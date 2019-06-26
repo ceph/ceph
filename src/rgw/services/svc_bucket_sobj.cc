@@ -334,10 +334,6 @@ int RGWSI_Bucket_SObj::do_read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
     return -EIO;
   }
   info->objv_tracker = ot;
-#warning need to remove field?
-#if 0
-  info->bucket.oid = obj.oid;
-#endif
   return 0;
 }
 
@@ -399,7 +395,6 @@ int RGWSI_Bucket_SObj::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
 
   if (entry_point.has_bucket_info) {
     *info = entry_point.old_bucket_info;
-    info->bucket.oid = bucket.name;
     info->bucket.tenant = bucket.tenant;
     info->ep_objv = ot.read_version;
     ldout(cct, 20) << "rgw_get_bucket_info: old bucket info, bucket=" << info->bucket << " owner " << info->owner << dendl;

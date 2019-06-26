@@ -1149,10 +1149,6 @@ struct rgw_bucket {
   std::string bucket_id;
   rgw_data_placement_target explicit_placement;
 
-  std::string oid; /*
-                    * runtime in-memory only info. If not empty, points to the bucket instance object
-                    */
-
   rgw_bucket() { }
   // cppcheck-suppress noExplicitConstructor
   explicit rgw_bucket(const rgw_user& u, const cls_user_bucket& b) :
@@ -1235,7 +1231,6 @@ struct rgw_bucket {
 
   void update_bucket_id(const string& new_bucket_id) {
     bucket_id = new_bucket_id;
-    oid.clear();
   }
 
   // format a key for the bucket/instance. pass delim=0 to skip a field
