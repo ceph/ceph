@@ -299,7 +299,6 @@ static int create_new_bucket_instance(RGWRados *store,
   new_bucket_info = bucket_info;
 
   store->create_bucket_id(&new_bucket_info.bucket.bucket_id);
-  new_bucket_info.bucket.oid.clear();
 
   new_bucket_info.num_shards = new_num_shards;
   new_bucket_info.objv_tracker.clear();
