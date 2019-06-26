@@ -209,6 +209,9 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
   void notify();
   ssize_t read_buffers(char* buf, size_t len);
   int post_work_request(std::vector<Chunk*>&);
+  size_t tx_copy_chunk(std::vector<Chunk*> &tx_buffers, size_t req_copy_len,
+      decltype(std::cbegin(pending_bl.buffers()))& start,
+      const decltype(std::cbegin(pending_bl.buffers()))& end);
 
  public:
   RDMAConnectedSocketImpl(CephContext *cct, Infiniband* ib, RDMADispatcher* s,
