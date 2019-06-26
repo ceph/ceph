@@ -1611,10 +1611,11 @@ private:
 	}
       };
       auto *pg = context< SnapTrimmer >().pg;
-      if (pg->cct->_conf->osd_snap_trim_sleep > 0) {
+      float osd_snap_trim_sleep = pg->osd->osd->get_osd_snap_trim_sleep();
+      if (osd_snap_trim_sleep > 0) {
 	Mutex::Locker l(pg->osd->sleep_lock);
 	wakeup = pg->osd->sleep_timer.add_event_after(
-	  pg->cct->_conf->osd_snap_trim_sleep,
+	  osd_snap_trim_sleep,
 	  new OnTimer{pg, pg->get_osdmap()->get_epoch()});
       } else {
 	post_event(SnapTrimTimerReady());
