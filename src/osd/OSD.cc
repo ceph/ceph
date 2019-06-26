@@ -5894,7 +5894,9 @@ void OSD::send_beacon(const ceph::coarse_mono_clock::time_point& now)
     MOSDBeacon* beacon = nullptr;
     {
       std::lock_guard l{min_last_epoch_clean_lock};
-      beacon = new MOSDBeacon(osdmap->get_epoch(), min_last_epoch_clean);
+      beacon = new MOSDBeacon(osdmap->get_epoch(),
+			      min_last_epoch_clean,
+			      superblock.last_purged_snaps_scrub);
       beacon->pgs = min_last_epoch_clean_pgs;
       last_sent_beacon = now;
     }
