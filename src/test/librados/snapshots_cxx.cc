@@ -457,7 +457,6 @@ TEST_F(LibRadosSnapshotsSelfManagedPP, OrderSnap) {
 TEST_F(LibRadosSnapshotsSelfManagedPP, ReusePurgedSnap) {
   std::vector<uint64_t> my_snaps;
   my_snaps.push_back(-2);
-  ASSERT_FALSE(cluster.get_pool_is_selfmanaged_snaps_mode(pool_name));
   ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps.back()));
   ASSERT_TRUE(cluster.get_pool_is_selfmanaged_snaps_mode(pool_name));
   ::std::reverse(my_snaps.begin(), my_snaps.end());
