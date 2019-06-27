@@ -259,5 +259,5 @@ and fixing the reference count.
   (manifest object (has ref), chunk 1(no ref)).
   To fix such inconsistency, ceph-dedup-tool supports chunk_scrub. ::
 
-          ceph-dedup-tool --op chunk_scrub --pool $POOL --chunk_pool $CHUNK_POOL
+          ceph-dedup-tool --op chunk_scrub --chunk_pool $CHUNK_POOL
 
