@@ -205,11 +205,15 @@ public:
     ObjectStore::Transaction &t,
     PGPeeringEventRef on_commit) final {
     t.register_on_commit(
-      new LambdaContext([this, on_commit](){
-	PeeringCtx rctx;
-        do_peering_event(*on_commit, rctx);
-	shard_services.dispatch_context(std::move(rctx));
-    }));
+      new LambdaContext(
+	[this, on_commit=std::move(on_commit)] {
+	  shard_services.start_operation<LocalPeeringEvent>(
+	    this,
+	    shard_services,
+	    pg_whoami,
+	    pgid,
+	    std::move(*on_commit));
+	}));
   }
 
   void update_heartbeat_peers(set<int> peers) final {
