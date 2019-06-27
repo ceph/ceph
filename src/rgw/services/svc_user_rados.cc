@@ -111,11 +111,11 @@ int RGWSI_User_RADOS::read_user_info(RGWSI_MetaBackend::Context *ctx,
                                map<string, bufferlist> * const pattrs,
                                optional_yield y)
 {
-#warning cache_info?
   bufferlist bl;
   RGWUID user_id;
 
   RGWSI_MBSObj_GetParams params(&bl, pattrs, pmtime);
+  params.set_cache_info(cache_info);
 
   int ret = svc.meta_be->get_entry(ctx, get_meta_key(user), params, objv_tracker, y);
   if (ret < 0) {
