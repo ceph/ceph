@@ -254,6 +254,28 @@ int libradosstriper::RadosStriper::read(const std::string& soid,
   return rados_striper_impl->read(soid, bl, len, off);
 }
 
+int libradosstriper::RadosStriper::read(const std::string& soid,
+					char *buf,
+					size_t len,
+					uint64_t off)
+{
+  bufferlist bl;
+  bufferptr bp = buffer::create_static(len, buf);
+
+  bl.push_back(bp);
+
+  int ret = rados_striper_impl->read(soid, &bl, len, off);
+
+  if (ret >= 0) {
+    if (bl.length() > len)
+      return -ERANGE;
+    if (!bl.is_provided_buffer(buf))
+      bl.begin().copy(bl.length(), buf);
+    ret = bl.length();    // hrm :/
+  }
+  return ret;
+}
+
 int libradosstriper::RadosStriper::aio_read(const std::string& soid,
 					    librados::AioCompletion *c,
 					    bufferlist* bl,
