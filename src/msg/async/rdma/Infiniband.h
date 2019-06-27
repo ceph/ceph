@@ -203,7 +203,7 @@ class Infiniband {
    public:
     class Chunk {
      public:
-      Chunk(ibv_mr* m, uint32_t len, char* b);
+      Chunk(ibv_mr* m, uint32_t bytes, char* buffer, uint32_t offset = 0, uint32_t bound = 0, uint32_t lkey = 0);
       ~Chunk();
 
       void set_offset(uint32_t o);
@@ -219,10 +219,10 @@ class Infiniband {
 
      public:
       ibv_mr* mr;
-      uint32_t lkey = 0;
+      uint32_t lkey;
       uint32_t bytes;
-      uint32_t bound = 0;
       uint32_t offset;
+      uint32_t bound;
       char* buffer; // TODO: remove buffer/refactor TX
       char  data[0];
     };
