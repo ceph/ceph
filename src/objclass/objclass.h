@@ -123,6 +123,7 @@ extern int cls_cxx_getxattrs(cls_method_context_t hctx, std::map<std::string,
 			     ceph::buffer::list> *attrset);
 extern int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len,
 			   ceph::buffer::list *bl);
+extern int cls_cxx_truncate(cls_method_context_t hctx, int ofs);
 extern int cls_cxx_snap_revert(cls_method_context_t hctx, snapid_t snapid);
 extern int cls_cxx_map_clear(cls_method_context_t hctx);
 extern int cls_cxx_map_get_all_vals(cls_method_context_t hctx,
@@ -159,6 +160,7 @@ extern int cls_current_subop_num(cls_method_context_t hctx);
 extern uint64_t cls_get_features(cls_method_context_t hctx);
 extern uint64_t cls_get_client_features(cls_method_context_t hctx);
 extern ceph_release_t cls_get_required_osd_release(cls_method_context_t hctx);
+extern ceph_release_t cls_get_min_compatible_client(cls_method_context_t hctx);
 
 /* helpers */
 extern void cls_cxx_subop_version(cls_method_context_t hctx, std::string *s);
@@ -175,6 +177,8 @@ int cls_cxx_chunk_write_and_set(cls_method_context_t hctx, int ofs, int len,
                    ceph::buffer::list *write_inbl, uint32_t op_flags, ceph::buffer::list *set_inbl,
 		   int set_len);
 bool cls_has_chunk(cls_method_context_t hctx, std::string fp_oid);
+
+extern uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx);
 
 #endif
 

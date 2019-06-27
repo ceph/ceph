@@ -493,6 +493,15 @@ void guard_append(librados::ObjectWriteOperation *op, uint64_t soft_max_size) {
   op->exec("journal", "guard_append", bl);
 }
 
+void append(librados::ObjectWriteOperation *op, uint64_t soft_max_size,
+            bufferlist &data) {
+  bufferlist bl;
+  encode(soft_max_size, bl);
+  encode(data, bl);
+
+  op->exec("journal", "append", bl);
+}
+
 } // namespace client
 } // namespace journal
 } // namespace cls
