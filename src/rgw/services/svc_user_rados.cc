@@ -466,10 +466,6 @@ int RGWSI_User_RADOS::remove_uid_index(RGWSI_MetaBackend::Context *ctx, const RG
   ldout(cct, 10) << "removing user index: " << user_info.user_id << dendl;
 
   RGWSI_MBSObj_RemoveParams params;
-#warning need mtime?
-#if 0
-  params.mtime = user_info.mtime;
-#endif
   int ret = svc.meta_be->remove_entry(ctx, get_meta_key(user_info.user_id), params, objv_tracker, y);
   if (ret < 0 && ret != -ENOENT && ret  != -ECANCELED) {
     string key;
