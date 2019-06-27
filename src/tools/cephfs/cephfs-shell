@@ -898,7 +898,8 @@ sub-directories, files')
         return self.complete_filenames(text, line, begidx, endidx)
 
     cd_parser = argparse.ArgumentParser(description='Change working directory')
-    cd_parser.add_argument('path', type=str, help='Name of the directory.', default='/')
+    cd_parser.add_argument('path', type=str, help='Name of the directory.',
+                           nargs='?', default='/')
 
     @with_argparser(cd_parser)
     def do_cd(self, args):
