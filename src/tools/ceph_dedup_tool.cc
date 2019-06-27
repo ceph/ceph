@@ -233,7 +233,9 @@ static void print_dedup_estimate(bool debug = false)
   for (auto &et : estimate_threads) {
     total_size += et->get_total_bytes();
     examined_objects += et->get_examined_objects();
-    total_objects += et->get_total_objects();
+    if (!total_objects) {
+      total_objects = et->get_total_objects();
+    }
   }
 
   cout << " result: " << total_size << " | " << dedup_size << " (total size | deduped size) " << std::endl;
@@ -757,7 +759,9 @@ static void print_chunk_scrub()
   int fixed_objects = 0;
 
   for (auto &et : estimate_threads) {
-    total_objects += et->get_total_objects();
+    if (!total_objects) {
+      total_objects = et->get_total_objects();
+    }
     examined_objects += et->get_examined_objects();
     ChunkScrub *ptr = static_cast<ChunkScrub*>(et.get());
     fixed_objects += ptr->get_fixed_objects();
