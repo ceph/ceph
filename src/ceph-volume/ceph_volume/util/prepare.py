@@ -201,6 +201,10 @@ def osd_id_available(osd_id):
     osd = [osd for osd in osds if str(osd['id']) == str(osd_id)]
     if osd and osd[0].get('status') == "destroyed":
         return True
+    
+    if not osd:
+        return True
+    
     return False
 
 
