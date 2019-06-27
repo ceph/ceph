@@ -168,6 +168,7 @@ namespace libradosstriper
      * synchronously read from the striped object at the specified offset.
      */
     int read(const std::string& soid, ceph::bufferlist* pbl, size_t len, uint64_t off);
+    int read(const std::string& soid, char *buf, size_t len, uint64_t off);
 
     /**
      * asynchronously read from the striped object at the specified offset.
