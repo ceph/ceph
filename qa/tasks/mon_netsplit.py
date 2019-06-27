@@ -18,6 +18,57 @@ from mon_thrash import _get_mons
 def get_mons(ctx):
     return _get_mons(ctx)
 
+def disconnect(ctx, config):
+    assert len(config) == 2 # we can only disconnect pairs right now
+    # and we can only disconnect mons right now
+    assert config[0].startswith('mon.')
+    assert config[1].startswith('mon.')
+    # I don't get what's happening with the IPs here right now;
+    # this will need to become a regex that can handle the
+    # different v1/v2 output formats and maybe deal with port-blocking
+    ip1 = ctx.ceph['ceph'].mons['{a}'.format(a=config[0])]
+    ip2 = ctx.ceph['ceph'].mons['{a}'.format(a=config[1])]
+
+    (host1,) = ctx.cluster.only(config[0]).remotes.iterkeys()
+    (host2,) = ctx.cluster.only(config[1]).remotes.iterkeys()
+    assert host1 is not None
+    assert host2 is not None
+
+    host1.run(
+        args = ["sudo", "iptables", "-A", "INPUT", "-p", "tcp", "-s",
+                ip2, "-j", "DROP"]
+    )
+    host2.run(
+        args = ["sudo", "iptables", "-A", "INPUT", "-p", "tcp", "-s",
+                ip1, "-j", "DROP"]
+    )
+
+def reconnect(ctx, config):
+    assert len(config) == 2 # we can only disconnect pairs right now
+    # and we can only disconnect mons right now
+    assert config[0].startswith('mon.')
+    assert config[1].startswith('mon.')
+    # I don't get what's happening with the IPs here right now;
+    # this will need to become a regex that can handle the
+    # different v1/v2 output formats and maybe deal with port-blocking
+    ip1 = ctx.ceph['ceph'].mons['{a}'.format(a=config[0])]
+    ip2 = ctx.ceph['ceph'].mons['{a}'.format(a=config[1])]
+
+    (host1,) = ctx.cluster.only(config[0]).remotes.iterkeys()
+    (host2,) = ctx.cluster.only(config[1]).remotes.iterkeys()
+    assert host1 is not None
+    assert host2 is not None
+
+    host1.run(
+        args = ["sudo", "iptables", "-D", "INPUT", "-p", "tcp", "-s",
+                ip2, "-j", "DROP"]
+    )
+    host2.run(
+        args = ["sudo", "iptables", "-D", "INPUT", "-p", "tcp", "-s",
+                ip1, "-j", "DROP"]
+    )
+
+    
 class MonitorNetsplit:
     """
     How it works::
@@ -115,42 +166,15 @@ class MonitorNetsplit:
 
                 #netsplit here
                 self.log('mons list is {mons}, mon_a is {mon_a}, mon_b is {mon_b}'.format(mons=mons, mon_a=mon_a, mon_b=mon_b))
-                self.log("ctx.ceph['ceph'].mons is {ctxmons}".format(ctxmons=self.ctx.ceph['ceph'].mons))
-                mon_a_ip = self.ctx.ceph['ceph'].mons['{a}'.format(a=mon_a)]
-                mon_b_ip = self.ctx.ceph['ceph'].mons['{a}'.format(a=mon_b)]
-                # I don't get what's happening with the IPs here right now;
-                # this regex will need to get better. Below is probably overcompilcated
-                # but we may in future want to parse out individual ports so it's
-                # not completely overblown, despite being inflexible...
-#                mon_a_ip2, _, _, mon_a_ip1, _, _  = re.match("v2:(.+):(.+)/(.+),v1:(.+):(.+)/(.+)",
-#                                                             self.ctx.ceph['ceph'].mons['{a}'.format(a=mon_a)]).groups()
-#                mon_b_ip2, _, _, mon_b_ip1, _, _  = re.match("v2:(.+):(.+)/(.+),v1:(.+):(.+)/(.+)",
-#                                                             self.ctx.ceph['ceph'].mons['{a}'.format(a=mon_b)]).groups()
-
-                (host_a,) = self.ctx.cluster.only(mon_a).remotes.iterkeys()
-                (host_b,) = self.ctx.cluster.only(mon_b).remotes.iterkeys()
+                disconnect(self.ctx, [mon_a, mon_b])
 
 
-                host_a.run(
-                    args = ["sudo", "iptables", "-A", "INPUT", "-p", "tcp", "-s", mon_b_ip, "-j", "DROP"]
-                    )
-                host_b.run(
-                    args = ["sudo", "iptables", "-A", "INPUT", "-p", "tcp", "-s", mon_a_ip, "-j", "DROP"]
-                    )
-                
                 self.log('waiting for {delay} secs before restoring monitor connections'.format(
                     delay=self.netsplit_period))
                 time.sleep(self.netsplit_period)
 
                 #undo netsplit here
-
-                host_a.run(
-                    args = ["sudo", "iptables", "-D", "INPUT", "-p", "tcp", "-s", mon_b_ip, "-j", "DROP"]
-                    )
-                host_b.run(
-                    args = ["sudo", "iptables", "-D", "INPUT", "-p", "tcp", "-s", mon_a_ip, "-j", "DROP"]
-                    )
-
+                reconnect(self.ctx, [mon_a, mon_b])
                 self.manager.wait_for_mon_quorum_size(len(mons))
                 for m in mons:
                     s = self.manager.get_mon_status(m)
