@@ -498,8 +498,9 @@ Infiniband::ProtectionDomain::~ProtectionDomain()
 }
 
 
-Infiniband::MemoryManager::Chunk::Chunk(ibv_mr* m, uint32_t len, char* b)
-  : mr(m), bytes(len), offset(0), buffer(b)
+Infiniband::MemoryManager::Chunk::Chunk(ibv_mr* m, uint32_t bytes, char* buffer,
+    uint32_t offset, uint32_t bound, uint32_t lkey)
+  : mr(m), lkey(lkey), bytes(bytes), offset(offset), bound(bound), buffer(buffer)
 {
 }
 
@@ -600,7 +601,7 @@ int Infiniband::MemoryManager::Cluster::fill(uint32_t num)
   ceph_assert(m);
   Chunk* chunk = chunk_base;
   for (uint32_t offset = 0; offset < bytes; offset += buffer_size){
-    new(chunk) Chunk(m, buffer_size, base+offset);
+    new(chunk) Chunk(m, buffer_size, base + offset, 0, buffer_size, m->lkey);
     free_chunks.push_back(chunk);
     chunk++;
   }
@@ -726,10 +727,7 @@ char *Infiniband::MemoryManager::PoolAllocator::malloc(const size_type bytes)
   /* initialize chunks */
   ch = m->chunks;
   for (unsigned i = 0; i < nbufs; i++) {
-    ch->lkey   = m->mr->lkey;
-    ch->bytes  = cct->_conf->ms_async_rdma_buffer_size;
-    ch->offset = 0;
-    ch->buffer = ch->data; // TODO: refactor tx and remove buffer
+    new(ch) Chunk(m->mr, cct->_conf->ms_async_rdma_buffer_size, ch->data, 0, 0, m->mr->lkey);
     ch = reinterpret_cast<Chunk *>(reinterpret_cast<char *>(ch) + rx_buf_size);
   }
 
