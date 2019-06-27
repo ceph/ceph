@@ -12,6 +12,28 @@
 
 using namespace cls::journal;
 
+static bool is_sparse_read_supported(librados::IoCtx &ioctx,
+                                     const std::string &oid) {
+  EXPECT_EQ(0, ioctx.create(oid, true));
+  bufferlist inbl;
+  inbl.append(std::string(1, 'X'));
+  EXPECT_EQ(0, ioctx.write(oid, inbl, inbl.length(), 1));
+  EXPECT_EQ(0, ioctx.write(oid, inbl, inbl.length(), 3));
+
+  std::map<uint64_t, uint64_t> m;
+  bufferlist outbl;
+  int r = ioctx.sparse_read(oid, m, outbl, 4, 0);
+  ioctx.remove(oid);
+
+  int expected_r = 2;
+  std::map<uint64_t, uint64_t> expected_m = {{1, 1}, {3, 1}};
+  bufferlist expected_outbl;
+  expected_outbl.append(std::string(2, 'X'));
+
+  return (r == expected_r && m == expected_m &&
+          outbl.contents_equal(expected_outbl));
+}
+
 class TestClsJournal : public ::testing::Test {
 public:
 
@@ -608,4 +630,66 @@ TEST_F(TestClsJournal, GuardAppendOverflow) {
   librados::ObjectWriteOperation op2;
   client::guard_append(&op2, 1);
   ASSERT_EQ(-EOVERFLOW, ioctx.operate(oid, &op2));
+}
+
+TEST_F(TestClsJournal, Append) {
+  librados::IoCtx ioctx;
+  ASSERT_EQ(0, _rados.ioctx_create(_pool_name.c_str(), ioctx));
+
+  std::string oid = get_temp_image_name();
+  ioctx.remove(oid);
+
+  bool sparse_read_supported = is_sparse_read_supported(ioctx, oid);
+
+  bufferlist bl;
+  bl.append("journal entry!");
+
+  librados::ObjectWriteOperation op1;
+  client::append(&op1, 1, bl);
+  ASSERT_EQ(0, ioctx.operate(oid, &op1));
+
+  librados::ObjectWriteOperation op2;
+  client::append(&op2, 1, bl);
+  ASSERT_EQ(-EOVERFLOW, ioctx.operate(oid, &op2));
+
+  bufferlist outbl;
+  ASSERT_LE(bl.length(), ioctx.read(oid, outbl, 0, 0));
+
+  bufferlist tmpbl;
+  tmpbl.substr_of(outbl, 0, bl.length());
+  ASSERT_TRUE(bl.contents_equal(tmpbl));
+
+  if (outbl.length() == bl.length()) {
+    std::cout << "padding is not enabled" << std::endl;
+    return;
+  }
+
+  tmpbl.clear();
+  tmpbl.substr_of(outbl, bl.length(), outbl.length() - bl.length());
+  ASSERT_TRUE(tmpbl.is_zero());
+
+  if (!sparse_read_supported) {
+    std::cout << "sparse_read is not supported" << std::endl;
+    return;
+  }
+
+  librados::ObjectWriteOperation op3;
+  client::append(&op3, 1 << 24, bl);
+  ASSERT_EQ(0, ioctx.operate(oid, &op3));
+
+  std::map<uint64_t, uint64_t> m;
+  uint64_t pad_len = outbl.length();
+  outbl.clear();
+  std::map<uint64_t, uint64_t> expected_m =
+      {{0, bl.length()}, {pad_len, bl.length()}};
+  ASSERT_EQ(expected_m.size(), ioctx.sparse_read(oid, m, outbl, 2 * pad_len, 0));
+  ASSERT_EQ(m, expected_m);
+
+  uint64_t buffer_offset = 0;
+  for (auto &it : m) {
+    tmpbl.clear();
+    tmpbl.substr_of(outbl, buffer_offset, it.second);
+    ASSERT_TRUE(bl.contents_equal(tmpbl));
+    buffer_offset += it.second;
+  }
 }

@@ -122,6 +122,8 @@ private:
   double m_flush_age = 0;
   int32_t m_max_in_flight_appends;
 
+  bool m_compat_mode;
+
   FlushHandler m_flush_handler;
 
   mutable std::shared_ptr<Mutex> m_lock;

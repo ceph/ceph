@@ -1389,6 +1389,12 @@ int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len,
   return ctx->io_ctx_impl->write(ctx->oid, *inbl, len, ofs, ctx->snapc);
 }
 
+int cls_cxx_truncate(cls_method_context_t hctx, int ofs) {
+  librados::TestClassHandler::MethodContext *ctx =
+    reinterpret_cast<librados::TestClassHandler::MethodContext*>(hctx);
+  return ctx->io_ctx_impl->truncate(ctx->oid, ofs, ctx->snapc);
+}
+
 int cls_cxx_list_watchers(cls_method_context_t hctx,
 			  obj_list_watch_response_t *watchers) {
   librados::TestClassHandler::MethodContext *ctx =
@@ -1476,6 +1482,10 @@ ceph_release_t cls_get_required_osd_release(cls_handle_t hclass) {
   return ceph_release_t::nautilus;
 }
 
+ceph_release_t cls_get_min_compatible_client(cls_handle_t hclass) {
+  return ceph_release_t::nautilus;
+}
+
 // stubs to silence TestClassHandler::open_class()
 PGLSFilter::~PGLSFilter()
 {}
@@ -1492,4 +1502,8 @@ int cls_cxx_chunk_write_and_set(cls_method_handle_t, int,
 
 int cls_cxx_map_read_header(cls_method_handle_t, bufferlist *) {
   return -ENOTSUP;
+}
+
+uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx) {
+  return 0;
 }

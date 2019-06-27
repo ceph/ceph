@@ -6,6 +6,7 @@
 #include "journal/Utils.h"
 #include "include/ceph_assert.h"
 #include "common/Timer.h"
+#include "common/errno.h"
 #include "cls/journal/cls_journal_client.h"
 
 #define dout_subsys ceph_subsys_journaler
@@ -31,6 +32,16 @@ ObjectRecorder::ObjectRecorder(librados::IoCtx &ioctx, const std::string &oid,
   m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext*>(m_ioctx.cct());
   ceph_assert(m_handler != NULL);
+
+  librados::Rados rados(m_ioctx);
+  int8_t require_osd_release = 0;
+  int r = rados.get_min_compatible_osd(&require_osd_release);
+  if (r < 0) {
+    ldout(m_cct, 0) << "failed to retrieve min OSD release: "
+                    << cpp_strerror(r) << dendl;
+  }
+  m_compat_mode = require_osd_release < CEPH_RELEASE_OCTOPUS;
+
   ldout(m_cct, 20) << dendl;
 }
 
@@ -287,10 +298,13 @@ bool ObjectRecorder::send_appends(bool force, FutureImplPtr flush_future) {
   }
 
   librados::ObjectWriteOperation op;
-  client::guard_append(&op, m_soft_max_size);
+  if (m_compat_mode) {
+    client::guard_append(&op, m_soft_max_size);
+  }
 
   size_t append_bytes = 0;
   AppendBuffers append_buffers;
+  bufferlist append_bl;
   for (auto it = m_pending_buffers.begin(); it != m_pending_buffers.end(); ) {
     auto& future = it->first;
     auto& bl = it->second;
@@ -308,8 +322,12 @@ bool ObjectRecorder::send_appends(bool force, FutureImplPtr flush_future) {
     ldout(m_cct, 20) << "flushing " << *future << dendl;
     future->set_flush_in_progress();
 
-    op.append(bl);
-    op.set_op_flags2(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    if (m_compat_mode) {
+      op.append(bl);
+      op.set_op_flags2(CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+    } else {
+      append_bl.append(bl);
+    }
 
     append_bytes += bl.length();
     append_buffers.push_back(*it);
@@ -331,6 +349,10 @@ bool ObjectRecorder::send_appends(bool force, FutureImplPtr flush_future) {
 
     ceph_assert(m_pending_bytes >= append_bytes);
     m_pending_bytes -= append_bytes;
+
+    if (!m_compat_mode) {
+      client::append(&op, m_soft_max_size, append_bl);
+    }
 
     auto rados_completion = librados::Rados::aio_create_completion(
       new C_AppendFlush(this, append_tid), nullptr, utils::rados_ctx_callback);

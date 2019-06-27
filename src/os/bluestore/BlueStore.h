@@ -2387,6 +2387,10 @@ public:
   bool wants_journal() override { return false; };
   bool allows_journal() override { return false; };
 
+  uint64_t get_min_alloc_size() const override {
+    return min_alloc_size;
+  }
+
   int get_devices(set<string> *ls) override;
 
   bool is_rotational() override;
