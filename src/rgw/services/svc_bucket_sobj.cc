@@ -280,8 +280,10 @@ int RGWSI_Bucket_SObj::read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                                  rgw_cache_entry_info *cache_info,
                                                  boost::optional<obj_version> refresh_version)
 {
-#warning cache set/get is a mess
-  if (auto e = binfo_cache->find(key)) {
+  string cache_key("bi/");
+  cache_key.append(key);
+
+  if (auto e = binfo_cache->find(cache_key)) {
     if (refresh_version &&
         e->info.objv_tracker.read_version.compare(&(*refresh_version))) {
       lderr(cct) << "WARNING: The bucket info cache is inconsistent. This is "
@@ -298,10 +300,39 @@ int RGWSI_Bucket_SObj::read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
     }
   }
 
-  int ret = do_read_bucket_instance_info(ctx, key, info, pmtime, pattrs,
-                                         cache_info, refresh_version, y);
+  bucket_info_cache_entry e;
+  rgw_cache_entry_info ci;
+
+  int ret = do_read_bucket_instance_info(ctx, key,
+                                  &e.info, &e.mtime, &e.attrs,
+                                  &ci, refresh_version, y);
+  *info = e.info;
+
   if (ret < 0) {
+    lderr(cct) << "ERROR: do_read_bucket_instance_info failed: " << ret << dendl;
     return ret;
+  }
+
+  if (pmtime) {
+    *pmtime = e.mtime;
+  }
+  if (pattrs) {
+    *pattrs = e.attrs;
+  }
+  if (cache_info) {
+    *cache_info = ci;
+  }
+
+  /* chain to only bucket instance and *not* bucket entrypoint */
+  if (!binfo_cache->put(svc.cache, cache_key, &e, {&ci})) {
+    ldout(cct, 20) << "couldn't put binfo cache entry, might have raced with data changes" << dendl;
+  }
+
+  if (refresh_version &&
+      refresh_version->compare(&info->objv_tracker.read_version)) {
+    lderr(cct) << "WARNING: The OSD has the same version I have. Something may "
+               << "have gone squirrelly. An administrator may have forced a "
+               << "change; otherwise there is a problem somewhere." << dendl;
   }
 
   return 0;
@@ -347,9 +378,18 @@ int RGWSI_Bucket_SObj::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
 {
   rgw_cache_entry_info cache_info;
 
-  string bucket_entry = get_entrypoint_meta_key(bucket);
+  if (!bucket.bucket_id.empty()) {
+    return read_bucket_instance_info(ctx.bi, get_bi_meta_key(bucket),
+                                     info,
+                                     pmtime, pattrs,
+                                     &cache_info, refresh_version);
+  }
 
-  if (auto e = binfo_cache->find(bucket_entry)) {
+  string bucket_entry = get_entrypoint_meta_key(bucket);
+  string cache_key("b/");
+  cache_key.append(bucket_entry);
+
+  if (auto e = binfo_cache->find(cache_key)) {
     bool found_version = (bucket.bucket_id.empty() ||
                           bucket.bucket_id == e->info.bucket.bucket_id);
 
@@ -359,7 +399,7 @@ int RGWSI_Bucket_SObj::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
       lderr(cct) << "WARNING: The bucket info cache is inconsistent. This is "
         << "a failure that should be debugged. I am a nice machine, "
         << "so I will try to recover." << dendl;
-      binfo_cache->invalidate(bucket_entry);
+      binfo_cache->invalidate(cache_key);
     } else {
       *info = e->info;
       if (pattrs)
@@ -370,15 +410,6 @@ int RGWSI_Bucket_SObj::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
     }
   }
 
-  if (!bucket.bucket_id.empty()) {
-    return read_bucket_instance_info(ctx.bi, get_bi_meta_key(bucket),
-                                     info,
-                                     pmtime, pattrs,
-                                     &cache_info, refresh_version,
-                                     y);
-  }
-
-  bucket_info_cache_entry e;
   RGWBucketEntryPoint entry_point;
   real_time ep_mtime;
   RGWObjVersionTracker ot;
@@ -413,6 +444,8 @@ int RGWSI_Bucket_SObj::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
 
   /* read bucket instance info */
 
+  bucket_info_cache_entry e;
+
   ret = read_bucket_instance_info(ctx.bi, get_bi_meta_key(entry_point.bucket),
                                   &e.info, &e.mtime, &e.attrs,
                                   &cache_info, refresh_version, y);
@@ -431,7 +464,7 @@ int RGWSI_Bucket_SObj::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
     *pattrs = e.attrs;
 
   /* chain to both bucket entry point and bucket instance */
-  if (!binfo_cache->put(svc.cache, bucket_entry, &e, {&entry_cache_info, &cache_info}, y)) {
+  if (!binfo_cache->put(svc.cache, cache_key, &e, {&entry_cache_info, &cache_info}, y)) {
     ldout(cct, 20) << "couldn't put binfo cache entry, might have raced with data changes" << dendl;
   }
 
