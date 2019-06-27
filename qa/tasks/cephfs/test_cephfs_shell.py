@@ -264,6 +264,22 @@ class TestGetAndPut(TestCephFSShell):
         log.info("o_hash:{}".format(o_hash))
         assert(s_hash == o_hash)
 
+class TestCD(TestCephFSShell):
+    CLIENTS_REQUIRED = 1
+
+    def test_cd_with_no_args(self):
+        """
+        Test that when cd is issued without any arguments, CWD is changed
+        to root directory.
+        """
+        path = 'dir1/dir2/dir3'
+        self.mount_a.run_shell('mkdir -p ' + path)
+        expected_cwd = '/'
+
+        script = 'cd {}\ncd\ncwd\n'.format(path)
+        output = self.get_cephfs_shell_script_output(script)
+        self.assertEqual(output, expected_cwd)
+
 #    def test_ls(self):
 #        """
 #        Test that ls passes
