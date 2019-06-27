@@ -836,7 +836,7 @@ void JournalPlayer::notify_complete(int r) {
 void JournalPlayer::handle_cache_rebalanced(uint64_t new_cache_bytes) {
   Mutex::Locker locker(m_lock);
 
-  if (m_state == STATE_ERROR) {
+  if (m_state == STATE_ERROR || m_shut_down) {
     return;
   }
 
