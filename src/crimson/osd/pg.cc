@@ -221,13 +221,15 @@ seastar::future<> PG::read_state(ceph::os::FuturizedStore* store)
       else
 	peering_state.set_role(-1);
 
-      PeeringCtx rctx;
-      PeeringState::Initialize evt;
-      peering_state.handle_event(evt, &rctx);
-      peering_state.write_if_dirty(rctx.transaction);
-      store->do_transaction(
-	coll_ref,
-	std::move(rctx.transaction));
+      epoch_t epoch = peering_state.get_osdmap()->get_epoch();
+      shard_services.start_operation<LocalPeeringEvent>(
+	this,
+	shard_services,
+	pg_whoami,
+	pgid,
+	epoch,
+	epoch,
+	PeeringState::Initialize());
 
       return seastar::now();
     });
