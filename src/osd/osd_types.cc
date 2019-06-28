@@ -1159,6 +1159,8 @@ std::string pg_state_string(uint64_t state)
     oss << "snaptrim_error+";
   if (state & PG_STATE_FAILED_REPAIR)
     oss << "failed_repair+";
+  if (state & PG_STATE_LAGGY)
+    oss << "laggy+";
   string ret(oss.str());
   if (ret.length() > 0)
     ret.resize(ret.length() - 1);
@@ -1232,6 +1234,8 @@ std::optional<uint64_t> pg_string_state(const std::string& state)
     type = PG_STATE_CREATING;
   else if (state == "failed_repair")
     type = PG_STATE_FAILED_REPAIR;
+  else if (state == "laggy")
+    type = PG_STATE_LAGGY;
   else if (state == "unknown")
     type = 0;
   else
