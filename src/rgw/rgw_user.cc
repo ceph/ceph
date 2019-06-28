@@ -2473,7 +2473,7 @@ public:
 
 class RGWMetadataHandlerPut_User : public RGWMetadataHandlerPut_SObj
 {
-  RGWUserMetadataHandler *handler;
+  RGWUserMetadataHandler *uhandler;
   RGWUserMetadataObject *uobj;
 public:
   RGWMetadataHandlerPut_User(RGWUserMetadataHandler *_handler,
@@ -2481,7 +2481,7 @@ public:
                              RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
                              optional_yield y,
                              RGWMDLogSyncType type) : RGWMetadataHandlerPut_SObj(_handler, op, entry, obj, objv_tracker, type),
-                                                                handler(_handler) {
+                                                                uhandler(_handler) {
     uobj = static_cast<RGWUserMetadataObject *>(obj);
   }
 
@@ -2512,7 +2512,7 @@ int RGWMetadataHandlerPut_User::put_checked()
 
   auto mtime = obj->get_mtime();
 
-  int ret = handler->svc.user->store_user_info(op->ctx(), uci.info, pold_info,
+  int ret = uhandler->svc.user->store_user_info(op->ctx(), uci.info, pold_info,
                                                &objv_tracker, mtime,
                                                false, pattrs, y);
   if (ret < 0) {
