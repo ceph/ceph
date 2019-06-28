@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 
-set -e
+set -ex
 
 stop() {
     if [ "$REMOTE" == "false" ]; then
