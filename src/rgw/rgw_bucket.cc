@@ -2425,14 +2425,14 @@ public:
 
 class RGWMetadataHandlerPut_Bucket : public RGWMetadataHandlerPut_SObj
 {
-  RGWBucketMetadataHandler *handler;
+  RGWBucketMetadataHandler *bhandler;
   RGWBucketEntryMetadataObject *obj;
 public:
   RGWMetadataHandlerPut_Bucket(RGWBucketMetadataHandler *_handler,
                                RGWSI_MetaBackend_Handler::Op *op, string& entry,
                                RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
-                               RGWMDLogSyncType type) : RGWMetadataHandlerPut_SObj(handler, op, entry, obj, objv_tracker, type),
-                                                        handler(_handler) {
+                               RGWMDLogSyncType type) : RGWMetadataHandlerPut_SObj(_handler, op, entry, obj, objv_tracker, type),
+                                                        bhandler(_handler) {
     obj = static_cast<RGWBucketEntryMetadataObject *>(_obj);
   }
   ~RGWMetadataHandlerPut_Bucket() {}
@@ -2468,7 +2468,7 @@ int RGWMetadataHandlerPut_Bucket::put_checked()
 
   RGWSI_Bucket_EP_Ctx ctx(op->ctx());
 
-  return handler->svc.bucket->store_bucket_entrypoint_info(ctx, entry,
+  return bhandler->svc.bucket->store_bucket_entrypoint_info(ctx, entry,
                                                            be,
                                                            false,
                                                            mtime,
@@ -2484,9 +2484,9 @@ int RGWMetadataHandlerPut_Bucket::put_post()
 
   /* link bucket */
   if (be.linked) {
-    ret = handler->ctl.bucket->link_bucket(be.owner, be.bucket, be.creation_time, false);
+    ret = bhandler->ctl.bucket->link_bucket(be.owner, be.bucket, be.creation_time, false);
   } else {
-    ret = handler->ctl.bucket->unlink_bucket(be.owner, be.bucket, false);
+    ret = bhandler->ctl.bucket->unlink_bucket(be.owner, be.bucket, false);
   }
 
   return ret;
@@ -2813,15 +2813,15 @@ public:
 class RGWMetadataHandlerPut_BucketInstance : public RGWMetadataHandlerPut_SObj
 {
   CephContext *cct;
-  RGWBucketInstanceMetadataHandler *handler;
+  RGWBucketInstanceMetadataHandler *bihandler;
   RGWBucketInstanceMetadataObject *obj;
 public:
   RGWMetadataHandlerPut_BucketInstance(CephContext *cct,
                                        RGWBucketInstanceMetadataHandler *_handler,
-                                       RGWSI_MetaBackend_Handler::Op *ctx, string& entry,
+                                       RGWSI_MetaBackend_Handler::Op *_op, string& entry,
                                        RGWMetadataObject *_obj, RGWObjVersionTracker& objv_tracker,
-                                       RGWMDLogSyncType type) : RGWMetadataHandlerPut_SObj(_handler, op, entry, obj, objv_tracker, type),
-                                                                handler(_handler) {
+                                       RGWMDLogSyncType type) : RGWMetadataHandlerPut_SObj(_handler, _op, entry, obj, objv_tracker, type),
+                                                                bihandler(_handler) {
     obj = static_cast<RGWBucketInstanceMetadataObject *>(_obj);
 
     auto& bci = obj->get_bci();
@@ -2877,7 +2877,7 @@ int RGWMetadataHandlerPut_BucketInstance::put_check()
     bci.info.bucket.name = bucket_name;
     bci.info.bucket.bucket_id = bucket_instance;
     bci.info.bucket.tenant = tenant_name;
-    ret = handler->svc.zone->select_bucket_location_by_rule(bci.info.placement_rule, &rule_info);
+    ret = bihandler->svc.zone->select_bucket_location_by_rule(bci.info.placement_rule, &rule_info);
     if (ret < 0) {
       ldout(cct, 0) << "ERROR: select_bucket_placement() returned " << ret << dendl;
       return ret;
@@ -2908,7 +2908,7 @@ int RGWMetadataHandlerPut_BucketInstance::put_checked()
 
   RGWSI_Bucket_BI_Ctx ctx(op->ctx());
 
-  return handler->svc.bucket->store_bucket_instance_info(ctx,
+  return bihandler->svc.bucket->store_bucket_instance_info(ctx,
                                                          entry,
                                                          info,
                                                          orig_info,
@@ -2923,7 +2923,7 @@ int RGWMetadataHandlerPut_BucketInstance::put_post()
 
   objv_tracker = bci.info.objv_tracker;
 
-  int ret = handler->svc.bi->init_index(bci.info);
+  int ret = bihandler->svc.bi->init_index(bci.info);
   if (ret < 0)
     return ret;
 
