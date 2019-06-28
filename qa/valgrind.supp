@@ -611,14 +611,3 @@
    fun:_ZN11EventCenter14process_eventsEjPNSt6chrono8durationImSt5ratioILl1ELl1000000000EEEE
    ...
 }
-
-{
-   boost::lockfree::queue uninitialized variable
-   Memcheck:Cond
-   ...
-   fun:*do_push*
-   fun:*push*
-   fun:_ZN6librbd2io13AioCompletion8completeEv
-   fun:_ZN6librbd2io13AioCompletion16complete_requestEl
-   ...
-}
