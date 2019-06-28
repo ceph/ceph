@@ -3508,7 +3508,7 @@ std::vector<Option> get_global_options() {
     .set_description("Update overall object digest only if object was last modified longer ago than this"),
 
     Option("osd_deep_scrub_large_omap_object_key_threshold", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(2000000)
+    .set_default(200000)
     .set_description("Warn when we encounter an object with more omap keys than this")
     .add_service("osd")
     .add_see_also("osd_deep_scrub_large_omap_object_value_sum_threshold"),
