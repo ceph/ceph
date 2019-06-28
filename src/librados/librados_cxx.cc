@@ -653,6 +653,13 @@ void librados::ObjectWriteOperation::unset_manifest()
   o->unset_manifest();
 }
 
+void librados::ObjectWriteOperation::tier_flush()
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->tier_flush();
+}
+
 void librados::ObjectWriteOperation::tmap_update(const bufferlist& cmdbl)
 {
   ceph_assert(impl);
