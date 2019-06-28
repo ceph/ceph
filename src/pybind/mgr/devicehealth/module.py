@@ -448,7 +448,7 @@ class Module(MgrModule):
                     self.log.exception("RADOS error reading omap: {0}".format(e))
                     raise
 
-        return 0, json.dumps(res, indent=4), ''
+        return 0, json.dumps(res, indent=4, sort_keys=True), ''
 
     def check_health(self):
         self.log.info('Check health')
