@@ -676,7 +676,7 @@ and to post the test results to the PR.
 .. _`ceph-workbench ceph-qa-suite`: http://ceph-workbench.readthedocs.org/
 
 The Ceph community has access to the `Sepia lab
-<http://ceph.github.io/sepia/>`_ where integration tests can be run on
+<https://wiki.sepia.ceph.com/doku.php>`_ where integration tests can be run on
 real hardware. Other developers may add tags like "needs-qa" to your PR.
 This allows PRs that need testing to be merged into a single branch and
 tested all at the same time. Since teuthology suites can take hours
