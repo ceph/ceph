@@ -172,7 +172,8 @@ In Octopus, erasure coded pools can recover as long as there are at least *K* sh
 available. (With fewer than *K* shards, you have actually lost data!)
 
 Prior to Octopus, erasure coded pools required at least *min_size* shards to be
-available. (We generally recommend min_size be *K+2* or more to prevent loss of writes and data.)
+available, even if *min_size* is greater than *K*. (We generally recommend min_size
+be *K+2* or more to prevent loss of writes and data.)
 This conservative decision was made out of an abundance of caution when designing the new pool
 mode but also meant pools with lost OSDs but no data loss were unable to recover and go active
 without manual intervention to change the *min_size*.
