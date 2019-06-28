@@ -57,6 +57,7 @@ ${CMAKE} -DCMAKE_BUILD_TYPE=Debug $ARGS "$@" .. || exit 1
 
 # minimal config to find plugins
 cat <<EOF > ceph.conf
+[global]
 plugin dir = lib
 erasure code dir = lib
 EOF
