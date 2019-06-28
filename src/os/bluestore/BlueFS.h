@@ -375,7 +375,7 @@ private:
   int _read_random(
     FileReader *h,   ///< [in] read from here
     uint64_t offset, ///< [in] offset
-    size_t len,      ///< [in] this many bytes
+    uint64_t len,    ///< [in] this many bytes
     char *out);      ///< [out] optional: or copy it here
 
   void _invalidate_cache(FileRef f, uint64_t offset, uint64_t length);
