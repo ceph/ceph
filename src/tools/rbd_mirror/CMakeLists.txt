@@ -48,7 +48,8 @@ set(rbd_mirror_internal
   service_daemon/Types.cc)
 
 add_library(rbd_mirror_internal STATIC
-  ${rbd_mirror_internal})
+  ${rbd_mirror_internal}
+  $<TARGET_OBJECTS:common_prioritycache_obj>)
 
 add_executable(rbd-mirror
   main.cc)
@@ -64,5 +65,7 @@ target_link_libraries(rbd-mirror
   cls_rbd_client
   cls_lock_client
   cls_journal_client
-  global)
+  global
+  heap_profiler
+  ${ALLOC_LIBS})
 install(TARGETS rbd-mirror DESTINATION bin)

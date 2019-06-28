@@ -8,9 +8,27 @@ add_executable(crimson-osd
   pg.cc
   pg_backend.cc
   pg_meta.cc
-  recovery_machine.cc
-  recovery_state.cc
-  recovery_states.cc
-  replicated_backend.cc)
+  replicated_backend.cc
+  shard_services.cc
+  osd_operation.cc
+  osd_operations/client_request.cc
+  osd_operations/peering_event.cc
+  osd_operations/compound_peering_request.cc
+  osd_operations/pg_advance_map.cc
+  osdmap_gate.cc
+  pg_map.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/PeeringState.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/PGPeeringEvent.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/PGStateUtils.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/MissingLoc.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/PGLog.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/osd_perf_counters.cc
+  )
 target_link_libraries(crimson-osd
   crimson-common crimson-os crimson fmt::fmt)
+set_target_properties(crimson-osd PROPERTIES
+  POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
+install(TARGETS crimson-osd DESTINATION bin)
+if(WITH_TESTS)
+  add_dependencies(tests crimson-osd)
+endif()

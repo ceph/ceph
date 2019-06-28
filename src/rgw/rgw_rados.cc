@@ -3588,6 +3588,18 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
     meta.set_mtime = real_clock::now();
   }
 
+  if (target->bucket_info.obj_lock_enabled() && target->bucket_info.obj_lock.has_rule() && meta.flags == PUT_OBJ_CREATE) {
+    auto iter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
+    if (iter == attrs.end()) {
+      real_time lock_until_date = target->bucket_info.obj_lock.get_lock_until_date(meta.set_mtime);
+      string mode = target->bucket_info.obj_lock.get_mode();
+      RGWObjectRetention obj_retention(mode, lock_until_date);
+      bufferlist bl;
+      obj_retention.encode(bl);
+      op.setxattr(RGW_ATTR_OBJECT_RETENTION, bl);
+    }
+  }
+
   if (state->is_olh) {
     op.setxattr(RGW_ATTR_OLH_ID_TAG, state->olh_tag);
   }
@@ -4346,6 +4358,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
 
   string etag;
   real_time set_mtime;
+  uint64_t expected_size = 0;
 
   RGWObjState *dest_state = NULL;
 
@@ -4380,12 +4393,19 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
     goto set_err_state;
   }
 
-  ret = conn->complete_request(in_stream_req, &etag, &set_mtime, nullptr, nullptr, nullptr);
+  ret = conn->complete_request(in_stream_req, &etag, &set_mtime,
+                               &expected_size, nullptr, nullptr);
   if (ret < 0) {
     goto set_err_state;
   }
   ret = cb.flush();
   if (ret < 0) {
+    goto set_err_state;
+  }
+  if (cb.get_data_len() != expected_size) {
+    ret = -EIO;
+    ldout(cct, 0) << "ERROR: object truncated during fetching, expected "
+        << expected_size << " bytes but received " << cb.get_data_len() << dendl;
     goto set_err_state;
   }
   if (compressor && compressor->is_compressed()) {
@@ -5163,8 +5183,11 @@ int RGWRados::open_bucket_index(const RGWBucketInfo& bucket_info,
 {
   const rgw_bucket& bucket = bucket_info.bucket;
   int r = open_bucket_index_ctx(bucket_info, index_ctx);
-  if (r < 0)
+  if (r < 0) {
+    ldout(cct, 20) << "open_bucket_index: open_bucket_index_ctx() returned "
+                   << r << dendl;
     return r;
+  }
 
   if (bucket.bucket_id.empty()) {
     ldout(cct, 0) << "ERROR: empty bucket id for bucket operation" << dendl;
@@ -5182,8 +5205,11 @@ int RGWRados::open_bucket_index_base(const RGWBucketInfo& bucket_info,
 				     string& bucket_oid_base) {
   const rgw_bucket& bucket = bucket_info.bucket;
   int r = open_bucket_index_ctx(bucket_info, index_ctx);
-  if (r < 0)
+  if (r < 0) {
+    ldout(cct, 20) << "open_bucket_index_base: open_bucket_index_ctx() returned "
+                   << r << dendl;
     return r;
+  }
 
   if (bucket.bucket_id.empty()) {
     ldout(cct, 0) << "ERROR: empty bucket_id for bucket operation" << dendl;
@@ -5205,6 +5231,8 @@ int RGWRados::open_bucket_index(const RGWBucketInfo& bucket_info,
   string bucket_oid_base;
   int ret = open_bucket_index_base(bucket_info, index_ctx, bucket_oid_base);
   if (ret < 0) {
+    ldout(cct, 20) << "open_bucket_index: open_bucket_index_base() returned "
+                   << ret << dendl;
     return ret;
   }
 
@@ -8154,6 +8182,7 @@ int RGWRados::get_bucket_instance_from_oid(RGWSysObjectCtx& obj_ctx, const strin
 			       oid, epbl, &info.objv_tracker, pmtime, y, pattrs,
 			       cache_info, refresh_version);
   if (ret < 0) {
+    ldout(cct, 20) << "rgw_get_system_obj() returned " << ret << dendl;
     return ret;
   }
 
@@ -9559,12 +9588,18 @@ int RGWRados::cls_bucket_head(const RGWBucketInfo& bucket_info, int shard_id, ve
   map<int, string> oids;
   map<int, struct rgw_cls_list_ret> list_results;
   int r = open_bucket_index(bucket_info, index_ctx, oids, list_results, shard_id, bucket_instance_ids);
-  if (r < 0)
+  if (r < 0) {
+    ldout(cct, 20) << "cls_bucket_head: open_bucket_index() returned "
+                   << r << dendl;
     return r;
+  }
 
   r = CLSRGWIssueGetDirHeader(index_ctx, oids, list_results, cct->_conf->rgw_bucket_index_max_aio)();
-  if (r < 0)
+  if (r < 0) {
+    ldout(cct, 20) << "cls_bucket_head: CLSRGWIssueGetDirHeader() returned "
+                   << r << dendl;
     return r;
+  }
 
   map<int, struct rgw_cls_list_ret>::iterator iter = list_results.begin();
   for(; iter != list_results.end(); ++iter) {

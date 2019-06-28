@@ -11,7 +11,7 @@ class OSDMap;
 
 class OSDMapService {
 public:
-  using cached_map_t = boost::local_shared_ptr<OSDMap>;
+  using cached_map_t = boost::local_shared_ptr<const OSDMap>;
   virtual ~OSDMapService() = default;
   virtual seastar::future<cached_map_t> get_map(epoch_t e) = 0;
   /// get the latest map

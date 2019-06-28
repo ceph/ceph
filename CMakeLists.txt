@@ -210,6 +210,9 @@ endif()
 
 find_package(Backtrace)
 
+# remote block storage
+option(WITH_RBD "Remote block storage is here" ON)
+
 if(LINUX)
   find_package(udev REQUIRED)
   set(HAVE_UDEV ${UDEV_FOUND})
@@ -221,9 +224,7 @@ elseif(FREEBSD)
   set(HAVE_BLKID OFF)
 else()
   set(HAVE_UDEV OFF)
-  message(STATUS "Not using udev")
   set(HAVE_BLKID OFF)
-  message(STATUS "Not using BLKID")
 endif(LINUX)
 
 option(WITH_OPENLDAP "OPENLDAP is here" ON)
@@ -310,9 +311,6 @@ option(WITH_LIBCEPHFS "libcephfs client library" ON)
 
 # key-value store
 option(WITH_KVS "Key value store is here" ON)
-
-# remote block storage
-option(WITH_RBD "Remote block storage is here" ON)
 
 # KERNEL remote block storage
 option(WITH_KRBD "Kernel Remote block storage is here" ON)
@@ -610,7 +608,7 @@ endif()
 
 option(WITH_UBSAN "build with UBSAN" OFF)
 if(WITH_UBSAN)
-  list(APPEND sanitizers "undefined-behavior")
+  list(APPEND sanitizers "undefined_behavior")
 endif()
 
 if(sanitizers)

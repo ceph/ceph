@@ -1,19 +1,21 @@
 """
 Client module to interact with the Ansible Runner Service
 """
-import requests
+
 import json
 import re
 from functools import wraps
 
+import requests
+
 # Ansible Runner service API endpoints
 API_URL = "api"
-LOGIN_URL = "api/v1/login"
 PLAYBOOK_EXEC_URL = "api/v1/playbooks"
 PLAYBOOK_EVENTS = "api/v1/jobs/%s/events"
 EVENT_DATA_URL = "api/v1/jobs/%s/events/%s"
 
 class AnsibleRunnerServiceError(Exception):
+    """Generic Ansible Runner Service Exception"""
     pass
 
 def handle_requests_exceptions(func):
@@ -21,10 +23,11 @@ def handle_requests_exceptions(func):
     """
     @wraps(func)
     def inner(*args, **kwargs):
+        """Generic error mgmt decorator"""
         try:
             return func(*args, **kwargs)
-        except requests.exceptions.RequestException as ex:
-               raise AnsibleRunnerServiceError(str(ex))
+        except (requests.exceptions.RequestException, IOError) as ex:
+            raise AnsibleRunnerServiceError(str(ex))
     return inner
 
 class ExecutionStatusCode(object):
@@ -73,8 +76,8 @@ class PlayBookExecution(object):
 
         try:
             response = self.rest_client.http_post(endpoint,
-                                                    self.params,
-                                                    self.querystr_dict)
+                                                  self.params,
+                                                  self.querystr_dict)
         except AnsibleRunnerServiceError:
             self.log.exception("Error launching playbook <%s>", self.playbook)
             raise
@@ -128,10 +131,11 @@ class PlayBookExecution(object):
         self.log.info("Requested playbook execution status is: %s", status_value)
         return status_value
 
-    def get_result(self, event_filter=""):
+    def get_result(self, event_filter):
         """Get the data of the events filtered by a task pattern and
         a event filter
 
+        @event_filter: list of 0..N event names items
         @returns: the events that matches with the patterns provided
         """
         response = None
@@ -148,16 +152,20 @@ class PlayBookExecution(object):
         else:
             events = json.loads(response.text)["data"]["events"]
 
+            # Filter by task
             if self.result_task_pattern:
-                result_events = {event:data for event,data in events.items()
-                                if "task" in data and
-                                re.match(self.result_task_pattern, data["task"])}
+                result_events = {event:data for event, data in events.items()
+                                 if "task" in data and
+                                 re.match(self.result_task_pattern, data["task"])}
             else:
                 result_events = events
 
+            # Filter by event
             if event_filter:
-                result_events = {event:data for event,data in result_events.items()
-                                if re.match(event_filter, data['event'])}
+                type_of_events = "|".join(event_filter)
+
+                result_events = {event:data for event, data in result_events.items()
+                                 if re.match(type_of_events, data['event'])}
 
         self.log.info("Requested playbook result is: %s", json.dumps(result_events))
         return result_events
@@ -167,67 +175,40 @@ class Client(object):
     and execute easily playbooks
     """
 
-    def __init__(self, server_url, user, password, verify_server, logger):
+    def __init__(self, server_url, verify_server, ca_bundle, client_cert,
+                 client_key, logger):
         """Provide an https client to make easy interact with the Ansible
         Runner Service"
 
-        :param servers_url: The base URL >server>:<port> of the Ansible Runner Service
-        :param user: Username of the authorized user
-        :param password: Password of the authorized user
-        :param verify_server: Either a boolean, in which case it controls whether we verify
-            the server's TLS certificate, or a string, in which case it must be a path
-            to a CA bundle to use. Defaults to ``True``.
+        :param server_url: The base URL >server>:<port> of the Ansible Runner
+                           Service
+        :param verify_server: A boolean to specify if server authentity should
+                              be checked or not. (True by default)
+        :param ca_bundle: If provided, an alternative Cert. Auth. bundle file
+                          will be used as source for checking the authentity of
+                          the Ansible Runner Service
+        :param client_cert: Path to Ansible Runner Service client certificate
+                            file
+        :param client_key: Path to Ansible Runner Service client certificate key
+                           file
         :param logger: Log file
         """
         self.server_url = server_url
-        self.user = user
-        self.password = password
         self.log = logger
-        self.auth = (self.user, self.password)
-        if not verify_server:
-            self.verify_server = True
-        elif verify_server.lower().strip() == 'false':
-            self.verify_server = False
-        else:
-            self.verify_server = verify_server
+        self.client_cert = (client_cert, client_key)
 
-        # Once authenticated this token will be used in all the requests
-        self.token = ""
+        # used to provide the "verify" parameter in requests
+        # a boolean that sometimes contains a string :-(
+        self.verify_server = verify_server
+        if ca_bundle: # This intentionallly overwrites
+            self.verify_server = ca_bundle
 
         self.server_url = "https://{0}".format(self.server_url)
-
-        # Log in the server and get a token
-        self.login()
-
-    @handle_requests_exceptions
-    def login(self):
-        """ Login with user credentials to obtain a valid token
-        """
-
-        the_url = "%s/%s" % (self.server_url, LOGIN_URL)
-        response = requests.get(the_url,
-                                auth = self.auth,
-                                verify = self.verify_server)
-
-        if response.status_code != requests.codes.ok:
-            self.log.error("login error <<%s>> (%s):%s",
-                            the_url, response.status_code, response.text)
-        else:
-            self.log.info("login succesful <<%s>> (%s):%s",
-                            the_url, response.status_code, response.text)
-
-        if response:
-            self.token = json.loads(response.text)["data"]["token"]
-            self.log.info("Connection with Ansible Runner Service is operative")
 
     @handle_requests_exceptions
     def is_operative(self):
         """Indicates if the connection with the Ansible runner Server is ok
         """
-
-        # No Token... this means we haven't used yet the service.
-        if not self.token:
-            return False
 
         # Check the service
         response = self.http_get(API_URL)
@@ -247,17 +228,19 @@ class Client(object):
         """
 
         the_url = "%s/%s" % (self.server_url, endpoint)
+
         response = requests.get(the_url,
-                            verify = self.verify_server,
-                            headers = {"Authorization": self.token})
+                                verify=self.verify_server,
+                                cert=self.client_cert,
+                                headers={})
 
         if response.status_code != requests.codes.ok:
             self.log.error("http GET %s <--> (%s - %s)\n%s",
-                            the_url, response.status_code, response.reason,
-                            response.text)
+                           the_url, response.status_code, response.reason,
+                           response.text)
         else:
             self.log.info("http GET %s <--> (%s - %s)",
-                            the_url, response.status_code, response.text)
+                          the_url, response.status_code, response.text)
 
         return response
 
@@ -274,19 +257,19 @@ class Client(object):
 
         the_url = "%s/%s" % (self.server_url, endpoint)
         response = requests.post(the_url,
-                            verify = self.verify_server,
-                            headers = {"Authorization": self.token,
-                                        "Content-type": "application/json"},
-                            json = payload,
-                            params = params_dict)
+                                 verify=self.verify_server,
+                                 cert=self.client_cert,
+                                 headers={"Content-type": "application/json"},
+                                 json=payload,
+                                 params=params_dict)
 
         if response.status_code != requests.codes.ok:
             self.log.error("http POST %s [%s] <--> (%s - %s:%s)\n",
-                            the_url, payload, response.status_code,
-                            response.reason, response.text)
+                           the_url, payload, response.status_code,
+                           response.reason, response.text)
         else:
             self.log.info("http POST %s <--> (%s - %s)",
-                            the_url, response.status_code, response.text)
+                          the_url, response.status_code, response.text)
 
         return response
 
@@ -301,16 +284,17 @@ class Client(object):
 
         the_url = "%s/%s" % (self.server_url, endpoint)
         response = requests.delete(the_url,
-                            verify = self.verify_server,
-                            headers = {"Authorization": self.token})
+                                   verify=self.verify_server,
+                                   cert=self.client_cert,
+                                   headers={})
 
         if response.status_code != requests.codes.ok:
             self.log.error("http DELETE %s <--> (%s - %s)\n%s",
-                            the_url, response.status_code, response.reason,
-                            response.text)
+                           the_url, response.status_code, response.reason,
+                           response.text)
         else:
             self.log.info("http DELETE %s <--> (%s - %s)",
-                            the_url, response.status_code, response.text)
+                          the_url, response.status_code, response.text)
 
         return response
 

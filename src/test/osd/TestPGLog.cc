@@ -2271,23 +2271,23 @@ TEST_F(PGLogTest, split_into_preserves_may_include_deletes) {
   clear();
 
   {
-    rebuilt_missing_with_deletes = false;
+    may_include_deletes_in_missing_dirty = false;
     missing.may_include_deletes = true;
     PGLog child_log(cct);
     pg_t child_pg;
     split_into(child_pg, 6, &child_log);
     ASSERT_TRUE(child_log.get_missing().may_include_deletes);
-    ASSERT_TRUE(child_log.get_rebuilt_missing_with_deletes());
+    ASSERT_TRUE(child_log.get_may_include_deletes_in_missing_dirty());
   }
 
   {
-    rebuilt_missing_with_deletes = false;
+    may_include_deletes_in_missing_dirty = false;
     missing.may_include_deletes = false;
     PGLog child_log(cct);
     pg_t child_pg;
     split_into(child_pg, 6, &child_log);
     ASSERT_FALSE(child_log.get_missing().may_include_deletes);
-    ASSERT_FALSE(child_log.get_rebuilt_missing_with_deletes());
+    ASSERT_FALSE(child_log.get_may_include_deletes_in_missing_dirty());
   }
 }
 

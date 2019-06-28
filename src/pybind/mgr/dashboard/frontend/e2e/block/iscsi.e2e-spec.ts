@@ -18,7 +18,7 @@ describe('Iscsi Page', () => {
     });
 
     it('should open and show breadcrumb', () => {
-      expect(Helper.getBreadcrumbText()).toEqual('Overview');
+      expect(IscsiPage.getBreadcrumbText()).toEqual('Overview');
     });
   });
 });

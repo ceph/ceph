@@ -8,16 +8,14 @@
 #include <string>
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 
+#include "crimson/os/futurized_store.h"
+#include "crimson/os/cyan_collection.h"
 #include "crimson/common/shared_lru.h"
 #include "os/Transaction.h"
 #include "osd/osd_types.h"
 #include "osd/osd_internal_types.h"
 
 struct hobject_t;
-namespace ceph::os {
-  class Collection;
-  class CyanStore;
-}
 
 class PGBackend
 {
@@ -26,11 +24,12 @@ protected:
   using ec_profile_t = std::map<std::string, std::string>;
 
 public:
-  PGBackend(shard_id_t shard, CollectionRef coll, ceph::os::CyanStore* store);
+  PGBackend(shard_id_t shard, CollectionRef coll, ceph::os::FuturizedStore* store);
   virtual ~PGBackend() = default;
   static std::unique_ptr<PGBackend> create(const spg_t pgid,
 					   const pg_pool_t& pool,
-					   ceph::os::CyanStore* store,
+					   ceph::os::CollectionRef coll,
+					   ceph::os::FuturizedStore* store,
 					   const ec_profile_t& ec_profile);
   using cached_os_t = boost::local_shared_ptr<ObjectState>;
   seastar::future<cached_os_t> get_object_state(const hobject_t& oid);
@@ -59,7 +58,7 @@ public:
 protected:
   const shard_id_t shard;
   CollectionRef coll;
-  ceph::os::CyanStore* store;
+  ceph::os::FuturizedStore* store;
 
 private:
   using cached_ss_t = boost::local_shared_ptr<SnapSet>;

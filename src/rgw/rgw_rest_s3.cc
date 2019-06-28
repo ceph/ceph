@@ -263,6 +263,7 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   } else {
     dump_header(s, "x-rgw-object-type", "Normal");
   }
+
   if (! op_ret) {
     if (! lo_etag.empty()) {
       /* Handle etag of Swift API's large objects (DLO/SLO). It's entirerly
@@ -328,6 +329,23 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
           ldpp_dout(this,0) << "Error caught buffer::error couldn't decode TagSet " << dendl;
         }
         dump_header(s, RGW_AMZ_TAG_COUNT, obj_tags.count());
+      } else if (iter->first.compare(RGW_ATTR_OBJECT_RETENTION) == 0 && get_retention){
+        RGWObjectRetention retention;
+        try {
+          decode(retention, iter->second);
+          dump_header(s, "x-amz-object-lock-mode", retention.get_mode());
+          dump_time_header(s, "x-amz-object-lock-retain-until-date", retention.get_retain_until_date());
+        } catch (buffer::error& err) {
+          ldpp_dout(this, 0) << "ERROR: failed to decode RGWObjectRetention" << dendl;
+        }
+      } else if (iter->first.compare(RGW_ATTR_OBJECT_LEGAL_HOLD) == 0 && get_legal_hold) {
+        RGWObjectLegalHold legal_hold;
+        try {
+          decode(legal_hold, iter->second);
+          dump_header(s, "x-amz-object-lock-legal-hold",legal_hold.get_status());
+        } catch (buffer::error& err) {
+          ldpp_dout(this, 0) << "ERROR: failed to decode RGWObjectLegalHold" << dendl;
+        }
       }
     }
   }
@@ -475,6 +493,100 @@ void RGWDeleteObjTags_ObjStore_S3::send_response()
   end_header(s, this);
 }
 
+void RGWGetBucketTags_ObjStore_S3::send_response_data(bufferlist& bl)
+{
+  if (op_ret)
+    set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  if (!op_ret) {
+  s->formatter->open_object_section_in_ns("Tagging", XMLNS_AWS_S3);
+  s->formatter->open_object_section("TagSet");
+  if (has_tags){
+    RGWObjTagSet_S3 tagset;
+    auto iter = bl.cbegin();
+    try {
+      tagset.decode(iter);
+    } catch (buffer::error& err) {
+      ldout(s->cct,0) << "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+      op_ret= -EIO;
+      return;
+    }
+    tagset.dump_xml(s->formatter);
+  }
+  s->formatter->close_section();
+  s->formatter->close_section();
+  rgw_flush_formatter_and_reset(s, s->formatter);
+  }
+}
+
+int RGWPutBucketTags_ObjStore_S3::get_params()
+{
+  RGWXMLParser parser;
+
+  if (!parser.init()){
+    return -EINVAL;
+  }
+
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  int r = 0;
+  bufferlist data;
+
+  std::tie(r, data) = rgw_rest_read_all_input(s, max_size, false);
+
+  if (r < 0)
+    return r;
+
+  if (!parser.parse(data.c_str(), data.length(), 1)) {
+    return -ERR_MALFORMED_XML;
+  }
+
+  RGWObjTagging_S3 tagging;
+  try {
+    RGWXMLDecoder::decode_xml("Tagging", tagging, &parser);
+  } catch (RGWXMLDecoder::err& err) {
+    
+    ldout(s->cct, 5) << "Malformed tagging request: " << err << dendl;
+    return -ERR_MALFORMED_XML;
+  }
+
+  RGWObjTags obj_tags(50); // A tag set can contain as many as 50 tags, or it can be empty.
+  r = tagging.rebuild(obj_tags);
+  if (r < 0)
+    return r;
+
+  obj_tags.encode(tags_bl);
+  ldout(s->cct, 20) << "Read " << obj_tags.count() << "tags" << dendl;
+
+  // forward bucket tags requests to meta master zone
+  if (!store->svc.zone->is_meta_master()) {
+    /* only need to keep this data around if we're not meta master */
+    in_data = std::move(data);
+  }
+
+  return 0;
+}
+
+void RGWPutBucketTags_ObjStore_S3::send_response()
+{
+  if (op_ret)
+    set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+}
+
+void RGWDeleteBucketTags_ObjStore_S3::send_response() 
+{
+  if (op_ret)
+    set_req_state_err(s, op_ret);
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+}
+
 void RGWListBuckets_ObjStore_S3::send_response_begin(bool has_buckets)
 {
   if (op_ret)
@@ -533,11 +645,11 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
       continue;
     const rgw_usage_data& usage = uiter->second;
     formatter->open_object_section("Entry");
-    formatter->dump_string("Category", uiter->first);
-    formatter->dump_int("BytesSent", usage.bytes_sent);
-    formatter->dump_int("BytesReceived", usage.bytes_received);
-    formatter->dump_int("Ops", usage.ops);
-    formatter->dump_int("SuccessfulOps", usage.successful_ops);
+    encode_json("Category", uiter->first, formatter);
+    encode_json("BytesSent", usage.bytes_sent, formatter);
+    encode_json("BytesReceived", usage.bytes_received, formatter);
+    encode_json("Ops", usage.ops, formatter);
+    encode_json("SuccessfulOps", usage.successful_ops, formatter);
     formatter->close_section(); // Entry
   }
   formatter->close_section(); // Category
@@ -546,9 +658,9 @@ static void dump_usage_categories_info(Formatter *formatter, const rgw_usage_log
 static void dump_usage_bucket_info(Formatter *formatter, const std::string& name, const cls_user_bucket_entry& entry)
 {
   formatter->open_object_section("Entry");
-  formatter->dump_string("Bucket", name);
-  formatter->dump_int("Bytes", entry.size);
-  formatter->dump_int("Bytes_Rounded", entry.size_rounded);
+  encode_json("Bucket", name, formatter);
+  encode_json("Bytes", entry.size, formatter);
+  encode_json("Bytes_Rounded", entry.size_rounded, formatter);
   formatter->close_section(); // entry
 }
 
@@ -621,10 +733,10 @@ void RGWGetUsage_ObjStore_S3::send_response()
        rgw_usage_data total_usage;
        entry.sum(total_usage, categories);
        formatter->open_object_section("Total");
-       formatter->dump_int("BytesSent", total_usage.bytes_sent);
-       formatter->dump_int("BytesReceived", total_usage.bytes_received);
-       formatter->dump_int("Ops", total_usage.ops);
-       formatter->dump_int("SuccessfulOps", total_usage.successful_ops);
+       encode_json("BytesSent", total_usage.bytes_sent, formatter);
+       encode_json("BytesReceived", total_usage.bytes_received, formatter);
+       encode_json("Ops", total_usage.ops, formatter);
+       encode_json("SuccessfulOps", total_usage.successful_ops, formatter);
        formatter->close_section(); // total
        formatter->close_section(); // user
      }
@@ -633,9 +745,9 @@ void RGWGetUsage_ObjStore_S3::send_response()
        formatter->open_object_section("Stats");
      }
 
-     formatter->dump_int("TotalBytes", header.stats.total_bytes);
-     formatter->dump_int("TotalBytesRounded", header.stats.total_bytes_rounded);
-     formatter->dump_int("TotalEntries", header.stats.total_entries);
+     encode_json("TotalBytes", header.stats.total_bytes, formatter);
+     encode_json("TotalBytesRounded", header.stats.total_bytes_rounded, formatter);
+     encode_json("TotalEntries", header.stats.total_entries, formatter);
 
      if (s->cct->_conf->rgw_rest_getusage_op_compat) {
        formatter->close_section(); //Stats
@@ -1272,7 +1384,13 @@ int RGWCreateBucket_ObjStore_S3::get_params()
   } else {
     placement_rule.storage_class = s->info.storage_class;
   }
-
+  auto iter = s->info.x_meta_map.find("x-amz-bucket-object-lock-enabled");
+  if (iter != s->info.x_meta_map.end()) {
+    if (!boost::algorithm::iequals(iter->second, "true") && !boost::algorithm::iequals(iter->second, "false")) {
+      return -EINVAL;
+    }
+    obj_lock_enabled = boost::algorithm::iequals(iter->second, "true");
+  }
   return 0;
 }
 
@@ -1443,6 +1561,41 @@ int RGWPutObj_ObjStore_S3::get_params()
     }
   }
 
+  //handle object lock
+  auto obj_lock_mode_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_MODE");
+  auto obj_lock_date_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_RETAIN_UNTIL_DATE");
+  auto obj_legal_hold_str = s->info.env->get("HTTP_X_AMZ_OBJECT_LOCK_LEGAL_HOLD");
+  if (obj_lock_mode_str && obj_lock_date_str) {
+    boost::optional<ceph::real_time> date = ceph::from_iso_8601(obj_lock_date_str);
+    if (boost::none == date || ceph::real_clock::to_time_t(*date) <= ceph_clock_now()) {
+        ret = -EINVAL;
+        ldpp_dout(this,0) << "invalid x-amz-object-lock-retain-until-date value" << dendl;
+        return ret;
+    }
+    if (strcmp(obj_lock_mode_str, "GOVERNANCE") != 0 && strcmp(obj_lock_mode_str, "COMPLIANCE") != 0) {
+        ret = -EINVAL;
+        ldpp_dout(this,0) << "invalid x-amz-object-lock-mode value" << dendl;
+        return ret;
+    }
+    obj_retention = new RGWObjectRetention(obj_lock_mode_str, *date);
+  } else if ((obj_lock_mode_str && !obj_lock_date_str) || (!obj_lock_mode_str && obj_lock_date_str)) {
+    ret = -EINVAL;
+    ldpp_dout(this,0) << "need both x-amz-object-lock-mode and x-amz-object-lock-retain-until-date " << dendl;
+    return ret;
+  }
+  if (obj_legal_hold_str) {
+    if (strcmp(obj_legal_hold_str, "ON") != 0 && strcmp(obj_legal_hold_str, "OFF") != 0) {
+        ret = -EINVAL;
+        ldpp_dout(this,0) << "invalid x-amz-object-lock-legal-hold value" << dendl;
+        return ret;
+    }
+    obj_legal_hold = new RGWObjectLegalHold(obj_legal_hold_str);
+  }
+  if (!s->bucket_info.obj_lock_enabled() && (obj_retention || obj_legal_hold)) {
+    ldpp_dout(this, 0) << "ERROR: object retention or legal hold can't be set if bucket object lock not configured" << dendl;
+    ret = -ERR_INVALID_REQUEST;
+    return ret;
+  }
   multipart_upload_id = s->info.args.get("uploadId");
   multipart_part_str = s->info.args.get("partNumber");
   if (!multipart_part_str.empty()) {
@@ -2163,6 +2316,12 @@ int RGWDeleteObj_ObjStore_S3::get_params()
     unmod_since = utime_t(epoch, nsec).to_real_time();
   }
 
+  const char *bypass_gov_header = s->info.env->get("HTTP_X_AMZ_BYPASS_GOVERNANCE_RETENTION");
+  if (bypass_gov_header) {
+    std::string bypass_gov_decoded = url_decode(bypass_gov_header);
+    bypass_governance_mode = boost::algorithm::iequals(bypass_gov_decoded, "true");
+  }
+
   return 0;
 }
 
@@ -2595,12 +2754,12 @@ int RGWSetRequestPayment_ObjStore_S3::get_params()
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
 
   int r = 0;
-  bufferlist data;
-  std::tie(r, data) = rgw_rest_read_all_input(s, max_size, false);
+  std::tie(r, in_data) = rgw_rest_read_all_input(s, max_size, false);
 
   if (r < 0) {
     return r;
   }
+
 
   RGWSetRequestPaymentParser parser;
 
@@ -2609,8 +2768,8 @@ int RGWSetRequestPayment_ObjStore_S3::get_params()
     return -EIO;
   }
 
-  char* buf = data.c_str();
-  if (!parser.parse(buf, data.length(), 1)) {
+  char* buf = in_data.c_str();
+  if (!parser.parse(buf, in_data.length(), 1)) {
     ldpp_dout(this, 10) << "failed to parse data: " << buf << dendl;
     return -EINVAL;
   }
@@ -2901,7 +3060,7 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(rgw_obj_key& key,
 
       s->formatter->dump_string("Key", key.name);
       s->formatter->dump_string("VersionId", key.instance);
-      s->formatter->dump_int("Code", r.http_ret);
+      s->formatter->dump_string("Code", r.s3_code);
       s->formatter->dump_string("Message", r.s3_code);
       s->formatter->close_section();
     }
@@ -3063,6 +3222,95 @@ void RGWDelBucketMetaSearch_ObjStore_S3::send_response()
   end_header(s, this);
 }
 
+void RGWPutBucketObjectLock_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+}
+
+void RGWGetBucketObjectLock_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  if (op_ret) {
+    return;
+  }
+  encode_xml("ObjectLockConfiguration", s->bucket_info.obj_lock, s->formatter);
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+
+int RGWPutObjRetention_ObjStore_S3::get_params()
+{
+  const char *bypass_gov_header = s->info.env->get("HTTP_X_AMZ_BYPASS_GOVERNANCE_RETENTION");
+  if (bypass_gov_header) {
+    std::string bypass_gov_decoded = url_decode(bypass_gov_header);
+    bypass_governance_mode = boost::algorithm::iequals(bypass_gov_decoded, "true");
+  }
+
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);
+  return op_ret;
+}
+
+void RGWPutObjRetention_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+}
+
+void RGWGetObjRetention_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  if (op_ret) {
+    return;
+  }
+  encode_xml("Retention", obj_retention, s->formatter);
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
+void RGWPutObjLegalHold_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s);
+}
+
+void RGWGetObjLegalHold_ObjStore_S3::send_response()
+{
+  if (op_ret) {
+    set_req_state_err(s, op_ret);
+  }
+  dump_errno(s);
+  end_header(s, this, "application/xml");
+  dump_start(s);
+
+  if (op_ret) {
+    return;
+  }
+  encode_xml("LegalHold", obj_legal_hold, s->formatter);
+  rgw_flush_formatter_and_reset(s, s->formatter);
+}
+
 
 RGWOp *RGWHandler_REST_Service_S3::op_get()
 {
@@ -3151,6 +3399,10 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_get()
     return new RGWGetLC_ObjStore_S3;
   } else if(is_policy_op()) {
     return new RGWGetBucketPolicy;
+  } else if (is_tagging_op()) {
+    return new RGWGetBucketTags_ObjStore_S3;
+  } else if (is_object_lock_op()) {
+    return new RGWGetBucketObjectLock_ObjStore_S3;
   }
   return get_obj_op(true);
 }
@@ -3177,7 +3429,10 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
     }
     return new RGWSetBucketWebsite_ObjStore_S3;
   }
-  if (is_acl_op()) {
+
+  if (is_tagging_op()) {
+    return new RGWPutBucketTags_ObjStore_S3;
+  } else if (is_acl_op()) {
     return new RGWPutACLs_ObjStore_S3;
   } else if (is_cors_op()) {
     return new RGWPutCORS_ObjStore_S3;
@@ -3189,13 +3444,17 @@ RGWOp *RGWHandler_REST_Bucket_S3::op_put()
     return new RGWPutBucketPolicy;
   } else if (is_tagging_op()) {
     return nullptr;
+  } else if (is_object_lock_op()) {
+    return new RGWPutBucketObjectLock_ObjStore_S3;
   }
   return new RGWCreateBucket_ObjStore_S3;
 }
 
 RGWOp *RGWHandler_REST_Bucket_S3::op_delete()
 {
-  if (is_cors_op()) {
+  if (is_tagging_op()) {
+    return new RGWDeleteBucketTags_ObjStore_S3;
+  } else if (is_cors_op()) {
     return new RGWDeleteCORS_ObjStore_S3;
   } else if(is_lc_op()) {
     return new RGWDeleteLC_ObjStore_S3;
@@ -3252,6 +3511,10 @@ RGWOp *RGWHandler_REST_Obj_S3::op_get()
     return new RGWGetObjLayout_ObjStore_S3;
   } else if (is_tagging_op()) {
     return new RGWGetObjTags_ObjStore_S3;
+  } else if (is_obj_retention_op()) {
+    return new RGWGetObjRetention_ObjStore_S3;
+  } else if (is_obj_legal_hold_op()) {
+    return new RGWGetObjLegalHold_ObjStore_S3;
   }
   return get_obj_op(true);
 }
@@ -3272,6 +3535,10 @@ RGWOp *RGWHandler_REST_Obj_S3::op_put()
     return new RGWPutACLs_ObjStore_S3;
   } else if (is_tagging_op()) {
     return new RGWPutObjTags_ObjStore_S3;
+  } else if (is_obj_retention_op()) {
+    return new RGWPutObjRetention_ObjStore_S3;
+  } else if (is_obj_legal_hold_op()) {
+    return new RGWPutObjLegalHold_ObjStore_S3;
   }
 
   if (s->init_state.src_bucket.empty())
@@ -3476,7 +3743,7 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
       (! s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE")) &&
       (! s->info.args.exists("uploadId"))) {
 
-    ret = RGWCopyObj::parse_copy_location(url_decode(copy_source),
+    ret = RGWCopyObj::parse_copy_location(copy_source,
                                           s->init_state.src_bucket,
                                           s->src_object);
     if (!ret) {
@@ -4059,9 +4326,15 @@ AWSGeneralAbstractor::get_auth_data_v4(const req_state* const s,
         case RGW_OP_SET_BUCKET_WEBSITE:
         case RGW_OP_PUT_BUCKET_POLICY:
         case RGW_OP_PUT_OBJ_TAGGING:
+	case RGW_OP_PUT_BUCKET_TAGGING:
         case RGW_OP_PUT_LC:
         case RGW_OP_SET_REQUEST_PAYMENT:
         case RGW_OP_PUBSUB_NOTIF_CREATE:
+        case RGW_OP_PUT_BUCKET_OBJ_LOCK:
+        case RGW_OP_PUT_OBJ_RETENTION:
+        case RGW_OP_PUT_OBJ_LEGAL_HOLD:
+        case RGW_STS_GET_SESSION_TOKEN:
+        case RGW_STS_ASSUME_ROLE:
           break;
         default:
           dout(10) << "ERROR: AWS4 completion for this operation NOT IMPLEMENTED" << dendl;
@@ -4514,9 +4787,14 @@ rgw::auth::s3::STSEngine::get_session_token(const DoutPrefixProvider* dpp, const
     ldpp_dout(dpp, 0) << "ERROR: Decryption failed: " << error << dendl;
     return -EPERM;
   } else {
-    dec_output.append('\0');
-    auto iter = dec_output.cbegin();
-    decode(token, iter);
+    try {
+      dec_output.append('\0');
+      auto iter = dec_output.cbegin();
+      decode(token, iter);
+    } catch (const buffer::error& e) {
+      ldout(cct, 0) << "ERROR: decode SessionToken failed: " << error << dendl;
+      return -EINVAL;
+    }
   }
   return 0;
 }

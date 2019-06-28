@@ -446,7 +446,7 @@ std::unique_ptr<BlockCrypt> AES_256_CBC_create(CephContext* cct, const uint8_t* 
 {
   auto cbc = std::unique_ptr<AES_256_CBC>(new AES_256_CBC(cct));
   cbc->set_key(key, AES_256_KEYSIZE);
-  return std::move(cbc);
+  return cbc;
 }
 
 

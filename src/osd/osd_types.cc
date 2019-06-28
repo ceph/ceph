@@ -37,6 +37,7 @@ extern "C" {
 #include "common/Formatter.h"
 #include "OSDMap.h"
 #include "osd_types.h"
+#include "os/Transaction.h"
 
 using std::list;
 using std::make_pair;
@@ -2978,7 +2979,7 @@ void store_statfs_t::dump(Formatter *f) const
 ostream& operator<<(ostream& out, const store_statfs_t &s)
 {
   out << std::hex
-      << "store_statfs(0x" << s.available
+      << " store_statfs(0x" << s.available
       << "/0x"  << s.internally_reserved
       << "/0x"  << s.total
       << ", data 0x" << s.data_stored
@@ -6648,3 +6649,34 @@ int prepare_info_keymap(
   return 0;
 }
 
+void create_pg_collection(
+  ceph::os::Transaction& t, spg_t pgid, int bits)
+{
+  coll_t coll(pgid);
+  t.create_collection(coll, bits);
+}
+
+void init_pg_ondisk(
+  ceph::os::Transaction& t,
+  spg_t pgid,
+  const pg_pool_t *pool)
+{
+  coll_t coll(pgid);
+  if (pool) {
+    // Give a hint to the PG collection
+    bufferlist hint;
+    uint32_t pg_num = pool->get_pg_num();
+    uint64_t expected_num_objects_pg = pool->expected_num_objects / pg_num;
+    encode(pg_num, hint);
+    encode(expected_num_objects_pg, hint);
+    uint32_t hint_type = ceph::os::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS;
+    t.collection_hint(coll, hint_type, hint);
+  }
+
+  ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
+  t.touch(coll, pgmeta_oid);
+  map<string,bufferlist> values;
+  __u8 struct_v = pg_latest_struct_v;
+  encode(struct_v, values[string(infover_key)]);
+  t.omap_setkeys(coll, pgmeta_oid, values);
+}

@@ -53,20 +53,21 @@ public:
     }
     desc = out.str();
   }
-  epoch_t get_epoch_sent() {
+  epoch_t get_epoch_sent() const {
     return epoch_sent;
   }
-  epoch_t get_epoch_requested() {
+  epoch_t get_epoch_requested() const {
     return epoch_requested;
   }
-  const boost::statechart::event_base &get_event() {
+  const boost::statechart::event_base &get_event() const {
     return *evt;
   }
-  const std::string& get_desc() {
+  const std::string& get_desc() const {
     return desc;
   }
 };
 typedef std::shared_ptr<PGPeeringEvent> PGPeeringEventRef;
+typedef std::unique_ptr<PGPeeringEvent> PGPeeringEventURef;
 
 struct MInfoRec : boost::statechart::event< MInfoRec > {
   pg_shard_t from;
@@ -82,8 +83,7 @@ struct MInfoRec : boost::statechart::event< MInfoRec > {
 struct MLogRec : boost::statechart::event< MLogRec > {
   pg_shard_t from;
   boost::intrusive_ptr<MOSDPGLog> msg;
-  MLogRec(pg_shard_t from, MOSDPGLog *msg) :
-    from(from), msg(msg) {}
+  MLogRec(pg_shard_t from, MOSDPGLog *msg);
   void print(std::ostream *out) const {
     *out << "MLogRec from " << from;
   }

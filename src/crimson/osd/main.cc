@@ -9,8 +9,11 @@
 #include <seastar/core/app-template.hh>
 #include <seastar/core/print.hh>
 #include <seastar/core/thread.hh>
+#include <seastar/util/std-compat.hh>
 
+#include "auth/KeyRing.h"
 #include "common/ceph_argparse.h"
+#include "crimson/common/buffer_io.h"
 #include "crimson/common/config_proxy.h"
 #include "crimson/net/SocketMessenger.h"
 #include "global/pidfile.h"
@@ -18,6 +21,7 @@
 #include "osd.h"
 
 using config_t = ceph::common::ConfigProxy;
+namespace fs = seastar::compat::filesystem;
 
 void usage(const char* prog) {
   std::cout << "usage: " << prog << " -i <ID>" << std::endl;
@@ -67,11 +71,43 @@ auto partition_args(seastar::app_template& app, char** argv_begin, char** argv_e
   return make_pair(std::move(ceph_args), std::move(app_args));
 }
 
+using ceph::common::local_conf;
+
+seastar::future<> make_keyring()
+{
+  const auto path = local_conf().get_val<string>("keyring");
+  return seastar::file_exists(path).then([path](bool exists) {
+    KeyRing keyring;
+    EntityName name{local_conf()->name};
+    EntityAuth auth;
+    if (exists &&
+        keyring.load(nullptr, path) == 0 &&
+        keyring.get_auth(name, auth)) {
+      seastar::fprint(std::cerr, "already have key in keyring: %s\n", path);
+      return seastar::now();
+    } else {
+      auth.key.create(std::make_unique<CephContext>().get(), CEPH_CRYPTO_AES);
+      keyring.add(name, auth);
+      bufferlist bl;
+      keyring.encode_plaintext(bl);
+      const auto permissions = (seastar::file_permissions::user_read |
+                              seastar::file_permissions::user_write);
+      return ceph::buffer::write_file(std::move(bl), path, permissions);
+    }
+  }).handle_exception_type([path](const fs::filesystem_error& e) {
+    seastar::fprint(std::cerr, "FATAL: writing new keyring to %s: %s\n", path, e.what());
+    throw e;
+  });
+}
+
 int main(int argc, char* argv[])
 {
   seastar::app_template app;
   app.add_options()
-    ("mkfs", "create a [new] data directory");
+    ("mkkey", "generate a new secret key. "
+              "This is normally used in combination with --mkfs")
+    ("mkfs", "create a [new] data directory")
+    ("debug", "enable debug output on all loggers");
 
   auto [ceph_args, app_args] = partition_args(app, argv, argv + argc);
   if (ceph_argparse_need_usage(ceph_args)) {
@@ -86,16 +122,20 @@ int main(int argc, char* argv[])
                                               CEPH_ENTITY_TYPE_OSD,
                                               &cluster_name,
                                               &conf_file_list);
-  seastar::sharded<OSD> osd;
+  seastar::sharded<ceph::osd::OSD> osd;
   seastar::sharded<ceph::net::SocketMessenger> cluster_msgr, client_msgr;
   seastar::sharded<ceph::net::SocketMessenger> hb_front_msgr, hb_back_msgr;
   using ceph::common::sharded_conf;
   using ceph::common::sharded_perf_coll;
-  using ceph::common::local_conf;
   try {
     return app.run_deprecated(app_args.size(), const_cast<char**>(app_args.data()), [&] {
       auto& config = app.configuration();
       return seastar::async([&] {
+	if (config.count("debug")) {
+	    seastar::global_logger_registry().set_all_loggers_level(
+	      seastar::log_level::debug
+	    );
+	}
         sharded_conf().start(init_params.name, cluster_name).get();
         seastar::engine().at_exit([] {
           return sharded_conf().stop();
@@ -136,12 +176,22 @@ int main(int argc, char* argv[])
                                            hb_front_msgr.stop(),
                                            hb_back_msgr.stop());
         });
+        if (config.count("mkkey")) {
+          make_keyring().handle_exception([](std::exception_ptr) {
+            seastar::engine().exit(1);
+          }).get();
+        }
         if (config.count("mkfs")) {
-          osd.invoke_on(0, &OSD::mkfs,
-                        local_conf().get_val<uuid_d>("fsid"))
-            .then([] { seastar::engine().exit(0); }).get();
+          osd.invoke_on(
+	    0,
+	    &ceph::osd::OSD::mkfs,
+	    local_conf().get_val<uuid_d>("osd_uuid"),
+	    local_conf().get_val<uuid_d>("fsid")).get();
+        }
+        if (config.count("mkkey") || config.count("mkfs")) {
+          seastar::engine().exit(0);
         } else {
-          osd.invoke_on(0, &OSD::start).get();
+          osd.invoke_on(0, &ceph::osd::OSD::start).get();
         }
       });
     });

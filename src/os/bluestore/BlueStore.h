@@ -968,7 +968,7 @@ public:
       uint64_t min_alloc_size);
 
     /// return a collection of extents to perform GC on
-    const vector<bluestore_pextent_t>& get_extents_to_collect() const {
+    const interval_set<uint64_t>& get_extents_to_collect() const {
       return extents_to_collect;
     }
     GarbageCollector(CephContext* _cct) : cct(_cct) {}
@@ -999,7 +999,7 @@ public:
                                          ///< specific write
 
     ///< protrusive extents that should be collected if GC takes place
-    vector<bluestore_pextent_t> extents_to_collect;
+    interval_set<uint64_t> extents_to_collect;
 
     boost::optional<uint64_t > used_alloc_unit; ///< last processed allocation
                                                 ///<  unit when traversing 
@@ -1021,8 +1021,6 @@ public:
     int64_t expected_for_release = 0;      ///< alloc units currently used by
                                            ///< compressed blobs that might
                                            ///< gone after GC
-    uint64_t gc_start_offset = 0;              ///starting offset for GC
-    uint64_t gc_end_offset = 0;                ///ending offset for GC
 
   protected:
     void process_protrusive_extents(const BlueStore::ExtentMap& extent_map, 
@@ -1396,7 +1394,7 @@ public:
     pool_opts_t pool_opts;
     ContextQueue *commit_queue;
 
-    OnodeRef get_onode(const ghobject_t& oid, bool create);
+    OnodeRef get_onode(const ghobject_t& oid, bool create, bool is_createop=false);
 
     // the terminology is confusing here, sorry!
     //
@@ -2031,7 +2029,6 @@ private:
     ceph::condition_variable cond;
     ceph::mutex lock = ceph::make_mutex("BlueStore::MempoolThread::lock");
     bool stop = false;
-    uint64_t autotune_cache_size = 0;
     std::shared_ptr<PriorityCache::PriCache> binned_kv_cache = nullptr;
     std::shared_ptr<PriorityCache::Manager> pcm = nullptr;
 
@@ -2390,6 +2387,10 @@ public:
   bool wants_journal() override { return false; };
   bool allows_journal() override { return false; };
 
+  uint64_t get_min_alloc_size() const override {
+    return min_alloc_size;
+  }
+
   int get_devices(set<string> *ls) override;
 
   bool is_rotational() override;
@@ -2682,7 +2683,8 @@ public:
     uint64_t size,
     PExtentVector* extents);
 
-  void log_latency_fn(int idx,
+  void log_latency_fn(const char* name,
+		      int idx,
 		      const ceph::timespan& lat,
 		      std::function<string (const ceph::timespan& lat)> fn);
 
@@ -2770,6 +2772,7 @@ private:
     unsigned csum_order = 0;        ///< target checksum chunk order
 
     old_extent_map_t old_extents;   ///< must deref these blobs
+    interval_set<uint64_t> extents_to_gc; ///< extents for garbage collection
 
     struct write_item {
       uint64_t logical_offset;      ///< write logical offset
@@ -2888,7 +2891,6 @@ private:
   int _do_gc(TransContext *txc,
              CollectionRef& c,
              OnodeRef o,
-             const GarbageCollector& gc,
              const WriteContext& wctx,
              uint64_t *dirty_start,
              uint64_t *dirty_end);

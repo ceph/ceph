@@ -2795,7 +2795,8 @@ void Client::send_reconnect(MetaSession *session)
     auto it = in->caps.find(mds);
     if (it != in->caps.end()) {
       if (allow_multi &&
-	  m->get_approx_size() >= (std::numeric_limits<int>::max() >> 1)) {
+	  m->get_approx_size() >=
+	  static_cast<size_t>((std::numeric_limits<int>::max() >> 1))) {
 	m->mark_more();
 	session->con->send_message2(std::move(m));
 
@@ -8579,22 +8580,6 @@ int Client::_lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
 {
   ldout(cct, 8) << __func__ << " enter(" << ino->ino << ")" << dendl;
 
-  if (unmounting)
-    return -ENOTCONN;
-
-  if (!ino->dentries.empty()) {
-    // if we exposed the parent here, we'd need to check permissions,
-    // but right now we just rely on the MDS doing so in make_request
-    ldout(cct, 8) << __func__ << " dentry already present" << dendl;
-    return 0;
-  }
-  
-  if (ino->is_root()) {
-    *parent = NULL;
-    ldout(cct, 8) << "ino is root, no parent" << dendl;
-    return -EINVAL;
-  }
-
   MetaRequest *req = new MetaRequest(CEPH_MDS_OP_LOOKUPPARENT);
   filepath path(ino->ino);
   req->set_filepath(path);
@@ -8613,12 +8598,6 @@ int Client::_lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
   }
   ldout(cct, 8) << __func__ << " exit(" << ino->ino << ") = " << r << dendl;
   return r;
-}
-
-int Client::lookup_parent(Inode *ino, const UserPerm& perms, Inode **parent)
-{
-  std::lock_guard lock(client_lock);
-  return _lookup_parent(ino, perms, parent);
 }
 
 /**
@@ -10608,6 +10587,7 @@ Inode *Client::open_snapdir(Inode *diri)
     in->mode = diri->mode;
     in->uid = diri->uid;
     in->gid = diri->gid;
+    in->nlink = 1;
     in->mtime = diri->mtime;
     in->ctime = diri->ctime;
     in->btime = diri->btime;
@@ -10677,31 +10657,38 @@ int Client::ll_lookup_inode(
     const UserPerm& perms,
     Inode **inode)
 {
+  ceph_assert(inode != NULL);
   std::lock_guard lock(client_lock);
   ldout(cct, 3) << "ll_lookup_inode " << ino  << dendl;
    
+  if (unmounting)
+    return -ENOTCONN;
+
   // Num1: get inode and *inode
   int r = _lookup_ino(ino, perms, inode);
-  if (r) {
+  if (r)
     return r;
-  }
-  ceph_assert(inode != NULL);
+
   ceph_assert(*inode != NULL);
+
+  if (!(*inode)->dentries.empty()) {
+    ldout(cct, 8) << __func__ << " dentry already present" << dendl;
+    return 0;
+  }
+
+  if ((*inode)->is_root()) {
+    ldout(cct, 8) << "ino is root, no parent" << dendl;
+    return 0;
+  }
 
   // Num2: Request the parent inode, so that we can look up the name
   Inode *parent;
   r = _lookup_parent(*inode, perms, &parent);
-  if (r && r != -EINVAL) {
-    // Unexpected error
+  if (r) {
     _ll_forget(*inode, 1);  
     return r;
-  } else if (r == -EINVAL) {
-    // EINVAL indicates node without parents (root), drop out now
-    // and don't try to look up the non-existent dentry.
-    return 0;
   }
-  // FIXME: I don't think this works; lookup_parent() returns 0 if the parent
-  // is already in cache
+
   ceph_assert(parent != NULL);
 
   // Num3: Finally, get the name (dentry) of the requested inode
@@ -11789,7 +11776,7 @@ size_t Client::_vxattrcb_dir_rbytes(Inode *in, char *val, size_t size)
 }
 size_t Client::_vxattrcb_dir_rctime(Inode *in, char *val, size_t size)
 {
-  return snprintf(val, size, "%ld.09%ld", (long)in->rstat.rctime.sec(),
+  return snprintf(val, size, "%ld.%09ld", (long)in->rstat.rctime.sec(),
       (long)in->rstat.rctime.nsec());
 }
 bool Client::_vxattrcb_dir_pin_exists(Inode *in)
@@ -11808,7 +11795,7 @@ bool Client::_vxattrcb_snap_btime_exists(Inode *in)
 
 size_t Client::_vxattrcb_snap_btime(Inode *in, char *val, size_t size)
 {
-  return snprintf(val, size, "%llu.09%lu",
+  return snprintf(val, size, "%llu.%09lu",
       (long long unsigned)in->snap_btime.sec(),
       (long unsigned)in->snap_btime.nsec());
 }

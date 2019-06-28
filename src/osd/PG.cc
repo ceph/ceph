@@ -176,7 +176,6 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   coll(p),
   osd(o),
   cct(o->cct),
-  pool(recovery_state.get_pool()),
   osdriver(osd->store, coll_t(), OSD::make_snapmapper_oid()),
   snap_mapper(
     cct,
@@ -208,6 +207,7 @@ PG::PG(OSDService *o, OSDMapRef curmap,
     curmap,
     this,
     this),
+  pool(recovery_state.get_pool()),
   info(recovery_state.get_info())
 {
 #ifdef PG_DEBUG_REFS
@@ -871,7 +871,7 @@ void PG::shutdown()
 
 void PG::upgrade(ObjectStore *store)
 {
-  dout(0) << __func__ << " " << info_struct_v << " -> " << latest_struct_v
+  dout(0) << __func__ << " " << info_struct_v << " -> " << pg_latest_struct_v
 	  << dendl;
   ceph_assert(info_struct_v <= 10);
   ObjectStore::Transaction t;
@@ -882,9 +882,9 @@ void PG::upgrade(ObjectStore *store)
   ceph_assert(info_struct_v == 10);
 
   // update infover_key
-  if (info_struct_v < latest_struct_v) {
+  if (info_struct_v < pg_latest_struct_v) {
     map<string,bufferlist> v;
-    __u8 ver = latest_struct_v;
+    __u8 ver = pg_latest_struct_v;
     encode(ver, v[string(infover_key)]);
     t.omap_setkeys(coll, pgmeta_oid, v);
   }
@@ -908,35 +908,6 @@ void PG::upgrade(ObjectStore *store)
 
 #pragma GCC diagnostic pop
 #pragma GCC diagnostic warning "-Wpragmas"
-
-void PG::_create(ObjectStore::Transaction& t, spg_t pgid, int bits)
-{
-  coll_t coll(pgid);
-  t.create_collection(coll, bits);
-}
-
-void PG::_init(ObjectStore::Transaction& t, spg_t pgid, const pg_pool_t *pool)
-{
-  coll_t coll(pgid);
-
-  if (pool) {
-    // Give a hint to the PG collection
-    bufferlist hint;
-    uint32_t pg_num = pool->get_pg_num();
-    uint64_t expected_num_objects_pg = pool->expected_num_objects / pg_num;
-    encode(pg_num, hint);
-    encode(expected_num_objects_pg, hint);
-    uint32_t hint_type = ObjectStore::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS;
-    t.collection_hint(coll, hint_type, hint);
-  }
-
-  ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
-  t.touch(coll, pgmeta_oid);
-  map<string,bufferlist> values;
-  __u8 struct_v = latest_struct_v;
-  encode(struct_v, values[string(infover_key)]);
-  t.omap_setkeys(coll, pgmeta_oid, values);
-}
 
 void PG::prepare_write(
   pg_info_t &info,
@@ -1115,7 +1086,7 @@ void PG::read_state(ObjectStore *store)
     info_struct_v);
   ceph_assert(r >= 0);
 
-  if (info_struct_v < compat_struct_v) {
+  if (info_struct_v < pg_compat_struct_v) {
     derr << "PG needs upgrade, but on-disk data is too old; upgrade to"
 	 << " an older version first." << dendl;
     ceph_abort_msg("PG too old to upgrade");
@@ -1140,7 +1111,7 @@ void PG::read_state(ObjectStore *store)
       return 0;
     });
 
-  if (info_struct_v < latest_struct_v) {
+  if (info_struct_v < pg_latest_struct_v) {
     upgrade(store);
   }
 
@@ -1162,7 +1133,7 @@ void PG::read_state(ObjectStore *store)
       recovery_state.set_role(-1);
   }
 
-  PG::PeeringCtx rctx;
+  PeeringCtx rctx;
   handle_initialize(rctx);
   // note: we don't activate here because we know the OSD will advance maps
   // during boot.
@@ -1363,7 +1334,11 @@ bool PG::sched_scrub()
 
   bool deep_coin_flip = false;
   // Only add random deep scrubs when NOT user initiated scrub
-  if (!scrubber.must_scrub)
+  // If we randomize when noscrub set then it guarantees
+  // we will deep scrub because this function is called often.
+  if (!time_for_deep && !scrubber.must_scrub
+       && !(get_osdmap()->test_flag(CEPH_OSDMAP_NOSCRUB)
+	    || pool.info.has_flag(pg_pool_t::FLAG_NOSCRUB)))
       deep_coin_flip = (rand() % 100) < cct->_conf->osd_deep_scrub_randomize_ratio * 100;
   dout(20) << __func__ << ": time_for_deep=" << time_for_deep << " deep_coin_flip=" << deep_coin_flip << dendl;
 
@@ -3780,10 +3755,10 @@ void PG::do_delete_work(ObjectStore::Transaction &t)
     if (!osd->try_finish_pg_delete(this, pool.info.get_pg_num())) {
       dout(1) << __func__ << " raced with merge, reinstantiating" << dendl;
       ch = osd->store->create_new_collection(coll);
-      _create(t,
+      create_pg_collection(t,
 	      info.pgid,
 	      info.pgid.get_split_bits(pool.info.get_pg_num()));
-      _init(t, info.pgid, &pool.info);
+      init_pg_ondisk(t, info.pgid, &pool.info);
       recovery_state.reset_last_persisted();
     } else {
       recovery_state.set_delete_complete();
@@ -3881,4 +3856,8 @@ void PG::with_heartbeat_peers(std::function<void(int)> f)
     f(p);
   }
   heartbeat_peer_lock.Unlock();
+}
+
+uint64_t PG::get_min_alloc_size() const {
+  return osd->store->get_min_alloc_size();
 }

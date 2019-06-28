@@ -94,12 +94,10 @@ class HealthData(object):
 
         del df['stats_by_class']
 
-        df['stats']['total_objects'] = sum(
-            [p['stats']['objects'] for p in df['pools']])
         if self._minimal:
             df = dict(stats=self._partial_dict(
                 df['stats'],
-                ['total_avail_bytes', 'total_bytes', 'total_objects',
+                ['total_avail_bytes', 'total_bytes',
                  'total_used_raw_bytes']
             ))
         return df
@@ -163,10 +161,7 @@ class HealthData(object):
         return osd_map
 
     def pg_info(self):
-        pg_info = CephService.get_pg_info()
-        if self._minimal:
-            pg_info = self._partial_dict(pg_info, ['pgs_per_osd', 'statuses'])
-        return pg_info
+        return CephService.get_pg_info()
 
     def pools(self):
         pools = CephService.get_pool_list_with_stats()

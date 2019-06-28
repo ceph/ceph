@@ -235,7 +235,7 @@ public:
     if (ret)
       return ret;
     cct->_conf.apply_changes(nullptr);
-    cct->_conf.complain_about_parse_errors(cct);
+    cct->_conf.complain_about_parse_error(cct);
     return 0;
   }
 

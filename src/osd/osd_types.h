@@ -27,6 +27,7 @@
 #include <boost/scoped_ptr.hpp>
 #include <boost/optional/optional_io.hpp>
 #include <boost/variant.hpp>
+#include <boost/smart_ptr/local_shared_ptr.hpp>
 
 #include "include/rados/rados_types.hpp"
 #include "include/mempool.h"
@@ -537,6 +538,9 @@ struct spg_t {
   }
   uint64_t pool() const {
     return pgid.pool();
+  }
+  void reset_shard(shard_id_t s) {
+    shard = s;
   }
 
   static const uint8_t calc_name_buf_size = pg_t::calc_name_buf_size + 4; // 36 + len('s') + len("255");
@@ -1455,12 +1459,18 @@ public:
   typedef enum {
     TYPE_FINGERPRINT_NONE = 0,
     TYPE_FINGERPRINT_SHA1 = 1,     
+    TYPE_FINGERPRINT_SHA256 = 2,     
+    TYPE_FINGERPRINT_SHA512 = 3,     
   } fingerprint_t;
   static fingerprint_t get_fingerprint_from_str(const std::string& s) {
     if (s == "none")
       return TYPE_FINGERPRINT_NONE;
     if (s == "sha1")
       return TYPE_FINGERPRINT_SHA1;
+    if (s == "sha256")
+      return TYPE_FINGERPRINT_SHA256;
+    if (s == "sha512")
+      return TYPE_FINGERPRINT_SHA512;
     return (fingerprint_t)-1;
   }
   const fingerprint_t get_fingerprint_type() const {
@@ -1479,6 +1489,8 @@ public:
     switch (m) {
     case TYPE_FINGERPRINT_NONE: return "none";
     case TYPE_FINGERPRINT_SHA1: return "sha1";
+    case TYPE_FINGERPRINT_SHA256: return "sha256";
+    case TYPE_FINGERPRINT_SHA512: return "sha512";
     default: return "unknown";
     }
   }
@@ -3014,6 +3026,11 @@ class OSDMap;
  * the might_have_unfound set
  */
 class PastIntervals {
+#ifdef WITH_SEASTAR
+  using OSDMapRef = boost::local_shared_ptr<const OSDMap>;
+#else
+  using OSDMapRef = std::shared_ptr<const OSDMap>;
+#endif
 public:
   struct pg_interval_t {
     std::vector<int32_t> up, acting;
@@ -3192,8 +3209,8 @@ public:
     const std::vector<int> &new_up,                  ///< [in] up as of osdmap
     epoch_t same_interval_since,                ///< [in] as of osdmap
     epoch_t last_epoch_clean,                   ///< [in] current
-    std::shared_ptr<const OSDMap> osdmap,      ///< [in] current map
-    std::shared_ptr<const OSDMap> lastmap,     ///< [in] last map
+    OSDMapRef osdmap,      ///< [in] current map
+    OSDMapRef lastmap,     ///< [in] last map
     pg_t pgid,                                  ///< [in] pgid for pg
     const IsPGRecoverablePredicate &could_have_gone_active, ///< [in] predicate whether the pg can be active
     PastIntervals *past_intervals,              ///< [out] intervals
@@ -6007,6 +6024,14 @@ static const string_view biginfo_key = "_biginfo"sv;
 static const string_view epoch_key = "_epoch"sv;
 static const string_view fastinfo_key = "_fastinfo"sv;
 
+static const __u8 pg_latest_struct_v = 10;
+// v10 is the new past_intervals encoding
+// v9 was fastinfo_key addition
+// v8 was the move to a per-pg pgmeta object
+// v7 was SnapMapper addition in 86658392516d5175b2756659ef7ffaaf95b0f8ad
+// (first appeared in cuttlefish).
+static const __u8 pg_compat_struct_v = 10;
+
 int prepare_info_keymap(
   CephContext* cct,
   map<string,bufferlist> *km,
@@ -6019,6 +6044,16 @@ int prepare_info_keymap(
   bool try_fast_info,
   PerfCounters *logger = nullptr,
   DoutPrefixProvider *dpp = nullptr);
+
+namespace ceph::os {
+  class Transaction;
+};
+
+void create_pg_collection(
+  ceph::os::Transaction& t, spg_t pgid, int bits);
+
+void init_pg_ondisk(
+  ceph::os::Transaction& t, spg_t pgid, const pg_pool_t *pool);
 
 // omap specific stats
 struct omap_stat_t {

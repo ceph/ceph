@@ -3,21 +3,20 @@
 #include <string_view>
 
 #include "crimson/os/cyan_collection.h"
-#include "crimson/os/cyan_store.h"
+#include "crimson/os/futurized_store.h"
 
 // prefix pgmeta_oid keys with _ so that PGLog::read_log_and_missing() can
 // easily skip them
+using ceph::os::FuturizedStore;
 
-using ceph::os::CyanStore;
-
-PGMeta::PGMeta(CyanStore* store, spg_t pgid)
+PGMeta::PGMeta(FuturizedStore* store, spg_t pgid)
   : store{store},
     pgid{pgid}
 {}
 
 namespace {
   template<typename T>
-  std::optional<T> find_value(const CyanStore::omap_values_t& values,
+  std::optional<T> find_value(const FuturizedStore::omap_values_t& values,
                               string_view key)
   {
     auto found = values.find(key);

@@ -19,14 +19,15 @@
 
 #include "acconfig.h"
 
-#include "common/config.h"
-#include "common/ceph_argparse.h"
-#include "global/global_init.h"
 #include "common/Cond.h"
+#include "common/Formatter.h"
+#include "common/ceph_argparse.h"
+#include "common/ceph_crypto.h"
+#include "common/config.h"
 #include "common/debug.h"
 #include "common/errno.h"
-#include "common/Formatter.h"
 #include "common/obj_bencher.h"
+#include "global/global_init.h"
 
 #include <iostream>
 #include <fstream>
@@ -59,7 +60,7 @@ void usage()
   cout << "   --object <object_name> " << std::endl;
   cout << "   --chunk-size <size> chunk-size (byte) " << std::endl;
   cout << "   --chunk-algorithm <fixed|rabin> " << std::endl;
-  cout << "   --fingerprint-algorithm <sha1> " << std::endl;
+  cout << "   --fingerprint-algorithm <sha1|sha256|sha512> " << std::endl;
   cout << "   --chunk-pool <pool name> " << std::endl;
   cout << "   --max-thread <threads> " << std::endl;
   cout << "   --report-perioid <seconds> " << std::endl;
@@ -369,8 +370,14 @@ void EstimateDedupRatio::add_chunk_fp_to_stat(bufferlist &chunk)
 {
   string fp;
   if (fp_algo == "sha1") {
-    sha1_digest_t sha1_val = chunk.sha1();
+    sha1_digest_t sha1_val = crypto::digest<crypto::SHA1>(chunk);
     fp = sha1_val.to_str();
+  } else if (fp_algo == "sha256") {
+    sha256_digest_t sha256_val = crypto::digest<crypto::SHA256>(chunk);
+    fp = sha256_val.to_str();
+  } else if (fp_algo == "sha512") {
+    sha512_digest_t sha512_val = crypto::digest<crypto::SHA512>(chunk);
+    fp = sha512_val.to_str();
   } else if (chunk_algo == "rabin") {
     uint64_t hash = rabin.gen_rabin_hash(chunk.c_str(), 0, chunk.length());
     fp = to_string(hash);
@@ -569,7 +576,8 @@ int estimate_dedup_ratio(const std::map < std::string, std::string > &opts,
   i = opts.find("fingerprint-algorithm");
   if (i != opts.end()) {
     fp_algo = i->second.c_str();
-    if (fp_algo != "sha1" && fp_algo != "rabin") {
+    if (fp_algo != "sha1" && fp_algo != "rabin"
+	&& fp_algo != "sha256" && fp_algo != "sha512") {
       usage_exit();
     }
   } else {

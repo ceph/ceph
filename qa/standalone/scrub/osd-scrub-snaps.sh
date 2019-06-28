@@ -178,6 +178,10 @@ function TEST_scrub_snaps() {
       run_osd $dir $osd || return 1
     done
 
+    # All scrubs done manually.  Don't want any unexpected scheduled scrubs.
+    ceph osd set noscrub || return 1
+    ceph osd set nodeep-scrub || return 1
+
     # Create a pool with a single pg
     create_pool $poolname 1 1
     wait_for_clean || return 1
@@ -782,6 +786,10 @@ function _scrub_snaps_multi() {
     do
       run_osd $dir $osd || return 1
     done
+
+    # All scrubs done manually.  Don't want any unexpected scheduled scrubs.
+    ceph osd set noscrub || return 1
+    ceph osd set nodeep-scrub || return 1
 
     # Create a pool with a single pg
     create_pool $poolname 1 1

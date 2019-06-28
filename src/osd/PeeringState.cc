@@ -17,6 +17,16 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
 
+BufferedRecoveryMessages::BufferedRecoveryMessages(PeeringCtx &ctx)
+  : query_map(std::move(ctx.query_map)),
+    info_map(std::move(ctx.info_map)),
+    notify_list(std::move(ctx.notify_list))
+{
+  ctx.query_map.clear();
+  ctx.info_map.clear();
+  ctx.notify_list.clear();
+}
+
 void PGPool::update(CephContext *cct, OSDMapRef map)
 {
   const pg_pool_t *pi = map->get_pg_pool(id);
@@ -728,12 +738,12 @@ void PeeringState::on_new_interval()
 	     << get_pg_log().get_missing() << dendl;
 
   if (!pg_log.get_missing().may_include_deletes &&
-    get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES)) {
+      !perform_deletes_during_peering()) {
     pl->rebuild_missing_set_with_deletes(pg_log);
   }
   ceph_assert(
-    pg_log.get_missing().may_include_deletes == get_osdmap()->test_flag(
-      CEPH_OSDMAP_RECOVERY_DELETES));
+    pg_log.get_missing().may_include_deletes ==
+    !perform_deletes_during_peering());
 
   pl->on_new_interval();
 }
@@ -1594,7 +1604,7 @@ void PeeringState::calc_replicated_acting(
   }
 }
 
-bool PeeringState::recoverable_and_ge_min_size(const vector<int> &want) const
+bool PeeringState::recoverable(const vector<int> &want) const
 {
   unsigned num_want_acting = 0;
   set<pg_shard_t> have;
@@ -1607,23 +1617,25 @@ bool PeeringState::recoverable_and_ge_min_size(const vector<int> &want) const
           pool.info.is_erasure() ? shard_id_t(i) : shard_id_t::NO_SHARD));
     }
   }
-  // We go incomplete if below min_size for ec_pools since backfill
-  // does not currently maintain rollbackability
-  // Otherwise, we will go "peered", but not "active"
-  if (num_want_acting < pool.info.min_size &&
-      (pool.info.is_erasure() ||
-       !cct->_conf->osd_allow_recovery_below_min_size)) {
-    psdout(10) << __func__ << " failed, below min size" << dendl;
+
+  if (num_want_acting < pool.info.min_size) {
+    const bool recovery_ec_pool_below_min_size=
+      HAVE_FEATURE(get_osdmap()->get_up_osd_features(), SERVER_OCTOPUS);
+
+    if (pool.info.is_erasure() && !recovery_ec_pool_below_min_size) {
+      psdout(10) << __func__ << " failed, ec recovery below min size not supported by pre-octopus" << dendl;
+      return false;
+    } else if (!cct->_conf.get_val<bool>("osd_allow_recovery_below_min_size")) {
+      psdout(10) << __func__ << " failed, recovery below min size not enabled" << dendl;
+      return false;
+    }
+  }
+  if (missing_loc.get_recoverable_predicate()(have)) {
+    return true;
+  } else {
+    psdout(10) << __func__ << " failed, not recoverable " << dendl;
     return false;
   }
-
-  /* Check whether we have enough acting shards to later perform recovery */
-  if (!missing_loc.get_recoverable_predicate()(have)) {
-    psdout(10) << __func__ << " failed, not recoverable" << dendl;
-    return false;
-  }
-
-  return true;
 }
 
 void PeeringState::choose_async_recovery_ec(
@@ -1685,7 +1697,7 @@ void PeeringState::choose_async_recovery_ec(
     pg_shard_t cur_shard = rit->second;
     vector<int> candidate_want(*want);
     candidate_want[cur_shard.shard.id] = CRUSH_ITEM_NONE;
-    if (recoverable_and_ge_min_size(candidate_want)) {
+    if (recoverable(candidate_want)) {
       want->swap(candidate_want);
       async_recovery->insert(cur_shard);
     }
@@ -1852,7 +1864,7 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
       ss);
   psdout(10) << ss.str() << dendl;
 
-  if (!recoverable_and_ge_min_size(want)) {
+  if (!recoverable(want)) {
     want_acting.clear();
     return false;
   }
@@ -3353,6 +3365,10 @@ void PeeringState::init(
   info.stats.acting = acting;
   info.stats.acting_primary = new_acting_primary;
   info.stats.mapping_epoch = info.history.same_interval_since;
+
+  if (!perform_deletes_during_peering()) {
+    pg_log.set_missing_may_contain_deletes();
+  }
 
   if (backfill) {
     psdout(10) << __func__ << ": Setting backfill" << dendl;

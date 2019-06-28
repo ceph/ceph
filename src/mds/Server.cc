@@ -732,7 +732,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       Capability *cap = session->caps.front();
       CInode *in = cap->get_inode();
       dout(20) << " killing capability " << ccap_string(cap->issued()) << " on " << *in << dendl;
-      mds->locker->remove_client_cap(in, cap);
+      mds->locker->remove_client_cap(in, cap, true);
     }
     while (!session->leases.empty()) {
       ClientLease *r = session->leases.front();
@@ -932,6 +932,7 @@ void Server::find_idle_sessions()
   //  (caps go stale, lease die)
   double queue_max_age = mds->get_dispatch_queue_max_age(ceph_clock_now());
   double cutoff = queue_max_age + mds->mdsmap->get_session_timeout();
+  bool defer_session_stale = g_conf().get_val<bool>("mds_defer_session_stale");
 
   std::vector<Session*> to_evict;
 
@@ -954,6 +955,22 @@ void Server::find_idle_sessions()
 		   << " and renewed caps recently (" << last_cap_renew_span << "s ago)" << dendl;
 	  continue;
 	}
+      }
+
+      if (last_cap_renew_span >= mds->mdsmap->get_session_autoclose()) {
+	dout(20) << "evicting session " << session->info.inst << " since autoclose "
+		    "has arrived" << dendl;
+	// evict session without marking it stale
+	to_evict.push_back(session);
+	continue;
+      }
+
+      if (defer_session_stale &&
+	  !session->is_any_flush_waiter() &&
+	  !mds->locker->is_revoking_any_caps_from(session->get_client())) {
+	dout(20) << "deferring marking session " << session->info.inst << " stale "
+		    "since it holds no caps" << dendl;
+	continue;
       }
 
       auto it = session->info.client_metadata.find("timeout");
@@ -983,10 +1000,14 @@ void Server::find_idle_sessions()
 
     for (auto session : new_stale) {
       mds->sessionmap.set_state(session, Session::STATE_STALE);
-      mds->locker->revoke_stale_caps(session);
-      mds->locker->remove_stale_leases(session);
-      mds->send_message_client(make_message<MClientSession>(CEPH_SESSION_STALE, session->get_push_seq()), session);
-      finish_flush_session(session, session->get_push_seq());
+      if (mds->locker->revoke_stale_caps(session)) {
+	mds->locker->remove_stale_leases(session);
+	finish_flush_session(session, session->get_push_seq());
+	auto m = make_message<MClientSession>(CEPH_SESSION_STALE, session->get_push_seq());
+	mds->send_message_client(m, session);
+      } else {
+	to_evict.push_back(session);
+      }
     }
   }
 
@@ -1108,9 +1129,14 @@ void Server::kill_session(Session *session, Context *on_safe)
 
 size_t Server::apply_blacklist(const std::set<entity_addr_t> &blacklist)
 {
+  bool prenautilus = mds->objecter->with_osdmap(
+      [&](const OSDMap& o) {
+	return o.require_osd_release < ceph_release_t::nautilus;
+      });
+
   std::vector<Session*> victims;
   const auto& sessions = mds->sessionmap.get_sessions();
-  for (const auto& p : sessions)  {
+  for (const auto& p : sessions) {
     if (!p.first.is_client()) {
       // Do not apply OSDMap blacklist to MDS daemons, we find out
       // about their death via MDSMap.
@@ -1118,8 +1144,19 @@ size_t Server::apply_blacklist(const std::set<entity_addr_t> &blacklist)
     }
 
     Session *s = p.second;
-    if (blacklist.count(s->info.inst.addr)) {
+    auto inst_addr = s->info.inst.addr;
+    // blacklist entries are always TYPE_ANY for nautilus+
+    inst_addr.set_type(entity_addr_t::TYPE_ANY);
+    if (blacklist.count(inst_addr)) {
       victims.push_back(s);
+      continue;
+    }
+    if (prenautilus) {
+      // ...except pre-nautilus, they were TYPE_LEGACY
+      inst_addr.set_type(entity_addr_t::TYPE_LEGACY);
+      if (blacklist.count(inst_addr)) {
+	victims.push_back(s);
+      }
     }
   }
 
@@ -1946,7 +1983,7 @@ void Server::reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &
     mds->logger->inc(l_mds_reply);
     utime_t lat = ceph_clock_now() - mdr->client_request->get_recv_stamp();
     mds->logger->tinc(l_mds_reply_latency, lat);
-    if (client_inst.name.is_client()) {
+    if (session && client_inst.name.is_client()) {
       mds->sessionmap.hit_session(session);
     }
     perf_gather_op_latency(req, lat);
@@ -1962,7 +1999,7 @@ void Server::reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &
   mdcache->request_drop_non_rdlocks(mdr);
 
   // reply at all?
-  if (!(client_inst.name.is_mds() || !session)) {
+  if (session && !client_inst.name.is_mds()) {
     // send reply.
     if (!did_early_reply &&   // don't issue leases if we sent an earlier reply already
 	(tracei || tracedn)) {
@@ -3184,7 +3221,7 @@ void Server::apply_allocated_inos(MDRequestRef& mdr, Session *session)
     ceph_assert(session);
     session->pending_prealloc_inos.subtract(mdr->prealloc_inos);
     session->info.prealloc_inos.insert(mdr->prealloc_inos);
-    mds->sessionmap.mark_dirty(session);
+    mds->sessionmap.mark_dirty(session, !mdr->used_prealloc_ino);
     mds->inotable->apply_alloc_ids(mdr->prealloc_inos);
   }
   if (mdr->used_prealloc_ino) {

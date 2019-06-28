@@ -623,5 +623,10 @@ WRITE_CLASS_ENCODER(sha1_digest_t)
 using sha256_digest_t = sha_digest_t<32>;
 WRITE_CLASS_ENCODER(sha256_digest_t)
 
+using sha512_digest_t = sha_digest_t<64>;
+
+using md5_digest_t = sha_digest_t<16>;
+WRITE_CLASS_ENCODER(md5_digest_t)
+
 
 #endif

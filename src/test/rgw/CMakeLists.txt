@@ -107,7 +107,7 @@ target_link_libraries(unittest_rgw_crypto
 
 add_executable(unittest_rgw_putobj test_rgw_putobj.cc)
 add_ceph_unittest(unittest_rgw_putobj)
-target_link_libraries(unittest_rgw_putobj rgw_a ${UNITTEST_LIBS})
+target_link_libraries(unittest_rgw_putobj ${rgw_libs} ${UNITTEST_LIBS})
 
 add_executable(ceph_test_rgw_throttle
   test_rgw_throttle.cc
@@ -141,7 +141,7 @@ add_ceph_unittest(unittest_rgw_string)
 add_executable(unittest_rgw_dmclock_scheduler test_rgw_dmclock_scheduler.cc $<TARGET_OBJECTS:unit-main>)
 add_ceph_unittest(unittest_rgw_dmclock_scheduler)
 
-target_link_libraries(unittest_rgw_dmclock_scheduler radosgw_a dmclock)
+target_link_libraries(unittest_rgw_dmclock_scheduler rgw_schedulers global ${UNITTEST_LIBS})
 if(WITH_BOOST_CONTEXT)
   target_compile_definitions(unittest_rgw_dmclock_scheduler PRIVATE BOOST_COROUTINES_NO_DEPRECATION_WARNING)
   target_link_libraries(unittest_rgw_dmclock_scheduler Boost::coroutine Boost::context)
@@ -157,11 +157,11 @@ endif()
 add_executable(unittest_rgw_xml test_rgw_xml.cc)
 add_ceph_unittest(unittest_rgw_xml)
 
-target_link_libraries(unittest_rgw_xml rgw_a ${EXPAT_LIBRARIES})
+target_link_libraries(unittest_rgw_xml ${rgw_libs} ${EXPAT_LIBRARIES})
 
 # unittest_rgw_arn
 add_executable(unittest_rgw_arn test_rgw_arn.cc)
 add_ceph_unittest(unittest_rgw_arn)
 
-target_link_libraries(unittest_rgw_arn rgw_a)
+target_link_libraries(unittest_rgw_arn ${rgw_libs})
 

@@ -122,7 +122,7 @@ int KernelDevice::open(const string& p)
   r = posix_fadvise(fd_buffereds[WRITE_LIFE_NOT_SET], 0, 0, POSIX_FADV_RANDOM);
   if (r) {
     r = -r;
-    derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
+    derr << __func__ << " posix_fadvise got: " << cpp_strerror(r) << dendl;
     goto out_fail;
   }
 
@@ -798,8 +798,8 @@ int KernelDevice::_sync_write(uint64_t off, bufferlist &bl, bool buffered, int w
   }
 #ifdef HAVE_SYNC_FILE_RANGE
   if (buffered) {
-    // initiate IO (but do not wait)
-    r = ::sync_file_range(fd_buffereds[WRITE_LIFE_NOT_SET], off, len, SYNC_FILE_RANGE_WRITE);
+    // initiate IO and wait till it completes
+    r = ::sync_file_range(fd_buffereds[WRITE_LIFE_NOT_SET], off, len, SYNC_FILE_RANGE_WRITE|SYNC_FILE_RANGE_WAIT_AFTER|SYNC_FILE_RANGE_WAIT_BEFORE);
     if (r < 0) {
       r = -errno;
       derr << __func__ << " sync_file_range error: " << cpp_strerror(r) << dendl;

@@ -227,12 +227,13 @@ private:
 } // anonymous namespace
 
 template <typename I>
-PoolReplayer<I>::PoolReplayer(Threads<I> *threads,
-                              ServiceDaemon<I>* service_daemon,
-			      int64_t local_pool_id, const PeerSpec &peer,
-			      const std::vector<const char*> &args) :
+PoolReplayer<I>::PoolReplayer(
+    Threads<I> *threads, ServiceDaemon<I> *service_daemon,
+    journal::CacheManagerHandler *cache_manager_handler, int64_t local_pool_id,
+    const PeerSpec &peer, const std::vector<const char*> &args) :
   m_threads(threads),
   m_service_daemon(service_daemon),
+  m_cache_manager_handler(cache_manager_handler),
   m_local_pool_id(local_pool_id),
   m_peer(peer),
   m_args(args),
@@ -336,8 +337,8 @@ void PoolReplayer<I>::init()
   dout(10) << "connected to " << m_peer << dendl;
 
   m_instance_replayer.reset(InstanceReplayer<I>::create(
-    m_threads, m_service_daemon, m_local_rados, local_mirror_uuid,
-    m_local_pool_id));
+    m_threads, m_service_daemon, m_cache_manager_handler, m_local_rados,
+    local_mirror_uuid, m_local_pool_id));
   m_instance_replayer->init();
   m_instance_replayer->add_peer(m_peer.uuid, m_remote_io_ctx);
 
@@ -517,7 +518,7 @@ int PoolReplayer<I>::init_rados(const std::string &cluster_name,
   // disable unnecessary librbd cache
   cct->_conf.set_val_or_die("rbd_cache", "false");
   cct->_conf.apply_changes(nullptr);
-  cct->_conf.complain_about_parse_errors(cct);
+  cct->_conf.complain_about_parse_error(cct);
 
   r = (*rados_ref)->init_with_context(cct);
   ceph_assert(r == 0);

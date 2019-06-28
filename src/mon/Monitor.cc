@@ -550,11 +550,19 @@ void Monitor::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("mon_health_to_clog") ||
       changed.count("mon_health_to_clog_interval") ||
       changed.count("mon_health_to_clog_tick_interval")) {
-    health_to_clog_update_conf(changed);
+    std::set<std::string> c2(changed);
+    finisher.queue(new C_MonContext(this, [this, c2](int) {
+      Mutex::Locker l(lock);
+      health_to_clog_update_conf(c2);
+    }));
   }
 
   if (changed.count("mon_scrub_interval")) {
-    scrub_update_interval(conf->mon_scrub_interval);
+    int scrub_interval = conf->mon_scrub_interval;
+    finisher.queue(new C_MonContext(this, [this, scrub_interval](int) {
+      Mutex::Locker l(lock);
+      scrub_update_interval(scrub_interval);
+    }));
   }
 }
 
@@ -3031,7 +3039,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
 	ss << "    " << i.second.message << "\n";
 	ss << "      [";
 	unsigned j;
-	for (j=0; j < i.second.progress * 30; ++j) {
+	for (j = 0; j < (unsigned)(i.second.progress * 30.0); ++j) {
 	  ss << '=';
 	}
 	for (; j < 30; ++j) {

@@ -1,4 +1,4 @@
-import { $, $$, browser } from 'protractor';
+import { browser } from 'protractor';
 
 export class Helper {
   static EC = browser.ExpectedConditions;
@@ -26,19 +26,5 @@ export class Helper {
 
         expect(browserLog.length).toEqual(0);
       });
-  }
-
-  static getBreadcrumbText() {
-    return $('.breadcrumb-item.active').getText();
-  }
-
-  static getTabText(idx) {
-    return $$('.nav.nav-tabs li')
-      .get(idx)
-      .getText();
-  }
-
-  static getTabsCount() {
-    return $$('.nav.nav-tabs li').count();
   }
 }

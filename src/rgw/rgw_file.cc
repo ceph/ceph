@@ -810,7 +810,7 @@ namespace rgw {
     default:
       break;
     };
-
+    /* if rgw_fh is a directory, mtime will be advanced */
     return rgw_fh->stat(st);
   } /* RGWLibFS::getattr */
 
@@ -942,6 +942,15 @@ namespace rgw {
     rele();
   } /* RGWLibFS::close */
 
+  inline std::ostream& operator<<(std::ostream &os, fh_key const &fhk) {
+    os << "<fh_key: bucket=";
+    os << fhk.fh_hk.bucket;
+    os << "; object=";
+    os << fhk.fh_hk.object;
+    os << ">";
+    return os;
+  }
+
   inline std::ostream& operator<<(std::ostream &os, struct timespec const &ts) {
       os << "<timespec: tv_sec=";
       os << ts.tv_sec;
@@ -993,7 +1002,12 @@ namespace rgw {
 	<< dendl;
       {
 	lock_guard guard(state.mtx); /* LOCKED */
-	/* just return if no events */
+	lsubdout(get_context(), rgw, 15)
+	  << "GC: processing"
+	  << " count=" << events.size()
+	  << " events"
+	  << dendl;
+        /* just return if no events */
 	if (events.empty()) {
 	  return;
 	}
@@ -1107,6 +1121,18 @@ namespace rgw {
     }
   }
 
+  fh_key RGWFileHandle::make_fhk(const std::string& name)
+  {
+    std::string tenant = get_fs()->get_user()->user_id.to_str();
+    if (depth == 0) {
+      /* S3 bucket -- assert mount-at-bucket case reaches here */
+      return fh_key(name, name, tenant);
+    } else {
+      std::string key_name = make_key_name(name.c_str());
+      return fh_key(fhk.fh_hk.bucket, key_name.c_str(), tenant);
+    }
+  }
+
   void RGWFileHandle::encode_attrs(ceph::buffer::list& ux_key1,
 				   ceph::buffer::list& ux_attrs1)
   {
@@ -1124,11 +1150,7 @@ namespace rgw {
     fh_key fhk;
     auto bl_iter_key1 = ux_key1->cbegin();
     decode(fhk, bl_iter_key1);
-    if (fhk.version >= 2) {
-      ceph_assert(this->fh.fh_hk == fhk.fh_hk);
-    } else {
-      get<0>(dar) = true;
-    }
+    get<0>(dar) = true;
 
     auto bl_iter_unix1 = ux_attrs1->cbegin();
     decode(*this, bl_iter_unix1);
@@ -1189,6 +1211,11 @@ namespace rgw {
     struct timespec now;
     CephContext* cct = fs->get_context();
 
+    lsubdout(cct, rgw, 10)
+      << __func__ << " readdir called on "
+      << object_name()
+      << dendl;
+
     directory* d = get<directory>(&variant_type);
     if (d) {
       (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
@@ -1215,9 +1242,6 @@ namespace rgw {
 	  set_nlink(2);
 	inc_nlink(req.d_count);
 	*eof = req.eof();
-	event ev(event::type::READDIR, get_key(), state.atime);
-	lock_guard sguard(fs->state.mtx);
-	fs->state.push_event(ev);
       }
     } else {
       RGWReaddirRequest req(cct, fs->get_user(), this, rcb, cb_arg, offset);
@@ -1230,11 +1254,12 @@ namespace rgw {
 	  set_nlink(2);
 	inc_nlink(req.d_count);
 	*eof = req.eof();
-	event ev(event::type::READDIR, get_key(), state.atime);
-	lock_guard sguard(fs->state.mtx);
-	fs->state.push_event(ev);
       }
     }
+
+    event ev(event::type::READDIR, get_key(), state.atime);
+    lock_guard sguard(fs->state.mtx);
+    fs->state.push_event(ev);
 
     lsubdout(fs->get_context(), rgw, 15)
       << __func__

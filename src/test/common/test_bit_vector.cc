@@ -5,7 +5,7 @@
  *
  * Copyright (C) 2014 Red Hat <contact@redhat.com>
  *
- * LGPL2.1 (see COPYING-LGPL2.1) or later
+ * LGPL-2.1 (see COPYING-LGPL2.1) or later
  */
 
 #include <gtest/gtest.h>
@@ -28,7 +28,7 @@ public:
 };
 
 typedef ::testing::Types<TestParams<2> > BitVectorTypes;
-TYPED_TEST_CASE(BitVectorTest, BitVectorTypes);
+TYPED_TEST_SUITE(BitVectorTest, BitVectorTypes);
 
 TYPED_TEST(BitVectorTest, resize) {
   typename TestFixture::bit_vector_t bit_vector;

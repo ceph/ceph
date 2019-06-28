@@ -121,6 +121,14 @@ if(CMAKE_VERSION VERSION_LESS "3.8")
       "The compiler ${CMAKE_CXX_COMPILER} has no C++17 support.")
   endif()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+
+  # for compiletest_cxx11_client
+  CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
+  if(NOT COMPILER_SUPPORTS_CXX11)
+    message(FATAL_ERROR
+      "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support.")
+  endif()
+
   include(CheckCCompilerFlag)
   CHECK_C_COMPILER_FLAG("-std=gnu99" COMPILER_SUPPORTS_GNU99)
   if(NOT COMPILER_SUPPORTS_GNU99)
@@ -301,7 +309,6 @@ if(WITH_SEASTAR)
   endmacro ()
   set(Seastar_HWLOC OFF CACHE BOOL "" FORCE)
   set(Seastar_STD_OPTIONAL_VARIANT_STRINGVIEW ON CACHE BOOL "" FORCE)
-  set(Seastar_TESTING OFF CACHE BOOL "" FORCE)
   set(Seastar_CXX_FLAGS "-Wno-error;-Wno-sign-compare;-Wno-attributes;-Wno-pessimizing-move;-Wno-address-of-packed-member" CACHE STRING "" FORCE)
   add_subdirectory(seastar)
   # create the directory so cmake won't complain when looking at the imported
@@ -364,6 +371,7 @@ set(ceph_common_deps
   Boost::program_options
   Boost::date_time
   Boost::iostreams
+  StdFilesystem::filesystem
   ${BLKID_LIBRARIES}
   ${Backtrace_LIBRARIES}
   ${BLKIN_LIBRARIES}
@@ -514,7 +522,8 @@ if(WITH_FUSE)
   target_link_libraries(ceph-osd ${FUSE_LIBRARIES})
 endif()
 set_target_properties(ceph-osd PROPERTIES
-  POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
+  POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE}
+  INSTALL_RPATH "")
 install(TARGETS ceph-osd DESTINATION bin)
 
 if (WITH_CEPHFS)
@@ -537,7 +546,7 @@ if(WITH_TESTS)
     find_package(GMock REQUIRED)
   else()
     set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
-    add_subdirectory(googletest/googlemock)
+    add_subdirectory(googletest)
     add_library(GMock::GMock ALIAS gmock)
     add_library(GMock::Main ALIAS gmock_main)
     target_include_directories(gmock INTERFACE

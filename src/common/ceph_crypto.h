@@ -5,11 +5,15 @@
 #include "acconfig.h"
 #include <stdexcept>
 
+#include "include/buffer.h"
+#include "include/types.h"
+
 #define CEPH_CRYPTO_MD5_DIGESTSIZE 16
 #define CEPH_CRYPTO_HMACSHA1_DIGESTSIZE 20
 #define CEPH_CRYPTO_SHA1_DIGESTSIZE 20
 #define CEPH_CRYPTO_HMACSHA256_DIGESTSIZE 32
 #define CEPH_CRYPTO_SHA256_DIGESTSIZE 32
+#define CEPH_CRYPTO_SHA512_DIGESTSIZE 64
 
 #ifdef USE_NSS
 // you *must* use CRYPTO_CXXFLAGS in CMakeLists.txt for including this include
@@ -33,6 +37,7 @@ extern "C" {
   const EVP_MD *EVP_md5(void);
   const EVP_MD *EVP_sha1(void);
   const EVP_MD *EVP_sha256(void);
+  const EVP_MD *EVP_sha512(void);
 }
 #endif /*USE_OPENSSL*/
 
@@ -57,13 +62,13 @@ namespace ceph {
 
     namespace nss {
 
+      template<size_t DigestSize>
       class NSSDigest {
       private:
         PK11Context *ctx;
-        size_t digest_size;
       public:
-        NSSDigest (SECOidTag _type, size_t _digest_size)
-	  : digest_size(_digest_size) {
+        static constexpr size_t digest_size = DigestSize;
+        NSSDigest (SECOidTag _type) {
 	  ctx = PK11_CreateDigestContext(_type);
 	  if (! ctx) {
 	    throw DigestException("PK11_CreateDigestContext() failed");
@@ -101,19 +106,24 @@ namespace ceph {
 	}
       };
 
-      class MD5 : public NSSDigest {
+      class MD5 : public NSSDigest<CEPH_CRYPTO_MD5_DIGESTSIZE> {
       public:
-	MD5 () : NSSDigest(SEC_OID_MD5, CEPH_CRYPTO_MD5_DIGESTSIZE) { }
+	MD5 () : NSSDigest<CEPH_CRYPTO_MD5_DIGESTSIZE>{SEC_OID_MD5} { }
       };
 
-      class SHA1 : public NSSDigest {
+      class SHA1 : public NSSDigest<CEPH_CRYPTO_SHA1_DIGESTSIZE> {
       public:
-        SHA1 () : NSSDigest(SEC_OID_SHA1, CEPH_CRYPTO_SHA1_DIGESTSIZE) { }
+        SHA1 () : NSSDigest<CEPH_CRYPTO_SHA1_DIGESTSIZE>{SEC_OID_SHA1} { }
       };
 
-      class SHA256 : public NSSDigest {
+      class SHA256 : public NSSDigest<CEPH_CRYPTO_SHA256_DIGESTSIZE> {
       public:
-        SHA256 () : NSSDigest(SEC_OID_SHA256, CEPH_CRYPTO_SHA256_DIGESTSIZE) { }
+        SHA256 () : NSSDigest<CEPH_CRYPTO_SHA256_DIGESTSIZE>{SEC_OID_SHA256} { }
+      };
+
+      class SHA512 : public NSSDigest<CEPH_CRYPTO_SHA256_DIGESTSIZE> {
+      public:
+        SHA512 () : NSSDigest<CEPH_CRYPTO_SHA256_DIGESTSIZE>{SEC_OID_SHA512} { }
       };
     }
   }
@@ -138,17 +148,26 @@ namespace ceph {
 
       class MD5 : public OpenSSLDigest {
       public:
+	static constexpr size_t digest_size = CEPH_CRYPTO_MD5_DIGESTSIZE;
 	MD5 () : OpenSSLDigest(EVP_md5()) { }
       };
 
       class SHA1 : public OpenSSLDigest {
       public:
+        static constexpr size_t digest_size = CEPH_CRYPTO_SHA1_DIGESTSIZE;
         SHA1 () : OpenSSLDigest(EVP_sha1()) { }
       };
 
       class SHA256 : public OpenSSLDigest {
       public:
+        static constexpr size_t digest_size = CEPH_CRYPTO_SHA256_DIGESTSIZE;
         SHA256 () : OpenSSLDigest(EVP_sha256()) { }
+      };
+
+      class SHA512 : public OpenSSLDigest {
+      public:
+        static constexpr size_t digest_size = CEPH_CRYPTO_SHA512_DIGESTSIZE;
+        SHA512 () : OpenSSLDigest(EVP_sha512()) { }
       };
     }
   }
@@ -337,6 +356,7 @@ namespace ceph {
     using ceph::crypto::ssl::SHA256;
     using ceph::crypto::ssl::MD5;
     using ceph::crypto::ssl::SHA1;
+    using ceph::crypto::ssl::SHA512;
 
     using ceph::crypto::ssl::HMACSHA256;
     using ceph::crypto::ssl::HMACSHA1;
@@ -348,6 +368,7 @@ namespace ceph {
     using ceph::crypto::nss::SHA256;
     using ceph::crypto::nss::MD5;
     using ceph::crypto::nss::SHA1;
+    using ceph::crypto::nss::SHA512;
 
     using ceph::crypto::nss::HMACSHA256;
     using ceph::crypto::nss::HMACSHA1;
@@ -357,5 +378,19 @@ namespace ceph {
 // cppcheck-suppress preprocessorErrorDirective
 # error "No supported crypto implementation found."
 #endif
+
+namespace ceph::crypto {
+template<class Digest>
+auto digest(const ceph::buffer::list& bl)
+{
+  unsigned char fingerprint[Digest::digest_size];
+  Digest gen;
+  for (auto& p : bl.buffers()) {
+    gen.Update((const unsigned char *)p.c_str(), p.length());
+  }
+  gen.Final(fingerprint);
+  return sha_digest_t<Digest::digest_size>{fingerprint};
+}
+}
 
 #endif

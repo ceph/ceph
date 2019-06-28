@@ -187,6 +187,7 @@ OPTION(mon_osd_cache_size, OPT_INT)  // the size of osdmaps cache, not to rely o
 
 OPTION(mon_cpu_threads, OPT_INT)
 OPTION(mon_osd_mapping_pgs_per_chunk, OPT_INT)
+OPTION(mon_clean_pg_upmaps_per_chunk, OPT_U64)
 OPTION(mon_osd_max_creating_pgs, OPT_INT)
 OPTION(mon_tick_interval, OPT_INT)
 OPTION(mon_session_timeout, OPT_INT)    // must send keepalive or subscribe
@@ -688,6 +689,8 @@ OPTION(osd_default_data_pool_replay_window, OPT_INT)
 OPTION(osd_auto_mark_unfound_lost, OPT_BOOL)
 OPTION(osd_recovery_delay_start, OPT_FLOAT)
 OPTION(osd_recovery_max_active, OPT_U64)
+OPTION(osd_recovery_max_active_hdd, OPT_U64)
+OPTION(osd_recovery_max_active_ssd, OPT_U64)
 OPTION(osd_recovery_max_single_start, OPT_U64)
 OPTION(osd_recovery_max_chunk, OPT_U64)  // max size of push chunk
 OPTION(osd_recovery_max_omap_entries_per_chunk, OPT_U64) // max number of omap entries per chunk; 0 to disable limit
@@ -837,6 +840,7 @@ OPTION(mon_rocksdb_options, OPT_STR)
 OPTION(osd_client_op_priority, OPT_U32)
 OPTION(osd_recovery_op_priority, OPT_U32)
 OPTION(osd_peering_op_priority, OPT_U32)
+OPTION(osd_kick_recovery_op_priority, OPT_U32)
 
 OPTION(osd_snap_trim_priority, OPT_U32)
 OPTION(osd_snap_trim_cost, OPT_U32) // set default cost equal to 1MB io
@@ -891,6 +895,7 @@ OPTION(osd_discard_disconnected_ops, OPT_BOOL)
 OPTION(memstore_device_bytes, OPT_U64)
 OPTION(memstore_page_set, OPT_BOOL)
 OPTION(memstore_page_size, OPT_U64)
+OPTION(memstore_debug_omit_block_device_write, OPT_BOOL)
 
 OPTION(bdev_debug_inflight_ios, OPT_BOOL)
 OPTION(bdev_inject_crash, OPT_INT)  // if N>0, then ~ 1/N IOs will complete before we crash on flush.

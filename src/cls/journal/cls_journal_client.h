@@ -99,6 +99,8 @@ int tag_list_finish(bufferlist::const_iterator *iter,
 
 // journal entry helpers
 void guard_append(librados::ObjectWriteOperation *op, uint64_t soft_max_size);
+void append(librados::ObjectWriteOperation *op, uint64_t soft_max_size,
+            bufferlist &data);
 
 } // namespace client
 } // namespace journal

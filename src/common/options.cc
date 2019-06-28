@@ -1320,6 +1320,11 @@ std::vector<Option> get_global_options() {
     .add_service("mon")
     .set_description("granularity of PG placement calculation background work"),
 
+    Option("mon_clean_pg_upmaps_per_chunk", Option::TYPE_UINT, Option::LEVEL_DEV)
+    .set_default(256)
+    .add_service("mon")
+    .set_description("granularity of PG upmap validation background work"),
+
     Option("mon_osd_max_creating_pgs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1024)
     .add_service("mon")
@@ -3347,8 +3352,22 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("osd_recovery_max_active", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("Number of simultaneous active recovery operations per OSD (overrides _ssd and _hdd if non-zero)")
+    .add_see_also("osd_recovery_max_active_hdd")
+    .add_see_also("osd_recovery_max_active_ssd"),
+
+    Option("osd_recovery_max_active_hdd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(3)
-    .set_description(""),
+    .set_description("Number of simultaneous active recovery oeprations per OSD (for rotational devices)")
+    .add_see_also("osd_recovery_max_active")
+    .add_see_also("osd_recovery_max_active_ssd"),
+
+    Option("osd_recovery_max_active_ssd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(10)
+    .set_description("Number of simultaneous active recovery oeprations per OSD (for non-rotational solid state devices)")
+    .add_see_also("osd_recovery_max_active")
+    .add_see_also("osd_recovery_max_active_hdd"),
 
     Option("osd_recovery_max_single_start", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(1)
@@ -3948,6 +3967,12 @@ std::vector<Option> get_global_options() {
     .set_default(255)
     .set_description(""),
 
+    Option("osd_kick_recovery_op_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(64)
+    .set_description("priority for recovery ops instantized by client ops, "
+                     "default to 64 to use strict priority ordering")
+    .add_see_also("osd_recovery_op_priority"),
+
     Option("osd_snap_trim_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(5)
     .set_description(""),
@@ -4112,6 +4137,11 @@ std::vector<Option> get_global_options() {
     .set_default(64_K)
     .set_description(""),
 
+    Option("memstore_debug_omit_block_device_write", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .add_see_also("bluestore_debug_omit_block_device_write")
+    .set_description("write metadata only"),
+
     Option("objectstore_blackhole", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description(""),
@@ -4224,8 +4254,8 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("bluefs_preextend_wal_files", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description(""),
+    .set_default(true)
+    .set_description("Preextent rocksdb wal files on mkfs to avoid performance penalty for young stores"),
 
     Option("bluestore_bluefs", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
@@ -6581,6 +6611,14 @@ std::vector<Option> get_rgw_options() {
         "server static websites if s3website hostnames are configured, and unrelated to "
         "this configurable."),
 
+     Option("rgw_user_unique_email", Option::TYPE_BOOL, Option::LEVEL_BASIC)
+    .set_default(true)
+    .set_description("Require local RGW users to have unique email addresses")
+    .set_long_description(
+        "Enforce builtin user accounts to have unique email addresses.  This "
+	"setting is historical.  In future, non-enforcement of email address "
+        "uniqueness is likely to become the default."),
+
     Option("rgw_log_http_headers", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_default("")
     .set_description("List of HTTP headers to log")
@@ -7115,6 +7153,10 @@ static std::vector<Option> get_rbd_options() {
     .set_default(false)
     .set_description("whether to block writes to the cache before the aio_write call completes"),
 
+    Option("rbd_parent_cache_enabled", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("whether to enable rbd shared ro cache"),
+
     Option("rbd_concurrent_management_ops", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10)
     .set_min(1)
@@ -7293,12 +7335,18 @@ static std::vector<Option> get_rbd_options() {
     .set_default(5)
     .set_description("commit time interval, seconds"),
 
+    Option("rbd_journal_object_writethrough_until_flush", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("when enabled, the rbd_journal_object_flush* configuration "
+                     "options are ignored until the first flush so that batched "
+                     "journal IO is known to be safe for consistency"),
+
     Option("rbd_journal_object_flush_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("maximum number of pending commits per journal object"),
 
     Option("rbd_journal_object_flush_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(0)
+    .set_default(1_M)
     .set_description("maximum number of pending bytes per journal object"),
 
     Option("rbd_journal_object_flush_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -7410,10 +7458,6 @@ static std::vector<Option> get_rbd_mirror_options() {
     .set_default(5)
     .set_description("maximum age (in seconds) between successive journal polls"),
 
-    Option("rbd_mirror_journal_max_fetch_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(32768)
-    .set_description("maximum bytes to read from each journal data object per fetch"),
-
     Option("rbd_mirror_sync_point_update_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(30)
     .set_description("number of seconds between each update of the image sync point object number"),
@@ -7479,6 +7523,42 @@ static std::vector<Option> get_rbd_mirror_options() {
                           "mgr_stats_threshold.")
     .set_min_max((int64_t)PerfCountersBuilder::PRIO_DEBUGONLY,
                  (int64_t)PerfCountersBuilder::PRIO_CRITICAL + 1),
+
+    Option("rbd_mirror_memory_autotune", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(true)
+    .add_see_also("rbd_mirror_memory_target")
+    .set_description("Automatically tune the ratio of caches while respecting min values."),
+
+    Option("rbd_mirror_memory_target", Option::TYPE_SIZE, Option::LEVEL_BASIC)
+    .set_default(4_G)
+    .add_see_also("rbd_mirror_memory_autotune")
+    .set_description("When tcmalloc and cache autotuning is enabled, try to keep this many bytes mapped in memory."),
+
+    Option("rbd_mirror_memory_base", Option::TYPE_SIZE, Option::LEVEL_DEV)
+    .set_default(768_M)
+    .add_see_also("rbd_mirror_memory_autotune")
+    .set_description("When tcmalloc and cache autotuning is enabled, estimate the minimum amount of memory in bytes the rbd-mirror daemon will need."),
+
+    Option("rbd_mirror_memory_expected_fragmentation", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(0.15)
+    .set_min_max(0.0, 1.0)
+    .add_see_also("rbd_mirror_memory_autotune")
+    .set_description("When tcmalloc and cache autotuning is enabled, estimate the percent of memory fragmentation."),
+
+    Option("rbd_mirror_memory_cache_min", Option::TYPE_SIZE, Option::LEVEL_DEV)
+    .set_default(128_M)
+    .add_see_also("rbd_mirror_memory_autotune")
+    .set_description("When tcmalloc and cache autotuning is enabled, set the minimum amount of memory used for cache."),
+
+    Option("rbd_mirror_memory_cache_resize_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(5)
+    .add_see_also("rbd_mirror_memory_autotune")
+    .set_description("When tcmalloc and cache autotuning is enabled, wait this many seconds between resizing caches."),
+
+    Option("rbd_mirror_memory_cache_autotune_interval", Option::TYPE_FLOAT, Option::LEVEL_DEV)
+    .set_default(30)
+    .add_see_also("rbd_mirror_memory_autotune")
+    .set_description("The number of seconds to wait between rebalances when cache autotune is enabled."),
   });
 }
 
@@ -7988,6 +8068,9 @@ std::vector<Option> get_mds_options() {
     Option("mds_hack_allow_loading_invalid_metadata", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
      .set_default(0)
      .set_description("INTENTIONALLY CAUSE DATA LOSS by bypasing checks for invalid metadata on disk. Allows testing repair tools."),
+
+    Option("mds_defer_session_stale", Option::TYPE_BOOL, Option::LEVEL_DEV)
+     .set_default(true),
 
     Option("mds_inject_migrator_session_race", Option::TYPE_BOOL, Option::LEVEL_DEV)
      .set_default(false),

@@ -7,16 +7,16 @@
 #include "osd/osd_types.h"
 
 namespace ceph::os {
-  class CyanStore;
+  class FuturizedStore;
 }
 
 /// PG related metadata
 class PGMeta
 {
-  ceph::os::CyanStore* store;
+  ceph::os::FuturizedStore* store;
   const spg_t pgid;
 public:
-  PGMeta(ceph::os::CyanStore *store, spg_t pgid);
+  PGMeta(ceph::os::FuturizedStore *store, spg_t pgid);
   seastar::future<epoch_t> get_epoch();
   seastar::future<pg_info_t, PastIntervals> load();
 };

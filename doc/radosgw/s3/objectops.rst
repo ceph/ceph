@@ -403,6 +403,7 @@ Syntax
     DELETE /{bucket}/{object}?uploadId= HTTP/1.1
 
 
+
 Append Object
 -------------
 Append data to an object. You must have write permissions on the bucket to perform this operation.
@@ -410,7 +411,6 @@ It is used to upload files in appending mode. The type of the objects created by
 operation is Appendable Object, and the type of the objects uploaded with the Put Object operation is Normal Object.
 **Append Object can't be used if bucket versioning is enabled or suspended.**
 **Synced object will become normal in multisite, but you can still append to the original object.**
-
 
 Syntax
 ~~~~~~
@@ -457,4 +457,101 @@ The following HTTP response may be returned:
 +---------------+----------------------------+---------------------------------------------------+
 | **409**       | InvalidBucketstate         | Bucket versioning is enabled or suspended         |
 +---------------+----------------------------+---------------------------------------------------+
+
+
+Put Object Retention
+--------------------
+Places an Object Retention configuration on an object.
+
+Syntax
+~~~~~~
+
+::
+
+    PUT /{bucket}/{object}?retention&versionId= HTTP/1.1
+
+Request Entities
+~~~~~~~~~~~~~~~~
+
++---------------------+-------------+-------------------------------------------------------------------------------+------------+
+| Name                | Type        | Description                                                                   |  Required  |
++=====================+=============+===============================================================================+============+
+| ``Retention``       | Container   | A container for the request.                                                  |    Yes     |
++---------------------+-------------+-------------------------------------------------------------------------------+------------+
+| ``Mode``            | String      | Retention mode for the specified object. Valid Values:  GOVERNANCE/COMPLIANCE |    Yes     |
++---------------------+-------------+--------------------------------------------------------------------------------------------+
+| ``RetainUntilDate`` | Timestamp   | Retention date. Format: 2020-01-05T00:00:00.000Z                              |    Yes     |
++---------------------+-------------+--------------------------------------------------------------------------------------------+
+
+
+Get Object Retention
+--------------------
+Gets an Object Retention configuration on an object.
+
+
+Syntax
+~~~~~~
+
+::
+
+    GET /{bucket}/{object}?retention&versionId= HTTP/1.1
+
+Response Entities
+~~~~~~~~~~~~~~~~~
+
++---------------------+-------------+-------------------------------------------------------------------------------+------------+
+| Name                | Type        | Description                                                                   |  Required  |
++=====================+=============+===============================================================================+============+
+| ``Retention``       | Container   | A container for the request.                                                  |    Yes     |
++---------------------+-------------+-------------------------------------------------------------------------------+------------+
+| ``Mode``            | String      | Retention mode for the specified object. Valid Values:  GOVERNANCE/COMPLIANCE |    Yes     |
++---------------------+-------------+--------------------------------------------------------------------------------------------+
+| ``RetainUntilDate`` | Timestamp   | Retention date. Format: 2020-01-05T00:00:00.000Z                              |    Yes     |
++---------------------+-------------+--------------------------------------------------------------------------------------------+
+
+
+Put Object Legal Hold
+---------------------
+Applies a Legal Hold configuration to the specified object.
+
+Syntax
+~~~~~~
+
+::
+
+    PUT /{bucket}/{object}?legal-hold&versionId= HTTP/1.1
+
+Request Entities
+~~~~~~~~~~~~~~~~
+
++----------------+-------------+----------------------------------------------------------------------------------------+------------+
+| Name           | Type        | Description                                                                            |  Required  |
++================+=============+========================================================================================+============+
+| ``LegalHold``  | Container   | A container for the request.                                                           |    Yes     |
++----------------+-------------+----------------------------------------------------------------------------------------+------------+
+| ``Status``     | String      | Indicates whether the specified object has a Legal Hold in place. Valid Values: ON/OFF |    Yes     |
++----------------+-------------+----------------------------------------------------------------------------------------+------------+
+
+
+Get Object Legal Hold
+---------------------
+Gets an object's current Legal Hold status.
+
+Syntax
+~~~~~~
+
+::
+
+    GET /{bucket}/{object}?legal-hold&versionId= HTTP/1.1
+
+Response Entities
+~~~~~~~~~~~~~~~~~
+
++----------------+-------------+----------------------------------------------------------------------------------------+------------+
+| Name           | Type        | Description                                                                            |  Required  |
++================+=============+========================================================================================+============+
+| ``LegalHold``  | Container   | A container for the request.                                                           |    Yes     |
++----------------+-------------+----------------------------------------------------------------------------------------+------------+
+| ``Status``     | String      | Indicates whether the specified object has a Legal Hold in place. Valid Values: ON/OFF |    Yes     |
++----------------+-------------+----------------------------------------------------------------------------------------+------------+
 

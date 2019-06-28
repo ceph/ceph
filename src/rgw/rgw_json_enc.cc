@@ -1667,12 +1667,11 @@ void RGWOrphanSearchState::dump(Formatter *f) const
 
 void RGWObjTags::dump(Formatter *f) const
 {
+  f->open_object_section("tagset");
   for (auto& tag: tag_map){
-    f->open_object_section("tag_map");
-    f->dump_string("key", tag.first);
-    f->dump_string("value", tag.second);
-    f->close_section();
+    f->dump_string(tag.first.c_str(), tag.second);
   }
+  f->close_section();
 }
 
 void lc_op::dump(Formatter *f) const

@@ -30,6 +30,7 @@
 #include <map>
 #include <memory>
 
+#include <boost/smart_ptr/local_shared_ptr.hpp>
 #include "include/btree_map.h"
 #include "include/types.h"
 #include "common/ceph_releases.h"
@@ -402,6 +403,7 @@ public:
     mempool::osdmap::map<int64_t, snap_interval_set_t> new_purged_snaps;
 
     mempool::osdmap::map<int32_t,uint32_t> new_crush_node_flags;
+    mempool::osdmap::map<int32_t,uint32_t> new_device_class_flags;
 
     std::string cluster_snapshot;
 
@@ -478,8 +480,11 @@ public:
       return new_state.count(osd) && (new_state[osd] & state) != 0;
     }
 
-    void pending_osd_state_set(int osd, unsigned state) {
+    bool pending_osd_state_set(int osd, unsigned state) {
+      if (pending_osd_has_state(osd, state))
+        return false;
       new_state[osd] |= state;
+      return true;
     }
 
     // cancel the specified pending osd state if there is any
@@ -516,6 +521,7 @@ private:
   std::vector<uint32_t> osd_state;
 
   mempool::osdmap::map<int32_t,uint32_t> crush_node_flags; // crush node -> CEPH_OSD_* flags
+  mempool::osdmap::map<int32_t,uint32_t> device_class_flags; // device class -> CEPH_OSD_* flags
 
   utime_t last_up_change, last_in_change;
 
@@ -834,66 +840,76 @@ public:
     return !is_out(osd);
   }
 
-  unsigned get_crush_node_flags(int osd) const;
+  unsigned get_osd_crush_node_flags(int osd) const;
+  unsigned get_crush_node_flags(int id) const;
+  unsigned get_device_class_flags(int id) const;
 
-  bool is_noup(int osd) const {
+  bool is_noup_by_osd(int osd) const {
     return exists(osd) && (osd_state[osd] & CEPH_OSD_NOUP);
   }
 
-  bool is_nodown(int osd) const {
+  bool is_nodown_by_osd(int osd) const {
     return exists(osd) && (osd_state[osd] & CEPH_OSD_NODOWN);
   }
 
-  bool is_noin(int osd) const {
+  bool is_noin_by_osd(int osd) const {
     return exists(osd) && (osd_state[osd] & CEPH_OSD_NOIN);
   }
 
-  bool is_noout(int osd) const {
+  bool is_noout_by_osd(int osd) const {
     return exists(osd) && (osd_state[osd] & CEPH_OSD_NOOUT);
   }
 
-  void get_noup_osds(std::vector<int> *osds) const {
-    ceph_assert(osds);
-    osds->clear();
-
-    for (int i = 0; i < max_osd; i++) {
-      if (is_noup(i)) {
-        osds->push_back(i);
-      }
-    }
+  bool is_noup(int osd) const {
+    if (test_flag(CEPH_OSDMAP_NOUP)) // global?
+      return true;
+    if (is_noup_by_osd(osd)) // by osd?
+      return true;
+    if (get_osd_crush_node_flags(osd) & CEPH_OSD_NOUP) // by crush-node?
+      return true;
+    if (auto class_id = crush->get_item_class_id(osd); class_id >= 0 &&
+        get_device_class_flags(class_id) & CEPH_OSD_NOUP) // by device-class?
+      return true;
+    return false;
   }
 
-  void get_nodown_osds(std::vector<int> *osds) const {
-    ceph_assert(osds);
-    osds->clear();
-
-    for (int i = 0; i < max_osd; i++) {
-      if (is_nodown(i)) {
-        osds->push_back(i);
-      }
-    }
+  bool is_nodown(int osd) const {
+    if (test_flag(CEPH_OSDMAP_NODOWN))
+      return true;
+    if (is_nodown_by_osd(osd))
+      return true;
+    if (get_osd_crush_node_flags(osd) & CEPH_OSD_NODOWN)
+      return true;
+    if (auto class_id = crush->get_item_class_id(osd); class_id >= 0 &&
+        get_device_class_flags(class_id) & CEPH_OSD_NODOWN)
+      return true;
+    return false;
   }
 
-  void get_noin_osds(std::vector<int> *osds) const {
-    ceph_assert(osds);
-    osds->clear();
-
-    for (int i = 0; i < max_osd; i++) {
-      if (is_noin(i)) {
-        osds->push_back(i);
-      }
-    }
+  bool is_noin(int osd) const {
+    if (test_flag(CEPH_OSDMAP_NOIN))
+      return true;
+    if (is_noin_by_osd(osd))
+      return true;
+    if (get_osd_crush_node_flags(osd) & CEPH_OSD_NOIN)
+      return true;
+    if (auto class_id = crush->get_item_class_id(osd); class_id >= 0 &&
+        get_device_class_flags(class_id) & CEPH_OSD_NOIN)
+      return true;
+    return false;
   }
 
-  void get_noout_osds(std::vector<int> *osds) const {
-    ceph_assert(osds);
-    osds->clear();
-
-    for (int i = 0; i < max_osd; i++) {
-      if (is_noout(i)) {
-        osds->push_back(i);
-      }
-    }
+  bool is_noout(int osd) const {
+    if (test_flag(CEPH_OSDMAP_NOOUT))
+      return true;
+    if (is_noout_by_osd(osd))
+      return true;
+    if (get_osd_crush_node_flags(osd) & CEPH_OSD_NOOUT)
+      return true;
+    if (auto class_id = crush->get_item_class_id(osd); class_id >= 0 &&
+        get_device_class_flags(class_id) & CEPH_OSD_NOOUT)
+      return true;
+    return false;
   }
 
   /**
@@ -1025,10 +1041,18 @@ public:
    */
   uint64_t get_up_osd_features() const;
 
-  void maybe_remove_pg_upmaps(CephContext *cct,
-                              const OSDMap& oldmap,
-			      const OSDMap& nextmap,
-                              Incremental *pending_inc);
+  void get_upmap_pgs(vector<pg_t> *upmap_pgs) const;
+  bool check_pg_upmaps(
+    CephContext *cct,
+    const vector<pg_t>& to_check,
+    vector<pg_t> *to_cancel,
+    map<pg_t, mempool::osdmap::vector<pair<int,int>>> *to_remap) const;
+  void clean_pg_upmaps(
+    CephContext *cct,
+    Incremental *pending_inc,
+    const vector<pg_t>& to_cancel,
+    const map<pg_t, mempool::osdmap::vector<pair<int,int>>>& to_remap) const;
+  bool clean_pg_upmaps(CephContext *cct, Incremental *pending_inc) const;
 
   int apply_incremental(const Incremental &inc);
 
@@ -1165,7 +1189,8 @@ public:
    * raw and primary must be non-NULL
    */
   void pg_to_raw_osds(pg_t pg, std::vector<int> *raw, int *primary) const;
-  void pg_to_raw_upmap(pg_t pg, std::vector<int> *raw_upmap) const;
+  void pg_to_raw_upmap(pg_t pg, std::vector<int> *raw,
+                       std::vector<int> *raw_upmap) const;
   /// map a pg to its acting set. @return acting set size
   void pg_to_acting_osds(const pg_t& pg, std::vector<int> *acting,
                         int *acting_primary) const {
@@ -1307,6 +1332,12 @@ public:
     ceph_assert(p != pools.end());
     return p->second.get_type();
   }
+  int get_pool_crush_rule(int64_t pool_id) const {
+    auto pool = get_pg_pool(pool_id);
+    if (!pool)
+      return -ENOENT;
+    return pool->get_crush_rule();
+  }
 
 
   pg_t raw_pg_to_pg(pg_t pg) const {
@@ -1375,10 +1406,6 @@ public:
 
     return calc_pg_role(osd, group, group.size()) >= 0;
   }
-
-  int clean_pg_upmaps(
-    CephContext *cct,
-    Incremental *pending_inc) const;
 
   bool try_pg_upmap(
     CephContext *cct,
@@ -1504,7 +1531,12 @@ public:
 WRITE_CLASS_ENCODER_FEATURES(OSDMap)
 WRITE_CLASS_ENCODER_FEATURES(OSDMap::Incremental)
 
-typedef std::shared_ptr<const OSDMap> OSDMapRef;
+#ifdef WITH_SEASTAR
+using OSDMapRef = boost::local_shared_ptr<const OSDMap>;
+#else
+using OSDMapRef = std::shared_ptr<const OSDMap>;
+#endif
+
 
 inline std::ostream& operator<<(std::ostream& out, const OSDMap& m) {
   m.print_oneline_summary(out);
@@ -1518,7 +1550,6 @@ void print_osd_utilization(const OSDMap& osdmap,
                            std::ostream& out,
                            ceph::Formatter *f,
                            bool tree,
-                           const std::string& class_name,
-                           const std::string& item_name);
+                           const std::string& filter);
 
 #endif

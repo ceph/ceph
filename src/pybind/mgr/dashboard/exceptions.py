@@ -101,3 +101,7 @@ class RoleNotInUser(Exception):
         super(RoleNotInUser, self).__init__(
             "Role '{}' is not associated with user '{}'"
             .format(rolename, username))
+
+
+class GrafanaError(Exception):
+    pass

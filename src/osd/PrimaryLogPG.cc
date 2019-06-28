@@ -25,6 +25,7 @@
 #include "Session.h"
 #include "objclass/objclass.h"
 
+#include "common/ceph_crypto.h"
 #include "common/errno.h"
 #include "common/scrub_types.h"
 #include "common/perf_counters.h"
@@ -572,13 +573,13 @@ void PrimaryLogPG::maybe_kick_recovery(
     dout(7) << "object " << soid << " v " << v << ", recovering." << dendl;
     PGBackend::RecoveryHandle *h = pgbackend->open_recovery_op();
     if (is_missing_object(soid)) {
-      recover_missing(soid, v, cct->_conf->osd_client_op_priority, h);
+      recover_missing(soid, v, cct->_conf->osd_kick_recovery_op_priority, h);
     } else if (recovery_state.get_missing_loc().is_deleted(soid)) {
       prep_object_replica_deletes(soid, v, h, &work_started);
     } else {
       prep_object_replica_pushes(soid, v, h, &work_started);
     }
-    pgbackend->run_recovery_op(h, cct->_conf->osd_client_op_priority);
+    pgbackend->run_recovery_op(h, cct->_conf->osd_kick_recovery_op_priority);
   }
 }
 
@@ -2469,44 +2470,46 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
     unsigned flags = CEPH_OSD_FLAG_IGNORE_CACHE | CEPH_OSD_FLAG_IGNORE_OVERLAY |
 		     CEPH_OSD_FLAG_RWORDERED;
     tgt_length = chunk_data.length();
-    pg_pool_t::fingerprint_t fp_algo_t = pool.info.get_fingerprint_type();
-    if (iter->second.has_reference() &&
-	fp_algo_t != pg_pool_t::TYPE_FINGERPRINT_NONE) {
-      switch (fp_algo_t) {
+    if (pg_pool_t::fingerprint_t fp_algo = pool.info.get_fingerprint_type();
+	iter->second.has_reference() &&
+	fp_algo != pg_pool_t::TYPE_FINGERPRINT_NONE) {
+      object_t fp_oid = [fp_algo, &chunk_data]() -> string {
+        switch (fp_algo) {
 	case pg_pool_t::TYPE_FINGERPRINT_SHA1:
-	  {
-	    sha1_digest_t sha1r = chunk_data.sha1();
-	    object_t fp_oid = sha1r.to_str();
-	    bufferlist in;
-	    if (fp_oid != tgt_soid.oid) {
-	      // decrement old chunk's reference count 
-	      ObjectOperation dec_op;
-	      cls_chunk_refcount_put_op put_call;
-	      ::encode(put_call, in);                             
-	      dec_op.call("refcount", "chunk_put", in);         
-	      // we don't care dec_op's completion. scrub for dedup will fix this.
-	      tid = osd->objecter->mutate(
-		tgt_soid.oid, oloc, dec_op, snapc,
-		ceph::real_clock::from_ceph_timespec(obc->obs.oi.mtime),
-		flags, NULL);
-	      in.clear();
-	    }
-	    tgt_soid.oid = fp_oid;
-	    iter->second.oid = tgt_soid;
-	    // add data op
-	    ceph_osd_op osd_op;
-	    osd_op.extent.offset = 0;
-	    osd_op.extent.length = chunk_data.length();
-	    encode(osd_op, in);
-	    encode(soid, in);
-	    in.append(chunk_data);
-	    obj_op.call("cas", "cas_write_or_get", in);
-	    break;
-	  }
+	  return crypto::digest<crypto::SHA1>(chunk_data).to_str();
+	case pg_pool_t::TYPE_FINGERPRINT_SHA256:
+	  return crypto::digest<crypto::SHA256>(chunk_data).to_str();
+	case pg_pool_t::TYPE_FINGERPRINT_SHA512:
+	  return crypto::digest<crypto::SHA512>(chunk_data).to_str();
 	default:
 	  assert(0 == "unrecognized fingerprint type");
-	  break;
+	  return {};
+	}
+      }();
+      bufferlist in;
+      if (fp_oid != tgt_soid.oid) {
+	// decrement old chunk's reference count 
+	ObjectOperation dec_op;
+	cls_chunk_refcount_put_op put_call;
+	::encode(put_call, in);                             
+	dec_op.call("refcount", "chunk_put", in);         
+	// we don't care dec_op's completion. scrub for dedup will fix this.
+	tid = osd->objecter->mutate(
+	  tgt_soid.oid, oloc, dec_op, snapc,
+	  ceph::real_clock::from_ceph_timespec(obc->obs.oi.mtime),
+	  flags, NULL);
+	in.clear();
       }
+      tgt_soid.oid = fp_oid;
+      iter->second.oid = tgt_soid;
+      // add data op
+      ceph_osd_op osd_op;
+      osd_op.extent.offset = 0;
+      osd_op.extent.length = chunk_data.length();
+      encode(osd_op, in);
+      encode(soid, in);
+      in.append(chunk_data);
+      obj_op.call("cas", "cas_write_or_get", in);
     } else {
       obj_op.add_data(CEPH_OSD_OP_WRITE, tgt_offset, tgt_length, chunk_data);
     }
@@ -11182,7 +11185,11 @@ void PrimaryLogPG::kick_object_context_blocked(ObjectContextRef obc)
 
   if (obc->requeue_scrub_on_unblock) {
     obc->requeue_scrub_on_unblock = false;
-    requeue_scrub();
+    // only requeue if we are still active: we may be unblocking
+    // because we are resetting for a new peering interval
+    if (is_active()) {
+      requeue_scrub();
+    }
   }
 }
 
