@@ -2835,7 +2835,8 @@ int RGWBucketCtl::read_bucket_instance_info(const rgw_bucket& bucket,
 
 int RGWBucketCtl::read_bucket_info(const rgw_bucket& bucket,
                                    RGWBucketInfo *info,
-                                   ceph::optional_ref_default<RGWBucketCtl::BucketInstance::GetParams> _params)
+                                   ceph::optional_ref_default<RGWBucketCtl::BucketInstance::GetParams> _params,
+                                   RGWObjVersionTracker *ep_objv_tracker)
 {
   const rgw_bucket *b = &bucket;
   auto& params = *_params;
@@ -2846,7 +2847,8 @@ int RGWBucketCtl::read_bucket_info(const rgw_bucket& bucket,
     ep.emplace();
 
     int r = read_bucket_entrypoint_info(*b, &(*ep), RGWBucketCtl::Bucket::GetParams()
-                                                    .set_bectx_params(params.bectx_params));
+                                                    .set_bectx_params(params.bectx_params)
+                                                    .set_objv_tracker(ep_objv_tracker));
     if (r < 0) {
       return r;
     }
@@ -2994,7 +2996,6 @@ int RGWBucketCtl::convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
   }
 
   info = entry_point.old_bucket_info;
-  info.ep_objv = ot.read_version;
 
   ot.generate_new_write_ver(cct);
 
