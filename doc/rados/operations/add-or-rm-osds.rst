@@ -140,6 +140,10 @@ backend, for instance, for switching from FileStore to BlueStore, OSDs need to
 be replaced. Unlike `Removing the OSD`_, replaced OSD's id and CRUSH map entry
 need to be keep intact after the OSD is destroyed for replacement.
 
+#. Make sure it is safe to destroy the OSD::
+
+     while ! ceph osd safe-to-destroy osd.{id} ; do sleep 10 ; done
+
 #. Destroy the OSD first::
 
      ceph osd destroy {id} --yes-i-really-mean-it
@@ -151,7 +155,7 @@ need to be keep intact after the OSD is destroyed for replacement.
 
 #. Prepare the disk for replacement by using the previously destroyed OSD id::
 
-     ceph-volume lvm  prepare --osd-id {id} --data /dev/sdX
+     ceph-volume lvm prepare --osd-id {id} --data /dev/sdX
 
 #. And activate the OSD::
 
@@ -160,7 +164,7 @@ need to be keep intact after the OSD is destroyed for replacement.
 Alternatively, instead of preparing and activating, the device can be recreated
 in one call, like::
 
-    ceph-volume lvm create --osd-id {id} --data /dev/sdX
+     ceph-volume lvm create --osd-id {id} --data /dev/sdX
 
 
 Starting the OSD
