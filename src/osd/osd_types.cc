@@ -1161,6 +1161,8 @@ std::string pg_state_string(uint64_t state)
     oss << "failed_repair+";
   if (state & PG_STATE_LAGGY)
     oss << "laggy+";
+  if (state & PG_STATE_WAIT)
+    oss << "wait+";
   string ret(oss.str());
   if (ret.length() > 0)
     ret.resize(ret.length() - 1);
@@ -1236,6 +1238,8 @@ std::optional<uint64_t> pg_string_state(const std::string& state)
     type = PG_STATE_FAILED_REPAIR;
   else if (state == "laggy")
     type = PG_STATE_LAGGY;
+  else if (state == "wait")
+    type = PG_STATE_WAIT;
   else if (state == "unknown")
     type = 0;
   else
