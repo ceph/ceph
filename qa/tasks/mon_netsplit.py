@@ -18,16 +18,29 @@ from mon_thrash import _get_mons
 def get_mons(ctx):
     return _get_mons(ctx)
 
+def get_ip_and_ports(ctx, daemon):
+    assert daemon.startswith('mon.')
+    addr = ctx.ceph['ceph'].mons['{a}'.format(a=daemon)]
+    ips = re.findall("[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+[:[0-9]*]*", addr)
+    assert len(ips) > 0
+    plain_ip = re.match("[0-9\.]*", ips[0]).group()
+    assert plain_ip is not None
+    port_list = []
+    for ip in ips:
+        ip_str, port_str = re.match("([0-9\.]*)([:[0-9]*]*)", ip2).groups()
+        assert ip_str = plain_ip
+        if len(port_str) > 0:
+            port_list.append(port_str)
+    return (plain_ip, port_list)
+
+
 def disconnect(ctx, config):
     assert len(config) == 2 # we can only disconnect pairs right now
     # and we can only disconnect mons right now
     assert config[0].startswith('mon.')
     assert config[1].startswith('mon.')
-    # I don't get what's happening with the IPs here right now;
-    # this will need to become a regex that can handle the
-    # different v1/v2 output formats and maybe deal with port-blocking
-    ip1 = ctx.ceph['ceph'].mons['{a}'.format(a=config[0])]
-    ip2 = ctx.ceph['ceph'].mons['{a}'.format(a=config[1])]
+    (ip1, _) = get_ip_and_ports(config[0])
+    (ip2, _) = get_ip_and_ports(config[1])
 
     (host1,) = ctx.cluster.only(config[0]).remotes.iterkeys()
     (host2,) = ctx.cluster.only(config[1]).remotes.iterkeys()
@@ -48,11 +61,9 @@ def reconnect(ctx, config):
     # and we can only disconnect mons right now
     assert config[0].startswith('mon.')
     assert config[1].startswith('mon.')
-    # I don't get what's happening with the IPs here right now;
-    # this will need to become a regex that can handle the
-    # different v1/v2 output formats and maybe deal with port-blocking
-    ip1 = ctx.ceph['ceph'].mons['{a}'.format(a=config[0])]
-    ip2 = ctx.ceph['ceph'].mons['{a}'.format(a=config[1])]
+
+    (ip1, _) = get_ip_and_ports(config[0])
+    (ip2, _) = get_ip_and_ports(config[1])
 
     (host1,) = ctx.cluster.only(config[0]).remotes.iterkeys()
     (host2,) = ctx.cluster.only(config[1]).remotes.iterkeys()
