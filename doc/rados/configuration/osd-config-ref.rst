@@ -468,6 +468,7 @@ recovery operations to ensure optimal performance during recovery.
 
 :Description: Time in seconds to sleep before next snap trim op.
               Increasing this value will slow down snap trimming.
+              This option overrides backend specific variants.
 
 :Type: Float
 :Default: ``0``
