@@ -4351,12 +4351,37 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
       return r;
     }
   }
-  
-  r = ctl.bucket->remove_bucket_entrypoint_info(bucket_info.bucket,
-						RGWBucketCtl::Bucket::RemoveParams()
-						.set_objv_tracker(&objv_tracker));
-  if (r < 0)
-    return r;
+
+  bool remove_ep = true;
+
+  if (objv_tracker.read_version.empty()) {
+    RGWBucketEntryPoint ep;
+    r = ctl.bucket->read_bucket_entrypoint_info(bucket_info.bucket,
+                                                &ep,
+                                                RGWBucketCtl::Bucket::GetParams()
+                                                .set_objv_tracker(&objv_tracker));
+    if (r < 0 ||
+        (!bucket_info.bucket.bucket_id.empty() &&
+         ep.bucket.bucket_id != bucket_info.bucket.bucket_id)) {
+      if (r != -ENOENT) {
+        ldout(cct, 0) << "ERROR: read_bucket_entrypoint_info() bucket=" << bucket_info.bucket << " returned error: r=" << r << dendl;
+        /* we have no idea what caused the error, will not try to remove it */
+      }
+      /* 
+       * either failed to read bucket entrypoint, or it points to a different bucket instance than
+       * requested
+       */
+      remove_ep = false;
+    }
+  }
+ 
+  if (remove_ep) {
+    r = ctl.bucket->remove_bucket_entrypoint_info(bucket_info.bucket,
+                                                  RGWBucketCtl::Bucket::RemoveParams()
+                                                  .set_objv_tracker(&objv_tracker));
+    if (r < 0)
+      return r;
+  }
 
   /* if the bucket is not synced we can remove the meta file */
   if (!svc.zone->is_syncing_bucket_meta(bucket)) {
