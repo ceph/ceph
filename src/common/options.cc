@@ -2872,7 +2872,7 @@ std::vector<Option> get_global_options() {
 
     Option("osd_snap_trim_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description("Time in seconds to sleep before next snap trim"),
+    .set_description("Time in seconds to sleep before next snap trim (overrides values below)"),
 
     Option("osd_snap_trim_sleep_hdd", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)
