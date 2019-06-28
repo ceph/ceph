@@ -55,6 +55,9 @@ static void parse_bucket(const string& bucket,
                          string *bucket_name,
                          string *bucket_instance = nullptr /* optional */)
 {
+  /*
+   * expected format: [tenant/]bucket:bucket_instance
+   */
   int pos = bucket.find('/');
   if (pos >= 0) {
     *tenant_name = bucket.substr(0, pos);
@@ -70,6 +73,18 @@ static void parse_bucket(const string& bucket,
   *bucket_name = bn.substr(0, pos);
   if (bucket_instance) {
     *bucket_instance = bn.substr(pos + 1);
+  }
+
+  /*
+   * deal with the possible tenant:bucket:bucket_instance case
+   */
+  if (tenant_name->empty()) {
+    pos = bucket_instance->find(':');
+    if (pos >= 0) {
+      *tenant_name = *bucket_name;
+      *bucket_name = bucket_instance->substr(0, pos);
+      *bucket_instance = bucket_instance->substr(pos + 1);
+    }
   }
 }
 
@@ -2863,15 +2878,10 @@ int RGWMetadataHandlerPut_BucketInstance::put_check()
 
   if (!exists || old_bci->info.bucket.bucket_id != bci.info.bucket.bucket_id) {
     /* a new bucket, we need to select a new bucket placement for it */
-    auto key(entry);
-#warning why was this needed?
-#if 0
-    rgw_bucket_instance_oid_to_key(key);
-#endif
     string tenant_name;
     string bucket_name;
     string bucket_instance;
-    parse_bucket(key, &tenant_name, &bucket_name, &bucket_instance);
+    parse_bucket(entry, &tenant_name, &bucket_name, &bucket_instance);
 
     RGWZonePlacementInfo rule_info;
     bci.info.bucket.name = bucket_name;
