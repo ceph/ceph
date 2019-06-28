@@ -706,6 +706,17 @@ static int block_device_run_smartctl(const string& devname, int timeout,
   return ret;
 }
 
+static std::string escape_quotes(const std::string& s)
+{
+  std::string r = s;
+  auto pos = r.find("\"");
+  while (pos != std::string::npos) {
+    r.replace(pos, 1, "\"");
+    pos = r.find("\"", pos + 1);
+  }
+  return r;
+}
+
 int block_device_get_metrics(const string& devname, int timeout,
 			     json_spirit::mValue *result)
 {
@@ -719,10 +730,12 @@ int block_device_get_metrics(const string& devname, int timeout,
     s += "\", \"smartctl_error_code\": " + stringify(r);
     s += "\", \"smartctl_output\": \"" + s;
     s += + "\"}";
-  }
-  if (!json_spirit::read(s, *result)) {
+  } else if (!json_spirit::read(s, *result)) {
+    string orig = s;
     s = "{\"error\": \"smartctl returned invalid JSON\", \"dev\": \"/dev/";
     s += devname;
+    s += "\",\"output\":\"";
+    s += escape_quotes(orig);
     s += "\"}";
   }
   if (!json_spirit::read(s, *result)) {
