@@ -121,6 +121,8 @@ def main(args=None):
 
     if sub_command == 'lvm':
         block_volume = get_block_volume(extra_data)
+        wal_device = None
+        db_device = None
         if block_volume:
             wal_device = block_volume.tags.get('ceph.wal_device')
             db_device = block_volume.tags.get('ceph.db_device')
