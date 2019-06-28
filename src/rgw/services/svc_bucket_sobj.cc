@@ -309,7 +309,11 @@ int RGWSI_Bucket_SObj::read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
   *info = e.info;
 
   if (ret < 0) {
-    lderr(cct) << "ERROR: do_read_bucket_instance_info failed: " << ret << dendl;
+    if (ret != -ENOENT) {
+      lderr(cct) << "ERROR: do_read_bucket_instance_info failed: " << ret << dendl;
+    } else {
+      ldout(cct, 20) << "do_read_bucket_instance_info, bucket instance not found (key=" << key << ")" << dendl;
+    }
     return ret;
   }
 
