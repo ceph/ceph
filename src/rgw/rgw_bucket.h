@@ -783,12 +783,14 @@ public:
 
   /*
    * bucket_id may or may not be provided
+   *
+   * ep_objv_tracker might not be populated even if provided. Will only be set if entrypoint is read
+   * (that is: if bucket_id is empty).
    */
   int read_bucket_info(const rgw_bucket& bucket,
                        RGWBucketInfo *info,
                        optional_yield y,
                        ceph::optional_ref_default<RGWBucketCtl::BucketInstance::GetParams> _params = std::nullopt);
-
 
 
   int set_bucket_instance_attrs(RGWBucketInfo& bucket_info,

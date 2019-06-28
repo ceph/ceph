@@ -1142,6 +1142,21 @@ inline ostream& operator<<(ostream& out, const rgw_raw_obj& o) {
   return out;
 }
 
+struct rgw_bucket_key {
+  std::string tenant;
+  std::string name;
+  std::string bucket_id;
+
+  rgw_bucket_key(const std::string& _tenant,
+                 const std::string& _name,
+                 const std::string& _bucket_id) : tenant(_tenant),
+                                                  name(_name),
+                                                  bucket_id(_bucket_id) {}
+  rgw_bucket_key(const std::string& _tenant,
+                 const std::string& _name) : tenant(_tenant),
+                                             name(_name) {}
+}; 
+
 struct rgw_bucket {
   std::string tenant;
   std::string name;
@@ -1159,6 +1174,9 @@ struct rgw_bucket {
     explicit_placement(b.explicit_placement.data_pool,
                        b.explicit_placement.data_extra_pool,
                        b.explicit_placement.index_pool) {}
+  rgw_bucket(const rgw_bucket_key& bk) : tenant(bk.tenant),
+                                         name(bk.name),
+                                         bucket_id(bk.bucket_id) {}
   rgw_bucket(const rgw_bucket&) = default;
   rgw_bucket(rgw_bucket&&) = default;
 
@@ -1385,7 +1403,6 @@ struct RGWBucketInfo {
   rgw_placement_rule placement_rule;
   bool has_instance_obj;
   RGWObjVersionTracker objv_tracker; /* we don't need to serialize this, for runtime tracking */
-  obj_version ep_objv; /* entry point object version, for runtime tracking only */
   RGWQuotaInfo quota;
 
   // Represents the number of bucket index object shards:
@@ -2002,6 +2019,7 @@ struct req_state : DoutPrefixProvider {
   string redirect;
 
   RGWBucketInfo bucket_info;
+  obj_version bucket_ep_objv;
   real_time bucket_mtime;
   std::map<std::string, ceph::bufferlist> bucket_attrs;
   bool bucket_exists{false};
