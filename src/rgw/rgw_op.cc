@@ -7532,7 +7532,10 @@ void RGWPutBucketObjectLock::execute()
     op_ret = -EINVAL;
     return;
   }
-
+  op_ret = get_params();
+  if (op_ret < 0) {
+    return;
+  }
   if (!parser.parse(data.c_str(), data.length(), 1)) {
     op_ret = -ERR_MALFORMED_XML;
     return;
@@ -7620,10 +7623,6 @@ void RGWPutObjRetention::execute()
     op_ret = -EINVAL;
     return;
   }
-
-  op_ret = get_params();
-  if (op_ret < 0)
-    return;
 
   if (!parser.parse(data.c_str(), data.length(), 1)) {
     op_ret = -ERR_MALFORMED_XML;
