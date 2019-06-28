@@ -353,15 +353,14 @@ int Infiniband::QueuePair::get_state() const
 bool Infiniband::QueuePair::is_error() const
 {
   ibv_qp_attr qpa;
-  ibv_qp_init_attr qpia;
 
-  int r = ibv_query_qp(qp, &qpa, -1, &qpia);
+  int r = get_state();
   if (r) {
     lderr(cct) << __func__ << " failed to get state: "
       << cpp_strerror(errno) << dendl;
     return true;
   }
-  return qpa.cur_qp_state == IBV_QPS_ERR;
+  return qpa.qp_state == IBV_QPS_ERR;
 }
 
 
