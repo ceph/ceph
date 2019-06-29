@@ -221,7 +221,7 @@ seastar::future<> PG::read_state(ceph::os::FuturizedStore* store)
       else
 	peering_state.set_role(-1);
 
-      epoch_t epoch = peering_state.get_osdmap()->get_epoch();
+      epoch_t epoch = get_osdmap_epoch();
       shard_services.start_operation<LocalPeeringEvent>(
 	this,
 	shard_services,
