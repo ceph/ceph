@@ -66,9 +66,8 @@ void OpRequest::_dump(Formatter *f) const
   }
   {
     f->open_array_section("events");
-    std::lock_guard l(lock);
-    for (auto& i : events) {
-      f->dump_object("event", i);
+    for (size_t i = 0; i < events.size(); i++) {
+      f->dump_object("event", *events.at(i));
     }
     f->close_section();
   }
@@ -154,7 +153,7 @@ void OpRequest::mark_flag_point(uint8_t flag, const char *s) {
 	     flag, s, old_flags, hit_flag_points);
 }
 
-void OpRequest::mark_flag_point_string(uint8_t flag, const string& s) {
+void OpRequest::mark_flag_point_string(uint8_t flag, const string &s) {
 #ifdef WITH_LTTNG
   uint8_t old_flags = hit_flag_points;
 #endif

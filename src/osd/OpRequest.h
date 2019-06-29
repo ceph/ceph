@@ -140,7 +140,7 @@ public:
   void mark_reached_pg() {
     mark_flag_point(flag_reached_pg, "reached_pg");
   }
-  void mark_delayed(const std::string& s) {
+  void mark_delayed(const string& s) {
     mark_flag_point_string(flag_delayed, s);
   }
   void mark_started() {
@@ -169,7 +169,7 @@ public:
 private:
   void set_rmw_flags(int flags);
   void mark_flag_point(uint8_t flag, const char *s);
-  void mark_flag_point_string(uint8_t flag, const std::string& s);
+  void mark_flag_point_string(uint8_t flag, const string &s);
 };
 
 typedef OpRequest::Ref OpRequestRef;

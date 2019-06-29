@@ -104,9 +104,8 @@ private:
   void _dump(Formatter *f) const override {
     {
       f->open_array_section("events");
-      std::lock_guard l(lock);
-      for (auto& i : events) {
-	f->dump_object("event", i);
+      for (size_t i = 0; i < events.size(); i++) {
+        f->dump_object("event", *events.at(i));
       }
       f->close_section();
       f->open_object_section("info");
@@ -215,7 +214,7 @@ struct C_MonOp : public Context
     _finish(r);
   }
 
-  void mark_op_event(const string &event) {
+  void mark_op_event(std::string_view event) {
     if (op)
       op->mark_event_string(event);
   }

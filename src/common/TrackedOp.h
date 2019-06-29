@@ -15,6 +15,7 @@
 #define TRACKEDREQUEST_H_
 
 #include <atomic>
+#include <stdexcept>
 #include "common/histogram.h"
 #include "common/RWLock.h"
 #include "common/Thread.h"
@@ -22,8 +23,7 @@
 #include "common/ceph_mutex.h"
 #include "include/spinlock.h"
 #include "msg/Message.h"
-
-#define OPTRACKER_PREALLOC_EVENTS 20
+#include "include/ceph_assert.h"
 
 class TrackedOp;
 class OpHistory;
@@ -233,34 +233,121 @@ protected:
   utime_t initiated_at;
 
   struct Event {
-    utime_t stamp;
-    string str;
-    const char *cstr = nullptr;
+    utime_t stamp_;
+    string str_;
+    const char *cstr_ = nullptr;
 
-    Event(utime_t t, const string& s) : stamp(t), str(s) {}
-    Event(utime_t t, const char *s) : stamp(t), cstr(s) {}
+    Event() {};
+    Event(utime_t t, std::string_view s) : stamp_(t), str_(s) {}
+    Event(utime_t t, const char *s) : stamp_(t), cstr_(s) {}
 
-    int compare(const char *s) const {
-      if (cstr)
-	return strcmp(cstr, s);
+    void set(utime_t t, std::string_view s) {
+      stamp_ = t;
+      str_ = s;
+    }
+
+    void set(utime_t t, const char* s) {
+      stamp_ = t;
+      cstr_ = s;
+    }
+
+    const utime_t stamp() const {
+      return stamp_;
+    }
+
+    const int compare(const char *s) const {
+      if (cstr_)
+	return strcmp(cstr_, s);
       else
-	return str.compare(s);
+	return str_.compare(s);
     }
 
     const char *c_str() const {
-      if (cstr)
-	return cstr;
+      if (cstr_)
+	return cstr_;
       else
-	return str.c_str();
+	return str_.c_str();
     }
 
     void dump(ceph::Formatter *f) const {
-      f->dump_stream("time") << stamp;
+      f->dump_stream("time") << stamp_;
       f->dump_string("event", c_str());
     }
   };
 
-  std::vector<Event> events;    ///< std::list of events and their times
+  // Semi-Lockless append only list with reserved items
+  template<class T>
+  class AppendList {
+    static constexpr size_t RESERVED_ITEMS = 16;
+
+  private:
+    // pre-initialized array with atomic index
+    std::array<T, RESERVED_ITEMS> arr;
+    std::atomic<size_t> reservation_ = 0;
+    std::atomic<size_t> size_ = 0;
+    // Expansion storage with lock
+    std::vector<T> vec;
+    mutable ceph::mutex lock = ceph::make_mutex("AppendList::lock");
+
+  public:
+    AppendList() {};
+
+    template<class... Args>
+    void emplace_back(Args&&... args) {
+      size_t r = reservation_++;
+
+      // Someone else got a prior reservation so wait until they've written it.
+      while (r > size_) {
+        continue;
+      }
+      
+      if (reservation_ < size_) {
+        ceph_assert("Trying to insert element before existing element.");
+      }
+
+      // It's our time to write
+      if (r < RESERVED_ITEMS) {
+        arr[r].set(std::forward<Args>(args)...);
+      } else {
+        std::lock_guard l(lock);
+        // Initialize vec to double capacity when we first start using it.
+        if (r == RESERVED_ITEMS)
+          vec.reserve(RESERVED_ITEMS);
+        vec.emplace_back(std::forward<Args>(args)...);
+      }
+      size_++;
+    }
+
+    const size_t size() const {
+      return size_;
+    }
+
+    const bool empty() const {
+      return (size_ == 0) ? true : false;
+    }
+
+    const T* at(size_t index) const {
+      if (index > size_)
+        return nullptr;
+      if (index < RESERVED_ITEMS)
+        return &arr[index];
+      std::lock_guard l(lock);
+      return &vec[index - RESERVED_ITEMS];
+    }
+
+    const T* back() const {
+      size_t s = size_;
+      if (s == 0)
+        return nullptr;
+      size_t index = s - 1;
+      if (index < RESERVED_ITEMS)
+        return &arr[index];
+      std::lock_guard l(lock);
+      return &vec[index - RESERVED_ITEMS];
+    }
+  };
+
+  AppendList<Event> events;
   mutable ceph::mutex lock = ceph::make_mutex("TrackedOp::lock"); ///< to protect the events list
   const char *current = 0; ///< the current state the event is in
   uint64_t seq = 0;        ///< a unique value set by the OpTracker
@@ -282,7 +369,6 @@ protected:
     tracker(_tracker),
     initiated_at(initiated)
   {
-    events.reserve(OPTRACKER_PREALLOC_EVENTS);
   }
 
   /// output any type-specific data you want to get when dump() is called
@@ -367,14 +453,15 @@ public:
   }
 
   double get_duration() const {
-    std::lock_guard l(lock);
-    if (!events.empty() && events.rbegin()->compare("done") == 0)
-      return events.rbegin()->stamp - get_initiated();
-    else
-      return ceph_clock_now() - get_initiated();
+    if (!events.empty()) {
+      const Event* e = events.back();
+      if (e->compare("done") == 0)
+        return e->stamp() - get_initiated();
+    }
+    return ceph_clock_now() - get_initiated();
   }
 
-  void mark_event_string(const string &event,
+  void mark_event_string(std::string_view event,
 			 utime_t stamp=ceph_clock_now());
   void mark_event(const char *event,
 		  utime_t stamp=ceph_clock_now());
@@ -384,8 +471,7 @@ public:
   }
 
   virtual const char *state_string() const {
-    std::lock_guard l(lock);
-    return events.rbegin()->c_str();
+    return (events.empty()) ? "" : events.back()->c_str();
   }
 
   void dump(utime_t now, ceph::Formatter *f) const;

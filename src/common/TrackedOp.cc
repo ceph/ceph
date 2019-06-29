@@ -434,15 +434,14 @@ void OpTracker::get_age_ms_histogram(pow2_hist_t *h)
 #undef dout_context
 #define dout_context tracker->cct
 
-void TrackedOp::mark_event_string(const string &event, utime_t stamp)
+void TrackedOp::mark_event_string(std::string_view event, utime_t stamp)
 {
   if (!state)
     return;
 
   {
-    std::lock_guard l(lock);
     events.emplace_back(stamp, event);
-    current = events.back().c_str();
+    current = events.back()->c_str();
   }
   dout(6) << " seq: " << seq
 	  << ", time: " << stamp
@@ -458,7 +457,6 @@ void TrackedOp::mark_event(const char *event, utime_t stamp)
     return;
 
   {
-    std::lock_guard l(lock);
     events.emplace_back(stamp, event);
     current = event;
   }
