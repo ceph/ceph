@@ -234,27 +234,36 @@ protected:
 
   struct Event {
     utime_t stamp;
-    std::string str;
+    string str;
+    const char *cstr = nullptr;
 
-    Event(utime_t t, std::string_view s) : stamp(t), str(s) {}
+    Event(utime_t t, const string& s) : stamp(t), str(s) {}
+    Event(utime_t t, const char *s) : stamp(t), cstr(s) {}
 
     int compare(const char *s) const {
-      return str.compare(s);
+      if (cstr)
+	return strcmp(cstr, s);
+      else
+	return str.compare(s);
     }
 
     const char *c_str() const {
-      return str.c_str();
+      if (cstr)
+	return cstr;
+      else
+	return str.c_str();
     }
 
     void dump(ceph::Formatter *f) const {
       f->dump_stream("time") << stamp;
-      f->dump_string("event", str);
+      f->dump_string("event", c_str());
     }
   };
 
   std::vector<Event> events;    ///< std::list of events and their times
   mutable ceph::mutex lock = ceph::make_mutex("TrackedOp::lock"); ///< to protect the events list
-  uint64_t seq = 0;        ///< a unique value std::set by the OpTracker
+  const char *current = 0; ///< the current state the event is in
+  uint64_t seq = 0;        ///< a unique value set by the OpTracker
 
   uint32_t warn_interval_multiplier = 1; //< limits output of a given op warning
 
@@ -365,15 +374,18 @@ public:
       return ceph_clock_now() - get_initiated();
   }
 
-  void mark_event(std::string_view event, utime_t stamp=ceph_clock_now());
+  void mark_event_string(const string &event,
+			 utime_t stamp=ceph_clock_now());
+  void mark_event(const char *event,
+		  utime_t stamp=ceph_clock_now());
 
   void mark_nowarn() {
     warn_interval_multiplier = 0;
   }
 
-  virtual std::string_view state_string() const {
+  virtual const char *state_string() const {
     std::lock_guard l(lock);
-    return events.empty() ? std::string_view() : std::string_view(events.rbegin()->str);
+    return events.rbegin()->c_str();
   }
 
   void dump(utime_t now, ceph::Formatter *f) const;

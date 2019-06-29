@@ -24,7 +24,6 @@
 #include <map>
 #include <list>
 #include <set>
-#include <string_view>
 
 class MDSRank;
 class CDir;
@@ -61,7 +60,7 @@ public:
   const static int EXPORT_EXPORTING	= 7;  // sent actual export, waiting for ack
   const static int EXPORT_LOGGINGFINISH	= 8;  // logging EExportFinish
   const static int EXPORT_NOTIFYING	= 9;  // waiting for notifyacks
-  static std::string_view get_export_statename(int s) {
+  static const char *get_export_statename(int s) {
     switch (s) {
     case EXPORT_CANCELLING: return "cancelling";
     case EXPORT_LOCKING: return "locking";
@@ -72,7 +71,7 @@ public:
     case EXPORT_EXPORTING: return "exporting";
     case EXPORT_LOGGINGFINISH: return "loggingfinish";
     case EXPORT_NOTIFYING: return "notifying";
-    default: ceph_abort(); return std::string_view();
+    default: ceph_abort(); return 0;
     }
   }
 
@@ -85,7 +84,7 @@ public:
   const static int IMPORT_ACKING        = 6; // logged EImportStart, sent ack, waiting for finish
   const static int IMPORT_FINISHING     = 7; // sent cap imports, waiting for finish
   const static int IMPORT_ABORTING      = 8; // notifying bystanders of an abort before unfreezing
-  static std::string_view get_import_statename(int s) {
+  static const char *get_import_statename(int s) {
     switch (s) {
     case IMPORT_DISCOVERING: return "discovering";
     case IMPORT_DISCOVERED: return "discovered";
@@ -95,7 +94,7 @@ public:
     case IMPORT_ACKING: return "acking";
     case IMPORT_FINISHING: return "finishing";
     case IMPORT_ABORTING: return "aborting";
-    default: ceph_abort(); return std::string_view();
+    default: ceph_abort(); return 0;
     }
   }
 

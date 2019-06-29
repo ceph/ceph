@@ -183,7 +183,7 @@ public:
   void journal_and_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn,
 			 LogEvent *le, MDSLogContextBase *fin);
   void submit_mdlog_entry(LogEvent *le, MDSLogContextBase *fin,
-                          MDRequestRef& mdr, std::string_view event);
+                          MDRequestRef& mdr, const char *evt);
   void dispatch_client_request(MDRequestRef& mdr);
   void perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t lat);
   void early_reply(MDRequestRef& mdr, CInode *tracei, CDentry *tracedn);

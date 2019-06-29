@@ -193,9 +193,9 @@ void Locker::include_snap_rdlocks_wlayout(CInode *in, MutationImpl::LockOpVec& l
 
 struct MarkEventOnDestruct {
   MDRequestRef& mdr;
-  std::string_view message;
+  const char* message;
   bool mark_event;
-  MarkEventOnDestruct(MDRequestRef& _mdr, std::string_view _message) :
+  MarkEventOnDestruct(MDRequestRef& _mdr, const char *_message) :
       mdr(_mdr),
       message(_message),
       mark_event(true) {}
@@ -5278,7 +5278,7 @@ void Locker::handle_file_lock(ScatterLock *lock, const cref_t<MLock> &m)
     }
   }
 
-  dout(7) << "handle_file_lock a=" << lock->get_lock_action_name(m->get_action())
+  dout(7) << "handle_file_lock a=" << get_lock_action_name(m->get_action())
 	  << " on " << *lock
 	  << " from mds." << from << " " 
 	  << *in << dendl;

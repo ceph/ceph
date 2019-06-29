@@ -496,7 +496,7 @@ struct C_MDC_CreateSystemFile : public MDCacheLogContext {
   }
 };
 
-void MDCache::_create_system_file(CDir *dir, std::string_view name, CInode *in, MDSContext *fin)
+void MDCache::_create_system_file(CDir *dir, const char *name, CInode *in, MDSContext *fin)
 {
   dout(10) << "_create_system_file " << name << " in " << *dir << dendl;
   CDentry *dn = dir->add_null_dentry(name);
