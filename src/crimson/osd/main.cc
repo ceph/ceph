@@ -24,7 +24,8 @@ using config_t = ceph::common::ConfigProxy;
 namespace fs = seastar::compat::filesystem;
 
 void usage(const char* prog) {
-  std::cout << "usage: " << prog << " -i <ID>" << std::endl;
+  std::cout << "usage: " << prog << " -i <ID>\n"
+            << "  --help-seastar    show Seastar help messages\n";
   generic_server_usage();
 }
 
@@ -51,18 +52,22 @@ auto partition_args(seastar::app_template& app, char** argv_begin, char** argv_e
     return argv;
   };
   auto unknown = unknown_args.begin();
-  auto consume_ceph_arg = [&](char** argv) {
-    while (unknown != unknown_args.end() && argv != argv_end &&
-           *unknown == *argv) {
-      ++unknown;
-      ceph_args.push_back(*argv++);
+  auto consume_unknown_arg = [&](char** argv) {
+    for (; unknown != unknown_args.end() &&
+           argv != argv_end &&
+           *unknown == *argv; ++argv, ++unknown) {
+      if (std::strcmp(*argv, "--help-seastar") == 0) {
+        app_args.push_back("--help");
+      } else {
+        ceph_args.push_back(*argv);
+      }
     }
     return argv;
   };
   for (auto argv = argv_begin; argv != argv_end;) {
     if (auto next_arg = consume_conf_arg(argv); next_arg != argv) {
       argv = next_arg;
-    } else if (auto next_arg = consume_ceph_arg(argv); next_arg != argv) {
+    } else if (auto next_arg = consume_unknown_arg(argv); next_arg != argv) {
       argv = next_arg;
     } else {
       app_args.push_back(*argv++);
@@ -110,7 +115,8 @@ int main(int argc, char* argv[])
     ("debug", "enable debug output on all loggers");
 
   auto [ceph_args, app_args] = partition_args(app, argv, argv + argc);
-  if (ceph_argparse_need_usage(ceph_args)) {
+  if (ceph_argparse_need_usage(ceph_args) &&
+      std::find(app_args.begin(), app_args.end(), "--help") == app_args.end()) {
     usage(argv[0]);
     return EXIT_SUCCESS;
   }
