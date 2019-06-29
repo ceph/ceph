@@ -211,7 +211,11 @@ class LCFilter
 };
 WRITE_CLASS_ENCODER(LCFilter)
 
-
+enum LCRule_status {
+  LCRULE_DISABLED = 0,
+  LCRULE_ENABLED,
+  LCRULE_PURGE_ENABLED,
+};
 
 class LCRule
 {
@@ -240,12 +244,26 @@ public:
       return status;
   }
 
-  bool is_enabled() const {
-    return status == "Enabled";
+  int is_enabled() const {
+    if (status == "Enabled")
+      return LCRULE_ENABLED;
+    if (status == "Purge_Enabled")
+      return LCRULE_PURGE_ENABLED;
+    return LCRULE_DISABLED;
   }
 
-  void set_enabled(bool flag) {
-    status = (flag ? "Enabled" : "Disabled");
+  void set_enabled(int flag) {
+    switch (flag) {
+      case LCRULE_PURGE_ENABLED:
+        status = "Purge_Enabled";
+        break;
+      case LCRULE_ENABLED:
+        status = "Enabled";
+        break;
+      case LCRULE_DISABLED:
+      default:
+        status = "Disabled";
+    }
   }
 
   const string& get_prefix() const {
@@ -376,7 +394,7 @@ struct transition_action
 struct lc_op
 {
   string id;
-  bool status{false};
+  int status{0};
   bool dm_expiration{false};
   int expiration{0};
   int noncur_expiration{0};

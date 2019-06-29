@@ -265,7 +265,7 @@ int RGWLC::bucket_lc_prepare(int index)
   return 0;
 }
 
-static bool obj_has_expired(CephContext *cct, ceph::real_time mtime, int days, ceph::real_time *expire_time = nullptr)
+static bool has_expired(CephContext *cct, ceph::real_time mtime, int days, ceph::real_time *expire_time = nullptr)
 {
   double timediff, cmp;
   utime_t base_time;
@@ -370,7 +370,7 @@ int RGWLC::handle_multipart_expiration(
       }
 
       for (auto obj_iter = objs.begin(); obj_iter != objs.end(); ++obj_iter) {
-        if (obj_has_expired(cct, obj_iter->meta.mtime, prefix_iter->second.mp_expiration)) {
+        if (has_expired(cct, obj_iter->meta.mtime, prefix_iter->second.mp_expiration)) {
           rgw_obj_key key(obj_iter->key);
           if (!mp_obj.from_meta(key.name)) {
             continue;
@@ -455,6 +455,10 @@ public:
   void set_prefix(const string& p) {
     prefix = p;
     list_op.params.prefix = prefix;
+  }
+
+  string get_prefix() {
+    return prefix;
   }
 
   int init() {
@@ -601,7 +605,7 @@ public:
    *   but should_process() if the action has already been applied. In object removal
    *   it doesn't matter, but in object transition it does.
    */
-  virtual bool should_process() {
+  virtual bool should_process(lc_op_ctx& oc) {
     return true;
   }
 
@@ -666,6 +670,18 @@ static int check_tags(lc_op_ctx& oc, bool *skip)
   return 0;
 }
 
+class LCOpFilter_PurgePrefix : public LCOpFilter {
+public:
+  bool check(lc_op_ctx& oc) override {
+    /* Check if prefix is "" */
+    if (oc.env.ol.get_prefix() == "")
+      return true;
+
+    ldout(oc.cct, 0) << "ERROR: Incompatible prefix for bucket purge. Use empty string \"\" as prefix." << dendl;
+    return false;
+  };
+};
+
 class LCOpFilter_Tags : public LCOpFilter {
 public:
   bool check(lc_op_ctx& oc) override {
@@ -690,6 +706,44 @@ public:
   };
 };
 
+class LCOpAction_BucketPurge : public LCOpAction {
+public:
+  bool check(lc_op_ctx& oc, ceph::real_time *exp_time) override {
+
+    auto& ctime = oc.bucket_info.creation_time;
+    bool is_expired;
+    auto& op = oc.op;
+    if (op.expiration <= 0) {
+      if (op.expiration_date == boost::none) {
+        ldout(oc.cct, 20) << __func__ << "(): Bucket=" << oc.bucket_info.bucket.name << ": no expiration set in rule, skipping" << dendl;
+        return false;
+      }
+      is_expired = ceph_clock_now() >= ceph::real_clock::to_time_t(*op.expiration_date);
+      *exp_time = *op.expiration_date;
+    } else {
+      is_expired = has_expired(oc.cct, ctime, op.expiration, exp_time);
+    }
+
+    ldout(oc.cct, 20) << __func__ << "(): Bucket=" << oc.bucket_info.bucket.name << ": is_expired=" << (int)is_expired << dendl;
+    return is_expired;
+  }
+
+  bool should_process(lc_op_ctx& oc) override {
+    /*
+     * Ensure that the bucket is empty
+     * TODO: Check for incomplete MPU
+     */
+    return (oc.o.exists == false);
+  }
+
+  int process(lc_op_ctx& oc) {
+    int r = rgw_remove_bucket(oc.store, oc.bucket_info.bucket, false /* delete_children */);
+    if (r < 0 && r != -ENOTEMPTY)
+      ldout(oc.cct, 0) << "Couldn't purge expired bucket:" << oc.bucket_info.bucket.name << "Error:" << r << dendl;
+    return r;
+  }
+};
+
 class LCOpAction_CurrentExpiration : public LCOpAction {
 public:
   bool check(lc_op_ctx& oc, ceph::real_time *exp_time) override {
@@ -710,7 +764,7 @@ public:
       is_expired = ceph_clock_now() >= ceph::real_clock::to_time_t(*op.expiration_date);
       *exp_time = *op.expiration_date;
     } else {
-      is_expired = obj_has_expired(oc.cct, mtime, op.expiration, exp_time);
+      is_expired = has_expired(oc.cct, mtime, op.expiration, exp_time);
     }
 
     ldout(oc.cct, 20) << __func__ << "(): key=" << o.key << ": is_expired=" << (int)is_expired << dendl;
@@ -721,7 +775,7 @@ public:
     auto& o = oc.o;
     int r = remove_expired_obj(oc, !oc.bucket_info.versioned());
     if (r < 0) {
-      ldout(oc.cct, 0) << "ERROR: remove_expired_obj " << dendl;
+      ldout(oc.cct, 0) << "ERROR: remove_expired_obj " << r << dendl;
       return r;
     }
     ldout(oc.cct, 2) << "DELETED:" << oc.bucket_info.bucket << ":" << o.key << dendl;
@@ -740,7 +794,7 @@ public:
 
     auto mtime = oc.ol.get_prev_obj().meta.mtime;
     int expiration = oc.op.noncur_expiration;
-    bool is_expired = obj_has_expired(oc.cct, mtime, expiration, exp_time);
+    bool is_expired = has_expired(oc.cct, mtime, expiration, exp_time);
 
     ldout(oc.cct, 20) << __func__ << "(): key=" << o.key << ": is_expired=" << is_expired << dendl;
     return is_expired && pass_object_lock_check(oc.store, oc.bucket_info, oc.obj, oc.rctx);
@@ -820,7 +874,7 @@ public:
       is_expired = ceph_clock_now() >= ceph::real_clock::to_time_t(*transition.date);
       *exp_time = *transition.date;
     } else {
-      is_expired = obj_has_expired(oc.cct, mtime, transition.days, exp_time);
+      is_expired = has_expired(oc.cct, mtime, transition.days, exp_time);
     }
 
     ldout(oc.cct, 20) << __func__ << "(): key=" << o.key << ": is_expired=" << is_expired << dendl;
@@ -830,7 +884,7 @@ public:
     return is_expired;
   }
 
-  bool should_process() override {
+  bool should_process(lc_op_ctx& oc) override {
     return need_to_process;
   }
 
@@ -880,9 +934,15 @@ public:
 
 void LCOpRule::build()
 {
-  filters.emplace_back(new LCOpFilter_Tags);
-
   auto& op = env.op;
+
+  if (op.status == LCRULE_PURGE_ENABLED) {
+    filters.emplace_back(new LCOpFilter_PurgePrefix);
+    actions.emplace_back(new LCOpAction_BucketPurge);
+    return;
+  }
+
+  filters.emplace_back(new LCOpFilter_Tags);
 
   if (op.expiration > 0 ||
       op.expiration_date != boost::none) {
@@ -925,7 +985,7 @@ int LCOpRule::process(rgw_bucket_dir_entry& o, const DoutPrefixProvider *dpp)
   }
 
   if (selected &&
-      (*selected)->should_process()) {
+      (*selected)->should_process(ctx)) {
 
     /*
      * Calling filter checks after action checks because
@@ -951,7 +1011,7 @@ int LCOpRule::process(rgw_bucket_dir_entry& o, const DoutPrefixProvider *dpp)
 
     int r = (*selected)->process(ctx);
     if (r < 0) {
-      ldpp_dout(dpp, 0) << "ERROR: remove_expired_obj " << dendl;
+      ldpp_dout(dpp, 0) << "ERROR while expiring/transitioning bucket/object " << dendl;
       return r;
     }
     ldpp_dout(dpp, 20) << "processed:" << env.bucket_info.bucket << ":" << o.key << dendl;
@@ -1041,8 +1101,17 @@ int RGWLC::bucket_lc_process(string& shard_id)
     orule.build();
 
     rgw_bucket_dir_entry o;
-    for (; ol.get_obj(&o); ol.next()) {
+
+    while (true) {
+      bool iter_continue = ol.get_obj(&o);
+      bool bucket_empty = !o.exists && ol.get_prefix() == "";
+      bool run_once = bucket_empty && !iter_continue;
+
       ldpp_dout(this, 20) << __func__ << "(): key=" << o.key << dendl;
+
+      if (!iter_continue && !run_once)
+        break;
+
       int ret = orule.process(o, this);
       if (ret < 0) {
         ldpp_dout(this, 20) << "ERROR: orule.process() returned ret="
@@ -1050,9 +1119,13 @@ int RGWLC::bucket_lc_process(string& shard_id)
 			    << dendl;
       }
 
+      if (run_once)
+        break;
+
       if (going_down()) {
         return 0;
       }
+      ol.next();
     }
   }
 

@@ -231,7 +231,8 @@ void LCRule_S3::decode_xml(XMLObj *obj)
   if (!RGWXMLDecoder::decode_xml("Status", status, obj)) {
     throw RGWXMLDecoder::err("missing Status in Filter");
   }
-  if (status.compare("Enabled") != 0 && status.compare("Disabled") != 0) {
+  if (status.compare("Enabled") != 0 && status.compare("Disabled") != 0 &&
+      status.compare("Purge_Enabled") != 0) {
     throw RGWXMLDecoder::err("bad Status in Filter");
   }
 
