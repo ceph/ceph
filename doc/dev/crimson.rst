@@ -58,19 +58,7 @@ over ``20`` will be printed using ``logger::trace()``.
 | >  20   | trace   |
 +---------+---------+
 
-As we know, Ceph allows user to adjust the logging level at runtime. So, if
-we set ``debug-osd=20``, all logging messages sent to osd subsystem can be
-found in the specified log file. But when it comes to crimson, this is no longer
-true. Seastar by default only prints logging messages whose severity is greater
-or equal to ``info``. So even if the logging level of OSD subsystem is ``20``,
-the logging messages whose levels are greater or equal to 5 are still
-invisible, because they are barred by Seastar. This setting can be adjusted
-using the ``--default-log-level`` command line option when starting
-``crimson-osd``, like::
-
-  crimson-osd --default-log-level debug"
-
-And, another noticeable difference in the logging system is that, ``crimson-osd``
+Please note, ``crimson-osd``
 does not send the logging message to specified ``log_file``. It writes
 the logging messages to stdout and/or syslog. Again, this behavior can be
 changed using ``--log-to-stdout`` and ``--log-to-syslog`` command line

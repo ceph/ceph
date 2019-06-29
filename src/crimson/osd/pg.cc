@@ -303,10 +303,6 @@ std::ostream& operator<<(std::ostream& os, const PG& pg)
 seastar::future<> PG::wait_for_active()
 {
   logger().debug("wait_for_active: {}", peering_state.get_pg_state_string());
-  if (local_conf()->crimson_debug_pg_always_active) {
-    return seastar::now();
-  }
-
   if (peering_state.is_active()) {
     return seastar::now();
   } else {
