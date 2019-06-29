@@ -71,11 +71,11 @@ public:
 
   ~PG();
 
-  const pg_shard_t &get_pg_whoami() const {
+  const pg_shard_t& get_pg_whoami() const {
     return pg_whoami;
   }
 
-  const spg_t&get_pgid() const {
+  const spg_t& get_pgid() const {
     return pgid;
   }
 
