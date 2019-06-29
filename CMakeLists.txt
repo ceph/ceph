@@ -315,8 +315,8 @@ option(WITH_KVS "Key value store is here" ON)
 # KERNEL remote block storage
 option(WITH_KRBD "Kernel Remote block storage is here" ON)
 
-if(WITH_KRBD AND WITHOUT_RBD)
-  message(FATAL_ERROR "Cannot have WITH_KRBD with WITH_RBD.")
+if(WITH_KRBD AND NOT WITH_RBD)
+  message(FATAL_ERROR "Cannot have WITH_KRBD without WITH_RBD.")
 endif()
 
 option(WITH_LEVELDB "LevelDB is here" ON)
