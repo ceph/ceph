@@ -435,10 +435,6 @@ public:
 
   void add_rule(const LCRule& rule);
 
-  int check_and_add_rule(const LCRule& rule);
-
-  bool valid();
-
   multimap<string, LCRule>& get_rule_map() { return rule_map; }
   multimap<string, lc_op>& get_prefix_map() { return prefix_map; }
 /*

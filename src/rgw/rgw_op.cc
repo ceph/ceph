@@ -5405,13 +5405,13 @@ void RGWPutLC::execute()
     return;
   }
 
-  op_ret = config.rebuild(store, new_config);
+  op_ret = config.validate();
   if (op_ret < 0)
     return;
 
   if (s->cct->_conf->subsys.should_gather<ceph_subsys_rgw, 15>()) {
     XMLFormatter xf;
-    new_config.dump_xml(&xf);
+    config.dump_xml(&xf);
     stringstream ss;
     xf.flush(ss);
     ldpp_dout(this, 15) << "New LifecycleConfiguration:" << ss.str() << dendl;
@@ -5425,7 +5425,7 @@ void RGWPutLC::execute()
     }
   }
 
-  op_ret = store->get_lc()->set_bucket_config(s->bucket_info, s->bucket_attrs, &new_config);
+  op_ret = store->get_lc()->set_bucket_config(s->bucket_info, s->bucket_attrs, &config);
   if (op_ret < 0) {
     return;
   }

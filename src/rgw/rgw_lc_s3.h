@@ -95,8 +95,8 @@ public:
   RGWLifecycleConfiguration_S3() : RGWLifecycleConfiguration(nullptr) {}
 
   void decode_xml(XMLObj *obj);
-  int rebuild(RGWRados *store, RGWLifecycleConfiguration& dest);
   void dump_xml(Formatter *f) const;
+  int validate();
 };
 
 #endif

@@ -131,23 +131,6 @@ bool RGWLifecycleConfiguration::_add_rule(const LCRule& rule)
   return true;
 }
 
-int RGWLifecycleConfiguration::check_and_add_rule(const LCRule& rule)
-{
-  if (!rule.valid()) {
-    return -EINVAL;
-  }
-  auto& id = rule.get_id();
-  if (rule_map.find(id) != rule_map.end()) {  //id shouldn't be the same 
-    return -EINVAL;
-  }
-  rule_map.insert(pair<string, LCRule>(id, rule));
-
-  if (!_add_rule(rule)) {
-    return -ERR_INVALID_REQUEST;
-  }
-  return 0;
-}
-
 bool RGWLifecycleConfiguration::has_same_action(const lc_op& first, const lc_op& second) {
   if ((first.expiration > 0 || first.expiration_date != boost::none) && 
     (second.expiration > 0 || second.expiration_date != boost::none)) {
@@ -170,13 +153,6 @@ bool RGWLifecycleConfiguration::has_same_action(const lc_op& first, const lc_op&
     }
   }
   return false;
-}
-
-/* Formerly, this method checked for duplicate rules using an invalid
- * method (prefix uniqueness). */
-bool RGWLifecycleConfiguration::valid() 
-{
-  return true;
 }
 
 void *RGWLC::LCWorker::entry() {

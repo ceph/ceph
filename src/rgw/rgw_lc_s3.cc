@@ -320,20 +320,29 @@ void LCRule_S3::dump_xml(Formatter *f) const {
   }
 }
 
-int RGWLifecycleConfiguration_S3::rebuild(RGWRados *store, RGWLifecycleConfiguration& dest)
+int RGWLifecycleConfiguration_S3::validate()
 {
-  int ret = 0;
   multimap<string, LCRule>::iterator iter;
+  multimap<string, LCRule> duplicate_finder;
+
+  /*
+    * Validate the rules for the following conditions:
+    * 1. Basic sanity checking of each LCRule
+    * 2. Check for duplicate IDs in case of multiple rules
+    * (Duplicate prefixes are still fine. We don't check for them)
+    */
   for (iter = rule_map.begin(); iter != rule_map.end(); ++iter) {
-    LCRule& src_rule = iter->second;
-    ret = dest.check_and_add_rule(src_rule);
-    if (ret < 0)
-      return ret;
+    LCRule& rule = iter->second;
+    if (!rule.valid()) {
+      return -EINVAL;
+    } else {
+      if (duplicate_finder.find(iter->first) == duplicate_finder.end())
+        duplicate_finder.insert(make_pair(iter->first, iter->second));
+      else
+        return -EINVAL;
+    }
   }
-  if (!dest.valid()) {
-    ret = -ERR_INVALID_REQUEST;
-  }
-  return ret;
+  return 0;
 }
 
 
