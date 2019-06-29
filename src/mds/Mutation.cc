@@ -439,9 +439,8 @@ void MDRequestImpl::_dump(Formatter *f) const
   }
   {
     f->open_array_section("events");
-    std::lock_guard l(lock);
-    for (auto& i : events) {
-      f->dump_object("event", i);
+    for (size_t i = 0; i < events.size(); i++) {
+      f->dump_object("event", *events.at(i));
     }
     f->close_section(); // events
   }
