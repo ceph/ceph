@@ -21,12 +21,6 @@
 
 using namespace ceph::net;
 
-namespace {
-  seastar::logger& logger() {
-    return ceph::get_logger(ceph_subsys_ms);
-  }
-}
-
 SocketConnection::SocketConnection(SocketMessenger& messenger,
                                    Dispatcher& dispatcher,
                                    bool is_msgr2)
@@ -56,7 +50,6 @@ seastar::future<bool> SocketConnection::is_connected()
 
 seastar::future<> SocketConnection::send(MessageRef msg)
 {
-  logger().debug("{} --> {} === {}", messenger, get_peer_addr(), *msg);
   // Cannot send msg from another core now, its ref counter can be contaminated!
   ceph_assert(seastar::engine().cpu_id() == shard_id());
   return seastar::smp::submit_to(shard_id(), [this, msg=std::move(msg)] {
