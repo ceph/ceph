@@ -663,6 +663,7 @@ seastar::future<bool> ProtocolV2::client_connect()
           // TODO: change peer_addr to entity_addrvec_t
           ceph_assert(conn.peer_addr == server_ident.addrs().front());
           peer_name = entity_name_t(conn.get_peer_type(), server_ident.gid());
+          conn.peer_id = server_ident.gid();
           conn.set_features(server_ident.supported_features() &
                             conn.policy.features_supported);
           peer_global_seq = server_ident.global_seq();
