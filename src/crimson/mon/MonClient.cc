@@ -600,7 +600,7 @@ int Client::handle_auth_request(ceph::net::ConnectionRef con,
     if (con->get_messenger()->get_require_authorizer()) {
       return -EACCES;
     } else {
-      auth_handler.handle_authentication({}, {}, {});
+      auth_handler.handle_authentication({}, {});
       return 1;
     }
   }
@@ -619,7 +619,6 @@ int Client::handle_auth_request(ceph::net::ConnectionRef con,
   ceph_assert(active_con);
   bool was_challenge = (bool)auth_meta->authorizer_challenge;
   EntityName name;
-  uint64_t global_id;
   AuthCapsInfo caps_info;
   bool is_valid = ah->verify_authorizer(
     &cct,
@@ -628,13 +627,13 @@ int Client::handle_auth_request(ceph::net::ConnectionRef con,
     auth_meta->get_connection_secret_length(),
     reply,
     &name,
-    &global_id,
+    &active_con->get_conn()->peer_global_id,
     &caps_info,
     &auth_meta->session_key,
     &auth_meta->connection_secret,
     &auth_meta->authorizer_challenge);
   if (is_valid) {
-    auth_handler.handle_authentication(name, global_id, caps_info);
+    auth_handler.handle_authentication(name, caps_info);
     return 1;
   }
   if (!more && !was_challenge && auth_meta->authorizer_challenge) {

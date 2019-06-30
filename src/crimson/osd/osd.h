@@ -105,7 +105,6 @@ class OSD final : public ceph::net::Dispatcher,
 
   // AuthHandler methods
   void handle_authentication(const EntityName& name,
-			     uint64_t global_id,
 			     const AuthCapsInfo& caps) final;
 
   ceph::osd::ShardServices shard_services;
