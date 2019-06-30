@@ -172,7 +172,7 @@ void ProtocolV1::reset_session()
 seastar::future<stop_t>
 ProtocolV1::handle_connect_reply(msgr_tag_t tag)
 {
-  if (h.auth_payload.length() && conn.peer_type != CEPH_ENTITY_TYPE_MON) {
+  if (h.auth_payload.length() && !conn.peer_is_mon()) {
     if (tag == CEPH_MSGR_TAG_CHALLENGE_AUTHORIZER) { // more
       h.auth_more = messenger.get_auth_client()->handle_auth_reply_more(
           conn.shared_from_this(), auth_meta, h.auth_payload);
