@@ -658,6 +658,7 @@ OPTION(osd_snap_trim_sleep, OPT_DOUBLE)
 OPTION(osd_scrub_invalid_stats, OPT_BOOL)
 OPTION(osd_command_thread_timeout, OPT_INT)
 OPTION(osd_command_thread_suicide_timeout, OPT_INT)
+OPTION(osd_update_daily_loadavg_interval, OPT_INT)       // (seconds) how often we update daily_loadavg
 OPTION(osd_heartbeat_interval, OPT_INT)       // (seconds) how often we ping peers
 
 // (seconds) how long before we decide a peer has failed

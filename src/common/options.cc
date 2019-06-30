@@ -3260,6 +3260,11 @@ std::vector<Option> get_global_options() {
     .set_default(15_min)
     .set_description(""),
 
+    Option("osd_update_daily_loadavg_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(6)
+    .set_min_max(1, 86400)
+    .set_description("Interval (in seconds) to update daily loadavg"),
+    
     Option("osd_heartbeat_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(6)
     .set_min_max(1, 86400)

@@ -1151,6 +1151,7 @@ protected:
   void create_recoverystate_perf();
   void tick();
   void tick_without_osd_lock();
+  void update_daily_loadavg();
   void _dispatch(Message *m);
   void dispatch_op(OpRequestRef op);
 

@@ -4749,24 +4749,6 @@ void OSD::heartbeat()
   ceph_assert(heartbeat_lock.is_locked_by_me());
   dout(30) << "heartbeat" << dendl;
 
-  // get CPU load avg
-  double loadavgs[1];
-  int hb_interval = cct->_conf->osd_heartbeat_interval;
-  int n_samples = 86400;
-  if (hb_interval > 1) {
-    n_samples /= hb_interval;
-    if (n_samples < 1)
-      n_samples = 1;
-  }
-
-  if (getloadavg(loadavgs, 1) == 1) {
-    logger->set(l_osd_loadavg, 100 * loadavgs[0]);
-    daily_loadavg = (daily_loadavg * (n_samples - 1) + loadavgs[0]) / n_samples;
-    dout(30) << "heartbeat: daily_loadavg " << daily_loadavg << dendl;
-  }
-
-  dout(30) << "heartbeat checking stats" << dendl;
-
   // refresh peer list and osd stats
   vector<int> hb_peers;
   for (map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin();
@@ -4972,11 +4954,41 @@ void OSD::tick_without_osd_lock()
     }
   }
 
+  update_daily_loadavg();
   mgrc.update_daemon_health(get_health_metrics());
   service.kick_recovery_queue();
   tick_timer_without_osd_lock.add_event_after(get_tick_interval(),
 					      new C_Tick_WithoutOSDLock(this));
 }
+
+void OSD::update_daily_loadavg()
+{
+  static utime_t last_update_time;
+  utime_t now = ceph_clock_now();
+
+  int interval = cct->_conf->osd_update_daily_loadavg_interval;
+  utime_t w;
+  w.set_from_double((double)interval);
+  if (now < last_update_time + w)
+    return;
+  last_update_time = now;
+
+  // get CPU load avg
+  double loadavgs[1];
+  int n_samples = 86400;
+  if (interval > 1) {      
+    n_samples /= interval; 
+    if (n_samples < 1)        
+      n_samples = 1;
+  }    
+
+  if (getloadavg(loadavgs, 1) == 1) {
+    logger->set(l_osd_loadavg, 100 * loadavgs[0]);
+    daily_loadavg = (daily_loadavg * (n_samples - 1) + loadavgs[0]) / n_samples;
+    dout(30) << __func__ << ": daily_loadavg " << daily_loadavg << dendl;
+  } 
+}
+
 
 // Usage:
 //   setomapval <pool-id> [namespace/]<obj-name> <key> <val>
