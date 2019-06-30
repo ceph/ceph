@@ -13,7 +13,7 @@ void RGWPSCreateTopicOp::execute() {
     return;
   }
 
-  ups = std::make_unique<RGWUserPubSub>(store, s->owner.get_id());
+  ups.emplace(store, s->owner.get_id());
   op_ret = ups->create_topic(topic_name, dest, topic_arn);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to create topic '" << topic_name << "', ret=" << op_ret << dendl;
@@ -23,7 +23,7 @@ void RGWPSCreateTopicOp::execute() {
 }
 
 void RGWPSListTopicsOp::execute() {
-  ups = std::make_unique<RGWUserPubSub>(store, s->owner.get_id());
+  ups.emplace(store, s->owner.get_id());
   op_ret = ups->get_user_topics(&result);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to get topics, ret=" << op_ret << dendl;
@@ -37,7 +37,7 @@ void RGWPSGetTopicOp::execute() {
   if (op_ret < 0) {
     return;
   }
-  ups = std::make_unique<RGWUserPubSub>(store, s->owner.get_id());
+  ups.emplace(store, s->owner.get_id());
   op_ret = ups->get_topic(topic_name, &result);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to get topic '" << topic_name << "', ret=" << op_ret << dendl;
@@ -51,8 +51,7 @@ void RGWPSDeleteTopicOp::execute() {
   if (op_ret < 0) {
     return;
   }
-
-  ups = std::make_unique<RGWUserPubSub>(store, s->owner.get_id());
+  ups.emplace(store, s->owner.get_id());
   op_ret = ups->remove_topic(topic_name);
   if (op_ret < 0) {
     ldout(s->cct, 1) << "failed to remove topic '" << topic_name << ", ret=" << op_ret << dendl;
@@ -66,7 +65,7 @@ void RGWPSCreateSubOp::execute() {
   if (op_ret < 0) {
     return;
   }
-  ups = std::make_unique<RGWUserPubSub>(store, s->owner.get_id());
+  ups.emplace(store, s->owner.get_id());
   auto sub = ups->get_sub(sub_name);
   op_ret = sub->subscribe(topic_name, dest);
   if (op_ret < 0) {
@@ -81,7 +80,7 @@ void RGWPSGetSubOp::execute() {
   if (op_ret < 0) {
     return;
   }
-  ups = std::make_unique<RGWUserPubSub>(store, s->owner.get_id());
+  ups.emplace(store, s->owner.get_id());
   auto sub = ups->get_sub(sub_name);
   op_ret = sub->get_conf(&result);
   if (op_ret < 0) {
@@ -96,7 +95,7 @@ void RGWPSDeleteSubOp::execute() {
   if (op_ret < 0) {
     return;
   }
-  ups = std::make_unique<RGWUserPubSub>(store, s->owner.get_id());
+  ups.emplace(store, s->owner.get_id());
   auto sub = ups->get_sub(sub_name);
   op_ret = sub->unsubscribe(topic_name);
   if (op_ret < 0) {
@@ -111,7 +110,7 @@ void RGWPSAckSubEventOp::execute() {
   if (op_ret < 0) {
     return;
   }
-  ups = std::make_unique<RGWUserPubSub>(store, s->owner.get_id());
+  ups.emplace(store, s->owner.get_id());
   auto sub = ups->get_sub_with_events(sub_name);
   op_ret = sub->remove_event(event_id);
   if (op_ret < 0) {
@@ -126,7 +125,7 @@ void RGWPSPullSubEventsOp::execute() {
   if (op_ret < 0) {
     return;
   }
-  ups = std::make_unique<RGWUserPubSub>(store, s->owner.get_id());
+  ups.emplace(store, s->owner.get_id());
   sub = ups->get_sub_with_events(sub_name);
   if (!sub) {
     op_ret = -ENOENT;

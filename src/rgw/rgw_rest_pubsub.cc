@@ -121,7 +121,7 @@ void RGWPSCreateNotif_ObjStore_S3::execute() {
     return;
   }
 
-  ups = std::make_unique<RGWUserPubSub>(store, s->owner.get_id());
+  ups.emplace(store, s->owner.get_id());
   auto b = ups->get_bucket(bucket_info.bucket);
   ceph_assert(b);
   std::string data_bucket_prefix = "";
@@ -271,7 +271,7 @@ void RGWPSDeleteNotif_ObjStore_S3::execute() {
     return;
   }
 
-  ups = std::make_unique<RGWUserPubSub>(store, s->owner.get_id());
+  ups.emplace(store, s->owner.get_id());
   auto b = ups->get_bucket(bucket_info.bucket);
   ceph_assert(b);
 
@@ -350,7 +350,7 @@ void RGWPSListNotifs_ObjStore_S3::add_notification_to_list(const rgw_pubsub_sub_
 }
 
 void RGWPSListNotifs_ObjStore_S3::execute() {
-  ups = std::make_unique<RGWUserPubSub>(store, s->owner.get_id());
+  ups.emplace(store, s->owner.get_id());
   auto b = ups->get_bucket(bucket_info.bucket);
   ceph_assert(b);
   if (!sub_name.empty()) {

@@ -355,7 +355,7 @@ public:
 
 void RGWPSCreateNotif_ObjStore::execute()
 {
-  ups = std::make_unique<RGWUserPubSub>(store, s->owner.get_id());
+  ups.emplace(store, s->owner.get_id());
 
   auto b = ups->get_bucket(bucket_info.bucket);
   op_ret = b->create_notification(topic_name, events);
@@ -392,7 +392,7 @@ void RGWPSDeleteNotif_ObjStore::execute() {
     return;
   }
 
-  ups = make_unique<RGWUserPubSub>(store, s->owner.get_id());
+  ups.emplace(store, s->owner.get_id());
   auto b = ups->get_bucket(bucket_info.bucket);
   op_ret = b->remove_notification(topic_name);
   if (op_ret < 0) {
@@ -431,7 +431,7 @@ public:
 
 void RGWPSListNotifs_ObjStore::execute()
 {
-  ups = std::make_unique<RGWUserPubSub>(store, s->owner.get_id());
+  ups.emplace(store, s->owner.get_id());
   auto b = ups->get_bucket(bucket_info.bucket);
   op_ret = b->get_topics(&result);
   if (op_ret < 0) {
