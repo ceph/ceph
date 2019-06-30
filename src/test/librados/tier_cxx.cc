@@ -633,10 +633,12 @@ TEST_F(LibRadosTwoPoolsPP, PromoteSnapTrimRace) {
 
   ioctx.snap_set_read(my_snaps[0]);
 
-  // read foo snap
+  // read foo snap.  the OSD may or may not realize that this snap has
+  // been logically deleted; either response is valid.
   {
     bufferlist bl;
-    ASSERT_EQ(-ENOENT, ioctx.read("foo", bl, 1, 0));
+    int r = ioctx.read("foo", bl, 1, 0);
+    ASSERT_TRUE(r == 1 || r == -ENOENT);
   }
 
   // cleanup
@@ -3961,10 +3963,12 @@ TEST_F(LibRadosTwoPoolsECPP, PromoteSnapTrimRace) {
 
   ioctx.snap_set_read(my_snaps[0]);
 
-  // read foo snap
+  // read foo snap.  the OSD may or may not realize that this snap has
+  // been logically deleted; either response is valid.
   {
     bufferlist bl;
-    ASSERT_EQ(-ENOENT, ioctx.read("foo", bl, 1, 0));
+    int r = ioctx.read("foo", bl, 1, 0);
+    ASSERT_TRUE(r == 1 || r == -ENOENT);
   }
 
   // cleanup
