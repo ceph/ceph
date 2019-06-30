@@ -80,9 +80,19 @@ using ``vstart.sh``,
 ``--redirect-output``
     redirect the stdout and stderr of service to ``out/$type.$num.stdout``.
 
+``--osd-args``
+    pass extra command line options to crimson-osd or ceph-osd. It's quite
+    useful for passing Seastar options to crimson-osd.
+
 So, a typical command to start a single-crimson-node cluster is::
 
-  MGR=1 MON=1 OSD=1 MDS=0 RGW=0 ../src/vstart.sh -n -x --without-dashboard --memstore --crimson --nodaemon --redirect-output
+  MGR=1 MON=1 OSD=1 MDS=0 RGW=0 ../src/vstart.sh -n -x --without-dashboard --memstore \
+    --crimson --nodaemon --redirect-output \
+    --osd-args "--memory 4G --smp 1 --cpuset 0"
+
+Where we assign 4 GiB memory, a single thread running on core-0 to crimson-osd.
+Please refer ``crimson-osd --help-seastar`` for more Seastar specific command
+line options.
 
 You could stop the vstart cluster using::
 
