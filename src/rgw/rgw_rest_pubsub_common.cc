@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "rgw_base_pubsub_rest.h"
+#include "rgw_rest_pubsub_common.h"
 #include "common/dout.h"
 
 #define dout_context g_ceph_context

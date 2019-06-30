@@ -2,8 +2,8 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <algorithm>
-#include "rgw_base_pubsub_rest.h"
-#include "rgw_pubsub_rest.h"
+#include "rgw_rest_pubsub_common.h"
+#include "rgw_rest_pubsub.h"
 #include "rgw_sync_module_pubsub.h"
 #include "rgw_pubsub_push.h"
 #include "rgw_sync_module_pubsub_rest.h"
