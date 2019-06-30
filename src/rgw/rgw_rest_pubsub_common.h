@@ -2,14 +2,14 @@
 // vim: ts=8 sw=2 smarttab
 #pragma once
 #include <string>
-#include <memory>
+#include <optional>
 #include "rgw_op.h"
 #include "rgw_pubsub.h"
 
 // create a topic
 class RGWPSCreateTopicOp : public RGWDefaultResponseOp {
 protected:
-  std::unique_ptr<RGWUserPubSub> ups;
+  std::optional<RGWUserPubSub> ups;
   std::string topic_name;
   rgw_pubsub_sub_dest dest;
   std::string topic_arn;
@@ -33,7 +33,7 @@ public:
 // list all topics
 class RGWPSListTopicsOp : public RGWOp {
 protected:
-  std::unique_ptr<RGWUserPubSub> ups;
+  std::optional<RGWUserPubSub> ups;
   rgw_pubsub_user_topics result;
 
 public:
@@ -54,7 +54,7 @@ public:
 class RGWPSGetTopicOp : public RGWOp {
 protected:
   std::string topic_name;
-  std::unique_ptr<RGWUserPubSub> ups;
+  std::optional<RGWUserPubSub> ups;
   rgw_pubsub_topic_subs result;
   
   virtual int get_params() = 0;
@@ -77,7 +77,7 @@ public:
 class RGWPSDeleteTopicOp : public RGWDefaultResponseOp {
 protected:
   string topic_name;
-  std::unique_ptr<RGWUserPubSub> ups;
+  std::optional<RGWUserPubSub> ups;
   
   virtual int get_params() = 0;
 
@@ -100,7 +100,7 @@ class RGWPSCreateSubOp : public RGWDefaultResponseOp {
 protected:
   std::string sub_name;
   std::string topic_name;
-  std::unique_ptr<RGWUserPubSub> ups;
+  std::optional<RGWUserPubSub> ups;
   rgw_pubsub_sub_dest dest;
   
   virtual int get_params() = 0;
@@ -123,7 +123,7 @@ public:
 class RGWPSGetSubOp : public RGWOp {
 protected:
   std::string sub_name;
-  std::unique_ptr<RGWUserPubSub> ups;
+  std::optional<RGWUserPubSub> ups;
   rgw_pubsub_sub_config result;
   
   virtual int get_params() = 0;
@@ -147,7 +147,7 @@ class RGWPSDeleteSubOp : public RGWDefaultResponseOp {
 protected:
   std::string sub_name;
   std::string topic_name;
-  std::unique_ptr<RGWUserPubSub> ups;
+  std::optional<RGWUserPubSub> ups;
   
   virtual int get_params() = 0;
 
@@ -170,7 +170,7 @@ class RGWPSAckSubEventOp : public RGWDefaultResponseOp {
 protected:
   std::string sub_name;
   std::string event_id;
-  std::unique_ptr<RGWUserPubSub> ups;
+  std::optional<RGWUserPubSub> ups;
   
   virtual int get_params() = 0;
 
@@ -198,7 +198,7 @@ protected:
   int max_entries{0};
   std::string sub_name;
   std::string marker;
-  std::unique_ptr<RGWUserPubSub> ups;
+  std::optional<RGWUserPubSub> ups;
   RGWUserPubSub::SubRef sub; 
 
   virtual int get_params() = 0;
@@ -222,7 +222,7 @@ public:
 // notification creation
 class RGWPSCreateNotifOp : public RGWDefaultResponseOp {
 protected:
-  std::unique_ptr<RGWUserPubSub> ups;
+  std::optional<RGWUserPubSub> ups;
   string bucket_name;
   RGWBucketInfo bucket_info;
 
@@ -242,7 +242,7 @@ public:
 // delete a notification
 class RGWPSDeleteNotifOp : public RGWDefaultResponseOp {
 protected:
-  std::unique_ptr<RGWUserPubSub> ups;
+  std::optional<RGWUserPubSub> ups;
   std::string bucket_name;
   RGWBucketInfo bucket_info;
   
@@ -264,7 +264,7 @@ class RGWPSListNotifsOp : public RGWOp {
 protected:
   std::string bucket_name;
   RGWBucketInfo bucket_info;
-  std::unique_ptr<RGWUserPubSub> ups;
+  std::optional<RGWUserPubSub> ups;
 
   virtual int get_params() = 0;
 
