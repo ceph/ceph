@@ -215,7 +215,8 @@ class Infiniband {
       uint32_t read(char* buf, uint32_t len);
       uint32_t write(char* buf, uint32_t len);
       bool full();
-      void clear();
+      void reset_read_chunk();
+      void reset_write_chunk();
 
      public:
       ibv_mr* mr;
