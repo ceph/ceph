@@ -295,10 +295,8 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
     ibv_wc* response = &cqe[i];
     ceph_assert(response->status == IBV_WC_SUCCESS);
     Chunk* chunk = reinterpret_cast<Chunk *>(response->wr_id);
-    ldout(cct, 25) << __func__ << " chunk length: " << response->byte_len << " bytes." << chunk << dendl;
     chunk->prepare_read(response->byte_len);
-    worker->perf_logger->inc(l_msgr_rdma_rx_bytes, response->byte_len);
-    if (response->byte_len == 0) {
+    if (chunk->get_size() == 0) {
       chunk->clear();
       dispatcher->perf_logger->inc(l_msgr_rdma_rx_fin);
       if (connected) {
@@ -306,20 +304,20 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
         ldout(cct, 20) << __func__ << " got remote close msg..." << dendl;
       }
       dispatcher->post_chunk_to_pool(chunk);
+      continue;
+    }
+    ldout(cct, 25) << __func__ << " chunk " << chunk << " has bytes " << chunk->get_size() << dendl;
+    worker->perf_logger->inc(l_msgr_rdma_rx_bytes, response->byte_len);
+
+    read += chunk->read(buf + read, len - read);
+
+    if (chunk->get_size()) {
+      buffers.push_back(chunk);
+      ldout(cct, 25) << __func__ << " buffers add a chunk: " << chunk->get_offset() << ":" << chunk->get_bound() << dendl;
     } else {
-      if (read == (ssize_t)len) {
-        buffers.push_back(chunk);
-        ldout(cct, 25) << __func__ << " buffers add a chunk: " << response->byte_len << dendl;
-      } else if (read + response->byte_len > (ssize_t)len) {
-        read += chunk->read(buf+read, (ssize_t)len-read);
-        buffers.push_back(chunk);
-        ldout(cct, 25) << __func__ << " buffers add a chunk: " << chunk->get_offset() << ":" << chunk->get_bound() << dendl;
-      } else {
-        read += chunk->read(buf+read, response->byte_len);
-        chunk->clear();
-        dispatcher->post_chunk_to_pool(chunk);
-        update_post_backlog();
-      }
+      chunk->clear();
+      dispatcher->post_chunk_to_pool(chunk);
+      update_post_backlog();
     }
   }
 
