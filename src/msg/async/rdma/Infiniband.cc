@@ -746,7 +746,8 @@ void Infiniband::MemoryManager::PoolAllocator::free(char * const block)
   mem_info *m;
   std::lock_guard l{lock};
     
-  m = reinterpret_cast<mem_info *>(block) - 1;
+  Chunk *mem_info_chunk = reinterpret_cast<Chunk *>(block);
+  m = reinterpret_cast<mem_info *>(reinterpret_cast<char *>(mem_info_chunk) - offsetof(mem_info, chunks));
   m->ctx->update_stats(-m->nbufs);
   ibv_dereg_mr(m->mr);
   m->ctx->manager->free(m);
