@@ -117,26 +117,6 @@ static int cls_gc_enqueue(cls_method_context_t hctx, bufferlist *in, bufferlist 
   return cls_enqueue(hctx, in, out);
 }
 
-static int cls_gc_dequeue(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
-{
-  int r = cls_dequeue(hctx, in, out);
-  if (r < 0)
-    return r;
-
-  cls_rgw_gc_obj_info data;
-  auto iter = out->cbegin();
-  try {
-    decode(data, iter);
-  } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: cls_gc_dequeue(): failed to decode entry\n");
-    return -EINVAL;
-  }
-
-  CLS_LOG(1, "INFO: tag of gc info is %s\n", data.tag.c_str());
-
-  return 0;
-}
-
 static int cls_gc_queue_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   CLS_LOG(1, "INFO: cls_gc_queue_list(): Entered cls_gc_queue_list \n");
@@ -665,7 +645,6 @@ CLS_INIT(rgw_queue)
   cls_method_handle_t h_gc_create_queue;
   cls_method_handle_t h_gc_init_queue;
   cls_method_handle_t h_gc_enqueue;
-  cls_method_handle_t h_gc_dequeue;
   cls_method_handle_t h_gc_queue_list_entries;
   cls_method_handle_t h_gc_queue_remove_entries;
   cls_method_handle_t h_gc_queue_update_entry;
@@ -676,7 +655,6 @@ CLS_INIT(rgw_queue)
   cls_register_cxx_method(h_class, GC_CREATE_QUEUE, CLS_METHOD_RD | CLS_METHOD_WR, cls_gc_create_queue, &h_gc_create_queue);
   cls_register_cxx_method(h_class, GC_INIT_QUEUE, CLS_METHOD_RD | CLS_METHOD_WR, cls_gc_init_queue, &h_gc_init_queue);
   cls_register_cxx_method(h_class, GC_ENQUEUE, CLS_METHOD_RD | CLS_METHOD_WR, cls_gc_enqueue, &h_gc_enqueue);
-  cls_register_cxx_method(h_class, GC_DEQUEUE, CLS_METHOD_RD | CLS_METHOD_WR, cls_gc_dequeue, &h_gc_dequeue);
   cls_register_cxx_method(h_class, GC_QUEUE_LIST_ENTRIES, CLS_METHOD_RD, cls_gc_queue_list, &h_gc_queue_list_entries);
   cls_register_cxx_method(h_class, GC_QUEUE_REMOVE_ENTRIES, CLS_METHOD_RD | CLS_METHOD_WR, cls_gc_queue_remove, &h_gc_queue_remove_entries);
   cls_register_cxx_method(h_class, GC_QUEUE_UPDATE_ENTRY, CLS_METHOD_RD | CLS_METHOD_WR, cls_gc_queue_update_entry, &h_gc_queue_update_entry);

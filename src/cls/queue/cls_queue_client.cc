@@ -60,24 +60,6 @@ void cls_rgw_gc_enqueue(ObjectWriteOperation& op, uint32_t expiration_secs, cls_
   op.exec(RGW_QUEUE_CLASS, GC_ENQUEUE, in);
 }
 
-int cls_rgw_gc_dequeue(IoCtx& io_ctx, string& oid, cls_rgw_gc_obj_info& info)
-{
-  bufferlist in, out;
-
-  int r = io_ctx.exec(oid, RGW_QUEUE_CLASS, GC_DEQUEUE, in, out);
-  if (r < 0)
-    return r;
-
-  auto iter = out.cbegin();
-  try {
-    decode(info, iter);
-  } catch (buffer::error& err) {
-    return -EIO;
-  }
-
-  return 0;
-}
-
 int cls_rgw_gc_list_queue(IoCtx& io_ctx, string& oid, string& marker, uint32_t max, bool expired_only,
                     list<cls_rgw_gc_obj_info>& entries, bool *truncated, string& next_marker)
 {
