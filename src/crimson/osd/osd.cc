@@ -110,11 +110,11 @@ CompatSet get_osd_initial_compat_set()
 
 seastar::future<> OSD::mkfs(uuid_d osd_uuid, uuid_d cluster_fsid)
 {
-  return store->mkfs().then([this] {
+  return store->mkfs(osd_uuid).then([this] {
     return store->mount();
-  }).then([cluster_fsid, osd_uuid, this] {
+  }).then([cluster_fsid, this] {
     superblock.cluster_fsid = cluster_fsid;
-    superblock.osd_fsid = osd_uuid;
+    superblock.osd_fsid = store->get_fsid();
     superblock.whoami = whoami;
     superblock.compat_features = get_osd_initial_compat_set();
 

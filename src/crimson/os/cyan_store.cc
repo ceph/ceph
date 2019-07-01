@@ -80,12 +80,16 @@ seastar::future<> CyanStore::umount()
   });
 }
 
-seastar::future<> CyanStore::mkfs()
+seastar::future<> CyanStore::mkfs(uuid_d new_osd_fsid)
 {
   std::string fsid_str;
   int r = read_meta("fsid", &fsid_str);
   if (r == -ENOENT) {
-    osd_fsid.generate_random();
+    if (new_osd_fsid.is_zero()) {
+      osd_fsid.generate_random();
+    } else {
+      osd_fsid = new_osd_fsid;
+    }
     write_meta("fsid", fmt::format("{}", osd_fsid));
   } else if (r < 0) {
     throw std::runtime_error("read_meta");
@@ -93,6 +97,9 @@ seastar::future<> CyanStore::mkfs()
     logger().info("{} already has fsid {}", __func__, fsid_str);
     if (!osd_fsid.parse(fsid_str.c_str())) {
       throw std::runtime_error("failed to parse fsid");
+    } else if (osd_fsid != new_osd_fsid) {
+      logger().error("on-disk fsid {} != provided {}", osd_fsid, new_osd_fsid);
+      throw std::runtime_error("unmatched osd_fsid");
     }
   }
 
