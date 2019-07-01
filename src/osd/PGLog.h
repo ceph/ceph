@@ -777,6 +777,8 @@ public:
   }
 
   void reset_complete_to(pg_info_t *info) {
+    if (log.log.empty()) // caller is split_into()
+      return;
     log.complete_to = log.log.begin();
     assert(log.complete_to != log.log.end());
     auto oldest_need = missing.get_oldest_need();
