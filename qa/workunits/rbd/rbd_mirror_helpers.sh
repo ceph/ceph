@@ -298,6 +298,11 @@ cleanup()
     if [ -z "${RBD_MIRROR_NOCLEANUP}" ]; then
         local cluster instance
 
+        CEPH_ARGS='' ceph --cluster ${CLUSTER1} osd pool rm ${POOL} ${POOL} --yes-i-really-really-mean-it
+        CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd pool rm ${POOL} ${POOL} --yes-i-really-really-mean-it
+        CEPH_ARGS='' ceph --cluster ${CLUSTER1} osd pool rm ${PARENT_POOL} ${PARENT_POOL} --yes-i-really-really-mean-it
+        CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd pool rm ${PARENT_POOL} ${PARENT_POOL} --yes-i-really-really-mean-it
+
         for cluster in "${CLUSTER1}" "${CLUSTER2}"; do
 	    stop_mirrors "${cluster}"
         done
@@ -306,11 +311,6 @@ cleanup()
             cd ${CEPH_ROOT}
             CEPH_ARGS='' ${CEPH_SRC}/mstop.sh ${CLUSTER1}
             CEPH_ARGS='' ${CEPH_SRC}/mstop.sh ${CLUSTER2}
-        else
-            CEPH_ARGS='' ceph --cluster ${CLUSTER1} osd pool rm ${POOL} ${POOL} --yes-i-really-really-mean-it
-            CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd pool rm ${POOL} ${POOL} --yes-i-really-really-mean-it
-            CEPH_ARGS='' ceph --cluster ${CLUSTER1} osd pool rm ${PARENT_POOL} ${PARENT_POOL} --yes-i-really-really-mean-it
-            CEPH_ARGS='' ceph --cluster ${CLUSTER2} osd pool rm ${PARENT_POOL} ${PARENT_POOL} --yes-i-really-really-mean-it
         fi
         test "${RBD_MIRROR_TEMDIR}" = "${TEMPDIR}" || rm -Rf ${TEMPDIR}
     fi
