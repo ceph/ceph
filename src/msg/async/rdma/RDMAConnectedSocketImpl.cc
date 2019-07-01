@@ -297,7 +297,7 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
     Chunk* chunk = reinterpret_cast<Chunk *>(response->wr_id);
     chunk->prepare_read(response->byte_len);
     if (chunk->get_size() == 0) {
-      chunk->clear();
+      chunk->reset_read_chunk();
       dispatcher->perf_logger->inc(l_msgr_rdma_rx_fin);
       if (connected) {
         error = ECONNRESET;
@@ -315,7 +315,7 @@ ssize_t RDMAConnectedSocketImpl::read(char* buf, size_t len)
       buffers.push_back(chunk);
       ldout(cct, 25) << __func__ << " buffers add a chunk: " << chunk->get_offset() << ":" << chunk->get_bound() << dendl;
     } else {
-      chunk->clear();
+      chunk->reset_read_chunk();
       dispatcher->post_chunk_to_pool(chunk);
       update_post_backlog();
     }
@@ -349,7 +349,7 @@ ssize_t RDMAConnectedSocketImpl::read_buffers(char* buf, size_t len)
                    << (*pchunk)->get_offset() << " ,bound: " << (*pchunk)->get_bound() << dendl;
 
     if ((*pchunk)->get_size() == 0) {
-      (*pchunk)->clear();
+      (*pchunk)->reset_read_chunk();
       dispatcher->post_chunk_to_pool(*pchunk);
       update_post_backlog();
       ldout(cct, 25) << __func__ << " read over one chunk " << dendl;

@@ -561,10 +561,16 @@ bool Infiniband::MemoryManager::Chunk::full()
   return offset == bytes;
 }
 
-void Infiniband::MemoryManager::Chunk::clear()
+void Infiniband::MemoryManager::Chunk::reset_read_chunk()
 {
   offset = 0;
   bound = 0;
+}
+
+void Infiniband::MemoryManager::Chunk::reset_write_chunk()
+{
+  offset = 0;
+  bound = bytes;
 }
 
 Infiniband::MemoryManager::Cluster::Cluster(MemoryManager& m, uint32_t s)
@@ -612,7 +618,7 @@ void Infiniband::MemoryManager::Cluster::take_back(std::vector<Chunk*> &ck)
 {
   std::lock_guard l{lock};
   for (auto c : ck) {
-    c->clear();
+    c->reset_write_chunk();
     free_chunks.push_back(c);
   }
 }
