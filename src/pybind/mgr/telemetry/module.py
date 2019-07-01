@@ -85,6 +85,12 @@ class Module(MgrModule):
             'default': True,
             'description': 'Share metadata about Ceph daemon crashes (version, stack straces, etc)',
         },
+        {
+            'name': 'channel_device',
+            'type': 'bool',
+            'default': True,
+            'description': 'Share device health metrics (e.g., SMART data)',
+        },
     ]
 
     COMMANDS = [
@@ -203,6 +209,8 @@ class Module(MgrModule):
             r.append('basic')
         if self.channel_crash:
             r.append('crash')
+        if self.channel_device:
+            r.append('device')
         return r
 
     def compile_report(self):
