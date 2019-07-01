@@ -72,9 +72,8 @@ def create_users(ctx, config):
     log.info('Creating rgw users...')
     testdir = teuthology.get_testdir(ctx)
     users = {'': 'foo', '2': 'bar'}
-    for client in config['clients']:
+    for client, testswift_conf in config.iteritems():
         cluster_name, daemon_type, client_id = teuthology.split_role(client)
-        testswift_conf = config['testswift_conf'][client]
         for suffix, user in users.iteritems():
             _config_user(testswift_conf, '{user}.{client}'.format(user=user, client=client), user, suffix)
             ctx.cluster.only(client).run(
@@ -97,7 +96,7 @@ def create_users(ctx, config):
     try:
         yield
     finally:
-        for client in config['clients']:
+        for client in config.iterkeys():
             for user in users.itervalues():
                 uid = '{user}.{client}'.format(user=user, client=client)
                 cluster_name, daemon_type, client_id = teuthology.split_role(client)
@@ -123,10 +122,7 @@ def configure(ctx, config):
     assert isinstance(config, dict)
     log.info('Configuring testswift...')
     testdir = teuthology.get_testdir(ctx)
-    for client, properties in config['clients'].iteritems():
-        log.info('client={c}'.format(c=client))
-        log.info('config={c}'.format(c=config))
-        testswift_conf = config['testswift_conf'][client]
+    for client, testswift_conf in config.iteritems():
         (remote,) = ctx.cluster.only(client).remotes.keys()
         remote.run(
             args=[
@@ -253,14 +249,8 @@ def task(ctx, config):
     log.info('clients={c}'.format(c=config.keys()))
     with contextutil.nested(
         lambda: download(ctx=ctx, config=config),
-        lambda: create_users(ctx=ctx, config=dict(
-                clients=clients,
-                testswift_conf=testswift_conf,
-                )),
-        lambda: configure(ctx=ctx, config=dict(
-                clients=config,
-                testswift_conf=testswift_conf,
-                )),
+        lambda: create_users(ctx=ctx, config=testswift_conf),
+        lambda: configure(ctx=ctx, config=testswift_conf),
         lambda: run_tests(ctx=ctx, config=config),
         ):
         pass
