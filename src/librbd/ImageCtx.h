@@ -172,9 +172,14 @@ namespace librbd {
 
     ContextWQ *op_work_queue;
 
-    boost::lockfree::queue<
+    typedef boost::lockfree::queue<
       io::AioCompletion*,
-      boost::lockfree::allocator<ceph::allocator<void>>> completed_reqs;
+      boost::lockfree::allocator<ceph::allocator<void>>> Completions;
+
+    Completions external_callback_completions;
+    std::atomic<bool> external_callback_in_progress = {false};
+
+    Completions event_socket_completions;
     EventSocket event_socket;
 
     bool ignore_migrating = false;
