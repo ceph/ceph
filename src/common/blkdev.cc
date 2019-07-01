@@ -725,10 +725,11 @@ int block_device_get_metrics(const string& devname, int timeout,
   // smartctl
   if (int r = block_device_run_smartctl(devname, timeout, &s);
       r != 0) {
+    string orig = s;
     s = "{\"error\": \"smartctl failed\", \"dev\": \"/dev/";
     s += devname;
     s += "\", \"smartctl_error_code\": " + stringify(r);
-    s += "\", \"smartctl_output\": \"" + s;
+    s += "\", \"smartctl_output\": \"" + escape_quotes(orig);
     s += + "\"}";
   } else if (!json_spirit::read(s, *result)) {
     string orig = s;
