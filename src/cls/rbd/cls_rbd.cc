@@ -2730,35 +2730,57 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
     return -EINVAL;
   }
 
+  uint64_t object_byte_offset;
+  uint64_t byte_length;
+  object_map.get_header_crc_extents(&object_byte_offset, &byte_length);
+
   bufferlist footer_bl;
-  r = cls_cxx_read2(hctx, object_map.get_footer_offset(),
-		    size - object_map.get_footer_offset(), &footer_bl,
+  r = cls_cxx_read2(hctx, object_byte_offset, byte_length, &footer_bl,
                     CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
   if (r < 0) {
-    CLS_ERR("object map footer read failed");
+    CLS_ERR("object map footer read header CRC failed");
     return r;
   }
 
   try {
     bufferlist::iterator it = footer_bl.begin();
-    object_map.decode_footer(it);
+    object_map.decode_header_crc(it);
   } catch (const buffer::error &err) {
-    CLS_ERR("failed to decode object map footer: %s", err.what());
+    CLS_ERR("failed to decode object map header CRC: %s", err.what());
   }
 
   if (start_object_no >= end_object_no || end_object_no > object_map.size()) {
     return -ERANGE;
   }
 
-  uint64_t byte_offset;
-  uint64_t byte_length;
-  object_map.get_data_extents(start_object_no,
-			      end_object_no - start_object_no,
-			      &byte_offset, &byte_length);
+  uint64_t object_count = end_object_no - start_object_no;
+  object_map.get_data_crcs_extents(start_object_no, object_count,
+                                   &object_byte_offset, &byte_length);
+  const auto footer_object_offset = object_byte_offset;
+
+  footer_bl.clear();
+  r = cls_cxx_read2(hctx, object_byte_offset, byte_length, &footer_bl,
+                    CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+  if (r < 0) {
+    CLS_ERR("object map footer read data CRCs failed");
+    return r;
+  }
+
+  try {
+    bufferlist::iterator it = footer_bl.begin();
+    object_map.decode_data_crcs(it, start_object_no);
+  } catch (const buffer::error &err) {
+    CLS_ERR("failed to decode object map data CRCs: %s", err.what());
+  }
+
+  uint64_t data_byte_offset;
+  object_map.get_data_extents(start_object_no, object_count,
+                              &data_byte_offset, &object_byte_offset,
+                              &byte_length);
 
   bufferlist data_bl;
-  r = cls_cxx_read2(hctx, object_map.get_header_length() + byte_offset,
-		    byte_length, &data_bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+  r = cls_cxx_read2(hctx, object_byte_offset, byte_length, &data_bl,
+                    CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
   if (r < 0) {
     CLS_ERR("object map data read failed");
     return r;
@@ -2766,10 +2788,10 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
 
   try {
     bufferlist::iterator it = data_bl.begin();
-    object_map.decode_data(it, byte_offset);
+    object_map.decode_data(it, data_byte_offset);
   } catch (const buffer::error &err) {
     CLS_ERR("failed to decode data chunk [%" PRIu64 "]: %s",
-	    byte_offset, err.what());
+	    data_byte_offset, err.what());
     return -EINVAL;
   }
 
@@ -2788,13 +2810,11 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
 
   if (updated) {
     CLS_LOG(20, "object_map_update: %" PRIu64 "~%" PRIu64 " -> %" PRIu64,
-	    byte_offset, byte_length,
-	    object_map.get_header_length() + byte_offset);
+	    data_byte_offset, byte_length, object_byte_offset);
 
     bufferlist data_bl;
-    object_map.encode_data(data_bl, byte_offset, byte_length);
-    r = cls_cxx_write2(hctx, object_map.get_header_length() + byte_offset,
-		       data_bl.length(), &data_bl,
+    object_map.encode_data(data_bl, data_byte_offset, byte_length);
+    r = cls_cxx_write2(hctx, object_byte_offset, data_bl.length(), &data_bl,
                        CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
     if (r < 0) {
       CLS_ERR("failed to write object map header: %s", cpp_strerror(r).c_str());
@@ -2802,8 +2822,8 @@ int object_map_update(cls_method_context_t hctx, bufferlist *in, bufferlist *out
     }
 
     footer_bl.clear();
-    object_map.encode_footer(footer_bl);
-    r = cls_cxx_write2(hctx, object_map.get_footer_offset(), footer_bl.length(),
+    object_map.encode_data_crcs(footer_bl, start_object_no, object_count);
+    r = cls_cxx_write2(hctx, footer_object_offset, footer_bl.length(),
 		       &footer_bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
     if (r < 0) {
       CLS_ERR("failed to write object map footer: %s", cpp_strerror(r).c_str());
