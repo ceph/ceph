@@ -440,23 +440,18 @@ public:
 };
 
 // factory for S3 compliant PubSub REST handlers 
-RGWHandler_REST* RGWRESTMgr_PubSub_S3::get_handler(struct req_state* const s,
+RGWHandler_REST* RGWRESTMgr_PubSub_S3::_get_handler(req_state* s,
                                                      const rgw::auth::StrategyRegistry& auth_registry,
                                                      const std::string& frontend_prefix) {
   if (RGWHandler_REST_S3::init_from_header(s, RGW_FORMAT_XML, true) < 0) {
     return nullptr;
   }
   
-  RGWHandler_REST *handler = nullptr;
-
   // s3 compliant PubSub API: <bucket name>?notification
   if (s->info.args.exists("notification")) {
-      handler = new RGWHandler_REST_PSNotifs_S3(auth_registry);
-  } else if (next) {
-      handler = next->get_handler(s, auth_registry, frontend_prefix);
+      return new RGWHandler_REST_PSNotifs_S3(auth_registry);
   }
 
-  ldout(s->cct, 20) << __func__ << " handler=" << (handler ? typeid(*handler).name() : "<null>") << dendl;
-  return handler;
+  return nullptr;
 }
 

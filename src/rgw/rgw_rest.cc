@@ -2275,3 +2275,19 @@ RGWHandler_REST* RGWREST::get_handler(
 
   return handler;
 } /* get stream handler */
+
+
+RGWHandler_REST* RGWLinkedRESTMgr::get_handler(req_state* s,
+                        const rgw::auth::StrategyRegistry& auth_registry,
+                        const std::string& frontend_prefix) {
+    
+  RGWHandler_REST* handler = _get_handler(s, auth_registry, frontend_prefix);
+
+  if (!handler && next) {
+      handler = next->get_handler(s, auth_registry, frontend_prefix);
+  }
+
+  ldout(s->cct, 20) << __func__ << " handler=" << (handler ? typeid(*handler).name() : "<null>") << dendl;
+  return handler;
+}
+

@@ -3,14 +3,13 @@
 
 #include "rgw_rest.h"
 
-class RGWRESTMgr_PubSub : public RGWRESTMgr {
-  std::unique_ptr<RGWRESTMgr> s3_compliant_mgr;
-public:
-  RGWRESTMgr_PubSub();
-
-  RGWHandler_REST *get_handler(struct req_state* s,
+class RGWRESTMgr_PubSub : public RGWLinkedRESTMgr {
+protected:
+  virtual RGWHandler_REST* _get_handler(struct req_state* s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
+public:
+  RGWRESTMgr_PubSub(RGWRESTMgr* _next) : RGWLinkedRESTMgr(_next) {}
 };
 
 #endif

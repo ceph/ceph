@@ -14,6 +14,7 @@
 #include "rgw_op.h"
 #include "rgw_pubsub.h"
 #include "rgw_pubsub_push.h"
+#include "rgw_pubsub_rest.h"
 #include "rgw_perf_counters.h"
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
 #include "rgw_amqp.h"
@@ -1577,11 +1578,11 @@ RGWDataSyncModule *RGWPSSyncModuleInstance::get_data_handler() {
   return data_handler.get();
 }
 
-RGWRESTMgr *RGWPSSyncModuleInstance::get_rest_filter(int dialect, RGWRESTMgr *orig) {
+RGWRESTMgr *RGWPSSyncModuleInstance::get_rest_filter(int dialect, RGWRESTMgr* orig) {
   if (dialect != RGW_REST_S3) {
     return orig;
   }
-  return new RGWRESTMgr_PubSub();
+  return new RGWRESTMgr_PubSub(orig);
 }
 
 bool RGWPSSyncModuleInstance::should_full_sync() const {

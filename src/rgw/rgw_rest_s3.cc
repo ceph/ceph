@@ -3408,7 +3408,7 @@ RGWOp *RGWHandler_REST_Obj_S3::op_options()
   return new RGWOptionsCORS_ObjStore_S3;
 }
 
-int RGWHandler_REST_S3::init_from_header(struct req_state* s,
+int RGWHandler_REST_S3::init_from_header(req_state* s,
 					int default_formatter,
 					bool configurable_format)
 {
@@ -3448,25 +3448,11 @@ int RGWHandler_REST_S3::init_from_header(struct req_state* s,
     first = req;
   }
 
-  /*
-   * XXX The intent of the check for empty is apparently to let the bucket
-   * name from DNS to be set ahead. However, we currently take the DNS
-   * bucket and re-insert it into URL in rgw_rest.cc:RGWREST::preprocess().
-   * So, this check is meaningless.
-   *
-   * Rather than dropping this, the code needs to be changed into putting
-   * the bucket (and its tenant) from DNS and Host: header (HTTP_HOST)
-   * into req_status.bucket_name directly.
-   */
-  if (s->init_state.url_bucket.empty()) {
-    // Save bucket to tide us over until token is parsed.
-    s->init_state.url_bucket = first;
-    if (pos >= 0) {
-      string encoded_obj_str = req.substr(pos+1);
-      s->object = rgw_obj_key(encoded_obj_str, s->info.args.get("versionId"));
-    }
-  } else {
-    s->object = rgw_obj_key(req_name, s->info.args.get("versionId"));
+  // Save bucket to tide us over until token is parsed.
+  s->init_state.url_bucket = first;
+  if (pos >= 0) {
+    std::string encoded_obj_str = req.substr(pos+1);
+    s->object = rgw_obj_key(encoded_obj_str, s->info.args.get("versionId"));
   }
   return 0;
 }

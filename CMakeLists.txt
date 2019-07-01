@@ -1,6 +1,7 @@
 cmake_minimum_required(VERSION 3.5.1)
 
 project(ceph CXX C ASM)
+set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(VERSION 15.0.0)
 
 if(POLICY CMP0028)

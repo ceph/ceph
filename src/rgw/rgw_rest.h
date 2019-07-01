@@ -787,4 +787,20 @@ extern int dump_body(struct req_state* s, /* const */ ceph::buffer::list& bl);
 extern int dump_body(struct req_state* s, const std::string& str);
 extern int recv_body(struct req_state* s, char* buf, size_t max);
 
+// REST manager that allow concatination of managers
+// each manager owns the next one
+class RGWLinkedRESTMgr : public RGWRESTMgr {
+protected:
+    std::unique_ptr<RGWRESTMgr> next;
+    virtual RGWHandler_REST* _get_handler(req_state* s,
+            const rgw::auth::StrategyRegistry& auth_registry,
+            const std::string& frontend_prefix) = 0;
+
+public:
+    RGWLinkedRESTMgr(RGWRESTMgr* _next) : next(_next) {}
+    RGWHandler_REST* get_handler(req_state* s,
+                        const rgw::auth::StrategyRegistry& auth_registry,
+                        const std::string& frontend_prefix);
+};
+
 #endif /* CEPH_RGW_REST_H */

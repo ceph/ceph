@@ -478,13 +478,8 @@ public:
   virtual ~RGWHandler_REST_PSNotifs() = default;
 };
 
-// sync module support both s3 compliant and non-compliant pubsub handlers
-// the original handler is not passed in, since regular operation are not permitted in the sync module
-// the s3 compliant handler is owned by the non-compliant handler
-RGWRESTMgr_PubSub::RGWRESTMgr_PubSub() : s3_compliant_mgr(new RGWRESTMgr_PubSub_S3(nullptr)) {}
-
 // factory for ceph specific PubSub REST handlers 
-RGWHandler_REST* RGWRESTMgr_PubSub::get_handler(struct req_state* const s,
+RGWHandler_REST* RGWRESTMgr_PubSub::_get_handler(struct req_state* const s,
                                                      const rgw::auth::StrategyRegistry& auth_registry,
                                                      const std::string& frontend_prefix)
 {
@@ -492,21 +487,18 @@ RGWHandler_REST* RGWRESTMgr_PubSub::get_handler(struct req_state* const s,
     return nullptr;
   }
   
-  RGWHandler_REST *handler = nullptr;
-
   // ceph specific PubSub API: topics/subscriptions/notification are reserved bucket names
   // this API is available only on RGW that belong to a pubsub zone
   if (s->init_state.url_bucket == "topics") {
-    handler = new RGWHandler_REST_PSTopic(auth_registry);
-  } else if (s->init_state.url_bucket == "subscriptions") {
-    handler = new RGWHandler_REST_PSSub(auth_registry);
-  } else if (s->init_state.url_bucket == "notifications") {
-    handler = new RGWHandler_REST_PSNotifs(auth_registry);
-  } else {
-      handler = s3_compliant_mgr->get_handler(s, auth_registry, frontend_prefix);
+    return new RGWHandler_REST_PSTopic(auth_registry);
+  }
+  if (s->init_state.url_bucket == "subscriptions") {
+    return new RGWHandler_REST_PSSub(auth_registry);
+  }
+  if (s->init_state.url_bucket == "notifications") {
+    return new RGWHandler_REST_PSNotifs(auth_registry);
   }
 
-  ldout(s->cct, 20) << __func__ << " handler=" << (handler ? typeid(*handler).name() : "<null>") << dendl;
-  return handler;
+  return nullptr;
 }
 
