@@ -170,47 +170,96 @@ Note:
   When using docker, as your device, you might need to run the script with sudo
   permissions.
 
-Writing End-to-End Tests
-~~~~~~~~~~~~~~~~~~~~~~~~
-
-When writing E2E tests, it is not necessary to compile the frontend code on
-each change of the test files. When your development environment is running
-(``npm start``), you can point Protractor to just use this environment.  To
-attach `Protractor <http://www.protractortest.org/>`__ to this process, run
-``npm run e2e:dev``.
+When developing E2E tests, it is not necessary to compile the frontend code
+on each change of the test files. When your development environment is
+running (``npm start``), you can point Protractor to just use this
+environment. To attach `Protractor <http://www.protractortest.org/>`__ to
+this process, run ``npm run e2e:dev``.
 
 Note::
 
    In case you have a somewhat particular environment, you might need to adapt
    `protractor.conf.js` to point to the appropriate destination.
 
-Making code reuseable
-~~~~~~~~~~~~~~~~~~~~~
+Writing End-to-End Tests
+~~~~~~~~~~~~~~~~~~~~~~~~
 
-In order to make some code reuseable, you just need to put it in a derived
-class of the ``PageHelper``. If you create a new class derived from the
-``PageHelper``, please also register it in the ``Helper`` class, so that it can
-automatically be used by all other classes. To do so, you just need to create a
-new attribute on the ``Helper`` class and ensure it's instantiated in the
-constructor of the ``Helper`` class.
+The PagerHelper class
+^^^^^^^^^^^^^^^^^^^^^
+
+The ``PageHelper`` class is supposed to be used for general purpose code that
+can be used on various pages or suites. Examples are
+``getTableCellByContent()``, ``getTabsCount()`` or ``checkCheckbox()``. Every
+method that could be useful on several pages belongs there. Also, methods
+which enhance the derived classes of the PageHelper belong there. A good
+example for such a case is the ``restrictTo()`` decorator. It ensures that a
+method implemented in a subclass of PageHelper is called on the correct page.
+It will also show a developer-friendly warning if this is not the case.
+
+Subclasses of PageHelper
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+Helper Methods
+""""""""""""""
+
+In order to make code reusable which is specific for a particular suite, make
+sure to put it in a derived class of the ``PageHelper``. For instance, when
+talking about the pool suite, such methods would be ``create()``, ``exist()``
+and ``delete()``. These methods are specific to a pool but are useful for other
+suites.
+
+Methods that return HTML elements (for instance of type ``ElementFinder`` or
+``ElementArrayFinder``, but also ``Promise<ElementFinder>``) which can only
+be found on a specific page, should be either implemented in the helper
+methods of the subclass of PageHelper or as own methods of the subclass of
+PageHelper.
+
+Registering a new PageHelper
+""""""""""""""""""""""""""""
+
+If you have to create a new Helper class derived from the ``PageHelper``,
+please also ensure that it is instantiated in the constructor of the
+``Helper`` class. That way it can automatically be used by all other suites.
 
 .. code:: TypeScript
 
-   class Helper {
-      // ...
-      pools: PoolPageHelper;
+  class Helper {
+     // ...
+     pools: PoolPageHelper;
 
-      constructor() {
-         this.pools = new PoolPageHelper();
-      }
+     constructor() {
+        this.pools = new PoolPageHelper();
+     }
 
-      // ...
-   }
+     // ...
+  }
+
+Using PageHelpers
+"""""""""""""""""
+
+In any suite, an instance of the ``Helper`` class should be used to call
+various ``PageHelper`` objects and their methods. This makes all methods of all
+PageHelpers available to all suites.
+
+.. code:: TypeScript
+
+  it('should create a pool', () => {
+    helper.pools.exist(poolName, false).then(() => {
+      helper.pools.navigateTo('create');
+      helper.pools.create(poolName).then(() => {
+        helper.pools.navigateTo();
+        helper.pools.exist(poolName, true);
+      });
+    });
+  });
+
+Code Style
+^^^^^^^^^^
 
 Please refer to the official `Protractor style-guide
-<https://www.protractortest.org/#/style-guide>`__
-for a better insight on how to write and structure tests
-as well as what exactly should be covered by end-to-end tests.
+<https://www.protractortest.org/#/style-guide>`__ for a better insight on how
+to write and structure tests as well as what exactly should be covered by
+end-to-end tests.
 
 Further Help
 ~~~~~~~~~~~~
