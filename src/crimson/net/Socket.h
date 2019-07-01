@@ -67,7 +67,7 @@ class Socket
   seastar::future<bufferlist> read(size_t bytes);
   using tmp_buf = seastar::temporary_buffer<char>;
   using packet = seastar::net::packet;
-  seastar::future<tmp_buf> read_exactly(size_t bytes);
+  seastar::future<tmp_buf> read_exactly(size_t bytes, __le16 alignment = alignof(char));
 
   seastar::future<> write(packet&& buf) {
     return out.write(std::move(buf));

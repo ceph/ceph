@@ -79,7 +79,7 @@ class ProtocolV2 final : public Protocol {
   ceph::bufferlist txbuf;
 
   void enable_recording();
-  seastar::future<Socket::tmp_buf> read_exactly(size_t bytes);
+  seastar::future<Socket::tmp_buf> read_exactly(size_t bytes, __le16 alignment = alignof(char));
   seastar::future<bufferlist> read(size_t bytes);
   seastar::future<> write(bufferlist&& buf);
   seastar::future<> write_flush(bufferlist&& buf);

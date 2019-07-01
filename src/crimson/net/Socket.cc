@@ -68,11 +68,11 @@ seastar::future<bufferlist> Socket::read(size_t bytes)
 }
 
 seastar::future<seastar::temporary_buffer<char>>
-Socket::read_exactly(size_t bytes) {
+Socket::read_exactly(size_t bytes, __le16 alignment) {
   if (bytes == 0) {
     return seastar::make_ready_future<seastar::temporary_buffer<char>>();
   }
-  return in.read_exactly(bytes)
+  return in.read_exactly2(bytes, alignment)
     .then([this](auto buf) {
       if (buf.empty()) {
         throw std::system_error(make_error_code(error::read_eof));
