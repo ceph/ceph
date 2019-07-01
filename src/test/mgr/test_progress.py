@@ -15,17 +15,8 @@ class TestPgRecoveryEvent(object):
     def setup(self):
         # Creating the class and Mocking 
         # a bunch of attributes for testing
-        self.test_class = module.PgRecoveryEvent
-        self._pgs = [module.PgId(1,i) for i in range(3)]
-        self._evacuate_osds = [0]
-        self._original_pg_count = len(self._pgs)
-        self._original_bytes_recovered = None
-        self.module_class = Mock()
-        self.module_class.info = Mock()
-        self._refresh = Mock()
-        self._progress = 0.0
-        self._message = None
-        self._start_epoch = 30
+        module._module = Mock() # just so Event._refresh() works
+        self.test_event = module.PgRecoveryEvent(None, None, [module.PgId(1,i) for i in range(3)], [0], 30)
 
     def test_pg_update(self):
         # Test for a completed event when the pg states show active+clear
@@ -85,9 +76,9 @@ class TestPgRecoveryEvent(object):
         ]
         }
 
-        self.test_class.pg_update(self,pg_dump,self.module_class)
-        assert self._progress == 1.0
-
+        self.test_event.pg_update(pg_dump, Mock())
+        assert self.test_event._progress == 1.0
+       
 class OSDMap: 
     
     # This is an artificial class to help
@@ -130,20 +121,21 @@ class TestModule(object):
     # Testing Module Class
     
     def setup(self):
-        # Creating the class and Mocking
-        # attributes for testing
-        self.test_class = module
-        self.test_class._module = Mock()
-        self.test_class.PgRecoveryEvent.pg_update = Mock()
-        self.test_module = module.Module
-        self.log = Mock()
-        self.get = Mock()
-        self._complete = Mock()
-        self._events = {}
+        # Creating the class and Mocking a
+        # bunch of attributes for testing
+
+        module.PgRecoveryEvent.pg_update = Mock()
+        self.test_event = module.Module() # so we can see if an event gets created
+        self.test_event.log = Mock() # we don't need to log anything
+        self.test_event.get = Mock() # so we can call pg_update
+        self.test_event._complete = Mock() # we want just to see if this event gets called
+        self.test_event.get_osdmap = Mock() # so that self.get_osdmap().get_epoch() works
+        module._module = Mock() # so that Event.refresh() works
 
     def test_osd_in_out(self):
         # test for the correct event being
         # triggered and completed.
+
         old_pg_stats = {
             "pg_stats":[
                 {
@@ -201,12 +193,11 @@ class TestModule(object):
 
         new_map = OSDMap(new_dump, new_pg_stats)
         old_map = OSDMap(old_dump, old_pg_stats)
-        marked_in = "in"
-        marked_out = "out"
-        osd_id = 3
-        self.test_module._osd_in_out(self, old_map, old_dump, new_map, osd_id, marked_out)
-        self.test_module._osd_in_out(self, old_map, old_dump, new_map, osd_id, marked_in)
+        self.test_event._osd_in_out(old_map, old_dump, new_map, 3, "out")
+        # check if only one event is created
+        assert len(self.test_event._events) == 1
+        self.test_event._osd_in_out(old_map, old_dump, new_map, 3, "in")
         # check if complete function is called
-        self._complete.assert_called_once() 
+        self.test_event._complete.assert_called_once() 
         # check if a PgRecovery Event was created and pg_update gets triggered
-        self.test_class.PgRecoveryEvent.pg_update.asset_called_once()
+        module.PgRecoveryEvent.pg_update.asset_called_once()
