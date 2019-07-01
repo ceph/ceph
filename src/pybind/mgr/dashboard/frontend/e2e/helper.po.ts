@@ -1,4 +1,5 @@
 import { browser } from 'protractor';
+import { PoolPageHelper } from './pools/pools.po';
 import { BucketsPageHelper } from './rgw/buckets.po';
 
 export class Helper {
@@ -6,9 +7,11 @@ export class Helper {
   static TIMEOUT = 30000;
 
   buckets: BucketsPageHelper;
+  pools: PoolPageHelper;
 
   constructor() {
     this.buckets = new BucketsPageHelper();
+    this.pools = new PoolPageHelper();
   }
 
   /**
