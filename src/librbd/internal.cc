@@ -48,6 +48,7 @@
 #include "librbd/io/ReadResult.h"
 #include "librbd/journal/Types.h"
 #include "librbd/managed_lock/Types.h"
+#include "librbd/mirror/DisableRequest.h"
 #include "librbd/mirror/EnableRequest.h"
 #include "librbd/operation/TrimRequest.h"
 #include "librbd/trash/MoveRequest.h"
@@ -123,6 +124,86 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     return c1.image_name < c2.image_name;
   else
     return false;
+}
+
+int disable_mirroring(ImageCtx *ictx) {
+  if (!ictx->test_features(RBD_FEATURE_JOURNALING)) {
+    return 0;
+  }
+
+  cls::rbd::MirrorImage mirror_image;
+  int r = cls_client::mirror_image_get(&ictx->md_ctx, ictx->id, &mirror_image);
+  if (r == -ENOENT) {
+    ldout(ictx->cct, 10) << "mirroring is not enabled for this image" << dendl;
+    return 0;
+  }
+
+  if (r < 0) {
+    lderr(ictx->cct) << "failed to retrieve mirror image: " << cpp_strerror(r)
+                     << dendl;
+    return r;
+  }
+
+  ldout(ictx->cct, 10) << dendl;
+
+  C_SaferCond ctx;
+  auto req = mirror::DisableRequest<>::create(ictx, false, true, &ctx);
+  req->send();
+  r = ctx.wait();
+  if (r < 0) {
+    lderr(ictx->cct) << "failed to disable mirroring: " << cpp_strerror(r)
+                     << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+int enable_mirroring(IoCtx &io_ctx, const std::string &image_id) {
+  auto cct = reinterpret_cast<CephContext*>(io_ctx.cct());
+
+  uint64_t features;
+  int r = cls_client::get_features(&io_ctx, util::header_name(image_id),
+                                   CEPH_NOSNAP, &features);
+  if (r < 0) {
+    lderr(cct) << "failed to retrieve features: " << cpp_strerror(r) << dendl;
+    return r;
+  }
+
+  if ((features & RBD_FEATURE_JOURNALING) == 0) {
+    return 0;
+  }
+
+  cls::rbd::MirrorMode mirror_mode;
+  r = cls_client::mirror_mode_get(&io_ctx, &mirror_mode);
+  if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to retrieve mirror mode: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  if (mirror_mode != cls::rbd::MIRROR_MODE_POOL) {
+    ldout(cct, 10) << "not pool mirroring mode" << dendl;
+    return 0;
+  }
+
+  ldout(cct, 10) << dendl;
+
+  ThreadPool *thread_pool;
+  ContextWQ *op_work_queue;
+  ImageCtx::get_thread_pool_instance(cct, &thread_pool, &op_work_queue);
+  C_SaferCond ctx;
+  auto req = mirror::EnableRequest<>::create(io_ctx, image_id, "",
+                                             op_work_queue, &ctx);
+  req->send();
+  r = ctx.wait();
+  if (r < 0) {
+    lderr(cct) << "failed to enable mirroring: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  return 0;
 }
 
 } // anonymous namespace
@@ -1409,6 +1490,12 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
     }
     ictx->owner_lock.put_read();
 
+    r = disable_mirroring(ictx);
+    if (r < 0) {
+      ictx->state->close();
+      return r;
+    }
+
     utime_t delete_time{ceph_clock_now()};
     utime_t deferment_end_time{delete_time};
     deferment_end_time += delay;
@@ -1601,6 +1688,11 @@ bool compare_by_name(const child_info_t& c1, const child_info_t& c2)
       lderr(cct) << "error adding image to v2 directory: "
                  << cpp_strerror(r) << dendl;
       return r;
+    }
+
+    r = enable_mirroring(io_ctx, image_id);
+    if (r < 0) {
+      // not fatal -- ignore
     }
 
     ldout(cct, 2) << "removing image from trash..." << dendl;
