@@ -1546,11 +1546,15 @@ private:
     explicit SnapTrimmer(PrimaryLogPG *pg) : pg(pg) {}
     void log_enter(const char *state_name);
     void log_exit(const char *state_name, utime_t duration);
-    bool can_trim() {
+    bool permit_trim() {
       return
 	pg->is_clean() &&
 	!pg->scrubber.active &&
-	!pg->snap_trimq.empty() &&
+	!pg->snap_trimq.empty();
+    }
+    bool can_trim() {
+      return
+	permit_trim() &&
 	!pg->get_osdmap()->test_flag(CEPH_OSDMAP_NOSNAPTRIM);
     }
   } snap_trimmer_machine;
@@ -1569,7 +1573,7 @@ private:
       : my_base(ctx),
 	NamedState(context< SnapTrimmer >().pg, "Trimming") {
       context< SnapTrimmer >().log_enter(state_name);
-      assert(context< SnapTrimmer >().can_trim());
+      assert(context< SnapTrimmer >().permit_trim());
       assert(in_flight.empty());
     }
     void exit() {
