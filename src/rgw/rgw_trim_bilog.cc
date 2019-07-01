@@ -353,14 +353,8 @@ template <typename Iter>
 int take_min_status(CephContext *cct, Iter first, Iter last,
                     std::vector<std::string> *status)
 {
-  status->clear();
-  std::optional<uint64_t> num_shards;
   for (auto peer = first; peer != last; ++peer) {
-    const size_t peer_shards = peer->size();
-    if (!num_shards) {
-      num_shards = peer_shards;
-      status->resize(*num_shards);
-    } else if (*num_shards != peer_shards) {
+    if (peer->size() != status->size()) {
       // all peers must agree on the number of shards
       return -EINVAL;
     }
@@ -482,6 +476,11 @@ int BucketTrimInstanceCR::operate()
         return set_cr_error(child_ret);
       }
     }
+
+    // initialize each shard with the maximum marker, which is only used when
+    // there are no peers syncing from us
+    min_markers.assign(std::max(1u, bucket_info.num_shards),
+                       RGWSyncLogTrimCR::max_marker);
 
     // determine the minimum marker for each shard
     retcode = take_min_status(cct, peer_status.begin(), peer_status.end(),
@@ -665,7 +664,7 @@ int AsyncMetadataList::_send_request()
       ceph_assert(keys.size() == 1);
       auto& key = keys.front();
       // stop at original marker
-      if (marker >= start_marker) {
+      if (marker > start_marker) {
         return 0;
       }
       if (!callback(std::move(key), std::move(marker))) {
