@@ -247,6 +247,8 @@ def task(ctx, config):
                         },
                     }
                 )
+    # only take config for valid clients
+    config = {c: config[c] for c in clients}
 
     log.info('clients={c}'.format(c=config.keys()))
     with contextutil.nested(
