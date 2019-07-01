@@ -14,7 +14,7 @@
 #include "rgw_op.h"
 #include "rgw_pubsub.h"
 #include "rgw_pubsub_push.h"
-#include "rgw_pubsub_rest.h"
+#include "rgw_rest_pubsub.h"
 #include "rgw_perf_counters.h"
 #ifdef WITH_RADOSGW_AMQP_ENDPOINT
 #include "rgw_amqp.h"

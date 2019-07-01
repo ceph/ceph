@@ -38,7 +38,7 @@
 #include "rgw_frontend.h"
 #include "rgw_http_client_curl.h"
 #include "rgw_perf_counters.h"
-#include "rgw_pubsub_rest.h"
+#include "rgw_rest_pubsub.h"
 #if defined(WITH_RADOSGW_BEAST_FRONTEND)
 #include "rgw_asio_frontend.h"
 #endif /* WITH_RADOSGW_BEAST_FRONTEND */
