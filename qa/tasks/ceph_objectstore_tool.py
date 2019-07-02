@@ -250,10 +250,10 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
     for stats in manager.get_pg_stats():
         if stats["pgid"].find(str(REPID) + ".") != 0:
             continue
-        if pool_dump["type"] == ceph_manager.CephManager.REPLICATED_POOL:
+        if pool_dump["type"] == ceph_manager.PoolType.REPLICATED:
             for osd in stats["acting"]:
                 pgs.setdefault(osd, []).append(stats["pgid"])
-        elif pool_dump["type"] == ceph_manager.CephManager.ERASURE_CODED_POOL:
+        elif pool_dump["type"] == ceph_manager.PoolType.ERASURE_CODED:
             shard = 0
             for osd in stats["acting"]:
                 pgs.setdefault(osd, []).append("{pgid}s{shard}".
@@ -311,7 +311,7 @@ def test_objectstore(ctx, config, cli_remote, REP_POOL, REP_NAME, ec=False):
     log.info(pgswithobjects)
     log.info(objsinpg)
 
-    if pool_dump["type"] == ceph_manager.CephManager.REPLICATED_POOL:
+    if pool_dump["type"] == ceph_manager.PoolType.REPLICATED:
         # Test get-bytes
         log.info("Test get-bytes and set-bytes")
         for basename in db.keys():
