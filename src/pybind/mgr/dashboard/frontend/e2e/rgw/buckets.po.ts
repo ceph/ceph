@@ -1,5 +1,4 @@
 import { $, browser, by, element } from 'protractor';
-// import { protractor } from 'protractor/built/ptor';
 import { Helper } from '../helper.po';
 import { PageHelper } from '../page-helper.po';
 
