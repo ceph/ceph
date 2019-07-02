@@ -229,7 +229,7 @@ public:
 
     RGWSI_MBSObj_PutParams params(data_bl, pattrs, mtime, exclusive);
 
-    int ret = svc.meta_be->put_entry(ctx, RGWSI_User::get_meta_key(info.user_id), params, &ot, y);
+    int ret = svc.meta_be->put(ctx, RGWSI_User::get_meta_key(info.user_id), params, &ot, y);
     if (ret < 0)
       return ret;
 
@@ -466,7 +466,7 @@ int RGWSI_User_RADOS::remove_uid_index(RGWSI_MetaBackend::Context *ctx, const RG
   ldout(cct, 10) << "removing user index: " << user_info.user_id << dendl;
 
   RGWSI_MBSObj_RemoveParams params;
-  int ret = svc.meta_be->remove_entry(ctx, get_meta_key(user_info.user_id), params, objv_tracker, y);
+  int ret = svc.meta_be->remove(ctx, get_meta_key(user_info.user_id), params, objv_tracker, y);
   if (ret < 0 && ret != -ENOENT && ret  != -ECANCELED) {
     string key;
     user_info.user_id.to_str(key);
