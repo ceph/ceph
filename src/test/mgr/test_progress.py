@@ -125,11 +125,11 @@ class TestModule(object):
         # bunch of attributes for testing
 
         module.PgRecoveryEvent.pg_update = Mock()
-        self.test_event = module.Module() # so we can see if an event gets created
-        self.test_event.log = Mock() # we don't need to log anything
-        self.test_event.get = Mock() # so we can call pg_update
-        self.test_event._complete = Mock() # we want just to see if this event gets called
-        self.test_event.get_osdmap = Mock() # so that self.get_osdmap().get_epoch() works
+        self.test_module = module.Module() # so we can see if an event gets created
+        self.test_module.log = Mock() # we don't need to log anything
+        self.test_module.get = Mock() # so we can call pg_update
+        self.test_module._complete = Mock() # we want just to see if this event gets called
+        self.test_module.get_osdmap = Mock() # so that self.get_osdmap().get_epoch() works
         module._module = Mock() # so that Event.refresh() works
 
     def test_osd_in_out(self):
@@ -193,11 +193,11 @@ class TestModule(object):
 
         new_map = OSDMap(new_dump, new_pg_stats)
         old_map = OSDMap(old_dump, old_pg_stats)
-        self.test_event._osd_in_out(old_map, old_dump, new_map, 3, "out")
+        self.test_module._osd_in_out(old_map, old_dump, new_map, 3, "out")
         # check if only one event is created
-        assert len(self.test_event._events) == 1
-        self.test_event._osd_in_out(old_map, old_dump, new_map, 3, "in")
+        assert len(self.test_module._events) == 1
+        self.test_module._osd_in_out(old_map, old_dump, new_map, 3, "in")
         # check if complete function is called
-        self.test_event._complete.assert_called_once() 
+        assert self.test_module._complete.call_count == 1
         # check if a PgRecovery Event was created and pg_update gets triggered
-        module.PgRecoveryEvent.pg_update.asset_called_once()
+        assert module.PgRecoveryEvent.pg_update.call_count == 2
