@@ -4159,7 +4159,7 @@ public:
     return head.version == 0 && head.epoch == 0;
   }
 
-  size_t approx_size() const {
+  uint64_t approx_size() const {
     return head.version - tail.version;
   }
 
