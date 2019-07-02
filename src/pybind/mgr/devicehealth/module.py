@@ -631,3 +631,7 @@ class Module(MgrModule):
                 return self.remote(plugin_name, 'predict_all_devices')
         except:
             return -1, '', 'unable to invoke diskprediction local or remote plugin'
+
+    def gather_device_report(self):
+        # write me
+        return {}
