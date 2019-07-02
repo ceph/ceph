@@ -42,12 +42,12 @@ Configuration
 =============
 
 The external Ansible Runner Service uses TLS mutual authentication to allow clients to use the API.
-A client certificate and a key files should be provided by the Administrator of the Ansible Runner Service for each manager node.
-This files should be copied in each of the manager nodes with read access for the ceph user.
+A client certificate and a key file should be provided by the Administrator of the Ansible Runner Service for each manager node.
+These files should be copied in each of the manager nodes with read access for the ceph user.
 The destination folder for this files and the name of the files must be the same always in all the manager nodes,
-althought the certificate/key content of this files logically will be different in each node.
+although the certificate/key content of these files logically will be different in each node.
 
-Configuration must be set once the module is enabled by first time.
+Configuration must be set when the module is enabled for the first time.
 
 This can be done in one monitor node via the configuration key facility on a
 cluster-wide level (so they apply to all manager instances) as follows:
