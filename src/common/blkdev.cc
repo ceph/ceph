@@ -699,9 +699,17 @@ static int block_device_run_smartctl(const string& devname, int timeout,
   }
 
   int joinerr = smartctl.join();
-  if (joinerr) {
-    *result = std::string("smartctl returned an error (") + stringify(joinerr) +
-      "): stderr:\n") + smartctl.err() + "\nstdout:\n" + *result;
+  // Bit 0: Command line did not parse.
+  // Bit 1: Device open failed, device did not return an IDENTIFY DEVICE structure, or device is in a low-power mode (see '-n' option above).
+  // Bit 2: Some SMART or other ATA command to the disk failed, or there was a checksum error in a SMART data structure (see '-b' option above).
+  // Bit 3: SMART status check returned "DISK FAILING".
+  // Bit 4: We found prefail Attributes <= threshold.
+  // Bit 5: SMART status check returned "DISK OK" but we found that some (usage or prefail) Attributes have been <= threshold at some time in the past.
+  // Bit 6: The device error log contains records of errors.
+  // Bit 7: The device self-test log contains records of errors.  [ATA only] Failed self-tests outdated by a newer successful extended self-test are ignored.
+  if (joinerr & 3) {
+    *result = "smartctl returned an error ("s + stringify(joinerr) +
+      "): stderr:\n"s + smartctl.err() + "\nstdout:\n"s + *result;
     return -EINVAL;
   }
 
