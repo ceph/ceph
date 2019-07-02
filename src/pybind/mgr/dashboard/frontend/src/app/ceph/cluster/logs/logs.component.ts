@@ -2,6 +2,7 @@ import { DatePipe } from '@angular/common';
 import { Component, OnDestroy, OnInit } from '@angular/core';
 
 import { LogsService } from '../../../shared/api/logs.service';
+import { Icons } from '../../../shared/enum/icons.enum';
 
 @Component({
   selector: 'cd-logs',
@@ -12,6 +13,7 @@ export class LogsComponent implements OnInit, OnDestroy {
   contentData: any;
   clog: Array<any>;
   audit_log: Array<any>;
+  icons = Icons;
 
   interval: number;
   bsConfig = {

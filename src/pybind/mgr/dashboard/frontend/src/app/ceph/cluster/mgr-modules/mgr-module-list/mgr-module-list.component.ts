@@ -7,6 +7,7 @@ import { timer as observableTimer } from 'rxjs';
 import { MgrModuleService } from '../../../../shared/api/mgr-module.service';
 import { TableComponent } from '../../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
+import { Icons } from '../../../../shared/enum/icons.enum';
 import { CdTableAction } from '../../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../../shared/models/cd-table-fetch-data-context';
@@ -67,21 +68,21 @@ export class MgrModuleListComponent {
           return Object.values(this.selection.first().options).length === 0;
         },
         routerLink: () => `/mgr-modules/edit/${getModuleUri()}`,
-        icon: 'fa-pencil'
+        icon: Icons.edit
       },
       {
         name: this.i18n('Enable'),
         permission: 'update',
         click: () => this.updateModuleState(),
         disable: () => this.isTableActionDisabled('enabled'),
-        icon: 'fa-play'
+        icon: Icons.start
       },
       {
         name: this.i18n('Disable'),
         permission: 'update',
         click: () => this.updateModuleState(),
         disable: () => this.isTableActionDisabled('disabled'),
-        icon: 'fa-stop'
+        icon: Icons.stop
       }
     ];
   }

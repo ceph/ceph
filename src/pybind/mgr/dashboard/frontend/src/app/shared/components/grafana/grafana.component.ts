@@ -3,6 +3,7 @@ import { DomSanitizer, SafeUrl } from '@angular/platform-browser';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
 
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
 import { SummaryService } from '../../../shared/services/summary.service';
 import { SettingsService } from '../../api/settings.service';
@@ -27,6 +28,7 @@ export class GrafanaComponent implements OnInit, OnChanges {
   dashboardExist = true;
   time: string;
   grafanaTimes: any;
+  icons = Icons;
   readonly DEFAULT_TIME: string = 'from=now-1h&to=now';
 
   @Input()

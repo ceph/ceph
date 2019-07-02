@@ -30,7 +30,7 @@
       <li routerLinkActive="active"
           class="tc_menuitem tc_menuitem_dashboard">
         <a routerLink="/dashboard">
-          <i class="fa fa-heartbeat fa-fw"
+          <i [ngClass]="[icons.health, icons.width]"
              [ngStyle]="summaryData?.health_status | healthColor"></i>
           <span i18n>Dashboard</span>
         </a>

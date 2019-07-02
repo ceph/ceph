@@ -2,6 +2,7 @@ import { Component, Input, OnInit } from '@angular/core';
 
 import * as _ from 'lodash';
 
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CdTableAction } from '../../models/cd-table-action';
 import { CdTableSelection } from '../../models/cd-table-selection';
 import { Permission } from '../../models/permissions';
@@ -29,6 +30,8 @@ export class TableActionsComponent implements OnInit {
 
   // Array with all visible actions
   dropDownActions: CdTableAction[] = [];
+
+  icons = Icons;
 
   constructor() {}
 

@@ -5,6 +5,7 @@ import * as _ from 'lodash';
 import { NodeEvent, TreeModel } from 'ng2-tree';
 
 import { TableComponent } from '../../../shared/datatable/table/table.component';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { IscsiBackstorePipe } from '../../../shared/pipes/iscsi-backstore.pipe';
@@ -75,26 +76,25 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
 
   private generateTree() {
     this.metadata = { root: this.selectedItem.target_controls };
-
     const cssClasses = {
       target: {
-        expanded: 'fa fa-fw fa-bullseye fa-lg'
+        expanded: _.join([Icons.width, Icons.large, Icons.bullseye], ' ')
       },
       initiators: {
-        expanded: 'fa fa-fw fa-user fa-lg',
-        leaf: 'fa fa-fw fa-user'
+        expanded: _.join([Icons.width, Icons.large, Icons.user], ' '),
+        leaf: _.join([Icons.width, Icons.user], ' ')
       },
       groups: {
-        expanded: 'fa fa-fw fa-users fa-lg',
-        leaf: 'fa fa-fw fa-users'
+        expanded: _.join([Icons.width, Icons.large, Icons.user], ' '),
+        leaf: _.join([Icons.width, Icons.user], ' ')
       },
       disks: {
-        expanded: 'fa fa-fw fa-hdd-o fa-lg',
-        leaf: 'fa fa-fw fa-hdd-o'
+        expanded: _.join([Icons.width, Icons.large, Icons.disk], ' '),
+        leaf: _.join([Icons.width, Icons.disk], ' ')
       },
       portals: {
-        expanded: 'fa fa-fw fa-server fa-lg',
-        leaf: 'fa fa-fw fa-server fa-lg'
+        expanded: _.join([Icons.width, Icons.large, Icons.server], ' '),
+        leaf: _.join([Icons.width, Icons.large, Icons.server], ' ')
       }
     };
 

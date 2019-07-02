@@ -10,6 +10,7 @@ import { CriticalConfirmationModalComponent } from '../../../../shared/component
 import { ActionLabelsI18n } from '../../../../shared/constants/app.constants';
 import { TableComponent } from '../../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
+import { Icons } from '../../../../shared/enum/icons.enum';
 import { CdTableAction } from '../../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
@@ -48,6 +49,7 @@ export class OsdListComponent implements OnInit {
   bsModalRef: BsModalRef;
   columns: CdTableColumn[];
   clusterWideActions: CdTableAction[];
+  icons = Icons;
 
   osds = [];
   selection = new CdTableSelection();
@@ -69,14 +71,14 @@ export class OsdListComponent implements OnInit {
       {
         name: this.actionLabels.SCRUB,
         permission: 'update',
-        icon: 'fa-stethoscope',
+        icon: Icons.analyse,
         click: () => this.scrubAction(false),
         disable: () => !this.hasOsdSelected
       },
       {
         name: this.actionLabels.DEEP_SCRUB,
         permission: 'update',
-        icon: 'fa-cog',
+        icon: Icons.deepCheck,
         click: () => this.scrubAction(true),
         disable: () => !this.hasOsdSelected
       },
@@ -85,28 +87,28 @@ export class OsdListComponent implements OnInit {
         permission: 'update',
         click: () => this.reweight(),
         disable: () => !this.hasOsdSelected,
-        icon: 'fa-balance-scale'
+        icon: Icons.reweight
       },
       {
         name: this.actionLabels.MARK_OUT,
         permission: 'update',
         click: () => this.showConfirmationModal(this.i18n('out'), this.osdService.markOut),
         disable: () => this.isNotSelectedOrInState('out'),
-        icon: 'fa-arrow-left'
+        icon: Icons.left
       },
       {
         name: this.actionLabels.MARK_IN,
         permission: 'update',
         click: () => this.showConfirmationModal(this.i18n('in'), this.osdService.markIn),
         disable: () => this.isNotSelectedOrInState('in'),
-        icon: 'fa-arrow-right'
+        icon: Icons.right
       },
       {
         name: this.actionLabels.MARK_DOWN,
         permission: 'update',
         click: () => this.showConfirmationModal(this.i18n('down'), this.osdService.markDown),
         disable: () => this.isNotSelectedOrInState('down'),
-        icon: 'fa-arrow-down'
+        icon: Icons.down
       },
       {
         name: this.actionLabels.MARK_LOST,
@@ -119,7 +121,7 @@ export class OsdListComponent implements OnInit {
             this.osdService.markLost
           ),
         disable: () => this.isNotSelectedOrInState('up'),
-        icon: 'fa-unlink'
+        icon: Icons.flatten
       },
       {
         name: this.actionLabels.PURGE,
@@ -132,7 +134,7 @@ export class OsdListComponent implements OnInit {
             this.osdService.purge
           ),
         disable: () => this.isNotSelectedOrInState('up'),
-        icon: 'fa-eraser'
+        icon: Icons.erase
       },
       {
         name: this.actionLabels.DESTROY,
@@ -145,7 +147,7 @@ export class OsdListComponent implements OnInit {
             this.osdService.destroy
           ),
         disable: () => this.isNotSelectedOrInState('up'),
-        icon: 'fa-remove'
+        icon: Icons.destroy
       }
     ];
   }
@@ -154,21 +156,21 @@ export class OsdListComponent implements OnInit {
     this.clusterWideActions = [
       {
         name: this.i18n('Flags'),
-        icon: 'fa-flag',
+        icon: Icons.flag,
         click: () => this.configureFlagsAction(),
         permission: 'read',
         visible: () => this.permissions.osd.read
       },
       {
         name: this.i18n('Recovery Priority'),
-        icon: 'fa-cog',
+        icon: Icons.deepCheck,
         click: () => this.configureQosParamsAction(),
         permission: 'read',
         visible: () => this.permissions.configOpt.read
       },
       {
         name: this.i18n('PG scrub'),
-        icon: 'fa-stethoscope',
+        icon: Icons.analyse,
         click: () => this.configurePgScrubAction(),
         permission: 'read',
         visible: () => this.permissions.configOpt.read

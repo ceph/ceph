@@ -12,6 +12,7 @@ import { RbdService } from '../../../shared/api/rbd.service';
 import { SelectMessages } from '../../../shared/components/select/select-messages.model';
 import { SelectOption } from '../../../shared/components/select/select-option.model';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import { FinishedTask } from '../../../shared/models/finished-task';
@@ -34,6 +35,8 @@ export class IscsiTargetFormComponent implements OnInit {
   default_backstore: string;
   unsupported_rbd_features: any;
   required_rbd_features: any;
+
+  icons = Icons;
 
   isEdit = false;
   target_iqn: string;

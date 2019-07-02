@@ -9,6 +9,7 @@ import { CriticalConfirmationModalComponent } from '../../../shared/components/c
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
@@ -42,6 +43,7 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
   summaryDataSubscription: Subscription;
   tableActions: CdTableAction[];
   targets = [];
+  icons = Icons;
 
   builders = {
     'iscsi/target/create': (metadata) => {
@@ -67,19 +69,19 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
     this.tableActions = [
       {
         permission: 'create',
-        icon: 'fa-plus',
+        icon: Icons.add,
         routerLink: () => '/block/iscsi/targets/create',
         name: this.actionLabels.CREATE
       },
       {
         permission: 'update',
-        icon: 'fa-pencil',
+        icon: Icons.edit,
         routerLink: () => `/block/iscsi/targets/edit/${this.selection.first().target_iqn}`,
         name: this.actionLabels.EDIT
       },
       {
         permission: 'delete',
-        icon: 'fa-times',
+        icon: Icons.destroy,
         click: () => this.deleteIscsiTargetModal(),
         name: this.actionLabels.DELETE
       }

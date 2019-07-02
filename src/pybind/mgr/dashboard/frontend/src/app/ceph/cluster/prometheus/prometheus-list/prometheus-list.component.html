@@ -22,6 +22,5 @@
 <ng-template #externalLinkTpl
              let-row="row"
              let-value="value">
-  <a [href]="value" target="_blank"><i class="fa fa-line-chart"></i> Source</a>
+  <a [href]="value" target="_blank"><i [ngClass]="[icons.lineChart]"></i> Source</a>
 </ng-template>
-

@@ -2,7 +2,7 @@
   <div [innerHtml]="html"></div>
   <ng-content></ng-content>
 </ng-template>
-<i class="fa fa-question-circle"
+<i [ngClass]="[icons.questionCircle]"
    aria-hidden="true"
    [popover]="popoverTpl"
    placement="bottom"

@@ -1,6 +1,7 @@
 import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
+import { Icons } from '../../../../shared/enum/icons.enum';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { CdDatePipe } from '../../../../shared/pipes/cd-date.pipe';
@@ -16,6 +17,7 @@ export class PrometheusListComponent implements OnInit {
   externalLinkTpl: TemplateRef<any>;
   columns: CdTableColumn[];
   selection = new CdTableSelection();
+  icons = Icons;
   customCss = {
     'label label-danger': 'active',
     'label label-warning': 'unprocessed',

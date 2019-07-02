@@ -1,7 +1,7 @@
 <div class="col-sm-12 col-lg-6">
   <h1 *ngIf="!(info && ecProfiles)"
       class="jumbotron">
-    <i class="fa fa-lg fa-pulse fa-spinner text-primary"></i>
+    <i [ngClass]="[icons.spinner, icons.pulse, icons.large]" class="text-primary"></i>
     <ng-container i18n>Loading...</ng-container>
   </h1>
   <form name="form"
@@ -135,7 +135,7 @@
                           id="crush-info-button"
                           type="button"
                           (click)="data.crushInfo = !data.crushInfo">
-                    <i class="fa fa-question-circle"
+                    <i [ngClass]="[icons.questionCircle]"
                        aria-hidden="true"></i>
                   </button>
                 </span>
@@ -229,21 +229,21 @@
                           id="ecp-info-button"
                           type="button"
                           (click)="data.erasureInfo = !data.erasureInfo">
-                    <i class="fa fa-question-circle"
+                    <i [ngClass]="[icons.questionCircle]"
                        aria-hidden="true"></i>
                   </button>
                   <button class="btn btn-default"
                           type="button"
                           [disabled]="editing"
                           (click)="addErasureCodeProfile()">
-                    <i class="fa fa-plus"
+                    <i [ngClass]="[icons.add]"
                        aria-hidden="true"></i>
                   </button>
                   <button class="btn btn-default"
                           type="button"
                           (click)="deleteErasureCodeProfile()"
                           [disabled]="editing || ecProfiles.length < 1">
-                    <i class="fa fa-trash-o"
+                    <i [ngClass]="[icons.trash]"
                        aria-hidden="true"></i>
                   </button>
                 </span>
