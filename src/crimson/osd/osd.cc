@@ -481,8 +481,7 @@ seastar::future<> OSD::ms_handle_remote_reset(ceph::net::ConnectionRef conn)
 }
 
 void OSD::handle_authentication(const EntityName& name,
-                                 uint64_t global_id,
-                                 const AuthCapsInfo& caps)
+				const AuthCapsInfo& caps)
 {
   // todo
 }

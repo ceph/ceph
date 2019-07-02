@@ -89,7 +89,7 @@ seastar::future<> Protocol::keepalive()
 
 void Protocol::notify_keepalive_ack(utime_t _keepalive_ack)
 {
-  logger().debug("{} got keepalive ack {}", conn, _keepalive_ack);
+  logger().trace("{} got keepalive ack {}", conn, _keepalive_ack);
   keepalive_ack = _keepalive_ack;
   write_event();
 }

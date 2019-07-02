@@ -11,7 +11,6 @@ class AuthHandler {
 public:
   // the peer just got authorized
   virtual void handle_authentication(const EntityName& name,
-				     uint64_t global_id,
 				     const AuthCapsInfo& caps) = 0;
   virtual ~AuthHandler() = default;
 };

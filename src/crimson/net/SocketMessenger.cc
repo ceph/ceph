@@ -92,7 +92,7 @@ SocketMessenger::try_bind(const entity_addrvec_t& addrs,
               return stop_t::yes;
             }).handle_exception_type([this, max_port, &port] (const std::system_error& e) {
               ceph_assert(e.code() == error::address_in_use);
-              logger().debug("{}: try_bind: {} already used", *this, port);
+              logger().trace("{}: try_bind: {} already used", *this, port);
               if (port == max_port) {
                 throw e;
               }
