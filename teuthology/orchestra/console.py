@@ -199,7 +199,7 @@ class PhysicalConsole():
         self._wait_for_login(timeout=timeout)
         log.info('Power cycle for {s} completed'.format(s=self.shortname))
 
-    def hard_reset(self):
+    def hard_reset(self, wait_for_login=True):
         """
         Perform physical hard reset.  Retry if EOF returned from read
         and wait for login when complete.
@@ -212,7 +212,8 @@ class PhysicalConsole():
                              timeout=self.timeout)
             if r == 0:
                 break
-        self._wait_for_login()
+        if wait_for_login:
+            self._wait_for_login()
         log.info('Hard reset for {s} completed'.format(s=self.shortname))
 
     def power_on(self):
