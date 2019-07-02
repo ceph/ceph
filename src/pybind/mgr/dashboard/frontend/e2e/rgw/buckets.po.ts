@@ -181,3 +181,4 @@ export class BucketsPageHelper extends PageHelper {
     expect(PageHelper.getTitleText()).toBe('Edit Bucket');
   }
 }
+
