@@ -213,6 +213,12 @@ class Module(MgrModule):
             r.append('device')
         return r
 
+    def gather_device_report(self):
+        try:
+            return self.remote('devicehealth', 'gather_device_report')
+        except:
+            return None
+
     def compile_report(self):
         report = {
             'leaderboard': False,
@@ -286,6 +292,9 @@ class Module(MgrModule):
 
         if self.channel_crash:
             report['crashes'] = self.gather_crashinfo()
+
+        if self.channel_devices:
+            report['devices'] = self.gather_device_report()
 
         return report
 
