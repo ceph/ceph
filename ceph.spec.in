@@ -1100,6 +1100,17 @@ Group:          System/Monitoring
 This package provides Ceph’s default alerts for Prometheus.
 %endif
 
+%package dashboard-e2e
+Summary:       Standalone Ceph Dashboard End-To-End ("E2E") tests
+BuildArch:     noarch
+%if 0%{?suse_version}
+Group:         System/Filesystems
+%endif
+Requires:      ceph-common = %{_epoch_prefix}%{version}-%{release}
+%description dashboard-e2e
+This package provides the Ceph Dashboard End-To-End ("E2E") tests as a
+standalone RPM for use in Continuous Integration and ad hoc testing.
+
 #################################################################################
 # common
 #################################################################################
@@ -1286,6 +1297,16 @@ mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rgw
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-mgr
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rbd
 mkdir -p %{buildroot}%{_localstatedir}/lib/ceph/bootstrap-rbd-mirror
+
+# dashboard E2E tests
+install -m 0755 -d %{buildroot}/%{_datadir}/ceph/dashboard-e2e
+install -m 0755 src/script/dashboard_e2e_tests.sh %{buildroot}/%{_datadir}/ceph/dashboard-e2e/dashboard_e2e_tests.sh
+install -m 0644 src/pybind/mgr/dashboard/frontend/angular.json %{buildroot}/%{_datadir}/ceph/dashboard-e2e/angular.json
+install -m 0644 src/pybind/mgr/dashboard/frontend/protractor.conf.js %{buildroot}/%{_datadir}/ceph/dashboard-e2e/protractor.conf.js
+install -m 0644 src/pybind/mgr/dashboard/frontend/package.json %{buildroot}/%{_datadir}/ceph/dashboard-e2e/package.json
+install -m 0644 src/pybind/mgr/dashboard/frontend/package-lock.json %{buildroot}/%{_datadir}/ceph/dashboard-e2e/package-lock.json
+install -m 0755 src/pybind/mgr/dashboard/frontend/tsconfig.json %{buildroot}/%{_datadir}/ceph/dashboard-e2e/tsconfig.json
+cp -a src/pybind/mgr/dashboard/frontend/e2e/ %{buildroot}/%{_datadir}/ceph/dashboard-e2e
 
 %if 0%{?suse_version}
 # create __pycache__ directories and their contents
@@ -2306,5 +2327,7 @@ exit 0
 %config /etc/prometheus/SUSE/default_rules/ceph_default_alerts.yml
 %endif
 
+%files dashboard-e2e
+%{_datadir}/ceph/dashboard-e2e
 
 %changelog
