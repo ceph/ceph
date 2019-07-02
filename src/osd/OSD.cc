@@ -6635,7 +6635,12 @@ void OSD::scrub_purged_snaps()
   SnapMapper::Scrubber s(cct, store, service.meta_ch,
 			 make_snapmapper_oid());
   clog->debug() << "purged_snaps scrub starts";
+  osd_lock.unlock();
   s.run();
+  osd_lock.lock();
+  if (is_stopping()) {
+    return;
+  }
   if (s.stray.size()) {
     clog->debug() << "purged_snaps scrub find " << s.stray.size() << " strays";
   } else {
