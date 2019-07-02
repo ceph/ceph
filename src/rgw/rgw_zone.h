@@ -1012,7 +1012,7 @@ class RGWPeriod
 public:
   RGWPeriod() {}
 
-  RGWPeriod(const std::string& period_id, epoch_t _epoch = 0)
+  explicit RGWPeriod(const std::string& period_id, epoch_t _epoch = 0)
     : id(period_id), epoch(_epoch) {}
 
   const std::string& get_id() const { return id; }
