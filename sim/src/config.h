@@ -30,23 +30,23 @@ namespace crimson {
   namespace qos_simulation {
 
     struct cli_group_t {
-      uint client_count;
+      unsigned client_count;
       std::chrono::seconds client_wait;
-      uint client_total_ops;
-      uint client_server_select_range;
-      uint client_iops_goal;
-      uint client_outstanding_ops;
+      unsigned client_total_ops;
+      unsigned client_server_select_range;
+      unsigned client_iops_goal;
+      unsigned client_outstanding_ops;
       double client_reservation;
       double client_limit;
       double client_weight;
       Cost client_req_cost;
 
-      cli_group_t(uint _client_count = 100,
-		  uint _client_wait = 0,
-		  uint _client_total_ops = 1000,
-		  uint _client_server_select_range = 10,
-		  uint _client_iops_goal = 50,
-		  uint _client_outstanding_ops = 100,
+      cli_group_t(unsigned _client_count = 100,
+		  unsigned _client_wait = 0,
+		  unsigned _client_total_ops = 1000,
+		  unsigned _client_server_select_range = 10,
+		  unsigned _client_iops_goal = 50,
+		  unsigned _client_outstanding_ops = 100,
 		  double _client_reservation = 20.0,
 		  double _client_limit = 60.0,
 		  double _client_weight = 1.0,
@@ -85,13 +85,13 @@ namespace crimson {
 
 
     struct srv_group_t {
-      uint server_count;
-      uint server_iops;
-      uint server_threads;
+      unsigned server_count;
+      unsigned server_iops;
+      unsigned server_threads;
 
-      srv_group_t(uint _server_count = 100,
-		  uint _server_iops = 40,
-		  uint _server_threads = 1) :
+      srv_group_t(unsigned _server_count = 100,
+		  unsigned _server_iops = 40,
+		  unsigned _server_threads = 1) :
 	server_count(_server_count),
 	server_iops(_server_iops),
 	server_threads(_server_threads)
@@ -111,8 +111,8 @@ namespace crimson {
 
 
     struct sim_config_t {
-      uint server_groups;
-      uint client_groups;
+      unsigned server_groups;
+      unsigned client_groups;
       bool server_random_selection;
       bool server_soft_limit;
       double anticipation_timeout;
@@ -120,8 +120,8 @@ namespace crimson {
       std::vector<cli_group_t> cli_group;
       std::vector<srv_group_t> srv_group;
 
-      sim_config_t(uint _server_groups = 1,
-		   uint _client_groups = 1,
+      sim_config_t(unsigned _server_groups = 1,
+		   unsigned _client_groups = 1,
 		   bool _server_random_selection = false,
 		   bool _server_soft_limit = true,
 		   double _anticipation_timeout = 0.0) :

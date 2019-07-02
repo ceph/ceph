@@ -31,8 +31,8 @@
 #include <functional>
 
 
-using ClientId = uint;
-using ServerId = uint;
+using ClientId = unsigned;
+using ServerId = unsigned;
 
 
 namespace crimson {

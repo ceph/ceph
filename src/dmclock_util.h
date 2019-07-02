@@ -52,7 +52,7 @@ namespace crimson {
 #endif
     }
 
-    std::string format_time(const Time& time, uint modulo = 1000);
+    std::string format_time(const Time& time, unsigned modulo = 1000);
 
     void debugger();
 

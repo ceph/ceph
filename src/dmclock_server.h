@@ -63,13 +63,13 @@ namespace crimson {
     constexpr double min_tag = std::numeric_limits<double>::is_iec559 ?
       -std::numeric_limits<double>::infinity() :
       std::numeric_limits<double>::lowest();
-    constexpr uint tag_modulo = 1000000;
+    constexpr unsigned tag_modulo = 1000000;
 
     constexpr auto standard_idle_age  = std::chrono::seconds(300);
     constexpr auto standard_erase_age = std::chrono::seconds(600);
     constexpr auto standard_check_time = std::chrono::seconds(60);
     constexpr auto aggressive_check_time = std::chrono::seconds(5);
-    constexpr uint standard_erase_max = 2000;
+    constexpr unsigned standard_erase_max = 2000;
 
     enum class AtLimit {
       // requests are delayed until the limit is restored
@@ -279,7 +279,7 @@ namespace crimson {
     //   recent values of rho and delta.
     // U1 determines whether to use client information function dynamically,
     // B is heap branching factor
-    template<typename C, typename R, bool IsDelayed, bool U1, uint B>
+    template<typename C, typename R, bool IsDelayed, bool U1, unsigned B>
     class PriorityQueueBase {
       // we don't want to include gtest.h just for FRIEND_TEST
       friend class dmclock_server_client_idle_erase_Test;
@@ -622,7 +622,7 @@ namespace crimson {
       }
 
 
-      uint get_heap_branching_factor() const {
+      unsigned get_heap_branching_factor() const {
 	return B;
       }
 
@@ -1273,7 +1273,7 @@ namespace crimson {
     }; // class PriorityQueueBase
 
 
-    template<typename C, typename R, bool IsDelayed=false, bool U1=false, uint B=2>
+    template<typename C, typename R, bool IsDelayed=false, bool U1=false, unsigned B=2>
     class PullPriorityQueue : public PriorityQueueBase<C,R,IsDelayed,U1,B> {
       using super = PriorityQueueBase<C,R,IsDelayed,U1,B>;
 
@@ -1499,7 +1499,7 @@ namespace crimson {
 
 
     // PUSH version
-    template<typename C, typename R, bool IsDelayed=false, bool U1=false, uint B=2>
+    template<typename C, typename R, bool IsDelayed=false, bool U1=false, unsigned B=2>
     class PushPriorityQueue : public PriorityQueueBase<C,R,IsDelayed,U1,B> {
 
     protected:
@@ -1668,7 +1668,7 @@ namespace crimson {
       template<typename C1,
 	       IndIntruHeapData super::ClientRec::*C2,
 	       typename C3,
-	       uint B4>
+	       unsigned B4>
       typename super::RequestMeta
       submit_top_request(IndIntruHeap<C1,typename super::ClientRec,C2,C3,B4>& heap,
 			 PhaseType phase) {

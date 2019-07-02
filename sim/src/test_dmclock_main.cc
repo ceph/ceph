@@ -77,33 +77,33 @@ int main(int argc, char* argv[]) {
     cli_group.push_back(ct2);
   }
 
-  const uint server_groups = g_conf.server_groups;
-  const uint client_groups = g_conf.client_groups;
+  const unsigned server_groups = g_conf.server_groups;
+  const unsigned client_groups = g_conf.client_groups;
   const bool server_random_selection = g_conf.server_random_selection;
   const bool server_soft_limit = g_conf.server_soft_limit;
   const double anticipation_timeout = g_conf.anticipation_timeout;
-  uint server_total_count = 0;
-  uint client_total_count = 0;
+  unsigned server_total_count = 0;
+  unsigned client_total_count = 0;
 
-  for (uint i = 0; i < client_groups; ++i) {
+  for (unsigned i = 0; i < client_groups; ++i) {
     client_total_count += cli_group[i].client_count;
   }
 
-  for (uint i = 0; i < server_groups; ++i) {
+  for (unsigned i = 0; i < server_groups; ++i) {
     server_total_count += srv_group[i].server_count;
   }
 
   std::vector<test::dmc::ClientInfo> client_info;
-  for (uint i = 0; i < client_groups; ++i) {
+  for (unsigned i = 0; i < client_groups; ++i) {
     client_info.push_back(test::dmc::ClientInfo
 			  { cli_group[i].client_reservation,
 			      cli_group[i].client_weight,
 			      cli_group[i].client_limit } );
   }
 
-  auto ret_client_group_f = [&](const ClientId& c) -> uint {
-    uint group_max = 0;
-    uint i = 0;
+  auto ret_client_group_f = [&](const ClientId& c) -> unsigned {
+    unsigned group_max = 0;
+    unsigned i = 0;
     for (; i < client_groups; ++i) {
       group_max += cli_group[i].client_count;
       if (c < group_max) {
@@ -113,9 +113,9 @@ int main(int argc, char* argv[]) {
     return i;
   };
 
-  auto ret_server_group_f = [&](const ServerId& s) -> uint {
-    uint group_max = 0;
-    uint i = 0;
+  auto ret_server_group_f = [&](const ServerId& s) -> unsigned {
+    unsigned group_max = 0;
+    unsigned i = 0;
     for (; i < server_groups; ++i) {
       group_max += srv_group[i].server_count;
       if (s < group_max) {
@@ -156,7 +156,7 @@ int main(int argc, char* argv[]) {
   };
 
   std::vector<std::vector<sim::CliInst>> cli_inst;
-  for (uint i = 0; i < client_groups; ++i) {
+  for (unsigned i = 0; i < client_groups; ++i) {
     if (cli_group[i].client_wait == std::chrono::seconds(0)) {
       cli_inst.push_back(
 	{ { sim::req_op,
@@ -199,7 +199,7 @@ int main(int argc, char* argv[]) {
 
 
   auto create_server_f = [&](ServerId id) -> test::DmcServer* {
-    uint i = ret_server_group_f(id);
+    unsigned i = ret_server_group_f(id);
     return new test::DmcServer(id,
 			       srv_group[i].server_iops,
 			       srv_group[i].server_threads,
@@ -209,9 +209,9 @@ int main(int argc, char* argv[]) {
   };
 
   auto create_client_f = [&](ClientId id) -> test::DmcClient* {
-    uint i = ret_client_group_f(id);
+    unsigned i = ret_client_group_f(id);
     test::MySim::ClientBasedServerSelectFunc server_select_f;
-    uint client_server_select_range = cli_group[i].client_server_select_range;
+    unsigned client_server_select_range = cli_group[i].client_server_select_range;
     if (!server_random_selection) {
       server_select_f = simulation->make_server_select_alt_range(client_server_select_range);
     } else {
@@ -226,11 +226,11 @@ int main(int argc, char* argv[]) {
 
 #if 1
   std::cout << "[global]" << std::endl << g_conf << std::endl;
-  for (uint i = 0; i < client_groups; ++i) {
+  for (unsigned i = 0; i < client_groups; ++i) {
     std::cout << std::endl << "[client." << i << "]" << std::endl;
     std::cout << cli_group[i] << std::endl;
   }
-  for (uint i = 0; i < server_groups; ++i) {
+  for (unsigned i = 0; i < server_groups; ++i) {
     std::cout << std::endl << "[server." << i << "]" << std::endl;
     std::cout << srv_group[i] << std::endl;
   }
@@ -258,7 +258,7 @@ void test::client_data(std::ostream& out,
 
   int total_r = 0;
   out << std::setw(head_w) << "res_ops:";
-  for (uint i = 0; i < sim->get_client_count(); ++i) {
+  for (unsigned i = 0; i < sim->get_client_count(); ++i) {
     const auto& client = sim->get_client(i);
     auto r = client.get_accumulator().reservation_count;
     total_r += r;
@@ -270,7 +270,7 @@ void test::client_data(std::ostream& out,
 
   int total_p = 0;
   out << std::setw(head_w) << "prop_ops:";
-  for (uint i = 0; i < sim->get_client_count(); ++i) {
+  for (unsigned i = 0; i < sim->get_client_count(); ++i) {
     const auto& client = sim->get_client(i);
     auto p = client.get_accumulator().proportion_count;
     total_p += p;
@@ -288,7 +288,7 @@ void test::server_data(std::ostream& out,
 		       int head_w, int data_w, int data_prec) {
   out << std::setw(head_w) << "res_ops:";
   int total_r = 0;
-  for (uint i = 0; i < sim->get_server_count(); ++i) {
+  for (unsigned i = 0; i < sim->get_server_count(); ++i) {
     const auto& server = sim->get_server(i);
     auto rc = server.get_accumulator().reservation_count;
     total_r += rc;
@@ -300,7 +300,7 @@ void test::server_data(std::ostream& out,
 
   out << std::setw(head_w) << "prop_ops:";
   int total_p = 0;
-  for (uint i = 0; i < sim->get_server_count(); ++i) {
+  for (unsigned i = 0; i < sim->get_server_count(); ++i) {
     const auto& server = sim->get_server(i);
     auto pc = server.get_accumulator().proportion_count;
     total_p += pc;
@@ -318,7 +318,7 @@ void test::server_data(std::ostream& out,
 #ifdef PROFILE
   crimson::ProfileCombiner<std::chrono::nanoseconds> art_combiner;
   crimson::ProfileCombiner<std::chrono::nanoseconds> rct_combiner;
-  for (uint i = 0; i < sim->get_server_count(); ++i) {
+  for (unsigned i = 0; i < sim->get_server_count(); ++i) {
     const auto& q = sim->get_server(i).get_priority_queue();
     const auto& art = q.add_request_timer;
     art_combiner.combine(art);

@@ -663,7 +663,7 @@ TEST_F(HeapFixture1, shared_data) {
 
 TEST_F(HeapFixture1, iterator_basics) {
   {
-    uint count = 0;
+    unsigned count = 0;
     for(auto i = heap.begin(); i != heap.end(); ++i) {
       ++count;
     }
@@ -708,7 +708,7 @@ TEST_F(HeapFixture1, const_iterator_basics) {
   const auto& cheap = heap;
 
   {
-    uint count = 0;
+    unsigned count = 0;
     for(auto i = cheap.cbegin(); i != cheap.cend(); ++i) {
       ++count;
     }
