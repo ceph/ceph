@@ -210,8 +210,7 @@ endif()
 
 find_package(Backtrace)
 
-# remote block storage
-option(WITH_RBD "Remote block storage is here" ON)
+option(WITH_RBD "Enable RADOS Block Device related targets" ON)
 
 if(LINUX)
   find_package(udev REQUIRED)
@@ -312,11 +311,10 @@ option(WITH_LIBCEPHFS "libcephfs client library" ON)
 # key-value store
 option(WITH_KVS "Key value store is here" ON)
 
-# KERNEL remote block storage
-option(WITH_KRBD "Kernel Remote block storage is here" ON)
+option(WITH_KRBD "Enable Linux krbd support of 'rbd' utility" ON)
 
-if(WITH_KRBD AND WITHOUT_RBD)
-  message(FATAL_ERROR "Cannot have WITH_KRBD with WITH_RBD.")
+if(WITH_KRBD AND NOT WITH_RBD)
+  message(FATAL_ERROR "Cannot have WITH_KRBD without WITH_RBD.")
 endif()
 
 option(WITH_LEVELDB "LevelDB is here" ON)
