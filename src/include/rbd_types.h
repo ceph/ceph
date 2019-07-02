@@ -42,6 +42,7 @@
 #define RBD_DIRECTORY           "rbd_directory"
 #define RBD_INFO                "rbd_info"
 #define RBD_NAMESPACE           "rbd_namespace"
+#define RBD_TASK                "rbd_task"
 
 /*
  * rbd_children object in each pool contains omap entries
