@@ -20,17 +20,27 @@ export class BucketsPageHelper extends PageHelper {
     const getOwnerStr = `[value="${owner}"]`;
 
     // Enter in bucket name
-    element(by.id('bid')).click();
-    element(by.id('bid')).sendKeys(name);
+    element(by.id('bid'))
+      .clear()
+      .then(() => {
+        element(by.id('bid')).sendKeys(name);
+      });
 
     // Select bucket owner
-    element(by.id('owner')).click();
+    browser
+      .actions()
+      .mouseMove(element(by.id('owner')))
+      .click(); // click owner dropdown menu
     $(getOwnerStr).click();
     expect(element(by.id('owner')).getAttribute('class')).toContain('ng-valid');
 
     // Click the create button and wait for bucket to be made
-    element(by.cssContainingText('button', 'Create Bucket'))
+    const createButton = element(by.cssContainingText('button', 'Create Bucket'));
+    browser
+      .actions()
+      .mouseMove(createButton)
       .click()
+      .perform()
       .then(() => {
         browser.sleep(5000);
         this.navigateTo();
@@ -48,10 +58,17 @@ export class BucketsPageHelper extends PageHelper {
 
     expect(PageHelper.getBreadcrumbText()).toEqual('Edit');
 
-    element(by.id('owner')).click(); // click owner dropdown menu
+    browser
+      .actions()
+      .mouseMove(element(by.id('owner')))
+      .click(); // click owner dropdown menu
     $(getOwnerStr).click(); // select the new user
-    element(by.cssContainingText('button', 'Edit Bucket'))
+    const editButton = element(by.cssContainingText('button', 'Edit Bucket'));
+    browser
+      .actions()
+      .mouseMove(editButton)
       .click()
+      .perform()
       .then(() => {
         this.navigateTo();
         browser
