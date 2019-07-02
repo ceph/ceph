@@ -42,8 +42,8 @@ namespace crimson {
       using ClientMap = std::map<ClientId,TC*>;
       using ServerMap = std::map<ServerId,TS*>;
 
-      uint server_count = 0;
-      uint client_count = 0;
+      unsigned server_count = 0;
+      unsigned client_count = 0;
 
       ServerMap servers;
       ClientMap clients;
@@ -106,18 +106,18 @@ namespace crimson {
 	}
       }
 
-      uint get_client_count() const { return client_count; }
-      uint get_server_count() const { return server_count; }
+      unsigned get_client_count() const { return client_count; }
+      unsigned get_server_count() const { return server_count; }
       TC& get_client(ClientId id) { return *clients[id]; }
       TS& get_server(ServerId id) { return *servers[id]; }
-      const ServerId& get_server_id(uint index) const {
+      const ServerId& get_server_id(std::size_t index) const {
 	return server_ids[index];
       }
 
 
-      void add_servers(uint count,
+      void add_servers(unsigned count,
 		       std::function<TS*(ServerId)> create_server_f) {
-	uint i = server_count;
+	unsigned i = server_count;
 
 	// increment server_count before creating servers since they
 	// will start running immediately and may use the server_count
@@ -136,9 +136,9 @@ namespace crimson {
       }
 
 
-      void add_clients(uint count,
+      void add_clients(unsigned count,
 		       std::function<TC*(ClientId)> create_client_f) {
-	uint i = client_count;
+	unsigned i = client_count;
 
 	// increment client_count before creating clients since they
 	// will start running immediately and may use the client_count
@@ -311,7 +311,7 @@ namespace crimson {
 	uint32_t add_request_count = 0;
 	uint32_t request_complete_count = 0;
 
-	for (uint i = 0; i < get_server_count(); ++i) {
+	for (unsigned i = 0; i < get_server_count(); ++i) {
 	  const auto& server = get_server(i);
 	  const auto& is = server.get_internal_stats();
 	  add_request_time +=
@@ -357,7 +357,7 @@ namespace crimson {
 	uint32_t track_resp_count = 0;
 	uint32_t get_req_params_count = 0;
 
-	for (uint i = 0; i < get_client_count(); ++i) {
+	for (unsigned i = 0; i < get_client_count(); ++i) {
 	  const auto& client = get_client(i);
 	  const auto& is = client.get_internal_stats();
 	  track_resp_time +=
@@ -400,7 +400,7 @@ namespace crimson {
 
       const ServerId& server_select_alternate(uint64_t seed,
 					      uint16_t client_idx) {
-	uint index = (client_idx + seed) % server_count;
+	size_t index = (client_idx + seed) % server_count;
 	return server_ids[index];
       }
 
@@ -411,8 +411,8 @@ namespace crimson {
 	return [servers_per,this](uint64_t seed, uint16_t client_idx)
 	  -> const ServerId& {
 	  double factor = double(server_count) / client_count;
-	  uint offset = seed % servers_per;
-	  uint index = (uint(0.5 + client_idx * factor) + offset) % server_count;
+	  size_t offset = seed % servers_per;
+	  size_t index = (size_t(0.5 + client_idx * factor) + offset) % server_count;
 	  return server_ids[index];
 	};
       }
@@ -420,7 +420,7 @@ namespace crimson {
 
       // function to choose a server randomly
       const ServerId& server_select_random(uint64_t seed, uint16_t client_idx) {
-	uint index = prng() % server_count;
+	size_t index = prng() % server_count;
 	return server_ids[index];
       }
 
@@ -431,8 +431,8 @@ namespace crimson {
 	return [servers_per,this](uint64_t seed, uint16_t client_idx)
 	  -> const ServerId& {
 	  double factor = double(server_count) / client_count;
-	  uint offset = prng() % servers_per;
-	  uint index = (uint(0.5 + client_idx * factor) + offset) % server_count;
+	  size_t offset = prng() % servers_per;
+	  size_t index = (size_t(0.5 + client_idx * factor) + offset) % server_count;
 	  return server_ids[index];
 	};
       }

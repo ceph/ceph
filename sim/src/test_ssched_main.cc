@@ -49,18 +49,18 @@ using Cost = uint32_t;
 int main(int argc, char* argv[]) {
   // server params
 
-  const uint server_count = 100;
-  const uint server_iops = 40;
-  const uint server_threads = 1;
+  const unsigned server_count = 100;
+  const unsigned server_iops = 40;
+  const unsigned server_threads = 1;
 
   // client params
 
-  const uint client_total_ops = 1000;
-  const uint client_count = 100;
-  const uint client_server_select_range = 10;
-  const uint client_wait_count = 1;
-  const uint client_iops_goal = 50;
-  const uint client_outstanding_ops = 100;
+  const unsigned client_total_ops = 1000;
+  const unsigned client_count = 100;
+  const unsigned client_server_select_range = 10;
+  const unsigned client_wait_count = 1;
+  const unsigned client_iops_goal = 50;
+  const unsigned client_outstanding_ops = 100;
   const std::chrono::seconds client_wait(10);
 
   auto client_disp_filter = [=] (const ClientId& i) -> bool {
@@ -162,7 +162,7 @@ void test::server_data(std::ostream& out,
 		       int head_w, int data_w, int data_prec) {
   out << std::setw(head_w) << "requests:";
   int total_req = 0;
-  for (uint i = 0; i < sim->get_server_count(); ++i) {
+  for (unsigned i = 0; i < sim->get_server_count(); ++i) {
     const auto& server = sim->get_server(i);
     auto req_count = server.get_accumulator().request_count;
     total_req += req_count;
@@ -175,7 +175,7 @@ void test::server_data(std::ostream& out,
 #ifdef PROFILE
     crimson::ProfileCombiner<std::chrono::nanoseconds> art_combiner;
     crimson::ProfileCombiner<std::chrono::nanoseconds> rct_combiner;
-    for (uint i = 0; i < sim->get_server_count(); ++i) {
+    for (unsigned i = 0; i < sim->get_server_count(); ++i) {
       const auto& q = sim->get_server(i).get_priority_queue();
       const auto& art = q.add_request_timer;
       art_combiner.combine(art);

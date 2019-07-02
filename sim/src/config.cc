@@ -142,7 +142,7 @@ int crimson::qos_simulation::parse_config_file(const std::string &fname, sim_con
   if (!cf.read("global", "anticipation_timeout", val))
     g_conf.anticipation_timeout = stod(val);
 
-  for (uint i = 0; i < g_conf.server_groups; i++) {
+  for (unsigned i = 0; i < g_conf.server_groups; i++) {
     srv_group_t st;
     std::string section = "server." + std::to_string(i);
     if (!cf.read(section, "server_count", val))
@@ -154,7 +154,7 @@ int crimson::qos_simulation::parse_config_file(const std::string &fname, sim_con
     g_conf.srv_group.push_back(st);
   }
 
-  for (uint i = 0; i < g_conf.client_groups; i++) {
+  for (unsigned i = 0; i < g_conf.client_groups; i++) {
     cli_group_t ct;
     std::string section = "client." + std::to_string(i);
     if (!cf.read(section, "client_count", val))
