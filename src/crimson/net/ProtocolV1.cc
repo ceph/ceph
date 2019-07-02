@@ -321,7 +321,7 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
                                const entity_type_t& _peer_type)
 {
   ceph_assert(state == state_t::none);
-  logger().debug("{} trigger connecting, was {}", conn, static_cast<int>(state));
+  logger().trace("{} trigger connecting, was {}", conn, static_cast<int>(state));
   state = state_t::connecting;
   set_write_state(write_state_t::delay);
 
@@ -600,7 +600,7 @@ void ProtocolV1::start_accept(SocketFRef&& sock,
                               const entity_addr_t& _peer_addr)
 {
   ceph_assert(state == state_t::none);
-  logger().debug("{} trigger accepting, was {}",
+  logger().trace("{} trigger accepting, was {}",
                  conn, static_cast<int>(state));
   state = state_t::accepting;
   set_write_state(write_state_t::delay);
@@ -680,12 +680,12 @@ ceph::bufferlist ProtocolV1::do_sweep_messages(
   if (unlikely(require_keepalive)) {
     k.req.stamp = ceph::coarse_real_clock::to_ceph_timespec(
       ceph::coarse_real_clock::now());
-    logger().debug("{} write keepalive2 {}", conn, k.req.stamp.tv_sec);
+    logger().trace("{} write keepalive2 {}", conn, k.req.stamp.tv_sec);
     bl.append(create_static(k.req));
   }
 
   if (unlikely(_keepalive_ack.has_value())) {
-    logger().debug("{} write keepalive2 ack {}", conn, *_keepalive_ack);
+    logger().trace("{} write keepalive2 ack {}", conn, *_keepalive_ack);
     k.ack.stamp = ceph_timespec(*_keepalive_ack);
     bl.append(create_static(k.ack));
   }
@@ -733,7 +733,7 @@ seastar::future<> ProtocolV1::handle_keepalive2_ack()
     .then([this] (auto buf) {
       auto t = reinterpret_cast<const ceph_timespec*>(buf.get());
       k.ack_stamp = *t;
-      logger().debug("{} got keepalive2 ack {}", conn, t->tv_sec);
+      logger().trace("{} got keepalive2 ack {}", conn, t->tv_sec);
     });
 }
 
@@ -860,7 +860,7 @@ seastar::future<> ProtocolV1::handle_tags()
 
 void ProtocolV1::execute_open()
 {
-  logger().debug("{} trigger open, was {}", conn, static_cast<int>(state));
+  logger().trace("{} trigger open, was {}", conn, static_cast<int>(state));
   state = state_t::open;
   set_write_state(write_state_t::open);
 
@@ -897,7 +897,7 @@ void ProtocolV1::execute_open()
 
 void ProtocolV1::trigger_close()
 {
-  logger().debug("{} trigger closing, was {}",
+  logger().trace("{} trigger closing, was {}",
                  conn, static_cast<int>(state));
 
   if (state == state_t::accepting) {
