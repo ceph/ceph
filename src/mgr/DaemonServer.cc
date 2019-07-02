@@ -42,7 +42,14 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "mgr.server " << __func__ << " "
 
-
+namespace {
+  template <typename Map>
+  bool map_compare(Map const &lhs, Map const &rhs) {
+    return lhs.size() == rhs.size()
+      && std::equal(lhs.begin(), lhs.end(), rhs.begin(),
+                    [] (auto a, auto b) { return a.first == b.first && a.second == b.second; });
+  }
+}
 
 DaemonServer::DaemonServer(MonClient *monc_,
                            Finisher &finisher_,
@@ -457,13 +464,14 @@ bool DaemonServer::handle_open(MMgrOpen *m)
     std::lock_guard l(daemon->lock);
     daemon->perf_counters.clear();
 
+    daemon->service_daemon = m->service_daemon;
     if (m->service_daemon) {
       daemon->service_status = m->daemon_status;
 
       utime_t now = ceph_clock_now();
       auto d = pending_service_map.get_daemon(m->service_name,
 					      m->daemon_name);
-      if (d->gid != (uint64_t)m->get_source().num()) {
+      if (!d->gid || d->gid != (uint64_t)m->get_source().num()) {
 	dout(10) << "registering " << key << " in pending_service_map" << dendl;
 	d->gid = m->get_source().num();
 	d->addr = m->get_source_addr();
@@ -549,98 +557,114 @@ bool DaemonServer::handle_report(MMgrReport *m)
     return true;
   }
 
-  // Look up the DaemonState
-  DaemonStatePtr daemon;
-  if (daemon_state.exists(key)) {
-    dout(20) << "updating existing DaemonState for " << key << dendl;
-    daemon = daemon_state.get(key);
-  } else {
-    // we don't know the hostname at this stage, reject MMgrReport here.
-    dout(5) << "rejecting report from " << key << ", since we do not have its metadata now."
-	    << dendl;
 
-    // issue metadata request in background
-    if (!daemon_state.is_updating(key) && 
-	(key.first == "osd" || key.first == "mds" || key.first == "mon")) {
+  {
+    lock.lock();
 
-      std::ostringstream oss;
-      auto c = new MetadataUpdate(daemon_state, key);
-      if (key.first == "osd") {
-        oss << "{\"prefix\": \"osd metadata\", \"id\": "
-            << key.second<< "}";
+    DaemonStatePtr daemon;
+    // Look up the DaemonState
+    if (daemon_state.exists(key)) {
+      dout(20) << "updating existing DaemonState for " << key << dendl;
+      daemon = daemon_state.get(key);
+    } else {
+      lock.unlock();
 
-      } else if (key.first == "mds") {
-        c->set_default("addr", stringify(m->get_source_addr()));
-        oss << "{\"prefix\": \"mds metadata\", \"who\": \""
-            << key.second << "\"}";
+      // we don't know the hostname at this stage, reject MMgrReport here.
+      dout(5) << "rejecting report from " << key << ", since we do not have its metadata now."
+              << dendl;
+      // issue metadata request in background
+      if (!daemon_state.is_updating(key) && 
+          (key.first == "osd" || key.first == "mds" || key.first == "mon")) {
+
+        std::ostringstream oss;
+        auto c = new MetadataUpdate(daemon_state, key);
+        if (key.first == "osd") {
+          oss << "{\"prefix\": \"osd metadata\", \"id\": "
+              << key.second<< "}";
+
+        } else if (key.first == "mds") {
+          c->set_default("addr", stringify(m->get_source_addr()));
+          oss << "{\"prefix\": \"mds metadata\", \"who\": \""
+              << key.second << "\"}";
  
-      } else if (key.first == "mon") {
-        oss << "{\"prefix\": \"mon metadata\", \"id\": \""
-            << key.second << "\"}";
-      } else {
-	ceph_abort();
+        } else if (key.first == "mon") {
+          oss << "{\"prefix\": \"mon metadata\", \"id\": \""
+              << key.second << "\"}";
+        } else {
+          ceph_abort();
+        }
+
+        monc->start_mon_command({oss.str()}, {}, &c->outbl, &c->outs, c);
       }
 
-      monc->start_mon_command({oss.str()}, {}, &c->outbl, &c->outs, c);
-    }
-    
-    {
-      std::lock_guard l(lock);
+      lock.lock();
+
       // kill session
       auto priv = m->get_connection()->get_priv();
       auto session = static_cast<MgrSession*>(priv.get());
       if (!session) {
-	return false;
+        return false;
       }
       m->get_connection()->mark_down();
 
       dout(10) << "unregistering osd." << session->osd_id
-	       << "  session " << session << " con " << m->get_connection() << dendl;
+               << "  session " << session << " con " << m->get_connection() << dendl;
       
       if (osd_cons.find(session->osd_id) != osd_cons.end()) {
-	   osd_cons[session->osd_id].erase(m->get_connection());
-      } 
+        osd_cons[session->osd_id].erase(m->get_connection());
+      }
 
       auto iter = daemon_connections.find(m->get_connection());
       if (iter != daemon_connections.end()) {
-	daemon_connections.erase(iter);
+        daemon_connections.erase(iter);
+      }
+
+      lock.unlock();
+      return false;
+    }
+
+    // Update the DaemonState
+    ceph_assert(daemon != nullptr);
+    {
+      std::lock_guard l(daemon->lock);
+      auto &daemon_counters = daemon->perf_counters;
+      daemon_counters.update(m);
+
+      auto p = m->config_bl.cbegin();
+      if (p != m->config_bl.end()) {
+        decode(daemon->config, p);
+        decode(daemon->ignored_mon_config, p);
+        dout(20) << " got config " << daemon->config
+                 << " ignored " << daemon->ignored_mon_config << dendl;
+      }
+
+      if (daemon->service_daemon) {
+        utime_t now = ceph_clock_now();
+        if (m->daemon_status) {
+          daemon->service_status_stamp = now;
+          daemon->service_status = *m->daemon_status;
+        }
+        if (m->task_status && !map_compare(daemon->task_status, *m->task_status)) {
+          auto d = pending_service_map.get_daemon(m->service_name, m->daemon_name);
+          if (d->gid) {
+            daemon->task_status = *m->task_status;
+            d->task_status = *m->task_status;
+            pending_service_map_dirty = pending_service_map.epoch;
+          }
+        }
+        daemon->last_service_beacon = now;
+      } else if (m->daemon_status) {
+        derr << "got status from non-daemon " << key << dendl;
+      }
+      if (m->get_connection()->peer_is_osd() || m->get_connection()->peer_is_mon()) {
+        // only OSD and MON send health_checks to me now
+        daemon->daemon_health_metrics = std::move(m->daemon_health_metrics);
+        dout(10) << "daemon_health_metrics " << daemon->daemon_health_metrics
+                 << dendl;
       }
     }
 
-    return false;
-  }
-
-  // Update the DaemonState
-  ceph_assert(daemon != nullptr);
-  {
-    std::lock_guard l(daemon->lock);
-    auto &daemon_counters = daemon->perf_counters;
-    daemon_counters.update(m);
-
-    auto p = m->config_bl.cbegin();
-    if (p != m->config_bl.end()) {
-      decode(daemon->config, p);
-      decode(daemon->ignored_mon_config, p);
-      dout(20) << " got config " << daemon->config
-	       << " ignored " << daemon->ignored_mon_config << dendl;
-    }
-
-    if (daemon->service_daemon) {
-      utime_t now = ceph_clock_now();
-      if (m->daemon_status) {
-        daemon->service_status = *m->daemon_status;
-        daemon->service_status_stamp = now;
-      }
-      daemon->last_service_beacon = now;
-    } else if (m->daemon_status) {
-      derr << "got status from non-daemon " << key << dendl;
-    }
-    if (m->get_connection()->peer_is_osd() || m->get_connection()->peer_is_mon()) {
-      // only OSD and MON send health_checks to me now
-      daemon->daemon_health_metrics = std::move(m->daemon_health_metrics);
-      dout(10) << "daemon_health_metrics " << daemon->daemon_health_metrics
-	       << dendl;
-    }
+    lock.unlock();
   }
 
   // if there are any schema updates, notify the python modules

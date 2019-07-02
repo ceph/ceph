@@ -9,23 +9,27 @@
 
 void ServiceMap::Daemon::encode(bufferlist& bl, uint64_t features) const
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode(gid, bl);
   encode(addr, bl, features);
   encode(start_epoch, bl);
   encode(start_stamp, bl);
   encode(metadata, bl);
+  encode(task_status, bl);
   ENCODE_FINISH(bl);
 }
 
 void ServiceMap::Daemon::decode(bufferlist::const_iterator& p)
 {
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   decode(gid, p);
   decode(addr, p);
   decode(start_epoch, p);
   decode(start_stamp, p);
   decode(metadata, p);
+  if (struct_v >= 2) {
+    decode(task_status, p);
+  }
   DECODE_FINISH(p);
 }
 
@@ -33,10 +37,15 @@ void ServiceMap::Daemon::dump(Formatter *f) const
 {
   f->dump_unsigned("start_epoch", start_epoch);
   f->dump_stream("start_stamp") << start_stamp;
-  f->dump_unsigned("gid", gid);
+  f->dump_unsigned("gid", *gid);
   f->dump_string("addr", addr.get_legacy_str());
   f->open_object_section("metadata");
   for (auto& p : metadata) {
+    f->dump_string(p.first.c_str(), p.second);
+  }
+  f->close_section();
+  f->open_object_section("task_status");
+  for (auto& p : task_status) {
     f->dump_string(p.first.c_str(), p.second);
   }
   f->close_section();
@@ -48,6 +57,7 @@ void ServiceMap::Daemon::generate_test_instances(std::list<Daemon*>& ls)
   ls.push_back(new Daemon);
   ls.back()->gid = 222;
   ls.back()->metadata["this"] = "that";
+  ls.back()->task_status["task1"] = "running";
 }
 
 // Service

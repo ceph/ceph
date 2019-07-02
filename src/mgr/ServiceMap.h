@@ -12,17 +12,20 @@
 #include "include/buffer.h"
 #include "msg/msg_types.h"
 
+#include <boost/optional.hpp>
+
 namespace ceph {
   class Formatter;
 }
 
 struct ServiceMap {
   struct Daemon {
-    uint64_t gid = 0;
+    boost::optional<uint64_t> gid;
     entity_addr_t addr;
     epoch_t start_epoch = 0;   ///< epoch first registered
     utime_t start_stamp;       ///< timestamp daemon started/registered
     std::map<std::string,std::string> metadata;  ///< static metadata
+    std::map<std::string,std::string> task_status; ///< running task status
 
     void encode(bufferlist& bl, uint64_t features) const;
     void decode(bufferlist::const_iterator& p);
@@ -64,7 +67,34 @@ struct ServiceMap {
       return ss.str();
     }
 
-    void count_metadata(const string& field,
+    std::string get_task_summary(const std::string_view task_prefix) const {
+      // contruct a map similar to:
+      //     {"service1 status" -> {"service1.0" -> "running"}}
+      //     {"service2 status" -> {"service2.0" -> "idle"},
+      //                           {"service2.1" -> "running"}}
+      std::map<std::string, std::map<std::string, std::string>> by_task;
+      for (const auto &p : daemons) {
+        std::stringstream d;
+        d << task_prefix << "." << p.first;
+        for (const auto &q : p.second.task_status) {
+          auto p1 = by_task.emplace(q.first, std::map<std::string, std::string>{}).first;
+          auto p2 = p1->second.emplace(d.str(), std::string()).first;
+          p2->second = q.second;
+        }
+      }
+
+      std::stringstream ss;
+      for (const auto &p : by_task) {
+        ss << "\n    " << p.first << ":";
+        for (auto q : p.second) {
+          ss << "\n        " << q.first << ": " << q.second;
+        }
+      }
+
+      return ss.str();
+    }
+
+    void count_metadata(const std::string& field,
 			std::map<std::string,int> *out) const {
       for (auto& p : daemons) {
 	auto q = p.second.metadata.find(field);

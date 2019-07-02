@@ -147,6 +147,7 @@ class DaemonState
   bool service_daemon = false;
   utime_t service_status_stamp;
   std::map<std::string, std::string> service_status;
+  std::map<std::string, std::string> task_status;
   utime_t last_service_beacon;
 
   // running config

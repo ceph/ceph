@@ -3010,8 +3010,29 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
       osdmon()->osdmap.print_summary(NULL, ss, string(maxlen + 6, ' '));
       ss << "\n";
       for (auto& p : service_map.services) {
+        const std::string &service = p.first;
+        // filter out normal ceph entity types
+        if (service == "osd" ||
+            service == "client" ||
+            service == "mon" ||
+            service == "mds" ||
+            service == "mgr") {
+          continue;
+        }
 	ss << "    " << p.first << ": " << string(maxlen - p.first.size(), ' ')
 	   << p.second.get_summary() << "\n";
+      }
+    }
+
+    {
+      auto& service_map = mgrstatmon()->get_service_map();
+      if (!service_map.services.empty()) {
+        ss << "\n \n  task status:\n";
+        {
+          for (auto &p : service_map.services) {
+            ss << p.second.get_task_summary(p.first);
+          }
+        }
       }
     }
 

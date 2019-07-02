@@ -87,9 +87,11 @@ protected:
   // for service registration and beacon
   bool service_daemon = false;
   bool daemon_dirty_status = false;
+  bool task_dirty_status = false;
   std::string service_name, daemon_name;
   std::map<std::string,std::string> daemon_metadata;
   std::map<std::string,std::string> daemon_status;
+  std::map<std::string,std::string> task_status;
   std::vector<DaemonHealthMetric> daemon_health_metrics;
 
   void reconnect();
@@ -147,6 +149,8 @@ public:
     const std::map<std::string,std::string>& metadata);
   int service_daemon_update_status(
     std::map<std::string,std::string>&& status);
+  int service_daemon_update_task_status(
+    std::map<std::string,std::string> &&task_status);
   void update_daemon_health(std::vector<DaemonHealthMetric>&& metrics);
 
 private:
