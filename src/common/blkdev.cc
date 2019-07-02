@@ -698,8 +698,10 @@ static int block_device_run_smartctl(const string& devname, int timeout,
     *result = output.to_str();
   }
 
-  if (smartctl.join() != 0) {
-    *result = std::string("smartctl returned an error:") + smartctl.err();
+  int joinerr = smartctl.join();
+  if (joinerr) {
+    *result = std::string("smartctl returned an error (") + stringify(joinerr) +
+      "): stderr:\n") + smartctl.err() + "\nstdout:\n" + *result;
     return -EINVAL;
   }
 
