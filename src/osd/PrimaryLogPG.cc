@@ -9401,6 +9401,9 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
   obs.oi.truncate_seq = cb->results->truncate_seq;
   obs.oi.truncate_size = cb->results->truncate_size;
 
+  obs.oi.mtime = ceph::real_clock::to_timespec(cb->results->mtime);
+  ctx->mtime = utime_t();
+
   ctx->extra_reqids = cb->results->reqids;
   ctx->extra_reqid_return_codes = cb->results->reqid_return_codes;
 
@@ -9589,6 +9592,8 @@ void PrimaryLogPG::finish_promote(int r, CopyResults *results,
     }
     tctx->new_obs.oi.size = results->object_size;
     tctx->new_obs.oi.user_version = results->user_version;
+    tctx->new_obs.oi.mtime = ceph::real_clock::to_timespec(results->mtime);
+    tctx->mtime = utime_t();
     if (results->is_data_digest()) {
       tctx->new_obs.oi.set_data_digest(results->data_digest);
     } else {
