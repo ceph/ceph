@@ -17,10 +17,7 @@ export class BucketsPageHelper extends PageHelper {
     expect(PageHelper.getTitleText()).toBe('Create Bucket');
 
     // Need the string '[value="<owner>"]' to find the owner in dropdown menu
-    const str1 = '[value="';
-    const str2 = '"]';
-    const str3 = str1.concat(owner);
-    const getOwnerStr = str3.concat(str2);
+    const getOwnerStr = `[value="${owner}"]`;
 
     // Enter in bucket name
     element(by.id('bid')).click();
@@ -47,10 +44,7 @@ export class BucketsPageHelper extends PageHelper {
     browser.get(edit_url);
 
     // Need the string '[value="<owner>"]' to find the new owner in dropdown menu
-    const str1 = '[value="';
-    const str2 = '"]';
-    const str3 = str1.concat(new_owner);
-    const getOwnerStr = str3.concat(str2);
+    const getOwnerStr = `[value="${new_owner}"]`;
 
     expect(PageHelper.getBreadcrumbText()).toEqual('Edit');
 
