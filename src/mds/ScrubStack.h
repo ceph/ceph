@@ -126,6 +126,12 @@ public:
    */
   void scrub_status(Formatter *f);
 
+  /**
+   * Get a high level scrub status summary such as current scrub state
+   * and scrub paths.
+   */
+  std::string_view scrub_summary();
+
 private:
   // scrub abort is _not_ a state, rather it's an operation that's
   // performed after in-progress scrubs are finished.
