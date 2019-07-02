@@ -118,7 +118,6 @@ export class BucketsPageHelper extends PageHelper {
      .maximize();
    const nameBox = element(by.id('bid')); // Grabs name box field
 
-
    // Clears input field and then puts an invalid input, then has a wait function
    // to verify that the error pops up
    nameBox.clear().then(() => {
