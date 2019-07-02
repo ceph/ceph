@@ -29,6 +29,7 @@ using namespace std;
 #include "msg/Messenger.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
+#include "auth/DummyAuth.h"
 
 class ServerDispatcher : public Dispatcher {
   uint64_t think_time;
@@ -109,12 +110,16 @@ class MessengerServer {
   string type;
   string bindaddr;
   ServerDispatcher dispatcher;
+  DummyAuthClientServer dummy_auth;
 
  public:
   MessengerServer(const string &t, const string &addr, int threads, int delay):
-      msgr(NULL), type(t), bindaddr(addr), dispatcher(threads, delay) {
+      msgr(NULL), type(t), bindaddr(addr), dispatcher(threads, delay),
+      dummy_auth(g_ceph_context) {
     msgr = Messenger::create(g_ceph_context, type, entity_name_t::OSD(0), "server", 0, 0);
     msgr->set_default_policy(Messenger::Policy::stateless_server(0));
+    dummy_auth.auth_registry.refresh_config();
+      msgr->set_auth_server(&dummy_auth);
   }
   ~MessengerServer() {
     msgr->shutdown();
