@@ -185,7 +185,7 @@ Note::
    `protractor.conf.js` to point to the appropriate destination.
 
 Making code reuseable
-"""""""""""""""""""""
+~~~~~~~~~~~~~~~~~~~~~
 
 In order to make some code reuseable, you just need to put it in a derived
 class of the ``PageHelper``. If you create a new class derived from the
