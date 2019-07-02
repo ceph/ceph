@@ -42,6 +42,93 @@ static void slow_discard_cb(void *priv, void* priv2) {
   bluefs->handle_discard(BlueFS::BDEV_SLOW, *tmp);
 }
 
+class BlueFS::SocketHook : public AdminSocketHook {
+  BlueFS *bluefs;
+public:
+  explicit SocketHook(BlueFS *m) : bluefs(m) {}
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+            std::string_view format, bufferlist& out) override {
+    stringstream ss;
+    bool r = true;
+    if (command == "bluefs files move") {
+      string file_name;
+      cmd_getval(g_ceph_context, cmdmap, "file", file_name);
+      string device;
+      cmd_getval(g_ceph_context, cmdmap, "device", device);
+      //command_tag_path(f, path, tag);
+      //bluefs->consider_move();
+      int8_t dev_id = -1;
+      if (device == "wal") {
+        dev_id = BDEV_WAL;
+      } else if (device == "db") {
+        dev_id = BDEV_DB;
+      } else if (device == "slow") {
+        dev_id = BDEV_SLOW;
+      } else {
+        ss << "Invalid bdev; expected 'wal'/'db'/'slow'" << std::endl;
+      }
+      if (dev_id != -1) {
+        FileRef file;
+        {
+          std::lock_guard l(bluefs->lock);
+          //bluefs->lock.lock()
+          for (auto &d : bluefs->dir_map) {
+            std::string dir = d.first;
+            for (auto &r : d.second->file_map) {
+              if (file_name == dir + "/" + r.first) {
+                file = r.second;
+
+              }
+            }
+          }
+        }
+        if (file)
+          bluefs->file_move_start(file, dev_id);
+      }
+    } else if (command == "bluefs files list") {
+      Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
+
+      std::lock_guard l(bluefs->lock);
+      f->open_array_section("files");
+      for (auto &d : bluefs->dir_map) {
+        std::string dir = d.first;
+        for (auto &r : d.second->file_map) {
+          f->open_object_section("file");
+          f->dump_string("name", (dir + "/" + r.first).c_str());
+          std::vector<size_t> sizes;
+          sizes.resize(bluefs->bdev.size());
+          for(auto& i : r.second->fnode.extents) {
+            sizes[i.bdev] += i.length;
+          }
+          for (size_t i=0; i<sizes.size(); i++) {
+            if (sizes[i]>0)
+              f->dump_string(("dev-"+to_string(i)).c_str(), to_string(sizes[i]).c_str());
+          }
+//          f->dump_string("name", r.first.c_str());
+          //f->dump_string("refs", to_string(r.second->refs));
+          //f->dump_string("locked", to_string(r.second->locked));
+          //f->dump_string("deleted", to_string(r.second->deleted));
+          //f->dump_string("readers", to_string(r.second->num_readers.load()));
+          //f->dump_string("writers", to_string(r.second->num_writers.load()));
+          f->close_section();
+        }
+      }
+      f->close_section();
+      f->flush(ss);
+      delete f;
+    } else {
+      ss << "Invalid command" << std::endl;
+      r = false;
+    }
+    //bool r = mds->asok_command(command, cmdmap, format, ss);
+
+    out.append(ss);
+    return r;
+  }
+};
+
+
+
 BlueFS::BlueFS(CephContext* cct)
   : cct(cct),
     bdev(MAX_BDEV),
@@ -51,10 +138,32 @@ BlueFS::BlueFS(CephContext* cct)
   discard_cb[BDEV_WAL] = wal_discard_cb;
   discard_cb[BDEV_DB] = db_discard_cb;
   discard_cb[BDEV_SLOW] = slow_discard_cb;
+  AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+  assert(asok_hook == nullptr);
+  asok_hook = new SocketHook(this);
+
+  int r = admin_socket->register_command("bluefs files move",
+                                         "bluefs files move"
+                                         " name=file,type=CephString"
+                                         " name=device,type=CephString",
+                                         asok_hook,
+                                         "move bluefs file");
+  assert(r == 0);
+  r = admin_socket->register_command("bluefs files list", "bluefs files list", asok_hook,
+                                     "print files in bluefs");
+  assert(r == 0);
+
 }
 
 BlueFS::~BlueFS()
 {
+  AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+  admin_socket->unregister_command("bluefs files move");
+  admin_socket->unregister_command("bluefs files list");
+
+  delete asok_hook;
+  asok_hook = nullptr;
+
   for (auto p : ioc) {
     if (p)
       p->aio_wait();
@@ -192,7 +301,7 @@ int BlueFS::add_block_device(unsigned id, const string& path, bool trim,
   dout(10) << __func__ << " bdev " << id << " path " << path << dendl;
   ceph_assert(id < bdev.size());
   ceph_assert(bdev[id] == NULL);
-  BlockDevice *b = BlockDevice::create(cct, path, NULL, NULL,
+  BlockDevice *b = BlockDevice::create(cct, path, aio_cb, static_cast<void*>(this),
 				       discard_cb[id], static_cast<void*>(this));
   if (shared_with_bluestore) {
     b->set_no_exclusive_lock();
@@ -1333,7 +1442,8 @@ void BlueFS::_drop_link(FileRef file)
   --file->refs;
   if (file->refs == 0) {
     dout(20) << __func__ << " destroying " << file->fnode << dendl;
-    ceph_assert(file->num_reading.load() == 0);
+    ceph_assert(file->num_reading.try_lock() == true);
+    file->num_reading.unlock();
     log_t.op_file_remove(file->fnode.ino);
     for (auto& r : file->fnode.extents) {
       pending_release[r.bdev].insert(r.offset, r.length);
@@ -1364,7 +1474,7 @@ int BlueFS::_read_random(
            << " 0x" << std::hex << off << "~" << len << std::dec
 	   << " from " << h->file->fnode << dendl;
 
-  ++h->file->num_reading;
+  h->file->num_reading.lock_shared();
 
   if (!h->ignore_eof &&
       off + len > h->file->fnode.size) {
@@ -1430,7 +1540,7 @@ int BlueFS::_read_random(
     }
   }
   dout(20) << __func__ << " got " << ret << dendl;
-  --h->file->num_reading;
+  h->file->num_reading.unlock_shared();
   return ret;
 }
 
@@ -1449,7 +1559,7 @@ int BlueFS::_read(
 	   << (prefetch ? " prefetch" : "")
 	   << dendl;
 
-  ++h->file->num_reading;
+  h->file->num_reading.lock_shared();
 
   if (!h->ignore_eof &&
       off + len > h->file->fnode.size) {
@@ -1530,7 +1640,7 @@ int BlueFS::_read(
 
   dout(20) << __func__ << " got " << ret << dendl;
   ceph_assert(!outbl || (int)outbl->length() == ret);
-  --h->file->num_reading;
+  h->file->num_reading.unlock_shared();
   return ret;
 }
 
@@ -3021,4 +3131,178 @@ bool BlueFS::wal_is_rotational()
     return bdev[BDEV_DB]->is_rotational();
   }
   return bdev[BDEV_SLOW]->is_rotational();
+}
+
+void BlueFS::consider_move()
+{
+  //if currently moving something, ignore
+  
+}
+
+//1. Create target extents, allocate on target device
+//2. Copy from f->extents to extents
+//3. If f is still existing swap f->extents and extents
+//4. Free extents
+
+BlueFS::AioMoveFileContext::AioMoveFileContext(BlueFS* bfs)
+  : bluefs(bfs),
+    ioc(bfs->cct, this, true)
+{
+}
+
+
+BlueFS::AioMoveFileContext* BlueFS::file_move_start(FileRef f, unsigned target_device)
+{
+  dout(10) << "rebalance " << __func__ << "file ino=" << f->fnode.ino << dendl;
+
+  PExtentVector temp_extents;
+  std::unique_lock l(lock);
+  ceph_assert(target_device < alloc.size());
+  ceph_assert(alloc[target_device]);
+  uint64_t need = f->fnode.size;
+  int r = _allocate_without_fallback(target_device,
+                             need,
+                             &temp_extents);
+  if (r != 0) {
+    //skip copying file
+    alloc[target_device]->release(temp_extents);
+    return nullptr;
+  }
+
+  AioMoveFileContext* c = new AioMoveFileContext(this);
+  c->source = f;
+  c->source_it = c->source->fnode.extents.begin();
+  c->source_offset = 0;
+  for (auto& i:temp_extents) {
+    c->target.emplace_back(target_device, i.offset, i.length);
+  }
+  c->target_it = c->target.begin();
+  c->target_offset = 0;
+  //bootup copying
+  aio_read_chunk(c);
+  return c;
+}
+
+void BlueFS::file_move_finished(AioMoveFileContext* c)
+{
+  dout(10) << "rebalance " << __func__ << "move finished file ino=" <<
+      c->source->fnode.ino << " result=" << c->result << dendl;
+  if (c->result) {
+    {
+      std::lock_guard l(lock);
+      if (c->source->num_reading.try_lock()) {
+        if (c->source->num_writers == 0) {
+          //std::swap(c->source->fnode.extents, c->target);
+          //c->source->fnode.recalc_allocated();
+        }
+        c->source->num_reading.unlock();
+      }
+      //sync file state
+      //log_t.op_file_update(c->source->fnode);
+      //mark now unneeded chunks for deallocation
+      for (auto& p : c->target) {
+        pending_release[p.bdev].insert(p.offset, p.length);
+      }
+    }
+    //sync_metadata();
+  } else {
+    //failure
+  }
+  delete c;
+  //try trigger move continuation
+}
+
+
+//requires that aio reading is not commencing right now
+void BlueFS::aio_read_chunk(AioMoveFileContext* c)
+{
+  dout(30) << "rebalance " << __func__ << dendl;
+  ceph_assert(c->read_bl.length() == 0);
+  uint64_t length = c->source_it->length - c->source_offset;
+  if (length > 10 * 1024 * 1024)
+    length = 10 * 1024 * 1024;
+
+  c->state = BlueFS::AioMoveFileContext::reading;
+  uint8_t dev = c->source_it->bdev;
+  int r = bdev[dev]->aio_read(
+    c->source_it->offset + c->source_offset, length, &c->read_bl, &c->ioc);
+  c->source_offset += length;
+  if (c->source_it->length == c->source_offset) {
+    c->source_it++;
+    c->source_offset = 0;
+  }
+  dout(20) << "rebalance " << __func__ << " requesting length=" << length << dendl;
+  if (r < 0) {
+    c->result = false;
+    file_move_finished(c);
+  }
+  bdev[dev]->aio_submit(&c->ioc);
+}
+
+void BlueFS::aio_write_chunk(AioMoveFileContext* c)
+{
+  dout(30) << "rebalance " << __func__ << " read_bl.length()=" << c->read_bl.length() << dendl;
+  ceph_assert(c->read_bl.length() > 0);
+  c->state = BlueFS::AioMoveFileContext::writing;
+
+  uint64_t length = std::min<uint64_t>(
+      c->target_it->length - c->target_offset,
+      c->read_bl.length());
+  //if (length> 30 * 1024) length = 32 * 1024;
+  //cut _length_ from read_bl to write_bl
+  ceph_assert(c->write_bl.length() == 0);
+  c->read_bl.splice(0, length, &c->write_bl);
+  ceph_assert(c->write_bl.length() > 0);
+  uint8_t dev = c->target_it->bdev;
+  int r = bdev[dev]->aio_write(c->target_it->offset + c->target_offset, c->write_bl, &c->ioc, false);
+  c->target_offset += length;
+  if (c->target_it->length == c->target_offset) {
+    c->target_it++;
+    c->target_offset = 0;
+  }
+  dout(20) << "rebalance " << __func__ << " requesting length=" << length << dendl;
+  if (r < 0) {
+    c->result = false;
+    file_move_finished(c);
+  }
+  bdev[dev]->aio_submit(&c->ioc);
+}
+
+
+void BlueFS::aio_cb(void *v_bluefs, void *v_aio)
+{
+  BlueFS *bluefs = static_cast<BlueFS*>(v_bluefs);
+  BlueFS::AioMoveFileContext *c = static_cast<BlueFS::AioMoveFileContext*>(v_aio);
+  bluefs->aio_cb(c);
+}
+
+void BlueFS::aio_cb(AioMoveFileContext* c)
+{
+  dout(30) << "rebalance " << __func__ << " state=" << c->state << dendl;
+  switch (c->state) {
+    case BlueFS::AioMoveFileContext::reading:
+    {
+      aio_write_chunk(c);
+      break;
+    }
+    case BlueFS::AioMoveFileContext::writing:
+    {
+      if (c->read_bl.length() > 0) {
+        //there is still something to write
+        aio_write_chunk(c);
+      } else {
+        if (c->source_it != c->source->fnode.extents.end()) {
+          //there is more data to fetch
+          aio_read_chunk(c);
+        } else {
+          //copy data successfull
+          file_move_finished(c);
+        }
+      }
+      break;
+    }
+    case BlueFS::AioMoveFileContext::idle:
+      ceph_assert(false);
+      break;
+  };
 }

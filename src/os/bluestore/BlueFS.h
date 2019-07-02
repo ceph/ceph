@@ -9,6 +9,7 @@
 #include "bluefs_types.h"
 #include "common/RefCountedObj.h"
 #include "BlockDevice.h"
+#include "common/admin_socket.h"
 
 #include "boost/intrusive/list.hpp"
 #include <boost/intrusive_ptr.hpp>
@@ -92,7 +93,7 @@ public:
     boost::intrusive::list_member_hook<> dirty_item;
 
     std::atomic_int num_readers, num_writers;
-    std::atomic_int num_reading;
+    shared_mutex num_reading;
 
     File()
       : RefCountedObject(NULL, 0),
@@ -101,13 +102,13 @@ public:
 	locked(false),
 	deleted(false),
 	num_readers(0),
-	num_writers(0),
-	num_reading(0)
+	num_writers(0)
       {}
     ~File() override {
       ceph_assert(num_readers.load() == 0);
       ceph_assert(num_writers.load() == 0);
-      ceph_assert(num_reading.load() == 0);
+      ceph_assert(num_reading.try_lock_shared() == true);
+      num_reading.unlock_shared();
       ceph_assert(!locked);
     }
 
@@ -535,7 +536,51 @@ public:
     std::lock_guard l(lock);
     return _truncate(h, offset);
   }
+private:
+  class SocketHook;
+  friend class BlueFS::SocketHook;
+  BlueFS::SocketHook* asok_hook = nullptr;
 
+  struct AioMoveFileContext {
+    enum {idle, reading, writing} state;
+    BlueFS* bluefs;
+    FileRef source;
+    mempool::bluefs::vector<bluefs_extent_t>::iterator source_it;
+    size_t source_offset;
+
+    //struct bluefs_fnode_t fnode;
+    IOContext ioc;//(cct, NULL, true);
+    mempool::bluefs::vector<bluefs_extent_t> target;
+    mempool::bluefs::vector<bluefs_extent_t>::iterator target_it;
+    size_t target_offset;
+
+    size_t in_target_pos_offset;
+    bufferlist read_bl;
+    bufferlist write_bl;
+    void* some_data_here;
+    //void aio_finish(BlueStore *store) = 0;
+    bool result = true;
+    AioMoveFileContext(BlueFS* bfs);
+
+    //bool move_file_start(FileRef f, unsigned target_device);
+    //    void move_file_finish();
+    //void aio_read_chunk();
+    //void aio_write_chunk();
+    //static void aio_cb(void *v_bluefs, void *v_ctx);
+    //void aio_cb();
+  };
+  // triggered periodically to verify whether we should move some files between devices
+  void consider_move();
+
+  BlueFS::AioMoveFileContext* file_move_start(FileRef f, unsigned target_device);
+  void file_move_finished(BlueFS::AioMoveFileContext* c);
+  
+  //void aio_move_finish(BlueFS::AioMoveFileContext& c);
+  void aio_read_chunk(BlueFS::AioMoveFileContext* c);
+  void aio_write_chunk(BlueFS::AioMoveFileContext* c);
+  static void aio_cb(void *v_bluefs, void *v_ctx);
+  void aio_cb(BlueFS::AioMoveFileContext* c);
+  
 };
 
 #endif
