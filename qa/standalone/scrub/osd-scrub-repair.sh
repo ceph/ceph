@@ -108,6 +108,86 @@ function TEST_corrupt_and_repair_replicated() {
     teardown $dir || return 1
 }
 
+#
+# Allow repair to be scheduled when some recovering is still undergoing on the same OSD
+#
+function TEST_allow_repair_during_recovery() {
+    local dir=$1
+    local poolname=rbd
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=2 || return 1
+    run_mgr $dir x || return 1
+    run_osd $dir 0 --osd_scrub_during_recovery=false \
+                   --osd_repair_during_recovery=true \
+                   --osd_debug_pretend_recovery_active=true || return 1
+    run_osd $dir 1 --osd_scrub_during_recovery=false \
+                   --osd_repair_during_recovery=true \
+                   --osd_debug_pretend_recovery_active=true || return 1
+    create_rbd_pool || return 1
+    wait_for_clean || return 1
+
+    add_something $dir $poolname || return 1
+    corrupt_and_repair_one $dir $poolname $(get_not_primary $poolname SOMETHING) || return 1
+
+    teardown $dir || return 1
+}
+
+#
+# Skip non-repair scrub correctly during recovery
+#
+function TEST_skip_non_repair_during_recovery() {
+    local dir=$1
+    local poolname=rbd
+
+    setup $dir || return 1
+    run_mon $dir a --osd_pool_default_size=2 || return 1
+    run_mgr $dir x || return 1
+    run_osd $dir 0 --osd_scrub_during_recovery=false \
+                   --osd_repair_during_recovery=true \
+                   --osd_debug_pretend_recovery_active=true || return 1
+    run_osd $dir 1 --osd_scrub_during_recovery=false \
+                   --osd_repair_during_recovery=true \
+                   --osd_debug_pretend_recovery_active=true || return 1
+    create_rbd_pool || return 1
+    wait_for_clean || return 1
+
+    add_something $dir $poolname || return 1
+    scrub_and_not_schedule $dir $poolname $(get_not_primary $poolname SOMETHING) || return 1
+
+    teardown $dir || return 1
+}
+
+function scrub_and_not_schedule() {
+    local dir=$1
+    local poolname=$2
+    local osd=$3
+
+    #
+    # 1) start a non-repair scrub
+    #
+    local pg=$(get_pg $poolname SOMETHING)
+    local last_scrub=$(get_last_scrub_stamp $pg)
+    ceph pg scrub $pg
+
+    #
+    # 2) Assure the scrub is not scheduled
+    #
+    for ((i=0; i < 3; i++)); do
+        if test "$(get_last_scrub_stamp $pg)" '>' "$last_scrub" ; then
+            return 1
+        fi
+        sleep 1
+    done
+
+    #
+    # 3) Access to the file must OK
+    #
+    objectstore_tool $dir $osd SOMETHING list-attrs || return 1
+    rados --pool $poolname get SOMETHING $dir/COPY || return 1
+    diff $dir/ORIGINAL $dir/COPY || return 1
+}
+
 function corrupt_and_repair_two() {
     local dir=$1
     local poolname=$2
