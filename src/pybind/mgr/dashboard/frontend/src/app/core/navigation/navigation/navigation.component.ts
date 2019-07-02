@@ -1,6 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 
 import { PrometheusService } from '../../../shared/api/prometheus.service';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { Permissions } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import {
@@ -17,6 +18,7 @@ import { SummaryService } from '../../../shared/services/summary.service';
 export class NavigationComponent implements OnInit {
   permissions: Permissions;
   summaryData: any;
+  icons = Icons;
 
   isCollapsed = true;
   prometheusConfigured = false;

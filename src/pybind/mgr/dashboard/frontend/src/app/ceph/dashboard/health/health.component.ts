@@ -5,6 +5,7 @@ import * as _ from 'lodash';
 import { Subscription } from 'rxjs/Subscription';
 
 import { HealthService } from '../../../shared/api/health.service';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { Permissions } from '../../../shared/models/permissions';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
@@ -27,6 +28,7 @@ export class HealthComponent implements OnInit, OnDestroy {
   interval = new Subscription();
   permissions: Permissions;
   enabledFeature$: FeatureTogglesMap$;
+  icons = Icons;
 
   rawCapacityChartConfig = {
     options: {

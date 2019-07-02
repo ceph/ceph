@@ -4,7 +4,7 @@
      data-toggle="dropdown"
      i18n-title
      title="Logged in user">
-    <i class="fa fa-fw fa-user"></i>
+    <i [ngClass]="[icons.user, icons.width]"></i>
     <span i18n
           class="visible-xs-inline-block">Logged in user</span>
     <span class="caret"></span>
@@ -23,7 +23,7 @@
     <li role="menuitem">
       <a class="dropdown-item"
          (click)="logout()">
-        <i class="fa fa-sign-out fa-fw"></i>
+        <i [ngClass]="[icons.signOut, icons.width]"></i>
         <span i18n>Sign out</span>
       </a>
     </li>

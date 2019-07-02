@@ -48,7 +48,7 @@
                     title="Remove the custom configuration value. The default configuration will be inherited and used instead."
                     (click)="resetValue(option.name)"
                     i18n-title>
-              <i class="fa fa-eraser"
+              <i [ngClass]="[icons.erase]"
                  aria-hidden="true"></i>
             </button>
           </span>

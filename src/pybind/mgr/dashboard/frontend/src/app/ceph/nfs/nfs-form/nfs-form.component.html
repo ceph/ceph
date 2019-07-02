@@ -63,7 +63,7 @@
                   <button class="btn btn-default"
                           type="button"
                           (click)="removeDaemon(i, daemon)">
-                    <i class="fa fa-remove fa-fw"
+                    <i [ngClass]="[icons.destroy, icons.width]"
                        aria-hidden="true"></i>
                   </button>
                 </span>
@@ -77,7 +77,7 @@
                            [messages]="daemonsMessages"
                            (selection)="onDaemonSelection()"
                            elemClass="btn btn-default pull-right">
-                  <i class="fa fa-fw fa-plus"></i>
+                  <i [ngClass]="[icons.add, icons.width]"></i>
                   <ng-container i18n>Add daemon</ng-container>
                 </cd-select>
               </div>

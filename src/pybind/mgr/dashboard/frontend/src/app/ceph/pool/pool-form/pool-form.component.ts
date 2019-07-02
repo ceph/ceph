@@ -11,6 +11,7 @@ import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-prof
 import { PoolService } from '../../../shared/api/pool.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import {
@@ -65,6 +66,7 @@ export class PoolFormComponent implements OnInit {
   currentConfigurationValues: { [configKey: string]: any } = {};
   action: string;
   resource: string;
+  icons = Icons;
 
   constructor(
     private dimlessBinaryPipe: DimlessBinaryPipe,

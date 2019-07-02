@@ -20,7 +20,7 @@
             type="button"
             (click)="purgeModal()"
             *ngIf="permission.delete">
-      <i class="fa fa-fw fa-times"
+      <i [ngClass]="[icons.destroy, icons.width]"
          aria-hidden="true"></i>
       <ng-container i18n>Purge Trash</ng-container>
     </button>
