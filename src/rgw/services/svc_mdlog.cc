@@ -43,7 +43,7 @@ int RGWSI_MDLog::do_start()
 
   period_puller.reset(new RGWPeriodPuller(svc.zone, svc.sysobj));
   period_history.reset(new RGWPeriodHistory(cct, period_puller.get(),
-                                            current_period.get_id()));
+                                            current_period));
 
   if (svc.zone->need_to_sync()) {
     // initialize the log period history
