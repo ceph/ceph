@@ -92,36 +92,52 @@ export class BucketsPageHelper extends PageHelper {
   }
 
   static invalidCreate() {
-    // Types in an invalid name for a bucket
-    this.navigateTo('create');
-    expect(PageHelper.getTitleText()).toBe('Create Bucket');
-    browser.driver
-      .manage()
-      .window()
-      .maximize();
-    const nameBox = element(by.id('bid')); // Grabs name box field
+   // Types in an invalid name for a bucket
+   this.navigateTo('create');
+   expect(PageHelper.getTitleText()).toBe('Create Bucket');
+   browser.driver
+     .manage()
+     .window()
+     .maximize();
+   const nameBox = element(by.id('bid')); // Grabs name box field
 
-    browser.wait(Helper.EC.elementToBeClickable(nameBox), 5000);
-    nameBox.click(); // Clicks the Name box on the Create Buckets page
-    nameBox.sendKeys('rq');
-    browser.sleep(100);
-    expect(element(by.id('bid')).getAttribute('class')).toContain('ng-invalid'); // Cehecks for invalid input
 
-    // Chooses 'Select a user' rather than a valid owner on Create Bucket page
-    const ownerBox = element(by.id('owner'));
-    browser.wait(Helper.EC.elementToBeClickable(ownerBox), 5000);
-    ownerBox.click(); // Clicks the Owner drop down on the Create Bucket page
-    $('[value="1: null"]').click();
-    expect(element(by.id('owner')).getAttribute('class')).toContain('ng-invalid');
+   // Clears input field and then puts an invalid input, then has a wait function
+   // to verify that the error pops up
+   nameBox.clear().then(() => {
+     nameBox.sendKeys('rq').then(() => {
+       browser
+         .wait(function() { // Waiting for website to decide if name is valid or not
+           return nameBox.getAttribute('class').then(function(classValue) {
+             return classValue.indexOf('ng-pending') === -1;
+           });
+         }, 6000)
+         .then(() => {
+           expect(nameBox.getAttribute('class')).toContain('ng-invalid');
+         });
+     });
+   });
 
-    // Clicks the Create Bucket button but the page doesn't move. Done by testing
-    // for the breadcrumb and heading
-    element(by.cssContainingText('button', 'Create Bucket')).click(); // Clicks Create Bucket button
-    expect(PageHelper.getTitleText()).toBe('Create Bucket');
-    expect(PageHelper.getBreadcrumbText()).toEqual('Create');
-    element(by.cssContainingText('button', 'Cancel')).click();
-    nameBox.clear();
-  }
+   browser.driver
+     .manage()
+     .window()
+     .maximize();
+   // Chooses 'Select a user' rather than a valid owner on Create Bucket page
+   // and checks if it's an invalid input
+   const ownerbox = element(by.id('owner'));
+   browser.wait(Helper.EC.elementToBeClickable(ownerbox), 5000);
+   browser.actions().mouseMove(ownerbox).click(); // Clicks the Owner drop down on the Create Bucket page
+   ownerbox.all(by.css('option')).first().click(); // select the first option, which is invalid
+   expect(element(by.id('owner')).getAttribute('class')).toContain('ng-invalid');
+
+   // Clicks the Create Bucket button but the page doesn't move. Done by testing
+   // for the breadcrumb and heading
+   browser.actions().mouseMove(element(by.cssContainingText('button', 'Create Bucket'))).click(); // Clicks Create Bucket button
+   expect(PageHelper.getTitleText()).toBe('Create Bucket');
+   expect(PageHelper.getBreadcrumbText()).toEqual('Create');
+   element(by.cssContainingText('button', 'Cancel')).click();
+   nameBox.clear();
+ }
 
   static invalidEdit(name) {
     // Chooses an invalid owner in the Edit Bucket page
@@ -136,8 +152,9 @@ export class BucketsPageHelper extends PageHelper {
     expect(PageHelper.getTitleText()).toBe('Edit Bucket');
 
     // Chooses 'Select a user' rather than a valid owner on Edit Bucket page
-    element(by.id('owner')).click(); // Clicks the Owner drop down on the Edit Bucket page
-    $('[value="1: null"]').click();
+    const ownerbox = element(by.id('owner'));
+    browser.actions().mouseMove(ownerbox).click(); // Clicks the Owner drop down on the Edit Bucket page
+    ownerbox.all(by.css('option')).first().click(); // select the first option, which is invalid
     expect(element(by.id('owner')).getAttribute('class')).toContain('ng-invalid');
 
     // Clicks the Edit Bucket button but the page doesn't move. Done by testing for
