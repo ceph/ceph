@@ -530,6 +530,56 @@ bool ScrubStack::scrub_in_transition_state() {
   return false;
 }
 
+std::string_view ScrubStack::scrub_summary() {
+  ceph_assert(ceph_mutex_is_locked_by_me(mdcache->mds->mds_lock));
+
+  bool have_more = false;
+  CachedStackStringStream cs;
+
+  if (state == STATE_IDLE) {
+    return "idle";
+  }
+
+  if (state == STATE_RUNNING) {
+    if (clear_inode_stack) {
+      *cs << "aborting";
+    } else {
+      *cs << "active";
+    }
+  } else {
+    if (state == STATE_PAUSING) {
+      have_more = true;
+      *cs << "pausing";
+    } else if (state == STATE_PAUSED) {
+      have_more = true;
+      *cs << "paused";
+    }
+
+    if (clear_inode_stack) {
+      if (have_more) {
+        *cs << "+";
+      }
+      *cs << "aborting";
+    }
+  }
+
+  if (!scrub_origins.empty()) {
+    *cs << " [paths:";
+    for (auto inode = scrub_origins.begin(); inode != scrub_origins.end(); ++inode) {
+      if (inode != scrub_origins.begin()) {
+        *cs << ",";
+      }
+
+      std::string path;
+      (*inode)->make_path_string(path, true);
+      *cs << (path.empty() ? "/" : path.c_str());
+    }
+    *cs << "]";
+  }
+
+  return cs->strv();
+}
+
 void ScrubStack::scrub_status(Formatter *f) {
   ceph_assert(mdcache->mds->mds_lock.is_locked_by_me());
 
