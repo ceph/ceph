@@ -152,6 +152,17 @@ bool Client::CommandHook::call(std::string_view command,
     m_client->dump_mds_sessions(f.get());
   else if (command == "dump_cache")
     m_client->dump_cache(f.get());
+  else if(command == "dump_inode"){
+        std::string str_inode_no;
+        cmd_getval(m_client->cct, cmdmap, "inode_no", str_inode_no);
+        uint64_t inode_no = strtoull(str_inode_no.c_str(), NULL, 0);
+        if ((inode_no == 0) && f) {
+            f->open_array_section("cache");
+            f->close_section();
+        } else {
+            m_client->dump_cache(f, inode_no);
+        }
+  }
   else if (command == "kick_stale_sessions")
     m_client->_kick_stale_sessions();
   else if (command == "status")
@@ -416,7 +427,7 @@ void Client::dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconne
   }
 }
 
-void Client::dump_cache(Formatter *f)
+void Client::dump_cache(Formatter *f, uint64_t inode_no)
 {
   set<Inode*> did;
 
@@ -425,18 +436,23 @@ void Client::dump_cache(Formatter *f)
   if (f)
     f->open_array_section("cache");
 
-  if (root)
-    dump_inode(f, root, did, true);
+  if (inode_no) {
+      auto it = inode_map.find(vinodeno_t(inode_no, CEPH_NOSNAP));
+      if (it != inode_map.end())
+          dump_inode(f, it->second, did, true);
+  } else {
+    if (root)
+      dump_inode(f, root, did, true);
 
-  // make a second pass to catch anything disconnected
-  for (ceph::unordered_map<vinodeno_t, Inode*>::iterator it = inode_map.begin();
-       it != inode_map.end();
-       ++it) {
-    if (did.count(it->second))
-      continue;
-    dump_inode(f, it->second, did, true);
+    // make a second pass to catch anything disconnected
+    for (ceph::unordered_map<vinodeno_t, Inode*>::iterator it = inode_map.begin();
+         it != inode_map.end();
+         ++it) {
+      if (did.count(it->second))
+        continue;
+      dump_inode(f, it->second, did, true);
+    }
   }
-
   if (f)
     f->close_section();
 }
@@ -528,6 +544,15 @@ void Client::_finish_init()
   if (ret < 0) {
     lderr(cct) << "error registering admin socket command: "
 	       << cpp_strerror(-ret) << dendl;
+  }
+  
+  ret = admin_socket->register_command("dump_inode",
+			  "dump_inode",
+			  &m_command_hook,
+			  "dump_inode <inode_no>: show signal in-memory metadata cache contents");
+  if (ret < 0) {
+	  lderr(cct) << "error registering admin socket command: "
+		  << cpp_strerror(-ret) << dendl;
   }
   ret = admin_socket->register_command("kick_stale_sessions",
 				       "kick_stale_sessions",
