@@ -47,13 +47,15 @@ class RGWSI_MDLog : public RGWServiceInstance
   // use the current period's log for mutating operations
   RGWMetadataLog* current_log{nullptr};
 
+  bool run_sync;
+
   // pulls missing periods for period_history
   std::unique_ptr<RGWPeriodPuller> period_puller;
   // maintains a connected history of periods
   std::unique_ptr<RGWPeriodHistory> period_history;
 
 public:
-  RGWSI_MDLog(CephContext *cct);
+  RGWSI_MDLog(CephContext *cct, bool run_sync);
   virtual ~RGWSI_MDLog();
 
   struct Svc {

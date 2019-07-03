@@ -18,7 +18,7 @@
 using Svc = RGWSI_MDLog::Svc;
 using Cursor = RGWPeriodHistory::Cursor;
 
-RGWSI_MDLog::RGWSI_MDLog(CephContext *cct) : RGWServiceInstance(cct) {
+RGWSI_MDLog::RGWSI_MDLog(CephContext *cct, bool _run_sync) : RGWServiceInstance(cct), run_sync(_run_sync) {
 }
 
 RGWSI_MDLog::~RGWSI_MDLog() {
@@ -45,7 +45,8 @@ int RGWSI_MDLog::do_start()
   period_history.reset(new RGWPeriodHistory(cct, period_puller.get(),
                                             current_period));
 
-  if (svc.zone->need_to_sync()) {
+  if (run_sync &&
+      svc.zone->need_to_sync()) {
     // initialize the log period history
     svc.mdlog->init_oldest_log_period();
   }
