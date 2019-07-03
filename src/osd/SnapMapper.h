@@ -26,6 +26,7 @@
 #include "include/encoding.h"
 #include "include/object.h"
 #include "os/ObjectStore.h"
+#include "osd/OSDMap.h"
 
 class OSDriver : public MapCacher::StoreDriver<std::string, bufferlist> {
   ObjectStore *os;
@@ -85,7 +86,7 @@ public:
  *
  * We accomplish this using two sets of keys:
  *  1) OBJECT_PREFIX + obj.str() -> encoding of object_snaps
- *  2) MAPPING_PREFIX + snapid_t + obj.str() -> encoding of pair<snapid_t, obj>
+ *  2) MAPPING_PREFIX + poolid + snapid_t + obj.str() -> encoding of pair<snapid_t, obj>
  *
  * The on disk strings and encodings are implemented in to_raw, to_raw_key,
  * from_raw, to_object_key.
@@ -111,14 +112,109 @@ public:
     void decode(bufferlist::const_iterator &bp);
   };
 
-private:
-  MapCacher::MapCacher<std::string, bufferlist> backend;
+  struct Mapping {
+    snapid_t snap;
+    hobject_t hoid;
+    explicit Mapping(const pair<snapid_t, hobject_t> &in)
+      : snap(in.first), hoid(in.second) {}
+    Mapping() : snap(0) {}
+    void encode(bufferlist &bl) const {
+      ENCODE_START(1, 1, bl);
+      encode(snap, bl);
+      encode(hoid, bl);
+      ENCODE_FINISH(bl);
+    }
+    void decode(bufferlist::const_iterator &bl) {
+      DECODE_START(1, bl);
+      decode(snap, bl);
+      decode(hoid, bl);
+      DECODE_FINISH(bl);
+    }
+  };
 
+  static const std::string LEGACY_MAPPING_PREFIX;
   static const std::string MAPPING_PREFIX;
   static const std::string OBJECT_PREFIX;
+  static const char *PURGED_SNAP_EPOCH_PREFIX;
+  static const char *PURGED_SNAP_PREFIX;
 
-  static std::string get_prefix(snapid_t snap);
+  struct Scrubber {
+    CephContext *cct;
+    ObjectStore *store;
+    ObjectStore::CollectionHandle ch;
+    ghobject_t hoid;
 
+    ObjectMap::ObjectMapIterator psit;
+    int64_t pool;
+    snapid_t begin, end;
+
+    bool _parse_p();   ///< advance the purged_snaps pointer
+
+    ObjectMap::ObjectMapIterator mapit;
+    Mapping mapping;
+    shard_id_t shard;
+
+    bool _parse_m();   ///< advance the (object) mapper pointer
+
+    vector<std::tuple<int64_t, snapid_t, uint32_t, shard_id_t>> stray;
+
+    Scrubber(
+      CephContext *cct,
+      ObjectStore *store,
+      ObjectStore::CollectionHandle& ch,
+      ghobject_t hoid)
+      : cct(cct),
+	store(store),
+	ch(ch),
+	hoid(hoid) {}
+
+
+    void _init();
+    void run();
+  };
+
+  static int convert_legacy(
+    CephContext *cct,
+    ObjectStore *store,
+    ObjectStore::CollectionHandle& ch,
+    ghobject_t hoid,
+    unsigned max);
+
+  static void record_purged_snaps(
+    CephContext *cct,
+    ObjectStore *store,
+    ObjectStore::CollectionHandle& ch,
+    ghobject_t hoid,
+    ObjectStore::Transaction *t,
+    map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps);
+  static void scrub_purged_snaps(
+    CephContext *cct,
+    ObjectStore *store,
+    ObjectStore::CollectionHandle& ch,
+    ghobject_t hoid);
+
+private:
+  static int _lookup_purged_snap(
+    CephContext *cct,
+    ObjectStore *store,
+    ObjectStore::CollectionHandle& ch,
+    const ghobject_t& hoid,
+    int64_t pool, snapid_t snap,
+    snapid_t *begin, snapid_t *end);
+  static void make_purged_snap_key_value(
+    int64_t pool, snapid_t begin,
+    snapid_t end, map<string,bufferlist> *m);
+  static string make_purged_snap_key(int64_t pool, snapid_t last);
+
+
+  MapCacher::MapCacher<std::string, bufferlist> backend;
+
+  static std::string get_legacy_prefix(snapid_t snap);
+  std::string to_legacy_raw_key(
+    const std::pair<snapid_t, hobject_t> &to_map);
+  static bool is_legacy_mapping(const std::string &to_test);
+
+  static std::string get_prefix(int64_t pool, snapid_t snap);
   std::string to_raw_key(
     const std::pair<snapid_t, hobject_t> &to_map);
 
@@ -127,7 +223,7 @@ private:
 
   static bool is_mapping(const std::string &to_test);
 
-  std::pair<snapid_t, hobject_t> from_raw(
+  static std::pair<snapid_t, hobject_t> from_raw(
     const std::pair<std::string, bufferlist> &image);
 
   std::string to_object_key(const hobject_t &hoid);
@@ -232,5 +328,6 @@ public:
     ); ///< @return error, -ENOENT if oid is not recorded
 };
 WRITE_CLASS_ENCODER(SnapMapper::object_snaps)
+WRITE_CLASS_ENCODER(SnapMapper::Mapping)
 
 #endif

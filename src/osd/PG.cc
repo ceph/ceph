@@ -320,6 +320,7 @@ void PG::clear_primary_state()
   projected_log = PGLog::IndexedLog();
 
   snap_trimq.clear();
+  snap_trimq_repeat.clear();
   finish_sync_event = 0;  // so that _finish_recovery doesn't go off in another thread
   release_pg_backoffs();
 
@@ -533,6 +534,7 @@ void PG::split_into(pg_t child_pgid, PG *child, unsigned split_bits)
   child->update_snap_mapper_bits(split_bits);
 
   child->snap_trimq = snap_trimq;
+  child->snap_trimq_repeat = snap_trimq_repeat;
 
   _split_into(child_pgid, child, split_bits);
 
@@ -1607,84 +1609,86 @@ void PG::on_active_exit()
 
 void PG::on_active_advmap(const OSDMapRef &osdmap)
 {
-  if (osdmap->require_osd_release >= ceph_release_t::mimic) {
-    const auto& new_removed_snaps = osdmap->get_new_removed_snaps();
-    auto i = new_removed_snaps.find(get_pgid().pool());
-    if (i != new_removed_snaps.end()) {
-      bool bad = false;
-      for (auto j : i->second) {
-	if (snap_trimq.intersects(j.first, j.second)) {
-	  decltype(snap_trimq) added, overlap;
-	  added.insert(j.first, j.second);
-	  overlap.intersection_of(snap_trimq, added);
-	  if (recovery_state.get_last_require_osd_release() < ceph_release_t::mimic) {
-	    derr << __func__ << " removed_snaps already contains "
-		 << overlap << ", but this is the first mimic+ osdmap,"
-		 << " so it's expected" << dendl;
-	  } else {
-	    derr << __func__ << " removed_snaps already contains "
-		 << overlap << dendl;
-	    bad = true;
-	  }
-	  snap_trimq.union_of(added);
-	} else {
-	  snap_trimq.insert(j.first, j.second);
-	}
+  const auto& new_removed_snaps = osdmap->get_new_removed_snaps();
+  auto i = new_removed_snaps.find(get_pgid().pool());
+  if (i != new_removed_snaps.end()) {
+    bool bad = false;
+    for (auto j : i->second) {
+      if (snap_trimq.intersects(j.first, j.second)) {
+	decltype(snap_trimq) added, overlap;
+	added.insert(j.first, j.second);
+	overlap.intersection_of(snap_trimq, added);
+	derr << __func__ << " removed_snaps already contains "
+	     << overlap << dendl;
+	bad = true;
+	snap_trimq.union_of(added);
+      } else {
+	snap_trimq.insert(j.first, j.second);
       }
-      if (recovery_state.get_last_require_osd_release() < ceph_release_t::mimic) {
-	// at upgrade, we report *all* previously removed snaps as removed in
-	// the first mimic epoch.  remove the ones we previously divined were
-	// removed (and subsequently purged) from the trimq.
-	derr << __func__ << " first mimic map, filtering purged_snaps"
-	     << " from new removed_snaps" << dendl;
-	snap_trimq.subtract(recovery_state.get_info().purged_snaps);
-      }
-      dout(10) << __func__ << " new removed_snaps " << i->second
-	       << ", snap_trimq now " << snap_trimq << dendl;
-      ceph_assert(!bad || !cct->_conf->osd_debug_verify_cached_snaps);
     }
+    dout(10) << __func__ << " new removed_snaps " << i->second
+	     << ", snap_trimq now " << snap_trimq << dendl;
+    ceph_assert(!bad || !cct->_conf->osd_debug_verify_cached_snaps);
+  }
 
-    const auto& new_purged_snaps = osdmap->get_new_purged_snaps();
-    auto j = new_purged_snaps.find(get_pgid().pgid.pool());
-    if (j != new_purged_snaps.end()) {
-      bool bad = false;
-      for (auto k : j->second) {
-	if (!recovery_state.get_info().purged_snaps.contains(k.first, k.second)) {
-	  interval_set<snapid_t> rm, overlap;
-	  rm.insert(k.first, k.second);
-	  overlap.intersection_of(recovery_state.get_info().purged_snaps, rm);
-	  derr << __func__ << " purged_snaps does not contain "
-	       << rm << ", only " << overlap << dendl;
-	  recovery_state.adjust_purged_snaps(
-	    [&overlap](auto &purged_snaps) {
-	      purged_snaps.subtract(overlap);
-	    });
-	  // This can currently happen in the normal (if unlikely) course of
-	  // events.  Because adding snaps to purged_snaps does not increase
-	  // the pg version or add a pg log entry, we don't reliably propagate
-	  // purged_snaps additions to other OSDs.
-	  // One example:
-	  //  - purge S
-	  //  - primary and replicas update purged_snaps
-	  //  - no object updates
-	  //  - pg mapping changes, new primary on different node
-	  //  - new primary pg version == eversion_t(), so info is not
-	  //    propagated.
-	  //bad = true;
-	} else {
-	  recovery_state.adjust_purged_snaps(
-	    [&k](auto &purged_snaps) {
-	      purged_snaps.erase(k.first, k.second);
-	    });
-	}
+  const auto& new_purged_snaps = osdmap->get_new_purged_snaps();
+  auto j = new_purged_snaps.find(get_pgid().pgid.pool());
+  if (j != new_purged_snaps.end()) {
+    bool bad = false;
+    for (auto k : j->second) {
+      if (!recovery_state.get_info().purged_snaps.contains(k.first, k.second)) {
+	interval_set<snapid_t> rm, overlap;
+	rm.insert(k.first, k.second);
+	overlap.intersection_of(recovery_state.get_info().purged_snaps, rm);
+	derr << __func__ << " purged_snaps does not contain "
+	     << rm << ", only " << overlap << dendl;
+	recovery_state.adjust_purged_snaps(
+	  [&overlap](auto &purged_snaps) {
+	    purged_snaps.subtract(overlap);
+	  });
+	// This can currently happen in the normal (if unlikely) course of
+	// events.  Because adding snaps to purged_snaps does not increase
+	// the pg version or add a pg log entry, we don't reliably propagate
+	// purged_snaps additions to other OSDs.
+	// One example:
+	//  - purge S
+	//  - primary and replicas update purged_snaps
+	//  - no object updates
+	//  - pg mapping changes, new primary on different node
+	//  - new primary pg version == eversion_t(), so info is not
+	//    propagated.
+	//bad = true;
+      } else {
+	recovery_state.adjust_purged_snaps(
+	  [&k](auto &purged_snaps) {
+	    purged_snaps.erase(k.first, k.second);
+	  });
       }
-      dout(10) << __func__ << " new purged_snaps " << j->second
-	       << ", now " << recovery_state.get_info().purged_snaps << dendl;
-      ceph_assert(!bad || !cct->_conf->osd_debug_verify_cached_snaps);
     }
-  } else if (!pool.newly_removed_snaps.empty()) {
-    snap_trimq.union_of(pool.newly_removed_snaps);
-    dout(10) << " snap_trimq now " << snap_trimq << dendl;
+    dout(10) << __func__ << " new purged_snaps " << j->second
+	     << ", now " << recovery_state.get_info().purged_snaps << dendl;
+    ceph_assert(!bad || !cct->_conf->osd_debug_verify_cached_snaps);
+  }
+}
+
+void PG::queue_snap_retrim(snapid_t snap)
+{
+  if (!is_active() ||
+      !is_primary()) {
+    dout(10) << __func__ << " snap " << snap << " - not active and primary"
+	     << dendl;
+    return;
+  }
+  if (!snap_trimq.contains(snap)) {
+    snap_trimq.insert(snap);
+    snap_trimq_repeat.insert(snap);
+    dout(20) << __func__ << " snap " << snap
+	     << ", trimq now " << snap_trimq
+	     << ", repeat " << snap_trimq_repeat << dendl;
+    kick_snap_trim();
+  } else {
+    dout(20) << __func__ << " snap " << snap
+	     << " already in trimq " << snap_trimq << dendl;
   }
 }
 
@@ -3331,8 +3335,14 @@ ostream& operator<<(ostream& out, const PG& pg)
     // only show a count if the set is large
     if (pg.snap_trimq.num_intervals() > 16) {
       out << pg.snap_trimq.size();
+      if (!pg.snap_trimq_repeat.empty()) {
+	out << "(" << pg.snap_trimq_repeat.size() << ")";
+      }
     } else {
       out << pg.snap_trimq;
+      if (!pg.snap_trimq_repeat.empty()) {
+	out << "(" << pg.snap_trimq_repeat << ")";
+      }
     }
   }
   if (!pg.recovery_state.get_info().purged_snaps.empty()) {

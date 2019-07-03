@@ -92,16 +92,17 @@ struct osd_xinfo_t {
   __u32 laggy_interval;    ///< average interval between being marked laggy and recovering
   uint64_t features;       ///< features supported by this osd we should know about
   __u32 old_weight;        ///< weight prior to being auto marked out
+  utime_t last_purged_snaps_scrub; ///< last scrub of purged_snaps
 
   osd_xinfo_t() : laggy_probability(0), laggy_interval(0),
                   features(0), old_weight(0) {}
 
   void dump(ceph::Formatter *f) const;
-  void encode(ceph::buffer::list& bl) const;
+  void encode(ceph::buffer::list& bl, uint64_t features) const;
   void decode(ceph::buffer::list::const_iterator& bl);
   static void generate_test_instances(std::list<osd_xinfo_t*>& o);
 };
-WRITE_CLASS_ENCODER(osd_xinfo_t)
+WRITE_CLASS_ENCODER_FEATURES(osd_xinfo_t)
 
 std::ostream& operator<<(std::ostream& out, const osd_xinfo_t& xi);
 
@@ -349,10 +350,6 @@ class OSDMap {
 public:
   MEMPOOL_CLASS_HELPERS();
 
-  typedef interval_set<
-    snapid_t,
-    mempool::osdmap::flat_map<snapid_t,snapid_t>> snap_interval_set_t;
-
   class Incremental {
   public:
     MEMPOOL_CLASS_HELPERS();
@@ -503,6 +500,13 @@ public:
       return true;
     }
 
+    bool in_new_removed_snaps(int64_t pool, snapid_t snap) const {
+      auto p = new_removed_snaps.find(pool);
+      if (p == new_removed_snaps.end()) {
+	return false;
+      }
+      return p->second.contains(snap);
+    }
   };
   
 private:
@@ -540,7 +544,8 @@ private:
     CEPH_FEATUREMASK_CRUSH_CHOOSE_ARGS |
     CEPH_FEATUREMASK_SERVER_LUMINOUS |
     CEPH_FEATUREMASK_SERVER_MIMIC |
-    CEPH_FEATUREMASK_SERVER_NAUTILUS;
+    CEPH_FEATUREMASK_SERVER_NAUTILUS |
+    CEPH_FEATUREMASK_SERVER_OCTOPUS;
 
   struct addrs_s {
     mempool::osdmap::vector<std::shared_ptr<entity_addrvec_t> > client_addrs;
@@ -1263,6 +1268,14 @@ public:
       return true;
     }
     return false;
+  }
+
+  bool in_removed_snaps_queue(int64_t pool, snapid_t snap) const {
+    auto p = removed_snaps_queue.find(pool);
+    if (p == removed_snaps_queue.end()) {
+      return false;
+    }
+    return p->second.contains(snap);
   }
 
   const mempool::osdmap::map<int64_t,snap_interval_set_t>&

@@ -61,6 +61,8 @@
 #define MSG_CONFIG           62
 #define MSG_GET_CONFIG       63
 
+#define MSG_MON_GET_PURGED_SNAPS 76
+#define MSG_MON_GET_PURGED_SNAPS_REPLY 77
 
 // osd internal
 #define MSG_OSD_PING         70

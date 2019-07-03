@@ -1496,7 +1496,8 @@ public:
 
   void handle_backoff(OpRequestRef& op);
 
-  int trim_object(bool first, const hobject_t &coid, OpContextUPtr *ctxp);
+  int trim_object(bool first, const hobject_t &coid, snapid_t snap_to_trim,
+		  OpContextUPtr *ctxp);
   void snap_trimmer(epoch_t e) override;
   void kick_snap_trim() override;
   void snap_trimmer_scrub_complete() override;

@@ -32,11 +32,6 @@ public:
   std::map<epoch_t, ceph::buffer::list> incremental_maps;
   epoch_t oldest_map =0, newest_map = 0;
 
-  // if we are fetching maps from the mon and have to jump a gap
-  // (client's next needed std::map is older than mon's oldest) we can
-  // share removed snaps from the gap here.
-  mempool::osdmap::map<int64_t,OSDMap::snap_interval_set_t> gap_removed_snaps;
-
   epoch_t get_first() const {
     epoch_t e = 0;
     auto i = maps.cbegin();
@@ -86,6 +81,8 @@ public:
       newest_map = 0;
     }
     if (header.version >= 4) {
+      // removed in octopus
+      mempool::osdmap::map<int64_t,snap_interval_set_t> gap_removed_snaps;
       decode(gap_removed_snaps, p);
     }
   }
@@ -150,7 +147,7 @@ public:
       encode(newest_map, payload);
     }
     if (header.version >= 4) {
-      encode(gap_removed_snaps, payload);
+      encode((uint32_t)0, payload);
     }
   }
 
@@ -159,8 +156,6 @@ public:
     out << "osd_map(" << get_first() << ".." << get_last();
     if (oldest_map || newest_map)
       out << " src has " << oldest_map << ".." << newest_map;
-    if (!gap_removed_snaps.empty())
-      out << " +gap_removed_snaps";
     out << ")";
   }
 private:
