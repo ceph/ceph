@@ -44,7 +44,8 @@ RGWServices_Def::~RGWServices_Def()
 
 int RGWServices_Def::init(CephContext *cct,
 			  bool have_cache,
-                          bool raw)
+                          bool raw,
+			  bool run_sync)
 {
   finisher = std::make_unique<RGWSI_Finisher>(cct);
   bucket_sobj = std::make_unique<RGWSI_Bucket_SObj>(cct);
@@ -52,7 +53,7 @@ int RGWServices_Def::init(CephContext *cct,
   bilog_rados = std::make_unique<RGWSI_BILog_RADOS>(cct);
   cls = std::make_unique<RGWSI_Cls>(cct);
   datalog_rados = std::make_unique<RGWSI_DataLog_RADOS>(cct);
-  mdlog = std::make_unique<RGWSI_MDLog>(cct);
+  mdlog = std::make_unique<RGWSI_MDLog>(cct, run_sync);
   meta = std::make_unique<RGWSI_Meta>(cct);
   meta_be_sobj = std::make_unique<RGWSI_MetaBackend_SObj>(cct);
   meta_be_otp = std::make_unique<RGWSI_MetaBackend_OTP>(cct);
@@ -253,11 +254,11 @@ void RGWServices_Def::shutdown()
 }
 
 
-int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw)
+int RGWServices::do_init(CephContext *_cct, bool have_cache, bool raw, bool run_sync)
 {
   cct = _cct;
 
-  int r = _svc.init(cct, have_cache, raw);
+  int r = _svc.init(cct, have_cache, raw, run_sync);
   if (r < 0) {
     return r;
   }
