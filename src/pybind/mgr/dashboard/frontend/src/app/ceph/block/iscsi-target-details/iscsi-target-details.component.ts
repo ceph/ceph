@@ -119,7 +119,13 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
 
     const clients = [];
     _.forEach(this.selectedItem.clients, (client) => {
-      this.metadata['client_' + client.client_iqn] = client.auth;
+      const client_metadata = _.cloneDeep(client.auth);
+      _.extend(client_metadata, client.info);
+      delete client_metadata['state'];
+      _.forEach(Object.keys(client.info.state), (state) => {
+        client_metadata[state.toLowerCase()] = client.info.state[state];
+      });
+      this.metadata['client_' + client.client_iqn] = client_metadata;
 
       const luns = [];
       client.luns.forEach((lun) => {
@@ -134,6 +140,7 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
 
       clients.push({
         value: client.client_iqn,
+        status: Object.keys(client.info.state).includes('LOGGED_IN') ? 'logged_in' : 'logged_out',
         id: 'client_' + client.client_iqn,
         children: luns
       });

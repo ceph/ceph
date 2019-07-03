@@ -671,6 +671,11 @@ class IscsiTarget(RESTController):
         gateway_name = target['portals'][0]['host']
         target_info = IscsiClient.instance(gateway_name=gateway_name).get_targetinfo(target_iqn)
         target['info'] = target_info
+        for client in target['clients']:
+            client_iqn = client['client_iqn']
+            client_info = IscsiClient.instance(gateway_name=gateway_name).get_clientinfo(
+                target_iqn, client_iqn)
+            client['info'] = client_info
 
     @staticmethod
     def _sorted_portals(portals):
