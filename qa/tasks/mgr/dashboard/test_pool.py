@@ -25,7 +25,7 @@ class PoolTest(DashboardTestCase):
     pool_list_stat_schema = JObj(sub_elems={
         'latest': int,
         'rate': float,
-        'series': JList(JAny(none=False)),
+        'rates': JList(JAny(none=False)),
     })
 
     pool_list_stats_schema = JObj(sub_elems={
