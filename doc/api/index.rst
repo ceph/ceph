@@ -2,6 +2,14 @@
  API Documentation
 ===================
 
+.. rubric:: Contents
+
+.. toctree::
+   :glob:
+
+   *
+
+
 
 Ceph Storage Cluster APIs
 =========================
@@ -43,3 +51,10 @@ Ceph Object Store APIs
 .. _S3-compatible API: ../radosgw/s3/
 .. _Swift-compatible API: ../radosgw/swift/
 .. _Admin Ops API: ../radosgw/adminops
+
+Ceph Command API
+================
+
+See `mon_command_api`_.
+
+.. _mon_command_api: ./mon_command_api

@@ -1,5 +1,7 @@
 #!/usr/bin/python
 import json
+import textwrap
+
 import rados
 import sys
 from itertools import groupby
@@ -19,8 +21,14 @@ import functools
 import warnings
 import json
 
+try:
+    from typing import List
+    from ceph.mon_command_api import CommandResult
+except ImportError:
+    pass
+
 if sys.version_info > (3, 0):
-    from typing import List, overload
+    from typing import overload
 
 
 def deprecated(func):
@@ -36,19 +44,17 @@ def deprecated(func):
 
 
 class MonCommandApi(object):
-    def __init__(self, cluster):
-        self._cluster = cluster
-
+    def __init__(self, rados):
+        self._rados = rados
+        
     def _mon_command(self, cmd, inbuf=b'', target=None):
-        return self._cluster.mon_command(json.dumps(cmd), inbuf=inbuf, target=target)"""
+        res = self._rados.mon_command(json.dumps(cmd), inbuf=inbuf, target=target)
+        return CommandResult(*res)"""
 
 func_template = '''
 def {}({}):
-    """
-    {}
 {}
-    module={} perm={} flags={}
-    """
+{}
     prefix = '{}'
     _args = {{'prefix': prefix, {}}}
     return self._mon_command(_args)
@@ -124,8 +130,8 @@ class Param(object):
         assert who == None
 
     def safe_name(self):
-        unsafe = ['from', 'class', 'id']
-        return self.name + '_' if self.name in unsafe else self.name
+        unsafe = ['from', 'class', 'id', 'type', 'property']
+        return self.name + '_1' if self.name in unsafe else self.name
 
     def help(self):
         advanced = ''
@@ -136,18 +142,23 @@ class Param(object):
         if self.goodchars:
             advanced += 'goodchars={} '.format(self.goodchars)
 
-        return '    :param {}: {} {}'.format(self.safe_name(), self.type, advanced)
+        lines = textwrap.wrap(':param {}: {} {}'.format(self.safe_name(), self.type, advanced))
+        return '\n    '.join(lines)
 
     def mk_default(self):
         if not self.req:
             return '=None'
         return ''
 
+    def py_type(self):
+        inner = Param.t[self.type]
+        return 'List[{}]'.format(inner) if self.n else inner
+
     def mk_type(self):
         if PY2:
             return ''
         inner = Param.t[self.type]
-        return ': List[{}]'.format(inner) if self.n else ': '  + inner
+        return ': ' + self.py_type()
 
     def mk_dict(self):
         return "'{}': {}".format(self.name, self.safe_name())
@@ -173,7 +184,8 @@ class FuncSig(object):
 
     def mk_params(self):
         if self.params:
-            return 'self, ' + ', '.join([str(p) for p in self.params])
+            lines = textwrap.wrap('self, ' + ', '.join([str(p) for p in self.params]), width=60)
+            return ('\n' + ' '*(5+len(self.name()))).join(lines)
         else:
             return 'self'
 
@@ -181,10 +193,26 @@ class FuncSig(object):
         return '\n'.join([f.help() for f in self.params])
 
     def mk_mk_dict(self):
-        return ', '.join([p.mk_dict() for p in self.params])
+        lines = textwrap.wrap(', '.join([p.mk_dict() for p in self.params]), width=60)
+        return ('\n' + ' '*(8+5)).join(lines)
+
+    def mk_type_hint(self):
+        if PY2:
+            return '# type: ({}) -> CommandResult\n'.format(', '.join([f.py_type() for f in self.params]))
+        return ''
+
+    def mk_doc_string(self):
+        elems = []
+        if self.help:
+            elems.append(textwrap.fill(self.help))
+        elems.append('module={} perm={} flags={}'.format(self.module, self.perm, str(self.flags)))
+        if self.params:
+            elems.append(self.mk_param_help())
+        return indent('"""\n{}\n"""'.format('\n\n'.join(elems)))
+
 
     def __str__(self):
-        out = func_template.format(self.name(), self.mk_params(), self.help, self.mk_param_help(), self.module, self.perm, str(self.flags), self.prefix(), self.mk_mk_dict())
+        out = func_template.format(self.name(), self.mk_params(), indent(self.mk_type_hint()), self.mk_doc_string(), self.prefix(), self.mk_mk_dict())
         if self.needs_overload:
             out = '\n@overload  # Python 3 only' + out
         if 'deprecated' in self.flags or 'obsolete' in self.flags:

@@ -756,7 +756,8 @@ class Module(MgrModule, orchestrator.Orchestrator):
     # Ansible Orchestrator self-owned commands
     #---------------------------------------------------------------------------
     @CLIWriteCommand("ansible set-ssl-certificate",
-                     "name=mgr_id,type=CephString,req=false")
+                     "name=mgr_id,type=CephString,req=false",
+                     desc='Set the ssl client certificate')
     def set_tls_certificate(self, mgr_id=None, inbuf=None):
         """Load tls certificate in mon k-v store
         """
@@ -770,7 +771,8 @@ class Module(MgrModule, orchestrator.Orchestrator):
         return 0, "SSL certificate updated", ""
 
     @CLIWriteCommand("ansible set-ssl-certificate-key",
-                     "name=mgr_id,type=CephString,req=false")
+                     "name=mgr_id,type=CephString,req=false",
+                     desc='Set the ssl client private key')
     def set_tls_certificate_key(self, mgr_id=None, inbuf=None):
         """Load tls certificate key in mon k-v store
         """

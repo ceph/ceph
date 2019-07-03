@@ -8,8 +8,14 @@ import functools
 import warnings
 import json
 
+try:
+    from typing import List
+    from ceph.mon_command_api import CommandResult
+except ImportError:
+    pass
+
 if sys.version_info > (3, 0):
-    from typing import List, overload
+    from typing import overload
 
 
 def deprecated(func):
@@ -25,101 +31,153 @@ def deprecated(func):
 
 
 class MonCommandApi(object):
-    def __init__(self, cluster):
-        self._cluster = cluster
-
+    def __init__(self, rados):
+        self._rados = rados
+        
     def _mon_command(self, cmd, inbuf=b'', target=None):
-        return self._cluster.mon_command(json.dumps(cmd), inbuf=inbuf, target=target)
+        res = self._rados.mon_command(json.dumps(cmd), inbuf=inbuf, target=target)
+        return CommandResult(*res)
     
-    def auth_add(self, entity: str, caps: List[str]=None):
+    def ansible_set_ssl_certificate(self, mgr_id=None):
+        # type: (str) -> CommandResult
         """
-        add auth info for <entity> from input file, or random key if no input is given, and/or any caps specified in the command
-        :param entity: CephString 
-        :param caps: CephString 
+        module=mgr perm=w flags=mgr
+        
+        :param mgr_id: CephString
+        """
+        prefix = 'ansible set-ssl-certificate'
+        _args = {'prefix': prefix, 'mgr_id': mgr_id}
+        return self._mon_command(_args)
+    
+    def ansible_set_ssl_certificate_key(self, mgr_id=None):
+        # type: (str) -> CommandResult
+        """
+        module=mgr perm=w flags=mgr
+        
+        :param mgr_id: CephString
+        """
+        prefix = 'ansible set-ssl-certificate-key'
+        _args = {'prefix': prefix, 'mgr_id': mgr_id}
+        return self._mon_command(_args)
+    
+    def auth_add(self, entity, caps=None):
+        # type: (str, List[str]) -> CommandResult
+        """
+        add auth info for <entity> from input file, or random key if no input
+        is given, and/or any caps specified in the command
+        
         module=auth perm=rwx flags=
+        
+        :param entity: CephString
+        :param caps: CephString
         """
         prefix = 'auth add'
         _args = {'prefix': prefix, 'entity': entity, 'caps': caps}
         return self._mon_command(_args)
     
-    def auth_caps(self, entity: str, caps: List[str]):
+    def auth_caps(self, entity, caps):
+        # type: (str, List[str]) -> CommandResult
         """
         update caps for <name> from caps specified in the command
-        :param entity: CephString 
-        :param caps: CephString 
+        
         module=auth perm=rwx flags=
+        
+        :param entity: CephString
+        :param caps: CephString
         """
         prefix = 'auth caps'
         _args = {'prefix': prefix, 'entity': entity, 'caps': caps}
         return self._mon_command(_args)
     
     @deprecated
-    def auth_del(self, entity: str):
+    def auth_del(self, entity):
+        # type: (str) -> CommandResult
         """
         delete all caps for <name>
-        :param entity: CephString 
+        
         module=auth perm=rwx flags=deprecated
+        
+        :param entity: CephString
         """
         prefix = 'auth del'
         _args = {'prefix': prefix, 'entity': entity}
         return self._mon_command(_args)
     
-    def auth_export(self, entity: str=None):
+    def auth_export(self, entity=None):
+        # type: (str) -> CommandResult
         """
         write keyring for requested entity, or master keyring if none given
-        :param entity: CephString 
+        
         module=auth perm=rx flags=
+        
+        :param entity: CephString
         """
         prefix = 'auth export'
         _args = {'prefix': prefix, 'entity': entity}
         return self._mon_command(_args)
     
-    def auth_get(self, entity: str):
+    def auth_get(self, entity):
+        # type: (str) -> CommandResult
         """
         write keyring file with requested key
-        :param entity: CephString 
+        
         module=auth perm=rx flags=
+        
+        :param entity: CephString
         """
         prefix = 'auth get'
         _args = {'prefix': prefix, 'entity': entity}
         return self._mon_command(_args)
     
-    def auth_get_key(self, entity: str):
+    def auth_get_key(self, entity):
+        # type: (str) -> CommandResult
         """
         display requested key
-        :param entity: CephString 
+        
         module=auth perm=rx flags=
+        
+        :param entity: CephString
         """
         prefix = 'auth get-key'
         _args = {'prefix': prefix, 'entity': entity}
         return self._mon_command(_args)
     
-    def auth_get_or_create(self, entity: str, caps: List[str]=None):
+    def auth_get_or_create(self, entity, caps=None):
+        # type: (str, List[str]) -> CommandResult
         """
-        add auth info for <entity> from input file, or random key if no input given, and/or any caps specified in the command
-        :param entity: CephString 
-        :param caps: CephString 
+        add auth info for <entity> from input file, or random key if no input
+        given, and/or any caps specified in the command
+        
         module=auth perm=rwx flags=
+        
+        :param entity: CephString
+        :param caps: CephString
         """
         prefix = 'auth get-or-create'
         _args = {'prefix': prefix, 'entity': entity, 'caps': caps}
         return self._mon_command(_args)
     
-    def auth_get_or_create_key(self, entity: str, caps: List[str]=None):
+    def auth_get_or_create_key(self, entity, caps=None):
+        # type: (str, List[str]) -> CommandResult
         """
-        get, or add, key for <name> from system/caps pairs specified in the command.  If key already exists, any given caps must match the existing caps for that key.
-        :param entity: CephString 
-        :param caps: CephString 
+        get, or add, key for <name> from system/caps pairs specified in the
+        command.  If key already exists, any given caps must match the
+        existing caps for that key.
+        
         module=auth perm=rwx flags=
+        
+        :param entity: CephString
+        :param caps: CephString
         """
         prefix = 'auth get-or-create-key'
         _args = {'prefix': prefix, 'entity': entity, 'caps': caps}
         return self._mon_command(_args)
     
     def auth_import(self):
+        # type: () -> CommandResult
         """
         auth import: read keyring file from -i <file>
-    
+        
         module=auth perm=rwx flags=
         """
         prefix = 'auth import'
@@ -128,9 +186,10 @@ class MonCommandApi(object):
     
     @deprecated
     def auth_list(self):
+        # type: () -> CommandResult
         """
         list authentication state
-    
+        
         module=auth perm=rx flags=deprecated
         """
         prefix = 'auth list'
@@ -138,111 +197,140 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def auth_ls(self):
+        # type: () -> CommandResult
         """
         list authentication state
-    
+        
         module=auth perm=rx flags=
         """
         prefix = 'auth ls'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
+    # 
+    # @overload  # Python 3 only
+    # def auth_print_key(self, entity):
+    #     # type: (str) -> CommandResult
+    #     """
+    #     display requested key
+    #     
+    #     module=auth perm=rx flags=
+    #     
+    #     :param entity: CephString
+    #     """
+    #     prefix = 'auth print-key'
+    #     _args = {'prefix': prefix, 'entity': entity}
+    #     return self._mon_command(_args)
+    # 
+    # @overload  # Python 3 only
+    # def auth_print_key(self, entity):
+    #     # type: (str) -> CommandResult
+    #     """
+    #     display requested key
+    #     
+    #     module=auth perm=rx flags=
+    #     
+    #     :param entity: CephString
+    #     """
+    #     prefix = 'auth print_key'
+    #     _args = {'prefix': prefix, 'entity': entity}
+    #     return self._mon_command(_args)
     
-    @overload  # Python 3 only
-    def auth_print_key(self, entity: str):
-        """
-        display requested key
-        :param entity: CephString 
-        module=auth perm=rx flags=
-        """
-        prefix = 'auth print-key'
-        _args = {'prefix': prefix, 'entity': entity}
-        return self._mon_command(_args)
-    
-    @overload  # Python 3 only
-    def auth_print_key(self, entity: str):
-        """
-        display requested key
-        :param entity: CephString 
-        module=auth perm=rx flags=
-        """
-        prefix = 'auth print_key'
-        _args = {'prefix': prefix, 'entity': entity}
-        return self._mon_command(_args)
-    
-    def auth_rm(self, entity: str):
+    def auth_rm(self, entity):
+        # type: (str) -> CommandResult
         """
         remove all caps for <name>
-        :param entity: CephString 
+        
         module=auth perm=rwx flags=
+        
+        :param entity: CephString
         """
         prefix = 'auth rm'
         _args = {'prefix': prefix, 'entity': entity}
         return self._mon_command(_args)
     
-    def balancer_dump(self, plan: str):
+    def balancer_dump(self, plan):
+        # type: (str) -> CommandResult
         """
         Show an optimization plan
-        :param plan: CephString 
+        
         module=mgr perm=r flags=mgr
+        
+        :param plan: CephString
         """
         prefix = 'balancer dump'
         _args = {'prefix': prefix, 'plan': plan}
         return self._mon_command(_args)
     
-    def balancer_eval(self, option: str=None):
+    def balancer_eval(self, option=None):
+        # type: (str) -> CommandResult
         """
-        Evaluate data distribution for the current cluster or specific pool or specific plan
-        :param option: CephString 
+        Evaluate data distribution for the current cluster or specific pool or
+        specific plan
+        
         module=mgr perm=r flags=mgr
+        
+        :param option: CephString
         """
         prefix = 'balancer eval'
         _args = {'prefix': prefix, 'option': option}
         return self._mon_command(_args)
     
-    def balancer_eval_verbose(self, option: str=None):
+    def balancer_eval_verbose(self, option=None):
+        # type: (str) -> CommandResult
         """
-        Evaluate data distribution for the current cluster or specific pool or specific plan (verbosely)
-        :param option: CephString 
+        Evaluate data distribution for the current cluster or specific pool or
+        specific plan (verbosely)
+        
         module=mgr perm=r flags=mgr
+        
+        :param option: CephString
         """
         prefix = 'balancer eval-verbose'
         _args = {'prefix': prefix, 'option': option}
         return self._mon_command(_args)
     
-    def balancer_execute(self, plan: str):
+    def balancer_execute(self, plan):
+        # type: (str) -> CommandResult
         """
         Execute an optimization plan
-        :param plan: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param plan: CephString
         """
         prefix = 'balancer execute'
         _args = {'prefix': prefix, 'plan': plan}
         return self._mon_command(_args)
     
     def balancer_ls(self):
+        # type: () -> CommandResult
         """
         List all plans
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'balancer ls'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def balancer_mode(self, mode: str):
+    def balancer_mode(self, mode):
+        # type: (str) -> CommandResult
         """
         Set balancer mode
-        :param mode: CephChoices strings=none|crush-compat|upmap 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param mode: CephChoices strings=none|crush-compat|upmap
         """
         prefix = 'balancer mode'
         _args = {'prefix': prefix, 'mode': mode}
         return self._mon_command(_args)
     
     def balancer_off(self):
+        # type: () -> CommandResult
         """
         Disable automatic balancing
-    
+        
         module=mgr perm=rw flags=mgr
         """
         prefix = 'balancer off'
@@ -250,90 +338,111 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def balancer_on(self):
+        # type: () -> CommandResult
         """
         Enable automatic balancing
-    
+        
         module=mgr perm=rw flags=mgr
         """
         prefix = 'balancer on'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def balancer_optimize(self, plan: str, pools: List[str]=None):
+    def balancer_optimize(self, plan, pools=None):
+        # type: (str, List[str]) -> CommandResult
         """
         Run optimizer to create a new plan
-        :param plan: CephString 
-        :param pools: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param plan: CephString
+        :param pools: CephString
         """
         prefix = 'balancer optimize'
         _args = {'prefix': prefix, 'plan': plan, 'pools': pools}
         return self._mon_command(_args)
     
-    def balancer_pool_add(self, pools: List[str]):
+    def balancer_pool_add(self, pools):
+        # type: (List[str]) -> CommandResult
         """
         Enable automatic balancing for specific pools
-        :param pools: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param pools: CephString
         """
         prefix = 'balancer pool add'
         _args = {'prefix': prefix, 'pools': pools}
         return self._mon_command(_args)
     
     def balancer_pool_ls(self):
+        # type: () -> CommandResult
         """
-        List automatic balancing pools. Note that empty list means all existing pools will be automatic balancing targets, which is the default behaviour of balancer.
-    
+        List automatic balancing pools. Note that empty list means all
+        existing pools will be automatic balancing targets, which is the
+        default behaviour of balancer.
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'balancer pool ls'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def balancer_pool_rm(self, pools: List[str]):
+    def balancer_pool_rm(self, pools):
+        # type: (List[str]) -> CommandResult
         """
         Disable automatic balancing for specific pools
-        :param pools: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param pools: CephString
         """
         prefix = 'balancer pool rm'
         _args = {'prefix': prefix, 'pools': pools}
         return self._mon_command(_args)
     
     def balancer_reset(self):
+        # type: () -> CommandResult
         """
         Discard all optimization plans
-    
+        
         module=mgr perm=rw flags=mgr
         """
         prefix = 'balancer reset'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def balancer_rm(self, plan: str):
+    def balancer_rm(self, plan):
+        # type: (str) -> CommandResult
         """
         Discard an optimization plan
-        :param plan: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param plan: CephString
         """
         prefix = 'balancer rm'
         _args = {'prefix': prefix, 'plan': plan}
         return self._mon_command(_args)
     
-    def balancer_show(self, plan: str):
+    def balancer_show(self, plan):
+        # type: (str) -> CommandResult
         """
         Show details of an optimization plan
-        :param plan: CephString 
+        
         module=mgr perm=r flags=mgr
+        
+        :param plan: CephString
         """
         prefix = 'balancer show'
         _args = {'prefix': prefix, 'plan': plan}
         return self._mon_command(_args)
     
     def balancer_status(self):
+        # type: () -> CommandResult
         """
         Show balancer status
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'balancer status'
@@ -342,19 +451,21 @@ class MonCommandApi(object):
     
     @deprecated
     def compact(self):
+        # type: () -> CommandResult
         """
         cause compaction of monitor's leveldb/rocksdb storage
-    
-        module=mon perm=rw flags=deprecated, no_forward
+        
+        module=mon perm=rw flags=no_forward, deprecated
         """
         prefix = 'compact'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
     def config_assimilate_conf(self):
+        # type: () -> CommandResult
         """
         Assimilate options from a conf, and return a new, minimal conf file
-    
+        
         module=config perm=rw flags=
         """
         prefix = 'config assimilate-conf'
@@ -362,9 +473,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def config_dump(self):
+        # type: () -> CommandResult
         """
         Show all configuration option(s)
-    
+        
         module=mon perm=r flags=
         """
         prefix = 'config dump'
@@ -372,147 +484,185 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def config_generate_minimal_conf(self):
+        # type: () -> CommandResult
         """
         Generate a minimal ceph.conf file
-    
+        
         module=config perm=r flags=
         """
         prefix = 'config generate-minimal-conf'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def config_get(self, who: str, key: str):
+    def config_get(self, who, key):
+        # type: (str, str) -> CommandResult
         """
         Show configuration option(s) for an entity
-        :param who: CephString 
-        :param key: CephString 
+        
         module=config perm=r flags=
+        
+        :param who: CephString
+        :param key: CephString
         """
         prefix = 'config get'
         _args = {'prefix': prefix, 'who': who, 'key': key}
         return self._mon_command(_args)
     
-    def config_help(self, key: str):
+    def config_help(self, key):
+        # type: (str) -> CommandResult
         """
         Describe a configuration option
-        :param key: CephString 
+        
         module=config perm=r flags=
+        
+        :param key: CephString
         """
         prefix = 'config help'
         _args = {'prefix': prefix, 'key': key}
         return self._mon_command(_args)
     
-    def config_log(self, num: int):
+    def config_log(self, num):
+        # type: (int) -> CommandResult
         """
         Show recent history of config changes
-        :param num: CephInt 
+        
         module=config perm=r flags=
+        
+        :param num: CephInt
         """
         prefix = 'config log'
         _args = {'prefix': prefix, 'num': num}
         return self._mon_command(_args)
     
     def config_ls(self):
+        # type: () -> CommandResult
         """
         List available configuration options
-    
+        
         module=config perm=r flags=
         """
         prefix = 'config ls'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def config_reset(self, num: int):
+    def config_reset(self, num):
+        # type: (int) -> CommandResult
         """
         Revert configuration to a historical version specified by <num>
-        :param num: CephInt ragne=0 
+        
         module=config perm=rw flags=
+        
+        :param num: CephInt ragne=0
         """
         prefix = 'config reset'
         _args = {'prefix': prefix, 'num': num}
         return self._mon_command(_args)
     
-    def config_rm(self, who: str, name: str):
+    def config_rm(self, who, name):
+        # type: (str, str) -> CommandResult
         """
         Clear a configuration option for one or more entities
-        :param who: CephString 
-        :param name: CephString 
+        
         module=config perm=rw flags=
+        
+        :param who: CephString
+        :param name: CephString
         """
         prefix = 'config rm'
         _args = {'prefix': prefix, 'who': who, 'name': name}
         return self._mon_command(_args)
     
-    def config_set(self, who: str, name: str, value: str, force: bool=None):
+    def config_set(self, who, name, value, force=None):
+        # type: (str, str, str, bool) -> CommandResult
         """
         Set a configuration option for one or more entities
-        :param who: CephString 
-        :param name: CephString 
-        :param value: CephString 
-        :param force: CephBool 
+        
         module=config perm=rw flags=
+        
+        :param who: CephString
+        :param name: CephString
+        :param value: CephString
+        :param force: CephBool
         """
         prefix = 'config set'
         _args = {'prefix': prefix, 'who': who, 'name': name, 'value': value, 'force': force}
         return self._mon_command(_args)
     
-    def config_show(self, who: str, key: str):
+    def config_show(self, who, key):
+        # type: (str, str) -> CommandResult
         """
         Show running configuration
-        :param who: CephString 
-        :param key: CephString 
+        
         module=mgr perm=r flags=mgr
+        
+        :param who: CephString
+        :param key: CephString
         """
         prefix = 'config show'
         _args = {'prefix': prefix, 'who': who, 'key': key}
         return self._mon_command(_args)
     
-    def config_show_with_defaults(self, who: str):
+    def config_show_with_defaults(self, who):
+        # type: (str) -> CommandResult
         """
         Show running configuration (including compiled-in defaults)
-        :param who: CephString 
+        
         module=mgr perm=r flags=mgr
+        
+        :param who: CephString
         """
         prefix = 'config show-with-defaults'
         _args = {'prefix': prefix, 'who': who}
         return self._mon_command(_args)
     
     @deprecated
-    def config_key_del(self, key: str):
+    def config_key_del(self, key):
+        # type: (str) -> CommandResult
         """
         delete <key>
-        :param key: CephString 
+        
         module=config-key perm=rw flags=deprecated
+        
+        :param key: CephString
         """
         prefix = 'config-key del'
         _args = {'prefix': prefix, 'key': key}
         return self._mon_command(_args)
     
-    def config_key_dump(self, key: str=None):
+    def config_key_dump(self, key=None):
+        # type: (str) -> CommandResult
         """
         dump keys and values (with optional prefix)
-        :param key: CephString 
+        
         module=config-key perm=r flags=
+        
+        :param key: CephString
         """
         prefix = 'config-key dump'
         _args = {'prefix': prefix, 'key': key}
         return self._mon_command(_args)
     
-    def config_key_exists(self, key: str):
+    def config_key_exists(self, key):
+        # type: (str) -> CommandResult
         """
         check for <key>'s existence
-        :param key: CephString 
+        
         module=config-key perm=r flags=
+        
+        :param key: CephString
         """
         prefix = 'config-key exists'
         _args = {'prefix': prefix, 'key': key}
         return self._mon_command(_args)
     
-    def config_key_get(self, key: str):
+    def config_key_get(self, key):
+        # type: (str) -> CommandResult
         """
         get <key>
-        :param key: CephString 
+        
         module=config-key perm=r flags=
+        
+        :param key: CephString
         """
         prefix = 'config-key get'
         _args = {'prefix': prefix, 'key': key}
@@ -520,9 +670,10 @@ class MonCommandApi(object):
     
     @deprecated
     def config_key_list(self):
+        # type: () -> CommandResult
         """
         list keys
-    
+        
         module=config-key perm=r flags=deprecated
         """
         prefix = 'config-key list'
@@ -530,9 +681,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def config_key_ls(self):
+        # type: () -> CommandResult
         """
         list keys
-    
+        
         module=config-key perm=r flags=
         """
         prefix = 'config-key ls'
@@ -540,62 +692,78 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     @deprecated
-    def config_key_put(self, key: str, val: str=None):
+    def config_key_put(self, key, val=None):
+        # type: (str, str) -> CommandResult
         """
         put <key>, value <val>
-        :param key: CephString 
-        :param val: CephString 
+        
         module=config-key perm=rw flags=deprecated
+        
+        :param key: CephString
+        :param val: CephString
         """
         prefix = 'config-key put'
         _args = {'prefix': prefix, 'key': key, 'val': val}
         return self._mon_command(_args)
     
-    def config_key_rm(self, key: str):
+    def config_key_rm(self, key):
+        # type: (str) -> CommandResult
         """
         rm <key>
-        :param key: CephString 
+        
         module=config-key perm=rw flags=
+        
+        :param key: CephString
         """
         prefix = 'config-key rm'
         _args = {'prefix': prefix, 'key': key}
         return self._mon_command(_args)
     
-    def config_key_set(self, key: str, val: str=None):
+    def config_key_set(self, key, val=None):
+        # type: (str, str) -> CommandResult
         """
         set <key> to value <val>
-        :param key: CephString 
-        :param val: CephString 
+        
         module=config-key perm=rw flags=
+        
+        :param key: CephString
+        :param val: CephString
         """
         prefix = 'config-key set'
         _args = {'prefix': prefix, 'key': key, 'val': val}
         return self._mon_command(_args)
     
-    def crash_info(self, id_: str):
+    def crash_info(self, id_1):
+        # type: (str) -> CommandResult
         """
         show crash dump metadata
-        :param id_: CephString 
+        
         module=mgr perm=r flags=mgr
+        
+        :param id_1: CephString
         """
         prefix = 'crash info'
-        _args = {'prefix': prefix, 'id': id_}
+        _args = {'prefix': prefix, 'id': id_1}
         return self._mon_command(_args)
     
-    def crash_json_report(self, hours: str):
+    def crash_json_report(self, hours):
+        # type: (str) -> CommandResult
         """
         Crashes in the last <hours> hours
-        :param hours: CephString 
+        
         module=mgr perm=r flags=mgr
+        
+        :param hours: CephString
         """
         prefix = 'crash json_report'
         _args = {'prefix': prefix, 'hours': hours}
         return self._mon_command(_args)
     
     def crash_ls(self):
+        # type: () -> CommandResult
         """
         Show saved crash dumps
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'crash ls'
@@ -603,214 +771,269 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def crash_post(self):
+        # type: () -> CommandResult
         """
         Add a crash dump (use -i <jsonfile>)
-    
+        
         module=mgr perm=rw flags=mgr
         """
         prefix = 'crash post'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def crash_prune(self, keep: str):
+    def crash_prune(self, keep):
+        # type: (str) -> CommandResult
         """
         Remove crashes older than <keep> days
-        :param keep: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param keep: CephString
         """
         prefix = 'crash prune'
         _args = {'prefix': prefix, 'keep': keep}
         return self._mon_command(_args)
     
-    def crash_rm(self, id_: str):
+    def crash_rm(self, id_1):
+        # type: (str) -> CommandResult
         """
         Remove a saved crash <id>
-        :param id_: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param id_1: CephString
         """
         prefix = 'crash rm'
-        _args = {'prefix': prefix, 'id': id_}
+        _args = {'prefix': prefix, 'id': id_1}
         return self._mon_command(_args)
     
     def crash_stat(self):
+        # type: () -> CommandResult
         """
         Summarize recorded crashes
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'crash stat'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def dashboard_ac_role_add_scope_perms(self, rolename: str, scopename: str, permissions: List[str]):
+    def dashboard_ac_role_add_scope_perms(self, rolename, scopename, permissions):
+        # type: (str, str, List[str]) -> CommandResult
         """
         Add the scope permissions for a role
-        :param rolename: CephString 
-        :param scopename: CephString 
-        :param permissions: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param rolename: CephString
+        :param scopename: CephString
+        :param permissions: CephString
         """
         prefix = 'dashboard ac-role-add-scope-perms'
-        _args = {'prefix': prefix, 'rolename': rolename, 'scopename': scopename, 'permissions': permissions}
+        _args = {'prefix': prefix, 'rolename': rolename, 'scopename': scopename, 'permissions':
+                 permissions}
         return self._mon_command(_args)
     
-    def dashboard_ac_role_create(self, rolename: str, description: str=None):
+    def dashboard_ac_role_create(self, rolename, description=None):
+        # type: (str, str) -> CommandResult
         """
         Create a new access control role
-        :param rolename: CephString 
-        :param description: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param rolename: CephString
+        :param description: CephString
         """
         prefix = 'dashboard ac-role-create'
         _args = {'prefix': prefix, 'rolename': rolename, 'description': description}
         return self._mon_command(_args)
     
-    def dashboard_ac_role_del_scope_perms(self, rolename: str, scopename: str):
+    def dashboard_ac_role_del_scope_perms(self, rolename, scopename):
+        # type: (str, str) -> CommandResult
         """
         Delete the scope permissions for a role
-        :param rolename: CephString 
-        :param scopename: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param rolename: CephString
+        :param scopename: CephString
         """
         prefix = 'dashboard ac-role-del-scope-perms'
         _args = {'prefix': prefix, 'rolename': rolename, 'scopename': scopename}
         return self._mon_command(_args)
     
-    def dashboard_ac_role_delete(self, rolename: str):
+    def dashboard_ac_role_delete(self, rolename):
+        # type: (str) -> CommandResult
         """
         Delete an access control role
-        :param rolename: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param rolename: CephString
         """
         prefix = 'dashboard ac-role-delete'
         _args = {'prefix': prefix, 'rolename': rolename}
         return self._mon_command(_args)
     
-    def dashboard_ac_role_show(self, rolename: str=None):
+    def dashboard_ac_role_show(self, rolename=None):
+        # type: (str) -> CommandResult
         """
         Show role info
-        :param rolename: CephString 
+        
         module=mgr perm=r flags=mgr
+        
+        :param rolename: CephString
         """
         prefix = 'dashboard ac-role-show'
         _args = {'prefix': prefix, 'rolename': rolename}
         return self._mon_command(_args)
     
-    def dashboard_ac_user_add_roles(self, username: str, roles: List[str]):
+    def dashboard_ac_user_add_roles(self, username, roles):
+        # type: (str, List[str]) -> CommandResult
         """
         Add roles to user
-        :param username: CephString 
-        :param roles: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param username: CephString
+        :param roles: CephString
         """
         prefix = 'dashboard ac-user-add-roles'
         _args = {'prefix': prefix, 'username': username, 'roles': roles}
         return self._mon_command(_args)
     
-    def dashboard_ac_user_create(self, username: str, password: str=None, rolename: str=None, name: str=None, email: str=None):
+    def dashboard_ac_user_create(self, username, password=None, rolename=None, name=None,
+                                 email=None):
+        # type: (str, str, str, str, str) -> CommandResult
         """
         Create a user
-        :param username: CephString 
-        :param password: CephString 
-        :param rolename: CephString 
-        :param name: CephString 
-        :param email: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param username: CephString
+        :param password: CephString
+        :param rolename: CephString
+        :param name: CephString
+        :param email: CephString
         """
         prefix = 'dashboard ac-user-create'
-        _args = {'prefix': prefix, 'username': username, 'password': password, 'rolename': rolename, 'name': name, 'email': email}
+        _args = {'prefix': prefix, 'username': username, 'password': password, 'rolename':
+                 rolename, 'name': name, 'email': email}
         return self._mon_command(_args)
     
-    def dashboard_ac_user_del_roles(self, username: str, roles: List[str]):
+    def dashboard_ac_user_del_roles(self, username, roles):
+        # type: (str, List[str]) -> CommandResult
         """
         Delete roles from user
-        :param username: CephString 
-        :param roles: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param username: CephString
+        :param roles: CephString
         """
         prefix = 'dashboard ac-user-del-roles'
         _args = {'prefix': prefix, 'username': username, 'roles': roles}
         return self._mon_command(_args)
     
-    def dashboard_ac_user_delete(self, username: str):
+    def dashboard_ac_user_delete(self, username):
+        # type: (str) -> CommandResult
         """
         Delete user
-        :param username: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param username: CephString
         """
         prefix = 'dashboard ac-user-delete'
         _args = {'prefix': prefix, 'username': username}
         return self._mon_command(_args)
     
-    def dashboard_ac_user_set_info(self, username: str, name: str, email: str):
+    def dashboard_ac_user_set_info(self, username, name, email):
+        # type: (str, str, str) -> CommandResult
         """
         Set user info
-        :param username: CephString 
-        :param name: CephString 
-        :param email: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param username: CephString
+        :param name: CephString
+        :param email: CephString
         """
         prefix = 'dashboard ac-user-set-info'
         _args = {'prefix': prefix, 'username': username, 'name': name, 'email': email}
         return self._mon_command(_args)
     
-    def dashboard_ac_user_set_password(self, username: str, password: str):
+    def dashboard_ac_user_set_password(self, username, password):
+        # type: (str, str) -> CommandResult
         """
         Set user password
-        :param username: CephString 
-        :param password: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param username: CephString
+        :param password: CephString
         """
         prefix = 'dashboard ac-user-set-password'
         _args = {'prefix': prefix, 'username': username, 'password': password}
         return self._mon_command(_args)
     
-    def dashboard_ac_user_set_roles(self, username: str, roles: List[str]):
+    def dashboard_ac_user_set_roles(self, username, roles):
+        # type: (str, List[str]) -> CommandResult
         """
         Set user roles
-        :param username: CephString 
-        :param roles: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param username: CephString
+        :param roles: CephString
         """
         prefix = 'dashboard ac-user-set-roles'
         _args = {'prefix': prefix, 'username': username, 'roles': roles}
         return self._mon_command(_args)
     
-    def dashboard_ac_user_show(self, username: str=None):
+    def dashboard_ac_user_show(self, username=None):
+        # type: (str) -> CommandResult
         """
         Show user info
-        :param username: CephString 
+        
         module=mgr perm=r flags=mgr
+        
+        :param username: CephString
         """
         prefix = 'dashboard ac-user-show'
         _args = {'prefix': prefix, 'username': username}
         return self._mon_command(_args)
     
     def dashboard_create_self_signed_cert(self):
+        # type: () -> CommandResult
         """
         Create self signed certificate
-    
+        
         module=mgr perm=w flags=mgr
         """
         prefix = 'dashboard create-self-signed-cert'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def dashboard_feature(self, action: str, features: List[str]=None):
+    def dashboard_feature(self, action, features=None):
+        # type: (str, List[str]) -> CommandResult
         """
         Enable or disable features in Ceph-Mgr Dashboard
-        :param action: CephChoices strings=disable|enable|status 
-        :param features: CephChoices strings=cephfs|iscsi|mirroring|rbd|rgw 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param action: CephChoices strings=enable|disable|status
+        :param features: CephChoices strings=rbd|mirroring|iscsi|cephfs|rgw
         """
         prefix = 'dashboard feature'
         _args = {'prefix': prefix, 'action': action, 'features': features}
         return self._mon_command(_args)
     
     def dashboard_get_alertmanager_api_host(self):
+        # type: () -> CommandResult
         """
         Get the ALERTMANAGER_API_HOST option value
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'dashboard get-alertmanager-api-host'
@@ -818,9 +1041,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_get_audit_api_enabled(self):
+        # type: () -> CommandResult
         """
         Get the AUDIT_API_ENABLED option value
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'dashboard get-audit-api-enabled'
@@ -828,9 +1052,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_get_audit_api_log_payload(self):
+        # type: () -> CommandResult
         """
         Get the AUDIT_API_LOG_PAYLOAD option value
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'dashboard get-audit-api-log-payload'
@@ -838,9 +1063,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_get_enable_browsable_api(self):
+        # type: () -> CommandResult
         """
         Get the ENABLE_BROWSABLE_API option value
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'dashboard get-enable-browsable-api'
@@ -848,9 +1074,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_get_ganesha_clusters_rados_pool_namespace(self):
+        # type: () -> CommandResult
         """
         Get the GANESHA_CLUSTERS_RADOS_POOL_NAMESPACE option value
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'dashboard get-ganesha-clusters-rados-pool-namespace'
@@ -858,9 +1085,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_get_grafana_api_password(self):
+        # type: () -> CommandResult
         """
         Get the GRAFANA_API_PASSWORD option value
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'dashboard get-grafana-api-password'
@@ -868,9 +1096,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_get_grafana_api_url(self):
+        # type: () -> CommandResult
         """
         Get the GRAFANA_API_URL option value
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'dashboard get-grafana-api-url'
@@ -878,19 +1107,32 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_get_grafana_api_username(self):
+        # type: () -> CommandResult
         """
         Get the GRAFANA_API_USERNAME option value
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'dashboard get-grafana-api-username'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
+    def dashboard_get_grafana_update_dashboards(self):
+        # type: () -> CommandResult
+        """
+        Get the GRAFANA_UPDATE_DASHBOARDS option value
+        
+        module=mgr perm=r flags=mgr
+        """
+        prefix = 'dashboard get-grafana-update-dashboards'
+        _args = {'prefix': prefix, }
+        return self._mon_command(_args)
+    
     def dashboard_get_iscsi_api_ssl_verification(self):
+        # type: () -> CommandResult
         """
         Get the ISCSI_API_SSL_VERIFICATION option value
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'dashboard get-iscsi-api-ssl-verification'
@@ -898,9 +1140,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_get_jwt_token_ttl(self):
+        # type: () -> CommandResult
         """
         Get the JWT token TTL in seconds
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'dashboard get-jwt-token-ttl'
@@ -908,9 +1151,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_get_prometheus_api_host(self):
+        # type: () -> CommandResult
         """
         Get the PROMETHEUS_API_HOST option value
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'dashboard get-prometheus-api-host'
@@ -918,9 +1162,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_get_rest_requests_timeout(self):
+        # type: () -> CommandResult
         """
         Get the REST_REQUESTS_TIMEOUT option value
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'dashboard get-rest-requests-timeout'
@@ -928,9 +1173,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_get_rgw_api_access_key(self):
+        # type: () -> CommandResult
         """
         Get the RGW_API_ACCESS_KEY option value
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'dashboard get-rgw-api-access-key'
@@ -938,9 +1184,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_get_rgw_api_admin_resource(self):
+        # type: () -> CommandResult
         """
         Get the RGW_API_ADMIN_RESOURCE option value
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'dashboard get-rgw-api-admin-resource'
@@ -948,9 +1195,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_get_rgw_api_host(self):
+        # type: () -> CommandResult
         """
         Get the RGW_API_HOST option value
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'dashboard get-rgw-api-host'
@@ -958,9 +1206,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_get_rgw_api_port(self):
+        # type: () -> CommandResult
         """
         Get the RGW_API_PORT option value
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'dashboard get-rgw-api-port'
@@ -968,9 +1217,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_get_rgw_api_scheme(self):
+        # type: () -> CommandResult
         """
         Get the RGW_API_SCHEME option value
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'dashboard get-rgw-api-scheme'
@@ -978,9 +1228,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_get_rgw_api_secret_key(self):
+        # type: () -> CommandResult
         """
         Get the RGW_API_SECRET_KEY option value
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'dashboard get-rgw-api-secret-key'
@@ -988,9 +1239,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_get_rgw_api_ssl_verify(self):
+        # type: () -> CommandResult
         """
         Get the RGW_API_SSL_VERIFY option value
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'dashboard get-rgw-api-ssl-verify'
@@ -998,49 +1250,69 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_get_rgw_api_user_id(self):
+        # type: () -> CommandResult
         """
         Get the RGW_API_USER_ID option value
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'dashboard get-rgw-api-user-id'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def dashboard_iscsi_gateway_add(self, service_url: str):
+    def dashboard_grafana_dashboards_update(self):
+        # type: () -> CommandResult
+        """
+        Push dashboards to Grafana
+        
+        module=mgr perm=w flags=mgr
+        """
+        prefix = 'dashboard grafana dashboards update'
+        _args = {'prefix': prefix, }
+        return self._mon_command(_args)
+    
+    def dashboard_iscsi_gateway_add(self, service_url):
+        # type: (str) -> CommandResult
         """
         Add iSCSI gateway configuration
-        :param service_url: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param service_url: CephString
         """
         prefix = 'dashboard iscsi-gateway-add'
         _args = {'prefix': prefix, 'service_url': service_url}
         return self._mon_command(_args)
     
     def dashboard_iscsi_gateway_list(self):
+        # type: () -> CommandResult
         """
         List iSCSI gateways
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'dashboard iscsi-gateway-list'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def dashboard_iscsi_gateway_rm(self, name: str):
+    def dashboard_iscsi_gateway_rm(self, name):
+        # type: (str) -> CommandResult
         """
         Remove iSCSI gateway configuration
-        :param name: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param name: CephString
         """
         prefix = 'dashboard iscsi-gateway-rm'
         _args = {'prefix': prefix, 'name': name}
         return self._mon_command(_args)
     
     def dashboard_reset_alertmanager_api_host(self):
+        # type: () -> CommandResult
         """
         Reset the ALERTMANAGER_API_HOST option to its default value
-    
+        
         module=mgr perm=w flags=mgr
         """
         prefix = 'dashboard reset-alertmanager-api-host'
@@ -1048,9 +1320,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_reset_audit_api_enabled(self):
+        # type: () -> CommandResult
         """
         Reset the AUDIT_API_ENABLED option to its default value
-    
+        
         module=mgr perm=w flags=mgr
         """
         prefix = 'dashboard reset-audit-api-enabled'
@@ -1058,9 +1331,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_reset_audit_api_log_payload(self):
+        # type: () -> CommandResult
         """
         Reset the AUDIT_API_LOG_PAYLOAD option to its default value
-    
+        
         module=mgr perm=w flags=mgr
         """
         prefix = 'dashboard reset-audit-api-log-payload'
@@ -1068,9 +1342,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_reset_enable_browsable_api(self):
+        # type: () -> CommandResult
         """
         Reset the ENABLE_BROWSABLE_API option to its default value
-    
+        
         module=mgr perm=w flags=mgr
         """
         prefix = 'dashboard reset-enable-browsable-api'
@@ -1078,9 +1353,11 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_reset_ganesha_clusters_rados_pool_namespace(self):
+        # type: () -> CommandResult
         """
-        Reset the GANESHA_CLUSTERS_RADOS_POOL_NAMESPACE option to its default value
-    
+        Reset the GANESHA_CLUSTERS_RADOS_POOL_NAMESPACE option to its default
+        value
+        
         module=mgr perm=w flags=mgr
         """
         prefix = 'dashboard reset-ganesha-clusters-rados-pool-namespace'
@@ -1088,9 +1365,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_reset_grafana_api_password(self):
+        # type: () -> CommandResult
         """
         Reset the GRAFANA_API_PASSWORD option to its default value
-    
+        
         module=mgr perm=w flags=mgr
         """
         prefix = 'dashboard reset-grafana-api-password'
@@ -1098,9 +1376,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_reset_grafana_api_url(self):
+        # type: () -> CommandResult
         """
         Reset the GRAFANA_API_URL option to its default value
-    
+        
         module=mgr perm=w flags=mgr
         """
         prefix = 'dashboard reset-grafana-api-url'
@@ -1108,19 +1387,32 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_reset_grafana_api_username(self):
+        # type: () -> CommandResult
         """
         Reset the GRAFANA_API_USERNAME option to its default value
-    
+        
         module=mgr perm=w flags=mgr
         """
         prefix = 'dashboard reset-grafana-api-username'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
+    def dashboard_reset_grafana_update_dashboards(self):
+        # type: () -> CommandResult
+        """
+        Reset the GRAFANA_UPDATE_DASHBOARDS option to its default value
+        
+        module=mgr perm=w flags=mgr
+        """
+        prefix = 'dashboard reset-grafana-update-dashboards'
+        _args = {'prefix': prefix, }
+        return self._mon_command(_args)
+    
     def dashboard_reset_iscsi_api_ssl_verification(self):
+        # type: () -> CommandResult
         """
         Reset the ISCSI_API_SSL_VERIFICATION option to its default value
-    
+        
         module=mgr perm=w flags=mgr
         """
         prefix = 'dashboard reset-iscsi-api-ssl-verification'
@@ -1128,9 +1420,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_reset_prometheus_api_host(self):
+        # type: () -> CommandResult
         """
         Reset the PROMETHEUS_API_HOST option to its default value
-    
+        
         module=mgr perm=w flags=mgr
         """
         prefix = 'dashboard reset-prometheus-api-host'
@@ -1138,9 +1431,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_reset_rest_requests_timeout(self):
+        # type: () -> CommandResult
         """
         Reset the REST_REQUESTS_TIMEOUT option to its default value
-    
+        
         module=mgr perm=w flags=mgr
         """
         prefix = 'dashboard reset-rest-requests-timeout'
@@ -1148,9 +1442,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_reset_rgw_api_access_key(self):
+        # type: () -> CommandResult
         """
         Reset the RGW_API_ACCESS_KEY option to its default value
-    
+        
         module=mgr perm=w flags=mgr
         """
         prefix = 'dashboard reset-rgw-api-access-key'
@@ -1158,9 +1453,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_reset_rgw_api_admin_resource(self):
+        # type: () -> CommandResult
         """
         Reset the RGW_API_ADMIN_RESOURCE option to its default value
-    
+        
         module=mgr perm=w flags=mgr
         """
         prefix = 'dashboard reset-rgw-api-admin-resource'
@@ -1168,9 +1464,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_reset_rgw_api_host(self):
+        # type: () -> CommandResult
         """
         Reset the RGW_API_HOST option to its default value
-    
+        
         module=mgr perm=w flags=mgr
         """
         prefix = 'dashboard reset-rgw-api-host'
@@ -1178,9 +1475,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_reset_rgw_api_port(self):
+        # type: () -> CommandResult
         """
         Reset the RGW_API_PORT option to its default value
-    
+        
         module=mgr perm=w flags=mgr
         """
         prefix = 'dashboard reset-rgw-api-port'
@@ -1188,9 +1486,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_reset_rgw_api_scheme(self):
+        # type: () -> CommandResult
         """
         Reset the RGW_API_SCHEME option to its default value
-    
+        
         module=mgr perm=w flags=mgr
         """
         prefix = 'dashboard reset-rgw-api-scheme'
@@ -1198,9 +1497,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_reset_rgw_api_secret_key(self):
+        # type: () -> CommandResult
         """
         Reset the RGW_API_SECRET_KEY option to its default value
-    
+        
         module=mgr perm=w flags=mgr
         """
         prefix = 'dashboard reset-rgw-api-secret-key'
@@ -1208,9 +1508,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_reset_rgw_api_ssl_verify(self):
+        # type: () -> CommandResult
         """
         Reset the RGW_API_SSL_VERIFY option to its default value
-    
+        
         module=mgr perm=w flags=mgr
         """
         prefix = 'dashboard reset-rgw-api-ssl-verify'
@@ -1218,230 +1519,308 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_reset_rgw_api_user_id(self):
+        # type: () -> CommandResult
         """
         Reset the RGW_API_USER_ID option to its default value
-    
+        
         module=mgr perm=w flags=mgr
         """
         prefix = 'dashboard reset-rgw-api-user-id'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def dashboard_set_alertmanager_api_host(self, value: str):
+    def dashboard_set_alertmanager_api_host(self, value):
+        # type: (str) -> CommandResult
         """
         Set the ALERTMANAGER_API_HOST option value
-        :param value: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param value: CephString
         """
         prefix = 'dashboard set-alertmanager-api-host'
         _args = {'prefix': prefix, 'value': value}
         return self._mon_command(_args)
     
-    def dashboard_set_audit_api_enabled(self, value: str):
+    def dashboard_set_audit_api_enabled(self, value):
+        # type: (str) -> CommandResult
         """
         Set the AUDIT_API_ENABLED option value
-        :param value: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param value: CephString
         """
         prefix = 'dashboard set-audit-api-enabled'
         _args = {'prefix': prefix, 'value': value}
         return self._mon_command(_args)
     
-    def dashboard_set_audit_api_log_payload(self, value: str):
+    def dashboard_set_audit_api_log_payload(self, value):
+        # type: (str) -> CommandResult
         """
         Set the AUDIT_API_LOG_PAYLOAD option value
-        :param value: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param value: CephString
         """
         prefix = 'dashboard set-audit-api-log-payload'
         _args = {'prefix': prefix, 'value': value}
         return self._mon_command(_args)
     
-    def dashboard_set_enable_browsable_api(self, value: str):
+    def dashboard_set_enable_browsable_api(self, value):
+        # type: (str) -> CommandResult
         """
         Set the ENABLE_BROWSABLE_API option value
-        :param value: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param value: CephString
         """
         prefix = 'dashboard set-enable-browsable-api'
         _args = {'prefix': prefix, 'value': value}
         return self._mon_command(_args)
     
-    def dashboard_set_ganesha_clusters_rados_pool_namespace(self, value: str):
+    def dashboard_set_ganesha_clusters_rados_pool_namespace(self, value):
+        # type: (str) -> CommandResult
         """
         Set the GANESHA_CLUSTERS_RADOS_POOL_NAMESPACE option value
-        :param value: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param value: CephString
         """
         prefix = 'dashboard set-ganesha-clusters-rados-pool-namespace'
         _args = {'prefix': prefix, 'value': value}
         return self._mon_command(_args)
     
-    def dashboard_set_grafana_api_password(self, value: str):
+    def dashboard_set_grafana_api_password(self, value):
+        # type: (str) -> CommandResult
         """
         Set the GRAFANA_API_PASSWORD option value
-        :param value: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param value: CephString
         """
         prefix = 'dashboard set-grafana-api-password'
         _args = {'prefix': prefix, 'value': value}
         return self._mon_command(_args)
     
-    def dashboard_set_grafana_api_url(self, value: str):
+    def dashboard_set_grafana_api_url(self, value):
+        # type: (str) -> CommandResult
         """
         Set the GRAFANA_API_URL option value
-        :param value: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param value: CephString
         """
         prefix = 'dashboard set-grafana-api-url'
         _args = {'prefix': prefix, 'value': value}
         return self._mon_command(_args)
     
-    def dashboard_set_grafana_api_username(self, value: str):
+    def dashboard_set_grafana_api_username(self, value):
+        # type: (str) -> CommandResult
         """
         Set the GRAFANA_API_USERNAME option value
-        :param value: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param value: CephString
         """
         prefix = 'dashboard set-grafana-api-username'
         _args = {'prefix': prefix, 'value': value}
         return self._mon_command(_args)
     
-    def dashboard_set_iscsi_api_ssl_verification(self, value: str):
+    def dashboard_set_grafana_update_dashboards(self, value):
+        # type: (str) -> CommandResult
+        """
+        Set the GRAFANA_UPDATE_DASHBOARDS option value
+        
+        module=mgr perm=w flags=mgr
+        
+        :param value: CephString
+        """
+        prefix = 'dashboard set-grafana-update-dashboards'
+        _args = {'prefix': prefix, 'value': value}
+        return self._mon_command(_args)
+    
+    def dashboard_set_iscsi_api_ssl_verification(self, value):
+        # type: (str) -> CommandResult
         """
         Set the ISCSI_API_SSL_VERIFICATION option value
-        :param value: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param value: CephString
         """
         prefix = 'dashboard set-iscsi-api-ssl-verification'
         _args = {'prefix': prefix, 'value': value}
         return self._mon_command(_args)
     
-    def dashboard_set_jwt_token_ttl(self, seconds: int):
+    def dashboard_set_jwt_token_ttl(self, seconds):
+        # type: (int) -> CommandResult
         """
         Set the JWT token TTL in seconds
-        :param seconds: CephInt 
+        
         module=mgr perm=w flags=mgr
+        
+        :param seconds: CephInt
         """
         prefix = 'dashboard set-jwt-token-ttl'
         _args = {'prefix': prefix, 'seconds': seconds}
         return self._mon_command(_args)
     
-    def dashboard_set_login_credentials(self, username: str, password: str):
+    def dashboard_set_login_credentials(self, username, password):
+        # type: (str, str) -> CommandResult
         """
         Set the login credentials
-        :param username: CephString 
-        :param password: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param username: CephString
+        :param password: CephString
         """
         prefix = 'dashboard set-login-credentials'
         _args = {'prefix': prefix, 'username': username, 'password': password}
         return self._mon_command(_args)
     
-    def dashboard_set_prometheus_api_host(self, value: str):
+    def dashboard_set_prometheus_api_host(self, value):
+        # type: (str) -> CommandResult
         """
         Set the PROMETHEUS_API_HOST option value
-        :param value: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param value: CephString
         """
         prefix = 'dashboard set-prometheus-api-host'
         _args = {'prefix': prefix, 'value': value}
         return self._mon_command(_args)
     
-    def dashboard_set_rest_requests_timeout(self, value: int):
+    def dashboard_set_rest_requests_timeout(self, value):
+        # type: (int) -> CommandResult
         """
         Set the REST_REQUESTS_TIMEOUT option value
-        :param value: CephInt 
+        
         module=mgr perm=w flags=mgr
+        
+        :param value: CephInt
         """
         prefix = 'dashboard set-rest-requests-timeout'
         _args = {'prefix': prefix, 'value': value}
         return self._mon_command(_args)
     
-    def dashboard_set_rgw_api_access_key(self, value: str):
+    def dashboard_set_rgw_api_access_key(self, value):
+        # type: (str) -> CommandResult
         """
         Set the RGW_API_ACCESS_KEY option value
-        :param value: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param value: CephString
         """
         prefix = 'dashboard set-rgw-api-access-key'
         _args = {'prefix': prefix, 'value': value}
         return self._mon_command(_args)
     
-    def dashboard_set_rgw_api_admin_resource(self, value: str):
+    def dashboard_set_rgw_api_admin_resource(self, value):
+        # type: (str) -> CommandResult
         """
         Set the RGW_API_ADMIN_RESOURCE option value
-        :param value: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param value: CephString
         """
         prefix = 'dashboard set-rgw-api-admin-resource'
         _args = {'prefix': prefix, 'value': value}
         return self._mon_command(_args)
     
-    def dashboard_set_rgw_api_host(self, value: str):
+    def dashboard_set_rgw_api_host(self, value):
+        # type: (str) -> CommandResult
         """
         Set the RGW_API_HOST option value
-        :param value: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param value: CephString
         """
         prefix = 'dashboard set-rgw-api-host'
         _args = {'prefix': prefix, 'value': value}
         return self._mon_command(_args)
     
-    def dashboard_set_rgw_api_port(self, value: int):
+    def dashboard_set_rgw_api_port(self, value):
+        # type: (int) -> CommandResult
         """
         Set the RGW_API_PORT option value
-        :param value: CephInt 
+        
         module=mgr perm=w flags=mgr
+        
+        :param value: CephInt
         """
         prefix = 'dashboard set-rgw-api-port'
         _args = {'prefix': prefix, 'value': value}
         return self._mon_command(_args)
     
-    def dashboard_set_rgw_api_scheme(self, value: str):
+    def dashboard_set_rgw_api_scheme(self, value):
+        # type: (str) -> CommandResult
         """
         Set the RGW_API_SCHEME option value
-        :param value: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param value: CephString
         """
         prefix = 'dashboard set-rgw-api-scheme'
         _args = {'prefix': prefix, 'value': value}
         return self._mon_command(_args)
     
-    def dashboard_set_rgw_api_secret_key(self, value: str):
+    def dashboard_set_rgw_api_secret_key(self, value):
+        # type: (str) -> CommandResult
         """
         Set the RGW_API_SECRET_KEY option value
-        :param value: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param value: CephString
         """
         prefix = 'dashboard set-rgw-api-secret-key'
         _args = {'prefix': prefix, 'value': value}
         return self._mon_command(_args)
     
-    def dashboard_set_rgw_api_ssl_verify(self, value: str):
+    def dashboard_set_rgw_api_ssl_verify(self, value):
+        # type: (str) -> CommandResult
         """
         Set the RGW_API_SSL_VERIFY option value
-        :param value: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param value: CephString
         """
         prefix = 'dashboard set-rgw-api-ssl-verify'
         _args = {'prefix': prefix, 'value': value}
         return self._mon_command(_args)
     
-    def dashboard_set_rgw_api_user_id(self, value: str):
+    def dashboard_set_rgw_api_user_id(self, value):
+        # type: (str) -> CommandResult
         """
         Set the RGW_API_USER_ID option value
-        :param value: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param value: CephString
         """
         prefix = 'dashboard set-rgw-api-user-id'
         _args = {'prefix': prefix, 'value': value}
         return self._mon_command(_args)
     
     def dashboard_sso_disable(self):
+        # type: () -> CommandResult
         """
         Disable Single Sign-On
-    
+        
         module=mgr perm=w flags=mgr
         """
         prefix = 'dashboard sso disable'
@@ -1449,34 +1828,45 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_sso_enable_saml2(self):
+        # type: () -> CommandResult
         """
         Enable SAML2 Single Sign-On
-    
+        
         module=mgr perm=w flags=mgr
         """
         prefix = 'dashboard sso enable saml2'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def dashboard_sso_setup_saml2(self, ceph_dashboard_base_url: str, idp_metadata: str, idp_username_attribute: str=None, idp_entity_id: str=None, sp_x_509_cert: str=None, sp_private_key: str=None):
+    def dashboard_sso_setup_saml2(self, ceph_dashboard_base_url, idp_metadata,
+                                  idp_username_attribute=None, idp_entity_id=None,
+                                  sp_x_509_cert=None, sp_private_key=None):
+        # type: (str, str, str, str, str, str) -> CommandResult
         """
         Setup SAML2 Single Sign-On
-        :param ceph_dashboard_base_url: CephString 
-        :param idp_metadata: CephString 
-        :param idp_username_attribute: CephString 
-        :param idp_entity_id: CephString 
-        :param sp_x_509_cert: CephString 
-        :param sp_private_key: CephString 
+        
         module=mgr perm=w flags=mgr
+        
+        :param ceph_dashboard_base_url: CephString
+        :param idp_metadata: CephString
+        :param idp_username_attribute: CephString
+        :param idp_entity_id: CephString
+        :param sp_x_509_cert: CephString
+        :param sp_private_key: CephString
         """
         prefix = 'dashboard sso setup saml2'
-        _args = {'prefix': prefix, 'ceph_dashboard_base_url': ceph_dashboard_base_url, 'idp_metadata': idp_metadata, 'idp_username_attribute': idp_username_attribute, 'idp_entity_id': idp_entity_id, 'sp_x_509_cert': sp_x_509_cert, 'sp_private_key': sp_private_key}
+        _args = {'prefix': prefix, 'ceph_dashboard_base_url': ceph_dashboard_base_url,
+                 'idp_metadata': idp_metadata, 'idp_username_attribute':
+                 idp_username_attribute, 'idp_entity_id': idp_entity_id,
+                 'sp_x_509_cert': sp_x_509_cert, 'sp_private_key':
+                 sp_private_key}
         return self._mon_command(_args)
     
     def dashboard_sso_show_saml2(self):
+        # type: () -> CommandResult
         """
         Show SAML2 configuration
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'dashboard sso show saml2'
@@ -1484,30 +1874,35 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def dashboard_sso_status(self):
+        # type: () -> CommandResult
         """
         Get Single Sign-On status
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'dashboard sso status'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def deepsea_config_set(self, key: str, value: str):
+    def deepsea_config_set(self, key, value):
+        # type: (str, str) -> CommandResult
         """
         Set a configuration value
-        :param key: CephString 
-        :param value: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param key: CephString
+        :param value: CephString
         """
         prefix = 'deepsea config-set'
         _args = {'prefix': prefix, 'key': key, 'value': value}
         return self._mon_command(_args)
     
     def deepsea_config_show(self):
+        # type: () -> CommandResult
         """
         Show current configuration
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'deepsea config-show'
@@ -1515,9 +1910,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def device_check_health(self):
+        # type: () -> CommandResult
         """
         Check life expectancy of devices
-    
+        
         module=mgr perm=rw flags=mgr
         """
         prefix = 'device check-health'
@@ -1525,9 +1921,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def device_debug_metrics_forced(self):
+        # type: () -> CommandResult
         """
         Run metrics agent forced
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'device debug metrics-forced'
@@ -1535,70 +1932,85 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def device_debug_smart_forced(self):
+        # type: () -> CommandResult
         """
         Run smart agent forced
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'device debug smart-forced'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def device_get_health_metrics(self, devid: str, sample: str):
+    def device_get_health_metrics(self, devid, sample):
+        # type: (str, str) -> CommandResult
         """
         Show stored device metrics for the device
-        :param devid: CephString 
-        :param sample: CephString 
+        
         module=mgr perm=r flags=mgr
+        
+        :param devid: CephString
+        :param sample: CephString
         """
         prefix = 'device get-health-metrics'
         _args = {'prefix': prefix, 'devid': devid, 'sample': sample}
         return self._mon_command(_args)
     
-    def device_info(self, devid: str):
+    def device_info(self, devid):
+        # type: (str) -> CommandResult
         """
         Show information about a device
-        :param devid: CephString 
+        
         module=mgr perm=r flags=mgr
+        
+        :param devid: CephString
         """
         prefix = 'device info'
         _args = {'prefix': prefix, 'devid': devid}
         return self._mon_command(_args)
     
     def device_ls(self):
+        # type: () -> CommandResult
         """
         Show devices
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'device ls'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def device_ls_by_daemon(self, who: str):
+    def device_ls_by_daemon(self, who):
+        # type: (str) -> CommandResult
         """
         Show devices associated with a daemon
-        :param who: CephString 
+        
         module=mgr perm=r flags=mgr
+        
+        :param who: CephString
         """
         prefix = 'device ls-by-daemon'
         _args = {'prefix': prefix, 'who': who}
         return self._mon_command(_args)
     
-    def device_ls_by_host(self, host: str):
+    def device_ls_by_host(self, host):
+        # type: (str) -> CommandResult
         """
         Show devices on a host
-        :param host: CephString 
+        
         module=mgr perm=r flags=mgr
+        
+        :param host: CephString
         """
         prefix = 'device ls-by-host'
         _args = {'prefix': prefix, 'host': host}
         return self._mon_command(_args)
     
     def device_monitoring_off(self):
+        # type: () -> CommandResult
         """
         Disable device health monitoring
-    
+        
         module=mgr perm=rw flags=mgr
         """
         prefix = 'device monitoring off'
@@ -1606,115 +2018,143 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def device_monitoring_on(self):
+        # type: () -> CommandResult
         """
         Enable device health monitoring
-    
+        
         module=mgr perm=rw flags=mgr
         """
         prefix = 'device monitoring on'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def device_predict_life_expectancy(self, devid: str):
+    def device_predict_life_expectancy(self, devid):
+        # type: (str) -> CommandResult
         """
         Predict life expectancy with local predictor
-        :param devid: CephString 
+        
         module=mgr perm=r flags=mgr
+        
+        :param devid: CephString
         """
         prefix = 'device predict-life-expectancy'
         _args = {'prefix': prefix, 'devid': devid}
         return self._mon_command(_args)
     
-    def device_query_daemon_health_metrics(self, who: str):
+    def device_query_daemon_health_metrics(self, who):
+        # type: (str) -> CommandResult
         """
         Get device health metrics for a given daemon
-        :param who: CephString 
+        
         module=mgr perm=r flags=mgr
+        
+        :param who: CephString
         """
         prefix = 'device query-daemon-health-metrics'
         _args = {'prefix': prefix, 'who': who}
         return self._mon_command(_args)
     
-    def device_rm_life_expectancy(self, devid: str):
+    def device_rm_life_expectancy(self, devid):
+        # type: (str) -> CommandResult
         """
         Clear predicted device life expectancy
-        :param devid: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param devid: CephString
         """
         prefix = 'device rm-life-expectancy'
         _args = {'prefix': prefix, 'devid': devid}
         return self._mon_command(_args)
     
-    def device_scrape_daemon_health_metrics(self, who: str):
+    def device_scrape_daemon_health_metrics(self, who):
+        # type: (str) -> CommandResult
         """
         Scrape and store device health metrics for a given daemon
-        :param who: CephString 
+        
         module=mgr perm=r flags=mgr
+        
+        :param who: CephString
         """
         prefix = 'device scrape-daemon-health-metrics'
         _args = {'prefix': prefix, 'who': who}
         return self._mon_command(_args)
     
-    def device_scrape_health_metrics(self, devid: str):
+    def device_scrape_health_metrics(self, devid):
+        # type: (str) -> CommandResult
         """
         Scrape and store health metrics
-        :param devid: CephString 
+        
         module=mgr perm=r flags=mgr
+        
+        :param devid: CephString
         """
         prefix = 'device scrape-health-metrics'
         _args = {'prefix': prefix, 'devid': devid}
         return self._mon_command(_args)
     
-    def device_set_cloud_prediction_config(self, server: str, user: str, password: str, certfile: str, port: str=None):
+    def device_set_cloud_prediction_config(self, server, user, password, certfile, port=None):
+        # type: (str, str, str, str, str) -> CommandResult
         """
         Configure Disk Prediction service
-        :param server: CephString 
-        :param user: CephString 
-        :param password: CephString 
-        :param certfile: CephString 
-        :param port: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param server: CephString
+        :param user: CephString
+        :param password: CephString
+        :param certfile: CephString
+        :param port: CephString
         """
         prefix = 'device set-cloud-prediction-config'
-        _args = {'prefix': prefix, 'server': server, 'user': user, 'password': password, 'certfile': certfile, 'port': port}
+        _args = {'prefix': prefix, 'server': server, 'user': user, 'password': password,
+                 'certfile': certfile, 'port': port}
         return self._mon_command(_args)
     
-    def device_set_life_expectancy(self, devid: str, from_: str, to: str):
+    def device_set_life_expectancy(self, devid, from_1, to):
+        # type: (str, str, str) -> CommandResult
         """
         Set predicted device life expectancy
-        :param devid: CephString 
-        :param from_: CephString 
-        :param to: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param devid: CephString
+        :param from_1: CephString
+        :param to: CephString
         """
         prefix = 'device set-life-expectancy'
-        _args = {'prefix': prefix, 'devid': devid, 'from': from_, 'to': to}
+        _args = {'prefix': prefix, 'devid': devid, 'from': from_1, 'to': to}
         return self._mon_command(_args)
     
     def device_show_prediction_config(self):
+        # type: () -> CommandResult
         """
         Prints diskprediction configuration
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'device show-prediction-config'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def df(self, detail: str=None):
+    def df(self, detail=None):
+        # type: (str) -> CommandResult
         """
         show cluster free space stats
-        :param detail: CephChoices strings=detail 
+        
         module=mon perm=r flags=
+        
+        :param detail: CephChoices strings=detail
         """
         prefix = 'df'
         _args = {'prefix': prefix, 'detail': detail}
         return self._mon_command(_args)
     
     def diskprediction_cloud_status(self):
+        # type: () -> CommandResult
         """
         Check diskprediction_cloud status
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'diskprediction_cloud status'
@@ -1722,382 +2162,509 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def features(self):
+        # type: () -> CommandResult
         """
         report of connected features
-    
+        
         module=mon perm=r flags=
         """
         prefix = 'features'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def fs_add_data_pool(self, fs_name: str, pool: str):
+    def fs_add_data_pool(self, fs_name, pool):
+        # type: (str, str) -> CommandResult
         """
         add data pool <pool>
-        :param fs_name: CephString 
-        :param pool: CephString 
+        
         module=mds perm=rw flags=
+        
+        :param fs_name: CephString
+        :param pool: CephString
         """
         prefix = 'fs add_data_pool'
         _args = {'prefix': prefix, 'fs_name': fs_name, 'pool': pool}
         return self._mon_command(_args)
     
-    def fs_authorize(self, filesystem: str, entity: str, caps: List[str]):
+    def fs_authorize(self, filesystem, entity, caps):
+        # type: (str, str, List[str]) -> CommandResult
         """
-        add auth for <entity> to access file system <filesystem> based on following directory and permissions pairs
-        :param filesystem: CephString 
-        :param entity: CephString 
-        :param caps: CephString 
+        add auth for <entity> to access file system <filesystem> based on
+        following directory and permissions pairs
+        
         module=auth perm=rwx flags=
+        
+        :param filesystem: CephString
+        :param entity: CephString
+        :param caps: CephString
         """
         prefix = 'fs authorize'
         _args = {'prefix': prefix, 'filesystem': filesystem, 'entity': entity, 'caps': caps}
         return self._mon_command(_args)
     
-    def fs_dump(self, epoch: int=None):
+    def fs_dump(self, epoch=None):
+        # type: (int) -> CommandResult
         """
         dump all CephFS status, optionally from epoch
-        :param epoch: CephInt ragne=0 
+        
         module=mds perm=r flags=
+        
+        :param epoch: CephInt ragne=0
         """
         prefix = 'fs dump'
         _args = {'prefix': prefix, 'epoch': epoch}
         return self._mon_command(_args)
     
-    def fs_fail(self, fs_name: str):
+    def fs_fail(self, fs_name):
+        # type: (str) -> CommandResult
         """
         bring the file system down and all of its ranks
-        :param fs_name: CephString 
+        
         module=fs perm=rw flags=
+        
+        :param fs_name: CephString
         """
         prefix = 'fs fail'
         _args = {'prefix': prefix, 'fs_name': fs_name}
         return self._mon_command(_args)
     
-    def fs_flag_set(self, flag_name: str, val: str, yes_i_really_mean_it: bool=None):
+    def fs_flag_set(self, flag_name, val, yes_i_really_mean_it=None):
+        # type: (str, str, bool) -> CommandResult
         """
         Set a global CephFS flag
-        :param flag_name: CephChoices strings=enable_multiple 
-        :param val: CephString 
-        :param yes_i_really_mean_it: CephBool 
+        
         module=fs perm=rw flags=
+        
+        :param flag_name: CephChoices strings=enable_multiple
+        :param val: CephString
+        :param yes_i_really_mean_it: CephBool
         """
         prefix = 'fs flag set'
-        _args = {'prefix': prefix, 'flag_name': flag_name, 'val': val, 'yes_i_really_mean_it': yes_i_really_mean_it}
+        _args = {'prefix': prefix, 'flag_name': flag_name, 'val': val, 'yes_i_really_mean_it':
+                 yes_i_really_mean_it}
         return self._mon_command(_args)
     
-    def fs_get(self, fs_name: str):
+    def fs_get(self, fs_name):
+        # type: (str) -> CommandResult
         """
         get info about one filesystem
-        :param fs_name: CephString 
+        
         module=fs perm=r flags=
+        
+        :param fs_name: CephString
         """
         prefix = 'fs get'
         _args = {'prefix': prefix, 'fs_name': fs_name}
         return self._mon_command(_args)
     
     def fs_ls(self):
+        # type: () -> CommandResult
         """
         list filesystems
-    
+        
         module=fs perm=r flags=
         """
         prefix = 'fs ls'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def fs_new(self, fs_name: str, metadata: str, data: str, force: bool=None, allow_dangerous_metadata_overlay: bool=None):
+    def fs_new(self, fs_name, metadata, data, force=None,
+               allow_dangerous_metadata_overlay=None):
+        # type: (str, str, str, bool, bool) -> CommandResult
         """
         make new filesystem using named pools <metadata> and <data>
-        :param fs_name: CephString 
-        :param metadata: CephString 
-        :param data: CephString 
-        :param force: CephBool 
-        :param allow_dangerous_metadata_overlay: CephBool 
+        
         module=fs perm=rw flags=
+        
+        :param fs_name: CephString
+        :param metadata: CephString
+        :param data: CephString
+        :param force: CephBool
+        :param allow_dangerous_metadata_overlay: CephBool
         """
         prefix = 'fs new'
-        _args = {'prefix': prefix, 'fs_name': fs_name, 'metadata': metadata, 'data': data, 'force': force, 'allow_dangerous_metadata_overlay': allow_dangerous_metadata_overlay}
+        _args = {'prefix': prefix, 'fs_name': fs_name, 'metadata': metadata, 'data': data,
+                 'force': force, 'allow_dangerous_metadata_overlay':
+                 allow_dangerous_metadata_overlay}
         return self._mon_command(_args)
     
-    def fs_reset(self, fs_name: str, yes_i_really_mean_it: bool=None):
+    def fs_reset(self, fs_name, yes_i_really_mean_it=None):
+        # type: (str, bool) -> CommandResult
         """
         disaster recovery only: reset to a single-MDS map
-        :param fs_name: CephString 
-        :param yes_i_really_mean_it: CephBool 
+        
         module=fs perm=rw flags=
+        
+        :param fs_name: CephString
+        :param yes_i_really_mean_it: CephBool
         """
         prefix = 'fs reset'
-        _args = {'prefix': prefix, 'fs_name': fs_name, 'yes_i_really_mean_it': yes_i_really_mean_it}
+        _args = {'prefix': prefix, 'fs_name': fs_name, 'yes_i_really_mean_it':
+                 yes_i_really_mean_it}
         return self._mon_command(_args)
     
-    def fs_rm(self, fs_name: str, yes_i_really_mean_it: bool=None):
+    def fs_rm(self, fs_name, yes_i_really_mean_it=None):
+        # type: (str, bool) -> CommandResult
         """
         disable the named filesystem
-        :param fs_name: CephString 
-        :param yes_i_really_mean_it: CephBool 
+        
         module=fs perm=rw flags=
+        
+        :param fs_name: CephString
+        :param yes_i_really_mean_it: CephBool
         """
         prefix = 'fs rm'
-        _args = {'prefix': prefix, 'fs_name': fs_name, 'yes_i_really_mean_it': yes_i_really_mean_it}
+        _args = {'prefix': prefix, 'fs_name': fs_name, 'yes_i_really_mean_it':
+                 yes_i_really_mean_it}
         return self._mon_command(_args)
     
-    def fs_rm_data_pool(self, fs_name: str, pool: str):
+    def fs_rm_data_pool(self, fs_name, pool):
+        # type: (str, str) -> CommandResult
         """
         remove data pool <pool>
-        :param fs_name: CephString 
-        :param pool: CephString 
+        
         module=mds perm=rw flags=
+        
+        :param fs_name: CephString
+        :param pool: CephString
         """
         prefix = 'fs rm_data_pool'
         _args = {'prefix': prefix, 'fs_name': fs_name, 'pool': pool}
         return self._mon_command(_args)
     
-    def fs_set(self, fs_name: str, var: str, val: str, yes_i_really_mean_it: bool=None):
+    def fs_set(self, fs_name, var, val, yes_i_really_mean_it=None):
+        # type: (str, str, str, bool) -> CommandResult
         """
         set fs parameter <var> to <val>
-        :param fs_name: CephString 
-        :param var: CephChoices strings=max_mds|max_file_size|allow_new_snaps|inline_data|cluster_down|allow_dirfrags|balancer|standby_count_wanted|session_timeout|session_autoclose|allow_standby_replay|down|joinable|min_compat_client 
-        :param val: CephString 
-        :param yes_i_really_mean_it: CephBool 
+        
         module=mds perm=rw flags=
+        
+        :param fs_name: CephString
+        :param var: CephChoices strings=max_mds|max_file_size|allow_new_snaps|
+            inline_data|cluster_down|allow_dirfrags|balancer|standby_count_wanted|
+            session_timeout|session_autoclose|allow_standby_replay|down|joinable|m
+            in_compat_client
+        :param val: CephString
+        :param yes_i_really_mean_it: CephBool
         """
         prefix = 'fs set'
-        _args = {'prefix': prefix, 'fs_name': fs_name, 'var': var, 'val': val, 'yes_i_really_mean_it': yes_i_really_mean_it}
+        _args = {'prefix': prefix, 'fs_name': fs_name, 'var': var, 'val': val,
+                 'yes_i_really_mean_it': yes_i_really_mean_it}
         return self._mon_command(_args)
+    # 
+    # @overload  # Python 3 only
+    # def fs_set_default(self, fs_name):
+    #     # type: (str) -> CommandResult
+    #     """
+    #     set the default to the named filesystem
+    #     
+    #     module=fs perm=rw flags=
+    #     
+    #     :param fs_name: CephString
+    #     """
+    #     prefix = 'fs set-default'
+    #     _args = {'prefix': prefix, 'fs_name': fs_name}
+    #     return self._mon_command(_args)
+    # 
+    # @deprecated
+    # @overload  # Python 3 only
+    # def fs_set_default(self, fs_name):
+    #     # type: (str) -> CommandResult
+    #     """
+    #     set the default to the named filesystem
+    #     
+    #     module=fs perm=rw flags=deprecated
+    #     
+    #     :param fs_name: CephString
+    #     """
+    #     prefix = 'fs set_default'
+    #     _args = {'prefix': prefix, 'fs_name': fs_name}
+    #     return self._mon_command(_args)
     
-    @overload  # Python 3 only
-    def fs_set_default(self, fs_name: str):
-        """
-        set the default to the named filesystem
-        :param fs_name: CephString 
-        module=fs perm=rw flags=
-        """
-        prefix = 'fs set-default'
-        _args = {'prefix': prefix, 'fs_name': fs_name}
-        return self._mon_command(_args)
-    
-    @deprecated
-    @overload  # Python 3 only
-    def fs_set_default(self, fs_name: str):
-        """
-        set the default to the named filesystem
-        :param fs_name: CephString 
-        module=fs perm=rw flags=deprecated
-        """
-        prefix = 'fs set_default'
-        _args = {'prefix': prefix, 'fs_name': fs_name}
-        return self._mon_command(_args)
-    
-    def fs_status(self, fs: str=None):
+    def fs_status(self, fs=None):
+        # type: (str) -> CommandResult
         """
         Show the status of a CephFS filesystem
-        :param fs: CephString 
+        
         module=mgr perm=r flags=mgr
+        
+        :param fs: CephString
         """
         prefix = 'fs status'
         _args = {'prefix': prefix, 'fs': fs}
         return self._mon_command(_args)
     
-    def fs_subvolume_create(self, vol_name: str, sub_name: str, size: int=None, group_name: str=None):
+    def fs_subvolume_create(self, vol_name, sub_name, size=None, group_name=None,
+                            pool_layout=None, mode=None):
+        # type: (str, str, int, str, str, str) -> CommandResult
         """
-        Create a CephFS subvolume in a volume, and optionally, with a specific size (in bytes) and in a specific subvolume group
-        :param vol_name: CephString 
-        :param sub_name: CephString 
-        :param size: CephInt 
-        :param group_name: CephString 
+        Create a CephFS subvolume in a volume, and optionally, with a specific
+        size (in bytes), a specific data pool layout, a specific mode, and in
+        a specific subvolume group
+        
         module=mgr perm=rw flags=mgr
+        
+        :param vol_name: CephString
+        :param sub_name: CephString
+        :param size: CephInt
+        :param group_name: CephString
+        :param pool_layout: CephString
+        :param mode: CephString
         """
         prefix = 'fs subvolume create'
-        _args = {'prefix': prefix, 'vol_name': vol_name, 'sub_name': sub_name, 'size': size, 'group_name': group_name}
+        _args = {'prefix': prefix, 'vol_name': vol_name, 'sub_name': sub_name, 'size': size,
+                 'group_name': group_name, 'pool_layout': pool_layout,
+                 'mode': mode}
         return self._mon_command(_args)
     
-    def fs_subvolume_getpath(self, vol_name: str, sub_name: str, group_name: str=None):
+    def fs_subvolume_getpath(self, vol_name, sub_name, group_name=None):
+        # type: (str, str, str) -> CommandResult
         """
-        Get the mountpath of a CephFS subvolume in a volume, and optionally, in a specific subvolume group
-        :param vol_name: CephString 
-        :param sub_name: CephString 
-        :param group_name: CephString 
+        Get the mountpath of a CephFS subvolume in a volume, and optionally,
+        in a specific subvolume group
+        
         module=mgr perm=rw flags=mgr
+        
+        :param vol_name: CephString
+        :param sub_name: CephString
+        :param group_name: CephString
         """
         prefix = 'fs subvolume getpath'
-        _args = {'prefix': prefix, 'vol_name': vol_name, 'sub_name': sub_name, 'group_name': group_name}
+        _args = {'prefix': prefix, 'vol_name': vol_name, 'sub_name': sub_name, 'group_name':
+                 group_name}
         return self._mon_command(_args)
     
-    def fs_subvolume_rm(self, vol_name: str, sub_name: str, group_name: str=None, force: bool=None):
+    def fs_subvolume_rm(self, vol_name, sub_name, group_name=None, force=None):
+        # type: (str, str, str, bool) -> CommandResult
         """
-        Delete a CephFS subvolume in a volume, and optionally, in a specific subvolume group
-        :param vol_name: CephString 
-        :param sub_name: CephString 
-        :param group_name: CephString 
-        :param force: CephBool 
+        Delete a CephFS subvolume in a volume, and optionally, in a specific
+        subvolume group
+        
         module=mgr perm=rw flags=mgr
+        
+        :param vol_name: CephString
+        :param sub_name: CephString
+        :param group_name: CephString
+        :param force: CephBool
         """
         prefix = 'fs subvolume rm'
-        _args = {'prefix': prefix, 'vol_name': vol_name, 'sub_name': sub_name, 'group_name': group_name, 'force': force}
+        _args = {'prefix': prefix, 'vol_name': vol_name, 'sub_name': sub_name, 'group_name':
+                 group_name, 'force': force}
         return self._mon_command(_args)
     
-    def fs_subvolume_snapshot_create(self, vol_name: str, sub_name: str, snap_name: str, group_name: str=None):
+    def fs_subvolume_snapshot_create(self, vol_name, sub_name, snap_name, group_name=None):
+        # type: (str, str, str, str) -> CommandResult
         """
-        Create a snapshot of a CephFS subvolume in a volume, and optionally, in a specific subvolume group
-        :param vol_name: CephString 
-        :param sub_name: CephString 
-        :param snap_name: CephString 
-        :param group_name: CephString 
+        Create a snapshot of a CephFS subvolume in a volume, and optionally,
+        in a specific subvolume group
+        
         module=mgr perm=rw flags=mgr
+        
+        :param vol_name: CephString
+        :param sub_name: CephString
+        :param snap_name: CephString
+        :param group_name: CephString
         """
         prefix = 'fs subvolume snapshot create'
-        _args = {'prefix': prefix, 'vol_name': vol_name, 'sub_name': sub_name, 'snap_name': snap_name, 'group_name': group_name}
+        _args = {'prefix': prefix, 'vol_name': vol_name, 'sub_name': sub_name, 'snap_name':
+                 snap_name, 'group_name': group_name}
         return self._mon_command(_args)
     
-    def fs_subvolume_snapshot_rm(self, vol_name: str, sub_name: str, snap_name: str, group_name: str=None, force: bool=None):
+    def fs_subvolume_snapshot_rm(self, vol_name, sub_name, snap_name, group_name=None,
+                                 force=None):
+        # type: (str, str, str, str, bool) -> CommandResult
         """
-        Delete a snapshot of a CephFS subvolume in a volume, and optionally, in a specific subvolume group
-        :param vol_name: CephString 
-        :param sub_name: CephString 
-        :param snap_name: CephString 
-        :param group_name: CephString 
-        :param force: CephBool 
+        Delete a snapshot of a CephFS subvolume in a volume, and optionally,
+        in a specific subvolume group
+        
         module=mgr perm=rw flags=mgr
+        
+        :param vol_name: CephString
+        :param sub_name: CephString
+        :param snap_name: CephString
+        :param group_name: CephString
+        :param force: CephBool
         """
         prefix = 'fs subvolume snapshot rm'
-        _args = {'prefix': prefix, 'vol_name': vol_name, 'sub_name': sub_name, 'snap_name': snap_name, 'group_name': group_name, 'force': force}
+        _args = {'prefix': prefix, 'vol_name': vol_name, 'sub_name': sub_name, 'snap_name':
+                 snap_name, 'group_name': group_name, 'force': force}
         return self._mon_command(_args)
     
-    def fs_subvolumegroup_create(self, vol_name: str, group_name: str):
+    def fs_subvolumegroup_create(self, vol_name, group_name, pool_layout=None, mode=None):
+        # type: (str, str, str, str) -> CommandResult
         """
-        Create a CephFS subvolume group in a volume
-        :param vol_name: CephString 
-        :param group_name: CephString 
+        Create a CephFS subvolume group in a volume, and optionally, with a
+        specific data pool layout, and a specific numeric mode
+        
         module=mgr perm=rw flags=mgr
+        
+        :param vol_name: CephString
+        :param group_name: CephString
+        :param pool_layout: CephString
+        :param mode: CephString
         """
         prefix = 'fs subvolumegroup create'
-        _args = {'prefix': prefix, 'vol_name': vol_name, 'group_name': group_name}
+        _args = {'prefix': prefix, 'vol_name': vol_name, 'group_name': group_name,
+                 'pool_layout': pool_layout, 'mode': mode}
         return self._mon_command(_args)
     
-    def fs_subvolumegroup_rm(self, vol_name: str, group_name: str, force: bool=None):
+    def fs_subvolumegroup_rm(self, vol_name, group_name, force=None):
+        # type: (str, str, bool) -> CommandResult
         """
         Delete a CephFS subvolume group in a volume
-        :param vol_name: CephString 
-        :param group_name: CephString 
-        :param force: CephBool 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param vol_name: CephString
+        :param group_name: CephString
+        :param force: CephBool
         """
         prefix = 'fs subvolumegroup rm'
-        _args = {'prefix': prefix, 'vol_name': vol_name, 'group_name': group_name, 'force': force}
+        _args = {'prefix': prefix, 'vol_name': vol_name, 'group_name': group_name, 'force':
+                 force}
         return self._mon_command(_args)
     
-    def fs_subvolumegroup_snapshot_create(self, vol_name: str, group_name: str, snap_name: str):
+    def fs_subvolumegroup_snapshot_create(self, vol_name, group_name, snap_name):
+        # type: (str, str, str) -> CommandResult
         """
         Create a snapshot of a CephFS subvolume group in a volume
-        :param vol_name: CephString 
-        :param group_name: CephString 
-        :param snap_name: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param vol_name: CephString
+        :param group_name: CephString
+        :param snap_name: CephString
         """
         prefix = 'fs subvolumegroup snapshot create'
-        _args = {'prefix': prefix, 'vol_name': vol_name, 'group_name': group_name, 'snap_name': snap_name}
+        _args = {'prefix': prefix, 'vol_name': vol_name, 'group_name': group_name, 'snap_name':
+                 snap_name}
         return self._mon_command(_args)
     
-    def fs_subvolumegroup_snapshot_rm(self, vol_name: str, group_name: str, snap_name: str, force: bool=None):
+    def fs_subvolumegroup_snapshot_rm(self, vol_name, group_name, snap_name, force=None):
+        # type: (str, str, str, bool) -> CommandResult
         """
         Delete a snapshot of a CephFS subvolume group in a volume
-        :param vol_name: CephString 
-        :param group_name: CephString 
-        :param snap_name: CephString 
-        :param force: CephBool 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param vol_name: CephString
+        :param group_name: CephString
+        :param snap_name: CephString
+        :param force: CephBool
         """
         prefix = 'fs subvolumegroup snapshot rm'
-        _args = {'prefix': prefix, 'vol_name': vol_name, 'group_name': group_name, 'snap_name': snap_name, 'force': force}
+        _args = {'prefix': prefix, 'vol_name': vol_name, 'group_name': group_name, 'snap_name':
+                 snap_name, 'force': force}
         return self._mon_command(_args)
     
-    def fs_volume_create(self, name: str, size: str=None):
+    def fs_volume_create(self, name, size=None):
+        # type: (str, str) -> CommandResult
         """
         Create a CephFS volume
-        :param name: CephString 
-        :param size: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param name: CephString
+        :param size: CephString
         """
         prefix = 'fs volume create'
         _args = {'prefix': prefix, 'name': name, 'size': size}
         return self._mon_command(_args)
     
     def fs_volume_ls(self):
+        # type: () -> CommandResult
         """
         List volumes
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'fs volume ls'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def fs_volume_rm(self, vol_name: str):
+    def fs_volume_rm(self, vol_name):
+        # type: (str) -> CommandResult
         """
         Delete a CephFS volume
-        :param vol_name: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param vol_name: CephString
         """
         prefix = 'fs volume rm'
         _args = {'prefix': prefix, 'vol_name': vol_name}
         return self._mon_command(_args)
     
     def fsid(self):
+        # type: () -> CommandResult
         """
         show cluster FSID/UUID
-    
+        
         module=mon perm=r flags=
         """
         prefix = 'fsid'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def health(self, detail: str=None):
+    def health(self, detail=None):
+        # type: (str) -> CommandResult
         """
         show cluster health
-        :param detail: CephChoices strings=detail 
+        
         module=mon perm=r flags=
+        
+        :param detail: CephChoices strings=detail
         """
         prefix = 'health'
         _args = {'prefix': prefix, 'detail': detail}
         return self._mon_command(_args)
     
-    def heap(self, heapcmd: str):
+    def heap(self, heapcmd):
+        # type: (str) -> CommandResult
         """
         show heap usage info (available only if compiled with tcmalloc)
-        :param heapcmd: CephChoices strings=dump|start_profiler|stop_profiler|release|stats 
+        
         module=mon perm=rw flags=no_forward
+        
+        :param heapcmd: CephChoices
+            strings=dump|start_profiler|stop_profiler|release|stats
         """
         prefix = 'heap'
         _args = {'prefix': prefix, 'heapcmd': heapcmd}
         return self._mon_command(_args)
     
-    def hello(self, person_name: str=None):
+    def hello(self, person_name=None):
+        # type: (str) -> CommandResult
         """
         Prints hello world to mgr.x.log
-        :param person_name: CephString 
+        
         module=mgr perm=r flags=mgr
+        
+        :param person_name: CephString
         """
         prefix = 'hello'
         _args = {'prefix': prefix, 'person_name': person_name}
         return self._mon_command(_args)
     
-    def influx_config_set(self, key: str, value: str):
+    def influx_config_set(self, key, value):
+        # type: (str, str) -> CommandResult
         """
         Set a configuration value
-        :param key: CephString 
-        :param value: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param key: CephString
+        :param value: CephString
         """
         prefix = 'influx config-set'
         _args = {'prefix': prefix, 'key': key, 'value': value}
         return self._mon_command(_args)
     
     def influx_config_show(self):
+        # type: () -> CommandResult
         """
         Show current configuration
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'influx config-show'
@@ -2105,83 +2672,101 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def influx_send(self):
+        # type: () -> CommandResult
         """
         Force sending data to Influx
-    
+        
         module=mgr perm=rw flags=mgr
         """
         prefix = 'influx send'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def injectargs(self, injected_args: List[str]):
+    def injectargs(self, injected_args):
+        # type: (List[str]) -> CommandResult
         """
         inject config arguments into monitor
-        :param injected_args: CephString 
+        
         module=mon perm=rw flags=no_forward
+        
+        :param injected_args: CephString
         """
         prefix = 'injectargs'
         _args = {'prefix': prefix, 'injected_args': injected_args}
         return self._mon_command(_args)
     
     def insights(self):
+        # type: () -> CommandResult
         """
         Retrieve insights report
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'insights'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def insights_prune_health(self, hours: str):
+    def insights_prune_health(self, hours):
+        # type: (str) -> CommandResult
         """
         Remove health history older than <hours> hours
-        :param hours: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param hours: CephString
         """
         prefix = 'insights prune-health'
         _args = {'prefix': prefix, 'hours': hours}
         return self._mon_command(_args)
     
     def iostat(self):
+        # type: () -> CommandResult
         """
         Get IO rates
-    
+        
         module=mgr perm=r flags=mgr, poll
         """
         prefix = 'iostat'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def log(self, logtext: List[str]):
+    def log(self, logtext):
+        # type: (List[str]) -> CommandResult
         """
         log supplied text to the monitor log
-        :param logtext: CephString 
+        
         module=mon perm=rw flags=
+        
+        :param logtext: CephString
         """
         prefix = 'log'
         _args = {'prefix': prefix, 'logtext': logtext}
         return self._mon_command(_args)
     
-    def log_last(self, num: int=None, level: str=None, channel: str=None):
+    def log_last(self, num=None, level=None, channel=None):
+        # type: (int, str, str) -> CommandResult
         """
         print last few lines of the cluster log
-        :param num: CephInt ragne=1 
-        :param level: CephChoices strings=debug|info|sec|warn|error 
-        :param channel: CephChoices strings=*|cluster|audit 
+        
         module=mon perm=r flags=
+        
+        :param num: CephInt ragne=1
+        :param level: CephChoices strings=debug|info|sec|warn|error
+        :param channel: CephChoices strings=*|cluster|audit
         """
         prefix = 'log last'
         _args = {'prefix': prefix, 'num': num, 'level': level, 'channel': channel}
         return self._mon_command(_args)
     
     @deprecated
-    def mds_add_data_pool(self, pool: str):
+    def mds_add_data_pool(self, pool):
+        # type: (str) -> CommandResult
         """
         add data pool <pool>
-        :param pool: CephString 
+        
         module=mds perm=rw flags=obsolete
+        
+        :param pool: CephString
         """
         prefix = 'mds add_data_pool'
         _args = {'prefix': prefix, 'pool': pool}
@@ -2189,9 +2774,10 @@ class MonCommandApi(object):
     
     @deprecated
     def mds_cluster_down(self):
+        # type: () -> CommandResult
         """
         take MDS cluster down
-    
+        
         module=mds perm=rw flags=obsolete
         """
         prefix = 'mds cluster_down'
@@ -2200,234 +2786,298 @@ class MonCommandApi(object):
     
     @deprecated
     def mds_cluster_up(self):
+        # type: () -> CommandResult
         """
         bring MDS cluster up
-    
+        
         module=mds perm=rw flags=obsolete
         """
         prefix = 'mds cluster_up'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def mds_compat_rm_compat(self, feature: int):
+    def mds_compat_rm_compat(self, feature):
+        # type: (int) -> CommandResult
         """
         remove compatible feature
-        :param feature: CephInt ragne=0 
+        
         module=mds perm=rw flags=
+        
+        :param feature: CephInt ragne=0
         """
         prefix = 'mds compat rm_compat'
         _args = {'prefix': prefix, 'feature': feature}
         return self._mon_command(_args)
     
-    def mds_compat_rm_incompat(self, feature: int):
+    def mds_compat_rm_incompat(self, feature):
+        # type: (int) -> CommandResult
         """
         remove incompatible feature
-        :param feature: CephInt ragne=0 
+        
         module=mds perm=rw flags=
+        
+        :param feature: CephInt ragne=0
         """
         prefix = 'mds compat rm_incompat'
         _args = {'prefix': prefix, 'feature': feature}
         return self._mon_command(_args)
     
     def mds_compat_show(self):
+        # type: () -> CommandResult
         """
         show mds compatibility settings
-    
+        
         module=mds perm=r flags=
         """
         prefix = 'mds compat show'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def mds_count_metadata(self, property: str):
+    def mds_count_metadata(self, property_1):
+        # type: (str) -> CommandResult
         """
         count MDSs by metadata field property
-        :param property: CephString 
+        
         module=mds perm=r flags=
+        
+        :param property_1: CephString
         """
         prefix = 'mds count-metadata'
-        _args = {'prefix': prefix, 'property': property}
+        _args = {'prefix': prefix, 'property': property_1}
         return self._mon_command(_args)
     
     @deprecated
-    def mds_deactivate(self, role: str):
+    def mds_deactivate(self, role):
+        # type: (str) -> CommandResult
         """
         clean up specified MDS rank (use with `set max_mds` to shrink cluster)
-        :param role: CephString 
+        
         module=mds perm=rw flags=obsolete
+        
+        :param role: CephString
         """
         prefix = 'mds deactivate'
         _args = {'prefix': prefix, 'role': role}
         return self._mon_command(_args)
     
     @deprecated
-    def mds_dump(self, epoch: int=None):
+    def mds_dump(self, epoch=None):
+        # type: (int) -> CommandResult
         """
         dump legacy MDS cluster info, optionally from epoch
-        :param epoch: CephInt ragne=0 
+        
         module=mds perm=r flags=obsolete
+        
+        :param epoch: CephInt ragne=0
         """
         prefix = 'mds dump'
         _args = {'prefix': prefix, 'epoch': epoch}
         return self._mon_command(_args)
     
-    def mds_fail(self, role_or_gid: str):
+    def mds_fail(self, role_or_gid):
+        # type: (str) -> CommandResult
         """
         Mark MDS failed: trigger a failover if a standby is available
-        :param role_or_gid: CephString 
+        
         module=mds perm=rw flags=
+        
+        :param role_or_gid: CephString
         """
         prefix = 'mds fail'
         _args = {'prefix': prefix, 'role_or_gid': role_or_gid}
         return self._mon_command(_args)
     
-    def mds_freeze(self, role_or_gid: str, val: str):
+    def mds_freeze(self, role_or_gid, val):
+        # type: (str, str) -> CommandResult
         """
         freeze MDS yes/no
-        :param role_or_gid: CephString 
-        :param val: CephString 
+        
         module=mds perm=rw flags=hidden
+        
+        :param role_or_gid: CephString
+        :param val: CephString
         """
         prefix = 'mds freeze'
         _args = {'prefix': prefix, 'role_or_gid': role_or_gid, 'val': val}
         return self._mon_command(_args)
     
     @deprecated
-    def mds_getmap(self, epoch: int=None):
+    def mds_getmap(self, epoch=None):
+        # type: (int) -> CommandResult
         """
         get MDS map, optionally from epoch
-        :param epoch: CephInt ragne=0 
+        
         module=mds perm=r flags=obsolete
+        
+        :param epoch: CephInt ragne=0
         """
         prefix = 'mds getmap'
         _args = {'prefix': prefix, 'epoch': epoch}
         return self._mon_command(_args)
     
-    def mds_metadata(self, who: str=None):
+    def mds_metadata(self, who=None):
+        # type: (str) -> CommandResult
         """
         fetch metadata for mds <role>
-        :param who: CephString 
+        
         module=mds perm=r flags=
+        
+        :param who: CephString
         """
         prefix = 'mds metadata'
         _args = {'prefix': prefix, 'who': who}
         return self._mon_command(_args)
     
     @deprecated
-    def mds_newfs(self, metadata: int, data: int, yes_i_really_mean_it: bool=None):
+    def mds_newfs(self, metadata, data, yes_i_really_mean_it=None):
+        # type: (int, int, bool) -> CommandResult
         """
         make new filesystem using pools <metadata> and <data>
-        :param metadata: CephInt ragne=0 
-        :param data: CephInt ragne=0 
-        :param yes_i_really_mean_it: CephBool 
+        
         module=mds perm=rw flags=obsolete
+        
+        :param metadata: CephInt ragne=0
+        :param data: CephInt ragne=0
+        :param yes_i_really_mean_it: CephBool
         """
         prefix = 'mds newfs'
-        _args = {'prefix': prefix, 'metadata': metadata, 'data': data, 'yes_i_really_mean_it': yes_i_really_mean_it}
+        _args = {'prefix': prefix, 'metadata': metadata, 'data': data, 'yes_i_really_mean_it':
+                 yes_i_really_mean_it}
         return self._mon_command(_args)
     
-    def mds_ok_to_stop(self, ids: List[str]):
+    def mds_ok_to_stop(self, ids):
+        # type: (List[str]) -> CommandResult
         """
-        check whether stopping the specified MDS would reduce immediate availability
-        :param ids: CephString 
+        check whether stopping the specified MDS would reduce immediate
+        availability
+        
         module=mds perm=r flags=
+        
+        :param ids: CephString
         """
         prefix = 'mds ok-to-stop'
         _args = {'prefix': prefix, 'ids': ids}
         return self._mon_command(_args)
     
     @deprecated
-    def mds_remove_data_pool(self, pool: str):
+    def mds_remove_data_pool(self, pool):
+        # type: (str) -> CommandResult
         """
         remove data pool <pool>
-        :param pool: CephString 
+        
         module=mds perm=rw flags=obsolete
+        
+        :param pool: CephString
         """
         prefix = 'mds remove_data_pool'
         _args = {'prefix': prefix, 'pool': pool}
         return self._mon_command(_args)
     
-    def mds_repaired(self, role: str):
+    def mds_repaired(self, role):
+        # type: (str) -> CommandResult
         """
         mark a damaged MDS rank as no longer damaged
-        :param role: CephString 
+        
         module=mds perm=rw flags=
+        
+        :param role: CephString
         """
         prefix = 'mds repaired'
         _args = {'prefix': prefix, 'role': role}
         return self._mon_command(_args)
     
-    def mds_rm(self, gid: int):
+    def mds_rm(self, gid):
+        # type: (int) -> CommandResult
         """
         remove nonactive mds
-        :param gid: CephInt ragne=0 
+        
         module=mds perm=rw flags=
+        
+        :param gid: CephInt ragne=0
         """
         prefix = 'mds rm'
         _args = {'prefix': prefix, 'gid': gid}
         return self._mon_command(_args)
     
     @deprecated
-    def mds_rm_data_pool(self, pool: str):
+    def mds_rm_data_pool(self, pool):
+        # type: (str) -> CommandResult
         """
         remove data pool <pool>
-        :param pool: CephString 
+        
         module=mds perm=rw flags=obsolete
+        
+        :param pool: CephString
         """
         prefix = 'mds rm_data_pool'
         _args = {'prefix': prefix, 'pool': pool}
         return self._mon_command(_args)
     
-    def mds_rmfailed(self, role: str, yes_i_really_mean_it: bool=None):
+    def mds_rmfailed(self, role, yes_i_really_mean_it=None):
+        # type: (str, bool) -> CommandResult
         """
         remove failed rank
-        :param role: CephString 
-        :param yes_i_really_mean_it: CephBool 
+        
         module=mds perm=rw flags=hidden
+        
+        :param role: CephString
+        :param yes_i_really_mean_it: CephBool
         """
         prefix = 'mds rmfailed'
         _args = {'prefix': prefix, 'role': role, 'yes_i_really_mean_it': yes_i_really_mean_it}
         return self._mon_command(_args)
     
     @deprecated
-    def mds_set(self, var: str, val: str, yes_i_really_mean_it: bool=None):
+    def mds_set(self, var, val, yes_i_really_mean_it=None):
+        # type: (str, str, bool) -> CommandResult
         """
         set mds parameter <var> to <val>
-        :param var: CephChoices strings=max_mds|max_file_size|inline_data|allow_new_snaps|allow_multimds|allow_multimds_snaps|allow_dirfrags 
-        :param val: CephString 
-        :param yes_i_really_mean_it: CephBool 
+        
         module=mds perm=rw flags=obsolete
+        
+        :param var: CephChoices strings=max_mds|max_file_size|inline_data|allo
+            w_new_snaps|allow_multimds|allow_multimds_snaps|allow_dirfrags
+        :param val: CephString
+        :param yes_i_really_mean_it: CephBool
         """
         prefix = 'mds set'
-        _args = {'prefix': prefix, 'var': var, 'val': val, 'yes_i_really_mean_it': yes_i_really_mean_it}
+        _args = {'prefix': prefix, 'var': var, 'val': val, 'yes_i_really_mean_it':
+                 yes_i_really_mean_it}
         return self._mon_command(_args)
     
     @deprecated
-    def mds_set_max_mds(self, maxmds: int):
+    def mds_set_max_mds(self, maxmds):
+        # type: (int) -> CommandResult
         """
         set max MDS index
-        :param maxmds: CephInt ragne=0 
+        
         module=mds perm=rw flags=obsolete
+        
+        :param maxmds: CephInt ragne=0
         """
         prefix = 'mds set_max_mds'
         _args = {'prefix': prefix, 'maxmds': maxmds}
         return self._mon_command(_args)
     
-    def mds_set_state(self, gid: int, state: int):
+    def mds_set_state(self, gid, state):
+        # type: (int, int) -> CommandResult
         """
         set mds state of <gid> to <numeric-state>
-        :param gid: CephInt ragne=0 
-        :param state: CephInt ragne=0|20 
+        
         module=mds perm=rw flags=hidden
+        
+        :param gid: CephInt ragne=0
+        :param state: CephInt ragne=0|20
         """
         prefix = 'mds set_state'
         _args = {'prefix': prefix, 'gid': gid, 'state': state}
         return self._mon_command(_args)
     
     def mds_stat(self):
+        # type: () -> CommandResult
         """
         show MDS status
-    
+        
         module=mds perm=r flags=hidden
         """
         prefix = 'mds stat'
@@ -2435,205 +3085,257 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     @deprecated
-    def mds_stop(self, role: str):
+    def mds_stop(self, role):
+        # type: (str) -> CommandResult
         """
         stop mds
-        :param role: CephString 
+        
         module=mds perm=rw flags=obsolete
+        
+        :param role: CephString
         """
         prefix = 'mds stop'
         _args = {'prefix': prefix, 'role': role}
         return self._mon_command(_args)
     
     @deprecated
-    def mds_tell(self, who: str, args: List[str]):
+    def mds_tell(self, who, args):
+        # type: (str, List[str]) -> CommandResult
         """
         send command to particular mds
-        :param who: CephString 
-        :param args: CephString 
+        
         module=mds perm=rw flags=obsolete
+        
+        :param who: CephString
+        :param args: CephString
         """
         prefix = 'mds tell'
         _args = {'prefix': prefix, 'who': who, 'args': args}
         return self._mon_command(_args)
     
     def mds_versions(self):
+        # type: () -> CommandResult
         """
         check running versions of MDSs
-    
+        
         module=mds perm=r flags=
         """
         prefix = 'mds versions'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def mgr_count_metadata(self, property: str):
+    def mgr_count_metadata(self, property_1):
+        # type: (str) -> CommandResult
         """
         count ceph-mgr daemons by metadata field property
-        :param property: CephString 
+        
         module=mgr perm=r flags=
+        
+        :param property_1: CephString
         """
         prefix = 'mgr count-metadata'
-        _args = {'prefix': prefix, 'property': property}
+        _args = {'prefix': prefix, 'property': property_1}
         return self._mon_command(_args)
     
-    def mgr_dump(self, epoch: int=None):
+    def mgr_dump(self, epoch=None):
+        # type: (int) -> CommandResult
         """
         dump the latest MgrMap
-        :param epoch: CephInt ragne=0 
+        
         module=mgr perm=r flags=
+        
+        :param epoch: CephInt ragne=0
         """
         prefix = 'mgr dump'
         _args = {'prefix': prefix, 'epoch': epoch}
         return self._mon_command(_args)
     
-    def mgr_fail(self, who: str):
+    def mgr_fail(self, who):
+        # type: (str) -> CommandResult
         """
         treat the named manager daemon as failed
-        :param who: CephString 
+        
         module=mgr perm=rw flags=
+        
+        :param who: CephString
         """
         prefix = 'mgr fail'
         _args = {'prefix': prefix, 'who': who}
         return self._mon_command(_args)
     
-    def mgr_metadata(self, who: str=None):
+    def mgr_metadata(self, who=None):
+        # type: (str) -> CommandResult
         """
         dump metadata for all daemons or a specific daemon
-        :param who: CephString 
+        
         module=mgr perm=r flags=
+        
+        :param who: CephString
         """
         prefix = 'mgr metadata'
         _args = {'prefix': prefix, 'who': who}
         return self._mon_command(_args)
     
-    def mgr_module_disable(self, module: str):
+    def mgr_module_disable(self, module):
+        # type: (str) -> CommandResult
         """
         disable mgr module
-        :param module: CephString 
+        
         module=mgr perm=rw flags=
+        
+        :param module: CephString
         """
         prefix = 'mgr module disable'
         _args = {'prefix': prefix, 'module': module}
         return self._mon_command(_args)
     
-    def mgr_module_enable(self, module: str, force: str=None):
+    def mgr_module_enable(self, module, force=None):
+        # type: (str, str) -> CommandResult
         """
         enable mgr module
-        :param module: CephString 
-        :param force: CephChoices strings=--force 
+        
         module=mgr perm=rw flags=
+        
+        :param module: CephString
+        :param force: CephChoices strings=--force
         """
         prefix = 'mgr module enable'
         _args = {'prefix': prefix, 'module': module, 'force': force}
         return self._mon_command(_args)
     
     def mgr_module_ls(self):
+        # type: () -> CommandResult
         """
         list active mgr modules
-    
+        
         module=mgr perm=r flags=
         """
         prefix = 'mgr module ls'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def mgr_self_test_background_start(self, workload: str):
+    def mgr_self_test_background_start(self, workload):
+        # type: (str) -> CommandResult
         """
         Activate a background workload (one of command_spam, throw_exception)
-        :param workload: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param workload: CephString
         """
         prefix = 'mgr self-test background start'
         _args = {'prefix': prefix, 'workload': workload}
         return self._mon_command(_args)
     
     def mgr_self_test_background_stop(self):
+        # type: () -> CommandResult
         """
         Stop background workload if any is running
-    
+        
         module=mgr perm=rw flags=mgr
         """
         prefix = 'mgr self-test background stop'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def mgr_self_test_cluster_log(self, channel: str, priority: str, message: str):
+    def mgr_self_test_cluster_log(self, channel, priority, message):
+        # type: (str, str, str) -> CommandResult
         """
         Create an audit log record.
-        :param channel: CephString 
-        :param priority: CephString 
-        :param message: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param channel: CephString
+        :param priority: CephString
+        :param message: CephString
         """
         prefix = 'mgr self-test cluster-log'
         _args = {'prefix': prefix, 'channel': channel, 'priority': priority, 'message': message}
         return self._mon_command(_args)
     
-    def mgr_self_test_config_get(self, key: str):
+    def mgr_self_test_config_get(self, key):
+        # type: (str) -> CommandResult
         """
         Peek at a configuration value
-        :param key: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param key: CephString
         """
         prefix = 'mgr self-test config get'
         _args = {'prefix': prefix, 'key': key}
         return self._mon_command(_args)
     
-    def mgr_self_test_config_get_localized(self, key: str):
+    def mgr_self_test_config_get_localized(self, key):
+        # type: (str) -> CommandResult
         """
         Peek at a configuration value (localized variant)
-        :param key: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param key: CephString
         """
         prefix = 'mgr self-test config get_localized'
         _args = {'prefix': prefix, 'key': key}
         return self._mon_command(_args)
     
-    def mgr_self_test_health_clear(self, checks: List[str]):
+    def mgr_self_test_health_clear(self, checks):
+        # type: (List[str]) -> CommandResult
         """
         Clear health checks by name. If no names provided, clear all.
-        :param checks: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param checks: CephString
         """
         prefix = 'mgr self-test health clear'
         _args = {'prefix': prefix, 'checks': checks}
         return self._mon_command(_args)
     
-    def mgr_self_test_health_set(self, checks: str):
+    def mgr_self_test_health_set(self, checks):
+        # type: (str) -> CommandResult
         """
         Set a health check from a JSON-formatted description.
-        :param checks: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param checks: CephString
         """
         prefix = 'mgr self-test health set'
         _args = {'prefix': prefix, 'checks': checks}
         return self._mon_command(_args)
     
-    def mgr_self_test_insights_set_now_offset(self, hours: str):
+    def mgr_self_test_insights_set_now_offset(self, hours):
+        # type: (str) -> CommandResult
         """
         Set the now time for the insights module.
-        :param hours: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param hours: CephString
         """
         prefix = 'mgr self-test insights_set_now_offset'
         _args = {'prefix': prefix, 'hours': hours}
         return self._mon_command(_args)
     
-    def mgr_self_test_module(self, module: str):
+    def mgr_self_test_module(self, module):
+        # type: (str) -> CommandResult
         """
         Run another module's self_test() method
-        :param module: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param module: CephString
         """
         prefix = 'mgr self-test module'
         _args = {'prefix': prefix, 'module': module}
         return self._mon_command(_args)
     
     def mgr_self_test_remote(self):
+        # type: () -> CommandResult
         """
         Test inter-module calls
-    
+        
         module=mgr perm=rw flags=mgr
         """
         prefix = 'mgr self-test remote'
@@ -2641,9 +3343,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def mgr_self_test_run(self):
+        # type: () -> CommandResult
         """
         Run mgr python interface tests
-    
+        
         module=mgr perm=rw flags=mgr
         """
         prefix = 'mgr self-test run'
@@ -2651,9 +3354,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def mgr_services(self):
+        # type: () -> CommandResult
         """
         list service endpoints provided by mgr modules
-    
+        
         module=mgr perm=r flags=
         """
         prefix = 'mgr services'
@@ -2661,226 +3365,281 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def mgr_versions(self):
+        # type: () -> CommandResult
         """
         check running versions of ceph-mgr daemons
-    
+        
         module=mgr perm=r flags=
         """
         prefix = 'mgr versions'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def mon_add(self, name: str, addr: str):
+    def mon_add(self, name, addr):
+        # type: (str, str) -> CommandResult
         """
         add new monitor named <name> at <addr>
-        :param name: CephString 
-        :param addr: CephIPAddr 
+        
         module=mon perm=rw flags=
+        
+        :param name: CephString
+        :param addr: CephIPAddr
         """
         prefix = 'mon add'
         _args = {'prefix': prefix, 'name': name, 'addr': addr}
         return self._mon_command(_args)
     
     def mon_compact(self):
+        # type: () -> CommandResult
         """
         cause compaction of monitor's leveldb/rocksdb storage
-    
+        
         module=mon perm=rw flags=no_forward
         """
         prefix = 'mon compact'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def mon_count_metadata(self, property: str):
+    def mon_count_metadata(self, property_1):
+        # type: (str) -> CommandResult
         """
         count mons by metadata field property
-        :param property: CephString 
+        
         module=mon perm=r flags=
+        
+        :param property_1: CephString
         """
         prefix = 'mon count-metadata'
-        _args = {'prefix': prefix, 'property': property}
+        _args = {'prefix': prefix, 'property': property_1}
         return self._mon_command(_args)
     
-    def mon_dump(self, epoch: int=None):
+    def mon_dump(self, epoch=None):
+        # type: (int) -> CommandResult
         """
         dump formatted monmap (optionally from epoch)
-        :param epoch: CephInt ragne=0 
+        
         module=mon perm=r flags=
+        
+        :param epoch: CephInt ragne=0
         """
         prefix = 'mon dump'
         _args = {'prefix': prefix, 'epoch': epoch}
         return self._mon_command(_args)
     
     def mon_enable_msgr2(self):
+        # type: () -> CommandResult
         """
         enable the msgr2 protocol on port 3300
-    
+        
         module=mon perm=rw flags=
         """
         prefix = 'mon enable-msgr2'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def mon_feature_ls(self, with_value: str=None):
+    def mon_feature_ls(self, with_value=None):
+        # type: (str) -> CommandResult
         """
         list available mon map features to be set/unset
-        :param with_value: CephChoices strings=--with-value 
+        
         module=mon perm=r flags=
+        
+        :param with_value: CephChoices strings=--with-value
         """
         prefix = 'mon feature ls'
         _args = {'prefix': prefix, 'with_value': with_value}
         return self._mon_command(_args)
     
-    def mon_feature_set(self, feature_name: str, yes_i_really_mean_it: bool=None):
+    def mon_feature_set(self, feature_name, yes_i_really_mean_it=None):
+        # type: (str, bool) -> CommandResult
         """
         set provided feature on mon map
-        :param feature_name: CephString 
-        :param yes_i_really_mean_it: CephBool 
+        
         module=mon perm=rw flags=
+        
+        :param feature_name: CephString
+        :param yes_i_really_mean_it: CephBool
         """
         prefix = 'mon feature set'
-        _args = {'prefix': prefix, 'feature_name': feature_name, 'yes_i_really_mean_it': yes_i_really_mean_it}
+        _args = {'prefix': prefix, 'feature_name': feature_name, 'yes_i_really_mean_it':
+                 yes_i_really_mean_it}
         return self._mon_command(_args)
     
-    def mon_getmap(self, epoch: int=None):
+    def mon_getmap(self, epoch=None):
+        # type: (int) -> CommandResult
         """
         get monmap
-        :param epoch: CephInt ragne=0 
+        
         module=mon perm=r flags=
+        
+        :param epoch: CephInt ragne=0
         """
         prefix = 'mon getmap'
         _args = {'prefix': prefix, 'epoch': epoch}
         return self._mon_command(_args)
     
-    def mon_metadata(self, id_: str=None):
+    def mon_metadata(self, id_1=None):
+        # type: (str) -> CommandResult
         """
         fetch metadata for mon <id>
-        :param id_: CephString 
+        
         module=mon perm=r flags=
+        
+        :param id_1: CephString
         """
         prefix = 'mon metadata'
-        _args = {'prefix': prefix, 'id': id_}
+        _args = {'prefix': prefix, 'id': id_1}
         return self._mon_command(_args)
     
     def mon_ok_to_add_offline(self):
+        # type: () -> CommandResult
         """
         check whether adding a mon and not starting it would break quorum
-    
+        
         module=mon perm=r flags=
         """
         prefix = 'mon ok-to-add-offline'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def mon_ok_to_rm(self, id_: str):
+    def mon_ok_to_rm(self, id_1):
+        # type: (str) -> CommandResult
         """
         check whether removing the specified mon would break quorum
-        :param id_: CephString 
+        
         module=mon perm=r flags=
+        
+        :param id_1: CephString
         """
         prefix = 'mon ok-to-rm'
-        _args = {'prefix': prefix, 'id': id_}
+        _args = {'prefix': prefix, 'id': id_1}
         return self._mon_command(_args)
     
-    def mon_ok_to_stop(self, ids: List[str]):
+    def mon_ok_to_stop(self, ids):
+        # type: (List[str]) -> CommandResult
         """
-        check whether mon(s) can be safely stopped without reducing immediate availability
-        :param ids: CephString 
+        check whether mon(s) can be safely stopped without reducing immediate
+        availability
+        
         module=mon perm=r flags=
+        
+        :param ids: CephString
         """
         prefix = 'mon ok-to-stop'
         _args = {'prefix': prefix, 'ids': ids}
         return self._mon_command(_args)
     
     @deprecated
-    def mon_remove(self, name: str):
+    def mon_remove(self, name):
+        # type: (str) -> CommandResult
         """
         remove monitor named <name>
-        :param name: CephString 
+        
         module=mon perm=rw flags=deprecated
+        
+        :param name: CephString
         """
         prefix = 'mon remove'
         _args = {'prefix': prefix, 'name': name}
         return self._mon_command(_args)
     
-    def mon_rm(self, name: str):
+    def mon_rm(self, name):
+        # type: (str) -> CommandResult
         """
         remove monitor named <name>
-        :param name: CephString 
+        
         module=mon perm=rw flags=
+        
+        :param name: CephString
         """
         prefix = 'mon rm'
         _args = {'prefix': prefix, 'name': name}
         return self._mon_command(_args)
     
     def mon_scrub(self):
+        # type: () -> CommandResult
         """
         scrub the monitor stores
-    
+        
         module=mon perm=rw flags=
         """
         prefix = 'mon scrub'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def mon_set_addrs(self, name: str, addrs: str):
+    def mon_set_addrs(self, name, addrs):
+        # type: (str, str) -> CommandResult
         """
         set the addrs (IPs and ports) a specific monitor binds to
-        :param name: CephString 
-        :param addrs: CephString 
+        
         module=mon perm=rw flags=
+        
+        :param name: CephString
+        :param addrs: CephString
         """
         prefix = 'mon set-addrs'
         _args = {'prefix': prefix, 'name': name, 'addrs': addrs}
         return self._mon_command(_args)
     
-    def mon_set_rank(self, name: str, rank: int):
+    def mon_set_rank(self, name, rank):
+        # type: (str, int) -> CommandResult
         """
         set the rank for the specified mon
-        :param name: CephString 
-        :param rank: CephInt 
+        
         module=mon perm=rw flags=
+        
+        :param name: CephString
+        :param rank: CephInt
         """
         prefix = 'mon set-rank'
         _args = {'prefix': prefix, 'name': name, 'rank': rank}
         return self._mon_command(_args)
     
-    def mon_set_weight(self, name: str, weight: int):
+    def mon_set_weight(self, name, weight):
+        # type: (str, int) -> CommandResult
         """
         set the weight for the specified mon
-        :param name: CephString 
-        :param weight: CephInt ragne=0|65535 
+        
         module=mon perm=rw flags=
+        
+        :param name: CephString
+        :param weight: CephInt ragne=0|65535
         """
         prefix = 'mon set-weight'
         _args = {'prefix': prefix, 'name': name, 'weight': weight}
         return self._mon_command(_args)
     
     def mon_stat(self):
+        # type: () -> CommandResult
         """
         summarize monitor status
-    
+        
         module=mon perm=r flags=
         """
         prefix = 'mon stat'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def mon_sync_force(self, yes_i_really_mean_it: bool=None, i_know_what_i_am_doing: bool=None):
+    def mon_sync_force(self, yes_i_really_mean_it=None, i_know_what_i_am_doing=None):
+        # type: (bool, bool) -> CommandResult
         """
         force sync of and clear monitor store
-        :param yes_i_really_mean_it: CephBool 
-        :param i_know_what_i_am_doing: CephBool 
+        
         module=mon perm=rw flags=no_forward
+        
+        :param yes_i_really_mean_it: CephBool
+        :param i_know_what_i_am_doing: CephBool
         """
         prefix = 'mon sync force'
-        _args = {'prefix': prefix, 'yes_i_really_mean_it': yes_i_really_mean_it, 'i_know_what_i_am_doing': i_know_what_i_am_doing}
+        _args = {'prefix': prefix, 'yes_i_really_mean_it': yes_i_really_mean_it,
+                 'i_know_what_i_am_doing': i_know_what_i_am_doing}
         return self._mon_command(_args)
     
     def mon_versions(self):
+        # type: () -> CommandResult
         """
         check running versions of monitors
-    
+        
         module=mon perm=r flags=
         """
         prefix = 'mon versions'
@@ -2888,295 +3647,383 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def mon_status(self):
+        # type: () -> CommandResult
         """
         report status of monitors
-    
+        
         module=mon perm=r flags=no_forward
         """
         prefix = 'mon_status'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def node_ls(self, type: str=None):
+    def node_ls(self, type_1=None):
+        # type: (str) -> CommandResult
         """
         list all nodes in cluster [type]
-        :param type: CephChoices strings=all|osd|mon|mds|mgr 
+        
         module=mon perm=r flags=
+        
+        :param type_1: CephChoices strings=all|osd|mon|mds|mgr
         """
         prefix = 'node ls'
-        _args = {'prefix': prefix, 'type': type}
+        _args = {'prefix': prefix, 'type': type_1}
         return self._mon_command(_args)
     
-    def orchestrator_device_ls(self, host: List[str]=None, format: str=None, refresh: bool=None):
+    def orchestrator_device_ls(self, host=None, format=None, refresh=None):
+        # type: (List[str], str, bool) -> CommandResult
         """
         List devices on a node
-        :param host: CephString 
-        :param format: CephChoices strings=json|plain 
-        :param refresh: CephBool 
+        
         module=mgr perm=r flags=mgr
+        
+        :param host: CephString
+        :param format: CephChoices strings=json|plain
+        :param refresh: CephBool
         """
         prefix = 'orchestrator device ls'
         _args = {'prefix': prefix, 'host': host, 'format': format, 'refresh': refresh}
         return self._mon_command(_args)
     
-    def orchestrator_host_add(self, host: str):
+    def orchestrator_host_add(self, host):
+        # type: (str) -> CommandResult
         """
         Add a host
-        :param host: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param host: CephString
         """
         prefix = 'orchestrator host add'
         _args = {'prefix': prefix, 'host': host}
         return self._mon_command(_args)
     
     def orchestrator_host_ls(self):
+        # type: () -> CommandResult
         """
         List hosts
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'orchestrator host ls'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def orchestrator_host_rm(self, host: str):
+    def orchestrator_host_rm(self, host):
+        # type: (str) -> CommandResult
         """
         Remove a host
-        :param host: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param host: CephString
         """
         prefix = 'orchestrator host rm'
         _args = {'prefix': prefix, 'host': host}
         return self._mon_command(_args)
     
-    def orchestrator_mds_add(self, svc_arg: str):
+    def orchestrator_mds_add(self, svc_arg):
+        # type: (str) -> CommandResult
         """
         Create an MDS service
-        :param svc_arg: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param svc_arg: CephString
         """
         prefix = 'orchestrator mds add'
         _args = {'prefix': prefix, 'svc_arg': svc_arg}
         return self._mon_command(_args)
     
-    def orchestrator_mds_rm(self, svc_id: str):
+    def orchestrator_mds_rm(self, svc_id):
+        # type: (str) -> CommandResult
         """
         Remove an MDS service
-        :param svc_id: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param svc_id: CephString
         """
         prefix = 'orchestrator mds rm'
         _args = {'prefix': prefix, 'svc_id': svc_id}
         return self._mon_command(_args)
     
-    def orchestrator_mgr_update(self, num: int, hosts: List[str]=None):
+    def orchestrator_mgr_update(self, num, hosts=None):
+        # type: (int, List[str]) -> CommandResult
         """
         Update the number of manager instances
-        :param num: CephInt 
-        :param hosts: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param num: CephInt
+        :param hosts: CephString
         """
         prefix = 'orchestrator mgr update'
         _args = {'prefix': prefix, 'num': num, 'hosts': hosts}
         return self._mon_command(_args)
     
-    def orchestrator_mon_update(self, num: int, hosts: List[str]=None):
+    def orchestrator_mon_update(self, num, hosts=None):
+        # type: (int, List[str]) -> CommandResult
         """
         Update the number of monitor instances
-        :param num: CephInt 
-        :param hosts: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param num: CephInt
+        :param hosts: CephString
         """
         prefix = 'orchestrator mon update'
         _args = {'prefix': prefix, 'num': num, 'hosts': hosts}
         return self._mon_command(_args)
     
-    def orchestrator_nfs_add(self, svc_arg: str, pool: str, namespace: str=None):
+    def orchestrator_nfs_add(self, svc_arg, pool, namespace=None):
+        # type: (str, str, str) -> CommandResult
         """
         Create an NFS service
-        :param svc_arg: CephString 
-        :param pool: CephString 
-        :param namespace: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param svc_arg: CephString
+        :param pool: CephString
+        :param namespace: CephString
         """
         prefix = 'orchestrator nfs add'
         _args = {'prefix': prefix, 'svc_arg': svc_arg, 'pool': pool, 'namespace': namespace}
         return self._mon_command(_args)
     
-    def orchestrator_nfs_rm(self, svc_id: str):
+    def orchestrator_nfs_rm(self, svc_id):
+        # type: (str) -> CommandResult
         """
         Remove an NFS service
-        :param svc_id: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param svc_id: CephString
         """
         prefix = 'orchestrator nfs rm'
         _args = {'prefix': prefix, 'svc_id': svc_id}
         return self._mon_command(_args)
     
-    def orchestrator_nfs_update(self, svc_id: str, num: int):
+    def orchestrator_nfs_update(self, svc_id, num):
+        # type: (str, int) -> CommandResult
         """
         Scale an NFS service
-        :param svc_id: CephString 
-        :param num: CephInt 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param svc_id: CephString
+        :param num: CephInt
         """
         prefix = 'orchestrator nfs update'
         _args = {'prefix': prefix, 'svc_id': svc_id, 'num': num}
         return self._mon_command(_args)
     
-    def orchestrator_osd_create(self, svc_arg: str=None):
+    def orchestrator_osd_create(self, svc_arg=None):
+        # type: (str) -> CommandResult
         """
-        Create an OSD service. Either --svc_arg=host:drives or -i <drive_group>
-        :param svc_arg: CephString 
+        Create an OSD service. Either --svc_arg=host:drives or -i
+        <drive_group>
+        
         module=mgr perm=rw flags=mgr
+        
+        :param svc_arg: CephString
         """
         prefix = 'orchestrator osd create'
         _args = {'prefix': prefix, 'svc_arg': svc_arg}
         return self._mon_command(_args)
     
-    def orchestrator_osd_rm(self, svc_id: List[str]):
+    def orchestrator_osd_rm(self, svc_id):
+        # type: (List[str]) -> CommandResult
         """
         Remove OSD services
-        :param svc_id: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param svc_id: CephString
         """
         prefix = 'orchestrator osd rm'
         _args = {'prefix': prefix, 'svc_id': svc_id}
         return self._mon_command(_args)
     
-    def orchestrator_rgw_add(self, svc_arg: str):
+    def orchestrator_rgw_add(self, svc_arg):
+        # type: (str) -> CommandResult
         """
         Create an RGW service
-        :param svc_arg: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param svc_arg: CephString
         """
         prefix = 'orchestrator rgw add'
         _args = {'prefix': prefix, 'svc_arg': svc_arg}
         return self._mon_command(_args)
     
-    def orchestrator_rgw_rm(self, svc_id: str):
+    def orchestrator_rgw_rm(self, svc_id):
+        # type: (str) -> CommandResult
         """
         Remove an RGW service
-        :param svc_id: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param svc_id: CephString
         """
         prefix = 'orchestrator rgw rm'
         _args = {'prefix': prefix, 'svc_id': svc_id}
         return self._mon_command(_args)
     
-    def orchestrator_service(self, action: str, svc_type: str, svc_name: str):
+    def orchestrator_service(self, action, svc_type, svc_name):
+        # type: (str, str, str) -> CommandResult
         """
         Start, stop or reload an entire service (i.e. all daemons)
-        :param action: CephChoices strings=start|stop|reload 
-        :param svc_type: CephString 
-        :param svc_name: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param action: CephChoices strings=start|stop|reload
+        :param svc_type: CephString
+        :param svc_name: CephString
         """
         prefix = 'orchestrator service'
         _args = {'prefix': prefix, 'action': action, 'svc_type': svc_type, 'svc_name': svc_name}
         return self._mon_command(_args)
     
-    def orchestrator_service_ls(self, host: str=None, svc_type: str=None, svc_id: str=None, format: str=None):
+    def orchestrator_service_ls(self, host=None, svc_type=None, svc_id=None, format=None):
+        # type: (str, str, str, str) -> CommandResult
         """
         List services known to orchestrator
-        :param host: CephString 
-        :param svc_type: CephChoices strings=mon|mgr|osd|mds|nfs|rgw|rbd-mirror 
-        :param svc_id: CephString 
-        :param format: CephChoices strings=json|plain 
+        
         module=mgr perm=r flags=mgr
+        
+        :param host: CephString
+        :param svc_type: CephChoices strings=mon|mgr|osd|mds|nfs|rgw|rbd-
+            mirror
+        :param svc_id: CephString
+        :param format: CephChoices strings=json|plain
         """
         prefix = 'orchestrator service ls'
-        _args = {'prefix': prefix, 'host': host, 'svc_type': svc_type, 'svc_id': svc_id, 'format': format}
+        _args = {'prefix': prefix, 'host': host, 'svc_type': svc_type, 'svc_id': svc_id,
+                 'format': format}
         return self._mon_command(_args)
     
-    def orchestrator_service_instance(self, action: str, svc_type: str, svc_id: str):
+    def orchestrator_service_instance(self, action, svc_type, svc_id):
+        # type: (str, str, str) -> CommandResult
         """
         Start, stop or reload a specific service instance
-        :param action: CephChoices strings=start|stop|reload 
-        :param svc_type: CephString 
-        :param svc_id: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param action: CephChoices strings=start|stop|reload
+        :param svc_type: CephString
+        :param svc_id: CephString
         """
         prefix = 'orchestrator service-instance'
         _args = {'prefix': prefix, 'action': action, 'svc_type': svc_type, 'svc_id': svc_id}
         return self._mon_command(_args)
     
-    def orchestrator_set_backend(self, module_name: str):
+    def orchestrator_set_backend(self, module_name):
+        # type: (str) -> CommandResult
         """
         Select orchestrator module backend
-        :param module_name: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param module_name: CephString
         """
         prefix = 'orchestrator set backend'
         _args = {'prefix': prefix, 'module_name': module_name}
         return self._mon_command(_args)
     
     def orchestrator_status(self):
+        # type: () -> CommandResult
         """
         Report configured backend and its status
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'orchestrator status'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def osd_add_nodown(self, ids: List[str]):
+    @deprecated
+    def osd_add_nodown(self, ids):
+        # type: (List[str]) -> CommandResult
         """
-        mark osd(s) <id> [<id>...] as nodown, or use <all|any> to mark all osds as nodown
-        :param ids: CephString 
-        module=osd perm=rw flags=
+        mark osd(s) <id> [<id>...] as nodown, or use <all|any> to mark all
+        osds as nodown
+        
+        module=osd perm=rw flags=deprecated
+        
+        :param ids: CephString
         """
         prefix = 'osd add-nodown'
         _args = {'prefix': prefix, 'ids': ids}
         return self._mon_command(_args)
     
-    def osd_add_noin(self, ids: List[str]):
+    @deprecated
+    def osd_add_noin(self, ids):
+        # type: (List[str]) -> CommandResult
         """
-        mark osd(s) <id> [<id>...] as noin, or use <all|any> to mark all osds as noin
-        :param ids: CephString 
-        module=osd perm=rw flags=
+        mark osd(s) <id> [<id>...] as noin, or use <all|any> to mark all osds
+        as noin
+        
+        module=osd perm=rw flags=deprecated
+        
+        :param ids: CephString
         """
         prefix = 'osd add-noin'
         _args = {'prefix': prefix, 'ids': ids}
         return self._mon_command(_args)
     
-    def osd_add_noout(self, ids: List[str]):
+    @deprecated
+    def osd_add_noout(self, ids):
+        # type: (List[str]) -> CommandResult
         """
-        mark osd(s) <id> [<id>...] as noout, or use <all|any> to mark all osds as noout
-        :param ids: CephString 
-        module=osd perm=rw flags=
+        mark osd(s) <id> [<id>...] as noout, or use <all|any> to mark all osds
+        as noout
+        
+        module=osd perm=rw flags=deprecated
+        
+        :param ids: CephString
         """
         prefix = 'osd add-noout'
         _args = {'prefix': prefix, 'ids': ids}
         return self._mon_command(_args)
     
-    def osd_add_noup(self, ids: List[str]):
+    @deprecated
+    def osd_add_noup(self, ids):
+        # type: (List[str]) -> CommandResult
         """
-        mark osd(s) <id> [<id>...] as noup, or use <all|any> to mark all osds as noup
-        :param ids: CephString 
-        module=osd perm=rw flags=
+        mark osd(s) <id> [<id>...] as noup, or use <all|any> to mark all osds
+        as noup
+        
+        module=osd perm=rw flags=deprecated
+        
+        :param ids: CephString
         """
         prefix = 'osd add-noup'
         _args = {'prefix': prefix, 'ids': ids}
         return self._mon_command(_args)
     
-    def osd_blacklist(self, blacklistop: str, addr: str, expire: float=None):
+    def osd_blacklist(self, blacklistop, addr, expire=None):
+        # type: (str, str, float) -> CommandResult
         """
-        add (optionally until <expire> seconds from now) or remove <addr> from blacklist
-        :param blacklistop: CephChoices strings=add|rm 
-        :param addr: CephEntityAddr 
-        :param expire: CephFloat ragne=0.0 
+        add (optionally until <expire> seconds from now) or remove <addr> from
+        blacklist
+        
         module=osd perm=rw flags=
+        
+        :param blacklistop: CephChoices strings=add|rm
+        :param addr: CephEntityAddr
+        :param expire: CephFloat ragne=0.0
         """
         prefix = 'osd blacklist'
         _args = {'prefix': prefix, 'blacklistop': blacklistop, 'addr': addr, 'expire': expire}
         return self._mon_command(_args)
     
     def osd_blacklist_clear(self):
+        # type: () -> CommandResult
         """
         clear all blacklisted clients
-    
+        
         module=osd perm=rw flags=
         """
         prefix = 'osd blacklist clear'
@@ -3184,9 +4031,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def osd_blacklist_ls(self):
+        # type: () -> CommandResult
         """
         show blacklisted clients
-    
+        
         module=osd perm=r flags=
         """
         prefix = 'osd blacklist ls'
@@ -3194,304 +4042,389 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def osd_blocked_by(self):
+        # type: () -> CommandResult
         """
         print histogram of which OSDs are blocking their peers
-    
+        
         module=osd perm=r flags=mgr
         """
         prefix = 'osd blocked-by'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def osd_count_metadata(self, property: str):
+    def osd_count_metadata(self, property_1):
+        # type: (str) -> CommandResult
         """
         count OSDs by metadata field property
-        :param property: CephString 
+        
         module=osd perm=r flags=
+        
+        :param property_1: CephString
         """
         prefix = 'osd count-metadata'
-        _args = {'prefix': prefix, 'property': property}
+        _args = {'prefix': prefix, 'property': property_1}
         return self._mon_command(_args)
     
     @deprecated
-    def osd_create(self, uuid: str=None, id_: str=None):
+    def osd_create(self, uuid=None, id_1=None):
+        # type: (str, str) -> CommandResult
         """
         create new osd (with optional UUID and ID)
-        :param uuid: CephUUID 
-        :param id_: CephOsdName 
+        
         module=osd perm=rw flags=deprecated
+        
+        :param uuid: CephUUID
+        :param id_1: CephOsdName
         """
         prefix = 'osd create'
-        _args = {'prefix': prefix, 'uuid': uuid, 'id': id_}
+        _args = {'prefix': prefix, 'uuid': uuid, 'id': id_1}
         return self._mon_command(_args)
     
-    def osd_crush_add(self, id_: str, weight: float, args: List[str]):
+    def osd_crush_add(self, id_1, weight, args):
+        # type: (str, float, List[str]) -> CommandResult
         """
-        add or update crushmap position and weight for <name> with <weight> and location <args>
-        :param id_: CephOsdName 
-        :param weight: CephFloat ragne=0.0 
-        :param args: CephString goodchars=[A-Za-z0-9-_.=] 
+        add or update crushmap position and weight for <name> with <weight>
+        and location <args>
+        
         module=osd perm=rw flags=
+        
+        :param id_1: CephOsdName
+        :param weight: CephFloat ragne=0.0
+        :param args: CephString goodchars=[A-Za-z0-9-_.=]
         """
         prefix = 'osd crush add'
-        _args = {'prefix': prefix, 'id': id_, 'weight': weight, 'args': args}
+        _args = {'prefix': prefix, 'id': id_1, 'weight': weight, 'args': args}
         return self._mon_command(_args)
     
-    def osd_crush_add_bucket(self, name: str, type: str, args: List[str]=None):
+    def osd_crush_add_bucket(self, name, type_1, args=None):
+        # type: (str, str, List[str]) -> CommandResult
         """
-        add no-parent (probably root) crush bucket <name> of type <type> to location <args>
-        :param name: CephString goodchars=[A-Za-z0-9-_.] 
-        :param type: CephString 
-        :param args: CephString goodchars=[A-Za-z0-9-_.=] 
+        add no-parent (probably root) crush bucket <name> of type <type> to
+        location <args>
+        
         module=osd perm=rw flags=
+        
+        :param name: CephString goodchars=[A-Za-z0-9-_.]
+        :param type_1: CephString
+        :param args: CephString goodchars=[A-Za-z0-9-_.=]
         """
         prefix = 'osd crush add-bucket'
-        _args = {'prefix': prefix, 'name': name, 'type': type, 'args': args}
+        _args = {'prefix': prefix, 'name': name, 'type': type_1, 'args': args}
         return self._mon_command(_args)
     
-    def osd_crush_class_create(self, class_: str):
+    def osd_crush_class_create(self, class_1):
+        # type: (str) -> CommandResult
         """
         create crush device class <class>
-        :param class_: CephString goodchars=[A-Za-z0-9-_] 
+        
         module=osd perm=rw flags=
+        
+        :param class_1: CephString goodchars=[A-Za-z0-9-_]
         """
         prefix = 'osd crush class create'
-        _args = {'prefix': prefix, 'class': class_}
+        _args = {'prefix': prefix, 'class': class_1}
         return self._mon_command(_args)
     
     def osd_crush_class_ls(self):
+        # type: () -> CommandResult
         """
         list all crush device classes
-    
+        
         module=osd perm=r flags=
         """
         prefix = 'osd crush class ls'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def osd_crush_class_ls_osd(self, class_: str):
+    def osd_crush_class_ls_osd(self, class_1):
+        # type: (str) -> CommandResult
         """
         list all osds belonging to the specific <class>
-        :param class_: CephString goodchars=[A-Za-z0-9-_] 
+        
         module=osd perm=r flags=
+        
+        :param class_1: CephString goodchars=[A-Za-z0-9-_]
         """
         prefix = 'osd crush class ls-osd'
-        _args = {'prefix': prefix, 'class': class_}
+        _args = {'prefix': prefix, 'class': class_1}
         return self._mon_command(_args)
     
-    def osd_crush_class_rename(self, srcname: str, dstname: str):
+    def osd_crush_class_rename(self, srcname, dstname):
+        # type: (str, str) -> CommandResult
         """
         rename crush device class <srcname> to <dstname>
-        :param srcname: CephString goodchars=[A-Za-z0-9-_] 
-        :param dstname: CephString goodchars=[A-Za-z0-9-_] 
+        
         module=osd perm=rw flags=
+        
+        :param srcname: CephString goodchars=[A-Za-z0-9-_]
+        :param dstname: CephString goodchars=[A-Za-z0-9-_]
         """
         prefix = 'osd crush class rename'
         _args = {'prefix': prefix, 'srcname': srcname, 'dstname': dstname}
         return self._mon_command(_args)
     
-    def osd_crush_class_rm(self, class_: str):
+    def osd_crush_class_rm(self, class_1):
+        # type: (str) -> CommandResult
         """
         remove crush device class <class>
-        :param class_: CephString goodchars=[A-Za-z0-9-_] 
+        
         module=osd perm=rw flags=
+        
+        :param class_1: CephString goodchars=[A-Za-z0-9-_]
         """
         prefix = 'osd crush class rm'
-        _args = {'prefix': prefix, 'class': class_}
+        _args = {'prefix': prefix, 'class': class_1}
         return self._mon_command(_args)
     
-    def osd_crush_create_or_move(self, id_: str, weight: float, args: List[str]):
+    def osd_crush_create_or_move(self, id_1, weight, args):
+        # type: (str, float, List[str]) -> CommandResult
         """
-        create entry or move existing entry for <name> <weight> at/to location <args>
-        :param id_: CephOsdName 
-        :param weight: CephFloat ragne=0.0 
-        :param args: CephString goodchars=[A-Za-z0-9-_.=] 
+        create entry or move existing entry for <name> <weight> at/to location
+        <args>
+        
         module=osd perm=rw flags=
+        
+        :param id_1: CephOsdName
+        :param weight: CephFloat ragne=0.0
+        :param args: CephString goodchars=[A-Za-z0-9-_.=]
         """
         prefix = 'osd crush create-or-move'
-        _args = {'prefix': prefix, 'id': id_, 'weight': weight, 'args': args}
+        _args = {'prefix': prefix, 'id': id_1, 'weight': weight, 'args': args}
         return self._mon_command(_args)
     
     def osd_crush_dump(self):
+        # type: () -> CommandResult
         """
         dump crush map
-    
+        
         module=osd perm=r flags=
         """
         prefix = 'osd crush dump'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def osd_crush_get_device_class(self, ids: List[str]):
+    def osd_crush_get_device_class(self, ids):
+        # type: (List[str]) -> CommandResult
         """
         get classes of specified osd(s) <id> [<id>...]
-        :param ids: CephString 
+        
         module=osd perm=r flags=
+        
+        :param ids: CephString
         """
         prefix = 'osd crush get-device-class'
         _args = {'prefix': prefix, 'ids': ids}
         return self._mon_command(_args)
     
-    def osd_crush_get_tunable(self, tunable: str):
+    def osd_crush_get_tunable(self, tunable):
+        # type: (str) -> CommandResult
         """
         get crush tunable <tunable>
-        :param tunable: CephChoices strings=straw_calc_version 
+        
         module=osd perm=r flags=
+        
+        :param tunable: CephChoices strings=straw_calc_version
         """
         prefix = 'osd crush get-tunable'
         _args = {'prefix': prefix, 'tunable': tunable}
         return self._mon_command(_args)
     
-    def osd_crush_link(self, name: str, args: List[str]):
+    def osd_crush_link(self, name, args):
+        # type: (str, List[str]) -> CommandResult
         """
         link existing entry for <name> under location <args>
-        :param name: CephString 
-        :param args: CephString goodchars=[A-Za-z0-9-_.=] 
+        
         module=osd perm=rw flags=
+        
+        :param name: CephString
+        :param args: CephString goodchars=[A-Za-z0-9-_.=]
         """
         prefix = 'osd crush link'
         _args = {'prefix': prefix, 'name': name, 'args': args}
         return self._mon_command(_args)
     
-    def osd_crush_ls(self, node: str):
+    def osd_crush_ls(self, node):
+        # type: (str) -> CommandResult
         """
         list items beneath a node in the CRUSH tree
-        :param node: CephString goodchars=[A-Za-z0-9-_.] 
+        
         module=osd perm=r flags=
+        
+        :param node: CephString goodchars=[A-Za-z0-9-_.]
         """
         prefix = 'osd crush ls'
         _args = {'prefix': prefix, 'node': node}
         return self._mon_command(_args)
     
-    def osd_crush_move(self, name: str, args: List[str]):
+    def osd_crush_move(self, name, args):
+        # type: (str, List[str]) -> CommandResult
         """
         move existing entry for <name> to location <args>
-        :param name: CephString goodchars=[A-Za-z0-9-_.] 
-        :param args: CephString goodchars=[A-Za-z0-9-_.=] 
+        
         module=osd perm=rw flags=
+        
+        :param name: CephString goodchars=[A-Za-z0-9-_.]
+        :param args: CephString goodchars=[A-Za-z0-9-_.=]
         """
         prefix = 'osd crush move'
         _args = {'prefix': prefix, 'name': name, 'args': args}
         return self._mon_command(_args)
     
     @deprecated
-    def osd_crush_remove(self, name: str, ancestor: str=None):
+    def osd_crush_remove(self, name, ancestor=None):
+        # type: (str, str) -> CommandResult
         """
         remove <name> from crush map (everywhere, or just at <ancestor>)
-        :param name: CephString goodchars=[A-Za-z0-9-_.] 
-        :param ancestor: CephString goodchars=[A-Za-z0-9-_.] 
+        
         module=osd perm=rw flags=deprecated
+        
+        :param name: CephString goodchars=[A-Za-z0-9-_.]
+        :param ancestor: CephString goodchars=[A-Za-z0-9-_.]
         """
         prefix = 'osd crush remove'
         _args = {'prefix': prefix, 'name': name, 'ancestor': ancestor}
         return self._mon_command(_args)
     
-    def osd_crush_rename_bucket(self, srcname: str, dstname: str):
+    def osd_crush_rename_bucket(self, srcname, dstname):
+        # type: (str, str) -> CommandResult
         """
         rename bucket <srcname> to <dstname>
-        :param srcname: CephString goodchars=[A-Za-z0-9-_.] 
-        :param dstname: CephString goodchars=[A-Za-z0-9-_.] 
+        
         module=osd perm=rw flags=
+        
+        :param srcname: CephString goodchars=[A-Za-z0-9-_.]
+        :param dstname: CephString goodchars=[A-Za-z0-9-_.]
         """
         prefix = 'osd crush rename-bucket'
         _args = {'prefix': prefix, 'srcname': srcname, 'dstname': dstname}
         return self._mon_command(_args)
     
-    def osd_crush_reweight(self, name: str, weight: float):
+    def osd_crush_reweight(self, name, weight):
+        # type: (str, float) -> CommandResult
         """
         change <name>'s weight to <weight> in crush map
-        :param name: CephString goodchars=[A-Za-z0-9-_.] 
-        :param weight: CephFloat ragne=0.0 
+        
         module=osd perm=rw flags=
+        
+        :param name: CephString goodchars=[A-Za-z0-9-_.]
+        :param weight: CephFloat ragne=0.0
         """
         prefix = 'osd crush reweight'
         _args = {'prefix': prefix, 'name': name, 'weight': weight}
         return self._mon_command(_args)
     
     def osd_crush_reweight_all(self):
+        # type: () -> CommandResult
         """
         recalculate the weights for the tree to ensure they sum correctly
-    
+        
         module=osd perm=rw flags=
         """
         prefix = 'osd crush reweight-all'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def osd_crush_reweight_subtree(self, name: str, weight: float):
+    def osd_crush_reweight_subtree(self, name, weight):
+        # type: (str, float) -> CommandResult
         """
         change all leaf items beneath <name> to <weight> in crush map
-        :param name: CephString goodchars=[A-Za-z0-9-_.] 
-        :param weight: CephFloat ragne=0.0 
+        
         module=osd perm=rw flags=
+        
+        :param name: CephString goodchars=[A-Za-z0-9-_.]
+        :param weight: CephFloat ragne=0.0
         """
         prefix = 'osd crush reweight-subtree'
         _args = {'prefix': prefix, 'name': name, 'weight': weight}
         return self._mon_command(_args)
     
-    def osd_crush_rm(self, name: str, ancestor: str=None):
+    def osd_crush_rm(self, name, ancestor=None):
+        # type: (str, str) -> CommandResult
         """
         remove <name> from crush map (everywhere, or just at <ancestor>)
-        :param name: CephString goodchars=[A-Za-z0-9-_.] 
-        :param ancestor: CephString goodchars=[A-Za-z0-9-_.] 
+        
         module=osd perm=rw flags=
+        
+        :param name: CephString goodchars=[A-Za-z0-9-_.]
+        :param ancestor: CephString goodchars=[A-Za-z0-9-_.]
         """
         prefix = 'osd crush rm'
         _args = {'prefix': prefix, 'name': name, 'ancestor': ancestor}
         return self._mon_command(_args)
     
-    def osd_crush_rm_device_class(self, ids: List[str]):
+    def osd_crush_rm_device_class(self, ids):
+        # type: (List[str]) -> CommandResult
         """
-        remove class of the osd(s) <id> [<id>...],or use <all|any> to remove all.
-        :param ids: CephString 
+        remove class of the osd(s) <id> [<id>...],or use <all|any> to remove
+        all.
+        
         module=osd perm=rw flags=
+        
+        :param ids: CephString
         """
         prefix = 'osd crush rm-device-class'
         _args = {'prefix': prefix, 'ids': ids}
         return self._mon_command(_args)
     
-    def osd_crush_rule_create_erasure(self, name: str, profile: str=None):
+    def osd_crush_rule_create_erasure(self, name, profile=None):
+        # type: (str, str) -> CommandResult
         """
-        create crush rule <name> for erasure coded pool created with <profile> (default default)
-        :param name: CephString goodchars=[A-Za-z0-9-_.] 
-        :param profile: CephString goodchars=[A-Za-z0-9-_.=] 
+        create crush rule <name> for erasure coded pool created with <profile>
+        (default default)
+        
         module=osd perm=rw flags=
+        
+        :param name: CephString goodchars=[A-Za-z0-9-_.]
+        :param profile: CephString goodchars=[A-Za-z0-9-_.=]
         """
         prefix = 'osd crush rule create-erasure'
         _args = {'prefix': prefix, 'name': name, 'profile': profile}
         return self._mon_command(_args)
     
-    def osd_crush_rule_create_replicated(self, name: str, root: str, type: str, class_: str=None):
+    def osd_crush_rule_create_replicated(self, name, root, type_1, class_1=None):
+        # type: (str, str, str, str) -> CommandResult
         """
-        create crush rule <name> for replicated pool to start from <root>, replicate across buckets of type <type>, use devices of type <class> (ssd or hdd)
-        :param name: CephString goodchars=[A-Za-z0-9-_.] 
-        :param root: CephString goodchars=[A-Za-z0-9-_.] 
-        :param type: CephString goodchars=[A-Za-z0-9-_.] 
-        :param class_: CephString goodchars=[A-Za-z0-9-_.] 
+        create crush rule <name> for replicated pool to start from <root>,
+        replicate across buckets of type <type>, use devices of type <class>
+        (ssd or hdd)
+        
         module=osd perm=rw flags=
+        
+        :param name: CephString goodchars=[A-Za-z0-9-_.]
+        :param root: CephString goodchars=[A-Za-z0-9-_.]
+        :param type_1: CephString goodchars=[A-Za-z0-9-_.]
+        :param class_1: CephString goodchars=[A-Za-z0-9-_.]
         """
         prefix = 'osd crush rule create-replicated'
-        _args = {'prefix': prefix, 'name': name, 'root': root, 'type': type, 'class': class_}
+        _args = {'prefix': prefix, 'name': name, 'root': root, 'type': type_1, 'class': class_1}
         return self._mon_command(_args)
     
-    def osd_crush_rule_create_simple(self, name: str, root: str, type: str, mode: str=None):
+    def osd_crush_rule_create_simple(self, name, root, type_1, mode=None):
+        # type: (str, str, str, str) -> CommandResult
         """
-        create crush rule <name> to start from <root>, replicate across buckets of type <type>, using a choose mode of <firstn|indep> (default firstn; indep best for erasure pools)
-        :param name: CephString goodchars=[A-Za-z0-9-_.] 
-        :param root: CephString goodchars=[A-Za-z0-9-_.] 
-        :param type: CephString goodchars=[A-Za-z0-9-_.] 
-        :param mode: CephChoices strings=firstn|indep 
+        create crush rule <name> to start from <root>, replicate across
+        buckets of type <type>, using a choose mode of <firstn|indep> (default
+        firstn; indep best for erasure pools)
+        
         module=osd perm=rw flags=
+        
+        :param name: CephString goodchars=[A-Za-z0-9-_.]
+        :param root: CephString goodchars=[A-Za-z0-9-_.]
+        :param type_1: CephString goodchars=[A-Za-z0-9-_.]
+        :param mode: CephChoices strings=firstn|indep
         """
         prefix = 'osd crush rule create-simple'
-        _args = {'prefix': prefix, 'name': name, 'root': root, 'type': type, 'mode': mode}
+        _args = {'prefix': prefix, 'name': name, 'root': root, 'type': type_1, 'mode': mode}
         return self._mon_command(_args)
     
-    def osd_crush_rule_dump(self, name: str=None):
+    def osd_crush_rule_dump(self, name=None):
+        # type: (str) -> CommandResult
         """
         dump crush rule <name> (default all)
-        :param name: CephString goodchars=[A-Za-z0-9-_.] 
+        
         module=osd perm=r flags=
+        
+        :param name: CephString goodchars=[A-Za-z0-9-_.]
         """
         prefix = 'osd crush rule dump'
         _args = {'prefix': prefix, 'name': name}
@@ -3499,9 +4432,10 @@ class MonCommandApi(object):
     
     @deprecated
     def osd_crush_rule_list(self):
+        # type: () -> CommandResult
         """
         list crush rules
-    
+        
         module=osd perm=r flags=deprecated
         """
         prefix = 'osd crush rule list'
@@ -3509,170 +4443,215 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def osd_crush_rule_ls(self):
+        # type: () -> CommandResult
         """
         list crush rules
-    
+        
         module=osd perm=r flags=
         """
         prefix = 'osd crush rule ls'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def osd_crush_rule_ls_by_class(self, class_: str):
+    def osd_crush_rule_ls_by_class(self, class_1):
+        # type: (str) -> CommandResult
         """
         list all crush rules that reference the same <class>
-        :param class_: CephString goodchars=[A-Za-z0-9-_.] 
+        
         module=osd perm=r flags=
+        
+        :param class_1: CephString goodchars=[A-Za-z0-9-_.]
         """
         prefix = 'osd crush rule ls-by-class'
-        _args = {'prefix': prefix, 'class': class_}
+        _args = {'prefix': prefix, 'class': class_1}
         return self._mon_command(_args)
     
-    def osd_crush_rule_rename(self, srcname: str, dstname: str):
+    def osd_crush_rule_rename(self, srcname, dstname):
+        # type: (str, str) -> CommandResult
         """
         rename crush rule <srcname> to <dstname>
-        :param srcname: CephString goodchars=[A-Za-z0-9-_.] 
-        :param dstname: CephString goodchars=[A-Za-z0-9-_.] 
+        
         module=osd perm=rw flags=
+        
+        :param srcname: CephString goodchars=[A-Za-z0-9-_.]
+        :param dstname: CephString goodchars=[A-Za-z0-9-_.]
         """
         prefix = 'osd crush rule rename'
         _args = {'prefix': prefix, 'srcname': srcname, 'dstname': dstname}
         return self._mon_command(_args)
     
-    def osd_crush_rule_rm(self, name: str):
+    def osd_crush_rule_rm(self, name):
+        # type: (str) -> CommandResult
         """
         remove crush rule <name>
-        :param name: CephString goodchars=[A-Za-z0-9-_.] 
+        
         module=osd perm=rw flags=
+        
+        :param name: CephString goodchars=[A-Za-z0-9-_.]
         """
         prefix = 'osd crush rule rm'
         _args = {'prefix': prefix, 'name': name}
         return self._mon_command(_args)
-    
-    @overload  # Python 3 only
-    def osd_crush_set(self, prior_version: int=None):
-        """
-        set crush map from input file
-        :param prior_version: CephInt 
-        module=osd perm=rw flags=
-        """
-        prefix = 'osd crush set'
-        _args = {'prefix': prefix, 'prior_version': prior_version}
-        return self._mon_command(_args)
-    
-    @overload  # Python 3 only
-    def osd_crush_set(self, id_: str, weight: float, args: List[str]):
-        """
-        update crushmap position and weight for <name> to <weight> with location <args>
-        :param id_: CephOsdName 
-        :param weight: CephFloat ragne=0.0 
-        :param args: CephString goodchars=[A-Za-z0-9-_.=] 
-        module=osd perm=rw flags=
-        """
-        prefix = 'osd crush set'
-        _args = {'prefix': prefix, 'id': id_, 'weight': weight, 'args': args}
-        return self._mon_command(_args)
+    # 
+    # @overload  # Python 3 only
+    # def osd_crush_set(self, prior_version=None):
+    #     # type: (int) -> CommandResult
+    #     """
+    #     set crush map from input file
+    #     
+    #     module=osd perm=rw flags=
+    #     
+    #     :param prior_version: CephInt
+    #     """
+    #     prefix = 'osd crush set'
+    #     _args = {'prefix': prefix, 'prior_version': prior_version}
+    #     return self._mon_command(_args)
+    # 
+    # @overload  # Python 3 only
+    # def osd_crush_set(self, id_1, weight, args):
+    #     # type: (str, float, List[str]) -> CommandResult
+    #     """
+    #     update crushmap position and weight for <name> to <weight> with
+    #     location <args>
+    #     
+    #     module=osd perm=rw flags=
+    #     
+    #     :param id_1: CephOsdName
+    #     :param weight: CephFloat ragne=0.0
+    #     :param args: CephString goodchars=[A-Za-z0-9-_.=]
+    #     """
+    #     prefix = 'osd crush set'
+    #     _args = {'prefix': prefix, 'id': id_1, 'weight': weight, 'args': args}
+    #     return self._mon_command(_args)
     
     def osd_crush_set_all_straw_buckets_to_straw2(self):
+        # type: () -> CommandResult
         """
         convert all CRUSH current straw buckets to use the straw2 algorithm
-    
+        
         module=osd perm=rw flags=
         """
         prefix = 'osd crush set-all-straw-buckets-to-straw2'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def osd_crush_set_device_class(self, class_: str, ids: List[str]):
+    def osd_crush_set_device_class(self, class_1, ids):
+        # type: (str, List[str]) -> CommandResult
         """
-        set the <class> of the osd(s) <id> [<id>...],or use <all|any> to set all.
-        :param class_: CephString 
-        :param ids: CephString 
+        set the <class> of the osd(s) <id> [<id>...],or use <all|any> to set
+        all.
+        
         module=osd perm=rw flags=
+        
+        :param class_1: CephString
+        :param ids: CephString
         """
         prefix = 'osd crush set-device-class'
-        _args = {'prefix': prefix, 'class': class_, 'ids': ids}
+        _args = {'prefix': prefix, 'class': class_1, 'ids': ids}
         return self._mon_command(_args)
     
-    def osd_crush_set_tunable(self, tunable: str, value: int):
+    def osd_crush_set_tunable(self, tunable, value):
+        # type: (str, int) -> CommandResult
         """
         set crush tunable <tunable> to <value>
-        :param tunable: CephChoices strings=straw_calc_version 
-        :param value: CephInt 
+        
         module=osd perm=rw flags=
+        
+        :param tunable: CephChoices strings=straw_calc_version
+        :param value: CephInt
         """
         prefix = 'osd crush set-tunable'
         _args = {'prefix': prefix, 'tunable': tunable, 'value': value}
         return self._mon_command(_args)
     
     def osd_crush_show_tunables(self):
+        # type: () -> CommandResult
         """
         show current crush tunables
-    
+        
         module=osd perm=r flags=
         """
         prefix = 'osd crush show-tunables'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def osd_crush_swap_bucket(self, source: str, dest: str, yes_i_really_mean_it: bool=None):
+    def osd_crush_swap_bucket(self, source, dest, yes_i_really_mean_it=None):
+        # type: (str, str, bool) -> CommandResult
         """
-        swap existing bucket contents from (orphan) bucket <source> and <target>
-        :param source: CephString goodchars=[A-Za-z0-9-_.] 
-        :param dest: CephString goodchars=[A-Za-z0-9-_.] 
-        :param yes_i_really_mean_it: CephBool 
+        swap existing bucket contents from (orphan) bucket <source> and
+        <target>
+        
         module=osd perm=rw flags=
+        
+        :param source: CephString goodchars=[A-Za-z0-9-_.]
+        :param dest: CephString goodchars=[A-Za-z0-9-_.]
+        :param yes_i_really_mean_it: CephBool
         """
         prefix = 'osd crush swap-bucket'
-        _args = {'prefix': prefix, 'source': source, 'dest': dest, 'yes_i_really_mean_it': yes_i_really_mean_it}
+        _args = {'prefix': prefix, 'source': source, 'dest': dest, 'yes_i_really_mean_it':
+                 yes_i_really_mean_it}
         return self._mon_command(_args)
     
-    def osd_crush_tree(self, shadow: str=None):
+    def osd_crush_tree(self, shadow=None):
+        # type: (str) -> CommandResult
         """
         dump crush buckets and items in a tree view
-        :param shadow: CephChoices strings=--show-shadow 
+        
         module=osd perm=r flags=
+        
+        :param shadow: CephChoices strings=--show-shadow
         """
         prefix = 'osd crush tree'
         _args = {'prefix': prefix, 'shadow': shadow}
         return self._mon_command(_args)
     
-    def osd_crush_tunables(self, profile: str):
+    def osd_crush_tunables(self, profile):
+        # type: (str) -> CommandResult
         """
         set crush tunables values to <profile>
-        :param profile: CephChoices strings=legacy|argonaut|bobtail|firefly|hammer|jewel|optimal|default 
+        
         module=osd perm=rw flags=
+        
+        :param profile: CephChoices
+            strings=legacy|argonaut|bobtail|firefly|hammer|jewel|optimal|default
         """
         prefix = 'osd crush tunables'
         _args = {'prefix': prefix, 'profile': profile}
         return self._mon_command(_args)
     
-    def osd_crush_unlink(self, name: str, ancestor: str=None):
+    def osd_crush_unlink(self, name, ancestor=None):
+        # type: (str, str) -> CommandResult
         """
         unlink <name> from crush map (everywhere, or just at <ancestor>)
-        :param name: CephString goodchars=[A-Za-z0-9-_.] 
-        :param ancestor: CephString goodchars=[A-Za-z0-9-_.] 
+        
         module=osd perm=rw flags=
+        
+        :param name: CephString goodchars=[A-Za-z0-9-_.]
+        :param ancestor: CephString goodchars=[A-Za-z0-9-_.]
         """
         prefix = 'osd crush unlink'
         _args = {'prefix': prefix, 'name': name, 'ancestor': ancestor}
         return self._mon_command(_args)
     
-    def osd_crush_weight_set_create(self, pool: str, mode: str):
+    def osd_crush_weight_set_create(self, pool, mode):
+        # type: (str, str) -> CommandResult
         """
         create a weight-set for a given pool
-        :param pool: CephPoolname 
-        :param mode: CephChoices strings=flat|positional 
+        
         module=osd perm=rw flags=
+        
+        :param pool: CephPoolname
+        :param mode: CephChoices strings=flat|positional
         """
         prefix = 'osd crush weight-set create'
         _args = {'prefix': prefix, 'pool': pool, 'mode': mode}
         return self._mon_command(_args)
     
     def osd_crush_weight_set_create_compat(self):
+        # type: () -> CommandResult
         """
         create a default backward-compatible weight-set
-    
+        
         module=osd perm=rw flags=
         """
         prefix = 'osd crush weight-set create-compat'
@@ -3680,9 +4659,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def osd_crush_weight_set_dump(self):
+        # type: () -> CommandResult
         """
         dump crush weight sets
-    
+        
         module=osd perm=r flags=
         """
         prefix = 'osd crush weight-set dump'
@@ -3690,273 +4670,351 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def osd_crush_weight_set_ls(self):
+        # type: () -> CommandResult
         """
         list crush weight sets
-    
+        
         module=osd perm=r flags=
         """
         prefix = 'osd crush weight-set ls'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def osd_crush_weight_set_reweight(self, pool: str, item: str, weight: List[float]):
+    def osd_crush_weight_set_reweight(self, pool, item, weight):
+        # type: (str, str, List[float]) -> CommandResult
         """
         set weight for an item (bucket or osd) in a pool's weight-set
-        :param pool: CephPoolname 
-        :param item: CephString 
-        :param weight: CephFloat ragne=0.0 
+        
         module=osd perm=rw flags=
+        
+        :param pool: CephPoolname
+        :param item: CephString
+        :param weight: CephFloat ragne=0.0
         """
         prefix = 'osd crush weight-set reweight'
         _args = {'prefix': prefix, 'pool': pool, 'item': item, 'weight': weight}
         return self._mon_command(_args)
     
-    def osd_crush_weight_set_reweight_compat(self, item: str, weight: List[float]):
+    def osd_crush_weight_set_reweight_compat(self, item, weight):
+        # type: (str, List[float]) -> CommandResult
         """
-        set weight for an item (bucket or osd) in the backward-compatible weight-set
-        :param item: CephString 
-        :param weight: CephFloat ragne=0.0 
+        set weight for an item (bucket or osd) in the backward-compatible
+        weight-set
+        
         module=osd perm=rw flags=
+        
+        :param item: CephString
+        :param weight: CephFloat ragne=0.0
         """
         prefix = 'osd crush weight-set reweight-compat'
         _args = {'prefix': prefix, 'item': item, 'weight': weight}
         return self._mon_command(_args)
     
-    def osd_crush_weight_set_rm(self, pool: str):
+    def osd_crush_weight_set_rm(self, pool):
+        # type: (str) -> CommandResult
         """
         remove the weight-set for a given pool
-        :param pool: CephPoolname 
+        
         module=osd perm=rw flags=
+        
+        :param pool: CephPoolname
         """
         prefix = 'osd crush weight-set rm'
         _args = {'prefix': prefix, 'pool': pool}
         return self._mon_command(_args)
     
     def osd_crush_weight_set_rm_compat(self):
+        # type: () -> CommandResult
         """
         remove the backward-compatible weight-set
-    
+        
         module=osd perm=rw flags=
         """
         prefix = 'osd crush weight-set rm-compat'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def osd_deep_scrub(self, who: str):
+    def osd_deep_scrub(self, who):
+        # type: (str) -> CommandResult
         """
         initiate deep scrub on osd <who>, or use <all|any> to deep scrub all
-        :param who: CephString 
+        
         module=osd perm=rw flags=mgr
+        
+        :param who: CephString
         """
         prefix = 'osd deep-scrub'
         _args = {'prefix': prefix, 'who': who}
         return self._mon_command(_args)
     
-    def osd_destroy(self, id_: str, force: bool=None, yes_i_really_mean_it: bool=None):
+    def osd_destroy(self, id_1, force=None, yes_i_really_mean_it=None):
+        # type: (str, bool, bool) -> CommandResult
         """
-        mark osd as being destroyed. Keeps the ID intact (allowing reuse), but removes cephx keys, config-key data and lockbox keys, rendering data permanently unreadable.
-        :param id_: CephOsdName 
-        :param force: CephBool 
-        :param yes_i_really_mean_it: CephBool 
+        mark osd as being destroyed. Keeps the ID intact (allowing reuse), but
+        removes cephx keys, config-key data and lockbox keys, rendering data
+        permanently unreadable.
+        
         module=osd perm=rw flags=mgr
+        
+        :param id_1: CephOsdName
+        :param force: CephBool
+        :param yes_i_really_mean_it: CephBool
         """
         prefix = 'osd destroy'
-        _args = {'prefix': prefix, 'id': id_, 'force': force, 'yes_i_really_mean_it': yes_i_really_mean_it}
+        _args = {'prefix': prefix, 'id': id_1, 'force': force, 'yes_i_really_mean_it':
+                 yes_i_really_mean_it}
         return self._mon_command(_args)
     
-    def osd_destroy_actual(self, id_: str, yes_i_really_mean_it: bool=None):
+    def osd_destroy_actual(self, id_1, yes_i_really_mean_it=None):
+        # type: (str, bool) -> CommandResult
         """
-        mark osd as being destroyed. Keeps the ID intact (allowing reuse), but removes cephx keys, config-key data and lockbox keys, rendering data permanently unreadable.
-        :param id_: CephOsdName 
-        :param yes_i_really_mean_it: CephBool 
+        mark osd as being destroyed. Keeps the ID intact (allowing reuse), but
+        removes cephx keys, config-key data and lockbox keys, rendering data
+        permanently unreadable.
+        
         module=osd perm=rw flags=hidden
+        
+        :param id_1: CephOsdName
+        :param yes_i_really_mean_it: CephBool
         """
         prefix = 'osd destroy-actual'
-        _args = {'prefix': prefix, 'id': id_, 'yes_i_really_mean_it': yes_i_really_mean_it}
+        _args = {'prefix': prefix, 'id': id_1, 'yes_i_really_mean_it': yes_i_really_mean_it}
         return self._mon_command(_args)
     
-    def osd_df(self, output_method: str=None, filter_by: str=None, filter: str=None):
+    def osd_df(self, output_method=None, filter_by=None, filter=None):
+        # type: (str, str, str) -> CommandResult
         """
         show OSD utilization
-        :param output_method: CephChoices strings=plain|tree 
-        :param filter_by: CephChoices strings=class|name 
-        :param filter: CephString 
+        
         module=osd perm=r flags=mgr
+        
+        :param output_method: CephChoices strings=plain|tree
+        :param filter_by: CephChoices strings=class|name
+        :param filter: CephString
         """
         prefix = 'osd df'
-        _args = {'prefix': prefix, 'output_method': output_method, 'filter_by': filter_by, 'filter': filter}
+        _args = {'prefix': prefix, 'output_method': output_method, 'filter_by': filter_by,
+                 'filter': filter}
         return self._mon_command(_args)
     
-    def osd_down(self, ids: List[str]):
+    def osd_down(self, ids):
+        # type: (List[str]) -> CommandResult
         """
         set osd(s) <id> [<id>...] down, or use <any|all> to set all osds down
-        :param ids: CephString 
+        
         module=osd perm=rw flags=
+        
+        :param ids: CephString
         """
         prefix = 'osd down'
         _args = {'prefix': prefix, 'ids': ids}
         return self._mon_command(_args)
     
-    def osd_dump(self, epoch: int=None):
+    def osd_dump(self, epoch=None):
+        # type: (int) -> CommandResult
         """
         print summary of OSD map
-        :param epoch: CephInt ragne=0 
+        
         module=osd perm=r flags=
+        
+        :param epoch: CephInt ragne=0
         """
         prefix = 'osd dump'
         _args = {'prefix': prefix, 'epoch': epoch}
         return self._mon_command(_args)
     
-    def osd_erasure_code_profile_get(self, name: str):
+    def osd_erasure_code_profile_get(self, name):
+        # type: (str) -> CommandResult
         """
         get erasure code profile <name>
-        :param name: CephString goodchars=[A-Za-z0-9-_.] 
+        
         module=osd perm=r flags=
+        
+        :param name: CephString goodchars=[A-Za-z0-9-_.]
         """
         prefix = 'osd erasure-code-profile get'
         _args = {'prefix': prefix, 'name': name}
         return self._mon_command(_args)
     
     def osd_erasure_code_profile_ls(self):
+        # type: () -> CommandResult
         """
         list all erasure code profiles
-    
+        
         module=osd perm=r flags=
         """
         prefix = 'osd erasure-code-profile ls'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def osd_erasure_code_profile_rm(self, name: str):
+    def osd_erasure_code_profile_rm(self, name):
+        # type: (str) -> CommandResult
         """
         remove erasure code profile <name>
-        :param name: CephString goodchars=[A-Za-z0-9-_.] 
+        
         module=osd perm=rw flags=
+        
+        :param name: CephString goodchars=[A-Za-z0-9-_.]
         """
         prefix = 'osd erasure-code-profile rm'
         _args = {'prefix': prefix, 'name': name}
         return self._mon_command(_args)
     
-    def osd_erasure_code_profile_set(self, name: str, profile: List[str]=None, force: bool=None):
+    def osd_erasure_code_profile_set(self, name, profile=None, force=None):
+        # type: (str, List[str], bool) -> CommandResult
         """
-        create erasure code profile <name> with [<key[=value]> ...] pairs. Add a --force at the end to override an existing profile (VERY DANGEROUS)
-        :param name: CephString goodchars=[A-Za-z0-9-_.] 
-        :param profile: CephString 
-        :param force: CephBool 
+        create erasure code profile <name> with [<key[=value]> ...] pairs. Add
+        a --force at the end to override an existing profile (VERY DANGEROUS)
+        
         module=osd perm=rw flags=
+        
+        :param name: CephString goodchars=[A-Za-z0-9-_.]
+        :param profile: CephString
+        :param force: CephBool
         """
         prefix = 'osd erasure-code-profile set'
         _args = {'prefix': prefix, 'name': name, 'profile': profile, 'force': force}
         return self._mon_command(_args)
     
-    def osd_find(self, id_: str):
+    def osd_find(self, id_1):
+        # type: (str) -> CommandResult
         """
         find osd <id> in the CRUSH map and show its location
-        :param id_: CephOsdName 
+        
         module=osd perm=r flags=
+        
+        :param id_1: CephOsdName
         """
         prefix = 'osd find'
-        _args = {'prefix': prefix, 'id': id_}
+        _args = {'prefix': prefix, 'id': id_1}
         return self._mon_command(_args)
     
-    def osd_force_create_pg(self, pgid: str, yes_i_really_mean_it: bool=None):
+    def osd_force_create_pg(self, pgid, yes_i_really_mean_it=None):
+        # type: (str, bool) -> CommandResult
         """
         force creation of pg <pgid>
-        :param pgid: CephPgid 
-        :param yes_i_really_mean_it: CephBool 
+        
         module=osd perm=rw flags=
+        
+        :param pgid: CephPgid
+        :param yes_i_really_mean_it: CephBool
         """
         prefix = 'osd force-create-pg'
         _args = {'prefix': prefix, 'pgid': pgid, 'yes_i_really_mean_it': yes_i_really_mean_it}
         return self._mon_command(_args)
     
     def osd_get_require_min_compat_client(self):
+        # type: () -> CommandResult
         """
         get the minimum client version we will maintain compatibility with
-    
+        
         module=osd perm=r flags=
         """
         prefix = 'osd get-require-min-compat-client'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def osd_getcrushmap(self, epoch: int=None):
+    def osd_getcrushmap(self, epoch=None):
+        # type: (int) -> CommandResult
         """
         get CRUSH map
-        :param epoch: CephInt ragne=0 
+        
         module=osd perm=r flags=
+        
+        :param epoch: CephInt ragne=0
         """
         prefix = 'osd getcrushmap'
         _args = {'prefix': prefix, 'epoch': epoch}
         return self._mon_command(_args)
     
-    def osd_getmap(self, epoch: int=None):
+    def osd_getmap(self, epoch=None):
+        # type: (int) -> CommandResult
         """
         get OSD map
-        :param epoch: CephInt ragne=0 
+        
         module=osd perm=r flags=
+        
+        :param epoch: CephInt ragne=0
         """
         prefix = 'osd getmap'
         _args = {'prefix': prefix, 'epoch': epoch}
         return self._mon_command(_args)
     
     def osd_getmaxosd(self):
+        # type: () -> CommandResult
         """
         show largest OSD id
-    
+        
         module=osd perm=r flags=
         """
         prefix = 'osd getmaxosd'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def osd_in(self, ids: List[str]):
+    def osd_in(self, ids):
+        # type: (List[str]) -> CommandResult
         """
-        set osd(s) <id> [<id>...] in, can use <any|all> to automatically set all previously out osds in
-        :param ids: CephString 
+        set osd(s) <id> [<id>...] in, can use <any|all> to automatically set
+        all previously out osds in
+        
         module=osd perm=rw flags=
+        
+        :param ids: CephString
         """
         prefix = 'osd in'
         _args = {'prefix': prefix, 'ids': ids}
         return self._mon_command(_args)
     
-    def osd_last_stat_seq(self, id_: str):
+    def osd_last_stat_seq(self, id_1):
+        # type: (str) -> CommandResult
         """
         get the last pg stats sequence number reported for this osd
-        :param id_: CephOsdName 
+        
         module=osd perm=r flags=
+        
+        :param id_1: CephOsdName
         """
         prefix = 'osd last-stat-seq'
-        _args = {'prefix': prefix, 'id': id_}
+        _args = {'prefix': prefix, 'id': id_1}
         return self._mon_command(_args)
     
-    def osd_lost(self, id_: str, yes_i_really_mean_it: bool=None):
+    def osd_lost(self, id_1, yes_i_really_mean_it=None):
+        # type: (str, bool) -> CommandResult
         """
-        mark osd as permanently lost. THIS DESTROYS DATA IF NO MORE REPLICAS EXIST, BE CAREFUL
-        :param id_: CephOsdName 
-        :param yes_i_really_mean_it: CephBool 
+        mark osd as permanently lost. THIS DESTROYS DATA IF NO MORE REPLICAS
+        EXIST, BE CAREFUL
+        
         module=osd perm=rw flags=
+        
+        :param id_1: CephOsdName
+        :param yes_i_really_mean_it: CephBool
         """
         prefix = 'osd lost'
-        _args = {'prefix': prefix, 'id': id_, 'yes_i_really_mean_it': yes_i_really_mean_it}
+        _args = {'prefix': prefix, 'id': id_1, 'yes_i_really_mean_it': yes_i_really_mean_it}
         return self._mon_command(_args)
     
-    def osd_ls(self, epoch: int=None):
+    def osd_ls(self, epoch=None):
+        # type: (int) -> CommandResult
         """
         show all OSD ids
-        :param epoch: CephInt ragne=0 
+        
         module=osd perm=r flags=
+        
+        :param epoch: CephInt ragne=0
         """
         prefix = 'osd ls'
         _args = {'prefix': prefix, 'epoch': epoch}
         return self._mon_command(_args)
     
-    def osd_ls_tree(self, name: str, epoch: int=None):
+    def osd_ls_tree(self, name, epoch=None):
+        # type: (str, int) -> CommandResult
         """
         show OSD ids under bucket <name> in the CRUSH map
-        :param name: CephString 
-        :param epoch: CephInt ragne=0 
+        
         module=osd perm=r flags=
+        
+        :param name: CephString
+        :param epoch: CephInt ragne=0
         """
         prefix = 'osd ls-tree'
         _args = {'prefix': prefix, 'name': name, 'epoch': epoch}
@@ -3964,82 +5022,103 @@ class MonCommandApi(object):
     
     @deprecated
     def osd_lspools(self):
+        # type: () -> CommandResult
         """
         list pools
-    
+        
         module=osd perm=r flags=deprecated
         """
         prefix = 'osd lspools'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def osd_map(self, pool: str, object: str, nspace: str=None):
+    def osd_map(self, pool, object, nspace=None):
+        # type: (str, str, str) -> CommandResult
         """
         find pg for <object> in <pool> with [namespace]
-        :param pool: CephPoolname 
-        :param object: CephObjectname 
-        :param nspace: CephString 
+        
         module=osd perm=r flags=
+        
+        :param pool: CephPoolname
+        :param object: CephObjectname
+        :param nspace: CephString
         """
         prefix = 'osd map'
         _args = {'prefix': prefix, 'pool': pool, 'object': object, 'nspace': nspace}
         return self._mon_command(_args)
     
-    def osd_metadata(self, id_: str=None):
+    def osd_metadata(self, id_1=None):
+        # type: (str) -> CommandResult
         """
         fetch metadata for osd {id} (default all)
-        :param id_: CephOsdName 
+        
         module=osd perm=r flags=
+        
+        :param id_1: CephOsdName
         """
         prefix = 'osd metadata'
-        _args = {'prefix': prefix, 'id': id_}
+        _args = {'prefix': prefix, 'id': id_1}
         return self._mon_command(_args)
     
-    def osd_new(self, uuid: str, id_: str=None):
+    def osd_new(self, uuid, id_1=None):
+        # type: (str, str) -> CommandResult
         """
-        Create a new OSD. If supplied, the `id` to be replaced needs to exist and have been previously destroyed. Reads secrets from JSON file via `-i <file>` (see man page).
-        :param uuid: CephUUID 
-        :param id_: CephOsdName 
+        Create a new OSD. If supplied, the `id` to be replaced needs to exist
+        and have been previously destroyed. Reads secrets from JSON file via
+        `-i <file>` (see man page).
+        
         module=osd perm=rw flags=
+        
+        :param uuid: CephUUID
+        :param id_1: CephOsdName
         """
         prefix = 'osd new'
-        _args = {'prefix': prefix, 'uuid': uuid, 'id': id_}
+        _args = {'prefix': prefix, 'uuid': uuid, 'id': id_1}
         return self._mon_command(_args)
     
     def osd_numa_status(self):
+        # type: () -> CommandResult
         """
         show NUMA status of OSDs
-    
+        
         module=osd perm=r flags=
         """
         prefix = 'osd numa-status'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def osd_ok_to_stop(self, ids: List[str]):
+    def osd_ok_to_stop(self, ids):
+        # type: (List[str]) -> CommandResult
         """
-        check whether osd(s) can be safely stopped without reducing immediate data availability
-        :param ids: CephString 
+        check whether osd(s) can be safely stopped without reducing immediate
+        data availability
+        
         module=osd perm=r flags=mgr
+        
+        :param ids: CephString
         """
         prefix = 'osd ok-to-stop'
         _args = {'prefix': prefix, 'ids': ids}
         return self._mon_command(_args)
     
-    def osd_out(self, ids: List[str]):
+    def osd_out(self, ids):
+        # type: (List[str]) -> CommandResult
         """
         set osd(s) <id> [<id>...] out, or use <any|all> to set all osds out
-        :param ids: CephString 
+        
         module=osd perm=rw flags=
+        
+        :param ids: CephString
         """
         prefix = 'osd out'
         _args = {'prefix': prefix, 'ids': ids}
         return self._mon_command(_args)
     
     def osd_pause(self):
+        # type: () -> CommandResult
         """
         pause osd
-    
+        
         module=osd perm=rw flags=
         """
         prefix = 'osd pause'
@@ -4047,846 +5126,1183 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def osd_perf(self):
+        # type: () -> CommandResult
         """
         print dump of OSD perf summary stats
-    
+        
         module=osd perm=r flags=mgr
         """
         prefix = 'osd perf'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def osd_perf_counters_get(self, query_id: int):
+    def osd_perf_counters_get(self, query_id):
+        # type: (int) -> CommandResult
         """
         fetch osd perf counters
-        :param query_id: CephInt 
+        
         module=mgr perm=w flags=mgr
+        
+        :param query_id: CephInt
         """
         prefix = 'osd perf counters get'
         _args = {'prefix': prefix, 'query_id': query_id}
         return self._mon_command(_args)
     
-    def osd_perf_query_add(self, query: str):
+    def osd_perf_query_add(self, query):
+        # type: (str) -> CommandResult
         """
         add osd perf query
-        :param query: CephChoices strings=client_id|rbd_image_id|all_subkeys 
+        
         module=mgr perm=w flags=mgr
+        
+        :param query: CephChoices strings=client_id|rbd_image_id|all_subkeys
         """
         prefix = 'osd perf query add'
         _args = {'prefix': prefix, 'query': query}
         return self._mon_command(_args)
     
-    def osd_perf_query_remove(self, query_id: int):
+    def osd_perf_query_remove(self, query_id):
+        # type: (int) -> CommandResult
         """
         remove osd perf query
-        :param query_id: CephInt 
+        
         module=mgr perm=w flags=mgr
+        
+        :param query_id: CephInt
         """
         prefix = 'osd perf query remove'
         _args = {'prefix': prefix, 'query_id': query_id}
         return self._mon_command(_args)
     
-    def osd_pg_temp(self, pgid: str, id_: List[str]=None):
+    def osd_pg_temp(self, pgid, id_1=None):
+        # type: (str, List[str]) -> CommandResult
         """
         set pg_temp mapping pgid:[<id> [<id>...]] (developers only)
-        :param pgid: CephPgid 
-        :param id_: CephOsdName 
+        
         module=osd perm=rw flags=
+        
+        :param pgid: CephPgid
+        :param id_1: CephOsdName
         """
         prefix = 'osd pg-temp'
-        _args = {'prefix': prefix, 'pgid': pgid, 'id': id_}
+        _args = {'prefix': prefix, 'pgid': pgid, 'id': id_1}
         return self._mon_command(_args)
     
-    def osd_pg_upmap(self, pgid: str, id_: List[str]):
+    def osd_pg_upmap(self, pgid, id_1):
+        # type: (str, List[str]) -> CommandResult
         """
         set pg_upmap mapping <pgid>:[<id> [<id>...]] (developers only)
-        :param pgid: CephPgid 
-        :param id_: CephOsdName 
+        
         module=osd perm=rw flags=
+        
+        :param pgid: CephPgid
+        :param id_1: CephOsdName
         """
         prefix = 'osd pg-upmap'
-        _args = {'prefix': prefix, 'pgid': pgid, 'id': id_}
+        _args = {'prefix': prefix, 'pgid': pgid, 'id': id_1}
         return self._mon_command(_args)
     
-    def osd_pg_upmap_items(self, pgid: str, id_: List[str]):
+    def osd_pg_upmap_items(self, pgid, id_1):
+        # type: (str, List[str]) -> CommandResult
         """
-        set pg_upmap_items mapping <pgid>:{<id> to <id>, [...]} (developers only)
-        :param pgid: CephPgid 
-        :param id_: CephOsdName 
+        set pg_upmap_items mapping <pgid>:{<id> to <id>, [...]} (developers
+        only)
+        
         module=osd perm=rw flags=
+        
+        :param pgid: CephPgid
+        :param id_1: CephOsdName
         """
         prefix = 'osd pg-upmap-items'
-        _args = {'prefix': prefix, 'pgid': pgid, 'id': id_}
+        _args = {'prefix': prefix, 'pgid': pgid, 'id': id_1}
         return self._mon_command(_args)
     
-    def osd_pool_application_disable(self, pool: str, app: str, yes_i_really_mean_it: bool=None):
+    def osd_pool_application_disable(self, pool, app, yes_i_really_mean_it=None):
+        # type: (str, str, bool) -> CommandResult
         """
         disables use of an application <app> on pool <poolname>
-        :param pool: CephPoolname 
-        :param app: CephString 
-        :param yes_i_really_mean_it: CephBool 
+        
         module=osd perm=rw flags=
+        
+        :param pool: CephPoolname
+        :param app: CephString
+        :param yes_i_really_mean_it: CephBool
         """
         prefix = 'osd pool application disable'
-        _args = {'prefix': prefix, 'pool': pool, 'app': app, 'yes_i_really_mean_it': yes_i_really_mean_it}
+        _args = {'prefix': prefix, 'pool': pool, 'app': app, 'yes_i_really_mean_it':
+                 yes_i_really_mean_it}
         return self._mon_command(_args)
     
-    def osd_pool_application_enable(self, pool: str, app: str, yes_i_really_mean_it: bool=None):
+    def osd_pool_application_enable(self, pool, app, yes_i_really_mean_it=None):
+        # type: (str, str, bool) -> CommandResult
         """
         enable use of an application <app> [cephfs,rbd,rgw] on pool <poolname>
-        :param pool: CephPoolname 
-        :param app: CephString goodchars=[A-Za-z0-9-_.] 
-        :param yes_i_really_mean_it: CephBool 
+        
         module=osd perm=rw flags=
+        
+        :param pool: CephPoolname
+        :param app: CephString goodchars=[A-Za-z0-9-_.]
+        :param yes_i_really_mean_it: CephBool
         """
         prefix = 'osd pool application enable'
-        _args = {'prefix': prefix, 'pool': pool, 'app': app, 'yes_i_really_mean_it': yes_i_really_mean_it}
+        _args = {'prefix': prefix, 'pool': pool, 'app': app, 'yes_i_really_mean_it':
+                 yes_i_really_mean_it}
         return self._mon_command(_args)
     
-    def osd_pool_application_get(self, pool: str, app: str=None, key: str=None):
+    def osd_pool_application_get(self, pool, app=None, key=None):
+        # type: (str, str, str) -> CommandResult
         """
         get value of key <key> of application <app> on pool <poolname>
-        :param pool: CephPoolname 
-        :param app: CephString 
-        :param key: CephString 
+        
         module=osd perm=r flags=
+        
+        :param pool: CephPoolname
+        :param app: CephString
+        :param key: CephString
         """
         prefix = 'osd pool application get'
         _args = {'prefix': prefix, 'pool': pool, 'app': app, 'key': key}
         return self._mon_command(_args)
     
-    def osd_pool_application_rm(self, pool: str, app: str, key: str):
+    def osd_pool_application_rm(self, pool, app, key):
+        # type: (str, str, str) -> CommandResult
         """
         removes application <app> metadata key <key> on pool <poolname>
-        :param pool: CephPoolname 
-        :param app: CephString 
-        :param key: CephString 
+        
         module=osd perm=rw flags=
+        
+        :param pool: CephPoolname
+        :param app: CephString
+        :param key: CephString
         """
         prefix = 'osd pool application rm'
         _args = {'prefix': prefix, 'pool': pool, 'app': app, 'key': key}
         return self._mon_command(_args)
     
-    def osd_pool_application_set(self, pool: str, app: str, key: str, value: str):
+    def osd_pool_application_set(self, pool, app, key, value):
+        # type: (str, str, str, str) -> CommandResult
         """
-        sets application <app> metadata key <key> to <value> on pool <poolname>
-        :param pool: CephPoolname 
-        :param app: CephString 
-        :param key: CephString goodchars=[A-Za-z0-9-_.] 
-        :param value: CephString goodchars=[A-Za-z0-9-_.=] 
+        sets application <app> metadata key <key> to <value> on pool
+        <poolname>
+        
         module=osd perm=rw flags=
+        
+        :param pool: CephPoolname
+        :param app: CephString
+        :param key: CephString goodchars=[A-Za-z0-9-_.]
+        :param value: CephString goodchars=[A-Za-z0-9-_.=]
         """
         prefix = 'osd pool application set'
         _args = {'prefix': prefix, 'pool': pool, 'app': app, 'key': key, 'value': value}
         return self._mon_command(_args)
     
     def osd_pool_autoscale_status(self):
+        # type: () -> CommandResult
         """
         report on pool pg_num sizing recommendation and intent
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'osd pool autoscale-status'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def osd_pool_cancel_force_backfill(self, who: List[str]):
+    def osd_pool_cancel_force_backfill(self, who):
+        # type: (List[str]) -> CommandResult
         """
         restore normal recovery priority of specified pool <who>
-        :param who: CephPoolname 
+        
         module=osd perm=rw flags=mgr
+        
+        :param who: CephPoolname
         """
         prefix = 'osd pool cancel-force-backfill'
         _args = {'prefix': prefix, 'who': who}
         return self._mon_command(_args)
     
-    def osd_pool_cancel_force_recovery(self, who: List[str]):
+    def osd_pool_cancel_force_recovery(self, who):
+        # type: (List[str]) -> CommandResult
         """
         restore normal recovery priority of specified pool <who>
-        :param who: CephPoolname 
+        
         module=osd perm=rw flags=mgr
+        
+        :param who: CephPoolname
         """
         prefix = 'osd pool cancel-force-recovery'
         _args = {'prefix': prefix, 'who': who}
         return self._mon_command(_args)
     
-    def osd_pool_create(self, pool: str, pg_num: int, pgp_num: int=None, pool_type: str=None, erasure_code_profile: str=None, rule: str=None, expected_num_objects: int=None, size: int=None, pg_num_min: int=None, target_size_bytes: int=None, target_size_ratio: float=None):
+    def osd_pool_create(self, pool, pg_num, pgp_num=None, pool_type=None,
+                        erasure_code_profile=None, rule=None,
+                        expected_num_objects=None, size=None, pg_num_min=None,
+                        target_size_bytes=None, target_size_ratio=None):
+        # type: (str, int, int, str, str, str, int, int, int, int, float) -> CommandResult
         """
         create pool
-        :param pool: CephPoolname 
-        :param pg_num: CephInt ragne=0 
-        :param pgp_num: CephInt ragne=0 
-        :param pool_type: CephChoices strings=replicated|erasure 
-        :param erasure_code_profile: CephString goodchars=[A-Za-z0-9-_.] 
-        :param rule: CephString 
-        :param expected_num_objects: CephInt 
-        :param size: CephInt 
-        :param pg_num_min: CephInt ragne=0 
-        :param target_size_bytes: CephInt ragne=0 
-        :param target_size_ratio: CephFloat ragne=0|1 
+        
         module=osd perm=rw flags=
+        
+        :param pool: CephPoolname
+        :param pg_num: CephInt ragne=0
+        :param pgp_num: CephInt ragne=0
+        :param pool_type: CephChoices strings=replicated|erasure
+        :param erasure_code_profile: CephString goodchars=[A-Za-z0-9-_.]
+        :param rule: CephString
+        :param expected_num_objects: CephInt
+        :param size: CephInt
+        :param pg_num_min: CephInt ragne=0
+        :param target_size_bytes: CephInt ragne=0
+        :param target_size_ratio: CephFloat ragne=0|1
         """
         prefix = 'osd pool create'
-        _args = {'prefix': prefix, 'pool': pool, 'pg_num': pg_num, 'pgp_num': pgp_num, 'pool_type': pool_type, 'erasure_code_profile': erasure_code_profile, 'rule': rule, 'expected_num_objects': expected_num_objects, 'size': size, 'pg_num_min': pg_num_min, 'target_size_bytes': target_size_bytes, 'target_size_ratio': target_size_ratio}
+        _args = {'prefix': prefix, 'pool': pool, 'pg_num': pg_num, 'pgp_num': pgp_num,
+                 'pool_type': pool_type, 'erasure_code_profile':
+                 erasure_code_profile, 'rule': rule, 'expected_num_objects':
+                 expected_num_objects, 'size': size, 'pg_num_min':
+                 pg_num_min, 'target_size_bytes': target_size_bytes,
+                 'target_size_ratio': target_size_ratio}
         return self._mon_command(_args)
     
-    def osd_pool_deep_scrub(self, who: List[str]):
+    def osd_pool_deep_scrub(self, who):
+        # type: (List[str]) -> CommandResult
         """
         initiate deep-scrub on pool <who>
-        :param who: CephPoolname 
+        
         module=osd perm=rw flags=mgr
+        
+        :param who: CephPoolname
         """
         prefix = 'osd pool deep-scrub'
         _args = {'prefix': prefix, 'who': who}
         return self._mon_command(_args)
     
     @deprecated
-    def osd_pool_delete(self, pool: str, pool2: str=None, yes_i_really_really_mean_it: bool=None, yes_i_really_really_mean_it_not_faking: bool=None):
+    def osd_pool_delete(self, pool, pool2=None, yes_i_really_really_mean_it=None,
+                        yes_i_really_really_mean_it_not_faking=None):
+        # type: (str, str, bool, bool) -> CommandResult
         """
         delete pool
-        :param pool: CephPoolname 
-        :param pool2: CephPoolname 
-        :param yes_i_really_really_mean_it: CephBool 
-        :param yes_i_really_really_mean_it_not_faking: CephBool 
+        
         module=osd perm=rw flags=deprecated
+        
+        :param pool: CephPoolname
+        :param pool2: CephPoolname
+        :param yes_i_really_really_mean_it: CephBool
+        :param yes_i_really_really_mean_it_not_faking: CephBool
         """
         prefix = 'osd pool delete'
-        _args = {'prefix': prefix, 'pool': pool, 'pool2': pool2, 'yes_i_really_really_mean_it': yes_i_really_really_mean_it, 'yes_i_really_really_mean_it_not_faking': yes_i_really_really_mean_it_not_faking}
+        _args = {'prefix': prefix, 'pool': pool, 'pool2': pool2, 'yes_i_really_really_mean_it':
+                 yes_i_really_really_mean_it,
+                 'yes_i_really_really_mean_it_not_faking':
+                 yes_i_really_really_mean_it_not_faking}
         return self._mon_command(_args)
     
-    def osd_pool_force_backfill(self, who: List[str]):
+    def osd_pool_force_backfill(self, who):
+        # type: (List[str]) -> CommandResult
         """
         force backfill of specified pool <who> first
-        :param who: CephPoolname 
+        
         module=osd perm=rw flags=mgr
+        
+        :param who: CephPoolname
         """
         prefix = 'osd pool force-backfill'
         _args = {'prefix': prefix, 'who': who}
         return self._mon_command(_args)
     
-    def osd_pool_force_recovery(self, who: List[str]):
+    def osd_pool_force_recovery(self, who):
+        # type: (List[str]) -> CommandResult
         """
         force recovery of specified pool <who> first
-        :param who: CephPoolname 
+        
         module=osd perm=rw flags=mgr
+        
+        :param who: CephPoolname
         """
         prefix = 'osd pool force-recovery'
         _args = {'prefix': prefix, 'who': who}
         return self._mon_command(_args)
     
-    def osd_pool_get(self, pool: str, var: str):
+    def osd_pool_get(self, pool, var):
+        # type: (str, str) -> CommandResult
         """
         get pool parameter <var>
-        :param pool: CephPoolname 
-        :param var: CephChoices strings=size|min_size|pg_num|pgp_num|crush_rule|hashpspool|nodelete|nopgchange|nosizechange|write_fadvise_dontneed|noscrub|nodeep-scrub|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|use_gmt_hitset|target_max_objects|target_max_bytes|cache_target_dirty_ratio|cache_target_dirty_high_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|erasure_code_profile|min_read_recency_for_promote|all|min_write_recency_for_promote|fast_read|hit_set_grade_decay_rate|hit_set_search_last_n|scrub_min_interval|scrub_max_interval|deep_scrub_interval|recovery_priority|recovery_op_priority|scrub_priority|compression_mode|compression_algorithm|compression_required_ratio|compression_max_blob_size|compression_min_blob_size|csum_type|csum_min_block|csum_max_block|allow_ec_overwrites|fingerprint_algorithm|pg_autoscale_mode|pg_autoscale_bias|pg_num_min|target_size_bytes|target_size_ratio 
+        
         module=osd perm=r flags=
+        
+        :param pool: CephPoolname
+        :param var: CephChoices strings=size|min_size|pg_num|pgp_num|crush_rul
+            e|hashpspool|nodelete|nopgchange|nosizechange|write_fadvise_dontneed|n
+            oscrub|nodeep-scrub|hit_set_type|hit_set_period|hit_set_count|hit_set_
+            fpp|use_gmt_hitset|target_max_objects|target_max_bytes|cache_target_di
+            rty_ratio|cache_target_dirty_high_ratio|cache_target_full_ratio|cache_
+            min_flush_age|cache_min_evict_age|erasure_code_profile|min_read_recenc
+            y_for_promote|all|min_write_recency_for_promote|fast_read|hit_set_grad
+            e_decay_rate|hit_set_search_last_n|scrub_min_interval|scrub_max_interv
+            al|deep_scrub_interval|recovery_priority|recovery_op_priority|scrub_pr
+            iority|compression_mode|compression_algorithm|compression_required_rat
+            io|compression_max_blob_size|compression_min_blob_size|csum_type|csum_
+            min_block|csum_max_block|allow_ec_overwrites|fingerprint_algorithm|pg_
+            autoscale_mode|pg_autoscale_bias|pg_num_min|target_size_bytes|target_s
+            ize_ratio
         """
         prefix = 'osd pool get'
         _args = {'prefix': prefix, 'pool': pool, 'var': var}
         return self._mon_command(_args)
     
-    def osd_pool_get_quota(self, pool: str):
+    def osd_pool_get_quota(self, pool):
+        # type: (str) -> CommandResult
         """
         obtain object or byte limits for pool
-        :param pool: CephPoolname 
+        
         module=osd perm=r flags=
+        
+        :param pool: CephPoolname
         """
         prefix = 'osd pool get-quota'
         _args = {'prefix': prefix, 'pool': pool}
         return self._mon_command(_args)
     
-    def osd_pool_ls(self, detail: str=None):
+    def osd_pool_ls(self, detail=None):
+        # type: (str) -> CommandResult
         """
         list pools
-        :param detail: CephChoices strings=detail 
+        
         module=osd perm=r flags=
+        
+        :param detail: CephChoices strings=detail
         """
         prefix = 'osd pool ls'
         _args = {'prefix': prefix, 'detail': detail}
         return self._mon_command(_args)
     
-    def osd_pool_mksnap(self, pool: str, snap: str):
+    def osd_pool_mksnap(self, pool, snap):
+        # type: (str, str) -> CommandResult
         """
         make snapshot <snap> in <pool>
-        :param pool: CephPoolname 
-        :param snap: CephString 
+        
         module=osd perm=rw flags=
+        
+        :param pool: CephPoolname
+        :param snap: CephString
         """
         prefix = 'osd pool mksnap'
         _args = {'prefix': prefix, 'pool': pool, 'snap': snap}
         return self._mon_command(_args)
     
-    def osd_pool_rename(self, srcpool: str, destpool: str):
+    def osd_pool_rename(self, srcpool, destpool):
+        # type: (str, str) -> CommandResult
         """
         rename <srcpool> to <destpool>
-        :param srcpool: CephPoolname 
-        :param destpool: CephPoolname 
+        
         module=osd perm=rw flags=
+        
+        :param srcpool: CephPoolname
+        :param destpool: CephPoolname
         """
         prefix = 'osd pool rename'
         _args = {'prefix': prefix, 'srcpool': srcpool, 'destpool': destpool}
         return self._mon_command(_args)
     
-    def osd_pool_repair(self, who: List[str]):
+    def osd_pool_repair(self, who):
+        # type: (List[str]) -> CommandResult
         """
         initiate repair on pool <who>
-        :param who: CephPoolname 
+        
         module=osd perm=rw flags=mgr
+        
+        :param who: CephPoolname
         """
         prefix = 'osd pool repair'
         _args = {'prefix': prefix, 'who': who}
         return self._mon_command(_args)
     
-    def osd_pool_rm(self, pool: str, pool2: str=None, yes_i_really_really_mean_it: bool=None, yes_i_really_really_mean_it_not_faking: bool=None):
+    def osd_pool_rm(self, pool, pool2=None, yes_i_really_really_mean_it=None,
+                    yes_i_really_really_mean_it_not_faking=None):
+        # type: (str, str, bool, bool) -> CommandResult
         """
         remove pool
-        :param pool: CephPoolname 
-        :param pool2: CephPoolname 
-        :param yes_i_really_really_mean_it: CephBool 
-        :param yes_i_really_really_mean_it_not_faking: CephBool 
+        
         module=osd perm=rw flags=
+        
+        :param pool: CephPoolname
+        :param pool2: CephPoolname
+        :param yes_i_really_really_mean_it: CephBool
+        :param yes_i_really_really_mean_it_not_faking: CephBool
         """
         prefix = 'osd pool rm'
-        _args = {'prefix': prefix, 'pool': pool, 'pool2': pool2, 'yes_i_really_really_mean_it': yes_i_really_really_mean_it, 'yes_i_really_really_mean_it_not_faking': yes_i_really_really_mean_it_not_faking}
+        _args = {'prefix': prefix, 'pool': pool, 'pool2': pool2, 'yes_i_really_really_mean_it':
+                 yes_i_really_really_mean_it,
+                 'yes_i_really_really_mean_it_not_faking':
+                 yes_i_really_really_mean_it_not_faking}
         return self._mon_command(_args)
     
-    def osd_pool_rmsnap(self, pool: str, snap: str):
+    def osd_pool_rmsnap(self, pool, snap):
+        # type: (str, str) -> CommandResult
         """
         remove snapshot <snap> from <pool>
-        :param pool: CephPoolname 
-        :param snap: CephString 
+        
         module=osd perm=rw flags=
+        
+        :param pool: CephPoolname
+        :param snap: CephString
         """
         prefix = 'osd pool rmsnap'
         _args = {'prefix': prefix, 'pool': pool, 'snap': snap}
         return self._mon_command(_args)
     
-    def osd_pool_scrub(self, who: List[str]):
+    def osd_pool_scrub(self, who):
+        # type: (List[str]) -> CommandResult
         """
         initiate scrub on pool <who>
-        :param who: CephPoolname 
+        
         module=osd perm=rw flags=mgr
+        
+        :param who: CephPoolname
         """
         prefix = 'osd pool scrub'
         _args = {'prefix': prefix, 'who': who}
         return self._mon_command(_args)
     
-    def osd_pool_set(self, pool: str, var: str, val: str, yes_i_really_mean_it: bool=None):
+    def osd_pool_set(self, pool, var, val, yes_i_really_mean_it=None):
+        # type: (str, str, str, bool) -> CommandResult
         """
         set pool parameter <var> to <val>
-        :param pool: CephPoolname 
-        :param var: CephChoices strings=size|min_size|pg_num|pgp_num|pgp_num_actual|crush_rule|hashpspool|nodelete|nopgchange|nosizechange|write_fadvise_dontneed|noscrub|nodeep-scrub|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|use_gmt_hitset|target_max_bytes|target_max_objects|cache_target_dirty_ratio|cache_target_dirty_high_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|min_read_recency_for_promote|min_write_recency_for_promote|fast_read|hit_set_grade_decay_rate|hit_set_search_last_n|scrub_min_interval|scrub_max_interval|deep_scrub_interval|recovery_priority|recovery_op_priority|scrub_priority|compression_mode|compression_algorithm|compression_required_ratio|compression_max_blob_size|compression_min_blob_size|csum_type|csum_min_block|csum_max_block|allow_ec_overwrites|fingerprint_algorithm|pg_autoscale_mode|pg_autoscale_bias|pg_num_min|target_size_bytes|target_size_ratio 
-        :param val: CephString 
-        :param yes_i_really_mean_it: CephBool 
+        
         module=osd perm=rw flags=
+        
+        :param pool: CephPoolname
+        :param var: CephChoices strings=size|min_size|pg_num|pgp_num|pgp_num_a
+            ctual|crush_rule|hashpspool|nodelete|nopgchange|nosizechange|write_fad
+            vise_dontneed|noscrub|nodeep-scrub|hit_set_type|hit_set_period|hit_set
+            _count|hit_set_fpp|use_gmt_hitset|target_max_bytes|target_max_objects|
+            cache_target_dirty_ratio|cache_target_dirty_high_ratio|cache_target_fu
+            ll_ratio|cache_min_flush_age|cache_min_evict_age|min_read_recency_for_
+            promote|min_write_recency_for_promote|fast_read|hit_set_grade_decay_ra
+            te|hit_set_search_last_n|scrub_min_interval|scrub_max_interval|deep_sc
+            rub_interval|recovery_priority|recovery_op_priority|scrub_priority|com
+            pression_mode|compression_algorithm|compression_required_ratio|compres
+            sion_max_blob_size|compression_min_blob_size|csum_type|csum_min_block|
+            csum_max_block|allow_ec_overwrites|fingerprint_algorithm|pg_autoscale_
+            mode|pg_autoscale_bias|pg_num_min|target_size_bytes|target_size_ratio
+        :param val: CephString
+        :param yes_i_really_mean_it: CephBool
         """
         prefix = 'osd pool set'
-        _args = {'prefix': prefix, 'pool': pool, 'var': var, 'val': val, 'yes_i_really_mean_it': yes_i_really_mean_it}
+        _args = {'prefix': prefix, 'pool': pool, 'var': var, 'val': val,
+                 'yes_i_really_mean_it': yes_i_really_mean_it}
         return self._mon_command(_args)
     
-    def osd_pool_set_quota(self, pool: str, field: str, val: str):
+    def osd_pool_set_quota(self, pool, field, val):
+        # type: (str, str, str) -> CommandResult
         """
         set object or byte limit on pool
-        :param pool: CephPoolname 
-        :param field: CephChoices strings=max_objects|max_bytes 
-        :param val: CephString 
+        
         module=osd perm=rw flags=
+        
+        :param pool: CephPoolname
+        :param field: CephChoices strings=max_objects|max_bytes
+        :param val: CephString
         """
         prefix = 'osd pool set-quota'
         _args = {'prefix': prefix, 'pool': pool, 'field': field, 'val': val}
         return self._mon_command(_args)
     
-    def osd_pool_stats(self, pool_name: str=None):
+    def osd_pool_stats(self, pool_name=None):
+        # type: (str) -> CommandResult
         """
         obtain stats from all pools, or from specified pool
-        :param pool_name: CephPoolname 
+        
         module=osd perm=r flags=mgr
+        
+        :param pool_name: CephPoolname
         """
         prefix = 'osd pool stats'
         _args = {'prefix': prefix, 'pool_name': pool_name}
         return self._mon_command(_args)
     
-    def osd_primary_affinity(self, id_: str, weight: float):
+    def osd_primary_affinity(self, id_1, weight):
+        # type: (str, float) -> CommandResult
         """
         adjust osd primary-affinity from 0.0 <= <weight> <= 1.0
-        :param id_: CephOsdName 
-        :param weight: CephFloat ragne=0.0|1.0 
+        
         module=osd perm=rw flags=
+        
+        :param id_1: CephOsdName
+        :param weight: CephFloat ragne=0.0|1.0
         """
         prefix = 'osd primary-affinity'
-        _args = {'prefix': prefix, 'id': id_, 'weight': weight}
+        _args = {'prefix': prefix, 'id': id_1, 'weight': weight}
         return self._mon_command(_args)
     
-    def osd_primary_temp(self, pgid: str, id_: str):
+    def osd_primary_temp(self, pgid, id_1):
+        # type: (str, str) -> CommandResult
         """
         set primary_temp mapping pgid:<id>|-1 (developers only)
-        :param pgid: CephPgid 
-        :param id_: CephOsdName 
+        
         module=osd perm=rw flags=
+        
+        :param pgid: CephPgid
+        :param id_1: CephOsdName
         """
         prefix = 'osd primary-temp'
-        _args = {'prefix': prefix, 'pgid': pgid, 'id': id_}
+        _args = {'prefix': prefix, 'pgid': pgid, 'id': id_1}
         return self._mon_command(_args)
     
-    def osd_purge(self, id_: str, force: bool=None, yes_i_really_mean_it: bool=None):
+    def osd_purge(self, id_1, force=None, yes_i_really_mean_it=None):
+        # type: (str, bool, bool) -> CommandResult
         """
-        purge all osd data from the monitors including the OSD id and CRUSH position
-        :param id_: CephOsdName 
-        :param force: CephBool 
-        :param yes_i_really_mean_it: CephBool 
+        purge all osd data from the monitors including the OSD id and CRUSH
+        position
+        
         module=osd perm=rw flags=mgr
+        
+        :param id_1: CephOsdName
+        :param force: CephBool
+        :param yes_i_really_mean_it: CephBool
         """
         prefix = 'osd purge'
-        _args = {'prefix': prefix, 'id': id_, 'force': force, 'yes_i_really_mean_it': yes_i_really_mean_it}
+        _args = {'prefix': prefix, 'id': id_1, 'force': force, 'yes_i_really_mean_it':
+                 yes_i_really_mean_it}
         return self._mon_command(_args)
     
-    def osd_purge_actual(self, id_: str, yes_i_really_mean_it: bool=None):
+    def osd_purge_actual(self, id_1, yes_i_really_mean_it=None):
+        # type: (str, bool) -> CommandResult
         """
-        purge all osd data from the monitors. Combines `osd destroy`, `osd rm`, and `osd crush rm`.
-        :param id_: CephOsdName 
-        :param yes_i_really_mean_it: CephBool 
+        purge all osd data from the monitors. Combines `osd destroy`, `osd
+        rm`, and `osd crush rm`.
+        
         module=osd perm=rw flags=hidden
+        
+        :param id_1: CephOsdName
+        :param yes_i_really_mean_it: CephBool
         """
         prefix = 'osd purge-actual'
-        _args = {'prefix': prefix, 'id': id_, 'yes_i_really_mean_it': yes_i_really_mean_it}
+        _args = {'prefix': prefix, 'id': id_1, 'yes_i_really_mean_it': yes_i_really_mean_it}
         return self._mon_command(_args)
     
-    def osd_purge_new(self, id_: str, yes_i_really_mean_it: bool=None):
+    def osd_purge_new(self, id_1, yes_i_really_mean_it=None):
+        # type: (str, bool) -> CommandResult
         """
-        purge all traces of an OSD that was partially created but never started
-        :param id_: CephOsdName 
-        :param yes_i_really_mean_it: CephBool 
+        purge all traces of an OSD that was partially created but never
+        started
+        
         module=osd perm=rw flags=
+        
+        :param id_1: CephOsdName
+        :param yes_i_really_mean_it: CephBool
         """
         prefix = 'osd purge-new'
-        _args = {'prefix': prefix, 'id': id_, 'yes_i_really_mean_it': yes_i_really_mean_it}
+        _args = {'prefix': prefix, 'id': id_1, 'yes_i_really_mean_it': yes_i_really_mean_it}
         return self._mon_command(_args)
     
-    def osd_repair(self, who: str):
+    def osd_repair(self, who):
+        # type: (str) -> CommandResult
         """
         initiate repair on osd <who>, or use <all|any> to repair all
-        :param who: CephString 
+        
         module=osd perm=rw flags=mgr
+        
+        :param who: CephString
         """
         prefix = 'osd repair'
         _args = {'prefix': prefix, 'who': who}
         return self._mon_command(_args)
     
-    def osd_require_osd_release(self, release: str, yes_i_really_mean_it: bool=None):
+    def osd_require_osd_release(self, release, yes_i_really_mean_it=None):
+        # type: (str, bool) -> CommandResult
         """
         set the minimum allowed OSD release to participate in the cluster
-        :param release: CephChoices strings=luminous|mimic|nautilus|octopus 
-        :param yes_i_really_mean_it: CephBool 
+        
         module=osd perm=rw flags=
+        
+        :param release: CephChoices strings=luminous|mimic|nautilus|octopus
+        :param yes_i_really_mean_it: CephBool
         """
         prefix = 'osd require-osd-release'
-        _args = {'prefix': prefix, 'release': release, 'yes_i_really_mean_it': yes_i_really_mean_it}
+        _args = {'prefix': prefix, 'release': release, 'yes_i_really_mean_it':
+                 yes_i_really_mean_it}
         return self._mon_command(_args)
     
-    def osd_reweight(self, id_: str, weight: float):
+    def osd_reweight(self, id_1, weight):
+        # type: (str, float) -> CommandResult
         """
         reweight osd to 0.0 < <weight> < 1.0
-        :param id_: CephOsdName 
-        :param weight: CephFloat ragne=0.0|1.0 
+        
         module=osd perm=rw flags=
+        
+        :param id_1: CephOsdName
+        :param weight: CephFloat ragne=0.0|1.0
         """
         prefix = 'osd reweight'
-        _args = {'prefix': prefix, 'id': id_, 'weight': weight}
+        _args = {'prefix': prefix, 'id': id_1, 'weight': weight}
         return self._mon_command(_args)
     
-    def osd_reweight_by_pg(self, oload: int=None, max_change: float=None, max_osds: int=None, pools: List[str]=None):
+    def osd_reweight_by_pg(self, oload=None, max_change=None, max_osds=None, pools=None):
+        # type: (int, float, int, List[str]) -> CommandResult
         """
-        reweight OSDs by PG distribution [overload-percentage-for-consideration, default 120]
-        :param oload: CephInt 
-        :param max_change: CephFloat 
-        :param max_osds: CephInt 
-        :param pools: CephPoolname 
+        reweight OSDs by PG distribution [overload-percentage-for-
+        consideration, default 120]
+        
         module=osd perm=rw flags=mgr
+        
+        :param oload: CephInt
+        :param max_change: CephFloat
+        :param max_osds: CephInt
+        :param pools: CephPoolname
         """
         prefix = 'osd reweight-by-pg'
-        _args = {'prefix': prefix, 'oload': oload, 'max_change': max_change, 'max_osds': max_osds, 'pools': pools}
+        _args = {'prefix': prefix, 'oload': oload, 'max_change': max_change, 'max_osds':
+                 max_osds, 'pools': pools}
         return self._mon_command(_args)
     
-    def osd_reweight_by_utilization(self, oload: int=None, max_change: float=None, max_osds: int=None, no_increasing: str=None):
+    def osd_reweight_by_utilization(self, oload=None, max_change=None, max_osds=None,
+                                    no_increasing=None):
+        # type: (int, float, int, str) -> CommandResult
         """
-        reweight OSDs by utilization [overload-percentage-for-consideration, default 120]
-        :param oload: CephInt 
-        :param max_change: CephFloat 
-        :param max_osds: CephInt 
-        :param no_increasing: CephChoices strings=--no-increasing 
+        reweight OSDs by utilization [overload-percentage-for-consideration,
+        default 120]
+        
         module=osd perm=rw flags=mgr
+        
+        :param oload: CephInt
+        :param max_change: CephFloat
+        :param max_osds: CephInt
+        :param no_increasing: CephChoices strings=--no-increasing
         """
         prefix = 'osd reweight-by-utilization'
-        _args = {'prefix': prefix, 'oload': oload, 'max_change': max_change, 'max_osds': max_osds, 'no_increasing': no_increasing}
+        _args = {'prefix': prefix, 'oload': oload, 'max_change': max_change, 'max_osds':
+                 max_osds, 'no_increasing': no_increasing}
         return self._mon_command(_args)
     
-    def osd_reweightn(self, weights: str):
+    def osd_reweightn(self, weights):
+        # type: (str) -> CommandResult
         """
         reweight osds with {<id>: <weight>,...})
-        :param weights: CephString 
+        
         module=osd perm=rw flags=
+        
+        :param weights: CephString
         """
         prefix = 'osd reweightn'
         _args = {'prefix': prefix, 'weights': weights}
         return self._mon_command(_args)
     
     @deprecated
-    def osd_rm(self, ids: List[str]):
+    def osd_rm(self, ids):
+        # type: (List[str]) -> CommandResult
         """
         remove osd(s) <id> [<id>...], or use <any|all> to remove all osds
-        :param ids: CephString 
+        
         module=osd perm=rw flags=deprecated
+        
+        :param ids: CephString
         """
         prefix = 'osd rm'
         _args = {'prefix': prefix, 'ids': ids}
         return self._mon_command(_args)
     
-    def osd_rm_nodown(self, ids: List[str]):
+    @deprecated
+    def osd_rm_nodown(self, ids):
+        # type: (List[str]) -> CommandResult
         """
-        allow osd(s) <id> [<id>...] to be marked down (if they are currently marked as nodown), can use <all|any> to automatically filter out all nodown osds
-        :param ids: CephString 
-        module=osd perm=rw flags=
+        allow osd(s) <id> [<id>...] to be marked down (if they are currently
+        marked as nodown), can use <all|any> to automatically filter out all
+        nodown osds
+        
+        module=osd perm=rw flags=deprecated
+        
+        :param ids: CephString
         """
         prefix = 'osd rm-nodown'
         _args = {'prefix': prefix, 'ids': ids}
         return self._mon_command(_args)
     
-    def osd_rm_noin(self, ids: List[str]):
+    @deprecated
+    def osd_rm_noin(self, ids):
+        # type: (List[str]) -> CommandResult
         """
-        allow osd(s) <id> [<id>...] to be marked in (if they are currently marked as noin), can use <all|any> to automatically filter out all noin osds
-        :param ids: CephString 
-        module=osd perm=rw flags=
+        allow osd(s) <id> [<id>...] to be marked in (if they are currently
+        marked as noin), can use <all|any> to automatically filter out all
+        noin osds
+        
+        module=osd perm=rw flags=deprecated
+        
+        :param ids: CephString
         """
         prefix = 'osd rm-noin'
         _args = {'prefix': prefix, 'ids': ids}
         return self._mon_command(_args)
     
-    def osd_rm_noout(self, ids: List[str]):
+    @deprecated
+    def osd_rm_noout(self, ids):
+        # type: (List[str]) -> CommandResult
         """
-        allow osd(s) <id> [<id>...] to be marked out (if they are currently marked as noout), can use <all|any> to automatically filter out all noout osds
-        :param ids: CephString 
-        module=osd perm=rw flags=
+        allow osd(s) <id> [<id>...] to be marked out (if they are currently
+        marked as noout), can use <all|any> to automatically filter out all
+        noout osds
+        
+        module=osd perm=rw flags=deprecated
+        
+        :param ids: CephString
         """
         prefix = 'osd rm-noout'
         _args = {'prefix': prefix, 'ids': ids}
         return self._mon_command(_args)
     
-    def osd_rm_noup(self, ids: List[str]):
+    @deprecated
+    def osd_rm_noup(self, ids):
+        # type: (List[str]) -> CommandResult
         """
-        allow osd(s) <id> [<id>...] to be marked up (if they are currently marked as noup), can use <all|any> to automatically filter out all noup osds
-        :param ids: CephString 
-        module=osd perm=rw flags=
+        allow osd(s) <id> [<id>...] to be marked up (if they are currently
+        marked as noup), can use <all|any> to automatically filter out all
+        noup osds
+        
+        module=osd perm=rw flags=deprecated
+        
+        :param ids: CephString
         """
         prefix = 'osd rm-noup'
         _args = {'prefix': prefix, 'ids': ids}
         return self._mon_command(_args)
     
-    def osd_rm_pg_upmap(self, pgid: str):
+    def osd_rm_pg_upmap(self, pgid):
+        # type: (str) -> CommandResult
         """
         clear pg_upmap mapping for <pgid> (developers only)
-        :param pgid: CephPgid 
+        
         module=osd perm=rw flags=
+        
+        :param pgid: CephPgid
         """
         prefix = 'osd rm-pg-upmap'
         _args = {'prefix': prefix, 'pgid': pgid}
         return self._mon_command(_args)
     
-    def osd_rm_pg_upmap_items(self, pgid: str):
+    def osd_rm_pg_upmap_items(self, pgid):
+        # type: (str) -> CommandResult
         """
         clear pg_upmap_items mapping for <pgid> (developers only)
-        :param pgid: CephPgid 
+        
         module=osd perm=rw flags=
+        
+        :param pgid: CephPgid
         """
         prefix = 'osd rm-pg-upmap-items'
         _args = {'prefix': prefix, 'pgid': pgid}
         return self._mon_command(_args)
     
-    def osd_safe_to_destroy(self, ids: List[str]):
+    def osd_safe_to_destroy(self, ids):
+        # type: (List[str]) -> CommandResult
         """
-        check whether osd(s) can be safely destroyed without reducing data durability
-        :param ids: CephString 
+        check whether osd(s) can be safely destroyed without reducing data
+        durability
+        
         module=osd perm=r flags=mgr
+        
+        :param ids: CephString
         """
         prefix = 'osd safe-to-destroy'
         _args = {'prefix': prefix, 'ids': ids}
         return self._mon_command(_args)
     
-    def osd_scrub(self, who: str):
+    def osd_scrub(self, who):
+        # type: (str) -> CommandResult
         """
         initiate scrub on osd <who>, or use <all|any> to scrub all
-        :param who: CephString 
+        
         module=osd perm=rw flags=mgr
+        
+        :param who: CephString
         """
         prefix = 'osd scrub'
         _args = {'prefix': prefix, 'who': who}
         return self._mon_command(_args)
     
-    def osd_set(self, key: str, yes_i_really_mean_it: bool=None):
+    def osd_set(self, key, yes_i_really_mean_it=None):
+        # type: (str, bool) -> CommandResult
         """
         set <key>
-        :param key: CephChoices strings=full|pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent|nosnaptrim|pglog_hardlimit 
-        :param yes_i_really_mean_it: CephBool 
+        
         module=osd perm=rw flags=
+        
+        :param key: CephChoices strings=full|pause|noup|nodown|noout|noin|noba
+            ckfill|norebalance|norecover|noscrub|nodeep-
+            scrub|notieragent|nosnaptrim|pglog_hardlimit
+        :param yes_i_really_mean_it: CephBool
         """
         prefix = 'osd set'
         _args = {'prefix': prefix, 'key': key, 'yes_i_really_mean_it': yes_i_really_mean_it}
         return self._mon_command(_args)
     
-    def osd_set_backfillfull_ratio(self, ratio: float):
+    def osd_set_backfillfull_ratio(self, ratio):
+        # type: (float) -> CommandResult
         """
         set usage ratio at which OSDs are marked too full to backfill
-        :param ratio: CephFloat ragne=0.0|1.0 
+        
         module=osd perm=rw flags=
+        
+        :param ratio: CephFloat ragne=0.0|1.0
         """
         prefix = 'osd set-backfillfull-ratio'
         _args = {'prefix': prefix, 'ratio': ratio}
         return self._mon_command(_args)
     
-    def osd_set_full_ratio(self, ratio: float):
+    def osd_set_full_ratio(self, ratio):
+        # type: (float) -> CommandResult
         """
         set usage ratio at which OSDs are marked full
-        :param ratio: CephFloat ragne=0.0|1.0 
+        
         module=osd perm=rw flags=
+        
+        :param ratio: CephFloat ragne=0.0|1.0
         """
         prefix = 'osd set-full-ratio'
         _args = {'prefix': prefix, 'ratio': ratio}
         return self._mon_command(_args)
     
-    def osd_set_nearfull_ratio(self, ratio: float):
+    def osd_set_group(self, flags, who):
+        # type: (str, List[str]) -> CommandResult
+        """
+        set <flags> for batch osds or crush nodes, <flags> must be a comma-
+        separated subset of {noup,nodown,noin,noout}
+        
+        module=osd perm=rw flags=
+        
+        :param flags: CephString
+        :param who: CephString
+        """
+        prefix = 'osd set-group'
+        _args = {'prefix': prefix, 'flags': flags, 'who': who}
+        return self._mon_command(_args)
+    
+    def osd_set_nearfull_ratio(self, ratio):
+        # type: (float) -> CommandResult
         """
         set usage ratio at which OSDs are marked near-full
-        :param ratio: CephFloat ragne=0.0|1.0 
+        
         module=osd perm=rw flags=
+        
+        :param ratio: CephFloat ragne=0.0|1.0
         """
         prefix = 'osd set-nearfull-ratio'
         _args = {'prefix': prefix, 'ratio': ratio}
         return self._mon_command(_args)
     
-    def osd_set_require_min_compat_client(self, version: str, yes_i_really_mean_it: bool=None):
+    def osd_set_require_min_compat_client(self, version, yes_i_really_mean_it=None):
+        # type: (str, bool) -> CommandResult
         """
         set the minimum client version we will maintain compatibility with
-        :param version: CephString 
-        :param yes_i_really_mean_it: CephBool 
+        
         module=osd perm=rw flags=
+        
+        :param version: CephString
+        :param yes_i_really_mean_it: CephBool
         """
         prefix = 'osd set-require-min-compat-client'
-        _args = {'prefix': prefix, 'version': version, 'yes_i_really_mean_it': yes_i_really_mean_it}
+        _args = {'prefix': prefix, 'version': version, 'yes_i_really_mean_it':
+                 yes_i_really_mean_it}
         return self._mon_command(_args)
     
-    def osd_setcrushmap(self, prior_version: int=None):
+    def osd_setcrushmap(self, prior_version=None):
+        # type: (int) -> CommandResult
         """
         set crush map from input file
-        :param prior_version: CephInt 
+        
         module=osd perm=rw flags=
+        
+        :param prior_version: CephInt
         """
         prefix = 'osd setcrushmap'
         _args = {'prefix': prefix, 'prior_version': prior_version}
         return self._mon_command(_args)
     
-    def osd_setmaxosd(self, newmax: int):
+    def osd_setmaxosd(self, newmax):
+        # type: (int) -> CommandResult
         """
         set new maximum osd value
-        :param newmax: CephInt ragne=0 
+        
         module=osd perm=rw flags=
+        
+        :param newmax: CephInt ragne=0
         """
         prefix = 'osd setmaxosd'
         _args = {'prefix': prefix, 'newmax': newmax}
         return self._mon_command(_args)
     
     def osd_stat(self):
+        # type: () -> CommandResult
         """
         print summary of OSD map
-    
+        
         module=osd perm=r flags=
         """
         prefix = 'osd stat'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def osd_status(self, bucket: str=None):
+    def osd_status(self, bucket=None):
+        # type: (str) -> CommandResult
         """
         Show the status of OSDs within a bucket, or all
-        :param bucket: CephString 
+        
         module=mgr perm=r flags=mgr
+        
+        :param bucket: CephString
         """
         prefix = 'osd status'
         _args = {'prefix': prefix, 'bucket': bucket}
         return self._mon_command(_args)
     
-    def osd_stop(self, ids: List[str]):
+    def osd_stop(self, ids):
+        # type: (List[str]) -> CommandResult
         """
         stop the corresponding osd daemons and mark them as down
-        :param ids: CephString 
+        
         module=osd perm=rw flags=
+        
+        :param ids: CephString
         """
         prefix = 'osd stop'
         _args = {'prefix': prefix, 'ids': ids}
         return self._mon_command(_args)
     
-    def osd_test_reweight_by_pg(self, oload: int=None, max_change: float=None, max_osds: int=None, pools: List[str]=None):
+    def osd_test_reweight_by_pg(self, oload=None, max_change=None, max_osds=None, pools=None):
+        # type: (int, float, int, List[str]) -> CommandResult
         """
-        dry run of reweight OSDs by PG distribution [overload-percentage-for-consideration, default 120]
-        :param oload: CephInt 
-        :param max_change: CephFloat 
-        :param max_osds: CephInt 
-        :param pools: CephPoolname 
+        dry run of reweight OSDs by PG distribution [overload-percentage-for-
+        consideration, default 120]
+        
         module=osd perm=r flags=mgr
+        
+        :param oload: CephInt
+        :param max_change: CephFloat
+        :param max_osds: CephInt
+        :param pools: CephPoolname
         """
         prefix = 'osd test-reweight-by-pg'
-        _args = {'prefix': prefix, 'oload': oload, 'max_change': max_change, 'max_osds': max_osds, 'pools': pools}
+        _args = {'prefix': prefix, 'oload': oload, 'max_change': max_change, 'max_osds':
+                 max_osds, 'pools': pools}
         return self._mon_command(_args)
     
-    def osd_test_reweight_by_utilization(self, oload: int=None, max_change: float=None, max_osds: int=None, no_increasing: bool=None):
+    def osd_test_reweight_by_utilization(self, oload=None, max_change=None, max_osds=None,
+                                         no_increasing=None):
+        # type: (int, float, int, bool) -> CommandResult
         """
-        dry run of reweight OSDs by utilization [overload-percentage-for-consideration, default 120]
-        :param oload: CephInt 
-        :param max_change: CephFloat 
-        :param max_osds: CephInt 
-        :param no_increasing: CephBool 
+        dry run of reweight OSDs by utilization [overload-percentage-for-
+        consideration, default 120]
+        
         module=osd perm=r flags=mgr
+        
+        :param oload: CephInt
+        :param max_change: CephFloat
+        :param max_osds: CephInt
+        :param no_increasing: CephBool
         """
         prefix = 'osd test-reweight-by-utilization'
-        _args = {'prefix': prefix, 'oload': oload, 'max_change': max_change, 'max_osds': max_osds, 'no_increasing': no_increasing}
+        _args = {'prefix': prefix, 'oload': oload, 'max_change': max_change, 'max_osds':
+                 max_osds, 'no_increasing': no_increasing}
         return self._mon_command(_args)
     
-    def osd_tier_add(self, pool: str, tierpool: str, force_nonempty: str=None):
+    def osd_tier_add(self, pool, tierpool, force_nonempty=None):
+        # type: (str, str, str) -> CommandResult
         """
-        add the tier <tierpool> (the second one) to base pool <pool> (the first one)
-        :param pool: CephPoolname 
-        :param tierpool: CephPoolname 
-        :param force_nonempty: CephChoices strings=--force-nonempty 
+        add the tier <tierpool> (the second one) to base pool <pool> (the
+        first one)
+        
         module=osd perm=rw flags=
+        
+        :param pool: CephPoolname
+        :param tierpool: CephPoolname
+        :param force_nonempty: CephChoices strings=--force-nonempty
         """
         prefix = 'osd tier add'
-        _args = {'prefix': prefix, 'pool': pool, 'tierpool': tierpool, 'force_nonempty': force_nonempty}
+        _args = {'prefix': prefix, 'pool': pool, 'tierpool': tierpool, 'force_nonempty':
+                 force_nonempty}
         return self._mon_command(_args)
     
-    def osd_tier_add_cache(self, pool: str, tierpool: str, size: int):
+    def osd_tier_add_cache(self, pool, tierpool, size):
+        # type: (str, str, int) -> CommandResult
         """
-        add a cache <tierpool> (the second one) of size <size> to existing pool <pool> (the first one)
-        :param pool: CephPoolname 
-        :param tierpool: CephPoolname 
-        :param size: CephInt ragne=0 
+        add a cache <tierpool> (the second one) of size <size> to existing
+        pool <pool> (the first one)
+        
         module=osd perm=rw flags=
+        
+        :param pool: CephPoolname
+        :param tierpool: CephPoolname
+        :param size: CephInt ragne=0
         """
         prefix = 'osd tier add-cache'
         _args = {'prefix': prefix, 'pool': pool, 'tierpool': tierpool, 'size': size}
         return self._mon_command(_args)
     
-    def osd_tier_cache_mode(self, pool: str, mode: str, yes_i_really_mean_it: bool=None):
+    def osd_tier_cache_mode(self, pool, mode, yes_i_really_mean_it=None):
+        # type: (str, str, bool) -> CommandResult
         """
         specify the caching mode for cache tier <pool>
-        :param pool: CephPoolname 
-        :param mode: CephChoices strings=none|writeback|forward|readonly|readforward|proxy|readproxy 
-        :param yes_i_really_mean_it: CephBool 
+        
         module=osd perm=rw flags=
+        
+        :param pool: CephPoolname
+        :param mode: CephChoices
+            strings=none|writeback|forward|readonly|readforward|proxy|readproxy
+        :param yes_i_really_mean_it: CephBool
         """
         prefix = 'osd tier cache-mode'
-        _args = {'prefix': prefix, 'pool': pool, 'mode': mode, 'yes_i_really_mean_it': yes_i_really_mean_it}
+        _args = {'prefix': prefix, 'pool': pool, 'mode': mode, 'yes_i_really_mean_it':
+                 yes_i_really_mean_it}
         return self._mon_command(_args)
     
     @deprecated
-    def osd_tier_remove(self, pool: str, tierpool: str):
+    def osd_tier_remove(self, pool, tierpool):
+        # type: (str, str) -> CommandResult
         """
-        remove the tier <tierpool> (the second one) from base pool <pool> (the first one)
-        :param pool: CephPoolname 
-        :param tierpool: CephPoolname 
+        remove the tier <tierpool> (the second one) from base pool <pool> (the
+        first one)
+        
         module=osd perm=rw flags=deprecated
+        
+        :param pool: CephPoolname
+        :param tierpool: CephPoolname
         """
         prefix = 'osd tier remove'
         _args = {'prefix': prefix, 'pool': pool, 'tierpool': tierpool}
         return self._mon_command(_args)
     
     @deprecated
-    def osd_tier_remove_overlay(self, pool: str):
+    def osd_tier_remove_overlay(self, pool):
+        # type: (str) -> CommandResult
         """
         remove the overlay pool for base pool <pool>
-        :param pool: CephPoolname 
+        
         module=osd perm=rw flags=deprecated
+        
+        :param pool: CephPoolname
         """
         prefix = 'osd tier remove-overlay'
         _args = {'prefix': prefix, 'pool': pool}
         return self._mon_command(_args)
     
-    def osd_tier_rm(self, pool: str, tierpool: str):
+    def osd_tier_rm(self, pool, tierpool):
+        # type: (str, str) -> CommandResult
         """
-        remove the tier <tierpool> (the second one) from base pool <pool> (the first one)
-        :param pool: CephPoolname 
-        :param tierpool: CephPoolname 
+        remove the tier <tierpool> (the second one) from base pool <pool> (the
+        first one)
+        
         module=osd perm=rw flags=
+        
+        :param pool: CephPoolname
+        :param tierpool: CephPoolname
         """
         prefix = 'osd tier rm'
         _args = {'prefix': prefix, 'pool': pool, 'tierpool': tierpool}
         return self._mon_command(_args)
     
-    def osd_tier_rm_overlay(self, pool: str):
+    def osd_tier_rm_overlay(self, pool):
+        # type: (str) -> CommandResult
         """
         remove the overlay pool for base pool <pool>
-        :param pool: CephPoolname 
+        
         module=osd perm=rw flags=
+        
+        :param pool: CephPoolname
         """
         prefix = 'osd tier rm-overlay'
         _args = {'prefix': prefix, 'pool': pool}
         return self._mon_command(_args)
     
-    def osd_tier_set_overlay(self, pool: str, overlaypool: str):
+    def osd_tier_set_overlay(self, pool, overlaypool):
+        # type: (str, str) -> CommandResult
         """
         set the overlay pool for base pool <pool> to be <overlaypool>
-        :param pool: CephPoolname 
-        :param overlaypool: CephPoolname 
+        
         module=osd perm=rw flags=
+        
+        :param pool: CephPoolname
+        :param overlaypool: CephPoolname
         """
         prefix = 'osd tier set-overlay'
         _args = {'prefix': prefix, 'pool': pool, 'overlaypool': overlaypool}
         return self._mon_command(_args)
     
-    def osd_tree(self, epoch: int=None, states: List[str]=None):
+    def osd_tree(self, epoch=None, states=None):
+        # type: (int, List[str]) -> CommandResult
         """
         print OSD tree
-        :param epoch: CephInt ragne=0 
-        :param states: CephChoices strings=up|down|in|out|destroyed 
+        
         module=osd perm=r flags=
+        
+        :param epoch: CephInt ragne=0
+        :param states: CephChoices strings=up|down|in|out|destroyed
         """
         prefix = 'osd tree'
         _args = {'prefix': prefix, 'epoch': epoch, 'states': states}
         return self._mon_command(_args)
     
-    def osd_tree_from(self, bucket: str, epoch: int=None, states: List[str]=None):
+    def osd_tree_from(self, bucket, epoch=None, states=None):
+        # type: (str, int, List[str]) -> CommandResult
         """
         print OSD tree in bucket
-        :param bucket: CephString 
-        :param epoch: CephInt ragne=0 
-        :param states: CephChoices strings=up|down|in|out|destroyed 
+        
         module=osd perm=r flags=
+        
+        :param bucket: CephString
+        :param epoch: CephInt ragne=0
+        :param states: CephChoices strings=up|down|in|out|destroyed
         """
         prefix = 'osd tree-from'
         _args = {'prefix': prefix, 'bucket': bucket, 'epoch': epoch, 'states': states}
         return self._mon_command(_args)
     
     def osd_unpause(self):
+        # type: () -> CommandResult
         """
         unpause osd
-    
+        
         module=osd perm=rw flags=
         """
         prefix = 'osd unpause'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def osd_unset(self, key: str):
+    def osd_unset(self, key):
+        # type: (str) -> CommandResult
         """
         unset <key>
-        :param key: CephChoices strings=full|pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent|nosnaptrim 
+        
         module=osd perm=rw flags=
+        
+        :param key: CephChoices strings=full|pause|noup|nodown|noout|noin|noba
+            ckfill|norebalance|norecover|noscrub|nodeep-
+            scrub|notieragent|nosnaptrim
         """
         prefix = 'osd unset'
         _args = {'prefix': prefix, 'key': key}
         return self._mon_command(_args)
     
+    def osd_unset_group(self, flags, who):
+        # type: (str, List[str]) -> CommandResult
+        """
+        unset <flags> for batch osds or crush nodes, <flags> must be a comma-
+        separated subset of {noup,nodown,noin,noout}
+        
+        module=osd perm=rw flags=
+        
+        :param flags: CephString
+        :param who: CephString
+        """
+        prefix = 'osd unset-group'
+        _args = {'prefix': prefix, 'flags': flags, 'who': who}
+        return self._mon_command(_args)
+    
     def osd_utilization(self):
+        # type: () -> CommandResult
         """
         get basic pg distribution stats
-    
+        
         module=osd perm=r flags=
         """
         prefix = 'osd utilization'
@@ -4894,216 +6310,275 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def osd_versions(self):
+        # type: () -> CommandResult
         """
         check running versions of OSDs
-    
+        
         module=osd perm=r flags=
         """
         prefix = 'osd versions'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def pg_cancel_force_backfill(self, pgid: List[str]):
+    def pg_cancel_force_backfill(self, pgid):
+        # type: (List[str]) -> CommandResult
         """
         restore normal backfill priority of <pgid>
-        :param pgid: CephPgid 
+        
         module=pg perm=rw flags=mgr
+        
+        :param pgid: CephPgid
         """
         prefix = 'pg cancel-force-backfill'
         _args = {'prefix': prefix, 'pgid': pgid}
         return self._mon_command(_args)
     
-    def pg_cancel_force_recovery(self, pgid: List[str]):
+    def pg_cancel_force_recovery(self, pgid):
+        # type: (List[str]) -> CommandResult
         """
         restore normal recovery priority of <pgid>
-        :param pgid: CephPgid 
+        
         module=pg perm=rw flags=mgr
+        
+        :param pgid: CephPgid
         """
         prefix = 'pg cancel-force-recovery'
         _args = {'prefix': prefix, 'pgid': pgid}
         return self._mon_command(_args)
     
-    def pg_debug(self, debugop: str):
+    def pg_debug(self, debugop):
+        # type: (str) -> CommandResult
         """
         show debug info about pgs
-        :param debugop: CephChoices strings=unfound_objects_exist|degraded_pgs_exist 
+        
         module=pg perm=r flags=mgr
+        
+        :param debugop: CephChoices
+            strings=unfound_objects_exist|degraded_pgs_exist
         """
         prefix = 'pg debug'
         _args = {'prefix': prefix, 'debugop': debugop}
         return self._mon_command(_args)
     
-    def pg_deep_scrub(self, pgid: str):
+    def pg_deep_scrub(self, pgid):
+        # type: (str) -> CommandResult
         """
         start deep-scrub on <pgid>
-        :param pgid: CephPgid 
+        
         module=pg perm=rw flags=mgr
+        
+        :param pgid: CephPgid
         """
         prefix = 'pg deep-scrub'
         _args = {'prefix': prefix, 'pgid': pgid}
         return self._mon_command(_args)
     
-    def pg_dump(self, dumpcontents: List[str]=None):
+    def pg_dump(self, dumpcontents=None):
+        # type: (List[str]) -> CommandResult
         """
         show human-readable versions of pg map (only 'all' valid with plain)
-        :param dumpcontents: CephChoices strings=all|summary|sum|delta|pools|osds|pgs|pgs_brief 
+        
         module=pg perm=r flags=mgr
+        
+        :param dumpcontents: CephChoices
+            strings=all|summary|sum|delta|pools|osds|pgs|pgs_brief
         """
         prefix = 'pg dump'
         _args = {'prefix': prefix, 'dumpcontents': dumpcontents}
         return self._mon_command(_args)
     
-    def pg_dump_json(self, dumpcontents: List[str]=None):
+    def pg_dump_json(self, dumpcontents=None):
+        # type: (List[str]) -> CommandResult
         """
         show human-readable version of pg map in json only
-        :param dumpcontents: CephChoices strings=all|summary|sum|pools|osds|pgs 
+        
         module=pg perm=r flags=mgr
+        
+        :param dumpcontents: CephChoices
+            strings=all|summary|sum|pools|osds|pgs
         """
         prefix = 'pg dump_json'
         _args = {'prefix': prefix, 'dumpcontents': dumpcontents}
         return self._mon_command(_args)
     
     def pg_dump_pools_json(self):
+        # type: () -> CommandResult
         """
         show pg pools info in json only
-    
+        
         module=pg perm=r flags=mgr
         """
         prefix = 'pg dump_pools_json'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def pg_dump_stuck(self, stuckops: List[str]=None, threshold: int=None):
+    def pg_dump_stuck(self, stuckops=None, threshold=None):
+        # type: (List[str], int) -> CommandResult
         """
         show information about stuck pgs
-        :param stuckops: CephChoices strings=inactive|unclean|stale|undersized|degraded 
-        :param threshold: CephInt 
+        
         module=pg perm=r flags=mgr
+        
+        :param stuckops: CephChoices
+            strings=inactive|unclean|stale|undersized|degraded
+        :param threshold: CephInt
         """
         prefix = 'pg dump_stuck'
         _args = {'prefix': prefix, 'stuckops': stuckops, 'threshold': threshold}
         return self._mon_command(_args)
     
-    def pg_force_backfill(self, pgid: List[str]):
+    def pg_force_backfill(self, pgid):
+        # type: (List[str]) -> CommandResult
         """
         force backfill of <pgid> first
-        :param pgid: CephPgid 
+        
         module=pg perm=rw flags=mgr
+        
+        :param pgid: CephPgid
         """
         prefix = 'pg force-backfill'
         _args = {'prefix': prefix, 'pgid': pgid}
         return self._mon_command(_args)
     
-    def pg_force_recovery(self, pgid: List[str]):
+    def pg_force_recovery(self, pgid):
+        # type: (List[str]) -> CommandResult
         """
         force recovery of <pgid> first
-        :param pgid: CephPgid 
+        
         module=pg perm=rw flags=mgr
+        
+        :param pgid: CephPgid
         """
         prefix = 'pg force-recovery'
         _args = {'prefix': prefix, 'pgid': pgid}
         return self._mon_command(_args)
     
     def pg_getmap(self):
+        # type: () -> CommandResult
         """
         get binary pg map to -o/stdout
-    
+        
         module=pg perm=r flags=mgr
         """
         prefix = 'pg getmap'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def pg_ls(self, pool: int=None, states: List[str]=None):
+    def pg_ls(self, pool=None, states=None):
+        # type: (int, List[str]) -> CommandResult
         """
         list pg with specific pool, osd, state
-        :param pool: CephInt 
-        :param states: CephString 
+        
         module=pg perm=r flags=mgr
+        
+        :param pool: CephInt
+        :param states: CephString
         """
         prefix = 'pg ls'
         _args = {'prefix': prefix, 'pool': pool, 'states': states}
         return self._mon_command(_args)
     
-    def pg_ls_by_osd(self, osd: str, pool: int=None, states: List[str]=None):
+    def pg_ls_by_osd(self, osd, pool=None, states=None):
+        # type: (str, int, List[str]) -> CommandResult
         """
         list pg on osd [osd]
-        :param osd: CephOsdName 
-        :param pool: CephInt 
-        :param states: CephString 
+        
         module=pg perm=r flags=mgr
+        
+        :param osd: CephOsdName
+        :param pool: CephInt
+        :param states: CephString
         """
         prefix = 'pg ls-by-osd'
         _args = {'prefix': prefix, 'osd': osd, 'pool': pool, 'states': states}
         return self._mon_command(_args)
     
-    def pg_ls_by_pool(self, poolstr: str, states: List[str]=None):
+    def pg_ls_by_pool(self, poolstr, states=None):
+        # type: (str, List[str]) -> CommandResult
         """
         list pg with pool = [poolname]
-        :param poolstr: CephString 
-        :param states: CephString 
+        
         module=pg perm=r flags=mgr
+        
+        :param poolstr: CephString
+        :param states: CephString
         """
         prefix = 'pg ls-by-pool'
         _args = {'prefix': prefix, 'poolstr': poolstr, 'states': states}
         return self._mon_command(_args)
     
-    def pg_ls_by_primary(self, osd: str, pool: int=None, states: List[str]=None):
+    def pg_ls_by_primary(self, osd, pool=None, states=None):
+        # type: (str, int, List[str]) -> CommandResult
         """
         list pg with primary = [osd]
-        :param osd: CephOsdName 
-        :param pool: CephInt 
-        :param states: CephString 
+        
         module=pg perm=r flags=mgr
+        
+        :param osd: CephOsdName
+        :param pool: CephInt
+        :param states: CephString
         """
         prefix = 'pg ls-by-primary'
         _args = {'prefix': prefix, 'osd': osd, 'pool': pool, 'states': states}
         return self._mon_command(_args)
     
-    def pg_map(self, pgid: str):
+    def pg_map(self, pgid):
+        # type: (str) -> CommandResult
         """
         show mapping of pg to osds
-        :param pgid: CephPgid 
+        
         module=pg perm=r flags=
+        
+        :param pgid: CephPgid
         """
         prefix = 'pg map'
         _args = {'prefix': prefix, 'pgid': pgid}
         return self._mon_command(_args)
     
-    def pg_repair(self, pgid: str):
+    def pg_repair(self, pgid):
+        # type: (str) -> CommandResult
         """
         start repair on <pgid>
-        :param pgid: CephPgid 
+        
         module=pg perm=rw flags=mgr
+        
+        :param pgid: CephPgid
         """
         prefix = 'pg repair'
         _args = {'prefix': prefix, 'pgid': pgid}
         return self._mon_command(_args)
     
-    def pg_repeer(self, pgid: str):
+    def pg_repeer(self, pgid):
+        # type: (str) -> CommandResult
         """
         force a PG to repeer
-        :param pgid: CephPgid 
+        
         module=osd perm=rw flags=
+        
+        :param pgid: CephPgid
         """
         prefix = 'pg repeer'
         _args = {'prefix': prefix, 'pgid': pgid}
         return self._mon_command(_args)
     
-    def pg_scrub(self, pgid: str):
+    def pg_scrub(self, pgid):
+        # type: (str) -> CommandResult
         """
         start scrub on <pgid>
-        :param pgid: CephPgid 
+        
         module=pg perm=rw flags=mgr
+        
+        :param pgid: CephPgid
         """
         prefix = 'pg scrub'
         _args = {'prefix': prefix, 'pgid': pgid}
         return self._mon_command(_args)
     
     def pg_stat(self):
+        # type: () -> CommandResult
         """
         show placement group status.
-    
+        
         module=pg perm=r flags=mgr
         """
         prefix = 'pg stat'
@@ -5111,9 +6586,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def progress(self):
+        # type: () -> CommandResult
         """
         Show progress of recovery operations
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'progress'
@@ -5121,9 +6597,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def progress_clear(self):
+        # type: () -> CommandResult
         """
         Reset progress tracking
-    
+        
         module=mgr perm=rw flags=mgr
         """
         prefix = 'progress clear'
@@ -5131,9 +6608,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def progress_json(self):
+        # type: () -> CommandResult
         """
         Show machine readable progress information
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'progress json'
@@ -5141,122 +6619,89 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def prometheus_file_sd_config(self):
+        # type: () -> CommandResult
         """
         Return file_sd compatible prometheus config for mgr cluster
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'prometheus file_sd_config'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def quorum(self, quorumcmd: str):
+    def quorum(self, quorumcmd):
+        # type: (str) -> CommandResult
         """
         enter or exit quorum
-        :param quorumcmd: CephChoices strings=enter|exit 
+        
         module=mon perm=rw flags=
+        
+        :param quorumcmd: CephChoices strings=enter|exit
         """
         prefix = 'quorum'
         _args = {'prefix': prefix, 'quorumcmd': quorumcmd}
         return self._mon_command(_args)
     
     def quorum_status(self):
+        # type: () -> CommandResult
         """
         report status of monitor quorum
-    
+        
         module=mon perm=r flags=
         """
         prefix = 'quorum_status'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def rbd_perf_image_counters(self, pool_spec: str=None, sort_by: str=None):
+    def rbd_perf_image_counters(self, pool_spec=None, sort_by=None):
+        # type: (str, str) -> CommandResult
         """
         Retrieve current RBD IO performance counters
-        :param pool_spec: CephString 
-        :param sort_by: CephChoices strings=write_ops|write_bytes|write_latency|read_ops|read_bytes|read_latency 
+        
         module=mgr perm=r flags=mgr
+        
+        :param pool_spec: CephString
+        :param sort_by: CephChoices strings=write_ops|write_bytes|write_latenc
+            y|read_ops|read_bytes|read_latency
         """
         prefix = 'rbd perf image counters'
         _args = {'prefix': prefix, 'pool_spec': pool_spec, 'sort_by': sort_by}
         return self._mon_command(_args)
     
-    def rbd_perf_image_stats(self, pool_spec: str=None, sort_by: str=None):
+    def rbd_perf_image_stats(self, pool_spec=None, sort_by=None):
+        # type: (str, str) -> CommandResult
         """
         Retrieve current RBD IO performance stats
-        :param pool_spec: CephString 
-        :param sort_by: CephChoices strings=write_ops|write_bytes|write_latency|read_ops|read_bytes|read_latency 
+        
         module=mgr perm=r flags=mgr
+        
+        :param pool_spec: CephString
+        :param sort_by: CephChoices strings=write_ops|write_bytes|write_latenc
+            y|read_ops|read_bytes|read_latency
         """
         prefix = 'rbd perf image stats'
         _args = {'prefix': prefix, 'pool_spec': pool_spec, 'sort_by': sort_by}
         return self._mon_command(_args)
     
-    def report(self, tags: List[str]=None):
+    def report(self, tags=None):
+        # type: (List[str]) -> CommandResult
         """
         report full status of cluster, optional title tag strings
-        :param tags: CephString 
+        
         module=mon perm=r flags=
+        
+        :param tags: CephString
         """
         prefix = 'report'
         _args = {'prefix': prefix, 'tags': tags}
         return self._mon_command(_args)
     
-    def restful_create_key(self, key_name: str):
-        """
-        Create an API key with this name
-        :param key_name: CephString 
-        module=mgr perm=rw flags=mgr
-        """
-        prefix = 'restful create-key'
-        _args = {'prefix': prefix, 'key_name': key_name}
-        return self._mon_command(_args)
-    
-    def restful_create_self_signed_cert(self):
-        """
-        Create localized self signed certificate
-    
-        module=mgr perm=rw flags=mgr
-        """
-        prefix = 'restful create-self-signed-cert'
-        _args = {'prefix': prefix, }
-        return self._mon_command(_args)
-    
-    def restful_delete_key(self, key_name: str):
-        """
-        Delete an API key with this name
-        :param key_name: CephString 
-        module=mgr perm=rw flags=mgr
-        """
-        prefix = 'restful delete-key'
-        _args = {'prefix': prefix, 'key_name': key_name}
-        return self._mon_command(_args)
-    
-    def restful_list_keys(self):
-        """
-        List all API keys
-    
-        module=mgr perm=r flags=mgr
-        """
-        prefix = 'restful list-keys'
-        _args = {'prefix': prefix, }
-        return self._mon_command(_args)
-    
-    def restful_restart(self):
-        """
-        Restart API server
-    
-        module=mgr perm=rw flags=mgr
-        """
-        prefix = 'restful restart'
-        _args = {'prefix': prefix, }
-        return self._mon_command(_args)
-    
     @deprecated
     def scrub(self):
+        # type: () -> CommandResult
         """
         scrub the monitor stores
-    
+        
         module=mon perm=rw flags=deprecated
         """
         prefix = 'scrub'
@@ -5264,9 +6709,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def service_dump(self):
+        # type: () -> CommandResult
         """
         dump service map
-    
+        
         module=service perm=r flags=mgr
         """
         prefix = 'service dump'
@@ -5274,29 +6720,34 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def service_status(self):
+        # type: () -> CommandResult
         """
         dump service state
-    
+        
         module=service perm=r flags=mgr
         """
         prefix = 'service status'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def smart(self, devid: str=None):
+    def smart(self, devid=None):
+        # type: (str) -> CommandResult
         """
         Query health metrics for underlying device
-        :param devid: CephString 
+        
         module=mon perm=rw flags=hidden
+        
+        :param devid: CephString
         """
         prefix = 'smart'
         _args = {'prefix': prefix, 'devid': devid}
         return self._mon_command(_args)
     
     def ssh_clear_ssh_config(self):
+        # type: () -> CommandResult
         """
         Clear the ssh_config file
-    
+        
         module=mgr perm=rw flags=mgr
         """
         prefix = 'ssh clear-ssh-config'
@@ -5304,9 +6755,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def ssh_set_ssh_config(self):
+        # type: () -> CommandResult
         """
         Set the ssh_config file (use -i <ssh_config>)
-    
+        
         module=mgr perm=rw flags=mgr
         """
         prefix = 'ssh set-ssh-config'
@@ -5314,9 +6766,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def status(self):
+        # type: () -> CommandResult
         """
         show cluster status
-    
+        
         module=mon perm=r flags=
         """
         prefix = 'status'
@@ -5324,32 +6777,40 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     @deprecated
-    def sync_force(self, yes_i_really_mean_it: bool=None, i_know_what_i_am_doing: bool=None):
+    def sync_force(self, yes_i_really_mean_it=None, i_know_what_i_am_doing=None):
+        # type: (bool, bool) -> CommandResult
         """
         force sync of and clear monitor store
-        :param yes_i_really_mean_it: CephBool 
-        :param i_know_what_i_am_doing: CephBool 
-        module=mon perm=rw flags=deprecated, no_forward
+        
+        module=mon perm=rw flags=no_forward, deprecated
+        
+        :param yes_i_really_mean_it: CephBool
+        :param i_know_what_i_am_doing: CephBool
         """
         prefix = 'sync force'
-        _args = {'prefix': prefix, 'yes_i_really_mean_it': yes_i_really_mean_it, 'i_know_what_i_am_doing': i_know_what_i_am_doing}
+        _args = {'prefix': prefix, 'yes_i_really_mean_it': yes_i_really_mean_it,
+                 'i_know_what_i_am_doing': i_know_what_i_am_doing}
         return self._mon_command(_args)
     
-    def telegraf_config_set(self, key: str, value: str):
+    def telegraf_config_set(self, key, value):
+        # type: (str, str) -> CommandResult
         """
         Set a configuration value
-        :param key: CephString 
-        :param value: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param key: CephString
+        :param value: CephString
         """
         prefix = 'telegraf config-set'
         _args = {'prefix': prefix, 'key': key, 'value': value}
         return self._mon_command(_args)
     
     def telegraf_config_show(self):
+        # type: () -> CommandResult
         """
         Show current configuration
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'telegraf config-show'
@@ -5357,9 +6818,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def telegraf_send(self):
+        # type: () -> CommandResult
         """
         Force sending data to Telegraf
-    
+        
         module=mgr perm=rw flags=mgr
         """
         prefix = 'telegraf send'
@@ -5367,9 +6829,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def telemetry_off(self):
+        # type: () -> CommandResult
         """
         Disable telemetry reports from this cluster
-    
+        
         module=mgr perm=rw flags=mgr
         """
         prefix = 'telemetry off'
@@ -5377,9 +6840,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def telemetry_on(self):
+        # type: () -> CommandResult
         """
         Enable telemetry reports from this cluster
-    
+        
         module=mgr perm=rw flags=mgr
         """
         prefix = 'telemetry on'
@@ -5387,9 +6851,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def telemetry_send(self):
+        # type: () -> CommandResult
         """
         Force sending data to Ceph telemetry
-    
+        
         module=mgr perm=rw flags=mgr
         """
         prefix = 'telemetry send'
@@ -5397,9 +6862,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def telemetry_show(self):
+        # type: () -> CommandResult
         """
         Show last report or report to be sent
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'telemetry show'
@@ -5407,30 +6873,35 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def telemetry_status(self):
+        # type: () -> CommandResult
         """
         Show current configuration
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'telemetry status'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def tell(self, target: str, args: List[str]):
+    def tell(self, target, args):
+        # type: (str, List[str]) -> CommandResult
         """
         send a command to a specific daemon
-        :param target: CephName 
-        :param args: CephString 
+        
         module=mon perm=rw flags=
+        
+        :param target: CephName
+        :param args: CephString
         """
         prefix = 'tell'
         _args = {'prefix': prefix, 'target': target, 'args': args}
         return self._mon_command(_args)
     
     def time_sync_status(self):
+        # type: () -> CommandResult
         """
         show time sync status
-    
+        
         module=mon perm=r flags=
         """
         prefix = 'time-sync-status'
@@ -5438,9 +6909,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def version(self):
+        # type: () -> CommandResult
         """
         show mon daemon version
-    
+        
         module=mon perm=r flags=no_forward
         """
         prefix = 'version'
@@ -5448,30 +6920,35 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def versions(self):
+        # type: () -> CommandResult
         """
         check running versions of ceph daemons
-    
+        
         module=mon perm=r flags=
         """
         prefix = 'versions'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
     
-    def zabbix_config_set(self, key: str, value: str):
+    def zabbix_config_set(self, key, value):
+        # type: (str, str) -> CommandResult
         """
         Set a configuration value
-        :param key: CephString 
-        :param value: CephString 
+        
         module=mgr perm=rw flags=mgr
+        
+        :param key: CephString
+        :param value: CephString
         """
         prefix = 'zabbix config-set'
         _args = {'prefix': prefix, 'key': key, 'value': value}
         return self._mon_command(_args)
     
     def zabbix_config_show(self):
+        # type: () -> CommandResult
         """
         Show current configuration
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'zabbix config-show'
@@ -5479,9 +6956,10 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def zabbix_discovery(self):
+        # type: () -> CommandResult
         """
         Discovering Zabbix data
-    
+        
         module=mgr perm=r flags=mgr
         """
         prefix = 'zabbix discovery'
@@ -5489,11 +6967,14 @@ class MonCommandApi(object):
         return self._mon_command(_args)
     
     def zabbix_send(self):
+        # type: () -> CommandResult
         """
         Force sending data to Zabbix
-    
+        
         module=mgr perm=rw flags=mgr
         """
         prefix = 'zabbix send'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
+
+
