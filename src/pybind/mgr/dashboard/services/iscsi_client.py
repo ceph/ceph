@@ -219,3 +219,8 @@ class IscsiClient(RestClient):
     def get_targetinfo(self, target_iqn, request=None):
         # pylint: disable=unused-argument
         return request()
+
+    @RestClient.api_get('/api/clientinfo/{target_iqn}/{client_iqn}')
+    def get_clientinfo(self, target_iqn, client_iqn, request=None):
+        # pylint: disable=unused-argument
+        return request()
