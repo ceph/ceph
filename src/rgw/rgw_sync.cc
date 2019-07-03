@@ -1265,7 +1265,6 @@ int RGWMetaSyncSingleEntryCR::operate() {
 
     if (error_injection &&
         rand() % 10000 < cct->_conf->rgw_sync_meta_inject_err_probability * 10000.0) {
-      ldpp_dout(sync_env->dpp, 0) << __FILE__ << ":" << __LINE__ << ": injecting meta sync error on key=" << raw_key << dendl;
       return set_cr_error(-EIO);
     }
 
