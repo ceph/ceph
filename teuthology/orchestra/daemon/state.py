@@ -110,7 +110,7 @@ class DaemonState(object):
             if not silent:
                 self.log.info('Sent signal %d', sig)
         else:
-            self.log.info('No such daemon running')
+            self.log.error('No such daemon running')
 
     def start(self, timeout=300):
         """
