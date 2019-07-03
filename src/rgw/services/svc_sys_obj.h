@@ -241,7 +241,7 @@ public:
     int list_prefixed_objs(const string& prefix,
                            Container *result) {
       return list_prefixed_objs(prefix, [&](const string& val) {
-        result->push_back(val.substr(prefix.size()));
+        result->push_back(val);
       });
     }
 
