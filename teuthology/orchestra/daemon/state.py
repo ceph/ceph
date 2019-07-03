@@ -103,7 +103,10 @@ class DaemonState(object):
         :param sig: signal to send
         """
         if self.running():
-            self.proc.stdin.write(struct.pack('!b', sig))
+            try:
+                self.proc.stdin.write(struct.pack('!b', sig))
+            except IOError as e:
+                log.exception('Failed to send signal %d: %s', sig, e.strerror)
             if not silent:
                 self.log.info('Sent signal %d', sig)
         else:
