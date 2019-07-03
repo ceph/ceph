@@ -66,10 +66,10 @@ public:
     if (m_op <= m_objects && !m_set_redirect && !m_set_chunk ) {
       stringstream oid;
       oid << m_op;
-      if (m_op % 2) {
+      /*if (m_op % 2) {
 	// make it a long name
 	oid << " " << string(300, 'o');
-      }
+	}*/
       cout << m_op << ": write initial oid " << oid.str() << std::endl;
       context.oid_not_flushing.insert(oid.str());
       if (m_ec_pool) {
@@ -138,9 +138,9 @@ public:
     if (m_op <= m_objects) {
       stringstream oid;
       oid << m_op;
-      if (m_op % 2) {
+      /*if (m_op % 2) {
 	oid << " " << string(300, 'o');
-      }
+	}*/
       cout << m_op << ": write initial oid " << oid.str() << std::endl;
       context.oid_not_flushing.insert(oid.str());
       if (m_ec_pool) {
@@ -154,9 +154,9 @@ public:
 	//int _oid = m_op-m_objects;
 	int _oid = m_op % m_objects + 1;
 	oid << _oid;
-	if ((_oid) % 2) {
+	/*if ((_oid) % 2) {
 	  oid << " " << string(300, 'o');
-	}
+	  }*/
 
         if (context.oid_in_use.count(oid.str())) {
           /* previous write is not finished */
@@ -183,9 +183,9 @@ public:
 	stringstream oid, oid2;
 	int _oid = m_op-copy_manifest_end;
 	oid << _oid;
-	if ((_oid) % 2) {
+	/*if ((_oid) % 2) {
 	  oid << " " << string(300, 'o');
-	}
+	  }*/
 	oid2 << _oid << " " << context.low_tier_pool_name;
 	if ((_oid) % 2) {
 	  oid2 << " " << string(300, 'm');
@@ -205,9 +205,9 @@ public:
 	stringstream oid;
 	int _oid = m_op % m_objects +1;
 	oid << _oid;
-	if ((_oid) % 2) {
+	/*if ((_oid) % 2) {
 	  oid << " " << string(300, 'o');
-	}
+	  }*/
 	if (context.oid_in_use.count(oid.str())) {
 	  /* previous set-chunk is not finished */
 	  op = NULL;

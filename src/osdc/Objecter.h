@@ -41,7 +41,8 @@
 
 #include "messages/MOSDOp.h"
 #include "msg/Dispatcher.h"
-#include "osd/OSDMap.h"		// for OSDMap::snap_interval_set_t
+
+#include "osd/OSDMap.h"
 
 class Context;
 class Messenger;
@@ -1997,7 +1998,7 @@ public:
   bool _osdmap_full_flag() const;
   bool _osdmap_has_pool_full() const;
   void _prune_snapc(
-    const mempool::osdmap::map<int64_t, OSDMap::snap_interval_set_t>& new_removed_snaps,
+    const mempool::osdmap::map<int64_t, snap_interval_set_t>& new_removed_snaps,
     Op *op);
 
   bool target_should_be_paused(op_target_t *op);
@@ -2143,8 +2144,7 @@ private:
     std::map<ceph_tid_t, Op*>& need_resend,
     std::list<LingerOp*>& need_resend_linger,
     std::map<ceph_tid_t, CommandOp*>& need_resend_command,
-    shunique_lock& sul,
-    const mempool::osdmap::map<int64_t,OSDMap::snap_interval_set_t> *gap_removed_snaps);
+    shunique_lock& sul);
 
   int64_t get_object_hash_position(int64_t pool, const std::string& key,
 				   const std::string& ns);

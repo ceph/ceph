@@ -42,66 +42,7 @@ void PGPool::update(CephContext *cct, OSDMapRef map)
     updated = true;
   }
 
-  if (map->require_osd_release >= ceph_release_t::mimic) {
-    // mimic tracks removed_snaps_queue in the OSDmap and purged_snaps
-    // in the pg_info_t, with deltas for both in each OSDMap.  we don't
-    // need to (and can't) track it here.
-    cached_removed_snaps.clear();
-    newly_removed_snaps.clear();
-  } else {
-    // legacy (<= luminous) removed_snaps tracking
-    if (updated) {
-      if (pi->maybe_updated_removed_snaps(cached_removed_snaps)) {
-	pi->build_removed_snaps(newly_removed_snaps);
-	if (cached_removed_snaps.subset_of(newly_removed_snaps)) {
-          interval_set<snapid_t> removed_snaps = newly_removed_snaps;
-          newly_removed_snaps.subtract(cached_removed_snaps);
-          cached_removed_snaps.swap(removed_snaps);
-	} else {
-          lgeneric_subdout(cct, osd, 0) << __func__
-		<< " cached_removed_snaps shrank from " << cached_removed_snaps
-		<< " to " << newly_removed_snaps << dendl;
-          cached_removed_snaps.swap(newly_removed_snaps);
-          newly_removed_snaps.clear();
-	}
-      } else {
-	newly_removed_snaps.clear();
-      }
-    } else {
-      /* 1) map->get_epoch() == cached_epoch + 1 &&
-       * 2) pi->get_snap_epoch() != map->get_epoch()
-       *
-       * From the if branch, 1 && 2 must be true.  From 2, we know that
-       * this map didn't change the set of removed snaps.  From 1, we
-       * know that our cached_removed_snaps matches the previous map.
-       * Thus, from 1 && 2, cached_removed snaps matches the current
-       * set of removed snaps and all we have to do is clear
-       * newly_removed_snaps.
-       */
-      newly_removed_snaps.clear();
-    }
-    lgeneric_subdout(cct, osd, 20)
-      << "PGPool::update cached_removed_snaps "
-      << cached_removed_snaps
-      << " newly_removed_snaps "
-      << newly_removed_snaps
-      << " snapc " << snapc
-      << (updated ? " (updated)":" (no change)")
-      << dendl;
-    if (cct->_conf->osd_debug_verify_cached_snaps) {
-      interval_set<snapid_t> actual_removed_snaps;
-      pi->build_removed_snaps(actual_removed_snaps);
-      if (!(actual_removed_snaps == cached_removed_snaps)) {
-	lgeneric_derr(cct) << __func__
-		   << ": mismatch between the actual removed snaps "
-		   << actual_removed_snaps
-		   << " and pool.cached_removed_snaps "
-		   << " pool.cached_removed_snaps " << cached_removed_snaps
-		   << dendl;
-      }
-      ceph_assert(actual_removed_snaps == cached_removed_snaps);
-    }
-  }
+  assert(map->require_osd_release >= ceph_release_t::mimic);
   if (info.is_pool_snaps_mode() && updated) {
     snapc = pi->get_snap_context();
   }
@@ -2162,34 +2103,25 @@ void PeeringState::activate(
   if (is_primary()) {
     // initialize snap_trimq
     interval_set<snapid_t> to_trim;
-    if (get_osdmap()->require_osd_release < ceph_release_t::mimic) {
-      psdout(20) << "activate - purged_snaps " << info.purged_snaps
-		 << " cached_removed_snaps " << pool.cached_removed_snaps
-		 << dendl;
-      to_trim = pool.cached_removed_snaps;
-    } else {
-      auto& removed_snaps_queue = get_osdmap()->get_removed_snaps_queue();
-      auto p = removed_snaps_queue.find(info.pgid.pgid.pool());
-      if (p != removed_snaps_queue.end()) {
-	dout(20) << "activate - purged_snaps " << info.purged_snaps
-		 << " removed_snaps " << p->second
-		 << dendl;
-	for (auto q : p->second) {
-	  to_trim.insert(q.first, q.second);
-	}
+    auto& removed_snaps_queue = get_osdmap()->get_removed_snaps_queue();
+    auto p = removed_snaps_queue.find(info.pgid.pgid.pool());
+    if (p != removed_snaps_queue.end()) {
+      dout(20) << "activate - purged_snaps " << info.purged_snaps
+	       << " removed_snaps " << p->second
+	       << dendl;
+      for (auto q : p->second) {
+	to_trim.insert(q.first, q.second);
       }
     }
     interval_set<snapid_t> purged;
     purged.intersection_of(to_trim, info.purged_snaps);
     to_trim.subtract(purged);
 
-    if (get_osdmap()->require_osd_release >= ceph_release_t::mimic) {
-      // adjust purged_snaps: PG may have been inactive while snaps were pruned
-      // from the removed_snaps_queue in the osdmap.  update local purged_snaps
-      // reflect only those snaps that we thought were pruned and were still in
-      // the queue.
-      info.purged_snaps.swap(purged);
-    }
+    // adjust purged_snaps: PG may have been inactive while snaps were pruned
+    // from the removed_snaps_queue in the osdmap.  update local purged_snaps
+    // reflect only those snaps that we thought were pruned and were still in
+    // the queue.
+    info.purged_snaps.swap(purged);
 
     // start up replicas
 
@@ -3290,20 +3222,18 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
   utime_t cutoff = now;
   cutoff -= cct->_conf->osd_pg_stat_report_interval_max;
 
-  if (get_osdmap()->require_osd_release >= ceph_release_t::mimic) {
-    // share (some of) our purged_snaps via the pg_stats. limit # of intervals
-    // because we don't want to make the pg_stat_t structures too expensive.
-    unsigned max = cct->_conf->osd_max_snap_prune_intervals_per_epoch;
-    unsigned num = 0;
-    auto i = info.purged_snaps.begin();
-    while (num < max && i != info.purged_snaps.end()) {
-      pre_publish.purged_snaps.insert(i.get_start(), i.get_len());
-      ++num;
-      ++i;
-    }
-    psdout(20) << __func__ << " reporting purged_snaps "
-	       << pre_publish.purged_snaps << dendl;
+  // share (some of) our purged_snaps via the pg_stats. limit # of intervals
+  // because we don't want to make the pg_stat_t structures too expensive.
+  unsigned max = cct->_conf->osd_max_snap_prune_intervals_per_epoch;
+  unsigned num = 0;
+  auto i = info.purged_snaps.begin();
+  while (num < max && i != info.purged_snaps.end()) {
+    pre_publish.purged_snaps.insert(i.get_start(), i.get_len());
+    ++num;
+    ++i;
   }
+  psdout(20) << __func__ << " reporting purged_snaps "
+	     << pre_publish.purged_snaps << dendl;
 
   if (pg_stats_publish_valid && pre_publish == pg_stats_publish &&
       info.stats.last_fresh > cutoff) {

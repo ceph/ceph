@@ -68,6 +68,7 @@
 #define CEPH_OSD_FEATURE_INCOMPAT_MISSING CompatSet::Feature(14, "explicit missing set")
 #define CEPH_OSD_FEATURE_INCOMPAT_FASTINFO CompatSet::Feature(15, "fastinfo pg attr")
 #define CEPH_OSD_FEATURE_INCOMPAT_RECOVERY_DELETES CompatSet::Feature(16, "deletes in missing set")
+#define CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER2 CompatSet::Feature(17, "new snapmapper key structure")
 
 
 /// pool priority range set by user
@@ -136,6 +137,12 @@ typedef std::map<std::string,std::string> osd_alert_list_t;
 /// map osd id -> alert_list_t
 typedef std::map<int, osd_alert_list_t> osd_alerts_t;
 void dump(ceph::Formatter* f, const osd_alerts_t& alerts);
+
+
+typedef interval_set<
+  snapid_t,
+  mempool::osdmap::flat_map<snapid_t,snapid_t>> snap_interval_set_t;
+
 
 /**
  * osd request identifier
@@ -1703,17 +1710,11 @@ public:
   bool is_unmanaged_snaps_mode() const;
   bool is_removed_snap(snapid_t s) const;
 
-  /*
-   * build set of known-removed sets from either pool snaps or
-   * explicit removed_snaps set.
-   */
-  void build_removed_snaps(interval_set<snapid_t>& rs) const;
-  bool maybe_updated_removed_snaps(const interval_set<snapid_t>& cached) const;
   snapid_t snap_exists(const char *s) const;
   void add_snap(const char *n, utime_t stamp);
-  void add_unmanaged_snap(uint64_t& snapid);
+  uint64_t add_unmanaged_snap(bool preoctopus_compat);
   void remove_snap(snapid_t s);
-  void remove_unmanaged_snap(snapid_t s);
+  void remove_unmanaged_snap(snapid_t s, bool preoctopus_compat);
 
   SnapContext get_snap_context() const;
 
@@ -4982,22 +4983,19 @@ inline std::ostream& operator<<(std::ostream& out, const ObjectExtent &ex)
 class OSDSuperblock {
 public:
   uuid_d cluster_fsid, osd_fsid;
-  int32_t whoami;    // my role in this fs.
-  epoch_t current_epoch;             // most recent epoch
-  epoch_t oldest_map, newest_map;    // oldest/newest maps we have.
-  double weight;
+  int32_t whoami = -1;    // my role in this fs.
+  epoch_t current_epoch = 0;             // most recent epoch
+  epoch_t oldest_map = 0, newest_map = 0;    // oldest/newest maps we have.
+  double weight = 0.0;
 
   CompatSet compat_features;
 
   // last interval over which i mounted and was then active
-  epoch_t mounted;     // last epoch i mounted
-  epoch_t clean_thru;  // epoch i was active and clean thru
+  epoch_t mounted = 0;     // last epoch i mounted
+  epoch_t clean_thru = 0;  // epoch i was active and clean thru
 
-  OSDSuperblock() : 
-    whoami(-1), 
-    current_epoch(0), oldest_map(0), newest_map(0), weight(0),
-    mounted(0), clean_thru(0) {
-  }
+  epoch_t purged_snaps_last = 0;
+  utime_t last_purged_snaps_scrub;
 
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
@@ -5031,6 +5029,7 @@ inline std::ostream& operator<<(std::ostream& out, const OSDSuperblock& sb)
  */
 struct SnapSet {
   snapid_t seq;
+  // NOTE: this is for pre-octopus compatibility only! remove in Q release
   std::vector<snapid_t> snaps;    // descending
   std::vector<snapid_t> clones;   // ascending
   std::map<snapid_t, interval_set<uint64_t> > clone_overlap;  // overlap w/ next newest
@@ -5057,11 +5056,14 @@ struct SnapSet {
   SnapContext get_ssc_as_of(snapid_t as_of) const {
     SnapContext out;
     out.seq = as_of;
-    for (std::vector<snapid_t>::const_iterator i = snaps.begin();
-	 i != snaps.end();
-	 ++i) {
-      if (*i <= as_of)
-	out.snaps.push_back(*i);
+    for (auto p = clone_snaps.rbegin();
+	 p != clone_snaps.rend();
+	 ++p) {
+      for (auto snap : p->second) {
+	if (snap <= as_of) {
+	  out.snaps.push_back(snap);
+	}
+      }
     }
     return out;
   }

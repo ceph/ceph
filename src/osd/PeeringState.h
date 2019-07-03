@@ -34,10 +34,6 @@ struct PGPool {
   pg_pool_t info;
   SnapContext snapc;   // the default pool snapc, ready to go.
 
-  // these two sets are for < mimic only
-  interval_set<snapid_t> cached_removed_snaps;      // current removed_snaps set
-  interval_set<snapid_t> newly_removed_snaps;  // newly removed in the last epoch
-
   PGPool(CephContext* cct, OSDMapRef map, int64_t i, const pg_pool_t& info,
 	 const string& name)
     : cct(cct),
@@ -46,9 +42,6 @@ struct PGPool {
       name(name),
       info(info) {
     snapc = info.get_snap_context();
-    if (map->require_osd_release < ceph_release_t::mimic) {
-      info.build_removed_snaps(cached_removed_snaps);
-    }
   }
 
   void update(CephContext *cct, OSDMapRef map);

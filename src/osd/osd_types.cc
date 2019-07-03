@@ -1529,32 +1529,6 @@ bool pg_pool_t::is_removed_snap(snapid_t s) const
     return removed_snaps.contains(s);
 }
 
-/*
- * build set of known-removed sets from either pool snaps or
- * explicit removed_snaps set.
- */
-void pg_pool_t::build_removed_snaps(interval_set<snapid_t>& rs) const
-{
-  if (is_pool_snaps_mode()) {
-    rs.clear();
-    for (snapid_t s = 1; s <= get_snap_seq(); s = s + 1)
-      if (snaps.count(s) == 0)
-	rs.insert(s);
-  } else {
-    rs = removed_snaps;
-  }
-}
-
-bool pg_pool_t::maybe_updated_removed_snaps(const interval_set<snapid_t>& cached) const
-{
-  if (is_unmanaged_snaps_mode()) { // remove_unmanaged_snap increments range_end
-    if (removed_snaps.empty() || cached.empty()) // range_end is undefined
-      return removed_snaps.empty() != cached.empty();
-    return removed_snaps.range_end() != cached.range_end();
-  }
-  return true;
-}
-
 snapid_t pg_pool_t::snap_exists(const char *s) const
 {
   for (auto p = snaps.cbegin(); p != snaps.cend(); ++p)
@@ -1574,18 +1548,21 @@ void pg_pool_t::add_snap(const char *n, utime_t stamp)
   snaps[s].stamp = stamp;
 }
 
-void pg_pool_t::add_unmanaged_snap(uint64_t& snapid)
+uint64_t pg_pool_t::add_unmanaged_snap(bool preoctopus_compat)
 {
   ceph_assert(!is_pool_snaps_mode());
   if (snap_seq == 0) {
-    // kludge for pre-mimic tracking of pool vs selfmanaged snaps.  after
-    // mimic this field is not decoded but our flag is set; pre-mimic, we
-    // have a non-empty removed_snaps to signifiy a non-pool-snaps pool.
-    removed_snaps.insert(snapid_t(1));
+    if (preoctopus_compat) {
+      // kludge for pre-mimic tracking of pool vs selfmanaged snaps.  after
+      // mimic this field is not decoded but our flag is set; pre-mimic, we
+      // have a non-empty removed_snaps to signifiy a non-pool-snaps pool.
+      removed_snaps.insert(snapid_t(1));
+    }
     snap_seq = 1;
   }
   flags |= FLAG_SELFMANAGED_SNAPS;
-  snapid = snap_seq = snap_seq + 1;
+  snap_seq = snap_seq + 1;
+  return snap_seq;
 }
 
 void pg_pool_t::remove_snap(snapid_t s)
@@ -1595,14 +1572,16 @@ void pg_pool_t::remove_snap(snapid_t s)
   snap_seq = snap_seq + 1;
 }
 
-void pg_pool_t::remove_unmanaged_snap(snapid_t s)
+void pg_pool_t::remove_unmanaged_snap(snapid_t s, bool preoctopus_compat)
 {
   ceph_assert(is_unmanaged_snaps_mode());
-  removed_snaps.insert(s);
-  snap_seq = snap_seq + 1;
-  // try to add in the new seq, just to try to keep the interval_set contiguous
-  if (!removed_snaps.contains(get_snap_seq())) {
-    removed_snaps.insert(get_snap_seq());
+  ++snap_seq;
+  if (preoctopus_compat) {
+    removed_snaps.insert(s);
+    // try to add in the new seq, just to try to keep the interval_set contiguous
+    if (!removed_snaps.contains(get_snap_seq())) {
+      removed_snaps.insert(get_snap_seq());
+    }
   }
 }
 
@@ -5222,7 +5201,7 @@ void pg_hit_set_history_t::generate_test_instances(list<pg_hit_set_history_t*>& 
 
 void OSDSuperblock::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(8, 5, bl);
+  ENCODE_START(9, 5, bl);
   encode(cluster_fsid, bl);
   encode(whoami, bl);
   encode(current_epoch, bl);
@@ -5235,12 +5214,14 @@ void OSDSuperblock::encode(ceph::buffer::list &bl) const
   encode(osd_fsid, bl);
   encode((epoch_t)0, bl);  // epoch_t last_epoch_marked_full
   encode((uint32_t)0, bl);  // map<int64_t,epoch_t> pool_last_epoch_marked_full
+  encode(purged_snaps_last, bl);
+  encode(last_purged_snaps_scrub, bl);
   ENCODE_FINISH(bl);
 }
 
 void OSDSuperblock::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(8, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(9, 5, 5, bl);
   if (struct_v < 3) {
     string magic;
     decode(magic, bl);
@@ -5268,6 +5249,12 @@ void OSDSuperblock::decode(ceph::buffer::list::const_iterator &bl)
     map<int64_t,epoch_t> pool_last_map_marked_full;
     decode(pool_last_map_marked_full, bl);
   }
+  if (struct_v >= 9) {
+    decode(purged_snaps_last, bl);
+    decode(last_purged_snaps_scrub, bl);
+  } else {
+    purged_snaps_last = 0;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -5285,6 +5272,8 @@ void OSDSuperblock::dump(Formatter *f) const
   f->close_section();
   f->dump_int("clean_thru", clean_thru);
   f->dump_int("last_epoch_mounted", mounted);
+  f->dump_unsigned("purged_snaps_last", purged_snaps_last);
+  f->dump_stream("last_purged_snaps_scrub") << last_purged_snaps_scrub;
 }
 
 void OSDSuperblock::generate_test_instances(list<OSDSuperblock*>& o)
