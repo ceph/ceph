@@ -25,7 +25,7 @@ class TestOSDPath(object):
         validator = arg_validators.OSDPath()
         with pytest.raises(argparse.ArgumentError) as error:
             validator(tmppath)
-        assert 'Required file (ceph_fsid) was not found in OSD' in str(error)
+        assert 'Required file (ceph_fsid) was not found in OSD' in str(error.value)
 
 
 class TestExcludeGroupOptions(object):

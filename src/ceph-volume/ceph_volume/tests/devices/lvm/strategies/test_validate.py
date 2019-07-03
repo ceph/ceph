@@ -14,7 +14,7 @@ class TestMinimumDeviceSize(object):
         with pytest.raises(RuntimeError) as error:
             validators.minimum_device_size(devices)
         msg = "LVs would be smaller than 5GB"
-        assert msg in str(error)
+        assert msg in str(error.value)
 
     def test_large_device_multiple_osds_fails(self, fakedevice):
         devices = [fakedevice(sys_api=dict(size=6073740000))]
@@ -23,7 +23,7 @@ class TestMinimumDeviceSize(object):
                 devices, osds_per_device=4
             )
         msg = "LVs would be smaller than 5GB"
-        assert msg in str(error)
+        assert msg in str(error.value)
 
 
 class TestMinimumCollocatedDeviceSize(object):
@@ -40,7 +40,7 @@ class TestMinimumCollocatedDeviceSize(object):
         with pytest.raises(RuntimeError) as error:
             validators.minimum_device_collocated_size(devices, self.journal_size)
         msg = "LVs would be smaller than 5GB"
-        assert msg in str(error)
+        assert msg in str(error.value)
 
     def test_large_device_multiple_osds_fails(self, fakedevice):
         devices = [fakedevice(sys_api=dict(size=16073740000))]
@@ -49,4 +49,4 @@ class TestMinimumCollocatedDeviceSize(object):
                 devices, self.journal_size, osds_per_device=3
             )
         msg = "LVs would be smaller than 5GB"
-        assert msg in str(error)
+        assert msg in str(error.value)
