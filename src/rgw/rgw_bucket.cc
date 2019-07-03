@@ -151,23 +151,28 @@ int rgw_read_user_buckets(RGWRados * store,
                                        is_truncated, default_amount);
 }
 
-int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *target_bucket_instance, int *shard_id)
+int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *bucket_name, string *bucket_id, int *shard_id)
 {
-  ssize_t pos = bucket_instance.rfind(':');
-  if (pos < 0) {
+  auto pos = bucket_instance.rfind(':');
+  if (pos == string::npos) {
     return -EINVAL;
   }
 
   string first = bucket_instance.substr(0, pos);
   string second = bucket_instance.substr(pos + 1);
 
-  if (first.find(':') == string::npos) {
+  pos = first.find(':');
+
+  if (pos == string::npos) {
     *shard_id = -1;
-    *target_bucket_instance = bucket_instance;
+    *bucket_name = first;
+    *bucket_id = second;
     return 0;
   }
 
-  *target_bucket_instance = first;
+  *bucket_name = first.substr(0, pos);
+  *bucket_id = first.substr(pos + 1);
+
   string err;
   *shard_id = strict_strtol(second.c_str(), 10, &err);
   if (!err.empty()) {
