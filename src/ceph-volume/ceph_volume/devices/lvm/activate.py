@@ -109,14 +109,16 @@ def get_osd_device_path(osd_lv, lvs, device_type, dmcrypt_secret=None):
             encryption_utils.luks_open(dmcrypt_secret, device_lv.lv_path, device_uuid)
             return '/dev/mapper/%s' % device_uuid
         return device_lv.lv_path
-    else:
-        # this could be a regular device, so query it with blkid
-        physical_device = disk.get_device_from_partuuid(device_uuid)
-        if physical_device and is_encrypted:
+
+    # this could be a regular device, so query it with blkid
+    physical_device = disk.get_device_from_partuuid(device_uuid)
+    if physical_device:
+        if is_encrypted:
             encryption_utils.luks_open(dmcrypt_secret, physical_device, device_uuid)
             return '/dev/mapper/%s' % device_uuid
-        return physical_device or None
-    return None
+        return physical_device
+
+    raise RuntimeError('could not find %s with uuid %s' % (device_type, device_uuid))
 
 
 def activate_bluestore(lvs, no_systemd=False):
