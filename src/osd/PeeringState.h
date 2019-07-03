@@ -113,7 +113,7 @@ public:
     /// Notify that info/history changed (generally to update scrub registration)
     virtual void on_info_history_change() = 0;
     /// Notify that a scrub has been requested
-    virtual void scrub_requested(bool deep, bool repair) = 0;
+    virtual void scrub_requested(bool deep, bool repair, bool need_auto = false) = 0;
 
     /// Return current snap_trimq size
     virtual uint64_t get_snap_trimq_size() const = 0;
