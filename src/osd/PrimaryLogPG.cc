@@ -4897,14 +4897,9 @@ struct FillInVerifyExtent : public Context {
   bufferlist *outdatap;
   std::optional<uint32_t> maybe_crc;
   uint64_t size;
-  OSDService *osd;
-  hobject_t soid;
-  __le32 flags;
   FillInVerifyExtent(ceph_le64 *r, int32_t *rv, bufferlist *blp,
-		     std::optional<uint32_t> mc, uint64_t size,
-		     OSDService *osd, hobject_t soid, __le32 flags) :
-    r(r), rval(rv), outdatap(blp), maybe_crc(mc),
-    size(size), osd(osd), soid(soid), flags(flags) {}
+		     std::optional<uint32_t> mc, uint64_t size) :
+    r(r), rval(rv), outdatap(blp), maybe_crc(mc), size(size) {}
   void finish(int len) override {
     *r = len;
     if (len < 0) {
@@ -4917,13 +4912,7 @@ struct FillInVerifyExtent : public Context {
     if (maybe_crc && *r == size) {
       uint32_t crc = outdatap->crc32c(-1);
       if (maybe_crc != crc) {
-        osd->clog->error() << std::hex << " full-object read crc 0x" << crc
-			   << " != expected 0x" << *maybe_crc
-			   << std::dec << " on " << soid;
-        if (!(flags & CEPH_OSD_OP_FLAG_FAILOK)) {
-	  *rval = -EIO;
-	  *r = 0;
-	}
+        *rval = -EFAULT;
       }
     }
   }
@@ -4995,6 +4984,24 @@ void PrimaryLogPG::maybe_create_new_object(
   }
 }
 
+struct UserReadFinisher : public PrimaryLogPG::OpFinisher {
+  PrimaryLogPG::OpContext *ctx;
+  OSDOp& osd_op;
+
+  explicit UserReadFinisher(PrimaryLogPG::OpContext *ctx, OSDOp& osd_op) :
+    ctx(ctx), osd_op(osd_op) { }
+
+  int execute() override {
+    if (osd_op.rval < 0 && !(osd_op.op.flags & CEPH_OSD_OP_FLAG_FAILOK))
+      osd_op.op.extent.length = 0;
+
+    ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.op.extent.length, 10);
+    ctx->delta_stats.num_rd++;
+
+    return osd_op.rval;
+  }
+};
+
 struct ReadFinisher : public PrimaryLogPG::OpFinisher {
   OSDOp& osd_op;
 
@@ -5022,8 +5029,7 @@ struct C_ChecksumRead : public Context {
     : primary_log_pg(primary_log_pg), osd_op(osd_op),
       csum_type(csum_type), init_value_bl(std::move(init_value_bl)),
       fill_extent_ctx(new FillInVerifyExtent(&read_length, &osd_op.rval,
-					     &read_bl, maybe_crc, size,
-					     osd, soid, flags)) {
+					     &read_bl, maybe_crc, size)) {
   }
   ~C_ChecksumRead() override {
     delete fill_extent_ctx;
@@ -5233,8 +5239,7 @@ struct C_ExtentCmpRead : public Context {
 		  OSDService *osd, hobject_t soid, __le32 flags)
     : primary_log_pg(primary_log_pg), osd_op(osd_op),
       fill_extent_ctx(new FillInVerifyExtent(&read_length, &osd_op.rval,
-					     &read_bl, maybe_crc, size,
-					     osd, soid, flags)) {
+					     &read_bl, maybe_crc, size)) {
   }
   ~C_ExtentCmpRead() override {
     delete fill_extent_ctx;
@@ -5388,12 +5393,11 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
         boost::make_tuple(op.extent.offset, op.extent.length, op.flags),
         make_pair(&osd_op.outdata,
 		  new FillInVerifyExtent(&op.extent.length, &osd_op.rval,
-					 &osd_op.outdata, maybe_crc, oi.size,
-					 osd, soid, op.flags))));
+					 &osd_op.outdata, maybe_crc, oi.size))));
     dout(10) << " async_read noted for " << soid << dendl;
 
     ctx->op_finishers[ctx->current_osd_subop_num].reset(
-      new ReadFinisher(osd_op));
+      new UserReadFinisher(ctx, osd_op));
   } else {
     int r = pgbackend->objects_read_sync(
       soid, op.extent.offset, op.extent.length, op.flags, &osd_op.outdata);
@@ -5422,10 +5426,10 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op) {
     }
     dout(10) << " read got " << r << " / " << op.extent.length
 	     << " bytes from obj " << soid << dendl;
-  }
-  if (result >= 0) {
-    ctx->delta_stats.num_rd_kb += shift_round_up(op.extent.length, 10);
-    ctx->delta_stats.num_rd++;
+    if (result >= 0) {
+      ctx->delta_stats.num_rd_kb += shift_round_up(op.extent.length, 10);
+      ctx->delta_stats.num_rd++;
+    }
   }
   return result;
 }
@@ -5463,7 +5467,7 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
       dout(10) << " async_read (was sparse_read) noted for " << soid << dendl;
 
       ctx->op_finishers[ctx->current_osd_subop_num].reset(
-        new ReadFinisher(osd_op));
+        new UserReadFinisher(ctx, osd_op));
     } else {
       dout(10) << " sparse read ended up empty for " << soid << dendl;
       map<uint64_t, uint64_t> extents;
@@ -5566,10 +5570,11 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
 
     dout(10) << " sparse_read got " << total_read << " bytes from object "
 	     << soid << dendl;
+
+    ctx->delta_stats.num_rd_kb += shift_round_up(op.extent.length, 10);
+    ctx->delta_stats.num_rd++;
   }
 
-  ctx->delta_stats.num_rd_kb += shift_round_up(op.extent.length, 10);
-  ctx->delta_stats.num_rd++;
   return 0;
 }
 
@@ -8468,6 +8473,15 @@ void PrimaryLogPG::complete_read_ctx(int result, OpContext *ctx)
 
   for (vector<OSDOp>::iterator p = ctx->ops->begin();
     p != ctx->ops->end() && result >= 0; ++p) {
+    if (p->rval == -EFAULT) {
+      uint32_t crc = p->outdata.crc32c(-1);
+      osd->clog->error() << std::hex << " full-object read crc 0x" << crc
+        << " != expected 0x" << ctx->new_obs.oi.data_digest
+        << std::dec << " on " << ctx->new_obs.oi.soid;
+      if (!(p->op.flags & CEPH_OSD_OP_FLAG_FAILOK)) {
+        p->rval = -EIO;
+      }
+    }
     if (p->rval < 0 && !(p->op.flags & CEPH_OSD_OP_FLAG_FAILOK)) {
       result = p->rval;
       break;
