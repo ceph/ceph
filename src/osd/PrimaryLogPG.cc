@@ -2028,12 +2028,8 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
   hobject_t missing_oid;
 
   // kludge around the fact that LIST_SNAPS sets CEPH_SNAPDIR for LIST_SNAPS
-  hobject_t _oid_head;
-  if (m->get_snapid() == CEPH_SNAPDIR) {
-    _oid_head = m->get_hobj().get_head();
-  }
   const hobject_t& oid =
-    m->get_snapid() == CEPH_SNAPDIR ? _oid_head : m->get_hobj();
+    m->get_snapid() == CEPH_SNAPDIR ? head : m->get_hobj();
 
   // make sure LIST_SNAPS is on CEPH_SNAPDIR and nothing else
   for (vector<OSDOp>::iterator p = m->ops.begin(); p != m->ops.end(); ++p) {
