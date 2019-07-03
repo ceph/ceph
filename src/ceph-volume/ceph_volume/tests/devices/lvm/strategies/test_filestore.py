@@ -26,7 +26,7 @@ class TestSingleType(object):
         with pytest.raises(RuntimeError) as error:
             filestore.SingleType(devices, args)
         msg = "Unable to use device 5.66 GB /dev/sda, LVs would be smaller than 5GB"
-        assert msg in str(error)
+        assert msg in str(error.value)
 
     def test_ssd_device_is_large_enough(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '5120')
@@ -49,7 +49,7 @@ class TestSingleType(object):
         with pytest.raises(RuntimeError) as error:
             filestore.SingleType(devices, args)
         msg = "Unable to use device 5.66 GB /dev/sda, LVs would be smaller than 5GB"
-        assert msg in str(error)
+        assert msg in str(error.value)
 
     def test_ssd_device_multi_osd(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '5120')
@@ -60,7 +60,7 @@ class TestSingleType(object):
         with pytest.raises(RuntimeError) as error:
             filestore.SingleType(devices, args)
         msg = "Unable to use device 14.97 GB /dev/sda, LVs would be smaller than 5GB"
-        assert msg in str(error)
+        assert msg in str(error.value)
 
     def test_hdd_device_multi_osd(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '5120')
@@ -71,7 +71,7 @@ class TestSingleType(object):
         with pytest.raises(RuntimeError) as error:
             filestore.SingleType(devices, args)
         msg = "Unable to use device 14.97 GB /dev/sda, LVs would be smaller than 5GB"
-        assert msg in str(error)
+        assert msg in str(error.value)
 
     def test_device_is_lvm_member_fails(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '5120')
@@ -81,7 +81,7 @@ class TestSingleType(object):
         ]
         with pytest.raises(RuntimeError) as error:
             filestore.SingleType(devices, args)
-        assert 'Unable to use device, already a member of LVM' in str(error)
+        assert 'Unable to use device, already a member of LVM' in str(error.value)
 
     def test_hdd_device_with_small_configured_journal(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '120')
@@ -92,7 +92,7 @@ class TestSingleType(object):
         with pytest.raises(RuntimeError) as error:
             filestore.SingleType(devices, args)
         msg = "journal sizes must be larger than 2GB, detected: 120.00 MB"
-        assert msg in str(error)
+        assert msg in str(error.value)
 
     def test_ssd_device_with_small_configured_journal(self, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '120')
@@ -103,7 +103,7 @@ class TestSingleType(object):
         with pytest.raises(RuntimeError) as error:
             filestore.SingleType(devices, args)
         msg = "journal sizes must be larger than 2GB, detected: 120.00 MB"
-        assert msg in str(error)
+        assert msg in str(error.value)
 
 
 class TestMixedType(object):
@@ -118,7 +118,7 @@ class TestMixedType(object):
         with pytest.raises(RuntimeError) as error:
             filestore.MixedType(devices, args)
         msg = "journal sizes must be larger than 2GB, detected: 120.00 MB"
-        assert msg in str(error)
+        assert msg in str(error.value)
 
     def test_ssd_device_is_not_large_enough(self, stub_vgs, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '7120')
@@ -130,7 +130,7 @@ class TestMixedType(object):
         with pytest.raises(RuntimeError) as error:
             filestore.MixedType(devices, args)
         msg = "Not enough space in fast devices (5.66 GB) to create 1 x 6.95 GB journal LV"
-        assert msg in str(error)
+        assert msg in str(error.value)
 
     def test_hdd_device_is_lvm_member_fails(self, stub_vgs, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '5120')
@@ -141,7 +141,7 @@ class TestMixedType(object):
         ]
         with pytest.raises(RuntimeError) as error:
             filestore.MixedType(devices, args)
-        assert 'Unable to use device, already a member of LVM' in str(error)
+        assert 'Unable to use device, already a member of LVM' in str(error.value)
 
     def test_ssd_is_lvm_member_doesnt_fail(self, volumes, stub_vgs, fakedevice, factory, conf_ceph):
         # fast PV, because ssd is an LVM member
@@ -195,7 +195,7 @@ class TestMixedType(object):
         with pytest.raises(RuntimeError) as error:
             filestore.MixedType(devices, args)
 
-        assert 'Could not find a common VG between devices' in str(error)
+        assert 'Could not find a common VG between devices' in str(error.value)
 
     def test_ssd_device_fails_multiple_osds(self, stub_vgs, fakedevice, factory, conf_ceph):
         conf_ceph(get_safe=lambda *a: '15120')
@@ -207,4 +207,4 @@ class TestMixedType(object):
         with pytest.raises(RuntimeError) as error:
             filestore.MixedType(devices, args)
         msg = "Not enough space in fast devices (14.97 GB) to create 2 x 14.77 GB journal LV"
-        assert msg in str(error)
+        assert msg in str(error.value)
