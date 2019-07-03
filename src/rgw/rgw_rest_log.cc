@@ -390,13 +390,15 @@ void RGWOp_BILog_List::execute() {
   }
 
   int shard_id;
-  http_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bucket_instance, &shard_id);
+  string bn;
+  http_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bn, &bucket_instance, &shard_id);
   if (http_ret < 0) {
     return;
   }
 
   if (!bucket_instance.empty()) {
-    http_ret = store->get_bucket_instance_info(*s->sysobj_ctx, bucket_instance, bucket_info, NULL, NULL, s->yield);
+    rgw_bucket b(rgw_bucket_key(tenant_name, bucket_name, bucket_instance));
+    http_ret = store->get_bucket_instance_info(*s->sysobj_ctx, b, bucket_info, NULL, NULL, s->yield);
     if (http_ret < 0) {
       ldpp_dout(s, 5) << "could not get bucket instance info for bucket instance id=" << bucket_instance << dendl;
       return;
@@ -481,13 +483,15 @@ void RGWOp_BILog_Info::execute() {
   }
 
   int shard_id;
-  http_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bucket_instance, &shard_id);
+  string bn;
+  http_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bn, &bucket_instance, &shard_id);
   if (http_ret < 0) {
     return;
   }
 
   if (!bucket_instance.empty()) {
-    http_ret = store->get_bucket_instance_info(*s->sysobj_ctx, bucket_instance, bucket_info, NULL, NULL, s->yield);
+    rgw_bucket b(rgw_bucket_key(tenant_name, bucket_name, bucket_instance));
+    http_ret = store->get_bucket_instance_info(*s->sysobj_ctx, b, bucket_info, NULL, NULL, s->yield);
     if (http_ret < 0) {
       ldpp_dout(s, 5) << "could not get bucket instance info for bucket instance id=" << bucket_instance << dendl;
       return;
@@ -543,13 +547,15 @@ void RGWOp_BILog_Delete::execute() {
   }
 
   int shard_id;
-  http_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bucket_instance, &shard_id);
+  string bn;
+  http_ret = rgw_bucket_parse_bucket_instance(bucket_instance, &bn, &bucket_instance, &shard_id);
   if (http_ret < 0) {
     return;
   }
 
   if (!bucket_instance.empty()) {
-    http_ret = store->get_bucket_instance_info(*s->sysobj_ctx, bucket_instance, bucket_info, NULL, NULL, s->yield);
+    rgw_bucket b(rgw_bucket_key(tenant_name, bucket_name, bucket_instance));
+    http_ret = store->get_bucket_instance_info(*s->sysobj_ctx, b, bucket_info, NULL, NULL, s->yield);
     if (http_ret < 0) {
       ldpp_dout(s, 5) << "could not get bucket instance info for bucket instance id=" << bucket_instance << dendl;
       return;
