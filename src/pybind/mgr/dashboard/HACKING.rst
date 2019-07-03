@@ -207,6 +207,11 @@ constructor of the ``Helper`` class.
       // ...
    }
 
+Please refer to the official `Protractor style-guide
+<https://www.protractortest.org/#/style-guide>`__
+for a better insight on how to write and structure tests
+as well as what exactly should be covered by end-to-end tests.
+
 Further Help
 ~~~~~~~~~~~~
 
