@@ -2883,6 +2883,14 @@ int OSD::init()
     if (r < 0)
       goto out;
   }
+  if (!store->exists(service.meta_ch, OSD::make_purged_snaps_oid())) {
+    dout(10) << "init creating/touching purged_snaps object" << dendl;
+    ObjectStore::Transaction t;
+    t.touch(coll_t::meta(), OSD::make_purged_snaps_oid());
+    r = store->queue_transaction(service.meta_ch, std::move(t));
+    if (r < 0)
+      goto out;
+  }
 
   class_handler = new ClassHandler(cct);
   cls_initialize(class_handler);
@@ -5529,7 +5537,7 @@ void OSD::handle_get_purged_snaps_reply(MMonGetPurgedSnapsReply *m)
     goto out;
   }
   SnapMapper::record_purged_snaps(cct, store, service.meta_ch,
-				  make_snapmapper_oid(), &t,
+				  make_purged_snaps_oid(), &t,
 				  m->purged_snaps);
   superblock.purged_snaps_last = m->last;
   write_superblock(t);
@@ -6633,7 +6641,8 @@ void OSD::scrub_purged_snaps()
   dout(10) << __func__ << dendl;
   ceph_assert(ceph_mutex_is_locked(osd_lock));
   SnapMapper::Scrubber s(cct, store, service.meta_ch,
-			 make_snapmapper_oid());
+			 make_snapmapper_oid(),
+			 make_purged_snaps_oid());
   clog->debug() << "purged_snaps scrub starts";
   osd_lock.unlock();
   s.run();
@@ -7812,7 +7821,7 @@ void OSD::handle_osd_map(MOSDMap *m)
   // record new purged_snaps
   if (superblock.purged_snaps_last == start - 1) {
     SnapMapper::record_purged_snaps(cct, store, service.meta_ch,
-				    make_snapmapper_oid(), &t,
+				    make_purged_snaps_oid(), &t,
 				    purged_snaps);
     superblock.purged_snaps_last = last;
   } else {

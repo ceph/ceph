@@ -586,11 +586,11 @@ void SnapMapper::Scrubber::run()
 
   _init();
 
-  psit = store->get_omap_iterator(ch, hoid);
+  psit = store->get_omap_iterator(ch, purged_snaps_hoid);
   psit->upper_bound(PURGED_SNAP_PREFIX);
   _parse_p();
 
-  mapit = store->get_omap_iterator(ch, hoid);
+  mapit = store->get_omap_iterator(ch, mapping_hoid);
   mapit->upper_bound(MAPPING_PREFIX);
 
   while (_parse_m()) {

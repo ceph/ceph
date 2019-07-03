@@ -142,7 +142,8 @@ public:
     CephContext *cct;
     ObjectStore *store;
     ObjectStore::CollectionHandle ch;
-    ghobject_t hoid;
+    ghobject_t mapping_hoid;
+    ghobject_t purged_snaps_hoid;
 
     ObjectMap::ObjectMapIterator psit;
     int64_t pool;
@@ -162,12 +163,13 @@ public:
       CephContext *cct,
       ObjectStore *store,
       ObjectStore::CollectionHandle& ch,
-      ghobject_t hoid)
+      ghobject_t mapping_hoid,
+      ghobject_t purged_snaps_hoid)
       : cct(cct),
 	store(store),
 	ch(ch),
-	hoid(hoid) {}
-
+	mapping_hoid(mapping_hoid),
+	purged_snaps_hoid(purged_snaps_hoid) {}
 
     void _init();
     void run();
@@ -191,7 +193,8 @@ public:
     CephContext *cct,
     ObjectStore *store,
     ObjectStore::CollectionHandle& ch,
-    ghobject_t hoid);
+    ghobject_t mapper_hoid,
+    ghobject_t purged_snaps_hoid);
 
 private:
   static int _lookup_purged_snap(
