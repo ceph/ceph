@@ -384,7 +384,7 @@ class TestVolumeGroupFree(object):
         vg = api.VolumeGroup(vg_name='nosize', vg_free='F')
         with pytest.raises(RuntimeError) as error:
             vg.free
-        assert "Unable to convert vg size to integer: 'F'" in str(error)
+        assert "Unable to convert vg size to integer: 'F'" in str(error.value)
 
     def test_invalid_float(self):
         vg = api.VolumeGroup(vg_name='nosize', vg_free=' g')
@@ -464,7 +464,7 @@ class TestVolumeGroupSizing(object):
     def test_parts_and_size_errors(self):
         with pytest.raises(ValueError) as error:
             self.vg.sizing(parts=4, size=10)
-        assert "Cannot process sizing" in str(error)
+        assert "Cannot process sizing" in str(error.value)
 
     def test_zero_parts_produces_100_percent(self):
         result = self.vg.sizing(parts=0)

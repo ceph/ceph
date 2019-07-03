@@ -36,7 +36,7 @@ class TestSingleType(object):
         ]
         with pytest.raises(RuntimeError) as error:
             bluestore.SingleType.with_auto_devices(args, devices)
-        assert 'Unable to use device 5.66 GB /dev/sda' in str(error)
+        assert 'Unable to use device 5.66 GB /dev/sda' in str(error.value)
 
     def test_device_is_lvm_member_fails(self, fakedevice, factory):
         args = factory(filtered_devices=[], osds_per_device=1,
@@ -46,7 +46,7 @@ class TestSingleType(object):
         ]
         with pytest.raises(RuntimeError) as error:
             bluestore.SingleType.with_auto_devices(args, devices)
-        assert 'Unable to use device, already a member of LVM' in str(error)
+        assert 'Unable to use device, already a member of LVM' in str(error.value)
 
 
 class TestMixedType(object):
@@ -97,7 +97,7 @@ class TestMixedTypeConfiguredSize(object):
         with pytest.raises(RuntimeError) as error:
             bluestore.MixedType.with_auto_devices(args, devices).computed['osds'][0]
         expected = 'Not enough space in fast devices (5.66 GB) to create 1 x 7.22 GB block.db LV'
-        assert expected in str(error)
+        assert expected in str(error.value)
 
     def test_multi_hdd_device_is_not_large_enough(self, stub_vgs, fakedevice, factory, conf_ceph):
         # 3GB block.db in ceph.conf
@@ -112,7 +112,7 @@ class TestMixedTypeConfiguredSize(object):
         with pytest.raises(RuntimeError) as error:
             bluestore.MixedType.with_auto_devices(args, devices)
         expected = 'Unable to use device 5.66 GB /dev/sda, LVs would be smaller than 5GB'
-        assert expected in str(error)
+        assert expected in str(error.value)
 
 
 class TestMixedTypeLargeAsPossible(object):
@@ -165,7 +165,7 @@ class TestMixedTypeLargeAsPossible(object):
         with pytest.raises(RuntimeError) as error:
             bluestore.MixedType.with_auto_devices(args, devices)
         expected = 'Unable to use device 5.66 GB /dev/sda, LVs would be smaller than 5GB'
-        assert expected in str(error)
+        assert expected in str(error.value)
 
 
 class TestMixedTypeWithExplicitDevices(object):
@@ -198,4 +198,4 @@ class TestMixedTypeWithExplicitDevices(object):
         with pytest.raises(RuntimeError) as error:
             bluestore.MixedType(args, [hdd], [], [ssd]).computed['osds'][0]
         expected = 'Unable to use device 1.50 GB /dev/sda, LVs would be smaller than 1GB'
-        assert expected in str(error), str(error)
+        assert expected in str(error.value), str(error)

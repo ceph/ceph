@@ -15,7 +15,7 @@ class TestActivate(object):
         os.environ['CEPH_VOLUME_SIMPLE_JSON_DIR'] = '/non/existing/path'
         with pytest.raises(RuntimeError) as error:
             activate.Activate(['1', 'asdf']).main()
-        assert 'RuntimeError: Expected JSON config path not found' in str(error)
+        assert 'Expected JSON config path not found' in str(error.value)
 
     def test_main_spits_help_with_no_arguments(self, capsys):
         activate.Activate([]).main()
@@ -132,13 +132,13 @@ class TestValidateDevices(object):
         activation = activate.Activate([])
         with pytest.raises(RuntimeError) as error:
             activation.validate_devices({'type': 'filestore', 'data': {}})
-        assert 'Unable to activate filestore OSD due to missing devices' in str(error)
+        assert 'Unable to activate filestore OSD due to missing devices' in str(error.value)
 
     def test_filestore_missing_data(self):
         activation = activate.Activate([])
         with pytest.raises(RuntimeError) as error:
             activation.validate_devices({'type': 'filestore', 'journal': {}})
-        assert 'Unable to activate filestore OSD due to missing devices' in str(error)
+        assert 'Unable to activate filestore OSD due to missing devices' in str(error.value)
 
     def test_filestore_journal_device_found(self, capsys):
         activation = activate.Activate([])
@@ -180,7 +180,7 @@ class TestValidateDevices(object):
         activation = activate.Activate([])
         with pytest.raises(RuntimeError) as error:
             activation.validate_devices({'type': 'bluestore', 'block': {}})
-        assert 'Unable to activate bluestore OSD due to missing devices' in str(error)
+        assert 'Unable to activate bluestore OSD due to missing devices' in str(error.value)
 
     def test_bluestore_block_device_found(self, capsys):
         activation = activate.Activate([])
