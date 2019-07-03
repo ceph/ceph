@@ -909,7 +909,7 @@ protected:
   void _trim_negative_child_dentries(InodeRef& in);
 
   void dump_inode(Formatter *f, Inode *in, set<Inode*>& did, bool disconnected);
-  void dump_cache(Formatter *f);  // debug
+  void dump_cache(Formatter *f,uint64_t inode_no = 0);  // debug
 
   // force read-only
   void force_session_readonly(MetaSession *s);
