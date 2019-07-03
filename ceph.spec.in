@@ -151,7 +151,8 @@ BuildRequires:	fuse-devel
 %if 0%{?rhel} == 7
 # devtoolset offers newer make and valgrind-devel, but the old ones are good
 # enough.
-BuildRequires:	devtoolset-8-gcc-c++ >= 8.2.1
+# see https://github.com/ceph/ceph/pull/28859
+BuildRequires:	devtoolset-8-gcc-c++ = 8.2.1
 %else
 BuildRequires:	gcc-c++
 %endif
