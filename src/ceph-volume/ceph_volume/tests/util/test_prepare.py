@@ -319,7 +319,7 @@ class TestMkfsBluestore(object):
         stub_call(([], [], 1))
         with pytest.raises(RuntimeError) as error:
             prepare.osd_mkfs_bluestore('1', 'asdf-1234', keyring='keyring')
-        assert "Command failed with exit code 1" in str(error)
+        assert "Command failed with exit code 1" in str(error.value)
 
     def test_non_zero_exit_formats_command_correctly(self, stub_call, monkeypatch):
         conf.cluster = 'ceph'
@@ -336,7 +336,7 @@ class TestMkfsBluestore(object):
             '--keyfile', '-', '--osd-data', '/var/lib/ceph/osd/ceph-1/',
             '--osd-uuid', 'asdf-1234',
             '--setuser', 'ceph', '--setgroup', 'ceph'])
-        assert expected in str(error)
+        assert expected in str(error.value)
 
 
 class TestGetJournalSize(object):
@@ -389,5 +389,5 @@ class TestGetJournalSize(object):
         """))
         with pytest.raises(RuntimeError) as error:
             prepare.get_journal_size()
-        assert 'journal sizes must be larger' in str(error)
-        assert 'detected: 1024.00 MB' in str(error)
+        assert 'journal sizes must be larger' in str(error.value)
+        assert 'detected: 1024.00 MB' in str(error.value)
