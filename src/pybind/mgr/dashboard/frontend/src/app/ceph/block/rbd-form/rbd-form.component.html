@@ -184,7 +184,7 @@
 
         <!-- Features -->
         <div class="form-group"
-             [ngClass]="{'has-error': (formDir.submitted || featuresFormGroups.dirty) && featuresFormGroups.invalid}"
+             [ngClass]="{'has-error': (formDir.submitted || rbdForm.get('features').dirty) && rbdForm.get('features').invalid}"
              formGroupName="features">
           <label i18n
                  class="col-sm-3 control-label"
