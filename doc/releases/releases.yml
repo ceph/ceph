@@ -35,6 +35,7 @@ releases:
         released: 2018-07-01
       - version: 13.2.0
         released: 2018-06-01
+    target_eol: 2020-06-01
   
   luminous:
     releases:
@@ -64,6 +65,7 @@ releases:
         released: 2017-09-01
       - version: 12.2.0
         released: 2017-08-01
+    target_eol: 2019-06-01
   
   kraken:
     target_eol: 2017-08-01
