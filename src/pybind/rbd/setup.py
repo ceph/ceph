@@ -55,7 +55,7 @@ def get_python_flags():
     if os.environ.get('VIRTUAL_ENV', None):
         python = "python"
     else:
-        python = 'python' + str(sys.version_info.major) + '.' + str(sys.version_info.minor)
+        python = sys.executable
 
     python_config = python + '-config'
 
