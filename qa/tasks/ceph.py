@@ -1335,7 +1335,7 @@ def run_daemon(ctx, config, type_):
 
     :param ctx: Context
     :param config: Configuration
-    :paran type_: Role type
+    :param type_: Role type
     """
     cluster_name = config['cluster']
     log.info('Starting %s daemons in cluster %s...', type_, cluster_name)
