@@ -6365,6 +6365,27 @@ int OSDMonitor::_lookup_snap(bool purged,
 	     << "', wrong prefix" << dendl;
     return -ENOENT;
   }
+  string gotk = it->key();
+  const char *format;
+  if (purged) {
+    format = "purged_snap_%llu_";
+  } else {
+    format = "removed_snap_%llu_";
+  }
+  long long int keypool;
+  int n = sscanf(gotk.c_str(), format, &keypool);
+  if (n != 1) {
+    derr << __func__ << " invalid k '" << gotk << "'" << dendl;
+    return -ENOENT;
+  }
+  if (pool != keypool) {
+    dout(20) << __func__ << (purged ? " (purged)" : " (removed)")
+	     << " pool " << pool << " snap " << snap
+	     << " - key '" << k << "' got '" << gotk
+	     << "', wrong pool " << keypool
+	     << dendl;
+    return -ENOENT;
+  }
   bufferlist v = it->value();
   auto p = v.cbegin();
   decode(*begin, p);

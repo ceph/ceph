@@ -1184,6 +1184,12 @@ public:
 	object_t("snapmapper"),
 	0)));
   }
+  static ghobject_t make_purged_snaps_oid() {
+    return ghobject_t(hobject_t(
+      sobject_t(
+	object_t("purged_snaps"),
+	0)));
+  }
 
   static ghobject_t make_pg_log_oid(spg_t pg) {
     stringstream ss;
