@@ -6040,7 +6040,7 @@ function TEST_request_scrub_priority() {
     done
 
     # Verify that the requested scrub ran first
-    grep "log_channel.*scrub ok" $dir/osd.${primary}.log | head -1 | sed 's/.*[[]DBG[]]//' | grep -q $pg || return 1
+    grep "log_channel.*scrub ok" $dir/osd.${primary}.log | grep -v purged_snaps | head -1 | sed 's/.*[[]DBG[]]//' | grep -q $pg || return 1
 
     return 0
 }
