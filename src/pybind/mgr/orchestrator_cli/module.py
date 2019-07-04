@@ -8,7 +8,10 @@ except ImportError:
 
 from functools import wraps
 
-from mgr_module import MgrModule, HandleCommandResult, CLICommand
+from ceph.deployment_utils.drive_group import DriveGroupSpec, DriveGroupValidationError, \
+    DeviceSelection
+from ceph.mon_command_api import CommandResult
+from mgr_module import MgrModule, CLICommand
 
 import orchestrator
 
@@ -20,10 +23,10 @@ def handle_exception(prefix, cmd_args, desc, perm, func):
             return func(*args, **kwargs)
         except (orchestrator.OrchestratorError, ImportError) as e:
             # Do not print Traceback for expected errors.
-            return HandleCommandResult(-errno.ENOENT, stderr=str(e))
+            return CommandResult(-errno.ENOENT, stderr=str(e))
         except NotImplementedError:
             msg = 'This Orchestrator does not support `{}`'.format(prefix)
-            return HandleCommandResult(-errno.ENOENT, stderr=msg)
+            return CommandResult(-errno.ENOENT, stderr=msg)
 
     return CLICommand(prefix, cmd_args, desc, perm)(wrapper)
 
@@ -52,7 +55,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         completion = self.add_host(host)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=str(completion.result))
+        return CommandResult(stdout=str(completion.result))
 
     @_write_cli('orchestrator host rm',
                 "name=host,type=CephString,req=true",
@@ -61,7 +64,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         completion = self.remove_host(host)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=str(completion.result))
+        return CommandResult(stdout=str(completion.result))
 
     @_read_cli('orchestrator host ls',
                desc='List hosts')
@@ -70,7 +73,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         result = "\n".join(map(lambda node: node.name, completion.result))
-        return HandleCommandResult(stdout=result)
+        return CommandResult(stdout=result)
 
     @_read_cli('orchestrator device ls',
                "name=host,type=CephString,n=N,req=false "
@@ -78,7 +81,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
                "name=refresh,type=CephBool,req=false",
                'List devices on a node')
     def _list_devices(self, host=None, format='plain', refresh=False):
-        # type: (List[str], str, bool) -> HandleCommandResult
+        # type: (List[str], str, bool) -> CommandResult
         """
         Provide information about storage devices present in cluster hosts
 
@@ -95,7 +98,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
 
         if format == 'json':
             data = [n.to_json() for n in completion.result]
-            return HandleCommandResult(stdout=json.dumps(data))
+            return CommandResult(stdout=json.dumps(data))
         else:
             # Return a human readable version
             result = ""
@@ -112,7 +115,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
                     result += d.pretty_print()
                 result += "\n"
 
-            return HandleCommandResult(stdout=result)
+            return CommandResult(stdout=result)
 
     @_read_cli('orchestrator service ls',
                "name=host,type=CephString,req=false "
@@ -133,10 +136,10 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         services.sort(key=lambda s: (s.service_type, s.nodename, s.service_instance))
 
         if len(services) == 0:
-            return HandleCommandResult(stdout="No services reported")
+            return CommandResult(stdout="No services reported")
         elif format == 'json':
             data = [s.to_json() for s in services]
-            return HandleCommandResult(stdout=json.dumps(data))
+            return CommandResult(stdout=json.dumps(data))
         else:
             lines = []
             for s in services:
@@ -153,13 +156,13 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
                     s.version,
                     s.rados_config_location))
 
-            return HandleCommandResult(stdout="\n".join(lines))
+            return CommandResult(stdout="\n".join(lines))
 
     @_write_cli('orchestrator osd create',
                 "name=svc_arg,type=CephString,req=false",
                 'Create an OSD service. Either --svc_arg=host:drives or -i <drive_group>')
     def _create_osd(self, svc_arg=None, inbuf=None):
-        # type: (str, str) -> HandleCommandResult
+        # type: (str, str) -> CommandResult
         """Create one or more OSDs"""
 
         usage = """
@@ -170,10 +173,10 @@ Usage:
 
         if inbuf:
             try:
-                drive_group = orchestrator.DriveGroupSpec.from_json(json.loads(inbuf))
+                drive_group = DriveGroupSpec.from_json(json.loads(inbuf))
             except ValueError as e:
                 msg = 'Failed to read JSON input: {}'.format(str(e)) + usage
-                return HandleCommandResult(-errno.EINVAL, stderr=msg)
+                return CommandResult(-errno.EINVAL, stderr=msg)
 
         elif svc_arg:
             try:
@@ -181,12 +184,12 @@ Usage:
                 block_devices = block_device.split(',')
             except (TypeError, KeyError, ValueError):
                 msg = "Invalid host:device spec: '{}'".format(svc_arg) + usage
-                return HandleCommandResult(-errno.EINVAL, stderr=msg)
+                return CommandResult(-errno.EINVAL, stderr=msg)
 
-            devs = orchestrator.DeviceSelection(paths=block_devices)
-            drive_group = orchestrator.DriveGroupSpec(node_name, data_devices=devs)
+            devs = DeviceSelection(paths=block_devices)
+            drive_group = DriveGroupSpec(node_name, data_devices=devs)
         else:
-            return HandleCommandResult(-errno.EINVAL, stderr=usage)
+            return CommandResult(-errno.EINVAL, stderr=usage)
 
         # TODO: Remove this and make the orchestrator composable
         #   Like a future or so.
@@ -197,20 +200,20 @@ Usage:
 
         try:
             drive_group.validate(all_hosts)
-        except orchestrator.DriveGroupValidationError as e:
-            return HandleCommandResult(-errno.EINVAL, stderr=str(e))
+        except DriveGroupValidationError as e:
+            return CommandResult(-errno.EINVAL, stderr=str(e))
 
         completion = self.create_osds(drive_group, all_hosts)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         self.log.warning(str(completion.result))
-        return HandleCommandResult(stdout=str(completion.result))
+        return CommandResult(stdout=str(completion.result))
 
     @_write_cli('orchestrator osd rm',
                 "name=svc_id,type=CephString,n=N",
                 'Remove OSD services')
     def _osd_rm(self, svc_id):
-        # type: (List[str]) -> HandleCommandResult
+        # type: (List[str]) -> CommandResult
         """
         Remove OSD's
         :cmd : Arguments for remove the osd
@@ -218,13 +221,13 @@ Usage:
         completion = self.remove_osds(svc_id)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=str(completion.result))
+        return CommandResult(stdout=str(completion.result))
 
     def _add_stateless_svc(self, svc_type, spec):
         completion = self.add_stateless_service(svc_type, spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult()
+        return CommandResult()
 
     @_write_cli('orchestrator mds add',
                 "name=svc_arg,type=CephString",
@@ -259,7 +262,7 @@ Usage:
         completion = self.remove_stateless_service(svc_type, svc_id)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult()
+        return CommandResult()
 
     @_write_cli('orchestrator mds rm',
                 "name=svc_id,type=CephString",
@@ -289,7 +292,7 @@ Usage:
         spec.count = num
         completion = self.update_stateless_service("nfs", spec)
         self._orchestrator_wait([completion])
-        return HandleCommandResult()
+        return CommandResult()
 
     @_write_cli('orchestrator service',
                 "name=action,type=CephChoices,strings=start|stop|reload "
@@ -300,7 +303,7 @@ Usage:
         completion = self.service_action(action, svc_type, service_name=svc_name)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult()
+        return CommandResult()
 
     @_write_cli('orchestrator service-instance',
                 "name=action,type=CephChoices,strings=start|stop|reload "
@@ -311,7 +314,7 @@ Usage:
         completion = self.service_action(action, svc_type, service_id=svc_id)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult()
+        return CommandResult()
 
     @_write_cli('orchestrator mgr update',
                 "name=num,type=CephInt,req=true "
@@ -321,13 +324,13 @@ Usage:
         hosts = hosts if hosts is not None else []
 
         if num <= 0:
-            return HandleCommandResult(-errno.EINVAL,
+            return CommandResult(-errno.EINVAL,
                     stderr="Invalid number of mgrs: require {} > 0".format(num))
 
         completion = self.update_mgrs(num, hosts)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=str(completion.result))
+        return CommandResult(stdout=str(completion.result))
 
     @_write_cli('orchestrator mon update',
                 "name=num,type=CephInt,req=true "
@@ -337,7 +340,7 @@ Usage:
         hosts = hosts if hosts is not None else []
 
         if num <= 0:
-            return HandleCommandResult(-errno.EINVAL,
+            return CommandResult(-errno.EINVAL,
                     stderr="Invalid number of mons: require {} > 0".format(num))
 
         def split_host(host):
@@ -357,12 +360,12 @@ Usage:
                 hosts = list(map(split_host, hosts))
             except Exception as e:
                 msg = "Failed to parse host list: '{}': {}".format(hosts, e)
-                return HandleCommandResult(-errno.EINVAL, stderr=msg)
+                return CommandResult(-errno.EINVAL, stderr=msg)
 
         completion = self.update_mons(num, hosts)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=str(completion.result))
+        return CommandResult(stdout=str(completion.result))
 
     @_write_cli('orchestrator set backend',
                 "name=module_name,type=CephString,req=true",
@@ -380,7 +383,7 @@ Usage:
 
         if module_name == "":
             self.set_module_option("orchestrator", None)
-            return HandleCommandResult()
+            return CommandResult()
 
         for module in mgr_map['available_modules']:
             if module['name'] != module_name:
@@ -391,7 +394,7 @@ Usage:
 
             enabled = module['name'] in mgr_map['modules']
             if not enabled:
-                return HandleCommandResult(-errno.EINVAL,
+                return CommandResult(-errno.EINVAL,
                                            stderr="Module '{module_name}' is not enabled. \n Run "
                                                   "`ceph mgr module enable {module_name}` "
                                                   "to enable.".format(module_name=module_name))
@@ -403,14 +406,14 @@ Usage:
                 is_orchestrator = False
 
             if not is_orchestrator:
-                return HandleCommandResult(-errno.EINVAL,
+                return CommandResult(-errno.EINVAL,
                                            stderr="'{0}' is not an orchestrator module".format(module_name))
 
             self.set_module_option("orchestrator", module_name)
 
-            return HandleCommandResult()
+            return CommandResult()
 
-        return HandleCommandResult(-errno.EINVAL, stderr="Module '{0}' not found".format(module_name))
+        return CommandResult(-errno.EINVAL, stderr="Module '{0}' not found".format(module_name))
 
     @_read_cli('orchestrator status',
                desc='Report configured backend and its status')
@@ -422,9 +425,9 @@ Usage:
         avail, why = self.available()
         if avail is None:
             # The module does not report its availability
-            return HandleCommandResult(stdout="Backend: {0}".format(o))
+            return CommandResult(stdout="Backend: {0}".format(o))
         else:
-            return HandleCommandResult(stdout="Backend: {0}\nAvailable: {1}{2}".format(
+            return CommandResult(stdout="Backend: {0}\nAvailable: {1}{2}".format(
                                            o, avail,
                                            " ({0})".format(why) if not avail else ""
                                        ))

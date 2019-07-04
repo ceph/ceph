@@ -15,6 +15,7 @@ from mgr_module import MgrModule
 from mgr_util import format_bytes
 
 try:
+    from ceph.deployment_utils.drive_group import DriveGroupSpec
     from typing import TypeVar, Generic, List, Optional, Union, Tuple
     T = TypeVar('T')
     G = Generic[T]

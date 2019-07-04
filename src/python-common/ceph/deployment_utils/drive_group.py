@@ -9,7 +9,7 @@ import six
 
 class DeviceSelection(object):
     """
-    Used within :class:`myclass.DriveGroupSpec` to specify the devices
+    Used within :class:`ceph.deployment_utils.drive_group.DriveGroupSpec` to specify the devices
     used by the Drive Group.
 
     Any attributes (even none) can be included in the device
