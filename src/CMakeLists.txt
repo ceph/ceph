@@ -478,6 +478,7 @@ endif()
 
 add_subdirectory(pybind)
 add_subdirectory(ceph-volume)
+add_subdirectory(python-common)
 
 # Monitor
 add_subdirectory(mon)
