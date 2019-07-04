@@ -37,6 +37,13 @@ class CephFS(RESTController):
 
         return self._clients(fs_id)
 
+    @RESTController.Resource('DELETE', path='/client/{client_id}')
+    def evict(self, fs_id, client_id):
+        fs_id = self.fs_id_to_int(fs_id)
+        client_id = self.client_id_to_int(client_id)
+
+        return self._evict(fs_id, client_id)
+
     @RESTController.Resource('GET')
     def mds_counters(self, fs_id):
         """
@@ -84,6 +91,15 @@ class CephFS(RESTController):
         except ValueError:
             raise DashboardException(code='invalid_cephfs_id',
                                      msg="Invalid cephfs ID {}".format(fs_id),
+                                     component='cephfs')
+
+    @staticmethod
+    def client_id_to_int(client_id):
+        try:
+            return int(client_id)
+        except ValueError:
+            raise DashboardException(code='invalid_cephfs_client_id',
+                                     msg="Invalid cephfs client ID {}".format(client_id),
                                      component='cephfs')
 
     def _get_mds_names(self, filesystem_id=None):
@@ -281,6 +297,15 @@ class CephFS(RESTController):
             'status': status,
             'data': clients
         }
+
+    def _evict(self, fs_id, client_id):
+        clients = self._clients(fs_id)
+        if not [c for c in clients['data'] if c['id'] == client_id]:
+            raise cherrypy.HTTPError(404,
+                                     "Client {0} does not exist in cephfs {1}".format(client_id,
+                                                                                      fs_id))
+        CephService.send_command('mds', 'client evict',
+                                 srv_spec='{0}:0'.format(fs_id), id=client_id)
 
 
 class CephFSClients(object):

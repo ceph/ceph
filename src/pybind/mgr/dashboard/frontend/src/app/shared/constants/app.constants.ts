@@ -59,6 +59,7 @@ export enum ActionLabels {
   COPY = 'Copy',
   CLONE = 'Clone',
   UPDATE = 'Update',
+  EVICT = 'Evict',
 
   /* Read-only */
   SHOW = 'Show',
@@ -85,6 +86,7 @@ export class ActionLabelsI18n {
   CLONE: string;
   DEEP_SCRUB: string;
   DESTROY: string;
+  EVICT: string;
   FLATTEN: string;
   MARK_DOWN: string;
   MARK_IN: string;
@@ -126,6 +128,7 @@ export class ActionLabelsI18n {
     this.COPY = this.i18n('Copy');
     this.DEEP_SCRUB = this.i18n('Deep Scrub');
     this.DESTROY = this.i18n('Destroy');
+    this.EVICT = this.i18n('Evict');
     this.FLATTEN = this.i18n('Flatten');
     this.MARK_DOWN = this.i18n('Mark Down');
     this.MARK_IN = this.i18n('Mark In');
