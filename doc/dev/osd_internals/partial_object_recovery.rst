@@ -17,7 +17,7 @@ Partial Object Recovery is designed to solve the problem mentioned above.
 In order to achieve the goals, two things should be done: 
 
 1. logging where the object is modified is necessary
-2. logging whether the object_map of an object is modified is also neccessary
+2. logging whether the object_map of an object is modified is also necessary
 
 class ObjectCleanRegion is introduced to do what we want.
 clean_offsets is a variable of interval_set<uint64_t>
