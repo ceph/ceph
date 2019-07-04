@@ -136,6 +136,11 @@ class Batch(object):
     """)
 
     def __init__(self, argv):
+
+
+        if __name__ != '__main__':
+            print("#TODO Implement a common interface for module<->module calls")
+
         parser = argparse.ArgumentParser(
             prog='ceph-volume lvm batch',
             formatter_class=argparse.RawDescriptionHelpFormatter,

@@ -6,7 +6,7 @@ import sys
 import logging
 
 from ceph_volume.decorators import catches
-from ceph_volume import log, devices, configuration, conf, exceptions, terminal, inventory
+from ceph_volume import log, devices, configuration, conf, exceptions, terminal, inventory, drivegroups
 
 
 class Volume(object):
@@ -28,6 +28,7 @@ Ceph Conf: {ceph_path}
             'lvm': devices.lvm.LVM,
             'simple': devices.simple.Simple,
             'inventory': inventory.Inventory,
+            'drivegroups': drivegroups.DriveGroups
         }
         self.plugin_help = "No plugins found/loaded"
         if argv is None:
@@ -99,7 +100,8 @@ Ceph Conf: {ceph_path}
         # early
         configuration.load_ceph_conf_path()
         self.load_log_path()
-        self.enable_plugins()
+        # FIXME: Uncommet later, Do not merge this
+        #self.enable_plugins()
         main_args, subcommand_args = self._get_split_args()
         # no flags where passed in, return the help menu instead of waiting for
         # argparse which will end up complaning that there are no args
