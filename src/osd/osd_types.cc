@@ -5326,10 +5326,7 @@ void SnapSet::decode(ceph::buffer::list::const_iterator& bl)
 
 void SnapSet::dump(Formatter *f) const
 {
-  SnapContext sc(seq, snaps);
-  f->open_object_section("snap_context");
-  sc.dump(f);
-  f->close_section();
+  f->dump_unsigned("seq", seq);
   f->open_array_section("clones");
   for (auto p = clones.cbegin(); p != clones.cend(); ++p) {
     f->open_object_section("clone");
