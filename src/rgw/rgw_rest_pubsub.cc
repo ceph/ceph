@@ -11,9 +11,221 @@
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
 #include "rgw_arn.h"
+#include "rgw_url.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
+
+// command (AWS compliant): POST
+// Action=CreateTopic&Name=<topic-name>[&push-endpoint=<endpoint>[&<arg1>=<value1>]]
+class RGWPSCreateTopic_ObjStore_AWS : public RGWPSCreateTopicOp {
+private:
+    HTTPArgs payload_args;
+
+public:
+  RGWPSCreateTopic_ObjStore_AWS(const HTTPArgs& _payload_args) : payload_args(_payload_args) {}
+
+  int get_params() override {
+    topic_name = payload_args.get("Name");
+    if (topic_name.empty()) {
+        ldout(s->cct, 1) << "CreateTopic Action 'Name' argument is missing" << dendl;
+        return -EINVAL;
+    }
+
+    dest.push_endpoint = payload_args.get("push-endpoint");
+    dest.push_endpoint_args = payload_args.get_str();
+    // dest object only stores endpoint info
+    // bucket to store events/records will be set only when subscription is created
+    dest.bucket_name = "";
+    dest.oid_prefix = "";
+    dest.arn_topic = topic_name;
+    // the topic ARN will be sent in the reply
+    const rgw::ARN arn(rgw::Partition::aws, rgw::Service::sns, 
+        store->svc.zone->get_zonegroup().get_name(),
+        s->user->user_id.tenant, topic_name);
+    topic_arn = arn.to_string();
+    return 0;
+  }
+
+  void send_response() override {
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/xml");
+
+    if (op_ret < 0) {
+      return;
+    }
+
+    {
+      XMLFormatter* f = static_cast<XMLFormatter*>(s->formatter);
+      f->open_object_section_in_ns("CreateTopicResponse", "https://sns.amazonaws.com/doc/2010-03-31/");
+      f->open_object_section("CreateTopicResult");
+      encode_xml("TopicArn", topic_arn, f); 
+      f->close_section();
+      f->open_object_section("ResponseMetadata");
+      encode_xml("RequestId", s->req_id, f); 
+      f->close_section();
+      f->close_section();
+    }
+    rgw_flush_formatter_and_reset(s, s->formatter);
+  }
+};
+
+// command (AWS compliant): POST ?Action=ListTopics
+class RGWPSListTopics_ObjStore_AWS : public RGWPSListTopicsOp {
+public:
+  void send_response() override {
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/xml");
+
+    if (op_ret < 0) {
+      return;
+    }
+
+    {
+      XMLFormatter* f = static_cast<XMLFormatter*>(s->formatter);
+      f->open_object_section_in_ns("ListTopicsResponse", "https://sns.amazonaws.com/doc/2010-03-31/");
+      f->open_object_section("ListTopicsResult");
+      encode_xml("Topics", result, f); 
+      f->close_section();
+      f->open_object_section("ResponseMetadata");
+      encode_xml("RequestId", s->req_id, f); 
+      f->close_section();
+      f->close_section();
+    }
+    rgw_flush_formatter_and_reset(s, s->formatter);
+  }
+};
+
+// command (extension to AWS): POST
+// Action=GetTopic&TopicArn=<topic-arn>
+class RGWPSGetTopic_ObjStore_AWS : public RGWPSGetTopicOp {
+private:
+    HTTPArgs payload_args;
+
+public:
+  RGWPSGetTopic_ObjStore_AWS(const HTTPArgs& _payload_args) : payload_args(_payload_args) {}
+
+  int get_params() override {
+    // TODO: get TopicArn from body
+    const auto topic_arn = rgw::ARN::parse((payload_args.get("TopicArn")));
+
+    if (!topic_arn || topic_arn->resource.empty()) {
+        ldout(s->cct, 1) << "GetTopic Action 'TopicArn' argument is missing or invalid" << dendl;
+        return -EINVAL;
+    }
+
+    topic_name = topic_arn->resource;
+    return 0;
+  }
+
+  void send_response() override {
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/xml");
+
+    if (op_ret < 0) {
+      return;
+    }
+
+    {
+      XMLFormatter* f = static_cast<XMLFormatter*>(s->formatter);
+      f->open_object_section("GetTopicResponse");
+      f->open_object_section("GetTopicResult");
+      encode_xml("Topic", result, f); 
+      f->close_section();
+      f->open_object_section("ResponseMetadata");
+      encode_xml("RequestId", s->req_id, f); 
+      f->close_section();
+      f->close_section();
+    }
+    rgw_flush_formatter_and_reset(s, s->formatter);
+  }
+};
+
+// command (AWS compliant): POST
+// Action=DeleteTopic&TopicArn=<topic-arn>
+class RGWPSDeleteTopic_ObjStore_AWS : public RGWPSDeleteTopicOp {
+private:
+    HTTPArgs payload_args;
+
+public:
+  RGWPSDeleteTopic_ObjStore_AWS(const HTTPArgs& _payload_args) : payload_args(_payload_args) {}
+
+  int get_params() override {
+    const auto topic_arn = rgw::ARN::parse((payload_args.get("TopicArn")));
+
+    if (!topic_arn || topic_arn->resource.empty()) {
+        ldout(s->cct, 1) << "DeleteTopic Action 'TopicArn' argument is missing or invalid" << dendl;
+        return -EINVAL;
+    }
+
+    topic_name = topic_arn->resource;
+    return 0;
+  }
+  
+  void send_response() override {
+    if (op_ret) {
+      set_req_state_err(s, op_ret);
+    }
+    dump_errno(s);
+    end_header(s, this, "application/xml");
+
+    if (op_ret < 0) {
+      return;
+    }
+
+    {
+      XMLFormatter* f = static_cast<XMLFormatter*>(s->formatter);
+      f->open_object_section_in_ns("DeleteTopicResponse", "https://sns.amazonaws.com/doc/2010-03-31/");
+      f->open_object_section("ResponseMetadata");
+      encode_xml("RequestId", s->req_id, f); 
+      f->close_section();
+      f->close_section();
+    }
+    rgw_flush_formatter_and_reset(s, s->formatter);
+  }
+};
+
+RGWOp* RGWHandler_REST_PSTopic_AWS::op_post() {
+  // looking into the message body to find the type of action
+  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  int r;
+  bufferlist data;
+  std::tie(r, data) = rgw_rest_read_all_input(s, max_size, false);
+
+  if (r < 0) {
+    ldout(s->cct, 1) << "unkonown action - failed to read urlencoded payload" << dendl;
+    return nullptr;
+  }
+  if (data.length() == 0) {
+    ldout(s->cct, 1) << "unknown action - urlencoded payload missing" << dendl;
+    return nullptr;
+  }
+  HTTPArgs payload_args(boost::string_view(data.c_str(), data.length()), false);
+  const auto action =  payload_args.get("Action");
+  if (action == "CreateTopic") {
+    return new RGWPSCreateTopic_ObjStore_AWS(payload_args);
+  }
+  if (action == "ListTopics") {
+    return new RGWPSListTopics_ObjStore_AWS();
+  }
+  if (action == "GetTopic") {
+    return new RGWPSGetTopic_ObjStore_AWS(payload_args);
+  }
+  if (action == "DeleteTopic") {
+    return new RGWPSDeleteTopic_ObjStore_AWS(payload_args);
+  }
+  ldout(s->cct, 1) << "unknown action: '" << action << "'" << dendl;
+  return nullptr;
+}
 
 namespace {
 // conversion functions between S3 and GCP style event names
@@ -412,46 +624,16 @@ void RGWPSListNotifs_ObjStore_S3::execute() {
   }
 }
 
-// s3 compliant notification handler factory
-class RGWHandler_REST_PSNotifs_S3 : public RGWHandler_REST_S3 {
-protected:
-  int init_permissions(RGWOp* op) override {
-    return 0;
-  }
-
-  int read_permissions(RGWOp* op) override {
-    return 0;
-  }
-  bool supports_quota() override {
-    return false;
-  }
-  RGWOp *op_get() override {
-    return new RGWPSListNotifs_ObjStore_S3();
-  }
-  RGWOp *op_put() override {
-    return new RGWPSCreateNotif_ObjStore_S3();
-  }
-  RGWOp *op_delete() override {
-    return new RGWPSDeleteNotif_ObjStore_S3();
-  }
-public:
-  explicit RGWHandler_REST_PSNotifs_S3(const rgw::auth::StrategyRegistry& auth_registry) : RGWHandler_REST_S3(auth_registry) {}
-  virtual ~RGWHandler_REST_PSNotifs_S3() = default;
-};
-
-// factory for S3 compliant PubSub REST handlers 
-RGWHandler_REST* RGWRESTMgr_PubSub_S3::_get_handler(req_state* s,
-                                                     const rgw::auth::StrategyRegistry& auth_registry,
-                                                     const std::string& frontend_prefix) {
-  if (RGWHandler_REST_S3::init_from_header(s, RGW_FORMAT_XML, true) < 0) {
-    return nullptr;
-  }
-  
-  // s3 compliant PubSub API: <bucket name>?notification
-  if (s->info.args.exists("notification")) {
-      return new RGWHandler_REST_PSNotifs_S3(auth_registry);
-  }
-
-  return nullptr;
+RGWOp* RGWHandler_REST_PSNotifs_S3::op_get() {
+  return new RGWPSListNotifs_ObjStore_S3();
 }
+
+RGWOp* RGWHandler_REST_PSNotifs_S3::op_put() {
+  return new RGWPSCreateNotif_ObjStore_S3();
+}
+
+RGWOp* RGWHandler_REST_PSNotifs_S3::op_delete() {
+  return new RGWPSDeleteNotif_ObjStore_S3();
+}
+
 

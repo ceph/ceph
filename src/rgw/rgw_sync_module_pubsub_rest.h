@@ -3,13 +3,14 @@
 
 #include "rgw_rest.h"
 
-class RGWRESTMgr_PubSub : public RGWLinkedRESTMgr {
+class RGWRESTMgr_PubSub : public RGWRESTMgr {
 protected:
-  virtual RGWHandler_REST* _get_handler(struct req_state* s,
+  RGWRESTMgr* const orig;
+  virtual RGWHandler_REST* get_handler(struct req_state* s,
                                const rgw::auth::StrategyRegistry& auth_registry,
                                const std::string& frontend_prefix) override;
 public:
-  RGWRESTMgr_PubSub(RGWRESTMgr* _next) : RGWLinkedRESTMgr(_next) {}
+  RGWRESTMgr_PubSub(RGWRESTMgr* _orig) : orig(_orig) {}
 };
 
 #endif

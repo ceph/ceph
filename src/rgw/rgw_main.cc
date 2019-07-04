@@ -363,7 +363,7 @@ int main(int argc, const char **argv)
   if (apis_map.count("s3") > 0 || s3website_enabled) {
     if (!swift_at_root) {
       rest.register_default_mgr(set_logging(rest_filter(store, RGW_REST_S3,
-                                                        new RGWRESTMgr_PubSub_S3(new RGWRESTMgr_S3(s3website_enabled, sts_enabled, iam_enabled)))));
+                                                        new RGWRESTMgr_S3(s3website_enabled, sts_enabled, iam_enabled))));
     } else {
       derr << "Cannot have the S3 or S3 Website enabled together with "
            << "Swift API placed in the root of hierarchy" << dendl;

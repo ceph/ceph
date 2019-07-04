@@ -21,6 +21,7 @@
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
 #include "rgw_rest_s3website.h"
+#include "rgw_rest_pubsub.h"
 #include "rgw_auth_s3.h"
 #include "rgw_acl.h"
 #include "rgw_policy_s3.h"
@@ -3428,17 +3429,19 @@ int RGWHandler_REST_S3::init_from_header(req_state* s,
   s->info.args.parse();
 
   /* must be called after the args parsing */
-  int ret = allocate_formatter(s, default_formatter, configurable_format);
-  if (ret < 0)
+  const int ret = allocate_formatter(s, default_formatter, configurable_format);
+  if (ret < 0) {
     return ret;
+  }
 
   if (*req_name != '/')
     return 0;
 
-  req_name++;
+  ++req_name;
 
-  if (!*req_name)
+  if (!*req_name) {
     return 0;
+  }
 
   req = req_name;
   int pos = req.find('/');
@@ -3698,9 +3701,18 @@ RGWHandler_REST* RGWRESTMgr_S3::get_handler(struct req_state* const s,
     }
   } else {
     if (s->init_state.url_bucket.empty()) {
-      handler = new RGWHandler_REST_Service_S3(auth_registry, enable_sts, enable_iam);
+      // using "find" to ignore encoding info in the content type
+      if (s->generic_attrs[RGW_ATTR_CONTENT_TYPE].find("application/x-www-form-urlencoded") != std::string::npos) {
+          handler = new RGWHandler_REST_PSTopic_AWS(auth_registry); 
+      } else {
+          handler = new RGWHandler_REST_Service_S3(auth_registry, enable_sts, enable_iam);
+      }
     } else if (s->object.empty()) {
-      handler = new RGWHandler_REST_Bucket_S3(auth_registry);
+      if (s->info.args.exists("notification")) {
+        handler = new RGWHandler_REST_PSNotifs_S3(auth_registry);
+      } else {
+          handler = new RGWHandler_REST_Bucket_S3(auth_registry);
+      }
     } else {
       handler = new RGWHandler_REST_Obj_S3(auth_registry);
     }

@@ -515,10 +515,10 @@ protected:
   virtual RGWOp *op_copy() { return NULL; }
   virtual RGWOp *op_options() { return NULL; }
 
+public:
   static int allocate_formatter(struct req_state *s, int default_formatter,
 				bool configurable);
 
-public:
   static constexpr int MAX_BUCKET_NAME_LEN = 255;
   static constexpr int MAX_OBJ_NAME_LEN = 1024;
 
@@ -786,21 +786,5 @@ extern int dump_body(struct req_state* s, const char* buf, size_t len);
 extern int dump_body(struct req_state* s, /* const */ ceph::buffer::list& bl);
 extern int dump_body(struct req_state* s, const std::string& str);
 extern int recv_body(struct req_state* s, char* buf, size_t max);
-
-// REST manager that allow concatination of managers
-// each manager owns the next one
-class RGWLinkedRESTMgr : public RGWRESTMgr {
-protected:
-    std::unique_ptr<RGWRESTMgr> next;
-    virtual RGWHandler_REST* _get_handler(req_state* s,
-            const rgw::auth::StrategyRegistry& auth_registry,
-            const std::string& frontend_prefix) = 0;
-
-public:
-    RGWLinkedRESTMgr(RGWRESTMgr* _next) : next(_next) {}
-    RGWHandler_REST* get_handler(req_state* s,
-                        const rgw::auth::StrategyRegistry& auth_registry,
-                        const std::string& frontend_prefix);
-};
 
 #endif /* CEPH_RGW_REST_H */

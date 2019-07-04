@@ -109,7 +109,7 @@ public:
   }
 };
 
-// topics handler factory
+// ceph specifc topics handler factory
 class RGWHandler_REST_PSTopic : public RGWHandler_REST_S3 {
 protected:
   int init_permissions(RGWOp* op) override {
@@ -479,26 +479,33 @@ public:
 };
 
 // factory for ceph specific PubSub REST handlers 
-RGWHandler_REST* RGWRESTMgr_PubSub::_get_handler(struct req_state* const s,
+RGWHandler_REST* RGWRESTMgr_PubSub::get_handler(struct req_state* const s,
                                                      const rgw::auth::StrategyRegistry& auth_registry,
                                                      const std::string& frontend_prefix)
 {
   if (RGWHandler_REST_S3::init_from_header(s, RGW_FORMAT_JSON, true) < 0) {
     return nullptr;
   }
-  
+ 
+  RGWHandler_REST* handler{nullptr};
+
   // ceph specific PubSub API: topics/subscriptions/notification are reserved bucket names
   // this API is available only on RGW that belong to a pubsub zone
   if (s->init_state.url_bucket == "topics") {
-    return new RGWHandler_REST_PSTopic(auth_registry);
+    handler = new RGWHandler_REST_PSTopic(auth_registry);
+  } else if (s->init_state.url_bucket == "subscriptions") {
+    handler = new RGWHandler_REST_PSSub(auth_registry);
+  } else if (s->init_state.url_bucket == "notifications") {
+    handler = new RGWHandler_REST_PSNotifs(auth_registry);
+  } else if (s->info.args.exists("notification")) {
+    const int ret = RGWHandler_REST::allocate_formatter(s, RGW_FORMAT_XML, true);
+    if (ret == 0) {
+        handler = new RGWHandler_REST_PSNotifs_S3(auth_registry);
+    }
   }
-  if (s->init_state.url_bucket == "subscriptions") {
-    return new RGWHandler_REST_PSSub(auth_registry);
-  }
-  if (s->init_state.url_bucket == "notifications") {
-    return new RGWHandler_REST_PSNotifs(auth_registry);
-  }
+  
+  ldout(s->cct, 20) << __func__ << " handler=" << (handler ? typeid(*handler).name() : "<null>") << dendl;
 
-  return nullptr;
+  return handler;
 }
 

@@ -129,6 +129,51 @@ class PSTopic:
         return self.send_request('GET', get_list=True)
 
 
+class PSTopicS3:
+    """class to set/list/get/delete a topic
+    POST ?Action=CreateTopic&Name=<topic name>[?push-endpoint=<endpoint>&[<arg1>=<value1>...]]
+    POST ?Action=ListTopics
+    POST ?Action=GetTopic&TopicArn=<topic-arn>
+    POST ?Action=DeleteTopic&TopicArn=<topic-arn>
+    """
+    def __init__(self, conn, topic_name, endpoint=None, endpoint_args=None):
+        self.conn = conn
+        self.topic_name = topic_name.strip()
+        assert self.topic_name
+        self.topic_arn = ''
+        if endpoint is not None:
+            self.parameters = {'push-endpoint': endpoint}
+            self.extra_parameters = endpoint_args
+        else:
+            self.parameters = None
+            self.extra_parameters = None
+        self.client = boto3.client('sns',
+                                   endpoint_url='http://'+conn.host+':'+str(conn.port),
+                                   aws_access_key_id=conn.aws_access_key_id,
+                                   aws_secret_access_key=conn.aws_secret_access_key,
+                                   region_name='a1',
+                                   config=Config(signature_version='s3'))
+
+
+    def get_config(self):
+        """get topic info"""
+        return {}
+
+    def set_config(self):
+        """set topic"""
+        result = self.client.create_topic(Name=self.topic_name)
+        self.topic_arn = result['TopicArn']
+        return self.topic_arn
+
+    def del_config(self):
+        """delete topic"""
+        self.client.delete_topic(TopicArn=self.topic_arn)
+    
+    def get_list(self):
+        """list all topics"""
+        return self.client.list_topics()
+
+
 class PSNotification:
     """class to set/get/delete a notification
     PUT /notifications/bucket/<bucket>?topic=<topic-name>[&events=<event>[,<event>]]

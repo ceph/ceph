@@ -29,6 +29,7 @@
 #include "rgw_quota.h"
 #include "rgw_string.h"
 #include "rgw_env.h"
+#include "rgw_url.h"
 #include "common/async/yield_context.h"
 #include "rgw_website.h"
 #include "cls/version/cls_version_types.h"
@@ -52,8 +53,6 @@ using ceph::crypto::MD5;
 #define RGW_AMZ_META_PREFIX RGW_AMZ_PREFIX "meta-"
 #define RGW_AMZ_WEBSITE_REDIRECT_LOCATION RGW_AMZ_PREFIX "website-redirect-location"
 #define RGW_AMZ_TAG_COUNT RGW_AMZ_PREFIX "tagging-count"
-
-#define RGW_SYS_PARAM_PREFIX "rgwx-"
 
 #define RGW_ATTR_ACL		RGW_ATTR_PREFIX "acl"
 #define RGW_ATTR_LC            RGW_ATTR_PREFIX "lc"
@@ -284,86 +283,6 @@ struct rgw_err {
   std::string err_code;
   std::string message;
 };
-
-
-
-/* Helper class used for RGWHTTPArgs parsing */
-class NameVal
-{
-   string str;
-   string name;
-   string val;
- public:
-    explicit NameVal(string nv) : str(nv) {}
-
-    int parse();
-
-    string& get_name() { return name; }
-    string& get_val() { return val; }
-};
-
-/** Stores the XML arguments associated with the HTTP request in req_state*/
-class RGWHTTPArgs {
-  string str, empty_str;
-  map<string, string> val_map;
-  map<string, string> sys_val_map;
-  map<string, string> sub_resources;
-  bool has_resp_modifier;
-  bool admin_subresource_added;
- public:
-  RGWHTTPArgs() : has_resp_modifier(false), admin_subresource_added(false) {}
-
-  /** Set the arguments; as received */
-  void set(string s) {
-    has_resp_modifier = false;
-    val_map.clear();
-    sub_resources.clear();
-    str = s;
-  }
-  /** parse the received arguments */
-  int parse();
-  void append(const string& name, const string& val);
-  /** Get the value for a specific argument parameter */
-  const string& get(const string& name, bool *exists = NULL) const;
-  boost::optional<const std::string&>
-  get_optional(const std::string& name) const;
-  int get_bool(const string& name, bool *val, bool *exists);
-  int get_bool(const char *name, bool *val, bool *exists);
-  void get_bool(const char *name, bool *val, bool def_val);
-  int get_int(const char *name, int *val, int def_val);
-
-  /** Get the value for specific system argument parameter */
-  std::string sys_get(const string& name, bool *exists = nullptr) const;
-
-  /** see if a parameter is contained in this RGWHTTPArgs */
-  bool exists(const char *name) const {
-    return (val_map.find(name) != std::end(val_map));
-  }
-  bool sub_resource_exists(const char *name) const {
-    return (sub_resources.find(name) != std::end(sub_resources));
-  }
-  map<string, string>& get_params() {
-    return val_map;
-  }
-  const std::map<std::string, std::string>& get_sub_resources() const {
-    return sub_resources;
-  }
-  unsigned get_num_params() const {
-    return val_map.size();
-  }
-  bool has_response_modifier() const {
-    return has_resp_modifier;
-  }
-  void set_system() { /* make all system params visible */
-    map<string, string>::iterator iter;
-    for (iter = sys_val_map.begin(); iter != sys_val_map.end(); ++iter) {
-      val_map[iter->first] = iter->second;
-    }
-  }
-  const string& get_str() {
-    return str;
-  }
-}; // RGWHTTPArgs
 
 const char *rgw_conf_get(const map<string, string, ltstr_nocase>& conf_map, const char *name, const char *def_val);
 int rgw_conf_get_int(const map<string, string, ltstr_nocase>& conf_map, const char *name, int def_val);
@@ -1563,7 +1482,6 @@ namespace rgw {
   }
 }
 
-
 struct req_info {
   const RGWEnv *env;
   RGWHTTPArgs args;
@@ -1879,8 +1797,8 @@ inline ostream& operator<<(ostream& out, const rgw_obj_index_key &o) {
 
 struct req_init_state {
   /* Keeps [[tenant]:]bucket until we parse the token. */
-  string url_bucket;
-  string src_bucket;
+  std::string url_bucket;
+  std::string src_bucket;
 };
 
 #include "rgw_auth.h"
@@ -2473,14 +2391,6 @@ extern bool verify_object_permission_no_policy(
   int perm);
 extern bool verify_object_permission_no_policy(const DoutPrefixProvider* dpp, struct req_state *s,
 					       int perm);
-/** Convert an input URL into a sane object name
- * by converting %-escaped strings into characters, etc*/
-extern void rgw_uri_escape_char(char c, string& dst);
-extern std::string url_decode(const boost::string_view& src_str,
-                              bool in_query = false);
-extern void url_encode(const std::string& src, string& dst,
-                       bool encode_slash = true);
-extern std::string url_encode(const std::string& src, bool encode_slash = true);
 /* destination should be CEPH_CRYPTO_HMACSHA1_DIGESTSIZE bytes long */
 extern void calc_hmac_sha1(const char *key, int key_len,
                           const char *msg, int msg_len, char *dest);

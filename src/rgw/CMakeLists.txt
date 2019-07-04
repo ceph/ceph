@@ -97,16 +97,17 @@ set(librgw_common_srcs
   rgw_rest_conn.cc
   rgw_rest_log.cc
   rgw_rest_metadata.cc
+  rgw_rest_pubsub.cc
+  rgw_rest_pubsub_common.cc
   rgw_rest_realm.cc
   rgw_rest_role.cc
   rgw_rest_s3.cc
-  rgw_rest_pubsub_common.cc
-  rgw_rest_pubsub.cc
   rgw_role.cc
   rgw_string.cc
   rgw_tag.cc
   rgw_tag_s3.cc
   rgw_tools.cc
+  rgw_url.cc
   rgw_user.cc
   rgw_website.cc
   rgw_xml.cc
