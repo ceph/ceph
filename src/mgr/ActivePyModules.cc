@@ -702,7 +702,7 @@ PyObject* ActivePyModules::get_counter_python(
       const auto &avg_data = counter_instance.get_data_avg();
       for (const auto &datapoint : avg_data) {
         f.open_array_section("datapoint");
-        f.dump_unsigned("t", datapoint.t.sec());
+        f.dump_unsigned("t", datapoint.t.to_nsec());
         f.dump_unsigned("s", datapoint.s);
         f.dump_unsigned("c", datapoint.c);
         f.close_section();
@@ -711,7 +711,7 @@ PyObject* ActivePyModules::get_counter_python(
       const auto &data = counter_instance.get_data();
       for (const auto &datapoint : data) {
         f.open_array_section("datapoint");
-        f.dump_unsigned("t", datapoint.t.sec());
+        f.dump_unsigned("t", datapoint.t.to_nsec());
         f.dump_unsigned("v", datapoint.v);
         f.close_section();
       }
@@ -732,12 +732,12 @@ PyObject* ActivePyModules::get_latest_counter_python(
   {
     if (counter_type.type & PERFCOUNTER_LONGRUNAVG) {
       const auto &datapoint = counter_instance.get_latest_data_avg();
-      f.dump_unsigned("t", datapoint.t.sec());
+      f.dump_unsigned("t", datapoint.t.to_nsec());
       f.dump_unsigned("s", datapoint.s);
       f.dump_unsigned("c", datapoint.c);
     } else {
       const auto &datapoint = counter_instance.get_latest_data();
-      f.dump_unsigned("t", datapoint.t.sec());
+      f.dump_unsigned("t", datapoint.t.to_nsec());
       f.dump_unsigned("v", datapoint.v);
     }
   };
