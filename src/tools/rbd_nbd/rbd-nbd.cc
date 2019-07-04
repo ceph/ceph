@@ -18,6 +18,7 @@
 
 #include "include/int_types.h"
 
+#include <libgen.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <stddef.h>
@@ -562,7 +563,7 @@ private:
     ifs >> cmdline;
 
     for (unsigned i = 0; i < cmdline.size(); i++) {
-      const char *arg = &cmdline[i];
+      char *arg = &cmdline[i];
       if (i == 0) {
         if (strcmp(basename(arg) , "rbd-nbd") != 0) {
           return -EINVAL;
