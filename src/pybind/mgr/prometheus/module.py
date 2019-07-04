@@ -1060,7 +1060,12 @@ class StandbyModule(MgrStandbyModule):
             @cherrypy.expose
             def metrics(self):
                 cherrypy.response.headers['Content-Type'] = 'text/plain'
-                return ''
+                active_uri = module.get_active_uri()
+                if active_uri:
+                    module.log.info("Redirecting to active '%s'", active_uri)
+                    raise cherrypy.HTTPRedirect(active_uri + "metrics")
+                else:
+                    raise cherrypy.HTTPError(503, 'No active ceph-mgr instance is currently running the prometheus')
 
         cherrypy.tree.mount(Root(), '/', {})
         self.log.info('Starting engine...')
