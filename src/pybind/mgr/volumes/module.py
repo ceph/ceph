@@ -6,7 +6,6 @@ try:
 except ImportError:
     import Queue
 
-import cephfs
 from mgr_module import MgrModule
 import orchestrator
 
