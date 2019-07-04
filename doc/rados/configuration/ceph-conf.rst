@@ -166,6 +166,9 @@ if the same option is specified in both ``global``, ``mon``, and
 ``mon.foo`` on the same source (i.e., in the same configurationfile),
 the ``mon.foo`` value will be used.
 
+If multiple values of the same configuration option are specified in the same
+section, the last value wins.
+
 Note that values from the local configuration file always take
 precedence over values from the monitor configuration database,
 regardless of which section they appear in.
@@ -276,6 +279,49 @@ surrounded by square brackets. For example,
 	[osd.2]
 	debug ms = 10
 
+
+Config file option values
+-------------------------
+
+The value of a configuration option is a string. If it is too long to
+fit in a single line, you can put a backslash (``\``) at the end of line
+as the line continuation marker, so the value of the option will be
+the string after ``=`` in current line combined with the string in the next
+line::
+
+  [global]
+  foo = long long ago\
+  long ago
+
+In the example above, the value of "``foo``" would be "``long long ago long ago``".
+
+Normally, the option value ends with a new line, or a comment, like
+
+.. code-block:: ini
+
+    [global]
+    obscure one = difficult to explain # I will try harder in next release
+    simpler one = nothing to explain
+
+In the example above, the value of "``obscure one``" would be "``difficult to explain``";
+and the value of "``simpler one`` would be "``nothing to explain``".
+
+If an option value contains spaces, and we want to make it explicit, we
+could quote the value using single or double quotes, like
+
+.. code-block:: ini
+
+    [global]
+    line = "to be, or not to be"
+
+Certain characters are not allowed to be present in the option values directly.
+They are ``=``, ``#``, ``;`` and ``[``. If we have to, we need to escape them,
+like
+
+.. code-block:: ini
+
+    [global]
+    secret = "i love \# and \["
 
 
 Monitor configuration database
@@ -488,4 +534,32 @@ will show only non-default settings (as well as where the value came from: a con
 will report the value of a single option.
 
 
+
+Changes since nautilus
+======================
+
+We changed the way the configuration file is parsed in Octopus. The changes are
+listed as follows:
+
+- repeated configuration options are allowed, and no warnings will be printed.
+  The value of the last one wins. Before this change, we would print out warning
+  messages at seeing lines with duplicated values, like::
+
+    warning line 42: 'foo' in section 'bar' redefined
+- invalid UTF-8 options are ignored with warning messages. But since Octopus,
+  they are treated as fatal errors.
+- backslash ``\`` is used as the line continuation marker to combine the next
+  line with current one. Before Octopus, it was required to follow backslash with
+  non-empty line. But in Octopus, empty line following backslash is now allowed.
+- In the configuration file, each line specifies an individual configuration
+  option. The option's name and its value are separated with ``=``. And the
+  value can be quoted using single or double quotes. But if an invalid
+  configuration is specified, we will treat it as an invalid configuration
+  file ::
+
+    bad option ==== bad value
+- Before Octopus, if no section name was specified in the configuration file,
+  all options would be grouped into the section of ``global``. But this is
+  discouraged now. Since Octopus, only a single option is allowed for
+  configuration files without a section name.
 
