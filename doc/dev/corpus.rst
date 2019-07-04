@@ -26,7 +26,7 @@ We can generate an object corpus for a particular version of ceph like so.
 	cd ceph
 	git submodule update --init --recursive
 
-#. Build with flag to dump objects to /tmp/foo::
+#. Build with flag to dump objects to ``/tmp/foo``::
 
 	rm -rf /tmp/foo ; mkdir /tmp/foo
 	do_cmake.sh -DCMAKE_CXX_FLAGS="-DENCODE_DUMP_PATH=/tmp/foo"
@@ -76,9 +76,9 @@ Do some more stuff with rgw if you know how.
 
 	pushd ../ceph-object-corpus
 	git checkout -b wip-new
-	git add archive/`../src/ceph-dencoder version`
-	git commit -m `../src/ceph-dencoder version`
-	git remote add cc ceph.com:/git/ceph-object-corpus.git
+	git add archive/`../build/bin/ceph-dencoder version`
+	git commit -m `../build/bin/ceph-dencoder version`
+	git remote add cc git@github.com:ceph/ceph-object-corpus.git
 	git push cc wip-new
 	popd
 
