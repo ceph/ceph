@@ -4818,6 +4818,28 @@ int main(int argc, const char **argv)
     return 0;
   }
 
+  bool non_master_cmd = (!store->is_meta_master() && !yes_i_really_mean_it);
+  std::set<int> non_master_ops_list = {OPT_USER_CREATE, OPT_USER_RM, 
+                                        OPT_USER_MODIFY, OPT_USER_ENABLE,
+                                        OPT_USER_SUSPEND, OPT_SUBUSER_CREATE,
+                                        OPT_SUBUSER_MODIFY, OPT_SUBUSER_RM,
+                                        OPT_BUCKET_LINK, OPT_BUCKET_UNLINK,
+                                        OPT_BUCKET_RESHARD, OPT_BUCKET_RM,
+                                        OPT_METADATA_PUT, OPT_METADATA_RM,
+                                        OPT_RESHARD_CANCEL, OPT_RESHARD_ADD,
+                                        OPT_MFA_CREATE, OPT_MFA_REMOVE,
+                                        OPT_MFA_RESYNC, OPT_CAPS_ADD,
+                                        OPT_CAPS_RM};
+
+  bool print_warning_message = (non_master_ops_list.find(opt_cmd) != non_master_ops_list.end() &&
+                                non_master_cmd);
+
+  if (print_warning_message) {
+      cerr << "Please run the command on master zone. Performing this operation on non-master zone leads to inconsistent metadata between zones" << std::endl;
+      cerr << "Are you sure you want to go ahead? (requires --yes-i-really-mean-it)" << std::endl;
+      return EINVAL;
+  }
+
   if (!user_id.empty()) {
     user_op.set_user_id(user_id);
     bucket_op.set_user_id(user_id);
@@ -4919,12 +4941,6 @@ int main(int argc, const char **argv)
   case OPT_USER_INFO:
     break;
   case OPT_USER_CREATE:
-    if (!store->svc.zone->is_meta_master() && !yes_i_really_mean_it) {
-      cerr << "user created here will not be synced to master zone" << std::endl;
-      cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
-      return EINVAL;
-    }
-
     if (!user_op.has_existing_user()) {
       user_op.set_generate_key(); // generate a new key by default
     }
@@ -4945,11 +4961,6 @@ int main(int argc, const char **argv)
     }
     break;
   case OPT_USER_RM:
-    if (!store->svc.zone->is_meta_master() && !yes_i_really_mean_it) {
-      cerr << "user delete operation will not be synced to master zone" << std::endl;
-      cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
-      return EINVAL;
-    }
     ret = user.remove(user_op, &err_msg);
     if (ret < 0) {
       cerr << "could not remove user: " << err_msg << std::endl;
@@ -4961,11 +4972,6 @@ int main(int argc, const char **argv)
   case OPT_USER_ENABLE:
   case OPT_USER_SUSPEND:
   case OPT_USER_MODIFY:
-    if (!store->svc.zone->is_meta_master() && !yes_i_really_mean_it) {
-      cerr << "user modify operation will not be synced to master zone" << std::endl;
-      cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
-      return EINVAL;
-    }
     ret = user.modify(user_op, &err_msg);
     if (ret < 0) {
       cerr << "could not modify user: " << err_msg << std::endl;
@@ -5466,11 +5472,6 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_BUCKET_LINK) {
-    if (!store->svc.zone->is_meta_master() && !yes_i_really_mean_it) {
-      cerr << "link operation will not be synced to master zone" << std::endl;
-      cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
-      return EINVAL;
-    }
     bucket_op.set_bucket_id(bucket_id);
     string err;
     int r = RGWBucketAdminOp::link(store, bucket_op, &err);
@@ -5481,11 +5482,6 @@ int main(int argc, const char **argv)
   }
 
   if (opt_cmd == OPT_BUCKET_UNLINK) {
-    if (!store->svc.zone->is_meta_master() && !yes_i_really_mean_it) {
-      cerr << "unlink operation will not be synced to master zone" << std::endl;
-      cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
-      return EINVAL;
-    }
     int r = RGWBucketAdminOp::unlink(store, bucket_op);
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << std::endl;
@@ -6132,11 +6128,6 @@ next:
   }
 
   if (opt_cmd == OPT_BUCKET_RESHARD) {
-    if (!store->svc.zone->is_meta_master() && !yes_i_really_mean_it) {
-      cerr << "resharding only applies to the local zone and will not be synced to master" << std::endl;
-      cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
-      return EINVAL;
-    }
     rgw_bucket bucket;
     RGWBucketInfo bucket_info;
     map<string, bufferlist> attrs;
@@ -6320,11 +6311,6 @@ next:
   }
 
   if (opt_cmd == OPT_OBJECT_UNLINK) {
-    if (!store->svc.zone->is_meta_master() && !yes_i_really_mean_it) {
-      cerr << "unlink operation will not be synced to master zone" << std::endl;
-      cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
-      return EINVAL;
-    }
     RGWBucketInfo bucket_info;
     int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
     if (ret < 0) {
@@ -6416,11 +6402,6 @@ next:
   }
 
   if (opt_cmd == OPT_BUCKET_RM) {
-    if (!store->svc.zone->is_meta_master() && !yes_i_really_mean_it) {
-      cerr << "bucket remove operation will not be synced to master zone" << std::endl;
-      cerr << "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
-      return EINVAL;
-    }
     if (!inconsistent_index) {
       RGWBucketAdminOp::remove_bucket(store, bucket_op, bypass_gc, true);
     } else {
