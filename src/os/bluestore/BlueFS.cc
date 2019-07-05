@@ -1354,7 +1354,7 @@ void BlueFS::_drop_link(FileRef file)
 int BlueFS::_read_random(
   FileReader *h,         ///< [in] read from here
   uint64_t off,          ///< [in] offset
-  size_t len,            ///< [in] this many bytes
+  uint64_t len,          ///< [in] this many bytes
   char *out)             ///< [out] optional: or copy it here
 {
   auto* buf = &h->buf;
@@ -1384,7 +1384,7 @@ int BlueFS::_read_random(
       s_lock.unlock();
       uint64_t x_off = 0;
       auto p = h->file->fnode.seek(off, &x_off);
-      uint64_t l = std::min(p->length - x_off, static_cast<uint64_t>(len));
+      uint64_t l = std::min(p->length - x_off, len);
       dout(20) << __func__ << " read random 0x"
 	       << std::hex << x_off << "~" << l << std::dec
 	       << " of " << *p << dendl;
