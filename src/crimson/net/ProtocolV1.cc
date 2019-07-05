@@ -691,6 +691,7 @@ ceph::bufferlist ProtocolV1::do_sweep_messages(
   }
 
   std::for_each(msgs.begin(), msgs.begin()+num_msgs, [this, &bl](const MessageRef& msg) {
+    ceph_assert(!msg->get_seq() && "message already has seq");
     msg->set_seq(++conn.out_seq);
     auto& header = msg->get_header();
     header.src = messenger.get_myname();
