@@ -203,7 +203,7 @@ seastar::future<> ShardServices::send_pg_created(pg_t pgid)
   auto o = get_osdmap();
   ceph_assert(o->require_osd_release >= ceph_release_t::luminous);
   pg_created.insert(pgid);
-  return monc.send_message(new MOSDPGCreated(pgid));
+  return monc.send_message(make_message<MOSDPGCreated>(pgid));
 }
 
 seastar::future<> ShardServices::send_pg_created()
@@ -213,7 +213,7 @@ seastar::future<> ShardServices::send_pg_created()
   ceph_assert(o->require_osd_release >= ceph_release_t::luminous);
   return seastar::parallel_for_each(pg_created,
     [this](auto &pgid) {
-      return monc.send_message(new MOSDPGCreated(pgid));
+      return monc.send_message(make_message<MOSDPGCreated>(pgid));
     });
 }
 
