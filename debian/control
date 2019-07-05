@@ -80,6 +80,9 @@ Build-Depends: cmake (>= 3.5),
 # Make-Check   python-werkzeug,
                python3-all-dev,
                python3-setuptools,
+# Make-Check   python3-cmd2
+# Make-Check   python3-colorama
+# Make-Check   python3-cephfs
 # Crimson      ragel,
 # Make-Check   socat,
 # Crimson      systemtap-sdt-dev,
