@@ -180,10 +180,14 @@ struct RGWBucketWebsiteConf
   std::string subdir_marker;
   std::string listing_css_doc;
   bool listing_enabled;
+  bool is_redirect_all;
+  bool is_set_index_doc;
   RGWBWRoutingRules routing_rules;
 
   RGWBucketWebsiteConf()
     : listing_enabled(false) {
+    is_redirect_all = false;
+    is_set_index_doc = false;
   }
 
   void encode(bufferlist& bl) const {
