@@ -43,7 +43,6 @@ set(common_srcs
   ceph_argparse.cc
   ceph_context.cc
   ceph_crypto.cc
-  ceph_crypto_cms.cc
   ceph_frag.cc
   ceph_fs.cc
   ceph_hash.cc

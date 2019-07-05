@@ -16,12 +16,6 @@
 
 #include <atomic>
 
-int rgw_open_cms_envelope(CephContext *cct,
-                          const std::string& src,
-                          std::string& dst);            /* out */
-int rgw_decode_b64_cms(CephContext *cct,
-                       const string& signed_b64,
-                       bufferlist& bl);
 bool rgw_is_pki_token(const string& token);
 void rgw_get_token_id(const string& token, string& token_id);
 static inline std::string rgw_get_token_id(const string& token)
@@ -124,7 +118,6 @@ public:
 
   typedef RGWKeystoneHTTPTransceiver RGWValidateKeystoneToken;
   typedef RGWKeystoneHTTPTransceiver RGWGetKeystoneAdminToken;
-  typedef RGWKeystoneHTTPTransceiver RGWGetRevokedTokens;
 
   static int get_admin_token(CephContext* const cct,
                              TokenCache& token_cache,
@@ -217,32 +210,6 @@ class TokenCache {
   };
 
   std::atomic<bool> down_flag = { false };
-
-  class RevokeThread : public Thread {
-    friend class TokenCache;
-    typedef RGWPostHTTPData RGWGetRevokedTokens;
-
-    CephContext* const cct;
-    TokenCache* const cache;
-    const rgw::keystone::Config& config;
-
-    Mutex lock;
-    Cond cond;
-
-    RevokeThread(CephContext* const cct,
-                 TokenCache* const cache,
-                 const rgw::keystone::Config& config)
-      : cct(cct),
-        cache(cache),
-        config(config),
-        lock("rgw::keystone::TokenCache::RevokeThread") {
-    }
-
-    void *entry() override;
-    void stop();
-    int check_revoked();
-  } revocator;
-
   const boost::intrusive_ptr<CephContext> cct;
 
   std::string admin_token_id;
@@ -255,30 +222,13 @@ class TokenCache {
   const size_t max;
 
   explicit TokenCache(const rgw::keystone::Config& config)
-    : revocator(g_ceph_context, this, config),
-      cct(g_ceph_context),
+    : cct(g_ceph_context),
       lock("rgw::keystone::TokenCache"),
       max(cct->_conf->rgw_keystone_token_cache_size) {
-    /* revocation logic needs to be smarter, but meanwhile,
-     *  make it optional.
-     * see http://tracker.ceph.com/issues/9493
-     *     http://tracker.ceph.com/issues/19499
-     */
-    if (cct->_conf->rgw_keystone_revocation_interval > 0
-        && cct->_conf->rgw_keystone_token_cache_size ) {
-      /* The thread name has been kept for backward compliance. */
-      revocator.create("rgw_swift_k_rev");
-    }
   }
 
   ~TokenCache() {
     down_flag = true;
-
-    // Only stop and join if revocator thread is started.
-    if (revocator.is_started()) {
-      revocator.stop();
-      revocator.join();
-    }
   }
 
 public:

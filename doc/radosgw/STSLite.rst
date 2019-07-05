@@ -97,9 +97,7 @@ configurable options will be::
   rgw keystone admin user = keystone service tenant user password}
   rgw keystone accepted roles = {accepted user roles}
   rgw keystone token cache size = {number of tokens to cache}
-  rgw keystone revocation interval = {number of seconds before checking revoked tickets}
   rgw s3 auth use keystone = true
-  rgw nss db path = {path to nss db}
 
 Note: By default, STS and S3 APIs co-exist in the same namespace, and both S3
 and STS APIs can be accessed via the same endpoint in Ceph Object Gateway.

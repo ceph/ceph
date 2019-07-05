@@ -119,7 +119,7 @@ target_link_libraries(crimson-common
     crc32
     crimson::cflags
     ${crimson_common_deps}
-    ${NSS_LIBRARIES} ${NSPR_LIBRARIES} OpenSSL::Crypto)
+    OpenSSL::Crypto)
 
 set(crimson_auth_srcs
   auth/KeyRing.cc)
