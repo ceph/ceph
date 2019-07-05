@@ -263,13 +263,25 @@ class PgRecoveryEvent(Event):
                         ratio = 0.5
 
                     complete_accumulate += ratio
+        
+        # Update duration of event in seconds/minutes/hours
+        duration = (datetime.datetime.utcnow() - self.started_at)
+        duration_sec = duration.seconds
+        duration_min = duration_sec //60
+        duration_hr = duration_min // 60
 
         self._pgs = list(set(self._pgs) ^ complete)
         completed_pgs = self._original_pg_count - len(self._pgs)
         self._progress = (completed_pgs + complete_accumulate)\
             / self._original_pg_count
-        self._refresh()
 
+        # Because the spacing of 'in' and 'out' characters are different
+        if self._message[31] == "i":
+            self._message = self._message[:34] + "(since {0}h {1}m {2}s)".format(duration_hr, duration_min, duration_sec)
+        else:
+            self._message = self._message[:34] + " (since {0}h {1}m {2}s)".format(duration_hr, duration_min, duration_sec)
+        self._refresh()
+        
         log.info("Updated progress to {0} ({1})".format(
             self._progress, self._message
         ))
