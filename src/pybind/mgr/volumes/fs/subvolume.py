@@ -183,7 +183,11 @@ class SubVolume(object):
                 self.fs.rmdir(root_path)
 
         trashpath = spec.trash_path
-        rmtree(trashpath)
+        # catch any unlink errors
+        try:
+            rmtree(trashpath)
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
 
     def get_subvolume_path(self, spec):
         path = spec.subvolume_path
