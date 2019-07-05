@@ -86,11 +86,11 @@
     "zone.js": "0.8.29"
   },
   "devDependencies": {
-    "@angular-devkit/build-angular": "0.13.3",
+    "@angular-devkit/build-angular": "0.13.9",
     "@angular/cli": "7.3.3",
     "@angular/compiler-cli": "7.2.6",
     "@angular/language-service": "7.2.6",
-    "@compodoc/compodoc": "^1.1.9",
+    "@compodoc/compodoc": "1.1.9",
     "@types/jasmine": "3.3.9",
     "@types/jasminewd2": "2.0.6",
     "@types/jest": "24.0.9",
@@ -101,17 +101,17 @@
     "html-linter": "1.1.1",
     "jasmine-core": "3.3.0",
     "jasmine-spec-reporter": "4.2.1",
-    "jest": "24.1.0",
+    "jest": "24.8.0",
     "jest-canvas-mock": "1.1.0",
     "jest-preset-angular": "6.0.2",
     "jest-silent-reporter": "0.1.2",
     "prettier": "1.16.4",
-    "pretty-quick": "^1.11.0",
+    "pretty-quick": "1.11.0",
     "protractor": "5.4.2",
     "protractor-screenshoter-plugin": "0.10.3",
     "replace-in-file": "3.4.3",
     "ts-node": "8.0.2",
-    "tslint": "5.12.1",
+    "tslint": "5.18.0",
     "typescript": "3.2.4"
   }
 }
