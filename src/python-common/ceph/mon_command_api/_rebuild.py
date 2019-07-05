@@ -49,7 +49,8 @@ class MonCommandApi(object):
         
     def _mon_command(self, cmd, inbuf=b'', target=None):
         res = self._rados.mon_command(json.dumps(cmd), inbuf=inbuf, target=target)
-        return CommandResult(*res)"""
+        return CommandResult(*res)
+"""
 
 func_template = '''
 def {}({}):
@@ -116,7 +117,6 @@ class Param(object):
         'CephFloat': 'float',
     }
 
-
     def __init__(self, type, name, who=None, n=None, req=True, range=None, strings=None, goodchars=None):
         self.type = type
         self.name = name
@@ -136,11 +136,11 @@ class Param(object):
     def help(self):
         advanced = ''
         if self.range:
-            advanced += 'ragne={} '.format(self.range)
+            advanced += 'range=``{}`` '.format(self.range.replace('|', '..'))
         if self.strings:
             advanced += 'strings={} '.format(self.strings)
         if self.goodchars:
-            advanced += 'goodchars={} '.format(self.goodchars)
+            advanced += 'goodchars=``{}`` '.format(self.goodchars)
 
         lines = textwrap.wrap(':param {}: {} {}'.format(self.safe_name(), self.type, advanced))
         return '\n    '.join(lines)
@@ -157,7 +157,6 @@ class Param(object):
     def mk_type(self):
         if PY2:
             return ''
-        inner = Param.t[self.type]
         return ': ' + self.py_type()
 
     def mk_dict(self):
@@ -229,23 +228,22 @@ def set_overload(funcs):
             for f in g:
                 f.needs_overload = True
 
-def mk_sigs(cluster):
+def mk_sigs(cluster, out):
     all = json.loads(run_command(cluster, {"prefix": "get_command_descriptions"})[1])
-    #print(all)
     sigs = [FuncSig(**e[1]) for e in all.items()]
     sigs = sorted(sigs, key=lambda f: f.sig)
     set_overload(sigs)
 
-    print(header)
-    print('\n'.join([indent(str(s)) for s in sigs]))
-    print(footer)
+    out.write(header)
+    out.write('\n'.join([indent(str(s)) for s in sigs]))
+    out.write(footer)
 
-def main(conf, py_ver='3'):
+def main(conf, py_ver='3', out=sys.stdout):
     cluster = rados.Rados(conffile=conf)
     cluster.connect()
     global PY2
     PY2 = py_ver == '2'
-    mk_sigs(cluster)
+    mk_sigs(cluster, out)
 
 if __name__ == '__main__':
     main(*sys.argv[1:])

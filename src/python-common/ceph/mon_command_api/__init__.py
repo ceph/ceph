@@ -1,6 +1,9 @@
 from collections import namedtuple
 
-from .generated_api import MonCommandApi
+try:
+    from ceph.mon_command_api.generated_api import MonCommandApi
+except ImportError:
+    pass
 
 class CommandResult(namedtuple('CommandResult', ['retval', 'stdout', 'stderr'])):
     def __new__(cls, retval=0, stdout="", stderr=""):

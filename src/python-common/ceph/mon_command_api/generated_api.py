@@ -41,6 +41,8 @@ class MonCommandApi(object):
     def ansible_set_ssl_certificate(self, mgr_id=None):
         # type: (str) -> CommandResult
         """
+        Set the ssl client certificate
+        
         module=mgr perm=w flags=mgr
         
         :param mgr_id: CephString
@@ -52,6 +54,8 @@ class MonCommandApi(object):
     def ansible_set_ssl_certificate_key(self, mgr_id=None):
         # type: (str) -> CommandResult
         """
+        Set the ssl client private key
+        
         module=mgr perm=w flags=mgr
         
         :param mgr_id: CephString
@@ -552,7 +556,7 @@ class MonCommandApi(object):
         
         module=config perm=rw flags=
         
-        :param num: CephInt ragne=0
+        :param num: CephInt range=``0``
         """
         prefix = 'config reset'
         _args = {'prefix': prefix, 'num': num}
@@ -2209,7 +2213,7 @@ class MonCommandApi(object):
         
         module=mds perm=r flags=
         
-        :param epoch: CephInt ragne=0
+        :param epoch: CephInt range=``0``
         """
         prefix = 'fs dump'
         _args = {'prefix': prefix, 'epoch': epoch}
@@ -2633,19 +2637,6 @@ class MonCommandApi(object):
         _args = {'prefix': prefix, 'heapcmd': heapcmd}
         return self._mon_command(_args)
     
-    def hello(self, person_name=None):
-        # type: (str) -> CommandResult
-        """
-        Prints hello world to mgr.x.log
-        
-        module=mgr perm=r flags=mgr
-        
-        :param person_name: CephString
-        """
-        prefix = 'hello'
-        _args = {'prefix': prefix, 'person_name': person_name}
-        return self._mon_command(_args)
-    
     def influx_config_set(self, key, value):
         # type: (str, str) -> CommandResult
         """
@@ -2724,7 +2715,7 @@ class MonCommandApi(object):
         """
         Get IO rates
         
-        module=mgr perm=r flags=mgr, poll
+        module=mgr perm=r flags=poll, mgr
         """
         prefix = 'iostat'
         _args = {'prefix': prefix, }
@@ -2750,7 +2741,7 @@ class MonCommandApi(object):
         
         module=mon perm=r flags=
         
-        :param num: CephInt ragne=1
+        :param num: CephInt range=``1``
         :param level: CephChoices strings=debug|info|sec|warn|error
         :param channel: CephChoices strings=*|cluster|audit
         """
@@ -2803,7 +2794,7 @@ class MonCommandApi(object):
         
         module=mds perm=rw flags=
         
-        :param feature: CephInt ragne=0
+        :param feature: CephInt range=``0``
         """
         prefix = 'mds compat rm_compat'
         _args = {'prefix': prefix, 'feature': feature}
@@ -2816,7 +2807,7 @@ class MonCommandApi(object):
         
         module=mds perm=rw flags=
         
-        :param feature: CephInt ragne=0
+        :param feature: CephInt range=``0``
         """
         prefix = 'mds compat rm_incompat'
         _args = {'prefix': prefix, 'feature': feature}
@@ -2868,7 +2859,7 @@ class MonCommandApi(object):
         
         module=mds perm=r flags=obsolete
         
-        :param epoch: CephInt ragne=0
+        :param epoch: CephInt range=``0``
         """
         prefix = 'mds dump'
         _args = {'prefix': prefix, 'epoch': epoch}
@@ -2909,7 +2900,7 @@ class MonCommandApi(object):
         
         module=mds perm=r flags=obsolete
         
-        :param epoch: CephInt ragne=0
+        :param epoch: CephInt range=``0``
         """
         prefix = 'mds getmap'
         _args = {'prefix': prefix, 'epoch': epoch}
@@ -2936,8 +2927,8 @@ class MonCommandApi(object):
         
         module=mds perm=rw flags=obsolete
         
-        :param metadata: CephInt ragne=0
-        :param data: CephInt ragne=0
+        :param metadata: CephInt range=``0``
+        :param data: CephInt range=``0``
         :param yes_i_really_mean_it: CephBool
         """
         prefix = 'mds newfs'
@@ -2993,7 +2984,7 @@ class MonCommandApi(object):
         
         module=mds perm=rw flags=
         
-        :param gid: CephInt ragne=0
+        :param gid: CephInt range=``0``
         """
         prefix = 'mds rm'
         _args = {'prefix': prefix, 'gid': gid}
@@ -3053,7 +3044,7 @@ class MonCommandApi(object):
         
         module=mds perm=rw flags=obsolete
         
-        :param maxmds: CephInt ragne=0
+        :param maxmds: CephInt range=``0``
         """
         prefix = 'mds set_max_mds'
         _args = {'prefix': prefix, 'maxmds': maxmds}
@@ -3066,8 +3057,8 @@ class MonCommandApi(object):
         
         module=mds perm=rw flags=hidden
         
-        :param gid: CephInt ragne=0
-        :param state: CephInt ragne=0|20
+        :param gid: CephInt range=``0``
+        :param state: CephInt range=``0..20``
         """
         prefix = 'mds set_state'
         _args = {'prefix': prefix, 'gid': gid, 'state': state}
@@ -3144,7 +3135,7 @@ class MonCommandApi(object):
         
         module=mgr perm=r flags=
         
-        :param epoch: CephInt ragne=0
+        :param epoch: CephInt range=``0``
         """
         prefix = 'mgr dump'
         _args = {'prefix': prefix, 'epoch': epoch}
@@ -3420,7 +3411,7 @@ class MonCommandApi(object):
         
         module=mon perm=r flags=
         
-        :param epoch: CephInt ragne=0
+        :param epoch: CephInt range=``0``
         """
         prefix = 'mon dump'
         _args = {'prefix': prefix, 'epoch': epoch}
@@ -3472,7 +3463,7 @@ class MonCommandApi(object):
         
         module=mon perm=r flags=
         
-        :param epoch: CephInt ragne=0
+        :param epoch: CephInt range=``0``
         """
         prefix = 'mon getmap'
         _args = {'prefix': prefix, 'epoch': epoch}
@@ -3603,7 +3594,7 @@ class MonCommandApi(object):
         module=mon perm=rw flags=
         
         :param name: CephString
-        :param weight: CephInt ragne=0|65535
+        :param weight: CephInt range=``0..65535``
         """
         prefix = 'mon set-weight'
         _args = {'prefix': prefix, 'name': name, 'weight': weight}
@@ -4013,7 +4004,7 @@ class MonCommandApi(object):
         
         :param blacklistop: CephChoices strings=add|rm
         :param addr: CephEntityAddr
-        :param expire: CephFloat ragne=0.0
+        :param expire: CephFloat range=``0.0``
         """
         prefix = 'osd blacklist'
         _args = {'prefix': prefix, 'blacklistop': blacklistop, 'addr': addr, 'expire': expire}
@@ -4089,8 +4080,8 @@ class MonCommandApi(object):
         module=osd perm=rw flags=
         
         :param id_1: CephOsdName
-        :param weight: CephFloat ragne=0.0
-        :param args: CephString goodchars=[A-Za-z0-9-_.=]
+        :param weight: CephFloat range=``0.0``
+        :param args: CephString goodchars=``[A-Za-z0-9-_.=]``
         """
         prefix = 'osd crush add'
         _args = {'prefix': prefix, 'id': id_1, 'weight': weight, 'args': args}
@@ -4104,9 +4095,9 @@ class MonCommandApi(object):
         
         module=osd perm=rw flags=
         
-        :param name: CephString goodchars=[A-Za-z0-9-_.]
+        :param name: CephString goodchars=``[A-Za-z0-9-_.]``
         :param type_1: CephString
-        :param args: CephString goodchars=[A-Za-z0-9-_.=]
+        :param args: CephString goodchars=``[A-Za-z0-9-_.=]``
         """
         prefix = 'osd crush add-bucket'
         _args = {'prefix': prefix, 'name': name, 'type': type_1, 'args': args}
@@ -4119,7 +4110,7 @@ class MonCommandApi(object):
         
         module=osd perm=rw flags=
         
-        :param class_1: CephString goodchars=[A-Za-z0-9-_]
+        :param class_1: CephString goodchars=``[A-Za-z0-9-_]``
         """
         prefix = 'osd crush class create'
         _args = {'prefix': prefix, 'class': class_1}
@@ -4143,7 +4134,7 @@ class MonCommandApi(object):
         
         module=osd perm=r flags=
         
-        :param class_1: CephString goodchars=[A-Za-z0-9-_]
+        :param class_1: CephString goodchars=``[A-Za-z0-9-_]``
         """
         prefix = 'osd crush class ls-osd'
         _args = {'prefix': prefix, 'class': class_1}
@@ -4156,8 +4147,8 @@ class MonCommandApi(object):
         
         module=osd perm=rw flags=
         
-        :param srcname: CephString goodchars=[A-Za-z0-9-_]
-        :param dstname: CephString goodchars=[A-Za-z0-9-_]
+        :param srcname: CephString goodchars=``[A-Za-z0-9-_]``
+        :param dstname: CephString goodchars=``[A-Za-z0-9-_]``
         """
         prefix = 'osd crush class rename'
         _args = {'prefix': prefix, 'srcname': srcname, 'dstname': dstname}
@@ -4170,7 +4161,7 @@ class MonCommandApi(object):
         
         module=osd perm=rw flags=
         
-        :param class_1: CephString goodchars=[A-Za-z0-9-_]
+        :param class_1: CephString goodchars=``[A-Za-z0-9-_]``
         """
         prefix = 'osd crush class rm'
         _args = {'prefix': prefix, 'class': class_1}
@@ -4185,8 +4176,8 @@ class MonCommandApi(object):
         module=osd perm=rw flags=
         
         :param id_1: CephOsdName
-        :param weight: CephFloat ragne=0.0
-        :param args: CephString goodchars=[A-Za-z0-9-_.=]
+        :param weight: CephFloat range=``0.0``
+        :param args: CephString goodchars=``[A-Za-z0-9-_.=]``
         """
         prefix = 'osd crush create-or-move'
         _args = {'prefix': prefix, 'id': id_1, 'weight': weight, 'args': args}
@@ -4237,7 +4228,7 @@ class MonCommandApi(object):
         module=osd perm=rw flags=
         
         :param name: CephString
-        :param args: CephString goodchars=[A-Za-z0-9-_.=]
+        :param args: CephString goodchars=``[A-Za-z0-9-_.=]``
         """
         prefix = 'osd crush link'
         _args = {'prefix': prefix, 'name': name, 'args': args}
@@ -4250,7 +4241,7 @@ class MonCommandApi(object):
         
         module=osd perm=r flags=
         
-        :param node: CephString goodchars=[A-Za-z0-9-_.]
+        :param node: CephString goodchars=``[A-Za-z0-9-_.]``
         """
         prefix = 'osd crush ls'
         _args = {'prefix': prefix, 'node': node}
@@ -4263,8 +4254,8 @@ class MonCommandApi(object):
         
         module=osd perm=rw flags=
         
-        :param name: CephString goodchars=[A-Za-z0-9-_.]
-        :param args: CephString goodchars=[A-Za-z0-9-_.=]
+        :param name: CephString goodchars=``[A-Za-z0-9-_.]``
+        :param args: CephString goodchars=``[A-Za-z0-9-_.=]``
         """
         prefix = 'osd crush move'
         _args = {'prefix': prefix, 'name': name, 'args': args}
@@ -4278,8 +4269,8 @@ class MonCommandApi(object):
         
         module=osd perm=rw flags=deprecated
         
-        :param name: CephString goodchars=[A-Za-z0-9-_.]
-        :param ancestor: CephString goodchars=[A-Za-z0-9-_.]
+        :param name: CephString goodchars=``[A-Za-z0-9-_.]``
+        :param ancestor: CephString goodchars=``[A-Za-z0-9-_.]``
         """
         prefix = 'osd crush remove'
         _args = {'prefix': prefix, 'name': name, 'ancestor': ancestor}
@@ -4292,8 +4283,8 @@ class MonCommandApi(object):
         
         module=osd perm=rw flags=
         
-        :param srcname: CephString goodchars=[A-Za-z0-9-_.]
-        :param dstname: CephString goodchars=[A-Za-z0-9-_.]
+        :param srcname: CephString goodchars=``[A-Za-z0-9-_.]``
+        :param dstname: CephString goodchars=``[A-Za-z0-9-_.]``
         """
         prefix = 'osd crush rename-bucket'
         _args = {'prefix': prefix, 'srcname': srcname, 'dstname': dstname}
@@ -4306,8 +4297,8 @@ class MonCommandApi(object):
         
         module=osd perm=rw flags=
         
-        :param name: CephString goodchars=[A-Za-z0-9-_.]
-        :param weight: CephFloat ragne=0.0
+        :param name: CephString goodchars=``[A-Za-z0-9-_.]``
+        :param weight: CephFloat range=``0.0``
         """
         prefix = 'osd crush reweight'
         _args = {'prefix': prefix, 'name': name, 'weight': weight}
@@ -4331,8 +4322,8 @@ class MonCommandApi(object):
         
         module=osd perm=rw flags=
         
-        :param name: CephString goodchars=[A-Za-z0-9-_.]
-        :param weight: CephFloat ragne=0.0
+        :param name: CephString goodchars=``[A-Za-z0-9-_.]``
+        :param weight: CephFloat range=``0.0``
         """
         prefix = 'osd crush reweight-subtree'
         _args = {'prefix': prefix, 'name': name, 'weight': weight}
@@ -4345,8 +4336,8 @@ class MonCommandApi(object):
         
         module=osd perm=rw flags=
         
-        :param name: CephString goodchars=[A-Za-z0-9-_.]
-        :param ancestor: CephString goodchars=[A-Za-z0-9-_.]
+        :param name: CephString goodchars=``[A-Za-z0-9-_.]``
+        :param ancestor: CephString goodchars=``[A-Za-z0-9-_.]``
         """
         prefix = 'osd crush rm'
         _args = {'prefix': prefix, 'name': name, 'ancestor': ancestor}
@@ -4374,8 +4365,8 @@ class MonCommandApi(object):
         
         module=osd perm=rw flags=
         
-        :param name: CephString goodchars=[A-Za-z0-9-_.]
-        :param profile: CephString goodchars=[A-Za-z0-9-_.=]
+        :param name: CephString goodchars=``[A-Za-z0-9-_.]``
+        :param profile: CephString goodchars=``[A-Za-z0-9-_.=]``
         """
         prefix = 'osd crush rule create-erasure'
         _args = {'prefix': prefix, 'name': name, 'profile': profile}
@@ -4390,10 +4381,10 @@ class MonCommandApi(object):
         
         module=osd perm=rw flags=
         
-        :param name: CephString goodchars=[A-Za-z0-9-_.]
-        :param root: CephString goodchars=[A-Za-z0-9-_.]
-        :param type_1: CephString goodchars=[A-Za-z0-9-_.]
-        :param class_1: CephString goodchars=[A-Za-z0-9-_.]
+        :param name: CephString goodchars=``[A-Za-z0-9-_.]``
+        :param root: CephString goodchars=``[A-Za-z0-9-_.]``
+        :param type_1: CephString goodchars=``[A-Za-z0-9-_.]``
+        :param class_1: CephString goodchars=``[A-Za-z0-9-_.]``
         """
         prefix = 'osd crush rule create-replicated'
         _args = {'prefix': prefix, 'name': name, 'root': root, 'type': type_1, 'class': class_1}
@@ -4408,9 +4399,9 @@ class MonCommandApi(object):
         
         module=osd perm=rw flags=
         
-        :param name: CephString goodchars=[A-Za-z0-9-_.]
-        :param root: CephString goodchars=[A-Za-z0-9-_.]
-        :param type_1: CephString goodchars=[A-Za-z0-9-_.]
+        :param name: CephString goodchars=``[A-Za-z0-9-_.]``
+        :param root: CephString goodchars=``[A-Za-z0-9-_.]``
+        :param type_1: CephString goodchars=``[A-Za-z0-9-_.]``
         :param mode: CephChoices strings=firstn|indep
         """
         prefix = 'osd crush rule create-simple'
@@ -4424,7 +4415,7 @@ class MonCommandApi(object):
         
         module=osd perm=r flags=
         
-        :param name: CephString goodchars=[A-Za-z0-9-_.]
+        :param name: CephString goodchars=``[A-Za-z0-9-_.]``
         """
         prefix = 'osd crush rule dump'
         _args = {'prefix': prefix, 'name': name}
@@ -4460,7 +4451,7 @@ class MonCommandApi(object):
         
         module=osd perm=r flags=
         
-        :param class_1: CephString goodchars=[A-Za-z0-9-_.]
+        :param class_1: CephString goodchars=``[A-Za-z0-9-_.]``
         """
         prefix = 'osd crush rule ls-by-class'
         _args = {'prefix': prefix, 'class': class_1}
@@ -4473,8 +4464,8 @@ class MonCommandApi(object):
         
         module=osd perm=rw flags=
         
-        :param srcname: CephString goodchars=[A-Za-z0-9-_.]
-        :param dstname: CephString goodchars=[A-Za-z0-9-_.]
+        :param srcname: CephString goodchars=``[A-Za-z0-9-_.]``
+        :param dstname: CephString goodchars=``[A-Za-z0-9-_.]``
         """
         prefix = 'osd crush rule rename'
         _args = {'prefix': prefix, 'srcname': srcname, 'dstname': dstname}
@@ -4487,7 +4478,7 @@ class MonCommandApi(object):
         
         module=osd perm=rw flags=
         
-        :param name: CephString goodchars=[A-Za-z0-9-_.]
+        :param name: CephString goodchars=``[A-Za-z0-9-_.]``
         """
         prefix = 'osd crush rule rm'
         _args = {'prefix': prefix, 'name': name}
@@ -4517,8 +4508,8 @@ class MonCommandApi(object):
     #     module=osd perm=rw flags=
     #     
     #     :param id_1: CephOsdName
-    #     :param weight: CephFloat ragne=0.0
-    #     :param args: CephString goodchars=[A-Za-z0-9-_.=]
+    #     :param weight: CephFloat range=``0.0``
+    #     :param args: CephString goodchars=``[A-Za-z0-9-_.=]``
     #     """
     #     prefix = 'osd crush set'
     #     _args = {'prefix': prefix, 'id': id_1, 'weight': weight, 'args': args}
@@ -4583,8 +4574,8 @@ class MonCommandApi(object):
         
         module=osd perm=rw flags=
         
-        :param source: CephString goodchars=[A-Za-z0-9-_.]
-        :param dest: CephString goodchars=[A-Za-z0-9-_.]
+        :param source: CephString goodchars=``[A-Za-z0-9-_.]``
+        :param dest: CephString goodchars=``[A-Za-z0-9-_.]``
         :param yes_i_really_mean_it: CephBool
         """
         prefix = 'osd crush swap-bucket'
@@ -4626,8 +4617,8 @@ class MonCommandApi(object):
         
         module=osd perm=rw flags=
         
-        :param name: CephString goodchars=[A-Za-z0-9-_.]
-        :param ancestor: CephString goodchars=[A-Za-z0-9-_.]
+        :param name: CephString goodchars=``[A-Za-z0-9-_.]``
+        :param ancestor: CephString goodchars=``[A-Za-z0-9-_.]``
         """
         prefix = 'osd crush unlink'
         _args = {'prefix': prefix, 'name': name, 'ancestor': ancestor}
@@ -4689,7 +4680,7 @@ class MonCommandApi(object):
         
         :param pool: CephPoolname
         :param item: CephString
-        :param weight: CephFloat ragne=0.0
+        :param weight: CephFloat range=``0.0``
         """
         prefix = 'osd crush weight-set reweight'
         _args = {'prefix': prefix, 'pool': pool, 'item': item, 'weight': weight}
@@ -4704,7 +4695,7 @@ class MonCommandApi(object):
         module=osd perm=rw flags=
         
         :param item: CephString
-        :param weight: CephFloat ragne=0.0
+        :param weight: CephFloat range=``0.0``
         """
         prefix = 'osd crush weight-set reweight-compat'
         _args = {'prefix': prefix, 'item': item, 'weight': weight}
@@ -4817,7 +4808,7 @@ class MonCommandApi(object):
         
         module=osd perm=r flags=
         
-        :param epoch: CephInt ragne=0
+        :param epoch: CephInt range=``0``
         """
         prefix = 'osd dump'
         _args = {'prefix': prefix, 'epoch': epoch}
@@ -4830,7 +4821,7 @@ class MonCommandApi(object):
         
         module=osd perm=r flags=
         
-        :param name: CephString goodchars=[A-Za-z0-9-_.]
+        :param name: CephString goodchars=``[A-Za-z0-9-_.]``
         """
         prefix = 'osd erasure-code-profile get'
         _args = {'prefix': prefix, 'name': name}
@@ -4854,7 +4845,7 @@ class MonCommandApi(object):
         
         module=osd perm=rw flags=
         
-        :param name: CephString goodchars=[A-Za-z0-9-_.]
+        :param name: CephString goodchars=``[A-Za-z0-9-_.]``
         """
         prefix = 'osd erasure-code-profile rm'
         _args = {'prefix': prefix, 'name': name}
@@ -4868,7 +4859,7 @@ class MonCommandApi(object):
         
         module=osd perm=rw flags=
         
-        :param name: CephString goodchars=[A-Za-z0-9-_.]
+        :param name: CephString goodchars=``[A-Za-z0-9-_.]``
         :param profile: CephString
         :param force: CephBool
         """
@@ -4921,7 +4912,7 @@ class MonCommandApi(object):
         
         module=osd perm=r flags=
         
-        :param epoch: CephInt ragne=0
+        :param epoch: CephInt range=``0``
         """
         prefix = 'osd getcrushmap'
         _args = {'prefix': prefix, 'epoch': epoch}
@@ -4934,7 +4925,7 @@ class MonCommandApi(object):
         
         module=osd perm=r flags=
         
-        :param epoch: CephInt ragne=0
+        :param epoch: CephInt range=``0``
         """
         prefix = 'osd getmap'
         _args = {'prefix': prefix, 'epoch': epoch}
@@ -5000,7 +4991,7 @@ class MonCommandApi(object):
         
         module=osd perm=r flags=
         
-        :param epoch: CephInt ragne=0
+        :param epoch: CephInt range=``0``
         """
         prefix = 'osd ls'
         _args = {'prefix': prefix, 'epoch': epoch}
@@ -5014,7 +5005,7 @@ class MonCommandApi(object):
         module=osd perm=r flags=
         
         :param name: CephString
-        :param epoch: CephInt ragne=0
+        :param epoch: CephInt range=``0``
         """
         prefix = 'osd ls-tree'
         _args = {'prefix': prefix, 'name': name, 'epoch': epoch}
@@ -5242,7 +5233,7 @@ class MonCommandApi(object):
         module=osd perm=rw flags=
         
         :param pool: CephPoolname
-        :param app: CephString goodchars=[A-Za-z0-9-_.]
+        :param app: CephString goodchars=``[A-Za-z0-9-_.]``
         :param yes_i_really_mean_it: CephBool
         """
         prefix = 'osd pool application enable'
@@ -5290,8 +5281,8 @@ class MonCommandApi(object):
         
         :param pool: CephPoolname
         :param app: CephString
-        :param key: CephString goodchars=[A-Za-z0-9-_.]
-        :param value: CephString goodchars=[A-Za-z0-9-_.=]
+        :param key: CephString goodchars=``[A-Za-z0-9-_.]``
+        :param value: CephString goodchars=``[A-Za-z0-9-_.=]``
         """
         prefix = 'osd pool application set'
         _args = {'prefix': prefix, 'pool': pool, 'app': app, 'key': key, 'value': value}
@@ -5345,16 +5336,16 @@ class MonCommandApi(object):
         module=osd perm=rw flags=
         
         :param pool: CephPoolname
-        :param pg_num: CephInt ragne=0
-        :param pgp_num: CephInt ragne=0
+        :param pg_num: CephInt range=``0``
+        :param pgp_num: CephInt range=``0``
         :param pool_type: CephChoices strings=replicated|erasure
-        :param erasure_code_profile: CephString goodchars=[A-Za-z0-9-_.]
+        :param erasure_code_profile: CephString goodchars=``[A-Za-z0-9-_.]``
         :param rule: CephString
         :param expected_num_objects: CephInt
         :param size: CephInt
-        :param pg_num_min: CephInt ragne=0
-        :param target_size_bytes: CephInt ragne=0
-        :param target_size_ratio: CephFloat ragne=0|1
+        :param pg_num_min: CephInt range=``0``
+        :param target_size_bytes: CephInt range=``0``
+        :param target_size_ratio: CephFloat range=``0..1``
         """
         prefix = 'osd pool create'
         _args = {'prefix': prefix, 'pool': pool, 'pg_num': pg_num, 'pgp_num': pgp_num,
@@ -5631,7 +5622,7 @@ class MonCommandApi(object):
         module=osd perm=rw flags=
         
         :param id_1: CephOsdName
-        :param weight: CephFloat ragne=0.0|1.0
+        :param weight: CephFloat range=``0.0..1.0``
         """
         prefix = 'osd primary-affinity'
         _args = {'prefix': prefix, 'id': id_1, 'weight': weight}
@@ -5734,7 +5725,7 @@ class MonCommandApi(object):
         module=osd perm=rw flags=
         
         :param id_1: CephOsdName
-        :param weight: CephFloat ragne=0.0|1.0
+        :param weight: CephFloat range=``0.0..1.0``
         """
         prefix = 'osd reweight'
         _args = {'prefix': prefix, 'id': id_1, 'weight': weight}
@@ -5944,7 +5935,7 @@ class MonCommandApi(object):
         
         module=osd perm=rw flags=
         
-        :param ratio: CephFloat ragne=0.0|1.0
+        :param ratio: CephFloat range=``0.0..1.0``
         """
         prefix = 'osd set-backfillfull-ratio'
         _args = {'prefix': prefix, 'ratio': ratio}
@@ -5957,7 +5948,7 @@ class MonCommandApi(object):
         
         module=osd perm=rw flags=
         
-        :param ratio: CephFloat ragne=0.0|1.0
+        :param ratio: CephFloat range=``0.0..1.0``
         """
         prefix = 'osd set-full-ratio'
         _args = {'prefix': prefix, 'ratio': ratio}
@@ -5985,7 +5976,7 @@ class MonCommandApi(object):
         
         module=osd perm=rw flags=
         
-        :param ratio: CephFloat ragne=0.0|1.0
+        :param ratio: CephFloat range=``0.0..1.0``
         """
         prefix = 'osd set-nearfull-ratio'
         _args = {'prefix': prefix, 'ratio': ratio}
@@ -6026,7 +6017,7 @@ class MonCommandApi(object):
         
         module=osd perm=rw flags=
         
-        :param newmax: CephInt ragne=0
+        :param newmax: CephInt range=``0``
         """
         prefix = 'osd setmaxosd'
         _args = {'prefix': prefix, 'newmax': newmax}
@@ -6133,7 +6124,7 @@ class MonCommandApi(object):
         
         :param pool: CephPoolname
         :param tierpool: CephPoolname
-        :param size: CephInt ragne=0
+        :param size: CephInt range=``0``
         """
         prefix = 'osd tier add-cache'
         _args = {'prefix': prefix, 'pool': pool, 'tierpool': tierpool, 'size': size}
@@ -6235,7 +6226,7 @@ class MonCommandApi(object):
         
         module=osd perm=r flags=
         
-        :param epoch: CephInt ragne=0
+        :param epoch: CephInt range=``0``
         :param states: CephChoices strings=up|down|in|out|destroyed
         """
         prefix = 'osd tree'
@@ -6250,7 +6241,7 @@ class MonCommandApi(object):
         module=osd perm=r flags=
         
         :param bucket: CephString
-        :param epoch: CephInt ragne=0
+        :param epoch: CephInt range=``0``
         :param states: CephChoices strings=up|down|in|out|destroyed
         """
         prefix = 'osd tree-from'
@@ -6976,5 +6967,3 @@ class MonCommandApi(object):
         prefix = 'zabbix send'
         _args = {'prefix': prefix, }
         return self._mon_command(_args)
-
-
