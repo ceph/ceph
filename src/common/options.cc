@@ -5319,10 +5319,6 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
-    Option("nss_db_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("")
-    .set_description(""),
-
     Option("mgr_module_path", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default(CEPH_DATADIR "/mgr")
     .add_service("mgr")
@@ -5853,14 +5849,6 @@ std::vector<Option> get_rgw_options() {
     .set_long_description(
         "Max number of Keystone tokens that will be cached. Token that is not cached "
         "requires RGW to access the Keystone server when authenticating."),
-
-    Option("rgw_keystone_revocation_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
-    .set_default(15_min)
-    .set_description("Keystone cache revocation interval")
-    .set_long_description(
-        "Time (in seconds) that RGW waits between requests to Keystone for getting a list "
-        "of revoked tokens. A revoked token might still be considered valid by RGW for "
-        "this amount of time."),
 
     Option("rgw_keystone_verify_ssl", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)

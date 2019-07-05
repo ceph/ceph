@@ -37,7 +37,6 @@ class TokenEngine : public rgw::auth::Engine {
 
   /* Helper methods. */
   bool is_applicable(const std::string& token) const noexcept;
-  token_envelope_t decode_pki_token(const DoutPrefixProvider* dpp, const std::string& token) const;
 
   boost::optional<token_envelope_t>
   get_from_keystone(const DoutPrefixProvider* dpp, const std::string& token) const;

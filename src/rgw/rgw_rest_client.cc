@@ -7,7 +7,6 @@
 #include "rgw_http_errors.h"
 #include "rgw_rados.h"
 
-#include "common/ceph_crypto_cms.h"
 #include "common/armor.h"
 #include "common/strtol.h"
 #include "include/str_list.h"
