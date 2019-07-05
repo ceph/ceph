@@ -418,8 +418,8 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
                                       entity_name_t::TYPE_OSD);
         }).then([](ceph::net::ConnectionXRef conn) {
           // send two messages
-          (*conn)->send(MessageRef{new MPing, false});
-          (*conn)->send(MessageRef{new MPing, false});
+          (*conn)->send(make_message<MPing>());
+          (*conn)->send(make_message<MPing>());
         }).then([server] {
           return server->wait();
         }).finally([client] {
