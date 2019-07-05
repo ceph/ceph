@@ -7,7 +7,7 @@ setup(
     packages=find_packages(),
     author='',
     author_email='dev@ceph.io',
-    description='Ceph common Python code.',
+    description='Ceph common',
     license='LGPLv2+',
     keywords='ceph',
     url="https://github.com/ceph/ceph",
