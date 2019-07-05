@@ -36,7 +36,6 @@ static seastar::future<> test_echo(unsigned rounds,
         : public ceph::net::Dispatcher,
           public seastar::peering_sharded_service<Server> {
       ceph::net::Messenger *msgr = nullptr;
-      MessageRef msg_pong{new MPing(), false};
       ceph::auth::DummyAuthClientServer dummy_auth;
 
       Dispatcher* get_local_shard() override {
@@ -51,7 +50,7 @@ static seastar::future<> test_echo(unsigned rounds,
           logger().info("server got {}", *m);
         }
         // reply with a pong
-        return c->send(msg_pong);
+        return c->send(make_message<MPing>());
       }
 
       seastar::future<> init(const entity_name_t& name,
@@ -95,7 +94,6 @@ static seastar::future<> test_echo(unsigned rounds,
       ceph::net::Messenger *msgr = nullptr;
       std::map<ceph::net::Connection*, seastar::promise<>> pending_conns;
       std::map<ceph::net::Connection*, PingSessionRef> sessions;
-      MessageRef msg_ping{new MPing(), false};
       ceph::auth::DummyAuthClientServer dummy_auth;
 
       Client(unsigned rounds, double keepalive_ratio)
@@ -230,7 +228,7 @@ static seastar::future<> test_echo(unsigned rounds,
                                 seastar::stop_iteration::no);
                             });
                         } else {
-                          return conn->send(msg_ping)
+                          return conn->send(make_message<MPing>())
                             .then([&count_ping] {
                               count_ping += 1;
                               return seastar::make_ready_future<seastar::stop_iteration>(
@@ -420,8 +418,8 @@ static seastar::future<> test_concurrent_dispatch(bool v2)
                                       entity_name_t::TYPE_OSD);
         }).then([](ceph::net::ConnectionXRef conn) {
           // send two messages
-          (*conn)->send(MessageRef{new MPing, false});
-          (*conn)->send(MessageRef{new MPing, false});
+          (*conn)->send(make_message<MPing>());
+          (*conn)->send(make_message<MPing>());
         }).then([server] {
           return server->wait();
         }).finally([client] {
