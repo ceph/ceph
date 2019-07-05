@@ -101,19 +101,19 @@ seastar::future<stop_t> Protocol::do_write_dispatch_sweep()
     size_t num_msgs = conn.out_q.size();
     // we must have something to write...
     ceph_assert(num_msgs || need_keepalive || keepalive_ack.has_value());
-    Message* msg_ptr = nullptr;
+    MessageRef front_msg;
     if (likely(num_msgs)) {
-      msg_ptr = conn.out_q.front().get();
+      front_msg = conn.out_q.front();
     }
     // sweep all pending writes with the concrete Protocol
     return socket->write(do_sweep_messages(
         conn.out_q, num_msgs, need_keepalive, keepalive_ack))
-    .then([this, msg_ptr, num_msgs, prv_keepalive_ack=keepalive_ack] {
+    .then([this, front_msg, num_msgs, prv_keepalive_ack=keepalive_ack] {
       need_keepalive = false;
       if (keepalive_ack == prv_keepalive_ack) {
         keepalive_ack = std::nullopt;
       }
-      if (likely(num_msgs && msg_ptr == conn.out_q.front().get())) {
+      if (likely(num_msgs && front_msg == conn.out_q.front())) {
         // we have sent some messages successfully
         // and the out_q was not reset during socket write
         conn.out_q.erase(conn.out_q.begin(), conn.out_q.begin()+num_msgs);
