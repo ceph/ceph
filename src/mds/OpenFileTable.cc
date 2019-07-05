@@ -61,72 +61,105 @@ OpenFileTable::~OpenFileTable() {
   }
 }
 
-void OpenFileTable::get_ref(CInode *in)
+void OpenFileTable::get_ref(CInode *in, bool add_dirfrag, CInode* child_in)
 {
+  bool only_ajust_recursive_opened_files = false;
   do {
     auto p = anchor_map.find(in->ino());
-    if (p != anchor_map.end()) {
+    if (p != anchor_map.end() && !only_ajust_recursive_opened_files) {
       ceph_assert(in->state_test(CInode::STATE_TRACKEDBYOFT));
       ceph_assert(p->second.nref > 0);
       p->second.nref++;
-      break;
+      if (!add_dirfrag)
+	only_ajust_recursive_opened_files = true;
+      else {
+	dout(20) << __func__ << " nref=" << p->second.nref << " " << *in << dendl;
+	break;
+      }
     }
+
+    if (!add_dirfrag) {
+      if (!child_in)
+	in->recursive_opened_files++;
+      else
+	in->recursive_opened_files += child_in->recursive_opened_files;
+    }
+
+    dout(20) << __func__ << " nref=" << p->second.nref << " " << *in << dendl;
 
     CDentry *dn = in->get_parent_dn();
     CInode *pin = dn ? dn->get_dir()->get_inode() : nullptr;
 
-    auto ret = anchor_map.emplace(std::piecewise_construct, std::forward_as_tuple(in->ino()),
-				  std::forward_as_tuple(in->ino(), (pin ? pin->ino() : inodeno_t(0)),
-				  (dn ? dn->get_name() : string()), in->d_type(), 1));
-    ceph_assert(ret.second == true);
-    in->state_set(CInode::STATE_TRACKEDBYOFT);
+    if (!only_ajust_recursive_opened_files) {
+      auto ret = anchor_map.emplace(std::piecewise_construct, std::forward_as_tuple(in->ino()),
+				    std::forward_as_tuple(in->ino(), (pin ? pin->ino() : inodeno_t(0)),
+							  (dn ? dn->get_name() : string()), in->d_type(), 1));
+      ceph_assert(ret.second == true);
+      in->state_set(CInode::STATE_TRACKEDBYOFT);
 
-    auto ret1 = dirty_items.emplace(in->ino(), (int)DIRTY_NEW);
-    if (!ret1.second) {
-      int omap_idx = ret1.first->second;
-      ceph_assert(omap_idx >= 0);
-      ret.first->second.omap_idx = omap_idx;
+      auto ret1 = dirty_items.emplace(in->ino(), (int)DIRTY_NEW);
+      if (!ret1.second) {
+	int omap_idx = ret1.first->second;
+	ceph_assert(omap_idx >= 0);
+	ret.first->second.omap_idx = omap_idx;
+      }
     }
 
     in = pin;
   } while (in);
 }
 
-void OpenFileTable::put_ref(CInode *in)
+void OpenFileTable::put_ref(CInode *in, bool remove_dirfrag, CInode* child_in)
 {
+  bool only_ajust_recursive_opened_files = false;
   do {
     ceph_assert(in->state_test(CInode::STATE_TRACKEDBYOFT));
     auto p = anchor_map.find(in->ino());
     ceph_assert(p != anchor_map.end());
     ceph_assert(p->second.nref > 0);
 
-    if (p->second.nref > 1) {
+    if (p->second.nref > 1 && !only_ajust_recursive_opened_files) {
       p->second.nref--;
-      break;
+      if (!remove_dirfrag)
+	only_ajust_recursive_opened_files = true;
+      else {
+	dout(20) << __func__ << " nref=" << p->second.nref << " " << *in << dendl;
+	break;
+      }
     }
+
+    if (!remove_dirfrag) {
+      if (!child_in)
+	in->recursive_opened_files--;
+      else
+	in->recursive_opened_files -= child_in->recursive_opened_files;
+    }
+    dout(20) << __func__ << " nref=" << p->second.nref << " "  << *in << dendl;
 
     CDentry *dn = in->get_parent_dn();
     CInode *pin = dn ? dn->get_dir()->get_inode() : nullptr;
-    if (dn) {
-      ceph_assert(p->second.dirino == pin->ino());
-      ceph_assert(p->second.d_name == dn->get_name());
-    } else {
-      ceph_assert(p->second.dirino == inodeno_t(0));
-      ceph_assert(p->second.d_name == "");
-    }
-
-    int omap_idx = p->second.omap_idx;
-    anchor_map.erase(p);
-    in->state_clear(CInode::STATE_TRACKEDBYOFT);
-
-    auto ret = dirty_items.emplace(in->ino(), omap_idx);
-    if (!ret.second) {
-      if (ret.first->second == DIRTY_NEW) {
-	ceph_assert(omap_idx < 0);
-	dirty_items.erase(ret.first);
+    if (!only_ajust_recursive_opened_files) {
+      if (dn) {
+        ceph_assert(p->second.dirino == pin->ino());
+        ceph_assert(p->second.d_name == dn->get_name());
       } else {
-	ceph_assert(omap_idx >= 0);
-	ret.first->second = omap_idx;
+        ceph_assert(p->second.dirino == inodeno_t(0));
+        ceph_assert(p->second.d_name == "");
+      }
+
+      int omap_idx = p->second.omap_idx;
+      anchor_map.erase(p);
+      in->state_clear(CInode::STATE_TRACKEDBYOFT);
+
+      auto ret = dirty_items.emplace(in->ino(), omap_idx);
+      if (!ret.second) {
+        if (ret.first->second == DIRTY_NEW) {
+          ceph_assert(omap_idx < 0);
+          dirty_items.erase(ret.first);
+        } else {
+          ceph_assert(omap_idx >= 0);
+          ret.first->second = omap_idx;
+        }
       }
     }
 
@@ -162,7 +195,7 @@ void OpenFileTable::add_dirfrag(CDir *dir)
   dir->state_set(CDir::STATE_TRACKEDBYOFT);
   auto ret = dirfrags.insert(dir->dirfrag());
   ceph_assert(ret.second);
-  get_ref(dir->get_inode());
+  get_ref(dir->get_inode(), true);
   dirty_items.emplace(dir->ino(), (int)DIRTY_UNDEF);
 }
 
@@ -175,7 +208,7 @@ void OpenFileTable::remove_dirfrag(CDir *dir)
   ceph_assert(p != dirfrags.end());
   dirfrags.erase(p);
   dirty_items.emplace(dir->ino(), (int)DIRTY_UNDEF);
-  put_ref(dir->get_inode());
+  put_ref(dir->get_inode(), true);
 }
 
 void OpenFileTable::notify_link(CInode *in)
@@ -194,7 +227,7 @@ void OpenFileTable::notify_link(CInode *in)
   p->second.d_name = dn->get_name();
   dirty_items.emplace(in->ino(), (int)DIRTY_UNDEF);
 
-  get_ref(pin);
+  get_ref(pin, false, in);
 }
 
 void OpenFileTable::notify_unlink(CInode *in)
@@ -213,7 +246,7 @@ void OpenFileTable::notify_unlink(CInode *in)
   p->second.d_name = "";
   dirty_items.emplace(in->ino(), (int)DIRTY_UNDEF);
 
-  put_ref(pin);
+  put_ref(pin, false, in);
 }
 
 object_t OpenFileTable::get_object_name(unsigned idx) const

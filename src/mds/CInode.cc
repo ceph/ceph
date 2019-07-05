@@ -177,6 +177,7 @@ ostream& operator<<(ostream& out, const CInode& in)
   if (pi->is_truncating())
     out << " truncating(" << pi->truncate_from << " to " << pi->truncate_size << ")";
 
+  out << " recursively_opened_files=" << in.recursive_opened_files;
   if (in.inode.is_dir()) {
     out << " " << in.inode.dirstat;
     if (g_conf()->mds_debug_scatterstat && in.is_projected()) {
@@ -4853,6 +4854,9 @@ void CInode::dump(Formatter *f, int flags) const
   
   if (flags & DUMP_MDS_CACHE_OBJECT)
     MDSCacheObject::dump(f);
+
+  if (flags & DUMP_OPENFILES)
+    f->dump_unsigned("recursive_opened_files", recursive_opened_files);
 
   if (flags & DUMP_LOCKS) {
     f->open_object_section("versionlock");

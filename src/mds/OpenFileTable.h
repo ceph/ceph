@@ -84,9 +84,6 @@ protected:
   void _journal_finish(int r, uint64_t log_seq, MDSContext *fin,
 		       std::map<unsigned, std::vector<ObjectOperation> >& ops);
 
-  void get_ref(CInode *in);
-  void put_ref(CInode *in);
-
   object_t get_object_name(unsigned idx) const;
 
   void _reset_states() {
@@ -134,6 +131,9 @@ protected:
   set<dirfrag_t> loaded_dirfrags;
   MDSContext::vec waiting_for_load;
   bool load_done = false;
+
+  void get_ref(CInode *in, bool add_dirfrag = false, CInode* child_in = NULL);
+  void put_ref(CInode *in, bool remove_dirfrag = false, CInode* child_in = NULL);
 
   enum {
     DIR_INODES = 1,

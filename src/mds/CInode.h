@@ -295,6 +295,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int DUMP_CAPS =             (1 << 4);
   static const int DUMP_PATH =             (1 << 5);
   static const int DUMP_DIRFRAGS =         (1 << 6);
+  static const int DUMP_OPENFILES =        (1 << 7);
   static const int DUMP_ALL =              (-1);
   static const int DUMP_DEFAULT = DUMP_ALL & (~DUMP_PATH) & (~DUMP_DIRFRAGS);
 
@@ -440,6 +441,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
       !old_inodes.empty(); // once multiversion, always multiversion.  until old_inodes gets cleaned out.
   }
   snapid_t get_oldest_snap();
+
+  uint64_t recursive_opened_files = 0;
 
   bool is_dirty_rstat() {
     return state_test(STATE_DIRTYRSTAT);
