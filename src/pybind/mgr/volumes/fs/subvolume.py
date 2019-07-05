@@ -57,7 +57,7 @@ class SubVolume(object):
             except cephfs.ObjectNotFound:
                 self.fs.mkdir(subpath, mode)
             except cephfs.Error as e:
-                raise VolumeException(e.args[0], e.args[1])
+                raise VolumeException(-e.args[0], e.args[1])
 
     ### basic subvolume operations
 
@@ -125,7 +125,7 @@ class SubVolume(object):
                 raise VolumeException(
                     -errno.ENOENT, "Subvolume '{0}' not found, cannot remove it".format(spec.subvolume_id))
         except cephfs.Error as e:
-            raise VolumeException(e.args[0], e.args[1])
+            raise VolumeException(-e.args[0], e.args[1])
 
     def purge_subvolume(self, spec):
         """
@@ -140,7 +140,7 @@ class SubVolume(object):
             except cephfs.ObjectNotFound:
                 return
             except cephfs.Error as e:
-                raise VolumeException(e.args[0], e.args[1])
+                raise VolumeException(-e.args[0], e.args[1])
             d = self.fs.readdir(dir_handle)
             while d:
                 d_name = d.d_name.decode('utf-8')
@@ -168,7 +168,7 @@ class SubVolume(object):
         except cephfs.ObjectNotFound:
             return None
         except cephfs.Error as e:
-            raise VolumeException(e.args[0], e.args[1])
+            raise VolumeException(-e.args[0], e.args[1])
         return path
 
     ### group operations
@@ -188,7 +188,7 @@ class SubVolume(object):
             if not force:
                 raise VolumeException(-errno.ENOENT, "Subvolume group '{0}' not found".format(spec.group_id))
         except cephfs.Error as e:
-            raise VolumeException(e.args[0], e.args[1])
+            raise VolumeException(-e.args[0], e.args[1])
 
     def get_group_path(self, spec):
         path = spec.group_path
@@ -222,7 +222,7 @@ class SubVolume(object):
         except cephfs.ObjectNotFound:
             self.fs.mkdir(snappath, mode)
         except cephfs.Error as e:
-            raise VolumeException(e.args[0], e.args[1])
+            raise VolumeException(-e.args[0], e.args[1])
         else:
             log.warn("Snapshot '{0}' already exists".format(snappath))
 
@@ -237,7 +237,7 @@ class SubVolume(object):
             if not force:
                 raise VolumeException(-errno.ENOENT, "Snapshot '{0}' not found, cannot remove it".format(snappath))
         except cephfs.Error as e:
-            raise VolumeException(e.args[0], e.args[1])
+            raise VolumeException(-e.args[0], e.args[1])
 
     def create_subvolume_snapshot(self, spec, snapname, mode=0o755):
         snappath = spec.make_subvol_snap_path(self.rados.conf_get('client_snapdir'), snapname)
