@@ -49,7 +49,7 @@ struct Server {
       return m->get_type() == CEPH_MSG_PING;
     }
     void ms_fast_dispatch(Message* m) override {
-      m->get_connection()->send_message(make_message<MPing>());
+      m->get_connection()->send_message(new MPing);
       m->put();
       {
         std::lock_guard lock{mutex};
@@ -132,7 +132,7 @@ struct Client {
       auto conn = msgr->connect_to(peer.name.type(),
                                    entity_addrvec_t{peer.addr});
       replied = false;
-      conn->send_message(make_message<MPing>());
+      conn->send_message(new MPing);
       std::unique_lock lock{mutex};
       return on_reply.wait_for(lock, 500ms, [&] {
         return replied;
