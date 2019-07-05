@@ -2398,15 +2398,8 @@ int RGWRados::Bucket::update_bucket_id(const string& new_bucket_id)
 static inline std::string after_delim(std::string_view delim)
 {
   // assert: ! delim.empty()
-  unsigned char e = delim.back();
-  delim.remove_suffix(1);
   std::string result{delim.data(), delim.length()};
-  if (uint8_t(e) < 255) {
-    result += char(++e);
-  } else {
-    result += e;
-    result += char(255);
-  }
+  result += char(255);
   return result;
 }
 
@@ -2442,12 +2435,12 @@ int RGWRados::Bucket::List::list_objects_ordered(
   string after_delim_s; /* needed in !params.delim.empty() AND later */
 
   if (!params.delim.empty()) {
+    after_delim_s = after_delim(params.delim);
     /* if marker points at a common prefix, fast forward it into its
      * upper bound string */
     int delim_pos = cur_marker.name.find(params.delim, cur_prefix.size());
     if (delim_pos >= 0) {
       string s = cur_marker.name.substr(0, delim_pos);
-      after_delim_s = after_delim(params.delim);
       s.append(after_delim_s);
       cur_marker = s;
     }
