@@ -250,8 +250,9 @@ class TestVolumes(CephFSTestCase):
         self.assertEqual(actual_mode2, expected_mode2)
         self.assertEqual(actual_mode3, expected_mode2)
 
-        self._fs_cmd("subvolume", "rm", self.volname, subvol2, group)
         self._fs_cmd("subvolume", "rm", self.volname, subvol1, group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvol2, group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvol3, group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
     def test_nonexistent_subvolme_group_rm(self):
