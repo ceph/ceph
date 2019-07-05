@@ -11,6 +11,8 @@ from .exception import VolumeException
 
 log = logging.getLogger(__name__)
 
+ALLOWED_ACCESS_LEVELS = ('r', 'rw')
+
 class VolumeClient(object):
     def __init__(self, mgr):
         self.mgr = mgr
@@ -235,6 +237,52 @@ class VolumeClient(object):
                     raise VolumeException(
                         -errno.ENOENT, "Subvolume '{0}' not found".format(subvolname))
                 ret = 0, path, ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def authorize_subvolume(self, volname, subvolname, authid, groupname, accesslevel):
+        ret = 0, "", ""
+        try:
+            if not self.volume_exists(volname):
+                raise VolumeException(
+                    -errno.ENOENT, "Volume '{0}' not found".format(volname))
+
+            with SubVolume(self.mgr, fs_name=volname) as sv:
+                spec = SubvolumeSpec(subvolname, groupname)
+                if not self.group_exists(sv, spec):
+                    raise VolumeException(
+                        -errno.ENOENT, "Subvolume group '{0}' not found".format(groupname))
+                if not sv.get_subvolume_path(spec):
+                    raise VolumeException(
+                        -errno.ENOENT, "Subvolume '{0}' not found".format(subvolname))
+                if accesslevel not in ALLOWED_ACCESS_LEVELS:
+                    raise VolumeException(
+                        -errno.EINVAL,
+                        "Invalid access level '{0}'. "
+                        "Valid access levels are {1}".format(accesslevel, ALLOWED_ACCESS_LEVELS))
+                key = sv.authorize_subvolume(spec, authid, accesslevel)
+                ret = 0, key, ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def deauthorize_subvolume(self, volname, subvolname, authid, groupname):
+        ret = 0, "", ""
+        try:
+            if not self.volume_exists(volname):
+                raise VolumeException(
+                    -errno.ENOENT, "Volume '{0}' not found".format(volname))
+
+            with SubVolume(self.mgr, fs_name=volname) as sv:
+                spec = SubvolumeSpec(subvolname, groupname)
+                if not self.group_exists(sv, spec):
+                    raise VolumeException(
+                        -errno.ENOENT, "Subvolume group '{0}' not found".format(groupname))
+                if not sv.get_subvolume_path(spec):
+                    raise VolumeException(
+                        -errno.ENOENT, "Subvolume '{0}' not found".format(subvolname))
+                sv.deauthorize_subvolume(spec, authid)
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret

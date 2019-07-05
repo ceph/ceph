@@ -6,6 +6,7 @@ LGPL2.1.  See file COPYING.
 
 import logging
 import os
+import json
 import errno
 
 import cephfs
@@ -37,7 +38,7 @@ class SubVolume(object):
         self.fs = None
         self.fs_name = fs_name
         self.connected = False
-
+        self.mgr = mgr
         self.rados = mgr.rados
 
     def _mkdir_p(self, path, mode=0o755):
@@ -171,7 +172,169 @@ class SubVolume(object):
             raise VolumeException(e.args[0], e.args[1])
         return path
 
-    ### group operations
+    def authorize_subvolume(self, spec, auth_id, access_level):
+        path = spec.subvolume_path
+        log.debug("Authorizing Ceph id '{0}' for path '{1}'".format(auth_id, path))
+
+        # First I need to work out what the data pool is for this share:
+        # read the layout
+        pool = self.fs.getxattr(path, "ceph.dir.layout.pool").decode('utf-8')
+        namespace = self.fs.getxattr(path, "ceph.dir.layout.pool_namespace").decode('utf-8')
+
+        # Now construct auth capabilities that give the guest just enough
+        # permissions to access the share
+        client_entity = "client.{0}".format(auth_id)
+        want_mds_cap = "allow {0} path={1}".format(access_level, path)
+        want_osd_cap = "allow {0} pool={1} namespace={2}".format(access_level, pool, namespace)
+
+        ret, out, err = self.mgr.mon_command({
+            "prefix": "auth get",
+            "entity": client_entity,
+            "format": "json"})
+
+        if ret == -errno.ENOENT:
+            ret, out, err = self.mgr.mon_command({
+                "prefix": "auth get-or-create",
+                "entity": client_entity,
+                "caps": ["mds", want_mds_cap,"osd", want_osd_cap,"mon", 'allow r'],
+                "format": "json"})
+        else:
+            cap = json.loads(out)[0]
+            want_access_level = access_level
+
+            # Construct auth caps that if present might conflict with the desired
+            # auth caps.
+            unwanted_access_level = 'r' if want_access_level is 'rw' else 'rw'
+            unwanted_mds_cap = 'allow {0} path={1}'.format(unwanted_access_level, path)
+            unwanted_osd_cap = 'allow {0} pool={1} namespace={2}'.format(
+                    unwanted_access_level, pool, namespace)
+
+            def cap_update(
+                    orig_mds_caps, orig_osd_caps, want_mds_cap,
+                    want_osd_cap, unwanted_mds_cap, unwanted_osd_cap):
+
+                if not orig_mds_caps:
+                    return want_mds_cap, want_osd_cap
+
+                mds_cap_tokens = orig_mds_caps.split(",")
+                osd_cap_tokens = orig_osd_caps.split(",")
+
+                if want_mds_cap in mds_cap_tokens:
+                    return orig_mds_caps, orig_osd_caps
+
+                if unwanted_mds_cap in mds_cap_tokens:
+                    mds_cap_tokens.remove(unwanted_mds_cap)
+                    osd_cap_tokens.remove(unwanted_osd_cap)
+
+                mds_cap_tokens.append(want_mds_cap)
+                osd_cap_tokens.append(want_osd_cap)
+
+                return ",".join(mds_cap_tokens), ",".join(osd_cap_tokens)
+
+            orig_mds_caps = cap['caps'].get('mds', "")
+            orig_osd_caps = cap['caps'].get('osd', "")
+
+            mds_cap_str, osd_cap_str = cap_update(
+                orig_mds_caps, orig_osd_caps, want_mds_cap, want_osd_cap,
+                unwanted_mds_cap, unwanted_osd_cap)
+
+            self.mgr.mon_command(
+                {
+                    "prefix": "auth caps",
+                    'entity': client_entity,
+                    'caps': [
+                        'mds', mds_cap_str,
+                        'osd', osd_cap_str,
+                        'mon', cap['caps'].get('mon', 'allow r')],
+                })
+            ret, out, err = self.mgr.mon_command(
+                {
+                    'prefix': 'auth get',
+                    'entity': client_entity,
+                    'format': 'json'
+                })
+
+        # Result expected like this:
+        # [
+        #     {
+        #         "entity": "client.foobar",
+        #         "key": "AQBY0\/pViX\/wBBAAUpPs9swy7rey1qPhzmDVGQ==",
+        #         "caps": {
+        #             "mds": "allow *",
+        #             "mon": "allow *"
+        #         }
+        #     }
+        # ]
+
+        caps = json.loads(out)
+        assert len(caps) == 1
+        assert caps[0]['entity'] == client_entity
+        return caps[0]['key']
+
+    def deauthorize_subvolume(self, spec, auth_id):
+        """
+        The volume must still exist.
+        """
+        client_entity = "client.{0}".format(auth_id)
+        path = spec.subvolume_path
+        pool_name = self.fs.getxattr(path, "ceph.dir.layout.pool").decode('utf-8')
+        namespace = self.fs.getxattr(path, "ceph.dir.layout.pool_namespace").decode('utf-8')
+
+        # The auth_id might have read-only or read-write mount access for the
+        # subvolume path.
+        access_levels = ('r', 'rw')
+        want_mds_caps = ['allow {0} path={1}'.format(access_level, path)
+                         for access_level in access_levels]
+        want_osd_caps = ['allow {0} pool={1} namespace={2}'.format(access_level, pool_name, namespace)
+                         for access_level in access_levels]
+
+
+        ret, out, err = self.mgr.mon_command({
+            "prefix": "auth get",
+            "entity": client_entity,
+            "format": "json",
+        })
+
+        if ret == -errno.ENOENT:
+            # Already gone, great.
+            return
+
+        def cap_remove(orig_mds_caps, orig_osd_caps, want_mds_caps, want_osd_caps):
+            mds_cap_tokens = orig_mds_caps.split(",")
+            osd_cap_tokens = orig_osd_caps.split(",")
+
+            for want_mds_cap, want_osd_cap in zip(want_mds_caps, want_osd_caps):
+                if want_mds_cap in mds_cap_tokens:
+                    mds_cap_tokens.remove(want_mds_cap)
+                    osd_cap_tokens.remove(want_osd_cap)
+                    break
+
+            return ",".join(mds_cap_tokens), ",".join(osd_cap_tokens)
+
+        cap = json.loads(out)[0]
+        orig_mds_caps = cap['caps'].get('mds', "")
+        orig_osd_caps = cap['caps'].get('osd', "")
+        mds_cap_str, osd_cap_str = cap_remove(orig_mds_caps, orig_osd_caps,
+                                              want_mds_caps, want_osd_caps)
+
+        if not mds_cap_str:
+            self.mgr.mon_command(
+                {
+                    'prefix': 'auth rm',
+                    'entity': client_entity
+                })
+        else:
+            self.mgr.mon_command(
+                {
+                    "prefix": "auth caps",
+                    'entity': client_entity,
+                    'caps': [
+                        'mds', mds_cap_str,
+                        'osd', osd_cap_str,
+                        'mon', cap['caps'].get('mon', 'allow r')],
+                })
+
+### group operations
 
     def create_group(self, spec, mode=0o755, pool=None):
         path = spec.group_path
