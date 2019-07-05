@@ -10,11 +10,16 @@ get_cmake_variable() {
     grep "$1" $CEPH_BUILD_DIR/CMakeCache.txt | cut -d "=" -f 2
 }
 
+
 script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
 : ${CEPH_BUILD_DIR:=$script_dir/../../build}
+
+
+
 : ${CYTHON_MODULES:=$CEPH_BUILD_DIR/lib/cython_modules}
 : ${LD_LIBRARY_PATH:=$CEPH_BUILD_DIR/lib}
-: ${CEPH_CONF:=$CEPH_BUILD_DIR/ceph.conf}
+: ${CEPH_DIR:=$CEPH_BUILD_DIR}
+CEPH_CONF=$CEPH_DIR/ceph.conf
 : ${WITH_PYTHON2:=$(get_cmake_variable WITH_PYTHON2)}
 : ${WITH_PYTHON3:=$(get_cmake_variable WITH_PYTHON3)}
 
