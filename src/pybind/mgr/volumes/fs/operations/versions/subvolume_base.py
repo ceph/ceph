@@ -19,7 +19,8 @@ log = logging.getLogger(__name__)
 class SubvolumeBase(object):
     LEGACY_CONF_DIR = "_legacy"
 
-    def __init__(self, fs, vol_spec, group, subvolname, legacy=False):
+    def __init__(self, mgr, fs, vol_spec, group, subvolname, legacy=False):
+        self.mgr = mgr
         self.fs = fs
         self.cmode = None
         self.user_id = None

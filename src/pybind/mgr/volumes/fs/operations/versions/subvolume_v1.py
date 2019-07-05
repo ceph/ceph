@@ -3,6 +3,7 @@ import stat
 import uuid
 import errno
 import logging
+import json
 from datetime import datetime
 
 import cephfs
@@ -13,6 +14,7 @@ from .op_sm import SubvolumeOpSm
 from .subvolume_base import SubvolumeBase
 from ..template import SubvolumeTemplate
 from ..snapshot_util import mksnap, rmsnap
+from ..access import allow_access, deny_access
 from ...exception import IndexException, OpSmException, VolumeException, MetadataMgrException
 from ...fs_util import listdir
 from ..template import SubvolumeOpType
@@ -228,6 +230,65 @@ class SubvolumeV1(SubvolumeBase, SubvolumeTemplate):
             raise VolumeException(-errno.ENOENT, "mount path missing for subvolume '{0}'".format(self.subvolname))
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
+
+    def authorize(self, auth_id, access_level):
+        subvol_path = self.path
+        log.debug("Authorizing Ceph id '{0}' for path '{1}'".format(auth_id, subvol_path))
+
+        # First I need to work out what the data pool is for this share:
+        # read the layout
+        try:
+            pool = self.fs.getxattr(subvol_path, 'ceph.dir.layout.pool').decode('utf-8')
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
+        try:
+            namespace = self.fs.getxattr(subvol_path, 'ceph.dir.layout.pool_namespace').decode('utf-8')
+        except cephfs.NoData:
+            namespace = None
+
+        # Now construct auth capabilities that give the guest just enough
+        # permissions to access the share
+        client_entity = "client.{0}".format(auth_id)
+        want_mds_cap = "allow {0} path={1}".format(access_level, subvol_path.decode('utf-8'))
+        want_osd_cap = "allow {0} pool={1}{2}".format(
+                access_level, pool, " namespace={0}".format(namespace) if namespace else "")
+
+        # Construct auth caps that if present might conflict with the desired
+        # auth caps.
+        unwanted_access_level = 'r' if access_level is 'rw' else 'rw'
+        unwanted_mds_cap = 'allow {0} path={1}'.format(unwanted_access_level, subvol_path.decode('utf-8'))
+        unwanted_osd_cap = "allow {0} pool={1}{2}".format(
+                unwanted_access_level, pool, " namespace={0}".format(namespace) if namespace else "")
+
+        return allow_access(self.mgr, client_entity, want_mds_cap, want_osd_cap,
+                            unwanted_mds_cap, unwanted_osd_cap)
+
+    def deauthorize(self, auth_id):
+        """
+        The volume must still exist.
+        """
+        client_entity = "client.{0}".format(auth_id)
+        subvol_path = self.path
+        try:
+            pool_name = self.fs.getxattr(subvol_path, 'ceph.dir.layout.pool').decode('utf-8')
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
+
+        try:
+            namespace = self.fs.getxattr(subvol_path, 'ceph.dir.layout.pool_namespace').decode('utf-8')
+        except cephfs.NoData:
+            namespace = None
+
+        # The auth_id might have read-only or read-write mount access for the
+        # subvolume path.
+        access_levels = ('r', 'rw')
+        want_mds_caps = ['allow {0} path={1}'.format(access_level, subvol_path.decode('utf-8'))
+                         for access_level in access_levels]
+        want_osd_caps = ['allow {0} pool={1}{2}'.format(
+                          access_level, pool_name, " namespace={0}".format(namespace) if namespace else "")
+                         for access_level in access_levels]
+        deny_access(self.mgr, client_entity, want_mds_caps, want_osd_caps)
 
     def _get_clone_source(self):
         try:
