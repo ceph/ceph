@@ -1368,6 +1368,7 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
 
     msg->encode(conn.features, 0);
 
+    ceph_assert(!msg->get_seq() && "message already has seq");
     msg->set_seq(++conn.out_seq);
     uint64_t ack_seq = conn.in_seq;
     // ack_left = 0;
