@@ -72,7 +72,7 @@ bool evp_sym_transform(CephContext* const cct,
   }
 
   // we want to support ciphers that don't use IV at all like AES-256-ECB
-  if constexpr (IvSizeV) {
+  if constexpr (static_cast<bool>(IvSizeV)) {
     ceph_assert(EVP_CIPHER_CTX_iv_length(pctx.get()) == IvSizeV);
     ceph_assert(EVP_CIPHER_CTX_block_size(pctx.get()) == IvSizeV);
   }
