@@ -197,6 +197,11 @@ EOF
 	    source /opt/rh/devtoolset-$dts_ver/enable
 	fi
     fi
+    if [ $(rpm -q --queryformat "%{VERSION}" devtoolset-$dts_ver-gcc-c++) = 8.3.1 ]; then
+        # rollback to avoid using a buggy version
+        $SUDO yum remove -y devtoolset-8-gcc-c++ devtoolset-8-gcc devtoolset-8-libstdc++-devel
+        $SUDO yum install -y devtoolset-8-gcc-c++-8.2.1-3.el7
+    fi
 }
 
 if [ x$(uname)x = xFreeBSDx ]; then
