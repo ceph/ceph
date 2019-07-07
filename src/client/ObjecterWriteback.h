@@ -8,7 +8,7 @@
 
 class ObjecterWriteback : public WritebackHandler {
  public:
-  ObjecterWriteback(Objecter *o, Finisher *fin, Mutex *lock)
+  ObjecterWriteback(Objecter *o, Finisher *fin, ceph::mutex *lock)
     : m_objecter(o),
       m_finisher(fin),
       m_lock(lock) { }
@@ -66,7 +66,7 @@ class ObjecterWriteback : public WritebackHandler {
  private:
   Objecter *m_objecter;
   Finisher *m_finisher;
-  Mutex *m_lock;
+  ceph::mutex *m_lock;
 };
 
 #endif

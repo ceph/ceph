@@ -7,7 +7,6 @@
 #include "UserPerm.h"
 #include "mds/flock.h"
 
-class Cond;
 class Inode;
 
 // file handle for any open file state
@@ -21,7 +20,7 @@ struct Fh {
 
   int flags;
   bool pos_locked;           // pos is currently in use
-  list<Cond*> pos_waiters;   // waiters for pos
+  std::list<ceph::condition_variable*> pos_waiters;   // waiters for pos
 
   UserPerm actor_perms; // perms I opened the file with
 
