@@ -16,7 +16,7 @@ namespace journal {
 struct JournalTrimmer::C_RemoveSet : public Context {
   JournalTrimmer *journal_trimmer;
   uint64_t object_set;
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("JournalTrimmer::m_lock");
   uint32_t refs;
   int return_value;
 
@@ -34,7 +34,7 @@ JournalTrimmer::JournalTrimmer(librados::IoCtx &ioctx,
                                const JournalMetadataPtr &journal_metadata)
     : m_cct(NULL), m_object_oid_prefix(object_oid_prefix),
       m_journal_metadata(journal_metadata), m_metadata_listener(this),
-      m_lock("JournalTrimmer::m_lock"), m_remove_set_pending(false),
+      m_remove_set_pending(false),
       m_remove_set(0), m_remove_set_ctx(NULL) {
   m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
@@ -49,7 +49,7 @@ JournalTrimmer::~JournalTrimmer() {
 void JournalTrimmer::shut_down(Context *on_finish) {
   ldout(m_cct, 20) << __func__ << dendl;
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     ceph_assert(!m_shutdown);
     m_shutdown = true;
   }
@@ -67,7 +67,7 @@ void JournalTrimmer::remove_objects(bool force, Context *on_finish) {
   ldout(m_cct, 20) << __func__ << dendl;
 
   on_finish = new FunctionContext([this, force, on_finish](int r) {
-      Mutex::Locker locker(m_lock);
+				    std::lock_guard locker{m_lock};
 
       if (m_remove_set_pending) {
         on_finish->complete(-EBUSY);
@@ -103,7 +103,7 @@ void JournalTrimmer::committed(uint64_t commit_tid) {
 }
 
 void JournalTrimmer::trim_objects(uint64_t minimum_set) {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   ldout(m_cct, 20) << __func__ << ": min_set=" << minimum_set << dendl;
   if (minimum_set <= m_journal_metadata->get_minimum_set()) {
@@ -121,7 +121,7 @@ void JournalTrimmer::trim_objects(uint64_t minimum_set) {
 }
 
 void JournalTrimmer::remove_set(uint64_t object_set) {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   m_async_op_tracker.start_op();
   uint8_t splay_width = m_journal_metadata->get_splay_width();
@@ -149,7 +149,7 @@ void JournalTrimmer::remove_set(uint64_t object_set) {
 void JournalTrimmer::handle_metadata_updated() {
   ldout(m_cct, 20) << __func__ << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
 
   JournalMetadata::RegisteredClients registered_clients;
   m_journal_metadata->get_registered_clients(&registered_clients);
@@ -193,7 +193,7 @@ void JournalTrimmer::handle_set_removed(int r, uint64_t object_set) {
   ldout(m_cct, 20) << __func__ << ": r=" << r << ", set=" << object_set << ", "
                    << "trim=" << m_remove_set << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   m_remove_set_pending = false;
 
   if (r == -ENOENT) {
@@ -223,12 +223,12 @@ JournalTrimmer::C_RemoveSet::C_RemoveSet(JournalTrimmer *_journal_trimmer,
                                          uint64_t _object_set,
                                          uint8_t _splay_width)
   : journal_trimmer(_journal_trimmer), object_set(_object_set),
-    lock(utils::unique_lock_name("C_RemoveSet::lock", this)),
+    lock(ceph::make_mutex(utils::unique_lock_name("C_RemoveSet::lock", this))),
     refs(_splay_width), return_value(-ENOENT) {
 }
 
 void JournalTrimmer::C_RemoveSet::complete(int r) {
-  lock.Lock();
+  lock.lock();
   if (r < 0 && r != -ENOENT &&
       (return_value == -ENOENT || return_value == 0)) {
     return_value = r;
@@ -238,10 +238,10 @@ void JournalTrimmer::C_RemoveSet::complete(int r) {
 
   if (--refs == 0) {
     finish(return_value);
-    lock.Unlock();
+    lock.unlock();
     delete this;
   } else {
-    lock.Unlock();
+    lock.unlock();
   }
 }
 

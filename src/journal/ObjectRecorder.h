@@ -7,8 +7,7 @@
 #include "include/utime.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
-#include "common/Cond.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/RefCountedObj.h"
 #include "common/WorkQueue.h"
 #include "journal/FutureImpl.h"
@@ -39,7 +38,7 @@ public:
   };
 
   ObjectRecorder(librados::IoCtx &ioctx, const std::string &oid,
-                 uint64_t object_number, std::shared_ptr<Mutex> lock,
+                 uint64_t object_number, ceph::mutex* lock,
                  ContextWQ *work_queue, Handler *handler, uint8_t order,
                  int32_t max_in_flight_appends);
   ~ObjectRecorder() override;
@@ -61,7 +60,7 @@ public:
   void claim_append_buffers(AppendBuffers *append_buffers);
 
   bool is_closed() const {
-    ceph_assert(m_lock->is_locked());
+    ceph_assert(ceph_mutex_is_locked(*m_lock));
     return (m_object_closed && m_in_flight_appends.empty());
   }
   bool close();
@@ -71,7 +70,7 @@ public:
   }
 
   inline size_t get_pending_appends() const {
-    Mutex::Locker locker(*m_lock);
+    std::lock_guard locker{*m_lock};
     return m_pending_buffers.size();
   }
 
@@ -126,7 +125,7 @@ private:
 
   FlushHandler m_flush_handler;
 
-  mutable std::shared_ptr<Mutex> m_lock;
+  mutable ceph::mutex* m_lock;
   AppendBuffers m_pending_buffers;
   uint64_t m_pending_bytes = 0;
   utime_t m_last_flush_time;
@@ -142,7 +141,7 @@ private:
   bufferlist m_prefetch_bl;
 
   bool m_in_flight_flushes;
-  Cond m_in_flight_flushes_cond;
+  ceph::condition_variable m_in_flight_flushes_cond;
   uint64_t m_in_flight_bytes = 0;
 
   bool send_appends(bool force, FutureImplPtr flush_sentinal);

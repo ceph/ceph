@@ -8,7 +8,6 @@
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
 #include "common/AsyncOpTracker.h"
-#include "common/Mutex.h"
 #include "journal/JournalMetadata.h"
 #include "journal/ObjectPlayer.h"
 #include "journal/Types.h"
@@ -116,7 +115,7 @@ private:
 
   AsyncOpTracker m_async_op_tracker;
 
-  mutable Mutex m_lock;
+  mutable ceph::mutex m_lock = ceph::make_mutex("JournalPlayer::m_lock");
   State m_state;
   uint8_t m_splay_offset;
 
