@@ -40,7 +40,7 @@ public:
 };
 
 void BucketIndexAioManager::do_completion(int id) {
-  Mutex::Locker l(lock);
+  std::lock_guard l{lock};
 
   map<int, librados::AioCompletion*>::iterator iter = pendings.find(id);
   ceph_assert(iter != pendings.end());
@@ -55,20 +55,19 @@ void BucketIndexAioManager::do_completion(int id) {
     pending_objs.erase(miter);
   }
 
-  cond.Signal();
+  cond.notify_all();
 }
 
 bool BucketIndexAioManager::wait_for_completions(int valid_ret_code,
     int *num_completions, int *ret_code, map<int, string> *objs) {
-  lock.Lock();
+  std::unique_lock locker{lock};
   if (pendings.empty() && completions.empty()) {
-    lock.Unlock();
     return false;
   }
 
   if (completions.empty()) {
     // Wait for AIO completion
-    cond.Wait(lock);
+    cond.wait(locker);
   }
 
   // Clear the completed AIOs
@@ -88,7 +87,6 @@ bool BucketIndexAioManager::wait_for_completions(int valid_ret_code,
   if (num_completions)
     (*num_completions) = completions.size();
   completions.clear();
-  lock.Unlock();
 
   return true;
 }
