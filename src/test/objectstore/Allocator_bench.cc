@@ -8,7 +8,6 @@
 #include <boost/scoped_ptr.hpp>
 #include <gtest/gtest.h>
 
-#include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/errno.h"
 #include "include/stringify.h"
