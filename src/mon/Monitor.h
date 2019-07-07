@@ -125,7 +125,7 @@ public:
   int rank;
   Messenger *messenger;
   ConnectionRef con_self;
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("Monitor::lock");
   SafeTimer timer;
   Finisher finisher;
   ThreadPool cpu_tp;  ///< threadpool for CPU intensive work
@@ -667,7 +667,7 @@ public:
 
   // -- sessions --
   MonSessionMap session_map;
-  Mutex session_map_lock{"Monitor::session_map_lock"};
+  ceph::mutex session_map_lock = ceph::make_mutex("Monitor::session_map_lock");
   AdminSocketHook *admin_hook;
 
   template<typename Func, typename...Args>
@@ -727,7 +727,7 @@ public:
 
   void health_tick_start();
   void health_tick_stop();
-  utime_t health_interval_calc_next_update();
+  ceph::real_clock::time_point health_interval_calc_next_update();
   void health_interval_start();
   void health_interval_stop();
   void health_events_cleanup();
@@ -884,9 +884,8 @@ public:
   //on forwarded messages, so we create a non-locking version for this class
   void _ms_dispatch(Message *m);
   bool ms_dispatch(Message *m) override {
-    lock.Lock();
+    std::lock_guard l{lock};
     _ms_dispatch(m);
-    lock.Unlock();
     return true;
   }
   void dispatch_op(MonOpRequestRef op);

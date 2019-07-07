@@ -723,7 +723,7 @@ void Paxos::handle_begin(MonOpRequestRef op)
 
   // set state.
   state = STATE_UPDATING;
-  lease_expire = utime_t();  // cancel lease
+  lease_expire = {};  // cancel lease
 
   // yes.
   version_t v = last_committed+1;
@@ -834,7 +834,7 @@ void Paxos::abort_commit()
   ceph_assert(commits_started > 0);
   --commits_started;
   if (commits_started == 0)
-    shutdown_cond.Signal();
+    shutdown_cond.notify_all();
 }
 
 void Paxos::commit_start()
@@ -891,7 +891,7 @@ void Paxos::commit_finish()
   // cancel lease - it was for the old value.
   //  (this would only happen if message layer lost the 'begin', but
   //   leader still got a majority and committed with out us.)
-  lease_expire = utime_t();  // cancel lease
+  lease_expire = {};  // cancel lease
 
   last_committed++;
   last_commit_time = ceph_clock_now();
@@ -969,8 +969,8 @@ void Paxos::extend_lease()
   ceph_assert(mon->is_leader());
   //assert(is_active());
 
-  lease_expire = ceph_clock_now();
-  lease_expire += g_conf()->mon_lease;
+  lease_expire = ceph::real_clock::now();
+  lease_expire += ceph::make_timespan(g_conf()->mon_lease);
   acked_lease.clear();
   acked_lease.insert(mon->rank);
 
@@ -985,7 +985,7 @@ void Paxos::extend_lease()
     MMonPaxos *lease = new MMonPaxos(mon->get_epoch(), MMonPaxos::OP_LEASE,
 				     ceph_clock_now());
     lease->last_committed = last_committed;
-    lease->lease_timestamp = lease_expire;
+    lease->lease_timestamp = utime_t{lease_expire};
     lease->first_committed = first_committed;
     mon->send_mon_message(lease, *p);
   }
@@ -1003,9 +1003,10 @@ void Paxos::extend_lease()
   }
 
   // set renew event
-  utime_t at = lease_expire;
-  at -= g_conf()->mon_lease;
-  at += g_conf()->mon_lease_renew_interval_factor * g_conf()->mon_lease;
+  auto at = lease_expire;
+  at -= ceph::make_timespan(g_conf()->mon_lease);
+  at += ceph::make_timespan(g_conf()->mon_lease_renew_interval_factor *
+			    g_conf()->mon_lease);
   lease_renew_event = mon->timer.add_event_at(
     at, new C_MonContext(mon, [this](int r) {
 	if (r == -ECANCELED)
@@ -1107,12 +1108,13 @@ void Paxos::handle_lease(MonOpRequestRef op)
   warn_on_future_time(lease->sent_timestamp, lease->get_source());
 
   // extend lease
-  if (lease_expire < lease->lease_timestamp) {
-    lease_expire = lease->lease_timestamp;
+  if (auto new_expire = lease->lease_timestamp.to_real_time();
+      lease_expire < new_expire) {
+    lease_expire = new_expire;
 
-    utime_t now = ceph_clock_now();
+    auto now = ceph::real_clock::now();
     if (lease_expire < now) {
-      utime_t diff = now - lease_expire;
+      auto diff = now - lease_expire;
       derr << "lease_expire from " << lease->get_source_inst() << " is " << diff << " seconds in the past; mons are probably laggy (or possibly clocks are too skewed)" << dendl;
     }
   }
@@ -1322,8 +1324,10 @@ void Paxos::shutdown()
   // Let store finish commits in progress
   // XXX: I assume I can't use finish_contexts() because the store
   // is going to trigger
-  while(commits_started > 0)
-    shutdown_cond.Wait(mon->lock);
+  unique_lock l{mon->lock, std::adopt_lock};
+  shutdown_cond.wait(l, [this] { return commits_started <= 0; });
+  // Monitor::shutdown() will unlock it
+  l.release();
 
   finish_contexts(g_ceph_context, waiting_for_writeable, -ECANCELED);
   finish_contexts(g_ceph_context, waiting_for_readable, -ECANCELED);
@@ -1353,7 +1357,7 @@ void Paxos::leader_init()
   }
 
   state = STATE_RECOVERING;
-  lease_expire = utime_t();
+  lease_expire = {};
   dout(10) << "leader_init -- starting paxos recovery" << dendl;
   collect(0);
 }
@@ -1364,7 +1368,7 @@ void Paxos::peon_init()
   new_value.clear();
 
   state = STATE_RECOVERING;
-  lease_expire = utime_t();
+  lease_expire = {};
   dout(10) << "peon_init -- i am a peon" << dendl;
 
   // start a timer, in case the leader never manages to issue a lease
@@ -1388,9 +1392,9 @@ void Paxos::restart()
 
   if (is_writing() || is_writing_previous()) {
     dout(10) << __func__ << " flushing" << dendl;
-    mon->lock.Unlock();
+    mon->lock.unlock();
     mon->store->flush();
-    mon->lock.Lock();
+    mon->lock.lock();
     dout(10) << __func__ << " flushed" << dendl;
   }
   state = STATE_RECOVERING;
@@ -1508,7 +1512,7 @@ version_t Paxos::read_current(bufferlist &bl)
 bool Paxos::is_lease_valid()
 {
   return ((mon->get_quorum().size() == 1)
-      || (ceph_clock_now() < lease_expire));
+	  || (ceph::real_clock::now() < lease_expire));
 }
 
 // -- WRITE --
