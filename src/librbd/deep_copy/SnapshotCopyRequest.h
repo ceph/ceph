@@ -99,7 +99,7 @@ private:
 
   cls::rbd::ParentImageSpec m_dst_parent_spec;
 
-  Mutex m_lock;
+  ceph::mutex m_lock;
   bool m_canceled = false;
 
   void send_snap_unprotect();
@@ -127,7 +127,7 @@ private:
   int validate_parent(ImageCtxT *image_ctx, cls::rbd::ParentImageSpec *spec);
 
   Context *start_lock_op(int* r);
-  Context *start_lock_op(RWLock &owner_locki, int* r);
+  Context *start_lock_op(ceph::shared_mutex &owner_locki, int* r);
 
   void finish(int r);
 };

@@ -19,7 +19,7 @@ namespace object_map {
 
 class ResizeRequest : public Request {
 public:
-  ResizeRequest(ImageCtx &image_ctx, RWLock *object_map_lock,
+  ResizeRequest(ImageCtx &image_ctx, ceph::shared_mutex *object_map_lock,
                 ceph::BitVector<2> *object_map, uint64_t snap_id,
                 uint64_t new_size, uint8_t default_object_state,
                 Context *on_finish)
@@ -39,7 +39,7 @@ protected:
   void finish_request() override;
 
 private:
-  RWLock* m_object_map_lock;
+  ceph::shared_mutex* m_object_map_lock;
   ceph::BitVector<2> *m_object_map;
   uint64_t m_num_objs;
   uint64_t m_new_size;

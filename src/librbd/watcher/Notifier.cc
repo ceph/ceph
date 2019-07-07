@@ -38,18 +38,18 @@ void Notifier::C_AioNotify::finish(int r) {
 
 Notifier::Notifier(ContextWQ *work_queue, IoCtx &ioctx, const std::string &oid)
   : m_work_queue(work_queue), m_ioctx(ioctx), m_oid(oid),
-    m_aio_notify_lock(util::unique_lock_name(
-      "librbd::object_watcher::Notifier::m_aio_notify_lock", this)) {
+    m_aio_notify_lock(ceph::make_mutex(util::unique_lock_name(
+      "librbd::object_watcher::Notifier::m_aio_notify_lock", this))) {
   m_cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
 }
 
 Notifier::~Notifier() {
-  Mutex::Locker aio_notify_locker(m_aio_notify_lock);
+  std::lock_guard aio_notify_locker{m_aio_notify_lock};
   ceph_assert(m_pending_aio_notifies == 0);
 }
 
 void Notifier::flush(Context *on_finish) {
-  Mutex::Locker aio_notify_locker(m_aio_notify_lock);
+  std::lock_guard aio_notify_locker{m_aio_notify_lock};
   if (m_pending_aio_notifies == 0) {
     m_work_queue->queue(on_finish, 0);
     return;
@@ -61,7 +61,7 @@ void Notifier::flush(Context *on_finish) {
 void Notifier::notify(bufferlist &bl, NotifyResponse *response,
                       Context *on_finish) {
   {
-    Mutex::Locker aio_notify_locker(m_aio_notify_lock);
+    std::lock_guard aio_notify_locker{m_aio_notify_lock};
     ++m_pending_aio_notifies;
 
     ldout(m_cct, 20) << "pending=" << m_pending_aio_notifies << dendl;
@@ -77,7 +77,7 @@ void Notifier::notify(bufferlist &bl, NotifyResponse *response,
 void Notifier::handle_notify(int r, Context *on_finish) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
-  Mutex::Locker aio_notify_locker(m_aio_notify_lock);
+  std::lock_guard aio_notify_locker{m_aio_notify_lock};
   ceph_assert(m_pending_aio_notifies > 0);
   --m_pending_aio_notifies;
 

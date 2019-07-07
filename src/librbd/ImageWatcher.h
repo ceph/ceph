@@ -5,8 +5,7 @@
 #define CEPH_LIBRBD_IMAGE_WATCHER_H
 
 #include "cls/rbd/cls_rbd_types.h"
-#include "common/Mutex.h"
-#include "common/RWLock.h"
+#include "common/ceph_mutex.h"
 #include "include/Context.h"
 #include "include/rbd/librbd.hpp"
 #include "librbd/Watcher.h"
@@ -165,11 +164,11 @@ private:
 
   TaskFinisher<Task> *m_task_finisher;
 
-  RWLock m_async_request_lock;
+  ceph::shared_mutex m_async_request_lock;
   std::map<watch_notify::AsyncRequestId, AsyncRequest> m_async_requests;
   std::set<watch_notify::AsyncRequestId> m_async_pending;
 
-  Mutex m_owner_client_id_lock;
+  ceph::mutex m_owner_client_id_lock;
   watch_notify::ClientId m_owner_client_id;
 
   void handle_register_watch(int r);

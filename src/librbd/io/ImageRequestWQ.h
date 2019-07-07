@@ -5,7 +5,7 @@
 #define CEPH_LIBRBD_IO_IMAGE_REQUEST_WQ_H
 
 #include "include/Context.h"
-#include "common/RWLock.h"
+#include "common/ceph_mutex.h"
 #include "common/Throttle.h"
 #include "common/WorkQueue.h"
 #include "librbd/io/Types.h"
@@ -62,7 +62,7 @@ public:
   void shut_down(Context *on_shutdown);
 
   inline bool writes_blocked() const {
-    RWLock::RLocker locker(m_lock);
+    std::shared_lock locker{m_lock};
     return (m_write_blockers > 0);
   }
 
@@ -94,7 +94,7 @@ private:
   struct C_RefreshFinish;
 
   ImageCtxT &m_image_ctx;
-  mutable RWLock m_lock;
+  mutable ceph::shared_mutex m_lock;
   Contexts m_write_blocker_contexts;
   uint32_t m_write_blockers = 0;
   Contexts m_unblocked_write_waiter_contexts;
@@ -116,11 +116,11 @@ private:
   bool is_lock_required(bool write_op) const;
 
   inline bool require_lock_on_read() const {
-    RWLock::RLocker locker(m_lock);
+    std::shared_lock locker{m_lock};
     return m_require_lock_on_read;
   }
   inline bool writes_empty() const {
-    RWLock::RLocker locker(m_lock);
+    std::shared_lock locker{m_lock};
     return (m_queued_writes == 0);
   }
 

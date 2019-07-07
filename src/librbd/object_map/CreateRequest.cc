@@ -33,7 +33,7 @@ void CreateRequest<I>::send() {
   uint64_t max_size = m_image_ctx->size;
 
   {
-    RWLock::WLocker image_locker(m_image_ctx->image_lock);
+    std::unique_lock image_locker{m_image_ctx->image_lock};
     m_snap_ids.push_back(CEPH_NOSNAP);
     for (auto it : m_image_ctx->snap_info) {
       max_size = std::max(max_size, it.second.size);

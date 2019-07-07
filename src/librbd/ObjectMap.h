@@ -40,13 +40,13 @@ public:
 
   uint8_t operator[](uint64_t object_no) const;
   inline uint64_t size() const {
-    RWLock::RLocker locker(m_lock);
+    std::shared_lock locker{m_lock};
     return m_object_map.size();
   }
 
   inline void set_state(uint64_t object_no, uint8_t new_state,
                         const boost::optional<uint8_t> &current_state) {
-    RWLock::WLocker locker(m_lock);
+    std::unique_lock locker{m_lock};
     ceph_assert(object_no < m_object_map.size());
     if (current_state && m_object_map[object_no] != *current_state) {
       return;
@@ -81,7 +81,7 @@ public:
                   const ZTracer::Trace &parent_trace, bool ignore_enoent,
                   T *callback_object) {
     ceph_assert(start_object_no < end_object_no);
-    RWLock::WLocker locker(m_lock);
+    std::unique_lock locker{m_lock};
 
     if (snap_id == CEPH_NOSNAP) {
       end_object_no = std::min(end_object_no, m_object_map.size());
@@ -146,7 +146,7 @@ private:
   ImageCtxT &m_image_ctx;
   uint64_t m_snap_id;
 
-  RWLock m_lock;
+  mutable ceph::shared_mutex m_lock;
   ceph::BitVector<2> m_object_map;
 
   UpdateGuard *m_update_guard = nullptr;
