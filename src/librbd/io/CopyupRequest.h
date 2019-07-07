@@ -7,7 +7,7 @@
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
 #include "include/buffer.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/zipkin_trace.h"
 #include "librbd/io/AsyncOperation.h"
 #include "librbd/io/Types.h"
@@ -96,7 +96,7 @@ private:
   std::vector<uint64_t> m_snap_ids;
   bool m_first_snap_is_clean = false;
 
-  Mutex m_lock;
+  ceph::mutex m_lock = ceph::make_mutex("CopyupRequest", false);
   WriteRequests m_pending_requests;
   unsigned m_pending_copyups = 0;
 

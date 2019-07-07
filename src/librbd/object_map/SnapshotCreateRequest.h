@@ -45,7 +45,7 @@ public:
     STATE_ADD_SNAPSHOT
   };
 
-  SnapshotCreateRequest(ImageCtx &image_ctx, RWLock* object_map_lock,
+  SnapshotCreateRequest(ImageCtx &image_ctx, ceph::shared_mutex* object_map_lock,
                         ceph::BitVector<2> *object_map, uint64_t snap_id,
                         Context *on_finish)
     : Request(image_ctx, snap_id, on_finish),
@@ -59,7 +59,7 @@ protected:
   bool should_complete(int r) override;
 
 private:
-  RWLock* m_object_map_lock;
+  ceph::shared_mutex* m_object_map_lock;
   ceph::BitVector<2> &m_object_map;
 
   State m_state = STATE_READ_MAP;

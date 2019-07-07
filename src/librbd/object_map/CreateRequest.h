@@ -5,7 +5,6 @@
 #define CEPH_LIBRBD_OBJECT_MAP_CREATE_REQUEST_H
 
 #include "include/buffer.h"
-#include "common/Mutex.h"
 #include <map>
 #include <string>
 

@@ -4,7 +4,7 @@
 #ifndef CEPH_LIBRBD_IO_SIMPLE_SCHEDULER_OBJECT_DISPATCH_H
 #define CEPH_LIBRBD_IO_SIMPLE_SCHEDULER_OBJECT_DISPATCH_H
 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/snap_types.h"
 #include "include/interval_set.h"
 #include "include/utime.h"
@@ -111,6 +111,8 @@ private:
 
   class ObjectRequests {
   public:
+    using clock_t = ceph::real_clock;
+
     ObjectRequests(uint64_t object_no) : m_object_no(object_no) {
     }
 
@@ -126,16 +128,16 @@ private:
       return m_dispatch_seq;
     }
 
-    utime_t get_dispatch_time() const {
+    clock_t::time_point get_dispatch_time() const {
       return m_dispatch_time;
     }
 
-    void set_scheduled_dispatch(const utime_t &dispatch_time) {
+    void set_scheduled_dispatch(const clock_t::time_point &dispatch_time) {
       m_dispatch_time = dispatch_time;
     }
 
     bool is_scheduled_dispatch() const {
-      return m_dispatch_time != utime_t();
+      return !clock_t::is_zero(m_dispatch_time);
     }
 
     size_t delayed_requests_size() const {
@@ -152,12 +154,12 @@ private:
 
     void dispatch_delayed_requests(ImageCtxT *image_ctx,
                                    LatencyStats *latency_stats,
-                                   Mutex *latency_stats_lock);
+                                   ceph::mutex *latency_stats_lock);
 
   private:
     uint64_t m_object_no;
     uint64_t m_dispatch_seq = 0;
-    utime_t m_dispatch_time;
+    clock_t::time_point m_dispatch_time;
     SnapContext m_snapc = {0, {}};
     int m_op_flags = 0;
     int m_object_dispatch_flags = 0;
@@ -174,9 +176,9 @@ private:
 
   ImageCtxT *m_image_ctx;
 
-  Mutex m_lock;
+  ceph::mutex m_lock;
   SafeTimer *m_timer;
-  Mutex *m_timer_lock;
+  ceph::mutex *m_timer_lock;
   uint64_t m_max_delay;
   uint64_t m_dispatch_seq = 0;
 
