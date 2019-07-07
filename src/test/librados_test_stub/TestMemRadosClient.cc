@@ -32,7 +32,7 @@ void TestMemRadosClient::object_list(int64_t pool_id,
 
   auto pool = m_mem_cluster->get_pool(pool_id);
   if (pool != nullptr) {
-    RWLock::RLocker file_locker(pool->file_lock);
+    std::shared_lock file_locker{pool->file_lock};
     for (auto &file_pair : pool->files) {
       Object obj;
       obj.oid = file_pair.first.name;

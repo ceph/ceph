@@ -156,7 +156,7 @@ TEST_F(TestMockObjectMapRefreshRequest, SuccessHead) {
   init_object_map(mock_image_ctx, &on_disk_object_map);
 
   C_SaferCond ctx;
-  RWLock object_map_lock("lock");
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
   ceph::BitVector<2> object_map;
   MockLockRequest mock_lock_request;
   MockRefreshRequest *req = new MockRefreshRequest(
@@ -187,7 +187,7 @@ TEST_F(TestMockObjectMapRefreshRequest, SuccessSnapshot) {
   init_object_map(mock_image_ctx, &on_disk_object_map);
 
   C_SaferCond ctx;
-  RWLock object_map_lock("lock");
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
   ceph::BitVector<2> object_map;
   MockRefreshRequest *req = new MockRefreshRequest(
     mock_image_ctx, &object_map_lock, &object_map, TEST_SNAP_ID, &ctx);
@@ -216,7 +216,7 @@ TEST_F(TestMockObjectMapRefreshRequest, LoadError) {
   init_object_map(mock_image_ctx, &on_disk_object_map);
 
   C_SaferCond ctx;
-  RWLock object_map_lock("lock");
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
   ceph::BitVector<2> object_map;
   MockRefreshRequest *req = new MockRefreshRequest(
     mock_image_ctx, &object_map_lock, &object_map, TEST_SNAP_ID, &ctx);
@@ -247,7 +247,7 @@ TEST_F(TestMockObjectMapRefreshRequest, LoadInvalidateError) {
   init_object_map(mock_image_ctx, &on_disk_object_map);
 
   C_SaferCond ctx;
-  RWLock object_map_lock("lock");
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
   ceph::BitVector<2> object_map;
   MockRefreshRequest *req = new MockRefreshRequest(
     mock_image_ctx, &object_map_lock, &object_map, TEST_SNAP_ID, &ctx);
@@ -278,7 +278,7 @@ TEST_F(TestMockObjectMapRefreshRequest, LoadCorrupt) {
   init_object_map(mock_image_ctx, &on_disk_object_map);
 
   C_SaferCond ctx;
-  RWLock object_map_lock("lock");
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
   ceph::BitVector<2> object_map;
   MockRefreshRequest *req = new MockRefreshRequest(
     mock_image_ctx, &object_map_lock, &object_map, TEST_SNAP_ID, &ctx);
@@ -313,7 +313,7 @@ TEST_F(TestMockObjectMapRefreshRequest, TooSmall) {
   ceph::BitVector<2> small_object_map;
 
   C_SaferCond ctx;
-  RWLock object_map_lock("lock");
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
   ceph::BitVector<2> object_map;
   MockRefreshRequest *req = new MockRefreshRequest(
     mock_image_ctx, &object_map_lock, &object_map, TEST_SNAP_ID, &ctx);
@@ -347,7 +347,7 @@ TEST_F(TestMockObjectMapRefreshRequest, TooSmallInvalidateError) {
   ceph::BitVector<2> small_object_map;
 
   C_SaferCond ctx;
-  RWLock object_map_lock("lock");
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
   ceph::BitVector<2> object_map;
   MockRefreshRequest *req = new MockRefreshRequest(
     mock_image_ctx, &object_map_lock, &object_map, TEST_SNAP_ID, &ctx);
@@ -381,7 +381,7 @@ TEST_F(TestMockObjectMapRefreshRequest, TooLarge) {
   large_object_map.resize(on_disk_object_map.size() * 2);
 
   C_SaferCond ctx;
-  RWLock object_map_lock("lock");
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
   ceph::BitVector<2> object_map;
   MockRefreshRequest *req = new MockRefreshRequest(
     mock_image_ctx, &object_map_lock, &object_map, TEST_SNAP_ID, &ctx);
@@ -410,7 +410,7 @@ TEST_F(TestMockObjectMapRefreshRequest, ResizeError) {
   ceph::BitVector<2> small_object_map;
 
   C_SaferCond ctx;
-  RWLock object_map_lock("lock");
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
   ceph::BitVector<2> object_map;
   MockRefreshRequest *req = new MockRefreshRequest(
     mock_image_ctx, &object_map_lock, &object_map, TEST_SNAP_ID, &ctx);
@@ -442,7 +442,7 @@ TEST_F(TestMockObjectMapRefreshRequest, LargeImageError) {
   init_object_map(mock_image_ctx, &on_disk_object_map);
 
   C_SaferCond ctx;
-  RWLock object_map_lock("lock");
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
   ceph::BitVector<2> object_map;
   MockRefreshRequest *req = new MockRefreshRequest(
     mock_image_ctx, &object_map_lock, &object_map, TEST_SNAP_ID, &ctx);

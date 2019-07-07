@@ -27,7 +27,7 @@ struct RefreshRequest<MockTestImageCtx> {
   Context *on_finish = nullptr;
   ceph::BitVector<2u> *object_map = nullptr;
   static RefreshRequest *s_instance;
-  static RefreshRequest *create(MockTestImageCtx &image_ctx, RWLock*,
+  static RefreshRequest *create(MockTestImageCtx &image_ctx, ceph::shared_mutex*,
                                 ceph::BitVector<2u> *object_map,
                                 uint64_t snap_id, Context *on_finish) {
     ceph_assert(s_instance != nullptr);
@@ -64,7 +64,7 @@ template <>
 struct UpdateRequest<MockTestImageCtx> {
   Context *on_finish = nullptr;
   static UpdateRequest *s_instance;
-  static UpdateRequest *create(MockTestImageCtx &image_ctx, RWLock*,
+  static UpdateRequest *create(MockTestImageCtx &image_ctx, ceph::shared_mutex*,
                                ceph::BitVector<2u> *object_map,
                                uint64_t snap_id,
                                uint64_t start_object_no, uint64_t end_object_no,
@@ -180,7 +180,7 @@ TEST_F(TestMockObjectMap, NonDetainedUpdate) {
   C_SaferCond update_ctx1;
   C_SaferCond update_ctx2;
   {
-    RWLock::RLocker image_locker(mock_image_ctx.image_lock);
+    std::shared_lock image_locker{mock_image_ctx.image_lock};
     mock_object_map.aio_update(CEPH_NOSNAP, 0, 1, {}, {}, false, &update_ctx1);
     mock_object_map.aio_update(CEPH_NOSNAP, 1, 1, {}, {}, false, &update_ctx2);
   }
@@ -237,7 +237,7 @@ TEST_F(TestMockObjectMap, DetainedUpdate) {
   C_SaferCond update_ctx3;
   C_SaferCond update_ctx4;
   {
-    RWLock::RLocker image_locker(mock_image_ctx.image_lock);
+    std::shared_lock image_locker{mock_image_ctx.image_lock};
     mock_object_map.aio_update(CEPH_NOSNAP, 1, 4, 1, {}, {}, false,
                                &update_ctx1);
     mock_object_map.aio_update(CEPH_NOSNAP, 1, 3, 1, {}, {}, false,

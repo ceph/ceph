@@ -42,7 +42,8 @@ public:
     interval_set<uint64_t> snap_overlap;
 
     bool exists;
-    RWLock lock;
+    ceph::shared_mutex lock =
+      ceph::make_shared_mutex("TestMemCluster::File::lock");
   };
   typedef boost::shared_ptr<File> SharedFile;
 
@@ -58,7 +59,8 @@ public:
     SnapSeqs snap_seqs;
     uint64_t snap_id = 1;
 
-    RWLock file_lock;
+    ceph::shared_mutex file_lock =
+      ceph::make_shared_mutex("TestMemCluster::Pool::file_lock");
     Files files;
     FileOMaps file_omaps;
     FileTMaps file_tmaps;
@@ -100,7 +102,8 @@ private:
   typedef std::map<std::string, Pool*>		Pools;
   typedef std::set<uint32_t> Blacklist;
 
-  mutable Mutex m_lock;
+  mutable ceph::mutex m_lock =
+    ceph::make_mutex("TestMemCluster::m_lock");
 
   Pools	m_pools;
   int64_t m_pool_id = 0;
@@ -110,10 +113,10 @@ private:
 
   Blacklist m_blacklist;
 
-  Cond m_transaction_cond;
+  ceph::condition_variable m_transaction_cond;
   std::set<ObjectLocator> m_transactions;
 
-  Pool *get_pool(const Mutex& lock, int64_t pool_id);
+  Pool *get_pool(const ceph::mutex& lock, int64_t pool_id);
 
 };
 

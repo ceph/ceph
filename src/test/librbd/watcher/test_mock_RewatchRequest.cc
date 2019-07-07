@@ -24,9 +24,7 @@ using ::testing::WithArgs;
 struct TestMockWatcherRewatchRequest : public TestMockFixture {
   typedef RewatchRequest MockRewatchRequest;
 
-  TestMockWatcherRewatchRequest()
-    : m_watch_lock("watch_lock") {
-  }
+  TestMockWatcherRewatchRequest() = default;
 
   void expect_aio_watch(MockImageCtx &mock_image_ctx, int r) {
     librados::MockTestMemIoCtxImpl &mock_io_ctx(get_mock_io_ctx(
@@ -68,7 +66,7 @@ struct TestMockWatcherRewatchRequest : public TestMockFixture {
     }
   };
 
-  RWLock m_watch_lock;
+  ceph::shared_mutex m_watch_lock = ceph::make_shared_mutex("watch_lock");
   WatchCtx m_watch_ctx;
   uint64_t m_watch_handle = 123;
 };
@@ -91,7 +89,7 @@ TEST_F(TestMockWatcherRewatchRequest, Success) {
                                                        &m_watch_handle,
                                                        &ctx);
   {
-    RWLock::WLocker watch_locker(m_watch_lock);
+    std::unique_lock watch_locker{m_watch_lock};
     req->send();
   }
   ASSERT_EQ(0, ctx.wait());
@@ -116,7 +114,7 @@ TEST_F(TestMockWatcherRewatchRequest, UnwatchError) {
                                                        &m_watch_handle,
                                                        &ctx);
   {
-    RWLock::WLocker watch_locker(m_watch_lock);
+    std::unique_lock watch_locker{m_watch_lock};
     req->send();
   }
   ASSERT_EQ(0, ctx.wait());
@@ -141,7 +139,7 @@ TEST_F(TestMockWatcherRewatchRequest, WatchBlacklist) {
                                                        &m_watch_handle,
                                                        &ctx);
   {
-    RWLock::WLocker watch_locker(m_watch_lock);
+    std::unique_lock watch_locker{m_watch_lock};
     req->send();
   }
   ASSERT_EQ(-EBLACKLISTED, ctx.wait());
@@ -166,7 +164,7 @@ TEST_F(TestMockWatcherRewatchRequest, WatchDNE) {
                                                        &m_watch_handle,
                                                        &ctx);
   {
-    RWLock::WLocker watch_locker(m_watch_lock);
+    std::unique_lock watch_locker{m_watch_lock};
     req->send();
   }
   ASSERT_EQ(-ENOENT, ctx.wait());
@@ -191,7 +189,7 @@ TEST_F(TestMockWatcherRewatchRequest, WatchError) {
                                                        &m_watch_handle,
                                                        &ctx);
   {
-    RWLock::WLocker watch_locker(m_watch_lock);
+    std::unique_lock watch_locker{m_watch_lock};
     req->send();
   }
   ASSERT_EQ(-EINVAL, ctx.wait());
@@ -217,7 +215,7 @@ TEST_F(TestMockWatcherRewatchRequest, InvalidWatchHandler) {
                                                        &m_watch_handle,
                                                        &ctx);
   {
-    RWLock::WLocker watch_locker(m_watch_lock);
+    std::unique_lock watch_locker{m_watch_lock};
     req->send();
   }
 

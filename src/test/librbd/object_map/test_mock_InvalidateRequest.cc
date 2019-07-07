@@ -40,8 +40,8 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesInMemoryFlag) {
                 .Times(0);
 
   {
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker image_locker(ictx->image_lock);
+    std::shared_lock owner_locker{ictx->owner_lock};
+    std::unique_lock image_locker{ictx->image_lock};
     request->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -66,8 +66,8 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesHeadOnDiskFlag) {
                 .WillOnce(DoDefault());
 
   {
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker image_locker(ictx->image_lock);
+    std::shared_lock owner_locker{ictx->owner_lock};
+    std::unique_lock image_locker{ictx->image_lock};
     request->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -95,8 +95,8 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesSnapOnDiskFlag) {
                 .WillOnce(DoDefault());
 
   {
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker image_locker(ictx->image_lock);
+    std::shared_lock owner_locker{ictx->owner_lock};
+    std::unique_lock image_locker{ictx->image_lock};
     request->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -116,8 +116,8 @@ TEST_F(TestMockObjectMapInvalidateRequest, SkipOnDiskUpdateWithoutLock) {
                 .Times(0);
 
   {
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker image_locker(ictx->image_lock);
+    std::shared_lock owner_locker{ictx->owner_lock};
+    std::unique_lock image_locker{ictx->image_lock};
     request->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -140,8 +140,8 @@ TEST_F(TestMockObjectMapInvalidateRequest, IgnoresOnDiskUpdateFailure) {
                 .WillOnce(Return(-EINVAL));
 
   {
-    RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker image_locker(ictx->image_lock);
+    std::shared_lock owner_locker{ictx->owner_lock};
+    std::unique_lock image_locker{ictx->image_lock};
     request->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());

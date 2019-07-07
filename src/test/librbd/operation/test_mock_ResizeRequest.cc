@@ -186,7 +186,7 @@ public:
       mock_image_ctx, &cond_ctx, new_size, allow_shrink, prog_ctx,
       journal_op_tid, disable_journal);
     {
-      RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+      std::shared_lock owner_locker{mock_image_ctx.owner_lock};
       req->send();
     }
     return cond_ctx.wait();

@@ -21,6 +21,7 @@
 #include "librbd/io/ImageRequest.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "osdc/Striper.h"
+#include "common/Cond.h"
 #include <boost/scope_exit.hpp>
 #include <boost/algorithm/string/predicate.hpp>
 #include <boost/assign/list_of.hpp>
@@ -198,7 +199,7 @@ TEST_F(TestInternal, IsExclusiveLockOwner) {
 
   C_SaferCond ctx;
   {
-    RWLock::WLocker l(ictx->owner_lock);
+    std::unique_lock l{ictx->owner_lock};
     ictx->exclusive_lock->try_acquire_lock(&ctx);
   }
   ASSERT_EQ(0, ctx.wait());
@@ -426,13 +427,13 @@ TEST_F(TestInternal, CancelAsyncResize) {
 
   C_SaferCond ctx;
   {
-    RWLock::WLocker l(ictx->owner_lock);
+    std::unique_lock l{ictx->owner_lock};
     ictx->exclusive_lock->try_acquire_lock(&ctx);
   }
 
   ASSERT_EQ(0, ctx.wait());
   {
-    RWLock::RLocker owner_locker(ictx->owner_lock);
+    std::shared_lock owner_locker{ictx->owner_lock};
     ASSERT_TRUE(ictx->exclusive_lock->is_lock_owner());
   }
 
@@ -446,7 +447,7 @@ TEST_F(TestInternal, CancelAsyncResize) {
 
     size -= std::min<uint64_t>(size, 1 << 18);
     {
-      RWLock::RLocker l(ictx->owner_lock);
+      std::shared_lock l{ictx->owner_lock};
       ictx->operations->execute_resize(size, true, prog_ctx, &ctx, 0);
     }
 
@@ -469,11 +470,11 @@ TEST_F(TestInternal, MultipleResize) {
   if (ictx->exclusive_lock != nullptr) {
     C_SaferCond ctx;
     {
-      RWLock::WLocker l(ictx->owner_lock);
+      std::unique_lock l{ictx->owner_lock};
       ictx->exclusive_lock->try_acquire_lock(&ctx);
     }
 
-    RWLock::RLocker owner_locker(ictx->owner_lock);
+    std::shared_lock owner_locker{ictx->owner_lock};
     ASSERT_EQ(0, ctx.wait());
     ASSERT_TRUE(ictx->exclusive_lock->is_lock_owner());
   }
@@ -493,7 +494,7 @@ TEST_F(TestInternal, MultipleResize) {
       new_size = size;
     }
 
-    RWLock::RLocker l(ictx->owner_lock);
+    std::shared_lock l{ictx->owner_lock};
     contexts.push_back(new C_SaferCond());
     ictx->operations->execute_resize(new_size, true, prog_ctx, contexts.back(), 0);
   }
@@ -803,7 +804,7 @@ TEST_F(TestInternal, SnapshotCopyupZeros)
       object_map.open(&ctx);
       ASSERT_EQ(0, ctx.wait());
 
-      RWLock::RLocker image_locker(ictx2->image_lock);
+      std::shared_lock image_locker{ictx2->image_lock};
       ASSERT_EQ(state, object_map[0]);
     }
   }
@@ -890,7 +891,7 @@ TEST_F(TestInternal, SnapshotCopyupZerosMigration)
       object_map.open(&ctx);
       ASSERT_EQ(0, ctx.wait());
 
-      RWLock::RLocker image_locker(ictx2->image_lock);
+      std::shared_lock image_locker{ictx2->image_lock};
       ASSERT_EQ(state, object_map[0]);
     }
   }
@@ -949,7 +950,7 @@ TEST_F(TestInternal, ResizeCopyup)
 
   {
     // hide the parent from the snapshot
-    RWLock::WLocker image_locker(ictx2->image_lock);
+    std::unique_lock image_locker{ictx2->image_lock};
     ictx2->snap_info.begin()->second.parent = librbd::ParentImageInfo();
   }
 
@@ -1016,7 +1017,7 @@ TEST_F(TestInternal, DiscardCopyup)
 
   {
     // hide the parent from the snapshot
-    RWLock::WLocker image_locker(ictx2->image_lock);
+    std::unique_lock image_locker{ictx2->image_lock};
     ictx2->snap_info.begin()->second.parent = librbd::ParentImageInfo();
   }
 

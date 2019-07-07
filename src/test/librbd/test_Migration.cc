@@ -16,7 +16,7 @@
 #include "librbd/internal.h"
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
-
+#include "common/Cond.h"
 #include <boost/scope_exit.hpp>
 
 void register_test_migration() {
@@ -97,8 +97,8 @@ struct TestMigration : public TestFixture {
                      librbd::ImageCtx *dst_ictx) {
     uint64_t src_size, dst_size;
     {
-      RWLock::RLocker src_locker(src_ictx->image_lock);
-      RWLock::RLocker dst_locker(dst_ictx->image_lock);
+      std::shared_lock src_locker{src_ictx->image_lock};
+      std::shared_lock dst_locker{dst_ictx->image_lock};
       src_size = src_ictx->get_image_size(src_ictx->snap_id);
       dst_size = dst_ictx->get_image_size(dst_ictx->snap_id);
     }
@@ -109,7 +109,7 @@ struct TestMigration : public TestFixture {
 
     if (dst_ictx->test_features(RBD_FEATURE_LAYERING)) {
       bool flags_set;
-      RWLock::RLocker dst_locker(dst_ictx->image_lock);
+      std::shared_lock dst_locker{dst_ictx->image_lock};
       EXPECT_EQ(0, dst_ictx->test_flags(dst_ictx->snap_id,
                                         RBD_FLAG_OBJECT_MAP_INVALID,
                                         dst_ictx->image_lock, &flags_set));

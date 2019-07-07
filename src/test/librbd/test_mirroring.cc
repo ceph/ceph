@@ -26,6 +26,7 @@
 #include "librbd/api/Image.h"
 #include "journal/Journaler.h"
 #include "journal/Settings.h"
+#include "common/Cond.h"
 #include <boost/scope_exit.hpp>
 #include <boost/assign/list_of.hpp>
 #include <utility>
