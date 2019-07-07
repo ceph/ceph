@@ -38,7 +38,9 @@ public:
   void lock_shared();
   bool try_lock_shared();
   void unlock_shared();
-
+  bool is_rlocked() const {
+    return nrlock > 0;
+  }
   // either of them
   bool is_locked() const {
     return nlock > 0 || nrlock > 0;
