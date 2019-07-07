@@ -41,8 +41,8 @@ public:
     ThreadPool *thread_pool = nullptr;
     ContextWQ *work_queue = nullptr;
 
-    SafeTimer *timer = nullptr;
-    Mutex timer_lock;
+    SafeTimer *timer;
+    ceph::mutex timer_lock = ceph::make_mutex("Journaler::timer_lock");
   };
 
   typedef cls::journal::Tag Tag;
@@ -56,7 +56,7 @@ public:
   Journaler(librados::IoCtx &header_ioctx, const std::string &journal_id,
 	    const std::string &client_id, const Settings &settings,
             CacheManagerHandler *cache_manager_handler);
-  Journaler(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
+  Journaler(ContextWQ *work_queue, SafeTimer *timer, ceph::mutex *timer_lock,
             librados::IoCtx &header_ioctx, const std::string &journal_id,
 	    const std::string &client_id, const Settings &settings,
             CacheManagerHandler *cache_manager_handler);
@@ -154,7 +154,7 @@ private:
   JournalRecorder *m_recorder = nullptr;
   JournalTrimmer *m_trimmer = nullptr;
 
-  void set_up(ContextWQ *work_queue, SafeTimer *timer, Mutex *timer_lock,
+  void set_up(ContextWQ *work_queue, SafeTimer *timer, ceph::mutex *timer_lock,
               librados::IoCtx &header_ioctx, const std::string &journal_id,
               const Settings &settings);
 
