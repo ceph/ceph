@@ -21,6 +21,8 @@ namespace ceph {
       return true;
     }
     void unlock() {}
+    void lock_shared() {}
+    void unlock_shared() {}
   };
 
   using mutex = dummy_mutex;
@@ -84,6 +86,7 @@ namespace ceph {
 
   // debug methods
   #define ceph_mutex_is_locked(m) ((m).is_locked())
+  #define ceph_mutex_is_wlocked(m) ((m).is_wlocked())
   #define ceph_mutex_is_locked_by_me(m) ((m).is_locked_by_me())
 }
 

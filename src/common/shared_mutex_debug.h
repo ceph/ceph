@@ -31,11 +31,18 @@ public:
   void lock();
   bool try_lock();
   void unlock();
+  bool is_wlocked() const {
+    return nlock > 0;
+  }
   // shared locking
   void lock_shared();
   bool try_lock_shared();
   void unlock_shared();
 
+  // either of them
+  bool is_locked() const {
+    return nlock > 0 || nrlock > 0;
+  }
 private:
   // exclusive locking
   void _pre_unlock();
