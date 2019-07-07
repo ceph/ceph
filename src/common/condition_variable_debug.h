@@ -38,7 +38,7 @@ public:
   std::cv_status wait_until(
     std::unique_lock<mutex_debug>& lock,
     const std::chrono::time_point<Clock, Duration>& when) {
-    timespec ts = when.to_timespec(when);
+    timespec ts = Clock::to_timespec(when);
     return _wait_until(lock.mutex(), &ts);
   }
   template<class Rep, class Period>
