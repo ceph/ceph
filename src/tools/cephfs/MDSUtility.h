@@ -36,7 +36,7 @@ protected:
   Messenger *messenger;
   MonClient *monc;
 
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("MDSUtility::lock");
   Finisher finisher;
 
   Context *waiting_for_mds_map;
