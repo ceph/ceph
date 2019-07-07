@@ -16,7 +16,7 @@
 #include "ActivePyModule.h"
 
 #include "common/Finisher.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 
 #include "PyFormatter.h"
 
@@ -55,7 +55,7 @@ private:
 
   map<std::string,ProgressEvent> progress_events;
 
-  mutable Mutex lock{"ActivePyModules::lock"};
+  mutable ceph::mutex lock = ceph::make_mutex("ActivePyModules::lock");
 
 public:
   ActivePyModules(PyModuleConfig &module_config,

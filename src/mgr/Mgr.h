@@ -44,13 +44,13 @@ protected:
   Client    *client;
   Messenger *client_messenger;
 
-  mutable Mutex lock;
+  mutable ceph::mutex lock = ceph::make_mutex("Mgr::lock");
   Finisher finisher;
 
   // Track receipt of initial data during startup
-  Cond fs_map_cond;
+  ceph::condition_variable fs_map_cond;
   bool digest_received;
-  Cond digest_cond;
+  ceph::condition_variable digest_cond;
 
   PyModuleRegistry *py_module_registry;
   DaemonStateIndex daemon_state;
