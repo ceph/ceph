@@ -66,7 +66,7 @@ void TestWatchNotify::flush(TestRadosClient *rados_client) {
 int TestWatchNotify::list_watchers(int64_t pool_id, const std::string& nspace,
                                    const std::string& o,
                                    std::list<obj_watch_t> *out_watchers) {
-  Mutex::Locker lock(m_lock);
+  std::lock_guard lock{m_lock};
   SharedWatcher watcher = get_watcher(pool_id, nspace, o);
   if (!watcher) {
     return -ENOENT;
@@ -157,7 +157,7 @@ void TestWatchNotify::notify_ack(TestRadosClient *rados_client, int64_t pool_id,
   CephContext *cct = rados_client->cct();
   ldout(cct, 20) << "notify_id=" << notify_id << ", handle=" << handle
 		 << ", gid=" << gid << dendl;
-  Mutex::Locker lock(m_lock);
+  std::lock_guard lock{m_lock};
   WatcherID watcher_id = std::make_pair(gid, handle);
   ack_notify(rados_client, pool_id, nspace, o, notify_id, watcher_id, bl);
   finish_notify(rados_client, pool_id, nspace, o, notify_id);
@@ -204,7 +204,7 @@ void TestWatchNotify::execute_unwatch(TestRadosClient *rados_client,
 
   ldout(cct, 20) << "handle=" << handle << dendl;
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     for (FileWatchers::iterator it = m_file_watchers.begin();
          it != m_file_watchers.end(); ++it) {
       SharedWatcher watcher = it->second;
@@ -395,7 +395,7 @@ void TestWatchNotify::finish_notify(TestRadosClient *rados_client,
 }
 
 void TestWatchNotify::blacklist(uint32_t nonce) {
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
 
   for (auto file_it = m_file_watchers.begin();
        file_it != m_file_watchers.end(); ) {
@@ -417,7 +417,7 @@ void TestWatchNotify::blacklist(uint32_t nonce) {
 void TestWatchNotify::handle_object_removed(int64_t pool_id,
                                             const std::string& nspace,
                                             const std::string& oid) {
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   auto it = m_file_watchers.find({pool_id, nspace, oid});
   if (it == m_file_watchers.end()) {
     return;

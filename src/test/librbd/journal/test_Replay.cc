@@ -30,7 +30,7 @@ public:
   int when_acquired_lock(librbd::ImageCtx *ictx) {
     C_SaferCond lock_ctx;
     {
-      RWLock::WLocker owner_locker(ictx->owner_lock);
+      std::unique_lock owner_locker{ictx->owner_lock};
       ictx->exclusive_lock->acquire_lock(&lock_ctx);
     }
     int r = lock_ctx.wait();
@@ -48,7 +48,7 @@ public:
     C_SaferCond ctx;
     librbd::journal::EventEntry event_entry(event);
     {
-      RWLock::RLocker owner_locker(ictx->owner_lock);
+      std::shared_lock owner_locker{ictx->owner_lock};
       uint64_t tid = ictx->journal->append_io_event(std::move(event_entry),0, 0,
                                                     true, 0);
       ictx->journal->wait_event(tid, &ctx);
@@ -328,7 +328,7 @@ TEST_F(TestJournalReplay, SnapCreate) {
   ASSERT_EQ(1, current_entry);
 
   {
-    RWLock::RLocker image_locker(ictx->image_lock);
+    std::shared_lock image_locker{ictx->image_lock};
     ASSERT_NE(CEPH_NOSNAP, ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(),
 					     "snap"));
   }
@@ -395,7 +395,7 @@ TEST_F(TestJournalReplay, SnapUnprotect) {
 					     "snap"));
   uint64_t snap_id;
   {
-    RWLock::RLocker image_locker(ictx->image_lock);
+    std::shared_lock image_locker{ictx->image_lock};
     snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(), "snap");
     ASSERT_NE(CEPH_NOSNAP, snap_id);
   }
@@ -450,7 +450,7 @@ TEST_F(TestJournalReplay, SnapRename) {
 					     "snap"));
   uint64_t snap_id;
   {
-    RWLock::RLocker image_locker(ictx->image_lock);
+    std::shared_lock image_locker{ictx->image_lock};
     snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(), "snap");
     ASSERT_NE(CEPH_NOSNAP, snap_id);
   }
@@ -478,7 +478,7 @@ TEST_F(TestJournalReplay, SnapRename) {
   ASSERT_EQ(0, ictx->state->refresh());
 
   {
-    RWLock::RLocker image_locker(ictx->image_lock);
+    std::shared_lock image_locker{ictx->image_lock};
     snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(), "snap2");
     ASSERT_NE(CEPH_NOSNAP, snap_id);
   }
@@ -563,7 +563,7 @@ TEST_F(TestJournalReplay, SnapRemove) {
   ASSERT_EQ(initial_entry + 2, current_entry);
 
   {
-    RWLock::RLocker image_locker(ictx->image_lock);
+    std::shared_lock image_locker{ictx->image_lock};
     uint64_t snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(),
 					 "snap");
     ASSERT_EQ(CEPH_NOSNAP, snap_id);

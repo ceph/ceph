@@ -324,7 +324,7 @@ TEST_F(TestMockOperationEnableFeaturesRequest, All) {
   MockEnableFeaturesRequest *req = new MockEnableFeaturesRequest(
     mock_image_ctx, &cond_ctx, 0, features_to_enable);
   {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -376,7 +376,7 @@ TEST_F(TestMockOperationEnableFeaturesRequest, ObjectMap) {
   MockEnableFeaturesRequest *req = new MockEnableFeaturesRequest(
     mock_image_ctx, &cond_ctx, 0, RBD_FEATURE_OBJECT_MAP);
   {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -427,7 +427,7 @@ TEST_F(TestMockOperationEnableFeaturesRequest, ObjectMapError) {
   MockEnableFeaturesRequest *req = new MockEnableFeaturesRequest(
     mock_image_ctx, &cond_ctx, 0, RBD_FEATURE_OBJECT_MAP);
   {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
   }
   ASSERT_EQ(-EINVAL, cond_ctx.wait());
@@ -476,7 +476,7 @@ TEST_F(TestMockOperationEnableFeaturesRequest, SetFlagsError) {
   MockEnableFeaturesRequest *req = new MockEnableFeaturesRequest(
     mock_image_ctx, &cond_ctx, 0, RBD_FEATURE_OBJECT_MAP);
   {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
   }
   ASSERT_EQ(-EINVAL, cond_ctx.wait());
@@ -524,7 +524,7 @@ TEST_F(TestMockOperationEnableFeaturesRequest, Mirroring) {
   MockEnableFeaturesRequest *req = new MockEnableFeaturesRequest(
     mock_image_ctx, &cond_ctx, 0, RBD_FEATURE_JOURNALING);
   {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -569,7 +569,7 @@ TEST_F(TestMockOperationEnableFeaturesRequest, JournalingError) {
   MockEnableFeaturesRequest *req = new MockEnableFeaturesRequest(
     mock_image_ctx, &cond_ctx, 0, RBD_FEATURE_JOURNALING);
   {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
   }
   ASSERT_EQ(-EINVAL, cond_ctx.wait());
@@ -617,7 +617,7 @@ TEST_F(TestMockOperationEnableFeaturesRequest, MirroringError) {
   MockEnableFeaturesRequest *req = new MockEnableFeaturesRequest(
     mock_image_ctx, &cond_ctx, 0, RBD_FEATURE_JOURNALING);
   {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
