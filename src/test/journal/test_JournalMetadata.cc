@@ -4,7 +4,6 @@
 #include "journal/JournalMetadata.h"
 #include "test/journal/RadosTestFixture.h"
 #include "common/Cond.h"
-#include "common/Mutex.h"
 #include <map>
 
 class TestJournalMetadata : public RadosTestFixture {

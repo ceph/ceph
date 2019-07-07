@@ -9,7 +9,8 @@
 #include "journal/Settings.h"
 
 RadosTestFixture::RadosTestFixture()
-  : m_timer_lock("m_timer_lock"), m_timer(NULL), m_listener(this) {
+  : m_timer_lock(ceph::make_mutex("m_timer_lock")),
+    m_listener(this) {
 }
 
 void RadosTestFixture::SetUpTestCase() {
@@ -53,7 +54,7 @@ void RadosTestFixture::TearDown() {
   }
 
   {
-    Mutex::Locker locker(m_timer_lock);
+    std::lock_guard locker{m_timer_lock};
     m_timer->shutdown();
   }
   delete m_timer;
@@ -115,10 +116,9 @@ int RadosTestFixture::init_metadata(journal::JournalMetadataPtr metadata) {
 }
 
 bool RadosTestFixture::wait_for_update(journal::JournalMetadataPtr metadata) {
-  Mutex::Locker locker(m_listener.mutex);
+  std::unique_lock locker{m_listener.mutex};
   while (m_listener.updates[metadata.get()] == 0) {
-    if (m_listener.cond.WaitInterval(
-	  m_listener.mutex, utime_t(10, 0)) != 0) {
+    if (m_listener.cond.wait_for(locker, 10s) == std::cv_status::timeout) {
       return false;
     }
   }
