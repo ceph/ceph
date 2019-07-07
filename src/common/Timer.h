@@ -15,6 +15,8 @@
 #ifndef CEPH_TIMER_H
 #define CEPH_TIMER_H
 
+#include <map>
+#include "ceph_time.h"
 #include "ceph_mutex.h"
 
 class CephContext;
