@@ -4,7 +4,7 @@
 #ifndef OSD_PERF_METRIC_COLLECTOR_H_
 #define OSD_PERF_METRIC_COLLECTOR_H_
 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 
 #include "mgr/OSDPerfMetricTypes.h"
 
@@ -46,7 +46,7 @@ private:
                    std::map<OSDPerfMetricKey, PerformanceCounters>> Counters;
 
   Listener &listener;
-  mutable Mutex lock;
+  mutable ceph::mutex lock = ceph::make_mutex("OSDPerfMetricCollector::lock");
   OSDPerfMetricQueryID next_query_id = 0;
   Queries queries;
   Counters counters;

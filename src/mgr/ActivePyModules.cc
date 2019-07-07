@@ -47,7 +47,7 @@ ActivePyModules::ActivePyModules(PyModuleConfig &module_config_,
     monc(mc), clog(clog_), audit_clog(audit_clog_), objecter(objecter_),
     client(client_), finisher(f),
     cmd_finisher(g_ceph_context, "cmd_finisher", "cmdfin"),
-    server(server), py_module_registry(pmr), lock("ActivePyModules")
+    server(server), py_module_registry(pmr)
 {
   store_cache = std::move(store_data);
   cmd_finisher.start();
@@ -434,21 +434,21 @@ void ActivePyModules::shutdown()
     auto module = i.second.get();
     const auto& name = i.first;
 
-    lock.Unlock();
+    lock.unlock();
     dout(10) << "calling module " << name << " shutdown()" << dendl;
     module->shutdown();
     dout(10) << "module " << name << " shutdown() returned" << dendl;
-    lock.Lock();
+    lock.lock();
   }
 
   // For modules implementing serve(), finish the threads where we
   // were running that.
   for (auto &i : modules) {
-    lock.Unlock();
+    lock.unlock();
     dout(10) << "joining module " << i.first << dendl;
     i.second->thread.join();
     dout(10) << "joined module " << i.first << dendl;
-    lock.Lock();
+    lock.lock();
   }
 
   cmd_finisher.wait_for_empty();
@@ -895,12 +895,12 @@ void ActivePyModules::set_health_checks(const std::string& module_name,
 {
   bool changed = false;
 
-  lock.Lock();
+  lock.lock();
   auto p = modules.find(module_name);
   if (p != modules.end()) {
     changed = p->second->set_health_checks(std::move(checks));
   }
-  lock.Unlock();
+  lock.unlock();
 
   // immediately schedule a report to be sent to the monitors with the new
   // health checks that have changed. This is done asynchronusly to avoid
@@ -925,15 +925,15 @@ int ActivePyModules::handle_command(
   std::stringstream *ds,
   std::stringstream *ss)
 {
-  lock.Lock();
+  lock.lock();
   auto mod_iter = modules.find(module_name);
   if (mod_iter == modules.end()) {
     *ss << "Module '" << module_name << "' is not available";
-    lock.Unlock();
+    lock.unlock();
     return -ENOENT;
   }
 
-  lock.Unlock();
+  lock.unlock();
   return mod_iter->second->handle_command(cmdmap, inbuf, ds, ss);
 }
 

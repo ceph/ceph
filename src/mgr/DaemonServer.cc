@@ -76,7 +76,6 @@ DaemonServer::DaemonServer(MonClient *monc_,
       py_modules(py_modules_),
       clog(clog_),
       audit_clog(audit_clog_),
-      lock("DaemonServer"),
       pgmap_ready(false),
       timer(g_ceph_context, lock),
       shutting_down(false),
@@ -308,7 +307,7 @@ void DaemonServer::tick()
 // fire after all modules have had a chance to set their health checks.
 void DaemonServer::schedule_tick_locked(double delay_sec)
 {
-  ceph_assert(lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
 
   if (tick_event) {
     timer.cancel_event(tick_event);
@@ -2755,7 +2754,7 @@ void DaemonServer::handle_conf_change(const ConfigProxy& conf,
 
 void DaemonServer::_send_configure(ConnectionRef c)
 {
-  ceph_assert(lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
 
   auto configure = make_message<MMgrConfigure>();
   configure->stats_period = g_conf().get_val<int64_t>("mgr_stats_period");

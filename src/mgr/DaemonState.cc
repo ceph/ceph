@@ -156,7 +156,7 @@ void DaemonStateIndex::_insert(DaemonStatePtr dm)
 
 void DaemonStateIndex::_erase(const DaemonKey& dmk)
 {
-  ceph_assert(lock.is_wlocked());
+  ceph_assert(ceph_mutex_is_wlocked(lock));
 
   const auto to_erase = all.find(dmk);
   ceph_assert(to_erase != all.end());

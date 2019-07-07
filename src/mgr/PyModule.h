@@ -18,7 +18,7 @@
 #include <string>
 #include <vector>
 #include <boost/optional.hpp>
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "Python.h"
 #include "Gil.h"
 #include "mon/MgrMap.h"
@@ -46,7 +46,7 @@ public:
 
 class PyModule
 {
-  mutable Mutex lock{"PyModule::lock"};
+  mutable ceph::mutex lock = ceph::make_mutex("PyModule::lock");
 private:
   const std::string module_name;
   std::string get_site_packages();
@@ -171,7 +171,7 @@ typedef std::shared_ptr<PyModule> PyModuleRef;
 
 class PyModuleConfig {
 public:
-  mutable Mutex lock{"PyModuleConfig::lock"};
+  mutable ceph::mutex lock = ceph::make_mutex("PyModuleConfig::lock");
   std::map<std::string, std::string> config;
 
   PyModuleConfig();
