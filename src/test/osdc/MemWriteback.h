@@ -11,11 +11,10 @@
 #include <atomic>
 
 class Finisher;
-class Mutex;
 
 class MemWriteback : public WritebackHandler {
 public:
-  MemWriteback(CephContext *cct, Mutex *lock, uint64_t delay_ns);
+  MemWriteback(CephContext *cct, ceph::mutex *lock, uint64_t delay_ns);
   ~MemWriteback() override;
 
   void read(const object_t& oid, uint64_t object_no,
@@ -44,7 +43,7 @@ public:
 private:
   std::map<object_t, bufferlist> object_data;
   CephContext *m_cct;
-  Mutex *m_lock;
+  ceph::mutex *m_lock;
   uint64_t m_delay_ns;
   std::atomic<unsigned> m_tid = { 0 };
   Finisher *m_finisher;

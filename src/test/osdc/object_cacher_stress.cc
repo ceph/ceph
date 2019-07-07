@@ -9,9 +9,9 @@
 #include <boost/scoped_ptr.hpp>
 
 #include "common/ceph_argparse.h"
+#include "common/ceph_mutex.h"
 #include "common/common_init.h"
 #include "common/config.h"
-#include "common/Mutex.h"
 #include "common/snap_types.h"
 #include "global/global_init.h"
 #include "include/buffer.h"
@@ -56,7 +56,7 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
 		uint64_t max_obj_size, uint64_t delay_ns,
 		uint64_t max_op_len, float percent_reads)
 {
-  Mutex lock("object_cacher_stress::object_cacher");
+  ceph::mutex lock = ceph::make_mutex("object_cacher_stress::object_cacher");
   FakeWriteback writeback(g_ceph_context, &lock, delay_ns);
 
   ObjectCacher obc(g_ceph_context, "test", writeback, lock, NULL, NULL,
@@ -103,9 +103,9 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
       rd->extents.push_back(op->extent);
       outstanding_reads++;
       Context *completion = new C_Count(op.get(), &outstanding_reads);
-      lock.Lock();
+      lock.lock();
       int r = obc.readx(rd, &object_set, completion);
-      lock.Unlock();
+      lock.unlock();
       ceph_assert(r >= 0);
       if ((uint64_t)r == length)
 	completion->complete(r);
@@ -116,9 +116,9 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
 						     ceph::real_time::min(), 0,
 						     ++journal_tid);
       wr->extents.push_back(op->extent);
-      lock.Lock();
+      lock.lock();
       obc.writex(wr, &object_set, NULL);
-      lock.Unlock();
+      lock.unlock();
     }
   }
 
@@ -140,28 +140,26 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
     }
   }
 
-  lock.Lock();
+  lock.lock();
   obc.release_set(&object_set);
-  lock.Unlock();
+  lock.unlock();
 
   int r = 0;
-  Mutex mylock("librbd::ImageCtx::flush_cache");
-  Cond cond;
+  ceph::mutex mylock = ceph::make_mutex("librbd::ImageCtx::flush_cache");
+  ceph::condition_variable cond;
   bool done;
-  Context *onfinish = new C_SafeCond(&mylock, &cond, &done, &r);
-  lock.Lock();
+  Context *onfinish = new C_SafeCond(mylock, cond, &done, &r);
+  lock.lock();
   bool already_flushed = obc.flush_set(&object_set, onfinish);
   std::cout << "already flushed = " << already_flushed << std::endl;
-  lock.Unlock();
-  mylock.Lock();
-  while (!done) {
-    cond.Wait(mylock);
+  lock.unlock();
+  {
+    std::unique_lock locker{mylock};
+    cond.wait(locker, [&done] { return done; });
   }
-  mylock.Unlock();
-
-  lock.Lock();
+  lock.lock();
   bool unclean = obc.release_set(&object_set);
-  lock.Unlock();
+  lock.unlock();
 
   if (unclean) {
     std::cout << "unclean buffers left over!" << std::endl;
@@ -178,7 +176,7 @@ int stress_test(uint64_t num_ops, uint64_t num_objs,
 int correctness_test(uint64_t delay_ns)
 {
   std::cerr << "starting correctness test" << std::endl;
-  Mutex lock("object_cacher_stress::object_cacher");
+  ceph::mutex lock = ceph::make_mutex("object_cacher_stress::object_cacher");
   MemWriteback writeback(g_ceph_context, &lock, delay_ns);
 
   ObjectCacher obc(g_ceph_context, "test", writeback, lock, NULL, NULL,
@@ -209,9 +207,9 @@ int correctness_test(uint64_t delay_ns)
     extent.oloc.pool = 0;
     extent.buffer_extents.push_back(make_pair(0, 1<<20));
     wr->extents.push_back(extent);
-    lock.Lock();
+    lock.lock();
     obc.writex(wr, &object_set, &create_finishers[i]);
-    lock.Unlock();
+    lock.unlock();
   }
 
   // write some 1-valued bits at 256-KB intervals for checking consistency
@@ -228,25 +226,25 @@ int correctness_test(uint64_t delay_ns)
     extent.oloc.pool = 0;
     extent.buffer_extents.push_back(make_pair(0, 1<<16));
     wr->extents.push_back(extent);
-    lock.Lock();
+    lock.lock();
     obc.writex(wr, &object_set, &create_finishers[i]);
-    lock.Unlock();
+    lock.unlock();
   }
 
   for (auto i = create_finishers.begin(); i != create_finishers.end(); ++i) {
     i->second.wait();
   }
   std::cout << "Finished setting up object" << std::endl;
-  lock.Lock();
+  lock.lock();
   C_SaferCond flushcond;
   bool done = obc.flush_all(&flushcond);
   if (!done) {
     std::cout << "Waiting for flush" << std::endl;
-    lock.Unlock();
+    lock.unlock();
     flushcond.wait();
-    lock.Lock();
+    lock.lock();
   }
-  lock.Unlock();
+  lock.unlock();
 
   /* now read the back half of the object in, check consistency,
    */
@@ -258,9 +256,9 @@ int correctness_test(uint64_t delay_ns)
   back_half_extent.oloc.pool = 0;
   back_half_extent.buffer_extents.push_back(make_pair(0, 1<<21));
   back_half_rd->extents.push_back(back_half_extent);
-  lock.Lock();
+  lock.lock();
   int r = obc.readx(back_half_rd, &object_set, &backreadcond);
-  lock.Unlock();
+  lock.unlock();
   ceph_assert(r >= 0);
   if (r == 0) {
     std::cout << "Waiting to read data into cache" << std::endl;
@@ -282,7 +280,7 @@ int correctness_test(uint64_t delay_ns)
   whole_extent.oloc.pool = 0;
   whole_extent.buffer_extents.push_back(make_pair(0, 1<<22));
   whole_rd->extents.push_back(whole_extent);
-  lock.Lock();
+  lock.lock();
   r = obc.readx(whole_rd, &object_set, &frontreadcond);
   // we cleared out the cache by reading back half, it shouldn't pass immediately!
   ceph_assert(r == 0);
@@ -297,7 +295,7 @@ int correctness_test(uint64_t delay_ns)
   verify_wr->extents.push_back(verify_extent);
   C_SaferCond verify_finisher;
   obc.writex(verify_wr, &object_set, &verify_finisher);
-  lock.Unlock();
+  lock.unlock();
   std::cout << "wrote dirtying data" << std::endl;
 
   std::cout << "Waiting to read data into cache" << std::endl;
@@ -317,14 +315,14 @@ int correctness_test(uint64_t delay_ns)
 
   std::cout << "validated that data is 0xff where it should be" << std::endl;
   
-  lock.Lock();
+  lock.lock();
   C_SaferCond flushcond2;
   done = obc.flush_all(&flushcond2);
   if (!done) {
     std::cout << "Waiting for final write flush" << std::endl;
-    lock.Unlock();
+    lock.unlock();
     flushcond2.wait();
-    lock.Lock();
+    lock.lock();
   }
 
   bool unclean = obc.release_set(&object_set);
@@ -336,11 +334,11 @@ int correctness_test(uint64_t delay_ns)
       discard_extents.emplace_back(oid, i++, 0, 1<<22, 0);
     }
     obc.discard_set(&object_set, discard_extents);
-    lock.Unlock();
+    lock.unlock();
     obc.stop();
     goto fail;
   }
-  lock.Unlock();
+  lock.unlock();
 
   obc.stop();
 
