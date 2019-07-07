@@ -11,9 +11,8 @@
 #include <boost/algorithm/string.hpp>
 
 #include "include/ceph_assert.h"
+#include "common/ceph_mutex.h"
 #include "include/Context.h"
-#include "common/Cond.h"
-#include "common/Mutex.h"
 #include "Types.h"
 #include "SocketCommon.h"
 
@@ -74,7 +73,8 @@ class CacheClient {
   std::atomic<bool> m_writing;
   std::atomic<bool> m_reading;
   std::atomic<uint64_t> m_sequence_id;
-  Mutex m_lock;
+  ceph::mutex m_lock =
+    ceph::make_mutex("ceph::cache::cacheclient::m_lock");
   std::map<uint64_t, ObjectCacheRequest*> m_seq_to_req;
   bufferlist m_outcoming_bl;
   bufferptr m_bp_header;

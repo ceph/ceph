@@ -5,8 +5,7 @@
 #define CEPH_CACHE_SIMPLE_POLICY_H
 
 #include "common/ceph_context.h"
-#include "common/RWLock.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "include/lru.h"
 #include "Policy.h"
 
@@ -56,7 +55,8 @@ class SimplePolicy : public Policy {
   std::atomic<uint64_t> inflight_ops = 0;
 
   std::unordered_map<std::string, Entry*> m_cache_map;
-  RWLock m_cache_map_lock;
+  ceph::shared_mutex m_cache_map_lock =
+    ceph::make_shared_mutex("rbd::cache::SimplePolicy::m_cache_map_lock");
 
   std::atomic<uint64_t> m_cache_size;
 
