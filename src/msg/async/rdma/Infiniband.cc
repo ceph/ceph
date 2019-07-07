@@ -580,7 +580,7 @@ void Infiniband::MemoryManager::Chunk::clear()
 }
 
 Infiniband::MemoryManager::Cluster::Cluster(MemoryManager& m, uint32_t s)
-  : manager(m), buffer_size(s), lock("cluster_lock")
+  : manager(m), buffer_size(s)
 {
 }
 
@@ -622,7 +622,7 @@ int Infiniband::MemoryManager::Cluster::fill(uint32_t num)
 
 void Infiniband::MemoryManager::Cluster::take_back(std::vector<Chunk*> &ck)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l{lock};
   for (auto c : ck) {
     c->clear();
     free_chunks.push_back(c);
@@ -635,7 +635,7 @@ int Infiniband::MemoryManager::Cluster::get_buffers(std::vector<Chunk*> &chunks,
   if (bytes % buffer_size == 0)
     --num;
   int r = num;
-  Mutex::Locker l(lock);
+  std::lock_guard l{lock};
   if (free_chunks.empty())
     return 0;
   if (!bytes) {
@@ -696,7 +696,7 @@ void *Infiniband::MemoryManager::mem_pool::slow_malloc()
 {
   void *p;
 
-  Mutex::Locker l(PoolAllocator::lock);
+  std::lock_guard l{PoolAllocator::lock};
   PoolAllocator::g_ctx = ctx;
   // this will trigger pool expansion via PoolAllocator::malloc()
   p = boost::pool<PoolAllocator>::malloc();
@@ -705,7 +705,8 @@ void *Infiniband::MemoryManager::mem_pool::slow_malloc()
 }
 
 Infiniband::MemoryManager::MemPoolContext *Infiniband::MemoryManager::PoolAllocator::g_ctx = nullptr;
-Mutex Infiniband::MemoryManager::PoolAllocator::lock("pool-alloc-lock");
+ceph::mutex Infiniband::MemoryManager::PoolAllocator::lock =
+			    ceph::make_mutex("pool-alloc-lock");
 
 // lock is taken by mem_pool::slow_malloc()
 char *Infiniband::MemoryManager::PoolAllocator::malloc(const size_type bytes)
@@ -765,7 +766,7 @@ char *Infiniband::MemoryManager::PoolAllocator::malloc(const size_type bytes)
 void Infiniband::MemoryManager::PoolAllocator::free(char * const block)
 {
   mem_info *m;
-  Mutex::Locker l(lock);
+  std::lock_guard l{lock};
     
   m = reinterpret_cast<mem_info *>(block) - 1;
   m->ctx->update_stats(-m->nbufs);
@@ -887,7 +888,7 @@ void Infiniband::verify_prereq(CephContext *cct) {
 }
 
 Infiniband::Infiniband(CephContext *cct)
-  : cct(cct), lock("IB lock"),
+  : cct(cct),
     device_name(cct->_conf->ms_async_rdma_device_name),
     port_num( cct->_conf->ms_async_rdma_port_num)
 {
@@ -898,7 +899,7 @@ Infiniband::Infiniband(CephContext *cct)
 
 void Infiniband::init()
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l{lock};
 
   if (initialized)
     return;
