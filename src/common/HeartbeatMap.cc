@@ -17,6 +17,7 @@
 #include "HeartbeatMap.h"
 #include "ceph_context.h"
 #include "common/errno.h"
+#include "common/valgrind.h"
 #include "debug.h"
 
 #define dout_subsys ceph_subsys_heartbeatmap
