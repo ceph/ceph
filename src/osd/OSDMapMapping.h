@@ -24,8 +24,8 @@ public:
     bool aborted = false;
     Context *onfinish = nullptr;
 
-    Mutex lock = {"ParallelPGMapper::Job::lock"};
-    Cond cond;
+    ceph::mutex lock = ceph::make_mutex("ParallelPGMapper::Job::lock");
+    ceph::condition_variable cond;
 
     Job(const OSDMap *om) : start(ceph_clock_now()), osdmap(om) {}
     virtual ~Job() {
@@ -38,15 +38,15 @@ public:
     virtual void complete() = 0;
 
     void set_finish_event(Context *fin) {
-      lock.Lock();
+      lock.lock();
       if (shards == 0) {
 	// already done.
-	lock.Unlock();
+	lock.unlock();
 	fin->complete(0);
       } else {
 	// set finisher
 	onfinish = fin;
-	lock.Unlock();
+	lock.unlock();
       }
     }
     bool is_done() {
@@ -57,33 +57,29 @@ public:
       return finish - start;
     }
     void wait() {
-      std::lock_guard l(lock);
-      while (shards > 0) {
-	cond.Wait(lock);
-      }
+      std::unique_lock l(lock);
+      cond.wait(l, [this] { return shards == 0; });
     }
     bool wait_for(double duration) {
       utime_t until = start;
       until += duration;
-      std::lock_guard l(lock);
+      std::unique_lock l(lock);
       while (shards > 0) {
 	if (ceph_clock_now() >= until) {
 	  return false;
 	}
-	cond.Wait(lock);
+	cond.wait(l);
       }
       return true;
     }
     void abort() {
       Context *fin = nullptr;
       {
-	std::lock_guard l(lock);
+	std::unique_lock l(lock);
 	aborted = true;
 	fin = onfinish;
 	onfinish = nullptr;
-	while (shards > 0) {
-	  cond.Wait(lock);
-	}
+	cond.wait(l, [this] { return shards == 0; });
       }
       if (fin) {
 	fin->complete(-ECANCELED);

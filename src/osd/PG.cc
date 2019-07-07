@@ -191,12 +191,9 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   scrub_queued(false),
   recovery_queued(false),
   recovery_ops_active(0),
-  heartbeat_peer_lock("PG::heartbeat_peer_lock"),
   backfill_reserving(false),
-  pg_stats_publish_lock("PG::pg_stats_publish_lock"),
   pg_stats_publish_valid(false),
   finish_sync_event(NULL),
-  backoff_lock("PG::backoff_lock"),
   scrub_after_recovery(false),
   active_pushes(0),
   recovery_state(
@@ -229,7 +226,7 @@ PG::~PG()
 
 void PG::lock(bool no_lockdep) const
 {
-  _lock.Lock(no_lockdep);
+  _lock.lock(no_lockdep);
   // if we have unrecorded dirty state with the lock dropped, there is a bug
   ceph_assert(!recovery_state.debug_has_dirty_state());
 
@@ -707,7 +704,7 @@ void PG::rm_backoff(BackoffRef b)
 {
   dout(10) << __func__ << " " << *b << dendl;
   std::lock_guard l(backoff_lock);
-  ceph_assert(b->lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(b->lock));
   ceph_assert(b->pg == this);
   auto p = backoffs.find(b->begin);
   // may race with release_backoffs()
@@ -783,7 +780,7 @@ void PG::clear_probe_targets()
 void PG::update_heartbeat_peers(set<int> new_peers)
 {
   bool need_update = false;
-  heartbeat_peer_lock.Lock();
+  heartbeat_peer_lock.lock();
   if (new_peers == heartbeat_peers) {
     dout(10) << "update_heartbeat_peers " << heartbeat_peers << " unchanged" << dendl;
   } else {
@@ -791,7 +788,7 @@ void PG::update_heartbeat_peers(set<int> new_peers)
     heartbeat_peers.swap(new_peers);
     need_update = true;
   }
-  heartbeat_peer_lock.Unlock();
+  heartbeat_peer_lock.unlock();
 
   if (need_update)
     osd->need_heartbeat_peer_update();
@@ -815,8 +812,7 @@ void PG::publish_stats_to_osd()
   if (!is_primary())
     return;
 
-  pg_stats_publish_lock.Lock();
-
+  std::lock_guard l{pg_stats_publish_lock};
   auto stats = recovery_state.prepare_stats_for_publish(
     pg_stats_publish_valid,
     pg_stats_publish,
@@ -825,16 +821,13 @@ void PG::publish_stats_to_osd()
     pg_stats_publish = stats.value();
     pg_stats_publish_valid = true;
   }
-
-  pg_stats_publish_lock.Unlock();
 }
 
 void PG::clear_publish_stats()
 {
   dout(15) << "clear_stats" << dendl;
-  pg_stats_publish_lock.Lock();
+  std::lock_guard l{pg_stats_publish_lock};
   pg_stats_publish_valid = false;
-  pg_stats_publish_lock.Unlock();
 }
 
 /**
@@ -1991,7 +1984,7 @@ bool PG::try_reserve_recovery_space(
 
   // This lock protects not only the stats OSDService but also setting the
   // pg primary_bytes.  That's why we don't immediately unlock
-  Mutex::Locker l(osd->stat_lock);
+  std::lock_guard l{osd->stat_lock};
   osd_stat_t cur_stat = osd->osd_stat;
   if (cct->_conf->osd_debug_reject_backfill_probability > 0 &&
       (rand()%1000 < (cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
@@ -2180,21 +2173,19 @@ void PG::_scan_snaps(ScrubMap &smap)
 
 	// wait for repair to apply to avoid confusing other bits of the system.
 	{
-	  Cond my_cond;
-	  Mutex my_lock("PG::_scan_snaps my_lock");
+	  ceph::condition_variable my_cond;
+	  ceph::mutex my_lock = ceph::make_mutex("PG::_scan_snaps my_lock");
 	  int r = 0;
 	  bool done;
 	  t.register_on_applied_sync(
-	    new C_SafeCond(&my_lock, &my_cond, &done, &r));
+	    new C_SafeCond(my_lock, my_cond, &done, &r));
 	  r = osd->store->queue_transaction(ch, std::move(t));
 	  if (r != 0) {
 	    derr << __func__ << ": queue_transaction got " << cpp_strerror(r)
 		 << dendl;
 	  } else {
-	    my_lock.Lock();
-	    while (!done)
-	      my_cond.Wait(my_lock);
-	    my_lock.Unlock();
+	    std::unique_lock l{my_lock};
+	    my_cond.wait(l, [&done] { return done;});
 	  }
 	}
       }
@@ -3732,11 +3723,11 @@ void PG::do_delete_work(ObjectStore::Transaction &t)
         unlock();
       });
 
-      utime_t delete_schedule_time = ceph_clock_now();
-      delete_schedule_time += osd_delete_sleep;
-      Mutex::Locker l(osd->sleep_lock);
+      auto delete_schedule_time = ceph::real_clock::now();
+      delete_schedule_time += ceph::make_timespan(osd_delete_sleep);
+      std::lock_guard l{osd->sleep_lock};
       osd->sleep_timer.add_event_at(delete_schedule_time,
-	                                        delete_requeue_callback);
+				    delete_requeue_callback);
       dout(20) << __func__ << " Delete scheduled at " << delete_schedule_time << dendl;
       return;
     }
@@ -3883,23 +3874,21 @@ void PG::dump_missing(Formatter *f)
 
 void PG::get_pg_stats(std::function<void(const pg_stat_t&, epoch_t lec)> f)
 {
-  pg_stats_publish_lock.Lock();
+  std::lock_guard l{pg_stats_publish_lock};
   if (pg_stats_publish_valid) {
     f(pg_stats_publish, pg_stats_publish.get_effective_last_epoch_clean());
   }
-  pg_stats_publish_lock.Unlock();
 }
 
 void PG::with_heartbeat_peers(std::function<void(int)> f)
 {
-  heartbeat_peer_lock.Lock();
+  std::lock_guard l{heartbeat_peer_lock};
   for (auto p : heartbeat_peers) {
     f(p);
   }
   for (auto p : probe_targets) {
     f(p);
   }
-  heartbeat_peer_lock.Unlock();
 }
 
 uint64_t PG::get_min_alloc_size() const {

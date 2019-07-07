@@ -16,7 +16,7 @@
 #define CEPH_OSD_SESSION_H
 
 #include "common/RefCountedObj.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "global/global_context.h"
 #include "include/spinlock.h"
 #include "OSDCap.h"
@@ -96,7 +96,7 @@ struct Backoff : public RefCountedObject {
     }
   }
 
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("Backoff::lock");
   // NOTE: the owning PG and session are either
   //   - *both* set, or
   //   - both null (teardown), or
@@ -111,7 +111,6 @@ struct Backoff : public RefCountedObject {
     : RefCountedObject(g_ceph_context, 0),
       pgid(pgid),
       id(i),
-      lock("Backoff::lock"),
       pg(pg),
       session(s),
       begin(b),
@@ -135,14 +134,15 @@ struct Session : public RefCountedObject {
   entity_addr_t socket_addr;
   WatchConState wstate;
 
-  Mutex session_dispatch_lock;
+  ceph::mutex session_dispatch_lock =
+    ceph::make_mutex("Session::session_dispatch_lock");
   boost::intrusive::list<OpRequest> waiting_on_map;
 
   ceph::spinlock sent_epoch_lock;
   epoch_t last_sent_epoch;
 
   /// protects backoffs; orders inside Backoff::lock *and* PG::backoff_lock
-  Mutex backoff_lock;
+  ceph::mutex backoff_lock = ceph::make_mutex("Session::backoff_lock");
   std::atomic<int> backoff_count= {0};  ///< simple count of backoffs
   map<spg_t,map<hobject_t,set<BackoffRef>>> backoffs;
 
@@ -153,9 +153,7 @@ struct Session : public RefCountedObject {
     con(con_),
     socket_addr(con_->get_peer_socket_addr()),
     wstate(cct),
-    session_dispatch_lock("Session::session_dispatch_lock"),
-    last_sent_epoch(0),
-    backoff_lock("Session::backoff_lock")
+    last_sent_epoch(0)
     {}
 
   entity_addr_t& get_peer_socket_addr() {
@@ -210,7 +208,7 @@ struct Session : public RefCountedObject {
   // called by PG::release_*_backoffs and PG::clear_backoffs()
   void rm_backoff(BackoffRef b) {
     std::lock_guard l(backoff_lock);
-    ceph_assert(b->lock.is_locked_by_me());
+    ceph_assert(ceph_mutex_is_locked_by_me(b->lock));
     ceph_assert(b->session == this);
     auto i = backoffs.find(b->pgid);
     if (i != backoffs.end()) {
