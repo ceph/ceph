@@ -1066,7 +1066,7 @@ class RGWGetUserHeader_CB;
 
 class RGWObjectCtx {
   RGWRados *store;
-  RWLock lock{"RGWObjectCtx"};
+  ceph::shared_mutex lock = ceph::make_shared_mutex("RGWObjectCtx");
   void *s{nullptr};
 
   std::map<rgw_obj, RGWObjState> objs_state;
@@ -1085,15 +1085,15 @@ public:
   RGWObjState *get_state(const rgw_obj& obj) {
     RGWObjState *result;
     typename std::map<rgw_obj, RGWObjState>::iterator iter;
-    lock.get_read();
+    lock.lock_shared();
     assert (!obj.empty());
     iter = objs_state.find(obj);
     if (iter != objs_state.end()) {
       result = &iter->second;
-      lock.unlock();
+      lock.unlock_shared();
     } else {
-      lock.unlock();
-      lock.get_write();
+      lock.unlock_shared();
+      lock.lock();
       result = &objs_state[obj];
       lock.unlock();
     }
@@ -1101,18 +1101,18 @@ public:
   }
 
   void set_atomic(rgw_obj& obj) {
-    RWLock::WLocker wl(lock);
+    std::unique_lock wl{lock};
     assert (!obj.empty());
     objs_state[obj].is_atomic = true;
   }
   void set_prefetch_data(const rgw_obj& obj) {
-    RWLock::WLocker wl(lock);
+    std::unique_lock wl{lock};
     assert (!obj.empty());
     objs_state[obj].prefetch_data = true;
   }
 
   void invalidate(const rgw_obj& obj) {
-    RWLock::WLocker wl(lock);
+    std::unique_lock wl{lock};
     auto iter = objs_state.find(obj);
     if (iter == objs_state.end()) {
       return;
@@ -1213,7 +1213,7 @@ class RGWRados : public AdminSocketHook
   void get_bucket_instance_ids(const RGWBucketInfo& bucket_info, int shard_id, map<int, string> *result);
 
   std::atomic<int64_t> max_req_id = { 0 };
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("rados_timer_lock");
   SafeTimer *timer;
 
   RGWGC *gc;
@@ -1236,8 +1236,8 @@ class RGWRados : public AdminSocketHook
   boost::optional<rgw::BucketTrimManager> bucket_trim;
   RGWSyncLogTrimThread *sync_log_trimmer{nullptr};
 
-  Mutex meta_sync_thread_lock;
-  Mutex data_sync_thread_lock;
+  ceph::mutex meta_sync_thread_lock = ceph::make_mutex("meta_sync_thread_lock");
+  ceph::mutex data_sync_thread_lock = ceph::make_mutex("data_sync_thread_lock");
 
   librados::IoCtx root_pool_ctx;      // .rgw
 
@@ -1246,7 +1246,7 @@ class RGWRados : public AdminSocketHook
 
   friend class RGWWatcher;
 
-  Mutex bucket_id_lock;
+  ceph::mutex bucket_id_lock = ceph::make_mutex("rados_bucket_id");
 
   // This field represents the number of bucket index object shards
   uint32_t bucket_index_max_shards;
@@ -1299,12 +1299,10 @@ protected:
 
   bool use_cache{false};
 public:
-  RGWRados(): lock("rados_timer_lock"), timer(NULL),
+  RGWRados(): timer(NULL),
                gc(NULL), lc(NULL), obj_expirer(NULL), use_gc_thread(false), use_lc_thread(false), quota_threads(false),
                run_sync_thread(false), run_reshard_thread(false), async_rados(nullptr), meta_notifier(NULL),
                data_notifier(NULL), meta_sync_processor_thread(NULL),
-               meta_sync_thread_lock("meta_sync_thread_lock"), data_sync_thread_lock("data_sync_thread_lock"),
-               bucket_id_lock("rados_bucket_id"),
                bucket_index_max_shards(0),
                max_bucket_id(0), cct(NULL),
                binfo_cache(NULL), obj_tombstone_cache(nullptr),
@@ -2581,25 +2579,25 @@ class RGWRadosThread {
   class Worker : public Thread {
     CephContext *cct;
     RGWRadosThread *processor;
-    Mutex lock;
-    Cond cond;
+    ceph::mutex lock = ceph::make_mutex("RGWRadosThread::Worker");
+    ceph::condition_variable cond;
 
     void wait() {
-      Mutex::Locker l(lock);
-      cond.Wait(lock);
+      std::unique_lock l{lock};
+      cond.wait(l);
     };
 
-    void wait_interval(const utime_t& wait_time) {
-      Mutex::Locker l(lock);
-      cond.WaitInterval(lock, wait_time);
+    void wait_interval(const ceph::real_clock::duration& wait_time) {
+      std::unique_lock l{lock};
+      cond.wait_for(l, wait_time);
     }
 
   public:
-    Worker(CephContext *_cct, RGWRadosThread *_p) : cct(_cct), processor(_p), lock("RGWRadosThread::Worker") {}
+    Worker(CephContext *_cct, RGWRadosThread *_p) : cct(_cct), processor(_p) {}
     void *entry() override;
     void signal() {
-      Mutex::Locker l(lock);
-      cond.Signal();
+      std::lock_guard l{lock};
+      cond.notify_all();
     }
   };
 

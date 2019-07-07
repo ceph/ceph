@@ -1132,9 +1132,8 @@ void *RGWReshard::ReshardWorker::entry() {
 
     secs -= end.sec();
 
-    lock.Lock();
-    cond.WaitInterval(lock, utime_t(secs, 0));
-    lock.Unlock();
+    std::unique_lock locker{lock};
+    cond.wait_for(locker, std::chrono::seconds(secs));
   } while (!reshard->going_down());
 
   return NULL;
@@ -1142,6 +1141,6 @@ void *RGWReshard::ReshardWorker::entry() {
 
 void RGWReshard::ReshardWorker::stop()
 {
-  Mutex::Locker l(lock);
-  cond.Signal();
+  std::lock_guard l{lock};
+  cond.notify_all();
 }

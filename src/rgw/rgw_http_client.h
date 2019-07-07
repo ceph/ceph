@@ -131,7 +131,7 @@ protected:
                                size_t nmemb,
                                void *_info);
 
-  Mutex& get_req_lock();
+  ceph::mutex& get_req_lock();
 
   /* needs to be called under req_lock() */
   void _set_write_paused(bool pause);
@@ -305,17 +305,17 @@ class RGWHTTPManager {
   CephContext *cct;
   RGWCompletionManager *completion_mgr;
   void *multi_handle;
-  bool is_started;
+  bool is_started = false;
   std::atomic<unsigned> going_down { 0 };
   std::atomic<unsigned> is_stopped { 0 };
 
-  RWLock reqs_lock;
+  ceph::shared_mutex reqs_lock = ceph::make_shared_mutex("RGWHTTPManager::reqs_lock");
   map<uint64_t, rgw_http_req_data *> reqs;
   list<rgw_http_req_data *> unregistered_reqs;
   list<set_state> reqs_change_state;
   map<uint64_t, rgw_http_req_data *> complete_reqs;
-  int64_t num_reqs;
-  int64_t max_threaded_req;
+  int64_t num_reqs = 0;
+  int64_t max_threaded_req = 0;
   int thread_pipe[2];
 
   void register_request(rgw_http_req_data *req_data);
@@ -339,7 +339,7 @@ class RGWHTTPManager {
     void *entry() override;
   };
 
-  ReqsThread *reqs_thread;
+  ReqsThread *reqs_thread = nullptr;
 
   void *reqs_thread_entry();
 

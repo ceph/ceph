@@ -278,7 +278,7 @@ class RGWRemoteDataLog : public RGWCoroutinesManager {
 
   RGWDataSyncEnv sync_env;
 
-  RWLock lock;
+  ceph::shared_mutex lock = ceph::make_shared_mutex("RGWRemoteDataLog::lock");
   RGWDataSyncControlCR *data_sync_cr;
 
   RGWSyncTraceNodeRef tn;
@@ -291,7 +291,7 @@ public:
     : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
       dpp(dpp), store(_store), async_rados(async_rados),
       http_manager(store->ctx(), completion_mgr),
-      lock("RGWRemoteDataLog::lock"), data_sync_cr(NULL),
+      data_sync_cr(NULL),
       initialized(false) {}
   int init(const string& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger,
            RGWSyncTraceManager *_sync_tracer, RGWSyncModuleInstanceRef& module,

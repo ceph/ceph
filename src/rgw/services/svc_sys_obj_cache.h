@@ -137,7 +137,7 @@ public:
   }
 
   boost::optional<T> find(const string& key) {
-    RWLock::RLocker rl(lock);
+    std::shared_lock rl{lock};
     auto iter = entries.find(key);
     if (iter == entries.end()) {
       return boost::none;
@@ -164,7 +164,7 @@ public:
 
   void chain_cb(const string& key, void *data) override {
     T *entry = static_cast<T *>(data);
-    RWLock::WLocker wl(lock);
+    std::unique_lock wl{lock};
     entries[key].first = *entry;
     if (expiry.count() > 0) {
       entries[key].second = ceph::coarse_mono_clock::now();
@@ -172,12 +172,12 @@ public:
   }
 
   void invalidate(const string& key) override {
-    RWLock::WLocker wl(lock);
+    std::unique_lock wl{lock};
     entries.erase(key);
   }
 
   void invalidate_all() override {
-    RWLock::WLocker wl(lock);
+    std::unique_lock wl{lock};
     entries.clear();
   }
 }; /* RGWChainedCacheImpl */

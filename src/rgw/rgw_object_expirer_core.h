@@ -19,7 +19,7 @@
 #include "common/Formatter.h"
 #include "common/errno.h"
 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Cond.h"
 #include "common/Thread.h"
 
@@ -49,15 +49,14 @@ protected:
   class OEWorker : public Thread {
     CephContext *cct;
     RGWObjectExpirer *oe;
-    Mutex lock;
-    Cond cond;
+    ceph::mutex lock = ceph::make_mutex("OEWorker");
+    ceph::condition_variable cond;
 
   public:
     OEWorker(CephContext * const cct,
              RGWObjectExpirer * const oe)
       : cct(cct),
-        oe(oe),
-        lock("OEWorker") {
+        oe(oe) {
     }
 
     void *entry() override;

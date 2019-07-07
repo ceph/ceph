@@ -11,7 +11,7 @@
 
 int ObjectCache::get(const string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cache_entry_info *cache_info)
 {
-  RWLock::RLocker l(lock);
+  std::shared_lock l{lock};
 
   if (!enabled) {
     return -ENOENT;
@@ -28,7 +28,7 @@ int ObjectCache::get(const string& name, ObjectCacheInfo& info, uint32_t mask, r
        (ceph::coarse_mono_clock::now() - iter->second.info.time_added) > expiry) {
     ldout(cct, 10) << "cache get: name=" << name << " : expiry miss" << dendl;
     lock.unlock();
-    lock.get_write();
+    lock.lock();
     // check that wasn't already removed by other thread
     iter = cache_map.find(name);
     if (iter != cache_map.end()) {
@@ -48,7 +48,7 @@ int ObjectCache::get(const string& name, ObjectCacheInfo& info, uint32_t mask, r
     ldout(cct, 20) << "cache get: touching lru, lru_counter=" << lru_counter
                    << " promotion_ts=" << entry->lru_promotion_ts << dendl;
     lock.unlock();
-    lock.get_write(); /* promote lock to writer */
+    lock.lock(); /* promote lock to writer */
 
     /* need to redo this because entry might have dropped off the cache */
     iter = cache_map.find(name);
@@ -90,7 +90,7 @@ int ObjectCache::get(const string& name, ObjectCacheInfo& info, uint32_t mask, r
 bool ObjectCache::chain_cache_entry(std::initializer_list<rgw_cache_entry_info*> cache_info_entries,
 				    RGWChainedCache::Entry *chained_entry)
 {
-  RWLock::WLocker l(lock);
+  std::unique_lock l{lock};
 
   if (!enabled) {
     return false;
@@ -132,7 +132,7 @@ bool ObjectCache::chain_cache_entry(std::initializer_list<rgw_cache_entry_info*>
 
 void ObjectCache::put(const string& name, ObjectCacheInfo& info, rgw_cache_entry_info *cache_info)
 {
-  RWLock::WLocker l(lock);
+  std::unique_lock l{lock};
 
   if (!enabled) {
     return;
@@ -204,7 +204,7 @@ void ObjectCache::put(const string& name, ObjectCacheInfo& info, rgw_cache_entry
 
 bool ObjectCache::remove(const string& name)
 {
-  RWLock::WLocker l(lock);
+  std::unique_lock l{lock};
 
   if (!enabled) {
     return false;
@@ -288,7 +288,7 @@ void ObjectCache::invalidate_lru(ObjectCacheEntry& entry)
 
 void ObjectCache::set_enabled(bool status)
 {
-  RWLock::WLocker l(lock);
+  std::unique_lock l{lock};
 
   enabled = status;
 
@@ -299,7 +299,7 @@ void ObjectCache::set_enabled(bool status)
 
 void ObjectCache::invalidate_all()
 {
-  RWLock::WLocker l(lock);
+  std::unique_lock l{lock};
 
   do_invalidate_all();
 }
@@ -319,12 +319,12 @@ void ObjectCache::do_invalidate_all()
 }
 
 void ObjectCache::chain_cache(RGWChainedCache *cache) {
-  RWLock::WLocker l(lock);
+  std::unique_lock l{lock};
   chained_cache.push_back(cache);
 }
 
 void ObjectCache::unchain_cache(RGWChainedCache *cache) {
-  RWLock::WLocker l(lock);
+  std::unique_lock l{lock};
 
   auto iter = chained_cache.begin();
   for (; iter != chained_cache.end(); ++iter) {

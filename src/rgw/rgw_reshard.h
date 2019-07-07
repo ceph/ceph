@@ -134,15 +134,14 @@ protected:
   class ReshardWorker : public Thread {
     CephContext *cct;
     RGWReshard *reshard;
-    Mutex lock;
-    Cond cond;
+    ceph::mutex lock = ceph::make_mutex("ReshardWorker");
+    ceph::condition_variable cond;
 
   public:
     ReshardWorker(CephContext * const _cct,
-		              RGWReshard * const _reshard)
+		  RGWReshard * const _reshard)
       : cct(_cct),
-        reshard(_reshard),
-        lock("ReshardWorker") {
+        reshard(_reshard) {
     }
 
     void *entry() override;

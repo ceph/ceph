@@ -1126,8 +1126,8 @@ class RGWDataSyncShardCR : public RGWCoroutine {
   list<rgw_data_change_log_entry>::iterator log_iter;
   bool truncated;
 
-  Mutex inc_lock;
-  Cond inc_cond;
+  ceph::mutex inc_lock = ceph::make_mutex("RGWDataSyncShardCR::inc_lock");
+  ceph::condition_variable inc_cond;
 
   boost::asio::coroutine incremental_cr;
   boost::asio::coroutine full_cr;
@@ -1175,7 +1175,7 @@ public:
 						      pool(_pool),
 						      shard_id(_shard_id),
 						      sync_marker(_marker),
-                                                      marker_tracker(NULL), truncated(false), inc_lock("RGWDataSyncShardCR::inc_lock"),
+                                                      marker_tracker(NULL), truncated(false),
                                                       total_entries(0), spawn_window(BUCKET_SHARD_SYNC_SPAWN_WINDOW), reset_backoff(NULL),
                                                       lease_cr(nullptr), lease_stack(nullptr), error_repo(nullptr), max_error_entries(DATA_SYNC_MAX_ERR_ENTRIES),
                                                       retry_backoff_secs(RETRY_BACKOFF_SECS_DEFAULT), tn(_tn) {
@@ -1195,7 +1195,7 @@ public:
   }
 
   void append_modified_shards(set<string>& keys) {
-    Mutex::Locker l(inc_lock);
+    std::lock_guard l{inc_lock};
     modified_shards.insert(keys.begin(), keys.end());
   }
 
@@ -1371,9 +1371,9 @@ public:
           return set_cr_error(-ECANCELED);
         }
         current_modified.clear();
-        inc_lock.Lock();
+        inc_lock.lock();
         current_modified.swap(modified_shards);
-        inc_lock.Unlock();
+        inc_lock.unlock();
 
         if (current_modified.size() > 0) {
           tn->set_flag(RGW_SNS_FLAG_ACTIVE); /* actually have entries to sync */
@@ -1543,7 +1543,7 @@ public:
   }
 
   void append_modified_shards(set<string>& keys) {
-    Mutex::Locker l(cr_lock());
+    std::lock_guard l{cr_lock()};
 
     RGWDataSyncShardCR *cr = static_cast<RGWDataSyncShardCR *>(get_cr());
     if (!cr) {
@@ -1562,7 +1562,8 @@ class RGWDataSyncCR : public RGWCoroutine {
 
   RGWDataSyncShardMarkerTrack *marker_tracker;
 
-  Mutex shard_crs_lock;
+  ceph::mutex shard_crs_lock =
+    ceph::make_mutex("RGWDataSyncCR::shard_crs_lock");
   map<int, RGWDataSyncShardControlCR *> shard_crs;
 
   bool *reset_backoff;
@@ -1575,7 +1576,6 @@ public:
                                                       sync_env(_sync_env),
                                                       num_shards(_num_shards),
                                                       marker_tracker(NULL),
-                                                      shard_crs_lock("RGWDataSyncCR::shard_crs_lock"),
                                                       reset_backoff(_reset_backoff), tn(_tn) {
 
   }
@@ -1654,9 +1654,9 @@ public:
             RGWDataSyncShardControlCR *cr = new RGWDataSyncShardControlCR(sync_env, sync_env->store->svc.zone->get_zone_params().log_pool,
                                                                           iter->first, iter->second, tn);
             cr->get();
-            shard_crs_lock.Lock();
+            shard_crs_lock.lock();
             shard_crs[iter->first] = cr;
-            shard_crs_lock.Unlock();
+            shard_crs_lock.unlock();
             spawn(cr, true);
           }
         }
@@ -1675,7 +1675,7 @@ public:
   }
 
   void wakeup(int shard_id, set<string>& keys) {
-    Mutex::Locker l(shard_crs_lock);
+    std::lock_guard l{shard_crs_lock};
     map<int, RGWDataSyncShardControlCR *>::iterator iter = shard_crs.find(shard_id);
     if (iter == shard_crs.end()) {
       return;
@@ -1835,17 +1835,17 @@ public:
   }
 
   void wakeup(int shard_id, set<string>& keys) {
-    Mutex& m = cr_lock();
+    ceph::mutex& m = cr_lock();
 
-    m.Lock();
+    m.lock();
     RGWDataSyncCR *cr = static_cast<RGWDataSyncCR *>(get_cr());
     if (!cr) {
-      m.Unlock();
+      m.unlock();
       return;
     }
 
     cr->get();
-    m.Unlock();
+    m.unlock();
 
     if (cr) {
       tn->log(20, SSTR("notify shard=" << shard_id << " keys=" << keys));
@@ -1857,7 +1857,7 @@ public:
 };
 
 void RGWRemoteDataLog::wakeup(int shard_id, set<string>& keys) {
-  RWLock::RLocker rl(lock);
+  std::shared_lock rl{lock};
   if (!data_sync_cr) {
     return;
   }
@@ -1866,14 +1866,14 @@ void RGWRemoteDataLog::wakeup(int shard_id, set<string>& keys) {
 
 int RGWRemoteDataLog::run_sync(int num_shards)
 {
-  lock.get_write();
+  lock.lock();
   data_sync_cr = new RGWDataSyncControlCR(&sync_env, num_shards, tn);
   data_sync_cr->get(); // run() will drop a ref, so take another
   lock.unlock();
 
   int r = run(data_sync_cr);
 
-  lock.get_write();
+  lock.lock();
   data_sync_cr->put();
   data_sync_cr = NULL;
   lock.unlock();
