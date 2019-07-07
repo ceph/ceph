@@ -136,7 +136,8 @@ public:
   struct Collection : public CollectionImpl {
     KStore *store;
     kstore_cnode_t cnode;
-    RWLock lock;
+    ceph::shared_mutex lock =
+      ceph::make_shared_mutex("KStore::Collection::lock", true, false);
 
     OpSequencerRef osr;
 
@@ -315,7 +316,8 @@ private:
   int fsid_fd;  ///< open handle (locked) to $path/fsid
   bool mounted;
 
-  RWLock coll_lock;    ///< rwlock to protect coll_map
+  /// rwlock to protect coll_map
+  ceph::shared_mutex coll_lock = ceph::make_shared_mutex("KStore::coll_lock");
   ceph::unordered_map<coll_t, CollectionRef> coll_map;
   map<coll_t,CollectionRef> new_coll_map;
 

@@ -32,6 +32,7 @@
 #include "common/errno.h"
 #include "common/safe_io.h"
 #include "common/PriorityCache.h"
+#include "common/RWLock.h"
 #include "Allocator.h"
 #include "FreelistManager.h"
 #include "BlueFS.h"
@@ -3447,7 +3448,6 @@ BlueStore::Collection::Collection(BlueStore *store_, OnodeCacheShard *oc, Buffer
   : CollectionImpl(cid),
     store(store_),
     cache(bc),
-    lock("BlueStore::Collection::lock", true, false),
     exists(true),
     onode_map(oc),
     commit_queue(nullptr)
@@ -3558,7 +3558,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   bool create,
   bool is_createop)
 {
-  ceph_assert(create ? lock.is_wlocked() : lock.is_locked());
+  ceph_assert(create ? ceph_mutex_is_wlocked(lock) : ceph_mutex_is_locked(lock));
 
   spg_t pgid;
   if (cid.is_pg(&pgid)) {
@@ -3703,7 +3703,7 @@ void BlueStore::Collection::split_cache(
 
 void *BlueStore::MempoolThread::entry()
 {
-  std::unique_lock l(lock);
+  std::unique_lock l{lock};
 
   uint64_t base = store->osd_memory_base;
   double fragmentation = store->osd_memory_expected_fragmentation;
@@ -3848,7 +3848,7 @@ BlueStore::OmapIteratorImpl::OmapIteratorImpl(
   CollectionRef c, OnodeRef o, KeyValueDB::Iterator it)
   : c(c), o(o), it(it)
 {
-  RWLock::RLocker l(c->lock);
+  std::shared_lock l(c->lock);
   if (o->onode.has_omap()) {
     get_omap_key(o->onode.nid, string(), &head);
     get_omap_tail(o->onode.nid, &tail);
@@ -3866,7 +3866,7 @@ string BlueStore::OmapIteratorImpl::_stringify() const
 
 int BlueStore::OmapIteratorImpl::seek_to_first()
 {
-  RWLock::RLocker l(c->lock);
+  std::shared_lock l(c->lock);
   auto start1 = mono_clock::now();
   if (o->onode.has_omap()) {
     it->lower_bound(head);
@@ -3884,7 +3884,7 @@ int BlueStore::OmapIteratorImpl::seek_to_first()
 
 int BlueStore::OmapIteratorImpl::upper_bound(const string& after)
 {
-  RWLock::RLocker l(c->lock);
+  std::shared_lock l(c->lock);
   auto start1 = mono_clock::now();
   if (o->onode.has_omap()) {
     string key;
@@ -3910,7 +3910,7 @@ int BlueStore::OmapIteratorImpl::upper_bound(const string& after)
 
 int BlueStore::OmapIteratorImpl::lower_bound(const string& to)
 {
-  RWLock::RLocker l(c->lock);
+  std::shared_lock l(c->lock);
   auto start1 = mono_clock::now();
   if (o->onode.has_omap()) {
     string key;
@@ -3936,7 +3936,7 @@ int BlueStore::OmapIteratorImpl::lower_bound(const string& to)
 
 bool BlueStore::OmapIteratorImpl::valid()
 {
-  RWLock::RLocker l(c->lock);
+  std::shared_lock l(c->lock);
   bool r = o->onode.has_omap() && it && it->valid() &&
     it->raw_key().second < tail;
   if (it && it->valid()) {
@@ -3950,7 +3950,7 @@ bool BlueStore::OmapIteratorImpl::valid()
 int BlueStore::OmapIteratorImpl::next()
 {
   int r = -1;
-  RWLock::RLocker l(c->lock);
+  std::shared_lock l(c->lock);
   auto start1 = mono_clock::now();
   if (o->onode.has_omap()) {
     it->next();
@@ -3967,7 +3967,7 @@ int BlueStore::OmapIteratorImpl::next()
 
 string BlueStore::OmapIteratorImpl::key()
 {
-  RWLock::RLocker l(c->lock);
+  std::shared_lock l(c->lock);
   ceph_assert(it->valid());
   string db_key = it->raw_key().second;
   string user_key;
@@ -3978,7 +3978,7 @@ string BlueStore::OmapIteratorImpl::key()
 
 bufferlist BlueStore::OmapIteratorImpl::value()
 {
-  RWLock::RLocker l(c->lock);
+  std::shared_lock l(c->lock);
   ceph_assert(it->valid());
   return it->value();
 }
@@ -7245,7 +7245,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 
       dout(10) << __func__ << "  " << oid << dendl;
       store_statfs_t onode_statfs;
-      RWLock::RLocker l(c->lock);
+      std::shared_lock l(c->lock);
       OnodeRef o = c->get_onode(oid, false);
       if (o->onode.nid) {
 	if (o->onode.nid > nid_max) {
@@ -7595,7 +7595,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	dout(20) << __func__ << " check misreference for col:" << c->cid
 		  << " obj:" << oid << dendl;
 
-	RWLock::RLocker l(c->lock);
+	std::shared_lock l(c->lock);
 	OnodeRef o = c->get_onode(oid, false);
 	o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
 	mempool::bluestore_fsck::set<BlobRef> blobs;
@@ -7994,7 +7994,7 @@ void BlueStore::inject_false_free(coll_t cid, ghobject_t oid)
   CollectionRef c = _get_collection(cid);
   ceph_assert(c);
   {
-    RWLock::WLocker l(c->lock); // just to avoid internal asserts
+    std::unique_lock l{c->lock}; // just to avoid internal asserts
     o = c->get_onode(oid, false);
     ceph_assert(o);
     o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
@@ -8046,7 +8046,7 @@ void BlueStore::inject_misreference(coll_t cid1, ghobject_t oid1,
   CollectionRef c1 = _get_collection(cid1);
   ceph_assert(c1);
   {
-    RWLock::WLocker l(c1->lock); // just to avoid internal asserts
+    std::unique_lock l{c1->lock}; // just to avoid internal asserts
     o1 = c1->get_onode(oid1, false);
     ceph_assert(o1);
     o1->extent_map.fault_range(db, offset, OBJECT_MAX_SIZE);
@@ -8055,7 +8055,7 @@ void BlueStore::inject_misreference(coll_t cid1, ghobject_t oid1,
   CollectionRef c2 = _get_collection(cid2);
   ceph_assert(c2);
   {
-    RWLock::WLocker l(c2->lock); // just to avoid internal asserts
+    std::unique_lock l{c2->lock}; // just to avoid internal asserts
     o2 = c2->get_onode(oid2, false);
     ceph_assert(o2);
     o2->extent_map.fault_range(db, offset, OBJECT_MAX_SIZE);
@@ -8302,7 +8302,7 @@ void BlueStore::_check_legacy_statfs_alert()
 
 BlueStore::CollectionRef BlueStore::_get_collection(const coll_t& cid)
 {
-  RWLock::RLocker l(coll_lock);
+  std::shared_lock l(coll_lock);
   ceph::unordered_map<coll_t,CollectionRef>::iterator cp = coll_map.find(cid);
   if (cp == coll_map.end())
     return CollectionRef();
@@ -8389,7 +8389,7 @@ ObjectStore::CollectionHandle BlueStore::open_collection(const coll_t& cid)
 ObjectStore::CollectionHandle BlueStore::create_new_collection(
   const coll_t& cid)
 {
-  RWLock::WLocker l(coll_lock);
+  std::unique_lock l{coll_lock};
   Collection *c = new Collection(
     this,
     onode_cache_shards[cid.hash_to_shard(onode_cache_shards.size())],
@@ -8405,7 +8405,7 @@ void BlueStore::set_collection_commit_queue(
     ContextQueue *commit_queue)
 {
   if (commit_queue) {
-    RWLock::RLocker l(coll_lock);
+    std::shared_lock l(coll_lock);
     if (coll_map.count(cid)) {
       coll_map[cid]->commit_queue = commit_queue;
     } else if (new_coll_map.count(cid)) {
@@ -8425,7 +8425,7 @@ bool BlueStore::exists(CollectionHandle &c_, const ghobject_t& oid)
   bool r = true;
 
   {
-    RWLock::RLocker l(c->lock);
+    std::shared_lock l(c->lock);
     OnodeRef o = c->get_onode(oid, false);
     if (!o || !o->exists)
       r = false;
@@ -8446,7 +8446,7 @@ int BlueStore::stat(
   dout(10) << __func__ << " " << c->get_cid() << " " << oid << dendl;
 
   {
-    RWLock::RLocker l(c->lock);
+    std::shared_lock l(c->lock);
     OnodeRef o = c->get_onode(oid, false);
     if (!o || !o->exists)
       return -ENOENT;
@@ -8471,7 +8471,7 @@ int BlueStore::set_collection_opts(
   dout(15) << __func__ << " " << ch->cid << " options " << opts << dendl;
   if (!c->exists)
     return -ENOENT;
-  RWLock::WLocker l(c->lock);
+  std::unique_lock l{c->lock};
   c->pool_opts = opts;
   return 0;
 }
@@ -8496,7 +8496,7 @@ int BlueStore::read(
   bl.clear();
   int r;
   {
-    RWLock::RLocker l(c->lock);
+    std::shared_lock l(c->lock);
     auto start1 = mono_clock::now();
     OnodeRef o = c->get_onode(oid, false);
     log_latency("get_onode@read",
@@ -9033,7 +9033,7 @@ int BlueStore::_fiemap(
   if (!c->exists)
     return -ENOENT;
   {
-    RWLock::RLocker l(c->lock);
+    std::shared_lock l(c->lock);
 
     OnodeRef o = c->get_onode(oid, false);
     if (!o || !o->exists) {
@@ -9133,7 +9133,7 @@ int BlueStore::dump_onode(CollectionHandle &c_,
 
   int r;
   {
-    RWLock::RLocker l(c->lock);
+    std::shared_lock l(c->lock);
 
     OnodeRef o = c->get_onode(oid, false);
     if (!o || !o->exists) {
@@ -9170,7 +9170,7 @@ int BlueStore::getattr(
 
   int r;
   {
-    RWLock::RLocker l(c->lock);
+    std::shared_lock l(c->lock);
     mempool::bluestore_cache_other::string k(name);
 
     OnodeRef o = c->get_onode(oid, false);
@@ -9208,7 +9208,7 @@ int BlueStore::getattrs(
 
   int r;
   {
-    RWLock::RLocker l(c->lock);
+    std::shared_lock l(c->lock);
 
     OnodeRef o = c->get_onode(oid, false);
     if (!o || !o->exists) {
@@ -9233,7 +9233,7 @@ int BlueStore::getattrs(
 
 int BlueStore::list_collections(vector<coll_t>& ls)
 {
-  RWLock::RLocker l(coll_lock);
+  std::shared_lock l(coll_lock);
   ls.reserve(coll_map.size());
   for (ceph::unordered_map<coll_t, CollectionRef>::iterator p = coll_map.begin();
        p != coll_map.end();
@@ -9244,7 +9244,7 @@ int BlueStore::list_collections(vector<coll_t>& ls)
 
 bool BlueStore::collection_exists(const coll_t& c)
 {
-  RWLock::RLocker l(coll_lock);
+  std::shared_lock l(coll_lock);
   return coll_map.count(c);
 }
 
@@ -9269,7 +9269,7 @@ int BlueStore::collection_bits(CollectionHandle& ch)
 {
   dout(15) << __func__ << " " << ch->cid << dendl;
   Collection *c = static_cast<Collection*>(ch.get());
-  RWLock::RLocker l(c->lock);
+  std::shared_lock l(c->lock);
   dout(10) << __func__ << " " << ch->cid << " = " << c->cnode.bits << dendl;
   return c->cnode.bits;
 }
@@ -9284,7 +9284,7 @@ int BlueStore::collection_list(
            << " start " << start << " end " << end << " max " << max << dendl;
   int r;
   {
-    RWLock::RLocker l(c->lock);
+    std::shared_lock l(c->lock);
     r = _collection_list(c, start, end, max, ls, pnext);
   }
 
@@ -9431,7 +9431,7 @@ int BlueStore::omap_get(
   dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
   if (!c->exists)
     return -ENOENT;
-  RWLock::RLocker l(c->lock);
+  std::shared_lock l(c->lock);
   int r = 0;
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists) {
@@ -9483,7 +9483,7 @@ int BlueStore::omap_get_header(
   dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
   if (!c->exists)
     return -ENOENT;
-  RWLock::RLocker l(c->lock);
+  std::shared_lock l(c->lock);
   int r = 0;
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists) {
@@ -9519,7 +9519,7 @@ int BlueStore::omap_get_keys(
   dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
   if (!c->exists)
     return -ENOENT;
-  RWLock::RLocker l(c->lock);
+  std::shared_lock l(c->lock);
   int r = 0;
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists) {
@@ -9567,7 +9567,7 @@ int BlueStore::omap_get_values(
   dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
   if (!c->exists)
     return -ENOENT;
-  RWLock::RLocker l(c->lock);
+  std::shared_lock l(c->lock);
   int r = 0;
   string final_key;
   OnodeRef o = c->get_onode(oid, false);
@@ -9611,7 +9611,7 @@ int BlueStore::omap_check_keys(
   dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
   if (!c->exists)
     return -ENOENT;
-  RWLock::RLocker l(c->lock);
+  std::shared_lock l(c->lock);
   int r = 0;
   string final_key;
   OnodeRef o = c->get_onode(oid, false);
@@ -9657,7 +9657,7 @@ ObjectMap::ObjectMapIterator BlueStore::get_omap_iterator(
   if (!c->exists) {
     return ObjectMap::ObjectMapIterator();
   }
-  RWLock::RLocker l(c->lock);
+  std::shared_lock l(c->lock);
   OnodeRef o = c->get_onode(oid, false);
   if (!o || !o->exists) {
     dout(10) << __func__ << " " << oid << "doesn't exist" <<dendl;
@@ -10438,7 +10438,7 @@ void BlueStore::_osr_drain_all()
   set<OpSequencerRef> s;
   vector<OpSequencerRef> zombies;
   {
-    RWLock::RLocker l(coll_lock);
+    std::shared_lock l(coll_lock);
     for (auto& i : coll_map) {
       s.insert(i.second->osr);
     }
@@ -10507,7 +10507,7 @@ void BlueStore::_kv_stop()
 {
   dout(10) << __func__ << dendl;
   {
-    std::unique_lock l(kv_lock);
+    std::unique_lock l{kv_lock};
     while (!kv_sync_started) {
       kv_cond.wait(l);
     }
@@ -10515,7 +10515,7 @@ void BlueStore::_kv_stop()
     kv_cond.notify_all();
   }
   {
-    std::unique_lock l(kv_finalize_lock);
+    std::unique_lock l{kv_finalize_lock};
     while (!kv_finalize_started) {
       kv_finalize_cond.wait(l);
     }
@@ -10545,7 +10545,7 @@ void BlueStore::_kv_sync_thread()
 {
   dout(10) << __func__ << " start" << dendl;
   deque<DeferredBatch*> deferred_stable_queue; ///< deferred ios done + stable
-  std::unique_lock l(kv_lock);
+  std::unique_lock l{kv_lock};
   ceph_assert(!kv_sync_started);
   kv_sync_started = true;
   kv_cond.notify_all();
@@ -10703,7 +10703,7 @@ void BlueStore::_kv_sync_thread()
       ceph_assert(r == 0);
 
       {
-	std::unique_lock m(kv_finalize_lock);
+	std::unique_lock m{kv_finalize_lock};
 	if (kv_committing_to_finalize.empty()) {
 	  kv_committing_to_finalize.swap(kv_committing);
 	} else {
@@ -11338,7 +11338,7 @@ void BlueStore::_txc_add_transaction(TransContext *txc, Transaction *t)
     }
 
     // object operations
-    RWLock::WLocker l(c->lock);
+    std::unique_lock l(c->lock);
     OnodeRef &o = ovec[op->oid];
     if (!o) {
       ghobject_t oid = i.get_oid(op->oid);
@@ -13535,7 +13535,7 @@ int BlueStore::_create_collection(
   bufferlist bl;
 
   {
-    RWLock::WLocker l(coll_lock);
+    std::unique_lock l(coll_lock);
     if (*c) {
       r = -EEXIST;
       goto out;
@@ -13564,7 +13564,7 @@ int BlueStore::_remove_collection(TransContext *txc, const coll_t &cid,
 
   (*c)->flush_all_but_last();
   {
-    RWLock::WLocker l(coll_lock);
+    std::unique_lock l(coll_lock);
     if (!*c) {
       r = -ENOENT;
       goto out;
@@ -13640,8 +13640,8 @@ int BlueStore::_split_collection(TransContext *txc,
 {
   dout(15) << __func__ << " " << c->cid << " to " << d->cid << " "
 	   << " bits " << bits << dendl;
-  RWLock::WLocker l(c->lock);
-  RWLock::WLocker l2(d->lock);
+  std::unique_lock l(c->lock);
+  std::unique_lock l2(d->lock);
   int r;
 
   // flush all previous deferred writes on this sequencer.  this is a bit
@@ -13693,8 +13693,8 @@ int BlueStore::_merge_collection(
 {
   dout(15) << __func__ << " " << (*c)->cid << " to " << d->cid
 	   << " bits " << bits << dendl;
-  RWLock::WLocker l((*c)->lock);
-  RWLock::WLocker l2(d->lock);
+  std::unique_lock l((*c)->lock);
+  std::unique_lock l2(d->lock);
   int r;
 
   coll_t cid = (*c)->cid;
@@ -13726,7 +13726,7 @@ int BlueStore::_merge_collection(
 
   // remove source collection
   {
-    RWLock::WLocker l3(coll_lock);
+    std::unique_lock l3(coll_lock);
     _do_remove_collection(txc, c);
   }
 
