@@ -24,8 +24,7 @@
 #include "common/version.h"
 #include "common/dout.h"
 #include "common/debug.h"
-#include "common/Cond.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Timer.h"
 #include "common/errno.h"
 #include "mon/MonClient.h"
@@ -55,7 +54,7 @@ protected:
   Messenger *msg;
   MonClient monc;
 
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("mon-msg-test::lock");
 
   set<int> wanted;
 
@@ -65,8 +64,7 @@ public:
     : Dispatcher(cct_),
       cct(cct_),
       msg(NULL),
-      monc(cct_),
-      lock("mon-msg-test::lock")
+      monc(cct_)
   { }
 
 
@@ -222,12 +220,11 @@ class MonMsgTest : public MonClientHelper,
 protected:
   int reply_type = 0;
   Message *reply_msg = nullptr;
-  Mutex lock;
-  Cond cond;
+  ceph::mutex lock = ceph::make_mutex("lock");
+  ceph::condition_variable cond;
 
   MonMsgTest() :
-    MonClientHelper(g_ceph_context),
-    lock("lock") { }
+    MonClientHelper(g_ceph_context) { }
 
 public:
   void SetUp() override {
@@ -248,36 +245,33 @@ public:
   }
 
   void handle_wanted(Message *m) override {
-    lock.Lock();
+    std::lock_guard l{lock};
     // caller will put() after they call us, so hold on to a ref
     m->get();
     reply_msg = m;
-    cond.Signal();
-    lock.Unlock();
+    cond.notify_all();
   }
 
   Message *send_wait_reply(Message *m, int t, double timeout=30.0) {
-    lock.Lock();
+    std::unique_lock l{lock};
     reply_type = t;
     add_wanted(t);
     send_message(m);
 
-    int err = 0;
+    std::cv_status status = std::cv_status::no_timeout;
     if (timeout > 0) {
-      utime_t cond_timeout;
-      cond_timeout.set_from_double(timeout);
       utime_t s = ceph_clock_now();
-      err = cond.WaitInterval(lock, cond_timeout);
+      status = cond.wait_for(l, ceph::make_timespan(timeout));
       utime_t e = ceph_clock_now();
       dout(20) << __func__ << " took " << (e-s) << " seconds" << dendl;
     } else {
-      err = cond.Wait(lock);
+      cond.wait(l);
     }
     rm_wanted(t);
-    lock.Unlock();
-    if (err > 0) {
-      dout(20) << __func__ << " error: " << cpp_strerror(err) << dendl;
-      return (Message*)((long)-err);
+    l.unlock();
+    if (status == std::cv_status::timeout) {
+      dout(20) << __func__ << " error: " << cpp_strerror(ETIMEDOUT) << dendl;
+      return (Message*)((long)-ETIMEDOUT);
     }
 
     if (!reply_msg)

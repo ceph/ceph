@@ -46,8 +46,7 @@
 #include "common/config.h"
 #include "common/debug.h"
 #include "common/errno.h"
-#include "common/Cond.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/strtol.h"
 #include "common/LogEntry.h"
 #include "auth/KeyRing.h"
@@ -85,8 +84,8 @@ class TestStub : public Dispatcher
   MessengerRef messenger;
   MonClient monc;
 
-  Mutex lock;
-  Cond cond;
+  ceph::mutex lock;
+  ceph::condition_variable cond;
   SafeTimer timer;
 
   bool do_shutdown;
@@ -153,7 +152,7 @@ class TestStub : public Dispatcher
   virtual int init() = 0;
 
   virtual int shutdown() {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     do_shutdown = true;
     int r = _shutdown();
     if (r < 0) {
@@ -179,7 +178,7 @@ class TestStub : public Dispatcher
   TestStub(CephContext *cct, string who)
     : Dispatcher(cct),
       monc(cct),
-      lock(who.append("::lock").c_str()),
+      lock(ceph::make_mutex(who.append("::lock"))),
       timer(cct, lock),
       do_shutdown(false),
       tick_seconds(0.0) { }
@@ -192,12 +191,12 @@ class ClientStub : public TestStub
 
  protected:
   bool ms_dispatch(Message *m) override {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     dout(1) << "client::" << __func__ << " " << *m << dendl;
     switch (m->get_type()) {
     case CEPH_MSG_OSD_MAP:
       objecter->handle_osd_map((MOSDMap*)m);
-      cond.Signal();
+      cond.notify_all();
       break;
     }
     return true;
@@ -205,19 +204,19 @@ class ClientStub : public TestStub
 
   void ms_handle_connect(Connection *con) override {
     dout(1) << "client::" << __func__ << " " << con << dendl;
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     objecter->ms_handle_connect(con);
   }
 
   void ms_handle_remote_reset(Connection *con) override {
     dout(1) << "client::" << __func__ << " " << con << dendl;
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     objecter->ms_handle_remote_reset(con);
   }
 
   bool ms_handle_reset(Connection *con) override {
     dout(1) << "client::" << __func__ << dendl;
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     objecter->ms_handle_reset(con);
     return false;
   }
@@ -289,11 +288,11 @@ class ClientStub : public TestStub
     objecter->set_client_incarnation(0);
     objecter->start();
 
-    lock.Lock();
+    lock.lock();
     timer.init();
     monc.renew_subs();
 
-    lock.Unlock();
+    lock.unlock();
 
     objecter->wait_for_osd_map();
 
@@ -390,7 +389,7 @@ class OSDStub : public TestStub
 
   int init() override {
     dout(10) << __func__ << dendl;
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
 
     dout(1) << __func__ << " fsid " << monc.monmap.fsid
 	    << " osd_fsid " << g_conf()->osd_uuid << dendl;
@@ -914,8 +913,8 @@ double const OSDStub::STUB_BOOT_INTERVAL = 10.0;
 
 const char *our_name = NULL;
 vector<TestStub*> stubs;
-Mutex shutdown_lock("main::shutdown_lock");
-Cond shutdown_cond;
+ceph::mutex shutdown_lock = ceph::make_mutex("main::shutdown_lock");
+ceph::condition_variable shutdown_cond;
 Context *shutdown_cb = NULL;
 SafeTimer *shutdown_timer = NULL;
 
@@ -923,7 +922,7 @@ struct C_Shutdown : public Context
 {
   void finish(int r) override {
     generic_dout(10) << "main::shutdown time has ran out" << dendl;
-    shutdown_cond.Signal();
+    shutdown_cond.notify_all();
   }
 };
 
@@ -933,10 +932,10 @@ void handle_test_signal(int signum)
     return;
 
   std::cerr << "*** Got signal " << sig_str(signum) << " ***" << std::endl;
-  Mutex::Locker l(shutdown_lock);
+  std::lock_guard l{shutdown_lock};
   if (shutdown_timer) {
     shutdown_timer->cancel_all_events();
-    shutdown_cond.Signal();
+    shutdown_cond.notify_all();
   }
 }
 
@@ -1067,21 +1066,20 @@ int main(int argc, const char *argv[])
   register_async_signal_handler_oneshot(SIGINT, handle_test_signal);
   register_async_signal_handler_oneshot(SIGTERM, handle_test_signal);
 
-  shutdown_lock.Lock();
-  shutdown_timer = new SafeTimer(g_ceph_context, shutdown_lock);
-  shutdown_timer->init();
-  if (duration != 0) {
-    std::cout << __func__
-	    << " run test for " << duration << " seconds" << std::endl;
-    shutdown_timer->add_event_after((double) duration, new C_Shutdown);
+  {
+    unique_lock locker{shutdown_lock};
+    shutdown_timer = new SafeTimer(g_ceph_context, shutdown_lock);
+    shutdown_timer->init();
+    if (duration != 0) {
+      std::cout << __func__
+		<< " run test for " << duration << " seconds" << std::endl;
+      shutdown_timer->add_event_after((double) duration, new C_Shutdown);
+    }
+    shutdown_cond.wait(locker);
+    shutdown_timer->shutdown();
+    delete shutdown_timer;
+    shutdown_timer = NULL;
   }
-  shutdown_cond.Wait(shutdown_lock);
-
-  shutdown_timer->shutdown();
-  delete shutdown_timer;
-  shutdown_timer = NULL;
-  shutdown_lock.Unlock();
-
   unregister_async_signal_handler(SIGINT, handle_test_signal);
   unregister_async_signal_handler(SIGTERM, handle_test_signal);
 
