@@ -21,13 +21,13 @@ class RGWAsyncRadosRequest : public RefCountedObject {
 
   int retcode;
 
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("RGWAsyncRadosRequest::lock");
 
 protected:
   virtual int _send_request() = 0;
 public:
-  RGWAsyncRadosRequest(RGWCoroutine *_caller, RGWAioCompletionNotifier *_cn) : caller(_caller), notifier(_cn), retcode(0),
-                                                                               lock("RGWAsyncRadosRequest::lock") {
+  RGWAsyncRadosRequest(RGWCoroutine *_caller, RGWAioCompletionNotifier *_cn)
+    : caller(_caller), notifier(_cn), retcode(0) {
   }
   ~RGWAsyncRadosRequest() override {
     if (notifier) {
@@ -39,7 +39,7 @@ public:
     get();
     retcode = _send_request();
     {
-      Mutex::Locker l(lock);
+      std::lock_guard l{lock};
       if (notifier) {
         notifier->cb(); // drops its own ref
         notifier = nullptr;
@@ -52,7 +52,7 @@ public:
 
   void finish() {
     {
-      Mutex::Locker l(lock);
+      std::lock_guard l{lock};
       if (notifier) {
         // we won't call notifier->cb() to drop its ref, so drop it here
         notifier->put();
@@ -674,38 +674,40 @@ public:
 
 class RGWAsyncWait : public RGWAsyncRadosRequest {
   CephContext *cct;
-  Mutex *lock;
-  Cond *cond;
-  utime_t interval;
+  ceph::mutex *lock;
+  ceph::condition_variable *cond;
+  std::chrono::seconds interval;
 protected:
   int _send_request() override {
-    Mutex::Locker l(*lock);
-    return cond->WaitInterval(*lock, interval);
+    std::unique_lock l{*lock};
+    return (cond->wait_for(l, interval) == std::cv_status::timeout ?
+	    ETIMEDOUT : 0);
   }
 public:
   RGWAsyncWait(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, CephContext *_cct,
-               Mutex *_lock, Cond *_cond, int _secs) : RGWAsyncRadosRequest(caller, cn),
-                                       cct(_cct),
-                                       lock(_lock), cond(_cond), interval(_secs, 0) {}
+               ceph::mutex *_lock, ceph::condition_variable *_cond, int _secs)
+    : RGWAsyncRadosRequest(caller, cn),
+      cct(_cct),
+      lock(_lock), cond(_cond), interval(_secs) {}
 
   void wakeup() {
-    Mutex::Locker l(*lock);
-    cond->Signal();
+    std::lock_guard l{*lock};
+    cond->notify_all();
   }
 };
 
 class RGWWaitCR : public RGWSimpleCoroutine {
   CephContext *cct;
   RGWAsyncRadosProcessor *async_rados;
-  Mutex *lock;
-  Cond *cond;
+  ceph::mutex *lock;
+  ceph::condition_variable *cond;
   int secs;
 
   RGWAsyncWait *req;
 
 public:
   RGWWaitCR(RGWAsyncRadosProcessor *_async_rados, CephContext *_cct,
-	    Mutex *_lock, Cond *_cond,
+	    ceph::mutex *_lock, ceph::condition_variable *_cond,
             int _secs) : RGWSimpleCoroutine(_cct), cct(_cct),
                          async_rados(_async_rados), lock(_lock), cond(_cond), secs(_secs), req(NULL) {
   }
@@ -1207,7 +1209,7 @@ class RGWContinuousLeaseCR : public RGWCoroutine {
 
   int interval;
 
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("RGWContinuousLeaseCR");
   std::atomic<bool> going_down = { false };
   bool locked{false};
 
@@ -1222,18 +1224,18 @@ public:
     : RGWCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
     obj(_obj), lock_name(_lock_name),
     cookie(RGWSimpleRadosLockCR::gen_random_cookie(cct)),
-    interval(_interval), lock("RGWContinuousLeaseCR"), caller(_caller)
+    interval(_interval), caller(_caller)
   {}
 
   int operate() override;
 
   bool is_locked() {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     return locked;
   }
 
   void set_locked(bool status) {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     locked = status;
   }
 

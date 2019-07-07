@@ -211,9 +211,8 @@ void *RGWLC::LCWorker::entry() {
 
     ldpp_dout(dpp, 5) << "schedule life cycle next start time: " << rgw_to_asctime(next) << dendl;
 
-    lock.Lock();
-    cond.WaitInterval(lock, utime_t(secs, 0));
-    lock.Unlock();
+    std::unique_lock l{lock};
+    cond.wait_for(l, std::chrono::seconds(secs));
   } while (!lc->going_down());
 
   return NULL;
@@ -1305,8 +1304,8 @@ std::ostream& RGWLC::gen_prefix(std::ostream& out) const
 
 void RGWLC::LCWorker::stop()
 {
-  Mutex::Locker l(lock);
-  cond.Signal();
+  std::lock_guard l{lock};
+  cond.notify_all();
 }
 
 bool RGWLC::going_down()

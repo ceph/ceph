@@ -272,12 +272,12 @@ int main(int argc, const char **argv)
   if (g_conf()->daemonize) {
     global_init_daemonize(g_ceph_context);
   }
-  Mutex mutex("main");
+  ceph::mutex mutex = ceph::make_mutex("main");
   SafeTimer init_timer(g_ceph_context, mutex);
   init_timer.init();
-  mutex.Lock();
+  mutex.lock();
   init_timer.add_event_after(g_conf()->rgw_init_timeout, new C_InitTimeout);
-  mutex.Unlock();
+  mutex.unlock();
 
   common_init_finish(g_ceph_context);
 
@@ -310,10 +310,10 @@ int main(int argc, const char **argv)
 				 g_conf().get_val<bool>("rgw_dynamic_resharding"),
 				 g_conf()->rgw_cache_enabled);
   if (!store) {
-    mutex.Lock();
+    mutex.lock();
     init_timer.cancel_all_events();
     init_timer.shutdown();
-    mutex.Unlock();
+    mutex.unlock();
 
     derr << "Couldn't init storage provider (RADOS)" << dendl;
     return EIO;
@@ -326,10 +326,10 @@ int main(int argc, const char **argv)
 
   rgw_rest_init(g_ceph_context, store, store->svc.zone->get_zonegroup());
 
-  mutex.Lock();
+  mutex.lock();
   init_timer.cancel_all_events();
   init_timer.shutdown();
-  mutex.Unlock();
+  mutex.unlock();
 
   rgw_user_init(store);
   rgw_bucket_init(store->meta_mgr);
