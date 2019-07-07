@@ -175,18 +175,17 @@ public:
 
 
 struct C_Lock : public Context {
-  Mutex *lock;
+  ceph::mutex *lock;
   Context *fin;
-  C_Lock(Mutex *l, Context *c) : lock(l), fin(c) {}
+  C_Lock(ceph::mutex *l, Context *c) : lock(l), fin(c) {}
   ~C_Lock() override {
     delete fin;
   }
   void finish(int r) override {
     if (fin) {
-      lock->Lock();
+      std::lock_guard l{*lock};
       fin->complete(r);
       fin = NULL;
-      lock->Unlock();
     }
   }
 };
