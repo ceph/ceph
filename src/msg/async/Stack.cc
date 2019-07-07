@@ -171,7 +171,7 @@ Worker* NetworkStack::get_worker()
 
 void NetworkStack::stop()
 {
-  std::lock_guard<decltype(pool_spin)> lk(pool_spin);
+  std::lock_guard lk(pool_spin);
   for (unsigned i = 0; i < num_workers; ++i) {
     workers[i]->done = true;
     workers[i]->center.wakeup();
@@ -181,23 +181,21 @@ void NetworkStack::stop()
 }
 
 class C_drain : public EventCallback {
-  Mutex drain_lock;
-  Cond drain_cond;
+  ceph::mutex drain_lock = ceph::make_mutex("C_drain::drain_lock");
+  ceph::condition_variable drain_cond;
   unsigned drain_count;
 
  public:
   explicit C_drain(size_t c)
-      : drain_lock("C_drain::drain_lock"),
-        drain_count(c) {}
+      : drain_count(c) {}
   void do_request(uint64_t id) override {
-    Mutex::Locker l(drain_lock);
+    std::lock_guard l{drain_lock};
     drain_count--;
-    if (drain_count == 0) drain_cond.Signal();
+    if (drain_count == 0) drain_cond.notify_all();
   }
   void wait() {
-    Mutex::Locker l(drain_lock);
-    while (drain_count)
-      drain_cond.Wait(drain_lock);
+    std::unique_lock l{drain_lock};
+    drain_cond.wait(l, [this] { return drain_count == 0; });
   }
 };
 

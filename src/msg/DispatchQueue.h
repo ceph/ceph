@@ -21,8 +21,7 @@
 #include <boost/intrusive_ptr.hpp>
 #include "include/ceph_assert.h"
 #include "common/Throttle.h"
-#include "common/Mutex.h"
-#include "common/Cond.h"
+#include "common/ceph_mutex.h"
 #include "common/Thread.h"
 #include "common/PrioritizedQueue.h"
 
@@ -65,8 +64,8 @@ class DispatchQueue {
     
   CephContext *cct;
   Messenger *msgr;
-  mutable Mutex lock;
-  Cond cond;
+  mutable ceph::mutex lock;
+  ceph::condition_variable cond;
 
   PrioritizedQueue<QueueItem, uint64_t> mqueue;
 
@@ -104,8 +103,8 @@ class DispatchQueue {
     }
   } dispatch_thread;
 
-  Mutex local_delivery_lock;
-  Cond local_delivery_cond;
+  ceph::mutex local_delivery_lock;
+  ceph::condition_variable local_delivery_cond;
   bool stop_local_delivery;
   std::queue<pair<ref_t<Message>, int>> local_messages;
   class LocalDeliveryThread : public Thread {
@@ -136,7 +135,7 @@ class DispatchQueue {
   double get_max_age(utime_t now) const;
 
   int get_queue_len() const {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     return mqueue.length();
   }
 
@@ -148,54 +147,54 @@ class DispatchQueue {
   void dispatch_throttle_release(uint64_t msize);
 
   void queue_connect(Connection *con) {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     if (stop)
       return;
     mqueue.enqueue_strict(
       0,
       CEPH_MSG_PRIO_HIGHEST,
       QueueItem(D_CONNECT, con));
-    cond.Signal();
+    cond.notify_all();
   }
   void queue_accept(Connection *con) {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     if (stop)
       return;
     mqueue.enqueue_strict(
       0,
       CEPH_MSG_PRIO_HIGHEST,
       QueueItem(D_ACCEPT, con));
-    cond.Signal();
+    cond.notify_all();
   }
   void queue_remote_reset(Connection *con) {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     if (stop)
       return;
     mqueue.enqueue_strict(
       0,
       CEPH_MSG_PRIO_HIGHEST,
       QueueItem(D_BAD_REMOTE_RESET, con));
-    cond.Signal();
+    cond.notify_all();
   }
   void queue_reset(Connection *con) {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     if (stop)
       return;
     mqueue.enqueue_strict(
       0,
       CEPH_MSG_PRIO_HIGHEST,
       QueueItem(D_BAD_RESET, con));
-    cond.Signal();
+    cond.notify_all();
   }
   void queue_refused(Connection *con) {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     if (stop)
       return;
     mqueue.enqueue_strict(
       0,
       CEPH_MSG_PRIO_HIGHEST,
       QueueItem(D_CONN_REFUSED, con));
-    cond.Signal();
+    cond.notify_all();
   }
 
   bool can_fast_dispatch(const cref_t<Message> &m) const;
@@ -221,12 +220,12 @@ class DispatchQueue {
 
   DispatchQueue(CephContext *cct, Messenger *msgr, string &name)
     : cct(cct), msgr(msgr),
-      lock("Messenger::DispatchQueue::lock" + name),
+      lock(ceph::make_mutex("Messenger::DispatchQueue::lock" + name)),
       mqueue(cct->_conf->ms_pq_max_tokens_per_priority,
 	     cct->_conf->ms_pq_min_cost),
       next_id(1),
       dispatch_thread(this),
-      local_delivery_lock("Messenger::DispatchQueue::local_delivery_lock" + name),
+      local_delivery_lock(ceph::make_mutex("Messenger::DispatchQueue::local_delivery_lock" + name)),
       stop_local_delivery(false),
       local_delivery_thread(this),
       dispatch_throttler(cct, string("msgr_dispatch_throttler-") + name,

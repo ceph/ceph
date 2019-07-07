@@ -76,23 +76,23 @@ class MessengerClient {
     ClientDispatcher dispatcher;
 
    public:
-    Mutex lock;
-    Cond cond;
+    ceph::mutex lock = ceph::make_mutex("MessengerBenchmark::ClientThread::lock");
+    ceph::condition_variable cond;
     uint64_t inflight;
 
     ClientThread(Messenger *m, int c, ConnectionRef con, int len, int ops, int think_time_us):
         msgr(m), concurrent(c), conn(con), oid("object-name"), oloc(1, 1), msg_len(len), ops(ops),
-        dispatcher(think_time_us, this), lock("MessengerBenchmark::ClientThread::lock"), inflight(0) {
+        dispatcher(think_time_us, this), inflight(0) {
       m->add_dispatcher_head(&dispatcher);
       bufferptr ptr(msg_len);
       memset(ptr.c_str(), 0, msg_len);
       data.append(ptr);
     }
     void *entry() override {
-      lock.Lock();
+      std::unique_lock locker{lock};
       for (int i = 0; i < ops; ++i) {
         if (inflight > uint64_t(concurrent)) {
-          cond.Wait(lock);
+	  cond.wait(locker);
         }
 	hobject_t hobj(oid, oloc.key, CEPH_NOSNAP, pgid.ps(), pgid.pool(),
 		       oloc.nspace);
@@ -104,7 +104,7 @@ class MessengerClient {
         conn->send_message(m);
         //cerr << __func__ << " send m=" << m << std::endl;
       }
-      lock.Unlock();
+      locker.unlock();
       msgr->shutdown();
       return 0;
     }
@@ -159,9 +159,9 @@ class MessengerClient {
 void MessengerClient::ClientDispatcher::ms_fast_dispatch(Message *m) {
   usleep(think_time);
   m->put();
-  Mutex::Locker l(thread->lock);
+  std::lock_guard l{thread->lock};
   thread->inflight--;
-  thread->cond.Signal();
+  thread->cond.notify_all();
 }
 
 

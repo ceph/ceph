@@ -29,7 +29,7 @@
 #define dout_prefix *_dout << "-- " << msgr->get_myaddrs() << " "
 
 double DispatchQueue::get_max_age(utime_t now) const {
-  Mutex::Locker l(lock);
+  std::lock_guard l{lock};
   if (marrival.empty())
     return 0;
   else
@@ -80,7 +80,7 @@ void DispatchQueue::fast_preprocess(const ref_t<Message>& m)
 
 void DispatchQueue::enqueue(const ref_t<Message>& m, int priority, uint64_t id)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l{lock};
   if (stop) {
     return;
   }
@@ -91,32 +91,32 @@ void DispatchQueue::enqueue(const ref_t<Message>& m, int priority, uint64_t id)
   } else {
     mqueue.enqueue(id, priority, m->get_cost(), QueueItem(m));
   }
-  cond.Signal();
+  cond.notify_all();
 }
 
 void DispatchQueue::local_delivery(const ref_t<Message>& m, int priority)
 {
   m->set_recv_stamp(ceph_clock_now());
-  Mutex::Locker l(local_delivery_lock);
+  std::lock_guard l{local_delivery_lock};
   if (local_messages.empty())
-    local_delivery_cond.Signal();
+    local_delivery_cond.notify_all();
   local_messages.emplace(m, priority);
   return;
 }
 
 void DispatchQueue::run_local_delivery()
 {
-  local_delivery_lock.Lock();
+  std::unique_lock l{local_delivery_lock};
   while (true) {
     if (stop_local_delivery)
       break;
     if (local_messages.empty()) {
-      local_delivery_cond.Wait(local_delivery_lock);
+      local_delivery_cond.wait(l);
       continue;
     }
     auto p = std::move(local_messages.front());
     local_messages.pop();
-    local_delivery_lock.Unlock();
+    l.unlock();
     const ref_t<Message>& m = p.first;
     int priority = p.second;
     fast_preprocess(m);
@@ -125,9 +125,8 @@ void DispatchQueue::run_local_delivery()
     } else {
       enqueue(m, priority, 0);
     }
-    local_delivery_lock.Lock();
+    l.lock();
   }
-  local_delivery_lock.Unlock();
 }
 
 void DispatchQueue::dispatch_throttle_release(uint64_t msize)
@@ -151,13 +150,13 @@ void DispatchQueue::dispatch_throttle_release(uint64_t msize)
  */
 void DispatchQueue::entry()
 {
-  lock.Lock();
+  std::unique_lock l{lock};
   while (true) {
     while (!mqueue.empty()) {
       QueueItem qitem = mqueue.dequeue();
       if (!qitem.is_code())
 	remove_arrival(qitem.get_message());
-      lock.Unlock();
+      l.unlock();
 
       if (qitem.is_code()) {
 	if (cct->_conf->ms_inject_internal_delays &&
@@ -199,19 +198,18 @@ void DispatchQueue::entry()
 	}
       }
 
-      lock.Lock();
+      l.lock();
     }
     if (stop)
       break;
 
     // wait for something to be put on queue
-    cond.Wait(lock);
+    cond.wait(l);
   }
-  lock.Unlock();
 }
 
 void DispatchQueue::discard_queue(uint64_t id) {
-  Mutex::Locker l(lock);
+  std::lock_guard l{lock};
   list<QueueItem> removed;
   mqueue.remove_by_class(id, &removed);
   for (list<QueueItem>::iterator i = removed.begin();
@@ -246,14 +244,15 @@ void DispatchQueue::discard_local()
 void DispatchQueue::shutdown()
 {
   // stop my local delivery thread
-  local_delivery_lock.Lock();
-  stop_local_delivery = true;
-  local_delivery_cond.Signal();
-  local_delivery_lock.Unlock();
-
+  {
+    std::scoped_lock l{local_delivery_lock};
+    stop_local_delivery = true;
+    local_delivery_cond.notify_all();
+  }
   // stop my dispatch thread
-  lock.Lock();
-  stop = true;
-  cond.Signal();
-  lock.Unlock();
+  {
+    std::scoped_lock l{lock};
+    stop = true;
+    cond.notify_all();
+  }
 }

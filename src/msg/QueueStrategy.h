@@ -25,7 +25,7 @@
 namespace bi = boost::intrusive;
 
 class QueueStrategy : public DispatchStrategy {
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("QueueStrategy::lock");
   const int n_threads;
   bool stop;
 
@@ -35,8 +35,8 @@ class QueueStrategy : public DispatchStrategy {
   public:
     bi::list_member_hook<> thread_q;
     QueueStrategy *dq;
-    Cond cond;
-    explicit QSThread(QueueStrategy *dq) : thread_q(), dq(dq), cond() {}
+    ceph::condition_variable cond;
+    explicit QSThread(QueueStrategy *dq) : thread_q(), dq(dq) {}
     void* entry() {
       dq->entry(this);
       return NULL;
