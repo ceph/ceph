@@ -17,6 +17,7 @@
 #define CEPH_COND_H
 
 #include "common/Clock.h"
+#include "common/Mutex.h"
 #include "include/Context.h"
 
 class Cond {
