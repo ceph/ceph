@@ -15,11 +15,10 @@
 #define TRACKEDREQUEST_H_
 
 #include <atomic>
+#include "common/ceph_mutex.h"
 #include "common/histogram.h"
-#include "common/RWLock.h"
 #include "common/Thread.h"
 #include "common/Clock.h"
-#include "common/ceph_mutex.h"
 #include "include/spinlock.h"
 #include "msg/Message.h"
 
@@ -108,7 +107,7 @@ class OpTracker {
   float complaint_time;
   int log_threshold;
   std::atomic<bool> tracking_enabled;
-  RWLock       lock;
+  ceph::shared_mutex lock = ceph::make_shared_mutex("OpTracker::lock");
 
 public:
   CephContext *cct;
