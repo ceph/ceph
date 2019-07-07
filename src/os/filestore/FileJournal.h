@@ -16,14 +16,15 @@
 #ifndef CEPH_FILEJOURNAL_H
 #define CEPH_FILEJOURNAL_H
 
-#include <stdlib.h>
+#include <condition_variable>
 #include <deque>
+#include <mutex>
+#include <stdlib.h>
 using std::deque;
 
 #include "Journal.h"
 #include "common/config_fwd.h"
 #include "common/Cond.h"
-#include "common/Mutex.h"
 #include "common/Thread.h"
 #include "common/Throttle.h"
 #include "JournalThrottle.h"
@@ -68,13 +69,13 @@ public:
     write_item() : seq(0), orig_len(0) {}
   };
 
-  Mutex finisher_lock;
-  Cond finisher_cond;
+  ceph::mutex finisher_lock = ceph::make_mutex("FileJournal::finisher_lock");
+  ceph::condition_variable finisher_cond;
   uint64_t journaled_seq;
   bool plug_journal_completions;
 
-  Mutex writeq_lock;
-  Cond writeq_cond;
+  ceph::mutex writeq_lock = ceph::make_mutex("FileJournal::writeq_lock");
+  ceph::condition_variable writeq_cond;
   list<write_item> writeq;
   bool writeq_empty();
   write_item &peek_write();
@@ -82,27 +83,28 @@ public:
   void batch_pop_write(list<write_item> &items);
   void batch_unpop_write(list<write_item> &items);
 
-  Mutex completions_lock;
+  ceph::mutex completions_lock =
+    ceph::make_mutex("FileJournal::completions_lock");
   list<completion_item> completions;
   bool completions_empty() {
-    Mutex::Locker l(completions_lock);
+    std::lock_guard l{completions_lock};
     return completions.empty();
   }
   void batch_pop_completions(list<completion_item> &items) {
-    Mutex::Locker l(completions_lock);
+    std::lock_guard l{completions_lock};
     completions.swap(items);
   }
   void batch_unpop_completions(list<completion_item> &items) {
-    Mutex::Locker l(completions_lock);
+    std::lock_guard l{completions_lock};
     completions.splice(completions.begin(), items);
   }
   completion_item completion_peek_front() {
-    Mutex::Locker l(completions_lock);
+    std::lock_guard l{completions_lock};
     ceph_assert(!completions.empty());
     return completions.front();
   }
   void completion_pop_front() {
-    Mutex::Locker l(completions_lock);
+    std::lock_guard l{completions_lock};
     ceph_assert(!completions.empty());
     completions.pop_front();
   }
@@ -269,14 +271,14 @@ private:
       delete[] iov;
     }
   };
-  Mutex aio_lock;
-  Cond aio_cond;
-  Cond write_finish_cond;
-  io_context_t aio_ctx;
+  ceph::mutex aio_lock = ceph::make_mutex("FileJournal::aio_lock");
+  ceph::condition_variable aio_cond;
+  ceph::condition_variable write_finish_cond;
+  io_context_t aio_ctx = 0;
   list<aio_info> aio_queue;
-  int aio_num, aio_bytes;
-  uint64_t aio_write_queue_ops;
-  uint64_t aio_write_queue_bytes;
+  int aio_num = 0, aio_bytes = 0;
+  uint64_t aio_write_queue_ops = 0;
+  uint64_t aio_write_queue_bytes = 0;
   /// End protected by aio_lock
 #endif
 
@@ -326,11 +328,11 @@ private:
   JournalThrottle throttle;
 
   // write thread
-  Mutex write_lock;
+  ceph::mutex write_lock = ceph::make_mutex("FileJournal::write_lock");
   bool write_stop;
   bool aio_stop;
 
-  Cond commit_cond;
+  ceph::condition_variable commit_cond;
 
   int _open(bool wr, bool create=false);
   int _open_block_device();
@@ -398,15 +400,11 @@ private:
   ZTracer::Endpoint trace_endpoint;
 
  public:
-  FileJournal(CephContext* cct, uuid_d fsid, Finisher *fin, Cond *sync_cond,
+  FileJournal(CephContext* cct, uuid_d fsid, Finisher *fin, ceph::condition_variable *sync_cond,
 	      const char *f, bool dio=false, bool ai=true, bool faio=false) :
     Journal(cct, fsid, fin, sync_cond),
-    finisher_lock("FileJournal::finisher_lock", false, true, false),
     journaled_seq(0),
     plug_journal_completions(false),
-    writeq_lock("FileJournal::writeq_lock", false, true, false),
-    completions_lock(
-      "FileJournal::completions_lock", false, true, false),
     fn(f),
     zero_buf(NULL),
     max_size(0), block_size(0),
@@ -414,20 +412,12 @@ private:
     must_write_header(false),
     write_pos(0), read_pos(0),
     discard(false),
-#ifdef HAVE_LIBAIO
-    aio_lock("FileJournal::aio_lock"),
-    aio_ctx(0),
-    aio_num(0), aio_bytes(0),
-    aio_write_queue_ops(0),
-    aio_write_queue_bytes(0),
-#endif
     last_committed_seq(0),
     journaled_since_start(0),
     full_state(FULL_NOTFULL),
     fd(-1),
     writing_seq(0),
     throttle(cct->_conf->filestore_caller_concurrency),
-    write_lock("FileJournal::write_lock", false, true, false),
     write_stop(true),
     aio_stop(true),
     write_thread(this),

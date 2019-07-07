@@ -20,8 +20,6 @@
 #include <cstdio>
 #include "common/config_obs.h"
 #include "common/hobject.h"
-#include "common/Mutex.h"
-#include "common/Cond.h"
 #include "common/shared_cache.hpp"
 #include "include/compat.h"
 #include "include/intarith.h"

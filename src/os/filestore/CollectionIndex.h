@@ -74,7 +74,8 @@ protected:
   };
  public:
 
-  RWLock access_lock;
+  ceph::shared_mutex access_lock =
+    ceph::make_shared_mutex("CollectionIndex::access_lock", true, false);
   /// Type of returned paths
   typedef std::shared_ptr<Path> IndexedPath;
 
@@ -181,7 +182,7 @@ protected:
   virtual int prep_delete() { return 0; }
 
   CollectionIndex(CephContext* cct, const coll_t& collection)
-    : cct(cct), access_lock("CollectionIndex::access_lock", true, false) {}
+    : cct(cct) {}
 
   /*
    * Pre-hash the collection, this collection should map to a PG folder.
