@@ -63,7 +63,7 @@
 // cons/des
 MDSDaemon::MDSDaemon(std::string_view n, Messenger *m, MonClient *mc) :
   Dispatcher(m->cct),
-  mds_lock("MDSDaemon::mds_lock"),
+  mds_lock(ceph::make_mutex("MDSDaemon::mds_lock")),
   stopping(false),
   timer(m->cct, mds_lock),
   gss_ktfile_client(m->cct->_conf.get_val<std::string>("gss_ktab_client_file")),
@@ -378,9 +378,9 @@ int MDSDaemon::init()
   r = monc->init();
   if (r < 0) {
     derr << "ERROR: failed to init monc: " << cpp_strerror(-r) << dendl;
-    mds_lock.Lock();
+    mds_lock.lock();
     suicide();
-    mds_lock.Unlock();
+    mds_lock.unlock();
     return r;
   }
 
@@ -394,9 +394,9 @@ int MDSDaemon::init()
   r = monc->authenticate();
   if (r < 0) {
     derr << "ERROR: failed to authenticate: " << cpp_strerror(-r) << dendl;
-    mds_lock.Lock();
+    mds_lock.lock();
     suicide();
-    mds_lock.Unlock();
+    mds_lock.unlock();
     return r;
   }
 
@@ -410,19 +410,18 @@ int MDSDaemon::init()
     }
     derr << "ERROR: failed to refresh rotating keys, "
          << "maximum retry time reached." << dendl;
-    mds_lock.Lock();
+    std::lock_guard locker{mds_lock};
     suicide();
-    mds_lock.Unlock();
     return -ETIMEDOUT;
   }
 
   mgrc.init();
   messenger->add_dispatcher_head(&mgrc);
 
-  mds_lock.Lock();
+  mds_lock.lock();
   if (beacon.get_want_state() == CEPH_MDS_STATE_DNE) {
     dout(4) << __func__ << ": terminated already, dropping out" << dendl;
-    mds_lock.Unlock();
+    mds_lock.unlock();
     return 0;
   }
 
@@ -430,16 +429,15 @@ int MDSDaemon::init()
   monc->sub_want("mgrmap", 0, 0);
   monc->renew_subs();
 
-  mds_lock.Unlock();
+  mds_lock.unlock();
 
   // Set up admin socket before taking mds_lock, so that ordering
   // is consistent (later we take mds_lock within asok callbacks)
   set_up_admin_socket();
-  mds_lock.Lock();
+  std::lock_guard locker{mds_lock};
   if (beacon.get_want_state() == MDSMap::STATE_DNE) {
     suicide();  // we could do something more graceful here
     dout(4) << __func__ << ": terminated already, dropping out" << dendl;
-    mds_lock.Unlock();
     return 0; 
   }
 
@@ -450,8 +448,6 @@ int MDSDaemon::init()
 
   // schedule tick
   reset_tick();
-  mds_lock.Unlock();
-
   return 0;
 }
 
@@ -464,7 +460,7 @@ void MDSDaemon::reset_tick()
   tick_event = timer.add_event_after(
     g_conf()->mds_tick_interval,
     new FunctionContext([this](int) {
-	ceph_assert(mds_lock.is_locked_by_me());
+	ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
 	tick();
       }));
 }
@@ -934,7 +930,7 @@ void MDSDaemon::handle_signal(int signum)
 
 void MDSDaemon::suicide()
 {
-  ceph_assert(mds_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(mds_lock));
   
   // make sure we don't suicide twice
   ceph_assert(stopping == false);

@@ -217,8 +217,8 @@ int main(int argc, const char **argv)
  shutdown:
   // yuck: grab the mds lock, so we can be sure that whoever in *mds
   // called shutdown finishes what they were doing.
-  mds->mds_lock.Lock();
-  mds->mds_lock.Unlock();
+  mds->mds_lock.lock();
+  mds->mds_lock.unlock();
 
   pidfile_remove();
 

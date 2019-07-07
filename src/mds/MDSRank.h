@@ -149,7 +149,7 @@ class MDSRank {
     // Reference to global MDS::mds_lock, so that users of MDSRank don't
     // carry around references to the outer MDS, and we can substitute
     // a separate lock here in future potentially.
-    Mutex &mds_lock;
+    ceph::mutex &mds_lock;
 
     mono_time get_starttime() const {
       return starttime;
@@ -243,12 +243,12 @@ class MDSRank {
 
     class ProgressThread : public Thread {
       MDSRank *mds;
-      Cond cond;
+      ceph::condition_variable cond;
       public:
       explicit ProgressThread(MDSRank *mds_) : mds(mds_) {}
       void * entry() override;
       void shutdown();
-      void signal() {cond.Signal();}
+      void signal() {cond.notify_all();}
     } progress_thread;
 
   list<cref_t<Message>> waiting_for_nolaggy;
@@ -325,7 +325,7 @@ class MDSRank {
 
     MDSRank(
         mds_rank_t whoami_,
-        Mutex &mds_lock_,
+        ceph::mutex &mds_lock_,
         LogChannelRef &clog_,
         SafeTimer &timer_,
         Beacon &beacon_,
@@ -639,7 +639,7 @@ public:
 
   MDSRankDispatcher(
       mds_rank_t whoami_,
-      Mutex &mds_lock_,
+      ceph::mutex &mds_lock_,
       LogChannelRef &clog_,
       SafeTimer &timer_,
       Beacon &beacon_,
