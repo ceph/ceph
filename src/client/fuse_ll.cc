@@ -89,7 +89,7 @@ public:
   struct fuse_session *se;
   char *mountpoint;
 
-  Mutex stag_lock;
+  ceph::mutex stag_lock = ceph::make_mutex("fuse_ll.cc stag_lock");
   int last_stag;
 
   ceph::unordered_map<uint64_t,int> snap_stag_map;
@@ -1048,7 +1048,6 @@ CephFuse::Handle::Handle(Client *c, int fd) :
   ch(NULL),
   se(NULL),
   mountpoint(NULL),
-  stag_lock("fuse_ll.cc stag_lock"),
   last_stag(0)
 {
   snap_stag_map[CEPH_NOSNAP] = 0;
