@@ -81,7 +81,6 @@ PurgeQueue::PurgeQueue(
   :
     cct(cct_),
     rank(rank_),
-    lock("PurgeQueue"),
     metadata_pool(metadata_pool_),
     finisher(cct, "PurgeQueue", "PQ_Finisher"),
     timer(cct, lock),
@@ -231,7 +230,7 @@ void PurgeQueue::wait_for_recovery(Context* c)
 
 void PurgeQueue::_recover()
 {
-  ceph_assert(lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
 
   // Journaler::is_readable() adjusts write_pos if partial entry is encountered
   while (1) {
@@ -412,7 +411,7 @@ void PurgeQueue::_go_readonly(int r)
 
 bool PurgeQueue::_consume()
 {
-  ceph_assert(lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
 
   bool could_consume = false;
   while(_can_consume()) {
@@ -478,7 +477,7 @@ void PurgeQueue::_execute_item(
     const PurgeItem &item,
     uint64_t expire_to)
 {
-  ceph_assert(lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
 
   in_flight[expire_to] = item;
   logger->set(l_pq_executing, in_flight.size());
@@ -582,7 +581,7 @@ void PurgeQueue::_execute_item(
 void PurgeQueue::_execute_item_complete(
     uint64_t expire_to)
 {
-  ceph_assert(lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
   dout(10) << "complete at 0x" << std::hex << expire_to << std::dec << dendl;
   ceph_assert(in_flight.count(expire_to) == 1);
 
