@@ -34,7 +34,7 @@ public:
 
   void finish(int r) override
   {
-    lock_guard locker{array_lock};
+    std::lock_guard locker{array_lock};
     cout << "TestContext " << num << std::endl;
     test_array[array_idx++] = num;
   }

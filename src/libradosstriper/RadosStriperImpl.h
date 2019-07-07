@@ -111,18 +111,17 @@ struct RadosStriperImpl {
 
   // reference counting
   void get() {
-    lock.Lock();
+    std::lock_guard l{lock};
     m_refCnt ++ ;
-    lock.Unlock();
   }
   void put() {
     bool deleteme = false;
-    lock.Lock();
+    lock.lock();
     m_refCnt --;
     if (m_refCnt == 0)
       deleteme = true;
-    cond.Signal();
-    lock.Unlock();
+    cond.notify_all();
+    lock.unlock();
     if (deleteme)
       delete this;
   }
@@ -257,9 +256,9 @@ struct RadosStriperImpl {
   }
 
   // reference counting
-  Cond  cond;
+  std::condition_variable cond;
   int m_refCnt;
-  Mutex lock;
+  std::mutex lock;
 
 
   // Context
