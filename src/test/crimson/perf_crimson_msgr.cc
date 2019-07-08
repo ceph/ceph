@@ -702,7 +702,7 @@ int main(int argc, char** argv)
   app.add_options()
     ("mode", bpo::value<unsigned>()->default_value(0),
      "0: both, 1:client, 2:server")
-    ("addr", bpo::value<std::string>()->default_value("v1:0.0.0.0:9010"),
+    ("addr", bpo::value<std::string>()->default_value("v1:127.0.0.1:9010"),
      "server address")
     ("ramptime", bpo::value<unsigned>()->default_value(5),
      "seconds of client ramp-up time")
