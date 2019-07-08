@@ -20,9 +20,9 @@ class Event(object):
     """
 
     def __init__(self, message, refs):
-        self._message = message
         self._refs = refs
-
+        self._duration_str = "(since 0h 0m 0s)"
+        self._message = message
         self.started_at = datetime.datetime.utcnow()
 
         self.id = None
@@ -31,6 +31,7 @@ class Event(object):
         global _module
         _module.log.debug('refreshing mgr for %s (%s) at %f' % (self.id, self._message,
                                                                 self.progress))
+        self.update_duration_event()
         _module.update_progress_event(self.id, self._message, self.progress)
 
     @property
@@ -44,6 +45,10 @@ class Event(object):
     @property
     def progress(self):
         raise NotImplementedError()
+    
+    @property
+    def duration_str(self):
+        return self._duration_str
 
     @property
     def failed(self):
@@ -54,7 +59,7 @@ class Event(object):
         return None
 
     def summary(self):
-        return "{0} {1}".format(self.progress, self.message)
+        return "{0} {1} {2}".format(self.progress, self.message, self.duration_str)
 
     def _progress_str(self, width):
         inner_width = width - 2
@@ -74,16 +79,26 @@ class Event(object):
             [===============..............]
 
         """
-        return "{0}\n    {1}".format(
-            self._message, self._progress_str(30))
+        return "{0} {1}\n    {2}".format(
+            self._message, self._duration_str, self._progress_str(30))
 
     def to_json(self):
         return {
             "id": self.id,
             "message": self.message,
+            "duration": self.duration_str,
             "refs": self._refs
         }
 
+    def update_duration_event(self):
+        # Update duration of event in seconds/minutes/hours
+
+        duration = (datetime.datetime.utcnow() - self.started_at)
+        duration_sec = duration.seconds
+        duration_min = duration_sec //60
+        duration_hr = duration_min // 60
+
+        self._duration_str = "(since {0}h {1}m {2}s)".format(duration_hr, duration_min, duration_sec)
 
 class GhostEvent(Event):
     """
@@ -264,26 +279,14 @@ class PgRecoveryEvent(Event):
 
                     complete_accumulate += ratio
         
-        # Update duration of event in seconds/minutes/hours
-        duration = (datetime.datetime.utcnow() - self.started_at)
-        duration_sec = duration.seconds
-        duration_min = duration_sec //60
-        duration_hr = duration_min // 60
-
         self._pgs = list(set(self._pgs) ^ complete)
         completed_pgs = self._original_pg_count - len(self._pgs)
         self._progress = (completed_pgs + complete_accumulate)\
             / self._original_pg_count
 
-        # Because the spacing of 'in' and 'out' characters are different
-        if self._message[31] == "i":
-            self._message = self._message[:34] + "(since {0}h {1}m {2}s)".format(duration_hr, duration_min, duration_sec)
-        else:
-            self._message = self._message[:34] + " (since {0}h {1}m {2}s)".format(duration_hr, duration_min, duration_sec)
-        self._refresh()
-        
-        log.info("Updated progress to {0} ({1})".format(
-            self._progress, self._message
+        self._refresh()    
+        log.info("Updated progress to {0} ({1} {2})".format(
+            self._progress, self._message, self._duration_str
         ))
 
     @property
