@@ -722,7 +722,7 @@ std::vector<Option> get_global_options() {
     .add_see_also("mon_cluster_log_to_file"),
 
     Option("mon_cluster_log_file_level", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("debug")
+    .set_default("info")
     .set_flag(Option::FLAG_RUNTIME)
     .add_service("mon")
     .set_description("Lowest level to include is cluster log file")
