@@ -140,7 +140,8 @@ def start_rgw(ctx, config, clients):
         endpoint = ctx.rgw.role_endpoints[client]
         url = endpoint.url()
         log.info('Polling {client} until it starts accepting connections on {url}'.format(client=client, url=url))
-        wait_for_radosgw(url)
+        (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+        wait_for_radosgw(url, remote)
 
     try:
         yield
