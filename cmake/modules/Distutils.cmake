@@ -56,6 +56,22 @@ function(distutils_add_cython_module target name src)
   set(PY_CC ${compiler_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1} ${cflags})
   set(PY_CXX ${compiler_launcher} ${CMAKE_CXX_COMPILER} ${cxx_compiler_arg1})
   set(PY_LDSHARED ${link_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1} "-shared")
+
+  if(${PYTHON${PYTHON_VERSION}_VERSION_MAJOR} STREQUAL "2")
+    set(suffix_var "SO")
+  else()
+    set(suffix_var "EXT_SUFFIX")
+  endif()
+  execute_process(COMMAND "${PYTHON${PYTHON_VERSION}_EXECUTABLE}" -c
+    "from distutils import sysconfig; print(sysconfig.get_config_var('${suffix_var}'))"
+    RESULT_VARIABLE result
+    OUTPUT_VARIABLE ext_suffix
+    ERROR_VARIABLE error
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if(NOT result EQUAL 0)
+    message(FATAL_ERROR "Unable to tell python extension's suffix: ${error}")
+  endif()
+  set(output_dir "${CYTHON_MODULE_DIR}/lib.${PYTHON${PYTHON_VERSION}_VERSION_MAJOR}")
   add_custom_target(${target} ALL
     COMMAND
     env
@@ -68,8 +84,9 @@ function(distutils_add_cython_module target name src)
     CEPH_LIBDIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
     ${PYTHON${PYTHON_VERSION}_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py
     build --verbose --build-base ${CYTHON_MODULE_DIR}
-    --build-platlib ${CYTHON_MODULE_DIR}/lib.${PYTHON${PYTHON_VERSION}_VERSION_MAJOR}
+    --build-platlib ${output_dir}
     WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
+    BUILD_BYPRODUCTS ${output_dir}/${ext_suffix}
     DEPENDS ${src})
 endfunction(distutils_add_cython_module)
 
