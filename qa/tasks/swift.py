@@ -72,9 +72,8 @@ def create_users(ctx, config):
     log.info('Creating rgw users...')
     testdir = teuthology.get_testdir(ctx)
     users = {'': 'foo', '2': 'bar'}
-    for client in config['clients']:
+    for client, testswift_conf in config.iteritems():
         cluster_name, daemon_type, client_id = teuthology.split_role(client)
-        testswift_conf = config['testswift_conf'][client]
         for suffix, user in users.iteritems():
             _config_user(testswift_conf, '{user}.{client}'.format(user=user, client=client), user, suffix)
             ctx.cluster.only(client).run(
@@ -97,7 +96,7 @@ def create_users(ctx, config):
     try:
         yield
     finally:
-        for client in config['clients']:
+        for client in config.iterkeys():
             for user in users.itervalues():
                 uid = '{user}.{client}'.format(user=user, client=client)
                 cluster_name, daemon_type, client_id = teuthology.split_role(client)
@@ -123,23 +122,7 @@ def configure(ctx, config):
     assert isinstance(config, dict)
     log.info('Configuring testswift...')
     testdir = teuthology.get_testdir(ctx)
-    for client, properties in config['clients'].iteritems():
-        log.info('client={c}'.format(c=client))
-        log.info('config={c}'.format(c=config))
-        testswift_conf = config['testswift_conf'][client]
-        if properties is not None and 'rgw_server' in properties:
-            host = None
-            for target, roles in zip(ctx.config['targets'].iterkeys(), ctx.config['roles']):
-                log.info('roles: ' + str(roles))
-                log.info('target: ' + str(target))
-                if properties['rgw_server'] in roles:
-                    _, host = split_user(target)
-            assert host is not None, "Invalid client specified as the rgw_server"
-            testswift_conf['func_test']['auth_host'] = host
-        else:
-            testswift_conf['func_test']['auth_host'] = 'localhost'
-
-        log.info(client)
+    for client, testswift_conf in config.iteritems():
         (remote,) = ctx.cluster.only(client).remotes.keys()
         remote.run(
             args=[
@@ -235,10 +218,7 @@ def task(ctx, config):
 
     testswift_conf = {}
     clients = []
-    for client in config.keys():
-        endpoint = ctx.rgw.role_endpoints.get(client)
-        assert endpoint, 'swift: no rgw endpoint for {}'.format(client)
-
+    for client, client_config in config.iteritems():
         # http://tracker.ceph.com/issues/40304 can't bootstrap on rhel 7.6+
         (remote,) = ctx.cluster.only(client).remotes.keys()
         if remote.os.name == 'rhel' and LooseVersion(remote.os.version) >= LooseVersion('7.6'):
@@ -247,29 +227,30 @@ def task(ctx, config):
 
         clients.append(client)
 
+        server = client_config.get('rgw_server', client)
+        endpoint = ctx.rgw.role_endpoints.get(server)
+        assert endpoint, 'swift: no rgw endpoint for {}'.format(server)
+
         testswift_conf[client] = ConfigObj(
                 indent_type='',
                 infile={
                     'func_test':
                         {
-                        'auth_port'      : endpoint.port,
+                        'auth_host' : endpoint.hostname,
+                        'auth_port' : endpoint.port,
                         'auth_ssl' : 'yes' if endpoint.cert else 'no',
                         'auth_prefix' : '/auth/',
                         },
                     }
                 )
+    # only take config for valid clients
+    config = {c: config[c] for c in clients}
 
     log.info('clients={c}'.format(c=config.keys()))
     with contextutil.nested(
         lambda: download(ctx=ctx, config=config),
-        lambda: create_users(ctx=ctx, config=dict(
-                clients=clients,
-                testswift_conf=testswift_conf,
-                )),
-        lambda: configure(ctx=ctx, config=dict(
-                clients=config,
-                testswift_conf=testswift_conf,
-                )),
+        lambda: create_users(ctx=ctx, config=testswift_conf),
+        lambda: configure(ctx=ctx, config=testswift_conf),
         lambda: run_tests(ctx=ctx, config=config),
         ):
         pass
