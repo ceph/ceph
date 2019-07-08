@@ -19,6 +19,7 @@
 #include <fcntl.h>
 
 #include <boost/container/flat_set.hpp>
+#include "boost/algorithm/string.hpp"
 
 #include "include/cpp-btree/btree_set.h"
 
@@ -5147,9 +5148,37 @@ int BlueStore::_open_bluefs(bool create)
   if (r < 0) {
     return r;
   }
+  RocksDBBlueFSVolumeSelector* vselector = nullptr;
+  if (bluefs_layout.shared_bdev == BlueFS::BDEV_SLOW) {
+
+    string options = cct->_conf->bluestore_rocksdb_options;
+
+    rocksdb::Options rocks_opts;
+    int r = RocksDBStore::ParseOptionsFromStringStatic(
+      cct,
+      options,
+      rocks_opts,
+      nullptr);
+    if (r < 0) {
+      return r;
+    }
+
+    double reserved_factor = cct->_conf->bluestore_volume_selection_reserved_factor;
+    vselector =
+      new RocksDBBlueFSVolumeSelector(
+        bluefs->get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
+        bluefs->get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
+        bluefs->get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100,
+        1024 * 1024 * 1024, //FIXME: set expected l0 size here
+        rocks_opts.max_bytes_for_level_base,
+        rocks_opts.max_bytes_for_level_multiplier,
+        reserved_factor,
+        cct->_conf->bluestore_volume_selection_policy != "rocksdb_original");
+  }
   if (create) {
     bluefs->mkfs(fsid);
   }
+  bluefs->set_volume_selector(vselector);
   r = bluefs->mount();
   if (r < 0) {
     derr << __func__ << " failed bluefs mount: " << cpp_strerror(r) << dendl;
@@ -5361,17 +5390,16 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
     if (r < 0) {
       return r;
     }
-    bluefs->set_slow_device_expander(this);
 
     if (cct->_conf->bluestore_bluefs_env_mirror) {
-      rocksdb::Env *a = new BlueRocksEnv(bluefs);
-      rocksdb::Env *b = rocksdb::Env::Default();
+      rocksdb::Env* a = new BlueRocksEnv(bluefs);
+      rocksdb::Env* b = rocksdb::Env::Default();
       if (create) {
-	string cmd = "rm -rf " + path + "/db " +
-	  path + "/db.slow " +
-	  path + "/db.wal";
-	int r = system(cmd.c_str());
-	(void)r;
+        string cmd = "rm -rf " + path + "/db " +
+          path + "/db.slow " +
+          path + "/db.wal";
+        int r = system(cmd.c_str());
+        (void)r;
       }
       env = new rocksdb::EnvMirror(b, a, false, true);
     } else {
@@ -5380,25 +5408,33 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
       // simplify the dir names, too, as "seen" by rocksdb
       fn = "db";
     }
+    bluefs->set_slow_device_expander(this);
+    BlueFSVolumeSelector::paths paths;
+    bluefs->get_vselector_paths(fn, paths);
 
     if (bluefs_shared_bdev == BlueFS::BDEV_SLOW) {
       // we have both block.db and block; tell rocksdb!
       // note: the second (last) size value doesn't really matter
       ostringstream db_paths;
-      uint64_t db_size = bluefs->get_block_device_size(BlueFS::BDEV_DB);
-      uint64_t slow_size = bluefs->get_block_device_size(BlueFS::BDEV_SLOW);
-      db_paths << fn << ","
-               << (uint64_t)(db_size * 95 / 100) << " "
-               << fn + ".slow" << ","
-               << (uint64_t)(slow_size * 95 / 100);
+      bool first = true;
+      for (auto& p : paths) {
+        if (!first) {
+          db_paths << " ";
+        }
+        first = false;
+        db_paths << p.first << "," << p.second;
+
+      }
       kv_options["db_paths"] = db_paths.str();
-      dout(10) << __func__ << " set db_paths to " << db_paths.str() << dendl;
+      dout(1) << __func__ << " set db_paths to " << db_paths.str() << dendl;
     }
 
     if (create) {
-      env->CreateDir(fn);
+      for (auto& p : paths) {
+        env->CreateDir(p.first);
+      }
+      // Selectors don't provide wal path so far hence create explicitly
       env->CreateDir(fn + ".wal");
-      env->CreateDir(fn + ".slow");
     } else {
       std::vector<std::string> res;
       // check for dir presence
@@ -14605,4 +14641,124 @@ unsigned BlueStoreRepairer::apply(KeyValueDB* db)
 }
 
 // =======================================================
+// RocksDBBlueFSVolumeSelector
 
+uint8_t RocksDBBlueFSVolumeSelector::select_prefer_bdev(void* h) {
+  ceph_assert(h != nullptr);
+  uint64_t hint = reinterpret_cast<uint64_t>(h);
+  uint8_t res;
+  switch (hint) {
+  case LEVEL_SLOW:
+    res = BlueFS::BDEV_SLOW;
+    if (db_avail4slow > 0) {
+      // considering statically available db space vs.
+      // - observed maximums on DB dev for DB/WAL/UNSORTED data
+      // - observed maximum spillovers
+      uint64_t max_db_use = 0; // max db usage we potentially observed
+      max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_DB, LEVEL_WAL - LEVEL_FIRST);
+      max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_DB, LEVEL_DB - LEVEL_FIRST);
+      // this could go to db hence using it in the estimation
+      max_db_use += per_level_per_dev_max.at(BlueFS::BDEV_SLOW, LEVEL_DB - LEVEL_FIRST);
+
+      auto db_total = l_totals[LEVEL_DB - LEVEL_FIRST];
+      uint64_t avail = min(
+        db_avail4slow,
+        max_db_use < db_total ? db_total - max_db_use : 0);
+
+      // considering current DB dev usage for SLOW data
+      if (avail > per_level_per_dev_usage.at(BlueFS::BDEV_DB, LEVEL_SLOW - LEVEL_FIRST)) {
+        res = BlueFS::BDEV_DB;
+      }
+    }
+    break;
+  case LEVEL_WAL:
+    res = BlueFS::BDEV_WAL;
+    break;
+  case LEVEL_DB:
+  default:
+    res = BlueFS::BDEV_DB;
+    break;
+  }
+  return res;
+}
+
+void RocksDBBlueFSVolumeSelector::get_paths(const std::string& base, paths& res) const
+{
+  res.emplace_back(base, l_totals[LEVEL_DB - LEVEL_FIRST]);
+  res.emplace_back(base + ".slow", l_totals[LEVEL_SLOW - LEVEL_FIRST]);
+}
+
+void* RocksDBBlueFSVolumeSelector::get_hint_by_dir(const string& dirname) const {
+  uint8_t res = LEVEL_DB;
+  if (dirname.length() > 5) {
+    // the "db.slow" and "db.wal" directory names are hard-coded at
+    // match up with bluestore.  the slow device is always the second
+    // one (when a dedicated block.db device is present and used at
+    // bdev 0).  the wal device is always last.
+    if (boost::algorithm::ends_with(dirname, ".slow")) {
+      res = LEVEL_SLOW;
+    }
+    else if (boost::algorithm::ends_with(dirname, ".wal")) {
+      res = LEVEL_WAL;
+    }
+  }
+  return reinterpret_cast<void*>(res);
+}
+
+#undef dout_prefix
+#define dout_prefix *_dout << "RocksDBBlueFSVolumeSelector: "
+
+void RocksDBBlueFSVolumeSelector::dump(CephContext* c) {
+  stringstream matrix_output;
+  auto max_x = per_level_per_dev_usage.get_max_x();
+  auto max_y = per_level_per_dev_usage.get_max_y();
+  matrix_output << "LEVEL, WAL, DB, SLOW, ****, ****, REAL" << std::endl;
+  for (size_t l = 0; l < max_y; l++) {
+    switch (l + LEVEL_FIRST) {
+    case LEVEL_WAL:
+      matrix_output << "WAL "; break;
+    case LEVEL_DB:
+      matrix_output << "DB "; break;
+    case LEVEL_SLOW:
+      matrix_output << "SLOW" << " "; break;
+    case LEVEL_MAX:
+      matrix_output << "TOTALS "; break;
+    }
+    for (size_t d = 0; d < max_x - 1; d++) {
+      matrix_output << per_level_per_dev_usage.at(d, l) << ",";
+    }
+    matrix_output << per_level_per_dev_usage.at(max_x - 1, l) << std::endl;
+  }
+  ceph_assert(max_x == per_level_per_dev_max.get_max_x());
+  ceph_assert(max_y == per_level_per_dev_max.get_max_y());
+  matrix_output << "MAXIMUMS:" << std::endl;
+  for (size_t l = 0; l < max_y; l++) {
+    switch (l + LEVEL_FIRST) {
+    case LEVEL_WAL:
+      matrix_output << "WAL "; break;
+    case LEVEL_DB:
+      matrix_output << "DB "; break;
+    case LEVEL_SLOW:
+      matrix_output << "SLOW" << " "; break;
+    case LEVEL_MAX:
+      matrix_output << "TOTALS "; break;
+    }
+    for (size_t d = 0; d < max_x - 1; d++) {
+      matrix_output << per_level_per_dev_max.at(d, l) << ",";
+    }
+    matrix_output << per_level_per_dev_max.at(max_x - 1, l);
+    if (l < max_y - 1) {
+      matrix_output << std::endl;
+    }
+  }
+  ldout(c, 1)
+    << "wal_total:" << l_totals[LEVEL_WAL - LEVEL_FIRST]
+    << ", db_total:" << l_totals[LEVEL_DB - LEVEL_FIRST]
+    << ", slow_total:" << l_totals[LEVEL_SLOW - LEVEL_FIRST]
+    << ", db_avail:" << db_avail4slow
+    << " usage matrix:" << std::endl
+    << matrix_output.str()
+    << dendl;
+}
+
+// =======================================================

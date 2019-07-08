@@ -90,31 +90,6 @@ public:
   virtual void dump(CephContext* cct) = 0;
 };
 class BlueFS;
-class OriginalVolumeSelector : public BlueFSVolumeSelector {
-  BlueFS* bluefs = nullptr;
-public:
-  OriginalVolumeSelector(BlueFS* _bluefs) : bluefs(_bluefs) {}
-
-  void* get_hint_by_device(uint8_t dev) const override;
-  void* get_hint_by_dir(const string& dirname) const override;
-
-  void add_usage(void* file_hint, const bluefs_fnode_t& fnode) override {
-    // do nothing
-  }
-  void sub_usage(void* file_hint, const bluefs_fnode_t& fnode) override {
-    // do nothing
-  }
-  void add_usage(void* file_hint, uint64_t fsize) override {
-    // do nothing
-  }
-  void sub_usage(void* file_hint, uint64_t fsize) override {
-    // do nothing
-  }
-  uint8_t select_prefer_bdev(void* hint) override;
-  void get_paths(const std::string& base, paths& res) const override;
-  void dump(CephContext* cct) override;
-
-};
 
 class BlueFS {
 public:
@@ -607,6 +582,43 @@ public:
     return _truncate(h, offset);
   }
 
+};
+
+class OriginalVolumeSelector : public BlueFSVolumeSelector {
+  uint64_t wal_total;
+  uint64_t db_total;
+  uint64_t slow_total;
+
+public:
+  OriginalVolumeSelector(
+    uint64_t _wal_total,
+    uint64_t _db_total,
+    uint64_t _slow_total)
+    : wal_total(_wal_total), db_total(_db_total), slow_total(_slow_total) {}
+
+  void* get_hint_by_device(uint8_t dev) const override;
+  void* get_hint_by_dir(const string& dirname) const override;
+
+  void add_usage(void* hint, const bluefs_fnode_t& fnode) override {
+    // do nothing
+    return;
+  }
+  void sub_usage(void* hint, const bluefs_fnode_t& fnode) override {
+    // do nothing
+    return;
+  }
+  void add_usage(void* hint, uint64_t fsize) override {
+    // do nothing
+    return;
+  }
+  void sub_usage(void* hint, uint64_t fsize) override {
+    // do nothing
+    return;
+  }
+
+  uint8_t select_prefer_bdev(void* hint) override;
+  void get_paths(const std::string& base, paths& res) const override;
+  void dump(CephContext* cct) override;
 };
 
 #endif

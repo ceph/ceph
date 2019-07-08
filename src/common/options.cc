@@ -4935,6 +4935,17 @@ std::vector<Option> get_global_options() {
     .set_default(60)
     .set_description("log collection list operation if it's slower than this age (seconds)"),
 
+    Option("bluestore_volume_selection_policy", Option::TYPE_STR, Option::LEVEL_DEV)
+    .set_default("rocksdb_original")
+    .set_enum_allowed({ "rocksdb_original", "use_some_extra" })
+    .set_description("Determines bluefs volume selection policy")
+    .set_long_description("Determines bluefs volume selection policy. 'use_some_extra' policy allows to override RocksDB level granularity and put high level's data to faster device even when the level doesn't completely fit there"),
+
+    Option("bluestore_volume_selection_reserved_factor", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+      .set_flag(Option::FLAG_STARTUP)
+      .set_default(2.0)
+      .set_description("DB level size multiplier. Determines amount of space at DB device to bar from the usage when 'use some extra' policy is in action. Reserved size is determined as sum(L_max_size[0], L_max_size[L-1]) + L_max_size[L] * this_factor"),
+
     // -----------------------------------------
     // kstore
 
