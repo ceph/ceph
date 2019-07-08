@@ -343,8 +343,7 @@ public:
 			       bool finish_mdr);
 
   void evict_cap_revoke_non_responders();
-  void handle_conf_change(const ConfigProxy& conf,
-                          const std::set <std::string> &changed);
+  void handle_conf_change(const std::set<std::string>& changed);
 
 private:
   void reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &reply);

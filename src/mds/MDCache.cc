@@ -198,9 +198,7 @@ MDCache::~MDCache()
   }
 }
 
-void MDCache::handle_conf_change(const ConfigProxy& conf,
-                                 const std::set <std::string> &changed,
-                                 const MDSMap &mdsmap)
+void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDSMap& mdsmap)
 {
   if (changed.count("mds_cache_size"))
     cache_inode_limit = g_conf().get_val<int64_t>("mds_cache_size");
@@ -216,8 +214,8 @@ void MDCache::handle_conf_change(const ConfigProxy& conf,
     trim_counter = DecayCounter(g_conf().get_val<double>("mds_cache_trim_decay_rate"));
   }
 
-  migrator->handle_conf_change(conf, changed, mdsmap);
-  mds->balancer->handle_conf_change(conf, changed, mdsmap);
+  migrator->handle_conf_change(changed, mdsmap);
+  mds->balancer->handle_conf_change(changed, mdsmap);
 }
 
 void MDCache::log_stat()
