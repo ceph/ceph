@@ -102,9 +102,7 @@ public:
   // -- cons --
   Migrator(MDSRank *m, MDCache *c);
 
-  void handle_conf_change(const ConfigProxy& conf,
-                          const std::set <std::string> &changed,
-                          const MDSMap &mds_map);
+  void handle_conf_change(const std::set<std::string>& changed, const MDSMap& mds_map);
 
 protected:
   struct export_base_t {

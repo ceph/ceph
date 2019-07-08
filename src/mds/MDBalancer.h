@@ -44,9 +44,7 @@ public:
 
   MDBalancer(MDSRank *m, Messenger *msgr, MonClient *monc);
 
-  void handle_conf_change(const ConfigProxy& conf,
-                          const std::set <std::string> &changed,
-                          const MDSMap &mds_map);
+  void handle_conf_change(const std::set<std::string>& changed, const MDSMap& mds_map);
 
   int proc_message(const Message::const_ref &m);
 
