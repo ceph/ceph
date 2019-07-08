@@ -72,7 +72,8 @@ function(distutils_add_cython_module target name src)
     message(FATAL_ERROR "Unable to tell python extension's suffix: ${error}")
   endif()
   set(output_dir "${CYTHON_MODULE_DIR}/lib.${PYTHON${PYTHON_VERSION}_VERSION_MAJOR}")
-  add_custom_target(${target} ALL
+  add_custom_command(
+    OUTPUT ${output_dir}/${name}${ext_suffix}
     COMMAND
     env
     CC="${PY_CC}"
@@ -85,9 +86,10 @@ function(distutils_add_cython_module target name src)
     ${PYTHON${PYTHON_VERSION}_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py
     build --verbose --build-base ${CYTHON_MODULE_DIR}
     --build-platlib ${output_dir}
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    BUILD_BYPRODUCTS ${output_dir}/${ext_suffix}
-    DEPENDS ${src})
+    DEPENDS ${src}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+  add_custom_target(${target} ALL
+    DEPENDS ${output_dir}/${name}${ext_suffix})
 endfunction(distutils_add_cython_module)
 
 function(distutils_install_cython_module name)
