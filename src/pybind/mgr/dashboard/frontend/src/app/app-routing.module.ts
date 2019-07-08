@@ -13,7 +13,9 @@ import { MgrModuleFormComponent } from './ceph/cluster/mgr-modules/mgr-module-fo
 import { MgrModuleListComponent } from './ceph/cluster/mgr-modules/mgr-module-list/mgr-module-list.component';
 import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
 import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component';
-import { PrometheusListComponent } from './ceph/cluster/prometheus/prometheus-list/prometheus-list.component';
+import { AlertListComponent } from './ceph/cluster/prometheus/alert-list/alert-list.component';
+import { SilenceFormComponent } from './ceph/cluster/prometheus/silence-form/silence-form.component';
+import { SilenceListComponent } from './ceph/cluster/prometheus/silence-list/silence-list.component';
 import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
 import { Nfs501Component } from './ceph/nfs/nfs-501/nfs-501.component';
 import { NfsFormComponent } from './ceph/nfs/nfs-form/nfs-form.component';
@@ -109,9 +111,37 @@ const routes: Routes = [
   },
   {
     path: 'alerts',
-    component: PrometheusListComponent,
+    component: AlertListComponent,
     canActivate: [AuthGuardService],
     data: { breadcrumbs: 'Cluster/Alerts' }
+  },
+  {
+    path: 'silence',
+    canActivate: [AuthGuardService],
+    data: { breadcrumbs: 'Cluster/Silences' },
+    children: [
+      { path: '', component: SilenceListComponent },
+      {
+        path: URLVerbs.CREATE,
+        component: SilenceFormComponent,
+        data: { breadcrumbs: ActionLabels.CREATE }
+      },
+      {
+        path: `${URLVerbs.CREATE}/:id`,
+        component: SilenceFormComponent,
+        data: { breadcrumbs: ActionLabels.CREATE }
+      },
+      {
+        path: `${URLVerbs.EDIT}/:id`,
+        component: SilenceFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
+      },
+      {
+        path: `${URLVerbs.RECREATE}/:id`,
+        component: SilenceFormComponent,
+        data: { breadcrumbs: ActionLabels.RECREATE }
+      }
+    ]
   },
   {
     path: 'perf_counters/:type/:id',

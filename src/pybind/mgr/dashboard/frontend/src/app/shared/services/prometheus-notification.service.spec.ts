@@ -2,7 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
 import { ToastModule, ToastsManager } from 'ng2-toastr';
-import { of } from 'rxjs';
+import { of, throwError } from 'rxjs';
 
 import {
   configureTestBed,
@@ -12,7 +12,7 @@ import {
 import { PrometheusService } from '../api/prometheus.service';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
-import { PrometheusNotification } from '../models/prometheus-alerts';
+import { AlertmanagerNotification } from '../models/prometheus-alerts';
 import { SharedModule } from '../shared.module';
 import { NotificationService } from './notification.service';
 import { PrometheusAlertFormatter } from './prometheus-alert-formatter';
@@ -21,10 +21,11 @@ import { PrometheusNotificationService } from './prometheus-notification.service
 describe('PrometheusNotificationService', () => {
   let service: PrometheusNotificationService;
   let notificationService: NotificationService;
-  let notifications: PrometheusNotification[];
+  let notifications: AlertmanagerNotification[];
   let prometheusService: PrometheusService;
   let prometheus: PrometheusHelper;
   let shown: CdNotificationConfig[];
+  let getNotificationSinceMock: Function;
 
   const toastFakeService = {
     error: () => true,
@@ -56,7 +57,8 @@ describe('PrometheusNotificationService', () => {
     spyOn(window, 'setTimeout').and.callFake((fn: Function) => fn());
 
     prometheusService = TestBed.get(PrometheusService);
-    spyOn(prometheusService, 'getNotifications').and.callFake(() => of(notifications));
+    getNotificationSinceMock = () => of(notifications);
+    spyOn(prometheusService, 'getNotifications').and.callFake(() => getNotificationSinceMock());
 
     notifications = [prometheus.createNotification()];
   });
@@ -90,7 +92,17 @@ describe('PrometheusNotificationService', () => {
 
   it('notifies not on the first call', () => {
     service.refresh();
-    expect(notificationService.show).not.toHaveBeenCalled();
+    expect(notificationService.save).not.toHaveBeenCalled();
+  });
+
+  it('notifies should not call the api again if it failed once', () => {
+    getNotificationSinceMock = () => throwError(new Error('Test error'));
+    service.refresh();
+    expect(prometheusService.getNotifications).toHaveBeenCalledTimes(1);
+    expect(service['backendFailure']).toBe(true);
+    service.refresh();
+    expect(prometheusService.getNotifications).toHaveBeenCalledTimes(1);
+    service['backendFailure'] = false;
   });
 
   describe('looks of fired notifications', () => {
@@ -183,19 +195,20 @@ describe('PrometheusNotificationService', () => {
 
     it('only shows toasties if it got new data', () => {
       service.refresh();
-      expect(notificationService.show).toHaveBeenCalledTimes(1);
+      expect(notificationService.save).toHaveBeenCalledTimes(1);
       notifications = [];
       service.refresh();
       service.refresh();
-      expect(notificationService.show).toHaveBeenCalledTimes(1);
+      expect(notificationService.save).toHaveBeenCalledTimes(1);
       notifications = [prometheus.createNotification()];
       service.refresh();
-      expect(notificationService.show).toHaveBeenCalledTimes(2);
+      expect(notificationService.save).toHaveBeenCalledTimes(2);
       service.refresh();
-      expect(notificationService.show).toHaveBeenCalledTimes(3);
+      expect(notificationService.save).toHaveBeenCalledTimes(3);
     });
 
     it('filters out duplicated and non user visible changes in notifications', fakeAsync(() => {
+      asyncRefresh();
       // Return 2 notifications with 3 duplicated alerts and 1 non visible changed alert
       const secondAlert = prometheus.createNotificationAlert('alert0');
       secondAlert.endsAt = new Date().toString(); // Should be ignored as it's not visible

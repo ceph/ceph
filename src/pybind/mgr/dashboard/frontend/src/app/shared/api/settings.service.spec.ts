@@ -8,6 +8,9 @@ describe('SettingsService', () => {
   let service: SettingsService;
   let httpTesting: HttpTestingController;
 
+  const exampleUrl = 'api/settings/something';
+  const exampleValue = 'http://localhost:3000';
+
   configureTestBed(
     {
       providers: [SettingsService],
@@ -60,15 +63,19 @@ describe('SettingsService', () => {
   });
 
   describe('isSettingConfigured', () => {
-    const exampleUrl = 'api/settings/something';
-    const exampleValue = 'http://localhost:3000';
     let increment: number;
 
     const testConfig = (url, value) => {
-      service.ifSettingConfigured(url, (setValue) => {
-        expect(setValue).toBe(value);
-        increment++;
-      });
+      service.ifSettingConfigured(
+        url,
+        (setValue) => {
+          expect(setValue).toBe(value);
+          increment++;
+        },
+        () => {
+          increment--;
+        }
+      );
     };
 
     const expectSettingsApiCall = (url: string, value: object, isSet: string) => {
@@ -77,7 +84,7 @@ describe('SettingsService', () => {
       expect(req.request.method).toBe('GET');
       req.flush(value);
       tick();
-      expect(increment).toBe(isSet !== '' ? 1 : 0);
+      expect(increment).toBe(isSet !== '' ? 1 : -1);
       expect(service['settings'][url]).toBe(isSet);
     };
 
@@ -111,5 +118,11 @@ describe('SettingsService', () => {
       httpTesting.expectNone(exampleUrl);
       expect(increment).toBe(2);
     }));
+  });
+
+  it('should disable a set setting', () => {
+    service['settings'] = { [exampleUrl]: exampleValue };
+    service.disableSetting(exampleUrl);
+    expect(service['settings']).toEqual({ [exampleUrl]: '' });
   });
 });

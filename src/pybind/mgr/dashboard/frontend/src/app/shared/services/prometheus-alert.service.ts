@@ -3,7 +3,7 @@ import { Injectable } from '@angular/core';
 import * as _ from 'lodash';
 
 import { PrometheusService } from '../api/prometheus.service';
-import { PrometheusAlert, PrometheusCustomAlert } from '../models/prometheus-alerts';
+import { AlertmanagerAlert, PrometheusCustomAlert } from '../models/prometheus-alerts';
 import { PrometheusAlertFormatter } from './prometheus-alert-formatter';
 
 @Injectable({
@@ -11,8 +11,7 @@ import { PrometheusAlertFormatter } from './prometheus-alert-formatter';
 })
 export class PrometheusAlertService {
   private canAlertsBeNotified = false;
-  private connected = true;
-  alerts: PrometheusAlert[] = [];
+  alerts: AlertmanagerAlert[] = [];
 
   constructor(
     private alertFormatter: PrometheusAlertFormatter,
@@ -20,24 +19,19 @@ export class PrometheusAlertService {
   ) {}
 
   refresh() {
-    this.prometheusService.ifAlertmanagerConfigured((url) => {
-      if (this.connected) {
-        this.prometheusService.list().subscribe(
-          (alerts) => this.handleAlerts(alerts),
-          (resp) => {
-            const errorMsg = `Please check if <a target="_blank" href="${url}">Prometheus Alertmanager</a> is still running`;
-            resp['application'] = 'Prometheus';
-            if (resp.status === 500) {
-              this.connected = false;
-              resp.error.detail = errorMsg;
-            }
+    this.prometheusService.ifAlertmanagerConfigured(() => {
+      this.prometheusService.getAlerts().subscribe(
+        (alerts) => this.handleAlerts(alerts),
+        (resp) => {
+          if ([404, 504].includes(resp.status)) {
+            this.prometheusService.disableAlertmanagerConfig();
           }
-        );
-      }
+        }
+      );
     });
   }
 
-  private handleAlerts(alerts: PrometheusAlert[]) {
+  private handleAlerts(alerts: AlertmanagerAlert[]) {
     if (this.canAlertsBeNotified) {
       this.notifyOnAlertChanges(alerts, this.alerts);
     }
@@ -45,7 +39,7 @@ export class PrometheusAlertService {
     this.canAlertsBeNotified = true;
   }
 
-  private notifyOnAlertChanges(alerts: PrometheusAlert[], oldAlerts: PrometheusAlert[]) {
+  private notifyOnAlertChanges(alerts: AlertmanagerAlert[], oldAlerts: AlertmanagerAlert[]) {
     const changedAlerts = this.getChangedAlerts(
       this.alertFormatter.convertToCustomAlerts(alerts),
       this.alertFormatter.convertToCustomAlerts(oldAlerts)

@@ -12,7 +12,7 @@ import {
 import { PrometheusService } from '../api/prometheus.service';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
-import { PrometheusAlert } from '../models/prometheus-alerts';
+import { AlertmanagerAlert } from '../models/prometheus-alerts';
 import { SharedModule } from '../shared.module';
 import { NotificationService } from './notification.service';
 import { PrometheusAlertFormatter } from './prometheus-alert-formatter';
@@ -21,7 +21,7 @@ import { PrometheusAlertService } from './prometheus-alert.service';
 describe('PrometheusAlertService', () => {
   let service: PrometheusAlertService;
   let notificationService: NotificationService;
-  let alerts: PrometheusAlert[];
+  let alerts: AlertmanagerAlert[];
   let prometheusService: PrometheusService;
   let prometheus: PrometheusHelper;
 
@@ -38,20 +38,30 @@ describe('PrometheusAlertService', () => {
     expect(TestBed.get(PrometheusAlertService)).toBeTruthy();
   });
 
-  it('tests error case ', () => {
-    const resp = { status: 500, error: {} };
-    service = new PrometheusAlertService(null, <PrometheusService>{
-      ifAlertmanagerConfigured: (fn) => fn(),
-      list: () => ({ subscribe: (_fn, err) => err(resp) })
+  describe('test error cases', () => {
+    const expectDisabling = (status, expectation) => {
+      let disabledSetting = false;
+      const resp = { status: status, error: {} };
+      service = new PrometheusAlertService(null, ({
+        ifAlertmanagerConfigured: (fn) => fn(),
+        getAlerts: () => ({ subscribe: (_fn, err) => err(resp) }),
+        disableAlertmanagerConfig: () => (disabledSetting = true)
+      } as object) as PrometheusService);
+      service.refresh();
+      expect(disabledSetting).toBe(expectation);
+    };
+
+    it('disables on 504 error which is thrown if the mgr failed', () => {
+      expectDisabling(504, true);
     });
 
-    expect(service['connected']).toBe(true);
-    service.refresh();
-    expect(service['connected']).toBe(false);
-    expect(resp['application']).toBe('Prometheus');
-    expect(resp.error['detail']).toBe(
-      'Please check if <a target="_blank" href="undefined">Prometheus Alertmanager</a> is still running'
-    );
+    it('disables on 404 error which is thrown if the external api cannot be reached', () => {
+      expectDisabling(404, true);
+    });
+
+    it('does not disable on 400 error which is thrown if the external api receives unexpected data', () => {
+      expectDisabling(400, false);
+    });
   });
 
   describe('refresh', () => {
@@ -67,7 +77,7 @@ describe('PrometheusAlertService', () => {
 
       prometheusService = TestBed.get(PrometheusService);
       spyOn(prometheusService, 'ifAlertmanagerConfigured').and.callFake((fn) => fn());
-      spyOn(prometheusService, 'list').and.callFake(() => of(alerts));
+      spyOn(prometheusService, 'getAlerts').and.callFake(() => of(alerts));
 
       alerts = [prometheus.createAlert('alert0')];
       service.refresh();

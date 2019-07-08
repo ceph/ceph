@@ -1,20 +1,45 @@
-class CommonAlert {
-  labels: {
-    alertname: string;
-    instance: string;
-    job: string;
-    severity: string;
-  };
-  annotations: {
-    description: string;
-    summary: string;
-  };
-  startsAt: string;
-  endsAt: string;
+export class PrometheusAlertLabels {
+  alertname: string;
+  instance: string;
+  job: string;
+  severity: string;
+}
+
+class Annotations {
+  description: string;
+  summary: string;
+}
+
+class CommonAlertmanagerAlert {
+  labels: PrometheusAlertLabels;
+  annotations: Annotations;
+  startsAt: string; // Date string
+  endsAt: string; // Date string
   generatorURL: string;
 }
 
-export class PrometheusAlert extends CommonAlert {
+class PrometheusAlert {
+  labels: PrometheusAlertLabels;
+  annotations: Annotations;
+  state: 'pending' | 'firing';
+  activeAt: string; // Date string
+  value: number;
+}
+
+export class PrometheusRule {
+  name: string; // => PrometheusAlertLabels.alertname
+  query: string;
+  duration: 10;
+  labels: {
+    severity: string; // => PrometheusAlertLabels.severity
+  };
+  annotations: Annotations;
+  alerts: PrometheusAlert[]; // Shows only active alerts
+  health: string;
+  type: string;
+}
+
+export class AlertmanagerAlert extends CommonAlertmanagerAlert {
   status: {
     state: 'unprocessed' | 'active' | 'suppressed';
     silencedBy: null | string[];
@@ -24,18 +49,18 @@ export class PrometheusAlert extends CommonAlert {
   fingerprint: string;
 }
 
-export class PrometheusNotificationAlert extends CommonAlert {
+export class AlertmanagerNotificationAlert extends CommonAlertmanagerAlert {
   status: 'firing' | 'resolved';
 }
 
-export class PrometheusNotification {
+export class AlertmanagerNotification {
   status: 'firing' | 'resolved';
   groupLabels: object;
   commonAnnotations: object;
   groupKey: string;
   notified: string;
   id: string;
-  alerts: PrometheusNotificationAlert[];
+  alerts: AlertmanagerNotificationAlert[];
   version: string;
   receiver: string;
   externalURL: string;
