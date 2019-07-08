@@ -173,8 +173,12 @@ static int get_obj_vals(cls_method_context_t hctx, const string& start, const st
   auto upper = std::lower_bound(lower, pkeys->end(), new_start, comp);
   pkeys->erase(lower, upper);
 
-  if (num_entries == (int)pkeys->size())
+  if (num_entries == (int)pkeys->size() || !(*pmore))
     return 0;
+
+  if (pkeys->size() && new_start < pkeys->rbegin()->first) {
+    new_start = pkeys->rbegin()->first;
+  }
 
   map<string, bufferlist> new_keys;
 
