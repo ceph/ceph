@@ -18,6 +18,7 @@ from mgr_module import MgrModule, PersistentStoreDict
 from mgr_util import format_bytes
 
 try:
+    from ceph.deployment.drive_group import DriveGroupSpec
     from typing import TypeVar, Generic, List, Optional, Union, Tuple, Iterator
 
     T = TypeVar('T')

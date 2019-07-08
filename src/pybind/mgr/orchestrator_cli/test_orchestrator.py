@@ -2,8 +2,8 @@ from __future__ import absolute_import
 import pytest
 
 
-from orchestrator import DriveGroupSpec, DeviceSelection, DriveGroupValidationError, \
-    InventoryDevice, ReadCompletion, raise_if_exception
+from ceph.deployment.drive_group import DriveGroupSpec, DeviceSelection, DriveGroupValidationError
+from orchestrator import InventoryDevice, ReadCompletion, raise_if_exception
 
 
 def test_DriveGroup():
