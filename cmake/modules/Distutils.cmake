@@ -33,7 +33,7 @@ function(distutils_install_module name)
     WORKING_DIRECTORY \"${CMAKE_CURRENT_BINARY_DIR}\")")
 endfunction(distutils_install_module)
 
-function(distutils_add_cython_module name src)
+function(distutils_add_cython_module target name src)
   get_property(compiler_launcher GLOBAL PROPERTY RULE_LAUNCH_COMPILE)
   get_property(link_launcher GLOBAL PROPERTY RULE_LAUNCH_LINK)
   # When using ccache, CMAKE_C_COMPILER is ccache executable absolute path
@@ -56,7 +56,7 @@ function(distutils_add_cython_module name src)
   set(PY_CC ${compiler_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1} ${cflags})
   set(PY_CXX ${compiler_launcher} ${CMAKE_CXX_COMPILER} ${cxx_compiler_arg1})
   set(PY_LDSHARED ${link_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1} "-shared")
-  add_custom_target(${name} ALL
+  add_custom_target(${target} ALL
     COMMAND
     env
     CC="${PY_CC}"
