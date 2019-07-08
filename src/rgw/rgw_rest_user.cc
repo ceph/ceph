@@ -341,7 +341,7 @@ void RGWOp_User_Remove::execute()
 
   op_state.set_purge_data(purge_data);
 
-  http_ret = RGWUserAdminOp_User::remove(store, op_state, flusher);
+  http_ret = RGWUserAdminOp_User::remove(store, op_state, flusher, s->yield);
 }
 
 class RGWOp_Subuser_Create : public RGWRESTOp {

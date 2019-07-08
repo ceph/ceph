@@ -291,7 +291,7 @@ int abort_multipart_upload(RGWRados *store, CephContext *cct,
   }
 
   // and also remove the metadata obj
-  ret = del_op.delete_obj();
+  ret = del_op.delete_obj(null_yield);
   if (ret < 0) {
     ldout(cct, 20) << __func__ << ": del_op.delete_obj returned " <<
       ret << dendl;
@@ -316,7 +316,7 @@ int list_bucket_multiparts(RGWRados *store, RGWBucketInfo& bucket_info,
   list_op.params.ns = RGW_OBJ_NS_MULTIPART;
   list_op.params.filter = &mp_filter;
 
-  return(list_op.list_objects(max_uploads, objs, common_prefixes, is_truncated));
+  return(list_op.list_objects(max_uploads, objs, common_prefixes, is_truncated, null_yield));
 }
 
 int abort_bucket_multiparts(RGWRados *store, CephContext *cct, RGWBucketInfo& bucket_info,

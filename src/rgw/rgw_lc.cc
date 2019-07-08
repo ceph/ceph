@@ -325,7 +325,7 @@ static bool pass_object_lock_check(RGWRados *store, RGWBucketInfo& bucket_info, 
   RGWRados::Object::Read read_op(&op_target);
   map<string, bufferlist> attrs;
   read_op.params.attrs = &attrs;
-  int ret = read_op.prepare();
+  int ret = read_op.prepare(null_yield);
   if (ret < 0) {
     if (ret == -ENOENT) {
       return true;
@@ -389,7 +389,7 @@ int RGWLC::handle_multipart_expiration(
     do {
       objs.clear();
       list_op.params.marker = list_op.get_next_marker();
-      ret = list_op.list_objects(1000, &objs, NULL, &is_truncated);
+      ret = list_op.list_objects(1000, &objs, NULL, &is_truncated, null_yield);
       if (ret < 0) {
           if (ret == (-ENOENT))
             return 0;
@@ -425,7 +425,7 @@ static int read_obj_tags(RGWRados *store, RGWBucketInfo& bucket_info, rgw_obj& o
   RGWRados::Object op_target(store, bucket_info, ctx, obj);
   RGWRados::Object::Read read_op(&op_target);
 
-  return read_op.get_attr(RGW_ATTR_TAGS, tags_bl);
+  return read_op.get_attr(RGW_ATTR_TAGS, tags_bl, null_yield);
 }
 
 static bool is_valid_op(const lc_op& op)
@@ -490,7 +490,7 @@ public:
   }
 
   int fetch() {
-    int ret = list_op.list_objects(1000, &objs, NULL, &is_truncated);
+    int ret = list_op.list_objects(1000, &objs, NULL, &is_truncated, null_yield);
     if (ret < 0) {
       return ret;
     }
@@ -607,7 +607,7 @@ static int remove_expired_obj(lc_op_ctx& oc, bool remove_indeed)
   del_op.params.obj_owner = obj_owner;
   del_op.params.unmod_since = meta.mtime;
 
-  return del_op.delete_obj();
+  return del_op.delete_obj(null_yield);
 }
 
 class LCOpAction {
@@ -877,7 +877,7 @@ public:
     }
 
     int r = oc.store->transition_obj(oc.rctx, oc.bucket_info, oc.obj,
-                                     target_placement, o.meta.mtime, o.versioned_epoch, oc.dpp);
+                                     target_placement, o.meta.mtime, o.versioned_epoch, oc.dpp, null_yield);
     if (r < 0) {
       ldpp_dout(oc.dpp, 0) << "ERROR: failed to transition obj (r=" << r << ")" << dendl;
       return r;
