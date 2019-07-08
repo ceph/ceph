@@ -6,9 +6,9 @@ import { Icons } from '../../shared/enum/icons.enum';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
 import {
-  PrometheusAlert,
-  PrometheusCustomAlert,
-  PrometheusNotificationAlert
+  AlertmanagerAlert,
+  AlertmanagerNotificationAlert,
+  PrometheusCustomAlert
 } from '../models/prometheus-alerts';
 import { NotificationService } from './notification.service';
 
@@ -23,18 +23,18 @@ export class PrometheusAlertFormatter {
   }
 
   convertToCustomAlerts(
-    alerts: (PrometheusNotificationAlert | PrometheusAlert)[]
+    alerts: (AlertmanagerNotificationAlert | AlertmanagerAlert)[]
   ): PrometheusCustomAlert[] {
     return _.uniqWith(
       alerts.map((alert) => {
         return {
           status: _.isObject(alert.status)
-            ? (alert as PrometheusAlert).status.state
-            : this.getPrometheusNotificationStatus(alert as PrometheusNotificationAlert),
+            ? (alert as AlertmanagerAlert).status.state
+            : this.getPrometheusNotificationStatus(alert as AlertmanagerNotificationAlert),
           name: alert.labels.alertname,
           url: alert.generatorURL,
           summary: alert.annotations.summary,
-          fingerprint: _.isObject(alert.status) && (alert as PrometheusAlert).fingerprint
+          fingerprint: _.isObject(alert.status) && (alert as AlertmanagerAlert).fingerprint
         };
       }),
       _.isEqual
@@ -44,7 +44,7 @@ export class PrometheusAlertFormatter {
   /*
    * This is needed because NotificationAlerts don't use 'active'
    */
-  private getPrometheusNotificationStatus(alert: PrometheusNotificationAlert): string {
+  private getPrometheusNotificationStatus(alert: AlertmanagerNotificationAlert): string {
     const state = alert.status;
     return state === 'firing' ? 'active' : state;
   }
