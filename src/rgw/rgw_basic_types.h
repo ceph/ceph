@@ -13,8 +13,7 @@ struct rgw_user {
   std::string id;
 
   rgw_user() {}
-  // cppcheck-suppress noExplicitConstructor
-  rgw_user(const std::string& s) {
+  explicit rgw_user(const std::string& s) {
     from_str(s);
   }
   rgw_user(const std::string& tenant, const std::string& id)
@@ -203,6 +202,7 @@ class JSONObj;
 
 void decode_json_obj(rgw_user& val, JSONObj *obj);
 void encode_json(const char *name, const rgw_user& val, Formatter *f);
+void encode_xml(const char *name, const rgw_user& val, Formatter *f);
 
 inline ostream& operator<<(ostream& out, const rgw_user &u) {
   string s;

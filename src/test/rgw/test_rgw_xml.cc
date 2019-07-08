@@ -433,3 +433,31 @@ TEST(TestDecoder, Attributes)
       expected_output_with_attributes);
 }
 
+static const char* expected_xml_output = "<Items xmlns=\"https://www.ceph.com/doc/\">"
+                             "<Item Order=\"0\"><NameAndStatus><Name>hello</Name><Status>True</Status></NameAndStatus><Value>0</Value></Item>"
+                             "<Item Order=\"1\"><NameAndStatus><Name>hello</Name><Status>False</Status></NameAndStatus><Value>1</Value></Item>"
+                             "<Item Order=\"2\"><NameAndStatus><Name>hello</Name><Status>True</Status></NameAndStatus><Value>2</Value></Item>"
+                             "<Item Order=\"3\"><NameAndStatus><Name>hello</Name><Status>False</Status></NameAndStatus><Value>3</Value></Item>"
+                             "<Item Order=\"4\"><NameAndStatus><Name>hello</Name><Status>True</Status></NameAndStatus><Value>4</Value></Item>"
+                           "</Items>";
+TEST(TestEncoder, ListWithAttrsAndNS)
+{
+  XMLFormatter f;
+  const auto array_size = 5;
+  f.open_array_section_in_ns("Items", "https://www.ceph.com/doc/");
+  for (auto i = 0; i < array_size; ++i) {
+    FormatterAttrs item_attrs("Order", std::to_string(i).c_str(), NULL);
+    f.open_object_section_with_attrs("Item", item_attrs);
+    f.open_object_section("NameAndStatus");
+    encode_xml("Name", "hello", &f);
+    encode_xml("Status", (i%2 == 0), &f);
+    f.close_section();
+    encode_xml("Value", i, &f);
+    f.close_section();
+  }
+  f.close_section();
+  std::stringstream ss;
+  f.flush(ss);
+  ASSERT_STREQ(ss.str().c_str(), expected_xml_output);
+}
+

@@ -1583,7 +1583,7 @@ RGWRESTMgr *RGWPSSyncModuleInstance::get_rest_filter(int dialect, RGWRESTMgr *or
   if (dialect != RGW_REST_S3) {
     return orig;
   }
-  return new RGWRESTMgr_PubSub_S3(orig);
+  return new RGWRESTMgr_PubSub();
 }
 
 bool RGWPSSyncModuleInstance::should_full_sync() const {

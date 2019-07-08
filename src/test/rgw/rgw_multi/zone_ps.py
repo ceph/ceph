@@ -1,6 +1,7 @@
 import logging
 import httplib
 import urllib
+import urlparse
 import hmac
 import hashlib
 import base64
@@ -127,6 +128,72 @@ class PSTopic:
     def get_list(self):
         """list all topics"""
         return self.send_request('GET', get_list=True)
+
+
+class PSTopicS3:
+    """class to set/list/get/delete a topic
+    POST ?Action=CreateTopic&Name=<topic name>&push-endpoint=<endpoint>&[<arg1>=<value1>...]]
+    POST ?Action=ListTopics
+    POST ?Action=GetTopic&TopicArn=<topic-arn>
+    POST ?Action=DeleteTopic&TopicArn=<topic-arn>
+    """
+    def __init__(self, conn, topic_name, region, endpoint_args=None):
+        self.conn = conn
+        self.topic_name = topic_name.strip()
+        assert self.topic_name
+        self.topic_arn = ''
+        self.attributes = {}
+        if endpoint_args is not None:
+            self.attributes = {nvp[0] : nvp[1] for nvp in urlparse.parse_qsl(endpoint_args, keep_blank_values=True)}
+        self.client = boto3.client('sns',
+                                   endpoint_url='http://'+conn.host+':'+str(conn.port),
+                                   aws_access_key_id=conn.aws_access_key_id,
+                                   aws_secret_access_key=conn.aws_secret_access_key,
+                                   region_name=region,
+                                   config=Config(signature_version='s3'))
+
+
+    def get_config(self):
+        """get topic info"""
+        parameters = {'Action': 'GetTopic', 'TopicArn': self.topic_arn}
+        body = urllib.urlencode(parameters)
+        string_date = strftime("%a, %d %b %Y %H:%M:%S +0000", gmtime())
+        content_type = 'application/x-www-form-urlencoded; charset=utf-8'
+        resource = '/'
+        method = 'POST'
+        string_to_sign = method + '\n\n' + content_type + '\n' + string_date + '\n' + resource
+        log.debug('StringTosign: %s', string_to_sign) 
+        signature = base64.b64encode(hmac.new(self.conn.aws_secret_access_key,
+                                     string_to_sign.encode('utf-8'),
+                                     hashlib.sha1).digest())
+        headers = {'Authorization': 'AWS '+self.conn.aws_access_key_id+':'+signature,
+                   'Date': string_date,
+                   'Host': self.conn.host+':'+str(self.conn.port),
+                   'Content-Type': content_type}
+        http_conn = httplib.HTTPConnection(self.conn.host, self.conn.port)
+        if log.getEffectiveLevel() <= 10:
+            http_conn.set_debuglevel(5)
+        http_conn.request(method, resource, body, headers)
+        response = http_conn.getresponse()
+        data = response.read()
+        status = response.status
+        http_conn.close()
+        dict_response = xmltodict.parse(data)
+        return dict_response, status
+
+    def set_config(self):
+        """set topic"""
+        result = self.client.create_topic(Name=self.topic_name, Attributes=self.attributes)
+        self.topic_arn = result['TopicArn']
+        return self.topic_arn
+
+    def del_config(self):
+        """delete topic"""
+        self.client.delete_topic(TopicArn=self.topic_arn)
+    
+    def get_list(self):
+        """list all topics"""
+        return self.client.list_topics()
 
 
 class PSNotification:

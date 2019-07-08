@@ -196,7 +196,7 @@ class DefaultStrategy : public rgw::auth::Strategy,
                              acl_strategy_t&& extra_acl_strategy,
                              const rgw::auth::RemoteApplier::AuthInfo &info) const override {
     auto apl = \
-      rgw::auth::add_3rdparty(ctl, s->account_name,
+      rgw::auth::add_3rdparty(ctl, rgw_user(s->account_name),
         rgw::auth::add_sysreq(cct, ctl, s,
           rgw::auth::RemoteApplier(cct, ctl, std::move(extra_acl_strategy), info,
                                    implicit_tenant_context,
@@ -211,7 +211,7 @@ class DefaultStrategy : public rgw::auth::Strategy,
                             const std::string& subuser,
                             const boost::optional<uint32_t>& perm_mask) const override {
     auto apl = \
-      rgw::auth::add_3rdparty(ctl, s->account_name,
+      rgw::auth::add_3rdparty(ctl, rgw_user(s->account_name),
         rgw::auth::add_sysreq(cct, ctl, s,
           rgw::auth::LocalApplier(cct, user_info, subuser, perm_mask)));
     /* TODO(rzarzynski): replace with static_ptr. */

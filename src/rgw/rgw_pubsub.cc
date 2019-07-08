@@ -116,6 +116,14 @@ void rgw_pubsub_topic::dump(Formatter *f) const
   encode_json("arn", arn, f);
 }
 
+void rgw_pubsub_topic::dump_xml(Formatter *f) const
+{
+  encode_xml("User", user, f);
+  encode_xml("Name", name, f);
+  encode_xml("EndPoint", dest, f);
+  encode_xml("TopicArn", arn, f);
+}
+
 void rgw_pubsub_topic_filter::dump(Formatter *f) const
 {
   encode_json("topic", topic, f);
@@ -144,6 +152,13 @@ void rgw_pubsub_user_topics::dump(Formatter *f) const
   }
 }
 
+void rgw_pubsub_user_topics::dump_xml(Formatter *f) const
+{
+  for (auto& t : topics) {
+    encode_xml("member", t.second.topic, f);
+  }
+}
+
 void rgw_pubsub_sub_dest::dump(Formatter *f) const
 {
   encode_json("bucket_name", bucket_name, f);
@@ -151,6 +166,13 @@ void rgw_pubsub_sub_dest::dump(Formatter *f) const
   encode_json("push_endpoint", push_endpoint, f);
   encode_json("push_endpoint_args", push_endpoint_args, f);
   encode_json("arn_topic", arn_topic, f);
+}
+
+void rgw_pubsub_sub_dest::dump_xml(Formatter *f) const
+{
+  encode_xml("EndpointAddress", push_endpoint, f);
+  encode_xml("EndpointArgs", push_endpoint_args, f);
+  encode_xml("TopicArn", arn_topic, f);
 }
 
 void rgw_pubsub_sub_config::dump(Formatter *f) const
