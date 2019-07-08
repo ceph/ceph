@@ -1019,8 +1019,7 @@ void SessionMap::hit_session(Session *session) {
   session->hit_session();
 }
 
-void SessionMap::handle_conf_change(const ConfigProxy &conf,
-                                    const std::set <std::string> &changed)
+void SessionMap::handle_conf_change(const std::set<std::string>& changed)
 {
   auto apply_to_open_sessions = [this](auto f) {
     if (auto it = by_state.find(Session::STATE_OPEN); it != by_state.end()) {
