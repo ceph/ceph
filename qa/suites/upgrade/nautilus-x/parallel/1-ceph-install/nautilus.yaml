@@ -25,6 +25,7 @@ tasks:
     conf:
       global:
         mon warn on pool no app: false
+        bluestore_warn_on_legacy_statfs: false
 - exec:
     osd.0:
       - ceph osd set-require-min-compat-client nautilus

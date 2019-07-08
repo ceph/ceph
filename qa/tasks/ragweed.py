@@ -119,7 +119,7 @@ def create_users(ctx, config, run_stages):
 
     log.info('Creating rgw users...')
     testdir = teuthology.get_testdir(ctx)
-    users = {'user regular': 'foo', 'user system': 'sysuser'}
+    users = {'user regular': 'ragweed', 'user system': 'sysuser'}
     for client in config['clients']:
         if not 'prepare' in run_stages[client]:
             # should have been prepared in a previous run
