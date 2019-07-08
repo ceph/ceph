@@ -90,7 +90,7 @@ int main(int argc, char** argv)
   po::options_description desc{"Allowed options"};
   desc.add_options()
     ("help,h", "show help message")
-    ("addr", po::value<std::string>()->default_value("v1:0.0.0.0:9010"),
+    ("addr", po::value<std::string>()->default_value("v1:127.0.0.1:9010"),
      "server address")
     ("bs", po::value<unsigned>()->default_value(0),
      "server block size")
