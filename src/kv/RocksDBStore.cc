@@ -264,6 +264,29 @@ int RocksDBStore::ParseOptionsFromString(const string &opt_str, rocksdb::Options
   return 0;
 }
 
+int RocksDBStore::ParseOptionsFromStringStatic(
+  CephContext *cct,
+  const string& opt_str,
+  rocksdb::Options& opt)
+{
+  map<string, string> str_map;
+  int r = get_str_map(opt_str, &str_map, ",\n;");
+  if (r < 0)
+    return r;
+  map<string, string>::iterator it;
+  for (it = str_map.begin(); it != str_map.end(); ++it) {
+    string this_opt = it->first + "=" + it->second;
+    rocksdb::Status status = rocksdb::GetOptionsFromString(opt, this_opt, &opt);
+    if (!status.ok()) {
+      derr << status.ToString() << dendl;
+      return -EINVAL;
+    }
+    lgeneric_dout(cct, 0) << " set rocksdb option " << it->first
+      << " = " << it->second << dendl;
+  }
+  return 0;
+}
+
 int RocksDBStore::init(string _options_str)
 {
   options_str = _options_str;
