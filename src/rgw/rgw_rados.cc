@@ -11870,31 +11870,34 @@ void RGWRados::check_pending_olh_entries(map<string, bufferlist>& pending_entrie
 
 int RGWRados::remove_olh_pending_entries(const RGWBucketInfo& bucket_info, RGWObjState& state, const rgw_obj& olh_obj, map<string, bufferlist>& pending_attrs)
 {
-  ObjectWriteOperation op;
-
-  bucket_index_guard_olh_op(state, op);
-
-  for (map<string, bufferlist>::iterator iter = pending_attrs.begin(); iter != pending_attrs.end(); ++iter) {
-    op.rmxattr(iter->first.c_str());
-  }
-
   rgw_rados_ref ref;
   int r = get_obj_head_ref(bucket_info, olh_obj, &ref);
   if (r < 0) {
     return r;
   }
 
-  /* update olh object */
-  r = ref.ioctx.operate(ref.oid, &op);
-  if (r == -ENOENT || r == -ECANCELED) {
-    /* raced with some other change, shouldn't sweat about it */
-    r = 0;
-  }
-  if (r < 0) {
-    ldout(cct, 0) << "ERROR: could not apply olh update, r=" << r << dendl;
-    return r;
-  }
+  // trim no more than 1000 entries per osd op
+  constexpr int max_entries = 1000;
 
+  auto i = pending_attrs.begin();
+  while (i != pending_attrs.end()) {
+    ObjectWriteOperation op;
+    bucket_index_guard_olh_op(state, op);
+
+    for (int n = 0; n < max_entries && i != pending_attrs.end(); ++n, ++i) {
+      op.rmxattr(i->first.c_str());
+    }
+
+    r = ref.ioctx.operate(ref.oid, &op);
+    if (r == -ENOENT || r == -ECANCELED) {
+      /* raced with some other change, shouldn't sweat about it */
+      return 0;
+    }
+    if (r < 0) {
+      ldout(cct, 0) << "ERROR: could not apply olh update, r=" << r << dendl;
+      return r;
+    }
+  }
   return 0;
 }
 
