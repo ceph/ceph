@@ -5847,12 +5847,7 @@ function TEST_corrupt_snapset_scrub_rep() {
                 ]
               }
             ],
-            "snap_context": {
-              "seq": 1,
-              "snaps": [
-                1
-              ]
-            }
+            "seq": 1
           }
         },
         {
@@ -5862,10 +5857,7 @@ function TEST_corrupt_snapset_scrub_rep() {
           "size": 21,
           "snapset": {
             "clones": [],
-            "snap_context": {
-              "seq": 0,
-              "snaps": []
-            }
+            "seq": 0
           }
         }
       ]
@@ -5925,10 +5917,7 @@ function TEST_corrupt_snapset_scrub_rep() {
           "size": 21,
           "snapset": {
             "clones": [],
-            "snap_context": {
-              "seq": 0,
-              "snaps": []
-            }
+            "seq": 0
           }
         },
         {
@@ -5947,12 +5936,7 @@ function TEST_corrupt_snapset_scrub_rep() {
                 ]
               }
             ],
-            "snap_context": {
-              "seq": 1,
-              "snaps": [
-                1
-              ]
-            }
+            "seq": 1
           }
         }
       ]
@@ -6056,7 +6040,7 @@ function TEST_request_scrub_priority() {
     done
 
     # Verify that the requested scrub ran first
-    grep "log_channel.*scrub ok" $dir/osd.${primary}.log | head -1 | sed 's/.*[[]DBG[]]//' | grep -q $pg || return 1
+    grep "log_channel.*scrub ok" $dir/osd.${primary}.log | grep -v purged_snaps | head -1 | sed 's/.*[[]DBG[]]//' | grep -q $pg || return 1
 
     return 0
 }
