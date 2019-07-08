@@ -828,9 +828,9 @@ int RGWSI_User_RADOS::cls_user_get_header(const rgw_user& user, cls_user_header 
   return rados_obj.operate(&op, &ibl, null_yield);
 }
 
-int RGWSI_User_RADOS::cls_user_get_header_async(const string& user, RGWGetUserHeader_CB *cb)
+int RGWSI_User_RADOS::cls_user_get_header_async(const string& user_str, RGWGetUserHeader_CB *cb)
 {
-  rgw_raw_obj obj = get_buckets_obj(user);
+  rgw_raw_obj obj = get_buckets_obj(rgw_user(user_str));
   auto rados_obj = svc.rados->obj(obj);
   int r = rados_obj.open();
   if (r < 0) {
@@ -855,7 +855,7 @@ int RGWSI_User_RADOS::read_stats(RGWSI_MetaBackend::Context *ctx,
   string user_str = user.to_str();
 
   cls_user_header header;
-  int r = cls_user_get_header(user_str, &header);
+  int r = cls_user_get_header(rgw_user(user_str), &header);
   if (r < 0)
     return r;
 

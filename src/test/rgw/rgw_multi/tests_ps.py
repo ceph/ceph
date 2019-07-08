@@ -19,7 +19,7 @@ from .tests import get_realm, \
     gen_bucket_name, \
     get_user, \
     get_tenant
-from .zone_ps import PSTopic, PSNotification, PSSubscription, PSNotificationS3, print_connection_info
+from .zone_ps import PSTopic, PSTopicS3, PSNotification, PSSubscription, PSNotificationS3, print_connection_info
 from multisite import User
 from nose import SkipTest
 from nose.tools import assert_not_equal, assert_equal
@@ -593,6 +593,44 @@ def test_ps_s3_notification():
     zones[0].delete_bucket(bucket_name)
 
 
+def test_ps_s3_notification_on_master():
+    """ test s3 notification set/get/delete on master """
+    zones, _  = init_env()
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+    bucket_name = gen_bucket_name()
+    # create bucket on the first of the rados zones
+    zones[0].create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+    # create s3 topic
+    topic_conf = PSTopicS3(zones[0].conn, topic_name, zonegroup.name)
+    topic_arn = topic_conf.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name,
+                        'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectCreated:*']
+                       }]
+    s3_notification_conf = PSNotificationS3(zones[0].conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # get notifications on a bucket
+    response, status = s3_notification_conf.get_config()
+    assert_equal(status/100, 2)
+    assert_equal(len(response['TopicConfigurations']), 1)
+    assert_equal(response['TopicConfigurations'][0]['TopicArn'], topic_arn)
+
+    # delete specific notifications
+    _, status = s3_notification_conf.del_config(notification=notification_name)
+    assert_equal(status/100, 2)
+
+    # cleanup
+    topic_conf.del_config()
+    # delete the bucket
+    zones[0].delete_bucket(bucket_name)
+
+
 def test_ps_topic():
     """ test set/get/delete of topic """
     _, ps_zones = init_env()
@@ -623,6 +661,33 @@ def test_ps_topic():
     assert_equal(parsed_result['Code'], 'NoSuchKey')
 
 
+def test_ps_s3_topic():
+    """ test set/get/delete of s3 topic """
+    zones, _ = init_env()
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+    bucket_name = gen_bucket_name()
+    topic_name = bucket_name+TOPIC_SUFFIX
+
+    # create topic
+    topic_conf = PSTopicS3(zones[0].conn, topic_name, zonegroup.name)
+    topic_arn = topic_conf.set_config()
+    assert_equal(topic_arn,
+                 'arn:aws:sns:' + zonegroup.name + ':' + get_tenant() + ':' + topic_name)
+
+    # list topics
+    result = topic_conf.get_list()
+    assert len(result['Topics']) > 0
+
+    # get topic
+    result, status  = topic_conf.get_config()
+    assert_equal(status/100, 2)
+    assert_equal(topic_arn, result['GetTopicResponse']['GetTopicResult']['Topic']['TopicArn'])
+
+    # delete topic
+    topic_conf.del_config()
+
+
 def test_ps_topic_with_endpoint():
     """ test set topic with endpoint"""
     _, ps_zones = init_env()
@@ -644,6 +709,33 @@ def test_ps_topic_with_endpoint():
     assert_equal(parsed_result['topic']['name'], topic_name)
     assert_equal(parsed_result['topic']['dest']['push_endpoint'], dest_endpoint)
     # cleanup
+    topic_conf.del_config()
+
+
+def test_ps_s3_topic_with_endpoint():
+    """ test set/get/delete of s3 topic with endpoint """
+    zones, _ = init_env()
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+    bucket_name = gen_bucket_name()
+    topic_name = bucket_name+TOPIC_SUFFIX
+
+    # create topic
+    endpoint_address = 'amqp://127.0.0.1:7001'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
+    topic_conf = PSTopicS3(zones[0].conn, topic_name, zonegroup.name, endpoint_args)
+    topic_arn = topic_conf.set_config()
+    assert_equal(topic_arn,
+                 'arn:aws:sns:' + zonegroup.name + ':' + get_tenant() + ':' + topic_name)
+
+    # get topic
+    result, status  = topic_conf.get_config()
+    assert_equal(status/100, 2)
+    assert_equal(topic_arn, result['GetTopicResponse']['GetTopicResult']['Topic']['TopicArn'])
+    assert_equal(endpoint_address, result['GetTopicResponse']['GetTopicResult']['Topic']['EndPoint']['EndpointAddress'])
+    # Note that endpoint args may be ordered differently in the result
+
+    # delete topic
     topic_conf.del_config()
 
 

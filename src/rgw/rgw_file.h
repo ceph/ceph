@@ -992,7 +992,7 @@ namespace rgw {
 	}
 	if (token.valid() && (ldh->auth(token.id, token.key) == 0)) {
 	  /* try to store user if it doesn't already exist */
-	  if (store->ctl()->user->get_info_by_uid(token.id, &user, null_yield) < 0) {
+	  if (store->ctl()->user->get_info_by_uid(rgw_user(token.id), &user, null_yield) < 0) {
 	    int ret = store->ctl()->user->store_info(user, null_yield,
                                                   RGWUserCtl::PutParams()
                                                   .set_exclusive(true));

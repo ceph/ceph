@@ -652,7 +652,7 @@ int RGWUserStatsCache::sync_user(const rgw_user& user)
   ceph::real_time last_stats_sync;
   ceph::real_time last_stats_update;
 
-  int ret = store->ctl()->user->read_stats(user_str, &stats, &last_stats_sync, &last_stats_update);
+  int ret = store->ctl()->user->read_stats(rgw_user(user_str), &stats, &last_stats_sync, &last_stats_update);
   if (ret < 0) {
     ldout(store->ctx(), 5) << "ERROR: can't read user header: ret=" << ret << dendl;
     return ret;

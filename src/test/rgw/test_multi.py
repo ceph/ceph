@@ -92,13 +92,18 @@ class Gateway(multisite.Gateway):
     def start(self, args = None):
         """ start the gateway """
         assert(self.cluster)
+        env = os.environ.copy()
+        # to change frontend, set RGW_FRONTEND env variable
+        # e.g. RGW_FRONTEND=civetweb
+        # to run test under valgrind memcheck, set RGW_VALGRIND to 'yes'
+        # e.g. RGW_VALGRIND=yes
         cmd = [mstart_path + 'mrgw.sh', self.cluster.cluster_id, str(self.port)]
         if self.id:
             cmd += ['-i', self.id]
         cmd += ['--debug-rgw=20', '--debug-ms=1']
         if args:
             cmd += args
-        bash(cmd)
+        bash(cmd, env=env)
 
     def stop(self):
         """ stop the gateway """
