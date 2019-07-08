@@ -25,7 +25,7 @@ from ..tools import TaskManager
 @UiApiController('/iscsi', Scope.ISCSI)
 class IscsiUi(BaseController):
 
-    REQUIRED_CEPH_ISCSI_CONFIG_VERSION = 9
+    REQUIRED_CEPH_ISCSI_CONFIG_VERSION = 10
 
     @Endpoint()
     @ReadPermission
