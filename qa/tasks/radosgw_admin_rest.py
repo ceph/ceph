@@ -404,6 +404,7 @@ def task(ctx, config):
 
     assert ret == 200
     assert out['owner'] == user1
+    assert out['tenant'] == ''
     bucket_id = out['id']
 
     # TESTCASE 'bucket-stats4','bucket','stats','new empty bucket','succeeds, expected bucket ID'
