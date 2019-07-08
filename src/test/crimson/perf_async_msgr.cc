@@ -54,6 +54,7 @@ struct Server {
       MOSDOp *rep = new MOSDOp(0, 0, hobj, spgid, 0, 0, 0);
       bufferlist data(msg_data);
       rep->write(0, msg_len, data);
+      rep->set_tid(m->get_tid());
       m->get_connection()->send_message(rep);
       m->put();
     }
