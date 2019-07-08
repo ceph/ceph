@@ -6,10 +6,12 @@
 #include <memory>
 #include <string>
 
+#include "rocksdb/options.h"
 #include "rocksdb/status.h"
 #include "rocksdb/utilities/env_mirror.h"
 
 #include "include/ceph_assert.h"
+#include "kv/RocksDBStore.h"
 
 class BlueFS;
 

@@ -3242,4 +3242,193 @@ private:
   fsck_interval misreferenced_extents;
 
 };
+
+class RocksDBBlueFSVolumeSelector : public BlueFSVolumeSelector
+{
+  template <class T, size_t MaxX, size_t MaxY>
+  class matrix_2d {
+    T values[MaxX][MaxY];
+  public:
+    matrix_2d() {
+      clear();
+    }
+    T& at(size_t x, size_t y) {
+      ceph_assert(x < MaxX);
+      ceph_assert(y < MaxY);
+
+      return values[x][y];
+    }
+    size_t get_max_x() const {
+      return MaxX;
+    }
+    size_t get_max_y() const {
+      return MaxY;
+    }
+    void clear() {
+      memset(values, 0, sizeof(values));
+    }
+  };
+
+  enum {
+    // use 0/nullptr as unset indication
+    LEVEL_1 = 1, // L0 + L1
+    LEVEL_2,
+    LEVEL_3,
+    LEVEL_OTHERS, // RocksDB supports up to 4 paths only
+    LEVEL_WAL,
+    LEVEL_UNSORTED,
+    LEVEL_MAX
+  };
+  // add +1 row for corresponding per-device totals
+  // add +1 column for per-level actual (taken from file size) total
+  typedef matrix_2d<uint64_t, BlueFS::MAX_BDEV + 1, LEVEL_MAX - LEVEL_1 + 1> per_level_per_dev_usage_t;
+
+  per_level_per_dev_usage_t per_level_per_dev_usage;
+
+  // Note: maximum per-device totals below might be smaller than corresponding
+  // perf counters by up to a single alloc unit (1M) due to superblock extent.
+  // The later is not accounted here.
+  per_level_per_dev_usage_t per_level_per_dev_max;
+
+  uint64_t wal_total;
+  uint64_t db_total;
+  uint64_t slow_total;
+  unsigned db_cut_level;
+  uint64_t l_cfg_max[LEVEL_OTHERS - LEVEL_1];
+  enum {
+    OLD_POLICY,
+    USE_SOME_EXTRA
+  } policy;
+
+public:
+  RocksDBBlueFSVolumeSelector(uint64_t _wal_total,
+    uint64_t _db_total,
+    uint64_t _slow_total,
+    uint64_t _level0_size,
+    uint64_t _level_base,
+    uint64_t _level_multiplier,
+    bool new_pol) :
+    wal_total(_wal_total),
+    db_total(_db_total),
+    slow_total(_slow_total),
+    policy(new_pol ? USE_SOME_EXTRA : OLD_POLICY)
+  {
+    uint64_t sz = _level_base;
+    db_cut_level = LEVEL_MAX;
+    l_cfg_max[0] = _level0_size + sz; // LEVEL_1 merges DB's L0 & L1
+    if (db_total > l_cfg_max[0]) {
+      db_cut_level = LEVEL_1 + 1;
+    }
+    sz *= _level_multiplier;
+    for (size_t i = LEVEL_2; i < LEVEL_OTHERS; i++) {
+      l_cfg_max[i - LEVEL_1] = sz;
+      if (db_total > sz) {
+        db_cut_level = i + 1;
+      }
+      sz *= _level_multiplier;
+    }
+  }
+
+  void* get_hint_by_device(uint8_t dev) const override {
+    ceph_assert(dev == BlueFS::BDEV_WAL); // others aren't used atm
+    return  reinterpret_cast<void*>(LEVEL_WAL);
+  }
+  void* get_hint_by_dir(const string& dirname) const override {
+    if (dirname.empty()) {
+      return nullptr;
+    }
+    int res = LEVEL_UNSORTED;
+    auto pos0 = dirname.find(".");
+    if (pos0 != string::npos) {
+      pos0++;
+      if (dirname.find("lev", pos0) == pos0) {
+        res = LEVEL_1 + atoi(dirname.c_str() + pos0 + 3) - 1;
+        ceph_assert(res >= LEVEL_1 && res <= LEVEL_OTHERS);
+      } else if (dirname.find("wal", pos0) == pos0) {
+        res = LEVEL_WAL;
+      }
+    }
+    return  reinterpret_cast<void*>(res);
+  }
+
+  void add_usage(void* hint, const bluefs_fnode_t& fnode) override {
+    if (hint == nullptr)
+      return;
+    size_t pos = (size_t)hint - 1;
+    for (auto& p : fnode.extents) {
+      auto& cur = per_level_per_dev_usage.at(p.bdev, pos);
+      auto& max = per_level_per_dev_max.at(p.bdev, pos);
+      cur += p.length;
+      if (cur > max) {
+        max = cur;
+      }
+      {
+        //update per-device totals
+        auto& cur = per_level_per_dev_usage.at(p.bdev, LEVEL_MAX - LEVEL_1);
+        auto& max = per_level_per_dev_max.at(p.bdev, LEVEL_MAX - LEVEL_1);
+        cur += p.length;
+        if (cur > max) {
+          max = cur;
+        }
+      }
+    }
+    {
+      //update per-level actual totals
+      auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
+      auto& max = per_level_per_dev_max.at(BlueFS::MAX_BDEV, pos);
+      cur += fnode.size;
+      if (cur > max) {
+        max = cur;
+      }
+    }
+  }
+  void sub_usage(void* hint, const bluefs_fnode_t& fnode) override {
+    if (hint == nullptr)
+      return;
+    size_t pos = (size_t)hint - 1;
+    for (auto& p : fnode.extents) {
+      auto& cur = per_level_per_dev_usage.at(p.bdev, pos);
+      ceph_assert(cur >= p.length);
+      cur -= p.length;
+
+      //update per-device totals
+      auto& cur2 = per_level_per_dev_usage.at(p.bdev, LEVEL_MAX - LEVEL_1);
+      ceph_assert(cur2 >= p.length);
+      cur2 -= p.length;
+    }
+    //update per-level actual totals
+    auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
+    ceph_assert(cur >= fnode.size);
+    cur -= fnode.size;
+  }
+  void add_usage(void* hint, uint64_t fsize) override {
+    if (hint == nullptr)
+      return;
+    size_t pos = (size_t)hint - 1;
+    //update per-level actual totals
+    auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
+    auto& max = per_level_per_dev_max.at(BlueFS::MAX_BDEV, pos);
+    cur += fsize;
+    if (cur > max) {
+      max = cur;
+    }
+  }
+  void sub_usage(void* hint, uint64_t fsize) override {
+    if (hint == nullptr)
+      return;
+    size_t pos = (size_t)hint - 1;
+    //update per-level actual totals
+    auto& cur = per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos);
+    ceph_assert(cur >= fsize);
+    per_level_per_dev_usage.at(BlueFS::MAX_BDEV, pos) -= fsize;
+  }
+
+  uint8_t select_prefer_bdev(void* h) override;
+  void get_paths(
+    const std::string& base,
+    BlueFSVolumeSelector::paths& res) const override;
+
+  void dump(CephContext* cct) override;
+};
+
 #endif
