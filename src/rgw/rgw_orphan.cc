@@ -553,7 +553,7 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
     vector<rgw_bucket_dir_entry> result;
 
     ret = list_op.list_objects(max_list_bucket_entries,
-                               &result, nullptr, &truncated);
+                               &result, nullptr, &truncated, null_yield);
     if (ret < 0) {
       cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) << std::endl;
       return -ret;

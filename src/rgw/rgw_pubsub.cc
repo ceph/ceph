@@ -533,7 +533,7 @@ int RGWUserPubSub::SubWithEvents<EventType>::list_events(const string& marker, i
 
   std::vector<rgw_bucket_dir_entry> objs;
 
-  ret = list_op.list_objects(max_events, &objs, nullptr, &list.is_truncated);
+  ret = list_op.list_objects(max_events, &objs, nullptr, &list.is_truncated, null_yield);
   if (ret < 0) {
     ldout(store->ctx(), 1) << "ERROR: failed to list bucket: bucket=" << sub_conf.dest.bucket_name << " ret=" << ret << dendl;
     return ret;
@@ -600,7 +600,7 @@ int RGWUserPubSub::SubWithEvents<EventType>::remove_event(const string& event_id
   del_op.params.bucket_owner = bucket_info.owner;
   del_op.params.versioning_status = bucket_info.versioning_status();
 
-  ret = del_op.delete_obj();
+  ret = del_op.delete_obj(null_yield);
   if (ret < 0) {
     ldout(store->ctx(), 1) << "ERROR: failed to remove event (obj=" << obj << "): ret=" << ret << dendl;
   }
