@@ -121,8 +121,6 @@ BlueFS::BlueFS(CephContext* cct)
   discard_cb[BDEV_DB] = db_discard_cb;
   discard_cb[BDEV_SLOW] = slow_discard_cb;
   asok_hook = SocketHook::create(this);
-  // set default volume selector
-  vselector.reset(new OriginalVolumeSelector(this));
 }
 
 BlueFS::~BlueFS()
@@ -452,6 +450,15 @@ int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
 	  << " osd_uuid " << osd_uuid
 	  << dendl;
 
+  // set volume selector if not provided before/outside
+  if (vselector == nullptr) {
+    vselector.reset(
+      new OriginalVolumeSelector(
+        get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
+        get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
+        get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100));
+  }
+
   _init_alloc();
   _init_logger();
 
@@ -499,6 +506,7 @@ int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
   _close_writer(log_writer);
   log_writer = NULL;
   block_all.clear();
+  vselector.reset(nullptr);
   _stop_alloc();
   _shutdown_logger();
 
@@ -582,6 +590,15 @@ int BlueFS::mount()
     goto out;
   }
 
+  // set volume selector if not provided before/outside
+  if (vselector == nullptr) {
+    vselector.reset(
+      new OriginalVolumeSelector(
+        get_block_device_size(BlueFS::BDEV_WAL) * 95 / 100,
+        get_block_device_size(BlueFS::BDEV_DB) * 95 / 100,
+        get_block_device_size(BlueFS::BDEV_SLOW) * 95 / 100));
+  }
+
   block_all.clear();
   block_all.resize(MAX_BDEV);
   _init_alloc();
@@ -644,6 +661,7 @@ void BlueFS::umount()
   _close_writer(log_writer);
   log_writer = NULL;
 
+  vselector.reset(nullptr);
   _stop_alloc();
   file_map.clear();
   dir_map.clear();
@@ -3473,17 +3491,16 @@ uint8_t OriginalVolumeSelector::select_prefer_bdev(void* hint)
 
 void OriginalVolumeSelector::get_paths(const std::string& base, paths& res) const
 {
-  // we have both block.db and block; tell rocksdb!
-  // note: the second (last) size value doesn't really matter
-  uint64_t db_size = bluefs->get_block_device_size(BlueFS::BDEV_DB);
-  uint64_t slow_size = bluefs->get_block_device_size(BlueFS::BDEV_SLOW);
-  res.emplace_back(base, (uint64_t)(db_size * 95 / 100));
-  res.emplace_back(base + ".slow", (uint64_t)(slow_size * 95 / 100));
+  res.emplace_back(base, db_total);
+  res.emplace_back(base + ".slow", slow_total);
 }
 
 #undef dout_prefix
 #define dout_prefix *_dout << "OriginalVolumeSelector: "
 
 void OriginalVolumeSelector::dump(CephContext* c) {
-  ldout(c, 1) << "OriginalVolumeSelector" << dendl;
+  ldout(c, 1) << "wal_total:" << wal_total
+    << ", db_total:" << db_total
+    << ", slow_total:" << slow_total
+    << dendl;
 }
