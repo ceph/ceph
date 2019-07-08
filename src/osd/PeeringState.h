@@ -45,6 +45,11 @@ struct PGPool {
   }
 
   void update(CephContext *cct, OSDMapRef map);
+
+  ceph::timespan get_readable_interval() const {
+    return ceph::make_timespan(
+      cct->_conf->osd_heartbeat_interval * 2.0);
+  }
 };
 
 class PeeringCtx;
