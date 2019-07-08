@@ -1025,28 +1025,28 @@ ReplicaLogType get_replicalog_type(const string& name) {
 
 BIIndexType get_bi_index_type(const string& type_str) {
   if (type_str == "plain")
-    return PlainIdx;
+    return BIIndexType::Plain;
   if (type_str == "instance")
-    return InstanceIdx;
+    return BIIndexType::Instance;
   if (type_str == "olh")
-    return OLHIdx;
+    return BIIndexType::OLH;
 
-  return InvalidIdx;
+  return BIIndexType::Invalid;
 }
 
 void dump_bi_entry(bufferlist& bl, BIIndexType index_type, Formatter *formatter)
 {
   bufferlist::iterator iter = bl.begin();
   switch (index_type) {
-    case PlainIdx:
-    case InstanceIdx:
+    case BIIndexType::Plain:
+    case BIIndexType::Instance:
       {
         rgw_bucket_dir_entry entry;
         decode(entry, iter);
         encode_json("entry", entry, formatter);
       }
       break;
-    case OLHIdx:
+    case BIIndexType::OLH:
       {
         rgw_bucket_olh_entry entry;
         decode(entry, iter);
@@ -2798,7 +2798,7 @@ int main(int argc, const char **argv)
   uint64_t max_rewrite_size = ULLONG_MAX;
   uint64_t min_rewrite_stripe_size = 0;
 
-  BIIndexType bi_index_type = PlainIdx;
+  BIIndexType bi_index_type = BIIndexType::Plain;
 
   string job_id;
   int num_shards = 0;
@@ -3063,7 +3063,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--index-type", (char*)NULL)) {
       string index_type_str = val;
       bi_index_type = get_bi_index_type(index_type_str);
-      if (bi_index_type == InvalidIdx) {
+      if (bi_index_type == BIIndexType::Invalid) {
         cerr << "ERROR: invalid bucket index entry type" << std::endl;
         return EINVAL;
       }

@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
 #include "cls/rgw/cls_rgw_types.h"
 #include "common/ceph_json.h"
@@ -156,15 +158,15 @@ static void dump_bi_entry(bufferlist bl, BIIndexType index_type, Formatter *form
 {
   bufferlist::iterator iter = bl.begin();
   switch (index_type) {
-    case PlainIdx:
-    case InstanceIdx:
+    case BIIndexType::Plain:
+    case BIIndexType::Instance:
       {
         rgw_bucket_dir_entry entry;
         decode(entry, iter);
         encode_json("entry", entry, formatter);
       }
       break;
-    case OLHIdx:
+    case BIIndexType::OLH:
       {
         rgw_bucket_olh_entry entry;
         decode(entry, iter);
@@ -181,18 +183,18 @@ void rgw_cls_bi_entry::decode_json(JSONObj *obj, cls_rgw_obj_key *effective_key)
   string s;
   JSONDecoder::decode_json("type", s, obj);
   if (s == "plain") {
-    type = PlainIdx;
+    type = BIIndexType::Plain;
   } else if (s == "instance") {
-    type = InstanceIdx;
+    type = BIIndexType::Instance;
   } else if (s == "olh") {
-    type = OLHIdx;
+    type = BIIndexType::OLH;
   } else {
-    type = InvalidIdx;
+    type = BIIndexType::Invalid;
   }
   using ceph::encode;
   switch (type) {
-    case PlainIdx:
-    case InstanceIdx:
+    case BIIndexType::Plain:
+    case BIIndexType::Instance:
       {
         rgw_bucket_dir_entry entry;
         JSONDecoder::decode_json("entry", entry, obj);
@@ -203,7 +205,7 @@ void rgw_cls_bi_entry::decode_json(JSONObj *obj, cls_rgw_obj_key *effective_key)
         }
       }
       break;
-    case OLHIdx:
+    case BIIndexType::OLH:
       {
         rgw_bucket_olh_entry entry;
         JSONDecoder::decode_json("entry", entry, obj);
@@ -223,17 +225,17 @@ void rgw_cls_bi_entry::dump(Formatter *f) const
 {
   string type_str;
   switch (type) {
-    case PlainIdx:
-      type_str = "plain";
-      break;
-    case InstanceIdx:
-      type_str = "instance";
-      break;
-    case OLHIdx:
-      type_str = "olh";
-      break;
-    default:
-      type_str = "invalid";
+  case BIIndexType::Plain:
+    type_str = "plain";
+    break;
+  case BIIndexType::Instance:
+    type_str = "instance";
+    break;
+  case BIIndexType::OLH:
+    type_str = "olh";
+    break;
+  default:
+    type_str = "invalid";
   }
   encode_json("type", type_str, f);
   encode_json("idx", idx, f);
@@ -246,8 +248,10 @@ bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key, uint8_t *category, rgw_buc
   bufferlist::iterator iter = data.begin();
   using ceph::decode;
   switch (type) {
-    case PlainIdx:
-    case InstanceIdx:
+    case BIIndexType::Plain:
+        account = true;
+        // NO BREAK; falls through to case InstanceIdx:
+    case BIIndexType::Instance:
       {
         rgw_bucket_dir_entry entry;
         decode(entry, iter);
@@ -257,10 +261,9 @@ bool rgw_cls_bi_entry::get_info(cls_rgw_obj_key *key, uint8_t *category, rgw_buc
         accounted_stats->total_size += entry.meta.accounted_size;
         accounted_stats->total_size_rounded += cls_rgw_get_rounded_size(entry.meta.accounted_size);
         accounted_stats->actual_size += entry.meta.size;
-        account = true;
       }
       break;
-    case OLHIdx:
+    case BIIndexType::OLH:
       {
         rgw_bucket_olh_entry entry;
         decode(entry, iter);

@@ -12958,7 +12958,7 @@ int RGWRados::bi_get_instance(const RGWBucketInfo& bucket_info, rgw_obj& obj, rg
   }
 
   rgw_cls_bi_entry bi_entry;
-  r = bi_get(obj.bucket, obj, InstanceIdx, &bi_entry);
+  r = bi_get(obj.bucket, obj, BIIndexType::Instance, &bi_entry);
   if (r < 0 && r != -ENOENT) {
     ldout(cct, 0) << "ERROR: bi_get() returned r=" << r << dendl;
   }
