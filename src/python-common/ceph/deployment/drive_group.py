@@ -55,11 +55,6 @@ class DeviceSelection(object):
 
 
 class DriveGroupValidationError(Exception):
-    """
-    Defining an exception here is a bit problematic, cause you cannot properly catch it,
-    if it was raised in a different mgr module.
-    """
-
     def __init__(self, msg):
         super(DriveGroupValidationError, self).__init__('Failed to validate Drive Group: ' + msg)
 

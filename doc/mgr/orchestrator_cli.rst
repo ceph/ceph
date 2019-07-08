@@ -149,7 +149,8 @@ Create OSDs on a group of devices on a single host::
 
 The output of ``osd create`` is not specified and may vary between orchestrator backends.
 
-Where ``drive.group.json`` is a JSON file containing the fields defined in :class:`orchestrator.DriveGroupSpec`
+Where ``drive.group.json`` is a JSON file containing the fields defined in
+:class:`ceph.deployment_utils.drive_group.DriveGroupSpec`
 
 Example::
 
