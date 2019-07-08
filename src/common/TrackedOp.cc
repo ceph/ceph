@@ -78,7 +78,7 @@ void OpHistory::_insert_delayed(const utime_t& now, TrackedOpRef op)
   double opduration = op->get_duration();
   duration.insert(make_pair(opduration, op));
   arrived.insert(make_pair(op->get_initiated(), op));
-  if (opduration >= history_slow_op_threshold)
+  if (opduration >= history_slow_op_threshold.load())
     slow_op.insert(make_pair(op->get_initiated(), op));
   cleanup(now);
 }
@@ -87,21 +87,21 @@ void OpHistory::cleanup(utime_t now)
 {
   while (arrived.size() &&
 	 (now - arrived.begin()->first >
-	  (double)(history_duration))) {
+	  (double)(history_duration.load()))) {
     duration.erase(make_pair(
 	arrived.begin()->second->get_duration(),
 	arrived.begin()->second));
     arrived.erase(arrived.begin());
   }
 
-  while (duration.size() > history_size) {
+  while (duration.size() > history_size.load()) {
     arrived.erase(make_pair(
 	duration.begin()->second->get_initiated(),
 	duration.begin()->second));
     duration.erase(duration.begin());
   }
 
-  while (slow_op.size() > history_slow_op_size) {
+  while (slow_op.size() > history_slow_op_size.load()) {
     slow_op.erase(make_pair(
 	slow_op.begin()->second->get_initiated(),
 	slow_op.begin()->second));
@@ -113,8 +113,8 @@ void OpHistory::dump_ops(utime_t now, Formatter *f, set<string> filters, bool by
   std::lock_guard history_lock(ops_history_lock);
   cleanup(now);
   f->open_object_section("op_history");
-  f->dump_int("size", history_size);
-  f->dump_int("duration", history_duration);
+  f->dump_int("size", history_size.load());
+  f->dump_int("duration", history_duration.load());
   {
     f->open_array_section("ops");
     auto dump_fn = [&f, &now, &filters](auto begin_iter, auto end_iter) {
@@ -182,8 +182,8 @@ void OpHistory::dump_slow_ops(utime_t now, Formatter *f, set<string> filters)
   std::lock_guard history_lock(ops_history_lock);
   cleanup(now);
   f->open_object_section("OpHistory slow ops");
-  f->dump_int("num to keep", history_slow_op_size);
-  f->dump_int("threshold to keep", history_slow_op_threshold);
+  f->dump_int("num to keep", history_slow_op_size.load());
+  f->dump_int("threshold to keep", history_slow_op_threshold.load());
   {
     f->open_array_section("Ops");
     for (set<pair<utime_t, TrackedOpRef> >::const_iterator i =
