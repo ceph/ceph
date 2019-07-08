@@ -345,13 +345,16 @@ Pull the Realm
 --------------
 
 Using the URL path, access key and secret of the master zone in the
-master zone group, pull the realm to the host. To pull a non-default
-realm, specify the realm using the ``--rgw-realm`` or ``--realm-id``
-configuration options.
+master zone group, pull the realm configuration to the host. To pull a
+non-default realm, specify the realm using the ``--rgw-realm`` or
+``--realm-id`` configuration options.
 
 ::
 
     # radosgw-admin realm pull --url={url-to-master-zone-gateway} --access-key={access-key} --secret={secret}
+
+.. note:: Pulling the realm also retrieves the remote's current period
+          configuration, and makes it the current period on this host as well.
 
 If this realm is the default realm or the only realm, make the realm the
 default realm.
@@ -359,22 +362,6 @@ default realm.
 ::
 
     # radosgw-admin realm default --rgw-realm={realm-name}
-
-Pull the Period
----------------
-
-Using the URL path, access key and secret of the master zone in the
-master zone group, pull the period to the host. To pull a period from a
-non-default realm, specify the realm using the ``--rgw-realm`` or
-``--realm-id`` configuration options.
-
-::
-
-    # radosgw-admin period pull --url={url-to-master-zone-gateway} --access-key={access-key} --secret={secret}
-
-
-.. note:: Pulling the period retrieves the latest version of the zone group
-          and zone configurations for the realm.
 
 Create a Secondary Zone
 -----------------------
@@ -606,13 +593,13 @@ disaster recovery.
 
 If the former master zone recovers, revert the operation.
 
-1. From the recovered zone, pull the period from the current master
-   zone.
+1. From the recovered zone, pull the latest realm configuration
+   from the current master zone.
 
    ::
 
-       # radosgw-admin period pull --url={url-to-master-zone-gateway} \
-                                   --access-key={access-key} --secret={secret}
+       # radosgw-admin realm pull --url={url-to-master-zone-gateway} \
+                                  --access-key={access-key} --secret={secret}
 
 2. Make the recovered zone the master and default zone.
 
