@@ -54,7 +54,33 @@ class IscsiGatewaysConfig(object):
     def _load_config_from_store(cls):
         json_db = mgr.get_store(_ISCSI_STORE_KEY,
                                 '{"gateways": {}}')
-        return json.loads(json_db)
+        config = json.loads(json_db)
+        cls.update_iscsi_config(config)
+        return config
+
+    @classmethod
+    def update_iscsi_config(cls, config):
+        """
+        Since `ceph-iscsi` config v10, gateway names were renamed from host short name to FQDN.
+        If Ceph Dashboard were configured before v10, we try to update our internal gateways
+        database automatically.
+        """
+        for gateway_name, gateway_config in config['gateways'].items():
+            if '.' not in gateway_name:
+                from .iscsi_client import IscsiClient
+                from ..rest_client import RequestException
+                try:
+                    service_url = gateway_config['service_url']
+                    new_gateway_name = IscsiClient.instance(
+                        service_url=service_url).get_hostname()['data']
+                    if gateway_name != new_gateway_name:
+                        config['gateways'][new_gateway_name] = gateway_config
+                        del config['gateways'][gateway_name]
+                        cls._save_config(config)
+                except RequestException:
+                    # If gateway is not acessible, it should be removed manually
+                    # or we will try to update automatically next time
+                    continue
 
     @staticmethod
     def _load_config_from_orchestrator():
