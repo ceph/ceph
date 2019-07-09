@@ -2208,6 +2208,16 @@ function test_mon_osd_erasure_code()
   # clean up
   ceph osd erasure-code-profile rm fooprofile
   ceph osd erasure-code-profile rm barprofile
+
+  # try weird k and m values
+  expect_false ceph osd erasure-code-profile set badk k=1 m=1
+  expect_false ceph osd erasure-code-profile set badk k=1 m=2
+  expect_false ceph osd erasure-code-profile set badk k=0 m=2
+  expect_false ceph osd erasure-code-profile set badk k=-1 m=2
+  expect_false ceph osd erasure-code-profile set badm k=2 m=0
+  expect_false ceph osd erasure-code-profile set badm k=2 m=-1
+  ceph osd erasure-code-profile set good k=2 m=1
+  ceph osd erasure-code-profile rm good
 }
 
 function test_mon_osd_misc()
