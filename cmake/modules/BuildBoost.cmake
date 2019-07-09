@@ -125,7 +125,11 @@ function(do_build_boost version)
   if(with_python_version)
     list(APPEND b2 python=${with_python_version})
   endif()
-
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm|ARM")
+    list(APPEND b2 abi=aapcs)
+    list(APPEND b2 architecture=arm)
+    list(APPEND b2 binary-format=elf)
+  endif()
   set(build_command
     ${b2} headers stage
     #"--buildid=ceph" # changes lib names--can omit for static
