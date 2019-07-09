@@ -6,6 +6,7 @@ from textwrap import dedent
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.fuse_mount import FuseMount
 from teuthology.exceptions import CommandFailedError
+from teuthology.misc import sudo_write_file
 
 log = logging.getLogger(__name__)
 
@@ -47,27 +48,6 @@ vc.disconnect()
                    vol_prefix=vol_prefix, ns_prefix=ns_prefix),
         self.py_version)
 
-    def _sudo_write_file(self, remote, path, data):
-        """
-        Write data to a remote file as super user
-
-        :param remote: Remote site.
-        :param path: Path on the remote being written to.
-        :param data: Data to be written.
-
-        Both perms and owner are passed directly to chmod.
-        """
-        remote.run(
-            args=[
-                'sudo',
-                'python',
-                '-c',
-                'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
-                path,
-            ],
-            stdin=data,
-        )
-
     def _configure_vc_auth(self, mount, id_name):
         """
         Set up auth credentials for the VolumeClient user
@@ -79,7 +59,7 @@ vc.disconnect()
             "mon", "allow *"
         )
         mount.client_id = id_name
-        self._sudo_write_file(mount.client_remote, mount.get_keyring_path(), out)
+        sudo_write_file(mount.client_remote, mount.get_keyring_path(), out)
         self.set_conf("client.{name}".format(name=id_name), "keyring", mount.get_keyring_path())
 
     def _configure_guest_auth(self, volumeclient_mount, guest_mount,
@@ -142,9 +122,8 @@ vc.disconnect()
             key=key
         ))
         guest_mount.client_id = guest_entity
-        self._sudo_write_file(guest_mount.client_remote,
-                              guest_mount.get_keyring_path(),
-                              keyring_txt)
+        sudo_write_file(guest_mount.client_remote,
+                        guest_mount.get_keyring_path(), keyring_txt)
 
         # Add a guest client section to the ceph config file.
         self.set_conf("client.{0}".format(guest_entity), "client quota", "True")
