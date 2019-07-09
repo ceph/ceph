@@ -1,4 +1,5 @@
 from mgr_module import MgrModule
+import os
 import threading
 import datetime
 import uuid
@@ -11,6 +12,9 @@ ENCODING_VERSION = 1
 # keep a global reference to the module so we can use it from Event methods
 _module = None
 
+# if unit test we want MgrModule to be blank
+if 'UNITTEST' in os.environ:
+    MgrModule = object
 
 class Event(object):
     """
@@ -122,7 +126,7 @@ class PgRecoveryEvent(Event):
     Always call update() immediately after construction.
     """
 
-    def __init__(self, message, refs, which_pgs, evacuate_osds):
+    def __init__(self, message, refs, which_pgs, evacuate_osds, start_epoch):
         super(PgRecoveryEvent, self).__init__(message, refs)
 
         self._pgs = which_pgs
@@ -135,7 +139,8 @@ class PgRecoveryEvent(Event):
 
         self._progress = 0.0
 
-        self._start_epoch = _module.get_osdmap().get_epoch() 
+        # self._start_epoch = _module.get_osdmap().get_epoch() 
+        self._start_epoch = start_epoch
 
         self.id = str(uuid.uuid4())
         self._refresh()
@@ -376,7 +381,8 @@ class Module(MgrModule):
                     "Rebalancing after osd.{0} marked {1}".format(osd_id, marked),
                     refs=[("osd", osd_id)],
                     which_pgs=affected_pgs,
-                    evacuate_osds=[osd_id]
+                    evacuate_osds=[osd_id],
+                    start_epoch=self.get_osdmap().get_epoch() 
                     )
             ev.pg_update(self.get("pg_dump"), self.log)
             self._events[ev.id] = ev
