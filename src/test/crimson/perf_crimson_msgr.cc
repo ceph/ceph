@@ -45,6 +45,7 @@ struct client_config {
   unsigned msgtime;
   unsigned jobs;
   unsigned depth;
+  bool v1_crc_enabled;
 
   std::string str() const {
     std::ostringstream out;
@@ -54,6 +55,7 @@ struct client_config {
         << ", msgtime=" << msgtime
         << ", jobs=" << jobs
         << ", depth=" << depth
+        << ", v1-crc-enabled=" << v1_crc_enabled
         << ")";
     return out.str();
   }
@@ -70,6 +72,7 @@ struct client_config {
     conf.jobs = options["jobs"].as<unsigned>();
     conf.depth = options["depth"].as<unsigned>();
     ceph_assert(conf.depth % conf.jobs == 0);
+    conf.v1_crc_enabled = options["v1-crc-enabled"].as<bool>();
     return conf;
   }
 };
@@ -78,12 +81,14 @@ struct server_config {
   entity_addr_t addr;
   unsigned block_size;
   unsigned core;
+  bool v1_crc_enabled;
 
   std::string str() const {
     std::ostringstream out;
     out << "server[" << addr
         << "](bs=" << block_size
         << ", core=" << core
+        << ", v1-crc-enabled=" << v1_crc_enabled
         << ")";
     return out.str();
   }
@@ -96,6 +101,7 @@ struct server_config {
     conf.addr = addr;
     conf.block_size = options["sbs"].as<unsigned>();
     conf.core = options["core"].as<unsigned>();
+    conf.v1_crc_enabled = options["v1-crc-enabled"].as<bool>();
     return conf;
   }
 };
@@ -152,16 +158,22 @@ static seastar::future<> run(
         return c->send(msg);
       }
 
-      seastar::future<> init(const entity_addr_t& addr) {
-        return container().invoke_on(msgr_sid, [addr] (auto& server) {
+      seastar::future<> init(bool v1_crc_enabled, const entity_addr_t& addr) {
+        return container().invoke_on(msgr_sid, [v1_crc_enabled, addr] (auto& server) {
           // server msgr is always with nonce 0
           auto&& fut = ceph::net::Messenger::create(entity_name_t::OSD(server.sid), server.lname, 0, server.sid);
-          return fut.then([&server, addr](ceph::net::Messenger *messenger) {
-              return server.container().invoke_on_all([messenger](auto& server) {
+          return fut.then(
+            [&server, addr, v1_crc_enabled](ceph::net::Messenger *messenger) {
+              return server.container().invoke_on_all(
+                [messenger, v1_crc_enabled](auto& server) {
                   server.msgr = messenger->get_local_shard();
                   server.msgr->set_default_policy(ceph::net::SocketPolicy::stateless_server(0));
                   server.msgr->set_auth_client(&server.dummy_auth);
                   server.msgr->set_auth_server(&server.dummy_auth);
+                  if (v1_crc_enabled) {
+                    server.msgr->set_crc_header();
+                    server.msgr->set_crc_data();
+                  }
                 }).then([messenger, addr] {
                   return messenger->bind(entity_addrvec_t{addr});
                 }).then([&server, messenger] {
@@ -310,16 +322,20 @@ static seastar::future<> run(
         return sid != 0 && sid <= jobs;
       }
 
-      seastar::future<> init() {
-        return container().invoke_on_all([] (auto& client) {
+      seastar::future<> init(bool v1_crc_enabled) {
+        return container().invoke_on_all([v1_crc_enabled] (auto& client) {
           if (client.is_active()) {
             return ceph::net::Messenger::create(entity_name_t::OSD(client.sid), client.lname, client.sid, client.sid)
-            .then([&client] (ceph::net::Messenger *messenger) {
+            .then([&client, v1_crc_enabled] (ceph::net::Messenger *messenger) {
               client.msgr = messenger;
               client.msgr->set_default_policy(ceph::net::SocketPolicy::lossy_client(0));
               client.msgr->set_require_authorizer(false);
               client.msgr->set_auth_client(&client.dummy_auth);
               client.msgr->set_auth_server(&client.dummy_auth);
+              if (v1_crc_enabled) {
+                client.msgr->set_crc_header();
+                client.msgr->set_crc_data();
+              }
               return client.msgr->start(&client);
             });
           }
@@ -638,8 +654,8 @@ static seastar::future<> run(
           ceph_assert(seastar::smp::count >= 1+server_conf.core);
           ceph_assert(server_conf.core == 0 || server_conf.core > client_conf.jobs);
           return seastar::when_all_succeed(
-              server->init(server_conf.addr),
-              client->init())
+              server->init(server_conf.v1_crc_enabled, server_conf.addr),
+              client->init(client_conf.v1_crc_enabled))
             .then([client, addr = client_conf.server_addr] {
               return client->connect_wait_verify(addr);
             }).then([client, ramptime = client_conf.ramptime,
@@ -654,7 +670,7 @@ static seastar::future<> run(
           logger().info("\nperf settings:\n  {}\n", client_conf.str());
           ceph_assert(seastar::smp::count >= 1+client_conf.jobs);
           ceph_assert(client_conf.jobs > 0);
-          return client->init()
+          return client->init(client_conf.v1_crc_enabled)
             .then([client, addr = client_conf.server_addr] {
               return client->connect_wait_verify(addr);
             }).then([client, ramptime = client_conf.ramptime,
@@ -666,7 +682,7 @@ static seastar::future<> run(
       } else { // mode == perf_mode_t::server
           ceph_assert(seastar::smp::count >= 1+server_conf.core);
           logger().info("\nperf settings:\n  {}\n", server_conf.str());
-          return server->init(server_conf.addr)
+          return server->init(server_conf.v1_crc_enabled, server_conf.addr)
           // dispatch ops
             .then([server] {
               return server->msgr->wait();
@@ -686,7 +702,7 @@ int main(int argc, char** argv)
   app.add_options()
     ("mode", bpo::value<unsigned>()->default_value(0),
      "0: both, 1:client, 2:server")
-    ("addr", bpo::value<std::string>()->default_value("v1:0.0.0.0:9010"),
+    ("addr", bpo::value<std::string>()->default_value("v1:127.0.0.1:9010"),
      "server address")
     ("ramptime", bpo::value<unsigned>()->default_value(5),
      "seconds of client ramp-up time")
@@ -701,7 +717,9 @@ int main(int argc, char** argv)
     ("core", bpo::value<unsigned>()->default_value(0),
      "server running core")
     ("sbs", bpo::value<unsigned>()->default_value(0),
-     "server block size");
+     "server block size")
+    ("v1-crc-enabled", bpo::value<bool>()->default_value(false),
+     "enable v1 CRC checks");
   return app.run(argc, argv, [&app] {
       auto&& config = app.configuration();
       auto mode = config["mode"].as<unsigned>();
