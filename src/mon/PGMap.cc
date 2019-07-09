@@ -2767,7 +2767,7 @@ void PGMap::get_health_checks(
     for (auto &sback : boost::adaptors::reverse(back_sorted)) {
       ostringstream ss;
       if (max_detail == 0) {
-	ss << "Truncated long network list.";
+	ss << "Truncated long network list.  Use ceph daemon mgr.# dump_osd_network for more information";
         detail_back.push_back(ss.str());
         break;
       }
@@ -2781,7 +2781,7 @@ void PGMap::get_health_checks(
     for (auto &sfront : boost::adaptors::reverse(front_sorted)) {
       ostringstream ss;
       if (max_detail == 0) {
-	ss << "Truncated long network list.";
+	ss << "Truncated long network list.  Use ceph daemon mgr.# dump_osd_network for more information";
         detail_front.push_back(ss.str());
         break;
       }
