@@ -89,3 +89,49 @@ CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtim.tv_nsec sys/stat.h
   HAVE_STAT_ST_MTIM_TV_NSEC LANGUAGE C)
 CHECK_STRUCT_HAS_MEMBER("struct stat" st_mtimespec.tv_nsec sys/stat.h
   HAVE_STAT_ST_MTIMESPEC_TV_NSEC LANGUAGE C)
+
+if(CMAKE_SYSTEM_PROCESSOR STREQUAL CMAKE_HOST_SYSTEM_PROCESSOR)
+  include(CheckCXXSourceRuns)
+  cmake_push_check_state()
+  set(CMAKE_REQUIRED_FLAGS "${CMAKE_REQUIRED_FLAGS} -std=c++17")
+  check_cxx_source_runs("
+#include <cstdint>
+#include <iterator>
+#include <arpa/inet.h>
+
+uint32_t load(char* p, size_t offset)
+{
+  return *reinterpret_cast<uint32_t*>(p + offset);
+}
+
+bool good(uint32_t lhs, uint32_t small_endian)
+{
+  uint32_t rhs;
+  if (ntohl(0xdeadbeaf) == 0xdeadbeaf) {
+    return lhs == ntohl(small_endian);
+  } else {
+    return lhs == small_endian;
+  }
+}
+
+int main(int argc, char **argv)
+{
+  char a1[] = \"ABCDEFG\";
+  uint32_t a2[] = {0x44434241,
+                   0x45444342,
+                   0x46454443,
+                   0x47464544};
+  for (size_t i = 0; i < std::size(a2); i++) {
+    if (!good(load(a1, i), a2[i])) {
+      return 1;
+    }
+  }
+}"
+    HAVE_UNALIGNED_ACCESS)
+  cmake_pop_check_state()
+  if(NOT HAVE_UNALIGNED_ACCESS)
+    message(FATAL_ERROR "Unaligned access is required")
+  endif()
+else(CMAKE_SYSTEM_PROCESSOR STREQUAL CMAKE_HOST_SYSTEM_PROCESSOR)
+  message(STATUS "Assuming unaligned access is supported")
+endif(CMAKE_SYSTEM_PROCESSOR STREQUAL CMAKE_HOST_SYSTEM_PROCESSOR)
