@@ -1247,6 +1247,10 @@ void PGBackend::be_omap_checks(const map<pg_shard_t,ScrubMap*> &maps,
   // Iterate through objects and update omap stats
   for (const auto& k : master_set) {
     for (const auto& map : maps) {
+      if (map.first != get_parent()->primary_shard()) {
+        // Only set omap stats for the primary
+        continue;
+      }
       auto it = map.second->objects.find(k);
       if (it == map.second->objects.end())
         continue;
