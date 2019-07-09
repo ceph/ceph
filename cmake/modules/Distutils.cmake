@@ -33,7 +33,7 @@ function(distutils_install_module name)
     WORKING_DIRECTORY \"${CMAKE_CURRENT_BINARY_DIR}\")")
 endfunction(distutils_install_module)
 
-function(distutils_add_cython_module name src)
+function(distutils_add_cython_module target name src)
   get_property(compiler_launcher GLOBAL PROPERTY RULE_LAUNCH_COMPILE)
   get_property(link_launcher GLOBAL PROPERTY RULE_LAUNCH_LINK)
   # When using ccache, CMAKE_C_COMPILER is ccache executable absolute path
@@ -56,7 +56,25 @@ function(distutils_add_cython_module name src)
   set(PY_CC ${compiler_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1} ${cflags})
   set(PY_CXX ${compiler_launcher} ${CMAKE_CXX_COMPILER} ${cxx_compiler_arg1})
   set(PY_LDSHARED ${link_launcher} ${CMAKE_C_COMPILER} ${c_compiler_arg1} "-shared")
-  add_custom_target(${name} ALL
+
+  if(${PYTHON${PYTHON_VERSION}_VERSION_MAJOR} STREQUAL "2")
+    set(suffix_var "SO")
+  else()
+    set(suffix_var "EXT_SUFFIX")
+  endif()
+  execute_process(COMMAND "${PYTHON${PYTHON_VERSION}_EXECUTABLE}" -c
+    "from distutils import sysconfig; print(sysconfig.get_config_var('${suffix_var}'))"
+    RESULT_VARIABLE result
+    OUTPUT_VARIABLE ext_suffix
+    ERROR_VARIABLE error
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if(NOT result EQUAL 0)
+    message(FATAL_ERROR "Unable to tell python extension's suffix: ${error}")
+  endif()
+  set(output_dir "${CYTHON_MODULE_DIR}/lib.${PYTHON${PYTHON_VERSION}_VERSION_MAJOR}")
+  set(setup_py ${CMAKE_CURRENT_SOURCE_DIR}/setup.py)
+  add_custom_command(
+    OUTPUT ${output_dir}/${name}${ext_suffix}
     COMMAND
     env
     CC="${PY_CC}"
@@ -66,11 +84,14 @@ function(distutils_add_cython_module name src)
     LDFLAGS=-L${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
     CYTHON_BUILD_DIR=${CMAKE_CURRENT_BINARY_DIR}
     CEPH_LIBDIR=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
-    ${PYTHON${PYTHON_VERSION}_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/setup.py
+    ${PYTHON${PYTHON_VERSION}_EXECUTABLE} ${setup_py}
     build --verbose --build-base ${CYTHON_MODULE_DIR}
-    --build-platlib ${CYTHON_MODULE_DIR}/lib.${PYTHON${PYTHON_VERSION}_VERSION_MAJOR}
-    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR}
-    DEPENDS ${src})
+    --build-platlib ${output_dir}
+    MAIN_DEPENDENCY ${src}
+    DEPENDS ${setup_py}
+    WORKING_DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR})
+  add_custom_target(${target} ALL
+    DEPENDS ${output_dir}/${name}${ext_suffix})
 endfunction(distutils_add_cython_module)
 
 function(distutils_install_cython_module name)
