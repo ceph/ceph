@@ -4,6 +4,9 @@ import {
   esLocale,
   frLocale,
   idLocale,
+  itLocale,
+  jaLocale,
+  koLocale,
   plLocale,
   ptBrLocale,
   zhCnLocale
@@ -15,12 +18,16 @@ export enum SupportedLanguages {
   'cs' = 'Čeština',
   'de-DE' = 'Deutsch',
   'en-US' = 'English',
+  'es-ES' = 'Español',
   'fr-FR' = 'Français',
   'id-ID' = 'Bahasa Indonesia',
+  'it-IT' = 'Italiano',
+  'ja-JP' = '日本語',
+  'ko-KR' = '한국어',
   'pl-PL' = 'Polski',
-  'pt-PT' = 'Português',
-  'es-ES' = 'Español',
-  'zh-CN' = '中文'
+  'pt-BR' = 'Português',
+  'zh-CN' = '中文 (简体)',
+  'zh-TW' = '中文 (繁體）'
 }
 
 // Supported languages:
@@ -31,6 +38,9 @@ export let languageBootstrapMapping = {
   es: esLocale,
   fr: frLocale,
   id: idLocale,
+  it: itLocale,
+  ja: jaLocale,
+  ko: koLocale,
   pl: plLocale,
   pt: ptBrLocale,
   zh: zhCnLocale

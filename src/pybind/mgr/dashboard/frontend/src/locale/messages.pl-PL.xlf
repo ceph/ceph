@@ -221,18 +221,6 @@ dodaj pulpity do Grafany.
         <source>Advanced Settings</source>
         <target>Ustawienia zaawansowane</target>
       </trans-unit>
-      <trans-unit id="602ace8a29cf86e2e7db2f6b0cdb896ddf760e0d" datatype="html">
-        <source>
-          <x id="ICU" equiv-text="{isEdit, select, 1 {...} other {...}}"/> target
-        </source>
-        <target>
-          <x id="ICU" equiv-text="{isEdit, select, 1 {...} other {...}}"/> docelowy obiekt
-        </target>
-      </trans-unit>
-      <trans-unit id="457db3d876e89cae583be9845912213ae73dc398" datatype="html">
-        <source>{VAR_SELECT, select, 1 {Edit} other {Add} }</source>
-        <target>{VAR_SELECT, wybierz, 1 {Edytuj} inaczej{Dodaj} }</target>
-      </trans-unit>
       <trans-unit id="1406c2fb12a20c1528b19bcc5e24a6a2386167f3" datatype="html">
         <source>Target IQN</source>
         <target>Nazwa IQN obiektu docelowego iSCSI</target>
@@ -276,14 +264,6 @@ dodaj pulpity do Grafany.
       <trans-unit id="6a3ac2b4137d723fd9878cd357c2012ff6c07973" datatype="html">
         <source>Add portal</source>
         <target>Dodaj portal</target>
-      </trans-unit>
-      <trans-unit id="6c1c7f516d021abaf155aab1e9c2fe96e2c4ff40" datatype="html">
-        <source>Backstore: 
-          <x id="INTERPOLATION" equiv-text="{{ imagesSettings[image].backstore }}"/>. 
-        </source>
-        <target>Tylny koniec przechowywania:
-          <x id="INTERPOLATION" equiv-text="{{ imagesSettings[image].backstore }}"/>. 
-        </target>
       </trans-unit>
       <trans-unit id="e3484cae8b118c576ca2815bf9c9406c2eb2cae3" datatype="html">
         <source>This image has modified settings.</source>
@@ -414,18 +394,6 @@ jak skonfigurować i uruchomić zarządzanie funkcjonalnościami obiektami docel
         <source>iSCSI Targets not available</source>
         <target>obiekty docelowe iSCSI niedostępne </target>
       </trans-unit>
-      <trans-unit id="8f4c079a38df7c3b64a4dfe8daa4d02aeffefbfa" datatype="html">
-        <source>Set discovery authentication</source>
-        <target>Ustaw uwierzytelnianie wykrywania </target>
-      </trans-unit>
-      <trans-unit id="beb1391a148bd032914f49a2665dcc414a5d56d0" datatype="html">
-        <source>{VAR_SELECT, select, editing {Edit} cloning {Clone} copying {Copy} other {Add} }</source>
-        <target>{VAR_SELECT, wybierz, edytowanie{Edytuj} klonowanie{Klonuj} kopiowanie{Kopiuj} inaczej {Dodaj} }</target>
-      </trans-unit>
-      <trans-unit id="52dd89f49fc440660cbbb3665b88d80f5baa7437" datatype="html">
-        <source>{VAR_SELECT, select, cloning {Clone from} copying {Copy from} other {Parent} }</source>
-        <target>{VAR_SELECT, wybierz, klonowanie{Klonuj od} kopiowanie{Kopiuj od} inaczej {Rodzic} }</target>
-      </trans-unit>
       <trans-unit id="0e9ecf29a4fa5b057bd8052e0d801b3fde6a30bf" datatype="html">
         <source>'/' and '@' are not allowed.</source>
         <target>'/' and '@' nie są dozwolone.</target>
@@ -517,18 +485,6 @@ jak skonfigurować i uruchomić zarządzanie funkcjonalnościami obiektami docel
       <trans-unit id="cd2ada6d5ecbd5cbf89eae0a1f5326efedac0dbc" datatype="html">
         <source>Stripe count must be greater than 0.</source>
         <target>Licznik pasków musi być większy od 0.</target>
-      </trans-unit>
-      <trans-unit id="21afa21d069c7fdfc742e6fbbe7e6c0f6ff4e580" datatype="html">
-        <source>
-          <x id="ICU" equiv-text="{mode, select, editing {...} cloning {...} copying {...} other {...}}"/> RBD
-        </source>
-        <target>
-          <x id="ICU" equiv-text="{mode, select, editing {...} cloning {...} copying {...} other {...}}"/> RBD
-        </target>
-      </trans-unit>
-      <trans-unit id="96d97d99d8c30942ace7d29cad9dcfb5d32315a1" datatype="html">
-        <source>{VAR_SELECT, select, editing {Update} cloning {Clone} copying {Copy} other {Create} }</source>
-        <target>{VAR_SELECT, wybierz, edytowanie{Aktualizuj} klonowanie{Klonuj} kopiowanie{Kopiuj} inaczej {Dodaj} }</target>
       </trans-unit>
       <trans-unit id="aba82bfd8e177d35b76cad7cd43941f8e5e5acac" datatype="html">
         <source>Trash</source>
@@ -776,14 +732,6 @@ jak skonfigurować i uruchomić zarządzanie funkcjonalnościami obiektami docel
       <trans-unit id="dc6705f342a036b332c3fd3443201c3613e5524d" datatype="html">
         <source>{VAR_SELECT, select, 1 {deep } }</source>
         <target>{VAR_SELECT, wybierz, 1 {głębokość} }</target>
-      </trans-unit>
-      <trans-unit id="4beacb61e2236200b5627677b5c0054d2b482ed4" datatype="html">
-        <source>Set Cluster-wide Flags</source>
-        <target>Ustaw flagi na całym klastrze </target>
-      </trans-unit>
-      <trans-unit id="9617df8e0504d997d0ff45b6c206a12becd13c37" datatype="html">
-        <source>Set Cluster-wide Recovery Priority</source>
-        <target>Ustaw priorytet odzyskiwania dla całego klastra</target>
       </trans-unit>
       <trans-unit id="b49d7877d24112d4bdfce9256edf61a007fae888" datatype="html">
         <source>OSDs List</source>
@@ -1035,10 +983,6 @@ w
         <source>By using different Pseudo options, the same Path may be exported multiple times.</source>
         <target>Używając różnych opcji Pseudo, ta sama Ścieżka może być wyeksportowana kilka razy.</target>
       </trans-unit>
-      <trans-unit id="a90eaec5c5d9b248bcc5a9765c21d80a5d210765" datatype="html">
-        <source>Wrong format</source>
-        <target>Zły format</target>
-      </trans-unit>
       <trans-unit id="27eb35c4b4ac08781a7253a2ab40f8f7d957ba51" datatype="html">
         <source>-- No access type available --</source>
         <target>-- Brak dostępnych typów dostępu --</target>
@@ -1070,10 +1014,6 @@ w
       <trans-unit id="734c9905951a774870497c5aaae8e3ee833b6196" datatype="html">
         <source>CephFS</source>
         <target>CephFS</target>
-      </trans-unit>
-      <trans-unit id="594cd9429597cf6bede5560b3d8fe578821213de" datatype="html">
-        <source>Add erasure code profile</source>
-        <target>Dodaj profil kasowania</target>
       </trans-unit>
       <trans-unit id="490e15ecc922965b6d8194754c87c5583aa071f3" datatype="html">
         <source>The name can only consist of alphanumeric characters, dashes and underscores.</source>
@@ -1154,18 +1094,6 @@ w
       <trans-unit id="f4e529ae5ffd73001d1ff4bbdeeb0a72e342e5c8" datatype="html">
         <source>Close</source>
         <target>Zamknij</target>
-      </trans-unit>
-      <trans-unit id="feb7520a18f7cda6389712427d0a6e4c38b76000" datatype="html">
-        <source>
-          <x id="ICU" equiv-text="{editing, select, 1 {...} other {...}}"/> pool
-        </source>
-        <target>
-          <x id="ICU" equiv-text="{editing, select, 1 {...} other {...}}"/>  pul
-        </target>
-      </trans-unit>
-      <trans-unit id="ecef2f4d8d12929542a3b16f268dac8156f2ee14" datatype="html">
-        <source>{VAR_SELECT, select, 1 {Edit} other {Add} }</source>
-        <target>{VAR_SELECT, wybierz, 1 {Edytuj} inaczej{Dodaj} }</target>
       </trans-unit>
       <trans-unit id="2fecea01ce1d44114ee45144eff6d47a5016a74f" datatype="html">
         <source>Name...</source>
@@ -1319,10 +1247,6 @@ zbyt mało OSD-ków, żeby spełnić minimum OSD-ków wymaganych przez tę zasad
         <source>Value should be greater than 0</source>
         <target>Wartość powinna być większa niż 0</target>
       </trans-unit>
-      <trans-unit id="54be22af9625a595ee5d70917ee1fb116be7c4be" datatype="html">
-        <source>Value should be greater than the maximum blob size</source>
-        <target>Wartość powinna być większa niż maksymalny rozmiar blob</target>
-      </trans-unit>
       <trans-unit id="151efb127a9a4dd25259a0b2055442318a141f5b" datatype="html">
         <source>Maximum blob size</source>
         <target>Maksymalny rozmiar blob</target>
@@ -1355,18 +1279,6 @@ zbyt mało OSD-ków, żeby spełnić minimum OSD-ków wymaganych przez tę zasad
         <source>Please change the name or remove 'rbd' from the applications list.</source>
         <target>Proszę zmienić nazwę albo usunąć 'rbd' z listy zastosowań.</target>
       </trans-unit>
-      <trans-unit id="c6d3131ce5386154504dc91b5ad08855d85881d3" datatype="html">
-        <source>
-          <x id="ICU" equiv-text="{editing, select, 1 {...} other {...}}"/> pool
-        </source>
-        <target>
-          <x id="ICU" equiv-text="{editing, select, 1 {...} other {...}}"/> pul
-        </target>
-      </trans-unit>
-      <trans-unit id="e2b15aacc2f17a9c3276895eeeaadd342ab26555" datatype="html">
-        <source>{VAR_SELECT, select, 1 {Edit} other {Create} }</source>
-        <target>{VAR_SELECT, wybierz, 1 {Edytuj} inaczej{Utwórz} }</target>
-      </trans-unit>
       <trans-unit id="1d8a7c8aea58294a3c57c23af0468ddf0ba0c9c7" datatype="html">
         <source>Pools List</source>
         <target>Lista puli</target>
@@ -1391,14 +1303,6 @@ jak skonfigurować i i uruchomić zarządzanie funkcjami Dostępu obiektowego
         <source>The bucket data could not be loaded.</source>
         <target>Nie można załadować wiadra danych.</target>
       </trans-unit>
-      <trans-unit id="838abd335419fb1a7a6f14398ef17eee3e3fdeb6" datatype="html">
-        <source>
-          <x id="ICU" equiv-text="{editing, select, 1 {...} other {...}}"/> bucket
-        </source>
-        <target>
-          <x id="ICU" equiv-text="{editing, select, 1 {...} other {...}}"/> wiadro
-        </target>
-      </trans-unit>
       <trans-unit id="2798cc1e152b1ec07fd8daf94a2a073d1ba1ebcc" datatype="html">
         <source>Id</source>
         <target>Number ID</target>
@@ -1419,17 +1323,9 @@ jak skonfigurować i i uruchomić zarządzanie funkcjami Dostępu obiektowego
         <source>-- Select a user --</source>
         <target>-- Wybierz użytkownika -- </target>
       </trans-unit>
-      <trans-unit id="315bfc460250cbfcf9b90beff732cf0770912990" datatype="html">
-        <source>{VAR_SELECT, select, 1 {Update} other {Add} }</source>
-        <target>{VAR_SELECT, wybierz, 1 {Aktualizuj} inaczej{Utwórz} }</target>
-      </trans-unit>
       <trans-unit id="479488ab6e91ecb375484edc78bee3d13467f33f" datatype="html">
         <source>Daemons List</source>
         <target>Lista demonów</target>
-      </trans-unit>
-      <trans-unit id="6bcc896f4c3dbf91cc00d8506409e6e22bccaacd" datatype="html">
-        <source>Capability</source>
-        <target>Zdolność </target>
       </trans-unit>
       <trans-unit id="f61c6867295f3b53d23557021f2f4e0aa1d0b8fc" datatype="html">
         <source>Type</source>
@@ -1547,10 +1443,6 @@ jak skonfigurować i i uruchomić zarządzanie funkcjami Dostępu obiektowego
         <source>Delete</source>
         <target>Usuń</target>
       </trans-unit>
-      <trans-unit id="1c9f46392d9b25bfb9afe74c87ddfe94f44c0b60" datatype="html">
-        <source>Add subuser</source>
-        <target>Dodaj pod-użytkownika </target>
-      </trans-unit>
       <trans-unit id="0bcd5ef19af0f1b814141ca8c57df623d8270088" datatype="html">
         <source>Keys</source>
         <target>Klucze</target>
@@ -1567,10 +1459,6 @@ jak skonfigurować i i uruchomić zarządzanie funkcjami Dostępu obiektowego
         <source>Show</source>
         <target>Pokaż</target>
       </trans-unit>
-      <trans-unit id="a5193a8d59cd045c18ef9521f486a091dad1f513" datatype="html">
-        <source>Add S3 key</source>
-        <target>Dodaj klucz S3</target>
-      </trans-unit>
       <trans-unit id="6ddb5e991a3ecd2659fb520bc5acc81b67e08ddd" datatype="html">
         <source>Swift</source>
         <target>Szybki</target>
@@ -1582,10 +1470,6 @@ jak skonfigurować i i uruchomić zarządzanie funkcjami Dostępu obiektowego
       <trans-unit id="1d01eccdda47fc907c5be35bcb16d2dcd02b0270" datatype="html">
         <source>There are no capabilities.</source>
         <target>Nie ma zdolności. </target>
-      </trans-unit>
-      <trans-unit id="60a495bec6eae04c9b7570956a6673069e8e47d6" datatype="html">
-        <source>Add capability</source>
-        <target>Dodaj zdolność</target>
       </trans-unit>
       <trans-unit id="36ad38f9c1a1485e09b67778a28af84553290ffb" datatype="html">
         <source>User quota</source>
@@ -1632,18 +1516,6 @@ jak skonfigurować i i uruchomić zarządzanie funkcjami Dostępu obiektowego
         <source>Login</source>
         <target>Zaloguj</target>
       </trans-unit>
-      <trans-unit id="d96493d07439fc50485a66b7469451d30fc8ad25" datatype="html">
-        <source>
-          <x id="ICU" equiv-text="{mode, select, editing {...} other {...}}"/> Role
-        </source>
-        <target>
-          <x id="ICU" equiv-text="{mode, select, editing {...} other {...}}"/> Rola
-        </target>
-      </trans-unit>
-      <trans-unit id="72d6ccefaf8e300c9bc29d5e9757aaf79cd3f7eb" datatype="html">
-        <source>{VAR_SELECT, select, editing {Edit} other {Add} }</source>
-        <target>{VAR_SELECT, wybierz, edytowanie{Edytuj} inaczej{Dodaj} }</target>
-      </trans-unit>
       <trans-unit id="1ea5c4d8942c00752dcc72e72949c5d9832f6399" datatype="html">
         <source>Description...</source>
         <target>Opis...</target>
@@ -1651,18 +1523,6 @@ jak skonfigurować i i uruchomić zarządzanie funkcjami Dostępu obiektowego
       <trans-unit id="70f45880fce6ac5d8e468e25e82aefbba8098cfe" datatype="html">
         <source>Permissions</source>
         <target>Pozwolenia</target>
-      </trans-unit>
-      <trans-unit id="95af469f00ed2c20403755ad45e9f00439027617" datatype="html">
-        <source>
-          <x id="ICU" equiv-text="{mode, select, editing {...} other {...}}"/> Role
-        </source>
-        <target>
-          <x id="ICU" equiv-text="{mode, select, editing {...} other {...}}"/> Rola
-        </target>
-      </trans-unit>
-      <trans-unit id="b46ed6a153fed3fcba2f1296155fc4bfb1b3b166" datatype="html">
-        <source>{VAR_SELECT, select, editing {Update} other {Create} }</source>
-        <target>{VAR_SELECT, wybierz, edytowanie {Aktualizuj} inaczej{Utwórz} }</target>
       </trans-unit>
       <trans-unit id="58fc1b5c79a75370eb52644fd83fb2e7096b6649" datatype="html">
         <source>Sorry, the user does not exist in Ceph.</source>
@@ -1676,14 +1536,6 @@ jak skonfigurować i i uruchomić zarządzanie funkcjami Dostępu obiektowego
         <target>Powrót do 
           <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>Strony Logowania
           <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>. Zostaniesz wylogowany z Dostastcy Tożsamości , kiedy spróbujesz się zalgować. 
-        </target>
-      </trans-unit>
-      <trans-unit id="e83cda1d2f391695610a1c572332e5f81499dd83" datatype="html">
-        <source>
-          <x id="ICU" equiv-text="{mode, select, editing {...} other {...}}"/> User
-        </source>
-        <target>
-          <x id="ICU" equiv-text="{mode, select, editing {...} other {...}}"/> Użytkownik
         </target>
       </trans-unit>
       <trans-unit id="7f3bdcce4b2e8c37cd7f0f6c92ef8cff34b039b8" datatype="html">
@@ -1705,14 +1557,6 @@ jak skonfigurować i i uruchomić zarządzanie funkcjami Dostępu obiektowego
       <trans-unit id="9610487cbeb5796d34d8601b5ac0c0a65f9e1d19" datatype="html">
         <source>Roles</source>
         <target>Role</target>
-      </trans-unit>
-      <trans-unit id="9c4773dff91deccdacd78a4cd578f8f5f7fa229b" datatype="html">
-        <source>
-          <x id="ICU" equiv-text="{mode, select, editing {...} other {...}}"/> User
-        </source>
-        <target>
-          <x id="ICU" equiv-text="{mode, select, editing {...} other {...}}"/> Użytkownik
-        </target>
       </trans-unit>
       <trans-unit id="0051a3479d3ba79135c16dc8cc017950a2cce821" datatype="html">
         <source>You are about to remove "user read / update" permissions from your own user.</source>
@@ -1857,6 +1701,10 @@ jak skonfigurować i i uruchomić zarządzanie funkcjami Dostępu obiektowego
       <trans-unit id="8011e20c5bbe51602d459a860fbf29b599b55edd" datatype="html">
         <source>System</source>
         <target>System</target>
+      </trans-unit>
+      <trans-unit id="f120423a48cf96636bc415daf5ac041ea8c6503e" datatype="html">
+        <source>{VAR_SELECT, select, 0 {No} 1 {Yes} }</source>
+        <target>{VAR_SELECT, wybierz, 0 {Nie} 1{Tak} }</target>
       </trans-unit>
       <trans-unit id="db18a2772988415466a7f75dc42663ce78c9c1d3" datatype="html">
         <source>Maximum buckets</source>
@@ -2401,22 +2249,6 @@ lustra sparowanych atrybutów dla pula
       <trans-unit id="9a541ec1a4319fffc16ad3b3ab2c2b6d251a829d" datatype="html">
         <source>Hostname</source>
         <target>Nazwa hosta</target>
-      </trans-unit>
-      <trans-unit id="32b73dd480452aed3c8df00055279a110b3e633c" datatype="html">
-        <source># Active/Optimized</source>
-        <target># Aktywny/Zoptymalizowany</target>
-      </trans-unit>
-      <trans-unit id="26a3d69b872abf67663ba7473606ea32d6128531" datatype="html">
-        <source># Active/Non-Optimized</source>
-        <target># Aktywny/Niezoptymalizowany</target>
-      </trans-unit>
-      <trans-unit id="2cd86fc9c2dc1b4398514266a08e507140fe5ba8" datatype="html">
-        <source>Active/Optimized</source>
-        <target>Aktywny/Zoptymalizowany</target>
-      </trans-unit>
-      <trans-unit id="c74c467d73caf2b951bc1a1d52d6e93f9c5e795b" datatype="html">
-        <source>Active/Non-Optimized</source>
-        <target>Aktywny/Niezoptymalizowany</target>
       </trans-unit>
       <trans-unit id="13415637c325ceefee29111b31cb48701490adf7" datatype="html">
         <source>Read Bytes</source>
