@@ -47,8 +47,14 @@ struct PGPool {
   void update(CephContext *cct, OSDMapRef map);
 
   ceph::timespan get_readable_interval() const {
-    return ceph::make_timespan(
-      cct->_conf->osd_heartbeat_interval * 2.0);
+    double v = 0;
+    if (info.opts.get(pool_opts_t::READ_LEASE_INTERVAL, &v)) {
+      return ceph::make_timespan(v);
+    } else {
+      auto hbi = cct->_conf->osd_heartbeat_grace;
+      auto fac = cct->_conf->osd_pool_default_read_lease_ratio;
+      return ceph::make_timespan(hbi * fac);
+    }
   }
 };
 
