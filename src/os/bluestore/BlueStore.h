@@ -2142,9 +2142,12 @@ private:
   void _assign_nid(TransContext *txc, OnodeRef o);
   uint64_t _assign_blobid(TransContext *txc);
 
-  void _dump_onode(const OnodeRef& o, int log_level=30);
-  void _dump_extent_map(ExtentMap& em, int log_level=30);
-  void _dump_transaction(Transaction *t, int log_level = 30);
+  friend void _dump_onode(CephContext *cct, const Onode& o, int log_level);
+  friend void _dump_extent_map(
+    CephContext *cct,
+    const ExtentMap& em,
+    int log_level);
+  friend void _dump_transaction(CephContext *cct, Transaction *t, int log_level);
 
   TransContext *_txc_create(OpSequencer *osr);
   void _txc_update_store_statfs(TransContext *txc);
