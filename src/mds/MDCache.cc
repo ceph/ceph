@@ -1021,16 +1021,6 @@ void MDCache::try_subtree_merge(CDir *dir)
   }
 }
 
-class C_MDC_SubtreeMergeWB : public MDCacheLogContext {
-  CInode *in;
-  MutationRef mut;
-public:
-  C_MDC_SubtreeMergeWB(MDCache *mdc, CInode *i, MutationRef& m) : MDCacheLogContext(mdc), in(i), mut(m) {}
-  void finish(int r) override { 
-    mdcache->subtree_merge_writebehind_finish(in, mut);
-  }
-};
-
 void MDCache::try_subtree_merge_at(CDir *dir, set<CInode*> *to_eval, bool adjust_pop)
 {
   dout(10) << "try_subtree_merge_at " << *dir << dendl;
@@ -1080,18 +1070,6 @@ void MDCache::try_subtree_merge_at(CDir *dir, set<CInode*> *to_eval, bool adjust
 
     show_subtrees(15);
   }
-}
-
-void MDCache::subtree_merge_writebehind_finish(CInode *in, MutationRef& mut)
-{
-  dout(10) << "subtree_merge_writebehind_finish on " << in << dendl;
-  in->pop_and_dirty_projected_inode(mut->ls);
-
-  mut->apply();
-  mds->locker->drop_locks(mut.get());
-  mut->cleanup();
-
-  in->auth_unpin(this);
 }
 
 void MDCache::eval_subtree_root(CInode *diri)
@@ -1818,7 +1796,8 @@ void MDCache::journal_dirty_inode(MutationImpl *mut, EMetaBlob *metablob, CInode
 
 // nested ---------------------------------------------------------------
 
-void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t first,
+void MDCache::project_rstat_inode_to_frag(const MutationRef& mut,
+					  CInode *cur, CDir *parent, snapid_t first,
 					  int linkunlink, SnapRealm *prealm)
 {
   CDentry *parentdn = cur->get_projected_parent_dn();
@@ -1861,7 +1840,7 @@ void MDCache::project_rstat_inode_to_frag(CInode *cur, CDir *parent, snapid_t fi
     }
     // hacky
     const CInode::mempool_inode *pi;
-    if (update && cur->is_projected()) {
+    if (update && mut->is_projected(cur)) {
       pi = cur->_get_projected_inode();
     } else {
       pi = cur->get_projected_inode().get();
@@ -2232,9 +2211,8 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 
     // inode -> dirfrag
     mut->auth_pin(parent);
-    mut->add_projected_fnode(parent);
 
-    auto pf = parent->project_fnode();
+    auto pf = parent->project_fnode(mut);
     pf->version = parent->pre_dirty();
 
     if (do_parent_mtime || linkunlink) {
@@ -2303,7 +2281,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
       parent->resync_accounted_rstat();
 
       // now push inode rstats into frag
-      project_rstat_inode_to_frag(cur, parent, first, linkunlink, prealm);
+      project_rstat_inode_to_frag(mut, cur, parent, first, linkunlink, prealm);
       cur->clear_dirty_rstat();
     }
 
@@ -2358,12 +2336,11 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 
     // dirfrag -> diri
     mut->auth_pin(pin);
-    mut->add_projected_inode(pin);
     lsi.push_front(pin);
 
     pin->pre_cow_old_inode();  // avoid cow mayhem!
 
-    auto pi = pin->project_inode();
+    auto pi = pin->project_inode(mut);
     pi.inode->version = pin->pre_dirty();
 
     // dirstat
@@ -6363,8 +6340,8 @@ void MDCache::queue_file_recover(CInode *in)
     s.erase(*s.rbegin());
   dout(10) << " snaps in [" << in->first << "," << in->last << "] are " << s << dendl;
   if (s.size() > 1) {
-    CInode::mempool_inode pi = in->project_inode();
-    pi->version = in->pre_dirty();
+    auto pi = in->project_inode(mut);
+    pi.inode.version = in->pre_dirty();
 
     auto mut(std::make_shared<MutationImpl>());
     mut->ls = mds->mdlog->get_current_segment();
@@ -6394,7 +6371,6 @@ void MDCache::queue_file_recover(CInode *in)
 
 void MDCache::_queued_file_recover_cow(CInode *in, MutationRef& mut)
 {
-  in->pop_and_dirty_projected_inode(mut->ls);
   mut->apply();
   mds->locker->drop_locks(mut.get());
   mut->cleanup();
@@ -6579,15 +6555,14 @@ void MDCache::truncate_inode_finish(CInode *in, LogSegment *ls)
   ceph_assert(p != ls->truncating_inodes.end());
   ls->truncating_inodes.erase(p);
 
+  MutationRef mut(new MutationImpl());
+  mut->ls = mds->mdlog->get_current_segment();
+
   // update
-  auto pi = in->project_inode();
+  auto pi = in->project_inode(mut);
   pi.inode->version = in->pre_dirty();
   pi.inode->truncate_from = 0;
   pi.inode->truncate_pending--;
-
-  MutationRef mut(new MutationImpl());
-  mut->ls = mds->mdlog->get_current_segment();
-  mut->add_projected_inode(in);
 
   EUpdate *le = new EUpdate(mds->mdlog, "truncate finish");
   mds->mdlog->start_entry(le);
@@ -11982,7 +11957,7 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
   // dft lock
   if (diri->is_auth()) {
     // journal dirfragtree
-    auto pi = diri->project_inode();
+    auto pi = diri->project_inode(mdr);
     pi.inode->version = diri->pre_dirty();
     predirty_journal_parents(mdr, &le->metablob, diri, 0, PREDIRTY_PRIMARY);
     journal_dirty_inode(mdr.get(), &le->metablob, diri);
@@ -12019,9 +11994,6 @@ void MDCache::_fragment_logged(MDRequestRef& mdr)
   dout(10) << "fragment_logged " << basedirfrag << " bits " << info.bits
 	   << " on " << *diri << dendl;
   mdr->mark_event("prepare logged");
-
-  if (diri->is_auth())
-    diri->pop_and_dirty_projected_inode(mdr->ls);
 
   mdr->apply();  // mark scatterlock
 
@@ -12426,8 +12398,7 @@ void MDCache::rollback_uncommitted_fragments()
     }
 
     if (diri_auth) {
-      auto pi = diri->project_inode();
-      mut->add_projected_inode(diri);
+      auto pi = diri->project_inode(mut);
       pi.inode->version = diri->pre_dirty();
       predirty_journal_parents(mut, &le->metablob, diri, 0, PREDIRTY_PRIMARY);
       le->metablob.add_primary_dentry(diri->get_projected_parent_dn(), diri, true);
@@ -13075,10 +13046,9 @@ void MDCache::repair_dirfrag_stats_work(MDRequestRef& mdr)
     return;
   }
 
-  auto _pf = dir->project_fnode();
+  auto _pf = dir->project_fnode(mdr);
   _pf->version = dir->pre_dirty();
   pf = _pf;
-  mdr->add_projected_fnode(dir);
 
   mdr->ls = mds->mdlog->get_current_segment();
   EUpdate *le = new EUpdate(mds->mdlog, "repair_dirfrag");
@@ -13235,8 +13205,7 @@ void MDCache::upgrade_inode_snaprealm_work(MDRequestRef& mdr)
     return;
 
   // project_snaprealm() upgrades snaprealm format
-  auto pi = in->project_inode(false, true);
-  mdr->add_projected_inode(in);
+  auto pi = in->project_inode(mdr, false, true);
   pi.inode->version = in->pre_dirty();
 
   mdr->ls = mds->mdlog->get_current_segment();

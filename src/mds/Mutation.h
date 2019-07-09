@@ -201,10 +201,15 @@ public:
   void set_remote_auth_pinned(MDSCacheObject* object, mds_rank_t from);
   void _clear_remote_auth_pinned(ObjectState& stat);
 
-  void add_projected_inode(CInode *in);
-  void pop_and_dirty_projected_inodes();
-  void add_projected_fnode(CDir *dir);
-  void pop_and_dirty_projected_fnodes();
+  void add_projected_node(MDSCacheObject* obj) {
+    projected_nodes.insert(obj);
+  }
+  void remove_projected_node(MDSCacheObject* obj) {
+    projected_nodes.erase(obj);
+  }
+  bool is_projected(MDSCacheObject *obj) const {
+    return projected_nodes.count(obj);
+  }
   void add_updated_lock(ScatterLock *lock);
   void add_cow_inode(CInode *in);
   void add_cow_dentry(CDentry *dn);
@@ -256,8 +261,7 @@ public:
   bool killed = false;
 
   // for applying projected inode changes
-  std::list<CInode*> projected_inodes;
-  std::vector<CDir*> projected_fnodes;
+  std::set<MDSCacheObject*> projected_nodes;
   std::list<ScatterLock*> updated_locks;
 
   std::list<CInode*> dirty_cow_inodes;

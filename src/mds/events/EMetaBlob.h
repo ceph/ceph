@@ -450,11 +450,9 @@ private:
       state |= fullbit::STATE_EPHEMERAL_RANDOM;
     }
 
-    // make note of where this inode was last journaled
-    in->last_journaled = event_seq;
-    //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
-
     const auto& pi = in->get_projected_inode();
+    ceph_assert(pi->version > 0);
+
     if ((state & fullbit::STATE_DIRTY) && pi->is_backtrace_updated())
       state |= fullbit::STATE_DIRTYPARENT;
 
@@ -467,6 +465,10 @@ private:
     lump.add_dfull(dn->get_name(), dn->first, dn->last, dn->get_projected_version(),
 		   pi, in->dirfragtree, in->get_projected_xattrs(), in->symlink,
 		   in->oldest_snap, snapbl, state, in->get_old_inodes());
+
+    // make note of where this inode was last journaled
+    in->last_journaled = event_seq;
+    //cout << "journaling " << in->inode.ino << " at " << my_offset << std::endl;
   }
 
   // convenience: primary or remote?  figure it out.

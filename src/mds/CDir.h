@@ -228,8 +228,8 @@ public:
 
   void resync_accounted_fragstat();
   void resync_accounted_rstat();
-  void assimilate_dirty_rstat_inodes();
-  void assimilate_dirty_rstat_inodes_finish(MutationRef& mut, EMetaBlob *blob);
+  void assimilate_dirty_rstat_inodes(MutationRef& mut);
+  void assimilate_dirty_rstat_inodes_finish(EMetaBlob *blob);
 
   void mark_exporting() {
     state_set(CDir::STATE_EXPORTING);
@@ -275,9 +275,9 @@ public:
     return const_cast<fnode_t*>(projected_fnode.back().get());
   }
 
-  fnode_ptr project_fnode();
+  fnode_ptr project_fnode(const MutationRef& mut);
 
-  void pop_and_dirty_projected_fnode(LogSegment *ls);
+  void pop_and_dirty_projected_fnode(LogSegment *ls, const MutationRef& mut);
   bool is_projected() const { return !projected_fnode.empty(); }
   version_t pre_dirty(version_t min=0);
   void _mark_dirty(LogSegment *ls);
