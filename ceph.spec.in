@@ -658,9 +658,7 @@ Summary:	Python 2 libraries for Ceph distributed file system
 Group:		Development/Languages/Python
 %endif
 Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
-%if 0%{?suse_version}
-Recommends: python-rados = %{_epoch_prefix}%{version}-%{release}
-%endif
+Requires:	python-rados = %{_epoch_prefix}%{version}-%{release}
 Obsoletes:	python-ceph < %{_epoch_prefix}%{version}-%{release}
 %description -n python-cephfs
 This package contains Python 2 libraries for interacting with Cephs distributed
