@@ -171,7 +171,6 @@ public:
 	mapping_hoid(mapping_hoid),
 	purged_snaps_hoid(purged_snaps_hoid) {}
 
-    void _init();
     void run();
   };
 
