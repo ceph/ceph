@@ -17,6 +17,10 @@ export abstract class PageHelper {
       .getText();
   }
 
+  static getTableCount() {
+    return $('.datatable-footer-inner.selected-count');
+  }
+
   static getTitleText() {
     let title;
     return browser
@@ -43,7 +47,16 @@ export abstract class PageHelper {
     return element.all(by.cssContainingText('.datatable-body-cell-label', content)).first();
   }
 
+  static moveClick(object) {
+    return browser
+      .actions()
+      .mouseMove(object)
+      .click();
+  }
+
   navigateTo(page = null) {
-    return browser.get(this.pages[page || 'index']);
+    page = page || 'index';
+    const url = this.pages[page];
+    return browser.get(url);
   }
 }
