@@ -68,8 +68,7 @@ EOF
 
 
     cd $TEMP_DIR
-
-    virtualenv --python=/usr/bin/python venv
+    virtualenv --python=${TEUTHOLOGY_PYTHON_BIN:-/usr/bin/python} venv
     source venv/bin/activate
     eval pip install $TEUTHOLOGY_PY_REQS
     pip install -r $CURR_DIR/requirements.txt
@@ -103,7 +102,6 @@ EOF
 run_teuthology_tests() {
     cd "$BUILD_DIR"
     find ../src/pybind/mgr/dashboard/ -name '*.pyc' -exec rm -f {} \;
-    source $TEMP_DIR/venv/bin/activate
 
     OPTIONS=''
     TEST_CASES=''
@@ -120,11 +118,10 @@ run_teuthology_tests() {
     fi
 
     export PATH=$BUILD_DIR/bin:$PATH
+    source $TEMP_DIR/venv/bin/activate # Run after setting PATH as it does the last PATH export.
     export LD_LIBRARY_PATH=$BUILD_DIR/lib/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}/:$BUILD_DIR/lib
     export PYTHONPATH=$TEMP_DIR/teuthology:$BUILD_DIR/../qa:$BUILD_DIR/lib/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}/:$BUILD_DIR/../src/pybind
-    if [[ -z "$RGW" ]]; then
-        export RGW=1
-    fi
+    export RGW=${RGW:-1}
 
     export COVERAGE_ENABLED=true
     export COVERAGE_FILE=.coverage.mgr.dashboard
