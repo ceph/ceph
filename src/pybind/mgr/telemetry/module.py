@@ -16,6 +16,7 @@ from collections import defaultdict
 
 from mgr_module import MgrModule
 
+ALL_CHANNELS = ['basic']
 
 class Module(MgrModule):
     config = dict()
@@ -90,7 +91,8 @@ class Module(MgrModule):
             "perm": "rw"
         },
         {
-            "cmd": "telemetry show",
+            "cmd": "telemetry show "
+                   "name=channels,type=CephString,n=N,req=False",
             "desc": "Show last report or report to be sent",
             "perm": "r"
         },
@@ -227,13 +229,16 @@ class Module(MgrModule):
             r.append('basic')
         return r
 
-    def compile_report(self):
+    def compile_report(self, channels=[]):
+        if not channels:
+            channels = self.get_active_channels()
         report = {
             'leaderboard': False,
             'report_version': 1,
             'report_timestamp': datetime.utcnow().isoformat(),
             'report_id': self.report_id,
-            'channels': self.get_active_channels(),
+            'channels': channels,
+            'channels_available': ALL_CHANNELS,
         }
 
         if self.str_to_bool(self.config['leaderboard']):
@@ -242,7 +247,7 @@ class Module(MgrModule):
         for option in ['description', 'contact', 'organization']:
             report[option] = self.config.get(option, None)
 
-        if self.config['channel_basic']:
+        if 'basic' in channels:
             mon_map = self.get('mon_map')
             osd_map = self.get('osd_map')
             service_map = self.get('service_map')
@@ -346,7 +351,9 @@ class Module(MgrModule):
                 resp.text
             )
         elif command['prefix'] == 'telemetry show':
-            report = self.compile_report()
+            report = self.compile_report(
+                channels=command.get('channels', None)
+            )
             return 0, json.dumps(report, indent=4), ''
         elif command['prefix'] == 'telemetry self-test':
             self.self_test()
