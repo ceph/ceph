@@ -346,9 +346,7 @@ class Module(MgrModule):
                 resp.text
             )
         elif command['prefix'] == 'telemetry show':
-            report = self.last_report
-            if not report:
-                report = self.compile_report()
+            report = self.compile_report()
             return 0, json.dumps(report, indent=4), ''
         elif command['prefix'] == 'telemetry self-test':
             self.self_test()
