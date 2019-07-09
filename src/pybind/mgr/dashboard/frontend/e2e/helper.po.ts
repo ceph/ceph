@@ -5,7 +5,11 @@ export class Helper {
   static EC = browser.ExpectedConditions;
   static TIMEOUT = 30000;
 
-  static buckets = BucketsPageHelper;
+  buckets: BucketsPageHelper;
+
+  constructor() {
+    this.buckets = new BucketsPageHelper();
+  }
 
   /**
    * Checks if there are any errors on the browser
