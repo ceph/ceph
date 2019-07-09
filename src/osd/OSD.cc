@@ -6681,6 +6681,7 @@ void OSD::scrub_purged_snaps()
     pg->queue_snap_retrim(snap);
     pg->unlock();
   }
+  dout(10) << __func__ << " done queueing pgs, updating superblock" << dendl;
   ObjectStore::Transaction t;
   superblock.last_purged_snaps_scrub = ceph_clock_now();
   write_superblock(t);
@@ -6689,6 +6690,7 @@ void OSD::scrub_purged_snaps()
   if (is_active()) {
     send_beacon(ceph::coarse_mono_clock::now());
   }
+  dout(10) << __func__ << " done" << dendl;
 }
 
 void OSD::probe_smart(const string& only_devid, ostream& ss)
