@@ -408,10 +408,10 @@ protected:
     uint64_t* allocated,
     interval_vector_t* res);
 
-  uint64_t _mark_alloc_l1(const interval_t& r)
+  uint64_t _mark_alloc_l1(uint64_t offset, uint64_t length)
   {
-    uint64_t l0_pos_start = r.offset / l0_granularity;
-    uint64_t l0_pos_end = P2ROUNDUP(r.offset + r.length, l0_granularity) / l0_granularity;
+    uint64_t l0_pos_start = offset / l0_granularity;
+    uint64_t l0_pos_end = P2ROUNDUP(offset + length, l0_granularity) / l0_granularity;
     _mark_alloc_l1_l0(l0_pos_start, l0_pos_end);
     return l0_granularity * (l0_pos_end - l0_pos_start);
   }
@@ -746,7 +746,7 @@ protected:
     uint64_t l2_pos_end = P2ROUNDUP(int64_t(o + len), int64_t(l2_granularity)) / l2_granularity;
 
     std::lock_guard<std::mutex> l(lock);
-    auto allocated = l1._mark_alloc_l1(interval_t(o, len));
+    auto allocated = l1._mark_alloc_l1(o, len);
     assert(available >= allocated);
     available -= allocated;
     _mark_l2_on_l1(l2_pos, l2_pos_end);
