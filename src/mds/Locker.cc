@@ -2136,7 +2136,6 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, unsigned flags,
 				client_t client, const ref_t<MClientCaps> &ack)
 {
   dout(10) << "file_update_finish on " << *in << dendl;
-  in->pop_and_dirty_projected_inode(mut->ls);
 
   mut->apply();
 
@@ -2792,7 +2791,7 @@ bool Locker::check_inode_max_size(CInode *in, bool force_wrlock,
   MutationRef mut(new MutationImpl());
   mut->ls = mds->mdlog->get_current_segment();
     
-  auto pi = in->project_inode();
+  auto pi = in->project_inode(mut);
   pi.inode.version = in->pre_dirty();
 
   if (update_max) {
@@ -3534,13 +3533,13 @@ void Locker::_do_snap_update(CInode *in, snapid_t snap, int dirty, snapid_t foll
   CInode::mempool_inode *i;
   if (oi) {
     dout(10) << " writing into old inode" << dendl;
-    auto pi = in->project_inode();
+    auto pi = in->project_inode(mut);
     pi.inode.version = in->pre_dirty();
     i = &oi->inode;
     if (xattrs)
       px = &oi->xattrs;
   } else {
-    auto pi = in->project_inode(xattrs);
+    auto pi = in->project_inode(mut, xattrs);
     pi.inode.version = in->pre_dirty();
     i = &pi.inode;
     if (xattrs)
@@ -3809,11 +3808,11 @@ bool Locker::_do_cap_update(CInode *in, Capability *cap,
                m->xattrbl.length() &&
                m->head.xattr_version > in->get_projected_inode()->xattr_version;
 
-  auto pi = in->project_inode(xattr);
-  pi.inode.version = in->pre_dirty();
-
   MutationRef mut(new MutationImpl());
   mut->ls = mds->mdlog->get_current_segment();
+
+  auto pi = in->project_inode(mut, xattr);
+  pi.inode.version = in->pre_dirty();
 
   _update_cap_fields(in, dirty, m, &pi.inode);
 
@@ -4876,10 +4875,10 @@ void Locker::scatter_writebehind(ScatterLock *lock)
 
   in->pre_cow_old_inode();  // avoid cow mayhem
 
-  auto pi = in->project_inode();
+  auto pi = in->project_inode(mut);
   pi.inode.version = in->pre_dirty();
 
-  in->finish_scatter_gather_update(lock->get_type());
+  in->finish_scatter_gather_update(lock->get_type(), mut);
   lock->start_flush();
 
   EUpdate *le = new EUpdate(mds->mdlog, "scatter_writebehind");
@@ -4888,7 +4887,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
   mdcache->predirty_journal_parents(mut, &le->metablob, in, 0, PREDIRTY_PRIMARY);
   mdcache->journal_dirty_inode(mut.get(), &le->metablob, in);
   
-  in->finish_scatter_gather_update_accounted(lock->get_type(), mut, &le->metablob);
+  in->finish_scatter_gather_update_accounted(lock->get_type(), &le->metablob);
 
   mds->mdlog->submit_entry(le, new C_Locker_ScatterWB(this, lock, mut));
 }
@@ -4897,7 +4896,8 @@ void Locker::scatter_writebehind_finish(ScatterLock *lock, MutationRef& mut)
 {
   CInode *in = static_cast<CInode*>(lock->get_parent());
   dout(10) << "scatter_writebehind_finish on " << *lock << " on " << *in << dendl;
-  in->pop_and_dirty_projected_inode(mut->ls);
+
+  mut->apply();
 
   lock->finish_flush();
 
@@ -4913,7 +4913,6 @@ void Locker::scatter_writebehind_finish(ScatterLock *lock, MutationRef& mut)
     }
   }
 
-  mut->apply();
   drop_locks(mut.get());
   mut->cleanup();
 
