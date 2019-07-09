@@ -839,21 +839,11 @@ return 0;
 
 void RGWListBucket_ObjStore_S3::send_common_versioned_response()
 {
-  
   if (!s->bucket_tenant.empty()) {
     s->formatter->dump_string("Tenant", s->bucket_tenant);
   }
   s->formatter->dump_string("Name", s->bucket_name);
   s->formatter->dump_string("Prefix", prefix);
-  s->formatter->dump_string("KeyMarker", marker.name);
-  s->formatter->dump_string("VersionIdMarker", marker.instance);
-  if (is_truncated && !next_marker.empty()) {
-    s->formatter->dump_string("NextKeyMarker", next_marker.name);
-    if (next_marker.instance.empty())
-      s->formatter->dump_string("NextVersionIdMarker", "null");  
-    else
-      s->formatter->dump_string("NextVersionIdMarker", next_marker.instance);
-  }
   s->formatter->dump_int("MaxKeys", max);
   if (!delimiter.empty()) {
     s->formatter->dump_string("Delimiter", delimiter);
@@ -889,7 +879,6 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       s->formatter->dump_string("NextVersionIdMarker", next_marker.instance);
     }
   }
-
   bool encode_key = false;
   if (strcasecmp(encoding_type.c_str(), "url") == 0) {
     s->formatter->dump_string("EncodingType", "url");
@@ -947,10 +936,9 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       }
       s->formatter->close_section();
     }
-
-  s->formatter->close_section();
+    s->formatter->close_section();
+  }
   rgw_flush_formatter_and_reset(s, s->formatter);
-}
 }
 
 
