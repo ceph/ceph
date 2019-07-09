@@ -3,7 +3,7 @@ from __future__ import absolute_import
 
 import cherrypy
 
-from . import ApiController, RESTController
+from . import BaseController, ApiController, RESTController, Endpoint
 from .. import mgr
 from ..exceptions import DashboardException, UserAlreadyExists, \
     UserDoesNotExist
@@ -89,3 +89,24 @@ class User(RESTController):
         user.set_roles(user_roles)
         mgr.ACCESS_CTRL_DB.save()
         return User._user_to_dict(user)
+
+
+@ApiController('/user/{username}')
+class UserChangePassword(BaseController):
+    @Endpoint('POST')
+    def change_password(self, username, old_password, new_password):
+        session_username = JwtManager.get_username()
+        if username != session_username:
+            raise DashboardException(msg='Invalid user context',
+                                     code='invalid_user_context',
+                                     component='user')
+        try:
+            user = mgr.ACCESS_CTRL_DB.get_user(session_username)
+        except UserDoesNotExist:
+            raise cherrypy.HTTPError(404)
+        if not user.compare_password(old_password):
+            raise DashboardException(msg='Invalid old password',
+                                     code='invalid_old_password',
+                                     component='user')
+        user.set_password(new_password)
+        mgr.ACCESS_CTRL_DB.save()
