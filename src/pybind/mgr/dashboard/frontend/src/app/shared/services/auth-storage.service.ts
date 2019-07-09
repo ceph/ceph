@@ -8,10 +8,11 @@ import { Permissions } from '../models/permissions';
 export class AuthStorageService {
   constructor() {}
 
-  set(username: string, token: string, permissions: object = {}) {
+  set(username: string, token: string, permissions: object = {}, sso = false) {
     localStorage.setItem('dashboard_username', username);
     localStorage.setItem('access_token', token);
     localStorage.setItem('dashboard_permissions', JSON.stringify(new Permissions(permissions)));
+    localStorage.setItem('sso', String(sso));
   }
 
   remove() {
@@ -35,5 +36,9 @@ export class AuthStorageService {
     return JSON.parse(
       localStorage.getItem('dashboard_permissions') || JSON.stringify(new Permissions({}))
     );
+  }
+
+  isSSO() {
+    return localStorage.getItem('sso') === 'true';
   }
 }
