@@ -147,7 +147,7 @@ class SSHOrchestrator(MgrModule, orchestrator.Orchestrator):
         # cache is invalidated by
         # 1. timeout
         # 2. refresh parameter
-        self.inventory_cache = orchestrator.OutdatableDict(self, self._STORE_HOST_PREFIX)
+        self.inventory_cache = orchestrator.OutdatablePersistentDict(self, self._STORE_HOST_PREFIX)
 
     def handle_command(self, inbuf, command):
         if command["prefix"] == "ssh set-ssh-config":
