@@ -128,7 +128,8 @@ AsyncConnection::AsyncConnection(CephContext *cct, AsyncMessenger *m, DispatchQu
     recv_max_prefetch(MAX(msgr->cct->_conf->ms_tcp_prefetch_max_size, TCP_PREFETCH_MIN_SIZE)),
     recv_start(0), recv_end(0),
     last_active(ceph::coarse_mono_clock::now()),
-    inactive_timeout_us(cct->_conf->ms_tcp_read_timeout*1000*1000),
+    connect_timeout_us(cct->_conf->ms_connection_ready_timeout*1000*1000),
+    inactive_timeout_us(cct->_conf->ms_connection_idle_timeout*1000*1000),
     authorizer(NULL), replacing(false),
     is_reset_from_peer(false), once_ready(false), state_buffer(NULL), state_offset(0),
     worker(w), center(&w->center)
@@ -878,6 +879,12 @@ ssize_t AsyncConnection::_process_connection()
       {
         assert(!policy.server);
 
+        // clear timer (if any) since we are connecting/re-connecting
+        if (last_tick_id) {
+          center->delete_time_event(last_tick_id);
+          last_tick_id = 0;
+        }
+
         // reset connect state variables
         delete authorizer;
         authorizer = NULL;
@@ -923,6 +930,12 @@ ssize_t AsyncConnection::_process_connection()
 
         center->delete_file_event(cs.fd(), EVENT_WRITABLE);
         ldout(async_msgr->cct, 10) << __func__ << " connect successfully, ready to send banner" << dendl;
+
+        ceph_assert(last_tick_id == 0);
+        // exclude TCP nonblock connect time
+        last_connect_started = ceph::coarse_mono_clock::now();
+        last_tick_id = center->create_time_event(
+          connect_timeout_us, tick_handler);
 
         bufferlist bl;
         bl.append(CEPH_BANNER, strlen(CEPH_BANNER));
@@ -1672,6 +1685,10 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
                             << existing << ".cseq " << existing->connect_seq
                             << " == " << connect.connect_seq << ", sending WAIT" << dendl;
         assert(peer_addr > async_msgr->get_myaddr());
+        // make sure we follow through with opening the existing
+        // connection (if it isn't yet open) since we know the peer
+        // has something to send to us.
+        existing->send_keepalive();
         existing->lock.unlock();
         return _reply_accept(CEPH_MSGR_TAG_WAIT, connect, reply, authorizer_reply);
       }
@@ -1793,8 +1810,14 @@ ssize_t AsyncConnection::handle_connect_msg(ceph_msg_connect &connect, bufferlis
         if (existing->state == STATE_CLOSED)
           return ;
         assert(existing->state == STATE_NONE);
-  
         existing->state = STATE_ACCEPTING_WAIT_CONNECT_MSG;
+
+        // we have called shutdown_socket above
+        ceph_assert(existing->last_tick_id == 0);
+        // restart timer since we are going to re-build connection
+        existing->last_connect_started = ceph::coarse_mono_clock::now();
+        existing->last_tick_id = existing->center->create_time_event(
+          existing->connect_timeout_us, existing->tick_handler);
         existing->center->create_file_event(existing->cs.fd(), EVENT_READABLE, existing->read_handler);
         reply.global_seq = existing->peer_global_seq;
         if (existing->_reply_accept(CEPH_MSGR_TAG_RETRY_GLOBAL, connect, reply, authorizer_reply) < 0) {
@@ -2122,7 +2145,7 @@ void AsyncConnection::fault()
     return ;
   }
   reset_recv_state();
-  if (policy.standby && !is_queued() && state != STATE_WAIT) {
+  if (policy.standby && !is_queued() && state != STATE_WAIT && !keepalive) {
     ldout(async_msgr->cct, 10) << __func__ << " with nothing to send, going to standby" << dendl;
     state = STATE_STANDBY;
     write_lock.unlock();
@@ -2581,13 +2604,29 @@ void AsyncConnection::tick(uint64_t id)
                              << " last_active" << last_active << dendl;
   std::lock_guard<std::mutex> l(lock);
   last_tick_id = 0;
-  auto idle_period = std::chrono::duration_cast<std::chrono::microseconds>(now - last_active).count();
-  if (inactive_timeout_us < (uint64_t)idle_period) {
-    ldout(async_msgr->cct, 1) << __func__ << " idle(" << idle_period << ") more than "
-                              << inactive_timeout_us
-                              << " us, mark self fault." << dendl;
-    fault();
-  } else if (is_connected()) {
-    last_tick_id = center->create_time_event(inactive_timeout_us, tick_handler);
+  if (!is_connected()) {
+    if (connect_timeout_us <=
+        (uint64_t)std::chrono::duration_cast<std::chrono::microseconds>
+          (now - last_connect_started).count()) {
+      ldout(async_msgr->cct, 1) << __func__ << " see no progress in more than "
+                                << connect_timeout_us
+                                << " us during connecting, fault."
+                                << dendl;
+      fault();
+    } else {
+      last_tick_id = center->create_time_event(connect_timeout_us, tick_handler);
+    }
+  } else {
+    auto idle_period = std::chrono::duration_cast<std::chrono::microseconds>
+      (now - last_active).count();
+    if (inactive_timeout_us < (uint64_t)idle_period) {
+      ldout(async_msgr->cct, 1) << __func__ << " idle (" << idle_period
+                                << ") for more than " << inactive_timeout_us
+                                << " us, fault."
+                                << dendl;
+      fault();
+    } else {
+      last_tick_id = center->create_time_event(inactive_timeout_us, tick_handler);
+    }
   }
 }

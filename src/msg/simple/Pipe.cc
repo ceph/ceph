@@ -166,7 +166,7 @@ Pipe::Pipe(SimpleMessenger *r, int st, PipeConnection *con)
   }
     
 
-  msgr->timeout = msgr->cct->_conf->ms_tcp_read_timeout * 1000; //convert to ms
+  msgr->timeout = msgr->cct->_conf->ms_connection_idle_timeout * 1000; //convert to ms
   if (msgr->timeout == 0)
     msgr->timeout = -1;
 
