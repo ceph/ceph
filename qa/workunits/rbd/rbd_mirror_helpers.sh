@@ -185,6 +185,11 @@ expect_failure()
     return 0
 }
 
+mkfname()
+{
+    echo "$@" | sed -e 's|[/ ]|_|g'
+}
+
 create_users()
 {
     local cluster=$1
@@ -256,6 +261,12 @@ setup_pools()
 
     rbd --cluster ${cluster} mirror pool enable ${POOL} pool
     rbd --cluster ${cluster} mirror pool enable ${PARENT_POOL} image
+
+    rbd --cluster ${cluster} namespace create ${POOL}/ns1
+    rbd --cluster ${cluster} namespace create ${POOL}/ns2
+
+    rbd --cluster ${cluster} mirror pool enable ${POOL}/ns1 pool
+    rbd --cluster ${cluster} mirror pool enable ${POOL}/ns2 image
 
     if [ -z ${RBD_MIRROR_CONFIG_KEY} ]; then
       rbd --cluster ${cluster} mirror pool peer add ${POOL} ${remote_cluster}
@@ -621,8 +632,8 @@ get_position()
     # Parse line like below, looking for the first position
     # [id=, commit_position=[positions=[[object_number=1, tag_tid=3, entry_tid=9], [object_number=0, tag_tid=3, entry_tid=8], [object_number=3, tag_tid=3, entry_tid=7], [object_number=2, tag_tid=3, entry_tid=6]]]]
 
-    local status_log=${TEMPDIR}/${CLUSTER2}-${pool}-${image}.status
-    rbd --cluster ${cluster} -p ${pool} journal status --image ${image} |
+    local status_log=${TEMPDIR}/$(mkfname ${CLUSTER2}-${pool}-${image}.status)
+    rbd --cluster ${cluster} journal status --image ${pool}/${image} |
 	tee ${status_log} >&2
     sed -nEe 's/^.*\[id='"${id_regexp}"',.*positions=\[\[([^]]*)\],.*state=connected.*$/\1/p' \
 	${status_log}
@@ -687,8 +698,8 @@ test_status_in_pool_dir()
     local description_pattern="$5"
     local service_pattern="$6"
 
-    local status_log=${TEMPDIR}/${cluster}-${pool}-${image}.mirror_status
-    rbd --cluster ${cluster} -p ${pool} mirror image status ${image} |
+    local status_log=${TEMPDIR}/$(mkfname ${cluster}-${pool}-${image}.mirror_status)
+    rbd --cluster ${cluster} mirror image status ${pool}/${image} |
 	tee ${status_log} >&2
     grep "state: .*${state_pattern}" ${status_log} || return 1
     grep "description: .*${description_pattern}" ${status_log} || return 1
@@ -720,7 +731,7 @@ test_mirror_pool_status_verbose()
     local state_pattern="$4"
     local prev_last_update="$5"
 
-    local status_log=${TEMPDIR}/${cluster}-${pool}.mirror_status
+    local status_log=${TEMPDIR}/$(mkfname ${cluster}-${pool}.mirror_status)
 
     rbd --cluster ${cluster} mirror pool status ${pool} --verbose --format xml \
         > ${status_log}
@@ -765,8 +776,8 @@ create_image()
 	shift
     fi
 
-    rbd --cluster ${cluster} -p ${pool} create --size ${size} \
-	--image-feature layering,exclusive-lock,journaling $@ ${image}
+    rbd --cluster ${cluster} create --size ${size} \
+	--image-feature layering,exclusive-lock,journaling $@ ${pool}/${image}
 }
 
 enable_journaling()
@@ -775,7 +786,7 @@ enable_journaling()
     local pool=$2
     local image=$3
 
-    rbd --cluster ${cluster} -p ${pool} feature enable ${image} journaling
+    rbd --cluster ${cluster} feature enable ${pool}/${image} journaling
 }
 
 set_image_meta()
@@ -786,7 +797,7 @@ set_image_meta()
     local key=$4
     local val=$5
 
-    rbd --cluster ${cluster} -p ${pool} image-meta set ${image} $key $val
+    rbd --cluster ${cluster} image-meta set ${pool}/${image} $key $val
 }
 
 compare_image_meta()
@@ -797,7 +808,7 @@ compare_image_meta()
     local key=$4
     local value=$5
 
-    test `rbd --cluster ${cluster} -p ${pool} image-meta get ${image} ${key}` = "${value}"
+    test `rbd --cluster ${cluster} image-meta get ${pool}/${image} ${key}` = "${value}"
 }
 
 rename_image()
@@ -807,7 +818,7 @@ rename_image()
     local image=$3
     local new_name=$4
 
-    rbd --cluster=${cluster} -p ${pool} rename ${image} ${new_name}
+    rbd --cluster=${cluster} rename ${pool}/${image} ${pool}/${new_name}
 }
 
 remove_image()
@@ -816,8 +827,8 @@ remove_image()
     local pool=$2
     local image=$3
 
-    rbd --cluster=${cluster} -p ${pool} snap purge ${image}
-    rbd --cluster=${cluster} -p ${pool} rm ${image}
+    rbd --cluster=${cluster} snap purge ${pool}/${image}
+    rbd --cluster=${cluster} rm ${pool}/${image}
 }
 
 remove_image_retry()
@@ -838,7 +849,7 @@ trash_move() {
     local pool=$2
     local image=$3
 
-    rbd --cluster=${cluster} -p ${pool} trash move ${image}
+    rbd --cluster=${cluster} trash move ${pool}/${image}
 }
 
 trash_restore() {
@@ -846,7 +857,7 @@ trash_restore() {
     local pool=$2
     local image_id=$3
 
-    rbd --cluster=${cluster} -p ${pool} trash restore ${image_id}
+    rbd --cluster=${cluster} trash restore ${pool}/${image_id}
 }
 
 clone_image()
@@ -868,8 +879,8 @@ disconnect_image()
     local pool=$2
     local image=$3
 
-    rbd --cluster ${cluster} -p ${pool} journal client disconnect \
-	--image ${image}
+    rbd --cluster ${cluster} journal client disconnect \
+	--image ${pool}/${image}
 }
 
 create_snapshot()
@@ -879,7 +890,7 @@ create_snapshot()
     local image=$3
     local snap=$4
 
-    rbd --cluster ${cluster} -p ${pool} snap create ${image}@${snap}
+    rbd --cluster ${cluster} snap create ${pool}/${image}@${snap}
 }
 
 remove_snapshot()
@@ -889,7 +900,7 @@ remove_snapshot()
     local image=$3
     local snap=$4
 
-    rbd --cluster ${cluster} -p ${pool} snap rm ${image}@${snap}
+    rbd --cluster ${cluster} snap rm ${pool}/${image}@${snap}
 }
 
 rename_snapshot()
@@ -900,7 +911,8 @@ rename_snapshot()
     local snap=$4
     local new_snap=$5
 
-    rbd --cluster ${cluster} -p ${pool} snap rename ${image}@${snap} ${image}@${new_snap}
+    rbd --cluster ${cluster} snap rename ${pool}/${image}@${snap} \
+        ${pool}/${image}@${new_snap}
 }
 
 purge_snapshots()
@@ -909,7 +921,7 @@ purge_snapshots()
     local pool=$2
     local image=$3
 
-    rbd --cluster ${cluster} -p ${pool} snap purge ${image}
+    rbd --cluster ${cluster} snap purge ${pool}/${image}
 }
 
 protect_snapshot()
@@ -919,7 +931,7 @@ protect_snapshot()
     local image=$3
     local snap=$4
 
-    rbd --cluster ${cluster} -p ${pool} snap protect ${image}@${snap}
+    rbd --cluster ${cluster} snap protect ${pool}/${image}@${snap}
 }
 
 unprotect_snapshot()
@@ -929,7 +941,7 @@ unprotect_snapshot()
     local image=$3
     local snap=$4
 
-    rbd --cluster ${cluster} -p ${pool} snap unprotect ${image}@${snap}
+    rbd --cluster ${cluster} snap unprotect ${pool}/${image}@${snap}
 }
 
 wait_for_snap_present()
@@ -942,7 +954,7 @@ wait_for_snap_present()
 
     for s in 1 2 4 8 8 8 8 8 8 8 8 16 16 16 16 32 32 32 32; do
 	sleep ${s}
-        rbd --cluster ${cluster} -p ${pool} info ${image}@${snap_name} || continue
+        rbd --cluster ${cluster} info ${pool}/${image}@${snap_name} || continue
         return 0
     done
     return 1
@@ -958,7 +970,7 @@ write_image()
 
     test -n "${size}" || size=4096
 
-    rbd --cluster ${cluster} -p ${pool} bench ${image} --io-type write \
+    rbd --cluster ${cluster} bench ${pool}/${image} --io-type write \
 	--io-size ${size} --io-threads 1 --io-total $((size * count)) \
 	--io-pattern rand
 }
@@ -993,12 +1005,12 @@ compare_images()
     local image=$2
     local ret=0
 
-    local rmt_export=${TEMPDIR}/${CLUSTER2}-${pool}-${image}.export
-    local loc_export=${TEMPDIR}/${CLUSTER1}-${pool}-${image}.export
+    local rmt_export=${TEMPDIR}/$(mkfname ${CLUSTER2}-${pool}-${image}.export)
+    local loc_export=${TEMPDIR}/$(mkfname ${CLUSTER1}-${pool}-${image}.export)
 
     rm -f ${rmt_export} ${loc_export}
-    rbd --cluster ${CLUSTER2} -p ${pool} export ${image} ${rmt_export}
-    rbd --cluster ${CLUSTER1} -p ${pool} export ${image} ${loc_export}
+    rbd --cluster ${CLUSTER2} export ${pool}/${image} ${rmt_export}
+    rbd --cluster ${CLUSTER1} export ${pool}/${image} ${loc_export}
     if ! cmp ${rmt_export} ${loc_export}
     then
         show_diff ${rmt_export} ${loc_export}
@@ -1017,13 +1029,13 @@ compare_image_snapshots()
     local rmt_export=${TEMPDIR}/${CLUSTER2}-${pool}-${image}.export
     local loc_export=${TEMPDIR}/${CLUSTER1}-${pool}-${image}.export
 
-    for snap_name in $(rbd --cluster ${CLUSTER1} -p ${pool} --format xml \
-                           snap list ${image} | \
+    for snap_name in $(rbd --cluster ${CLUSTER1} --format xml \
+                           snap list ${pool}/${image} | \
                            $XMLSTARLET sel -t -v "//snapshot/name" | \
                            grep -E -v "^\.rbd-mirror\."); do
         rm -f ${rmt_export} ${loc_export}
-        rbd --cluster ${CLUSTER2} -p ${pool} export ${image}@${snap_name} ${rmt_export}
-        rbd --cluster ${CLUSTER1} -p ${pool} export ${image}@${snap_name} ${loc_export}
+        rbd --cluster ${CLUSTER2} export ${pool}/${image}@${snap_name} ${rmt_export}
+        rbd --cluster ${CLUSTER1} export ${pool}/${image}@${snap_name} ${loc_export}
         if ! cmp ${rmt_export} ${loc_export}
         then
             show_diff ${rmt_export} ${loc_export}
@@ -1059,7 +1071,7 @@ set_pool_mirror_mode()
     local pool=$2
     local mode=$3
 
-    rbd --cluster=${cluster} -p ${pool} mirror pool enable ${mode}
+    rbd --cluster=${cluster} mirror pool enable ${pool} ${mode}
 }
 
 disable_mirror()
@@ -1126,7 +1138,7 @@ get_image_id()
     local pool=$2
     local image=$3
 
-    rbd --cluster=${cluster} -p ${pool} info ${image} |
+    rbd --cluster=${cluster} info ${pool}/${image} |
 	sed -ne 's/^.*block_name_prefix: rbd_data\.//p'
 }
 
@@ -1140,7 +1152,7 @@ request_resync_image()
     eval "${image_id_var_name}='$(get_image_id ${cluster} ${pool} ${image})'"
     eval 'test -n "$'${image_id_var_name}'"'
 
-    rbd --cluster=${cluster} -p ${pool} mirror image resync ${image}
+    rbd --cluster=${cluster} mirror image resync ${pool}/${image}
 }
 
 get_image_data_pool()
@@ -1149,7 +1161,7 @@ get_image_data_pool()
     local pool=$2
     local image=$3
 
-    rbd --cluster ${cluster} -p ${pool} info ${image} |
+    rbd --cluster ${cluster} info ${pool}/${image} |
         awk '$1 == "data_pool:" {print $2}'
 }
 
