@@ -2710,7 +2710,8 @@ void BlueStore::ExtentMap::fault_range(
       p->extents = decode_some(v);
       p->loaded = true;
       dout(20) << __func__ << " open shard 0x" << std::hex
-	       << p->shard_info->offset << std::dec
+	       << p->shard_info->offset
+	       << " for range 0x" << offset << "~" << length << std::dec
 	       << " (" << v.length() << " bytes)" << dendl;
       assert(p->dirty == false);
       assert(v.length() == p->shard_info->bytes);
@@ -9832,6 +9833,20 @@ void BlueStore::_do_write_small(
   bufferlist bl;
   blp.copy(length, bl);
 
+  auto max_bsize = std::max(wctx->target_blob_size, min_alloc_size);
+  auto min_off = offset >= max_bsize ? offset - max_bsize : 0;
+  uint32_t alloc_len = min_alloc_size;
+  auto offset0 = P2ALIGN(offset, alloc_len);
+
+  bool any_change;
+
+  // search suitable extent in both forward and reverse direction in
+  // [offset - target_max_blob_size, offset + target_max_blob_size] range
+  // then check if blob can be reused via can_reuse_blob func or apply
+  // direct/deferred write (the latter for extents including or higher
+  // than 'offset' only).
+  o->extent_map.fault_range(db, min_off, offset + max_bsize - min_off);
+
   // Look for an existing mutable blob we can use.
   auto begin = o->extent_map.extent_map.begin();
   auto end = o->extent_map.extent_map.end();
@@ -9849,18 +9864,6 @@ void BlueStore::_do_write_small(
     prev_ep = end; // to avoid this extent check as it's a duplicate
   }
 
-  auto max_bsize = MAX(wctx->target_blob_size, min_alloc_size);
-  auto min_off = offset >= max_bsize ? offset - max_bsize : 0;
-  uint32_t alloc_len = min_alloc_size;
-  auto offset0 = P2ALIGN(offset, alloc_len);
-
-  bool any_change;
-
-  // search suitable extent in both forward and reverse direction in
-  // [offset - target_max_blob_size, offset + target_max_blob_size] range
-  // then check if blob can be reused via can_reuse_blob func or apply
-  // direct/deferred write (the latter for extents including or higher
-  // than 'offset' only).
   do {
     any_change = false;
 
