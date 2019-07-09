@@ -2022,7 +2022,7 @@ public:
   bool is_complete() const { return info.last_complete == info.last_update; }
   bool should_send_notify() const { return send_notify; }
 
-  int get_state() const { return state; }
+  uint64_t get_state() const { return state; }
   bool is_active() const { return state_test(PG_STATE_ACTIVE); }
   bool is_activating() const { return state_test(PG_STATE_ACTIVATING); }
   bool is_peering() const { return state_test(PG_STATE_PEERING); }
