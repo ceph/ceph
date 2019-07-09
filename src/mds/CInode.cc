@@ -419,8 +419,15 @@ void CInode::clear_dirty_rstat()
   }
 }
 
-CInode::projected_inode CInode::project_inode(bool xattr, bool snap)
+CInode::projected_inode CInode::project_inode(const MutationRef& mut,
+					      bool xattr, bool snap)
 {
+  if (mut && mut->is_projected(this)) {
+    ceph_assert(!xattr && !snap);
+    auto _inode = std::const_pointer_cast<mempool_inode>(projected_nodes.back().inode);
+    return projected_inode(std::move(_inode), xattr_map_ptr());
+  }
+
   auto pi = allocate_inode(*get_projected_inode());
 
   if (scrub_infop && scrub_infop->last_scrub_dirty) {
@@ -445,18 +452,21 @@ CInode::projected_inode CInode::project_inode(bool xattr, bool snap)
   }
 
   projected_nodes.emplace_back(pi, xattr ? px : ox , ps);
-
+  if (mut)
+    mut->add_projected_node(this);
   dout(15) << __func__ << " " << pi->ino << dendl;
   return projected_inode(std::move(pi), std::move(px), ps);
 }
 
-void CInode::pop_and_dirty_projected_inode(LogSegment *ls) 
+void CInode::pop_and_dirty_projected_inode(LogSegment *ls, const MutationRef& mut)
 {
   ceph_assert(!projected_nodes.empty());
   auto front = std::move(projected_nodes.front());
   dout(15) << __func__ << " v" << front.inode->version << dendl;
 
   projected_nodes.pop_front();
+  if (mut)
+    mut->remove_projected_node(this);
 
   bool pool_update = get_inode()->layout.pool_id != front.inode->layout.pool_id;
   bool pin_update = get_inode()->export_pin != front.inode->export_pin;
@@ -2347,7 +2357,7 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
       MutationRef mut(new MutationImpl());
       mut->ls = mdlog->get_current_segment();
 
-      auto pf = dir->project_fnode();
+      auto pf = dir->project_fnode(mut);
 
       std::string_view ename;
       switch (lock->get_type()) {
@@ -2364,7 +2374,7 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
 	if (!is_auth() && lock->get_state() == LOCK_MIX) {
 	  dout(10) << __func__ << " try to assimilate dirty rstat on " 
 	    << *dir << dendl; 
-	  dir->assimilate_dirty_rstat_inodes();
+	  dir->assimilate_dirty_rstat_inodes(mut);
        }
 
 	break;
@@ -2384,7 +2394,7 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
 	  !is_auth() && lock->get_state() == LOCK_MIX) {
         dout(10) << __func__ << " finish assimilating dirty rstat on " 
           << *dir << dendl; 
-        dir->assimilate_dirty_rstat_inodes_finish(mut, &le->metablob);
+        dir->assimilate_dirty_rstat_inodes_finish(&le->metablob);
 
         if (!(pf->rstat == pf->accounted_rstat)) {
           if (!mut->is_wrlocked(&nestlock)) {
@@ -2397,7 +2407,6 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
       }
 
       pf->version = dir->pre_dirty();
-      mut->add_projected_fnode(dir);
       
       mdlog->submit_entry(le, new C_Inode_FragUpdate(this, dir, mut));
     } else {
@@ -2434,7 +2443,7 @@ void CInode::_finish_frag_update(CDir *dir, MutationRef& mut)
  * un-stale.
  */
 /* for more info on scatterlocks, see comments by Locker::scatter_writebehind */
-void CInode::finish_scatter_gather_update(int type)
+void CInode::finish_scatter_gather_update(int type, MutationRef& mut)
 {
   LogChannelRef clog = mdcache->mds->clog;
 
@@ -2469,10 +2478,12 @@ void CInode::finish_scatter_gather_update(int type)
 	}
 
 	CDir::fnode_const_ptr pf;
-	if (update)
-	  pf = dir->project_fnode();
-	else
+	if (update) {
+	  mut->auth_pin(dir);
+	  pf = dir->project_fnode(mut);
+	} else {
 	  pf = dir->get_projected_fnode();
+	}
 
 	if (pf->accounted_fragstat.version == pi->dirstat.version - 1) {
 	  dout(20) << fg << "           fragstat " << pf->fragstat << dendl;
@@ -2499,6 +2510,7 @@ void CInode::finish_scatter_gather_update(int type)
 	  auto _pf = const_cast<fnode_t*>(pf.get());
 	  _pf->accounted_fragstat = _pf->fragstat;
 	  _pf->fragstat.version = _pf->accounted_fragstat.version = pi->dirstat.version;
+	  _pf->version = dir->pre_dirty();
 	  dout(10) << fg << " updated accounted_fragstat " << pf->fragstat << " on " << *dir << dendl;
 	}
 
@@ -2584,17 +2596,19 @@ void CInode::finish_scatter_gather_update(int type)
 	}
 
 	CDir::fnode_const_ptr pf;
-	if (update)
-	  pf = dir->project_fnode();
-	else
+	if (update) {
+	  mut->auth_pin(dir);
+	  pf = dir->project_fnode(mut);
+	} else {
 	  pf = dir->get_projected_fnode();
+	}
 
 	if (pf->accounted_rstat.version == pi->rstat.version-1) {
 	  // only pull this frag's dirty rstat inodes into the frag if
 	  // the frag is non-stale and updateable.  if it's stale,
 	  // that info will just get thrown out!
 	  if (update)
-	    dir->assimilate_dirty_rstat_inodes();
+	    dir->assimilate_dirty_rstat_inodes(mut);
 
 	  dout(20) << fg << "           rstat " << pf->rstat << dendl;
 	  dout(20) << fg << " accounted_rstat " << pf->accounted_rstat << dendl;
@@ -2613,8 +2627,9 @@ void CInode::finish_scatter_gather_update(int type)
 	if (update) {
 	  auto _pf = const_cast<fnode_t*>(pf.get());
 	  _pf->accounted_rstat = pf->rstat;
-	  dir->dirty_old_rstat.clear();
 	  _pf->rstat.version = _pf->accounted_rstat.version = pi->rstat.version;
+	  _pf->version = dir->pre_dirty();
+	  dir->dirty_old_rstat.clear();
 	  dir->check_rstats();
 	  dout(10) << fg << " updated accounted_rstat " << pf->rstat << " on " << *dir << dendl;
 	}
@@ -2663,7 +2678,7 @@ void CInode::finish_scatter_gather_update(int type)
   }
 }
 
-void CInode::finish_scatter_gather_update_accounted(int type, MutationRef& mut, EMetaBlob *metablob)
+void CInode::finish_scatter_gather_update_accounted(int type, EMetaBlob *metablob)
 {
   dout(10) << __func__ << " " << type << " on " << *this << dendl;
   ceph_assert(is_auth());
@@ -2677,15 +2692,11 @@ void CInode::finish_scatter_gather_update_accounted(int type, MutationRef& mut, 
       continue;  // nothing to do.
 
     if (type == CEPH_LOCK_INEST)
-      dir->assimilate_dirty_rstat_inodes_finish(mut, metablob);
+      dir->assimilate_dirty_rstat_inodes_finish(metablob);
 
     dout(10) << " journaling updated frag accounted_ on " << *dir << dendl;
     ceph_assert(dir->is_projected());
-    auto pf = dir->_get_projected_fnode();
-    pf->version = dir->pre_dirty();
-    mut->add_projected_fnode(dir);
     metablob->add_dir(dir, true);
-    mut->auth_pin(dir);
   }
 }
 

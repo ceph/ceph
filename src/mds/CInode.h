@@ -524,12 +524,13 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     sr_t* const snapnode;
 
     projected_inode() = delete;
-    explicit projected_inode(inode_ptr&& i, xattr_map_ptr&& x, sr_t *s) :
+    explicit projected_inode(inode_ptr&& i, xattr_map_ptr&& x, sr_t *s=nullptr) :
       inode(std::move(i)), xattrs(std::move(x)), snapnode(s) {}
   };
-  projected_inode project_inode(bool xattr = false, bool snap = false);
+  projected_inode project_inode(const MutationRef& mut,
+				bool xattr = false, bool snap = false);
 
-  void pop_and_dirty_projected_inode(LogSegment *ls);
+  void pop_and_dirty_projected_inode(LogSegment *ls, const MutationRef& mut);
 
   version_t get_projected_version() const {
     if (projected_nodes.empty())
@@ -843,8 +844,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void start_scatter(ScatterLock *lock);
   void finish_scatter_update(ScatterLock *lock, CDir *dir,
 			     version_t inode_version, version_t dir_accounted_version);
-  void finish_scatter_gather_update(int type);
-  void finish_scatter_gather_update_accounted(int type, MutationRef& mut, EMetaBlob *metablob);
+  void finish_scatter_gather_update(int type, MutationRef& mut);
+  void finish_scatter_gather_update_accounted(int type, EMetaBlob *metablob);
 
   // -- snap --
   void open_snaprealm(bool no_split=false);

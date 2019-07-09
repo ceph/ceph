@@ -1217,7 +1217,7 @@ void CDir::resync_accounted_rstat()
   }
 }
 
-void CDir::assimilate_dirty_rstat_inodes()
+void CDir::assimilate_dirty_rstat_inodes(MutationRef& mut)
 {
   dout(10) << __func__ << dendl;
   for (elist<CInode*>::iterator p = dirty_rstat_inodes.begin_use_current();
@@ -1227,16 +1227,18 @@ void CDir::assimilate_dirty_rstat_inodes()
     if (in->is_frozen())
       continue;
 
-    auto pi = in->project_inode();
+    mut->auth_pin(in);
+
+    auto pi = in->project_inode(mut);
     pi.inode->version = in->pre_dirty();
 
-    inode->mdcache->project_rstat_inode_to_frag(in, this, 0, 0, NULL);
+    inode->mdcache->project_rstat_inode_to_frag(mut, in, this, 0, 0, nullptr);
   }
   state_set(STATE_ASSIMRSTAT);
   dout(10) << __func__ << " done" << dendl;
 }
 
-void CDir::assimilate_dirty_rstat_inodes_finish(MutationRef& mut, EMetaBlob *blob)
+void CDir::assimilate_dirty_rstat_inodes_finish(EMetaBlob *blob)
 {
   if (!state_test(STATE_ASSIMRSTAT))
     return;
@@ -1251,9 +1253,6 @@ void CDir::assimilate_dirty_rstat_inodes_finish(MutationRef& mut, EMetaBlob *blo
       continue;
 
     CDentry *dn = in->get_projected_parent_dn();
-
-    mut->auth_pin(in);
-    mut->add_projected_inode(in);
 
     in->clear_dirty_rstat();
     blob->add_primary_dentry(dn, in, true);
@@ -1379,9 +1378,12 @@ void CDir::finish_waiting(uint64_t mask, int result)
 
 // dirty/clean
 
-CDir::fnode_ptr CDir::project_fnode()
+CDir::fnode_ptr CDir::project_fnode(const MutationRef& mut)
 {
   ceph_assert(get_version() != 0);
+
+  if (mut && mut->is_projected(this))
+    return std::const_pointer_cast<fnode_t>(projected_fnode.back());
 
   auto pf = allocate_fnode(*get_projected_fnode());
 
@@ -1395,22 +1397,25 @@ CDir::fnode_ptr CDir::project_fnode()
   }
 
   projected_fnode.emplace_back(pf);
+  if (mut)
+    mut->add_projected_node(this);
   dout(10) << __func__ <<  " " << pf.get() << dendl;
   return pf;
 }
 
-void CDir::pop_and_dirty_projected_fnode(LogSegment *ls)
+void CDir::pop_and_dirty_projected_fnode(LogSegment *ls, const MutationRef& mut)
 {
   ceph_assert(!projected_fnode.empty());
   auto pf = std::move(projected_fnode.front());
   dout(15) << __func__ << " " << pf.get() << " v" << pf->version << dendl;
 
   projected_fnode.pop_front();
+  if (mut)
+    mut->remove_projected_node(this);
 
   reset_fnode(std::move(pf));
   _mark_dirty(ls);
 }
-
 
 version_t CDir::pre_dirty(version_t min)
 {
@@ -1428,7 +1433,8 @@ void CDir::mark_dirty(LogSegment *ls, version_t pv)
   if (pv) {
     ceph_assert(get_version() < pv);
     ceph_assert(pv <= projected_version);
-    ceph_assert(!projected_fnode.empty());
+    ceph_assert(!projected_fnode.empty() &&
+	        pv <= projected_fnode.front()->version);
   }
 
   _mark_dirty(ls);
