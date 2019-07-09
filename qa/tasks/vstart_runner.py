@@ -231,8 +231,22 @@ class LocalRemote(object):
         shutil.copy(path, tmpfile)
         return tmpfile
 
+    # XXX: This method ignores the error raised when src and dst are
+    # holding same path. For teuthology, same path still represents
+    # different locations as they lie on different machines.
     def put_file(self, src, dst, sudo=False):
-        shutil.copy(src, dst)
+        if sys.version_info.major < 3:
+            exception = shutil.Error
+        elif sys.version_info.major >= 3:
+            exception = shutil.SameFileError
+
+        try:
+            shutil.copy(src, dst)
+        except exception as e:
+            if sys.version_info.major < 3 and e.message.find('are the same '
+               'file') != -1:
+                return
+            raise e
 
     def run(self, args, check_status=True, wait=True,
             stdout=None, stderr=None, cwd=None, stdin=None,
