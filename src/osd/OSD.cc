@@ -6646,10 +6646,6 @@ void OSD::scrub_purged_snaps()
   clog->debug() << "purged_snaps scrub starts";
   osd_lock.unlock();
   s.run();
-  osd_lock.lock();
-  if (is_stopping()) {
-    return;
-  }
   if (s.stray.size()) {
     clog->debug() << "purged_snaps scrub find " << s.stray.size() << " strays";
   } else {
@@ -6680,6 +6676,10 @@ void OSD::scrub_purged_snaps()
 	     << snap << dendl;
     pg->queue_snap_retrim(snap);
     pg->unlock();
+  }
+  osd_lock.Lock();
+  if (is_stopping()) {
+    return;
   }
   dout(10) << __func__ << " done queueing pgs, updating superblock" << dendl;
   ObjectStore::Transaction t;
