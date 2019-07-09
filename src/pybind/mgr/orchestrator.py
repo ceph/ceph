@@ -1040,7 +1040,7 @@ class OutdatableData(object):
         return 'OutdatableData(data={}, last_refresh={})'.format(self.data, self.last_refresh)
 
 
-class OutdatableDict(PersistentStoreDict):
+class OutdatableDictMixin(object):
     """
     Toolbox for implementing a cache. As every orchestrator has
     different needs, we cannot implement any logic here.
@@ -1048,16 +1048,16 @@ class OutdatableDict(PersistentStoreDict):
 
     def __getitem__(self, item):
         # type: (str) -> OutdatableData
-        return OutdatableData.from_json(super(OutdatableDict, self).__getitem__(item))
+        return OutdatableData.from_json(super(OutdatableDictMixin, self).__getitem__(item))
 
     def __setitem__(self, key, value):
         # type: (str, OutdatableData) -> None
         val = None if value is None else value.json()
-        super(OutdatableDict, self).__setitem__(key, val)
+        super(OutdatableDictMixin, self).__setitem__(key, val)
 
     def items(self):
         # type: () -> Iterator[Tuple[str, OutdatableData]]
-        for item in super(OutdatableDict, self).items():
+        for item in super(OutdatableDictMixin, self).items():
             k, v = item
             yield k, OutdatableData.from_json(v)
 
@@ -1077,3 +1077,9 @@ class OutdatableDict(PersistentStoreDict):
         outdated = [item[0] for item in self.items() if item[1].outdated()]
         for o in outdated:
             del self[o]
+
+class OutdatablePersistentDict(OutdatableDictMixin, PersistentStoreDict):
+    pass
+
+class OutdatableDict(OutdatableDictMixin, dict):
+    pass

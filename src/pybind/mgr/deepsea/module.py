@@ -108,8 +108,8 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
         self._last_failure_msg = None
         self._all_completions = dict()
         self._completion_lock = Lock()
-        self.inventory_cache = orchestrator.OutdatableDict(self, 'inventory_cache')
-        self.service_cache = orchestrator.OutdatableDict(self, 'service_cache')
+        self.inventory_cache = orchestrator.OutdatableDict()
+        self.service_cache = orchestrator.OutdatableDict()
 
     def available(self):
         if not self._config_valid():
