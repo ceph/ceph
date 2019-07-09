@@ -911,6 +911,9 @@ protected:
    *  - waiting_for_active
    *    - !is_active()
    *    - only starts blocking on interval change; never restarts
+   *  - waiting_for_readable
+   *    - now > readable_until
+   *    - unblocks when we get fresh(er) osd_pings
    *  - waiting_for_scrub
    *    - starts and stops blocking for varying intervals during scrub
    *  - waiting_for_unreadable_object
@@ -947,6 +950,9 @@ protected:
 
   // ops waiting on peered
   list<OpRequestRef>            waiting_for_peered;
+
+  /// ops waiting on readble
+  list<OpRequestRef>            waiting_for_readable;
 
   // ops waiting on active (require peered as well)
   list<OpRequestRef>            waiting_for_active;
@@ -1403,6 +1409,7 @@ protected:
   bool is_recovering() const { return recovery_state.is_recovering(); }
   bool is_premerge() const { return recovery_state.is_premerge(); }
   bool is_repair() const { return recovery_state.is_repair(); }
+  bool is_laggy() const { return state_test(PG_STATE_LAGGY); }
 
   bool is_empty() const { return recovery_state.is_empty(); }
 
