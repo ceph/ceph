@@ -403,6 +403,9 @@ private:
   void process_failures();
   void take_all_failures(list<MonOpRequestRef>& ls);
 
+  bool preprocess_mark_me_dead(MonOpRequestRef op);
+  bool prepare_mark_me_dead(MonOpRequestRef op);
+
   bool preprocess_full(MonOpRequestRef op);
   bool prepare_full(MonOpRequestRef op);
 
