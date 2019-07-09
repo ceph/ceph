@@ -181,8 +181,7 @@ void StrayManager::_purge_stray_purged(
     MutationRef mut(new MutationImpl());
     mut->ls = mds->mdlog->get_current_segment();
     
-    auto pi = in->project_inode();
-    mut->add_projected_inode(in);
+    auto pi = in->project_inode(mut);
     pi.inode->size = 0;
     pi.inode->max_size_ever = 0;
     pi.inode->client_ranges.clear();
@@ -191,8 +190,7 @@ void StrayManager::_purge_stray_purged(
     pi.inode->version = in->pre_dirty();
 
     CDir *dir = dn->get_dir();
-    auto pf = dir->project_fnode();
-    mut->add_projected_fnode(dir);
+    auto pf = dir->project_fnode(mut);
     pf->version = dir->pre_dirty();
 
     EUpdate *le = new EUpdate(mds->mdlog, "purge_stray truncate");
@@ -228,8 +226,7 @@ void StrayManager::_purge_stray_purged(
 
     // update dirfrag fragstat, rstat
     CDir *dir = dn->get_dir();
-    auto pf = dir->project_fnode();
-    mut->add_projected_fnode(dir);
+    auto pf = dir->project_fnode(mut);
     pf->version = dir->pre_dirty();
     if (in->is_dir())
       pf->fragstat.nsubdirs--;

@@ -14,6 +14,7 @@
 
 #include "Mutation.h"
 #include "ScatterLock.h"
+#include "CInode.h"
 #include "CDir.h"
 
 // MutationImpl
@@ -215,33 +216,6 @@ void MutationImpl::_clear_remote_auth_pinned(ObjectState &stat)
   --num_remote_auth_pins;
 }
 
-void MutationImpl::add_projected_inode(CInode *in)
-{
-  projected_inodes.push_back(in);
-}
-
-void MutationImpl::pop_and_dirty_projected_inodes()
-{
-  while (!projected_inodes.empty()) {
-    CInode *in = projected_inodes.front();
-    projected_inodes.pop_front();
-    in->pop_and_dirty_projected_inode(ls);
-  }
-}
-
-void MutationImpl::add_projected_fnode(CDir *dir)
-{
-  projected_fnodes.push_back(dir);
-}
-
-void MutationImpl::pop_and_dirty_projected_fnodes()
-{
-  for (const auto& dir : projected_fnodes) {
-    dir->pop_and_dirty_projected_fnode(ls);
-  }
-  projected_fnodes.clear();
-}
-
 void MutationImpl::add_updated_lock(ScatterLock *lock)
 {
   updated_locks.push_back(lock);
@@ -256,24 +230,34 @@ void MutationImpl::add_cow_inode(CInode *in)
 void MutationImpl::add_cow_dentry(CDentry *dn)
 {
   pin(dn);
-  dirty_cow_dentries.push_back(pair<CDentry*,version_t>(dn, dn->get_projected_version()));
+  dirty_cow_dentries.emplace_back(dn, dn->get_projected_version());
 }
 
 void MutationImpl::apply()
 {
-  pop_and_dirty_projected_inodes();
-  
-  for (const auto& in : dirty_cow_inodes)
+  for (auto& obj : projected_nodes) {
+    if (CInode *in = dynamic_cast<CInode*>(obj))
+      in->pop_and_dirty_projected_inode(ls, nullptr);
+  }
+
+  for (const auto& in : dirty_cow_inodes) {
     in->_mark_dirty(ls);
+  }
 
-  for (const auto& [dn, v] : dirty_cow_dentries)
+  for (const auto& [dn, v] : dirty_cow_dentries) {
     dn->mark_dirty(v, ls);
+  }
 
-  pop_and_dirty_projected_fnodes();
+  for (auto& obj : projected_nodes) {
+    if (CDir *dir = dynamic_cast<CDir*>(obj))
+      dir->pop_and_dirty_projected_fnode(ls, nullptr);
+  }
 
   for (const auto& lock : updated_locks) {
     lock->mark_dirty();
   }
+
+  projected_nodes.clear();
 }
 
 void MutationImpl::cleanup()
