@@ -25,7 +25,7 @@
 #include <thread>
 #include <vector>
 
-#include "lazy-omap-stats-test.h"
+#include "lazy_omap_stats_test.h"
 
 using namespace std;
 namespace bp = boost::process;
