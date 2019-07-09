@@ -46,9 +46,11 @@ In the creation of the secondary zone, its tier type must be set to ``pubsub``:
 ::
 
    # radosgw-admin zone create --rgw-zonegroup={zone-group-name} \
-                                --rgw-zone={zone-name} \
-                                --endpoints={http://fqdn}[,{http://fqdn}]
-                                --tier-type=pubsub
+                               --rgw-zone={zone-name} \
+                               --endpoints={http://fqdn}[,{http://fqdn}] \
+                               --sync-from-all=0 \
+                               --sync-from={master-zone-name} \
+                               --tier-type=pubsub
 
 
 PubSub Zone Configuration Parameters
