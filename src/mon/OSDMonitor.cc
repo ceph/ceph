@@ -1486,6 +1486,27 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	tmp.require_osd_release >= ceph_release_t::octopus) {
       dout(10) << __func__ << " first octopus+ epoch" << dendl;
 
+      // adjust obsoleted cache modes
+      for (auto& [poolid, pi] : tmp.pools) {
+	if (pi.cache_mode == pg_pool_t::CACHEMODE_FORWARD) {
+	  if (pending_inc.new_pools.count(poolid) == 0) {
+	    pending_inc.new_pools[poolid] = pi;
+	  }
+	  dout(10) << __func__ << " switching pool " << poolid
+		   << " cachemode from forward -> proxy" << dendl;
+	  pending_inc.new_pools[poolid].cache_mode = pg_pool_t::CACHEMODE_PROXY;
+	}
+	if (pi.cache_mode == pg_pool_t::CACHEMODE_READFORWARD) {
+	  if (pending_inc.new_pools.count(poolid) == 0) {
+	    pending_inc.new_pools[poolid] = pi;
+	  }
+	  dout(10) << __func__ << " switching pool " << poolid
+		   << " cachemode from readforward -> readproxy" << dendl;
+	  pending_inc.new_pools[poolid].cache_mode =
+	    pg_pool_t::CACHEMODE_READPROXY;
+	}
+      }
+
       // clear removed_snaps for every pool
       for (auto& [poolid, pi] : tmp.pools) {
 	if (pi.removed_snaps.empty()) {
