@@ -6647,7 +6647,7 @@ void OSD::scrub_purged_snaps()
   osd_lock.unlock();
   s.run();
   if (s.stray.size()) {
-    clog->debug() << "purged_snaps scrub find " << s.stray.size() << " strays";
+    clog->debug() << "purged_snaps scrub found " << s.stray.size() << " strays";
   } else {
     clog->debug() << "purged_snaps scrub ok";
   }
