@@ -2,7 +2,7 @@
 
 add_executable(ceph_test_lazy_omap_stats
   main.cc
-  lazy-omap-stats-test.cc)
+  lazy_omap_stats_test.cc)
 target_link_libraries(ceph_test_lazy_omap_stats
   librados ${UNITTEST_LIBS} Boost::system)
 install(TARGETS

@@ -12,7 +12,7 @@
  *
  */
 
-#include "lazy-omap-stats-test.h"
+#include "lazy_omap_stats_test.h"
 
 int main(const int argc, const char** argv)
 {
