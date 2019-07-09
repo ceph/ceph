@@ -623,6 +623,8 @@ void SnapMapper::Scrubber::run()
   }
 
   dout(10) << __func__ << " end, found " << stray.size() << " stray" << dendl;
+  psit = ObjectMap::ObjectMapIterator();
+  mapit = ObjectMap::ObjectMapIterator();
 }
 
 
