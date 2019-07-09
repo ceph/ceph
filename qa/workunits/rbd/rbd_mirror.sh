@@ -358,6 +358,41 @@ enable_journaling ${CLUSTER2} ${POOL} ${image}
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'present'
 wait_for_image_replay_started ${CLUSTER1} ${POOL} ${image}
 
+testlog "TEST: non-default namespace image mirroring"
+testlog " - replay"
+create_image ${CLUSTER2} ${POOL}/ns1 ${image}
+create_image ${CLUSTER2} ${POOL}/ns2 ${image}
+enable_mirror ${CLUSTER2} ${POOL}/ns2 ${image}
+wait_for_image_replay_started ${CLUSTER1} ${POOL}/ns1 ${image}
+wait_for_image_replay_started ${CLUSTER1} ${POOL}/ns2 ${image}
+write_image ${CLUSTER2} ${POOL}/ns1 ${image} 100
+write_image ${CLUSTER2} ${POOL}/ns2 ${image} 100
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL}/ns1 ${image}
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL}/ns2 ${image}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL}/ns1 ${image} 'up+replaying' 'master_position'
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL}/ns2 ${image} 'up+replaying' 'master_position'
+compare_images ${POOL}/ns1 ${image}
+compare_images ${POOL}/ns2 ${image}
+
+testlog " - disable mirroring / delete image"
+remove_image_retry ${CLUSTER2} ${POOL}/ns1 ${image}
+disable_mirror ${CLUSTER2} ${POOL}/ns2 ${image}
+wait_for_image_present ${CLUSTER1} ${POOL}/ns1 ${image} 'deleted'
+wait_for_image_present ${CLUSTER1} ${POOL}/ns2 ${image} 'deleted'
+
+testlog " - data pool"
+dp_image=test_data_pool
+create_image ${CLUSTER2} ${POOL}/ns1 ${dp_image} 128 --data-pool ${PARENT_POOL}
+data_pool=$(get_image_data_pool ${CLUSTER2} ${POOL}/ns1 ${dp_image})
+test "${data_pool}" = "${PARENT_POOL}"
+wait_for_image_replay_started ${CLUSTER1} ${POOL}/ns1 ${dp_image}
+data_pool=$(get_image_data_pool ${CLUSTER1} ${POOL}/ns1 ${dp_image})
+test "${data_pool}" = "${PARENT_POOL}"
+write_image ${CLUSTER2} ${POOL}/ns1 ${dp_image} 100
+wait_for_replay_complete ${CLUSTER1} ${CLUSTER2} ${POOL}/ns1 ${dp_image}
+wait_for_status_in_pool_dir ${CLUSTER1} ${POOL}/ns1 ${dp_image} 'up+replaying' 'master_position'
+compare_images ${POOL}/ns1 ${dp_image}
+
 testlog "TEST: simple image resync"
 request_resync_image ${CLUSTER1} ${POOL} ${image} image_id
 wait_for_image_present ${CLUSTER1} ${POOL} ${image} 'deleted' ${image_id}
