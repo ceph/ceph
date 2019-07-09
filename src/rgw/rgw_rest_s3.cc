@@ -2152,11 +2152,11 @@ int RGWCopyObj_ObjStore_S3::get_params()
   }
 
   copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
-  md_directive = s->info.env->get("HTTP_X_AMZ_METADATA_DIRECTIVE");
-  if (md_directive) {
-    if (strcasecmp(md_directive, "COPY") == 0) {
+  auto tmp_md_d = s->info.env->get("HTTP_X_AMZ_METADATA_DIRECTIVE");
+  if (tmp_md_d) {
+    if (strcasecmp(tmp_md_d, "COPY") == 0) {
       attrs_mod = RGWRados::ATTRSMOD_NONE;
-    } else if (strcasecmp(md_directive, "REPLACE") == 0) {
+    } else if (strcasecmp(tmp_md_d, "REPLACE") == 0) {
       attrs_mod = RGWRados::ATTRSMOD_REPLACE;
     } else if (!source_zone.empty()) {
       attrs_mod = RGWRados::ATTRSMOD_NONE; // default for intra-zone_group copy
@@ -2165,6 +2165,7 @@ int RGWCopyObj_ObjStore_S3::get_params()
       ldout(s->cct, 0) << s->err.message << dendl;
       return -EINVAL;
     }
+    md_directive = tmp_md_d;
   }
 
   if (source_zone.empty() &&
