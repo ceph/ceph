@@ -54,6 +54,7 @@ struct Server {
       MOSDOp *rep = new MOSDOp(0, 0, hobj, spgid, 0, 0, 0);
       bufferlist data(msg_data);
       rep->write(0, msg_len, data);
+      rep->set_tid(m->get_tid());
       m->get_connection()->send_message(rep);
       m->put();
     }
@@ -89,10 +90,12 @@ int main(int argc, char** argv)
   po::options_description desc{"Allowed options"};
   desc.add_options()
     ("help,h", "show help message")
-    ("addr", po::value<std::string>()->default_value("v1:0.0.0.0:9010"),
+    ("addr", po::value<std::string>()->default_value("v1:127.0.0.1:9010"),
      "server address")
     ("bs", po::value<unsigned>()->default_value(0),
-     "server block size");
+     "server block size")
+    ("v1-crc-enabled", po::value<bool>()->default_value(false),
+     "enable v1 CRC checks");
   po::variables_map vm;
   std::vector<std::string> unrecognized_options;
   try {
@@ -116,6 +119,7 @@ int main(int argc, char** argv)
   entity_addr_t target_addr;
   target_addr.parse(addr.c_str(), nullptr);
   auto bs = vm["bs"].as<unsigned>();
+  auto v1_crc_enabled = vm["v1-crc-enabled"].as<bool>();
 
   std::vector<const char*> args(argv, argv + argc);
   auto cct = global_init(nullptr, args,
@@ -123,5 +127,14 @@ int main(int argc, char** argv)
                          CODE_ENVIRONMENT_UTILITY,
                          CINIT_FLAG_NO_MON_CONFIG);
   common_init_finish(cct.get());
+
+  if (v1_crc_enabled) {
+    cct->_conf.set_val("ms_crc_header", "true");
+    cct->_conf.set_val("ms_crc_data", "true");
+  } else {
+    cct->_conf.set_val("ms_crc_header", "false");
+    cct->_conf.set_val("ms_crc_data", "false");
+  }
+
   run(cct.get(), target_addr, bs);
 }
