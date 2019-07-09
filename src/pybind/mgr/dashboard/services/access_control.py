@@ -191,6 +191,17 @@ class User(object):
         self.password = password_hash(password)
         self.refreshLastUpdate()
 
+    def compare_password(self, password):
+        """
+        Compare the specified password with the user password.
+        :param password: The plain password to check.
+        :type password: str
+        :return: `True` if the passwords are equal, otherwise `False`.
+        :rtype: bool
+        """
+        pass_hash = password_hash(password, salt_password=self.password)
+        return pass_hash == self.password
+
     def set_roles(self, roles):
         self.roles = set(roles)
         self.refreshLastUpdate()
@@ -652,8 +663,7 @@ class LocalAuthenticator(object):
         try:
             user = mgr.ACCESS_CTRL_DB.get_user(username)
             if user.password:
-                pass_hash = password_hash(password, user.password)
-                if pass_hash == user.password:
+                if user.compare_password(password):
                     return user.permissions_dict()
         except UserDoesNotExist:
             logger.debug("User '%s' does not exist", username)

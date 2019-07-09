@@ -202,6 +202,9 @@ export class CdValidators {
     return (control: AbstractControl): { [key: string]: any } => {
       const ctrl1 = control.get(path1);
       const ctrl2 = control.get(path2);
+      if (!ctrl1 || !ctrl2) {
+        return null;
+      }
       if (ctrl1.value !== ctrl2.value) {
         ctrl2.setErrors({ match: true });
       } else {

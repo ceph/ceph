@@ -20,6 +20,14 @@
       <strong>{{ username }}</strong></a>
     </li>
     <li class="divider dropdown-divider"></li>
+    <li *ngIf="!sso"
+        role="menuitem">
+      <a class="dropdown-item"
+         routerLink="/user-profile/edit">
+        <i [ngClass]="[icons.lock]"></i>
+        <span i18n>Change password</span>
+      </a>
+    </li>
     <li role="menuitem">
       <a class="dropdown-item"
          (click)="logout()">

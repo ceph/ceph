@@ -26,7 +26,7 @@ export class AuthService {
       .post('api/auth', credentials)
       .toPromise()
       .then((resp: LoginResponse) => {
-        this.authStorageService.set(resp.username, resp.token, resp.permissions);
+        this.authStorageService.set(resp.username, resp.token, resp.permissions, resp.sso);
       });
   }
 

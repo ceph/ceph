@@ -16,6 +16,7 @@ import { RoleListComponent } from './role-list/role-list.component';
 import { SsoNotFoundComponent } from './sso/sso-not-found/sso-not-found.component';
 import { UserFormComponent } from './user-form/user-form.component';
 import { UserListComponent } from './user-list/user-list.component';
+import { UserPasswordFormComponent } from './user-password-form/user-password-form.component';
 import { UserTabsComponent } from './user-tabs/user-tabs.component';
 
 @NgModule({
@@ -37,7 +38,8 @@ import { UserTabsComponent } from './user-tabs/user-tabs.component';
     SsoNotFoundComponent,
     UserTabsComponent,
     UserListComponent,
-    UserFormComponent
+    UserFormComponent,
+    UserPasswordFormComponent
   ]
 })
 export class AuthModule {}

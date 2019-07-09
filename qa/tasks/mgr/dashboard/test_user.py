@@ -113,3 +113,34 @@ class UserTest(DashboardTestCase):
         self.assertStatus(400)
         self.assertError(code='role_does_not_exist',
                          component='user')
+
+    def test_change_password_from_other_user(self):
+        self._post('/api/user/test2/change_password', {
+            'old_password': 'abc',
+            'new_password': 'xyz'
+        })
+        self.assertStatus(400)
+        self.assertError(code='invalid_user_context', component='user')
+
+    def test_change_password_old_not_match(self):
+        self._post('/api/user/admin/change_password', {
+            'old_password': 'foo',
+            'new_password': 'bar'
+        })
+        self.assertStatus(400)
+        self.assertError(code='invalid_old_password', component='user')
+
+    def test_change_password(self):
+        self.create_user('test1', 'test1', ['read-only'])
+        self.login('test1', 'test1')
+        self._post('/api/user/test1/change_password', {
+            'old_password': 'test1',
+            'new_password': 'foo'
+        })
+        self.assertStatus(200)
+        self.logout()
+        self._post('/api/auth', {'username': 'test1', 'password': 'test1'})
+        self.assertStatus(400)
+        self.assertError(code='invalid_credentials', component='auth')
+        self.delete_user('test1')
+        self.login('admin', 'admin')
