@@ -71,6 +71,7 @@
 #include "messages/MOSDPing.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMarkMeDown.h"
+#include "messages/MOSDMarkMeDead.h"
 #include "messages/MOSDFull.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
@@ -8023,6 +8024,14 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
           clog->debug() << "map e" << osdmap->get_epoch()
                         << " wrongly marked me down at e"
                         << osdmap->get_down_at(whoami);
+	}
+	if (monc->monmap.min_mon_release >= ceph_release_t::octopus) {
+	  // note that this is best-effort...
+	  monc->send_mon_message(
+	    new MOSDMarkMeDead(
+	      monc->get_fsid(),
+	      whoami,
+	      osdmap->get_epoch()));
 	}
       } else if (!osdmap->get_addrs(whoami).legacy_equals(
 		   client_messenger->get_myaddrs())) {
