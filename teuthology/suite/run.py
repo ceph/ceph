@@ -383,7 +383,7 @@ class Run(object):
 
             raw_yaml = '\n'.join([file(a, 'r').read() for a in fragment_paths])
 
-            parsed_yaml = yaml.load(raw_yaml)
+            parsed_yaml = yaml.safe_load(raw_yaml)
             os_type = parsed_yaml.get('os_type') or self.base_config.os_type
             os_version = parsed_yaml.get('os_version') or self.base_config.os_version
             exclude_arch = parsed_yaml.get('exclude_arch')
