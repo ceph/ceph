@@ -25,6 +25,18 @@
 WRITE_RAW_ENCODER(ceph_msg_connect);
 WRITE_RAW_ENCODER(ceph_msg_connect_reply);
 
+namespace {
+template<typename T>
+inline T unaligned_load(const char* p)
+{
+  static_assert(std::is_pod_v<T>);
+  struct unaligned_t { T value; } __attribute__((packed));
+  static_assert(sizeof(unaligned_t) == sizeof(T));
+  static_assert(alignof(unaligned_t) == 1);
+  return reinterpret_cast<const unaligned_t*>(p)->value;
+}
+}
+
 std::ostream& operator<<(std::ostream& out, const ceph_msg_connect& c)
 {
   return out << "connect{features=" << std::hex << c.features << std::dec
@@ -206,8 +218,8 @@ ProtocolV1::handle_connect_reply(msgr_tag_t tag)
         if (tag == CEPH_MSGR_TAG_SEQ) {
           return socket->read_exactly(sizeof(seq_num_t))
             .then([this] (auto buf) {
-              auto acked_seq = reinterpret_cast<const seq_num_t*>(buf.get());
-              discard_up_to(&conn.out_q, *acked_seq);
+              auto acked_seq = unaligned_load<seq_num_t>(buf.get());
+              discard_up_to(&conn.out_q, acked_seq);
               return socket->write_flush(make_static_packet(conn.in_seq));
             });
         }
@@ -435,8 +447,8 @@ seastar::future<stop_t> ProtocolV1::send_connect_reply_ready(
           .then([this] {
             return socket->read_exactly(sizeof(seq_num_t));
           }).then([this] (auto buf) {
-            auto acked_seq = reinterpret_cast<const seq_num_t*>(buf.get());
-            discard_up_to(&conn.out_q, *acked_seq);
+            auto acked_seq = unaligned_load<seq_num_t>(buf.get());
+            discard_up_to(&conn.out_q, acked_seq);
           });
       } else {
         return socket->flush();
@@ -765,9 +777,9 @@ seastar::future<> ProtocolV1::handle_keepalive2_ack()
 {
   return socket->read_exactly(sizeof(ceph_timespec))
     .then([this] (auto buf) {
-      auto t = reinterpret_cast<const ceph_timespec*>(buf.get());
-      k.ack_stamp = *t;
-      logger().trace("{} got keepalive2 ack {}", conn, t->tv_sec);
+      auto t = unaligned_load<ceph_timespec>(buf.get());
+      k.ack_stamp = t;
+      logger().trace("{} got keepalive2 ack {}", conn, t.tv_sec);
     });
 }
 
@@ -775,7 +787,7 @@ seastar::future<> ProtocolV1::handle_keepalive2()
 {
   return socket->read_exactly(sizeof(ceph_timespec))
     .then([this] (auto buf) {
-      utime_t ack{*reinterpret_cast<const ceph_timespec*>(buf.get())};
+      utime_t ack{unaligned_load<ceph_timespec>(buf.get())};
       notify_keepalive_ack(ack);
     });
 }
@@ -784,8 +796,8 @@ seastar::future<> ProtocolV1::handle_ack()
 {
   return socket->read_exactly(sizeof(ceph_le64))
     .then([this] (auto buf) {
-      auto seq = reinterpret_cast<const ceph_le64*>(buf.get());
-      discard_up_to(&conn.sent, *seq);
+      auto seq = unaligned_load<ceph_le64>(buf.get());
+      discard_up_to(&conn.sent, seq);
     });
 }
 
