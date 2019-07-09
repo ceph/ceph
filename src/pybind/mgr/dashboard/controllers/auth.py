@@ -28,7 +28,8 @@ class Auth(RESTController):
             return {
                 'token': token,
                 'username': username,
-                'permissions': user_perms
+                'permissions': user_perms,
+                'sso': mgr.SSO_DB.protocol == 'saml2'
             }
 
         logger.debug('Login failed')
@@ -64,6 +65,7 @@ class Auth(RESTController):
                         return {
                             'username': user.username,
                             'permissions': user.permissions_dict(),
+                            'sso': mgr.SSO_DB.protocol == 'saml2'
                         }
 
                     logger.debug("AMT: user info changed after token was"
