@@ -1,0 +1,28 @@
+tasks:
+        - deepsea.create_pools:
+                foo:     
+        - exec:
+                client.salt_master:
+                        - 'ceph -s'
+        - deepsea.toolbox:
+                assert_filestore:
+                        osd.0:
+        - exec:
+                client.salt_master:
+                       - 'rados bench -p foo 1 write -b 4096 --no-cleanup'
+        - exec:
+                client.salt_master:
+                        - sed -i 's/filestore/bluestore/g' /srv/salt/ceph/configuration/files/drive_groups.yml
+        - exec:
+                client.salt_master:
+                        - 'cat /srv/salt/ceph/configuration/files/drive_groups.yml'
+        - deepsea.toolbox:
+                rebuild_node:
+                        osd.0:
+        - exec:
+                client.salt_master:
+                        - 'ceph -s'
+        - deepsea.toolbox:
+                assert_bluestore:
+                        osd.0:
+        - deepsea.validation:
