@@ -112,11 +112,6 @@ public:
   /// encoded copy of defaults (map<string,string>)
   ceph::bufferlist defaults_bl;
 
-  typedef enum {
-    OPT_INT, OPT_LONGLONG, OPT_STR, OPT_DOUBLE, OPT_FLOAT, OPT_BOOL,
-    OPT_ADDR, OPT_ADDRVEC, OPT_U32, OPT_U64, OPT_UUID
-  } opt_type_t;
-
   // Create a new md_config_t structure.
   explicit md_config_t(ConfigValues& values,
 		       const ConfigTracker& tracker,
