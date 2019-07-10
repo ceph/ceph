@@ -4126,6 +4126,7 @@ void PrimaryLogPG::do_backfill(OpRequestRef op)
       ObjectStore::Transaction t;
       recovery_state.update_backfill_progress(
 	m->last_backfill,
+        m->mark_missing,
 	m->stats,
 	m->op == MOSDPGBackfill::OP_BACKFILL_PROGRESS,
 	t);
@@ -11515,10 +11516,12 @@ void PrimaryLogPG::on_failed_pull(
   finish_recovery_op(soid);  // close out this attempt,
   finish_degraded_object(soid);
 
+  backfills_failed.emplace(soid, v);
+  backfills_in_flight.erase(soid);
+
   if (from.count(pg_whoami)) {
     dout(0) << " primary missing oid " << soid << " version " << v << dendl;
     primary_error(soid, v);
-    backfills_in_flight.erase(soid);
   }
 }
 
@@ -12161,6 +12164,7 @@ void PrimaryLogPG::_clear_recovery_state()
   }
   ceph_assert(backfills_in_flight.empty());
   pending_backfill_updates.clear();
+  backfills_failed.clear();
   ceph_assert(recovering.empty());
   pgbackend->clear_recovery_state();
 }
@@ -12822,6 +12826,7 @@ uint64_t PrimaryLogPG::recover_backfill(
 
     backfills_in_flight.clear();
     pending_backfill_updates.clear();
+    backfills_failed.clear();
   }
 
   for (set<pg_shard_t>::const_iterator i = get_backfill_targets().begin();
@@ -13088,6 +13093,16 @@ uint64_t PrimaryLogPG::recover_backfill(
       i->second);
     new_last_backfill = i->first;
   }
+  map<hobject_t, eversion_t> mark_missing;
+  for (map<hobject_t, eversion_t>::iterator i = backfills_failed.begin();
+       i != backfills_failed.end();) {
+    if (i->first <= new_last_backfill) {
+      mark_missing.insert(*i);
+      backfills_failed.erase(i++);
+    } else {
+      ++i; 
+    }
+  }
   dout(10) << "possible new_last_backfill at " << new_last_backfill << dendl;
 
   ceph_assert(!pending_backfill_updates.empty() ||
@@ -13130,6 +13145,7 @@ uint64_t PrimaryLogPG::recover_backfill(
         // Use default priority here, must match sub_op priority
       }
       m->last_backfill = pinfo.last_backfill;
+      m->mark_missing = mark_missing;
       m->stats = pinfo.stats;
       osd->send_message_osd_cluster(bt.osd, m, get_osdmap_epoch());
       dout(10) << " peer " << bt

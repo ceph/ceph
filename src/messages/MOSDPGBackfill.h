@@ -19,7 +19,7 @@
 
 class MOSDPGBackfill : public MOSDFastDispatchOp {
 private:
-  static constexpr int HEAD_VERSION = 3;
+  static constexpr int HEAD_VERSION = 4;
   static constexpr int COMPAT_VERSION = 3;
 public:
   enum {
@@ -41,6 +41,7 @@ public:
   spg_t pgid;
   hobject_t last_backfill;
   pg_stat_t stats;
+  map<hobject_t, eversion_t> mark_missing;
 
   epoch_t get_map_epoch() const override {
     return map_epoch;
@@ -70,6 +71,9 @@ public:
 	last_backfill.pool == -1)
       last_backfill.pool = pgid.pool();
     decode(pgid.shard, p);
+    if (header.version >= 4) {
+      decode(mark_missing, p);
+    }
   }
 
   void encode_payload(uint64_t features) override {
@@ -86,6 +90,7 @@ public:
     encode(stats, payload);
 
     encode(pgid.shard, payload);
+    encode(mark_missing, payload);
   }
 
   MOSDPGBackfill()
