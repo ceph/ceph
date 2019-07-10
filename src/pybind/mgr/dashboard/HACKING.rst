@@ -72,7 +72,7 @@ Run ``npm run doc-build`` to generate code docs in the ``documentation/``
 directory. To make them accesible locally for a web browser, run
 ``npm run doc-serve`` and they will become available at ``http://localhost:8444``.
 With ``npm run compodoc -- <opts>`` you may
-`fully configure it https://compodoc.app/guides/usage.html`_.
+`fully configure it <https://compodoc.app/guides/usage.html>`_.
 
 Code linting and formatting
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
