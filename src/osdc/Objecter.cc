@@ -4175,6 +4175,7 @@ void Objecter::_finish_pool_op(PoolOp *op, int r)
 
 void Objecter::get_pool_stats(list<string>& pools,
 			      map<string,pool_stat_t> *result,
+			      bool *per_pool,
 			      Context *onfinish)
 {
   ldout(cct, 10) << "get_pool_stats " << pools << dendl;
@@ -4183,6 +4184,7 @@ void Objecter::get_pool_stats(list<string>& pools,
   op->tid = ++last_tid;
   op->pools = pools;
   op->pool_stats = result;
+  op->per_pool = per_pool;
   op->onfinish = onfinish;
   if (mon_timeout > timespan(0)) {
     op->ontimeout = timer.add_event(mon_timeout,
@@ -4229,6 +4231,7 @@ void Objecter::handle_get_pool_stats_reply(MGetPoolStatsReply *m)
     PoolStatOp *op = poolstat_ops[tid];
     ldout(cct, 10) << "have request " << tid << " at " << op << dendl;
     *op->pool_stats = m->pool_stats;
+    *op->per_pool = m->per_pool;
     if (m->version > last_seen_pgmap_version) {
       last_seen_pgmap_version = m->version;
     }
