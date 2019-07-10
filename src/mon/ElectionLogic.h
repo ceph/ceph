@@ -229,7 +229,7 @@ public:
    * @param mepoch The epoch of the proposal
    * @param from The rank proposing itself as leader
    */
-  void receive_propose(epoch_t mepoch, int from);
+  void receive_propose(int from, epoch_t mepoch);
   /**
    * Handle a message from some other participant Acking us as the Leader.
    *
