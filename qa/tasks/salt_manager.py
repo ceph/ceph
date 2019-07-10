@@ -28,6 +28,10 @@ log = logging.getLogger(__name__)
 master_role = 'client.salt_master'
 
 
+class InternalError(Exception):
+    pass
+
+
 def systemctl_remote(remote, subcommand, service_name):
     """
     Caveat: only works for units ending in ".service"
@@ -169,24 +173,42 @@ class SaltManager(object):
                 '/home/ubuntu/cephtest/archive/{}'.format(logfile)
                 ])
 
-    def gather_logs(self, logdir):
+    def gather_logs(self, logdir, archive=None):
+        """
+        Grabs contents of logdir and saves them in /home/ubuntu/cephtest/archive
+        teuthology will harvest them before destroying the remote (target machine).
+
+        logdir can be specified as an absolute path or a relative path. Relative
+        paths are assumed to be under /var/log.
+        """
+        if logdir[:1] == '/':
+            if not archive:
+                raise InternalError((
+                    'Unable to harvest logs from absolute directory ->{}<- '
+                    'because no archive option was passed'
+                    ).format(logdir)
+                    )
+        else:
+            if not archive:
+                archive = logdir
+            logdir = '/var/log/{}'.format(logdir)
         for _remote in self.ctx.cluster.remotes.iterkeys():
             try:
                 _remote.run(args=[
-                    'sudo', 'test', '-d', '/var/log/{}/'.format(logdir),
+                    'sudo', 'test', '-d', '{}/'.format(logdir),
                     ])
             except CommandFailedError:
                 continue
             log.info("gathering {} logs from remote {}"
                      .format(logdir, _remote.hostname))
             _remote.run(args=[
-                'sudo', 'cp', '-a', '/var/log/{}/'.format(logdir),
+                'sudo', 'cp', '-a', '{}/'.format(logdir),
                 '/home/ubuntu/cephtest/archive/',
                 run.Raw(';'),
                 'sudo', 'chown', '-R', 'ubuntu',
-                '/home/ubuntu/cephtest/archive/{}/'.format(logdir),
+                '/home/ubuntu/cephtest/archive/{}/'.format(archive),
                 run.Raw(';'),
-                'find', '/home/ubuntu/cephtest/archive/{}/'.format(logdir),
+                'find', '/home/ubuntu/cephtest/archive/{}/'.format(archive),
                 '-type', 'f', '-print0',
                 run.Raw('|'),
                 'xargs', '-0', '--no-run-if-empty', '--', 'gzip', '--'
