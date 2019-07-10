@@ -406,7 +406,9 @@ ceph_config_set(BaseMgrModule *self, PyObject *args)
   if (value) {
     val = value;
   }
+  PyThreadState *tstate = PyEval_SaveThread();
   self->py_modules->set_config(self->this_module->get_name(), key, val);
+  PyEval_RestoreThread(tstate);
 
   Py_RETURN_NONE;
 }
@@ -447,7 +449,9 @@ ceph_store_set(BaseMgrModule *self, PyObject *args)
   if (value) {
     val = value;
   }
+  PyThreadState *tstate = PyEval_SaveThread();
   self->py_modules->set_store(self->this_module->get_name(), key, val);
+  PyEval_RestoreThread(tstate);
 
   Py_RETURN_NONE;
 }
