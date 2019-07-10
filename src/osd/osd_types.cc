@@ -396,6 +396,8 @@ void osd_stat_t::dump(Formatter *f) const
   f->dump_unsigned("up_from", up_from);
   f->dump_unsigned("seq", seq);
   f->dump_unsigned("num_pgs", num_pgs);
+  f->dump_unsigned("num_osds", num_osds);
+  f->dump_unsigned("num_per_pool_osds", num_per_pool_osds);
 
   /// dump legacy stats fields to ensure backward compatibility.
   f->dump_unsigned("kb", statfs.kb());
@@ -429,7 +431,7 @@ void osd_stat_t::dump(Formatter *f) const
 
 void osd_stat_t::encode(ceph::buffer::list &bl, uint64_t features) const
 {
-  ENCODE_START(11, 2, bl);
+  ENCODE_START(12, 2, bl);
 
   //////// for compatibility ////////
   int64_t kb = statfs.kb();
@@ -461,6 +463,8 @@ void osd_stat_t::encode(ceph::buffer::list &bl, uint64_t features) const
   ///////////////////////////////////
   encode(os_alerts, bl);
   encode(num_shards_repaired, bl);
+  encode(num_osds, bl);
+  encode(num_per_pool_osds, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -468,7 +472,7 @@ void osd_stat_t::decode(ceph::buffer::list::const_iterator &bl)
 {
   int64_t kb, kb_used,kb_avail;
   int64_t kb_used_data, kb_used_omap, kb_used_meta;
-  DECODE_START_LEGACY_COMPAT_LEN(11, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(12, 2, 2, bl);
   decode(kb, bl);
   decode(kb_used, bl);
   decode(kb_avail, bl);
@@ -527,6 +531,13 @@ void osd_stat_t::decode(ceph::buffer::list::const_iterator &bl)
     decode(num_shards_repaired, bl);
   } else {
     num_shards_repaired = 0;
+  }
+  if (struct_v >= 12) {
+    decode(num_osds, bl);
+    decode(num_per_pool_osds, bl);
+  } else {
+    num_osds = 0;
+    num_per_pool_osds = 0;
   }
   DECODE_FINISH(bl);
 }
