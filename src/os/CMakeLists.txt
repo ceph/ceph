@@ -46,10 +46,10 @@ if(WITH_FUSE)
     FuseStore.cc)
 endif(WITH_FUSE)
 
-if(WITH_PMEM)
+if(WITH_BLUESTORE_PMEM)
   list(APPEND libos_srcs
     bluestore/PMEMDevice.cc)
-endif(WITH_PMEM)
+endif()
 
 if(HAVE_LIBXFS)
   list(APPEND libos_srcs
@@ -121,7 +121,7 @@ if(WITH_BLUESTORE)
     DESTINATION bin)
 endif()
 
-if(WITH_PMEM)
+if(WITH_BLUESTORE_PMEM)
   include(ExternalProject)
   ExternalProject_Add(nvml_ext
     DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/src/
@@ -145,7 +145,7 @@ if(WITH_PMEM)
     INTERFACE_LINK_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
   target_link_libraries(os pmem)
   target_include_directories(os SYSTEM PRIVATE "${CMAKE_BINARY_DIR}/src/nvml/src/include")
-endif(WITH_PMEM)
+endif(WITH_BLUESTORE_PMEM)
 
 if(WITH_LTTNG AND WITH_EVENTTRACE)
   add_dependencies(os eventtrace_tp)
