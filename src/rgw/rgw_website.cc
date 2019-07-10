@@ -106,8 +106,11 @@ bool RGWBucketWebsiteConf::should_redirect(const string& key, const int http_err
   return true;
 }
 
-void RGWBucketWebsiteConf::get_effective_key(const string& key, string *effective_key, bool is_file) const
+bool RGWBucketWebsiteConf::get_effective_key(const string& key, string *effective_key, bool is_file) const
 {
+  if (index_doc_suffix.empty()) {
+    return false;
+  }
 
   if (key.empty()) {
     *effective_key = index_doc_suffix;
@@ -118,4 +121,6 @@ void RGWBucketWebsiteConf::get_effective_key(const string& key, string *effectiv
   } else {
     *effective_key = key;
   }
+
+  return true;
 }
