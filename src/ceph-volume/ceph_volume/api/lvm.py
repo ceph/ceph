@@ -67,8 +67,13 @@ def _splitname_parser(line):
 
     :returns: dictionary with stripped prefixes
     """
-    parts = line[0].split(';')
     parsed = {}
+    try:
+        parts = line[0].split(';')
+    except IndexError:
+        logger.exception('Unable to parse mapper device: %s', line)
+        return parsed
+
     for part in parts:
         part = part.replace("'", '')
         key, value = part.split('=')
