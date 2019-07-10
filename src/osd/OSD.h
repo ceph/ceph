@@ -760,6 +760,12 @@ public:
     std::lock_guard l(stat_lock);
     return osd_stat.seq;
   }
+  void get_hb_pingtime(map<int, osd_stat_t::Interfaces> *pp)
+  {
+    std::lock_guard l(stat_lock);
+    *pp = osd_stat.hb_pingtime;
+    return;
+  }
 
   // -- OSD Full Status --
 private:
