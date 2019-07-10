@@ -360,12 +360,15 @@ function test_tiering_1()
   expect_false ceph osd tier add slow2 cache
   # test some state transitions
   ceph osd tier cache-mode cache writeback
+  # forward is removed/deprecated
   expect_false ceph osd tier cache-mode cache forward
-  ceph osd tier cache-mode cache forward --yes-i-really-mean-it
+  expect_false ceph osd tier cache-mode cache forward --yes-i-really-mean-it
   expect_false ceph osd tier cache-mode cache readonly
+  ceph osd tier cache-mode cache proxy
+  ceph osd tier cache-mode cache none
   ceph osd tier cache-mode cache readonly --yes-i-really-mean-it
   expect_false ceph osd tier cache-mode cache forward
-  ceph osd tier cache-mode cache forward --yes-i-really-mean-it
+  expect_false ceph osd tier cache-mode cache forward --yes-i-really-mean-it
   ceph osd tier cache-mode cache none
   ceph osd tier cache-mode cache writeback
   ceph osd tier cache-mode cache proxy
