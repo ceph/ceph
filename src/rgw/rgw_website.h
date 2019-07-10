@@ -226,7 +226,7 @@ struct RGWBucketWebsiteConf
                        const int http_error_code,
                        RGWBWRoutingRule *redirect);
 
-  void get_effective_key(const std::string& key,
+  bool get_effective_key(const std::string& key,
                          std::string *effective_key, bool is_file) const;
 
   const std::string& get_index_doc() const {

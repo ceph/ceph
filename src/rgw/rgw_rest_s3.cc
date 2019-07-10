@@ -4186,7 +4186,13 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
   }
 
   rgw_obj_key new_obj;
-  s->bucket_info.website_conf.get_effective_key(s->object.name, &new_obj.name, web_dir());
+  bool get_res = s->bucket_info.website_conf.get_effective_key(s->object.name, &new_obj.name, web_dir());
+  if (!get_res) {
+    s->err.message = "The IndexDocument Suffix is not configurated or not well formed!";
+    ldpp_dout(s, 5) << s->err.message << dendl;
+    return -EINVAL;
+  }
+
   ldpp_dout(s, 10) << "retarget get_effective_key " << s->object << " -> "
 		    << new_obj << dendl;
 
