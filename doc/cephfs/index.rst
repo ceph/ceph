@@ -70,7 +70,7 @@ authentication keyring.
 	:maxdepth: 1
 
 	Create a CephFS file system <createfs>
-	Mount CephFS <kernel>
+	Mount CephFS with the Kernel Driver <kernel>
 	Mount CephFS as FUSE <fuse>
 	Mount CephFS in fstab <fstab>
 	Use the CephFS Shell <cephfs-shell>
