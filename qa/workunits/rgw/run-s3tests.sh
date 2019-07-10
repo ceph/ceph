@@ -31,7 +31,7 @@ git checkout ceph-$branch
 VIRTUALENV_PYTHON=/usr/bin/python2 ./bootstrap
 cd ../..
 
-S3TEST_CONF=$dir/s3-tests/s3tests.conf.SAMPLE $dir/s3-tests/virtualenv/bin/nosetests -a '!fails_on_rgw' -v
+S3TEST_CONF=$dir/s3-tests/s3tests.conf.SAMPLE $dir/s3-tests/virtualenv/bin/nosetests -a '!fails_on_rgw,!lifecycle_expiration,!fails_strict_rfc2616' -v
 
 rm -rf $dir
 
