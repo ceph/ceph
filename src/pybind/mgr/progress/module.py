@@ -2,7 +2,7 @@ from mgr_module import MgrModule
 import threading
 import datetime
 import uuid
-
+import time
 import json
 
 
@@ -19,9 +19,9 @@ class Event(object):
     objects (osds, pools) this relates to.
     """
 
-    def __init__(self, message, refs):
+    def __init__(self, message, refs, duration="(since 00h 00m 00s)"):
         self._refs = refs
-        self._duration_str = "(since 0h 0m 0s)"
+        self._duration_str = duration
         self._message = message
         self.started_at = datetime.datetime.utcnow()
 
@@ -32,7 +32,7 @@ class Event(object):
         _module.log.debug('refreshing mgr for %s (%s) at %f' % (self.id, self._message,
                                                                 self.progress))
         self.update_duration_event()
-        _module.update_progress_event(self.id, self._message, self.progress)
+        _module.update_progress_event(self.id, self._message, self.progress, self._duration_str)
 
     @property
     def message(self):
@@ -93,12 +93,8 @@ class Event(object):
     def update_duration_event(self):
         # Update duration of event in seconds/minutes/hours
 
-        duration = (datetime.datetime.utcnow() - self.started_at)
-        duration_sec = duration.seconds
-        duration_min = duration_sec //60
-        duration_hr = duration_min // 60
-
-        self._duration_str = "(since {0}h {1}m {2}s)".format(duration_hr, duration_min, duration_sec)
+        duration = (datetime.datetime.utcnow() - self.started_at).seconds
+        self._duration_str = time.strftime("(since %Hh %Mm %Ss)", time.gmtime(duration))
 
 class GhostEvent(Event):
     """
@@ -106,9 +102,8 @@ class GhostEvent(Event):
     after the event is complete.
     """
 
-    def __init__(self, my_id, message, refs,
-                 failed=False, failure_message=None):
-        super(GhostEvent, self).__init__(message, refs)
+    def __init__(self, my_id, message, refs, duration="(since 00h 00m 00s)"):
+        super(GhostEvent, self).__init__(message, refs, duration)
         self.id = my_id
 
         if failed:
@@ -148,8 +143,8 @@ class RemoteEvent(Event):
     progress information as it emerges.
     """
 
-    def __init__(self, my_id, message, refs):
-        super(RemoteEvent, self).__init__(message, refs)
+    def __init__(self, my_id, message, refs, duration="(since 00h 00m 00s)"):
+        super(RemoteEvent, self).__init__(message, refs, duration)
         self.id = my_id
         self._progress = 0.0
         self._failed = False
@@ -278,16 +273,14 @@ class PgRecoveryEvent(Event):
                         ratio = 0.5
 
                     complete_accumulate += ratio
-        
+
         self._pgs = list(set(self._pgs) ^ complete)
         completed_pgs = self._original_pg_count - len(self._pgs)
         self._progress = (completed_pgs + complete_accumulate)\
             / self._original_pg_count
 
-        self._refresh()    
-        log.info("Updated progress to {0} ({1} {2})".format(
-            self._progress, self._message, self._duration_str
-        ))
+        self._refresh()
+        log.info("Updated progress to %s", self.summary())
 
     @property
     def progress(self):
@@ -572,8 +565,7 @@ class Module(MgrModule):
         self.complete_progress_event(ev.id)
 
         self._completed_events.append(
-            GhostEvent(ev.id, ev.message, ev.refs,
-                       failed=ev.failed, failure_message=ev.failure_message))
+            GhostEvent(ev.id, ev.message, ev.refs, ev.duration_str))
         del self._events[ev.id]
         self._prune_completed_events()
         self._dirty = True
