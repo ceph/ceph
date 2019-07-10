@@ -187,6 +187,18 @@ class SubVolume(object):
         want_mds_cap = "allow {0} path={1}".format(access_level, path)
         want_osd_cap = "allow {0} pool={1} namespace={2}".format(access_level, pool, namespace)
 
+        # Construct auth caps that if present might conflict with the desired
+        # auth caps.
+        unwanted_access_level = 'r' if access_level is 'rw' else 'rw'
+        unwanted_mds_cap = 'allow {0} path={1}'.format(unwanted_access_level, path)
+        unwanted_osd_cap = 'allow {0} pool={1} namespace={2}'.format(
+                unwanted_access_level, pool, namespace)
+
+        return self._authorize(client_entity, want_mds_cap, want_osd_cap,
+                               unwanted_mds_cap, unwanted_osd_cap)
+
+    def _authorize(self, client_entity, want_mds_cap, want_osd_cap,
+                   unwanted_mds_cap, unwanted_osd_cap):
         ret, out, err = self.mgr.mon_command({
             "prefix": "auth get",
             "entity": client_entity,
@@ -200,14 +212,6 @@ class SubVolume(object):
                 "format": "json"})
         else:
             cap = json.loads(out)[0]
-            want_access_level = access_level
-
-            # Construct auth caps that if present might conflict with the desired
-            # auth caps.
-            unwanted_access_level = 'r' if want_access_level is 'rw' else 'rw'
-            unwanted_mds_cap = 'allow {0} path={1}'.format(unwanted_access_level, path)
-            unwanted_osd_cap = 'allow {0} pool={1} namespace={2}'.format(
-                    unwanted_access_level, pool, namespace)
 
             def cap_update(
                     orig_mds_caps, orig_osd_caps, want_mds_cap,
@@ -288,7 +292,9 @@ class SubVolume(object):
         want_osd_caps = ['allow {0} pool={1} namespace={2}'.format(access_level, pool_name, namespace)
                          for access_level in access_levels]
 
+        self._deauthorize(client_entity, want_mds_caps, want_osd_caps)
 
+    def _deauthorize(self, client_entity, want_mds_caps, want_osd_caps):
         ret, out, err = self.mgr.mon_command({
             "prefix": "auth get",
             "entity": client_entity,
@@ -333,6 +339,38 @@ class SubVolume(object):
                         'osd', osd_cap_str,
                         'mon', cap['caps'].get('mon', 'allow r')],
                 })
+
+    def authorize_group(self, spec, auth_id, access_level):
+        path = spec.group_path
+        log.debug("Authorizing Ceph id '{0}' for path '{1}'".format(auth_id, path))
+        client_entity = "client.{0}".format(auth_id)
+
+        want_mds_cap = "allow {0} path={1}".format(access_level, path)
+        want_osd_cap = "allow {0} tag cephfs data={1}".format(access_level, self.fs_name)
+        # Construct auth caps that if present might conflict with the desired
+        # auth caps.
+        unwanted_access_level = 'r' if access_level is 'rw' else 'rw'
+        unwanted_mds_cap = 'allow {0} path={1}'.format(unwanted_access_level, path)
+        unwanted_osd_cap = 'allow {0} tag cephfs data={1}'.format(
+                unwanted_access_level, self.fs_name)
+
+        return self._authorize(client_entity, want_mds_cap, want_osd_cap,
+                               unwanted_mds_cap, unwanted_osd_cap)
+
+    def deauthorize_group(self, spec, auth_id):
+        """
+        The volume must still exist.
+        """
+        client_entity = "client.{0}".format(auth_id)
+        path = spec.group_path
+        # The auth_id might have read-only or read-write mount access for the
+        # group path.
+        access_levels = ('r', 'rw')
+        want_mds_caps = ['allow {0} path={1}'.format(access_level, path)
+                         for access_level in access_levels]
+        want_osd_caps = ['allow {0} tag cephfs data={1}'.format(access_level, self.fs_name)
+                         for access_level in access_levels]
+        self._deauthorize(client_entity, want_mds_caps, want_osd_caps)
 
 ### group operations
 

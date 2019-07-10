@@ -149,6 +149,23 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'desc': "Deny a cephx auth ID access to a subvolume",
             'perm': 'rw'
         },
+        {
+            'cmd': 'fs subvolumegroup authorize '
+                   'name=vol_name,type=CephString '
+                   'name=group_name,type=CephString '
+                   'name=auth_id,type=CephString '
+                   'name=access_level,type=CephString,req=false ',
+            'desc': "Allow a cephx auth ID access to a subvolumegroup",
+            'perm': 'rw'
+        },
+        {
+            'cmd': 'fs subvolumegroup deauthorize '
+                   'name=vol_name,type=CephString '
+                   'name=group_name,type=CephString '
+                   'name=auth_id,type=CephString ',
+            'desc': "Deny a cephx auth ID access to a subvolumegroup",
+            'perm': 'rw'
+        },
 
 
         # volume ls [recursive]
@@ -315,3 +332,18 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         group_name = cmd.get('group_name', None)
 
         return self.vc.deauthorize_subvolume(vol_name, sub_name, auth_id, group_name)
+
+    def _cmd_fs_subvolumegroup_authorize(self, inbuf, cmd):
+        vol_name = cmd['vol_name']
+        group_name = cmd['group_name']
+        auth_id = cmd['auth_id']
+        access_level = cmd.get('access_level', 'rw')
+
+        return self.vc.authorize_subvolumegroup(vol_name, group_name, auth_id, access_level)
+
+    def _cmd_fs_subvolumegroup_deauthorize(self, inbuf, cmd):
+        vol_name = cmd['vol_name']
+        group_name = cmd['group_name']
+        auth_id = cmd['auth_id']
+
+        return self.vc.deauthorize_subvolumegroup(vol_name, group_name, auth_id)

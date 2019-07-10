@@ -371,6 +371,45 @@ class VolumeClient(object):
             ret = self.volume_exception_to_retval(ve)
         return ret
 
+    def authorize_subvolumegroup(self, volname, groupname, authid, accesslevel):
+        ret = 0, "", ""
+        try:
+            if not self.volume_exists(volname):
+                raise VolumeException(
+                    -errno.ENOENT, "Volume '{0}' not found".format(volname))
+
+            with SubVolume(self.mgr, fs_name=volname) as sv:
+                spec = SubvolumeSpec("", groupname)
+                if not self.group_exists(sv, spec):
+                    raise VolumeException(
+                        -errno.ENOENT, "Subvolume group '{0}' not found".format(groupname))
+                if accesslevel not in ALLOWED_ACCESS_LEVELS:
+                    raise VolumeException(
+                        -errno.EINVAL,
+                        "Invalid access level '{0}'. "
+                        "Valid access levels are {1}".format(accesslevel, ALLOWED_ACCESS_LEVELS))
+                key = sv.authorize_group(spec, authid, accesslevel)
+                ret = 0, key, ""
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
+    def deauthorize_subvolumegroup(self, volname, groupname, authid):
+        ret = 0, "", ""
+        try:
+            if not self.volume_exists(volname):
+                raise VolumeException(
+                    -errno.ENOENT, "Volume '{0}' not found".format(volname))
+            with SubVolume(self.mgr, fs_name=volname) as sv:
+                spec = SubvolumeSpec("", groupname)
+                if not self.group_exists(sv, spec):
+                    raise VolumeException(
+                        -errno.ENOENT, "Subvolume group '{0}' not found".format(groupname))
+                sv.deauthorize_group(spec, authid)
+        except VolumeException as ve:
+            ret = self.volume_exception_to_retval(ve)
+        return ret
+
     ### group snapshot
 
     def create_subvolume_group_snapshot(self, volname, groupname, snapname):
