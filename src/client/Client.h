@@ -30,6 +30,7 @@
 #include "include/types.h"
 #include "include/unordered_map.h"
 #include "include/unordered_set.h"
+#include "include/cephfs/metrics/Types.h"
 #include "mds/mdstypes.h"
 #include "msg/Dispatcher.h"
 #include "msg/MessageRef.h"
@@ -1190,6 +1191,8 @@ private:
   int _lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode=NULL);
   bool _ll_forget(Inode *in, uint64_t count);
 
+  void collect_and_send_metrics();
+  void collect_and_send_global_metrics();
 
   uint32_t deleg_timeout = 0;
 
