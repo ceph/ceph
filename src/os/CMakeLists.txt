@@ -122,8 +122,6 @@ if(WITH_BLUESTORE)
 endif()
 
 if(WITH_BLUESTORE_PMEM)
-  include(Buildpmem)
-  build_pmem()
   target_link_libraries(os pmem::pmem)
 endif()
 
