@@ -528,6 +528,7 @@ Architecture: linux-any
 Depends: librbd1 (= ${binary:Version}),
          python-cephfs (= ${binary:Version}),
          python-ceph-argparse (= ${binary:Version}),
+         python-ceph-common (= ${binary:Version}),
          python-prettytable,
          python-rados (= ${binary:Version}),
          python-rbd (= ${binary:Version}),
@@ -1199,6 +1200,32 @@ Description: Python 3 utility libraries for Ceph CLI
  .
  This package contains types and routines for Python 3 used by the
  Ceph CLI as well as the RESTful interface.
+
+Package: python-ceph-common
+Architecture: all
+Section: python
+Depends: ${misc:Depends},
+         ${python:Depends},
+Description: Python 2 utility libraries for Ceph
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains data structures, classes and functions used by Ceph.
+ It also contains utilities used for the SSH orchestrator.
+
+Package: python3-ceph-common
+Architecture: all
+Section: python
+Depends: ${misc:Depends},
+         ${python3:Depends},
+Description: Python 3 utility libraries for Ceph
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains data structures, classes and functions used by Ceph.
+ It also contains utilities used for the SSH orchestrator.
 
 Package: libcephfs-java
 Section: java
