@@ -10,6 +10,17 @@ where the problem is occurring: in the client, the MDS, or the network connectin
 them. Start by looking to see if either side has stuck operations
 (:ref:`slow_requests`, below), and narrow it down from there.
 
+We can get hints about what's going on by dumping the MDS cache ::
+
+  ceph daemon mds.<name> dump cache /tmp/dump.txt
+
+.. note:: The file `dump.txt` is on the machine executing the MDS and for systemd
+	  controlled MDS services, this is in a tmpfs in the MDS container.
+	  Use `nsenter(1)` to locate `dump.txt` or specify another system-wide path.
+
+If high logging levels are set on the MDS, that will almost certainly hold the
+information we need to diagnose and solve the issue.
+
 RADOS Health
 ============
 
@@ -24,12 +35,16 @@ If an operation is hung inside the MDS, it will eventually show up in ``ceph hea
 identifying "slow requests are blocked". It may also identify clients as
 "failing to respond" or misbehaving in other ways. If the MDS identifies
 specific clients as misbehaving, you should investigate why they are doing so.
+
 Generally it will be the result of
-1) overloading the system (if you have extra RAM, increase the
-"mds cache size" config from its default 100000; having a larger active file set
-than your MDS cache is the #1 cause of this!)
-2) running an older (misbehaving) client, or
-3) underlying RADOS issues.
+
+#. Overloading the system (if you have extra RAM, increase the "mds cache size"
+   config from its default 100000; having a larger active file set than your MDS
+   cache is the #1 cause of this!).
+
+#. Running an older (misbehaving) client.
+
+#. Underlying RADOS issues.
 
 Otherwise, you have probably discovered a new bug and should report it to
 the developers!
@@ -57,10 +72,12 @@ If there are no slow requests reported on the MDS, and it is not reporting
 that clients are misbehaving, either the client has a problem or its
 requests are not reaching the MDS.
 
+.. _ceph_fuse_debugging:
+
 ceph-fuse debugging
 ===================
 
-ceph-fuse also supports dump_ops_in_flight. See if it has any and where they are
+ceph-fuse also supports ``dump_ops_in_flight``. See if it has any and where they are
 stuck.
 
 Debug output
@@ -74,9 +91,15 @@ with logging to the console (``-d``) and enabling client debug
 If you suspect a potential monitor issue, enable monitor debugging as well
 (``--debug-monc=20``).
 
+.. _kernel_mount_debugging:
 
 Kernel mount debugging
 ======================
+
+If there is an issue with the kernel client, the most important thing is
+figuring out whether the problem is with the kernel client or the MDS. Generally,
+this is easy to work out. If the kernel client broke directly, there will be
+output in ``dmesg``. Collect it and any inappropriate kernel state.
 
 Slow requests
 -------------
@@ -158,3 +181,9 @@ If the Ceph Client is behind the Ceph cluster, try to upgrade it::
 You may need to uninstall, autoclean and autoremove ``ceph-common`` 
 and then reinstall it so that you have the latest version.
 
+Dynamic Debugging
+=================
+
+You can enable dynamic debug against the CephFS module.
+
+Please see: https://github.com/ceph/ceph/blob/master/src/script/kcon_all.sh

@@ -47,6 +47,8 @@ A persistent mount point can be setup via::
 
 	sudo systemctl enable ceph-fuse@/mnt.service
 
+For troubleshooting, see :ref:`ceph_fuse_debugging`.
+
 .. _ceph-fuse: ../../man/8/ceph-fuse/
 .. _fstab: ../fstab/#fuse
 .. _CEPHX Config Reference: ../../rados/configuration/auth-config-ref
