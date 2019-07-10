@@ -23,6 +23,7 @@
 #include <sys/stat.h>
 #include <signal.h>
 #include <boost/scoped_ptr.hpp>
+#include <boost/range/adaptor/reversed.hpp>
 
 #ifdef HAVE_SYS_PARAM_H
 #include <sys/param.h>
@@ -2281,6 +2282,77 @@ will start to track new ops received afterwards.";
       f->dump_string("device", "/dev/" + dev);
     }
     f->close_section();
+  } else if (admin_command == "dump_osd_network") {
+    int64_t value = 0;
+    if (!(cmd_getval(cct, cmdmap, "value", value))) {
+      value = static_cast<int64_t>(g_conf().get_val<uint64_t>("mon_warn_on_slow_ping_time"));
+    }
+    if (value < 0) value = 0;
+
+    struct osd_ping_time_t {
+      uint32_t pingtime;
+      int to;
+      bool back;
+      std::array<uint32_t,3> times;
+
+      bool operator<(const osd_ping_time_t& rhs) const {
+	if (pingtime < rhs.pingtime)
+          return true;
+	if (pingtime > rhs.pingtime)
+	  return false;
+        if (to < rhs.to)
+	  return true;
+        if (to > rhs.to)
+	  return false;
+	return back;
+      }
+    };
+
+    set<osd_ping_time_t> sorted;
+    // Get pingtimes under lock and not on the stack
+    map<int, osd_stat_t::Interfaces> *pingtimes = new map<int, osd_stat_t::Interfaces>;
+    service.get_hb_pingtime(pingtimes);
+    for (auto j : *pingtimes) {
+      osd_ping_time_t item;
+      item.pingtime = std::max(j.second.back_pingtime[0], j.second.back_pingtime[1]);
+      item.pingtime = std::max(item.pingtime, j.second.back_pingtime[2]);
+      if (item.pingtime >= value) {
+	item.to = j.first;
+	item.times[0] = j.second.back_pingtime[0];
+	item.times[1] = j.second.back_pingtime[1];
+	item.times[2] = j.second.back_pingtime[2];
+	item.back = true;
+	sorted.emplace(item);
+      }
+      if (j.second.front_pingtime[0] == 0)
+	continue;
+      item.pingtime = std::max(j.second.front_pingtime[0], j.second.front_pingtime[1]);
+      item.pingtime = std::max(item.pingtime, j.second.front_pingtime[2]);
+      if (item.pingtime >= value) {
+	item.to = j.first;
+	item.times[0] = j.second.front_pingtime[0];
+	item.times[1] = j.second.front_pingtime[1];
+	item.times[2] = j.second.front_pingtime[2];
+	item.back = false;
+	sorted.emplace(item);
+      }
+    }
+    delete pingtimes;
+    //
+    // Network ping times (1min 5min 15min)
+    f->open_array_section("network_ping_times");
+    for (auto &sitem : boost::adaptors::reverse(sorted)) {
+      ceph_assert(sitem.pingtime >= value);
+      f->open_object_section("entry");
+      f->dump_int("from osd", whoami);
+      f->dump_int("to osd", sitem.to);
+      f->dump_string("interface", (sitem.back ? "back" : "front"));
+      f->dump_int("1min", sitem.times[0]);
+      f->dump_int("5min", sitem.times[1]);
+      f->dump_int("15min", sitem.times[2]);
+      f->close_section();  // entry
+    }
+    f->close_section(); // network_ping_times
   } else {
     assert(0 == "broken asok registration");
   }
@@ -2888,6 +2960,10 @@ void OSD::final_init()
   r = admin_socket->register_command("list_devices", "list_devices",
                                      asok_hook,
                                      "list OSD devices.");
+
+  r = admin_socket->register_command("dump_osd_network", "dump_osd_network name=value,type=CephInt,req=false", asok_hook,
+					 "Dump osd heartbeat network ping times");
+  ceph_assert(r == 0);
 
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
   // Note: pools are CephString instead of CephPoolname because
