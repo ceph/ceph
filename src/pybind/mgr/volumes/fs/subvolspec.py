@@ -80,13 +80,6 @@ class SubvolumeSpec(object):
         return "{0}{1}".format(self.pool_ns_prefix, self.subvolumeid)
 
     @property
-    def group_dir(self):
-        """
-        return the group directory path
-        """
-        return self.subvolume_prefix
-
-    @property
     def trash_dir(self):
         """
         return the trash directory path
