@@ -17,13 +17,19 @@
 #define CEPH_MGETPOOLSTATSREPLY_H
 
 class MGetPoolStatsReply : public PaxosServiceMessage {
+  static constexpr int HEAD_VERSION = 2;
+  static constexpr int COMPAT_VERSION = 1;
+
 public:
   uuid_d fsid;
   std::map<std::string,pool_stat_t> pool_stats;
+  bool per_pool = false;
 
-  MGetPoolStatsReply() : PaxosServiceMessage{MSG_GETPOOLSTATSREPLY, 0} {}
+  MGetPoolStatsReply() : PaxosServiceMessage{MSG_GETPOOLSTATSREPLY, 0,
+					     HEAD_VERSION, COMPAT_VERSION} {}
   MGetPoolStatsReply(uuid_d& f, ceph_tid_t t, version_t v) :
-    PaxosServiceMessage{MSG_GETPOOLSTATSREPLY, v},
+    PaxosServiceMessage{MSG_GETPOOLSTATSREPLY, v,
+			HEAD_VERSION, COMPAT_VERSION},
     fsid(f) {
     set_tid(t);
   }
@@ -34,7 +40,10 @@ private:
 public:
   std::string_view get_type_name() const override { return "getpoolstats"; }
   void print(std::ostream& out) const override {
-    out << "getpoolstatsreply(" << get_tid() << " v" << version <<  ")";
+    out << "getpoolstatsreply(" << get_tid();
+    if (per_pool)
+      out << " per_pool";
+    out << " v" << version <<  ")";
   }
 
   void encode_payload(uint64_t features) override {
@@ -42,6 +51,7 @@ public:
     paxos_encode();
     encode(fsid, payload);
     encode(pool_stats, payload, features);
+    encode(per_pool, payload);
   }
   void decode_payload() override {
     using ceph::decode;
@@ -49,6 +59,11 @@ public:
     paxos_decode(p);
     decode(fsid, p);
     decode(pool_stats, p);
+    if (header.version >= 2) {
+      decode(per_pool, p);
+    } else {
+      per_pool = false;
+    }
   }
 private:
   template<class T, typename... Args>

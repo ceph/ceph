@@ -1644,6 +1644,7 @@ public:
     std::list<std::string> pools;
 
     std::map<std::string,pool_stat_t> *pool_stats;
+    bool *per_pool;
     Context *onfinish;
     uint64_t ontimeout;
 
@@ -2998,7 +2999,9 @@ private:
   void _poolstat_submit(PoolStatOp *op);
 public:
   void handle_get_pool_stats_reply(MGetPoolStatsReply *m);
-  void get_pool_stats(std::list<std::string>& pools, std::map<std::string,pool_stat_t> *result,
+  void get_pool_stats(std::list<std::string>& pools,
+		      std::map<std::string,pool_stat_t> *result,
+		      bool *per_pool,
 		      Context *onfinish);
   int pool_stat_op_cancel(ceph_tid_t tid, int r);
   void _finish_pool_stat_op(PoolStatOp *op, int r);
