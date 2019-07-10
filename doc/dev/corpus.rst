@@ -18,7 +18,8 @@ decode old objects across that $version (this is normally the case).
 How to generate an object corpus
 --------------------------------
 
-We can generate an object corpus for a particular version of ceph like so.
+We can generate an object corpus for a particular version of ceph using the
+script of ``script/gen-corpus.sh``, or by following the instructions below:
 
 #. Checkout a clean repo (best not to do this where you normally work)::
 
@@ -50,8 +51,7 @@ We can generate an object corpus for a particular version of ceph like so.
 	bin/ceph_test_librbd
 	bin/ceph_test_libcephfs
 	bin/init-ceph restart mds.a
-
-Do some more stuff with rgw if you know how.
+    ../qa/workunits/rgw/run-s3tests.sh
 
 #. Stop::
 
