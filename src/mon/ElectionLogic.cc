@@ -132,7 +132,7 @@ void ElectionLogic::declare_victory()
   elector->message_victory(new_quorum);
 }
 
-void ElectionLogic::receive_propose(epoch_t mepoch, int from)
+void ElectionLogic::receive_propose(int from, epoch_t mepoch)
 {
   if (mepoch > epoch) {
     bump_epoch(mepoch);

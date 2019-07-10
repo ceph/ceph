@@ -247,7 +247,7 @@ void Elector::handle_propose(MonOpRequestRef op)
             << dendl;
     nak_old_peer(op);
   }
-  logic.receive_propose(m->epoch, from);
+  logic.receive_propose(from, m->epoch);
 }
 
 void Elector::handle_ack(MonOpRequestRef op)
