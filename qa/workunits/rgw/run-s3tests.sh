@@ -29,10 +29,10 @@ git clone https://github.com/ceph/s3-tests
 cd s3-tests
 git checkout ceph-$branch
 VIRTUALENV_PYTHON=/usr/bin/python2 ./bootstrap
+
+S3TEST_CONF=s3tests.conf.SAMPLE virtualenv/bin/nosetests -a '!fails_on_rgw,!lifecycle_expiration,!fails_strict_rfc2616' -v
+
 cd ../..
-
-S3TEST_CONF=$dir/s3-tests/s3tests.conf.SAMPLE $dir/s3-tests/virtualenv/bin/nosetests -a '!fails_on_rgw,!lifecycle_expiration,!fails_strict_rfc2616' -v
-
 rm -rf $dir
 
 echo OK.
