@@ -7675,6 +7675,7 @@ MPGStats* OSD::collect_pg_stats()
       });
   }
   store_statfs_t st;
+  bool per_pool_stats = false;
   for (auto p : pool_set) {
     int r = store->pool_statfs(p, &st);
     if (r == -ENOTSUP) {
@@ -7682,8 +7683,13 @@ MPGStats* OSD::collect_pg_stats()
     } else {
       assert(r >= 0);
       m->pool_stat[p] = st;
+      per_pool_stats = true;
     }
   }
+
+  // indicate whether we are reporting per-pool stats
+  m->osd_stat.num_osds = 1;
+  m->osd_stat.num_per_pool_osds = per_pool_stats ? 1 : 0;
 
   return m;
 }
