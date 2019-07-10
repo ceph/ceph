@@ -575,16 +575,9 @@ bool SnapMapper::Scrubber::_parse_m()
   return true;
 }
 
-void SnapMapper::Scrubber::_init()
-{
-  dout(10) << __func__ << dendl;
-}
-
 void SnapMapper::Scrubber::run()
 {
   dout(10) << __func__ << dendl;
-
-  _init();
 
   psit = store->get_omap_iterator(ch, purged_snaps_hoid);
   psit->upper_bound(PURGED_SNAP_PREFIX);
@@ -630,6 +623,8 @@ void SnapMapper::Scrubber::run()
   }
 
   dout(10) << __func__ << " end, found " << stray.size() << " stray" << dendl;
+  psit = ObjectMap::ObjectMapIterator();
+  mapit = ObjectMap::ObjectMapIterator();
 }
 
 

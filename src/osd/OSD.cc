@@ -6646,12 +6646,8 @@ void OSD::scrub_purged_snaps()
   clog->debug() << "purged_snaps scrub starts";
   osd_lock.unlock();
   s.run();
-  osd_lock.lock();
-  if (is_stopping()) {
-    return;
-  }
   if (s.stray.size()) {
-    clog->debug() << "purged_snaps scrub find " << s.stray.size() << " strays";
+    clog->debug() << "purged_snaps scrub found " << s.stray.size() << " strays";
   } else {
     clog->debug() << "purged_snaps scrub ok";
   }
@@ -6681,6 +6677,11 @@ void OSD::scrub_purged_snaps()
     pg->queue_snap_retrim(snap);
     pg->unlock();
   }
+  osd_lock.Lock();
+  if (is_stopping()) {
+    return;
+  }
+  dout(10) << __func__ << " done queueing pgs, updating superblock" << dendl;
   ObjectStore::Transaction t;
   superblock.last_purged_snaps_scrub = ceph_clock_now();
   write_superblock(t);
@@ -6689,6 +6690,7 @@ void OSD::scrub_purged_snaps()
   if (is_active()) {
     send_beacon(ceph::coarse_mono_clock::now());
   }
+  dout(10) << __func__ << " done" << dendl;
 }
 
 void OSD::probe_smart(const string& only_devid, ostream& ss)
