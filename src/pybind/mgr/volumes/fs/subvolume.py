@@ -66,13 +66,13 @@ class SubVolume(object):
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
-        exclude.extend([".", ".."])
+        exclude.extend((b".", b".."))
 
         d = self.fs.readdir(dir_handle)
         d_name = None
         while d:
-            if not d.d_name.decode('utf-8') in exclude and d.is_dir():
-                d_name = d.d_name.decode('utf-8')
+            if not d.d_name in exclude and d.is_dir():
+                d_name = d.d_name
                 break
             d = self.fs.readdir(dir_handle)
         self.fs.closedir(dir_handle)
@@ -164,12 +164,8 @@ class SubVolume(object):
                 raise VolumeException(-e.args[0], e.args[1])
             d = self.fs.readdir(dir_handle)
             while d and not should_cancel():
-                d_name = d.d_name.decode('utf-8')
-                if d_name not in [".", ".."]:
-                    # Do not use os.path.join because it is sensitive
-                    # to string encoding, we just pass through dnames
-                    # as byte arrays
-                    d_full = "{0}/{1}".format(root_path, d_name)
+                if d.d_name not in (b".", b".."):
+                    d_full = os.path.join(root_path, d.d_name)
                     if d.is_dir():
                         rmtree(d_full)
                     else:
