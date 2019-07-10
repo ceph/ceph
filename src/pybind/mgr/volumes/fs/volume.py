@@ -582,7 +582,7 @@ class VolumeClient(object):
 
         try:
             with SubVolume(self.mgr, fs_handle) as sv:
-                spec = SubvolumeSpec(purge_dir, "")
+                spec = SubvolumeSpec(purge_dir.decode('utf-8'), "")
                 sv.purge_subvolume(spec, should_cancel)
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
