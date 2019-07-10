@@ -68,6 +68,7 @@ add_subdirectory(system)
 if(WITH_FIO OR WITH_SYSTEM_FIO)
   add_subdirectory(fio)
 endif()
+add_subdirectory(lazy-omap-stats)
 
 # test_timers
 add_executable(ceph_test_timers
