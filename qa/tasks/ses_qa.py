@@ -66,6 +66,8 @@ class SESQA(Task):
 
     def end(self):
         super(SESQA, self).end()
+        self.sm.gather_logs('/home/farm/.npm/_logs', 'dashboard-e2e-npm')
+        self.sm.gather_logs('/home/farm/.protractor-report', 'dashboard-e2e-protractor')
 
     def teardown(self):
         super(SESQA, self).teardown()

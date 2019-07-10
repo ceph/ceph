@@ -575,6 +575,8 @@ class DeepSea(Task):
             self.log.warning("Problem with ctx summary key? ctx is {}".format(self.ctx))
         if not success:
             self.ctx.cluster.run(args="rpm -qa | sort")
+        self.sm.gather_logs('/home/farm/.npm/_logs', 'dashboard-e2e-npm')
+        self.sm.gather_logs('/home/farm/.protractor-report', 'dashboard-e2e-protractor')
         self.log.debug("end of end method")
 
     def teardown(self):
