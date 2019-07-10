@@ -61,6 +61,10 @@ public:
     paxos_decode(p);
     decode(fsid, p);
     decode(osd_stat, p);
+    if (osd_stat.num_osds == 0) {
+      // for the benefit of legacy OSDs who don't set this field
+      osd_stat.num_osds = 1;
+    }
     decode(pg_stat, p);
     decode(epoch, p);
     utime_t dummy;
