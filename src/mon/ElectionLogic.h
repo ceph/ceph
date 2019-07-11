@@ -281,6 +281,7 @@ public:
    * @returns Our current epoch number
    */
   epoch_t get_epoch() const { return epoch; }
+  int get_acked_leader() { return leader_acked; }
   
 private:
   /**
