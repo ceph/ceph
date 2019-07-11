@@ -258,7 +258,7 @@ ProtocolV1::handle_connect_reply(msgr_tag_t tag)
 ceph::bufferlist ProtocolV1::get_auth_payload()
 {
   // only non-mons connectings to mons use MAuth messages
-  if (conn.peer_type == CEPH_ENTITY_TYPE_MON &&
+  if (conn.peer_is_mon() &&
      messenger.get_mytype() != CEPH_ENTITY_TYPE_MON) {
     return {};
   } else {
@@ -284,7 +284,7 @@ ProtocolV1::repeat_connect()
   h.connect.host_type = messenger.get_myname().type();
   h.connect.global_seq = h.global_seq;
   h.connect.connect_seq = h.connect_seq;
-  h.connect.protocol_version = get_proto_version(conn.peer_type, true);
+  h.connect.protocol_version = get_proto_version(conn.get_peer_type(), true);
   // this is fyi, actually, server decides!
   h.connect.flags = conn.policy.lossy ? CEPH_MSG_CONNECT_LOSSY : 0;
 
@@ -327,7 +327,7 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
 
   ceph_assert(!socket);
   conn.peer_addr = _peer_addr;
-  conn.peer_type = _peer_type;
+  conn.set_peer_type(_peer_type);
   messenger.register_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   seastar::with_gate(pending_dispatch, [this] {
@@ -537,7 +537,7 @@ seastar::future<stop_t> ProtocolV1::repeat_handle_connect()
     .then([this](bufferlist bl) {
       auto p = bl.cbegin();
       ::decode(h.connect, p);
-      conn.peer_type = h.connect.host_type;
+      conn.set_peer_type(h.connect.host_type);
       return socket->read(h.connect.authorizer_len);
     }).then([this] (bufferlist authorizer) {
       memset(&h.reply, 0, sizeof(h.reply));

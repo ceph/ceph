@@ -62,7 +62,6 @@ class ProtocolV2 final : public Protocol {
 
   void trigger_state(state_t state, write_state_t write_state, bool reentrant);
 
-  entity_name_t peer_name;
   uint64_t connection_features = 0;
   uint64_t peer_required_features = 0;
 

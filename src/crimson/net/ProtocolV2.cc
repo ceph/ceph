@@ -108,7 +108,7 @@ void ProtocolV2::start_connect(const entity_addr_t& _peer_addr,
   ceph_assert(!socket);
   conn.peer_addr = _peer_addr;
   conn.target_addr = _peer_addr;
-  conn.peer_type = _peer_type;
+  conn.set_peer_type(_peer_type);
   conn.policy = messenger.get_policy(_peer_type);
   messenger.register_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
@@ -476,7 +476,8 @@ seastar::future<entity_type_t, entity_addr_t> ProtocolV2::banner_exchange()
       // 6. process peer HelloFrame
       auto hello = HelloFrame::Decode(rx_segments_data.back());
       logger().trace("{} received hello: peer_type={} peer_addr_for_me={}",
-                     conn, (int)hello.entity_type(), hello.peer_addr());
+                     conn, ceph_entity_type_name(hello.entity_type()),
+                     hello.peer_addr());
       return seastar::make_ready_future<entity_type_t, entity_addr_t>(
           hello.entity_type(), hello.peer_addr());
     });
@@ -662,8 +663,7 @@ seastar::future<bool> ProtocolV2::client_connect()
 
           // TODO: change peer_addr to entity_addrvec_t
           ceph_assert(conn.peer_addr == server_ident.addrs().front());
-          peer_name = entity_name_t(conn.get_peer_type(), server_ident.gid());
-          conn.peer_id = server_ident.gid();
+          conn.set_peer_id(server_ident.gid());
           conn.set_features(server_ident.supported_features() &
                             conn.policy.features_supported);
           peer_global_seq = server_ident.global_seq();
@@ -787,9 +787,10 @@ void ProtocolV2::execute_connecting()
           return banner_exchange();
         }).then([this] (entity_type_t _peer_type,
                         entity_addr_t _peer_addr) {
-          if (conn.peer_type != _peer_type) {
+          if (conn.get_peer_type() != _peer_type) {
             logger().debug("{} connection peer type does not match what peer advertises {} != {}",
-                           conn, conn.peer_type, (int)_peer_type);
+                           conn, ceph_entity_type_name(conn.get_peer_type()),
+                           ceph_entity_type_name(_peer_type));
             dispatch_reset();
             abort_in_close();
           }
@@ -999,8 +1000,7 @@ seastar::future<bool> ProtocolV2::server_connect()
     logger().trace("{} got paddr={}, conn.peer_addr={}", conn, paddr, conn.peer_addr);
     conn.target_addr = conn.peer_addr;
 
-    peer_name = entity_name_t(conn.get_peer_type(), client_ident.gid());
-    conn.peer_id = client_ident.gid();
+    conn.set_peer_id(client_ident.gid());
     client_cookie = client_ident.cookie();
 
     uint64_t feat_missing =
@@ -1199,12 +1199,12 @@ void ProtocolV2::execute_accepting()
       return banner_exchange()
         .then([this] (entity_type_t _peer_type,
                       entity_addr_t _peer_addr) {
-          ceph_assert(conn.get_peer_type() == -1);
-          conn.peer_type = _peer_type;
+          ceph_assert(conn.get_peer_type() == 0);
+          conn.set_peer_type(_peer_type);
 
           conn.policy = messenger.get_policy(_peer_type);
           logger().trace("{} accept of host type {}, lossy={} server={} standby={} resetcheck={}",
-                         conn, (int)_peer_type,
+                         conn, ceph_entity_type_name(_peer_type),
                          conn.policy.lossy, conn.policy.server,
                          conn.policy.standby, conn.policy.resetcheck);
           return server_auth();
@@ -1387,7 +1387,7 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
     auto message = MessageFrame::Encode(header2,
         msg->get_payload(), msg->get_middle(), msg->get_data());
     logger().debug("{} --> [{} {}] #{} === {} ({}) // {}",
-		   messenger, peer_name, conn.get_peer_addr(),
+		   messenger, conn.get_peer_name(), conn.get_peer_addr(),
 		   msg->get_seq(), *msg, msg->get_type(), conn);
     bl.append(message.get_buffer(session_stream_handlers));
   });
@@ -1418,7 +1418,7 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
     logger().trace("{} got {} + {} + {} byte message,"
                    " envelope type={} src={} off={} seq={}",
                    conn, msg_frame.front_len(), msg_frame.middle_len(),
-                   msg_frame.data_len(), current_header.type, peer_name,
+                   msg_frame.data_len(), current_header.type, conn.get_peer_name(),
                    current_header.data_off, current_header.seq);
 
     ceph_msg_header header{current_header.seq,
@@ -1430,7 +1430,7 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
                            msg_frame.middle_len(),
                            msg_frame.data_len(),
                            current_header.data_off,
-                           peer_name,
+                           conn.get_peer_name(),
                            current_header.compat_version,
                            current_header.reserved,
                            0};
