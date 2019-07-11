@@ -1,3 +1,4 @@
+import os
 import pytest
 from ceph_volume.api import lvm as api
 from ceph_volume.devices.lvm import zap
@@ -151,3 +152,26 @@ class TestEnsureAssociatedLVs(object):
         assert '/dev/VolGroup/lvjournal' in result
         assert '/dev/VolGroup/lvwal' in result
         assert '/dev/VolGroup/lvdb' in result
+
+
+class TestWipeFs(object):
+
+    def setup(self):
+        os.environ['CEPH_VOLUME_WIPEFS_INTERVAL'] = '0'
+
+    def test_works_on_second_try(self, stub_call):
+        os.environ['CEPH_VOLUME_WIPEFS_TRIES'] = '2'
+        stub_call([('wiping /dev/sda', '', 1), ('', '', 0)])
+        result = zap.wipefs('/dev/sda')
+        assert result is None
+
+    def test_does_not_work_after_several_tries(self, stub_call):
+        os.environ['CEPH_VOLUME_WIPEFS_TRIES'] = '2'
+        stub_call([('wiping /dev/sda', '', 1), ('', '', 1)])
+        with pytest.raises(RuntimeError):
+            zap.wipefs('/dev/sda')
+
+    def test_does_not_work_default_tries(self, stub_call):
+        stub_call([('wiping /dev/sda', '', 1)]*8)
+        with pytest.raises(RuntimeError):
+            zap.wipefs('/dev/sda')
