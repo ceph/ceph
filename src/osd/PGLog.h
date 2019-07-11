@@ -80,7 +80,7 @@ public:
 
     // recovery pointers
     list<pg_log_entry_t>::iterator complete_to; // not inclusive of referenced item
-    version_t last_requested = 0;               // last object requested by primary
+    eversion_t last_requested = eversion_t();               // last object requested by primary
 
     //
   private:
@@ -132,7 +132,7 @@ public:
   public:
     IndexedLog() :
       complete_to(log.end()),
-      last_requested(0),
+      last_requested(0, 0),
       indexed_data(0),
       rollback_info_trimmed_to_riter(log.rbegin())
     { }
@@ -141,7 +141,7 @@ public:
     explicit IndexedLog(Args&&... args) :
       pg_log_t(std::forward<Args>(args)...),
       complete_to(log.end()),
-      last_requested(0),
+      last_requested(0, 0),
       indexed_data(0),
       rollback_info_trimmed_to_riter(log.rbegin())
     {
@@ -240,7 +240,7 @@ public:
     }
     void reset_recovery_pointers() {
       complete_to = log.end();
-      last_requested = 0;
+      last_requested = eversion_t();
     }
 
     bool logged_object(const hobject_t& oid) const {
@@ -708,7 +708,7 @@ public:
 
   void set_head(eversion_t head) { log.head = head; }
 
-  void set_last_requested(version_t last_requested) {
+  void set_last_requested(eversion_t last_requested) {
     log.last_requested = last_requested;
   }
 
@@ -846,7 +846,7 @@ public:
 
   void activate_not_complete(pg_info_t &info) {
     reset_complete_to(&info);
-    log.last_requested = 0;
+    log.last_requested = eversion_t();
   }
 
   void proc_replica_log(pg_info_t &oinfo,

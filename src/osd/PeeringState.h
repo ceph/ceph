@@ -1850,7 +1850,7 @@ public:
   }
 
   /// Update last_requested pointer to v
-  void set_last_requested(version_t v) {
+  void set_last_requested(eversion_t v) {
     pg_log.set_last_requested(v);
   }
 

@@ -1048,7 +1048,7 @@ TEST(pg_missing_t, add_next_event)
     missing.add_next_event(e);
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(eversion_t(), missing.get_items().at(oid).have);
-    EXPECT_EQ(oid, missing.get_rmissing().at(e.version.version));
+    EXPECT_EQ(oid, missing.get_rmissing().at(e.version));
     EXPECT_EQ(1U, missing.num_missing());
     EXPECT_EQ(1U, missing.get_rmissing().size());
 
@@ -1073,7 +1073,7 @@ TEST(pg_missing_t, add_next_event)
     missing.add_next_event(e);
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(eversion_t(), missing.get_items().at(oid).have);
-    EXPECT_EQ(oid, missing.get_rmissing().at(e.version.version));
+    EXPECT_EQ(oid, missing.get_rmissing().at(e.version));
     EXPECT_EQ(1U, missing.num_missing());
     EXPECT_EQ(1U, missing.get_rmissing().size());
 
@@ -1098,7 +1098,7 @@ TEST(pg_missing_t, add_next_event)
     missing.add_next_event(e);
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(eversion_t(), missing.get_items().at(oid).have);
-    EXPECT_EQ(oid, missing.get_rmissing().at(e.version.version));
+    EXPECT_EQ(oid, missing.get_rmissing().at(e.version));
     EXPECT_EQ(1U, missing.num_missing());
     EXPECT_EQ(1U, missing.get_rmissing().size());
 
@@ -1125,7 +1125,7 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_TRUE(missing.is_missing(oid));
     EXPECT_EQ(prior_version, missing.get_items().at(oid).have);
     EXPECT_EQ(version, missing.get_items().at(oid).need);
-    EXPECT_EQ(oid, missing.get_rmissing().at(e.version.version));
+    EXPECT_EQ(oid, missing.get_rmissing().at(e.version));
     EXPECT_EQ(1U, missing.num_missing());
     EXPECT_EQ(1U, missing.get_rmissing().size());
   }
@@ -1150,7 +1150,7 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_TRUE(missing.get_items().at(oid).is_delete());
     EXPECT_EQ(prior_version, missing.get_items().at(oid).have);
     EXPECT_EQ(version, missing.get_items().at(oid).need);
-    EXPECT_EQ(oid, missing.get_rmissing().at(e.version.version));
+    EXPECT_EQ(oid, missing.get_rmissing().at(e.version));
     EXPECT_EQ(1U, missing.num_missing());
     EXPECT_EQ(1U, missing.get_rmissing().size());
   }
@@ -1177,7 +1177,7 @@ TEST(pg_missing_t, add_next_event)
     EXPECT_TRUE(missing.get_items().at(oid).is_delete());
     EXPECT_EQ(prior_version, missing.get_items().at(oid).have);
     EXPECT_EQ(e.version, missing.get_items().at(oid).need);
-    EXPECT_EQ(oid, missing.get_rmissing().at(e.version.version));
+    EXPECT_EQ(oid, missing.get_rmissing().at(e.version));
     EXPECT_EQ(1U, missing.num_missing());
     EXPECT_EQ(1U, missing.get_rmissing().size());
   }
