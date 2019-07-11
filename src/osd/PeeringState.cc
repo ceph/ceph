@@ -2142,15 +2142,7 @@ void PeeringState::activate(
 
       bool needs_past_intervals = pi.dne();
 
-      /*
-       * cover case where peer sort order was different and
-       * last_backfill cannot be interpreted
-       */
-      bool force_restart_backfill =
-	!pi.last_backfill.is_max() &&
-	!pi.last_backfill_bitwise;
-
-      if (pi.last_update == info.last_update && !force_restart_backfill) {
+      if (pi.last_update == info.last_update) {
         // empty log
 	if (!pi.last_backfill.is_max())
 	  pl->get_clog_info() << info.pgid << " continuing backfill to osd."
@@ -2179,7 +2171,6 @@ void PeeringState::activate(
       } else if (
 	pg_log.get_tail() > pi.last_update ||
 	pi.last_backfill == hobject_t() ||
-	force_restart_backfill ||
 	(backfill_targets.count(*i) && pi.last_backfill.is_max())) {
 	/* ^ This last case covers a situation where a replica is not contiguous
 	 * with the auth_log, but is contiguous with this replica.  Reshuffling
@@ -3392,7 +3383,6 @@ bool PeeringState::append_log_entries_update_missing(
   bool invalidate_stats =
     pg_log.append_new_log_entries(
       info.last_backfill,
-      info.last_backfill_bitwise,
       entries,
       rollbacker.get());
 
@@ -3444,7 +3434,6 @@ void PeeringState::merge_new_log_entries(
     pg_info_t& pinfo(peer_info[peer]);
     bool invalidate_stats = PGLog::append_log_entries_update_missing(
       pinfo.last_backfill,
-      info.last_backfill_bitwise,
       entries,
       true,
       NULL,
