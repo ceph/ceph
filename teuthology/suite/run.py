@@ -119,8 +119,9 @@ class Run(object):
         # Put together a stanza specifying the kernel hash
         if self.args.kernel_branch == 'distro':
             kernel_hash = 'distro'
-        # Skip the stanza if no -k given
-        elif self.args.kernel_branch is None:
+        # Skip the stanza if '-k none' is given
+        elif self.args.kernel_branch is None or \
+             self.args.kernel_branch.lower() == 'none':
             kernel_hash = None
         else:
             kernel_hash = util.get_gitbuilder_hash(
