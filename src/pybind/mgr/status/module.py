@@ -43,7 +43,7 @@ class Module(MgrModule):
         data = self.get_counter(daemon_type, daemon_name, stat)[stat]
 
         #self.log.error("get_latest {0} data={1}".format(stat, data))
-        if data and len(data) > 1:
+        if data and len(data) > 1 and data[-1][0] != data[-2][0]:
             return (data[-1][1] - data[-2][1]) / float(data[-1][0] - data[-2][0])
         else:
             return 0
