@@ -17,13 +17,6 @@ ExternalProject_Add(zstd_ext
   BUILD_BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/libzstd/lib/libzstd.a"
   INSTALL_COMMAND "true")
 
-# force zstd make to be called on each time
-ExternalProject_Add_Step(zstd_ext forcebuild
-  DEPENDEES configure
-  DEPENDERS build
-  COMMAND "true"
-  ALWAYS 1)
-
 add_library(zstd STATIC IMPORTED)
 set_target_properties(zstd PROPERTIES
   INTERFACE_INCLUDE_DIRECTORIES "${CMAKE_SOURCE_DIR}/src/zstd/lib"
