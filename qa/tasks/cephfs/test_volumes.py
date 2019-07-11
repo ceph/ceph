@@ -3,6 +3,7 @@ import json
 import errno
 import random
 import logging
+from textwrap import dedent
 
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.exceptions import CommandFailedError
@@ -14,6 +15,7 @@ class TestVolumes(CephFSTestCase):
     TEST_SUBVOLUME_PREFIX="subvolume"
     TEST_GROUP_PREFIX="group"
     TEST_SNAPSHOT_PREFIX="snapshot"
+    CLIENTS_REQUIRED = 2
 
     def _fs_cmd(self, *args):
         return self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", *args)
@@ -430,4 +432,85 @@ class TestVolumes(CephFSTestCase):
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, group)
 
         # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    ### authorize operations
+
+    def _configure_guest_auth(self, guest_mount, authid, key):
+        """
+        Set up auth credentials for a guest client.
+        """
+        # Create keyring file for the guest client.
+        keyring_txt = dedent("""
+        [client.{authid}]
+            key = {key}
+
+        """.format(authid=authid,key=key))
+
+        guest_mount.client_id = authid
+        self._sudo_write_file(guest_mount.client_remote,
+                              guest_mount.get_keyring_path(),
+                              keyring_txt)
+
+        # Add a guest client section to the ceph config file.
+        self.set_conf("client.{0}".format(authid), "client quota", "True")
+        self.set_conf("client.{0}".format(authid), "debug client", "20")
+        self.set_conf("client.{0}".format(authid), "debug objecter", "20")
+        self.set_conf("client.{0}".format(authid),
+                      "keyring", guest_mount.get_keyring_path())
+
+    def test_authorize_subvolume(self):
+        subvolume = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+        authid = "alice"
+
+        guest_mount = self.mount_b
+        guest_mount.umount_wait()
+
+        # create group
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--group_name", group)
+        mount_path = self._fs_cmd("subvolume", "getpath", self.volname, subvolume,
+                                  "--group_name", group).rstrip()
+
+        # authorize guest authID read-write access to subvolume
+        key = self._fs_cmd("subvolume", "authorize", self.volname, subvolume, authid,
+                           "--group_name", group)
+
+        # guest authID should exist
+        existing_ids = [a['entity'] for a in self.auth_list()]
+        self.assertIn("client.{0}".format(authid), existing_ids)
+
+        # configure credentials for guest client
+        self._configure_guest_auth(guest_mount, authid, key)
+
+        # mount the subvolume, and write to it
+        guest_mount.mount(mount_path=mount_path)
+        guest_mount.write_n_mb("data.bin", 1)
+
+        # authorize guest authID read access to subvolume
+        key = self._fs_cmd("subvolume", "authorize", self.volname, subvolume, authid,
+                           "--group_name", group, "--access_level", "r")
+
+        # guest client sees the change in access level to read only after a
+        # remount of the subvolume.
+        guest_mount.umount_wait()
+        guest_mount.mount(mount_path=mount_path)
+
+        # read existing content of the subvolume
+        self.assertListEqual(guest_mount.ls(guest_mount.mountpoint), ["data.bin"])
+        # cannot write into read-only subvolume
+        with self.assertRaises(CommandFailedError):
+            guest_mount.write_n_mb("rogue.bin", 1)
+
+        # cleanup
+        guest_mount.umount_wait()
+        self._fs_cmd("subvolume", "deauthorize", self.volname, subvolume, authid,
+                     "--group_name", group)
+        # guest authID should no longer exist
+        existing_ids = [a['entity'] for a in self.auth_list()]
+        self.assertNotIn("client.{0}".format(authid), existing_ids)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)

@@ -297,3 +297,25 @@ class CephFSTestCase(CephTestCase):
                 return subtrees
             time.sleep(pause)
         raise RuntimeError("rank {0} failed to reach desired subtree state".format(rank))
+
+    @staticmethod
+    def _sudo_write_file(remote, path, data):
+        """
+        Write data to a remote file as super user
+
+        :param remote: Remote site.
+        :param path: Path on the remote being written to.
+        :param data: Data to be written.
+
+        Both perms and owner are passed directly to chmod.
+        """
+        remote.run(
+            args=[
+                'sudo',
+                'python',
+                '-c',
+                'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
+                path,
+            ],
+            stdin=data,
+        )
