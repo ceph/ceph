@@ -11,11 +11,11 @@ import { RbdMirroringService } from '../../../../shared/api/rbd-mirroring.servic
   styleUrls: ['./image-list.component.scss']
 })
 export class ImageListComponent implements OnInit, OnDestroy {
-  @ViewChild('stateTmpl')
+  @ViewChild('stateTmpl', { static: true })
   stateTmpl: TemplateRef<any>;
-  @ViewChild('syncTmpl')
+  @ViewChild('syncTmpl', { static: true })
   syncTmpl: TemplateRef<any>;
-  @ViewChild('progressTmpl')
+  @ViewChild('progressTmpl', { static: true })
   progressTmpl: TemplateRef<any>;
 
   subs: Subscription;

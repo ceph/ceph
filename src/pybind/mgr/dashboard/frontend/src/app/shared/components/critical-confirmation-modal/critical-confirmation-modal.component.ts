@@ -13,7 +13,7 @@ import { SubmitButtonComponent } from '../submit-button/submit-button.component'
   styleUrls: ['./critical-confirmation-modal.component.scss']
 })
 export class CriticalConfirmationModalComponent implements OnInit {
-  @ViewChild(SubmitButtonComponent)
+  @ViewChild(SubmitButtonComponent, { static: true })
   submitButton: SubmitButtonComponent;
   bodyTemplate: TemplateRef<any>;
   bodyContext: object;

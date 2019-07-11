@@ -21,7 +21,7 @@ describe('LanguageSelectorComponent', () => {
     fixture = TestBed.createComponent(LanguageSelectorComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
-    spyOn(window.location, 'reload').and.callFake(() => component.ngOnInit());
+    spyOn(component, 'reloadWindow').and.callFake(() => component.ngOnInit());
   });
 
   it('should create', () => {

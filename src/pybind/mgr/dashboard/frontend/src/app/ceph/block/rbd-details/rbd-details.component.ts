@@ -14,7 +14,7 @@ export class RbdDetailsComponent implements OnChanges {
   selectedItem: RbdFormModel;
   @Input()
   images: any;
-  @ViewChild('poolConfigurationSourceTpl')
+  @ViewChild('poolConfigurationSourceTpl', { static: true })
   poolConfigurationSourceTpl: TemplateRef<any>;
 
   constructor() {}

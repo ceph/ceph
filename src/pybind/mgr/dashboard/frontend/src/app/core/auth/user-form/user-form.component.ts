@@ -27,7 +27,7 @@ import { UserFormModel } from './user-form.model';
   styleUrls: ['./user-form.component.scss']
 })
 export class UserFormComponent implements OnInit {
-  @ViewChild('removeSelfUserReadUpdatePermissionTpl')
+  @ViewChild('removeSelfUserReadUpdatePermissionTpl', { static: true })
   removeSelfUserReadUpdatePermissionTpl: TemplateRef<any>;
 
   modalRef: BsModalRef;
