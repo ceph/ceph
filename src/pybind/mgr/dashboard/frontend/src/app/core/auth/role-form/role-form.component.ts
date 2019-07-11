@@ -24,11 +24,11 @@ import { RoleFormModel } from './role-form.model';
   styleUrls: ['./role-form.component.scss']
 })
 export class RoleFormComponent implements OnInit {
-  @ViewChild('headerPermissionCheckboxTpl')
+  @ViewChild('headerPermissionCheckboxTpl', { static: true })
   headerPermissionCheckboxTpl: TemplateRef<any>;
-  @ViewChild('cellScopeCheckboxTpl')
+  @ViewChild('cellScopeCheckboxTpl', { static: true })
   cellScopeCheckboxTpl: TemplateRef<any>;
-  @ViewChild('cellPermissionCheckboxTpl')
+  @ViewChild('cellPermissionCheckboxTpl', { static: true })
   cellPermissionCheckboxTpl: TemplateRef<any>;
 
   modalRef: BsModalRef;

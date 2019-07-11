@@ -39,12 +39,12 @@ const BASE_URL = 'pool';
   styleUrls: ['./pool-list.component.scss']
 })
 export class PoolListComponent implements OnInit {
-  @ViewChild(TableComponent)
+  @ViewChild(TableComponent, { static: true })
   table: TableComponent;
-  @ViewChild('poolUsageTpl')
+  @ViewChild('poolUsageTpl', { static: true })
   poolUsageTpl: TemplateRef<any>;
 
-  @ViewChild('poolConfigurationSourceTpl')
+  @ViewChild('poolConfigurationSourceTpl', { static: false })
   poolConfigurationSourceTpl: TemplateRef<any>;
 
   pools: Pool[] = [];

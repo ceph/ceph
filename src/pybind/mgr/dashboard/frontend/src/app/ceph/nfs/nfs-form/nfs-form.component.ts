@@ -28,7 +28,7 @@ import { NfsFormClientComponent } from '../nfs-form-client/nfs-form-client.compo
   styleUrls: ['./nfs-form.component.scss']
 })
 export class NfsFormComponent implements OnInit {
-  @ViewChild('nfsClients')
+  @ViewChild('nfsClients', { static: true })
   nfsClients: NfsFormClientComponent;
 
   permission: Permission;

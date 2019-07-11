@@ -30,7 +30,7 @@ import { IscsiTargetDiscoveryModalComponent } from '../iscsi-target-discovery-mo
   providers: [TaskListService]
 })
 export class IscsiTargetListComponent implements OnInit, OnDestroy {
-  @ViewChild(TableComponent)
+  @ViewChild(TableComponent, { static: false })
   table: TableComponent;
 
   available: boolean = undefined;

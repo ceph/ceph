@@ -27,9 +27,9 @@ const BASE_URL = 'user-management/users';
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
 export class UserListComponent implements OnInit {
-  @ViewChild('userRolesTpl')
+  @ViewChild('userRolesTpl', { static: true })
   userRolesTpl: TemplateRef<any>;
-  @ViewChild('userEnabledTpl')
+  @ViewChild('userEnabledTpl', { static: true })
   userEnabledTpl: TemplateRef<any>;
 
   permission: Permission;

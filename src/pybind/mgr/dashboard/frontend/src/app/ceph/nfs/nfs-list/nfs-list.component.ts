@@ -28,12 +28,12 @@ import { TaskWrapperService } from '../../../shared/services/task-wrapper.servic
   providers: [TaskListService]
 })
 export class NfsListComponent implements OnInit, OnDestroy {
-  @ViewChild('nfsState')
+  @ViewChild('nfsState', { static: false })
   nfsState: TemplateRef<any>;
-  @ViewChild('nfsFsal')
+  @ViewChild('nfsFsal', { static: true })
   nfsFsal: TemplateRef<any>;
 
-  @ViewChild('table')
+  @ViewChild('table', { static: true })
   table: TableComponent;
 
   columns: CdTableColumn[];

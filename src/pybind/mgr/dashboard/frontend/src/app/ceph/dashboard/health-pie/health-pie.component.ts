@@ -23,9 +23,9 @@ import { HealthPieColor } from './health-pie-color.enum';
   styleUrls: ['./health-pie.component.scss']
 })
 export class HealthPieComponent implements OnChanges, OnInit {
-  @ViewChild('chartCanvas')
+  @ViewChild('chartCanvas', { static: true })
   chartCanvasRef: ElementRef;
-  @ViewChild('chartTooltip')
+  @ViewChild('chartTooltip', { static: true })
   chartTooltipRef: ElementRef;
 
   @Input()
@@ -75,7 +75,7 @@ export class HealthPieComponent implements OnChanges, OnInit {
     // An extension to Chart.js to enable rendering some
     // text in the middle of a doughnut
     Chart.pluginService.register({
-      beforeDraw: function(chart) {
+      beforeDraw: function(chart: any) {
         if (!chart.options.center_text) {
           return;
         }

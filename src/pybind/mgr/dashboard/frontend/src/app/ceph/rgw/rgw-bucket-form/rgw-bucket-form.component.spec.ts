@@ -118,9 +118,9 @@ describe('RgwBucketFormComponent', () => {
       expect(component.zonegroup).toBe(payload.zonegroup);
       const placementTargets = [];
       for (const placementTarget of payload['placement_targets']) {
-        placementTarget['description'] = `${placementTarget['name']} (pool: ${
-          placementTarget['data_pool']
-        })`;
+        placementTarget[
+          'description'
+        ] = `${placementTarget['name']} (pool: ${placementTarget['data_pool']})`;
         placementTargets.push(placementTarget);
       }
       expect(component.placementTargets).toEqual(placementTargets);

@@ -10,9 +10,9 @@ import { DimlessBinaryPipe } from '../../pipes/dimless-binary.pipe';
   styleUrls: ['./sparkline.component.scss']
 })
 export class SparklineComponent implements OnInit, OnChanges {
-  @ViewChild('sparkCanvas')
+  @ViewChild('sparkCanvas', { static: true })
   chartCanvasRef: ElementRef;
-  @ViewChild('sparkTooltip')
+  @ViewChild('sparkTooltip', { static: true })
   chartTooltipRef: ElementRef;
 
   @Input()

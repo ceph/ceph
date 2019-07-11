@@ -206,22 +206,18 @@ export class CdValidators {
   ) {
     conditionalValidators = conditionalValidators.concat(permanentValidators);
 
-    formControl.setValidators(
-      (
-        control: AbstractControl
-      ): {
-        [key: string]: any;
-      } => {
-        const value = condition.call(this);
-        if (value) {
-          return Validators.compose(conditionalValidators)(control);
-        }
-        if (permanentValidators.length > 0) {
-          return Validators.compose(permanentValidators)(control);
-        }
-        return null;
+    formControl.setValidators((control: AbstractControl): {
+      [key: string]: any;
+    } => {
+      const value = condition.call(this);
+      if (value) {
+        return Validators.compose(conditionalValidators)(control);
       }
-    );
+      if (permanentValidators.length > 0) {
+        return Validators.compose(permanentValidators)(control);
+      }
+      return null;
+    });
 
     watchControls.forEach((control: AbstractControl) => {
       control.valueChanges.subscribe(() => {

@@ -40,11 +40,11 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
   poolName: string;
   @Input()
   rbdName: string;
-  @ViewChild('nameTpl')
+  @ViewChild('nameTpl', { static: false })
   nameTpl: TemplateRef<any>;
-  @ViewChild('protectTpl')
+  @ViewChild('protectTpl', { static: true })
   protectTpl: TemplateRef<any>;
-  @ViewChild('rollbackTpl')
+  @ViewChild('rollbackTpl', { static: true })
   rollbackTpl: TemplateRef<any>;
 
   permission: Permission;

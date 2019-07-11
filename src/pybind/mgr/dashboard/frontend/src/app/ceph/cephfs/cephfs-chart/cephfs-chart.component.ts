@@ -11,9 +11,9 @@ import { ChartTooltip } from '../../../shared/models/chart-tooltip';
   styleUrls: ['./cephfs-chart.component.scss']
 })
 export class CephfsChartComponent implements OnChanges, OnInit {
-  @ViewChild('chartCanvas')
+  @ViewChild('chartCanvas', { static: true })
   chartCanvas: ElementRef;
-  @ViewChild('chartTooltip')
+  @ViewChild('chartTooltip', { static: true })
   chartTooltip: ElementRef;
 
   @Input()

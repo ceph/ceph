@@ -39,8 +39,16 @@ export class LanguageSelectorComponent implements OnInit {
     }
   }
 
+  /**
+   * Jest is being more restricted regarding spying on the reload method.
+   * This will allow us to spyOn this method instead.
+   */
+  reloadWindow() {
+    window.location.reload();
+  }
+
   changeLanguage(lang: string) {
     LocaleHelper.setLocale(lang);
-    window.location.reload();
+    this.reloadWindow();
   }
 }

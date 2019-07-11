@@ -27,7 +27,7 @@ const BASE_URL = 'rgw/user';
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
 export class RgwUserListComponent {
-  @ViewChild(TableComponent)
+  @ViewChild(TableComponent, { static: true })
   table: TableComponent;
 
   permission: Permission;

@@ -22,7 +22,7 @@ import { NotificationService } from '../../../../shared/services/notification.se
   styleUrls: ['./mgr-module-list.component.scss']
 })
 export class MgrModuleListComponent {
-  @ViewChild(TableComponent)
+  @ViewChild(TableComponent, { static: true })
   table: TableComponent;
   @BlockUI()
   blockUI: NgBlockUI;
