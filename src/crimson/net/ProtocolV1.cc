@@ -699,6 +699,8 @@ ceph::bufferlist ProtocolV1::do_sweep_messages(
     if (session_security) {
       session_security->sign_message(msg.get());
     }
+    logger().debug("{} --> #{} === {} ({})",
+                   conn, msg->get_seq(), *msg, msg->get_type());
     bl.append(CEPH_MSGR_TAG_MSG);
     bl.append((const char*)&header, sizeof(header));
     bl.append(msg->get_payload());
@@ -819,8 +821,8 @@ seastar::future<> ProtocolV1::read_message()
 
       // start dispatch, ignoring exceptions from the application layer
       seastar::with_gate(pending_dispatch, [this, msg = std::move(msg_ref)] {
-          logger().debug("{} <= {}@{} === {}", messenger,
-                msg->get_source(), conn.peer_addr, *msg);
+          logger().debug("{} <== #{} === {} ({})",
+                         conn, msg->get_seq(), *msg, msg->get_type());
           return dispatcher.ms_dispatch(&conn, std::move(msg))
             .handle_exception([this] (std::exception_ptr eptr) {
               logger().error("{} ms_dispatch caught exception: {}", conn, eptr);

@@ -1480,9 +1480,8 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
 
     auto message = MessageFrame::Encode(header2,
         msg->get_payload(), msg->get_middle(), msg->get_data());
-    logger().debug("{} --> [{} {}] #{} === {} ({}) // {}",
-		   messenger, conn.get_peer_name(), conn.get_peer_addr(),
-		   msg->get_seq(), *msg, msg->get_type(), conn);
+    logger().debug("{} --> #{} === {} ({})",
+		   conn, msg->get_seq(), *msg, msg->get_type());
     bl.append(message.get_buffer(session_stream_handlers));
   });
 
@@ -1569,9 +1568,8 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
 
     // note last received message.
     conn.in_seq = message->get_seq();
-    logger().debug("{} <== [{} {}] #{} === {} ({}) // {}",
-		   messenger, message->get_source(), conn.get_peer_addr(),
-		   message->get_seq(), *message, message->get_type(), conn);
+    logger().debug("{} <== #{} === {} ({})",
+		   conn, message->get_seq(), *message, message->get_type());
     if (!conn.policy.lossy) {
       // ++ack_left;
     }
