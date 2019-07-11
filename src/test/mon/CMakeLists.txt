@@ -63,3 +63,10 @@ add_executable(ceph_test_mon_rss_usage
 target_link_libraries(ceph_test_mon_rss_usage ${UNITTEST_LIBS})
 install(TARGETS ceph_test_mon_rss_usage
   DESTINATION ${CMAKE_INSTALL_BINDIR})
+
+#unittest_mon_election
+add_executable(unittest_mon_election
+  test_election.cc
+  )
+add_ceph_unittest(unittest_mon_election)
+target_link_libraries(unittest_mon_election mon global)
