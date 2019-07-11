@@ -89,16 +89,10 @@ struct AioCompletion {
   }
 
   template <typename T, void (T::*MF)(int) = &T::complete>
-  static AioCompletion *create(T *obj, ImageCtx *image_ctx, aio_type_t type) {
-    AioCompletion *comp = create<T, MF>(obj);
-    comp->init_time(image_ctx, type);
-    return comp;
-  }
-
-  template <typename T, void (T::*MF)(int) = &T::complete>
   static AioCompletion *create_and_start(T *obj, ImageCtx *image_ctx,
                                          aio_type_t type) {
-    AioCompletion *comp = create<T, MF>(obj, image_ctx, type);
+    AioCompletion *comp = create<T, MF>(obj);
+    comp->init_time(image_ctx, type);
     comp->start_op();
     return comp;
   }
@@ -129,7 +123,7 @@ struct AioCompletion {
   }
 
   void init_time(ImageCtx *i, aio_type_t t);
-  void start_op(bool ignore_type = false);
+  void start_op();
   void fail(int r);
 
   void complete();
