@@ -1486,6 +1486,27 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
 	tmp.require_osd_release >= ceph_release_t::octopus) {
       dout(10) << __func__ << " first octopus+ epoch" << dendl;
 
+      // adjust obsoleted cache modes
+      for (auto& [poolid, pi] : tmp.pools) {
+	if (pi.cache_mode == pg_pool_t::CACHEMODE_FORWARD) {
+	  if (pending_inc.new_pools.count(poolid) == 0) {
+	    pending_inc.new_pools[poolid] = pi;
+	  }
+	  dout(10) << __func__ << " switching pool " << poolid
+		   << " cachemode from forward -> proxy" << dendl;
+	  pending_inc.new_pools[poolid].cache_mode = pg_pool_t::CACHEMODE_PROXY;
+	}
+	if (pi.cache_mode == pg_pool_t::CACHEMODE_READFORWARD) {
+	  if (pending_inc.new_pools.count(poolid) == 0) {
+	    pending_inc.new_pools[poolid] = pi;
+	  }
+	  dout(10) << __func__ << " switching pool " << poolid
+		   << " cachemode from readforward -> readproxy" << dendl;
+	  pending_inc.new_pools[poolid].cache_mode =
+	    pg_pool_t::CACHEMODE_READPROXY;
+	}
+      }
+
       // clear removed_snaps for every pool
       for (auto& [poolid, pi] : tmp.pools) {
 	if (pi.removed_snaps.empty()) {
@@ -12386,6 +12407,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool sure = false;
     cmd_getval(cct, cmdmap, "yes_i_really_mean_it", sure);
 
+    if (mode == pg_pool_t::CACHEMODE_FORWARD ||
+	mode == pg_pool_t::CACHEMODE_READFORWARD) {
+      ss << "'" << modestr << "' is no longer a supported cache mode";
+      err = -EPERM;
+      goto reply;
+    }
     if ((mode != pg_pool_t::CACHEMODE_WRITEBACK &&
 	 mode != pg_pool_t::CACHEMODE_NONE &&
 	 mode != pg_pool_t::CACHEMODE_PROXY &&
@@ -12410,10 +12437,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     /* Mode description:
      *
      *  none:       No cache-mode defined
-     *  forward:    Forward all reads and writes to base pool
+     *  forward:    Forward all reads and writes to base pool [removed]
      *  writeback:  Cache writes, promote reads from base pool
      *  readonly:   Forward writes to base pool
-     *  readforward: Writes are in writeback mode, Reads are in forward mode
+     *  readforward: Writes are in writeback mode, Reads are in forward mode [removed]
      *  proxy:       Proxy all reads and writes to base pool
      *  readproxy:   Writes are in writeback mode, Reads are in proxy mode
      *
@@ -12421,10 +12448,10 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
      *
      *  none -> any
      *  forward -> proxy || readforward || readproxy || writeback || any IF num_objects_dirty == 0
-     *  proxy -> forward || readforward || readproxy || writeback || any IF num_objects_dirty == 0
+     *  proxy -> readproxy || writeback || any IF num_objects_dirty == 0
      *  readforward -> forward || proxy || readproxy || writeback || any IF num_objects_dirty == 0
-     *  readproxy -> forward || proxy || readforward || writeback || any IF num_objects_dirty == 0
-     *  writeback -> readforward || readproxy || forward || proxy
+     *  readproxy -> proxy || writeback || any IF num_objects_dirty == 0
+     *  writeback -> readproxy || proxy
      *  readonly -> any
      */
 
@@ -12433,18 +12460,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     // whatever mode is on the pending state.
 
     if (p->cache_mode == pg_pool_t::CACHEMODE_WRITEBACK &&
-        (mode != pg_pool_t::CACHEMODE_FORWARD &&
-	  mode != pg_pool_t::CACHEMODE_PROXY &&
-	  mode != pg_pool_t::CACHEMODE_READFORWARD &&
+        (mode != pg_pool_t::CACHEMODE_PROXY &&
 	  mode != pg_pool_t::CACHEMODE_READPROXY)) {
       ss << "unable to set cache-mode '" << pg_pool_t::get_cache_mode_name(mode)
          << "' on a '" << pg_pool_t::get_cache_mode_name(p->cache_mode)
          << "' pool; only '"
-         << pg_pool_t::get_cache_mode_name(pg_pool_t::CACHEMODE_FORWARD)
-	 << "','"
          << pg_pool_t::get_cache_mode_name(pg_pool_t::CACHEMODE_PROXY)
-	 << "','"
-         << pg_pool_t::get_cache_mode_name(pg_pool_t::CACHEMODE_READFORWARD)
 	 << "','"
          << pg_pool_t::get_cache_mode_name(pg_pool_t::CACHEMODE_READPROXY)
         << "' allowed.";
@@ -12453,25 +12474,19 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     }
     if ((p->cache_mode == pg_pool_t::CACHEMODE_READFORWARD &&
         (mode != pg_pool_t::CACHEMODE_WRITEBACK &&
-	  mode != pg_pool_t::CACHEMODE_FORWARD &&
 	  mode != pg_pool_t::CACHEMODE_PROXY &&
 	  mode != pg_pool_t::CACHEMODE_READPROXY)) ||
 
         (p->cache_mode == pg_pool_t::CACHEMODE_READPROXY &&
         (mode != pg_pool_t::CACHEMODE_WRITEBACK &&
-	  mode != pg_pool_t::CACHEMODE_FORWARD &&
-	  mode != pg_pool_t::CACHEMODE_READFORWARD &&
 	  mode != pg_pool_t::CACHEMODE_PROXY)) ||
 
         (p->cache_mode == pg_pool_t::CACHEMODE_PROXY &&
         (mode != pg_pool_t::CACHEMODE_WRITEBACK &&
-	  mode != pg_pool_t::CACHEMODE_FORWARD &&
-	  mode != pg_pool_t::CACHEMODE_READFORWARD &&
 	  mode != pg_pool_t::CACHEMODE_READPROXY)) ||
 
         (p->cache_mode == pg_pool_t::CACHEMODE_FORWARD &&
         (mode != pg_pool_t::CACHEMODE_WRITEBACK &&
-	  mode != pg_pool_t::CACHEMODE_READFORWARD &&
 	  mode != pg_pool_t::CACHEMODE_PROXY &&
 	  mode != pg_pool_t::CACHEMODE_READPROXY))) {
 
