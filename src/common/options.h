@@ -25,21 +25,6 @@ struct Option {
     TYPE_SECS = 9,
   };
 
-  static const char *type_to_c_type_str(type_t t) {
-    switch (t) {
-    case TYPE_UINT: return "uint64_t";
-    case TYPE_INT: return "int64_t";
-    case TYPE_STR: return "std::string";
-    case TYPE_FLOAT: return "double";
-    case TYPE_BOOL: return "bool";
-    case TYPE_ADDR: return "entity_addr_t";
-    case TYPE_ADDRVEC: return "entity_addrvec_t";
-    case TYPE_UUID: return "uuid_d";
-    case TYPE_SIZE: return "size_t";
-    case TYPE_SECS: return "secs";
-    default: return "unknown";
-    }
-  }
   static const char *type_to_str(type_t t) {
     switch (t) {
     case TYPE_UINT: return "uint";
