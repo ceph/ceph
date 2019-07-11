@@ -3569,11 +3569,15 @@ RGWOp *RGWHandler_REST_Bucket_S3::get_obj_op(bool get_data)
   if (get_data) {   
     if (list_type == 1) {
        return new RGWListBucket_ObjStore_S3;     
-    } else if(list_type == 2) {
+    } else if (list_type == 2) {
       return new RGWListBucket_ObjStore_S3v2;
-    } } else {
+    } else {
+      return nullptr;
+    }
+  } else {
     return new RGWStatBucket_ObjStore_S3;    
-  }   }
+  }
+}
 
 RGWOp *RGWHandler_REST_Bucket_S3::op_get()
 {
