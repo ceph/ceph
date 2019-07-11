@@ -31,14 +31,16 @@ public:
 			bool ec_pool,
 			bool balance_reads,
 			bool set_redirect,
-			bool set_chunk) :
+			bool set_chunk,
+			bool enable_dedup) :
     m_nextop(NULL), m_op(0), m_ops(ops), m_seconds(max_seconds),
     m_objects(objects), m_stats(stats),
     m_total_weight(0),
     m_ec_pool(ec_pool),
     m_balance_reads(balance_reads),
     m_set_redirect(set_redirect),
-    m_set_chunk(set_chunk)
+    m_set_chunk(set_chunk),
+    m_enable_dedup(enable_dedup)
   {
     m_start = time(0);
     for (map<TestOpType, unsigned int>::const_iterator it = op_weights.begin();
@@ -243,7 +245,7 @@ public:
 	     << " length: " << rand_length <<  " target oid " << oid2.str() 
 	     << " tgt_offset: " << rand_tgt_offset << std::endl;
 	op = new SetChunkOp(m_op, &context, oid.str(), rand_offset, rand_length, oid2.str(), 
-			      context.low_tier_pool_name, rand_tgt_offset, m_stats);
+			      context.low_tier_pool_name, rand_tgt_offset, m_stats, m_enable_dedup);
 	return true;
       }
     } else if (m_op == make_manifest_end + 1) {
@@ -266,7 +268,7 @@ public:
 	cout << " redirect_not_in_use: " << oid.str() << std::endl;
 	context.oid_redirect_not_in_use.insert(oid.str());
       }
-    }
+    } 
 
     return false;
   }
@@ -451,6 +453,7 @@ private:
   bool m_balance_reads;
   bool m_set_redirect;
   bool m_set_chunk;
+  bool m_enable_dedup;
 };
 
 int main(int argc, char **argv)
@@ -505,6 +508,7 @@ int main(int argc, char **argv)
   bool balance_reads = false;
   bool set_redirect = false;
   bool set_chunk = false;
+  bool enable_dedup = false;
 
   for (int i = 1; i < argc; ++i) {
     if (strcmp(argv[i], "--max-ops") == 0)
@@ -585,6 +589,8 @@ int main(int argc, char **argv)
        * to prevent the race. see https://github.com/ceph/ceph/pull/20096
        */
       low_tier_pool_name = argv[++i];
+    } else if (strcmp(argv[i], "--enable_dedup") == 0) {
+      enable_dedup = true;
     } else {
       cerr << "unknown arg " << argv[i] << std::endl;
       exit(1);
@@ -647,13 +653,14 @@ int main(int argc, char **argv)
     pool_snaps,
     write_fadvise_dontneed,
     low_tier_pool_name,
+    enable_dedup,
     id);
 
   TestOpStat stats;
   WeightedTestGenerator gen = WeightedTestGenerator(
     ops, objects,
     op_weights, &stats, max_seconds,
-    ec_pool, balance_reads, set_redirect, set_chunk);
+    ec_pool, balance_reads, set_redirect, set_chunk, enable_dedup);
   int r = context.init();
   if (r < 0) {
     cerr << "Error initializing rados test context: "
