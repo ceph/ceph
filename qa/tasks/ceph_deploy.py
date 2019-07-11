@@ -381,16 +381,15 @@ def build_ceph_cluster(ctx, config):
         # try the next block which will wait up to 15 minutes to gatherkeys.
         execute_ceph_deploy(mon_create_nodes)
 
-        # create-keys is explicit now
-        # http://tracker.ceph.com/issues/16036
-        mons = ctx.cluster.only(teuthology.is_type('mon'))
-        for remote in mons.remotes.iterkeys():
-            remote.run(args=['sudo', 'ceph-create-keys', '--cluster', 'ceph',
-                             '--id', remote.shortname])
-
         estatus_gather = execute_ceph_deploy(gather_keys)
         if estatus_gather != 0:
             raise RuntimeError("ceph-deploy: Failed during gather keys")
+
+        # install admin key on mons (ceph-create-keys doesn't do this any more)
+        mons = ctx.cluster.only(teuthology.is_type('mon'))
+        for remote in mons.remotes.iterkeys():
+            execute_ceph_deploy('./ceph-deploy admin ' + remote.shortname)
+
         # create osd's
         if config.get('use-ceph-volume', False):
             no_of_osds = ceph_volume_osd_create(ctx, config)
