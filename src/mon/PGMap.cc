@@ -2713,6 +2713,11 @@ void PGMap::get_health_checks(
 
   // SLOW_PING_TIME
   auto warn_slow_ping_time = cct->_conf.get_val<uint64_t>("mon_warn_on_slow_ping_time");
+  if (warn_slow_ping_time == 0) {
+    double ratio = cct->_conf.get_val<double>("mon_warn_on_slow_ping_ratio");
+    warn_slow_ping_time = cct->_conf.get_val<int64_t>("osd_heartbeat_grace");
+    warn_slow_ping_time *= 1000000 * ratio; // Seconds of grace to microseconds at ratio
+  }
   if (warn_slow_ping_time > 0) {
 
     struct mon_ping_item_t {

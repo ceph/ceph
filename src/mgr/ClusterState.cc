@@ -224,6 +224,11 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
     // Default to health warning level if nothing specified
     if (!(cmd_getval(g_ceph_context, cmdmap, "value", value))) {
       value = static_cast<int64_t>(g_ceph_context->_conf.get_val<uint64_t>("mon_warn_on_slow_ping_time"));
+      if (value == 0) {
+        double ratio = g_conf().get_val<double>("mon_warn_on_slow_ping_ratio");
+	value = g_conf().get_val<int64_t>("osd_heartbeat_grace");
+	value *= 1000000 * ratio; // Seconds of grace to microseconds at ratio
+      }
     }
     if (value < 0)
       value = 0;
@@ -285,7 +290,9 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
     }
 
     // Network ping times (1min 5min 15min)
-    f->open_array_section("network_ping_times");
+    f->open_object_section("network_ping_times");
+    f->dump_int("threshold", value);
+    f->open_array_section("entries");
     for (auto &sitem : boost::adaptors::reverse(sorted)) {
       ceph_assert(!value || sitem.pingtime >= value);
 
@@ -298,6 +305,7 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
       f->dump_unsigned("15min", sitem.times[2]);
       f->close_section(); // entry
     }
+    f->close_section(); // entries
     f->close_section(); // network_ping_times
   } else {
     ceph_abort_msg("broken asok registration");
