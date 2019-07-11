@@ -20,7 +20,6 @@
 #include "msg/msg_types.h"
 #include "msg/Message.h"
 
-using peer_type_t = int;
 using auth_proto_t = int;
 
 class AuthConnectionMeta;
