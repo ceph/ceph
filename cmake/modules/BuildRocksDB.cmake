@@ -65,14 +65,9 @@ function(build_rocksdb)
     CMAKE_ARGS ${rocksdb_CMAKE_ARGS}
     BINARY_DIR "${rocksdb_BINARY_DIR}"
     BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target rocksdb
+    BUILD_ALWAYS TRUE
     BUILD_BYPRODUCTS "${rocksdb_LIBRARY}"
     INSTALL_COMMAND "true")
-  # force rocksdb make to be called on each time
-  ExternalProject_Add_Step(rocksdb_ext forcebuild
-    DEPENDEES configure
-    DEPENDERS build
-    COMMAND "true"
-    ALWAYS 1)
 
   add_library(RocksDB::RocksDB STATIC IMPORTED)
   add_dependencies(RocksDB::RocksDB rocksdb_ext)
