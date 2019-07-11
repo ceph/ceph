@@ -102,7 +102,7 @@ string SnapMapper::get_prefix(int64_t pool, snapid_t snap)
 string SnapMapper::to_raw_key(
   const pair<snapid_t, hobject_t> &in)
 {
-  return get_prefix(pool, in.first) + shard_prefix + in.second.to_str();
+  return get_prefix(in.second.pool, in.first) + shard_prefix + in.second.to_str();
 }
 
 pair<string, bufferlist> SnapMapper::to_raw(
