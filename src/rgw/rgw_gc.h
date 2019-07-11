@@ -52,7 +52,7 @@ public:
   int send_chain(cls_rgw_obj_chain& chain, const string& tag, bool sync);
   int defer_chain(const string& tag, cls_rgw_obj_chain& info, bool sync);
   int remove(int index, const std::vector<string>& tags, librados::AioCompletion **pc);
-  int remove(int index, string& marker, int num_entries, librados::AioCompletion **pc);
+  int remove(int index, int num_entries, librados::AioCompletion **pc);
 
   void initialize(CephContext *_cct, RGWRados *_store);
   void finalize();

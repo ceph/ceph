@@ -5,14 +5,3 @@
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
 #include "include/utime.h"
-
-void cls_create_queue_op::dump(Formatter *f) const
-{
-  head.dump(f);
-}
-
-void cls_create_queue_op::generate_test_instances(list<cls_create_queue_op*>& ls)
-{
-  ls.push_back(new cls_create_queue_op);
-  ls.push_back(new cls_create_queue_op);
-}
