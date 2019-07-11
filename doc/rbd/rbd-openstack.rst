@@ -64,13 +64,9 @@ The instructions below detail the setup for Glance, Cinder and Nova, although
 they do not have to be used together. You may store images in Ceph block devices
 while running VMs using a local disk, or vice versa.
 
-.. important:: Ceph doesn’t support QCOW2 for hosting a virtual machine disk.
-   Thus if you want to boot virtual machines in Ceph (ephemeral backend or boot
-   from volume), the Glance image format must be ``RAW``.
-
-.. tip:: This document describes using Ceph Block Devices with OpenStack Havana.
-   For earlier versions of OpenStack see
-   `Block Devices and OpenStack (Dumpling)`_.
+.. important:: Using QCOW2 for hosting a virtual machine disk is NOT recommended.
+   If you want to boot virtual machines in Ceph (ephemeral backend or boot
+   from volume), please use the ``raw`` image format within Glance.
 
 .. index:: pools; OpenStack
 
@@ -196,35 +192,6 @@ Configuring Glance
 Glance can use multiple back ends to store images. To use Ceph block devices by
 default, configure Glance like the following.
 
-Prior to Juno
-~~~~~~~~~~~~~~
-
-Edit ``/etc/glance/glance-api.conf`` and add under the ``[DEFAULT]`` section::
-
-    default_store = rbd
-    rbd_store_user = glance
-    rbd_store_pool = images
-    rbd_store_chunk_size = 8
-
-
-Juno
-~~~~
-
-Edit ``/etc/glance/glance-api.conf`` and add under the ``[glance_store]`` section::
-
-    [DEFAULT]
-    ...
-    default_store = rbd
-    ...
-    [glance_store]
-    stores = rbd
-    rbd_store_pool = images
-    rbd_store_user = glance
-    rbd_store_ceph_conf = /etc/ceph/ceph.conf
-    rbd_store_chunk_size = 8
-
-.. important:: Glance has not completely moved to 'store' yet.
-    So we still need to configure the store in the DEFAULT section until Kilo.
 
 Kilo and after
 ~~~~~~~~~~~~~~
@@ -252,14 +219,6 @@ Any OpenStack version except Mitaka
 
 If you want to enable copy-on-write cloning of images, also add under the ``[DEFAULT]`` section::
 
-    show_image_direct_url = True
-
-For Mitaka only
-^^^^^^^^^^^^^^^
-
-To enable image locations and take advantage of copy-on-write cloning for images, add under the ``[DEFAULT]`` section::
-
-    show_multiple_locations = True
     show_image_direct_url = True
 
 Disable cache management (any OpenStack version)
@@ -383,84 +342,6 @@ The provided example works for RedHat based systems.
 .. tip:: If your virtual machine is already running you can simply restart it to get the socket
 
 
-Havana and Icehouse
-~~~~~~~~~~~~~~~~~~~
-
-Havana and Icehouse require patches to implement copy-on-write cloning and fix
-bugs with image size and live migration of ephemeral disks on rbd. These are
-available in branches based on upstream Nova `stable/havana`_  and
-`stable/icehouse`_. Using them is not mandatory but **highly recommended** in
-order to take advantage of the copy-on-write clone functionality.
-
-On every Compute node, edit ``/etc/nova/nova.conf`` and add::
-
-    libvirt_images_type = rbd
-    libvirt_images_rbd_pool = vms
-    libvirt_images_rbd_ceph_conf = /etc/ceph/ceph.conf
-    disk_cachemodes="network=writeback"
-    rbd_user = cinder
-    rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
-
-It is also a good practice to disable file injection. While booting an
-instance, Nova usually attempts to open the rootfs of the virtual machine.
-Then, Nova injects values such as password, ssh keys etc. directly into the
-filesystem. However, it is better to rely on the metadata service and
-``cloud-init``.
-
-On every Compute node, edit ``/etc/nova/nova.conf`` and add::
-
-    libvirt_inject_password = false
-    libvirt_inject_key = false
-    libvirt_inject_partition = -2
-
-To ensure a proper live-migration, use the following flags::
-
-    libvirt_live_migration_flag="VIR_MIGRATE_UNDEFINE_SOURCE,VIR_MIGRATE_PEER2PEER,VIR_MIGRATE_LIVE,VIR_MIGRATE_PERSIST_DEST,VIR_MIGRATE_TUNNELLED"
-
-Juno
-~~~~
-
-In Juno, Ceph block device was moved under the ``[libvirt]`` section.
-On every Compute node, edit ``/etc/nova/nova.conf`` under the ``[libvirt]``
-section and add::
-
-    [libvirt]
-    images_type = rbd
-    images_rbd_pool = vms
-    images_rbd_ceph_conf = /etc/ceph/ceph.conf
-    rbd_user = cinder
-    rbd_secret_uuid = 457eb676-33da-42ec-9a8c-9293d545c337
-    disk_cachemodes="network=writeback"
-
-
-It is also a good practice to disable file injection. While booting an
-instance, Nova usually attempts to open the rootfs of the virtual machine.
-Then, Nova injects values such as password, ssh keys etc. directly into the
-filesystem. However, it is better to rely on the metadata service and
-``cloud-init``.
-
-On every Compute node, edit ``/etc/nova/nova.conf`` and add the following
-under the ``[libvirt]`` section::
-
-    inject_password = false
-    inject_key = false
-    inject_partition = -2
-
-To ensure a proper live-migration, use the following flags (under the ``[libvirt]`` section)::
-
-    live_migration_flag="VIR_MIGRATE_UNDEFINE_SOURCE,VIR_MIGRATE_PEER2PEER,VIR_MIGRATE_LIVE,VIR_MIGRATE_PERSIST_DEST,VIR_MIGRATE_TUNNELLED"
-
-Kilo
-~~~~
-
-Enable discard support for virtual machine ephemeral root disk::
-
-    [libvirt]
-    ...
-    ...
-    hw_disk_discard = unmap # enable discard support (be careful of performance)
-
-
 Restart OpenStack
 =================
 
@@ -491,8 +372,7 @@ You can create a volume from an image using the Cinder command line tool::
 
     cinder create --image-id {id of image} --display-name {name of volume} {size of volume}
 
-Note that image must be RAW format. You can use `qemu-img`_ to convert
-from one format to another. For example::
+You can use `qemu-img`_ to convert from one format to another. For example::
 
     qemu-img convert -f {source-format} -O {output-format} {source-filename} {output-filename}
     qemu-img convert -f qcow2 -O raw precise-cloudimg.img precise-cloudimg.raw
@@ -507,6 +387,3 @@ dashboard, you can boot from that volume by performing the following steps:
 #. Select the volume you created.
 
 .. _qemu-img: ../qemu-rbd/#running-qemu-with-rbd
-.. _Block Devices and OpenStack (Dumpling): http://docs.ceph.com/docs/dumpling/rbd/rbd-openstack
-.. _stable/havana: https://github.com/jdurgin/nova/tree/havana-ephemeral-rbd
-.. _stable/icehouse: https://github.com/angdraug/nova/tree/rbd-ephemeral-clone-stable-icehouse
