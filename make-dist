@@ -90,7 +90,7 @@ build_dashboard_frontend() {
   $TEMP_DIR/bin/nodeenv -p --node=10.13.0
   cd src/pybind/mgr/dashboard/frontend
   . $TEMP_DIR/bin/activate
-  npm ci
+  timeout 1h npm ci
   npm run build -- --prod --progress=false
   deactivate
   cd $CURR_DIR
