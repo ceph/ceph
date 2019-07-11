@@ -542,45 +542,36 @@ private:
   BlueFS::SocketHook* asok_hook = nullptr;
 
   struct AioMoveFileContext {
-    enum {idle, reading, writing} state;
+    enum {idle=0, reading=1, writing=2} state;
     BlueFS* bluefs;
+    IOContext ioc;
     FileRef source;
     mempool::bluefs::vector<bluefs_extent_t>::iterator source_it;
-    size_t source_offset;
+    size_t source_offset = 0;
 
-    //struct bluefs_fnode_t fnode;
-    IOContext ioc;//(cct, NULL, true);
     mempool::bluefs::vector<bluefs_extent_t> target;
     mempool::bluefs::vector<bluefs_extent_t>::iterator target_it;
-    size_t target_offset;
+    size_t target_offset = 0;
 
-    size_t in_target_pos_offset;
     bufferlist read_bl;
     bufferlist write_bl;
-    void* some_data_here;
-    //void aio_finish(BlueStore *store) = 0;
-    bool result = true;
+    bool result = false;
     AioMoveFileContext(BlueFS* bfs);
-
-    //bool move_file_start(FileRef f, unsigned target_device);
-    //    void move_file_finish();
-    //void aio_read_chunk();
-    //void aio_write_chunk();
-    //static void aio_cb(void *v_bluefs, void *v_ctx);
-    //void aio_cb();
   };
-  // triggered periodically to verify whether we should move some files between devices
-  void consider_move();
-
+  uint64_t move_last_ino = 0;
+  utime_t move_next_check = ceph_clock_now();
+  AioMoveFileContext* move_context = nullptr;
+  FileRef find_move_candidate(uint8_t is_on, uint8_t wants_on);
   BlueFS::AioMoveFileContext* file_move_start(FileRef f, unsigned target_device);
   void file_move_finished(BlueFS::AioMoveFileContext* c);
   
-  //void aio_move_finish(BlueFS::AioMoveFileContext& c);
   void aio_read_chunk(BlueFS::AioMoveFileContext* c);
   void aio_write_chunk(BlueFS::AioMoveFileContext* c);
   static void aio_cb(void *v_bluefs, void *v_ctx);
   void aio_cb(BlueFS::AioMoveFileContext* c);
-  
+public:
+  // triggered periodically to verify whether we should move some files between devices
+  void consider_move();
 };
 
 #endif

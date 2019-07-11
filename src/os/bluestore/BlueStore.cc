@@ -10583,6 +10583,9 @@ void BlueStore::_kv_sync_thread()
 	int r = _balance_bluefs_freespace();
 	ceph_assert(r >= 0);
       }
+      if (bluefs) {
+	bluefs->consider_move();
+      }
 
       // cleanup sync deferred keys
       for (auto b : deferred_stable) {

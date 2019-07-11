@@ -4296,6 +4296,18 @@ std::vector<Option> get_global_options() {
     .set_default(1)
     .set_description("How frequently (in seconds) to balance free space between BlueFS and BlueStore"),
 
+    Option("bluestore_bluefs_placement_check_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(10)
+    .set_description("How frequently (in seconds) to check for optimal RocksDB files placement (db/slow)"),
+
+    Option("bluestore_bluefs_placement_all_on_db", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.8)
+    .set_description("Level on which all RocksDB files are placed on db"),
+
+    Option("bluestore_bluefs_placement_no_slow_on_db", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0.9)
+    .set_description("Level on which no RocksDB files marked slow are allowed on db"),
+
     Option("bluestore_bluefs_alloc_failure_dump_interval", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("How frequently (in seconds) to dump allocator on"
