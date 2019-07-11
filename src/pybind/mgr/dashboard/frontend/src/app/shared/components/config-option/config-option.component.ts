@@ -25,7 +25,7 @@ export class ConfigOptionComponent implements OnInit {
   @Input()
   optionsFormShowReset = true;
 
-  icons: Icons;
+  icons = Icons;
   options: Array<any> = [];
   optionsFormGroup: CdFormGroup = new CdFormGroup({});
 
