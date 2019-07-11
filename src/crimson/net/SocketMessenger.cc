@@ -59,7 +59,7 @@ seastar::future<> SocketMessenger::bind(const entity_addrvec_t& addrs)
   for (auto& addr : my_addrs.v) {
     addr.nonce = nonce;
   }
-  logger().info("listening on {}", my_addrs.front().in4_addr());
+  logger().info("{} listening on {}", *this, my_addrs.front().in4_addr());
   return container().invoke_on_all([my_addrs](auto& msgr) {
     msgr.do_bind(my_addrs);
   }).handle_exception_type([this] (const std::system_error& e) {
@@ -233,7 +233,10 @@ seastar::future<> SocketMessenger::learned_addr(const entity_addr_t &peer_addr_f
   addr.u = peer_addr_for_me.u;
   addr.set_type(peer_addr_for_me.get_type());
   addr.set_port(get_myaddr().get_port());
-  return set_myaddrs(entity_addrvec_t{addr});
+  return set_myaddrs(entity_addrvec_t{addr}).then([this, peer_addr_for_me] {
+    logger().debug("{} learned myaddr={} from {}",
+                   *this, get_myaddr(), peer_addr_for_me);
+  });
 }
 
 SocketPolicy SocketMessenger::get_policy(entity_type_t peer_type) const
