@@ -2147,6 +2147,9 @@ class CephManager:
         Find the number of active and clean pgs.
         """
         pgs = self.get_pg_stats()
+        return self._get_num_active_clean(pgs)
+
+    def _get_num_active_clean(self, pgs):
         num = 0
         for pg in pgs:
             if (pg['state'].count('active') and
@@ -2160,6 +2163,9 @@ class CephManager:
         Find the number of active and recovered pgs.
         """
         pgs = self.get_pg_stats()
+        return self._get_num_active_recovered(pgs)
+
+    def _get_num_active_recovered(self, pgs):
         num = 0
         for pg in pgs:
             if (pg['state'].count('active') and
@@ -2210,6 +2216,9 @@ class CephManager:
         Find the number of pgs that are either active or down.
         """
         pgs = self.get_pg_stats()
+        return self._get_num_active_down(pgs)
+
+    def _get_num_active_down(self, pgs):
         num = 0
         for pg in pgs:
             if ((pg['state'].count('active') and not
@@ -2236,19 +2245,22 @@ class CephManager:
         """
         True if all pgs are clean
         """
-        return self.get_num_active_clean() == self.get_num_pgs()
+        pgs = self.get_pg_stats()
+        return self._get_num_active_clean(pgs) == len(pgs)
 
     def is_recovered(self):
         """
         True if all pgs have recovered
         """
-        return self.get_num_active_recovered() == self.get_num_pgs()
+        pgs = self.get_pg_stats()
+        return self._get_num_active_recovered(pgs) == len(pgs)
 
     def is_active_or_down(self):
         """
         True if all pgs are active or down
         """
-        return self.get_num_active_down() == self.get_num_pgs()
+        pgs = self.get_pg_stats()
+        return self._get_num_active_down(pgs) == len(pgs)
 
     def wait_for_clean(self, timeout=1200):
         """
