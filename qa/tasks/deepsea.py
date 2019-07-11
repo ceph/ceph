@@ -1688,6 +1688,20 @@ class Toolbox(DeepSea):
                 all_green = False
         assert all_green, "One or more OSDs is not {}".format(file_or_blue)
 
+    def rebuild_node(self, **kwargs):
+        """
+        Expects a teuthology 'osd' role specifying one of the storage nodes.
+        Then runs 'rebuild.nodes' on the node, can be used for filestore to bluestore 
+        migration if you run it after you change the drive_groups.yml file.
+        """
+        role = kwargs.keys()[0]
+        remote = get_remote_for_role(self.ctx, role)
+        self.log.info("Disengaging safety to prepare for rebuild")
+        self.master_remote.sh("sudo salt-run disengage.safety")
+        self.log.info("Rebuilding node {}".format(remote.hostname))
+        self.master_remote.sh("sudo salt-run rebuild.node {}*".format(remote.hostname))
+        
+
     def _noout(self, add_or_rm, teuth_role):
         """
         add_or_rm is either 'add' or 'rm'
