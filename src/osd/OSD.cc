@@ -2553,6 +2553,11 @@ will start to track new ops received afterwards.";
     int64_t value = 0;
     if (!(cmd_getval(cct, cmdmap, "value", value))) {
       value = static_cast<int64_t>(g_conf().get_val<uint64_t>("mon_warn_on_slow_ping_time"));
+      if (value == 0) {
+        double ratio = g_conf().get_val<double>("mon_warn_on_slow_ping_ratio");
+        value = g_conf().get_val<int64_t>("osd_heartbeat_grace");
+        value *= 1000000 * ratio; // Seconds of grace to microseconds at ratio
+      }
     }
     if (value < 0) value = 0;
 
@@ -2607,7 +2612,9 @@ will start to track new ops received afterwards.";
     delete pingtimes;
     //
     // Network ping times (1min 5min 15min)
-    f->open_array_section("network_ping_times");
+    f->open_object_section("network_ping_times");
+    f->dump_int("threshold", value);
+    f->open_array_section("entries");
     for (auto &sitem : boost::adaptors::reverse(sorted)) {
       ceph_assert(sitem.pingtime >= value);
       f->open_object_section("entry");
@@ -2619,6 +2626,7 @@ will start to track new ops received afterwards.";
       f->dump_int("15min", sitem.times[2]);
       f->close_section();  // entry
     }
+    f->close_section(); // entries
     f->close_section(); // network_ping_times
   } else {
     ceph_abort_msg("broken asok registration");

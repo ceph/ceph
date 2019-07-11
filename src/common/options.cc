@@ -1713,9 +1713,17 @@ std::vector<Option> get_global_options() {
     .set_description("Issue a health warning if there are fewer OSDs than osd_pool_default_size"),
 
     Option("mon_warn_on_slow_ping_time", Option::TYPE_UINT, Option::LEVEL_BASIC)
-    .set_default(1000000)
+    .set_default(0)
     .add_service("mgr")
-    .set_description("Issue a health warning if heartbeat ping longer than specified microseconds"),
+    .set_description("Override mon_warn_on_slow_ping_ratio with specified threshold in microseconds")
+    .add_see_also("mon_warn_on_slow_ping_ratio"),
+
+    Option("mon_warn_on_slow_ping_ratio", Option::TYPE_FLOAT, Option::LEVEL_BASIC)
+    .set_default(.05)
+    .add_service("mgr")
+    .set_description("Issue a health warning if heartbeat ping longer than percentage of osd_heartbeat_grace")
+    .add_see_also("osd_heartbeat_grace")
+    .add_see_also("mon_warn_on_slow_ping_time"),
 
     Option("mon_max_snap_prune_per_epoch", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(100)
