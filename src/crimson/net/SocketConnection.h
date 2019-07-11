@@ -74,10 +74,6 @@ class SocketConnection : public Connection {
 
   Messenger* get_messenger() const override;
 
-  int get_peer_type() const override {
-    return peer_type;
-  }
-
   seastar::future<bool> is_connected() override;
 
   seastar::future<> send(MessageRef msg) override;
