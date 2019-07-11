@@ -82,11 +82,11 @@ class Module(MgrModule):
         },
         {
             'name': 'diskprediction_ssl_target_name_override',
-            'default': 'api.diskprophet.com'
+            'default': 'localhost'
         },
         {
             'name': 'diskprediction_default_authority',
-            'default': 'api.diskprophet.com'
+            'default': 'localhost'
         },
         {
             'name': 'sleep_interval',
@@ -398,7 +398,7 @@ class Module(MgrModule):
                         restart_agent = True
                         break
             except Exception as IOError:
-                self.log.error('disk prediction plugin faield to started and try to restart')
+                self.log.error('disk prediction plugin failed to started and try to restart')
                 restart_agent = True
 
             if restart_agent:
