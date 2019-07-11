@@ -247,13 +247,12 @@ class EventCenter {
     ceph_assert(i < MAX_EVENTCENTER && global_centers);
     EventCenter *c = global_centers->centers[i];
     ceph_assert(c);
-    if (!nowait && c->in_thread()) {
-      f();
-      return ;
-    }
     if (nowait) {
       C_submit_event<func> *event = new C_submit_event<func>(std::move(f), true);
       c->dispatch_event_external(event);
+    } else if (c->in_thread()) {
+      f();
+      return;
     } else {
       C_submit_event<func> event(std::move(f), false);
       c->dispatch_event_external(&event);
