@@ -30,6 +30,17 @@ int aio_queue_t::submit(aio_t &aio, int *retries)
   return r;
 }
 
+std::ostream& operator<<(std::ostream& os, const aio_t& aio)
+{
+  unsigned i = 0;
+  os << "aio: ";
+  for (auto& iov : aio.iov) {
+    os << "\n [" << i++ << "] 0x"
+       << std::hex << iov.iov_base << "~" << iov.iov_len << std::dec;
+  }
+  return os;
+}
+
 int aio_queue_t::submit_batch(aio_iter begin, aio_iter end, 
 			      uint16_t aios_size, void *priv, 
 			      int *retries)
