@@ -314,9 +314,10 @@ You may set values for the following keys:
 
 ``min_size``
 
-:Description: Sets the minimum number of replicas required for I/O.
-              See `Set the Number of Object Replicas`_ for further details.
-              Replicated pools only.
+:Description: Sets the minimum number of replicas or shards required for I/O.
+              For further details with **replicated pools**, see `Set the Number of Object Replicas`_
+              or `Erasure Coded Pool Recovery <../erasure-code/#erasure-coded-pool-recovery>`_
+              if **erasure coded**.
 
 :Type: Integer
 :Version: ``0.54`` and above
