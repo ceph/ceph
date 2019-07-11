@@ -44,6 +44,7 @@ export class DashboardHelpComponent implements OnInit {
 
   openAboutModal() {
     this.modalRef = this.modalService.show(AboutComponent);
+    this.modalRef.setClass('modal-lg');
   }
 
   goToApiDocs() {

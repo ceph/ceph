@@ -5,7 +5,7 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
-import { ToastModule } from 'ng2-toastr';
+import { ToastrModule } from 'ngx-toastr';
 
 import { By } from '@angular/platform-browser';
 import { of } from 'rxjs';
@@ -30,7 +30,7 @@ describe('RbdFormComponent', () => {
       HttpClientTestingModule,
       ReactiveFormsModule,
       RouterTestingModule,
-      ToastModule.forRoot(),
+      ToastrModule.forRoot(),
       SharedModule,
       TooltipModule
     ],
@@ -83,7 +83,10 @@ describe('RbdFormComponent', () => {
   describe('test image configuration component', () => {
     it('is visible', () => {
       fixture.detectChanges();
-      expect(queryNativeElement('cd-rbd-configuration-form').parentElement.hidden).toBe(false);
+      expect(
+        fixture.debugElement.query(By.css('cd-rbd-configuration-form')).nativeElement.parentElement
+          .hidden
+      ).toBe(true);
     });
   });
 

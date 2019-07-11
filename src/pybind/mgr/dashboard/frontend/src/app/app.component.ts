@@ -1,7 +1,6 @@
-import { Component, ViewContainerRef } from '@angular/core';
+import { Component } from '@angular/core';
 import { Router } from '@angular/router';
 
-import { ToastsManager } from 'ng2-toastr';
 import { TooltipConfig } from 'ngx-bootstrap/tooltip';
 
 import { AuthStorageService } from './shared/services/auth-storage.service';
@@ -23,14 +22,7 @@ import { AuthStorageService } from './shared/services/auth-storage.service';
 export class AppComponent {
   title = 'cd';
 
-  constructor(
-    private authStorageService: AuthStorageService,
-    private router: Router,
-    public toastr: ToastsManager,
-    private vcr: ViewContainerRef
-  ) {
-    this.toastr.setRootViewContainerRef(this.vcr);
-  }
+  constructor(private authStorageService: AuthStorageService, private router: Router) {}
 
   isLoginActive() {
     return this.router.url === '/login' || !this.authStorageService.isLoggedIn();

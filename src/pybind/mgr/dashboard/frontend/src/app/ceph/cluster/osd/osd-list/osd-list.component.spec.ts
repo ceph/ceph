@@ -263,7 +263,7 @@ describe('OsdListComponent', () => {
       const tableActionElement = fixture.debugElement.query(By.directive(TableActionsComponent));
       const toClassName = TestBed.get(TableActionsComponent).toClassName;
       const getActionClasses = (action: CdTableAction) =>
-        tableActionElement.query(By.css('.' + toClassName(action.name))).classes;
+        tableActionElement.query(By.css(`.${toClassName(action.name)} .dropdown-item`)).classes;
 
       component.tableActions.forEach((action) => {
         expect(getActionClasses(action).disabled).toBe(true);

@@ -2,35 +2,37 @@
 
 @import 'vendor.variables';
 
-$screen-sm-min: 768px !default;
-$screen-md-min: 992px !default;
-$screen-lg-min: 1200px !default;
+$screen-sm-min: 576px !default;
+$screen-md-min: 768px !default;
+$screen-lg-min: 992px !default;
+$screen-xl-min: 1200px !default;
 
 $screen-xs-max: calc(#{$screen-sm-min} - 1px);
 $screen-sm-max: calc(#{$screen-md-min} - 1px);
 $screen-md-max: calc(#{$screen-lg-min} - 1px);
+$screen-lg-max: calc(#{$screen-xl-min} - 1px);
 
 $color-solid-red: #ff0000 !default;
 $color-pink: #a94442 !default;
 $color-light-red: #f2dede !default;
 
-$color-orange: #ff6600 !default;
+// $color-orange: #ff6600 !default;
 
 $color-bright-yellow: #ffc200 !default;
 $color-light-yellow: #fff3cd !default;
 
 $color-bright-green: #00bb00 !default;
-$color-green: #71843f !default;
+// $color-green: #71843f !default;
 
 $color-blue: #288cea !default;
-$color-light-blue: #d9edf7 !default;
+$color-light-blue: #d1ecf1 !default;
 $color-sky-blue: #afd9ee !default;
 
 $color-black: #000 !default;
 $color-transparent-black: rgba(0, 0, 0, 0.7) !default;
 $color-solid-gray: #555555 !default;
 $color-dark-gray: #474544 !default;
-$color-gray: #505050 !default;
+// $color-gray: #505050 !default;
 $color-mild-gray: #777777 !default;
 $color-blue-gray: #90949c !default;
 $color-grad-gray: #ededed !default;
@@ -43,6 +45,8 @@ $color-light-shade-gray: #f3f3f3 !default;
 $color-whitesmoke-gray: #f5f5f5 !default;
 $color-solid-white: #ffffff !default;
 $color-transparent: rgba(0, 0, 0, 0.09) !default;
+$color-input-border: #ced4da;
+$color-input-border-hover: #adadad;
 $color-brand-teal: #2b99a8 !default;
 $color-brand-gray: #374249 !default;
 
@@ -51,23 +55,21 @@ $color-secondary: $color-brand-gray !default;
 $color-accent: #ef5c55 !default;
 
 $color-app-bg: $color-solid-white !default;
-$color-bg-darken: $color-dark-gray !default;
-$color-links: $color-primary !default;
-$color-links-focus: $color-dark-gray !default;
+// $color-bg-darken: $color-dark-gray !default;
+// $color-links: $color-primary !default;
+// $color-links-focus: $color-dark-gray !default;
 $color-breadcrumb: $color-dark-gray !default;
-$color-button-text: $color-white-gray !default;
+// $color-button-text: $color-white-gray !default;
 $color-button: $color-primary !default;
-$color-button-hover: darken($color-primary, 3) !default;
-$color-button-border: darken($color-primary, 6) !default;
+// $color-button-hover: darken($color-primary, 3) !default;
+// $color-button-border: darken($color-primary, 6) !default;
 $color-button-badge: $color-white-gray !default;
-$color-button-caret: $color-white-gray !default;
 $color-dropdown-menu: $color-dark-gray !default;
 $color-dropdown-active-text: $color-white-gray !default;
 $color-dropdown-active-bg: $color-primary !default;
-$color-caret-text: $color-solid-white !default;
 $color-progress-bar-info-bg: $color-primary !default;
 $color-progress-bar-freespace-bg: $color-light-gray !default;
-$color-oaprogress-text: $color-black !default;
+$color-progress-text: $color-black !default;
 $color-tags-border: $color-light-gray !default;
 $color-tags-box-shadow: $color-transparent !default;
 $color-error-btn-bg: $color-light-red !default;
@@ -84,18 +86,16 @@ $color-login-row-bg: $color-secondary !default;
 $color-password-toggle-text: $color-solid-white !default;
 $color-password-toggle-bg: $color-solid-gray !default;
 $color-password-toggle-focus: $color-primary !default;
-$color-login-checkbox-bg: $color-primary !default;
-$color-login-checkbox-border: $color-primary !default;
-$color-login-active-row-bg: $color-light-yellow !default;
-$color-login-active-row-text: $color-black !default;
+// $color-login-active-row-bg: $color-light-yellow !default;
+// $color-login-active-row-text: $color-black !default;
 
 /*Landing Page*/
 
 /*InfoGroup*/
-$color-info-group-underline: $color-whitesmoke-gray !default;
+// $color-info-group-underline: $color-whitesmoke-gray !default;
 
 /*InfoCard*/
-$color-info-card-background: $color-whitesmoke-gray !default;
+// $color-info-card-background: $color-whitesmoke-gray !default;
 $color-info-card-border: $color-soft-gray !default;
 
 /*Navigation*/
@@ -123,7 +123,7 @@ $color-table-header-bg: $color-whitesmoke-gray !default;
 $color-table-header-border: $color-light-gray !default;
 $color-table-active-row: $color-sky-blue !default;
 $color-table-active-row-hover: $color-light-blue !default;
-$color-table-progress-bar-bg: $color-sky-blue !default;
+// $color-table-progress-bar-bg: $color-sky-blue !default;
 $color-table-progress-bar-active: $color-primary !default;
 $color-table-gradient-1: $color-whitesmoke-gray !default;
 $color-table-gradient-2: $color-grad-gray !default;

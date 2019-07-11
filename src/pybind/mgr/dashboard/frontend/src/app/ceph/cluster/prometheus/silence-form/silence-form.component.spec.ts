@@ -6,10 +6,10 @@ import { ActivatedRoute, Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import * as _ from 'lodash';
-import { ToastModule } from 'ng2-toastr';
 import { BsDatepickerDirective, BsDatepickerModule } from 'ngx-bootstrap/datepicker';
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { TooltipModule } from 'ngx-bootstrap/tooltip';
+import { ToastrModule } from 'ngx-toastr';
 import { of, throwError } from 'rxjs';
 
 import {
@@ -61,7 +61,7 @@ describe('SilenceFormComponent', () => {
       RouterTestingModule.withRoutes(routes),
       BsDatepickerModule.forRoot(),
       SharedModule,
-      ToastModule.forRoot(),
+      ToastrModule.forRoot(),
       TooltipModule.forRoot(),
       ReactiveFormsModule
     ],
