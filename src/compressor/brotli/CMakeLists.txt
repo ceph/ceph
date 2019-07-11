@@ -16,12 +16,6 @@ ExternalProject_Add(brotli_ext
   BUILD_IN_SOURCE 1
   INSTALL_COMMAND "")
 
-ExternalProject_Add_Step(brotli_ext forcebuild
-  DEPENDEES configure
-  DEPENDERS build
-  COMMAND "true"
-  ALWAYS 1)
-
 set(bortli_libs enc dec common)
 file(MAKE_DIRECTORY "${CMAKE_BINARY_DIR}/src/brotli/c/include")
 foreach(lib ${bortli_libs})
