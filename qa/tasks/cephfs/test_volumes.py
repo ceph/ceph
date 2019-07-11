@@ -514,3 +514,57 @@ class TestVolumes(CephFSTestCase):
         self.assertNotIn("client.{0}".format(authid), existing_ids)
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_authorize_subvolumegroup(self):
+        subvolume = self._generate_random_subvolume_name()
+        group = self._generate_random_group_name()
+        authid = "bob"
+
+        guest_mount = self.mount_b
+        guest_mount.umount_wait()
+
+        # create group
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+
+        # create subvolume in group
+        self._fs_cmd("subvolume", "create", self.volname, subvolume, "--group_name", group)
+        mount_path = self._fs_cmd("subvolume", "getpath", self.volname, subvolume,
+                                  "--group_name", group).rstrip()
+
+        # authorize guest authID read-write access to the group
+        key = self._fs_cmd("subvolumegroup", "authorize", self.volname, group, authid)
+
+        # guest authID should exist
+        existing_ids = [a['entity'] for a in self.auth_list()]
+        self.assertIn("client.{0}".format(authid), existing_ids)
+
+        # configure credentials for guest client
+        self._configure_guest_auth(guest_mount, authid, key)
+
+        # mount the subvolume, and write to it
+        guest_mount.mount(mount_path=mount_path)
+        guest_mount.write_n_mb("data.bin", 1)
+
+        # authorize guest authID read access to subvolume
+        key = self._fs_cmd("subvolumegroup", "authorize", self.volname, group, authid,
+                           "--access_level", "r")
+
+        # guest client sees the change in access level to read only after a
+        # remount of the subvolume
+        guest_mount.umount_wait()
+        guest_mount.mount(mount_path=mount_path)
+
+        # read existing content of the subvolume
+        self.assertListEqual(guest_mount.ls(guest_mount.mountpoint), ["data.bin"])
+        # cannot write into read-only subvolume
+        with self.assertRaises(CommandFailedError):
+            guest_mount.write_n_mb("rogue.bin", 1)
+
+        # cleanup
+        guest_mount.umount_wait()
+        self._fs_cmd("subvolumegroup", "deauthorize", self.volname, group, authid)
+        # guest authID should no longer exist
+        existing_ids = [a['entity'] for a in self.auth_list()]
+        self.assertNotIn("client.{0}".format(authid), existing_ids)
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--group_name", group)
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
