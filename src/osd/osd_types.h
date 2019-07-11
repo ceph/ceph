@@ -2760,7 +2760,6 @@ struct pg_info_t {
   eversion_t log_tail;         ///< oldest log entry.
 
   hobject_t last_backfill;     ///< objects >= this and < last_complete may be missing
-  bool last_backfill_bitwise;  ///< true if last_backfill reflects a bitwise (vs nibblewise) sort
 
   interval_set<snapid_t> purged_snaps;
 
@@ -2779,7 +2778,6 @@ struct pg_info_t {
       l.last_user_version == r.last_user_version &&
       l.log_tail == r.log_tail &&
       l.last_backfill == r.last_backfill &&
-      l.last_backfill_bitwise == r.last_backfill_bitwise &&
       l.purged_snaps == r.purged_snaps &&
       l.stats == r.stats &&
       l.history == r.history &&
@@ -2790,8 +2788,7 @@ struct pg_info_t {
     : last_epoch_started(0),
       last_interval_started(0),
       last_user_version(0),
-      last_backfill(hobject_t::get_max()),
-      last_backfill_bitwise(false)
+      last_backfill(hobject_t::get_max())
   { }
   // cppcheck-suppress noExplicitConstructor
   pg_info_t(spg_t p)
@@ -2799,13 +2796,11 @@ struct pg_info_t {
       last_epoch_started(0),
       last_interval_started(0),
       last_user_version(0),
-      last_backfill(hobject_t::get_max()),
-      last_backfill_bitwise(false)
+      last_backfill(hobject_t::get_max())
   { }
   
   void set_last_backfill(hobject_t pos) {
     last_backfill = pos;
-    last_backfill_bitwise = true;
   }
 
   bool is_empty() const { return last_update.version == 0; }
@@ -2835,8 +2830,7 @@ inline std::ostream& operator<<(std::ostream& out, const pg_info_t& pgi)
     out << " (" << pgi.log_tail << "," << pgi.last_update << "]";
   }
   if (pgi.is_incomplete())
-    out << " lb " << pgi.last_backfill
-	<< (pgi.last_backfill_bitwise ? " (bitwise)" : " (NIBBLEWISE)");
+    out << " lb " << pgi.last_backfill;
   //out << " c " << pgi.epoch_created;
   out << " local-lis/les=" << pgi.last_interval_started
       << "/" << pgi.last_epoch_started;
