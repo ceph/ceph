@@ -2,7 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastModule } from 'ng2-toastr';
+import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import { By } from '@angular/platform-browser';
@@ -23,7 +23,7 @@ describe('RbdTrashListComponent', () => {
 
   configureTestBed({
     declarations: [RbdTrashListComponent],
-    imports: [SharedModule, HttpClientTestingModule, RouterTestingModule, ToastModule.forRoot()],
+    imports: [SharedModule, HttpClientTestingModule, RouterTestingModule, ToastrModule.forRoot()],
     providers: [TaskListService, i18nProviders]
   });
 

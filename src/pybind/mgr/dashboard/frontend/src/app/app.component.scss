@@ -1,4 +1,4 @@
-@import '../defaults';
+@import 'defaults';
 
 .dashboard {
   background-color: $color-whitesmoke-gray;
@@ -13,7 +13,7 @@
     margin-top: 2.5vw;
   }
 
-  @media (max-width: $screen-sm-max) {
+  @media (max-width: $screen-md-max) {
     margin-top: 9vw;
   }
 

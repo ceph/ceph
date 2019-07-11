@@ -5,6 +5,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 import { ChartsModule } from 'ng2-charts';
 import { AlertModule } from 'ngx-bootstrap/alert';
+import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { ErrorPanelComponent } from '../../../shared/components/error-panel/error-panel.component';
@@ -26,6 +27,7 @@ describe('RbdConfigurationListComponent', () => {
       NgxDatatableModule,
       RouterTestingModule,
       AlertModule,
+      BsDropdownModule.forRoot(),
       ChartsModule,
       PipesModule
     ],

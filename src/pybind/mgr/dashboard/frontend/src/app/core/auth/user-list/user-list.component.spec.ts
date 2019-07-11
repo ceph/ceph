@@ -3,8 +3,8 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastModule } from 'ng2-toastr';
 import { TabsModule } from 'ngx-bootstrap/tabs';
+import { ToastrModule } from 'ngx-toastr';
 
 import {
   configureTestBed,
@@ -24,7 +24,7 @@ describe('UserListComponent', () => {
   configureTestBed({
     imports: [
       SharedModule,
-      ToastModule.forRoot(),
+      ToastrModule.forRoot(),
       TabsModule.forRoot(),
       RouterTestingModule,
       HttpClientTestingModule

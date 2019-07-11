@@ -111,8 +111,8 @@ describe('IscsiTargetDetailsComponent', () => {
           children: [{ id: 'disk_rbd_disk_1', value: 'rbd/disk_1' }],
           settings: {
             cssClasses: {
-              expanded: _.join([Icons.width, Icons.large, Icons.disk], ' '),
-              leaf: _.join([Icons.width, Icons.disk], ' ')
+              expanded: _.join([Icons.large, Icons.disk], ' '),
+              leaf: _.join([Icons.disk], ' ')
             },
             selectionAllowed: false
           },
@@ -122,8 +122,8 @@ describe('IscsiTargetDetailsComponent', () => {
           children: [{ value: 'node1:192.168.100.201' }],
           settings: {
             cssClasses: {
-              expanded: _.join([Icons.width, Icons.large, Icons.server], ' '),
-              leaf: _.join([Icons.width, Icons.large, Icons.server], ' ')
+              expanded: _.join([Icons.large, Icons.server], ' '),
+              leaf: _.join([Icons.large, Icons.server], ' ')
             },
             selectionAllowed: false
           },
@@ -137,8 +137,8 @@ describe('IscsiTargetDetailsComponent', () => {
                   id: 'disk_rbd_disk_1',
                   settings: {
                     cssClasses: {
-                      expanded: _.join([Icons.width, Icons.large, Icons.disk], ' '),
-                      leaf: _.join([Icons.width, Icons.disk], ' ')
+                      expanded: _.join([Icons.large, Icons.disk], ' '),
+                      leaf: _.join([Icons.disk], ' ')
                     }
                   },
                   value: 'rbd/disk_1'
@@ -151,8 +151,8 @@ describe('IscsiTargetDetailsComponent', () => {
           ],
           settings: {
             cssClasses: {
-              expanded: _.join([Icons.width, Icons.large, Icons.user], ' '),
-              leaf: _.join([Icons.width, Icons.user], ' ')
+              expanded: _.join([Icons.large, Icons.user], ' '),
+              leaf: _.join([Icons.user], ' ')
             },
             selectionAllowed: false
           },
@@ -162,8 +162,8 @@ describe('IscsiTargetDetailsComponent', () => {
           children: [],
           settings: {
             cssClasses: {
-              expanded: _.join([Icons.width, Icons.large, Icons.user], ' '),
-              leaf: _.join([Icons.width, Icons.user], ' ')
+              expanded: _.join([Icons.large, Icons.user], ' '),
+              leaf: _.join([Icons.user], ' ')
             },
             selectionAllowed: false
           },
@@ -172,7 +172,7 @@ describe('IscsiTargetDetailsComponent', () => {
       ],
       id: 'root',
       settings: {
-        cssClasses: { expanded: _.join([Icons.width, Icons.large, Icons.bullseye], ' ') },
+        cssClasses: { expanded: _.join([Icons.large, Icons.bullseye], ' ') },
         static: true
       },
       value: 'iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw'

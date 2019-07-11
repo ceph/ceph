@@ -3,7 +3,7 @@ import { HttpClientTestingModule, HttpTestingController } from '@angular/common/
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { Router } from '@angular/router';
 
-import { ToastsManager } from 'ng2-toastr';
+import { ToastrService } from 'ngx-toastr';
 
 import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
 import { AppModule } from '../../app.module';
@@ -53,7 +53,7 @@ describe('ApiInterceptorService', () => {
       NotificationService,
       i18nProviders,
       {
-        provide: ToastsManager,
+        provide: ToastrService,
         useValue: {
           error: () => true
         }

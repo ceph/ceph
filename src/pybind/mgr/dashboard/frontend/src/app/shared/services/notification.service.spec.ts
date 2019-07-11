@@ -2,7 +2,7 @@ import { DatePipe } from '@angular/common';
 import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 
 import * as _ from 'lodash';
-import { ToastsManager } from 'ng2-toastr';
+import { ToastrService } from 'ngx-toastr';
 
 import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
 import { NotificationType } from '../enum/notification-type.enum';
@@ -26,7 +26,7 @@ describe('NotificationService', () => {
       DatePipe,
       NotificationService,
       TaskMessageService,
-      { provide: ToastsManager, useValue: toastFakeService },
+      { provide: ToastrService, useValue: toastFakeService },
       { provide: CdDatePipe, useValue: { transform: (d) => d } },
       i18nProviders
     ]
@@ -201,7 +201,7 @@ describe('NotificationService', () => {
   });
 
   describe('showToasty', () => {
-    let toastr: ToastsManager;
+    let toastr: ToastrService;
     const time = '2022-02-22T00:00:00.000Z';
 
     beforeEach(() => {
@@ -209,7 +209,7 @@ describe('NotificationService', () => {
       spyOn(global, 'Date').and.returnValue(baseTime);
       spyOn(window, 'setTimeout').and.callFake((fn) => fn());
 
-      toastr = TestBed.get(ToastsManager);
+      toastr = TestBed.get(ToastrService);
       // spyOn needs to know the methods before spying and can't read the array for clarification
       ['error', 'info', 'success'].forEach((method: 'error' | 'info' | 'success') =>
         spyOn(toastr, method).and.stub()
@@ -220,7 +220,7 @@ describe('NotificationService', () => {
       service.show(NotificationType.info, 'Some info');
       expect(toastr.info).toHaveBeenCalledWith(
         `<small class="date">${time}</small>` +
-          '<i class="pull-right custom-icon ceph-icon" title="Ceph"></i>',
+          '<i class="float-right custom-icon ceph-icon" title="Ceph"></i>',
         'Some info',
         undefined
       );
@@ -234,7 +234,7 @@ describe('NotificationService', () => {
       expect(toastr.error).toHaveBeenCalledWith(
         'Some operation failed<br>' +
           `<small class="date">${time}</small>` +
-          '<i class="pull-right custom-icon ceph-icon" title="Ceph"></i>',
+          '<i class="float-right custom-icon ceph-icon" title="Ceph"></i>',
         'Some error',
         undefined
       );
@@ -253,7 +253,7 @@ describe('NotificationService', () => {
       expect(toastr.success).toHaveBeenCalledWith(
         'Some alert resolved<br>' +
           `<small class="date">${time}</small>` +
-          '<i class="pull-right custom-icon prometheus-icon" title="Prometheus"></i>',
+          '<i class="float-right custom-icon prometheus-icon" title="Prometheus"></i>',
         'Alert resolved',
         undefined
       );

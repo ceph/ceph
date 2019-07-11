@@ -3,9 +3,9 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastModule } from 'ng2-toastr';
 import { TreeModule } from 'ng2-tree';
 import { TabsModule } from 'ngx-bootstrap/tabs';
+import { ToastrModule } from 'ngx-toastr';
 import { BehaviorSubject, of } from 'rxjs';
 
 import {
@@ -40,7 +40,7 @@ describe('IscsiTargetListComponent', () => {
       SharedModule,
       TabsModule.forRoot(),
       TreeModule,
-      ToastModule.forRoot()
+      ToastrModule.forRoot()
     ],
     declarations: [IscsiTargetListComponent, IscsiTabsComponent, IscsiTargetDetailsComponent],
     providers: [TaskListService, i18nProviders]

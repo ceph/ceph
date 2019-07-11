@@ -40,9 +40,9 @@ export class SilenceListComponent implements OnInit {
   selection = new CdTableSelection();
   modalRef: BsModalRef;
   customCss = {
-    'label label-danger': 'active',
-    'label label-warning': 'pending',
-    'label label-default': 'expired'
+    'badge badge-danger': 'active',
+    'badge badge-warning': 'pending',
+    'badge badge-default': 'expired'
   };
   sorts: SortPropDir[] = [{ prop: 'endsAt', dir: SortDirection.desc }];
 

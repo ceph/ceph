@@ -3,10 +3,10 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastModule } from 'ng2-toastr';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { BsModalRef, BsModalService, ModalModule } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
+import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import {
@@ -34,7 +34,7 @@ describe('SilenceListComponent', () => {
       BsDropdownModule.forRoot(),
       TabsModule.forRoot(),
       ModalModule.forRoot(),
-      ToastModule.forRoot(),
+      ToastrModule.forRoot(),
       RouterTestingModule,
       HttpClientTestingModule
     ],

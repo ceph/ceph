@@ -3,6 +3,7 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
 
+import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { PopoverModule } from 'ngx-bootstrap/popover';
 import { TabsModule } from 'ngx-bootstrap/tabs';
@@ -27,7 +28,8 @@ import { UserTabsComponent } from './user-tabs/user-tabs.component';
     ReactiveFormsModule,
     SharedModule,
     TabsModule.forRoot(),
-    RouterModule
+    RouterModule,
+    NgBootstrapFormValidationModule
   ],
   declarations: [
     LoginComponent,
