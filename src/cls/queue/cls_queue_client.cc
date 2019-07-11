@@ -4,6 +4,7 @@
 
 #include "cls/rgw/cls_rgw_ops.h"
 #include "cls/queue/cls_rgw_queue_ops.h"
+#include "cls/queue/cls_queue_ops.h"
 #include "cls/queue/cls_queue_const.h"
 #include "cls/queue/cls_queue_client.h"
 
@@ -11,21 +12,10 @@
 
 using namespace librados;
 
-void cls_rgw_gc_create_queue(ObjectWriteOperation& op, string& queue_name, uint64_t& size, uint64_t& num_urgent_data_entries)
-{
-  bufferlist in;
-  cls_gc_create_queue_op call;
-  call.name = queue_name;
-  call.size = size;
-  call.num_urgent_data_entries = num_urgent_data_entries;
-  encode(call, in);
-  op.exec(RGW_QUEUE_CLASS, GC_CREATE_QUEUE, in);
-}
-
 void cls_rgw_gc_init_queue(ObjectWriteOperation& op, string& queue_name, uint64_t& size, uint64_t& num_urgent_data_entries)
 {
   bufferlist in;
-  cls_gc_create_queue_op call;
+  cls_gc_init_queue_op call;
   call.name = queue_name;
   call.size = size;
   call.num_urgent_data_entries = num_urgent_data_entries;
@@ -40,12 +30,15 @@ int cls_rgw_gc_get_queue_size(IoCtx& io_ctx, string& oid, uint64_t& size)
   if (r < 0)
     return r;
 
+  cls_queue_get_size_ret op_ret;
   auto iter = out.cbegin();
   try {
-    decode(size, iter);
+    decode(op_ret, iter);
   } catch (buffer::error& err) {
     return -EIO;
   }
+
+  size = op_ret.queue_size;
 
   return 0;
 }
@@ -84,19 +77,17 @@ int cls_rgw_gc_list_queue(IoCtx& io_ctx, string& oid, string& marker, uint32_t m
 
   entries.swap(ret.entries);
 
-  if (truncated)
-    *truncated = ret.truncated;
+  *truncated = ret.truncated;
 
   next_marker = std::move(ret.next_marker);
 
   return 0;
 }
 
-void cls_rgw_gc_remove_entries_queue(ObjectWriteOperation& op, string& marker, uint32_t num_entries)
+void cls_rgw_gc_remove_entries_queue(ObjectWriteOperation& op, uint32_t num_entries)
 {
   bufferlist in, out;
   cls_rgw_gc_queue_remove_op rem_op;
-  rem_op.marker = marker;
   rem_op.num_entries = num_entries;
   encode(rem_op, in);
   op.exec(RGW_QUEUE_CLASS, GC_QUEUE_REMOVE_ENTRIES, in);

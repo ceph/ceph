@@ -3,16 +3,18 @@
 
 #include "cls/queue/cls_queue_types.h"
 
-struct cls_create_queue_op {
+struct cls_queue_init_op {
   cls_queue_head head;
   uint64_t head_size{0};
+  bool has_urgent_data{false};
 
-  cls_create_queue_op() {}
+  cls_queue_init_op() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     encode(head, bl);
     encode(head_size, bl);
+    encode(has_urgent_data, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -20,61 +22,49 @@ struct cls_create_queue_op {
     DECODE_START(1, bl);
     decode(head, bl);
     decode(head_size, bl);
+    decode(has_urgent_data, bl);
     DECODE_FINISH(bl);
   }
 
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<cls_create_queue_op*>& ls);
 };
-WRITE_CLASS_ENCODER(cls_create_queue_op)
+WRITE_CLASS_ENCODER(cls_queue_init_op)
 
-struct cls_enqueue_op {
+struct cls_queue_enqueue_op {
   vector<bufferlist> bl_data_vec;
-  bufferlist bl_urgent_data;
 
-  cls_enqueue_op() {}
+  cls_queue_enqueue_op() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     encode(bl_data_vec, bl);
-    encode(bl_urgent_data, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(bl_data_vec, bl);
-    decode(bl_urgent_data, bl);
     DECODE_FINISH(bl);
   } 
 };
-WRITE_CLASS_ENCODER(cls_enqueue_op)
-
-struct cls_dequeue_op {
-  bufferlist bl;
-
-  cls_dequeue_op() {}
-
-  static void generate_test_instances(list<cls_dequeue_op*>& ls);
-};
+WRITE_CLASS_ENCODER(cls_queue_enqueue_op)
 
 struct cls_queue_list_op {
   uint64_t max;
-  uint64_t start_offset;
+  string start_marker;
 
   cls_queue_list_op() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     encode(max, bl);
-    encode(start_offset, bl);
+    encode(start_marker, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(max, bl);
-    decode(start_offset, bl);
+    decode(start_marker, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -82,123 +72,68 @@ WRITE_CLASS_ENCODER(cls_queue_list_op)
 
 struct cls_queue_list_ret {
   bool is_truncated;
-  uint64_t next_offset;
+  string next_marker;
   vector<bufferlist> data;
-  vector<uint64_t> offsets;
-  bufferlist bl_urgent_data;
+  vector<string> markers;
 
   cls_queue_list_ret() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
     encode(is_truncated, bl);
-    encode(next_offset, bl);
+    encode(next_marker, bl);
     encode(data, bl);
-    encode(offsets, bl);
-    encode(bl_urgent_data, bl);
+    encode(markers, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(is_truncated, bl);
-    decode(next_offset, bl);
+    decode(next_marker, bl);
     decode(data, bl);
-    decode(offsets, bl);
-    decode(bl_urgent_data, bl);
+    decode(markers, bl);
     DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(cls_queue_list_ret)
 
 struct cls_queue_remove_op {
-  uint64_t start_offset;
-  uint64_t end_offset;
-  bufferlist bl_urgent_data;
+  string end_marker;
 
   cls_queue_remove_op() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    encode(start_offset, bl);
-    encode(end_offset, bl);
-    encode(bl_urgent_data, bl);
+    encode(end_marker, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    decode(start_offset, bl);
-    decode(end_offset, bl);
-    decode(bl_urgent_data, bl);
+    decode(end_marker, bl);
     DECODE_FINISH(bl);
   }
 };
 WRITE_CLASS_ENCODER(cls_queue_remove_op)
 
-struct cls_queue_urgent_data_ret {
-  bufferlist bl_urgent_data;
+struct cls_queue_get_size_ret {
+  uint64_t queue_size;
 
-  cls_queue_urgent_data_ret() {}
+  cls_queue_get_size_ret() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    encode(bl_urgent_data, bl);
+    encode(queue_size, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    decode(bl_urgent_data, bl);
+    decode(queue_size, bl);
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_queue_urgent_data_ret)
-
-struct cls_queue_write_urgent_data_op {
-  bufferlist bl_urgent_data;
-
-  cls_queue_write_urgent_data_op() {}
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(bl_urgent_data, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(bl_urgent_data, bl);
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(cls_queue_write_urgent_data_op)
-
-struct cls_queue_update_last_entry_op {
-  bufferlist bl_data;
-  bufferlist bl_urgent_data;
-
-  cls_queue_update_last_entry_op() {}
-
-  void encode(bufferlist& bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(bl_data, bl);
-    encode(bl_urgent_data, bl);
-    ENCODE_FINISH(bl);
-  }
-
-  void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(1, bl);
-    decode(bl_data, bl);
-    decode(bl_urgent_data, bl);
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(cls_queue_update_last_entry_op)
-
-struct cls_init_queue_op : cls_create_queue_op{
-
-};
-WRITE_CLASS_ENCODER(cls_init_queue_op)
+WRITE_CLASS_ENCODER(cls_queue_get_size_ret)
 
 #endif /* CEPH_CLS_QUEUE_OPS_H */

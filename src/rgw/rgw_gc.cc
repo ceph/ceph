@@ -44,15 +44,10 @@ void RGWGC::initialize(CephContext *_cct, RGWRados *_store) {
   for (int i = 0; i < max_objs; i++) {
     ldpp_dout(this, 20) << "RGWGC::initialize initing gc queue with name = " << obj_names[i] << dendl;
     librados::ObjectWriteOperation op;
-    op.assert_exists();
+    op.create(true);
     uint64_t queue_size = 1048576, num_urgent_data_entries = 50;
     cls_rgw_gc_init_queue(op, obj_names[i], queue_size, num_urgent_data_entries);
-    int ret = store->gc_operate(obj_names[i], &op);
-    if (ret == -ENOENT) {
-      ldpp_dout(this, 20) << "RGWGC::initialize creating gc queue with name = " << obj_names[i] << dendl;
-      cls_rgw_gc_create_queue(op, obj_names[i], queue_size, num_urgent_data_entries);
-      store->gc_operate(obj_names[i], &op);
-    }
+    store->gc_operate(obj_names[i], &op);
   }
 }
 
@@ -115,10 +110,10 @@ int RGWGC::remove(int index, const std::vector<string>& tags, AioCompletion **pc
   return store->gc_aio_operate(obj_names[index], &op, pc);
 }
 
-int RGWGC::remove(int index, string& marker, int num_entries, librados::AioCompletion **pc)
+int RGWGC::remove(int index, int num_entries, librados::AioCompletion **pc)
 {
   ObjectWriteOperation op;
-  cls_rgw_gc_remove_entries_queue(op, marker, num_entries);
+  cls_rgw_gc_remove_entries_queue(op, num_entries);
   return store->gc_aio_operate(obj_names[index], &op, pc);
 }
 
@@ -343,11 +338,11 @@ public:
     }
   }
 
-  int remove_queue_entries(int index, string& marker, int num_entries) {
+  int remove_queue_entries(int index, int num_entries) {
     IO index_io;
     index_io.type = IO::IndexIO;
     index_io.index = index;
-    int ret = gc->remove(index, marker, num_entries, &index_io.c);
+    int ret = gc->remove(index, num_entries, &index_io.c);
     if (ret < 0) {
       ldpp_dout(dpp, 0) << "WARNING: failed to remove queue entries on index=" <<
 	    index << " ret=" << ret << dendl;
@@ -478,7 +473,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
     if (entries.size() > 0) {
       //Remove the entries from the queue
       ldpp_dout(this, 5) << "RGWGC::process removing entries, marker: " << marker << dendl;
-      ret = io_manager.remove_queue_entries(index, marker, entries.size());
+      ret = io_manager.remove_queue_entries(index, entries.size());
       if (ret < 0) {
         ldpp_dout(this, 0) <<
           "WARNING: failed to remove queue entries" << dendl;

@@ -56,20 +56,14 @@ static void create_obj(cls_rgw_obj& obj, int i, int j)
   obj.loc.append(buf);
 }
 
-static bool cmp_objs(cls_rgw_obj& obj1, cls_rgw_obj& obj2)
-{
-  return (obj1.pool == obj2.pool) &&
-         (obj1.key == obj2.key) &&
-         (obj1.loc == obj2.loc);
-}
-
 TEST(cls_queue, gc_queue_ops1)
 {
   //Testing queue ops when data size is NOT a multiple of queue size
   string queue_name = "my-queue";
-  uint64_t queue_size = 320, num_urgent_data_entries = 10;
+  uint64_t queue_size = 322, num_urgent_data_entries = 10;
   librados::ObjectWriteOperation op;
-  cls_rgw_gc_create_queue(op, queue_name, queue_size, num_urgent_data_entries);
+  op.create(true);
+  cls_rgw_gc_init_queue(op, queue_name, queue_size, num_urgent_data_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
   uint64_t size = 0;
@@ -102,7 +96,7 @@ TEST(cls_queue, gc_queue_ops1)
   librados::ObjectWriteOperation remove_op;
   string marker1;
   uint64_t num_entries = 1;
-  cls_rgw_gc_remove_entries_queue(remove_op, marker1, num_entries);
+  cls_rgw_gc_remove_entries_queue(remove_op, num_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &remove_op));
 
   //Test enqueue again
@@ -140,9 +134,10 @@ TEST(cls_queue, gc_queue_ops2)
 {
   //Testing list queue
   string queue_name = "my-second-queue";
-  uint64_t queue_size = 330, num_urgent_data_entries = 10;
+  uint64_t queue_size = 334, num_urgent_data_entries = 10;
   librados::ObjectWriteOperation op;
-  cls_rgw_gc_create_queue(op, queue_name, queue_size, num_urgent_data_entries);
+  op.create(true);
+  cls_rgw_gc_init_queue(op, queue_name, queue_size, num_urgent_data_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
   uint64_t size = 0;
@@ -215,9 +210,10 @@ TEST(cls_queue, gc_queue_ops3)
 {
   //Testing remove queue entries
   string queue_name = "my-third-queue";
-  uint64_t queue_size = 495, num_urgent_data_entries = 10;
+  uint64_t queue_size = 501, num_urgent_data_entries = 10;
   librados::ObjectWriteOperation op;
-  cls_rgw_gc_create_queue(op, queue_name, queue_size, num_urgent_data_entries);
+  op.create(true);
+  cls_rgw_gc_init_queue(op, queue_name, queue_size, num_urgent_data_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
   uint64_t size = 0;
@@ -229,8 +225,8 @@ TEST(cls_queue, gc_queue_ops3)
   librados::ObjectWriteOperation remove_op;
   string marker1;
   uint64_t num_entries = 2;
-  cls_rgw_gc_remove_entries_queue(remove_op, marker1, num_entries);
-  ASSERT_EQ(-ENOENT, ioctx.operate(queue_name, &remove_op));
+  cls_rgw_gc_remove_entries_queue(remove_op, num_entries);
+  ASSERT_EQ(0, ioctx.operate(queue_name, &remove_op));
 
   cls_rgw_gc_obj_info defer_info;
 
@@ -280,7 +276,7 @@ TEST(cls_queue, gc_queue_ops3)
 
   //Test remove entries
   num_entries = 2;
-  cls_rgw_gc_remove_entries_queue(remove_op,  marker1, num_entries);
+  cls_rgw_gc_remove_entries_queue(remove_op, num_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &remove_op));
 
   //Test list queue again
@@ -293,9 +289,10 @@ TEST(cls_queue, gc_queue_ops4)
 {
   //Testing remove queue entries
   string queue_name = "my-fourth-queue";
-  uint64_t queue_size = 495, num_urgent_data_entries = 10;
+  uint64_t queue_size = 501, num_urgent_data_entries = 10;
   librados::ObjectWriteOperation op;
-  cls_rgw_gc_create_queue(op, queue_name, queue_size, num_urgent_data_entries);
+  op.create(true);
+  cls_rgw_gc_init_queue(op, queue_name, queue_size, num_urgent_data_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
   uint64_t size = 0;
@@ -308,8 +305,8 @@ TEST(cls_queue, gc_queue_ops4)
   string marker1;
   uint64_t num_entries = 2;
 
-  cls_rgw_gc_remove_entries_queue(remove_op,  marker1, num_entries);
-  ASSERT_EQ(-ENOENT, ioctx.operate(queue_name, &remove_op));
+  cls_rgw_gc_remove_entries_queue(remove_op, num_entries);
+  ASSERT_EQ(0, ioctx.operate(queue_name, &remove_op));
 
   cls_rgw_gc_obj_info defer_info;
 
@@ -353,7 +350,7 @@ TEST(cls_queue, gc_queue_ops4)
 
   //Test remove entries
   num_entries = 2;
-  cls_rgw_gc_remove_entries_queue(remove_op,  marker1, num_entries);
+  cls_rgw_gc_remove_entries_queue(remove_op, num_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &remove_op));
 
   //Test list queue again
@@ -366,9 +363,10 @@ TEST(cls_queue, gc_queue_ops5)
 {
   //Testing remove queue entries
   string queue_name = "my-fifth-queue";
-  uint64_t queue_size = 495, num_urgent_data_entries = 10;
+  uint64_t queue_size = 501, num_urgent_data_entries = 10;
   librados::ObjectWriteOperation op;
-  cls_rgw_gc_create_queue(op, queue_name, queue_size, num_urgent_data_entries);
+  op.create(true);
+  cls_rgw_gc_init_queue(op, queue_name, queue_size, num_urgent_data_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
   uint64_t size = 0;
@@ -414,7 +412,7 @@ TEST(cls_queue, gc_queue_ops5)
   //Test remove entries
   librados::ObjectWriteOperation remove_op;
   auto num_entries = list_info1.size();
-  cls_rgw_gc_remove_entries_queue(remove_op,  marker1, num_entries);
+  cls_rgw_gc_remove_entries_queue(remove_op, num_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &remove_op));
 
   //Test list queue again for all entries
@@ -428,9 +426,10 @@ TEST(cls_queue, gc_queue_ops6)
 {
   //Testing list queue, when data size is split at the end of the queue
   string queue_name = "my-sixth-queue";
-  uint64_t queue_size = 337, num_urgent_data_entries = 10;
+  uint64_t queue_size = 341, num_urgent_data_entries = 10;
   librados::ObjectWriteOperation op;
-  cls_rgw_gc_create_queue(op, queue_name, queue_size, num_urgent_data_entries);
+  op.create(true);
+  cls_rgw_gc_init_queue(op, queue_name, queue_size, num_urgent_data_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
   uint64_t size = 0;
@@ -461,7 +460,7 @@ TEST(cls_queue, gc_queue_ops6)
   string marker1;
   uint64_t num_entries = 1;
 
-  cls_rgw_gc_remove_entries_queue(remove_op,  marker1, num_entries);
+  cls_rgw_gc_remove_entries_queue(remove_op, num_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &remove_op));
 
   //Enqueue one more element
@@ -499,9 +498,10 @@ TEST(cls_queue, gc_queue_ops7)
 {
   //Testing list queue, when data size is written at the end of queue and data is written after wrap around
   string queue_name = "my-seventh-queue";
-  uint64_t queue_size = 338, num_urgent_data_entries = 10;
+  uint64_t queue_size = 342, num_urgent_data_entries = 10;
   librados::ObjectWriteOperation op;
-  cls_rgw_gc_create_queue(op, queue_name, queue_size, num_urgent_data_entries);
+  op.create(true);
+  cls_rgw_gc_init_queue(op, queue_name, queue_size, num_urgent_data_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
   uint64_t size = 0;
@@ -532,7 +532,7 @@ TEST(cls_queue, gc_queue_ops7)
   string marker1;
   uint64_t num_entries = 1;
 
-  cls_rgw_gc_remove_entries_queue(remove_op,  marker1, num_entries);
+  cls_rgw_gc_remove_entries_queue(remove_op, num_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &remove_op));
 
   //Enqueue one more element
@@ -570,9 +570,10 @@ TEST(cls_queue, gc_queue_ops8)
 {
   //Testing list queue, when data is split at the end of the queue
   string queue_name = "my-eighth-queue";
-  uint64_t queue_size = 340, num_urgent_data_entries = 10;
+  uint64_t queue_size = 344, num_urgent_data_entries = 10;
   librados::ObjectWriteOperation op;
-  cls_rgw_gc_create_queue(op, queue_name, queue_size, num_urgent_data_entries);
+  op.create(true);
+  cls_rgw_gc_init_queue(op, queue_name, queue_size, num_urgent_data_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
   uint64_t size = 0;
@@ -603,7 +604,7 @@ TEST(cls_queue, gc_queue_ops8)
   string marker1;
   uint64_t num_entries = 1;
 
-  cls_rgw_gc_remove_entries_queue(remove_op,  marker1, num_entries);
+  cls_rgw_gc_remove_entries_queue(remove_op, num_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &remove_op));
 
   //Enqueue one more element
@@ -641,9 +642,10 @@ TEST(cls_queue, gc_queue_ops9)
 {
   //Testing remove queue entries
   string queue_name = "my-ninth-queue";
-  uint64_t queue_size = 660, num_urgent_data_entries = 1;
+  uint64_t queue_size = 668, num_urgent_data_entries = 1;
   librados::ObjectWriteOperation op;
-  cls_rgw_gc_create_queue(op, queue_name, queue_size, num_urgent_data_entries);
+  op.create(true);
+  cls_rgw_gc_init_queue(op, queue_name, queue_size, num_urgent_data_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
   uint64_t size = 0;
