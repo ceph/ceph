@@ -11,10 +11,10 @@ import os
 import errno
 import tempfile
 import requests
-from OpenSSL import crypto, SSL
 
 from mgr_module import MgrModule, Option, CLIWriteCommand
 import orchestrator
+from mgr_util import verify_tls_files, ServerConfigException
 
 from .ansible_runner_svc import Client, PlayBookExecution, ExecutionStatusCode,\
                                 AnsibleRunnerServiceError
@@ -691,9 +691,6 @@ class Module(MgrModule, orchestrator.Orchestrator):
            configure properly the orchestrator
         """
 
-        the_crt = None
-        the_key = None
-
         # Retrieve TLS content to use and check them
         # First try to get certiticate and key content for this manager instance
         # ex: mgr/ansible/mgr0/[crt/key]
@@ -722,8 +719,10 @@ class Module(MgrModule, orchestrator.Orchestrator):
         self.client_cert_fname = generate_temp_file("crt", the_crt)
         self.client_key_fname = generate_temp_file("key", the_key)
 
-        self.status_message = verify_tls_files(self.client_cert_fname,
-                                               self.client_key_fname)
+        try:
+            verify_tls_files(self.client_cert_fname, self.client_key_fname)
+        except ServerConfigException as e:
+            self.status_message = str(e)
 
         if self.status_message:
             self.log.error(self.status_message)
@@ -854,51 +853,4 @@ def generate_temp_file(key, content):
 
     return fname
 
-def verify_tls_files(crt_file, key_file):
-    """Basic checks for TLS certificate and key files
 
-    :crt_file : Name of the certificate file
-    :key_file : name of the certificate public key file
-
-    :returns  :  String with error description
-    """
-
-    # Check we have files
-    if not crt_file or not key_file:
-        return "no certificate/key configured"
-
-    if not os.path.isfile(crt_file):
-        return "certificate {} does not exist".format(crt_file)
-
-    if not os.path.isfile(key_file):
-        return "Public key {} does not exist".format(key_file)
-
-    # Do some validations to the private key and certificate:
-    # - Check the type and format
-    # - Check the certificate expiration date
-    # - Check the consistency of the private key
-    # - Check that the private key and certificate match up
-    try:
-        with open(crt_file) as fcrt:
-            x509 = crypto.load_certificate(crypto.FILETYPE_PEM, fcrt.read())
-            if x509.has_expired():
-                return "Certificate {} has been expired".format(crt_file)
-    except (ValueError, crypto.Error) as ex:
-        return "Invalid certificate {}: {}".format(crt_file, str(ex))
-    try:
-        with open(key_file) as fkey:
-            pkey = crypto.load_privatekey(crypto.FILETYPE_PEM, fkey.read())
-            pkey.check()
-    except (ValueError, crypto.Error) as ex:
-        return "Invalid private key {}: {}".format(key_file, str(ex))
-    try:
-        context = SSL.Context(SSL.TLSv1_METHOD)
-        context.use_certificate_file(crt_file, crypto.FILETYPE_PEM)
-        context.use_privatekey_file(key_file, crypto.FILETYPE_PEM)
-        context.check_privatekey()
-    except crypto.Error as ex:
-        return "Private key {} and certificate {} do not match up: {}".format(
-                key_file, crt_file, str(ex))
-
-    # Everything OK
-    return ""
