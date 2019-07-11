@@ -257,7 +257,7 @@ class LocalRemote(object):
             if isinstance(arg, Raw):
                 continue
 
-            if (arg[0] in ['"', "'"] or arg[-1] in ['"', "'"]) and \
+            if arg and (arg[0] in ['"', "'"] or arg[-1] in ['"', "'"]) and \
                (arg.find(' ') != -1 and 0 < arg.find(' ') < len(arg) - 1):
                 raise RuntimeError(errmsg)
 
