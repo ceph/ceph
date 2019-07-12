@@ -53,7 +53,7 @@ namespace ceph::containers {
 //  4. std::unique_ptr<ValueT>: extra indirection together with memory
 //     fragmentation.
 
-template<typename Value, std::size_t InternalCapacity>
+template<typename Value, std::size_t InternalCapacity = 0>
 class tiny_vector {
   // NOTE: to avoid false sharing consider aligning to cache line
   using storage_unit_t = \
@@ -97,6 +97,17 @@ public:
   //     }
   //   }
   // ```
+  //
+  // For the sake of supporting the ceph::make_mutex() family of
+  // factories, which relies on C++17's guaranteed copy elision,
+  // the emplacer provides `data()` to retrieve the location for
+  // constructing the instance with placement-new. This is handy
+  // as the `emplace()` depends on perfect forwarding, and thus
+  // interfere with the elision for cases like:
+  // ```
+  //   emplacer.emplace(ceph::make_mutex("mtx-name"));
+  // ```
+  // See: https://stackoverflow.com/a/52498826
 
   class emplacer {
     friend class tiny_vector;
@@ -107,13 +118,17 @@ public:
     }
 
   public:
+    void* data() {
+      void* const ret = &parent->data[parent->_size++];
+      parent = nullptr;
+      return ret;
+    }
+
     template<class... Args>
     void emplace(Args&&... args) {
-      if (!parent) {
-        return;
+      if (parent) {
+        new (data()) Value(std::forward<Args>(args)...);
       }
-      new (&parent->data[parent->_size++]) Value(std::forward<Args>(args)...);
-      parent = nullptr;
     }
   };
 
