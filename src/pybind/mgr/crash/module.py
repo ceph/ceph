@@ -111,6 +111,26 @@ class Module(MgrModule):
 
         return 0, '', ''
 
+    def do_archive(self, cmd, inbuf):
+        crashid = cmd['id']
+        key = 'crash/%s' % crashid
+        val = self.get_store(key)
+        if not val:
+            return errno.EINVAL, '', 'crash info: %s not found' % crashid
+        m = json.loads(val)
+        if not m.get('archived', None):
+            m['archived'] = str(datetime.datetime.utcnow())
+            self.set_store(key, json.dumps(m))
+        return 0, '', ''
+
+    def do_archive_all(self, cmd, inbuf):
+        for key, m in self.timestamp_filter(lambda ts: True):
+            if not m.get('archived', None):
+                m['archived'] = str(datetime.datetime.utcnow())
+                self.set_store(key, json.dumps(m))
+        return 0, '', ''
+
+
     def do_stat(self, cmd, inbuf):
         # age in days for reporting, ordered smallest first
         bins = [1, 3, 7]
@@ -226,5 +246,17 @@ class Module(MgrModule):
             'desc': 'Crashes in the last <hours> hours',
             'perm': 'r',
             'handler': do_json_report,
+        },
+        {
+            'cmd': 'crash archive name=id,type=CephString',
+            'desc': 'Acknowledge a crash and silence health warning(s)',
+            'perm': 'w',
+            'handler': do_archive,
+        },
+        {
+            'cmd': 'crash archive-all',
+            'desc': 'Acknowledge all new crashes and silence health warning(s)',
+            'perm': 'w',
+            'handler': do_archive_all,
         },
     ]
