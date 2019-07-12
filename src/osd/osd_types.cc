@@ -359,32 +359,54 @@ void osd_stat_t::dump(Formatter *f) const
   f->open_object_section("perf_stat");
   os_perf_stat.dump(f);
   f->close_section();
-  // Call to update ping times?
   f->open_array_section("network_ping_times");
   for (auto &i : hb_pingtime) {
-    f->open_object_section("osd");
+    f->open_object_section("entry");
     f->dump_int("osd", i.first);
-
     f->open_array_section("interfaces");
     f->open_object_section("interface");
     f->dump_string("interface", "back");
+    f->open_object_section("average");
     f->dump_int("1min", i.second.back_pingtime[0]);
     f->dump_int("5min", i.second.back_pingtime[1]);
     f->dump_int("15min", i.second.back_pingtime[2]);
-    f->close_section();
+    f->close_section(); // average
+    f->open_object_section("min");
+    f->dump_int("1min", i.second.back_min[0]);
+    f->dump_int("5min", i.second.back_min[1]);
+    f->dump_int("15min", i.second.back_min[2]);
+    f->close_section(); // min
+    f->open_object_section("max");
+    f->dump_int("1min", i.second.back_max[0]);
+    f->dump_int("5min", i.second.back_max[1]);
+    f->dump_int("15min", i.second.back_max[2]);
+    f->close_section(); // max
+    f->close_section(); // interface
 
     if (i.second.front_pingtime[0] != 0) {
       f->open_object_section("interface");
       f->dump_string("interface", "front");
+      f->open_object_section("average");
       f->dump_int("1min", i.second.front_pingtime[0]);
       f->dump_int("5min", i.second.front_pingtime[1]);
       f->dump_int("15min", i.second.front_pingtime[2]);
-      f->close_section();
+      f->close_section(); // average
+      f->open_object_section("min");
+      f->dump_int("1min", i.second.front_min[0]);
+      f->dump_int("5min", i.second.front_min[1]);
+      f->dump_int("15min", i.second.front_min[2]);
+      f->close_section(); // min
+      f->open_object_section("max");
+      f->dump_int("1min", i.second.front_max[0]);
+      f->dump_int("5min", i.second.front_max[1]);
+      f->dump_int("15min", i.second.front_max[2]);
+      f->close_section(); // max
+      f->close_section(); // interface
     }
-    f->close_section();
-    f->close_section();
+    f->close_section(); // interfaces
+    f->close_section(); // entry
   }
-  f->close_section();
+  f->close_section(); // network_ping_time
 }
 
 void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
@@ -412,9 +434,21 @@ void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
     encode(i.second.back_pingtime[0], bl);
     encode(i.second.back_pingtime[1], bl);
     encode(i.second.back_pingtime[2], bl);
+    encode(i.second.back_min[0], bl);
+    encode(i.second.back_min[1], bl);
+    encode(i.second.back_min[2], bl);
+    encode(i.second.back_max[0], bl);
+    encode(i.second.back_max[1], bl);
+    encode(i.second.back_max[2], bl);
     encode(i.second.front_pingtime[0], bl);
     encode(i.second.front_pingtime[1], bl);
     encode(i.second.front_pingtime[2], bl);
+    encode(i.second.front_min[0], bl);
+    encode(i.second.front_min[1], bl);
+    encode(i.second.front_min[2], bl);
+    encode(i.second.front_max[0], bl);
+    encode(i.second.front_max[1], bl);
+    encode(i.second.front_max[2], bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -461,9 +495,21 @@ void osd_stat_t::decode(bufferlist::iterator &bl)
       decode(ifs.back_pingtime[0],bl);
       decode(ifs.back_pingtime[1], bl);
       decode(ifs.back_pingtime[2], bl);
+      decode(ifs.back_min[0],bl);
+      decode(ifs.back_min[1], bl);
+      decode(ifs.back_min[2], bl);
+      decode(ifs.back_max[0],bl);
+      decode(ifs.back_max[1], bl);
+      decode(ifs.back_max[2], bl);
       decode(ifs.front_pingtime[0], bl);
       decode(ifs.front_pingtime[1], bl);
       decode(ifs.front_pingtime[2], bl);
+      decode(ifs.front_min[0], bl);
+      decode(ifs.front_min[1], bl);
+      decode(ifs.front_min[2], bl);
+      decode(ifs.front_max[0], bl);
+      decode(ifs.front_max[1], bl);
+      decode(ifs.front_max[2], bl);
       hb_pingtime[osd] = ifs;
     }
   }
@@ -484,9 +530,12 @@ void osd_stat_t::generate_test_instances(std::list<osd_stat_t*>& o)
   o.back()->hb_peers.push_back(7);
   o.back()->snap_trim_queue_len = 8;
   o.back()->num_snap_trimming = 99;
-  struct Interfaces gen_interfaces = { { 1000, 995, 990 }, {980, 985, 990} };
+  struct Interfaces gen_interfaces = {
+	 { 1000, 900, 800 }, { 990, 890, 790 }, { 1010, 910, 810 },
+	 { 1100, 1000, 900 }, { 1090, 990, 890 }, { 1110, 1010, 910 } };
   o.back()->hb_pingtime[20] = gen_interfaces;
-  gen_interfaces = { { 700, 800, 900 } };
+  gen_interfaces = {
+	 { 100, 200, 300 }, { 90, 190, 290 }, { 110, 210, 310 } };
   o.back()->hb_pingtime[30] = gen_interfaces;
 }
 
