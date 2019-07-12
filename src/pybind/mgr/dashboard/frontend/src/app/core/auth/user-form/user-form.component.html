@@ -132,7 +132,26 @@
                                 [messages]="messages"></cd-select-badges>
             </span>
           </div>
+        </div>
 
+        <!-- Enabled -->
+        <div class="form-group row" *ngIf="!isCurrentUser()">
+          <label class="col-sm-3 col-form-label"
+                 i18n>Enabled</label>
+          <div class="col-sm-9">
+            <div class="btn-group"
+                 btnRadioGroup
+                 formControlName="enabled">
+              <label [btnRadio]="true"
+                     class="btn btn-primary"
+                     tabindex="0"
+                     role="button">Enabled</label>
+              <label [btnRadio]="false"
+                     class="btn btn-primary"
+                     tabindex="0"
+                     role="button">Disabled</label>
+            </div>
+          </div>
         </div>
 
       </div>
