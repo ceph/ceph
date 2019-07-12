@@ -193,6 +193,8 @@ int64_t StupidAllocator::allocate(
   if (max_alloc_size == 0) {
     max_alloc_size = want_size;
   }
+  // cap with 32-bit val
+  max_alloc_size = std::min(max_alloc_size, 0x10000000 - alloc_unit);
 
   while (allocated_size < want_size) {
     res = allocate_int(std::min(max_alloc_size, (want_size - allocated_size)),
@@ -206,10 +208,13 @@ int64_t StupidAllocator::allocate(
     bool can_append = true;
     if (!extents->empty()) {
       bluestore_pextent_t &last_extent  = extents->back();
-      if ((last_extent.end() == offset) &&
-	  ((last_extent.length + length) <= max_alloc_size)) {
-	can_append = false;
-	last_extent.length += length;
+      if (last_extent.end() == offset) {
+        uint64_t l64 = last_extent.length;
+        l64 += length;
+        if (l64 < 0x100000000 && l64 <= max_alloc_size) {
+	  can_append = false;
+	  last_extent.length += length;
+        }
       }
     }
     if (can_append) {
