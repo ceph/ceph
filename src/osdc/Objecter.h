@@ -1564,6 +1564,7 @@ public:
     list<string> pools;
 
     map<string,pool_stat_t> *pool_stats;
+    bool *per_pool;
     Context *onfinish;
     uint64_t ontimeout;
 
@@ -2937,6 +2938,7 @@ private:
 public:
   void handle_get_pool_stats_reply(MGetPoolStatsReply *m);
   void get_pool_stats(list<string>& pools, map<string,pool_stat_t> *result,
+		      bool *per_pool,
 		      Context *onfinish);
   int pool_stat_op_cancel(ceph_tid_t tid, int r);
   void _finish_pool_stat_op(PoolStatOp *op, int r);

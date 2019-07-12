@@ -2497,9 +2497,9 @@ struct pool_stat_t {
   // In legacy mode used and netto values are the same. But for new per-pool
   // collection 'used' provides amount of space ALLOCATED at all related OSDs 
   // and 'netto' is amount of stored user data.
-  uint64_t get_allocated_bytes() const {
+  uint64_t get_allocated_bytes(bool per_pool) const {
     uint64_t allocated_bytes;
-    if (num_store_stats) {
+    if (per_pool) {
       allocated_bytes = store_stats.allocated;
     } else {
       // legacy mode, use numbers from 'stats'
@@ -2510,9 +2510,9 @@ struct pool_stat_t {
     allocated_bytes += stats.sum.num_omap_bytes;
     return allocated_bytes;
   }
-  uint64_t get_user_bytes(float raw_used_rate) const {
+  uint64_t get_user_bytes(float raw_used_rate, bool per_pool) const {
     uint64_t user_bytes;
-    if (num_store_stats) {
+    if (per_pool) {
       user_bytes = raw_used_rate ? store_stats.data_stored / raw_used_rate : 0;
     } else {
       // legacy mode, use numbers from 'stats'
