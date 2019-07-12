@@ -14,13 +14,15 @@
 #include "crimson/osd/acked_peers.h"
 #include "crimson/osd/pg.h"
 #include "crimson/common/shared_lru.h"
+#include "messages/MOSDOp.h"
+#include "messages/MOSDOpReply.h"
+#include "os/Transaction.h"
 #include "osd/osd_types.h"
 #include "crimson/osd/object_context.h"
 #include "crimson/osd/osd_operation.h"
 #include "crimson/osd/osd_operations/osdop_params.h"
 
 struct hobject_t;
-class MOSDRepOpReply;
 
 namespace ceph::os {
   class Transaction;
