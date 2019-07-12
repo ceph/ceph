@@ -32,9 +32,13 @@ namespace ceph::crypto::ssl {
 #if OPENSSL_VERSION_NUMBER < 0x10100000L
 static std::atomic_uint32_t crypto_refs;
 
-static std::vector<ceph::shared_mutex> ssl_mutexes {
-  static_cast<size_t>(std::max(CRYPTO_num_locks(), 0))
-};
+
+static auto ssl_mutexes = ceph::make_lock_container<ceph::shared_mutex>(
+  static_cast<size_t>(std::max(CRYPTO_num_locks(), 0)),
+  [](const size_t i) {
+    return ceph::make_shared_mutex(
+      std::string("ssl-mutex-") + std::to_string(i));
+  });
 
 static struct {
   // we could use e.g. unordered_set instead at the price of providing
