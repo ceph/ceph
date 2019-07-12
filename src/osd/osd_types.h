@@ -2365,6 +2365,9 @@ struct osd_stat_t {
 
   uint32_t num_pgs = 0;
 
+  uint32_t num_osds = 0;
+  uint32_t num_per_pool_osds = 0;
+
   osd_stat_t() : snap_trim_queue_len(0), num_snap_trimming(0),
        num_shards_repaired(0)	{}
 
@@ -2376,6 +2379,8 @@ struct osd_stat_t {
     op_queue_age_hist.add(o.op_queue_age_hist);
     os_perf_stat.add(o.os_perf_stat);
     num_pgs += o.num_pgs;
+    num_osds += o.num_osds;
+    num_per_pool_osds += o.num_per_pool_osds;
     for (const auto& a : o.os_alerts) {
       auto& target = os_alerts[a.first];
       for (auto& i : a.second) {
@@ -2391,6 +2396,8 @@ struct osd_stat_t {
     op_queue_age_hist.sub(o.op_queue_age_hist);
     os_perf_stat.sub(o.os_perf_stat);
     num_pgs -= o.num_pgs;
+    num_osds -= o.num_osds;
+    num_per_pool_osds -= o.num_per_pool_osds;
     for (const auto& a : o.os_alerts) {
       auto& target = os_alerts[a.first];
       for (auto& i : a.second) {
@@ -2416,7 +2423,9 @@ inline bool operator==(const osd_stat_t& l, const osd_stat_t& r) {
     l.hb_peers == r.hb_peers &&
     l.op_queue_age_hist == r.op_queue_age_hist &&
     l.os_perf_stat == r.os_perf_stat &&
-    l.num_pgs == r.num_pgs;
+    l.num_pgs == r.num_pgs &&
+    l.num_osds == r.num_osds &&
+    l.num_per_pool_osds == r.num_per_pool_osds;
 }
 inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
   return !(l == r);
@@ -2500,9 +2509,9 @@ struct pool_stat_t {
   // In legacy mode used and netto values are the same. But for new per-pool
   // collection 'used' provides amount of space ALLOCATED at all related OSDs 
   // and 'netto' is amount of stored user data.
-  uint64_t get_allocated_bytes() const {
+  uint64_t get_allocated_bytes(bool per_pool) const {
     uint64_t allocated_bytes;
-    if (num_store_stats) {
+    if (per_pool) {
       allocated_bytes = store_stats.allocated;
     } else {
       // legacy mode, use numbers from 'stats'
@@ -2513,9 +2522,9 @@ struct pool_stat_t {
     allocated_bytes += stats.sum.num_omap_bytes;
     return allocated_bytes;
   }
-  uint64_t get_user_bytes(float raw_used_rate) const {
+  uint64_t get_user_bytes(float raw_used_rate, bool per_pool) const {
     uint64_t user_bytes;
-    if (num_store_stats) {
+    if (per_pool) {
       user_bytes = raw_used_rate ? store_stats.data_stored / raw_used_rate : 0;
     } else {
       // legacy mode, use numbers from 'stats'

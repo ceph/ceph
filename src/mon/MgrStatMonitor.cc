@@ -246,6 +246,7 @@ bool MgrStatMonitor::preprocess_getpoolstats(MonOpRequestRef op)
   }
   epoch_t ver = get_last_committed();
   auto reply = new MGetPoolStatsReply(m->fsid, m->get_tid(), ver);
+  reply->per_pool = digest.use_per_pool_stats();
   for (const auto& pool_name : m->pools) {
     const auto pool_id = mon->osdmon()->osdmap.lookup_pg_pool_name(pool_name);
     if (pool_id == -ENOENT)
