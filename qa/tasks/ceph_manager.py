@@ -766,9 +766,9 @@ class Thrasher:
                     self.log("chose to kill {n} OSDs".format(n=most_killable))
                     for i in range(1, most_killable):
                         self.kill_osd(mark_out=True)
-                    time.sleep(5)
+                    time.sleep(15)
                     assert self.ceph_manager.all_active_or_peered(), \
-                            'not all PGs are active or peered 5 seconds after marking out OSDs'
+                            'not all PGs are active or peered 15 seconds after marking out OSDs'
                 else: # chose to revive OSDs, bring up a random fraction of the dead ones
                     self.log("chose to revive osds")
                     for i in range(1, int(rand_val * len(self.dead_osds))):
