@@ -66,6 +66,7 @@ class Module(MgrModule):
         val = self.get_store(key)
         if not val:
             return errno.EINVAL, '', 'crash info: %s not found' % crashid
+        val = json.dumps(json.loads(val), indent=4)
         return 0, val, ''
 
     def do_post(self, cmd, inbuf):
