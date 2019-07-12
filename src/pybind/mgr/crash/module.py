@@ -4,6 +4,7 @@ import errno
 import json
 import six
 from collections import defaultdict
+from prettytable import PrettyTable
 
 
 DATEFMT = '%Y-%m-%d %H:%M:%S.%f'
@@ -84,12 +85,23 @@ class Module(MgrModule):
         return self.do_ls({'prefix': 'crash ls'}, '')
 
     def do_ls(self, cmd, inbuf):
-        keys = []
+        r = []
         for k, meta in self.timestamp_filter(lambda ts: True):
-            entity_name = meta.get('entity_name', 'unknown')
-            keys.append("%s %s" % (k.replace('crash/', ''), entity_name))
-        keys.sort()
-        return 0, '\n'.join(keys), ''
+            r.append(meta)
+        if cmd.get('format') == 'json' or cmd.get('format') == 'json-pretty':
+            return 0, json.dumps(r, indent=4), ''
+        else:
+            table = PrettyTable(['ID', 'ENTITY', 'NEW'],
+                                border=False)
+            table.left_padding_width = 0
+            table.right_padding_width = 1
+            table.align['ID'] = 'l'
+            table.align['ENTITY'] = 'l'
+            for c in r:
+                table.add_row([c.get('crash_id'),
+                               c.get('entity_name','unknown'),
+                               '' if 'archived' in c else '*'])
+            return 0, table.get_string(), ''
 
     def do_rm(self, cmd, inbuf):
         crashid = cmd['id']
