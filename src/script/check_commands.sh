@@ -1,5 +1,5 @@
 #!/bin/sh
-git grep COMMAND\( | grep -o "(\"[a-zA-z ]*\"" | grep -o "[a-zA-z ]*" > commands.txt
+git grep COMMAND\( | grep -o "(\"[a-zA-Z ]*\"" | grep -o "[a-zA-Z ]*" > commands.txt
 missing_test=false
 good_tests=""
 bad_tests=""
