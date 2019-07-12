@@ -26,6 +26,7 @@
 #include <type_traits>
 #include <variant>
 
+#include <boost/container/small_vector.hpp>
 #include <boost/asio.hpp>
 
 #include <fmt/format.h>
@@ -73,18 +74,24 @@ struct EnumerationContext;
 template<typename t>
 struct CB_EnumerateReply;
 
+inline constexpr std::size_t osdc_opvec_len = 2;
+using osdc_opvec = boost::container::small_vector<OSDOp, osdc_opvec_len>;
+
 // -----------------------------------------
 
 struct ObjectOperation {
-  std::vector<OSDOp> ops;
+  osdc_opvec ops;
   int flags = 0;
   int priority = 0;
 
-  std::vector<ceph::buffer::list*> out_bl;
-  std::vector<fu2::unique_function<void(boost::system::error_code, int,
-				        const ceph::buffer::list& bl) &&>> out_handler;
-  std::vector<int*> out_rval;
-  std::vector<boost::system::error_code*> out_ec;
+  boost::container::small_vector<ceph::buffer::list*, osdc_opvec_len> out_bl;
+  boost::container::small_vector<
+    fu2::unique_function<void(boost::system::error_code, int,
+			      const ceph::buffer::list& bl) &&>,
+    osdc_opvec_len> out_handler;
+  boost::container::small_vector<int*, osdc_opvec_len> out_rval;
+  boost::container::small_vector<boost::system::error_code*,
+				 osdc_opvec_len> out_ec;
 
   ObjectOperation() = default;
   ObjectOperation(const ObjectOperation&) = delete;
@@ -1562,8 +1569,11 @@ struct ObjectOperation {
     set_last_op_flags(CEPH_OSD_OP_FLAG_FAILOK);
   }
 
-  void dup(std::vector<OSDOp>& sops) {
-    ops = sops;
+  template<typename V>
+  void dup(V& sops) {
+    ops.clear();
+    std::copy(sops.begin(), sops.end(),
+	      std::back_inserter(ops));
     out_bl.resize(sops.size());
     out_handler.resize(sops.size());
     out_rval.resize(sops.size());
@@ -1604,6 +1614,7 @@ inline std::ostream& operator <<(std::ostream& m, const ObjectOperation& oo) {
 // ----------------
 
 class Objecter : public md_config_obs_t, public Dispatcher {
+  using MOSDOp = _mosdop::MOSDOp<osdc_opvec>;
 public:
   using OpSignature = void(boost::system::error_code);
   using OpCompletion = ceph::async::Completion<OpSignature>;
@@ -1871,18 +1882,21 @@ public:
     ConnectionRef con = nullptr;  // for rx buffer only
     uint64_t features = CEPH_FEATURES_SUPPORTED_DEFAULT; // explicitly specified op features
 
-    std::vector<OSDOp> ops;
+    osdc_opvec ops;
 
     snapid_t snapid = CEPH_NOSNAP;
     SnapContext snapc;
     ceph::real_time mtime;
 
     ceph::buffer::list *outbl = nullptr;
-    std::vector<ceph::buffer::list*> out_bl;
-    std::vector<fu2::unique_function<void(boost::system::error_code, int,
-					  const ceph::buffer::list& bl) &&>> out_handler;
-    std::vector<int*> out_rval;
-    std::vector<boost::system::error_code*> out_ec;
+    boost::container::small_vector<ceph::buffer::list*, osdc_opvec_len> out_bl;
+    boost::container::small_vector<
+      fu2::unique_function<void(boost::system::error_code, int,
+				const ceph::buffer::list& bl) &&>,
+      osdc_opvec_len> out_handler;
+    boost::container::small_vector<int*, osdc_opvec_len> out_rval;
+    boost::container::small_vector<boost::system::error_code*,
+				   osdc_opvec_len> out_ec;
 
     int priority = 0;
     using OpSig = void(boost::system::error_code);
@@ -1951,7 +1965,7 @@ public:
       complete(std::move(onfinish), ec, r);
     }
 
-    Op(const object_t& o, const object_locator_t& ol, vector<OSDOp>&& _ops,
+    Op(const object_t& o, const object_locator_t& ol,  osdc_opvec&& _ops,
        int f, std::unique_ptr<OpComp>&& fin,
        version_t *ov, int *offset = nullptr,
        ZTracer::Trace *parent_trace = nullptr) :
@@ -1971,7 +1985,8 @@ public:
         trace.event("start");
       }
     }
-    Op(const object_t& o, const object_locator_t& ol, vector<OSDOp>&& _ops,
+
+    Op(const object_t& o, const object_locator_t& ol, osdc_opvec&& _ops,
        int f, Context* fin, version_t *ov, int *offset = nullptr,
        ZTracer::Trace *parent_trace = nullptr) :
       target(o, ol, f),
@@ -1991,7 +2006,7 @@ public:
       }
     }
 
-    Op(const object_t& o, const object_locator_t& ol,  vector<OSDOp>&& _ops,
+    Op(const object_t& o, const object_locator_t& ol, osdc_opvec&&  _ops,
        int f, fu2::unique_function<OpSig>&& fin, version_t *ov, int *offset = nullptr,
        ZTracer::Trace *parent_trace = nullptr) :
       target(o, ol, f),
@@ -2238,7 +2253,7 @@ public:
     SnapContext snapc;
     ceph::real_time mtime;
 
-    std::vector<OSDOp> ops;
+    osdc_opvec ops;
     ceph::buffer::list inbl;
     version_t *pobjver{nullptr};
 
@@ -2519,7 +2534,7 @@ private:
    * and returned whenever an op is removed from the std::map
    * If throttle_op needs to throttle it will unlock client_lock.
    */
-  int calc_op_budget(const std::vector<OSDOp>& ops);
+  int calc_op_budget(const boost::container::small_vector_base<OSDOp>& ops);
   void _throttle_op(Op *op, ceph::shunique_lock<ceph::shared_mutex>& sul,
 		    int op_size = 0);
   int _take_op_budget(Op *op, ceph::shunique_lock<ceph::shared_mutex>& sul) {
@@ -2943,7 +2958,7 @@ public:
     o->priority = op.priority;
     o->snapid = snapid;
     o->outbl = pbl;
-    if (!o->outbl && op.size() == 1 && op.out_bl[0]->length())
+    if (!o->outbl && op.size() == 1 && op.out_bl[0] && op.out_bl[0]->length())
 	o->outbl = op.out_bl[0];
     o->out_bl.swap(op.out_bl);
     o->out_handler.swap(op.out_handler);
@@ -2979,8 +2994,10 @@ public:
     o->priority = op.priority;
     o->snapid = snapid;
     o->outbl = pbl;
-    if (!o->outbl && op.size() == 1 && op.out_bl[0]->length())
-	o->outbl = op.out_bl[0];
+    // XXX
+    if (!o->outbl && op.size() == 1 && op.out_bl[0] && op.out_bl[0]->length()) {
+      o->outbl = op.out_bl[0];
+    }
     o->out_bl.swap(op.out_bl);
     o->out_handler.swap(op.out_handler);
     o->out_rval.swap(op.out_rval);
@@ -3111,7 +3128,8 @@ public:
    * @param extra_ops pointer to [array of] initial op[s]
    * @return index of final op (for caller to fill in)
    */
-  int init_ops(std::vector<OSDOp>& ops, int ops_count, ObjectOperation *extra_ops) {
+  int init_ops(boost::container::small_vector_base<OSDOp>& ops, int ops_count,
+	       ObjectOperation *extra_ops) {
     int i;
     int extra = 0;
 
@@ -3134,7 +3152,7 @@ public:
     snapid_t snap, uint64_t *psize, ceph::real_time *pmtime,
     int flags, Context *onfinish, version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL) {
-    std::vector<OSDOp> ops;
+    osdc_opvec ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_STAT;
     C_Stat *fin = new C_Stat(psize, pmtime, onfinish);
@@ -3162,7 +3180,7 @@ public:
     int flags, Context *onfinish, version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL, int op_flags = 0,
     ZTracer::Trace *parent_trace = nullptr) {
-    std::vector<OSDOp> ops;
+    osdc_opvec ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_READ;
     ops[i].op.extent.offset = off;
@@ -3194,7 +3212,7 @@ public:
     uint64_t off, ceph::buffer::list &cmp_bl,
     snapid_t snap, int flags, Context *onfinish, version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL, int op_flags = 0) {
-    std::vector<OSDOp> ops;
+    osdc_opvec ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_CMPEXT;
     ops[i].op.extent.offset = off;
@@ -3227,7 +3245,7 @@ public:
 			__u32 trunc_seq, Context *onfinish,
 			version_t *objver = NULL,
 			ObjectOperation *extra_ops = NULL, int op_flags = 0) {
-    std::vector<OSDOp> ops;
+    osdc_opvec ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_READ;
     ops[i].op.extent.offset = off;
@@ -3247,7 +3265,7 @@ public:
 		    uint64_t off, uint64_t len, snapid_t snap, ceph::buffer::list *pbl,
 		    int flags, Context *onfinish, version_t *objver = NULL,
 		    ObjectOperation *extra_ops = NULL) {
-    std::vector<OSDOp> ops;
+    osdc_opvec ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_MAPEXT;
     ops[i].op.extent.offset = off;
@@ -3266,7 +3284,7 @@ public:
 	     const char *name, snapid_t snap, ceph::buffer::list *pbl, int flags,
 	     Context *onfinish,
 	     version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
-    std::vector<OSDOp> ops;
+    osdc_opvec ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_GETXATTR;
     ops[i].op.xattr.name_len = (name ? strlen(name) : 0);
@@ -3286,7 +3304,7 @@ public:
 		       snapid_t snap, std::map<std::string,ceph::buffer::list>& attrset,
 		       int flags, Context *onfinish, version_t *objver = NULL,
 		       ObjectOperation *extra_ops = NULL) {
-    std::vector<OSDOp> ops;
+    osdc_opvec ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_GETXATTRS;
     C_GetAttrs *fin = new C_GetAttrs(attrset, onfinish);
@@ -3310,7 +3328,8 @@ public:
 
   // writes
   ceph_tid_t _modify(const object_t& oid, const object_locator_t& oloc,
-		     std::vector<OSDOp>& ops, ceph::real_time mtime,
+		     osdc_opvec& ops,
+		     ceph::real_time mtime,
 		     const SnapContext& snapc, int flags,
 		     Context *oncommit,
 		     version_t *objver = NULL) {
@@ -3329,7 +3348,7 @@ public:
     Context *oncommit, version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL, int op_flags = 0,
     ZTracer::Trace *parent_trace = nullptr) {
-    std::vector<OSDOp> ops;
+    osdc_opvec ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_WRITE;
     ops[i].op.extent.offset = off;
@@ -3364,7 +3383,7 @@ public:
     Context *oncommit,
     version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL) {
-    std::vector<OSDOp> ops;
+    osdc_opvec ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_APPEND;
     ops[i].op.extent.offset = 0;
@@ -3398,7 +3417,7 @@ public:
 			 Context *oncommit,
 			 version_t *objver = NULL,
 			 ObjectOperation *extra_ops = NULL, int op_flags = 0) {
-    std::vector<OSDOp> ops;
+    osdc_opvec ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_WRITE;
     ops[i].op.extent.offset = off;
@@ -3421,7 +3440,7 @@ public:
     ceph::real_time mtime, int flags,
     Context *oncommit, version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL, int op_flags = 0) {
-    std::vector<OSDOp> ops;
+    osdc_opvec ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_WRITEFULL;
     ops[i].op.extent.offset = 0;
@@ -3454,7 +3473,7 @@ public:
     Context *oncommit, version_t *objver = NULL,
     ObjectOperation *extra_ops = NULL, int op_flags = 0) {
 
-    std::vector<OSDOp> ops;
+    osdc_opvec ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_WRITESAME;
     ops[i].op.writesame.offset = off;
@@ -3489,7 +3508,7 @@ public:
 		   uint64_t trunc_size, __u32 trunc_seq,
 		   Context *oncommit, version_t *objver = NULL,
 		   ObjectOperation *extra_ops = NULL) {
-    std::vector<OSDOp> ops;
+    osdc_opvec ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_TRUNCATE;
     ops[i].op.extent.offset = trunc_size;
@@ -3507,7 +3526,7 @@ public:
 		  uint64_t off, uint64_t len, const SnapContext& snapc,
 		  ceph::real_time mtime, int flags, Context *oncommit,
 	     version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
-    std::vector<OSDOp> ops;
+    osdc_opvec ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_ZERO;
     ops[i].op.extent.offset = off;
@@ -3525,7 +3544,7 @@ public:
 			     ceph::real_time mtime, Context *oncommit,
 			     version_t *objver = NULL,
 			     ObjectOperation *extra_ops = NULL) {
-    std::vector<OSDOp> ops;
+    osdc_opvec ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_ROLLBACK;
     ops[i].op.snap.snapid = snapid;
@@ -3541,7 +3560,7 @@ public:
 		    int create_flags, Context *oncommit,
 		    version_t *objver = NULL,
 		    ObjectOperation *extra_ops = NULL) {
-    std::vector<OSDOp> ops;
+    osdc_opvec ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_CREATE;
     ops[i].op.flags = create_flags;
@@ -3558,7 +3577,7 @@ public:
     const SnapContext& snapc, ceph::real_time mtime, int flags,
     Context *oncommit,
     version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
-    std::vector<OSDOp> ops;
+    osdc_opvec ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_DELETE;
     Op *o = new Op(oid, oloc, std::move(ops), flags | global_op_flags |
@@ -3584,7 +3603,7 @@ public:
 	      ceph::real_time mtime, int flags,
 	      Context *oncommit,
 	      version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
-    std::vector<OSDOp> ops;
+    osdc_opvec ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_SETXATTR;
     ops[i].op.xattr.name_len = (name ? strlen(name) : 0);
@@ -3606,7 +3625,7 @@ public:
 	      ceph::real_time mtime, int flags,
 	      Context *oncommit,
 	      version_t *objver = NULL, ObjectOperation *extra_ops = NULL) {
-    std::vector<OSDOp> ops;
+    osdc_opvec ops;
     int i = init_ops(ops, 1, extra_ops);
     ops[i].op.op = CEPH_OSD_OP_RMXATTR;
     ops[i].op.xattr.name_len = (name ? strlen(name) : 0);

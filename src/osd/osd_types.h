@@ -3960,7 +3960,16 @@ struct OSDOp {
    * @param ops [out] vector of OSDOps
    * @param in  [in] combined data buffer
    */
-  static void split_osd_op_vector_in_data(std::vector<OSDOp>& ops, ceph::buffer::list& in);
+  template<typename V>
+  static void split_osd_op_vector_in_data(V& ops,
+					  ceph::buffer::list& in) {
+    ceph::buffer::list::iterator datap = in.begin();
+    for (unsigned i = 0; i < ops.size(); i++) {
+      if (ops[i].op.payload_len) {
+	datap.copy(ops[i].op.payload_len, ops[i].indata);
+      }
+    }
+  }
 
   /**
    * merge indata members of a vector of OSDOp into a single ceph::buffer::list
@@ -3971,7 +3980,15 @@ struct OSDOp {
    * @param ops [in] vector of OSDOps
    * @param out [out] combined data buffer
    */
-  static void merge_osd_op_vector_in_data(std::vector<OSDOp>& ops, ceph::buffer::list& out);
+  template<typename V>
+  static void merge_osd_op_vector_in_data(V& ops, ceph::buffer::list& out) {
+    for (unsigned i = 0; i < ops.size(); i++) {
+      if (ops[i].indata.length()) {
+	ops[i].op.payload_len = ops[i].indata.length();
+	out.append(ops[i].indata);
+      }
+    }
+  }
 
   /**
    * split a ceph::buffer::list into constituent outdata members of a vector of OSDOps
@@ -3994,10 +4011,34 @@ struct OSDOp {
    *
    * @param ops [in] vector of OSDOps
    */
-  static void clear_data(std::vector<OSDOp>& ops);
+  template<typename V>
+  static void clear_data(V& ops) {
+    for (unsigned i = 0; i < ops.size(); i++) {
+      OSDOp& op = ops[i];
+      op.outdata.clear();
+      if (ceph_osd_op_type_attr(op.op.op) &&
+	  op.op.xattr.name_len &&
+	  op.indata.length() >= op.op.xattr.name_len) {
+	ceph::buffer::list bl;
+	bl.push_back(ceph::buffer::ptr_node::create(op.op.xattr.name_len));
+	bl.begin().copy_in(op.op.xattr.name_len, op.indata);
+	op.indata.claim(bl);
+      } else if (ceph_osd_op_type_exec(op.op.op) &&
+		 op.op.cls.class_len &&
+		 op.indata.length() >
+	         (op.op.cls.class_len + op.op.cls.method_len)) {
+	__u8 len = op.op.cls.class_len + op.op.cls.method_len;
+	ceph::buffer::list bl;
+	bl.push_back(ceph::buffer::ptr_node::create(len));
+	bl.begin().copy_in(len, op.indata);
+	op.indata.claim(bl);
+      } else {
+	op.indata.clear();
+      }
+    }
+  }
 };
 std::ostream& operator<<(std::ostream& out, const OSDOp& op);
-
 
 struct pg_log_op_return_item_t {
   int32_t rval;
