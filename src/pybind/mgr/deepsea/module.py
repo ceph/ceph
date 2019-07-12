@@ -147,6 +147,12 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
             if event_data['success']:
                 for node_name, node_devs in event_data["return"].items():
                     if node_filter is None:
+                        # The cache will only be populated when this function is invoked
+                        # without a node filter, i.e. if you run it once for the whole
+                        # cluster, you can then call it for individual nodes and return
+                        # cached data.  However, if you only *ever* call it for individual
+                        # nodes, the cache will never be populated, and you'll always have
+                        # the full round trip to DeepSea.
                         self.inventory_cache[node_name] = orchestrator.OutdatableData(node_devs)
                     devs = orchestrator.InventoryDevice.from_ceph_volume_inventory_list(node_devs)
                     result.append(orchestrator.InventoryNode(node_name, devs))
@@ -184,7 +190,24 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
         # function query OSD information from DeepSea doesn't make a lot of
         # sense (DeepSea would have to call back into Ceph).
 
-        assert service_type in ("mon", "mgr", "mds", "rgw", None), service_type + " unsupported"
+        assert service_type in ("mon", "mgr", "mds", "rgw", "nfs", "iscsi", None), service_type + " unsupported"
+
+        def _deepsea_to_ceph(service):
+            if service == "ganesha":
+                return "nfs"
+            elif service == "igw":
+                return "iscsi"
+            else:
+                return service
+
+        # presently unused
+        def _ceph_to_deepsea(service):
+            if service == "nfs":
+                return "ganesha"
+            elif service == "iscsi":
+                return "igw"
+            else:
+                return service
 
         self.service_cache.remove_outdated()
         if not self.service_cache.any_outdated() and not refresh:
@@ -204,15 +227,34 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
         def process_result(event_data):
             result = []
             if event_data['success']:
-                for node_name, service_info in event_data["return"].items():
+                for service_node, service_info in event_data["return"].items():
                     node_service_cache = []
-                    for service_type, service_instance in service_info.items():
-                        desc = orchestrator.ServiceDescription(nodename=node_name,
-                                                               service_instance=service_instance,
-                                                               service_type=service_type)
-                        result.append(desc)
+                    for this_service_type, service_dict in service_info.items():
+                        if isinstance(service_dict, str):
+                            # map old form where deepsea only returned service IDs
+                            # to new form where it retuns a dict
+                            service_dict = { 'service_instance': service_dict }
+                        desc = orchestrator.ServiceDescription(nodename=service_node,
+                                                               service_instance=service_dict['service_instance'],
+                                                               service_type=_deepsea_to_ceph(this_service_type),
+                                                               # the following may or may not be present
+                                                               container_id=service_dict.get('container_id', None),
+                                                               service=service_dict.get('service', None),
+                                                               version=service_dict.get('version', None),
+                                                               rados_config_location=service_dict.get('rados_config_location', None),
+                                                               service_url = service_dict.get('service_url', None),
+                                                               status=service_dict.get('status', None),
+                                                               status_desc=service_dict.get('status_desc', None)
+                                                               )
+                        # Always add every service to the cache...
                         node_service_cache.append(desc.to_json())
-                    self.service_cache[node_name] = orchestrator.OutdatableData(node_service_cache)
+                        # ...but only return the ones the caller asked for
+                        if ((service_type is None or desc.service_type == service_type) and
+                            (service_id is None or desc.service_instance == service_id) and
+                            (node_name is None or desc.nodename == node_name)):
+                            result.append(desc)
+
+                    self.service_cache[service_node] = orchestrator.OutdatableData(node_service_cache)
             else:
                 self.log.error(event_data['return'])
             return result
@@ -220,12 +262,10 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
         with self._completion_lock:
             c = DeepSeaReadCompletion(process_result)
 
+            # Always request all services, so we always have all services cached.
             resp = self._do_request_with_login("POST", data = {
                 "client": "runner_async",
-                "fun": "mgr_orch.describe_service",
-                "role": service_type,
-                "service_id": service_id,
-                "node": node_name
+                "fun": "mgr_orch.describe_service"
             })
             self._all_completions["{}/ret".format(resp.json()['return'][0]['tag'])] = c
 
