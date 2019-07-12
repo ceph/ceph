@@ -27,13 +27,13 @@
 #include "crimson/osd/pg_map.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 
+#include "messages/MOSDOp.h"
 #include "osd/PeeringState.h"
 #include "osd/osd_types.h"
 #include "osd/osd_perf_counters.h"
 #include "osd/PGPeeringEvent.h"
 
 class MOSDMap;
-class MOSDOp;
 class MOSDRepOpReply;
 class MOSDRepOp;
 class OSDMap;
