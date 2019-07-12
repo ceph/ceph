@@ -8,7 +8,8 @@
 
 #include "osd/OSDMap.h"
 
-class MOSDOp;
+#include "messages/MOSDOp.h"
+
 class OpInfo {
 public:
   struct ClassInfo {
