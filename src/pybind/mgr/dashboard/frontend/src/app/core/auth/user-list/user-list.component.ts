@@ -28,6 +28,8 @@ const BASE_URL = 'user-management/users';
 export class UserListComponent implements OnInit {
   @ViewChild('userRolesTpl')
   userRolesTpl: TemplateRef<any>;
+  @ViewChild('userEnabledTpl')
+  userEnabledTpl: TemplateRef<any>;
 
   permission: Permission;
   tableActions: CdTableAction[];
@@ -94,6 +96,12 @@ export class UserListComponent implements OnInit {
         prop: 'roles',
         flexGrow: 1,
         cellTemplate: this.userRolesTpl
+      },
+      {
+        name: this.i18n('Enabled'),
+        prop: 'enabled',
+        flexGrow: 1,
+        cellTemplate: this.userEnabledTpl
       }
     ];
   }
