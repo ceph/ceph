@@ -522,9 +522,8 @@ void Objecter::_send_linger(LingerOp *info,
 			    ceph::shunique_lock<ceph::shared_mutex>& sul)
 {
   ceph_assert(sul.owns_lock() && sul.mutex() == &rwlock);
-
-  vector<OSDOp> opv;
   std::unique_ptr<Op::OpComp> oncommit;
+  osdc_opvec opv;
   std::shared_lock watchl(info->watch_lock);
   cb::list *poutbl = nullptr;
   if (info->registered && info->is_watch) {
@@ -689,7 +688,7 @@ void Objecter::_send_linger_ping(LingerOp *info)
   ldout(cct, 10) << __func__ << " " << info->linger_id << " now " << now
 		 << dendl;
 
-  vector<OSDOp> opv(1);
+  osdc_opvec opv(1);
   opv[0].op.op = CEPH_OSD_OP_WATCH;
   opv[0].op.watch.cookie = info->get_cookie();
   opv[0].op.watch.op = CEPH_OSD_WATCH_OP_PING;
@@ -3122,7 +3121,7 @@ void Objecter::_finish_op(Op *op, int r)
   op->put();
 }
 
-MOSDOp *Objecter::_prepare_osd_op(Op *op)
+Objecter::MOSDOp *Objecter::_prepare_osd_op(Op *op)
 {
   // rwlock is locked
 
@@ -3249,12 +3248,10 @@ void Objecter::_send_op(Op *op)
   op->session->con->send_message(m);
 }
 
-int Objecter::calc_op_budget(const vector<OSDOp>& ops)
+int Objecter::calc_op_budget(const bc::small_vector_base<OSDOp>& ops)
 {
   int op_budget = 0;
-  for (vector<OSDOp>::const_iterator i = ops.begin();
-       i != ops.end();
-       ++i) {
+  for (auto i = ops.begin(); i != ops.end(); ++i) {
     if (i->op.op & CEPH_OSD_OP_MODE_WR) {
       op_budget += i->indata.length();
     } else if (ceph_osd_op_mode_read(i->op.op)) {
