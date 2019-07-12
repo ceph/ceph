@@ -144,7 +144,9 @@ class HealthTest(DashboardTestCase):
                     'total_bytes': int,
                     'total_used_bytes': int,
                     'total_used_raw_bytes': int,
-                    'total_used_raw_ratio': float
+                    'total_used_raw_ratio': float,
+                    'num_osds': int,
+                    'num_per_pool_osds': int
                 })
             }),
             'fs_map': JObj({
