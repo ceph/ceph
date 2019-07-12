@@ -40,7 +40,7 @@ export enum Icons {
   hourglass = 'fa fa-hourglass-o', // Task
   filledHourglass = 'fa fa-hourglass', // Task
   table = 'fa fa-table', // Table,
-  spinner = 'fa spinner', // spinner, Load
+  spinner = 'fa fa-spinner', // spinner, Load
   refresh = 'fa fa-refresh', // Refresh
   bullseye = 'fa fa-bullseye', // Target
   disk = 'fa fa-hdd-o', // Hard disk, disks

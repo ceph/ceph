@@ -2,7 +2,7 @@
   <div *ngFor="let option of options; let last = last">
     <div class="form-group row pt-2"
          *ngIf="option.type === 'bool'">
-      <label class="control-label col-6"
+      <label class="col-form-label col-6"
              [for]="option.name">
         <b>{{ option.text }}</b>
         <br>
@@ -27,7 +27,7 @@
 
     <div class="form-group row pt-2"
          *ngIf="option.type !== 'bool'">
-      <label class="col-6 control-label"
+      <label class="col-6 col-form-label"
              [for]="option.name">{{ option.text }}
         <br>
         <span class="text-muted">

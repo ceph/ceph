@@ -11,7 +11,7 @@
   <div class="table-filters form-inline">
     <div class="form-group filter"
          *ngFor="let filter of filters">
-      <label>{{ filter.label }}: </label>
+      <label class="col-form-label">{{ filter.label }}: </label>
       <select class="form-control custom-select"
               [(ngModel)]="filter.value"
               (ngModelChange)="updateFilter()">
