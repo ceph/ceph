@@ -267,6 +267,17 @@ if(WITH_BLUESTORE)
   endif()
 endif()
 
+include(CMakeDependentOption)
+CMAKE_DEPENDENT_OPTION(WITH_BLUESTORE_PMEM "Enable PMDK libraries" OFF
+  "WITH_BLUESTORE" OFF)
+
+CMAKE_DEPENDENT_OPTION(WITH_SYSTEM_PMDK "Require and build with system PMDK" OFF
+  "WITH_BLUESTORE_PMEM" OFF)
+
+if(WITH_BLUESTORE_PMEM)
+  set(HAVE_BLUESTORE_PMEM ON)
+endif()
+
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686|amd64|x86_64|AMD64|aarch64")
   option(WITH_SPDK "Enable SPDK" ON)
 else()
@@ -281,19 +292,11 @@ if(WITH_SPDK)
   set(HAVE_SPDK TRUE)
 endif(WITH_SPDK)
 
-option(WITH_PMEM "Enable PMEM" OFF)
-if(WITH_PMEM)
-  set(HAVE_PMEM ON)
-  if(NOT WITH_BLUESTORE)
-    message(SEND_ERROR "Please enable WITH_BLUESTORE for using PMEM")
-  endif()
-endif()
-
 if(WITH_BLUESTORE)
-  if(NOT AIO_FOUND AND NOT HAVE_POSIXAIO AND NOT WITH_SPDK AND NOT WITH_PMEM)
+  if(NOT AIO_FOUND AND NOT HAVE_POSIXAIO AND NOT WITH_SPDK AND NOT WITH_BLUESTORE_PMEM)
     message(SEND_ERROR "WITH_BLUESTORE is ON, "
       "but none of the bluestore backends is enabled. "
-      "Please install libaio, or enable WITH_SPDK or WITH_PMEM (experimental)")
+      "Please install libaio, or enable WITH_SPDK or WITH_BLUESTORE_PMEM (experimental)")
   endif()
 endif()
 

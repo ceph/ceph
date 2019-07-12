@@ -401,6 +401,15 @@ if(WITH_DPDK)
   list(APPEND ceph_common_deps common_async_dpdk)
 endif()
 
+if(WITH_BLUESTORE_PMEM)
+  if(WITH_SYSTEM_PMDK)
+    find_package(pmem REQUIRED)
+  else()
+    include(Buildpmem)
+    build_pmem()
+  endif()
+endif()
+
 add_library(common STATIC ${ceph_common_objs})
 target_link_libraries(common ${ceph_common_deps})
 
