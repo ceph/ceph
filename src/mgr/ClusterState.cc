@@ -239,6 +239,8 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
       int to;
       bool back;
       std::array<uint32_t,3> times;
+      std::array<uint32_t,3> min;
+      std::array<uint32_t,3> max;
 
       bool operator<(const mgr_ping_time_t& rhs) const {
         if (pingtime < rhs.pingtime)
@@ -269,6 +271,12 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
 	  item.times[0] = j.second.back_pingtime[0];
 	  item.times[1] = j.second.back_pingtime[1];
 	  item.times[2] = j.second.back_pingtime[2];
+	  item.min[0] = j.second.back_min[0];
+	  item.min[1] = j.second.back_min[1];
+	  item.min[2] = j.second.back_min[2];
+	  item.max[0] = j.second.back_max[0];
+	  item.max[1] = j.second.back_max[1];
+	  item.max[2] = j.second.back_max[2];
 	  item.back = true;
 	  sorted.emplace(item);
 	}
@@ -283,6 +291,12 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
 	  item.times[0] = j.second.front_pingtime[0];
 	  item.times[1] = j.second.front_pingtime[1];
 	  item.times[2] = j.second.front_pingtime[2];
+	  item.min[0] = j.second.front_min[0];
+	  item.min[1] = j.second.front_min[1];
+	  item.min[2] = j.second.front_min[2];
+	  item.max[0] = j.second.front_max[0];
+	  item.max[1] = j.second.front_max[1];
+	  item.max[2] = j.second.front_max[2];
 	  item.back = false;
 	  sorted.emplace(item);
 	}
@@ -300,9 +314,21 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
       f->dump_int("from osd", sitem.from);
       f->dump_int("to osd", sitem.to);
       f->dump_string("interface", (sitem.back ? "back" : "front"));
+      f->open_object_section("average");
       f->dump_unsigned("1min", sitem.times[0]);
       f->dump_unsigned("5min", sitem.times[1]);
       f->dump_unsigned("15min", sitem.times[2]);
+      f->close_section(); // average
+      f->open_object_section("min");
+      f->dump_unsigned("1min", sitem.min[0]);
+      f->dump_unsigned("5min", sitem.min[1]);
+      f->dump_unsigned("15min", sitem.min[2]);
+      f->close_section(); // min
+      f->open_object_section("max");
+      f->dump_unsigned("1min", sitem.max[0]);
+      f->dump_unsigned("5min", sitem.max[1]);
+      f->dump_unsigned("15min", sitem.max[2]);
+      f->close_section(); // max
       f->close_section(); // entry
     }
     f->close_section(); // entries
