@@ -93,7 +93,7 @@ public:
     boost::intrusive::list_member_hook<> dirty_item;
 
     std::atomic_int num_readers, num_writers;
-    shared_mutex num_reading;
+    ceph::shared_mutex num_reading;
 
     File()
       : RefCountedObject(NULL, 0),

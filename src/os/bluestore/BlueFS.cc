@@ -72,7 +72,7 @@ public:
             for (auto &r : d.second->file_map) {
               if (file_name == dir + "/" + r.first) {
                 file = r.second;
-
+                break;
               }
             }
           }
@@ -90,6 +90,7 @@ public:
         for (auto &r : d.second->file_map) {
           f->open_object_section("file");
           f->dump_string("name", (dir + "/" + r.first).c_str());
+          f->dump_int("size", r.second->fnode.size);
           f->dump_int("refs", r.second->refs);
           f->dump_int("locked", r.second->locked);
           f->dump_int("deleted", r.second->deleted);
@@ -111,6 +112,29 @@ public:
       f->close_section();
       f->flush(ss);
       delete f;
+    } else if (command == "bluefs files get") {
+      string file_name;
+      cmd_getval(g_ceph_context, cmdmap, "file", file_name);
+      FileRef file;
+      std::lock_guard l(bluefs->lock);
+      {
+        for (auto &d : bluefs->dir_map) {
+          std::string dir = d.first;
+          for (auto &r : d.second->file_map) {
+            if (file_name == dir + "/" + r.first) {
+              file = r.second;
+              break;
+            }
+          }
+        }
+      }
+      if (file) {
+        FileReader fr(file, bluefs->cct->_conf->bluefs_max_prefetch, false, false);
+        buffer::ptr p(file->fnode.size);
+        int r = bluefs->_read_random(&fr, 0, file->fnode.size, p.c_str());
+        p.set_length(r);
+        out.append(p);
+      }
     } else {
       ss << "Invalid command" << std::endl;
       r = false;
@@ -141,10 +165,16 @@ BlueFS::BlueFS(CephContext* cct)
                                          " name=device,type=CephString",
                                          asok_hook,
                                          "move bluefs file");
-  assert(r == 0);
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("bluefs files get",
+                                           "bluefs files get"
+                                           " name=file,type=CephString",
+                                           asok_hook,
+                                           "get content of bluefs file");
+  ceph_assert(r == 0);
   r = admin_socket->register_command("bluefs files list", "bluefs files list", asok_hook,
                                      "print files in bluefs");
-  assert(r == 0);
+  ceph_assert(r == 0);
 
 }
 
@@ -153,6 +183,7 @@ BlueFS::~BlueFS()
   AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
   admin_socket->unregister_command("bluefs files move");
   admin_socket->unregister_command("bluefs files list");
+  admin_socket->unregister_command("bluefs files get");
 
   delete asok_hook;
   asok_hook = nullptr;
