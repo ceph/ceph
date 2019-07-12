@@ -1844,7 +1844,7 @@ void BlueFS::_compact_log_async(std::unique_lock<ceph::mutex>& l)
   t.op_jump(log_seq, new_log_jump_to);
 
   // allocate
-  r = _allocate(BlueFS::BDEV_DB, new_log_jump_to,
+  r = _allocate(BlueFS::BDEV_WAL, new_log_jump_to,
                     &new_log->fnode);
   ceph_assert(r == 0);
 
