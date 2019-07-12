@@ -26,6 +26,7 @@
 #include "crimson/osd/pg_map.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 
+#include "messages/MOSDOp.h"
 #include "osd/PeeringState.h"
 #include "osd/osd_types.h"
 #include "osd/osd_perf_counters.h"
@@ -33,7 +34,6 @@
 
 class MCommand;
 class MOSDMap;
-class MOSDOp;
 class MOSDRepOpReply;
 class MOSDRepOp;
 class OSDMap;

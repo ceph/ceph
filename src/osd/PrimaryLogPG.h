@@ -40,8 +40,6 @@ class PrimaryLogPG;
 class PGLSFilter;
 class HitSet;
 struct TierAgentState;
-class MOSDOp;
-class MOSDOpReply;
 class OSDService;
 
 void intrusive_ptr_add_ref(PrimaryLogPG *pg);

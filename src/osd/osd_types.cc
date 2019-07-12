@@ -6776,26 +6776,6 @@ ostream& operator<<(ostream& out, const OSDOp& op)
 }
 
 
-void OSDOp::split_osd_op_vector_in_data(vector<OSDOp>& ops, ceph::buffer::list& in)
-{
-  ceph::buffer::list::iterator datap = in.begin();
-  for (unsigned i = 0; i < ops.size(); i++) {
-    if (ops[i].op.payload_len) {
-      datap.copy(ops[i].op.payload_len, ops[i].indata);
-    }
-  }
-}
-
-void OSDOp::merge_osd_op_vector_in_data(vector<OSDOp>& ops, ceph::buffer::list& out)
-{
-  for (unsigned i = 0; i < ops.size(); i++) {
-    if (ops[i].indata.length()) {
-      ops[i].op.payload_len = ops[i].indata.length();
-      out.append(ops[i].indata);
-    }
-  }
-}
-
 void OSDOp::split_osd_op_vector_out_data(vector<OSDOp>& ops, ceph::buffer::list& in)
 {
   auto datap = in.begin();
@@ -6812,33 +6792,6 @@ void OSDOp::merge_osd_op_vector_out_data(vector<OSDOp>& ops, ceph::buffer::list&
     ops[i].op.payload_len = ops[i].outdata.length();
     if (ops[i].outdata.length()) {
       out.append(ops[i].outdata);
-    }
-  }
-}
-
-void OSDOp::clear_data(vector<OSDOp>& ops)
-{
-  for (unsigned i = 0; i < ops.size(); i++) {
-    OSDOp& op = ops[i];
-    op.outdata.clear();
-    if (ceph_osd_op_type_attr(op.op.op) &&
-        op.op.xattr.name_len &&
-	op.indata.length() >= op.op.xattr.name_len) {
-      ceph::buffer::list bl;
-      bl.push_back(ceph::buffer::ptr_node::create(op.op.xattr.name_len));
-      bl.begin().copy_in(op.op.xattr.name_len, op.indata);
-      op.indata.claim(bl);
-    } else if (ceph_osd_op_type_exec(op.op.op) &&
-               op.op.cls.class_len &&
-	       op.indata.length() >
-	         (op.op.cls.class_len + op.op.cls.method_len)) {
-      __u8 len = op.op.cls.class_len + op.op.cls.method_len;
-      ceph::buffer::list bl;
-      bl.push_back(ceph::buffer::ptr_node::create(len));
-      bl.begin().copy_in(len, op.indata);
-      op.indata.claim(bl);
-    } else {
-      op.indata.clear();
     }
   }
 }
