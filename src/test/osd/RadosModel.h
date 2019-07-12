@@ -67,7 +67,8 @@ enum TestOpType {
   TEST_OP_SET_REDIRECT,
   TEST_OP_UNSET_REDIRECT,
   TEST_OP_CHUNK_READ,
-  TEST_OP_TIER_PROMOTE
+  TEST_OP_TIER_PROMOTE,
+  TEST_OP_TIER_FLUSH
 };
 
 class TestWatchContext : public librados::WatchCtx2 {
@@ -2692,6 +2693,74 @@ public:
   string getType() override
   {
     return "TierPromoteOp";
+  }
+};
+
+class TierFlushOp : public TestOp {
+public:
+  librados::AioCompletion *completion;
+  librados::ObjectWriteOperation op;
+  string oid;
+  std::shared_ptr<int> in_use;
+
+  TierFlushOp(int n,
+	       RadosTestContext *context,
+	       const string &oid,
+	       TestOpStat *stat)
+    : TestOp(n, context, stat),
+      completion(NULL),
+      oid(oid)
+  {}
+
+  void _begin() override
+  {
+    context->state_lock.Lock();
+
+    context->oid_in_use.insert(oid);
+    context->oid_not_in_use.erase(oid);
+
+    pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
+      new pair<TestOp*, TestOp::CallbackInfo*>(this,
+					       new TestOp::CallbackInfo(0));
+    completion = context->rados.aio_create_completion((void *) cb_arg, NULL,
+						      &write_callback);
+    context->state_lock.Unlock();
+
+    op.tier_flush();
+    int r = context->io_ctx.aio_operate(context->prefix+oid, completion,
+					&op);
+    ceph_assert(!r);
+  }
+
+  void _finish(CallbackInfo *info) override
+  {
+    context->state_lock.Lock();
+    ceph_assert(!done);
+    ceph_assert(completion->is_complete());
+
+    int r = completion->get_return_value();
+    cout << num << ":  got " << cpp_strerror(r) << std::endl;
+    if (r == 0) {
+      // sucess
+    } else {
+      ceph_abort_msg("shouldn't happen");
+    }
+    context->update_object_version(oid, completion->get_version64());
+    context->oid_in_use.erase(oid);
+    context->oid_not_in_use.insert(oid);
+    context->kick();
+    done = true;
+    context->state_lock.Unlock();
+  }
+
+  bool finished() override
+  {
+    return done;
+  }
+
+  string getType() override
+  {
+    return "TierFlushOp";
   }
 };
 
