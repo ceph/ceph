@@ -13,7 +13,8 @@ class ECBackend : public PGBackend
 {
 public:
   ECBackend(shard_id_t shard,
-	    CollectionRef, ceph::os::FuturizedStore*,
+	    CollectionRef coll,
+	    ceph::osd::ShardServices& shard_services,
 	    const ec_profile_t& ec_profile,
 	    uint64_t stripe_width);
 private:
@@ -21,6 +22,13 @@ private:
 					  uint64_t off,
 					  uint64_t len,
 					  uint32_t flags) override;
+  seastar::future<ceph::osd::acked_peers_t>
+  _submit_transaction(std::set<pg_shard_t>&& pg_shards,
+		      const hobject_t& hoid,
+		      ceph::os::Transaction&& txn,
+		      osd_reqid_t req_id,
+		      epoch_t min_epoch, epoch_t max_epoch,
+		      eversion_t ver) final;
   CollectionRef coll;
   ceph::os::FuturizedStore* store;
 };

@@ -34,6 +34,7 @@
 
 class MOSDMap;
 class MOSDOp;
+class MOSDRepOpReply;
 class OSDMap;
 class OSDMeta;
 class Heartbeat;
@@ -164,6 +165,8 @@ private:
                                    Ref<MOSDMap> m);
   seastar::future<> handle_osd_op(ceph::net::Connection* conn,
 				  Ref<MOSDOp> m);
+  seastar::future<> handle_rep_op_reply(ceph::net::Connection* conn,
+					Ref<MOSDRepOpReply> m);
   seastar::future<> handle_pg_log(ceph::net::Connection* conn,
 				  Ref<MOSDPGLog> m);
 
