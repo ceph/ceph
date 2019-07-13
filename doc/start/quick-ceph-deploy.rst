@@ -223,7 +223,7 @@ Once you have added your new Ceph Monitors, Ceph will begin synchronizing
 the monitors and form a quorum. You can check the quorum status by executing
 the following::
 
-  ceph quorum_status --format json-pretty
+  sudo ceph quorum_status --format json-pretty
 
 
 .. tip:: When you run Ceph with multiple monitors, you SHOULD install and
