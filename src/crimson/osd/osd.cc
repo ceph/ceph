@@ -16,7 +16,12 @@
 #include "messages/MOSDMap.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDPGLog.h"
+#include "messages/MOSDRepOpReply.h"
 #include "messages/MPGStats.h"
+
+#include "os/Transaction.h"
+#include "osd/PGPeeringEvent.h"
+#include "osd/PeeringState.h"
 
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Connection.h"
@@ -24,14 +29,11 @@
 #include "crimson/os/cyan_collection.h"
 #include "crimson/os/cyan_object.h"
 #include "crimson/os/futurized_store.h"
-#include "os/Transaction.h"
 #include "crimson/osd/heartbeat.h"
 #include "crimson/osd/osd_meta.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_backend.h"
 #include "crimson/osd/pg_meta.h"
-#include "osd/PGPeeringEvent.h"
-#include "osd/PeeringState.h"
 #include "crimson/osd/osd_operations/compound_peering_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
@@ -477,6 +479,8 @@ seastar::future<> OSD::ms_dispatch(ceph::net::Connection* conn, MessageRef m)
     return seastar::now();
   case MSG_OSD_PG_LOG:
     return handle_pg_log(conn, boost::static_pointer_cast<MOSDPGLog>(m));
+  case MSG_OSD_REPOPREPLY:
+    return handle_rep_op_reply(conn, boost::static_pointer_cast<MOSDRepOpReply>(m));
   default:
     logger().info("{} unhandled message {}", __func__, *m);
     return seastar::now();
@@ -849,6 +853,18 @@ seastar::future<> OSD::handle_osd_op(ceph::net::Connection* conn,
     *this,
     conn->get_shared(),
     std::move(m));
+  return seastar::now();
+}
+
+seastar::future<> OSD::handle_rep_op_reply(ceph::net::Connection* conn,
+					   Ref<MOSDRepOpReply> m)
+{
+  const auto& pgs = pg_map.get_pgs();
+  if (auto pg = pgs.find(m->get_spg()); pg != pgs.end()) {
+    pg->second->handle_rep_op_reply(conn, *m);
+  } else {
+    logger().warn("stale reply: {}", *m);
+  }
   return seastar::now();
 }
 

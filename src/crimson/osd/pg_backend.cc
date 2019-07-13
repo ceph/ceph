@@ -25,17 +25,19 @@ namespace {
   }
 }
 
-std::unique_ptr<PGBackend> PGBackend::create(const spg_t pgid,
+std::unique_ptr<PGBackend> PGBackend::create(pg_t pgid,
+					     const pg_shard_t pg_shard,
                                              const pg_pool_t& pool,
 					     ceph::os::CollectionRef coll,
-                                             ceph::os::FuturizedStore* store,
+					     ceph::osd::ShardServices& shard_services,
                                              const ec_profile_t& ec_profile)
 {
   switch (pool.type) {
   case pg_pool_t::TYPE_REPLICATED:
-    return std::make_unique<ReplicatedBackend>(pgid.shard, coll, store);
+    return std::make_unique<ReplicatedBackend>(pgid, pg_shard,
+					       coll, shard_services);
   case pg_pool_t::TYPE_ERASURE:
-    return std::make_unique<ECBackend>(pgid.shard, coll, store,
+    return std::make_unique<ECBackend>(pg_shard.shard, coll, shard_services,
                                        std::move(ec_profile),
                                        pool.stripe_width);
   default:
@@ -157,11 +159,15 @@ PGBackend::_load_ss(const hobject_t& oid)
   });
 }
 
-seastar::future<>
+seastar::future<ceph::osd::acked_peers_t>
 PGBackend::mutate_object(
+  std::set<pg_shard_t> pg_shards,
   cached_os_t&& os,
   ceph::os::Transaction&& txn,
-  const MOSDOp& m)
+  const MOSDOp& m,
+  epoch_t min_epoch,
+  epoch_t map_epoch,
+  eversion_t ver)
 {
   logger().trace("mutate_object: num_ops={}", txn.get_num_ops());
   if (os->exists) {
@@ -185,7 +191,8 @@ PGBackend::mutate_object(
     // reset cached ObjectState without enforcing eviction
     os->oi = object_info_t(os->oi.soid);
   }
-  return store->do_transaction(coll, std::move(txn));
+  return _submit_transaction(std::move(pg_shards), os->oi.soid, std::move(txn),
+			     m.get_reqid(), min_epoch, map_epoch, ver);
 }
 
 seastar::future<>

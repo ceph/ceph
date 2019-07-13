@@ -417,6 +417,9 @@ public:
   void handle_initialize(PeeringCtx &rctx);
   seastar::future<> handle_op(ceph::net::Connection* conn,
 			      Ref<MOSDOp> m);
+  void handle_rep_op_reply(ceph::net::Connection* conn,
+			   const MOSDRepOpReply& m);
+
   void print(std::ostream& os) const;
 
 private:
@@ -431,6 +434,9 @@ private:
   seastar::future<ceph::bufferlist> do_pgnls(ceph::bufferlist& indata,
 					     const std::string& nspace,
 					     uint64_t limit);
+  seastar::future<> submit_transaction(boost::local_shared_ptr<ObjectState>&& os,
+				       ceph::os::Transaction&& txn,
+				       const MOSDOp& req);
 
 private:
   OSDMapGate osdmap_gate;

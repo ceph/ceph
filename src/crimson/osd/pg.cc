@@ -80,10 +80,11 @@ PG::PG(
     osdmap{osdmap},
     backend(
       PGBackend::create(
-        pgid,
+	pgid.pgid,
+	pg_shard,
 	pool,
 	coll_ref,
-	&shard_services.get_store(),
+	shard_services,
 	profile)),
     peering_state(
       shard_services.get_cct(),
@@ -411,6 +412,27 @@ seastar::future<bufferlist> PG::do_pgnls(bufferlist& indata,
   });
 }
 
+seastar::future<> PG::submit_transaction(boost::local_shared_ptr<ObjectState>&& os,
+					 ceph::os::Transaction&& txn,
+					 const MOSDOp& req)
+{
+  epoch_t map_epoch = get_osdmap_epoch();
+  eversion_t at_version{map_epoch, projected_last_update.version + 1};
+  return backend->mutate_object(peering_state.get_acting_recovery_backfill(),
+				std::move(os),
+				std::move(txn),
+				req,
+				peering_state.get_last_peering_reset(),
+				map_epoch,
+				at_version).then([this](auto acked) {
+    for (const auto& peer : acked) {
+      peering_state.update_peer_last_complete_ondisk(
+        peer.shard, peer.last_complete_ondisk);
+    }
+    return seastar::now();
+  });
+}
+
 seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
 {
   return seastar::do_with(std::move(m), ceph::os::Transaction{},
@@ -425,8 +447,11 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
         return do_osd_op(*pos, osd_op, txn);
       }).then([&txn,m,this,os=std::move(os)]() mutable {
         // XXX: the entire lambda could be scheduled conditionally. ::if_then()?
-        return txn.empty() ? seastar::now()
-                           : backend->mutate_object(std::move(os), std::move(txn), *m);
+	if (txn.empty()) {
+	  return seastar::now();
+	} else {
+	  return submit_transaction(std::move(os), std::move(txn), *m);
+	}
       });
     }).then([m,this] {
       auto reply = make_message<MOSDOpReply>(m.get(), 0, get_osdmap_epoch(),
@@ -457,6 +482,12 @@ seastar::future<> PG::handle_op(ceph::net::Connection* conn,
   }).then([conn](Ref<MOSDOpReply> reply) {
     return conn->send(reply);
   });
+}
+
+void PG::handle_rep_op_reply(ceph::net::Connection* conn,
+			     const MOSDRepOpReply& m)
+{
+  backend->got_rep_op_reply(m);
 }
 
 }
