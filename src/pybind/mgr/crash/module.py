@@ -5,6 +5,7 @@ import json
 import six
 from collections import defaultdict
 from prettytable import PrettyTable
+from threading import Event
 
 
 DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
@@ -12,10 +13,32 @@ OLD_DATEFMT = '%Y-%m-%d %H:%M:%S.%f'
 
 
 class Module(MgrModule):
+    MODULE_OPTIONS = [
+    ]
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
         self.crashes = None
+        self.run = True
+        self.event = Event()
+
+    def shutdown(self):
+        self.run = False
+        self.event.set()
+
+    def serve(self):
+        self.config_notify()
+        while self.run:
+            self.event.wait(self.warn_recent_interval / 100)
+            self.event.clear()
+
+    def config_notify(self):
+        for opt in self.MODULE_OPTIONS:
+            setattr(self,
+                    opt['name'],
+                    self.get_module_option(opt['name']) or opt['default'])
+            self.log.debug(' mgr option %s = %s',
+                           opt['name'], getattr(self, opt['name']))
 
     def _load_crashes(self):
         raw = self.get_store_prefix('crash/')
