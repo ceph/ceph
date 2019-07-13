@@ -14,8 +14,15 @@ class Module(MgrModule):
 
     def __init__(self, *args, **kwargs):
         super(Module, self).__init__(*args, **kwargs)
+        self.crashes = None
+
+    def _load_crashes(self):
+        raw = self.get_store_prefix('crash/')
+        self.crashes = {k[6:]: json.loads(m) for (k, m) in raw.items()}
 
     def handle_command(self, inbuf, command):
+        if not self.crashes:
+            self._load_crashes()
         for cmd in self.COMMANDS:
             if cmd['cmd'].startswith(command['prefix']):
                 handler = cmd['handler']
@@ -47,23 +54,19 @@ class Module(MgrModule):
         :returns: crash reports for which f(time) returns true
         """
         def inner(pair):
-            _, meta = pair
-            meta = json.loads(meta)
-            time = self.time_from_string(meta["timestamp"])
+            _, crash = pair
+            time = self.time_from_string(crash["timestamp"])
             return f(time)
-        matches = filter(inner, six.iteritems(
-            self.get_store_prefix("crash/")))
-        return [(k, json.loads(m)) for k, m in matches]
+        return filter(inner, self.crashes.items())
 
     # command handlers
 
     def do_info(self, cmd, inbuf):
         crashid = cmd['id']
-        key = 'crash/%s' % crashid
-        val = self.get_store(key)
-        if not val:
+        crash = self.crashes.get(crashid)
+        if not crash:
             return errno.EINVAL, '', 'crash info: %s not found' % crashid
-        val = json.dumps(json.loads(val), indent=4)
+        val = json.dumps(crash, indent=4)
         return 0, val, ''
 
     def do_post(self, cmd, inbuf):
@@ -71,12 +74,12 @@ class Module(MgrModule):
             metadata = self.validate_crash_metadata(inbuf)
         except Exception as e:
             return errno.EINVAL, '', 'malformed crash metadata: %s' % e
-
         crashid = metadata['crash_id']
-        key = 'crash/%s' % crashid
-        # repeated stores of same item are ignored silently
-        if not self.get_store(key):
-            self.set_store(key, inbuf)
+
+        if crashid not in self.crashes:
+            self.crashes[crashid] = metadata
+            key = 'crash/%s' % crashid
+            self.set_store(key, json.dumps(metadata))
         return 0, '', ''
 
     def ls(self):
@@ -85,9 +88,7 @@ class Module(MgrModule):
         return self.do_ls({'prefix': 'crash ls'}, '')
 
     def do_ls(self, cmd, inbuf):
-        r = []
-        for k, meta in self.timestamp_filter(lambda ts: True):
-            r.append(meta)
+        r = self.crashes.values()
         if cmd.get('format') == 'json' or cmd.get('format') == 'json-pretty':
             return 0, json.dumps(r, indent=4), ''
         else:
@@ -105,45 +106,53 @@ class Module(MgrModule):
 
     def do_rm(self, cmd, inbuf):
         crashid = cmd['id']
-        key = 'crash/%s' % crashid
-        self.set_store(key, None)       # removes key
+        if crashid in self.crashes:
+            del self.crashes[crashid]
+            key = 'crash/%s' % crashid
+            self.set_store(key, None)       # removes key
         return 0, '', ''
 
     def do_prune(self, cmd, inbuf):
-        now = datetime.datetime.utcnow()
-
         keep = cmd['keep']
         try:
             keep = int(keep)
         except ValueError:
             return errno.EINVAL, '', 'keep argument must be integer'
 
-        cutoff = now - datetime.timedelta(days=keep)
-
-        for key, _ in self.timestamp_filter(lambda ts: ts <= cutoff):
-            self.set_store(key, None)
-
+        self._prune(keep * 60*60*24)
         return 0, '', ''
+
+    def _prune(self, seconds):
+        now = datetime.datetime.utcnow()
+        cutoff = now - datetime.timedelta(seconds=seconds)
+        removed_any = False
+        # make a copy of the list, since we'll modify self.crashes below
+        to_prune = list(self.timestamp_filter(lambda ts: ts <= cutoff))
+        for crashid, crash in to_prune:
+            del self.crashes[crashid]
+            key = 'crash/%s' % crashid
+            self.set_store(key, None)
 
     def do_archive(self, cmd, inbuf):
         crashid = cmd['id']
-        key = 'crash/%s' % crashid
-        val = self.get_store(key)
-        if not val:
+        crash = self.crashes.get(crashid)
+        if not crash:
             return errno.EINVAL, '', 'crash info: %s not found' % crashid
-        m = json.loads(val)
-        if not m.get('archived', None):
-            m['archived'] = str(datetime.datetime.utcnow())
-            self.set_store(key, json.dumps(m))
+        if not crash.get('archived'):
+            crash['archived'] = str(datetime.datetime.utcnow())
+            self.crashes[crashid] = crash
+            key = 'crash/%s' % crashid
+            self.set_store(key, json.dumps(crash))
         return 0, '', ''
 
     def do_archive_all(self, cmd, inbuf):
-        for key, m in self.timestamp_filter(lambda ts: True):
-            if not m.get('archived', None):
-                m['archived'] = str(datetime.datetime.utcnow())
-                self.set_store(key, json.dumps(m))
+        for crashid, crash in self.crashes.items():
+            if not crash.get('archived'):
+                crash['archived'] = str(datetime.datetime.utcnow())
+                self.crashes[crashid] = crash
+                key = 'crash/%s' % crashid
+                self.set_store(key, json.dumps(crash))
         return 0, '', ''
-
 
     def do_stat(self, cmd, inbuf):
         # age in days for reporting, ordered smallest first
@@ -171,11 +180,9 @@ class Module(MgrModule):
                 'idlist': list()
             }
 
-        for key, meta in six.iteritems(self.get_store_prefix('crash/')):
+        for crashid, crash in self.crashes.items():
             total += 1
-            meta = json.loads(meta)
-            stamp = self.time_from_string(meta['timestamp'])
-            crashid = meta['crash_id']
+            stamp = self.time_from_string(crash['timestamp'])
             for i, bindict in enumerate(bins):
                 if stamp <= bindict['agelimit']:
                     bindict['idlist'].append(crashid)
@@ -199,8 +206,8 @@ class Module(MgrModule):
 
         report = defaultdict(lambda: 0)
         cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=hours)
-        for _, meta in self.timestamp_filter(lambda ts: ts >= cutoff):
-            pname = meta.get("process_name", "unknown")
+        for crashid, crash in self.crashes.items():
+            pname = crash.get("process_name", "unknown")
             if not pname:
                 pname = "unknown"
             report[pname] += 1
