@@ -37,7 +37,13 @@ Remove a specific crash dump.
 
   ceph crash ls
 
-List the timestamp/uuid crashids for all saved crash info.
+List the timestamp/uuid crashids for all new and archived crash info.
+
+::
+
+  ceph crash ls-new
+
+List the timestamp/uuid crashids for all newcrash info.
 
 ::
 

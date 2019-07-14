@@ -107,10 +107,15 @@ class Module(MgrModule):
             self.crashes[crashid] = metadata
             key = 'crash/%s' % crashid
             self.set_store(key, json.dumps(metadata))
+            self._refresh_health_checks()
         return 0, '', ''
 
     def do_ls(self, cmd, inbuf):
-        r = self.crashes.values()
+        if cmd['prefix'] == 'crash ls':
+            r = self.crashes.values()
+        else:
+            r = [crash for crashid, crash in self.crashes.items()
+                 if 'archived' not in crash]
         if cmd.get('format') == 'json' or cmd.get('format') == 'json-pretty':
             return 0, json.dumps(r, indent=4), ''
         else:
@@ -256,7 +261,13 @@ class Module(MgrModule):
         },
         {
             'cmd': 'crash ls',
-            'desc': 'Show saved crash dumps',
+            'desc': 'Show new and archived crash dumps',
+            'perm': 'r',
+            'handler': do_ls,
+        },
+        {
+            'cmd': 'crash ls-new',
+            'desc': 'Show new crash dumps',
             'perm': 'r',
             'handler': do_ls,
         },
