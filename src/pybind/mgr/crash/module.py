@@ -11,9 +11,18 @@ from threading import Event
 DATEFMT = '%Y-%m-%dT%H:%M:%S.%f'
 OLD_DATEFMT = '%Y-%m-%d %H:%M:%S.%f'
 
+MAX_WAIT = 600
+MIN_WAIT = 60
 
 class Module(MgrModule):
     MODULE_OPTIONS = [
+        {
+            'name': 'warn_recent_interval',
+            'type': 'secs',
+            'default': 60*60*24*14,
+            'desc': 'time interval in which to warn about recent crashes',
+            'runtime': True,
+        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -29,7 +38,9 @@ class Module(MgrModule):
     def serve(self):
         self.config_notify()
         while self.run:
-            self.event.wait(self.warn_recent_interval / 100)
+            self._refresh_health_checks()
+            wait = min(MAX_WAIT, max(self.warn_recent_interval / 100, MIN_WAIT))
+            self.event.wait(wait)
             self.event.clear()
 
     def config_notify(self):
@@ -43,6 +54,35 @@ class Module(MgrModule):
     def _load_crashes(self):
         raw = self.get_store_prefix('crash/')
         self.crashes = {k[6:]: json.loads(m) for (k, m) in raw.items()}
+
+    def _refresh_health_checks(self):
+        if not self.crashes:
+            self._load_crashes()
+        cutoff = datetime.datetime.utcnow() - datetime.timedelta(
+            seconds=self.warn_recent_interval)
+        recent = {
+            crashid: crash for crashid, crash in self.crashes.items()
+            if self.time_from_string(crash['timestamp']) > cutoff and 'archived' not in crash
+        }
+        num = len(recent)
+        health_checks = {}
+        if recent:
+            detail = [
+                '%s crashed on host %s at %s' % (
+                    crash.get('entity_name', 'unidentified daemon'),
+                    crash.get('utsname_hostname', '(unknown)'),
+                    crash.get('timestamp', 'unknown time'))
+                    for (_, crash) in recent.items()]
+            if num > 30:
+                detail = detail[0:30]
+                detail.append('and %d more' % (num - 30))
+            self.log.debug('detail %s' % detail)
+            health_checks['RECENT_CRASH'] = {
+                'severity': 'warning',
+                'summary': '%d daemons have recently crashed' % (num),
+                'detail': detail,
+            }
+        self.set_health_checks(health_checks)
 
     def handle_command(self, inbuf, command):
         if not self.crashes:
@@ -137,6 +177,7 @@ class Module(MgrModule):
             del self.crashes[crashid]
             key = 'crash/%s' % crashid
             self.set_store(key, None)       # removes key
+            self._refresh_health_checks()
         return 0, '', ''
 
     def do_prune(self, cmd, inbuf):
@@ -159,6 +200,9 @@ class Module(MgrModule):
             del self.crashes[crashid]
             key = 'crash/%s' % crashid
             self.set_store(key, None)
+            removed_any = True
+        if removed_any:
+            self._refresh_health_checks()
 
     def do_archive(self, cmd, inbuf):
         crashid = cmd['id']
@@ -170,6 +214,7 @@ class Module(MgrModule):
             self.crashes[crashid] = crash
             key = 'crash/%s' % crashid
             self.set_store(key, json.dumps(crash))
+            self._refresh_health_checks()
         return 0, '', ''
 
     def do_archive_all(self, cmd, inbuf):
@@ -179,6 +224,7 @@ class Module(MgrModule):
                 self.crashes[crashid] = crash
                 key = 'crash/%s' % crashid
                 self.set_store(key, json.dumps(crash))
+        self._refresh_health_checks()
         return 0, '', ''
 
     def do_stat(self, cmd, inbuf):
