@@ -54,7 +54,8 @@ public:
 
   virtual int remove_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
                                     const string& key,
-                                    RGWObjVersionTracker *objv_tracker) = 0;
+                                    RGWObjVersionTracker *objv_tracker,
+                                    optional_yield y) = 0;
 
   virtual int read_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                 const string& key,

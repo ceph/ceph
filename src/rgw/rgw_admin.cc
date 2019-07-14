@@ -6809,7 +6809,7 @@ next:
   }
 
   if (opt_cmd == OPT_METADATA_GET) {
-    int ret = store->ctl.meta.mgr->get(metadata_key, formatter);
+    int ret = store->ctl.meta.mgr->get(metadata_key, formatter, null_yield);
     if (ret < 0) {
       cerr << "ERROR: can't get key: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -6825,7 +6825,7 @@ next:
       cerr << "ERROR: failed to read input: " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
-    ret = store->ctl.meta.mgr->put(metadata_key, bl, RGWMDLogSyncType::APPLY_ALWAYS);
+    ret = store->ctl.meta.mgr->put(metadata_key, bl, null_yield, RGWMDLogSyncType::APPLY_ALWAYS);
     if (ret < 0) {
       cerr << "ERROR: can't put key: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -6833,7 +6833,7 @@ next:
   }
 
   if (opt_cmd == OPT_METADATA_RM) {
-    int ret = store->ctl.meta.mgr->remove(metadata_key);
+    int ret = store->ctl.meta.mgr->remove(metadata_key, null_yield);
     if (ret < 0) {
       cerr << "ERROR: can't remove key: " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -7740,6 +7740,7 @@ next:
 
     int ret = store->ctl.meta.mgr->mutate(RGWSI_MetaBackend_OTP::get_meta_key(user_id),
 					  mtime, &objv_tracker,
+					  null_yield,
 					  MDLOG_STATUS_WRITE,
 					  [&] {
       return store->svc.cls->mfa.create_mfa(user_id, config, &objv_tracker, mtime, null_yield);
@@ -7775,6 +7776,7 @@ next:
 
     int ret = store->ctl.meta.mgr->mutate(RGWSI_MetaBackend_OTP::get_meta_key(user_id),
 					  mtime, &objv_tracker,
+					  null_yield,
 					  MDLOG_STATUS_WRITE,
 					  [&] {
       return store->svc.cls->mfa.remove_mfa(user_id, totp_serial, &objv_tracker, mtime, null_yield);
@@ -7918,6 +7920,7 @@ next:
 
     ret = store->ctl.meta.mgr->mutate(RGWSI_MetaBackend_OTP::get_meta_key(user_id),
 				      mtime, &objv_tracker,
+				      null_yield,
 				      MDLOG_STATUS_WRITE,
 				      [&] {
       return store->svc.cls->mfa.create_mfa(user_id, config, &objv_tracker, mtime, null_yield);

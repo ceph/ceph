@@ -52,9 +52,9 @@ protected:
                      const std::string& key,
                      const ceph::real_time& mtime, RGWObjVersionTracker *objv_tracker,
                      RGWMDLogStatus op_type,
+                     optional_yield y,
                      std::function<int()> f,
-                     bool generic_prepare,
-                     optional_yield y);
+                     bool generic_prepare);
 
   virtual int pre_modify(Context *ctx,
                          const std::string& key,
@@ -193,6 +193,7 @@ public:
                      const std::string& key,
                      MutateParams& params,
 		     RGWObjVersionTracker *objv_tracker,
+                     optional_yield y,
                      std::function<int()> f);
 };
 
@@ -216,27 +217,31 @@ public:
 
     int get(const std::string& key,
             RGWSI_MetaBackend::GetParams &params,
-            RGWObjVersionTracker *objv_tracker) {
-      return be->get(be_ctx, key, params, objv_tracker);
+            RGWObjVersionTracker *objv_tracker,
+            optional_yield y) {
+      return be->get(be_ctx, key, params, objv_tracker, y);
     }
 
     int put(const std::string& key,
             RGWSI_MetaBackend::PutParams& params,
-            RGWObjVersionTracker *objv_tracker) {
-      return be->put(be_ctx, key, params, objv_tracker);
+            RGWObjVersionTracker *objv_tracker,
+            optional_yield y) {
+      return be->put(be_ctx, key, params, objv_tracker, y);
     }
 
     int remove(const std::string& key,
                RGWSI_MetaBackend::RemoveParams& params,
-               RGWObjVersionTracker *objv_tracker) {
-      return be->remove(be_ctx, key, params, objv_tracker);
+               RGWObjVersionTracker *objv_tracker,
+               optional_yield y) {
+      return be->remove(be_ctx, key, params, objv_tracker, y);
     }
 
     int mutate(const std::string& key,
 	       RGWSI_MetaBackend::MutateParams& params,
 	       RGWObjVersionTracker *objv_tracker,
+               optional_yield y,
 	       std::function<int()> f) {
-      return be->mutate(be_ctx, key, params, objv_tracker, f);
+      return be->mutate(be_ctx, key, params, objv_tracker, y, f);
     }
 
     int list_init(const string& marker) {

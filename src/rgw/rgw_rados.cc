@@ -2215,8 +2215,8 @@ int RGWRados::get_obj_head_ref(const RGWBucketInfo& bucket_info, const rgw_obj& 
 
   ref->pool = svc.rados->pool(pool);
 
-  int r = ref->pool.open(RGWSI_RADOS::Pool::OpenParams()
-                         .set_mostly_omap(false);
+  int r = ref->pool.open(RGWSI_RADOS::OpenParams()
+                         .set_mostly_omap(false));
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed opening data pool (pool=" << pool << "); r=" << r << dendl;
     return r;
@@ -2236,8 +2236,8 @@ int RGWRados::get_raw_obj_ref(const rgw_raw_obj& obj, rgw_rados_ref *ref)
     ref->obj.pool = svc.zone->get_zone_params().domain_root;
   }
   ref->pool = svc.rados->pool(obj.pool);
-  int r = ref->pool.open(RGWSI_RADOS::Pool::OpenParams()
-                         .set_mostly_omap(false);
+  int r = ref->pool.open(RGWSI_RADOS::OpenParams()
+                         .set_mostly_omap(false));
   if (r < 0) {
     ldout(cct, 0) << "ERROR: failed opening pool (pool=" << obj.pool << "); r=" << r << dendl;
     return r;
@@ -4358,6 +4358,7 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
     RGWBucketEntryPoint ep;
     r = ctl.bucket->read_bucket_entrypoint_info(bucket_info.bucket,
                                                 &ep,
+						null_yield,
                                                 RGWBucketCtl::Bucket::GetParams()
                                                 .set_objv_tracker(&objv_tracker));
     if (r < 0 ||
@@ -4376,7 +4377,7 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
   }
  
   if (remove_ep) {
-    r = ctl.bucket->remove_bucket_entrypoint_info(bucket_info.bucket,
+    r = ctl.bucket->remove_bucket_entrypoint_info(bucket_info.bucket, null_yield,
                                                   RGWBucketCtl::Bucket::RemoveParams()
                                                   .set_objv_tracker(&objv_tracker));
     if (r < 0)
@@ -4386,7 +4387,7 @@ int RGWRados::delete_bucket(RGWBucketInfo& bucket_info, RGWObjVersionTracker& ob
   /* if the bucket is not synced we can remove the meta file */
   if (!svc.zone->is_syncing_bucket_meta(bucket)) {
     RGWObjVersionTracker objv_tracker;
-    r = ctl.bucket->remove_bucket_instance_info(bucket, bucket_info);
+    r = ctl.bucket->remove_bucket_instance_info(bucket, bucket_info, null_yield);
     if (r < 0) {
       return r;
     }
@@ -4642,17 +4643,6 @@ void RGWRados::cls_obj_check_mtime(ObjectOperation& op, const real_time& mtime, 
 {
   cls_rgw_obj_check_mtime(op, mtime, high_precision_time, type);
 }
-
-struct tombstone_entry {
-  ceph::real_time mtime;
-  uint32_t zone_short_id;
-  uint64_t pg_ver;
-
-  tombstone_entry() = default;
-  explicit tombstone_entry(const RGWObjState& state)
-    : mtime(state.mtime), zone_short_id(state.zone_short_id),
-      pg_ver(state.pg_ver) {}
-};
 
 struct tombstone_entry {
   ceph::real_time mtime;
@@ -5152,7 +5142,7 @@ int RGWRados::get_obj_state_impl(RGWObjectCtx *rctx, const RGWBucketInfo& bucket
 
     if (need_follow_olh) {
       return get_olh_target_state(*rctx, bucket_info, obj, s, state, y);
-    } else if (obj.key.have_null_instance() && !s->has_manifest) {
+    } else if (obj.key.have_null_instance() && !s->manifest) {
       // read null version, and the head object only have olh info
       s->exists = false;
       return -ENOENT;
@@ -5453,7 +5443,7 @@ int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& sr
     return r;
 
   // ensure null version object exist
-  if (src_obj.key.instance == "null" && !state->has_manifest) {
+  if (src_obj.key.instance == "null" && !state->manifest) {
     return -ENOENT;
   }
 
@@ -7310,11 +7300,11 @@ int RGWRados::get_bucket_instance_info(RGWSysObjectCtx& obj_ctx, const rgw_bucke
 {
   RGWSI_MetaBackend_CtxParams bectx_params = RGWSI_MetaBackend_CtxParams_SObj(&obj_ctx);
   return ctl.bucket->read_bucket_instance_info(bucket, &info,
+					       y,
 					       RGWBucketCtl::BucketInstance::GetParams()
 					       .set_mtime(pmtime)
 					       .set_attrs(pattrs)
-                                               .set_bectx_params(bectx_params),
-                                               .set_yield(y));
+                                               .set_bectx_params(bectx_params));
 }
 
 int RGWRados::get_bucket_info(RGWSysObjectCtx& obj_ctx,
@@ -7343,7 +7333,7 @@ int RGWRados::try_refresh_bucket_info(RGWBucketInfo& info,
 
   auto rv = info.objv_tracker.read_version;
 
-  return ctl.bucket->read_bucket_info(bucket, &info,
+  return ctl.bucket->read_bucket_info(bucket, &info, null_yield,
 				      RGWBucketCtl::BucketInstance::GetParams()
 				      .set_mtime(pmtime)
 				      .set_attrs(pattrs)
@@ -7353,7 +7343,7 @@ int RGWRados::try_refresh_bucket_info(RGWBucketInfo& info,
 int RGWRados::put_bucket_instance_info(RGWBucketInfo& info, bool exclusive,
                               real_time mtime, map<string, bufferlist> *pattrs)
 {
-  return ctl.bucket->store_bucket_instance_info(info.bucket, info,
+  return ctl.bucket->store_bucket_instance_info(info.bucket, info, null_yield,
 						RGWBucketCtl::BucketInstance::PutParams()
 						.set_exclusive(exclusive)
 						.set_mtime(mtime)
@@ -7387,7 +7377,7 @@ int RGWRados::put_linked_bucket_info(RGWBucketInfo& info, bool exclusive, real_t
       *pep_objv = ot.write_version;
     }
   }
-  ret = ctl.bucket->store_bucket_entrypoint_info(info.bucket, entry_point, RGWBucketCtl::Bucket::PutParams()
+  ret = ctl.bucket->store_bucket_entrypoint_info(info.bucket, entry_point, null_yield, RGWBucketCtl::Bucket::PutParams()
 						                          .set_exclusive(exclusive)
 									  .set_objv_tracker(&ot)
 									  .set_mtime(mtime));

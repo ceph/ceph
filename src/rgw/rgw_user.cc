@@ -2480,7 +2480,7 @@ public:
                              RGWSI_MetaBackend_Handler::Op *op, string& entry,
                              RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
                              optional_yield y,
-                             RGWMDLogSyncType type) : RGWMetadataHandlerPut_SObj(_handler, op, entry, obj, objv_tracker, type),
+                             RGWMDLogSyncType type) : RGWMetadataHandlerPut_SObj(_handler, op, entry, obj, objv_tracker, y, type),
                                                                 uhandler(_handler) {
     uobj = static_cast<RGWUserMetadataObject *>(obj);
   }

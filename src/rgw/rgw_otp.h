@@ -94,9 +94,9 @@ public:
     }
   };
 
-  int read_all(const rgw_user& uid, RGWOTPInfo *info, ceph::optional_ref_default<GetParams> params);
-  int store_all(const RGWOTPInfo& info, ceph::optional_ref_default<PutParams> params);
-  int remove_all(const rgw_user& user, ceph::optional_ref_default<RemoveParams> params);
+  int read_all(const rgw_user& uid, RGWOTPInfo *info, optional_yield y, ceph::optional_ref_default<GetParams> params);
+  int store_all(const RGWOTPInfo& info, optional_yield y, ceph::optional_ref_default<PutParams> params);
+  int remove_all(const rgw_user& user, optional_yield y, ceph::optional_ref_default<RemoveParams> params);
 };
 
 #endif

@@ -60,10 +60,10 @@ public:
     s.append(part);
     return s;
   }
-  string& get_upload_id() const {
+  const string& get_upload_id() const {
     return upload_id;
   }
-  string& get_key() const {
+  const string& get_key() const {
     return oid;
   }
   bool from_meta(string& meta) {
@@ -108,7 +108,7 @@ public:
    * @return true if the name provided is in the form of a multipart meta
    *         object, false otherwise
    */
-  bool filter(string& name, string& key) override;
+  bool filter(const string& name, string& key) override;
 };
 
 class RGWSI_Tier_RADOS : public RGWServiceInstance

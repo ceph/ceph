@@ -58,7 +58,8 @@ class RGWSI_Bucket_SObj : public RGWSI_Bucket
                                    real_time *pmtime,
                                    map<string, bufferlist> *pattrs,
                                    rgw_cache_entry_info *cache_info,
-                                   boost::optional<obj_version> refresh_version);
+                                   boost::optional<obj_version> refresh_version,
+                                   optional_yield y);
 
   int read_bucket_stats(const RGWBucketInfo& bucket_info,
                         RGWBucketEnt *ent,

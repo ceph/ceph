@@ -124,7 +124,7 @@ void rgw_shard_name(const string& prefix, unsigned shard_id, string& name)
 }
 
 int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
-                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs)
+                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, map<string, bufferlist> *pattrs)
 {
   map<string,bufferlist> no_attrs;
   if (!pattrs) {
@@ -139,13 +139,22 @@ int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const str
                   .set_exclusive(exclusive)
                   .set_mtime(set_mtime)
                   .set_attrs(*pattrs)
-                  .write(data, null_yield);
+                  .write(data, y);
 
   return ret;
 }
 
+int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
+                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs)
+{
+  return rgw_put_system_obj(obj_ctx, pool, oid, data, exclusive,
+                            objv_tracker, set_mtime, null_yield, pattrs);
+}
+
 int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
                        RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, map<string, bufferlist> *pattrs,
+                       rgw_cache_entry_info *cache_info,
+		       boost::optional<obj_version> refresh_version)
 {
   bufferlist::iterator iter;
   int request_len = READ_CHUNK_LEN;

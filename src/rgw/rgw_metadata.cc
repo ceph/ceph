@@ -320,21 +320,14 @@ public:
     return -ENOTSUP;
   }
 
-  int remove(string& entry, RGWObjVersionTracker& objv_tracker optional_yield y, override {
+  int remove(string& entry, RGWObjVersionTracker& objv_tracker, optional_yield y) override {
     return -ENOTSUP;
   }
 
   int mutate(const string& entry,
              const ceph::real_time& mtime,
              RGWObjVersionTracker *objv_tracker,
-             RGWMDLogStatus op_type,
-             std::function<int()> f) {
-    return -ENOTSUP;
-  }
-
-  int mutate(const string& entry,
-             const ceph::real_time& mtime,
-             RGWObjVersionTracker *objv_tracker,
+             optional_yield y,
              RGWMDLogStatus op_type,
              std::function<int()> f) {
     return -ENOTSUP;
@@ -411,7 +404,8 @@ RGWMetadataHandler_GenericMetaBE::Put::Put(RGWMetadataHandler_GenericMetaBE *_ha
 
 RGWMetadataHandlerPut_SObj::RGWMetadataHandlerPut_SObj(RGWMetadataHandler_GenericMetaBE *handler, RGWSI_MetaBackend_Handler::Op *op,
                                                        string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
-                                                       RGWMDLogSyncType type) : Put(handler, op, entry, obj, objv_tracker, type) {
+						       optional_yield y,
+                                                       RGWMDLogSyncType type) : Put(handler, op, entry, obj, objv_tracker, y, type) {
 }
 
 RGWMetadataHandlerPut_SObj::~RGWMetadataHandlerPut_SObj() {
@@ -486,21 +480,21 @@ int RGWMetadataHandler_GenericMetaBE::do_put_operate(Put *put_op)
   return 0;
 }
 
-int RGWMetadataHandler_GenericMetaBE::get(string& entry, RGWMetadataObject **obj)
+int RGWMetadataHandler_GenericMetaBE::get(string& entry, RGWMetadataObject **obj, optional_yield y)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return do_get(op, entry, obj, y);
   });
 }
 
-int RGWMetadataHandler_GenericMetaBE::put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type)
+int RGWMetadataHandler_GenericMetaBE::put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, optional_yield y, RGWMDLogSyncType type)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return do_put(op, entry, obj, objv_tracker, y, type);
   });
 }
 
-int RGWMetadataHandler_GenericMetaBE::remove(string& entry, RGWObjVersionTracker& objv_tracker)
+int RGWMetadataHandler_GenericMetaBE::remove(string& entry, RGWObjVersionTracker& objv_tracker, optional_yield y)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return do_remove(op, entry, objv_tracker, y);
@@ -510,6 +504,7 @@ int RGWMetadataHandler_GenericMetaBE::remove(string& entry, RGWObjVersionTracker
 int RGWMetadataHandler_GenericMetaBE::mutate(const string& entry,
                                              const ceph::real_time& mtime,
                                              RGWObjVersionTracker *objv_tracker,
+                                             optional_yield y,
                                              RGWMDLogStatus op_type,
                                              std::function<int()> f)
 {
@@ -518,21 +513,7 @@ int RGWMetadataHandler_GenericMetaBE::mutate(const string& entry,
     return op->mutate(entry,
                       params,
                       objv_tracker,
-                      f);
-  });
-}
-
-int RGWMetadataHandler_GenericMetaBE::mutate(const string& entry,
-                                             const ceph::real_time& mtime,
-                                             RGWObjVersionTracker *objv_tracker,
-                                             RGWMDLogStatus op_type,
-                                             std::function<int()> f)
-{
-  return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    RGWSI_MetaBackend::MutateParams params(mtime, op_type);
-    return op->mutate(entry,
-                      params,
-                      objv_tracker,
+		      y,
                       f);
   });
 }
@@ -648,7 +629,7 @@ int RGWMetadataManager::find_handler(const string& metadata_key, RGWMetadataHand
 
 }
 
-int RGWMetadataManager::get(string& metadata_key, Formatter *f)
+int RGWMetadataManager::get(string& metadata_key, Formatter *f, optional_yield y)
 {
   RGWMetadataHandler *handler;
   string entry;
@@ -659,7 +640,7 @@ int RGWMetadataManager::get(string& metadata_key, Formatter *f)
 
   RGWMetadataObject *obj;
 
-  ret = handler->get(entry, &obj);
+  ret = handler->get(entry, &obj, y);
   if (ret < 0) {
     return ret;
   }
@@ -681,6 +662,7 @@ int RGWMetadataManager::get(string& metadata_key, Formatter *f)
 }
 
 int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
+			    optional_yield y,
                             RGWMDLogSyncType sync_type,
                             obj_version *existing_version)
 {
@@ -721,7 +703,7 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
     return -EINVAL;
   }
 
-  ret = handler->put(entry, obj, objv_tracker, sync_type);
+  ret = handler->put(entry, obj, objv_tracker, y, sync_type);
   if (existing_version) {
     *existing_version = objv_tracker.read_version;
   }
@@ -731,7 +713,7 @@ int RGWMetadataManager::put(string& metadata_key, bufferlist& bl,
   return ret;
 }
 
-int RGWMetadataManager::remove(string& metadata_key)
+int RGWMetadataManager::remove(string& metadata_key, optional_yield y)
 {
   RGWMetadataHandler *handler;
   string entry;
@@ -742,7 +724,7 @@ int RGWMetadataManager::remove(string& metadata_key)
   }
 
   RGWMetadataObject *obj;
-  ret = handler->get(entry, &obj);
+  ret = handler->get(entry, &obj, y);
   if (ret < 0) {
     return ret;
   }
@@ -750,12 +732,13 @@ int RGWMetadataManager::remove(string& metadata_key)
   objv_tracker.read_version = obj->get_version();
   delete obj;
 
-  return handler->remove(entry, objv_tracker);
+  return handler->remove(entry, objv_tracker, y);
 }
 
 int RGWMetadataManager::mutate(const string& metadata_key,
                                const ceph::real_time& mtime,
                                RGWObjVersionTracker *objv_tracker,
+			       optional_yield y,
                                RGWMDLogStatus op_type,
                                std::function<int()> f)
 {
@@ -767,7 +750,7 @@ int RGWMetadataManager::mutate(const string& metadata_key,
     return ret;
   }
 
-  return handler->mutate(entry, mtime, objv_tracker, op_type, f);
+  return handler->mutate(entry, mtime, objv_tracker, y, op_type, f);
 }
 
 int RGWMetadataManager::get_shard_id(const string& section, const string& entry, int *shard_id)

@@ -214,7 +214,7 @@ int RGWSI_Bucket_SObj::read_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
   auto params = RGWSI_MBSObj_GetParams(&bl, pattrs, pmtime).set_cache_info(cache_info)
                                                            .set_refresh_version(refresh_version);
                                                     
-  int ret = svc.meta_be->get_entry(ctx.get(), key, params, objv_tracker);
+  int ret = svc.meta_be->get_entry(ctx.get(), key, params, objv_tracker, y);
   if (ret < 0) {
     return ret;
   }
@@ -243,7 +243,7 @@ int RGWSI_Bucket_SObj::store_bucket_entrypoint_info(RGWSI_Bucket_EP_Ctx& ctx,
 
   RGWSI_MBSObj_PutParams params(bl, pattrs, mtime, exclusive);
 
-  int ret = svc.meta_be->put(ctx.get(), key, params, objv_tracker);
+  int ret = svc.meta_be->put(ctx.get(), key, params, objv_tracker, y);
   if (ret == -EEXIST) {
     /* well, if it's exclusive we shouldn't overwrite it, because we might race with another
      * bucket operation on this specific bucket (e.g., being synced from the master), but
@@ -386,6 +386,7 @@ int RGWSI_Bucket_SObj::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
     return read_bucket_instance_info(ctx.bi, get_bi_meta_key(bucket),
                                      info,
                                      pmtime, pattrs,
+                                     y,
                                      &cache_info, refresh_version);
   }
 
@@ -420,8 +421,8 @@ int RGWSI_Bucket_SObj::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
   rgw_cache_entry_info entry_cache_info;
   int ret = read_bucket_entrypoint_info(ctx.ep, bucket_entry,
                                         &entry_point, &ot, &ep_mtime, pattrs,
-                                        &entry_cache_info, refresh_version,
-                                        y);
+                                        y,
+                                        &entry_cache_info, refresh_version);
   if (ret < 0) {
     /* only init these fields */
     info->bucket = bucket;
@@ -451,7 +452,8 @@ int RGWSI_Bucket_SObj::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
 
   ret = read_bucket_instance_info(ctx.bi, get_bi_meta_key(entry_point.bucket),
                                   &e.info, &e.mtime, &e.attrs,
-                                  &cache_info, refresh_version, y);
+                                  y,
+                                  &cache_info, refresh_version);
   *info = e.info;
   if (ret < 0) {
     lderr(cct) << "ERROR: read_bucket_instance_from_oid failed: " << ret << dendl;
@@ -466,7 +468,7 @@ int RGWSI_Bucket_SObj::read_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
     *pattrs = e.attrs;
 
   /* chain to both bucket entry point and bucket instance */
-  if (!binfo_cache->put(svc.cache, cache_key, &e, {&entry_cache_info, &cache_info}, y)) {
+  if (!binfo_cache->put(svc.cache, cache_key, &e, {&entry_cache_info, &cache_info})) {
     ldout(cct, 20) << "couldn't put binfo cache entry, might have raced with data changes" << dendl;
   }
 
@@ -509,6 +511,7 @@ int RGWSI_Bucket_SObj::store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                        key,
                                        &_orig_info,
                                        nullptr, nullptr,
+                                       y,
                                        nullptr, boost::none);
     if (r < 0) {
       if (r != -ENOENT) {

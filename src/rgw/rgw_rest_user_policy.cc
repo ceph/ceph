@@ -125,7 +125,7 @@ void RGWPutUserPolicy::execute()
   }
 
   map<string, bufferlist> uattrs;
-  op_ret = store->ctl.user->get_attrs_by_uid(user_id, &uattrs);
+  op_ret = store->ctl.user->get_attrs_by_uid(user_id, &uattrs, s->yield);
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;
@@ -190,7 +190,7 @@ void RGWGetUserPolicy::execute()
 
   rgw_user user_id(user_name);
   map<string, bufferlist> uattrs;
-  op_ret = store->ctl.user->get_attrs_by_uid(user_id, &uattrs);
+  op_ret = store->ctl.user->get_attrs_by_uid(user_id, &uattrs, s->yield);
   if (op_ret == -ENOENT) {
     ldout(s->cct, 0) << "ERROR: attrs not found for user" << user_name << dendl;
     op_ret = -ERR_NO_SUCH_ENTITY;
@@ -254,7 +254,7 @@ void RGWListUserPolicies::execute()
 
   rgw_user user_id(user_name);
   map<string, bufferlist> uattrs;
-  op_ret = store->ctl.user->get_attrs_by_uid(user_id, &uattrs);
+  op_ret = store->ctl.user->get_attrs_by_uid(user_id, &uattrs, s->yield);
   if (op_ret == -ENOENT) {
     ldout(s->cct, 0) << "ERROR: attrs not found for user" << user_name << dendl;
     op_ret = -ERR_NO_SUCH_ENTITY;
@@ -323,7 +323,7 @@ void RGWDeleteUserPolicy::execute()
   }
 
   map<string, bufferlist> uattrs;
-  op_ret = store->ctl.user->get_attrs_by_uid(user_id, &uattrs);
+  op_ret = store->ctl.user->get_attrs_by_uid(user_id, &uattrs, s->yield);
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;

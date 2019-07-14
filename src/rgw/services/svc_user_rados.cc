@@ -523,7 +523,7 @@ int RGWSI_User_RADOS::get_user_info_from_index(RGWSI_MetaBackend::Context *_ctx,
     return -EIO;
   }
 
-  uinfo_cache->put(svc.cache, cache_key, &e, { &cache_info }, y);
+  uinfo_cache->put(svc.cache, cache_key, &e, { &cache_info });
 
   *info = e.info;
   if (objv_tracker)

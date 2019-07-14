@@ -1087,7 +1087,7 @@ class RGWAsyncMetaStoreEntry : public RGWAsyncRadosRequest {
   bufferlist bl;
 protected:
   int _send_request() override {
-    int ret = store->ctl.meta.mgr->put(raw_key, bl, RGWMDLogSyncType::APPLY_ALWAYS);
+    int ret = store->ctl.meta.mgr->put(raw_key, bl, null_yield, RGWMDLogSyncType::APPLY_ALWAYS);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: can't store key: " << raw_key << " ret=" << ret << dendl;
       return ret;
@@ -1139,7 +1139,7 @@ class RGWAsyncMetaRemoveEntry : public RGWAsyncRadosRequest {
   string raw_key;
 protected:
   int _send_request() override {
-    int ret = store->ctl.meta.mgr->remove(raw_key);
+    int ret = store->ctl.meta.mgr->remove(raw_key, null_yield);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: can't remove key: " << raw_key << " ret=" << ret << dendl;
       return ret;

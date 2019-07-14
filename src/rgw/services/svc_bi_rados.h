@@ -58,7 +58,8 @@ class RGWSI_BucketIndex_RADOS : public RGWSI_BucketIndex
   int cls_bucket_head(const RGWBucketInfo& bucket_info,
                       int shard_id,
                       vector<rgw_bucket_dir_header> *headers,
-                      map<int, string> *bucket_instance_ids);
+                      map<int, string> *bucket_instance_ids,
+                      optional_yield y);
 
 public:
 
@@ -98,7 +99,8 @@ public:
   /* RADOS specific */
 
   int read_stats(const RGWBucketInfo& bucket_info,
-                 RGWBucketEnt *stats) override;
+                 RGWBucketEnt *stats,
+                 optional_yield y) override;
 
   int get_reshard_status(const RGWBucketInfo& bucket_info,
                          std::list<cls_rgw_bucket_instance_entry> *status);

@@ -695,7 +695,7 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
   /* handle user ACL only for those APIs which support it */
   if (s->user_acl) {
     map<string, bufferlist> uattrs;
-    ret = store->ctl.user->get_attrs_by_uid(acct_acl_user.uid, &uattrs);
+    ret = store->ctl.user->get_attrs_by_uid(acct_acl_user.uid, &uattrs, s->yield);
     if (!ret) {
       ret = get_user_policy_from_attr(s->cct, store, uattrs, *s->user_acl);
     }
@@ -721,7 +721,7 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
   if (! s->user->user_id.empty() && s->auth.identity->get_identity_type() != TYPE_ROLE) {
     try {
       map<string, bufferlist> uattrs;
-      if (ret = store->ctl.user->get_attrs_by_uid(s->user->user_id, &uattrs); ! ret) {
+      if (ret = store->ctl.user->get_attrs_by_uid(s->user->user_id, &uattrs, s->yield); ! ret) {
         if (s->iam_user_policies.empty()) {
           s->iam_user_policies = get_iam_user_policy_from_attr(s->cct, store, uattrs, s->user->user_id.tenant);
         } else {
@@ -1199,7 +1199,7 @@ void RGWPutBucketTags::execute() {
   op_ret = retry_raced_bucket_write(store, s, [this] {
     map<string, bufferlist> attrs = s->bucket_attrs;
     attrs[RGW_ATTR_TAGS] = tags_bl;
-    return rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+    return store->ctl.bucket->set_bucket_instance_attrs(s->bucket_info, attrs, &s->bucket_info.objv_tracker, s->yield);
   });
 
 }
@@ -1228,7 +1228,7 @@ void RGWDeleteBucketTags::execute()
   op_ret = retry_raced_bucket_write(store, s, [this] {
     map<string, bufferlist> attrs = s->bucket_attrs;
     attrs.erase(RGW_ATTR_TAGS);
-    op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs, &s->bucket_info.objv_tracker);
+    op_ret = store->ctl.bucket->set_bucket_instance_attrs(s->bucket_info, attrs, &s->bucket_info.objv_tracker, s->yield);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "RGWDeleteBucketTags() failed to remove RGW_ATTR_TAGS on bucket="
 			 << s->bucket.name
@@ -2300,7 +2300,7 @@ void RGWListBuckets::execute()
   }
 
   if (supports_account_metadata()) {
-    op_ret = store->ctl.user->get_attrs_by_uid(s->user->user_id, &attrs);
+    op_ret = store->ctl.user->get_attrs_by_uid(s->user->user_id, &attrs, s->yield);
     if (op_ret < 0) {
       goto send_end;
     }
@@ -3258,10 +3258,10 @@ void RGWCreateBucket::execute()
   }
 
   op_ret = store->ctl.bucket->link_bucket(s->user->user_id, s->bucket,
-                                          info.creation_time, false);
+                                          info.creation_time, s->yield, false);
   if (op_ret && !existed && op_ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
-    op_ret = store->ctl.bucket->unlink_bucket(s->user->user_id, s->bucket);
+    op_ret = store->ctl.bucket->unlink_bucket(s->user->user_id, s->bucket, s->yield);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "WARNING: failed to unlink bucket: ret=" << op_ret
 		       << dendl;
@@ -3318,7 +3318,8 @@ void RGWCreateBucket::execute()
 
       /* This will also set the quota on the bucket. */
       op_ret = store->ctl.bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
-							    &s->bucket_info.objv_tracker);
+							    &s->bucket_info.objv_tracker,
+							    s->yield);
     } while (op_ret == -ECANCELED && tries++ < 20);
 
     /* Restore the proper return code. */
@@ -3430,7 +3431,7 @@ void RGWDeleteBucket::execute()
 
   if (op_ret == 0) {
     op_ret = store->ctl.bucket->unlink_bucket(s->bucket_info.owner,
-                                              s->bucket, false);
+                                              s->bucket, s->yield, false);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "WARNING: failed to unlink bucket: ret=" << op_ret
 		       << dendl;
@@ -4325,6 +4326,7 @@ int RGWPutMetadataAccount::init_processing()
   }
 
   op_ret = store->ctl.user->get_attrs_by_uid(s->user->user_id, &orig_attrs,
+					     s->yield,
                                              &acct_op_tracker);
   if (op_ret < 0) {
     return op_ret;
@@ -4497,7 +4499,8 @@ void RGWPutMetadataBucket::execute()
        * to this fact, the new quota settings can be serialized with
        * the same call. */
       op_ret = store->ctl.bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
-							    &s->bucket_info.objv_tracker);
+							    &s->bucket_info.objv_tracker,
+							    s->yield);
       return op_ret;
     });
 }
@@ -5365,7 +5368,8 @@ void RGWPutACLs::execute()
     attrs = s->bucket_attrs;
     attrs[RGW_ATTR_ACL] = bl;
     op_ret = store->ctl.bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
-							  &s->bucket_info.objv_tracker);
+							  &s->bucket_info.objv_tracker,
+							  s->yield);
   }
   if (op_ret == -ECANCELED) {
     op_ret = 0; /* lost a race, but it's ok because acls are immutable */
@@ -5479,7 +5483,8 @@ void RGWDeleteLC::execute()
   map<string, bufferlist> attrs = s->bucket_attrs;
   attrs.erase(RGW_ATTR_LC);
   op_ret = store->ctl.bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
-							&s->bucket_info.objv_tracker);
+							&s->bucket_info.objv_tracker,
+							s->yield);
   if (op_ret < 0) {
     ldpp_dout(this, 0) << "RGWLC::RGWDeleteLC() failed to set attrs on bucket="
         << s->bucket.name << " returned err=" << op_ret << dendl;
@@ -5536,7 +5541,8 @@ void RGWPutCORS::execute()
       map<string, bufferlist> attrs = s->bucket_attrs;
       attrs[RGW_ATTR_CORS] = cors_bl;
       return store->ctl.bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
-							  &s->bucket_info.objv_tracker);
+							  &s->bucket_info.objv_tracker,
+							  s->yield);
     });
 }
 
@@ -5571,7 +5577,8 @@ void RGWDeleteCORS::execute()
       map<string, bufferlist> attrs = s->bucket_attrs;
       attrs.erase(RGW_ATTR_CORS);
       op_ret = store->ctl.bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
-							    &s->bucket_info.objv_tracker);
+							    &s->bucket_info.objv_tracker,
+							    s->yield);
       if (op_ret < 0) {
 	ldpp_dout(this, 0) << "RGWLC::RGWDeleteCORS() failed to set attrs on bucket=" << s->bucket.name
 			 << " returned err=" << op_ret << dendl;
@@ -6517,7 +6524,7 @@ bool RGWBulkDelete::Deleter::delete_single(const acct_path_t& path)
   } else {
     ret = store->delete_bucket(binfo, ot, s->yield);
     if (0 == ret) {
-      ret = store->ctl.bucket->unlink_bucket(binfo.owner, binfo.bucket, false);
+      ret = store->ctl.bucket->unlink_bucket(binfo.owner, binfo.bucket, s->yield, false);
       if (ret < 0) {
         ldpp_dout(s, 0) << "WARNING: failed to unlink bucket: ret=" << ret << dendl;
       }
@@ -6889,10 +6896,11 @@ int RGWBulkUploadOp::handle_dir(const boost::string_ref path)
   }
 
   op_ret = store->ctl.bucket->link_bucket(s->user->user_id, bucket,
-                                          out_info.creation_time, false);
+                                          out_info.creation_time,
+					  s->yield, false);
   if (op_ret && !existed && op_ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
-    op_ret = store->ctl.bucket->unlink_bucket(s->user->user_id, bucket);
+    op_ret = store->ctl.bucket->unlink_bucket(s->user->user_id, bucket, s->yield);
     if (op_ret < 0) {
       ldpp_dout(this, 0) << "WARNING: failed to unlink bucket: ret=" << op_ret << dendl;
     }
@@ -7277,7 +7285,8 @@ void RGWSetAttrs::execute()
       s->bucket_attrs[iter.first] = std::move(iter.second);
     }
     op_ret = store->ctl.bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
-							  &s->bucket_info.objv_tracker);
+							  &s->bucket_info.objv_tracker,
+							  s->yield);
   }
 }
 
@@ -7499,7 +7508,8 @@ void RGWPutBucketPolicy::execute()
 	attrs[RGW_ATTR_IAM_POLICY].clear();
 	attrs[RGW_ATTR_IAM_POLICY].append(p.text);
 	op_ret = store->ctl.bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
-							      &s->bucket_info.objv_tracker);
+							      &s->bucket_info.objv_tracker,
+							      s->yield);
 	return op_ret;
       });
   } catch (rgw::IAM::PolicyParseException& e) {
@@ -7574,7 +7584,8 @@ void RGWDeleteBucketPolicy::execute()
       auto attrs = s->bucket_attrs;
       attrs.erase(RGW_ATTR_IAM_POLICY);
       op_ret = store->ctl.bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
-							    &s->bucket_info.objv_tracker);
+							    &s->bucket_info.objv_tracker,
+							    s->yield);
       return op_ret;
     });
 }
