@@ -23,6 +23,13 @@ class Module(MgrModule):
             'desc': 'time interval in which to warn about recent crashes',
             'runtime': True,
         },
+        {
+            'name': 'retain_interval',
+            'type': 'secs',
+            'default': 60*60*24 * 365,
+            'desc': 'how long to retain crashes before pruning them',
+            'runtime': True,
+        },
     ]
 
     def __init__(self, *args, **kwargs):
@@ -39,6 +46,7 @@ class Module(MgrModule):
         self.config_notify()
         while self.run:
             self._refresh_health_checks()
+            self._prune(self.retain_interval)
             wait = min(MAX_WAIT, max(self.warn_recent_interval / 100, MIN_WAIT))
             self.event.wait(wait)
             self.event.clear()
