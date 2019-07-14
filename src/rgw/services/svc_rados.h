@@ -61,7 +61,7 @@ private:
                    bool *is_truncated);
 
 public:
-  RGWSI_RADOS(CephContext *cct) : RGWServiceInstance(cct) {}
+  RGWSI_RADOS(CephContext *cct);
   ~RGWSI_RADOS();
 
   void init() {}

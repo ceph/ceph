@@ -68,13 +68,14 @@ public:
 
   virtual RGWMetadataObject *get_meta_obj(JSONObj *jo, const obj_version& objv, const ceph::real_time& mtime) = 0;
 
-  virtual int get(string& entry, RGWMetadataObject **obj) = 0;
-  virtual int put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type) = 0;
-  virtual int remove(string& entry, RGWObjVersionTracker& objv_tracker) = 0;
+  virtual int get(string& entry, RGWMetadataObject **obj, optional_yield) = 0;
+  virtual int put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, optional_yield, RGWMDLogSyncType type) = 0;
+  virtual int remove(string& entry, RGWObjVersionTracker& objv_tracker, optional_yield) = 0;
 
   virtual int mutate(const string& entry,
 		     const ceph::real_time& mtime,
 		     RGWObjVersionTracker *objv_tracker,
+                     optional_yield y,
 		     RGWMDLogStatus op_type,
 		     std::function<int()> f) = 0;
 
@@ -102,11 +103,11 @@ public:
 protected:
   RGWSI_MetaBackend_Handler *be_handler;
 
-  virtual int do_get(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject **obj) = 0;
+  virtual int do_get(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject **obj, optional_yield y) = 0;
   virtual int do_put(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWMetadataObject *obj,
-                     RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type) = 0;
+                     RGWObjVersionTracker& objv_tracker, optional_yield y, RGWMDLogSyncType type) = 0;
   virtual int do_put_operate(Put *put_op);
-  virtual int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker) = 0;
+  virtual int do_remove(RGWSI_MetaBackend_Handler::Op *op, string& entry, RGWObjVersionTracker& objv_tracker, optional_yield y) = 0;
 
 public:
   RGWMetadataHandler_GenericMetaBE() {}
@@ -156,13 +157,14 @@ public:
     }
   };
 
-  int get(string& entry, RGWMetadataObject **obj) override;
-  int put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, RGWMDLogSyncType type) override;
-  int remove(string& entry, RGWObjVersionTracker& objv_tracker) override;
+  int get(string& entry, RGWMetadataObject **obj, optional_yield) override;
+  int put(string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker, optional_yield, RGWMDLogSyncType type) override;
+  int remove(string& entry, RGWObjVersionTracker& objv_tracker, optional_yield) override;
 
   int mutate(const string& entry,
 	     const ceph::real_time& mtime,
 	     RGWObjVersionTracker *objv_tracker,
+             optional_yield y,
 	     RGWMDLogStatus op_type,
 	     std::function<int()> f) override;
 
@@ -233,12 +235,7 @@ public:
   int mutate(const string& metadata_key,
 	     const ceph::real_time& mtime,
 	     RGWObjVersionTracker *objv_tracker,
-	     RGWMDLogStatus op_type,
-	     std::function<int()> f);
-
-  int mutate(const string& metadata_key,
-	     const ceph::real_time& mtime,
-	     RGWObjVersionTracker *objv_tracker,
+             optional_yield y,
 	     RGWMDLogStatus op_type,
 	     std::function<int()> f);
 
@@ -268,6 +265,7 @@ protected:
 public:
   RGWMetadataHandlerPut_SObj(RGWMetadataHandler_GenericMetaBE *handler, RGWSI_MetaBackend_Handler::Op *op,
                              string& entry, RGWMetadataObject *obj, RGWObjVersionTracker& objv_tracker,
+			     optional_yield y,
                              RGWMDLogSyncType type);
   ~RGWMetadataHandlerPut_SObj();
 

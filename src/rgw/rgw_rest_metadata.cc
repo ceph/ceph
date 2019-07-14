@@ -56,7 +56,7 @@ void RGWOp_Metadata_Get::execute() {
   auto meta_mgr = store->ctl.meta.mgr;
 
   /* Get keys */
-  http_ret = meta_mgr->get(metadata_key, s->formatter);
+  http_ret = meta_mgr->get(metadata_key, s->formatter, s->yield);
   if (http_ret < 0) {
     dout(5) << "ERROR: can't get key: " << cpp_strerror(http_ret) << dendl;
     return;
@@ -262,7 +262,7 @@ void RGWOp_Metadata_Put::execute() {
     }
   }
 
-  http_ret = store->ctl.meta.mgr->put(metadata_key, bl, sync_type,
+  http_ret = store->ctl.meta.mgr->put(metadata_key, bl, s->yield, sync_type,
 				  &ondisk_version);
   if (http_ret < 0) {
     dout(5) << "ERROR: can't put key: " << cpp_strerror(http_ret) << dendl;
@@ -293,7 +293,7 @@ void RGWOp_Metadata_Delete::execute() {
   string metadata_key;
 
   frame_metadata_key(s, metadata_key);
-  http_ret = store->ctl.meta.mgr->remove(metadata_key);
+  http_ret = store->ctl.meta.mgr->remove(metadata_key, s->yield);
   if (http_ret < 0) {
     dout(5) << "ERROR: can't remove key: " << cpp_strerror(http_ret) << dendl;
     return;

@@ -630,7 +630,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
     return -EIO;
   }
 
-  ret = store->ctl.bucket->link_bucket(new_bucket_info.owner, new_bucket_info.bucket, bucket_info.creation_time);
+  ret = store->ctl.bucket->link_bucket(new_bucket_info.owner, new_bucket_info.bucket, bucket_info.creation_time, null_yield);
   if (ret < 0) {
     lderr(store->ctx()) << "failed to link new bucket instance (bucket_id=" << new_bucket_info.bucket.bucket_id << ": " << cpp_strerror(-ret) << ")" << dendl;
     return ret;
@@ -709,7 +709,7 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
   }
 
   ret = store->ctl.bucket->remove_bucket_instance_info(bucket_info.bucket,
-                                                       bucket_info);
+                                                       bucket_info, null_yield);
   if (ret < 0) {
     lderr(store->ctx()) << "Error: " << __func__ <<
       " failed to clean old bucket info object \"" <<
@@ -740,6 +740,7 @@ error_out:
 
   ret2 = store->ctl.bucket->remove_bucket_instance_info(new_bucket_info.bucket,
                                                         new_bucket_info,
+							null_yield,
                                                         std::nullopt);
   if (ret2 < 0) {
     lderr(store->ctx()) << "Error: " << __func__ <<

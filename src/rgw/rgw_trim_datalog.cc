@@ -11,6 +11,9 @@
 #include "rgw_zone.h"
 #include "rgw_bucket.h"
 
+#include "services/svc_zone.h"
+#include "services/svc_datalog_rados.h"
+
 #include <boost/asio/yield.hpp>
 
 #define dout_subsys ceph_subsys_rgw

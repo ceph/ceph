@@ -33,7 +33,8 @@ public:
   virtual int clean_index(RGWBucketInfo& bucket_info) = 0;
 
   virtual int read_stats(const RGWBucketInfo& bucket_info,
-                         RGWBucketEnt *stats) = 0;
+                         RGWBucketEnt *stats,
+                         optional_yield y) = 0;
 
   virtual int handle_overwrite(const RGWBucketInfo& info,
                                const RGWBucketInfo& orig_info) = 0;

@@ -11,6 +11,10 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+RGWSI_RADOS::RGWSI_RADOS(CephContext *cct) : RGWServiceInstance(cct)
+{
+}
+
 RGWSI_RADOS::~RGWSI_RADOS()
 {
 }
@@ -88,7 +92,7 @@ int RGWSI_RADOS::pool_iterate(librados::IoCtx& io_ctx,
   return objs.size();
 }
 
-RGWSI_RADOS::Obj::Obj(Pool& pool, const string& oid) : rados_svc(pool.rados_svc), rados_handle(pool.rados_handle)
+RGWSI_RADOS::Obj::Obj(Pool& pool, const string& oid) : rados_svc(pool.rados_svc)
 {
   ref.pool = pool;
   ref.obj = rgw_raw_obj(pool.get_pool(), oid);
@@ -96,7 +100,7 @@ RGWSI_RADOS::Obj::Obj(Pool& pool, const string& oid) : rados_svc(pool.rados_svc)
 
 void RGWSI_RADOS::Obj::init(const rgw_raw_obj& obj)
 {
-  ref.pool = RGWSI_RADOS::Pool(rados_svc, obj.pool, rados_handle);
+  ref.pool = RGWSI_RADOS::Pool(rados_svc, obj.pool);
   ref.obj = obj;
 }
 

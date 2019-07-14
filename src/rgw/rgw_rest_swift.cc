@@ -545,7 +545,7 @@ static void dump_container_metadata(struct req_state *s,
 void RGWStatAccount_ObjStore_SWIFT::execute()
 {
   RGWStatAccount_ObjStore::execute();
-  op_ret = store->ctl.user->get_attrs_by_uid(s->user->user_id, &attrs);
+  op_ret = store->ctl.user->get_attrs_by_uid(s->user->user_id, &attrs, s->yield);
 }
 
 void RGWStatAccount_ObjStore_SWIFT::send_response()

@@ -170,7 +170,7 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index(const RGWBucketInfo& bucket_info,
   int ret = open_bucket_index_base(bucket_info, index_pool, &bucket_oid_base);
   if (ret < 0) {
     ldout(cct, 20) << __func__ << ": open_bucket_index_pool() returned "
-                   << r << dendl;
+                   << ret << dendl;
     return ret;
   }
 
@@ -237,7 +237,7 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const RGWBucketInfo& bucket
   int ret = open_bucket_index_base(bucket_info, &pool, &bucket_oid_base);
   if (ret < 0) {
     ldout(cct, 20) << __func__ << ": open_bucket_index_pool() returned "
-                   << r << dendl;
+                   << ret << dendl;
     return ret;
   }
 
@@ -264,7 +264,7 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const RGWBucketInfo& bucket
   int ret = open_bucket_index_base(bucket_info, &index_pool, &bucket_oid_base);
   if (ret < 0) {
     ldout(cct, 20) << __func__ << ": open_bucket_index_pool() returned "
-                   << r << dendl;
+                   << ret << dendl;
     return ret;
   }
 
@@ -281,7 +281,8 @@ int RGWSI_BucketIndex_RADOS::open_bucket_index_shard(const RGWBucketInfo& bucket
 int RGWSI_BucketIndex_RADOS::cls_bucket_head(const RGWBucketInfo& bucket_info,
                                              int shard_id,
                                              vector<rgw_bucket_dir_header> *headers,
-                                             map<int, string> *bucket_instance_ids)
+                                             map<int, string> *bucket_instance_ids,
+                                             optional_yield y)
 {
   RGWSI_RADOS::Pool index_pool;
   map<int, string> oids;
@@ -347,12 +348,13 @@ int RGWSI_BucketIndex_RADOS::clean_index(RGWBucketInfo& bucket_info)
 }
 
 int RGWSI_BucketIndex_RADOS::read_stats(const RGWBucketInfo& bucket_info,
-                                        RGWBucketEnt *result)
+                                        RGWBucketEnt *result,
+                                        optional_yield y)
 {
   vector<rgw_bucket_dir_header> headers;
 
   result->bucket = bucket_info.bucket;
-  int r = cls_bucket_head(bucket_info, RGW_NO_SHARD, &headers, nullptr);
+  int r = cls_bucket_head(bucket_info, RGW_NO_SHARD, &headers, nullptr, y);
   if (r < 0) {
     return r;
   }

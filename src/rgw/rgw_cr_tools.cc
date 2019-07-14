@@ -209,10 +209,10 @@ int RGWBucketCreateLocalCR::Request::_send_request()
     bucket = info.bucket;
   }
 
-  ret = store->ctl.bucket->link_bucket(user, bucket, info.creation_time, false);
+  ret = store->ctl.bucket->link_bucket(user, bucket, info.creation_time, null_yield, false);
   if (ret && !existed && ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
-    int r = store->ctl.bucket->unlink_bucket(user, bucket);
+    int r = store->ctl.bucket->unlink_bucket(user, bucket, null_yield);
     if (r < 0) {
       ldout(cct, 0) << "WARNING: failed to unlink bucket: ret=" << r << dendl;
     }

@@ -829,10 +829,10 @@ public:
               char buf[16];
               snprintf(buf, sizeof(buf), ":%d", i);
               s = key + buf;
-              yield entries_index->append(s, store->svc.data_log_rados->get_log_shard_id(meta_info.data.get_bucket_info().bucket, i));
+              yield entries_index->append(s, store->svc.datalog_rados->get_log_shard_id(meta_info.data.get_bucket_info().bucket, i));
             }
           } else {
-            yield entries_index->append(key, store->svc.data_log_rados->get_log_shard_id(meta_info.data.get_bucket_info().bucket, -1));
+            yield entries_index->append(key, store->svc.datalog_rados->get_log_shard_id(meta_info.data.get_bucket_info().bucket, -1));
           }
         }
         truncated = result.truncated;

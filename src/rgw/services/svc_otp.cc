@@ -84,13 +84,14 @@ int RGWSI_OTP::read_all(RGWSI_OTP_BE_Ctx& ctx,
                         const string& key,
                         otp_devices_list_t *devices,
                         real_time *pmtime,
-                        RGWObjVersionTracker *objv_tracker)
+                        RGWObjVersionTracker *objv_tracker,
+                        optional_yield y)
 {
   RGWSI_MBOTP_GetParams params;
   params.pdevices = devices;
   params.pmtime = pmtime;
 
-  int ret = svc.meta_be->get_entry(ctx.get(), key, params, objv_tracker);
+  int ret = svc.meta_be->get_entry(ctx.get(), key, params, objv_tracker, y);
   if (ret < 0) {
     return ret;
   }
@@ -102,26 +103,29 @@ int RGWSI_OTP::read_all(RGWSI_OTP_BE_Ctx& ctx,
                         const rgw_user& uid,
                         otp_devices_list_t *devices,
                         real_time *pmtime,
-                        RGWObjVersionTracker *objv_tracker)
+                        RGWObjVersionTracker *objv_tracker,
+                        optional_yield y)
 {
   return read_all(ctx,
                   uid.to_str(),
                   devices,
                   pmtime,
-                  objv_tracker);
+                  objv_tracker,
+                  y);
 }
 
 int RGWSI_OTP::store_all(RGWSI_OTP_BE_Ctx& ctx,
                          const string& key,
                          const otp_devices_list_t& devices,
                          real_time mtime,
-                         RGWObjVersionTracker *objv_tracker)
+                         RGWObjVersionTracker *objv_tracker,
+                         optional_yield y)
 {
   RGWSI_MBOTP_PutParams params;
   params.mtime = mtime;
   params.devices = devices;
 
-  int ret = svc.meta_be->put_entry(ctx.get(), key, params, objv_tracker);
+  int ret = svc.meta_be->put_entry(ctx.get(), key, params, objv_tracker, y);
   if (ret < 0) {
     return ret;
   }
@@ -133,22 +137,25 @@ int RGWSI_OTP::store_all(RGWSI_OTP_BE_Ctx& ctx,
                          const rgw_user& uid,
                          const otp_devices_list_t& devices,
                          real_time mtime,
-                         RGWObjVersionTracker *objv_tracker)
+                         RGWObjVersionTracker *objv_tracker,
+                         optional_yield y)
 {
   return store_all(ctx,
                    uid.to_str(),
                    devices,
                    mtime,
-                   objv_tracker);
+                   objv_tracker,
+                   y);
 }
 
 int RGWSI_OTP::remove_all(RGWSI_OTP_BE_Ctx& ctx,
                           const string& key,
-                          RGWObjVersionTracker *objv_tracker)
+                          RGWObjVersionTracker *objv_tracker,
+                          optional_yield y)
 {
   RGWSI_MBOTP_RemoveParams params;
 
-  int ret = svc.meta_be->remove_entry(ctx.get(), key, params, objv_tracker);
+  int ret = svc.meta_be->remove_entry(ctx.get(), key, params, objv_tracker, y);
   if (ret < 0) {
     return ret;
   }
@@ -158,9 +165,11 @@ int RGWSI_OTP::remove_all(RGWSI_OTP_BE_Ctx& ctx,
 
 int RGWSI_OTP::remove_all(RGWSI_OTP_BE_Ctx& ctx,
                           const rgw_user& uid,
-                          RGWObjVersionTracker *objv_tracker)
+                          RGWObjVersionTracker *objv_tracker,
+                          optional_yield y)
 {
   return remove_all(ctx,
                     uid.to_str(),
-                    objv_tracker);
+                    objv_tracker,
+                    y);
 }

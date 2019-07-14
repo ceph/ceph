@@ -179,7 +179,7 @@ int RGWSI_BILog_RADOS::get_log_status(const RGWBucketInfo& bucket_info,
 {
   vector<rgw_bucket_dir_header> headers;
   map<int, string> bucket_instance_ids;
-  int r = svc.bi->cls_bucket_head(bucket_info, shard_id, &headers, &bucket_instance_ids);
+  int r = svc.bi->cls_bucket_head(bucket_info, shard_id, &headers, &bucket_instance_ids, null_yield);
   if (r < 0)
     return r;
 
