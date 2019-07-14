@@ -354,7 +354,7 @@ class PgAutoscaler(MgrModule):
         total_bytes = dict([(r, 0) for r in iter(root_map)])
         total_target_bytes = dict([(r, 0.0) for r in iter(root_map)])
         target_bytes_pools = dict([(r, []) for r in iter(root_map)])
-        
+ 
         for p in ps:
             pool_id = str(p['pool_id'])
             total_ratio[p['crush_root_id']] += max(p['actual_capacity_ratio'],
@@ -369,6 +369,8 @@ class PgAutoscaler(MgrModule):
                 total_target_bytes[p['crush_root_id']] += p['target_bytes'] * p['raw_used_rate']
                 target_bytes_pools[p['crush_root_id']].append(p['pool_name'])
             if not p['would_adjust']:
+                # Means that we no need to adjust the pg any longer
+                # Therefore complete event if it still exists
                 if pool_id in self._event:
                     self.remote('progress', 'complete', self._event[pool_id])
                     del self._event[pool_id]
