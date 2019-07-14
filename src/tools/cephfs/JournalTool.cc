@@ -65,7 +65,8 @@ void JournalTool::usage()
     << "  --rank=filesystem:mds-rank|all Journal rank (mandatory)\n"
     << "  --journal=<mdlog|purge_queue>  Journal type (purge_queue means\n"
     << "                                 this journal is used to queue for purge operation,\n"
-    << "                                 default is mdlog, and only mdlog support event mode)\n" 
+    << "                                 default is mdlog, and only mdlog support event mode)\n"
+    << "  --repair repair entry size or start_ptr of the damaged journal entry.\n"
     << "\n"
     << "Special options\n"
     << "  --alternate-pool <name>     Alternative metadata pool to target\n"
@@ -366,6 +367,7 @@ int JournalTool::main_header(std::vector<const char*> &argv)
 int JournalTool::main_event(std::vector<const char*> &argv)
 {
   int r;
+  bool repair_corrupted_entry = false;
 
   std::vector<const char*>::iterator arg = argv.begin();
 
@@ -391,6 +393,15 @@ int JournalTool::main_event(std::vector<const char*> &argv)
   r = filter.parse_args(argv, arg);
   if (r) {
     return r;
+  }
+
+  // Check if need to repair
+  for (const auto& s : argv) {
+    if (strcmp(s, "--repair") ==0) {
+      repair_corrupted_entry = true;
+      arg++;
+      break;
+    }
   }
 
   // Parse output options
@@ -427,7 +438,10 @@ int JournalTool::main_event(std::vector<const char*> &argv)
 
   // Execute command
   // ===============
-  JournalScanner js(input, rank, type, filter);
+  JournalScanner js(input, rank, filter);
+  if (repair_corrupted_entry)
+    js.repair_corrupted_entry = true;
+
   if (command == "get") {
     r = js.scan();
     if (r) {
