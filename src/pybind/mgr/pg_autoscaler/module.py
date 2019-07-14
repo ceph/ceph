@@ -242,7 +242,7 @@ class PgAutoscaler(MgrModule):
             pools,
             threshold=3.0,
     ):
-        assert threshold >= 3.0
+        assert threshold >= 2.0
 
         crush_map = osdmap.get_crush()
 
