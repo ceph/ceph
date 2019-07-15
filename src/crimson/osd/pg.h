@@ -21,6 +21,7 @@
 #include "crimson/common/type_helpers.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
+#include "crimson/osd/osd_operations/replicated_request.h"
 #include "crimson/osd/shard_services.h"
 #include "crimson/osd/osdmap_gate.h"
 
@@ -54,6 +55,7 @@ class PG : public boost::intrusive_ref_counter<
 
   ClientRequest::PGPipeline client_request_pg_pipeline;
   PeeringEvent::PGPipeline peering_request_pg_pipeline;
+  RepRequest::PGPipeline replicated_request_pg_pipeline;
 
   spg_t pgid;
   pg_shard_t pg_whoami;
@@ -417,6 +419,7 @@ public:
   void handle_initialize(PeeringCtx &rctx);
   seastar::future<> handle_op(ceph::net::Connection* conn,
 			      Ref<MOSDOp> m);
+  seastar::future<> handle_rep_op(Ref<MOSDRepOp> m);
   void handle_rep_op_reply(ceph::net::Connection* conn,
 			   const MOSDRepOpReply& m);
 
@@ -453,8 +456,9 @@ private:
 
   friend std::ostream& operator<<(std::ostream&, const PG& pg);
   friend class ClientRequest;
-  friend class PeeringEvent;
   friend class PGAdvanceMap;
+  friend class PeeringEvent;
+  friend class RepRequest;
 };
 
 std::ostream& operator<<(std::ostream&, const PG& pg);
