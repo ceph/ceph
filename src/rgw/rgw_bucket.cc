@@ -190,6 +190,38 @@ int rgw_bucket_sync_user_stats(RGWRados *store, const string& tenant_name, const
   return 0;
 }
 
+int rgw_set_bucket_acl(RGWRados* store, ACLOwner& owner, rgw_bucket& bucket, RGWBucketInfo& bucket_info, bufferlist& bl)
+{
+  RGWObjVersionTracker objv_tracker;
+  RGWObjVersionTracker old_version = bucket_info.objv_tracker;
+
+  int r = store->set_bucket_owner(bucket_info.bucket, owner);
+  if (r < 0) {
+    cerr << "ERROR: failed to set bucket owner: " << cpp_strerror(-r) << std::endl;
+    return r;
+  }
+
+  const rgw_pool& root_pool = store->svc.zone->get_zone_params().domain_root;
+  std::string bucket_entry;
+  rgw_make_bucket_entry_name(bucket.tenant, bucket.name, bucket_entry);
+  rgw_raw_obj obj(root_pool, bucket_entry);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(obj);
+  rgw_raw_obj obj_bucket_instance;
+
+  store->get_bucket_instance_obj(bucket, obj_bucket_instance);
+  auto inst_sysobj = obj_ctx.get_obj(obj_bucket_instance);
+  r = inst_sysobj.wop()
+            .set_objv_tracker(&objv_tracker)
+            .write_attr(RGW_ATTR_ACL, bl, null_yield);
+  if (r < 0) {
+    cerr << "failed to set new acl: " << cpp_strerror(-r) << std::endl;
+    return r;
+  }
+  
+  return 0;
+}
+
 int rgw_bucket_chown(RGWRados* const store, RGWUserInfo& user_info, RGWBucketInfo& bucket_info, const string& marker, map<string, bufferlist>& attrs)
 {
   RGWObjectCtx obj_ctx(store);
@@ -1007,25 +1039,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state,
   policy_instance.encode(aclbl);
 
   if (bucket == old_bucket) {
-    r = store->set_bucket_owner(bucket_info.bucket, owner);
-    if (r < 0) {
-      set_err_msg(err_msg, "failed to set bucket owner: " + cpp_strerror(-r));
-      return r;
-    }
-
-    const rgw_pool& root_pool = store->svc.zone->get_zone_params().domain_root;
-    std::string bucket_entry;
-    rgw_make_bucket_entry_name(tenant, bucket_name, bucket_entry);
-    rgw_raw_obj obj(root_pool, bucket_entry);
-    auto obj_ctx = store->svc.sysobj->init_obj_ctx();
-    auto sysobj = obj_ctx.get_obj(obj);
-    rgw_raw_obj obj_bucket_instance;
-
-    store->get_bucket_instance_obj(bucket, obj_bucket_instance);
-    auto inst_sysobj = obj_ctx.get_obj(obj_bucket_instance);
-    r = inst_sysobj.wop()
-              .set_objv_tracker(&objv_tracker)
-              .write_attr(RGW_ATTR_ACL, aclbl, null_yield);
+    r = rgw_set_bucket_acl(store, owner, bucket, bucket_info, aclbl);
     if (r < 0) {
       set_err_msg(err_msg, "failed to set new acl");
       return r;

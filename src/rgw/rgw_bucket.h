@@ -217,6 +217,8 @@ extern int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id,
                              const string& tenant_name, const string& bucket_name, bool update_entrypoint = true);
 extern int rgw_bucket_chown(RGWRados* const store, RGWUserInfo& user_info, RGWBucketInfo& bucket_info,
                              const string& marker, map<string, bufferlist>& attrs);
+extern int rgw_set_bucket_acl(RGWRados* store, ACLOwner& owner, rgw_bucket& bucket,
+                              RGWBucketInfo& bucket_info, bufferlist& bl);
 extern int rgw_remove_object(RGWRados *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key);
 extern int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children, optional_yield y);
 extern int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket, int concurrent_max, optional_yield y);
