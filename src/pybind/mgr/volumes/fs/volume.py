@@ -227,6 +227,10 @@ class VolumeClient(object):
         return self.mgr.mon_command(command)
 
     def remove_filesystem(self, fs_name):
+        command = {'prefix': 'fs fail', 'fs_name': fs_name}
+        r, outb, outs = self.mgr.mon_command(command)
+        if r != 0:
+            return r, outb, outs
         command = {'prefix': 'fs rm', 'fs_name': fs_name, 'yes_i_really_mean_it': True}
         return self.mgr.mon_command(command)
 
@@ -244,18 +248,6 @@ class VolumeClient(object):
             # bubble out to the user
             log.exception("Failed to create MDS daemons")
             return -errno.EINVAL, "", str(e)
-        return 0, "", ""
-
-    def set_mds_down(self, fs_name):
-        command = {'prefix': 'fs set', 'fs_name': fs_name, 'var': 'cluster_down', 'val': 'true'}
-        r, outb, outs = self.mgr.mon_command(command)
-        if r != 0:
-            return r, outb, outs
-        for mds in self.get_mds_names(fs_name):
-            command = {'prefix': 'mds fail', 'role_or_gid': mds}
-            r, outb, outs = self.mgr.mon_command(command)
-            if r != 0:
-                return r, outb, outs
         return 0, "", ""
 
     ### volume operations -- create, rm, ls
@@ -302,9 +294,6 @@ class VolumeClient(object):
         # In case orchestrator didn't tear down MDS daemons cleanly, or
         # there was no orchestrator, we force the daemons down.
         if self.volume_exists(volname):
-            r, outb, outs = self.set_mds_down(volname)
-            if r != 0:
-                return r, outb, outs
             r, outb, outs = self.remove_filesystem(volname)
             if r != 0:
                 return r, outb, outs
