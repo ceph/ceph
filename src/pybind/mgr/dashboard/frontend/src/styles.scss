@@ -390,3 +390,10 @@ pre {
 bfv-messages {
   display: none;
 }
+
+// Display error message in 'input-group' form fields.
+// https://github.com/twbs/bootstrap/issues/23454
+// https://github.com/adrianhurt/play-bootstrap/issues/118
+.form-group.has-error .invalid-feedback {
+  display: block;
+}
