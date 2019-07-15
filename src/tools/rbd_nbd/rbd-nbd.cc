@@ -508,8 +508,8 @@ public:
       if (new_size != size) {
         dout(5) << "resize detected" << dendl;
         if (ioctl(fd, BLKFLSBUF, NULL) < 0)
-            derr << "invalidate page cache failed: " << cpp_strerror(errno)
-                 << dendl;
+          derr << "invalidate page cache failed: " << cpp_strerror(errno)
+               << dendl;
 	if (use_netlink) {
 	  ret = netlink_resize(nbd_index, new_size);
 	} else {
@@ -526,7 +526,7 @@ public:
                << dendl;
         }
         if (image.invalidate_cache() < 0)
-            derr << "invalidate rbd cache failed" << dendl;
+          derr << "invalidate rbd cache failed" << dendl;
       }
     }
   }
