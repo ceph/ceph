@@ -124,6 +124,11 @@ bool PG::try_flush_or_schedule_async() {
   return false;
 }
 
+void PG::on_activate(interval_set<snapid_t>)
+{
+  projected_last_update = peering_state.get_info().last_update;
+}
+
 void PG::on_activate_complete()
 {
   active_promise.set_value();
