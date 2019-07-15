@@ -37,25 +37,6 @@ class SubVolume(object):
         self.fs = fs_handle
         self.rados = mgr.rados
 
-    def _mkdir_p(self, path, mode=0o755):
-        try:
-            self.fs.stat(path)
-        except cephfs.ObjectNotFound:
-            pass
-        else:
-            return
-
-        parts = path.split(os.path.sep)
-
-        for i in range(1, len(parts) + 1):
-            subpath = os.path.join(*parts[0:i])
-            try:
-                self.fs.stat(subpath)
-            except cephfs.ObjectNotFound:
-                self.fs.mkdir(subpath, mode)
-            except cephfs.Error as e:
-                raise VolumeException(-e.args[0], e.args[1])
-
     def _get_single_dir_entry(self, dir_path, exclude=[]):
         """
         Return a directory entry in a given directory exclusing passed
@@ -96,7 +77,7 @@ class SubVolume(object):
         subvolpath = spec.subvolume_path
         log.info("creating subvolume with path: {0}".format(subvolpath))
 
-        self._mkdir_p(subvolpath, mode)
+        self.fs.mkdirs(subvolpath, mode)
 
         if size is not None:
             self.fs.setxattr(subvolpath, 'ceph.quota.max_bytes', str(size).encode('utf-8'), 0)
@@ -134,7 +115,7 @@ class SubVolume(object):
 
         # Create the trash directory if it doesn't already exist
         trashdir = spec.trash_dir
-        self._mkdir_p(trashdir)
+        self.fs.mkdirs(trashdir, 0o700)
 
         # mangle the trash directroy entry to a random string so that subsequent
         # subvolume create and delete with same name moves the subvolume directory
@@ -199,7 +180,7 @@ class SubVolume(object):
 
     def create_group(self, spec, mode=0o755, pool=None):
         path = spec.group_path
-        self._mkdir_p(path, mode)
+        self.fs.mkdirs(path, mode)
         if not pool:
             pool = self._get_ancestor_xattr(path, "ceph.dir.layout.pool")
         self.fs.setxattr(path, 'ceph.dir.layout.pool', pool.encode('utf-8'), 0)
