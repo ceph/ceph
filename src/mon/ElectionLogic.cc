@@ -113,7 +113,13 @@ void ElectionLogic::start()
 
 void ElectionLogic::defer(int who)
 {
-  ldout(cct, 5) << "defer to " << who << dendl;
+  if (strategy == CLASSIC) {
+      ldout(cct, 5) << "defer to " << who << dendl;
+      ceph_assert(who < elector->get_my_rank());
+  } else {
+    ldout(cct, 5) << "defer to " << who << ", disallowed_leaders=" << elector->get_disallowed_leaders() << dendl;
+    ceph_assert(!elector->get_disallowed_leaders().count(who));
+  }
 
   if (electing_me) {
     // drop out
@@ -147,6 +153,7 @@ void ElectionLogic::end_election_period()
 
 void ElectionLogic::declare_victory()
 {
+  ldout(cct, 5) << "I win! acked_me=" << acked_me << dendl;
   leader_acked = -1;
   electing_me = false;
 
@@ -178,10 +185,21 @@ void ElectionLogic::receive_propose(int from, epoch_t mepoch)
     return;
   }
 
-  if (elector->get_my_rank() < from) {
+  const set<int>& disallowed_leaders = elector->get_disallowed_leaders();
+  int my_rank = elector->get_my_rank();
+  bool me_disallowed = disallowed_leaders.count(my_rank);
+  bool from_disallowed = disallowed_leaders.count(from);
+  bool my_win = !me_disallowed && // we are allowed to lead
+    (my_rank < from || from_disallowed); // we are a better choice than them
+  bool their_win = !from_disallowed && // they are allowed to lead
+    (my_rank > from || me_disallowed) && // they are a better choice than us
+    (leader_acked < 0 || leader_acked >= from); // they are a better choice than our previously-acked choice
+    
+  
+  if (my_win) {
     // i would win over them.
     if (leader_acked >= 0) {        // we already acked someone
-      ceph_assert(leader_acked < from);  // and they still win, of course
+      ceph_assert(leader_acked < from || from_disallowed);  // and they still win, of course
       ldout(cct, 5) << "no, we already acked " << leader_acked << dendl;
     } else {
       // wait, i should win!
@@ -191,9 +209,7 @@ void ElectionLogic::receive_propose(int from, epoch_t mepoch)
     }
   } else {
     // they would win over me
-    if (leader_acked < 0 ||      // haven't acked anyone yet, or
-	leader_acked > from ||   // they would win over who you did ack, or
-	leader_acked == from) {  // this is the guy we're already deferring to
+    if (their_win) {
       defer(from);
     } else {
       // ignore them!
@@ -226,7 +242,7 @@ void ElectionLogic::receive_ack(int from, epoch_t from_epoch)
 
 bool ElectionLogic::receive_victory_claim(int from, epoch_t from_epoch)
 {
-  ceph_assert(from < elector->get_my_rank());
+  ceph_assert(from < elector->get_my_rank() || elector->get_disallowed_leaders().count(elector->get_my_rank()));
   ceph_assert(from_epoch % 2 == 0);  
 
   leader_acked = -1;
