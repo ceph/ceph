@@ -1496,6 +1496,8 @@ public:
   /// get priority for pg deletion
   unsigned get_delete_priority();
 
+  bool check_prior_readable_down_osds(const OSDMapRef& map);
+
   bool adjust_need_up_thru(const OSDMapRef osdmap);
   PastIntervals::PriorSet build_prior();
 
