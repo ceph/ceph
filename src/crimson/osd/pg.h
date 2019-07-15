@@ -257,9 +257,7 @@ public:
   void on_change(ObjectStore::Transaction &t) final {
     // Not needed yet
   }
-  void on_activate(interval_set<snapid_t> to_trim) final {
-    // Not needed yet (will be needed for IO unblocking)
-  }
+  void on_activate(interval_set<snapid_t> to_trim) final;
   void on_activate_complete() final;
   void on_new_interval() final {
     // Not needed yet
@@ -442,6 +440,7 @@ private:
   std::unique_ptr<PGBackend> backend;
 
   PeeringState peering_state;
+  eversion_t projected_last_update;
 
   seastar::shared_promise<> active_promise;
   seastar::future<> wait_for_active();
