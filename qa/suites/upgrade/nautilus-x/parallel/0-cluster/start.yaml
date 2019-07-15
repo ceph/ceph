@@ -13,11 +13,13 @@ roles:
   - osd.2
   - osd.3
 - - mon.b
+  - mgr.y
   - osd.4
   - osd.5
   - osd.6
   - osd.7
 - - mon.c
+  - mgr.z
   - osd.8
   - osd.9
   - osd.10
@@ -36,6 +38,23 @@ overrides:
     - \(SLOW_OPS\)
     - overall HEALTH_
     - slow request
+    - overall HEALTH_
+    - \(MGR_DOWN\)
+    - \(PG_
+    - replacing it with standby
+    - No standby daemons available
+    - \(FS_DEGRADED\)
+    - \(MDS_FAILED\)
+    - \(MDS_DEGRADED\)
+    - \(FS_WITH_FAILED_MDS\)
+    - \(MDS_DAMAGE\)
+    - \(MDS_ALL_DOWN\)
+    - \(MDS_UP_LESS_THAN_MAX\)
+    - \(OSD_DOWN\)
+    - \(OSD_HOST_DOWN\)
+    - \(POOL_APP_NOT_ENABLED\)
+    - pauserd,pausewr flag\(s\) set
+    - Monitor daemon marked osd\.[[:digit:]]+ down, but it is still running
     conf:
       global:
         enable experimental unrecoverable data corrupting features: "*"
