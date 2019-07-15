@@ -43,13 +43,15 @@ struct Election {
   map<int, Owner*> electors;
   map<int, set<int> > blocked_messages;
   int count;
+  set<int> disallowed_leaders;
 
   vector< function<void()> > messages;
-    
+
   Election(int c);
   ~Election();
   // ElectionOwner interfaces
   int get_paxos_size() { return count; }
+  const set<int>& get_disallowed_leaders() { return disallowed_leaders; }
   void propose_to(int from, int to, epoch_t e);
   void defer_to(int from, int to, epoch_t e);
   void claim_victory(int from, int to, epoch_t e, const set<int>& members);
@@ -65,6 +67,7 @@ struct Election {
   void block_bidirectional_messages(int a, int b);
   void unblock_messages(int from, int to);
   void unblock_bidirectional_messages(int a, int b);
+  void add_disallowed_leader(int disallowed) { disallowed_leaders.insert(disallowed); }
   const char* prefix_name() { return "Election:      "; }
 };
 struct Owner : public ElectionOwner {
@@ -109,6 +112,7 @@ struct Owner : public ElectionOwner {
   }
   bool ever_participated() const { return ever_joined; }
   unsigned paxos_size() const { return parent->get_paxos_size(); }
+  const set<int>& get_disallowed_leaders() const { return parent->get_disallowed_leaders(); }
   void cancel_timer() {
     timer_steps = -1;
   }
@@ -367,3 +371,30 @@ TEST(election, blocked_connection_continues_election)
   ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
   ASSERT_TRUE(election.election_stable());
 }
+
+TEST(election, disallowed_doesnt_win)
+{
+  int MON_COUNT = 5;
+  for (int i = 0; i < MON_COUNT - 1; ++i) {
+    Election election(MON_COUNT);
+    for (int j = 0; j <= i; ++j) {
+      election.add_disallowed_leader(j);
+    }
+    election.start_all();
+    int steps = election.run_timesteps(0);
+    ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
+    ASSERT_TRUE(election.election_stable());
+    Owner *first_o = election.electors[0];
+    int leader = first_o->logic.get_acked_leader();
+    int epoch = first_o->logic.get_epoch();
+    for (auto i : election.electors) {
+      Owner *o = i.second;
+      ASSERT_EQ(leader, o->logic.get_acked_leader());
+      ASSERT_EQ(epoch, o->logic.get_epoch());
+    }
+    for (int j = 0; j <= i; ++j) {
+      ASSERT_NE(j, leader);
+    }
+  }
+}
+
