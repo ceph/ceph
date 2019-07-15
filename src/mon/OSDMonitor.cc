@@ -3723,7 +3723,9 @@ bool OSDMonitor::prepare_remove_snaps(MonOpRequestRef op)
     for (auto s : snaps) {
       if (!_is_removed_snap(pool, s) &&
 	  (!pending_inc.new_pools.count(pool) ||
-	   !pending_inc.new_pools[pool].removed_snaps.contains(s))) {
+	   !pending_inc.new_pools[pool].removed_snaps.contains(s)) &&
+	  (!pending_inc.new_removed_snaps.count(pool) ||
+	   !pending_inc.new_removed_snaps[pool].contains(s))) {
 	pg_pool_t *newpi = pending_inc.get_new_pool(pool, &pi);
 	if (osdmap.require_osd_release < ceph_release_t::octopus) {
 	  newpi->removed_snaps.insert(s);
