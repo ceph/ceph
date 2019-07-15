@@ -230,6 +230,7 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
       std::array<uint32_t,3> times;
       std::array<uint32_t,3> min;
       std::array<uint32_t,3> max;
+      uint32_t last;
 
       bool operator<(const mgr_ping_time_t& rhs) const {
         if (pingtime < rhs.pingtime)
@@ -266,14 +267,15 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
 	  item.max[0] = j.second.back_max[0];
 	  item.max[1] = j.second.back_max[1];
 	  item.max[2] = j.second.back_max[2];
+	  item.last = j.second.back_last;
 	  item.back = true;
 	  sorted.emplace(item);
 	}
 
+	if (j.second.front_last == 0)
+	  continue;
 	item.pingtime = std::max(j.second.front_pingtime[0], j.second.front_pingtime[1]);
 	item.pingtime = std::max(item.pingtime, j.second.front_pingtime[2]);
-	if (item.pingtime == 0)
-	  continue;
 	if (!value || item.pingtime >= value) {
 	  item.from = i.first;
 	  item.to = j.first;
@@ -286,6 +288,7 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
 	  item.max[0] = j.second.front_max[0];
 	  item.max[1] = j.second.front_max[1];
 	  item.max[2] = j.second.front_max[2];
+	  item.last = j.second.front_last;
 	  item.back = false;
 	  sorted.emplace(item);
 	}
@@ -318,6 +321,7 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
       f->dump_unsigned("5min", sitem.max[1]);
       f->dump_unsigned("15min", sitem.max[2]);
       f->close_section(); // max
+      f->dump_unsigned("last", sitem.last);
       f->close_section(); // entry
     }
     f->close_section(); // entries

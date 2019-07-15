@@ -381,6 +381,7 @@ void osd_stat_t::dump(Formatter *f) const
     f->dump_int("5min", i.second.back_max[1]);
     f->dump_int("15min", i.second.back_max[2]);
     f->close_section(); // max
+    f->dump_int("last", i.second.back_last);
     f->close_section(); // interface
 
     if (i.second.front_pingtime[0] != 0) {
@@ -401,6 +402,7 @@ void osd_stat_t::dump(Formatter *f) const
       f->dump_int("5min", i.second.front_max[1]);
       f->dump_int("15min", i.second.front_max[2]);
       f->close_section(); // max
+      f->dump_int("last", i.second.front_last);
       f->close_section(); // interface
     }
     f->close_section(); // interfaces
@@ -440,6 +442,7 @@ void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
     encode(i.second.back_max[0], bl);
     encode(i.second.back_max[1], bl);
     encode(i.second.back_max[2], bl);
+    encode(i.second.back_last, bl);
     encode(i.second.front_pingtime[0], bl);
     encode(i.second.front_pingtime[1], bl);
     encode(i.second.front_pingtime[2], bl);
@@ -449,6 +452,7 @@ void osd_stat_t::encode(bufferlist &bl, uint64_t features) const
     encode(i.second.front_max[0], bl);
     encode(i.second.front_max[1], bl);
     encode(i.second.front_max[2], bl);
+    encode(i.second.front_last, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -501,6 +505,7 @@ void osd_stat_t::decode(bufferlist::iterator &bl)
       decode(ifs.back_max[0],bl);
       decode(ifs.back_max[1], bl);
       decode(ifs.back_max[2], bl);
+      decode(ifs.back_last, bl);
       decode(ifs.front_pingtime[0], bl);
       decode(ifs.front_pingtime[1], bl);
       decode(ifs.front_pingtime[2], bl);
@@ -510,6 +515,7 @@ void osd_stat_t::decode(bufferlist::iterator &bl)
       decode(ifs.front_max[0], bl);
       decode(ifs.front_max[1], bl);
       decode(ifs.front_max[2], bl);
+      decode(ifs.front_last, bl);
       hb_pingtime[osd] = ifs;
     }
   }
@@ -531,11 +537,11 @@ void osd_stat_t::generate_test_instances(std::list<osd_stat_t*>& o)
   o.back()->snap_trim_queue_len = 8;
   o.back()->num_snap_trimming = 99;
   struct Interfaces gen_interfaces = {
-	 { 1000, 900, 800 }, { 990, 890, 790 }, { 1010, 910, 810 },
-	 { 1100, 1000, 900 }, { 1090, 990, 890 }, { 1110, 1010, 910 } };
+	 { 1000, 900, 800 }, { 990, 890, 790 }, { 1010, 910, 810 }, 1001,
+	 { 1100, 1000, 900 }, { 1090, 990, 890 }, { 1110, 1010, 910 }, 1101 };
   o.back()->hb_pingtime[20] = gen_interfaces;
   gen_interfaces = {
-	 { 100, 200, 300 }, { 90, 190, 290 }, { 110, 210, 310 } };
+	 { 100, 200, 300 }, { 90, 190, 290 }, { 110, 210, 310 }, 101 };
   o.back()->hb_pingtime[30] = gen_interfaces;
 }
 

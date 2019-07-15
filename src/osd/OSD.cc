@@ -2301,6 +2301,7 @@ will start to track new ops received afterwards.";
       std::array<uint32_t,3> times;
       std::array<uint32_t,3> min;
       std::array<uint32_t,3> max;
+      uint32_t last;
 
       bool operator<(const osd_ping_time_t& rhs) const {
 	if (pingtime < rhs.pingtime)
@@ -2334,10 +2335,11 @@ will start to track new ops received afterwards.";
 	item.max[0] = j.second.back_max[0];
 	item.max[1] = j.second.back_max[1];
 	item.max[2] = j.second.back_max[2];
+	item.last = j.second.back_last;
 	item.back = true;
 	sorted.emplace(item);
       }
-      if (j.second.front_pingtime[0] == 0)
+      if (j.second.front_last == 0)
 	continue;
       item.pingtime = std::max(j.second.front_pingtime[0], j.second.front_pingtime[1]);
       item.pingtime = std::max(item.pingtime, j.second.front_pingtime[2]);
@@ -2352,6 +2354,7 @@ will start to track new ops received afterwards.";
 	item.max[0] = j.second.front_max[0];
 	item.max[1] = j.second.front_max[1];
 	item.max[2] = j.second.front_max[2];
+	item.last = j.second.front_last;
 	item.back = false;
 	sorted.emplace(item);
       }
@@ -2383,6 +2386,7 @@ will start to track new ops received afterwards.";
       f->dump_int("5min", sitem.max[1]);
       f->dump_int("15min", sitem.max[2]);
       f->close_section();  // max
+      f->dump_int("last", sitem.last);
       f->close_section();  // entry
     }
     f->close_section(); // entries
@@ -4782,10 +4786,10 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	    if (i->second.hb_interval_start == utime_t())
 	      i->second.hb_interval_start = now;
 	    if (now - i->second.hb_interval_start >=  utime_t(hb_avg, 0)) {
-              uint32_t back_pingtime = i->second.hb_total_back / i->second.hb_average_count;
+              uint32_t back_avg = i->second.hb_total_back / i->second.hb_average_count;
               uint32_t back_min = i->second.hb_min_back;
               uint32_t back_max = i->second.hb_max_back;
-              uint32_t front_pingtime = i->second.hb_total_front / i->second.hb_average_count;
+              uint32_t front_avg = i->second.hb_total_front / i->second.hb_average_count;
               uint32_t front_min = i->second.hb_min_front;
               uint32_t front_max = i->second.hb_max_front;
 
@@ -4801,18 +4805,18 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	      // Based on osd_heartbeat_interval ignoring that it is randomly short than this interval
 	      if (i->second.hb_back_pingtime.size() < hb_vector_size) {
 		ceph_assert(i->second.hb_front_pingtime.size() == i->second.hb_back_pingtime.size());
-	        i->second.hb_back_pingtime.push_back(back_pingtime);
+	        i->second.hb_back_pingtime.push_back(back_avg);
 	        i->second.hb_back_min.push_back(back_min);
 	        i->second.hb_back_max.push_back(back_max);
-	        i->second.hb_front_pingtime.push_back(front_pingtime);
+	        i->second.hb_front_pingtime.push_back(front_avg);
 	        i->second.hb_front_min.push_back(front_min);
 	        i->second.hb_front_max.push_back(front_max);
 	      } else {
 	        int index = i->second.hb_index & (hb_vector_size - 1);
-	        i->second.hb_back_pingtime[index] = back_pingtime;
+	        i->second.hb_back_pingtime[index] = back_avg;
 	        i->second.hb_back_min[index] = back_min;
 	        i->second.hb_back_max[index] = back_max;
-	        i->second.hb_front_pingtime[index] = front_pingtime;
+	        i->second.hb_front_pingtime[index] = front_avg;
 	        i->second.hb_front_min[index] = front_min;
 	        i->second.hb_front_max[index] = front_max;
 	      }
@@ -4820,6 +4824,8 @@ void OSD::handle_osd_ping(MOSDPing *m)
 
 	      {
 		std::lock_guard l(service.stat_lock);
+		service.osd_stat.hb_pingtime[from].back_last =  back_pingtime;
+
 		uint32_t total = 0;
 		uint32_t min = UINT_MAX;
 		uint32_t max = 0;
@@ -4845,6 +4851,8 @@ void OSD::handle_osd_ping(MOSDPing *m)
 		}
 
                 if (i->second.con_front != NULL) {
+		  service.osd_stat.hb_pingtime[from].front_last = front_pingtime;
+
 		  total = 0;
 		  min = UINT_MAX;
 		  max = 0;
@@ -4869,6 +4877,11 @@ void OSD::handle_osd_ping(MOSDPing *m)
 		  }
 		}
 	      }
+	    } else {
+		std::lock_guard l(service.stat_lock);
+		service.osd_stat.hb_pingtime[from].back_last =  back_pingtime;
+                if (i->second.con_front != NULL)
+		  service.osd_stat.hb_pingtime[from].front_last = front_pingtime;
 	    }
             i->second.ping_history.erase(i->second.ping_history.begin(), ++acked);
           }
