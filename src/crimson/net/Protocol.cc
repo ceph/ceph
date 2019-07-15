@@ -55,10 +55,10 @@ seastar::future<> Protocol::close()
   assert(!close_ready.valid());
 
   if (socket) {
-    close_ready = socket->close()
-      .then([this] {
-        return pending_dispatch.close();
-      }).finally(std::move(cleanup));
+    socket->shutdown();
+    close_ready = pending_dispatch.close().finally([this] {
+      return socket->close();
+    }).finally(std::move(cleanup));
   } else {
     close_ready = pending_dispatch.close().finally(std::move(cleanup));
   }

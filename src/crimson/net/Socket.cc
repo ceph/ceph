@@ -3,11 +3,16 @@
 
 #include "Socket.h"
 
+#include "crimson/common/log.h"
 #include "Errors.h"
 
 namespace ceph::net {
 
 namespace {
+
+seastar::logger& logger() {
+  return ceph::get_logger(ceph_subsys_ms);
+}
 
 // an input_stream consumer that reads buffer segments into a bufferlist up to
 // the given number of remaining bytes
@@ -79,6 +84,40 @@ Socket::read_exactly(size_t bytes) {
       }
       return seastar::make_ready_future<tmp_buf>(std::move(buf));
     });
+}
+
+void Socket::shutdown() {
+#ifndef NDEBUG
+  ceph_assert(!down);
+  down = true;
+#endif
+  socket.shutdown_input();
+  socket.shutdown_output();
+}
+
+static inline seastar::future<> close_and_handle_errors(auto& out) {
+  return out.close().handle_exception_type([] (const std::system_error& e) {
+    if (e.code() != error::broken_pipe &&
+        e.code() != error::connection_reset) {
+      logger().error("Socket::close(): unexpected error {}", e);
+      ceph_abort();
+    }
+    // can happen when out is already shutdown, ignore
+  });
+}
+
+seastar::future<> Socket::close() {
+#ifndef NDEBUG
+  ceph_assert(!closed);
+  closed = true;
+#endif
+  return seastar::when_all_succeed(
+    in.close(),
+    close_and_handle_errors(out)
+  ).handle_exception([] (auto eptr) {
+    logger().error("Socket::close(): unexpected exception {}", eptr);
+    ceph_abort();
+  });
 }
 
 } // namespace ceph::net
