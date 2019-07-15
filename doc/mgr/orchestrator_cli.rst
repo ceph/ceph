@@ -69,7 +69,7 @@ Disable the Orchestrator
 To disable the orchestrator again, use the empty string ``""``::
 
     ceph orchestrator set backend ""``
-    ceph mgr module disalbe rook
+    ceph mgr module disable rook
 
 Usage
 =====
