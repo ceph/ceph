@@ -21,10 +21,13 @@ it should serve as a reference for Ceph developers.
 We assume that readers are already familiar with Ceph (the distributed
 object store and file system designed to provide excellent performance,
 reliability and scalability). If not, please refer to the `project website`_
-and especially the `publications list`_.
+and especially the `publications list`_. Another way to learn about what's happening
+in Ceph is to check out our `youtube channel`_ , where we post Tech Talks, Code walk-throughs
+and Ceph Developer Monthly recordings.
 
 .. _`project website`: https://ceph.com
 .. _`publications list`: https://ceph.com/publications/
+.. _`youtube channel`: https://www.youtube.com/channel/UCno-Fry25FJ7B4RycCxOtfw
 
 Since this document is to be consumed by developers, who are assumed to
 have Internet access, topics covered elsewhere, either within the Ceph
