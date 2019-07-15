@@ -83,7 +83,9 @@ class Event(object):
             "id": self.id,
             "message": self.message,
             "duration": self.duration_str,
-            "refs": self._refs
+            "refs": self._refs,
+            "progress": self.progress,
+            "started_at": self.started_at
         }
 
     def update_duration_event(self):
@@ -105,6 +107,13 @@ class GhostEvent(Event):
     @property
     def progress(self):
         return 1.0
+
+    def to_json(self):
+        return {
+            "id": self.id,
+            "message": self.message,
+            "refs": self._refs
+        }
 
 
 class RemoteEvent(Event):
