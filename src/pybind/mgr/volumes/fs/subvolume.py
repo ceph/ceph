@@ -39,25 +39,21 @@ class SubVolume(object):
 
     def _get_single_dir_entry(self, dir_path, exclude=[]):
         """
-        Return a directory entry in a given directory exclusing passed
+        Return a directory entry in a given directory excluding passed
         in entries.
         """
+        exclude.extend((b".", b".."))
         try:
-            dir_handle = self.fs.opendir(dir_path)
+            with self.fs.opendir(dir_path) as d:
+                entry = self.fs.readdir(d)
+                while entry:
+                    if entry.d_name not in exclude and entry.is_dir():
+                        return entry.d_name
+                    entry = self.fs.readdir(d)
+            return None
         except cephfs.Error as e:
             raise VolumeException(-e.args[0], e.args[1])
 
-        exclude.extend((b".", b".."))
-
-        d = self.fs.readdir(dir_handle)
-        d_name = None
-        while d:
-            if not d.d_name in exclude and d.is_dir():
-                d_name = d.d_name
-                break
-            d = self.fs.readdir(dir_handle)
-        self.fs.closedir(dir_handle)
-        return d_name
 
     ### basic subvolume operations
 
