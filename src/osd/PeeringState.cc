@@ -1206,6 +1206,29 @@ void PeeringState::recalc_readable_until()
   dout(20) << __func__ << " readable_until[_ub] " << readable_until << dendl;
 }
 
+bool PeeringState::check_prior_readable_down_osds(const OSDMapRef& map)
+{
+  bool changed = false;
+  auto p = prior_readable_down_osds.begin();
+  while (p != prior_readable_down_osds.end()) {
+    if (map->is_dead(*p)) {
+      dout(10) << __func__ << " prior_readable_down_osds osd." << *p
+	       << " is dead as of epoch " << map->get_epoch()
+	       << dendl;
+      p = prior_readable_down_osds.erase(p);
+      changed = true;
+    } else {
+      ++p;
+    }
+  }
+  if (changed && prior_readable_down_osds.empty()) {
+    psdout(10) << " empty prior_readable_down_osds, clearing ub" << dendl;
+    clear_prior_readable_until_ub();
+    return true;
+  }
+  return false;
+}
+
 bool PeeringState::adjust_need_up_thru(const OSDMapRef osdmap)
 {
   epoch_t up_thru = osdmap->get_up_thru(pg_whoami.osd);
@@ -4490,6 +4513,7 @@ boost::statechart::result PeeringState::Peering::react(const AdvMap& advmap)
   }
 
   ps->adjust_need_up_thru(advmap.osdmap);
+  ps->check_prior_readable_down_osds(advmap.osdmap);
 
   return forward_event();
 }
@@ -5525,6 +5549,10 @@ boost::statechart::result PeeringState::Active::react(const AdvMap& advmap)
   if (need_publish)
     pl->publish_stats_to_osd();
 
+  if (ps->check_prior_readable_down_osds(advmap.osdmap)) {
+    pl->recheck_readable();
+  }
+
   return forward_event();
 }
 
@@ -6243,6 +6271,8 @@ void PeeringState::GetInfo::get_infos()
       ps->blocked_by.insert(peer.osd);
     }
   }
+
+  ps->check_prior_readable_down_osds(ps->get_osdmap());
 
   pl->publish_stats_to_osd();
 }
