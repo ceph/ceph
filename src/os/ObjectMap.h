@@ -162,6 +162,7 @@ public:
     return ObjectMapIterator();
   }
 
+  virtual KeyValueDB *get_db() { return nullptr; }
 
   ObjectMap(CephContext* cct) : cct(cct) {}
   virtual ~ObjectMap() {}

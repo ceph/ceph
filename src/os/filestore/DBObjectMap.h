@@ -59,6 +59,8 @@ class DBObjectMap : public ObjectMap {
 public:
   boost::scoped_ptr<KeyValueDB> db;
 
+  KeyValueDB *get_db() override { return db.get(); }
+
   /**
    * Serializes access to next_seq as well as the in_use set
    */

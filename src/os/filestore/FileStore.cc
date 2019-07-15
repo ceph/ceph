@@ -745,14 +745,28 @@ int FileStore::statfs(struct store_statfs_t *buf0)
   }
 
   uint64_t bfree = buf.f_bavail * buf.f_bsize;
+
+  // assume all of leveldb/rocksdb is omap.
+  {
+    map<string,uint64_t> kv_usage;
+    buf0->omap_allocated += object_map->get_db()->get_estimated_size(kv_usage);
+  }
+
   uint64_t thin_total, thin_avail;
   if (get_vdo_utilization(vdo_fd, &thin_total, &thin_avail)) {
     buf0->total = thin_total;
     bfree = std::min(bfree, thin_avail);
+    buf0->allocated = thin_total - thin_avail;
+    buf0->data_stored = bfree;
   } else {
     buf0->total = buf.f_blocks * buf.f_bsize;
+    buf0->allocated = bfree;
+    buf0->data_stored = bfree;
   }
   buf0->available = bfree;
+
+  // FIXME: we don't know how to populate buf->internal_metadata; XFS doesn't
+  // tell us what its internal overhead is.
 
   // Adjust for writes pending in the journal
   if (journal) {
@@ -762,6 +776,7 @@ int FileStore::statfs(struct store_statfs_t *buf0)
     else
       buf0->available = 0;
   }
+
   return 0;
 }
 

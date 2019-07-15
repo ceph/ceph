@@ -785,9 +785,7 @@ void OSDService::set_injectfull(s_names type, int64_t count)
   injectfull = count;
 }
 
-osd_stat_t OSDService::set_osd_stat(const struct store_statfs_t &stbuf,
-                                    vector<int>& hb_peers,
-				    int num_pgs)
+void OSDService::set_statfs(const struct store_statfs_t &stbuf)
 {
   uint64_t bytes = stbuf.total;
   uint64_t used = bytes - stbuf.available;
@@ -797,33 +795,23 @@ osd_stat_t OSDService::set_osd_stat(const struct store_statfs_t &stbuf,
   osd->logger->set(l_osd_stat_bytes_used, used);
   osd->logger->set(l_osd_stat_bytes_avail, avail);
 
-  {
-    Mutex::Locker l(stat_lock);
-    osd_stat.hb_peers.swap(hb_peers);
-    osd->op_tracker.get_age_ms_histogram(&osd_stat.op_queue_age_hist);
-    osd_stat.kb = bytes >> 10;
-    osd_stat.kb_used = used >> 10;
-    osd_stat.kb_avail = avail >> 10;
-    osd_stat.num_pgs = num_pgs;
-    return osd_stat;
-  }
+  Mutex::Locker l(stat_lock);
+  osd_stat.kb = bytes >> 10;
+  osd_stat.kb_used = used >> 10;
+  osd_stat.kb_avail = avail >> 10;
+  osd_stat.kb_used_data = stbuf.allocated >> 10;
+  osd_stat.kb_used_omap = stbuf.omap_allocated >> 10;
+  osd_stat.kb_used_meta = stbuf.internal_metadata >> 10;
 }
 
-void OSDService::update_osd_stat(vector<int>& hb_peers)
+osd_stat_t OSDService::set_osd_stat(vector<int>& hb_peers,
+				    int num_pgs)
 {
-  // load osd stats first
-  struct store_statfs_t stbuf;
-  int r = osd->store->statfs(&stbuf);
-  if (r < 0) {
-    derr << "statfs() failed: " << cpp_strerror(r) << dendl;
-    return;
-  }
-
-  auto new_stat = set_osd_stat(stbuf, hb_peers, osd->num_pgs);
-  dout(20) << "update_osd_stat " << new_stat << dendl;
-  assert(new_stat.kb);
-  float ratio = ((float)new_stat.kb_used) / ((float)new_stat.kb);
-  check_full_status(ratio);
+  Mutex::Locker l(stat_lock);
+  osd_stat.hb_peers.swap(hb_peers);
+  osd->op_tracker.get_age_ms_histogram(&osd_stat.op_queue_age_hist);
+  osd_stat.num_pgs = num_pgs;
+  return osd_stat;
 }
 
 bool OSDService::check_osdmap_full(const set<pg_shard_t> &missing_on)
@@ -2579,6 +2567,14 @@ int OSD::init()
     op_prio_cutoff << "." << dendl;
 
   create_logger();
+
+  // prime osd stats
+  {
+    struct store_statfs_t stbuf;
+    int r = store->statfs(&stbuf);
+    assert(r == 0);
+    service.set_statfs(stbuf);
+  }
 
   // i'm ready!
   client_messenger->add_dispatcher_head(this);
@@ -4713,15 +4709,19 @@ void OSD::heartbeat()
 
   dout(30) << "heartbeat checking stats" << dendl;
 
-  // refresh stats?
+  // refresh peer list and osd stats
   vector<int> hb_peers;
   for (map<int,HeartbeatInfo>::iterator p = heartbeat_peers.begin();
        p != heartbeat_peers.end();
        ++p)
     hb_peers.push_back(p->first);
-  service.update_osd_stat(hb_peers);
 
-  dout(5) << "heartbeat: " << service.get_osd_stat() << dendl;
+  auto new_stat = service.set_osd_stat(hb_peers, get_num_pgs());
+  dout(5) << __func__ << " " << new_stat << dendl;
+  assert(new_stat.kb);
+
+  float ratio = ((float)new_stat.kb_used) / ((float)new_stat.kb);
+  service.check_full_status(ratio);
 
   utime_t now = ceph_clock_now();
 
@@ -4837,6 +4837,12 @@ void OSD::tick_without_osd_lock()
   logger->set(l_osd_cached_crc, buffer::get_cached_crc());
   logger->set(l_osd_cached_crc_adjusted, buffer::get_cached_crc_adjusted());
   logger->set(l_osd_missed_crc, buffer::get_missed_crc());
+
+  // refresh osd stats
+  struct store_statfs_t stbuf;
+  int r = store->statfs(&stbuf);
+  assert(r == 0);
+  service.set_statfs(stbuf);
 
   // osd_lock is not being held, which means the OSD state
   // might change when doing the monitor report

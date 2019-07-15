@@ -4426,10 +4426,10 @@ int BlueStore::_reload_logger()
   int r = statfs(&store_statfs);
   if (r >= 0) {
     logger->set(l_bluestore_allocated, store_statfs.allocated);
-    logger->set(l_bluestore_stored, store_statfs.stored);
-    logger->set(l_bluestore_compressed, store_statfs.compressed);
-    logger->set(l_bluestore_compressed_allocated, store_statfs.compressed_allocated);
-    logger->set(l_bluestore_compressed_original, store_statfs.compressed_original);
+    logger->set(l_bluestore_stored, store_statfs.data_stored);
+    logger->set(l_bluestore_compressed, store_statfs.data_compressed);
+    logger->set(l_bluestore_compressed_allocated, store_statfs.data_compressed_allocated);
+    logger->set(l_bluestore_compressed_original, store_statfs.data_compressed_original);
   }
   return r;
 }
@@ -6022,7 +6022,7 @@ int BlueStore::_fsck_check_extents(
       continue;
     expected_statfs.allocated += e.length;
     if (compressed) {
-      expected_statfs.compressed_allocated += e.length;
+      expected_statfs.data_compressed_allocated += e.length;
     }
     bool already = false;
     apply(
@@ -6220,6 +6220,8 @@ int BlueStore::_fsck(bool deep, bool repair)
   statfs(&actual_statfs);
   expected_statfs.total = actual_statfs.total;
   expected_statfs.available = actual_statfs.available;
+  expected_statfs.internal_metadata = actual_statfs.internal_metadata;
+  expected_statfs.omap_allocated = actual_statfs.omap_allocated;
 
   // walk PREFIX_OBJ
   dout(1) << __func__ << " walking object keyspace" << dendl;
@@ -6374,7 +6376,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  ++errors;
 	}
 	pos = l.logical_offset + l.length;
-	expected_statfs.stored += l.length;
+	expected_statfs.data_stored += l.length;
 	ceph_assert(l.blob);
 	const bluestore_blob_t& blob = l.blob->get_blob();
 
@@ -6458,8 +6460,8 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  ++errors;
 	}
 	if (blob.is_compressed()) {
-	  expected_statfs.compressed += blob.get_compressed_payload_length();
-	  expected_statfs.compressed_original += 
+	  expected_statfs.data_compressed += blob.get_compressed_payload_length();
+	  expected_statfs.data_compressed_original +=
 	    i.first->get_referenced_bytes();
 	}
 	if (blob.is_shared()) {
@@ -6706,7 +6708,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	    }
 	    expected_statfs.allocated += e->length;
 	    if (compressed) {
-	      expected_statfs.compressed_allocated += e->length;
+	      expected_statfs.data_compressed_allocated += e->length;
 	    }
 	    bufferlist bl;
 	    IOContext ioc(cct, NULL, true); // allow EIO
@@ -6744,7 +6746,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 		// NB: it's crucial to use compressed flag from sb_info_t
 		// as we originally used that value while accumulating 
 		// expected_statfs
-		expected_statfs.compressed_allocated -= r.second.length;
+		expected_statfs.data_compressed_allocated -= r.second.length;
 	      }
 	    }
 	    sbi.updated = sbi.passed = true;
@@ -6758,7 +6760,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	    for (auto& p : pext_to_release) {
 	      expected_statfs.allocated -= p.length;
 	      if (compressed) {
-		expected_statfs.compressed_allocated -= p.length;
+		expected_statfs.data_compressed_allocated -= p.length;
 	      }
 	      to_release.union_insert(p.offset, p.length);
 	    }
@@ -7153,7 +7155,10 @@ int BlueStore::statfs(struct store_statfs_t *buf)
 {
   buf->reset();
 
+  buf->omap_allocated = db->estimate_prefix_size(PREFIX_OMAP);
+
   uint64_t bfree = alloc->get_free();
+
   if (bluefs) {
     // part of our shared device is "free" according to BlueFS, but we
     // can't touch bluestore_bluefs_min of it.
@@ -7165,6 +7170,15 @@ int BlueStore::statfs(struct store_statfs_t *buf)
     }
   }
 
+  {
+    std::lock_guard<std::mutex> l(vstatfs_lock);
+    buf->allocated = vstatfs.allocated();
+    buf->data_stored = vstatfs.stored();
+    buf->data_compressed = vstatfs.compressed();
+    buf->data_compressed_original = vstatfs.compressed_original();
+    buf->data_compressed_allocated = vstatfs.compressed_allocated();
+  }
+
   uint64_t thin_total, thin_avail;
   if (bdev->get_thin_utilization(&thin_total, &thin_avail)) {
     buf->total += thin_total;
@@ -7172,6 +7186,8 @@ int BlueStore::statfs(struct store_statfs_t *buf)
     // we are limited by both the size of the virtual device and the
     // underlying physical device.
     bfree = std::min(bfree, thin_avail);
+
+    buf->allocated = thin_total - thin_avail;
   } else {
     buf->total = bdev->get_size();
   }
@@ -7182,15 +7198,11 @@ int BlueStore::statfs(struct store_statfs_t *buf)
     if (bluefs_shared_bdev != BlueFS::BDEV_DB) {
       buf->total += bluefs->get_total(BlueFS::BDEV_DB);
     }
-  }
 
-  {
-    std::lock_guard<std::mutex> l(vstatfs_lock);
-    buf->allocated = vstatfs.allocated();
-    buf->stored = vstatfs.stored();
-    buf->compressed = vstatfs.compressed();
-    buf->compressed_original = vstatfs.compressed_original();
-    buf->compressed_allocated = vstatfs.compressed_allocated();
+    // call any non-omap bluefs space "internal metadata"
+    buf->internal_metadata =
+      std::max(bluefs->get_used(), (uint64_t)cct->_conf->bluestore_bluefs_min)
+      - buf->omap_allocated;
   }
 
   dout(20) << __func__ << " " << *buf << dendl;
