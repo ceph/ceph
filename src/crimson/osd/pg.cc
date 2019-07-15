@@ -21,6 +21,8 @@
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGQuery.h"
+#include "messages/MOSDRepOp.h"
+#include "messages/MOSDRepOpReply.h"
 
 #include "osd/OSDMap.h"
 
@@ -482,6 +484,23 @@ seastar::future<> PG::handle_op(ceph::net::Connection* conn,
   }).then([conn](Ref<MOSDOpReply> reply) {
     return conn->send(reply);
   });
+}
+
+seastar::future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
+{
+  ceph::os::Transaction txn;
+  auto encoded_txn = req->get_data().cbegin();
+  decode(txn, encoded_txn);
+  return shard_services.get_store().do_transaction(coll_ref, std::move(txn))
+    .then([req, lcod=peering_state.get_info().last_complete, this] {
+      peering_state.update_last_complete_ondisk(lcod);
+      const auto map_epoch = get_osdmap_epoch();
+      auto reply = make_message<MOSDRepOpReply>(
+        req.get(), pg_whoami, 0,
+	map_epoch, req->get_min_epoch(), CEPH_OSD_FLAG_ONDISK);
+      reply->set_last_complete_ondisk(lcod);
+      return shard_services.send_to_osd(req->from.osd, reply, map_epoch);
+    });
 }
 
 void PG::handle_rep_op_reply(ceph::net::Connection* conn,
