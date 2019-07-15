@@ -2376,9 +2376,11 @@ struct osd_stat_t {
     uint32_t back_pingtime[3];
     uint32_t back_min[3];
     uint32_t back_max[3];
+    uint32_t back_last;
     uint32_t front_pingtime[3];
     uint32_t front_min[3];
     uint32_t front_max[3];
+    uint32_t front_last;
   };
   map<int, Interfaces> hb_pingtime;  ///< map of osd id to Interfaces
 
