@@ -1081,8 +1081,7 @@ void Server::evict_cap_revoke_non_responders() {
   }
 }
 
-void Server::handle_conf_change(const ConfigProxy& conf,
-                                const std::set <std::string> &changed) {
+void Server::handle_conf_change(const std::set<std::string>& changed) {
   if (changed.count("mds_cap_revoke_eviction_timeout")) {
     cap_revoke_eviction_timeout = g_conf().get_val<double>("mds_cap_revoke_eviction_timeout");
     dout(20) << __func__ << " cap revoke eviction timeout changed to "
