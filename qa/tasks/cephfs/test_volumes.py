@@ -14,6 +14,14 @@ class TestVolumes(CephFSTestCase):
     TEST_SUBVOLUME_PREFIX="subvolume"
     TEST_GROUP_PREFIX="group"
     TEST_SNAPSHOT_PREFIX="snapshot"
+    TEST_FILE_NAME_PREFIX="subvolume_file"
+
+    # for filling subvolume with data
+    CLIENTS_REQUIRED = 1
+
+    # io defaults
+    DEFAULT_FILE_SIZE = 1 # MB
+    DEFAULT_NUMBER_OF_FILES = 1024
 
     def _fs_cmd(self, *args):
         return self.mgr_cluster.mon_manager.raw_cluster_cmd("fs", *args)
@@ -51,6 +59,24 @@ class TestVolumes(CephFSTestCase):
     def _delete_test_volume(self):
         self._fs_cmd("volume", "rm", self.volname)
 
+    def _do_subvolume_io(self, subvolume, number_of_files=DEFAULT_NUMBER_OF_FILES,
+                         file_size=DEFAULT_FILE_SIZE):
+        # get subvolume path for IO
+        subvolpath = self._fs_cmd("subvolume", "getpath", self.volname, subvolume)
+        self.assertNotEqual(subvolpath, None)
+        subvolpath = subvolpath[1:].rstrip() # remove "/" prefix and any trailing newline
+
+        log.debug("filling subvolume {0} with {1} files each {2}MB size".format(subvolume, number_of_files, file_size))
+        for i in range(number_of_files):
+            filename = "{0}.{1}".format(TestVolumes.TEST_FILE_NAME_PREFIX, i)
+            self.mount_a.write_n_mb(os.path.join(subvolpath, filename), file_size)
+
+    def _wait_for_trash_empty(self, timeout=30):
+        # XXX: construct the trash dir path (note that there is no mgr
+        # [sub]volume interface for this).
+        trashdir = os.path.join("./", "volumes", "_deleting")
+        self.mount_a.wait_for_dir_empty(trashdir)
+
     def setUp(self):
         super(TestVolumes, self).setUp()
         self.volname = None
@@ -83,6 +109,9 @@ class TestVolumes(CephFSTestCase):
             if ce.exitstatus != errno.ENOENT:
                 raise
 
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
     def test_subvolume_create_idempotence(self):
         # create subvolume
         subvolume = self._generate_random_subvolume_name()
@@ -93,6 +122,9 @@ class TestVolumes(CephFSTestCase):
 
         # remove subvolume
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
     def test_nonexistent_subvolume_rm(self):
         # remove non-existing subvolume
@@ -133,6 +165,9 @@ class TestVolumes(CephFSTestCase):
 
         # remove subvolume
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
@@ -250,8 +285,9 @@ class TestVolumes(CephFSTestCase):
         self.assertEqual(actual_mode2, expected_mode2)
         self.assertEqual(actual_mode3, expected_mode2)
 
-        self._fs_cmd("subvolume", "rm", self.volname, subvol2, group)
         self._fs_cmd("subvolume", "rm", self.volname, subvol1, group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvol2, group)
+        self._fs_cmd("subvolume", "rm", self.volname, subvol3, group)
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
     def test_nonexistent_subvolme_group_rm(self):
@@ -285,6 +321,9 @@ class TestVolumes(CephFSTestCase):
         # remove subvolume
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
 
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
     def test_subvolume_snapshot_create_idempotence(self):
         subvolume = self._generate_random_subvolume_name()
         snapshot = self._generate_random_snapshot_name()
@@ -303,6 +342,9 @@ class TestVolumes(CephFSTestCase):
 
         # remove subvolume
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
     def test_nonexistent_subvolume_snapshot_rm(self):
         subvolume = self._generate_random_subvolume_name()
@@ -330,6 +372,9 @@ class TestVolumes(CephFSTestCase):
         # remove subvolume
         self._fs_cmd("subvolume", "rm", self.volname, subvolume)
 
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
     def test_subvolume_snapshot_in_group(self):
         subvolume = self._generate_random_subvolume_name()
         group = self._generate_random_group_name()
@@ -349,6 +394,9 @@ class TestVolumes(CephFSTestCase):
 
         # remove subvolume
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
@@ -372,6 +420,9 @@ class TestVolumes(CephFSTestCase):
 
         # remove subvolume
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
@@ -398,6 +449,9 @@ class TestVolumes(CephFSTestCase):
 
         # remove subvolume
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, group)
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
 
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
@@ -429,5 +483,27 @@ class TestVolumes(CephFSTestCase):
         # remove subvolume
         self._fs_cmd("subvolume", "rm", self.volname, subvolume, group)
 
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
+
         # remove group
         self._fs_cmd("subvolumegroup", "rm", self.volname, group)
+
+    def test_async_subvolume_rm(self):
+        subvolume = self._generate_random_subvolume_name()
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+
+        # fill subvolume w/ some data
+        self._do_subvolume_io(subvolume)
+
+        self.mount_a.umount_wait()
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
+        self.mount_a.mount()
+
+        # verify trash dir is clean
+        self._wait_for_trash_empty()
