@@ -800,6 +800,20 @@ if(WITH_LIBCEPHFS)
   endif()
 endif(WITH_LIBCEPHFS)
 
+if(WITH_LIBCEPHSQLITE)
+  set(libcephsqlite_srcs libcephsqlite.cc)
+  add_library(cephsqlite ${CEPH_SHARED} ${libcephsqlite_srcs})
+  target_link_libraries(cephsqlite PRIVATE client ceph-common
+    ${CRYPTO_LIBS} ${EXTRALIBS})
+  if(ENABLE_SHARED)
+    set_target_properties(cephsqlite PROPERTIES
+      OUTPUT_NAME cephsqlite
+      VERSION 1.0.0
+      SOVERSION 1)
+  endif(ENABLE_SHARED)
+  install(TARGETS cephsqlite DESTINATION ${CMAKE_INSTALL_LIBDIR})
+endif(WITH_LIBCEPHSQLITE)
+
 if(WITH_FUSE)
   set(ceph_fuse_srcs
     ceph_fuse.cc
