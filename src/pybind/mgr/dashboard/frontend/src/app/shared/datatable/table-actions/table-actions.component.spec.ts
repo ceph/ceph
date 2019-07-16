@@ -17,21 +17,7 @@ describe('TableActionsComponent', () => {
   let unprotectAction: CdTableAction;
   let deleteAction: CdTableAction;
   let copyAction: CdTableAction;
-  let scenario;
   let permissionHelper: PermissionHelper;
-
-  const getTableActionComponent = (): TableActionsComponent => {
-    component.tableActions = [
-      addAction,
-      editAction,
-      protectAction,
-      unprotectAction,
-      copyAction,
-      deleteAction
-    ];
-    component.ngOnInit();
-    return component;
-  };
 
   configureTestBed({
     declarations: [TableActionsComponent],
@@ -85,15 +71,23 @@ describe('TableActionsComponent', () => {
     component.selection = new CdTableSelection();
     component.permission = new Permission();
     component.permission.read = true;
-    permissionHelper = new PermissionHelper(component.permission, () => getTableActionComponent());
-    permissionHelper.setPermissionsAndGetActions(1, 1, 1);
+    component.tableActions = [
+      addAction,
+      editAction,
+      protectAction,
+      unprotectAction,
+      copyAction,
+      deleteAction
+    ];
+    permissionHelper = new PermissionHelper(component.permission);
+    permissionHelper.setPermissionsAndGetActions(component.tableActions);
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should ngInit should be called with no permissions', () => {
+  it('should call ngInit without permissions', () => {
     component.permission = undefined;
     component.ngOnInit();
     expect(component.tableActions).toEqual([]);
@@ -122,199 +116,43 @@ describe('TableActionsComponent', () => {
     });
   });
 
-  describe('disableSelectionAction', () => {
-    beforeEach(() => {
-      scenario = {
-        fn: () => null,
-        multiple: false,
-        singleExecuting: false,
-        single: false,
-        empty: false
-      };
-    });
-
-    it('tests disabling addAction', () => {
-      scenario.fn = () => component.disableSelectionAction(addAction);
-      permissionHelper.testScenarios(scenario);
-    });
-
-    it('tests disabling editAction', () => {
-      scenario.fn = () => component.disableSelectionAction(editAction);
-      scenario.multiple = true;
-      scenario.empty = true;
-      scenario.singleExecuting = true;
-      permissionHelper.testScenarios(scenario);
-    });
-
-    it('tests disabling deleteAction', () => {
-      scenario.fn = () => component.disableSelectionAction(deleteAction);
-      scenario.multiple = false;
-      scenario.empty = true;
-      scenario.singleExecuting = true;
-      permissionHelper.testScenarios(scenario);
-    });
-
-    it('tests disabling copyAction', () => {
-      scenario.fn = () => component.disableSelectionAction(copyAction);
-      scenario.multiple = true;
-      scenario.empty = true;
-      scenario.singleExecuting = true;
-      permissionHelper.testScenarios(scenario);
-    });
-  });
-
-  describe('get current button', () => {
-    const hiddenScenario = () => {
-      scenario.multiple = undefined;
-      scenario.empty = undefined;
-      scenario.singleExecuting = undefined;
-      scenario.single = undefined;
-    };
-
-    const setScenario = (defaultAction, selectionAction) => {
-      scenario.single = selectionAction;
-      scenario.singleExecuting = selectionAction;
-      scenario.multiple = defaultAction;
-      scenario.empty = defaultAction;
-    };
-
-    beforeEach(() => {
-      scenario = {
-        fn: () => component.getCurrentButton(),
-        singleExecuting: copyAction,
-        single: copyAction,
-        empty: addAction
-      };
-    });
-
-    it('gets add for no, edit for single and delete for multiple selections', () => {
-      setScenario(addAction, editAction);
-      scenario.multiple = deleteAction;
-      permissionHelper.setPermissionsAndGetActions(1, 1, 1);
-      permissionHelper.testScenarios(scenario);
-    });
-
-    it('gets add action except for selections where it shows edit action', () => {
-      setScenario(addAction, editAction);
-      permissionHelper.setPermissionsAndGetActions(1, 1, 0);
-      permissionHelper.testScenarios(scenario);
-    });
-
-    it('gets add for no, copy for single and delete for multiple selections', () => {
-      setScenario(addAction, copyAction);
-      scenario.multiple = deleteAction;
-      permissionHelper.setPermissionsAndGetActions(1, 0, 1);
-      permissionHelper.testScenarios(scenario);
-    });
-
-    it('gets add action except for selections where it shows copy action', () => {
-      setScenario(addAction, copyAction);
-      permissionHelper.setPermissionsAndGetActions(1, 0, 0);
-      permissionHelper.testScenarios(scenario);
-    });
-
-    it('should always get edit action except delete for multiple items', () => {
-      setScenario(editAction, editAction);
-      scenario.multiple = deleteAction;
-      permissionHelper.setPermissionsAndGetActions(0, 1, 1);
-      permissionHelper.testScenarios(scenario);
-    });
-
-    it('should always get edit action', () => {
-      setScenario(editAction, editAction);
-      permissionHelper.setPermissionsAndGetActions(0, 1, 0);
-      permissionHelper.testScenarios(scenario);
-    });
-
-    it('should always get delete action', () => {
-      setScenario(deleteAction, deleteAction);
-      permissionHelper.setPermissionsAndGetActions(0, 0, 1);
-      permissionHelper.testScenarios(scenario);
-    });
-
-    it('should not get any button with no permissions, except the true action', () => {
-      hiddenScenario();
-      permissionHelper.setPermissionsAndGetActions(0, 0, 0);
-      permissionHelper.testScenarios(scenario);
-    });
-
-    it('should not get any button if only a drop down should be shown', () => {
-      hiddenScenario();
-      component.dropDownOnly = 'Drop down label that is shown';
-      permissionHelper.setPermissionsAndGetActions(1, 1, 1);
-      permissionHelper.testScenarios(scenario);
-    });
-  });
-
-  describe('show drop down', () => {
-    const testShowDropDownActions = (perms, expected) => {
-      permissionHelper.setPermissionsAndGetActions(perms[0], perms[1], perms[2]);
-      expect(`${perms} ${component.showDropDownActions()}`).toBe(`${perms} ${expected}`);
-    };
-
-    it('is shown if multiple items are found depending on the permissions', () => {
-      [[1, 0, 0], [1, 1, 1], [1, 1, 0], [1, 0, 1], [0, 1, 1], [0, 1, 0]].forEach((perms) => {
-        testShowDropDownActions(perms, true);
-      });
-    });
-
-    it('is not shown if only 1 or less items are found depending on the permissions', () => {
-      [[0, 0, 1], [0, 0, 0]].forEach((perms) => {
-        testShowDropDownActions(perms, false);
-      });
-    });
-  });
-
-  describe('all visible actions with all different permissions', () => {
-    it('with create, update and delete', () => {
-      permissionHelper.setPermissionsAndGetActions(1, 1, 1);
-      expect(component.dropDownActions).toEqual([
-        addAction,
-        editAction,
-        unprotectAction,
-        copyAction,
-        deleteAction
-      ]);
-    });
-
-    it('with create and delete', () => {
-      permissionHelper.setPermissionsAndGetActions(1, 0, 1);
-      expect(component.dropDownActions).toEqual([addAction, copyAction, deleteAction]);
-    });
-
-    it('with create and update', () => {
-      permissionHelper.setPermissionsAndGetActions(1, 1, 0);
-      expect(component.dropDownActions).toEqual([
-        addAction,
-        editAction,
-        unprotectAction,
-        copyAction
-      ]);
-    });
-
-    it('with create', () => {
-      permissionHelper.setPermissionsAndGetActions(1, 0, 0);
-      expect(component.dropDownActions).toEqual([addAction, copyAction]);
-    });
-
-    it('with update and delete', () => {
-      permissionHelper.setPermissionsAndGetActions(0, 1, 1);
-      expect(component.dropDownActions).toEqual([editAction, unprotectAction, deleteAction]);
-    });
-
-    it('with update', () => {
-      permissionHelper.setPermissionsAndGetActions(0, 1, 0);
-      expect(component.dropDownActions).toEqual([editAction, unprotectAction]);
-    });
-
-    it('with delete', () => {
-      permissionHelper.setPermissionsAndGetActions(0, 0, 1);
-      expect(component.dropDownActions).toEqual([deleteAction]);
-    });
-
-    it('without any', () => {
-      permissionHelper.setPermissionsAndGetActions(0, 0, 0);
-      expect(component.dropDownActions).toEqual([]);
+  it('should test all TableActions combinations', () => {
+    const tableActions: TableActionsComponent = permissionHelper.setPermissionsAndGetActions(
+      component.tableActions
+    );
+    expect(tableActions).toEqual({
+      'create,update,delete': {
+        actions: ['Add', 'Edit', 'Protect', 'Unprotect', 'Copy', 'Delete'],
+        primary: { multiple: 'Delete', executing: 'Edit', single: 'Edit', no: 'Add' }
+      },
+      'create,update': {
+        actions: ['Add', 'Edit', 'Protect', 'Unprotect', 'Copy'],
+        primary: { multiple: 'Add', executing: 'Edit', single: 'Edit', no: 'Add' }
+      },
+      'create,delete': {
+        actions: ['Add', 'Copy', 'Delete'],
+        primary: { multiple: 'Delete', executing: 'Copy', single: 'Copy', no: 'Add' }
+      },
+      create: {
+        actions: ['Add', 'Copy'],
+        primary: { multiple: 'Add', executing: 'Copy', single: 'Copy', no: 'Add' }
+      },
+      'update,delete': {
+        actions: ['Edit', 'Protect', 'Unprotect', 'Delete'],
+        primary: { multiple: 'Delete', executing: 'Edit', single: 'Edit', no: 'Edit' }
+      },
+      update: {
+        actions: ['Edit', 'Protect', 'Unprotect'],
+        primary: { multiple: 'Edit', executing: 'Edit', single: 'Edit', no: 'Edit' }
+      },
+      delete: {
+        actions: ['Delete'],
+        primary: { multiple: 'Delete', executing: 'Delete', single: 'Delete', no: 'Delete' }
+      },
+      'no-permissions': {
+        actions: [],
+        primary: { multiple: '', executing: '', single: '', no: '' }
+      }
     });
   });
 
