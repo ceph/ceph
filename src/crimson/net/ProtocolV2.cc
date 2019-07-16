@@ -653,35 +653,29 @@ seastar::future<bool> ProtocolV2::client_connect()
     client_cookie = ceph::util::generate_random_number<uint64_t>(1, -1ll);
   }
 
-  // TODO: get socket address and learn(not supported by seastar)
-  entity_addr_t a;
-  a.u.sa.sa_family = AF_INET;
-  a.set_type(entity_addr_t::TYPE_MSGR2);
-  return messenger.learned_addr(a).then([this] {
-    uint64_t flags = 0;
-    if (conn.policy.lossy) {
-      flags |= CEPH_MSG_CONNECT_LOSSY;
-    }
+  uint64_t flags = 0;
+  if (conn.policy.lossy) {
+    flags |= CEPH_MSG_CONNECT_LOSSY;
+  }
 
-    auto client_ident = ClientIdentFrame::Encode(
-        messenger.get_myaddrs(),
-        conn.target_addr,
-        messenger.get_myname().num(),
-        global_seq,
-        conn.policy.features_supported,
-        conn.policy.features_required | msgr2_required, flags,
-        client_cookie);
+  auto client_ident = ClientIdentFrame::Encode(
+      messenger.get_myaddrs(),
+      conn.target_addr,
+      messenger.get_myname().num(),
+      global_seq,
+      conn.policy.features_supported,
+      conn.policy.features_required | msgr2_required, flags,
+      client_cookie);
 
-    logger().debug("{} WRITE ClientIdentFrame: addrs={}, target={}, gid={},"
-                   " gs={}, features_supported={}, features_required={},"
-                   " flags={}, cookie={}",
-                   conn, messenger.get_myaddrs(), conn.target_addr,
-                   messenger.get_myname().num(), global_seq,
-                   conn.policy.features_supported,
-                   conn.policy.features_required | msgr2_required,
-                   flags, client_cookie);
-    return write_frame(client_ident);
-  }).then([this] {
+  logger().debug("{} WRITE ClientIdentFrame: addrs={}, target={}, gid={},"
+                 " gs={}, features_supported={}, features_required={},"
+                 " flags={}, cookie={}",
+                 conn, messenger.get_myaddrs(), conn.target_addr,
+                 messenger.get_myname().num(), global_seq,
+                 conn.policy.features_supported,
+                 conn.policy.features_required | msgr2_required,
+                 flags, client_cookie);
+  return write_frame(client_ident).then([this] {
     return read_main_preamble();
   }).then([this] (Tag tag) {
     switch (tag) {
@@ -719,13 +713,19 @@ seastar::future<bool> ProtocolV2::client_connect()
           if (!server_ident.addrs().contains(conn.target_addr)) {
             logger().warn("{} peer identifies as {}, does not include {}",
                           conn, server_ident.addrs(), conn.target_addr);
-            abort_in_fault();
+            throw std::system_error(
+                make_error_code(ceph::net::error::bad_peer_address));
           }
 
           server_cookie = server_ident.cookie();
 
           // TODO: change peer_addr to entity_addrvec_t
-          ceph_assert(conn.peer_addr == server_ident.addrs().front());
+          if (server_ident.addrs().front() != conn.peer_addr) {
+            logger().warn("{} peer advertises as {}, does not match {}",
+                          conn, server_ident.addrs(), conn.peer_addr);
+            throw std::system_error(
+                make_error_code(ceph::net::error::bad_peer_address));
+          }
           conn.set_peer_id(server_ident.gid());
           conn.set_features(server_ident.supported_features() &
                             conn.policy.features_supported);
@@ -862,12 +862,14 @@ void ProtocolV2::execute_connecting()
           }
           conn.set_ephemeral_port(_my_addr_from_peer.get_port(),
                                   SocketConnection::side_t::connector);
-          if (messenger.get_myaddrs().empty() ||
-              messenger.get_myaddrs().front().is_blank_ip()) {
-            return messenger.learned_addr(_my_addr_from_peer);
-          } else {
-            return seastar::now();
+          if (unlikely(_my_addr_from_peer.is_legacy())) {
+            logger().warn("{} peer sent a legacy address for me: {}",
+                          conn, _my_addr_from_peer);
+            throw std::system_error(
+                make_error_code(ceph::net::error::bad_peer_address));
           }
+          _my_addr_from_peer.set_type(entity_addr_t::TYPE_MSGR2);
+          return messenger.learned_addr(_my_addr_from_peer, conn);
         }).then([this] {
           return client_auth();
         }).then([this] {
@@ -1065,15 +1067,26 @@ seastar::future<bool> ProtocolV2::server_connect()
     if (client_ident.addrs().empty() ||
         client_ident.addrs().front() == entity_addr_t()) {
       logger().warn("{} oops, client_ident.addrs() is empty", conn);
-      abort_in_fault();
+      throw std::system_error(
+          make_error_code(ceph::net::error::bad_peer_address));
     }
     if (!messenger.get_myaddrs().contains(client_ident.target_addr())) {
       logger().warn("{} peer is trying to reach {} which is not us ({})",
                     conn, client_ident.target_addr(), messenger.get_myaddrs());
-      abort_in_fault();
+      throw std::system_error(
+          make_error_code(ceph::net::error::bad_peer_address));
     }
     // TODO: change peer_addr to entity_addrvec_t
     entity_addr_t paddr = client_ident.addrs().front();
+    if ((paddr.is_msgr2() || paddr.is_any()) &&
+        paddr.is_same_host(conn.target_addr)) {
+      // good
+    } else {
+      logger().warn("{} peer's address {} is not v2 or not the same host with {}",
+                    conn, paddr, conn.target_addr);
+      throw std::system_error(
+          make_error_code(ceph::net::error::bad_peer_address));
+    }
     conn.peer_addr = paddr;
     logger().debug("{} UPDATE: peer_addr={}", conn, conn.peer_addr);
     conn.target_addr = conn.peer_addr;
@@ -1306,6 +1319,15 @@ void ProtocolV2::execute_accepting()
                         conn, ceph_entity_type_name(_peer_type),
                         conn.policy.lossy, conn.policy.server,
                         conn.policy.standby, conn.policy.resetcheck);
+          if (messenger.get_myaddr().get_port() != _my_addr_from_peer.get_port() ||
+              messenger.get_myaddr().get_nonce() != _my_addr_from_peer.get_nonce()) {
+            logger().warn("{} my_addr_from_peer {} port/nonce doesn't match myaddr {}",
+                          conn, _my_addr_from_peer, messenger.get_myaddr());
+            throw std::system_error(
+                make_error_code(ceph::net::error::bad_peer_address));
+          }
+          return messenger.learned_addr(_my_addr_from_peer, conn);
+        }).then([this] {
           return server_auth();
         }).then([this] {
           return read_main_preamble();
