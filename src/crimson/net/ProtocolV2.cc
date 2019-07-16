@@ -1077,6 +1077,12 @@ seastar::future<bool> ProtocolV2::server_connect()
     conn.peer_addr = paddr;
     logger().debug("{} UPDATE: peer_addr={}", conn, conn.peer_addr);
     conn.target_addr = conn.peer_addr;
+    if (!conn.policy.lossy && !conn.policy.server && conn.target_addr.get_port() <= 0) {
+      logger().warn("{} we don't know how to reconnect to peer {}",
+                    conn, conn.target_addr);
+      throw std::system_error(
+          make_error_code(ceph::net::error::bad_peer_address));
+    }
 
     conn.set_peer_id(client_ident.gid());
     client_cookie = client_ident.cookie();

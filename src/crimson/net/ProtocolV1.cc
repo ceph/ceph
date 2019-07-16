@@ -542,6 +542,12 @@ seastar::future<stop_t> ProtocolV1::repeat_handle_connect()
       ::decode(h.connect, p);
       conn.set_peer_type(h.connect.host_type);
       conn.policy = messenger.get_policy(h.connect.host_type);
+      if (!conn.policy.lossy && !conn.policy.server && conn.target_addr.get_port() <= 0) {
+          logger().error("{} we don't know how to reconnect to peer {}",
+                         conn, conn.target_addr);
+        throw std::system_error(
+            make_error_code(ceph::net::error::bad_peer_address));
+      }
       return socket->read(h.connect.authorizer_len);
     }).then([this] (bufferlist authorizer) {
       memset(&h.reply, 0, sizeof(h.reply));
