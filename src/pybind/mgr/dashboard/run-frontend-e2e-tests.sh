@@ -63,7 +63,7 @@ cd $DASH_DIR/frontend
 jq .[].target=$BASE_URL proxy.conf.json.sample > proxy.conf.json
 
 . $BUILD_DIR/src/pybind/mgr/dashboard/node-env/bin/activate
-npm ci
+timeout 1h npm ci
 
 if [ $DEVICE == "chrome" ]; then
     npm run e2e || stop 1
