@@ -12,13 +12,27 @@
 
 using namespace std;
 
+#define dout_subsys ceph_subsys_test
+#undef dout_prefix
+#define dout_prefix _prefix(_dout, prefix_name())
+static ostream& _prefix(std::ostream *_dout, const char *prefix) {
+  return *_dout << prefix;
+}
+
+const char* prefix_name() { return "test_election: "; }
+
 int main(int argc, char **argv) {
   vector<const char*> args(argv, argv+argc);
+  bool user_set_debug = false;
+  for (auto& arg : args) {
+    if (strncmp("--debug_mon", arg, 11) == 0) user_set_debug = true;
+  }
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
 			 CODE_ENVIRONMENT_UTILITY,
 			 CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
-  g_ceph_context->_conf.set_val("debug mon", "0/20");
+  if (!user_set_debug) g_ceph_context->_conf.set_val("debug mon", "0/20");
+
   ::testing::InitGoogleTest(&argc, argv);
   return RUN_ALL_TESTS();
 }
@@ -51,6 +65,7 @@ struct Election {
   void block_bidirectional_messages(int a, int b);
   void unblock_messages(int from, int to);
   void unblock_bidirectional_messages(int a, int b);
+  const char* prefix_name() { return "Election:      "; }
 };
 struct Owner : public ElectionOwner {
   Election *parent;
@@ -152,17 +167,17 @@ struct Owner : public ElectionOwner {
     }
   }
   void election_timeout() {
-    cerr << "election epoch " << logic.get_epoch()
+    ldout(g_ceph_context, 2) << "election epoch " << logic.get_epoch()
 	 << " timed out for " << rank
 	 << ", electing me:" << logic.electing_me
-	 << ", acked_me:" << logic.acked_me << std::endl;
+	 << ", acked_me:" << logic.acked_me << dendl;
     logic.end_election_period();
   }
   void victory_timeout() {
-    cerr << "victory epoch " << logic.get_epoch()
+    ldout(g_ceph_context, 2) << "victory epoch " << logic.get_epoch()
 	 << " timed out for " << rank
 	 << ", electing me:" << logic.electing_me
-	 << ", acked_me:" << logic.acked_me << std::endl;
+	 << ", acked_me:" << logic.acked_me << dendl;
     reset_election();
   }
   void notify_timestep() {
@@ -178,6 +193,7 @@ struct Owner : public ElectionOwner {
       }
     }
   }
+  const char *prefix_name() { return "Owner:         "; }
 };
 
 Election::Election(int c) : count(c)
@@ -305,7 +321,7 @@ TEST(election, single_startup_election_completes)
     // This test is not actually legit since you should start
     // all the ElectionLogics, but it seems to work
     int steps = election.run_timesteps(0);
-    cerr << "ran in " << steps << " timesteps" << std::endl;
+    ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
     ASSERT_TRUE(election.election_stable());
     Owner *first_o = election.electors[0];
     int leader = first_o->logic.get_acked_leader();
@@ -323,7 +339,7 @@ TEST(election, everybody_starts_completes)
   Election election(5);
   election.start_all();
   int steps = election.run_timesteps(0);
-  cerr << "ran in " << steps << " timesteps" << std::endl;
+  ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
   ASSERT_TRUE(election.election_stable());
   Owner *first_o = election.electors[0];
   int leader = first_o->logic.get_acked_leader();
@@ -341,11 +357,11 @@ TEST(election, blocked_connection_continues_election)
   election.block_bidirectional_messages(0, 1);
   election.start_all();
   int steps = election.run_timesteps(100);
-  cerr << "ran in " << steps << " timesteps" << std::endl;
+  ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
   // This is a failure mode!
   ASSERT_FALSE(election.election_stable());
   election.unblock_bidirectional_messages(0, 1);
   steps = election.run_timesteps(100);
-  cerr << "ran in " << steps << " timesteps" << std::endl;
+  ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
   ASSERT_TRUE(election.election_stable());
 }
