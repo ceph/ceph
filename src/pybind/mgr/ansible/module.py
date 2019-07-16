@@ -695,37 +695,33 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         return ARSChangeOperation(self.ar_client, self.log, operations)
 
-    def add_stateless_service(self, service_type, spec):
-        """ Add a stateless service in the cluster
+    def add_rgw(self, spec):
+        # type: (orchestrator.RGWSpec) -> PlaybookOperation
+        """ Add a RGW service in the cluster
 
-        : service_type: Kind of service (nfs, rgw, mds)
-        : spec        : an Orchestrator.StatelessServiceSpec object
+        : spec        : an Orchestrator.RGWSpec object
 
         : returns     : Completion object
         """
 
-        # Check service_type is supported
-        if service_type not in ["rgw"]:
-            raise orchestrator.OrchestratorError(
-                "{} service not supported".format(service_type))
 
         # Add the hosts to the inventory in the right group
-        hosts = spec.service_spec.hosts
+        hosts = spec.hosts
         if not hosts:
-            raise orchestrator.OrchestratorError("No hosts provided."\
-                "At least one destination host is needed to install the RGW "\
+            raise orchestrator.OrchestratorError("No hosts provided. "
+                "At least one destination host is needed to install the RGW "
                 "service")
-        InventoryGroup("{}s".format(service_type), self.ar_client).update(hosts)
+        InventoryGroup("rgws", self.ar_client).update(hosts)
 
         # Limit playbook execution to certain hosts
         limited = ",".join(hosts)
 
         # Add the settings for this service
-        extravars = vars(spec.service_spec)
+        extravars = {k:v for (k,v) in spec.__dict__.items() if k.startswith('rgw_')}
+        extravars['rgw_zone'] = spec.name
 
         # Group hosts by resource (used in rm ops)
-        if service_type == "rgw":
-            resource_group = "rgw_zone_{}".format(spec.service_spec.rgw_zone)
+        resource_group = "rgw_zone_{}".format(spec.name)
         InventoryGroup(resource_group, self.ar_client).update(hosts)
 
 
@@ -747,30 +743,21 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         return playbook_operation
 
-    def remove_stateless_service(self, service_type, id_resource):
-        """ Remove a stateles services providing <sv_id> resources
+    def remove_rgw(self, zone):
+        """ Remove a RGW service providing <zone>
 
-        :svc_type    : Kind of service (nfs, rgw, mds)
-        :id_resource : Id of the resource provided
-                            <zone name> if service is RGW
+        :zone : <zone name> of the RGW
                             ...
         : returns    : Completion object
         """
 
-        # Check service_type is supported
-        if service_type not in ["rgw"]:
-            raise orchestrator.OrchestratorError(
-                "{} service not supported".format(service_type))
 
         # Ansible Inventory group for the kind of service
-        group = "{}s".format(service_type)
+        group = "rgws"
 
         # get the list of hosts where to remove the service
         # (hosts in resource group)
-        if service_type == "rgw":
-            group_prefix = "rgw_zone_{}"
-
-        resource_group = group_prefix.format(id_resource)
+        resource_group = "rgw_zone_{}".format(zone)
 
         hosts_list = list(InventoryGroup(resource_group, self.ar_client))
         limited = ",".join(hosts_list)
@@ -798,8 +785,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
         playbook_operation.clean_hosts_on_success = clean_inventory
 
         # Execute the playbook
-        self.log.info("Removing service %s for resource %s", service_type,
-                      id_resource)
+        self.log.info("Removing service rgw for resource %s", zone)
         self._launch_operation(playbook_operation)
 
         return playbook_operation

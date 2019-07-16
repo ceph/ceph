@@ -375,24 +375,32 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         return RookWriteCompletion(lambda: func(spec), None,
                     "Creating {0} services for {1}".format(typename, spec.name))
 
-    def add_stateless_service(self, service_type, spec):
-        # assert isinstance(spec, orchestrator.StatelessServiceSpec)
-        if service_type == "mds":
-            return self._service_add_decorate("Filesystem", spec,
-                                         self.rook_cluster.add_filesystem)
-        elif service_type == "rgw" :
-            return self._service_add_decorate("RGW", spec,
-                                         self.rook_cluster.add_objectstore)
-        elif service_type == "nfs" :
-            return self._service_add_decorate("NFS", spec,
-                                         self.rook_cluster.add_nfsgw)
-        else:
-            raise NotImplementedError(service_type)
+    def add_mds(self, spec):
+        return self._service_add_decorate("Filesystem", spec,
+                                          self.rook_cluster.add_filesystem)
 
-    def remove_stateless_service(self, service_type, service_id):
+    def add_rgw(self, spec):
+        return self._service_add_decorate("RGW", spec,
+                                          self.rook_cluster.add_objectstore)
+
+    def add_nfs(self, spec):
+        return self._service_add_decorate("NFS", spec,
+                                          self.rook_cluster.add_nfsgw)
+
+    def remove_mds(self, name):
         return RookWriteCompletion(
-            lambda: self.rook_cluster.rm_service(service_type, service_id), None,
-            "Removing {0} services for {1}".format(service_type, service_id))
+            lambda: self.rook_cluster.rm_service('cephfilesystems', name), None,
+            "Removing {0} services for {1}".format('mds', name))
+
+    def remove_rgw(self, zone):
+        return RookWriteCompletion(
+            lambda: self.rook_cluster.rm_service('cephobjectstores', zone), None,
+            "Removing {0} services for {1}".format('rgw', zone))
+
+    def remove_nfs(self, name):
+        return RookWriteCompletion(
+            lambda: self.rook_cluster.rm_service('cephnfses', name), None,
+            "Removing {0} services for {1}".format('nfs', name))
 
     def update_mons(self, num, hosts):
         if hosts:
@@ -402,11 +410,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             lambda: self.rook_cluster.update_mon_count(num), None,
             "Updating mon count to {0}".format(num))
 
-    def update_stateless_service(self, svc_type, spec):
-        # only nfs is currently supported
-        if svc_type != "nfs":
-            raise NotImplementedError(svc_type)
-
+    def update_nfs(self, spec):
         num = spec.count
         return RookWriteCompletion(
             lambda: self.rook_cluster.update_nfs_count(spec.name, num), None,
