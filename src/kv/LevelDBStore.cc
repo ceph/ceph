@@ -180,14 +180,14 @@ LevelDBStore::~LevelDBStore()
 void LevelDBStore::close()
 {
   // stop compaction thread
-  compact_queue_lock.Lock();
+  compact_queue_lock.lock();
   if (compact_thread.is_started()) {
     compact_queue_stop = true;
-    compact_queue_cond.Signal();
-    compact_queue_lock.Unlock();
+    compact_queue_cond.notify_all();
+    compact_queue_lock.unlock();
     compact_thread.join();
   } else {
-    compact_queue_lock.Unlock();
+    compact_queue_lock.unlock();
   }
 
   if (logger)
@@ -383,27 +383,26 @@ void LevelDBStore::compact()
 
 void LevelDBStore::compact_thread_entry()
 {
-  compact_queue_lock.Lock();
+  std::unique_lock l{compact_queue_lock};
   while (!compact_queue_stop) {
     while (!compact_queue.empty()) {
       pair<string,string> range = compact_queue.front();
       compact_queue.pop_front();
       logger->set(l_leveldb_compact_queue_len, compact_queue.size());
-      compact_queue_lock.Unlock();
+      l.unlock();
       logger->inc(l_leveldb_compact_range);
       if (range.first.empty() && range.second.empty()) {
         compact();
       } else {
         compact_range(range.first, range.second);
       }
-      compact_queue_lock.Lock();
+      l.lock();
       continue;
     }
     if (compact_queue_stop)
       break;
-    compact_queue_cond.Wait(compact_queue_lock);
+    compact_queue_cond.wait(l);
   }
-  compact_queue_lock.Unlock();
 }
 
 void LevelDBStore::compact_range_async(const string& start, const string& end)
@@ -440,7 +439,7 @@ void LevelDBStore::compact_range_async(const string& start, const string& end)
     compact_queue.push_back(make_pair(start, end));
     logger->set(l_leveldb_compact_queue_len, compact_queue.size());
   }
-  compact_queue_cond.Signal();
+  compact_queue_cond.notify_all();
   if (!compact_thread.is_started()) {
     compact_thread.create("levdbst_compact");
   }

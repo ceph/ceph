@@ -69,6 +69,9 @@ class ConnectionPool(object):
             assert self.ops_in_progress == 0
             log.debug("Connecting to cephfs '{0}'".format(self.fs_name))
             self.fs = cephfs.LibCephFS(rados_inst=self.mgr.rados)
+            log.debug("Setting user ID and group ID of CephFS mount as root...")
+            self.fs.conf_set("client_mount_uid", "0")
+            self.fs.conf_set("client_mount_gid", "0")
             log.debug("CephFS initializing...")
             self.fs.init()
             log.debug("CephFS mounting...")
@@ -200,20 +203,13 @@ class VolumeClient(object):
         """
         return ve.to_tuple()
 
-    def create_pool(self, pool_name, pg_num, pg_num_min=None, pg_autoscale_factor=None):
+    def create_pool(self, pool_name, pg_num):
         # create the given pool
         command = {'prefix': 'osd pool create', 'pool': pool_name, 'pg_num': pg_num}
-        if pg_num_min:
-            command['pg_num_min'] = pg_num_min
         r, outb, outs = self.mgr.mon_command(command)
         if r != 0:
             return r, outb, outs
 
-        # set pg autoscale if needed
-        if pg_autoscale_factor:
-            command = {'prefix': 'osd pool set', 'pool': pool_name, 'var': 'pg_autoscale_bias',
-                       'val': str(pg_autoscale_factor)}
-            r, outb, outs = self.mgr.mon_command(command)
         return r, outb, outs
 
     def remove_pool(self, pool_name):
@@ -235,10 +231,9 @@ class VolumeClient(object):
         return self.mgr.mon_command(command)
 
     def create_mds(self, fs_name):
-        spec = orchestrator.StatelessServiceSpec()
-        spec.name = fs_name
+        spec = orchestrator.StatelessServiceSpec(fs_name)
         try:
-            completion = self.mgr.add_stateless_service("mds", spec)
+            completion = self.mgr.add_mds(spec)
             self.mgr._orchestrator_wait([completion])
             orchestrator.raise_if_exception(completion)
         except (ImportError, orchestrator.OrchestratorError):
@@ -258,7 +253,7 @@ class VolumeClient(object):
         """
         metadata_pool, data_pool = self.gen_pool_names(volname)
         # create pools
-        r, outs, outb = self.create_pool(metadata_pool, 16, pg_num_min=16, pg_autoscale_factor=4.0)
+        r, outs, outb = self.create_pool(metadata_pool, 16)
         if r != 0:
             return r, outb, outs
         r, outb, outs = self.create_pool(data_pool, 8)
@@ -280,7 +275,7 @@ class VolumeClient(object):
         self.connection_pool.del_fs_handle(volname)
         # Tear down MDS daemons
         try:
-            completion = self.mgr.remove_stateless_service("mds", volname)
+            completion = self.mgr.remove_mds(volname)
             self.mgr._orchestrator_wait([completion])
             orchestrator.raise_if_exception(completion)
         except (ImportError, orchestrator.OrchestratorError):
@@ -506,6 +501,20 @@ class VolumeClient(object):
         except VolumeException as ve:
             ret = self.volume_exception_to_retval(ve)
         return ret
+
+    @connection_pool_wrap
+    def getpath_subvolume_group(self, fs_handle, **kwargs):
+        groupname  = kwargs['group_name']
+        try:
+            with SubVolume(self.mgr, fs_handle) as sv:
+                spec = SubvolumeSpec("", groupname)
+                path = sv.get_group_path(spec)
+                if path is None:
+                    raise VolumeException(
+                        -errno.ENOENT, "Subvolume group '{0}' not found".format(groupname))
+                return 0, path, ""
+        except VolumeException as ve:
+            return self.volume_exception_to_retval(ve)
 
     ### group snapshot
 

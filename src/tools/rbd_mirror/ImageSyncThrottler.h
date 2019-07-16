@@ -11,7 +11,7 @@
 #include <string>
 #include <utility>
 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/config_obs.h"
 
 class CephContext;
@@ -42,11 +42,11 @@ public:
   void finish_op(const std::string &id);
   void drain(int r);
 
-  void print_status(Formatter *f, std::stringstream *ss);
+  void print_status(ceph::Formatter *f, std::stringstream *ss);
 
 private:
   CephContext *m_cct;
-  Mutex m_lock;
+  ceph::mutex m_lock;
   uint32_t m_max_concurrent_syncs;
   std::list<std::string> m_queue;
   std::map<std::string, Context *> m_queued_ops;

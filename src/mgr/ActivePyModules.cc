@@ -47,7 +47,7 @@ ActivePyModules::ActivePyModules(PyModuleConfig &module_config_,
     monc(mc), clog(clog_), audit_clog(audit_clog_), objecter(objecter_),
     client(client_), finisher(f),
     cmd_finisher(g_ceph_context, "cmd_finisher", "cmdfin"),
-    server(server), py_module_registry(pmr), lock("ActivePyModules")
+    server(server), py_module_registry(pmr)
 {
   store_cache = std::move(store_data);
   cmd_finisher.start();
@@ -198,6 +198,22 @@ PyObject *ActivePyModules::get_python(const std::string &what)
         osd_map.crush->dump(&f);
       }
     });
+    return f.get();
+  } else if (what == "modified_config_options") {
+    PyEval_RestoreThread(tstate);
+    auto all_daemons = daemon_state.get_all();
+    set<string> names;
+    for (auto& [key, daemon] : all_daemons) {
+      std::lock_guard l(daemon->lock);
+      for (auto& [name, valmap] : daemon->config) {
+	names.insert(name);
+      }
+    }
+    f.open_array_section("options");
+    for (auto& name : names) {
+      f.dump_string("name", name);
+    }
+    f.close_section();
     return f.get();
   } else if (what.substr(0, 6) == "config") {
     PyEval_RestoreThread(tstate);
@@ -418,21 +434,21 @@ void ActivePyModules::shutdown()
     auto module = i.second.get();
     const auto& name = i.first;
 
-    lock.Unlock();
+    lock.unlock();
     dout(10) << "calling module " << name << " shutdown()" << dendl;
     module->shutdown();
     dout(10) << "module " << name << " shutdown() returned" << dendl;
-    lock.Lock();
+    lock.lock();
   }
 
   // For modules implementing serve(), finish the threads where we
   // were running that.
   for (auto &i : modules) {
-    lock.Unlock();
+    lock.unlock();
     dout(10) << "joining module " << i.first << dendl;
     i.second->thread.join();
     dout(10) << "joined module " << i.first << dendl;
-    lock.Lock();
+    lock.lock();
   }
 
   cmd_finisher.wait_for_empty();
@@ -516,7 +532,7 @@ bool ActivePyModules::get_config(const std::string &module_name,
   const std::string global_key = PyModule::config_prefix
     + module_name + "/" + key;
 
-  dout(4) << __func__ << " key: " << global_key << dendl;
+  dout(20) << " key: " << global_key << dendl;
 
   std::lock_guard lock(module_config.lock);
   
@@ -558,10 +574,10 @@ PyObject *ActivePyModules::get_typed_config(
   }
   PyEval_RestoreThread(tstate);
   if (prefix.size()) {
-    dout(4) << __func__ << " [" << prefix << "/]" << key << " not found "
+    dout(10) << " [" << prefix << "/]" << key << " not found "
 	    << dendl;
   } else {
-    dout(4) << __func__ << " " << key << " not found " << dendl;
+    dout(10) << " " << key << " not found " << dendl;
   }
   Py_RETURN_NONE;
 }
@@ -879,12 +895,12 @@ void ActivePyModules::set_health_checks(const std::string& module_name,
 {
   bool changed = false;
 
-  lock.Lock();
+  lock.lock();
   auto p = modules.find(module_name);
   if (p != modules.end()) {
     changed = p->second->set_health_checks(std::move(checks));
   }
-  lock.Unlock();
+  lock.unlock();
 
   // immediately schedule a report to be sent to the monitors with the new
   // health checks that have changed. This is done asynchronusly to avoid
@@ -909,15 +925,15 @@ int ActivePyModules::handle_command(
   std::stringstream *ds,
   std::stringstream *ss)
 {
-  lock.Lock();
+  lock.lock();
   auto mod_iter = modules.find(module_name);
   if (mod_iter == modules.end()) {
     *ss << "Module '" << module_name << "' is not available";
-    lock.Unlock();
+    lock.unlock();
     return -ENOENT;
   }
 
-  lock.Unlock();
+  lock.unlock();
   return mod_iter->second->handle_command(cmdmap, inbuf, ds, ss);
 }
 

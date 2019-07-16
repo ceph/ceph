@@ -1,9 +1,7 @@
 import { Helper } from '../helper.po';
-import { PageHelper } from '../page-helper.po';
-import { BucketsPageHelper } from './buckets.po';
 
 describe('RGW buckets page', () => {
-  let buckets: BucketsPageHelper;
+  let buckets: Helper['buckets'];
 
   beforeAll(() => {
     buckets = new Helper().buckets;
@@ -16,7 +14,7 @@ describe('RGW buckets page', () => {
 
   describe('breadcrumb test', () => {
     it('should open and show breadcrumb', () => {
-      expect(PageHelper.getBreadcrumbText()).toEqual('Buckets');
+      expect(buckets.getBreadcrumbText()).toEqual('Buckets');
     });
   });
 
@@ -27,17 +25,17 @@ describe('RGW buckets page', () => {
         '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
         'default-placement'
       );
-      expect(PageHelper.getTableCell('000test').isPresent()).toBe(true);
+      expect(buckets.getTableCell('000test').isPresent()).toBe(true);
     });
 
     it('should edit bucket', () => {
       buckets.edit('000test', 'dev');
-      expect(PageHelper.getTable().getText()).toMatch('dev');
+      expect(buckets.getTable().getText()).toMatch('dev');
     });
 
     it('should delete bucket', () => {
       buckets.delete('000test');
-      expect(PageHelper.getTableCell('000test').isPresent()).toBe(false);
+      expect(buckets.getTableCell('000test').isPresent()).toBe(false);
     });
   });
 

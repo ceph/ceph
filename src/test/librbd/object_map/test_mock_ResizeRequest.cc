@@ -55,7 +55,7 @@ TEST_F(TestMockObjectMapResizeRequest, UpdateInMemory) {
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
   ASSERT_EQ(0, acquire_exclusive_lock(*ictx));
 
-  RWLock object_map_lock("lock");
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
   ceph::BitVector<2> object_map;
   object_map.resize(1);
 
@@ -81,7 +81,7 @@ TEST_F(TestMockObjectMapResizeRequest, UpdateHeadOnDisk) {
 
   expect_resize(ictx, CEPH_NOSNAP, 0);
 
-  RWLock object_map_lock("lock");
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
   ceph::BitVector<2> object_map;
   object_map.resize(1);
 
@@ -108,7 +108,7 @@ TEST_F(TestMockObjectMapResizeRequest, UpdateSnapOnDisk) {
   uint64_t snap_id = ictx->snap_id;
   expect_resize(ictx, snap_id, 0);
 
-  RWLock object_map_lock("lock");
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
   ceph::BitVector<2> object_map;
   object_map.resize(1);
 
@@ -132,7 +132,7 @@ TEST_F(TestMockObjectMapResizeRequest, UpdateOnDiskError) {
   expect_resize(ictx, CEPH_NOSNAP, -EINVAL);
   expect_invalidate(ictx);
 
-  RWLock object_map_lock("lock");
+  ceph::shared_mutex object_map_lock = ceph::make_shared_mutex("lock");
   ceph::BitVector<2> object_map;
   object_map.resize(1);
 

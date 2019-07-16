@@ -491,12 +491,12 @@ namespace rgw {
 		      CODE_ENVIRONMENT_DAEMON,
 		      CINIT_FLAG_UNPRIVILEGED_DAEMON_DEFAULTS);
 
-    Mutex mutex("main");
+    ceph::mutex mutex = ceph::make_mutex("main");
     SafeTimer init_timer(g_ceph_context, mutex);
     init_timer.init();
-    mutex.Lock();
+    mutex.lock();
     init_timer.add_event_after(g_conf()->rgw_init_timeout, new C_InitTimeout);
-    mutex.Unlock();
+    mutex.unlock();
 
     common_init_finish(g_ceph_context);
 
@@ -514,10 +514,10 @@ namespace rgw {
 					 g_conf().get_val<bool>("rgw_dynamic_resharding"));
 
     if (!store) {
-      mutex.Lock();
+      mutex.lock();
       init_timer.cancel_all_events();
       init_timer.shutdown();
-      mutex.Unlock();
+      mutex.unlock();
 
       derr << "Couldn't init storage provider (RADOS)" << dendl;
       return -EIO;
@@ -527,10 +527,10 @@ namespace rgw {
 
     rgw_rest_init(g_ceph_context, store, store->svc.zone->get_zonegroup());
 
-    mutex.Lock();
+    mutex.lock();
     init_timer.cancel_all_events();
     init_timer.shutdown();
-    mutex.Unlock();
+    mutex.unlock();
 
     if (r)
       return -EIO;

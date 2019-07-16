@@ -1,12 +1,3 @@
-set(MGR_DASHBOARD_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/mgr-dashboard-virtualenv)
-
-add_custom_target(mgr-dashboard-test-venv
-  COMMAND
-  ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${MGR_PYTHON_EXECUTABLE} ${MGR_DASHBOARD_VIRTUALENV}
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard
-  COMMENT "dashboard tests virtualenv is being created")
-add_dependencies(tests mgr-dashboard-test-venv)
-
 include(CMakeParseArguments)
 function(add_npm_command)
   set(options NODEENV)
@@ -32,7 +23,7 @@ if(WITH_SYSTEM_NPM)
   set(mgr-dashboard-nodeenv-dir )
   set(nodeenv "")
   add_custom_target(mgr-dashboard-frontend-deps
-    DEPENDS frontend/node_modules 
+    DEPENDS frontend/node_modules
     WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend
   )
 else()
@@ -43,7 +34,7 @@ else()
     OUTPUT "${mgr-dashboard-nodeenv-dir}/bin/npm"
     COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${MGR_PYTHON_EXECUTABLE} ${mgr-dashboard-nodeenv-dir}
     COMMAND ${mgr-dashboard-nodeenv-dir}/bin/pip install nodeenv
-    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/nodeenv -p --node=10.13.0
+    COMMAND ${mgr-dashboard-nodeenv-dir}/bin/nodeenv -p --node=10.16.0
     WORKING_DIRECTORY ${CMAKE_CURRENT_BINARY_DIR}
     COMMENT "dashboard nodeenv is being installed"
   )
@@ -104,3 +95,15 @@ add_custom_target(mgr-dashboard-frontend-build
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/frontend)
 add_dependencies(tests mgr-dashboard-frontend-build)
 endif(WITH_MGR_DASHBOARD_FRONTEND AND NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64|AARCH64|arm|ARM")
+
+if(WITH_TESTS)
+  include(AddCephTest)
+  if(WITH_PYTHON2)
+    list(APPEND dashboard_tox_envs py27-cov py27-lint py27-check)
+  endif()
+  if(WITH_PYTHON3)
+    list(APPEND dashboard_tox_envs py3-cov py3-lint py3-check)
+  endif()
+  add_tox_test(mgr-dashboard
+    TOX_ENVS ${dashboard_tox_envs})
+endif()

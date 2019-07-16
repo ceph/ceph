@@ -638,7 +638,7 @@ Context *OpenRequest<I>::send_set_snap(int *result) {
   uint64_t snap_id = CEPH_NOSNAP;
   std::swap(m_image_ctx->open_snap_id, snap_id);
   if (snap_id == CEPH_NOSNAP) {
-    RWLock::RLocker image_locker(m_image_ctx->image_lock);
+    std::shared_lock image_locker{m_image_ctx->image_lock};
     snap_id = m_image_ctx->get_snap_id(m_image_ctx->snap_namespace,
                                        m_image_ctx->snap_name);
   }

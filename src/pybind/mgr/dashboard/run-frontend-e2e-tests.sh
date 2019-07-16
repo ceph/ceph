@@ -56,22 +56,23 @@ if [ "$BASE_URL" == "" ]; then
     # Set SSL verify to False
     ./bin/ceph dashboard set-rgw-api-ssl-verify False
 
-    BASE_URL=$(./bin/ceph mgr services | jq .dashboard)
+    BASE_URL=$(./bin/ceph mgr services | jq -r .dashboard)
 fi
 
+export BASE_URL
+
 cd $DASH_DIR/frontend
-jq .[].target=$BASE_URL proxy.conf.json.sample > proxy.conf.json
+jq .[].target=\"$BASE_URL\" proxy.conf.json.sample > proxy.conf.json
 
 . $BUILD_DIR/src/pybind/mgr/dashboard/node-env/bin/activate
-timeout 1h npm ci
 
 if [ "$DEVICE" == "chrome" ]; then
-    npm run e2e || stop 1
+    npm run e2e:ci || stop 1
     stop 0
 elif [ "$DEVICE" == "docker" ]; then
     failed=0
     docker run -d -v $(pwd):/workdir --net=host --name angular-e2e-container rogargon/angular-e2e || failed=1
-    docker exec angular-e2e-container npm run e2e || failed=1
+    docker exec -e BASE_URL=$BASE_URL angular-e2e-container npm run e2e:ci || failed=1
     docker stop angular-e2e-container
     docker rm angular-e2e-container
     stop $failed

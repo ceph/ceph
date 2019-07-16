@@ -321,12 +321,13 @@ vector<Policy> get_iam_user_policy_from_attr(CephContext* cct,
   return policies;
 }
 
-static int get_obj_attrs(RGWRados *store, struct req_state *s, const rgw_obj& obj, map<string, bufferlist>& attrs)
+static int get_obj_attrs(RGWRados *store, struct req_state *s, const rgw_obj& obj, map<string, bufferlist>& attrs, rgw_obj *target_obj = nullptr)
 {
   RGWRados::Object op_target(store, s->bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
   RGWRados::Object::Read read_op(&op_target);
 
   read_op.params.attrs = &attrs;
+  read_op.params.target_obj = target_obj;
 
   return read_op.prepare(s->yield);
 }
@@ -795,7 +796,7 @@ void rgw_add_to_iam_environment(rgw::IAM::Environment& e, std::string_view key, 
 }
 
 static int rgw_iam_add_tags_from_bl(struct req_state* s, bufferlist& bl){
-  RGWObjTags tagset;
+  RGWObjTags& tagset = s->tagset;
   try {
     auto bliter = bl.cbegin();
     tagset.decode(bliter);
@@ -1702,7 +1703,7 @@ static int iterate_slo_parts(CephContext *cct,
     ent.meta.etag = part.etag;
 
     uint64_t cur_total_len = obj_ofs;
-    uint64_t start_ofs = 0, end_ofs = ent.meta.size;
+    uint64_t start_ofs = 0, end_ofs = ent.meta.size - 1;
 
     if (!found_start && cur_total_len + ent.meta.size > (uint64_t)ofs) {
       start_ofs = ofs - obj_ofs;
@@ -1712,7 +1713,7 @@ static int iterate_slo_parts(CephContext *cct,
     obj_ofs += ent.meta.size;
 
     if (!found_end && obj_ofs > (uint64_t)end) {
-      end_ofs = end - cur_total_len + 1;
+      end_ofs = end - cur_total_len;
       found_end = true;
     }
 
@@ -1721,6 +1722,12 @@ static int iterate_slo_parts(CephContext *cct,
 
     if (found_start) {
       if (cb) {
+        dout(20) << "iterate_slo_parts()"
+                          << " obj=" << part.obj_name
+                          << " start_ofs=" << start_ofs
+                          << " end_ofs=" << end_ofs
+                          << dendl;
+
 	// SLO is a Swift thing, and Swift has no knowledge of S3 Policies.
         int r = cb(part.bucket, ent, part.bucket_acl,
 		   (part.bucket_policy ?
@@ -1947,8 +1954,7 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
     part.obj_name = obj_name;
     part.size = entry.size_bytes;
     part.etag = entry.etag;
-    ldpp_dout(this, 20) << "slo_part: ofs=" << ofs
-                      << " bucket=" << part.bucket
+    ldpp_dout(this, 20) << "slo_part: bucket=" << part.bucket
                       << " obj=" << part.obj_name
                       << " size=" << part.size
                       << " etag=" << part.etag
@@ -1972,6 +1978,10 @@ int RGWGetObj::handle_slo_manifest(bufferlist& bl)
   }
 
   total_len = end - ofs + 1;
+  ldpp_dout(this, 20) << "Requested: ofs=" << ofs
+                    << " end=" << end
+                    << " total=" << total_len
+                    << dendl;
 
   r = iterate_slo_parts(s->cct, store, ofs, end, slo_parts,
         get_obj_user_manifest_iterate_cb, (void *)this);
@@ -2044,6 +2054,22 @@ static bool object_is_expired(map<string, bufferlist>& attrs) {
   }
 
   return false;
+}
+
+static inline void rgw_cond_decode_objtags(
+  struct req_state *s,
+  const std::map<std::string, buffer::list> &attrs)
+{
+  const auto& tags = attrs.find(RGW_ATTR_TAGS);
+  if (tags != attrs.end()) {
+    try {
+      bufferlist::const_iterator iter{&tags->second};
+      s->tagset.decode(iter);
+    } catch (buffer::error& err) {
+      ldout(s->cct, 0)
+	<< "ERROR: caught buffer::error, couldn't decode TagSet" << dendl;
+    }
+  }
 }
 
 void RGWGetObj::execute()
@@ -2175,6 +2201,9 @@ void RGWGetObj::execute()
     op_ret = -ENOENT;
     goto done_err;
   }
+
+  /* Decode S3 objtags, if any */
+  rgw_cond_decode_objtags(s, attrs);
 
   start = ofs;
 
@@ -3987,6 +4016,7 @@ void RGWPutObj::execute()
   }
   encode_delete_at_attr(delete_at, attrs);
   encode_obj_tags_attr(obj_tags.get(), attrs);
+  rgw_cond_decode_objtags(s, attrs);
 
   /* Add a custom metadata to expose the information whether an object
    * is an SLO or not. Appending the attribute must be performed AFTER
@@ -4497,6 +4527,7 @@ void RGWPutMetadataObject::pre_exec()
 void RGWPutMetadataObject::execute()
 {
   rgw_obj obj(s->bucket, s->object);
+  rgw_obj target_obj;
   map<string, bufferlist> attrs, orig_attrs, rmattrs;
 
   store->set_atomic(s->obj_ctx, obj);
@@ -4512,7 +4543,7 @@ void RGWPutMetadataObject::execute()
   }
 
   /* check if obj exists, read orig attrs */
-  op_ret = get_obj_attrs(store, s, obj, orig_attrs);
+  op_ret = get_obj_attrs(store, s, obj, orig_attrs, &target_obj);
   if (op_ret < 0) {
     return;
   }
@@ -4537,7 +4568,8 @@ void RGWPutMetadataObject::execute()
     }
   }
 
-  op_ret = store->set_attrs(s->obj_ctx, s->bucket_info, obj, attrs, &rmattrs, s->yield);
+  op_ret = store->set_attrs(s->obj_ctx, s->bucket_info, target_obj,
+    attrs, &rmattrs, s->yield);
 }
 
 int RGWDeleteObj::handle_slo_manifest(bufferlist& bl)

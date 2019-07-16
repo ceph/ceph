@@ -117,7 +117,7 @@ WRITE_CLASS_ENCODER(rgw_log_entry)
 
 class OpsLogSocket : public OutputDataSocket {
   Formatter *formatter;
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("OpsLogSocket");
 
   void formatter_to_bl(bufferlist& bl);
 

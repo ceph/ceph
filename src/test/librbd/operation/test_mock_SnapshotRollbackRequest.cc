@@ -200,7 +200,7 @@ public:
 	mock_image_ctx, &cond_ctx, cls::rbd::UserSnapshotNamespace(), snap_name,
 	snap_id, snap_size, prog_ctx);
     {
-      RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+      std::shared_lock owner_locker{mock_image_ctx.owner_lock};
       req->send();
     }
     return cond_ctx.wait();

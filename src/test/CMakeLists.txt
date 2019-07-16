@@ -540,41 +540,6 @@ add_ceph_test(test_objectstore_memstore.sh ${CMAKE_CURRENT_SOURCE_DIR}/test_obje
 
 add_ceph_test(smoke.sh ${CMAKE_CURRENT_SOURCE_DIR}/smoke.sh)
 
-# XXX are these safe to remove? they used to be around for ceph-disk tox testing
-set(env_vars_for_tox_tests
-  CEPH_BUILD_DIR=${CMAKE_BINARY_DIR}
-  CEPH_ROOT=${CMAKE_SOURCE_DIR}
-  CEPH_BIN=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-  CEPH_LIB=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
-  CEPH_BUILD_VIRTUALENV=${CEPH_BUILD_VIRTUALENV}
-  LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib
-  PATH=$ENV{PATH}:${CMAKE_RUNTIME_OUTPUT_DIRECTORY}:${CMAKE_SOURCE_DIR}/src
-  PYTHONPATH=${CMAKE_SOURCE_DIR}/src/pybind
-  WITH_PYTHON2=${WITH_PYTHON2}
-  WITH_PYTHON3=${WITH_PYTHON3})
-
-if(WITH_MGR)
-  add_test(NAME run-tox-mgr-dashboard COMMAND bash ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/run-tox.sh)
-  list(APPEND tox_tests run-tox-mgr-dashboard)
-  set(MGR_DASHBOARD_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/mgr-dashboard-virtualenv)
-  list(APPEND env_vars_for_tox_tests MGR_DASHBOARD_VIRTUALENV=${MGR_DASHBOARD_VIRTUALENV})
-
-  add_test(NAME run-tox-mgr-insights COMMAND bash ${CMAKE_SOURCE_DIR}/src/pybind/mgr/insights/run-tox.sh)
-  list(APPEND tox_tests run-tox-mgr-insights)
-  set(MGR_INSIGHTS_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/mgr-insights-virtualenv)
-  list(APPEND env_vars_for_tox_tests MGR_INSIGHTS_VIRTUALENV=${MGR_INSIGHTS_VIRTUALENV})
-
-  add_test(NAME run-tox-mgr-ansible COMMAND bash ${CMAKE_SOURCE_DIR}/src/pybind/mgr/ansible/run-tox.sh)
-  list(APPEND tox_tests run-tox-mgr-ansible)
-  set(MGR_ANSIBLE_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/mgr-ansible-virtualenv)
-  list(APPEND env_vars_for_tox_tests MGR_ANSIBLE_VIRTUALENV=${MGR_ANSIBLE_VIRTUALENV})
-
-  add_test(NAME run-tox-mgr-orchestrator_cli COMMAND bash ${CMAKE_SOURCE_DIR}/src/pybind/mgr/orchestrator_cli/run-tox.sh)
-  list(APPEND tox_tests run-tox-mgr-orchestrator_cli)
-  set(MGR_ORCHESTRATOR_CLI_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/mgr-orchestrator_cli-virtualenv)
-  list(APPEND env_vars_for_tox_tests MGR_ORCHESTRATOR_CLI_VIRTUALENV=${MGR_ORCHESTRATOR_CLI_VIRTUALENV})
-endif()
-
 set_property(
   TEST ${tox_tests}
   PROPERTY ENVIRONMENT ${env_vars_for_tox_tests})

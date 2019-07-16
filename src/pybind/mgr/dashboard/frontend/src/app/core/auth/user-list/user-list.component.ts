@@ -6,6 +6,7 @@ import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { UserService } from '../../../shared/api/user.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
+import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { Icons } from '../../../shared/enum/icons.enum';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
@@ -26,8 +27,10 @@ const BASE_URL = 'user-management/users';
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
 export class UserListComponent implements OnInit {
-  @ViewChild('userRolesTpl')
+  @ViewChild('userRolesTpl', { static: true })
   userRolesTpl: TemplateRef<any>;
+  @ViewChild('userEnabledTpl', { static: true })
+  userEnabledTpl: TemplateRef<any>;
 
   permission: Permission;
   tableActions: CdTableAction[];
@@ -94,6 +97,12 @@ export class UserListComponent implements OnInit {
         prop: 'roles',
         flexGrow: 1,
         cellTemplate: this.userRolesTpl
+      },
+      {
+        name: this.i18n('Enabled'),
+        prop: 'enabled',
+        flexGrow: 1,
+        cellTransformation: CellTemplate.checkIcon
       }
     ];
   }

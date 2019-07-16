@@ -58,6 +58,7 @@ elif [ -n "$CEPH_ROOT" ]; then
     [ -z "$CEPH_LIB" ] && CEPH_LIB=$CEPH_BUILD_DIR/lib
     [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB
     [ -z "$EC_PATH" ] && EC_PATH=$CEPH_LIB
+    [ -z "$CEPH_PYTHON_COMMON" ] && CEPH_PYTHON_COMMON=$CEPH_ROOT/src/python-common
 fi
 
 if [ -z "${CEPH_VSTART_WRAPPER}" ]; then
@@ -66,7 +67,10 @@ fi
 
 [ -z "$PYBIND" ] && PYBIND=./pybind
 
-export PYTHONPATH=$PYBIND:$CEPH_LIB/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}:$PYTHONPATH
+[ -n "$CEPH_PYTHON_COMMON" ] && CEPH_PYTHON_COMMON="$CEPH_PYTHON_COMMON:"
+CYTHON_PYTHONPATH="$CEPH_LIB/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}"
+export PYTHONPATH=$PYBIND:$CYTHON_PYTHONPATH:$CEPH_PYTHON_COMMON$PYTHONPATH
+
 export LD_LIBRARY_PATH=$CEPH_LIB:$LD_LIBRARY_PATH
 export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
 # Suppress logging for regular use that indicated that we are using a
@@ -466,6 +470,13 @@ prun() {
     "$@"
 }
 
+prun_to_file() {
+	f=$1
+	shift
+	quoted_print "$@"
+	"$@" >> $f
+}
+
 run() {
     type=$1
     shift
@@ -501,6 +512,32 @@ get_pci_selector() {
 
 get_pci_selector_num() {
     lspci -mm -n -D -d $pci_id | cut -d' ' -f 1 | wc -l
+}
+
+do_rgw_conf() {
+
+    if [ $CEPH_NUM_RGW -eq 0 ]; then
+        return 0
+    fi
+
+    # setup each rgw on a sequential port, starting at $CEPH_RGW_PORT.
+    # individual rgw's ids will be their ports.
+    current_port=$CEPH_RGW_PORT
+    for n in $(seq 1 $CEPH_NUM_RGW); do
+        wconf << EOF
+[client.rgw.${current_port}]
+        rgw frontends = $rgw_frontend port=${current_port}
+        admin socket = ${CEPH_OUT_DIR}/radosgw.${current_port}.asok
+        ; needed for s3tests
+        rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
+        rgw crypt require ssl = false
+        ; uncomment the following to set LC days as the value in seconds;
+        ; needed for passing lc time based s3-tests (can be verbose)
+        ; rgw lc debug interval = 10
+EOF
+        current_port=$((current_port + 1))
+done
+
 }
 
 prepare_conf() {
@@ -624,15 +661,10 @@ EOF
         log file = $CEPH_OUT_DIR/\$name.\$pid.log
         admin socket = $CEPH_ASOK_DIR/\$name.\$pid.asok
 $extra_conf
-[client.rgw]
-        rgw frontends = $rgw_frontend port=$CEPH_RGW_PORT
-        admin socket = ${CEPH_OUT_DIR}/radosgw.${CEPH_RGW_PORT}.asok
-        ; needed for s3tests
-        rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
-        rgw crypt require ssl = false
-        ; uncomment the following to set LC days as the value in seconds;
-        ; needed for passing lc time based s3-tests (can be verbose)
-        ; rgw lc debug interval = 10
+EOF
+
+	do_rgw_conf
+	wconf << EOF
 [mds]
 $DAEMONOPTS
         mds data = $CEPH_DEV_DIR/mds.\$id
@@ -715,12 +747,6 @@ start_mon() {
              --cap mon 'allow r' \
              --cap osd 'allow rw tag cephfs data=*' \
              --cap mds 'allow rwp' \
-             "$keyring_fn"
-
-        prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.rgw \
-             --cap mon 'allow rw' \
-             --cap osd 'allow rwx' \
-             --cap mgr 'allow rw' \
              "$keyring_fn"
 
         # build a fresh fs monmap, mon fs
@@ -1036,6 +1062,17 @@ ceph_adm() {
     fi
 }
 
+ceph_adm_to_file() {
+	f=$1
+	shift
+
+	if [ "$cephx" -eq 1 ]; then
+		prun_to_file $f $SUDO "$CEPH_ADM" -c "$conf_fn" -k "$keyring_fn" "$@"
+	else
+		prun_to_file $f $SUDO "$CEPH_ADM" -c "$conf_fn" "$@"
+	fi
+}
+
 if [ "$new" -eq 1 ]; then
     prepare_conf
 fi
@@ -1066,6 +1103,10 @@ osd_copyfrom_max_chunk = 524288
 mds_debug_frag = true
 mds_debug_auth_pins = true
 mds_debug_subtrees = true
+
+[mgr]
+mgr/telemetry/nag = false
+mgr/telemetry/enable = false
 
 EOF
 
@@ -1252,14 +1293,29 @@ do_rgw()
     fi
     RGWSUDO=
     [ $CEPH_RGW_PORT_NUM -lt 1024 ] && RGWSUDO=sudo
-    n=$(($CEPH_NUM_RGW - 1))
-    i=0
-    for rgw in j k l m n o p q r s t u v; do
-        current_port=$((CEPH_RGW_PORT_NUM + i))
+
+    current_port=$CEPH_RGW_PORT
+    for n in $(seq 1 $CEPH_NUM_RGW); do
+        rgw_name="client.rgw.${current_port}"
+
+        ceph_adm_to_file $keyring_fn auth get-or-create $rgw_name \
+            mon 'allow rw' \
+            osd 'allow rwx' \
+            mgr 'allow rw' \
+
         echo start rgw on http${CEPH_RGW_HTTPS}://localhost:${current_port}
-        run 'rgw' $current_port $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/radosgw.${current_port}.log --admin-socket=${CEPH_OUT_DIR}/radosgw.${current_port}.asok --pid-file=${CEPH_OUT_DIR}/radosgw.${current_port}.pid ${RGWDEBUG} -n client.rgw "--rgw_frontends=${rgw_frontend} port=${current_port}${CEPH_RGW_HTTPS}"
+        run 'rgw' $current_port $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn \
+            --log-file=${CEPH_OUT_DIR}/radosgw.${current_port}.log \
+            --admin-socket=${CEPH_OUT_DIR}/radosgw.${current_port}.asok \
+            --pid-file=${CEPH_OUT_DIR}/radosgw.${current_port}.pid \
+            ${RGWDEBUG} \
+            -n ${rgw_name} \
+            "--rgw_frontends=${rgw_frontend} port=${current_port}${CEPH_RGW_HTTPS}"
+
         i=$(($i + 1))
         [ $i -eq $CEPH_NUM_RGW ] && break
+
+        current_port=$((current_port+1))
     done
 }
 if [ "$CEPH_NUM_RGW" -gt 0 ]; then
@@ -1288,7 +1344,7 @@ echo ""
     echo "#"
 } > $CEPH_DIR/vstart_environment.sh
 {
-    echo "export PYTHONPATH=$PYBIND:$CEPH_LIB/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}:\$PYTHONPATH"
+    echo "export PYTHONPATH=$PYBIND:$CYTHON_PYTHONPATH:$CEPH_PYTHON_COMMON\$PYTHONPATH"
     echo "export LD_LIBRARY_PATH=$CEPH_LIB:\$LD_LIBRARY_PATH"
 
     if [ "$CEPH_DIR" != "$PWD" ]; then

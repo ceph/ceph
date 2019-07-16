@@ -18,8 +18,8 @@
 
 #include "common/CommandTable.h"
 #include "common/Finisher.h"
-#include "common/Mutex.h"
 #include "common/Timer.h"
+#include "common/ceph_mutex.h"
 #include "common/cmdparse.h"
 #include "common/compiler_extensions.h"
 #include "include/cephfs/ceph_statx.h"
@@ -611,8 +611,8 @@ public:
   int ll_delegation(Fh *fh, unsigned cmd, ceph_deleg_cb_t cb, void *priv);
 
   entity_name_t get_myname() { return messenger->get_myname(); }
-  void wait_on_list(list<Cond*>& ls);
-  void signal_cond_list(list<Cond*>& ls);
+  void wait_on_list(std::list<ceph::condition_variable*>& ls);
+  void signal_cond_list(std::list<ceph::condition_variable*>& ls);
 
   void set_filer_flags(int flags);
   void clear_filer_flags(int flags);
@@ -651,7 +651,7 @@ public:
   int mark_caps_flushing(Inode *in, ceph_tid_t *ptid);
   void adjust_session_flushing_caps(Inode *in, MetaSession *old_s, MetaSession *new_s);
   void flush_caps_sync();
-  void flush_caps(Inode *in, MetaSession *session, bool sync=false);
+  void kick_flushing_caps(Inode *in, MetaSession *session);
   void kick_flushing_caps(MetaSession *session);
   void early_kick_flushing_caps(MetaSession *session);
   int get_caps(Inode *in, int need, int want, int *have, loff_t endoff);
@@ -670,13 +670,16 @@ public:
   void handle_cap_flushsnap_ack(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m);
   void handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const MConstRef<MClientCaps>& m);
   void cap_delay_requeue(Inode *in);
-  void send_cap(Inode *in, MetaSession *session, Cap *cap, bool sync,
+
+  void send_cap(Inode *in, MetaSession *session, Cap *cap, int flags,
 		int used, int want, int retain, int flush,
 		ceph_tid_t flush_tid);
 
+  void send_flush_snap(Inode *in, MetaSession *session, snapid_t follows, CapSnap& capsnap);
+
+  void flush_snaps(Inode *in);
   void get_cap_ref(Inode *in, int cap);
   void put_cap_ref(Inode *in, int cap);
-  void flush_snaps(Inode *in, bool all_again=false);
   void wait_sync_caps(Inode *in, ceph_tid_t want);
   void wait_sync_caps(ceph_tid_t want);
   void queue_cap_snap(Inode *in, SnapContext &old_snapc);
@@ -956,7 +959,8 @@ protected:
 
   // global client lock
   //  - protects Client and buffer cache both!
-  Mutex                  client_lock;
+  ceph::mutex client_lock = ceph::make_mutex("Client::client_lock");
+;
 
   std::map<snapid_t, int> ll_snap_ref;
 
@@ -995,7 +999,7 @@ private:
   struct VXattr {
 	  const string name;
 	  size_t (Client::*getxattr_cb)(Inode *in, char *val, size_t size);
-	  bool readonly, hidden;
+	  bool readonly;
 	  bool (Client::*exists_cb)(Inode *in);
 	  unsigned int flags;
   };
@@ -1218,10 +1222,10 @@ private:
 
   // mds sessions
   map<mds_rank_t, MetaSession> mds_sessions;  // mds -> push seq
-  list<Cond*> waiting_for_mdsmap;
+  std::list<ceph::condition_variable*> waiting_for_mdsmap;
 
   // FSMap, for when using mds_command
-  list<Cond*> waiting_for_fsmap;
+  std::list<ceph::condition_variable*> waiting_for_fsmap;
   std::unique_ptr<FSMap> fsmap;
   std::unique_ptr<FSMapUser> fsmap_user;
 
@@ -1278,15 +1282,15 @@ private:
   // trace generation
   ofstream traceout;
 
-  Cond mount_cond, sync_cond;
+  ceph::condition_variable mount_cond, sync_cond;
 
   std::map<std::pair<int64_t,std::string>, int> pool_perms;
-  list<Cond*> waiting_for_pool_perm;
+  std::list<ceph::condition_variable*> waiting_for_pool_perm;
 
   uint64_t retries_on_invalidate = 0;
 
   // state reclaim
-  list<Cond*> waiting_for_reclaim;
+  std::list<ceph::condition_variable*> waiting_for_reclaim;
   int reclaim_errno = 0;
   epoch_t reclaim_osd_epoch = 0;
   entity_addrvec_t reclaim_target_addrs;

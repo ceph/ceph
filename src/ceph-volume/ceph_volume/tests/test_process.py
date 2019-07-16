@@ -35,7 +35,7 @@ class TestCall(object):
         assert 'Running command: ' in log_lines[0]
         assert 'ls' in log_lines[0]
         assert 'stderr some stderr message' in log_lines[-1]
-        assert 'some stderr message' in out
+        assert 'some stderr message' in err
 
     def test_stderr_terminal_and_logfile_off(self, mock_call, caplog, capsys):
         mock_call(stdout='stdout\n', stderr='some stderr message\n')

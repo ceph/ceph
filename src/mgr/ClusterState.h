@@ -16,7 +16,7 @@
 
 #include "mds/FSMap.h"
 #include "mon/MgrMap.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 
 #include "osdc/Objecter.h"
 #include "mon/MonClient.h"
@@ -39,7 +39,7 @@ protected:
   Objecter *objecter;
   FSMap fsmap;
   ServiceMap servicemap;
-  mutable Mutex lock;
+  mutable ceph::mutex lock = ceph::make_mutex("ClusterState");
 
   MgrMap mgr_map;
 

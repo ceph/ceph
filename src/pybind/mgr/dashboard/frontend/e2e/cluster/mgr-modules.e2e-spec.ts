@@ -1,11 +1,10 @@
 import { Helper } from '../helper.po';
-import { ManagerModulesPage } from './mgr-modules.po';
 
 describe('Manager modules page', () => {
-  let page: ManagerModulesPage;
+  let mgrmodules: Helper['mgrmodules'];
 
   beforeAll(() => {
-    page = new ManagerModulesPage();
+    mgrmodules = new Helper().mgrmodules;
   });
 
   afterEach(() => {
@@ -14,11 +13,11 @@ describe('Manager modules page', () => {
 
   describe('breadcrumb test', () => {
     beforeAll(() => {
-      page.navigateTo();
+      mgrmodules.navigateTo();
     });
 
     it('should open and show breadcrumb', () => {
-      expect(ManagerModulesPage.getBreadcrumbText()).toEqual('Manager modules');
+      expect(mgrmodules.getBreadcrumbText()).toEqual('Manager modules');
     });
   });
 });

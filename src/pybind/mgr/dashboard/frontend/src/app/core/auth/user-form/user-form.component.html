@@ -132,7 +132,22 @@
                                 [messages]="messages"></cd-select-badges>
             </span>
           </div>
+        </div>
 
+        <!-- Enabled -->
+        <div class="form-group row" *ngIf="!isCurrentUser()">
+          <div class="offset-sm-3 col-sm-9">
+            <div class="custom-control custom-checkbox">
+              <input type="checkbox"
+                     class="custom-control-input"
+                     id="enabled"
+                     name="enabled"
+                     formControlName="enabled">
+              <label class="custom-control-label"
+                     for="enabled"
+                     i18n>Enabled</label>
+            </div>
+          </div>
         </div>
 
       </div>

@@ -56,20 +56,20 @@ void StandbyPyModules::shutdown()
     auto module = i.second.get();
     const auto& name = i.first;
     dout(10) << "waiting for module " << name << " to shutdown" << dendl;
-    lock.Unlock();
+    lock.unlock();
     module->shutdown();
-    lock.Lock();
+    lock.lock();
     dout(10) << "module " << name << " shutdown" << dendl;
   }
 
   // For modules implementing serve(), finish the threads where we
   // were running that.
   for (auto &i : modules) {
-    lock.Unlock();
+    lock.unlock();
     dout(10) << "joining thread for module " << i.first << dendl;
     i.second->thread.join();
     dout(10) << "joined thread for module " << i.first << dendl;
-    lock.Lock();
+    lock.lock();
   }
 
   modules.clear();

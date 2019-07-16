@@ -5,7 +5,7 @@
 #define CEPH_CACHE_OBJECT_CACHE_STORE_H
 
 #include "common/ceph_context.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "include/rados/librados.hpp"
 
 #include "SimplePolicy.h"
@@ -50,7 +50,8 @@ class ObjectCacheStore {
   CephContext *m_cct;
   RadosRef m_rados;
   std::map<uint64_t, librados::IoCtx> m_ioctx_map;
-  Mutex m_ioctx_map_lock;
+  ceph::mutex m_ioctx_map_lock =
+    ceph::make_mutex("ceph::cache::ObjectCacheStore::m_ioctx_map_lock");
   Policy* m_policy;
   std::string m_cache_root_dir;
 };

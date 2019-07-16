@@ -887,7 +887,7 @@ int PrimaryLogPG::get_pgls_filter(bufferlist::const_iterator& iter, PGLSFilter *
     const std::string class_name = type.substr(0, dot);
     const std::string filter_name = type.substr(dot + 1);
     ClassHandler::ClassData *cls = NULL;
-    int r = osd->class_handler->open_class(class_name, &cls);
+    int r = ClassHandler::get_instance().open_class(class_name, &cls);
     if (r != 0) {
       derr << "Error opening class '" << class_name << "': "
            << cpp_strerror(r) << dendl;
@@ -1525,7 +1525,6 @@ PrimaryLogPG::PrimaryLogPG(OSDService *o, OSDMapRef curmap,
     PGBackend::build_pg_backend(
       _pool.info, ec_profile, this, coll_t(p), ch, o->store, cct)),
   object_contexts(o->cct, o->cct->_conf->osd_pg_object_context_cache_count),
-  snapset_contexts_lock("PrimaryLogPG::snapset_contexts_lock"),
   new_backfill(false),
   temp_seq(0),
   snap_trimmer_machine(this)
@@ -2276,8 +2275,19 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
     ceph_osd_op& op = osd_op.op;
     if (op.op == CEPH_OSD_OP_SET_REDIRECT ||
 	op.op == CEPH_OSD_OP_SET_CHUNK || 
-	op.op == CEPH_OSD_OP_TIER_PROMOTE ||
-	op.op == CEPH_OSD_OP_UNSET_MANIFEST) {
+	op.op == CEPH_OSD_OP_UNSET_MANIFEST ||
+	op.op == CEPH_OSD_OP_TIER_FLUSH) {
+      return cache_result_t::NOOP;
+    } else if (op.op == CEPH_OSD_OP_TIER_PROMOTE) {
+      bool is_dirty = false;
+      for (auto& p : obc->obs.oi.manifest.chunk_map) {
+	if (p.second.is_dirty()) {
+	  is_dirty = true;
+	}
+      }
+      if (is_dirty) {
+	start_flush(OpRequestRef(), obc, true, NULL, std::nullopt);
+      }
       return cache_result_t::NOOP;
     }
   }
@@ -2486,8 +2496,9 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
 	// decrement old chunk's reference count 
 	ObjectOperation dec_op;
 	cls_chunk_refcount_put_op put_call;
+	put_call.source = soid;
 	::encode(put_call, in);                             
-	dec_op.call("refcount", "chunk_put", in);         
+	dec_op.call("cas", "chunk_put", in);         
 	// we don't care dec_op's completion. scrub for dedup will fix this.
 	tid = osd->objecter->mutate(
 	  tgt_soid.oid, oloc, dec_op, snapc,
@@ -5612,6 +5623,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_CACHE_UNPIN:
     case CEPH_OSD_OP_SET_REDIRECT:
     case CEPH_OSD_OP_TIER_PROMOTE:
+    case CEPH_OSD_OP_TIER_FLUSH:
       break;
     default:
       if (op.op & CEPH_OSD_OP_MODE_WR)
@@ -5755,7 +5767,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	tracepoint(osd, do_osd_op_pre_call, soid.oid.name.c_str(), soid.snap.val, cname.c_str(), mname.c_str());
 
 	ClassHandler::ClassData *cls;
-	result = osd->class_handler->open_class(cname, &cls);
+	result = ClassHandler::get_instance().open_class(cname, &cls);
 	ceph_assert(result == 0);   // init_op_flags() already verified this works.
 
 	ClassHandler::ClassMethod *method = cls->get_method(mname.c_str());
@@ -6967,6 +6979,46 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
       break;
 
+    case CEPH_OSD_OP_TIER_FLUSH:
+      ++ctx->num_write;
+      {
+	if (pool.info.is_tier()) {
+	  result = -EINVAL;
+	  break;
+	}
+	if (!obs.exists) {
+	  result = -ENOENT;
+	  break;
+	}
+	if (get_osdmap()->require_osd_release < ceph_release_t::octopus) {
+	  result = -EOPNOTSUPP;
+	  break;
+	}
+	if (!obs.oi.has_manifest()) {
+	  result = 0;
+	  break;
+	}
+
+	hobject_t missing;
+	bool is_dirty = false;
+	for (auto& p : ctx->obc->obs.oi.manifest.chunk_map) {
+	  if (p.second.is_dirty()) {
+	    is_dirty = true;
+	    break;
+	  }
+	}
+
+	if (is_dirty) {
+	  result = start_flush(ctx->op, ctx->obc, true, NULL, std::nullopt);
+	  if (result == -EINPROGRESS)
+	    result = -EAGAIN;
+	} else {
+	  result = 0;
+	}
+      }
+
+      break;
+
     case CEPH_OSD_OP_UNSET_MANIFEST:
       ++ctx->num_write;
       {
@@ -8110,7 +8162,7 @@ void PrimaryLogPG::write_update_size_and_usage(object_stat_sum_t& delta_stats, o
   if (oi.has_manifest() && oi.manifest.is_chunked()) {
     for (auto &p : oi.manifest.chunk_map) {
       if ((p.first <= offset && p.first + p.second.length > offset) ||
-	  (p.first > offset && p.first <= offset + length)) {
+	  (p.first > offset && p.first < offset + length)) {
 	p.second.clear_flag(chunk_info_t::FLAG_MISSING);
 	p.second.set_flag(chunk_info_t::FLAG_DIRTY);
       }
@@ -12560,6 +12612,24 @@ int PrimaryLogPG::prep_object_replica_pushes(
 {
   ceph_assert(is_primary());
   dout(10) << __func__ << ": on " << soid << dendl;
+
+  if (soid.snap && soid.snap < CEPH_NOSNAP) {
+    // do we have the head and/or snapdir?
+    hobject_t head = soid.get_head();
+    if (recovery_state.get_pg_log().get_missing().is_missing(head)) {
+      if (recovering.count(head)) {
+	dout(10) << " missing but already recovering head " << head << dendl;
+	return 0;
+      } else {
+	int r = recover_missing(
+	    head, recovery_state.get_pg_log().get_missing().get_items().find(head)->second.need,
+	    get_recovery_op_priority(), h);
+	if (r != PULL_NONE)
+	  return 1;
+	return 0;
+      }
+    }
+  }
 
   // NOTE: we know we will get a valid oloc off of disk here.
   ObjectContextRef obc = get_object_context(soid, false);

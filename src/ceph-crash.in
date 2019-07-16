@@ -1,4 +1,4 @@
-#!@PYTHON_EXECUTABLE@
+#!@Python_EXECUTABLE@
 # -*- mode:python -*-
 # vim: ts=4 sw=4 smarttab expandtab
 
@@ -32,7 +32,7 @@ def post_crash(path):
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
     )
-    f = open(os.path.join(path, 'meta'), 'r')
+    f = open(os.path.join(path, 'meta'), 'rb')
     stdout, stderr = pr.communicate(input=f.read())
     rc = pr.wait()
     f.close()

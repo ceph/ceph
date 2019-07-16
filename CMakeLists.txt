@@ -1,14 +1,18 @@
-cmake_minimum_required(VERSION 3.5.1)
+cmake_minimum_required(VERSION 3.10.2)
 # remove cmake/modules/FindPython* once 3.12 is required
 
-project(ceph CXX C ASM)
-set(VERSION 15.0.0)
+project(ceph
+  VERSION 15.0.0
+  LANGUAGES CXX C ASM)
 
 if(POLICY CMP0028)
   cmake_policy(SET CMP0028 NEW)
 endif()
 if(POLICY CMP0046)
   cmake_policy(SET CMP0046 NEW)
+endif()
+if(POLICY CMP0048)
+  cmake_policy(SET CMP0048 NEW)
 endif()
 if(POLICY CMP0054)
   cmake_policy(SET CMP0054 NEW)
@@ -497,11 +501,15 @@ option(WITH_CEPHFS "CephFS is enabled" ON)
 option(WITH_MGR "ceph-mgr is enabled" ON)
 if(WITH_MGR)
   # Please specify 3 or 3.[0-7] if you want to build with python3 support.
-  # FindPyhonInterp and FindPythonLibs think they belong to different families.
+  # FindPython thinks they belong to different families.
   set(MGR_PYTHON_VERSION "2.7" CACHE
-    STRING "minimal required version of python runtime for running mgr plugins. ")
-  find_package(Python ${MGR_PYTHON_VERSION} REQUIRED
+    STRING "required version of python runtime for running mgr plugins. ")
+  if(NOT MGR_PYTHON_VERSION MATCHES "^[23]$")
+    set(find_python_exact "EXACT")
+  endif()
+  find_package(Python ${MGR_PYTHON_VERSION} ${find_python_exact} REQUIRED
     COMPONENTS Interpreter Development)
+  unset(find_python_exact)
   set(MGR_PYTHON_EXECUTABLE ${Python_EXECUTABLE})
   set(MGR_PYTHON_LIBRARIES ${Python_LIBRARIES})
   set(MGR_PYTHON_VERSION_MAJOR ${Python_VERSION_MAJOR})

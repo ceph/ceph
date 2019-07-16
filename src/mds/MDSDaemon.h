@@ -24,7 +24,7 @@
 #include "messages/MMonCommand.h"
 
 #include "common/LogClient.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Timer.h"
 #include "include/Context.h"
 #include "include/types.h"
@@ -46,7 +46,7 @@ class MDSDaemon : public Dispatcher {
    * also check the `stopping` flag.  If stopping is true, you
    * must either do nothing and immediately drop the lock, or
    * never drop the lock again (i.e. call respawn()) */
-  Mutex        mds_lock;
+  ceph::mutex  mds_lock;
   bool         stopping;
 
   SafeTimer    timer;

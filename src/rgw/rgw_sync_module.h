@@ -80,14 +80,14 @@ typedef std::shared_ptr<RGWSyncModule> RGWSyncModuleRef;
 
 
 class RGWSyncModulesManager {
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("RGWSyncModulesManager");
 
   map<string, RGWSyncModuleRef> modules;
 public:
-  RGWSyncModulesManager() : lock("RGWSyncModulesManager") {}
+  RGWSyncModulesManager() = default;
 
   void register_module(const string& name, RGWSyncModuleRef& module, bool is_default = false) {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     modules[name] = module;
     if (is_default) {
       modules[string()] = module;
@@ -95,7 +95,7 @@ public:
   }
 
   bool get_module(const string& name, RGWSyncModuleRef *module) {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     auto iter = modules.find(name);
     if (iter == modules.end()) {
       return false;

@@ -5,6 +5,7 @@
 #include "include/rados/librados.hpp"
 #include "common/dout.h"
 #include "common/errno.h"
+#include "common/Cond.h"
 #include "common/Throttle.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "osd/osd_types.h"

@@ -1,11 +1,10 @@
 import { Helper } from '../helper.po';
-import { NfsPage } from './nfs.po';
 
 describe('Nfs page', () => {
-  let page: NfsPage;
+  let nfs: Helper['nfs'];
 
   beforeAll(() => {
-    page = new NfsPage();
+    nfs = new Helper().nfs;
   });
 
   afterEach(() => {
@@ -14,11 +13,11 @@ describe('Nfs page', () => {
 
   describe('breadcrumb test', () => {
     beforeAll(() => {
-      page.navigateTo();
+      nfs.navigateTo();
     });
 
     it('should open and show breadcrumb', () => {
-      expect(NfsPage.getBreadcrumbText()).toEqual('NFS');
+      expect(nfs.getBreadcrumbText()).toEqual('NFS');
     });
   });
 });

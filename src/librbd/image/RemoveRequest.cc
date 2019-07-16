@@ -141,7 +141,7 @@ void RemoveRequest<I>::trim_image() {
     *m_image_ctx, create_context_callback<
       klass, &klass::handle_trim_image>(this));
 
-  RWLock::RLocker owner_lock(m_image_ctx->owner_lock);
+  std::shared_lock owner_lock{m_image_ctx->owner_lock};
   auto req = librbd::operation::TrimRequest<I>::create(
     *m_image_ctx, ctx, m_image_ctx->size, 0, m_prog_ctx);
   req->send();
@@ -152,8 +152,10 @@ void RemoveRequest<I>::handle_trim_image(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
   if (r < 0) {
-    lderr(m_cct) << "warning: failed to remove some object(s): "
+    lderr(m_cct) << "failed to remove some object(s): "
                  << cpp_strerror(r) << dendl;
+    send_close_image(r);
+    return;
   }
 
   if (m_old_format) {

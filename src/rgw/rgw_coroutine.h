@@ -47,8 +47,8 @@ class RGWCompletionManager : public RefCountedObject {
   using NotifierRef = boost::intrusive_ptr<RGWAioCompletionNotifier>;
   set<NotifierRef> cns;
 
-  Mutex lock;
-  Cond cond;
+  ceph::mutex lock = ceph::make_mutex("RGWCompletionManager::lock");
+  ceph::condition_variable cond;
 
   SafeTimer timer;
 
@@ -87,20 +87,20 @@ class RGWAioCompletionNotifier : public RefCountedObject {
   RGWCompletionManager *completion_mgr;
   rgw_io_id io_id;
   void *user_data;
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("RGWAioCompletionNotifier");
   bool registered;
 
 public:
   RGWAioCompletionNotifier(RGWCompletionManager *_mgr, const rgw_io_id& _io_id, void *_user_data);
   ~RGWAioCompletionNotifier() override {
     c->release();
-    lock.Lock();
+    lock.lock();
     bool need_unregister = registered;
     if (registered) {
       completion_mgr->get();
     }
     registered = false;
-    lock.Unlock();
+    lock.unlock();
     if (need_unregister) {
       completion_mgr->unregister_completion_notifier(this);
       completion_mgr->put();
@@ -112,7 +112,7 @@ public:
   }
 
   void unregister() {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     if (!registered) {
       return;
     }
@@ -120,15 +120,15 @@ public:
   }
 
   void cb() {
-    lock.Lock();
+    lock.lock();
     if (!registered) {
-      lock.Unlock();
+      lock.unlock();
       put();
       return;
     }
     completion_mgr->get();
     registered = false;
-    lock.Unlock();
+    lock.unlock();
     completion_mgr->complete(this, io_id, user_data);
     completion_mgr->put();
     put();
@@ -198,13 +198,14 @@ class RGWCoroutine : public RefCountedObject, public boost::asio::coroutine {
 
   struct Status {
     CephContext *cct;
-    RWLock lock;
+    ceph::shared_mutex lock =
+      ceph::make_shared_mutex("RGWCoroutine::Status::lock");
     int max_history;
 
     utime_t timestamp;
     stringstream status;
 
-    explicit Status(CephContext *_cct) : cct(_cct), lock("RGWCoroutine::Status::lock"), max_history(MAX_COROUTINE_HISTORY) {}
+    explicit Status(CephContext *_cct) : cct(_cct), max_history(MAX_COROUTINE_HISTORY) {}
 
     deque<StatusItem> history;
 
@@ -542,12 +543,13 @@ class RGWCoroutinesManagerRegistry : public RefCountedObject, public AdminSocket
   CephContext *cct;
 
   set<RGWCoroutinesManager *> managers;
-  RWLock lock;
+  ceph::shared_mutex lock =
+    ceph::make_shared_mutex("RGWCoroutinesRegistry::lock");
 
   string admin_command;
 
 public:
-  explicit RGWCoroutinesManagerRegistry(CephContext *_cct) : cct(_cct), lock("RGWCoroutinesRegistry::lock") {}
+  explicit RGWCoroutinesManagerRegistry(CephContext *_cct) : cct(_cct) {}
   ~RGWCoroutinesManagerRegistry() override;
 
   void add(RGWCoroutinesManager *mgr);
@@ -569,7 +571,8 @@ class RGWCoroutinesManager {
 
   std::atomic<int64_t> max_io_id = { 0 };
 
-  RWLock lock;
+  mutable ceph::shared_mutex lock =
+    ceph::make_shared_mutex("RGWCoroutinesManager::lock");
 
   RGWIOIDProvider io_id_provider;
 
@@ -585,7 +588,7 @@ protected:
 
   void put_completion_notifier(RGWAioCompletionNotifier *cn);
 public:
-  RGWCoroutinesManager(CephContext *_cct, RGWCoroutinesManagerRegistry *_cr_registry) : cct(_cct), lock("RGWCoroutinesManager::lock"),
+  RGWCoroutinesManager(CephContext *_cct, RGWCoroutinesManagerRegistry *_cr_registry) : cct(_cct),
                                                                                         cr_registry(_cr_registry), ops_window(RGW_ASYNC_OPS_MGR_WINDOW) {
     completion_mgr = new RGWCompletionManager(cct);
     if (cr_registry) {

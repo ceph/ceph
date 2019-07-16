@@ -653,6 +653,13 @@ void librados::ObjectWriteOperation::unset_manifest()
   o->unset_manifest();
 }
 
+void librados::ObjectWriteOperation::tier_flush()
+{
+  ceph_assert(impl);
+  ::ObjectOperation *o = &impl->o;
+  o->tier_flush();
+}
+
 void librados::ObjectWriteOperation::tmap_update(const bufferlist& cmdbl)
 {
   ceph_assert(impl);
@@ -1737,9 +1744,9 @@ struct AioUnlockCompletion : public librados::ObjectOperationCompletion {
     rados_callback_t cb = completion->callback_complete;
     void *cb_arg = completion->callback_complete_arg;
     cb(completion, cb_arg);
-    completion->lock.Lock();
+    completion->lock.lock();
     completion->callback_complete = NULL;
-    completion->cond.Signal();
+    completion->cond.notify_all();
     completion->put_unlock();
   }
 };

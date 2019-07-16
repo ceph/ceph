@@ -39,6 +39,7 @@
 #include "messages/MOSDBeacon.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMarkMeDown.h"
+#include "messages/MOSDMarkMeDead.h"
 #include "messages/MOSDFull.h"
 #include "messages/MOSDMap.h"
 #include "messages/MMonGetOSDMap.h"
@@ -2287,6 +2288,8 @@ bool OSDMonitor::preprocess_query(MonOpRequestRef op)
     // damp updates
   case MSG_OSD_MARK_ME_DOWN:
     return preprocess_mark_me_down(op);
+  case MSG_OSD_MARK_ME_DEAD:
+    return preprocess_mark_me_dead(op);
   case MSG_OSD_FULL:
     return preprocess_full(op);
   case MSG_OSD_FAILURE:
@@ -2329,6 +2332,8 @@ bool OSDMonitor::prepare_update(MonOpRequestRef op)
     // damp updates
   case MSG_OSD_MARK_ME_DOWN:
     return prepare_mark_me_down(op);
+  case MSG_OSD_MARK_ME_DEAD:
+    return prepare_mark_me_dead(op);
   case MSG_OSD_FULL:
     return prepare_full(op);
   case MSG_OSD_FAILURE:
@@ -2607,6 +2612,62 @@ bool OSDMonitor::prepare_mark_me_down(MonOpRequestRef op)
   return true;
 }
 
+bool OSDMonitor::preprocess_mark_me_dead(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  MOSDMarkMeDead *m = static_cast<MOSDMarkMeDead*>(op->get_req());
+  int from = m->target_osd;
+
+  // check permissions
+  if (check_source(op, m->fsid)) {
+    mon->no_reply(op);
+    return true;
+  }
+
+  // first, verify the reporting host is valid
+  if (!m->get_orig_source().is_osd()) {
+    mon->no_reply(op);
+    return true;
+  }
+
+  if (!osdmap.exists(from) ||
+      !osdmap.is_down(from)) {
+    dout(5) << __func__ << " from nonexistent or up osd." << from
+	    << ", ignoring" << dendl;
+    send_incremental(op, m->get_epoch()+1);
+    mon->no_reply(op);
+    return true;
+  }
+
+  return false;
+}
+
+bool OSDMonitor::prepare_mark_me_dead(MonOpRequestRef op)
+{
+  op->mark_osdmon_event(__func__);
+  MOSDMarkMeDead *m = static_cast<MOSDMarkMeDead*>(op->get_req());
+  int target_osd = m->target_osd;
+
+  ceph_assert(osdmap.is_down(target_osd));
+
+  mon->clog->info() << "osd." << target_osd << " marked itself dead as of e"
+		    << m->get_epoch();
+  if (!pending_inc.new_xinfo.count(target_osd)) {
+    pending_inc.new_xinfo[target_osd] = osdmap.osd_xinfo[target_osd];
+  }
+  pending_inc.new_xinfo[target_osd].dead_epoch = m->get_epoch();
+  wait_for_finished_proposal(
+    op,
+    new FunctionContext(
+      [op, this] (int r) {
+	if (r >= 0) {
+	  mon->no_reply(op);	  // ignore on success
+	}
+      }
+      ));
+  return true;
+}
+
 bool OSDMonitor::can_mark_down(int i)
 {
   if (osdmap.is_nodown(i)) {
@@ -2799,6 +2860,10 @@ void OSDMonitor::force_failure(int target_osd, int by)
 
   dout(1) << " we're forcing failure of osd." << target_osd << dendl;
   pending_inc.new_state[target_osd] = CEPH_OSD_UP;
+  if (!pending_inc.new_xinfo.count(target_osd)) {
+    pending_inc.new_xinfo[target_osd] = osdmap.osd_xinfo[target_osd];
+  }
+  pending_inc.new_xinfo[target_osd].dead_epoch = pending_inc.epoch;
 
   mon->clog->info() << "osd." << target_osd << " failed ("
 		    << osdmap.crush->get_full_location_ordered_string(target_osd)
@@ -3137,7 +3202,9 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
 	pair<epoch_t,epoch_t>(begin, end);
     }
 
-    osd_xinfo_t xi = osdmap.get_xinfo(from);
+    if (pending_inc.new_xinfo.count(from) == 0)
+      pending_inc.new_xinfo[from] = osdmap.osd_xinfo[from];
+    osd_xinfo_t& xi = pending_inc.new_xinfo[from];
     if (m->boot_epoch == 0) {
       xi.laggy_probability *= (1.0 - g_conf()->mon_osd_laggy_weight);
       xi.laggy_interval *= (1.0 - g_conf()->mon_osd_laggy_weight);
@@ -3172,8 +3239,8 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
 	(g_conf()->mon_osd_auto_mark_new_in && (oldstate & CEPH_OSD_NEW)) ||
 	(g_conf()->mon_osd_auto_mark_in)) {
       if (can_mark_in(from)) {
-	if (osdmap.osd_xinfo[from].old_weight > 0) {
-	  pending_inc.new_weight[from] = osdmap.osd_xinfo[from].old_weight;
+	if (xi.old_weight > 0) {
+	  pending_inc.new_weight[from] = xi.old_weight;
 	  xi.old_weight = 0;
 	} else {
 	  pending_inc.new_weight[from] = CEPH_OSD_IN;
@@ -3183,8 +3250,6 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
 		<< m->get_orig_source_addr() << dendl;
       }
     }
-
-    pending_inc.new_xinfo[from] = xi;
 
     // wait
     wait_for_finished_proposal(op, new C_Booted(this, op));
@@ -4355,6 +4420,15 @@ void OSDMonitor::do_application_enable(int64_t pool_id,
   pending_inc.new_pools[pool_id] = p;
 }
 
+void OSDMonitor::do_set_pool_opt(int64_t pool_id,
+				 pool_opts_t::key_t opt,
+				 pool_opts_t::value_t val)
+{
+  auto p = pending_inc.new_pools.try_emplace(
+    pool_id, *osdmap.get_pg_pool(pool_id));
+  p.first->second.opts.set(opt, val);
+}
+
 unsigned OSDMonitor::scan_for_creating_pgs(
   const mempool::osdmap::map<int64_t,pg_pool_t>& pools,
   const mempool::osdmap::set<int64_t>& removed_pools,
@@ -4824,7 +4898,8 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	   prefix == "osd ls" ||
 	   prefix == "osd getmap" ||
 	   prefix == "osd getcrushmap" ||
-	   prefix == "osd ls-tree") {
+	   prefix == "osd ls-tree" ||
+	   prefix == "osd info") {
     string val;
 
     epoch_t epoch = 0;
@@ -4888,6 +4963,34 @@ bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 	    first = false;
 	    ds << i;
 	  }
+	}
+      }
+      rdata.append(ds);
+    } else if (prefix == "osd info") {
+      int64_t osd_id;
+      bool do_single_osd = true;
+      if (!cmd_getval(cct, cmdmap, "id", osd_id)) {
+	do_single_osd = false;
+      }
+
+      if (do_single_osd && !osdmap.exists(osd_id)) {
+	ss << "osd." << osd_id << " does not exist";
+	r = -EINVAL;
+	goto reply;
+      }
+
+      if (f) {
+	if (do_single_osd) {
+	  osdmap.dump_osd(osd_id, f.get());
+	} else {
+	  osdmap.dump_osds(f.get());
+	}
+	f->flush(ds);
+      } else {
+	if (do_single_osd) {
+	  osdmap.print_osd(osd_id, ds);
+	} else {
+	  osdmap.print_osds(ds);
 	}
       }
       rdata.append(ds);
@@ -7458,7 +7561,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 
     if (p.type != pg_pool_t::TYPE_ERASURE) {
       if (n < 1 || n > p.size) {
-	ss << "pool min_size must be between 1 and " << (int)p.size;
+	ss << "pool min_size must be between 1 and size, which is set to " << (int)p.size;
 	return -EINVAL;
       }
     } else {
@@ -7474,7 +7577,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
        }
 
        if (n < k || n > p.size) {
-	 ss << "pool min_size must be between " << k << " and " << (int)p.size;
+	 ss << "pool min_size must be between " << k << " and size, which is set to " << (int)p.size;
 	 return -EINVAL;
        }
     }
@@ -10715,9 +10818,12 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     bool any = false;
     bool stop = false;
     bool verbose = true;
+    bool definitely_dead = false;
 
     vector<string> idvec;
     cmd_getval(cct, cmdmap, "ids", idvec);
+    cmd_getval(cct, cmdmap, "definitely_dead", definitely_dead);
+    derr << "definitely_dead " << (int)definitely_dead << dendl;
     for (unsigned j = 0; j < idvec.size() && !stop; j++) {
       set<int> osds;
 
@@ -10755,6 +10861,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
             pending_inc.pending_osd_state_set(osd, CEPH_OSD_UP);
 	    ss << "marked down osd." << osd << ". ";
 	    any = true;
+	  }
+	  if (definitely_dead) {
+	    if (!pending_inc.new_xinfo.count(osd)) {
+	      pending_inc.new_xinfo[osd] = osdmap.osd_xinfo[osd];
+	    }
+	    if (pending_inc.new_xinfo[osd].dead_epoch < pending_inc.epoch) {
+	      any = true;
+	    }
+	    pending_inc.new_xinfo[osd].dead_epoch = pending_inc.epoch;
 	  }
         } else if (prefix == "osd out") {
 	  if (osdmap.is_out(osd)) {

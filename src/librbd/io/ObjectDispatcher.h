@@ -5,7 +5,7 @@
 #define CEPH_LIBRBD_IO_OBJECT_DISPATCHER_H
 
 #include "include/int_types.h"
-#include "common/RWLock.h"
+#include "common/ceph_mutex.h"
 #include "librbd/io/Types.h"
 #include <map>
 
@@ -71,7 +71,7 @@ private:
 
   ImageCtxT* m_image_ctx;
 
-  RWLock m_lock;
+  ceph::shared_mutex m_lock;
   std::map<ObjectDispatchLayer, ObjectDispatchMeta> m_object_dispatches;
 
   void send(ObjectDispatchSpec* object_dispatch_spec);

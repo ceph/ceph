@@ -11,8 +11,7 @@
 #include "common/RefCountedObj.h"
 #include "include/compat.h"
 #include "common/ceph_time.h"
-#include "common/Mutex.h"
-#include "common/Cond.h"
+#include "common/ceph_mutex.h"
 
 // Forward declaration
 class BucketIndexAioManager;
@@ -38,9 +37,9 @@ private:
   map<int, librados::AioCompletion*> completions;
   map<int, string> pending_objs;
   map<int, string> completion_objs;
-  int next;
-  Mutex lock;
-  Cond cond;
+  int next = 0;
+  ceph::mutex lock = ceph::make_mutex("BucketIndexAioManager::lock");
+  ceph::condition_variable cond;
   /*
    * Callback implementation for AIO request.
    */
@@ -73,8 +72,7 @@ public:
   /*
    * Create a new instance.
    */
-  BucketIndexAioManager() : next(0), lock("BucketIndexAioManager::lock") {}
-
+  BucketIndexAioManager() = default;
 
   /*
    * Do completion for the given AIO request.
@@ -98,7 +96,7 @@ public:
    * Do aio read operation.
    */
   bool aio_operate(librados::IoCtx& io_ctx, const string& oid, librados::ObjectReadOperation *op) {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     BucketIndexAioArg *arg = new BucketIndexAioArg(get_next(), this);
     librados::AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, NULL, bucket_index_op_completion_cb);
     int r = io_ctx.aio_operate(oid, c, (librados::ObjectReadOperation*)op, NULL);
@@ -114,7 +112,7 @@ public:
    * Do aio write operation.
    */
   bool aio_operate(librados::IoCtx& io_ctx, const string& oid, librados::ObjectWriteOperation *op) {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     BucketIndexAioArg *arg = new BucketIndexAioArg(get_next(), this);
     librados::AioCompletion *c = librados::Rados::aio_create_completion((void*)arg, NULL, bucket_index_op_completion_cb);
     int r = io_ctx.aio_operate(oid, c, (librados::ObjectWriteOperation*)op);

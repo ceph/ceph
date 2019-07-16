@@ -87,7 +87,8 @@
             ]
           }
         }
-      }
+      },
+      "cli": {}
     },
     "ceph-dashboard-e2e": {
       "root": "",
@@ -112,7 +113,8 @@
             ]
           }
         }
-      }
+      },
+      "cli": {}
     }
   },
   "defaultProject": "ceph-dashboard",
@@ -124,5 +126,6 @@
     "@schematics/angular:directive": {
       "prefix": "cd"
     }
-  }
+  },
+  "cli": {}
 }

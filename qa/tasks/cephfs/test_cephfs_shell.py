@@ -1,6 +1,7 @@
 import os
 import crypt
 import logging
+from tempfile import mkstemp as tempfile_mkstemp
 from StringIO import StringIO
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from tasks.cephfs.fuse_mount import FuseMount
@@ -23,15 +24,27 @@ class TestCephFSShell(CephFSTestCase):
                                                 stdin=stdin)
         return status.stdout.getvalue().strip()
 
-    def test_help(self):
-        """
-        Test that help outputs commands.
-        """
+    def get_cephfs_shell_script_output(self, script, mount_x=None, stdin=None):
+        return self.run_cephfs_shell_script(script, mount_x, stdin).stdout.\
+            getvalue().strip()
 
-        o = self._cephfs_shell("help")
+    def run_cephfs_shell_script(self, script, mount_x=None, stdin=None):
+        if mount_x is None:
+            mount_x = self.mount_a
 
-        log.info("output:\n{}".format(o))
+        scriptpath = tempfile_mkstemp(prefix='test-cephfs', text=True)[1]
+        with open(scriptpath, 'w') as scriptfile:
+            scriptfile.write(script)
+        # copy script to the machine running cephfs-shell.
+        mount_x.client_remote.put_file(scriptpath, scriptpath)
+        mount_x.run_shell('chmod 755 ' + scriptpath)
 
+        args = ["cephfs-shell", "-c", mount_x.config_path, '-b', scriptpath]
+        log.info('Running script \"' + scriptpath + '\"')
+        return mount_x.client_remote.run(args=args, stdout=StringIO(),
+                                         stderr=StringIO(), stdin=stdin)
+
+class TestMkdir(TestCephFSShell):
     def test_mkdir(self):
         """
         Test that mkdir creates directory
@@ -120,18 +133,8 @@ class TestCephFSShell(CephFSTestCase):
         o = self.mount_a.stat('d5/d6/d7')
         log.info("mount_a output:\n{}".format(o))
 
-    def validate_stat_output(self, s):
-        l = s.split('\n')
-        log.info("lines:\n{}".format(l))
-        rv = l[-1] # get last line; a failed stat will have "1" as the line
-        log.info("rv:{}".format(rv))
-        r = 0
-        try:
-            r = int(rv) # a non-numeric line will cause an exception
-        except:
-            pass
-        assert(r == 0)
-
+class TestGetAndPut(TestCephFSShell):
+    # the 'put' command gets tested as well with the 'get' comamnd
     def test_put_and_get_without_target_directory(self):
         """
         Test that put fails without target path
@@ -174,7 +177,18 @@ class TestCephFSShell(CephFSTestCase):
         log.info("cephfs-shell output:\n{}".format(o))
         self.validate_stat_output(o)
 
-    # the 'put' command gets tested as well with the 'get' comamnd
+    def validate_stat_output(self, s):
+        l = s.split('\n')
+        log.info("lines:\n{}".format(l))
+        rv = l[-1] # get last line; a failed stat will have "1" as the line
+        log.info("rv:{}".format(rv))
+        r = 0
+        try:
+            r = int(rv) # a non-numeric line will cause an exception
+        except:
+            pass
+        assert(r == 0)
+
     def test_get_with_target_name(self):
         """
         Test that get passes with target name
@@ -250,6 +264,35 @@ class TestCephFSShell(CephFSTestCase):
         log.info("o_hash:{}".format(o_hash))
         assert(s_hash == o_hash)
 
+class TestCD(TestCephFSShell):
+    CLIENTS_REQUIRED = 1
+
+    def test_cd_with_no_args(self):
+        """
+        Test that when cd is issued without any arguments, CWD is changed
+        to root directory.
+        """
+        path = 'dir1/dir2/dir3'
+        self.mount_a.run_shell('mkdir -p ' + path)
+        expected_cwd = '/'
+
+        script = 'cd {}\ncd\ncwd\n'.format(path)
+        output = self.get_cephfs_shell_script_output(script)
+        self.assertEqual(output, expected_cwd)
+
+    def test_cd_with_args(self):
+        """
+        Test that when cd is issued with an argument, CWD is changed
+        to the path passed in the argument.
+        """
+        path = 'dir1/dir2/dir3'
+        self.mount_a.run_shell('mkdir -p ' + path)
+        expected_cwd = '/dir1/dir2/dir3'
+
+        script = 'cd {}\ncwd\n'.format(path)
+        output = self.get_cephfs_shell_script_output(script)
+        self.assertEqual(output, expected_cwd)
+
 #    def test_ls(self):
 #        """
 #        Test that ls passes
@@ -280,3 +323,13 @@ class TestCephFSShell(CephFSTestCase):
 #            log.info('ls -a succeeded')
 #        else:
 #            log.info('ls -a failed')
+
+class TestMisc(TestCephFSShell):
+    def test_help(self):
+        """
+        Test that help outputs commands.
+        """
+
+        o = self._cephfs_shell("help")
+
+        log.info("output:\n{}".format(o))

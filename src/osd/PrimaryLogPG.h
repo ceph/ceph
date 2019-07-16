@@ -1007,7 +1007,8 @@ protected:
   SharedLRU<hobject_t, ObjectContext> object_contexts;
   // map from oid.snapdir() to SnapSetContext *
   map<hobject_t, SnapSetContext*> snapset_contexts;
-  Mutex snapset_contexts_lock;
+  ceph::mutex snapset_contexts_lock =
+    ceph::make_mutex("PrimaryLogPG::snapset_contexts_lock");
 
   // debug order that client ops are applied
   map<hobject_t, map<client_t, ceph_tid_t>> debug_op_order;
@@ -1053,7 +1054,7 @@ protected:
     _register_snapset_context(ssc);
   }
   void _register_snapset_context(SnapSetContext *ssc) {
-    ceph_assert(snapset_contexts_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(snapset_contexts_lock));
     if (!ssc->registered) {
       ceph_assert(snapset_contexts.count(ssc->oid) == 0);
       ssc->registered = true;
@@ -1659,10 +1660,11 @@ private:
 	}
       };
       auto *pg = context< SnapTrimmer >().pg;
-      if (pg->cct->_conf->osd_snap_trim_sleep > 0) {
+      float osd_snap_trim_sleep = pg->osd->osd->get_osd_snap_trim_sleep();
+      if (osd_snap_trim_sleep > 0) {
 	std::lock_guard l(pg->osd->sleep_lock);
 	wakeup = pg->osd->sleep_timer.add_event_after(
-	  pg->cct->_conf->osd_snap_trim_sleep,
+	  osd_snap_trim_sleep,
 	  new OnTimer{pg, pg->get_osdmap_epoch()});
       } else {
 	post_event(SnapTrimTimerReady());

@@ -170,13 +170,12 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
                 c_v_out = check_output(cmd.format(tmpdir='.'),shell=True)
 
         for out in c_v_out.splitlines():
-            if not out.startswith(b'-->') and not out.startswith(b' stderr'):
-                self.log.error(out)
-                devs = []
-                for device in json.loads(out):
-                    dev = orchestrator.InventoryDevice.from_ceph_volume_inventory(device)
-                    devs.append(dev)
-                return [orchestrator.InventoryNode('localhost', devs)]
+            self.log.error(out)
+            devs = []
+            for device in json.loads(out):
+                dev = orchestrator.InventoryDevice.from_ceph_volume_inventory(device)
+                devs.append(dev)
+            return [orchestrator.InventoryNode('localhost', devs)]
         self.log.error('c-v failed: ' + str(c_v_out))
         raise Exception('c-v failed')
 
@@ -202,9 +201,6 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return result
 
-    @deferred_write("Adding stateless service")
-    def add_stateless_service(self, service_type, spec):
-        pass
 
     @deferred_write("create_osds")
     def create_osds(self, drive_group, all_hosts):
@@ -218,13 +214,34 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def service_action(self, action, service_type, service_name=None, service_id=None):
         pass
 
-    @deferred_write("remove_stateless_service")
-    def remove_stateless_service(self, service_type, id_):
+    @deferred_write("Adding NFS service")
+    def add_nfs(self, spec):
+        assert isinstance(spec.pool, str)
+
+    @deferred_write("remove_nfs")
+    def remove_nfs(self, name):
         pass
 
-    @deferred_write("update_stateless_service")
-    def update_stateless_service(self, service_type, spec):
+    @deferred_write("update_nfs")
+    def update_nfs(self, spec):
         pass
+
+    @deferred_write("add_mds")
+    def add_mds(self, spec):
+        pass
+
+    @deferred_write("remove_mds")
+    def remove_mds(self, name):
+        pass
+
+    @deferred_write("add_rgw")
+    def add_rgw(self, spec):
+        pass
+
+    @deferred_write("remove_rgw")
+    def remove_rgw(self, zone):
+        pass
+
 
     @deferred_read
     def get_hosts(self):

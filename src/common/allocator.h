@@ -4,10 +4,13 @@
 #ifndef CEPH_COMMON_ALLOCATOR_H
 #define CEPH_COMMON_ALLOCATOR_H
 
-#include <malloc.h>
-#include <memory>
-#include <new>
 #include "acconfig.h"
+
+#ifdef LIBTCMALLOC_MISSING_ALIGNED_ALLOC
+#include <malloc.h>
+#include <new>
+#endif
+#include <memory>
 
 namespace ceph {
 

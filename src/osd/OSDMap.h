@@ -93,6 +93,7 @@ struct osd_xinfo_t {
   uint64_t features;       ///< features supported by this osd we should know about
   __u32 old_weight;        ///< weight prior to being auto marked out
   utime_t last_purged_snaps_scrub; ///< last scrub of purged_snaps
+  epoch_t dead_epoch = 0;  ///< last epoch we were confirmed dead (not just down)
 
   osd_xinfo_t() : laggy_probability(0), laggy_interval(0),
                   features(0), old_weight(0) {}
@@ -845,6 +846,13 @@ public:
     return !is_out(osd);
   }
 
+  bool is_dead(int osd) const {
+    if (!exists(osd)) {
+      return false; // unclear if they know they are removed from map
+    }
+    return get_xinfo(osd).dead_epoch > get_info(osd).up_from;
+  }
+
   unsigned get_osd_crush_node_flags(int osd) const;
   unsigned get_crush_node_flags(int id) const;
   unsigned get_device_class_flags(int id) const;
@@ -1504,8 +1512,11 @@ private:
   void print_osd_line(int cur, std::ostream *out, ceph::Formatter *f) const;
 public:
   void print(std::ostream& out) const;
+  void print_osd(int id, std::ostream& out) const;
+  void print_osds(std::ostream& out) const;
   void print_pools(std::ostream& out) const;
-  void print_summary(ceph::Formatter *f, std::ostream& out, const std::string& prefix, bool extra=false) const;
+  void print_summary(ceph::Formatter *f, std::ostream& out,
+		     const std::string& prefix, bool extra=false) const;
   void print_oneline_summary(std::ostream& out) const;
 
   enum {
@@ -1515,7 +1526,8 @@ public:
     DUMP_DOWN = 8,       // only 'down' osds
     DUMP_DESTROYED = 16, // only 'destroyed' osds
   };
-  void print_tree(ceph::Formatter *f, std::ostream *out, unsigned dump_flags=0, std::string bucket="") const;
+  void print_tree(ceph::Formatter *f, std::ostream *out,
+		  unsigned dump_flags=0, std::string bucket="") const;
 
   int summarize_mapping_stats(
     OSDMap *newmap,
@@ -1529,6 +1541,8 @@ public:
     const mempool::osdmap::map<std::string,std::map<std::string,std::string> > &profiles,
     ceph::Formatter *f);
   void dump(ceph::Formatter *f) const;
+  void dump_osd(int id, ceph::Formatter *f) const;
+  void dump_osds(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<OSDMap*>& o);
   bool check_new_blacklist_entries() const { return new_blacklist_entries; }
 

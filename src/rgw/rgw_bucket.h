@@ -458,8 +458,9 @@ class RGWDataChangesLog {
   int num_shards;
   string *oids;
 
-  Mutex lock;
-  RWLock modified_lock;
+  ceph::mutex lock = ceph::make_mutex("RGWDataChangesLog::lock");
+  ceph::shared_mutex modified_lock =
+    ceph::make_shared_mutex("RGWDataChangesLog::modified_lock");
   map<int, set<string> > modified_shards;
 
   std::atomic<bool> down_flag = { false };
@@ -467,17 +468,13 @@ class RGWDataChangesLog {
   struct ChangeStatus {
     real_time cur_expiration;
     real_time cur_sent;
-    bool pending;
-    RefCountedCond *cond;
-    Mutex *lock;
+    bool pending = false;
+    RefCountedCond *cond = nullptr;
+    ceph::mutex lock =
+      ceph::make_mutex("RGWDataChangesLog::ChangeStatus");
 
-    ChangeStatus() : pending(false), cond(NULL) {
-      lock = new Mutex("RGWDataChangesLog::ChangeStatus");
-    }
-
-    ~ChangeStatus() {
-      delete lock;
-    }
+    ChangeStatus() = default;
+    ~ChangeStatus() = default;
   };
 
   typedef std::shared_ptr<ChangeStatus> ChangeStatusPtr;
@@ -493,11 +490,11 @@ class RGWDataChangesLog {
   class ChangesRenewThread : public Thread {
     CephContext *cct;
     RGWDataChangesLog *log;
-    Mutex lock;
-    Cond cond;
+    ceph::mutex lock = ceph::make_mutex("ChangesRenewThread::lock");
+    ceph::condition_variable cond;
 
   public:
-    ChangesRenewThread(CephContext *_cct, RGWDataChangesLog *_log) : cct(_cct), log(_log), lock("ChangesRenewThread::lock") {}
+    ChangesRenewThread(CephContext *_cct, RGWDataChangesLog *_log) : cct(_cct), log(_log) {}
     void *entry() override;
     void stop();
   };
@@ -507,7 +504,6 @@ class RGWDataChangesLog {
 public:
 
   RGWDataChangesLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store),
-                                                           lock("RGWDataChangesLog::lock"), modified_lock("RGWDataChangesLog::modified_lock"),
                                                            changes(cct->_conf->rgw_data_log_changes_size) {
     num_shards = cct->_conf->rgw_data_log_num_shards;
 

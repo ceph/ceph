@@ -15,73 +15,63 @@
 #ifndef CEPH_LIBRADOS_POOLASYNCCOMPLETIONIMPL_H
 #define CEPH_LIBRADOS_POOLASYNCCOMPLETIONIMPL_H
 
-#include "common/Cond.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "include/Context.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
 
 namespace librados {
   struct PoolAsyncCompletionImpl {
-    Mutex lock;
-    Cond cond;
-    int ref, rval;
-    bool released;
-    bool done;
+    ceph::mutex lock = ceph::make_mutex("PoolAsyncCompletionImpl lock");
+    ceph::condition_variable cond;
+    int ref = 1;
+    int rval = 0;
+    bool released = false;
+    bool done = false;
 
-    rados_callback_t callback;
-    void *callback_arg;
+    rados_callback_t callback = 0;
+    void *callback_arg = nullptr;;
 
-    PoolAsyncCompletionImpl() : lock("PoolAsyncCompletionImpl lock"),
-				ref(1), rval(0), released(false), done(false),
-				callback(0), callback_arg(0) {}
+    PoolAsyncCompletionImpl() = default;
 
     int set_callback(void *cb_arg, rados_callback_t cb) {
-      lock.Lock();
+      std::scoped_lock l{lock};
       callback = cb;
       callback_arg = cb_arg;
-      lock.Unlock();
       return 0;
     }
     int wait() {
-      lock.Lock();
-      while (!done)
-	cond.Wait(lock);
-      lock.Unlock();
+      std::unique_lock l{lock};
+      cond.wait(l, [this] { return done;});
       return 0;
     }
     int is_complete() {
-      lock.Lock();
-      int r = done;
-      lock.Unlock();
-      return r;
+      std::scoped_lock l{lock};
+      return done;
     }
     int get_return_value() {
-      lock.Lock();
-      int r = rval;
-      lock.Unlock();
-      return r;
+      std::scoped_lock l{lock};
+      return rval;
     }
     void get() {
-      lock.Lock();
+      std::scoped_lock l{lock};
       ceph_assert(ref > 0);
       ref++;
-      lock.Unlock();
     }
     void release() {
-      lock.Lock();
+      lock.lock();
       ceph_assert(!released);
       released = true;
       put_unlock();
     }
     void put() {
-      lock.Lock();
+      lock.lock();
       put_unlock();
     }
     void put_unlock() {
       ceph_assert(ref > 0);
       int n = --ref;
-      lock.Unlock();
+      lock.unlock();
       if (!n)
 	delete this;
     }
@@ -99,20 +89,20 @@ namespace librados {
     }
   
     void finish(int r) override {
-      c->lock.Lock();
+      c->lock.lock();
       c->rval = r;
       c->done = true;
-      c->cond.Signal();
+      c->cond.notify_all();
 
       if (c->callback) {
 	rados_callback_t cb = c->callback;
 	void *cb_arg = c->callback_arg;
-	c->lock.Unlock();
+	c->lock.unlock();
 	cb(c, cb_arg);
-	c->lock.Lock();
+	c->lock.lock();
       }
 
-      c->lock.Unlock();
+      c->lock.unlock();
     }
   };
 }

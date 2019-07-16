@@ -1040,7 +1040,7 @@ int DBObjectMap::upgrade_to_v2()
 
 void DBObjectMap::set_state()
 {
-  Mutex::Locker l(header_lock);
+  std::lock_guard l{header_lock};
   KeyValueDB::Transaction t = db->get_transaction();
   write_state(t);
   int ret = db->submit_transaction_sync(t);
@@ -1122,18 +1122,18 @@ int DBObjectMap::sync(const ghobject_t *oid,
      *
      * See 2b63dd25fc1c73fa42e52e9ea4ab5a45dd9422a0 and bug 9891.
      */
-    Mutex::Locker l(header_lock);
+    std::lock_guard l{header_lock};
     write_state(t);
     return db->submit_transaction_sync(t);
   } else {
-    Mutex::Locker l(header_lock);
+    std::lock_guard l{header_lock};
     write_state(t);
     return db->submit_transaction_sync(t);
   }
 }
 
 int DBObjectMap::write_state(KeyValueDB::Transaction _t) {
-  ceph_assert(header_lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(header_lock));
   dout(20) << "dbobjectmap: seq is " << state.seq << dendl;
   KeyValueDB::Transaction t = _t ? _t : db->get_transaction();
   bufferlist bl;
@@ -1153,7 +1153,7 @@ DBObjectMap::Header DBObjectMap::_lookup_map_header(
 
   _Header *header = new _Header();
   {
-    Mutex::Locker l(cache_lock);
+    std::lock_guard l{cache_lock};
     if (caches.lookup(oid, header)) {
       ceph_assert(!in_use.count(header->seq));
       in_use.insert(header->seq);
@@ -1172,7 +1172,7 @@ DBObjectMap::Header DBObjectMap::_lookup_map_header(
   auto iter = out.cbegin();
   ret->decode(iter);
   {
-    Mutex::Locker l(cache_lock);
+    std::lock_guard l{cache_lock};
     caches.add(oid, *ret);
   }
 
@@ -1201,9 +1201,8 @@ DBObjectMap::Header DBObjectMap::_generate_new_header(const ghobject_t &oid,
 
 DBObjectMap::Header DBObjectMap::lookup_parent(Header input)
 {
-  Mutex::Locker l(header_lock);
-  while (in_use.count(input->parent))
-    header_cond.Wait(header_lock);
+  std::unique_lock l{header_lock};
+  header_cond.wait(l, [&input, this] { return !in_use.count(input->parent); });
   map<string, bufferlist> out;
   set<string> keys;
   keys.insert(HEADER_KEY);
@@ -1235,7 +1234,7 @@ DBObjectMap::Header DBObjectMap::lookup_create_map_header(
   const ghobject_t &oid,
   KeyValueDB::Transaction t)
 {
-  Mutex::Locker l(header_lock);
+  std::lock_guard l{header_lock};
   Header header = _lookup_map_header(hl, oid);
   if (!header) {
     header = _generate_new_header(oid, Header());
@@ -1278,7 +1277,7 @@ void DBObjectMap::remove_map_header(
   to_remove.insert(map_header_key(oid));
   t->rmkeys(HOBJECT_TO_SEQ, to_remove);
   {
-    Mutex::Locker l(cache_lock);
+    std::lock_guard l{cache_lock};
     caches.clear(oid);
   }
 }
@@ -1296,7 +1295,7 @@ void DBObjectMap::set_map_header(
   header.encode(to_set[map_header_key(oid)]);
   t->set(HOBJECT_TO_SEQ, to_set);
   {
-    Mutex::Locker l(cache_lock);
+    std::lock_guard l{cache_lock};
     caches.add(oid, header);
   }
 }

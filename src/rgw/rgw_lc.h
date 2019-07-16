@@ -12,7 +12,7 @@
 
 #include "include/types.h"
 #include "include/rados/librados.hpp"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Cond.h"
 #include "common/iso_8601.h"
 #include "common/Thread.h"
@@ -23,6 +23,7 @@
 #include "rgw_tag.h"
 
 #include <atomic>
+#include <tuple>
 
 #define HASH_PRIME 7877
 #define MAX_ID_LEN 255
@@ -210,8 +211,6 @@ class LCFilter
   void dump(Formatter *f) const;
 };
 WRITE_CLASS_ENCODER(LCFilter)
-
-
 
 class LCRule
 {
@@ -463,11 +462,11 @@ class RGWLC : public DoutPrefixProvider {
     const DoutPrefixProvider *dpp;
     CephContext *cct;
     RGWLC *lc;
-    Mutex lock;
-    Cond cond;
+    ceph::mutex lock = ceph::make_mutex("LCWorker");
+    ceph::condition_variable cond;
 
   public:
-    LCWorker(const DoutPrefixProvider* _dpp, CephContext *_cct, RGWLC *_lc) : dpp(_dpp), cct(_cct), lc(_lc), lock("LCWorker") {}
+    LCWorker(const DoutPrefixProvider* _dpp, CephContext *_cct, RGWLC *_lc) : dpp(_dpp), cct(_cct), lc(_lc) {}
     void *entry() override;
     void stop();
     bool should_work(utime_t& now);
@@ -515,6 +514,13 @@ namespace rgw::lc {
 
 int fix_lc_shard_entry(RGWRados *store, const RGWBucketInfo& bucket_info,
 		       const map<std::string,bufferlist>& battrs);
+
+std::string s3_expiration_header(
+  DoutPrefixProvider* dpp,
+  const rgw_obj_key& obj_key,
+  const RGWObjTags& obj_tagset,
+  const ceph::real_time& mtime,
+  const std::map<std::string, buffer::list>& bucket_attrs);
 
 } // namespace rgw::lc
 

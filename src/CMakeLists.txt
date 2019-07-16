@@ -114,37 +114,13 @@ endif()
 
 
 # require c++17
-if(CMAKE_VERSION VERSION_LESS "3.8")
-  CHECK_CXX_COMPILER_FLAG("-std=c++17" COMPILER_SUPPORTS_CXX17)
-  if(NOT COMPILER_SUPPORTS_CXX17)
-    message(FATAL_ERROR
-      "The compiler ${CMAKE_CXX_COMPILER} has no C++17 support.")
-  endif()
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
-
-  # for compiletest_cxx11_client
-  CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
-  if(NOT COMPILER_SUPPORTS_CXX11)
-    message(FATAL_ERROR
-      "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support.")
-  endif()
-
-  include(CheckCCompilerFlag)
-  CHECK_C_COMPILER_FLAG("-std=gnu99" COMPILER_SUPPORTS_GNU99)
-  if(NOT COMPILER_SUPPORTS_GNU99)
-    message(FATAL_ERROR
-      "The compiler ${CMAKE_C_COMPILER} has no GNU C99 support.")
-  endif()
-  set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -std=gnu99")
-else()
-  set(CMAKE_CXX_STANDARD 17)
-  set(CMAKE_CXX_EXTENSIONS OFF)
-  set(CMAKE_CXX_STANDARD_REQUIRED ON)
-  set(CMAKE_C_STANDARD 99)
-  # we use `asm()` to inline assembly, so enable the GNU extension
-  set(CMAKE_C_EXTENSIONS ON)
-  set(C_STANDARD_REQUIRED ON)
-endif()
+set(CMAKE_CXX_STANDARD 17)
+set(CMAKE_CXX_EXTENSIONS OFF)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_C_STANDARD 99)
+# we use `asm()` to inline assembly, so enable the GNU extension
+set(CMAKE_C_EXTENSIONS ON)
+set(C_STANDARD_REQUIRED ON)
 
 include(CheckCXXSourceCompiles)
 CHECK_CXX_SOURCE_COMPILES("
@@ -240,8 +216,12 @@ if(WITH_PYTHON3)
   if(WITH_PYTHON3 MATCHES "^(1|ON|YES|TRUE|Y)$")
     set(WITH_PYTHON3 "3")
   endif()
-  find_package(Python3 ${WITH_PYTHON3} REQUIRED
+  if(NOT WITH_PYTHON3 STREQUAL "3")
+    set(find_python3_exact "EXACT")
+  endif()
+  find_package(Python3 ${WITH_PYTHON3} ${find_python3_exact} REQUIRED
     COMPONENTS Interpreter Development)
+  unset(find_python3_exact)
 endif()
 
 # the major version of the python bindings as a dependency of other
@@ -250,6 +230,17 @@ if(WITH_PYTHON2)
   set(PY_BINDING_INFIX 2)
 else()
   set(PY_BINDING_INFIX 3)
+endif()
+# use python2 by default for python bindings, tools and tests, before
+# switching to python3
+# Python_EXECUTABLE` can be set by `find_package(Python ...)` also. and we do
+# call `find_package(Python ...)` in `ceph/CMakeLists.txt`. but we do so before
+# `add_subdirectory(src)` where `Python_EXECUTABLE` is set. so it's safe to
+# use this variable name and call `find_package(Python ...)`.
+if(WITH_PYTHON2)
+  set(Python_EXECUTABLE ${Python2_EXECUTABLE})
+else()
+  set(Python_EXECUTABLE ${Python3_EXECUTABLE})
 endif()
 
 # sort out which allocator to use
@@ -288,12 +279,13 @@ add_subdirectory(json_spirit)
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 
+find_package(fmt 5.2.1 QUIET)
+if(NOT fmt_FOUND)
+  message(STATUS "Could not find fmt, will build it")
+  add_subdirectory(fmt)
+endif()
+
 if(WITH_SEASTAR)
-  find_package(fmt 5.2.1 QUIET)
-  if(NOT fmt_FOUND)
-    message(STATUS "Could not find fmt, will build it")
-    add_subdirectory(fmt)
-  endif()
   find_package(c-ares 1.13.0 QUIET)
   if(NOT c-ares_FOUND)
     message(STATUS "Could not find c-ares, will build it")
@@ -487,6 +479,7 @@ endif()
 
 add_subdirectory(pybind)
 add_subdirectory(ceph-volume)
+add_subdirectory(python-common)
 
 # Monitor
 add_subdirectory(mon)
@@ -520,6 +513,9 @@ add_subdirectory(os)
 add_subdirectory(osd)
 
 set(ceph_osd_srcs
+  # Link the Object Class API implementation directly as intermediary
+  # static library (like libosd.a) nullifies the effect of `-rdynamic`.
+  objclass/class_api.cc
   ceph_osd.cc)
 add_executable(ceph-osd ${ceph_osd_srcs})
 add_dependencies(ceph-osd erasure_code_plugins)

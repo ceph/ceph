@@ -113,6 +113,7 @@ struct CapSnap {
 #define I_DIR_ORDERED	2
 #define I_CAP_DROPPED	4
 #define I_SNAPDIR_OPEN	8
+#define I_KICK_FLUSH	16
 
 struct Inode {
   Client *client;
@@ -227,9 +228,9 @@ struct Inode {
   map<string,bufferptr> xattrs;
   map<frag_t,int> fragmap;  // known frag -> mds mappings
 
-  list<Cond*>       waitfor_caps;
-  list<Cond*>       waitfor_commit;
-  list<Cond*>	    waitfor_deleg;
+  std::list<ceph::condition_variable*> waitfor_caps;
+  std::list<ceph::condition_variable*> waitfor_commit;
+  std::list<ceph::condition_variable*> waitfor_deleg;
 
   Dentry *get_first_parent() {
     ceph_assert(!dentries.empty());

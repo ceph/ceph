@@ -12,7 +12,6 @@
 #include <boost/optional.hpp>
 
 class Context;
-class RWLock;
 
 namespace librbd {
 
@@ -24,7 +23,7 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class UpdateRequest : public Request {
 public:
   static UpdateRequest *create(ImageCtx &image_ctx,
-                               RWLock* object_map_lock,
+                               ceph::shared_mutex* object_map_lock,
                                ceph::BitVector<2> *object_map,
                                uint64_t snap_id, uint64_t start_object_no,
                                uint64_t end_object_no, uint8_t new_state,
@@ -37,7 +36,7 @@ public:
                              on_finish);
   }
 
-  UpdateRequest(ImageCtx &image_ctx, RWLock* object_map_lock,
+  UpdateRequest(ImageCtx &image_ctx, ceph::shared_mutex* object_map_lock,
                 ceph::BitVector<2> *object_map, uint64_t snap_id,
                 uint64_t start_object_no, uint64_t end_object_no,
                 uint8_t new_state,
@@ -79,7 +78,7 @@ private:
    * @endverbatim
    */
 
-  RWLock* m_object_map_lock;
+  ceph::shared_mutex* m_object_map_lock;
   ceph::BitVector<2> &m_object_map;
   uint64_t m_start_object_no;
   uint64_t m_end_object_no;

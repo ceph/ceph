@@ -215,6 +215,9 @@ public:
     virtual bool valid() = 0;
     virtual int next() = 0;
     virtual std::string key() = 0;
+    virtual std::string tail_key() {
+      return "";
+    }
     virtual ceph::buffer::list value() = 0;
     virtual int status() = 0;
     virtual ~SimplestIteratorImpl() {}

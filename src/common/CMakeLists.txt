@@ -21,7 +21,6 @@ set(common_srcs
   LogClient.cc
   LogEntry.cc
   ostream_temp.cc
-  Mutex.cc
   OutputDataSocket.cc
   PluginRegistry.cc
   Readahead.cc

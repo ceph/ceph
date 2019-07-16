@@ -62,6 +62,7 @@
 #include "messages/MOSDPGTemp.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMarkMeDown.h"
+#include "messages/MOSDMarkMeDead.h"
 #include "messages/MOSDFull.h"
 #include "messages/MOSDPing.h"
 #include "messages/MOSDOp.h"
@@ -474,6 +475,9 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case MSG_OSD_MARK_ME_DOWN:
     m = make_message<MOSDMarkMeDown>();
+    break;
+  case MSG_OSD_MARK_ME_DEAD:
+    m = make_message<MOSDMarkMeDead>();
     break;
   case MSG_OSD_FULL:
     m = make_message<MOSDFull>();

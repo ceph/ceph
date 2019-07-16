@@ -577,9 +577,9 @@ void rgw_bucket_dir::dump(Formatter *f) const
   f->open_object_section("header");
   header.dump(f);
   f->close_section();
-  map<string, rgw_bucket_dir_entry>::const_iterator iter = m.begin();
+  auto iter = m.cbegin();
   f->open_array_section("map");
-  for (; iter != m.end(); ++iter) {
+  for (; iter != m.cend(); ++iter) {
     f->dump_string("key", iter->first);
     f->open_object_section("dir_entry");
     iter->second.dump(f);

@@ -73,6 +73,11 @@
 # git cherry-pick -x ...
 # ceph-backport.sh 19206 jewel
 #
+# optionally, you can set the component label that will be added to the PR with
+# an environment variable:
+#
+# COMPONENT=dashboard ceph-backport.sh 19206 jewel
+#
 # See http://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO_backport_commits
 # for more info on cherry-picking.
 #
@@ -124,13 +129,13 @@ echo "Milestone: $milestone"
 # milestone numbers can be obtained manually with:
 #   curl --verbose -X GET https://api.github.com/repos/ceph/ceph/milestones
 
-milestone_number=$(curl -s -X GET https://api.github.com/repos/ceph/ceph/milestones | jq --arg milestone $milestone '.[] | select(.title==$milestone) | .number')
+milestone_number=$(curl -s -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token | jq --arg milestone $milestone '.[] | select(.title==$milestone) | .number')
 
 if test -n "$milestone_number" ; then
     target_branch="$milestone"
 else
     echo -n "Unknown Milestone. Please use one of the following ones: "
-    echo $(curl -s -X GET https://api.github.com/repos/ceph/ceph/milestones | jq '.[].title')
+    echo $(curl -s -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token | jq '.[].title')
     exit 1
 fi
 echo "Milestone is $milestone and milestone number is $milestone_number"
@@ -156,7 +161,7 @@ function prepare () {
     [ -z "$pr" ] && echo "Could not find PR." && return 1
     echo "Original PR: $pr"
 
-    number=$(curl --silent 'https://api.github.com/repos/ceph/ceph/pulls/'$pr | jq .commits)
+    number=$(curl --silent 'https://api.github.com/repos/ceph/ceph/pulls/'$pr'?access_token='$github_token | jq .commits)
     [ -z "$number" ] && echo "Could not determine the number of commits." && return 1
     echo "Found $number commit(s)"
 
@@ -184,7 +189,7 @@ git push -u $github_repo wip-$issue-$milestone
 number=$(curl --silent --data-binary '{"title":"'"$title"'","head":"'$github_user':wip-'$issue-$milestone'","base":"'$target_branch'","body":"http://tracker.ceph.com/issues/'$issue'"}' 'https://api.github.com/repos/ceph/ceph/pulls?access_token='$github_token | jq .number)
 echo "Opened pull request $number"
 
-component=core ; curl --silent --data-binary '{"milestone":'$milestone_number',"assignee":"'$github_user'","labels":["bug fix","'$component'"]}' 'https://api.github.com/repos/ceph/ceph/issues/'$number'?access_token='$github_token
+component=${COMPONENT:-core}; curl --silent --data-binary '{"milestone":'$milestone_number',"assignee":"'$github_user'","labels":["bug fix","'$component'"]}' 'https://api.github.com/repos/ceph/ceph/issues/'$number'?access_token='$github_token
 firefox https://github.com/ceph/ceph/pull/$number
 redmine_status=2 # In Progress
 curl --verbose -X PUT --header 'Content-type: application/json' --data-binary '{"issue":{"description":"https://github.com/ceph/ceph/pull/'$number'","status_id":'$redmine_status',"assigned_to_id":'$redmine_user_id'}}' 'http://tracker.ceph.com/issues/'$issue.json?key=$redmine_key

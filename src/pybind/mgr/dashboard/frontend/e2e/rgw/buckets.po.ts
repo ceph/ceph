@@ -28,7 +28,7 @@ export class BucketsPageHelper extends PageHelper {
     const createButton = element(by.cssContainingText('button', 'Create Bucket'));
     createButton.click().then(() => {
       browser.wait(
-        Helper.EC.presenceOf(PageHelper.getTableCell(name)),
+        Helper.EC.presenceOf(this.getTableCell(name)),
         Helper.TIMEOUT,
         'Timed out waiting for bucket creation'
       );
@@ -38,11 +38,11 @@ export class BucketsPageHelper extends PageHelper {
   edit(name, new_owner) {
     this.navigateTo();
 
-    browser.wait(Helper.EC.elementToBeClickable(PageHelper.getTableCell(name)), 10000); // wait for table to load
-    PageHelper.getTableCell(name).click(); // click on the bucket you want to edit in the table
+    browser.wait(Helper.EC.elementToBeClickable(this.getTableCell(name)), 10000); // wait for table to load
+    this.getTableCell(name).click(); // click on the bucket you want to edit in the table
     element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
-    expect(PageHelper.getBreadcrumbText()).toEqual('Edit');
+    expect(this.getBreadcrumbText()).toEqual('Edit');
 
     expect(element(by.css('input[name=placement-target]')).getAttribute('value')).toBe(
       'default-placement'
@@ -56,13 +56,13 @@ export class BucketsPageHelper extends PageHelper {
     editbutton.click().then(() => {
       // wait to be back on buckets page with table visible
       browser.wait(
-        Helper.EC.elementToBeClickable(PageHelper.getTableCell(name)),
+        Helper.EC.elementToBeClickable(this.getTableCell(name)),
         10000,
         'Could not return to buckets page and load table after editing bucket'
       );
 
       // click on edited bucket and check its details table for edited owner field
-      PageHelper.getTableCell(name).click();
+      this.getTableCell(name).click();
       const element_details_table = element
         .all(by.css('.table.table-striped.table-bordered'))
         .first();
@@ -74,9 +74,9 @@ export class BucketsPageHelper extends PageHelper {
     this.navigateTo();
 
     // wait for table to load
-    browser.wait(Helper.EC.elementToBeClickable(PageHelper.getTableCell(name)), 10000);
+    browser.wait(Helper.EC.elementToBeClickable(this.getTableCell(name)), 10000);
 
-    PageHelper.getTableCell(name).click(); // click on the bucket you want to delete in the table
+    this.getTableCell(name).click(); // click on the bucket you want to delete in the table
     $('.table-actions button.dropdown-toggle').click(); // click toggle menu
     $('li.delete a').click(); // click delete
     // wait for pop-up to be visible (checks for title of pop-up)
@@ -87,14 +87,14 @@ export class BucketsPageHelper extends PageHelper {
         .click()
         .then(() => {
           this.navigateTo();
-          browser.wait(Helper.EC.not(Helper.EC.presenceOf(PageHelper.getTableCell(name))), 10000);
+          browser.wait(Helper.EC.not(Helper.EC.presenceOf(this.getTableCell(name))), 10000);
         });
     });
   }
 
   invalidCreate() {
     this.navigateTo('create');
-    expect(PageHelper.getBreadcrumbText()).toEqual('Create');
+    expect(this.getBreadcrumbText()).toEqual('Create');
 
     const nameInputField = element(by.id('bid')); // Grabs name box field
     const ownerDropDown = element(by.id('owner')); // Grab owner field
@@ -102,7 +102,7 @@ export class BucketsPageHelper extends PageHelper {
     // Gives an invalid name (too short), then waits for dashboard to determine validity
     nameInputField.sendKeys('rq');
 
-    PageHelper.moveClick(ownerDropDown); // To trigger a validation
+    this.moveClick(ownerDropDown); // To trigger a validation
 
     browser.wait(
       function() {
@@ -124,16 +124,16 @@ export class BucketsPageHelper extends PageHelper {
     );
 
     // Test invalid owner input
-    PageHelper.moveClick(ownerDropDown); // Clicks the Owner drop down on the Create Bucket page
+    this.moveClick(ownerDropDown); // Clicks the Owner drop down on the Create Bucket page
     // select some valid option. The owner drop down error message will not appear unless a valid user was selected at
     // one point before the invalid placeholder user is selected.
     element(by.cssContainingText('select[name=owner] option', 'dev')).click();
 
-    PageHelper.moveClick(ownerDropDown); // Clicks the Owner drop down on the Create Bucket page
+    this.moveClick(ownerDropDown); // Clicks the Owner drop down on the Create Bucket page
     // select the first option, which is invalid because it is a placeholder
     element(by.cssContainingText('select[name=owner] option', 'Select a user')).click();
 
-    PageHelper.moveClick(nameInputField); // To trigger a validation
+    this.moveClick(nameInputField); // To trigger a validation
 
     // Check that owner drop down field was marked invalid in the css
     expect(element(by.id('owner')).getAttribute('class')).toContain('ng-invalid');
@@ -144,7 +144,7 @@ export class BucketsPageHelper extends PageHelper {
     );
 
     // Check invalid placement target input
-    PageHelper.moveClick(ownerDropDown);
+    this.moveClick(ownerDropDown);
     element(by.cssContainingText('select[name=owner] option', 'dev')).click();
     // The drop down error message will not appear unless a valid option is previsously selected.
     element(
@@ -153,7 +153,7 @@ export class BucketsPageHelper extends PageHelper {
     element(
       by.cssContainingText('select[name=placement-target] option', 'Select a placement target')
     ).click();
-    PageHelper.moveClick(nameInputField); // To trigger a validation
+    this.moveClick(nameInputField); // To trigger a validation
     expect(element(by.id('placement-target')).getAttribute('class')).toContain('ng-invalid');
     expect(element(by.css('#placement-target + .invalid-feedback')).getText()).toMatch(
       'This field is required.'
@@ -161,8 +161,8 @@ export class BucketsPageHelper extends PageHelper {
 
     // Clicks the Create Bucket button but the page doesn't move. Done by testing
     // for the breadcrumb
-    PageHelper.moveClick(element(by.cssContainingText('button', 'Create Bucket'))); // Clicks Create Bucket button
-    expect(PageHelper.getBreadcrumbText()).toEqual('Create');
+    this.moveClick(element(by.cssContainingText('button', 'Create Bucket'))); // Clicks Create Bucket button
+    expect(this.getBreadcrumbText()).toEqual('Create');
     // content in fields seems to subsist through tests if not cleared, so it is cleared
     nameInputField.clear().then(() => {
       element(by.cssContainingText('button', 'Cancel')).click();
@@ -173,21 +173,21 @@ export class BucketsPageHelper extends PageHelper {
     this.navigateTo();
 
     browser.wait(
-      Helper.EC.elementToBeClickable(PageHelper.getTableCell(name)),
+      Helper.EC.elementToBeClickable(this.getTableCell(name)),
       10000,
       'Failed waiting for bucket to be present in table'
     ); // wait for table to load
-    PageHelper.getTableCell(name).click(); // click on the bucket you want to edit in the table
+    this.getTableCell(name).click(); // click on the bucket you want to edit in the table
     element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
-    expect(PageHelper.getBreadcrumbText()).toEqual('Edit');
+    expect(this.getBreadcrumbText()).toEqual('Edit');
 
     // Chooses 'Select a user' rather than a valid owner on Edit Bucket page
     // and checks if it's an invalid input
     const ownerDropDown = element(by.id('owner'));
     browser.wait(Helper.EC.elementToBeClickable(ownerDropDown), 5000);
 
-    PageHelper.moveClick(ownerDropDown); // Clicks the Owner drop down on the Create Bucket page
+    this.moveClick(ownerDropDown); // Clicks the Owner drop down on the Create Bucket page
     // select the first option, which is invalid because it is a placeholder
     element(by.cssContainingText('select[name=owner] option', 'Select a user')).click();
 
@@ -206,6 +206,6 @@ export class BucketsPageHelper extends PageHelper {
     // Clicks the Edit Bucket button but the page doesn't move. Done by testing for
     // breadcrumb
     element(by.cssContainingText('button', 'Edit Bucket')).click(); // Gets the Edit button and clicks it
-    expect(PageHelper.getBreadcrumbText()).toEqual('Edit');
+    expect(this.getBreadcrumbText()).toEqual('Edit');
   }
 }

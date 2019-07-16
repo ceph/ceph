@@ -32,7 +32,7 @@ int C_DecodeTag::process(int r) {
     return r;
   }
 
-  Mutex::Locker locker(*lock);
+  std::lock_guard locker{*lock};
   *tag_tid = tag.tid;
 
   auto data_it = tag.data.cbegin();
@@ -64,7 +64,7 @@ int C_DecodeTags::process(int r) {
     return -ENOENT;
   }
 
-  Mutex::Locker locker(*lock);
+  std::lock_guard locker{*lock};
   *tag_tid = tags.back().tid;
   auto data_it = tags.back().data.cbegin();
   r = C_DecodeTag::decode(&data_it, tag_data);

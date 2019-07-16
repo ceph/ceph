@@ -21,7 +21,7 @@
 #include <pthread.h>
 
 #include "common/ceph_time.h"
-#include "RWLock.h"
+#include "common/ceph_mutex.h"
 
 class CephContext;
 
@@ -81,7 +81,8 @@ class HeartbeatMap {
 
  private:
   CephContext *m_cct;
-  RWLock m_rwlock;
+  ceph::shared_mutex m_rwlock =
+    ceph::make_shared_mutex("HeartbeatMap::m_rwlock");
   ceph::coarse_mono_clock::time_point m_inject_unhealthy_until;
   std::list<heartbeat_handle_d*> m_workers;
   std::atomic<unsigned> m_unhealthy_workers = { 0 };

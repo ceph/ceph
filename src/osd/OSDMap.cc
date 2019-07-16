@@ -133,6 +133,7 @@ void osd_xinfo_t::dump(Formatter *f) const
   f->dump_int("features", features);
   f->dump_unsigned("old_weight", old_weight);
   f->dump_stream("last_purged_snaps_scrub") << last_purged_snaps_scrub;
+  f->dump_int("dead_epoch", dead_epoch);
 }
 
 void osd_xinfo_t::encode(ceph::buffer::list& bl, uint64_t enc_features) const
@@ -150,6 +151,7 @@ void osd_xinfo_t::encode(ceph::buffer::list& bl, uint64_t enc_features) const
   encode(old_weight, bl);
   if (v >= 4) {
     encode(last_purged_snaps_scrub, bl);
+    encode(dead_epoch, bl);
   }
   ENCODE_FINISH(bl);
 }
@@ -172,6 +174,9 @@ void osd_xinfo_t::decode(ceph::buffer::list::const_iterator& bl)
     old_weight = 0;
   if (struct_v >= 4) {
     decode(last_purged_snaps_scrub, bl);
+    decode(dead_epoch, bl);
+  } else {
+    dead_epoch = 0;
   }
   DECODE_FINISH(bl);
 }
@@ -192,7 +197,8 @@ ostream& operator<<(ostream& out, const osd_xinfo_t& xi)
 	     << " laggy_probability " << xi.laggy_probability
 	     << " laggy_interval " << xi.laggy_interval
 	     << " old_weight " << xi.old_weight
-	     << " last_purged_snaps_scrub " << xi.last_purged_snaps_scrub;
+	     << " last_purged_snaps_scrub " << xi.last_purged_snaps_scrub
+	     << " dead_epoch " << xi.dead_epoch;
 }
 
 // ----------------------------------
@@ -3371,6 +3377,54 @@ void OSDMap::dump_erasure_code_profiles(
   f->close_section();
 }
 
+void OSDMap::dump_osds(Formatter *f) const
+{
+  f->open_array_section("osds");
+  for (int i=0; i<get_max_osd(); i++) {
+    if (exists(i)) {
+      dump_osd(i, f);
+    }
+  }
+  f->close_section();
+}
+
+void OSDMap::dump_osd(int id, Formatter *f) const
+{
+  ceph_assert(f != nullptr);
+  if (!exists(id)) {
+    return;
+  }
+
+  f->open_object_section("osd_info");
+  f->dump_int("osd", id);
+  f->dump_stream("uuid") << get_uuid(id);
+  f->dump_int("up", is_up(id));
+  f->dump_int("in", is_in(id));
+  f->dump_float("weight", get_weightf(id));
+  f->dump_float("primary_affinity", get_primary_affinityf(id));
+  get_info(id).dump(f);
+  f->dump_object("public_addrs", get_addrs(id));
+  f->dump_object("cluster_addrs", get_cluster_addrs(id));
+  f->dump_object("heartbeat_back_addrs", get_hb_back_addrs(id));
+  f->dump_object("heartbeat_front_addrs", get_hb_front_addrs(id));
+  // compat
+  f->dump_stream("public_addr") << get_addrs(id).get_legacy_str();
+  f->dump_stream("cluster_addr") << get_cluster_addrs(id).get_legacy_str();
+  f->dump_stream("heartbeat_back_addr")
+    << get_hb_back_addrs(id).get_legacy_str();
+  f->dump_stream("heartbeat_front_addr")
+    << get_hb_front_addrs(id).get_legacy_str();
+
+  set<string> st;
+  get_state(id, st);
+  f->open_array_section("state");
+  for (const auto &state : st)
+    f->dump_string("state", state);
+  f->close_section();
+
+  f->close_section();
+}
+
 void OSDMap::dump(Formatter *f) const
 {
   f->dump_int("epoch", get_epoch());
@@ -3416,39 +3470,7 @@ void OSDMap::dump(Formatter *f) const
   }
   f->close_section();
 
-  f->open_array_section("osds");
-  for (int i=0; i<get_max_osd(); i++)
-    if (exists(i)) {
-      f->open_object_section("osd_info");
-      f->dump_int("osd", i);
-      f->dump_stream("uuid") << get_uuid(i);
-      f->dump_int("up", is_up(i));
-      f->dump_int("in", is_in(i));
-      f->dump_float("weight", get_weightf(i));
-      f->dump_float("primary_affinity", get_primary_affinityf(i));
-      get_info(i).dump(f);
-      f->dump_object("public_addrs", get_addrs(i));
-      f->dump_object("cluster_addrs", get_cluster_addrs(i));
-      f->dump_object("heartbeat_back_addrs", get_hb_back_addrs(i));
-      f->dump_object("heartbeat_front_addrs", get_hb_front_addrs(i));
-      // compat
-      f->dump_stream("public_addr") << get_addrs(i).get_legacy_str();
-      f->dump_stream("cluster_addr") << get_cluster_addrs(i).get_legacy_str();
-      f->dump_stream("heartbeat_back_addr")
-	<< get_hb_back_addrs(i).get_legacy_str();
-      f->dump_stream("heartbeat_front_addr")
-	<< get_hb_front_addrs(i).get_legacy_str();
-
-      set<string> st;
-      get_state(i, st);
-      f->open_array_section("state");
-      for (const auto &state : st)
-	f->dump_string("state", state);
-      f->close_section();
-
-      f->close_section();
-    }
-  f->close_section();
+  dump_osds(f);
 
   f->open_array_section("osd_xinfo");
   for (int i=0; i<get_max_osd(); i++) {
@@ -3678,6 +3700,39 @@ void OSDMap::print_pools(ostream& out) const
   out << std::endl;
 }
 
+void OSDMap::print_osds(ostream& out) const
+{
+  for (int i=0; i<get_max_osd(); i++) {
+    if (exists(i)) {
+      print_osd(i, out);
+    }
+  }
+}
+void OSDMap::print_osd(int id, ostream& out) const
+{
+  if (!exists(id)) {
+    return;
+  }
+
+  out << "osd." << id;
+  out << (is_up(id) ? " up  ":" down");
+  out << (is_in(id) ? " in ":" out");
+  out << " weight " << get_weightf(id);
+  if (get_primary_affinity(id) != CEPH_OSD_DEFAULT_PRIMARY_AFFINITY) {
+    out << " primary_affinity " << get_primary_affinityf(id);
+  }
+  const osd_info_t& info(get_info(id));
+  out << " " << info;
+  out << " " << get_addrs(id) << " " << get_cluster_addrs(id);
+  set<string> st;
+  get_state(id, st);
+  out << " " << st;
+  if (!get_uuid(id).is_zero()) {
+    out << " " << get_uuid(id);
+  }
+  out << "\n";
+}
+
 void OSDMap::print(ostream& out) const
 {
   out << "epoch " << get_epoch() << "\n"
@@ -3707,25 +3762,7 @@ void OSDMap::print(ostream& out) const
   print_pools(out);
 
   out << "max_osd " << get_max_osd() << "\n";
-  for (int i=0; i<get_max_osd(); i++) {
-    if (exists(i)) {
-      out << "osd." << i;
-      out << (is_up(i) ? " up  ":" down");
-      out << (is_in(i) ? " in ":" out");
-      out << " weight " << get_weightf(i);
-      if (get_primary_affinity(i) != CEPH_OSD_DEFAULT_PRIMARY_AFFINITY)
-	out << " primary_affinity " << get_primary_affinityf(i);
-      const osd_info_t& info(get_info(i));
-      out << " " << info;
-      out << " " << get_addrs(i) << " " << get_cluster_addrs(i);
-      set<string> st;
-      get_state(i, st);
-      out << " " << st;
-      if (!get_uuid(i).is_zero())
-	out << " " << get_uuid(i);
-      out << "\n";
-    }
-  }
+  print_osds(out);
   out << std::endl;
 
   for (auto& p : pg_upmap) {

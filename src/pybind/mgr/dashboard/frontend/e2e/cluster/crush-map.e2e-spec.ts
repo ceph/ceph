@@ -1,11 +1,10 @@
 import { Helper } from '../helper.po';
-import { CrushMapPage } from './crush-map.po';
 
 describe('CRUSH map page', () => {
-  let page: CrushMapPage;
+  let crushmap: Helper['crushmap'];
 
   beforeAll(() => {
-    page = new CrushMapPage();
+    crushmap = new Helper().crushmap;
   });
 
   afterEach(() => {
@@ -14,11 +13,11 @@ describe('CRUSH map page', () => {
 
   describe('breadcrumb test', () => {
     beforeAll(() => {
-      page.navigateTo();
+      crushmap.navigateTo();
     });
 
     it('should open and show breadcrumb', () => {
-      expect(CrushMapPage.getBreadcrumbText()).toEqual('CRUSH map');
+      expect(crushmap.getBreadcrumbText()).toEqual('CRUSH map');
     });
   });
 });

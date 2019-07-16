@@ -11,10 +11,10 @@ import os
 import errno
 import tempfile
 import requests
-from OpenSSL import crypto, SSL
 
 from mgr_module import MgrModule, Option, CLIWriteCommand
 import orchestrator
+from mgr_util import verify_tls_files, ServerConfigException
 
 from .ansible_runner_svc import Client, PlayBookExecution, ExecutionStatusCode,\
                                 AnsibleRunnerServiceError, InventoryGroup,\
@@ -559,7 +559,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
         If no host provided the operation affects all the host in the OSDS role
 
 
-        :param drive_group: (orchestrator.DriveGroupSpec),
+        :param drive_group: (ceph.deployment.drive_group.DriveGroupSpec),
                             Drive group with the specification of drives to use
         :param all_hosts  : (List[str]),
                             List of hosts where the OSD's must be created
@@ -695,37 +695,57 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         return ARSChangeOperation(self.ar_client, self.log, operations)
 
-    def add_stateless_service(self, service_type, spec):
-        """ Add a stateless service in the cluster
+    def add_rgw(self, spec):
+        # type: (orchestrator.RGWSpec) -> PlaybookOperation
+        """ Add a RGW service in the cluster
 
-        : service_type: Kind of service (nfs, rgw, mds)
-        : spec        : an Orchestrator.StatelessServiceSpec object
+        : spec        : an Orchestrator.RGWSpec object
 
         : returns     : Completion object
         """
 
-        # Check service_type is supported
-        if service_type not in ["rgw"]:
-            raise orchestrator.OrchestratorError(
-                "{} service not supported".format(service_type))
 
         # Add the hosts to the inventory in the right group
-        hosts = spec.service_spec.hosts
+        hosts = spec.hosts
         if not hosts:
-            raise orchestrator.OrchestratorError("No hosts provided."\
-                "At least one destination host is needed to install the RGW "\
+            raise orchestrator.OrchestratorError("No hosts provided. "
+                "At least one destination host is needed to install the RGW "
                 "service")
-        InventoryGroup("{}s".format(service_type), self.ar_client).update(hosts)
+
+        def set_rgwspec_defaults(spec):
+            spec.rgw_multisite = spec.rgw_multisite if spec.rgw_multisite is not None else True
+            spec.rgw_zonemaster = spec.rgw_zonemaster if spec.rgw_zonemaster is not None else True
+            spec.rgw_zonesecondary = spec.rgw_zonesecondary \
+                if spec.rgw_zonesecondary is not None else False
+            spec.rgw_multisite_proto = spec.rgw_multisite_proto \
+                if spec.rgw_multisite_proto is not None else "http"
+            spec.rgw_frontend_port = spec.rgw_frontend_port \
+                if spec.rgw_frontend_port is not None else 8080
+
+            spec.rgw_zonegroup = spec.rgw_zonegroup if spec.rgw_zonegroup is not None else "Main"
+            spec.rgw_zone_user = spec.rgw_zone_user if spec.rgw_zone_user is not None else "zone.user"
+            spec.rgw_realm = spec.rgw_realm if spec.rgw_realm is not None else "RGW_Realm"
+
+            spec.system_access_key = spec.system_access_key \
+                if spec.system_access_key is not None else spec.genkey(20)
+            spec.system_secret_key = spec.system_secret_key \
+                if spec.system_secret_key is not None else spec.genkey(40)
+
+        set_rgwspec_defaults(spec)
+        InventoryGroup("rgws", self.ar_client).update(hosts)
 
         # Limit playbook execution to certain hosts
         limited = ",".join(hosts)
 
         # Add the settings for this service
-        extravars = vars(spec.service_spec)
+        extravars = {k:v for (k,v) in spec.__dict__.items() if k.startswith('rgw_')}
+        extravars['rgw_zone'] = spec.name
+        extravars['rgw_multisite_endpoint_addr'] = spec.rgw_multisite_endpoint_addr
+        extravars['rgw_multisite_endpoints_list'] = spec.rgw_multisite_endpoints_list
+        extravars['rgw_frontend_port'] = str(spec.rgw_frontend_port)
 
         # Group hosts by resource (used in rm ops)
-        if service_type == "rgw":
-            resource_group = "rgw_zone_{}".format(spec.service_spec.rgw_zone)
+        resource_group = "rgw_zone_{}".format(spec.name)
         InventoryGroup(resource_group, self.ar_client).update(hosts)
 
 
@@ -747,30 +767,21 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         return playbook_operation
 
-    def remove_stateless_service(self, service_type, id_resource):
-        """ Remove a stateles services providing <sv_id> resources
+    def remove_rgw(self, zone):
+        """ Remove a RGW service providing <zone>
 
-        :svc_type    : Kind of service (nfs, rgw, mds)
-        :id_resource : Id of the resource provided
-                            <zone name> if service is RGW
+        :zone : <zone name> of the RGW
                             ...
         : returns    : Completion object
         """
 
-        # Check service_type is supported
-        if service_type not in ["rgw"]:
-            raise orchestrator.OrchestratorError(
-                "{} service not supported".format(service_type))
 
         # Ansible Inventory group for the kind of service
-        group = "{}s".format(service_type)
+        group = "rgws"
 
         # get the list of hosts where to remove the service
         # (hosts in resource group)
-        if service_type == "rgw":
-            group_prefix = "rgw_zone_{}"
-
-        resource_group = group_prefix.format(id_resource)
+        resource_group = "rgw_zone_{}".format(zone)
 
         hosts_list = list(InventoryGroup(resource_group, self.ar_client))
         limited = ",".join(hosts_list)
@@ -798,8 +809,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
         playbook_operation.clean_hosts_on_success = clean_inventory
 
         # Execute the playbook
-        self.log.info("Removing service %s for resource %s", service_type,
-                      id_resource)
+        self.log.info("Removing service rgw for resource %s", zone)
         self._launch_operation(playbook_operation)
 
         return playbook_operation
@@ -821,9 +831,6 @@ class Module(MgrModule, orchestrator.Orchestrator):
         """Verify mandatory settings for the module and provide help to
            configure properly the orchestrator
         """
-
-        the_crt = None
-        the_key = None
 
         # Retrieve TLS content to use and check them
         # First try to get certiticate and key content for this manager instance
@@ -853,8 +860,10 @@ class Module(MgrModule, orchestrator.Orchestrator):
         self.client_cert_fname = generate_temp_file("crt", the_crt)
         self.client_key_fname = generate_temp_file("key", the_key)
 
-        self.status_message = verify_tls_files(self.client_cert_fname,
-                                               self.client_key_fname)
+        try:
+            verify_tls_files(self.client_cert_fname, self.client_key_fname)
+        except ServerConfigException as e:
+            self.status_message = str(e)
 
         if self.status_message:
             self.log.error(self.status_message)
@@ -985,51 +994,4 @@ def generate_temp_file(key, content):
 
     return fname
 
-def verify_tls_files(crt_file, key_file):
-    """Basic checks for TLS certificate and key files
 
-    :crt_file : Name of the certificate file
-    :key_file : name of the certificate public key file
-
-    :returns  :  String with error description
-    """
-
-    # Check we have files
-    if not crt_file or not key_file:
-        return "no certificate/key configured"
-
-    if not os.path.isfile(crt_file):
-        return "certificate {} does not exist".format(crt_file)
-
-    if not os.path.isfile(key_file):
-        return "Public key {} does not exist".format(key_file)
-
-    # Do some validations to the private key and certificate:
-    # - Check the type and format
-    # - Check the certificate expiration date
-    # - Check the consistency of the private key
-    # - Check that the private key and certificate match up
-    try:
-        with open(crt_file) as fcrt:
-            x509 = crypto.load_certificate(crypto.FILETYPE_PEM, fcrt.read())
-            if x509.has_expired():
-                return "Certificate {} has been expired".format(crt_file)
-    except (ValueError, crypto.Error) as ex:
-        return "Invalid certificate {}: {}".format(crt_file, str(ex))
-    try:
-        with open(key_file) as fkey:
-            pkey = crypto.load_privatekey(crypto.FILETYPE_PEM, fkey.read())
-            pkey.check()
-    except (ValueError, crypto.Error) as ex:
-        return "Invalid private key {}: {}".format(key_file, str(ex))
-    try:
-        context = SSL.Context(SSL.TLSv1_METHOD)
-        context.use_certificate_file(crt_file, crypto.FILETYPE_PEM)
-        context.use_privatekey_file(key_file, crypto.FILETYPE_PEM)
-        context.check_privatekey()
-    except crypto.Error as ex:
-        return "Private key {} and certificate {} do not match up: {}".format(
-                key_file, crt_file, str(ex))
-
-    # Everything OK
-    return ""

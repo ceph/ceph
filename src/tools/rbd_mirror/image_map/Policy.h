@@ -51,7 +51,7 @@ protected:
   typedef std::map<std::string, std::set<std::string> > InstanceToImageMap;
 
   bool is_dead_instance(const std::string instance_id) {
-    ceph_assert(m_map_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(m_map_lock));
     return m_dead_instances.find(instance_id) != m_dead_instances.end();
   }
 
@@ -89,7 +89,7 @@ private:
 
   librados::IoCtx &m_ioctx;
 
-  RWLock m_map_lock;        // protects m_map
+  ceph::shared_mutex m_map_lock;        // protects m_map
   InstanceToImageMap m_map; // instance_id -> global_id map
 
   ImageStates m_image_states;
@@ -97,7 +97,8 @@ private:
 
   bool m_initial_update = true;
 
-  void remove_instances(const RWLock& lock, const InstanceIds &instance_ids,
+  void remove_instances(const ceph::shared_mutex& lock,
+			const InstanceIds &instance_ids,
                         GlobalImageIds* global_image_ids);
 
   bool set_state(ImageState* image_state, StateTransition::State state,

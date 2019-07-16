@@ -448,14 +448,17 @@ class RgwClient(RestClient):
             raise e
 
     @RestClient.api_put('/{bucket_name}')
-    def create_bucket(self, bucket_name, zonegroup, placement_target, request=None):
+    def create_bucket(self, bucket_name, zonegroup=None, placement_target=None, request=None):
         logger.info("Creating bucket: %s, zonegroup: %s, placement_target: %s",
                     bucket_name, zonegroup, placement_target)
-        create_bucket_configuration = ET.Element('CreateBucketConfiguration')
-        location_constraint = ET.SubElement(create_bucket_configuration, 'LocationConstraint')
-        location_constraint.text = '{}:{}'.format(zonegroup, placement_target)
+        data = None
+        if zonegroup and placement_target:
+            create_bucket_configuration = ET.Element('CreateBucketConfiguration')
+            location_constraint = ET.SubElement(create_bucket_configuration, 'LocationConstraint')
+            location_constraint.text = '{}:{}'.format(zonegroup, placement_target)
+            data = ET.tostring(create_bucket_configuration, encoding='utf-8')
 
-        return request(data=ET.tostring(create_bucket_configuration, encoding='utf-8'))
+        return request(data=data)
 
     def get_placement_targets(self):  # type: () -> Dict[str, Any]
         zone = self._get_daemon_zone_info()

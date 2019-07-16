@@ -129,12 +129,12 @@ private:
     }
 
     bool is_leader() const {
-      Mutex::Locker locker(Parent::m_lock);
+      std::lock_guard locker{Parent::m_lock};
       return Parent::is_state_post_acquiring() || Parent::is_state_locked();
     }
 
     bool is_releasing_leader() const {
-      Mutex::Locker locker(Parent::m_lock);
+      std::lock_guard locker{Parent::m_lock};
       return Parent::is_state_pre_releasing();
     }
 
@@ -142,7 +142,7 @@ private:
     void post_acquire_lock_handler(int r, Context *on_finish) {
       if (r == 0) {
         // lock is owned at this point
-        Mutex::Locker locker(Parent::m_lock);
+	std::lock_guard locker{Parent::m_lock};
         Parent::set_state_post_acquiring();
       }
       watcher->handle_post_acquire_leader_lock(r, on_finish);
@@ -208,7 +208,7 @@ private:
   leader_watcher::Listener *m_listener;
 
   InstancesListener m_instances_listener;
-  mutable Mutex m_lock;
+  mutable ceph::mutex m_lock;
   uint64_t m_notifier_id;
   std::string m_instance_id;
   LeaderLock *m_leader_lock;
@@ -226,8 +226,8 @@ private:
 
   librbd::watcher::NotifyResponse m_heartbeat_response;
 
-  bool is_leader(Mutex &m_lock) const;
-  bool is_releasing_leader(Mutex &m_lock) const;
+  bool is_leader(ceph::mutex &m_lock) const;
+  bool is_releasing_leader(ceph::mutex &m_lock) const;
 
   void cancel_timer_task();
   void schedule_timer_task(const std::string &name,

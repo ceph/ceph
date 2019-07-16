@@ -626,10 +626,10 @@ void RGWRadosThread::stop()
 
 void *RGWRadosThread::Worker::entry() {
   uint64_t msec = processor->interval_msec();
-  utime_t interval = utime_t(msec / 1000, (msec % 1000) * 1000000);
+  auto interval = std::chrono::milliseconds(msec);
 
   do {
-    utime_t start = ceph_clock_now();
+    auto start = ceph::real_clock::now();
     int r = processor->process();
     if (r < 0) {
       dout(0) << "ERROR: processor->process() returned error r=" << r << dendl;
@@ -638,22 +638,19 @@ void *RGWRadosThread::Worker::entry() {
     if (processor->going_down())
       break;
 
-    utime_t end = ceph_clock_now();
-    end -= start;
+    auto end = ceph::real_clock::now() - start;
 
     uint64_t cur_msec = processor->interval_msec();
     if (cur_msec != msec) { /* was it reconfigured? */
       msec = cur_msec;
-      interval = utime_t(msec / 1000, (msec % 1000) * 1000000);
+      interval = std::chrono::milliseconds(msec);
     }
 
     if (cur_msec > 0) {
       if (interval <= end)
         continue; // next round
 
-      utime_t wait_time = interval;
-      wait_time -= end;
-
+      auto wait_time = interval - end;
       wait_interval(wait_time);
     } else {
       wait();
@@ -897,7 +894,7 @@ public:
 
 void RGWRados::wakeup_meta_sync_shards(set<int>& shard_ids)
 {
-  Mutex::Locker l(meta_sync_thread_lock);
+  std::lock_guard l{meta_sync_thread_lock};
   if (meta_sync_processor_thread) {
     meta_sync_processor_thread->wakeup_sync_shards(shard_ids);
   }
@@ -906,7 +903,7 @@ void RGWRados::wakeup_meta_sync_shards(set<int>& shard_ids)
 void RGWRados::wakeup_data_sync_shards(const string& source_zone, map<int, set<string> >& shard_ids)
 {
   ldout(ctx(), 20) << __func__ << ": source_zone=" << source_zone << ", shard_ids=" << shard_ids << dendl;
-  Mutex::Locker l(data_sync_thread_lock);
+  std::lock_guard l{data_sync_thread_lock};
   map<string, RGWDataSyncProcessorThread *>::iterator iter = data_sync_processor_threads.find(source_zone);
   if (iter == data_sync_processor_threads.end()) {
     ldout(ctx(), 10) << __func__ << ": couldn't find sync thread for zone " << source_zone << ", skipping async data sync processing" << dendl;
@@ -920,7 +917,7 @@ void RGWRados::wakeup_data_sync_shards(const string& source_zone, map<int, set<s
 
 RGWMetaSyncStatusManager* RGWRados::get_meta_sync_manager()
 {
-  Mutex::Locker l(meta_sync_thread_lock);
+  std::lock_guard l{meta_sync_thread_lock};
   if (meta_sync_processor_thread) {
     return meta_sync_processor_thread->get_manager();
   }
@@ -929,7 +926,7 @@ RGWMetaSyncStatusManager* RGWRados::get_meta_sync_manager()
 
 RGWDataSyncStatusManager* RGWRados::get_data_sync_manager(const std::string& source_zone)
 {
-  Mutex::Locker l(data_sync_thread_lock);
+  std::lock_guard l{data_sync_thread_lock};
   auto thread = data_sync_processor_threads.find(source_zone);
   if (thread == data_sync_processor_threads.end()) {
     return nullptr;
@@ -1023,7 +1020,7 @@ int RGWRados::get_max_chunk_size(const rgw_placement_rule& placement_rule, const
 class RGWIndexCompletionManager;
 
 struct complete_op_data {
-  Mutex lock{"complete_op_data"};
+  ceph::mutex lock = ceph::make_mutex("complete_op_data");
   AioCompletion *rados_completion{nullptr};
   int manager_shard_id{-1};
   RGWIndexCompletionManager *manager{nullptr};
@@ -1041,7 +1038,7 @@ struct complete_op_data {
   bool stopped{false};
 
   void stop() {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     stopped = true;
   }
 };
@@ -1055,16 +1052,17 @@ class RGWIndexCompletionThread : public RGWRadosThread {
 
   list<complete_op_data *> completions;
 
-  Mutex completions_lock;
+  ceph::mutex completions_lock =
+    ceph::make_mutex("RGWIndexCompletionThread::completions_lock");
 public:
   RGWIndexCompletionThread(RGWRados *_store)
-    : RGWRadosThread(_store, "index-complete"), store(_store), completions_lock("RGWIndexCompletionThread::completions_lock") {}
+    : RGWRadosThread(_store, "index-complete"), store(_store) {}
 
   int process() override;
 
   void add_completion(complete_op_data *completion) {
     {
-      Mutex::Locker l(completions_lock);
+      std::lock_guard l{completions_lock};
       completions.push_back(completion);
     }
 
@@ -1077,7 +1075,7 @@ int RGWIndexCompletionThread::process()
   list<complete_op_data *> comps;
 
   {
-    Mutex::Locker l(completions_lock);
+    std::lock_guard l{completions_lock};
     completions.swap(comps);
   }
 
@@ -1123,7 +1121,7 @@ int RGWIndexCompletionThread::process()
 
 class RGWIndexCompletionManager {
   RGWRados *store{nullptr};
-  vector<Mutex *> locks;
+  ceph::containers::tiny_vector<ceph::mutex> locks;
   vector<set<complete_op_data *> > completions;
 
   RGWIndexCompletionThread *completion_thread{nullptr};
@@ -1134,23 +1132,20 @@ class RGWIndexCompletionManager {
 
 
 public:
-  RGWIndexCompletionManager(RGWRados *_store) : store(_store) {
+  RGWIndexCompletionManager(RGWRados *_store) :
+    store(_store),
+    locks{ceph::make_lock_container<ceph::mutex>(
+      store->ctx()->_conf->rgw_thread_pool_size,
+      [](const size_t i) {
+        return ceph::make_mutex("RGWIndexCompletionManager::lock::" +
+				std::to_string(i));
+      })}
+  {
     num_shards = store->ctx()->_conf->rgw_thread_pool_size;
-
-    for (int i = 0; i < num_shards; i++) {
-      char buf[64];
-      snprintf(buf, sizeof(buf), "RGWIndexCompletionManager::lock::%d", i);
-      locks.push_back(new Mutex(buf));
-    }
-
     completions.resize(num_shards);
   }
   ~RGWIndexCompletionManager() {
     stop();
-
-    for (auto l : locks) {
-      delete l;
-    }
   }
 
   int next_shard() {
@@ -1186,7 +1181,7 @@ public:
     }
 
     for (int i = 0; i < num_shards; ++i) {
-      Mutex::Locker l(*locks[i]);
+      std::lock_guard l{locks[i]};
       for (auto c : completions[i]) {
         c->stop();
       }
@@ -1198,14 +1193,14 @@ public:
 static void obj_complete_cb(completion_t cb, void *arg)
 {
   complete_op_data *completion = (complete_op_data *)arg;
-  completion->lock.Lock();
+  completion->lock.lock();
   if (completion->stopped) {
-    completion->lock.Unlock(); /* can drop lock, no one else is referencing us */
+    completion->lock.unlock(); /* can drop lock, no one else is referencing us */
     delete completion;
     return;
   }
   bool need_delete = completion->manager->handle_completion(cb, completion);
-  completion->lock.Unlock();
+  completion->lock.unlock();
   if (need_delete) {
     delete completion;
   }
@@ -1253,7 +1248,7 @@ void RGWIndexCompletionManager::create_completion(const rgw_obj& obj,
 
   entry->rados_completion = librados::Rados::aio_create_completion(entry, NULL, obj_complete_cb);
 
-  Mutex::Locker l(*locks[shard_id]);
+  std::lock_guard l{locks[shard_id]};
   completions[shard_id].insert(entry);
 }
 
@@ -1261,7 +1256,7 @@ bool RGWIndexCompletionManager::handle_completion(completion_t cb, complete_op_d
 {
   int shard_id = arg->manager_shard_id;
   {
-    Mutex::Locker l(*locks[shard_id]);
+    std::lock_guard l{locks[shard_id]};
 
     auto& comps = completions[shard_id];
 
@@ -1285,10 +1280,10 @@ void RGWRados::finalize()
 {
   cct->get_admin_socket()->unregister_commands(this);
   if (run_sync_thread) {
-    Mutex::Locker l(meta_sync_thread_lock);
+    std::lock_guard l{meta_sync_thread_lock};
     meta_sync_processor_thread->stop();
 
-    Mutex::Locker dl(data_sync_thread_lock);
+    std::lock_guard dl{data_sync_thread_lock};
     for (auto iter : data_sync_processor_threads) {
       RGWDataSyncProcessorThread *thread = iter.second;
       thread->stop();
@@ -1303,7 +1298,7 @@ void RGWRados::finalize()
   if (run_sync_thread) {
     delete meta_sync_processor_thread;
     meta_sync_processor_thread = NULL;
-    Mutex::Locker dl(data_sync_thread_lock);
+    std::lock_guard dl{data_sync_thread_lock};
     for (auto iter : data_sync_processor_threads) {
       RGWDataSyncProcessorThread *thread = iter.second;
       delete thread;
@@ -1540,7 +1535,7 @@ int RGWRados::init_complete()
                       << pt.second.name << " present in zonegroup" << dendl;
       }
     }
-    Mutex::Locker l(meta_sync_thread_lock);
+    std::lock_guard l{meta_sync_thread_lock};
     meta_sync_processor_thread = new RGWMetaSyncProcessorThread(this, async_rados);
     ret = meta_sync_processor_thread->init();
     if (ret < 0) {
@@ -1561,7 +1556,7 @@ int RGWRados::init_complete()
     }
     data_log->set_observer(&*bucket_trim);
 
-    Mutex::Locker dl(data_sync_thread_lock);
+    std::lock_guard dl{data_sync_thread_lock};
     for (auto source_zone : svc.zone->get_data_sync_source_zones()) {
       ldout(cct, 5) << "starting data sync thread for zone " << source_zone->name << dendl;
       auto *thread = new RGWDataSyncProcessorThread(this, async_rados, source_zone);
@@ -2378,6 +2373,15 @@ int RGWRados::Bucket::update_bucket_id(const string& new_bucket_id)
 }
 
 
+static inline std::string after_delim(std::string_view delim)
+{
+  // assert: ! delim.empty()
+  std::string result{delim.data(), delim.length()};
+  result += char(255);
+  return result;
+}
+
+
 /**
  * Get ordered listing of the objects in a bucket.
  *
@@ -2395,20 +2399,11 @@ int RGWRados::Bucket::update_bucket_id(const string& new_bucket_id)
  * is_truncated: if number of objects in the bucket is bigger than
  * max, then truncated.
  */
-static inline std::string after_delim(std::string_view delim)
-{
-  // assert: ! delim.empty()
-  std::string result{delim.data(), delim.length()};
-  result += char(255);
-  return result;
-}
-
-int RGWRados::Bucket::List::list_objects_ordered(
-  int64_t max,
-  vector<rgw_bucket_dir_entry> *result,
-  map<string, bool> *common_prefixes,
-  bool *is_truncated,
-  optional_yield y)
+int RGWRados::Bucket::List::list_objects_ordered(int64_t max_p,
+						 vector<rgw_bucket_dir_entry> *result,
+						 map<string, bool> *common_prefixes,
+						 bool *is_truncated,
+						 optional_yield y)
 {
   RGWRados *store = target->get_store();
   CephContext *cct = store->ctx();
@@ -2416,7 +2411,9 @@ int RGWRados::Bucket::List::list_objects_ordered(
 
   int count = 0;
   bool truncated = true;
-  int read_ahead = std::max(cct->_conf->rgw_list_bucket_min_readahead,max);
+  const int64_t max = // protect against memory issues and non-positive vals
+    std::min(bucket_list_objects_absolute_max, std::max(int64_t(0), max_p));
+  int read_ahead = std::max(cct->_conf->rgw_list_bucket_min_readahead, max);
 
   result->clear();
 
@@ -2457,7 +2454,9 @@ int RGWRados::Bucket::List::list_objects_ordered(
 		     << "[" << cur_marker.instance << "]"
 		     << dendl;
     }
-    std::map<string, rgw_bucket_dir_entry> ent_map;
+
+    ent_map_t ent_map;
+    ent_map.reserve(read_ahead);
     int r = store->cls_bucket_list_ordered(target->get_bucket_info(),
 					   shard_id,
 					   cur_marker,
@@ -2591,7 +2590,7 @@ done:
  * is_truncated: if number of objects in the bucket is bigger than max, then
  *               truncated.
  */
-int RGWRados::Bucket::List::list_objects_unordered(int64_t max,
+int RGWRados::Bucket::List::list_objects_unordered(int64_t max_p,
 						   vector<rgw_bucket_dir_entry> *result,
 						   map<string, bool> *common_prefixes,
 						   bool *is_truncated,
@@ -2603,6 +2602,9 @@ int RGWRados::Bucket::List::list_objects_unordered(int64_t max,
 
   int count = 0;
   bool truncated = true;
+
+  const int64_t max = // protect against memory issues and non-positive vals
+    std::min(bucket_list_objects_absolute_max, std::max(int64_t(1), max_p));
 
   // read a few extra in each call to cls_bucket_list_unordered in
   // case some are filtered out due to namespace matching, versioning,
@@ -6351,6 +6353,9 @@ int RGWRados::Object::Read::prepare(optional_yield y)
   if (r < 0) {
     return r;
   }
+  if (params.target_obj) {
+    *params.target_obj = state.obj;
+  }
   if (params.attrs) {
     *params.attrs = astate->attrset;
     if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
@@ -7134,8 +7139,8 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
   // new_bucket_id and returns 0, otherwise it returns a negative
   // error code
   auto fetch_new_bucket_id =
-    [this, bucket_info](const std::string& log_tag,
-			std::string* new_bucket_id) -> int {
+    [this, &bucket_info](const std::string& log_tag,
+			 std::string* new_bucket_id) -> int {
       RGWBucketInfo fresh_bucket_info = bucket_info;
       int ret = try_refresh_bucket_info(fresh_bucket_info, nullptr);
       if (ret < 0) {
@@ -8026,15 +8031,15 @@ class RGWGetBucketStatsContext : public RGWGetDirHeader_CB {
   map<RGWObjCategory, RGWStorageStats> stats;
   int ret_code;
   bool should_cb;
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("RGWGetBucketStatsContext");
 
 public:
   RGWGetBucketStatsContext(RGWGetBucketStats_CB *_cb, uint32_t _pendings)
-    : cb(_cb), pendings(_pendings), stats(), ret_code(0), should_cb(true),
-    lock("RGWGetBucketStatsContext") {}
+    : cb(_cb), pendings(_pendings), stats(), ret_code(0), should_cb(true)
+  {}
 
   void handle_response(int r, rgw_bucket_dir_header& header) override {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     if (should_cb) {
       if ( r >= 0) {
         accumulate_raw_stats(header, stats);
@@ -8054,7 +8059,7 @@ public:
   }
 
   void unset_cb() {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     should_cb = false;
   }
 };
@@ -9115,7 +9120,7 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
 				      const string& prefix,
 				      uint32_t num_entries,
 				      bool list_versions,
-				      map<string, rgw_bucket_dir_entry>& m,
+				      ent_map_t& m,
 				      bool *is_truncated,
 				      rgw_obj_index_key *last_entry,
                                       optional_yield y,
@@ -9143,8 +9148,8 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
     return r;
 
   // Create a list of iterators that are used to iterate each shard
-  vector<map<string, struct rgw_bucket_dir_entry>::iterator> vcurrents;
-  vector<map<string, struct rgw_bucket_dir_entry>::iterator> vends;
+  vector<RGWRados::ent_map_t::iterator> vcurrents;
+  vector<RGWRados::ent_map_t::iterator> vends;
   vector<string> vnames;
   vcurrents.reserve(list_results.size());
   vends.reserve(list_results.size());
@@ -10047,7 +10052,7 @@ uint64_t RGWRados::instance_id()
 
 uint64_t RGWRados::next_bucket_id()
 {
-  Mutex::Locker l(bucket_id_lock);
+  std::lock_guard l{bucket_id_lock};
   return ++max_bucket_id;
 }
 

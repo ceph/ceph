@@ -13,6 +13,9 @@ tasks:
       - ceph osd require-osd-release nautilus
       - ceph osd set-require-min-compat-client nautilus
 - print: "**** done ceph"
+- rgw:
+   - client.0
+- print: "**** done => started rgw client.0"
 overrides:
   ceph:
     conf:

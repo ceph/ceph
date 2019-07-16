@@ -24,7 +24,7 @@
 #include "common/RefCountedObj.h"
 #include "common/config.h"
 #include "common/debug.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "include/ceph_assert.h" // Because intusive_ptr clobbers our assert...
 #include "include/buffer.h"
 #include "include/types.h"
@@ -43,7 +43,7 @@ class Interceptor;
 #endif
 
 struct Connection : public RefCountedObject {
-  mutable Mutex lock;
+  mutable ceph::mutex lock = ceph::make_mutex("Connection::lock");
   Messenger *msgr;
   RefCountedPtr priv;
   int peer_type;
@@ -78,7 +78,6 @@ public:
     // we are managed exclusively by ConnectionRef; make it so you can
     //   ConnectionRef foo = new Connection;
     : RefCountedObject(cct, 0),
-      lock("Connection::lock"),
       msgr(m),
       peer_type(-1),
       features(0),
@@ -92,12 +91,12 @@ public:
   }
 
   void set_priv(const RefCountedPtr& o) {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     priv = o;
   }
 
   RefCountedPtr get_priv() {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     return priv;
   }
 
@@ -221,7 +220,7 @@ public:
 
   void post_rx_buffer(ceph_tid_t tid, ceph::buffer::list& bl) {
 #if 0
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     ++rx_buffers_version;
     rx_buffers[tid] = pair<bufferlist,int>(bl, rx_buffers_version);
 #endif
@@ -229,25 +228,25 @@ public:
 
   void revoke_rx_buffer(ceph_tid_t tid) {
 #if 0
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     rx_buffers.erase(tid);
 #endif
   }
 
   utime_t get_last_keepalive() const {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     return last_keepalive;
   }
   void set_last_keepalive(utime_t t) {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     last_keepalive = t;
   }
   utime_t get_last_keepalive_ack() const {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     return last_keepalive_ack;
   }
   void set_last_keepalive_ack(utime_t t) {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     last_keepalive_ack = t;
   }
 

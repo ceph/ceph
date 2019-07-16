@@ -28,7 +28,7 @@ private:
   RGWSI_RADOS *rados_svc{nullptr};
   RGWSI_Finisher *finisher_svc{nullptr};
 
-  RWLock watchers_lock{"watchers_lock"};
+  ceph::shared_mutex watchers_lock = ceph::make_shared_mutex("watchers_lock");
   rgw_pool control_pool;
 
   int num_watchers{0};

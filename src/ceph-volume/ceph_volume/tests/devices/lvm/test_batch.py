@@ -1,3 +1,4 @@
+import pytest
 from ceph_volume.devices.lvm import batch
 
 
@@ -54,6 +55,16 @@ class TestBatch(object):
         b = batch.Batch([])
         result = b.get_devices().strip()
         assert result == '* /dev/vdf                  20.00 GB   rotational'
+
+    def test_disjoint_device_lists(self, factory):
+        device1 = factory(used_by_ceph=False, available=True, abspath="/dev/sda")
+        device2 = factory(used_by_ceph=False, available=True, abspath="/dev/sdb")
+        b = batch.Batch([])
+        b.args.devices = [device1, device2]
+        b.args.db_devices = [device2]
+        b._filter_devices()
+        with pytest.raises(Exception):
+            b._ensure_disjoint_device_lists()
 
 
 class TestFilterDevices(object):

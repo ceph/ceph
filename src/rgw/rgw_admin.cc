@@ -4989,7 +4989,7 @@ int main(int argc, const char **argv)
   // RGWUser to use for user operations
   RGWUser user;
   int ret = 0;
-  if (!user_id.empty() || !subuser.empty()) {
+  if (!(user_id.empty() && access_key.empty()) || !subuser.empty()) {
     ret = user.init(store, user_op);
     if (ret < 0) {
       cerr << "user.init failed: " << cpp_strerror(-ret) << std::endl;
@@ -5012,8 +5012,8 @@ int main(int argc, const char **argv)
 
   switch (opt_cmd) {
   case OPT_USER_INFO:
-    if (user_id.empty()) {
-      cerr << "ERROR: uid not specified" << std::endl;
+    if (user_id.empty() && access_key.empty()) {
+      cerr << "ERROR: --uid or --access-key required" << std::endl;
       return EINVAL;
     }
     break;
@@ -5943,7 +5943,8 @@ next:
 
     formatter->open_array_section("entries");
 
-    for (int i = 0; i < max_shards; i++) {
+    int i = (specified_shard_id ? shard_id : 0);
+    for (; i < max_shards; i++) {
       RGWRados::BucketShard bs(store);
       int shard_id = (bucket_info.num_shards > 0  ? i : -1);
       int ret = bs.init(bucket, shard_id, nullptr /* no RGWBucketInfo */);
@@ -5971,6 +5972,9 @@ next:
         formatter->flush(cout);
       } while (is_truncated);
       formatter->flush(cout);
+
+      if (specified_shard_id)
+        break;
     }
     formatter->close_section();
     formatter->flush(cout);
@@ -6178,7 +6182,7 @@ next:
     formatter->dump_string("bucket", bucket_name);
     formatter->open_array_section("objects");
     while (is_truncated) {
-      map<string, rgw_bucket_dir_entry> result;
+      RGWRados::ent_map_t result;
       int r =
 	store->cls_bucket_list_ordered(bucket_info, RGW_NO_SHARD, marker,
 				       prefix, 1000, true,
@@ -6193,8 +6197,7 @@ next:
       if (r == -ENOENT)
         break;
 
-      map<string, rgw_bucket_dir_entry>::iterator iter;
-      for (iter = result.begin(); iter != result.end(); ++iter) {
+      for (auto iter = result.begin(); iter != result.end(); ++iter) {
         rgw_obj_key key = iter->second.key;
         rgw_bucket_dir_entry& entry = iter->second;
 

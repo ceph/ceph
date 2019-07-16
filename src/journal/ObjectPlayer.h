@@ -7,8 +7,7 @@
 #include "include/Context.h"
 #include "include/interval_set.h"
 #include "include/rados/librados.hpp"
-#include "common/Cond.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/RefCountedObj.h"
 #include "journal/Entry.h"
 #include <list>
@@ -37,7 +36,7 @@ public:
   };
 
   ObjectPlayer(librados::IoCtx &ioctx, const std::string &object_oid_prefix,
-               uint64_t object_num, SafeTimer &timer, Mutex &timer_lock,
+               uint64_t object_num, SafeTimer &timer, ceph::mutex &timer_lock,
                uint8_t order, uint64_t max_fetch_bytes);
   ~ObjectPlayer() override;
 
@@ -55,16 +54,16 @@ public:
   void front(Entry *entry) const;
   void pop_front();
   inline bool empty() const {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     return m_entries.empty();
   }
 
   inline void get_entries(Entries *entries) {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     *entries = m_entries;
   }
   inline void get_invalid_ranges(InvalidRanges *invalid_ranges) {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     *invalid_ranges = m_invalid_ranges;
   }
 
@@ -79,7 +78,7 @@ public:
   }
 
   inline void set_max_fetch_bytes(uint64_t max_fetch_bytes) {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     m_max_fetch_bytes = max_fetch_bytes;
   }
 
@@ -108,7 +107,7 @@ private:
   CephContext *m_cct;
 
   SafeTimer &m_timer;
-  Mutex &m_timer_lock;
+  ceph::mutex &m_timer_lock;
 
   uint8_t m_order;
   uint64_t m_max_fetch_bytes;
@@ -116,7 +115,7 @@ private:
   double m_watch_interval;
   Context *m_watch_task;
 
-  mutable Mutex m_lock;
+  mutable ceph::mutex m_lock;
   bool m_fetch_in_progress;
   bufferlist m_read_bl;
   uint32_t m_read_off = 0;

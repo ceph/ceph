@@ -41,9 +41,14 @@ install(TARGETS
 option(WITH_CEPHFS_SHELL "install cephfs-shell" OFF)
 if(WITH_CEPHFS_SHELL)
   if(NOT WITH_PYTHON3)
-    message(SEND_ERROR "Please enable WITH_PYTHON3 for cephfs-shell")
+    message(WARNING "Please enable WITH_PYTHON3 for cephfs-shell")
+  else()
+    include(Distutils)
+    distutils_install_module(cephfs-shell
+      PYTHON_VERSION 3)
   endif()
-  include(Distutils)
-  distutils_install_module(cephfs-shell
-    PYTHON_VERSION 3)
+  if(WITH_TESTS)
+    include(AddCephTest)
+    add_tox_test(cephfs-shell)
+  endif()
 endif()

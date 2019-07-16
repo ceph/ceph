@@ -20,7 +20,6 @@
 #include "auth/Crypto.h"
 #include "client/Client.h"
 #include "librados/RadosClient.h"
-#include "common/Mutex.h"
 #include "common/ceph_argparse.h"
 #include "common/common_init.h"
 #include "common/config.h"
@@ -362,7 +361,7 @@ extern "C" const char *ceph_version(int *pmajor, int *pminor, int *ppatch)
     *pminor = (n >= 2) ? minor : 0;
   if (ppatch)
     *ppatch = (n >= 3) ? patch : 0;
-  return VERSION;
+  return PROJECT_VERSION;
 }
 
 extern "C" int ceph_create_with_context(struct ceph_mount_info **cmount, CephContext *cct)

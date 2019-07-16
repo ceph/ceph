@@ -23,7 +23,8 @@ class SimplePolicyMessenger : public Messenger
 {
 private:
   /// lock protecting policy
-  Mutex policy_lock;
+  ceph::mutex policy_lock =
+    ceph::make_mutex("SimplePolicyMessenger::policy_lock");
   // entity_name_t::type -> Policy
   ceph::net::PolicySet<Throttle> policy_set;
 
@@ -31,8 +32,7 @@ public:
 
   SimplePolicyMessenger(CephContext *cct, entity_name_t name,
 			string mname, uint64_t _nonce)
-    : Messenger(cct, name),
-      policy_lock("SimplePolicyMessenger::policy_lock")
+    : Messenger(cct, name)
     {
     }
 
@@ -43,12 +43,12 @@ public:
    * @return A const Policy reference.
    */
   Policy get_policy(int t) override {
-    Mutex::Locker l(policy_lock);
+    std::lock_guard l{policy_lock};
     return policy_set.get(t);
   }
 
   Policy get_default_policy() override {
-    Mutex::Locker l(policy_lock);
+    std::lock_guard l{policy_lock};
     return policy_set.get_default();
   }
 
@@ -61,7 +61,7 @@ public:
    * @param p The Policy to apply.
    */
   void set_default_policy(Policy p) override {
-    Mutex::Locker l(policy_lock);
+    std::lock_guard l{policy_lock};
     policy_set.set_default(p);
   }
   /**
@@ -73,7 +73,7 @@ public:
    * @param p The policy to apply.
    */
   void set_policy(int type, Policy p) override {
-    Mutex::Locker l(policy_lock);
+    std::lock_guard l{policy_lock};
     policy_set.set(type, p);
   }
 
@@ -91,7 +91,7 @@ public:
   void set_policy_throttlers(int type,
 			     Throttle* byte_throttle,
 			     Throttle* msg_throttle) override {
-    Mutex::Locker l(policy_lock);
+    std::lock_guard l{policy_lock};
     policy_set.set_throttlers(type, byte_throttle, msg_throttle);
   }
 

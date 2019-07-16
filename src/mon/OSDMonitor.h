@@ -256,7 +256,8 @@ public:
     OSDMap::Incremental& pending_inc;
     // lock to protect pending_inc form changing
     // when checking is done
-    Mutex pending_inc_lock = {"CleanUpmapJob::pending_inc_lock"};
+    ceph::mutex pending_inc_lock =
+      ceph::make_mutex("CleanUpmapJob::pending_inc_lock");
 
     CleanUpmapJob(CephContext *cct, const OSDMap& om, OSDMap::Incremental& pi)
       : ParallelPGMapper::Job(&om),
@@ -340,7 +341,8 @@ private:
   void check_osdmap_subs();
   void share_map_with_random_osd();
 
-  Mutex prime_pg_temp_lock = {"OSDMonitor::prime_pg_temp_lock"};
+  ceph::mutex prime_pg_temp_lock =
+    ceph::make_mutex("OSDMonitor::prime_pg_temp_lock");
   struct PrimeTempJob : public ParallelPGMapper::Job {
     OSDMonitor *osdmon;
     PrimeTempJob(const OSDMap& om, OSDMonitor *m)
@@ -402,6 +404,9 @@ private:
   bool prepare_mark_me_down(MonOpRequestRef op);
   void process_failures();
   void take_all_failures(list<MonOpRequestRef>& ls);
+
+  bool preprocess_mark_me_dead(MonOpRequestRef op);
+  bool prepare_mark_me_dead(MonOpRequestRef op);
 
   bool preprocess_full(MonOpRequestRef op);
   bool prepare_full(MonOpRequestRef op);
@@ -748,6 +753,8 @@ public:
   void do_application_enable(int64_t pool_id, const std::string &app_name,
 			     const std::string &app_key="",
 			     const std::string &app_value="");
+  void do_set_pool_opt(int64_t pool_id, pool_opts_t::key_t opt,
+		       pool_opts_t::value_t);
 
   void add_flag(int flag) {
     if (!(osdmap.flags & flag)) {

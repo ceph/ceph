@@ -52,7 +52,6 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
   log_client(g_ceph_context, client_messenger.get(), &monc.monmap, LogClient::NO_FLAGS),
   clog(log_client.create_channel(CLOG_CHANNEL_CLUSTER)),
   audit_clog(log_client.create_channel(CLOG_CHANNEL_AUDIT)),
-  lock("MgrStandby::lock"),
   finisher(g_ceph_context, "MgrStandby", "mgrsb-fin"),
   timer(g_ceph_context, lock),
   py_module_registry(clog),
@@ -190,8 +189,8 @@ int MgrStandby::init()
 
 void MgrStandby::send_beacon()
 {
-  ceph_assert(lock.is_locked_by_me());
-  dout(4) << state_str() << dendl;
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
+  dout(20) << state_str() << dendl;
 
   std::list<PyModuleRef> modules = py_module_registry.get_modules();
 
@@ -432,7 +431,7 @@ void MgrStandby::handle_mgr_map(ref_t<MMgrMap> mmap)
 bool MgrStandby::ms_dispatch2(const ref_t<Message>& m)
 {
   std::lock_guard l(lock);
-  dout(4) << state_str() << " " << *m << dendl;
+  dout(10) << state_str() << " " << *m << dendl;
 
   if (m->get_type() == MSG_MGR_MAP) {
     handle_mgr_map(ref_cast<MMgrMap>(m));
@@ -440,9 +439,9 @@ bool MgrStandby::ms_dispatch2(const ref_t<Message>& m)
   bool handled = false;
   if (active_mgr) {
     auto am = active_mgr;
-    lock.Unlock();
+    lock.unlock();
     handled = am->ms_dispatch2(m);
-    lock.Lock();
+    lock.lock();
   }
   if (m->get_type() == MSG_MGR_MAP) {
     // let this pass through for mgrc

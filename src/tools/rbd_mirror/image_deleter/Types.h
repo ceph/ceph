@@ -30,7 +30,7 @@ struct TrashListener {
   }
 
   virtual void handle_trash_image(const std::string& image_id,
-                                  const utime_t& deferment_end_time) = 0;
+    const ceph::real_clock::time_point& deferment_end_time) = 0;
 
 };
 

@@ -8,7 +8,6 @@
 #include "include/buffer.h"
 #include "include/rados/librados.hpp"
 #include "include/rbd/librbd.hpp"
-#include "common/Mutex.h"
 #include "librbd/journal/TypeTraits.h"
 #include <string>
 
