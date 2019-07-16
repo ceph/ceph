@@ -108,8 +108,9 @@ class Module(MgrModule):
     def validate_crash_metadata(inbuf):
         # raise any exceptions to caller
         metadata = json.loads(inbuf)
-        if 'crash_id' not in metadata:
-            raise AttributeError("missing 'crash_id' field")
+        for f in ['crash_id', 'timestamp']:
+            if f not in metadata:
+                raise AttributeError("missing '%s' field" % (f))
         return metadata
 
     @staticmethod
