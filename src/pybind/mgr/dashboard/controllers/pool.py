@@ -44,7 +44,8 @@ class Pool(RESTController):
         res['pool_name'] = pool['pool_name']
         return res
 
-    def _pool_list(self, attrs=None, stats=False):
+    @classmethod
+    def _pool_list(cls, attrs=None, stats=False):
         if attrs:
             attrs = attrs.split(',')
 
@@ -53,14 +54,15 @@ class Pool(RESTController):
         else:
             pools = CephService.get_pool_list()
 
-        return [self._serialize_pool(pool, attrs) for pool in pools]
+        return [cls._serialize_pool(pool, attrs) for pool in pools]
 
     def list(self, attrs=None, stats=False):
         return self._pool_list(attrs, stats)
 
-    def _get(self, pool_name, attrs=None, stats=False):
+    @classmethod
+    def _get(cls, pool_name, attrs=None, stats=False):
         # type: (str, str, bool) -> dict
-        pools = self._pool_list(attrs, stats)
+        pools = cls._pool_list(attrs, stats)
         pool = [pool for pool in pools if pool['pool_name'] == pool_name]
         if not pool:
             raise cherrypy.NotFound('No such pool')
@@ -143,17 +145,19 @@ class Pool(RESTController):
                 reset_arg(arg, '0')
             reset_arg('compression_algorithm', 'unset')
 
-    def _wait_for_pgs(self, pool_name):
+    @classmethod
+    def _wait_for_pgs(cls, pool_name):
         """
         Keep the task waiting for until all pg changes are complete
         :param pool_name: The name of the pool.
         :type pool_name: string
         """
-        current_pool = self._get(pool_name)
+        current_pool = cls._get(pool_name)
         initial_pgs = int(current_pool['pg_placement_num']) + int(current_pool['pg_num'])
-        self._pg_wait_loop(current_pool, initial_pgs)
+        cls._pg_wait_loop(current_pool, initial_pgs)
 
-    def _pg_wait_loop(self, pool, initial_pgs):
+    @classmethod
+    def _pg_wait_loop(cls, pool, initial_pgs):
         """
         Compares if all pg changes are completed, if not it will call itself
         until all changes are completed.
@@ -171,7 +175,7 @@ class Pool(RESTController):
                 percentage = int(round(diff / float(max_diff) * 100))
                 TaskManager.current_task().set_progress(percentage)
                 time.sleep(4)
-                self._pg_wait_loop(self._get(pool['pool_name']), initial_pgs)
+                cls._pg_wait_loop(cls._get(pool['pool_name']), initial_pgs)
 
     @RESTController.Resource()
     @ReadPermission
