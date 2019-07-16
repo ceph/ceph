@@ -12,6 +12,7 @@
  *
  */
 
+#include <iomanip>
 #include <string>
 
 #include "common/ceph_argparse.h"
@@ -25,45 +26,45 @@ using std::string;
 static void usage()
 {
   // TODO: add generic_usage once cerr/derr issues are resolved
-  cerr << "Ceph configuration query tool\n\
-\n\
-USAGE\n\
-ceph-conf <flags> <action>\n\
-\n\
-ACTIONS\n\
-  -L|--list-all-sections          List all sections\n\
-  -l|--list-sections <prefix>     List sections with the given prefix\n\
-  --filter-key <key>              Filter section list to only include sections\n\
-                                  with given key defined.\n\
-  --filter-key-value <key>=<val>  Filter section list to only include sections\n\
-                                  with given key/value pair.\n\
-  --lookup <key>                  Print a configuration setting to stdout.\n\
-                                  Returns 0 (success) if the configuration setting is\n\
-                                  found; 1 otherwise.\n\
-  -r|--resolve-search             search for the first file that exists and\n\
-                                  can be opened in the resulted comma\n\
-                                  delimited search list.\n\
-  -D|--dump-all                   dump all variables.\n\
-\n\
-FLAGS\n\
-  --name name                     Set type.id\n\
-  [-s <section>]                  Add to list of sections to search\n\
-  [--format plain|json|json-pretty]\n\
-                                  dump variables in plain text, json or pretty\n\
-                                  json\n\
-\n\
-If there is no action given, the action will default to --lookup.\n\
-\n\
-EXAMPLES\n\
-$ ceph-conf --name mon.0 -c /etc/ceph/ceph.conf 'mon addr'\n\
-Find out what the value of 'mon addr' is for monitor 0.\n\
-\n\
-$ ceph-conf -l mon\n\
-List sections beginning with 'mon'.\n\
-\n\
-RETURN CODE\n\
-Return code will be 0 on success; error code otherwise.\n\
-";
+  out << R"(Ceph configuration query tool
+
+USAGE
+ceph-conf <flags> <action>
+
+ACTIONS
+  -L|--list-all-sections          List all sections
+  -l|--list-sections <prefix>     List sections with the given prefix
+  --filter-key <key>              Filter section list to only include sections
+                                  with given key defined.
+  --filter-key-value <key>=<val>  Filter section list to only include sections
+                                  with given key/value pair.
+  --lookup <key>                  Print a configuration setting to stdout.
+                                  Returns 0 (success) if the configuration setting is
+                                  found; 1 otherwise.
+  -r|--resolve-search             search for the first file that exists and
+                                  can be opened in the resulted comma
+                                  delimited search list.
+  -D|--dump-all                   dump all variables.
+
+FLAGS
+  --name name                     Set type.id
+  [-s <section>]                  Add to list of sections to search
+  [--format plain|json|json-pretty]
+                                  dump variables in plain text, json or pretty
+                                  json
+
+If there is no action given, the action will default to --lookup.
+
+EXAMPLES
+$ ceph-conf --name mon.0 -c /etc/ceph/ceph.conf 'mon addr'
+Find out what the value of 'mon addr' is for monitor 0.
+
+$ ceph-conf -l mon
+List sections beginning with 'mon'.
+
+RETURN CODE
+Return code will be 0 on success; error code otherwise.
+)";
 }
 
 static int list_sections(const std::string &prefix,
@@ -229,8 +230,8 @@ int main(int argc, const char **argv)
       } else {
 	cerr << "unable to parse option: '" << *i << "'" << std::endl;
 	cerr << "args:";
-	for (std::vector<const char *>::iterator ci = orig_args.begin(); ci != orig_args.end(); ++ci) {
-	  cerr << " '" << *ci << "'";
+	for (auto arg : orig_args) {
+	  cerr << " " << quoted(arg);
 	}
 	cerr << std::endl;
 	usage();
