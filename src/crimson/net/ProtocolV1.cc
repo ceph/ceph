@@ -330,6 +330,7 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
   ceph_assert(!socket);
   conn.peer_addr = _peer_addr;
   conn.set_peer_type(_peer_type);
+  conn.policy = messenger.get_policy(_peer_type);
   messenger.register_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   seastar::with_gate(pending_dispatch, [this] {
@@ -539,6 +540,7 @@ seastar::future<stop_t> ProtocolV1::repeat_handle_connect()
       auto p = bl.cbegin();
       ::decode(h.connect, p);
       conn.set_peer_type(h.connect.host_type);
+      conn.policy = messenger.get_policy(h.connect.host_type);
       return socket->read(h.connect.authorizer_len);
     }).then([this] (bufferlist authorizer) {
       memset(&h.reply, 0, sizeof(h.reply));
