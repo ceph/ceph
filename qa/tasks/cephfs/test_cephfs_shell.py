@@ -44,15 +44,7 @@ class TestCephFSShell(CephFSTestCase):
         return mount_x.client_remote.run(args=args, stdout=StringIO(),
                                          stderr=StringIO(), stdin=stdin)
 
-    def test_help(self):
-        """
-        Test that help outputs commands.
-        """
-
-        o = self._cephfs_shell("help")
-
-        log.info("output:\n{}".format(o))
-
+class TestMkdir(TestCephFSShell):
     def test_mkdir(self):
         """
         Test that mkdir creates directory
@@ -141,18 +133,8 @@ class TestCephFSShell(CephFSTestCase):
         o = self.mount_a.stat('d5/d6/d7')
         log.info("mount_a output:\n{}".format(o))
 
-    def validate_stat_output(self, s):
-        l = s.split('\n')
-        log.info("lines:\n{}".format(l))
-        rv = l[-1] # get last line; a failed stat will have "1" as the line
-        log.info("rv:{}".format(rv))
-        r = 0
-        try:
-            r = int(rv) # a non-numeric line will cause an exception
-        except:
-            pass
-        assert(r == 0)
-
+class TestGetAndPut(TestCephFSShell):
+    # the 'put' command gets tested as well with the 'get' comamnd
     def test_put_and_get_without_target_directory(self):
         """
         Test that put fails without target path
@@ -195,7 +177,18 @@ class TestCephFSShell(CephFSTestCase):
         log.info("cephfs-shell output:\n{}".format(o))
         self.validate_stat_output(o)
 
-    # the 'put' command gets tested as well with the 'get' comamnd
+    def validate_stat_output(self, s):
+        l = s.split('\n')
+        log.info("lines:\n{}".format(l))
+        rv = l[-1] # get last line; a failed stat will have "1" as the line
+        log.info("rv:{}".format(rv))
+        r = 0
+        try:
+            r = int(rv) # a non-numeric line will cause an exception
+        except:
+            pass
+        assert(r == 0)
+
     def test_get_with_target_name(self):
         """
         Test that get passes with target name
@@ -301,3 +294,13 @@ class TestCephFSShell(CephFSTestCase):
 #            log.info('ls -a succeeded')
 #        else:
 #            log.info('ls -a failed')
+
+class TestMisc(TestCephFSShell):
+    def test_help(self):
+        """
+        Test that help outputs commands.
+        """
+
+        o = self._cephfs_shell("help")
+
+        log.info("output:\n{}".format(o))
