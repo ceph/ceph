@@ -198,6 +198,29 @@ seastar::future<> OSD::start()
     osdmap = std::move(map);
     return load_pgs();
   }).then([this] {
+
+    uint64_t osd_required =
+      CEPH_FEATURE_UID |
+      CEPH_FEATURE_PGID64 |
+      CEPH_FEATURE_OSDENC;
+    using ceph::net::SocketPolicy;
+
+    public_msgr.set_default_policy(SocketPolicy::stateless_server(0));
+    public_msgr.set_policy(entity_name_t::TYPE_MON,
+                           SocketPolicy::lossy_client(osd_required));
+    public_msgr.set_policy(entity_name_t::TYPE_MGR,
+                           SocketPolicy::lossy_client(osd_required));
+    public_msgr.set_policy(entity_name_t::TYPE_OSD,
+                           SocketPolicy::stateless_server(0));
+
+    cluster_msgr.set_default_policy(SocketPolicy::stateless_server(0));
+    cluster_msgr.set_policy(entity_name_t::TYPE_MON,
+                            SocketPolicy::lossy_client(0));
+    cluster_msgr.set_policy(entity_name_t::TYPE_OSD,
+                            SocketPolicy::lossless_peer(osd_required));
+    cluster_msgr.set_policy(entity_name_t::TYPE_CLIENT,
+                            SocketPolicy::stateless_server(0));
+
     dispatchers.push_front(this);
     dispatchers.push_front(monc.get());
     dispatchers.push_front(mgrc.get());
