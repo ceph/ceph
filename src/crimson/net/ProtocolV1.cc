@@ -325,6 +325,8 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
   state = state_t::connecting;
   set_write_state(write_state_t::delay);
 
+  // we don't know my ephemeral port yet
+  conn.set_ephemeral_port(0, SocketConnection::side_t::none);
   ceph_assert(!socket);
   conn.peer_addr = _peer_addr;
   conn.set_peer_type(_peer_type);
@@ -351,9 +353,8 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
           ::decode(caddr, p);
           ceph_assert(p.end());
           validate_peer_addr(saddr, conn.peer_addr);
-
-          conn.side = SocketConnection::side_t::connector;
-          conn.socket_port = caddr.get_port();
+          conn.set_ephemeral_port(caddr.get_port(),
+                                  SocketConnection::side_t::connector);
           return messenger.learned_addr(caddr);
         }).then([this] {
           // encode/send client's handshake header
@@ -608,8 +609,8 @@ void ProtocolV1::start_accept(SocketFRef&& sock,
   ceph_assert(!socket);
   conn.peer_addr.u = _peer_addr.u;
   conn.peer_addr.set_port(0);
-  conn.side = SocketConnection::side_t::acceptor;
-  conn.socket_port = _peer_addr.get_port();
+  conn.set_ephemeral_port(_peer_addr.get_port(),
+                          SocketConnection::side_t::acceptor);
   socket = std::move(sock);
   messenger.accept_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));

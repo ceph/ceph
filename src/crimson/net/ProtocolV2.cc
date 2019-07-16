@@ -148,6 +148,8 @@ void ProtocolV2::start_accept(SocketFRef&& sock,
   ceph_assert(state == state_t::NONE);
   ceph_assert(!socket);
   conn.target_addr = _peer_addr;
+  conn.set_ephemeral_port(_peer_addr.get_port(),
+                          SocketConnection::side_t::acceptor);
   socket = std::move(sock);
   logger().info("{} ProtocolV2::start_accept(): peer_addr={}", conn, _peer_addr);
   messenger.accept_conn(
@@ -830,6 +832,8 @@ void ProtocolV2::execute_connecting()
 {
   trigger_state(state_t::CONNECTING, write_state_t::delay, true);
   seastar::with_gate(pending_dispatch, [this] {
+      // we don't know my socket_port yet
+      conn.set_ephemeral_port(0, SocketConnection::side_t::none);
       enable_recording();
       global_seq = messenger.get_global_seq();
       logger().debug("{} UPDATE: gs={}", conn, global_seq);
@@ -855,6 +859,8 @@ void ProtocolV2::execute_connecting()
             dispatch_reset();
             abort_in_close();
           }
+          conn.set_ephemeral_port(_my_addr_from_peer.get_port(),
+                                  SocketConnection::side_t::connector);
           if (messenger.get_myaddrs().empty() ||
               messenger.get_myaddrs().front().is_blank_ip()) {
             return messenger.learned_addr(_my_addr_from_peer);
