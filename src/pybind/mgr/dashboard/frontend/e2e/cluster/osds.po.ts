@@ -1,5 +1,5 @@
 import { PageHelper } from '../page-helper.po';
 
-export class OSDsPage extends PageHelper {
+export class OSDsPageHelper extends PageHelper {
   pages = { index: '/#/osd' };
 }
