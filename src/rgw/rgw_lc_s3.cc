@@ -103,10 +103,10 @@ void RGWLifecycleConfiguration_S3::decode_xml(XMLObj *obj)
     add_rule(rule);
   }
 
-  if (cct->_conf->rgw_lc_max_rules < rule_map.size()) {
+  if (cct->_conf.get_val<uint64_t>("rgw_lc_max_rules") < rule_map.size()) {
     stringstream ss;
     ss << "Warn: The lifecycle config has too many rules, rule number is:" 
-      << rule_map.size() << ", max number is:" << cct->_conf->rgw_lc_max_rules;
+      << rule_map.size() << ", max number is:" << cct->_conf.get_val<uint64_t>("rgw_lc_max_rules");
     throw RGWXMLDecoder::err(ss.str());
   }
 }

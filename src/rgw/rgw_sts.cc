@@ -67,7 +67,7 @@ int Credentials::generateCredentials(CephContext* cct,
   if (! cryptohandler) {
     return -EINVAL;
   }
-  string secret_s = cct->_conf->rgw_sts_key;
+  string secret_s = cct->_conf.get_val<std::string>("rgw_sts_key");
   buffer::ptr secret(secret_s.c_str(), secret_s.length());
   int ret = 0;
   if (ret = cryptohandler->validate_secret(secret); ret < 0) {

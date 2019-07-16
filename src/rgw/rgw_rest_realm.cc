@@ -97,7 +97,7 @@ void RGWOp_Period_Post::execute()
   period.init(cct, store->svc.sysobj, false);
 
   // decode the period from input
-  const auto max_size = cct->_conf->rgw_max_put_param_size;
+  const auto max_size = cct->_conf.get_val<size_t>("rgw_max_put_param_size");
   bool empty;
   http_ret = rgw_rest_get_json_input(cct, s, period, max_size, &empty);
   if (http_ret < 0) {

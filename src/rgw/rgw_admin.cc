@@ -2734,8 +2734,8 @@ int main(int argc, const char **argv)
                          CODE_ENVIRONMENT_UTILITY, 0);
 
   // for region -> zonegroup conversion (must happen before common_init_finish())
-  if (!g_conf()->rgw_region.empty() && g_conf()->rgw_zonegroup.empty()) {
-    g_conf().set_val_or_die("rgw_zonegroup", g_conf()->rgw_region.c_str());
+  if (!g_conf().get_val<std::string>("rgw_region").empty() && g_conf()->rgw_zonegroup.empty()) {
+    g_conf().set_val_or_die("rgw_zonegroup", g_conf().get_val<std::string>("rgw_region").c_str());
   }
 
   common_init_finish(g_ceph_context);
@@ -3424,7 +3424,7 @@ int main(int argc, const char **argv)
     store = RGWStoreManager::get_raw_storage(g_ceph_context);
   } else {
     store = RGWStoreManager::get_storage(g_ceph_context, false, false, false, false, false,
-      need_cache && g_conf()->rgw_cache_enabled);
+      need_cache && g_conf().get_val<bool>("rgw_cache_enabled"));
   }
   if (!store) {
     cerr << "couldn't init storage provider" << std::endl;
@@ -6879,7 +6879,7 @@ next:
     RGWMetadataLog *meta_log = store->meta_mgr->get_log(period_id);
 
     formatter->open_array_section("entries");
-    for (; i < g_ceph_context->_conf->rgw_md_log_max_shards; i++) {
+    for (; i < g_ceph_context->_conf.get_val<int64_t>("rgw_md_log_max_shards"); i++) {
       void *handle;
       list<cls_log_entry> entries;
 
@@ -6926,7 +6926,7 @@ next:
 
     formatter->open_array_section("entries");
 
-    for (; i < g_ceph_context->_conf->rgw_md_log_max_shards; i++) {
+    for (; i < g_ceph_context->_conf.get_val<int64_t>("rgw_md_log_max_shards"); i++) {
       RGWMetadataLogInfo info;
       meta_log->get_info(i, &info);
 
@@ -6953,7 +6953,7 @@ next:
       return -ret;
     }
 
-    auto num_shards = g_conf()->rgw_md_log_max_shards;
+    auto num_shards = g_conf().get_val<int64_t>("rgw_md_log_max_shards");
     ret = crs.run(create_admin_meta_log_trim_cr(dpp(), store, &http, num_shards));
     if (ret < 0) {
       cerr << "automated mdlog trim failed with " << cpp_strerror(ret) << std::endl;
@@ -7578,7 +7578,7 @@ next:
     int i = (specified_shard_id ? shard_id : 0);
 
     formatter->open_array_section("entries");
-    for (; i < g_ceph_context->_conf->rgw_data_log_num_shards; i++) {
+    for (; i < g_ceph_context->_conf.get_val<int64_t>("rgw_data_log_num_shards"); i++) {
       list<cls_log_entry> entries;
 
       RGWDataChangesLogInfo info;
@@ -7603,7 +7603,7 @@ next:
       return -ret;
     }
 
-    auto num_shards = g_conf()->rgw_data_log_num_shards;
+    auto num_shards = g_conf().get_val<int64_t>("rgw_data_log_num_shards");
     std::vector<std::string> markers(num_shards);
     ret = crs.run(create_admin_data_log_trim_cr(store, &http, num_shards, markers));
     if (ret < 0) {

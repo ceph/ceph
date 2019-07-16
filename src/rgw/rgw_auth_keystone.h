@@ -95,7 +95,7 @@ class SecretCache {
   SecretCache()
     : cct(g_ceph_context),
       lock(),
-      max(cct->_conf->rgw_keystone_token_cache_size),
+      max(cct->_conf.get_val<int64_t>("rgw_keystone_token_cache_size")),
       s3_token_expiry_length(300, 0) {
   }
 

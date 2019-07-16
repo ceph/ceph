@@ -449,7 +449,7 @@ void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id,
 
   CephContext *cct = store->ctx();
 
-  size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
+  size_t max_entries = cct->_conf.get_val<int64_t>("rgw_list_buckets_max_chunk");
 
   do {
     int ret = rgw_read_user_buckets(store, user_id, user_buckets, marker,
@@ -1491,13 +1491,13 @@ int RGWBucketAdminOp::limit_check(RGWRados *store,
 {
   int ret = 0;
   const size_t max_entries =
-    store->ctx()->_conf->rgw_list_buckets_max_chunk;
+    store->ctx()->_conf.get_val<int64_t>("rgw_list_buckets_max_chunk");
 
   const size_t safe_max_objs_per_shard =
-    store->ctx()->_conf->rgw_safe_max_objects_per_shard;
+    store->ctx()->_conf.get_val<int64_t>("rgw_safe_max_objects_per_shard");
 
   uint16_t shard_warn_pct =
-    store->ctx()->_conf->rgw_shard_warning_threshold;
+    store->ctx()->_conf.get_val<double>("rgw_shard_warning_threshold");
   if (shard_warn_pct > 100)
     shard_warn_pct = 90;
 
@@ -1615,7 +1615,7 @@ int RGWBucketAdminOp::info(RGWRados *store, RGWBucketAdminOpState& op_state,
 
   CephContext *cct = store->ctx();
 
-  const size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
+  const size_t max_entries = cct->_conf.get_val<int64_t>("rgw_list_buckets_max_chunk");
 
   bool show_stats = op_state.will_fetch_stats();
   rgw_user user_id = op_state.get_user_id();
@@ -2183,7 +2183,7 @@ int RGWDataChangesLog::renew_entries()
     }
 
     real_time expiration = now;
-    expiration += make_timespan(cct->_conf->rgw_data_log_window);
+    expiration += make_timespan(cct->_conf.get_val<int64_t>("rgw_data_log_window"));
 
     list<rgw_bucket_shard>& buckets = miter->second.first;
     list<rgw_bucket_shard>::iterator liter;
@@ -2290,7 +2290,7 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket, int shard_id) {
     status->cur_sent = now;
 
     expiration = now;
-    expiration += ceph::make_timespan(cct->_conf->rgw_data_log_window);
+    expiration += ceph::make_timespan(cct->_conf.get_val<int64_t>("rgw_data_log_window"));
 
     status->lock->Unlock();
   
@@ -2316,7 +2316,7 @@ int RGWDataChangesLog::add_entry(rgw_bucket& bucket, int shard_id) {
 
   status->pending = false;
   status->cur_expiration = status->cur_sent; /* time of when operation started, not completed */
-  status->cur_expiration += make_timespan(cct->_conf->rgw_data_log_window);
+  status->cur_expiration += make_timespan(cct->_conf.get_val<int64_t>("rgw_data_log_window"));
   status->cond = NULL;
   status->lock->Unlock();
 
@@ -2469,7 +2469,7 @@ void *RGWDataChangesLog::ChangesRenewThread::entry() {
     if (log->going_down())
       break;
 
-    int interval = cct->_conf->rgw_data_log_window * 3 / 4;
+    int interval = cct->_conf.get_val<int64_t>("rgw_data_log_window") * 3 / 4;
     lock.Lock();
     cond.WaitInterval(lock, utime_t(interval, 0));
     lock.Unlock();

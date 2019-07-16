@@ -110,7 +110,7 @@ bool RGWQuotaCache<T>::can_use_cached_stats(RGWQuotaInfo& quota, RGWStorageStats
 {
   if (quota.max_size >= 0) {
     if (quota.max_size_soft_threshold < 0) {
-      quota.max_size_soft_threshold = quota.max_size * store->ctx()->_conf->rgw_bucket_quota_soft_threshold;
+      quota.max_size_soft_threshold = quota.max_size * store->ctx()->_conf.get_val<double>("rgw_bucket_quota_soft_threshold");
     }
 
     if (cached_stats.size_rounded  >= (uint64_t)quota.max_size_soft_threshold) {
@@ -122,7 +122,7 @@ bool RGWQuotaCache<T>::can_use_cached_stats(RGWQuotaInfo& quota, RGWStorageStats
 
   if (quota.max_objects >= 0) {
     if (quota.max_objs_soft_threshold < 0) {
-      quota.max_objs_soft_threshold = quota.max_objects * store->ctx()->_conf->rgw_bucket_quota_soft_threshold;
+      quota.max_objs_soft_threshold = quota.max_objects * store->ctx()->_conf.get_val<double>("rgw_bucket_quota_soft_threshold");
     }
 
     if (cached_stats.num_objects >= (uint64_t)quota.max_objs_soft_threshold) {
@@ -188,8 +188,8 @@ void RGWQuotaCache<T>::set_stats(const rgw_user& user, const rgw_bucket& bucket,
   qs.stats = stats;
   qs.expiration = ceph_clock_now();
   qs.async_refresh_time = qs.expiration;
-  qs.expiration += store->ctx()->_conf->rgw_bucket_quota_ttl;
-  qs.async_refresh_time += store->ctx()->_conf->rgw_bucket_quota_ttl / 2;
+  qs.expiration += store->ctx()->_conf.get_val<int64_t>("rgw_bucket_quota_ttl");
+  qs.async_refresh_time += store->ctx()->_conf.get_val<int64_t>("rgw_bucket_quota_ttl") / 2;
 
   map_add(user, bucket, qs);
 }
@@ -518,7 +518,7 @@ class RGWUserStatsCache : public RGWQuotaCache<rgw_user> {
           break;
 
         lock.Lock();
-        cond.WaitInterval(lock, utime_t(cct->_conf->rgw_user_quota_sync_interval, 0));
+        cond.WaitInterval(lock, utime_t(cct->_conf.get_val<int64_t>("rgw_user_quota_sync_interval"), 0));
         lock.Unlock();
       } while (!stats->going_down());
       ldout(cct, 20) << "UserSyncThread: done" << dendl;
@@ -655,7 +655,7 @@ int RGWUserStatsCache::sync_user(const rgw_user& user)
     return ret;
   }
 
-  if (!store->ctx()->_conf->rgw_user_quota_sync_idle_users &&
+  if (!store->ctx()->_conf.get_val<bool>("rgw_user_quota_sync_idle_users") &&
       header.last_stats_update < header.last_stats_sync) {
     ldout(store->ctx(), 20) << "user is idle, not doing a full sync (user=" << user << ")" << dendl;
     return 0;
@@ -1011,12 +1011,12 @@ void RGWQuotaHandler::free_handler(RGWQuotaHandler *handler)
 
 void rgw_apply_default_bucket_quota(RGWQuotaInfo& quota, const ConfigProxy& conf)
 {
-  if (conf->rgw_bucket_default_quota_max_objects >= 0) {
-    quota.max_objects = conf->rgw_bucket_default_quota_max_objects;
+  if (conf.get_val<int64_t>("rgw_bucket_default_quota_max_objects") >= 0) {
+    quota.max_objects = conf.get_val<int64_t>("rgw_bucket_default_quota_max_objects");
     quota.enabled = true;
   }
-  if (conf->rgw_bucket_default_quota_max_size >= 0) {
-    quota.max_size = conf->rgw_bucket_default_quota_max_size;
+  if (conf.get_val<int64_t>("rgw_bucket_default_quota_max_size") >= 0) {
+    quota.max_size = conf.get_val<int64_t>("rgw_bucket_default_quota_max_size");
     quota.enabled = true;
   }
 }
@@ -1027,8 +1027,8 @@ void rgw_apply_default_user_quota(RGWQuotaInfo& quota, const ConfigProxy& conf)
     quota.max_objects = conf->rgw_user_default_quota_max_objects;
     quota.enabled = true;
   }
-  if (conf->rgw_user_default_quota_max_size >= 0) {
-    quota.max_size = conf->rgw_user_default_quota_max_size;
+  if (conf.get_val<int64_t>("rgw_user_default_quota_max_size") >= 0) {
+    quota.max_size = conf.get_val<int64_t>("rgw_user_default_quota_max_size");
     quota.enabled = true;
   }
 }

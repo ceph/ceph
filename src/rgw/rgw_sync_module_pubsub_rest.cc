@@ -805,7 +805,7 @@ class RGWPSCreateNotif_ObjStore_S3 : public RGWPSCreateNotifOp {
   rgw_pubsub_s3_notifications configurations;
 
   int get_params_from_body() {
-    const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+    const auto max_size = s->cct->_conf.get_val<size_t>("rgw_max_put_param_size");
     int r;
     bufferlist data;
     std::tie(r, data) = rgw_rest_read_all_input(s, max_size, false);

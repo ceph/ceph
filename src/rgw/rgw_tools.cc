@@ -431,7 +431,7 @@ int RGWDataAccess::Object::put(bufferlist& data,
 
   RGWBucketInfo& bucket_info = bucket->bucket_info;
 
-  rgw::BlockingAioThrottle aio(store->ctx()->_conf->rgw_put_obj_min_window_size);
+  rgw::BlockingAioThrottle aio(store->ctx()->_conf.get_val<size_t>("rgw_put_obj_min_window_size"));
 
   RGWObjectCtx obj_ctx(store);
   rgw_obj obj(bucket_info.bucket, key);
@@ -538,7 +538,7 @@ void RGWDataAccess::Object::set_policy(const RGWAccessControlPolicy& policy)
 int rgw_tools_init(CephContext *cct)
 {
   ext_mime_map = new std::map<std::string, std::string>;
-  ext_mime_map_init(cct, cct->_conf->rgw_mime_types_file.c_str());
+  ext_mime_map_init(cct, cct->_conf.get_val<std::string>("rgw_mime_types_file").c_str());
   // ignore errors; missing mime.types is not fatal
   return 0;
 }

@@ -215,7 +215,7 @@ void *RGWLC::LCWorker::entry() {
 void RGWLC::initialize(CephContext *_cct, RGWRados *_store) {
   cct = _cct;
   store = _store;
-  max_objs = cct->_conf->rgw_lc_max_objs;
+  max_objs = cct->_conf.get_val<int64_t>("rgw_lc_max_objs");
   if (max_objs > HASH_PRIME)
     max_objs = HASH_PRIME;
 
@@ -246,8 +246,8 @@ bool RGWLC::if_already_run_today(time_t& start_date)
   utime_t now = ceph_clock_now();
   localtime_r(&start_date, &bdt);
 
-  if (cct->_conf->rgw_lc_debug_interval > 0) {
-    if (now - start_date < cct->_conf->rgw_lc_debug_interval)
+  if (cct->_conf.get_val<int64_t>("rgw_lc_debug_interval") > 0) {
+    if (now - start_date < cct->_conf.get_val<int64_t>("rgw_lc_debug_interval"))
       return true;
     else
       return false;
@@ -297,13 +297,13 @@ static bool obj_has_expired(CephContext *cct, ceph::real_time mtime, int days, c
 {
   double timediff, cmp;
   utime_t base_time;
-  if (cct->_conf->rgw_lc_debug_interval <= 0) {
+  if (cct->_conf.get_val<int64_t>("rgw_lc_debug_interval") <= 0) {
     /* Normal case, run properly */
     cmp = days*24*60*60;
     base_time = ceph_clock_now().round_to_day();
   } else {
     /* We're in debug mode; Treat each rgw_lc_debug_interval seconds as a day */
-    cmp = days*cct->_conf->rgw_lc_debug_interval;
+    cmp = days*cct->_conf.get_val<int64_t>("rgw_lc_debug_interval");
     base_time = ceph_clock_now();
   }
   timediff = base_time - ceph::real_clock::to_time_t(mtime);
@@ -1098,7 +1098,7 @@ int RGWLC::bucket_lc_process(string& shard_id)
 
 int RGWLC::bucket_lc_post(int index, int max_lock_sec, pair<string, int >& entry, int& result)
 {
-  utime_t lock_duration(cct->_conf->rgw_lc_lock_max_time, 0);
+  utime_t lock_duration(cct->_conf.get_val<int64_t>("rgw_lc_lock_max_time"), 0);
 
   rados::cls::lock::Lock l(lc_index_lock_name);
   l.set_cookie(cookie);
@@ -1166,7 +1166,7 @@ int RGWLC::list_lc_progress(const string& marker, uint32_t max_entries, map<stri
 
 int RGWLC::process()
 {
-  int max_secs = cct->_conf->rgw_lc_lock_max_time;
+  int max_secs = cct->_conf.get_val<int64_t>("rgw_lc_lock_max_time");
 
   const int start = ceph::util::generate_random_number(0, max_objs - 1);
 
@@ -1300,13 +1300,13 @@ bool RGWLC::LCWorker::should_work(utime_t& now)
   int start_minute;
   int end_hour;
   int end_minute;
-  string worktime = cct->_conf->rgw_lifecycle_work_time;
+  string worktime = cct->_conf.get_val<std::string>("rgw_lifecycle_work_time");
   sscanf(worktime.c_str(),"%d:%d-%d:%d",&start_hour, &start_minute, &end_hour, &end_minute);
   struct tm bdt;
   time_t tt = now.sec();
   localtime_r(&tt, &bdt);
 
-  if (cct->_conf->rgw_lc_debug_interval > 0) {
+  if (cct->_conf.get_val<int64_t>("rgw_lc_debug_interval") > 0) {
 	  /* We're debugging, so say we can run */
 	  return true;
   } else if ((bdt.tm_hour*60 + bdt.tm_min >= start_hour*60 + start_minute) &&
@@ -1322,8 +1322,8 @@ int RGWLC::LCWorker::schedule_next_start_time(utime_t &start, utime_t& now)
 {
   int secs;
 
-  if (cct->_conf->rgw_lc_debug_interval > 0) {
-	secs = start + cct->_conf->rgw_lc_debug_interval - now;
+  if (cct->_conf.get_val<int64_t>("rgw_lc_debug_interval") > 0) {
+	secs = start + cct->_conf.get_val<int64_t>("rgw_lc_debug_interval") - now;
 	if (secs < 0)
 	  secs = 0;
 	return (secs);
@@ -1333,7 +1333,7 @@ int RGWLC::LCWorker::schedule_next_start_time(utime_t &start, utime_t& now)
   int start_minute;
   int end_hour;
   int end_minute;
-  string worktime = cct->_conf->rgw_lifecycle_work_time;
+  string worktime = cct->_conf.get_val<std::string>("rgw_lifecycle_work_time");
   sscanf(worktime.c_str(),"%d:%d-%d:%d",&start_hour, &start_minute, &end_hour, &end_minute);
   struct tm bdt;
   time_t tt = now.sec();
@@ -1355,7 +1355,7 @@ void RGWLifecycleConfiguration::generate_test_instances(list<RGWLifecycleConfigu
 
 void get_lc_oid(CephContext *cct, const string& shard_id, string *oid)
 {
-  int max_objs = (cct->_conf->rgw_lc_max_objs > HASH_PRIME ? HASH_PRIME : cct->_conf->rgw_lc_max_objs);
+  int max_objs = (cct->_conf.get_val<int64_t>("rgw_lc_max_objs") > HASH_PRIME ? HASH_PRIME : cct->_conf.get_val<int64_t>("rgw_lc_max_objs"));
   int index = ceph_str_hash_linux(shard_id.c_str(), shard_id.size()) % HASH_PRIME % max_objs;
   *oid = lc_oid_prefix;
   char buf[32];
@@ -1380,7 +1380,7 @@ static int guard_lc_modify(RGWRados* store, const rgw_bucket& bucket, const stri
   get_lc_oid(cct, shard_id, &oid);
 
   pair<string, int> entry(shard_id, lc_uninitial);
-  int max_lock_secs = cct->_conf->rgw_lc_lock_max_time;
+  int max_lock_secs = cct->_conf.get_val<int64_t>("rgw_lc_lock_max_time");
 
   rados::cls::lock::Lock l(lc_index_lock_name); 
   utime_t time(max_lock_secs, 0);

@@ -108,7 +108,7 @@ class UsageLogger {
   };
 
   void set_timer() {
-    timer.add_event_after(cct->_conf->rgw_usage_log_tick_interval, new C_UsageLogTimeout(this));
+    timer.add_event_after(cct->_conf.get_val<int64_t>("rgw_usage_log_tick_interval"), new C_UsageLogTimeout(this));
   }
 public:
 
@@ -143,7 +143,7 @@ public:
     usage_map[ub].insert(rt, entry, &account);
     if (account)
       num_entries++;
-    bool need_flush = (num_entries > cct->_conf->rgw_usage_log_flush_threshold);
+    bool need_flush = (num_entries > cct->_conf.get_val<int64_t>("rgw_usage_log_flush_threshold"));
     lock.Unlock();
     if (need_flush) {
       Mutex::Locker l(timer_lock);
@@ -330,7 +330,7 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
     return -EINVAL;
   }
   if (s->err.ret == -ERR_NO_SUCH_BUCKET) {
-    if (!s->cct->_conf->rgw_log_nonexistent_bucket) {
+    if (!s->cct->_conf.get_val<bool>("rgw_log_nonexistent_bucket")) {
       ldout(s->cct, 5) << "bucket " << s->bucket << " doesn't exist, not logging" << dendl;
       return 0;
     }
@@ -353,8 +353,8 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
 
   entry.obj_size = s->obj_size;
 
-  if (s->cct->_conf->rgw_remote_addr_param.length())
-    set_param_str(s, s->cct->_conf->rgw_remote_addr_param.c_str(),
+  if (s->cct->_conf.get_val<std::string>("rgw_remote_addr_param").length())
+    set_param_str(s, s->cct->_conf.get_val<std::string>("rgw_remote_addr_param").c_str(),
 		  entry.remote_addr);
   else
     set_param_str(s, "REMOTE_ADDR", entry.remote_addr);
@@ -432,15 +432,15 @@ int rgw_log_op(RGWRados *store, RGWREST* const rest, struct req_state *s,
 
   struct tm bdt;
   time_t t = req_state::Clock::to_time_t(entry.time);
-  if (s->cct->_conf->rgw_log_object_name_utc)
+  if (s->cct->_conf.get_val<bool>("rgw_log_object_name_utc"))
     gmtime_r(&t, &bdt);
   else
     localtime_r(&t, &bdt);
 
   int ret = 0;
 
-  if (s->cct->_conf->rgw_ops_log_rados) {
-    string oid = render_log_object_name(s->cct->_conf->rgw_log_object_name, &bdt,
+  if (s->cct->_conf.get_val<bool>("rgw_ops_log_rados")) {
+    string oid = render_log_object_name(s->cct->_conf.get_val<std::string>("rgw_log_object_name"), &bdt,
 				        s->bucket.bucket_id, entry.bucket);
 
     rgw_raw_obj obj(store->svc.zone->get_zone_params().log_pool, oid);

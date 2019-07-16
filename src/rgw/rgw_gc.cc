@@ -28,7 +28,7 @@ void RGWGC::initialize(CephContext *_cct, RGWRados *_store) {
   cct = _cct;
   store = _store;
 
-  max_objs = min(static_cast<int>(cct->_conf->rgw_gc_max_objs), rgw_shards_max());
+  max_objs = min(static_cast<int>(cct->_conf.get_val<int64_t>("rgw_gc_max_objs")), rgw_shards_max());
 
   obj_names = new string[max_objs];
 
@@ -56,7 +56,7 @@ void RGWGC::add_chain(ObjectWriteOperation& op, cls_rgw_obj_chain& chain, const 
   info.chain = chain;
   info.tag = tag;
 
-  cls_rgw_gc_set_entry(op, cct->_conf->rgw_gc_obj_min_wait, info);
+  cls_rgw_gc_set_entry(op, cct->_conf.get_val<int64_t>("rgw_gc_obj_min_wait"), info);
 }
 
 int RGWGC::send_chain(cls_rgw_obj_chain& chain, const string& tag, bool sync)
@@ -75,7 +75,7 @@ int RGWGC::send_chain(cls_rgw_obj_chain& chain, const string& tag, bool sync)
 int RGWGC::defer_chain(const string& tag, bool sync)
 {
   ObjectWriteOperation op;
-  cls_rgw_gc_defer_entry(op, cct->_conf->rgw_gc_obj_min_wait, tag);
+  cls_rgw_gc_defer_entry(op, cct->_conf.get_val<int64_t>("rgw_gc_obj_min_wait"), tag);
 
   int i = tag_index(tag);
 
@@ -159,8 +159,8 @@ public:
   RGWGCIOManager(const DoutPrefixProvider* _dpp, CephContext *_cct, RGWGC *_gc) : dpp(_dpp),
                                                   cct(_cct),
                                                   gc(_gc),
-                                                  remove_tags(cct->_conf->rgw_gc_max_objs) {
-    max_aio = cct->_conf->rgw_gc_max_concurrent_io;
+                                                  remove_tags(cct->_conf.get_val<int64_t>("rgw_gc_max_objs")) {
+    max_aio = cct->_conf.get_val<int64_t>("rgw_gc_max_concurrent_io");
   }
 
   ~RGWGCIOManager() {
@@ -227,7 +227,7 @@ public:
     // not already on the list
     if (rt.empty() || rt.back() != tag) {
       rt.push_back(tag);
-      if (rt.size() >= (size_t)cct->_conf->rgw_gc_max_trim_chunk) {
+      if (rt.size() >= (size_t)cct->_conf.get_val<int64_t>("rgw_gc_max_trim_chunk")) {
 	flush_remove_tags(index, rt);
       }
     }
@@ -416,7 +416,7 @@ done:
 
 int RGWGC::process(bool expired_only)
 {
-  int max_secs = cct->_conf->rgw_gc_processor_max_time;
+  int max_secs = cct->_conf.get_val<int64_t>("rgw_gc_processor_max_time");
 
   const int start = ceph::util::generate_random_number(0, max_objs - 1);
 
@@ -482,7 +482,7 @@ void *RGWGC::GCWorker::entry() {
 
     utime_t end = ceph_clock_now();
     end -= start;
-    int secs = cct->_conf->rgw_gc_processor_period;
+    int secs = cct->_conf.get_val<int64_t>("rgw_gc_processor_period");
 
     if (secs <= end.sec())
       continue; // next round

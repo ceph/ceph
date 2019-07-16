@@ -160,7 +160,7 @@ RGWSI_RADOS::Obj RGWSI_Notify::pick_control_obj(const string& key)
 
 int RGWSI_Notify::init_watch()
 {
-  num_watchers = cct->_conf->rgw_num_control_oids;
+  num_watchers = cct->_conf.get_val<int64_t>("rgw_num_control_oids");
 
   bool compat_oid = (num_watchers == 0);
 

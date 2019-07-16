@@ -300,7 +300,7 @@ int RGWSI_Zone::replace_region_with_zonegroup()
 {
   /* copy default region */
   /* convert default region to default zonegroup */
-  string default_oid = cct->_conf->rgw_default_region_info_oid;
+  string default_oid = cct->_conf.get_val<std::string>("rgw_default_region_info_oid");
   if (default_oid.empty()) {
     default_oid = default_region_info_oid;
   }
@@ -718,7 +718,7 @@ int RGWSI_Zone::convert_regionmap()
 {
   RGWZoneGroupMap zonegroupmap;
 
-  string pool_name = cct->_conf->rgw_zone_root_pool;
+  string pool_name = cct->_conf.get_val<std::string>("rgw_zone_root_pool");
   if (pool_name.empty()) {
     pool_name = RGW_DEFAULT_ZONE_ROOT_POOL;
   }

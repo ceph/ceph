@@ -195,7 +195,7 @@ int RGWOrphanSearch::init(const string& job_name, RGWOrphanSearchInfo *info, boo
 
   constexpr int64_t MAX_LIST_OBJS_ENTRIES=100;
 
-  max_list_bucket_entries = std::max(store->ctx()->_conf->rgw_list_bucket_min_readahead,
+  max_list_bucket_entries = std::max(store->ctx()->_conf.get_val<int64_t>("rgw_list_bucket_min_readahead"),
                                      MAX_LIST_OBJS_ENTRIES);
 
   detailed_mode = _detailed_mode;

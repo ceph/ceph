@@ -529,8 +529,8 @@ int RGWHTTPClient::init_request(rgw_http_req_data *_req_data)
   curl_easy_setopt(easy_handle, CURLOPT_WRITEFUNCTION, receive_http_data);
   curl_easy_setopt(easy_handle, CURLOPT_WRITEDATA, (void *)req_data);
   curl_easy_setopt(easy_handle, CURLOPT_ERRORBUFFER, (void *)req_data->error_buf);
-  curl_easy_setopt(easy_handle, CURLOPT_LOW_SPEED_TIME, cct->_conf->rgw_curl_low_speed_time);
-  curl_easy_setopt(easy_handle, CURLOPT_LOW_SPEED_LIMIT, cct->_conf->rgw_curl_low_speed_limit);
+  curl_easy_setopt(easy_handle, CURLOPT_LOW_SPEED_TIME, cct->_conf.get_val<int64_t>("rgw_curl_low_speed_time"));
+  curl_easy_setopt(easy_handle, CURLOPT_LOW_SPEED_LIMIT, cct->_conf.get_val<int64_t>("rgw_curl_low_speed_limit"));
   if (h) {
     curl_easy_setopt(easy_handle, CURLOPT_HTTPHEADER, (void *)h);
   }
@@ -717,7 +717,7 @@ static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
   wait_fd.events = CURL_WAIT_POLLIN;
   wait_fd.revents = 0;
 
-  int ret = curl_multi_wait(handle, &wait_fd, 1, cct->_conf->rgw_curl_wait_timeout_ms, &num_fds);
+  int ret = curl_multi_wait(handle, &wait_fd, 1, cct->_conf.get_val<int64_t>("rgw_curl_wait_timeout_ms"), &num_fds);
   if (ret) {
     ldout(cct, 0) << "ERROR: curl_multi_wait() returned " << ret << dendl;
     return -EIO;
@@ -761,7 +761,7 @@ static int do_curl_wait(CephContext *cct, CURLM *handle, int signal_fd)
   }
 
   /* forcing a strict timeout, as the returned fdsets might not reference all fds we wait on */
-  uint64_t to = cct->_conf->rgw_curl_wait_timeout_ms;
+  uint64_t to = cct->_conf.get_val<int64_t>("rgw_curl_wait_timeout_ms");
 #define RGW_CURL_TIMEOUT 1000
   if (!to)
     to = RGW_CURL_TIMEOUT;
@@ -1184,7 +1184,7 @@ void *RGWHTTPManager::reqs_thread_entry()
             break;
           case CURLE_OPERATION_TIMEDOUT:
             dout(0) << "WARNING: curl operation timed out, network average transfer speed less than " 
-              << cct->_conf->rgw_curl_low_speed_limit << " Bytes per second during " << cct->_conf->rgw_curl_low_speed_time << " seconds." << dendl;
+              << cct->_conf.get_val<int64_t>("rgw_curl_low_speed_limit") << " Bytes per second during " << cct->_conf.get_val<int64_t>("rgw_curl_low_speed_time") << " seconds." << dendl;
           default:
             dout(20) << "ERROR: msg->data.result=" << result << " req_data->id=" << id << " http_status=" << http_status << dendl;
             dout(20) << "ERROR: curl error: " << curl_easy_strerror((CURLcode)result) << dendl;

@@ -52,14 +52,14 @@ namespace keystone {
 
 ApiVersion CephCtxConfig::get_api_version() const noexcept
 {
-  switch (g_ceph_context->_conf->rgw_keystone_api_version) {
+  switch (g_ceph_context->_conf.get_val<int64_t>("rgw_keystone_api_version")) {
   case 3:
     return ApiVersion::VER_3;
   case 2:
     return ApiVersion::VER_2;
   default:
     dout(0) << "ERROR: wrong Keystone API version: "
-            << g_ceph_context->_conf->rgw_keystone_api_version
+            << g_ceph_context->_conf.get_val<int64_t>("rgw_keystone_api_version")
             << "; falling back to v2" <<  dendl;
     return ApiVersion::VER_2;
   }
@@ -67,7 +67,7 @@ ApiVersion CephCtxConfig::get_api_version() const noexcept
 
 std::string CephCtxConfig::get_endpoint_url() const noexcept
 {
-  static const std::string url = g_ceph_context->_conf->rgw_keystone_url;
+  static const std::string url = g_ceph_context->_conf.get_val<std::string>("rgw_keystone_url");
 
   if (url.empty() || boost::algorithm::ends_with(url, "/")) {
     return url;
@@ -107,11 +107,11 @@ static inline std::string read_secret(const std::string& file_path)
 
 std::string CephCtxConfig::get_admin_token() const noexcept
 {
-  auto& atv = g_ceph_context->_conf->rgw_keystone_admin_token_path;
+  auto& atv = g_ceph_context->_conf.get_val<std::string>("rgw_keystone_admin_token_path");
   if (!atv.empty()) {
     return read_secret(atv);
   } else {
-    auto& atv = g_ceph_context->_conf->rgw_keystone_admin_token;
+    auto& atv = g_ceph_context->_conf.get_val<std::string>("rgw_keystone_admin_token");
     if (!atv.empty()) {
       return atv;
     }
@@ -120,11 +120,11 @@ std::string CephCtxConfig::get_admin_token() const noexcept
 }
 
 std::string CephCtxConfig::get_admin_password() const noexcept  {
-  auto& apv = g_ceph_context->_conf->rgw_keystone_admin_password_path;
+  auto& apv = g_ceph_context->_conf.get_val<std::string>("rgw_keystone_admin_password_path");
   if (!apv.empty()) {
     return read_secret(apv);
   } else {
-    auto& apv = g_ceph_context->_conf->rgw_keystone_admin_password;
+    auto& apv = g_ceph_context->_conf.get_val<std::string>("rgw_keystone_admin_password");
     if (!apv.empty()) {
       return apv;
     }

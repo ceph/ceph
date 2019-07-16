@@ -105,7 +105,7 @@ int RGWGetObj::parse_range(void)
   string ofs_str;
   string end_str;
 
-  ignore_invalid_range = s->cct->_conf->rgw_ignore_get_invalid_range;
+  ignore_invalid_range = s->cct->_conf.get_val<bool>("rgw_ignore_get_invalid_range");
   partial_content = false;
 
   size_t pos = rs.find("bytes=");
@@ -865,7 +865,7 @@ void rgw_build_iam_environment(RGWRados* store,
     s->env.emplace("aws:SecureTransport", "true");
   }
 
-  const auto remote_addr_param = s->cct->_conf->rgw_remote_addr_param;
+  const auto remote_addr_param = s->cct->_conf.get_val<std::string>("rgw_remote_addr_param");
   if (remote_addr_param.length()) {
     i = m.find(remote_addr_param);
   } else {
@@ -1992,7 +1992,7 @@ int RGWGetObj::get_data_cb(bufferlist& bl, off_t bl_ofs, off_t bl_len)
       ldpp_dout(this, 0) << "WARNING: could not defer gc entry for obj" << dendl;
     }
     gc_invalidate_time = start_time;
-    gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
+    gc_invalidate_time += (s->cct->_conf.get_val<int64_t>("rgw_gc_obj_min_wait") / 2);
   }
   return send_response_data(bl, bl_ofs, bl_len);
 }
@@ -2050,7 +2050,7 @@ void RGWGetObj::execute()
 {
   bufferlist bl;
   gc_invalidate_time = ceph_clock_now();
-  gc_invalidate_time += (s->cct->_conf->rgw_gc_obj_min_wait / 2);
+  gc_invalidate_time += (s->cct->_conf.get_val<int64_t>("rgw_gc_obj_min_wait") / 2);
 
   bool need_decompress;
   int64_t ofs_x, end_x;
@@ -2270,7 +2270,7 @@ void RGWListBuckets::execute()
   bool started = false;
   uint64_t total_count = 0;
 
-  const uint64_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
+  const uint64_t max_buckets = s->cct->_conf.get_val<int64_t>("rgw_list_buckets_max_chunk");
 
   op_ret = get_params();
   if (op_ret < 0) {
@@ -2434,7 +2434,7 @@ void RGWStatAccount::execute()
 {
   string marker;
   bool is_truncated = false;
-  uint64_t max_buckets = s->cct->_conf->rgw_list_buckets_max_chunk;
+  uint64_t max_buckets = s->cct->_conf.get_val<int64_t>("rgw_list_buckets_max_chunk");
 
   do {
     RGWUserBuckets buckets;
@@ -3749,7 +3749,7 @@ void RGWPutObj::execute()
   }
 
   // create the object processor
-  auto aio = rgw::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
+  auto aio = rgw::make_throttle(s->cct->_conf.get_val<size_t>("rgw_put_obj_min_window_size"),
                                 s->yield);
   using namespace rgw::putobj;
   constexpr auto max_processor_size = std::max({sizeof(MultipartObjectProcessor),
@@ -4015,7 +4015,7 @@ void RGWPutObj::execute()
   tracepoint(rgw_op, processor_complete_exit, s->req_id.c_str());
 
   /* produce torrent */
-  if (s->cct->_conf->rgw_torrent_flag && (ofs == torrent.get_data_len()))
+  if (s->cct->_conf.get_val<bool>("rgw_torrent_flag") && (ofs == torrent.get_data_len()))
   {
     torrent.init(s, store);
     torrent.set_create_date(mtime);
@@ -4126,7 +4126,7 @@ void RGWPostObj::execute()
       store->gen_rand_obj_instance_name(&obj);
     }
 
-    auto aio = rgw::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
+    auto aio = rgw::make_throttle(s->cct->_conf.get_val<size_t>("rgw_put_obj_min_window_size"),
                                   s->yield);
 
     using namespace rgw::putobj;
@@ -5015,7 +5015,7 @@ static void copy_obj_progress_cb(off_t ofs, void *param)
 
 void RGWCopyObj::progress_cb(off_t ofs)
 {
-  if (!s->cct->_conf->rgw_copy_obj_progress)
+  if (!s->cct->_conf.get_val<bool>("rgw_copy_obj_progress"))
     return;
 
   if (ofs - last_ofs < s->cct->_conf->rgw_copy_obj_progress_every_bytes)
@@ -5246,7 +5246,7 @@ void RGWPutACLs::execute()
                        << s->length << dendl;
       op_ret = -ERR_MALFORMED_XML;
       s->err.message = "The XML you provided was larger than the maximum " +
-                       std::to_string(s->cct->_conf->rgw_max_put_param_size) +
+                       std::to_string(s->cct->_conf.get_val<size_t>("rgw_max_put_param_size")) +
                        " bytes allowed.";
     }
     return;
@@ -5282,7 +5282,7 @@ void RGWPutACLs::execute()
   const RGWAccessControlList& req_acl = policy->get_acl();
   const multimap<string, ACLGrant>& req_grant_map = req_acl.get_grant_map();
 #define ACL_GRANTS_MAX_NUM      100
-  int max_num = s->cct->_conf->rgw_acl_grants_max_num;
+  int max_num = s->cct->_conf.get_val<int64_t>("rgw_acl_grants_max_num");
   if (max_num < 0) {
     max_num = ACL_GRANTS_MAX_NUM;
   }
@@ -5846,7 +5846,7 @@ void RGWCompleteMultipart::execute()
   }
 
   if ((int)parts->parts.size() >
-      s->cct->_conf->rgw_multipart_part_upload_limit) {
+      s->cct->_conf.get_val<int64_t>("rgw_multipart_part_upload_limit")) {
     op_ret = -ERANGE;
     return;
   }
@@ -5863,7 +5863,7 @@ void RGWCompleteMultipart::execute()
   bool compressed = false;
   uint64_t accounted_size = 0;
 
-  uint64_t min_part_size = s->cct->_conf->rgw_multipart_min_part_size;
+  uint64_t min_part_size = s->cct->_conf.get_val<size_t>("rgw_multipart_min_part_size");
 
   list<rgw_obj_index_key> remove_objs; /* objects to be removed from index listing */
 
@@ -6244,8 +6244,8 @@ void RGWListBucketMultiparts::execute()
 
 void RGWGetHealthCheck::execute()
 {
-  if (!g_conf()->rgw_healthcheck_disabling_path.empty() &&
-      (::access(g_conf()->rgw_healthcheck_disabling_path.c_str(), F_OK) == 0)) {
+  if (!g_conf().get_val<std::string>("rgw_healthcheck_disabling_path").empty() &&
+      (::access(g_conf().get_val<std::string>("rgw_healthcheck_disabling_path").c_str(), F_OK) == 0)) {
     /* Disabling path specified & existent in the filesystem. */
     op_ret = -ERR_SERVICE_UNAVAILABLE; /* 503 */
   } else {
@@ -6329,7 +6329,7 @@ void RGWDeleteMultiObj::execute()
     goto error;
   } else {
 #define DELETE_MULTI_OBJ_MAX_NUM      1000
-    int max_num = s->cct->_conf->rgw_delete_multi_obj_max_num;
+    int max_num = s->cct->_conf.get_val<int64_t>("rgw_delete_multi_obj_max_num");
     if (max_num < 0) {
       max_num = DELETE_MULTI_OBJ_MAX_NUM;
     }
@@ -6971,7 +6971,7 @@ int RGWBulkUploadOp::handle_file(const boost::string_ref path,
   rgw_placement_rule dest_placement = s->dest_placement;
   dest_placement.inherit_from(binfo.placement_rule);
 
-  auto aio = rgw::make_throttle(s->cct->_conf->rgw_put_obj_min_window_size,
+  auto aio = rgw::make_throttle(s->cct->_conf.get_val<size_t>("rgw_put_obj_min_window_size"),
                                 s->yield);
 
   using namespace rgw::putobj;
@@ -7442,7 +7442,7 @@ int RGWPutBucketPolicy::verify_permission()
 
 int RGWPutBucketPolicy::get_params()
 {
-  const auto max_size = s->cct->_conf->rgw_max_put_param_size;
+  const auto max_size = s->cct->_conf.get_val<size_t>("rgw_max_put_param_size");
   // At some point when I have more time I want to make a version of
   // rgw_rest_read_all_input that doesn't use malloc.
   std::tie(op_ret, data) = rgw_rest_read_all_input(s, max_size, false);

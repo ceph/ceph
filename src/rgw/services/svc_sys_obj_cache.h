@@ -90,10 +90,8 @@ protected:
   void set_enabled(bool status);
 
 public:
-  RGWSI_SysObj_Cache(CephContext *cct) : RGWSI_SysObj_Core(cct) {
-    cache.set_ctx(cct);
-  }
-
+  RGWSI_SysObj_Cache(CephContext *cct) : RGWSI_SysObj_Core(cct), cache(cct) {}
+    
   bool chain_cache_entry(std::initializer_list<rgw_cache_entry_info *> cache_info_entries,
                          RGWChainedCache::Entry *chained_entry);
   void register_chained_cache(RGWChainedCache *cc);

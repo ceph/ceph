@@ -668,7 +668,7 @@ class RGWMetaNotifier : public RGWRadosThread {
   RGWMetadataLog *const log;
 
   uint64_t interval_msec() override {
-    return cct->_conf->rgw_md_notify_interval_msec;
+    return cct->_conf.get_val<int64_t>("rgw_md_notify_interval_msec");
   }
   void stop_process() override {
     notify_mgr.stop();
@@ -863,13 +863,13 @@ public:
     list<RGWCoroutinesStack*> stacks;
     auto meta = new RGWCoroutinesStack(store->ctx(), &crs);
     meta->call(create_meta_log_trim_cr(this, store, &http,
-                                       cct->_conf->rgw_md_log_max_shards,
+                                       cct->_conf.get_val<int64_t>("rgw_md_log_max_shards"),
                                        trim_interval));
     stacks.push_back(meta);
 
     auto data = new RGWCoroutinesStack(store->ctx(), &crs);
     data->call(create_data_log_trim_cr(store, &http,
-                                       cct->_conf->rgw_data_log_num_shards,
+                                       cct->_conf.get_val<int64_t>("rgw_data_log_num_shards"),
                                        trim_interval));
     stacks.push_back(data);
 
@@ -1135,7 +1135,7 @@ class RGWIndexCompletionManager {
 
 public:
   RGWIndexCompletionManager(RGWRados *_store) : store(_store) {
-    num_shards = store->ctx()->_conf->rgw_thread_pool_size;
+    num_shards = store->ctx()->_conf.get_val<int64_t>("rgw_thread_pool_size");
 
     for (int i = 0; i < num_shards; i++) {
       char buf[64];
@@ -1508,7 +1508,7 @@ int RGWRados::init_complete()
     meta_mgr->init_oldest_log_period();
   }
 
-  async_rados = new RGWAsyncRadosProcessor(this, cct->_conf->rgw_num_async_rados_threads);
+  async_rados = new RGWAsyncRadosProcessor(this, cct->_conf.get_val<int64_t>("rgw_num_async_rados_threads"));
   async_rados->start();
 
   ret = meta_mgr->init(current_period.get_id());
@@ -1525,7 +1525,7 @@ int RGWRados::init_complete()
   }
 
   /* init it anyway, might run sync through radosgw-admin explicitly */
-  sync_tracer = new RGWSyncTraceManager(cct, cct->_conf->rgw_sync_trace_history_size);
+  sync_tracer = new RGWSyncTraceManager(cct, cct->_conf.get_val<size_t>("rgw_sync_trace_history_size"));
   sync_tracer->init(this);
   ret = sync_tracer->hook_to_admin_command();
   if (ret < 0) {
@@ -1573,7 +1573,7 @@ int RGWRados::init_complete()
       thread->start();
       data_sync_processor_threads[source_zone->id] = thread;
     }
-    auto interval = cct->_conf->rgw_sync_log_trim_interval;
+    auto interval = cct->_conf.get_val<int64_t>("rgw_sync_log_trim_interval");
     if (interval > 0) {
       sync_log_trimmer = new RGWSyncLogTrimThread(this, &*bucket_trim, interval);
       ret = sync_log_trimmer->init();
@@ -1610,7 +1610,7 @@ int RGWRados::init_complete()
   bool need_tombstone_cache = !svc.zone->get_zone_data_notify_to_map().empty(); /* have zones syncing from us */
 
   if (need_tombstone_cache) {
-    obj_tombstone_cache = new tombstone_cache_t(cct->_conf->rgw_obj_tombstone_cache_size);
+    obj_tombstone_cache = new tombstone_cache_t(cct->_conf.get_val<int64_t>("rgw_obj_tombstone_cache_size"));
   }
 
   reshard_wait = std::make_shared<RGWReshardWait>();
@@ -1875,12 +1875,12 @@ static void usage_log_hash(CephContext *cct, const string& name, string& hash, u
   uint32_t val = index;
 
   if (!name.empty()) {
-    int max_user_shards = cct->_conf->rgw_usage_max_user_shards;
+    int max_user_shards = cct->_conf.get_val<int64_t>("rgw_usage_max_user_shards");
     val %= max_user_shards;
     val += ceph_str_hash_linux(name.c_str(), name.size());
   }
   char buf[17];
-  int max_shards = cct->_conf->rgw_usage_max_shards;
+  int max_shards = cct->_conf.get_val<int64_t>("rgw_usage_max_shards");
   snprintf(buf, sizeof(buf), RGW_USAGE_OBJ_PREFIX "%u", (unsigned)(val % max_shards));
   hash = buf;
 }
@@ -1996,7 +1996,7 @@ int RGWRados::trim_usage(const rgw_user& user, const string& bucket_name, uint64
 
 int RGWRados::clear_usage()
 {
-  auto max_shards = cct->_conf->rgw_usage_max_shards;
+  auto max_shards = cct->_conf.get_val<int64_t>("rgw_usage_max_shards");
   int ret=0;
   for (unsigned i=0; i < max_shards; i++){
     string oid = RGW_USAGE_OBJ_PREFIX + to_string(i);
@@ -2191,7 +2191,7 @@ string RGWRados::objexp_hint_get_shardname(int shard_num)
 int RGWRados::objexp_key_shard(const rgw_obj_index_key& key)
 {
   string obj_key = key.name + key.instance;
-  int num_shards = cct->_conf->rgw_objexp_hints_num_shards;
+  int num_shards = cct->_conf.get_val<uint64_t>("rgw_objexp_hints_num_shards");
   return rgw_bucket_shard_index(obj_key, num_shards);
 }
 
@@ -2416,7 +2416,7 @@ int RGWRados::Bucket::List::list_objects_ordered(
 
   int count = 0;
   bool truncated = true;
-  int read_ahead = std::max(cct->_conf->rgw_list_bucket_min_readahead,max);
+  int read_ahead = std::max(cct->_conf.get_val<int64_t>("rgw_list_bucket_min_readahead"),max);
 
   result->clear();
 
@@ -4292,7 +4292,7 @@ int RGWRados::fetch_remote_obj(RGWObjectCtx& obj_ctx,
   set_mtime_weight.high_precision = high_precision_time;
   int ret;
 
-  rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
+  rgw::BlockingAioThrottle aio(cct->_conf.get_val<size_t>("rgw_put_obj_min_window_size"));
   using namespace rgw::putobj;
   const rgw_placement_rule *ptail_rule = (dest_placement_rule ? &(*dest_placement_rule) : nullptr);
   AtomicObjectProcessor processor(&aio, this, dest_bucket_info, ptail_rule, user_id,
@@ -4880,7 +4880,7 @@ int RGWRados::copy_obj_data(RGWObjectCtx& obj_ctx,
   string tag;
   append_rand_alpha(cct, tag, tag, 32);
 
-  rgw::BlockingAioThrottle aio(cct->_conf->rgw_put_obj_min_window_size);
+  rgw::BlockingAioThrottle aio(cct->_conf.get_val<size_t>("rgw_put_obj_min_window_size"));
   using namespace rgw::putobj;
   // do not change the null_yield in the initialization of this AtomicObjectProcessor
   // it causes crashes in the ragweed tests
@@ -6861,8 +6861,8 @@ int RGWRados::Object::Read::iterate(int64_t ofs, int64_t end, RGWGetDataCB *cb,
   RGWRados *store = source->get_store();
   CephContext *cct = store->ctx();
   RGWObjectCtx& obj_ctx = source->get_ctx();
-  const uint64_t chunk_size = cct->_conf->rgw_get_obj_max_req_size;
-  const uint64_t window_size = cct->_conf->rgw_get_obj_window_size;
+  const uint64_t chunk_size = cct->_conf.get_val<size_t>("rgw_get_obj_max_req_size");
+  const uint64_t window_size = cct->_conf.get_val<size_t>("rgw_get_obj_window_size");
 
   auto aio = rgw::make_throttle(window_size, y);
   get_obj_data data(store, cb, &*aio, ofs, y);
@@ -7820,7 +7820,7 @@ void RGWRados::check_pending_olh_entries(map<string, bufferlist>& pending_entrie
 
     map<string, bufferlist>::iterator cur_iter = iter;
     ++iter;
-    if (now - pending_info.time >= make_timespan(cct->_conf->rgw_olh_pending_timeout_sec)) {
+    if (now - pending_info.time >= make_timespan(cct->_conf.get_val<int64_t>("rgw_olh_pending_timeout_sec"))) {
       (*rm_pending_entries)[cur_iter->first] = cur_iter->second;
       pending_entries.erase(cur_iter);
     } else {

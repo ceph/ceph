@@ -921,10 +921,10 @@ namespace rgw {
 	    const char* _key, const char *root)
       : cct(_cct), root_fh(this), invalidate_cb(nullptr),
 	invalidate_arg(nullptr), shutdown(false), refcnt(1),
-	fh_cache(cct->_conf->rgw_nfs_fhcache_partitions,
-		 cct->_conf->rgw_nfs_fhcache_size),
-	fh_lru(cct->_conf->rgw_nfs_lru_lanes,
-	       cct->_conf->rgw_nfs_lru_lane_hiwat),
+	fh_cache(cct->_conf.get_val<int64_t>("rgw_nfs_fhcache_partitions"),
+		 cct->_conf.get_val<int64_t>("rgw_nfs_fhcache_size")),
+	fh_lru(cct->_conf.get_val<int64_t>("rgw_nfs_lru_lanes"),
+	       cct->_conf.get_val<int64_t>("rgw_nfs_lru_lane_hiwat")),
 	uid(_uid), key(_user_id, _key) {
 
       if (!root || !strcmp(root, "/")) {

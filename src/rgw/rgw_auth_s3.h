@@ -47,7 +47,7 @@ class STSAuthStrategy : public rgw::auth::Strategy,
                             ) const override {
     auto apl = rgw::auth::add_sysreq(cct, store, s,
       rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info,
-                               cct->_conf->rgw_keystone_implicit_tenants));
+                               cct->_conf.get_val<bool>("rgw_keystone_implicit_tenants")));
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
 
@@ -80,7 +80,7 @@ public:
                   static_cast<rgw::auth::LocalApplier::Factory*>(this),
                   static_cast<rgw::auth::RemoteApplier::Factory*>(this),
                   static_cast<rgw::auth::RoleApplier::Factory*>(this)) {
-      if (cct->_conf->rgw_s3_auth_use_sts) {
+      if (cct->_conf.get_val<bool>("rgw_s3_auth_use_sts")) {
         add_engine(Control::SUFFICIENT, sts_engine);
       }
     }
@@ -110,7 +110,7 @@ class ExternalAuthStrategy : public rgw::auth::Strategy,
                             ) const override {
     auto apl = rgw::auth::add_sysreq(cct, store, s,
       rgw::auth::RemoteApplier(cct, store, std::move(acl_alg), info,
-                               cct->_conf->rgw_keystone_implicit_tenants));
+                               cct->_conf.get_val<bool>("rgw_keystone_implicit_tenants")));
     /* TODO(rzarzynski): replace with static_ptr. */
     return aplptr_t(new decltype(apl)(std::move(apl)));
   }
@@ -123,8 +123,8 @@ public:
       ldap_engine(cct, store, *ver_abstractor,
                   static_cast<rgw::auth::RemoteApplier::Factory*>(this)) {
 
-    if (cct->_conf->rgw_s3_auth_use_keystone &&
-        ! cct->_conf->rgw_keystone_url.empty()) {
+    if (cct->_conf.get_val<bool>("rgw_s3_auth_use_keystone") &&
+        ! cct->_conf.get_val<std::string>("rgw_keystone_url").empty()) {
 
       keystone_engine.emplace(cct, ver_abstractor,
                               static_cast<rgw::auth::RemoteApplier::Factory*>(this),
@@ -201,7 +201,7 @@ public:
     const std::set <std::string_view> allowed_auth = { "sts", "external", "local" };
     std::vector <std::string> default_order = { "sts", "external", "local" };
     // supplied strings may contain a space, so let's bypass that
-    boost::split(result, cct->_conf->rgw_s3_auth_order,
+    boost::split(result, cct->_conf.get_val<std::string>("rgw_s3_auth_order"),
 		 boost::is_any_of(", "), boost::token_compress_on);
 
     if (std::any_of(result.begin(), result.end(),
@@ -240,7 +240,7 @@ public:
       engine_map.insert(std::make_pair("external", std::cref(external_engines)));
     }
     /* The local auth. */
-    if (cct->_conf->rgw_s3_auth_use_rados) {
+    if (cct->_conf.get_val<bool>("rgw_s3_auth_use_rados")) {
       engine_map.insert(std::make_pair("local", std::cref(local_engine)));
     }
 

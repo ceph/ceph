@@ -1023,10 +1023,10 @@ namespace rgw {
     /* dirent invalidate timeout--basically, the upper-bound on
      * inconsistency with the S3 namespace */
     auto expire_s
-      = get_context()->_conf->rgw_nfs_namespace_expire_secs;
+      = get_context()->_conf.get_val<int64_t>("rgw_nfs_namespace_expire_secs");
 
     /* max events to gc in one cycle */
-    uint32_t max_ev = get_context()->_conf->rgw_nfs_max_gc;
+    uint32_t max_ev = get_context()->_conf.get_val<int64_t>("rgw_nfs_max_gc");
 
     struct timespec now, expire_ts;
     event_vector ve;
@@ -1487,7 +1487,7 @@ namespace rgw {
     auto now = real_clock::now();
     auto cmptime = state.mtime;
     cmptime.tv_sec +=
-      fs->get_context()->_conf->rgw_nfs_namespace_expire_secs;
+      fs->get_context()->_conf.get_val<int64_t>("rgw_nfs_namespace_expire_secs");
     if (cmptime < real_clock::to_timespec(now)) {
       /* sets ctime as well as mtime, to avoid masking updates should
        * ctime inexplicably hold a higher value */
@@ -1536,7 +1536,7 @@ namespace rgw {
     /* skipping user-supplied etag--we might have one in future, but
      * like data it and other attrs would arrive after open */
 
-    aio.emplace(s->cct->_conf->rgw_put_obj_min_window_size);
+    aio.emplace(s->cct->_conf.get_val<size_t>("rgw_put_obj_min_window_size"));
 
     if (s->bucket_info.versioning_enabled()) {
       if (!version_id.empty()) {
@@ -2013,7 +2013,7 @@ int rgw_lookup(struct rgw_fs *rgw_fs,
 	? RGWFileHandle::FLAG_NONE
 	: RGWFileHandle::FLAG_EXACT_MATCH;
 
-      bool fast_attrs= fs->get_context()->_conf->rgw_nfs_s3_fast_attrs;
+      bool fast_attrs= fs->get_context()->_conf.get_val<bool>("rgw_nfs_s3_fast_attrs");
 
       if ((flags & RGW_LOOKUP_FLAG_RCB) && fast_attrs) {
 	/* FAKE STAT--this should mean, interpolate special

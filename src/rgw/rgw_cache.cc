@@ -229,7 +229,7 @@ bool ObjectCache::remove(const string& name)
 void ObjectCache::touch_lru(const string& name, ObjectCacheEntry& entry,
 			    std::list<string>::iterator& lru_iter)
 {
-  while (lru_size > (size_t)cct->_conf->rgw_cache_lru_size) {
+  while (lru_size > lru_max_size) {
     auto iter = lru.begin();
     if ((*iter).compare(name) == 0) {
       /*
@@ -311,8 +311,7 @@ void ObjectCache::do_invalidate_all()
 
   lru_size = 0;
   lru_counter = 0;
-  lru_window = 0;
-
+  
   for (auto& cache : chained_cache) {
     cache->invalidate_all();
   }
@@ -338,8 +337,46 @@ void ObjectCache::unchain_cache(RGWChainedCache *cache) {
 
 ObjectCache::~ObjectCache()
 {
+  cct->_conf.remove_observer(this);
   for (auto cache : chained_cache) {
     cache->unregistered();
   }
 }
+
+const char** ObjectCache::get_tracked_conf_keys() const
+{
+  static const char* keys[] = {
+    "rgw_cache_lru_size",
+    "rgw_cache_expiry_interval",
+    nullptr
+  };
+  return keys;
+}
+
+void ObjectCache::handle_conf_change(const ConfigProxy& conf,
+           const std::set<std::string>& changed)
+{
+  if (changed.find("rgw_cache_lru_size") != changed.end()) {
+    RWLock::WLocker l(lock);
+    lru_max_size = cct->_conf.get_val<int64_t>("rgw_cache_lru_size");
+    lru_window = lru_max_size / 2;
+      }
+  if (changed.find("rgw_cache_expiry_interval") != changed.end()) {
+    RWLock::WLocker l(lock);
+    expiry = std::chrono::seconds(cct->_conf.get_val<uint64_t>("rgw_cache_expiry_interval"));
+  }
+}
+
+     
+    
+    
+  
+  
+  
+    
+    
+    
+    
+            
+  
 

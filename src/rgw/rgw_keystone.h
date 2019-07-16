@@ -71,21 +71,21 @@ public:
   std::string get_admin_token() const noexcept override;
 
   boost::string_ref get_admin_user() const noexcept override {
-    return g_ceph_context->_conf->rgw_keystone_admin_user;
+    return g_ceph_context->_conf.get_val<std::string>("rgw_keystone_admin_user");
   }
 
   std::string get_admin_password() const noexcept override;
 
   boost::string_ref get_admin_tenant() const noexcept override {
-    return g_ceph_context->_conf->rgw_keystone_admin_tenant;
+    return g_ceph_context->_conf.get_val<std::string>("rgw_keystone_admin_tenant");
   }
 
   boost::string_ref get_admin_project() const noexcept override {
-    return g_ceph_context->_conf->rgw_keystone_admin_project;
+    return g_ceph_context->_conf.get_val<std::string>("rgw_keystone_admin_project");
   }
 
   boost::string_ref get_admin_domain() const noexcept override {
-    return g_ceph_context->_conf->rgw_keystone_admin_domain;
+    return g_ceph_context->_conf.get_val<std::string>("rgw_keystone_admin_domain");
   }
 };
 
@@ -102,7 +102,7 @@ public:
                                const string& url,
                                bufferlist * const token_body_bl)
       : RGWHTTPTransceiver(cct, method, url, token_body_bl,
-                           cct->_conf->rgw_keystone_verify_ssl,
+                           cct->_conf.get_val<bool>("rgw_keystone_verify_ssl"),
                            { "X-Subject-Token" }) {
     }
 
@@ -224,7 +224,7 @@ class TokenCache {
   explicit TokenCache(const rgw::keystone::Config& config)
     : cct(g_ceph_context),
       lock("rgw::keystone::TokenCache"),
-      max(cct->_conf->rgw_keystone_token_cache_size) {
+      max(cct->_conf.get_val<int64_t>("rgw_keystone_token_cache_size")) {
   }
 
   ~TokenCache() {

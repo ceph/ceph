@@ -51,12 +51,12 @@ boost::optional<WebTokenEngine::token_t>
 WebTokenEngine::get_from_idp(const DoutPrefixProvider* dpp, const std::string& token) const
 {
   //Access token conforming to OAuth2.0
-  if (! cct->_conf->rgw_sts_token_introspection_url.empty()) {
+  if (! cct->_conf.get_val<std::string>("rgw_sts_token_introspection_url").empty()) {
     bufferlist introspect_resp;
-    RGWHTTPTransceiver introspect_req(cct, "POST", cct->_conf->rgw_sts_token_introspection_url, &introspect_resp);
+    RGWHTTPTransceiver introspect_req(cct, "POST", cct->_conf.get_val<std::string>("rgw_sts_token_introspection_url"), &introspect_resp);
     //Headers
     introspect_req.append_header("Content-Type", "application/x-www-form-urlencoded");
-    string base64_creds = "Basic " + rgw::to_base64(cct->_conf->rgw_sts_client_id + ":" + cct->_conf->rgw_sts_client_secret);
+    string base64_creds = "Basic " + rgw::to_base64(cct->_conf.get_val<std::string>("rgw_sts_client_id") + ":" + cct->_conf.get_val<std::string>("rgw_sts_client_secret"));
     introspect_req.append_header("Authorization", base64_creds);
     // POST data
     string post_data = "token=" + token;
@@ -189,7 +189,7 @@ int RGWSTSGetSessionToken::get_params()
   if (! duration.empty()) {
     uint64_t duration_in_secs = stoull(duration);
     if (duration_in_secs < STS::GetSessionTokenRequest::getMinDuration() ||
-            duration_in_secs > s->cct->_conf->rgw_sts_max_session_duration)
+            duration_in_secs > s->cct->_conf.get_val<uint64_t>("rgw_sts_max_session_duration"))
       return -EINVAL;
   }
 

@@ -84,7 +84,7 @@ int PurgePeriodLogsCR::operate()
       yield {
         const auto mdlog = metadata->get_log(cursor.get_period().get_id());
         const auto& pool = store->svc.zone->get_zone_params().log_pool;
-        auto num_shards = cct->_conf->rgw_md_log_max_shards;
+        auto num_shards = cct->_conf.get_val<int64_t>("rgw_md_log_max_shards");
         call(new PurgeLogShardsCR(store, mdlog, pool, num_shards));
       }
       if (retcode < 0) {
@@ -164,7 +164,7 @@ int take_min_status(CephContext *cct, Iter first, Iter last,
   if (first == last) {
     return -EINVAL;
   }
-  const size_t num_shards = cct->_conf->rgw_md_log_max_shards;
+  const size_t num_shards = cct->_conf.get_val<int64_t>("rgw_md_log_max_shards");
 
   status->sync_info.realm_epoch = std::numeric_limits<epoch_t>::max();
   for (auto p = first; p != last; ++p) {

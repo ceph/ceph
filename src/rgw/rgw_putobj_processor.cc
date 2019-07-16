@@ -242,7 +242,7 @@ int AtomicObjectProcessor::prepare(optional_yield y)
   }
 
   uint64_t stripe_size;
-  const uint64_t default_stripe_size = store->ctx()->_conf->rgw_obj_stripe_size;
+  const uint64_t default_stripe_size = store->ctx()->_conf.get_val<size_t>("rgw_obj_stripe_size");
 
   store->get_max_aligned_size(default_stripe_size, alignment, &stripe_size);
 
@@ -361,7 +361,7 @@ int MultipartObjectProcessor::process_first_chunk(bufferlist&& data,
 
 int MultipartObjectProcessor::prepare_head()
 {
-  const uint64_t default_stripe_size = store->ctx()->_conf->rgw_obj_stripe_size;
+  const uint64_t default_stripe_size = store->ctx()->_conf.get_val<size_t>("rgw_obj_stripe_size");
   uint64_t chunk_size;
   uint64_t stripe_size;
   uint64_t alignment;
@@ -563,7 +563,7 @@ int AppendObjectProcessor::prepare(optional_yield y)
     cur_manifest = &astate->manifest;
     manifest.set_prefix(cur_manifest->get_prefix());
   }
-  manifest.set_multipart_part_rule(store->ctx()->_conf->rgw_obj_stripe_size, cur_part_num);
+  manifest.set_multipart_part_rule(store->ctx()->_conf.get_val<size_t>("rgw_obj_stripe_size"), cur_part_num);
 
   r = manifest_gen.create_begin(store->ctx(), &manifest, bucket_info.placement_rule, &tail_placement_rule, head_obj.bucket, head_obj);
   if (r < 0) {

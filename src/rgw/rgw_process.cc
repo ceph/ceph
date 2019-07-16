@@ -129,7 +129,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   }
 
   /* Check if OPA is used to authorize requests */
-  if (s->cct->_conf->rgw_use_opa_authz) {
+  if (s->cct->_conf.get_val<bool>("rgw_use_opa_authz")) {
     ret = rgw_opa_authorize(op, s);
     if (ret < 0) {
       return ret;
