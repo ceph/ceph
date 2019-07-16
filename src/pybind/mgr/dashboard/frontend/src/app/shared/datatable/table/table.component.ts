@@ -179,14 +179,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   ngOnInit() {
     // ngx-datatable triggers calculations each time mouse enters a row,
     // this will prevent that.
-    window.addEventListener(
-      'mouseenter',
-      function(event) {
-        event.stopPropagation();
-      },
-      true
-    );
-
+    window.addEventListener('mouseenter', (event) => event.stopPropagation(), true);
     this._addTemplates();
     if (!this.sorts) {
       // Check whether the specified identifier exists.
