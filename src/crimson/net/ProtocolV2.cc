@@ -147,11 +147,12 @@ void ProtocolV2::start_accept(SocketFRef&& sock,
 {
   ceph_assert(state == state_t::NONE);
   ceph_assert(!socket);
+  // until we know better
   conn.target_addr = _peer_addr;
   conn.set_ephemeral_port(_peer_addr.get_port(),
                           SocketConnection::side_t::acceptor);
   socket = std::move(sock);
-  logger().info("{} ProtocolV2::start_accept(): peer_addr={}", conn, _peer_addr);
+  logger().info("{} ProtocolV2::start_accept(): target_addr={}", conn, _peer_addr);
   messenger.accept_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   execute_accepting();
@@ -1073,10 +1074,7 @@ seastar::future<bool> ProtocolV2::server_connect()
     }
     // TODO: change peer_addr to entity_addrvec_t
     entity_addr_t paddr = client_ident.addrs().front();
-    conn.peer_addr = conn.target_addr;
-    conn.peer_addr.set_type(paddr.get_type());
-    conn.peer_addr.set_port(paddr.get_port());
-    conn.peer_addr.set_nonce(paddr.get_nonce());
+    conn.peer_addr = paddr;
     logger().debug("{} UPDATE: peer_addr={}", conn, conn.peer_addr);
     conn.target_addr = conn.peer_addr;
 

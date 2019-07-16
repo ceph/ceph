@@ -329,6 +329,7 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
   conn.set_ephemeral_port(0, SocketConnection::side_t::none);
   ceph_assert(!socket);
   conn.peer_addr = _peer_addr;
+  conn.target_addr = _peer_addr;
   conn.set_peer_type(_peer_type);
   conn.policy = messenger.get_policy(_peer_type);
   messenger.register_conn(
@@ -609,19 +610,19 @@ void ProtocolV1::start_accept(SocketFRef&& sock,
   set_write_state(write_state_t::delay);
 
   ceph_assert(!socket);
-  conn.peer_addr.u = _peer_addr.u;
-  conn.peer_addr.set_port(0);
+  // until we know better
+  conn.target_addr = _peer_addr;
   conn.set_ephemeral_port(_peer_addr.get_port(),
                           SocketConnection::side_t::acceptor);
   socket = std::move(sock);
   messenger.accept_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-  seastar::with_gate(pending_dispatch, [this, _peer_addr] {
+  seastar::with_gate(pending_dispatch, [this] {
       // encode/send server's handshake header
       bufferlist bl;
       bl.append(buffer::create_static(banner_size, banner));
       ::encode(messenger.get_myaddr(), bl, 0);
-      ::encode(_peer_addr, bl, 0);
+      ::encode(conn.target_addr, bl, 0);
       return socket->write_flush(std::move(bl))
         .then([this] {
           // read client's handshake header and connect request
@@ -632,9 +633,8 @@ void ProtocolV1::start_accept(SocketFRef&& sock,
           entity_addr_t addr;
           ::decode(addr, p);
           ceph_assert(p.end());
-          conn.peer_addr.set_type(addr.get_type());
-          conn.peer_addr.set_port(addr.get_port());
-          conn.peer_addr.set_nonce(addr.get_nonce());
+          conn.peer_addr = addr;
+          conn.target_addr = conn.peer_addr;
           return seastar::repeat([this] {
             return repeat_handle_connect();
           });
