@@ -7276,11 +7276,18 @@ void OSD::sched_scrub()
   if (!service.can_inc_scrubs_pending()) {
     return;
   }
-  if (!cct->_conf->osd_scrub_during_recovery && service.is_recovery_active()) {
-    dout(20) << __func__ << " not scheduling scrubs due to active recovery" << dendl;
-    return;
+  bool allow_requested_repair_only = false;
+  if (service.is_recovery_active()) {
+    if (!cct->_conf->osd_scrub_during_recovery && cct->_conf->osd_repair_during_recovery) {
+      dout(10) << __func__
+               << " will only schedule explicitly requested repair due to active recovery"
+               << dendl;
+      allow_requested_repair_only = true;
+    } else if (!cct->_conf->osd_scrub_during_recovery && !cct->_conf->osd_repair_during_recovery) {
+      dout(20) << __func__ << " not scheduling scrubs due to active recovery" << dendl;
+      return;
+    }
   }
-
 
   utime_t now = ceph_clock_now();
   bool time_permit = scrub_time_permit(now);
@@ -7313,6 +7320,14 @@ void OSD::sched_scrub()
 	pg->unlock();
 	dout(30) << __func__ << ": already in progress pgid " << scrub.pgid << dendl;
 	continue;
+      }
+      // Skip other kinds of scrubing if only explicitly requested repairing is allowed
+      if (allow_requested_repair_only && !pg->scrubber.must_repair) {
+        pg->unlock();
+        dout(10) << __func__ << " skip " << scrub.pgid
+                 << " because repairing is not explicitly requested on it"
+                 << dendl;
+        continue;
       }
       // If it is reserving, let it resolve before going to the next scrub job
       if (pg->scrubber.reserved) {
@@ -9433,6 +9448,9 @@ void OSDService::finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue)
 
 bool OSDService::is_recovery_active()
 {
+  if (cct->_conf->osd_debug_pretend_recovery_active) {
+    return true;
+  }
   return local_reserver.has_reservation() || remote_reserver.has_reservation();
 }
 

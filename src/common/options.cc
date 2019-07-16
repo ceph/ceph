@@ -3406,6 +3406,10 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description("Allow scrubbing when PGs on the OSD are undergoing recovery"),
 
+    Option("osd_repair_during_recovery", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Allow requested repairing when PGs on the OSD are undergoing recovery"),
+
     Option("osd_scrub_begin_hour", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("Restrict scrubbing to this hour of the day or later")
@@ -3722,6 +3726,10 @@ std::vector<Option> get_global_options() {
     .set_default(false),
     Option("osd_debug_no_purge_strays", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false),
+
+    Option("osd_debug_pretend_recovery_active", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description(""),
 
     Option("osd_enable_op_tracker", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
