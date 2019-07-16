@@ -105,6 +105,7 @@ private:
   feature_bitset_t supported_features;
   feature_bitset_t required_client_features;
 
+  bool replay_unsafe_with_closed_session = false;
   double cap_revoke_eviction_timeout = 0;
 
   friend class MDSContinuation;

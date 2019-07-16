@@ -1836,7 +1836,7 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, unsigned flags,
 
   if (ack) {
     Session *session = mds->get_session(client);
-    if (session) {
+    if (session && !session->is_closed()) {
       // "oldest flush tid" > 0 means client uses unique TID for each flush
       if (ack->get_oldest_flush_tid() > 0)
         session->add_completed_flush(ack->get_client_tid());
