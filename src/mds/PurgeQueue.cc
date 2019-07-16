@@ -404,7 +404,7 @@ void PurgeQueue::_go_readonly(int r)
   if (readonly) return;
   dout(1) << "going readonly because internal IO failed: " << strerror(-r) << dendl;
   readonly = true;
-  on_error->complete(r);
+  finisher.queue(on_error, r);
   on_error = nullptr;
   journaler.set_readonly();
   finish_contexts(g_ceph_context, waiting_for_recovery, r);
@@ -570,7 +570,8 @@ void PurgeQueue::_execute_item(
     // Also do this periodically even if not idle, so that the persisted
     // expire_pos doesn't fall too far behind our progress when consuming
     // a very long queue.
-    if (in_flight.empty() || journaler.write_head_needed()) {
+    if (!readonly &&
+	(in_flight.empty() || journaler.write_head_needed())) {
       journaler.write_head(nullptr);
     }
   }), &finisher));
