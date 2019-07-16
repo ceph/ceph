@@ -2483,8 +2483,8 @@ int BlueFS::_allocate_without_fallback(uint8_t id, uint64_t len,
   }
   extents->reserve(4);  // 4 should be (more than) enough for most allocations
   int64_t alloc_len = alloc[id]->allocate(left, min_alloc_size, 0, extents);
-  if (alloc_len < (int64_t)left) {
-    if (alloc_len != 0) {
+  if (alloc_len < 0 || alloc_len < (int64_t)left) {
+    if (alloc_len > 0) {
       alloc[id]->release(*extents);
     }
     if (bdev[id])
@@ -2522,7 +2522,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
     extents.reserve(4);  // 4 should be (more than) enough for most allocations
     alloc_len = alloc[id]->allocate(left, min_alloc_size, hint, &extents);
   }
-  if (alloc_len < (int64_t)left) {
+  if (alloc_len < 0 || alloc_len < (int64_t)left) {
     if (alloc_len > 0) {
       alloc[id]->release(extents);
     }
@@ -2552,7 +2552,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
       ceph_assert(last_alloc);
       // try again
       alloc_len = last_alloc->allocate(left, min_alloc_size, hint, &extents);
-      if (alloc_len < (int64_t)left) {
+      if (alloc_len < 0 || alloc_len < (int64_t)left) {
 	if (alloc_len > 0) {
 	  last_alloc->release(extents);
 	}
