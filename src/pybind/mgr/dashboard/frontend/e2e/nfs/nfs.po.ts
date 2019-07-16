@@ -1,5 +1,5 @@
 import { PageHelper } from '../page-helper.po';
 
-export class NfsPage extends PageHelper {
+export class NfsPageHelper extends PageHelper {
   pages = { index: '/#/nfs' };
 }

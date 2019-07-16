@@ -3,6 +3,6 @@ import { PageHelper } from '../page-helper.po';
 
 browser.ignoreSynchronization = true;
 
-export class LogsPage extends PageHelper {
+export class LogsPageHelper extends PageHelper {
   pages = { index: '/#/logs' };
 }

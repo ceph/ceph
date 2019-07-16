@@ -1,11 +1,10 @@
 import { Helper } from '../helper.po';
-import { UsersPage } from './users.po';
 
 describe('RGW users page', () => {
-  let page: UsersPage;
+  let users;
 
   beforeAll(() => {
-    page = new UsersPage();
+    users = new Helper().users;
   });
 
   afterEach(() => {
@@ -14,11 +13,11 @@ describe('RGW users page', () => {
 
   describe('breadcrumb test', () => {
     beforeAll(() => {
-      page.navigateTo();
+      users.navigateTo();
     });
 
     it('should open and show breadcrumb', () => {
-      expect(UsersPage.getBreadcrumbText()).toEqual('Users');
+      expect(users.getBreadcrumbText()).toEqual('Users');
     });
   });
 });

@@ -1,11 +1,10 @@
 import { Helper } from '../helper.po';
-import { ConfigurationPage } from './configuration.po';
 
 describe('Configuration page', () => {
-  let page: ConfigurationPage;
+  let configuration;
 
   beforeAll(() => {
-    page = new ConfigurationPage();
+    configuration = new Helper().configuration;
   });
 
   afterEach(() => {
@@ -14,11 +13,11 @@ describe('Configuration page', () => {
 
   describe('breadcrumb test', () => {
     beforeAll(() => {
-      page.navigateTo();
+      configuration.navigateTo();
     });
 
     it('should open and show breadcrumb', () => {
-      expect(ConfigurationPage.getBreadcrumbText()).toEqual('Configuration');
+      expect(configuration.getBreadcrumbText()).toEqual('Configuration');
     });
   });
 });
