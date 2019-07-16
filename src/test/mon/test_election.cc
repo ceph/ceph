@@ -63,6 +63,8 @@ struct Election {
   void start_one(int who);
   void start_all();
   bool election_stable();
+  bool check_leader_agreement();
+  bool check_epoch_agreement();
   void block_messages(int from, int to);
   void block_bidirectional_messages(int a, int b);
   void unblock_messages(int from, int to);
@@ -299,6 +301,31 @@ bool Election::election_stable()
   return true;
 }
 
+bool Election::check_leader_agreement()
+{
+  int leader = electors[0]->logic.get_acked_leader();
+  for (auto i: electors) {
+    if (leader != i.second->logic.get_acked_leader()) {
+      return false;
+    }
+  }
+  if (disallowed_leaders.count(leader)) {
+    return false;
+  }
+  return true;
+}
+
+bool Election::check_epoch_agreement()
+{
+  epoch_t epoch = electors[0]->logic.get_epoch();
+  for (auto i : electors) {
+    if (epoch != i.second->logic.get_epoch()) {
+      return false;
+    }
+  }
+  return true;
+}
+
 void Election::block_messages(int from, int to)
 {
   blocked_messages[from].insert(to);
@@ -329,14 +356,8 @@ TEST(election, single_startup_election_completes)
     int steps = election.run_timesteps(0);
     ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
     ASSERT_TRUE(election.election_stable());
-    Owner *first_o = election.electors[0];
-    int leader = first_o->logic.get_acked_leader();
-    int epoch = first_o->logic.get_epoch();
-    for (auto i : election.electors) {
-      Owner *o = i.second;
-      ASSERT_EQ(leader, o->logic.get_acked_leader());
-      ASSERT_EQ(epoch, o->logic.get_epoch());
-    }
+    ASSERT_TRUE(election.check_leader_agreement());
+    ASSERT_TRUE(election.check_epoch_agreement());
   }
 }
 
@@ -347,14 +368,8 @@ TEST(election, everybody_starts_completes)
   int steps = election.run_timesteps(0);
   ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
   ASSERT_TRUE(election.election_stable());
-  Owner *first_o = election.electors[0];
-  int leader = first_o->logic.get_acked_leader();
-  int epoch = first_o->logic.get_epoch();
-  for (auto i : election.electors) {
-    Owner *o = i.second;
-    ASSERT_EQ(leader, o->logic.get_acked_leader());
-    ASSERT_EQ(epoch, o->logic.get_epoch());
-  }
+  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.check_epoch_agreement());
 }
 
 TEST(election, blocked_connection_continues_election)
@@ -370,6 +385,8 @@ TEST(election, blocked_connection_continues_election)
   steps = election.run_timesteps(100);
   ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
   ASSERT_TRUE(election.election_stable());
+  ASSERT_TRUE(election.check_leader_agreement());
+  ASSERT_TRUE(election.check_epoch_agreement());
 }
 
 TEST(election, disallowed_doesnt_win)
@@ -384,17 +401,29 @@ TEST(election, disallowed_doesnt_win)
     int steps = election.run_timesteps(0);
     ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
     ASSERT_TRUE(election.election_stable());
-    Owner *first_o = election.electors[0];
-    int leader = first_o->logic.get_acked_leader();
-    int epoch = first_o->logic.get_epoch();
-    for (auto i : election.electors) {
-      Owner *o = i.second;
-      ASSERT_EQ(leader, o->logic.get_acked_leader());
-      ASSERT_EQ(epoch, o->logic.get_epoch());
-    }
+    ASSERT_TRUE(election.check_leader_agreement());
+    ASSERT_TRUE(election.check_epoch_agreement());
+    int leader = election.electors[0]->logic.get_acked_leader();
     for (int j = 0; j <= i; ++j) {
+      ASSERT_NE(j, leader);
+    }
+  }
+  for (int i = MON_COUNT - 1; i > 0; --i) {
+    Election election(MON_COUNT);
+    for (int j = i; j <= MON_COUNT - 1; ++j) {
+      election.add_disallowed_leader(j);
+    }
+    election.start_all();
+    int steps = election.run_timesteps(0);
+    ldout(g_ceph_context, 1) << "ran in " << steps << " timesteps" << dendl;
+    ASSERT_TRUE(election.election_stable());
+    ASSERT_TRUE(election.check_leader_agreement());
+    ASSERT_TRUE(election.check_epoch_agreement());
+    int leader = election.electors[0]->logic.get_acked_leader();
+    for (int j = i; j < MON_COUNT; ++j) {
       ASSERT_NE(j, leader);
     }
   }
 }
 
+// TODO: Write a test that disallowing and disconnecting 0 is otherwise stable?
