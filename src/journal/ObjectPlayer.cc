@@ -180,8 +180,7 @@ int ObjectPlayer::handle_fetch_complete(int r, const bufferlist &bl,
         break;
       }
 
-      if (!invalid &&
-          !advance_to_last_pad_byte(m_read_bl_off + iter.get_off(), &iter,
+      if (!advance_to_last_pad_byte(m_read_bl_off + iter.get_off(), &iter,
                                     &pad_len, &partial_entry)) {
         invalid_start_off = m_read_bl_off + bl_off;
         invalid = true;
@@ -193,10 +192,11 @@ int ObjectPlayer::handle_fetch_complete(int r, const bufferlist &bl,
             ldout(m_cct, 20) << ": partial pad detected, will re-fetch"
                              << dendl;
           }
-          break;
+        } else {
+          lderr(m_cct) << ": detected corrupt journal entry at offset "
+                       << invalid_start_off << dendl;
         }
-        lderr(m_cct) << ": detected corrupt journal entry at offset "
-                     << invalid_start_off << dendl;
+        break;
       }
       ++iter;
       continue;
