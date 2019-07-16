@@ -280,6 +280,19 @@ class TestCD(TestCephFSShell):
         output = self.get_cephfs_shell_script_output(script)
         self.assertEqual(output, expected_cwd)
 
+    def test_cd_with_args(self):
+        """
+        Test that when cd is issued with an argument, CWD is changed
+        to the path passed in the argument.
+        """
+        path = 'dir1/dir2/dir3'
+        self.mount_a.run_shell('mkdir -p ' + path)
+        expected_cwd = '/dir1/dir2/dir3'
+
+        script = 'cd {}\ncwd\n'.format(path)
+        output = self.get_cephfs_shell_script_output(script)
+        self.assertEqual(output, expected_cwd)
+
 #    def test_ls(self):
 #        """
 #        Test that ls passes
