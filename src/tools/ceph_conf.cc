@@ -23,7 +23,7 @@
 using std::deque;
 using std::string;
 
-static void usage()
+static void usage(std::ostream& out)
 {
   // TODO: add generic_usage once cerr/derr issues are resolved
   out << R"(Ceph configuration query tool
@@ -156,7 +156,7 @@ static int dump_all(const string& format)
       return 0;
     }
     cerr << "format '" << format << "' not recognized." << std::endl;
-    usage();
+    usage(cerr);
     return 1;
   }
 }
@@ -213,7 +213,7 @@ int main(int argc, const char **argv)
       size_t pos = val.find_first_of('=');
       if (pos == string::npos) {
 	cerr << "expecting argument like 'key=value' for --filter-key-value (not '" << val << "')" << std::endl;
-	usage();
+	usage(cerr);
 	return EXIT_FAILURE;
       } 
       string key(val, 0, pos);
@@ -234,7 +234,7 @@ int main(int argc, const char **argv)
 	  cerr << " " << quoted(arg);
 	}
 	cerr << std::endl;
-	usage();
+	usage(cerr);
 	return EXIT_FAILURE;
       }
     }
@@ -242,7 +242,7 @@ int main(int argc, const char **argv)
 
   cct->_log->flush();
   if (action == "help") {
-    usage();
+    usage(cout);
     return EXIT_SUCCESS;
   } else if (action == "list-sections") {
     return list_sections(section_list_prefix, filter_key, filter_key_value);
