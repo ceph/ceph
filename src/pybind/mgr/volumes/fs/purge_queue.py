@@ -1,6 +1,7 @@
 import time
 import logging
 import threading
+import traceback
 from collections import deque
 
 log = logging.getLogger(__name__)
@@ -17,7 +18,11 @@ class PurgeQueueBase(object):
             threading.Thread.__init__(self, name=name)
 
         def run(self):
-            self.purge_fn()
+            try:
+                self.purge_fn()
+            except Exception as e:
+                trace = "".join(traceback.format_exception(None, e, e.__traceback__))
+                log.error("purge queue thread encountered fatal error:\n"+trace)
 
         def cancel_job(self):
             self.cancel_event.set()
