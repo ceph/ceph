@@ -1143,6 +1143,7 @@ void MonClient::start_mon_command(const std::vector<string>& cmd,
                                   ceph::buffer::list *outbl, string *outs,
                                   Context *onfinish)
 {
+  ldout(cct,10) << __func__ << " cmd=" << cmd << dendl;
   std::lock_guard l(monc_lock);
   if (!initialized || stopping) {
     if (onfinish) {
@@ -1180,6 +1181,7 @@ void MonClient::start_mon_command(const string &mon_name,
                                   ceph::buffer::list *outbl, string *outs,
                                   Context *onfinish)
 {
+  ldout(cct,10) << __func__ << " mon." << mon_name << " cmd=" << cmd << dendl;
   std::lock_guard l(monc_lock);
   if (!initialized || stopping) {
     if (onfinish) {
@@ -1204,6 +1206,7 @@ void MonClient::start_mon_command(int rank,
                                   ceph::buffer::list *outbl, string *outs,
                                   Context *onfinish)
 {
+  ldout(cct,10) << __func__ << " rank " << rank << " cmd=" << cmd << dendl;
   std::lock_guard l(monc_lock);
   if (!initialized || stopping) {
     if (onfinish) {
