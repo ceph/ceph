@@ -214,7 +214,7 @@ int main(int argc, const char **argv)
       if (pos == string::npos) {
 	cerr << "expecting argument like 'key=value' for --filter-key-value (not '" << val << "')" << std::endl;
 	usage();
-	exit(1);
+	return EXIT_FAILURE;
       } 
       string key(val, 0, pos);
       string value(val, pos+1);
@@ -235,7 +235,7 @@ int main(int argc, const char **argv)
 	}
 	cerr << std::endl;
 	usage();
-	exit(1);
+	return EXIT_FAILURE;
       }
     }
   }
@@ -243,7 +243,7 @@ int main(int argc, const char **argv)
   cct->_log->flush();
   if (action == "help") {
     usage();
-    exit(0);
+    return EXIT_SUCCESS;
   } else if (action == "list-sections") {
     return list_sections(section_list_prefix, filter_key, filter_key_value);
   } else if (action == "lookup") {
@@ -253,6 +253,6 @@ int main(int argc, const char **argv)
   } else {
     cerr << "You must give an action, such as --lookup or --list-all-sections." << std::endl;
     cerr << "Pass --help for more help." << std::endl;
-    exit(1);
+    return EXIT_FAILURE;
   }
 }
