@@ -174,19 +174,14 @@ int main(int argc, const char **argv)
   std::string dump_format;
 
   argv_to_vec(argc, argv, args);
-  vector<const char*> orig_args = args;
-
-  global_pre_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT, CODE_ENVIRONMENT_DAEMON,
-		  CINIT_FLAG_NO_DAEMON_ACTIONS |
-		  CINIT_FLAG_NO_MON_CONFIG);
-  std::unique_ptr<CephContext,
-		  std::function<void(CephContext*)> > cct_deleter{
-      g_ceph_context,
-      [](CephContext *p) {p->put();}
-  };
-
-  g_conf().apply_changes(nullptr);
-  g_conf().complain_about_parse_errors(g_ceph_context);
+  auto orig_args = args;
+  auto cct = [&args] {
+    std::map<std::string,std::string> defaults = {{"log_to_file", "false"}};
+    return global_init(&defaults, args, CEPH_ENTITY_TYPE_CLIENT,
+		       CODE_ENVIRONMENT_DAEMON,
+		       CINIT_FLAG_NO_DAEMON_ACTIONS |
+		       CINIT_FLAG_NO_MON_CONFIG);
+  }();
 
   // do not common_init_finish(); do not start threads; do not do any of thing
   // wonky things the daemon whose conf we are examining would do (like initialize
@@ -245,7 +240,7 @@ int main(int argc, const char **argv)
     }
   }
 
-  g_ceph_context->_log->flush();
+  cct->_log->flush();
   if (action == "help") {
     usage();
     exit(0);
