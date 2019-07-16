@@ -124,9 +124,9 @@ void SocketConnection::print(ostream& out) const {
       out << " >> " << get_peer_name() << " " << peer_addr;
     } else if (side == side_t::acceptor) {
       out << " >> " << get_peer_name() << " " << peer_addr
-          << "@" << socket_port;
+          << "@" << ephemeral_port;
     } else { // side == side_t::connector
-      out << "@" << socket_port
+      out << "@" << ephemeral_port
           << " >> " << get_peer_name() << " " << peer_addr;
     }
 }
