@@ -173,15 +173,15 @@ For example, a key pair can be generated with a command similar to::
 The ``dashboard.crt`` file should then be signed by a CA. Once that is done, you
 can enable it for all Ceph manager instances by running the following commands::
 
-  $ ceph config-key set mgr/dashboard/crt -i dashboard.crt
-  $ ceph config-key set mgr/dashboard/key -i dashboard.key
+  $ ceph dashboard set-ssl-certificate -i dashboard.crt
+  $ ceph dashboard set-ssl-certificate-key -i dashboard.key
 
 If different certificates are desired for each manager instance for some reason,
 the name of the instance can be included as follows (where ``$name`` is the name
 of the ``ceph-mgr`` instance, usually the hostname)::
 
-  $ ceph config-key set mgr/dashboard/$name/crt -i dashboard.crt
-  $ ceph config-key set mgr/dashboard/$name/key -i dashboard.key
+  $ ceph dashboard set-ssl-certificate $name -i dashboard.crt
+  $ ceph dashboard set-ssl-certificate-key $name -i dashboard.key
 
 SSL can also be disabled by setting this configuration value::
 
