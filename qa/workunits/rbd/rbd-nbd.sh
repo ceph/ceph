@@ -83,6 +83,19 @@ function get_pid()
     ps -p ${PID} -o cmd | grep rbd-nbd
 }
 
+unmap_device()
+{
+    local unmap_dev=$1
+    local list_dev=$2
+    _sudo rbd-nbd unmap ${unmap_dev}
+
+    for s in 0.5 1 2 4 8 16 32; do
+	sleep ${s}
+        rbd-nbd list-mapped | expect_false grep "${list_dev} $" && return 0
+    done
+    return 1
+}
+
 #
 # main
 #
@@ -110,8 +123,7 @@ get_pid
 # map test specifying the device
 expect_false _sudo rbd-nbd --device ${DEV} map ${POOL}/${IMAGE}
 dev1=${DEV}
-_sudo rbd-nbd unmap ${DEV}
-rbd-nbd list-mapped | expect_false grep "${DEV} $"
+unmap_device ${DEV} ${DEV}
 DEV=
 # XXX: race possible when the device is reused by other process
 DEV=`_sudo rbd-nbd --device ${dev1} map ${POOL}/${IMAGE}`
@@ -190,8 +202,7 @@ ps -p ${PID} -o cmd | expect_false grep rbd-nbd
 rbd snap create ${POOL}/${IMAGE}@snap
 DEV=`_sudo rbd-nbd map ${POOL}/${IMAGE}@snap`
 get_pid
-_sudo rbd-nbd unmap "${IMAGE}@snap"
-rbd-nbd list-mapped | expect_false grep "${DEV} $"
+unmap_device "${IMAGE}@snap" ${DEV}
 DEV=
 ps -p ${PID} -o cmd | expect_false grep rbd-nbd
 
