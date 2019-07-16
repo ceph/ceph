@@ -499,17 +499,10 @@ MDSRank::MDSRank(
     cluster_degraded(false), stopping(false),
     purge_queue(g_ceph_context, whoami_,
       mdsmap_->get_metadata_pool(), objecter,
-      new FunctionContext(
-          [this](int r){
-          // Purge Queue operates inside mds_lock when we're calling into
-          // it, and outside when in background, so must handle both cases.
-          if (mds_lock.is_locked_by_me()) {
-            handle_write_error(r);
-          } else {
-            std::lock_guard l(mds_lock);
-            handle_write_error(r);
-          }
-        }
+      new FunctionContext([this](int r) {
+	  std::lock_guard l(mds_lock);
+	  handle_write_error(r);
+	}
       )
     ),
     progress_thread(this), dispatch_depth(0),
