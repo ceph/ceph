@@ -1,8 +1,15 @@
 import { browser } from 'protractor';
+import { BucketsPageHelper } from './rgw/buckets.po';
 
 export class Helper {
   static EC = browser.ExpectedConditions;
-  static TIMEOUT = 10000;
+  static TIMEOUT = 30000;
+
+  buckets: BucketsPageHelper;
+
+  constructor() {
+    this.buckets = new BucketsPageHelper();
+  }
 
   /**
    * Checks if there are any errors on the browser
