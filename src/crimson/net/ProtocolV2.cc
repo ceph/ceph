@@ -357,6 +357,7 @@ void ProtocolV2::dispatch_reset()
         seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
     .handle_exception([this] (std::exception_ptr eptr) {
       logger().error("{} ms_handle_reset caught exception: {}", conn, eptr);
+      ceph_abort("unexpected exception from ms_handle_reset()");
     });
   });
 }
@@ -383,6 +384,7 @@ void ProtocolV2::reset_session(bool full)
           seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
       .handle_exception([this] (std::exception_ptr eptr) {
         logger().error("{} ms_handle_remote_reset caught exception: {}", conn, eptr);
+        ceph_abort("unexpected exception from ms_handle_remote_reset()");
       });
     });
   }
@@ -680,6 +682,7 @@ seastar::future<bool> ProtocolV2::client_connect()
               seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
           .handle_exception([this] (std::exception_ptr eptr) {
             logger().error("{} ms_handle_connect caught exception: {}", conn, eptr);
+            ceph_abort("unexpected exception from ms_handle_connect()");
           });
         }).then([this] {
           return true;
@@ -755,6 +758,7 @@ seastar::future<bool> ProtocolV2::client_reconnect()
                 conn.shared_from_this()))
           .handle_exception([this] (std::exception_ptr eptr) {
             logger().error("{} ms_handle_connect caught exception: {}", conn, eptr);
+            ceph_abort("unexpected exception from ms_handle_connect()");
           });
         }).then([this] {
           return true;
@@ -1326,6 +1330,7 @@ seastar::future<> ProtocolV2::send_server_ident()
         seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
     .handle_exception([this] (std::exception_ptr eptr) {
       logger().error("{} ms_handle_accept caught exception: {}", conn, eptr);
+      ceph_abort("unecpected exception from ms_handle_accept()");
     });
   });
 
@@ -1490,7 +1495,7 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
       return dispatcher.ms_dispatch(&conn, std::move(msg))
 	.handle_exception([this] (std::exception_ptr eptr) {
         logger().error("{} ms_dispatch caught exception: {}", conn, eptr);
-        ceph_assert(false);
+        ceph_abort("unexpected exception from ms_dispatch()");
       });
     });
   });
