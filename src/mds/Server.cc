@@ -193,6 +193,7 @@ Server::Server(MDSRank *m) :
   terminating_sessions(false),
   recall_throttle(g_conf().get_val<double>("mds_recall_max_decay_rate"))
 {
+  replay_unsafe_with_closed_session = g_conf().get_val<bool>("mds_replay_unsafe_with_closed_session");
   cap_revoke_eviction_timeout = g_conf().get_val<double>("mds_cap_revoke_eviction_timeout");
   supported_features = feature_bitset_t(CEPHFS_FEATURES_MDS_SUPPORTED);
 }
@@ -205,13 +206,23 @@ void Server::dispatch(const Message::const_ref &m)
     return;
   }
 
+/*
+ *In reconnect phase, client sent unsafe requests to mds before reconnect msg. Seting sessionclosed_isok will handle scenario like this:
+
+1. In reconnect phase, client sent unsafe requests to mds.
+2. It reached reconnect timeout. All sessions without sending reconnect msg in time, some of which may had sent unsafe requests, are marked as closed.
+(Another situation is #31668, which will deny all client reconnect msg to speed up reboot).
+3.So these unsafe request from session without sending reconnect msg in time or being denied could be handled in clientreplay phase.
+
+*/
+  bool sessionclosed_isok = replay_unsafe_with_closed_session;
   // active?
   // handle_slave_request()/handle_client_session() will wait if necessary
   if (m->get_type() == CEPH_MSG_CLIENT_REQUEST && !mds->is_active()) {
     const auto &req = MClientRequest::msgref_cast(m);
     if (mds->is_reconnect() || mds->get_want_state() == CEPH_MDS_STATE_RECONNECT) {
       Session *session = mds->get_session(req);
-      if (!session || session->is_closed()) {
+      if (!session || (!session->is_open() && !sessionclosed_isok)) {
 	dout(5) << "session is closed, dropping " << req->get_reqid() << dendl;
 	return;
       }
@@ -779,8 +790,9 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
     } else if (session->is_killing()) {
       // destroy session, close connection
       if (session->get_connection()) {
-	session->get_connection()->mark_down();
-	session->get_connection()->set_priv(NULL);
+        session->get_connection()->mark_down();
+        mds->sessionmap.set_state(session, Session::STATE_CLOSED);
+        session->set_connection(nullptr);
       }
       mds->sessionmap.remove_session(session);
     } else {
@@ -1086,6 +1098,9 @@ void Server::evict_cap_revoke_non_responders() {
 }
 
 void Server::handle_conf_change(const std::set<std::string>& changed) {
+  if (changed.count("mds_replay_unsafe_with_closed_session")) {
+    replay_unsafe_with_closed_session = g_conf().get_val<bool>("mds_replay_unsafe_with_closed_session");
+  }
   if (changed.count("mds_cap_revoke_eviction_timeout")) {
     cap_revoke_eviction_timeout = g_conf().get_val<double>("mds_cap_revoke_eviction_timeout");
     dout(20) << __func__ << " cap revoke eviction timeout changed to "
@@ -1239,6 +1254,14 @@ void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
     dout(0) << " ignoring sessionless msg " << *m << dendl;
     auto reply = MClientSession::create(CEPH_SESSION_REJECT);
     reply->metadata["error_string"] = "sessionless";
+    mds->send_message(reply, m->get_connection());
+    return;
+  }
+
+  if (!session->is_open()) {
+    dout(0) << " ignoring msg from not-open session" << *m << dendl;
+    auto reply = MClientSession::create(CEPH_SESSION_CLOSE);
+    reply->metadata["error_string"] = "session is not open";
     mds->send_message(reply, m->get_connection());
     return;
   }
@@ -2148,13 +2171,14 @@ void Server::handle_client_request(const MClientRequest::const_ref &req)
     return;
   }
 
+  bool sessionclosed_isok = replay_unsafe_with_closed_session;
   // active session?
   Session *session = 0;
   if (req->get_source().is_client()) {
     session = mds->get_session(req);
     if (!session) {
       dout(5) << "no session for " << req->get_source() << ", dropping" << dendl;
-    } else if (session->is_closed() ||
+    } else if ((session->is_closed() && (!mds->is_clientreplay() || !sessionclosed_isok)) ||
 	       session->is_closing() ||
 	       session->is_killing()) {
       dout(5) << "session closed|closing|killing, dropping" << dendl;
@@ -2180,6 +2204,8 @@ void Server::handle_client_request(const MClientRequest::const_ref &req)
     inodeno_t created;
     if (session->have_completed_request(req->get_reqid().tid, &created)) {
       has_completed = true;
+      if (!session->is_open())
+        return;
       // Don't send traceless reply if the completed request has created
       // new inode. Treat the request as lookup request instead.
       if (req->is_replay() ||
@@ -3103,7 +3129,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
   // state. In that corner case, session's prealloc_inos are being freed.
   // To simplify the code, we disallow using/refilling session's prealloc_ino
   // while session is opening.
-  bool allow_prealloc_inos = !mdr->session->is_opening();
+  bool allow_prealloc_inos = mdr->session->is_open();
 
   // assign ino
   if (allow_prealloc_inos &&
@@ -3118,7 +3144,7 @@ CInode* Server::prepare_new_inode(MDRequestRef& mdr, CDir *dir, inodeno_t useino
 	     << dendl;
   } else {
     mdr->alloc_ino = 
-      in->inode.ino = mds->inotable->project_alloc_id();
+      in->inode.ino = mds->inotable->project_alloc_id(useino);
     dout(10) << "prepare_new_inode alloc " << mdr->alloc_ino << dendl;
   }
 
