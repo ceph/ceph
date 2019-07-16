@@ -221,7 +221,7 @@ static int lock_obj(cls_method_context_t hctx,
     lock_obj_id = object_info->to_str();
 
     CLS_LOG(20,
-	    "creating bidded lock for object \"%s\", lock \"%s\", "
+	    "working on bidded lock for object \"%s\", lock \"%s\", "
 	    "for client \"%s\"",
 	    lock_obj_id.c_str(), lock_name.c_str(), bid_source.type_str());
 

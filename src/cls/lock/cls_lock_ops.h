@@ -10,6 +10,8 @@
 
 struct cls_lock_lock_op
 {
+  static constexpr int32_t no_bid_amount = -1;
+
   string name;
   ClsLockType type;
   string cookie;
@@ -21,7 +23,7 @@ struct cls_lock_lock_op
   utime_t bid_duration;
 
   cls_lock_lock_op() :
-    type(LOCK_NONE), flags(0), bid_amount(-1), bid_duration()
+    type(LOCK_NONE), flags(0), bid_amount(no_bid_amount)
   {}
 
   void encode(bufferlist &bl) const {
