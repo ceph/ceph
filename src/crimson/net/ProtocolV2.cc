@@ -356,7 +356,7 @@ void ProtocolV2::dispatch_reset()
     return dispatcher.ms_handle_reset(
         seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
     .handle_exception([this] (std::exception_ptr eptr) {
-      logger().error("{} ms_handle_reset caust exception: {}", conn, eptr);
+      logger().error("{} ms_handle_reset caught exception: {}", conn, eptr);
     });
   });
 }
@@ -382,7 +382,7 @@ void ProtocolV2::reset_session(bool full)
       return dispatcher.ms_handle_remote_reset(
           seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
       .handle_exception([this] (std::exception_ptr eptr) {
-        logger().error("{} ms_handle_remote_reset caust exception: {}", conn, eptr);
+        logger().error("{} ms_handle_remote_reset caught exception: {}", conn, eptr);
       });
     });
   }
@@ -679,7 +679,7 @@ seastar::future<bool> ProtocolV2::client_connect()
           return dispatcher.ms_handle_connect(
               seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
           .handle_exception([this] (std::exception_ptr eptr) {
-            logger().error("{} ms_handle_connect caust exception: {}", conn, eptr);
+            logger().error("{} ms_handle_connect caught exception: {}", conn, eptr);
           });
         }).then([this] {
           return true;
@@ -754,7 +754,7 @@ seastar::future<bool> ProtocolV2::client_reconnect()
               seastar::static_pointer_cast<SocketConnection>(
                 conn.shared_from_this()))
           .handle_exception([this] (std::exception_ptr eptr) {
-            logger().error("{} ms_handle_connect caust exception: {}", conn, eptr);
+            logger().error("{} ms_handle_connect caught exception: {}", conn, eptr);
           });
         }).then([this] {
           return true;
@@ -1325,7 +1325,7 @@ seastar::future<> ProtocolV2::send_server_ident()
     return dispatcher.ms_handle_accept(
         seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
     .handle_exception([this] (std::exception_ptr eptr) {
-      logger().error("{} ms_handle_accept caust exception: {}", conn, eptr);
+      logger().error("{} ms_handle_accept caught exception: {}", conn, eptr);
     });
   });
 
