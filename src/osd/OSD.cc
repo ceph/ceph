@@ -4803,14 +4803,17 @@ void OSD::handle_osd_ping(MOSDPing *m)
 
 	      // Record per osd interace ping times
 	      // Based on osd_heartbeat_interval ignoring that it is randomly short than this interval
-	      if (i->second.hb_back_pingtime.size() < hb_vector_size) {
-		ceph_assert(i->second.hb_front_pingtime.size() == i->second.hb_back_pingtime.size());
-	        i->second.hb_back_pingtime.push_back(back_avg);
-	        i->second.hb_back_min.push_back(back_min);
-	        i->second.hb_back_max.push_back(back_max);
-	        i->second.hb_front_pingtime.push_back(front_avg);
-	        i->second.hb_front_min.push_back(front_min);
-	        i->second.hb_front_max.push_back(front_max);
+	      if (i->second.hb_back_pingtime.size() == 0) {
+		ceph_assert(i->second.hb_front_pingtime.size() == 0);
+		for (unsigned k = 0 ; k < hb_vector_size; ++k) {
+	          i->second.hb_back_pingtime.push_back(back_avg);
+	          i->second.hb_back_min.push_back(back_min);
+	          i->second.hb_back_max.push_back(back_max);
+	          i->second.hb_front_pingtime.push_back(front_avg);
+	          i->second.hb_front_min.push_back(front_min);
+	          i->second.hb_front_max.push_back(front_max);
+	          ++i->second.hb_index;
+		}
 	      } else {
 	        int index = i->second.hb_index & (hb_vector_size - 1);
 	        i->second.hb_back_pingtime[index] = back_avg;
@@ -4819,8 +4822,8 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	        i->second.hb_front_pingtime[index] = front_avg;
 	        i->second.hb_front_min[index] = front_min;
 	        i->second.hb_front_max[index] = front_max;
+	        ++i->second.hb_index;
 	      }
-	      ++i->second.hb_index;
 
 	      {
 		std::lock_guard l(service.stat_lock);
