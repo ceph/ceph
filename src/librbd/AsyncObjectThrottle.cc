@@ -93,7 +93,10 @@ void AsyncObjectThrottle<T>::start_next_op() {
       done = true;
     }
     if (m_prog_ctx != NULL) {
-      m_prog_ctx->update_progress(ono, m_end_object_no);
+      r = m_prog_ctx->update_progress(ono, m_end_object_no);
+      if (r < 0) {
+        m_ret = r;
+      }
     }
   }
 }
