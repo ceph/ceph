@@ -48,6 +48,7 @@ const static std::map<uint32_t, std::set<std::string>> always_on_modules = {
       "balancer",
       "devicehealth",
       "orchestrator_cli",
+      "rbd_support",
       "volumes",
     }
   },
@@ -59,6 +60,7 @@ const static std::map<uint32_t, std::set<std::string>> always_on_modules = {
       "balancer",
       "devicehealth",
       "orchestrator_cli",
+      "rbd_support",
       "volumes",
     }
   }
