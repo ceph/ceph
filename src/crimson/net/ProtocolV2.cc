@@ -791,7 +791,7 @@ void ProtocolV2::execute_connecting()
         }).then([this] {
           return banner_exchange();
         }).then([this] (entity_type_t _peer_type,
-                        entity_addr_t _peer_addr) {
+                        entity_addr_t _my_addr_from_peer) {
           if (conn.get_peer_type() != _peer_type) {
             logger().debug("{} connection peer type does not match what peer advertises {} != {}",
                            conn, ceph_entity_type_name(conn.get_peer_type()),
@@ -801,8 +801,8 @@ void ProtocolV2::execute_connecting()
           }
           if (messenger.get_myaddrs().empty() ||
               messenger.get_myaddrs().front().is_blank_ip()) {
-            logger().trace("peer {} says I am {}", conn.target_addr, _peer_addr);
-            return messenger.learned_addr(_peer_addr);
+            logger().trace("peer {} says I am {}", conn.target_addr, _my_addr_from_peer);
+            return messenger.learned_addr(_my_addr_from_peer);
           } else {
             return seastar::now();
           }
@@ -1203,7 +1203,7 @@ void ProtocolV2::execute_accepting()
       enable_recording();
       return banner_exchange()
         .then([this] (entity_type_t _peer_type,
-                      entity_addr_t _peer_addr) {
+                      entity_addr_t _my_addr_from_peer) {
           ceph_assert(conn.get_peer_type() == 0);
           conn.set_peer_type(_peer_type);
 
