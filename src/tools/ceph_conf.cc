@@ -64,7 +64,6 @@ List sections beginning with 'mon'.\n\
 RETURN CODE\n\
 Return code will be 0 on success; error code otherwise.\n\
 ";
-  exit(1);
 }
 
 static int list_sections(const std::string &prefix,
