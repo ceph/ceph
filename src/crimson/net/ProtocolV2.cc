@@ -52,12 +52,12 @@ inline void expect_tag(const Tag& expected,
   }
 }
 
-inline seastar::future<> unexpected_tag(const Tag& unexpected,
-                                        ceph::net::SocketConnection& conn,
-                                        const char *where) {
+inline void unexpected_tag(const Tag& unexpected,
+                           ceph::net::SocketConnection& conn,
+                           const char *where) {
   logger().error("{} {} received unexpected tag: {}",
                  conn, where, static_cast<uint32_t>(unexpected));
-  return abort_in_fault();
+  abort_in_fault();
 }
 
 } // namespace anonymous
@@ -546,7 +546,8 @@ seastar::future<> ProtocolV2::handle_auth_reply()
           return finish_auth();
         });
       default: {
-        return unexpected_tag(tag, conn, __func__);
+        unexpected_tag(tag, conn, __func__);
+        return seastar::now();
       }
     }
   });
@@ -1554,8 +1555,10 @@ void ProtocolV2::execute_ready()
               logger().trace("{} got KEEPALIVE_ACK {}",
                              conn, conn.last_keepalive_ack);
             });
-          default:
-            return unexpected_tag(tag, conn, "execute_ready");
+          default: {
+            unexpected_tag(tag, conn, "execute_ready");
+            return seastar::now();
+          }
         }
       });
     }).handle_exception([this] (std::exception_ptr eptr) {
