@@ -597,7 +597,7 @@ public:
   frag_t frag;   // my frag
 
   fnode_t fnode;
-  snapid_t first;
+  snapid_t first = 2;
   mempool::mds_co::compact_map<snapid_t,old_rstat_t> dirty_old_rstat;  // [value.first,key]
 
   // my inodes with dirty rstat data
@@ -661,25 +661,25 @@ protected:
   void _encode_dentry(CDentry *dn, bufferlist& bl, const std::set<snapid_t> *snaps);
   void _committed(int r, version_t v);
 
-  version_t projected_version;
+  version_t projected_version = 0;
   mempool::mds_co::list<fnode_t> projected_fnode;
 
   std::unique_ptr<scrub_info_t> scrub_infop; // FIXME not in mempool
 
   // contents of this directory
   dentry_key_map items;       // non-null AND null
-  unsigned num_head_items;
-  unsigned num_head_null;
-  unsigned num_snap_items;
-  unsigned num_snap_null;
+  unsigned num_head_items = 0;
+  unsigned num_head_null = 0;
+  unsigned num_snap_items = 0;
+  unsigned num_snap_null = 0;
 
-  int num_dirty;
+  int num_dirty = 0;
 
   int num_inodes_with_caps = 0;
 
   // state
-  version_t committing_version;
-  version_t committed_version;
+  version_t committing_version = 0;
+  version_t committed_version = 0;
 
   mempool::mds_co::compact_set<mempool::mds_co::string> stale_items;
 
@@ -687,7 +687,7 @@ protected:
   static int num_frozen_trees;
   static int num_freezing_trees;
 
-  int dir_auth_pins;
+  int dir_auth_pins = 0;
 
   // cache control  (defined for authority; hints for replicas)
   __s32      dir_rep;
@@ -706,9 +706,9 @@ protected:
   elist<CInode*> pop_lru_subdirs;
 
   // and to provide density
-  int num_dentries_nested;
-  int num_dentries_auth_subtree;
-  int num_dentries_auth_subtree_nested;
+  int num_dentries_nested = 0;
+  int num_dentries_auth_subtree = 0;
+  int num_dentries_auth_subtree_nested = 0;
 
   std::unique_ptr<bloom_filter> bloom; // XXX not part of mempool::mds_co
   /* If you set up the bloom filter, you must keep it accurate!
