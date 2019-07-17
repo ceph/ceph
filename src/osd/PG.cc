@@ -7151,7 +7151,12 @@ PG::RecoveryState::Backfilling::react(const RemoteReservationRevoked &)
   PG *pg = context< RecoveryMachine >().pg;
   pg->state_set(PG_STATE_BACKFILL_WAIT);
   cancel_backfill();
-  return transit<WaitLocalBackfillReserved>();
+  if (pg->needs_backfill()) {
+    return transit<WaitLocalBackfillReserved>();
+  } else {
+    // raced with MOSDPGBackfill::OP_BACKFILL_FINISH, ignore
+    return discard_event();
+  }
 }
 
 void PG::RecoveryState::Backfilling::exit()
@@ -7529,14 +7534,6 @@ PG::RecoveryState::RepWaitBackfillReserved::react(
 boost::statechart::result
 PG::RecoveryState::RepWaitBackfillReserved::react(
   const RemoteReservationCanceled &evt)
-{
-  PG *pg = context< RecoveryMachine >().pg;
-  pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
-  return transit<RepNotRecovering>();
-}
-
-boost::statechart::result
-PG::RecoveryState::RepWaitBackfillReserved::react(const RecoveryDone&)
 {
   PG *pg = context< RecoveryMachine >().pg;
   pg->osd->remote_reserver.cancel_reservation(pg->info.pgid);
