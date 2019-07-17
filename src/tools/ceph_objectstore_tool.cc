@@ -1951,14 +1951,16 @@ int do_remove_object(ObjectStore *store, coll_t coll,
       cerr << "Can't get snapset error " << cpp_strerror(r) << std::endl;
       return r;
     }
-    if (!ss.snaps.empty() && !all) {
+//    cout << "snapset " << ss << std::endl;
+    if (!ss.clone_snaps.empty() && !all) {
       if (force) {
         cout << "WARNING: only removing "
              << (ghobj.hobj.is_head() ? "head" : "snapdir")
-             << " with snapshots present" << std::endl;
-        ss.snaps.clear();
+             << " with clones present" << std::endl;
+        ss.clone_snaps.clear();
       } else {
-        cerr << "Snapshots are present, use removeall to delete everything" << std::endl;
+        cerr << "Clones are present, use removeall to delete everything"
+	     << std::endl;
         return -EINVAL;
       }
     }
@@ -1968,10 +1970,9 @@ int do_remove_object(ObjectStore *store, coll_t coll,
   OSDriver::OSTransaction _t(driver.get_transaction(&t));
 
   ghobject_t snapobj = ghobj;
-  for (vector<snapid_t>::iterator i = ss.snaps.begin() ;
-       i != ss.snaps.end() ; ++i) {
-    snapobj.hobj.snap = *i;
-    cout << "remove " << snapobj << std::endl;
+  for (auto& p : ss.clone_snaps) {
+    snapobj.hobj.snap = p.first;
+    cout << "remove clone " << snapobj << std::endl;
     if (!dry_run) {
       r = remove_object(coll, snapobj, mapper, &_t, &t, type);
       if (r < 0)
@@ -2634,9 +2635,9 @@ int clear_snapset(ObjectStore *store, coll_t coll, ghobject_t &ghobj,
   // Use "seq" to just corrupt SnapSet.seq
   if (arg == "corrupt" || arg == "seq")
     ss.seq = 0;
-  // Use "snaps" to just clear SnapSet.snaps
+  // Use "snaps" to just clear SnapSet.clone_snaps
   if (arg == "corrupt" || arg == "snaps")
-    ss.snaps.clear();
+    ss.clone_snaps.clear();
   // By default just clear clone, clone_overlap and clone_size
   if (arg == "corrupt")
     arg = "";

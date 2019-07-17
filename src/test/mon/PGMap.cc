@@ -80,7 +80,7 @@ TEST(pgmap, dump_object_stat_sum_0)
   pool.size = 2;
   pool.type = pg_pool_t::TYPE_REPLICATED;
   PGMap::dump_object_stat_sum(tbl, nullptr, pool_stat, avail,
-                                  pool.get_size(), verbose, &pool);  
+			      pool.get_size(), verbose, true, &pool);  
   float copies_rate =
     (static_cast<float>(sum.num_object_copies - sum.num_objects_degraded) /
       sum.num_object_copies) * pool.get_size();
@@ -117,7 +117,7 @@ TEST(pgmap, dump_object_stat_sum_1)
   pool.size = 2;
   pool.type = pg_pool_t::TYPE_REPLICATED;
   PGMap::dump_object_stat_sum(tbl, nullptr, pool_stat, avail,
-                                  pool.get_size(), verbose, &pool);  
+			      pool.get_size(), verbose, true, &pool);  
   unsigned col = 0;
   ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(stringify(si_u_t(0)), tbl.get(0, col++));
@@ -148,7 +148,7 @@ TEST(pgmap, dump_object_stat_sum_2)
   pool.type = pg_pool_t::TYPE_REPLICATED;
 
   PGMap::dump_object_stat_sum(tbl, nullptr, pool_stat, avail,
-                                  pool.get_size(), verbose, &pool);  
+			      pool.get_size(), verbose, true, &pool);  
   unsigned col = 0;
   ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(stringify(si_u_t(0)), tbl.get(0, col++));

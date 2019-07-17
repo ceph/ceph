@@ -637,15 +637,17 @@ int librados::RadosClient::pool_list(std::list<std::pair<int64_t, string> >& v)
 }
 
 int librados::RadosClient::get_pool_stats(std::list<string>& pools,
-					  map<string,::pool_stat_t>& result)
+					  map<string,::pool_stat_t> *result,
+					  bool *per_pool)
 {
   Mutex mylock("RadosClient::get_pool_stats::mylock");
   Cond cond;
   bool done;
   int ret = 0;
 
-  objecter->get_pool_stats(pools, &result, new C_SafeCond(&mylock, &cond, &done,
-							  &ret));
+  objecter->get_pool_stats(pools, result, per_pool,
+			   new C_SafeCond(&mylock, &cond, &done,
+					  &ret));
 
   mylock.Lock();
   while (!done)

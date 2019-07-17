@@ -33,31 +33,27 @@ class SubVolume(object):
     """
 
 
-    def __init__(self, mgr, fs_name=None):
-        self.fs = None
-        self.fs_name = fs_name
-        self.connected = False
-
+    def __init__(self, mgr, fs_handle):
+        self.fs = fs_handle
         self.rados = mgr.rados
 
-    def _mkdir_p(self, path, mode=0o755):
+    def _get_single_dir_entry(self, dir_path, exclude=[]):
+        """
+        Return a directory entry in a given directory excluding passed
+        in entries.
+        """
+        exclude.extend((b".", b".."))
         try:
-            self.fs.stat(path)
-        except cephfs.ObjectNotFound:
-            pass
-        else:
-            return
+            with self.fs.opendir(dir_path) as d:
+                entry = self.fs.readdir(d)
+                while entry:
+                    if entry.d_name not in exclude and entry.is_dir():
+                        return entry.d_name
+                    entry = self.fs.readdir(d)
+            return None
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
 
-        parts = path.split(os.path.sep)
-
-        for i in range(1, len(parts) + 1):
-            subpath = os.path.join(*parts[0:i])
-            try:
-                self.fs.stat(subpath)
-            except cephfs.ObjectNotFound:
-                self.fs.mkdir(subpath, mode)
-            except cephfs.Error as e:
-                raise VolumeException(e.args[0], e.args[1])
 
     ### basic subvolume operations
 
@@ -77,7 +73,7 @@ class SubVolume(object):
         subvolpath = spec.subvolume_path
         log.info("creating subvolume with path: {0}".format(subvolpath))
 
-        self._mkdir_p(subvolpath, mode)
+        self.fs.mkdirs(subvolpath, mode)
 
         if size is not None:
             self.fs.setxattr(subvolpath, 'ceph.quota.max_bytes', str(size).encode('utf-8'), 0)
@@ -102,8 +98,8 @@ class SubVolume(object):
     def remove_subvolume(self, spec, force):
         """
         Make a subvolume inaccessible to guests.  This function is idempotent.
-        This is the fast part of tearing down a subvolume: you must also later
-        call purge_subvolume, which is the slow part.
+        This is the fast part of tearing down a subvolume. The subvolume will
+        get purged in the background.
 
         :param spec: subvolume path specification
         :param force: flag to ignore non-existent path (never raise exception)
@@ -115,9 +111,12 @@ class SubVolume(object):
 
         # Create the trash directory if it doesn't already exist
         trashdir = spec.trash_dir
-        self._mkdir_p(trashdir)
+        self.fs.mkdirs(trashdir, 0o700)
 
-        trashpath = spec.trash_path
+        # mangle the trash directroy entry to a random string so that subsequent
+        # subvolume create and delete with same name moves the subvolume directory
+        # to a unique trash dir (else, rename() could fail if the trash dir exist).
+        trashpath = spec.unique_trash_path
         try:
             self.fs.rename(subvolpath, trashpath)
         except cephfs.ObjectNotFound:
@@ -125,12 +124,11 @@ class SubVolume(object):
                 raise VolumeException(
                     -errno.ENOENT, "Subvolume '{0}' not found, cannot remove it".format(spec.subvolume_id))
         except cephfs.Error as e:
-            raise VolumeException(e.args[0], e.args[1])
+            raise VolumeException(-e.args[0], e.args[1])
 
-    def purge_subvolume(self, spec):
+    def purge_subvolume(self, spec, should_cancel):
         """
-        Finish clearing up a subvolume that was previously passed to delete_subvolume.  This
-        function is idempotent.
+        Finish clearing up a subvolume from the trash directory.
         """
 
         def rmtree(root_path):
@@ -140,15 +138,11 @@ class SubVolume(object):
             except cephfs.ObjectNotFound:
                 return
             except cephfs.Error as e:
-                raise VolumeException(e.args[0], e.args[1])
+                raise VolumeException(-e.args[0], e.args[1])
             d = self.fs.readdir(dir_handle)
-            while d:
-                d_name = d.d_name.decode('utf-8')
-                if d_name not in [".", ".."]:
-                    # Do not use os.path.join because it is sensitive
-                    # to string encoding, we just pass through dnames
-                    # as byte arrays
-                    d_full = "{0}/{1}".format(root_path, d_name)
+            while d and not should_cancel():
+                if d.d_name not in (b".", b".."):
+                    d_full = os.path.join(root_path, d.d_name)
                     if d.is_dir():
                         rmtree(d_full)
                     else:
@@ -156,10 +150,17 @@ class SubVolume(object):
 
                 d = self.fs.readdir(dir_handle)
             self.fs.closedir(dir_handle)
-            self.fs.rmdir(root_path)
+            # remove the directory only if we were not asked to cancel
+            # (else we would fail to remove this anyway)
+            if not should_cancel():
+                self.fs.rmdir(root_path)
 
         trashpath = spec.trash_path
-        rmtree(trashpath)
+        # catch any unlink errors
+        try:
+            rmtree(trashpath)
+        except cephfs.Error as e:
+            raise VolumeException(-e.args[0], e.args[1])
 
     def get_subvolume_path(self, spec):
         path = spec.subvolume_path
@@ -168,14 +169,14 @@ class SubVolume(object):
         except cephfs.ObjectNotFound:
             return None
         except cephfs.Error as e:
-            raise VolumeException(e.args[0], e.args[1])
+            raise VolumeException(-e.args[0], e.args[1])
         return path
 
     ### group operations
 
     def create_group(self, spec, mode=0o755, pool=None):
         path = spec.group_path
-        self._mkdir_p(path, mode)
+        self.fs.mkdirs(path, mode)
         if not pool:
             pool = self._get_ancestor_xattr(path, "ceph.dir.layout.pool")
         self.fs.setxattr(path, 'ceph.dir.layout.pool', pool.encode('utf-8'), 0)
@@ -188,7 +189,7 @@ class SubVolume(object):
             if not force:
                 raise VolumeException(-errno.ENOENT, "Subvolume group '{0}' not found".format(spec.group_id))
         except cephfs.Error as e:
-            raise VolumeException(e.args[0], e.args[1])
+            raise VolumeException(-e.args[0], e.args[1])
 
     def get_group_path(self, spec):
         path = spec.group_path
@@ -222,7 +223,7 @@ class SubVolume(object):
         except cephfs.ObjectNotFound:
             self.fs.mkdir(snappath, mode)
         except cephfs.Error as e:
-            raise VolumeException(e.args[0], e.args[1])
+            raise VolumeException(-e.args[0], e.args[1])
         else:
             log.warn("Snapshot '{0}' already exists".format(snappath))
 
@@ -237,7 +238,7 @@ class SubVolume(object):
             if not force:
                 raise VolumeException(-errno.ENOENT, "Snapshot '{0}' not found, cannot remove it".format(snappath))
         except cephfs.Error as e:
-            raise VolumeException(e.args[0], e.args[1])
+            raise VolumeException(-e.args[0], e.args[1])
 
     def create_subvolume_snapshot(self, spec, snapname, mode=0o755):
         snappath = spec.make_subvol_snap_path(self.rados.conf_get('client_snapdir'), snapname)
@@ -255,31 +256,20 @@ class SubVolume(object):
         snappath = spec.make_group_snap_path(self.rados.conf_get('client_snapdir'), snapname)
         return self._snapshot_delete(snappath, force)
 
+    def get_trash_entry(self, spec, exclude):
+        try:
+            trashdir = spec.trash_dir
+            return self._get_single_dir_entry(trashdir, exclude)
+        except VolumeException as ve:
+            if ve.errno == -errno.ENOENT:
+                # trash dir does not exist yet, signal success
+                return None
+            raise
+
     ### context manager routines
 
-    def connect(self):
-        log.debug("Connecting to cephfs...")
-        self.fs = cephfs.LibCephFS(rados_inst=self.rados)
-        log.debug("CephFS initializing...")
-        self.fs.init()
-        log.debug("CephFS mounting...")
-        self.fs.mount(filesystem_name=self.fs_name.encode('utf-8'))
-        log.debug("Connection to cephfs complete")
-
-    def disconnect(self):
-        log.info("disconnect")
-        if self.fs:
-            log.debug("Disconnecting cephfs...")
-            self.fs.shutdown()
-            self.fs = None
-            log.debug("Disconnecting cephfs complete")
-
     def __enter__(self):
-        self.connect()
         return self
 
     def __exit__(self, exc_type, exc_val, exc_tb):
-        self.disconnect()
-
-    def __del__(self):
-        self.disconnect()
+        pass

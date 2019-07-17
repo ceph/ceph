@@ -36,7 +36,7 @@ class Grafana(BaseController):
             response['success'] = push_local_dashboards()
         except Exception as e:  # pylint: disable=broad-except
             raise DashboardException(
-                msg=e.message,
+                msg=str(e),
                 component='grafana',
                 http_status_code=500,
             )

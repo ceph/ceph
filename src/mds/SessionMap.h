@@ -794,8 +794,7 @@ private:
 
 public:
   void hit_session(Session *session);
-  void handle_conf_change(const ConfigProxy &conf,
-                          const std::set <std::string> &changed);
+  void handle_conf_change(const std::set <std::string> &changed);
 };
 
 std::ostream& operator<<(std::ostream &out, const Session &s);
