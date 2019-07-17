@@ -6,13 +6,12 @@
 
 #include "include/rados/librados.hpp"
 #include "common/AsyncOpTracker.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include <boost/noncopyable.hpp>
 #include <boost/shared_ptr.hpp>
 #include <list>
 #include <map>
 
-class Cond;
 class Finisher;
 
 namespace librados {
@@ -109,7 +108,8 @@ private:
   uint64_t m_handle = 0;
   uint64_t m_notify_id = 0;
 
-  Mutex m_lock;
+  ceph::mutex m_lock =
+    ceph::make_mutex("librados::TestWatchNotify::m_lock");
   AsyncOpTracker m_async_op_tracker;
 
   FileWatchers	m_file_watchers;

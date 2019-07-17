@@ -8,8 +8,7 @@
 #include "include/buffer.h"
 #include "include/interval_set.h"
 #include "include/int_types.h"
-#include "common/Cond.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/RefCountedObj.h"
 #include "common/RWLock.h"
 #include <boost/shared_ptr.hpp>
