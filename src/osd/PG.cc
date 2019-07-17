@@ -1969,7 +1969,7 @@ void PG::activate(ObjectStore::Transaction& t,
 	  get_osdmap()->get_epoch(), pi);
 
 	// send some recent log, so that op dup detection works well.
-	m->log.copy_up_to(pg_log.get_log(), cct->_conf->osd_min_pg_log_entries);
+	m->log.copy_up_to(cct, pg_log.get_log(), cct->_conf->osd_min_pg_log_entries);
 	m->info.log_tail = m->log.tail;
 	pi.log_tail = m->log.tail;  // sigh...
 
@@ -1981,7 +1981,7 @@ void PG::activate(ObjectStore::Transaction& t,
 	  i->shard, pg_whoami.shard,
 	  get_osdmap()->get_epoch(), info);
 	// send new stuff to append to replicas log
-	m->log.copy_after(pg_log.get_log(), pi.last_update);
+	m->log.copy_after(cct, pg_log.get_log(), pi.last_update);
       }
 
       // share past_intervals if we are creating the pg on the replica
@@ -5715,7 +5715,7 @@ void PG::fulfill_log(
 			<< ", sending full log instead";
       mlog->log = pg_log.get_log();           // primary should not have requested this!!
     } else
-      mlog->log.copy_after(pg_log.get_log(), query.since);
+      mlog->log.copy_after(cct, pg_log.get_log(), query.since);
   }
   else if (query.type == pg_query_t::FULLLOG) {
     dout(10) << " sending info+missing+full log" << dendl;

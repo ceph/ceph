@@ -57,8 +57,9 @@ void PGLog::IndexedLog::trim(
   auto earliest_dup_version =
     log.rbegin()->version.version < cct->_conf->osd_pg_log_dups_tracked
     ? 0u
-    : log.rbegin()->version.version - cct->_conf->osd_pg_log_dups_tracked;
+    : log.rbegin()->version.version - cct->_conf->osd_pg_log_dups_tracked + 1;
 
+  lgeneric_subdout(cct, osd, 20) << "earliest_dup_version = " << earliest_dup_version << dendl;
   while (!log.empty()) {
     const pg_log_entry_t &e = *log.begin();
     if (e.version > s)
@@ -70,7 +71,6 @@ void PGLog::IndexedLog::trim(
     unindex(e);         // remove from index,
 
     // add to dup list
-    lgeneric_subdout(cct, osd, 20) << "earliest_dup_version = " << earliest_dup_version << dendl;
     if (e.version.version >= earliest_dup_version) {
       if (write_from_dups != nullptr && *write_from_dups > e.version) {
 	lgeneric_subdout(cct, osd, 20) << "updating write_from_dups from " << *write_from_dups << " to " << e.version << dendl;
@@ -558,12 +558,12 @@ bool PGLog::merge_log_dups(const pg_log_t& olog) {
   }
 
   // remove any dup entries that overlap with pglog
-  if (!log.dups.empty() && log.dups.back().version >= log.tail) {
-    dout(10) << "merge_log removed dups overlapping log entries [" <<
+  if (!log.dups.empty() && log.dups.back().version > log.tail) {
+    dout(10) << "merge_log removed dups overlapping log entries (" <<
       log.tail << "," << log.dups.back().version << "]" << dendl;
     changed = true;
 
-    while (!log.dups.empty() && log.dups.back().version >= log.tail) {
+    while (!log.dups.empty() && log.dups.back().version > log.tail) {
       log.unindex(log.dups.back());
       mark_dirty_from_dups(log.dups.back().version);
       log.dups.pop_back();
