@@ -237,6 +237,7 @@ void Server::dispatch(const Message::const_ref &m)
       }
       if (queue_replay) {
 	req->mark_queued_for_replay();
+	req->mark_replay_or_retry_op();
 	mds->enqueue_replay(new C_MDS_RetryMessage(mds, m));
 	return;
       }
@@ -2110,7 +2111,7 @@ void Server::handle_client_request(const MClientRequest::const_ref &req)
   Session *session = 0;
   if (req->get_source().is_client()) {
     session = mds->get_session(req);
-    if (!session) {
+    if (!session && !req->is_replay_or_retry_op()) {
       dout(5) << "no session for " << req->get_source() << ", dropping" << dendl;
     } else if (session->is_closed() ||
 	       session->is_closing() ||
@@ -2118,7 +2119,7 @@ void Server::handle_client_request(const MClientRequest::const_ref &req)
       dout(5) << "session closed|closing|killing, dropping" << dendl;
       session = NULL;
     }
-    if (!session) {
+    if (!session && !req->is_replay_or_retry_op()) {
       if (req->is_queued_for_replay())
 	mds->queue_one_replay();
       return;

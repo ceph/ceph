@@ -87,6 +87,7 @@ public:
 
   /* XXX HACK */
   mutable bool queued_for_replay = false;
+  mutable bool replay_or_retry_op = false;
 
 protected:
   // cons
@@ -175,7 +176,9 @@ public:
   int get_dentry_wanted() const { return get_flags() & CEPH_MDS_FLAG_WANT_DENTRY; }
 
   void mark_queued_for_replay() const { queued_for_replay = true; }
+  void mark_replay_or_retry_op() const { replay_or_retry_op = true; }
   bool is_queued_for_replay() const { return queued_for_replay; }
+  bool is_replay_or_retry_op() const { return replay_or_retry_op; }
 
   void decode_payload() override {
     auto p = payload.cbegin();
