@@ -296,9 +296,9 @@ ceph_set_health_checks(BaseMgrModule *self, PyObject *args)
 	  severity = HEALTH_ERR;
 	}
       } else if (ks == "summary") {
-	if (!PyString_Check(v)) {
+	if (!PyString_Check(v) && !PyUnicode_Check(v)) {
 	  derr << __func__ << " check " << check_name
-	       << " summary value not string" << dendl;
+	       << " summary value not [unicode] string" << dendl;
 	  continue;
 	}
 	summary = PyString_AsString(v);
@@ -310,9 +310,9 @@ ceph_set_health_checks(BaseMgrModule *self, PyObject *args)
 	}
 	for (int k = 0; k < PyList_Size(v); ++k) {
 	  PyObject *di = PyList_GET_ITEM(v, k);
-	  if (!PyString_Check(di)) {
+	  if (!PyString_Check(di) && !PyUnicode_Check(di)) {
 	    derr << __func__ << " check " << check_name
-		 << " detail item " << k << " not a string" << dendl;
+		 << " detail item " << k << " not a [unicode] string" << dendl;
 	    continue;
 	  }
 	  detail.push_back(PyString_AsString(di));
