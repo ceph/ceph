@@ -3,6 +3,9 @@
 
 #pragma once
 
+#include <utility>
+#include "common/containers.h"
+
 // What and why
 // ============
 //
@@ -41,6 +44,11 @@ namespace ceph {
 
   template <typename ...Args>
   recursive_mutex make_recursive_mutex(Args&& ...args) {
+    return {};
+  }
+
+  template <typename ...Args>
+  shared_mutex make_shared_mutex(Args&& ...args) {
     return {};
   }
 
@@ -135,3 +143,21 @@ namespace ceph {
 #endif	// CEPH_DEBUG_MUTEX
 
 #endif	// WITH_SEASTAR
+
+namespace ceph {
+
+template <class LockT,
+          class LockFactoryT>
+ceph::containers::tiny_vector<LockT> make_lock_container(
+  const std::size_t num_instances,
+  LockFactoryT&& lock_factory)
+{
+  return {
+    num_instances, [&](const std::size_t i, auto emplacer) {
+      // this will be called `num_instances` times
+      new (emplacer.data()) LockT {lock_factory(i)};
+    }
+  };
+}
+} // namespace ceph
+

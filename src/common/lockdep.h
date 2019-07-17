@@ -21,6 +21,9 @@ extern bool g_lockdep;
 
 extern void lockdep_register_ceph_context(CephContext *cct);
 extern void lockdep_unregister_ceph_context(CephContext *cct);
+// lockdep tracks dependencies between multiple and different instances
+// of locks within a class denoted by `n`.
+// Caller is obliged to guarantee name uniqueness.
 extern int lockdep_register(const char *n);
 extern void lockdep_unregister(int id);
 extern int lockdep_will_lock(const char *n, int id, bool force_backtrace=false,
