@@ -119,7 +119,8 @@ public:
 		    bool wait_latest_map = false);
 
   int pool_list(std::list<std::pair<int64_t, string> >& ls);
-  int get_pool_stats(std::list<string>& ls, map<string,::pool_stat_t>& result);
+  int get_pool_stats(std::list<string>& ls, map<string,::pool_stat_t> *result,
+    bool *per_pool);
   int get_fs_stats(ceph_statfs& result);
   bool get_pool_is_selfmanaged_snaps_mode(const std::string& pool);
 
