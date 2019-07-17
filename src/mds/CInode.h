@@ -31,6 +31,7 @@
 #include "MDSContext.h"
 #include "flock.h"
 
+#include "BatchOp.h"
 #include "CDentry.h"
 #include "SimpleLock.h"
 #include "ScatterLock.h"
@@ -56,26 +57,6 @@ class EMetaBlob;
 struct cinode_lock_info_t {
   int lock;
   int wr_caps;
-};
-
-class BatchOp {
-public:
-  virtual void add_request(const MDRequestRef& mdr) = 0;
-  virtual void set_request(const MDRequestRef& mdr) = 0;
-  virtual void forward_all(mds_rank_t target) = 0;
-  virtual void respond_all(int r) = 0;
-
-  void finish(int r) {
-    respond_all(r);
-    delete this;
-  }
-
-  void forward_requests(mds_rank_t target) {
-    forward_all(target);
-    delete this;
-  }
-
-  virtual ~BatchOp() {}
 };
 
 /**
@@ -368,7 +349,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     ceph_assert(num_exporting_dirs == 0);
   }
 
-  std::map<int, BatchOp*> batch_ops;
+  std::map<int, std::unique_ptr<BatchOp>> batch_ops;
 
   std::string_view pin_name(int p) const override;
 

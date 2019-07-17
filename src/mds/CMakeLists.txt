@@ -1,4 +1,5 @@
 set(mds_srcs
+  BatchOp.cc
   Capability.cc
   MDSDaemon.cc
   MDSRank.cc
