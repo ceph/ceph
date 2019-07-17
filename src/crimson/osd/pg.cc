@@ -332,9 +332,7 @@ PG::do_osd_op(ObjectState& os, OSDOp& osd_op, ceph::os::Transaction& txn)
       return seastar::now();
     });
   case CEPH_OSD_OP_WRITE:
-    // TODO: handle write separately. For `rados bench write` the fall-
-    // through path somehow works but this is really nasty.
-    [[fallthrough]];
+    return backend->write(os, osd_op, txn);
   case CEPH_OSD_OP_WRITEFULL:
     // XXX: os = backend->write(std::move(os), ...) instead?
     return backend->writefull(os, osd_op, txn);

@@ -43,6 +43,10 @@ public:
   seastar::future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn);
+  seastar::future<> write(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& trans);
   seastar::future<> writefull(
     ObjectState& os,
     const OSDOp& osd_op,
