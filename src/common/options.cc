@@ -4830,6 +4830,10 @@ std::vector<Option> get_global_options() {
     .set_default(5)
     .set_description("log omap iteration operation if it's slower than this age (seconds)"),
 
+    Option("bluestore_log_collection_list_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(60)
+    .set_description("log collection list operation if it's slower than this age (seconds)"),
+
     // -----------------------------------------
     // kstore
 
