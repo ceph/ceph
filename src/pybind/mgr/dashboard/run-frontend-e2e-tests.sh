@@ -43,7 +43,7 @@ cd ../../../../build
 BUILD_DIR=`pwd`
 
 if [ "$BASE_URL" == "" ]; then
-    MGR=2 RGW=1 ../src/vstart.sh -n -d --nolockdep
+    MGR=2 RGW=1 ../src/vstart.sh -n -d
     sleep 10
 
     # Create an Object Gateway User
