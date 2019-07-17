@@ -265,7 +265,7 @@ void ECTransaction::generate_transactions(
 	[&](const PGTransaction::ObjectOperation::Init::None &) {},
 	[&](const PGTransaction::ObjectOperation::Init::Create &op) {
 	  for (auto &&st: *transactions) {
-	    if (require_osd_release >= ceph_release_t::nautilus) {
+	    if (require_osd_release >= ceph_release_t::octopus) {
 	      st.second.create(
 		coll_t(spg_t(pgid, st.first)),
 		ghobject_t(oid, ghobject_t::NO_GEN, st.first));

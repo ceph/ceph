@@ -324,7 +324,7 @@ void generate_transaction(
 	[&](const PGTransaction::ObjectOperation::Init::None &) {
 	},
 	[&](const PGTransaction::ObjectOperation::Init::Create &op) {
-	  if (require_osd_release >= ceph_release_t::nautilus) {
+	  if (require_osd_release >= ceph_release_t::octopus) {
 	    t->create(coll, goid);
 	  } else {
 	    t->touch(coll, goid);
