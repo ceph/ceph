@@ -110,6 +110,7 @@ class Module(MgrModule):
         for f in ['crash_id', 'timestamp']:
             if f not in metadata:
                 raise AttributeError("missing '%s' field" % (f))
+        time = time_from_string(metadata['timestamp'])
         return metadata
 
     @staticmethod
