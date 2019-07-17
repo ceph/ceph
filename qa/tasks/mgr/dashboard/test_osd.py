@@ -84,17 +84,17 @@ class OsdTest(DashboardTestCase):
         # Create
         self._post('/api/osd', {
             'uuid': 'f860ca2e-757d-48ce-b74a-87052cad563f',
-            'svc_id': 5
+            'svc_id': 100
         })
         self.assertStatus(201)
         # Lost
-        self._post('/api/osd/5/mark_lost')
+        self._post('/api/osd/100/mark_lost')
         self.assertStatus(200)
         # Destroy
-        self._post('/api/osd/5/destroy')
+        self._post('/api/osd/100/destroy')
         self.assertStatus(200)
         # Purge
-        self._post('/api/osd/5/purge')
+        self._post('/api/osd/100/purge')
         self.assertStatus(200)
 
     def test_safe_to_destroy(self):

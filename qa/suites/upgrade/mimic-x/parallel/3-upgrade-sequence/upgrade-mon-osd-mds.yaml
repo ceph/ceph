@@ -13,7 +13,7 @@ upgrade-sequence:
    - sleep:
        duration: 60
    - ceph.restart:
-       daemons: [mon.b, mgr.x]
+       daemons: [mon.b, mgr.x,mgr.y,mgr.z]
        wait-for-healthy: true
        mon-health-to-clog: false
    - sleep:
