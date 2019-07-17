@@ -42,6 +42,7 @@ public:
     bool operator!=(struct ColumnFamilyHandle rhs) const {return rhs.priv != priv;}
     bool operator==(void* rhs) const {return rhs == priv;}
     bool operator!=(void* rhs) const {return rhs != priv;}
+    operator bool() const {return priv != nullptr;}
   };
 
   class TransactionImpl {

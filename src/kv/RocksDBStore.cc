@@ -850,12 +850,22 @@ int RocksDBStore::column_family_create(const std::string& cf_name, const std::st
 
 int RocksDBStore::column_family_delete(const std::string& cf_name)
 {
-  return -1;
+  RWLock::WLocker l(api_lock);
+  rocksdb::ColumnFamilyHandle* handle = cf_get_handle(cf_name);
+  rocksdb::Status status = db->DropColumnFamily(handle);
+  if (!status.ok()) {
+      derr << __func__ << " problem deleting column family '" << cf_name << "'" << dendl;
+      return -EINVAL;
+  }
+  return 0;
 }
 
 KeyValueDB::ColumnFamilyHandle RocksDBStore::column_family_handle(const std::string& cf_name) const
 {
   RWLock::RLocker l(api_lock);
+  if (cf_name == "default") {
+    return cf_wrap_handle(default_cf);
+  }
   auto it = column_families.find(cf_name);
   if (it == column_families.end())
     return KeyValueDB::ColumnFamilyHandle();
@@ -1075,7 +1085,7 @@ int RocksDBStore::cf_create(const std::string& cf_name, const std::string& cf_op
 }
 
 
-KeyValueDB::ColumnFamilyHandle RocksDBStore::cf_wrap_handle(rocksdb::ColumnFamilyHandle* rocks_cfh)
+KeyValueDB::ColumnFamilyHandle RocksDBStore::cf_wrap_handle(rocksdb::ColumnFamilyHandle* rocks_cfh) const
 {
   KeyValueDB::ColumnFamilyHandle cfh;
   cfh.priv = static_cast<void*>(rocks_cfh);
