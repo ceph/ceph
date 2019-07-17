@@ -2669,10 +2669,15 @@ public:
     uint64_t size,
     PExtentVector* extents);
 
-  void log_latency_fn(const char* name,
-		      int idx,
-		      const ceph::timespan& lat,
-		      std::function<string (const ceph::timespan& lat)> fn);
+  inline void log_latency(const char* name,
+    int idx,
+    const ceph::timespan& lat,
+    const char* info = "") const;
+
+  inline void log_latency_fn(const char* name,
+    int idx,
+    const ceph::timespan& lat,
+    std::function<string (const ceph::timespan& lat)> fn) const;
 
 private:
   bool _debug_data_eio(const ghobject_t& o) {

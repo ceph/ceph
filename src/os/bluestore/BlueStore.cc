@@ -130,35 +130,6 @@ const string BLUESTORE_GLOBAL_STATFS_KEY = "bluestore_statfs";
  */
 #define EXTENT_SHARD_KEY_SUFFIX 'x'
 
-// FIXME minor: make a BlueStore method once we have effecient way to
-// map idx to counter nickname
-#define LOG_LATENCY_I(logger, cct, name, idx, v, info) { \
-  ceph::timespan lat = v; \
-  logger->tinc(idx, lat); \
-  if (cct->_conf->bluestore_log_op_age > 0.0 && \
-      lat >= make_timespan(cct->_conf->bluestore_log_op_age)) { \
-    dout(0) << __func__ << " slow operation observed for " << name \
-      << ", latency = " << lat \
-      << info \
-      << dendl; \
-  } \
-}
-
-#define LOG_LATENCY_FN(logger, cct, name, idx, v, fn) { \
-  ceph::timespan lat = v; \
-  logger->tinc(idx, lat); \
-  if (cct->_conf->bluestore_log_op_age > 0.0 && \
-      lat >= make_timespan(cct->_conf->bluestore_log_op_age)) { \
-    dout(0) << __func__ << " slow operation observed for " << name \
-      << ", latency = " << lat \
-      << fn(lat) \
-      << dendl; \
-  } \
-}
-
-#define LOG_LATENCY(logger, cct, name, idx, v) \
-  LOG_LATENCY_I(logger, cct, name, idx, v, "")
-
 /*
  * string encoding in the key
  *
@@ -3881,14 +3852,10 @@ int BlueStore::OmapIteratorImpl::seek_to_first()
   } else {
     it = KeyValueDB::Iterator();
   }
-  c->store->log_latency_fn(
+  c->store->log_latency(
     __func__,
     l_bluestore_omap_seek_to_first_lat,
-    mono_clock::now() - start1,
-    [&] (const ceph::timespan& lat) {
-      return ", lat = " + timespan_str(lat) + _stringify();
-    }
-  );
+    mono_clock::now() - start1);
 
   return 0;
 }
@@ -3911,7 +3878,7 @@ int BlueStore::OmapIteratorImpl::upper_bound(const string& after)
     l_bluestore_omap_upper_bound_lat,
     mono_clock::now() - start1,
     [&] (const ceph::timespan& lat) {
-      return ", after = " + after + ", lat = " + timespan_str(lat) +
+      return ", after = " + after +
 	_stringify();
     }
   );
@@ -3936,7 +3903,7 @@ int BlueStore::OmapIteratorImpl::lower_bound(const string& to)
     l_bluestore_omap_lower_bound_lat,
     mono_clock::now() - start1,
     [&] (const ceph::timespan& lat) {
-      return ", to = " + to + ", lat = " + timespan_str(lat) +
+      return ", to = " + to +
 	_stringify();
     }
   );
@@ -3965,14 +3932,10 @@ int BlueStore::OmapIteratorImpl::next()
     it->next();
     r = 0;
   }
-  c->store->log_latency_fn(
+  c->store->log_latency(
     __func__,
     l_bluestore_omap_next_lat,
-    mono_clock::now() - start1,
-    [&] (const ceph::timespan& lat) {
-      return ", lat = " + timespan_str(lat) + _stringify();
-    }
-  );
+    mono_clock::now() - start1);
 
   return r;
 }
@@ -8492,7 +8455,7 @@ int BlueStore::read(
     RWLock::RLocker l(c->lock);
     auto start1 = mono_clock::now();
     OnodeRef o = c->get_onode(oid, false);
-    LOG_LATENCY(logger, cct, "get_onode@read",
+    log_latency("get_onode@read",
       l_bluestore_read_onode_meta_lat, mono_clock::now() - start1);
     if (!o || !o->exists) {
       r = -ENOENT;
@@ -8522,7 +8485,7 @@ int BlueStore::read(
   dout(10) << __func__ << " " << cid << " " << oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
-  LOG_LATENCY(logger, cct, __func__,
+  log_latency(__func__,
     l_bluestore_read_lat, mono_clock::now() - start);
   return r;
 }
@@ -8615,7 +8578,7 @@ int BlueStore::_do_read(
 
   auto start = mono_clock::now();
   o->extent_map.fault_range(db, offset, length);
-  LOG_LATENCY(logger, cct, __func__,
+  log_latency(__func__,
     l_bluestore_read_onode_meta_lat, mono_clock::now() - start);
   _dump_onode<30>(cct, *o);
 
@@ -8811,7 +8774,7 @@ int BlueStore::_do_read(
       return -EIO;
     }
   }
-  LOG_LATENCY_FN(logger, cct, __func__,
+  log_latency_fn(__func__,
     l_bluestore_read_wait_aio_lat,
     mono_clock::now() - start,
     [&](auto lat) { return ", num_ios = " + stringify(num_ios); }
@@ -8961,7 +8924,7 @@ int BlueStore::_verify_csum(OnodeRef& o,
       derr << __func__ << " failed with exit code: " << cpp_strerror(r) << dendl;
     }
   }
-  LOG_LATENCY(logger, cct, __func__,
+  log_latency(__func__,
     l_bluestore_csum_lat, mono_clock::now() - start);
   if (cct->_conf->bluestore_ignore_data_csum) {
     return 0;
@@ -8997,7 +8960,7 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
       r = -EIO;
     }
   }
-  LOG_LATENCY(logger, cct, __func__,
+  log_latency(__func__,
     l_bluestore_decompress_lat, mono_clock::now() - start);
   return r;
 }
@@ -10153,8 +10116,7 @@ void BlueStore::_txc_committed_kv(TransContext *txc)
     }
   }
   txc->log_state_latency(logger, l_bluestore_state_kv_committing_lat);
-  LOG_LATENCY_FN(logger,
-    cct,
+  log_latency_fn(
     __func__,
     l_bluestore_commit_lat,
     ceph::make_timespan(ceph_clock_now() - txc->start),
@@ -10666,11 +10628,11 @@ void BlueStore::_kv_sync_thread()
 	  << " in " << dur
 	  << " (" << dur_flush << " flush + " << dur_kv << " kv commit)"
 	  << dendl;
-	LOG_LATENCY(logger, cct, "kv_flush",
+	log_latency("kv_flush",
 	  l_bluestore_kv_flush_lat, dur_flush);
-	LOG_LATENCY(logger, cct, "kv_commit",
+	log_latency("kv_commit",
 	  l_bluestore_kv_commit_lat, dur_kv);
-	LOG_LATENCY(logger, cct, "kv_sync",
+	log_latency("kv_sync",
 	  l_bluestore_kv_sync_lat, dur);
       }
 
@@ -10765,7 +10727,7 @@ void BlueStore::_kv_finalize_thread()
       logger->set(l_bluestore_fragmentation,
 	  (uint64_t)(alloc->get_fragmentation(min_alloc_size) * 1000));
 
-      LOG_LATENCY(logger, cct, "kv_final",
+      log_latency("kv_final",
 	l_bluestore_kv_final_lat, mono_clock::now() - start);
 
       l.lock();
@@ -11094,9 +11056,9 @@ int BlueStore::queue_transactions(
     }
   }
 
-  LOG_LATENCY(logger, cct, "submit_transact",
+  log_latency("submit_transact",
     l_bluestore_submit_lat, mono_clock::now() - start);
-  LOG_LATENCY(logger, cct, "throttle_transact",
+  log_latency("throttle_transact",
     l_bluestore_throttle_lat, tend - tstart);
   return 0;
 }
@@ -12098,7 +12060,7 @@ int BlueStore::_do_alloc_write(
 	logger->inc(l_bluestore_compress_rejected_count);
 	need += wi.blob_length;
       }
-      LOG_LATENCY(logger, cct, "compress@_do_alloc_write",
+      log_latency("compress@_do_alloc_write",
 	l_bluestore_compress_lat,
         mono_clock::now() - start);
     } else {
@@ -13566,13 +13528,36 @@ int BlueStore::_merge_collection(
   return r;
 }
 
+void BlueStore::log_latency(
+  const char* name,
+  int idx,
+  const ceph::timespan& l,
+  const char* info) const
+{
+  logger->tinc(idx, l);
+  if (cct->_conf->bluestore_log_op_age > 0.0 &&
+      l >= make_timespan(cct->_conf->bluestore_log_op_age)) {
+    dout(0) << __func__ << " slow operation observed for " << name
+      << ", latency = " << l
+      << info
+      << dendl;
+  }
+}
+
 void BlueStore::log_latency_fn(
   const char* name,
   int idx,
   const ceph::timespan& l,
-  std::function<string (const ceph::timespan& lat)> fn)
+  std::function<string (const ceph::timespan& lat)> fn) const
 {
-  LOG_LATENCY_FN(logger, cct, name, idx, l, fn);
+  logger->tinc(idx, l);
+  if (cct->_conf->bluestore_log_op_age > 0.0 &&
+      l >= make_timespan(cct->_conf->bluestore_log_op_age)) {
+    dout(0) << __func__ << " slow operation observed for " << name
+      << ", latency = " << l
+      << fn(l)
+      << dendl;
+  }
 }
 
 
