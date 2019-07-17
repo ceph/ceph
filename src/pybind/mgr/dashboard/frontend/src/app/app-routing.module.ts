@@ -30,6 +30,7 @@ import { BreadcrumbsResolver, IBreadcrumb } from './shared/models/breadcrumbs';
 import { AuthGuardService } from './shared/services/auth-guard.service';
 import { FeatureTogglesGuardService } from './shared/services/feature-toggles-guard.service';
 import { ModuleStatusGuardService } from './shared/services/module-status-guard.service';
+import { NoSsoGuardService } from './shared/services/no-sso-guard.service';
 
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
   resolve(route: ActivatedRouteSnapshot) {
@@ -224,6 +225,7 @@ const routes: Routes = [
       {
         path: URLVerbs.EDIT,
         component: UserPasswordFormComponent,
+        canActivate: [NoSsoGuardService],
         data: { breadcrumbs: ActionLabels.EDIT }
       }
     ]
