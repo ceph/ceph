@@ -154,23 +154,7 @@ private:
     return r;
   }
   int open(std::ostream &out, const std::vector<ColumnFamily>& options = {}) override {
-    int r = db->open(out, options);
-    if (r != 0)
-      return r;
-    vector<std::string> cf_names;
-    db->column_family_list(cf_names);
-    for (auto& s_it: sharding_schema) {
-      for (size_t i = 0; i < s_it.second; i++) {
-        std::string name = s_it.first + "-" + to_string(i);
-        auto n_it = std::find(std::begin(cf_names), std::end(cf_names), name);
-        if (n_it == cf_names.end()) {
-          derr << "Missing column family: '" << name << "' " << dendl;
-          ceph_abort();
-        }
-      }
-    }
-    r = open_shards();
-    return r;
+    return _do_open(out, false, options);
   }
   int create_and_open(std::ostream &out, const std::vector<ColumnFamily>& new_cfs = {}) override {
     int r = db->create_and_open(out, new_cfs);
@@ -182,6 +166,30 @@ private:
         r = db->column_family_create(name, "");
         if (r != 0) {
           derr << "Unable to create column family: '" << name << "' " << dendl;
+          ceph_abort();
+        }
+      }
+    }
+    r = open_shards();
+    return r;
+  }
+  int open_read_only(std::ostream &out, const std::vector<ColumnFamily>& options = {}) override {
+    return _do_open(out, true, options);
+  }
+  int _do_open(std::ostream &out, bool read_only, const std::vector<ColumnFamily>& options = {}) {
+    int r = read_only ?
+      db->open_read_only(out, options) :
+      db->open(out, options);
+    if (r != 0)
+      return r;
+    vector<std::string> cf_names;
+    db->column_family_list(cf_names);
+    for (auto& s_it: sharding_schema) {
+      for (size_t i = 0; i < s_it.second; i++) {
+        std::string name = s_it.first + "-" + to_string(i);
+        auto n_it = std::find(std::begin(cf_names), std::end(cf_names), name);
+        if (n_it == cf_names.end()) {
+          derr << "Missing column family: '" << name << "' " << dendl;
           ceph_abort();
         }
       }
@@ -699,45 +707,6 @@ public:
   int set_cache_size(uint64_t) override {
     return -EOPNOTSUPP;
   }
-
-  // PriCache
-  int64_t request_cache_bytes(PriorityCache::Priority pri, uint64_t chunk_bytes) const override {
-    return db->request_cache_bytes(pri, chunk_bytes);
-  }
-
-  int64_t get_cache_bytes(PriorityCache::Priority pri) const override {
-    return db->get_cache_bytes(pri);
-  }
-
-  int64_t get_cache_bytes() const override {
-    return db->get_cache_bytes();
-  }
-
-  void set_cache_bytes(PriorityCache::Priority pri, int64_t bytes) override {
-    db->set_cache_bytes(pri, bytes);
-  }
-
-  void add_cache_bytes(PriorityCache::Priority pri, int64_t bytes) override {
-    db->add_cache_bytes(pri, bytes);
-  }
-
-  int64_t commit_cache_size() override {
-    return db->commit_cache_size();
-  }
-
-  double get_cache_ratio() const override {
-    return db->get_cache_ratio();
-  }
-
-  void set_cache_ratio(double ratio) override {
-    db->set_cache_ratio(ratio);
-  }
-
-  string get_cache_name() const override {
-    return db->get_cache_name();
-  }
-
-  // End PriCache
 
   int set_cache_high_pri_pool_ratio(double ratio) override {
     return db->set_cache_high_pri_pool_ratio(ratio);
