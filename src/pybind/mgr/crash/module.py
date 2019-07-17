@@ -286,7 +286,6 @@ class Module(MgrModule):
             return errno.EINVAL, '', '<hours> argument must be integer'
 
         report = defaultdict(lambda: 0)
-        cutoff = datetime.datetime.utcnow() - datetime.timedelta(hours=hours)
         for crashid, crash in self.crashes.items():
             pname = crash.get("process_name", "unknown")
             if not pname:
