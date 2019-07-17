@@ -9,7 +9,7 @@ ceph, general guidelines for upgrade to nautilus must be followed
 Notable Changes
 ---------------
 
-* The no{up,down,in,out} related commands has been revamped.
+* The no{up,down,in,out} related commands have been revamped.
   There are now 2 ways to set the no{up,down,in,out} flags:
   the old 'ceph osd [un]set <flag>' command, which sets cluster-wide flags;
   and the new 'ceph osd [un]set-group <flags> <who>' command,
