@@ -4448,6 +4448,8 @@ void BlueStore::_init_logger()
     "Average omap iterator lower_bound call latency");
   b.add_time_avg(l_bluestore_omap_next_lat, "omap_next_lat",
     "Average omap iterator next call latency");
+  b.add_time_avg(l_bluestore_clist_lat, "clist_lat",
+    "Average collection listing latency");
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -9202,6 +9204,7 @@ int BlueStore::_collection_list(
   if (!c->exists)
     return -ENOENT;
 
+  auto start_time = mono_clock::now();
   int r = 0;
   ghobject_t static_next;
   KeyValueDB::Iterator it;
@@ -9301,7 +9304,20 @@ out:
   if (!set_next) {
     *pnext = ghobject_t::get_max();
   }
-
+  log_latency_fn(
+    __func__,
+    l_bluestore_clist_lat,
+    mono_clock::now() - start_time,
+    cct->_conf->bluestore_log_collection_list_age,
+    [&] (const ceph::timespan& lat) {
+      ostringstream ostr;
+      ostr << ", lat = " << timespan_str(lat)
+           << " cid =" << c->cid
+           << " start " << start << " end " << end
+           << " max " << max;
+      return ostr.str();
+    }
+  );
   return r;
 }
 
