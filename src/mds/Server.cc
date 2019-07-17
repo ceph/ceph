@@ -94,7 +94,7 @@ public:
   void forward_all(mds_rank_t t) override {
     mdcache->mds->forward_message_mds(mdr->release_client_request(), t);
     mdr->set_mds_stamp(ceph_clock_now());
-    for (auto m : mdr->batch_reqs) {
+    for (auto& m : mdr->batch_reqs) {
       if (!m->killed)
 	mdcache->request_forward(m, t);
     }
@@ -102,7 +102,7 @@ public:
   }
   void respond_all(int r) {
     mdr->set_mds_stamp(ceph_clock_now());
-    for (auto m : mdr->batch_reqs) {
+    for (auto& m : mdr->batch_reqs) {
       if (!m->killed) {
 	m->tracei = mdr->tracei;
 	m->tracedn = mdr->tracedn;
