@@ -3366,12 +3366,13 @@ returned %d, but should return zero on success." % (self.name, ret))
 
         keys = cstr_list(keys, 'keys')
         values = cstr_list(values, 'values')
+        lens = [len(v) for v in values]
         cdef:
             WriteOp _write_op = write_op
             size_t key_num = len(keys)
             char **_keys = to_bytes_array(keys)
             char **_values = to_bytes_array(values)
-            size_t *_lens = to_csize_t_array([len(v) for v in values])
+            size_t *_lens = to_csize_t_array(lens)
 
         try:
             with nogil:
