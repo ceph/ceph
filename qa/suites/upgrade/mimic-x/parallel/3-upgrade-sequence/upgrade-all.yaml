@@ -4,7 +4,7 @@ meta:
 upgrade-sequence:
    sequential:
    - ceph.restart:
-       daemons: [mon.a, mon.b, mon.c, mgr.x, mgr.y]
+       daemons: [mon.a, mon.b, mon.c, mgr.x, mgr.y,mgr.z]
        mon-health-to-clog: false
        wait-for-healthy: false
    - exec:
