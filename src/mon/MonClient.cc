@@ -1010,7 +1010,7 @@ void MonClient::_send_command(MonCommand *r)
 
   if (r->target_rank >= 0 &&
       r->target_rank != monmap.get_rank(peer)) {
-    if (r->send_attempts > 1) {
+    if (r->send_attempts > cct->_conf->mon_client_directed_command_retry) {
       _finish_command(r, -ENXIO, "mon unavailable");
       return;
     }
@@ -1029,7 +1029,7 @@ void MonClient::_send_command(MonCommand *r)
 
   if (r->target_name.length() &&
       r->target_name != monmap.get_name(peer)) {
-    if (r->send_attempts > 1) {
+    if (r->send_attempts > cct->_conf->mon_client_directed_command_retry) {
       _finish_command(r, -ENXIO, "mon unavailable");
       return;
     }
