@@ -9,6 +9,7 @@ import { BehaviorSubject, of } from 'rxjs';
 
 import {
   configureTestBed,
+  expectItemTasks,
   i18nProviders,
   PermissionHelper
 } from '../../../../testing/unit-test-helper';
@@ -135,10 +136,6 @@ describe('IscsiTargetListComponent', () => {
       summaryService.addRunningTask(task);
     };
 
-    const expectTargetTasks = (target: any, executing: string) => {
-      expect(target.cdExecuting).toEqual(executing);
-    };
-
     beforeEach(() => {
       targets = [];
       addTarget('iqn.a');
@@ -159,16 +156,16 @@ describe('IscsiTargetListComponent', () => {
     it('should add a new target from a task', () => {
       addTask('iscsi/target/create', 'iqn.d');
       expect(component.targets.length).toBe(4);
-      expectTargetTasks(component.targets[0], undefined);
-      expectTargetTasks(component.targets[1], undefined);
-      expectTargetTasks(component.targets[2], undefined);
-      expectTargetTasks(component.targets[3], 'Creating');
+      expectItemTasks(component.targets[0], undefined);
+      expectItemTasks(component.targets[1], undefined);
+      expectItemTasks(component.targets[2], undefined);
+      expectItemTasks(component.targets[3], 'Creating');
     });
 
     it('should show when an existing target is being modified', () => {
       addTask('iscsi/target/delete', 'iqn.b');
       expect(component.targets.length).toBe(3);
-      expectTargetTasks(component.targets[1], 'Deleting');
+      expectItemTasks(component.targets[1], 'Deleting');
     });
   });
 
