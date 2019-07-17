@@ -507,6 +507,20 @@ class VolumeClient(object):
             ret = self.volume_exception_to_retval(ve)
         return ret
 
+    @connection_pool_wrap
+    def getpath_subvolume_group(self, fs_handle, **kwargs):
+        groupname  = kwargs['group_name']
+        try:
+            with SubVolume(self.mgr, fs_handle) as sv:
+                spec = SubvolumeSpec("", groupname)
+                path = sv.get_group_path(spec)
+                if path is None:
+                    raise VolumeException(
+                        -errno.ENOENT, "Subvolume group '{0}' not found".format(groupname))
+                return 0, path, ""
+        except VolumeException as ve:
+            return self.volume_exception_to_retval(ve)
+
     ### group snapshot
 
     @connection_pool_wrap
