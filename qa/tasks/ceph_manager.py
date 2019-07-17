@@ -495,6 +495,8 @@ class Thrasher:
         try:
             if random.random() >= .3:
                 pgs = self.ceph_manager.get_pg_stats()
+                if not pgs:
+                    return
                 pg = random.choice(pgs)
                 pgid = str(pg['pgid'])
                 poolid = int(pgid.split('.')[0])
