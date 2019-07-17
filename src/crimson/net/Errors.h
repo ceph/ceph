@@ -31,6 +31,7 @@ enum class error {
   corrupted_message,
   invalid_argument,
   address_in_use,
+  broken_pipe,
 };
 
 /// net error category

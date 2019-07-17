@@ -1,6 +1,5 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
-import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
@@ -212,209 +211,54 @@ describe('RbdSnapshotListComponent', () => {
     });
   });
 
-  describe('show action buttons and drop down actions depending on permissions', () => {
-    let tableActions: TableActionsComponent;
-    let scenario: { fn; empty; single };
-    let permissionHelper: PermissionHelper;
+  it('should test all TableActions combinations', () => {
+    const permissionHelper: PermissionHelper = new PermissionHelper(component.permission);
+    const tableActions: TableActionsComponent = permissionHelper.setPermissionsAndGetActions(
+      component.tableActions
+    );
 
-    const getTableActionComponent = (): TableActionsComponent => {
-      fixture.detectChanges();
-      return fixture.debugElement.query(By.directive(TableActionsComponent)).componentInstance;
-    };
-
-    beforeEach(() => {
-      permissionHelper = new PermissionHelper(component.permission, () =>
-        getTableActionComponent()
-      );
-      scenario = {
-        fn: () => tableActions.getCurrentButton().name,
-        single: 'Rename',
-        empty: 'Create'
-      };
-    });
-
-    describe('with all', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(1, 1, 1);
-      });
-
-      it(`shows 'Rename' for single selection else 'Create' as main action`, () =>
-        permissionHelper.testScenarios(scenario));
-
-      it('shows all actions', () => {
-        expect(tableActions.tableActions.length).toBe(8);
-        expect(tableActions.tableActions).toEqual(component.tableActions);
-      });
-    });
-
-    describe('with read, create and update', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(1, 1, 0);
-      });
-
-      it(`shows 'Rename' for single selection else 'Create' as main action`, () =>
-        permissionHelper.testScenarios(scenario));
-
-      it(`shows all actions except for 'Delete'`, () => {
-        expect(tableActions.tableActions.length).toBe(7);
-        component.tableActions.pop();
-        expect(tableActions.tableActions).toEqual(component.tableActions);
-      });
-    });
-
-    describe('with read, create and delete', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(1, 0, 1);
-      });
-
-      it(`shows 'Clone' for single selection else 'Create' as main action`, () => {
-        scenario.single = 'Clone';
-        permissionHelper.testScenarios(scenario);
-      });
-
-      it(`shows 'Create', 'Clone', 'Copy' and 'Delete' action`, () => {
-        expect(tableActions.tableActions.length).toBe(4);
-        expect(tableActions.tableActions).toEqual([
-          component.tableActions[0],
-          component.tableActions[4],
-          component.tableActions[5],
-          component.tableActions[7]
-        ]);
-      });
-    });
-
-    describe('with read, edit and delete', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(0, 1, 1);
-      });
-
-      it(`shows always 'Rename' as main action`, () => {
-        scenario.empty = 'Rename';
-        permissionHelper.testScenarios(scenario);
-      });
-
-      it(`shows 'Rename', 'Protect', 'Unprotect', 'Rollback' and 'Delete' action`, () => {
-        expect(tableActions.tableActions.length).toBe(5);
-        expect(tableActions.tableActions).toEqual([
-          component.tableActions[1],
-          component.tableActions[2],
-          component.tableActions[3],
-          component.tableActions[6],
-          component.tableActions[7]
-        ]);
-      });
-    });
-
-    describe('with read and create', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(1, 0, 0);
-      });
-
-      it(`shows 'Clone' for single selection else 'Create' as main action`, () => {
-        scenario.single = 'Clone';
-        permissionHelper.testScenarios(scenario);
-      });
-
-      it(`shows 'Create', 'Clone' and 'Copy' actions`, () => {
-        expect(tableActions.tableActions.length).toBe(3);
-        expect(tableActions.tableActions).toEqual([
-          component.tableActions[0],
-          component.tableActions[4],
-          component.tableActions[5]
-        ]);
-      });
-    });
-
-    describe('with read and edit', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(0, 1, 0);
-      });
-
-      it(`shows always 'Rename' as main action`, () => {
-        scenario.empty = 'Rename';
-        permissionHelper.testScenarios(scenario);
-      });
-
-      it(`shows 'Rename', 'Protect', 'Unprotect' and 'Rollback' actions`, () => {
-        expect(tableActions.tableActions.length).toBe(4);
-        expect(tableActions.tableActions).toEqual([
-          component.tableActions[1],
-          component.tableActions[2],
-          component.tableActions[3],
-          component.tableActions[6]
-        ]);
-      });
-    });
-
-    describe('with read and delete', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(0, 0, 1);
-      });
-
-      it(`shows always 'Delete' as main action`, () => {
-        scenario.single = 'Delete';
-        scenario.empty = 'Delete';
-        permissionHelper.testScenarios(scenario);
-      });
-
-      it(`shows only 'Delete' action`, () => {
-        expect(tableActions.tableActions.length).toBe(1);
-        expect(tableActions.tableActions).toEqual([component.tableActions[7]]);
-      });
-    });
-
-    describe('with only read', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(0, 0, 0);
-      });
-
-      it('shows no main action', () => {
-        permissionHelper.testScenarios({
-          fn: () => tableActions.getCurrentButton(),
-          single: undefined,
-          empty: undefined
-        });
-      });
-
-      it('shows no actions', () => {
-        expect(tableActions.tableActions.length).toBe(0);
-        expect(tableActions.tableActions).toEqual([]);
-      });
-    });
-
-    describe('test unprotected and protected action cases', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(0, 1, 0);
-      });
-
-      it(`shows none of them if nothing is selected`, () => {
-        permissionHelper.setSelection([]);
-        fixture.detectChanges();
-        expect(tableActions.dropDownActions).toEqual([
-          component.tableActions[1],
-          component.tableActions[6]
-        ]);
-      });
-
-      it(`shows 'Protect' of them if nothing is selected`, () => {
-        permissionHelper.setSelection([{ is_protected: false }]);
-        fixture.detectChanges();
-        expect(tableActions.dropDownActions).toEqual([
-          component.tableActions[1],
-          component.tableActions[2],
-          component.tableActions[6]
-        ]);
-      });
-
-      it(`shows 'Unprotect' of them if nothing is selected`, () => {
-        permissionHelper.setSelection([{ is_protected: true }]);
-        fixture.detectChanges();
-        expect(tableActions.dropDownActions).toEqual([
-          component.tableActions[1],
-          component.tableActions[3],
-          component.tableActions[6]
-        ]);
-      });
+    expect(tableActions).toEqual({
+      'create,update,delete': {
+        actions: [
+          'Create',
+          'Rename',
+          'Protect',
+          'Unprotect',
+          'Clone',
+          'Copy',
+          'Rollback',
+          'Delete'
+        ],
+        primary: { multiple: 'Create', executing: 'Rename', single: 'Rename', no: 'Create' }
+      },
+      'create,update': {
+        actions: ['Create', 'Rename', 'Protect', 'Unprotect', 'Clone', 'Copy', 'Rollback'],
+        primary: { multiple: 'Create', executing: 'Rename', single: 'Rename', no: 'Create' }
+      },
+      'create,delete': {
+        actions: ['Create', 'Clone', 'Copy', 'Delete'],
+        primary: { multiple: 'Create', executing: 'Clone', single: 'Clone', no: 'Create' }
+      },
+      create: {
+        actions: ['Create', 'Clone', 'Copy'],
+        primary: { multiple: 'Create', executing: 'Clone', single: 'Clone', no: 'Create' }
+      },
+      'update,delete': {
+        actions: ['Rename', 'Protect', 'Unprotect', 'Rollback', 'Delete'],
+        primary: { multiple: 'Rename', executing: 'Rename', single: 'Rename', no: 'Rename' }
+      },
+      update: {
+        actions: ['Rename', 'Protect', 'Unprotect', 'Rollback'],
+        primary: { multiple: 'Rename', executing: 'Rename', single: 'Rename', no: 'Rename' }
+      },
+      delete: {
+        actions: ['Delete'],
+        primary: { multiple: 'Delete', executing: 'Delete', single: 'Delete', no: 'Delete' }
+      },
+      'no-permissions': {
+        actions: [],
+        primary: { multiple: '', executing: '', single: '', no: '' }
+      }
     });
   });
 });

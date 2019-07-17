@@ -50,7 +50,7 @@ seastar::future<> ClientRequest::start()
   IRef ref = this;
   return with_blocking_future(handle.enter(cp().await_map))
     .then([this]() {
-      return with_blocking_future(osd.osdmap_gate.wait_for_map(m->get_map_epoch()));
+      return with_blocking_future(osd.osdmap_gate.wait_for_map(m->get_min_epoch()));
     }).then([this](epoch_t epoch) {
       return with_blocking_future(handle.enter(cp().get_pg));
     }).then([this] {

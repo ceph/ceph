@@ -256,6 +256,52 @@ bool PGBackend::maybe_create_new_object(
   return true;
 }
 
+seastar::future<> PGBackend::write(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& txn)
+{
+  const ceph_osd_op& op = osd_op.op;
+  uint64_t offset = op.extent.offset;
+  uint64_t length = op.extent.length;
+  bufferlist buf = osd_op.indata;
+  if (auto seq = os.oi.truncate_seq;
+      seq != 0 && op.extent.truncate_seq < seq) {
+    // old write, arrived after trimtrunc
+    if (offset + length > os.oi.size) {
+      // no-op
+      if (offset > os.oi.size) {
+	length = 0;
+	buf.clear();
+      } else {
+	// truncate
+	auto len = os.oi.size - offset;
+	buf.splice(len, length);
+	length = len;
+      }
+    }
+  } else if (op.extent.truncate_seq > seq) {
+    // write arrives before trimtrunc
+    if (os.exists && !os.oi.is_whiteout()) {
+      txn.truncate(coll->cid, ghobject_t{os.oi.soid}, op.extent.truncate_size);
+    }
+    os.oi.truncate_seq = op.extent.truncate_seq;
+    os.oi.truncate_size = op.extent.truncate_size;
+  }
+  maybe_create_new_object(os, txn);
+  if (length == 0) {
+    if (offset > os.oi.size) {
+      txn.truncate(coll->cid, ghobject_t{os.oi.soid}, op.extent.offset);
+    } else {
+      txn.nop();
+    }
+  } else {
+    txn.write(coll->cid, ghobject_t{os.oi.soid},
+	      offset, length, std::move(buf), op.flags);
+  }
+  return seastar::now();
+}
+
 seastar::future<> PGBackend::writefull(
   ObjectState& os,
   const OSDOp& osd_op,

@@ -3,7 +3,7 @@ import os
 import threading
 import datetime
 import uuid
-
+import time
 import json
 
 
@@ -23,10 +23,10 @@ class Event(object):
     objects (osds, pools) this relates to.
     """
 
-    def __init__(self, message, refs):
-        self._message = message
+    def __init__(self, message, refs, duration="(since 00h 00m 00s)"):
         self._refs = refs
-
+        self._duration_str = duration
+        self._message = message
         self.started_at = datetime.datetime.utcnow()
 
         self.id = None
@@ -35,7 +35,8 @@ class Event(object):
         global _module
         _module.log.debug('refreshing mgr for %s (%s) at %f' % (self.id, self._message,
                                                                 self.progress))
-        _module.update_progress_event(self.id, self._message, self.progress)
+        self.update_duration_event()
+        _module.update_progress_event(self.id, self._message, self.progress, self._duration_str)
 
     @property
     def message(self):
@@ -48,9 +49,13 @@ class Event(object):
     @property
     def progress(self):
         raise NotImplementedError()
+    
+    @property
+    def duration_str(self):
+        return self._duration_str
 
     def summary(self):
-        return "{0} {1}".format(self.progress, self.message)
+        return "{0} {1} {2}".format(self.progress, self.message, self.duration_str)
 
     def _progress_str(self, width):
         inner_width = width - 2
@@ -70,16 +75,22 @@ class Event(object):
             [===============..............]
 
         """
-        return "{0}\n    {1}".format(
-            self._message, self._progress_str(30))
+        return "{0} {1}\n    {2}".format(
+            self._message, self._duration_str, self._progress_str(30))
 
     def to_json(self):
         return {
             "id": self.id,
             "message": self.message,
+            "duration": self.duration_str,
             "refs": self._refs
         }
 
+    def update_duration_event(self):
+        # Update duration of event in seconds/minutes/hours
+
+        duration = (datetime.datetime.utcnow() - self.started_at).seconds
+        self._duration_str = time.strftime("(since %Hh %Mm %Ss)", time.gmtime(duration))
 
 class GhostEvent(Event):
     """
@@ -87,8 +98,8 @@ class GhostEvent(Event):
     after the event is complete.
     """
 
-    def __init__(self, my_id, message, refs):
-        super(GhostEvent, self).__init__(message, refs)
+    def __init__(self, my_id, message, refs, duration="(since 00h 00m 00s)"):
+        super(GhostEvent, self).__init__(message, refs, duration)
         self.id = my_id
 
     @property
@@ -103,8 +114,8 @@ class RemoteEvent(Event):
     progress information as it emerges.
     """
 
-    def __init__(self, my_id, message, refs):
-        super(RemoteEvent, self).__init__(message, refs)
+    def __init__(self, my_id, message, refs, duration="(since 00h 00m 00s)"):
+        super(RemoteEvent, self).__init__(message, refs, duration)
         self.id = my_id
         self._progress = 0.0
         self._refresh()
@@ -225,11 +236,9 @@ class PgRecoveryEvent(Event):
         completed_pgs = self._original_pg_count - len(self._pgs)
         self._progress = (completed_pgs + complete_accumulate)\
             / self._original_pg_count
-        self._refresh()
 
-        log.info("Updated progress to {0} ({1})".format(
-            self._progress, self._message
-        ))
+        self._refresh()
+        log.info("Updated progress to %s", self.summary())
 
     @property
     def progress(self):
@@ -521,7 +530,7 @@ class Module(MgrModule):
         self.complete_progress_event(ev.id)
 
         self._completed_events.append(
-            GhostEvent(ev.id, ev.message, ev.refs))
+            GhostEvent(ev.id, ev.message, ev.refs, ev.duration_str))
         del self._events[ev.id]
         self._prune_completed_events()
         self._dirty = True

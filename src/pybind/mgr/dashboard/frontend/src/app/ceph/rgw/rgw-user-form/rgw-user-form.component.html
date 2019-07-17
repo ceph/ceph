@@ -202,7 +202,7 @@
           <div class="row">
             <div class="offset-sm-3 col-sm-9">
               <span *ngIf="subusers.length === 0"
-                    class="form-control no-border">
+                    class="no-border">
                 <span class="form-text text-muted"
                       i18n>There are no subusers.</span>
               </span>
@@ -215,7 +215,7 @@
                     </span>
                   </div>
                   <input type="text"
-                         class="form-control"
+                         class="cd-form-control"
                          value="{{ subuser.id }}"
                          readonly>
                   <div class="input-group-prepend"
@@ -225,7 +225,7 @@
                     </span>
                   </div>
                   <input type="text"
-                         class="form-control"
+                         class="cd-form-control"
                          value="{{ ('full-control' === subuser.permissions) ? 'full' : subuser.permissions }}"
                          readonly>
                   <span class="input-group-append">
@@ -274,7 +274,7 @@
                    i18n>S3</label>
             <div class="col-sm-9">
               <span *ngIf="s3Keys.length === 0"
-                    class="form-control no-border">
+                    class="no-border">
                 <span class="form-text text-muted"
                       i18n>There are no keys.</span>
               </span>
@@ -287,7 +287,7 @@
                     </div>
                   </div>
                   <input type="text"
-                         class="form-control"
+                         class="cd-form-control"
                          value="{{ key.user }}"
                          readonly>
                   <span class="input-group-append">
@@ -335,7 +335,7 @@
 
             <div class="col-sm-9">
               <span *ngIf="swiftKeys.length === 0"
-                    class="form-control no-border">
+                    class="no-border">
                 <span class="form-text text-muted"
                       i18n>There are no keys.</span>
               </span>
@@ -348,7 +348,7 @@
                     </span>
                   </div>
                   <input type="text"
-                         class="form-control"
+                         class="cd-form-control"
                          value="{{ key.user }}"
                          readonly>
                   <span class="input-group-append">
@@ -374,7 +374,7 @@
           <div class="form-group row">
             <div class="offset-sm-3 col-sm-9">
               <span *ngIf="capabilities.length === 0"
-                    class="form-control no-border">
+                    class="no-border">
                 <span class="form-text text-muted"
                       i18n>There are no capabilities.</span>
               </span>
@@ -387,7 +387,7 @@
                     </div>
                   </span>
                   <input type="text"
-                         class="form-control"
+                         class="cd-form-control"
                          value="{{ cap.type }}:{{ cap.perm }}"
                          readonly>
                   <span class="input-group-append">

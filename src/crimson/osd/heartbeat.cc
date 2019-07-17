@@ -88,11 +88,11 @@ seastar::future<> Heartbeat::add_peer(osd_id_t peer, epoch_t epoch)
   if (found == peers.end()) {
     logger().info("add_peer({})", peer);
     auto osdmap = service.get_map();
-    // TODO: msgr v2
+    // TODO: use addrs
     return seastar::when_all_succeed(
-        front_msgr.connect(osdmap->get_hb_front_addrs(peer).legacy_addr(),
+        front_msgr.connect(osdmap->get_hb_front_addrs(peer).front(),
                            CEPH_ENTITY_TYPE_OSD),
-        back_msgr.connect(osdmap->get_hb_back_addrs(peer).legacy_addr(),
+        back_msgr.connect(osdmap->get_hb_back_addrs(peer).front(),
                           CEPH_ENTITY_TYPE_OSD))
       .then([this, peer, epoch] (auto xcon_front, auto xcon_back) {
         PeerInfo info;
