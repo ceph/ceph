@@ -31,7 +31,7 @@ To unmount the Ceph file system, you may use the ``umount`` command. For example
 .. tip:: Ensure that you are not within the file system directories before
    executing this command.
 
-See `mount.ceph`_ for details.
+See `mount.ceph`_ for details. For troubleshooting, see :ref:`kernel_mount_debugging`.
 
 .. _mount.ceph: ../../man/8/mount.ceph/
 .. _User Management: ../../rados/operations/user-management/
