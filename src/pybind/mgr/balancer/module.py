@@ -205,6 +205,8 @@ class Module(MgrModule):
     OPTIONS = [
             {'name': 'active'},
             {'name': 'begin_time'},
+            {'name': 'begin_weekday'},
+            {'name': 'end_weekday'},
             {'name': 'crush_compat_max_iterations'},
             {'name': 'crush_compat_metrics'},
             {'name': 'crush_compat_step'},
@@ -400,25 +402,46 @@ class Module(MgrModule):
         self.run = False
         self.event.set()
 
-    def time_in_interval(self, tod, begin, end):
-        if begin <= end:
-            return tod >= begin and tod < end
+    def time_permit(self):
+        local_time = time.localtime()
+        time_of_day = time.strftime('%H%M', local_time)
+        weekday = (local_time.tm_wday + 1) % 7 # be compatible with C
+        permit = False
+
+        begin_time = self.get_config('begin_time') or '0000'
+        end_time = self.get_config('end_time') or '2400'
+        if begin_time <= end_time:
+            permit = begin_time <= time_of_day < end_time
         else:
-            return tod >= begin or tod < end
+            permit = time_of_day >= begin_time or time_of_day < end_time
+        if not permit:
+            self.log.debug("should run between %s - %s, now %s, skipping",
+                           begin_time, end_time, time_of_day)
+            return False
+
+        begin_weekday = int(self.get_config('begin_weekday', 0))
+        end_weekday = int(self.get_config('end_weekday', 7))
+        if begin_weekday <= end_weekday:
+            permit = begin_weekday <= weekday < end_weekday
+        else:
+            permit = weekday >= begin_weekday or weekday < end_weekday
+        if not permit:
+            self.log.debug("should run between weekday %d - %d, now %d, skipping",
+                           begin_weekday, end_weekday, weekday)
+            return False
+
+        return True
 
     def serve(self):
         self.log.info('Starting')
         while self.run:
             self.active = self.get_config('active', '') is not ''
-            begin_time = self.get_config('begin_time') or '0000'
-            end_time = self.get_config('end_time') or '2400'
-            timeofday = time.strftime('%H%M', time.localtime())
-            self.log.debug('Waking up [%s, scheduled for %s-%s, now %s]',
-                           "active" if self.active else "inactive",
-                           begin_time, end_time, timeofday)
             sleep_interval = float(self.get_config('sleep_interval',
                                                    default_sleep_interval))
-            if self.active and self.time_in_interval(timeofday, begin_time, end_time):
+            self.log.debug('Waking up [%s, now %s]',
+                           "active" if self.active else "inactive",
+                           time.strftime(TIME_FORMAT, time.localtime()))
+            if self.active and self.time_permit():
                 self.log.debug('Running')
                 name = 'auto_%s' % time.strftime(TIME_FORMAT, time.gmtime())
                 plan = self.plan_create(name, self.get_osdmap(), [])
