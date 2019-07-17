@@ -94,9 +94,16 @@ private:
   int load_rocksdb_options(bool create_if_missing, rocksdb::Options& opt);
 
   // manage async compactions
-  ceph::mutex compact_queue_lock;
+  ceph::mutex compact_queue_lock = ceph::make_mutex("RocksDBStore::compact_queue_lock");
   ceph::condition_variable compact_queue_cond;
-  list< pair<string,string> > compact_queue;
+  struct compact_command {
+    compact_command(rocksdb::ColumnFamilyHandle* cf, std::string s, std::string e) :
+      cf_handle(cf), start(s), end(e) {}
+    rocksdb::ColumnFamilyHandle* cf_handle;
+    std::string start;
+    std::string end;
+  };
+  list< compact_command > compact_queue;
   bool compact_queue_stop;
 
   class CompactThread : public Thread {
@@ -165,6 +172,8 @@ public:
   int column_family_create(const std::string& name, const std::string& options) override;
   int column_family_delete(const std::string& name) override;
   KeyValueDB::ColumnFamilyHandle column_family_handle(const std::string& cf_name) const override;
+  int column_family_compact(const std::string& cf_name, const string& prefix, const string& start, const string& end) override;
+  int column_family_compact_async(const std::string& cf_name, const string& prefix, const string& start, const string& end) override;
 
 private:
   int _open(ostream &out, bool read_only, const std::vector<ColumnFamily>& options);
@@ -175,6 +184,8 @@ private:
   std::pair<std::string, ColumnFamilyHandle> cf_get_by_rocksdb_ID(uint32_t ID) const;
   int cf_create(const std::string& name, const std::string& options);
   KeyValueDB::ColumnFamilyHandle cf_wrap_handle(rocksdb::ColumnFamilyHandle*);
+  int cf_compact(rocksdb::ColumnFamilyHandle* cf, const string& start, const string& end);
+  int cf_compact_async(rocksdb::ColumnFamilyHandle* cf, const string& start, const string& end);
 
   rocksdb::Options rocksdb_options;
   struct ColumnFamilyData;

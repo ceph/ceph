@@ -862,6 +862,107 @@ KeyValueDB::ColumnFamilyHandle RocksDBStore::column_family_handle(const std::str
  return it->second.handle;
 }
 
+int RocksDBStore::column_family_compact(const std::string& cf_name,
+                                        const string& prefix,
+                                        const string& start,
+                                        const string& end) {
+  RWLock::RLocker l(api_lock);
+  auto it = column_families.find(cf_name);
+  if (it == column_families.end())
+    return -EINVAL;
+  auto cf = static_cast<rocksdb::ColumnFamilyHandle*>(it->second.handle.priv);
+  if (prefix.empty()) {
+    if (start.empty() && end.empty()) {
+      cf_compact(cf, string(), string());
+    } else {
+      return -EINVAL;
+    }
+  } else {
+    cf_compact(cf, combine_strings(prefix, start), combine_strings(prefix, end));
+  }
+  return 0;
+}
+
+int RocksDBStore::column_family_compact_async(const std::string& cf_name,
+                                              const string& prefix,
+                                              const string& _start,
+                                              const string& _end) {
+  RWLock::RLocker l(api_lock);
+  auto it = column_families.find(cf_name);
+  if (it == column_families.end())
+    return -EINVAL;
+  rocksdb::ColumnFamilyHandle* h = static_cast<rocksdb::ColumnFamilyHandle*>(it->second.handle.priv);
+  string start;
+  string end;
+  if (prefix.empty()) {
+    if (!_start.empty() || !_end.empty()) {
+      return -EINVAL;
+    }
+  } else {
+    start = combine_strings(prefix, _start);
+    end = combine_strings(prefix, _end);
+  }
+
+  return cf_compact_async(h, start, end);
+}
+
+int RocksDBStore::cf_compact(rocksdb::ColumnFamilyHandle* cf, const string& start, const string& end)
+{
+  rocksdb::CompactRangeOptions options;
+  rocksdb::Slice cstart;
+  rocksdb::Slice cend;
+  if (!start.empty()) {
+    cstart = rocksdb::Slice(start);
+  }
+  if (!end.empty()) {
+    cend = rocksdb::Slice(end);
+  }
+  db->CompactRange(options, cf, &cstart, &cend);
+  return 0;
+}
+
+int RocksDBStore::cf_compact_async(rocksdb::ColumnFamilyHandle* cf, const string& start, const string& end)
+{
+  std::lock_guard ll(compact_queue_lock);
+
+  // try to merge adjacent ranges.  this is O(n), but the queue should
+  // be short.  note that we do not cover all overlap cases and merge
+  // opportunities here, but we capture the ones we currently need.
+  auto p = compact_queue.begin();
+  while (p != compact_queue.end()) {
+    if (p->cf_handle != cf) {
+      //only can merge same column families
+      p++;
+      continue;
+    }
+    if (end < p->start || p->end < start) {
+      /* no common range*/
+      p++;
+      continue;
+    }
+    compact_queue.emplace(p, cf,
+                          std::min(p->start, start),
+                          std::max(p->end, end));
+    compact_queue.erase(p);
+    logger->inc(l_rocksdb_compact_queue_merge);
+    break;
+  }
+
+  if (p == compact_queue.end()) {
+    // no merge, new entry.
+    compact_queue.emplace_back(cf, start, end);
+    logger->set(l_rocksdb_compact_queue_len, compact_queue.size());
+  }
+  compact_queue_cond.notify_one();
+  if (!compact_thread.is_started()) {
+    compact_thread.create("rstore_compact");
+  }
+  return 0;
+}
+
+
+
+
 /**
  * Get merge operator for column family.
  */
@@ -1003,7 +1104,6 @@ RocksDBStore::RocksDBStore(CephContext *c, const string &path, map<string,string
   env(static_cast<rocksdb::Env*>(p)),
   dbstats(NULL),
   api_lock("RocksDBStore::api_lock"),
-  compact_queue_lock("RocksDBStore::compact_thread_lock"),
   compact_queue_stop(false),
   compact_thread(this),
   compact_on_mount(false),
@@ -1683,22 +1783,25 @@ void RocksDBStore::compact()
   }
 }
 
-
 void RocksDBStore::compact_thread_entry()
 {
   std::unique_lock l{compact_queue_lock};
   dout(10) << __func__ << " enter" << dendl;
   while (!compact_queue_stop) {
     if (!compact_queue.empty()) {
-      pair<string,string> range = compact_queue.front();
+      compact_command range = compact_queue.front();
       compact_queue.pop_front();
       logger->set(l_rocksdb_compact_queue_len, compact_queue.size());
       l.unlock();
       logger->inc(l_rocksdb_compact_range);
-      if (range.first.empty() && range.second.empty()) {
-        compact();
+      if (range.cf_handle == nullptr) {
+        if (range.start.empty() && range.end.empty()) {
+          compact();
+        } else {
+          compact_range(range.start, range.end);
+        }
       } else {
-        compact_range(range.first, range.second);
+        /*TODO*/
       }
       l.lock();
       continue;
@@ -1711,46 +1814,9 @@ void RocksDBStore::compact_thread_entry()
 
 void RocksDBStore::compact_range_async(const string& start, const string& end)
 {
-  std::lock_guard l(compact_queue_lock);
-
-  // try to merge adjacent ranges.  this is O(n), but the queue should
-  // be short.  note that we do not cover all overlap cases and merge
-  // opportunities here, but we capture the ones we currently need.
-  list< pair<string,string> >::iterator p = compact_queue.begin();
-  while (p != compact_queue.end()) {
-    if (p->first == start && p->second == end) {
-      // dup; no-op
-      return;
-    }
-    if (start <= p->first && p->first <= end) {
-      // new region crosses start of existing range
-      // select right bound that is bigger
-      compact_queue.push_back(make_pair(start, end > p->second ? end : p->second));
-      compact_queue.erase(p);
-      logger->inc(l_rocksdb_compact_queue_merge);
-      break;
-    }
-    if (start <= p->second && p->second <= end) {
-      // new region crosses end of existing range
-      //p->first < p->second and p->second <= end, so p->first <= end.
-      //But we break if previous condition, so start > p->first.
-      compact_queue.push_back(make_pair(p->first, end));
-      compact_queue.erase(p);
-      logger->inc(l_rocksdb_compact_queue_merge);
-      break;
-    }
-    ++p;
-  }
-  if (p == compact_queue.end()) {
-    // no merge, new entry.
-    compact_queue.push_back(make_pair(start, end));
-    logger->set(l_rocksdb_compact_queue_len, compact_queue.size());
-  }
-  compact_queue_cond.notify_all();
-  if (!compact_thread.is_started()) {
-    compact_thread.create("rstore_compact");
-  }
+  cf_compact_async(default_cf, start, end);
 }
+
 bool RocksDBStore::check_omap_dir(string &omap_dir)
 {
   rocksdb::Options options;
