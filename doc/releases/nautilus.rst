@@ -22,18 +22,16 @@ Notable Changes
   objects and the other deletes them. Read the troubleshooting section
   of the dynamic resharding docs for details.
 
-Known Issues
-------------
-
-* All current Nautilus releases have an issue where deploying a single new
-  (Nautilus) BlueStore OSD on an upgraded cluster (i.e. one that was originally
-  deployed pre-Nautilus) breaks the pool utilization stats reported by
-  ``ceph df``.  Until all OSDs have been reprovisioned or updated (via
-  ``ceph-bluestore-tool repair``), the pool stats will show values that are
-  lower than the true value. A fix is in the works but will not appear until
-  14.2.3. Users who have upgraded to Nautilus (or are considering upgrading)
-  may want to delay provisioning new OSDs until the fix is available in the
-  next release.
+* Earlier Nautilus releases (14.2.1 and 14.2.0) have an issue where
+  deploying a single new (Nautilus) BlueStore OSD on an upgraded
+  cluster (i.e. one that was originally deployed pre-Nautilus) breaks
+  the pool utilization stats reported by ``ceph df``.  Until all OSDs
+  have been reprovisioned or updated (via ``ceph-bluestore-tool
+  repair``), the pool stats will show values that are lower than the
+  true value.  This is resolved in 14.2.2, such that the cluster only
+  switches to using the more accurate per-pool stats after *all* OSDs
+  are 14.2.2 (or later), are BlueStore, and (if they were created
+  prior to Nautilus) have been updated via the ``repair`` function.
 
 Changelog
 ---------
