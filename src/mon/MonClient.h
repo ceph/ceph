@@ -501,6 +501,7 @@ private:
   struct MonCommand {
     std::string target_name;
     int target_rank;
+    unsigned send_attempts = 0;
     uint64_t tid;
     std::vector<std::string> cmd;
     ceph::buffer::list inbl;

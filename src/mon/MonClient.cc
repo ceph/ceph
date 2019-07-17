@@ -1031,6 +1031,8 @@ int MonClient::wait_auth_rotating(double timeout)
 
 void MonClient::_send_command(MonCommand *r)
 {
+  ++r->send_attempts;
+
   entity_addr_t peer;
   if (active_con) {
     peer = active_con->get_con()->get_peer_addr();
@@ -1038,6 +1040,10 @@ void MonClient::_send_command(MonCommand *r)
 
   if (r->target_rank >= 0 &&
       r->target_rank != monmap.get_rank(peer)) {
+    if (r->send_attempts > 1) {
+      _finish_command(r, -ENXIO, "mon unavailable");
+      return;
+    }
     ldout(cct, 10) << __func__ << " " << r->tid << " " << r->cmd
 		   << " wants rank " << r->target_rank
 		   << ", reopening session"
@@ -1053,6 +1059,10 @@ void MonClient::_send_command(MonCommand *r)
 
   if (r->target_name.length() &&
       r->target_name != monmap.get_name(peer)) {
+    if (r->send_attempts > 1) {
+      _finish_command(r, -ENXIO, "mon unavailable");
+      return;
+    }
     ldout(cct, 10) << __func__ << " " << r->tid << " " << r->cmd
 		   << " wants mon " << r->target_name
 		   << ", reopening session"
@@ -1078,8 +1088,11 @@ void MonClient::_send_command(MonCommand *r)
 void MonClient::_resend_mon_commands()
 {
   // resend any requests
-  for (auto p = mon_commands.begin(); p != mon_commands.end(); ++p) {
-    _send_command(p->second);
+  auto p = mon_commands.begin();
+  while (p != mon_commands.end()) {
+    auto cmd = p->second;
+    ++p;
+    _send_command(cmd); // might remove cmd from mon_commands
   }
 }
 
