@@ -13,6 +13,7 @@ import { BehaviorSubject, of } from 'rxjs';
 
 import {
   configureTestBed,
+  expectItemTasks,
   i18nProviders,
   PermissionHelper
 } from '../../../../testing/unit-test-helper';
@@ -137,10 +138,6 @@ describe('RbdListComponent', () => {
       summaryService.addRunningTask(task);
     };
 
-    const expectImageTasks = (image: RbdModel, executing: string) => {
-      expect(image.cdExecuting).toEqual(executing);
-    };
-
     beforeEach(() => {
       images = [];
       addImage('a');
@@ -162,28 +159,28 @@ describe('RbdListComponent', () => {
     it('should add a new image from a task', () => {
       addTask('rbd/create', 'd');
       expect(component.images.length).toBe(4);
-      expectImageTasks(component.images[0], undefined);
-      expectImageTasks(component.images[1], undefined);
-      expectImageTasks(component.images[2], undefined);
-      expectImageTasks(component.images[3], 'Creating');
+      expectItemTasks(component.images[0], undefined);
+      expectItemTasks(component.images[1], undefined);
+      expectItemTasks(component.images[2], undefined);
+      expectItemTasks(component.images[3], 'Creating');
     });
 
     it('should show when a image is being cloned', () => {
       addTask('rbd/clone', 'd');
       expect(component.images.length).toBe(4);
-      expectImageTasks(component.images[0], undefined);
-      expectImageTasks(component.images[1], undefined);
-      expectImageTasks(component.images[2], undefined);
-      expectImageTasks(component.images[3], 'Cloning');
+      expectItemTasks(component.images[0], undefined);
+      expectItemTasks(component.images[1], undefined);
+      expectItemTasks(component.images[2], undefined);
+      expectItemTasks(component.images[3], 'Cloning');
     });
 
     it('should show when a image is being copied', () => {
       addTask('rbd/copy', 'd');
       expect(component.images.length).toBe(4);
-      expectImageTasks(component.images[0], undefined);
-      expectImageTasks(component.images[1], undefined);
-      expectImageTasks(component.images[2], undefined);
-      expectImageTasks(component.images[3], 'Copying');
+      expectItemTasks(component.images[0], undefined);
+      expectItemTasks(component.images[1], undefined);
+      expectItemTasks(component.images[2], undefined);
+      expectItemTasks(component.images[3], 'Copying');
     });
 
     it('should show when an existing image is being modified', () => {
@@ -191,9 +188,9 @@ describe('RbdListComponent', () => {
       addTask('rbd/delete', 'b');
       addTask('rbd/flatten', 'c');
       expect(component.images.length).toBe(3);
-      expectImageTasks(component.images[0], 'Updating');
-      expectImageTasks(component.images[1], 'Deleting');
-      expectImageTasks(component.images[2], 'Flattening');
+      expectItemTasks(component.images[0], 'Updating');
+      expectItemTasks(component.images[1], 'Deleting');
+      expectItemTasks(component.images[2], 'Flattening');
     });
   });
 

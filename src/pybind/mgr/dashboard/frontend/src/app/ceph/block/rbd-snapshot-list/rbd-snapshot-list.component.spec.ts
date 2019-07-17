@@ -10,6 +10,7 @@ import { Subject, throwError as observableThrowError } from 'rxjs';
 
 import {
   configureTestBed,
+  expectItemTasks,
   i18nProviders,
   PermissionHelper
 } from '../../../../testing/unit-test-helper';
@@ -137,10 +138,6 @@ describe('RbdSnapshotListComponent', () => {
       summaryService.addRunningTask(task);
     };
 
-    const expectImageTasks = (snapshot: RbdSnapshotModel, executing: string) => {
-      expect(snapshot.cdExecuting).toEqual(executing);
-    };
-
     const refresh = (data) => {
       summaryService['summaryDataSource'].next(data);
     };
@@ -167,10 +164,10 @@ describe('RbdSnapshotListComponent', () => {
     it('should add a new image from a task', () => {
       addTask('rbd/snap/create', 'd');
       expect(component.snapshots.length).toBe(4);
-      expectImageTasks(component.snapshots[0], undefined);
-      expectImageTasks(component.snapshots[1], undefined);
-      expectImageTasks(component.snapshots[2], undefined);
-      expectImageTasks(component.snapshots[3], 'Creating');
+      expectItemTasks(component.snapshots[0], undefined);
+      expectItemTasks(component.snapshots[1], undefined);
+      expectItemTasks(component.snapshots[2], undefined);
+      expectItemTasks(component.snapshots[3], 'Creating');
     });
 
     it('should show when an existing image is being modified', () => {
@@ -178,9 +175,9 @@ describe('RbdSnapshotListComponent', () => {
       addTask('rbd/snap/delete', 'b');
       addTask('rbd/snap/rollback', 'c');
       expect(component.snapshots.length).toBe(3);
-      expectImageTasks(component.snapshots[0], 'Updating');
-      expectImageTasks(component.snapshots[1], 'Deleting');
-      expectImageTasks(component.snapshots[2], 'Rolling back');
+      expectItemTasks(component.snapshots[0], 'Updating');
+      expectItemTasks(component.snapshots[1], 'Deleting');
+      expectItemTasks(component.snapshots[2], 'Rolling back');
     });
   });
 
