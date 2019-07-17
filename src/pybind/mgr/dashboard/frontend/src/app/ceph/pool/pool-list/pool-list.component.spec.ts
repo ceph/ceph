@@ -8,7 +8,11 @@ import { BsModalService } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 import { of } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import {
+  configureTestBed,
+  expectItemTasks,
+  i18nProviders
+} from '../../../../testing/unit-test-helper';
 import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { PoolService } from '../../../shared/api/pool.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -195,13 +199,13 @@ describe('PoolListComponent', () => {
     it('gets a pool from a task during creation', () => {
       addTask('pool/create', 'd');
       expect(component.pools.length).toBe(4);
-      expect(component.pools[3].cdExecuting).toBe('Creating');
+      expectItemTasks(component.pools[3], 'Creating');
     });
 
     it('gets all pools with one executing pools', () => {
       addTask('pool/create', 'a');
       expect(component.pools.length).toBe(3);
-      expect(component.pools[0].cdExecuting).toBe('Creating');
+      expectItemTasks(component.pools[0], 'Creating');
       expect(component.pools[1].cdExecuting).toBeFalsy();
       expect(component.pools[2].cdExecuting).toBeFalsy();
     });
@@ -214,9 +218,9 @@ describe('PoolListComponent', () => {
       addTask('pool/delete', 'b');
       addTask('pool/delete', 'c');
       expect(component.pools.length).toBe(3);
-      expect(component.pools[0].cdExecuting).toBe('Creating, Updating, Deleting');
-      expect(component.pools[1].cdExecuting).toBe('Updating, Deleting');
-      expect(component.pools[2].cdExecuting).toBe('Deleting');
+      expectItemTasks(component.pools[0], 'Creating..., Updating..., Deleting');
+      expectItemTasks(component.pools[1], 'Updating..., Deleting');
+      expectItemTasks(component.pools[2], 'Deleting');
     });
 
     it('gets all pools with multiple executing tasks (not only pool tasks)', () => {
@@ -227,8 +231,8 @@ describe('PoolListComponent', () => {
       addTask('rbd/delete', 'b');
       addTask('rbd/delete', 'c');
       expect(component.pools.length).toBe(3);
-      expect(component.pools[0].cdExecuting).toBe('Deleting');
-      expect(component.pools[1].cdExecuting).toBe('Updating');
+      expectItemTasks(component.pools[0], 'Deleting');
+      expectItemTasks(component.pools[1], 'Updating');
       expect(component.pools[2].cdExecuting).toBeFalsy();
     });
   });
@@ -364,12 +368,12 @@ describe('PoolListComponent', () => {
           pg_num_target: 16,
           pg_placement_num: 32,
           pg_placement_num_target: 16,
-          cdExecuting: 'Updating 50%'
+          cdExecuting: 'Updating... 50%'
         })
       ];
       expect(component.transformPoolsData(pools)).toEqual(
         getPoolData({
-          cdExecuting: 'Updating 50%',
+          cdExecuting: 'Updating... 50%',
           pg_num: 32,
           pg_num_target: 16,
           pg_placement_num: 32,
