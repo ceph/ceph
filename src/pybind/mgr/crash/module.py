@@ -103,24 +103,22 @@ class Module(MgrModule):
 
         return handler(self, command, inbuf)
 
-    @staticmethod
-    def validate_crash_metadata(inbuf):
-        # raise any exceptions to caller
-        metadata = json.loads(inbuf)
-        for f in ['crash_id', 'timestamp']:
-            if f not in metadata:
-                raise AttributeError("missing '%s' field" % (f))
-        time = time_from_string(metadata['timestamp'])
-        return metadata
-
-    @staticmethod
-    def time_from_string(timestr):
+    def time_from_string(self, timestr):
         # drop the 'Z' timezone indication, it's always UTC
         timestr = timestr.rstrip('Z')
         try:
             return datetime.datetime.strptime(timestr, DATEFMT)
         except ValueError:
             return datetime.datetime.strptime(timestr, OLD_DATEFMT)
+
+    def validate_crash_metadata(self, inbuf):
+        # raise any exceptions to caller
+        metadata = json.loads(inbuf)
+        for f in ['crash_id', 'timestamp']:
+            if f not in metadata:
+                raise AttributeError("missing '%s' field" % f)
+        time = self.time_from_string(metadata['timestamp'])
+        return metadata
 
     def timestamp_filter(self, f):
         """
