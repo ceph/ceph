@@ -25,8 +25,6 @@ extern "C" {
 #include "include/encoding.h"
 #include "include/mempool.h"
 
-#include "common/Mutex.h"
-
 namespace ceph {
   class Formatter;
 }
