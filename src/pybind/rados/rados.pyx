@@ -3365,6 +3365,7 @@ returned %d, but should return zero on success." % (self.name, ret))
             raise Error("Rados(): keys and values must have the same number of items")
 
         keys = cstr_list(keys, 'keys')
+        values = cstr_list(values, 'values')
         cdef:
             WriteOp _write_op = write_op
             size_t key_num = len(keys)
