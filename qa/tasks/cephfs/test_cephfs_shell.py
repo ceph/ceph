@@ -40,6 +40,11 @@ class TestCephFSShell(CephFSTestCase):
         return mount_x.client_remote.run(args=args, stdout=StringIO(),
                                            stdin=stdin)
 
+    def get_cephfs_shell_cmd_output(self, cmd, mount_x=None, opts=None,
+                                    stdin=None):
+        return self.run_cephfs_shell_cmd(cmd, mount_x, opts, stdin).stdout.\
+            getvalue().strip()
+
     def get_cephfs_shell_script_output(self, script, mount_x=None, stdin=None):
         return self.run_cephfs_shell_script(script, mount_x, stdin).stdout.\
             getvalue().strip()
@@ -65,7 +70,7 @@ class TestMkdir(TestCephFSShell):
         """
         Test that mkdir creates directory
         """
-        o = self.run_cephfs_shell_cmd("mkdir d1")
+        o = self.get_cephfs_shell_cmd_output("mkdir d1")
         log.info("cephfs-shell output:\n{}".format(o))
 
         o = self.mount_a.stat('d1')
@@ -75,7 +80,7 @@ class TestMkdir(TestCephFSShell):
         """
         Test that mkdir fails with octal mode greater than 0777
         """
-        o = self.run_cephfs_shell_cmd("mkdir -m 07000 d2")
+        o = self.get_cephfs_shell_cmd_output("mkdir -m 07000 d2")
         log.info("cephfs-shell output:\n{}".format(o))
 
         # mkdir d2 should fail
@@ -89,7 +94,7 @@ class TestMkdir(TestCephFSShell):
         """
         Test that mkdir fails with negative octal mode
         """
-        o = self.run_cephfs_shell_cmd("mkdir -m -0755 d3")
+        o = self.get_cephfs_shell_cmd_output("mkdir -m -0755 d3")
         log.info("cephfs-shell output:\n{}".format(o))
 
         # mkdir d3 should fail
@@ -103,7 +108,7 @@ class TestMkdir(TestCephFSShell):
         """
         Test that mkdir passes with non-octal mode
         """
-        o = self.run_cephfs_shell_cmd("mkdir -m u=rwx d4")
+        o = self.get_cephfs_shell_cmd_output("mkdir -m u=rwx d4")
         log.info("cephfs-shell output:\n{}".format(o))
 
         # mkdir d4 should pass
@@ -114,7 +119,7 @@ class TestMkdir(TestCephFSShell):
         """
         Test that mkdir failes with bad non-octal mode
         """
-        o = self.run_cephfs_shell_cmd("mkdir -m ugx=0755 d5")
+        o = self.get_cephfs_shell_cmd_output("mkdir -m ugx=0755 d5")
         log.info("cephfs-shell output:\n{}".format(o))
 
         # mkdir d5 should fail
@@ -128,7 +133,7 @@ class TestMkdir(TestCephFSShell):
         """
         Test that mkdir fails without path option for creating path
         """
-        o = self.run_cephfs_shell_cmd("mkdir d5/d6/d7")
+        o = self.get_cephfs_shell_cmd_output("mkdir d5/d6/d7")
         log.info("cephfs-shell output:\n{}".format(o))
 
         # mkdir d5/d6/d7 should fail
@@ -142,7 +147,7 @@ class TestMkdir(TestCephFSShell):
         """
         Test that mkdir passes with path option for creating path
         """
-        o = self.run_cephfs_shell_cmd("mkdir -p d5/d6/d7")
+        o = self.get_cephfs_shell_cmd_output("mkdir -p d5/d6/d7")
         log.info("cephfs-shell output:\n{}".format(o))
 
         # mkdir d5/d6/d7 should pass
@@ -162,7 +167,7 @@ class TestGetAndPut(TestCephFSShell):
         self.run_cephfs_shell_cmd('!dd if=/dev/urandom of=p1/dump3 bs=3M count=1')
 
         # copy the whole directory over to the cephfs
-        o = self.run_cephfs_shell_cmd("put p1")
+        o = self.get_cephfs_shell_cmd_output("put p1")
         log.info("cephfs-shell output:\n{}".format(o))
 
         # put p1 should pass
@@ -176,20 +181,20 @@ class TestGetAndPut(TestCephFSShell):
         log.info("mount_a output:\n{}".format(o))
 
         self.run_cephfs_shell_cmd('!rm -rf p1')
-        o = self.run_cephfs_shell_cmd("get p1")
-        o = self.run_cephfs_shell_cmd('!stat p1 || echo $?')
+        o = self.get_cephfs_shell_cmd_output("get p1")
+        o = self.get_cephfs_shell_cmd_output('!stat p1 || echo $?')
         log.info("cephfs-shell output:\n{}".format(o))
         self.validate_stat_output(o)
 
-        o = self.run_cephfs_shell_cmd('!stat p1/dump1 || echo $?')
+        o = self.get_cephfs_shell_cmd_output('!stat p1/dump1 || echo $?')
         log.info("cephfs-shell output:\n{}".format(o))
         self.validate_stat_output(o)
 
-        o = self.run_cephfs_shell_cmd('!stat p1/dump2 || echo $?')
+        o = self.get_cephfs_shell_cmd_output('!stat p1/dump2 || echo $?')
         log.info("cephfs-shell output:\n{}".format(o))
         self.validate_stat_output(o)
 
-        o = self.run_cephfs_shell_cmd('!stat p1/dump3 || echo $?')
+        o = self.get_cephfs_shell_cmd_output('!stat p1/dump3 || echo $?')
         log.info("cephfs-shell output:\n{}".format(o))
         self.validate_stat_output(o)
 
@@ -211,17 +216,17 @@ class TestGetAndPut(TestCephFSShell):
         """
         s = 'C' * 1024
         s_hash = crypt.crypt(s, '.A')
-        o = self.run_cephfs_shell_cmd("put - dump4", stdin=s)
+        o = self.get_cephfs_shell_cmd_output("put - dump4", stdin=s)
         log.info("cephfs-shell output:\n{}".format(o))
 
         # put - dump4 should pass
         o = self.mount_a.stat('dump4')
         log.info("mount_a output:\n{}".format(o))
 
-        o = self.run_cephfs_shell_cmd("get dump4 .")
+        o = self.get_cephfs_shell_cmd_output("get dump4 .")
         log.info("cephfs-shell output:\n{}".format(o))
 
-        o = self.run_cephfs_shell_cmd("!cat dump4")
+        o = self.get_cephfs_shell_cmd_output("!cat dump4")
         o_hash = crypt.crypt(o, '.A')
 
         # s_hash must be equal to o_hash
@@ -234,7 +239,7 @@ class TestGetAndPut(TestCephFSShell):
         Test that get passes with target name
         """
         s = 'D' * 1024
-        o = self.run_cephfs_shell_cmd("put - dump5", stdin=s)
+        o = self.get_cephfs_shell_cmd_output("put - dump5", stdin=s)
         log.info("cephfs-shell output:\n{}".format(o))
 
         # put - dump5 should pass
@@ -242,8 +247,8 @@ class TestGetAndPut(TestCephFSShell):
         log.info("mount_a output:\n{}".format(o))
 
         # get dump5 should fail
-        o = self.run_cephfs_shell_cmd("get dump5")
-        o = self.run_cephfs_shell_cmd("!stat dump5 || echo $?")
+        o = self.get_cephfs_shell_cmd_output("get dump5")
+        o = self.get_cephfs_shell_cmd_output("!stat dump5 || echo $?")
         log.info("cephfs-shell output:\n{}".format(o))
         l = o.split('\n')
         try:
@@ -263,7 +268,7 @@ class TestGetAndPut(TestCephFSShell):
         """
         s = 'E' * 1024
         s_hash = crypt.crypt(s, '.A')
-        o = self.run_cephfs_shell_cmd("put - dump6", stdin=s)
+        o = self.get_cephfs_shell_cmd_output("put - dump6", stdin=s)
         log.info("cephfs-shell output:\n{}".format(o))
 
         # put - dump6 should pass
@@ -271,7 +276,7 @@ class TestGetAndPut(TestCephFSShell):
         log.info("mount_a output:\n{}".format(o))
 
         # get dump6 - should pass
-        o = self.run_cephfs_shell_cmd("get dump6 -")
+        o = self.get_cephfs_shell_cmd_output("get dump6 -")
         o_hash = crypt.crypt(o, '.A')
         log.info("cephfs-shell output:\n{}".format(o))
 
@@ -313,7 +318,7 @@ class TestCD(TestCephFSShell):
 #        """
 #        Test that ls passes
 #        """
-#        o = self.run_cephfs_shell_cmd("ls")
+#        o = self.get_cephfs_shell_cmd_output("ls")
 #        log.info("cephfs-shell output:\n{}".format(o))
 #
 #        o = self.mount_a.run_shell(['ls']).stdout.getvalue().strip().replace("\n", " ").split()
@@ -329,7 +334,7 @@ class TestCD(TestCephFSShell):
 #        """
 #        Test that ls -a passes
 #        """
-#        o = self.run_cephfs_shell_cmd("ls -a")
+#        o = self.get_cephfs_shell_cmd_output("ls -a")
 #        log.info("cephfs-shell output:\n{}".format(o))
 #
 #        o = self.mount_a.run_shell(['ls', '-a']).stdout.getvalue().strip().replace("\n", " ").split()
@@ -346,6 +351,6 @@ class TestMisc(TestCephFSShell):
         Test that help outputs commands.
         """
 
-        o = self.run_cephfs_shell_cmd("help")
+        o = self.get_cephfs_shell_cmd_output("help")
 
         log.info("output:\n{}".format(o))
