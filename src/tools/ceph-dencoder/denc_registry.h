@@ -14,7 +14,8 @@ namespace ceph {
 
 struct Dencoder {
   virtual ~Dencoder() {}
-  virtual std::string decode(bufferlist bl, uint64_t seek) = 0;
+  virtual std::string decode(bufferlist bl, uint64_t seek,
+			     int message_version) = 0;
   virtual void encode(bufferlist& out, uint64_t features) = 0;
   virtual void dump(ceph::Formatter *f) = 0;
   virtual void copy() {
@@ -47,7 +48,7 @@ public:
     delete m_object;
   }
 
-  std::string decode(bufferlist bl, uint64_t seek) override {
+  std::string decode(bufferlist bl, uint64_t seek, int message_version) override {
     auto p = bl.cbegin();
     p.seek(seek);
     try {
@@ -160,11 +161,17 @@ public:
   MessageDencoderImpl() : m_object{make_message<T>()} {}
   ~MessageDencoderImpl() override {}
 
-  string decode(bufferlist bl, uint64_t seek) override {
+  string decode(bufferlist bl, uint64_t seek, int message_version) override {
     auto p = bl.cbegin();
     p.seek(seek);
     try {
-      ref_t<Message> n(decode_message(g_ceph_context, 0, p), false);
+      ceph_msg_header h;
+      h.type = m_object->get_type();
+      h.version = message_version;
+      ceph_msg_footer f;
+      bufferlist empty;
+      ref_t<Message> n(decode_message(g_ceph_context, 0,
+				      h, f, bl, empty, empty, 0), false);
       if (!n)
 	throw std::runtime_error("failed to decode");
       if (n->get_type() != m_object->get_type()) {

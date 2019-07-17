@@ -34,6 +34,8 @@ void usage(ostream &out)
   out << "\n";
   out << "  set_features <num>  set feature bits used for encoding\n";
   out << "  get_features        print feature bits (int) to stdout\n";
+  out << "  set_message_version <num>\n";
+  out << "                      set message encoding version\n";
   out << "\n";
   out << "  list_types          list supported types\n";
   out << "  type <classname>    select in-memory type\n";
@@ -67,6 +69,7 @@ int main(int argc, const char **argv)
 
   Dencoder *den = NULL;
   uint64_t features = CEPH_FEATURES_SUPPORTED_DEFAULT;
+  int message_version = 0;
   bufferlist encbl;
   uint64_t skip = 0;
 
@@ -116,6 +119,13 @@ int main(int argc, const char **argv)
 	exit(1);
       }
       features = atoll(*i);
+    } else if (*i == string("set_message_version")) {
+      ++i;
+      if (i == args.end()) {
+	cerr << "expecting message version" << std::endl;
+	exit(1);
+      }
+      message_version = atoll(*i);
     } else if (*i == string("encode")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
@@ -127,7 +137,7 @@ int main(int argc, const char **argv)
 	cerr << "must first select type with 'type <name>'" << std::endl;
 	exit(1);
       }
-      err = den->decode(encbl, skip);
+      err = den->decode(encbl, skip, message_version);
     } else if (*i == string("copy_ctor")) {
       if (!den) {
 	cerr << "must first select type with 'type <name>'" << std::endl;
