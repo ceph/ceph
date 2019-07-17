@@ -93,7 +93,7 @@ export class TaskListService implements OnDestroy {
     return tasks
       .map((task) => {
         const progress = task.progress ? ` ${task.progress}%` : '';
-        return this.taskMessageService.getRunningText(task) + progress;
+        return this.taskMessageService.getRunningText(task) + '...' + progress;
       })
       .join(', ');
   }
