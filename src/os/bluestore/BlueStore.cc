@@ -3855,7 +3855,8 @@ int BlueStore::OmapIteratorImpl::seek_to_first()
   c->store->log_latency(
     __func__,
     l_bluestore_omap_seek_to_first_lat,
-    mono_clock::now() - start1);
+    mono_clock::now() - start1,
+    c->store->cct->_conf->bluestore_log_omap_iterator_age);
 
   return 0;
 }
@@ -3877,6 +3878,7 @@ int BlueStore::OmapIteratorImpl::upper_bound(const string& after)
     __func__,
     l_bluestore_omap_upper_bound_lat,
     mono_clock::now() - start1,
+    c->store->cct->_conf->bluestore_log_omap_iterator_age,
     [&] (const ceph::timespan& lat) {
       return ", after = " + after +
 	_stringify();
@@ -3902,6 +3904,7 @@ int BlueStore::OmapIteratorImpl::lower_bound(const string& to)
     __func__,
     l_bluestore_omap_lower_bound_lat,
     mono_clock::now() - start1,
+    c->store->cct->_conf->bluestore_log_omap_iterator_age,
     [&] (const ceph::timespan& lat) {
       return ", to = " + to +
 	_stringify();
@@ -3935,7 +3938,8 @@ int BlueStore::OmapIteratorImpl::next()
   c->store->log_latency(
     __func__,
     l_bluestore_omap_next_lat,
-    mono_clock::now() - start1);
+    mono_clock::now() - start1,
+    c->store->cct->_conf->bluestore_log_omap_iterator_age);
 
   return r;
 }
@@ -8456,7 +8460,9 @@ int BlueStore::read(
     auto start1 = mono_clock::now();
     OnodeRef o = c->get_onode(oid, false);
     log_latency("get_onode@read",
-      l_bluestore_read_onode_meta_lat, mono_clock::now() - start1);
+      l_bluestore_read_onode_meta_lat,
+      mono_clock::now() - start1,
+      cct->_conf->bluestore_log_op_age);
     if (!o || !o->exists) {
       r = -ENOENT;
       goto out;
@@ -8486,7 +8492,9 @@ int BlueStore::read(
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
 	   << " = " << r << dendl;
   log_latency(__func__,
-    l_bluestore_read_lat, mono_clock::now() - start);
+    l_bluestore_read_lat,
+    mono_clock::now() - start,
+    cct->_conf->bluestore_log_op_age);
   return r;
 }
 
@@ -8579,7 +8587,9 @@ int BlueStore::_do_read(
   auto start = mono_clock::now();
   o->extent_map.fault_range(db, offset, length);
   log_latency(__func__,
-    l_bluestore_read_onode_meta_lat, mono_clock::now() - start);
+    l_bluestore_read_onode_meta_lat,
+    mono_clock::now() - start,
+    cct->_conf->bluestore_log_op_age);
   _dump_onode<30>(cct, *o);
 
   ready_regions_t ready_regions;
@@ -8777,6 +8787,7 @@ int BlueStore::_do_read(
   log_latency_fn(__func__,
     l_bluestore_read_wait_aio_lat,
     mono_clock::now() - start,
+    cct->_conf->bluestore_log_op_age,
     [&](auto lat) { return ", num_ios = " + stringify(num_ios); }
   );
 
@@ -8925,7 +8936,9 @@ int BlueStore::_verify_csum(OnodeRef& o,
     }
   }
   log_latency(__func__,
-    l_bluestore_csum_lat, mono_clock::now() - start);
+    l_bluestore_csum_lat,
+    mono_clock::now() - start,
+    cct->_conf->bluestore_log_op_age);
   if (cct->_conf->bluestore_ignore_data_csum) {
     return 0;
   }
@@ -8961,7 +8974,9 @@ int BlueStore::_decompress(bufferlist& source, bufferlist* result)
     }
   }
   log_latency(__func__,
-    l_bluestore_decompress_lat, mono_clock::now() - start);
+    l_bluestore_decompress_lat,
+    mono_clock::now() - start,
+    cct->_conf->bluestore_log_op_age);
   return r;
 }
 
@@ -10120,6 +10135,7 @@ void BlueStore::_txc_committed_kv(TransContext *txc)
     __func__,
     l_bluestore_commit_lat,
     ceph::make_timespan(ceph_clock_now() - txc->start),
+    cct->_conf->bluestore_log_op_age,
     [&](auto lat) {
       return ", txc = " + stringify(txc);
     }
@@ -10629,11 +10645,17 @@ void BlueStore::_kv_sync_thread()
 	  << " (" << dur_flush << " flush + " << dur_kv << " kv commit)"
 	  << dendl;
 	log_latency("kv_flush",
-	  l_bluestore_kv_flush_lat, dur_flush);
+	  l_bluestore_kv_flush_lat,
+	  dur_flush,
+	  cct->_conf->bluestore_log_op_age);
 	log_latency("kv_commit",
-	  l_bluestore_kv_commit_lat, dur_kv);
+	  l_bluestore_kv_commit_lat,
+	  dur_kv,
+	  cct->_conf->bluestore_log_op_age);
 	log_latency("kv_sync",
-	  l_bluestore_kv_sync_lat, dur);
+	  l_bluestore_kv_sync_lat,
+	  dur,
+	  cct->_conf->bluestore_log_op_age);
       }
 
       if (bluefs) {
@@ -10728,7 +10750,9 @@ void BlueStore::_kv_finalize_thread()
 	  (uint64_t)(alloc->get_fragmentation(min_alloc_size) * 1000));
 
       log_latency("kv_final",
-	l_bluestore_kv_final_lat, mono_clock::now() - start);
+	l_bluestore_kv_final_lat,
+	mono_clock::now() - start,
+	cct->_conf->bluestore_log_op_age);
 
       l.lock();
     }
@@ -11057,9 +11081,13 @@ int BlueStore::queue_transactions(
   }
 
   log_latency("submit_transact",
-    l_bluestore_submit_lat, mono_clock::now() - start);
+    l_bluestore_submit_lat,
+    mono_clock::now() - start,
+    cct->_conf->bluestore_log_op_age);
   log_latency("throttle_transact",
-    l_bluestore_throttle_lat, tend - tstart);
+    l_bluestore_throttle_lat,
+    tend - tstart,
+    cct->_conf->bluestore_log_op_age);
   return 0;
 }
 
@@ -12062,7 +12090,8 @@ int BlueStore::_do_alloc_write(
       }
       log_latency("compress@_do_alloc_write",
 	l_bluestore_compress_lat,
-        mono_clock::now() - start);
+        mono_clock::now() - start,
+	cct->_conf->bluestore_log_op_age );
     } else {
       need += wi.blob_length;
     }
@@ -13532,11 +13561,12 @@ void BlueStore::log_latency(
   const char* name,
   int idx,
   const ceph::timespan& l,
+  double lat_threshold,
   const char* info) const
 {
   logger->tinc(idx, l);
-  if (cct->_conf->bluestore_log_op_age > 0.0 &&
-      l >= make_timespan(cct->_conf->bluestore_log_op_age)) {
+  if (lat_threshold > 0.0 &&
+      l >= make_timespan(lat_threshold)) {
     dout(0) << __func__ << " slow operation observed for " << name
       << ", latency = " << l
       << info
@@ -13548,11 +13578,12 @@ void BlueStore::log_latency_fn(
   const char* name,
   int idx,
   const ceph::timespan& l,
+  double lat_threshold,
   std::function<string (const ceph::timespan& lat)> fn) const
 {
   logger->tinc(idx, l);
-  if (cct->_conf->bluestore_log_op_age > 0.0 &&
-      l >= make_timespan(cct->_conf->bluestore_log_op_age)) {
+  if (lat_threshold > 0.0 &&
+      l >= make_timespan(lat_threshold)) {
     dout(0) << __func__ << " slow operation observed for " << name
       << ", latency = " << l
       << fn(l)

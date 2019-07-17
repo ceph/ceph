@@ -2672,11 +2672,13 @@ public:
   inline void log_latency(const char* name,
     int idx,
     const ceph::timespan& lat,
+    double lat_threshold,
     const char* info = "") const;
 
   inline void log_latency_fn(const char* name,
     int idx,
     const ceph::timespan& lat,
+    double lat_threshold,
     std::function<string (const ceph::timespan& lat)> fn) const;
 
 private:
