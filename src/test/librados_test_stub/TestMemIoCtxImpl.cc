@@ -768,8 +768,9 @@ void TestMemIoCtxImpl::ensure_minimum_length(size_t len, bufferlist *bl) {
 
 TestMemCluster::SharedFile TestMemIoCtxImpl::get_file(
     const std::string &oid, bool write, const SnapContext &snapc) {
-  ceph_assert(m_pool->file_lock.is_locked() || m_pool->file_lock.is_wlocked());
-  ceph_assert(!write || m_pool->file_lock.is_wlocked());
+  ceph_assert(ceph_mutex_is_locked(m_pool->file_lock) ||
+	      ceph_mutex_is_wlocked(m_pool->file_lock));
+  ceph_assert(!write || ceph_mutex_is_wlocked(m_pool->file_lock));
 
   TestMemCluster::SharedFile file;
   TestMemCluster::Files::iterator it = m_pool->files.find(
