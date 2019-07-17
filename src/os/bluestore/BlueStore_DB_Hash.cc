@@ -162,7 +162,7 @@ public:
       for (size_t i = 0; i < s_it.second; i++) {
         std::string name = s_it.first + "-" + to_string(i);
         auto n_it = std::find(std::begin(cf_names), std::end(cf_names), name);
-        if (n_it != cf_names.end()) {
+        if (n_it == cf_names.end()) {
           derr << "Missing column family: '" << name << "' " << dendl;
           ceph_abort();
         }
@@ -637,29 +637,55 @@ public:
     db->compact_async();
   }
   void compact_prefix(const std::string& prefix) override {
-    //TODO
-    db->compact_prefix(prefix);
+    auto it = sharding_schema.find(prefix);
+    if (it != sharding_schema.end()) {
+      for (size_t i = 0; i < it->second; i++) {
+        std::string cf_name = prefix + "-" + to_string(i);
+        db->column_family_compact(cf_name, prefix, "", "");
+      }
+    }
   }
   void compact_prefix_async(const std::string& prefix) override {
-    //TODO
-    db->compact_prefix_async(prefix);
+    auto it = sharding_schema.find(prefix);
+    if (it != sharding_schema.end()) {
+      for (size_t i = 0; i < it->second; i++) {
+        std::string cf_name = prefix + "-" + to_string(i);
+        db->column_family_compact_async(cf_name, prefix, "", "");
+      }
+    }
   }
   void compact_range(const std::string& prefix,
                      const std::string& start, const std::string& end) override {
-    //TODO
-    db->compact_range(prefix, start, end);
+    auto it = sharding_schema.find(prefix);
+    if (it != sharding_schema.end()) {
+      for (size_t i = 0; i < it->second; i++) {
+        std::string cf_name = prefix + "-" + to_string(i);
+        db->column_family_compact(cf_name, prefix, start, end);
+      }
+    }
   }
   void compact_range_async(const std::string& prefix,
                            const std::string& start, const std::string& end) override {
-    //TODO
-    db->compact_range_async(prefix, start, end);
+    auto it = sharding_schema.find(prefix);
+    if (it != sharding_schema.end()) {
+      for (size_t i = 0; i < it->second; i++) {
+        std::string cf_name = prefix + "-" + to_string(i);
+        db->column_family_compact_async(cf_name, prefix, start, end);
+      }
+    }
   }
 
   int set_merge_operator(const std::string& prefix,
                          std::shared_ptr<MergeOperator> mop) override {
-    //TODO!!
-    return db->set_merge_operator(prefix, mop);
-    return -EOPNOTSUPP;
+    auto it = sharding_schema.find(prefix);
+    if (it != sharding_schema.end()) {
+      for (size_t i = 0; i < it->second; i++) {
+        std::string cf_name = prefix + "-" + to_string(i);
+        db->set_merge_operator(cf_name, mop);
+      }
+      return 0;
+    }
+    return -EINVAL;
   }
 
   void get_statistics(Formatter *f) override {
