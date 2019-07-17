@@ -955,6 +955,11 @@ std::vector<Option> get_global_options() {
     .add_see_also("ms_cluster_mode")
     .add_see_also("ms_service_mode"),
 
+    Option("ms_learn_addr_from_peer", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("Learn address from what IP our first peer thinks we connect from")
+    .set_long_description("Use the IP address our first peer (usually a monitor) sees that we are connecting from.  This is useful if a client is behind some sort of NAT and we want to see it identified by its local (not NATed) address."),
+
     Option("ms_tcp_nodelay", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description("Disable Nagle's algorithm and send queued network traffic immediately"),

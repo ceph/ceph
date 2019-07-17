@@ -922,6 +922,12 @@ CtPtr ProtocolV2::handle_hello(ceph::bufferlist &payload)
                 << " peer_type=" << (int)hello.entity_type()
                 << " peer_addr_for_me=" << hello.peer_addr() << dendl;
 
+  sockaddr_storage ss;
+  socklen_t len = sizeof(ss);
+  getsockname(connection->cs.fd(), (sockaddr *)&ss, &len);
+  ldout(cct, 5) << __func__ << " getsockname says I am " << (sockaddr *)&ss
+		<< " when talking to " << connection->target_addr << dendl;
+
   if (connection->get_peer_type() == -1) {
     connection->set_peer_type(hello.entity_type());
 
@@ -945,6 +951,45 @@ CtPtr ProtocolV2::handle_hello(ceph::bufferlist &payload)
       return nullptr;
     }
   }
+
+  if (messenger->get_myaddrs().empty() ||
+      messenger->get_myaddrs().front().is_blank_ip()) {
+    entity_addr_t a;
+    if (cct->_conf->ms_learn_addr_from_peer) {
+      ldout(cct, 1) << __func__ << " peer " << connection->target_addr
+		    << " says I am " << hello.peer_addr() << " (socket says "
+		    << (sockaddr*)&ss << ")" << dendl;
+      a = hello.peer_addr();
+    } else {
+      ldout(cct, 1) << __func__ << " socket to  " << connection->target_addr
+		    << " says I am " << (sockaddr*)&ss
+		    << " (peer says " << hello.peer_addr() << ")" << dendl;
+      a.set_sockaddr((sockaddr *)&ss);
+    }
+    a.set_type(entity_addr_t::TYPE_MSGR2); // anything but NONE; learned_addr ignores this
+    a.set_port(0);
+    connection->lock.unlock();
+    messenger->learned_addr(a);
+    if (cct->_conf->ms_inject_internal_delays &&
+        cct->_conf->ms_inject_socket_failures) {
+      if (rand() % cct->_conf->ms_inject_socket_failures == 0) {
+        ldout(cct, 10) << __func__ << " sleep for "
+                       << cct->_conf->ms_inject_internal_delays << dendl;
+        utime_t t;
+        t.set_from_double(cct->_conf->ms_inject_internal_delays);
+        t.sleep();
+      }
+    }
+    connection->lock.lock();
+    if (state != HELLO_CONNECTING) {
+      ldout(cct, 1) << __func__
+                    << " state changed while learned_addr, mark_down or "
+                    << " replacing must be happened just now" << dendl;
+      return nullptr;
+    }
+  }
+
+
 
   CtPtr callback;
   callback = bannerExchangeCallback;
@@ -1817,39 +1862,6 @@ CtPtr ProtocolV2::send_client_ident() {
   uint64_t flags = 0;
   if (connection->policy.lossy) {
     flags |= CEPH_MSG_CONNECT_LOSSY;
-  }
-
-  if (messenger->get_myaddrs().empty() ||
-      messenger->get_myaddrs().front().is_blank_ip()) {
-    sockaddr_storage ss;
-    socklen_t len = sizeof(ss);
-    int r = getsockname(connection->cs.socket_fd(), (sockaddr *)&ss, &len);
-    ceph_assert(r == 0);
-    ldout(cct, 1) << __func__ << " getsockname reveals I am " << (sockaddr *)&ss
-                  << " when talking to " << connection->target_addr << dendl;
-    entity_addr_t a;
-    a.set_type(entity_addr_t::TYPE_MSGR2); // anything but NONE; learned_addr ignores this
-    a.set_sockaddr((sockaddr *)&ss);
-    a.set_port(0);
-    connection->lock.unlock();
-    messenger->learned_addr(a);
-    if (cct->_conf->ms_inject_internal_delays &&
-        cct->_conf->ms_inject_socket_failures) {
-      if (rand() % cct->_conf->ms_inject_socket_failures == 0) {
-        ldout(cct, 10) << __func__ << " sleep for "
-                       << cct->_conf->ms_inject_internal_delays << dendl;
-        utime_t t;
-        t.set_from_double(cct->_conf->ms_inject_internal_delays);
-        t.sleep();
-      }
-    }
-    connection->lock.lock();
-    if (state != SESSION_CONNECTING) {
-      ldout(cct, 1) << __func__
-                    << " state changed while learned_addr, mark_down or "
-                    << " replacing must be happened just now" << dendl;
-      return nullptr;
-    }
   }
 
   auto client_ident = ClientIdentFrame::Encode(

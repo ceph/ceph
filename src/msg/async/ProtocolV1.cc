@@ -1376,25 +1376,44 @@ CtPtr ProtocolV1::handle_server_banner_and_identify(char *buffer, int r) {
 
   ldout(cct, 20) << __func__ << " connect peer addr for me is "
                  << peer_addr_for_me << dendl;
-  connection->lock.unlock();
-  messenger->learned_addr(peer_addr_for_me);
-  if (cct->_conf->ms_inject_internal_delays &&
-      cct->_conf->ms_inject_socket_failures) {
-    if (rand() % cct->_conf->ms_inject_socket_failures == 0) {
-      ldout(cct, 10) << __func__ << " sleep for "
-                     << cct->_conf->ms_inject_internal_delays << dendl;
-      utime_t t;
-      t.set_from_double(cct->_conf->ms_inject_internal_delays);
-      t.sleep();
+  if (messenger->get_myaddrs().empty() ||
+      messenger->get_myaddrs().front().is_blank_ip()) {
+    sockaddr_storage ss;
+    socklen_t len = sizeof(ss);
+    getsockname(connection->cs.fd(), (sockaddr *)&ss, &len);
+    entity_addr_t a;
+    if (cct->_conf->ms_learn_addr_from_peer) {
+      ldout(cct, 1) << __func__ << " peer " << connection->target_addr
+		    << " says I am " << peer_addr_for_me << " (socket says "
+		    << (sockaddr*)&ss << ")" << dendl;
+      a = peer_addr_for_me;
+    } else {
+      ldout(cct, 1) << __func__ << " socket to  " << connection->target_addr
+		    << " says I am " << (sockaddr*)&ss
+		    << " (peer says " << peer_addr_for_me << ")" << dendl;
+      a.set_sockaddr((sockaddr *)&ss);
     }
-  }
-
-  connection->lock.lock();
-  if (state != CONNECTING_WAIT_BANNER_AND_IDENTIFY) {
-    ldout(cct, 1) << __func__
+    a.set_type(entity_addr_t::TYPE_LEGACY); // anything but NONE; learned_addr ignores this
+    a.set_port(0);
+    connection->lock.unlock();
+    messenger->learned_addr(a);
+    if (cct->_conf->ms_inject_internal_delays &&
+	cct->_conf->ms_inject_socket_failures) {
+      if (rand() % cct->_conf->ms_inject_socket_failures == 0) {
+	ldout(cct, 10) << __func__ << " sleep for "
+		       << cct->_conf->ms_inject_internal_delays << dendl;
+	utime_t t;
+	t.set_from_double(cct->_conf->ms_inject_internal_delays);
+	t.sleep();
+      }
+    }
+    connection->lock.lock();
+    if (state != CONNECTING_WAIT_BANNER_AND_IDENTIFY) {
+      ldout(cct, 1) << __func__
                   << " state changed while learned_addr, mark_down or "
-                  << " replacing must be happened just now" << dendl;
-    return nullptr;
+		    << " replacing must be happened just now" << dendl;
+      return nullptr;
+    }
   }
 
   bufferlist myaddrbl;
