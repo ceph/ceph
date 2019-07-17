@@ -2,7 +2,6 @@ from mgr_module import MgrModule
 import datetime
 import errno
 import json
-import six
 from collections import defaultdict
 from prettytable import PrettyTable
 from threading import Event
