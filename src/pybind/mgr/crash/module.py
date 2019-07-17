@@ -157,6 +157,11 @@ class Module(MgrModule):
             self._refresh_health_checks()
         return 0, '', ''
 
+    def ls(self):
+        if not self.crashes:
+            self._load_crashes()
+        return self.do_ls({'prefix': 'crash ls'}, '')
+
     def do_ls(self, cmd, inbuf):
         if cmd['prefix'] == 'crash ls':
             r = self.crashes.values()
