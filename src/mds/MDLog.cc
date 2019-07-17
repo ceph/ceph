@@ -627,6 +627,13 @@ void MDLog::trim(int m)
 
   unsigned new_expiring_segments = 0;
 
+  unsigned max_expiring_segments = 0;
+  if (pre_segments_size > 0){
+    max_expiring_segments = max_segments/2;
+    assert(segments.size() >= pre_segments_size);
+    max_expiring_segments = std::max<unsigned>(max_expiring_segments,segments.size() - pre_segments_size);
+  }
+  
   map<uint64_t,LogSegment*>::iterator p = segments.begin();
   while (p != segments.end()) {
     if (stop < ceph_clock_now())
@@ -642,6 +649,10 @@ void MDLog::trim(int m)
     if (new_expiring_segments * 2 > num_remaining_segments)
       break;
 
+    if (max_expiring_segments > 0 &&
+	expiring_segments.size() >= max_expiring_segments)
+      break;
+    
     // look at first segment
     LogSegment *ls = p->second;
     assert(ls);
@@ -832,6 +843,8 @@ void MDLog::_trim_expired_segments()
 	     << ls->seq << "/0x" << std::hex << ls->offset << std::dec << dendl;
     expired_events -= ls->num_events;
     expired_segments.erase(ls);
+    if (pre_segments_size > 0)
+      pre_segments_size--;
     num_events -= ls->num_events;
       
     // this was the oldest segment, adjust expire pos
@@ -1468,6 +1481,7 @@ void MDLog::_replay_thread()
     if (mds->is_daemon_stopping()) {
       return;
     }
+    pre_segments_size = segments.size();  // get num of logs when replay is finished
     finish_contexts(g_ceph_context, waitfor_replay, r);  
   }
 
