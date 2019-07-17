@@ -5746,7 +5746,20 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
     return -EIO;
   }
   //wrap DB with sharded features
-  db = make_BlueStore_DB_Hash(db);
+  std::map<std::string, size_t> shards{
+    {PREFIX_SUPER, 1},
+    {PREFIX_STAT, 1},
+    {PREFIX_COLL, 1},
+    {PREFIX_OBJ, 7},
+    {PREFIX_OMAP, 11},
+    {PREFIX_PGMETA_OMAP, 1},
+    {PREFIX_DEFERRED, 1},
+    {PREFIX_ALLOC, 1},
+    {PREFIX_ALLOC_BITMAP, 9},
+    {PREFIX_SHARED_BLOB, 5}
+  };
+
+  db = make_BlueStore_DB_Hash(db, shards);
 
   FreelistManager::setup_merge_operators(db);
   db->set_merge_operator(PREFIX_STAT, merge_op);
