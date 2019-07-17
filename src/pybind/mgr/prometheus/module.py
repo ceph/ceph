@@ -142,7 +142,8 @@ class Metric(object):
 
         def promethize(path):
             ''' replace illegal metric name characters '''
-            result = path.replace('.', '_').replace('+', '_plus').replace('::', '_')
+            result = path.replace('.', '_').replace(
+                '+', '_plus').replace('::', '_').replace(' ', '_')
 
             # Hyphens usually turn into underscores, unless they are
             # trailing
