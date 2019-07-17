@@ -41,8 +41,8 @@
 #include "perfglue/heap_profiler.h"
 #include "common/blkdev.h"
 #include "common/numa.h"
-
-KeyValueDB* make_BlueStore_DB_Hash(KeyValueDB*, const std::map<std::string, size_t>& = {});
+#include "BlueStore_DB_Hash.h"
+#include "common/url_escape.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
@@ -5526,50 +5526,26 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
 
   if (kv_backend == "rocksdb") {
     options = cct->_conf->bluestore_rocksdb_options;
-
-    if (cct->_conf.get_val<bool>("bluestore_rocksdb_cf")) {
-      /* enable sharding of rocksdb */
-      map<string,string> cf_map;
-      cct->_conf.with_val<string>("bluestore_rocksdb_cfs",
-                                  get_str_map,
-                                  &cf_map,
-                                  " \t");
-      std::map<std::string, size_t> shards {
-        {PREFIX_SUPER, 0},
-        {PREFIX_STAT, 0},
-        {PREFIX_COLL, 0},
-        {PREFIX_OBJ, 0},
-        {PREFIX_OMAP, 0},
-        {PREFIX_PGMETA_OMAP, 0},
-        {PREFIX_DEFERRED, 0},
-        {PREFIX_ALLOC, 0},
-        {PREFIX_ALLOC_BITMAP, 0},
-        {PREFIX_SHARED_BLOB, 0}
-      };
-
-      for (auto& i : cf_map) {
-        std::string prefix = i.first.substr(0, 1);
-        std::string prefix_count_str = i.first.substr(1);
-        int prefix_count = 1;
-        if (prefix_count_str.size() > 0) {
-          prefix_count = std::stoi(prefix_count_str);
-        }
-        auto sh = shards.find(prefix);
-        if (sh == shards.end()) {
-          derr << __func__ << " db prefix '" << prefix << "' illegal " << dendl;
-          return -EINVAL;
-        }
-        sh->second = prefix_count;
-        dout(10) << "prefix '" << prefix << "' split into " << prefix_count << "column families" << dendl;
-
-        for(int k = 0; k < prefix_count; k++) {
-          std::string cf_name = prefix + "-" + to_string(k);
-          dout(10) << "column family name=" << cf_name << ", options=" << i.second << dendl;
-          cfs.push_back(KeyValueDB::ColumnFamily(cf_name, i.second));
-        }
+    if (create) {
+      if (cct->_conf.get_val<bool>("bluestore_rocksdb_cf")) {
+        std::string sharding_schema = cct->_conf.get_val<string>("bluestore_rocksdb_cfs");
+        r = write_meta("sharding", sharding_schema);
+        if (r < 0)
+          return r;
       }
+    }
+    std::string sharding_schema;
+    r = read_meta("sharding", &sharding_schema);
 
-      db = make_BlueStore_DB_Hash(db, shards);
+    if (r == 0 && sharding_schema.size() > 0) {
+      /* enable sharding of rocksdb */
+      std::map<std::string, size_t> shards;
+      r = get_sharding(sharding_schema, cfs, shards);
+      if (r < 0)
+        return r;
+      RocksDBStore* rdb = dynamic_cast<RocksDBStore*>(db);
+      ceph_assert(rdb != nullptr);
+      db = new BlueStore_DB_Hash(rdb, shards);
     }
   }
   FreelistManager::setup_merge_operators(db);
@@ -5587,6 +5563,22 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
     r = read_only ?
       db->open_read_only(err, cfs) :
       db->open(err, cfs);
+    // check if current sharding is exactly as it should be
+    std::vector<std::string> cf_names;
+    db->column_family_list(cf_names);
+
+    if (cf_names.size() != 1 + cfs.size()) {
+      //cf_names always has "default" listed
+      derr << "Existing column families: " << cf_names << dendl;
+      std::string cfs_str = "[default";
+      for (auto &i: cfs) {
+        cfs_str += ", " + i.name;
+      }
+      cfs_str += "]";
+      derr << "Column families from sharding: " << cfs_str << dendl;
+      derr << "Use ceph-bluestore-tool to reshard" << dendl;
+      return -EIO;
+    }
   }
   if (r) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
@@ -5607,6 +5599,55 @@ void BlueStore::_close_db()
     _close_bluefs();
   }
 }
+
+int BlueStore::get_sharding(const std::string& sharding_schema,
+                            std::vector<KeyValueDB::ColumnFamily>& cfs,
+                            std::map<std::string, size_t>& shards)
+{
+  cfs.clear();
+  map<string,string> cf_map;
+
+  get_str_map(sharding_schema,
+              &cf_map,
+              " \t");
+
+  shards = std::map<std::string, size_t> {
+    {PREFIX_SUPER, 0},
+    {PREFIX_STAT, 0},
+    {PREFIX_COLL, 0},
+    {PREFIX_OBJ, 0},
+    {PREFIX_OMAP, 0},
+    {PREFIX_PGMETA_OMAP, 0},
+    {PREFIX_DEFERRED, 0},
+    {PREFIX_ALLOC, 0},
+    {PREFIX_ALLOC_BITMAP, 0},
+    {PREFIX_SHARED_BLOB, 0}
+  };
+
+  for (auto& i : cf_map) {
+    std::string prefix = i.first.substr(0, 1);
+    std::string prefix_count_str = i.first.substr(1);
+    int prefix_count = 1;
+    if (prefix_count_str.size() > 0) {
+      prefix_count = std::stoi(prefix_count_str);
+    }
+    auto sh = shards.find(prefix);
+    if (sh == shards.end()) {
+      derr << __func__ << " db prefix '" << prefix << "' illegal " << dendl;
+      return -EINVAL;
+    }
+    sh->second = prefix_count;
+    dout(10) << "prefix '" << prefix << "' split into " << prefix_count << "column families" << dendl;
+
+    for(int k = 0; k < prefix_count; k++) {
+      std::string cf_name = prefix + "-" + to_string(k);
+      dout(10) << "column family name=" << cf_name << ", options=" << i.second << dendl;
+      cfs.push_back(KeyValueDB::ColumnFamily(cf_name, i.second));
+    }
+  }
+  return 0;
+}
+
 
 void BlueStore::_dump_alloc_on_failure()
 {
@@ -7929,6 +7970,142 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  << duration << " seconds" << dendl;
   return errors - (int)repaired;
 }
+
+int BlueStore::reshard(const std::string& new_sharding)
+{
+  KeyValueDB* source_db = nullptr;
+  BlueStore_DB_Hash* target_hash_db = nullptr;
+  int r = _mount(true, false);
+  if (r < 0)
+    return r;
+
+  stringstream err;
+  r = db->open(err);
+  if (r < 0) {
+    derr << __func__ << " erroring opening db: " << err.str() << dendl;
+    _close_db();
+    return -EIO;
+  }
+
+  BlueStore_DB_Hash* hdb = dynamic_cast<BlueStore_DB_Hash*>(db);
+  //column families to iterate over
+  std::vector<std::string> columns_to_iterate;
+  if (hdb == nullptr) {
+    /* not sharded DB, yet */
+    source_db = db;
+    columns_to_iterate.push_back("default");
+  } else {
+    //list columns that have to be iterated over
+    hdb->column_family_list(columns_to_iterate);
+    source_db = hdb->db;
+  }
+  dout(10) << "Columns to iterate over: " << columns_to_iterate << dendl;
+
+  std::vector<KeyValueDB::ColumnFamily> new_cfs;
+  std::map<std::string, size_t> new_shards;
+
+  r = get_sharding(new_sharding, new_cfs, new_shards);
+  if (r != 0) {
+    derr << "Sharding schema '" << new_sharding << "' invalid" << dendl;
+    return r;
+  }
+  RocksDBStore* r_source_db = dynamic_cast<RocksDBStore*>(source_db);
+  ceph_assert(r_source_db && "BlueStore not based on RocksDB");
+
+  //target_db is a somewhat clone of source_db, but it is lacking knowledge of MergeOperators
+  //new columns needed for target_db must be created by source_db handle before we open
+  for (auto new_column: new_cfs) {
+    bool has_column = false;
+    for (auto c: columns_to_iterate) {
+      if (new_column.name == c) {
+        has_column = true;
+        break;
+      }
+    }
+    if (!has_column) {
+      dout(5) << "Create required column family '" << new_column.name <<
+          "' with options '" << new_column.option << "'" << dendl;
+      r = source_db->column_family_create(new_column.name, new_column.option);
+      assert(r == 0);
+    }
+  }
+
+  //all columns created, now opening of targer_hash_db should succeed
+  target_hash_db = new BlueStore_DB_Hash(r_source_db, new_shards);
+
+  //walk columns
+  for (std::string source_cf_name: columns_to_iterate) {
+    dout(10) << "Starting processing column family '" << source_cf_name << "'" << dendl;
+    if (source_cf_name == "default") continue;
+    KeyValueDB::ColumnFamilyHandle source_cf_handle = source_db->column_family_handle(source_cf_name);
+    ceph_assert(source_cf_handle);
+    KeyValueDB::WholeSpaceIterator data_source = source_db->get_wholespace_iterator_cf(source_cf_handle);
+    data_source->seek_to_first();
+    if (!data_source->valid()) {
+      //no data in this cf
+      continue;
+    }
+
+    KeyValueDB::Transaction transaction = source_db->get_transaction();
+
+    size_t data_in_transaction = 0;
+    size_t ops_in_transaction = 0;
+    do {
+      std::pair<std::string, std::string> raw_key = data_source->raw_key();
+      ceph::bufferlist data = data_source->value();
+      data_source->next();
+      dout(20) << "Processing key '" << url_escape(raw_key.first) << " " << url_escape(raw_key.second) << "'" << dendl;
+
+      std::string target_cf_name;
+      target_hash_db->locate_column_name(raw_key, target_cf_name);
+      dout(20) << "prev name=" << source_cf_name << " new name=" << target_cf_name << dendl;
+      if (target_cf_name == source_cf_name) {
+        dout(20) << "Skipped" << dendl;
+      } else {
+        KeyValueDB::ColumnFamilyHandle target_cf_handle = source_db->column_family_handle(target_cf_name);
+        ceph_assert(target_cf_handle);
+        ops_in_transaction++;
+        data_in_transaction += data.length();
+        transaction->select(source_cf_handle);
+        transaction->rm_single_key(raw_key.first, raw_key.second);
+        transaction->select(target_cf_handle);
+        transaction->set(raw_key.first, raw_key.second, data);
+      }
+      if (ops_in_transaction == 1000 || data_in_transaction > 100000 || !data_source->valid()) {
+        dout(10) << "Submitting #" << ops_in_transaction << " ops" << dendl;
+        r = source_db->submit_transaction_sync(transaction);
+        ceph_assert(r == 0);
+        ops_in_transaction = 0;
+        data_in_transaction = 0;
+      }
+    } while (data_source->valid());
+    dout(10) << "Finished processing column family '" << source_cf_name << "'" << dendl;
+  }
+
+  //some columns may now not be necessary, delete
+  for (auto c: columns_to_iterate) {
+    if (c == "default") continue;
+    bool needed = false;
+    for (auto n: new_cfs) {
+      if (c == n.name) {
+        needed = true;
+        break;
+      }
+    }
+    if (!needed) {
+      dout(5) << "Delete column family '" << c << dendl;
+      r = source_db->column_family_delete(c);
+      assert(r == 0);
+    }
+  }
+
+  umount();
+  write_meta("sharding", new_sharding);
+  dout(5) << "Resharding finished." << dendl;
+  return 0;
+}
+
+
 
 /// methods to inject various errors fsck can repair
 void BlueStore::inject_broken_shared_blob_key(const string& key,
