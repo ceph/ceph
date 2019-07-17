@@ -28,6 +28,8 @@ def to_bytes(param):
     '''
     if isinstance(param, str):
         return param.encode('utf-8')
+    elif param is None:
+        return param
     else:
         return str(param).encode('utf-8')
 
