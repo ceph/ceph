@@ -8,6 +8,8 @@ import sys
 import time
 import fnmatch
 import uuid
+import string
+import random
 import datetime
 
 import six
@@ -440,7 +442,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_stateless_service(self, service_type, id_):
+    def remove_stateless_service(self, service_type, id_resource):
         # type: (str, str) -> WriteCompletion
         """
         Uninstalls an existing service from the cluster.
@@ -741,6 +743,68 @@ class StatelessServiceSpec(object):
         # Maybe you're using e.g. kubenetes and you want to pass through
         # some replicaset special sauce for autoscaling?
         self.extended = {}
+
+        # Object with specific settings for the service
+        self.service_spec = None
+
+class RGWSpec(object):
+    """
+    Settings to configure a multisite Ceph RGW
+    """
+    def __init__(self, hosts=None, rgw_multisite=True, rgw_zone="Default_Zone",
+              rgw_zonemaster=True, rgw_zonesecondary=False,
+              rgw_multisite_proto="http", rgw_frontend_port="8080",
+              rgw_zonegroup="Main", rgw_zone_user="zone.user",
+              rgw_realm="RGW_Realm", system_access_key=None,
+              system_secret_key=None):
+
+        self.hosts = hosts
+        self.rgw_multisite = rgw_multisite
+        self.rgw_zone = rgw_zone
+        self.rgw_zonemaster = rgw_zonemaster
+        self.rgw_zonesecondary = rgw_zonesecondary
+        self.rgw_multisite_proto = rgw_multisite_proto
+        self.rgw_frontend_port = rgw_frontend_port
+
+        if hosts:
+            self.rgw_multisite_endpoint_addr = hosts[0]
+
+            self.rgw_multisite_endpoints_list = ",".join(
+                ["{}://{}:{}".format(self.rgw_multisite_proto,
+                                    host,
+                                    self.rgw_frontend_port) for host in hosts])
+
+        self.rgw_zonegroup = rgw_zonegroup
+        self.rgw_zone_user = rgw_zone_user
+        self.rgw_realm = rgw_realm
+
+        if system_access_key:
+            self.system_access_key = system_access_key
+        else:
+            self.system_access_key = self.genkey(20)
+        if system_secret_key:
+            self.system_secret_key = system_secret_key
+        else:
+            self.system_secret_key = self.genkey(40)
+
+    def genkey(self, nchars):
+        """ Returns a random string of nchars
+
+        :nchars : Length of the returned string
+        """
+
+        return ''.join(random.choice(string.ascii_uppercase +
+                                     string.ascii_lowercase +
+                                     string.digits) for _ in range(nchars))
+
+    @classmethod
+    def from_json(self, json_rgw_spec):
+        """
+        Initialize 'RGWSpec' object geting data from a json estructure
+        :param json_rgw_spec: A valid json string with a the RGW settings
+        """
+        args = {k:v for k, v in json_rgw_spec.items()}
+        return RGWSpec(**args)
 
 
 class InventoryFilter(object):
