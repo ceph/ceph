@@ -499,6 +499,7 @@ private:
   struct MonCommand {
     string target_name;
     int target_rank;
+    unsigned send_attempts = 0;
     uint64_t tid;
     vector<string> cmd;
     bufferlist inbl;
