@@ -77,6 +77,11 @@ class Module(MgrModule):
             self.set_store(key, inbuf)
         return 0, '', ''
 
+    def ls(self):
+        if not self.crashes:
+            self._load_crashes()
+        return self.do_ls({'prefix': 'crash ls'}, '')
+
     def do_ls(self, cmd, inbuf):
         keys = []
         for k, meta in self.timestamp_filter(lambda ts: True):
