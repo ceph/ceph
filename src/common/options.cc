@@ -6708,7 +6708,9 @@ std::vector<Option> get_rgw_options() {
     .set_long_description("Time in seconds between polling attemps for the shard lock bids."),
 
     Option("rgw_sync_bid_shuffle_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_min(1 * 60) /* 1 minute */
+#if 1 // temporary
+    .set_min(30) /* 1 minute */
+#endif
     .set_default(3 * 60) /* 3 minutes */
     .set_description("Lock bid shuffle interval")
     .set_long_description("Time in seconds between shuffles of the shard lock bids."),
