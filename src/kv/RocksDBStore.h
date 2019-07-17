@@ -96,7 +96,14 @@ private:
   // manage async compactions
   Mutex compact_queue_lock;
   Cond compact_queue_cond;
-  list< pair<string,string> > compact_queue;
+  struct compact_command {
+    compact_command(rocksdb::ColumnFamilyHandle* cf, std::string s, std::string e) :
+      cf_handle(cf), start(s), end(e) {}
+    rocksdb::ColumnFamilyHandle* cf_handle;
+    std::string start;
+    std::string end;
+  };
+  list< compact_command > compact_queue;
   bool compact_queue_stop;
 
   class CompactThread : public Thread {
@@ -161,6 +168,8 @@ public:
   int column_family_create(const std::string& name, const std::string& options) override;
   int column_family_delete(const std::string& name) override;
   KeyValueDB::ColumnFamilyHandle column_family_handle(const std::string& cf_name) const override;
+  int column_family_compact(const std::string& cf_name, const string& prefix, const string& start, const string& end) override;
+  int column_family_compact_async(const std::string& cf_name, const string& prefix, const string& start, const string& end) override;
 
 private:
   int _open(ostream &out, bool read_only, const std::vector<ColumnFamily>& options);
@@ -171,6 +180,8 @@ private:
   std::pair<std::string, ColumnFamilyHandle> cf_get_by_rocksdb_ID(uint32_t ID) const;
   int cf_create(const std::string& name, const std::string& options);
   KeyValueDB::ColumnFamilyHandle cf_wrap_handle(rocksdb::ColumnFamilyHandle*);
+  int cf_compact(rocksdb::ColumnFamilyHandle* cf, const string& start, const string& end);
+  int cf_compact_async(rocksdb::ColumnFamilyHandle* cf, const string& start, const string& end);
 
   rocksdb::Options rocksdb_options;
   struct ColumnFamilyData;
@@ -342,12 +353,6 @@ public:
     return static_cast<int64_t>(bbt_opts.block_cache->GetUsage());
   }
   uint64_t get_estimated_size(map<string,uint64_t> &extra) override;
-  virtual int64_t request_cache_bytes(
-      PriorityCache::Priority pri, uint64_t cache_bytes) const override;
-  virtual int64_t commit_cache_size() override;
-  virtual std::string get_cache_name() const override {
-    return "RocksDB Block Cache";
-  }
   int set_cache_size(uint64_t s) override {
     cache_size = s;
     set_cache_flag = true;
