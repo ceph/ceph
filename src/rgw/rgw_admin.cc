@@ -2415,11 +2415,11 @@ static int bucket_source_sync_status(RGWRados *store, const RGWZone& zone,
       shards_behind.insert(shard_id);
     }
   }
-  if (shards_behind.empty()) {
-    out << indented{width} << "bucket is caught up with source\n";
-  } else {
+  if (!shards_behind.empty()) {
     out << indented{width} << "bucket is behind on " << shards_behind.size() << " shards\n";
     out << indented{width} << "behind shards: [" << shards_behind << "]\n" ;
+  } else if (!num_full) {
+    out << indented{width} << "bucket is caught up with source\n";
   }
   return 0;
 }
