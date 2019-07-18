@@ -283,6 +283,13 @@ void MDSDaemon::set_up_admin_socket()
 				     asok_hook,
 				     "Enumerate connected CephFS clients");
   assert(r == 0);
+  r = admin_socket->register_command("session config",
+				     "session config name=client_id,type=CephInt,req=true "
+				     "name=option,type=CephString,req=true "
+				     "name=value,type=CephString,req=false ",
+				     asok_hook,
+				     "Config a CephFS client session");
+  assert(r == 0);
   r = admin_socket->register_command("flush journal",
 				     "flush journal",
 				     asok_hook,
@@ -704,6 +711,9 @@ COMMAND("session evict " \
 COMMAND("client evict " \
 	"name=filters,type=CephString,n=N,req=false",
 	"Evict client session(s)", "mds", "rw", "cli,rest")
+COMMAND("client config " \
+	"name=client_id,type=CephInt name=option,type=CephString name=value,type=CephString,req=false",
+	"Config a client session", "mds", "rw", "cli,rest")
 COMMAND("damage ls",
 	"List detected metadata damage", "mds", "r", "cli,rest")
 COMMAND("damage rm name=damage_id,type=CephInt",
