@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import time
 import cherrypy
 
 from . import ApiController, RESTController, Endpoint, ReadPermission, Task
@@ -9,7 +10,7 @@ from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.rbd import RbdConfiguration
 from ..services.exception import handle_send_command_error
-from ..tools import str_to_bool
+from ..tools import str_to_bool, TaskManager
 
 
 def pool_task(name, metadata, wait_for=2.0):
@@ -43,7 +44,8 @@ class Pool(RESTController):
         res['pool_name'] = pool['pool_name']
         return res
 
-    def _pool_list(self, attrs=None, stats=False):
+    @classmethod
+    def _pool_list(cls, attrs=None, stats=False):
         if attrs:
             attrs = attrs.split(',')
 
@@ -52,14 +54,15 @@ class Pool(RESTController):
         else:
             pools = CephService.get_pool_list()
 
-        return [self._serialize_pool(pool, attrs) for pool in pools]
+        return [cls._serialize_pool(pool, attrs) for pool in pools]
 
     def list(self, attrs=None, stats=False):
         return self._pool_list(attrs, stats)
 
-    def _get(self, pool_name, attrs=None, stats=False):
+    @classmethod
+    def _get(cls, pool_name, attrs=None, stats=False):
         # type: (str, str, bool) -> dict
-        pools = self._pool_list(attrs, stats)
+        pools = cls._pool_list(attrs, stats)
         pool = [pool for pool in pools if pool['pool_name'] == pool_name]
         if not pool:
             raise cherrypy.NotFound('No such pool')
@@ -81,6 +84,7 @@ class Pool(RESTController):
     def set(self, pool_name, flags=None, application_metadata=None, configuration=None, **kwargs):
         self._set_pool_values(pool_name, application_metadata, flags, True, kwargs)
         RbdConfiguration(pool_name).set_configuration(configuration)
+        self._wait_for_pgs(pool_name)
 
     @pool_task('create', {'pool_name': '{pool}'})
     @handle_send_command_error('pool')
@@ -92,6 +96,7 @@ class Pool(RESTController):
                                  rule=rule_name)
         self._set_pool_values(pool, application_metadata, flags, False, kwargs)
         RbdConfiguration(pool).set_configuration(configuration)
+        self._wait_for_pgs(pool)
 
     def _set_pool_values(self, pool, application_metadata, flags, update_existing, kwargs):
         update_name = False
@@ -150,6 +155,38 @@ class Pool(RESTController):
                         'compression_required_ratio']:
                 reset_arg(arg, '0')
             reset_arg('compression_algorithm', 'unset')
+
+    @classmethod
+    def _wait_for_pgs(cls, pool_name):
+        """
+        Keep the task waiting for until all pg changes are complete
+        :param pool_name: The name of the pool.
+        :type pool_name: string
+        """
+        current_pool = cls._get(pool_name)
+        initial_pgs = int(current_pool['pg_placement_num']) + int(current_pool['pg_num'])
+        cls._pg_wait_loop(current_pool, initial_pgs)
+
+    @classmethod
+    def _pg_wait_loop(cls, pool, initial_pgs):
+        """
+        Compares if all pg changes are completed, if not it will call itself
+        until all changes are completed.
+        :param pool: The dict that represents a pool.
+        :type pool: dict
+        :param initial_pgs: The pg and pg_num count before any change happened.
+        :type initial_pgs: int
+        """
+        if 'pg_num_target' in pool:
+            target = int(pool['pg_num_target']) + int(pool['pg_placement_num_target'])
+            current = int(pool['pg_placement_num']) + int(pool['pg_num'])
+            if current != target:
+                max_diff = abs(target - initial_pgs)
+                diff = max_diff - abs(target - current)
+                percentage = int(round(diff / float(max_diff) * 100))
+                TaskManager.current_task().set_progress(percentage)
+                time.sleep(4)
+                cls._pg_wait_loop(cls._get(pool['pool_name']), initial_pgs)
 
     @RESTController.Resource()
     @ReadPermission

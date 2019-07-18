@@ -8,7 +8,11 @@ import { TabsModule } from 'ngx-bootstrap/tabs';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import {
+  configureTestBed,
+  expectItemTasks,
+  i18nProviders
+} from '../../../../testing/unit-test-helper';
 import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { PoolService } from '../../../shared/api/pool.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
@@ -27,18 +31,18 @@ describe('PoolListComponent', () => {
   let fixture: ComponentFixture<PoolListComponent>;
   let poolService: PoolService;
 
-  const addPool = (pools, name, id) => {
-    const pool = new Pool(name);
-    pool.pool = id;
-    pool.pg_num = 256;
-    pools.push(pool);
+  const createPool = (name, id): Pool => {
+    return _.merge(new Pool(name), {
+      pool: id,
+      pg_num: 256,
+      pg_placement_num: 256,
+      pg_num_target: 256,
+      pg_placement_num_target: 256
+    });
   };
 
-  const setUpPools = (pools) => {
-    addPool(pools, 'a', 0);
-    addPool(pools, 'b', 1);
-    addPool(pools, 'c', 2);
-    component.pools = pools;
+  const getPoolList = (): Pool[] => {
+    return [createPool('a', 0), createPool('b', 1), createPool('c', 2)];
   };
 
   configureTestBed({
@@ -58,6 +62,7 @@ describe('PoolListComponent', () => {
     component = fixture.componentInstance;
     component.permissions.pool.read = true;
     poolService = TestBed.get(PoolService);
+    spyOn(poolService, 'getList').and.callFake(() => of(getPoolList()));
     fixture.detectChanges();
   });
 
@@ -67,6 +72,12 @@ describe('PoolListComponent', () => {
 
   it('should have columns that are sortable', () => {
     expect(component.columns.every((column) => Boolean(column.prop))).toBeTruthy();
+  });
+
+  it('returns pool details correctly', () => {
+    const pool = { prop1: 1, cdIsBinary: true, prop2: 2, cdExecuting: true, prop3: 3 };
+    const expected = { prop1: 1, prop2: 2, prop3: 3 };
+    expect(component.getPoolDetails(pool)).toEqual(expected);
   });
 
   describe('monAllowPoolDelete', () => {
@@ -166,7 +177,6 @@ describe('PoolListComponent', () => {
   });
 
   describe('handling of executing tasks', () => {
-    let pools: Pool[];
     let summaryService: SummaryService;
 
     const addTask = (name: string, pool: string) => {
@@ -179,10 +189,6 @@ describe('PoolListComponent', () => {
     beforeEach(() => {
       summaryService = TestBed.get(SummaryService);
       summaryService['summaryDataSource'].next({ executing_tasks: [], finished_tasks: [] });
-      pools = [];
-      setUpPools(pools);
-      spyOn(poolService, 'getList').and.callFake(() => of(pools));
-      fixture.detectChanges();
     });
 
     it('gets all pools without executing pools', () => {
@@ -193,13 +199,13 @@ describe('PoolListComponent', () => {
     it('gets a pool from a task during creation', () => {
       addTask('pool/create', 'd');
       expect(component.pools.length).toBe(4);
-      expect(component.pools[3].cdExecuting).toBe('Creating');
+      expectItemTasks(component.pools[3], 'Creating');
     });
 
     it('gets all pools with one executing pools', () => {
       addTask('pool/create', 'a');
       expect(component.pools.length).toBe(3);
-      expect(component.pools[0].cdExecuting).toBe('Creating');
+      expectItemTasks(component.pools[0], 'Creating');
       expect(component.pools[1].cdExecuting).toBeFalsy();
       expect(component.pools[2].cdExecuting).toBeFalsy();
     });
@@ -212,9 +218,9 @@ describe('PoolListComponent', () => {
       addTask('pool/delete', 'b');
       addTask('pool/delete', 'c');
       expect(component.pools.length).toBe(3);
-      expect(component.pools[0].cdExecuting).toBe('Creating, Updating, Deleting');
-      expect(component.pools[1].cdExecuting).toBe('Updating, Deleting');
-      expect(component.pools[2].cdExecuting).toBe('Deleting');
+      expectItemTasks(component.pools[0], 'Creating..., Updating..., Deleting');
+      expectItemTasks(component.pools[1], 'Updating..., Deleting');
+      expectItemTasks(component.pools[2], 'Deleting');
     });
 
     it('gets all pools with multiple executing tasks (not only pool tasks)', () => {
@@ -225,8 +231,8 @@ describe('PoolListComponent', () => {
       addTask('rbd/delete', 'b');
       addTask('rbd/delete', 'c');
       expect(component.pools.length).toBe(3);
-      expect(component.pools[0].cdExecuting).toBe('Deleting');
-      expect(component.pools[1].cdExecuting).toBe('Updating');
+      expectItemTasks(component.pools[0], 'Deleting');
+      expectItemTasks(component.pools[1], 'Updating');
       expect(component.pools[2].cdExecuting).toBeFalsy();
     });
   });
@@ -279,39 +285,11 @@ describe('PoolListComponent', () => {
   });
 
   describe('transformPoolsData', () => {
-    it('transforms pools data correctly', () => {
-      const pools = [
-        {
-          stats: {
-            bytes_used: { latest: 5, rate: 0, rates: [] },
-            max_avail: { latest: 15, rate: 0, rates: [] },
-            rd_bytes: { latest: 6, rate: 4, rates: [[0, 2], [1, 6]] }
-          },
-          pg_status: { 'active+clean': 8, down: 2 }
-        }
-      ];
-      const expected = [
-        {
-          cdIsBinary: true,
-          pg_status: '8 active+clean, 2 down',
-          stats: {
-            bytes_used: { latest: 5, rate: 0, rates: [] },
-            max_avail: { latest: 15, rate: 0, rates: [] },
-            rd: { latest: 0, rate: 0, rates: [] },
-            rd_bytes: { latest: 6, rate: 4, rates: [2, 6] },
-            wr: { latest: 0, rate: 0, rates: [] },
-            wr_bytes: { latest: 0, rate: 0, rates: [] }
-          },
-          usage: 0.25
-        }
-      ];
-      expect(component.transformPoolsData(pools)).toEqual(expected);
-    });
+    let pool: Pool;
 
-    it('transforms pools data correctly if stats are missing', () => {
-      const pools = [{}];
-      const expected = [
-        {
+    const getPoolData = (o) => [
+      _.merge(
+        _.merge(createPool('a', 0), {
           cdIsBinary: true,
           pg_status: '',
           stats: {
@@ -323,15 +301,85 @@ describe('PoolListComponent', () => {
             wr_bytes: { latest: 0, rate: 0, rates: [] }
           },
           usage: 0
-        }
-      ];
-      expect(component.transformPoolsData(pools)).toEqual(expected);
+        }),
+        o
+      )
+    ];
+
+    beforeEach(() => {
+      pool = createPool('a', 0);
+    });
+
+    it('transforms pools data correctly', () => {
+      pool = _.merge(pool, {
+        stats: {
+          bytes_used: { latest: 5, rate: 0, rates: [] },
+          max_avail: { latest: 15, rate: 0, rates: [] },
+          rd_bytes: { latest: 6, rate: 4, rates: [[0, 2], [1, 6]] }
+        },
+        pg_status: { 'active+clean': 8, down: 2 }
+      });
+      expect(component.transformPoolsData([pool])).toEqual(
+        getPoolData({
+          pg_status: '8 active+clean, 2 down',
+          stats: {
+            bytes_used: { latest: 5, rate: 0, rates: [] },
+            max_avail: { latest: 15, rate: 0, rates: [] },
+            rd_bytes: { latest: 6, rate: 4, rates: [2, 6] }
+          },
+          usage: 0.25
+        })
+      );
+    });
+
+    it('transforms pools data correctly if stats are missing', () => {
+      expect(component.transformPoolsData([pool])).toEqual(getPoolData({}));
     });
 
     it('transforms empty pools data correctly', () => {
-      const pools = undefined;
-      const expected = undefined;
-      expect(component.transformPoolsData(pools)).toEqual(expected);
+      expect(component.transformPoolsData(undefined)).toEqual(undefined);
+      expect(component.transformPoolsData([])).toEqual([]);
+    });
+
+    it('shows not marked pools in progress if pg_num does not match pg_num_target', () => {
+      const pools = [
+        _.merge(pool, {
+          pg_num: 32,
+          pg_num_target: 16,
+          pg_placement_num: 32,
+          pg_placement_num_target: 16
+        })
+      ];
+      expect(component.transformPoolsData(pools)).toEqual(
+        getPoolData({
+          cdExecuting: 'Updating',
+          pg_num: 32,
+          pg_num_target: 16,
+          pg_placement_num: 32,
+          pg_placement_num_target: 16
+        })
+      );
+    });
+
+    it('shows marked pools in progress as defined by task', () => {
+      const pools = [
+        _.merge(pool, {
+          pg_num: 32,
+          pg_num_target: 16,
+          pg_placement_num: 32,
+          pg_placement_num_target: 16,
+          cdExecuting: 'Updating... 50%'
+        })
+      ];
+      expect(component.transformPoolsData(pools)).toEqual(
+        getPoolData({
+          cdExecuting: 'Updating... 50%',
+          pg_num: 32,
+          pg_num_target: 16,
+          pg_placement_num: 32,
+          pg_placement_num_target: 16
+        })
+      );
     });
   });
 
@@ -365,17 +413,7 @@ describe('PoolListComponent', () => {
     });
   });
 
-  describe('getPoolDetails', () => {
-    it('returns pool details corretly', () => {
-      const pool = { prop1: 1, cdIsBinary: true, prop2: 2, cdExecuting: true, prop3: 3 };
-      const expected = { prop1: 1, prop2: 2, prop3: 3 };
-
-      expect(component.getPoolDetails(pool)).toEqual(expected);
-    });
-  });
-
   describe('getSelectionTiers', () => {
-    let pools: Pool[];
     const setSelectionTiers = (tiers: number[]) => {
       component.selection.selected = [
         {
@@ -387,18 +425,17 @@ describe('PoolListComponent', () => {
     };
 
     beforeEach(() => {
-      pools = [];
-      setUpPools(pools);
+      component.pools = getPoolList();
     });
 
     it('should select multiple existing cache tiers', () => {
       setSelectionTiers([0, 1, 2]);
-      expect(component.selectionCacheTiers).toEqual(pools);
+      expect(component.selectionCacheTiers).toEqual(getPoolList());
     });
 
     it('should select correct existing cache tier', () => {
       setSelectionTiers([0]);
-      expect(component.selectionCacheTiers).toEqual([{ pg_num: 256, pool: 0, pool_name: 'a' }]);
+      expect(component.selectionCacheTiers).toEqual([createPool('a', 0)]);
     });
 
     it('should not select cache tier if id is invalid', () => {
@@ -413,9 +450,9 @@ describe('PoolListComponent', () => {
 
     it('should be able to selected one pool with multiple tiers, than with a single tier, than with no tiers', () => {
       setSelectionTiers([0, 1, 2]);
-      expect(component.selectionCacheTiers).toEqual(pools);
+      expect(component.selectionCacheTiers).toEqual(getPoolList());
       setSelectionTiers([0]);
-      expect(component.selectionCacheTiers).toEqual([{ pg_num: 256, pool: 0, pool_name: 'a' }]);
+      expect(component.selectionCacheTiers).toEqual([createPool('a', 0)]);
       setSelectionTiers([]);
       expect(component.selectionCacheTiers).toEqual([]);
     });
