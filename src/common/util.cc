@@ -208,7 +208,7 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
   // processor
   f = fopen(PROCPREFIX "/proc/cpuinfo", "r");
   if (f) {
-    char buf[100];
+    char buf[1024];
     while (!feof(f)) {
       char *line = fgets(buf, sizeof(buf), f);
       if (!line)
