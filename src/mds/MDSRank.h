@@ -459,6 +459,9 @@ class MDSRank {
 
     bool evict_client(int64_t session_id, bool wait, bool blacklist,
                       std::ostream& ss, Context *on_killed=nullptr);
+    int config_client(int64_t session_id, bool remove,
+		      const std::string& option, const std::string& value,
+		      std::ostream& ss);
 
     void mark_base_recursively_scrubbed(inodeno_t ino);
 
