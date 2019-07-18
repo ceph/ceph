@@ -2559,17 +2559,17 @@ public:
 int RGWUserCtl::get_info_by_uid(const rgw_user& uid,
                                 RGWUserInfo *info,
                                 optional_yield y,
-                                ceph::optional_ref_default<GetParams> params)
+                                const GetParams& params)
 
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return svc.user->read_user_info(op->ctx(),
                                     uid,
                                     info,
-                                    params->objv_tracker,
-                                    params->mtime,
-                                    params->cache_info,
-                                    params->attrs,
+                                    params.objv_tracker,
+                                    params.mtime,
+                                    params.cache_info,
+                                    params.attrs,
                                     y);
   });
 }
@@ -2577,13 +2577,13 @@ int RGWUserCtl::get_info_by_uid(const rgw_user& uid,
 int RGWUserCtl::get_info_by_email(const string& email,
                                   RGWUserInfo *info,
                                   optional_yield y,
-                                  ceph::optional_ref_default<GetParams> params)
+                                  const GetParams& params)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return svc.user->get_user_info_by_email(op->ctx(), email,
                                             info,
-                                            params->objv_tracker,
-                                            params->mtime,
+                                            params.objv_tracker,
+                                            params.mtime,
                                             y);
   });
 }
@@ -2591,13 +2591,13 @@ int RGWUserCtl::get_info_by_email(const string& email,
 int RGWUserCtl::get_info_by_swift(const string& swift_name,
                                   RGWUserInfo *info,
                                   optional_yield y,
-                                  ceph::optional_ref_default<GetParams> params)
+                                  const GetParams& params)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return svc.user->get_user_info_by_swift(op->ctx(), swift_name,
                                             info,
-                                            params->objv_tracker,
-                                            params->mtime,
+                                            params.objv_tracker,
+                                            params.mtime,
                                             y);
   });
 }
@@ -2605,13 +2605,13 @@ int RGWUserCtl::get_info_by_swift(const string& swift_name,
 int RGWUserCtl::get_info_by_access_key(const string& access_key,
                                        RGWUserInfo *info,
                                        optional_yield y,
-                                       ceph::optional_ref_default<GetParams> params)
+                                       const GetParams& params)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return svc.user->get_user_info_by_access_key(op->ctx(), access_key,
                                                  info,
-                                                 params->objv_tracker,
-                                                 params->mtime,
+                                                 params.objv_tracker,
+                                                 params.mtime,
                                                  y);
   });
 }
@@ -2629,30 +2629,30 @@ int RGWUserCtl::get_attrs_by_uid(const rgw_user& user_id,
 }
 
 int RGWUserCtl::store_info(const RGWUserInfo& info, optional_yield y,
-                           ceph::optional_ref_default<PutParams> params)
+                           const PutParams& params)
 {
   string key = RGWSI_User::get_meta_key(info.user_id);
 
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return svc.user->store_user_info(op->ctx(), info,
-                                     params->old_info,
-                                     params->objv_tracker,
-                                     params->mtime,
-                                     params->exclusive,
-                                     params->attrs,
+                                     params.old_info,
+                                     params.objv_tracker,
+                                     params.mtime,
+                                     params.exclusive,
+                                     params.attrs,
                                      y);
   });
 }
 
 int RGWUserCtl::remove_info(const RGWUserInfo& info, optional_yield y,
-                            ceph::optional_ref_default<RemoveParams> params)
+                            const RemoveParams& params)
 
 {
   string key = RGWSI_User::get_meta_key(info.user_id);
 
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return svc.user->remove_user_info(op->ctx(), info,
-                                      params->objv_tracker,
+                                      params.objv_tracker,
                                       y);
   });
 }
