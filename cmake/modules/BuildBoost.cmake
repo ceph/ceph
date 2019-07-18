@@ -109,14 +109,15 @@ function(do_build_boost version)
     " : ${CMAKE_CXX_COMPILER}"
     " ;\n")
   if(with_python_version)
-    find_package(PythonLibs ${with_python_version} QUIET REQUIRED)
-    string(REPLACE ";" " " python_includes "${PYTHON_INCLUDE_DIRS}")
+    find_package(Python ${with_python_version} QUIET REQUIRED
+      COMPONENTS Development)
+    string(REPLACE ";" " " python_includes "${Python_INCLUDE_DIRS}")
     file(APPEND ${user_config}
       "using python"
       " : ${with_python_version}"
-      " : ${PYTHON_EXECUTABLE}"
+      " : ${Python_EXECUTABLE}"
       " : ${python_includes}"
-      " : ${PYTHON_LIBRARIES}"
+      " : ${Python_LIBRARIES}"
       " ;\n")
   endif()
   list(APPEND b2 --user-config=${user_config})
@@ -212,7 +213,7 @@ macro(build_boost version)
     endif()
     add_dependencies(Boost::${c} Boost)
     if(c MATCHES "^python")
-      set(c "python${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}")
+      set(c "python${Python_VERSION_MAJOR}${Python_VERSION_MINOR}")
     endif()
     if(Boost_USE_STATIC_LIBS)
       set(Boost_${upper_c}_LIBRARY
