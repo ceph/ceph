@@ -627,7 +627,7 @@ namespace rgw {
 
   int RGWLibIO::set_uid(RGWRados *store, const rgw_user& uid)
   {
-    int ret = store->ctl.user->get_info_by_uid(uid, &user_info);
+    int ret = store->ctl.user->get_info_by_uid(uid, &user_info, null_yield);
     if (ret < 0) {
       derr << "ERROR: failed reading user info: uid=" << uid << " ret="
 	   << ret << dendl;

@@ -826,7 +826,6 @@ public:
     ceph::real_time *mtime{nullptr};
     rgw_cache_entry_info *cache_info{nullptr};
     map<string, bufferlist> *attrs{nullptr};
-    optional_yield y{null_yield};
 
     GetParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
       objv_tracker = _objv_tracker;
@@ -847,11 +846,6 @@ public:
       attrs = _attrs;
       return *this;
     }
-
-    GetParams& set_yield(optional_yield _y) {
-      y = _y;
-      return *this;
-    }
   };
 
   struct PutParams {
@@ -860,7 +854,6 @@ public:
     ceph::real_time mtime;
     bool exclusive{false};
     map<string, bufferlist> *attrs;
-    optional_yield y{null_yield};
 
     PutParams& set_old_info(RGWUserInfo *_info) {
       old_info = _info;
@@ -886,39 +879,35 @@ public:
       attrs = _attrs;
       return *this;
     }
-
-    PutParams& set_yield(optional_yield _y) {
-      y = _y;
-      return *this;
-    }
   };
 
   struct RemoveParams {
     RGWObjVersionTracker *objv_tracker{nullptr};
-    optional_yield y{null_yield};
 
     RemoveParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
       objv_tracker = _objv_tracker;
       return *this;
     }
-    RemoveParams& set_yield(optional_yield _y) {
-      y = _y;
-      return *this;
-    }
   };
 
-  int get_info_by_uid(const rgw_user& uid, RGWUserInfo *info, ceph::optional_ref_default<GetParams> params = std::nullopt);
-  int get_info_by_email(const string& email, RGWUserInfo *info, ceph::optional_ref_default<GetParams> params = std::nullopt);
-  int get_info_by_swift(const string& swift_name, RGWUserInfo *info, ceph::optional_ref_default<GetParams> params = std::nullopt);
-  int get_info_by_access_key(const string& access_key, RGWUserInfo *info, ceph::optional_ref_default<GetParams> params = std::nullopt);
+  int get_info_by_uid(const rgw_user& uid, RGWUserInfo *info, optional_yield y,
+                      ceph::optional_ref_default<GetParams> params = std::nullopt);
+  int get_info_by_email(const string& email, RGWUserInfo *info, optional_yield y,
+                        ceph::optional_ref_default<GetParams> params = std::nullopt);
+  int get_info_by_swift(const string& swift_name, RGWUserInfo *info, optional_yield y,
+                        ceph::optional_ref_default<GetParams> params = std::nullopt);
+  int get_info_by_access_key(const string& access_key, RGWUserInfo *info, optional_yield y,
+                             ceph::optional_ref_default<GetParams> params = std::nullopt);
 
   int get_attrs_by_uid(const rgw_user& user_id,
                        map<string, bufferlist> *attrs,
                        optional_yield y,
                        RGWObjVersionTracker *objv_tracker = nullptr);
 
-  int store_info(const RGWUserInfo& info, ceph::optional_ref_default<PutParams> params);
-  int remove_info(const RGWUserInfo& info, ceph::optional_ref_default<RemoveParams> params);
+  int store_info(const RGWUserInfo& info, optional_yield y,
+                 ceph::optional_ref_default<PutParams> params);
+  int remove_info(const RGWUserInfo& info, optional_yield y,
+                  ceph::optional_ref_default<RemoveParams> params);
 
   int add_bucket(const rgw_user& user,
                  const rgw_bucket& bucket,
