@@ -23,6 +23,7 @@ tasks:
         - \(POOL_APP_NOT_ENABLED\)
         - pauserd,pausewr flag\(s\) set
         - Monitor daemon marked osd\.[[:digit:]]+ down, but it is still running
+        - evicting unresponsive client .+
   - rgw: [client.0]
   - cephfs_test_runner:
       fail_on_skip: false
