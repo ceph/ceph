@@ -740,8 +740,7 @@ error_out:
 
   ret2 = store->ctl.bucket->remove_bucket_instance_info(new_bucket_info.bucket,
                                                         new_bucket_info,
-							null_yield,
-                                                        std::nullopt);
+							null_yield);
   if (ret2 < 0) {
     lderr(store->ctx()) << "Error: " << __func__ <<
       " failed to clean bucket info object \"" <<

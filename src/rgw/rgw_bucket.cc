@@ -2999,9 +2999,8 @@ int RGWBucketCtl::call(std::function<int(RGWSI_Bucket_X_Ctx& ctx)> f) {
 int RGWBucketCtl::read_bucket_entrypoint_info(const rgw_bucket& bucket,
                                               RGWBucketEntryPoint *info,
                                               optional_yield y,
-                                              ceph::optional_ref_default<RGWBucketCtl::Bucket::GetParams> _params)
+                                              const Bucket::GetParams& params)
 {
-  auto& params = *_params;
   return bm_handler->call(params.bectx_params, [&](RGWSI_Bucket_EP_Ctx& ctx) {
     return svc.bucket->read_bucket_entrypoint_info(ctx,
                                                    RGWSI_Bucket::get_entrypoint_meta_key(bucket),
@@ -3018,9 +3017,8 @@ int RGWBucketCtl::read_bucket_entrypoint_info(const rgw_bucket& bucket,
 int RGWBucketCtl::store_bucket_entrypoint_info(const rgw_bucket& bucket,
                                                RGWBucketEntryPoint& info,
                                                optional_yield y,
-                                               ceph::optional_ref_default<RGWBucketCtl::Bucket::PutParams> _params)
+                                               const Bucket::PutParams& params)
 {
-  auto& params = *_params;
   return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
     return svc.bucket->store_bucket_entrypoint_info(ctx,
                                                     RGWSI_Bucket::get_entrypoint_meta_key(bucket),
@@ -3035,9 +3033,8 @@ int RGWBucketCtl::store_bucket_entrypoint_info(const rgw_bucket& bucket,
 
 int RGWBucketCtl::remove_bucket_entrypoint_info(const rgw_bucket& bucket,
                                                 optional_yield y,
-                                                ceph::optional_ref_default<RGWBucketCtl::Bucket::RemoveParams> _params)
+                                                const Bucket::RemoveParams& params)
 {
-  auto& params = *_params;
   return bm_handler->call([&](RGWSI_Bucket_EP_Ctx& ctx) {
     return svc.bucket->remove_bucket_entrypoint_info(ctx,
                                                      RGWSI_Bucket::get_entrypoint_meta_key(bucket),
@@ -3049,9 +3046,8 @@ int RGWBucketCtl::remove_bucket_entrypoint_info(const rgw_bucket& bucket,
 int RGWBucketCtl::read_bucket_instance_info(const rgw_bucket& bucket,
                                             RGWBucketInfo *info,
                                             optional_yield y,
-                                            ceph::optional_ref_default<RGWBucketCtl::BucketInstance::GetParams> _params)
+                                            const BucketInstance::GetParams& params)
 {
-  auto& params = *_params;
   int ret = bmi_handler->call(params.bectx_params, [&](RGWSI_Bucket_BI_Ctx& ctx) {
     return svc.bucket->read_bucket_instance_info(ctx,
                                                  RGWSI_Bucket::get_bi_meta_key(bucket),
@@ -3077,11 +3073,10 @@ int RGWBucketCtl::read_bucket_instance_info(const rgw_bucket& bucket,
 int RGWBucketCtl::read_bucket_info(const rgw_bucket& bucket,
                                    RGWBucketInfo *info,
                                    optional_yield y,
-                                   ceph::optional_ref_default<RGWBucketCtl::BucketInstance::GetParams> _params,
+                                   const BucketInstance::GetParams& params,
                                    RGWObjVersionTracker *ep_objv_tracker)
 {
   const rgw_bucket *b = &bucket;
-  auto& params = *_params;
 
   std::optional<RGWBucketEntryPoint> ep;
 
@@ -3124,9 +3119,8 @@ int RGWBucketCtl::do_store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
                                                 const rgw_bucket& bucket,
                                                 RGWBucketInfo& info,
                                                 optional_yield y,
-                                                ceph::optional_ref_default<RGWBucketCtl::BucketInstance::PutParams> _params)
+                                                const BucketInstance::PutParams& params)
 {
-  auto& params = *_params;
   if (params.objv_tracker) {
     info.objv_tracker = *params.objv_tracker;
   }
@@ -3144,19 +3138,18 @@ int RGWBucketCtl::do_store_bucket_instance_info(RGWSI_Bucket_BI_Ctx& ctx,
 int RGWBucketCtl::store_bucket_instance_info(const rgw_bucket& bucket,
                                             RGWBucketInfo& info,
                                             optional_yield y,
-                                            ceph::optional_ref_default<RGWBucketCtl::BucketInstance::PutParams> _params)
+                                            const BucketInstance::PutParams& params)
 {
   return bmi_handler->call([&](RGWSI_Bucket_BI_Ctx& ctx) {
-    return do_store_bucket_instance_info(ctx, bucket, info, y, _params);
+    return do_store_bucket_instance_info(ctx, bucket, info, y, params);
   });
 }
 
 int RGWBucketCtl::remove_bucket_instance_info(const rgw_bucket& bucket,
                                               RGWBucketInfo& info,
                                               optional_yield y,
-                                              ceph::optional_ref_default<RGWBucketCtl::BucketInstance::RemoveParams> _params)
+                                              const BucketInstance::RemoveParams& params)
 {
-  auto& params = *_params;
   if (params.objv_tracker) {
     info.objv_tracker = *params.objv_tracker;
   }
