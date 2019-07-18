@@ -6,9 +6,11 @@ import json
 from . import ApiController, Endpoint, BaseController
 
 from .. import mgr
+from ..rest_client import RequestException
 from ..security import Permission, Scope
 from ..services.ceph_service import CephService
 from ..services.iscsi_cli import IscsiGatewaysConfig
+from ..services.iscsi_client import IscsiClient
 
 
 class HealthData(object):
@@ -121,8 +123,15 @@ class HealthData(object):
         return len(mgr.list_servers())
 
     def iscsi_daemons(self):
-        gateways = IscsiGatewaysConfig.get_gateways_config()['gateways']
-        return len(gateways) if gateways else 0
+        up_counter = 0
+        down_counter = 0
+        for gateway_name in IscsiGatewaysConfig.get_gateways_config()['gateways']:
+            try:
+                IscsiClient.instance(gateway_name=gateway_name).ping()
+                up_counter += 1
+            except RequestException:
+                down_counter += 1
+        return {'up': up_counter, 'down': down_counter}
 
     def mgr_map(self):
         mgr_map = mgr.get('mgr_map')

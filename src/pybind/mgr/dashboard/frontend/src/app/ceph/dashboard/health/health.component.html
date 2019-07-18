@@ -113,7 +113,10 @@
                   class="cd-status-card"
                   contentClass="content-highlight"
                   *ngIf="enabledFeature.iscsi && healthData.iscsi_daemons != null">
-      {{ healthData.iscsi_daemons }} total
+      {{ healthData.iscsi_daemons.up + healthData.iscsi_daemons.down }} total
+      <span class="card-text-line-break"></span>
+      {{ healthData.iscsi_daemons.up }} up,
+      <span [ngClass]="{'card-text-error': healthData.iscsi_daemons.down > 0}">{{ healthData.iscsi_daemons.down }} down</span>
     </cd-info-card>
   </cd-info-group>
 
