@@ -285,7 +285,7 @@ class Module(MgrModule):
         {
             'name': 'sleep_interval',
             'type': 'secs',
-            'default': 60,
+            'default': 10,
             'desc': 'how frequently to wake up and attempt optimization',
             'runtime': True,
         },
@@ -1203,7 +1203,7 @@ class Module(MgrModule):
         self.log.info('Executing plan %s' % plan.name)
 
         commands = []
-
+        flag = False
         # compat weight-set
         if len(plan.compat_ws) and \
            not CRUSHMap.have_default_choose_args(plan.initial.crush_dump):
@@ -1246,6 +1246,7 @@ class Module(MgrModule):
 
         # upmap
         incdump = plan.inc.dump()
+        self.log.info("JR {0}".format(json.dumps(incdump)))
         for pgid in incdump.get('old_pg_upmap_items', []):
             self.log.info('ceph osd rm-pg-upmap-items %s', pgid)
             result = CommandResult('foo')
@@ -1255,13 +1256,22 @@ class Module(MgrModule):
                 'pgid': pgid,
             }), 'foo')
             commands.append(result)
-
+        
+        # FIXME loop can be optimized
         for item in incdump.get('new_pg_upmap_items', []):
             self.log.info('ceph osd pg-upmap-items %s mappings %s', item['pgid'],
                           item['mappings'])
             osdlist = []
+            evacuate_osds = []
+            affected_pgs = [] 
             for m in item['mappings']:
                 osdlist += [m['from'], m['to']]
+                if m['from'] not in evacuate_osds:
+                    evacuate_osds += [m['from']]
+                temp_list = item['pgid'].split('.')
+                pg_obj = self.remote('progress', 'construct_pgid', pool_id=int(temp_list[0]), ps=int(temp_list[1]))
+                affected_pgs.append(pg_obj)
+
             result = CommandResult('foo')
             self.send_command(result, 'mon', '', json.dumps({
                 'prefix': 'osd pg-upmap-items',
@@ -1270,7 +1280,22 @@ class Module(MgrModule):
                 'id': osdlist,
             }), 'foo')
             commands.append(result)
-
+            # Create Progress Event if flag
+            if not flag:
+                ev=self.remote('progress', 'construct_pg_recovery_event', 
+                        message='Balancer upmap',
+                        refs=[("Balancer", "upmap")],
+                        which_pgs=affected_pgs,
+                        evacuate_osds=evacuate_osds,
+                        start_epoch=self.get_osdmap().get_epoch()
+                        )
+                self.log.info("JR line 1292")
+                ev.pg_update(self.get("pg_dump"), self.log)
+                self.log.info("JR line 1294")
+                self.remote('progress', 'add_event', ev)
+                self.log.info("JR 1296")
+                flag = True
+    
         # wait for commands
         self.log.debug('commands %s' % commands)
         for result in commands:

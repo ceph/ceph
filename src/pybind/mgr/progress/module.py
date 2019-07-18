@@ -589,6 +589,10 @@ class Module(MgrModule):
         ev.set_progress(ev_progress)
         ev._refresh()
 
+    def add_event(self, ev):
+            self._events[ev.id] = ev
+            return None
+
     def _complete(self, ev):
         duration = (time.time() - ev.started_at)
         self.log.info("Completed event {0} ({1}) in {2} seconds".format(
@@ -679,3 +683,11 @@ class Module(MgrModule):
             return 0, json.dumps(self._json(), indent=2), ""
         else:
             raise NotImplementedError(cmd['prefix'])
+
+    def construct_pgid(self, pool_id, ps):
+        return PgId(pool_id, ps)
+
+    def construct_pg_recovery_event(self, message, refs, which_pgs, evacuate_osds, start_epoch):
+        return PgRecoveryEvent(message, refs, which_pgs,
+                evacuate_osds, start_epoch)
+
