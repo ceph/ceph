@@ -4073,12 +4073,6 @@ void BlueStore::_set_compression()
 
   compressor = nullptr;
 
-  if (comp_mode == Compressor::COMP_NONE) {
-    dout(10) << __func__ << " compression mode set to 'none', "
-             << "ignore other compression settings" << dendl;
-    return;
-  }
-
   if (cct->_conf->bluestore_compression_min_blob_size) {
     comp_min_blob_size = cct->_conf->bluestore_compression_min_blob_size;
   } else {
