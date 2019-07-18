@@ -68,7 +68,7 @@ class ObjBencher {
 public:
   CephContext *cct;
 protected:
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("ObjBencher::lock");
 
   static void *status_printer(void *bencher);
 
@@ -107,7 +107,7 @@ protected:
   ostream& out(ostream& os);
   ostream& out(ostream& os, utime_t& t);
 public:
-  explicit ObjBencher(CephContext *cct_) : show_time(false), cct(cct_), lock("ObjBencher::lock"), data() {}
+  explicit ObjBencher(CephContext *cct_) : show_time(false), cct(cct_), data() {}
   virtual ~ObjBencher() {}
   int aio_bench(
     int operation, int secondsToRun,
