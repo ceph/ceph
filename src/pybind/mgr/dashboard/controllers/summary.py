@@ -9,6 +9,7 @@ from ..security import Permission, Scope
 from ..controllers.rbd_mirroring import get_daemons_and_pools
 from ..exceptions import ViewCacheNoDataException
 from ..tools import TaskManager
+from ..services import progress
 
 
 @ApiController('/summary')
@@ -72,6 +73,13 @@ class Summary(BaseController):
         exe_t, fin_t = TaskManager.list_serializable()
         executing_tasks = [task for task in exe_t if self._task_permissions(task['name'])]
         finished_tasks = [task for task in fin_t if self._task_permissions(task['name'])]
+
+        e, f = progress.get_progress_tasks()
+        executing_tasks.extend(e)
+        finished_tasks.extend(f)
+
+        executing_tasks.sort(key=lambda t: t['begin_time'], reverse=True)
+        finished_tasks.sort(key=lambda t: t['end_time'], reverse=True)
 
         result = {
             'health_status': self._health_status(),

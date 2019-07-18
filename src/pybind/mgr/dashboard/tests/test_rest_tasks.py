@@ -3,9 +3,12 @@
 
 import time
 
+import mock
+
 from . import ControllerTestCase
 from ..controllers import Controller, RESTController, Task
 from ..controllers.task import Task as TaskController
+from ..services import progress
 from ..tools import NotificationQueue, TaskManager
 
 
@@ -48,6 +51,9 @@ class TaskControllerTest(ControllerTestCase):
     @classmethod
     def setup_server(cls):
         # pylint: disable=protected-access
+        progress.get_progress_tasks = mock.MagicMock()
+        progress.get_progress_tasks.return_value = ([], [])
+
         NotificationQueue.start_queue()
         TaskManager.init()
         TaskTest._cp_config['tools.authenticate.on'] = False
