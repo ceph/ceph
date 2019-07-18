@@ -20,7 +20,6 @@
 #include "common/Formatter.h"
 #include "common/lru_map.h"
 #include "common/ceph_time.h"
-#include "common/optional_ref_default.h"
 
 #include "rgw_formats.h"
 
@@ -602,6 +601,8 @@ public:
       boost::optional<obj_version> refresh_version;
       std::optional<RGWSI_MetaBackend_CtxParams> bectx_params;
 
+      GetParams() {}
+
       GetParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
         objv_tracker = _objv_tracker;
         return *this;
@@ -639,6 +640,8 @@ public:
       bool exclusive{false};
       map<string, bufferlist> *attrs{nullptr};
 
+      PutParams() {}
+
       PutParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
         objv_tracker = _objv_tracker;
         return *this;
@@ -663,6 +666,8 @@ public:
     struct RemoveParams {
       RGWObjVersionTracker *objv_tracker{nullptr};
 
+      RemoveParams() {}
+
       RemoveParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
         objv_tracker = _objv_tracker;
         return *this;
@@ -678,6 +683,8 @@ public:
       boost::optional<obj_version> refresh_version;
       RGWObjVersionTracker *objv_tracker{nullptr};
       std::optional<RGWSI_MetaBackend_CtxParams> bectx_params;
+
+      GetParams() {}
 
       GetParams& set_mtime(ceph::real_time *_mtime) {
         mtime = _mtime;
@@ -718,6 +725,8 @@ public:
       map<string, bufferlist> *attrs{nullptr};
       RGWObjVersionTracker *objv_tracker{nullptr};
 
+      PutParams() {}
+
       PutParams& set_orig_info(RGWBucketInfo *pinfo) {
         orig_info = pinfo;
         return *this;
@@ -747,6 +756,8 @@ public:
     struct RemoveParams {
       RGWObjVersionTracker *objv_tracker{nullptr};
 
+      RemoveParams() {}
+
       RemoveParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
         objv_tracker = _objv_tracker;
         return *this;
@@ -758,28 +769,28 @@ public:
   int read_bucket_entrypoint_info(const rgw_bucket& bucket,
                                   RGWBucketEntryPoint *info,
                                   optional_yield y,
-                                  ceph::optional_ref_default<RGWBucketCtl::Bucket::GetParams> params = std::nullopt);
+                                  const Bucket::GetParams& params = {});
   int store_bucket_entrypoint_info(const rgw_bucket& bucket,
                                    RGWBucketEntryPoint& info,
                                    optional_yield y,
-                                   ceph::optional_ref_default<RGWBucketCtl::Bucket::PutParams> params = std::nullopt);
+                                   const Bucket::PutParams& params = {});
   int remove_bucket_entrypoint_info(const rgw_bucket& bucket,
                                     optional_yield y,
-                                    ceph::optional_ref_default<RGWBucketCtl::Bucket::RemoveParams> params = std::nullopt);
+                                    const Bucket::RemoveParams& params = {});
 
   /* bucket instance */
   int read_bucket_instance_info(const rgw_bucket& bucket,
                                   RGWBucketInfo *info,
                                   optional_yield y,
-                                  ceph::optional_ref_default<RGWBucketCtl::BucketInstance::GetParams> params = std::nullopt);
+                                  const BucketInstance::GetParams& params = {});
   int store_bucket_instance_info(const rgw_bucket& bucket,
                                  RGWBucketInfo& info,
                                  optional_yield y,
-                                 ceph::optional_ref_default<RGWBucketCtl::BucketInstance::PutParams> params = std::nullopt);
+                                 const BucketInstance::PutParams& params = {});
   int remove_bucket_instance_info(const rgw_bucket& bucket,
                                   RGWBucketInfo& info,
                                   optional_yield y,
-                                  ceph::optional_ref_default<RGWBucketCtl::BucketInstance::RemoveParams> params = std::nullopt);
+                                  const BucketInstance::RemoveParams& params = {});
 
   /*
    * bucket_id may or may not be provided
@@ -790,7 +801,7 @@ public:
   int read_bucket_info(const rgw_bucket& bucket,
                        RGWBucketInfo *info,
                        optional_yield y,
-                       ceph::optional_ref_default<RGWBucketCtl::BucketInstance::GetParams> _params = std::nullopt,
+                       const BucketInstance::GetParams& params = {},
 		       RGWObjVersionTracker *ep_objv_tracker = nullptr);
 
 
@@ -830,7 +841,7 @@ private:
                                     const rgw_bucket& bucket,
                                     RGWBucketInfo& info,
                                     optional_yield y,
-                                    ceph::optional_ref_default<RGWBucketCtl::BucketInstance::PutParams> params);
+                                    const BucketInstance::PutParams& params);
 
   int do_store_linked_bucket_info(RGWSI_Bucket_X_Ctx& ctx,
                                   RGWBucketInfo& info,
