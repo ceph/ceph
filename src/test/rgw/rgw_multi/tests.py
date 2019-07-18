@@ -863,6 +863,73 @@ def test_bucket_delete_notempty():
     for _, bucket_name in zone_bucket:
         assert c1.get_bucket(bucket_name)
 
+def test_bucket_delete_on_master():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    zone_conn = zonegroup_conns.master_zone
+
+    # create a bucket on the master zone
+    bucket_name = gen_bucket_name()
+    log.info('create bucket zone=%s name=%s', zone_conn.name, bucket_name)
+    bucket = zone_conn.conn.create_bucket(bucket_name)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create an object for each object name
+    names = ('testobj{}'.format(i) for i in range(20))
+    keys = []
+    for name in names:
+        k = bucket.new_key(name)
+        k.set_contents_from_string('asdf')
+        keys.append(k)
+
+    # delete all objects
+    for k in keys:
+        k.delete()
+
+    # delete the bucket without a bucket checkpoint, so that full sync can race
+    try:
+        bucket.delete()
+    except boto.exception.S3ResponseError as e:
+        log.info('contents: {}'.format(list(bucket.list_versions())))
+        raise e
+    zonegroup_data_checkpoint(zonegroup_conns)
+
+def test_versioned_bucket_delete_on_master():
+    zonegroup = realm.master_zonegroup()
+    zonegroup_conns = ZonegroupConns(zonegroup)
+    zone_conn = zonegroup_conns.master_zone
+
+    # create a versioned bucket on the master zone
+    bucket_name = gen_bucket_name()
+    log.info('create bucket zone=%s name=%s', zone_conn.name, bucket_name)
+    bucket = zone_conn.conn.create_bucket(bucket_name)
+    bucket.configure_versioning(True)
+    zonegroup_meta_checkpoint(zonegroup)
+
+    # create an object version and delete marker for each object name
+    names = ('testobj{}'.format(i) for i in range(10))
+    keys = []
+    for name in names:
+        k = bucket.new_key(name)
+        k.set_contents_from_string('asdf')
+        keys.append(k)
+
+        dm = bucket.delete_key(name)
+        assert(dm.delete_marker)
+        keys.append(dm)
+
+    # delete all versions and delete markers
+    for k in keys:
+        k.delete()
+
+    # delete the bucket without a bucket checkpoint, so that full sync can race
+    try:
+        bucket.delete()
+    except boto.exception.S3ResponseError as e:
+        log.info('contents: {}'.format(list(bucket.list_versions())))
+        raise e
+    zonegroup_data_checkpoint(zonegroup_conns)
+
 def test_multi_period_incremental_sync():
     zonegroup = realm.master_zonegroup()
     if len(zonegroup.zones) < 3:
