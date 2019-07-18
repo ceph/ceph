@@ -10,6 +10,8 @@
 #include <execinfo.h>
 #endif
 #include <stdlib.h>
+#include <string_view>
+#include <tuple>
 
 namespace ceph {
 
@@ -37,8 +39,8 @@ struct BackTrace {
     free(strings);
   }
 
-  BackTrace(const BackTrace& other);
-  const BackTrace& operator=(const BackTrace& other);
+  static std::tuple<std::string_view, std::string, uint64_t>
+    split_backtrace_line(const char* addr_line);
 
   void print(std::ostream& out) const;
   void dump(Formatter *f) const;
