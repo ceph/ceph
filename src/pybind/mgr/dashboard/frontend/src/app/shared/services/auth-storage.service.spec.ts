@@ -32,4 +32,16 @@ describe('AuthStorageService', () => {
     service.remove();
     expect(service.isLoggedIn()).toBe(false);
   });
+
+  it('should be SSO', () => {
+    service.set(username, '', {}, true);
+    expect(localStorage.getItem('sso')).toBe('true');
+    expect(service.isSSO()).toBe(true);
+  });
+
+  it('should not be SSO', () => {
+    service.set(username, '');
+    expect(localStorage.getItem('sso')).toBe('false');
+    expect(service.isSSO()).toBe(false);
+  });
 });
