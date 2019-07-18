@@ -4,10 +4,11 @@ import threading
 import datetime
 import uuid
 import time
+
 import json
 
 
-ENCODING_VERSION = 1
+ENCODING_VERSION = 2
 
 # keep a global reference to the module so we can use it from Event methods
 _module = None
@@ -23,13 +24,12 @@ class Event(object):
     objects (osds, pools) this relates to.
     """
 
-    def __init__(self, message, refs, duration="(since 00h 00m 00s)"):
-        self._refs = refs
-        self._duration_str = duration
+    def __init__(self, message, refs, started_at=None):
         self._message = message
-        self.started_at = datetime.datetime.utcnow()
-
+        self._refs = refs
+        self.started_at = started_at if started_at else time.time()
         self.id = None
+        self.update_duration_event()
 
     def _refresh(self):
         global _module
@@ -49,7 +49,7 @@ class Event(object):
     @property
     def progress(self):
         raise NotImplementedError()
-    
+
     @property
     def duration_str(self):
         return self._duration_str
@@ -83,13 +83,15 @@ class Event(object):
             "id": self.id,
             "message": self.message,
             "duration": self.duration_str,
-            "refs": self._refs
+            "refs": self._refs,
+            "progress": self.progress,
+            "started_at": self.started_at
         }
 
     def update_duration_event(self):
         # Update duration of event in seconds/minutes/hours
 
-        duration = (datetime.datetime.utcnow() - self.started_at).seconds
+        duration = time.time() - self.started_at
         self._duration_str = time.strftime("(since %Hh %Mm %Ss)", time.gmtime(duration))
 
 class GhostEvent(Event):
@@ -98,13 +100,23 @@ class GhostEvent(Event):
     after the event is complete.
     """
 
-    def __init__(self, my_id, message, refs, duration="(since 00h 00m 00s)"):
-        super(GhostEvent, self).__init__(message, refs, duration)
+    def __init__(self, my_id, message, refs, started_at, finished_at=None):
+        super(GhostEvent, self).__init__(message, refs, started_at)
+        self.finished_at = finished_at if finished_at else time.time()
         self.id = my_id
 
     @property
     def progress(self):
         return 1.0
+
+    def to_json(self):
+        return {
+            "id": self.id,
+            "message": self.message,
+            "refs": self._refs,
+            "started_at": self.started_at,
+            "finished_at": self.finished_at
+        }
 
 
 class RemoteEvent(Event):
@@ -114,8 +126,8 @@ class RemoteEvent(Event):
     progress information as it emerges.
     """
 
-    def __init__(self, my_id, message, refs, duration="(since 00h 00m 00s)"):
-        super(RemoteEvent, self).__init__(message, refs, duration)
+    def __init__(self, my_id, message, refs):
+        super(RemoteEvent, self).__init__(message, refs)
         self.id = my_id
         self._progress = 0.0
         self._refresh()
@@ -150,7 +162,7 @@ class PgRecoveryEvent(Event):
 
         self._progress = 0.0
 
-        # self._start_epoch = _module.get_osdmap().get_epoch() 
+        # self._start_epoch = _module.get_osdmap().get_epoch()
         self._start_epoch = start_epoch
 
         self.id = str(uuid.uuid4())
@@ -316,7 +328,7 @@ class Module(MgrModule):
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
 
     def _osd_in_out(self, old_map, old_dump, new_map, osd_id, marked):
-        # A function that will create or complete an event when an 
+        # A function that will create or complete an event when an
         # OSD is marked in or out according to the affected PGs
         affected_pgs = []
         unmoved_pgs = []
@@ -332,13 +344,13 @@ class Module(MgrModule):
 
                 new_up_acting = new_map.pg_to_up_acting_osds(pool['pool'], ps)
                 new_osds = set(new_up_acting['acting'])
-                
+
                 # Check the osd_id being in the acting set for both old
                 # and new maps to cover both out and in cases
                 was_on_out_or_in_osd = osd_id in old_osds or osd_id in new_osds
                 if not was_on_out_or_in_osd:
                     continue
-                
+
                 self.log.debug("pool_id, ps = {0}, {1}".format(
                     pool_id, ps
                 ))
@@ -357,7 +369,7 @@ class Module(MgrModule):
                 self.log.debug(
                     "new_up_acting: {0}".format(json.dumps(new_up_acting,
                                                            indent=2)))
-                
+
                 if was_on_out_or_in_osd and is_relocated:
                     # This PG is now in motion, track its progress
                     affected_pgs.append(PgId(pool_id, ps))
@@ -374,8 +386,8 @@ class Module(MgrModule):
         self.log.warn("{0} PGs affected by osd.{1} being marked {2}".format(
             len(affected_pgs), osd_id, marked))
 
-           
-        # In the case of the osd coming back in, we might need to cancel 
+
+        # In the case of the osd coming back in, we might need to cancel
         # previous recovery event for that osd
         if marked == "in":
             for ev_id, ev in self._events.items():
@@ -391,11 +403,11 @@ class Module(MgrModule):
                     refs=[("osd", osd_id)],
                     which_pgs=affected_pgs,
                     evacuate_osds=[osd_id],
-                    start_epoch=self.get_osdmap().get_epoch() 
+                    start_epoch=self.get_osdmap().get_epoch()
                     )
             ev.pg_update(self.get("pg_dump"), self.log)
             self._events[ev.id] = ev
-                 
+
     def _osdmap_changed(self, old_osdmap, new_osdmap):
         old_dump = old_osdmap.dump()
         new_dump = new_osdmap.dump()
@@ -464,8 +476,16 @@ class Module(MgrModule):
             raise RuntimeError("Cannot decode version {0}".format(
                                decoded['compat_version']))
 
+        if decoded['compat_version'] < ENCODING_VERSION:
+            # we need to add the "started_at" and "finished_at" attributes to the events
+            for ev in decoded['events']:
+                ev['started_at'] = None
+                ev['finished_at'] = None
+
         for ev in decoded['events']:
-            self._completed_events.append(GhostEvent(ev['id'], ev['message'], ev['refs']))
+            self._completed_events.append(GhostEvent(ev['id'], ev['message'],
+                                                     ev['refs'], ev['started_at'],
+                                                     ev['finished_at']))
 
         self._prune_completed_events()
 
@@ -523,14 +543,14 @@ class Module(MgrModule):
         ev._refresh()
 
     def _complete(self, ev):
-        duration = (datetime.datetime.utcnow() - ev.started_at)
+        duration = (time.time() - ev.started_at)
         self.log.info("Completed event {0} ({1}) in {2} seconds".format(
-            ev.id, ev.message, duration.seconds
+            ev.id, ev.message, int(round(duration))
         ))
         self.complete_progress_event(ev.id)
 
         self._completed_events.append(
-            GhostEvent(ev.id, ev.message, ev.refs, ev.duration_str))
+            GhostEvent(ev.id, ev.message, ev.refs, ev.started_at))
         del self._events[ev.id]
         self._prune_completed_events()
         self._dirty = True
