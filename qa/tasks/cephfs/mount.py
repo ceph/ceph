@@ -208,6 +208,22 @@ class CephFSMount(object):
 
         return rproc
 
+    def wait_for_dir_empty(self, dirname, timeout=30):
+        i = 0
+        dirpath = os.path.join(self.mountpoint, dirname)
+        while i < timeout:
+            nr_entries = int(self.getfattr(dirpath, "ceph.dir.entries"))
+            if nr_entries == 0:
+                log.debug("Directory {0} seen empty from {1} after {2}s ".format(
+                    dirname, self.client_id, i))
+                return
+            else:
+                time.sleep(1)
+                i += 1
+
+        raise RuntimeError("Timed out after {0}s waiting for {1} to become empty from {2}".format(
+            i, dirname, self.client_id))
+
     def wait_for_visible(self, basename="background_file", timeout=30):
         i = 0
         while i < timeout:

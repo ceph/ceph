@@ -6,7 +6,6 @@ try:
 except ImportError:
     import Queue
 
-import cephfs
 from mgr_module import MgrModule
 import orchestrator
 
@@ -200,82 +199,63 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
         """
         :return: a 3-tuple of return code(int), empty string(str), error message (str)
         """
-        vol_name = cmd['vol_name']
-        group_name = cmd['group_name']
-        pool_layout = cmd.get('pool_layout', None)
-        mode = cmd.get('mode', '755')
-
-        return self.vc.create_subvolume_group(vol_name, group_name, mode=mode, pool=pool_layout)
+        return self.vc.create_subvolume_group(
+            None, vol_name=cmd['vol_name'], group_name=cmd['group_name'],
+            pool_layout=cmd.get('pool_layout', None), mode=cmd.get('mode', '755'))
 
     def _cmd_fs_subvolumegroup_rm(self, inbuf, cmd):
         """
         :return: a 3-tuple of return code(int), empty string(str), error message (str)
         """
-        vol_name = cmd['vol_name']
-        group_name = cmd['group_name']
-        force = cmd.get('force', False)
-
-        return self.vc.remove_subvolume_group(vol_name, group_name, force)
+        return self.vc.remove_subvolume_group(None, vol_name=cmd['vol_name'],
+                                              group_name=cmd['group_name'],
+                                              force=cmd.get('force', False))
 
     def _cmd_fs_subvolume_create(self, inbuf, cmd):
         """
         :return: a 3-tuple of return code(int), empty string(str), error message (str)
         """
-        vol_name = cmd['vol_name']
-        sub_name = cmd['sub_name']
-        size = cmd.get('size', None)
-        group_name = cmd.get('group_name', None)
-        pool_layout = cmd.get('pool_layout', None)
-        mode = cmd.get('mode', '755')
-
-        return self.vc.create_subvolume(vol_name, sub_name, group_name, size, mode=mode, pool=pool_layout)
+        return self.vc.create_subvolume(None, vol_name=cmd['vol_name'],
+                                        sub_name=cmd['sub_name'],
+                                        group_name=cmd.get('group_name', None),
+                                        size=cmd.get('size', None),
+                                        pool_layout=cmd.get('pool_layout', None),
+                                        mode=cmd.get('mode', '755'))
 
     def _cmd_fs_subvolume_rm(self, inbuf, cmd):
         """
         :return: a 3-tuple of return code(int), empty string(str), error message (str)
         """
-        vol_name = cmd['vol_name']
-        sub_name = cmd['sub_name']
-        force = cmd.get('force', False)
-        group_name = cmd.get('group_name', None)
-
-        return self.vc.remove_subvolume(vol_name, sub_name, group_name, force)
+        return self.vc.remove_subvolume(None, vol_name=cmd['vol_name'],
+                                        sub_name=cmd['sub_name'],
+                                        group_name=cmd.get('group_name', None),
+                                        force=cmd.get('force', False))
 
     def _cmd_fs_subvolume_getpath(self, inbuf, cmd):
-        vol_name = cmd['vol_name']
-        sub_name = cmd['sub_name']
-        group_name = cmd.get('group_name', None)
-
-        return self.vc.subvolume_getpath(vol_name, sub_name, group_name)
+        return self.vc.subvolume_getpath(None, vol_name=cmd['vol_name'],
+                                         sub_name=cmd['sub_name'],
+                                         group_name=cmd.get('group_name', None))
 
     def _cmd_fs_subvolumegroup_snapshot_create(self, inbuf, cmd):
-        vol_name = cmd['vol_name']
-        group_name = cmd['group_name']
-        snap_name = cmd['snap_name']
-
-        return self.vc.create_subvolume_group_snapshot(vol_name, group_name, snap_name)
+        return self.vc.create_subvolume_group_snapshot(None, vol_name=cmd['vol_name'],
+                                                       group_name=cmd['group_name'],
+                                                       snap_name=cmd['snap_name'])
 
     def _cmd_fs_subvolumegroup_snapshot_rm(self, inbuf, cmd):
-        vol_name = cmd['vol_name']
-        group_name = cmd['group_name']
-        snap_name = cmd['snap_name']
-        force = cmd.get('force', False)
-
-        return self.vc.remove_subvolume_group_snapshot(vol_name, group_name, snap_name, force)
+        return self.vc.remove_subvolume_group_snapshot(None, vol_name=cmd['vol_name'],
+                                                       group_name=cmd['group_name'],
+                                                       snap_name=cmd['snap_name'],
+                                                       force=cmd.get('force', False))
 
     def _cmd_fs_subvolume_snapshot_create(self, inbuf, cmd):
-        vol_name = cmd['vol_name']
-        sub_name = cmd['sub_name']
-        snap_name = cmd['snap_name']
-        group_name = cmd.get('group_name', None)
-
-        return self.vc.create_subvolume_snapshot(vol_name, sub_name, snap_name, group_name)
+        return self.vc.create_subvolume_snapshot(None, vol_name=cmd['vol_name'],
+                                                 sub_name=cmd['sub_name'],
+                                                 snap_name=cmd['snap_name'],
+                                                 group_name=cmd.get('group_name', None))
 
     def _cmd_fs_subvolume_snapshot_rm(self, inbuf, cmd):
-        vol_name = cmd['vol_name']
-        sub_name = cmd['sub_name']
-        snap_name = cmd['snap_name']
-        force = cmd.get('force', False)
-        group_name = cmd.get('group_name', None)
-
-        return self.vc.remove_subvolume_snapshot(vol_name, sub_name, snap_name, group_name, force)
+        return self.vc.remove_subvolume_snapshot(None, vol_name=cmd['vol_name'],
+                                                 sub_name=cmd['sub_name'],
+                                                 snap_name=cmd['snap_name'],
+                                                 group_name=cmd.get('group_name', None),
+                                                 force=cmd.get('force', False))

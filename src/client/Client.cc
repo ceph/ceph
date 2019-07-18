@@ -6652,8 +6652,6 @@ int Client::mkdirs(const char *relpath, mode_t mode, const UserPerm& perms)
       break;
     cur.swap(next);
   }
-  //check that we have work left to do
-  if (i==path.depth()) return -EEXIST;
   if (r!=-ENOENT) return r;
   ldout(cct, 20) << __func__ << " got through " << i << " directories on path " << relpath << dendl;
   //make new directory at each level
