@@ -699,6 +699,7 @@ class Thrasher:
         minlive = int(self.config.get("min_live", 2))
         mindead = int(self.config.get("min_dead", 1))
         self.log("doing min_size thrashing")
+        self.ceph_manager.wait_for_clean(timeout=60)
         assert self.ceph_manager.is_clean(), \
             'not clean before minsize thrashing starts'
         while not self.stopping:
