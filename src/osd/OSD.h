@@ -138,6 +138,8 @@ public:
     }
   }
 
+  ceph::signedspan get_mnow();
+
 private:
   // -- superblock --
   ceph::mutex publish_lock, pre_publish_lock; // pre-publish orders before publish

@@ -1800,6 +1800,11 @@ void PG::send_pg_created(pg_t pgid)
   osd->send_pg_created(pgid);
 }
 
+ceph::signedspan PG::get_mnow()
+{
+  return osd->get_mnow();
+}
+
 void PG::rebuild_missing_set_with_deletes(PGLog &pglog)
 {
   pglog.rebuild_missing_set_with_deletes(

@@ -124,6 +124,8 @@ public:
     /// Send pg_created to mon
     virtual void send_pg_created(pg_t pgid) = 0;
 
+    virtual ceph::signedspan get_mnow() = 0;
+
     // ============ Flush state ==================
     /**
      * try_flush_or_schedule_async()

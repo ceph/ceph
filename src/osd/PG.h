@@ -478,6 +478,8 @@ public:
 
   void send_pg_created(pg_t pgid) override;
 
+  ceph::signedspan get_mnow() override;
+
   void rebuild_missing_set_with_deletes(PGLog &pglog) override;
 
   void queue_peering_event(PGPeeringEventRef evt);
