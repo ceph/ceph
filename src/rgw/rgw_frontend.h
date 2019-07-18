@@ -229,7 +229,7 @@ public:
     rgw_user uid(uid_str);
 
     RGWUserInfo user_info;
-    int ret = env.store->ctl.user->get_info_by_uid(uid, &user_info);
+    int ret = env.store->ctl.user->get_info_by_uid(uid, &user_info, null_yield);
     if (ret < 0) {
       derr << "ERROR: failed reading user info: uid=" << uid << " ret="
 	   << ret << dendl;

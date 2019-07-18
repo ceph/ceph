@@ -599,7 +599,7 @@ int RGWBucket::init(RGWRados *storage, RGWBucketAdminOpState& op_state)
   }
 
   if (!user_id.empty()) {
-    int r = store->ctl.user->get_info_by_uid(user_id, &user_info);
+    int r = store->ctl.user->get_info_by_uid(user_id, &user_info, null_yield);
     if (r < 0)
       return r;
 

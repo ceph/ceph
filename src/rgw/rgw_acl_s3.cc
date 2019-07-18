@@ -306,14 +306,14 @@ static int parse_grantee_str(RGWUserCtl *user_ctl, string& grantee_str,
   string id_val = rgw_trim_quotes(id_val_quoted);
 
   if (strcasecmp(id_type.c_str(), "emailAddress") == 0) {
-    ret = user_ctl->get_info_by_email(id_val, &info);
+    ret = user_ctl->get_info_by_email(id_val, &info, null_yield);
     if (ret < 0)
       return ret;
 
     grant.set_canon(info.user_id, info.display_name, rgw_perm);
   } else if (strcasecmp(id_type.c_str(), "id") == 0) {
     rgw_user user(id_val);
-    ret = user_ctl->get_info_by_uid(user, &info);
+    ret = user_ctl->get_info_by_uid(user, &info, null_yield);
     if (ret < 0)
       return ret;
 
@@ -487,7 +487,7 @@ int RGWAccessControlPolicy_S3::rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RG
   }
 
   RGWUserInfo owner_info;
-  if (user_ctl->get_info_by_uid(owner->get_id(), &owner_info) < 0) {
+  if (user_ctl->get_info_by_uid(owner->get_id(), &owner_info, null_yield) < 0) {
     ldout(cct, 10) << "owner info does not exist" << dendl;
     return -EINVAL;
   }
@@ -520,7 +520,7 @@ int RGWAccessControlPolicy_S3::rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RG
         }
         email = u.id;
         ldout(cct, 10) << "grant user email=" << email << dendl;
-        if (user_ctl->get_info_by_email(email, &grant_user) < 0) {
+        if (user_ctl->get_info_by_email(email, &grant_user, null_yield) < 0) {
           ldout(cct, 10) << "grant user email not found or other error" << dendl;
           return -ERR_UNRESOLVABLE_EMAIL;
         }
@@ -535,7 +535,7 @@ int RGWAccessControlPolicy_S3::rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RG
           }
         }
     
-        if (grant_user.user_id.empty() && user_ctl->get_info_by_uid(uid, &grant_user) < 0) {
+        if (grant_user.user_id.empty() && user_ctl->get_info_by_uid(uid, &grant_user, null_yield) < 0) {
           ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
           return -EINVAL;
         } else {

@@ -220,7 +220,7 @@ static int get_bucket_instance_policy_from_attr(CephContext *cct,
     ldout(cct, 0) << "WARNING: couldn't find acl header for bucket, generating default" << dendl;
     RGWUserInfo uinfo;
     /* object exists, but policy is broken */
-    int r = rgw_get_user_info_by_uid(user_ctl, bucket_info.owner, uinfo);
+    int r = user_ctl->get_info_by_uid(bucket_info.owner, &uinfo, null_yield);
     if (r < 0)
       return r;
 
@@ -245,7 +245,7 @@ static int get_obj_policy_from_attr(CephContext *cct,
   RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
   RGWRados::Object::Read rop(&op_target);
 
-  ret = rop.get_attr(RGW_ATTR_ACL, bl, null_yield);
+  ret = rop.get_attr(RGW_ATTR_ACL, bl, y);
   if (ret >= 0) {
     ret = decode_policy(cct, bl, policy);
     if (ret < 0)
@@ -254,7 +254,7 @@ static int get_obj_policy_from_attr(CephContext *cct,
     /* object exists, but policy is broken */
     ldout(cct, 0) << "WARNING: couldn't find acl header for object, generating default" << dendl;
     RGWUserInfo uinfo;
-    ret = store->ctl.user->get_info_by_uid(bucket_info.owner, &uinfo);
+    ret = store->ctl.user->get_info_by_uid(bucket_info.owner, &uinfo, y);
     if (ret < 0)
       return ret;
 
@@ -1279,7 +1279,7 @@ int RGWOp::init_quota()
   if (s->user->user_id == s->bucket_owner.get_id()) {
     uinfo = s->user;
   } else {
-    int r = store->ctl.user->get_info_by_uid(s->bucket_info.owner, &owner_info);
+    int r = store->ctl.user->get_info_by_uid(s->bucket_info.owner, &owner_info, s->yield);
     if (r < 0)
       return r;
     uinfo = &owner_info;
@@ -4388,7 +4388,7 @@ void RGWPutMetadataAccount::execute()
 {
   /* Params have been extracted earlier. See init_processing(). */
   RGWUserInfo new_uinfo;
-  op_ret = store->ctl.user->get_info_by_uid(s->user->user_id, &new_uinfo,
+  op_ret = store->ctl.user->get_info_by_uid(s->user->user_id, &new_uinfo, s->yield,
                                             RGWUserCtl::GetParams()
                                             .set_objv_tracker(&acct_op_tracker));
   if (op_ret < 0) {
@@ -4409,10 +4409,11 @@ void RGWPutMetadataAccount::execute()
 
   /* We are passing here the current (old) user info to allow the function
    * optimize-out some operations. */
-  op_ret = store->ctl.user->store_info(new_uinfo, RGWUserCtl::PutParams()
-                                                  .set_old_info(s->user)
-                                                  .set_objv_tracker(&acct_op_tracker)
-                                                  .set_attrs(&attrs));
+  op_ret = store->ctl.user->store_info(new_uinfo, s->yield,
+                                       RGWUserCtl::PutParams()
+                                       .set_old_info(s->user)
+                                       .set_objv_tracker(&acct_op_tracker)
+                                       .set_attrs(&attrs));
 }
 
 int RGWPutMetadataBucket::verify_permission()

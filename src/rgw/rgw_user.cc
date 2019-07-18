@@ -159,13 +159,13 @@ int rgw_store_user_info(RGWUserCtl *user_ctl,
                         bool exclusive,
                         map<string, bufferlist> *pattrs)
 {
-  return user_ctl->store_info(info, RGWUserCtl::PutParams()
-                                    .set_old_info(old_info)
-                                    .set_objv_tracker(objv_tracker)
-                                    .set_mtime(mtime)
-                                    .set_exclusive(exclusive)
-                                    .set_attrs(pattrs)
-                                    .set_yield(null_yield));
+  return user_ctl->store_info(info, null_yield,
+                              RGWUserCtl::PutParams()
+                              .set_old_info(old_info)
+                              .set_objv_tracker(objv_tracker)
+                              .set_mtime(mtime)
+                              .set_exclusive(exclusive)
+                              .set_attrs(pattrs));
 }
 
 /**
@@ -180,12 +180,12 @@ int rgw_get_user_info_by_uid(RGWUserCtl *user_ctl,
                              rgw_cache_entry_info * const cache_info,
                              map<string, bufferlist> * const pattrs)
 {
-  return user_ctl->get_info_by_uid(uid, &info, RGWUserCtl::GetParams()
-                                        .set_objv_tracker(objv_tracker)
-                                        .set_mtime(pmtime)
-                                        .set_cache_info(cache_info)
-                                        .set_attrs(pattrs)
-                                        .set_yield(null_yield));
+  return user_ctl->get_info_by_uid(uid, &info, null_yield,
+                                   RGWUserCtl::GetParams()
+                                   .set_objv_tracker(objv_tracker)
+                                   .set_mtime(pmtime)
+                                   .set_cache_info(cache_info)
+                                   .set_attrs(pattrs));
 }
 
 /**
@@ -195,10 +195,10 @@ int rgw_get_user_info_by_uid(RGWUserCtl *user_ctl,
 int rgw_get_user_info_by_email(RGWUserCtl *user_ctl, string& email, RGWUserInfo& info,
                                RGWObjVersionTracker *objv_tracker, real_time *pmtime)
 {
-  return user_ctl->get_info_by_email(email, &info, RGWUserCtl::GetParams()
-                                            .set_objv_tracker(objv_tracker)
-                                            .set_mtime(pmtime)
-                                            .set_yield(null_yield));
+  return user_ctl->get_info_by_email(email, &info, null_yield,
+                                     RGWUserCtl::GetParams()
+                                     .set_objv_tracker(objv_tracker)
+                                     .set_mtime(pmtime));
 }
 
 /**
@@ -211,10 +211,10 @@ extern int rgw_get_user_info_by_swift(RGWUserCtl *user_ctl,
                                       RGWObjVersionTracker * const objv_tracker,
                                       real_time * const pmtime)
 {
-  return user_ctl->get_info_by_swift(swift_name, &info, RGWUserCtl::GetParams()
-                                                 .set_objv_tracker(objv_tracker)
-                                                 .set_mtime(pmtime)
-                                                 .set_yield(null_yield));
+  return user_ctl->get_info_by_swift(swift_name, &info, null_yield,
+                                     RGWUserCtl::GetParams()
+                                     .set_objv_tracker(objv_tracker)
+                                     .set_mtime(pmtime));
 }
 
 /**
@@ -227,10 +227,10 @@ extern int rgw_get_user_info_by_access_key(RGWUserCtl *user_ctl,
                                            RGWObjVersionTracker* objv_tracker,
                                            real_time *pmtime)
 {
-  return user_ctl->get_info_by_access_key(access_key, &info, RGWUserCtl::GetParams()
-                                                      .set_objv_tracker(objv_tracker)
-                                                      .set_mtime(pmtime)
-                                                      .set_yield(null_yield));
+  return user_ctl->get_info_by_access_key(access_key, &info, null_yield,
+                                          RGWUserCtl::GetParams()
+                                          .set_objv_tracker(objv_tracker)
+                                          .set_mtime(pmtime));
 }
 
 static bool char_is_unreserved_url(char c)
@@ -1771,8 +1771,8 @@ int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg,
 
   } while (is_truncated);
 
-  ret = user_ctl->remove_info(user_info, RGWUserCtl::RemoveParams()
-                                         .set_objv_tracker(&op_state.objv));
+  ret = user_ctl->remove_info(user_info, y, RGWUserCtl::RemoveParams()
+                                            .set_objv_tracker(&op_state.objv));
   if (ret < 0) {
     set_err_msg(err_msg, "unable to remove user from RADOS");
     return ret;
@@ -2558,6 +2558,7 @@ public:
 
 int RGWUserCtl::get_info_by_uid(const rgw_user& uid,
                                 RGWUserInfo *info,
+                                optional_yield y,
                                 ceph::optional_ref_default<GetParams> params)
 
 {
@@ -2569,11 +2570,13 @@ int RGWUserCtl::get_info_by_uid(const rgw_user& uid,
                                     params->mtime,
                                     params->cache_info,
                                     params->attrs,
-                                    params->y);
+                                    y);
   });
 }
 
-int RGWUserCtl::get_info_by_email(const string& email, RGWUserInfo *info,
+int RGWUserCtl::get_info_by_email(const string& email,
+                                  RGWUserInfo *info,
+                                  optional_yield y,
                                   ceph::optional_ref_default<GetParams> params)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
@@ -2581,12 +2584,13 @@ int RGWUserCtl::get_info_by_email(const string& email, RGWUserInfo *info,
                                             info,
                                             params->objv_tracker,
                                             params->mtime,
-                                            params->y);
+                                            y);
   });
 }
 
 int RGWUserCtl::get_info_by_swift(const string& swift_name,
                                   RGWUserInfo *info,
+                                  optional_yield y,
                                   ceph::optional_ref_default<GetParams> params)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
@@ -2594,12 +2598,13 @@ int RGWUserCtl::get_info_by_swift(const string& swift_name,
                                             info,
                                             params->objv_tracker,
                                             params->mtime,
-                                            params->y);
+                                            y);
   });
 }
 
 int RGWUserCtl::get_info_by_access_key(const string& access_key,
                                        RGWUserInfo *info,
+                                       optional_yield y,
                                        ceph::optional_ref_default<GetParams> params)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
@@ -2607,7 +2612,7 @@ int RGWUserCtl::get_info_by_access_key(const string& access_key,
                                                  info,
                                                  params->objv_tracker,
                                                  params->mtime,
-                                                 params->y);
+                                                 y);
   });
 }
 
@@ -2618,13 +2623,13 @@ int RGWUserCtl::get_attrs_by_uid(const rgw_user& user_id,
 {
   RGWUserInfo user_info;
 
-  return get_info_by_uid(user_id, &user_info, RGWUserCtl::GetParams()
+  return get_info_by_uid(user_id, &user_info, y, RGWUserCtl::GetParams()
                          .set_attrs(pattrs)
-                         .set_yield(y)
                          .set_objv_tracker(objv_tracker));
 }
 
-int RGWUserCtl::store_info(const RGWUserInfo& info, ceph::optional_ref_default<PutParams> params)
+int RGWUserCtl::store_info(const RGWUserInfo& info, optional_yield y,
+                           ceph::optional_ref_default<PutParams> params)
 {
   string key = RGWSI_User::get_meta_key(info.user_id);
 
@@ -2635,11 +2640,12 @@ int RGWUserCtl::store_info(const RGWUserInfo& info, ceph::optional_ref_default<P
                                      params->mtime,
                                      params->exclusive,
                                      params->attrs,
-                                     params->y);
+                                     y);
   });
 }
 
-int RGWUserCtl::remove_info(const RGWUserInfo& info, ceph::optional_ref_default<RemoveParams> params)
+int RGWUserCtl::remove_info(const RGWUserInfo& info, optional_yield y,
+                            ceph::optional_ref_default<RemoveParams> params)
 
 {
   string key = RGWSI_User::get_meta_key(info.user_id);
@@ -2647,7 +2653,7 @@ int RGWUserCtl::remove_info(const RGWUserInfo& info, ceph::optional_ref_default<
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
     return svc.user->remove_user_info(op->ctx(), info,
                                       params->objv_tracker,
-                                      params->y);
+                                      y);
   });
 }
 

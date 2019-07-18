@@ -89,7 +89,7 @@ int RGWUserCreateCR::Request::_send_request()
 template<>
 int RGWGetUserInfoCR::Request::_send_request()
 {
-  return store->ctl.user->get_info_by_uid(params.user, result.get(), nullopt);
+  return store->ctl.user->get_info_by_uid(params.user, result.get(), null_yield);
 }
 
 template<>
