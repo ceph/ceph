@@ -520,7 +520,7 @@ int RocksDBStore::open_read_only(ostream &out, const std::vector<ColumnFamily>& 
   return _open(out, true, options);
 }
 
-int RocksDBStore::_open(ostream &out, bool read_only, const std::vector<ColumnFamily>& options)
+int RocksDBStore::_open(ostream &out, bool read_only, const std::vector<ColumnFamily>& cf_specs)
 {
   RWLock::WLocker l(api_lock);
   int r = create_db_dir();
@@ -558,22 +558,18 @@ int RocksDBStore::_open(ostream &out, bool read_only, const std::vector<ColumnFa
       // the base for new CF
       rocksdb::ColumnFamilyOptions cf_opt(rocksdb_options);
       std::string cf_specific_options;
-      for (auto& i : options) {
+      for (auto& i : cf_specs) {
         if (i.name == cf_name) {
           cf_specific_options = i.option;
-	  // Custom cache for the column family
-	  cf_bbt_opts[i.name] = bbt_opts;
-	  if (!i.share_cache) {
-	    init_block_cache(cache_size, cf_bbt_opts[i.name]);
-	    cf_opt.table_factory.reset(NewBlockBasedTableFactory(cf_bbt_opts[i.name]));
-	  }
           break;
         }
       }
+      std::unordered_map<std::string, std::string> cf_options_map;
+      apply_cache_group(cf_opt, cf_specific_options, cf_options_map);
       //mark existence of new column_family
       column_families.emplace(cf_name, ColumnFamilyData(cf_specific_options, ColumnFamilyHandle()));
-      status = rocksdb::GetColumnFamilyOptionsFromString(
-          cf_opt, cf_specific_options, &cf_opt);
+      status = rocksdb::GetColumnFamilyOptionsFromMap(
+          cf_opt, cf_options_map, &cf_opt);
       if (!status.ok()) {
         derr << __func__ << " invalid db column family options for CF '"
             << cf_name << "': " << cf_specific_options << dendl;
@@ -789,7 +785,7 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
 	   << dendl;
 
   opt.merge_operator.reset(new MergeOperatorRouter(*this));
-
+  cf_bbt_opts[""] = bbt_opts;
   return 0;
 }
 
@@ -1035,21 +1031,47 @@ RocksDBStore::cf_get_by_rocksdb_ID(uint32_t ID) const
   return std::make_pair(std::string(), ColumnFamilyHandle());
 }
 
+bool RocksDBStore::apply_cache_group(rocksdb::ColumnFamilyOptions& cf_opt,
+				     const std::string& cf_options,
+				     std::unordered_map<std::string, std::string>& cf_options_map)
+{
+  bool result = true;
+  rocksdb::Status status;
+  status = rocksdb::StringToMap(cf_options, &cf_options_map);
+  if (!status.ok()) {
+    derr << __func__ << " invalid options for column family: '" << cf_options << "'" << dendl;
+    result = false;
+  }
+  auto it = cf_options_map.find("block_cache_group");
+  if (it != cf_options_map.end()) {
+    // Custom cache for the column family
+    std::string cache_group_name = it->second;
+    cf_options_map.erase(it);
+    rocksdb::BlockBasedTableOptions bbto_cf;
+    status = GetBlockBasedTableOptionsFromMap(bbt_opts, cf_options_map, &bbto_cf);
+    if (status.ok()) {
+      cf_bbt_opts[cache_group_name] = bbto_cf;
+      init_block_cache(cache_size, cf_bbt_opts[cache_group_name]);
+      cf_opt.table_factory.reset(rocksdb::NewBlockBasedTableFactory(cf_bbt_opts[cache_group_name]));
+    } else {
+      derr << __func__ << " invalid options for column family: '" << cf_options << "'" << dendl;
+      result = false;
+    }
+  }
+  return result;
+}
+
 int RocksDBStore::cf_create(const std::string& cf_name, const std::string& cf_options)
 {
   rocksdb::Status status;
   // copy default CF settings, block cache, merge operators as
   // the base for new CF
   rocksdb::ColumnFamilyOptions cf_opt(rocksdb_options);
-  // Custom cache for the column family
-  cf_bbt_opts[cf_name] = bbt_opts;
-  if (false/*AK_TEMP !p.share_cache*/) {
-    init_block_cache(cache_size, cf_bbt_opts[cf_name]);
-    cf_opt.table_factory.reset(rocksdb::NewBlockBasedTableFactory(cf_bbt_opts[cf_name]));
-  }
+  std::unordered_map<std::string, std::string> cf_options_map;
+  apply_cache_group(cf_opt, cf_options, cf_options_map);
   // user input options will override the base options
-  status = rocksdb::GetColumnFamilyOptionsFromString(
-      cf_opt, cf_options, &cf_opt);
+  status = rocksdb::GetColumnFamilyOptionsFromMap(
+      cf_opt, cf_options_map, &cf_opt);
   if (!status.ok()) {
     derr << __func__ << " invalid db column family option string for CF: "
         << cf_name << dendl;

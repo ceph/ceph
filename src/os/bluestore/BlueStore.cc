@@ -5666,15 +5666,10 @@ int BlueStore::get_sharding(const std::string& sharding_schema,
     sh->second = prefix_count;
     dout(10) << "prefix '" << prefix << "' split into " << prefix_count << "column families" << dendl;
 
-    bool share_cache = true;
-    // Don't share cache for the onode CF
-    if (prefix == PREFIX_OBJ) {
-      share_cache = false;
-    }
     for(int k = 0; k < prefix_count; k++) {
       std::string cf_name = prefix + "-" + to_string(k);
       dout(10) << "column family name=" << cf_name << ", options=" << i.second << dendl;
-      cfs.push_back(KeyValueDB::ColumnFamily(cf_name, i.second, share_cache));
+      cfs.push_back(KeyValueDB::ColumnFamily(cf_name, i.second));
     }
   }
   return 0;

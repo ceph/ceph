@@ -191,7 +191,9 @@ private:
   std::unordered_map<std::string, ColumnFamilyHandle> cf_mono_handles;
 
   void perf_counters_register();
-
+  bool apply_cache_group(rocksdb::ColumnFamilyOptions& cf_opt,
+			 const std::string& cf_options,
+			 std::unordered_map<std::string, std::string>& cf_options_map);
   friend class RocksWBHandler;
   friend class BlueStore_DB_Hash;
 public:

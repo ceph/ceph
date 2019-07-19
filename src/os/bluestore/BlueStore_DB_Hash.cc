@@ -736,6 +736,9 @@ int64_t BlueStore_DB_Hash::get_cache_usage() const {
   return db->get_cache_usage();
 }
 
+int64_t BlueStore_DB_Hash::get_cache_usage(std::string prefix) const {
+  return db->get_cache_usage(prefix);
+}
 /// estimate space utilization for a prefix (in bytes)
 int64_t BlueStore_DB_Hash::estimate_prefix_size(const string& prefix,
                                                 ColumnFamilyHandle cfh) {

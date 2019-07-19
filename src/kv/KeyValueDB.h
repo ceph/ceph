@@ -31,11 +31,8 @@ public:
   struct ColumnFamily {
     string name;      //< name of this individual column family
     string option;    //< configure option string for this CF
-    bool share_cache = true; //< should this column family share the default block_cache?
     ColumnFamily(const string &name, const string &option)
       : name(name), option(option) {}
-    ColumnFamily(const string &name, const string &option, bool share_cache)
-      : name(name), option(option), share_cache(share_cache) {}
   };
 
   struct ColumnFamilyHandle {

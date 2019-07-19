@@ -74,6 +74,7 @@ public:
   int set_cache_size(uint64_t) override;
   int set_cache_high_pri_pool_ratio(double ratio) override;
   int64_t get_cache_usage() const override;
+  int64_t get_cache_usage(std::string prefix) const override;
   /// estimate space utilization for a prefix (in bytes)
   int64_t estimate_prefix_size(const string& prefix,
                                ColumnFamilyHandle cfh = ColumnFamilyHandle()) override;
