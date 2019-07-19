@@ -862,6 +862,8 @@ public:
   // Timer for readable leases
   ceph::timer<ceph::mono_clock> mono_timer = ceph::timer<ceph::mono_clock>{ceph::construct_suspended};
 
+  void queue_renew_lease(epoch_t epoch, spg_t spgid);
+
   // -- stopping --
   ceph::mutex is_stopping_lock = ceph::make_mutex("OSDService::is_stopping_lock");
   ceph::condition_variable is_stopping_cond;

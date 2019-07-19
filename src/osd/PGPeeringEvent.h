@@ -207,3 +207,5 @@ struct DeferBackfill : boost::statechart::event<DeferBackfill> {
     *out << "DeferBackfill: delay " << delay;
   }
 };
+
+TrivialEvent(RenewLease)

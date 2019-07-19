@@ -747,9 +747,6 @@ void PeeringState::on_new_interval()
   acting_readable_until_ub.clear();
   if (is_primary()) {
     acting_readable_until_ub.resize(acting.size(), ceph::signedspan::zero());
-
-    // start lease here, so that we get acks during peering
-    renew_lease(pl->get_mnow());
   }
 
   pl->on_new_interval();
@@ -1082,8 +1079,34 @@ bool PeeringState::set_force_backfill(bool b)
   return did;
 }
 
+void PeeringState::schedule_renew_lease()
+{
+  pl->schedule_renew_lease(
+    last_peering_reset,
+    readable_interval / 2);
+}
+
+void PeeringState::send_lease()
+{
+  epoch_t epoch = pl->get_osdmap_epoch();
+  for (auto peer : actingset) {
+    if (peer == pg_whoami) {
+      continue;
+    }
+    pl->send_cluster_message(
+      peer.osd,
+      new MOSDPGLease(epoch,
+		      spg_t(spgid.pgid, peer.shard),
+		      get_lease()),
+      epoch);
+  }
+}
+
 void PeeringState::proc_lease(const pg_lease_t& l)
 {
+  if (get_role() < 0) {
+    return;
+  }
   psdout(10) << __func__ << " " << l << dendl;
   if (l.readable_until_ub > readable_until_ub_from_primary) {
     readable_until_ub_from_primary = l.readable_until_ub;
@@ -2431,6 +2454,10 @@ void PeeringState::activate(
 		   << " missing " << pm << dendl;
       }
     }
+
+    renew_lease(pl->get_mnow());
+    send_lease();
+    schedule_renew_lease();
 
     // Set up missing_loc
     set<pg_shard_t> complete_shards;
@@ -5689,6 +5716,15 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
   return discard_event();
 }
 
+boost::statechart::result PeeringState::Active::react(const RenewLease& rl)
+{
+  DECLARE_LOCALS;
+  ps->renew_lease(pl->get_mnow());
+  ps->send_lease();
+  ps->schedule_renew_lease();
+  return discard_event();
+}
+
 boost::statechart::result PeeringState::Active::react(const MLeaseAck& la)
 {
   DECLARE_LOCALS;
@@ -5805,7 +5841,9 @@ boost::statechart::result PeeringState::ReplicaActive::react(const MLease& l)
   ps->proc_lease(l.lease);
   pl->send_cluster_message(
     ps->get_primary().osd,
-    new MOSDPGLeaseAck(epoch, spgid, ps->get_lease_ack()),
+    new MOSDPGLeaseAck(epoch,
+		       spg_t(spgid.pgid, ps->get_primary().shard),
+		       ps->get_lease_ack()),
     epoch);
   return discard_event();
 }

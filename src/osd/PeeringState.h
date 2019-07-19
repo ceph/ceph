@@ -272,6 +272,7 @@ public:
 
     virtual ceph::signedspan get_mnow() = 0;
     virtual HeartbeatStampsRef get_hb_stamps(int peer) = 0;
+    virtual void schedule_renew_lease(epoch_t plr, ceph::timespan delay) = 0;
 
     // ============ Flush state ==================
     /**
@@ -813,6 +814,7 @@ public:
       boost::statechart::custom_reaction< RemoteReservationRevokedTooFull>,
       boost::statechart::custom_reaction< RemoteReservationRevoked>,
       boost::statechart::custom_reaction< DoRecovery>,
+      boost::statechart::custom_reaction< RenewLease>,
       boost::statechart::custom_reaction< MLeaseAck>
       > reactions;
     boost::statechart::result react(const QueryState& q);
@@ -827,6 +829,7 @@ public:
     }
     boost::statechart::result react(const ActivateCommitted&);
     boost::statechart::result react(const AllReplicasActivated&);
+    boost::statechart::result react(const RenewLease&);
     boost::statechart::result react(const MLeaseAck&);
     boost::statechart::result react(const DeferRecovery& evt) {
       return discard_event();
@@ -1949,7 +1952,7 @@ public:
       recalc_readable_until();
     }
   }
-
+  void send_lease();
   void schedule_renew_lease();
 
   pg_lease_t get_lease() {

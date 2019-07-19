@@ -480,6 +480,7 @@ public:
 
   ceph::signedspan get_mnow() override;
   HeartbeatStampsRef get_hb_stamps(int peer) override;
+  void schedule_renew_lease(epoch_t lpr, ceph::timespan delay) override;
 
   void rebuild_missing_set_with_deletes(PGLog &pglog) override;
 

@@ -455,6 +455,16 @@ HeartbeatStampsRef OSDService::get_hb_stamps(unsigned peer)
   return hb_stamps[peer];
 }
 
+void OSDService::queue_renew_lease(epoch_t epoch, spg_t spgid)
+{
+  osd->enqueue_peering_evt(
+    spgid,
+    PGPeeringEventRef(
+      std::make_shared<PGPeeringEvent>(
+	epoch, epoch,
+	RenewLease())));
+}
+
 void OSDService::start_shutdown()
 {
   {
