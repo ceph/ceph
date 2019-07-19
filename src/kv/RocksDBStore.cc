@@ -561,6 +561,12 @@ int RocksDBStore::_open(ostream &out, bool read_only, const std::vector<ColumnFa
       for (auto& i : options) {
         if (i.name == cf_name) {
           cf_specific_options = i.option;
+	  // Custom cache for the column family
+	  cf_bbt_opts[i.name] = bbt_opts;
+	  if (!i.share_cache) {
+	    init_block_cache(cache_size, cf_bbt_opts[i.name]);
+	    cf_opt.table_factory.reset(NewBlockBasedTableFactory(cf_bbt_opts[i.name]));
+	  }
           break;
         }
       }
@@ -649,6 +655,28 @@ int RocksDBStore::create_and_open(ostream &out,
   return r;
 }
 
+int RocksDBStore::init_block_cache(uint64_t size, rocksdb::BlockBasedTableOptions& bbto) {
+  auto shard_bits = g_conf()->rocksdb_cache_shard_bits;
+  if (g_conf()->rocksdb_cache_type == "binned_lru") {
+    bbto.block_cache = rocksdb_cache::NewBinnedLRUCache(cct, size, shard_bits);
+  } else if (g_conf()->rocksdb_cache_type == "lru") {
+    bbto.block_cache = rocksdb::NewLRUCache(size, shard_bits);
+  } else if (g_conf()->rocksdb_cache_type == "clock") {
+    bbto.block_cache = rocksdb::NewClockCache(size, shard_bits);
+    if (!bbto.block_cache) {
+      derr << "rocksdb_cache_type '" << g_conf()->rocksdb_cache_type
+           << "' chosen, but RocksDB not compiled with LibTBB. "
+           << dendl;
+      return -EINVAL;
+    }
+  } else {
+    derr << "unrecognized rocksdb_cache_type '" << g_conf()->rocksdb_cache_type
+      << "'" << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+
 int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options& opt)
 {
   rocksdb::Status status;
@@ -714,31 +742,7 @@ int RocksDBStore::load_rocksdb_options(bool create_if_missing, rocksdb::Options&
   }
   uint64_t row_cache_size = cache_size * g_conf()->rocksdb_cache_row_ratio;
   uint64_t block_cache_size = cache_size - row_cache_size;
-
-  if (g_conf()->rocksdb_cache_type == "binned_lru") {
-    bbt_opts.block_cache = rocksdb_cache::NewBinnedLRUCache(
-      cct,
-      block_cache_size,
-      g_conf()->rocksdb_cache_shard_bits);
-  } else if (g_conf()->rocksdb_cache_type == "lru") {
-    bbt_opts.block_cache = rocksdb::NewLRUCache(
-      block_cache_size,
-      g_conf()->rocksdb_cache_shard_bits);
-  } else if (g_conf()->rocksdb_cache_type == "clock") {
-    bbt_opts.block_cache = rocksdb::NewClockCache(
-      block_cache_size,
-      g_conf()->rocksdb_cache_shard_bits);
-    if (!bbt_opts.block_cache) {
-      derr << "rocksdb_cache_type '" << g_conf()->rocksdb_cache_type
-           << "' chosen, but RocksDB not compiled with LibTBB. "
-           << dendl;
-      return -EINVAL;
-    }
-  } else {
-    derr << "unrecognized rocksdb_cache_type '" << g_conf()->rocksdb_cache_type
-      << "'" << dendl;
-    return -EINVAL;
-  }
+  init_block_cache(block_cache_size, bbt_opts);
   bbt_opts.block_size = g_conf()->rocksdb_block_size;
 
   if (row_cache_size > 0)
@@ -1037,6 +1041,12 @@ int RocksDBStore::cf_create(const std::string& cf_name, const std::string& cf_op
   // copy default CF settings, block cache, merge operators as
   // the base for new CF
   rocksdb::ColumnFamilyOptions cf_opt(rocksdb_options);
+  // Custom cache for the column family
+  cf_bbt_opts[cf_name] = bbt_opts;
+  if (false/*AK_TEMP !p.share_cache*/) {
+    init_block_cache(cache_size, cf_bbt_opts[cf_name]);
+    cf_opt.table_factory.reset(rocksdb::NewBlockBasedTableFactory(cf_bbt_opts[cf_name]));
+  }
   // user input options will override the base options
   status = rocksdb::GetColumnFamilyOptionsFromString(
       cf_opt, cf_options, &cf_opt);
