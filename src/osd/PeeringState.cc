@@ -637,7 +637,7 @@ void PeeringState::start_peering_interval(
     info.history.same_primary_since = osdmap->get_epoch();
   }
 
-  pl->on_new_interval();
+  on_new_interval();
   pl->on_info_history_change();
 
   psdout(1) << __func__ << " up " << oldup << " -> " << up
@@ -713,6 +713,7 @@ void PeeringState::start_peering_interval(
 
 void PeeringState::on_new_interval()
 {
+  dout(20) << __func__ << dendl;
   const OSDMapRef osdmap = get_osdmap();
 
   // initialize features
