@@ -909,6 +909,7 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       s->formatter->open_object_section(section_name);
       if (objs_container) {
         s->formatter->dump_bool("IsDeleteMarker", iter->is_delete_marker());
+        encode_json("ZonesTrace", iter->meta.zones_trace, s->formatter);
       }
       rgw_obj_key key(iter->key);
       if (encode_key) {

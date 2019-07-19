@@ -5466,11 +5466,6 @@ int RGWRados::Object::Delete::delete_obj(optional_yield y)
 
       meta.owner = params.obj_owner.get_id().to_str();
       meta.owner_display_name = params.obj_owner.get_display_name();
-      if (params.zones_trace) {
-        // store the zone trace with the delete marker so it's available for
-        // full sync in DeleteMarkerZonesTrace
-        meta.dm_zones_trace = *params.zones_trace;
-      }
 
       if (real_clock::is_zero(params.mtime)) {
         meta.mtime = real_clock::now();

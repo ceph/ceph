@@ -2378,11 +2378,13 @@ struct bucket_list_entry {
   rgw_bucket_entry_owner owner;
   uint64_t versioned_epoch;
   string rgw_tag;
+  rgw_zone_set zones_trace; // zones known to have applied this object version
 
   bucket_list_entry() : delete_marker(false), is_latest(false), size(0), versioned_epoch(0) {}
 
   void decode_json(JSONObj *obj) {
     JSONDecoder::decode_json("IsDeleteMarker", delete_marker, obj);
+    JSONDecoder::decode_json("ZonesTrace", zones_trace, obj);
     JSONDecoder::decode_json("Key", key.name, obj);
     JSONDecoder::decode_json("VersionId", key.instance, obj);
     JSONDecoder::decode_json("IsLatest", is_latest, obj);
@@ -2821,8 +2823,6 @@ class RGWBucketShardFullSyncCR : public RGWCoroutine {
 
   const string& status_oid;
 
-  rgw_zone_set zones_trace;
-
   RGWSyncTraceNodeRef tn;
 public:
   RGWBucketShardFullSyncCR(RGWDataSyncEnv *_sync_env, const rgw_bucket_shard& bs,
@@ -2837,7 +2837,6 @@ public:
       status_oid(status_oid),
       tn(sync_env->sync_tracer->add_node(tn_parent, "full_sync",
                                          SSTR(bucket_shard_str{bs}))) {
-    zones_trace.insert(sync_env->source_zone);
     marker_tracker.set_tn(tn);
   }
 
@@ -2874,9 +2873,17 @@ int RGWBucketShardFullSyncCR::operate()
           drain_all();
           return set_cr_error(-ECANCELED);
         }
+        entry = &(*entries_iter);
+        // filter out entries we've already seen on this zone; otherwise
+        // this can race to recreate objects that have been deleted
+        if (entry->zones_trace.count(sync_env->store->svc.zone->zone_id())) {
+          tn->log(20, SSTR("[full sync] skipping object already created here: "
+                           << bucket_shard_str{bs} << "/" << entry->key));
+          marker_tracker.try_update_high_marker(entry->key, 0, ceph::real_time{});
+          continue;
+        }
         tn->log(20, SSTR("[full sync] syncing object: "
             << bucket_shard_str{bs} << "/" << entries_iter->key));
-        entry = &(*entries_iter);
         total_entries++;
         list_marker = entries_iter->key;
         if (!marker_tracker.start(entry->key, total_entries, real_time())) {
@@ -2887,7 +2894,7 @@ int RGWBucketShardFullSyncCR::operate()
                                  false, /* versioned, only matters for object removal */
                                  entry->versioned_epoch, entry->mtime,
                                  entry->owner, entry->get_modify_op(), CLS_RGW_STATE_COMPLETE,
-                                 entry->key, &marker_tracker, zones_trace, tn),
+                                 entry->key, &marker_tracker, entry->zones_trace, tn),
                       false);
         }
         while (num_spawned() > BUCKET_SYNC_SPAWN_WINDOW) {
