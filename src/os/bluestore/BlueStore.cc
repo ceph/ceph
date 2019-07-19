@@ -10614,7 +10614,10 @@ void BlueStore::_kv_sync_thread()
 	      deferred_stable.end());
 	  deferred_stable.clear();
 	}
-	kv_finalize_cond.notify_one();
+	if (!kv_finalize_in_progress) {
+	  kv_finalize_in_progress = true;
+	  kv_finalize_cond.notify_one();
+	}
       }
 
       if (new_nid_max) {
@@ -10699,6 +10702,7 @@ void BlueStore::_kv_finalize_thread()
       if (kv_finalize_stop)
 	break;
       dout(20) << __func__ << " sleep" << dendl;
+      kv_finalize_in_progress = false;
       kv_finalize_cond.wait(l);
       dout(20) << __func__ << " wake" << dendl;
     } else {
