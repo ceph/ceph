@@ -167,9 +167,9 @@ class usage_acc:
                 r.append("malformed summary looking for user " + e['user']
 		    + " " + str(ex))
                 break
-            if s2 == None:
-                r.append("missing summary for user " + e['user'] + " " + str(ex))
-                continue
+                if s2 == None:
+                    r.append("missing summary for user " + e['user'] + " " + str(ex))
+                    continue
             try:
                 c2 = s2['categories']
             except Exception as ex:
@@ -284,16 +284,21 @@ def task(ctx, config):
     ##
     user1='foo'
     user2='fud'
+    user3='bar'
+    user4='bud'
     subuser1='foo:foo1'
     subuser2='foo:foo2'
     display_name1='Foo'
     display_name2='Fud'
+    display_name3='Bar'
     email='foo@foo.com'
     email2='bar@bar.com'
     access_key='9te6NH5mcdcq0Tc5i8i1'
     secret_key='Ny4IOauQoL18Gp2zM7lC1vLmoawgqcYP/YGcWfXu'
     access_key2='p5YnriCv1nAtykxBrupQ'
     secret_key2='Q8Tk6Q/27hfbFSYdSkPtUqhqx1GgzvpXa4WARozh'
+    access_key3='NX5QOQKC6BH2IDN8HC7A'
+    secret_key3='LnEsqNNqZIpkzauboDcLXLcYaWwLQ3Kop0zAnKIn'
     swift_secret1='gpS2G9RREMrnbqlp29PP2D36kgPR1tm72n5fPYfL'
     swift_secret2='ri2VJQcKSYATOY6uaDUX7pxgkW+W1YmC6OCxPHwy'
 
@@ -858,6 +863,47 @@ def task(ctx, config):
         entry = user_summary['categories'][0]
         assert entry['category'] == cat
         assert entry['successful_ops'] > 0
+
+    # TESTCASE 'user-rename', 'user', 'rename', 'existing user', 'new user', 'succeeds'
+    # create a new user
+    (err, out) = rgwadmin(ctx, client, [
+        'user', 'create',
+        '--uid', user3,
+        '--display-name', display_name3,
+        '--access-key', access_key3,
+        '--secret', secret_key3,
+        '--max-buckets', '4'
+        ],
+        check_status=True)
+
+    # create a bucket
+    bucket = connection.create_bucket(bucket_name + '6')
+
+    rl.log_and_clear("create_bucket", bucket_name + '6', user3)
+
+    # create object
+    object_name = 'thirteen'
+    key = boto.s3.key.Key(bucket, object_name)
+    key.set_contents_from_string(object_name)
+    rl.log_and_clear("put_obj", bucket_name + '6', user3)
+
+    # rename user3
+    (err, out) = rgwadmin(ctx, client, ['user', 'rename', '--uid', user3, '--new-uid', user4], check_status=True)
+    assert out['user_id'] == user4
+    assert out['keys'][0]['access_key'] == access_key3
+    assert out['keys'][0]['secret_key'] == secret_key3
+
+    time.sleep(5)
+
+    # get bucket and object to test if user keys are preserved
+    bucket = connection.get_bucket(bucket_name + '6')
+    s = key.get_contents_as_string()
+    rl.log_and_clear("get_obj", bucket_name + '6', user4)
+    assert s == object_name
+
+    (err, out) = rgwadmin(ctx, client,
+    ['user', 'rm', '--uid', user4, '--purge-data' ],
+    check_status=True)
 
     # should be all through with connection. (anything using connection
     #  should be BEFORE the usage stuff above.)
