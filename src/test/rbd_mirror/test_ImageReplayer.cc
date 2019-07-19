@@ -56,12 +56,12 @@ public:
   struct C_WatchCtx : public librados::WatchCtx2 {
     TestImageReplayer *test;
     std::string oid;
-    Mutex lock;
-    Cond cond;
+    ceph::mutex lock = ceph::make_mutex("C_WatchCtx::lock");
+    ceph::condition_variable cond;
     bool notified;
 
     C_WatchCtx(TestImageReplayer *test, const std::string &oid)
-      : test(test), oid(oid), lock("C_WatchCtx::lock"), notified(false) {
+      : test(test), oid(oid), notified(false) {
     }
 
     void handle_notify(uint64_t notify_id, uint64_t cookie,
@@ -69,9 +69,9 @@ public:
       bufferlist bl;
       test->m_remote_ioctx.notify_ack(oid, notify_id, cookie, bl);
 
-      Mutex::Locker locker(lock);
+      std::lock_guard locker{lock};
       notified = true;
-      cond.Signal();
+      cond.notify_all();
     }
 
     void handle_error(uint64_t cookie, int err) override {
@@ -284,10 +284,11 @@ public:
       return false;
     }
 
-    Mutex::Locker locker(m_watch_ctx->lock);
+    std::unique_lock locker{m_watch_ctx->lock};
     while (!m_watch_ctx->notified) {
-      if (m_watch_ctx->cond.WaitInterval(m_watch_ctx->lock,
-					 utime_t(seconds, 0)) != 0) {
+      if (m_watch_ctx->cond.wait_for(locker,
+				     std::chrono::seconds(seconds)) ==
+	  std::cv_status::timeout) {
         return false;
       }
     }
@@ -805,7 +806,7 @@ TEST_F(TestImageReplayer, MultipleReplayFailures_SingleEpoch) {
   // race failed op shut down with new ops
   open_remote_image(&ictx);
   for (uint64_t i = 0; i < 10; ++i) {
-    RWLock::RLocker owner_locker(ictx->owner_lock);
+    std::shared_lock owner_locker{ictx->owner_lock};
     C_SaferCond request_lock;
     ictx->exclusive_lock->acquire_lock(&request_lock);
     ASSERT_EQ(0, request_lock.wait());
@@ -859,7 +860,7 @@ TEST_F(TestImageReplayer, MultipleReplayFailures_MultiEpoch) {
   // race failed op shut down with new tag flush
   open_remote_image(&ictx);
   {
-    RWLock::RLocker owner_locker(ictx->owner_lock);
+    std::shared_lock owner_locker{ictx->owner_lock};
     C_SaferCond request_lock;
     ictx->exclusive_lock->acquire_lock(&request_lock);
     ASSERT_EQ(0, request_lock.wait());

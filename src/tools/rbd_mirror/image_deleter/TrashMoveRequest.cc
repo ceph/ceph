@@ -184,7 +184,7 @@ void TrashMoveRequest<I>::open_image() {
 
   {
     // don't attempt to open the journal
-    RWLock::WLocker image_locker(m_image_ctx->image_lock);
+    std::unique_lock image_locker{m_image_ctx->image_lock};
     m_image_ctx->set_journal_policy(new JournalPolicy());
   }
 
@@ -217,10 +217,10 @@ void TrashMoveRequest<I>::handle_open_image(int r) {
 
 template <typename I>
 void TrashMoveRequest<I>::acquire_lock() {
-  m_image_ctx->owner_lock.get_read();
+  m_image_ctx->owner_lock.lock_shared();
   if (m_image_ctx->exclusive_lock == nullptr) {
     derr << "exclusive lock feature not enabled" << dendl;
-    m_image_ctx->owner_lock.put_read();
+    m_image_ctx->owner_lock.unlock_shared();
     m_ret_val = -EINVAL;
     close_image();
     return;
@@ -232,7 +232,7 @@ void TrashMoveRequest<I>::acquire_lock() {
     TrashMoveRequest<I>, &TrashMoveRequest<I>::handle_acquire_lock>(this);
   m_image_ctx->exclusive_lock->block_requests(0);
   m_image_ctx->exclusive_lock->acquire_lock(ctx);
-  m_image_ctx->owner_lock.put_read();
+  m_image_ctx->owner_lock.unlock_shared();
 }
 
 template <typename I>

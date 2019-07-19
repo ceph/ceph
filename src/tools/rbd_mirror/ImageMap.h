@@ -6,7 +6,7 @@
 
 #include <vector>
 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "include/Context.h"
 #include "common/AsyncOpTracker.h"
 #include "cls/rbd/cls_rbd_types.h"
@@ -89,7 +89,7 @@ private:
   std::unique_ptr<image_map::Policy> m_policy; // our mapping policy
 
   Context *m_timer_task = nullptr;
-  Mutex m_lock;
+  ceph::mutex m_lock;
   bool m_shutting_down = false;
   AsyncOpTracker m_async_op_tracker;
 
@@ -147,7 +147,7 @@ private:
   void schedule_action(const std::string &global_image_id);
 
   void schedule_update_task();
-  void schedule_update_task(const Mutex &timer_lock);
+  void schedule_update_task(const ceph::mutex &timer_lock);
   void process_updates();
   void update_image_mapping(Updates&& map_updates,
                             std::set<std::string>&& map_removals);

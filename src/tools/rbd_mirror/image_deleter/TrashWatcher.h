@@ -6,7 +6,7 @@
 
 #include "include/rados/librados.hpp"
 #include "common/AsyncOpTracker.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "librbd/TrashWatcher.h"
 #include <set>
 #include <string>
@@ -97,7 +97,7 @@ private:
   std::string m_last_image_id;
   bufferlist m_out_bl;
 
-  mutable Mutex m_lock;
+  mutable ceph::mutex m_lock;
 
   Context *m_on_init_finish = nullptr;
   Context *m_timer_ctx = nullptr;

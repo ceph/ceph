@@ -250,8 +250,8 @@ struct ServiceDaemon<librbd::MockTestImageCtx> {
 template <>
 struct Threads<librbd::MockTestImageCtx> {
   MockSafeTimer *timer;
-  Mutex &timer_lock;
-  Cond timer_cond;
+  ceph::mutex &timer_lock;
+  ceph::condition_variable timer_cond;
 
   MockContextWQ *work_queue;
 
