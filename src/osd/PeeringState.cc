@@ -18,6 +18,8 @@
 #include "messages/MOSDPGNotify2.h"
 #include "messages/MOSDPGQuery.h"
 #include "messages/MOSDPGQuery2.h"
+#include "messages/MOSDPGLease.h"
+#include "messages/MOSDPGLeaseAck.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
@@ -1078,6 +1080,62 @@ bool PeeringState::set_force_backfill(bool b)
     pl->update_local_background_io_priority(get_backfill_priority());
   }
   return did;
+}
+
+void PeeringState::proc_lease(const pg_lease_t& l)
+{
+  psdout(10) << __func__ << " " << l << dendl;
+  if (l.readable_until_ub > readable_until_ub_from_primary) {
+    readable_until_ub_from_primary = l.readable_until_ub;
+  }
+
+  ceph::signedspan ru;
+  if (hb_stamps[0]->peer_clock_delta_ub) {
+    ru = l.readable_until - *hb_stamps[0]->peer_clock_delta_ub;
+  } else {
+    ru = ceph::signedspan::zero();
+  }
+  if (ru > readable_until) {
+    readable_until = ru;
+    psdout(20) << __func__ << " readable_until now " << readable_until << dendl;
+#warning fixme: wake up replica?
+  }
+
+  ceph::signedspan ruub;
+  if (hb_stamps[0]->peer_clock_delta_lb) {
+    ruub = l.readable_until_ub - *hb_stamps[0]->peer_clock_delta_lb;
+  } else {
+    ruub = pl->get_mnow() + l.interval;
+  }
+  if (ruub > readable_until_ub) {
+    readable_until_ub = ruub;
+    psdout(20) << __func__ << " readable_until_ub now " << readable_until_ub
+	       << dendl;
+  }
+}
+
+void PeeringState::proc_lease_ack(int from, const pg_lease_ack_t& a)
+{
+  auto now = pl->get_mnow();
+  bool was_min = false;
+  for (unsigned i = 0; i < acting.size(); ++i) {
+    if (from == acting[i]) {
+      // the lease_ack value is based on the primary's clock
+      if (a.readable_until_ub > acting_readable_until_ub[i]) {
+	if (acting_readable_until_ub[i] == readable_until) {
+	  was_min = true;
+	}
+	acting_readable_until_ub[i] = a.readable_until_ub;
+	break;
+      }
+    }
+  }
+  if (was_min) {
+    recalc_readable_until();
+//    if (pl->is_laggy() && readable_until > now) {
+#warning fixme: wake up?
+    //}
+  }
 }
 
 void PeeringState::recalc_readable_until()
@@ -5631,6 +5689,13 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
   return discard_event();
 }
 
+boost::statechart::result PeeringState::Active::react(const MLeaseAck& la)
+{
+  DECLARE_LOCALS;
+  ps->proc_lease_ack(la.from, la.lease_ack);
+  return discard_event();
+}
+
 /*
  * update info.history.last_epoch_started ONLY after we and all
  * replicas have activated AND committed the activate transaction
@@ -5728,6 +5793,20 @@ boost::statechart::result PeeringState::ReplicaActive::react(
   }
   pl->on_activate_committed();
 
+  return discard_event();
+}
+
+boost::statechart::result PeeringState::ReplicaActive::react(const MLease& l)
+{
+  DECLARE_LOCALS;
+  spg_t spgid = context< PeeringMachine >().spgid;
+  epoch_t epoch = pl->get_osdmap_epoch();
+
+  ps->proc_lease(l.lease);
+  pl->send_cluster_message(
+    ps->get_primary().osd,
+    new MOSDPGLeaseAck(epoch, spgid, ps->get_lease_ack()),
+    epoch);
   return discard_event();
 }
 

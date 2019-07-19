@@ -86,6 +86,8 @@
 #include "messages/MOSDPGCreate.h"
 #include "messages/MOSDPGCreate2.h"
 #include "messages/MOSDPGTrim.h"
+#include "messages/MOSDPGLease.h"
+#include "messages/MOSDPGLeaseAck.h"
 #include "messages/MOSDScrub.h"
 #include "messages/MOSDScrub2.h"
 #include "messages/MOSDScrubReserve.h"
@@ -558,6 +560,12 @@ Message *decode_message(CephContext *cct,
     break;
   case MSG_OSD_PG_TRIM:
     m = make_message<MOSDPGTrim>();
+    break;
+  case MSG_OSD_PG_LEASE:
+    m = make_message<MOSDPGLease>();
+    break;
+  case MSG_OSD_PG_LEASE_ACK:
+    m = make_message<MOSDPGLeaseAck>();
     break;
 
   case MSG_OSD_SCRUB:
