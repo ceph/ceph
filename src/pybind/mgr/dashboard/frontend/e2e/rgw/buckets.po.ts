@@ -8,7 +8,7 @@ export class BucketsPageHelper extends PageHelper {
     create: '/#/rgw/bucket/create'
   };
 
-  create(name, owner) {
+  create(name, owner, placementTarget) {
     this.navigateTo('create');
 
     // Enter in bucket name
@@ -18,6 +18,11 @@ export class BucketsPageHelper extends PageHelper {
     element(by.id('owner')).click();
     element(by.cssContainingText('select[name=owner] option', owner)).click();
     expect(element(by.id('owner')).getAttribute('class')).toContain('ng-valid');
+
+    // Select bucket placement target:
+    element(by.id('owner')).click();
+    element(by.cssContainingText('select[name=placement-target] option', placementTarget)).click();
+    expect(element(by.id('placement-target')).getAttribute('class')).toContain('ng-valid');
 
     // Click the create button and wait for bucket to be made
     const createButton = element(by.cssContainingText('button', 'Create Bucket'));
@@ -38,6 +43,10 @@ export class BucketsPageHelper extends PageHelper {
     element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
     expect(PageHelper.getBreadcrumbText()).toEqual('Edit');
+
+    expect(element(by.css('input[name=placement-target]')).getAttribute('value')).toBe(
+      'default-placement'
+    );
 
     const ownerDropDown = element(by.id('owner'));
     ownerDropDown.click(); // click owner dropdown menu
@@ -131,6 +140,22 @@ export class BucketsPageHelper extends PageHelper {
 
     // Check that error message was printed under owner drop down field
     expect(element(by.css('#owner + .invalid-feedback')).getText()).toMatch(
+      'This field is required.'
+    );
+
+    // Check invalid placement target input
+    PageHelper.moveClick(ownerDropDown);
+    element(by.cssContainingText('select[name=owner] option', 'dev')).click();
+    // The drop down error message will not appear unless a valid option is previsously selected.
+    element(
+      by.cssContainingText('select[name=placement-target] option', 'default-placement')
+    ).click();
+    element(
+      by.cssContainingText('select[name=placement-target] option', 'Select a placement target')
+    ).click();
+    PageHelper.moveClick(nameInputField); // To trigger a validation
+    expect(element(by.id('placement-target')).getAttribute('class')).toContain('ng-invalid');
+    expect(element(by.css('#placement-target + .invalid-feedback')).getText()).toMatch(
       'This field is required.'
     );
 
