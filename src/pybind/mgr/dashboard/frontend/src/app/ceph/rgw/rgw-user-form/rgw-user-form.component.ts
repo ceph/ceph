@@ -252,14 +252,13 @@ export class RgwUserFormComponent implements OnInit {
   }
 
   /**
-   * Validate the quota maximum size, e.g. 1096, 1K, 30M. Only integer numbers are valid,
-   * something like 1.9M is not recognized as valid.
+   * Validate the quota maximum size, e.g. 1096, 1K, 30M or 1.9MiB.
    */
   quotaMaxSizeValidator(control: AbstractControl): ValidationErrors | null {
     if (isEmptyInputValue(control.value)) {
       return null;
     }
-    const m = RegExp('^(\\d+)\\s*(B|K(B|iB)?|M(B|iB)?|G(B|iB)?|T(B|iB)?)?$', 'i').exec(
+    const m = RegExp('^(\\d+(\\.\\d+)?)\\s*(B|K(B|iB)?|M(B|iB)?|G(B|iB)?|T(B|iB)?)?$', 'i').exec(
       control.value
     );
     if (m === null) {
