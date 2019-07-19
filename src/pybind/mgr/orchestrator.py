@@ -123,7 +123,11 @@ def raise_if_exception(c):
         return my_obj
 
     if c.exception is not None:
-        raise copy_to_this_subinterpreter(c.exception)
+        try:
+            e = copy_to_this_subinterpreter(c.exception)
+        except (KeyError, AttributeError):
+            raise Exception(str(c.exception))
+        raise e
 
 
 class ReadCompletion(_Completion):
