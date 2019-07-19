@@ -1,0 +1,1 @@
+CherryPy<18; python_version<'3'
