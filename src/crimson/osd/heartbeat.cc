@@ -40,6 +40,12 @@ seastar::future<> Heartbeat::start(entity_addrvec_t front_addrs,
   for (auto& addr : boost::join(front_addrs.v, back_addrs.v)) {
     addr.set_port(0);
   }
+
+  using ceph::net::SocketPolicy;
+  front_msgr.set_policy(entity_name_t::TYPE_OSD,
+                        SocketPolicy::stateless_server(0));
+  back_msgr.set_policy(entity_name_t::TYPE_OSD,
+                       SocketPolicy::stateless_server(0));
   return seastar::when_all_succeed(start_messenger(front_msgr, front_addrs),
                                    start_messenger(back_msgr, back_addrs))
     .then([this] {

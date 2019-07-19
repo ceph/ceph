@@ -115,7 +115,6 @@ static seastar::future<> test_echo(unsigned rounds,
         return seastar::now();
       }
       seastar::future<> ms_handle_connect(ceph::net::ConnectionRef conn) override {
-        logger().info("{}: connected to {}", *conn, conn->get_peer_addr());
         auto session = seastar::make_shared<PingSession>();
         auto [i, added] = sessions.emplace(conn.get(), session);
         std::ignore = i;

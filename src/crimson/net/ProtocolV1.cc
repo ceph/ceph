@@ -84,24 +84,6 @@ void validate_banner(bufferlist::const_iterator& p)
   }
 }
 
-// make sure that we agree with the peer about its address
-void validate_peer_addr(const entity_addr_t& addr,
-                        const entity_addr_t& expected)
-{
-  if (addr == expected) {
-    return;
-  }
-  // ok if server bound anonymously, as long as port/nonce match
-  if (addr.is_blank_ip() &&
-      addr.get_port() == expected.get_port() &&
-      addr.get_nonce() == expected.get_nonce()) {
-    return;
-  } else {
-    throw std::system_error(
-        make_error_code(ceph::net::error::bad_peer_address));
-  }
-}
-
 // return a static bufferptr to the given object
 template <typename T>
 bufferptr create_static(T& obj)
@@ -258,7 +240,7 @@ ProtocolV1::handle_connect_reply(msgr_tag_t tag)
 ceph::bufferlist ProtocolV1::get_auth_payload()
 {
   // only non-mons connectings to mons use MAuth messages
-  if (conn.peer_type == CEPH_ENTITY_TYPE_MON &&
+  if (conn.peer_is_mon() &&
      messenger.get_mytype() != CEPH_ENTITY_TYPE_MON) {
     return {};
   } else {
@@ -284,7 +266,7 @@ ProtocolV1::repeat_connect()
   h.connect.host_type = messenger.get_myname().type();
   h.connect.global_seq = h.global_seq;
   h.connect.connect_seq = h.connect_seq;
-  h.connect.protocol_version = get_proto_version(conn.peer_type, true);
+  h.connect.protocol_version = get_proto_version(conn.get_peer_type(), true);
   // this is fyi, actually, server decides!
   h.connect.flags = conn.policy.lossy ? CEPH_MSG_CONNECT_LOSSY : 0;
 
@@ -325,9 +307,13 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
   state = state_t::connecting;
   set_write_state(write_state_t::delay);
 
+  // we don't know my ephemeral port yet
+  conn.set_ephemeral_port(0, SocketConnection::side_t::none);
   ceph_assert(!socket);
   conn.peer_addr = _peer_addr;
-  conn.peer_type = _peer_type;
+  conn.target_addr = _peer_addr;
+  conn.set_peer_type(_peer_type);
+  conn.policy = messenger.get_policy(_peer_type);
   messenger.register_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   seastar::with_gate(pending_dispatch, [this] {
@@ -350,11 +336,22 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
           ::decode(saddr, p);
           ::decode(caddr, p);
           ceph_assert(p.end());
-          validate_peer_addr(saddr, conn.peer_addr);
-
-          conn.side = SocketConnection::side_t::connector;
-          conn.socket_port = caddr.get_port();
-          return messenger.learned_addr(caddr);
+          if (saddr != conn.peer_addr) {
+            logger().error("{} my peer_addr {} doesn't match what peer advertized {}",
+                           conn, conn.peer_addr, saddr);
+            throw std::system_error(
+                make_error_code(ceph::net::error::bad_peer_address));
+          }
+          conn.set_ephemeral_port(caddr.get_port(),
+                                  SocketConnection::side_t::connector);
+          if (unlikely(caddr.is_msgr2())) {
+            logger().warn("{} peer sent a v2 address for me: {}",
+                          conn, caddr);
+            throw std::system_error(
+                make_error_code(ceph::net::error::bad_peer_address));
+          }
+          caddr.set_type(entity_addr_t::TYPE_LEGACY);
+          return messenger.learned_addr(caddr, conn);
         }).then([this] {
           // encode/send client's handshake header
           bufferlist bl;
@@ -537,7 +534,14 @@ seastar::future<stop_t> ProtocolV1::repeat_handle_connect()
     .then([this](bufferlist bl) {
       auto p = bl.cbegin();
       ::decode(h.connect, p);
-      conn.peer_type = h.connect.host_type;
+      conn.set_peer_type(h.connect.host_type);
+      conn.policy = messenger.get_policy(h.connect.host_type);
+      if (!conn.policy.lossy && !conn.policy.server && conn.target_addr.get_port() <= 0) {
+          logger().error("{} we don't know how to reconnect to peer {}",
+                         conn, conn.target_addr);
+        throw std::system_error(
+            make_error_code(ceph::net::error::bad_peer_address));
+      }
       return socket->read(h.connect.authorizer_len);
     }).then([this] (bufferlist authorizer) {
       memset(&h.reply, 0, sizeof(h.reply));
@@ -606,21 +610,23 @@ void ProtocolV1::start_accept(SocketFRef&& sock,
   set_write_state(write_state_t::delay);
 
   ceph_assert(!socket);
-  conn.peer_addr.u = _peer_addr.u;
-  conn.peer_addr.set_port(0);
-  conn.side = SocketConnection::side_t::acceptor;
-  conn.socket_port = _peer_addr.get_port();
+  // until we know better
+  conn.target_addr = _peer_addr;
+  conn.set_ephemeral_port(_peer_addr.get_port(),
+                          SocketConnection::side_t::acceptor);
   socket = std::move(sock);
   messenger.accept_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-  seastar::with_gate(pending_dispatch, [this, _peer_addr] {
-      // encode/send server's handshake header
-      bufferlist bl;
-      bl.append(buffer::create_static(banner_size, banner));
-      ::encode(messenger.get_myaddr(), bl, 0);
-      ::encode(_peer_addr, bl, 0);
-      return socket->write_flush(std::move(bl))
-        .then([this] {
+  seastar::with_gate(pending_dispatch, [this] {
+      // stop learning my_addr before sending it out, so it won't change
+      return messenger.learned_addr(messenger.get_myaddr(), conn).then([this] {
+          // encode/send server's handshake header
+          bufferlist bl;
+          bl.append(buffer::create_static(banner_size, banner));
+          ::encode(messenger.get_myaddr(), bl, 0);
+          ::encode(conn.target_addr, bl, 0);
+          return socket->write_flush(std::move(bl));
+        }).then([this] {
           // read client's handshake header and connect request
           return socket->read(client_header_size);
         }).then([this] (bufferlist bl) {
@@ -629,9 +635,18 @@ void ProtocolV1::start_accept(SocketFRef&& sock,
           entity_addr_t addr;
           ::decode(addr, p);
           ceph_assert(p.end());
-          conn.peer_addr.set_type(addr.get_type());
-          conn.peer_addr.set_port(addr.get_port());
-          conn.peer_addr.set_nonce(addr.get_nonce());
+          if ((addr.is_legacy() || addr.is_any()) &&
+              addr.is_same_host(conn.target_addr)) {
+            // good
+          } else {
+            logger().error("{} peer advertized an invalid peer_addr: {},"
+                           " which should be v1 and the same host with {}.",
+                           conn, addr, conn.peer_addr);
+            throw std::system_error(
+                make_error_code(ceph::net::error::bad_peer_address));
+          }
+          conn.peer_addr = addr;
+          conn.target_addr = conn.peer_addr;
           return seastar::repeat([this] {
             return repeat_handle_connect();
           });
@@ -699,6 +714,8 @@ ceph::bufferlist ProtocolV1::do_sweep_messages(
     if (session_security) {
       session_security->sign_message(msg.get());
     }
+    logger().debug("{} --> #{} === {} ({})",
+                   conn, msg->get_seq(), *msg, msg->get_type());
     bl.append(CEPH_MSGR_TAG_MSG);
     bl.append((const char*)&header, sizeof(header));
     bl.append(msg->get_payload());
@@ -819,8 +836,8 @@ seastar::future<> ProtocolV1::read_message()
 
       // start dispatch, ignoring exceptions from the application layer
       seastar::with_gate(pending_dispatch, [this, msg = std::move(msg_ref)] {
-          logger().debug("{} <= {}@{} === {}", messenger,
-                msg->get_source(), conn.peer_addr, *msg);
+          logger().debug("{} <== #{} === {} ({})",
+                         conn, msg->get_seq(), *msg, msg->get_type());
           return dispatcher.ms_dispatch(&conn, std::move(msg))
             .handle_exception([this] (std::exception_ptr eptr) {
               logger().error("{} ms_dispatch caught exception: {}", conn, eptr);

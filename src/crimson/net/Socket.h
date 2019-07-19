@@ -67,6 +67,7 @@ class Socket
 				      seastar::socket_address paddr) {
         entity_addr_t peer_addr;
         peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
+        peer_addr.set_type(entity_addr_t::TYPE_ANY);
         return seastar::make_ready_future<SocketFRef, entity_addr_t>(
           seastar::make_foreign(std::make_unique<Socket>(std::move(socket),
 							 construct_tag{})),
