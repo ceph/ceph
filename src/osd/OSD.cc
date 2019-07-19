@@ -481,6 +481,8 @@ void OSDService::shutdown_reserver()
 
 void OSDService::shutdown()
 {
+  mono_timer.suspend();
+
   {
     std::lock_guard l(watch_lock);
     watch_timer.shutdown();
@@ -509,6 +511,7 @@ void OSDService::init()
 
   watch_timer.init();
   agent_timer.init();
+  mono_timer.resume();
 
   agent_thread.create("osd_srv_agent");
 

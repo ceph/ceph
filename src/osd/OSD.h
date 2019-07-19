@@ -25,6 +25,7 @@
 #include "common/ceph_context.h"
 #include "common/config_cacher.h"
 #include "common/zipkin_trace.h"
+#include "common/ceph_timer.h"
 
 #include "mgr/MgrClient.h"
 
@@ -856,6 +857,10 @@ public:
 
   /// get or create a ref for a peer's HeartbeatStamps
   HeartbeatStampsRef get_hb_stamps(unsigned osd);
+
+
+  // Timer for readable leases
+  ceph::timer<ceph::mono_clock> mono_timer = ceph::timer<ceph::mono_clock>{ceph::construct_suspended};
 
   // -- stopping --
   ceph::mutex is_stopping_lock = ceph::make_mutex("OSDService::is_stopping_lock");
