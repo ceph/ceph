@@ -19,12 +19,9 @@ def lru_cache(maxsize=128, typed=False):
         cache = OrderedDict()
         stats = [0, 0]
         rlock = RLock()
-        setattr(
-            function,
-            'cache_info',
-            lambda:
-            "hits={}, misses={}, maxsize={}, currsize={}".format(
-                stats[0], stats[1], maxsize, len(cache)))
+        setattr(function, 'cache_info', lambda:
+                "hits={}, misses={}, maxsize={}, currsize={}".format(
+                    stats[0], stats[1], maxsize, len(cache)))
 
         @wraps(function)
         def wrapper(*args, **kwargs):

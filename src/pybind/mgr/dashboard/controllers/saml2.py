@@ -75,12 +75,12 @@ class Saml2(BaseController):
             token = token.decode('utf-8')
             logger.debug("JWT Token: %s", token)
             raise cherrypy.HTTPRedirect("{}/#/login?access_token={}".format(url_prefix, token))
-        else:
-            return {
-                'is_authenticated': auth.is_authenticated(),
-                'errors': errors,
-                'reason': auth.get_last_error_reason()
-            }
+
+        return {
+            'is_authenticated': auth.is_authenticated(),
+            'errors': errors,
+            'reason': auth.get_last_error_reason()
+        }
 
     @Endpoint(xml=True)
     def metadata(self):

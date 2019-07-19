@@ -12,6 +12,8 @@ import rbd
 
 from . import ApiController, Endpoint, Task, BaseController, ReadPermission, \
     RESTController
+from .rbd import _rbd_call
+
 from .. import logger, mgr
 from ..security import Scope
 from ..services.ceph_service import CephService
@@ -35,11 +37,6 @@ def RbdMirroringTask(name, metadata, wait_for):
         return Task("rbd/mirroring/{}".format(name), metadata, wait_for,
                     partial(serialize_dashboard_exception, include_http_status=True))(func)
     return composed_decorator
-
-
-def _rbd_call(pool_name, func, *args, **kwargs):
-    with mgr.rados.open_ioctx(pool_name) as ioctx:
-        func(ioctx, *args, **kwargs)
 
 
 @ViewCache()

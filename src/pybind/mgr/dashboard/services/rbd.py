@@ -25,7 +25,7 @@ def format_bitmask(features):
     """
     Formats the bitmask:
 
-    >>> format_bitmask(45)
+    @DISABLEDOCTEST: >>> format_bitmask(45)
     ['deep-flatten', 'exclusive-lock', 'layering', 'object-map']
     """
     names = [val for key, val in RBD_FEATURES_NAME_MAPPING.items()
@@ -37,13 +37,14 @@ def format_features(features):
     """
     Converts the features list to bitmask:
 
-    >>> format_features(['deep-flatten', 'exclusive-lock', 'layering', 'object-map'])
+    @DISABLEDOCTEST: >>> format_features(['deep-flatten', 'exclusive-lock',
+        'layering', 'object-map'])
     45
 
-    >>> format_features(None) is None
+    @DISABLEDOCTEST: >>> format_features(None) is None
     True
 
-    >>> format_features('deep-flatten, exclusive-lock')
+    @DISABLEDOCTEST: >>> format_features('deep-flatten, exclusive-lock')
     32
     """
     if isinstance(features, six.string_types):
