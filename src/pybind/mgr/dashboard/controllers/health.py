@@ -11,6 +11,7 @@ from ..security import Permission, Scope
 from ..services.ceph_service import CephService
 from ..services.iscsi_cli import IscsiGatewaysConfig
 from ..services.iscsi_client import IscsiClient
+from ..tools import partial_dict
 
 
 class HealthData(object):
@@ -25,10 +26,6 @@ class HealthData(object):
     def __init__(self, auth_callback, minimal=True):
         self._has_permissions = auth_callback
         self._minimal = minimal
-
-    @staticmethod
-    def _partial_dict(orig, keys):
-        return {k: orig[k] for k in keys}
 
     def all_health(self):
         result = {
@@ -83,7 +80,7 @@ class HealthData(object):
     def client_perf(self):
         result = CephService.get_client_perf()
         if self._minimal:
-            result = self._partial_dict(
+            result = partial_dict(
                 result,
                 ['read_bytes_sec', 'read_op_per_sec',
                  'recovering_bytes_per_sec', 'write_bytes_sec',
@@ -97,7 +94,7 @@ class HealthData(object):
         del df['stats_by_class']
 
         if self._minimal:
-            df = dict(stats=self._partial_dict(
+            df = dict(stats=partial_dict(
                 df['stats'],
                 ['total_avail_bytes', 'total_bytes',
                  'total_used_raw_bytes']
@@ -107,15 +104,15 @@ class HealthData(object):
     def fs_map(self):
         fs_map = mgr.get('fs_map')
         if self._minimal:
-            fs_map = self._partial_dict(fs_map, ['filesystems', 'standbys'])
+            fs_map = partial_dict(fs_map, ['filesystems', 'standbys'])
             fs_map['standbys'] = [{}] * len(fs_map['standbys'])
-            fs_map['filesystems'] = [self._partial_dict(item, ['mdsmap']) for
+            fs_map['filesystems'] = [partial_dict(item, ['mdsmap']) for
                                      item in fs_map['filesystems']]
             for fs in fs_map['filesystems']:
                 mdsmap_info = fs['mdsmap']['info']
                 min_mdsmap_info = dict()
                 for k, v in mdsmap_info.items():
-                    min_mdsmap_info[k] = self._partial_dict(v, ['state'])
+                    min_mdsmap_info[k] = partial_dict(v, ['state'])
                 fs['mdsmap'] = dict(info=min_mdsmap_info)
         return fs_map
 
@@ -136,15 +133,15 @@ class HealthData(object):
     def mgr_map(self):
         mgr_map = mgr.get('mgr_map')
         if self._minimal:
-            mgr_map = self._partial_dict(mgr_map, ['active_name', 'standbys'])
+            mgr_map = partial_dict(mgr_map, ['active_name', 'standbys'])
             mgr_map['standbys'] = [{}] * len(mgr_map['standbys'])
         return mgr_map
 
     def mon_status(self):
         mon_status = json.loads(mgr.get('mon_status')['json'])
         if self._minimal:
-            mon_status = self._partial_dict(mon_status, ['monmap', 'quorum'])
-            mon_status['monmap'] = self._partial_dict(
+            mon_status = partial_dict(mon_status, ['monmap', 'quorum'])
+            mon_status['monmap'] = partial_dict(
                 mon_status['monmap'], ['mons']
             )
             mon_status['monmap']['mons'] = [{}] * \
@@ -157,9 +154,9 @@ class HealthData(object):
         # Not needed, skip the effort of transmitting this to UI
         del osd_map['pg_temp']
         if self._minimal:
-            osd_map = self._partial_dict(osd_map, ['osds'])
+            osd_map = partial_dict(osd_map, ['osds'])
             osd_map['osds'] = [
-                self._partial_dict(item, ['in', 'up'])
+                partial_dict(item, ['in', 'up'])
                 for item in osd_map['osds']
             ]
         else:
