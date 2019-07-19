@@ -4,6 +4,7 @@
 #include "test/rbd_mirror/test_fixture.h"
 #include "include/stringify.h"
 #include "include/rbd/librbd.hpp"
+#include "common/Cond.h"
 #include "journal/Journaler.h"
 #include "journal/Settings.h"
 #include "librbd/ExclusiveLock.h"
@@ -58,7 +59,7 @@ void scribble(librbd::ImageCtx *image_ctx, int num_ops, uint64_t max_size)
     }
   }
 
-  RWLock::RLocker owner_locker(image_ctx->owner_lock);
+  std::shared_lock owner_locker{image_ctx->owner_lock};
   ASSERT_EQ(0, flush(image_ctx));
 }
 
@@ -104,7 +105,7 @@ public:
 
     C_SaferCond ctx;
     {
-      RWLock::RLocker owner_locker((*image_ctx)->owner_lock);
+      std::shared_lock owner_locker{(*image_ctx)->owner_lock};
       (*image_ctx)->exclusive_lock->try_acquire_lock(&ctx);
     }
     ASSERT_EQ(0, ctx.wait());
@@ -178,7 +179,7 @@ TEST_F(TestImageSync, Resize) {
                                                                std::move(bl),
                                                                0));
   {
-    RWLock::RLocker owner_locker(m_remote_image_ctx->owner_lock);
+    std::shared_lock owner_locker{m_remote_image_ctx->owner_lock};
     ASSERT_EQ(0, flush(m_remote_image_ctx));
   }
 
@@ -220,7 +221,7 @@ TEST_F(TestImageSync, Discard) {
                                                                std::move(bl),
                                                                0));
   {
-    RWLock::RLocker owner_locker(m_remote_image_ctx->owner_lock);
+    std::shared_lock owner_locker{m_remote_image_ctx->owner_lock};
     ASSERT_EQ(0, flush(m_remote_image_ctx));
   }
 
@@ -230,7 +231,7 @@ TEST_F(TestImageSync, Discard) {
             m_remote_image_ctx->io_work_queue->discard(
               off + 1, len - 2, m_remote_image_ctx->discard_granularity_bytes));
   {
-    RWLock::RLocker owner_locker(m_remote_image_ctx->owner_lock);
+    std::shared_lock owner_locker{m_remote_image_ctx->owner_lock};
     ASSERT_EQ(0, flush(m_remote_image_ctx));
   }
 
@@ -289,7 +290,7 @@ TEST_F(TestImageSync, SnapshotStress) {
   for (auto &snap_name : snap_names) {
     uint64_t remote_snap_id;
     {
-      RWLock::RLocker remote_image_locker(m_remote_image_ctx->image_lock);
+      std::shared_lock remote_image_locker{m_remote_image_ctx->image_lock};
       remote_snap_id = m_remote_image_ctx->get_snap_id(
         cls::rbd::UserSnapshotNamespace{}, snap_name);
     }
@@ -300,14 +301,14 @@ TEST_F(TestImageSync, SnapshotStress) {
       m_remote_image_ctx->state->snap_set(remote_snap_id, &ctx);
       ASSERT_EQ(0, ctx.wait());
 
-      RWLock::RLocker remote_image_locker(m_remote_image_ctx->image_lock);
+      std::shared_lock remote_image_locker{m_remote_image_ctx->image_lock};
       remote_size = m_remote_image_ctx->get_image_size(
         m_remote_image_ctx->snap_id);
     }
 
     uint64_t local_snap_id;
     {
-      RWLock::RLocker image_locker(m_local_image_ctx->image_lock);
+      std::shared_lock image_locker{m_local_image_ctx->image_lock};
       local_snap_id = m_local_image_ctx->get_snap_id(
         cls::rbd::UserSnapshotNamespace{}, snap_name);
     }
@@ -318,7 +319,7 @@ TEST_F(TestImageSync, SnapshotStress) {
       m_local_image_ctx->state->snap_set(local_snap_id, &ctx);
       ASSERT_EQ(0, ctx.wait());
 
-      RWLock::RLocker image_locker(m_local_image_ctx->image_lock);
+      std::shared_lock image_locker{m_local_image_ctx->image_lock};
       local_size = m_local_image_ctx->get_image_size(
         m_local_image_ctx->snap_id);
       bool flags_set;

@@ -64,7 +64,7 @@ struct ManagedLock<MockTestImageCtx> {
               const std::string& oid, librbd::Watcher *watcher,
               managed_lock::Mode  mode, bool blacklist_on_break_lock,
               uint32_t blacklist_expire_seconds)
-    : m_work_queue(work_queue), m_lock("ManagedLock::m_lock") {
+    : m_work_queue(work_queue) {
     MockManagedLock::get_instance().construct();
   }
 
@@ -74,7 +74,7 @@ struct ManagedLock<MockTestImageCtx> {
 
   ContextWQ *m_work_queue;
 
-  mutable Mutex m_lock;
+  mutable ceph::mutex m_lock = ceph::make_mutex("ManagedLock::m_lock");
 
   bool is_lock_owner() const {
     return MockManagedLock::get_instance().is_lock_owner();
@@ -182,7 +182,7 @@ namespace mirror {
 
 template <>
 struct Threads<librbd::MockTestImageCtx> {
-  Mutex &timer_lock;
+  ceph::mutex &timer_lock;
   SafeTimer *timer;
   ContextWQ *work_queue;
 

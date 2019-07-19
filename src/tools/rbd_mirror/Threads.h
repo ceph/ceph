@@ -4,7 +4,7 @@
 #ifndef CEPH_RBD_MIRROR_THREADS_H
 #define CEPH_RBD_MIRROR_THREADS_H
 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 
 class CephContext;
 class ContextWQ;
@@ -22,7 +22,8 @@ struct Threads {
   ContextWQ *work_queue = nullptr;
 
   SafeTimer *timer = nullptr;
-  Mutex timer_lock;
+  ceph::mutex timer_lock =
+    ceph::make_mutex("Threads::timer_lock");
 
   explicit Threads(CephContext *cct);
   Threads(const Threads&) = delete;

@@ -4,7 +4,7 @@
 #ifndef CEPH_RBD_MIRROR_SERVICE_DAEMON_H
 #define CEPH_RBD_MIRROR_SERVICE_DAEMON_H
 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/service_daemon/Types.h"
 #include <map>
@@ -68,7 +68,7 @@ private:
   RadosRef m_rados;
   Threads<ImageCtxT>* m_threads;
 
-  Mutex m_lock;
+  ceph::mutex m_lock = ceph::make_mutex("rbd::mirror::ServiceDaemon");
   Pools m_pools;
   uint64_t m_callout_id = service_daemon::CALLOUT_ID_NONE;
 

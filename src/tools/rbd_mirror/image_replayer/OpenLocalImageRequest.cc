@@ -45,8 +45,8 @@ struct MirrorExclusiveLockPolicy : public librbd::exclusive_lock::Policy {
   int lock_requested(bool force) override {
     int r = -EROFS;
     {
-      RWLock::RLocker owner_locker(image_ctx->owner_lock);
-      RWLock::RLocker image_locker(image_ctx->image_lock);
+      std::shared_lock owner_locker{image_ctx->owner_lock};
+      std::shared_lock image_locker{image_ctx->image_lock};
       if (image_ctx->journal == nullptr || image_ctx->journal->is_tag_owner()) {
         r = 0;
       }
@@ -107,8 +107,8 @@ void OpenLocalImageRequest<I>::send_open_image() {
   *m_local_image_ctx = I::create("", m_local_image_id, nullptr,
                                  m_local_io_ctx, false);
   {
-    RWLock::WLocker owner_locker((*m_local_image_ctx)->owner_lock);
-    RWLock::WLocker image_locker((*m_local_image_ctx)->image_lock);
+    std::scoped_lock locker{(*m_local_image_ctx)->owner_lock,
+			    (*m_local_image_ctx)->image_lock};
     (*m_local_image_ctx)->set_exclusive_lock_policy(
       new MirrorExclusiveLockPolicy<I>(*m_local_image_ctx));
     (*m_local_image_ctx)->set_journal_policy(
@@ -183,7 +183,7 @@ template <typename I>
 void OpenLocalImageRequest<I>::send_lock_image() {
   dout(20) << dendl;
 
-  RWLock::RLocker owner_locker((*m_local_image_ctx)->owner_lock);
+  std::shared_lock owner_locker{(*m_local_image_ctx)->owner_lock};
   if ((*m_local_image_ctx)->exclusive_lock == nullptr) {
     derr << ": image does not support exclusive lock" << dendl;
     send_close_image(-EINVAL);
@@ -212,7 +212,7 @@ void OpenLocalImageRequest<I>::handle_lock_image(int r) {
   }
 
   {
-    RWLock::RLocker owner_locker((*m_local_image_ctx)->owner_lock);
+    std::shared_lock owner_locker{(*m_local_image_ctx)->owner_lock};
     if ((*m_local_image_ctx)->exclusive_lock == nullptr ||
 	!(*m_local_image_ctx)->exclusive_lock->is_lock_owner()) {
       derr << ": image is not locked" << dendl;

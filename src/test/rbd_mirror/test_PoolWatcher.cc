@@ -16,7 +16,7 @@
 #include "librbd/api/Mirror.h"
 #include "common/Cond.h"
 #include "common/errno.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "tools/rbd_mirror/PoolWatcher.h"
 #include "tools/rbd_mirror/Threads.h"
 #include "tools/rbd_mirror/Types.h"
@@ -46,7 +46,7 @@ class TestPoolWatcher : public ::rbd::mirror::TestFixture {
 public:
 
   TestPoolWatcher()
-    : m_lock("TestPoolWatcherLock"), m_pool_watcher_listener(this),
+    : m_pool_watcher_listener(this),
       m_image_number(0), m_snap_number(0)
   {
     m_cluster = std::make_shared<librados::Rados>();
@@ -70,7 +70,7 @@ public:
 
   struct PoolWatcherListener : public rbd::mirror::pool_watcher::Listener {
     TestPoolWatcher *test;
-    Cond cond;
+    ceph::condition_variable cond;
     ImageIds image_ids;
 
     explicit PoolWatcherListener(TestPoolWatcher *test) : test(test) {
@@ -79,12 +79,12 @@ public:
     void handle_update(const std::string &mirror_uuid,
                        ImageIds &&added_image_ids,
                        ImageIds &&removed_image_ids) override {
-      Mutex::Locker locker(test->m_lock);
+      std::lock_guard locker{test->m_lock};
       for (auto &image_id : removed_image_ids) {
         image_ids.erase(image_id);
       }
       image_ids.insert(added_image_ids.begin(), added_image_ids.end());
-      cond.Signal();
+      cond.notify_all();
     }
   };
 
@@ -204,10 +204,9 @@ public:
   }
 
   void check_images() {
-    Mutex::Locker l(m_lock);
+    std::unique_lock l{m_lock};
     while (m_mirrored_images != m_pool_watcher_listener.image_ids) {
-      if (m_pool_watcher_listener.cond.WaitInterval(
-            m_lock, utime_t(10, 0)) != 0) {
+      if (m_pool_watcher_listener.cond.wait_for(l, 10s) == std::cv_status::timeout) {
         break;
       }
     }
@@ -215,7 +214,7 @@ public:
     ASSERT_EQ(m_mirrored_images, m_pool_watcher_listener.image_ids);
   }
 
-  Mutex m_lock;
+  ceph::mutex m_lock = ceph::make_mutex("TestPoolWatcherLock");
   RadosRef m_cluster;
   PoolWatcherListener m_pool_watcher_listener;
   unique_ptr<PoolWatcher<> > m_pool_watcher;

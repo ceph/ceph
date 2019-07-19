@@ -88,7 +88,7 @@ ImageDeleter<librbd::MockTestImageCtx>* ImageDeleter<librbd::MockTestImageCtx>::
 template <>
 struct Threads<librbd::MockTestImageCtx> {
   MockSafeTimer *timer;
-  Mutex &timer_lock;
+  ceph::mutex &timer_lock;
 
   MockContextWQ *work_queue;
 

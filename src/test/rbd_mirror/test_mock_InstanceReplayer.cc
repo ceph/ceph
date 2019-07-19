@@ -32,8 +32,8 @@ namespace mirror {
 template <>
 struct Threads<librbd::MockTestImageCtx> {
   MockSafeTimer *timer;
-  Mutex &timer_lock;
-  Cond timer_cond;
+  ceph::mutex &timer_lock;
+  ceph::condition_variable timer_cond;
 
   MockContextWQ *work_queue;
 
@@ -144,14 +144,14 @@ public:
     EXPECT_CALL(*mock_threads.timer, add_event_after(_, _))
       .WillOnce(DoAll(
         WithArg<1>(Invoke([this, &mock_threads, timer_ctx](Context *ctx) {
-          ceph_assert(mock_threads.timer_lock.is_locked());
+          ceph_assert(ceph_mutex_is_locked(mock_threads.timer_lock));
           if (timer_ctx != nullptr) {
             *timer_ctx = ctx;
-            mock_threads.timer_cond.SignalOne();
+            mock_threads.timer_cond.notify_one();
           } else {
             m_threads->work_queue->queue(
               new FunctionContext([&mock_threads, ctx](int) {
-                Mutex::Locker timer_lock(mock_threads.timer_lock);
+                std::lock_guard timer_lock{mock_threads.timer_lock};
                 ctx->complete(0);
               }), 0);
           }
@@ -281,7 +281,7 @@ TEST_F(TestMockInstanceReplayer, RemoveFinishedImage) {
 
   ASSERT_TRUE(timer_ctx1 != nullptr);
   {
-    Mutex::Locker timer_locker(mock_threads.timer_lock);
+    std::lock_guard timer_locker{mock_threads.timer_lock};
     timer_ctx1->complete(0);
   }
 
