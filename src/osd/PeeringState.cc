@@ -411,6 +411,7 @@ void PeeringState::advance_map(
   if (pool.info.last_change == osdmap_ref->get_epoch()) {
     pl->on_pool_change();
   }
+  readable_interval = pool.get_readable_interval();
   last_require_osd_release = osdmap->require_osd_release;
 }
 
@@ -741,6 +742,14 @@ void PeeringState::on_new_interval()
 
   init_hb_stamps();
 
+  acting_readable_until_ub.clear();
+  if (is_primary()) {
+    acting_readable_until_ub.resize(acting.size(), ceph::signedspan::zero());
+
+    // start lease here, so that we get acks during peering
+    renew_lease(pl->get_mnow());
+  }
+
   pl->on_new_interval();
 }
 
@@ -1069,6 +1078,23 @@ bool PeeringState::set_force_backfill(bool b)
     pl->update_local_background_io_priority(get_backfill_priority());
   }
   return did;
+}
+
+void PeeringState::recalc_readable_until()
+{
+  assert(is_primary());
+  ceph::signedspan min = readable_until_ub_sent;
+  for (unsigned i = 0; i < acting.size(); ++i) {
+    if (acting[i] == pg_whoami.osd || acting[i] == CRUSH_ITEM_NONE) {
+      continue;
+    }
+    if (acting_readable_until_ub[i] < min) {
+      min = acting_readable_until_ub[i];
+    }
+  }
+  readable_until = min;
+  readable_until_ub = min;
+  dout(20) << __func__ << " readable_until[_ub] " << readable_until << dendl;
 }
 
 bool PeeringState::adjust_need_up_thru(const OSDMapRef osdmap)

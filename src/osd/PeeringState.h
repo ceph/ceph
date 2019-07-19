@@ -1343,6 +1343,23 @@ public:
 
   vector<HeartbeatStampsRef> hb_stamps;
 
+  ceph::signedspan readable_interval = ceph::signedspan::zero();
+
+  /// how long we can service reads in this interval
+  ceph::signedspan readable_until = ceph::signedspan::zero();
+
+  /// upper bound on any acting OSDs' readable_until in this interval
+  ceph::signedspan readable_until_ub = ceph::signedspan::zero();
+
+  /// [replica] upper bound we got from the primary (primary's clock)
+  ceph::signedspan readable_until_ub_from_primary = ceph::signedspan::zero();
+
+  /// [primary] last upper bound shared by primary to replicas
+  ceph::signedspan readable_until_ub_sent = ceph::signedspan::zero();
+
+  /// [primary] readable ub acked by acting set members
+  vector<ceph::signedspan> acting_readable_until_ub;
+
   bool send_notify = false; ///< True if a notify needs to be sent to the primary
 
   bool dirty_info = false;          ///< small info structu on disk out of date
@@ -1915,6 +1932,26 @@ public:
     dirty_big_info = true;
     write_if_dirty(t);
   }
+
+  /// Get current interval's readable_until
+  ceph::signedspan get_readable_until() const {
+    return readable_until;
+  }
+
+  void renew_lease(ceph::signedspan now) {
+    bool was_min = (readable_until_ub == readable_until);
+    readable_until_ub_sent = now + readable_interval;
+    if (was_min) {
+      recalc_readable_until();
+    }
+  }
+
+  pg_lease_t get_lease() {
+    return pg_lease_t(readable_until, readable_until_ub_sent, readable_interval);
+  }
+
+  /// [primary] recalc readable_until[_ub] for the current interval
+  void recalc_readable_until();
 
   //============================ const helpers ================================
   const char *get_current_state() const {
