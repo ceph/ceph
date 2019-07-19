@@ -1358,6 +1358,8 @@ public:
 
   /// upper bound on any acting OSDs' readable_until in this interval
   ceph::signedspan readable_until_ub = ceph::signedspan::zero();
+  /// upper bound from prior interval(s)
+  ceph::signedspan prior_readable_until_ub = ceph::signedspan::zero();
 
   /// [replica] upper bound we got from the primary (primary's clock)
   ceph::signedspan readable_until_ub_from_primary = ceph::signedspan::zero();
@@ -1946,6 +1948,11 @@ public:
     return readable_until;
   }
 
+  /// Get prior intervals' readable_until upper bound
+  ceph::signedspan get_prior_readable_until_ub() const {
+    return prior_readable_until_ub;
+  }
+
   void renew_lease(ceph::signedspan now) {
     bool was_min = (readable_until_ub == readable_until);
     readable_until_ub_sent = now + readable_interval;
@@ -1953,6 +1960,7 @@ public:
       recalc_readable_until();
     }
   }
+
   void send_lease();
   void schedule_renew_lease();
 
