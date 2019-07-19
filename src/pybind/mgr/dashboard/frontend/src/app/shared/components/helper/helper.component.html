@@ -7,5 +7,6 @@
    [popover]="popoverTpl"
    placement="bottom"
    container="body"
+   (click)="$event.preventDefault();"
    [outsideClick]="true">
 </i>
