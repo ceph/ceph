@@ -168,6 +168,9 @@ class RemoteEvent(Event):
         self._progress = 1.0
         self._failed = True
         self._failure_message = message
+
+    def set_message(self, message):
+        self._message = message
         self._refresh()
 
     @property
@@ -384,7 +387,6 @@ class Module(MgrModule):
                 # data from the json dump
                 old_up_acting = old_map.pg_to_up_acting_osds(pool['pool'], ps)
                 old_osds = set(old_up_acting['acting'])
-
                 new_up_acting = new_map.pg_to_up_acting_osds(pool['pool'], ps)
                 new_osds = set(new_up_acting['acting'])
 
@@ -587,7 +589,7 @@ class Module(MgrModule):
                 ev_progress, ev_msg))
 
         ev.set_progress(ev_progress)
-        ev._refresh()
+        ev.set_message(ev_msg)
 
     def _complete(self, ev):
         duration = (time.time() - ev.started_at)

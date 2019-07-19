@@ -44,6 +44,16 @@ def nearest_power_of_two(n):
 
     return x if (v - n) > (n - x) else v
 
+class PgAdjustmentProgress(object):
+    """
+    Keeps the initial and target pg_num values
+    """
+    def __init__(self, pg_num, pg_num_target, ev_id):
+        self._ev_id = ev_id
+        self._pg_num = pg_num
+        self._pg_num_target = pg_num_target
+        
+   
 
 class PgAutoscaler(MgrModule):
     """
@@ -65,7 +75,7 @@ class PgAutoscaler(MgrModule):
     MODULE_OPTIONS = [
         {
             'name': 'sleep_interval',
-            'default': str(60),
+            'default': str(10),
         },
     ]
 
@@ -162,6 +172,7 @@ class PgAutoscaler(MgrModule):
         self.config_notify()
         while not self._shutdown.is_set():
             self._maybe_adjust()
+            self._update_progress_events()
             self._shutdown.wait(timeout=int(self.sleep_interval))
 
     def get_subtree_resource_status(self, osdmap, crush):
@@ -240,9 +251,9 @@ class PgAutoscaler(MgrModule):
             self,
             osdmap,
             pools,
-            threshold=3.0,
+            threshold=1.0,
     ):
-        assert threshold >= 2.0
+        assert threshold >= 1.0
 
         crush_map = osdmap.get_crush()
 
@@ -330,8 +341,40 @@ class PgAutoscaler(MgrModule):
                 });
 
         return (ret, root_map, pool_root)
+    
+    def _update_progress_events(self):
+        osdmap = self.get_osdmap()
+        pools = osdmap.get_pools()
+        for pool_id in list(self._event):
+            ev = self._event[pool_id]
+            pool_data = pools[int(pool_id)]
+            pg_num = pool_data['pg_num']
+            pg_num_target = pool_data['pg_num_target']
+            initial_pg_num = ev._pg_num
+            initial_pg_num_target = ev._pg_num_target
+            if pg_num == pg_num_target:
+                self.remote('progress', 'complete', ev._ev_id)
+                del self._event[pool_id]
+                continue
+            if pg_num == initial_pg_num:
+                continue
+            if pg_num < pg_num_target:
+                self.remote('progress', 'update', ev._ev_id, 
+                                    ev_msg=" PG autoscaler increasing pool %s PGs from %d to %d" % 
+                                    (pool_id, pg_num, pg_num_target), 
+                                    ev_progress=pg_num/pg_num_target,
+                                    refs=[("pool", int(pool_id))])
+            elif pg_num > pg_num_target:
+                self.remote('progress', 'update', ev._ev_id, 
+                                    ev_msg=" PG autoscaler decreasing pool %s PGs from %d to %d" % 
+                                    (pool_id, pg_num, pg_num_target), 
+                                    ev_progress=pg_num_target/pg_num,
+                                    refs=[("pool", int(pool_id))])
+            ev._pg_num = pg_num
+            ev._pg_num_target = pg_num_target
 
-
+            
+           
     def _maybe_adjust(self):
         self.log.info('_maybe_adjust')
         osdmap = self.get_osdmap()
@@ -366,11 +409,6 @@ class PgAutoscaler(MgrModule):
                 total_target_bytes[p['crush_root_id']] += p['target_bytes'] * p['raw_used_rate']
                 target_bytes_pools[p['crush_root_id']].append(p['pool_name'])
             if not p['would_adjust']:
-                # Means that we no need to adjust the pg any longer
-                # Therefore complete event if it still exists
-                if pool_id in self._event:
-                    self.remote('progress', 'complete', self._event[pool_id])
-                    del self._event[pool_id]
                 continue
             if p['pg_autoscale_mode'] == 'warn':
                 msg = 'Pool %s has %d placement groups, should have %d' % (
@@ -395,41 +433,61 @@ class PgAutoscaler(MgrModule):
                 # Create new event for each pool
                 # and update existing events
                 # Call Progress Module to create progress event
-
                 if pool_id not in self._event:
-                    self._event[pool_id] = str(uuid.uuid4())
-                    if p['pg_num_target'] < p['pg_num_final']:
-                        self.remote('progress', 'update', self._event[pool_id], 
-                                ev_msg=" PgAutoscaler growing PGs in pool: {0}".format(
-                                    pool_id), 
-                                ev_progress=0.0, 
-                                refs=[("pool", int(pool_id))])
+                    osdmap = self.get_osdmap()
+                    pools = osdmap.get_pools()
+                    pool_data = pools[int(pool_id)]
+                    pg_num = pool_data['pg_num']
+                    pg_num_target = pool_data['pg_num_target']
+                    ev_id = str(uuid.uuid4())
+                    pg_adj_obj = PgAdjustmentProgress(pg_num, pg_num_target, ev_id)
+                    self._event[pool_id] = pg_adj_obj
+                    if pg_num < pg_num_target:
+                        self.remote('progress', 'update', ev_id, 
+                                    ev_msg=" PG autoscaler increasing pool %s PGs from %d to %d" % 
+                                    (pool_id, pg_num, pg_num_target), 
+                                    ev_progress=0.0,
+                                    refs=[("pool", int(pool_id))])
                     else:
-                        self.remote('progress', 'update', self._event[pool_id], 
-                                ev_msg=" PgAutoscaler shrinking PGs in pool: {0}".format(
-                                    pool_id), 
-                                ev_progress=0.0, 
-                                refs=[("pool", int(pool_id))])
+                        self.remote('progress', 'update', ev_id, 
+                                    ev_msg=" PG autoscaler decreasing pool %s PGs from %d to %d" % 
+                                    (pool_id, pg_num, pg_num_target), 
+                                    ev_progress=0.0,
+                                    refs=[("pool", int(pool_id))])
 
-                else:
-                    new_progress = p['pg_num_target']/p['pg_num_final']
-                    if new_progress == 1.0:
-                        self.remote('progress', 'complete', self._event[pool_id])
-                        del self._event[pool_id]
-                    elif new_progress > 1.0:
-                        new_progress = p['pg_num_final']/p['pg_num_target']
-                        self.remote('progress', 'update', self._event[pool_id],   
-                                ev_msg=" PgAutoscaler shrinking PGs in pool: {0}".format(
-                                    pool_id), 
-                                ev_progress=new_progress,
-                                refs=[("pool", int(pool_id))])
-                    else:
-                        self.remote('progress', 'update', self._event[pool_id],   
-                                ev_msg=" PgAutoscaler growing PGs in pool: {0}".format(
-                                    pool_id), 
-                                ev_progress=new_progress,
-                                refs=[("pool", int(pool_id))])
 
+#                    if p['pg_num_target'] < p['pg_num_final']:
+#                        self.remote('progress', 'update', self._event[pool_id], 
+#                                ev_msg=" PgAutoscaler growing PGs in pool: {0}".format(
+#                                    pool_id), 
+#                                ev_progress=0.0, 
+#                                refs=[("pool", int(pool_id))])
+#                    else:
+#                        self.remote('progress', 'update', self._event[pool_id], 
+#                                ev_msg=" PgAutoscaler shrinking PGs in pool: {0}".format(
+#                                    pool_id), 
+#                                ev_progress=0.0, 
+#                                refs=[("pool", int(pool_id))])
+#
+#                else:
+#                    new_progress = p['pg_num_target']/p['pg_num_final']
+#                    if new_progress == 1.0:
+#                        self.remote('progress', 'complete', self._event[pool_id])
+#                        del self._event[pool_id]
+#                    elif new_progress > 1.0:
+#                        new_progress = p['pg_num_final']/p['pg_num_target']
+#                        self.remote('progress', 'update', self._event[pool_id],   
+#                                ev_msg=" PgAutoscaler shrinking PGs in pool: {0}".format(
+#                                    pool_id), 
+#                                ev_progress=new_progress,
+#                                refs=[("pool", int(pool_id))])
+#                    else:
+#                        self.remote('progress', 'update', self._event[pool_id],   
+#                                ev_msg=" PgAutoscaler growing PGs in pool: {0}".format(
+#                                    pool_id), 
+#                                ev_progress=new_progress,
+#                                refs=[("pool", int(pool_id))])
+#
 
                 if r[0] != 0:
                     # FIXME: this is a serious and unexpected thing,
