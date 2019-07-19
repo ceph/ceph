@@ -89,6 +89,7 @@ class MonitorThrasher:
         self.manager = manager
         self.manager.wait_for_clean()
 
+        self.e = None
         self.stopping = False
         self.logger = logger
         self.config = config
@@ -220,6 +221,19 @@ class MonitorThrasher:
             return m
 
     def do_thrash(self):
+        """
+        _do_thrash() wrapper.
+        """
+        try:
+            self._do_thrash()
+        except Exception as e:
+            # See _run exception comment for MDSThrasher
+            self.e = e
+            self.logger.exception("exception:")
+            # Allow successful completion so gevent doesn't see an exception.
+            # The DaemonWatchdog will observe the error and tear down the test.
+
+    def _do_thrash(self):
         """
         Continuously loop and thrash the monitors.
         """
