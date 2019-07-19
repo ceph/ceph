@@ -129,6 +129,29 @@ struct MTrim : boost::statechart::event<MTrim> {
   }
 };
 
+struct MLease : boost::statechart::event<MLease> {
+  epoch_t epoch;
+  int from;
+  pg_lease_t lease;
+  MLease(epoch_t epoch, int from, pg_lease_t l)
+    : epoch(epoch), from(from), lease(l) {}
+  void print(std::ostream *out) const {
+    *out << "MLease epoch " << epoch << " from osd." << from << " " << lease;
+  }
+};
+
+struct MLeaseAck : boost::statechart::event<MLeaseAck> {
+  epoch_t epoch;
+  int from;
+  pg_lease_ack_t lease_ack;
+  MLeaseAck(epoch_t epoch, int from, pg_lease_ack_t l)
+    : epoch(epoch), from(from), lease_ack(l) {}
+  void print(std::ostream *out) const {
+    *out << "MLeaseAck epoch " << epoch << " from osd." << from
+	 << " " << lease_ack;
+  }
+};
+
 struct RequestBackfillPrio : boost::statechart::event< RequestBackfillPrio > {
   unsigned priority;
   int64_t primary_num_bytes;
