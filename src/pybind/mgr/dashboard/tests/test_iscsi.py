@@ -21,7 +21,7 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
 
     @classmethod
     def setup_server(cls):
-        OrchClient().available = lambda: False
+        OrchClient.instance().available = lambda: False
         mgr.rados.side_effect = None
         # pylint: disable=protected-access
         Iscsi._cp_config['tools.authenticate.on'] = False

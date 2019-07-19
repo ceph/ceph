@@ -1,6 +1,21 @@
-<tabset *ngIf="selection.hasSingleSelection && grafanaPermission.read">
+<tabset *ngIf="selection.hasSingleSelection">
   <tab i18n-heading
-       heading="Performance Details">
+       heading="Inventory"
+       *ngIf="hostsPermission.read">
+    <cd-inventory
+      [hostname]="host['hostname']">
+    </cd-inventory>
+  </tab>
+  <tab i18n-heading
+       heading="Services"
+       *ngIf="hostsPermission.read">
+    <cd-services
+      [hostname]="host['hostname']">
+    </cd-services>
+  </tab>
+  <tab i18n-heading
+       heading="Performance Details"
+       *ngIf="grafanaPermission.read">
     <cd-grafana [grafanaPath]="'host-details?var-ceph_hosts=' + host['hostname']"
                 uid="rtOg0AiWz"
                 grafanaStyle="three">
