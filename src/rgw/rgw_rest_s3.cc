@@ -934,9 +934,12 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       } else {
         s->formatter->dump_string("Type", "Normal");
       }
-      s->formatter->close_section();
+      s->formatter->close_section(); // Version/DeleteMarker
     }
-    s->formatter->close_section();
+    if (objs_container) {
+      s->formatter->close_section(); // Entries
+    }
+    s->formatter->close_section(); // ListVersionsResult
   }
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
