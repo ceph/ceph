@@ -11,6 +11,7 @@ tasks:
         - \(MGR_INSIGHTS_WARNING\)
         - \(insights_health_check
         - \(PG_
+        - \(RECENT_CRASH\)
         - replacing it with standby
         - No standby daemons available
   - cephfs_test_runner:
