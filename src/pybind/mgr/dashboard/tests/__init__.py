@@ -201,13 +201,13 @@ class ControllerTestCase(helper.CPWebCase):
             elif method == 'DELETE':
                 self.status = '204 No Content'
             return
+
+        if 'status' in thread.res_task['exception']:
+            self.status = thread.res_task['exception']['status']
         else:
-            if 'status' in thread.res_task['exception']:
-                self.status = thread.res_task['exception']['status']
-            else:
-                self.status = 500
-            self.body = json.dumps(thread.res_task['exception'])
-            return
+            self.status = 500
+        self.body = json.dumps(thread.res_task['exception'])
+        return
 
     def _task_post(self, url, data=None, timeout=60):
         self._task_request('POST', url, data, timeout)

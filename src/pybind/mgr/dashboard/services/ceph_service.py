@@ -167,11 +167,11 @@ class CephService(object):
                                                                                     kwargs)
             logger.error(msg)
             raise SendCommandError(outs, prefix, argdict, r)
-        else:
-            try:
-                return json.loads(outb)
-            except Exception:  # pylint: disable=broad-except
-                return outb
+
+        try:
+            return json.loads(outb)
+        except Exception:  # pylint: disable=broad-except
+            return outb
 
     @classmethod
     def get_rates(cls, svc_type, svc_name, path):
