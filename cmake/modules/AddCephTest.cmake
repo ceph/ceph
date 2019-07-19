@@ -69,7 +69,7 @@ function(add_tox_test name)
     list(APPEND tox_envs py3)
   endif()
   if(DEFINED TOXTEST_TOX_ENVS)
-    set(tox_envs ${TOXTEST_TOX_ENVS})
+    list(APPEND tox_envs ${TOXTEST_TOX_ENVS})
   endif()
   string(REPLACE ";" "," tox_envs "${tox_envs}")
   add_custom_command(

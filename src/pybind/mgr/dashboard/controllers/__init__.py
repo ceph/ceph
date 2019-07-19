@@ -10,10 +10,8 @@ import os
 import pkgutil
 import sys
 
-if sys.version_info >= (3, 0):
-    from urllib.parse import unquote  # pylint: disable=no-name-in-module,import-error
-else:
-    from urllib import unquote  # pylint: disable=no-name-in-module
+import six
+from six.moves.urllib.parse import unquote
 
 # pylint: disable=wrong-import-position
 import cherrypy
@@ -637,9 +635,7 @@ class BaseController(object):
         @wraps(func)
         def inner(*args, **kwargs):
             for key, value in kwargs.items():
-                # pylint: disable=undefined-variable
-                if (sys.version_info < (3, 0) and isinstance(value, unicode)) \
-                        or isinstance(value, str):
+                if isinstance(value, six.text_type):
                     kwargs[key] = unquote(value)
 
             # Process method arguments.

@@ -439,9 +439,11 @@ function populate_wheelhouse() {
 
     # although pip comes with virtualenv, having a recent version
     # of pip matters when it comes to using wheel packages
-    pip --timeout 300 $install 'setuptools >= 0.8' 'pip >= 7.0' 'wheel >= 0.24' || return 1
+    PIP_OPTS="--timeout 300 --exists-action i"
+    pip $PIP_OPTS $install \
+      'setuptools >= 0.8' 'pip >= 7.0' 'wheel >= 0.24' 'tox >= 2.9.1' || return 1
     if test $# != 0 ; then
-        pip --timeout 300 $install $@ || return 1
+        pip $PIP_OPTS $install $@ || return 1
     fi
 }
 
@@ -485,10 +487,13 @@ wip_wheelhouse=wheelhouse-wip
 find . -name tox.ini | while read ini ; do
     (
         cd $(dirname $ini)
-        require=$(ls *requirements.txt 2>/dev/null | sed -e 's/^/-r /')
+        require_files=$(ls *requirements*.txt 2>/dev/null) || true
+        constraint_files=$(ls *constraints*.txt 2>/dev/null) || true
+        require=$(echo -n "$require_files" | sed -e 's/^/-r /')
+        constraint=$(echo -n "$constraint_files" | sed -e 's/^/-c /')
         md5=wheelhouse/md5
         if test "$require"; then
-            if ! test -f $md5 || ! md5sum -c $md5 ; then
+            if ! test -f $md5 || ! md5sum -c $md5 > /dev/null; then
                 rm -rf wheelhouse
             fi
         fi
@@ -496,10 +501,10 @@ find . -name tox.ini | while read ini ; do
             for interpreter in python2.7 python3 ; do
                 type $interpreter > /dev/null 2>&1 || continue
                 activate_virtualenv $top_srcdir $interpreter || exit 1
-                populate_wheelhouse "wheel -w $wip_wheelhouse" $require || exit 1
+                populate_wheelhouse "download -d $wip_wheelhouse" $require $constraint || exit 1
             done
             mv $wip_wheelhouse wheelhouse
-            md5sum *requirements.txt > $md5
+            md5sum $require_files $constraint_files > $md5
         fi
     )
 done

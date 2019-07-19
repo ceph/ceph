@@ -1,6 +1,9 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=protected-access
-from mock import patch
+try:
+    from mock import patch
+except ImportError:
+    from unittest.mock import patch
 
 from . import ControllerTestCase
 from .. import mgr

@@ -1,0 +1,9 @@
+pylint
+flake8
+flake8-colors
+#TODO: Fix docstring issues: https://tracker.ceph.com/issues/41224
+#flake8-docstrings
+#flake8-import-order
+#flake8-typing-imports; python_version >= '3'
+#pep8-naming
+rstcheck

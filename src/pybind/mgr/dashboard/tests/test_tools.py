@@ -5,7 +5,10 @@ import unittest
 
 import cherrypy
 from cherrypy.lib.sessions import RamSession
-from mock import patch
+try:
+    from mock import patch
+except ImportError:
+    from unittest.mock import patch
 
 from . import ControllerTestCase
 from ..services.exception import handle_rados_error
