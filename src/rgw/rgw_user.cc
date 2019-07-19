@@ -229,7 +229,7 @@ int rgw_store_user_info(RGWRados *store,
     map<string, RGWAccessKey>::iterator iter = info.access_keys.begin();
     for (; iter != info.access_keys.end(); ++iter) {
       RGWAccessKey& k = iter->second;
-      if (old_info && old_info->access_keys.count(iter->first) && !renamed != 0)
+      if (old_info && old_info->access_keys.count(iter->first) != 0 && !renamed)
 	 continue;
 
       ret = rgw_put_system_obj(store, store->svc.zone->get_zone_params().user_keys_pool, k.id,
@@ -242,7 +242,7 @@ int rgw_store_user_info(RGWRados *store,
   map<string, RGWAccessKey>::iterator siter;
   for (siter = info.swift_keys.begin(); siter != info.swift_keys.end(); ++siter) {
     RGWAccessKey& k = siter->second;
-    if (old_info && old_info->swift_keys.count(siter->first) && !renamed != 0)
+    if (old_info && old_info->swift_keys.count(siter->first) != 0 && !renamed)
       continue;
 
     ret = rgw_put_system_obj(store, store->svc.zone->get_zone_params().user_swift_pool, k.id,

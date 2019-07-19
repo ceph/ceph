@@ -243,7 +243,7 @@ int rgw_bucket_chown(RGWRados* const store, RGWUserInfo& user_info, RGWBucketInf
 
   do {
       objs.clear();
-      int ret = list_op.list_objects(max_entries, &objs, &common_prefixes, &is_truncated);
+      int ret = list_op.list_objects(max_entries, &objs, &common_prefixes, &is_truncated, null_yield);
       if (ret < 0) {
         ldout(store->ctx(), 0) << "ERROR: list objects failed: " << cpp_strerror(-ret) << dendl;
         return ret;
@@ -254,8 +254,12 @@ int rgw_bucket_chown(RGWRados* const store, RGWUserInfo& user_info, RGWBucketInf
 
       for (const auto& obj : objs) {
 
-        const rgw_obj r_obj(bucket_info.bucket, obj.key);
-        ret = get_obj_attrs(store, obj_ctx, bucket_info, r_obj, attrs);
+        rgw_obj r_obj(bucket_info.bucket, obj.key);
+        RGWRados::Object op_target(store, bucket_info, obj_ctx, r_obj);
+        RGWRados::Object::Read read_op(&op_target);
+
+        read_op.params.attrs = &attrs;
+        ret = read_op.prepare(null_yield);
         if (ret < 0){
           ldout(store->ctx(), 0) << "ERROR: failed to read object " << obj.key.name << cpp_strerror(-ret) << dendl;
           continue;
@@ -295,7 +299,8 @@ int rgw_bucket_chown(RGWRados* const store, RGWUserInfo& user_info, RGWBucketInf
           bl.clear();
           encode(policy, bl);
 
-          ret = modify_obj_attr(store, obj_ctx, bucket_info, r_obj, RGW_ATTR_ACL, bl);
+          obj_ctx.set_atomic(r_obj);
+          ret = store->set_attr(&obj_ctx, bucket_info, r_obj, RGW_ATTR_ACL, bl);
           if (ret < 0) {
             ldout(store->ctx(), 0) << "ERROR: modify attr failed " << cpp_strerror(-ret) << dendl;
             return ret;
