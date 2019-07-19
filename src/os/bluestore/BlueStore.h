@@ -1957,6 +1957,7 @@ private:
   ceph::condition_variable kv_finalize_cond;
   deque<TransContext*> kv_committing_to_finalize;   ///< pending finalization
   deque<DeferredBatch*> deferred_stable_to_finalize; ///< pending finalization
+  bool kv_finalize_in_progress = false;
 
   PerfCounters *logger = nullptr;
 
