@@ -6,6 +6,7 @@ call methods.
 
 This module is runnable outside of ceph-mgr, useful for testing.
 """
+import threading
 import logging
 import json
 from contextlib import contextmanager
@@ -14,23 +15,29 @@ from six.moves.urllib.parse import urljoin  # pylint: disable=import-error
 
 # Optional kubernetes imports to enable MgrModule.can_run
 # to behave cleanly.
+from mgr_util import merge_dicts
+
 try:
     from kubernetes.client.rest import ApiException
+    from kubernetes.client import V1ListMeta, CoreV1Api, V1Pod
+    from kubernetes import watch
 except ImportError:
-    ApiException = None
+    class ApiException(Exception): pass
+
+
+import orchestrator
+
 
 try:
-    import orchestrator
     from rook.module import RookEnv
-    from typing import List
+    from typing import List, Dict
 except ImportError:
     pass  # just used for type checking.
-
 
 log = logging.getLogger(__name__)
 
 
-class ApplyException(Exception):
+class ApplyException(orchestrator.OrchestratorError):
     """
     For failures to update the Rook CRDs, usually indicating
     some kind of interference between our attempted update
@@ -38,10 +45,128 @@ class ApplyException(Exception):
     """
 
 
+def threaded(f):
+    def wrapper(*args, **kwargs):
+        t = threading.Thread(target=f, args=args, kwargs=kwargs)
+        t.start()
+        return t
+
+    return wrapper
+
+
+class KubernetesResource(object):
+    def __init__(self, api_func, **kwargs):
+        """
+        Generic kubernetes Resource parent class
+
+        The api fetch and watch methods should be common across resource types,
+
+        Exceptions in the runner thread are propagated to the caller.
+
+        :param api_func: kubernetes client api function that is passed to the watcher
+        :param filter_func: signature: ``(Item) -> bool``.
+        """
+        self.kwargs = kwargs
+        self.api_func = api_func
+
+        # ``_items`` is accessed by different threads. I assume assignment is atomic.
+        self._items = dict()
+        self.thread = None  # type: threading.Thread
+        self.exception = None
+
+    def _fetch(self):
+        """ Execute the requested api method as a one-off fetch"""
+        response = self.api_func(**self.kwargs)
+        # metadata is a V1ListMeta object type
+        metadata = response.metadata  # type: V1ListMeta
+        self._items = {item.metadata.name: item for item in response.items}
+        log.info('Full fetch of {}. result: {}'.format(self.api_func, len(self._items)))
+        return metadata.resource_version
+
+    @property
+    def items(self):
+        """
+        Returns the items of the request.
+        Creates the watcher as a side effect.
+        :return:
+        """
+        if self.exception:
+            e = self.exception
+            self.exception = None
+            raise e  # Propagate the exception to the user.
+        if not self.thread or not self.thread.is_alive():
+            # Start a thread which will use the kubernetes watch client against a resource
+            resource_version = self._fetch()
+            log.debug("Attaching resource watcher for k8s {}".format(self.api_func))
+            self.thread = self._watch(resource_version)  # type: threading.Thread
+
+        return self._items.values()
+
+    @threaded
+    def _watch(self, res_ver):
+        """ worker thread that runs the kubernetes watch """
+
+        self.exception = None
+
+        w = watch.Watch()
+
+        try:
+            # execute generator to continually watch resource for changes
+            for event in w.stream(self.api_func, resource_version=res_ver, watch=True,
+                                  **self.kwargs):
+                self.health = ''
+                item = event['object']
+                try:
+                    name = item.metadata.name
+                except AttributeError:
+                    raise AttributeError(
+                        "{} doesn't contain a metadata.name. Unable to track changes".format(
+                            self.api_func))
+
+                log.info('{} event: {}'.format(event['type'], name))
+
+                if event['type'] in ('ADDED', 'MODIFIED'):
+                    self._items = merge_dicts(self._items, {name: item})
+                elif event['type'] == 'DELETED':
+                    self._items = {k:v for k,v in self._items.items() if k != name}
+                elif event['type'] == 'BOOKMARK':
+                    pass
+                elif event['type'] == 'ERROR':
+                    raise ApiException(str(event))
+                else:
+                    raise KeyError('Unknown watch event {}'.format(event['type']))
+
+        except ApiException as e:
+            log.exception('K8s API failed. {}'.format(self.api_func))
+            self.exception = e
+            raise
+        except AttributeError as e:
+            log.exception(
+                "Unable to attach watcher - incompatible urllib3? ({})".format(self.api_func))
+            self.exception = e
+            raise
+        except Exception as e:
+            log.exception("Watcher failed. ({})".format(self.api_func))
+            self.exception = e
+            raise
+
+
 class RookCluster(object):
     def __init__(self, k8s, rook_env):
         self.rook_env = rook_env  # type: RookEnv
-        self.k8s = k8s
+        self.k8s = k8s  # type: CoreV1Api
+
+        #  TODO: replace direct k8s calls with Rook API calls
+        # when they're implemented
+        self.inventory_maps = KubernetesResource(self.k8s.list_namespaced_config_map,
+                                                 namespace=self.rook_env.operator_namespace,
+                                                 label_selector="app=rook-discover")
+
+        self.rook_pods = KubernetesResource(self.k8s.list_namespaced_pod,
+                                            namespace=self.rook_env.namespace,
+                                            label_selector="rook_cluster={0}".format(
+                                                self.rook_env.cluster_name))
+        self.nodes = KubernetesResource(self.k8s.list_node)
 
     def rook_url(self, path):
         prefix = "/apis/ceph.rook.io/%s/namespaces/%s/" % (
@@ -76,25 +201,20 @@ class RookCluster(object):
         return self.rook_api_call("POST", path, **kwargs)
 
     def get_discovered_devices(self, nodenames=None):
-        # TODO: replace direct k8s calls with Rook API calls
-        # when they're implemented
-        label_selector = "app=rook-discover"
-        if nodenames is not None:
-            # FIXME: is there a practical or official limit on the
-            # number of entries in a label selector
-            label_selector += ", rook.io/node in ({0})".format(
-                ", ".join(nodenames))
+        def predicate(item):
+            if nodenames is not None:
+                return item.metadata.labels['rook.io/node'] in nodenames
+            else:
+                return True
 
         try:
-            result = self.k8s.list_namespaced_config_map(
-                self.rook_env.operator_namespace,
-                label_selector=label_selector)
+            result = [i for i in self.inventory_maps.items if predicate(i)]
         except ApiException as e:
-            log.exception("Failed to fetch device metadata: {0}".format(e))
+            log.exception("Failed to fetch device metadata")
             raise
 
         nodename_to_devices = {}
-        for i in result.items:
+        for i in result:
             drives = json.loads(i.data['devices'])
             nodename_to_devices[i.metadata.labels['rook.io/node']] = drives
 
@@ -121,71 +241,65 @@ class RookCluster(object):
             url = "rados://{0}/{1}/conf-{2}.{3}".format(pool, namespace, nfs_cluster, instance)
         return url
 
-
     def describe_pods(self, service_type, service_id, nodename):
-        # Go query the k8s API about deployment, containers related to this
-        # filesystem
+        """
+        Go query the k8s API about deployment, containers related to this
+        filesystem
 
-        # Inspect the Rook YAML, to decide whether this filesystem
-        # is Ceph-managed or Rook-managed
-        # TODO: extend Orchestrator interface to describe whether FS
-        # is manageable by us or not
+        Example Rook Pod labels for a mgr daemon:
+        Labels:         app=rook-ceph-mgr
+                        pod-template-hash=2171958073
+                        rook_cluster=rook
+        And MDS containers additionally have `rook_filesystem` label
 
-        # Example Rook Pod labels for a mgr daemon:
-        # Labels:         app=rook-ceph-mgr
-        #                 pod-template-hash=2171958073
-        #                 rook_cluster=rook
-        # And MDS containers additionally have `rook_filesystem` label
+        Label filter is rook_cluster=<cluster name>
+                        rook_file_system=<self.fs_name>
+        """
+        def predicate(item):
+            # type: (V1Pod) -> bool
+            metadata = item.metadata
+            if service_type is not None:
+                if metadata.labels['app'] != "rook-ceph-{0}".format(service_type):
+                    return False
 
-        # Label filter is rook_cluster=<cluster name>
-        #                 rook_file_system=<self.fs_name>
+                if service_id is not None:
+                    try:
+                        k, v = {
+                            "mds": ("rook_file_system", service_id),
+                            "osd": ("ceph-osd-id", service_id),
+                            "mon": ("mon", service_id),
+                            "mgr": ("mgr", service_id),
+                            "ceph_nfs": ("ceph_nfs", service_id),
+                            "rgw": ("ceph_rgw", service_id),
+                        }[service_type]
+                    except KeyError:
+                        raise orchestrator.OrchestratorValidationError(
+                            '{} not supported'.format(service_type))
+                    if metadata.labels[k] != v:
+                        return False
 
-        label_filter = "rook_cluster={0}".format(self.rook_env.cluster_name)
-        if service_type != None:
-            label_filter += ",app=rook-ceph-{0}".format(service_type)
-            if service_id != None:
-                if service_type == "mds":
-                    label_filter += ",rook_file_system={0}".format(service_id)
-                elif service_type == "osd":
-                    # Label added in https://github.com/rook/rook/pull/1698
-                    label_filter += ",ceph-osd-id={0}".format(service_id)
-                elif service_type == "mon":
-                    # label like mon=rook-ceph-mon0
-                    label_filter += ",mon={0}".format(service_id)
-                elif service_type == "mgr":
-                    label_filter += ",mgr={0}".format(service_id)
-                elif service_type == "nfs":
-                    label_filter += ",ceph_nfs={0}".format(service_id)
-                elif service_type == "rgw":
-                    # TODO: rgw
-                    pass
+            if nodename is not None:
+                if item.spec.node_name != nodename:
+                    return False
+            return True
 
-        field_filter = ""
-        if nodename != None:
-            field_filter = "spec.nodeName={0}".format(nodename)
-
-        pods = self.k8s.list_namespaced_pod(
-            self.rook_env.namespace,
-            label_selector=label_filter,
-            field_selector=field_filter)
-
-        # import json
-        # print json.dumps(pods.items[0])
+        pods = [i for i in self.rook_pods.items if predicate(i)]
 
         pods_summary = []
 
-        for p in pods.items:
+        for p in pods:
             d = p.to_dict()
             # p['metadata']['creationTimestamp']
-            # p['metadata']['nodeName']
             pods_summary.append({
                 "name": d['metadata']['name'],
                 "nodename": d['spec']['node_name'],
                 "labels": d['metadata']['labels']
             })
-            pass
 
         return pods_summary
+
+    def get_node_names(self):
+        return [i.metadata.name for i in self.nodes.items]
 
     @contextmanager
     def ignore_409(self, what):
@@ -315,15 +429,7 @@ class RookCluster(object):
         return not use_all_nodes
 
     def node_exists(self, node_name):
-        try:
-            self.k8s.read_node(node_name, exact=False, export=True)
-        except ApiException as e:
-            if e.status == 404:
-                return False
-            else:
-                raise
-        else:
-            return True
+        return node_name in self.get_node_names()
 
     def update_mon_count(self, newcount):
         patch = [{"op": "replace", "path": "/spec/mon/count", "value": newcount}]
