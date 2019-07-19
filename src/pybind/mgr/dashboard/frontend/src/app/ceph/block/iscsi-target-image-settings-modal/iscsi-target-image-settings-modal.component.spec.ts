@@ -1,6 +1,6 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { FormsModule } from '@angular/forms';
+import { ReactiveFormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { BsModalRef } from 'ngx-bootstrap/modal';
@@ -15,7 +15,7 @@ describe('IscsiTargetImageSettingsModalComponent', () => {
 
   configureTestBed({
     declarations: [IscsiTargetImageSettingsModalComponent],
-    imports: [SharedModule, FormsModule, HttpClientTestingModule, RouterTestingModule],
+    imports: [SharedModule, ReactiveFormsModule, HttpClientTestingModule, RouterTestingModule],
     providers: [BsModalRef, i18nProviders]
   });
 
@@ -44,16 +44,17 @@ describe('IscsiTargetImageSettingsModalComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should fill the model', () => {
-    expect(component.model).toEqual({
+  it('should fill the form', () => {
+    expect(component.settingsForm.value).toEqual({
       backstore: 'backstore:1',
-      'backstore:1': {},
-      'backstore:2': {}
+      foo: null,
+      bar: null,
+      baz: null
     });
   });
 
   it('should save changes to imagesSettings', () => {
-    component.model['backstore:1'] = { foo: 1234 };
+    component.settingsForm.controls['foo'].setValue(1234);
     expect(component.imagesSettings).toEqual({
       'rbd/disk_1': { backstore: 'backstore:1', 'backstore:1': {} }
     });
