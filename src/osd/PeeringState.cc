@@ -224,6 +224,8 @@ void PeeringState::check_recovery_sources(const OSDMapRef& osdmap)
 
 void PeeringState::update_history(const pg_history_t& new_history)
 {
+  auto mnow = pl->get_mnow();
+  info.history.refresh_prior_readable_until_ub(mnow, prior_readable_until_ub);
   if (info.history.merge(new_history)) {
     psdout(20) << __func__ << " advanced history from " << new_history << dendl;
     dirty_info = true;
@@ -231,6 +233,13 @@ void PeeringState::update_history(const pg_history_t& new_history)
       psdout(20) << __func__ << " clearing past_intervals" << dendl;
       past_intervals.clear();
       dirty_big_info = true;
+    }
+    prior_readable_until_ub = info.history.get_prior_readable_until_ub(mnow);
+    if (prior_readable_until_ub != ceph::signedspan::zero()) {
+      dout(20) << __func__
+	       << " prior_readable_until_ub " << prior_readable_until_ub
+	       << " (mnow " << mnow << " + "
+	       << info.history.prior_readable_until_ub << ")" << dendl;
     }
   }
   pl->on_info_history_change();
@@ -2318,6 +2327,8 @@ void PeeringState::activate(
     info.purged_snaps.swap(purged);
 
     // start up replicas
+    info.history.refresh_prior_readable_until_ub(pl->get_mnow(),
+						 prior_readable_until_ub);
 
     ceph_assert(!acting_recovery_backfill.empty());
     for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
@@ -2549,6 +2560,9 @@ void PeeringState::share_pg_info()
 {
   psdout(10) << "share_pg_info" << dendl;
 
+  info.history.refresh_prior_readable_until_ub(pl->get_mnow(),
+					       prior_readable_until_ub);
+
   // share new pg_info_t with replicas
   ceph_assert(!acting_recovery_backfill.empty());
   for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
@@ -2728,6 +2742,7 @@ void PeeringState::fulfill_query(const MQuery& query, PeeringCtxWrapper &rctx)
 {
   if (query.query.type == pg_query_t::INFO) {
     pair<pg_shard_t, pg_info_t> notify_info;
+    // note this refreshes our prior_readable_until_ub value
     update_history(query.query.history);
     fulfill_info(query.from, query.query, notify_info);
     rctx.send_notify(
@@ -4272,6 +4287,9 @@ boost::statechart::result PeeringState::Reset::react(const ActMap&)
 {
   DECLARE_LOCALS;
   if (ps->should_send_notify() && ps->get_primary().osd >= 0) {
+    ps->info.history.refresh_prior_readable_until_ub(
+      pl->get_mnow(),
+      ps->prior_readable_until_ub);
     context< PeeringMachine >().send_notify(
       ps->get_primary().osd,
       pg_notify_t(
@@ -5882,6 +5900,8 @@ boost::statechart::result PeeringState::ReplicaActive::react(const ActMap&)
 {
   DECLARE_LOCALS;
   if (ps->should_send_notify() && ps->get_primary().osd >= 0) {
+    ps->info.history.refresh_prior_readable_until_ub(
+      pl->get_mnow(), ps->prior_readable_until_ub);
     context< PeeringMachine >().send_notify(
       ps->get_primary().osd,
       pg_notify_t(
@@ -6002,6 +6022,8 @@ boost::statechart::result PeeringState::Stray::react(const ActMap&)
 {
   DECLARE_LOCALS;
   if (ps->should_send_notify() && ps->get_primary().osd >= 0) {
+    ps->info.history.refresh_prior_readable_until_ub(
+      pl->get_mnow(), ps->prior_readable_until_ub);
     context< PeeringMachine >().send_notify(
       ps->get_primary().osd,
       pg_notify_t(
@@ -6861,5 +6883,9 @@ ostream &operator<<(ostream &out, const PeeringState &ps) {
   out << " " << pg_state_string(ps.get_state());
   if (ps.should_send_notify())
     out << " NOTIFY";
+
+  if (ps.prior_readable_until_ub != ceph::signedspan::zero()) {
+    out << " pruub " << ps.prior_readable_until_ub;
+  }
   return out;
 }
