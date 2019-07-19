@@ -48,7 +48,7 @@ class Dispatcher {
   }
 
   virtual seastar::future<msgr_tag_t, bufferlist>
-  ms_verify_authorizer(peer_type_t,
+  ms_verify_authorizer(entity_type_t,
 		       auth_proto_t,
 		       bufferlist&) {
     return seastar::make_ready_future<msgr_tag_t, bufferlist>(0, bufferlist{});

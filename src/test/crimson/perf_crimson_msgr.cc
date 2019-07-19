@@ -289,7 +289,6 @@ static seastar::future<> run(
         return seastar::now();
       }
       seastar::future<> ms_handle_connect(ceph::net::ConnectionRef conn) override {
-        logger().info("{}: connected", *conn);
         conn_stats.connected_time = mono_clock::now();
         return seastar::now();
       }

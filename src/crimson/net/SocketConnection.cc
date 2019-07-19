@@ -121,12 +121,12 @@ seastar::shard_id SocketConnection::shard_id() const {
 void SocketConnection::print(ostream& out) const {
     messenger.print(out);
     if (side == side_t::none) {
-      out << " >> " << peer_addr;
+      out << " >> " << get_peer_name() << " " << peer_addr;
     } else if (side == side_t::acceptor) {
-      out << " >> " << peer_addr
-          << "@" << socket_port;
+      out << " >> " << get_peer_name() << " " << peer_addr
+          << "@" << ephemeral_port;
     } else { // side == side_t::connector
-      out << "@" << socket_port
-          << " >> " << peer_addr;
+      out << "@" << ephemeral_port
+          << " >> " << get_peer_name() << " " << peer_addr;
     }
 }
