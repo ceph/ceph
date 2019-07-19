@@ -21,8 +21,7 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
-"""
-
+"""\
 """
 CAVEAT:
 This is a minimal implementation of python-pluggy (based on 0.8.0 interface:
@@ -103,9 +102,9 @@ class PluginManager(object):
 
     def add_hookspecs(self, module_or_class):
         """ Dummy method"""
-        pass
 
-    def register(self, plugin, name=None):
+    def register(self, plugin, name=None):  # pylint: disable=unused-argument
         for attr in dir(plugin):
             if self.parse_hookimpl_opts(plugin, attr) is not None:
+                # pylint: disable=protected-access
                 self.hook._add_hookimpl(attr, getattr(plugin, attr))

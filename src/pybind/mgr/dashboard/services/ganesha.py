@@ -429,8 +429,7 @@ class RGWFSal(FSal):
                 raise NFSException('Cannot create bucket "{}" as it already '
                                    'exists, and belongs to other user.'
                                    .format(path))
-            else:
-                raise exp
+            raise exp
         if not exists:
             logger.info('Creating new RGW bucket "%s" for user "%s"', path,
                         self.rgw_user_id)

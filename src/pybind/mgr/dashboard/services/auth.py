@@ -69,16 +69,36 @@ class JwtManager(object):
         return None
 
     @classmethod
-    def set_user(cls, token):
-        cls.LOCAL_USER.username = token['username']
+    def set_user(cls, username):
+        cls.LOCAL_USER.username = username
 
     @classmethod
     def reset_user(cls):
-        cls.set_user({'username': None, 'permissions': None})
+        cls.set_user(None)
 
     @classmethod
     def get_username(cls):
         return getattr(cls.LOCAL_USER, 'username', None)
+
+    @classmethod
+    def get_user(cls, token):
+        try:
+            dtoken = JwtManager.decode_token(token)
+            if not JwtManager.is_blacklisted(dtoken['jti']):
+                user = AuthManager.get_user(dtoken['username'])
+                if user.lastUpdate <= dtoken['iat']:
+                    return user
+                logger.debug("AMT: user info changed after token was issued, iat=%s lastUpdate=%s",
+                             dtoken['iat'], user.lastUpdate)
+            else:
+                logger.debug('AMT: Token is black-listed')
+        except jwt.exceptions.ExpiredSignatureError:
+            logger.debug("AMT: Token has expired")
+        except jwt.exceptions.InvalidTokenError:
+            logger.debug("AMT: Failed to decode token")
+        except UserDoesNotExist:
+            logger.debug("AMT: Invalid token: user %s does not exist", dtoken['username'])
+        return None
 
     @classmethod
     def blacklist_token(cls, token):
@@ -139,40 +159,23 @@ class AuthManagerTool(cherrypy.Tool):
         token = JwtManager.get_token_from_header()
         logger.debug("AMT: token: %s", token)
         if token:
-            try:
-                token = JwtManager.decode_token(token)
-                if not JwtManager.is_blacklisted(token['jti']):
-                    user = AuthManager.get_user(token['username'])
-                    if user.lastUpdate <= token['iat']:
-                        self._check_authorization(token)
-                        return
-
-                    logger.debug("AMT: user info changed after token was"
-                                 " issued, iat=%s lastUpdate=%s",
-                                 token['iat'], user.lastUpdate)
-                else:
-                    logger.debug('AMT: Token is black-listed')
-            except jwt.exceptions.ExpiredSignatureError:
-                logger.debug("AMT: Token has expired")
-            except jwt.exceptions.InvalidTokenError:
-                logger.debug("AMT: Failed to decode token")
-            except UserDoesNotExist:
-                logger.debug("AMT: Invalid token: user %s does not exist",
-                             token['username'])
-
+            user = JwtManager.get_user(token)
+            if user:
+                self._check_authorization(user.username)
+                return
         logger.debug('AMT: Unauthorized access to %s',
                      cherrypy.url(relative='server'))
         raise cherrypy.HTTPError(401, 'You are not authorized to access '
                                       'that resource')
 
-    def _check_authorization(self, token):
+    def _check_authorization(self, username):
         logger.debug("AMT: checking authorization...")
-        username = token['username']
+        username = username
         handler = cherrypy.request.handler.callable
         controller = handler.__self__
         sec_scope = getattr(controller, '_security_scope', None)
         sec_perms = getattr(handler, '_security_permissions', None)
-        JwtManager.set_user(token)
+        JwtManager.set_user(username)
 
         if not sec_scope:
             # controller does not define any authorization restrictions
