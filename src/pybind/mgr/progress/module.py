@@ -279,6 +279,7 @@ class PgRecoveryEvent(Event):
                         # exceed the contents of the PG (moment in time), we
                         # must clamp this
                         ratio = min(ratio, 1.0)
+                        ratio = max(ratio, 0.0)
 
                     else:
                         # Dataless PGs (e.g. containing only OMAPs) count
