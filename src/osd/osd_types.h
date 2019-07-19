@@ -2357,6 +2357,7 @@ struct osd_stat_t {
   uint32_t num_per_pool_osds = 0;
 
   struct Interfaces {
+    uint32_t last_update;  // in seconds
     uint32_t back_pingtime[3];
     uint32_t back_min[3];
     uint32_t back_max[3];

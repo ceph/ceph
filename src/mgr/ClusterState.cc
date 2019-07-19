@@ -16,6 +16,7 @@
 #include "messages/MPGStats.h"
 
 #include "mgr/ClusterState.h"
+#include <time.h>
 #include <boost/range/adaptor/reversed.hpp>
 
 #define dout_context g_ceph_context
@@ -242,6 +243,7 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
       std::array<uint32_t,3> min;
       std::array<uint32_t,3> max;
       uint32_t last;
+      uint32_t last_update;
 
       bool operator<(const mgr_ping_time_t& rhs) const {
         if (pingtime < rhs.pingtime)
@@ -280,6 +282,7 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
 	  item.max[2] = j.second.back_max[2];
 	  item.last = j.second.back_last;
 	  item.back = true;
+	  item.last_update = j.second.last_update;
 	  sorted.emplace(item);
 	}
 
@@ -301,6 +304,7 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
 	  item.max[2] = j.second.front_max[2];
 	  item.last = j.second.front_last;
 	  item.back = false;
+	  item.last_update = j.second.last_update;
 	  sorted.emplace(item);
 	}
       }
@@ -314,6 +318,14 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
       ceph_assert(!value || sitem.pingtime >= value);
 
       f->open_object_section("entry");
+
+      const time_t lu(sitem.last_update);
+      char buffer[26];
+      string lustr(ctime_r(&lu, buffer));
+      lustr.pop_back();   // Remove trailing \n
+      auto stale = g_ceph_context->_conf.get_val<int64_t>("osd_heartbeat_stale");
+      f->dump_string("last update", lustr);
+      f->dump_bool("stale", ceph_clock_now().sec() - sitem.last_update > stale);
       f->dump_int("from osd", sitem.from);
       f->dump_int("to osd", sitem.to);
       f->dump_string("interface", (sitem.back ? "back" : "front"));

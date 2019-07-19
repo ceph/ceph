@@ -2713,9 +2713,10 @@ void PGMap::get_health_checks(
 
   // SLOW_PING_TIME
   auto warn_slow_ping_time = cct->_conf.get_val<uint64_t>("mon_warn_on_slow_ping_time");
+  auto grace = cct->_conf.get_val<int64_t>("osd_heartbeat_grace");
   if (warn_slow_ping_time == 0) {
     double ratio = cct->_conf.get_val<double>("mon_warn_on_slow_ping_ratio");
-    warn_slow_ping_time = cct->_conf.get_val<int64_t>("osd_heartbeat_grace");
+    warn_slow_ping_time = grace;
     warn_slow_ping_time *= 1000000 * ratio; // Seconds of grace to microseconds at ratio
   }
   if (warn_slow_ping_time > 0) {
@@ -2744,6 +2745,10 @@ void PGMap::get_health_checks(
     set<mon_ping_item_t> back_sorted, front_sorted;
     for (auto i : osd_stat) {
       for (auto j : i.second.hb_pingtime) {
+
+	// Maybe source info is old
+	if (now.sec() - j.second.last_update > grace * 60)
+	  continue;
 
 	mon_ping_item_t back;
 	back.pingtime = std::max(j.second.back_pingtime[0], j.second.back_pingtime[1]);
