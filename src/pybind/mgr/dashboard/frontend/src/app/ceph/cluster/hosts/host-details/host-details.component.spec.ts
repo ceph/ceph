@@ -7,6 +7,8 @@ import { TabsModule } from 'ngx-bootstrap/tabs';
 import { configureTestBed } from '../../../../../testing/unit-test-helper';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../../shared/shared.module';
+import { InventoryComponent } from '../../inventory/inventory.component';
+import { ServicesComponent } from '../../services/services.component';
 import { HostDetailsComponent } from './host-details.component';
 
 describe('HostDetailsComponent', () => {
@@ -20,7 +22,7 @@ describe('HostDetailsComponent', () => {
       BsDropdownModule.forRoot(),
       SharedModule
     ],
-    declarations: [HostDetailsComponent]
+    declarations: [HostDetailsComponent, InventoryComponent, ServicesComponent]
   });
 
   beforeEach(() => {

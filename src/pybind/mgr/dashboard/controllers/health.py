@@ -12,6 +12,7 @@ from ..services.ceph_service import CephService
 from ..services.iscsi_cli import IscsiGatewaysConfig
 from ..services.iscsi_client import IscsiClient
 from ..tools import partial_dict
+from .host import get_hosts
 
 
 class HealthData(object):
@@ -117,7 +118,7 @@ class HealthData(object):
         return fs_map
 
     def host_count(self):
-        return len(mgr.list_servers())
+        return len(get_hosts())
 
     def iscsi_daemons(self):
         up_counter = 0

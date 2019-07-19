@@ -11,12 +11,15 @@ import { AuthStorageService } from '../../../../shared/services/auth-storage.ser
 })
 export class HostDetailsComponent implements OnChanges {
   grafanaPermission: Permission;
+  hostsPermission: Permission;
+
   @Input()
   selection: CdTableSelection;
   host: any;
 
   constructor(private authStorageService: AuthStorageService) {
     this.grafanaPermission = this.authStorageService.getPermissions().grafana;
+    this.hostsPermission = this.authStorageService.getPermissions().hosts;
   }
 
   ngOnChanges() {
