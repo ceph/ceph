@@ -4,8 +4,6 @@
 #ifndef CEPH_RGW_OTP_H
 #define CEPH_RGW_OTP_H
 
-#include "common/optional_ref_default.h"
-
 #include "cls/otp/cls_otp_types.h"
 #include "services/svc_meta_be_otp.h"
 
@@ -59,6 +57,8 @@ public:
     RGWObjVersionTracker *objv_tracker{nullptr};
     ceph::real_time *mtime{nullptr};
 
+    GetParams() {}
+
     GetParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
       objv_tracker = _objv_tracker;
       return *this;
@@ -74,6 +74,8 @@ public:
     RGWObjVersionTracker *objv_tracker{nullptr};
     ceph::real_time mtime;
 
+    PutParams() {}
+
     PutParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
       objv_tracker = _objv_tracker;
       return *this;
@@ -88,15 +90,20 @@ public:
   struct RemoveParams {
     RGWObjVersionTracker *objv_tracker{nullptr};
 
+    RemoveParams() {}
+
     RemoveParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
       objv_tracker = _objv_tracker;
       return *this;
     }
   };
 
-  int read_all(const rgw_user& uid, RGWOTPInfo *info, optional_yield y, ceph::optional_ref_default<GetParams> params);
-  int store_all(const RGWOTPInfo& info, optional_yield y, ceph::optional_ref_default<PutParams> params);
-  int remove_all(const rgw_user& user, optional_yield y, ceph::optional_ref_default<RemoveParams> params);
+  int read_all(const rgw_user& uid, RGWOTPInfo *info, optional_yield y,
+               const GetParams& params = {});
+  int store_all(const RGWOTPInfo& info, optional_yield y,
+                const PutParams& params = {});
+  int remove_all(const rgw_user& user, optional_yield y,
+                 const RemoveParams& params = {});
 };
 
 #endif
