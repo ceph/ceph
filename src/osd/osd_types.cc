@@ -432,6 +432,11 @@ void osd_stat_t::dump(Formatter *f) const
   for (auto &i : hb_pingtime) {
     f->open_object_section("entry");
     f->dump_int("osd", i.first);
+    const time_t lu(i.second.last_update);
+    char buffer[26];
+    string lustr(ctime_r(&lu, buffer));
+    lustr.pop_back();   // Remove trailing \n
+    f->dump_string("last update", lustr);
     f->open_array_section("interfaces");
     f->open_object_section("interface");
     f->dump_string("interface", "back");
@@ -522,6 +527,7 @@ void osd_stat_t::encode(ceph::buffer::list &bl, uint64_t features) const
   encode((int)hb_pingtime.size(), bl);
   for (auto i : hb_pingtime) {
     encode(i.first, bl); // osd
+    encode(i.second.last_update, bl);
     encode(i.second.back_pingtime[0], bl);
     encode(i.second.back_pingtime[1], bl);
     encode(i.second.back_pingtime[2], bl);
@@ -630,6 +636,7 @@ void osd_stat_t::decode(ceph::buffer::list::const_iterator &bl)
       int osd;
       decode(osd, bl);
       struct Interfaces ifs;
+      decode(ifs.last_update, bl);
       decode(ifs.back_pingtime[0],bl);
       decode(ifs.back_pingtime[1], bl);
       decode(ifs.back_pingtime[2], bl);
@@ -673,11 +680,11 @@ void osd_stat_t::generate_test_instances(std::list<osd_stat_t*>& o)
   o.back()->os_alerts[1].emplace(
     "some alert2", "some alert2 details");
   struct Interfaces gen_interfaces = {
-	 { 1000, 900, 800 }, { 990, 890, 790 }, { 1010, 910, 810 }, 1001,
+	123456789, { 1000, 900, 800 }, { 990, 890, 790 }, { 1010, 910, 810 }, 1001,
 	 { 1100, 1000, 900 }, { 1090, 990, 890 }, { 1110, 1010, 910 }, 1101 };
   o.back()->hb_pingtime[20] = gen_interfaces;
   gen_interfaces = {
-	 { 100, 200, 300 }, { 90, 190, 290 }, { 110, 210, 310 }, 101 };
+	987654321, { 100, 200, 300 }, { 90, 190, 290 }, { 110, 210, 310 }, 101 };
   o.back()->hb_pingtime[30] = gen_interfaces;
 }
 
