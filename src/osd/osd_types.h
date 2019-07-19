@@ -3629,6 +3629,69 @@ inline std::ostream& operator<<(std::ostream& out, const pg_query_t& q) {
   return out;
 }
 
+/**
+ * pg_lease_t - readable lease metadata, from primary -> non-primary
+ *
+ * This metadata serves to increase either or both of the lease expiration
+ * and upper bound on the non-primary.
+ */
+struct pg_lease_t {
+  /// pg readable_until value; replicas must not be readable beyond this
+  ceph::signedspan readable_until = ceph::signedspan::zero();
+
+  /// upper bound on any acting osd's readable_until
+  ceph::signedspan readable_until_ub = ceph::signedspan::zero();
+
+  /// duration of the lease (in case clock deltas aren't available)
+  ceph::signedspan interval = ceph::signedspan::zero();
+
+  pg_lease_t() {}
+  pg_lease_t(ceph::signedspan ru, ceph::signedspan ruub,
+	     ceph::signedspan i)
+    : readable_until(ru),
+      readable_until_ub(ruub),
+      interval(i) {}
+
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &bl);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<pg_lease_t*>& o);
+
+  friend ostream& operator<<(ostream& out, const pg_lease_t& l) {
+    return out << "pg_lease(ru " << l.readable_until
+	       << " ub " << l.readable_until_ub
+	       << " int " << l.interval << ")";
+  }
+};
+WRITE_CLASS_ENCODER(pg_lease_t)
+
+/**
+ * pg_lease_ack_t - lease ack, from non-primary -> primary
+ *
+ * This metadata acknowledges to the primary what a non-primary's noted
+ * upper bound is.
+ */
+struct pg_lease_ack_t {
+  /// highest upper bound non-primary has recorded (primary's clock)
+  ceph::signedspan readable_until_ub = ceph::signedspan::zero();
+
+  pg_lease_ack_t() {}
+  pg_lease_ack_t(ceph::signedspan ub)
+    : readable_until_ub(ub) {}
+
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &bl);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<pg_lease_ack_t*>& o);
+
+  friend ostream& operator<<(ostream& out, const pg_lease_ack_t& l) {
+    return out << "pg_lease_ack(ruub " << l.readable_until_ub << ")";
+  }
+};
+WRITE_CLASS_ENCODER(pg_lease_ack_t)
+
+
+
 class PGBackend;
 class ObjectModDesc {
   bool can_local_rollback;

@@ -4251,6 +4251,71 @@ void pg_query_t::generate_test_instances(list<pg_query_t*>& o)
 			     *h.back(), 5));
 }
 
+// -- pg_lease_t --
+
+void pg_lease_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  encode(readable_until, bl);
+  encode(readable_until_ub, bl);
+  encode(interval, bl);
+  ENCODE_FINISH(bl);
+}
+
+void pg_lease_t::decode(bufferlist::const_iterator& p)
+{
+  DECODE_START(1, p);
+  decode(readable_until, p);
+  decode(readable_until_ub, p);
+  decode(interval, p);
+  DECODE_FINISH(p);
+}
+
+void pg_lease_t::dump(Formatter *f) const
+{
+  f->dump_stream("readable_until") << readable_until;
+  f->dump_stream("readable_until_ub") << readable_until_ub;
+  f->dump_stream("interval") << interval;
+}
+
+void pg_lease_t::generate_test_instances(std::list<pg_lease_t*>& o)
+{
+  o.push_back(new pg_lease_t());
+  o.push_back(new pg_lease_t());
+  o.back()->readable_until = make_timespan(1.5);
+  o.back()->readable_until_ub = make_timespan(3.4);
+  o.back()->interval = make_timespan(1.0);
+}
+
+// -- pg_lease_ack_t --
+
+void pg_lease_ack_t::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  encode(readable_until_ub, bl);
+  ENCODE_FINISH(bl);
+}
+
+void pg_lease_ack_t::decode(bufferlist::const_iterator& p)
+{
+  DECODE_START(1, p);
+  decode(readable_until_ub, p);
+  DECODE_FINISH(p);
+}
+
+void pg_lease_ack_t::dump(Formatter *f) const
+{
+  f->dump_stream("readable_until_ub") << readable_until_ub;
+}
+
+void pg_lease_ack_t::generate_test_instances(std::list<pg_lease_ack_t*>& o)
+{
+  o.push_back(new pg_lease_ack_t());
+  o.push_back(new pg_lease_ack_t());
+  o.back()->readable_until_ub = make_timespan(3.4);
+}
+
+
 // -- ObjectModDesc --
 void ObjectModDesc::visit(Visitor *visitor) const
 {
