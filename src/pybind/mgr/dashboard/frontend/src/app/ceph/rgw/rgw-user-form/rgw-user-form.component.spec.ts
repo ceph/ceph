@@ -87,38 +87,48 @@ describe('RgwUserFormComponent', () => {
   });
 
   describe('quotaMaxSizeValidator', () => {
-    it('should validate max size (1/7)', () => {
+    it('should validate max size (1)', () => {
       const resp = component.quotaMaxSizeValidator(new FormControl(''));
       expect(resp).toBe(null);
     });
 
-    it('should validate max size (2/7)', () => {
+    it('should validate max size (2)', () => {
       const resp = component.quotaMaxSizeValidator(new FormControl('xxxx'));
       expect(resp.quotaMaxSize).toBeTruthy();
     });
 
-    it('should validate max size (3/7)', () => {
+    it('should validate max size (3)', () => {
       const resp = component.quotaMaxSizeValidator(new FormControl('1023'));
       expect(resp.quotaMaxSize).toBeTruthy();
     });
 
-    it('should validate max size (4/7)', () => {
+    it('should validate max size (4)', () => {
       const resp = component.quotaMaxSizeValidator(new FormControl('1024'));
       expect(resp).toBe(null);
     });
 
-    it('should validate max size (5/7)', () => {
+    it('should validate max size (5)', () => {
       const resp = component.quotaMaxSizeValidator(new FormControl('1M'));
       expect(resp).toBe(null);
     });
 
-    it('should validate max size (6/7)', () => {
+    it('should validate max size (6)', () => {
       const resp = component.quotaMaxSizeValidator(new FormControl('1024 gib'));
       expect(resp).toBe(null);
     });
 
-    it('should validate max size (7/7)', () => {
+    it('should validate max size (7)', () => {
       const resp = component.quotaMaxSizeValidator(new FormControl('10 X'));
+      expect(resp.quotaMaxSize).toBeTruthy();
+    });
+
+    it('should validate max size (8)', () => {
+      const resp = component.quotaMaxSizeValidator(new FormControl('1.085 GiB'));
+      expect(resp).toBe(null);
+    });
+
+    it('should validate max size (9)', () => {
+      const resp = component.quotaMaxSizeValidator(new FormControl('1,085 GiB'));
       expect(resp.quotaMaxSize).toBeTruthy();
     });
   });
