@@ -941,6 +941,7 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       rgw_bucket_dir_entry_meta& meta = op.meta;
       rgw_bucket_category_stats& stats = header.stats[meta.category];
       entry.meta = meta;
+      entry.meta.zones_trace = op.zones_trace;
       entry.key = op.key;
       entry.exists = true;
       entry.tag = op.tag;
@@ -1117,6 +1118,10 @@ public:
     instance_entry.tag = "delete-marker";
 
     initialized = true;
+  }
+
+  void add_zones(const rgw_zone_set& zones) {
+    instance_entry.meta.zones_trace.insert(zones.begin(), zones.end());
   }
 
   void set_epoch(uint64_t epoch) {
@@ -1484,6 +1489,8 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
     /* a deletion marker, need to initialize entry as such */
     obj.init_as_delete_marker(op.meta);
   }
+  // record any extra zones in the instance entry
+  obj.add_zones(op.zones_trace);
 
   /* read olh */
   bool olh_found;
