@@ -2833,7 +2833,10 @@ void PGMap::get_health_checks(
       }
       max_detail--;
       ss << "Slow heartbeat ping on back interface from osd." << sback.from
-         << " to osd." << sback.to << " " << sback.pingtime << " usec"
+         << (osdmap.is_down(sback.from) ? " (down)" : "")
+	 << " to osd." << sback.to
+         << (osdmap.is_down(sback.to) ? " (down)" : "")
+	 << " " << sback.pingtime << " usec"
 	 << (sback.improving ? " possibly improving" : "");
       detail_back.push_back(ss.str());
     }
@@ -2847,7 +2850,10 @@ void PGMap::get_health_checks(
       }
       max_detail--;
       ss << "Slow heartbeat ping on front interface from osd." << sfront.from
-         << " to osd." << sfront.to << " " << sfront.pingtime << " usec"
+         << (osdmap.is_down(sfront.from) ? " (down)" : "")
+         << " to osd." << sfront.to
+         << (osdmap.is_down(sfront.to) ? " (down)" : "")
+	 << " " << sfront.pingtime << " usec"
 	 << (sfront.improving ? " possibly improving" : "");
       detail_front.push_back(ss.str());
     }
