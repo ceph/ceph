@@ -207,6 +207,11 @@ class IscsiTarget(RESTController):
             raise DashboardException(msg='Target does not exist',
                                      code='target_does_not_exist',
                                      component='iscsi')
+        target_info = IscsiClient.instance().get_targetinfo(target_iqn)
+        if target_info['num_sessions'] > 0:
+            raise DashboardException(msg='Target has active sessions',
+                                     code='target_has_active_sessions',
+                                     component='iscsi')
         IscsiTarget._delete(target_iqn, config, 0, 100)
 
     @iscsi_target_task('create', {'target_iqn': '{target_iqn}'})
