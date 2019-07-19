@@ -6,7 +6,7 @@ import cherrypy
 from mgr_module import CLICommand, Option
 
 from . import PLUGIN_MANAGER as PM
-from . import interfaces as I
+from . import interfaces as I  # noqa: E741
 from .ttl_cache import ttl_cache
 
 from ..controllers.rbd import Rbd, RbdSnapshot, RbdTrash

@@ -1,3 +1,0 @@
-astroid==2.1.0
-pylint==2.2.2
-python3-saml==1.4.1

@@ -59,4 +59,4 @@ class DashboardPluginManager(object):
 PLUGIN_MANAGER = DashboardPluginManager("ceph-mgr.dashboard")
 
 # Load all interfaces and their hooks
-from . import interfaces  # pylint: disable=wrong-import-position,cyclic-import
+from . import interfaces  # noqa: F401 pylint: disable=wrong-import-position,cyclic-import

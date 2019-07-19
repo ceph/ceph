@@ -10,7 +10,7 @@ import cherrypy
 from cherrypy._cptools import HandlerWrapperTool
 from cherrypy.test import helper
 
-from mgr_module import CLICommand, MgrModule
+from mgr_module import CLICommand
 
 from .. import logger, mgr
 from ..controllers import json_error_page, generate_controller_routes
@@ -207,7 +207,6 @@ class ControllerTestCase(helper.CPWebCase):
         else:
             self.status = 500
         self.body = json.dumps(thread.res_task['exception'])
-        return
 
     def _task_post(self, url, data=None, timeout=60):
         self._task_request('POST', url, data, timeout)

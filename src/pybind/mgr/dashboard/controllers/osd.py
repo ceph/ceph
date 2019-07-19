@@ -7,7 +7,7 @@ from ..services.ceph_service import CephService, SendCommandError
 from ..services.exception import handle_send_command_error
 from ..tools import str_to_bool
 try:
-    from typing import Dict, List, Any, Union  # pylint: disable=unused-import
+    from typing import Dict, List, Any, Union  # noqa: F401 pylint: disable=unused-import
 except ImportError:
     pass  # For typing only
 
