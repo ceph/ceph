@@ -178,7 +178,7 @@ public:
     if (enable_lockdep(no_lockdep))
       _will_lock(recursive);
 
-    if (try_lock())
+    if (try_lock(no_lockdep))
       return;
 
     lock_impl();
