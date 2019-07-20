@@ -5584,18 +5584,19 @@ int BlueStore::allocate_bluefs_freespace(
 
       alloc_len = alloc->allocate(gift, cct->_conf->bluefs_alloc_size,
 				  0, 0, extents);
-      if (alloc_len) {
+      if (alloc_len > 0) {
 	allocated += alloc_len;
 	size -= alloc_len;
       }
 
-      if (alloc_len < (int64_t)gift && (min_size > allocated)) {
+      if (alloc_len < 0 || 
+          (alloc_len < (int64_t)gift && (min_size > allocated))) {
 	derr << __func__
 	      << " failed to allocate on 0x" << std::hex << gift
 	      << " min_size 0x" << min_size
 	      << " > allocated total 0x" << allocated
 	      << " bluefs_alloc_size 0x" << cct->_conf->bluefs_alloc_size
-	      << " allocated 0x" << alloc_len
+	      << " allocated 0x" << (alloc_len < 0 ? 0 : alloc_len)
 	      << " available 0x " << alloc->get_free()
 	      << std::dec << dendl;
 
@@ -7548,10 +7549,10 @@ int BlueStore::_fsck(bool deep, bool repair)
 	    PExtentVector exts;
 	    int64_t alloc_len = alloc->allocate(e->length, min_alloc_size,
 						0, 0, &exts);
-	    if (alloc_len < (int64_t)e->length) {
+	    if (alloc_len < 0 || alloc_len < (int64_t)e->length) {
 	      derr << __func__
 	           << " failed to allocate 0x" << std::hex << e->length
-		   << " allocated 0x " << alloc_len
+		   << " allocated 0x " << (alloc_len < 0 ? 0 : alloc_len)
 		   << " min_alloc_size 0x" << min_alloc_size
 		   << " available 0x " << alloc->get_free()
 		   << std::dec << dendl;
@@ -12136,9 +12137,9 @@ int BlueStore::_do_alloc_write(
   prealloc_left = alloc->allocate(
     need, min_alloc_size, need,
     0, &prealloc);
-  if (prealloc_left < (int64_t)need) {
+  if (prealloc_left < 0 || prealloc_left < (int64_t)need) {
     derr << __func__ << " failed to allocate 0x" << std::hex << need
-         << " allocated 0x " << prealloc_left
+         << " allocated 0x " << (prealloc_left < 0 ? 0 : prealloc_left)
          << " min_alloc_size 0x" << min_alloc_size
          << " available 0x " << alloc->get_free()
          << std::dec << dendl;
