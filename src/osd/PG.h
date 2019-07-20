@@ -217,14 +217,8 @@ public:
     handle.reset_tp_timeout();
   }
   void lock(bool no_lockdep = false) const;
-  void unlock() const {
-    //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
-    ceph_assert(!recovery_state.debug_has_dirty_state());
-    _lock.unlock();
-  }
-  bool is_locked() const {
-    return _lock.is_locked();
-  }
+  void unlock() const;
+  bool is_locked() const;
 
   const spg_t& get_pgid() const {
     return pg_id;
@@ -608,7 +602,9 @@ protected:
   // put() should be called on destruction of some previously copied pointer.
   // unlock() when done with the current pointer (_most common_).
   mutable ceph::mutex _lock = ceph::make_mutex("PG::_lock");
-
+#ifndef CEPH_DEBUG_MUTEX
+  mutable std::thread::id locked_by;
+#endif
   std::atomic<unsigned int> ref{0};
 
 #ifdef PG_DEBUG_REFS
