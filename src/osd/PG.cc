@@ -226,17 +226,41 @@ PG::~PG()
 
 void PG::lock(bool no_lockdep) const
 {
+#ifdef CEPH_DEBUG_MUTEX
   _lock.lock(no_lockdep);
+#else
+  _lock.lock();
+  locked_by = std::this_thread::get_id();
+#endif
   // if we have unrecorded dirty state with the lock dropped, there is a bug
   ceph_assert(!recovery_state.debug_has_dirty_state());
 
   dout(30) << "lock" << dendl;
 }
 
+bool PG::is_locked() const
+{
+  return ceph_mutex_is_locked(_lock);
+}
+
+void PG::unlock() const
+{
+  //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
+  ceph_assert(!recovery_state.debug_has_dirty_state());
+#ifndef CEPH_DEBUG_MUTEX
+  locked_by = {};
+#endif
+  _lock.unlock();
+}
+
 std::ostream& PG::gen_prefix(std::ostream& out) const
 {
   OSDMapRef mapref = recovery_state.get_osdmap();
+#ifdef CEPH_DEBUG_MUTEX
   if (_lock.is_locked_by_me()) {
+#else
+  if (locked_by == std::this_thread::get_id()) {
+#endif
     out << "osd." << osd->whoami
 	<< " pg_epoch: " << (mapref ? mapref->get_epoch():0)
 	<< " " << *this << " ";
@@ -389,7 +413,7 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
 
 bool PG::requeue_scrub(bool high_priority)
 {
-  ceph_assert(is_locked());
+  ceph_assert(ceph_mutex_is_locked(_lock));
   if (scrub_queued) {
     dout(10) << __func__ << ": already queued" << dendl;
     return false;
@@ -417,7 +441,7 @@ void PG::queue_recovery()
 
 bool PG::queue_scrub()
 {
-  ceph_assert(is_locked());
+  ceph_assert(ceph_mutex_is_locked(_lock));
   if (is_scrubbing()) {
     return false;
   }
@@ -1323,7 +1347,7 @@ void PG::requeue_map_waiters()
 // returns true if a scrub has been newly kicked off
 bool PG::sched_scrub()
 {
-  ceph_assert(is_locked());
+  ceph_assert(ceph_mutex_is_locked(_lock));
   ceph_assert(!is_scrubbing());
   if (!(is_primary() && is_active() && is_clean())) {
     return false;
