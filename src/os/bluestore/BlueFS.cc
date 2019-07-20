@@ -1477,27 +1477,32 @@ int BlueFS::_read(
     if (off < buf->bl_off || off >= buf->get_buf_end()) {
       s_lock.unlock();
       std::unique_lock u_lock(h->lock);
-      buf->bl.clear();
-      buf->bl_off = off & super.block_mask();
-      uint64_t x_off = 0;
-      auto p = h->file->fnode.seek(buf->bl_off, &x_off);
-      uint64_t want = round_up_to(len + (off & ~super.block_mask()),
-				  super.block_size);
-      want = std::max(want, buf->max_prefetch);
-      uint64_t l = std::min(p->length - x_off, want);
-      uint64_t eof_offset = round_up_to(h->file->fnode.size, super.block_size);
-      if (!h->ignore_eof &&
-	  buf->bl_off + l > eof_offset) {
-	l = eof_offset - buf->bl_off;
+      if (off < buf->bl_off || off >= buf->get_buf_end()) {
+        // if precondition hasn't changed during locking upgrade.
+        buf->bl.clear();
+        buf->bl_off = off & super.block_mask();
+        uint64_t x_off = 0;
+        auto p = h->file->fnode.seek(buf->bl_off, &x_off);
+        uint64_t want = round_up_to(len + (off & ~super.block_mask()),
+				    super.block_size);
+        want = std::max(want, buf->max_prefetch);
+        uint64_t l = std::min(p->length - x_off, want);
+        uint64_t eof_offset = round_up_to(h->file->fnode.size, super.block_size);
+        if (!h->ignore_eof &&
+	    buf->bl_off + l > eof_offset) {
+	  l = eof_offset - buf->bl_off;
+        }
+        dout(20) << __func__ << " fetching 0x"
+                 << std::hex << x_off << "~" << l << std::dec
+                 << " of " << *p << dendl;
+        int r = bdev[p->bdev]->read(p->offset + x_off, l, &buf->bl, ioc[p->bdev],
+				    cct->_conf->bluefs_buffered_io);
+        ceph_assert(r == 0);
       }
-      dout(20) << __func__ << " fetching 0x"
-               << std::hex << x_off << "~" << l << std::dec
-               << " of " << *p << dendl;
-      int r = bdev[p->bdev]->read(p->offset + x_off, l, &buf->bl, ioc[p->bdev],
-				  cct->_conf->bluefs_buffered_io);
-      ceph_assert(r == 0);
       u_lock.unlock();
       s_lock.lock();
+      // we should recheck if buffer is valid after lock downgrade
+      continue; 
     }
     left = buf->get_buf_remaining(off);
     dout(20) << __func__ << " left 0x" << std::hex << left
