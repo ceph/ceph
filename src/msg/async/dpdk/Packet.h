@@ -125,7 +125,7 @@ class Packet {
       n->rss_hash.construct(old->rss_hash);
       std::copy(old->frags, old->frags + old->_nr_frags, n->frags);
       old->copy_internal_fragment_to(n.get());
-      return std::move(n);
+      return n;
     }
 
     static std::unique_ptr<impl> copy(impl* old) {
@@ -134,7 +134,7 @@ class Packet {
 
     static std::unique_ptr<impl> allocate_if_needed(std::unique_ptr<impl> old, size_t extra_frags) {
       if (old->_allocated_frags >= old->_nr_frags + extra_frags) {
-        return std::move(old);
+        return old;
       }
       return copy(old.get(), std::max<size_t>(old->_nr_frags + extra_frags, 2 * old->_nr_frags));
     }

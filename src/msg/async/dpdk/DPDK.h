@@ -833,7 +833,7 @@ class DPDKDevice {
   subscription<Packet> receive(unsigned cpuid, std::function<int (Packet)> next_packet) {
     auto sub = _queues[cpuid]->_rx_stream.listen(std::move(next_packet));
     _queues[cpuid]->rx_start();
-    return std::move(sub);
+    return sub;
   }
   ethernet_address hw_address() {
     struct ether_addr mac;
@@ -849,7 +849,7 @@ class DPDKDevice {
   std::unique_ptr<DPDKQueuePair> init_local_queue(CephContext *c, EventCenter *center, string hugepages, uint16_t qid) {
     std::unique_ptr<DPDKQueuePair> qp;
     qp = std::unique_ptr<DPDKQueuePair>(new DPDKQueuePair(c, center, this, qid));
-    return std::move(qp);
+    return qp;
   }
   unsigned hash2qid(uint32_t hash) {
     // return hash % hw_queues_count();
