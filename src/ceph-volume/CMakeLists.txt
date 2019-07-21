@@ -1,7 +1,15 @@
 
 include(Distutils)
+
+if(WITH_PYTHON2)
+  set(python_version_major 2)
+else()
+  set(python_version_major 3)
+endif()
+
 distutils_install_module(ceph_volume
-  INSTALL_SCRIPT ${CMAKE_INSTALL_FULL_SBINDIR})
+  INSTALL_SCRIPT ${CMAKE_INSTALL_FULL_SBINDIR}
+  PYTHON_VERSION ${python_version_major})
 
 if(FREEBSD)
   add_subdirectory(plugin/zfs)
@@ -12,7 +20,7 @@ set(CEPH_VOLUME_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/ceph-volume-virtualenv)
 
 add_custom_command(
   OUTPUT ${CEPH_VOLUME_VIRTUALENV}/bin/python
-  COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${PYTHON_EXECUTABLE} ${CEPH_VOLUME_VIRTUALENV}
+  COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${Python_EXECUTABLE} ${CEPH_VOLUME_VIRTUALENV}
   WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/ceph-volume
   COMMENT "ceph-volume venv is being created")
 

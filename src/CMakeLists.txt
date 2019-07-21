@@ -231,8 +231,8 @@ endif()
 # Python stuff
 option(WITH_PYTHON2 "build python2 bindings" ON)
 if(WITH_PYTHON2)
-  find_package(PythonInterp 2 REQUIRED)
-  find_package(PythonLibs ${PYTHON_VERSION_STRING} EXACT REQUIRED)
+  find_package(Python2 REQUIRED
+    COMPONENTS Interpreter Development)
 endif()
 
 set(WITH_PYTHON3 "OFF" CACHE STRING "build python3 bindings with specified python3 version")
@@ -240,14 +240,14 @@ if(WITH_PYTHON3)
   if(WITH_PYTHON3 MATCHES "^(1|ON|YES|TRUE|Y)$")
     set(WITH_PYTHON3 "3")
   endif()
-  find_package(Python3Interp ${WITH_PYTHON3} REQUIRED)
-  find_package(Python3Libs ${PYTHON3_VERSION_STRING} EXACT REQUIRED)
+  find_package(Python3 ${WITH_PYTHON3} REQUIRED
+    COMPONENTS Interpreter Development)
 endif()
 
 # the major version of the python bindings as a dependency of other
 # targets
 if(WITH_PYTHON2)
-  set(PY_BINDING_INFIX "")
+  set(PY_BINDING_INFIX 2)
 else()
   set(PY_BINDING_INFIX 3)
 endif()

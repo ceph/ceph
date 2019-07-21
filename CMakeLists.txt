@@ -1,4 +1,5 @@
 cmake_minimum_required(VERSION 3.5.1)
+# remove cmake/modules/FindPython* once 3.12 is required
 
 project(ceph CXX C ASM)
 set(VERSION 15.0.0)
@@ -499,12 +500,12 @@ if(WITH_MGR)
   # FindPyhonInterp and FindPythonLibs think they belong to different families.
   set(MGR_PYTHON_VERSION "2.7" CACHE
     STRING "minimal required version of python runtime for running mgr plugins. ")
-  find_package(PythonInterp ${MGR_PYTHON_VERSION} REQUIRED)
-  find_package(PythonLibs ${MGR_PYTHON_VERSION} REQUIRED)
-  set(MGR_PYTHON_EXECUTABLE ${PYTHON_EXECUTABLE})
-  set(MGR_PYTHON_LIBRARIES ${PYTHON_LIBRARIES})
-  set(MGR_PYTHON_VERSION_MAJOR ${PYTHON_VERSION_MAJOR})
-  set(MGR_PYTHON_VERSION_MINOR ${PYTHON_VERSION_MINOR})
+  find_package(Python ${MGR_PYTHON_VERSION} REQUIRED
+    COMPONENTS Interpreter Development)
+  set(MGR_PYTHON_EXECUTABLE ${Python_EXECUTABLE})
+  set(MGR_PYTHON_LIBRARIES ${Python_LIBRARIES})
+  set(MGR_PYTHON_VERSION_MAJOR ${Python_VERSION_MAJOR})
+  set(MGR_PYTHON_VERSION_MINOR ${Python_VERSION_MINOR})
   # Boost dependency check deferred to Boost section
 endif(WITH_MGR)
 
