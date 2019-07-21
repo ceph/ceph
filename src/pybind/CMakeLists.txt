@@ -14,11 +14,7 @@ if(NOT py_vers)
 endif()
 
 foreach(python_version ${py_vers})
-  if(${python_version} EQUAL 2)
-    set(PYTHON_VERSION "")
-  else(${python_version} EQUAL 2)
-    set(PYTHON_VERSION ${python_version})
-  endif(${python_version} EQUAL 2)
+  set(PYTHON_VERSION ${python_version})
 
   find_package(Cython REQUIRED)
 
@@ -50,7 +46,7 @@ foreach(python_version ${py_vers})
 
   execute_process(
     COMMAND
-    ${PYTHON${PYTHON_VERSION}_EXECUTABLE} -c "from distutils import sysconfig; print(sysconfig.get_python_lib(prefix='${PYTHON_INSTALL_TEMPLATE}'))"
+    ${Python${PYTHON_VERSION}_EXECUTABLE} -c "from distutils import sysconfig; print(sysconfig.get_python_lib(prefix='${PYTHON_INSTALL_TEMPLATE}'))"
     OUTPUT_VARIABLE "PYTHON${PYTHON_VERSION}_INSTDIR"
     OUTPUT_STRIP_TRAILING_WHITESPACE)
 
@@ -69,7 +65,7 @@ if(WITH_MGR)
   endif()
 
   execute_process(
-    COMMAND ${PYTHON${PYTHON_VERSION}_EXECUTABLE} -c "import ssl; print('.'.join(map(str,ssl.OPENSSL_VERSION_INFO[0:3])))"
+    COMMAND ${Python${PYTHON_VERSION}_EXECUTABLE} -c "import ssl; print('.'.join(map(str,ssl.OPENSSL_VERSION_INFO[0:3])))"
     RESULT_VARIABLE PYSSL_RESULT
     OUTPUT_VARIABLE PYSSL_VER
     ERROR_QUIET)
