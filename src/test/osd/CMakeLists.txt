@@ -17,6 +17,22 @@ install(TARGETS
   ceph_test_rados
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+# test_stale_read
+add_executable(ceph_test_osd_stale_read
+  ceph_test_osd_stale_read.cc
+  )
+target_link_libraries(ceph_test_osd_stale_read
+  librados
+  global
+  ${CMAKE_DL_LIBS}
+  ${EXTRALIBS}
+  ${CMAKE_DL_LIBS}
+  ${UNITTEST_LIBS}
+  )
+install(TARGETS
+  ceph_test_osd_stale_read
+  DESTINATION ${CMAKE_INSTALL_BINDIR})
+
 # scripts
 add_ceph_test(safe-to-destroy.sh ${CMAKE_CURRENT_SOURCE_DIR}/safe-to-destroy.sh)
 
