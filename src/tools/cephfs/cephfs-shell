@@ -104,6 +104,7 @@ def get_chunks(file_size):
 def to_bytes(string):
     return bytes(string, encoding='utf-8')
 
+
 def ls(path, opts=''):
     # opts tries to be like /bin/ls opts
     almost_all = 'A' in opts
@@ -118,6 +119,7 @@ def ls(path, opts=''):
                 yield dent
     except cephfs.ObjectNotFound:
         return []
+
 
 def glob(path, pattern):
     paths = []
