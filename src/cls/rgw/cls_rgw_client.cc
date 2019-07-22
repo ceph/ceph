@@ -739,7 +739,7 @@ int cls_rgw_gc_list(IoCtx& io_ctx, string& oid, string& marker, uint32_t max, bo
   return r;
 }
 
-void cls_rgw_gc_remove(librados::ObjectWriteOperation& op, const list<string>& tags)
+void cls_rgw_gc_remove(librados::ObjectWriteOperation& op, const vector<string>& tags)
 {
   bufferlist in;
   cls_rgw_gc_remove_op call;

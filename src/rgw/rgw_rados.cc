@@ -13194,11 +13194,15 @@ int RGWRados::gc_operate(string& oid, librados::ObjectWriteOperation *op)
   return gc_pool_ctx.operate(oid, op);
 }
 
-int RGWRados::gc_aio_operate(string& oid, librados::ObjectWriteOperation *op)
+int RGWRados::gc_aio_operate(string& oid, librados::ObjectWriteOperation *op, AioCompletion **pc)
 {
   AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
   int r = gc_pool_ctx.aio_operate(oid, c, op);
-  c->release();
+  if (!pc) {
+    c->release();
+  } else {
+    *pc = c;
+  }
   return r;
 }
 
@@ -13212,9 +13216,9 @@ int RGWRados::list_gc_objs(int *index, string& marker, uint32_t max, bool expire
   return gc->list(index, marker, max, expired_only, result, truncated);
 }
 
-int RGWRados::process_gc()
+int RGWRados::process_gc(bool expired_only)
 {
-  return gc->process();
+  return gc->process(expired_only);
 }
 
 int RGWRados::list_lc_progress(const string& marker, uint32_t max_entries, map<string, int> *progress_map)

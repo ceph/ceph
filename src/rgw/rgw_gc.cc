@@ -81,11 +81,11 @@ int RGWGC::defer_chain(const string& tag, bool sync)
   return store->gc_aio_operate(obj_names[i], &op);
 }
 
-int RGWGC::remove(int index, const std::list<string>& tags)
+int RGWGC::remove(int index, const std::vector<string>& tags, AioCompletion **pc)
 {
   ObjectWriteOperation op;
   cls_rgw_gc_remove(op, tags);
-  return store->gc_operate(obj_names[index], &op);
+  return store->gc_aio_operate(obj_names[index], &op, pc);
 }
 
 int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated)
@@ -128,11 +128,145 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
   return 0;
 }
 
-int RGWGC::process(int index, int max_secs)
+class RGWGCIOManager {
+  CephContext *cct;
+  RGWGC *gc;
+
+  struct IO {
+    enum Type {
+      UnknownIO = 0,
+      TailIO = 1,
+      IndexIO = 2,
+    } type{UnknownIO};
+    librados::AioCompletion *c{nullptr};
+    string oid;
+    int index{-1};
+    string tag;
+
+    IO() = default;
+
+    IO(IO::Type type, librados::AioCompletion *c, 
+       const std::string& oid, int index, const std::string& tag)
+     : type(type), c(c), oid(oid), index(index), tag(tag)
+    {}
+  };
+
+  deque<IO> ios;
+  vector<std::vector<string> > remove_tags;
+
+#define MAX_AIO_DEFAULT 10
+  size_t max_aio{MAX_AIO_DEFAULT};
+
+public:
+  RGWGCIOManager(CephContext *_cct, RGWGC *_gc) : cct(_cct),
+                                                  gc(_gc),
+                                                  remove_tags(cct->_conf->rgw_gc_max_objs) {
+    max_aio = cct->_conf->rgw_gc_max_concurrent_io;
+  }
+  ~RGWGCIOManager() {
+    for (auto io : ios) {
+      io.c->release();
+    }
+  }
+
+  int schedule_io(IoCtx *ioctx, const string& oid, ObjectWriteOperation *op, int index, const string& tag) {
+    while (ios.size() > max_aio) {
+      if (gc->going_down()) {
+        return 0;
+      }
+      handle_next_completion();
+    }
+
+    AioCompletion *c = librados::Rados::aio_create_completion(NULL, NULL, NULL);
+    int ret = ioctx->aio_operate(oid, c, op);
+    if (ret < 0) {
+      return ret;
+    }
+    ios.push_back(IO(IO::TailIO, c, oid, index, tag));
+
+    return 0;
+  }
+
+  void handle_next_completion() {
+    assert(!ios.empty());
+    IO& io = ios.front();
+    io.c->wait_for_safe();
+    int ret = io.c->get_return_value();
+    io.c->release();
+
+    auto& rt = remove_tags[io.index];
+
+    if (ret == -ENOENT) {
+      ret = 0;
+    }
+
+    if (io.type == IO::IndexIO) {
+      if (ret < 0) {
+        ldout(cct, 0) << "WARNING: gc cleanup of tags on gc shard index=" << io.index << " returned error, ret=" << ret << dendl;
+      }
+      goto done;
+    }
+
+    if (ret < 0) {
+      ldout(cct, 0) << "WARNING: could not remove oid=" << io.oid << ", ret=" << ret << dendl;
+      goto done;
+    }
+
+    rt.push_back(io.tag);
+    if (rt.size() > (size_t)cct->_conf->rgw_gc_max_trim_chunk) {
+      flush_remove_tags(io.index, rt);
+    }
+done:
+    ios.pop_front();
+  }
+
+  void drain_ios() {
+    while (!ios.empty()) {
+      if (gc->going_down()) {
+        return;
+      }
+      handle_next_completion();
+    }
+  }
+
+  void drain() {
+    drain_ios();
+    flush_remove_tags();
+    /* the tags draining might have generated more ios, drain those too */
+    drain_ios();
+  }
+
+  void flush_remove_tags(int index, vector<string>& rt) {
+    IO index_io;
+    index_io.type = IO::IndexIO;
+    index_io.index = index;
+
+    int ret = gc->remove(index, rt, &index_io.c);
+    rt.clear();
+    if (ret < 0) {
+      /* we already cleared list of tags, this prevents us from ballooning in case of
+       * a persistent problem
+       */
+      ldout(cct, 0) << "WARNING: failed to remove tags on gc shard index=" << index << " ret=" << ret << dendl;
+      return;
+    }
+    ios.push_back(index_io);
+  }
+
+  void flush_remove_tags() {
+    int index = 0;
+    for (auto& rt : remove_tags) {
+      flush_remove_tags(index, rt);
+      ++index;
+    }
+  }
+};
+
+int RGWGC::process(int index, int max_secs, bool expired_only,
+                   RGWGCIOManager& io_manager)
 {
   rados::cls::lock::Lock l(gc_index_lock_name);
   utime_t end = ceph_clock_now();
-  std::list<string> remove_tags;
 
   /* max_secs should be greater than zero. We don't want a zero max_secs
    * to be translated as no timeout, since we'd then need to break the
@@ -160,7 +294,7 @@ int RGWGC::process(int index, int max_secs)
   do {
     int max = 100;
     std::list<cls_rgw_gc_obj_info> entries;
-    ret = cls_rgw_gc_list(store->gc_pool_ctx, obj_names[index], marker, max, true, entries, &truncated, next_marker);
+    ret = cls_rgw_gc_list(store->gc_pool_ctx, obj_names[index], marker, max, expired_only, entries, &truncated, next_marker);
     if (ret == -ENOENT) {
       ret = 0;
       goto done;
@@ -171,7 +305,6 @@ int RGWGC::process(int index, int max_secs)
     string last_pool;
     std::list<cls_rgw_gc_obj_info>::iterator iter;
     for (iter = entries.begin(); iter != entries.end(); ++iter) {
-      bool remove_tag;
       cls_rgw_gc_obj_info& info = *iter;
       std::list<cls_rgw_obj>::iterator liter;
       cls_rgw_obj_chain& chain = info.chain;
@@ -180,7 +313,6 @@ int RGWGC::process(int index, int max_secs)
       if (now >= end)
         goto done;
 
-      remove_tag = true;
       for (liter = chain.objs.begin(); liter != chain.objs.end(); ++liter) {
         cls_rgw_obj& obj = *liter;
 
@@ -203,41 +335,28 @@ int RGWGC::process(int index, int max_secs)
 	dout(5) << "gc::process: removing " << obj.pool << ":" << obj.key.name << dendl;
 	ObjectWriteOperation op;
 	cls_refcount_put(op, info.tag, true);
-        ret = ctx->operate(oid, &op);
-	if (ret == -ENOENT)
-	  ret = 0;
+
+        ret = io_manager.schedule_io(ctx, oid, &op, index, info.tag);
         if (ret < 0) {
-          remove_tag = false;
-          dout(0) << "failed to remove " << obj.pool << ":" << oid << "@" << obj.loc << dendl;
+          ldout(store->ctx(), 0) << "WARNING: failed to schedule deletion for oid=" << oid << dendl;
         }
 
         if (going_down()) // leave early, even if tag isn't removed, it's ok
           goto done;
       }
-      if (remove_tag) {
-        remove_tags.push_back(info.tag);
-#define MAX_REMOVE_CHUNK 16
-        if (remove_tags.size() > MAX_REMOVE_CHUNK) {
-          RGWGC::remove(index, remove_tags);
-          remove_tags.clear();
-        }
-      }
-    }
-    if (!remove_tags.empty()) {
-      RGWGC::remove(index, remove_tags);
-      remove_tags.clear();
     }
   } while (truncated);
 
 done:
-  if (!remove_tags.empty())
-    RGWGC::remove(index, remove_tags);
+  /* we don't drain here, because if we're going down we don't want to hold the system
+   * if backend is unresponsive
+   */
   l.unlock(&store->gc_pool_ctx, obj_names[index]);
   delete ctx;
   return 0;
 }
 
-int RGWGC::process()
+int RGWGC::process(bool expired_only)
 {
   int max_secs = cct->_conf->rgw_gc_processor_max_time;
 
@@ -246,11 +365,16 @@ int RGWGC::process()
   if (ret < 0)
     return ret;
 
+  RGWGCIOManager io_manager(store->ctx(), this);
+
   for (int i = 0; i < max_objs; i++) {
     int index = (i + start) % max_objs;
-    ret = process(index, max_secs);
+    int ret = process(index, max_secs, expired_only, io_manager);
     if (ret < 0)
       return ret;
+  }
+  if (!going_down()) {
+    io_manager.drain();
   }
 
   return 0;
@@ -282,7 +406,7 @@ void *RGWGC::GCWorker::entry() {
   do {
     utime_t start = ceph_clock_now();
     dout(2) << "garbage collection: start" << dendl;
-    int r = gc->process();
+    int r = gc->process(true);
     if (r < 0) {
       dout(0) << "ERROR: garbage collection process() returned error r=" << r << dendl;
     }

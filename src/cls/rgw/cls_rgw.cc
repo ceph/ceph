@@ -3397,11 +3397,9 @@ static int rgw_cls_gc_list(cls_method_context_t hctx, bufferlist *in, bufferlist
   return 0;
 }
 
-static int gc_remove(cls_method_context_t hctx, list<string>& tags)
+static int gc_remove(cls_method_context_t hctx, vector<string>& tags)
 {
-  list<string>::iterator iter;
-
-  for (iter = tags.begin(); iter != tags.end(); ++iter) {
+  for (auto iter = tags.begin(); iter != tags.end(); ++iter) {
     string& tag = *iter;
     cls_rgw_gc_obj_info info;
     int ret = gc_omap_get(hctx, GC_OBJ_NAME_INDEX, tag, &info);
