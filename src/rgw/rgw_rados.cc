@@ -4619,7 +4619,7 @@ int RGWRados::defer_gc(void *ctx, const RGWBucketInfo& bucket_info, const rgw_ob
   ldout(cct, 0) << "defer chain tag=" << tag << dendl;
 
   cls_rgw_obj_chain chain;
-  update_gc_chain(state->obj, state->manifest, &chain);
+  update_gc_chain(state->obj, *state->manifest, &chain);
   return gc->defer_chain(tag, chain, false);
 }
 

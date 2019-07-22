@@ -1,13 +1,10 @@
-#ifndef CEPH_CLS_RGW_QUEUE_TYPES_H
-#define CEPH_CLS_RGW_QUEUE_TYPES_H
+#ifndef CEPH_CLS_RGW_GC_TYPES_H
+#define CEPH_CLS_RGW_GC_TYPES_H
 
 #include "include/types.h"
-#include "common/ceph_time.h"
-#include "common/Formatter.h"
-
 #include <unordered_map>
 
-struct cls_gc_urgent_data
+struct cls_rgw_gc_urgent_data
 {
   std::unordered_map<string,ceph::real_time> urgent_data_map;
   uint32_t num_urgent_data_entries{0}; // requested by user
@@ -32,6 +29,6 @@ struct cls_gc_urgent_data
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_gc_urgent_data)
+WRITE_CLASS_ENCODER(cls_rgw_gc_urgent_data)
 
 #endif

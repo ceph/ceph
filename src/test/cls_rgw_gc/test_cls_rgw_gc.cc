@@ -4,8 +4,8 @@
 #include "include/types.h"
 
 #include "cls/rgw/cls_rgw_types.h"
-#include "cls/queue/cls_queue_client.h"
-#include "cls/queue/cls_queue_ops.h"
+#include "cls/rgw_gc/cls_rgw_gc_client.h"
+#include "cls/rgw_gc/cls_rgw_gc_ops.h"
 
 #include "gtest/gtest.h"
 #include "test/librados/test_cxx.h"
@@ -25,7 +25,7 @@ string pool_name;
 
 
 /* must be the first test! */
-TEST(cls_queue, init)
+TEST(cls_rgw_gc, init)
 {
   pool_name = get_temp_pool_name();
   /* create pool */
@@ -56,18 +56,18 @@ static void create_obj(cls_rgw_obj& obj, int i, int j)
   obj.loc.append(buf);
 }
 
-TEST(cls_queue, gc_queue_ops1)
+TEST(cls_rgw_gc, gc_queue_ops1)
 {
   //Testing queue ops when data size is NOT a multiple of queue size
   string queue_name = "my-queue";
   uint64_t queue_size = 322, num_urgent_data_entries = 10;
   librados::ObjectWriteOperation op;
   op.create(true);
-  cls_rgw_gc_init_queue(op, queue_name, queue_size, num_urgent_data_entries);
+  cls_rgw_gc_queue_init(op, queue_size, num_urgent_data_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
   uint64_t size = 0;
-  int ret = cls_rgw_gc_get_queue_size(ioctx, queue_name, size);
+  int ret = cls_rgw_gc_queue_get_capacity(ioctx, queue_name, size);
   ASSERT_EQ(0, ret);
   ASSERT_EQ(queue_size, size);
 
@@ -84,7 +84,7 @@ TEST(cls_queue, gc_queue_ops1)
     info.chain.objs.push_back(obj2);
 
     info.tag = tag;
-    cls_rgw_gc_enqueue(op, 0, info);
+    cls_rgw_gc_queue_enqueue(op, 0, info);
     if (i == 1) {
       ASSERT_EQ(-ENOSPC, ioctx.operate(queue_name, &op));
     } else {
@@ -96,7 +96,7 @@ TEST(cls_queue, gc_queue_ops1)
   librados::ObjectWriteOperation remove_op;
   string marker1;
   uint64_t num_entries = 1;
-  cls_rgw_gc_remove_entries_queue(remove_op, num_entries);
+  cls_rgw_gc_queue_remove_entries(remove_op, num_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &remove_op));
 
   //Test enqueue again
@@ -112,7 +112,7 @@ TEST(cls_queue, gc_queue_ops1)
     info.chain.objs.push_back(obj2);
 
     info.tag = tag;
-    cls_rgw_gc_enqueue(op, 0, info);
+    cls_rgw_gc_queue_enqueue(op, 0, info);
     ASSERT_EQ(0, ioctx.operate(queue_name, &op));
   }
 
@@ -121,7 +121,7 @@ TEST(cls_queue, gc_queue_ops1)
   string marker, next_marker;
   uint64_t max = 1;
   bool expired_only = false, truncated;
-  cls_rgw_gc_list_queue(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
   ASSERT_EQ(1, list_info1.size());
 
   for (auto it : list_info1) {
@@ -130,18 +130,18 @@ TEST(cls_queue, gc_queue_ops1)
   }
 }
 
-TEST(cls_queue, gc_queue_ops2)
+TEST(cls_rgw_gc, gc_queue_ops2)
 {
   //Testing list queue
   string queue_name = "my-second-queue";
   uint64_t queue_size = 334, num_urgent_data_entries = 10;
   librados::ObjectWriteOperation op;
   op.create(true);
-  cls_rgw_gc_init_queue(op, queue_name, queue_size, num_urgent_data_entries);
+  cls_rgw_gc_queue_init(op, queue_size, num_urgent_data_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
   uint64_t size = 0;
-  int ret = cls_rgw_gc_get_queue_size(ioctx, queue_name, size);
+  int ret = cls_rgw_gc_queue_get_capacity(ioctx, queue_name, size);
   ASSERT_EQ(0, ret);
   ASSERT_EQ(size, queue_size);
 
@@ -150,7 +150,7 @@ TEST(cls_queue, gc_queue_ops2)
   string marker1, next_marker1;
   uint64_t max1 = 2;
   bool expired_only1 = false, truncated1;
-  cls_rgw_gc_list_queue(ioctx, queue_name, marker1, max1, expired_only1, list_info, &truncated1, next_marker1);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker1, max1, expired_only1, list_info, &truncated1, next_marker1);
   ASSERT_EQ(0, list_info.size());
 
   //Test enqueue
@@ -166,7 +166,7 @@ TEST(cls_queue, gc_queue_ops2)
     info.chain.objs.push_back(obj2);
 
     info.tag = tag;
-    cls_rgw_gc_enqueue(op, 0, info);
+    cls_rgw_gc_queue_enqueue(op, 0, info);
     if (i == 2) {
       ASSERT_EQ(-ENOSPC, ioctx.operate(queue_name, &op));
     } else {
@@ -179,7 +179,7 @@ TEST(cls_queue, gc_queue_ops2)
   string marker, next_marker;
   uint64_t max = 2;
   bool expired_only = false, truncated;
-  cls_rgw_gc_list_queue(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
   ASSERT_EQ(2, list_info1.size());
 
   int i = 0;
@@ -191,7 +191,7 @@ TEST(cls_queue, gc_queue_ops2)
 
   max = 1;
   truncated = false;
-  cls_rgw_gc_list_queue(ioctx, queue_name, marker, max, expired_only, list_info2, &truncated, next_marker);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info2, &truncated, next_marker);
   auto it = list_info2.front();
   ASSERT_EQ(1, list_info2.size());
   ASSERT_EQ(true, truncated);
@@ -199,25 +199,25 @@ TEST(cls_queue, gc_queue_ops2)
   std::cerr << "[          ] next_marker is: = " << next_marker << std::endl;
 
   marker = next_marker;
-  cls_rgw_gc_list_queue(ioctx, queue_name, marker, max, expired_only, list_info3, &truncated, next_marker);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info3, &truncated, next_marker);
   it = list_info3.front();
   ASSERT_EQ(1, list_info3.size());
   ASSERT_EQ(false, truncated);
   ASSERT_EQ("chain-1", it.tag);
 }
 
-TEST(cls_queue, gc_queue_ops3)
+TEST(cls_rgw_gc, gc_queue_ops3)
 {
   //Testing remove queue entries
   string queue_name = "my-third-queue";
   uint64_t queue_size = 501, num_urgent_data_entries = 10;
   librados::ObjectWriteOperation op;
   op.create(true);
-  cls_rgw_gc_init_queue(op, queue_name, queue_size, num_urgent_data_entries);
+  cls_rgw_gc_queue_init(op, queue_size, num_urgent_data_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
   uint64_t size = 0;
-  int ret = cls_rgw_gc_get_queue_size(ioctx, queue_name, size);
+  int ret = cls_rgw_gc_queue_get_capacity(ioctx, queue_name, size);
   ASSERT_EQ(0, ret);
   ASSERT_EQ(size, queue_size);
 
@@ -225,7 +225,7 @@ TEST(cls_queue, gc_queue_ops3)
   librados::ObjectWriteOperation remove_op;
   string marker1;
   uint64_t num_entries = 2;
-  cls_rgw_gc_remove_entries_queue(remove_op, num_entries);
+  cls_rgw_gc_queue_remove_entries(remove_op, num_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &remove_op));
 
   cls_rgw_gc_obj_info defer_info;
@@ -243,7 +243,7 @@ TEST(cls_queue, gc_queue_ops3)
     info.chain.objs.push_back(obj2);
 
     info.tag = tag;
-    cls_rgw_gc_enqueue(op, 5, info);
+    cls_rgw_gc_queue_enqueue(op, 5, info);
     ASSERT_EQ(0, ioctx.operate(queue_name, &op));
     if (i == 0)
       defer_info = info;
@@ -251,7 +251,7 @@ TEST(cls_queue, gc_queue_ops3)
 
   //Test defer entry for 1st element
   librados::ObjectWriteOperation defer_op;
-  cls_rgw_gc_defer_entry_queue(defer_op, 10, defer_info);
+  cls_rgw_gc_queue_defer_entry(defer_op, 10, defer_info);
   ASSERT_EQ(0, ioctx.operate(queue_name, &defer_op));
 
   //Test list queue
@@ -259,7 +259,7 @@ TEST(cls_queue, gc_queue_ops3)
   string marker, next_marker;
   uint64_t max = 2;
   bool expired_only = false, truncated;
-  cls_rgw_gc_list_queue(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
   ASSERT_EQ(2, list_info1.size());
 
   int i = 0;
@@ -276,27 +276,27 @@ TEST(cls_queue, gc_queue_ops3)
 
   //Test remove entries
   num_entries = 2;
-  cls_rgw_gc_remove_entries_queue(remove_op, num_entries);
+  cls_rgw_gc_queue_remove_entries(remove_op, num_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &remove_op));
 
   //Test list queue again
-  cls_rgw_gc_list_queue(ioctx, queue_name, marker, max, expired_only, list_info2, &truncated, next_marker);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info2, &truncated, next_marker);
   ASSERT_EQ(0, list_info2.size());
 
 }
 
-TEST(cls_queue, gc_queue_ops4)
+TEST(cls_rgw_gc, gc_queue_ops4)
 {
   //Testing remove queue entries
   string queue_name = "my-fourth-queue";
   uint64_t queue_size = 501, num_urgent_data_entries = 10;
   librados::ObjectWriteOperation op;
   op.create(true);
-  cls_rgw_gc_init_queue(op, queue_name, queue_size, num_urgent_data_entries);
+  cls_rgw_gc_queue_init(op, queue_size, num_urgent_data_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
   uint64_t size = 0;
-  int ret = cls_rgw_gc_get_queue_size(ioctx, queue_name, size);
+  int ret = cls_rgw_gc_queue_get_capacity(ioctx, queue_name, size);
   ASSERT_EQ(0, ret);
   ASSERT_EQ(size, queue_size);
 
@@ -305,7 +305,7 @@ TEST(cls_queue, gc_queue_ops4)
   string marker1;
   uint64_t num_entries = 2;
 
-  cls_rgw_gc_remove_entries_queue(remove_op, num_entries);
+  cls_rgw_gc_queue_remove_entries(remove_op, num_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &remove_op));
 
   cls_rgw_gc_obj_info defer_info;
@@ -323,14 +323,14 @@ TEST(cls_queue, gc_queue_ops4)
     info.chain.objs.push_back(obj2);
 
     info.tag = tag;
-    cls_rgw_gc_enqueue(op, 5, info);
+    cls_rgw_gc_queue_enqueue(op, 5, info);
     ASSERT_EQ(0, ioctx.operate(queue_name, &op));
     defer_info = info;
   }
 
   //Test defer entry for last element
   librados::ObjectWriteOperation defer_op;
-  cls_rgw_gc_defer_entry_queue(defer_op, 10, defer_info);
+  cls_rgw_gc_queue_defer_entry(defer_op, 10, defer_info);
   ASSERT_EQ(0, ioctx.operate(queue_name, &defer_op));
 
   //Test list queue
@@ -338,7 +338,7 @@ TEST(cls_queue, gc_queue_ops4)
   string marker, next_marker;
   uint64_t max = 2;
   bool expired_only = false, truncated;
-  cls_rgw_gc_list_queue(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
   ASSERT_EQ(2, list_info1.size());
 
   int i = 0;
@@ -350,27 +350,27 @@ TEST(cls_queue, gc_queue_ops4)
 
   //Test remove entries
   num_entries = 2;
-  cls_rgw_gc_remove_entries_queue(remove_op, num_entries);
+  cls_rgw_gc_queue_remove_entries(remove_op, num_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &remove_op));
 
   //Test list queue again
-  cls_rgw_gc_list_queue(ioctx, queue_name, marker, max, expired_only, list_info2, &truncated, next_marker);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info2, &truncated, next_marker);
   ASSERT_EQ(0, list_info2.size());
 
 }
 
-TEST(cls_queue, gc_queue_ops5)
+TEST(cls_rgw_gc, gc_queue_ops5)
 {
   //Testing remove queue entries
   string queue_name = "my-fifth-queue";
   uint64_t queue_size = 501, num_urgent_data_entries = 10;
   librados::ObjectWriteOperation op;
   op.create(true);
-  cls_rgw_gc_init_queue(op, queue_name, queue_size, num_urgent_data_entries);
+  cls_rgw_gc_queue_init(op, queue_size, num_urgent_data_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
   uint64_t size = 0;
-  int ret = cls_rgw_gc_get_queue_size(ioctx, queue_name, size);
+  int ret = cls_rgw_gc_queue_get_capacity(ioctx, queue_name, size);
   ASSERT_EQ(0, ret);
   ASSERT_EQ(size, queue_size);
 
@@ -388,9 +388,9 @@ TEST(cls_queue, gc_queue_ops5)
 
     info.tag = tag;
     if (i == 2) {
-      cls_rgw_gc_enqueue(op, 300, info);
+      cls_rgw_gc_queue_enqueue(op, 300, info);
     } else {
-      cls_rgw_gc_enqueue(op, 0, info);
+      cls_rgw_gc_queue_enqueue(op, 0, info);
     }
     ASSERT_EQ(0, ioctx.operate(queue_name, &op));
   }
@@ -399,7 +399,7 @@ TEST(cls_queue, gc_queue_ops5)
   string marker, next_marker, marker1;
   uint64_t max = 10;
   bool expired_only = true, truncated;
-  cls_rgw_gc_list_queue(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
   ASSERT_EQ(2, list_info1.size());
 
   int i = 0;
@@ -412,28 +412,28 @@ TEST(cls_queue, gc_queue_ops5)
   //Test remove entries
   librados::ObjectWriteOperation remove_op;
   auto num_entries = list_info1.size();
-  cls_rgw_gc_remove_entries_queue(remove_op, num_entries);
+  cls_rgw_gc_queue_remove_entries(remove_op, num_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &remove_op));
 
   //Test list queue again for all entries
   expired_only = false;
-  cls_rgw_gc_list_queue(ioctx, queue_name, marker, max, expired_only, list_info2, &truncated, next_marker);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info2, &truncated, next_marker);
   ASSERT_EQ(1, list_info2.size());
 
 }
 
-TEST(cls_queue, gc_queue_ops6)
+TEST(cls_rgw_gc, gc_queue_ops6)
 {
   //Testing list queue, when data size is split at the end of the queue
   string queue_name = "my-sixth-queue";
   uint64_t queue_size = 341, num_urgent_data_entries = 10;
   librados::ObjectWriteOperation op;
   op.create(true);
-  cls_rgw_gc_init_queue(op, queue_name, queue_size, num_urgent_data_entries);
+  cls_rgw_gc_queue_init(op, queue_size, num_urgent_data_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
   uint64_t size = 0;
-  int ret = cls_rgw_gc_get_queue_size(ioctx, queue_name, size);
+  int ret = cls_rgw_gc_queue_get_capacity(ioctx, queue_name, size);
   ASSERT_EQ(0, ret);
   ASSERT_EQ(size, queue_size);
 
@@ -450,7 +450,7 @@ TEST(cls_queue, gc_queue_ops6)
     info.chain.objs.push_back(obj2);
 
     info.tag = tag;
-    cls_rgw_gc_enqueue(op, 0, info);
+    cls_rgw_gc_queue_enqueue(op, 0, info);
 
     ASSERT_EQ(0, ioctx.operate(queue_name, &op));
   }
@@ -460,7 +460,7 @@ TEST(cls_queue, gc_queue_ops6)
   string marker1;
   uint64_t num_entries = 1;
 
-  cls_rgw_gc_remove_entries_queue(remove_op, num_entries);
+  cls_rgw_gc_queue_remove_entries(remove_op, num_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &remove_op));
 
   //Enqueue one more element
@@ -474,7 +474,7 @@ TEST(cls_queue, gc_queue_ops6)
   info.chain.objs.push_back(obj2);
 
   info.tag = "chain-2";
-  cls_rgw_gc_enqueue(enq_op, 0, info);
+  cls_rgw_gc_queue_enqueue(enq_op, 0, info);
 
   ASSERT_EQ(0, ioctx.operate(queue_name, &enq_op));
 
@@ -483,7 +483,7 @@ TEST(cls_queue, gc_queue_ops6)
   string marker, next_marker;
   uint64_t max = 2;
   bool expired_only = false, truncated;
-  cls_rgw_gc_list_queue(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
   ASSERT_EQ(2, list_info1.size());
 
   int i = 1;
@@ -494,18 +494,18 @@ TEST(cls_queue, gc_queue_ops6)
   }
 }
 
-TEST(cls_queue, gc_queue_ops7)
+TEST(cls_rgw_gc, gc_queue_ops7)
 {
   //Testing list queue, when data size is written at the end of queue and data is written after wrap around
   string queue_name = "my-seventh-queue";
   uint64_t queue_size = 342, num_urgent_data_entries = 10;
   librados::ObjectWriteOperation op;
   op.create(true);
-  cls_rgw_gc_init_queue(op, queue_name, queue_size, num_urgent_data_entries);
+  cls_rgw_gc_queue_init(op, queue_size, num_urgent_data_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
   uint64_t size = 0;
-  int ret = cls_rgw_gc_get_queue_size(ioctx, queue_name, size);
+  int ret = cls_rgw_gc_queue_get_capacity(ioctx, queue_name, size);
   ASSERT_EQ(0, ret);
   ASSERT_EQ(size, queue_size);
 
@@ -522,7 +522,7 @@ TEST(cls_queue, gc_queue_ops7)
     info.chain.objs.push_back(obj2);
 
     info.tag = tag;
-    cls_rgw_gc_enqueue(op, 0, info);
+    cls_rgw_gc_queue_enqueue(op, 0, info);
 
     ASSERT_EQ(0, ioctx.operate(queue_name, &op));
   }
@@ -532,7 +532,7 @@ TEST(cls_queue, gc_queue_ops7)
   string marker1;
   uint64_t num_entries = 1;
 
-  cls_rgw_gc_remove_entries_queue(remove_op, num_entries);
+  cls_rgw_gc_queue_remove_entries(remove_op, num_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &remove_op));
 
   //Enqueue one more element
@@ -546,7 +546,7 @@ TEST(cls_queue, gc_queue_ops7)
   info.chain.objs.push_back(obj2);
 
   info.tag = "chain-2";
-  cls_rgw_gc_enqueue(enq_op, 0, info);
+  cls_rgw_gc_queue_enqueue(enq_op, 0, info);
 
   ASSERT_EQ(0, ioctx.operate(queue_name, &enq_op));
 
@@ -555,7 +555,7 @@ TEST(cls_queue, gc_queue_ops7)
   string marker, next_marker;
   uint64_t max = 2;
   bool expired_only = false, truncated;
-  cls_rgw_gc_list_queue(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
   ASSERT_EQ(2, list_info1.size());
 
   int i = 1;
@@ -566,18 +566,18 @@ TEST(cls_queue, gc_queue_ops7)
   }
 }
 
-TEST(cls_queue, gc_queue_ops8)
+TEST(cls_rgw_gc, gc_queue_ops8)
 {
   //Testing list queue, when data is split at the end of the queue
   string queue_name = "my-eighth-queue";
   uint64_t queue_size = 344, num_urgent_data_entries = 10;
   librados::ObjectWriteOperation op;
   op.create(true);
-  cls_rgw_gc_init_queue(op, queue_name, queue_size, num_urgent_data_entries);
+  cls_rgw_gc_queue_init(op, queue_size, num_urgent_data_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
   uint64_t size = 0;
-  int ret = cls_rgw_gc_get_queue_size(ioctx, queue_name, size);
+  int ret = cls_rgw_gc_queue_get_capacity(ioctx, queue_name, size);
   ASSERT_EQ(0, ret);
   ASSERT_EQ(size, queue_size);
 
@@ -594,7 +594,7 @@ TEST(cls_queue, gc_queue_ops8)
     info.chain.objs.push_back(obj2);
 
     info.tag = tag;
-    cls_rgw_gc_enqueue(op, 0, info);
+    cls_rgw_gc_queue_enqueue(op, 0, info);
 
     ASSERT_EQ(0, ioctx.operate(queue_name, &op));
   }
@@ -604,7 +604,7 @@ TEST(cls_queue, gc_queue_ops8)
   string marker1;
   uint64_t num_entries = 1;
 
-  cls_rgw_gc_remove_entries_queue(remove_op, num_entries);
+  cls_rgw_gc_queue_remove_entries(remove_op, num_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &remove_op));
 
   //Enqueue one more element
@@ -618,7 +618,7 @@ TEST(cls_queue, gc_queue_ops8)
   info.chain.objs.push_back(obj2);
 
   info.tag = "chain-2";
-  cls_rgw_gc_enqueue(enq_op, 0, info);
+  cls_rgw_gc_queue_enqueue(enq_op, 0, info);
 
   ASSERT_EQ(0, ioctx.operate(queue_name, &enq_op));
 
@@ -627,7 +627,7 @@ TEST(cls_queue, gc_queue_ops8)
   string marker, next_marker;
   uint64_t max = 2;
   bool expired_only = false, truncated;
-  cls_rgw_gc_list_queue(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
+  cls_rgw_gc_queue_list_entries(ioctx, queue_name, marker, max, expired_only, list_info1, &truncated, next_marker);
   ASSERT_EQ(2, list_info1.size());
 
   int i = 1;
@@ -638,18 +638,18 @@ TEST(cls_queue, gc_queue_ops8)
   }
 }
 
-TEST(cls_queue, gc_queue_ops9)
+TEST(cls_rgw_gc, gc_queue_ops9)
 {
   //Testing remove queue entries
   string queue_name = "my-ninth-queue";
   uint64_t queue_size = 668, num_urgent_data_entries = 1;
   librados::ObjectWriteOperation op;
   op.create(true);
-  cls_rgw_gc_init_queue(op, queue_name, queue_size, num_urgent_data_entries);
+  cls_rgw_gc_queue_init(op, queue_size, num_urgent_data_entries);
   ASSERT_EQ(0, ioctx.operate(queue_name, &op));
 
   uint64_t size = 0;
-  int ret = cls_rgw_gc_get_queue_size(ioctx, queue_name, size);
+  int ret = cls_rgw_gc_queue_get_capacity(ioctx, queue_name, size);
   ASSERT_EQ(0, ret);
   ASSERT_EQ(size, queue_size);
 
@@ -668,7 +668,7 @@ TEST(cls_queue, gc_queue_ops9)
     info.chain.objs.push_back(obj2);
 
     info.tag = tag;
-    cls_rgw_gc_enqueue(op, 5, info);
+    cls_rgw_gc_queue_enqueue(op, 5, info);
     ASSERT_EQ(0, ioctx.operate(queue_name, &op));
     if (i == 0) {
       defer_info1 = info;
@@ -680,16 +680,16 @@ TEST(cls_queue, gc_queue_ops9)
 
   //Test defer entry for last element
   librados::ObjectWriteOperation defer_op;
-  cls_rgw_gc_defer_entry_queue(defer_op, 10, defer_info2);
+  cls_rgw_gc_queue_defer_entry(defer_op, 10, defer_info2);
   ASSERT_EQ(0, ioctx.operate(queue_name, &defer_op));
 
   //Test defer entry for first element
-  cls_rgw_gc_defer_entry_queue(defer_op, 10, defer_info1);
+  cls_rgw_gc_queue_defer_entry(defer_op, 10, defer_info1);
   ASSERT_EQ(-ENOSPC, ioctx.operate(queue_name, &defer_op));
 }
 
 /* must be last test! */
-TEST(cls_queue, finalize)
+TEST(cls_rgw_gc, finalize)
 {
   /* remove pool */
   ioctx.close();

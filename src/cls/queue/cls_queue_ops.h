@@ -73,8 +73,7 @@ WRITE_CLASS_ENCODER(cls_queue_list_op)
 struct cls_queue_list_ret {
   bool is_truncated;
   string next_marker;
-  vector<bufferlist> data;
-  vector<string> markers;
+  vector<cls_queue_entry> entries;
 
   cls_queue_list_ret() {}
 
@@ -82,8 +81,7 @@ struct cls_queue_list_ret {
     ENCODE_START(1, 1, bl);
     encode(is_truncated, bl);
     encode(next_marker, bl);
-    encode(data, bl);
-    encode(markers, bl);
+    encode(entries, bl);
     ENCODE_FINISH(bl);
   }
 
@@ -91,8 +89,7 @@ struct cls_queue_list_ret {
     DECODE_START(1, bl);
     decode(is_truncated, bl);
     decode(next_marker, bl);
-    decode(data, bl);
-    decode(markers, bl);
+    decode(entries, bl);
     DECODE_FINISH(bl);
   }
 };
@@ -117,23 +114,23 @@ struct cls_queue_remove_op {
 };
 WRITE_CLASS_ENCODER(cls_queue_remove_op)
 
-struct cls_queue_get_size_ret {
-  uint64_t queue_size;
+struct cls_queue_get_capacity_ret {
+  uint64_t queue_capacity;
 
-  cls_queue_get_size_ret() {}
+  cls_queue_get_capacity_ret() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    encode(queue_size, bl);
+    encode(queue_capacity, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    decode(queue_size, bl);
+    decode(queue_capacity, bl);
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_queue_get_size_ret)
+WRITE_CLASS_ENCODER(cls_queue_get_capacity_ret)
 
 #endif /* CEPH_CLS_QUEUE_OPS_H */

@@ -7,7 +7,7 @@
 #include "include/scope_guard.h"
 #include "include/rados/librados.hpp"
 #include "cls/rgw/cls_rgw_client.h"
-#include "cls/queue/cls_queue_client.h"
+#include "cls/rgw_gc/cls_rgw_gc_client.h"
 #include "cls/refcount/cls_refcount_client.h"
 #include "rgw_perf_counters.h"
 #include "cls/lock/cls_lock_client.h"
@@ -46,7 +46,7 @@ void RGWGC::initialize(CephContext *_cct, RGWRados *_store) {
     librados::ObjectWriteOperation op;
     op.create(true);
     uint64_t queue_size = 1048576, num_urgent_data_entries = 50;
-    cls_rgw_gc_init_queue(op, obj_names[i], queue_size, num_urgent_data_entries);
+    cls_rgw_gc_queue_init(op, queue_size, num_urgent_data_entries);
     store->gc_operate(obj_names[i], &op);
   }
 }
@@ -68,7 +68,7 @@ void RGWGC::add_chain(ObjectWriteOperation& op, cls_rgw_obj_chain& chain, const 
   info.tag = tag;
 
   //cls_rgw_gc_set_entry(op, cct->_conf->rgw_gc_obj_min_wait, info);
-  cls_rgw_gc_enqueue(op, cct->_conf->rgw_gc_obj_min_wait, info);
+  cls_rgw_gc_queue_enqueue(op, cct->_conf->rgw_gc_obj_min_wait, info);
 }
 
 int RGWGC::send_chain(cls_rgw_obj_chain& chain, const string& tag, bool sync)
@@ -93,7 +93,7 @@ int RGWGC::defer_chain(const string& tag, cls_rgw_obj_chain& chain, bool sync)
 
   ObjectWriteOperation op;
   //cls_rgw_gc_defer_entry(op, cct->_conf->rgw_gc_obj_min_wait, tag);
-  cls_rgw_gc_defer_entry_queue(op, cct->_conf->rgw_gc_obj_min_wait, info);
+  cls_rgw_gc_queue_defer_entry(op, cct->_conf->rgw_gc_obj_min_wait, info);
 
   int i = tag_index(tag);
 
@@ -113,7 +113,7 @@ int RGWGC::remove(int index, const std::vector<string>& tags, AioCompletion **pc
 int RGWGC::remove(int index, int num_entries, librados::AioCompletion **pc)
 {
   ObjectWriteOperation op;
-  cls_rgw_gc_remove_entries_queue(op, num_entries);
+  cls_rgw_gc_queue_remove_entries(op, num_entries);
   return store->gc_aio_operate(obj_names[index], &op, pc);
 }
 
@@ -125,7 +125,7 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
   for (; *index < max_objs && result.size() < max; (*index)++, marker.clear()) {
     std::list<cls_rgw_gc_obj_info> entries;
     //int ret = cls_rgw_gc_list(store->gc_pool_ctx, obj_names[*index], marker, max - result.size(), expired_only, entries, truncated, next_marker);
-    int ret = cls_rgw_gc_list_queue(store->gc_pool_ctx, obj_names[*index], marker, max - result.size(), expired_only, entries, truncated, next_marker);
+    int ret = cls_rgw_gc_queue_list_entries(store->gc_pool_ctx, obj_names[*index], marker, max - result.size(), expired_only, entries, truncated, next_marker);
     if (ret == -ENOENT)
       continue;
     if (ret < 0)
@@ -393,9 +393,9 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
     //ret = cls_rgw_gc_list(store->gc_pool_ctx, obj_names[index], marker, max,
 			//  expired_only, entries, &truncated, next_marker);
 
-    ret = cls_rgw_gc_list_queue(store->gc_pool_ctx, obj_names[index], marker, max, expired_only, entries, &truncated, next_marker);
+    ret = cls_rgw_gc_queue_list_entries(store->gc_pool_ctx, obj_names[index], marker, max, expired_only, entries, &truncated, next_marker);
     ldpp_dout(this, 20) <<
-      "RGWGC::process cls_rgw_gc_list_queue returned with returned:" << ret <<
+      "RGWGC::process cls_rgw_gc_queue_list_entries returned with returned:" << ret <<
       ", entries.size=" << entries.size() << ", truncated=" << truncated <<
       ", next_marker='" << next_marker << "'" << dendl;
 

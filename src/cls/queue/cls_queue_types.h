@@ -3,8 +3,6 @@
 
 #include <errno.h>
 #include "include/types.h"
-#include "common/ceph_time.h"
-#include "common/Formatter.h"
 
 #define QUEUE_HEAD_SIZE_1K 1024
 //Actual start offset of queue data
@@ -16,6 +14,27 @@
 
 constexpr unsigned int QUEUE_HEAD_START = 0xDEAD;
 constexpr unsigned int QUEUE_ENTRY_START = 0xBEEF;
+
+struct cls_queue_entry
+{
+  bufferlist data;
+  std::string marker;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(data, bl);
+    encode(marker, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(data, bl);
+    decode(marker, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_queue_entry)
 
 struct cls_queue_marker
 {
