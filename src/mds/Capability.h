@@ -72,15 +72,6 @@ public:
   MEMPOOL_CLASS_HELPERS();
 
   struct Export {
-    int64_t cap_id = 0;
-    int32_t wanted = 0;
-    int32_t issued = 0;
-    int32_t pending = 0;
-    snapid_t client_follows;
-    ceph_seq_t seq = 0;
-    ceph_seq_t mseq = 0;
-    utime_t last_issue_stamp;
-    uint32_t state = 0;
     Export() {}
     Export(int64_t id, int w, int i, int p, snapid_t cf,
 	   ceph_seq_t s, ceph_seq_t m, utime_t lis, unsigned st) :
@@ -90,26 +81,39 @@ public:
     void decode(bufferlist::const_iterator &p);
     void dump(Formatter *f) const;
     static void generate_test_instances(std::list<Export*>& ls);
+
+    int64_t cap_id = 0;
+    int32_t wanted = 0;
+    int32_t issued = 0;
+    int32_t pending = 0;
+    snapid_t client_follows;
+    ceph_seq_t seq = 0;
+    ceph_seq_t mseq = 0;
+    utime_t last_issue_stamp;
+    uint32_t state = 0;
   };
   struct Import {
-    int64_t cap_id;
-    ceph_seq_t issue_seq;
-    ceph_seq_t mseq;
-    Import() : cap_id(0), issue_seq(0), mseq(0) {}
+    Import() {}
     Import(int64_t i, ceph_seq_t s, ceph_seq_t m) : cap_id(i), issue_seq(s), mseq(m) {}
     void encode(bufferlist &bl) const;
     void decode(bufferlist::const_iterator &p);
     void dump(Formatter *f) const;
+
+    int64_t cap_id = 0;
+    ceph_seq_t issue_seq = 0;
+    ceph_seq_t mseq = 0;
   };
   struct revoke_info {
-    __u32 before;
-    ceph_seq_t seq, last_issue;
-    revoke_info() : before(0), seq(0), last_issue(0) {}
+    revoke_info() {}
     revoke_info(__u32 b, ceph_seq_t s, ceph_seq_t li) : before(b), seq(s), last_issue(li) {}
     void encode(bufferlist& bl) const;
     void decode(bufferlist::const_iterator& bl);
     void dump(Formatter *f) const;
     static void generate_test_instances(std::list<revoke_info*>& ls);
+
+    __u32 before = 0;
+    ceph_seq_t seq = 0;
+    ceph_seq_t last_issue = 0;
   };
 
   const static unsigned STATE_NOTABLE		= (1<<0);
@@ -358,6 +362,18 @@ public:
   xlist<Capability*>::item item_client_revoking_caps;
 
 private:
+  void calc_issued() {
+    _issued = _pending;
+    for (const auto &r : _revokes) {
+      _issued |= r.before;
+    }
+  }
+
+  void revalidate();
+
+  void mark_notable();
+  void maybe_clear_notable();
+
   CInode *inode;
   Session *session;
 
@@ -382,18 +398,6 @@ private:
 
   int suppress;
   unsigned state;
-
-  void calc_issued() {
-    _issued = _pending;
-    for (const auto &r : _revokes) {
-      _issued |= r.before;
-    }
-  }
-
-  void revalidate();
-
-  void mark_notable();
-  void maybe_clear_notable();
 };
 
 WRITE_CLASS_ENCODER(Capability::Export)
