@@ -191,12 +191,12 @@ class PgRecoveryEvent(Event):
     Always call update() immediately after construction.
     """
 
-    def __init__(self, message, refs, which_pgs, evacuate_osds, start_epoch):
+    def __init__(self, message, refs, which_pgs, which_osds, start_epoch):
         super(PgRecoveryEvent, self).__init__(message, refs)
 
         self._pgs = which_pgs
 
-        self._evacuate_osds = evacuate_osds
+        self._which_osds = which_osds
 
         self._original_pg_count = len(self._pgs)
 
@@ -211,8 +211,8 @@ class PgRecoveryEvent(Event):
         self._refresh()
 
     @property
-    def evacuating_osds(self):
-        return self. _evacuate_osds
+    def which_osds(self):
+        return self. _which_osds
 
     def pg_update(self, pg_dump, log):
         # FIXME: O(pg_num) in python
@@ -434,7 +434,7 @@ class Module(MgrModule):
         # previous recovery event for that osd
         if marked == "in":
             for ev_id, ev in self._events.items():
-                if isinstance(ev, PgRecoveryEvent) and osd_id in ev.evacuating_osds:
+                if isinstance(ev, PgRecoveryEvent) and osd_id in ev.which_osds:
                     self.log.info("osd.{0} came back in, cancelling event".format(
                         osd_id
                     ))
@@ -445,7 +445,7 @@ class Module(MgrModule):
                     "Rebalancing after osd.{0} marked {1}".format(osd_id, marked),
                     refs=[("osd", osd_id)],
                     which_pgs=affected_pgs,
-                    evacuate_osds=[osd_id],
+                    which_osds=[osd_id],
                     start_epoch=self.get_osdmap().get_epoch()
                     )
             ev.pg_update(self.get("pg_dump"), self.log)
