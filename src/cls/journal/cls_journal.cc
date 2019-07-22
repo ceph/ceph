@@ -55,8 +55,11 @@ int read_key(cls_method_context_t hctx, const string &key, T *t,
              bool ignore_enoent = false) {
   bufferlist bl;
   int r = cls_cxx_map_get_val(hctx, key, &bl);
-  if (r == -ENOENT && ignore_enoent) {
-    return 0;
+  if (r == -ENOENT) {
+    if (ignore_enoent) {
+      r = 0;
+    }
+    return r;
   } else if (r < 0) {
     CLS_ERR("failed to get omap key: %s", key.c_str());
     return r;
@@ -468,7 +471,7 @@ int journal_set_minimum_set(cls_method_context_t hctx, bufferlist *in,
   }
 
   if (current_active_set < object_set) {
-    CLS_ERR("active object set earlier than minimum: %" PRIu64
+    CLS_LOG(10, "active object set earlier than minimum: %" PRIu64
             " < %" PRIu64, current_active_set, object_set);
     return -EINVAL;
   }
