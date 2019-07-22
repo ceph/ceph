@@ -1023,6 +1023,9 @@ struct objexp_hint_entry {
     }
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<objexp_hint_entry*>& o);
 };
 WRITE_CLASS_ENCODER(objexp_hint_entry)
 

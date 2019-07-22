@@ -1748,3 +1748,15 @@ void RGWCompressionInfo::dump(Formatter *f) const
   f->dump_unsigned("orig_size", orig_size);
   ::encode_json("blocks", blocks, f);
 }
+
+void objexp_hint_entry::dump(Formatter *f) const
+{
+  f->open_object_section("objexp_hint_entry");
+  encode_json("tenant", tenant, f);
+  encode_json("bucket_name", bucket_name, f);
+  encode_json("bucket_id", bucket_id, f);
+  encode_json("rgw_obj_key", obj_key, f);
+  utime_t ut(exp_time);
+  encode_json("exp_time", ut, f);
+  f->close_section();
+}
