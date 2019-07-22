@@ -377,6 +377,15 @@ OSD Settings
 :Default: ``30``
 
 
+``osd mon heartbeat stat stale``
+
+:Description: Stop reporting on heartbeat ping times which haven't been updated for
+              this many seconds.  Set to zero to disable this action.
+
+:Type: 32-bit Integer
+:Default: ``3600``
+
+
 ``osd mon report interval``
 
 :Description: The number of seconds a Ceph OSD Daemon may wait
