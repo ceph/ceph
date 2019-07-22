@@ -67,7 +67,7 @@ Changelog
 * bluestore: fix missing discard in BlueStore::_kv_sync_thread (`issue#39672 <http://tracker.ceph.com/issues/39672>`_, `pr#28258 <https://github.com/ceph/ceph/pull/28258>`_, Junhui Tang)
 * bluestore: fix out-of-bound access in bmap allocator (`pr#27740 <https://github.com/ceph/ceph/pull/27740>`_, Igor Fedotov)
 * bluestore: fix duplicate allocations in bmap allocator (`issue#40080 <http://tracker.ceph.com/issues/40080>`_, `pr#28646 <https://github.com/ceph/ceph/pull/28646>`_, Igor Fedotov)
-* build/ops: Ceph RPM build fails on openSUSE Tumbleweed with GCC 9 (`issue#40067 <http://tracker.ceph.com/issues/40067>`_, `issue#39974 <http://tracker.ceph.com/issues/39974>`_, `pr#28299 <https://github.com/ceph/ceph/pull/28299>`_, Martin Li\xc5\xa1ka)
+* build/ops: Ceph RPM build fails on openSUSE Tumbleweed with GCC 9 (`issue#40067 <http://tracker.ceph.com/issues/40067>`_, `issue#39974 <http://tracker.ceph.com/issues/39974>`_, `pr#28299 <https://github.com/ceph/ceph/pull/28299>`_, Martin Liška)
 * build/ops: cmake: Fix build against ncurses with separate libtinfo (`pr#27532 <https://github.com/ceph/ceph/pull/27532>`_, Lars Wendler)
 * build/ops: cmake: set empty-string RPATH for ceph-osd (`issue#40301 <http://tracker.ceph.com/issues/40301>`_, `issue#40295 <http://tracker.ceph.com/issues/40295>`_, `pr#28516 <https://github.com/ceph/ceph/pull/28516>`_, Nathan Cutler)
 * build/ops: do_cmake.sh: source not found (`issue#39981 <http://tracker.ceph.com/issues/39981>`_, `issue#40003 <http://tracker.ceph.com/issues/40003>`_, `pr#28215 <https://github.com/ceph/ceph/pull/28215>`_, Nathan Cutler)
