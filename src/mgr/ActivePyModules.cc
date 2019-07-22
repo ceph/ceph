@@ -538,7 +538,7 @@ bool ActivePyModules::get_config(const std::string &module_name,
   const std::string global_key = PyModule::config_prefix
     + module_name + "/" + key;
 
-  dout(4) << __func__ << " key: " << global_key << dendl;
+  dout(20) << " key: " << global_key << dendl;
 
   std::lock_guard lock(module_config.lock);
   
@@ -580,10 +580,10 @@ PyObject *ActivePyModules::get_typed_config(
   }
   PyEval_RestoreThread(tstate);
   if (prefix.size()) {
-    dout(4) << __func__ << " [" << prefix << "/]" << key << " not found "
+    dout(10) << " [" << prefix << "/]" << key << " not found "
 	    << dendl;
   } else {
-    dout(4) << __func__ << " " << key << " not found " << dendl;
+    dout(10) << " " << key << " not found " << dendl;
   }
   Py_RETURN_NONE;
 }

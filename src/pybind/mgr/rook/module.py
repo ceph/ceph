@@ -162,7 +162,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     ]
 
     def wait(self, completions):
-        self.log.info("wait: completions={0}".format(completions))
+        if completions:
+            self.log.info("wait: completions={0}".format(completions))
 
         incomplete = False
 

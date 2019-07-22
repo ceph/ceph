@@ -419,7 +419,7 @@ bool DaemonServer::handle_open(MMgrOpen *m)
 				   m->get_connection()->get_peer_type(),
 				   m->daemon_name);
 
-  dout(4) << "from " << m->get_connection() << "  " << key << dendl;
+  dout(10) << "from " << m->get_connection() << "  " << key << dendl;
 
   _send_configure(m->get_connection());
 
@@ -519,13 +519,13 @@ bool DaemonServer::handle_report(MMgrReport *m)
   }
   key.second = m->daemon_name;
 
-  dout(4) << "from " << m->get_connection() << " " << key << dendl;
+  dout(10) << "from " << m->get_connection() << " " << key << dendl;
 
   if (m->get_connection()->get_peer_type() == entity_name_t::TYPE_CLIENT &&
       m->service_name.empty()) {
     // Clients should not be sending us stats unless they are declaring
     // themselves to be a daemon for some service.
-    dout(4) << "rejecting report from non-daemon client " << m->daemon_name
+    dout(10) << "rejecting report from non-daemon client " << m->daemon_name
 	    << dendl;
     m->get_connection()->mark_down();
     m->put();

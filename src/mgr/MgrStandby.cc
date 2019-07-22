@@ -192,7 +192,7 @@ int MgrStandby::init()
 void MgrStandby::send_beacon()
 {
   ceph_assert(lock.is_locked_by_me());
-  dout(4) << state_str() << dendl;
+  dout(20) << state_str() << dendl;
 
   std::list<PyModuleRef> modules = py_module_registry.get_modules();
 
@@ -433,7 +433,7 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
 bool MgrStandby::ms_dispatch(Message *m)
 {
   std::lock_guard l(lock);
-  dout(4) << state_str() << " " << *m << dendl;
+  dout(10) << state_str() << " " << *m << dendl;
 
   if (m->get_type() == MSG_MGR_MAP) {
     handle_mgr_map(static_cast<MMgrMap*>(m));
