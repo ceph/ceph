@@ -118,7 +118,7 @@ bool OSDCapPoolNamespace::is_match(const std::string& pn,
     }
   }
   if (nspace) {
-    if ((*nspace)[nspace->length() - 1] == '*' &&
+    if (!nspace->empty() && nspace->back() == '*' &&
 	boost::starts_with(ns, nspace->substr(0, nspace->length() - 1))) {
       return true;
     }
