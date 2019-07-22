@@ -4143,6 +4143,8 @@ PGRef OSD::handle_pg_create_info(const OSDMapRef& osdmap,
     false,
     rctx.transaction);
 
+  pg->init_collection_pool_opts();
+
   if (pg->is_primary()) {
     Mutex::Locker locker(m_perf_queries_lock);
     pg->set_dynamic_perf_stats_queries(m_perf_queries);
@@ -8784,6 +8786,8 @@ void OSD::split_pgs(
       i->pgid,
       child,
       split_bits);
+
+    child->init_collection_pool_opts();
 
     child->finish_split_stats(*stat_iter, rctx.transaction);
     child->unlock();
