@@ -92,6 +92,8 @@ class OSD final : public ceph::net::Dispatcher,
   //< since when there is no more pending pg creates from mon
   epoch_t last_pg_create_epoch = 0;
 
+  ceph::mono_time startup_time;
+
   OSDSuperblock superblock;
 
   // Dispatcher methods
@@ -137,6 +139,10 @@ private:
   seastar::future<> _send_alive();
 
   // OSDMapService methods
+  ceph::signedspan get_mnow() const final;
+  epoch_t get_up_epoch() const final {
+    return up_epoch;
+  }
   seastar::future<cached_map_t> get_map(epoch_t e) final;
   cached_map_t get_map() const final;
   seastar::future<std::unique_ptr<OSDMap>> load_map(epoch_t e);

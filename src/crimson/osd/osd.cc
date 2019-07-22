@@ -185,6 +185,8 @@ seastar::future<> OSD::start()
 {
   logger().info("start");
 
+  startup_time = ceph::mono_clock::now();
+
   return store->mount().then([this] {
     meta_coll = make_unique<OSDMeta>(store->open_collection(coll_t::meta()),
                                      store.get());
@@ -524,6 +526,11 @@ MessageRef OSD::get_stats()
     }
   }
   return m;
+}
+
+ceph::signedspan OSD::get_mnow() const
+{
+  return ceph::mono_clock::now() - startup_time;
 }
 
 OSD::cached_map_t OSD::get_map() const
