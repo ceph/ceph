@@ -252,8 +252,18 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
     };
 
     set<mgr_ping_time_t> sorted;
+    utime_t now = ceph_clock_now();
     for (auto i : pg_map.osd_stat) {
       for (auto j : i.second.hb_pingtime) {
+
+	if (j.second.last_update == 0)
+	  continue;
+	auto stale_time = g_ceph_context->_conf.get_val<int64_t>("osd_mon_heartbeat_stat_stale");
+	if (now.sec() - j.second.last_update > stale_time) {
+	  dout(20) << __func__ << " time out heartbeat for osd " << i.first
+	           << " last_update " << j.second.last_update << dendl;
+	   continue;
+	}
 	mgr_ping_time_t item;
 	item.pingtime = std::max(j.second.back_pingtime[0], j.second.back_pingtime[1]);
 	item.pingtime = std::max(item.pingtime, j.second.back_pingtime[2]);

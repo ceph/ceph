@@ -2969,6 +2969,11 @@ std::vector<Option> get_global_options() {
     .set_default(30)
     .set_description(""),
 
+    Option("osd_mon_heartbeat_stat_stale", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(1_hr)
+    .set_description("Stop reporting on heartbeat ping times not updated for this many seconds.")
+    .set_long_description("Stop reporting on old heartbeat information unless this is set to zero"),
+
     Option("osd_mon_report_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(5)
     .set_description("Frequency of OSD reports to mon for peer failures, fullness status changes"),
