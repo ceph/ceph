@@ -148,6 +148,9 @@
               <span class="help-block">
                 <ng-container *ngIf="backstores.length > 1"
                               i18n>Backstore: {{ imagesSettings[image].backstore | iscsiBackstore }}.&nbsp;</ng-container>
+                <p class="alert-warning"
+                   *ngIf="imagesSettings[image].backstore === 'user:rbd'">
+                  tcmu-runner based iSCSI Gateway deployments are currently a technology preview.</p>
 
                 <ng-container *ngIf="hasAdvancedSettings(imagesSettings[image][imagesSettings[image].backstore])"
                               i18n>This image has modified settings.</ng-container>
