@@ -497,7 +497,7 @@ option(WITH_CEPHFS "CephFS is enabled" ON)
 option(WITH_MGR "ceph-mgr is enabled" ON)
 if(WITH_MGR)
   # Please specify 3 or 3.[0-7] if you want to build with python3 support.
-  # FindPyhonInterp and FindPythonLibs think they belong to different families.
+  # FindPython thinks they belong to different families.
   set(MGR_PYTHON_VERSION "2.7" CACHE
     STRING "minimal required version of python runtime for running mgr plugins. ")
   find_package(Python ${MGR_PYTHON_VERSION} REQUIRED
