@@ -37,6 +37,9 @@ struct cls_timeindex_entry {
     decode(value, bl);
     DECODE_FINISH(bl);
   }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<cls_timeindex_entry*>& o);
 };
 WRITE_CLASS_ENCODER(cls_timeindex_entry)
 

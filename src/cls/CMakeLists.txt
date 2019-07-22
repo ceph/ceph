@@ -148,7 +148,9 @@ set_target_properties(cls_timeindex PROPERTIES
   CXX_VISIBILITY_PRESET hidden)
 install(TARGETS cls_timeindex DESTINATION ${cls_dir})
 
-set(cls_timeindex_client_srcs timeindex/cls_timeindex_client.cc)
+set(cls_timeindex_client_srcs
+  timeindex/cls_timeindex_types.cc
+  timeindex/cls_timeindex_client.cc)
 add_library(cls_timeindex_client STATIC ${cls_timeindex_client_srcs})
 
 
