@@ -200,7 +200,7 @@ class VolumeClient(object):
         """
         return ve.to_tuple()
 
-    def create_pool(self, pool_name, pg_num, pg_num_min=None, pg_autoscale_factor=None):
+    def create_pool(self, pool_name, pg_num, pg_num_min=None):
         # create the given pool
         command = {'prefix': 'osd pool create', 'pool': pool_name, 'pg_num': pg_num}
         if pg_num_min:
@@ -209,11 +209,6 @@ class VolumeClient(object):
         if r != 0:
             return r, outb, outs
 
-        # set pg autoscale if needed
-        if pg_autoscale_factor:
-            command = {'prefix': 'osd pool set', 'pool': pool_name, 'var': 'pg_autoscale_bias',
-                       'val': str(pg_autoscale_factor)}
-            r, outb, outs = self.mgr.mon_command(command)
         return r, outb, outs
 
     def remove_pool(self, pool_name):
@@ -258,7 +253,7 @@ class VolumeClient(object):
         """
         metadata_pool, data_pool = self.gen_pool_names(volname)
         # create pools
-        r, outs, outb = self.create_pool(metadata_pool, 16, pg_num_min=16, pg_autoscale_factor=4.0)
+        r, outs, outb = self.create_pool(metadata_pool, 16, pg_num_min=16)
         if r != 0:
             return r, outb, outs
         r, outb, outs = self.create_pool(data_pool, 8)
