@@ -2,35 +2,30 @@
 // vim: ts=8 sw=2 smarttab
 #include <errno.h>
 
-#include "cls/rgw/cls_rgw_ops.h"
-#include "cls/queue/cls_rgw_queue_ops.h"
 #include "cls/queue/cls_queue_ops.h"
 #include "cls/queue/cls_queue_const.h"
 #include "cls/queue/cls_queue_client.h"
 
-#include "common/debug.h"
-
 using namespace librados;
 
-void cls_rgw_gc_init_queue(ObjectWriteOperation& op, string& queue_name, uint64_t& size, uint64_t& num_urgent_data_entries)
+void cls_queue_init(ObjectWriteOperation& op, const string& queue_name, uint64_t size)
 {
   bufferlist in;
-  cls_gc_init_queue_op call;
-  call.name = queue_name;
-  call.size = size;
-  call.num_urgent_data_entries = num_urgent_data_entries;
+  cls_queue_init_op call;
+  call.has_urgent_data = false;
+  call.head.queue_size = size;
   encode(call, in);
-  op.exec(RGW_QUEUE_CLASS, GC_INIT_QUEUE, in);
+  op.exec(QUEUE_CLASS, QUEUE_INIT, in);
 }
 
-int cls_rgw_gc_get_queue_size(IoCtx& io_ctx, string& oid, uint64_t& size)
+int cls_queue_get_capacity(IoCtx& io_ctx, const string& oid, uint64_t& size)
 {
   bufferlist in, out;
-  int r = io_ctx.exec(oid, QUEUE_CLASS, GET_QUEUE_SIZE, in, out);
+  int r = io_ctx.exec(oid, QUEUE_CLASS, QUEUE_GET_CAPACITY, in, out);
   if (r < 0)
     return r;
 
-  cls_queue_get_size_ret op_ret;
+  cls_queue_get_capacity_ret op_ret;
   auto iter = out.cbegin();
   try {
     decode(op_ret, iter);
@@ -38,36 +33,35 @@ int cls_rgw_gc_get_queue_size(IoCtx& io_ctx, string& oid, uint64_t& size)
     return -EIO;
   }
 
-  size = op_ret.queue_size;
+  size = op_ret.queue_capacity;
 
   return 0;
 }
 
-void cls_rgw_gc_enqueue(ObjectWriteOperation& op, uint32_t expiration_secs, cls_rgw_gc_obj_info& info)
+void cls_queue_enqueue(ObjectWriteOperation& op, uint32_t expiration_secs, vector<bufferlist> bl_data_vec)
 {
   bufferlist in;
-  cls_rgw_gc_set_entry_op call;
-  call.expiration_secs = expiration_secs;
-  call.info = info;
+  cls_queue_enqueue_op call;
+  call.bl_data_vec = std::move(bl_data_vec);
   encode(call, in);
-  op.exec(RGW_QUEUE_CLASS, GC_ENQUEUE, in);
+  op.exec(QUEUE_CLASS, QUEUE_ENQUEUE, in);
 }
 
-int cls_rgw_gc_list_queue(IoCtx& io_ctx, string& oid, string& marker, uint32_t max, bool expired_only,
-                    list<cls_rgw_gc_obj_info>& entries, bool *truncated, string& next_marker)
+int cls_queue_list_entries(IoCtx& io_ctx, const string& oid, const string& marker, uint32_t max,
+                            vector<cls_queue_entry>& entries,
+                            bool *truncated, string& next_marker)
 {
   bufferlist in, out;
-  cls_rgw_gc_list_op op;
-  op.marker = marker;
+  cls_queue_list_op op;
+  op.start_marker = marker;
   op.max = max;
-  op.expired_only = expired_only;
   encode(op, in);
 
-  int r = io_ctx.exec(oid, RGW_QUEUE_CLASS, GC_QUEUE_LIST_ENTRIES, in, out);
+  int r = io_ctx.exec(oid, QUEUE_CLASS, QUEUE_LIST_ENTRIES, in, out);
   if (r < 0)
     return r;
 
-  cls_rgw_gc_list_ret ret;
+  cls_queue_list_ret ret;
   auto iter = out.cbegin();
   try {
     decode(ret, iter);
@@ -75,30 +69,19 @@ int cls_rgw_gc_list_queue(IoCtx& io_ctx, string& oid, string& marker, uint32_t m
     return -EIO;
   }
 
-  entries.swap(ret.entries);
-
-  *truncated = ret.truncated;
+  entries = std::move(ret.entries);
+  *truncated = ret.is_truncated;
 
   next_marker = std::move(ret.next_marker);
 
   return 0;
 }
 
-void cls_rgw_gc_remove_entries_queue(ObjectWriteOperation& op, uint32_t num_entries)
+void cls_queue_remove_entries(ObjectWriteOperation& op, const string& end_marker)
 {
   bufferlist in, out;
-  cls_rgw_gc_queue_remove_op rem_op;
-  rem_op.num_entries = num_entries;
+  cls_queue_remove_op rem_op;
+  rem_op.end_marker = end_marker;
   encode(rem_op, in);
-  op.exec(RGW_QUEUE_CLASS, GC_QUEUE_REMOVE_ENTRIES, in);
-}
-
-void cls_rgw_gc_defer_entry_queue(ObjectWriteOperation& op, uint32_t expiration_secs, cls_rgw_gc_obj_info& info)
-{
-  bufferlist in;
-  cls_gc_defer_entry_op defer_op;
-  defer_op.expiration_secs = expiration_secs;
-  defer_op.info = info;
-  encode(defer_op, in);
-  op.exec(RGW_QUEUE_CLASS, GC_QUEUE_UPDATE_ENTRY, in);
+  op.exec(QUEUE_CLASS, QUEUE_REMOVE_ENTRIES, in);
 }

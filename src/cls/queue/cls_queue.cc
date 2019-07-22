@@ -14,7 +14,7 @@
 CLS_VER(1,0)
 CLS_NAME(queue)
 
-static int cls_init_queue(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+static int cls_queue_init(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   auto in_iter = in->cbegin();
   cls_queue_init_op op;
@@ -26,13 +26,13 @@ static int cls_init_queue(cls_method_context_t hctx, bufferlist *in, bufferlist 
     return -EINVAL;
   }
 
-  return init_queue(hctx, op);
+  return queue_init(hctx, op);
 }
 
-static int cls_get_queue_size(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+static int cls_queue_get_capacity(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
-  cls_queue_get_size_ret op_ret;
-  auto ret = get_queue_size(hctx, op_ret);
+  cls_queue_get_capacity_ret op_ret;
+  auto ret = queue_get_capacity(hctx, op_ret);
   if (ret < 0) {
     return ret;
   }
@@ -41,30 +41,30 @@ static int cls_get_queue_size(cls_method_context_t hctx, bufferlist *in, bufferl
   return 0;
 }
 
-static int cls_enqueue(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+static int cls_queue_enqueue(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
   auto iter = in->cbegin();
   cls_queue_enqueue_op op;
   try {
     decode(op, iter);
   } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: cls_enqueue: failed to decode input data \n");
+    CLS_LOG(1, "ERROR: cls_queue_enqueue: failed to decode input data \n");
     return -EINVAL;
   }
 
   cls_queue_head head;
-  auto ret = get_queue_head(hctx, head);
+  auto ret = queue_read_head(hctx, head);
   if (ret < 0) {
     return ret;
   }
 
-  ret = enqueue(hctx, op, head);
+  ret = queue_enqueue(hctx, op, head);
   if (ret < 0) {
     return ret;
   }
 
   //Write back head
-  return write_queue_head(hctx, head);
+  return queue_write_head(hctx, head);
 }
 
 static int cls_queue_list_entries(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
@@ -74,12 +74,12 @@ static int cls_queue_list_entries(cls_method_context_t hctx, bufferlist *in, buf
   try {
     decode(op, in_iter);
   } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: cls_queue_list_entries(): failed to decode input data\n");
+    CLS_LOG(5, "ERROR: cls_queue_list_entries(): failed to decode input data\n");
     return -EINVAL;
   }
 
   cls_queue_head head;
-  auto ret = get_queue_head(hctx, head);
+  auto ret = queue_read_head(hctx, head);
   if (ret < 0) {
     return ret;
   }
@@ -101,12 +101,12 @@ static int cls_queue_remove_entries(cls_method_context_t hctx, bufferlist *in, b
   try {
     decode(op, in_iter);
   } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: cls_queue_remove_entries: failed to decode input data\n");
+    CLS_LOG(5, "ERROR: cls_queue_remove_entries: failed to decode input data\n");
     return -EINVAL;
   }
 
   cls_queue_head head;
-  auto ret = get_queue_head(hctx, head);
+  auto ret = queue_read_head(hctx, head);
   if (ret < 0) {
     return ret;
   }
@@ -114,7 +114,7 @@ static int cls_queue_remove_entries(cls_method_context_t hctx, bufferlist *in, b
   if (ret < 0) {
     return ret;
   }
-  return write_queue_head(hctx, head);
+  return queue_write_head(hctx, head);
 }
 
 CLS_INIT(queue)
@@ -122,18 +122,18 @@ CLS_INIT(queue)
   CLS_LOG(1, "Loaded queue class!");
 
   cls_handle_t h_class;
-  cls_method_handle_t h_init_queue;
-  cls_method_handle_t h_get_queue_size;
-  cls_method_handle_t h_enqueue;
+  cls_method_handle_t h_queue_init;
+  cls_method_handle_t h_queue_get_capacity;
+  cls_method_handle_t h_queue_enqueue;
   cls_method_handle_t h_queue_list_entries;
   cls_method_handle_t h_queue_remove_entries;
  
   cls_register(QUEUE_CLASS, &h_class);
 
   /* queue*/
-  cls_register_cxx_method(h_class, INIT_QUEUE, CLS_METHOD_WR, cls_init_queue, &h_init_queue);
-  cls_register_cxx_method(h_class, GET_QUEUE_SIZE, CLS_METHOD_RD, cls_get_queue_size, &h_get_queue_size);
-  cls_register_cxx_method(h_class, ENQUEUE, CLS_METHOD_RD | CLS_METHOD_WR, cls_enqueue, &h_enqueue);
+  cls_register_cxx_method(h_class, QUEUE_INIT, CLS_METHOD_WR, cls_queue_init, &h_queue_init);
+  cls_register_cxx_method(h_class, QUEUE_GET_CAPACITY, CLS_METHOD_RD, cls_queue_get_capacity, &h_queue_get_capacity);
+  cls_register_cxx_method(h_class, QUEUE_ENQUEUE, CLS_METHOD_RD | CLS_METHOD_WR, cls_queue_enqueue, &h_queue_enqueue);
   cls_register_cxx_method(h_class, QUEUE_LIST_ENTRIES, CLS_METHOD_RD, cls_queue_list_entries, &h_queue_list_entries);
   cls_register_cxx_method(h_class, QUEUE_REMOVE_ENTRIES, CLS_METHOD_RD | CLS_METHOD_WR, cls_queue_remove_entries, &h_queue_remove_entries);
 
