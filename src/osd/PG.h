@@ -395,6 +395,7 @@ public:
   void on_role_change() override;
   virtual void plpg_on_role_change() = 0;
 
+  void init_collection_pool_opts();
   void on_pool_change() override;
   virtual void plpg_on_pool_change() = 0;
 
