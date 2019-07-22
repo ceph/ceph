@@ -1350,7 +1350,7 @@ int BlueStore::BufferSpace::_discard(Cache* cache, uint32_t offset, uint32_t len
 		      0, b);
 	}
 	if (!b->is_writing()) {
-	  cache->_adjust_buffer_size(b, front - (int64_t)b->length);
+	  cache->_adjust_buffer_size(b, tail + front - (int64_t)b->length);
 	}
 	b->truncate(front);
 	b->maybe_rebuild();
