@@ -260,7 +260,10 @@ seastar::future<> Heartbeat::handle_ping(ceph::net::Connection* conn,
     make_message<MOSDPing>(m->fsid,
                            service.get_map()->get_epoch(),
                            MOSDPing::PING_REPLY,
-                           m->stamp,
+                           m->ping_stamp,
+			   m->mono_ping_stamp,
+			   service.get_mnow(),
+			   service.get_up_epoch(),
                            min_message);
   return conn->send(reply);
 }
@@ -275,7 +278,7 @@ seastar::future<> Heartbeat::handle_reply(ceph::net::Connection* conn,
     return seastar::now();
   }
   auto& peer = found->second;
-  auto ping = peer.ping_history.find(m->stamp);
+  auto ping = peer.ping_history.find(m->ping_stamp);
   if (ping == peer.ping_history.end()) {
     // old replies, deprecated by newly sent pings.
     return seastar::now();
@@ -314,6 +317,7 @@ seastar::future<> Heartbeat::send_heartbeats()
   using peers_item_t = typename peers_map_t::value_type;
   return seastar::parallel_for_each(peers,
     [this](peers_item_t& item) {
+      const auto mnow = service.get_mnow();
       const auto now = clock::now();
       const auto deadline =
         now + std::chrono::seconds(local_conf()->osd_heartbeat_grace);
@@ -328,7 +332,7 @@ seastar::future<> Heartbeat::send_heartbeats()
       std::vector<ceph::net::ConnectionRef> conns{info.con_front,
                                                   info.con_back};
       return seastar::parallel_for_each(std::move(conns),
-        [sent_stamp, &reply=reply->second, this] (auto con) {
+	 [sent_stamp, mnow, &reply=reply->second, this] (auto con) {
           if (con) {
             auto min_message = static_cast<uint32_t>(
               local_conf()->osd_heartbeat_min_size);
@@ -336,6 +340,9 @@ seastar::future<> Heartbeat::send_heartbeats()
                                                service.get_map()->get_epoch(),
                                                MOSDPing::PING,
                                                sent_stamp,
+					       mnow,
+					       mnow,
+					       service.get_up_epoch(),
                                                min_message);
             return con->send(ping).then([&reply] {
               reply.unacknowledged++;
