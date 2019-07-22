@@ -486,7 +486,7 @@ class CephFSFSal(FSal):
             self.cephx_key = CephX.get_client_key(self.user_id)
 
     def create_path(self, path):
-        cfs = CephFS()
+        cfs = CephFS(self.fs_name)
         if not cfs.dir_exists(path):
             cfs.mkdirs(path)
 
