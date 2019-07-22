@@ -16,7 +16,7 @@ import re
 import shlex
 
 if sys.version_info.major < 3:
-   raise RuntimeError("cephfs-shell is only compatible with python3")
+    raise RuntimeError("cephfs-shell is only compatible with python3")
 
 try:
     from cmd2 import with_argparser
@@ -123,7 +123,7 @@ def glob(path, pattern):
     if parent_dir == '':
         parent_dir = '/'
     if path == '/' or is_dir_exists(os.path.basename(path),
-                                        parent_dir):
+                                    parent_dir):
         for i in ls(path, opts='A'):
             if fnmatch.fnmatch(i.d_name, pattern):
                 paths.append(os.path.join(path, i.d_name))
