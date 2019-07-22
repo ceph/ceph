@@ -164,7 +164,7 @@ class OSError(Error):
         self.strerror = strerror
 
     def __str__(self):
-        return '[Errno {0}] {1}'.format(self.errno, self.strerror)
+        return '{0}: {1} [Errno {2}]'.format(self.strerror, os.strerror(self.errno), self.errno)
 
 
 class PermissionError(OSError):
@@ -211,6 +211,10 @@ class OutOfRange(OSError):
     pass
 
 
+class ObjectNotEmpty(OSError):
+    pass
+
+
 IF UNAME_SYSNAME == "FreeBSD":
     cdef errno_to_exception =  {
         errno.EPERM      : PermissionError,
@@ -223,6 +227,7 @@ IF UNAME_SYSNAME == "FreeBSD":
         errno.EOPNOTSUPP : OperationNotSupported,
         errno.ERANGE     : OutOfRange,
         errno.EWOULDBLOCK: WouldBlock,
+        errno.ENOTEMPTY  : ObjectNotEmpty,
     }
 ELSE:
     cdef errno_to_exception =  {
@@ -236,6 +241,7 @@ ELSE:
         errno.EOPNOTSUPP : OperationNotSupported,
         errno.ERANGE     : OutOfRange,
         errno.EWOULDBLOCK: WouldBlock,
+        errno.ENOTEMPTY  : ObjectNotEmpty,
     }
 
 
@@ -253,7 +259,7 @@ cdef make_ex(ret, msg):
     if ret in errno_to_exception:
         return errno_to_exception[ret](ret, msg)
     else:
-        return Error(ret, msg + (": error code %d" % ret))
+        return Error(msg + ': {} [Errno {:d}]'.format(os.strerror(ret), ret))
 
 
 class DirEntry(namedtuple('DirEntry',
@@ -798,7 +804,7 @@ cdef class LibCephFS(object):
         with nogil:
             ret = ceph_mkdir(self.cluster, _path, _mode)
         if ret < 0:
-            raise make_ex(ret, "error in mkdir '%s'" % path)
+            raise make_ex(ret, "error in mkdir {}".format(path.decode('utf-8')))
 
     def chmod(self, path, mode) :
         """
@@ -817,7 +823,7 @@ cdef class LibCephFS(object):
         with nogil:
             ret = ceph_chmod(self.cluster, _path, _mode)
         if ret < 0:
-            raise make_ex(ret, "error in chmod '%s'" % path)
+            raise make_ex(ret, "error in chmod {}".format(path.decode('utf-8')))
 
     def mkdirs(self, path, mode):
         """
@@ -838,7 +844,7 @@ cdef class LibCephFS(object):
         with nogil:
             ret = ceph_mkdirs(self.cluster, _path, _mode)
         if ret < 0:
-            raise make_ex(ret, "error in mkdirs '%s'" % path)
+            raise make_ex(ret, "error in mkdirs {}".format(path.decode('utf-8')))
 
     def rmdir(self, path):
         """
@@ -851,7 +857,7 @@ cdef class LibCephFS(object):
         cdef char* _path = path
         ret = ceph_rmdir(self.cluster, _path)
         if ret < 0:
-            raise make_ex(ret, "error in rmdir '%s'" % path)
+            raise make_ex(ret, "error in rmdir {}".format(path.decode('utf-8')))
 
     def open(self, path, flags, mode=0):
         """
@@ -906,7 +912,7 @@ cdef class LibCephFS(object):
         with nogil:
             ret = ceph_open(self.cluster, _path, _flags, _mode)
         if ret < 0:
-            raise make_ex(ret, "error in open '%s'" % path)
+            raise make_ex(ret, "error in open {}".format(path.decode('utf-8')))
         return ret
 
     def close(self, fd):
@@ -1104,7 +1110,7 @@ cdef class LibCephFS(object):
             # FIXME: replace magic number with CEPH_STATX_BASIC_STATS
             ret = ceph_statx(self.cluster, _path, &stx, 0x7ffu, 0)
         if ret < 0:
-            raise make_ex(ret, "error in stat: %s" % path)
+            raise make_ex(ret, "error in stat: {}".format(path.decode('utf-8')))
         return StatResult(st_dev=stx.stx_dev, st_ino=stx.stx_ino,
                           st_mode=stx.stx_mode, st_nlink=stx.stx_nlink,
                           st_uid=stx.stx_uid, st_gid=stx.stx_gid,
@@ -1222,7 +1228,7 @@ cdef class LibCephFS(object):
         with nogil:
             ret = ceph_unlink(self.cluster, _path)
         if ret < 0:
-            raise make_ex(ret, "error in unlink: %s" % path)
+            raise make_ex(ret, "error in unlink: {}".format(path.decode('utf-8')))
 
     def rename(self, src, dst):
         """
@@ -1244,7 +1250,8 @@ cdef class LibCephFS(object):
         with nogil:
             ret = ceph_rename(self.cluster, _src, _dst)
         if ret < 0:
-            raise make_ex(ret, "error in rename '%s' to '%s'" % (src, dst))
+            raise make_ex(ret, "error in rename {} to {}".format(src.decode(
+                          'utf-8'), dst.decode('utf-8')))
 
     def mds_command(self, mds_spec, args, input_data):
         """
