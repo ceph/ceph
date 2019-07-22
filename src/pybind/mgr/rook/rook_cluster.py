@@ -251,6 +251,7 @@ class RookCluster(object):
             self.rook_api_post("cephnfses/", body=rook_nfsgw)
 
     def add_objectstore(self, spec):
+        # type: (orchestrator.RGWSpec) -> None
         rook_os = {
             "apiVersion": self.rook_env.api_name,
             "kind": "CephObjectStore",
@@ -273,13 +274,13 @@ class RookCluster(object):
                 },
                 "gateway": {
                     "type": "s3",
-                    "port": 80,
-                    "instances": 1,
+                    "port": spec.rgw_frontend_port if spec.rgw_frontend_port is not None else 80,
+                    "instances": spec.count,
                     "allNodes": False
                 }
             }
         }
-        
+
         with self.ignore_409("CephObjectStore '{0}' already exists".format(spec.name)):
             self.rook_api_post("cephobjectstores/", body=rook_os)
 

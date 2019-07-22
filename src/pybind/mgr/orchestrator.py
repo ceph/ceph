@@ -695,41 +695,60 @@ class RGWSpec(StatelessServiceSpec):
     """
     # TODO: move all default values to a dedicated method. I don't want to overwrite
     # Rook's default values.
-    def __init__(self, hosts=None, rgw_multisite=True, rgw_zone="Default_Zone",
-              rgw_zonemaster=True, rgw_zonesecondary=False,
-              rgw_multisite_proto="http", rgw_frontend_port="8080",
-              rgw_zonegroup="Main", rgw_zone_user="zone.user",
-              rgw_realm="RGW_Realm", system_access_key=None,
-              system_secret_key=None):
+    def __init__(self, hosts=None, rgw_multisite=None, rgw_zone=None,
+              rgw_zonemaster=None, rgw_zonesecondary=None,
+              rgw_multisite_proto=None, rgw_frontend_port=None,
+              rgw_zonegroup=None, rgw_zone_user=None,
+              rgw_realm=None, system_access_key=None,
+              system_secret_key=None, count=None):
 
-        super(RGWSpec, self).__init__(name=rgw_zone)
+        super(RGWSpec, self).__init__(name=rgw_zone, count=count)
+
+        #: List of hosts where RGWs should run. Not for Rook.
         self.hosts = hosts
+
         self.rgw_multisite = rgw_multisite
         self.rgw_zonemaster = rgw_zonemaster
         self.rgw_zonesecondary = rgw_zonesecondary
         self.rgw_multisite_proto = rgw_multisite_proto
         self.rgw_frontend_port = rgw_frontend_port
 
-        if hosts and self.rgw_multisite:
-            self.rgw_multisite_endpoint_addr = hosts[0]
-
-            self.rgw_multisite_endpoints_list = ",".join(
-                ["{}://{}:{}".format(self.rgw_multisite_proto,
-                                    host,
-                                    self.rgw_frontend_port) for host in hosts])
-
         self.rgw_zonegroup = rgw_zonegroup
         self.rgw_zone_user = rgw_zone_user
         self.rgw_realm = rgw_realm
 
-        if system_access_key:
-            self.system_access_key = system_access_key
-        else:
-            self.system_access_key = self.genkey(20)
-        if system_secret_key:
-            self.system_secret_key = system_secret_key
-        else:
-            self.system_secret_key = self.genkey(40)
+        self.system_access_key = system_access_key
+        self.system_secret_key = system_secret_key
+
+    def set_ansible_defaults(self):
+        self.rgw_multisite = self.rgw_multisite if self.rgw_multisite is not None else True
+        self.rgw_zonemaster = self.rgw_zonemaster if self.rgw_zonemaster is not None else True
+        self.rgw_zonesecondary = self.rgw_zonesecondary \
+            if self.rgw_zonesecondary is not None else False
+        self.rgw_multisite_proto = self.rgw_multisite_proto \
+            if self.rgw_multisite_proto is not None else "http"
+        self.rgw_frontend_port = self.rgw_frontend_port \
+            if self.rgw_frontend_port is not None else 8080
+
+        self.rgw_zonegroup = self.rgw_zonegroup if self.rgw_zonegroup is not None else "Main"
+        self.rgw_zone_user = self.rgw_zone_user if self.rgw_zone_user is not None else "zone.user"
+        self.rgw_realm = self.rgw_realm if self.rgw_realm is not None else "RGW_Realm"
+
+        self.system_access_key = self.system_access_key \
+            if self.system_access_key is not None else self.genkey(20)
+        self.system_secret_key = self.system_secret_key \
+            if self.system_secret_key is not None else self.genkey(40)
+
+    @property
+    def rgw_multisite_endpoint_addr(self):
+        """Returns the first host. Not supported for Rook."""
+        return self.hosts[0]
+
+    @property
+    def rgw_multisite_endpoints_list(self):
+        return ",".join(["{}://{}:{}".format(self.rgw_multisite_proto,
+                             host,
+                             self.rgw_frontend_port) for host in self.hosts])
 
     def genkey(self, nchars):
         """ Returns a random string of nchars

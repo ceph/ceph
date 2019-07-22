@@ -234,10 +234,10 @@ Usage:
         return HandleCommandResult(stdout=completion.result)
 
     @_write_cli('orchestrator rgw add',
-                'name=svc_arg,type=CephString,req=false',
+                'name=zone_name,type=CephString,req=false',
                 'Create an RGW service. A complete <rgw_spec> can be provided'\
                 ' using <-i> to customize completelly the RGW service')
-    def _rgw_add(self, svc_arg=None, inbuf=None):
+    def _rgw_add(self, zone_name=None, inbuf=None):
         usage = """
 Usage:
   ceph orchestrator rgw add -i <json_file>
@@ -250,16 +250,15 @@ Usage:
             except ValueError as e:
                 msg = 'Failed to read JSON input: {}'.format(str(e)) + usage
                 return HandleCommandResult(-errno.EINVAL, stderr=msg)
-        elif svc_arg:
-            rgw_spec = orchestrator.RGWSpec()
-            rgw_spec.zone_name = svc_arg
+        elif zone_name:
+            rgw_spec = orchestrator.RGWSpec(rgw_zone=zone_name)
         else:
             return HandleCommandResult(-errno.EINVAL, stderr=usage)
 
         completion = self.add_rgw(rgw_spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result)
+        return HandleCommandResult(stdout=str(completion.result))
 
     @_write_cli('orchestrator nfs add',
                 "name=svc_arg,type=CephString "

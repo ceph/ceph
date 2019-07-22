@@ -711,6 +711,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
             raise orchestrator.OrchestratorError("No hosts provided. "
                 "At least one destination host is needed to install the RGW "
                 "service")
+        spec.set_ansible_defaults()
         InventoryGroup("rgws", self.ar_client).update(hosts)
 
         # Limit playbook execution to certain hosts
@@ -719,6 +720,9 @@ class Module(MgrModule, orchestrator.Orchestrator):
         # Add the settings for this service
         extravars = {k:v for (k,v) in spec.__dict__.items() if k.startswith('rgw_')}
         extravars['rgw_zone'] = spec.name
+        extravars['rgw_multisite_endpoint_addr'] = spec.rgw_multisite_endpoint_addr
+        extravars['rgw_multisite_endpoints_list'] = spec.rgw_multisite_endpoints_list
+        extravars['rgw_frontend_port'] = str(spec.rgw_frontend_port)
 
         # Group hosts by resource (used in rm ops)
         resource_group = "rgw_zone_{}".format(spec.name)
