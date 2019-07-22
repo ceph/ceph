@@ -538,6 +538,7 @@ class Task:
         self.in_progress = False
         self.progress = 0.0
         self.canceled = False
+        self.failed = False
 
     def __str__(self):
         return self.to_json()
@@ -548,6 +549,11 @@ class Task:
 
     def cancel(self):
         self.canceled = True
+        self.fail("Operation canceled")
+
+    def fail(self, message):
+        self.failed = True
+        self.failure_message = message
 
     def to_dict(self):
         d = {TASK_SEQUENCE: self.sequence,
@@ -849,9 +855,11 @@ class TaskHandler:
             with rbd.Image(ioctx, task.refs[TASK_REF_IMAGE_NAME]) as image:
                 image.flatten(on_progress=partial(self.progress_callback, task))
         except rbd.InvalidArgument:
-            self.log.info("Image does not have parent: task={}".format(str(task)))
+            task.fail("Image does not have parent")
+            self.log.info("{}: task={}".format(task.failure_message, str(task)))
         except rbd.ImageNotFound:
-            self.log.info("Image does not exist: task={}".format(str(task)))
+            task.fail("Image does not exist")
+            self.log.info("{}: task={}".format(task.failure_message, str(task)))
 
     def execute_remove(self, ioctx, task):
         self.log.info("execute_remove: task={}".format(str(task)))
@@ -860,7 +868,8 @@ class TaskHandler:
             rbd.RBD().remove(ioctx, task.refs[TASK_REF_IMAGE_NAME],
                              on_progress=partial(self.progress_callback, task))
         except rbd.ImageNotFound:
-            self.log.info("Image does not exist: task={}".format(str(task)))
+            task.fail("Image does not exist")
+            self.log.info("{}: task={}".format(task.failure_message, str(task)))
 
     def execute_trash_remove(self, ioctx, task):
         self.log.info("execute_trash_remove: task={}".format(str(task)))
@@ -869,7 +878,8 @@ class TaskHandler:
             rbd.RBD().trash_remove(ioctx, task.refs[TASK_REF_IMAGE_ID],
                                    on_progress=partial(self.progress_callback, task))
         except rbd.ImageNotFound:
-            self.log.info("Image does not exist: task={}".format(str(task)))
+            task.fail("Image does not exist")
+            self.log.info("{}: task={}".format(task.failure_message, str(task)))
 
     def execute_migration_execute(self, ioctx, task):
         self.log.info("execute_migration_execute: task={}".format(str(task)))
@@ -878,9 +888,11 @@ class TaskHandler:
             rbd.RBD().migration_execute(ioctx, task.refs[TASK_REF_IMAGE_NAME],
                                         on_progress=partial(self.progress_callback, task))
         except rbd.ImageNotFound:
-            self.log.info("Image does not exist: task={}".format(str(task)))
+            task.fail("Image does not exist")
+            self.log.info("{}: task={}".format(task.failure_message, str(task)))
         except rbd.InvalidArgument:
-            self.log.info("Image is not migrating: task={}".format(str(task)))
+            task.fail("Image is not migrating")
+            self.log.info("{}: task={}".format(task.failure_message, str(task)))
 
     def execute_migration_commit(self, ioctx, task):
         self.log.info("execute_migration_commit: task={}".format(str(task)))
@@ -889,9 +901,11 @@ class TaskHandler:
             rbd.RBD().migration_commit(ioctx, task.refs[TASK_REF_IMAGE_NAME],
                                        on_progress=partial(self.progress_callback, task))
         except rbd.ImageNotFound:
-            self.log.info("Image does not exist: task={}".format(str(task)))
+            task.fail("Image does not exist")
+            self.log.info("{}: task={}".format(task.failure_message, str(task)))
         except rbd.InvalidArgument:
-            self.log.info("Image is not migrating or migration not executed: task={}".format(str(task)))
+            task.fail("Image is not migrating or migration not executed")
+            self.log.info("{}: task={}".format(task.failure_message, str(task)))
 
     def execute_migration_abort(self, ioctx, task):
         self.log.info("execute_migration_abort: task={}".format(str(task)))
@@ -900,14 +914,20 @@ class TaskHandler:
             rbd.RBD().migration_abort(ioctx, task.refs[TASK_REF_IMAGE_NAME],
                                       on_progress=partial(self.progress_callback, task))
         except rbd.ImageNotFound:
-            self.log.info("Image does not exist: task={}".format(str(task)))
+            task.fail("Image does not exist")
+            self.log.info("{}: task={}".format(task.failure_message, str(task)))
         except rbd.InvalidArgument:
-            self.log.info("Image is not migrating: task={}".format(str(task)))
+            task.fail("Image is not migrating")
+            self.log.info("{}: task={}".format(task.failure_message, str(task)))
 
     def complete_progress(self, task):
         self.log.debug("complete_progress: task={}".format(str(task)))
         try:
-            self.module.remote("progress", "complete", task.task_id)
+            if task.failed:
+                self.module.remote("progress", "fail", task.task_id,
+                                   task.failure_message)
+            else:
+                self.module.remote("progress", "complete", task.task_id)
         except ImportError:
             # progress module is disabled
             pass
