@@ -251,6 +251,17 @@ if(WITH_PYTHON2)
 else()
   set(PY_BINDING_INFIX 3)
 endif()
+# use python2 by default for python bindings, tools and tests, before
+# switching to python3
+# Python_EXECUTABLE` can be set by `find_package(Python ...)` also. and we do
+# call `find_package(Python ...)` in `ceph/CMakeLists.txt`. but we do so before
+# `add_subdirectory(src)` where `Python_EXECUTABLE` is set. so it's safe to
+# use this variable name and call `find_package(Python ...)`.
+if(WITH_PYTHON2)
+  set(Python_EXECUTABLE ${Python2_EXECUTABLE})
+else()
+  set(Python_EXECUTABLE ${Python3_EXECUTABLE})
+endif()
 
 # sort out which allocator to use
 if(ALLOCATOR STREQUAL "tcmalloc")
