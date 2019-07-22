@@ -4367,7 +4367,11 @@ bool PG::sched_scrub()
 
   bool deep_coin_flip = false;
   // Only add random deep scrubs when NOT user initiated scrub
-  if (!scrubber.must_scrub)
+  // If we randomize when noscrub set then it guarantees
+  // we will deep scrub because this function is called often.
+  if (!time_for_deep && !scrubber.must_scrub
+       && !(get_osdmap()->test_flag(CEPH_OSDMAP_NOSCRUB)
+	    || pool.info.has_flag(pg_pool_t::FLAG_NOSCRUB)))
       deep_coin_flip = (rand() % 100) < cct->_conf->osd_deep_scrub_randomize_ratio * 100;
   dout(20) << __func__ << ": time_for_deep=" << time_for_deep << " deep_coin_flip=" << deep_coin_flip << dendl;
 
