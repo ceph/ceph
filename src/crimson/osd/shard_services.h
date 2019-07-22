@@ -9,6 +9,7 @@
 #include "osd_operation.h"
 #include "msg/MessageRef.h"
 #include "crimson/os/cyan_collection.h"
+#include "osd/PeeringState.h"
 
 namespace ceph::net {
   class Messenger;
@@ -141,6 +142,10 @@ public:
   void prune_pg_created();
 
   seastar::future<> osdmap_subscribe(version_t epoch, bool force_request);
+
+  ceph::signedspan get_mnow();
+  HeartbeatStampsRef get_hb_stamps(int peer);
+
 };
 
 

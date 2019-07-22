@@ -245,4 +245,14 @@ seastar::future<> ShardServices::osdmap_subscribe(version_t epoch, bool force_re
   }
 }
 
+ceph::signedspan ShardServices::get_mnow()
+{
+#warning write me
+}
+
+HeartbeatStampsRef ShardServices::get_hb_stamps(int peer)
+{
+#warning write me
+}
+
 };
