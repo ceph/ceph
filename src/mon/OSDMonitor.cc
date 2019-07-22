@@ -4355,6 +4355,15 @@ void OSDMonitor::do_application_enable(int64_t pool_id,
   pending_inc.new_pools[pool_id] = p;
 }
 
+void OSDMonitor::do_set_pool_opt(int64_t pool_id,
+				 pool_opts_t::key_t opt,
+				 pool_opts_t::value_t val)
+{
+  auto p = pending_inc.new_pools.try_emplace(
+    pool_id, *osdmap.get_pg_pool(pool_id));
+  p.first->second.opts.set(opt, val);
+}
+
 unsigned OSDMonitor::scan_for_creating_pgs(
   const mempool::osdmap::map<int64_t,pg_pool_t>& pools,
   const mempool::osdmap::set<int64_t>& removed_pools,
