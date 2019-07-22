@@ -5519,6 +5519,14 @@ std::vector<Option> get_rgw_options() {
         "server static websites if s3website hostnames are configured, and unrelated to "
         "this configurable."),
 
+     Option("rgw_user_unique_email", Option::TYPE_BOOL, Option::LEVEL_BASIC)
+    .set_default(true)
+    .set_description("Require local RGW users to have unique email addresses")
+    .set_long_description(
+        "Enforce builtin user accounts to have unique email addresses.  This "
+	"setting is historical.  In future, non-enforcement of email address "
+        "uniqueness is likely to become the default."),
+
     Option("rgw_log_http_headers", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_default("")
     .set_description("List of HTTP headers to log")
