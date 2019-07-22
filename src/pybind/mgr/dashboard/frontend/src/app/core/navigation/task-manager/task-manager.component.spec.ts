@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { PopoverModule } from 'ngx-bootstrap/popover';
+import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { ExecutingTask } from '../../../shared/models/executing-task';
@@ -19,7 +20,13 @@ describe('TaskManagerComponent', () => {
   };
 
   configureTestBed({
-    imports: [SharedModule, PopoverModule.forRoot(), HttpClientTestingModule, RouterTestingModule],
+    imports: [
+      SharedModule,
+      PopoverModule.forRoot(),
+      ProgressbarModule,
+      HttpClientTestingModule,
+      RouterTestingModule
+    ],
     declarations: [TaskManagerComponent],
     providers: [i18nProviders]
   });
