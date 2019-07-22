@@ -935,9 +935,11 @@ class TaskHandler:
     def update_progress(self, task, progress):
         self.log.debug("update_progress: task={}, progress={}".format(str(task), progress))
         try:
+            refs = {"origin": "rbd_support"}
+            refs.update(task.refs)
+
             self.module.remote("progress", "update", task.task_id,
-                               task.message, progress,
-                               ["rbd_support"])
+                               task.message, progress, refs)
         except ImportError:
             # progress module is disabled
             pass
