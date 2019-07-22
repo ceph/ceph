@@ -830,7 +830,7 @@ if (ret < 0) {
 }
 s->info.args.get_bool("fetch-owner", &fetchOwner, false);
 startAfter = s->info.args.get("start-after");
-marker = s->info.args.get("ContinuationToken");
+marker = s->info.args.get("continuation-token");
 if(marker.empty()) {
   marker = startAfter;
 }
