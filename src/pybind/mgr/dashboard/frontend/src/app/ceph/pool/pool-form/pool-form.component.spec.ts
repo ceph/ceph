@@ -5,9 +5,9 @@ import { By } from '@angular/platform-browser';
 import { ActivatedRoute, Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastModule } from 'ng2-toastr';
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
+import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import {
@@ -136,7 +136,7 @@ describe('PoolFormComponent', () => {
     imports: [
       HttpClientTestingModule,
       RouterTestingModule.withRoutes(routes),
-      ToastModule.forRoot(),
+      ToastrModule.forRoot(),
       TabsModule.forRoot(),
       PoolModule
     ],

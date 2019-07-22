@@ -214,7 +214,7 @@ Example:
     import { Component } from '@angular/core';
     import { Router } from '@angular/router';
 
-    import { ToastsManager } from 'ng2-toastr';
+    import { ToastrManager } from 'ngx-toastr';
 
     import { Credentials } from '../../../shared/models/credentials.model';
     import { HostService } from './services/host.service';
@@ -257,7 +257,7 @@ or removed to/from a set of items (e.g.: 'Add permission' to a user vs. 'Create
 
 In order to enforce the use of this wording, a service ``ActionLabelsI18n`` has
 been created, which provides translated labels for use in UI elements.
-    
+
 Frontend branding
 ~~~~~~~~~~~~~~~~~
 
@@ -1462,7 +1462,7 @@ decorators that can be used to add more information:
 
 * ``@EndpointDoc()`` for documentation of endpoints. It has four optional arguments
   (explained below): ``description``, ``group``, ``parameters`` and``responses``.
-* ``@ControllerDoc()`` for documentation of controller or group associated with 
+* ``@ControllerDoc()`` for documentation of controller or group associated with
   the endpoints. It only takes the two first arguments: ``description`` and``group``.
 
 
@@ -1471,7 +1471,7 @@ decorators that can be used to add more information:
 
 ``group``: By default, an endpoint is grouped together with other endpoints
 within the same controller class. ``group`` is a string that can be used to
-assign an endpoint or all endpoints in a class to another controller or a 
+assign an endpoint or all endpoints in a class to another controller or a
 conceived group name.
 
 
@@ -1505,7 +1505,7 @@ for nested parameters).
       'item2': (str, 'Description of item2', True),  # item2 is optional
       'item3': (str, 'Description of item3', True, 'foo'),  # item3 is optional with 'foo' as default value
   }, 'Description of my_dictionary')})
- 
+
 If the parameter is a ``list`` of primitive types, the type should be
 surrounded with square brackets.
 

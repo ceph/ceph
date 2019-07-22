@@ -3,8 +3,8 @@ import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testin
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastModule } from 'ng2-toastr';
 import { TabsModule } from 'ngx-bootstrap/tabs';
+import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf, throwError as observableThrowError } from 'rxjs';
 
 import {
@@ -33,7 +33,7 @@ describe('MgrModuleListComponent', () => {
       SharedModule,
       HttpClientTestingModule,
       TabsModule.forRoot(),
-      ToastModule.forRoot()
+      ToastrModule.forRoot()
     ],
     providers: [MgrModuleService, NotificationService, i18nProviders]
   });
