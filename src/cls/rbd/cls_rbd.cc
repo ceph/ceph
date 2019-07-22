@@ -4141,8 +4141,10 @@ int mirror_image_get_image_id(cls_method_context_t hctx, bufferlist *in,
   std::string image_id;
   int r = read_key(hctx, mirror::global_key(global_id), &image_id);
   if (r < 0) {
-    CLS_ERR("error retrieving image id for global id '%s': %s",
-            global_id.c_str(), cpp_strerror(r).c_str());
+    if (r != -ENOENT) {
+      CLS_ERR("error retrieving image id for global id '%s': %s",
+              global_id.c_str(), cpp_strerror(r).c_str());
+    }
     return r;
   }
 
