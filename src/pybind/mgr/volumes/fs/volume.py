@@ -200,11 +200,9 @@ class VolumeClient(object):
         """
         return ve.to_tuple()
 
-    def create_pool(self, pool_name, pg_num, pg_num_min=None):
+    def create_pool(self, pool_name, pg_num):
         # create the given pool
         command = {'prefix': 'osd pool create', 'pool': pool_name, 'pg_num': pg_num}
-        if pg_num_min:
-            command['pg_num_min'] = pg_num_min
         r, outb, outs = self.mgr.mon_command(command)
         if r != 0:
             return r, outb, outs
@@ -253,7 +251,7 @@ class VolumeClient(object):
         """
         metadata_pool, data_pool = self.gen_pool_names(volname)
         # create pools
-        r, outs, outb = self.create_pool(metadata_pool, 16, pg_num_min=16)
+        r, outs, outb = self.create_pool(metadata_pool, 16)
         if r != 0:
             return r, outb, outs
         r, outb, outs = self.create_pool(data_pool, 8)
