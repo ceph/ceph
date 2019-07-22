@@ -87,17 +87,17 @@ void test_stats(librados::IoCtx& ioctx, string& oid, int category, uint64_t num_
 }
 
 void index_prepare(OpMgr& mgr, librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op, string& tag,
-		   string& obj, string& loc, uint16_t bi_flags = 0)
+		   string& obj, string& loc, uint16_t bi_flags = 0, bool log_op = true)
 {
   ObjectWriteOperation *op = mgr.write_op();
   cls_rgw_obj_key key(obj, string());
   rgw_zone_set zones_trace;
-  cls_rgw_bucket_prepare_op(*op, index_op, tag, key, loc, true, bi_flags, zones_trace);
+  cls_rgw_bucket_prepare_op(*op, index_op, tag, key, loc, log_op, bi_flags, zones_trace);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 }
 
 void index_complete(OpMgr& mgr, librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op, string& tag,
-		    int epoch, string& obj, rgw_bucket_dir_entry_meta& meta, uint16_t bi_flags = 0)
+		    int epoch, string& obj, rgw_bucket_dir_entry_meta& meta, uint16_t bi_flags = 0, bool log_op = true)
 {
   ObjectWriteOperation *op = mgr.write_op();
   cls_rgw_obj_key key(obj, string());
@@ -105,7 +105,7 @@ void index_complete(OpMgr& mgr, librados::IoCtx& ioctx, string& oid, RGWModifyOp
   ver.pool = ioctx.get_id();
   ver.epoch = epoch;
   meta.accounted_size = meta.size;
-  cls_rgw_bucket_complete_op(*op, index_op, tag, ver, key, meta, nullptr, true, bi_flags, nullptr);
+  cls_rgw_bucket_complete_op(*op, index_op, tag, ver, key, meta, nullptr, log_op, bi_flags, nullptr);
   ASSERT_EQ(0, ioctx.operate(oid, op));
 }
 
@@ -395,7 +395,7 @@ TEST(cls_rgw, index_list)
 
   uint64_t epoch = 1;
   uint64_t obj_size = 1024;
-  const int num_objs = 5;
+  const int num_objs = 4;
   const string keys[num_objs] = {
     /* single byte utf8 character */
     { static_cast<char>(0x41) },
@@ -405,8 +405,6 @@ TEST(cls_rgw, index_list)
     { static_cast<char>(0xDF), static_cast<char>(0x8F), static_cast<char>(0x8F) },
     /* quadruble byte utf8 character */
     { static_cast<char>(0xF7), static_cast<char>(0x8F), static_cast<char>(0x8F), static_cast<char>(0x8F) },
-    /* BI_PREFIX_CHAR private namespace, for test only */
-    { static_cast<char>(0x80), static_cast<char>(0x41) }
   };
 
   for (int i = 0; i < num_objs; i++) {
@@ -414,14 +412,24 @@ TEST(cls_rgw, index_list)
     string tag = str_int("tag", i);
     string loc = str_int("loc", i);
 
-    index_prepare(mgr, ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc);
+    index_prepare(mgr, ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc, 0 /* bi_falgs */, false /* log_op */);
 
     op = mgr.write_op();
     rgw_bucket_dir_entry_meta meta;
     meta.category = 0;
     meta.size = obj_size;
-    index_complete(mgr, ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, epoch, obj, meta);
+    index_complete(mgr, ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, epoch, obj, meta, 0 /* bi_falgs */, false /* log_op */);
   }
+
+  map<string, bufferlist> entries;
+  /* insert 998 omap key starts with BI_PREFIX_CHAR,
+   * so bucket list first time will get one key before 0x80 and one key after */
+  for (int i = 0; i < 998; ++i) {
+    char buf[10];
+    snprintf(buf, sizeof(buf), "%c%s%d", 0x80, "1000_", i);
+    entries.emplace(string{buf}, bufferlist{});
+  }
+  ioctx.omap_set(bucket_oid, entries);
 
   test_stats(ioctx, bucket_oid, 0, num_objs, obj_size * num_objs);
 
