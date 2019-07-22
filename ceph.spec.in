@@ -226,7 +226,6 @@ BuildRequires:  yaml-cpp-devel
 %if 0%{?suse_version}
 BuildRequires:  pkgconfig(systemd)
 BuildRequires:	systemd-rpm-macros
-BuildRequires:	systemd
 %{?systemd_requires}
 PreReq:		%fillup_prereq
 BuildRequires:	net-tools
