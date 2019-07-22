@@ -693,7 +693,8 @@ void PeeringState::init_primary_up_acting(
   const vector<int> &newup,
   const vector<int> &newacting,
   int new_up_primary,
-  int new_acting_primary) {
+  int new_acting_primary)
+{
   actingset.clear();
   acting = newacting;
   for (uint8_t i = 0; i < acting.size(); ++i) {
@@ -713,26 +714,28 @@ void PeeringState::init_primary_up_acting(
 	  pool.info.is_erasure() ? shard_id_t(i) : shard_id_t::NO_SHARD));
   }
   if (!pool.info.is_erasure()) {
+    // replicated
     up_primary = pg_shard_t(new_up_primary, shard_id_t::NO_SHARD);
     primary = pg_shard_t(new_acting_primary, shard_id_t::NO_SHARD);
-    return;
-  }
-  up_primary = pg_shard_t();
-  primary = pg_shard_t();
-  for (uint8_t i = 0; i < up.size(); ++i) {
-    if (up[i] == new_up_primary) {
-      up_primary = pg_shard_t(up[i], shard_id_t(i));
-      break;
+  } else {
+    // erasure
+    up_primary = pg_shard_t();
+    primary = pg_shard_t();
+    for (uint8_t i = 0; i < up.size(); ++i) {
+      if (up[i] == new_up_primary) {
+	up_primary = pg_shard_t(up[i], shard_id_t(i));
+	break;
+      }
     }
-  }
-  for (uint8_t i = 0; i < acting.size(); ++i) {
-    if (acting[i] == new_acting_primary) {
-      primary = pg_shard_t(acting[i], shard_id_t(i));
-      break;
+    for (uint8_t i = 0; i < acting.size(); ++i) {
+      if (acting[i] == new_acting_primary) {
+	primary = pg_shard_t(acting[i], shard_id_t(i));
+	break;
+      }
     }
+    ceph_assert(up_primary.osd == new_up_primary);
+    ceph_assert(primary.osd == new_acting_primary);
   }
-  ceph_assert(up_primary.osd == new_up_primary);
-  ceph_assert(primary.osd == new_acting_primary);
 }
 
 void PeeringState::clear_recovery_state()
