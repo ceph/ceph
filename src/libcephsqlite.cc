@@ -71,7 +71,7 @@ struct CephFile {
 };
 
 // map to hold pointers to vfs contexts for various databases
-static ceph::mutex                             vfs_context_map_mutex; // ("vfs_context_map_mutex");
+static ceph::mutex                             vfs_context_map_mutex("vfs_context_map_mutex");
 static std::map<std::string, CephVFSContext*>  vfs_context_map;
 
 static const std::string lock_name = "cephsqlite3_vfs_lock";
