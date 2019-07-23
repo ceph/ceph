@@ -279,7 +279,7 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
 
 void EMetaBlob::add_dir_context(CDir *dir, int mode)
 {
-  MDSRank *mds = dir->cache->mds;
+  MDSRank *mds = dir->mdcache->mds;
 
   list<CDentry*> parents;
 

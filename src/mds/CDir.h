@@ -204,7 +204,7 @@ public:
   static const int DUMP_ALL              = (-1);
   static const int DUMP_DEFAULT          = DUMP_ALL & (~DUMP_ITEMS);
 
-  CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth);
+  CDir(CInode *in, frag_t fg, MDCache *mdc, bool auth);
 
   std::string_view pin_name(int p) const override {
     switch (p) {
@@ -627,7 +627,7 @@ public:
   void dump_load(ceph::Formatter *f);
 
   // context
-  MDCache *cache;
+  MDCache *mdcache;
 
   CInode *inode;  // my inode
   frag_t frag;   // my frag
