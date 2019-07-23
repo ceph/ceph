@@ -1017,7 +1017,8 @@ class MgrModule(ceph_module.BaseMgrModule):
         return self._get_module_option(key, default, self.get_mgr_id())
 
     def _set_module_option(self, key, val):
-        return self._ceph_set_module_option(self.module_name, key, str(val))
+        return self._ceph_set_module_option(self.module_name, key,
+                                            None if val is None else str(val))
 
     def set_module_option(self, key, val):
         """

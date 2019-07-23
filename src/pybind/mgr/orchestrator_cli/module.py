@@ -399,7 +399,7 @@ Usage:
         """
         mgr_map = self.get("mgr_map")
 
-        if module_name == "":
+        if module_name is None or module_name == "":
             self.set_module_option("orchestrator", None)
             return HandleCommandResult()
 
@@ -449,3 +449,9 @@ Usage:
                                            o, avail,
                                            " ({0})".format(why) if not avail else ""
                                        ))
+
+    def self_test(self):
+        old_orch = self._select_orchestrator()
+        self._set_backend('')
+        assert self._select_orchestrator() is None
+        self._set_backend(old_orch)
