@@ -2513,7 +2513,7 @@ struct pool_stat_t {
   // In legacy mode used and netto values are the same. But for new per-pool
   // collection 'used' provides amount of space ALLOCATED at all related OSDs 
   // and 'netto' is amount of stored user data.
-  uint64_t get_allocated_bytes(bool per_pool) const {
+  uint64_t get_allocated_bytes(bool per_pool, bool per_pool_omap) const {
     uint64_t allocated_bytes;
     if (per_pool) {
       allocated_bytes = store_stats.allocated;
@@ -2522,11 +2522,16 @@ struct pool_stat_t {
       allocated_bytes = stats.sum.num_bytes +
 	stats.sum.num_bytes_hit_set_archive;
     }
-    // omap is not broken out by pool by nautilus bluestore
-    allocated_bytes += stats.sum.num_omap_bytes;
+    if (per_pool_omap) {
+      allocated_bytes += store_stats.omap_allocated;
+    } else {
+      // omap is not broken out by pool by nautilus bluestore
+      allocated_bytes += stats.sum.num_omap_bytes;
+    }
     return allocated_bytes;
   }
-  uint64_t get_user_bytes(float raw_used_rate, bool per_pool) const {
+  uint64_t get_user_bytes(float raw_used_rate, bool per_pool,
+			  bool per_pool_omap) const {
     uint64_t user_bytes;
     if (per_pool) {
       user_bytes = raw_used_rate ? store_stats.data_stored / raw_used_rate : 0;
@@ -2535,8 +2540,12 @@ struct pool_stat_t {
       user_bytes = stats.sum.num_bytes +
 	stats.sum.num_bytes_hit_set_archive;
     }
-    // omap is not broken out by pool by nautilus bluestore
-    user_bytes += stats.sum.num_omap_bytes;
+    if (per_pool_omap) {
+      user_bytes += store_stats.omap_allocated;
+    } else {
+      // omap is not broken out by pool by nautilus bluestore
+      user_bytes += stats.sum.num_omap_bytes;
+    }
     return user_bytes;
   }
 

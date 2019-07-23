@@ -74,6 +74,9 @@ public:
   bool use_per_pool_stats() const {
     return osd_sum.num_osds == osd_sum.num_per_pool_osds;
   }
+  bool use_per_pool_omap_stats() const {
+    return osd_sum.num_osds == osd_sum.num_per_pool_omap_osds;
+  }
 
   // recent deltas, and summation
   /**
@@ -175,6 +178,7 @@ public:
 				   float raw_used_rate,
 				   bool verbose,
 				   bool per_pool,
+				   bool per_pool_omap,
 				   const pg_pool_t *pool);
 
   size_t get_num_pg_by_osd(int osd) const {
