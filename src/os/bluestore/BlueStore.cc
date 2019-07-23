@@ -9579,15 +9579,16 @@ int BlueStore::omap_get_values(
     r = -ENOENT;
     goto out;
   }
-  if (!o->onode.has_omap())
+  if (!o->onode.has_omap()) {
     goto out;
+  }
+  o->flush();
   {
     const string& prefix = o->get_omap_prefix();
-    o->flush();
-    _key_encode_u64(o->onode.nid, &final_key);
-    final_key.push_back('.');
+    o->get_omap_key(string(), &final_key);
+    size_t base_key_len = final_key.size();
     for (set<string>::const_iterator p = keys.begin(); p != keys.end(); ++p) {
-      final_key.resize(9); // keep prefix
+      final_key.resize(base_key_len); // keep prefix
       final_key += *p;
       bufferlist val;
       if (db->get(prefix, final_key, &val) >= 0) {
@@ -9622,15 +9623,16 @@ int BlueStore::omap_check_keys(
     r = -ENOENT;
     goto out;
   }
-  if (!o->onode.has_omap())
+  if (!o->onode.has_omap()) {
     goto out;
+  }
+  o->flush();
   {
     const string& prefix = o->get_omap_prefix();
-    o->flush();
-    _key_encode_u64(o->onode.nid, &final_key);
-    final_key.push_back('.');
+    o->get_omap_key(string(), &final_key);
+    size_t base_key_len = final_key.size();
     for (set<string>::const_iterator p = keys.begin(); p != keys.end(); ++p) {
-      final_key.resize(9); // keep prefix
+      final_key.resize(base_key_len); // keep prefix
       final_key += *p;
       bufferlist val;
       if (db->get(prefix, final_key, &val) >= 0) {
@@ -13159,15 +13161,15 @@ int BlueStore::_omap_setkeys(TransContext *txc,
   }
   const string& prefix = o->get_omap_prefix();
   string final_key;
-  _key_encode_u64(o->onode.nid, &final_key);
-  final_key.push_back('.');
+  o->get_omap_key(string(), &final_key);
+  size_t base_key_len = final_key.size();
   decode(num, p);
   while (num--) {
     string key;
     bufferlist value;
     decode(key, p);
     decode(value, p);
-    final_key.resize(9); // keep prefix
+    final_key.resize(base_key_len); // keep prefix
     final_key += key;
     dout(20) << __func__ << "  " << pretty_binary_string(final_key)
 	     << " <- " << key << dendl;
@@ -13225,13 +13227,13 @@ int BlueStore::_omap_rmkeys(TransContext *txc,
   }
   {
     const string& prefix = o->get_omap_prefix();
-    _key_encode_u64(o->onode.nid, &final_key);
-    final_key.push_back('.');
+    o->get_omap_key(string(), &final_key);
+    size_t base_key_len = final_key.size();
     decode(num, p);
     while (num--) {
       string key;
       decode(key, p);
-      final_key.resize(9); // keep prefix
+      final_key.resize(base_key_len); // keep prefix
       final_key += key;
       dout(20) << __func__ << "  rm " << pretty_binary_string(final_key)
 	       << " <- " << key << dendl;
