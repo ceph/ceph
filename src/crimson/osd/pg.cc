@@ -194,6 +194,12 @@ HeartbeatStampsRef PG::get_hb_stamps(int peer)
   return shard_services.get_hb_stamps(peer);
 }
 
+void PG::schedule_renew_lease(epoch_t plr, ceph::timespan delay)
+{
+#warning implement me
+}
+
+
 void PG::init(
   ceph::os::CollectionRef coll,
   int role,
