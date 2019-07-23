@@ -5734,6 +5734,19 @@ boost::statechart::result PeeringState::Active::react(const AllReplicasActivated
     ps->state_set(PG_STATE_ACTIVE);
   }
 
+  auto mnow = pl->get_mnow();
+  if (ps->prior_readable_until_ub > mnow) {
+    psdout(10) << " waiting for prior_readable_until_ub "
+	       << ps->prior_readable_until_ub << " > mnow " << mnow << dendl;
+    ps->state_set(PG_STATE_WAIT);
+    pl->queue_check_readable(
+      ps->last_peering_reset,
+      ps->prior_readable_until_ub - mnow);
+  } else {
+    psdout(10) << " mnow " << mnow << " >= prior_readable_until_ub "
+	       << ps->prior_readable_until_ub << dendl;
+  }
+
   if (ps->pool.info.has_flag(pg_pool_t::FLAG_CREATING)) {
     pl->send_pg_created(pgid);
   }
