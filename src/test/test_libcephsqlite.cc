@@ -12,7 +12,32 @@
 
 #include <sqlite3.h>
 
+#define sqlcatchcode(S, code) \
+do {\
+    rc = S;\
+    if (rc != code) {\
+        if (rc == SQLITE_BUSY) {\
+            rc = EAGAIN;\
+        } else {\
+            std::cerr << "[" << __FILE__ << ":" << __LINE__ << "]"\
+                      << " sqlite3 error: " << rc << " `" << sqlite3_errstr(rc)\
+                      << "': " << sqlite3_errmsg(db) << std::endl;\
+            if (rc == SQLITE_CONSTRAINT) {\
+                rc = EINVAL;\
+            } else {\
+                rc = EIO;\
+            }\
+        }\
+        sqlite3_finalize(stmt);\
+        stmt = NULL;\
+        goto out;\
+    }\
+} while (0)
+
+#define sqlcatch(S) sqlcatchcode(S, 0)
+
 void create_db(sqlite3 *db);
+void insert_rand(sqlite3 *db, uint64_t count, uint64_t size);
 void insert_db(sqlite3 *db, const char *file_name);
 long int count_db(sqlite3 *db);
 void list_db(sqlite3 *db);
@@ -64,6 +89,8 @@ int main(int argc, char **argv)
 
     if (cmd == "create") {
         create_db(db);
+    } else if (cmd == "insert_rand") {
+        insert_rand(db, strtoul(argv[2], NULL, 10), strtoul(argv[3], NULL, 10)); /* argv[2] contains file name of data file */
     } else if (cmd == "insert") {
         insert_db(db, argv[2]); /* argv[2] contains file name of data file */
     } else if (cmd == "count") {
@@ -131,6 +158,34 @@ void create_db(sqlite3 *db)
 out:
     sqlite3_finalize(stmt);
 }
+
+void insert_rand(sqlite3 *db, uint64_t count, uint64_t size)
+{
+    static const char SQL[] =
+      "CREATE TABLE IF NOT EXISTS rand(text BLOB NOT NULL);"
+      "INSERT INTO rand VALUES (randomblob(?));"
+      ;
+
+    sqlite3_stmt *stmt = NULL;
+    const char *current = SQL;
+    int rc;
+
+    sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
+    sqlcatchcode(sqlite3_step(stmt), SQLITE_DONE);
+    sqlcatch(sqlite3_finalize(stmt));
+
+    sqlcatch(sqlite3_prepare_v2(db, current, -1, &stmt, &current));
+    sqlcatch(sqlite3_bind_int64(stmt, 1, (sqlite3_int64)size));
+    for (uint64_t i = 0; i < count; i++) {
+      sqlcatchcode(sqlite3_step(stmt), SQLITE_DONE);
+      std::cout << "last row inserted: " << sqlite3_last_insert_rowid(db) << std::endl;
+    }
+    sqlcatch(sqlite3_finalize(stmt));
+
+out:
+    (void)0;
+}
+
 
 void insert_db(sqlite3 *db, const char *file_name)
 {
