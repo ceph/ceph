@@ -15,6 +15,8 @@ from six.moves.urllib.parse import urljoin  # pylint: disable=import-error
 
 # Optional kubernetes imports to enable MgrModule.can_run
 # to behave cleanly.
+from urllib3.exceptions import ProtocolError
+
 from mgr_util import merge_dicts
 
 try:
@@ -36,6 +38,18 @@ except ImportError:
 
 log = logging.getLogger(__name__)
 
+
+def _urllib3_supports_read_chunked():
+    # There is a bug in CentOS 7 as it ships a urllib3 which is lower
+    # than required by kubernetes-client
+    try:
+        from urllib3.response import HTTPResponse
+        return hasattr(HTTPResponse, 'read_chunked')
+    except ImportError:
+        return False
+
+
+_urllib3_supports_read_chunked = _urllib3_supports_read_chunked()
 
 class ApplyException(orchestrator.OrchestratorError):
     """
@@ -73,6 +87,8 @@ class KubernetesResource(object):
         self._items = dict()
         self.thread = None  # type: threading.Thread
         self.exception = None
+        if not _urllib3_supports_read_chunked:
+            logging.info('urllib3 is too old. Fallback to full fetches')
 
     def _fetch(self):
         """ Execute the requested api method as a one-off fetch"""
@@ -95,10 +111,11 @@ class KubernetesResource(object):
             self.exception = None
             raise e  # Propagate the exception to the user.
         if not self.thread or not self.thread.is_alive():
-            # Start a thread which will use the kubernetes watch client against a resource
             resource_version = self._fetch()
-            log.debug("Attaching resource watcher for k8s {}".format(self.api_func))
-            self.thread = self._watch(resource_version)  # type: threading.Thread
+            if _urllib3_supports_read_chunked:
+                # Start a thread which will use the kubernetes watch client against a resource
+                log.debug("Attaching resource watcher for k8s {}".format(self.api_func))
+                self.thread = self._watch(resource_version)  # type: threading.Thread
 
         return self._items.values()
 
@@ -135,14 +152,13 @@ class KubernetesResource(object):
                     raise ApiException(str(event))
                 else:
                     raise KeyError('Unknown watch event {}'.format(event['type']))
-
+        except ProtocolError as e:
+            if 'Connection broken' in str(e):
+                log.info('Connection reset.')
+                return
+            raise
         except ApiException as e:
             log.exception('K8s API failed. {}'.format(self.api_func))
-            self.exception = e
-            raise
-        except AttributeError as e:
-            log.exception(
-                "Unable to attach watcher - incompatible urllib3? ({})".format(self.api_func))
             self.exception = e
             raise
         except Exception as e:
