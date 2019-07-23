@@ -388,6 +388,8 @@ public:
 
   ceph::signedspan get_mnow() final;
   HeartbeatStampsRef get_hb_stamps(int peer) final;
+  void schedule_renew_lease(epoch_t plr, ceph::timespan delay) final;
+
 
   // Utility
   bool is_primary() const {
