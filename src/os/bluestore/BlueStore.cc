@@ -6180,7 +6180,11 @@ int BlueStore::mkfs()
       encode((uint64_t)min_alloc_size, bl);
       t->set(PREFIX_SUPER, "min_alloc_size", bl);
     }
-
+    {
+      bufferlist bl;
+      bl.append("1");
+      t->set(PREFIX_SUPER, "per_pool_omap", bl);
+    }
     ondisk_format = latest_ondisk_format;
     _prepare_ondisk_format_super(t);
     db->submit_transaction_sync(t);
@@ -9840,6 +9844,18 @@ int BlueStore::_open_super_meta()
     dout(10) << __func__ << " min_alloc_size 0x" << std::hex << min_alloc_size
 	     << std::dec << dendl;
   }
+
+  {
+    bufferlist bl;
+    db->get(PREFIX_SUPER, "per_pool_omap", &bl);
+    if (bl.length()) {
+      per_pool_omap = true;
+      dout(10) << __func__ << " per_pool_omap=1" << dendl;
+    } else {
+      dout(10) << __func__ << " per_pool_omap not present" << dendl;
+    }
+  }
+
   _open_statfs();
   _set_alloc_sizes();
   _set_throttle_params();
