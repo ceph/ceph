@@ -188,7 +188,7 @@ RBD supports advanced features which can be specified via the command line when 
 :Internal value: 8
 :CLI value: object-map
 :Added in: v0.93 (Hammer)
-:KRBD support: no
+:KRBD support: since v5.3
 :Default: yes
 
 
@@ -198,7 +198,7 @@ RBD supports advanced features which can be specified via the command line when 
 :Internal value: 16
 :CLI value: fast-diff
 :Added in: v9.0.1 (Infernalis)
-:KRBD support: no
+:KRBD support: since v5.3
 :Default: yes
 
 
@@ -208,7 +208,7 @@ RBD supports advanced features which can be specified via the command line when 
 :Internal value: 32
 :CLI value: deep-flatten
 :Added in: v9.0.2 (Infernalis)
-:KRBD support: no
+:KRBD support: since v5.1
 :Default: yes
 
 
