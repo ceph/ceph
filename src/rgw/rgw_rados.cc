@@ -4620,7 +4620,7 @@ int RGWRados::defer_gc(void *ctx, const RGWBucketInfo& bucket_info, const rgw_ob
 
   cls_rgw_obj_chain chain;
   update_gc_chain(state->obj, *state->manifest, &chain);
-  return gc->defer_chain(tag, chain, false);
+  return gc->defer_chain(tag, chain, true);
 }
 
 void RGWRados::remove_rgw_head_obj(ObjectWriteOperation& op)

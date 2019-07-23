@@ -47,8 +47,8 @@ public:
     stop_processor();
     finalize();
   }
-
-  void add_chain(librados::ObjectWriteOperation& op, cls_rgw_obj_chain& chain, const string& tag);
+  vector<bool> transitioned_objects_cache;
+  void add_chain(librados::ObjectWriteOperation& op, cls_rgw_gc_obj_info& info);
   int send_chain(cls_rgw_obj_chain& chain, const string& tag, bool sync);
   int defer_chain(const string& tag, cls_rgw_obj_chain& info, bool sync);
   int remove(int index, const std::vector<string>& tags, librados::AioCompletion **pc);
