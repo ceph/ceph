@@ -273,6 +273,7 @@ public:
     virtual ceph::signedspan get_mnow() = 0;
     virtual HeartbeatStampsRef get_hb_stamps(int peer) = 0;
     virtual void schedule_renew_lease(epoch_t plr, ceph::timespan delay) = 0;
+    virtual void queue_check_readable(epoch_t lpr, ceph::timespan delay) = 0;
     virtual void recheck_readable() = 0;
 
     // ============ Flush state ==================
@@ -535,6 +536,8 @@ public:
   TrivialEvent(DeleteReserved)
   TrivialEvent(DeleteInterrupted)
 
+  TrivialEvent(CheckReadable)
+
   void start_handle(PeeringCtx *new_ctx);
   void end_handle();
   void begin_block_outgoing();
@@ -698,6 +701,7 @@ public:
       boost::statechart::custom_reaction<SetForceBackfill>,
       boost::statechart::custom_reaction<UnsetForceBackfill>,
       boost::statechart::custom_reaction<RequestScrub>,
+      boost::statechart::custom_reaction<CheckReadable>,
       // crash
       boost::statechart::transition< boost::statechart::event_base, Crashed >
       > reactions;
@@ -816,7 +820,8 @@ public:
       boost::statechart::custom_reaction< RemoteReservationRevoked>,
       boost::statechart::custom_reaction< DoRecovery>,
       boost::statechart::custom_reaction< RenewLease>,
-      boost::statechart::custom_reaction< MLeaseAck>
+      boost::statechart::custom_reaction< MLeaseAck>,
+      boost::statechart::custom_reaction< CheckReadable>
       > reactions;
     boost::statechart::result react(const QueryState& q);
     boost::statechart::result react(const ActMap&);
@@ -853,6 +858,7 @@ public:
     boost::statechart::result react(const DoRecovery&) {
       return discard_event();
     }
+    boost::statechart::result react(const CheckReadable&);
     void all_activated_and_committed();
   };
 

@@ -9561,6 +9561,26 @@ void OSD::handle_pg_query_nopg(const MQuery& q)
   }
 }
 
+void OSDService::queue_check_readable(spg_t spgid,
+				      epoch_t lpr,
+				      ceph::signedspan delay)
+{
+  if (delay == ceph::signedspan::zero()) {
+    osd->enqueue_peering_evt(
+      spgid,
+      PGPeeringEventRef(
+	std::make_shared<PGPeeringEvent>(
+	  lpr, lpr,
+	  PeeringState::CheckReadable())));
+  } else {
+    mono_timer.add_event(
+      delay,
+      [this, spgid, lpr]() {
+	queue_check_readable(spgid, lpr);
+      });
+  }
+}
+
 
 // =========================================================
 // RECOVERY
