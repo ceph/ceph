@@ -149,7 +149,7 @@ void usage()
   cout << "  zonegroup add              add a zone to a zonegroup\n";
   cout << "  zonegroup create           create a new zone group info\n";
   cout << "  zonegroup default          set default zone group\n";
-  cout << "  zonegroup rm               remove a zone group info\n";
+  cout << "  zonegroup delete           delete a zone group info\n";
   cout << "  zonegroup get              show zone group info\n";
   cout << "  zonegroup modify           modify an existing zonegroup\n";
   cout << "  zonegroup set              set zone group info (requires infile)\n";
@@ -162,7 +162,7 @@ void usage()
   cout << "  zonegroup placement rm     remove a placement target from a zonegroup\n";
   cout << "  zonegroup placement default  set a zonegroup's default placement target\n";
   cout << "  zone create                create a new zone\n";
-  cout << "  zone rm                    remove a zone\n";
+  cout << "  zone delete                delete a zone\n";
   cout << "  zone get                   show zone cluster params\n";
   cout << "  zone modify                modify an existing zone\n";
   cout << "  zone set                   set zone cluster params (requires infile)\n";

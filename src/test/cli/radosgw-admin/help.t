@@ -69,7 +69,7 @@
     zonegroup add              add a zone to a zonegroup
     zonegroup create           create a new zone group info
     zonegroup default          set default zone group
-    zonegroup rm               remove a zone group info
+    zonegroup delete           delete a zone group info
     zonegroup get              show zone group info
     zonegroup modify           modify an existing zonegroup
     zonegroup set              set zone group info (requires infile)
@@ -82,7 +82,7 @@
     zonegroup placement rm     remove a placement target from a zonegroup
     zonegroup placement default  set a zonegroup's default placement target
     zone create                create a new zone
-    zone rm                    remove a zone
+    zone delete                delete a zone
     zone get                   show zone cluster params
     zone modify                modify an existing zone
     zone set                   set zone cluster params (requires infile)
