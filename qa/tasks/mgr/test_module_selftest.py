@@ -78,6 +78,10 @@ class TestModuleSelftest(MgrTestCase):
     def test_crash(self):
         self._selftest_plugin("crash")
 
+    def test_orchestrator_cli(self):
+        self._selftest_plugin("orchestrator_cli")
+
+
     def test_selftest_config_update(self):
         """
         That configuration updates are seen by running mgr modules
