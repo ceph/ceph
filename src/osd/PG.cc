@@ -1818,6 +1818,11 @@ void PG::schedule_renew_lease(epoch_t lpr, ceph::timespan delay)
     });
 }
 
+void PG::queue_check_readable(epoch_t lpr, ceph::timespan delay)
+{
+  osd->queue_check_readable(info.pgid, lpr, delay);
+}
+
 void PG::rebuild_missing_set_with_deletes(PGLog &pglog)
 {
   pglog.rebuild_missing_set_with_deletes(

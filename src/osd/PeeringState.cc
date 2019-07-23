@@ -5766,6 +5766,14 @@ boost::statechart::result PeeringState::Active::react(const MLeaseAck& la)
   return discard_event();
 }
 
+
+boost::statechart::result PeeringState::Active::react(const CheckReadable &evt)
+{
+  DECLARE_LOCALS;
+  pl->recheck_readable();
+  return discard_event();
+}
+
 /*
  * update info.history.last_epoch_started ONLY after we and all
  * replicas have activated AND committed the activate transaction
