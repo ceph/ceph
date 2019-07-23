@@ -4049,6 +4049,20 @@ void InodeStoreBase::dump(Formatter *f) const
 {
   inode.dump(f);
   f->dump_string("symlink", symlink);
+
+  f->open_array_section("xattrs");
+  for (const auto& [key, val] : xattrs) {
+    f->open_object_section("xattr");
+    f->dump_string("key", key);
+    std::string v(val.c_str(), val.length());
+    f->dump_string("val", v);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_object_section("dirfragtree");
+  dirfragtree.dump(f);
+  f->close_section(); // dirfragtree
+  
   f->open_array_section("old_inodes");
   for (const auto &p : old_inodes) {
     f->open_object_section("old_inode");
@@ -4059,9 +4073,8 @@ void InodeStoreBase::dump(Formatter *f) const
   }
   f->close_section();  // old_inodes
 
-  f->open_object_section("dirfragtree");
-  dirfragtree.dump(f);
-  f->close_section(); // dirfragtree
+  f->dump_unsigned("oldest_snap", oldest_snap);
+  f->dump_unsigned("damage_flags", damage_flags);
 }
 
 

@@ -848,6 +848,14 @@ void inode_t<Allocator>::dump(Formatter *f) const
   f->dump_unsigned("backtrace_version", backtrace_version);
 
   f->dump_string("stray_prior_path", stray_prior_path);
+  f->dump_unsigned("max_size_ever", max_size_ever);
+
+  f->open_object_section("quota");
+  quota.dump(f);
+  f->close_section();
+
+  f->dump_stream("last_scrub_stamp") << last_scrub_stamp;
+  f->dump_unsigned("last_scrub_version", last_scrub_version);
 }
 
 template<template<typename> class Allocator>
