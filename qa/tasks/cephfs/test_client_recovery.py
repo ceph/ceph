@@ -519,3 +519,21 @@ class TestClientRecovery(CephFSTestCase):
         self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id])
 
         self.mount_a.umount_wait(require_clean=True, timeout=30)
+
+    def test_config_session_timeout(self):
+        session_timeout = self.fs.get_var("session_timeout")
+        mount_a_gid = self.mount_a.get_global_id()
+
+        self.fs.mds_asok(['session', 'config', '%s' % mount_a_gid, 'timeout', '%s' % (session_timeout * 2)])
+
+        self.mount_a.kill();
+
+        self.assert_session_count(2)
+
+        time.sleep(session_timeout * 1.5)
+        self.assert_session_state(mount_a_gid, "open")
+
+        time.sleep(session_timeout)
+        self.assert_session_count(1)
+
+        self.mount_a.kill_cleanup()
