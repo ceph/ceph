@@ -8211,7 +8211,7 @@ void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
 {
   buf->reset();
 
-  buf->omap_allocated = db->estimate_prefix_size(PREFIX_OMAP);
+  buf->omap_allocated = db->estimate_prefix_size(PREFIX_OMAP, string());
 
   uint64_t bfree = alloc->get_free();
 
