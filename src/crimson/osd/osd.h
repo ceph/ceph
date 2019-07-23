@@ -71,9 +71,6 @@ class OSD final : public ceph::net::Dispatcher,
   std::unique_ptr<ceph::mon::Client> monc;
   std::unique_ptr<ceph::mgr::Client> mgrc;
 
-  std::unique_ptr<Heartbeat> heartbeat;
-  seastar::timer<seastar::lowres_clock> heartbeat_timer;
-
   SharedLRU<epoch_t, OSDMap> osdmaps;
   SimpleLRU<epoch_t, bufferlist, false> map_bl_cache;
   cached_map_t osdmap;
@@ -112,6 +109,9 @@ class OSD final : public ceph::net::Dispatcher,
   ceph::osd::ShardServices shard_services;
   std::unordered_map<spg_t, Ref<PG>> pgs;
 
+  std::unique_ptr<Heartbeat> heartbeat;
+  seastar::timer<seastar::lowres_clock> heartbeat_timer;
+
 public:
   OSD(int id, uint32_t nonce,
       ceph::net::Messenger& cluster_msgr,
@@ -139,7 +139,6 @@ private:
   seastar::future<> _send_alive();
 
   // OSDMapService methods
-  ceph::signedspan get_mnow() const final;
   epoch_t get_up_epoch() const final {
     return up_epoch;
   }
