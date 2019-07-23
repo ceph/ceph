@@ -767,6 +767,11 @@ bool PrimaryLogPG::check_laggy(OpRequestRef& op)
 	     << " mnow " << mnow
 	     << " > readable_until " << ru << dendl;
 
+    if (!is_primary()) {
+      osd->reply_op_error(op, -EAGAIN);
+      return false;
+    }
+
     // go to laggy state
     state_set(PG_STATE_LAGGY);
     publish_stats_to_osd();

@@ -1145,7 +1145,8 @@ void PeeringState::proc_lease(const pg_lease_t& l)
   if (ru > readable_until) {
     readable_until = ru;
     psdout(20) << __func__ << " readable_until now " << readable_until << dendl;
-#warning fixme: wake up replica?
+    // NOTE: if we ever decide to block/queue ops on the replica,
+    // we'll need to wake them up here.
   }
 
   ceph::signedspan ruub;
