@@ -8311,6 +8311,12 @@ int BlueStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf)
     std::lock_guard l(vstatfs_lock);
     osd_pools[pool_id].publish(buf);
   }
+
+  string key_prefix;
+  _key_encode_u64(pool_id, &key_prefix);
+  buf->omap_allocated = db->estimate_prefix_size(PREFIX_PERPOOL_OMAP,
+						 key_prefix);
+
   dout(10) << __func__ << *buf << dendl;
   return 0;
 }
