@@ -49,6 +49,10 @@ cdef extern from "time.h":
         time_t tv_sec
         long tv_nsec
 
+cdef extern from "<errno.h>" nogil:
+    enum:
+        _ECANCELED "ECANCELED"
+
 cdef extern from "rados/librados.h":
     enum:
         _LIBRADOS_SNAP_HEAD "LIBRADOS_SNAP_HEAD"
@@ -613,6 +617,8 @@ cdef extern from "rbd/librbd.h" nogil:
                                          int stat_option, uint64_t* stat_val)
     int rbd_pool_stats_get(rados_ioctx_t io, rbd_pool_stats_t stats)
 
+ECANCELED = _ECANCELED
+
 RBD_FEATURE_LAYERING = _RBD_FEATURE_LAYERING
 RBD_FEATURE_STRIPINGV2 = _RBD_FEATURE_STRIPINGV2
 RBD_FEATURE_EXCLUSIVE_LOCK = _RBD_FEATURE_EXCLUSIVE_LOCK
@@ -781,6 +787,10 @@ class Timeout(OSError):
 class DiskQuotaExceeded(OSError):
     pass
 
+class OperationCanceled(OSError):
+    def __init__(self, message, errno=None):
+        super(OperationCanceled, self).__init__(
+                "RBD operation canceled (%s)" % message, errno)
 
 cdef errno_to_exception = {
     errno.EPERM     : PermissionError,
@@ -797,6 +807,7 @@ cdef errno_to_exception = {
     errno.ESHUTDOWN : ConnectionShutdown,
     errno.ETIMEDOUT : Timeout,
     errno.EDQUOT    : DiskQuotaExceeded,
+    ECANCELED       : OperationCanceled,
 }
 
 cdef group_errno_to_exception = {
@@ -814,6 +825,7 @@ cdef group_errno_to_exception = {
     errno.ESHUTDOWN : ConnectionShutdown,
     errno.ETIMEDOUT : Timeout,
     errno.EDQUOT    : DiskQuotaExceeded,
+    ECANCELED       : OperationCanceled,
 }
 
 cdef make_ex(ret, msg, exception_map=errno_to_exception):
