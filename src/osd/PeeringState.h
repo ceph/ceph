@@ -273,6 +273,7 @@ public:
     virtual ceph::signedspan get_mnow() = 0;
     virtual HeartbeatStampsRef get_hb_stamps(int peer) = 0;
     virtual void schedule_renew_lease(epoch_t plr, ceph::timespan delay) = 0;
+    virtual void recheck_readable() = 0;
 
     // ============ Flush state ==================
     /**
