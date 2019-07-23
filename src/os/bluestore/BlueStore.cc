@@ -506,39 +506,6 @@ static bool is_extent_shard_key(const string& key)
   return *key.rbegin() == EXTENT_SHARD_KEY_SUFFIX;
 }
 
-// '-' < '.' < '~'
-static void get_omap_header(uint64_t id, string *out)
-{
-  _key_encode_u64(id, out);
-  out->push_back('-');
-}
-
-// hmm, I don't think there's any need to escape the user key since we
-// have a clean prefix.
-static void get_omap_key(uint64_t id, const string& key, string *out)
-{
-  _key_encode_u64(id, out);
-  out->push_back('.');
-  out->append(key);
-}
-
-static void rewrite_omap_key(uint64_t id, string old, string *out)
-{
-  _key_encode_u64(id, out);
-  out->append(old.c_str() + out->length(), old.size() - out->length());
-}
-
-static void decode_omap_key(const string& key, string *user_key)
-{
-  *user_key = key.substr(sizeof(uint64_t) + 1);
-}
-
-static void get_omap_tail(uint64_t id, string *out)
-{
-  _key_encode_u64(id, out);
-  out->push_back('~');
-}
-
 static void get_deferred_key(uint64_t seq, string *out)
 {
   _key_encode_u64(seq, out);
@@ -3309,6 +3276,40 @@ const string& BlueStore::Onode::get_omap_prefix()
   return onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP
     : PREFIX_OMAP;
 }
+
+// '-' < '.' < '~'
+
+void BlueStore::Onode::get_omap_header(string *out)
+{
+  _key_encode_u64(onode.nid, out);
+  out->push_back('-');
+}
+
+void BlueStore::Onode::get_omap_key(const string& key, string *out)
+{
+  _key_encode_u64(onode.nid, out);
+  out->push_back('.');
+  out->append(key);
+}
+
+void BlueStore::Onode::rewrite_omap_key(const string& old, string *out)
+{
+  _key_encode_u64(onode.nid, out);
+  out->append(old.c_str() + out->length(), old.size() - out->length());
+}
+
+void BlueStore::Onode::get_omap_tail(string *out)
+{
+  _key_encode_u64(onode.nid, out);
+  out->push_back('~');
+}
+
+void BlueStore::Onode::decode_omap_key(const string& key, string *user_key)
+{
+  *user_key = key.substr(sizeof(uint64_t) + 1);
+}
+
+
 // =======================================================
 // WriteContext
  
@@ -3856,8 +3857,8 @@ BlueStore::OmapIteratorImpl::OmapIteratorImpl(
 {
   RWLock::RLocker l(c->lock);
   if (o->onode.has_omap()) {
-    get_omap_key(o->onode.nid, string(), &head);
-    get_omap_tail(o->onode.nid, &tail);
+    o->get_omap_key(string(), &head);
+    o->get_omap_tail(&tail);
     it->lower_bound(head);
   }
 }
@@ -3894,7 +3895,7 @@ int BlueStore::OmapIteratorImpl::upper_bound(const string& after)
   auto start1 = mono_clock::now();
   if (o->onode.has_omap()) {
     string key;
-    get_omap_key(o->onode.nid, after, &key);
+    o->get_omap_key(after, &key);
     ldout(c->store->cct,20) << __func__ << " after " << after << " key "
 			    << pretty_binary_string(key) << dendl;
     it->upper_bound(key);
@@ -3920,7 +3921,7 @@ int BlueStore::OmapIteratorImpl::lower_bound(const string& to)
   auto start1 = mono_clock::now();
   if (o->onode.has_omap()) {
     string key;
-    get_omap_key(o->onode.nid, to, &key);
+    o->get_omap_key(to, &key);
     ldout(c->store->cct,20) << __func__ << " to " << to << " key "
 			    << pretty_binary_string(key) << dendl;
     it->lower_bound(key);
@@ -3977,7 +3978,7 @@ string BlueStore::OmapIteratorImpl::key()
   ceph_assert(it->valid());
   string db_key = it->raw_key().second;
   string user_key;
-  decode_omap_key(db_key, &user_key);
+  o->decode_omap_key(db_key, &user_key);
 
   return user_key;
 }
@@ -9451,8 +9452,8 @@ int BlueStore::omap_get(
     const string& prefix = o->get_omap_prefix();
     KeyValueDB::Iterator it = db->get_iterator(prefix);
     string head, tail;
-    get_omap_header(o->onode.nid, &head);
-    get_omap_tail(o->onode.nid, &tail);
+    o->get_omap_header(&head);
+    o->get_omap_tail(&tail);
     it->lower_bound(head);
     while (it->valid()) {
       if (it->key() == head) {
@@ -9463,7 +9464,7 @@ int BlueStore::omap_get(
 	break;
       } else {
 	string user_key;
-	decode_omap_key(it->key(), &user_key);
+	o->decode_omap_key(it->key(), &user_key);
 	dout(20) << __func__ << "  got " << pretty_binary_string(it->key())
 		 << " -> " << user_key << dendl;
 	(*out)[user_key] = it->value();
@@ -9500,7 +9501,7 @@ int BlueStore::omap_get_header(
   o->flush();
   {
     string head;
-    get_omap_header(o->onode.nid, &head);
+    o->get_omap_header(&head);
     if (db->get(o->get_omap_prefix(), head, header) >= 0) {
       dout(30) << __func__ << "  got header" << dendl;
     } else {
@@ -9537,8 +9538,8 @@ int BlueStore::omap_get_keys(
     const string& prefix = o->get_omap_prefix();
     KeyValueDB::Iterator it = db->get_iterator(prefix);
     string head, tail;
-    get_omap_key(o->onode.nid, string(), &head);
-    get_omap_tail(o->onode.nid, &tail);
+    o->get_omap_key(string(), &head);
+    o->get_omap_tail(&tail);
     it->lower_bound(head);
     while (it->valid()) {
       if (it->key() >= tail) {
@@ -9546,7 +9547,7 @@ int BlueStore::omap_get_keys(
 	break;
       }
       string user_key;
-      decode_omap_key(it->key(), &user_key);
+      o->decode_omap_key(it->key(), &user_key);
       dout(20) << __func__ << "  got " << pretty_binary_string(it->key())
 	       << " -> " << user_key << dendl;
       keys->insert(user_key);
@@ -13106,10 +13107,9 @@ int BlueStore::_rmattrs(TransContext *txc,
 void BlueStore::_do_omap_clear(TransContext *txc, OnodeRef& o)
 {
   const string& omap_prefix = o->get_omap_prefix();
-  const uint64_t id = o->onode.nid;
   string prefix, tail;
-  get_omap_header(id, &prefix);
-  get_omap_tail(id, &tail);
+  o->get_omap_header(&prefix);
+  o->get_omap_tail(&tail);
   txc->t->rm_range_keys(omap_prefix, prefix, tail);
   txc->t->rmkey(omap_prefix, tail);
   dout(20) << __func__ << " remove range start: "
@@ -13152,7 +13152,7 @@ int BlueStore::_omap_setkeys(TransContext *txc,
     const string& prefix = o->get_omap_prefix();
     string key_tail;
     bufferlist tail;
-    get_omap_tail(o->onode.nid, &key_tail);
+    o->get_omap_tail(&key_tail);
     txc->t->set(prefix, key_tail, tail);
   } else {
     txc->note_modified_object(o);
@@ -13196,13 +13196,13 @@ int BlueStore::_omap_setheader(TransContext *txc,
     const string& prefix = o->get_omap_prefix();
     string key_tail;
     bufferlist tail;
-    get_omap_tail(o->onode.nid, &key_tail);
+    o->get_omap_tail(&key_tail);
     txc->t->set(prefix, key_tail, tail);
   } else {
     txc->note_modified_object(o);
   }
   const string& prefix = o->get_omap_prefix();
-  get_omap_header(o->onode.nid, &key);
+  o->get_omap_header(&key);
   txc->t->set(prefix, key, bl);
   r = 0;
   dout(10) << __func__ << " " << c->cid << " " << o->oid << " = " << r << dendl;
@@ -13259,8 +13259,8 @@ int BlueStore::_omap_rmkey_range(TransContext *txc,
   {
     const string& prefix = o->get_omap_prefix();
     o->flush();
-    get_omap_key(o->onode.nid, first, &key_first);
-    get_omap_key(o->onode.nid, last, &key_last);
+    o->get_omap_key(first, &key_first);
+    o->get_omap_key(last, &key_last);
     txc->t->rm_range_keys(prefix, key_first, key_last);
     dout(20) << __func__ << " remove range start: "
              << pretty_binary_string(key_first) << " end: "
@@ -13349,8 +13349,8 @@ int BlueStore::_clone(TransContext *txc,
     const string& prefix = newo->get_omap_prefix();
     KeyValueDB::Iterator it = db->get_iterator(prefix);
     string head, tail;
-    get_omap_header(oldo->onode.nid, &head);
-    get_omap_tail(oldo->onode.nid, &tail);
+    oldo->get_omap_header(&head);
+    oldo->get_omap_tail(&tail);
     it->lower_bound(head);
     while (it->valid()) {
       if (it->key() >= tail) {
@@ -13360,14 +13360,14 @@ int BlueStore::_clone(TransContext *txc,
 	dout(30) << __func__ << "  got header/data "
 		 << pretty_binary_string(it->key()) << dendl;
         string key;
-	rewrite_omap_key(newo->onode.nid, it->key(), &key);
+	newo->rewrite_omap_key(it->key(), &key);
 	txc->t->set(prefix, key, it->value());
       }
       it->next();
     }
     string new_tail;
     bufferlist new_tail_value;
-    get_omap_tail(newo->onode.nid, &new_tail);
+    newo->get_omap_tail(&new_tail);
     txc->t->set(prefix, new_tail, new_tail_value);
   }
 
