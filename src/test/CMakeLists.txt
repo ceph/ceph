@@ -939,4 +939,9 @@ add_ceph_unittest(unittest_any)
 add_executable(unittest_weighted_shuffle test_weighted_shuffle.cc)
 add_ceph_unittest(unittest_weighted_shuffle)
 
+if(WITH_LIBCEPHSQLITE)
+  add_executable(test_libcephsqlite test_libcephsqlite.cc)
+  target_link_libraries(test_libcephsqlite cephsqlite radosstriper librados)
+endif(WITH_LIBCEPHSQLITE)
+
 #make check ends here

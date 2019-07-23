@@ -803,8 +803,8 @@ endif(WITH_LIBCEPHFS)
 if(WITH_LIBCEPHSQLITE)
   set(libcephsqlite_srcs libcephsqlite.cc)
   add_library(cephsqlite ${CEPH_SHARED} ${libcephsqlite_srcs})
-  target_link_libraries(cephsqlite PRIVATE client ceph-common
-    ${CRYPTO_LIBS} ${EXTRALIBS})
+  set_target_properties(cephsqlite PROPERTIES COMPILE_FLAGS "-I${SQLITE3_INCLUDE_DIRS}")
+  target_link_libraries(cephsqlite radosstriper librados ${SQLITE3_LIBRARIES} ${EXTRALIBS})
   if(ENABLE_SHARED)
     set_target_properties(cephsqlite PROPERTIES
       OUTPUT_NAME cephsqlite
