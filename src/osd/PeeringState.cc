@@ -763,6 +763,8 @@ void PeeringState::on_new_interval()
   psdout(10) << __func__ << " prior_readable_until_ub "
 	     << prior_readable_until_ub << " (mnow " << mnow << " + "
 	     << info.history.prior_readable_until_ub << ")" << dendl;
+  prior_readable_down_osds.clear(); // we populate this when we build the priorset
+
   readable_until =
     readable_until_ub =
     readable_until_ub_sent =
@@ -6196,6 +6198,7 @@ PeeringState::GetInfo::GetInfo(my_context ctx)
   ceph_assert(ps->blocked_by.empty());
 
   prior_set = ps->build_prior();
+  ps->prior_readable_down_osds = prior_set.down;
 
   ps->reset_min_peer_features();
   get_infos();
@@ -6263,6 +6266,7 @@ boost::statechart::result PeeringState::GetInfo::react(const MNotifyRec& infoevt
     if (old_start < ps->info.history.last_epoch_started) {
       psdout(10) << " last_epoch_started moved forward, rebuilding prior" << dendl;
       prior_set = ps->build_prior();
+      ps->prior_readable_down_osds = prior_set.down;
 
       // filter out any osds that got dropped from the probe set from
       // peer_info_requested.  this is less expensive than restarting
@@ -6921,7 +6925,8 @@ ostream &operator<<(ostream &out, const PeeringState &ps) {
     out << " NOTIFY";
 
   if (ps.prior_readable_until_ub != ceph::signedspan::zero()) {
-    out << " pruub " << ps.prior_readable_until_ub;
+    out << " pruub " << ps.prior_readable_until_ub
+	<< "@" << ps.get_prior_readable_down_osds();
   }
   return out;
 }

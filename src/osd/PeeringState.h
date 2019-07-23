@@ -1364,8 +1364,12 @@ public:
 
   /// upper bound on any acting OSDs' readable_until in this interval
   ceph::signedspan readable_until_ub = ceph::signedspan::zero();
+
   /// upper bound from prior interval(s)
   ceph::signedspan prior_readable_until_ub = ceph::signedspan::zero();
+
+  /// pg instances from prior interval(s) that may still be readable
+  set<int> prior_readable_down_osds;
 
   /// [replica] upper bound we got from the primary (primary's clock)
   ceph::signedspan readable_until_ub_from_primary = ceph::signedspan::zero();
@@ -1959,9 +1963,15 @@ public:
     return prior_readable_until_ub;
   }
 
+  /// Get prior intervals' readable_until down OSDs of note
+  const set<int>& get_prior_readable_down_osds() const {
+    return prior_readable_down_osds;
+  }
+
   /// Reset prior intervals' readable_until upper bound (e.g., bc it passed)
   void clear_prior_readable_until_ub() {
     prior_readable_until_ub = ceph::signedspan::zero();
+    prior_readable_down_osds.clear();
   }
 
   void renew_lease(ceph::signedspan now) {
