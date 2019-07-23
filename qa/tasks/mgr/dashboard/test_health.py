@@ -58,7 +58,10 @@ class HealthTest(DashboardTestCase):
                 'status': str,
             }),
             'hosts': int,
-            'iscsi_daemons': int,
+            'iscsi_daemons': JObj({
+                'up': int,
+                'down': int
+            }),
             'mgr_map': JObj({
                 'active_name': str,
                 'standbys': JList(JLeaf(dict))
@@ -183,7 +186,10 @@ class HealthTest(DashboardTestCase):
                 'status': str,
             }),
             'hosts': int,
-            'iscsi_daemons': int,
+            'iscsi_daemons': JObj({
+                'up': int,
+                'down': int
+            }),
             'mgr_map': JObj({
                 'active_addr': str,
                 'active_addrs': JObj({
