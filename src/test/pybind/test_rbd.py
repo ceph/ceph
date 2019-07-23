@@ -16,6 +16,7 @@ from rados import (Rados,
 from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  ImageBusy, ImageHasSnapshots, ReadOnlyImage,
                  FunctionNotSupported, ArgumentOutOfRange,
+                 ECANCELED, OperationCanceled,
                  DiskQuotaExceeded, ConnectionShutdown, PermissionError,
                  RBD_FEATURE_LAYERING, RBD_FEATURE_STRIPINGV2,
                  RBD_FEATURE_EXCLUSIVE_LOCK, RBD_FEATURE_JOURNALING,
@@ -338,9 +339,9 @@ def test_remove_with_progress():
 @with_setup(create_image)
 def test_remove_canceled():
     def progress_cb(current, total):
-        return -errno.ESHUTDOWN
+        return -ECANCELED
 
-    assert_raises(ConnectionShutdown, RBD().remove, ioctx, image_name,
+    assert_raises(OperationCanceled, RBD().remove, ioctx, image_name,
                   on_progress=progress_cb)
 
 @with_setup(create_image, remove_image)
