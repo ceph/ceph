@@ -16,7 +16,7 @@ upgrade-sequence:
        wait-for-healthy: false
        wait-for-osds-up: true
    - ceph.restart:
-       daemons: [mds.a]
+       daemons: [mds.a, rgw.*]
        wait-for-healthy: false
        wait-for-osds-up: true
    - print: "**** done ceph.restart all"
