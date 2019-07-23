@@ -1,5 +1,5 @@
 import { PageHelper } from '../page-helper.po';
 
-export class MirroringPage extends PageHelper {
+export class MirroringPageHelper extends PageHelper {
   pages = { index: '/#/block/mirroring' };
 }
