@@ -12908,9 +12908,7 @@ int BlueStore::_do_remove(
   _do_truncate(txc, c, o, 0, is_gen ? &maybe_unshared_blobs : nullptr);
   if (o->onode.has_omap()) {
     o->flush();
-    _do_omap_clear(txc,
-		   o->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP : PREFIX_OMAP,
-		   o->onode.nid);
+    _do_omap_clear(txc, o);
   }
   o->exists = false;
   string key;
@@ -13105,9 +13103,11 @@ int BlueStore::_rmattrs(TransContext *txc,
   return r;
 }
 
-void BlueStore::_do_omap_clear(TransContext *txc, const string& omap_prefix,
-			       uint64_t id)
+void BlueStore::_do_omap_clear(TransContext *txc, OnodeRef& o)
 {
+  const string& omap_prefix = o->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP
+    : PREFIX_OMAP;
+  const uint64_t id = o->onode.nid;
   string prefix, tail;
   get_omap_header(id, &prefix);
   get_omap_tail(id, &tail);
@@ -13126,9 +13126,7 @@ int BlueStore::_omap_clear(TransContext *txc,
   int r = 0;
   if (o->onode.has_omap()) {
     o->flush();
-    _do_omap_clear(txc,
-		   o->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP : PREFIX_OMAP,
-		   o->onode.nid);
+    _do_omap_clear(txc, o);
     o->onode.clear_omap_flag();
     txc->write_onode(o);
   }
@@ -13346,10 +13344,7 @@ int BlueStore::_clone(TransContext *txc,
   if (newo->onode.has_omap()) {
     dout(20) << __func__ << " clearing old omap data" << dendl;
     newo->flush();
-    _do_omap_clear(txc,
-		   newo->onode.is_pgmeta_omap() ? PREFIX_PGMETA_OMAP
-		   : PREFIX_OMAP,
-		   newo->onode.nid);
+    _do_omap_clear(txc, newo);
     newo->onode.clear_omap_flag();
   }
   if (oldo->onode.has_omap()) {
