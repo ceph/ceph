@@ -97,7 +97,7 @@ void create_db(sqlite3 *db)
     sqlite3_stmt *stmt = NULL;
     const char *unused = NULL;
 
-    int ret = sqlite3_prepare_v3(db, ddl1, strlen(ddl1), 0x0, &stmt, &unused);
+    int ret = sqlite3_prepare_v2(db, ddl1, strlen(ddl1), &stmt, &unused);
     std::cerr << __FUNCTION__ << ": prepare:0x" << std::hex << ret << "(" << sqlite_error_str(ret) << ")" << std::endl;
     if (ret != SQLITE_OK) {
         dump_error(__FUNCTION__, __LINE__, "error: when preparing", sqlite3_errmsg(db));
@@ -115,7 +115,7 @@ void create_db(sqlite3 *db)
 #if 0
     sqlite3_finalize(stmt);
 
-    ret = sqlite3_prepare_v3(db, ddl2, strlen(ddl2), 0x0, &stmt, &unused);
+    ret = sqlite3_prepare_v2(db, ddl2, strlen(ddl2), &stmt, &unused);
     std::cerr << __FUNCTION__ << ": prepare:0x" << std::hex << ret << "(" << sqlite_error_str(ret) << ")" << std::endl;
     if (ret != SQLITE_OK) {
         dump_error(__FUNCTION__, __LINE__, "error: when preparing", sqlite3_errmsg(db));
@@ -145,7 +145,7 @@ void insert_db(sqlite3 *db, const char *file_name)
     const char *unused = NULL;
 
     while (is >> col_sha256sum >> col_fname) {
-        if (sqlite3_prepare_v3(db, dml, strlen(dml), 0x0, &stmt, &unused) != SQLITE_OK) {
+        if (sqlite3_prepare_v2(db, dml, strlen(dml), &stmt, &unused) != SQLITE_OK) {
             dump_error(__FUNCTION__, __LINE__, "error: while preparing", sqlite3_errmsg(db));
             goto out;
         }
@@ -200,7 +200,7 @@ long int count_db(sqlite3 *db)
     sqlite3_stmt *stmt = NULL;
     const char *unused = NULL;
 
-    if (sqlite3_prepare_v3(db, dml, strlen(dml), 0x0, &stmt, &unused) != SQLITE_OK) {
+    if (sqlite3_prepare_v2(db, dml, strlen(dml), &stmt, &unused) != SQLITE_OK) {
         dump_error(__FUNCTION__, __LINE__, "error: when preparing", sqlite3_errmsg(db));
         goto out;
     }
@@ -224,7 +224,7 @@ void list_db(sqlite3 *db)
     sqlite3_stmt *stmt = NULL;
     const char *unused = NULL;
 
-    if (sqlite3_prepare_v3(db, dml, strlen(dml), 0x0, &stmt, &unused) != SQLITE_OK) {
+    if (sqlite3_prepare_v2(db, dml, strlen(dml), &stmt, &unused) != SQLITE_OK) {
         dump_error(__FUNCTION__, __LINE__, "error: when preparing", sqlite3_errmsg(db));
         goto out;
     }
@@ -242,7 +242,7 @@ void delete_db(sqlite3 *db)
     sqlite3_stmt *stmt = NULL;
     const char *unused = NULL;
 
-    if (sqlite3_prepare_v3(db, dml, strlen(dml), 0x0, &stmt, &unused) != SQLITE_OK) {
+    if (sqlite3_prepare_v2(db, dml, strlen(dml), &stmt, &unused) != SQLITE_OK) {
         dump_error(__FUNCTION__, __LINE__, "error: when preparing", sqlite3_errmsg(db));
         goto out;
     }
@@ -299,9 +299,15 @@ const char *sqlite_exterror_str(int err)
     switch (err & 0xff) {
         case SQLITE_ERROR:
             switch (err) {
+#ifdef SQLITE_ERROR_MISSING_COLLSEQ
                 CASE(SQLITE_ERROR_MISSING_COLLSEQ);
+#endif
+#ifdef SQLITE_ERROR_RETRY
                 CASE(SQLITE_ERROR_RETRY);
+#endif
+#ifdef SQLITE_ERROR_SNAPSHOT
                 CASE(SQLITE_ERROR_SNAPSHOT);
+#endif
             }
             break;
 
@@ -335,16 +341,24 @@ const char *sqlite_exterror_str(int err)
                 CASE(SQLITE_IOERR_CONVPATH);
                 CASE(SQLITE_IOERR_VNODE);
                 CASE(SQLITE_IOERR_AUTH);
+#ifdef SQLITE_IOERR_BEGIN_ATOMIC
                 CASE(SQLITE_IOERR_BEGIN_ATOMIC);
+#endif
+#ifdef SQLITE_IOERR_COMMIT_ATOMIC
                 CASE(SQLITE_IOERR_COMMIT_ATOMIC);
+#endif
+#ifdef SQLITE_IOERR_ROLLBACK_ATOMIC
                 CASE(SQLITE_IOERR_ROLLBACK_ATOMIC);
+#endif
             }
             break;
 
         case SQLITE_LOCKED:
             switch (err) {
                 CASE(SQLITE_LOCKED_SHAREDCACHE);
+#ifdef SQLITE_LOCKED_VTAB
                 CASE(SQLITE_LOCKED_VTAB);
+#endif
             }
             break;
 
@@ -361,14 +375,18 @@ const char *sqlite_exterror_str(int err)
                 CASE(SQLITE_CANTOPEN_ISDIR);
                 CASE(SQLITE_CANTOPEN_FULLPATH);
                 CASE(SQLITE_CANTOPEN_CONVPATH);
+#ifdef SQLITE_CANTOPEN_DIRTYWAL
                 CASE(SQLITE_CANTOPEN_DIRTYWAL);
+#endif
             }
             break;
 
         case SQLITE_CORRUPT:
             switch (err) {
                 CASE(SQLITE_CORRUPT_VTAB);
+#ifdef SQLITE_CORRUPT_SEQUENCE
                 CASE(SQLITE_CORRUPT_SEQUENCE);
+#endif
             }
             break;
 
@@ -378,8 +396,12 @@ const char *sqlite_exterror_str(int err)
                 CASE(SQLITE_READONLY_CANTLOCK);
                 CASE(SQLITE_READONLY_ROLLBACK);
                 CASE(SQLITE_READONLY_DBMOVED);
+#ifdef SQLITE_READONLY_CANTINIT
                 CASE(SQLITE_READONLY_CANTINIT);
+#endif
+#ifdef SQLITE_READONLY_DIRECTORY
                 CASE(SQLITE_READONLY_DIRECTORY);
+#endif
             }
             break;
 
@@ -425,7 +447,9 @@ const char *sqlite_exterror_str(int err)
 
         case SQLITE_OK:
             switch (err) {
+#ifdef SQLITE_OK_LOAD_PERMANENTLY
                 CASE(SQLITE_OK_LOAD_PERMANENTLY);
+#endif
             }
             break;
     }
