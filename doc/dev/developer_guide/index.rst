@@ -834,8 +834,7 @@ branch and the stable branches). Traditionally, these tests are called "the
 nightlies" because the Ceph core developers used to live and work in
 the same time zone and from their perspective the tests were run overnight.
 
-The results of the nightlies are published at http://pulpito.ceph.com/ and
-http://pulpito.ovh.sepia.ceph.com:8081/. The developer nick shows in the
+The results of the nightlies are published at http://pulpito.ceph.com/. The developer nick shows in the
 test results URL and in the first column of the Pulpito dashboard.  The
 results are also reported on the `ceph-qa mailing list
 <https://ceph.com/irc/>`_ for analysis.
