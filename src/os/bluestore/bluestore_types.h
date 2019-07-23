@@ -913,12 +913,19 @@ struct bluestore_onode_t {
   enum {
     FLAG_OMAP = 1,       ///< object may have omap data
     FLAG_PGMETA_OMAP = 2,  ///< omap data is in meta omap prefix
+    FLAG_PERPOOL_OMAP = 4, ///< omap data is in per-pool prefix; per-pool keys
   };
 
   string get_flags_string() const {
     string s;
     if (flags & FLAG_OMAP) {
       s = "omap";
+    }
+    if (flags & FLAG_PGMETA_OMAP) {
+      s += "+pgmeta_omap";
+    }
+    if (flags & FLAG_PERPOOL_OMAP) {
+      s += "+perpool_omap";
     }
     return s;
   }
@@ -941,9 +948,12 @@ struct bluestore_onode_t {
   bool is_pgmeta_omap() const {
     return has_flag(FLAG_PGMETA_OMAP);
   }
+  bool is_perpool_omap() const {
+    return has_flag(FLAG_PERPOOL_OMAP);
+  }
 
-  void set_omap_flag() {
-    set_flag(FLAG_OMAP);
+  void set_omap_flags() {
+    set_flag(FLAG_OMAP | FLAG_PERPOOL_OMAP);
   }
 
   void clear_omap_flag() {
