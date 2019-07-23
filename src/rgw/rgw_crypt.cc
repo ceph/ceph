@@ -91,7 +91,7 @@ bool evp_sym_transform(CephContext* const cct,
 
   // operate!
   int written = 0;
-  ceph_assert(size <= std::numeric_limits<int>::max());
+  ceph_assert(size <= static_cast<size_t>(std::numeric_limits<int>::max()));
   if (1 != EVP_CipherUpdate(pctx.get(), out, &written, in, size)) {
     ldout(cct, 5) << "EVP: EVP_CipherUpdate failed" << dendl;
     return false;
