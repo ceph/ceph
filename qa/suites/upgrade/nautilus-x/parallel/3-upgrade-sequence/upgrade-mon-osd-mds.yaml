@@ -4,6 +4,7 @@ meta:
    upgrate in two steps
    step one ordering: mon.a, osd.0, osd.1, mds.a
    step two ordering: mon.b, mon.c, osd.2, osd.3
+   step three ordering: client.1
    ceph expected to be healthy state after each step
 upgrade-sequence:
    sequential:
@@ -42,6 +43,11 @@ upgrade-sequence:
        duration: 60
    - ceph.restart:
        daemons: [osd.8, osd.9, osd.10, osd.11]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - ceph.restart:
+       daemons: [rgw.*]
        wait-for-healthy: true
    - sleep:
        duration: 60
