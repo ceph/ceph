@@ -754,7 +754,9 @@ void PrimaryLogPG::maybe_force_recovery()
 
 bool PrimaryLogPG::check_laggy(OpRequestRef& op)
 {
-  if (!state_test(PG_STATE_LAGGY)) {
+  if (state_test(PG_STATE_WAIT)) {
+    dout(10) << __func__ << " PG is WAIT state" << dendl;
+  } else if (!state_test(PG_STATE_LAGGY)) {
     auto mnow = osd->get_mnow();
     auto ru = recovery_state.get_readable_until();
     if (mnow <= ru) {
@@ -777,7 +779,7 @@ bool PrimaryLogPG::check_laggy(OpRequestRef& op)
 
 bool PrimaryLogPG::check_laggy_requeue(OpRequestRef& op)
 {
-  if (!state_test(PG_STATE_LAGGY)) {
+  if (!state_test(PG_STATE_WAIT) && !state_test(PG_STATE_LAGGY)) {
     return true; // not laggy
   }
   dout(10) << __func__ << " not readable" << dendl;
@@ -788,16 +790,47 @@ bool PrimaryLogPG::check_laggy_requeue(OpRequestRef& op)
 
 void PrimaryLogPG::recheck_readable()
 {
+  if (!is_wait() && !is_laggy()) {
+    dout(20) << __func__ << " wasn't wait or laggy" << dendl;
+    return;
+  }
+  auto mnow = osd->get_mnow();
+  bool pub = false;
+  if (is_wait()) {
+    auto prior_readable_until_ub = recovery_state.get_prior_readable_until_ub();
+    if (mnow < prior_readable_until_ub) {
+      dout(10) << __func__ << " still wait (mnow " << mnow
+	       << " < prior_readable_until_ub " << prior_readable_until_ub
+	       << dendl;
+    } else {
+      dout(10) << __func__ << " no longer wait (mnow " << mnow
+	       << " >= prior_readable_until_ub " << prior_readable_until_ub
+	       << ")" << dendl;
+      state_clear(PG_STATE_WAIT);
+      recovery_state.clear_prior_readable_until_ub();
+      pub = true;
+    }
+  }
   if (is_laggy()) {
     auto ru = recovery_state.get_readable_until();
-    auto mnow = osd->get_mnow();
-    if (ru > mnow) {
-      dout(10) << __func__ << " no longer laggy (ru " << ru << " > mnow " << mnow
-	       << ")" << dendl;
+    if (ru == ceph::signedspan::zero()) {
+      dout(10) << __func__ << " still laggy (mnow " << mnow
+	       << ", readable_until zero)" << dendl;
+    } else if (mnow >= ru) {
+      dout(10) << __func__ << " still laggy (mnow " << mnow
+	       << " >= readable_until " << ru << ")" << dendl;
+    } else {
+      dout(10) << __func__ << " no longer laggy (mnow " << mnow
+	       << " < readable_until " << ru << ")" << dendl;
       state_clear(PG_STATE_LAGGY);
-      publish_stats_to_osd();
-      requeue_ops(waiting_for_readable);
+      pub = true;
     }
+  }
+  if (pub) {
+    publish_stats_to_osd();
+  }
+  if (!is_laggy() && !is_wait()) {
+    requeue_ops(waiting_for_readable);
   }
 }
 

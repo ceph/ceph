@@ -1959,6 +1959,11 @@ public:
     return prior_readable_until_ub;
   }
 
+  /// Reset prior intervals' readable_until upper bound (e.g., bc it passed)
+  void clear_prior_readable_until_ub() {
+    prior_readable_until_ub = ceph::signedspan::zero();
+  }
+
   void renew_lease(ceph::signedspan now) {
     bool was_min = (readable_until_ub == readable_until);
     readable_until_ub_sent = now + readable_interval;

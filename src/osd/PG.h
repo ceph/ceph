@@ -1411,6 +1411,7 @@ protected:
   bool is_premerge() const { return recovery_state.is_premerge(); }
   bool is_repair() const { return recovery_state.is_repair(); }
   bool is_laggy() const { return state_test(PG_STATE_LAGGY); }
+  bool is_wait() const { return state_test(PG_STATE_WAIT); }
 
   bool is_empty() const { return recovery_state.is_empty(); }
 
