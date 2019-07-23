@@ -1085,6 +1085,8 @@ public:
       if (--nref == 0)
 	delete this;
     }
+
+    const string& get_omap_prefix();
   };
   typedef boost::intrusive_ptr<Onode> OnodeRef;
 
