@@ -277,7 +277,7 @@ void Log::_flush(EntryVector& t, bool requeue, bool crash)
       ceph_assert((used + 1 /* '\n' */) < allocated);
 
       if (do_syslog) {
-        syslog(LOG_USER|LOG_INFO, "%s", pos);
+        syslog(LOG_USER|LOG_INFO|LOG_NOTICE, "%s", pos);
       }
 
       if (do_stderr) {
@@ -324,7 +324,7 @@ void Log::_log_message(const char *s, bool crash)
       std::cerr << "problem writing to " << m_log_file << ": " << cpp_strerror(r) << std::endl;
   }
   if ((crash ? m_syslog_crash : m_syslog_log) >= 0) {
-    syslog(LOG_USER|LOG_INFO, "%s", s);
+    syslog(LOG_USER|LOG_INFO|LOG_NOTICE, "%s", s);
   }
 
   if ((crash ? m_stderr_crash : m_stderr_log) >= 0) {

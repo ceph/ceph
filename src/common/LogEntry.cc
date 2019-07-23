@@ -57,7 +57,7 @@ int clog_type_to_syslog_level(clog_type t)
     case CLOG_VERBOSE:
       return LOG_INFO;
     case CLOG_INFO:
-      return LOG_INFO;
+      return LOG_NOTICE;
     case CLOG_WARN:
       return LOG_WARNING;
     case CLOG_ERROR:
@@ -112,7 +112,7 @@ int string_to_syslog_level(string s)
   }
   if (boost::iequals(s, "info") ||
       boost::iequals(s, "notice")) {
-    return LOG_INFO;
+    return LOG_NOTICE;
   }
   if (boost::iequals(s, "warning") ||
       boost::iequals(s, "warn")) {
