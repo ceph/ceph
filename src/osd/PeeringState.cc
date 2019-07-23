@@ -754,6 +754,20 @@ void PeeringState::on_new_interval()
 
   init_hb_stamps();
 
+  // update lease bounds for a new interval
+  auto mnow = pl->get_mnow();
+  prior_readable_until_ub = std::max(prior_readable_until_ub,
+				     readable_until_ub);
+  prior_readable_until_ub = info.history.refresh_prior_readable_until_ub(
+    mnow, prior_readable_until_ub);
+  psdout(10) << __func__ << " prior_readable_until_ub "
+	     << prior_readable_until_ub << " (mnow " << mnow << " + "
+	     << info.history.prior_readable_until_ub << ")" << dendl;
+  readable_until =
+    readable_until_ub =
+    readable_until_ub_sent =
+    readable_until_ub_from_primary = ceph::signedspan::zero();
+
   acting_readable_until_ub.clear();
   if (is_primary()) {
     acting_readable_until_ub.resize(acting.size(), ceph::signedspan::zero());
