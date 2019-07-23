@@ -8301,7 +8301,8 @@ int BlueStore::statfs(struct store_statfs_t *buf,
   return 0;
 }
 
-int BlueStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf)
+int BlueStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf,
+			   bool *out_per_pool_omap)
 {
   dout(20) << __func__ << " pool " << pool_id<< dendl;
 
@@ -8320,6 +8321,7 @@ int BlueStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf)
   _key_encode_u64(pool_id, &key_prefix);
   buf->omap_allocated = db->estimate_prefix_size(PREFIX_PERPOOL_OMAP,
 						 key_prefix);
+  *out_per_pool_omap = per_pool_omap;
 
   dout(10) << __func__ << *buf << dendl;
   return 0;
