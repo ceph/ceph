@@ -146,6 +146,10 @@ class RGWGCIOManager {
 
   deque<IO> ios;
   vector<std::vector<string> > remove_tags;
+  /* tracks the number of remaining shadow objects for a given tag in order to
+   * only remove the tag once all shadow objects have themselves been removed
+   */
+  vector<map<string, size_t> > tag_io_size;
 
 #define MAX_AIO_DEFAULT 10
   size_t max_aio{MAX_AIO_DEFAULT};
@@ -153,7 +157,8 @@ class RGWGCIOManager {
 public:
   RGWGCIOManager(CephContext *_cct, RGWGC *_gc) : cct(_cct),
                                                   gc(_gc),
-                                                  remove_tags(cct->_conf->rgw_gc_max_objs) {
+                                                  remove_tags(cct->_conf->rgw_gc_max_objs),
+                                                  tag_io_size(cct->_conf->rgw_gc_max_objs) {
     max_aio = cct->_conf->rgw_gc_max_concurrent_io;
   }
 
@@ -213,18 +218,36 @@ public:
     ios.pop_front();
   }
 
+  /* This is a request to schedule a tag removal. It will be called once when
+   * there are no shadow objects. But it will also be called for every shadow
+   * object when there are any. Since we do not want the tag to be removed
+   * until all shadow objects have been successfully removed, the scheduling
+   * will not happen until the shadow object count goes down to zero
+   */
   void schedule_tag_removal(int index, string tag) {
+    auto& ts = tag_io_size[index];
+    auto ts_it = ts.find(tag);
+    if (ts_it != ts.end()) {
+      auto& size = ts_it->second;
+      --size;
+      // wait all shadow obj delete return
+      if (size != 0)
+        return;
+
+      ts.erase(ts_it);
+    }
+
     auto& rt = remove_tags[index];
 
-    // since every element of a chain tries to add the same tag, and
-    // since chains are handled sequentially, check to make sure it's
-    // not already on the list
-    if (rt.empty() || rt.back() != tag) {
-      rt.push_back(tag);
-      if (rt.size() >= (size_t)cct->_conf->rgw_gc_max_trim_chunk) {
-	flush_remove_tags(index, rt);
-      }
+    rt.push_back(tag);
+    if (rt.size() >= (size_t)cct->_conf->rgw_gc_max_trim_chunk) {
+      flush_remove_tags(index, rt);
     }
+  }
+
+  void add_tag_io_size(int index, string tag, size_t size) {
+    auto& ts = tag_io_size[index];
+    ts.emplace(tag, size);
   }
 
   void drain_ios() {
@@ -367,6 +390,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
       if (chain.objs.empty()) {
         io_manager.schedule_tag_removal(index, info.tag);
       } else {
+        io_manager.add_tag_io_size(index, info.tag, chain.objs.size());
 	for (liter = chain.objs.begin(); liter != chain.objs.end(); ++liter) {
 	  cls_rgw_obj& obj = *liter;
 
