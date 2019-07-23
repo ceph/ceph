@@ -240,8 +240,12 @@ if(WITH_PYTHON3)
   if(WITH_PYTHON3 MATCHES "^(1|ON|YES|TRUE|Y)$")
     set(WITH_PYTHON3 "3")
   endif()
-  find_package(Python3 ${WITH_PYTHON3} REQUIRED
+  if(NOT WITH_PYTHON3 STREQUAL "3")
+    set(find_python3_exact "EXACT")
+  endif()
+  find_package(Python3 ${WITH_PYTHON3} ${find_python3_exact} REQUIRED
     COMPONENTS Interpreter Development)
+  unset(find_python3_exact)
 endif()
 
 # the major version of the python bindings as a dependency of other
