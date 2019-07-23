@@ -43,6 +43,7 @@ void frag_info_t::dump(Formatter *f) const
   f->dump_stream("mtime") << mtime;
   f->dump_unsigned("num_files", nfiles);
   f->dump_unsigned("num_subdirs", nsubdirs);
+  f->dump_unsigned("change_attr", change_attr);
 }
 
 void frag_info_t::generate_test_instances(std::list<frag_info_t*>& ls)

@@ -19,6 +19,9 @@ void dump(const ceph_file_layout& l, Formatter *f)
 void dump(const ceph_dir_layout& l, Formatter *f)
 {
   f->dump_unsigned("dir_hash", l.dl_dir_hash);
+  f->dump_unsigned("unused1", l.dl_unused1);
+  f->dump_unsigned("unused2", l.dl_unused2);
+  f->dump_unsigned("unused3", l.dl_unused3);
 }
 
 
