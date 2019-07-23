@@ -421,6 +421,7 @@ bool bluestore_blob_use_tracker_t::put(
 	if (release_units) {
           if (release_units->empty() || next_offs != pos * au_size) {
   	    release_units->emplace_back(pos * au_size, au_size);
+            next_offs = pos * au_size;
           } else {
             release_units->back().length += au_size;
           }
