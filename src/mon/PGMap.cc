@@ -808,8 +808,9 @@ void PGMapDigest::dump_pool_stats_full(
     }
     float raw_used_rate = osd_map.pool_raw_used_rate(pool_id);
     bool per_pool = use_per_pool_stats();
+    bool per_pool_omap = use_per_pool_omap_stats();
     dump_object_stat_sum(tbl, f, stat, avail, raw_used_rate, verbose, per_pool,
-			 pool);
+			 per_pool_omap, pool);
     if (f) {
       f->close_section();  // stats
       f->close_section();  // pool
@@ -891,7 +892,7 @@ void PGMapDigest::dump_cluster_stats(stringstream *ss,
 void PGMapDigest::dump_object_stat_sum(
   TextTable &tbl, ceph::Formatter *f,
   const pool_stat_t &pool_stat, uint64_t avail,
-  float raw_used_rate, bool verbose, bool per_pool,
+  float raw_used_rate, bool verbose, bool per_pool, bool per_pool_omap,
   const pg_pool_t *pool)
 {
   const object_stat_sum_t &sum = pool_stat.stats.sum;
@@ -901,7 +902,7 @@ void PGMapDigest::dump_object_stat_sum(
     raw_used_rate *= (float)(sum.num_object_copies - sum.num_objects_degraded) / sum.num_object_copies;
   }
 
-  uint64_t used_bytes = pool_stat.get_allocated_bytes(per_pool);
+  uint64_t used_bytes = pool_stat.get_allocated_bytes(per_pool, per_pool_omap);
 
   float used = 0.0;
   // note avail passed in is raw_avail, calc raw_used here.
@@ -913,7 +914,8 @@ void PGMapDigest::dump_object_stat_sum(
   }
   auto avail_res = raw_used_rate ? avail / raw_used_rate : 0;
   // an approximation for actually stored user data
-  auto stored_normalized = pool_stat.get_user_bytes(raw_used_rate, per_pool);
+  auto stored_normalized = pool_stat.get_user_bytes(raw_used_rate, per_pool,
+						    per_pool_omap);
   if (f) {
     f->dump_int("stored", stored_normalized);
     f->dump_int("objects", sum.num_objects);
@@ -932,7 +934,8 @@ void PGMapDigest::dump_object_stat_sum(
       f->dump_int("compress_bytes_used", statfs.data_compressed_allocated);
       f->dump_int("compress_under_bytes", statfs.data_compressed_original);
       // Stored by user amplified by replication
-      f->dump_int("stored_raw", pool_stat.get_user_bytes(1.0, per_pool));
+      f->dump_int("stored_raw", pool_stat.get_user_bytes(1.0, per_pool,
+							 per_pool_omap));
     }
   } else {
     tbl << stringify(byte_u_t(stored_normalized));
