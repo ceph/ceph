@@ -15,6 +15,7 @@
 
 #include <algorithm>
 #include <boost/algorithm/string/trim.hpp>
+#include "boost/date_time/posix_time/posix_time.hpp"
 #include <boost/process.hpp>
 #include <boost/tokenizer.hpp>
 #include <boost/uuid/uuid.hpp>             // uuid class
@@ -27,8 +28,10 @@
 
 #include "lazy_omap_stats_test.h"
 
+using namespace boost;
 using namespace std;
 namespace bp = boost::process;
+namespace pt = boost::posix_time;
 
 void LazyOmapStatsTest::init(const int argc, const char** argv)
 {
@@ -166,27 +169,81 @@ void LazyOmapStatsTest::create_payload()
        << endl;
 }
 
-void LazyOmapStatsTest::scrub() const
+void LazyOmapStatsTest::get_scrub_stamps(map<string,string>& scrub_stamps)
 {
-  // Use CLI because we need to block
+  string command = R"({"prefix": "pg dump", "dumpcontents": ["pgs"]})";
+  string dump_output = get_output(command);
 
-  cout << "Scrubbing" << endl;
-  error_code ec;
-  bp::ipstream is;
-  bp::system("ceph osd deep-scrub all --block", bp::std_out > is, ec);
-  if (ec) {
-    cout << "Deep scrub command failed! Error: " << ec.value() << " "
-         << ec.message() << endl;
-    exit(ec.value());
+  regex reg(R"(^(PG_STAT\s.*))"
+            "\n");
+
+  int pg_index = find_index(dump_output, reg, "PG_STAT");
+  int stamp_date_index = find_index(dump_output, reg, "LAST_DEEP_SCRUB");
+  int stamp_time_index = find_index(dump_output, reg, "DEEP_SCRUB_STAMP");
+  reg = R"(^(PG_STAT[\s\S]*))"
+        "\n\n";
+  smatch match;
+  regex_search(dump_output, match, reg);
+  auto table = match[1].str();
+  istringstream buffer(table);
+  string line;
+  bool header = true;
+  while (std::getline(buffer, line)) {
+    if (header) {
+      header = false;
+      continue;
+    }
+    boost::char_separator<char> sep{" "};
+    boost::tokenizer<boost::char_separator<char>> tok(line, sep);
+    vector<string> tokens(tok.begin(), tok.end());
+    //cout << tokens.at(pg_index) << " " << tokens.at(stamp_date_index)
+    //     << " "  << tokens.at(stamp_time_index) << endl;
+    string date_time_stamp = tokens.at(stamp_date_index) + " "
+                             + tokens.at(stamp_time_index);
+    scrub_stamps.insert({tokens.at(pg_index), date_time_stamp});
   }
-  cout << is.rdbuf() << endl;
+
+}
+
+void LazyOmapStatsTest::wait_for_scrub_stamps(map<string,string>& intial_scrub_stamps)
+{
+  while (!intial_scrub_stamps.empty())
+  {
+    map<string,string> scrub_stamps;
+    get_scrub_stamps(scrub_stamps);
+    for (auto it = intial_scrub_stamps.begin();
+         it != intial_scrub_stamps.end();) {
+      auto initial_ts = pt::time_from_string(it->second);
+      auto current_ts = pt::time_from_string(scrub_stamps.at(it->first));
+      if (current_ts > initial_ts) {
+        cout << "Scrub stamp updated: " << it->first << endl;
+        intial_scrub_stamps.erase(it++);
+      } else {
+        ++it;
+      }
+    }
+    this_thread::sleep_for(chrono::milliseconds(500));
+  }
+}
+
+void LazyOmapStatsTest::scrub()
+{
+  cout << "Getting pre-scrub timestamps" << endl;
+  map<string,string> scrub_stamps;
+  get_scrub_stamps(scrub_stamps);
+  cout << "Scrubbing" << endl;
+  string command = R"({"prefix": "osd deep-scrub", "who": "all", "target": ["mgr", ""]})";
+  string dump_output = get_output(command);
+  cout << dump_output << endl;
+  cout << "Waiting for updated scrub timestamps" << endl;
+  wait_for_scrub_stamps(scrub_stamps);
 }
 
 const int LazyOmapStatsTest::find_matches(string& output, regex& reg) const
 {
   sregex_iterator cur(output.begin(), output.end(), reg);
   uint x = 0;
-  for (auto end = std::sregex_iterator(); cur != end; ++cur) {
+  for (auto end = sregex_iterator(); cur != end; ++cur) {
     cout << (*cur)[1].str() << endl;
     x++;
   }
@@ -225,9 +282,9 @@ void LazyOmapStatsTest::check_one()
   cout << truncated_output << endl;
   reg = regex(
       "\n"
-      R"(([0-9,s].*\s)" +
+      R"(([0-9,s].*?\s)" +
       to_string(conf.keys) +
-      R"(\s.*))"
+      R"(\s.*?))"
       "\n");
 
   cout << "Checking number of keys " << conf.keys << endl;
@@ -240,9 +297,9 @@ void LazyOmapStatsTest::check_one()
 
   reg = regex(
       "\n"
-      R"(([0-9,s].*\s)" +
+      R"(([0-9,s].*?\s)" +
       to_string(conf.payload_size * conf.keys) +
-      R"(\s.*))"
+      R"(\s.*?))"
       "\n");
   cout << "Checking number of bytes "
        << conf.payload_size * conf.keys << endl;
@@ -406,7 +463,7 @@ void LazyOmapStatsTest::check_pg_dump_summary()
 
   reg =
       "\n"
-      R"((sum\s.*))"
+      R"((sum\s.*?))"
       "\n";
   smatch match;
   regex_search(dump_output, match, reg);
@@ -464,7 +521,7 @@ void LazyOmapStatsTest::check_pg_dump_pools()
       "\n"
       R"(()" +
       pool_id +
-      R"(\s.*))"
+      R"(\s.*?))"
       "\n";
   smatch match;
   regex_search(dump_output, match, reg);
@@ -486,11 +543,11 @@ void LazyOmapStatsTest::check_pg_ls()
   string dump_output = get_output(command);
   cout << dump_output << endl;
 
-  regex reg(R"(^(PG\s.*))"
+  regex reg(R"(^(PG_STAT\s.*))"
             "\n");
   index_t indexes = get_indexes(reg, dump_output);
 
-  reg = R"(^(PG[\s\S]*))"
+  reg = R"(^(PG_STAT[\s\S]*?))"
         "\n\n";
   smatch match;
   regex_search(dump_output, match, reg);

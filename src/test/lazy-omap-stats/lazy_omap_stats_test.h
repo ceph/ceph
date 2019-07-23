@@ -16,7 +16,7 @@
 #define CEPH_LAZY_OMAP_STATS_TEST_H
 
 #include <map>
-#include <regex>
+#include <boost/regex.hpp>
 #include <string>
 
 #include "include/rados/librados.hpp"
@@ -50,16 +50,18 @@ class LazyOmapStatsTest
   const std::string get_name() const;
   void create_payload();
   void write_many(const uint how_many);
-  void scrub() const;
-  const int find_matches(std::string& output, std::regex& reg) const;
+  void get_scrub_stamps(std::map<std::string,std::string>& scrub_stamps);
+  void wait_for_scrub_stamps(std::map<std::string,std::string>& intial_scrub_stamps);
+  void scrub();
+  const int find_matches(std::string& output, boost::regex& reg) const;
   void check_one();
-  const int find_index(std::string& haystack, std::regex& needle,
+  const int find_index(std::string& haystack, boost::regex& needle,
                        std::string label) const;
   const uint tally_column(const uint omap_bytes_index,
                           const std::string& table, bool header) const;
   void check_column(const int index, const std::string& table,
                     const std::string& type, bool header = true) const;
-  index_t get_indexes(std::regex& reg, std::string& output) const;
+  index_t get_indexes(boost::regex& reg, std::string& output) const;
   const std::string get_pool_id(std::string& pool);
   void check_pg_dump();
   void check_pg_dump_summary();
