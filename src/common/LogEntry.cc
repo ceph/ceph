@@ -32,6 +32,8 @@ clog_type LogEntry::str_to_level(std::string const &str)
 
   if (level_str == "debug") {
     return CLOG_DEBUG;
+  } else if (level_str == "verbose") {
+    return CLOG_VERBOSE;
   } else if (level_str == "info") {
     return CLOG_INFO;
   } else if (level_str == "sec") {
@@ -52,6 +54,8 @@ int clog_type_to_syslog_level(clog_type t)
   switch (t) {
     case CLOG_DEBUG:
       return LOG_DEBUG;
+    case CLOG_VERBOSE:
+      return LOG_INFO;
     case CLOG_INFO:
       return LOG_INFO;
     case CLOG_WARN:
@@ -69,42 +73,60 @@ int clog_type_to_syslog_level(clog_type t)
 clog_type string_to_clog_type(const string& s)
 {
   if (boost::iequals(s, "debug") ||
-      boost::iequals(s, "dbg"))
+      boost::iequals(s, "dbg")) {
     return CLOG_DEBUG;
+  }
+  if (boost::iequals(s, "verbose") ||
+      boost::iequals(s, "verb")) {
+    return CLOG_VERBOSE;
+  }
   if (boost::iequals(s, "info") ||
-      boost::iequals(s, "inf"))
+      boost::iequals(s, "inf")) {
     return CLOG_INFO;
+  }
   if (boost::iequals(s, "warning") ||
       boost::iequals(s, "warn") ||
-      boost::iequals(s, "wrn"))
+      boost::iequals(s, "wrn")) {
     return CLOG_WARN;
+  }
   if (boost::iequals(s, "error") ||
-      boost::iequals(s, "err"))
+      boost::iequals(s, "err")) {
     return CLOG_ERROR;
+  }
   if (boost::iequals(s, "security") ||
-      boost::iequals(s, "sec"))
+      boost::iequals(s, "sec")) {
     return CLOG_SEC;
+  }
 
   return CLOG_UNKNOWN;
 }
 
 int string_to_syslog_level(string s)
 {
-  if (boost::iequals(s, "debug"))
+  if (boost::iequals(s, "debug")) {
     return LOG_DEBUG;
-  if (boost::iequals(s, "info") ||
-      boost::iequals(s, "notice"))
+  }
+  if (boost::iequals(s, "verbose") ||
+      boost::iequals(s, "verb")) {
     return LOG_INFO;
+  }
+  if (boost::iequals(s, "info") ||
+      boost::iequals(s, "notice")) {
+    return LOG_INFO;
+  }
   if (boost::iequals(s, "warning") ||
-      boost::iequals(s, "warn"))
+      boost::iequals(s, "warn")) {
     return LOG_WARNING;
+  }
   if (boost::iequals(s, "error") ||
-      boost::iequals(s, "err"))
+      boost::iequals(s, "err")) {
     return LOG_ERR;
+  }
   if (boost::iequals(s, "crit") ||
       boost::iequals(s, "critical") ||
-      boost::iequals(s, "emerg"))
+      boost::iequals(s, "emerg")) {
     return LOG_CRIT;
+  }
 
   // err on the side of noise!
   return LOG_DEBUG;
@@ -162,6 +184,8 @@ string clog_type_to_string(clog_type t)
   switch (t) {
     case CLOG_DEBUG:
       return "debug";
+    case CLOG_VERBOSE:
+      return "verbose";
     case CLOG_INFO:
       return "info";
     case CLOG_WARN:

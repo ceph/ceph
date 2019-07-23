@@ -91,6 +91,20 @@ public:
         ceph_abort();
     }
   }
+
+  OstreamTemp verbose() {
+    return OstreamTemp(CLOG_VERBOSE, this);
+  }
+  void verbose(std::stringstream &s) {
+    do_log(CLOG_VERBOSE, s);
+  }
+  OstreamTemp verb() {
+    return verbose();
+  }
+  void verb(std::stringstream &s) {
+    verbose(s);
+  }
+
   OstreamTemp info() {
     return OstreamTemp(CLOG_INFO, this);
   }

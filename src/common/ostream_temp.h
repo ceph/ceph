@@ -11,6 +11,8 @@ typedef enum {
   CLOG_SEC = 2,
   CLOG_WARN = 3,
   CLOG_ERROR = 4,
+  // VERBOSE is actually to be an intermediate state between DEBUG and INFO
+  CLOG_VERBOSE = 5,
   CLOG_UNKNOWN = -1,
 } clog_type;
 

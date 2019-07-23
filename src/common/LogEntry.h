@@ -148,6 +148,8 @@ inline std::ostream& operator<<(std::ostream& out, const clog_type t)
   switch (t) {
   case CLOG_DEBUG:
     return out << "[DBG]";
+  case CLOG_VERBOSE:
+    return out << "[VERB]";
   case CLOG_INFO:
     return out << "[INF]";
   case CLOG_SEC:
