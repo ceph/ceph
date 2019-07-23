@@ -840,6 +840,7 @@ void PGMapDigest::dump_cluster_stats(stringstream *ss,
     f->dump_float("total_used_raw_ratio", osd_sum.statfs.get_used_raw_ratio());
     f->dump_unsigned("num_osds", osd_sum.num_osds);
     f->dump_unsigned("num_per_pool_osds", osd_sum.num_per_pool_osds);
+    f->dump_unsigned("num_per_pool_omap_osds", osd_sum.num_per_pool_omap_osds);
     f->close_section();
     f->open_object_section("stats_by_class");
     for (auto& i : osd_sum_by_class) {
