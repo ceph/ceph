@@ -18,7 +18,7 @@ export class PoolPageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.index)
   exist(name: string, oughtToBePresent = true): promise.Promise<any> {
-    return PageHelper.getTableCellByContent(name).then((elem) => {
+    return this.getTableCellByContent(name).then((elem) => {
       const waitFn = oughtToBePresent ? EC.visibilityOf(elem) : EC.invisibilityOf(elem);
       return browser.wait(waitFn, Helper.TIMEOUT).catch(() => {
         const visibility = oughtToBePresent ? 'invisible' : 'visible';
@@ -53,7 +53,7 @@ export class PoolPageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.index)
   delete(name: string): promise.Promise<any> {
-    return PoolPageHelper.getTableCellByContent(name).then((tableCell: ElementFinder) => {
+    return this.getTableCellByContent(name).then((tableCell: ElementFinder) => {
       return tableCell.click().then(() => {
         return $('.table-actions button.dropdown-toggle') // open submenu
           .click()
@@ -65,7 +65,7 @@ export class PoolPageHelper extends PageHelper {
                 browser
                   .wait(() => EC.visibilityOf(getConfirmationCheckbox()), Helper.TIMEOUT)
                   .then(() => {
-                    PageHelper.moveClick(getConfirmationCheckbox()).then(() => {
+                    this.moveClick(getConfirmationCheckbox()).then(() => {
                       return element(by.cssContainingText('button', 'Delete Pool')).click(); // Click Delete item
                     });
                   });
