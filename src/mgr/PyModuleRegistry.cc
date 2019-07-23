@@ -417,7 +417,7 @@ void PyModuleRegistry::handle_config(const std::string &k, const std::string &v)
   std::lock_guard l(module_config.lock);
 
   if (!v.empty()) {
-    dout(4) << "Loaded module_config entry " << k << ":" << v << dendl;
+    dout(10) << "Loaded module_config entry " << k << ":" << v << dendl;
     module_config.config[k] = v;
   } else {
     module_config.config.erase(k);

@@ -520,7 +520,7 @@ void Mgr::handle_mon_map()
 
 bool Mgr::ms_dispatch2(const ref_t<Message>& m)
 {
-  dout(4) << *m << dendl;
+  dout(10) << *m << dendl;
   std::lock_guard l(lock);
 
   switch (m->get_type()) {
