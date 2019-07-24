@@ -209,6 +209,17 @@ public:
    */
   virtual int create_and_open(std::ostream &out, const std::vector<ColumnFamily>& new_cfs = {}) = 0;
 
+  /**
+   * Open database in read-only mode.
+   *
+   * It is similar to \ref open but database can only be read from, not written to.
+   *
+   * Params:
+   *   out - textual representation of error
+   *   options - column families specific options
+   * Result:
+   *   0 - success, <0 error code
+   */
   virtual int open_read_only(std::ostream &out, const std::vector<ColumnFamily>& options = {}) {
     return -ENOTSUP;
   }
@@ -222,7 +233,7 @@ public:
    * 1) mono column family
    * Tightly bound to single prefix (P) value.
    * Name of column family is P.
-   * Only keys with prefix P are all allowed.
+   * Only keys with prefix P are allowed.
    * Merge operator (if exists) must be named P.
    *
    * 2) regular column family
@@ -252,7 +263,7 @@ public:
    * Result:
    *   0 - success, <0 - db does not support column families
    */
-  virtual int column_family_list(vector<std::string>& cf_names)
+  virtual int column_family_list(std::vector<std::string>& cf_names)
   { cf_names.clear(); return -1; }
 
   /**
@@ -291,8 +302,8 @@ public:
    * @ingroup column_family
    * Get handle to column family
    *
-   * This works properly only if column family names cf_name exists.
-   * Note: If requested for handle to
+   * This works properly only if column family \ref cf_name exists.
+   * Note: Name for default column family is "default".
    *
    * Params:
    * - cf_name name of column family
@@ -302,16 +313,54 @@ public:
   virtual ColumnFamilyHandle column_family_handle(const std::string& cf_name) const
   { ceph_abort_msg("Not implemented"); return ColumnFamilyHandle(); }
 
+  /**
+   * @ingroup column_family
+   * Compact database
+   *
+   * Executes compaction of slice of single column family.
+   * Only one \ref prefix can be compacted at once.
+   * Function blocks until compaction finishes.
+   * To compact entire column family provide "" to \ref prefix, \ref start and \ref end.
+   * To compact entire database indiscriminately use \ref KeyValueDB::compact.
+   *
+   * Params:
+   * - cf_name name of column family
+   * - prefix key prefix to operate
+   * - start low end of range to compact
+   * - end high end of range to compact
+   * Result:
+   *   0 - success, <0 error code
+   */
   virtual int column_family_compact(const std::string& cf_name,
-                            const string& prefix,
-                            const string& start,
-                            const string& end)
+                            const std::string& prefix,
+                            const std::string& start,
+                            const std::string& end)
   { ceph_abort_msg("Not implemented"); return 0; }
 
+  /**
+   * @ingroup column_family
+   * Compact database in background
+   *
+   * Schedules compaction of slice of single column family. Does not block.
+   * Only one \ref prefix can be scheduled in single call, but there is
+   * no limit against scheduling multiple compactions.
+   * To schedule compaction of entire column family provide "" to \ref prefix,
+   * \ref start and \ref end.
+   * To schedule compation of entire database indiscriminately
+   * use \ref KeyValueDB::compact_async.
+   *
+   * Params:
+   * - cf_name name of column family
+   * - prefix key prefix to operate
+   * - start low end of range to compact
+   * - end high end of range to compact
+   * Result:
+   *   0 - success, <0 error code
+   */
   virtual int column_family_compact_async(const std::string& cf_name,
-                                  const string& prefix,
-                                  const string& start,
-                                  const string& end)
+                                  const std::string& prefix,
+                                  const std::string& start,
+                                  const std::string& end)
   { ceph_abort_msg("Not implemented"); return 0; }
 
   /// Try to repair K/V database. leveldb and rocksdb require that database must be not opened.
@@ -384,8 +433,8 @@ public:
       return "";
     }
     virtual ceph::buffer::list value() = 0;
-    virtual bufferptr value_as_ptr() {
-      bufferlist bl = value();
+    virtual ceph::buffer::ptr value_as_ptr() {
+      ceph::buffer::list bl = value();
       if (bl.length() == 1) {
         return *bl.buffers().begin();
       } else if (bl.length() == 0) {

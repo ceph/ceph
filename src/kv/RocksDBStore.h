@@ -171,20 +171,28 @@ public:
   int column_family_create(const std::string& name, const std::string& options) override;
   int column_family_delete(const std::string& name) override;
   KeyValueDB::ColumnFamilyHandle column_family_handle(const std::string& cf_name) const override;
-  int column_family_compact(const std::string& cf_name, const string& prefix, const string& start, const string& end) override;
-  int column_family_compact_async(const std::string& cf_name, const string& prefix, const string& start, const string& end) override;
+  int column_family_compact(
+		  const std::string& cf_name,
+		  const std::string& prefix,
+		  const std::string& start,
+		  const std::string& end) override;
+  int column_family_compact_async(
+		  const std::string& cf_name,
+		  const std::string& prefix,
+		  const std::string& start,
+		  const std::string& end) override;
 
 private:
-  int _open(ostream &out, bool read_only, const std::vector<ColumnFamily>& options);
+  int _open(std::ostream &out, bool read_only, const std::vector<ColumnFamily>& options);
   std::shared_ptr<rocksdb::MergeOperator> cf_get_merge_operator(const std::string& prefix) const;
   rocksdb::ColumnFamilyHandle* cf_get_mono_handle(const std::string& cf_name) const;
   rocksdb::ColumnFamilyHandle* cf_get_handle(const std::string& cf_name) const;
-  bool cf_check_mode(rocksdb::ColumnFamilyHandle* &cf, const string &prefix) const;
+  bool cf_check_mode(rocksdb::ColumnFamilyHandle* &cf, const std::string &prefix) const;
   std::pair<std::string, ColumnFamilyHandle> cf_get_by_rocksdb_ID(uint32_t ID) const;
   int cf_create(const std::string& name, const std::string& options);
   KeyValueDB::ColumnFamilyHandle cf_wrap_handle(rocksdb::ColumnFamilyHandle*) const;
-  int cf_compact(rocksdb::ColumnFamilyHandle* cf, const string& start, const string& end);
-  int cf_compact_async(rocksdb::ColumnFamilyHandle* cf, const string& start, const string& end);
+  int cf_compact(rocksdb::ColumnFamilyHandle* cf, const std::string& start, const std::string& end);
+  int cf_compact_async(rocksdb::ColumnFamilyHandle* cf, const std::string& start, const std::string& end);
 
   rocksdb::Options rocksdb_options;
   struct ColumnFamilyData;
@@ -210,8 +218,8 @@ public:
     const std::string &property,
     uint64_t *out) final;
 
-  int64_t estimate_prefix_size(const string& prefix,
-			       const string& key_prefix,
+  int64_t estimate_prefix_size(const std::string& prefix,
+			       const std::string& key_prefix,
                                ColumnFamilyHandle cfh = ColumnFamilyHandle{}) override;
 
   class RocksDBTransactionImpl : public KeyValueDB::TransactionImpl {
@@ -288,13 +296,12 @@ public:
     KeyValueDB::ColumnFamilyHandle cf_handle,
     const std::string &prefix,
     const std::set<std::string> &keys,
-    std::map<std::string, bufferlist> *out) override;
+    std::map<std::string, ceph::bufferlist> *out) override;
   int get(
     KeyValueDB::ColumnFamilyHandle cf_handle,
-    const string &prefix,
-    const string &key,
-    bufferlist *out
-    ) override;
+    const std::string &prefix,
+    const std::string &key,
+    ceph::bufferlist *out) override;
 
   class RocksDBWholeSpaceIteratorImpl :
     public KeyValueDB::WholeSpaceIteratorImpl {
@@ -360,7 +367,7 @@ public:
   virtual int64_t get_cache_usage() const override {
     return static_cast<int64_t>(bbt_opts.block_cache->GetUsage());
   }
-  uint64_t get_estimated_size(map<string,uint64_t> &extra) override;
+  uint64_t get_estimated_size(std::map<std::string,uint64_t> &extra) override;
   int set_cache_size(uint64_t s) override {
     cache_size = s;
     set_cache_flag = true;
