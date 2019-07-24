@@ -6351,6 +6351,9 @@ int RGWRados::Object::Read::prepare(optional_yield y)
   if (r < 0) {
     return r;
   }
+  if (params.target_obj) {
+    *params.target_obj = state.obj;
+  }
   if (params.attrs) {
     *params.attrs = astate->attrset;
     if (cct->_conf->subsys.should_gather<ceph_subsys_rgw, 20>()) {
