@@ -24,6 +24,7 @@ import testtools
 
 import ceph_detect_init
 from ceph_detect_init import alpine
+from ceph_detect_init import alt
 from ceph_detect_init import arch
 from ceph_detect_init import centos
 from ceph_detect_init import debian
@@ -45,6 +46,19 @@ class TestCephDetectInit(testtools.TestCase):
 
     def test_alpine(self):
         self.assertEqual('openrc', alpine.choose_init())
+
+    def test_alt(self):
+        with mock.patch.multiple('os.path',
+                                 isdir=lambda x: x == '/run/systemd/system'):
+            self.assertEqual('systemd', alt.choose_init())
+
+        with mock.patch.multiple('os.path',
+                                 isdir=lambda x: False,
+                                 isfile=lambda x: x == '/sbin/init',
+                                 islink=lambda x: x != '/sbin/init'):
+            with mock.patch.multiple('subprocess',
+                                     call=lambda *args, **kwargs: 1):
+                self.assertEqual('sysvinit', alt.choose_init())
 
     def test_arch(self):
         self.assertEqual('systemd', arch.choose_init())
@@ -222,6 +236,7 @@ class TestCephDetectInit(testtools.TestCase):
         self.assertEqual(rhel, g('redhat', use_rhceph=True))
         self.assertEqual(gentoo, g('gentoo'))
         self.assertEqual(centos, g('virtuozzo'))
+        self.assertEqual(alt, g('alt'))
 
     def test_normalized_distro_name(self):
         n = ceph_detect_init._normalized_distro_name
@@ -252,6 +267,10 @@ class TestCephDetectInit(testtools.TestCase):
         self.assertEqual('gentoo', n('Exherbo'))
         self.assertEqual('gentoo', n('exherbo'))
         self.assertEqual('virtuozzo', n('Virtuozzo Linux'))
+        self.assertEqual('alt', n('ALTLinux'))
+        self.assertEqual('alt', n('ALT'))
+        self.assertEqual('alt', n('BaseALT'))
+        self.assertEqual('alt', n('ALT Linux'))
 
     @mock.patch('os.path.isfile', lambda path: False)
     @mock.patch('platform.system', lambda: 'Linux')
