@@ -16,8 +16,8 @@ die()
 
 PLATFORM=$(lsb_release -is)
 
-TMPFILE1=$(mktemp --tmpdir depA.XXXXXX)|| exit 1
-TMPFILE2=$(`mktemp --tmpdir depB.XXXXXX) || exit 2
+TMPFILE1=$(mktemp --tmpdir depA.XXXXXX) || exit 1
+TMPFILE2=$(mktemp --tmpdir depB.XXXXXX) || exit 2
 TMPFILE3=$(mktemp --tmpdir depB.XXXXXX) || exit 3
 
 cleanup() {
@@ -109,7 +109,7 @@ echo "Checking licenses ... " >&2
 #  Read package list and generate report
 sort $TMPFILE1 | uniq > $TMPFILE2
 
-rm $TMPFILE1
+rm "$TMPFILE1"
 echo -e "\nPackage Dependencies:\n"
 while read -r PACKAGE
 do
