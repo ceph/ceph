@@ -240,8 +240,12 @@ if(WITH_PYTHON3)
   if(WITH_PYTHON3 MATCHES "^(1|ON|YES|TRUE|Y)$")
     set(WITH_PYTHON3 "3")
   endif()
-  find_package(Python3 ${WITH_PYTHON3} REQUIRED
+  if(NOT WITH_PYTHON3 STREQUAL "3")
+    set(find_python3_exact "EXACT")
+  endif()
+  find_package(Python3 ${WITH_PYTHON3} ${find_python3_exact} REQUIRED
     COMPONENTS Interpreter Development)
+  unset(find_python3_exact)
 endif()
 
 # the major version of the python bindings as a dependency of other
@@ -250,6 +254,17 @@ if(WITH_PYTHON2)
   set(PY_BINDING_INFIX 2)
 else()
   set(PY_BINDING_INFIX 3)
+endif()
+# use python2 by default for python bindings, tools and tests, before
+# switching to python3
+# Python_EXECUTABLE` can be set by `find_package(Python ...)` also. and we do
+# call `find_package(Python ...)` in `ceph/CMakeLists.txt`. but we do so before
+# `add_subdirectory(src)` where `Python_EXECUTABLE` is set. so it's safe to
+# use this variable name and call `find_package(Python ...)`.
+if(WITH_PYTHON2)
+  set(Python_EXECUTABLE ${Python2_EXECUTABLE})
+else()
+  set(Python_EXECUTABLE ${Python3_EXECUTABLE})
 endif()
 
 # sort out which allocator to use
