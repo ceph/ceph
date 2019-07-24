@@ -3,6 +3,5 @@ overrides:
     frontend: civetweb
 tasks:
   - sequential:
-    - rgw: [client.1]
-    - print: "**** done rgw 4-final-workload"
     - rgw-final-workload
+    - print: "**** done rgw 4-final-workload"

@@ -3,7 +3,7 @@ tasks:
     osd.8:
     client.0:
 - ceph.restart:
-    daemons: [mon.c, osd.8, osd.9, osd.10, osd.11]
+    daemons: [mon.c, osd.8, osd.9, osd.10, osd.11, rgw.*]
     wait-for-healthy: false
     wait-for-osds-up: true
 - exec:
