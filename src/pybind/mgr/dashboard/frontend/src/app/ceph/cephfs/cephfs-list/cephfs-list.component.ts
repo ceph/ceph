@@ -3,6 +3,7 @@ import { Component, OnInit } from '@angular/core';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 
 import { CephfsService } from '../../../shared/api/cephfs.service';
+import { CellTemplate } from '../../../shared/enum/cell-template.enum';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
@@ -34,7 +35,8 @@ export class CephfsListComponent implements OnInit {
       {
         name: this.i18n('Enabled'),
         prop: 'mdsmap.enabled',
-        flexGrow: 1
+        flexGrow: 1,
+        cellTransformation: CellTemplate.checkIcon
       }
     ];
   }
