@@ -1498,7 +1498,6 @@ private:
   double daily_loadavg;
   ceph::mono_time startup_time;
 
-  const uint32_t hb_avg = 60;
   // Track ping repsonse times using vector as a circular buffer
   // MUST BE A POWER OF 2
   const uint32_t hb_vector_size = 16;
