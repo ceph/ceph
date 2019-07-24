@@ -129,6 +129,7 @@ add_library(rgw_common OBJECT ${librgw_common_srcs})
 
 target_include_directories(rgw_common SYSTEM PUBLIC "services")
 target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/dmclock/support/src")
+target_include_directories(rgw_common PUBLIC "${CMAKE_SOURCE_DIR}/src/fmt/include")
 
 if(WITH_LTTNG)
   # rgw/rgw_op.cc includes "tracing/rgw_op.h"
