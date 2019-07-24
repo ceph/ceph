@@ -447,6 +447,7 @@ Recommends:	ceph-mgr-dashboard = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-diskprediction-local = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-diskprediction-cloud = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-rook = %{_epoch_prefix}%{version}-%{release}
+Recommends:	ceph-mgr-k8sevents = %{_epoch_prefix}%{version}-%{release}
 Recommends:	ceph-mgr-ssh = %{_epoch_prefix}%{version}-%{release}
 Recommends:	python%{_python_buildid}-influxdb
 %endif
@@ -537,6 +538,18 @@ Requires:       python%{_python_buildid}-kubernetes
 %description mgr-rook
 ceph-mgr-rook is a ceph-mgr plugin for orchestration functions using
 a Rook backend.
+
+%package mgr-k8sevents
+BuildArch:      noarch
+Summary:        Ceph Manager plugin to orchestrate ceph-events to kubernetes' events API
+%if 0%{?suse_version}
+Group:          System/Filesystems
+%endif
+Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
+Requires:       python%{_python_buildid}-kubernetes
+%description mgr-k8sevents
+ceph-mgr-k8sevents is a ceph-mgr plugin that sends every ceph-events
+to kubernetes' events API
 
 %package mgr-ssh
 Summary:        ceph-mgr ssh module
@@ -1642,6 +1655,19 @@ if [ $1 -eq 1 ] ; then
 fi
 
 %postun mgr-rook
+if [ $1 -eq 1 ] ; then
+    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
+fi
+
+%files mgr-k8sevents
+%{_datadir}/ceph/mgr/k8sevents
+
+%post mgr-k8sevents
+if [ $1 -eq 1 ] ; then
+    /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
+fi
+
+%postun mgr-k8sevents
 if [ $1 -eq 1 ] ; then
     /usr/bin/systemctl try-restart ceph-mgr.target >/dev/null 2>&1 || :
 fi
