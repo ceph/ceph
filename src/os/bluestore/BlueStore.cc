@@ -8579,7 +8579,7 @@ void BlueStore::_kv_finalize_thread()
 }
 
 bluestore_deferred_op_t *BlueStore::_get_deferred_op(
-  TransContext *txc, OnodeRef o)
+  TransContext *txc)
 {
   if (!txc->deferred_txn) {
     txc->deferred_txn = new bluestore_deferred_transaction_t;
@@ -9469,7 +9469,7 @@ void BlueStore::_do_write_small(
 	    if (b_len <= prefer_deferred_size) {
 	      dout(20) << __func__ << " deferring small 0x" << std::hex
 		       << b_len << std::dec << " unused write via deferred" << dendl;
-	      bluestore_deferred_op_t *op = _get_deferred_op(txc, o);
+	      bluestore_deferred_op_t *op = _get_deferred_op(txc);
 	      op->op = bluestore_deferred_op_t::OP_WRITE;
 	      b->get_blob().map(
 		b_off, b_len,
@@ -9980,7 +9980,7 @@ int BlueStore::_do_alloc_write(
       if (l->length() <= prefer_deferred_size.load()) {
 	dout(20) << __func__ << " deferring small 0x" << std::hex
 		 << l->length() << std::dec << " write via deferred" << dendl;
-	bluestore_deferred_op_t *op = _get_deferred_op(txc, o);
+	bluestore_deferred_op_t *op = _get_deferred_op(txc);
 	op->op = bluestore_deferred_op_t::OP_WRITE;
 	int r = b->get_blob().map(
 	  b_off, l->length(),
