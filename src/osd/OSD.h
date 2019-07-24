@@ -1634,7 +1634,6 @@ private:
   utime_t last_heartbeat_resample;   ///< last time we chose random peers in waiting-for-healthy state
   double daily_loadavg;
 
-  const uint32_t hb_avg = 60;
   // Track ping repsonse times using vector as a circular buffer
   // MUST BE A POWER OF 2
   const uint32_t hb_vector_size = 16;

@@ -5539,6 +5539,10 @@ std::vector<Option> get_global_options() {
     Option("debug_disable_randomized_ping", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description("Disable heartbeat ping randomization for testing purposes"),
+
+    Option("debug_heartbeat_testing_span", Option::TYPE_INT, Option::LEVEL_DEV)
+    .set_default(0)
+    .set_description("Override 60 second periods for testing only"),
   });
 }
 
