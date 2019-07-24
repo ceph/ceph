@@ -53,10 +53,11 @@ class Plan:
         self.name = name
         self.initial = ms
         self.pools = pools
-
+        
         self.osd_weights = {}
         self.compat_ws = {}
         self.inc = ms.osdmap.new_incremental()
+        self.message = None
 
     def final_state(self):
         self.inc.set_osd_reweights(self.osd_weights)
@@ -942,7 +943,9 @@ class Module(MgrModule):
             left -= did
             if left <= 0:
                 break
-        self.log.info('prepared %d/%d changes' % (total_did, max_iterations))
+        msg = 'prepared %d/%d changes' % (total_did, max_iterations)
+        plan.message = msg
+        self.log.info(msg)
         if total_did == 0:
             return -errno.EALREADY, 'Unable to find further optimization, ' \
                                     'or pool(s)\' pg_num is decreasing, ' \
@@ -1129,7 +1132,9 @@ class Module(MgrModule):
             fudge = .001
 
         if best_pe.score < pe.score + fudge:
-            self.log.info('Success, score %f -> %f', pe.score, best_pe.score)
+            msg = 'Success, score %f -> %f' % (pe.score, best_pe.score)
+            plan.message = msg
+            self.log.info(msg)
             plan.compat_ws = best_ws
             for osd, w in six.iteritems(best_ow):
                 if w != orig_osd_weight[osd]:
@@ -1246,7 +1251,6 @@ class Module(MgrModule):
 
         # upmap
         incdump = plan.inc.dump()
-        self.log.info("JR {0}".format(json.dumps(incdump)))
         for pgid in incdump.get('old_pg_upmap_items', []):
             self.log.info('ceph osd rm-pg-upmap-items %s', pgid)
             result = CommandResult('foo')
@@ -1280,22 +1284,7 @@ class Module(MgrModule):
                 'id': osdlist,
             }), 'foo')
             commands.append(result)
-            # Create Progress Event if flag
-            if not flag:
-                ev=self.remote('progress', 'construct_pg_recovery_event', 
-                        message='Balancer upmap',
-                        refs=[("Balancer", "upmap")],
-                        which_pgs=affected_pgs,
-                        evacuate_osds=evacuate_osds,
-                        start_epoch=self.get_osdmap().get_epoch()
-                        )
-                self.log.info("JR line 1292")
-                ev.pg_update(self.get("pg_dump"), self.log)
-                self.log.info("JR line 1294")
-                self.remote('progress', 'add_event', ev)
-                self.log.info("JR 1296")
-                flag = True
-    
+                
         # wait for commands
         self.log.debug('commands %s' % commands)
         for result in commands:
@@ -1303,5 +1292,24 @@ class Module(MgrModule):
             if r != 0:
                 self.log.error('execute error: r = %d, detail = %s' % (r, outs))
                 return r, outs
+        plan.mode = self.get_module_option('mode')
+        if plan.mode == 'upmap':
+            ev=self.remote('progress', 'construct_pg_recovery_event', 
+                        message= "Balancer upmap %s" % plan.message,
+                        refs=[("Balancer", "upmap")],
+                        which_pgs=affected_pgs,
+                        evacuate_osds=evacuate_osds,
+                        start_epoch=self.get_osdmap().get_epoch()
+                        )
+            ev.pg_update(self.get("pg_dump"), self.log)
+            self.remote('progress', 'add_event', ev)
+        elif plan.mode == 'crush-compat':
+            old_osdmap = plan.initial.osdmap
+            new_osdmap = self.get_osdmap()
+            old_dump = plan.initial.osdmap_dump
+            self.remote('progress', 'balancer_crush_compat', old_osdmap,
+                    old_dump, new_osdmap, plan.message)
+        else:
+            self.log.error("plan.mode is not upmap or crush-compat")
         self.log.debug('done')
         return 0, ''
