@@ -2530,15 +2530,19 @@ struct pool_stat_t {
     }
     return allocated_bytes;
   }
-  uint64_t get_user_bytes(float raw_used_rate, bool per_pool,
+  uint64_t get_user_bytes(float raw_used_rate, ///< space amp factor
+			  bool per_pool,
 			  bool per_pool_omap) const {
+    // NOTE: we need the space amp factor so that we can work backwards from
+    // the raw utilization to the amount of data that the user actually stored.
     uint64_t user_bytes;
     if (per_pool) {
       user_bytes = raw_used_rate ? store_stats.data_stored / raw_used_rate : 0;
     } else {
-      // legacy mode, use numbers from 'stats'
-      user_bytes = stats.sum.num_bytes +
-	stats.sum.num_bytes_hit_set_archive;
+      // legacy mode, use numbers from 'stats'.  note that we do NOT use the
+      // raw_used_rate factor here because we are working from the PG stats
+      // directly.
+      user_bytes = stats.sum.num_bytes + stats.sum.num_bytes_hit_set_archive;
     }
     if (per_pool_omap) {
       user_bytes += store_stats.omap_allocated;

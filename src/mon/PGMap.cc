@@ -916,6 +916,8 @@ void PGMapDigest::dump_object_stat_sum(
   // an approximation for actually stored user data
   auto stored_normalized = pool_stat.get_user_bytes(raw_used_rate, per_pool,
 						    per_pool_omap);
+  // same, amplied by replication or EC
+  auto stored_raw = stored_normalized * raw_used_rate;
   if (f) {
     f->dump_int("stored", stored_normalized);
     f->dump_int("objects", sum.num_objects);
@@ -934,8 +936,7 @@ void PGMapDigest::dump_object_stat_sum(
       f->dump_int("compress_bytes_used", statfs.data_compressed_allocated);
       f->dump_int("compress_under_bytes", statfs.data_compressed_original);
       // Stored by user amplified by replication
-      f->dump_int("stored_raw", pool_stat.get_user_bytes(1.0, per_pool,
-							 per_pool_omap));
+      f->dump_int("stored_raw", stored_raw);
     }
   } else {
     tbl << stringify(byte_u_t(stored_normalized));
