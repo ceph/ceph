@@ -5273,7 +5273,11 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	    ceph_assert(i->second.hb_interval_start != utime_t());
 	    if (i->second.hb_interval_start == utime_t())
 	      i->second.hb_interval_start = now;
-	    if (now - i->second.hb_interval_start >=  utime_t(hb_avg, 0)) {
+	    int64_t hb_avg_time_period = 60;
+	    if (cct->_conf.get_val<int64_t>("debug_heartbeat_testing_span")) {
+	      hb_avg_time_period = cct->_conf.get_val<int64_t>("debug_heartbeat_testing_span");
+	    }
+	    if (now - i->second.hb_interval_start >=  utime_t(hb_avg_time_period, 0)) {
               uint32_t back_avg = i->second.hb_total_back / i->second.hb_average_count;
               uint32_t back_min = i->second.hb_min_back;
               uint32_t back_max = i->second.hb_max_back;
