@@ -1696,6 +1696,8 @@ struct object_stat_sum_t {
   int64_t num_legacy_snapsets; ///< upper bound on pre-luminous-style SnapSets
   int64_t num_large_omap_objects = 0;
   int64_t num_objects_manifest = 0;
+  int64_t num_omap_bytes = 0;
+  int64_t num_omap_keys = 0;
 
   object_stat_sum_t()
     : num_bytes(0),
@@ -1744,6 +1746,8 @@ struct object_stat_sum_t {
     FLOOR(num_wr_kb);
     FLOOR(num_large_omap_objects);
     FLOOR(num_objects_manifest);
+    FLOOR(num_omap_bytes);
+    FLOOR(num_omap_keys);
     FLOOR(num_shallow_scrub_errors);
     FLOOR(num_deep_scrub_errors);
     num_scrub_errors = num_shallow_scrub_errors + num_deep_scrub_errors;
@@ -1800,6 +1804,8 @@ struct object_stat_sum_t {
     SPLIT(num_wr_kb);
     SPLIT(num_large_omap_objects);
     SPLIT(num_objects_manifest);
+    SPLIT(num_omap_bytes);
+    SPLIT(num_omap_keys);
     SPLIT_PRESERVE_NONZERO(num_shallow_scrub_errors);
     SPLIT_PRESERVE_NONZERO(num_deep_scrub_errors);
     for (unsigned i = 0; i < out.size(); ++i) {
@@ -1862,6 +1868,8 @@ struct object_stat_sum_t {
         sizeof(num_scrub_errors) +
         sizeof(num_large_omap_objects) +
         sizeof(num_objects_manifest) +
+        sizeof(num_omap_bytes) +
+        sizeof(num_omap_keys) +
         sizeof(num_objects_recovered) +
         sizeof(num_bytes_recovered) +
         sizeof(num_keys_recovered) +
@@ -4959,6 +4967,8 @@ struct ScrubMap {
     bool large_omap_object_found:1;
     uint64_t large_omap_object_key_count = 0;
     uint64_t large_omap_object_value_size = 0;
+    uint64_t object_omap_bytes = 0;
+    uint64_t object_omap_keys = 0;
 
     object() :
       // Init invalid size so it won't match if we get a stat EIO error
@@ -4979,6 +4989,7 @@ struct ScrubMap {
   eversion_t incr_since;
   bool has_large_omap_object_errors:1;
   boost::optional<bool> has_builtin_csum;
+  bool has_omap_keys:1;
 
   void merge_incr(const ScrubMap &l);
   void clear_from(const hobject_t& start) {
@@ -5369,5 +5380,12 @@ struct store_statfs_t
   void dump(Formatter *f) const;
 };
 ostream &operator<<(ostream &lhs, const store_statfs_t &rhs);
+
+// omap specific stats
+struct omap_stat_t {
+ int large_omap_objects;
+ int64_t omap_bytes;
+ int64_t omap_keys;
+};
 
 #endif
