@@ -124,13 +124,13 @@ echo "Milestone: $milestone"
 # milestone numbers can be obtained manually with:
 #   curl --verbose -X GET https://api.github.com/repos/ceph/ceph/milestones
 
-milestone_number=$(curl -s -X GET https://api.github.com/repos/ceph/ceph/milestones | jq --arg milestone $milestone '.[] | select(.title==$milestone) | .number')
+milestone_number=$(curl -s -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token | jq --arg milestone $milestone '.[] | select(.title==$milestone) | .number')
 
 if test -n "$milestone_number" ; then
     target_branch="$milestone"
 else
     echo -n "Unknown Milestone. Please use one of the following ones: "
-    echo $(curl -s -X GET https://api.github.com/repos/ceph/ceph/milestones | jq '.[].title')
+    echo $(curl -s -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token | jq '.[].title')
     exit 1
 fi
 echo "Milestone is $milestone and milestone number is $milestone_number"
@@ -156,7 +156,7 @@ function prepare () {
     [ -z "$pr" ] && echo "Could not find PR." && return 1
     echo "Original PR: $pr"
 
-    number=$(curl --silent 'https://api.github.com/repos/ceph/ceph/pulls/'$pr | jq .commits)
+    number=$(curl --silent 'https://api.github.com/repos/ceph/ceph/pulls/'$pr'?access_token='$github_token | jq .commits)
     [ -z "$number" ] && echo "Could not determine the number of commits." && return 1
     echo "Found $number commit(s)"
 
