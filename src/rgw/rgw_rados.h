@@ -2828,8 +2828,10 @@ public:
         ceph::real_time *lastmod;
         uint64_t *obj_size;
         map<string, bufferlist> *attrs;
+        rgw_obj *target_obj;
 
-        Params() : lastmod(NULL), obj_size(NULL), attrs(NULL) {}
+        Params() : lastmod(nullptr), obj_size(nullptr), attrs(nullptr),
+		 target_obj(nullptr) {}
       } params;
 
       explicit Read(RGWRados::Object *_source) : source(_source) {}
