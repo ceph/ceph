@@ -941,7 +941,7 @@ void OSDMonitor::maybe_prime_pg_temp()
     dout(10) << __func__ << " no pools, no pg_temp priming" << dendl;
   } else if (all) {
     PrimeTempJob job(next, this);
-    mapper.queue(&job, g_conf->mon_osd_mapping_pgs_per_chunk);
+    mapper.queue(&job, g_conf->mon_osd_mapping_pgs_per_chunk, {});
     if (job.wait_for(g_conf->mon_osd_prime_pg_temp_max_time)) {
       dout(10) << __func__ << " done in " << job.get_duration() << dendl;
     } else {
@@ -1089,6 +1089,23 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
     OSDMap tmp;
     tmp.deepish_copy_from(osdmap);
     tmp.apply_incremental(pending_inc);
+
+    // clean inappropriate pg_upmap/pg_upmap_items (if any)
+    {
+      // check every upmapped pg for now
+      // until we could reliably identify certain cases to ignore,
+      // which is obviously the hard part TBD..
+      vector<pg_t> pgs_to_check;
+      tmp.get_upmap_pgs(&pgs_to_check);
+      if (pgs_to_check.size() < g_conf->mon_clean_pg_upmaps_per_chunk * 2) {
+        // not enough pgs, do it inline
+        tmp.clean_pg_upmaps(cct, &pending_inc);
+      } else {
+        CleanUpmapJob job(cct, tmp, pending_inc);
+        mapper.queue(&job, g_conf->mon_clean_pg_upmaps_per_chunk, pgs_to_check);
+        job.wait();
+      }
+    }
 
     if (tmp.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
       // remove any legacy osdmap nearfull/full flags
@@ -1409,9 +1426,6 @@ void OSDMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       dout(2) << " osd." << i->first << " WEIGHT " << hex << i->second << dec << dendl;
     }
   }
-
-  // clean inappropriate pg_upmap/pg_upmap_items (if any)
-  osdmap.maybe_remove_pg_upmaps(cct, osdmap, &pending_inc);
 
   // features for osdmap and its incremental
   uint64_t features;

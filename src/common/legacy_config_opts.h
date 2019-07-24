@@ -200,6 +200,7 @@ OPTION(mon_osd_cache_size, OPT_INT)  // the size of osdmaps cache, not to rely o
 
 OPTION(mon_cpu_threads, OPT_INT)
 OPTION(mon_osd_mapping_pgs_per_chunk, OPT_INT)
+OPTION(mon_clean_pg_upmaps_per_chunk, OPT_INT)
 OPTION(mon_osd_max_creating_pgs, OPT_INT)
 OPTION(mon_tick_interval, OPT_INT)
 OPTION(mon_session_timeout, OPT_INT)    // must send keepalive or subscribe

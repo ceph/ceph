@@ -166,6 +166,35 @@ public:
     FAST_READ_DEFAULT
   };
 
+  struct CleanUpmapJob : public ParallelPGMapper::Job {
+    CephContext *cct;
+    const OSDMap& osdmap;
+    OSDMap::Incremental& pending_inc;
+    // lock to protect pending_inc form changing
+    // when checking is done
+    Mutex pending_inc_lock = {"CleanUpmapJob::pending_inc_lock"};
+
+    CleanUpmapJob(CephContext *cct, const OSDMap& om, OSDMap::Incremental& pi)
+      : ParallelPGMapper::Job(&om),
+        cct(cct),
+        osdmap(om),
+        pending_inc(pi) {}
+
+    void process(const vector<pg_t>& to_check) override {
+      vector<pg_t> to_cancel;
+      map<pg_t, mempool::osdmap::vector<pair<int,int>>> to_remap;
+      osdmap.check_pg_upmaps(cct, to_check, &to_cancel, &to_remap);
+      // don't bother taking lock if nothing changes
+      if (!to_cancel.empty() || !to_remap.empty()) {
+        Mutex::Locker l(pending_inc_lock);
+        osdmap.clean_pg_upmaps(cct, &pending_inc, to_cancel, to_remap);
+      }
+    }
+
+    void process(int64_t poolid, unsigned ps_begin, unsigned ps_end) override {}
+    void complete() override {}
+  }; // public as this will need to be accessible from TestTestOSDMap.cc
+
   // svc
 public:  
   void create_initial() override;
@@ -225,6 +254,7 @@ private:
 	osdmon->prime_pg_temp(*osdmap, pgid);
       }
     }
+    void process(const vector<pg_t>& pgs) override {}
     void complete() override {}
   };
   void maybe_prime_pg_temp();

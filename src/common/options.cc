@@ -913,6 +913,11 @@ std::vector<Option> get_global_options() {
     .set_default(4096)
     .set_description(""),
 
+    Option("mon_clean_pg_upmaps_per_chunk", Option::TYPE_INT, Option::LEVEL_DEV)
+    .set_default(256)
+    .add_service("mon")
+    .set_description("granularity of PG upmap validation background work"),
+
     Option("mon_osd_max_creating_pgs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1024)
     .set_description(""),
