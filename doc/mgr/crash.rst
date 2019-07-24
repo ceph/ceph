@@ -63,4 +63,21 @@ Show all details of a saved crash.
 
 Remove saved crashes older than 'keep' days.  <keep> must be an integer.
 
+::
 
+   ceph crash archive <crashid>
+
+Archive a crash report so that it is no longer considered for the ``RECENT_CRASH`` health check and does not appear in the ``crash ls-new`` output (it will still appear in the ``crash ls`` output).
+
+::
+
+   ceph crash archive-all
+
+Archive all new crash reports.
+
+
+Options
+-------
+
+* ``mgr/crash/warn_recent_interval`` [default: 2 weeks] controls what constitutes "recent" for the purposes of raising the ``RECENT_CRASH`` health warning.
+* ``mgr/crash/retain_interval`` [default: 1 year] controls how long crash reports are retained by the cluster before they are automatically purged.
