@@ -928,20 +928,47 @@ int RGWReshardWait::block_while_resharding(RGWRados::BucketShard *bs,
   int ret = 0;
   cls_rgw_bucket_instance_entry entry;
 
-  for (int i=0; i < num_retries; i++) {
-    ret = cls_rgw_get_bucket_resharding(bs->index_ctx, bs->bucket_obj, &entry);
+  // since we want to run this recovery code from two distinct places,
+  // let's just put it in a lambda so we can easily re-use; if the
+  // lambda successfully fetches a new bucket id, it sets
+  // new_bucket_id and returns 0, otherwise it returns a negative
+  // error code
+  auto fetch_new_bucket_id =
+    [this, bucket_info](RGWRados* store,
+			const std::string& log_tag,
+			std::string* new_bucket_id) -> int {
+    RGWBucketInfo fresh_bucket_info = bucket_info;
+    int ret = store->try_refresh_bucket_info(fresh_bucket_info, nullptr);
     if (ret < 0) {
+      ldout(store->ctx(), 0) << __func__ <<
+	" ERROR: failed to refresh bucket info after reshard at " <<
+	log_tag << ": " << cpp_strerror(-ret) << dendl;
+      return ret;
+    }
+    *new_bucket_id = fresh_bucket_info.bucket.bucket_id;
+    return 0;
+  };
+
+  for (int i = 1; i <= num_retries; i++) {
+    ret = cls_rgw_get_bucket_resharding(bs->index_ctx, bs->bucket_obj, &entry);
+    if (ret == -ENOENT) {
+      return fetch_new_bucket_id(bs->store,
+				 "get_bucket_resharding_failed",
+				 new_bucket_id);
+    } else if (ret < 0) {
       ldout(store->ctx(), 0) << __func__ << " ERROR: failed to get bucket resharding :"  <<
 	cpp_strerror(-ret)<< dendl;
       return ret;
     }
     if (!entry.resharding_in_progress()) {
-      *new_bucket_id = entry.new_bucket_instance_id;
-      return 0;
+      return fetch_new_bucket_id(bs->store,
+				 "get_bucket_resharding_succeeded",
+                                 new_bucket_id);
     }
-    ldout(store->ctx(), 20) << "NOTICE: reshard still in progress; " << (i < num_retries - 1 ? "retrying" : "too many retries") << dendl;
 
-    if (i == num_retries - 1) {
+    ldout(store->ctx(), 20) << "NOTICE: reshard still in progress; " << (i < num_retries ? "retrying" : "too many retries") << dendl;
+
+    if (i == num_retries) {
       break;
     }
 
@@ -987,7 +1014,8 @@ int RGWReshardWait::block_while_resharding(RGWRados::BucketShard *bs,
       ldout(store->ctx(), 0) << __func__ << " ERROR: bucket is still resharding, please retry" << dendl;
       return ret;
     }
-  }
+  } // for loop
+
   ldout(store->ctx(), 0) << __func__ << " ERROR: bucket is still resharding, please retry" << dendl;
   return -ERR_BUSY_RESHARDING;
 }
@@ -1103,7 +1131,7 @@ int RGWReshard::process_all_logshards()
     string logshard;
     get_logshard_oid(i, &logshard);
 
-    ldout(store->ctx(), 20) << "proceeding logshard = " << logshard << dendl;
+    ldout(store->ctx(), 20) << "processing logshard = " << logshard << dendl;
 
     ret = process_single_logshard(i);
     if (ret <0) {
