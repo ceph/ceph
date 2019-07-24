@@ -173,6 +173,11 @@ Interface
 
         rados -p base_pool unset-manifest <obj-name>
 
+* tier-flush
+
+  flush the object that has chunks to the chunk pool. ::
+
+        rados -p base_pool tier-flush <obj-name>
 
 Dedup tool
 ==========
