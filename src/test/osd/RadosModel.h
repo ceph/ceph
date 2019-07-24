@@ -198,6 +198,7 @@ public:
   librados::IoCtx low_tier_io_ctx;
   int snapname_num;
   map<string,string > redirect_objs;
+  bool enable_dedup;
 
   RadosTestContext(const string &pool_name, 
 		   int max_in_flight,
@@ -209,6 +210,7 @@ public:
 		   bool pool_snaps,
 		   bool write_fadvise_dontneed,
 		   const string &low_tier_pool_name,
+		   bool enable_dedup,
 		   const char *id = 0) :
     state_lock("Context Lock"),
     pool_obj_cont(),
@@ -227,7 +229,8 @@ public:
     pool_snaps(pool_snaps),
     write_fadvise_dontneed(write_fadvise_dontneed),
     low_tier_pool_name(low_tier_pool_name),
-    snapname_num(0)
+    snapname_num(0),
+    enable_dedup(enable_dedup)
   {
   }
 
@@ -266,6 +269,17 @@ public:
       rados.shutdown();
       return r;
     }
+    if (enable_dedup) {
+      r = rados.mon_command(
+	"{\"prefix\": \"osd pool set\", \"pool\": \"" + pool_name +
+	"\", \"var\": \"fingerprint_algorithm\", \"val\": \"" + "sha256" + "\"}",
+	inbl, NULL, NULL);
+      if (r < 0) {
+	rados.shutdown();
+	return r;
+      }
+    }
+
     char hostname_cstr[100];
     gethostname(hostname_cstr, 100);
     stringstream hostpid;
@@ -2305,6 +2319,7 @@ public:
   uint64_t offset;
   uint32_t length;
   uint64_t tgt_offset;
+  bool enable_with_reference;
   SetChunkOp(int n,
 	     RadosTestContext *context,
 	     const string &oid,
@@ -2313,12 +2328,13 @@ public:
 	     const string &oid_tgt,
 	     const string &tgt_pool_name,
 	     uint64_t tgt_offset,
-	     TestOpStat *stat = 0)
+	     TestOpStat *stat = 0,
+	     bool enable_with_reference = false)
     : TestOp(n, context, stat),
       oid(oid), oid_tgt(oid_tgt), tgt_pool_name(tgt_pool_name),
       comp(NULL), done(0), 
       r(0), offset(offset), length(length), 
-      tgt_offset(tgt_offset)
+      tgt_offset(tgt_offset), enable_with_reference(enable_with_reference)
   {}
 
   void _begin() override
@@ -2334,8 +2350,13 @@ public:
 
     if (src_value.version != 0 && !src_value.deleted())
       op.assert_version(src_value.version);
-    op.set_chunk(offset, length, context->low_tier_io_ctx, 
-		 context->prefix+oid_tgt, tgt_offset);
+    if (enable_with_reference) {
+      op.set_chunk(offset, length, context->low_tier_io_ctx, 
+		   context->prefix+oid_tgt, tgt_offset, CEPH_OSD_OP_FLAG_WITH_REFERENCE);
+    } else {
+      op.set_chunk(offset, length, context->low_tier_io_ctx, 
+		   context->prefix+oid_tgt, tgt_offset);
+    }
 
     pair<TestOp*, TestOp::CallbackInfo*> *cb_arg =
       new pair<TestOp*, TestOp::CallbackInfo*>(this,
