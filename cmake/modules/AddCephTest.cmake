@@ -37,7 +37,7 @@ if(WITH_GTEST_PARALLEL)
   add_dependencies(tests gtest-parallel_ext)
   find_package(Python REQUIRED)
   set(GTEST_PARALLEL_COMMAND
-    ${PYTHON_EXECUTABLE} ${gtest_parallel_source_dir}/gtest-parallel)
+    ${Python_EXECUTABLE} ${gtest_parallel_source_dir}/gtest-parallel)
 endif()
 
 #sets uniform compiler flags and link libraries
