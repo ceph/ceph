@@ -320,12 +320,13 @@ vector<Policy> get_iam_user_policy_from_attr(CephContext* cct,
   return policies;
 }
 
-static int get_obj_attrs(RGWRados *store, struct req_state *s, const rgw_obj& obj, map<string, bufferlist>& attrs)
+static int get_obj_attrs(RGWRados *store, struct req_state *s, const rgw_obj& obj, map<string, bufferlist>& attrs, rgw_obj *target_obj = nullptr)
 {
   RGWRados::Object op_target(store, s->bucket_info, *static_cast<RGWObjectCtx *>(s->obj_ctx), obj);
   RGWRados::Object::Read read_op(&op_target);
 
   read_op.params.attrs = &attrs;
+  read_op.params.target_obj = target_obj;
 
   return read_op.prepare();
 }
@@ -4378,6 +4379,7 @@ void RGWPutMetadataObject::pre_exec()
 void RGWPutMetadataObject::execute()
 {
   rgw_obj obj(s->bucket, s->object);
+  rgw_obj target_obj;
   map<string, bufferlist> attrs, orig_attrs, rmattrs;
 
   store->set_atomic(s->obj_ctx, obj);
@@ -4393,7 +4395,7 @@ void RGWPutMetadataObject::execute()
   }
 
   /* check if obj exists, read orig attrs */
-  op_ret = get_obj_attrs(store, s, obj, orig_attrs);
+  op_ret = get_obj_attrs(store, s, obj, orig_attrs, &target_obj);
   if (op_ret < 0) {
     return;
   }
@@ -4418,7 +4420,7 @@ void RGWPutMetadataObject::execute()
     }
   }
 
-  op_ret = store->set_attrs(s->obj_ctx, s->bucket_info, obj, attrs, &rmattrs);
+  op_ret = store->set_attrs(s->obj_ctx, s->bucket_info, target_obj, attrs, &rmattrs);
 }
 
 int RGWDeleteObj::handle_slo_manifest(bufferlist& bl)
