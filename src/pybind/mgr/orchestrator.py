@@ -692,21 +692,33 @@ class NFSServiceSpec(StatelessServiceSpec):
 class RGWSpec(StatelessServiceSpec):
     """
     Settings to configure a (multisite) Ceph RGW
+
     """
-    # TODO: move all default values to a dedicated method. I don't want to overwrite
-    # Rook's default values.
-    def __init__(self, hosts=None, rgw_multisite=None, rgw_zone=None,
-              rgw_zonemaster=None, rgw_zonesecondary=None,
-              rgw_multisite_proto=None, rgw_frontend_port=None,
-              rgw_zonegroup=None, rgw_zone_user=None,
-              rgw_realm=None, system_access_key=None,
-              system_secret_key=None, count=None):
+    def __init__(self,
+                 rgw_zone,  # type: str
+                 hosts=None,  # type: Optional[List[str]]
+                 rgw_multisite=None,  # type: Optional[bool]
+                 rgw_zonemaster=None,  # type: Optional[bool]
+                 rgw_zonesecondary=None,  # type: Optional[bool]
+                 rgw_multisite_proto=None,  # type: Optional[str]
+                 rgw_frontend_port=None,  # type: Optional[int]
+                 rgw_zonegroup=None,  # type: Optional[str]
+                 rgw_zone_user=None,  # type: Optional[str]
+                 rgw_realm=None,  # type: Optional[str]
+                 system_access_key=None,  # type: Optional[str]
+                 system_secret_key=None,  # type: Optional[str]
+                 count=None  # type: Optional[int]
+                 ):
+        # Regarding default values. Ansible has a `set_rgwspec_defaults` that sets
+        # default values that makes sense for Ansible. Rook has default values implemented
+        # in Rook itself. Thus we don't set any defaults here in this class.
 
         super(RGWSpec, self).__init__(name=rgw_zone, count=count)
 
         #: List of hosts where RGWs should run. Not for Rook.
         self.hosts = hosts
 
+        #: is multisite
         self.rgw_multisite = rgw_multisite
         self.rgw_zonemaster = rgw_zonemaster
         self.rgw_zonesecondary = rgw_zonesecondary
@@ -719,25 +731,6 @@ class RGWSpec(StatelessServiceSpec):
 
         self.system_access_key = system_access_key
         self.system_secret_key = system_secret_key
-
-    def set_ansible_defaults(self):
-        self.rgw_multisite = self.rgw_multisite if self.rgw_multisite is not None else True
-        self.rgw_zonemaster = self.rgw_zonemaster if self.rgw_zonemaster is not None else True
-        self.rgw_zonesecondary = self.rgw_zonesecondary \
-            if self.rgw_zonesecondary is not None else False
-        self.rgw_multisite_proto = self.rgw_multisite_proto \
-            if self.rgw_multisite_proto is not None else "http"
-        self.rgw_frontend_port = self.rgw_frontend_port \
-            if self.rgw_frontend_port is not None else 8080
-
-        self.rgw_zonegroup = self.rgw_zonegroup if self.rgw_zonegroup is not None else "Main"
-        self.rgw_zone_user = self.rgw_zone_user if self.rgw_zone_user is not None else "zone.user"
-        self.rgw_realm = self.rgw_realm if self.rgw_realm is not None else "RGW_Realm"
-
-        self.system_access_key = self.system_access_key \
-            if self.system_access_key is not None else self.genkey(20)
-        self.system_secret_key = self.system_secret_key \
-            if self.system_secret_key is not None else self.genkey(40)
 
     @property
     def rgw_multisite_endpoint_addr(self):
