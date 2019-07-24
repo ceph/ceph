@@ -6600,8 +6600,8 @@ COMMAND("bench " \
 	"name=size,type=CephInt,req=false " \
 	"name=object_size,type=CephInt,req=false " \
 	"name=object_num,type=CephInt,req=false ", \
-	"OSD benchmark: write <count> <size>-byte objects, " \
-	"(default 1G size 4MB). Results in log.",
+	"OSD benchmark: write <count> <size>-byte objects(with <obj_size> <obj_num>), " \
+	"(default count=1G default size=4MB). Results in log.",
 	"osd", "rw", "cli,rest")
 COMMAND("flush_pg_stats", "flush pg stats", "osd", "rw", "cli,rest")
 COMMAND("heap " \
