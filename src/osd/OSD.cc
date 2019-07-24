@@ -2703,6 +2703,18 @@ int OSD::get_recovery_max_active()
     return cct->_conf->osd_recovery_max_active_ssd;
 }
 
+float OSD::get_osd_snap_trim_sleep()
+{
+  float osd_snap_trim_sleep = cct->_conf.get_val<double>("osd_snap_trim_sleep");
+  if (osd_snap_trim_sleep > 0)
+    return osd_snap_trim_sleep;
+  if (!store_is_rotational && !journal_is_rotational)
+    return cct->_conf.get_val<double>("osd_snap_trim_sleep_ssd");
+  if (store_is_rotational && !journal_is_rotational)
+    return cct->_conf.get_val<double>("osd_snap_trim_sleep_hybrid");
+  return cct->_conf.get_val<double>("osd_snap_trim_sleep_hdd");
+}
+
 int OSD::init()
 {
   CompatSet initial, diff;
