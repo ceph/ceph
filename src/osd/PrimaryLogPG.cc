@@ -2276,8 +2276,19 @@ PrimaryLogPG::cache_result_t PrimaryLogPG::maybe_handle_manifest_detail(
     ceph_osd_op& op = osd_op.op;
     if (op.op == CEPH_OSD_OP_SET_REDIRECT ||
 	op.op == CEPH_OSD_OP_SET_CHUNK || 
-	op.op == CEPH_OSD_OP_TIER_PROMOTE ||
-	op.op == CEPH_OSD_OP_UNSET_MANIFEST) {
+	op.op == CEPH_OSD_OP_UNSET_MANIFEST ||
+	op.op == CEPH_OSD_OP_TIER_FLUSH) {
+      return cache_result_t::NOOP;
+    } else if (op.op == CEPH_OSD_OP_TIER_PROMOTE) {
+      bool is_dirty = false;
+      for (auto& p : obc->obs.oi.manifest.chunk_map) {
+	if (p.second.is_dirty()) {
+	  is_dirty = true;
+	}
+      }
+      if (is_dirty) {
+	start_flush(OpRequestRef(), obc, true, NULL, std::nullopt);
+      }
       return cache_result_t::NOOP;
     }
   }
@@ -5612,6 +5623,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_CACHE_UNPIN:
     case CEPH_OSD_OP_SET_REDIRECT:
     case CEPH_OSD_OP_TIER_PROMOTE:
+    case CEPH_OSD_OP_TIER_FLUSH:
       break;
     default:
       if (op.op & CEPH_OSD_OP_MODE_WR)
@@ -6967,6 +6979,46 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
       break;
 
+    case CEPH_OSD_OP_TIER_FLUSH:
+      ++ctx->num_write;
+      {
+	if (pool.info.is_tier()) {
+	  result = -EINVAL;
+	  break;
+	}
+	if (!obs.exists) {
+	  result = -ENOENT;
+	  break;
+	}
+	if (get_osdmap()->require_osd_release < ceph_release_t::octopus) {
+	  result = -EOPNOTSUPP;
+	  break;
+	}
+	if (!obs.oi.has_manifest()) {
+	  result = 0;
+	  break;
+	}
+
+	hobject_t missing;
+	bool is_dirty = false;
+	for (auto& p : ctx->obc->obs.oi.manifest.chunk_map) {
+	  if (p.second.is_dirty()) {
+	    is_dirty = true;
+	    break;
+	  }
+	}
+
+	if (is_dirty) {
+	  result = start_flush(ctx->op, ctx->obc, true, NULL, std::nullopt);
+	  if (result == -EINPROGRESS)
+	    result = -EAGAIN;
+	} else {
+	  result = 0;
+	}
+      }
+
+      break;
+
     case CEPH_OSD_OP_UNSET_MANIFEST:
       ++ctx->num_write;
       {
@@ -8110,7 +8162,7 @@ void PrimaryLogPG::write_update_size_and_usage(object_stat_sum_t& delta_stats, o
   if (oi.has_manifest() && oi.manifest.is_chunked()) {
     for (auto &p : oi.manifest.chunk_map) {
       if ((p.first <= offset && p.first + p.second.length > offset) ||
-	  (p.first > offset && p.first <= offset + length)) {
+	  (p.first > offset && p.first < offset + length)) {
 	p.second.clear_flag(chunk_info_t::FLAG_MISSING);
 	p.second.set_flag(chunk_info_t::FLAG_DIRTY);
       }

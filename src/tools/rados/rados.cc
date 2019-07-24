@@ -131,6 +131,7 @@ void usage(ostream& out)
 "                                    convert an object to chunked object\n"
 "   tier-promote <obj-name>	     promote the object to the base tier\n"
 "   unset-manifest <obj-name>	     unset redirect or chunked object\n"
+"   tier-flush <obj-name>	     flush the chunked object\n"
 "\n"
 "IMPORT AND EXPORT\n"
 "   export [filename]\n"
@@ -3767,6 +3768,21 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     ret = io_ctx.operate(oid, &op);
     if (ret < 0) {
       cerr << "error unset-manifest " << pool_name << "/" << oid << " : " 
+	   << cpp_strerror(ret) << std::endl;
+      return 1;
+    }
+  } else if (strcmp(nargs[0], "tier-flush") == 0) {
+    if (!pool_name || nargs.size() < 2) {
+      usage(cerr);
+      return 1;
+    }
+    string oid(nargs[1]);
+
+    ObjectWriteOperation op;
+    op.tier_flush();
+    ret = io_ctx.operate(oid, &op);
+    if (ret < 0) {
+      cerr << "error tier-flush " << pool_name << "/" << oid << " : " 
 	   << cpp_strerror(ret) << std::endl;
       return 1;
     }
