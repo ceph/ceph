@@ -27,6 +27,9 @@ class TestCephFSShell(CephFSTestCase):
         if mount_x is None:
             mount_x = self.mount_a
 
+        if isinstance(cmd, list):
+            cmd = " ".join(cmd)
+
         args = ["cephfs-shell", "-c", mount_x.config_path]
         if opts is not None:
             args.extend(opts)
