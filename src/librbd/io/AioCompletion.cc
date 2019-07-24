@@ -95,6 +95,7 @@ void AioCompletion::complete() {
     // must destroy ImageCtx prior to invoking callback
     delete ictx;
     ictx = nullptr;
+    external_callback = false;
   }
 
   state = AIO_STATE_CALLBACK;
