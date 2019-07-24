@@ -100,28 +100,6 @@ struct C_DiscardJournalCommit : public Context {
   }
 };
 
-template <typename ImageCtxT = ImageCtx>
-struct C_FlushJournalCommit : public Context {
-  ImageCtxT &image_ctx;
-  AioCompletion *aio_comp;
-
-  C_FlushJournalCommit(ImageCtxT &_image_ctx, AioCompletion *_aio_comp,
-                       uint64_t tid)
-    : image_ctx(_image_ctx), aio_comp(_aio_comp) {
-    CephContext *cct = image_ctx.cct;
-    ldout(cct, 20) << "delaying flush until journal tid " << tid << " "
-                   << "safe" << dendl;
-
-    aio_comp->add_request();
-  }
-
-  void finish(int r) override {
-    CephContext *cct = image_ctx.cct;
-    ldout(cct, 20) << "C_FlushJournalCommit: journal committed" << dendl;
-    aio_comp->complete_request(r);
-  }
-};
-
 } // anonymous namespace
 
 template <typename I>
@@ -244,7 +222,7 @@ template <typename I>
 void ImageRequest<I>::send() {
   I &image_ctx = this->m_image_ctx;
   assert(m_aio_comp->is_initialized(get_aio_type()));
-  assert(m_aio_comp->is_started() ^ (get_aio_type() == AIO_TYPE_FLUSH));
+  assert(m_aio_comp->is_started());
 
   CephContext *cct = image_ctx.cct;
   AioCompletion *aio_comp = this->m_aio_comp;
@@ -710,36 +688,35 @@ void ImageFlushRequest<I>::send_request() {
   }
 
   AioCompletion *aio_comp = this->m_aio_comp;
+  aio_comp->set_request_count(1);
+
+  Context* ctx = new C_AioRequest(aio_comp);
+
+  // ensure no locks are held when flush is complete
+  ctx = util::create_async_context_callback(image_ctx, ctx);
+
   if (journaling) {
     // in-flight ops are flushed prior to closing the journal
     uint64_t journal_tid = image_ctx.journal->append_io_event(
       journal::EventEntry(journal::AioFlushEvent()),
       ObjectRequests(), 0, 0, false, 0);
 
-    aio_comp->set_request_count(1);
     aio_comp->associate_journal_event(journal_tid);
 
-    FunctionContext *flush_ctx = new FunctionContext(
-      [aio_comp, &image_ctx, journal_tid] (int r) {
-        auto ctx = new C_FlushJournalCommit<I>(image_ctx, aio_comp,
-                                               journal_tid);
-        image_ctx.journal->flush_event(journal_tid, ctx);
-
-        // track flush op for block writes
-        aio_comp->start_op(true);
-        aio_comp->put();
+    ctx = new FunctionContext([ctx, &image_ctx, journal_tid](int r) {
+      image_ctx.journal->flush_event(journal_tid, ctx);
     });
 
-    image_ctx.flush_async_operations(flush_ctx);
-  } else {
+  } else if (image_ctx.object_cacher != nullptr) {
     // flush rbd cache only when journaling is not enabled
-    aio_comp->set_request_count(1);
-    C_AioRequest *req_comp = new C_AioRequest(aio_comp);
-    image_ctx.flush(req_comp);
-
-    aio_comp->start_op(true);
-    aio_comp->put();
+    ctx = new FunctionContext([ctx, &image_ctx](int r) {
+      image_ctx.flush_cache(ctx);
+    });
   }
+
+  // ensure all in-flight IOs are settled if non-user flush request
+  aio_comp->async_op.flush(ctx);
+  aio_comp->put();
 
   image_ctx.perfcounter->inc(l_librbd_aio_flush);
 }
