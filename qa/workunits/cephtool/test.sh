@@ -1530,6 +1530,31 @@ function test_mon_osd()
   ceph osd dump | grep 'osd.0.*in'
   ceph osd find 0
 
+  ceph osd info 0
+  ceph osd info osd.0
+  expect_false ceph osd info osd.xyz
+  expect_false ceph osd info xyz
+  expect_false ceph osd info 42
+  expect_false ceph osd info osd.42
+
+  ceph osd info
+  info_json=$(ceph osd info --format=json | jq -cM '.')
+  dump_json=$(ceph osd dump --format=json | jq -cM '.osds')
+  [[ "${info_json}" == "${dump_json}" ]]
+
+  info_json=$(ceph osd info 0 --format=json | jq -cM '.')
+  dump_json=$(ceph osd dump --format=json | \
+	  jq -cM '.osds[] | select(.osd == 0)')
+  [[ "${info_json}" == "${dump_json}" ]]
+  
+  info_plain="$(ceph osd info)"
+  dump_plain="$(ceph osd dump | grep '^osd')"
+  [[ "${info_plain}" == "${dump_plain}" ]]
+
+  info_plain="$(ceph osd info 0)"
+  dump_plain="$(ceph osd dump | grep '^osd.0')"
+  [[ "${info_plain}" == "${dump_plain}" ]]
+
   ceph osd add-nodown 0 1
   ceph health detail | grep 'NODOWN'
   ceph osd rm-nodown 0 1
