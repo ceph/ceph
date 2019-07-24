@@ -759,8 +759,16 @@ void PGMapDigest::dump_pool_stats_full(
     tbl.define_column("POOL", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("ID", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("STORED", TextTable::LEFT, TextTable::RIGHT);
+    if (verbose) {
+      tbl.define_column("(DATA)", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("(OMAP)", TextTable::LEFT, TextTable::RIGHT);
+    }
     tbl.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
+    if (verbose) {
+      tbl.define_column("(DATA)", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("(OMAP)", TextTable::LEFT, TextTable::RIGHT);
+    }
     tbl.define_column("%USED", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("MAX AVAIL", TextTable::LEFT, TextTable::RIGHT);
 
@@ -925,9 +933,17 @@ void PGMapDigest::dump_object_stat_sum(
   auto stored_raw = stored_normalized * raw_used_rate;
   if (f) {
     f->dump_int("stored", stored_normalized);
+    if (verbose) {
+      f->dump_int("stored_data", stored_data_normalized);
+      f->dump_int("stored_omap", stored_omap_normalized);
+    }
     f->dump_int("objects", sum.num_objects);
     f->dump_int("kb_used", shift_round_up(used_bytes, 10));
     f->dump_int("bytes_used", used_bytes);
+    if (verbose) {
+      f->dump_int("data_bytes_used", used_data_bytes);
+      f->dump_int("omap_bytes_used", used_omap_bytes);
+    }
     f->dump_float("percent_used", used);
     f->dump_unsigned("max_avail", avail_res);
     if (verbose) {
@@ -945,8 +961,16 @@ void PGMapDigest::dump_object_stat_sum(
     }
   } else {
     tbl << stringify(byte_u_t(stored_normalized));
+    if (verbose) {
+      tbl << stringify(byte_u_t(stored_data_normalized));
+      tbl << stringify(byte_u_t(stored_omap_normalized));
+    }
     tbl << stringify(si_u_t(sum.num_objects));
     tbl << stringify(byte_u_t(used_bytes));
+    if (verbose) {
+      tbl << stringify(byte_u_t(used_data_bytes));
+      tbl << stringify(byte_u_t(used_omap_bytes));
+    }
     tbl << percentify(used*100);
     tbl << stringify(byte_u_t(avail_res));
     if (verbose) {
