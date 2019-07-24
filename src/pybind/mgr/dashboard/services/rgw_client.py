@@ -448,7 +448,8 @@ class RgwClient(RestClient):
             raise e
 
     @RestClient.api_put('/{bucket_name}')
-    def create_bucket(self, bucket_name, zonegroup, placement_target, request=None):
+    def create_bucket(self, bucket_name, zonegroup="default", placement_target="default-placement",
+                      request=None):
         logger.info("Creating bucket: %s, zonegroup: %s, placement_target: %s",
                     bucket_name, zonegroup, placement_target)
         create_bucket_configuration = ET.Element('CreateBucketConfiguration')
