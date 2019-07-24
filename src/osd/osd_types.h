@@ -5485,6 +5485,7 @@ struct chunk_info_t {
   void decode(ceph::buffer::list::const_iterator &bl);
   void dump(ceph::Formatter *f) const;
   friend std::ostream& operator<<(std::ostream& out, const chunk_info_t& ci);
+  bool operator==(const chunk_info_t& cit) const;
 };
 WRITE_CLASS_ENCODER(chunk_info_t)
 std::ostream& operator<<(std::ostream& out, const chunk_info_t& ci);
@@ -5529,6 +5530,8 @@ struct object_manifest_t {
     redirect_target = hobject_t();
     chunk_map.clear();
   }
+  void build_intersection_set(std::map<uint64_t, chunk_info_t>& map, 
+		set<uint64_t>& intersection, interval_set<uint64_t>* check_intersection);
   static void generate_test_instances(std::list<object_manifest_t*>& o);
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);

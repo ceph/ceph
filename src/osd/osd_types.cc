@@ -5810,6 +5810,23 @@ void chunk_info_t::dump(Formatter *f) const
   f->dump_unsigned("flags", flags);
 }
 
+
+bool chunk_info_t::operator==(const chunk_info_t& cit) const
+{
+  if (has_fingerprint()) {
+    if (oid.oid.name == cit.oid.oid.name) {
+      return true;
+    }
+  } else {
+    if (offset == cit.offset && length == cit.length &&
+	oid.oid.name == cit.oid.oid.name) {
+      return true;
+    }
+
+  }
+  return false;
+}
+
 ostream& operator<<(ostream& out, const chunk_info_t& ci)
 {
   return out << "(len: " << ci.length << " oid: " << ci.oid
@@ -5818,6 +5835,25 @@ ostream& operator<<(ostream& out, const chunk_info_t& ci)
 }
 
 // -- object_manifest_t --
+
+void object_manifest_t::build_intersection_set(std::map<uint64_t, chunk_info_t>& map, 
+	      set<uint64_t>& intersection, interval_set<uint64_t>* check_intersection)
+{
+  for (auto p : chunk_map) {
+    if (check_intersection) {
+      if (check_intersection->intersects(p.first, p.second.length)) {
+	intersection.insert(p.first);	
+	continue;
+      }
+    }
+
+    for (auto c : map) {
+      if (p.second == c.second) {
+	intersection.insert(p.first);
+      }
+    }
+  }
+}
 
 void object_manifest_t::encode(ceph::buffer::list& bl) const
 {
