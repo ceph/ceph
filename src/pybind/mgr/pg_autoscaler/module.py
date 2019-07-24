@@ -9,7 +9,7 @@ import threading
 import uuid
 from six import itervalues, iteritems
 from collections import defaultdict
-from prettytable import PrettyTable
+from prettytable import PrettyTable, PLAIN_COLUMNS
 
 from mgr_module import MgrModule
 
@@ -115,6 +115,8 @@ class PgAutoscaler(MgrModule):
 #                                 'IDEAL',
                                  'NEW PG_NUM', 'AUTOSCALE'],
                                 border=False)
+            table.left_padding_width = 0
+            table.right_padding_width = 1
             table.align['POOL'] = 'l'
             table.align['SIZE'] = 'r'
             table.align['TARGET SIZE'] = 'r'
