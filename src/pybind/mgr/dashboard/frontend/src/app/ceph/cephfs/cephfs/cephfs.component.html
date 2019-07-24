@@ -42,9 +42,10 @@
   </div>
 </div>
 
+<legend i18n>MDS performance counters</legend>
 <div class="row"
      *ngFor="let mdsCounter of objectValues(mdsCounters); trackBy: trackByFn">
-  <div class="cold-md-12">
+  <div class="col-md-12">
     <cd-cephfs-chart [mdsCounter]="mdsCounter"></cd-cephfs-chart>
   </div>
 </div>
