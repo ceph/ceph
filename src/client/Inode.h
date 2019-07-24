@@ -182,6 +182,7 @@ struct Inode {
   unsigned flags;
 
   quota_info_t quota;
+  qos_info_t qos;
 
   bool is_complete_and_ordered() {
     static const unsigned wants = I_COMPLETE | I_DIR_ORDERED;

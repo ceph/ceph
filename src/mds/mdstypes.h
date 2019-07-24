@@ -355,6 +355,84 @@ inline bool operator==(const quota_info_t &l, const quota_info_t &r) {
 
 ostream& operator<<(ostream &out, const quota_info_t &n);
 
+struct qos_info_t
+{
+  struct _qos_info_t{
+    int64_t iops = 0;
+    int64_t bps = 0;
+    int64_t read_iops = 0;
+    int64_t read_bps = 0;
+    int64_t write_iops = 0;
+    int64_t write_bps = 0;
+    _qos_info_t() {}
+  };
+
+  _qos_info_t limit;
+  _qos_info_t burst;
+
+  qos_info_t() {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(limit.iops, bl);
+    encode(limit.bps, bl);
+    encode(limit.read_iops, bl);
+    encode(limit.read_bps, bl);
+    encode(limit.write_iops, bl);
+    encode(limit.write_bps, bl);
+    encode(burst.iops, bl);
+    encode(burst.bps, bl);
+    encode(burst.read_iops, bl);
+    encode(burst.read_bps, bl);
+    encode(burst.write_iops, bl);
+    encode(burst.write_bps, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator& p) {
+    DECODE_START_LEGACY_COMPAT_LEN(1, 1, 1, p);
+    decode(limit.iops, p);
+    decode(limit.bps, p);
+    decode(limit.read_iops, p);
+    decode(limit.read_bps, p);
+    decode(limit.write_iops, p);
+    decode(limit.write_bps, p);
+    decode(burst.iops, p);
+    decode(burst.bps, p);
+    decode(burst.read_iops, p);
+    decode(burst.read_bps, p);
+    decode(burst.write_iops, p);
+    decode(burst.write_bps, p);
+    DECODE_FINISH(p);
+  }
+
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<qos_info_t *>& ls);
+
+  bool is_valid() const {
+    return limit.iops >=0 && limit.bps >=0 && 
+      limit.read_iops >=0 && limit.read_bps >=0 && 
+      limit.write_iops >=0 && limit.write_bps >=0 &&
+      burst.iops >=0 && burst.bps >=0 && 
+      burst.read_iops >=0 && burst.read_bps >=0 && 
+      burst.write_iops >=0 && burst.write_bps >=0;
+  }
+  bool is_enable() const {
+    return limit.iops>0 || limit.bps >0 ||
+      limit.read_iops >0 || limit.read_bps >0 ||
+      limit.write_iops >0 || limit.write_bps >0 ||
+      burst.iops >0 || burst.bps >0 ||
+      burst.read_iops >0 || burst.read_bps >0 ||
+      burst.write_iops >0 || burst.write_bps >0;
+  }
+};
+WRITE_CLASS_ENCODER(qos_info_t)
+
+inline bool operator==(const qos_info_t &l, const qos_info_t &r) {
+  return memcmp(&l, &r, sizeof(l)) == 0;
+}
+
+ostream& operator<<(ostream &out, const qos_info_t &n);
+
 namespace std {
   template<> struct hash<vinodeno_t> {
     size_t operator()(const vinodeno_t &vino) const { 
@@ -514,6 +592,7 @@ struct inode_t {
   nest_info_t accounted_rstat; // protected by parent's nestlock
 
   quota_info_t quota;
+  qos_info_t qos;
 
   mds_rank_t export_pin = MDS_RANK_NONE;
  
@@ -636,7 +715,7 @@ private:
 template<template<typename> class Allocator>
 void inode_t<Allocator>::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(15, 6, bl);
+  ENCODE_START(16, 6, bl);
 
   encode(ino, bl);
   encode(rdev, bl);
@@ -687,6 +766,7 @@ void inode_t<Allocator>::encode(bufferlist &bl, uint64_t features) const
   encode(change_attr, bl);
 
   encode(export_pin, bl);
+  encode(qos, bl);
 
   ENCODE_FINISH(bl);
 }
@@ -782,6 +862,9 @@ void inode_t<Allocator>::decode(bufferlist::const_iterator &p)
   } else {
     export_pin = MDS_RANK_NONE;
   }
+
+  if (struct_v >= 16)
+    ::decode(qos, p);
 
   DECODE_FINISH(p);
 }

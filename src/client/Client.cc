@@ -257,9 +257,41 @@ vinodeno_t Client::map_faked_ino(ino_t ino)
 }
 
 // cons/des
+static std::map<uint64_t, std::string> throttle_flags = {
+  { CLIENT_QOS_IOPS_THROTTLE,       "client_qos_iops_throttle"       },
+  { CLIENT_QOS_BPS_THROTTLE,        "client_qos_bps_throttle"        },
+  { CLIENT_QOS_READ_IOPS_THROTTLE,  "client_qos_read_iops_throttle"  },
+  { CLIENT_QOS_WRITE_IOPS_THROTTLE, "client_qos_write_iops_throttle" },
+  { CLIENT_QOS_READ_BPS_THROTTLE,   "client_qos_read_bps_throttle"   },
+  { CLIENT_QOS_WRITE_BPS_THROTTLE,  "client_qos_write_bps_throttle"  }
+};
+
+class SafeTimerSingleton : public SafeTimer {
+public:
+  Mutex lock;
+
+  explicit SafeTimerSingleton(CephContext *cct)
+      : SafeTimer(cct, lock, true),
+        lock("client::throttle::SafeTimerSingleton::lock") {
+    init();
+  }
+  ~SafeTimerSingleton() {
+    Mutex::Locker locker(lock);
+    shutdown();
+  }
+};
+void Client::get_timer_instance(CephContext *cct, SafeTimer **timer,
+    Mutex **timer_lock) {
+  auto safe_timer_singleton =
+    &cct->lookup_or_create_singleton_object<SafeTimerSingleton>(
+	"client::throttle::safe_timer", false, cct);
+  *timer = safe_timer_singleton;
+  *timer_lock = &safe_timer_singleton->lock;
+}
 
 Client::Client(Messenger *m, MonClient *mc, Objecter *objecter_)
   : Dispatcher(m->cct),
+    m_throttles_lock("client_throttles_lock"),
     timer(m->cct, client_lock),
     client_lock("Client::client_lock"),
     messenger(m),
@@ -317,6 +349,11 @@ Client::~Client()
   client_lock.Lock();
   tear_down_cache();
   client_lock.Unlock();
+  for(auto m_th : m_throttles){
+    for(auto t: m_th.second){
+      delete t.second;
+    }
+  }
 }
 
 void Client::tear_down_cache()
@@ -887,7 +924,9 @@ Inode * Client::add_update_inode(InodeStat *st, utime_t from,
       ldout(cct, 20) << " dir hash is " << (int)in->dir_layout.dl_dir_hash << dendl;
       in->rstat = st->rstat;
       in->quota = st->quota;
+      in->qos = st->qos;
       in->dir_pin = st->dir_pin;
+      ldout(cct, 20) << " add_update_inode qos:" << st->qos << dendl;
     }
     // move me if/when version reflects fragtree changes.
     if (in->dirfragtree != st->dirfragtree) {
@@ -4798,11 +4837,27 @@ void Client::handle_quota(const MConstRef<MClientQuota>& m)
 
     if (in) {
       in->quota = m->quota;
+      in->qos = m->qos;
       in->rstat = m->rstat;
+      client_set_qos(in);
     }
   }
 }
 
+int Client::client_set_qos(Inode *in)
+{
+  ldout(cct, 10) << "client_set_qos qos:" << in->qos << dendl;
+
+  std::unordered_map<uint64_t, pair<int64_t, int64_t>> qosInfo;
+  qosInfo[CLIENT_QOS_IOPS_THROTTLE]       = make_pair(in->qos.limit.iops,       in->qos.burst.iops);
+  qosInfo[CLIENT_QOS_BPS_THROTTLE]        = make_pair(in->qos.limit.bps,        in->qos.burst.bps);
+  qosInfo[CLIENT_QOS_READ_IOPS_THROTTLE]  = make_pair(in->qos.limit.read_iops,  in->qos.burst.read_iops);
+  qosInfo[CLIENT_QOS_READ_BPS_THROTTLE]   = make_pair(in->qos.limit.read_bps,   in->qos.burst.read_bps);
+  qosInfo[CLIENT_QOS_WRITE_IOPS_THROTTLE] = make_pair(in->qos.limit.write_iops, in->qos.burst.write_iops);
+  qosInfo[CLIENT_QOS_WRITE_BPS_THROTTLE]  = make_pair(in->qos.limit.write_bps,  in->qos.burst.write_bps);
+
+  return update_throttles_info(in, qosInfo, false);
+}
 void Client::handle_caps(const MConstRef<MClientCaps>& m)
 {
   mds_rank_t mds = mds_rank_t(m->get_source().num());
@@ -9022,6 +9077,7 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
   Inode *in = f->inode.get();
   utime_t lat;
   utime_t start = ceph_clock_now(); 
+  ThrottleItem item;
 
   if ((f->mode & CEPH_FILE_MODE_RD) == 0)
     return -EBADF;
@@ -9040,6 +9096,10 @@ int64_t Client::_read(Fh *f, int64_t offset, uint64_t size, bufferlist *bl)
       goto done;
     }
     ceph_assert(in->inline_version > 0);
+  }
+  if (needs_throttled(in, size, true, &item, f->actor_perms)){
+    ++m_io_throttled;
+    item.wait();
   }
 
 retry:
@@ -9447,6 +9507,12 @@ int64_t Client::_write(Fh *f, int64_t offset, uint64_t size, const char *buf,
   if (endoff > in->size && is_quota_bytes_exceeded(in, endoff - in->size,
 						   f->actor_perms)) {
     return -EDQUOT;
+  }
+
+  ThrottleItem item;
+  if (needs_throttled(in, size, false, &item, f->actor_perms)){
+    ++m_io_throttled;
+    item.wait();
   }
 
   //bool lazy = f->mode == CEPH_FILE_MODE_LAZY;
@@ -11491,6 +11557,12 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
 	return -EOPNOTSUPP;
       if (vxattr->name.compare(0, 10, "ceph.quota") == 0 && value)
 	check_realm = true;
+      if(in->is_dir() && !strncmp(name, "ceph.qos", 8)){
+	string val((const char *)value, size);
+	int ret = set_throttle_limit(in, name, val);
+	if(ret < 0)
+	  return ret;
+      }
     }
   }
 
@@ -11692,6 +11764,64 @@ size_t Client::_vxattrcb_quota_max_files(Inode *in, char *val, size_t size)
   return snprintf(val, size, "%lld", (long long int)in->quota.max_files);
 }
 
+bool Client::_vxattrcb_qos_exists(Inode *in)
+{
+  return in->qos.is_enable();
+}
+size_t Client::_vxattrcb_qos(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size,
+                  "iops=%lld/%lld bps=%lld/%lld read_iops=%lld/%lld read_bps=%lld/%lld write_iops=%lld/%lld write_bps=%lld/%lld",
+                  (long long int)in->qos.limit.iops,
+                  (long long int)in->qos.burst.iops,
+                  (long long int)in->qos.limit.bps,
+                  (long long int)in->qos.burst.bps,
+                  (long long int)in->qos.limit.read_iops,
+                  (long long int)in->qos.burst.read_iops,
+                  (long long int)in->qos.limit.read_bps,
+                  (long long int)in->qos.burst.read_bps,
+                  (long long int)in->qos.limit.write_iops,
+                  (long long int)in->qos.burst.write_iops,
+                  (long long int)in->qos.limit.write_bps,
+                  (long long int)in->qos.burst.write_bps);
+}
+size_t Client::_vxattrcb_qos_iops(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%lld, %lld",
+      (long long int)in->qos.limit.iops,
+      (long long int)in->qos.burst.iops);
+}
+size_t Client::_vxattrcb_qos_bps(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%lld, %lld",
+      (long long int)in->qos.limit.bps,
+      (long long int)in->qos.burst.bps);
+}
+size_t Client::_vxattrcb_qos_read_iops(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%lld, %lld",
+      (long long int)in->qos.limit.read_iops,
+      (long long int)in->qos.burst.read_iops);
+}
+size_t Client::_vxattrcb_qos_read_bps(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%lld, %lld",
+      (long long int)in->qos.limit.read_bps,
+      (long long int)in->qos.burst.read_bps);
+}
+size_t Client::_vxattrcb_qos_write_iops(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%lld, %lld",
+      (long long int)in->qos.limit.write_iops,
+      (long long int)in->qos.burst.write_iops);
+}
+size_t Client::_vxattrcb_qos_write_bps(Inode *in, char *val, size_t size)
+{
+  return snprintf(val, size, "%lld, %lld",
+      (long long int)in->qos.limit.write_bps,
+      (long long int)in->qos.burst.write_bps);
+}
+
 bool Client::_vxattrcb_layout_exists(Inode *in)
 {
   return in->layout != file_layout_t();
@@ -11837,6 +11967,15 @@ size_t Client::_vxattrcb_snap_btime(Inode *in, char *val, size_t size)
   exists_cb: &Client::_vxattrcb_quota_exists,			\
   flags: 0,                                                     \
 }
+#define XATTR_QOS_FIELD(_type, _name1, _name2)		                \
+{								\
+  name: CEPH_XATTR_NAME2(_type, _name1, _name2),			        \
+  getxattr_cb: &Client::_vxattrcb_ ## _type ## _ ## _name2,	\
+  readonly: false,						\
+  hidden: true,							\
+  exists_cb: &Client::_vxattrcb_qos_exists,			\
+  flags: 0,                                                     \
+}
 
 const Client::VXattr Client::_dir_vxattrs[] = {
   {
@@ -11886,6 +12025,27 @@ const Client::VXattr Client::_dir_vxattrs[] = {
     exists_cb: &Client::_vxattrcb_snap_btime_exists,
     flags: 0,
   },
+  {
+    name: "ceph.qos",
+    getxattr_cb: &Client::_vxattrcb_qos,
+    readonly: false,
+    hidden: true,
+    exists_cb: &Client::_vxattrcb_qos_exists,
+    flags: 0,
+  },
+  XATTR_QOS_FIELD(qos, limit, iops),
+  XATTR_QOS_FIELD(qos, limit, bps),
+  XATTR_QOS_FIELD(qos, limit, read_iops),
+  XATTR_QOS_FIELD(qos, limit, read_bps),
+  XATTR_QOS_FIELD(qos, limit, write_iops),
+  XATTR_QOS_FIELD(qos, limit, write_bps),
+
+  XATTR_QOS_FIELD(qos, burst, iops),
+  XATTR_QOS_FIELD(qos, burst, bps),
+  XATTR_QOS_FIELD(qos, burst, read_iops),
+  XATTR_QOS_FIELD(qos, burst, read_bps),
+  XATTR_QOS_FIELD(qos, burst, write_iops),
+  XATTR_QOS_FIELD(qos, burst, write_bps),
   { name: "" }     /* Required table terminator */
 };
 
@@ -14002,7 +14162,7 @@ bool Client::ms_handle_refused(Connection *con)
 
 Inode *Client::get_quota_root(Inode *in, const UserPerm& perms)
 {
-  Inode *quota_in = root_ancestor;
+  Inode *q_in = root_ancestor;
   SnapRealm *realm = in->snaprealm;
   while (realm) {
     ldout(cct, 10) << __func__ << " realm " << realm->ino << dendl;
@@ -14011,15 +14171,15 @@ Inode *Client::get_quota_root(Inode *in, const UserPerm& perms)
       if (p == inode_map.end())
 	break;
 
-      if (p->second->quota.is_enable()) {
-	quota_in = p->second;
+      if (p->second->quota.is_enable() || p->second->qos.is_enable()) {
+	q_in = p->second;
 	break;
       }
     }
     realm = realm->pparent;
   }
-  ldout(cct, 10) << __func__ << " " << in->vino() << " -> " << quota_in->vino() << dendl;
-  return quota_in;
+  ldout(cct, 10) << __func__ << " " << in->vino() << " -> " << q_in->vino() << dendl;
+  return q_in;
 }
 
 /**
@@ -14038,6 +14198,125 @@ bool Client::check_quota_condition(Inode *in, const UserPerm& perms,
     if (in == root_ancestor) {
       // We're done traversing, drop out
       return false;
+    } else {
+      // Continue up the tree
+      in = get_quota_root(in, perms);
+    }
+  }
+
+  return false;
+}
+
+int Client::set_throttle_limit(Inode *in, const char* name, string value)
+{
+  std::unordered_map<uint64_t, pair<int64_t, int64_t>> qosInfo;
+  int64_t q;
+  ldout(cct, 10) << "set_throttle_limit in:" << *in << " qos:" << in->qos
+    << " name:" << name << " value:" << value << dendl;
+
+  try{
+    q = boost::lexical_cast<int64_t>(value);
+    if (q < 0)
+      return -EINVAL;
+  } catch (boost::bad_lexical_cast const&) {
+    ldout(cct, 10) << "bad vxattr value, unable to parse int for " << name << dendl;
+    return -EINVAL;
+  }
+
+  if(!strcmp(name, "ceph.qos.limit.iops")){
+    qosInfo[CLIENT_QOS_IOPS_THROTTLE] = make_pair(q, in->qos.burst.iops);
+  }else if(!strcmp(name, "ceph.qos.burst.iops")){
+    qosInfo[CLIENT_QOS_IOPS_THROTTLE] = make_pair(in->qos.limit.iops, q);
+  }else if(!strcmp(name, "ceph.qos.limit.bps")){
+    qosInfo[CLIENT_QOS_BPS_THROTTLE] = make_pair(q, in->qos.burst.bps);
+  }else if(!strcmp(name, "ceph.qos.burst.bps")){
+    qosInfo[CLIENT_QOS_BPS_THROTTLE] = make_pair(in->qos.limit.bps, q);
+  }else if(!strcmp(name, "ceph.qos.limit.read_iops")){
+    qosInfo[CLIENT_QOS_READ_IOPS_THROTTLE] = make_pair(q, in->qos.burst.read_iops);
+  }else if(!strcmp(name, "ceph.qos.burst.read_iops")){
+    qosInfo[CLIENT_QOS_READ_IOPS_THROTTLE] = make_pair(in->qos.limit.read_iops, q);
+  }else if(!strcmp(name, "ceph.qos.limit.read_bps")){
+    qosInfo[CLIENT_QOS_READ_BPS_THROTTLE] = make_pair(q, in->qos.burst.read_bps);
+  }else if(!strcmp(name, "ceph.qos.burst.read_bps")){
+    qosInfo[CLIENT_QOS_READ_BPS_THROTTLE] = make_pair(in->qos.limit.read_bps, q);
+  }else if(!strcmp(name, "ceph.qos.limit.write_iops")){
+    qosInfo[CLIENT_QOS_WRITE_IOPS_THROTTLE] = make_pair(q, in->qos.burst.write_iops);
+  }else if(!strcmp(name, "ceph.qos.burst.write_iops")){
+    qosInfo[CLIENT_QOS_WRITE_IOPS_THROTTLE] = make_pair(in->qos.limit.write_iops, q);
+  }else if(!strcmp(name, "ceph.qos.limit.write_bps")){
+    qosInfo[CLIENT_QOS_WRITE_BPS_THROTTLE] = make_pair(q, in->qos.burst.write_bps);
+  }else if(!strcmp(name, "ceph.qos.burst.write_bps")){
+    qosInfo[CLIENT_QOS_WRITE_BPS_THROTTLE] = make_pair(in->qos.limit.write_bps, q);
+  }
+
+  return update_throttles_info(in, qosInfo, true);
+}
+
+/**
+ * Traverse quota ancestors of the Inode, return true
+ * if any of them passes the passed function
+ */
+bool Client::__check_qos_condition(Inode *in, uint64_t r, bool isRead,
+				     ThrottleItem* item)
+{
+  bool blocked = false;
+  uint64_t tokens = 0;
+  uint64_t flag = 0;
+  TokenBucketThrottle* throttle = nullptr;
+  if(!in->is_dir())
+    return false;
+
+  ldout(cct, 5) << "__check_qos_condition qos:" << in->qos
+    << " in:" << *in << dendl;
+
+  if(in->qos.is_enable()){
+    if(m_throttles.find(in) == m_throttles.end()){
+      std::unordered_map<uint64_t, pair<int64_t, int64_t>> qosInfo;
+      qosInfo[CLIENT_QOS_IOPS_THROTTLE]       = make_pair(in->qos.limit.iops,       in->qos.burst.iops);
+      qosInfo[CLIENT_QOS_BPS_THROTTLE]        = make_pair(in->qos.limit.bps,        in->qos.burst.bps);
+      qosInfo[CLIENT_QOS_READ_IOPS_THROTTLE]  = make_pair(in->qos.limit.read_iops,  in->qos.burst.read_iops);
+      qosInfo[CLIENT_QOS_READ_BPS_THROTTLE]   = make_pair(in->qos.limit.read_bps,   in->qos.burst.read_bps);
+      qosInfo[CLIENT_QOS_WRITE_IOPS_THROTTLE] = make_pair(in->qos.limit.write_iops, in->qos.burst.write_iops);
+      qosInfo[CLIENT_QOS_WRITE_BPS_THROTTLE]  = make_pair(in->qos.limit.write_bps,  in->qos.burst.write_bps);
+      if(update_throttles_info(in, qosInfo, false))
+	return false;
+    }
+  }else{
+    return false;
+  }
+
+  for (auto t : m_throttles[in]) {
+    flag = t.first;
+    throttle = t.second;
+    if (item->were_throttled(flag))
+      continue;
+
+    tokens = tokens_requested(flag, r, isRead);
+    if(throttle->get<Client, ThrottleItem,
+	&Client::handle_throttle_ready>(
+	  tokens, this, item, flag)){
+      blocked = true;
+    } else {
+      item->set_throttled(flag);
+    }
+  }
+
+  return blocked;
+}
+
+bool Client::check_qos_condition(Inode *in, uint64_t r, bool isRead,
+				     ThrottleItem* item,
+				     const UserPerm& perms)
+{
+  while (true) {
+    assert(in != NULL);
+    if(__check_qos_condition(in, r, isRead, item)){
+      return true;
+    }
+
+    if (in == root_ancestor) {
+      // We're done traversing, drop out
+      break;
     } else {
       // Continue up the tree
       in = get_quota_root(in, perms);
@@ -14083,6 +14362,61 @@ bool Client::is_quota_bytes_approaching(Inode *in, const UserPerm& perms)
         }
       });
 }
+
+int Client::update_throttles_info(Inode* in, std::unordered_map<uint64_t, pair<int64_t, int64_t>>& qosInfo, bool refOnly)
+{
+  int ret = 0;
+  Mutex::Locker lock(m_throttles_lock);
+  TokenBucketThrottle* th;
+
+  auto it = m_throttles.find(in);
+  if(it == m_throttles.end()){
+    SafeTimer *timer;
+    Mutex *timer_lock;
+    get_timer_instance(cct, &timer, &timer_lock);
+    for (auto f : throttle_flags) {
+      auto throttle = new TokenBucketThrottle(cct, f.second,
+	  qosInfo[f.first].first, qosInfo[f.first].second, timer, timer_lock);
+      m_throttles[in].push_back(make_pair(f.first, throttle));
+      throttle->set_limit(qosInfo[f.first].first, qosInfo[f.first].second);
+    }
+  }else{
+    uint64_t flag = 0;
+    auto throttle = it->second ;
+    for (auto t : throttle) {
+      flag = t.first;
+      th = t.second;
+      if(refOnly){
+	if(qosInfo.find(flag) != qosInfo.end()){
+	  ret = th->set_limit(qosInfo[flag].first, qosInfo[flag].second);
+	}
+      }else{
+	ret = th->set_limit(qosInfo[flag].first, qosInfo[flag].second);
+      }
+    }
+  }
+  return ret;
+}
+
+bool Client::needs_throttled(Inode *in, uint64_t r, bool isRead,
+				     ThrottleItem* item,
+				     const UserPerm& perms)
+{
+  ldout(cct, 5) << "needs_throttled isRead:" << isRead << dendl;
+  return check_qos_condition(in, r, isRead, item, perms);
+}
+
+void Client::handle_throttle_ready(int c, ThrottleItem *item, uint64_t flag)
+{
+  assert(m_io_throttled.load() > 0);
+  item->set_throttled(flag);
+  if(item->were_all_throttled()){
+    --m_io_throttled;
+    item->signal();
+  }
+  return;
+}
+
 
 enum {
   POOL_CHECKED = 1,

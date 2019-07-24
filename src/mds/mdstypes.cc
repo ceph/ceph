@@ -172,6 +172,62 @@ ostream& operator<<(ostream &out, const quota_info_t &n)
 }
 
 /*
+ * qos_info_t
+ */
+void qos_info_t::dump(Formatter *f) const
+{
+  f->dump_int("limit.iops",       limit.iops);
+  f->dump_int("limit.bps",        limit.bps);
+  f->dump_int("limit.read_iops",  limit.read_iops);
+  f->dump_int("limit.read_bps",   limit.read_bps);
+  f->dump_int("limit.write_iops", limit.write_iops);
+  f->dump_int("limit.write_bps",  limit.write_bps);
+
+  f->dump_int("burst.iops",       burst.iops);
+  f->dump_int("burst.bps",        burst.bps);
+  f->dump_int("burst.read_iops",  burst.read_iops);
+  f->dump_int("burst.read_bps",   burst.read_bps);
+  f->dump_int("burst.write_iops", burst.write_iops);
+  f->dump_int("burst.write_bps",  burst.write_bps);
+}
+void qos_info_t::generate_test_instances(list<qos_info_t *>& ls)
+{
+  ls.push_back(new qos_info_t);
+  ls.push_back(new qos_info_t);
+
+  ls.back()->limit.iops = 16;
+  ls.back()->limit.bps = 16;
+  ls.back()->limit.read_iops = 16;
+  ls.back()->limit.read_bps = 16;
+  ls.back()->limit.write_iops = 16;
+  ls.back()->limit.write_bps = 16;
+
+  ls.back()->burst.iops = 16;
+  ls.back()->burst.bps = 16;
+  ls.back()->burst.read_iops = 16;
+  ls.back()->burst.read_bps = 16;
+  ls.back()->burst.write_iops = 16;
+  ls.back()->burst.write_bps = 16;
+}
+ostream& operator<<(ostream &out, const qos_info_t &n)
+{
+  out << "qos("
+      << "iops = " << n.limit.iops
+      << "/" << n.burst.iops
+      << " bps = " << n.limit.bps
+      << "/" << n.burst.bps
+      << " read_iops = " << n.limit.read_iops
+      << "/" << n.burst.read_iops
+      << " read_bps = " << n.limit.read_bps
+      << "/" << n.burst.read_bps
+      << " write_iops = " << n.limit.write_iops
+      << "/" << n.burst.write_iops
+      << " write_bps = " << n.limit.write_bps
+      << "/" << n.burst.write_bps
+      << ")";
+  return out;
+}
+/*
  * client_writeable_range_t
  */
 

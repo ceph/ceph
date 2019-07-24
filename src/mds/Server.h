@@ -240,6 +240,7 @@ public:
   void handle_client_setdirlayout(MDRequestRef& mdr);
 
   int parse_quota_vxattr(string name, string value, quota_info_t *quota);
+  int parse_qos_vxattr(string name, string value, qos_info_t *qos);
   void create_quota_realm(CInode *in);
   int parse_layout_vxattr(string name, string value, const OSDMap& osdmap,
 			  file_layout_t *layout, bool validate=true);

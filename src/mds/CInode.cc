@@ -1682,6 +1682,7 @@ void CInode::encode_lock_state(int type, bufferlist& bl)
       encode(inode.ctime, bl);
       encode(inode.layout, bl, mdcache->mds->mdsmap->get_up_features());
       encode(inode.quota, bl);
+      encode(inode.qos, bl);
       encode(inode.export_pin, bl);
     }
     break;
@@ -1940,6 +1941,7 @@ void CInode::decode_lock_state(int type, const bufferlist& bl)
       if (inode.ctime < tm) inode.ctime = tm;
       decode(inode.layout, p);
       decode(inode.quota, p);
+      decode(inode.qos, p);
       mds_rank_t old_pin = inode.export_pin;
       decode(inode.export_pin, p);
       maybe_export_pin(old_pin != inode.export_pin);
@@ -2358,7 +2360,7 @@ void CInode::finish_scatter_gather_update(int type)
 	}
       }
 
-      mdcache->broadcast_quota_to_client(this);
+      mdcache->broadcast_quota_qos_to_client(this);
     }
     break;
 
@@ -3640,6 +3642,7 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     encode(inline_data, bl);
     mempool_inode *policy_i = ppolicy ? pi : oi;
     encode(policy_i->quota, bl);
+    encode(policy_i->qos, bl);
     encode(layout.pool_ns, bl);
     encode(any_i->btime, bl);
     encode(any_i->change_attr, bl);
@@ -3693,6 +3696,10 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
     if (conn->has_feature(CEPH_FEATURE_MDS_QUOTA)) {
       mempool_inode *policy_i = ppolicy ? pi : oi;
       encode(policy_i->quota, bl);
+    }
+    if (conn->has_feature(CEPH_FEATURE_MDS_QOS)) {
+      mempool_inode *policy_i = ppolicy ? pi : oi;
+      encode(policy_i->qos, bl);
     }
     if (conn->has_feature(CEPH_FEATURE_FS_FILE_LAYOUT_V2)) {
       encode(layout.pool_ns, bl);

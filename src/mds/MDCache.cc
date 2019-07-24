@@ -1953,7 +1953,7 @@ void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accou
   }
 }
 
-void MDCache::broadcast_quota_to_client(CInode *in, client_t exclude_ct, bool quota_change)
+void MDCache::broadcast_quota_qos_to_client(CInode *in, client_t exclude_ct, bool quota_qos_change)
 {
   if (!(mds->is_active() || mds->is_stopping()))
     return;
@@ -1964,7 +1964,8 @@ void MDCache::broadcast_quota_to_client(CInode *in, client_t exclude_ct, bool qu
   auto i = in->get_projected_inode();
   
   if (!i->quota.is_enable() &&
-  	  !quota_change)
+  	  !quota_qos_change &&
+	  !i->qos.is_enable())
     return;
 
   // creaete snaprealm for quota inode (quota was set before mimic)
@@ -1999,6 +2000,10 @@ void MDCache::broadcast_quota_to_client(CInode *in, client_t exclude_ct, bool qu
       if ((abs(cap->last_rbytes - i->quota.max_bytes) >> 4) <
           abs(cap->last_rbytes - i->rstat.rbytes))
         goto update;
+
+      if (i->qos.is_valid()){
+        goto update;
+      }
     }
 
     continue;
@@ -2011,6 +2016,7 @@ update:
     msg->ino = in->ino();
     msg->rstat = i->rstat;
     msg->quota = i->quota;
+    msg->qos = i->qos;
     mds->send_message_client_counted(msg, cap->get_session());
   }
   for (const auto &it : in->get_replicas()) {
@@ -2315,7 +2321,7 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
     }
 
     parent->check_rstats();
-    broadcast_quota_to_client(pin);
+    broadcast_quota_qos_to_client(pin);
     // next parent!
     cur = pin;
     parent = parentdn->get_dir();

@@ -275,6 +275,46 @@ public:
   Client(const Client&) = delete;
   Client(const Client&&) = delete;
   virtual ~Client() override;
+#define CLIENT_QOS_IOPS_THROTTLE			1 << 0
+#define CLIENT_QOS_BPS_THROTTLE				1 << 1
+#define CLIENT_QOS_READ_IOPS_THROTTLE			1 << 2
+#define CLIENT_QOS_WRITE_IOPS_THROTTLE			1 << 3
+#define CLIENT_QOS_READ_BPS_THROTTLE			1 << 4
+#define CLIENT_QOS_WRITE_BPS_THROTTLE			1 << 5
+#define CLIENT_QOS_MAX					1 << 6
+
+#define CLIENT_QOS_BPS_MASK	(CLIENT_QOS_BPS_THROTTLE | CLIENT_QOS_READ_BPS_THROTTLE | CLIENT_QOS_WRITE_BPS_THROTTLE)
+#define CLIENT_QOS_IOPS_MASK	(CLIENT_QOS_IOPS_THROTTLE | CLIENT_QOS_READ_IOPS_THROTTLE | CLIENT_QOS_WRITE_IOPS_THROTTLE)
+#define CLIENT_QOS_READ_MASK	(CLIENT_QOS_READ_BPS_THROTTLE | CLIENT_QOS_READ_IOPS_THROTTLE)
+#define CLIENT_QOS_WRITE_MASK	(CLIENT_QOS_WRITE_BPS_THROTTLE | CLIENT_QOS_WRITE_IOPS_THROTTLE)
+#define CLIENT_QOS_MASK         (CLIENT_QOS_BPS_MASK | CLIENT_QOS_IOPS_MASK)
+  std::unordered_map<Inode*, std::list<std::pair<uint64_t, TokenBucketThrottle*>>> m_throttles;
+  Mutex m_throttles_lock;
+  std::atomic<unsigned> m_io_blockers { 0 };
+  std::atomic<unsigned> m_io_throttled { 0 };
+  class ThrottleItem{
+    public:
+      uint64_t m_throttled_flag;
+      C_SaferCond ctx;
+      ThrottleItem():m_throttled_flag(0), 
+      ctx()
+    {}
+      bool were_all_throttled(){
+	return (m_throttled_flag == CLIENT_QOS_MASK);
+      }
+      bool were_throttled(uint64_t flag) {
+	return m_throttled_flag & flag;
+      }
+      void set_throttled(uint64_t flag) {
+	m_throttled_flag |= flag;
+      }
+      void wait() {
+	ctx.wait();
+      }
+      void signal() {
+	ctx.complete(0);
+      }
+  };
 
   static UserPerm pick_my_perms(CephContext *c) {
     uid_t uid = c->_conf->client_mount_uid >= 0 ? c->_conf->client_mount_uid : -1;
@@ -285,6 +325,22 @@ public:
     uid_t uid = user_id >= 0 ? user_id : -1;
     gid_t gid = group_id >= 0 ? group_id : -1;
     return UserPerm(uid, gid);
+  }
+  uint64_t tokens_requested(uint64_t flag, int64_t size, bool isRead){
+    if(isRead){
+      if (flag & CLIENT_QOS_WRITE_MASK) {
+	return 0;
+      }
+    }else{
+      if (flag & CLIENT_QOS_READ_MASK) {
+	return 0;
+      }
+    }
+
+    if (flag & CLIENT_QOS_BPS_MASK){
+      return size;
+    }
+    return 1;
   }
 
   int mount(const std::string &mount_root, const UserPerm& perms,
@@ -752,6 +808,14 @@ public:
   std::unique_ptr<PerfCounters> logger;
   std::unique_ptr<MDSMap> mdsmap;
 
+  int client_set_qos(Inode *in);
+  void get_timer_instance(CephContext *cct, SafeTimer **timer, Mutex **timer_lock);
+  bool needs_throttled(Inode *in, uint64_t r, bool isRead, ThrottleItem* item, const UserPerm& perms);
+  int update_throttles_info(Inode* in, std::unordered_map<uint64_t, pair<int64_t, int64_t>>& qosInfo, bool refOnly);
+  int set_throttle_limit(Inode *in, const char* name, string value);
+  void handle_throttle_ready(int c, ThrottleItem *item, uint64_t flag);
+  bool check_qos_condition(Inode *in, uint64_t r, bool isRead, ThrottleItem* item, const UserPerm& perms);
+  bool __check_qos_condition(Inode *in, uint64_t r, bool isRead, ThrottleItem* item);
 
 protected:
   /* Flags for check_caps() */
@@ -1143,6 +1207,15 @@ private:
   size_t _vxattrcb_quota(Inode *in, char *val, size_t size);
   size_t _vxattrcb_quota_max_bytes(Inode *in, char *val, size_t size);
   size_t _vxattrcb_quota_max_files(Inode *in, char *val, size_t size);
+
+  bool _vxattrcb_qos_exists(Inode *in);
+  size_t _vxattrcb_qos(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_qos_iops(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_qos_bps(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_qos_read_iops(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_qos_read_bps(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_qos_write_iops(Inode *in, char *val, size_t size);
+  size_t _vxattrcb_qos_write_bps(Inode *in, char *val, size_t size);
 
   bool _vxattrcb_layout_exists(Inode *in);
   size_t _vxattrcb_layout(Inode *in, char *val, size_t size);

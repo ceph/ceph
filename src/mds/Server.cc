@@ -5166,6 +5166,58 @@ void Server::create_quota_realm(CInode *in)
   mds->send_message_mds(req, in->authority().first);
 }
 
+int Server::parse_qos_vxattr(string name, string value, qos_info_t *qos)
+{
+  dout(20) << "parse_qos_vxattr name " << name << " value '" << value << "'" << dendl;
+  try {
+    // just for client data QoS
+    // qos iops/ bps
+    // qos.read.iops/ qos.read.bps
+    // qos.write.iops/ qos.write.bps
+    // Fixme: if we should support another setting type(refer quota)
+    int64_t q = boost::lexical_cast<int64_t>(value);
+    if (q < 0)
+      return -EINVAL;
+    if (name == "qos.limit.iops") {
+      qos->limit.iops = q;
+    }else if (name == "qos.burst.iops") {
+      qos->burst.iops = q;
+    }else if(name == "qos.limit.bps"){
+      qos->limit.bps = q;
+    }else if(name == "qos.burst.bps"){
+      qos->burst.bps = q;
+    }else if(name == "qos.limit.read_iops"){
+      qos->limit.read_iops = q;
+    }else if(name == "qos.burst.read_iops"){
+      qos->burst.read_iops = q;
+    }else if(name == "qos.limit.read_bps"){
+      qos->limit.read_bps = q;
+    }else if(name == "qos.burst.read_bps"){
+      qos->burst.read_bps = q;
+    }else if(name == "qos.limit.write_iops"){
+      qos->limit.write_iops = q;
+    }else if(name == "qos.burst.write_iops"){
+      qos->burst.write_iops = q;
+    }else if(name == "qos.limit.write_bps"){
+      qos->limit.write_bps = q;
+    }else if(name == "qos.burst.write_bps"){
+      qos->burst.write_bps = q;
+    }else{
+      dout(10) << " unknown qos vxattr " << name << dendl;
+      return -EINVAL;
+    }
+    if (!qos->is_valid()) {
+      dout(10) << "bad quota" << dendl;
+      return -EINVAL;
+    }
+  } catch (boost::bad_lexical_cast const&) {
+    dout(10) << "bad vxattr value, unable to parse int for " << name << dendl;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
 /*
  * Verify that the file layout attribute carried by client
  * is well-formatted.
@@ -5344,7 +5396,47 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     pip = &pi.inode;
 
     client_t exclude_ct = mdr->get_client();
-    mdcache->broadcast_quota_to_client(cur, exclude_ct, true);
+    mdcache->broadcast_quota_qos_to_client(cur, exclude_ct, true);
+  } else if (name.compare(0, 8, "ceph.qos") == 0) { 
+    if (!cur->is_dir() || cur->is_root()) {
+      respond_to_request(mdr, -EINVAL);
+      return;
+    }
+
+    qos_info_t qos = cur->get_projected_inode()->qos;
+
+    dout(10) << "handle_set_vxattr qos:" << qos << dendl;
+    rest = name.substr(name.find("qos"));
+    int r = parse_qos_vxattr(rest, value, &qos);
+    if (r < 0) {
+      respond_to_request(mdr, r);
+      return;
+    }
+
+    lov.add_xlock(&cur->policylock);
+    if (qos.is_enable() && !cur->get_projected_srnode()) {
+      lov.add_xlock(&cur->snaplock);
+      new_realm = true;
+    }
+
+    if (!mds->locker->acquire_locks(mdr, lov))
+      return;
+
+    auto &pi = cur->project_inode(false, new_realm);
+    pi.inode.qos = qos;
+
+    if (new_realm) {
+      SnapRealm *realm = cur->find_snaprealm();
+      auto seq = realm->get_newest_seq();
+      auto &newsnap = *pi.snapnode;
+      newsnap.created = seq;
+      newsnap.seq = seq;
+    }
+    mdr->no_early_reply = true;
+    pip = &pi.inode;
+
+    client_t exclude_ct = mdr->get_client();
+    mdcache->broadcast_quota_qos_to_client(cur, exclude_ct, true);
   } else if (name.find("ceph.dir.pin") == 0) {
     if (!cur->is_dir() || cur->is_root()) {
       respond_to_request(mdr, -EINVAL);

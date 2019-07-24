@@ -8,6 +8,7 @@ public:
   inodeno_t ino;
   nest_info_t rstat;
   quota_info_t quota;
+  qos_info_t qos;
 
 protected:
   MClientQuota() :
@@ -34,6 +35,7 @@ public:
     encode(rstat.rfiles, payload);
     encode(rstat.rsubdirs, payload);
     encode(quota, payload);
+    encode(qos, payload);
   }
   void decode_payload() override {
     auto p = payload.cbegin();
@@ -43,6 +45,7 @@ public:
     decode(rstat.rfiles, p);
     decode(rstat.rsubdirs, p);
     decode(quota, p);
+    decode(qos, p);
     ceph_assert(p.end());
   }
 private:
