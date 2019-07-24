@@ -5004,6 +5004,10 @@ std::vector<Option> get_global_options() {
     Option("debug_asok_assert_abort", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description("allow commands 'assert' and 'abort' via asok for testing crash dumps etc"),
+
+    Option("debug_disable_randomized_ping", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description("Disable heartbeat ping randomization for testing purposes"),
   });
 }
 
