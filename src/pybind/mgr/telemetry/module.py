@@ -168,7 +168,7 @@ class Module(MgrModule):
 
     def gather_crashinfo(self):
         crashlist = list()
-        errno, crashids, err = self.remote('crash', 'do_ls', '', '')
+        errno, crashids, err = self.remote('crash', 'ls')
         if errno:
             return ''
         for crashid in crashids.split():
