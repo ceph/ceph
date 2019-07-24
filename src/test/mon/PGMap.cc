@@ -25,7 +25,7 @@ namespace {
         define_column("", TextTable::LEFT, TextTable::LEFT);
       }
       if (verbose) {
-        for (int i = 0; i < 5; i++) {
+        for (int i = 0; i < 9; i++) {
           define_column("", TextTable::LEFT, TextTable::LEFT);
         }
       }
@@ -90,8 +90,12 @@ TEST(pgmap, dump_object_stat_sum_0)
 
   unsigned col = 0;
   ASSERT_EQ(stringify(byte_u_t(stored)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(stored)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(stringify(si_u_t(sum.num_objects)), tbl.get(0, col++));
   ASSERT_EQ(stringify(byte_u_t(statfs.allocated)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(statfs.allocated)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(percentify(used_percent), tbl.get(0, col++));
   ASSERT_EQ(stringify(byte_u_t(avail/copies_rate)), tbl.get(0, col++));
   ASSERT_EQ(stringify(si_u_t(pool.quota_max_objects)), tbl.get(0, col++));
@@ -120,7 +124,11 @@ TEST(pgmap, dump_object_stat_sum_1)
 			      pool.get_size(), verbose, true, true, &pool);  
   unsigned col = 0;
   ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(stringify(si_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
+  ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(stringify(byte_u_t(0)), tbl.get(0, col++));
   ASSERT_EQ(percentify(0), tbl.get(0, col++));
   ASSERT_EQ(stringify(byte_u_t(avail/pool.size)), tbl.get(0, col++));
