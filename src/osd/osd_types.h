@@ -2513,44 +2513,45 @@ struct pool_stat_t {
   // In legacy mode used and netto values are the same. But for new per-pool
   // collection 'used' provides amount of space ALLOCATED at all related OSDs 
   // and 'netto' is amount of stored user data.
-  uint64_t get_allocated_bytes(bool per_pool, bool per_pool_omap) const {
-    uint64_t allocated_bytes;
+  uint64_t get_allocated_data_bytes(bool per_pool) const {
     if (per_pool) {
-      allocated_bytes = store_stats.allocated;
+      return store_stats.allocated;
     } else {
       // legacy mode, use numbers from 'stats'
-      allocated_bytes = stats.sum.num_bytes +
-	stats.sum.num_bytes_hit_set_archive;
+      return stats.sum.num_bytes + stats.sum.num_bytes_hit_set_archive;
     }
-    if (per_pool_omap) {
-      allocated_bytes += store_stats.omap_allocated;
-    } else {
-      // omap is not broken out by pool by nautilus bluestore
-      allocated_bytes += stats.sum.num_omap_bytes;
-    }
-    return allocated_bytes;
   }
-  uint64_t get_user_bytes(float raw_used_rate, ///< space amp factor
-			  bool per_pool,
-			  bool per_pool_omap) const {
+  uint64_t get_allocated_omap_bytes(bool per_pool_omap) const {
+    if (per_pool_omap) {
+      return store_stats.omap_allocated;
+    } else {
+      // omap is not broken out by pool by nautilus bluestore; report the
+      // scrub value.  this will be imprecise in that it won't account for
+      // any storage overhead/efficiency.
+      return stats.sum.num_omap_bytes;
+    }
+  }
+  uint64_t get_user_data_bytes(float raw_used_rate, ///< space amp factor
+			       bool per_pool) const {
     // NOTE: we need the space amp factor so that we can work backwards from
     // the raw utilization to the amount of data that the user actually stored.
-    uint64_t user_bytes;
     if (per_pool) {
-      user_bytes = raw_used_rate ? store_stats.data_stored / raw_used_rate : 0;
+      return raw_used_rate ? store_stats.data_stored / raw_used_rate : 0;
     } else {
       // legacy mode, use numbers from 'stats'.  note that we do NOT use the
       // raw_used_rate factor here because we are working from the PG stats
       // directly.
-      user_bytes = stats.sum.num_bytes + stats.sum.num_bytes_hit_set_archive;
+      return stats.sum.num_bytes + stats.sum.num_bytes_hit_set_archive;
     }
+  }
+  uint64_t get_user_omap_bytes(float raw_used_rate, ///< space amp factor
+			       bool per_pool_omap) const {
     if (per_pool_omap) {
-      user_bytes += store_stats.omap_allocated;
+      return raw_used_rate ? store_stats.omap_allocated / raw_used_rate : 0;
     } else {
-      // omap is not broken out by pool by nautilus bluestore
-      user_bytes += stats.sum.num_omap_bytes;
+      // omap usage is lazily reported during scrub; this value may lag.
+      return stats.sum.num_omap_bytes;
     }
-    return user_bytes;
   }
 
   void dump(ceph::Formatter *f) const;
