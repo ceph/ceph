@@ -10,6 +10,7 @@ import { Icons } from '../../../shared/enum/icons.enum';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
+import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { Permission } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
@@ -66,11 +67,19 @@ export class CephfsClientsComponent implements OnInit {
     this.viewCacheStatus = ViewCacheStatus.ValueNone;
   }
 
-  refresh() {
-    this.cephfsService.getClients(this.id).subscribe((data: any) => {
-      this.viewCacheStatus = data.status;
-      this.clients.data = data.data;
-    });
+  refresh(context?: CdTableFetchDataContext) {
+    this.cephfsService.getClients(this.id).subscribe(
+      (data: any) => {
+        this.viewCacheStatus = data.status;
+        this.clients.data = data.data;
+      },
+      () => {
+        this.viewCacheStatus = ViewCacheStatus.ValueException;
+        if (context) {
+          context.error();
+        }
+      }
+    );
   }
 
   updateSelection(selection: CdTableSelection) {

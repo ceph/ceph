@@ -53,7 +53,8 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
     if (this.selection.hasSelection) {
       this.selectedItem = this.selection.first();
       const mdsInfo: any[] = this.selectedItem.mdsmap.info;
-      this.grafanaId = Object.values(mdsInfo)[0].name;
+      const values = Object.values(mdsInfo);
+      this.grafanaId = values.length ? _.first(values).name : undefined;
 
       if (this.id !== this.selectedItem.id) {
         this.id = this.selectedItem.id;
@@ -61,7 +62,12 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
         this.pools.data = [];
         this.standbys = [];
         this.mdsCounters = {};
+        this.clientCount = 0;
       }
+
+      // Immediately refresh the displayed data, don't wait until the
+      // table refreshes the data itself.
+      this.refresh();
     }
   }
 
