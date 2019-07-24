@@ -2,16 +2,8 @@ set(_std_filesystem_test_src
   ${CMAKE_CURRENT_LIST_DIR}/FindStdFilesystem_test.cc)
 
 macro(try_std_filesystem_library _library _result)
-  if(CMAKE_VERSION VERSION_LESS "3.8")
-    # abuse the definition flags, because they are quite
-    # the same as CMAKE_C_FLAGS: they are passed to the
-    # compiler.
-    set(_std_filesystem_try_compile_arg
-      COMPILE_DEFINITIONS "-std=c++17")
-  else()
-    set(_std_filesystem_try_compile_arg
-      CXX_STANDARD 17)
-  endif()
+  set(_std_filesystem_try_compile_arg
+    CXX_STANDARD 17)
   try_compile(_std_filesystem_compiles
     ${CMAKE_CURRENT_BINARY_DIR}
     SOURCES ${_std_filesystem_test_src}

@@ -1,14 +1,18 @@
-cmake_minimum_required(VERSION 3.5.1)
+cmake_minimum_required(VERSION 3.10.2)
 # remove cmake/modules/FindPython* once 3.12 is required
 
-project(ceph CXX C ASM)
-set(VERSION 15.0.0)
+project(ceph
+  VERSION 15.0.0
+  LANGUAGES CXX C ASM)
 
 if(POLICY CMP0028)
   cmake_policy(SET CMP0028 NEW)
 endif()
 if(POLICY CMP0046)
   cmake_policy(SET CMP0046 NEW)
+endif()
+if(POLICY CMP0048)
+  cmake_policy(SET CMP0048 NEW)
 endif()
 if(POLICY CMP0054)
   cmake_policy(SET CMP0054 NEW)

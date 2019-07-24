@@ -103,7 +103,7 @@
 # main package definition
 #################################################################################
 Name:		ceph
-Version:	@VERSION@
+Version:	@PROJECT_VERSION@
 Release:	@RPM_RELEASE@%{?dist}
 %if 0%{?fedora} || 0%{?rhel}
 Epoch:		2
