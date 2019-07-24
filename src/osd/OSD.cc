@@ -10786,6 +10786,7 @@ void OSD::ShardedOpWQ::_enqueue(OpQueueItem&& item) {
   sdata->shard_lock.lock();
 
   dout(20) << __func__ << " " << item << dendl;
+  bool empty = sdata->pqueue->empty();
   if (priority >= osd->op_prio_cutoff)
     sdata->pqueue->enqueue_strict(
       item.get_owner(), priority, std::move(item));
@@ -10794,8 +10795,10 @@ void OSD::ShardedOpWQ::_enqueue(OpQueueItem&& item) {
       item.get_owner(), priority, cost, std::move(item));
   sdata->shard_lock.unlock();
 
-  std::lock_guard l{sdata->sdata_wait_lock};
-  sdata->sdata_cond.notify_one();
+  if (empty) {
+    std::lock_guard l{sdata->sdata_wait_lock};
+    sdata->sdata_cond.notify_one();
+  }
 }
 
 void OSD::ShardedOpWQ::_enqueue_front(OpQueueItem&& item)
