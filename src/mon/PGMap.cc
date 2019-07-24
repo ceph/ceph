@@ -902,7 +902,9 @@ void PGMapDigest::dump_object_stat_sum(
     raw_used_rate *= (float)(sum.num_object_copies - sum.num_objects_degraded) / sum.num_object_copies;
   }
 
-  uint64_t used_bytes = pool_stat.get_allocated_bytes(per_pool, per_pool_omap);
+  uint64_t used_data_bytes = pool_stat.get_allocated_data_bytes(per_pool);
+  uint64_t used_omap_bytes = pool_stat.get_allocated_omap_bytes(per_pool_omap);
+  uint64_t used_bytes = used_data_bytes + used_omap_bytes;
 
   float used = 0.0;
   // note avail passed in is raw_avail, calc raw_used here.
@@ -914,8 +916,11 @@ void PGMapDigest::dump_object_stat_sum(
   }
   auto avail_res = raw_used_rate ? avail / raw_used_rate : 0;
   // an approximation for actually stored user data
-  auto stored_normalized = pool_stat.get_user_bytes(raw_used_rate, per_pool,
-						    per_pool_omap);
+  auto stored_data_normalized = pool_stat.get_user_data_bytes(
+    raw_used_rate, per_pool);
+  auto stored_omap_normalized = pool_stat.get_user_omap_bytes(
+    raw_used_rate, per_pool_omap);
+  auto stored_normalized = stored_data_normalized + stored_omap_normalized;
   // same, amplied by replication or EC
   auto stored_raw = stored_normalized * raw_used_rate;
   if (f) {

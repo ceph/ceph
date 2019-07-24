@@ -1018,11 +1018,13 @@ extern "C" int _rados_ioctx_pool_stat(rados_ioctx_t io,
   }
 
   ::pool_stat_t& r = rawresult[pool_name];
-  uint64_t allocated_bytes = r.get_allocated_bytes(per_pool);
+  uint64_t allocated_bytes = r.get_allocated_data_bytes(per_pool) +
+    r.get_allocated_omap_bytes(per_pool);
   // FIXME: raw_used_rate is unknown hence use 1.0 here
   // meaning we keep net amount aggregated over all replicas
   // Not a big deal so far since this field isn't exposed
-  uint64_t user_bytes = r.get_user_bytes(1.0, per_pool);
+  uint64_t user_bytes = r.get_user_data_bytes(1.0, per_pool) +
+    r.get_user_omap_bytes(1.0, per_pool);
 
   stats->num_kb = shift_round_up(allocated_bytes, 10);
   stats->num_bytes = allocated_bytes;
