@@ -30,6 +30,9 @@ class TestScrubControls(CephFSTestCase):
         self.assertEqual(res['return_code'], expected)
     def _get_scrub_status(self):
         return self.fs.rank_tell(["scrub", "status"])
+    def _check_task_status(self, expected_status):
+        task_status = self.fs.get_task_status("scrub status")
+        self.assertTrue(task_status['0'].startswith(expected_status))
 
     def test_scrub_abort(self):
         test_dir = "scrub_control_test_path"
@@ -50,6 +53,10 @@ class TestScrubControls(CephFSTestCase):
         out_json = self._get_scrub_status()
         self.assertTrue("no active" in out_json['status'])
 
+        # sleep enough to fetch updated task status
+        time.sleep(10)
+        self._check_task_status("idle")
+
     def test_scrub_pause_and_resume(self):
         test_dir = "scrub_control_test_path"
         abs_test_path = "/{0}".format(test_dir)
@@ -68,6 +75,10 @@ class TestScrubControls(CephFSTestCase):
         self._pause_scrub(0)
         out_json = self._get_scrub_status()
         self.assertTrue("PAUSED" in out_json['status'])
+
+        # sleep enough to fetch updated task status
+        time.sleep(10)
+        self._check_task_status("paused")
 
         # resume and verify
         self._resume_scrub(0)
@@ -93,16 +104,28 @@ class TestScrubControls(CephFSTestCase):
         out_json = self._get_scrub_status()
         self.assertTrue("PAUSED" in out_json['status'])
 
+        # sleep enough to fetch updated task status
+        time.sleep(10)
+        self._check_task_status("paused")
+
         # abort and verify
         self._abort_scrub(0)
         out_json = self._get_scrub_status()
         self.assertTrue("PAUSED" in out_json['status'])
         self.assertTrue("0 inodes" in out_json['status'])
 
+        # sleep enough to fetch updated task status
+        time.sleep(10)
+        self._check_task_status("paused")
+
         # resume and verify
         self._resume_scrub(0)
         out_json = self._get_scrub_status()
         self.assertTrue("no active" in out_json['status'])
+
+        # sleep enough to fetch updated task status
+        time.sleep(10)
+        self._check_task_status("idle")
 
 class TestScrubChecks(CephFSTestCase):
     """
