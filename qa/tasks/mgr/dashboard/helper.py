@@ -95,6 +95,9 @@ class DashboardTestCase(MgrTestCase):
         else:
             assert False
         try:
+            if not cls._resp.ok:
+                # Output response for easier debugging.
+                log.error("Request response: %s", cls._resp.text)
             if cls._resp.text and cls._resp.text != "":
                 return cls._resp.json()
             return cls._resp.text

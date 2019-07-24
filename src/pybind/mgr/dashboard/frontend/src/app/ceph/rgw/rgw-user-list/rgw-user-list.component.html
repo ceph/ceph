@@ -14,7 +14,7 @@
           columnMode="flex"
           selectionType="multi"
           (updateSelection)="updateSelection($event)"
-          identifier="user_id"
+          identifier="uid"
           (fetchData)="getUserList()">
   <div class="table-actions">
     <div class="btn-group" dropdown>
@@ -28,7 +28,7 @@
       <button type="button"
               class="btn btn-sm btn-primary"
               *ngIf="selection.hasSingleSelection"
-              routerLink="/rgw/user/edit/{{ selection.first()?.user_id }}">
+              routerLink="/rgw/user/edit/{{ selection.first()?.uid | encodeUri }}">
         <i class="fa fa-fw fa-pencil"></i>
         <ng-container i18n>Edit</ng-container>
       </button>
@@ -59,7 +59,7 @@
         <li role="menuitem"
             [ngClass]="{'disabled': !selection.hasSingleSelection}">
           <a class="dropdown-item"
-             routerLink="/rgw/user/edit/{{ selection.first()?.user_id }}"
+             routerLink="/rgw/user/edit/{{ selection.first()?.uid | encodeUri }}"
              i18n>
             <i class="fa fa-fw fa-pencil"></i>
             Edit

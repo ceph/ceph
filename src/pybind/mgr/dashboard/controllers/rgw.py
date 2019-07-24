@@ -2,6 +2,7 @@
 from __future__ import absolute_import
 
 import json
+import sys
 import cherrypy
 
 from . import ApiController, BaseController, RESTController, AuthRequired
@@ -9,6 +10,11 @@ from .. import logger
 from ..services.ceph_service import CephService
 from ..services.rgw_client import RgwClient
 from ..rest_client import RequestException
+
+if sys.version_info >= (3, 0):
+    from urllib.parse import unquote  # pylint: disable=no-name-in-module,import-error
+else:
+    from urllib import unquote  # pylint: disable=no-name-in-module
 
 
 @ApiController('rgw')
@@ -32,8 +38,8 @@ class Rgw(RESTController):
                     instance.userid)
                 raise RequestException(status['message'])
             status['available'] = True
-        except RequestException:
-            pass
+        except (RequestException, LookupError) as ex:
+            status['message'] = str(ex)
         return status
 
 
@@ -99,6 +105,12 @@ class RgwProxy(BaseController):
             if cherrypy.request.body.length:
                 data = cherrypy.request.body.read()
 
+            for key, value in params.items():
+                # pylint: disable=undefined-variable
+                if (sys.version_info < (3, 0) and isinstance(value, unicode)) \
+                        or isinstance(value, str):
+                    params[key] = unquote(value)
+
             return rgw_client.proxy(method, path, params, data)
         except RequestException as e:
             # Always use status code 500 and NOT the status that may delivered
@@ -109,9 +121,49 @@ class RgwProxy(BaseController):
             return json.dumps({'detail': str(e)}).encode('utf-8')
 
 
+class RgwRESTController(RESTController):
+
+    @staticmethod
+    def proxy(method, path, params=None, json_response=True):
+        instance = RgwClient.admin_instance()
+        result = instance.proxy(method, path, params, None)
+        if json_response:
+            result = result.decode('utf-8')
+            if result != '':
+                result = json.loads(result)
+            else:
+                result = {}
+        return result
+
+
 @ApiController('rgw/bucket')
 @AuthRequired()
-class RgwBucket(RESTController):
+class RgwBucket(RgwRESTController):
+
+    @staticmethod
+    def _append_bid(bucket):
+        """
+        Append the bucket identifier that looks like [<tenant>/]<bucket>.
+        See http://docs.ceph.com/docs/nautilus/radosgw/multitenancy/ for
+        more information.
+        :param bucket: The bucket parameters.
+        :type bucket: dict
+        :return: The modified bucket parameters including the 'bid' parameter.
+        :rtype: dict
+        """
+        if isinstance(bucket, dict):
+            bucket['bid'] = '{}/{}'.format(bucket['tenant'], bucket['bucket']) \
+                if bucket['tenant'] else bucket['bucket']
+        return bucket
+
+    def get(self, bucket):
+        try:
+            result = self.proxy('GET', 'bucket', {'bucket': bucket})
+            return self._append_bid(result)
+        except RequestException as e:
+            cherrypy.response.headers['Content-Type'] = 'application/json'
+            cherrypy.response.status = 500
+            return {'detail': str(e)}
 
     def create(self, bucket, uid):
         try:
@@ -125,20 +177,43 @@ class RgwBucket(RESTController):
 
 @ApiController('rgw/user')
 @AuthRequired()
-class RgwUser(RESTController):
+class RgwUser(RgwRESTController):
+
+    @staticmethod
+    def _append_uid(user):
+        """
+        Append the user identifier that looks like [<tenant>$]<user>.
+        See http://docs.ceph.com/docs/jewel/radosgw/multitenancy/ for
+        more information.
+        :param user: The user parameters.
+        :type user: dict
+        :return: The modified user parameters including the 'uid' parameter.
+        :rtype: dict
+        """
+        if isinstance(user, dict):
+            user['uid'] = '{}${}'.format(user['tenant'], user['user_id']) \
+                if user['tenant'] else user['user_id']
+        return user
+
+    def get(self, uid):
+        try:
+            result = self.proxy('GET', 'user', {'uid': uid})
+            return self._append_uid(result)
+        except RequestException as e:
+            cherrypy.response.headers['Content-Type'] = 'application/json'
+            cherrypy.response.status = 500
+            return {'detail': str(e)}
 
     def delete(self, uid):
         try:
             rgw_client = RgwClient.admin_instance()
-
             # Ensure the user is not configured to access the Object Gateway.
             if rgw_client.userid == uid:
                 raise RequestException('Unable to delete "{}" - this user '
                                        'account is required for managing the '
                                        'Object Gateway'.format(uid))
-
             # Finally redirect request to the RGW proxy.
-            return rgw_client.proxy('DELETE', 'user', cherrypy.request.params, None)
+            return self.proxy('DELETE', 'user', cherrypy.request.params)
         except RequestException as e:
             cherrypy.response.headers['Content-Type'] = 'application/json'
             cherrypy.response.status = 500

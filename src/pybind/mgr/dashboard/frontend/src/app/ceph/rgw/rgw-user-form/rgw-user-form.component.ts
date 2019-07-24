@@ -57,7 +57,7 @@ export class RgwUserFormComponent implements OnInit {
   createForm() {
     this.userForm = this.formBuilder.group({
       // General
-      user_id: [null, [Validators.required], [this.userIdValidator()]],
+      uid: [null, [Validators.required], [this.userIdValidator()]],
       display_name: [null, [Validators.required]],
       email: [null, [CdValidators.email]],
       max_buckets: [null, [Validators.min(0)]],
@@ -156,13 +156,14 @@ export class RgwUserFormComponent implements OnInit {
       if (!params.hasOwnProperty('uid')) {
         return;
       }
+      const uid = decodeURIComponent(params.uid);
       this.loading = true;
       // Load the user data in 'edit' mode.
       this.editing = true;
       // Load the user and quota information.
       const observables = [];
-      observables.push(this.rgwUserService.get(params.uid));
-      observables.push(this.rgwUserService.getQuota(params.uid));
+      observables.push(this.rgwUserService.get(uid));
+      observables.push(this.rgwUserService.getQuota(uid));
       Observable.forkJoin(observables).subscribe(
         (resp: any[]) => {
           this.loading = false;
@@ -182,8 +183,8 @@ export class RgwUserFormComponent implements OnInit {
               value[type + '_quota_max_size'] = `${quota.max_size} B`;
             }
             if (quota.max_objects < 0) {
-              value[type + '_quota_max_size_unlimited'] = true;
-              value[type + '_quota_max_size'] = null;
+              value[type + '_quota_max_objects_unlimited'] = true;
+              value[type + '_quota_max_objects'] = null;
             } else {
               value[type + '_quota_max_objects_unlimited'] = false;
               value[type + '_quota_max_objects'] = quota.max_objects;
@@ -310,7 +311,7 @@ export class RgwUserFormComponent implements OnInit {
       // Create an observable to modify the subuser when the form is submitted.
       this.submitObservables.push(
         this.rgwUserService.addSubuser(
-          this.userForm.get('user_id').value,
+          this.userForm.get('uid').value,
           subuser.id,
           subuser.permissions,
           subuser.secret_key,
@@ -323,7 +324,7 @@ export class RgwUserFormComponent implements OnInit {
       // Create an observable to add the subuser when the form is submitted.
       this.submitObservables.push(
         this.rgwUserService.addSubuser(
-          this.userForm.get('user_id').value,
+          this.userForm.get('uid').value,
           subuser.id,
           subuser.permissions,
           subuser.secret_key,
@@ -350,7 +351,7 @@ export class RgwUserFormComponent implements OnInit {
     const subuser = this.subusers[index];
     // Create an observable to delete the subuser when the form is submitted.
     this.submitObservables.push(
-      this.rgwUserService.deleteSubuser(this.userForm.get('user_id').value, subuser.id)
+      this.rgwUserService.deleteSubuser(this.userForm.get('uid').value, subuser.id)
     );
     // Remove the associated S3 keys.
     this.s3Keys = this.s3Keys.filter((key) => {
@@ -370,7 +371,7 @@ export class RgwUserFormComponent implements OnInit {
    * Add/Update a capability.
    */
   setCapability(cap: RgwUserCapability, index?: number) {
-    const uid = this.userForm.get('user_id').value;
+    const uid = this.userForm.get('uid').value;
     if (_.isNumber(index)) {
       // Modify
       const oldCap = this.capabilities[index];
@@ -402,7 +403,7 @@ export class RgwUserFormComponent implements OnInit {
     const cap = this.capabilities[index];
     // Create an observable to delete the capability when the form is submitted.
     this.submitObservables.push(
-      this.rgwUserService.deleteCapability(this.userForm.get('user_id').value, cap.type, cap.perm)
+      this.rgwUserService.deleteCapability(this.userForm.get('uid').value, cap.type, cap.perm)
     );
     // Remove the capability to update the UI.
     this.capabilities.splice(index, 1);
@@ -451,7 +452,7 @@ export class RgwUserFormComponent implements OnInit {
     const key = this.s3Keys[index];
     // Create an observable to delete the S3 key when the form is submitted.
     this.submitObservables.push(
-      this.rgwUserService.deleteS3Key(this.userForm.get('user_id').value, key.access_key)
+      this.rgwUserService.deleteS3Key(this.userForm.get('uid').value, key.access_key)
     );
     // Remove the S3 key to update the UI.
     this.s3Keys.splice(index, 1);
@@ -464,7 +465,7 @@ export class RgwUserFormComponent implements OnInit {
    * @param {number | undefined} index The subuser to show.
    */
   showSubuserModal(index?: number) {
-    const uid = this.userForm.get('user_id').value;
+    const uid = this.userForm.get('uid').value;
     const modalRef = this.bsModalService.show(RgwUserSubuserModalComponent);
     if (_.isNumber(index)) {
       // Edit
@@ -583,7 +584,7 @@ export class RgwUserFormComponent implements OnInit {
    */
   private _getApiPutArgs() {
     const result = {
-      uid: this.userForm.get('user_id').value,
+      uid: this.userForm.get('uid').value,
       'display-name': this.userForm.get('display_name').value
     };
     const suspendedCtl = this.userForm.get('suspended');
@@ -616,7 +617,7 @@ export class RgwUserFormComponent implements OnInit {
    */
   private _getApiPostArgs() {
     const result = {
-      uid: this.userForm.get('user_id').value
+      uid: this.userForm.get('uid').value
     };
     const argsMap = {
       'display-name': 'display_name',
@@ -639,7 +640,7 @@ export class RgwUserFormComponent implements OnInit {
    */
   private _getApiUserQuotaArgs(): object {
     const result = {
-      uid: this.userForm.get('user_id').value,
+      uid: this.userForm.get('uid').value,
       'quota-type': 'user',
       enabled: this.userForm.get('user_quota_enabled').value,
       'max-size-kb': -1,
@@ -663,7 +664,7 @@ export class RgwUserFormComponent implements OnInit {
    */
   private _getApiBucketQuotaArgs(): object {
     const result = {
-      uid: this.userForm.get('user_id').value,
+      uid: this.userForm.get('uid').value,
       'quota-type': 'bucket',
       enabled: this.userForm.get('bucket_quota_enabled').value,
       'max-size-kb': -1,
@@ -690,9 +691,9 @@ export class RgwUserFormComponent implements OnInit {
   private _getS3KeyUserCandidates() {
     let result = [];
     // Add the current user id.
-    const user_id = this.userForm.get('user_id').value;
-    if (_.isString(user_id) && !_.isEmpty(user_id)) {
-      result.push(user_id);
+    const uid = this.userForm.get('uid').value;
+    if (_.isString(uid) && !_.isEmpty(uid)) {
+      result.push(uid);
     }
     // Append the subusers.
     this.subusers.forEach((subUser) => {

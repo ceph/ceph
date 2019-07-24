@@ -39,7 +39,7 @@ export class RgwBucketFormComponent implements OnInit {
   createForm() {
     this.bucketForm = this.formBuilder.group({
       id: [null],
-      bucket: [null, [Validators.required], [this.bucketNameValidator()]],
+      bid: [null, [Validators.required], [this.bucketNameValidator()]],
       owner: [null, [Validators.required]]
     });
   }
@@ -52,15 +52,15 @@ export class RgwBucketFormComponent implements OnInit {
 
     // Process route parameters.
     this.route.params.subscribe(
-      (params: { bucket: string }) => {
-        if (!params.hasOwnProperty('bucket')) {
+      (params: { bid: string }) => {
+        if (!params.hasOwnProperty('bid')) {
           return;
         }
-        params.bucket = decodeURIComponent(params.bucket);
+        const bid = decodeURIComponent(params.bid);
         this.loading = true;
         // Load the bucket data in 'edit' mode.
         this.editing = true;
-        this.rgwBucketService.get(params.bucket).subscribe((resp: object) => {
+        this.rgwBucketService.get(bid).subscribe((resp: object) => {
           this.loading = false;
           // Get the default values.
           const defaults = _.clone(this.bucketForm.value);
@@ -87,7 +87,7 @@ export class RgwBucketFormComponent implements OnInit {
     if (this.bucketForm.pristine) {
       this.goToListView();
     }
-    const bucketCtl = this.bucketForm.get('bucket');
+    const bucketCtl = this.bucketForm.get('bid');
     const ownerCtl = this.bucketForm.get('owner');
     if (this.editing) {
       // Edit

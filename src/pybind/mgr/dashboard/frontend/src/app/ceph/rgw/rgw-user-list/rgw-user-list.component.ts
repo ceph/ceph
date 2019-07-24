@@ -35,7 +35,7 @@ export class RgwUserListComponent {
     this.columns = [
       {
         name: 'Username',
-        prop: 'user_id',
+        prop: 'uid',
         flexGrow: 1
       },
       {
@@ -88,7 +88,7 @@ export class RgwUserListComponent {
           // Delete all selected data table rows.
           Observable.forkJoin(
             this.selection.selected.map((user: any) => {
-              return this.rgwUserService.delete(user.user_id);
+              return this.rgwUserService.delete(user.uid);
             })
           ).subscribe(
             null,

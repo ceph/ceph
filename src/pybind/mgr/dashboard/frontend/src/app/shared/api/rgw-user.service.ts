@@ -42,9 +42,7 @@ export class RgwUserService {
   }
 
   get(uid: string) {
-    let params = new HttpParams();
-    params = params.append('uid', uid);
-    return this.http.get(this.url, {params: params});
+    return this.http.get(`api/rgw/user/${uid}`);
   }
 
   getQuota(uid: string) {
