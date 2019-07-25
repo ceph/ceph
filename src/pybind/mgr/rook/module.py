@@ -346,6 +346,15 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             sd.nodename = p['nodename']
             sd.container_id = p['name']
             sd.service_type = p['labels']['app'].replace('rook-ceph-', '')
+            status = {
+                'Pending': -1,
+                'Running': 1,
+                'Succeeded': 0,
+                'Failed': -1,
+                'Unknown': -1,
+            }[p['phase']]
+            sd.status = status
+            sd.status_desc = p['phase']
 
             if sd.service_type == "osd":
                 sd.service_instance = "%s" % p['labels']["ceph-osd-id"]
