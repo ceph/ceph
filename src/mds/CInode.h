@@ -347,33 +347,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     ceph_assert(num_exporting_dirs == 0);
   }
 
-  std::string_view pin_name(int p) const override {
-    switch (p) {
-    case PIN_DIRFRAG: return "dirfrag";
-    case PIN_CAPS: return "caps";
-    case PIN_IMPORTING: return "importing";
-    case PIN_OPENINGDIR: return "openingdir";
-    case PIN_REMOTEPARENT: return "remoteparent";
-    case PIN_BATCHOPENJOURNAL: return "batchopenjournal";
-    case PIN_SCATTERED: return "scattered";
-    case PIN_STICKYDIRS: return "stickydirs";
-      //case PIN_PURGING: return "purging";
-    case PIN_FREEZING: return "freezing";
-    case PIN_FROZEN: return "frozen";
-    case PIN_IMPORTINGCAPS: return "importingcaps";
-    case PIN_EXPORTINGCAPS: return "exportingcaps";
-    case PIN_PASTSNAPPARENT: return "pastsnapparent";
-    case PIN_OPENINGSNAPPARENTS: return "openingsnapparents";
-    case PIN_TRUNCATING: return "truncating";
-    case PIN_STRAY: return "stray";
-    case PIN_NEEDSNAPFLUSH: return "needsnapflush";
-    case PIN_DIRTYRSTAT: return "dirtyrstat";
-    case PIN_DIRTYPARENT: return "dirtyparent";
-    case PIN_DIRWAITER: return "dirwaiter";
-    case PIN_SCRUBQUEUE: return "scrubqueue";
-    default: return generic_pin_name(p);
-    }
-  }
+  std::string_view pin_name(int p) const override;
 
   ostream& print_db_line_prefix(ostream& out) override;
 
@@ -506,22 +480,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
       return &inode;
   }
 
-  mempool_xattr_map *get_projected_xattrs() {
-    if (num_projected_xattrs > 0) {
-      for (auto it = projected_nodes.rbegin(); it != projected_nodes.rend(); ++it)
-	if (it->xattrs)
-	  return it->xattrs.get();
-    }
-    return &xattrs;
-  }
-  mempool_xattr_map *get_previous_projected_xattrs() {
-    if (num_projected_xattrs > 0) {
-      for (auto it = ++projected_nodes.rbegin(); it != projected_nodes.rend(); ++it)
-	if (it->xattrs)
-	  return it->xattrs.get();
-    }
-    return &xattrs;
-  }
+  mempool_xattr_map *get_projected_xattrs();
+  mempool_xattr_map *get_previous_projected_xattrs();
 
   sr_t *prepare_new_srnode(snapid_t snapid);
   void project_snaprealm(sr_t *new_srnode);
@@ -530,17 +490,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     project_snaprealm(new_srnode);
     return new_srnode;
   }
-  const sr_t *get_projected_srnode() const {
-    if (num_projected_srnodes > 0) {
-      for (auto it = projected_nodes.rbegin(); it != projected_nodes.rend(); ++it)
-	if (it->snapnode != projected_inode::UNDEF_SRNODE)
-	  return it->snapnode;
-    }
-    if (snaprealm)
-      return &snaprealm->srnode;
-    else
-      return NULL;
-  }
+  const sr_t *get_projected_srnode() const;
 
   void mark_snaprealm_global(sr_t *new_srnode);
   void clear_snaprealm_global(sr_t *new_srnode);
@@ -767,20 +717,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 		       int getattr_wants=0);
   void encode_cap_message(const ref_t<MClientCaps> &m, Capability *cap);
 
-  SimpleLock* get_lock(int type) override {
-    switch (type) {
-    case CEPH_LOCK_IFILE: return &filelock;
-    case CEPH_LOCK_IAUTH: return &authlock;
-    case CEPH_LOCK_ILINK: return &linklock;
-    case CEPH_LOCK_IDFT: return &dirfragtreelock;
-    case CEPH_LOCK_IXATTR: return &xattrlock;
-    case CEPH_LOCK_ISNAP: return &snaplock;
-    case CEPH_LOCK_INEST: return &nestlock;
-    case CEPH_LOCK_IFLOCK: return &flocklock;
-    case CEPH_LOCK_IPOLICY: return &policylock;
-    }
-    return 0;
-  }
+  SimpleLock* get_lock(int type) override;
 
   void set_object_info(MDSCacheObjectInfo &info) override;
   void encode_lock_state(int type, bufferlist& bl) override;
@@ -826,25 +763,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void choose_lock_state(SimpleLock *lock, int allissued);
   void choose_lock_states(int dirty_caps);
 
-  int count_nonstale_caps() {
-    int n = 0;
-    for (const auto &p : client_caps) {
-      if (!p.second.is_stale())
-	n++;
-    }
-    return n;
-  }
-  bool multiple_nonstale_caps() {
-    int n = 0;
-    for (const auto &p : client_caps) {
-      if (!p.second.is_stale()) {
-	if (n)
-	  return true;
-	n++;
-      }
-    }
-    return false;
-  }
+  int count_nonstale_caps();
+  bool multiple_nonstale_caps();
 
   bool is_any_caps() { return !client_caps.empty(); }
   bool is_any_nonstale_caps() { return count_nonstale_caps(); }
