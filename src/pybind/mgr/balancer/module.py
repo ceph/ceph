@@ -53,7 +53,6 @@ class Plan:
         self.name = name
         self.initial = ms
         self.pools = pools
-        
         self.osd_weights = {}
         self.compat_ws = {}
         self.inc = ms.osdmap.new_incremental()
@@ -286,7 +285,7 @@ class Module(MgrModule):
         {
             'name': 'sleep_interval',
             'type': 'secs',
-            'default': 10,
+            'default': 60,
             'desc': 'how frequently to wake up and attempt optimization',
             'runtime': True,
         },
@@ -1132,9 +1131,9 @@ class Module(MgrModule):
             fudge = .001
 
         if best_pe.score < pe.score + fudge:
-            msg = 'Success, score %f -> %f' % (pe.score, best_pe.score)
+            msg = 'score %f -> %f' % (pe.score, best_pe.score)
             plan.message = msg
-            self.log.info(msg)
+            self.log.info('Success, %s' % msg)
             plan.compat_ws = best_ws
             for osd, w in six.iteritems(best_ow):
                 if w != orig_osd_weight[osd]:
@@ -1208,7 +1207,6 @@ class Module(MgrModule):
         self.log.info('Executing plan %s' % plan.name)
 
         commands = []
-        flag = False
         # compat weight-set
         if len(plan.compat_ws) and \
            not CRUSHMap.have_default_choose_args(plan.initial.crush_dump):
@@ -1284,7 +1282,6 @@ class Module(MgrModule):
                 'id': osdlist,
             }), 'foo')
             commands.append(result)
-                
         # wait for commands
         self.log.debug('commands %s' % commands)
         for result in commands:
