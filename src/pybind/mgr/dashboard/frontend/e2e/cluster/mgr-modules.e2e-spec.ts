@@ -1,7 +1,7 @@
 import { Helper } from '../helper.po';
 
 describe('Manager modules page', () => {
-  let mgrmodules;
+  let mgrmodules: Helper['mgrmodules'];
 
   beforeAll(() => {
     mgrmodules = new Helper().mgrmodules;

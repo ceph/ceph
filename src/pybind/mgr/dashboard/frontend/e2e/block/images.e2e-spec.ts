@@ -1,7 +1,7 @@
 import { Helper } from '../helper.po';
 
 describe('Images page', () => {
-  let images;
+  let images: Helper['images'];
 
   beforeAll(() => {
     images = new Helper().images;

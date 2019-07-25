@@ -1,7 +1,7 @@
 import { Helper } from '../helper.po';
 
 describe('Pools page', () => {
-  let pools;
+  let pools: Helper['pools'];
   const poolName = 'pool_e2e_pool_test';
 
   beforeAll(() => {

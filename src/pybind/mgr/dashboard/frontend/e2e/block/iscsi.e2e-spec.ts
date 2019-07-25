@@ -1,7 +1,7 @@
 import { Helper } from '../helper.po';
 
 describe('Iscsi Page', () => {
-  let iscsi;
+  let iscsi: Helper['iscsi'];
 
   beforeAll(() => {
     iscsi = new Helper().iscsi;
