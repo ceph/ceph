@@ -277,6 +277,9 @@ class TestClientRecovery(CephFSTestCase):
         # Simulate client death
         self.mount_a.kill()
 
+        # wait for it to die so it doesn't voluntarily release buffer cap
+        time.sleep(5)
+
         try:
             # The waiter should get stuck waiting for the capability
             # held on the MDS by the now-dead client A
