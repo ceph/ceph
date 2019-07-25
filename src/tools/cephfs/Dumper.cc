@@ -243,7 +243,7 @@ int Dumper::undump(const char *dump_file, bool force)
     if (strstr(buf, "fsid")) {
       uuid_d fsid;
       char fsid_str[40];
-      sscanf(strstr(buf, "fsid"), "fsid %s", fsid_str);
+      sscanf(strstr(buf, "fsid"), "fsid %39s", fsid_str);
       r = fsid.parse(fsid_str);
       if (!r) {
 	derr  << "Invalid fsid" << dendl;

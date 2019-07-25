@@ -194,7 +194,7 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
 	break;
       char key[40];
       long long value;
-      int r = sscanf(line, "%s %lld", key, &value);
+      int r = sscanf(line, "%39s %lld", key, &value);
       if (r == 2) {
 	if (strcmp(key, "MemTotal:") == 0)
 	  (*m)["mem_total_kb"] = boost::lexical_cast<string>(value);
