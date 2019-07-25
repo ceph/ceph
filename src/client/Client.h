@@ -995,7 +995,7 @@ private:
   struct VXattr {
 	  const string name;
 	  size_t (Client::*getxattr_cb)(Inode *in, char *val, size_t size);
-	  bool readonly, hidden;
+	  bool readonly;
 	  bool (Client::*exists_cb)(Inode *in);
 	  unsigned int flags;
   };
