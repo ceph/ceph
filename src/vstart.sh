@@ -1104,6 +1104,10 @@ mds_debug_frag = true
 mds_debug_auth_pins = true
 mds_debug_subtrees = true
 
+[mgr]
+mgr/telemetry/nag = false
+mgr/telemetry/enable = false
+
 EOF
 
     if [ "$debug" -ne 0 ]; then
