@@ -179,6 +179,8 @@ class Module(MgrModule):
                     opt['name'],
                     self.get_module_option(opt['name']))
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
+        # wake up serve() thread
+        self.event.set()
 
     @staticmethod
     def parse_timestamp(timestamp):
