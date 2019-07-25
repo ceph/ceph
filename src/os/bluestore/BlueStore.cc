@@ -9906,6 +9906,19 @@ int BlueStore::_upgrade_super()
       int r = db->submit_transaction_sync(t);
       ceph_assert(r == 0);
     }
+    if (ondisk_format == 2) {
+      // changes:
+      // - onode has FLAG_PER_POOL_OMAP.  Note that we do not know that *all*
+      //   ondes are using the per-pool prefix until a repair is run; at that
+      //   point the per_pool_omap=1 key will be set.
+      // - super: added per_pool_omap key, which indicates that *all* objects
+      //   are using the new prefix and key format
+      ondisk_format = 3;
+      KeyValueDB::Transaction t = db->get_transaction();
+      _prepare_ondisk_format_super(t);
+      int r = db->submit_transaction_sync(t);
+      ceph_assert(r == 0);
+    }
   }
   // done
   dout(1) << __func__ << " done" << dendl;
