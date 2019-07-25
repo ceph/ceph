@@ -18,6 +18,7 @@ add_executable(crimson-osd
   osd_operations/replicated_request.cc
   osdmap_gate.cc
   pg_map.cc
+  ${PROJECT_SOURCE_DIR}/src/osd/ClassHandler.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PeeringState.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PGPeeringEvent.cc
   ${PROJECT_SOURCE_DIR}/src/osd/PGStateUtils.cc
