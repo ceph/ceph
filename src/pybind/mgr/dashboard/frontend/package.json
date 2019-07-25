@@ -12,7 +12,7 @@
     "test:ci": "npm run test:config && JEST_SILENT_REPORTER_DOTS=true jest --coverage --reporters jest-silent-reporter",
     "test:config": "if [ ! -e 'src/unit-test-configuration.ts' ]; then cp 'src/unit-test-configuration.ts.sample' 'src/unit-test-configuration.ts'; fi",
     "e2e": "npm run env_build && ng e2e",
-    "e2e:dev": "npm run env_build && ng e2e --dev-server-target",
+    "e2e:ci": "npm run env_build && ng e2e --dev-server-target",
     "lint:tslint": "ng lint",
     "lint:prettier": "prettier --list-different \"{src,e2e}/**/*.{ts,scss}\"",
     "lint:html": "html-linter --config html-linter.config.json",
