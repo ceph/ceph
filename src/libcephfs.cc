@@ -872,11 +872,11 @@ extern "C" int ceph_fsetxattr(struct ceph_mount_info *cmount, int fd, const char
 }
 /* end xattr support */
 
-extern "C" int ceph_rstatflush(struct ceph_mount_info* cmount)
+extern "C" int ceph_rstatflush(struct ceph_mount_info* cmount, const char* path)
 {
   if (!cmount->is_mounted())
     return -ENOTCONN;
-  return cmount->get_client()->rstat_flush();
+  return cmount->get_client()->rstat_flush(path);
 }
 
 extern "C" int ceph_stat(struct ceph_mount_info *cmount, const char *path, struct stat *stbuf)

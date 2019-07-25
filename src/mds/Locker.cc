@@ -88,8 +88,7 @@ public:
 };
 
 Locker::Locker(MDSRank *m, MDCache *c) :
-  need_snapflush_inodes(member_offset(CInode, item_caps)), mds(m), mdcache(c),
-  rstat_propagate_time(utime_t()), last_finished_rstat_propagation(utime_t()) {}
+  need_snapflush_inodes(member_offset(CInode, item_caps)), mds(m), mdcache(c) {}
 
 void Locker::dispatch(const cref_t<Message> &m)
 {
@@ -5135,9 +5134,6 @@ bool Locker::nudge_updated_scatterlocks(const MDRequestRef& mdr)
     << (mdr ? mdr->reqid : metareqid_t()) << dendl;
   int nudged = 0;
 
-  if (mdr)
-    ceph_assert(is_rstat_propagating());
-
   // updated
   utime_t now = ceph_clock_now();
   int n = updated_scatterlocks.size();
@@ -5162,7 +5158,7 @@ bool Locker::nudge_updated_scatterlocks(const MDRequestRef& mdr)
 	<< ", update_stamp: " << lock->get_update_stamp() << ", lock's parent's rstat_dirty_from:"
 	<< static_cast<CInode*>(lock->get_parent())->get_rstat_dirty_from() << ", lock's parent's subdir rstat_dirty_from:"
 	<< static_cast<CInode*>(lock->get_parent())->get_dirfrags_rstat_dirty_from()
-	<< ", mdr's rstats_propagate_time: " << rstat_propagate_time << dendl;
+	<< ", mdr's rstats_propagate_time: " << (mdr ? mdr->get_op_stamp() : utime_t()) << dendl;
 
     if (mdr) {
 
@@ -5178,7 +5174,7 @@ bool Locker::nudge_updated_scatterlocks(const MDRequestRef& mdr)
       CInode* ino = static_cast<CInode*>(lock->get_parent());
 
       if (lock->get_type() == CEPH_LOCK_INEST
-	  && ino->need_to_nudge(rstat_propagate_time)) {
+	  && ino->need_to_nudge(mdr->in[0], mdr->get_op_stamp())) {
         dout(20) << __func__ << " " << (mdr ? mdr->reqid : metareqid_t())
           << " need to nudge scatterlock: " << *lock << " of " << *lock->get_parent() << dendl;
 
@@ -5200,8 +5196,6 @@ bool Locker::nudge_updated_scatterlocks(const MDRequestRef& mdr)
   if (mdr && !nudged) {
     dout(20) << __func__ << " " << mdr->reqid
       << " rstat flush finished!" << dendl;
-    last_finished_rstat_propagation = rstat_propagate_time;
-    rstat_propagate_time = utime_t();
     return true;
   }
   return false;

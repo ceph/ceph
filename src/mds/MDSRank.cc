@@ -2700,8 +2700,6 @@ void MDSRankDispatcher::handle_asok_command(
     damage_table.erase(id);
   } else if (command == "rstat flush") {
     command_start_rstat_propagate(ss);
-  } else if (command == "rstat last_time") {
-    command_last_rstat_time(ss);
   } else {
     r = -ENOSYS;
   }
@@ -3125,10 +3123,6 @@ void MDSRank::command_start_rstat_propagate(std::ostream& ss)
   bool rstat_flush_finished = false;
   {
     std::lock_guard l(mds_lock);
-    if (locker->is_rstat_propagating()) {
-      ss << "already propagating rstat";
-      return;
-    }
 
     if (get_nodeid() != (mds_rank_t)0) {
       ss << "rstat flush command should be called from mds.0";
@@ -3143,11 +3137,6 @@ void MDSRank::command_start_rstat_propagate(std::ostream& ss)
   if (!rstat_flush_finished)
     c.wait(locker);
   ss << "rstat propagation finished, rstat flush time: " << timestamp;
-}
-
-void MDSRank::command_last_rstat_time(std::ostream& ss)
-{
-  ss << "last successful rstat propagation: " << locker->get_last_finished_rstat_propagation();
 }
 
 void MDSRank::dump_status(Formatter *f) const

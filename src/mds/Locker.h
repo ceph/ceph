@@ -51,19 +51,6 @@ public:
 
   void nudge_log(SimpleLock *lock);
 
-  bool is_rstat_propagating() {
-    return rstat_propagate_time != utime_t();
-  }
-
-  void start_rstat_propagate(utime_t propagate_time) {
-    if (!is_rstat_propagating()) {
-      rstat_propagate_time = propagate_time;
-    }
-  }
-
-  utime_t get_rstat_propagate_time() { return rstat_propagate_time; }
-  utime_t get_last_finished_rstat_propagation() { return last_finished_rstat_propagation; }
-
   bool acquire_locks(MDRequestRef& mdr,
 		     MutationImpl::LockOpVec& lov,
 		     CInode *auth_pin_freeze=NULL,
@@ -280,7 +267,5 @@ private:
   MDSRank *mds;
   MDCache *mdcache;
   xlist<ScatterLock*> updated_filelocks;
-  utime_t rstat_propagate_time;
-  utime_t last_finished_rstat_propagation;
 };
 #endif

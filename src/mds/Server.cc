@@ -3843,17 +3843,40 @@ void Server::handle_client_rstatflush(MDRequestRef& mdr)
 {
   dout(20) << __func__ << dendl;
 
-  if (mds->get_nodeid() != (mds_rank_t)0) {
-    mdcache->request_forward(mdr, (mds_rank_t)0);
+  CF_MDS_MDRContextFactory cf(mdcache, mdr, false);
+  int r = mdcache->path_traverse(mdr, cf, mdr->client_request->get_filepath(), 0, &mdr->dn[0], &mdr->in[0]);
+  if (r > 0)
+    return;
+  if (r < 0) {
+    if (r == -ESTALE) {
+      dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
+      MDSContext *c = new C_MDS_TryFindInode(this, mdr);
+      mdcache->find_ino_peers(mdr->client_request->get_filepath().get_ino(), c);
+    } else {
+      dout(10) << "FAIL on error " << r << dendl;
+      respond_to_request(mdr, r);
+    }
     return;
   }
 
-  if (mds->locker->is_rstat_propagating()) {
-    respond_to_request(mdr, -EAGAIN);
+  CInode* ref = mdr->in[0];
+  if (ref->is_ambiguous_auth()) {
+    dout(10) << __func__ << " waiting for single auth on " << *ref << dendl;
+    ref->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
+    return;
+  }
+  if (!ref->is_auth()) {
+    dout(10) << __func__ << " fw to auth for " << *ref << dendl;
+    mdcache->request_forward(mdr, ref->authority().first);
+    return;
+  }
+  if (ref->is_frozen() || ref->is_frozen_auth_pin() ||
+      (ref->is_freezing() && !mdr->is_auth_pinned(ref))) {
+    dout(7) << __func__ << "waiting for !frozen/authpinnable on " << *ref << dendl;
+    ref->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
     return;
   }
 
-  CInode* ref = mdr->in[0] = mdcache->get_root();
   if (!ref->state_test(CInode::STATE_RSTATFLUSH)) {
     ref->state_set(CInode::STATE_RSTATFLUSH);
     mdcache->local_rstatflushes[ref].insert(mdr->reqid);

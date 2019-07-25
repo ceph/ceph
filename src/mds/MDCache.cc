@@ -13417,10 +13417,6 @@ void MDCache::propagate_rstats(MDRequestRef& mdr) {
 
   dout(20) << __func__ << " " << *mdr << dendl;
 
-  if (!mds->locker->is_rstat_propagating()) {
-    mds->locker->start_rstat_propagate(mdr->get_op_stamp());
-  }
-
   if (!mdr->in[0]) {
     ceph_assert(mdr->client_request || mdr->internal_op > -1);
     ceph_assert(mds->get_nodeid() == (mds_rank_t)0);

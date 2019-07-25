@@ -11464,11 +11464,19 @@ int Client::_do_setxattr(Inode *in, const char *name, const void *value,
   return res;
 }
 
-int Client::rstat_flush()
+int Client::rstat_flush(const char* path)
 {
   std::lock_guard lock(client_lock);
+  InodeRef in;
+  const UserPerm perms = pick_my_perms();
+  int r = Client::path_walk(path, &in, perms, false);
+  if (r < 0)
+    return r;
+  filepath f_path;
+  in->make_nosnap_relative_path(f_path);
   MetaRequest* req = new MetaRequest(CEPH_MDS_OP_RSTATFLUSH);
-  return make_request(req, pick_my_perms());
+  req->set_filepath(f_path);
+  return make_request(req, perms);
 }
 
 int Client::_setxattr(Inode *in, const char *name, const void *value,

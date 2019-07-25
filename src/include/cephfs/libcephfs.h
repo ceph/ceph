@@ -1310,8 +1310,11 @@ int ceph_lsetxattr(struct ceph_mount_info *cmount, const char *path, const char 
  * Instruct mdses to flush rstat
  *
  * @param cmount the ceph mount handle to use for performing the rstat flush
+ * @param the directory that rstat will be propagated up to
+ *
+ * @returns 0 on success or a negative error code on failure.
  */
-int ceph_rstatflush(struct ceph_mount_info* cmount);
+int ceph_rstatflush(struct ceph_mount_info* cmount, const char* path);
 
 /**
  * @defgroup libcephfs_h_filelayout Control File Layout.

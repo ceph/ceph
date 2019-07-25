@@ -440,10 +440,11 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   }
   snapid_t get_oldest_snap();
 
-  bool need_to_nudge(utime_t rstat_propagate_time) {
+  bool need_to_nudge(CInode* rstat_flush_root, utime_t rstat_propagate_time) {
     utime_t rstat_dirty_from = get_rstat_dirty_from();
-    return !rstat_dirty_from.is_zero()
-              && rstat_dirty_from <= rstat_propagate_time;
+    return rstat_flush_root->is_projected_ancestor_of(this)
+	    && (!rstat_dirty_from.is_zero()
+              && rstat_dirty_from <= rstat_propagate_time);
   }
 
   bool is_dirty_rstat() {

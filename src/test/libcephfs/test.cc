@@ -153,7 +153,7 @@ TEST(LibCephFS, RstatFlush) {
   struct ceph_statx stx;
   char val[1024];
   int a = 1;
-  ASSERT_EQ(0, ceph_rstatflush(cmount));
+  ASSERT_EQ(0, ceph_rstatflush(cmount, &dir_path[0]));
   int r = ceph_getxattr(cmount, dir_path, "ceph.dir.rctime", &val[0], 1024);
   ASSERT_LE(0, r);
   val[r + 1] = '\0';
