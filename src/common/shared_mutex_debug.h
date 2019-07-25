@@ -15,7 +15,6 @@ class shared_mutex_debug :
 {
   pthread_rwlock_t rwlock;
   const bool track;
-  const bool lockdep;
   std::atomic<unsigned> nrlock{0};
 
 public:
