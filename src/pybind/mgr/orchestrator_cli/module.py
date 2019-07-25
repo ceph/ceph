@@ -116,7 +116,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
 
     @_read_cli('orchestrator service ls',
                "name=host,type=CephString,req=false "
-               "name=svc_type,type=CephChoices,strings=mon|mgr|osd|mds|nfs|rgw|rbd-mirror,req=false "
+               "name=svc_type,type=CephChoices,strings=mon|mgr|osd|mds|iscsi|nfs|rgw|rbd-mirror,req=false "
                "name=svc_id,type=CephString,req=false "
                "name=format,type=CephChoices,strings=json|plain,req=false",
                'List services known to orchestrator')
