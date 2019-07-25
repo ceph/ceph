@@ -416,6 +416,18 @@ class Module(MgrModule):
         self.run = False
         self.event.set()
 
+    def refresh_health_checks(self):
+        health_checks = {}
+        if self.enabled and self.last_opt_revision < LAST_REVISION_RE_OPT_IN:
+            health_checks['TELEMETRY_CHANGED'] = {
+                'severity': 'warning',
+                'summary': 'Telemetry requires re-opt-in',
+                'detail': [
+                    'telemetry report includes new information; must re-opt-in (or out)'
+                ]
+            }
+        self.set_health_checks(health_checks)
+
     def serve(self):
         self.init_module_config()
         self.run = True
@@ -424,6 +436,12 @@ class Module(MgrModule):
         self.event.wait(10)
 
         while self.run:
+            self.refresh_health_checks()
+
+            if self.last_opt_revision < LAST_REVISION_RE_OPT_IN:
+                self.log.debug('Not sending report until user re-opts-in')
+                self.event.wait(1800)
+                continue
             if not self.config['enabled']:
                 self.log.debug('Not sending report until configured to do so')
                 self.event.wait(1800)
