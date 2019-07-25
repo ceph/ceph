@@ -236,14 +236,7 @@ void LogEntry::decode(bufferlist::const_iterator& bl)
     decode(t, bl);
     prio = (clog_type)t;
     decode(msg, bl);
-    if (struct_v >= 3) {
-      decode(channel, bl);
-    } else {
-      // prior to having logging channels we only had a cluster log.
-      // Ensure we keep that appearance when the other party has no
-      // clue of what a 'channel' is.
-      channel = CLOG_CHANNEL_CLUSTER;
-    }
+    decode(channel, bl);
     if (struct_v >= 4) {
       decode(name, bl);
     }
