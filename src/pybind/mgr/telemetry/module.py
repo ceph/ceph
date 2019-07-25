@@ -84,7 +84,7 @@ class Module(MgrModule):
             'name': 'channel_basic',
             'type': 'bool',
             'default': True,
-            'description': 'Share basic cluster information (size, version)',
+            'desc': 'Share basic cluster information (size, version)',
         },
         {
             'name': 'channel_ident',
@@ -202,6 +202,26 @@ class Module(MgrModule):
 
         return metadata
 
+    def gather_configs(self):
+        configs = set()
+        r, outb, outs = self.mon_command({
+            'prefix': 'config dump',
+            'format': 'json'
+        });
+        if r != 0:
+            return {}
+        try:
+            dump = json.loads(outb)
+        except json.decoder.JSONDecodeError:
+            return {}
+        for opt in dump:
+            name = opt.get('name')
+            if name:
+                configs.add(name)
+        return {
+            'non_default_options': [ sorted(list(configs)) ]
+        }
+
     def gather_crashinfo(self):
         crashlist = list()
         errno, crashids, err = self.remote('crash', 'do_ls', '', '')
@@ -265,6 +285,8 @@ class Module(MgrModule):
                 'count': len(mon_map['mons']),
                 'features': mon_map['features']
             }
+
+            report['config'] = self.gather_configs()
 
             num_pg = 0
             report['pools'] = list()
