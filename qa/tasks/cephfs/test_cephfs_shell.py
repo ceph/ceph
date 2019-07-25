@@ -24,6 +24,10 @@ class TestCephFSShell(CephFSTestCase):
                                                 stdin=stdin)
         return status.stdout.getvalue().strip()
 
+    def get_cephfs_shell_script_output(self, script, mount_x=None, stdin=None):
+        return self.run_cephfs_shell_script(script, mount_x, stdin).stdout.\
+            getvalue().strip()
+
     def run_cephfs_shell_script(self, script, mount_x=None, stdin=None):
         if mount_x is None:
             mount_x = self.mount_a
