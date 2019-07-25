@@ -139,6 +139,7 @@ static Command cmd = None;
 
 static int parse_args(vector<const char*>& args, std::ostream *err_msg,
                       Command *command, Config *cfg);
+static int netlink_resize(int nbd_index, uint64_t size);
 
 class NBDServer
 {
@@ -476,15 +477,21 @@ class NBDWatchCtx : public librbd::UpdateWatchCtx
 {
 private:
   int fd;
+  int nbd_index;
+  bool use_netlink;
   librados::IoCtx &io_ctx;
   librbd::Image &image;
   unsigned long size;
 public:
   NBDWatchCtx(int _fd,
+              int _nbd_index,
+              bool _use_netlink,
               librados::IoCtx &_io_ctx,
               librbd::Image &_image,
               unsigned long _size)
     : fd(_fd)
+    , nbd_index(_nbd_index)
+    , use_netlink(_use_netlink)
     , io_ctx(_io_ctx)
     , image(_image)
     , size(_size)
@@ -497,23 +504,30 @@ public:
     librbd::image_info_t info;
     if (image.stat(info, sizeof(info)) == 0) {
       unsigned long new_size = info.size;
+      int ret;
 
       if (new_size != size) {
         dout(5) << "resize detected" << dendl;
         if (ioctl(fd, BLKFLSBUF, NULL) < 0)
-            derr << "invalidate page cache failed: " << cpp_strerror(errno)
-                 << dendl;
-        if (ioctl(fd, NBD_SET_SIZE, new_size) < 0) {
+          derr << "invalidate page cache failed: " << cpp_strerror(errno)
+               << dendl;
+	if (use_netlink) {
+	  ret = netlink_resize(nbd_index, new_size);
+	} else {
+          ret = ioctl(fd, NBD_SET_SIZE, new_size);
+          if (ret < 0)
             derr << "resize failed: " << cpp_strerror(errno) << dendl;
-        } else {
+	}
+
+        if (!ret)
           size = new_size;
-        }
+
         if (ioctl(fd, BLKRRPART, NULL) < 0) {
           derr << "rescan of partition table failed: " << cpp_strerror(errno)
                << dendl;
         }
         if (image.invalidate_cache() < 0)
-            derr << "invalidate rbd cache failed" << dendl;
+          derr << "invalidate rbd cache failed" << dendl;
       }
     }
   }
@@ -864,6 +878,53 @@ static int netlink_disconnect_by_path(const std::string& devpath)
   return netlink_disconnect(index);
 }
 
+static int netlink_resize(int nbd_index, uint64_t size)
+{
+  struct nl_sock *sock;
+  struct nl_msg *msg;
+  int nl_id, ret;
+
+  sock = netlink_init(&nl_id);
+  if (!sock) {
+    cerr << "rbd-nbd: Netlink interface not supported." << std::endl;
+    return 1;
+  }
+
+  nl_socket_modify_cb(sock, NL_CB_VALID, NL_CB_CUSTOM, genl_handle_msg, NULL);
+
+  msg = nlmsg_alloc();
+  if (!msg) {
+    cerr << "rbd-nbd: Could not allocate netlink message." << std::endl;
+    goto free_sock;
+  }
+
+  if (!genlmsg_put(msg, NL_AUTO_PORT, NL_AUTO_SEQ, nl_id, 0, 0,
+                   NBD_CMD_RECONFIGURE, 0)) {
+    cerr << "rbd-nbd: Could not setup message." << std::endl;
+    goto free_msg;
+  }
+
+  NLA_PUT_U32(msg, NBD_ATTR_INDEX, nbd_index);
+  NLA_PUT_U64(msg, NBD_ATTR_SIZE_BYTES, size);
+
+  ret = nl_send_sync(sock, msg);
+  if (ret < 0) {
+    cerr << "rbd-nbd: netlink resize failed: " << nl_geterror(ret) << std::endl;
+    goto free_sock;
+  }
+
+  netlink_cleanup(sock);
+  dout(10) << "netlink resize complete for nbd" << nbd_index << dendl;
+  return 0;
+
+nla_put_failure:
+free_msg:
+  nlmsg_free(msg);
+free_sock:
+  netlink_cleanup(sock);
+  return -EIO;
+}
+
 static int netlink_connect_cb(struct nl_msg *msg, void *arg)
 {
   struct genlmsghdr *gnlh = (struct genlmsghdr *)nlmsg_data(nlmsg_hdr(msg));
@@ -1194,7 +1255,8 @@ static int do_map(int argc, const char *argv[], Config *cfg)
   {
     uint64_t handle;
 
-    NBDWatchCtx watch_ctx(nbd, io_ctx, image, info.size);
+    NBDWatchCtx watch_ctx(nbd, nbd_index, use_netlink, io_ctx, image,
+                          info.size);
     r = image.update_watch(&watch_ctx, &handle);
     if (r < 0)
       goto close_nbd;
