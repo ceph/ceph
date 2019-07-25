@@ -1,7 +1,7 @@
 import { Helper } from '../helper.po';
 
 describe('RGW buckets page', () => {
-  let buckets;
+  let buckets: Helper['buckets'];
 
   beforeAll(() => {
     buckets = new Helper().buckets;

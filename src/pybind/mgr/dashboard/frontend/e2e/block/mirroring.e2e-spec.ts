@@ -1,7 +1,7 @@
 import { Helper } from '../helper.po';
 
 describe('Mirroring page', () => {
-  let mirroring;
+  let mirroring: Helper['mirroring'];
 
   beforeAll(() => {
     mirroring = new Helper().mirroring;
