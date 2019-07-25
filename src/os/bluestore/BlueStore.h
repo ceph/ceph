@@ -2297,7 +2297,7 @@ private:
   void _kv_sync_thread();
   void _kv_finalize_thread();
 
-  bluestore_deferred_op_t *_get_deferred_op(TransContext *txc, OnodeRef o);
+  bluestore_deferred_op_t *_get_deferred_op(TransContext *txc);
   void _deferred_queue(TransContext *txc);
 public:
   void deferred_try_submit();
