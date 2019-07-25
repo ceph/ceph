@@ -5949,9 +5949,19 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwrite) {
     return;
 
   size_t block_size = 4096;
-  StartDeferred(block_size);
+
   g_conf->set_val("bluestore_max_blob_size", "65536");
+  // need to tune cache autotune interval as lack of cache balancing
+  // triggers excessive cache trimming after fsck
+  // See https://tracker.ceph.com/issues/38795
+  g_conf->set_val("bluestore_cache_autotune_interval", "1");
   g_conf->apply_changes(NULL);
+
+  StartDeferred(block_size);
+
+  // wait 2xbluestore_cache_autotune_interval to make sure cache has been
+  // rebalanced
+  sleep(2);
 
   ObjectStore::Sequencer osr("test");
   int r;
@@ -6115,6 +6125,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwrite) {
     ASSERT_EQ(r, 0);
   }
   g_conf->set_val("bluestore_max_blob_size", "0");
+  g_conf->set_val("bluestore_cache_autotune_interval", "5");
 
 }
 
@@ -6124,10 +6135,18 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
     return;
 
   size_t block_size = 4096;
-  StartDeferred(block_size);
   g_conf->set_val("bluestore_max_blob_size", "65536");
-
+  // need to tune cache autotune interval as lack of cache balancing
+  // triggers excessive cache trimming after fsck
+  // See https://tracker.ceph.com/issues/38795
+  g_conf->set_val("bluestore_cache_autotune_interval", "1");
   g_conf->apply_changes(NULL);
+
+  StartDeferred(block_size);
+
+  // wait 2xbluestore_cache_autotune_interval to make sure cache has been
+  // rebalanced
+  sleep(2);
 
   ObjectStore::Sequencer osr("test");
   int r;
@@ -6298,6 +6317,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnOverwriteReverse) {
     ASSERT_EQ(r, 0);
   }
   g_conf->set_val("bluestore_max_blob_size", "0");
+  g_conf->set_val("bluestore_cache_autotune_interval", "5");
 }
 
 TEST_P(StoreTestSpecificAUSize, BlobReuseOnSmallOverwrite) {
@@ -6306,9 +6326,18 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnSmallOverwrite) {
     return;
 
   size_t block_size = 4096;
-  StartDeferred(block_size);
   g_conf->set_val("bluestore_max_blob_size", "65536");
+  // need to tune cache autotune interval as lack of cache balancing
+  // triggers excessive cache trimming after fsck
+  // See https://tracker.ceph.com/issues/38795
+  g_conf->set_val("bluestore_cache_autotune_interval", "1");
   g_conf->apply_changes(NULL);
+
+  StartDeferred(block_size);
+
+  // wait 2xbluestore_cache_autotune_interval to make sure cache has been
+  // rebalanced
+  sleep(2);
 
   ObjectStore::Sequencer osr("test");
   int r;
@@ -6372,6 +6401,7 @@ TEST_P(StoreTestSpecificAUSize, BlobReuseOnSmallOverwrite) {
     ASSERT_EQ(r, 0);
   }
   g_conf->set_val("bluestore_max_blob_size", "0");
+  g_conf->set_val("bluestore_cache_autotune_interval", "5");
 }
 
 // The test case to reproduce an issue when write happens
@@ -6680,6 +6710,7 @@ TEST_P(StoreTestSpecificAUSize, garbageCollection) {
 
   g_conf->set_val("bluestore_compression_max_blob_size", "524288");
   g_conf->set_val("bluestore_compression_min_blob_size", "262144");
+  g_conf->set_val("bluestore_max_blob_size", "524288");
   g_conf->set_val("bluestore_compression_mode", "force");
   g_conf->apply_changes(NULL);
 
