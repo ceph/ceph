@@ -446,7 +446,7 @@ class Module(MgrModule):
 
         while self.run:
             if not self.enabled:
-                self.log.info('Not sending report until configured to do so')
+                self.log.debug('Not sending report until configured to do so')
                 self.event.wait(1800)
                 continue
 
@@ -471,7 +471,7 @@ class Module(MgrModule):
                 except:
                     self.log.exception('Exception while sending report:')
             else:
-                self.log.info('Interval for sending new report has not expired')
+                self.log.debug('Interval for sending new report has not expired')
 
             sleep = 3600
             self.log.debug('Sleeping for %d seconds', sleep)
