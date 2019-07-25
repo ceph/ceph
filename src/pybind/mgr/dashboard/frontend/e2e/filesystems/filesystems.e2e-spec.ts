@@ -1,7 +1,7 @@
 import { Helper } from '../helper.po';
 
 describe('Filesystems page', () => {
-  let filesystems;
+  let filesystems: Helper['filesystems'];
 
   beforeAll(() => {
     filesystems = new Helper().filesystems;

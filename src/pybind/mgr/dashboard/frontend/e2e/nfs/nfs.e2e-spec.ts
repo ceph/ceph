@@ -1,7 +1,7 @@
 import { Helper } from '../helper.po';
 
 describe('Nfs page', () => {
-  let nfs;
+  let nfs: Helper['nfs'];
 
   beforeAll(() => {
     nfs = new Helper().nfs;

@@ -1,7 +1,7 @@
 import { Helper } from '../helper.po';
 
 describe('CRUSH map page', () => {
-  let crushmap;
+  let crushmap: Helper['crushmap'];
 
   beforeAll(() => {
     crushmap = new Helper().crushmap;

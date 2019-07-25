@@ -1,7 +1,7 @@
 import { Helper } from '../helper.po';
 
 describe('Configuration page', () => {
-  let configuration;
+  let configuration: Helper['configuration'];
 
   beforeAll(() => {
     configuration = new Helper().configuration;
