@@ -792,11 +792,11 @@ static void crush_choose_indep(const struct crush_map *map,
 							out2, rep,
 							recurse_tries, 0,
 							0, NULL, r, choose_args);
-						if (out2[rep] == CRUSH_ITEM_NONE) {
+						if (out2 && out2[rep] == CRUSH_ITEM_NONE) {
 							/* placed nothing; no leaf */
 							break;
 						}
-					} else {
+					} else if (out2) {
 						/* we already have a leaf! */
 						out2[rep] = item;
 					}
