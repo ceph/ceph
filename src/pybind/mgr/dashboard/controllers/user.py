@@ -8,8 +8,34 @@ from .. import mgr
 from ..exceptions import DashboardException, UserAlreadyExists, \
     UserDoesNotExist
 from ..security import Scope
-from ..services.access_control import SYSTEM_ROLES
+from ..services.access_control import SYSTEM_ROLES, PasswordCheck
 from ..services.auth import JwtManager
+
+
+def check_password_complexity(password, username):
+    password_complexity = PasswordCheck(password, username)
+    if password_complexity.check_ifContainsUsername():
+        raise DashboardException(msg='Password cannot contain username.',
+                                 code='not-strong-enough-password',
+                                 component='Update/Create user')
+    elif password_complexity.check_ifContainsForbiddenWords():
+        raise DashboardException(msg='Password cannot contain keywords.',
+                                 code='not-strong-enough-password',
+                                 component='Update/Create user')
+    elif password_complexity.check_ifRepetitiveCharacters():
+        raise DashboardException(msg='Password cannot contain repetitive\
+                                      characters.',
+                                 code='not-strong-enough-password',
+                                 component='Update/Create user')
+    elif password_complexity.check_ifSequentialCharacters():
+        raise DashboardException(msg='Password cannot contain sequential\
+                                      characters.',
+                                 code='not-strong-enough-password',
+                                 component='Update/Create user')
+    elif password_complexity.check_PasswordCharacters() < 10:
+        raise DashboardException(msg='Password is too weak.',
+                                 code='not-strong-enough-password',
+                                 component='Update/Create user')
 
 
 @ApiController('/user', Scope.USER)
@@ -51,6 +77,8 @@ class User(RESTController):
         user_roles = None
         if roles:
             user_roles = User._get_user_roles(roles)
+        if password:
+            check_password_complexity(password, username)
         try:
             user = mgr.ACCESS_CTRL_DB.create_user(username, password, name, email)
         except UserAlreadyExists:
@@ -108,5 +136,6 @@ class UserChangePassword(BaseController):
             raise DashboardException(msg='Invalid old password',
                                      code='invalid_old_password',
                                      component='user')
+        check_password_complexity(new_password, username)
         user.set_password(new_password)
         mgr.ACCESS_CTRL_DB.save()

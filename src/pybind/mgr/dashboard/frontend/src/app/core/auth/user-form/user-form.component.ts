@@ -17,6 +17,7 @@ import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
+import { UserChangePasswordService } from '../../../shared/services/user-change-password.service';
 import { UserFormMode } from './user-form-mode.enum';
 import { UserFormRoleModel } from './user-form-role.model';
 import { UserFormModel } from './user-form.model';
@@ -41,6 +42,9 @@ export class UserFormComponent implements OnInit {
   messages = new SelectMessages({ empty: 'There are no roles.' }, this.i18n);
   action: string;
   resource: string;
+  requiredPasswordRulesMessage: string;
+  passwordStrengthLevel: string;
+  passwordStrengthDescription: string;
 
   constructor(
     private authService: AuthService,
@@ -52,7 +56,8 @@ export class UserFormComponent implements OnInit {
     private userService: UserService,
     private notificationService: NotificationService,
     private i18n: I18n,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    private userChangePasswordService: UserChangePasswordService
   ) {
     this.resource = this.i18n('user');
     this.createForm();
@@ -60,6 +65,7 @@ export class UserFormComponent implements OnInit {
   }
 
   createForm() {
+    this.requiredPasswordRulesMessage = this.userChangePasswordService.getPasswordRulesMessage();
     this.userForm = new CdFormGroup(
       {
         username: new FormControl('', {
@@ -169,7 +175,14 @@ export class UserFormComponent implements OnInit {
     }
   }
 
-  private isCurrentUser(): boolean {
+  checkPassword() {
+    const password = this.userForm.get('password').value;
+    const passwordStrength = this.userChangePasswordService.checkPasswordComplexity(password);
+    this.passwordStrengthLevel = passwordStrength[0];
+    this.passwordStrengthDescription = passwordStrength[1];
+  }
+
+  public isCurrentUser(): boolean {
     return this.authStorageService.getUsername() === this.userForm.getValue('username');
   }
 

@@ -34,7 +34,10 @@
         <div class="form-group row">
           <label i18n
                  class="col-form-label col-sm-3"
-                 for="password">Password</label>
+                 for="password">Password
+            <i class="fa fa-fw fa-question-circle-o" i18n-title
+               title="{{ requiredPasswordRulesMessage }}"></i>
+          </label>
           <div class="col-sm-9">
             <div class="input-group">
               <input class="form-control"
@@ -43,7 +46,8 @@
                      id="password"
                      name="password"
                      autocomplete="new-password"
-                     formControlName="password">
+                     formControlName="password"
+                     (keyup)=checkPassword()>
               <span class="input-group-append">
                 <button type="button"
                         class="btn btn-light"
@@ -51,6 +55,8 @@
                 </button>
               </span>
             </div>
+            <div id="passwordStrengthLevel" class="{{ passwordStrengthLevel }}"></div>
+            {{ passwordStrengthDescription }}
             <span class="invalid-feedback"
                   *ngIf="userForm.showError('password', formDir, 'required')"
                   i18n>This field is required.</span>

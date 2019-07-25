@@ -2,11 +2,13 @@
 # pylint: disable=too-many-arguments,too-many-return-statements
 # pylint: disable=too-many-branches, too-many-locals, too-many-statements
 from __future__ import absolute_import
+from string import punctuation, ascii_lowercase, digits, ascii_uppercase
 
 import errno
 import json
 import threading
 import time
+import re
 
 import bcrypt
 
@@ -32,6 +34,60 @@ def password_hash(password, salt_password=None):
 
 
 _P = Permission  # short alias
+
+
+class PasswordCheck(object):
+    def __init__(self, password, username):
+        self.password = password
+        self.username = username
+        self.forbiddenWords = ['osd', 'host', 'dashboard', 'pool',
+                               'block', 'nfs', 'ceph', 'monitors',
+                               'gateway', 'logs', 'crush', 'maps']
+        self.complexityCredits = 0
+
+    @staticmethod
+    def _check_ifContainsWord(password, word):
+        return re.compile('(?:{0})'.format(word),
+                          flags=re.IGNORECASE).search(password)
+
+    def check_PasswordCharacters(self):
+        digitCredit = 1
+        smallLetterCredit = 1
+        bigLetterCredit = 2
+        specialCharactersCretit = 3
+        otherCharactersCredit = 5
+        for _ in self.password:
+            if _ in ascii_uppercase:
+                self.complexityCredits += bigLetterCredit
+            elif _ in ascii_lowercase:
+                self.complexityCredits += smallLetterCredit
+            elif _ in digits:
+                self.complexityCredits += digitCredit
+            elif _ in punctuation:
+                self.complexityCredits += specialCharactersCretit
+            else:
+                self.complexityCredits += otherCharactersCredit
+        return self.complexityCredits
+
+    def check_ifContainsUsername(self):
+        return self._check_ifContainsWord(self.password, self.username)
+
+    def check_ifContainsForbiddenWords(self):
+        return self._check_ifContainsWord(self.password,
+                                          '|'.join(self.forbiddenWords))
+
+    def check_ifSequentialCharacters(self):
+        for _ in range(1, len(self.password)-1):
+            if ord(self.password[_-1])+1 == ord(self.password[_])\
+               == ord(self.password[_+1])-1:
+                return True
+        return False
+
+    def check_ifRepetitiveCharacters(self):
+        for _ in range(1, len(self.password)-1):
+            if self.password[_-1] == self.password[_] == self.password[_+1]:
+                return True
+        return False
 
 
 class Role(object):
