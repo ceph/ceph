@@ -15,30 +15,28 @@
 # Please submit bugfixes or comments via http://tracker.ceph.com/
 #
 %bcond_without ocf
-%bcond_without cephfs_java
-%if 0%{?suse_version}
-%bcond_with ceph_test_package
-%else
-%bcond_without ceph_test_package
-%endif
 %bcond_with make_check
 %ifarch s390 s390x
 %bcond_with tcmalloc
 %else
 %bcond_without tcmalloc
 %endif
-%bcond_with lowmem_builder
 %if 0%{?fedora} || 0%{?rhel}
 %bcond_without selinux
+%bcond_without ceph_test_package
+%bcond_without cephfs_java
+%bcond_with lowmem_builder
+%bcond_without lttng
 %endif
 %if 0%{?suse_version}
 %bcond_with selinux
-%endif
-
-# LTTng-UST enabled on Fedora, RHEL 6+, and SLE (not openSUSE)
-%if 0%{?fedora} || 0%{?rhel} >= 6 || 0%{?suse_version}
-%if ! 0%{?is_opensuse}
+%bcond_with ceph_test_package
+%bcond_with cephfs_java
+%bcond_without lowmem_builder
+%ifarch x86_64 aarch64
 %bcond_without lttng
+%else
+%bcond_with lttng
 %endif
 %endif
 
