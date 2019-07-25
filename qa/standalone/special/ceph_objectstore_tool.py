@@ -38,7 +38,8 @@ try:
 except ImportError:
     DEVNULL = open(os.devnull, "wb")
 
-logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING)
+logging.basicConfig(format='%(levelname)s:%(message)s', level=logging.WARNING,
+                    datefmt="%FT%T")
 
 
 if sys.version_info[0] >= 3:
