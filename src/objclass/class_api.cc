@@ -1,6 +1,9 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include <cstdarg>
+#include "common/ceph_context.h"
+#include "common/ceph_releases.h"
 #include "common/config.h"
 #include "common/debug.h"
 
