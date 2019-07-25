@@ -27,7 +27,7 @@ and Ceph Developer Monthly recordings.
 
 .. _`project website`: https://ceph.com
 .. _`publications list`: https://ceph.com/publications/
-.. _`youtube channel`: https://www.youtube.com/channel/UCno-Fry25FJ7B4RycCxOtfw
+.. _`youtube channel`: https://www.youtube.com/c/CephStorage
 
 Since this document is to be consumed by developers, who are assumed to
 have Internet access, topics covered elsewhere, either within the Ceph
