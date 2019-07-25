@@ -16,7 +16,7 @@ from collections import defaultdict
 
 from mgr_module import MgrModule
 
-ALL_CHANNELS = ['basic']
+ALL_CHANNELS = ['basic', 'ident']
 
 class Module(MgrModule):
     config = dict()
@@ -71,6 +71,12 @@ class Module(MgrModule):
             'default': True,
             'description': 'Share basic cluster information (size, version)',
         },
+        {
+            'name': 'channel_ident',
+            'type': 'bool',
+            'default': False,
+            'description': 'Share a user-provided description and/or contact email for the cluster',
+        }
     ]
 
     COMMANDS = [
@@ -241,11 +247,11 @@ class Module(MgrModule):
             'channels_available': ALL_CHANNELS,
         }
 
-        if self.str_to_bool(self.config['leaderboard']):
-            report['leaderboard'] = True
-
-        for option in ['description', 'contact', 'organization']:
-            report[option] = self.config.get(option, None)
+        if 'ident' in channels:
+            if self.config['leaderboard']:
+                report['leaderboard'] = True
+            for option in ['description', 'contact', 'organization']:
+                report[option] = self.config.get(option, None)
 
         if 'basic' in channels:
             mon_map = self.get('mon_map')
