@@ -11351,29 +11351,6 @@ int Client::_listxattr(Inode *in, char *name, size_t size,
     name += this_len;
     size -= this_len;
   }
-
-  const VXattr *vxattr;
-  for (vxattr = _get_vxattrs(in); vxattr && !vxattr->name.empty(); vxattr++) {
-    if (vxattr->hidden)
-      continue;
-    // call pointer-to-member function
-    if (vxattr->exists_cb && !(this->*(vxattr->exists_cb))(in))
-      continue;
-
-    size_t this_len = vxattr->name.length() + 1;
-    r += this_len;
-    if (len_only)
-      continue;
-
-    if (this_len > size) {
-      r = -ERANGE;
-      goto out;
-    }
-
-    memcpy(name, vxattr->name.c_str(), this_len);
-    name += this_len;
-    size -= this_len;
-  }
 out:
   ldout(cct, 8) << __func__ << "(" << in->ino << ", " << size << ") = " << r << dendl;
   return r;
@@ -11806,7 +11783,6 @@ size_t Client::_vxattrcb_snap_btime(Inode *in, char *val, size_t size)
   name: CEPH_XATTR_NAME(_type, _name),				\
   getxattr_cb: &Client::_vxattrcb_ ## _type ## _ ## _name,	\
   readonly: true,						\
-  hidden: false,						\
   exists_cb: NULL,						\
   flags: 0,                                                     \
 }
@@ -11815,7 +11791,6 @@ size_t Client::_vxattrcb_snap_btime(Inode *in, char *val, size_t size)
   name: CEPH_XATTR_NAME(_type, _name),                         \
   getxattr_cb: &Client::_vxattrcb_ ## _type ## _ ## _name,     \
   readonly: true,                                              \
-  hidden: false,                                               \
   exists_cb: NULL,                                             \
   flags: _flags,                                               \
 }
@@ -11824,7 +11799,6 @@ size_t Client::_vxattrcb_snap_btime(Inode *in, char *val, size_t size)
   name: CEPH_XATTR_NAME2(_type, _name, _field),			\
   getxattr_cb: &Client::_vxattrcb_ ## _name ## _ ## _field,	\
   readonly: false,						\
-  hidden: true,							\
   exists_cb: &Client::_vxattrcb_layout_exists,			\
   flags: 0,                                                     \
 }
@@ -11833,7 +11807,6 @@ size_t Client::_vxattrcb_snap_btime(Inode *in, char *val, size_t size)
   name: CEPH_XATTR_NAME(_type, _name),			        \
   getxattr_cb: &Client::_vxattrcb_ ## _type ## _ ## _name,	\
   readonly: false,						\
-  hidden: true,							\
   exists_cb: &Client::_vxattrcb_quota_exists,			\
   flags: 0,                                                     \
 }
@@ -11843,7 +11816,6 @@ const Client::VXattr Client::_dir_vxattrs[] = {
     name: "ceph.dir.layout",
     getxattr_cb: &Client::_vxattrcb_layout,
     readonly: false,
-    hidden: true,
     exists_cb: &Client::_vxattrcb_layout_exists,
     flags: 0,
   },
@@ -11864,7 +11836,6 @@ const Client::VXattr Client::_dir_vxattrs[] = {
     name: "ceph.quota",
     getxattr_cb: &Client::_vxattrcb_quota,
     readonly: false,
-    hidden: true,
     exists_cb: &Client::_vxattrcb_quota_exists,
     flags: 0,
   },
@@ -11874,7 +11845,6 @@ const Client::VXattr Client::_dir_vxattrs[] = {
     name: "ceph.dir.pin",
     getxattr_cb: &Client::_vxattrcb_dir_pin,
     readonly: false,
-    hidden: true,
     exists_cb: &Client::_vxattrcb_dir_pin_exists,
     flags: 0,
   },
@@ -11882,7 +11852,6 @@ const Client::VXattr Client::_dir_vxattrs[] = {
     name: "ceph.snap.btime",
     getxattr_cb: &Client::_vxattrcb_snap_btime,
     readonly: true,
-    hidden: false,
     exists_cb: &Client::_vxattrcb_snap_btime_exists,
     flags: 0,
   },
@@ -11894,7 +11863,6 @@ const Client::VXattr Client::_file_vxattrs[] = {
     name: "ceph.file.layout",
     getxattr_cb: &Client::_vxattrcb_layout,
     readonly: false,
-    hidden: true,
     exists_cb: &Client::_vxattrcb_layout_exists,
     flags: 0,
   },
@@ -11907,7 +11875,6 @@ const Client::VXattr Client::_file_vxattrs[] = {
     name: "ceph.snap.btime",
     getxattr_cb: &Client::_vxattrcb_snap_btime,
     readonly: true,
-    hidden: false,
     exists_cb: &Client::_vxattrcb_snap_btime_exists,
     flags: 0,
   },
