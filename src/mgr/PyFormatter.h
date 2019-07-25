@@ -21,6 +21,9 @@
 #include "PythonCompat.h"
 
 #include <stack>
+#include <string>
+#include <string_view>
+#include <sstream>
 #include <memory>
 #include <list>
 
