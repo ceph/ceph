@@ -84,6 +84,13 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
             'perm': 'rw'
         },
         {
+            'cmd': 'fs subvolumegroup getpath '
+                   'name=vol_name,type=CephString '
+                   'name=group_name,type=CephString ',
+            'desc': "Get the mountpath of a CephFS subvolume group in a volume",
+            'perm': 'r'
+        },
+        {
             'cmd': 'fs subvolume getpath '
                    'name=vol_name,type=CephString '
                    'name=sub_name,type=CephString '
@@ -230,6 +237,10 @@ class Module(orchestrator.OrchestratorClientMixin, MgrModule):
                                         sub_name=cmd['sub_name'],
                                         group_name=cmd.get('group_name', None),
                                         force=cmd.get('force', False))
+
+    def _cmd_fs_subvolumegroup_getpath(self, inbuf, cmd):
+        return self.vc.getpath_subvolume_group(
+                None, vol_name=cmd['vol_name'], group_name=cmd['group_name'])
 
     def _cmd_fs_subvolume_getpath(self, inbuf, cmd):
         return self.vc.subvolume_getpath(None, vol_name=cmd['vol_name'],
