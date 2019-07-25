@@ -14,6 +14,13 @@ try:
     from kubernetes.client.rest import ApiException
 
     kubernetes_imported = True
+
+    # https://github.com/kubernetes-client/python/issues/895
+    from kubernetes.client.models.v1_container_image import V1ContainerImage
+    def names(self, names):
+        self._names = names
+    V1ContainerImage.names = V1ContainerImage.names.setter(names)
+
 except ImportError:
     kubernetes_imported = False
     client = None
