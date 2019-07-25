@@ -10528,7 +10528,7 @@ void Client::_ll_get(Inode *in)
   ldout(cct, 20) << __func__ << " " << in << " " << in->ino << " -> " << in->ll_ref << dendl;
 }
 
-int Client::_ll_put(Inode *in, int num)
+int Client::_ll_put(Inode *in, uint64_t num)
 {
   in->ll_put(num);
   ldout(cct, 20) << __func__ << " " << in << " " << in->ino << " " << num << " -> " << in->ll_ref << dendl;
@@ -10569,7 +10569,7 @@ void Client::_ll_drop_pins()
   }
 }
 
-bool Client::_ll_forget(Inode *in, int count)
+bool Client::_ll_forget(Inode *in, uint64_t count)
 {
   inodeno_t ino = in->ino;
 
@@ -10598,7 +10598,7 @@ bool Client::_ll_forget(Inode *in, int count)
   return last;
 }
 
-bool Client::ll_forget(Inode *in, int count)
+bool Client::ll_forget(Inode *in, uint64_t count)
 {
   Mutex::Locker lock(client_lock);
   return _ll_forget(in, count);
