@@ -23,7 +23,7 @@ int64_t BitmapAllocator::allocate(
   int64_t hint, PExtentVector *extents)
 {
   uint64_t allocated = 0;
-
+  size_t old_size = extents->size();
   ldout(cct, 10) << __func__ << std::hex << " 0x" << want_size
 		 << "/" << alloc_unit << "," << max_alloc_size << "," << hint
 		 << std::dec << dendl;
@@ -34,9 +34,10 @@ int64_t BitmapAllocator::allocate(
   if (!allocated) {
     return -ENOSPC;
   }
-  for (auto e : *extents) {
+  for (auto i = old_size; i < extents->size(); ++i) {
+    auto& e = (*extents)[i];
     ldout(cct, 10) << __func__
-                   << " 0x" << std::hex << e.offset << "~" << e.length
+                   << " extent: 0x" << std::hex << e.offset << "~" << e.length
 		   << "/" << alloc_unit << "," << max_alloc_size << "," << hint
 		   << std::dec << dendl;
   }

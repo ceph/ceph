@@ -365,7 +365,7 @@ interval_t AllocatorLevel01Loose::_allocate_l1_contiguous(uint64_t length,
     if (ctx.affordable_len) {
       assert(ctx.affordable_len >= length);
       assert((length % l0_granularity) == 0);
-      auto pos_start = ctx.affordable_offs + length / l0_granularity;
+      auto pos_start = ctx.affordable_offs / l0_granularity;
       auto pos_end = (ctx.affordable_offs + length) / l0_granularity;
       _mark_alloc_l1_l0(pos_start, pos_end);
       res = interval_t(ctx.affordable_offs, length);
