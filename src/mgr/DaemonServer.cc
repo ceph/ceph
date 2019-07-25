@@ -711,7 +711,7 @@ public:
     }
 
     if (r == 0) {
-      dout(4) << __func__ << " success" << dendl;
+      dout(20) << "success" << dendl;
     } else {
       derr << __func__ << " " << cpp_strerror(r) << " " << rs << dendl;
     }
@@ -787,8 +787,7 @@ bool DaemonServer::_handle_command(
   string prefix;
   cmd_getval(cct, cmdctx->cmdmap, "prefix", prefix);
 
-  dout(4) << "decoded " << cmdctx->cmdmap.size() << dendl;
-  dout(4) << "prefix=" << prefix << dendl;
+  dout(10) << "decoded-size=" << cmdctx->cmdmap.size() << " prefix=" << prefix  << dendl;
 
   if (prefix == "get_command_descriptions") {
     dout(10) << "reading commands from python modules" << dendl;
@@ -2180,7 +2179,7 @@ bool DaemonServer::_handle_command(
     return true;
   }
 
-  dout(4) << "passing through " << cmdctx->cmdmap.size() << dendl;
+  dout(10) << "passing through " << cmdctx->cmdmap.size() << dendl;
   finisher.queue(new FunctionContext([this, cmdctx, handler_name, prefix](int r_) {
     std::stringstream ss;
 
