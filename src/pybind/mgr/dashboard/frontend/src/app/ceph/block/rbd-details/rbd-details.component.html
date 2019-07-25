@@ -118,6 +118,7 @@
   <tab i18n-heading
        heading="Snapshots">
     <cd-rbd-snapshot-list [snapshots]="selectedItem.snapshots"
+                          [featuresName]="selectedItem.features_name"
                           [poolName]="selectedItem.pool_name"
                           [rbdName]="selectedItem.name"></cd-rbd-snapshot-list>
   </tab>
