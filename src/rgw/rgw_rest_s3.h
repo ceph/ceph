@@ -124,6 +124,10 @@ class RGWListBucket_ObjStore_S3 : public RGWListBucket_ObjStore {
 
 class RGWListBucket_ObjStore_S3v2 : public RGWListBucket_ObjStore_S3 {
   bool fetchOwner;
+  bool start_after_exist;
+  bool continuation_token_exist;
+  string startAfter;
+  string continuation_token;
 public:
   RGWListBucket_ObjStore_S3v2() :  fetchOwner(false) {
   }
