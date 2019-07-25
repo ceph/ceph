@@ -329,6 +329,15 @@ int ClassHandler::ClassMethod::exec(cls_method_context_t ctx, bufferlist& indata
 
 ClassHandler& ClassHandler::get_instance()
 {
+#ifdef WITH_SEASTAR
+  // the context is being used solely for:
+  //   1. random number generation (cls_gen_random_bytes)
+  //   2. accessing the configuration
+  //   3. logging
+  static CephContext cct;
+  static ClassHandler single(&cct);
+#else
   static ClassHandler single(g_ceph_context);
+#endif // WITH_SEASTAR
   return single;
 }
