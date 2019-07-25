@@ -23,6 +23,27 @@ LICENSE='sharing-1-0'
 LICENSE_NAME='Community Data License Agreement - Sharing - Version 1.0'
 LICENSE_URL='https://cdla.io/sharing-1-0/'
 
+# If the telemetry revision has changed since this point, re-require
+# an opt-in.  This should happen each time we add new information to
+# the telemetry report.
+LAST_REVISION_RE_OPT_IN = 2
+
+# Latest revision of the telemetry report.  Bump this each time we make
+# *any* change.
+REVISION = 2
+
+# History of revisions
+# --------------------
+#
+# Version 1:
+#   Mimic and/or nautilus are lumped together here, since
+#   we didn't track revisions yet.
+#
+# Version 2:
+#   - added revision tracking, nagging, etc.
+#   - added config option changes
+#   - added channels
+#   - added explicit license acknowledgement to the opt-in process
 
 class Module(MgrModule):
     config = dict()
@@ -48,6 +69,11 @@ class Module(MgrModule):
             'name': 'enabled',
             'type': 'bool',
             'default': False
+        },
+        {
+            'name': 'last_opt_revision',
+            'type': 'int',
+            'default': 1,
         },
         {
             'name': 'leaderboard',
@@ -369,9 +395,11 @@ class Module(MgrModule):
             if command.get('license') != LICENSE:
                 return -errno.EPERM, '', "Telemetry data is licensed under the " + LICENSE_NAME + " (" + LICENSE_URL + ").\nTo enable, add '--license " + LICENSE + "' to the 'ceph telemetry on' command."
             self.set_module_option('enabled', True)
+            self.set_module_option('last_opt_revision', REVISION)
             return 0, '', ''
         elif command['prefix'] == 'telemetry off':
             self.set_module_option('enabled', False)
+            self.set_module_option('last_opt_revision', REVISION)
             return 0, '', ''
         elif command['prefix'] == 'telemetry send':
             self.last_report = self.compile_report()
