@@ -265,7 +265,12 @@ class Device(object):
 
     @property
     def rotational(self):
-        return self.sys_api['rotational'] == '1'
+        rotational = self.sys_api.get('rotational')
+        if rotational is None:
+            # fall back to lsblk if not found in sys_api
+            # default to '1' if no value is found with lsblk either
+            rotational = self.disk_api.get('ROTA', '1')
+        return rotational == '1'
 
     @property
     def model(self):
