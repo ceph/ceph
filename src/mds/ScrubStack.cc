@@ -482,6 +482,7 @@ void ScrubStack::_validate_inode_done(CInode *in, int r,
 
   if (in == header->get_origin()) {
     scrub_origins.erase(in);
+    clog_scrub_summary(in);
     if (!header->get_recursive()) {
       if (r >= 0) { // we got into the scrubbing dump it
         result.dump(&(header->get_formatter()));
@@ -514,6 +515,7 @@ void ScrubStack::set_state(State next_state) {
       dout(20) << __func__ << ", from state=" << state << ", to state="
                << next_state << dendl;
       state = next_state;
+      clog_scrub_summary();
     }
 }
 
@@ -570,9 +572,7 @@ std::string_view ScrubStack::scrub_summary() {
         *cs << ",";
       }
 
-      std::string path;
-      (*inode)->make_path_string(path, true);
-      *cs << (path.empty() ? "/" : path.c_str());
+      *cs << scrub_inode_path(*inode);
     }
     *cs << "]";
   }
@@ -621,9 +621,7 @@ void ScrubStack::scrub_status(Formatter *f) {
     std::string tag(header->get_tag());
     f->open_object_section(tag.c_str()); // scrub id
 
-    std::string path;
-    inode->make_path_string(path, true);
-    f->dump_string("path", path.empty() ? "/" : path.c_str());
+    f->dump_string("path", scrub_inode_path(inode));
 
     std::stringstream optss;
     if (header->get_recursive()) {
@@ -659,6 +657,7 @@ void ScrubStack::abort_pending_scrubs() {
     CInode *in = *inode;
     if (in == in->scrub_info()->header->get_origin()) {
       scrub_origins.erase(in);
+      clog_scrub_summary(in);
     }
 
     MDSContext *ctx = nullptr;
@@ -736,4 +735,21 @@ bool ScrubStack::scrub_resume() {
   }
 
   return r;
+}
+
+// send current scrub summary to cluster log
+void ScrubStack::clog_scrub_summary(CInode *in) {
+  if (in) {
+    std::string what;
+    if (clear_inode_stack) {
+      what = "aborted";
+    } else if (scrub_origins.count(in)) {
+      what = "queued";
+    } else {
+      what = "completed";
+    }
+    clog->info() << "scrub " << what << " for path: " << scrub_inode_path(in);
+  }
+
+  clog->info() << "scrub summary: " << scrub_summary();
 }
