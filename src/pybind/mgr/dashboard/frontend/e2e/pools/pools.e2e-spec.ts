@@ -34,7 +34,7 @@ describe('Pools page', () => {
   it('should create a pool', () => {
     pools.exist(poolName, false).then(() => {
       pools.navigateTo('create');
-      pools.create(poolName, 8).then(() => {
+      pools.create(poolName, 8, undefined).then(() => {
         pools.navigateTo();
         pools.exist(poolName, true);
       });

@@ -29,7 +29,7 @@ export class PoolPageHelper extends PageHelper {
   }
 
   @PageHelper.restrictTo(pages.create)
-  create(name: string, placement_groups: number): promise.Promise<any> {
+  create(name: string, placement_groups: number, ...apps: string[]): promise.Promise<any> {
     const nameInput = $('input[name=name]');
     nameInput.clear();
     if (!this.isPowerOf2(placement_groups)) {
@@ -45,6 +45,22 @@ export class PoolPageHelper extends PageHelper {
           $('input[name=pgNum]')
             .sendKeys(protractor.Key.CONTROL, 'a', protractor.Key.NULL, placement_groups)
             .then(() => {
+              if (apps !== undefined) {
+                element(by.css('.float-left.mr-2.select-menu-edit'))
+                  .click()
+                  .then(() => {
+                    browser
+                      .wait(
+                        Helper.EC.visibilityOf(element(by.css('.popover-content.popover-body'))),
+                        Helper.TIMEOUT
+                      )
+                      .then(() => {
+                        for (let i = 0, app; (app = apps[i]); i++) {
+                          element(by.cssContainingText('.select-menu-item-content', app)).click();
+                        }
+                      });
+                  });
+              }
               return element(by.css('cd-submit-button')).click();
             });
         });
@@ -61,13 +77,17 @@ export class PoolPageHelper extends PageHelper {
             return $('li.delete a') // click on "delete" menu item
               .click()
               .then(() => {
-                const getConfirmationCheckbox = () => $('#confirmation');
                 browser
-                  .wait(() => EC.visibilityOf(getConfirmationCheckbox()), Helper.TIMEOUT)
+                  .wait(Helper.EC.visibilityOf($('.custom-control-label')), Helper.TIMEOUT)
                   .then(() => {
-                    this.moveClick(getConfirmationCheckbox()).then(() => {
-                      return element(by.cssContainingText('button', 'Delete Pool')).click(); // Click Delete item
-                    });
+                    const getConfirmationCheckbox = () => $('.custom-control-label');
+                    browser
+                      .wait(() => EC.visibilityOf(getConfirmationCheckbox()), Helper.TIMEOUT)
+                      .then(() => {
+                        this.moveClick(getConfirmationCheckbox()).then(() => {
+                          return element(by.cssContainingText('button', 'Delete Pool')).click(); // Click Delete item
+                        });
+                      });
                   });
               });
           });
