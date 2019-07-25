@@ -370,6 +370,11 @@ public:
 
   virtual ~KeyValueDB() {}
 
+  /// estimate space utilization for a prefix (in bytes)
+  virtual int64_t estimate_prefix_size(const string& prefix) {
+    return 0;
+  }
+
   /// compact the underlying store
   virtual void compact() {}
 

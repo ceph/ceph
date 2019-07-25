@@ -336,7 +336,7 @@ public:
   void collect_metadata(map<string,string> *pm);
   int fsck();
 
-  uint64_t get_fs_usage();
+  uint64_t get_used();
   uint64_t get_total(unsigned id);
   uint64_t get_free(unsigned id);
   void get_usage(vector<pair<uint64_t,uint64_t>> *usage); // [<free,total> ...]

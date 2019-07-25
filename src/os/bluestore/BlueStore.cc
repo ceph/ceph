@@ -4270,10 +4270,10 @@ int BlueStore::_reload_logger()
   int r = statfs(&store_statfs);
   if(r >= 0) {
     logger->set(l_bluestore_allocated, store_statfs.allocated);
-    logger->set(l_bluestore_stored, store_statfs.stored);
-    logger->set(l_bluestore_compressed, store_statfs.compressed);
-    logger->set(l_bluestore_compressed_allocated, store_statfs.compressed_allocated);
-    logger->set(l_bluestore_compressed_original, store_statfs.compressed_original);
+    logger->set(l_bluestore_stored, store_statfs.data_stored);
+    logger->set(l_bluestore_compressed, store_statfs.data_compressed);
+    logger->set(l_bluestore_compressed_allocated, store_statfs.data_compressed_allocated);
+    logger->set(l_bluestore_compressed_original, store_statfs.data_compressed_original);
   }
   return r;
 }
@@ -5825,7 +5825,7 @@ int BlueStore::_fsck_check_extents(
       continue;
     expected_statfs.allocated += e.length;
     if (compressed) {
-      expected_statfs.compressed_allocated += e.length;
+      expected_statfs.data_compressed_allocated += e.length;
     }
     bool already = false;
     apply(
@@ -5967,6 +5967,8 @@ int BlueStore::_fsck(bool deep, bool repair)
   statfs(&actual_statfs);
   expected_statfs.total = actual_statfs.total;
   expected_statfs.available = actual_statfs.available;
+  expected_statfs.internal_metadata = actual_statfs.internal_metadata;
+  expected_statfs.omap_allocated = actual_statfs.omap_allocated;
 
   // walk PREFIX_OBJ
   dout(1) << __func__ << " walking object keyspace" << dendl;
@@ -6123,7 +6125,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  ++errors;
 	}
 	pos = l.logical_offset + l.length;
-	expected_statfs.stored += l.length;
+	expected_statfs.data_stored += l.length;
 	assert(l.blob);
 	const bluestore_blob_t& blob = l.blob->get_blob();
 
@@ -6207,8 +6209,8 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  ++errors;
 	}
 	if (blob.is_compressed()) {
-	  expected_statfs.compressed += blob.get_compressed_payload_length();
-	  expected_statfs.compressed_original += 
+	  expected_statfs.data_compressed += blob.get_compressed_payload_length();
+	  expected_statfs.data_compressed_original +=
 	    i.first->get_referenced_bytes();
 	}
 	if (blob.is_shared()) {
@@ -6501,6 +6503,8 @@ int BlueStore::statfs(struct store_statfs_t *buf)
   buf->total = bdev->get_size();
   buf->available = alloc->get_free();
 
+  buf->omap_allocated = db->estimate_prefix_size(PREFIX_OMAP);
+
   if (bluefs) {
     // part of our shared device is "free" according to BlueFS, but we
     // can't touch bluestore_bluefs_min of it.
@@ -6510,16 +6514,21 @@ int BlueStore::statfs(struct store_statfs_t *buf)
     if (shared_available > 0) {
       buf->available += shared_available;
     }
+
+    // call any non-omap bluefs space "internal metadata"
+    buf->internal_metadata =
+      std::max(bluefs->get_used(), (uint64_t)cct->_conf->bluestore_bluefs_min)
+      - buf->omap_allocated;
   }
 
   {
     std::lock_guard<std::mutex> l(vstatfs_lock);
     
     buf->allocated = vstatfs.allocated();
-    buf->stored = vstatfs.stored();
-    buf->compressed = vstatfs.compressed();
-    buf->compressed_original = vstatfs.compressed_original();
-    buf->compressed_allocated = vstatfs.compressed_allocated();
+    buf->data_stored = vstatfs.stored();
+    buf->data_compressed = vstatfs.compressed();
+    buf->data_compressed_original = vstatfs.compressed_original();
+    buf->data_compressed_allocated = vstatfs.compressed_allocated();
   }
 
   dout(20) << __func__ << *buf << dendl;
