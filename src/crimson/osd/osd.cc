@@ -51,6 +51,14 @@ namespace {
 using ceph::common::local_conf;
 using ceph::os::FuturizedStore;
 
+PGLSFilter::PGLSFilter() : cct(nullptr)
+{
+}
+
+PGLSFilter::~PGLSFilter()
+{
+}
+
 namespace ceph::osd {
 
 OSD::OSD(int id, uint32_t nonce,
