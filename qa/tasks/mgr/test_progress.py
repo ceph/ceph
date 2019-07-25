@@ -36,6 +36,14 @@ class TestProgress(MgrTestCase):
         log.info(json.dumps(p, indent=2))
         return p['events'] + p['completed']
 
+    def _events_in_progress(self):
+        """
+        this function returns all events that are in progress
+        """
+        p = self._get_progress()
+        log.info(json.dumps(p, indent=2))
+        return p['events']
+
     def _setup_pool(self, size=None):
         self.mgr_cluster.mon_manager.create_pool(self.POOL)
         if size is not None:
@@ -101,7 +109,28 @@ class TestProgress(MgrTestCase):
         ev = self._all_events()[0]
         log.info(json.dumps(ev, indent=1))
         self.assertIn("Rebalancing after osd.0 marked out", ev['message'])
+        
+        return ev
 
+    def _simulate_back_in(self, osd_ids, initial_event):
+        
+        for osd_id in osd_ids:
+            self.mgr_cluster.mon_manager.raw_cluster_cmd(
+                    'osd', 'in', str(osd_id))
+        
+        # First Event should complete promptly
+        self.wait_until_true(lambda: self._is_complete(initial_event['id']),
+                             timeout=self.EVENT_CREATION_PERIOD)
+
+            
+        # Wait for progress event marked in to pop up
+        self.wait_until_equal(lambda: len(self._events_in_progress()), 1,
+                              timeout=self.EVENT_CREATION_PERIOD)
+
+        new_event = self._all_events()[0]
+        log.info(json.dumps(new_event, indent=1))
+        self.assertIn("Rebalancing after osd.0 marked in", new_event['message'])    
+        
         return ev
 
     def _is_quiet(self):
@@ -165,14 +194,17 @@ class TestProgress(MgrTestCase):
         """
         When a recovery is underway, but then the out OSD
         comes back in, such that recovery is no longer necessary.
+        It should create another event for when osd is marked in
+        and cancel the one that is still ongoing.
         """
-        ev = self._simulate_failure()
+        ev1 = self._simulate_failure()
 
-        self.mgr_cluster.mon_manager.raw_cluster_cmd('osd', 'in', '0')
+        ev2 = self._simulate_back_in([0], ev1)
+        
+        # Wait for progress event to ultimately complete
+        self.wait_until_true(lambda: self._is_complete(ev2['id']),
+                             timeout=self.RECOVERY_PERIOD)
 
-        # Event should complete promptly
-        self.wait_until_true(lambda: self._is_complete(ev['id']),
-                             timeout=self.EVENT_CREATION_PERIOD)
         self.assertTrue(self._is_quiet())
 
     def test_osd_cannot_recover(self):
