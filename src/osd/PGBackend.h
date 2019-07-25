@@ -555,17 +555,36 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      map<string, bufferlist> *out);
 
    virtual int objects_read_sync(
-     const hobject_t &hoid,
+     const hobject_t &soid,
+     const shard_id_t &shard,
      uint64_t off,
      uint64_t len,
      uint32_t op_flags,
-     bufferlist *bl) = 0;
+     unsigned size,
+     bufferlist *bl,
+     boost::optional<uint32_t> maybe_crc,
+     bool sparse) = 0;
 
+   struct ReadItem {
+     uint64_t off;
+     uint64_t len;
+     unsigned flags;
+     bufferlist *out;
+     std::unique_ptr<Context> on_finish;
+     boost::optional<uint32_t> maybe_crc;
+     bool sparse;
+     ReadItem(uint64_t o, uint64_t l, unsigned f, bufferlist *out, Context *fin,
+              boost::optional<uint32_t> c, bool s):
+        off(o), len(l), flags(f), out(out), on_finish(fin), maybe_crc(c), sparse(s) {}
+   };
    virtual void objects_read_async(
      const hobject_t &hoid,
-     const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
-		pair<bufferlist*, Context*> > > &to_read,
-     Context *on_complete, bool fast_read = false) = 0;
+     const shard_id_t &shard,
+     unsigned size,
+     list<ReadItem> &&to_read,
+     Context *on_complete,
+     PrimaryLogPG* pg,
+     bool fast_read = false) = 0;
 
    virtual bool auto_repair_supported() const = 0;
    int be_scan_list(

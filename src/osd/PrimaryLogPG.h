@@ -319,6 +319,12 @@ public:
   GenContext<ThreadPool::TPHandle&> *bless_unlocked_gencontext(
     GenContext<ThreadPool::TPHandle&> *c) override;
     
+  static void queue_read(list<PGBackend::ReadItem> &&to_read,
+                         const hobject_t &soid, const shard_id_t &shard,
+                         unsigned size, Context *on_finish,
+                         PrimaryLogPG *pg) {
+    pg->osd->osd->queue_read(std::move(to_read), soid, shard, size, on_finish, pg);
+  }
   void send_message(int to_osd, Message *m) override {
     osd->send_message_osd_cluster(to_osd, m, get_osdmap_epoch());
   }
@@ -650,9 +656,7 @@ public:
 
     bool sent_reply = false;
 
-    // pending async reads <off, len, op_flags> -> <outbl, outr>
-    list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
-	      pair<bufferlist*, Context*> > > pending_async_reads;
+    list<PGBackend::ReadItem> pending_async_reads;
     int inflightreads;
     friend struct OnReadComplete;
     void start_async_reads(PrimaryLogPG *pg);
@@ -715,13 +719,6 @@ public:
       ceph_assert(!op_t);
       if (reply)
 	reply->put();
-      for (list<pair<boost::tuple<uint64_t, uint64_t, unsigned>,
-		     pair<bufferlist*, Context*> > >::iterator i =
-	     pending_async_reads.begin();
-	   i != pending_async_reads.end();
-	   pending_async_reads.erase(i++)) {
-	delete i->second.second;
-      }
     }
     uint64_t get_features() {
       if (op && op->get_req()) {
@@ -1406,7 +1403,7 @@ protected:
 
   friend class C_ExtentCmpRead;
 
-  int do_read(OpContext *ctx, OSDOp& osd_op);
+  int do_read(OpContext *ctx, OSDOp& osd_op, bool sync);
   int do_sparse_read(OpContext *ctx, OSDOp& osd_op);
   int do_writesame(OpContext *ctx, OSDOp& osd_op);
 

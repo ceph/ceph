@@ -1331,6 +1331,7 @@ private:
 
   ShardedThreadPool osd_op_tp;
   ThreadPool command_tp;
+  ThreadPool read_tp;
 
   void get_latest_osdmap();
 
@@ -2136,6 +2137,31 @@ private:
   }
 
 private:
+  class ReadContext;
+  struct ReadWQ: ThreadPool::WorkQueue<ReadContext> {
+    list<ReadContext*> read_queue;
+    ReadWQ(time_t ti, time_t si, ThreadPool *tp)
+      : ThreadPool::WorkQueue<ReadContext>("OSD::ReadWQ", ti, si, tp){}
+    bool _enqueue(ReadContext *r) override {
+      read_queue.push_back(r);
+      return true;
+    }
+    bool _empty() override {
+      return read_queue.empty();
+    }
+    void _dequeue(ReadContext *) override {
+      ceph_abort();
+    }
+    void _clear() override;
+    ReadContext* _dequeue() override {
+      if (read_queue.empty())
+	return nullptr;
+      auto i = read_queue.front();
+      read_queue.pop_front();
+      return i;
+    }
+    void _process(ReadContext *r, ThreadPool::TPHandle &) override;
+  } read_wq;
   int mon_cmd_maybe_osd_create(string &cmd);
   int update_crush_device_class();
   int update_crush_location();
@@ -2169,8 +2195,11 @@ public:
 		       uuid_d *osd_fsid,
 		       int *whoami,
 		       ceph_release_t *min_osd_release);
+  void queue_read(list<PGBackend::ReadItem> &&items,
+                  const hobject_t &soid, const shard_id_t &shard,
+                  unsigned size, Context *on_finish,
+                  PrimaryLogPG *pg);
   
-
   // startup/shutdown
   int pre_init();
   int init();

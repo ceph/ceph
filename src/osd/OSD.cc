@@ -2001,6 +2001,65 @@ int OSD::write_meta(CephContext *cct, ObjectStore *store, uuid_d& cluster_fsid, 
   return 0;
 }
 
+struct OSD::ReadContext {
+  list<PGBackend::ReadItem> items;
+  hobject_t soid;
+  shard_id_t shard;
+  unsigned size;
+  std::unique_ptr<Context> on_finish;
+  PrimaryLogPGRef pg;
+  ReadContext(list<PGBackend::ReadItem> &&items, const hobject_t &soid,
+              const shard_id_t &shard, unsigned size,
+              Context *on_finish, PrimaryLogPG *pg):
+    items(std::move(items)), soid(soid), shard(shard), size(size),
+    on_finish(on_finish), pg(pg){}
+};
+
+struct AsyncReadCallback : public GenContext<ThreadPool::TPHandle&> {
+  int r;
+  Context *c;
+  AsyncReadCallback(int r, Context *c) : r(r), c(c) {}
+  void finish(ThreadPool::TPHandle&) override {
+    c->complete(r);
+    c = NULL;
+  }
+  ~AsyncReadCallback() override {
+    delete c;
+  }
+};
+
+void OSD::queue_read(list<PGBackend::ReadItem> &&items,
+                     const hobject_t &soid, const shard_id_t &shard,
+                     unsigned size, Context *on_finish,
+                     PrimaryLogPG *pg) {
+  auto it = new ReadContext(std::move(items), soid, shard, size, on_finish, pg);
+  read_wq.queue(it);
+}
+
+void OSD::ReadWQ::_clear() {
+  for(auto it: read_queue) {
+    delete it;
+  }
+  read_queue.clear();
+}
+
+void OSD::ReadWQ::_process(ReadContext *r, ThreadPool::TPHandle &t)
+{
+  int rval = 0;
+  for(auto &it: r->items) {
+    int _r = r->pg->get_pgbackend()->objects_read_sync(r->soid, r->shard, it.off, it.len, it.flags, r->size, it.out, it.maybe_crc, it.sparse);
+    if (it.on_finish) {
+      r->pg->schedule_recovery_work(new AsyncReadCallback(_r, it.on_finish.release()));
+    }
+    if (_r < 0) {
+      rval = _r;
+      break;
+    }
+  }
+  r->pg->schedule_recovery_work(new AsyncReadCallback(rval, r->on_finish.release()));
+  delete r;
+}
+
 int OSD::peek_meta(ObjectStore *store,
 		   std::string *magic,
 		   uuid_d *cluster_fsid,
@@ -2086,6 +2145,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   osd_op_tp(cct, "OSD::osd_op_tp", "tp_osd_tp",
 	    get_num_op_threads()),
   command_tp(cct, "OSD::command_tp", "tp_osd_cmd",  1),
+  read_tp(cct, "OSD::read_tp", "tp_osd_read",  1),
   heartbeat_stop(false),
   heartbeat_need_update(true),
   hb_front_client_messenger(hb_client_front),
@@ -2115,6 +2175,10 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
     cct->_conf->osd_command_thread_timeout,
     cct->_conf->osd_command_thread_suicide_timeout,
     &command_tp),
+  read_wq(
+    cct->_conf->get_val<long>("osd_read_thread_timeout"),
+    cct->_conf->get_val<long>("osd_read_thread_suicide_timeout"),
+    &read_tp),
   service(this)
 {
 
@@ -2133,7 +2197,6 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
                                     gss_ktfile_client.c_str(), 1));
     ceph_assert(set_result == 0);
   }
-
   monc->set_messenger(client_messenger);
   op_tracker.set_complaint_and_threshold(cct->_conf->osd_op_complaint_time,
                                          cct->_conf->osd_op_log_threshold);
@@ -3020,6 +3083,7 @@ int OSD::init()
 
   osd_op_tp.start();
   command_tp.start();
+  read_tp.start();
 
   // start the heartbeat
   heartbeat_thread.create("osd_srv_heartbt");
@@ -3449,6 +3513,9 @@ int OSD::shutdown()
   command_tp.stop();
   dout(10) << "command tp stopped" << dendl;
 
+  read_tp.drain();
+  read_tp.stop();
+  dout(10) << "read tp stopped" << dendl;
   dout(10) << "stopping agent" << dendl;
   service.agent_stop();
 

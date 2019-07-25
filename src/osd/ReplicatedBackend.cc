@@ -13,6 +13,7 @@
  */
 #include "common/errno.h"
 #include "ReplicatedBackend.h"
+#include "PrimaryLogPG.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDRepOp.h"
 #include "messages/MOSDRepOpReply.h"
@@ -246,23 +247,121 @@ void ReplicatedBackend::on_change()
 }
 
 int ReplicatedBackend::objects_read_sync(
-  const hobject_t &hoid,
+  const hobject_t &soid,
+  const shard_id_t &shard,
   uint64_t off,
   uint64_t len,
   uint32_t op_flags,
-  bufferlist *bl)
+  unsigned size,
+  bufferlist *bl,
+  boost::optional<uint32_t> maybe_crc,
+  bool sparse)
 {
-  return store->read(ch, ghobject_t(hoid), off, len, *bl, op_flags);
+  if(!sparse) {
+    int r = store->read(ch, ghobject_t(soid), off, len, *bl, op_flags);
+    if (maybe_crc && r == size) {
+      uint32_t crc = bl->crc32c(-1);
+      if (maybe_crc != crc) {
+        derr << std::hex << " full-object read crc 0x" << crc
+             << " != expected 0x" << *maybe_crc
+             << std::dec << " on " << soid << dendl; 
+        return -EIO;
+      }
+    }
+    return r;
+  }
+
+  // read into a buffer
+  map<uint64_t, uint64_t> m;
+  uint32_t total_read = 0;
+  int r = store->fiemap(ch, ghobject_t(soid, ghobject_t::NO_GEN, shard),
+			off, len, m);
+  if (r < 0)  {
+    return r;
+  }
+
+  map<uint64_t, uint64_t>::iterator miter;
+  bufferlist data_bl;
+  uint64_t last = off;
+  for (miter = m.begin(); miter != m.end(); ++miter) {
+    // verify hole?
+    if (cct->_conf->osd_verify_sparse_read_holes &&
+        last < miter->first) {
+      bufferlist t;
+      uint64_t len = miter->first - last;
+      r = store->read(ch, ghobject_t(soid), last, len, t, op_flags);
+      if (r < 0) {
+        derr << coll << " " << soid << " sparse-read failed to read: " << r << dendl;
+      } else if (!t.is_zero()) {
+        derr << coll << " " << soid << " sparse-read found data in hole " << last << "~" << len << dendl;
+      }
+    }
+
+    bufferlist tmpbl;
+    r = store->read(ch, ghobject_t(soid), miter->first, miter->second,
+                    tmpbl, op_flags);
+    if (r < 0) {
+      return r;
+    }
+
+    // this is usually happen when we get extent that exceeds the actual file
+    // size
+    if (r < (int)miter->second)
+      miter->second = r;
+    total_read += r;
+    dout(10) << "sparse-read " << miter->first << "@" << miter->second
+	       << dendl;
+    data_bl.claim_append(tmpbl);
+    last = miter->first + r;
+  }
+
+  // verify trailing hole?
+  if (cct->_conf->osd_verify_sparse_read_holes) {
+    uint64_t end = MIN(off + len, size);
+    if (last < end) {
+      bufferlist t;
+      uint64_t len = end - last;
+      r = store->read(ch, ghobject_t(soid), last, len, t, op_flags);
+      if (r < 0) {
+        derr << soid << " sparse-read failed to read: " << r << dendl;
+      } else if (!t.is_zero()) {
+        derr << soid << " sparse-read found data in hole " << last << "~" << len << dendl;
+      }
+    }
+  }
+  if (maybe_crc && total_read == size) {
+    uint32_t crc = data_bl.crc32c(-1);
+    if (maybe_crc != crc) {
+      derr << std::hex << " full-object read crc 0x" << crc
+           << " != expected 0x" << *maybe_crc
+           << std::dec << " on " << soid << dendl; 
+      return -EIO;
+    }
+  }
+  encode(m, *bl);
+  ::encode_destructively(data_bl, *bl);
+
+  dout(10) << " sparse_read got " << total_read << " bytes from object "
+	     << soid << dendl;
+  return total_read;
 }
 
 void ReplicatedBackend::objects_read_async(
   const hobject_t &hoid,
-  const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
-		  pair<bufferlist*, Context*> > > &to_read,
+  const shard_id_t &shard,
+  unsigned size,
+  list<PGBackend::ReadItem> &&to_read,
   Context *on_complete,
+  PrimaryLogPG* pg,
   bool fast_read)
 {
-  ceph_abort_msg("async read is not used by replica pool");
+  // There is no fast read implementation for replication backend yet
+  assert(!fast_read);
+  for (auto &it: to_read) {
+     if(it.on_finish)
+       it.on_finish = std::unique_ptr<Context>(pg->bless_context(it.on_finish.release()));
+  }
+  PrimaryLogPG::queue_read(std::move(to_read), hoid, shard, size, pg->bless_context(on_complete), pg);
 }
 
 class C_OSD_OnOpCommit : public Context {

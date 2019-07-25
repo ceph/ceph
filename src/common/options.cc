@@ -3296,6 +3296,14 @@ std::vector<Option> get_global_options() {
     .set_default(15_min)
     .set_description(""),
 
+    Option("osd_read_thread_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(15)
+    .set_description(""),
+
+    Option("osd_read_thread_suicide_timeout", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(150)
+    .set_description(""),
+
     Option("osd_heartbeat_interval", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(6)
     .set_min_max(1, 86400)

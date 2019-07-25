@@ -143,18 +143,24 @@ public:
   }
 
   int objects_read_sync(
-    const hobject_t &hoid,
+    const hobject_t &soid,
+    const shard_id_t &shard,
     uint64_t off,
     uint64_t len,
     uint32_t op_flags,
-    bufferlist *bl) override;
+    unsigned size,
+    bufferlist *bl,
+    boost::optional<uint32_t> maybe_crc,
+    bool sparse) override;
 
   void objects_read_async(
     const hobject_t &hoid,
-    const list<pair<boost::tuple<uint64_t, uint64_t, uint32_t>,
-	       pair<bufferlist*, Context*> > > &to_read,
-               Context *on_complete,
-               bool fast_read = false) override;
+    const shard_id_t &shard,
+    unsigned size,
+    list<PGBackend::ReadItem> &&to_read,
+    Context *on_complete,
+    PrimaryLogPG *pg,
+    bool fast_read = false) override;
 
 private:
   // push
