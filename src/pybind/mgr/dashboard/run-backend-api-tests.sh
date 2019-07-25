@@ -70,8 +70,11 @@ EOF
     cd $TEMP_DIR
     virtualenv --python=${TEUTHOLOGY_PYTHON_BIN:-/usr/bin/python} venv
     source venv/bin/activate
-    eval pip install $TEUTHOLOGY_PY_REQS
-    pip install -r $CURR_DIR/requirements.txt
+    echo "##### $PATH ####"
+    echo "*** which pip ***"
+    which pip
+    venv/bin/pip install $TEUTHOLOGY_PY_REQS
+    venv/bin/pip install -r $CURR_DIR/requirements.txt
     deactivate
 
     git clone --depth 1 https://github.com/ceph/teuthology.git
