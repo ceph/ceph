@@ -144,7 +144,7 @@ class RgwBucket(RgwRESTController):
         result = self.proxy('GET', 'bucket', {'bucket': bucket})
         return self._append_bid(result)
 
-    def create(self, bucket, uid, zonegroup, placement_target):
+    def create(self, bucket, uid, zonegroup=None, placement_target=None):
         try:
             rgw_client = RgwClient.instance(uid)
             return rgw_client.create_bucket(bucket, zonegroup, placement_target)
