@@ -25,20 +25,19 @@ enum {
   l_mutex_last
 };
 
-mutex_debugging_base::mutex_debugging_base(std::string group, bool bt)
+mutex_debugging_base::mutex_debugging_base(std::string group, bool ld, bool bt)
   : group(std::move(group)),
-    id(-1),
-    backtrace(bt),
-    nlock(0),
-    locked_by(thread::id())
+    lockdep(ld),
+    backtrace(bt)
 {
-  if (g_lockdep)
+  if (_enable_lockdep()) {
     _register();
+  }
 }
 
 mutex_debugging_base::~mutex_debugging_base() {
   ceph_assert(nlock == 0);
-  if (g_lockdep) {
+  if (_enable_lockdep()) {
     lockdep_unregister(id);
   }
 }
