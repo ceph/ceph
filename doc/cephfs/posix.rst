@@ -96,6 +96,6 @@ addition, unreported errors that occured before the file description was
 opened will also be returned on fsync.
 
 See `PostgreSQL's summary of fsync() error reporting across operating systems
-<https://wiki.postgresql.org/wiki/Fsync_Errors>` and `Matthew Wilcox's
+<https://wiki.postgresql.org/wiki/Fsync_Errors>`_ and `Matthew Wilcox's
 presentation on Linux IO error handling
-<https://www.youtube.com/watch?v=74c19hwY2oE>` for more information.
+<https://www.youtube.com/watch?v=74c19hwY2oE>`_ for more information.
