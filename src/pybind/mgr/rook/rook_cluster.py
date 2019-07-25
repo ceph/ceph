@@ -309,7 +309,8 @@ class RookCluster(object):
             pods_summary.append({
                 "name": d['metadata']['name'],
                 "nodename": d['spec']['node_name'],
-                "labels": d['metadata']['labels']
+                "labels": d['metadata']['labels'],
+                'phase': d['status']['phase']
             })
 
         return pods_summary
