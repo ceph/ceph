@@ -5,6 +5,7 @@ Collect statistics from Ceph cluster and send this back to the Ceph project
 when user has opted-in
 """
 import errno
+import hashlib
 import json
 import re
 import requests
@@ -172,6 +173,7 @@ class Module(MgrModule):
         self.last_upload = None
         self.last_report = dict()
         self.report_id = None
+        self.salt = None
 
     def config_notify(self):
         for opt in self.MODULE_OPTIONS:
@@ -195,6 +197,11 @@ class Module(MgrModule):
         if self.report_id is None:
             self.report_id = str(uuid.uuid4())
             self.set_store('report_id', self.report_id)
+
+        self.salt = self.get_store('salt', None)
+        if not self.salt:
+            self.salt = str(uuid.uuid4())
+            self.set_store('salt', self.salt)
 
     def gather_osd_metadata(self, osd_map):
         keys = ["osd_objectstore", "rotational"]
@@ -269,6 +276,13 @@ class Module(MgrModule):
                 continue
             c = json.loads(crashinfo)
             del c['utsname_hostname']
+            (etype, eid) = c.get('entity_name', '').split('.')
+            if etype != 'osd':
+                m = hashlib.sha1()
+                m.update(self.salt.encode('utf-8'))
+                m.update(eid.encode('utf-8'))
+                m.update(self.salt.encode('utf-8'))
+                c['entity_name'] = etype + '.' + m.hexdigest()
             crashlist.append(c)
         return crashlist
 
