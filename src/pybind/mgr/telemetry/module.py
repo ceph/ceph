@@ -181,6 +181,8 @@ class Module(MgrModule):
                     opt['name'],
                     self.get_module_option(opt['name']))
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
+        # wake up serve() thread
+        self.event.set()
 
     def load(self):
         self.last_upload = self.get_store('last_upload', None)
