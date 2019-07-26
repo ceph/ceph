@@ -515,6 +515,7 @@ add_subdirectory(osd)
 set(ceph_osd_srcs
   # Link the Object Class API implementation directly as intermediary
   # static library (like libosd.a) nullifies the effect of `-rdynamic`.
+  osd/objclass.cc
   objclass/class_api.cc
   ceph_osd.cc)
 add_executable(ceph-osd ${ceph_osd_srcs})
