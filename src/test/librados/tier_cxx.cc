@@ -5679,7 +5679,7 @@ TEST_F(LibRadosTierECPP, CallForcesPromote) {
   cluster.wait_for_latest_osdmap();
 
   ASSERT_EQ(0, cluster.pool_delete(cache_pool_name.c_str()));
-  ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
+  ASSERT_EQ(0, destroy_one_ec_pool_pp(pool_name, cluster));
 }
 
 TEST_F(LibRadosTierECPP, HitSetNone) {
