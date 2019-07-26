@@ -2,6 +2,7 @@ from flask import request, jsonify
 from flask_restful import Resource
 from elasticsearch import Elasticsearch
 import datetime
+import hashlib
 
 
 class Report(Resource):
@@ -70,11 +71,32 @@ class Report(Resource):
                 if 'utsname_hostname' in crash:
                     del crash['utsname_hostname']
 
+    def _obfuscate_entity_name(self):
+        """
+        Early nautilus releases did not obfuscate the entity_name, which is
+        often a (short) hostname.
+        """
+        for crash in self.report.get('crashes', []):
+            if 'entity_name' in crash:
+                ls = crash.get('entity_name').split('.')
+                entity_type = ls[0]
+                entity_id = '.'.join(ls[1:])
+                if len(entity_id) != 40:
+                    m = hashlib.sha1()
+                    m.update(self.report.get('report_id').encode('utf-8'))
+                    m.update(entity_id.encode('utf-8'));
+                    m.update(self.report.get('report_id').encode('utf-8'))
+                    crash['entity_name'] = entity_type + '.' + m.hexdigest()
+
     def put(self):
         self.report = request.get_json(force=True)
+
+        # clean up
         self._crashes_to_list()
         self._dots_to_percent()
         self._purge_hostname_from_crash()
+        self._obfuscate_entity_name()
+
         es_id = self._report_id()
         es = Elasticsearch()
         es.index(index='telemetry', doc_type='report', id=es_id,
