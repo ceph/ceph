@@ -73,7 +73,7 @@
     "core-js": "2.6.5",
     "detect-browser": "4.1.0",
     "fork-awesome": "1.1.6",
-    "lodash": "4.17.11",
+    "lodash": "4.17.13",
     "moment": "2.24.0",
     "ng-block-ui": "2.1.1",
     "ng-bootstrap-form-validation": "4.0.0",
