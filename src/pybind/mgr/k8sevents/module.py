@@ -20,20 +20,27 @@ import os
 import sys
 import time
 import json
-import queue
 import threading
 
 from datetime import datetime, timedelta, tzinfo
-from urllib3.exceptions import NewConnectionError, MaxRetryError
+from urllib3.exceptions import MaxRetryError
 
 import rados
 from mgr_module import MgrModule
 from ceph_argparse import json_command, run_in_thread
 
 try:
+    import queue
+except ImportError:
+    # python 2.7.5
+    import Queue as queue
+finally:
+    # python 2.7.15 or python3
+    event_queue = queue.Queue()
+
+try:
     from kubernetes import client, config
     from kubernetes.client.rest import ApiException
-
 except ImportError:
     kubernetes_imported = False
     client = None
@@ -44,8 +51,6 @@ else:
     config.load_incluster_config()
 
 DEFAULT_LOG_LEVEL = 'info'
-
-event_queue = queue.Queue()
 
 ZERO = timedelta(0)
 
@@ -101,9 +106,11 @@ class LogEntry(object):
     }
 
     def __init__(self, *args, **kwargs):
-        # for k,v in kwargs.items():
-        #     setattr(self, k, v)
-        self.update(**kwargs)
+
+        # self.update(**kwargs) - python3 syntax
+        for k,v in kwargs.items():
+            setattr(self, k, v)
+        
 
         if 'health check ' in self.msg.lower():
             self.healthcheck = HealthCheck(self.msg)
@@ -214,7 +221,7 @@ class KubernetesEvent(object):
 
         try:
             self.api.create_namespaced_event(self.namespace, self.event_body)
-        except (NewConnectionError, MaxRetryError):
+        except MaxRetryError:
             # k8s config has not be defined properly 
             self.api_status = 403       # Forbidden
         except ApiException as e:
@@ -294,8 +301,14 @@ class KubernetesEvent(object):
         try:
             self.api.patch_namespaced_event(self.event_name, self.namespace, self.body)
         except ApiException as e:
-            # unable to update the event
-            self.api_status = e.status
+            if e.status == 404:
+                # tried to patch but it's rolled out of k8s events
+                try:
+                    self.api.create_namespaced_event(self.namespace, self.event_body)
+                except ApiException as e:
+                    self.api_status = e.status
+                else:
+                    self.api_status = 200
         else:
             self.api_status = 200 
 
@@ -383,23 +396,88 @@ class EventProcessor(threading.Thread):
         self.log.error("[INF] Ceph log processor thread exited")
 
 class CephConfigWatcher(threading.Thread):
-    """ parallel thread watching for configuration changes within the cluster """
+    """ Catch configuration changes within the cluster and generate events """
     daemon = True
 
     def __init__(self, mgr):
         self.mgr = mgr
-        self.server_list = list()
+        self.server_map = dict()
+        self.osd_map = dict()
+        self.service_lookup = dict()
         threading.Thread.__init__(self)
     
+    @property
+    def raw_capacity(self):
+        return sum([self.osd_map[osd]['capacity'] for osd in self.osd_map])
+    
+    @property
+    def num_servers(self):
+        return len(self.server_map.keys())
+
+    @property
+    def num_osds(self):
+        return len(self.osd_map.keys())
+
+    def fetch_servers(self):
+        servers = self.mgr.list_servers()
+        server_map = dict()
+        for server_info in servers:
+            service_map = dict()
+            for svc in server_info['services']:
+                if svc.get('type') in service_map.keys():
+                    service_map[svc.get('type')].append(svc.get('id'))
+                else:
+                    service_map[svc.get('type')] = list([svc.get('id')])
+                # maintain the service xref map service -> host and version
+                self.service_lookup[(svc.get('type'), str(svc.get('id')))] = server_info.get('hostname')
+            server_map[server_info.get('hostname')] = service_map
+
+        return server_map
+    
+    def fetch_osd_map(self):
+        stats = self.mgr.get('osd_stats')
+        osd_map = dict()
+
+        devices = self.mgr.get('osd_map_crush')['devices']
+        for dev in devices:
+            osd_id = str(dev['id']) 
+            osd_map[osd_id] = dict(
+                deviceclass=dev.get('class'),
+                capacity=0,
+                hostname=self.service_lookup['osd', osd_id]
+                )
+        
+        for osd_stat in stats['osd_stats']:
+            osd_id = str(osd_stat.get('osd'))
+            osd_map[osd_id]['capacity'] = osd_stat['statfs']['total']
+
+        return osd_map
+
     def run(self):
         self.mgr.log.warning("[INF] Ceph configuration watcher started")
         # TODO
         # 1. every hour send a health event - ok/warning/error
         # 2. send event if nodes added/removed from the cluster
-        # 3. send event of osd count increases/decreases
-        # 4. 
+        # 3. send event if osd count increases/decreases
+        # 4. send event if service location changes
+        self.server_map = self.fetch_servers()
+        self.mgr.log.warning("[DBG] {}".format(self.service_lookup))
+        self.osd_map = self.fetch_osd_map()
+        self.mgr.log.warning("[INF] {} hosts, {} OSDs, {}B Raw Capacity".format(self.num_servers, 
+                                                                               self.num_osds,
+                                                                               MgrModule.to_pretty_iec(self.raw_capacity)))
+        self.mgr.log.warning("[DBG] server map : {}".format(self.server_map))
+        self.mgr.log.warning("[DBG] osd map : {}".format(self.osd_map))
+
         while True:
-            self.server_list = self.mgr.list_servers()
+            self.server_map = self.fetch_servers()
+            self.osd_map = self.fetch_osd_map()
+
+            self.mgr.log.error("[DBG] service map : {}".format(self.server_map))
+            self.mgr.log.error("[DBG] osd_map : {}".format(self.osd_map))
+            self.mgr.log.warning("[DBG] {} hosts, {} OSDs, {}B Raw Capacity".format(self.num_servers, 
+                                                                        self.num_osds,
+                                                                        MgrModule.to_pretty_iec(self.raw_capacity)))
             time.sleep(10)    
 
 
