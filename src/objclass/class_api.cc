@@ -22,11 +22,6 @@ void cls_initialize(ClassHandler *h)
   ch = h;
 }
 
-void cls_finalize()
-{
-  ch = NULL;
-}
-
 
 void *cls_alloc(size_t size)
 {
