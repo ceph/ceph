@@ -3,7 +3,8 @@ from flask_restful import Resource
 from elasticsearch import Elasticsearch
 import datetime
 import hashlib
-
+import json
+import copy
 
 class Report(Resource):
     def __init__(self, report=None):
@@ -93,12 +94,24 @@ class Report(Resource):
 
         # clean up
         self._crashes_to_list()
-        self._dots_to_percent()
         self._purge_hostname_from_crash()
         self._obfuscate_entity_name()
 
+        self.post_to_file()
+        self.post_to_es()
+
+        return jsonify(status=True)
+
+    def post_to_file(self):
+        id = self._report_id()
+        with open('/opt/telemetry/raw/%s' % id, 'w') as f:
+            f.write(json.dumps(self.report, indent=4))
+            f.close()
+    
+    def post_to_es(self):
+        r = copy.deepcopy(self.report)
+        self._dots_to_percent(r)
         es_id = self._report_id()
         es = Elasticsearch()
         es.index(index='telemetry', doc_type='report', id=es_id,
-                 body=self.report)
-        return jsonify(status=True)
+                 body=r)
