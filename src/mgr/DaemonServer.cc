@@ -2381,7 +2381,8 @@ void DaemonServer::send_report()
 	  jf.flush(*_dout);
 	  *_dout << dendl;
           if (osdmap.require_osd_release >= ceph_release_t::luminous) {
-              clog->debug() << "pgmap v" << pg_map.version << ": " << pg_map;
+              stats_clog->info() << "pgmap v" << pg_map.version << ": "
+				 << pg_map;
           }
 	});
     });
