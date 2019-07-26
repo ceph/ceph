@@ -7,8 +7,8 @@ from teuthology.provision import cloud
 from teuthology.provision import downburst
 from teuthology.provision import fog
 from teuthology.provision import openstack
+from teuthology.provision import pelagos
 import os
-
 
 log = logging.getLogger(__name__)
 
@@ -18,12 +18,25 @@ def _logfile(ctx, shortname):
         return os.path.join(ctx.config['archive_path'],
                             shortname + '.downburst.log')
 
+def get_reimage_types():
+    return pelagos.get_types() + fog.get_types()
 
-def reimage(ctx, machine_name):
+def reimage(ctx, machine_name, machine_type):
     os_type = get_distro(ctx)
     os_version = get_distro_version(ctx)
-    fog_obj = fog.FOG(machine_name, os_type, os_version)
-    return fog_obj.create()
+
+    pelagos_types = pelagos.get_types()
+    fog_types = fog.get_types()
+    if machine_type in pelagos_types and machine_type in fog_types:
+        raise Exception('machine_type can be used with one provisioner only')
+    elif machine_type in pelagos_types:
+        obj = pelagos.Pelagos(machine_name, os_type, os_version)
+    elif machine_type in fog_types:
+        obj = fog.FOG(machine_name, os_type, os_version)
+    else:
+        raise Exception("The machine_type '%s' is not known to any "
+                        "of configured provisioners" % machine_type)
+    return obj.create()
 
 
 def create_if_vm(ctx, machine_name, _downburst=None):

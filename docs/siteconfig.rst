@@ -236,3 +236,9 @@ Here is a sample configuration with many of the options set and documented::
       api_token: your_api_token
       user_token: your_user_token
       machine_types: ['mira', 'smithi']
+
+    # FOG provisioner is default and switching to Pelgas
+    # should be made explicitly
+    pelagos:
+      endpoint: http://head.ses.suse.de:5000/
+      machine_types: ['type1', 'type2', 'type3']
