@@ -69,6 +69,9 @@ class ConnectionPool(object):
             assert self.ops_in_progress == 0
             log.debug("Connecting to cephfs '{0}'".format(self.fs_name))
             self.fs = cephfs.LibCephFS(rados_inst=self.mgr.rados)
+            log.debug("Setting user ID and group ID of CephFS mount as root...")
+            self.fs.conf_set("client_mount_uid", "0")
+            self.fs.conf_set("client_mount_gid", "0")
             log.debug("CephFS initializing...")
             self.fs.init()
             log.debug("CephFS mounting...")
