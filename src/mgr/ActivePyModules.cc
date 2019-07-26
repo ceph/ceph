@@ -41,11 +41,14 @@ ActivePyModules::ActivePyModules(PyModuleConfig &module_config_,
           std::map<std::string, std::string> store_data,
           DaemonStateIndex &ds, ClusterState &cs,
           MonClient &mc, LogChannelRef clog_,
-          LogChannelRef audit_clog_, Objecter &objecter_,
+          LogChannelRef audit_clog_,
+	  LogChannelRef stats_clog_,
+	  Objecter &objecter_,
           Client &client_, Finisher &f, DaemonServer &server,
           PyModuleRegistry &pmr)
   : module_config(module_config_), daemon_state(ds), cluster_state(cs),
-    monc(mc), clog(clog_), audit_clog(audit_clog_), objecter(objecter_),
+    monc(mc), clog(clog_), audit_clog(audit_clog_), stats_clog(stats_clog_),
+    objecter(objecter_),
     client(client_), finisher(f),
     cmd_finisher(g_ceph_context, "cmd_finisher", "cmdfin"),
     server(server), py_module_registry(pmr)
@@ -1054,6 +1057,8 @@ void ActivePyModules::cluster_log(const std::string &channel, clog_type prio,
 
   if (channel == "audit") {
     audit_clog->do_log(prio, message);
+  } else if (channel == "stats") {
+    stats_clog->do_log(prio, message);
   } else {
     clog->do_log(prio, message);
   }

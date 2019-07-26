@@ -41,7 +41,9 @@
 Mgr::Mgr(MonClient *monc_, const MgrMap& mgrmap,
          PyModuleRegistry *py_module_registry_,
 	 Messenger *clientm_, Objecter *objecter_,
-	 Client* client_, LogChannelRef clog_, LogChannelRef audit_clog_) :
+	 Client* client_,
+	 LogChannelRef clog_, LogChannelRef audit_clog_,
+	 LogChannelRef stats_clog_) :
   monc(monc_),
   objecter(objecter_),
   client(client_),
@@ -51,9 +53,10 @@ Mgr::Mgr(MonClient *monc_, const MgrMap& mgrmap,
   py_module_registry(py_module_registry_),
   cluster_state(monc, nullptr, mgrmap),
   server(monc, finisher, daemon_state, cluster_state, *py_module_registry,
-         clog_, audit_clog_),
+         clog_, audit_clog_, stats_clog_),
   clog(clog_),
   audit_clog(audit_clog_),
+  stats_clog(stats_clog_),
   initialized(false),
   initializing(false)
 {
@@ -289,7 +292,7 @@ void Mgr::init()
   // assume finisher already initialized in background_init
   dout(4) << "starting python modules..." << dendl;
   py_module_registry->active_start(daemon_state, cluster_state,
-      kv_store, *monc, clog, audit_clog, *objecter, *client,
+      kv_store, *monc, clog, audit_clog, stats_clog, *objecter, *client,
       finisher, server);
 
   cluster_state.final_init();

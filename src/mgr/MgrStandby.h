@@ -47,7 +47,7 @@ protected:
   MgrClient mgrc;
 
   LogClient log_client;
-  LogChannelRef clog, audit_clog;
+  LogChannelRef clog, audit_clog, stats_clog;
 
   ceph::mutex lock = ceph::make_mutex("MgrStandby::lock");
   Finisher finisher;

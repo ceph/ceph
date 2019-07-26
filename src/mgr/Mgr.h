@@ -60,6 +60,7 @@ protected:
 
   LogChannelRef clog;
   LogChannelRef audit_clog;
+  LogChannelRef stats_clog;
 
   void load_all_metadata();
   std::map<std::string, std::string> load_store();
@@ -72,7 +73,9 @@ public:
   Mgr(MonClient *monc_, const MgrMap& mgrmap,
       PyModuleRegistry *py_module_registry_,
       Messenger *clientm_, Objecter *objecter_,
-      Client *client_, LogChannelRef clog_, LogChannelRef audit_clog_);
+      Client *client_,
+      LogChannelRef clog_, LogChannelRef audit_clog_,
+      LogChannelRef stats_clog_);
   ~Mgr();
 
   bool is_initialized() const {return initialized;}

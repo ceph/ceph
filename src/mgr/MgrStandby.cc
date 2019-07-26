@@ -52,6 +52,7 @@ MgrStandby::MgrStandby(int argc, const char **argv) :
   log_client(g_ceph_context, client_messenger.get(), &monc.monmap, LogClient::NO_FLAGS),
   clog(log_client.create_channel(CLOG_CHANNEL_CLUSTER)),
   audit_clog(log_client.create_channel(CLOG_CHANNEL_AUDIT)),
+  stats_clog(log_client.create_channel(CLOG_CHANNEL_STATS)),
   finisher(g_ceph_context, "MgrStandby", "mgrsb-fin"),
   timer(g_ceph_context, lock),
   py_module_registry(clog),
@@ -363,14 +364,12 @@ void MgrStandby::_update_log_config()
 			       log_channel, log_prio, log_to_graylog,
 			       log_to_graylog_host, log_to_graylog_port,
 			       fsid, host) == 0) {
-    clog->update_config(log_to_monitors, log_to_syslog,
-			log_channel, log_prio, log_to_graylog,
-			log_to_graylog_host, log_to_graylog_port,
-			fsid, host);
-    audit_clog->update_config(log_to_monitors, log_to_syslog,
-			      log_channel, log_prio, log_to_graylog,
-			      log_to_graylog_host, log_to_graylog_port,
-			      fsid, host);
+    for (auto &x : { clog, audit_clog, stats_clog }) {
+      x->update_config(log_to_monitors, log_to_syslog,
+		       log_channel, log_prio, log_to_graylog,
+		       log_to_graylog_host, log_to_graylog_port,
+		       fsid, host);
+    }
   }
 }
 
@@ -394,7 +393,7 @@ void MgrStandby::handle_mgr_map(ref_t<MMgrMap> mmap)
       dout(1) << "Activating!" << dendl;
       active_mgr.reset(new Mgr(&monc, map, &py_module_registry,
                                client_messenger.get(), &objecter,
-			       &client, clog, audit_clog));
+			       &client, clog, audit_clog, stats_clog));
       active_mgr->background_init(new LambdaContext(
             [this](int r){
               // Advertise our active-ness ASAP instead of waiting for

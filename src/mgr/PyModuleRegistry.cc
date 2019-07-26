@@ -176,6 +176,7 @@ void PyModuleRegistry::active_start(
             DaemonStateIndex &ds, ClusterState &cs,
             const std::map<std::string, std::string> &kv_store,
             MonClient &mc, LogChannelRef clog_, LogChannelRef audit_clog_,
+	    LogChannelRef stats_clog_,
             Objecter &objecter_, Client &client_, Finisher &f,
             DaemonServer &server)
 {
@@ -196,7 +197,7 @@ void PyModuleRegistry::active_start(
 
   active_modules.reset(new ActivePyModules(
               module_config, kv_store, ds, cs, mc,
-              clog_, audit_clog_, objecter_, client_, f, server,
+              clog_, audit_clog_, stats_clog_, objecter_, client_, f, server,
               *this));
 
   for (const auto &i : modules) {

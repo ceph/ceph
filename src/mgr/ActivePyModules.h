@@ -43,7 +43,7 @@ class ActivePyModules
   DaemonStateIndex &daemon_state;
   ClusterState &cluster_state;
   MonClient &monc;
-  LogChannelRef clog, audit_clog;
+  LogChannelRef clog, audit_clog, stats_clog;
   Objecter &objecter;
   Client   &client;
   Finisher &finisher;
@@ -61,7 +61,9 @@ public:
   ActivePyModules(PyModuleConfig &module_config,
             std::map<std::string, std::string> store_data,
             DaemonStateIndex &ds, ClusterState &cs, MonClient &mc,
-            LogChannelRef clog_, LogChannelRef audit_clog_, Objecter &objecter_, Client &client_,
+            LogChannelRef clog_, LogChannelRef audit_clog_,
+	    LogChannelRef stats_clog_,
+	    Objecter &objecter_, Client &client_,
             Finisher &f, DaemonServer &server, PyModuleRegistry &pmr);
 
   ~ActivePyModules();

@@ -64,7 +64,7 @@ protected:
   DaemonStateIndex &daemon_state;
   ClusterState &cluster_state;
   PyModuleRegistry &py_modules;
-  LogChannelRef clog, audit_clog;
+  LogChannelRef clog, audit_clog, stats_clog;
 
   // Connections for daemons, and clients with service names set
   // (i.e. those MgrClients that are allowed to send MMgrReports)
@@ -135,7 +135,8 @@ public:
 	       ClusterState &cluster_state_,
 	       PyModuleRegistry &py_modules_,
 	       LogChannelRef cl,
-	       LogChannelRef auditcl);
+	       LogChannelRef auditcl,
+	       LogChannelRef statscl);
   ~DaemonServer() override;
 
   bool ms_dispatch2(const ceph::ref_t<Message>& m) override;
