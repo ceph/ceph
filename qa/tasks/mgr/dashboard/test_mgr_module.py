@@ -111,6 +111,10 @@ class MgrModuleTelemetryTest(MgrModuleTestCase):
             data,
             JObj(
                 sub_elems={
+                    'channel_basic': JLeaf(bool),
+                    'channel_ident': JLeaf(bool),
+                    'channel_crash': JLeaf(bool),
+                    'channel_device': JLeaf(bool),
                     'contact': JLeaf(str),
                     'description': JLeaf(str),
                     'enabled': JLeaf(bool),
