@@ -1134,8 +1134,7 @@ class TaskHandler:
         self.log.info("task_cancel: {}".format(task_id))
 
         if task_id not in self.tasks_by_id:
-            self.log.debug("tasks: {}".format(str(self.tasks_by_id)))
-            raise KeyError("No such task {}".format(task_id))
+            return -errno.ENOENT, '', "No such task {}".format(task_id)
 
         task = self.tasks_by_id[task_id]
         task.cancel()
@@ -1160,7 +1159,7 @@ class TaskHandler:
 
         if task_id:
             if task_id not in self.tasks_by_id:
-                raise KeyError("No such task {}".format(task_id))
+                return -errno.ENOENT, '', "No such task {}".format(task_id)
 
             result = self.tasks_by_id[task_id].to_dict()
         else:
