@@ -143,6 +143,7 @@ public:
   LogClient log_client;
   LogChannelRef clog;
   LogChannelRef audit_clog;
+  LogChannelRef stats_clog;
   KeyRing keyring;
   KeyServer key_server;
 

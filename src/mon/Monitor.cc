@@ -179,6 +179,7 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
 {
   clog = log_client.create_channel(CLOG_CHANNEL_CLUSTER);
   audit_clog = log_client.create_channel(CLOG_CHANNEL_AUDIT);
+  stats_clog = log_client.create_channel(CLOG_CHANNEL_STATS);
 
   update_log_clients();
 
@@ -628,6 +629,14 @@ void Monitor::update_log_clients()
 			       fsid, host))
     return;
 
+  for (auto x : { clog, audit_clog, stats_clog }) {
+    x->update_config(log_to_monitors, log_to_syslog,
+		     log_channel, log_prio, log_to_graylog,
+		     log_to_graylog_host, log_to_graylog_port,
+		     fsid, host);
+  }
+
+  /*
   clog->update_config(log_to_monitors, log_to_syslog,
 		      log_channel, log_prio, log_to_graylog,
 		      log_to_graylog_host, log_to_graylog_port,
@@ -637,6 +646,7 @@ void Monitor::update_log_clients()
 			    log_channel, log_prio, log_to_graylog,
 			    log_to_graylog_host, log_to_graylog_port,
 			    fsid, host);
+  */
 }
 
 int Monitor::sanitize_options()

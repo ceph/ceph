@@ -28,6 +28,7 @@ static const std::string CLOG_CHANNEL_NONE    = "none";
 static const std::string CLOG_CHANNEL_DEFAULT = "cluster";
 static const std::string CLOG_CHANNEL_CLUSTER = "cluster";
 static const std::string CLOG_CHANNEL_AUDIT   = "audit";
+static const std::string CLOG_CHANNEL_STATS   = "stats";
 
 // this is the key name used in the config options for the default, e.g.
 //   default=true foo=false bar=false
