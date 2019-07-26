@@ -1951,12 +1951,14 @@ private:
   deque<TransContext*> kv_queue_unsubmitted; ///< ready, need submit by kv thread
   deque<TransContext*> kv_committing;        ///< currently syncing
   deque<DeferredBatch*> deferred_done_queue;   ///< deferred ios done
+  bool kv_sync_in_progress = false;
 
   KVFinalizeThread kv_finalize_thread;
   ceph::mutex kv_finalize_lock = ceph::make_mutex("BlueStore::kv_finalize_lock");
   ceph::condition_variable kv_finalize_cond;
   deque<TransContext*> kv_committing_to_finalize;   ///< pending finalization
   deque<DeferredBatch*> deferred_stable_to_finalize; ///< pending finalization
+  bool kv_finalize_in_progress = false;
 
   PerfCounters *logger = nullptr;
 
