@@ -221,7 +221,6 @@ OSDService::OSDService(OSD *osd) :
   logger(osd->logger),
   recoverystate_perf(osd->recoverystate_perf),
   monc(osd->monc),
-  class_handler(osd->class_handler),
   osd_max_object_size(cct->_conf, "osd_max_object_size"),
   osd_skip_data_digest(cct->_conf, "osd_skip_data_digest"),
   publish_lock{ceph::make_mutex("OSDService::publish_lock")},
@@ -2177,7 +2176,6 @@ OSD::~OSD()
     delete shards.back();
     shards.pop_back();
   }
-  delete class_handler;
   cct->get_perfcounters_collection()->remove(recoverystate_perf);
   cct->get_perfcounters_collection()->remove(logger);
   delete recoverystate_perf;
@@ -2192,8 +2190,6 @@ double OSD::get_tick_interval() const
   return (OSD_TICK_INTERVAL *
 	  ceph::util::generate_random_number(1.0 - delta, 1.0 + delta));
 }
-
-void cls_initialize(ClassHandler *ch);
 
 void OSD::handle_signal(int signum)
 {
@@ -2869,11 +2865,8 @@ int OSD::init()
       goto out;
   }
 
-  class_handler = new ClassHandler(cct);
-  cls_initialize(class_handler);
-
   if (cct->_conf->osd_open_classes_on_start) {
-    int r = class_handler->open_all_classes();
+    int r = ClassHandler::get_instance().open_all_classes();
     if (r)
       dout(1) << "warning: got an error loading one or more classes: " << cpp_strerror(r) << dendl;
   }
@@ -3525,7 +3518,7 @@ int OSD::shutdown()
 
   op_tracker.on_shutdown();
 
-  class_handler->shutdown();
+  ClassHandler::get_instance().shutdown();
   client_messenger->shutdown();
   cluster_messenger->shutdown();
   hb_front_client_messenger->shutdown();
@@ -9633,7 +9626,7 @@ int OSD::init_op_flags(OpRequestRef& op)
 	bp.copy(iter->op.cls.method_len, mname);
 
 	ClassHandler::ClassData *cls;
-	int r = class_handler->open_class(cname, &cls);
+	int r = ClassHandler::get_instance().open_class(cname, &cls);
 	if (r) {
 	  derr << "class " << cname << " open got " << cpp_strerror(r) << dendl;
 	  if (r == -ENOENT)

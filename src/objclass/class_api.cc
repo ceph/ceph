@@ -13,15 +13,9 @@
 #include "auth/Crypto.h"
 #include "common/armor.h"
 
+#define dout_context ClassHandler::get_instance().cct
+
 static constexpr int dout_subsys = ceph_subsys_objclass;
-
-static ClassHandler *ch;
-
-void cls_initialize(ClassHandler *h)
-{
-  ch = h;
-}
-
 
 void *cls_alloc(size_t size)
 {
@@ -35,7 +29,8 @@ void cls_free(void *p)
 
 int cls_register(const char *name, cls_handle_t *handle)
 {
-  ClassHandler::ClassData *cls = ch->register_class(name);
+  ClassHandler::ClassData *cls = \
+    ClassHandler::get_instance().register_class(name);
   *handle = (cls_handle_t)cls;
   return (cls != NULL);
 }
@@ -43,7 +38,7 @@ int cls_register(const char *name, cls_handle_t *handle)
 int cls_unregister(cls_handle_t handle)
 {
   ClassHandler::ClassData *cls = (ClassHandler::ClassData *)handle;
-  ch->unregister_class(cls);
+  ClassHandler::get_instance().unregister_class(cls);
   return 1;
 }
 
@@ -631,7 +626,7 @@ int cls_cxx_list_watchers(cls_method_context_t hctx,
 
 int cls_gen_random_bytes(char *buf, int size)
 {
-  ch->cct->random()->get_bytes(buf, size);
+  ClassHandler::get_instance().cct->random()->get_bytes(buf, size);
   return 0;
 }
 
@@ -643,14 +638,14 @@ int cls_gen_rand_base64(char *dest, int size) /* size should be the required str
 
   ret = cls_gen_random_bytes(buf, sizeof(buf));
   if (ret < 0) {
-    lgeneric_derr(ch->cct) << "cannot get random bytes: " << ret << dendl;
+    derr << "cannot get random bytes: " << ret << dendl;
     return -1;
   }
 
   ret = ceph_armor(tmp_dest, &tmp_dest[sizeof(tmp_dest)],
 		   (const char *)buf, ((const char *)buf) + ((size - 1) * 3 + 4 - 1) / 4);
   if (ret < 0) {
-    lgeneric_derr(ch->cct) << "ceph_armor failed" << dendl;
+    derr << "ceph_armor failed" << dendl;
     return -1;
   }
   tmp_dest[ret] = '\0';
@@ -727,7 +722,7 @@ int cls_log(int level, const char *format, ...)
      va_end(ap);
 #define MAX_SIZE 8196
      if ((n > -1 && n < size) || size > MAX_SIZE) {
-       ldout(ch->cct, ceph::dout::need_dynamic(level)) << buf << dendl;
+       dout(ceph::dout::need_dynamic(level)) << buf << dendl;
        return n;
      }
      size *= 2;

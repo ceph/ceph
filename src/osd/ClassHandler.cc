@@ -327,3 +327,8 @@ int ClassHandler::ClassMethod::exec(cls_method_context_t ctx, bufferlist& indata
   return ret;
 }
 
+ClassHandler& ClassHandler::get_instance()
+{
+  static ClassHandler single(g_ceph_context);
+  return single;
+}
