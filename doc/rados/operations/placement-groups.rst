@@ -433,9 +433,11 @@ You should then check if the result makes sense with the way you
 designed your Ceph cluster to maximize `data durability`_,
 `object distribution`_ and minimize `resource usage`_.
 
-The result should be **rounded up to the nearest power of two.**
-Rounding up is optional, but recommended for CRUSH to more evenly balance
-the number of objects among placement groups.
+The result should always be **rounded up to the nearest power of two.**
+A power of two will evenly balance the number of objects among placement groups. 
+You could set it to a different value but you should be aware that this could result in 
+an uneven distribution of data across your OSDs. Use of such values shoud be limited to 
+incrementally stepping from one power of two to another.
 
 As an example, for a cluster with 200 OSDs and a pool size of 3
 replicas, you would estimate your number of PGs as follows::
