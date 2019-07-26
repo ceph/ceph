@@ -1,7 +1,7 @@
 Progress Module
 ===============
 
-The progress module is primary used for informing users about the recovery progress
+The progress module is primarily used for informing users about the recovery progress
 of PGs (Placement Groups) that are affected by events such as OSDs being marked in/out,
 pg_autoscaler trying to match the target PG number, balancer trying to perform 
 upmap/crush-compat optimization and etc. 
@@ -21,10 +21,10 @@ in chronological order.
 
         ceph progress json
 
-Shows the summary of ongoing/completed events in json format
+Shows the summary of ongoing/completed events in JSON format.
 ::
         ceph progress clear
 
 The clear command isn't usually needed - it's to enable
 the admin to "kick" this module if it seems to have done
-something wrong (e.g. we have a bug causing a progress event that never finishes)
+something wrong (e.g. we have a bug causing a progress event that never finishes).
