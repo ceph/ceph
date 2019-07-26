@@ -52,6 +52,7 @@ struct Options {
   unsigned simulate_pglog;
   unsigned single_pool_mode;
   unsigned preallocate_files;
+  unsigned check_files;
 };
 
 template <class Func> // void Func(fio_option&)
@@ -154,6 +155,14 @@ static std::vector<fio_option> ceph_options{
     o.help   = "Enables/disables file preallocation (touch and resize) on init";
     o.off1   = offsetof(Options, preallocate_files);
     o.def    = "1";
+  }),
+  make_option([] (fio_option& o) {
+    o.name   = "check_files";
+    o.lname  = "ensure files exist and are correct on init";
+    o.type   = FIO_OPT_BOOL;
+    o.help   = "Enables/disables checking of files on init";
+    o.off1   = offsetof(Options, check_files);
+    o.def    = "0";
   }),
   {} // fio expects a 'null'-terminated list
 };
@@ -476,6 +485,7 @@ Job::Job(Engine* engine, const thread_data* td)
 
   // create an object for each file in the job
   objects.reserve(td->o.nr_files);
+  unsigned checked_or_preallocated = 0;
   for (uint32_t i = 0; i < td->o.nr_files; i++) {
     auto f = td->files[i];
     f->real_file_size = file_size;
@@ -495,6 +505,31 @@ Job::Job(Engine* engine, const thread_data* td)
         throw std::system_error(r, std::system_category(), "job init");
       }
     }
+    if (o->check_files) {
+      auto& oid = objects.back().oid;
+      struct stat st;
+      int r = engine->os->stat(coll.ch, oid, &st);
+      if (r || ((unsigned)st.st_size) != file_size) {
+	derr << "Problem checking " << oid << ", r=" << r
+	     << ", st.st_size=" << st.st_size
+	     << ", file_size=" << file_size
+	     << ", nr_files=" << td->o.nr_files << dendl;
+        engine->deref();
+        throw std::system_error(
+	  r, std::system_category(), "job init -- cannot check file");
+      }
+    }
+    if (o->check_files || o->preallocate_files) {
+      ++checked_or_preallocated;
+    }
+  }
+  if (o->check_files) {
+    derr << "fio_ceph_objectstore checked " << checked_or_preallocated
+	 << " files"<< dendl;
+  }
+  if (o->preallocate_files ){
+    derr << "fio_ceph_objectstore preallocated " << checked_or_preallocated
+	 << " files"<< dendl;
   }
 }
 
