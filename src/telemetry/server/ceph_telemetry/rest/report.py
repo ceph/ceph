@@ -5,11 +5,15 @@ import datetime
 import hashlib
 import json
 import copy
+import psycopg2
 
 class Report(Resource):
     def __init__(self, report=None):
         super(Report, self).__init__()
         self.report = report
+        with open('/opt/telemetry/pg_pass.txt', 'r') as f:
+            p = f.read()
+            self.pg_password = p.strip()
 
     def _dots_to_percent(self, obj=None):
         '''
@@ -94,6 +98,7 @@ class Report(Resource):
         self._obfuscate_entity_name()
 
         self.post_to_file()
+        self.post_to_postgres()
         self.post_to_es()
 
         return jsonify(status=True)
@@ -111,3 +116,22 @@ class Report(Resource):
         es = Elasticsearch()
         es.index(index='telemetry', doc_type='report', id=es_id,
                  body=r)
+
+    def _connect_pg(self):
+        return psycopg2.connect(
+            host='localhost',
+            database='telemetry',
+            user='telemetry',
+            password=self.pg_password,
+            )
+
+    def post_to_postgres(self):
+        conn = self._connect_pg()
+        cur = conn.cursor()
+        cur.execute(
+            'INSERT INTO report (cluster_id, report_stamp, report) VALUES (%s,%s,%s)',
+            (self.report.get('report_id'),
+             self.report.get('report_timestamp'),
+             json.dumps(self.report))
+            )
+        conn.commit()
