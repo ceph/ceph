@@ -93,6 +93,7 @@ struct osd_xinfo_t {
   uint64_t features;       ///< features supported by this osd we should know about
   __u32 old_weight;        ///< weight prior to being auto marked out
   utime_t last_purged_snaps_scrub; ///< last scrub of purged_snaps
+  epoch_t dead_epoch = 0;  ///< last epoch we were confirmed dead (not just down)
 
   osd_xinfo_t() : laggy_probability(0), laggy_interval(0),
                   features(0), old_weight(0) {}
@@ -843,6 +844,13 @@ public:
 
   bool is_in(int osd) const {
     return !is_out(osd);
+  }
+
+  bool is_dead(int osd) const {
+    if (!exists(osd)) {
+      return false; // unclear if they know they are removed from map
+    }
+    return get_xinfo(osd).dead_epoch > get_info(osd).up_from;
   }
 
   unsigned get_osd_crush_node_flags(int osd) const;
