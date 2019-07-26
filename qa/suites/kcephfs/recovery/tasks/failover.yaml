@@ -6,6 +6,9 @@ overrides:
       - \(MDS_ALL_DOWN\)
       - \(MDS_UP_LESS_THAN_MAX\)
 tasks:
+  - exec:
+      mon.a:
+        - ceph config set mgr mgr/crash/warn_recent_interval 0
   - cephfs_test_runner:
       fail_on_skip: false
       modules:
