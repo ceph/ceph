@@ -306,7 +306,9 @@ int rgw_bucket_chown(RGWRados* const store, RGWUserInfo& user_info, RGWBucketInf
             return ret;
           }
         }
-      } cerr << count << " objects processed in " << bucket_info.bucket.name << " .Next marker " << list_op.params.marker.name << std::endl;
+      }
+      cerr << count << " objects processed in " << bucket_info.bucket.name
+      << ". Next marker " << list_op.params.marker.name << std::endl;
     } while(is_truncated);
     return 0;
 }
