@@ -199,6 +199,22 @@ PyObject *ActivePyModules::get_python(const std::string &what)
       }
     });
     return f.get();
+  } else if (what == "modified_config_options") {
+    PyEval_RestoreThread(tstate);
+    auto all_daemons = daemon_state.get_all();
+    set<string> names;
+    for (auto& [key, daemon] : all_daemons) {
+      std::lock_guard l(daemon->lock);
+      for (auto& [name, valmap] : daemon->config) {
+	names.insert(name);
+      }
+    }
+    f.open_array_section("options");
+    for (auto& name : names) {
+      f.dump_string("name", name);
+    }
+    f.close_section();
+    return f.get();
   } else if (what.substr(0, 6) == "config") {
     PyEval_RestoreThread(tstate);
     if (what == "config_options") {
