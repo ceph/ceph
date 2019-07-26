@@ -9912,7 +9912,10 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       {
 	std::lock_guard l(kv_lock);
 	kv_queue.push_back(txc);
-	kv_cond.notify_one();
+	if (!kv_sync_in_progress) {
+	  kv_sync_in_progress = true;
+	  kv_cond.notify_one();
+	}
 	if (txc->state != TransContext::STATE_KV_SUBMITTED) {
 	  kv_queue_unsubmitted.push_back(txc);
 	  ++txc->osr->kv_committing_serially;
@@ -10294,7 +10297,10 @@ void BlueStore::_osr_drain_preceding(TransContext *txc)
   {
     // wake up any previously finished deferred events
     std::lock_guard l(kv_lock);
-    kv_cond.notify_one();
+    if (!kv_sync_in_progress) {
+      kv_sync_in_progress = true;
+      kv_cond.notify_one();
+    }
   }
   osr->drain_preceding(txc);
   --deferred_aggressive;
@@ -10317,7 +10323,10 @@ void BlueStore::_osr_drain(OpSequencer *osr)
   {
     // wake up any previously finished deferred events
     std::lock_guard l(kv_lock);
-    kv_cond.notify_one();
+    if (!kv_sync_in_progress) {
+      kv_sync_in_progress = true;
+      kv_cond.notify_one();
+    }
   }
   osr->drain();
   --deferred_aggressive;
@@ -10450,6 +10459,7 @@ void BlueStore::_kv_sync_thread()
       if (kv_stop)
 	break;
       dout(20) << __func__ << " sleep" << dendl;
+      kv_sync_in_progress = false;
       kv_cond.wait(l);
       dout(20) << __func__ << " wake" << dendl;
     } else {
@@ -10614,7 +10624,10 @@ void BlueStore::_kv_sync_thread()
 	      deferred_stable.end());
 	  deferred_stable.clear();
 	}
-	kv_finalize_cond.notify_one();
+	if (!kv_finalize_in_progress) {
+	  kv_finalize_in_progress = true;
+	  kv_finalize_cond.notify_one();
+	}
       }
 
       if (new_nid_max) {
@@ -10699,6 +10712,7 @@ void BlueStore::_kv_finalize_thread()
       if (kv_finalize_stop)
 	break;
       dout(20) << __func__ << " sleep" << dendl;
+      kv_finalize_in_progress = false;
       kv_finalize_cond.wait(l);
       dout(20) << __func__ << " wake" << dendl;
     } else {
@@ -10926,7 +10940,10 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
   // catch us on the next commit anyway.
   if (deferred_aggressive) {
     std::lock_guard l(kv_lock);
-    kv_cond.notify_one();
+    if (!kv_sync_in_progress) {
+      kv_sync_in_progress = true;
+      kv_cond.notify_one();
+    }
   }
 }
 
@@ -11044,7 +11061,10 @@ int BlueStore::queue_transactions(
       {
 	// wake up any previously finished deferred events
 	std::lock_guard l(kv_lock);
-	kv_cond.notify_one();
+	if (!kv_sync_in_progress) {
+	  kv_sync_in_progress = true;
+	  kv_cond.notify_one();
+	}
       }
       throttle_deferred_bytes.get(txc->cost);
       --deferred_aggressive;
