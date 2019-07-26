@@ -2497,8 +2497,9 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
 	// decrement old chunk's reference count 
 	ObjectOperation dec_op;
 	cls_chunk_refcount_put_op put_call;
+	put_call.source = soid;
 	::encode(put_call, in);                             
-	dec_op.call("refcount", "chunk_put", in);         
+	dec_op.call("cas", "chunk_put", in);         
 	// we don't care dec_op's completion. scrub for dedup will fix this.
 	tid = osd->objecter->mutate(
 	  tgt_soid.oid, oloc, dec_op, snapc,
