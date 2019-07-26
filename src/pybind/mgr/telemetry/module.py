@@ -203,7 +203,8 @@ class Module(MgrModule):
         return metadata
 
     def gather_configs(self):
-        configs = set()
+        # cluster config options
+        cluster = set()
         r, outb, outs = self.mon_command({
             'prefix': 'config dump',
             'format': 'json'
@@ -217,9 +218,15 @@ class Module(MgrModule):
         for opt in dump:
             name = opt.get('name')
             if name:
-                configs.add(name)
+                cluster.add(name)
+        # daemon-reported options (which may include ceph.conf)
+        active = set()
+        ls = self.get("modified_config_options");
+        for opt in ls.get('options', {}):
+            active.add(opt)
         return {
-            'non_default_options': [ sorted(list(configs)) ]
+            'cluster_changed': sorted(list(cluster)),
+            'active_changed': sorted(list(active)),
         }
 
     def gather_crashinfo(self):
