@@ -157,6 +157,23 @@ class TestVolumes(CephFSTestCase):
             if ce.exitstatus != errno.ENOENT:
                 raise
 
+    def test_default_uid_gid_subvolume(self):
+        subvolume = self._generate_random_subvolume_name()
+        expected_uid = 0
+        expected_gid = 0
+
+        # create subvolume
+        self._fs_cmd("subvolume", "create", self.volname, subvolume)
+        subvol_path = self._get_subvolume_path(self.volname, subvolume)
+
+        # check subvolume's uid and gid
+        stat = self.mount_a.stat(subvol_path)
+        self.assertEqual(stat['st_uid'], expected_uid)
+        self.assertEqual(stat['st_gid'], expected_gid)
+
+        # remove subvolume
+        self._fs_cmd("subvolume", "rm", self.volname, subvolume)
+
     ### subvolume group operations
 
     def test_subvolume_create_and_rm_in_group(self):
@@ -308,6 +325,23 @@ class TestVolumes(CephFSTestCase):
 
         # force remove subvolume
         self._fs_cmd("subvolumegroup", "rm", self.volname, group, "--force")
+
+    def test_default_uid_gid_subvolume_group(self):
+        group = self._generate_random_group_name()
+        expected_uid = 0
+        expected_gid = 0
+
+        # create group
+        self._fs_cmd("subvolumegroup", "create", self.volname, group)
+        group_path = self._get_subvolume_group_path(self.volname, group)
+
+        # check group's uid and gid
+        stat = self.mount_a.stat(group_path)
+        self.assertEqual(stat['st_uid'], expected_uid)
+        self.assertEqual(stat['st_gid'], expected_gid)
+
+        # remove group
+        self._fs_cmd("subvolumegroup", "rm", self.volname, group)
 
     ### snapshot operations
 
