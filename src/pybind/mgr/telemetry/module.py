@@ -16,6 +16,7 @@ from collections import defaultdict
 
 from mgr_module import MgrModule
 
+ALL_CHANNELS = ['basic', 'ident', 'crash', 'device']
 
 class Module(MgrModule):
     config = dict()
@@ -72,7 +73,31 @@ class Module(MgrModule):
             'type': 'int',
             'default': 24,
             'min': 8
-        }
+        },
+        {
+            'name': 'channel_basic',
+            'type': 'bool',
+            'default': True,
+            'description': 'Share basic cluster information (size, version)',
+        },
+        {
+            'name': 'channel_ident',
+            'type': 'bool',
+            'default': False,
+            'description': 'Share a user-provided description and/or contact email for the cluster',
+        },
+        {
+            'name': 'channel_crash',
+            'type': 'bool',
+            'default': True,
+            'description': 'Share metadata about Ceph daemon crashes (version, stack straces, etc)',
+        },
+        {
+            'name': 'channel_device',
+            'type': 'bool',
+            'default': True,
+            'description': 'Share device health metrics (e.g., SMART data)',
+        },
     ]
 
     COMMANDS = [
@@ -87,7 +112,8 @@ class Module(MgrModule):
             "perm": "rw"
         },
         {
-            "cmd": "telemetry show",
+            "cmd": "telemetry show "
+                   "name=channels,type=CephString,n=N,req=False",
             "desc": "Show last report or report to be sent",
             "perm": "r"
         },
@@ -181,76 +207,101 @@ class Module(MgrModule):
             crashlist.append(c)
         return crashlist
 
-    def compile_report(self):
+    def get_active_channels(self):
+        r = []
+        if self.channel_basic:
+            r.append('basic')
+        if self.channel_crash:
+            r.append('crash')
+        if self.channel_device:
+            r.append('device')
+        return r
+
+    def gather_device_report(self):
+        try:
+            return self.remote('devicehealth', 'gather_device_report')
+        except:
+            return None
+
+    def compile_report(self, channels=[]):
+        if not channels:
+            channels = self.get_active_channels()
         report = {
             'leaderboard': False,
             'report_version': 1,
-            'report_timestamp': datetime.utcnow().isoformat()
+            'report_timestamp': datetime.utcnow().isoformat(),
+            'report_id': self.report_id,
+            'channels': channels,
+            'channels_available': ALL_CHANNELS,
         }
 
-        if self.leaderboard:
-            report['leaderboard'] = True
+        if 'ident' in channels:
+            if self.leaderboard:
+                report['leaderboard'] = True
+            for option in ['description', 'contact', 'organization']:
+                report[option] = getattr(self, option)
 
-        for option in ['description', 'contact', 'organization']:
-            report[option] = getattr(self, option)
+        if 'basic' in channels:
+            mon_map = self.get('mon_map')
+            osd_map = self.get('osd_map')
+            service_map = self.get('service_map')
+            fs_map = self.get('fs_map')
+            df = self.get('df')
 
-        mon_map = self.get('mon_map')
-        osd_map = self.get('osd_map')
-        service_map = self.get('service_map')
-        fs_map = self.get('fs_map')
-        df = self.get('df')
+            report['created'] = mon_map['created']
 
-        report['report_id'] = self.report_id
-        report['created'] = mon_map['created']
+            report['mon'] = {
+                'count': len(mon_map['mons']),
+                'features': mon_map['features']
+            }
 
-        report['mon'] = {
-            'count': len(mon_map['mons']),
-            'features': mon_map['features']
-        }
+            num_pg = 0
+            report['pools'] = list()
+            for pool in osd_map['pools']:
+                num_pg += pool['pg_num']
+                report['pools'].append(
+                    {
+                        'pool': pool['pool'],
+                        'type': pool['type'],
+                        'pg_num': pool['pg_num'],
+                        'pgp_num': pool['pg_placement_num'],
+                        'size': pool['size'],
+                        'min_size': pool['min_size'],
+                        'crush_rule': pool['crush_rule']
+                    }
+                )
 
-        num_pg = 0
-        report['pools'] = list()
-        for pool in osd_map['pools']:
-            num_pg += pool['pg_num']
-            report['pools'].append(
-                {
-                    'pool': pool['pool'],
-                    'type': pool['type'],
-                    'pg_num': pool['pg_num'],
-                    'pgp_num': pool['pg_placement_num'],
-                    'size': pool['size'],
-                    'min_size': pool['min_size'],
-                    'crush_rule': pool['crush_rule']
-                }
-            )
+            report['osd'] = {
+                'count': len(osd_map['osds']),
+                'require_osd_release': osd_map['require_osd_release'],
+                'require_min_compat_client': osd_map['require_min_compat_client']
+            }
 
-        report['osd'] = {
-            'count': len(osd_map['osds']),
-            'require_osd_release': osd_map['require_osd_release'],
-            'require_min_compat_client': osd_map['require_min_compat_client']
-        }
+            report['fs'] = {
+                'count': len(fs_map['filesystems'])
+            }
 
-        report['fs'] = {
-            'count': len(fs_map['filesystems'])
-        }
+            report['metadata'] = dict()
+            report['metadata']['osd'] = self.gather_osd_metadata(osd_map)
+            report['metadata']['mon'] = self.gather_mon_metadata(mon_map)
 
-        report['metadata'] = dict()
-        report['metadata']['osd'] = self.gather_osd_metadata(osd_map)
-        report['metadata']['mon'] = self.gather_mon_metadata(mon_map)
+            report['usage'] = {
+                'pools': len(df['pools']),
+                'pg_num:': num_pg,
+                'total_used_bytes': df['stats']['total_used_bytes'],
+                'total_bytes': df['stats']['total_bytes'],
+                'total_avail_bytes': df['stats']['total_avail_bytes']
+            }
 
-        report['usage'] = {
-            'pools': len(df['pools']),
-            'pg_num:': num_pg,
-            'total_used_bytes': df['stats']['total_used_bytes'],
-            'total_bytes': df['stats']['total_bytes'],
-            'total_avail_bytes': df['stats']['total_avail_bytes']
-        }
+            report['services'] = defaultdict(int)
+            for key, value in service_map['services'].items():
+                report['services'][key] += 1
 
-        report['services'] = defaultdict(int)
-        for key, value in service_map['services'].items():
-            report['services'][key] += 1
+        if 'crash' in channels:
+            report['crashes'] = self.gather_crashinfo()
 
-        report['crashes'] = self.gather_crashinfo()
+        if 'device' in channels:
+            report['devices'] = self.gather_device_report()
 
         return report
 
@@ -293,9 +344,9 @@ class Module(MgrModule):
             )
 
         elif command['prefix'] == 'telemetry show':
-            report = self.last_report
-            if not report:
-                report = self.compile_report()
+            report = self.compile_report(
+                channels=command.get('channels', None)
+            )
             return 0, json.dumps(report, indent=4), ''
         else:
             return (-errno.EINVAL, '',
