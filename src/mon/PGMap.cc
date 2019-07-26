@@ -2582,10 +2582,10 @@ void PGMap::get_health_checks(
 
   // SLOW_PING_TIME
   // Convert milliseconds to microseconds
-  auto warn_slow_ping_time = cct->_conf.get_val<double>("mon_warn_on_slow_ping_time") * 1000;
-  auto grace = cct->_conf.get_val<int64_t>("osd_heartbeat_grace");
+  auto warn_slow_ping_time = cct->_conf->get_val<double>("mon_warn_on_slow_ping_time") * 1000;
+  auto grace = cct->_conf->get_val<int64_t>("osd_heartbeat_grace");
   if (warn_slow_ping_time == 0) {
-    double ratio = cct->_conf.get_val<double>("mon_warn_on_slow_ping_ratio");
+    double ratio = cct->_conf->get_val<double>("mon_warn_on_slow_ping_ratio");
     warn_slow_ping_time = grace;
     warn_slow_ping_time *= 1000000 * ratio; // Seconds of grace to microseconds at ratio
   }

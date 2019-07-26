@@ -810,7 +810,7 @@ osd_stat_t OSDService::set_osd_stat(vector<int>& hb_peers,
 				    int num_pgs)
 {
   utime_t now = ceph_clock_now();
-  auto stale_time = g_conf().get_val<int64_t>("osd_mon_heartbeat_stat_stale");
+  auto stale_time = g_conf->get_val<int64_t>("osd_mon_heartbeat_stat_stale");
   Mutex::Locker l(stat_lock);
   osd_stat.hb_peers.swap(hb_peers);
   osd->op_tracker.get_age_ms_histogram(&osd_stat.op_queue_age_hist);
@@ -2301,10 +2301,10 @@ will start to track new ops received afterwards.";
     int64_t value = 0;
     if (!(cmd_getval(cct, cmdmap, "value", value))) {
       // Convert milliseconds to microseconds
-      value = static_cast<int64_t>(g_conf().get_val<double>("mon_warn_on_slow_ping_time")) * 1000;
+      value = static_cast<int64_t>(g_conf->get_val<double>("mon_warn_on_slow_ping_time")) * 1000;
       if (value == 0) {
-        double ratio = g_conf().get_val<double>("mon_warn_on_slow_ping_ratio");
-        value = g_conf().get_val<int64_t>("osd_heartbeat_grace");
+        double ratio = g_conf->get_val<double>("mon_warn_on_slow_ping_ratio");
+        value = g_conf->get_val<int64_t>("osd_heartbeat_grace");
         value *= 1000000 * ratio; // Seconds of grace to microseconds at ratio
       }
     } else {
@@ -2397,7 +2397,7 @@ will start to track new ops received afterwards.";
       char buffer[26];
       string lustr(ctime_r(&lu, buffer));
       lustr.pop_back();   // Remove trailing \n
-      auto stale = cct->_conf.get_val<int64_t>("osd_heartbeat_stale");
+      auto stale = cct->_conf->get_val<int64_t>("osd_heartbeat_stale");
       f->dump_string("last update", lustr);
       f->dump_bool("stale", ceph_clock_now().sec() - sitem.last_update > stale);
       f->dump_int("from osd", whoami);
@@ -4818,8 +4818,8 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	    if (i->second.hb_interval_start == utime_t())
 	      i->second.hb_interval_start = now;
 	    int64_t hb_avg_time_period = 60;
-	    if (cct->_conf.get_val<int64_t>("debug_heartbeat_testing_span")) {
-	      hb_avg_time_period = cct->_conf.get_val<int64_t>("debug_heartbeat_testing_span");
+	    if (cct->_conf->get_val<int64_t>("debug_heartbeat_testing_span")) {
+	      hb_avg_time_period = cct->_conf->get_val<int64_t>("debug_heartbeat_testing_span");
 	    }
 	    if (now - i->second.hb_interval_start >=  utime_t(hb_avg_time_period, 0)) {
               uint32_t back_avg = i->second.hb_total_back / i->second.hb_average_count;
@@ -4862,7 +4862,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	      }
 
 	      {
-		std::lock_guard l(service.stat_lock);
+		Mutex::Locker l(service.stat_lock);
 		service.osd_stat.hb_pingtime[from].last_update = now.sec();
 		service.osd_stat.hb_pingtime[from].back_last =  back_pingtime;
 
@@ -4918,7 +4918,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 		}
 	      }
 	    } else {
-		std::lock_guard l(service.stat_lock);
+		Mutex::Locker l(service.stat_lock);
 		service.osd_stat.hb_pingtime[from].back_last =  back_pingtime;
                 if (i->second.con_front != NULL)
 		  service.osd_stat.hb_pingtime[from].front_last = front_pingtime;
@@ -4986,7 +4986,7 @@ void OSD::heartbeat_entry()
     heartbeat();
 
     double wait;
-    if (cct->_conf.get_val<bool>("debug_disable_randomized_ping")) {
+    if (cct->_conf->get_val<bool>("debug_disable_randomized_ping")) {
       wait = (float)cct->_conf->osd_heartbeat_interval;
     } else {
       wait = .5 + ((float)(rand() % 10)/10.0) * (float)cct->_conf->osd_heartbeat_interval;

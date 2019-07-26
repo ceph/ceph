@@ -174,13 +174,7 @@ public:
   bool call(std::string_view admin_command, const cmdmap_t& cmdmap,
 	    std::string_view format, bufferlist& out) override {
     stringstream ss;
-    bool r = true;
-    try {
-      r = cluster_state->asok_command(admin_command, cmdmap, format, ss);
-    } catch (const bad_cmd_get& e) {
-      ss << e.what();
-      r = true;
-    }
+    bool r = cluster_state->asok_command(admin_command, cmdmap, format, ss);
     out.append(ss);
     return r;
   }
@@ -199,7 +193,7 @@ void ClusterState::final_init()
 void ClusterState::shutdown()
 {
   // unregister commands
-  g_ceph_context->get_admin_socket()->unregister_commands(asok_hook);
+  g_ceph_context->get_admin_socket()->unregister_command("dump_osd_network");
   delete asok_hook;
   asok_hook = NULL;
 }
@@ -207,17 +201,17 @@ void ClusterState::shutdown()
 bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& cmdmap,
 		       std::string_view format, ostream& ss)
 {
-  std::lock_guard l(lock);
+  Mutex::Locker l(lock);
   Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
   if (admin_command == "dump_osd_network") {
     int64_t value = 0;
     // Default to health warning level if nothing specified
     if (!(cmd_getval(g_ceph_context, cmdmap, "value", value))) {
       // Convert milliseconds to microseconds
-      value = static_cast<int64_t>(g_ceph_context->_conf.get_val<double>("mon_warn_on_slow_ping_time")) * 1000;
+      value = static_cast<int64_t>(g_ceph_context->_conf->get_val<double>("mon_warn_on_slow_ping_time")) * 1000;
       if (value == 0) {
-        double ratio = g_conf().get_val<double>("mon_warn_on_slow_ping_ratio");
-	value = g_conf().get_val<int64_t>("osd_heartbeat_grace");
+        double ratio = g_conf->get_val<double>("mon_warn_on_slow_ping_ratio");
+	value = g_conf->get_val<int64_t>("osd_heartbeat_grace");
 	value *= 1000000 * ratio; // Seconds of grace to microseconds at ratio
       }
     } else {
@@ -262,7 +256,7 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
 
 	if (j.second.last_update == 0)
 	  continue;
-	auto stale_time = g_ceph_context->_conf.get_val<int64_t>("osd_mon_heartbeat_stat_stale");
+	auto stale_time = g_ceph_context->_conf->get_val<int64_t>("osd_mon_heartbeat_stat_stale");
 	if (now.sec() - j.second.last_update > stale_time) {
 	  dout(20) << __func__ << " time out heartbeat for osd " << i.first
 	           << " last_update " << j.second.last_update << dendl;
@@ -326,7 +320,7 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
       char buffer[26];
       string lustr(ctime_r(&lu, buffer));
       lustr.pop_back();   // Remove trailing \n
-      auto stale = g_ceph_context->_conf.get_val<int64_t>("osd_heartbeat_stale");
+      auto stale = g_ceph_context->_conf->get_val<int64_t>("osd_heartbeat_stale");
       f->dump_string("last update", lustr);
       f->dump_bool("stale", ceph_clock_now().sec() - sitem.last_update > stale);
       f->dump_int("from osd", sitem.from);
@@ -353,7 +347,7 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
     f->close_section(); // entries
     f->close_section(); // network_ping_times
   } else {
-    ceph_abort_msg("broken asok registration");
+    ceph_abort();
   }
   f->flush(ss);
   delete f;
