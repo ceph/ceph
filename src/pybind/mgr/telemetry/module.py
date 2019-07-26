@@ -212,12 +212,11 @@ class Module(MgrModule):
             c = json.loads(crashinfo)
             del c['utsname_hostname']
             (etype, eid) = c.get('entity_name', '').split('.')
-            if etype != 'osd':
-                m = hashlib.sha1()
-                m.update(self.salt.encode('utf-8'))
-                m.update(eid.encode('utf-8'))
-                m.update(self.salt.encode('utf-8'))
-                c['entity_name'] = etype + '.' + m.hexdigest()
+            m = hashlib.sha1()
+            m.update(self.salt.encode('utf-8'))
+            m.update(eid.encode('utf-8'))
+            m.update(self.salt.encode('utf-8'))
+            c['entity_name'] = etype + '.' + m.hexdigest()
             crashlist.append(c)
         return crashlist
 
