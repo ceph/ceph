@@ -13,6 +13,7 @@ tasks:
       - \(PG_
       - \(OSD_
       - \(OBJECT_
+      - \(OSDMAP_FLAGS\)
 - exec:
     mon.a:
       - ceph restful create-key admin
