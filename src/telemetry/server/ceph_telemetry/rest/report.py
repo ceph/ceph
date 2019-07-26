@@ -45,19 +45,17 @@ class Report(Resource):
                 newcrashes.append(crashinfo)
             self.report['crashes'] = newcrashes
 
+    def _add_timestamp(self):
+        if 'report_timestamp' not in self.report:
+            self.report['report_timestamp'] = datetime.datetime.utcnow().isoformat()
+
     def _report_id(self):
         '''
         Make a unique Elasticsearch document ID.  Earlier versions
         of telemetry did not contain a report_timestamp, so use
         time-of-receipt if not present.
         '''
-
-        if 'report_timestamp' in self.report:
-            timestamp = self.report['report_timestamp']
-        else:
-            timestamp = datetime.datetime.utcnow().isoformat()
-
-        return '.'.join((self.report['report_id'], timestamp))
+        return '.'.join((self.report['report_id'], self.report['report_timestamp']))
 
     def _purge_hostname_from_crash(self):
         '''
@@ -90,6 +88,7 @@ class Report(Resource):
         self.report = request.get_json(force=True)
 
         # clean up
+        self._add_timestamp()
         self._crashes_to_list()
         self._purge_hostname_from_crash()
         self._obfuscate_entity_name()
