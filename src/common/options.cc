@@ -3503,6 +3503,14 @@ std::vector<Option> get_global_options() {
     .set_default(0)
     .set_description("Duration to inject a delay during scrubbing"),
 
+    Option("osd_scrub_extended_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("Duration to inject a delay during scrubbing out of scrubbing hours")
+    .add_see_also("osd_scrub_begin_hour")
+    .add_see_also("osd_scrub_end_hour")
+    .add_see_also("osd_scrub_begin_week_day")
+    .add_see_also("osd_scrub_end_week_day"),
+
     Option("osd_scrub_auto_repair", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description("Automatically repair damaged objects detected during scrub"),
