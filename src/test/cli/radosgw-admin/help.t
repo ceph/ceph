@@ -4,6 +4,7 @@
     user create                create a new user
     user modify                modify user
     user info                  get user info
+    user rename                rename user
     user rm                    remove user
     user suspend               suspend a user
     user enable                re-enable user after suspension
@@ -163,6 +164,7 @@
   options:
      --tenant=<tenant>         tenant name
      --uid=<id>                user id
+     --new-uid=<id>            new user id
      --subuser=<name>          subuser name
      --access-key=<key>        S3 access key
      --email=<email>           user's email address
