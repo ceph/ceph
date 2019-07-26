@@ -5,6 +5,7 @@
 #define CEPH_CLS_LOCK_CLIENT_H
 
 #include <chrono>
+#include <ostream>
 
 #include "include/rados/librados_fwd.hpp"
 #include "cls/lock/cls_lock_types.h"
@@ -186,8 +187,12 @@ namespace rados {
 	    }
 	  }
 	}
-      }; // class BidSet
 
+	friend std::ostream& operator<<(std::ostream& out, const BidSet& bs) {
+	  out << bs.bids;
+	  return out;
+	}
+      }; // class BidSet
 
     } // namespace lock
   }  // namespace cls
