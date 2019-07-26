@@ -65,12 +65,9 @@ class Report(Resource):
         Remove from crashdump data (newer telemetry modules don't
         submit it at all).
         '''
-        if 'crashes' in self.report:
-            if not isinstance(self.report['crashes'], list):
-                self._crashes_to_list()
-            for crash in self.report['crashes']:
-                if 'utsname_hostname' in crash:
-                    del crash['utsname_hostname']
+        for crash in self.report.get('crashes', []):
+            if 'utsname_hostname' in crash:
+                del crash['utsname_hostname']
 
     def _obfuscate_entity_name(self):
         """
