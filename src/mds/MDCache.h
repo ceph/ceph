@@ -1261,6 +1261,9 @@ public:
   void process_delayed_expire(CDir *dir);
   void discard_delayed_expire(CDir *dir);
 
+  // -- mdsmap --
+  void handle_mdsmap(const MDSMap &mdsmap);
+
 protected:
   int dump_cache(std::string_view fn, Formatter *f);
 public:
@@ -1318,6 +1321,7 @@ public:
 public:
   /* Because exports may fail, this set lets us keep track of inodes that need exporting. */
   std::set<CInode *> export_pin_queue;
+  std::set<CInode *> export_pin_delayed_queue;
 
   OpenFileTable open_file_table;
 };
