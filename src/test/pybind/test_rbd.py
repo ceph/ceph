@@ -1,4 +1,5 @@
 # vim: expandtab smarttab shiftwidth=4 softtabstop=4
+import errno
 import functools
 import socket
 import os
@@ -15,6 +16,7 @@ from rados import (Rados,
 from rbd import (RBD, Group, Image, ImageNotFound, InvalidArgument, ImageExists,
                  ImageBusy, ImageHasSnapshots, ReadOnlyImage,
                  FunctionNotSupported, ArgumentOutOfRange,
+                 ECANCELED, OperationCanceled,
                  DiskQuotaExceeded, ConnectionShutdown, PermissionError,
                  RBD_FEATURE_LAYERING, RBD_FEATURE_STRIPINGV2,
                  RBD_FEATURE_EXCLUSIVE_LOCK, RBD_FEATURE_JOURNALING,
@@ -323,6 +325,24 @@ def test_list():
     with Image(ioctx, image_name) as image:
         image_id = image.id()
     eq([{'id': image_id, 'name': image_name}], list(RBD().list2(ioctx)))
+
+@with_setup(create_image)
+def test_remove_with_progress():
+    d = {'received_callback': False}
+    def progress_cb(current, total):
+        d['received_callback'] = True
+        return 0
+
+    RBD().remove(ioctx, image_name, on_progress=progress_cb)
+    eq(True, d['received_callback'])
+
+@with_setup(create_image)
+def test_remove_canceled():
+    def progress_cb(current, total):
+        return -ECANCELED
+
+    assert_raises(OperationCanceled, RBD().remove, ioctx, image_name,
+                  on_progress=progress_cb)
 
 @with_setup(create_image, remove_image)
 def test_rename():
@@ -1519,6 +1539,22 @@ class TestClone(object):
         self.clone.remove_snap('snap2')
         self.rbd.remove(ioctx, clone_name3)
 
+    def test_flatten_with_progress(self):
+        d = {'received_callback': False}
+        def progress_cb(current, total):
+            d['received_callback'] = True
+            return 0
+
+        global ioctx
+        global features
+        clone_name = get_temp_image_name()
+        self.rbd.clone(ioctx, image_name, 'snap1', ioctx, clone_name,
+                       features, 0)
+        with Image(ioctx, clone_name) as clone:
+            clone.flatten(on_progress=progress_cb)
+        self.rbd.remove(ioctx, clone_name)
+        eq(True, d['received_callback'])
+
     def test_resize_flatten_multi_level(self):
         self.clone.create_snap('snap2')
         self.clone.protect_snap('snap2')
@@ -1919,6 +1955,20 @@ class TestTrash(object):
         RBD().trash_move(ioctx, image_name, 0)
         RBD().trash_remove(ioctx, image_id)
 
+    def test_remove_with_progress(self):
+        d = {'received_callback': False}
+        def progress_cb(current, total):
+            d['received_callback'] = True
+            return 0
+
+        create_image()
+        with Image(ioctx, image_name) as image:
+            image_id = image.id()
+
+        RBD().trash_move(ioctx, image_name, 0)
+        RBD().trash_remove(ioctx, image_id, on_progress=progress_cb)
+        eq(True, d['received_callback'])
+
     def test_get(self):
         create_image()
         with Image(ioctx, image_name) as image:
@@ -2165,10 +2215,42 @@ class TestMigration(object):
         RBD().migration_commit(ioctx, image_name)
         remove_image()
 
+    def test_migration_with_progress(self):
+        d = {'received_callback': False}
+        def progress_cb(current, total):
+            d['received_callback'] = True
+            return 0
+
+        create_image()
+        RBD().migration_prepare(ioctx, image_name, ioctx, image_name, features=63,
+                                order=23, stripe_unit=1<<23, stripe_count=1,
+                                data_pool=None)
+        RBD().migration_execute(ioctx, image_name, on_progress=progress_cb)
+        eq(True, d['received_callback'])
+        d['received_callback'] = False
+
+        RBD().migration_commit(ioctx, image_name, on_progress=progress_cb)
+        eq(True, d['received_callback'])
+        remove_image()
+
     def test_migrate_abort(self):
         create_image()
         RBD().migration_prepare(ioctx, image_name, ioctx, image_name, features=63,
                                 order=23, stripe_unit=1<<23, stripe_count=1,
                                 data_pool=None)
         RBD().migration_abort(ioctx, image_name)
+        remove_image()
+
+    def test_migrate_abort_with_progress(self):
+        d = {'received_callback': False}
+        def progress_cb(current, total):
+            d['received_callback'] = True
+            return 0
+
+        create_image()
+        RBD().migration_prepare(ioctx, image_name, ioctx, image_name, features=63,
+                                order=23, stripe_unit=1<<23, stripe_count=1,
+                                data_pool=None)
+        RBD().migration_abort(ioctx, image_name, on_progress=progress_cb)
+        eq(True, d['received_callback'])
         remove_image()
