@@ -12458,12 +12458,13 @@ void BlueStore::_wctx_finish(
         txc->statfs_delta.compressed_allocated() -= e.length;
       }
     }
-    delete &lo;
-    if (b->is_spanning() && !b->is_referenced()) {
+
+    if (b->is_spanning() && !b->is_referenced() && lo.blob_empty) {
       dout(20) << __func__ << "  spanning_blob_map removing empty " << *b
 	       << dendl;
       o->extent_map.spanning_blob_map.erase(b->id);
     }
+    delete &lo;
   }
 }
 
