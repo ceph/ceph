@@ -345,7 +345,7 @@ You may set values for the following keys:
 ``crush_rule``
 
 :Description: The rule to use for mapping object placement in the cluster.
-:Type: Integer
+:Type: String
 
 .. _allow_ec_overwrites:
 
