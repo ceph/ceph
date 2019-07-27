@@ -27,6 +27,7 @@ void usage()
        << "        [--enable-all-features]\n"
        << "        [--generate] [--set-initial-members]\n"
        << "        [--add name 1.2.3.4:567] [--rm name]\n"
+       << "        [--addv name [v2:1.2.4.5:567,v1:1.2.3.4:568]]\n"
        << "        [--feature-list [plain|parseable]]\n"
        << "        [--feature-set <value> [--optional|--persistent]]\n"
        << "        [--feature-unset <value> [--optional|--persistent]]\n"
