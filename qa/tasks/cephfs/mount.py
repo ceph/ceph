@@ -555,7 +555,7 @@ class CephFSMount(object):
     def get_osd_epoch(self):
         raise NotImplementedError()
 
-    def stat(self, fs_path, wait=True):
+    def stat(self, fs_path, follow_symlinks=True, wait=True):
         """
         stat a file, and return the result as a dictionary like this:
         {
@@ -574,6 +574,10 @@ class CephFSMount(object):
         Raises exception on absent file.
         """
         abs_path = os.path.join(self.mountpoint, fs_path)
+        if follow_symlinks:
+            stat_call = "os.stat('" + abs_path + "')"
+        else:
+            stat_call = "os.lstat('" + abs_path + "')"
 
         pyscript = dedent("""
             import os
@@ -582,7 +586,7 @@ class CephFSMount(object):
             import sys
 
             try:
-                s = os.stat("{path}")
+                s = {stat_call}
             except OSError as e:
                 sys.exit(e.errno)
 
@@ -590,7 +594,7 @@ class CephFSMount(object):
             print json.dumps(
                 dict([(a, getattr(s, a)) for a in attrs]),
                 indent=2)
-            """).format(path=abs_path)
+            """).format(stat_call=stat_call)
         proc = self._run_python(pyscript)
         if wait:
             proc.wait()
