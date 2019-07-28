@@ -47,6 +47,7 @@
 #include "messages/MMDSResolveAck.h"
 #include "messages/MMDSSlaveRequest.h"
 #include "messages/MMDSSnapUpdate.h"
+#include "messages/MMDSRstatFlush.h"
 
 #include "osdc/Filer.h"
 #include "CInode.h"
@@ -197,6 +198,15 @@ class MDCache {
   bool forward_all_reqs_to_auth() const { 
     return forward_all_requests_to_auth;
   }
+
+  std::map<metareqid_t, std::set<dirfrag_t>> rstatflush_finished_dirs, already_rstatflushed; // map: parent rstatflush op <-> roots of subtrees that are rstat-flushed
+  std::map<metareqid_t, metareqid_t> rstatflush_parent_child_mdr_map; // map: parent rstatflush op <-> internal op
+  std::map<CInode*, std::set<metareqid_t>> local_rstatflushes;  // map: inode <-> internal op
+
+  void trigger_rstatflush_run(CInode* in);
+
+  void handle_subtree_rstat_flush(const cref_t<MMDSRstatFlush> m);
+
   uint64_t cache_limit_memory(void) {
     return cache_memory_limit;
   }
@@ -311,6 +321,8 @@ class MDCache {
   void eval_subtree_root(CInode *diri);
   CDir *get_subtree_root(CDir *dir);
   CDir *get_projected_subtree_root(CDir *dir);
+  CDir *get_farest_auth_subtree_root(CDir* dir, CInode* ceiling);
+  bool is_subtree_rstat_flushed(MDRequestRef& mdr, CDir* dir);
   bool is_leaf_subtree(CDir *dir) {
     ceph_assert(subtrees.count(dir));
     return subtrees[dir].empty();
@@ -438,6 +450,8 @@ class MDCache {
   void finish_committed_masters();
 
   void _logged_slave_commit(mds_rank_t from, metareqid_t reqid);
+
+  void propagate_rstats(MDRequestRef& mdr);
 
   void set_recovery_set(set<mds_rank_t>& s);
   void handle_mds_failure(mds_rank_t who);
@@ -1133,6 +1147,10 @@ class MDCache {
 
   // -- recovery --
   set<mds_rank_t> recovery_set;
+  int should_wait_for_subtree_rstats(MDRequestRef& mdr,
+      const std::vector<CDir*>& subtree_bounds,
+      const std::vector<CDir*>& need_to_wait);
+
 
   // [resolve]
   // from EImportStart w/o EImportFinish during journal replay
@@ -1241,6 +1259,16 @@ class MDCache {
     return strays[stray_index];
   }
 
+  void clear_rstat_flush(MDRequestRef& mdr);
+  void finish_rstat_flush(MDRequestRef& mdr);
+  void calc_rstat_flush_subtrees(CInode* cur,
+				 std::vector<CDir*>& subtree_bounds,
+                                 std::vector<CDir*>& need_to_wait,
+				 std::map<CDir*, std::vector<CDir*>>& need_to_nudge);
+  void calc_rstat_flushed_auth_subtrees(MDRequestRef& mdr,
+					const std::map<CDir*, std::vector<CDir*>>& need_to_nudge,
+					map<mds_rank_t, map<inodeno_t, pair<filepath, vector<frag_t>>>>& completed);
+
   void identify_files_to_recover();
 
   std::pair<bool, uint64_t> trim_lru(uint64_t count, expiremap& expiremap);
@@ -1321,6 +1349,17 @@ class C_MDS_RetryRequest : public MDSInternalContext {
  public:
   C_MDS_RetryRequest(MDCache *c, MDRequestRef& r);
   void finish(int r) override;
+};
+
+class CF_MDS_MDRContextFactory : public MDSContextFactory {
+public:
+  CF_MDS_MDRContextFactory(MDCache *cache, MDRequestRef &mdr, bool dl) :
+    cache(cache), mdr(mdr), drop_locks(dl) {}
+  MDSContext *build();
+private:
+  MDCache *cache;
+  MDRequestRef mdr;
+  bool drop_locks;
 };
 
 #endif

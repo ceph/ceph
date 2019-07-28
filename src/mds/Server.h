@@ -27,6 +27,7 @@
 #include "messages/MClientReclaim.h"
 #include "messages/MClientReclaimReply.h"
 #include "messages/MLock.h"
+#include "messages/MMDSRstatFlush.h"
 
 #include "MDSRank.h"
 #include "Mutation.h"
@@ -75,6 +76,7 @@ enum {
   l_mdss_req_setxattr_latency,
   l_mdss_req_symlink_latency,
   l_mdss_req_unlink_latency,
+  l_mdss_req_rstatflush_latency,
   l_mdss_cap_revoke_eviction,
   l_mdss_last,
 };
@@ -230,6 +232,9 @@ public:
   void handle_client_mknod(MDRequestRef& mdr);
   void handle_client_mkdir(MDRequestRef& mdr);
   void handle_client_symlink(MDRequestRef& mdr);
+
+  // rstat flush
+  void handle_client_rstatflush(MDRequestRef& mdr);
 
   // link
   void handle_client_link(MDRequestRef& mdr);

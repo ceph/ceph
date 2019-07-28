@@ -38,6 +38,8 @@
 
 #include "MDSRank.h"
 
+#include "Mutation.h"
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mds
 #undef dout_prefix
@@ -470,6 +472,24 @@ private:
     f->open_object_section("result");
     f->dump_string("error", err);
     f->close_section();
+  }
+};
+
+class C_Rstat_Flush : public MDSInternalContext {
+private:
+  ceph::condition_variable& cond;
+  ceph::mutex& mutex;
+  bool& rstat_flush_finished;
+public:
+  C_Rstat_Flush(MDSRank* mds, ceph::condition_variable& c, ceph::mutex& m, bool& rff)
+    : MDSInternalContext(mds), cond(c),
+      mutex(m), rstat_flush_finished(rff) {}
+
+  void finish(int r) override {
+    mutex.lock();
+    rstat_flush_finished = true;
+    cond.notify_all();
+    mutex.unlock();
   }
 };
 
@@ -2678,6 +2698,10 @@ void MDSRankDispatcher::handle_asok_command(
       goto out;
     }
     damage_table.erase(id);
+  } else if (command == "rstat flush") {
+    command_start_rstat_propagate(ss);
+  } else if (command == "rstat last_time") {
+    command_last_rstat_time(ss);
   } else {
     r = -ENOSYS;
   }
@@ -3091,6 +3115,39 @@ void MDSRank::command_dump_inode(Formatter *f, const cmdmap_t &cmdmap, std::ostr
   if (!success) {
     ss << "dump inode failed, wrong inode number or the inode is not cached";
   }
+}
+
+void MDSRank::command_start_rstat_propagate(std::ostream& ss)
+{
+  ceph::mutex m = ceph::make_mutex("MDSRank::rstat_flush");
+  ceph::condition_variable c;
+  utime_t timestamp = ceph_clock_now();
+  bool rstat_flush_finished = false;
+  {
+    std::lock_guard l(mds_lock);
+    if (locker->is_rstat_propagating()) {
+      ss << "already propagating rstat";
+      return;
+    }
+
+    if (get_nodeid() != (mds_rank_t)0) {
+      ss << "rstat flush command should be called from mds.0";
+      return;
+    }
+    auto mdr = mdcache->request_start_internal(CEPH_MDS_OP_RSTATFLUSH);
+    mdr->set_op_stamp(timestamp);
+    mdr->internal_op_finish = new C_Rstat_Flush(this, c, m, rstat_flush_finished);
+    mdcache->propagate_rstats(mdr);
+  }
+  std::unique_lock locker{m};
+  if (!rstat_flush_finished)
+    c.wait(locker);
+  ss << "rstat propagation finished, rstat flush time: " << timestamp;
+}
+
+void MDSRank::command_last_rstat_time(std::ostream& ss)
+{
+  ss << "last successful rstat propagation: " << locker->get_last_finished_rstat_propagation();
 }
 
 void MDSRank::dump_status(Formatter *f) const

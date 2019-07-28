@@ -116,6 +116,22 @@ public:
     if (dirtied_childrstats)
       dirtied_childrstats--;
   }
+
+  std::set<metareqid_t>& get_nudged_by() {
+    return nudged_by;
+  }
+
+  bool is_nudged_by(metareqid_t rqt) {
+    return nudged_by.count(rqt) != 0;
+  }
+
+  void add_nudged_by(metareqid_t rqt) {
+    nudged_by.insert(rqt);
+  }
+
+  void remove_nudged_by(metareqid_t rqt) {
+    nudged_by.erase(rqt);
+  }
   bool is_dirty() const override {
     return state_flags & DIRTY;
   }
@@ -128,7 +144,6 @@ public:
   bool is_dirty_or_flushing() const {
     return is_dirty() || is_flushing();
   }
-
   void mark_dirty() { 
     if (!is_dirty()) {
       if (!is_flushing())
@@ -263,7 +278,7 @@ private:
   void clear_dirty_childrstats() {
     dirtied_childrstats = 0;
   }
-
+  std::set<metareqid_t> nudged_by;
   void set_flushing() {
     state_flags |= FLUSHING;
   }

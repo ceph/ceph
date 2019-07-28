@@ -276,6 +276,7 @@ struct MDRequestImpl : public MutationImpl {
   // TrackedOp stuff
   typedef boost::intrusive_ptr<MDRequestImpl> Ref;
 
+  metareqid_t parent_rstatflush_rid;
   // break rarely-used fields into a separately allocated structure 
   // to save memory for most ops
   struct More {
@@ -284,6 +285,9 @@ struct MDRequestImpl : public MutationImpl {
     int slave_error = 0;
     set<mds_rank_t> slaves;           // mds nodes that have slave requests to me (implies client_request)
     set<mds_rank_t> waiting_on_slave; // peers i'm waiting for slavereq replies from. 
+    map<CDir*, mds_rank_t> queried_for_rstat_propagation;
+    map<mds_rank_t, set<CDir*>> mds_queried_dirs_map;
+    CDir* queried_dir; //this references to the CDir that's queried the purpose of rstat propagation
 
     // for rename/link/unlink
     set<mds_rank_t> witnessed;       // nodes who have journaled a RenamePrepare
@@ -420,6 +424,7 @@ struct MDRequestImpl : public MutationImpl {
   bool has_completed = false;	///< request has already completed
 
   bufferlist reply_extra_bl;
+  bool already_replied = false;
 
   // inos we did a embedded cap release on, and may need to eval if we haven't since reissued
   map<vinodeno_t, ceph_seq_t> cap_releases;
@@ -444,6 +449,7 @@ struct MDRequestImpl : public MutationImpl {
 protected:
   void _dump(Formatter *f) const override;
   void _dump_op_descriptor_unlocked(ostream& stream) const override;
+
 private:
   mutable ceph::spinlock msg_lock;
 };

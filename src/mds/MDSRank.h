@@ -469,6 +469,8 @@ class MDSRank {
     void command_openfiles_ls(Formatter *f);
     void command_dump_tree(const cmdmap_t &cmdmap, std::ostream &ss, Formatter *f);
     void command_dump_inode(Formatter *f, const cmdmap_t &cmdmap, std::ostream &ss);
+    void command_start_rstat_propagate(std::ostream& ss);
+    void command_last_rstat_time(std::ostream& ss);
     void command_cache_drop(uint64_t timeout, Formatter *f, Context *on_finish);
 
     // FIXME the state machine logic should be separable from the dispatch

@@ -450,6 +450,7 @@ public:
 		size_t size, int flags, const UserPerm& perms);
   int fsetxattr(int fd, const char *name, const void *value, size_t size,
 		int flags, const UserPerm& perms);
+  int rstat_flush();
 
   int sync_fs();
   int64_t drop_caches();

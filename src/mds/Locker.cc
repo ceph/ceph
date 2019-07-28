@@ -68,9 +68,28 @@ public:
   }
 };
 
-Locker::Locker(MDSRank *m, MDCache *c) :
-  need_snapflush_inodes(member_offset(CInode, item_caps)), mds(m), mdcache(c) {}
+class C_Locker_RstatFlush: public LockerContext {
+  MDRequestRef mdr;
+  ScatterLock* lock;
+public:
+  C_Locker_RstatFlush(Locker* l, const MDRequestRef& m, ScatterLock* lo)
+    : LockerContext(l), mdr(m), lock(lo) {}
 
+  void finish(int r) override {
+    if (lock->is_dirty())
+      ceph_assert(lock->get_updated_item()->is_on_list());
+
+    ceph_assert(lock->is_nudged_by(mdr->reqid));
+    lock->remove_nudged_by(mdr->reqid);
+    locker->mdcache->propagate_rstats(mdr);
+  }
+
+  virtual ~C_Locker_RstatFlush() {}
+};
+
+Locker::Locker(MDSRank *m, MDCache *c) :
+  need_snapflush_inodes(member_offset(CInode, item_caps)), mds(m), mdcache(c),
+  rstat_propagate_time(utime_t()), last_finished_rstat_propagation(utime_t()) {}
 
 void Locker::dispatch(const cref_t<Message> &m)
 {
@@ -5002,7 +5021,7 @@ void Locker::scatter_nudge(ScatterLock *lock, MDSContext *c, bool forcelockchang
 
   if (p->is_ambiguous_auth()) {
     dout(10) << "scatter_nudge waiting for single auth on " << *p << dendl;
-    if (c) 
+    if (c)
       p->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, c);
     if (lock->is_dirty())
       // just requeue.  not ideal.. starvation prone..
@@ -5078,7 +5097,7 @@ void Locker::scatter_nudge(ScatterLock *lock, MDSContext *c, bool forcelockchang
 	if (c)
 	  lock->add_waiter(SimpleLock::WAIT_STABLE, c);
 
-	if (lock->dirty())
+	if (lock->is_dirty())
 	  updated_scatterlocks.push_back(lock->get_updated_item());
 	return;
       }
@@ -5092,20 +5111,33 @@ void Locker::scatter_nudge(ScatterLock *lock, MDSContext *c, bool forcelockchang
       mds->send_message_mds(make_message<MLock>(lock, LOCK_AC_NUDGE, mds->get_nodeid()), auth);
     }
 
-    // wait...
-    if (c)
-      lock->add_waiter(SimpleLock::WAIT_STABLE, c);
-
     // also, requeue, in case we had wrong auth or something
     if (lock->is_dirty())
       updated_scatterlocks.push_back(lock->get_updated_item());
+
+    // wait...
+    if (c) {
+      lock->add_waiter(SimpleLock::WAIT_STABLE, c);
+    }
   }
 }
 
 void Locker::scatter_tick()
 {
-  dout(10) << "scatter_tick" << dendl;
-  
+  nudge_updated_scatterlocks();
+}
+
+// This method may be called by scatter_tick or a client/slave request.
+// When called by a client/slave request, mdr wouldn't be empty.
+bool Locker::nudge_updated_scatterlocks(const MDRequestRef& mdr)
+{
+  dout(10) << __func__ << " rstat flush: " 
+    << (mdr ? mdr->reqid : metareqid_t()) << dendl;
+  int nudged = 0;
+
+  if (mdr)
+    ceph_assert(is_rstat_propagating());
+
   // updated
   utime_t now = ceph_clock_now();
   int n = updated_scatterlocks.size();
@@ -5120,12 +5152,59 @@ void Locker::scatter_tick()
 	       << *lock << " " << *lock->get_parent() << dendl;
       continue;
     }
-    if (now - lock->get_update_stamp() < g_conf()->mds_scatter_nudge_interval)
+
+    if (!mdr && now - lock->get_update_stamp() < g_conf()->mds_scatter_nudge_interval)
       break;
     updated_scatterlocks.pop_front();
-    scatter_nudge(lock, 0);
+
+    if (lock->get_type() == CEPH_LOCK_INEST)
+      dout(20) << __func__ << " lock: " << *lock << " of " << *lock->get_parent()
+	<< ", update_stamp: " << lock->get_update_stamp() << ", lock's parent's rstat_dirty_from:"
+	<< static_cast<CInode*>(lock->get_parent())->get_rstat_dirty_from() << ", lock's parent's subdir rstat_dirty_from:"
+	<< static_cast<CInode*>(lock->get_parent())->get_dirfrags_rstat_dirty_from()
+	<< ", mdr's rstats_propagate_time: " << rstat_propagate_time << dendl;
+
+    if (mdr) {
+
+      if (lock->is_nudged_by(mdr->reqid)) {
+	updated_scatterlocks.push_back(lock->get_updated_item());
+	nudged++;
+	// the lock is nudged by myself previously, and there must
+	// be a C_Locker_RstatFlush that will be triggered, so just
+	// skip this lock for now.
+	continue;
+      }
+
+      CInode* ino = static_cast<CInode*>(lock->get_parent());
+
+      if (lock->get_type() == CEPH_LOCK_INEST
+	  && ino->need_to_nudge(rstat_propagate_time)) {
+        dout(20) << __func__ << " " << (mdr ? mdr->reqid : metareqid_t())
+          << " need to nudge scatterlock: " << *lock << " of " << *lock->get_parent() << dendl;
+
+        scatter_nudge(lock, new C_Locker_RstatFlush(this, mdr, lock));
+	lock->add_nudged_by(mdr->reqid);
+	nudged++;
+      } else
+        scatter_nudge(lock, 0);
+    } else {
+      scatter_nudge(lock, 0);
+    }
   }
+
   mds->mdlog->flush();
+
+  dout(20) << __func__ << " rstat flush: nudged: " << nudged << dendl;
+
+  // If no locks is of the current mdr's interest, all rstats are flushed successfully
+  if (mdr && !nudged) {
+    dout(20) << __func__ << " " << mdr->reqid
+      << " rstat flush finished!" << dendl;
+    last_finished_rstat_propagation = rstat_propagate_time;
+    rstat_propagate_time = utime_t();
+    return true;
+  }
+  return false;
 }
 
 

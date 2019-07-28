@@ -1413,6 +1413,7 @@ void Migrator::export_frozen(CDir *dir, uint64_t tid)
   // send.
   it->second.state = EXPORT_PREPPING;
   mds->send_message_mds(prep, it->second.peer);
+
   assert (g_conf()->mds_kill_export_at != 4);
 
   // make sure any new instantiations of caps are flushed out
@@ -1627,7 +1628,7 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state,
 				   map<client_t,entity_inst_t>& exported_client_map,
 				   map<client_t,client_metadata_t>& exported_client_metadata_map)
 {
-  ENCODE_START(1, 1, enc_state);
+  ENCODE_START(2, 1, enc_state);
   dout(7) << __func__ << " " << *in << dendl;
   ceph_assert(!in->is_replica(mds->get_nodeid()));
 
@@ -1637,6 +1638,7 @@ void Migrator::encode_export_inode(CInode *in, bufferlist& enc_state,
 
   // caps 
   encode_export_inode_caps(in, true, enc_state, exported_client_map, exported_client_metadata_map);
+  encode(in->rstatflushed_dirs, enc_state);
   ENCODE_FINISH(enc_state);
 }
 
@@ -2983,6 +2985,21 @@ void Migrator::import_reverse_unfreeze(CDir *dir)
 {
   dout(7) << "import_reverse_unfreeze " << *dir << dendl;
   ceph_assert(!dir->is_auth());
+
+  // only bounds' inodes have "rstat flushed dirs", clear them here.
+  set<CDir*> bounds;
+  cache->get_subtree_bounds(dir, bounds);
+  for (auto bound : bounds) {
+    for (auto& p : bound->get_inode()->rstatflushed_dirs) {
+      for (auto dirfrag : p.second) {
+	cache->rstatflush_finished_dirs[p.first].erase(dirfrag);
+      }
+      if (!cache->rstatflush_finished_dirs[p.first].size())
+	cache->rstatflush_finished_dirs.erase(p.first);
+    }
+    bound->get_inode()->rstatflushed_dirs.clear();
+  }
+
   cache->discard_delayed_expire(dir);
   dir->unfreeze_tree();
   if (dir->is_subtree_root())
@@ -3140,6 +3157,12 @@ void Migrator::import_finish(CDir *dir, bool notify, bool last)
   map<CInode*, map<client_t,Capability::Export> > peer_exports;
   it->second.peer_exports.swap(peer_exports);
 
+  if (last) {
+    for (auto bound : bounds)
+      cache->trigger_rstatflush_run(bound->get_inode());
+    cache->trigger_rstatflush_run(dir->get_inode());
+  }
+
   // clear import state (we're done!)
   MutationRef mut = it->second.mut;
   import_state.erase(it);
@@ -3193,7 +3216,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
 { 
   CInode *in;
   bool added = false;
-  DECODE_START(1, blp); 
+  DECODE_START(2, blp); 
   dout(15) << __func__ << " on " << *dn << dendl;
 
   inodeno_t ino;
@@ -3213,6 +3236,20 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
   // caps
   decode_import_inode_caps(in, true, blp, peer_exports);
 
+  if (struct_v >= 2) {
+    decode(in->rstatflushed_dirs, blp);
+    auto it = in->rstatflushed_dirs.begin();
+    while (it != in->rstatflushed_dirs.end()) {
+      dout(20) << __func__ << " rstatflushed_dirs: " << it->first << dendl;
+      if (cache->have_request(it->first) || cache->rstatflush_parent_child_mdr_map.count(it->first)) {
+	dout(20) << __func__ << " rstatflushed_dirs: " << *it->second.begin() << dendl;
+	cache->rstatflush_finished_dirs[it->first].insert(it->second.begin(), it->second.end());
+	it++;
+      } else {
+	it = in->rstatflushed_dirs.erase(it);
+      }
+    }
+  }
   DECODE_FINISH(blp);
 
   // link before state  -- or not!  -sage

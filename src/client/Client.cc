@@ -11464,6 +11464,13 @@ int Client::_do_setxattr(Inode *in, const char *name, const void *value,
   return res;
 }
 
+int Client::rstat_flush()
+{
+  std::lock_guard lock(client_lock);
+  MetaRequest* req = new MetaRequest(CEPH_MDS_OP_RSTATFLUSH);
+  return make_request(req, pick_my_perms());
+}
+
 int Client::_setxattr(Inode *in, const char *name, const void *value,
 		      size_t size, int flags, const UserPerm& perms)
 {

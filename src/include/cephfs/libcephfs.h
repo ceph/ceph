@@ -1307,6 +1307,13 @@ int ceph_lsetxattr(struct ceph_mount_info *cmount, const char *path, const char 
 /** @} xattr */
 
 /**
+ * Instruct mdses to flush rstat
+ *
+ * @param cmount the ceph mount handle to use for performing the rstat flush
+ */
+int ceph_rstatflush(struct ceph_mount_info* cmount);
+
+/**
  * @defgroup libcephfs_h_filelayout Control File Layout.
  * Functions for setting and getting the file layout of existing files.
  *

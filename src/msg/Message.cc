@@ -130,6 +130,7 @@
 #include "messages/MClientQuota.h"
 
 #include "messages/MMDSSlaveRequest.h"
+#include "messages/MMDSRstatFlush.h"
 
 #include "messages/MMDSMap.h"
 #include "messages/MFSMap.h"
@@ -684,6 +685,10 @@ Message *decode_message(CephContext *cct,
     // mds
   case MSG_MDS_SLAVE_REQUEST:
     m = make_message<MMDSSlaveRequest>();
+    break;
+
+  case MSG_MDS_RSTATFLUSH:
+    m = make_message<MMDSRstatFlush>();
     break;
 
   case CEPH_MSG_MDS_MAP:

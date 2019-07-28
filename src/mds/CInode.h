@@ -315,6 +315,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int STATE_QUEUEDEXPORTPIN	= (1<<17);
   static const int STATE_TRACKEDBYOFT		= (1<<18);  // tracked by open file table
   static const int STATE_DELAYEDEXPORTPIN	= (1<<19);
+  static const int STATE_RSTATFLUSH		= (1<<20);
   // orphan inode needs notification of releasing reference
   static const int STATE_ORPHAN =	STATE_NOTIFYREF;
 
@@ -334,6 +335,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
   // misc
   static const unsigned EXPORT_NONCE = 1; // nonce given to replicas created by export
+
+  std::map<metareqid_t, std::vector<dirfrag_t>> rstatflushed_dirs;
 
   // ---------------------------
   CInode() = delete;
@@ -436,6 +439,12 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
       !old_inodes.empty(); // once multiversion, always multiversion.  until old_inodes gets cleaned out.
   }
   snapid_t get_oldest_snap();
+
+  bool need_to_nudge(utime_t rstat_propagate_time) {
+    utime_t rstat_dirty_from = get_rstat_dirty_from();
+    return !rstat_dirty_from.is_zero()
+              && rstat_dirty_from <= rstat_propagate_time;
+  }
 
   bool is_dirty_rstat() {
     return state_test(STATE_DIRTYRSTAT);
@@ -613,7 +622,16 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
   void clean_rstat_dirty_dir(CDir* dir);
 
-  utime_t get_rstat_dirty_from() { return get_projected_inode()->rstat_dirty_from; }
+  utime_t get_rstat_dirty_from() {
+    auto pi = get_projected_inode();
+    if (pi->rstat_dirty_from.is_zero())
+      return dirs_rstat_dirty_from;
+    else if (dirs_rstat_dirty_from.is_zero())
+      return pi->rstat_dirty_from;
+    else
+      return std::min(pi->rstat_dirty_from, dirs_rstat_dirty_from);
+  }
+
   utime_t get_dirfrags_rstat_dirty_from();
   CDentry* get_parent_dn() { return parent; }
   const CDentry* get_parent_dn() const { return parent; }
@@ -1126,5 +1144,6 @@ ostream& operator<<(ostream& out, const CInode::scrub_stamp_info_t& si);
 
 extern cinode_lock_info_t cinode_lock_info[];
 extern int num_cinode_locks;
+
 #undef dout_context
 #endif

@@ -212,6 +212,8 @@ void Server::create_logger()
                    "Request type remove snapshot latency");
   plb.add_time_avg(l_mdss_req_renamesnap_latency, "req_renamesnap_latency",
                    "Request type rename snapshot latency");
+  plb.add_time_avg(l_mdss_req_rstatflush_latency, "req_rstatflush_latency",
+                   "Request type rstat flush latency");
 
   plb.set_prio_default(PerfCountersBuilder::PRIO_DEBUGONLY);
   plb.add_u64_counter(l_mdss_dispatch_client_request, "dispatch_client_request",
@@ -1979,6 +1981,10 @@ void Server::perf_gather_op_latency(const cref_t<MClientRequest> &req, utime_t l
   case CEPH_MDS_OP_RENAMESNAP:
     code = l_mdss_req_renamesnap_latency;
     break;
+  case CEPH_MDS_OP_RSTATFLUSH:
+    code = l_mdss_req_rstatflush_latency;
+    break;
+
   default: ceph_abort();
   }
   logger->tinc(code, lat);   
@@ -2598,6 +2604,11 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
     handle_client_renamesnap(mdr);
     break;
 
+    // rstat flush
+  case CEPH_MDS_OP_RSTATFLUSH:
+    handle_client_rstatflush(mdr);
+    break;
+
   default:
     dout(1) << " unknown client op " << req->get_op() << dendl;
     respond_to_request(mdr, -EOPNOTSUPP);
@@ -2810,6 +2821,18 @@ void Server::handle_slave_request_reply(const cref_t<MMDSSlaveRequest> &m)
   }
 }
 
+class C_MDS_TryFindInode : public ServerContext {
+  MDRequestRef mdr;
+public:
+  C_MDS_TryFindInode(Server *s, MDRequestRef& r) : ServerContext(s), mdr(r) {}
+  void finish(int r) override {
+    if (r == -ESTALE) // :( find_ino_peers failed
+      server->respond_to_request(mdr, r);
+    else
+      server->dispatch_client_request(mdr);
+  }
+};
+
 void Server::dispatch_slave_request(MDRequestRef& mdr)
 {
   dout(7) << "dispatch_slave_request " << *mdr << " " << *mdr->slave_request << dendl;
@@ -2919,6 +2942,14 @@ void Server::dispatch_slave_request(MDRequestRef& mdr)
     handle_slave_rename_prep(mdr);
     break;
 
+  case MMDSSlaveRequest::OP_FINISH:
+    // information about rename imported caps
+    if (mdr->slave_request->inode_export.length() > 0)
+      mdr->more()->inode_import = mdr->slave_request->inode_export;
+    // finish off request.
+    mdcache->request_finish(mdr);
+    break;
+  
   default: 
     ceph_abort();
   }
@@ -3328,35 +3359,6 @@ void Server::apply_allocated_inos(MDRequestRef& mdr, Session *session)
     mds->sessionmap.mark_dirty(session);
   }
 }
-
-class C_MDS_TryFindInode : public ServerContext {
-  MDRequestRef mdr;
-public:
-  C_MDS_TryFindInode(Server *s, MDRequestRef& r) : ServerContext(s), mdr(r) {}
-  void finish(int r) override {
-    if (r == -ESTALE) // :( find_ino_peers failed
-      server->respond_to_request(mdr, r);
-    else
-      server->dispatch_client_request(mdr);
-  }
-};
-
-class CF_MDS_MDRContextFactory : public MDSContextFactory {
-public:
-  CF_MDS_MDRContextFactory(MDCache *cache, MDRequestRef &mdr, bool dl) :
-    mdcache(cache), mdr(mdr), drop_locks(dl) {}
-  MDSContext *build() {
-    if (drop_locks) {
-      mdcache->mds->locker->drop_locks(mdr.get(), nullptr);
-      mdr->drop_local_auth_pins();
-    }
-    return new C_MDS_RetryRequest(mdcache, mdr);
-  }
-private:
-  MDCache *mdcache;
-  MDRequestRef mdr;
-  bool drop_locks;
-};
 
 /* If this returns null, the request has been handled
  * as appropriate: forwarded on, or the client's been replied to */
@@ -3835,6 +3837,38 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
   if (is_lookup)
     mdr->tracedn = mdr->dn[0].back();
   respond_to_request(mdr, 0);
+}
+
+void Server::handle_client_rstatflush(MDRequestRef& mdr)
+{
+  dout(20) << __func__ << dendl;
+
+  if (mds->get_nodeid() != (mds_rank_t)0) {
+    mdcache->request_forward(mdr, (mds_rank_t)0);
+    return;
+  }
+
+  if (mds->locker->is_rstat_propagating()) {
+    respond_to_request(mdr, -EAGAIN);
+    return;
+  }
+
+  CInode* ref = mdr->in[0] = mdcache->get_root();
+  if (!ref->state_test(CInode::STATE_RSTATFLUSH)) {
+    ref->state_set(CInode::STATE_RSTATFLUSH);
+    mdcache->local_rstatflushes[ref].insert(mdr->reqid);
+
+    auto replica_map = ref->get_replicas();
+    for (auto& p : replica_map) {
+      auto req = make_message<MMDSRstatFlush>(mdr->reqid,
+	  MMDSRstatFlush::OP_RSTATFLUSH,
+	  mdr->get_op_stamp(),
+	  filepath(ref->ino()));
+      mds->send_message_mds(req, p.first);
+    }
+  }
+
+  mdcache->propagate_rstats(mdr);
 }
 
 struct C_MDS_LookupIno2 : public ServerContext {

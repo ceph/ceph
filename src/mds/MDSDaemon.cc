@@ -444,6 +444,10 @@ void MDSDaemon::set_up_admin_socket()
     asok_hook,
     "run cpu profiling on daemon");
   ceph_assert(r == 0);
+  r = admin_socket->register_command("rstat flush",
+                                     asok_hook,
+                                     "flush all rstats up to root");
+  ceph_assert(r==0);
 }
 
 void MDSDaemon::clean_up_admin_socket()

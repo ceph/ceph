@@ -134,6 +134,34 @@ public:
   explicit MDCacheLogContext(MDCache *mdc_) : mdcache(mdc_) {}
 };
 
+class C_MDC_RstatFlush: public MDCacheContext {
+  MDRequestRef mdr;
+public:
+  C_MDC_RstatFlush(MDCache* mdc, const MDRequestRef& m) : MDCacheContext(mdc), mdr(m) {}
+
+  void finish(int r) override {
+    mdcache->propagate_rstats(mdr);
+  }
+
+  virtual ~C_MDC_RstatFlush() {}
+};
+
+class MDCacheRstatFlush : public MDCacheContext {
+  std::vector<metareqid_t> mdrs;
+public:
+  MDCacheRstatFlush(MDCache* mdc, const std::vector<metareqid_t>& mv) :
+    MDCacheContext{mdc}, mdrs(mv) {}
+
+  void finish(int r) override {
+    for (auto reqid : mdrs) {
+      if (mdcache->have_request(reqid)) {
+	auto mdr = mdcache->request_get(reqid);
+	mdcache->propagate_rstats(mdr);
+      }
+    }
+  }
+};
+
 MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   mds(m),
   open_file_table(m),
@@ -1259,6 +1287,30 @@ CDir *MDCache::get_projected_subtree_root(CDir *dir)
     dir = dir->get_inode()->get_projected_parent_dir();
     if (!dir) 
       return 0;             // none
+  }
+}
+
+// find the auth subtree root whose inode isn't auth and between "dir" and
+// which there isn't other non-auth subtree roots. If "ceiling" is reached,
+// then its dirfrag which is a parent of "dir" is returned.
+CDir* MDCache::get_farest_auth_subtree_root(CDir* dir, CInode* ceiling)
+{
+  while (true) {
+    if (dir->is_subtree_root()
+	&& (dir->is_auth()
+	  && !dir->get_inode()->is_auth()))
+      return dir;
+
+    if (ceiling && (dir->get_inode() == ceiling)) {
+      if (dir->is_auth())
+	return dir;
+      else
+	return NULL;
+    }
+
+    dir = dir->get_inode()->get_projected_parent_dir();
+    if (!dir)
+      return NULL;
   }
 }
 
@@ -8155,6 +8207,10 @@ void MDCache::dispatch(const cref_t<Message> &m)
   case MSG_MDS_SNAPUPDATE:
     handle_snap_update(ref_cast<MMDSSnapUpdate>(m));
     break;
+
+  case MSG_MDS_RSTATFLUSH:
+    handle_subtree_rstat_flush(ref_cast<MMDSRstatFlush>(m));
+    break;
     
   default:
     derr << "cache unknown message " << m->get_type() << dendl;
@@ -9636,6 +9692,9 @@ void MDCache::dispatch_request(MDRequestRef& mdr)
     case CEPH_MDS_OP_UPGRADE_SNAPREALM:
       upgrade_inode_snaprealm_work(mdr);
       break;
+    case CEPH_MDS_OP_SUBTREERSTATFLUSH:
+      propagate_rstats(mdr);
+      break;
     default:
       ceph_abort();
     }
@@ -10700,7 +10759,7 @@ void MDCache::encode_replica_dentry(CDentry *dn, mds_rank_t to, bufferlist& bl)
 void MDCache::encode_replica_inode(CInode *in, mds_rank_t to, bufferlist& bl,
 			      uint64_t features)
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   ceph_assert(in->is_auth());
   encode(in->inode.ino, bl);  // bleh, minor assymetry here
   encode(in->last, bl);
@@ -10710,6 +10769,20 @@ void MDCache::encode_replica_inode(CInode *in, mds_rank_t to, bufferlist& bl,
 
   in->_encode_base(bl, features);
   in->_encode_locks_state_for_replica(bl, mds->get_state() < MDSMap::STATE_ACTIVE);
+  auto it = local_rstatflushes.find(in);
+  if (it == local_rstatflushes.end())
+    encode(0, bl);
+  else {
+    int n = it->second.size();
+    encode(n, bl);
+    for (auto& reqid : it->second) {
+      const MDRequestRef& mdr = request_get(reqid);
+      auto rid_to_send = mdr->client_request ? mdr->reqid : mdr->parent_rstatflush_rid;
+      dout(20) << __func__ << " rid_to_send: " << rid_to_send << dendl;
+      encode(rid_to_send, bl);
+      encode(mdr->get_op_stamp(), bl);
+    }
+  }
   ENCODE_FINISH(bl);
 }
 
@@ -10806,7 +10879,7 @@ void MDCache::decode_replica_dentry(CDentry *&dn, bufferlist::const_iterator& p,
 
 void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, CDentry *dn, MDSContext::vec& finished)
 {
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   inodeno_t ino;
   snapid_t last;
   __u32 nonce;
@@ -10839,6 +10912,35 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
   if (dn) {
     if (!dn->get_linkage()->is_primary() || dn->get_linkage()->get_inode() != in)
       dout(10) << __func__ << " different linkage in dentry " << *dn << dendl;
+  }
+
+  if (struct_v >= 2) {
+    int n = 0;
+    decode(n, p);
+    std::vector<metareqid_t> mdrs;
+    for (int i = 0; i < n; i++) {
+      metareqid_t reqid;
+      decode(reqid, p);
+      utime_t timestamp;
+      decode(timestamp, p);
+      dout(20) << __func__ << " rstat flush reqid: " << reqid << dendl;
+      if (rstatflush_parent_child_mdr_map.count(reqid))
+	continue;
+
+      MDRequestRef mdr = request_start_internal(CEPH_MDS_OP_SUBTREERSTATFLUSH);
+      rstatflush_parent_child_mdr_map[reqid] = mdr->reqid;
+      mdr->set_op_stamp(timestamp);
+      mdr->parent_rstatflush_rid = reqid;
+      mdrs.push_back(mdr->reqid);
+      mdr->in[0] = in;
+    
+      if (!in->state_test(CInode::STATE_RSTATFLUSH)) {
+	in->state_set(CInode::STATE_RSTATFLUSH);
+	local_rstatflushes[in].insert(mdr->reqid);
+      }
+    }
+    if (mdrs.size())
+      mds->queue_waiter(new MDCacheRstatFlush(this, std::move(mdrs)));
   }
   DECODE_FINISH(p); 
 }
@@ -12688,7 +12790,6 @@ void C_MDS_RetryRequest::finish(int r)
   cache->dispatch_request(mdr);
 }
 
-
 class C_MDS_EnqueueScrub : public Context
 {
   std::string tag;
@@ -13290,3 +13391,418 @@ void MDCache::handle_mdsmap(const MDSMap &mdsmap) {
   }
 }
 
+// This is main method that flushes the rstat. mdr->in[0]
+// is NULL if this method is called by a client or asok
+// command, or the inode the dir of which the current mds
+// is the auth.
+//
+// This method:
+// -- 1. check if there is still non-auth subtree that are not
+// 	 "rstat-flushed", if so, return;
+// -- 2. if all the subtrees are rstat-flushed, go on flush local
+// 	 auth rstats.
+//
+// NOTE: when flushing local rstats, this method won't successfully
+// flush all rstats in one round as dirty nestlocks need to be
+// flushed to the underlying storage or go through scatter-gather
+// process first, and when those processes finishes, this method
+// would be called agian, and it will go through the above procedure,
+// step 1 and 2, again, as new subtrees could be created during the
+// nestlock flushing or scatter-gathering.
+//
+// If no new subtree is created, and no nestlocks need to be nudged
+// this method would reply clients or other mdses that the current mds
+// has finished flushing its rstats.
+void MDCache::propagate_rstats(MDRequestRef& mdr) {
+
+  dout(20) << __func__ << " " << *mdr << dendl;
+
+  if (!mds->locker->is_rstat_propagating()) {
+    mds->locker->start_rstat_propagate(mdr->get_op_stamp());
+  }
+
+  if (!mdr->in[0]) {
+    ceph_assert(mdr->client_request || mdr->internal_op > -1);
+    ceph_assert(mds->get_nodeid() == (mds_rank_t)0);
+    mdr->in[0] = get_root();
+  }
+  if (mdr->in[0]->is_ambiguous_auth()) {
+    dout(20) << __func__ << " waiting for single auth on " << *mdr->in[0] << dendl;
+    mdr->in[0]->add_waiter(CInode::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(this, mdr));
+    return;
+  }
+
+  if (mdr->in[0]->is_frozen() || mdr->in[0]->is_frozen_auth_pin() || mdr->in[0]->is_freezing()) {
+    dout(20) << __func__ << " waiting for !frozen/authpinnable on " << *mdr->in[0] << dendl;
+    mdr->in[0]->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryRequest(this, mdr));
+    return;
+  }
+
+  show_subtrees(5, true);
+
+  std::vector<CDir*> subtree_bounds, need_to_wait;
+  std::map<CDir*, std::vector<CDir*>> need_to_nudge;
+
+  calc_rstat_flush_subtrees(mdr->in[0], subtree_bounds, need_to_wait, need_to_nudge);
+
+  int should_wait = should_wait_for_subtree_rstats(mdr, subtree_bounds, need_to_wait);
+
+  if (should_wait < 0)
+    return;
+
+  if (mds->locker->nudge_updated_scatterlocks(mdr)) {
+    map<mds_rank_t, map<inodeno_t, pair<filepath, vector<frag_t>>>> completed;
+    calc_rstat_flushed_auth_subtrees(mdr, std::move(need_to_nudge), completed);
+    for (auto& p : completed) {
+      auto msg = make_message<MMDSRstatFlush>((mdr->client_request ? mdr->reqid : mdr->parent_rstatflush_rid),
+	  MMDSRstatFlush::OP_RSTATFLUSH_SUBTREECOMPELETE, p.second);
+      mds->send_message_mds(msg, p.first);
+    }
+
+    if ((mdr->client_request
+	  || mdr->internal_op == CEPH_MDS_OP_RSTATFLUSH)
+	&& !should_wait) {
+      if (mdr->already_replied) {
+	dout(20) << __func__ << " " << *mdr << " already replied, just finish it" << dendl;
+	request_finish(mdr);
+	return;
+      }
+
+      finish_rstat_flush(mdr);
+      
+      mdr->already_replied = true;
+    }
+  }
+  return;
+}
+
+void MDCache::clear_rstat_flush(MDRequestRef& mdr)
+{
+  if (mdr->in[0]->state_test(CInode::STATE_RSTATFLUSH)) {
+    mdr->in[0]->state_clear(CInode::STATE_RSTATFLUSH);
+  }
+
+  auto dirfrags = rstatflush_finished_dirs[mdr->reqid];
+  for (auto df : dirfrags) {
+    CInode* in = get_inode(df.ino);
+    if (in)
+      in->rstatflushed_dirs.erase(mdr->reqid);
+  }
+  rstatflush_finished_dirs.erase(mdr->reqid);
+  local_rstatflushes[mdr->in[0]].erase(mdr->reqid);
+  if (!local_rstatflushes[mdr->in[0]].size())
+    local_rstatflushes.erase(mdr->in[0]);
+}
+
+void MDCache::finish_rstat_flush(MDRequestRef& mdr)
+{
+  clear_rstat_flush(mdr);
+  
+  auto replica_map = mdr->in[0]->get_replicas();
+  for (auto& p : replica_map) {
+    auto req = make_message<MMDSRstatFlush>(mdr->reqid,
+	MMDSRstatFlush::OP_RSTATFLUSH_FINISH,
+	mdr->get_op_stamp(),
+	filepath(mdr->in[0]->ino()));
+    mds->send_message_mds(req, p.first);
+  }
+
+  if (mdr->client_request) {
+    mds->server->respond_to_request(mdr, 0);
+  } else if (mdr->internal_op == CEPH_MDS_OP_RSTATFLUSH) {
+    if (mdr->internal_op_finish)
+      mdr->internal_op_finish->complete(0);
+    request_finish(mdr);
+  }
+}
+
+// Before rstat-flushing a auth subtree, all of its non-auth subtrees needs to be rstat-flushed. And
+// on auth subtrees whose parent subtree is not auth need to be considered.
+// 	need_to_wait: the set of non-auth subtree roots the inode of which the current mds is auth for.
+//	need_to_nudge: the map between auth subtree roots and the set of non-auth subtrees beneath it.
+void MDCache::calc_rstat_flush_subtrees(CInode* cur,
+					std::vector<CDir*>& subtree_bounds,
+					std::vector<CDir*>& need_to_wait,
+					std::map<CDir*, std::vector<CDir*>>& need_to_nudge)
+{
+  std::set<CDir*> bounds;
+
+  cur->get_dirfrags(subtree_bounds);
+
+  bool direct_dirs = true;
+  auto n = subtree_bounds.size();
+  for (std::vector<CDir*>::size_type i = 0; i < subtree_bounds.size(); i++) {
+    auto dir = subtree_bounds[i];
+    if (direct_dirs) {
+      if (!dir->is_auth()) {
+	dout(20) << __func__ << " subtree_bound(to wait): " << *dir << dendl;
+	need_to_wait.push_back(dir);
+      } else if (!dir->get_inode()->is_auth())
+	need_to_nudge[dir];
+    }
+    bounds.clear();
+    get_wouldbe_subtree_bounds(dir, bounds);
+    dout(20) << __func__ << " subtree root: " << *dir << dendl;
+    for (auto dir2 : bounds) {
+      dout(20) << __func__ << " subtree_bound: " << *dir2 << dendl;
+      if (dir->is_auth() && !dir2->is_auth()) {
+	dout(20) << __func__ << " need_to_wait: " << *dir2 << dendl;
+	need_to_wait.push_back(dir2);
+	CDir* auth_root = get_farest_auth_subtree_root(dir2, cur);
+	if (auth_root)
+	  need_to_nudge[auth_root].push_back(dir2);
+      } else if (!dir->is_auth() && dir2->is_auth())
+	need_to_nudge[dir2];
+      subtree_bounds.push_back(dir2);
+    }
+    if (i + 1 == n)
+      direct_dirs = false;
+  }
+}
+
+void MDCache::calc_rstat_flushed_auth_subtrees(MDRequestRef& mdr,
+					       const std::map<CDir*, std::vector<CDir*>>& need_to_nudge,
+					       map<mds_rank_t, map<inodeno_t, pair<filepath, vector<frag_t>>>>& completed)
+{
+  for (auto p : need_to_nudge) {
+    bool should_inform_parent = true;
+    for (auto dir : p.second) {
+      if (!is_subtree_rstat_flushed(mdr, dir))
+	should_inform_parent = false;
+    }
+
+    if (!should_inform_parent 
+	|| already_rstatflushed[(mdr->client_request ? mdr->reqid : mdr->parent_rstatflush_rid)].count(p.first->dirfrag()))
+      continue;
+
+    filepath path;
+    p.first->get_inode()->make_path(path);
+    auto it = completed[p.first->get_inode()->authority().first].find(p.first->ino());
+    if (it == completed[p.first->get_inode()->authority().first].end()) {
+      auto tmp_pair = make_pair(path, vector<frag_t>());
+      tmp_pair.second.push_back(p.first->get_frag());
+      completed[p.first->get_inode()->authority().first][p.first->ino()] = tmp_pair;
+    } else
+      it->second.second.push_back(p.first->get_frag());
+    dout(20) << __func__ << " subtree rstatflushed: " << *(p.first) << dendl;
+    already_rstatflushed[(mdr->client_request ? mdr->reqid : mdr->parent_rstatflush_rid)].insert(p.first->dirfrag());
+  }
+}
+
+// Returns:
+// 	- 1: there exists subtrees in need_to_wait that are not rstat-flushed yet;
+// 	- -1: there exists subtrees being migrated;
+// 	- 0: all non-auth subtrees are rstat-flushed, and all subtrees are stable, which means
+// 	     the current rstat_flush run is current mds's final run.
+int MDCache::should_wait_for_subtree_rstats(MDRequestRef& mdr,
+    const std::vector<CDir*>& subtree_bounds,
+    const std::vector<CDir*>& need_to_wait) {
+
+  int went_wait = 0;
+  for (auto dir : subtree_bounds) {
+    dout(20) << __func__ << " subtree root: " << *dir << dendl;
+
+    if (dir->is_freezing() || dir->is_frozen()) {
+      dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDC_RstatFlush(this, mdr));
+      dout(20) << __func__ << " wait for unfreeze: " << *dir << dendl;
+      went_wait = -1;
+      continue;
+    }
+
+    if (dir->is_ambiguous_auth()) {
+      dir->add_waiter(CDir::WAIT_SINGLEAUTH, new C_MDC_RstatFlush(this, mdr));
+      dout(20) << __func__ << " wait for singleauth: " << *dir << dendl;
+      went_wait = -1;
+      continue;
+    }
+  }
+
+  if (went_wait)
+    return went_wait;
+
+  for (auto dir : need_to_wait) {
+    if (!is_subtree_rstat_flushed(mdr, dir)) {
+      dout(20) << __func__ << " subtree not rstatflushed: " << *dir << dendl;
+      went_wait = 1;
+    }
+  }
+
+  return went_wait;
+}
+
+void MDCache::trigger_rstatflush_run(CInode* in) {
+  dout(20) << __func__ << " " << *in << dendl;
+  std::vector<metareqid_t> mdrs;
+  for (auto& p : local_rstatflushes) {
+    dout(20) << __func__ << " inode under rstat flush: " << *p.first << dendl;
+    if (p.first->is_projected_ancestor_of(in)) {
+      dout(20) << __func__ << " rstat flushes: " << *p.second.begin() << dendl;
+      mdrs.insert(mdrs.end(), p.second.begin(), p.second.end());
+    }
+  }
+
+  mds->queue_waiter(new MDCacheRstatFlush(this, std::move(mdrs)));
+}
+
+bool MDCache::is_subtree_rstat_flushed(MDRequestRef& mdr, CDir* dir) {
+  if (rstatflush_finished_dirs[(mdr->client_request ? mdr->reqid : mdr->parent_rstatflush_rid)].count(dir->dirfrag())) {
+    return true;
+  } else {
+    bool rstat_flushed = false;
+    for (auto dirfrag : rstatflush_finished_dirs[(mdr->client_request ? mdr->reqid : mdr->parent_rstatflush_rid)]) {
+      if (dir->ino() == dirfrag.ino && dirfrag.frag.contains(dir->get_frag())) {
+	rstat_flushed = true;
+	break;
+      }
+
+      // If a parent dir has been rstat-flushed, the current one must have been
+      // created after the parent dir's rstat-flush, in which case the current
+      // one can be ignored.
+      CDir* maybe_parent = get_dirfrag(dirfrag);
+      if (maybe_parent->contains(dir)) {
+	rstat_flushed = true;
+	break;
+      }
+    }
+    
+    return rstat_flushed;
+  }
+}
+
+void MDCache::handle_subtree_rstat_flush(const cref_t<MMDSRstatFlush> mrf)
+{
+  MDRequestRef mdr;
+  CF_MDS_RetryMessageFactory cf(mds, mrf);
+
+  switch (mrf->get_op()) {
+  case MMDSRstatFlush::OP_RSTATFLUSH:
+    {
+      dout(20) << __func__ << " new OP_RSTATFLUSH " << *mrf << dendl;
+      if (!rstatflush_parent_child_mdr_map.count(mrf->get_reqid())) {
+	mdr = request_start_internal(CEPH_MDS_OP_SUBTREERSTATFLUSH);
+	rstatflush_parent_child_mdr_map[mrf->get_reqid()] = mdr->reqid;
+	mdr->parent_rstatflush_rid = mrf->get_reqid();
+	mdr->set_op_stamp(mrf->get_op_stamp());
+      }
+      
+      int r = path_traverse(mdr, cf, mrf->get_rstatflush_root(), NULL, &mdr->in[0], 0);
+      if (r > 0)
+	return;
+      if (r < 0) {
+	// The inode that doing rstat flush is not here, which means the current mds
+	// shouldn't take part in the rstat flush operation, and the initiating mds
+	// will receive the expire message later, and wouldn't consider this mds anymore,
+	// so just finish it now.
+	request_finish(mdr);
+	return;
+      }
+      if (!mdr->in[0]->state_test(CInode::STATE_RSTATFLUSH)) {
+	mdr->in[0]->state_set(CInode::STATE_RSTATFLUSH);
+	local_rstatflushes[mdr->in[0]].insert(mdr->reqid);
+      }
+    }
+
+  case MMDSRstatFlush::OP_RSTATFLUSH_SUBTREECOMPELETE:
+    if (!mdr) {
+      dout(20) << __func__ << " new OP_RSTATFLUSH_SUBTREECOMPELETE " << *mrf << dendl;
+      auto iter = rstatflush_parent_child_mdr_map.find(mrf->get_reqid());
+      if (iter != rstatflush_parent_child_mdr_map.end())
+	mdr = request_get(iter->second);
+      else {
+	if (have_request(mrf->get_reqid()))
+	  mdr = request_get(mrf->get_reqid());
+	else
+	  return;
+      }
+      
+      MDRequestRef null_ref;
+      ref_t<MMDSRstatFlush> non_const_mrf = ref_t<MMDSRstatFlush>(const_cast<MMDSRstatFlush*>(mrf.get()));
+      map<inodeno_t, pair<filepath, vector<frag_t>>>& subtree_rstatflushed = non_const_mrf->get_subtree_rstatflushed();
+      map<mds_rank_t, map<inodeno_t, pair<filepath, vector<frag_t>>>> to_forward;
+
+      MDSGatherBuilder gBuilder(g_ceph_context);
+      for (auto it = subtree_rstatflushed.begin(); it != subtree_rstatflushed.end();) {
+	CInode* in;
+	int r = path_traverse(null_ref, cf, it->second.first, MDS_TRAVERSE_DISCOVER, NULL, &in);
+	if (r > 0) {
+	  it++;
+	  continue;
+	}
+	ceph_assert(r == 0);
+	ceph_assert(in);
+	if (in->is_ambiguous_auth()) {
+	  dout(20) << __func__ << " waiting for single auth on " << *in << dendl;
+	  in->add_waiter(CInode::WAIT_SINGLEAUTH, gBuilder.new_sub());
+	  it++;
+	  continue;
+	}
+
+	if (in->is_frozen() || in->is_frozen_auth_pin() || in->is_freezing()) {
+	  dout(20) << __func__ << " waiting for !frozen/authpinnable on " << *in << dendl;
+	  in->add_waiter(CInode::WAIT_UNFREEZE, gBuilder.new_sub());
+	  it++;
+	  continue;
+	}
+
+	if (!in->is_auth()) {
+	  // the subtree containing the current "in" has been migrated to other mds,
+	  // forward the MMDSRstatFlush message.
+	  dout (20) << __func__ << " not auth anymore, forwarding to new auth: " << *in << dendl;
+	  to_forward[in->authority().first][it->first] =
+	    make_pair(it->second.first, vector(it->second.second.begin(), it->second.second.end()));
+	  it = subtree_rstatflushed.erase(it);
+	  continue;
+	}
+	for (auto it2 = it->second.second.begin(); it2 != it->second.second.end();) {
+	  rstatflush_finished_dirs[mrf->get_reqid()].insert(dirfrag_t(in->ino(), *it2));
+	  in->rstatflushed_dirs[mrf->get_reqid()].push_back(dirfrag_t(in->ino(), *it2));
+	  it2 = it->second.second.erase(it2);
+	}
+	it = subtree_rstatflushed.erase(it);
+      }
+      for (auto& p : to_forward) {
+	auto msg = make_message<MMDSRstatFlush>((mdr->client_request ? mdr->reqid : mdr->parent_rstatflush_rid),
+	    MMDSRstatFlush::OP_RSTATFLUSH_SUBTREECOMPELETE, p.second);
+	mds->send_message_mds(msg, p.first);
+      }
+      
+      if (gBuilder.has_subs()) {
+	gBuilder.set_finisher(new C_MDS_RetryMessage(mds, mrf));
+	gBuilder.activate();
+      }
+
+      if (subtree_rstatflushed.size())
+	return;
+    }
+    propagate_rstats(mdr);
+    break;
+  case MMDSRstatFlush::OP_RSTATFLUSH_FINISH:
+    {
+      dout(20) << __func__ << " new OP_RSTATFLUSH_FINISH " << *mrf << dendl;
+
+      auto it = rstatflush_parent_child_mdr_map.find(mrf->get_reqid());
+      if (it == rstatflush_parent_child_mdr_map.end())
+	return;
+      mdr = request_get(it->second);
+
+      clear_rstat_flush(mdr);
+      if (mdr->internal_op == CEPH_MDS_OP_SUBTREERSTATFLUSH)
+	rstatflush_parent_child_mdr_map.erase(mrf->get_reqid());
+
+      request_finish(mdr);
+      break;
+    }
+  default:
+    ceph_abort_msg("MSG_MDS_RSTATFLUSH: unknown op");
+  }
+}
+
+MDSContext* CF_MDS_MDRContextFactory::build()
+{
+  MDSRank* mds = cache->mds;
+  if (drop_locks) {
+    mds->locker->drop_locks(mdr.get(), nullptr);
+    mdr->drop_local_auth_pins();
+  }
+  return new C_MDS_RetryRequest(cache, mdr);
+}

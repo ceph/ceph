@@ -141,6 +141,7 @@ void LogSegment::try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int o
   for (elist<CInode*>::iterator p = dirty_dirfrag_nest.begin(); !p.end(); ++p) {
     CInode *in = *p;
     dout(10) << "try_to_expire waiting for nest flush on " << *in << dendl;
+
     mds->locker->scatter_nudge(&in->nestlock, gather_bld.new_sub());
   }
 
