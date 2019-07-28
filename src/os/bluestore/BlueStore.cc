@@ -3287,10 +3287,12 @@ void BlueStore::Onode::flush()
 {
   if (flushing_count.load()) {
     ldout(c->store->cct, 20) << __func__ << " cnt:" << flushing_count << dendl;
+    waiting_count++;
     std::unique_lock l(flush_lock);
     while (flushing_count.load()) {
       flush_cond.wait(l);
     }
+    waiting_count--;
   }
   ldout(c->store->cct, 20) << __func__ << " done" << dendl;
 }
@@ -10201,7 +10203,7 @@ void BlueStore::_txc_applied_kv(TransContext *txc)
     for (auto& o : *ls) {
       dout(20) << __func__ << " onode " << o << " had " << o->flushing_count
 	       << dendl;
-      if (--o->flushing_count == 0) {
+      if (--o->flushing_count == 0 && o->waiting_count.load()) {
         std::lock_guard l(o->flush_lock);
 	o->flush_cond.notify_all();
       }
