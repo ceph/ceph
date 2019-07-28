@@ -131,7 +131,7 @@ class TestProgress(MgrTestCase):
         log.info(json.dumps(new_event, indent=1))
         self.assertIn("Rebalancing after osd.0 marked in", new_event['message'])    
         
-        return ev
+        return new_event
 
     def _is_quiet(self):
         """
