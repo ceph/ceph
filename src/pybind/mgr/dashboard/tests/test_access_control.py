@@ -562,6 +562,42 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         self.assertEqual(ctx.exception.retcode, -errno.ENOENT)
         self.assertEqual(str(ctx.exception), "User 'admin' does not exist")
 
+    def test_set_user_password_hash(self):
+        user_orig = self.test_create_user()
+        user = self.exec_cmd('ac-user-set-password-hash', username='admin',
+                             hashed_password='$2b$12$Pt3Vq/rDt2y9glTPSV.'
+                                             'VFegiLkQeIpddtkhoFetNApYmIJOY8gau2')
+        pass_hash = password_hash('newpass', user['password'])
+        self.assertDictEqual(user, {
+            'username': 'admin',
+            'password': pass_hash,
+            'name': 'admin User',
+            'email': 'admin@user.com',
+            'lastUpdate': user['lastUpdate'],
+            'roles': []
+        })
+        self.validate_persistent_user('admin', [], pass_hash, 'admin User',
+                                      'admin@user.com')
+        self.assertGreaterEqual(user['lastUpdate'], user_orig['lastUpdate'])
+
+    def test_set_user_password_hash_nonexistent_user(self):
+        with self.assertRaises(CmdException) as ctx:
+            self.exec_cmd('ac-user-set-password-hash', username='admin',
+                          hashed_password='$2b$12$Pt3Vq/rDt2y9glTPSV.'
+                                          'VFegiLkQeIpddtkhoFetNApYmIJOY8gau2')
+
+        self.assertEqual(ctx.exception.retcode, -errno.ENOENT)
+        self.assertEqual(str(ctx.exception), "User 'admin' does not exist")
+
+    def test_set_user_password_hash_broken_hash(self):
+        self.test_create_user()
+        with self.assertRaises(CmdException) as ctx:
+            self.exec_cmd('ac-user-set-password-hash', username='admin',
+                          hashed_password='')
+
+        self.assertEqual(ctx.exception.retcode, -errno.EINVAL)
+        self.assertEqual(str(ctx.exception), 'Invalid password hash')
+
     def test_set_login_credentials(self):
         self.exec_cmd('set-login-credentials', username='admin',
                       password='admin')
