@@ -1,34 +1,32 @@
-<div class="form-group">
-  <label class="col-sm-3 control-label"
+<div class="form-group row">
+  <label class="col-sm-3 col-form-label"
          i18n>Clients</label>
 
   <div class="col-sm-9"
        [formGroup]="form"
        #formDir="ngForm">
     <span *ngIf="form.get('clients').value.length === 0"
-          class="form-control no-border text-muted">
-      <span class="text-muted"
+          class="no-border text-muted">
+      <span class="form-text text-muted"
             i18n>Any client can access</span>
     </span>
 
     <ng-container formArrayName="clients">
       <div *ngFor="let item of form.get('clients').value; let index = index; trackBy: trackByFn">
-        <div class="panel panel-default"
+        <div class="card"
              [formGroupName]="index">
-          <div class="panel-heading">
-            <h3 class="panel-title">{{ (index + 1) | ordinal }}
-              <span class="pull-right clickable"
-                    (click)="removeClient(index)"
-                    tooltip="Remove">&times;</span>
-            </h3>
+          <div class="card-header">
+            {{ (index + 1) | ordinal }}
+            <span class="float-right clickable"
+                  (click)="removeClient(index)"
+                  tooltip="Remove">&times;</span>
           </div>
 
-          <div class="panel-body">
+          <div class="card-body">
             <!-- Addresses -->
-            <div class="form-group"
-                 [ngClass]="{ 'has-error': showError(index, 'addresses', formDir) }">
+            <div class="form-group row">
               <label i18n
-                     class="col-sm-3 control-label"
+                     class="col-sm-3 col-form-label"
                      for="addresses">Addresses</label>
               <div class="col-sm-9">
                 <input type="text"
@@ -37,7 +35,7 @@
                        id="addresses"
                        formControlName="addresses"
                        placeholder="192.168.0.10, 192.168.1.0/8">
-                <span class="help-block">
+                <span class="invalid-feedback">
                   <span *ngIf="showError(index, 'addresses', formDir, 'required')"
                         i18n>Required field</span>
 
@@ -51,20 +49,20 @@
             </div>
 
             <!-- Access Type-->
-            <div class="form-group">
+            <div class="form-group row">
               <label i18n
-                     class="col-sm-3 control-label"
+                     class="col-sm-3 col-form-label"
                      for="access_type">Access Type</label>
               <div class="col-sm-9">
-                <select class="form-control"
+                <select class="form-control custom-select"
                         name="access_type"
                         id="access_type"
                         formControlName="access_type">
-                  <option [value]="form.getValue('access_type')">{{ getNoAccessTypeDescr() }}</option>
+                  <option value="">{{ getNoAccessTypeDescr() }}</option>
                   <option *ngFor="let item of nfsAccessType"
                           [value]="item.value">{{ item.value }}</option>
                 </select>
-                <span class="help-block"
+                <span class="form-text text-muted"
                       *ngIf="getValue(index, 'access_type')">
                   {{ getAccessTypeHelp(index) }}
                 </span>
@@ -72,16 +70,16 @@
             </div>
 
             <!-- Squash -->
-            <div class="form-group">
+            <div class="form-group row">
               <label i18n
-                     class="col-sm-3 control-label"
+                     class="col-sm-3 col-form-label"
                      for="squash">Squash</label>
               <div class="col-sm-9">
-                <select class="form-control"
+                <select class="form-control custom-select"
                         name="squash"
                         id="squash"
                         formControlName="squash">
-                  <option [value]="form.getValue('squash')">{{ getNoSquashDescr() }}</option>
+                  <option value="">{{ getNoSquashDescr() }}</option>
                   <option *ngFor="let squash of nfsSquash"
                           [value]="squash">{{ squash }}</option>
                 </select>
@@ -92,13 +90,16 @@
       </div>
     </ng-container>
 
-    <span class="form-control no-border">
-      <button class="btn btn-default btn-label pull-right"
-              (click)="addClient()">
-        <i class="fa fa-fw fa-plus"></i>
-        <ng-container i18n>Add clients</ng-container>
-      </button>
-    </span>
-    <hr>
+    <div class="row">
+      <div class="col-12">
+        <div class="float-right">
+          <button class="btn btn-light "
+                  (click)="addClient()">
+            <i [ngClass]="[icons.add]"></i>
+            <ng-container i18n>Add clients</ng-container>
+          </button>
+        </div>
+      </div>
+    </div>
   </div>
 </div>

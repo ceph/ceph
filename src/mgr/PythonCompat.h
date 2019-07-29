@@ -4,6 +4,7 @@
 #pragma once
 
 #include <Python.h>
+#include <string>
 
 // Python's pyconfig-64.h conflicts with ceph's acconfig.h
 #undef HAVE_SYS_WAIT_H
@@ -36,3 +37,19 @@ inline PyObject* PyInt_FromString(const char *str, char **pend, int base) {
 }
 #define PyString_Type PyUnicode_Type
 #endif
+
+inline std::pair<std::string, bool> PyString_ToString(PyObject *o) {
+#if PY_MAJOR_VERSION >= 3
+  if (PyUnicode_Check(o)) {
+    return {PyUnicode_AsUTF8(o), true};
+  } else {
+    return {{}, false};
+  }
+#else
+  if (PyString_Check(o) || PyUnicode_Check(o)) {
+    return {PyString_AsString(o), true};
+  } else {
+    return {{}, false};
+  }
+#endif
+}

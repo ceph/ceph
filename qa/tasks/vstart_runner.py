@@ -231,13 +231,27 @@ class LocalRemote(object):
         shutil.copy(path, tmpfile)
         return tmpfile
 
+    # XXX: This method ignores the error raised when src and dst are
+    # holding same path. For teuthology, same path still represents
+    # different locations as they lie on different machines.
     def put_file(self, src, dst, sudo=False):
-        shutil.copy(src, dst)
+        if sys.version_info.major < 3:
+            exception = shutil.Error
+        elif sys.version_info.major >= 3:
+            exception = shutil.SameFileError
+
+        try:
+            shutil.copy(src, dst)
+        except exception as e:
+            if sys.version_info.major < 3 and e.message.find('are the same '
+               'file') != -1:
+                return
+            raise e
 
     def _perform_checks_and_return_list_of_args(self, args, omit_sudo):
         # Since Python's shell simulation can only work when commands are
         # provided as a list of argumensts...
-        if isinstance(args, str):
+        if isinstance(args, str) or isinstance(args, unicode):
             args = args.split()
 
         # We'll let sudo be a part of command even omit flag says otherwise in
@@ -248,29 +262,30 @@ class LocalRemote(object):
         except ValueError:
             pass
 
-        # Quotes don't work in Python's shell simulation as a bash user would
-        # expect. However, it works fine it has special meaning for the given
-        # command (writing a small python program on the command line).
-        if 'sudo' in args and 'python' not in args and \
-           'python2' not in args and 'python3' not in args:
-            if '-c' in args:
-                args_to_check = args[args.index('-c') + 1 : ]
-            else:
-                args_to_check = args
+        # Quotes wrapping a command argument don't work fine in Python's shell
+        # simulation if the arguments contains spaces too. E.g. '"ls"' is OK
+        # but "ls /" isn't.
+        errmsg = "Don't surround arguments commands by quotes if it " + \
+                 "contains spaces.\nargs - %s" % (args)
+        for arg in args:
+            if isinstance(arg, Raw):
+                continue
 
-            for arg in args_to_check:
-                if arg.find("'") != -1 or arg.find('"') != -1:
-                    raise RuntimeError("Don't surround commands by "
-                                       "single/double quotes")
+            if arg and (arg[0] in ['"', "'"] or arg[-1] in ['"', "'"]) and \
+               (arg.find(' ') != -1 and 0 < arg.find(' ') < len(arg) - 1):
+                raise RuntimeError(errmsg)
 
         # ['sudo', '-u', 'user', '-s', 'path-to-shell', '-c', 'ls', 'a']
         # and ['sudo', '-u', user, '-s', path_to_shell, '-c', 'ls a'] are
         # treated differently by Python's shell simulation. Only latter has
         # the desired effect.
-        if 'sudo' in args and '-c' in args:
-            if args.index('-c') != len(args) - 2:
-                raise RuntimeError("All args after '-c' should be a single "
-                                   "string")
+        errmsg = 'The entire command to executed as other user should be a ' +\
+                 'single argument.\nargs - %s' % (args)
+        if 'sudo' in args and '-u' in args and '-c' in args and \
+           args.count('-c') == 1:
+            if args.index('-c') != len(args) - 2 and \
+               args[args.index('-c') + 2].find('-') == -1:
+                raise RuntimeError(errmsg)
 
         if omit_sudo:
             args = [a for a in args if a != "sudo"]

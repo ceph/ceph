@@ -3,7 +3,7 @@
     <tr>
       <td rowspan="2"
           class="error-panel-alert-icon">
-        <i class="fa fa-3x fa-times-circle alert-danger"
+        <i [ngClass]="[icons.destroyCircle, icons.large3x]" class="alert-danger"
            aria-hidden="true"></i>
       </td>
       <td class="error-panel-alert-title">
@@ -20,7 +20,7 @@
 
 <div class="button-group text-right"
      *ngIf="backAction.observers.length > 0">
-  <button class="btn btn-sm btn-default tc_backButton"
+  <button class="btn btn-light tc_backButton"
           type="button"
           (click)="backAction.emit()"
           autofocus

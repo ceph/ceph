@@ -4,11 +4,12 @@ import { FormControl, ReactiveFormsModule } from '@angular/forms';
 import { Router } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastModule } from 'ng2-toastr';
+import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
+import { RgwSiteService } from '../../../shared/api/rgw-site.service';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { NotificationService } from '../../../shared/services/notification.service';
 import { SharedModule } from '../../../shared/shared.module';
@@ -17,7 +18,8 @@ import { RgwBucketFormComponent } from './rgw-bucket-form.component';
 describe('RgwBucketFormComponent', () => {
   let component: RgwBucketFormComponent;
   let fixture: ComponentFixture<RgwBucketFormComponent>;
-  let rwgBucketService: RgwBucketService;
+  let rgwBucketService: RgwBucketService;
+  let getPlacementTargetsSpy;
 
   configureTestBed({
     declarations: [RgwBucketFormComponent],
@@ -26,7 +28,7 @@ describe('RgwBucketFormComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule,
       SharedModule,
-      ToastModule.forRoot()
+      ToastrModule.forRoot()
     ],
     providers: [i18nProviders]
   });
@@ -34,8 +36,8 @@ describe('RgwBucketFormComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(RgwBucketFormComponent);
     component = fixture.componentInstance;
-    fixture.detectChanges();
-    rwgBucketService = TestBed.get(RgwBucketService);
+    rgwBucketService = TestBed.get(RgwBucketService);
+    getPlacementTargetsSpy = spyOn(TestBed.get(RgwSiteService), 'getPlacementTargets');
   });
 
   it('should create', () => {
@@ -82,7 +84,7 @@ describe('RgwBucketFormComponent', () => {
     });
 
     it('should validate name (4/4)', () => {
-      spyOn(rwgBucketService, 'enumerate').and.returnValue(observableOf(['abcd']));
+      spyOn(rgwBucketService, 'enumerate').and.returnValue(observableOf(['abcd']));
       const validatorFn = component.bucketNameValidator();
       const ctrl = new FormControl('abcd');
       ctrl.markAsDirty();
@@ -94,6 +96,34 @@ describe('RgwBucketFormComponent', () => {
           expect(resp.bucketNameExists).toBeTruthy();
         });
       }
+    });
+
+    it('should get zonegroup and placement targets', () => {
+      const payload = {
+        zonegroup: 'default',
+        placement_targets: [
+          {
+            name: 'default-placement',
+            data_pool: 'default.rgw.buckets.data'
+          },
+          {
+            name: 'placement-target2',
+            data_pool: 'placement-target2.rgw.buckets.data'
+          }
+        ]
+      };
+      getPlacementTargetsSpy.and.returnValue(observableOf(payload));
+      fixture.detectChanges();
+
+      expect(component.zonegroup).toBe(payload.zonegroup);
+      const placementTargets = [];
+      for (const placementTarget of payload['placement_targets']) {
+        placementTarget['description'] = `${placementTarget['name']} (pool: ${
+          placementTarget['data_pool']
+        })`;
+        placementTargets.push(placementTarget);
+      }
+      expect(component.placementTargets).toEqual(placementTargets);
     });
   });
 
@@ -107,7 +137,7 @@ describe('RgwBucketFormComponent', () => {
     });
 
     it('tests create success notification', () => {
-      spyOn(rwgBucketService, 'create').and.returnValue(observableOf([]));
+      spyOn(rgwBucketService, 'create').and.returnValue(observableOf([]));
       component.editing = false;
       component.bucketForm.markAsDirty();
       component.submit();
@@ -118,7 +148,7 @@ describe('RgwBucketFormComponent', () => {
     });
 
     it('tests update success notification', () => {
-      spyOn(rwgBucketService, 'update').and.returnValue(observableOf([]));
+      spyOn(rgwBucketService, 'update').and.returnValue(observableOf([]));
       component.editing = true;
       component.bucketForm.markAsDirty();
       component.submit();

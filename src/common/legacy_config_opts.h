@@ -132,6 +132,11 @@ OPTION(ms_inject_delay_msg_type, OPT_STR)      // the type of message to delay).
 OPTION(ms_inject_delay_max, OPT_DOUBLE)         // seconds
 OPTION(ms_inject_delay_probability, OPT_DOUBLE) // range [0, 1]
 OPTION(ms_inject_internal_delays, OPT_DOUBLE)   // seconds
+OPTION(ms_blackhole_osd, OPT_BOOL)
+OPTION(ms_blackhole_mon, OPT_BOOL)
+OPTION(ms_blackhole_mds, OPT_BOOL)
+OPTION(ms_blackhole_mgr, OPT_BOOL)
+OPTION(ms_blackhole_client, OPT_BOOL)
 OPTION(ms_dump_on_send, OPT_BOOL)           // hexdump msg to log on send
 OPTION(ms_dump_corrupt_message_level, OPT_INT)  // debug level to hexdump undecodeable messages at
 OPTION(ms_async_op_threads, OPT_U64)            // number of worker processing threads for async messenger created on init
@@ -187,6 +192,7 @@ OPTION(mon_osd_cache_size, OPT_INT)  // the size of osdmaps cache, not to rely o
 
 OPTION(mon_cpu_threads, OPT_INT)
 OPTION(mon_osd_mapping_pgs_per_chunk, OPT_INT)
+OPTION(mon_clean_pg_upmaps_per_chunk, OPT_U64)
 OPTION(mon_osd_max_creating_pgs, OPT_INT)
 OPTION(mon_tick_interval, OPT_INT)
 OPTION(mon_session_timeout, OPT_INT)    // must send keepalive or subscribe
@@ -278,7 +284,6 @@ OPTION(mon_debug_deprecated_as_obsolete, OPT_BOOL) // consider deprecated comman
 OPTION(mon_debug_dump_transactions, OPT_BOOL)
 OPTION(mon_debug_dump_json, OPT_BOOL)
 OPTION(mon_debug_dump_location, OPT_STR)
-OPTION(mon_debug_no_require_mimic, OPT_BOOL)
 OPTION(mon_debug_no_require_bluestore_for_ec_overwrites, OPT_BOOL)
 OPTION(mon_debug_no_initial_persistent_features, OPT_BOOL)
 OPTION(mon_inject_transaction_delay_max, OPT_DOUBLE)      // seconds
@@ -688,6 +693,8 @@ OPTION(osd_default_data_pool_replay_window, OPT_INT)
 OPTION(osd_auto_mark_unfound_lost, OPT_BOOL)
 OPTION(osd_recovery_delay_start, OPT_FLOAT)
 OPTION(osd_recovery_max_active, OPT_U64)
+OPTION(osd_recovery_max_active_hdd, OPT_U64)
+OPTION(osd_recovery_max_active_ssd, OPT_U64)
 OPTION(osd_recovery_max_single_start, OPT_U64)
 OPTION(osd_recovery_max_chunk, OPT_U64)  // max size of push chunk
 OPTION(osd_recovery_max_omap_entries_per_chunk, OPT_U64) // max number of omap entries per chunk; 0 to disable limit
@@ -697,6 +704,7 @@ OPTION(osd_max_push_cost, OPT_U64)  // max size of push message
 OPTION(osd_max_push_objects, OPT_U64)  // max objects in single push op
 OPTION(osd_max_scrubs, OPT_INT)
 OPTION(osd_scrub_during_recovery, OPT_BOOL) // Allow new scrubs to start while recovery is active on the OSD
+OPTION(osd_repair_during_recovery, OPT_BOOL) // Allow new requested repairs to start while recovery is active on the OSD
 OPTION(osd_scrub_begin_hour, OPT_INT)
 OPTION(osd_scrub_end_hour, OPT_INT)
 OPTION(osd_scrub_begin_week_day, OPT_INT)
@@ -765,6 +773,7 @@ OPTION(osd_debug_random_push_read_error, OPT_DOUBLE)
 OPTION(osd_debug_verify_cached_snaps, OPT_BOOL)
 OPTION(osd_debug_deep_scrub_sleep, OPT_FLOAT)
 OPTION(osd_debug_no_acting_change, OPT_BOOL)
+OPTION(osd_debug_pretend_recovery_active, OPT_BOOL)
 OPTION(osd_enable_op_tracker, OPT_BOOL) // enable/disable OSD op tracking
 OPTION(osd_num_op_tracker_shard, OPT_U32) // The number of shards for holding the ops
 OPTION(osd_op_history_size, OPT_U32)    // Max number of completed ops to track
@@ -837,6 +846,7 @@ OPTION(mon_rocksdb_options, OPT_STR)
 OPTION(osd_client_op_priority, OPT_U32)
 OPTION(osd_recovery_op_priority, OPT_U32)
 OPTION(osd_peering_op_priority, OPT_U32)
+OPTION(osd_kick_recovery_op_priority, OPT_U32)
 
 OPTION(osd_snap_trim_priority, OPT_U32)
 OPTION(osd_snap_trim_cost, OPT_U32) // set default cost equal to 1MB io
@@ -891,6 +901,7 @@ OPTION(osd_discard_disconnected_ops, OPT_BOOL)
 OPTION(memstore_device_bytes, OPT_U64)
 OPTION(memstore_page_set, OPT_BOOL)
 OPTION(memstore_page_size, OPT_U64)
+OPTION(memstore_debug_omit_block_device_write, OPT_BOOL)
 
 OPTION(bdev_debug_inflight_ios, OPT_BOOL)
 OPTION(bdev_inject_crash, OPT_INT)  // if N>0, then ~ 1/N IOs will complete before we crash on flush.
@@ -1044,6 +1055,7 @@ OPTION(bluestore_default_buffered_write, OPT_BOOL)
 OPTION(bluestore_debug_misc, OPT_BOOL)
 OPTION(bluestore_debug_no_reuse_blocks, OPT_BOOL)
 OPTION(bluestore_debug_small_allocations, OPT_INT)
+OPTION(bluestore_debug_too_many_blobs_threshold, OPT_INT)
 OPTION(bluestore_debug_freelist, OPT_BOOL)
 OPTION(bluestore_debug_prefill, OPT_FLOAT)
 OPTION(bluestore_debug_prefragment_max, OPT_INT)
@@ -1061,6 +1073,7 @@ OPTION(bluestore_warn_on_bluefs_spillover, OPT_BOOL)
 OPTION(bluestore_warn_on_legacy_statfs, OPT_BOOL)
 OPTION(bluestore_log_op_age, OPT_DOUBLE)
 OPTION(bluestore_log_omap_iterator_age, OPT_DOUBLE)
+OPTION(bluestore_log_collection_list_age, OPT_DOUBLE)
 OPTION(bluestore_debug_enforce_settings, OPT_STR)
 
 OPTION(kstore_max_ops, OPT_U64)
@@ -1243,8 +1256,6 @@ OPTION(rados_mon_op_timeout, OPT_DOUBLE) // how many seconds to wait for a respo
 OPTION(rados_osd_op_timeout, OPT_DOUBLE) // how many seconds to wait for a response from osds before returning an error from a rados operation. 0 means no limit.
 OPTION(rados_tracing, OPT_BOOL) // true if LTTng-UST tracepoints should be enabled
 
-OPTION(nss_db_path, OPT_STR) // path to nss db
-
 
 OPTION(rgw_max_chunk_size, OPT_INT)
 OPTION(rgw_put_obj_min_window_size, OPT_INT)
@@ -1320,7 +1331,6 @@ OPTION(rgw_keystone_api_version, OPT_INT) // Version of Keystone API to use (2 o
 OPTION(rgw_keystone_accepted_roles, OPT_STR)  // roles required to serve requests
 OPTION(rgw_keystone_accepted_admin_roles, OPT_STR) // list of roles allowing an user to gain admin privileges
 OPTION(rgw_keystone_token_cache_size, OPT_INT)  // max number of entries in keystone token cache
-OPTION(rgw_keystone_revocation_interval, OPT_INT)  // seconds between tokens revocation check
 OPTION(rgw_keystone_verify_ssl, OPT_BOOL) // should we try to verify keystone's ssl
 OPTION(rgw_keystone_implicit_tenants, OPT_BOOL)  // create new users in their own tenants of the same name
 OPTION(rgw_cross_domain_policy, OPT_STR)
@@ -1381,6 +1391,10 @@ OPTION(rgw_nfs_max_gc, OPT_INT) /* max gc events per cycle */
 OPTION(rgw_nfs_write_completion_interval_s, OPT_INT) /* stateless (V3)
 							  * commit
 							  * delay */
+OPTION(rgw_nfs_s3_fast_attrs, OPT_BOOL) /* use fast S3 attrs from
+					 * bucket index--currently
+					 * assumes NFS mounts are
+					 * immutable */
 
 OPTION(rgw_zone, OPT_STR) // zone name
 OPTION(rgw_zone_root_pool, OPT_STR)    // pool where zone specific info is stored
@@ -1538,5 +1552,3 @@ OPTION(rgw_sts_token_introspection_url, OPT_STR)  // url for introspecting web t
 OPTION(rgw_sts_client_id, OPT_STR) // Client Id
 OPTION(rgw_sts_client_secret, OPT_STR) // Client Secret
 OPTION(debug_allow_any_pool_priority, OPT_BOOL)
-
-OPTION(crimson_debug_pg_always_active, OPT_BOOL)

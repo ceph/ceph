@@ -1,4 +1,5 @@
 #include <cstdarg>
+#include <iostream>
 
 #include <seastar/util/backtrace.hh>
 #include <seastar/core/reactor.hh>
@@ -22,6 +23,7 @@ namespace ceph {
                  "{}",
                  file, line, func, assertion,
                  seastar::current_backtrace());
+    std::cout << std::flush;
     abort();
   }
   [[gnu::cold]] void __ceph_assertf_fail(const char *assertion,
@@ -37,9 +39,11 @@ namespace ceph {
 
     seastar::logger& logger = ceph::get_logger(0);
     logger.error("{}:{} : In function '{}', ceph_assert(%s)\n"
-                 "{}",
+                 "{}\n{}\n",
                  file, line, func, assertion,
+                 buf,
                  seastar::current_backtrace());
+    std::cout << std::flush;
     abort();
   }
 
@@ -51,6 +55,27 @@ namespace ceph {
                  "{}",
                  file, line, func, msg,
                  seastar::current_backtrace());
+    std::cout << std::flush;
+    abort();
+  }
+
+  [[gnu::cold]] void __ceph_abortf(const char* file, int line,
+                                   const char* func, const char* fmt,
+                                   ...)
+  {
+    char buf[8096];
+    va_list args;
+    va_start(args, fmt);
+    std::vsnprintf(buf, sizeof(buf), fmt, args);
+    va_end(args);
+
+    seastar::logger& logger = ceph::get_logger(0);
+    logger.error("{}:{} : In function '{}', abort()\n"
+                 "{}\n{}\n",
+                 file, line, func,
+                 buf,
+                 seastar::current_backtrace());
+    std::cout << std::flush;
     abort();
   }
 }

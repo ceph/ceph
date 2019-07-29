@@ -114,7 +114,7 @@ Epoch:		2
 %global _epoch_prefix %{?epoch:%{epoch}:}
 
 Summary:	User space components of the Ceph file system
-License:	LGPL-2.1 and CC-BY-SA-3.0 and GPL-2.0 and BSL-1.0 and BSD-3-Clause and MIT
+License:	LGPL-2.1 and LGPL-3.0 and CC-BY-SA-3.0 and GPL-2.0 and BSL-1.0 and BSD-3-Clause and MIT
 %if 0%{?suse_version}
 Group:		System/Filesystems
 %endif
@@ -151,7 +151,8 @@ BuildRequires:	fuse-devel
 %if 0%{?rhel} == 7
 # devtoolset offers newer make and valgrind-devel, but the old ones are good
 # enough.
-BuildRequires:	devtoolset-8-gcc-c++ >= 8.2.1
+# see https://github.com/ceph/ceph/pull/28859
+BuildRequires:	devtoolset-8-gcc-c++ = 8.2.1
 %else
 BuildRequires:	gcc-c++
 %endif
@@ -169,6 +170,7 @@ BuildRequires:	libaio-devel
 BuildRequires:	libblkid-devel >= 2.17
 BuildRequires:	libcurl-devel
 BuildRequires:	libudev-devel
+BuildRequires:	libnl3-devel
 BuildRequires:	liboath-devel
 BuildRequires:	libtool
 BuildRequires:	libxml2-devel
@@ -176,6 +178,7 @@ BuildRequires:	libuuid-devel
 BuildRequires:	make
 BuildRequires:	ncurses-devel
 BuildRequires:	parted
+BuildRequires:	patch
 BuildRequires:	perl
 BuildRequires:	pkgconfig
 BuildRequires:  procps
@@ -228,7 +231,6 @@ BuildRequires:  yaml-cpp-devel
 %if 0%{?suse_version}
 BuildRequires:  pkgconfig(systemd)
 BuildRequires:	systemd-rpm-macros
-BuildRequires:	systemd
 %{?systemd_requires}
 PreReq:		%fillup_prereq
 BuildRequires:	net-tools
@@ -644,11 +646,24 @@ Provides:	ceph-test:/usr/bin/ceph-osdomap-tool
 Requires:	ceph-base = %{_epoch_prefix}%{version}-%{release}
 Requires:	lvm2
 Requires:	sudo
-Requires: libstoragemgmt
+Requires:	libstoragemgmt
 %description osd
 ceph-osd is the object storage daemon for the Ceph distributed file
 system.  It is responsible for storing objects on a local file system
 and providing access to them over the network.
+
+%if 0%{with seastar}
+%package crimson-osd
+Summary:	Ceph Object Storage Daemon (crimson)
+%if 0%{?suse_version}
+Group:		System/Filesystems
+%endif
+Requires:	ceph-osd = %{_epoch_prefix}%{version}-%{release}
+%description crimson-osd
+crimson-osd is the object storage daemon for the Ceph distributed file
+system.  It is responsible for storing objects on a local file system
+and providing access to them over the network.
+%endif
 
 %package -n librados2
 Summary:	RADOS distributed object store client library
@@ -733,6 +748,10 @@ Group:		Development/Libraries/Python
 Requires:	librgw2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{release}
 Provides: 	python3-rgw = %{_epoch_prefix}%{version}-%{release}
+%if 0%{without python2}
+Provides:	python-rgw = %{_epoch_prefix}%{version}-%{release}
+Obsoletes:	python-rgw < %{_epoch_prefix}%{version}-%{release}
+%endif
 %description -n python%{python3_pkgversion}-rgw
 This package contains Python 3 libraries for interacting with Cephs RADOS
 gateway.
@@ -758,6 +777,10 @@ Group:		Development/Libraries/Python
 Requires:	python%{python3_pkgversion}
 Requires:	librados2 = %{_epoch_prefix}%{version}-%{release}
 Provides:	python3-rados = %{_epoch_prefix}%{version}-%{release}
+%if 0%{without python2}
+Provides:	python-rados = %{_epoch_prefix}%{version}-%{release}
+Obsoletes:      python-rados < %{_epoch_prefix}%{version}-%{release}
+%endif
 %description -n python%{python3_pkgversion}-rados
 This package contains Python 3 libraries for interacting with Cephs RADOS
 object store.
@@ -845,6 +868,10 @@ Group:		Development/Libraries/Python
 Requires:	librbd1 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{release}
 Provides:	python3-rbd = %{_epoch_prefix}%{version}-%{release}
+%if 0%{without python2}
+Provides:	python-rbd = %{_epoch_prefix}%{version}-%{release}
+Obsoletes:	python-rbd < %{_epoch_prefix}%{version}-%{release}
+%endif
 %description -n python%{python3_pkgversion}-rbd
 This package contains Python 3 libraries for interacting with Cephs RADOS
 block device.
@@ -903,6 +930,10 @@ Requires:	libcephfs2 = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{python3_pkgversion}-rados = %{_epoch_prefix}%{version}-%{release}
 Requires:	python%{python3_pkgversion}-ceph-argparse = %{_epoch_prefix}%{version}-%{release}
 Provides:	python3-cephfs = %{_epoch_prefix}%{version}-%{release}
+%if 0%{without python2}
+Provides:	python-cephfs = %{_epoch_prefix}%{version}-%{release}
+Obsoletes:	python-cephfs < %{_epoch_prefix}%{version}-%{release}
+%endif
 %description -n python%{python3_pkgversion}-cephfs
 This package contains Python 3 libraries for interacting with Cephs distributed
 file system.
@@ -1076,6 +1107,9 @@ This package provides Ceph’s default alerts for Prometheus.
 %autosetup -p1 -n @TARBALL_BASENAME@
 
 %build
+# LTO can be enabled as soon as the following GCC bug is fixed:
+# https://gcc.gnu.org/bugzilla/show_bug.cgi?id=48200
+%define _lto_cflags %{nil}
 
 %if 0%{?rhel} == 7
 . /opt/rh/devtoolset-8/enable
@@ -1222,8 +1256,6 @@ install -m 0644 -D etc/sysctl/90-ceph-osd.conf %{buildroot}%{_sysctldir}/90-ceph
 
 # firewall templates and /sbin/mount.ceph symlink
 %if 0%{?suse_version}
-install -m 0644 -D etc/sysconfig/SuSEfirewall2.d/services/ceph-mon %{buildroot}%{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-mon
-install -m 0644 -D etc/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds %{buildroot}%{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds
 mkdir -p %{buildroot}/sbin
 ln -sf %{_sbindir}/mount.ceph %{buildroot}/sbin/mount.ceph
 %endif
@@ -1302,8 +1334,6 @@ rm -rf %{buildroot}
 %endif
 %if 0%{?suse_version}
 %{_fillupdir}/sysconfig.*
-%config %{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-mon
-%config %{_sysconfdir}/sysconfig/SuSEfirewall2.d/services/ceph-osd-mds
 %endif
 %{_unitdir}/ceph.target
 %if 0%{with python2}
@@ -1933,6 +1963,11 @@ if [ $1 -ge 1 ] ; then
   fi
 fi
 
+%if 0%{with seastar}
+%files crimson-osd
+%{_bindir}/crimson-osd
+%endif
+
 %if %{with ocf}
 
 %files resource-agents
@@ -2250,9 +2285,9 @@ exit 0
 
 %files grafana-dashboards
 %if 0%{?suse_version}
-%attr(0750,root,grafana) %dir %{_sysconfdir}/grafana
-%attr(0750,root,grafana) %dir %{_sysconfdir}/grafana/dashboards
-%attr(0750,root,grafana) %dir %{_sysconfdir}/grafana/dashboards/ceph-dashboard
+%attr(0755,root,root) %dir %{_sysconfdir}/grafana
+%attr(0755,root,root) %dir %{_sysconfdir}/grafana/dashboards
+%attr(0755,root,root) %dir %{_sysconfdir}/grafana/dashboards/ceph-dashboard
 %else
 %attr(0755,root,root) %dir %{_sysconfdir}/grafana/dashboards/ceph-dashboard
 %endif

@@ -25,7 +25,7 @@ int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
 int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs = NULL);
 int rgw_get_system_obj(RGWRados *rgwstore, RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
-                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, map<string, bufferlist> *pattrs = NULL,
+                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, map<string, bufferlist> *pattrs = NULL,
                        rgw_cache_entry_info *cache_info = NULL,
 		       boost::optional<obj_version> refresh_version = boost::none);
 int rgw_delete_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid,
@@ -155,7 +155,7 @@ public:
                                       bucket(_bucket),
                                       key(_key) {}
   public:
-    int put(bufferlist& data, map<string, bufferlist>& attrs, const DoutPrefixProvider *dpp); /* might modify attrs */
+    int put(bufferlist& data, map<string, bufferlist>& attrs, const DoutPrefixProvider *dpp, optional_yield y); /* might modify attrs */
 
     void set_mtime(const ceph::real_time& _mtime) {
       mtime = _mtime;

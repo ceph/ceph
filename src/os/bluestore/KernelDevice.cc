@@ -122,7 +122,7 @@ int KernelDevice::open(const string& p)
   r = posix_fadvise(fd_buffereds[WRITE_LIFE_NOT_SET], 0, 0, POSIX_FADV_RANDOM);
   if (r) {
     r = -r;
-    derr << __func__ << " open got: " << cpp_strerror(r) << dendl;
+    derr << __func__ << " posix_fadvise got: " << cpp_strerror(r) << dendl;
     goto out_fail;
   }
 
@@ -223,7 +223,7 @@ out_fail:
   return r;
 }
 
-int KernelDevice::get_devices(std::set<std::string> *ls)
+int KernelDevice::get_devices(std::set<std::string> *ls) const
 {
   if (devname.empty()) {
     return 0;
@@ -272,6 +272,22 @@ int KernelDevice::collect_metadata(const string& prefix, map<string,string> *pm)
     uint64_t total, avail;
     get_vdo_utilization(vdo_fd, &total, &avail);
     (*pm)[prefix + "vdo_physical_size"] = stringify(total);
+  }
+
+  {
+    string res_names;
+    std::set<std::string> devnames;
+    if (get_devices(&devnames) == 0) {
+      for (auto& dev : devnames) {
+	if (!res_names.empty()) {
+	  res_names += ",";
+	}
+	res_names += dev;
+      }
+      if (res_names.size()) {
+	(*pm)[prefix + "devices"] = res_names;
+      }
+    }
   }
 
   struct stat st;
@@ -782,8 +798,8 @@ int KernelDevice::_sync_write(uint64_t off, bufferlist &bl, bool buffered, int w
   }
 #ifdef HAVE_SYNC_FILE_RANGE
   if (buffered) {
-    // initiate IO (but do not wait)
-    r = ::sync_file_range(fd_buffereds[WRITE_LIFE_NOT_SET], off, len, SYNC_FILE_RANGE_WRITE);
+    // initiate IO and wait till it completes
+    r = ::sync_file_range(fd_buffereds[WRITE_LIFE_NOT_SET], off, len, SYNC_FILE_RANGE_WRITE|SYNC_FILE_RANGE_WAIT_AFTER|SYNC_FILE_RANGE_WAIT_BEFORE);
     if (r < 0) {
       r = -errno;
       derr << __func__ << " sync_file_range error: " << cpp_strerror(r) << dendl;
@@ -855,7 +871,10 @@ int KernelDevice::aio_write(
       ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
       ++ioc->num_pending;
       auto& aio = ioc->pending_aios.back();
-      aio.pread(off, len);
+      bufferptr p = buffer::create_small_page_aligned(len);
+      aio.bl.append(std::move(p));
+      aio.bl.prepare_iov(&aio.iov);
+      aio.preadv(off, len);
       ++injecting_crash;
     } else {
       if (bl.length() <= RW_IO_MAX) {
@@ -981,7 +1000,10 @@ int KernelDevice::aio_read(
     ioc->pending_aios.push_back(aio_t(ioc, fd_directs[WRITE_LIFE_NOT_SET]));
     ++ioc->num_pending;
     aio_t& aio = ioc->pending_aios.back();
-    aio.pread(off, len);
+    bufferptr p = buffer::create_small_page_aligned(len);
+    aio.bl.append(std::move(p));
+    aio.bl.prepare_iov(&aio.iov);
+    aio.preadv(off, len);
     dout(30) << aio << dendl;
     pbl->append(aio.bl);
     dout(5) << __func__ << " 0x" << std::hex << off << "~" << len

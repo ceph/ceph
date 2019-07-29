@@ -20,6 +20,7 @@
 #include <seastar/core/gate.hh>
 #include <seastar/core/reactor.hh>
 #include <seastar/core/sharded.hh>
+#include <seastar/core/shared_future.hh>
 
 #include "Messenger.h"
 #include "SocketConnection.h"
@@ -39,11 +40,16 @@ class SocketMessenger final : public Messenger, public seastar::peering_sharded_
   // Distinguish messengers with meaningful names for debugging
   const std::string logic_name;
   const uint32_t nonce;
+  // specifying we haven't learned our addr; set false when we find it.
+  bool need_addr = true;
 
   seastar::future<> accept(seastar::connected_socket socket,
                            seastar::socket_address paddr);
 
   void do_bind(const entity_addrvec_t& addr);
+
+  bool started = false;
+  seastar::shared_promise<> accepting_complete;
   seastar::future<> do_start(Dispatcher *disp);
   seastar::foreign_ptr<ConnectionRef> do_connect(const entity_addr_t& peer_addr,
                                                  const entity_type_t& peer_type);
@@ -102,7 +108,8 @@ class SocketMessenger final : public Messenger, public seastar::peering_sharded_
   void set_policy_throttler(entity_type_t peer_type, Throttle* throttle) override;
 
  public:
-  seastar::future<> learned_addr(const entity_addr_t &peer_addr_for_me);
+  seastar::future<> learned_addr(const entity_addr_t &peer_addr_for_me,
+                                 const SocketConnection& conn);
 
   SocketConnectionRef lookup_conn(const entity_addr_t& addr);
   void accept_conn(SocketConnectionRef);

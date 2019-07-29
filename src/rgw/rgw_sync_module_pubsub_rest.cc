@@ -67,6 +67,7 @@ public:
     // bucket to store events/records will be set only when subscription is created
     dest.bucket_name = "";
     dest.oid_prefix = "";
+    dest.arn_topic = topic_name;
     // the topic ARN will be sent in the reply
     const rgw::ARN arn(rgw::Partition::aws, rgw::Service::sns, 
         store->svc.zone->get_zonegroup().get_name(),
@@ -354,6 +355,7 @@ public:
     dest.bucket_name = string(conf["data_bucket_prefix"]) + s->owner.get_id().to_str() + "-" + topic_name;
     dest.oid_prefix = string(conf["data_oid_prefix"]) + sub_name + "/";
     dest.push_endpoint_args = s->info.args.get_str();
+    dest.arn_topic = topic_name;
 
     return 0;
   }
@@ -700,7 +702,7 @@ public:
     const auto& id = s->owner.get_id();
 
     ret = store->get_bucket_info(*s->sysobj_ctx, id.tenant, bucket_name,
-                                 bucket_info, nullptr, nullptr);
+                                 bucket_info, nullptr, null_yield, nullptr);
     if (ret < 0) {
       ldout(s->cct, 1) << "failed to get bucket info, cannot verify ownership" << dendl;
       return ret;
@@ -963,7 +965,7 @@ public:
     }
 
     ret = store->get_bucket_info(*s->sysobj_ctx, s->owner.get_id().tenant, bucket_name,
-                                 bucket_info, nullptr, nullptr);
+                                 bucket_info, nullptr, null_yield, nullptr);
     if (ret < 0) {
       return ret;
     }
@@ -1123,7 +1125,7 @@ public:
     }
 
     ret = store->get_bucket_info(*s->sysobj_ctx, s->owner.get_id().tenant, bucket_name,
-                                 bucket_info, nullptr, nullptr);
+                                 bucket_info, nullptr, null_yield, nullptr);
     if (ret < 0) {
       return ret;
     }

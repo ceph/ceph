@@ -2252,7 +2252,7 @@ TEST(LibRadosAioEC, OmapPP) {
     EXPECT_EQ(-EOPNOTSUPP, my_completion->get_return_value());
   }
   ioctx.remove("test_obj");
-  destroy_one_pool_pp(pool_name, cluster);
+  destroy_one_ec_pool_pp(pool_name, cluster);
 }
 
 TEST(LibRadosAioEC, MultiWritePP) {

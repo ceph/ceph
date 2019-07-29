@@ -550,11 +550,18 @@ void Monitor::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("mon_health_to_clog") ||
       changed.count("mon_health_to_clog_interval") ||
       changed.count("mon_health_to_clog_tick_interval")) {
-    health_to_clog_update_conf(changed);
+    finisher.queue(new C_MonContext(this, [this, changed](int) {
+      Mutex::Locker l(lock);
+      health_to_clog_update_conf(changed);
+    }));
   }
 
   if (changed.count("mon_scrub_interval")) {
-    scrub_update_interval(conf->mon_scrub_interval);
+    int scrub_interval = conf->mon_scrub_interval;
+    finisher.queue(new C_MonContext(this, [this, scrub_interval](int) {
+      Mutex::Locker l(lock);
+      scrub_update_interval(scrub_interval);
+    }));
   }
 }
 
@@ -3031,7 +3038,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
 	ss << "    " << i.second.message << "\n";
 	ss << "      [";
 	unsigned j;
-	for (j=0; j < i.second.progress * 30; ++j) {
+	for (j = 0; j < (unsigned)(i.second.progress * 30.0); ++j) {
 	  ss << '=';
 	}
 	for (; j < 30; ++j) {
@@ -4474,6 +4481,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
     case CEPH_MSG_POOLOP:
     case MSG_OSD_BEACON:
     case MSG_OSD_MARK_ME_DOWN:
+    case MSG_OSD_MARK_ME_DEAD:
     case MSG_OSD_FULL:
     case MSG_OSD_FAILURE:
     case MSG_OSD_BOOT:
@@ -4481,6 +4489,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
     case MSG_OSD_PGTEMP:
     case MSG_OSD_PG_CREATED:
     case MSG_REMOVE_SNAPS:
+    case MSG_MON_GET_PURGED_SNAPS:
     case MSG_OSD_PG_READY_TO_MERGE:
       paxos_service[PAXOS_OSDMAP]->dispatch(op);
       return;

@@ -2,7 +2,7 @@
  Mount CephFS with the Kernel Driver
 ====================================
 
-To mount the Ceph file system you may use the ``mount`` command if you know the
+To mount CephFS with the Kernel Driver you may use the ``mount`` command if you know the
 monitor host IP address(es), or use the ``mount.ceph`` utility to resolve the 
 monitor host name(s) into IP address(es) for you. For example:: 
 
@@ -31,7 +31,7 @@ To unmount the Ceph file system, you may use the ``umount`` command. For example
 .. tip:: Ensure that you are not within the file system directories before
    executing this command.
 
-See `mount.ceph`_ for details.
+See `mount.ceph`_ for details. For troubleshooting, see :ref:`kernel_mount_debugging`.
 
 .. _mount.ceph: ../../man/8/mount.ceph/
 .. _User Management: ../../rados/operations/user-management/

@@ -145,7 +145,7 @@ public:
   template <typename ImageReplayerT = rbd::mirror::ImageReplayer<> >
   void create_replayer() {
     m_replayer = new ImageReplayerT(
-        m_threads.get(), m_instance_watcher,
+        m_threads.get(), m_instance_watcher, nullptr,
         rbd::mirror::RadosRef(new librados::Rados(m_local_ioctx)),
         m_local_mirror_uuid, m_local_ioctx.get_id(), m_global_image_id);
     m_replayer->add_peer("peer uuid", m_remote_ioctx);

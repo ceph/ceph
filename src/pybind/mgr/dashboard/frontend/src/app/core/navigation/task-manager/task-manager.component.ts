@@ -1,5 +1,7 @@
 import { Component, OnInit } from '@angular/core';
 
+import * as _ from 'lodash';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { ExecutingTask } from '../../../shared/models/executing-task';
 import { FinishedTask } from '../../../shared/models/finished-task';
 import { SummaryService } from '../../../shared/services/summary.service';
@@ -14,7 +16,8 @@ export class TaskManagerComponent implements OnInit {
   executingTasks: ExecutingTask[] = [];
   finishedTasks: FinishedTask[] = [];
 
-  icon = 'fa-hourglass-o';
+  icons = Icons;
+  icon = _.join([this.icons.hourglass], ' ');
 
   constructor(
     private summaryService: SummaryService,
@@ -50,6 +53,6 @@ export class TaskManagerComponent implements OnInit {
   _setIcon(executingTasks: number) {
     const iconSuffix = ['o', 'start', 'half', 'end']; // TODO: Use all suffixes
     const iconIndex = executingTasks > 0 ? 1 : 0;
-    this.icon = 'fa-hourglass-' + iconSuffix[iconIndex];
+    this.icon = [Icons.filledHourglass, iconSuffix[iconIndex]].join('-');
   }
 }

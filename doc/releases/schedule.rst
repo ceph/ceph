@@ -10,16 +10,24 @@ Current
 Timeline
 --------
 
-.. ceph_timeline:: releases.yml development mimic luminous kraken jewel infernalis hammer giant firefly emperor dumpling
+.. ceph_timeline:: releases.yml development nautilus mimic luminous kraken jewel infernalis hammer giant firefly emperor dumpling
+
+.. _Nautilus: ../nautilus
+.. _14.2.1: ../nautilus#v14-2-1-nautilus
+.. _14.2.0: ../nautilus#v14-2-0-nautilus
 
 .. _Mimic: ../mimic
+.. _13.2.6: ../mimic#v13-2-6-mimic
+.. _13.2.5: ../mimic#v13-2-5-mimic
 .. _13.2.4: ../mimic#v13-2-4-mimic
 .. _13.2.3: ../mimic#v13-2-3-mimic
 .. _13.2.2: ../mimic#v13-2-2-mimic
 .. _13.2.1: ../mimic#v13-2-1-mimic
 .. _13.2.0: ../mimic#v13-2-0-mimic
 
-.. _Luminous: ../luminous#v12-2-0-luminous
+.. _Luminous: ../luminous
+.. _12.2.12: ../luminous#v12-2-12-luminous
+.. _12.2.11: ../luminous#v12-2-11-luminous
 .. _12.2.10: ../luminous#v12-2-10-luminous
 .. _12.2.9: ../luminous#v12-2-9-luminous
 .. _12.2.8: ../luminous#v12-2-8-luminous
@@ -152,8 +160,8 @@ Timeline
 Understanding the release cycle
 -------------------------------
 
-There is a new stable release cycle every nine (9) months, starting
-after the Luminous release (12.2.0).  Each stable release series will
+There is a new stable release cycle every year, targetting March 1st, starting
+with the Nautilus release (14.2.0).  Each stable release series will
 receive a name (e.g., 'Mimic') and a major release number (e.g., 13
 for Mimic because 'M' is the 13th letter of the alphabet).
 
@@ -180,7 +188,7 @@ and applies `integration and upgrade tests
 released, there is no effort to backport fixes; developer focus is on
 the next development release which is usually only a few weeks away.
 
-* Development release every 4 to 8 weeks
+* Development release every 8 to 12 weeks
 * Intended for testing, not production deployments
 * Full integration testing
 * Upgrade testing from the last stable release(s)
@@ -194,13 +202,13 @@ the next development release which is usually only a few weeks away.
 Release candidates (x.1.z)
 ^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-There is a feature release roughly six (6) weeks prior to the planned
+There is a feature release roughly eight (8) weeks prior to the planned
 initial stable release, after which focus shifts to stabilization and
 bug fixes only.
 
 * Release candidate release every 1-2 weeks
 * Intended for final testing and validation of the upcoming stable release
-  
+
 Stable releases (x.2.z)
 ^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -232,9 +240,9 @@ For each stable release:
   publishes ``point releases`` including fixes that have been backported to the stable release.
 
 In the timeline above, the life time of a stable release series is
-calculated to be approximately 18 months (i.e., two 9 month release
-cycles) after the month of the first release.  For example, Luminous
-(12.2.z) will reach end of life (EOL) shortly after Nautilus (14.2.0) is
+calculated to be approximately 24 months (i.e., two 12 month release
+cycles) after the month of the first release.  For example, Mimic
+(13.2.z) will reach end of life (EOL) shortly after Octopus (15.2.0) is
 released.  The lifetime of a release may vary because it depends on how
 quickly the stable releases are published.
 

@@ -109,14 +109,15 @@ function(do_build_boost version)
     " : ${CMAKE_CXX_COMPILER}"
     " ;\n")
   if(with_python_version)
-    find_package(PythonLibs ${with_python_version} QUIET REQUIRED)
-    string(REPLACE ";" " " python_includes "${PYTHON_INCLUDE_DIRS}")
+    find_package(Python ${with_python_version} QUIET REQUIRED
+      COMPONENTS Development)
+    string(REPLACE ";" " " python_includes "${Python_INCLUDE_DIRS}")
     file(APPEND ${user_config}
       "using python"
       " : ${with_python_version}"
-      " : ${PYTHON_EXECUTABLE}"
+      " : ${Python_EXECUTABLE}"
       " : ${python_includes}"
-      " : ${PYTHON_LIBRARIES}"
+      " : ${Python_LIBRARIES}"
       " ;\n")
   endif()
   list(APPEND b2 --user-config=${user_config})
@@ -125,7 +126,11 @@ function(do_build_boost version)
   if(with_python_version)
     list(APPEND b2 python=${with_python_version})
   endif()
-
+  if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm|ARM")
+    list(APPEND b2 abi=aapcs)
+    list(APPEND b2 architecture=arm)
+    list(APPEND b2 binary-format=elf)
+  endif()
   set(build_command
     ${b2} headers stage
     #"--buildid=ceph" # changes lib names--can omit for static
@@ -163,6 +168,9 @@ function(do_build_boost version)
   include(ExternalProject)
   ExternalProject_Add(Boost
     ${source_dir}
+    PATCH_COMMAND
+      patch -d <SOURCE_DIR> -p1 < ${CMAKE_MODULE_PATH}/boost_context_asm_arm_syntax_unified.patch &&
+      patch -d <SOURCE_DIR> -p1 < ${CMAKE_MODULE_PATH}/boost_lockfree_queue_valgrind_error.patch
     CONFIGURE_COMMAND CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ${configure_command}
     BUILD_COMMAND CC=${CMAKE_C_COMPILER} CXX=${CMAKE_CXX_COMPILER} ${build_command}
     BUILD_IN_SOURCE 1
@@ -205,7 +213,7 @@ macro(build_boost version)
     endif()
     add_dependencies(Boost::${c} Boost)
     if(c MATCHES "^python")
-      set(c "python${PYTHON_VERSION_MAJOR}${PYTHON_VERSION_MINOR}")
+      set(c "python${Python_VERSION_MAJOR}${Python_VERSION_MINOR}")
     endif()
     if(Boost_USE_STATIC_LIBS)
       set(Boost_${upper_c}_LIBRARY

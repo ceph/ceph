@@ -37,6 +37,7 @@ extern "C" {
 #include "common/Formatter.h"
 #include "OSDMap.h"
 #include "osd_types.h"
+#include "os/Transaction.h"
 
 using std::list;
 using std::make_pair;
@@ -395,6 +396,8 @@ void osd_stat_t::dump(Formatter *f) const
   f->dump_unsigned("up_from", up_from);
   f->dump_unsigned("seq", seq);
   f->dump_unsigned("num_pgs", num_pgs);
+  f->dump_unsigned("num_osds", num_osds);
+  f->dump_unsigned("num_per_pool_osds", num_per_pool_osds);
 
   /// dump legacy stats fields to ensure backward compatibility.
   f->dump_unsigned("kb", statfs.kb());
@@ -428,7 +431,7 @@ void osd_stat_t::dump(Formatter *f) const
 
 void osd_stat_t::encode(ceph::buffer::list &bl, uint64_t features) const
 {
-  ENCODE_START(11, 2, bl);
+  ENCODE_START(12, 2, bl);
 
   //////// for compatibility ////////
   int64_t kb = statfs.kb();
@@ -460,6 +463,8 @@ void osd_stat_t::encode(ceph::buffer::list &bl, uint64_t features) const
   ///////////////////////////////////
   encode(os_alerts, bl);
   encode(num_shards_repaired, bl);
+  encode(num_osds, bl);
+  encode(num_per_pool_osds, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -467,7 +472,7 @@ void osd_stat_t::decode(ceph::buffer::list::const_iterator &bl)
 {
   int64_t kb, kb_used,kb_avail;
   int64_t kb_used_data, kb_used_omap, kb_used_meta;
-  DECODE_START_LEGACY_COMPAT_LEN(11, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(12, 2, 2, bl);
   decode(kb, bl);
   decode(kb_used, bl);
   decode(kb_avail, bl);
@@ -526,6 +531,13 @@ void osd_stat_t::decode(ceph::buffer::list::const_iterator &bl)
     decode(num_shards_repaired, bl);
   } else {
     num_shards_repaired = 0;
+  }
+  if (struct_v >= 12) {
+    decode(num_osds, bl);
+    decode(num_per_pool_osds, bl);
+  } else {
+    num_osds = 0;
+    num_per_pool_osds = 0;
   }
   DECODE_FINISH(bl);
 }
@@ -1528,32 +1540,6 @@ bool pg_pool_t::is_removed_snap(snapid_t s) const
     return removed_snaps.contains(s);
 }
 
-/*
- * build set of known-removed sets from either pool snaps or
- * explicit removed_snaps set.
- */
-void pg_pool_t::build_removed_snaps(interval_set<snapid_t>& rs) const
-{
-  if (is_pool_snaps_mode()) {
-    rs.clear();
-    for (snapid_t s = 1; s <= get_snap_seq(); s = s + 1)
-      if (snaps.count(s) == 0)
-	rs.insert(s);
-  } else {
-    rs = removed_snaps;
-  }
-}
-
-bool pg_pool_t::maybe_updated_removed_snaps(const interval_set<snapid_t>& cached) const
-{
-  if (is_unmanaged_snaps_mode()) { // remove_unmanaged_snap increments range_end
-    if (removed_snaps.empty() || cached.empty()) // range_end is undefined
-      return removed_snaps.empty() != cached.empty();
-    return removed_snaps.range_end() != cached.range_end();
-  }
-  return true;
-}
-
 snapid_t pg_pool_t::snap_exists(const char *s) const
 {
   for (auto p = snaps.cbegin(); p != snaps.cend(); ++p)
@@ -1573,18 +1559,21 @@ void pg_pool_t::add_snap(const char *n, utime_t stamp)
   snaps[s].stamp = stamp;
 }
 
-void pg_pool_t::add_unmanaged_snap(uint64_t& snapid)
+uint64_t pg_pool_t::add_unmanaged_snap(bool preoctopus_compat)
 {
   ceph_assert(!is_pool_snaps_mode());
   if (snap_seq == 0) {
-    // kludge for pre-mimic tracking of pool vs selfmanaged snaps.  after
-    // mimic this field is not decoded but our flag is set; pre-mimic, we
-    // have a non-empty removed_snaps to signifiy a non-pool-snaps pool.
-    removed_snaps.insert(snapid_t(1));
+    if (preoctopus_compat) {
+      // kludge for pre-mimic tracking of pool vs selfmanaged snaps.  after
+      // mimic this field is not decoded but our flag is set; pre-mimic, we
+      // have a non-empty removed_snaps to signifiy a non-pool-snaps pool.
+      removed_snaps.insert(snapid_t(1));
+    }
     snap_seq = 1;
   }
   flags |= FLAG_SELFMANAGED_SNAPS;
-  snapid = snap_seq = snap_seq + 1;
+  snap_seq = snap_seq + 1;
+  return snap_seq;
 }
 
 void pg_pool_t::remove_snap(snapid_t s)
@@ -1594,14 +1583,16 @@ void pg_pool_t::remove_snap(snapid_t s)
   snap_seq = snap_seq + 1;
 }
 
-void pg_pool_t::remove_unmanaged_snap(snapid_t s)
+void pg_pool_t::remove_unmanaged_snap(snapid_t s, bool preoctopus_compat)
 {
   ceph_assert(is_unmanaged_snaps_mode());
-  removed_snaps.insert(s);
-  snap_seq = snap_seq + 1;
-  // try to add in the new seq, just to try to keep the interval_set contiguous
-  if (!removed_snaps.contains(get_snap_seq())) {
-    removed_snaps.insert(get_snap_seq());
+  ++snap_seq;
+  if (preoctopus_compat) {
+    removed_snaps.insert(s);
+    // try to add in the new seq, just to try to keep the interval_set contiguous
+    if (!removed_snaps.contains(get_snap_seq())) {
+      removed_snaps.insert(get_snap_seq());
+    }
   }
 }
 
@@ -2145,8 +2136,11 @@ void pg_pool_t::generate_test_instances(list<pg_pool_t*>& o)
 
 ostream& operator<<(ostream& out, const pg_pool_t& p)
 {
-  out << p.get_type_name()
-      << " size " << p.get_size()
+  out << p.get_type_name();
+  if (p.get_type_name() == "erasure") {
+    out << " profile " << p.erasure_code_profile;
+  }
+  out  << " size " << p.get_size()
       << " min_size " << p.get_min_size()
       << " crush_rule " << p.get_crush_rule()
       << " object_hash " << p.get_object_hash_name()
@@ -2975,7 +2969,7 @@ void store_statfs_t::dump(Formatter *f) const
 ostream& operator<<(ostream& out, const store_statfs_t &s)
 {
   out << std::hex
-      << "store_statfs(0x" << s.available
+      << " store_statfs(0x" << s.available
       << "/0x"  << s.internally_reserved
       << "/0x"  << s.total
       << ", data 0x" << s.data_stored
@@ -3237,11 +3231,7 @@ void pg_info_t::encode(ceph::buffer::list &bl) const
   encode(last_update, bl);
   encode(last_complete, bl);
   encode(log_tail, bl);
-  if (last_backfill_bitwise && !last_backfill.is_max()) {
-    encode(hobject_t(), bl);
-  } else {
-    encode(last_backfill, bl);
-  }
+  encode(hobject_t(), bl);  // old (nibblewise) last_backfill
   encode(stats, bl);
   history.encode(bl);
   encode(purged_snaps, bl);
@@ -3250,7 +3240,7 @@ void pg_info_t::encode(ceph::buffer::list &bl) const
   encode(hit_set, bl);
   encode(pgid.shard, bl);
   encode(last_backfill, bl);
-  encode(last_backfill_bitwise, bl);
+  encode(true, bl); // was last_backfill_bitwise
   encode(last_interval_started, bl);
   ENCODE_FINISH(bl);
 }
@@ -3274,7 +3264,13 @@ void pg_info_t::decode(ceph::buffer::list::const_iterator &bl)
   decode(hit_set, bl);
   decode(pgid.shard, bl);
   decode(last_backfill, bl);
-  decode(last_backfill_bitwise, bl);
+  {
+    bool last_backfill_bitwise;
+    decode(last_backfill_bitwise, bl);
+    // note: we may see a false value here since the default value for
+    // the member was false, so it often didn't get set to true until
+    // peering progressed.
+  }
   if (struct_v >= 32) {
     decode(last_interval_started, bl);
   } else {
@@ -3293,7 +3289,6 @@ void pg_info_t::dump(Formatter *f) const
   f->dump_stream("log_tail") << log_tail;
   f->dump_int("last_user_version", last_user_version);
   f->dump_stream("last_backfill") << last_backfill;
-  f->dump_int("last_backfill_bitwise", (int)last_backfill_bitwise);
   f->open_array_section("purged_snaps");
   for (interval_set<snapid_t>::const_iterator i=purged_snaps.begin();
        i != purged_snaps.end();
@@ -3334,7 +3329,6 @@ void pg_info_t::generate_test_instances(list<pg_info_t*>& o)
   o.back()->last_user_version = 2;
   o.back()->log_tail = eversion_t(7, 8);
   o.back()->last_backfill = hobject_t(object_t("objname"), "key", 123, 456, -1, "");
-  o.back()->last_backfill_bitwise = true;
   {
     list<pg_stat_t*> s;
     pg_stat_t::generate_test_instances(s);
@@ -5218,7 +5212,7 @@ void pg_hit_set_history_t::generate_test_instances(list<pg_hit_set_history_t*>& 
 
 void OSDSuperblock::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(8, 5, bl);
+  ENCODE_START(9, 5, bl);
   encode(cluster_fsid, bl);
   encode(whoami, bl);
   encode(current_epoch, bl);
@@ -5231,12 +5225,14 @@ void OSDSuperblock::encode(ceph::buffer::list &bl) const
   encode(osd_fsid, bl);
   encode((epoch_t)0, bl);  // epoch_t last_epoch_marked_full
   encode((uint32_t)0, bl);  // map<int64_t,epoch_t> pool_last_epoch_marked_full
+  encode(purged_snaps_last, bl);
+  encode(last_purged_snaps_scrub, bl);
   ENCODE_FINISH(bl);
 }
 
 void OSDSuperblock::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(8, 5, 5, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(9, 5, 5, bl);
   if (struct_v < 3) {
     string magic;
     decode(magic, bl);
@@ -5264,6 +5260,12 @@ void OSDSuperblock::decode(ceph::buffer::list::const_iterator &bl)
     map<int64_t,epoch_t> pool_last_map_marked_full;
     decode(pool_last_map_marked_full, bl);
   }
+  if (struct_v >= 9) {
+    decode(purged_snaps_last, bl);
+    decode(last_purged_snaps_scrub, bl);
+  } else {
+    purged_snaps_last = 0;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -5281,6 +5283,8 @@ void OSDSuperblock::dump(Formatter *f) const
   f->close_section();
   f->dump_int("clean_thru", clean_thru);
   f->dump_int("last_epoch_mounted", mounted);
+  f->dump_unsigned("purged_snaps_last", purged_snaps_last);
+  f->dump_stream("last_purged_snaps_scrub") << last_purged_snaps_scrub;
 }
 
 void OSDSuperblock::generate_test_instances(list<OSDSuperblock*>& o)
@@ -5333,10 +5337,7 @@ void SnapSet::decode(ceph::buffer::list::const_iterator& bl)
 
 void SnapSet::dump(Formatter *f) const
 {
-  SnapContext sc(seq, snaps);
-  f->open_object_section("snap_context");
-  sc.dump(f);
-  f->close_section();
+  f->dump_unsigned("seq", seq);
   f->open_array_section("clones");
   for (auto p = clones.cbegin(); p != clones.cend(); ++p) {
     f->open_object_section("clone");
@@ -6645,3 +6646,34 @@ int prepare_info_keymap(
   return 0;
 }
 
+void create_pg_collection(
+  ceph::os::Transaction& t, spg_t pgid, int bits)
+{
+  coll_t coll(pgid);
+  t.create_collection(coll, bits);
+}
+
+void init_pg_ondisk(
+  ceph::os::Transaction& t,
+  spg_t pgid,
+  const pg_pool_t *pool)
+{
+  coll_t coll(pgid);
+  if (pool) {
+    // Give a hint to the PG collection
+    bufferlist hint;
+    uint32_t pg_num = pool->get_pg_num();
+    uint64_t expected_num_objects_pg = pool->expected_num_objects / pg_num;
+    encode(pg_num, hint);
+    encode(expected_num_objects_pg, hint);
+    uint32_t hint_type = ceph::os::Transaction::COLL_HINT_EXPECTED_NUM_OBJECTS;
+    t.collection_hint(coll, hint_type, hint);
+  }
+
+  ghobject_t pgmeta_oid(pgid.make_pgmeta_oid());
+  t.touch(coll, pgmeta_oid);
+  map<string,bufferlist> values;
+  __u8 struct_v = pg_latest_struct_v;
+  encode(struct_v, values[string(infover_key)]);
+  t.omap_setkeys(coll, pgmeta_oid, values);
+}

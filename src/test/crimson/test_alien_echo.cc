@@ -46,13 +46,13 @@ struct Server {
                                   MessageRef m) override {
       std::cout << "server got ping " << *m << std::endl;
       // reply with a pong
-      return c->send(MessageRef{new MPing(), false}).then([this] {
+      return c->send(make_message<MPing>()).then([this] {
         ++count;
         on_reply.signal();
       });
     }
     seastar::future<ceph::net::msgr_tag_t, bufferlist>
-    ms_verify_authorizer(peer_type_t peer_type,
+    ms_verify_authorizer(entity_type_t peer_type,
                          auth_proto_t protocol,
                          bufferlist& auth) override {
       return seastar::make_ready_future<ceph::net::msgr_tag_t, bufferlist>(
@@ -196,7 +196,7 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
               }).then([&disp=client.dispatcher, count](ceph::net::ConnectionXRef conn) {
                 return seastar::do_until(
                   [&disp,count] { return disp.count >= count; },
-                  [&disp,conn] { return (*conn)->send(MessageRef{new MPing(), false})
+                  [&disp,conn] { return (*conn)->send(make_message<MPing>())
                                    .then([&] { return disp.on_reply.wait(); });
                 });
               }).finally([&client] {

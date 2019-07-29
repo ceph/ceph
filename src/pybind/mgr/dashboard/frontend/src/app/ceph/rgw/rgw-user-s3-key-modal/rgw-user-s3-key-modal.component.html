@@ -1,23 +1,22 @@
 <div class="modal-header">
   <h4 i18n="form title|Example: Create Pool@@formTitle"
-      class="modal-title pull-left">{{ action | titlecase }} {{ resource | upperFirst }}</h4>
+      class="modal-title float-left">{{ action | titlecase }} {{ resource | upperFirst }}</h4>
+
   <button type="button"
-          class="close pull-right"
+          class="close float-right"
           aria-label="Close"
           (click)="bsModalRef.hide()">
     <span aria-hidden="true">&times;</span>
   </button>
 </div>
-<form class="form-horizontal"
-      #frm="ngForm"
+<form #frm="ngForm"
       [formGroup]="formGroup"
       novalidate>
   <div class="modal-body">
 
     <!-- Username -->
-    <div class="form-group"
-         [ngClass]="{'has-error': formGroup.showError('user', frm)}">
-      <label class="control-label col-sm-3"
+    <div class="form-group row">
+      <label class="col-form-label col-sm-3"
              for="user">
         <ng-container i18n>Username</ng-container>
         <span class="required"
@@ -32,7 +31,7 @@
                [readonly]="true"
                formControlName="user">
         <select id="user"
-                class="form-control"
+                class="form-control custom-select"
                 formControlName="user"
                 *ngIf="!viewing"
                 autofocus>
@@ -42,31 +41,32 @@
           <option *ngFor="let userCandidate of userCandidates"
                   [value]="userCandidate">{{ userCandidate }}</option>
         </select>
-        <span class="help-block"
+        <span class="invalid-feedback"
               *ngIf="formGroup.showError('user', frm, 'required')"
               i18n>This field is required.</span>
       </div>
     </div>
 
     <!-- Auto-generate key -->
-    <div class="form-group"
+    <div class="form-group row"
          *ngIf="!viewing">
-      <div class="col-sm-offset-3 col-sm-9">
-        <div class="checkbox checkbox-primary">
-          <input id="generate_key"
+      <div class="offset-sm-3 col-sm-9">
+        <div class="custom-control custom-checkbox">
+          <input class="custom-control-input"
+                 id="generate_key"
                  type="checkbox"
                  formControlName="generate_key">
-          <label for="generate_key"
+          <label class="custom-control-label"
+                 for="generate_key"
                  i18n>Auto-generate key</label>
         </div>
       </div>
     </div>
 
     <!-- Access key -->
-    <div class="form-group"
-         [ngClass]="{'has-error': formGroup.showError('access_key', frm)}"
+    <div class="form-group row"
          *ngIf="!formGroup.getValue('generate_key')">
-      <label class="control-label col-sm-3"
+      <label class="col-form-label col-sm-3"
              for="access_key">
         <ng-container i18n>Access key</ng-container>
         <span class="required"
@@ -80,28 +80,27 @@
                  type="password"
                  [readonly]="viewing"
                  formControlName="access_key">
-          <span class="input-group-btn">
+          <span class="input-group-append">
             <button type="button"
-                    class="btn btn-default"
+                    class="btn btn-light"
                     cdPasswordButton="access_key">
             </button>
             <button type="button"
-                    class="btn btn-default"
+                    class="btn btn-light"
                     cdCopy2ClipboardButton="access_key">
             </button>
           </span>
         </div>
-        <span class="help-block"
+        <span class="invalid-feedback"
               *ngIf="formGroup.showError('access_key', frm, 'required')"
               i18n>This field is required.</span>
       </div>
     </div>
 
     <!-- Secret key -->
-    <div class="form-group"
-         [ngClass]="{'has-error': formGroup.showError('secret_key', frm)}"
+    <div class="form-group row"
          *ngIf="!formGroup.getValue('generate_key')">
-      <label class="control-label col-sm-3"
+      <label class="col-form-label col-sm-3"
              for="secret_key">
         <ng-container i18n>Secret key</ng-container>
         <span class="required"
@@ -115,18 +114,18 @@
                  type="password"
                  [readonly]="viewing"
                  formControlName="secret_key">
-          <span class="input-group-btn">
+          <span class="input-group-append">
             <button type="button"
-                    class="btn btn-default"
+                    class="btn btn-light"
                     cdPasswordButton="secret_key">
             </button>
             <button type="button"
-                    class="btn btn-default"
+                    class="btn btn-light"
                     cdCopy2ClipboardButton="secret_key">
             </button>
           </span>
         </div>
-        <span class="help-block"
+        <span class="invalid-feedback"
               *ngIf="formGroup.showError('secret_key', frm, 'required')"
               i18n>This field is required.</span>
       </div>
@@ -134,11 +133,10 @@
 
   </div>
   <div class="modal-footer">
-    <cd-submit-button
-      *ngIf="!viewing"
-      (submitAction)="onSubmit()"
-      i18n="form action button|Example: Create Pool@@formActionButton"
-      [form]="formGroup">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+    <cd-submit-button *ngIf="!viewing"
+                      (submitAction)="onSubmit()"
+                      i18n="form action button|Example: Create Pool@@formActionButton"
+                      [form]="formGroup">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
     <cd-back-button [back]="bsModalRef.hide"></cd-back-button>
   </div>
 </form>

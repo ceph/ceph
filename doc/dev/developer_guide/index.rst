@@ -21,10 +21,13 @@ it should serve as a reference for Ceph developers.
 We assume that readers are already familiar with Ceph (the distributed
 object store and file system designed to provide excellent performance,
 reliability and scalability). If not, please refer to the `project website`_
-and especially the `publications list`_.
+and especially the `publications list`_. Another way to learn about what's happening
+in Ceph is to check out our `youtube channel`_ , where we post Tech Talks, Code walk-throughs
+and Ceph Developer Monthly recordings.
 
 .. _`project website`: https://ceph.com
 .. _`publications list`: https://ceph.com/publications/
+.. _`youtube channel`: https://www.youtube.com/c/CephStorage
 
 Since this document is to be consumed by developers, who are assumed to
 have Internet access, topics covered elsewhere, either within the Ceph
@@ -78,9 +81,9 @@ Licensing
 
 Ceph is free software.
 
-Unless stated otherwise, the Ceph source code is distributed under the terms of
-the LGPL2.1. For full details, see the file `COPYING`_ in the top-level
-directory of the source-code tree.
+Unless stated otherwise, the Ceph source code is distributed under the
+terms of the LGPL2.1 or LGPL3.0. For full details, see the file
+`COPYING`_ in the top-level directory of the source-code tree.
 
 .. _`COPYING`:
   https://github.com/ceph/ceph/blob/master/COPYING
@@ -676,7 +679,7 @@ and to post the test results to the PR.
 .. _`ceph-workbench ceph-qa-suite`: http://ceph-workbench.readthedocs.org/
 
 The Ceph community has access to the `Sepia lab
-<http://ceph.github.io/sepia/>`_ where integration tests can be run on
+<https://wiki.sepia.ceph.com/doku.php>`_ where integration tests can be run on
 real hardware. Other developers may add tags like "needs-qa" to your PR.
 This allows PRs that need testing to be merged into a single branch and
 tested all at the same time. Since teuthology suites can take hours
@@ -831,8 +834,7 @@ branch and the stable branches). Traditionally, these tests are called "the
 nightlies" because the Ceph core developers used to live and work in
 the same time zone and from their perspective the tests were run overnight.
 
-The results of the nightlies are published at http://pulpito.ceph.com/ and
-http://pulpito.ovh.sepia.ceph.com:8081/. The developer nick shows in the
+The results of the nightlies are published at http://pulpito.ceph.com/. The developer nick shows in the
 test results URL and in the first column of the Pulpito dashboard.  The
 results are also reported on the `ceph-qa mailing list
 <https://ceph.com/irc/>`_ for analysis.

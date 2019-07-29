@@ -25,6 +25,7 @@
 #include "common/RefCountedObj.h"
 #include "common/ThrottleInterface.h"
 #include "common/config.h"
+#include "common/ref.h"
 #include "common/debug.h"
 #include "common/zipkin_trace.h"
 #include "include/ceph_assert.h" // Because intrusive_ptr clobbers our assert...
@@ -61,6 +62,8 @@
 #define MSG_CONFIG           62
 #define MSG_GET_CONFIG       63
 
+#define MSG_MON_GET_PURGED_SNAPS 76
+#define MSG_MON_GET_PURGED_SNAPS_REPLY 77
 
 // osd internal
 #define MSG_OSD_PING         70
@@ -69,6 +72,7 @@
 #define MSG_OSD_ALIVE        73
 #define MSG_OSD_MARK_ME_DOWN 74
 #define MSG_OSD_FULL         75
+#define MSG_OSD_MARK_ME_DEAD 123
 
 // removed right after luminous
 //#define MSG_OSD_SUBOP        76
@@ -186,9 +190,6 @@
 #define MSG_CRC_HEADER         (1 << 1)
 #define MSG_CRC_ALL            (MSG_CRC_DATA | MSG_CRC_HEADER)
 
-// Xio Testing
-//#define MSG_DATA_PING		  0x602
-// Xio intends to define messages 0x603..0x606
 
 // Special
 #define MSG_NOP                   0x607
@@ -218,18 +219,6 @@
 // ======================================================
 
 // abstract Message class
-
-// XioMessenger conditional trace flags
-#define MSG_MAGIC_XIO          0x0002
-#define MSG_MAGIC_TRACE_XCON   0x0004
-#define MSG_MAGIC_TRACE_DTOR   0x0008
-#define MSG_MAGIC_TRACE_HDR    0x0010
-#define MSG_MAGIC_TRACE_XIO    0x0020
-#define MSG_MAGIC_TRACE_XMSGR  0x0040
-#define MSG_MAGIC_TRACE_CTR    0x0080
-
-// XioMessenger diagnostic "ping pong" flag (resend msg when send completes)
-#define MSG_MAGIC_REDUPE       0x0100
 
 class Message : public RefCountedObject {
 protected:
@@ -532,22 +521,8 @@ private:
 };
 
 namespace ceph {
-template<typename T> using ref_t = boost::intrusive_ptr<T>;
-template<typename T> using cref_t = boost::intrusive_ptr<const T>;
-template<class T, class U>
-boost::intrusive_ptr<T> ref_cast(const boost::intrusive_ptr<U>& r) noexcept {
-  return static_cast<T*>(r.get());
-}
-template<class T, class U>
-boost::intrusive_ptr<T> ref_cast(boost::intrusive_ptr<U>&& r) noexcept {
-  return {static_cast<T*>(r.detach()), false};
-}
-template<class T, class U>
-boost::intrusive_ptr<const T> ref_cast(const boost::intrusive_ptr<const U>& r) noexcept {
-  return static_cast<const T*>(r.get());
-}
 template<class T, typename... Args>
-boost::intrusive_ptr<T> make_message(Args&&... args) {
+ceph::ref_t<T> make_message(Args&&... args) {
   return {new T(std::forward<Args>(args)...), false};
 }
 }

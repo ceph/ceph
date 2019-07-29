@@ -13,7 +13,9 @@ import { MgrModuleFormComponent } from './ceph/cluster/mgr-modules/mgr-module-fo
 import { MgrModuleListComponent } from './ceph/cluster/mgr-modules/mgr-module-list/mgr-module-list.component';
 import { MonitorComponent } from './ceph/cluster/monitor/monitor.component';
 import { OsdListComponent } from './ceph/cluster/osd/osd-list/osd-list.component';
-import { PrometheusListComponent } from './ceph/cluster/prometheus/prometheus-list/prometheus-list.component';
+import { AlertListComponent } from './ceph/cluster/prometheus/alert-list/alert-list.component';
+import { SilenceFormComponent } from './ceph/cluster/prometheus/silence-form/silence-form.component';
+import { SilenceListComponent } from './ceph/cluster/prometheus/silence-list/silence-list.component';
 import { DashboardComponent } from './ceph/dashboard/dashboard/dashboard.component';
 import { Nfs501Component } from './ceph/nfs/nfs-501/nfs-501.component';
 import { NfsFormComponent } from './ceph/nfs/nfs-form/nfs-form.component';
@@ -21,12 +23,15 @@ import { NfsListComponent } from './ceph/nfs/nfs-list/nfs-list.component';
 import { PerformanceCounterComponent } from './ceph/performance-counter/performance-counter/performance-counter.component';
 import { LoginComponent } from './core/auth/login/login.component';
 import { SsoNotFoundComponent } from './core/auth/sso/sso-not-found/sso-not-found.component';
+import { UserPasswordFormComponent } from './core/auth/user-password-form/user-password-form.component';
 import { ForbiddenComponent } from './core/forbidden/forbidden.component';
 import { NotFoundComponent } from './core/not-found/not-found.component';
+import { ActionLabels, URLVerbs } from './shared/constants/app.constants';
 import { BreadcrumbsResolver, IBreadcrumb } from './shared/models/breadcrumbs';
 import { AuthGuardService } from './shared/services/auth-guard.service';
 import { FeatureTogglesGuardService } from './shared/services/feature-toggles-guard.service';
 import { ModuleStatusGuardService } from './shared/services/module-status-guard.service';
+import { NoSsoGuardService } from './shared/services/no-sso-guard.service';
 
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
   resolve(route: ActivatedRouteSnapshot) {
@@ -90,7 +95,7 @@ const routes: Routes = [
       {
         path: 'edit/:name',
         component: ConfigurationFormComponent,
-        data: { breadcrumbs: 'Edit' }
+        data: { breadcrumbs: ActionLabels.EDIT }
       }
     ]
   },
@@ -108,9 +113,37 @@ const routes: Routes = [
   },
   {
     path: 'alerts',
-    component: PrometheusListComponent,
+    component: AlertListComponent,
     canActivate: [AuthGuardService],
     data: { breadcrumbs: 'Cluster/Alerts' }
+  },
+  {
+    path: 'silence',
+    canActivate: [AuthGuardService],
+    data: { breadcrumbs: 'Cluster/Silences' },
+    children: [
+      { path: '', component: SilenceListComponent },
+      {
+        path: URLVerbs.CREATE,
+        component: SilenceFormComponent,
+        data: { breadcrumbs: ActionLabels.CREATE }
+      },
+      {
+        path: `${URLVerbs.CREATE}/:id`,
+        component: SilenceFormComponent,
+        data: { breadcrumbs: ActionLabels.CREATE }
+      },
+      {
+        path: `${URLVerbs.EDIT}/:id`,
+        component: SilenceFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
+      },
+      {
+        path: `${URLVerbs.RECREATE}/:id`,
+        component: SilenceFormComponent,
+        data: { breadcrumbs: ActionLabels.RECREATE }
+      }
+    ]
   },
   {
     path: 'perf_counters/:type/:id',
@@ -178,13 +211,28 @@ const routes: Routes = [
     },
     loadChildren: './ceph/rgw/rgw.module#RoutedRgwModule'
   },
-  // Dashboard Settings
+  // User/Role Management
   {
     path: 'user-management',
     canActivate: [AuthGuardService],
     canActivateChild: [AuthGuardService],
     data: { breadcrumbs: 'User management', path: null },
     loadChildren: './core/auth/auth.module#RoutedAuthModule'
+  },
+  // User Profile
+  {
+    path: 'user-profile',
+    canActivate: [AuthGuardService],
+    canActivateChild: [AuthGuardService],
+    data: { breadcrumbs: 'User profile', path: null },
+    children: [
+      {
+        path: URLVerbs.EDIT,
+        component: UserPasswordFormComponent,
+        canActivate: [NoSsoGuardService],
+        data: { breadcrumbs: ActionLabels.EDIT }
+      }
+    ]
   },
   // NFS
   {
@@ -206,11 +254,15 @@ const routes: Routes = [
     },
     children: [
       { path: '', component: NfsListComponent },
-      { path: 'add', component: NfsFormComponent, data: { breadcrumbs: 'Add' } },
       {
-        path: 'edit/:cluster_id/:export_id',
+        path: URLVerbs.CREATE,
         component: NfsFormComponent,
-        data: { breadcrumbs: 'Edit' }
+        data: { breadcrumbs: ActionLabels.CREATE }
+      },
+      {
+        path: `${URLVerbs.EDIT}/:cluster_id/:export_id`,
+        component: NfsFormComponent,
+        data: { breadcrumbs: ActionLabels.EDIT }
       }
     ]
   },

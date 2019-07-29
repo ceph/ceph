@@ -5,7 +5,7 @@ Source: http://ceph.com/
 
 Files: *
 Copyright: (c) 2004-2010 by Sage Weil <sage@newdream.net>
-License: LGPL2.1 (see COPYING-LGPL2.1)
+License: LGPL-2.1 or LGPL-3 (see COPYING-LGPL2.1 and COPYING-LGPL3)
 
 Files: cmake/modules/FindLTTngUST.cmake
 Copyright:
@@ -17,9 +17,12 @@ Files: doc/*
 Copyright: (c) 2010-2012 New Dream Network and contributors
 License: Creative Commons Attribution Share Alike 3.0 (CC-BY-SA-3.0)
 
+Files: bin/git-archive-all.sh
+License: GPL3
+
 Files: src/mount/canonicalize.c
 Copyright: Copyright (C) 1993 Rick Sladkey <jrs@world.std.com>
-License: LGPL2 or later (see COPYING-GPL2)
+License: LGPL-2 or later
 
 Files: src/os/btrfs_ioctl.h
 Copyright: Copyright (C) 2007 Oracle.  All rights reserved.
@@ -30,13 +33,19 @@ Copyright: None
 License: Public domain
 
 Files: src/common/bloom_filter.hpp
-Copyright: Copyright (C) 2000 Arash Partow
+Copyright: Copyright (C) 2000 Arash Partow <arash@partow.net>
 License: Boost Software License, Version 1.0
 
 Files: src/common/crc32c_intel*:
 Copyright:
     Copyright 2012-2013 Intel Corporation All Rights Reserved.
 License: BSD 3-clause
+
+Files: src/common/deleter.h
+Copyright:
+    Copyright (C) 2014 Cloudius Systems, Ltd.
+License:
+    Apache-2.0
 
 Files: src/common/sctp_crc32.c:
 Copyright:
@@ -69,6 +78,18 @@ License:
   ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF
   THE POSSIBILITY OF SUCH DAMAGE.
 
+Files: src/common/sstring.hh
+Copyright:
+    Copyright 2014 Cloudius Systems
+License:
+    Apache-2.0
+
+Files: src/include/cpp-btree
+Copyright:
+    Copyright 2013 Google Inc. All Rights Reserved.
+License:
+    Apache-2.0
+
 Files: src/json_spirit
 Copyright:
 	Copyright John W. Wilkinson 2007 - 2011
@@ -98,11 +119,9 @@ License:
   FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR
   OTHER DEALINGS IN THE SOFTWARE.
 
-
-
 Files: src/test/common/Throttle.cc src/test/filestore/chain_xattr.cc
 Copyright: Copyright (C) 2013 Cloudwatt <libre.licensing@cloudwatt.com>
-License: LGPL2.1 or later
+License: LGPL-2.1 or later
 
 Files: src/osd/ErasureCodePluginJerasure/*.{c,h}
 Copyright: Copyright (c) 2011, James S. Plank <plank@cs.utk.edu>
@@ -139,7 +158,7 @@ License:
 Packaging:
     Copyright (C) 2004-2009 by Sage Weil <sage@newdream.net>
     Copyright (C) 2010 Canonical, Ltd.
-    Licensed under LGPL-2.1
+    Licensed under LGPL-2.1 or LGPL-3.0
 
 Files: src/test/perf_local.cc
 Copyright:
@@ -147,3 +166,17 @@ Copyright:
   (c) 2011 Facebook
 License:
   The MIT License
+
+File: qa/workunits/erasure-code/jquery.js
+  Copyright 2012 jQuery Foundation and other contributors
+  Released under the MIT license
+  http://jquery.org/license
+
+Files: qa/workunits/erasure-code/jquery.{flot.categories,flot}.js
+  Copyright (c) 2007-2014 IOLA and Ole Laursen.
+  Licensed under the MIT license.
+
+Files: src/include/timegm.h
+  Copyright (C) Copyright Howard Hinnant
+  Copyright (C) Copyright 2010-2011 Vicente J. Botet Escriba
+  License: Boost Software License, Version 1.0

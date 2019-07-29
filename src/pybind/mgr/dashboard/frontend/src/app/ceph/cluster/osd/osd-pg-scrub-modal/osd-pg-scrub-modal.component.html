@@ -1,0 +1,47 @@
+<cd-modal [modalRef]="bsModalRef">
+  <ng-container i18n="form title|Example: Create Pool@@formTitle"
+                class="modal-title">{{ action | titlecase }} {{ resource | upperFirst }}</ng-container>
+
+  <ng-container class="modal-content">
+    <form #formDir="ngForm"
+          [formGroup]="osdPgScrubForm"
+          novalidate>
+      <div class="modal-body osd-modal">
+        <!-- Basic -->
+        <cd-config-option [optionNames]="basicOptions"
+                          [optionsForm]="osdPgScrubForm"
+                          [optionsFormDir]="formDir"
+                          [optionsFormGroupName]="'basicFormGroup'"
+                          #basicOptionsValues></cd-config-option>
+        <!-- Advanced -->
+        <div class="row">
+          <div class="col-sm-12">
+            <a class="pull-right margin-right-md"
+               (click)="advancedEnabled = true"
+               *ngIf="!advancedEnabled"
+               i18n>Advanced...</a>
+          </div>
+        </div>
+        <div *ngIf="advancedEnabled">
+          <h2 class="page-header"
+              i18n>Advanced configuration options</h2>
+          <cd-config-option [optionNames]="advancedOptions"
+                            [optionsForm]="osdPgScrubForm"
+                            [optionsFormDir]="formDir"
+                            [optionsFormGroupName]="'advancedFormGroup'"
+                            #advancedOptionsValues></cd-config-option>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <div class="button-group text-right">
+          <cd-submit-button *ngIf="permissions.configOpt.update"
+                            (submitAction)="submitAction()"
+                            i18n="form action button|Example: Create Pool@@formActionButton"
+                            [form]="osdPgScrubForm">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+          <cd-back-button [back]="bsModalRef.hide">
+          </cd-back-button>
+        </div>
+      </div>
+    </form>
+  </ng-container>
+</cd-modal>

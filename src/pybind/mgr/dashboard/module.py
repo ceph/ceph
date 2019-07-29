@@ -13,8 +13,9 @@ import tempfile
 import threading
 import time
 from uuid import uuid4
-from OpenSSL import crypto, SSL
-from mgr_module import MgrModule, MgrStandbyModule, Option
+from OpenSSL import crypto
+from mgr_module import MgrModule, MgrStandbyModule, Option, CLIWriteCommand
+from mgr_util import get_default_addr, ServerConfigException, verify_tls_files
 
 try:
     import cherrypy
@@ -71,8 +72,9 @@ if 'COVERAGE_ENABLED' in os.environ:
 # pylint: disable=wrong-import-position
 from . import logger, mgr
 from .controllers import generate_routes, json_error_page
+from .grafana import push_local_dashboards
 from .tools import NotificationQueue, RequestLoggingTool, TaskManager, \
-                   prepare_url_prefix
+                   prepare_url_prefix, str_to_bool
 from .services.auth import AuthManager, AuthManagerTool, JwtManager
 from .services.sso import SSO_COMMANDS, \
                           handle_sso_command
@@ -92,10 +94,6 @@ def os_exit_noop(*args):
 
 # pylint: disable=W0212
 os._exit = os_exit_noop
-
-
-class ServerConfigException(Exception):
-    pass
 
 
 class CherryPyConfig(object):
@@ -125,7 +123,8 @@ class CherryPyConfig(object):
 
         :returns our URI
         """
-        server_addr = self.get_localized_module_option('server_addr', '::')
+        server_addr = self.get_localized_module_option(
+            'server_addr', get_default_addr())
         ssl = self.get_localized_module_option('ssl', True)
         if not ssl:
             server_port = self.get_localized_module_option('server_port', 8080)
@@ -190,43 +189,7 @@ class CherryPyConfig(object):
             else:
                 pkey_fname = self.get_localized_module_option('key_file')
 
-            if not cert_fname or not pkey_fname:
-                raise ServerConfigException('no certificate configured')
-            if not os.path.isfile(cert_fname):
-                raise ServerConfigException('certificate %s does not exist' % cert_fname)
-            if not os.path.isfile(pkey_fname):
-                raise ServerConfigException('private key %s does not exist' % pkey_fname)
-
-            # Do some validations to the private key and certificate:
-            # - Check the type and format
-            # - Check the certificate expiration date
-            # - Check the consistency of the private key
-            # - Check that the private key and certificate match up
-            try:
-                with open(cert_fname) as f:
-                    x509 = crypto.load_certificate(crypto.FILETYPE_PEM, f.read())
-                    if x509.has_expired():
-                        self.log.warning(
-                            'Certificate {} has been expired'.format(cert_fname))
-            except (ValueError, crypto.Error) as e:
-                raise ServerConfigException(
-                    'Invalid certificate {}: {}'.format(cert_fname, str(e)))
-            try:
-                with open(pkey_fname) as f:
-                    pkey = crypto.load_privatekey(crypto.FILETYPE_PEM, f.read())
-                    pkey.check()
-            except (ValueError, crypto.Error) as e:
-                raise ServerConfigException(
-                    'Invalid private key {}: {}'.format(pkey_fname, str(e)))
-            try:
-                context = SSL.Context(SSL.TLSv1_METHOD)
-                context.use_certificate_file(cert_fname, crypto.FILETYPE_PEM)
-                context.use_privatekey_file(pkey_fname, crypto.FILETYPE_PEM)
-                context.check_privatekey()
-            except crypto.Error as e:
-                self.log.warning(
-                    'Private key {} and certificate {} do not match up: {}'.format(
-                        pkey_fname, cert_fname, str(e)))
+            verify_tls_files(cert_fname, pkey_fname)
 
             config['server.ssl_module'] = 'builtin'
             config['server.ssl_certificate'] = cert_fname
@@ -289,13 +252,18 @@ class Module(MgrModule, CherryPyConfig):
             "desc": "Create self signed certificate",
             "perm": "w"
         },
+        {
+            "cmd": "dashboard grafana dashboards update",
+            "desc": "Push dashboards to Grafana",
+            "perm": "w",
+        },
     ]
     COMMANDS.extend(options_command_list())
     COMMANDS.extend(SSO_COMMANDS)
     PLUGIN_MANAGER.hook.register_commands()
 
     MODULE_OPTIONS = [
-        Option(name='server_addr', type='str', default='::'),
+        Option(name='server_addr', type='str', default=get_default_addr()),
         Option(name='server_port', type='int', default=8080),
         Option(name='ssl_server_port', type='int', default=8443),
         Option(name='jwt_token_ttl', type='int', default=28800),
@@ -374,6 +342,16 @@ class Module(MgrModule, CherryPyConfig):
         NotificationQueue.start_queue()
         TaskManager.init()
         logger.info('Engine started.')
+        update_dashboards = str_to_bool(
+            self.get_module_option('GRAFANA_UPDATE_DASHBOARDS', 'False'))
+        if update_dashboards:
+            logger.info('Starting Grafana dashboard task')
+            TaskManager.run(
+                'grafana/dashboards/update',
+                {},
+                push_local_dashboards,
+                kwargs=dict(tries=10, sleep=60),
+            )
         # wait for the shutdown event
         self.shutdown_event.wait()
         self.shutdown_event.clear()
@@ -386,6 +364,30 @@ class Module(MgrModule, CherryPyConfig):
         CherryPyConfig.shutdown(self)
         logger.info('Stopping engine...')
         self.shutdown_event.set()
+
+    @CLIWriteCommand("dashboard set-ssl-certificate",
+                     "name=mgr_id,type=CephString,req=false")
+    def set_ssl_certificate(self, mgr_id=None, inbuf=None):
+        if inbuf is None:
+            return -errno.EINVAL, '',\
+                   'Please specify the certificate file with "-i" option'
+        if mgr_id is not None:
+            self.set_store('{}/crt'.format(mgr_id), inbuf)
+        else:
+            self.set_store('crt', inbuf)
+        return 0, 'SSL certificate updated', ''
+
+    @CLIWriteCommand("dashboard set-ssl-certificate-key",
+                     "name=mgr_id,type=CephString,req=false")
+    def set_ssl_certificate_key(self, mgr_id=None, inbuf=None):
+        if inbuf is None:
+            return -errno.EINVAL, '',\
+                   'Please specify the certificate key file with "-i" option'
+        if mgr_id is not None:
+            self.set_store('{}/key'.format(mgr_id), inbuf)
+        else:
+            self.set_store('key', inbuf)
+        return 0, 'SSL certificate key updated', ''
 
     def handle_command(self, inbuf, cmd):
         # pylint: disable=too-many-return-statements
@@ -404,6 +406,9 @@ class Module(MgrModule, CherryPyConfig):
         if cmd['prefix'] == 'dashboard create-self-signed-cert':
             self.create_self_signed_cert()
             return 0, 'Self-signed certificate created', ''
+        if cmd['prefix'] == 'dashboard grafana dashboards update':
+            push_local_dashboards()
+            return 0, 'Grafana dashboards updated', ''
 
         return (-errno.EINVAL, '', 'Command not found \'{0}\''
                 .format(cmd['prefix']))

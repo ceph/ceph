@@ -3,6 +3,7 @@ import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 import { RouterModule, Routes } from '@angular/router';
 
+import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { TreeModule } from 'ng2-tree';
 import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
@@ -62,7 +63,8 @@ import { RbdTrashRestoreModalComponent } from './rbd-trash-restore-modal/rbd-tra
     ModalModule.forRoot(),
     SharedModule,
     RouterModule,
-    TreeModule
+    TreeModule,
+    NgBootstrapFormValidationModule
   ],
   declarations: [
     RbdListComponent,
@@ -149,9 +151,9 @@ const routes: Routes = [
         children: [
           { path: '', component: IscsiTargetListComponent },
           {
-            path: URLVerbs.ADD,
+            path: URLVerbs.CREATE,
             component: IscsiTargetFormComponent,
-            data: { breadcrumbs: ActionLabels.ADD }
+            data: { breadcrumbs: ActionLabels.CREATE }
           },
           {
             path: `${URLVerbs.EDIT}/:target_iqn`,

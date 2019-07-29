@@ -27,6 +27,7 @@
 #include <boost/scoped_ptr.hpp>
 #include <boost/optional/optional_io.hpp>
 #include <boost/variant.hpp>
+#include <boost/smart_ptr/local_shared_ptr.hpp>
 
 #include "include/rados/rados_types.hpp"
 #include "include/mempool.h"
@@ -67,6 +68,7 @@
 #define CEPH_OSD_FEATURE_INCOMPAT_MISSING CompatSet::Feature(14, "explicit missing set")
 #define CEPH_OSD_FEATURE_INCOMPAT_FASTINFO CompatSet::Feature(15, "fastinfo pg attr")
 #define CEPH_OSD_FEATURE_INCOMPAT_RECOVERY_DELETES CompatSet::Feature(16, "deletes in missing set")
+#define CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER2 CompatSet::Feature(17, "new snapmapper key structure")
 
 
 /// pool priority range set by user
@@ -135,6 +137,12 @@ typedef std::map<std::string,std::string> osd_alert_list_t;
 /// map osd id -> alert_list_t
 typedef std::map<int, osd_alert_list_t> osd_alerts_t;
 void dump(ceph::Formatter* f, const osd_alerts_t& alerts);
+
+
+typedef interval_set<
+  snapid_t,
+  mempool::osdmap::flat_map<snapid_t,snapid_t>> snap_interval_set_t;
+
 
 /**
  * osd request identifier
@@ -537,6 +545,9 @@ struct spg_t {
   }
   uint64_t pool() const {
     return pgid.pool();
+  }
+  void reset_shard(shard_id_t s) {
+    shard = s;
   }
 
   static const uint8_t calc_name_buf_size = pg_t::calc_name_buf_size + 4; // 36 + len('s') + len("255");
@@ -1455,12 +1466,18 @@ public:
   typedef enum {
     TYPE_FINGERPRINT_NONE = 0,
     TYPE_FINGERPRINT_SHA1 = 1,     
+    TYPE_FINGERPRINT_SHA256 = 2,     
+    TYPE_FINGERPRINT_SHA512 = 3,     
   } fingerprint_t;
   static fingerprint_t get_fingerprint_from_str(const std::string& s) {
     if (s == "none")
       return TYPE_FINGERPRINT_NONE;
     if (s == "sha1")
       return TYPE_FINGERPRINT_SHA1;
+    if (s == "sha256")
+      return TYPE_FINGERPRINT_SHA256;
+    if (s == "sha512")
+      return TYPE_FINGERPRINT_SHA512;
     return (fingerprint_t)-1;
   }
   const fingerprint_t get_fingerprint_type() const {
@@ -1479,6 +1496,8 @@ public:
     switch (m) {
     case TYPE_FINGERPRINT_NONE: return "none";
     case TYPE_FINGERPRINT_SHA1: return "sha1";
+    case TYPE_FINGERPRINT_SHA256: return "sha256";
+    case TYPE_FINGERPRINT_SHA512: return "sha512";
     default: return "unknown";
     }
   }
@@ -1691,17 +1710,11 @@ public:
   bool is_unmanaged_snaps_mode() const;
   bool is_removed_snap(snapid_t s) const;
 
-  /*
-   * build set of known-removed sets from either pool snaps or
-   * explicit removed_snaps set.
-   */
-  void build_removed_snaps(interval_set<snapid_t>& rs) const;
-  bool maybe_updated_removed_snaps(const interval_set<snapid_t>& cached) const;
   snapid_t snap_exists(const char *s) const;
   void add_snap(const char *n, utime_t stamp);
-  void add_unmanaged_snap(uint64_t& snapid);
+  uint64_t add_unmanaged_snap(bool preoctopus_compat);
   void remove_snap(snapid_t s);
-  void remove_unmanaged_snap(snapid_t s);
+  void remove_unmanaged_snap(snapid_t s, bool preoctopus_compat);
 
   SnapContext get_snap_context() const;
 
@@ -2352,6 +2365,9 @@ struct osd_stat_t {
 
   uint32_t num_pgs = 0;
 
+  uint32_t num_osds = 0;
+  uint32_t num_per_pool_osds = 0;
+
   osd_stat_t() : snap_trim_queue_len(0), num_snap_trimming(0),
        num_shards_repaired(0)	{}
 
@@ -2363,6 +2379,8 @@ struct osd_stat_t {
     op_queue_age_hist.add(o.op_queue_age_hist);
     os_perf_stat.add(o.os_perf_stat);
     num_pgs += o.num_pgs;
+    num_osds += o.num_osds;
+    num_per_pool_osds += o.num_per_pool_osds;
     for (const auto& a : o.os_alerts) {
       auto& target = os_alerts[a.first];
       for (auto& i : a.second) {
@@ -2378,6 +2396,8 @@ struct osd_stat_t {
     op_queue_age_hist.sub(o.op_queue_age_hist);
     os_perf_stat.sub(o.os_perf_stat);
     num_pgs -= o.num_pgs;
+    num_osds -= o.num_osds;
+    num_per_pool_osds -= o.num_per_pool_osds;
     for (const auto& a : o.os_alerts) {
       auto& target = os_alerts[a.first];
       for (auto& i : a.second) {
@@ -2403,7 +2423,9 @@ inline bool operator==(const osd_stat_t& l, const osd_stat_t& r) {
     l.hb_peers == r.hb_peers &&
     l.op_queue_age_hist == r.op_queue_age_hist &&
     l.os_perf_stat == r.os_perf_stat &&
-    l.num_pgs == r.num_pgs;
+    l.num_pgs == r.num_pgs &&
+    l.num_osds == r.num_osds &&
+    l.num_per_pool_osds == r.num_per_pool_osds;
 }
 inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
   return !(l == r);
@@ -2487,9 +2509,9 @@ struct pool_stat_t {
   // In legacy mode used and netto values are the same. But for new per-pool
   // collection 'used' provides amount of space ALLOCATED at all related OSDs 
   // and 'netto' is amount of stored user data.
-  uint64_t get_allocated_bytes() const {
+  uint64_t get_allocated_bytes(bool per_pool) const {
     uint64_t allocated_bytes;
-    if (num_store_stats) {
+    if (per_pool) {
       allocated_bytes = store_stats.allocated;
     } else {
       // legacy mode, use numbers from 'stats'
@@ -2500,9 +2522,9 @@ struct pool_stat_t {
     allocated_bytes += stats.sum.num_omap_bytes;
     return allocated_bytes;
   }
-  uint64_t get_user_bytes(float raw_used_rate) const {
+  uint64_t get_user_bytes(float raw_used_rate, bool per_pool) const {
     uint64_t user_bytes;
-    if (num_store_stats) {
+    if (per_pool) {
       user_bytes = raw_used_rate ? store_stats.data_stored / raw_used_rate : 0;
     } else {
       // legacy mode, use numbers from 'stats'
@@ -2716,13 +2738,11 @@ WRITE_CLASS_ENCODER(pg_history_t)
 
 inline std::ostream& operator<<(std::ostream& out, const pg_history_t& h) {
   return out << "ec=" << h.epoch_created << "/" << h.epoch_pool_created
-	     << " lis/c " << h.last_interval_started
+	     << " lis/c=" << h.last_interval_started
 	     << "/" << h.last_interval_clean
-	     << " les/c/f " << h.last_epoch_started << "/" << h.last_epoch_clean
+	     << " les/c/f=" << h.last_epoch_started << "/" << h.last_epoch_clean
 	     << "/" << h.last_epoch_marked_full
-	     << " " << h.same_up_since
-	     << "/" << h.same_interval_since
-	     << "/" << h.same_primary_since;
+	     << " sis=" << h.same_interval_since;
 }
 
 
@@ -2747,7 +2767,6 @@ struct pg_info_t {
   eversion_t log_tail;         ///< oldest log entry.
 
   hobject_t last_backfill;     ///< objects >= this and < last_complete may be missing
-  bool last_backfill_bitwise;  ///< true if last_backfill reflects a bitwise (vs nibblewise) sort
 
   interval_set<snapid_t> purged_snaps;
 
@@ -2766,7 +2785,6 @@ struct pg_info_t {
       l.last_user_version == r.last_user_version &&
       l.log_tail == r.log_tail &&
       l.last_backfill == r.last_backfill &&
-      l.last_backfill_bitwise == r.last_backfill_bitwise &&
       l.purged_snaps == r.purged_snaps &&
       l.stats == r.stats &&
       l.history == r.history &&
@@ -2777,8 +2795,7 @@ struct pg_info_t {
     : last_epoch_started(0),
       last_interval_started(0),
       last_user_version(0),
-      last_backfill(hobject_t::get_max()),
-      last_backfill_bitwise(false)
+      last_backfill(hobject_t::get_max())
   { }
   // cppcheck-suppress noExplicitConstructor
   pg_info_t(spg_t p)
@@ -2786,13 +2803,11 @@ struct pg_info_t {
       last_epoch_started(0),
       last_interval_started(0),
       last_user_version(0),
-      last_backfill(hobject_t::get_max()),
-      last_backfill_bitwise(false)
+      last_backfill(hobject_t::get_max())
   { }
   
   void set_last_backfill(hobject_t pos) {
     last_backfill = pos;
-    last_backfill_bitwise = true;
   }
 
   bool is_empty() const { return last_update.version == 0; }
@@ -2822,8 +2837,7 @@ inline std::ostream& operator<<(std::ostream& out, const pg_info_t& pgi)
     out << " (" << pgi.log_tail << "," << pgi.last_update << "]";
   }
   if (pgi.is_incomplete())
-    out << " lb " << pgi.last_backfill
-	<< (pgi.last_backfill_bitwise ? " (bitwise)" : " (NIBBLEWISE)");
+    out << " lb " << pgi.last_backfill;
   //out << " c " << pgi.epoch_created;
   out << " local-lis/les=" << pgi.last_interval_started
       << "/" << pgi.last_epoch_started;
@@ -3014,6 +3028,11 @@ class OSDMap;
  * the might_have_unfound set
  */
 class PastIntervals {
+#ifdef WITH_SEASTAR
+  using OSDMapRef = boost::local_shared_ptr<const OSDMap>;
+#else
+  using OSDMapRef = std::shared_ptr<const OSDMap>;
+#endif
 public:
   struct pg_interval_t {
     std::vector<int32_t> up, acting;
@@ -3192,8 +3211,8 @@ public:
     const std::vector<int> &new_up,                  ///< [in] up as of osdmap
     epoch_t same_interval_since,                ///< [in] as of osdmap
     epoch_t last_epoch_clean,                   ///< [in] current
-    std::shared_ptr<const OSDMap> osdmap,      ///< [in] current map
-    std::shared_ptr<const OSDMap> lastmap,     ///< [in] last map
+    OSDMapRef osdmap,      ///< [in] current map
+    OSDMapRef lastmap,     ///< [in] last map
     pg_t pgid,                                  ///< [in] pgid for pg
     const IsPGRecoverablePredicate &could_have_gone_active, ///< [in] predicate whether the pg can be active
     PastIntervals *past_intervals,              ///< [out] intervals
@@ -4142,7 +4161,7 @@ public:
     return head.version == 0 && head.epoch == 0;
   }
 
-  size_t approx_size() const {
+  uint64_t approx_size() const {
     return head.version - tail.version;
   }
 
@@ -4965,22 +4984,19 @@ inline std::ostream& operator<<(std::ostream& out, const ObjectExtent &ex)
 class OSDSuperblock {
 public:
   uuid_d cluster_fsid, osd_fsid;
-  int32_t whoami;    // my role in this fs.
-  epoch_t current_epoch;             // most recent epoch
-  epoch_t oldest_map, newest_map;    // oldest/newest maps we have.
-  double weight;
+  int32_t whoami = -1;    // my role in this fs.
+  epoch_t current_epoch = 0;             // most recent epoch
+  epoch_t oldest_map = 0, newest_map = 0;    // oldest/newest maps we have.
+  double weight = 0.0;
 
   CompatSet compat_features;
 
   // last interval over which i mounted and was then active
-  epoch_t mounted;     // last epoch i mounted
-  epoch_t clean_thru;  // epoch i was active and clean thru
+  epoch_t mounted = 0;     // last epoch i mounted
+  epoch_t clean_thru = 0;  // epoch i was active and clean thru
 
-  OSDSuperblock() : 
-    whoami(-1), 
-    current_epoch(0), oldest_map(0), newest_map(0), weight(0),
-    mounted(0), clean_thru(0) {
-  }
+  epoch_t purged_snaps_last = 0;
+  utime_t last_purged_snaps_scrub;
 
   void encode(ceph::buffer::list &bl) const;
   void decode(ceph::buffer::list::const_iterator &bl);
@@ -5014,6 +5030,7 @@ inline std::ostream& operator<<(std::ostream& out, const OSDSuperblock& sb)
  */
 struct SnapSet {
   snapid_t seq;
+  // NOTE: this is for pre-octopus compatibility only! remove in Q release
   std::vector<snapid_t> snaps;    // descending
   std::vector<snapid_t> clones;   // ascending
   std::map<snapid_t, interval_set<uint64_t> > clone_overlap;  // overlap w/ next newest
@@ -5040,11 +5057,14 @@ struct SnapSet {
   SnapContext get_ssc_as_of(snapid_t as_of) const {
     SnapContext out;
     out.seq = as_of;
-    for (std::vector<snapid_t>::const_iterator i = snaps.begin();
-	 i != snaps.end();
-	 ++i) {
-      if (*i <= as_of)
-	out.snaps.push_back(*i);
+    for (auto p = clone_snaps.rbegin();
+	 p != clone_snaps.rend();
+	 ++p) {
+      for (auto snap : p->second) {
+	if (snap <= as_of) {
+	  out.snaps.push_back(snap);
+	}
+      }
     }
     return out;
   }
@@ -6007,6 +6027,14 @@ static const string_view biginfo_key = "_biginfo"sv;
 static const string_view epoch_key = "_epoch"sv;
 static const string_view fastinfo_key = "_fastinfo"sv;
 
+static const __u8 pg_latest_struct_v = 10;
+// v10 is the new past_intervals encoding
+// v9 was fastinfo_key addition
+// v8 was the move to a per-pg pgmeta object
+// v7 was SnapMapper addition in 86658392516d5175b2756659ef7ffaaf95b0f8ad
+// (first appeared in cuttlefish).
+static const __u8 pg_compat_struct_v = 10;
+
 int prepare_info_keymap(
   CephContext* cct,
   map<string,bufferlist> *km,
@@ -6019,6 +6047,16 @@ int prepare_info_keymap(
   bool try_fast_info,
   PerfCounters *logger = nullptr,
   DoutPrefixProvider *dpp = nullptr);
+
+namespace ceph::os {
+  class Transaction;
+};
+
+void create_pg_collection(
+  ceph::os::Transaction& t, spg_t pgid, int bits);
+
+void init_pg_ondisk(
+  ceph::os::Transaction& t, spg_t pgid, const pg_pool_t *pool);
 
 // omap specific stats
 struct omap_stat_t {

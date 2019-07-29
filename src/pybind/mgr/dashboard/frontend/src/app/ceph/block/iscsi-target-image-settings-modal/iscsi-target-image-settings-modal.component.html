@@ -5,54 +5,67 @@
   </ng-container>
 
   <ng-container class="modal-content">
-    <div class="modal-body">
-      <p class="alert-warning"
-         i18n>Changing these parameters from their default values is usually not necessary.</p>
+    <form name="settingsForm"
+          class="form"
+          #formDir="ngForm"
+          [formGroup]="settingsForm"
+          novalidate>
+      <div class="modal-body">
+        <p class="alert-warning"
+           i18n>Changing these parameters from their default values is usually not necessary.</p>
 
-      <!-- BACKSTORE -->
-      <div class="form-group row">
-        <div class="col-sm-12">
-          <label class="control-label"
-                 i18n>Backstore</label>
-          <select id="backstore"
-                  name="backstore"
-                  class="form-control"
-                  [(ngModel)]="model.backstore"
-                  [disabled]="backstores.length == 1">
-            <option *ngFor="let bs of backstores"
-                    [value]="bs">{{ bs | iscsiBackstore }}</option>
-          </select>
+        <!-- BACKSTORE -->
+        <div class="form-group row">
+          <div class="col-sm-12">
+            <label class="col-form-label"
+                   i18n>Backstore</label>
+            <select id="backstore"
+                    name="backstore"
+                    class="form-control custom-select"
+                    formControlName="backstore">
+              <option *ngFor="let bs of backstores"
+                      [value]="bs">{{ bs | iscsiBackstore }}</option>
+            </select>
+          </div>
+        </div>
+
+        <!-- CONTROLS -->
+        <ng-container *ngFor="let bs of backstores">
+          <ng-container *ngIf="settingsForm.value['backstore'] === bs">
+            <div class="form-group row"
+                 *ngFor="let setting of disk_default_controls[bs] | keyvalue">
+              <div class="col-sm-12">
+                <label class="col-form-label"
+                       for="{{ setting.key }}">{{ setting.key }}</label>
+                <input type="number"
+                       class="form-control"
+                       [formControlName]="setting.key">
+                <span class="invalid-feedback"
+                      *ngIf="settingsForm.showError(setting.key, formDir, 'min')">
+                  <ng-container i18n>Must be greater than or equal to {{ disk_controls_limits[bs][setting.key]['min'] }}.</ng-container>
+                </span>
+                <span class="invalid-feedback"
+                      *ngIf="settingsForm.showError(setting.key, formDir, 'max')">
+                  <ng-container i18n>Must be less than or equal to {{ disk_controls_limits[bs][setting.key]['max'] }}.</ng-container>
+                </span>
+                <span class="form-text text-muted">{{ helpText[setting.key]?.help }}</span>
+              </div>
+            </div>
+          </ng-container>
+        </ng-container>
+      </div>
+
+      <div class="modal-footer">
+        <div class="button-group text-right">
+          <cd-submit-button i18n
+                            [form]="settingsForm"
+                            (submitAction)="save()">Confirm</cd-submit-button>
+          <cd-back-button [back]="modalRef.hide"
+                          name="Cancel"
+                          i18n-name>
+          </cd-back-button>
         </div>
       </div>
-
-      <!-- CONTROLS -->
-      <ng-container *ngFor="let bs of backstores">
-        <ng-container *ngIf="model.backstore === bs">
-          <div class="form-group row"
-               *ngFor="let setting of disk_default_controls[bs] | keyvalue">
-            <div class="col-sm-12">
-              <label class="control-label"
-                     for="{{ setting.key }}">{{ setting.key }}</label>
-              <input type="number"
-                     class="form-control"
-                     [(ngModel)]="model[bs][setting.key]">
-              <span class="help-block">{{ helpText[setting.key]?.help }}</span>
-            </div>
-          </div>
-        </ng-container>
-      </ng-container>
-    </div>
-
-    <div class="modal-footer">
-      <div class="button-group text-right">
-        <button class="btn btn-sm btn-primary"
-                (click)="save()"
-                i18n>Confirm</button>
-        <cd-back-button [back]="modalRef.hide"
-                        name="Cancel"
-                        i18n-name>
-        </cd-back-button>
-      </div>
-    </div>
+    </form>
   </ng-container>
 </cd-modal>

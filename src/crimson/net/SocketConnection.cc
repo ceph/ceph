@@ -21,12 +21,6 @@
 
 using namespace ceph::net;
 
-namespace {
-  seastar::logger& logger() {
-    return ceph::get_logger(ceph_subsys_ms);
-  }
-}
-
 SocketConnection::SocketConnection(SocketMessenger& messenger,
                                    Dispatcher& dispatcher,
                                    bool is_msgr2)
@@ -56,7 +50,8 @@ seastar::future<bool> SocketConnection::is_connected()
 
 seastar::future<> SocketConnection::send(MessageRef msg)
 {
-  logger().debug("{} --> {} === {}", messenger, get_peer_addr(), *msg);
+  // Cannot send msg from another core now, its ref counter can be contaminated!
+  ceph_assert(seastar::engine().cpu_id() == shard_id());
   return seastar::smp::submit_to(shard_id(), [this, msg=std::move(msg)] {
     return protocol->send(std::move(msg));
   });
@@ -126,12 +121,12 @@ seastar::shard_id SocketConnection::shard_id() const {
 void SocketConnection::print(ostream& out) const {
     messenger.print(out);
     if (side == side_t::none) {
-      out << " >> " << peer_addr;
+      out << " >> " << get_peer_name() << " " << peer_addr;
     } else if (side == side_t::acceptor) {
-      out << " >> " << peer_addr
-          << "@" << socket_port;
+      out << " >> " << get_peer_name() << " " << peer_addr
+          << "@" << ephemeral_port;
     } else { // side == side_t::connector
-      out << "@" << socket_port
-          << " >> " << peer_addr;
+      out << "@" << ephemeral_port
+          << " >> " << get_peer_name() << " " << peer_addr;
     }
 }

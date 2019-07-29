@@ -132,23 +132,33 @@ void osd_xinfo_t::dump(Formatter *f) const
   f->dump_int("laggy_interval", laggy_interval);
   f->dump_int("features", features);
   f->dump_unsigned("old_weight", old_weight);
+  f->dump_stream("last_purged_snaps_scrub") << last_purged_snaps_scrub;
+  f->dump_int("dead_epoch", dead_epoch);
 }
 
-void osd_xinfo_t::encode(ceph::buffer::list& bl) const
+void osd_xinfo_t::encode(ceph::buffer::list& bl, uint64_t enc_features) const
 {
-  ENCODE_START(3, 1, bl);
+  uint8_t v = 4;
+  if (!HAVE_FEATURE(enc_features, SERVER_OCTOPUS)) {
+    v = 3;
+  }
+  ENCODE_START(v, 1, bl);
   encode(down_stamp, bl);
   __u32 lp = laggy_probability * 0xfffffffful;
   encode(lp, bl);
   encode(laggy_interval, bl);
   encode(features, bl);
   encode(old_weight, bl);
+  if (v >= 4) {
+    encode(last_purged_snaps_scrub, bl);
+    encode(dead_epoch, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
 void osd_xinfo_t::decode(ceph::buffer::list::const_iterator& bl)
 {
-  DECODE_START(3, bl);
+  DECODE_START(4, bl);
   decode(down_stamp, bl);
   __u32 lp;
   decode(lp, bl);
@@ -162,6 +172,12 @@ void osd_xinfo_t::decode(ceph::buffer::list::const_iterator& bl)
     decode(old_weight, bl);
   else
     old_weight = 0;
+  if (struct_v >= 4) {
+    decode(last_purged_snaps_scrub, bl);
+    decode(dead_epoch, bl);
+  } else {
+    dead_epoch = 0;
+  }
   DECODE_FINISH(bl);
 }
 
@@ -180,7 +196,9 @@ ostream& operator<<(ostream& out, const osd_xinfo_t& xi)
   return out << "down_stamp " << xi.down_stamp
 	     << " laggy_probability " << xi.laggy_probability
 	     << " laggy_interval " << xi.laggy_interval
-	     << " old_weight " << xi.old_weight;
+	     << " old_weight " << xi.old_weight
+	     << " last_purged_snaps_scrub " << xi.last_purged_snaps_scrub
+	     << " dead_epoch " << xi.dead_epoch;
 }
 
 // ----------------------------------
@@ -481,7 +499,7 @@ void OSDMap::Incremental::encode_classic(ceph::buffer::list& bl, uint64_t featur
   encode(new_up_cluster, bl, features);
   encode(cluster_snapshot, bl);
   encode(new_uuid, bl);
-  encode(new_xinfo, bl);
+  encode(new_xinfo, bl, features);
   encode(new_hb_front_up, bl, features);
 }
 
@@ -598,7 +616,7 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
   }
 
   {
-    uint8_t target_v = 8;
+    uint8_t target_v = 9;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 2;
     } else if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
@@ -622,7 +640,7 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
     }
     encode(cluster_snapshot, bl);
     encode(new_uuid, bl);
-    encode(new_xinfo, bl);
+    encode(new_xinfo, bl, features);
     if (target_v < 7) {
       encode_addrvec_map_as_addr(new_hb_front_up, bl, features);
     } else {
@@ -641,6 +659,9 @@ void OSDMap::Incremental::encode(ceph::buffer::list& bl, uint64_t features) cons
     }
     if (target_v >= 8) {
       encode(new_crush_node_flags, bl);
+    }
+    if (target_v >= 9) {
+      encode(new_device_class_flags, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -851,7 +872,7 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
   }
 
   {
-    DECODE_START(8, bl); // extended, osd-only data
+    DECODE_START(9, bl); // extended, osd-only data
     decode(new_hb_back_up, bl);
     decode(new_up_thru, bl);
     decode(new_last_clean_interval, bl);
@@ -904,6 +925,9 @@ void OSDMap::Incremental::decode(ceph::buffer::list::const_iterator& bl)
     }
     if (struct_v >= 8) {
       decode(new_crush_node_flags, bl);
+    }
+    if (struct_v >= 9) {
+      decode(new_device_class_flags, bl);
     }
     DECODE_FINISH(bl); // osd-only data
   }
@@ -1211,6 +1235,18 @@ void OSDMap::Incremental::dump(Formatter *f) const
   f->open_array_section("new_crush_node_flags");
   for (auto& i : new_crush_node_flags) {
     f->open_object_section("node");
+    f->dump_int("id", i.first);
+    set<string> st;
+    calc_state_set(i.second, st);
+    for (auto& j : st) {
+      f->dump_string("flag", j);
+    }
+    f->close_section();
+  }
+  f->close_section();
+  f->open_array_section("new_device_class_flags");
+  for (auto& i : new_device_class_flags) {
+    f->open_object_section("device_class");
     f->dump_int("id", i.first);
     set<string> st;
     calc_state_set(i.second, st);
@@ -1775,73 +1811,99 @@ void OSDMap::clean_temps(CephContext *cct,
   }
 }
 
-void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
-                                    const OSDMap& oldmap,
-				    const OSDMap& nextmap,
-                                    Incremental *pending_inc)
+void OSDMap::get_upmap_pgs(vector<pg_t> *upmap_pgs) const
 {
-  ldout(cct, 10) << __func__ << dendl;
-  set<pg_t> to_check;
-  set<pg_t> to_cancel;
-  map<int, map<int, float>> rule_weight_map;
+  upmap_pgs->reserve(pg_upmap.size() + pg_upmap_items.size());
+  for (auto& p : pg_upmap)
+    upmap_pgs->push_back(p.first);
+  for (auto& p : pg_upmap_items)
+    upmap_pgs->push_back(p.first);
+}
 
-  for (auto& p : nextmap.pg_upmap) {
-    to_check.insert(p.first);
-  }
-  for (auto& p : nextmap.pg_upmap_items) {
-    to_check.insert(p.first);
-  }
-  for (auto& p : pending_inc->new_pg_upmap) {
-    to_check.insert(p.first);
-  }
-  for (auto& p : pending_inc->new_pg_upmap_items) {
-    to_check.insert(p.first);
-  }
+bool OSDMap::check_pg_upmaps(
+  CephContext *cct,
+  const vector<pg_t>& to_check,
+  vector<pg_t> *to_cancel,
+  map<pg_t, mempool::osdmap::vector<pair<int,int>>> *to_remap) const
+{
+  bool any_change = false;
+  map<int, map<int, float>> rule_weight_map;
   for (auto& pg : to_check) {
-    const pg_pool_t *pi = nextmap.get_pg_pool(pg.pool());
+    const pg_pool_t *pi = get_pg_pool(pg.pool());
     if (!pi || pg.ps() >= pi->get_pg_num_pending()) {
       ldout(cct, 0) << __func__ << " pg " << pg << " is gone or merge source"
 		    << dendl;
-      to_cancel.insert(pg);
+      to_cancel->push_back(pg);
       continue;
     }
     if (pi->is_pending_merge(pg, nullptr)) {
       ldout(cct, 0) << __func__ << " pg " << pg << " is pending merge"
 		    << dendl;
-      to_cancel.insert(pg);
+      to_cancel->push_back(pg);
       continue;
     }
-    vector<int> raw_up;
-    int primary;
-    nextmap.pg_to_raw_up(pg, &raw_up, &primary);
-    vector<int> up;
-    up.reserve(raw_up.size());
-    for (auto osd : raw_up) {
-      // skip non-existent/down osd for erasure-coded PGs
-      if (osd == CRUSH_ITEM_NONE)
-        continue;
-      up.push_back(osd);
+    vector<int> raw, up;
+    pg_to_raw_upmap(pg, &raw, &up);
+    auto i = pg_upmap.find(pg);
+    if (i != pg_upmap.end() && raw == i->second) {
+      ldout(cct, 10) << " removing redundant pg_upmap "
+                     << i->first << " " << i->second
+                     << dendl;
+      to_cancel->push_back(pg);
+      continue;
     }
-    auto crush_rule = nextmap.get_pg_pool_crush_rule(pg);
-    auto r = nextmap.crush->verify_upmap(cct,
-                                         crush_rule,
-                                         nextmap.get_pg_pool_size(pg),
-                                         up);
+    auto j = pg_upmap_items.find(pg);
+    if (j != pg_upmap_items.end()) {
+      mempool::osdmap::vector<pair<int,int>> newmap;
+      for (auto& p : j->second) {
+        if (std::find(raw.begin(), raw.end(), p.first) == raw.end()) {
+          // cancel mapping if source osd does not exist anymore
+          continue;
+        }
+        if (p.second != CRUSH_ITEM_NONE && p.second < max_osd &&
+            p.second >= 0 && osd_weight[p.second] == 0) {
+          // cancel mapping if target osd is out
+          continue;
+        }
+        newmap.push_back(p);
+      }
+      if (newmap.empty()) {
+        ldout(cct, 10) << " removing no-op pg_upmap_items "
+                       << j->first << " " << j->second
+                       << dendl;
+        to_cancel->push_back(pg);
+        continue;
+      } else if (newmap != j->second) {
+        ldout(cct, 10) << " simplifying partially no-op pg_upmap_items "
+                       << j->first << " " << j->second
+                       << " -> " << newmap
+                       << dendl;
+        to_remap->insert({pg, newmap});
+        any_change = true;
+        continue;
+      }
+    }
+    auto crush_rule = get_pg_pool_crush_rule(pg);
+    auto r = crush->verify_upmap(cct,
+                                 crush_rule,
+                                 get_pg_pool_size(pg),
+                                 up);
     if (r < 0) {
       ldout(cct, 0) << __func__ << " verify_upmap of pg " << pg
                     << " returning " << r
                     << dendl;
-      to_cancel.insert(pg);
+      to_cancel->push_back(pg);
       continue;
     }
     // below we check against crush-topology changing..
     map<int, float> weight_map;
     auto it = rule_weight_map.find(crush_rule);
     if (it == rule_weight_map.end()) {
-      auto r = nextmap.crush->get_rule_weight_osd_map(crush_rule, &weight_map);
+      auto r = crush->get_rule_weight_osd_map(crush_rule, &weight_map);
       if (r < 0) {
         lderr(cct) << __func__ << " unable to get crush weight_map for "
-                   << "crush_rule " << crush_rule << dendl;
+                   << "crush_rule " << crush_rule
+                   << dendl;
         continue;
       }
       rule_weight_map[crush_rule] = weight_map;
@@ -1855,55 +1917,77 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
       auto it = weight_map.find(osd);
       if (it == weight_map.end()) {
         // osd is gone or has been moved out of the specific crush-tree
-        to_cancel.insert(pg);
+        to_cancel->push_back(pg);
         break;
       }
-      auto adjusted_weight = nextmap.get_weightf(it->first) * it->second;
+      auto adjusted_weight = get_weightf(it->first) * it->second;
       if (adjusted_weight == 0) {
         // osd is out/crush-out
-        to_cancel.insert(pg);
+        to_cancel->push_back(pg);
         break;
       }
     }
   }
+  any_change = any_change || !to_cancel->empty();
+  return any_change;
+}
+
+void OSDMap::clean_pg_upmaps(
+  CephContext *cct,
+  Incremental *pending_inc,
+  const vector<pg_t>& to_cancel,
+  const map<pg_t, mempool::osdmap::vector<pair<int,int>>>& to_remap) const
+{
   for (auto &pg: to_cancel) {
-    { // pg_upmap
-      auto it = pending_inc->new_pg_upmap.find(pg);
-      if (it != pending_inc->new_pg_upmap.end()) {
-        ldout(cct, 10) << __func__ << " cancel invalid pending "
-                       << "pg_upmap entry "
-                       << it->first << "->" << it->second
-                       << dendl;
-        pending_inc->new_pg_upmap.erase(it);
-      }
-      if (oldmap.pg_upmap.count(pg)) {
-        ldout(cct, 10) << __func__ << " cancel invalid pg_upmap entry "
-                       << oldmap.pg_upmap.find(pg)->first << "->"
-                       << oldmap.pg_upmap.find(pg)->second
-                       << dendl;
-        pending_inc->old_pg_upmap.insert(pg);
-      }
+    auto i = pending_inc->new_pg_upmap.find(pg);
+    if (i != pending_inc->new_pg_upmap.end()) {
+      ldout(cct, 10) << __func__ << " cancel invalid pending "
+                     << "pg_upmap entry "
+                     << i->first << "->" << i->second
+                     << dendl;
+      pending_inc->new_pg_upmap.erase(i);
     }
-    { // pg_upmap_items
-      auto it = pending_inc->new_pg_upmap_items.find(pg);
-      if (it != pending_inc->new_pg_upmap_items.end()) {
-        ldout(cct, 10) << __func__ << " cancel invalid pending "
-                       << "pg_upmap_items entry "
-                       << it->first << "->" << it->second
-                       << dendl;
-        pending_inc->new_pg_upmap_items.erase(it);
-      }
-      if (oldmap.pg_upmap_items.count(pg)) {
-        ldout(cct, 10) << __func__ << " cancel invalid "
-                       << "pg_upmap_items entry "
-                       << oldmap.pg_upmap_items.find(pg)->first << "->"
-                       << oldmap.pg_upmap_items.find(pg)->second
-                       << dendl;
-        pending_inc->old_pg_upmap_items.insert(pg);
-      }
+    auto j = pg_upmap.find(pg);
+    if (j != pg_upmap.end()) {
+      ldout(cct, 10) << __func__ << " cancel invalid pg_upmap entry "
+                     << j->first << "->" << j->second
+                     << dendl;
+      pending_inc->old_pg_upmap.insert(pg);
+    }
+    auto p = pending_inc->new_pg_upmap_items.find(pg);
+    if (p != pending_inc->new_pg_upmap_items.end()) {
+      ldout(cct, 10) << __func__ << " cancel invalid pending "
+                     << "pg_upmap_items entry "
+                     << p->first << "->" << p->second
+                     << dendl;
+      pending_inc->new_pg_upmap_items.erase(p);
+    }
+    auto q = pg_upmap_items.find(pg);
+    if (q != pg_upmap_items.end()) {
+      ldout(cct, 10) << __func__ << " cancel invalid "
+                     << "pg_upmap_items entry "
+                     << q->first << "->" << q->second
+                     << dendl;
+      pending_inc->old_pg_upmap_items.insert(pg);
     }
   }
-  nextmap.clean_pg_upmaps(cct, pending_inc);
+  for (auto& i : to_remap)
+    pending_inc->new_pg_upmap_items[i.first] = i.second;
+}
+
+bool OSDMap::clean_pg_upmaps(
+  CephContext *cct,
+  Incremental *pending_inc) const
+{
+  ldout(cct, 10) << __func__ << dendl;
+  vector<pg_t> to_check;
+  vector<pg_t> to_cancel;
+  map<pg_t, mempool::osdmap::vector<pair<int,int>>> to_remap;
+
+  get_upmap_pgs(&to_check);
+  auto any_change = check_pg_upmaps(cct, to_check, &to_cancel, &to_remap);
+  clean_pg_upmaps(cct, pending_inc, to_cancel, to_remap);
+  return any_change;
 }
 
 int OSDMap::apply_incremental(const Incremental &inc)
@@ -2131,6 +2215,14 @@ int OSDMap::apply_incremental(const Incremental &inc)
     }
   }
 
+  for (auto& i : inc.new_device_class_flags) {
+    if (i.second) {
+      device_class_flags[i.first] = i.second;
+    } else {
+      device_class_flags.erase(i.first);
+    }
+  }
+
   // cluster snapshot?
   if (inc.cluster_snapshot.length()) {
     cluster_snapshot = inc.cluster_snapshot;
@@ -2178,6 +2270,14 @@ int OSDMap::apply_incremental(const Incremental &inc)
       // are decoding and applying on their end.  if we won't encode
       // it in the canonical version, don't change it.
       ++crush_version;
+    }
+    for (auto it = device_class_flags.begin();
+         it != device_class_flags.end();) {
+      const char* class_name = crush->get_class_name(it->first);
+      if (!class_name) // device class is gone
+        it = device_class_flags.erase(it);
+      else
+        it++;
     }
   }
 
@@ -2458,14 +2558,16 @@ void OSDMap::pg_to_raw_osds(pg_t pg, vector<int> *raw, int *primary) const
   *primary = _pick_primary(*raw);
 }
 
-void OSDMap::pg_to_raw_upmap(pg_t pg, vector<int> *raw_upmap) const
+void OSDMap::pg_to_raw_upmap(pg_t pg, vector<int>*raw,
+                             vector<int> *raw_upmap) const
 {
   auto pool = get_pg_pool(pg.pool());
   if (!pool) {
     raw_upmap->clear();
     return;
   }
-  _pg_to_raw_osds(*pool, pg, raw_upmap, NULL);
+  _pg_to_raw_osds(*pool, pg, raw, NULL);
+  *raw_upmap = *raw;
   _apply_upmap(*pool, pg, raw_upmap);
 }
 
@@ -2710,7 +2812,7 @@ void OSDMap::encode_classic(ceph::buffer::list& bl, uint64_t features) const
   encode(cluster_snapshot_epoch, bl);
   encode(cluster_snapshot, bl);
   encode(*osd_uuid, bl);
-  encode(osd_xinfo, bl);
+  encode(osd_xinfo, bl, features);
   encode(osd_addrs->hb_front_addrs, bl, features);
 }
 
@@ -2832,7 +2934,7 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
   {
     // NOTE: any new encoding dependencies must be reflected by
     // SIGNIFICANT_FEATURES
-    uint8_t target_v = 8;
+    uint8_t target_v = 9;
     if (!HAVE_FEATURE(features, SERVER_LUMINOUS)) {
       target_v = 1;
     } else if (!HAVE_FEATURE(features, SERVER_MIMIC)) {
@@ -2863,7 +2965,7 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
     encode(cluster_snapshot_epoch, bl);
     encode(cluster_snapshot, bl);
     encode(*osd_uuid, bl);
-    encode(osd_xinfo, bl);
+    encode(osd_xinfo, bl, features);
     if (target_v < 7) {
       encode_addrvec_pvec_as_addr(osd_addrs->hb_front_addrs, bl, features);
     } else {
@@ -2884,6 +2986,9 @@ void OSDMap::encode(ceph::buffer::list& bl, uint64_t features) const
     }
     if (target_v >= 8) {
       encode(crush_node_flags, bl);
+    }
+    if (target_v >= 9) {
+      encode(device_class_flags, bl);
     }
     ENCODE_FINISH(bl); // osd-only data
   }
@@ -3145,7 +3250,7 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
   }
 
   {
-    DECODE_START(8, bl); // extended, osd-only data
+    DECODE_START(9, bl); // extended, osd-only data
     decode(osd_addrs->hb_back_addrs, bl);
     decode(osd_info, bl);
     decode(blacklist, bl);
@@ -3205,6 +3310,11 @@ void OSDMap::decode(ceph::buffer::list::const_iterator& bl)
       decode(crush_node_flags, bl);
     } else {
       crush_node_flags.clear();
+    }
+    if (struct_v >= 9) {
+      decode(device_class_flags, bl);
+    } else {
+      device_class_flags.clear();
     }
     DECODE_FINISH(bl); // osd-only data
   }
@@ -3267,6 +3377,54 @@ void OSDMap::dump_erasure_code_profiles(
   f->close_section();
 }
 
+void OSDMap::dump_osds(Formatter *f) const
+{
+  f->open_array_section("osds");
+  for (int i=0; i<get_max_osd(); i++) {
+    if (exists(i)) {
+      dump_osd(i, f);
+    }
+  }
+  f->close_section();
+}
+
+void OSDMap::dump_osd(int id, Formatter *f) const
+{
+  ceph_assert(f != nullptr);
+  if (!exists(id)) {
+    return;
+  }
+
+  f->open_object_section("osd_info");
+  f->dump_int("osd", id);
+  f->dump_stream("uuid") << get_uuid(id);
+  f->dump_int("up", is_up(id));
+  f->dump_int("in", is_in(id));
+  f->dump_float("weight", get_weightf(id));
+  f->dump_float("primary_affinity", get_primary_affinityf(id));
+  get_info(id).dump(f);
+  f->dump_object("public_addrs", get_addrs(id));
+  f->dump_object("cluster_addrs", get_cluster_addrs(id));
+  f->dump_object("heartbeat_back_addrs", get_hb_back_addrs(id));
+  f->dump_object("heartbeat_front_addrs", get_hb_front_addrs(id));
+  // compat
+  f->dump_stream("public_addr") << get_addrs(id).get_legacy_str();
+  f->dump_stream("cluster_addr") << get_cluster_addrs(id).get_legacy_str();
+  f->dump_stream("heartbeat_back_addr")
+    << get_hb_back_addrs(id).get_legacy_str();
+  f->dump_stream("heartbeat_front_addr")
+    << get_hb_front_addrs(id).get_legacy_str();
+
+  set<string> st;
+  get_state(id, st);
+  f->open_array_section("state");
+  for (const auto &state : st)
+    f->dump_string("state", state);
+  f->close_section();
+
+  f->close_section();
+}
+
 void OSDMap::dump(Formatter *f) const
 {
   f->dump_int("epoch", get_epoch());
@@ -3312,39 +3470,7 @@ void OSDMap::dump(Formatter *f) const
   }
   f->close_section();
 
-  f->open_array_section("osds");
-  for (int i=0; i<get_max_osd(); i++)
-    if (exists(i)) {
-      f->open_object_section("osd_info");
-      f->dump_int("osd", i);
-      f->dump_stream("uuid") << get_uuid(i);
-      f->dump_int("up", is_up(i));
-      f->dump_int("in", is_in(i));
-      f->dump_float("weight", get_weightf(i));
-      f->dump_float("primary_affinity", get_primary_affinityf(i));
-      get_info(i).dump(f);
-      f->dump_object("public_addrs", get_addrs(i));
-      f->dump_object("cluster_addrs", get_cluster_addrs(i));
-      f->dump_object("heartbeat_back_addrs", get_hb_back_addrs(i));
-      f->dump_object("heartbeat_front_addrs", get_hb_front_addrs(i));
-      // compat
-      f->dump_stream("public_addr") << get_addrs(i).get_legacy_str();
-      f->dump_stream("cluster_addr") << get_cluster_addrs(i).get_legacy_str();
-      f->dump_stream("heartbeat_back_addr")
-	<< get_hb_back_addrs(i).get_legacy_str();
-      f->dump_stream("heartbeat_front_addr")
-	<< get_hb_front_addrs(i).get_legacy_str();
-
-      set<string> st;
-      get_state(i, st);
-      f->open_array_section("state");
-      for (const auto &state : st)
-	f->dump_string("state", state);
-      f->close_section();
-
-      f->close_section();
-    }
-  f->close_section();
+  dump_osds(f);
 
   f->open_array_section("osd_xinfo");
   for (int i=0; i<get_max_osd(); i++) {
@@ -3463,6 +3589,19 @@ void OSDMap::dump(Formatter *f) const
     f->close_section();
   }
   f->close_section();
+  f->open_object_section("device_class_flags");
+  for (auto& i : device_class_flags) {
+    const char* class_name = crush->get_class_name(i.first);
+    string s = class_name ? class_name : stringify(i.first);
+    f->open_array_section(s.c_str());
+    set<string> st;
+    calc_state_set(i.second, st);
+    for (auto& j : st) {
+      f->dump_string("flag", j);
+    }
+    f->close_section();
+  }
+  f->close_section();
 }
 
 void OSDMap::generate_test_instances(list<OSDMap*>& o)
@@ -3561,6 +3700,39 @@ void OSDMap::print_pools(ostream& out) const
   out << std::endl;
 }
 
+void OSDMap::print_osds(ostream& out) const
+{
+  for (int i=0; i<get_max_osd(); i++) {
+    if (exists(i)) {
+      print_osd(i, out);
+    }
+  }
+}
+void OSDMap::print_osd(int id, ostream& out) const
+{
+  if (!exists(id)) {
+    return;
+  }
+
+  out << "osd." << id;
+  out << (is_up(id) ? " up  ":" down");
+  out << (is_in(id) ? " in ":" out");
+  out << " weight " << get_weightf(id);
+  if (get_primary_affinity(id) != CEPH_OSD_DEFAULT_PRIMARY_AFFINITY) {
+    out << " primary_affinity " << get_primary_affinityf(id);
+  }
+  const osd_info_t& info(get_info(id));
+  out << " " << info;
+  out << " " << get_addrs(id) << " " << get_cluster_addrs(id);
+  set<string> st;
+  get_state(id, st);
+  out << " " << st;
+  if (!get_uuid(id).is_zero()) {
+    out << " " << get_uuid(id);
+  }
+  out << "\n";
+}
+
 void OSDMap::print(ostream& out) const
 {
   out << "epoch " << get_epoch() << "\n"
@@ -3590,25 +3762,7 @@ void OSDMap::print(ostream& out) const
   print_pools(out);
 
   out << "max_osd " << get_max_osd() << "\n";
-  for (int i=0; i<get_max_osd(); i++) {
-    if (exists(i)) {
-      out << "osd." << i;
-      out << (is_up(i) ? " up  ":" down");
-      out << (is_in(i) ? " in ":" out");
-      out << " weight " << get_weightf(i);
-      if (get_primary_affinity(i) != CEPH_OSD_DEFAULT_PRIMARY_AFFINITY)
-	out << " primary_affinity " << get_primary_affinityf(i);
-      const osd_info_t& info(get_info(i));
-      out << " " << info;
-      out << " " << get_addrs(i) << " " << get_cluster_addrs(i);
-      set<string> st;
-      get_state(i, st);
-      out << " " << st;
-      if (!get_uuid(i).is_zero())
-	out << " " << get_uuid(i);
-      out << "\n";
-    }
-  }
+  print_osds(out);
   out << std::endl;
 
   for (auto& p : pg_upmap) {
@@ -4313,56 +4467,6 @@ int OSDMap::summarize_mapping_stats(
   return 0;
 }
 
-
-int OSDMap::clean_pg_upmaps(
-  CephContext *cct,
-  Incremental *pending_inc) const
-{
-  ldout(cct, 10) << __func__ << dendl;
-  int changed = 0;
-  for (auto& p : pg_upmap) {
-    vector<int> raw;
-    int primary;
-    pg_to_raw_osds(p.first, &raw, &primary);
-    if (raw == p.second) {
-      ldout(cct, 10) << " removing redundant pg_upmap " << p.first << " "
-		     << p.second << dendl;
-      pending_inc->old_pg_upmap.insert(p.first);
-      ++changed;
-    }
-  }
-  for (auto& p : pg_upmap_items) {
-    vector<int> raw;
-    int primary;
-    pg_to_raw_osds(p.first, &raw, &primary);
-    mempool::osdmap::vector<pair<int,int>> newmap;
-    for (auto& q : p.second) {
-      if (std::find(raw.begin(), raw.end(), q.first) == raw.end()) {
-        // cancel mapping if source osd does not exist anymore
-        continue;
-      }
-      if (q.second != CRUSH_ITEM_NONE && q.second < max_osd &&
-          q.second >= 0 && osd_weight[q.second] == 0) {
-        // cancel mapping if target osd is out
-        continue;
-      }
-      newmap.push_back(q);
-    }
-    if (newmap.empty()) {
-      ldout(cct, 10) << " removing no-op pg_upmap_items " << p.first << " "
-		     << p.second << dendl;
-      pending_inc->old_pg_upmap_items.insert(p.first);
-      ++changed;
-    } else if (newmap != p.second) {
-      ldout(cct, 10) << " simplifying partially no-op pg_upmap_items "
-		     << p.first << " " << p.second << " -> " << newmap << dendl;
-      pending_inc->new_pg_upmap_items[p.first] = newmap;
-      ++changed;
-    }
-  }
-  return changed;
-}
-
 bool OSDMap::try_pg_upmap(
   CephContext *cct,
   pg_t pg,                       ///< pg to potentially remap
@@ -4675,8 +4779,8 @@ int OSDMap::calc_pg_upmaps(
           // to see if we can append more remapping pairs
         }
 	ldout(cct, 10) << " trying " << pg << dendl;
-	vector<int> orig, out;
-        tmp.pg_to_raw_upmap(pg, &orig); // including existing upmaps too
+        vector<int> raw, orig, out;
+        tmp.pg_to_raw_upmap(pg, &raw, &orig); // including existing upmaps too
 	if (!try_pg_upmap(cct, pg, overfull, underfull, &orig, &out)) {
 	  continue;
 	}
@@ -4919,23 +5023,32 @@ public:
 
   OSDUtilizationDumper(const CrushWrapper *crush, const OSDMap *osdmap_,
                        const PGMap& pgmap_, bool tree_,
-                       const string& class_name_,
-                       const string& item_name_) :
+                       const string& filter) :
     Parent(crush, osdmap_->get_pool_names()),
     osdmap(osdmap_),
     pgmap(pgmap_),
     tree(tree_),
-    class_name(class_name_),
-    item_name(item_name_),
     min_var(-1),
     max_var(-1),
     stddev(0),
     sum(0) {
-    if (osdmap->crush->name_exists(item_name)) {
-      // filter out items we are allowed to dump
-      auto item_id = osdmap->crush->get_item_id(item_name);
+    if (osdmap->crush->name_exists(filter)) {
+      // filter by crush node
+      auto item_id = osdmap->crush->get_item_id(filter);
       allowed.insert(item_id);
       osdmap->crush->get_all_children(item_id, &allowed);
+    } else if (osdmap->crush->class_exists(filter)) {
+      // filter by device class
+      class_id = osdmap->crush->get_class_id(filter);
+    } else if (auto pool_id = osdmap->lookup_pg_pool_name(filter);
+               pool_id >= 0) {
+      // filter by pool
+      auto crush_rule = osdmap->get_pool_crush_rule(pool_id);
+      set<int> roots;
+      osdmap->crush->find_takes_by_rule(crush_rule, &roots);
+      allowed = roots;
+      for (auto r : roots)
+        osdmap->crush->get_all_children(r, &allowed);
     }
     average_util = average_utilization();
   }
@@ -4945,18 +5058,17 @@ protected:
   bool should_dump(int id) const {
     if (!allowed.empty() && !allowed.count(id)) // filter by name
       return false;
-    if (id >= 0 && !class_name.empty()) {
-      const char* item_class_name = osdmap->crush->get_item_class(id);
-      if (!item_class_name || // not bound to a class yet
-           item_class_name != class_name) // or already bound to
-                                          // a different class
+    if (id >= 0 && class_id >= 0) {
+      auto item_class_id = osdmap->crush->get_item_class_id(id);
+      if (item_class_id < 0 || // not bound to a class yet
+          item_class_id != class_id) // or already bound to a different class
         return false;
     }
     return true;
   }
 
   set<int> get_dumped_osds() {
-    if (class_name.empty() && item_name.empty()) {
+    if (allowed.empty() && class_id < 0) {
       // old way, all
       return {};
     }
@@ -5110,13 +5222,12 @@ protected:
   const OSDMap *osdmap;
   const PGMap& pgmap;
   bool tree;
-  const string class_name;
-  const string item_name;
   double average_util;
   double min_var;
   double max_var;
   double stddev;
   double sum;
+  int class_id = -1;
   set<int> allowed;
   set<int> dumped_osds;
 };
@@ -5128,9 +5239,8 @@ public:
 
   OSDUtilizationPlainDumper(const CrushWrapper *crush, const OSDMap *osdmap,
                             const PGMap& pgmap, bool tree,
-                            const string& class_name,
-                            const string& item_name) :
-    Parent(crush, osdmap, pgmap, tree, class_name, item_name) {}
+                            const string& filter) :
+    Parent(crush, osdmap, pgmap, tree, filter) {}
 
   void dump(TextTable *tbl) {
     tbl->define_column("ID", TextTable::LEFT, TextTable::RIGHT);
@@ -5265,9 +5375,8 @@ public:
 
   OSDUtilizationFormatDumper(const CrushWrapper *crush, const OSDMap *osdmap,
                              const PGMap& pgmap, bool tree,
-                             const string& class_name,
-                             const string& item_name) :
-    Parent(crush, osdmap, pgmap, tree, class_name, item_name) {}
+                             const string& filter) :
+    Parent(crush, osdmap, pgmap, tree, filter) {}
 
   void dump(Formatter *f) {
     f->open_array_section("nodes");
@@ -5343,21 +5452,18 @@ void print_osd_utilization(const OSDMap& osdmap,
                            ostream& out,
                            Formatter *f,
                            bool tree,
-                           const string& class_name,
-                           const string& item_name)
+                           const string& filter)
 {
   const CrushWrapper *crush = osdmap.crush.get();
   if (f) {
     f->open_object_section("df");
-    OSDUtilizationFormatDumper d(crush, &osdmap, pgmap, tree,
-                                 class_name, item_name);
+    OSDUtilizationFormatDumper d(crush, &osdmap, pgmap, tree, filter);
     d.dump(f);
     d.summary(f);
     f->close_section();
     f->flush(out);
   } else {
-    OSDUtilizationPlainDumper d(crush, &osdmap, pgmap, tree,
-                                class_name, item_name);
+    OSDUtilizationPlainDumper d(crush, &osdmap, pgmap, tree, filter);
     TextTable tbl;
     d.dump(&tbl);
     out << tbl << d.summary() << "\n";
@@ -5670,9 +5776,19 @@ void OSDMap::check_health(health_check_map_t *checks) const
 	detail.push_back(ss.str());
       }
     }
+    for (auto& i : device_class_flags) {
+      const char* class_name = crush->get_class_name(i.first);
+      if (i.second && class_name) {
+        ostringstream ss;
+        set<string> states;
+        OSDMap::calc_state_set(i.second, states);
+        ss << "device class '" << class_name << "' has flags " << states;
+        detail.push_back(ss.str());
+      }
+    }
     if (!detail.empty()) {
       ostringstream ss;
-      ss << detail.size() << " OSDs or CRUSH nodes have {NOUP,NODOWN,NOIN,NOOUT} flags set";
+      ss << detail.size() << " OSDs or CRUSH {nodes, device-classes} have {NOUP,NODOWN,NOIN,NOOUT} flags set";
       auto& d = checks->add("OSD_FLAGS", HEALTH_WARN, ss.str());
       d.detail.swap(detail);
     }
@@ -5870,7 +5986,7 @@ float OSDMap::pool_raw_used_rate(int64_t poolid) const
   }
 }
 
-unsigned OSDMap::get_crush_node_flags(int osd) const
+unsigned OSDMap::get_osd_crush_node_flags(int osd) const
 {
   unsigned flags = 0;
   if (!crush_node_flags.empty()) {
@@ -5884,5 +6000,23 @@ unsigned OSDMap::get_crush_node_flags(int osd) const
       }
     }
   }
+  return flags;
+}
+
+unsigned OSDMap::get_crush_node_flags(int id) const
+{
+  unsigned flags = 0;
+  auto it = crush_node_flags.find(id);
+  if (it != crush_node_flags.end())
+    flags = it->second;
+  return flags;
+}
+
+unsigned OSDMap::get_device_class_flags(int id) const
+{
+  unsigned flags = 0;
+  auto it = device_class_flags.find(id);
+  if (it != device_class_flags.end())
+    flags = it->second;
   return flags;
 }

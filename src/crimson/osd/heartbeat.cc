@@ -40,6 +40,12 @@ seastar::future<> Heartbeat::start(entity_addrvec_t front_addrs,
   for (auto& addr : boost::join(front_addrs.v, back_addrs.v)) {
     addr.set_port(0);
   }
+
+  using ceph::net::SocketPolicy;
+  front_msgr.set_policy(entity_name_t::TYPE_OSD,
+                        SocketPolicy::stateless_server(0));
+  back_msgr.set_policy(entity_name_t::TYPE_OSD,
+                       SocketPolicy::stateless_server(0));
   return seastar::when_all_succeed(start_messenger(front_msgr, front_addrs),
                                    start_messenger(back_msgr, back_addrs))
     .then([this] {
@@ -88,11 +94,11 @@ seastar::future<> Heartbeat::add_peer(osd_id_t peer, epoch_t epoch)
   if (found == peers.end()) {
     logger().info("add_peer({})", peer);
     auto osdmap = service.get_map();
-    // TODO: msgr v2
+    // TODO: use addrs
     return seastar::when_all_succeed(
-        front_msgr.connect(osdmap->get_hb_front_addrs(peer).legacy_addr(),
+        front_msgr.connect(osdmap->get_hb_front_addrs(peer).front(),
                            CEPH_ENTITY_TYPE_OSD),
-        back_msgr.connect(osdmap->get_hb_back_addrs(peer).legacy_addr(),
+        back_msgr.connect(osdmap->get_hb_back_addrs(peer).front(),
                           CEPH_ENTITY_TYPE_OSD))
       .then([this, peer, epoch] (auto xcon_front, auto xcon_back) {
         PeerInfo info;

@@ -9,13 +9,13 @@ import socket
 import threading
 import time
 from mgr_module import MgrModule, MgrStandbyModule, CommandResult, PG_STATES
+from mgr_util import get_default_addr
 from rbd import RBD
 
 # Defaults for the Prometheus HTTP server.  Can also set in config-key
 # see https://github.com/prometheus/prometheus/wiki/Default-port-allocations
 # for Prometheus exporter port registry
 
-DEFAULT_ADDR = '::'
 DEFAULT_PORT = 9283
 
 # When the CherryPy server in 3.2.2 (and later) starts it attempts to verify
@@ -80,6 +80,14 @@ MDS_METADATA = ('ceph_daemon', 'fs_id', 'hostname', 'public_addr', 'rank',
 MON_METADATA = ('ceph_daemon', 'hostname',
                 'public_addr', 'rank', 'ceph_version')
 
+MGR_METADATA = ('ceph_daemon', 'hostname', 'ceph_version')
+
+MGR_STATUS = ('ceph_daemon',)
+
+MGR_MODULE_STATUS = ('name',)
+
+MGR_MODULE_CAN_RUN = ('name',)
+
 OSD_METADATA = ('back_iface', 'ceph_daemon', 'cluster_addr', 'device_class',
                 'front_iface', 'hostname', 'objectstore', 'public_addr',
                 'ceph_version')
@@ -121,8 +129,7 @@ class Metric(object):
 
         def promethize(path):
             ''' replace illegal metric name characters '''
-            result = path.replace('.', '_').replace(
-                '+', '_plus').replace('::', '_').replace(' ', '_')
+            result = re.sub(r'[./\s]|::', '_', path).replace('+', '_plus')
 
             # Hyphens usually turn into underscores, unless they are
             # trailing
@@ -245,6 +252,30 @@ class Module(MgrModule):
             'mon_metadata',
             'MON Metadata',
             MON_METADATA
+        )
+        metrics['mgr_metadata'] = Metric(
+            'gauge',
+            'mgr_metadata',
+            'MGR metadata',
+            MGR_METADATA
+        )
+        metrics['mgr_status'] = Metric(
+            'gauge',
+            'mgr_status',
+            'MGR status (0=standby, 1=active)',
+            MGR_STATUS
+        )
+        metrics['mgr_module_status'] = Metric(
+            'gauge',
+            'mgr_module_status',
+            'MGR module status (0=disabled, 1=enabled, 2=auto-enabled)',
+            MGR_MODULE_STATUS
+        )
+        metrics['mgr_module_can_run'] = Metric(
+            'gauge',
+            'mgr_module_can_run',
+            'MGR module runnable state i.e. can it run (0=no, 1=yes)',
+            MGR_MODULE_CAN_RUN
         )
         metrics['osd_metadata'] = Metric(
             'untyped',
@@ -422,6 +453,50 @@ class Module(MgrModule):
             self.metrics['mon_quorum_status'].set(in_quorum, (
                 'mon.{}'.format(id_),
             ))
+
+    def get_mgr_status(self):
+        mgr_map = self.get('mgr_map')
+        servers = self.get_service_list()
+
+        active = mgr_map['active_name']
+        standbys = [s.get('name') for s in mgr_map['standbys']]
+
+        all_mgrs = list(standbys)
+        all_mgrs.append(active)
+
+        all_modules = {module.get('name'):module.get('can_run') for module in mgr_map['available_modules']}
+
+        for mgr in all_mgrs:
+            host_version = servers.get((mgr, 'mgr'), ('', ''))
+            if mgr == active:
+                _state = 1
+                ceph_release = host_version[1].split()[-2] # e.g. nautilus
+            else:
+                _state = 0
+            
+            self.metrics['mgr_metadata'].set(1, (
+                'mgr.{}'.format(mgr), host_version[0],
+                host_version[1]
+            ))
+            self.metrics['mgr_status'].set(_state, (
+                'mgr.{}'.format(mgr), 
+            ))
+        always_on_modules = mgr_map['always_on_modules'][ceph_release]
+        active_modules = list(always_on_modules)
+        active_modules.extend(mgr_map['modules'])
+
+        for mod_name in all_modules.keys():
+
+            if mod_name in always_on_modules:
+                _state = 2
+            elif mod_name in active_modules:
+                _state = 1
+            else:
+                _state = 0
+
+            _can_run = 1 if all_modules[mod_name] else 0
+            self.metrics['mgr_module_status'].set(_state, (mod_name,))
+            self.metrics['mgr_module_can_run'].set(_can_run, (mod_name,))
 
     def get_pg_status(self):
         # TODO add per pool status?
@@ -831,6 +906,7 @@ class Module(MgrModule):
         self.get_fs()
         self.get_osd_stats()
         self.get_quorum_status()
+        self.get_mgr_status()
         self.get_metadata_and_osd_status()
         self.get_pg_status()
         self.get_num_objects()
@@ -842,6 +918,9 @@ class Module(MgrModule):
                 if not stattype or stattype == 'histogram':
                     self.log.debug('ignoring %s, type %s' % (path, stattype))
                     continue
+
+                path, label_names, labels = self._perfpath_to_path_labels(
+                    daemon, path)
 
                 # Get the value of the counter
                 value = self._perfvalue_to_value(
@@ -855,9 +934,9 @@ class Module(MgrModule):
                             stattype,
                             _path,
                             counter_info['description'] + ' Total',
-                            ("ceph_daemon",),
+                            label_names,
                         )
-                    self.metrics[_path].set(value, (daemon,))
+                    self.metrics[_path].set(value, labels)
 
                     _path = path + '_count'
                     if _path not in self.metrics:
@@ -865,18 +944,18 @@ class Module(MgrModule):
                             'counter',
                             _path,
                             counter_info['description'] + ' Count',
-                            ("ceph_daemon",),
+                            label_names,
                         )
-                    self.metrics[_path].set(counter_info['count'], (daemon,))
+                    self.metrics[_path].set(counter_info['count'], labels,)
                 else:
                     if path not in self.metrics:
                         self.metrics[path] = Metric(
                             stattype,
                             path,
                             counter_info['description'],
-                            ("ceph_daemon",),
+                            label_names,
                         )
-                    self.metrics[path].set(value, (daemon,))
+                    self.metrics[path].set(value, labels)
 
         self.get_rbd_stats()
 
@@ -986,7 +1065,7 @@ class Module(MgrModule):
             'scrape_interval', 5.0)
 
         server_addr = self.get_localized_module_option(
-            'server_addr', DEFAULT_ADDR)
+            'server_addr', get_default_addr())
         server_port = self.get_localized_module_option(
             'server_port', DEFAULT_PORT)
         self.log.info(
@@ -1028,7 +1107,8 @@ class StandbyModule(MgrStandbyModule):
         self.shutdown_event = threading.Event()
 
     def serve(self):
-        server_addr = self.get_localized_module_option('server_addr', '::')
+        server_addr = self.get_localized_module_option(
+            'server_addr', get_default_addr())
         server_port = self.get_localized_module_option(
             'server_port', DEFAULT_PORT)
         self.log.info("server_addr: %s server_port: %s" %

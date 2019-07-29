@@ -162,7 +162,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     ]
 
     def wait(self, completions):
-        self.log.info("wait: completions={0}".format(completions))
+        if completions:
+            self.log.info("wait: completions={0}".format(completions))
 
         incomplete = False
 
@@ -182,10 +183,11 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             try:
                 c.execute()
             except Exception as e:
-                self.log.exception("Completion {0} threw an exception:".format(
-                    c.message
-                ))
-                c.error = e
+                if not isinstance(e, orchestrator.OrchestratorError):
+                    self.log.exception("Completion {0} threw an exception:".format(
+                        c.message
+                    ))
+                c.exception = e
                 c._complete = True
 
             if not c.is_complete:
@@ -329,9 +331,10 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         return result
 
     @deferred_read
-    def describe_service(self, service_type=None, service_id=None, node_name=None):
+    def describe_service(self, service_type=None, service_id=None, node_name=None, refresh=False):
 
-        assert service_type in ("mds", "osd", "mgr", "mon", "nfs", None), service_type + " unsupported"
+        if service_type not in ("mds", "osd", "mgr", "mon", "nfs", None):
+            raise orchestrator.OrchestratorValidationError(service_type + " unsupported")
 
         pods = self.rook_cluster.describe_pods(service_type, service_id, node_name)
 

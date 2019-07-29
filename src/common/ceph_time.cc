@@ -100,7 +100,20 @@ namespace ceph {
   }
 
   std::ostream& operator<<(std::ostream& m, const timespan& t) {
-    return m << std::chrono::duration<double>(t).count() << "s";
+    int64_t ns = t.count();
+    if (ns < 0) {
+      ns = -ns;
+      m << "-";
+    }
+    m << (ns / 1000000000ll);
+    ns %= 1000000000ll;
+    if (ns) {
+      char oldfill = m.fill();
+      m.fill('0');
+      m << '.' << std::setw(9) << ns;
+      m.fill(oldfill);
+    }
+    return m << "s";
   }
 
   template<typename Clock,
@@ -111,19 +124,22 @@ namespace ceph {
     char oldfill = m.fill();
     m.fill('0');
     // localtime.  this looks like an absolute time.
-    //  aim for http://en.wikipedia.org/wiki/ISO_8601
+    //  conform to http://en.wikipedia.org/wiki/ISO_8601
     struct tm bdt;
     time_t tt = Clock::to_time_t(t);
     localtime_r(&tt, &bdt);
+    char tz[32] = { 0 };
+    strftime(tz, sizeof(tz), "%z", &bdt);
     m << std::setw(4) << (bdt.tm_year+1900)  // 2007 -> '07'
       << '-' << std::setw(2) << (bdt.tm_mon+1)
       << '-' << std::setw(2) << bdt.tm_mday
-      << ' '
+      << 'T'
       << std::setw(2) << bdt.tm_hour
       << ':' << std::setw(2) << bdt.tm_min
       << ':' << std::setw(2) << bdt.tm_sec
       << "." << std::setw(6) << duration_cast<microseconds>(
-	t.time_since_epoch() % seconds(1));
+	t.time_since_epoch() % seconds(1)).count()
+      << tz;
     m.fill(oldfill);
     m.unsetf(std::ios::right);
     return m;

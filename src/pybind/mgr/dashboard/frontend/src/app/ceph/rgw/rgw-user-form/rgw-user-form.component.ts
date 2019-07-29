@@ -5,10 +5,11 @@ import { ActivatedRoute, Router } from '@angular/router';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap/modal';
-import { forkJoin as observableForkJoin, Observable } from 'rxjs';
+import { concat as observableConcat, forkJoin as observableForkJoin, Observable } from 'rxjs';
 
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
@@ -35,7 +36,7 @@ export class RgwUserFormComponent implements OnInit {
   error = false;
   loading = false;
   submitObservables: Observable<Object>[] = [];
-
+  icons = Icons;
   subusers: RgwUserSubuser[] = [];
   s3Keys: RgwUserS3Key[] = [];
   swiftKeys: RgwUserSwiftKey[] = [];
@@ -62,7 +63,6 @@ export class RgwUserFormComponent implements OnInit {
     this.s3keyLabel = this.i18n('S3 Key');
     this.capabilityLabel = this.i18n('capability');
     this.createForm();
-    this.listenToChanges();
   }
 
   createForm() {
@@ -91,11 +91,13 @@ export class RgwUserFormComponent implements OnInit {
       user_quota_max_size: [
         null,
         [
-          CdValidators.requiredIf({
-            user_quota_enabled: true,
-            user_quota_max_size_unlimited: false
-          }),
-          this.quotaMaxSizeValidator
+          CdValidators.composeIf(
+            {
+              user_quota_enabled: true,
+              user_quota_max_size_unlimited: false
+            },
+            [Validators.required, this.quotaMaxSizeValidator]
+          )
         ]
       ],
       user_quota_max_objects_unlimited: [true],
@@ -115,11 +117,13 @@ export class RgwUserFormComponent implements OnInit {
       bucket_quota_max_size: [
         null,
         [
-          CdValidators.requiredIf({
-            bucket_quota_enabled: true,
-            bucket_quota_max_size_unlimited: false
-          }),
-          this.quotaMaxSizeValidator
+          CdValidators.composeIf(
+            {
+              bucket_quota_enabled: true,
+              bucket_quota_max_size_unlimited: false
+            },
+            [Validators.required, this.quotaMaxSizeValidator]
+          )
         ]
       ],
       bucket_quota_max_objects_unlimited: [true],
@@ -133,39 +137,6 @@ export class RgwUserFormComponent implements OnInit {
           })
         ]
       ]
-    });
-  }
-
-  listenToChanges() {
-    // Reset the validation status of various controls, especially those that are using
-    // the 'requiredIf' validator. This is necessary because the controls itself are not
-    // validated again if the status of their prerequisites have been changed.
-    this.userForm.get('generate_key').valueChanges.subscribe(() => {
-      ['access_key', 'secret_key'].forEach((path) => {
-        this.userForm.get(path).updateValueAndValidity({ onlySelf: true });
-      });
-    });
-    this.userForm.get('user_quota_enabled').valueChanges.subscribe(() => {
-      ['user_quota_max_size', 'user_quota_max_objects'].forEach((path) => {
-        this.userForm.get(path).updateValueAndValidity({ onlySelf: true });
-      });
-    });
-    this.userForm.get('user_quota_max_size_unlimited').valueChanges.subscribe(() => {
-      this.userForm.get('user_quota_max_size').updateValueAndValidity({ onlySelf: true });
-    });
-    this.userForm.get('user_quota_max_objects_unlimited').valueChanges.subscribe(() => {
-      this.userForm.get('user_quota_max_objects').updateValueAndValidity({ onlySelf: true });
-    });
-    this.userForm.get('bucket_quota_enabled').valueChanges.subscribe(() => {
-      ['bucket_quota_max_size', 'bucket_quota_max_objects'].forEach((path) => {
-        this.userForm.get(path).updateValueAndValidity({ onlySelf: true });
-      });
-    });
-    this.userForm.get('bucket_quota_max_size_unlimited').valueChanges.subscribe(() => {
-      this.userForm.get('bucket_quota_max_size').updateValueAndValidity({ onlySelf: true });
-    });
-    this.userForm.get('bucket_quota_max_objects_unlimited').valueChanges.subscribe(() => {
-      this.userForm.get('bucket_quota_max_objects').updateValueAndValidity({ onlySelf: true });
     });
   }
 
@@ -272,28 +243,27 @@ export class RgwUserFormComponent implements OnInit {
       const bucketQuotaArgs = this._getBucketQuotaArgs();
       this.submitObservables.push(this.rgwUserService.updateQuota(uid, bucketQuotaArgs));
     }
-    // Finally execute all observables.
-    observableForkJoin(this.submitObservables).subscribe(
-      () => {
-        this.notificationService.show(NotificationType.success, notificationTitle);
-        this.goToListView();
-      },
-      () => {
+    // Finally execute all observables one by one in serial.
+    observableConcat(...this.submitObservables).subscribe({
+      error: () => {
         // Reset the 'Submit' button.
         this.userForm.setErrors({ cdSubmitButton: true });
+      },
+      complete: () => {
+        this.notificationService.show(NotificationType.success, notificationTitle);
+        this.goToListView();
       }
-    );
+    });
   }
 
   /**
-   * Validate the quota maximum size, e.g. 1096, 1K, 30M. Only integer numbers are valid,
-   * something like 1.9M is not recognized as valid.
+   * Validate the quota maximum size, e.g. 1096, 1K, 30M or 1.9MiB.
    */
   quotaMaxSizeValidator(control: AbstractControl): ValidationErrors | null {
     if (isEmptyInputValue(control.value)) {
       return null;
     }
-    const m = RegExp('^(\\d+)\\s*(B|K(B|iB)?|M(B|iB)?|G(B|iB)?|T(B|iB)?)?$', 'i').exec(
+    const m = RegExp('^(\\d+(\\.\\d+)?)\\s*(B|K(B|iB)?|M(B|iB)?|G(B|iB)?|T(B|iB)?)?$', 'i').exec(
       control.value
     );
     if (m === null) {

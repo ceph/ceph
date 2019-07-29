@@ -374,11 +374,13 @@ int md_config_t::parse_config_files(ConfigValues& values,
   for (c = conf_files.begin(); c != conf_files.end(); ++c) {
     cf.clear();
     string fn = *c;
-
-    int ret = cf.parse_file(fn.c_str(), &parse_errors, warnings);
-    if (ret == 0)
+    ostringstream oss;
+    int ret = cf.parse_file(fn.c_str(), &oss);
+    parse_error = oss.str();
+    if (ret == 0) {
       break;
-    else if (ret != -ENOENT)
+    }
+    if (ret != -ENOENT)
       return ret;
   }
   // it must have been all ENOENTs, that's the only way we got here
@@ -426,12 +428,10 @@ int md_config_t::parse_config_files(ConfigValues& values,
 
   // Warn about section names that look like old-style section names
   std::deque < std::string > old_style_section_names;
-  for (ConfFile::const_section_iter_t s = cf.sections_begin();
-       s != cf.sections_end(); ++s) {
-    const string &str(s->first);
-    if (((str.find("mds") == 0) || (str.find("mon") == 0) ||
-	 (str.find("osd") == 0)) && (str.size() > 3) && (str[3] != '.')) {
-      old_style_section_names.push_back(str);
+  for (auto& [name, section] : cf) {
+    if (((name.find("mds") == 0) || (name.find("mon") == 0) ||
+	 (name.find("osd") == 0)) && (name.size() > 3) && (name[3] != '.')) {
+      old_style_section_names.push_back(name);
     }
   }
   if (!old_style_section_names.empty()) {
@@ -461,11 +461,11 @@ void md_config_t::parse_env(unsigned entity_type,
   if (!args_var) {
     args_var = "CEPH_ARGS";
   }
-  if (getenv("CEPH_KEYRING")) {
-    _set_val(values, tracker, getenv("CEPH_KEYRING"), *find_option("keyring"),
-	     CONF_ENV, nullptr);
+  if (auto s = getenv("CEPH_KEYRING"); s) {
+    string err;
+    _set_val(values, tracker, s, *find_option("keyring"), CONF_ENV, &err);
   }
-  if (const char *dir = getenv("CEPH_LIB")) {
+  if (auto dir = getenv("CEPH_LIB"); dir) {
     for (auto name : { "erasure_code_dir", "plugin_dir", "osd_class_dir" }) {
     std::string err;
       const Option *o = find_option(name);
@@ -473,15 +473,15 @@ void md_config_t::parse_env(unsigned entity_type,
       _set_val(values, tracker, dir, *o, CONF_ENV, &err);
     }
   }
-  const char *pod_req = getenv("POD_MEMORY_REQUEST");
-  if (pod_req) {
+  if (auto pod_req = getenv("POD_MEMORY_REQUEST"); pod_req) {
+    string err;
     uint64_t v = atoll(pod_req);
     if (v) {
       switch (entity_type) {
       case CEPH_ENTITY_TYPE_OSD:
 	_set_val(values, tracker, stringify(v),
 		 *find_option("osd_memory_target"),
-		 CONF_ENV, nullptr);
+		 CONF_ENV, &err);
 	break;
       }
     }
@@ -1240,9 +1240,9 @@ void md_config_t::_get_my_sections(const ConfigValues& values,
 // Return a list of all sections
 int md_config_t::get_all_sections(std::vector <std::string> &sections) const
 {
-  for (ConfFile::const_section_iter_t s = cf.sections_begin();
-       s != cf.sections_end(); ++s) {
-    sections.push_back(s->first);
+  for (auto [section_name, section] : cf) {
+    sections.push_back(section_name);
+    std::ignore = section;
   }
   return 0;
 }
@@ -1291,6 +1291,7 @@ int md_config_t::_set_val(
   std::string *error_message)
 {
   Option::value_t new_value;
+  ceph_assert(error_message);
   int r = opt.parse_value(raw_val, &new_value, error_message);
   if (r < 0) {
     return r;
@@ -1469,7 +1470,7 @@ void md_config_t::diff(
   });
 }
 
-void md_config_t::complain_about_parse_errors(CephContext *cct)
+void md_config_t::complain_about_parse_error(CephContext *cct)
 {
-  ::complain_about_parse_errors(cct, &parse_errors);
+  ::complain_about_parse_error(cct, parse_error);
 }

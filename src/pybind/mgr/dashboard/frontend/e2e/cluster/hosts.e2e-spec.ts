@@ -1,11 +1,10 @@
 import { Helper } from '../helper.po';
-import { HostsPage } from './hosts.po';
 
 describe('Hosts page', () => {
-  let page: HostsPage;
+  let hosts: Helper['hosts'];
 
   beforeAll(() => {
-    page = new HostsPage();
+    hosts = new Helper().hosts;
   });
 
   afterEach(() => {
@@ -14,23 +13,23 @@ describe('Hosts page', () => {
 
   describe('breadcrumb and tab tests', () => {
     beforeAll(() => {
-      page.navigateTo();
+      hosts.navigateTo();
     });
 
     it('should open and show breadcrumb', () => {
-      expect(Helper.getBreadcrumbText()).toEqual('Hosts');
+      expect(hosts.getBreadcrumbText()).toEqual('Hosts');
     });
 
     it('should show two tabs', () => {
-      expect(Helper.getTabsCount()).toEqual(2);
+      expect(hosts.getTabsCount()).toEqual(2);
     });
 
     it('should show hosts list tab at first', () => {
-      expect(Helper.getTabText(0)).toEqual('Hosts List');
+      expect(hosts.getTabText(0)).toEqual('Hosts List');
     });
 
     it('should show overall performance as a second tab', () => {
-      expect(Helper.getTabText(1)).toEqual('Overall Performance');
+      expect(hosts.getTabText(1)).toEqual('Overall Performance');
     });
   });
 });

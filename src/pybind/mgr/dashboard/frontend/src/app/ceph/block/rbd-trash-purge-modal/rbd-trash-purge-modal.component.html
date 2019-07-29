@@ -15,7 +15,7 @@
         </p>
 
         <div class="form-group">
-          <label class="center-block"
+          <label class="col-form-label mx-auto"
                  i18n>Pool:</label>
           <input class="form-control"
                  type="text"
@@ -23,7 +23,7 @@
                  i18n-placeholder
                  formControlName="poolName"
                  *ngIf="!poolPermission.read">
-          <select class="form-control"
+          <select class="form-control custom-select"
                   formControlName="poolName"
                   *ngIf="poolPermission.read">
             <option value=""

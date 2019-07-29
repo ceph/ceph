@@ -1,3 +1,5 @@
+.. _ecpool:
+
 =============
  Erasure code
 =============
@@ -162,6 +164,21 @@ the *hot-storage* and benefit from its flexibility and speed.
 
 More information can be found in the `cache tiering
 <../cache-tiering>`_ documentation.
+
+Erasure coded pool recovery
+---------------------------
+If an erasure coded pool loses some shards, it must recover them from the others.
+This generally involves reading from the remaining shards, reconstructing the data, and
+writing it to the new peer.
+In Octopus, erasure coded pools can recover as long as there are at least *K* shards
+available. (With fewer than *K* shards, you have actually lost data!)
+
+Prior to Octopus, erasure coded pools required at least *min_size* shards to be
+available, even if *min_size* is greater than *K*. (We generally recommend min_size
+be *K+2* or more to prevent loss of writes and data.)
+This conservative decision was made out of an abundance of caution when designing the new pool
+mode but also meant pools with lost OSDs but no data loss were unable to recover and go active
+without manual intervention to change the *min_size*.
 
 Glossary
 --------

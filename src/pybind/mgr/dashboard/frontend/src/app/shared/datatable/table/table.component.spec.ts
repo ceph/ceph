@@ -4,6 +4,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 import * as _ from 'lodash';
+import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ComponentsModule } from '../../components/components.module';
@@ -32,7 +33,13 @@ describe('TableComponent', () => {
 
   configureTestBed({
     declarations: [TableComponent],
-    imports: [NgxDatatableModule, FormsModule, ComponentsModule, RouterTestingModule]
+    imports: [
+      NgxDatatableModule,
+      FormsModule,
+      ComponentsModule,
+      RouterTestingModule,
+      BsDropdownModule.forRoot()
+    ]
   });
 
   beforeEach(() => {
@@ -77,6 +84,21 @@ describe('TableComponent', () => {
     e.target.value = '-20';
     component.setLimit(e);
     expect(component.userConfig.limit).toBe(1);
+  });
+
+  it('should prevent propagation of mouseenter event', (done) => {
+    let wasCalled = false;
+    const mouseEvent = new MouseEvent('mouseenter');
+    mouseEvent.stopPropagation = () => {
+      wasCalled = true;
+    };
+    spyOn(window, 'addEventListener').and.callFake((eventName, fn) => {
+      fn(mouseEvent);
+      expect(eventName).toBe('mouseenter');
+      expect(wasCalled).toBe(true);
+      done();
+    });
+    component.ngOnInit();
   });
 
   describe('test search', () => {
@@ -347,9 +369,9 @@ describe('TableComponent', () => {
   describe('useCustomClass', () => {
     beforeEach(() => {
       component.customCss = {
-        'label label-danger': 'active',
+        'badge badge-danger': 'active',
         'secret secret-number': 123.456,
-        'btn btn-sm': (v) => _.isString(v) && v.startsWith('http'),
+        btn: (v) => _.isString(v) && v.startsWith('http'),
         secure: (v) => _.isString(v) && v.startsWith('https')
       };
     });
@@ -366,7 +388,7 @@ describe('TableComponent', () => {
     });
 
     it('should match a string and return the corresponding class', () => {
-      expect(component.useCustomClass('active')).toBe('label label-danger');
+      expect(component.useCustomClass('active')).toBe('badge badge-danger');
     });
 
     it('should match a number and return the corresponding class', () => {
@@ -374,11 +396,11 @@ describe('TableComponent', () => {
     });
 
     it('should match against a function and return the corresponding class', () => {
-      expect(component.useCustomClass('http://no.ssl')).toBe('btn btn-sm');
+      expect(component.useCustomClass('http://no.ssl')).toBe('btn');
     });
 
     it('should match against multiple functions and return the corresponding classes', () => {
-      expect(component.useCustomClass('https://secure.it')).toBe('btn btn-sm secure');
+      expect(component.useCustomClass('https://secure.it')).toBe('btn secure');
     });
   });
 });

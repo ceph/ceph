@@ -25,13 +25,16 @@ namespace ceph::net {
 using seq_num_t = uint64_t;
 
 class Connection : public seastar::enable_shared_from_this<Connection> {
+  entity_name_t peer_name = {0, -1};
+
  protected:
   entity_addr_t peer_addr;
-  peer_type_t peer_type = -1;
-  int64_t peer_id = -1;
   using clock_t = seastar::lowres_system_clock;
   clock_t::time_point last_keepalive;
   clock_t::time_point last_keepalive_ack;
+
+  void set_peer_type(entity_type_t peer_type) { peer_name._type = peer_type; }
+  void set_peer_id(int64_t peer_id) { peer_name._num = peer_id; }
 
  public:
   uint64_t peer_global_id = 0;
@@ -42,7 +45,15 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
 
   virtual Messenger* get_messenger() const = 0;
   const entity_addr_t& get_peer_addr() const { return peer_addr; }
-  virtual int get_peer_type() const = 0;
+  const entity_name_t& get_peer_name() const { return peer_name; }
+  entity_type_t get_peer_type() const { return peer_name.type(); }
+  int64_t get_peer_id() const { return peer_name.num(); }
+
+  bool peer_is_mon() const { return peer_name.is_mon(); }
+  bool peer_is_mgr() const { return peer_name.is_mgr(); }
+  bool peer_is_mds() const { return peer_name.is_mds(); }
+  bool peer_is_osd() const { return peer_name.is_osd(); }
+  bool peer_is_client() const { return peer_name.is_client(); }
 
   /// true if the handshake has completed and no errors have been encountered
   virtual seastar::future<bool> is_connected() = 0;
@@ -70,6 +81,27 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   }
   auto get_last_keepalive() const { return last_keepalive; }
   auto get_last_keepalive_ack() const { return last_keepalive_ack; }
+
+  seastar::shared_ptr<Connection> get_shared() {
+    return shared_from_this();
+  }
+
+  struct user_private_t {
+    virtual ~user_private_t() = default;
+  };
+private:
+  unique_ptr<user_private_t> user_private;
+public:
+  bool has_user_private() const {
+    return user_private != nullptr;
+  }
+  void set_user_private(unique_ptr<user_private_t> new_user_private) {
+    user_private = std::move(new_user_private);
+  }
+  user_private_t &get_user_private() {
+    ceph_assert(user_private);
+    return *user_private;
+  }
 };
 
 inline ostream& operator<<(ostream& out, const Connection& conn) {

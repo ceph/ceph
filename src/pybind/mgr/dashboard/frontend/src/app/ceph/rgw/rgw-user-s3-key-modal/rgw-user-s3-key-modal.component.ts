@@ -37,7 +37,6 @@ export class RgwUserS3KeyModalComponent {
   ) {
     this.resource = this.i18n('S3 Key');
     this.createForm();
-    this.listenToChanges();
   }
 
   createForm() {
@@ -49,17 +48,6 @@ export class RgwUserS3KeyModalComponent {
     });
   }
 
-  listenToChanges() {
-    // Reset the validation status of various controls, especially those that are using
-    // the 'requiredIf' validator. This is necessary because the controls itself are not
-    // validated again if the status of their prerequisites have been changed.
-    this.formGroup.get('generate_key').valueChanges.subscribe(() => {
-      ['access_key', 'secret_key'].forEach((path) => {
-        this.formGroup.get(path).updateValueAndValidity({ onlySelf: true });
-      });
-    });
-  }
-
   /**
    * Set the 'viewing' flag. If set to TRUE, the modal dialog is in 'View' mode,
    * otherwise in 'Add' mode. According to the mode the dialog and its controls
@@ -67,8 +55,8 @@ export class RgwUserS3KeyModalComponent {
    * @param {boolean} viewing
    */
   setViewing(viewing: boolean = true) {
-    this.action = this.actionLabels.SHOW;
     this.viewing = viewing;
+    this.action = this.viewing ? this.actionLabels.SHOW : this.actionLabels.CREATE;
   }
 
   /**

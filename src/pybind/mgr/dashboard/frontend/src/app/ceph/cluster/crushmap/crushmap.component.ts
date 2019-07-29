@@ -34,12 +34,22 @@ export class CrushmapComponent implements OnInit {
       };
     }
 
-    const rootNodeId = nodes[0].id || null;
+    const roots = [];
     nodes.reverse().forEach((node) => {
+      if (node.type === 'root') {
+        roots.push(node.id);
+      }
       treeNodeMap[node.id] = this.generateTreeLeaf(node, treeNodeMap);
     });
 
-    return treeNodeMap[rootNodeId];
+    const children = roots.map((id) => {
+      return treeNodeMap[id];
+    });
+
+    return {
+      value: 'CRUSH map',
+      children: children
+    };
   }
 
   private generateTreeLeaf(node: any, treeNodeMap) {

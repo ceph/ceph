@@ -17,9 +17,7 @@ The following configuration options are available for Keystone integration::
 	rgw keystone admin token path = {path to keystone admin token} #preferred
 	rgw keystone accepted roles = {accepted user roles}
 	rgw keystone token cache size = {number of tokens to cache}
-	rgw keystone revocation interval = {number of seconds before checking revoked tickets}
 	rgw keystone implicit tenants = {true for private tenant for each new user}
-	nss db path = {path to nss db}
 
 It is also possible to configure a Keystone service tenant, user & password for
 Keystone (for v2.0 version of the OpenStack Identity API), similar to the way
@@ -109,25 +107,7 @@ object-storage endpoint::
 The Keystone URL is the Keystone admin RESTful API URL. The admin token is the
 token that is configured internally in Keystone for admin requests.
 
-The Ceph Object Gateway will query Keystone periodically for a list of revoked
-tokens. These requests are encoded and signed. Also, Keystone may be configured
-to provide self-signed tokens, which are also encoded and signed. The gateway
-needs to be able to decode and verify these signed messages, and the process
-requires that the gateway be set up appropriately. Currently, the Ceph Object
-Gateway will only be able to perform the procedure if it was compiled with
-``--with-nss``. Configuring the Ceph Object Gateway to work with Keystone also
-requires converting the OpenSSL certificates that Keystone uses for creating the
-requests to the nss db format, for example::
-
-	mkdir /var/ceph/nss
-
-	openssl x509 -in /etc/keystone/ssl/certs/ca.pem -pubkey | \
-		certutil -d /var/ceph/nss -A -n ca -t "TCu,Cu,Tuw"
-	openssl x509 -in /etc/keystone/ssl/certs/signing_cert.pem -pubkey | \
-		certutil -A -d /var/ceph/nss -n signing_cert -t "P,P,P"
-
-
-OpenStack Keystone may also be terminated with a self signed ssl certificate, in
+OpenStack Keystone may be terminated with a self signed ssl certificate, in
 order for radosgw to interact with Keystone in such a case, you could either
 install Keystone's ssl certificate in the node running radosgw. Alternatively
 radosgw could be made to not verify the ssl certificate at all (similar to
@@ -137,6 +117,32 @@ configurable ``rgw keystone verify ssl`` to false.
 
 .. _OpenStack Keystone documentation: http://docs.openstack.org/developer/keystone/configuringservices.html#setting-up-projects-users-and-roles
 
+Cross Project(Tenant) Access
+----------------------------
+
+In order to let a project (earlier called a 'tenant') access buckets belonging to a different project, the following config option needs to be enabled::
+
+   rgw swift account in url = true
+
+The Keystone object-store endpoint must accordingly be configured to include the AUTH_%(project_id)s suffix::
+
+   openstack endpoint create --region RegionOne \
+       --publicurl   "http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s" \
+       --adminurl    "http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s" \
+       --internalurl "http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s" \
+       swift
+  +--------------+--------------------------------------------------------------+
+  | Field        | Value                                                        |
+  +--------------+--------------------------------------------------------------+
+  | adminurl     | http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s |
+  | id           | e4249d2b60e44743a67b5e5b38c18dd3                             |
+  | internalurl  | http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s |
+  | publicurl    | http://radosgw.example.com:8080/swift/v1/AUTH_$(project_id)s |
+  | region       | RegionOne                                                    |
+  | service_id   | 37c4c0e79571404cb4644201a4a6e5ee                             |
+  | service_name | swift                                                        |
+  | service_type | object-store                                                 |
+  +--------------+--------------------------------------------------------------+
 
 Keystone integration with the S3 API
 ------------------------------------

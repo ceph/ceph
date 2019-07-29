@@ -25,15 +25,15 @@
           (updateSelection)="updateSelection($event)">
   <div class="table-actions btn-toolbar">
     <cd-table-actions class="btn-group"
-                      [permission]="permissions.iscsi"
+                      [permission]="permission"
                       [selection]="selection"
                       [tableActions]="tableActions">
     </cd-table-actions>
 
-    <button class="btn btn-sm btn-default btn-label"
+    <button class="btn btn-light"
             type="button"
             (click)="configureDiscoveryAuth()">
-      <i class="fa fa-fw fa-key-modern"
+      <i [ngClass]="[icons.key]"
          aria-hidden="true">
       </i>
       <ng-container i18n>Discovery authentication</ng-container>

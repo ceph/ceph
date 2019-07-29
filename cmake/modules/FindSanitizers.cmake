@@ -44,6 +44,8 @@ if(Sanitizers_COMPILE_OPTIONS)
     "-fno-omit-frame-pointer")
 endif()
 
+string (REPLACE ";" " " Sanitizers_COMPILE_OPTIONS "${Sanitizers_COMPILE_OPTIONS}")
+
 include(CheckCXXSourceCompiles)
 set(CMAKE_REQUIRED_FLAGS ${Sanitizers_COMPILE_OPTIONS})
 set(CMAKE_REQUIRED_LIBRARIES ${Sanitizers_COMPILE_OPTIONS})

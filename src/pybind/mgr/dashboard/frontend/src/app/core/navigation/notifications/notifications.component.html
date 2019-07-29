@@ -1,7 +1,7 @@
 <ng-template #notificationsTpl>
   <div *ngIf="notifications.length > 0">
-    <button type="button" class="btn btn-default btn-sm btn-block" (click)="removeAll()">
-      <i class="fa fa-trash-o" aria-hidden="true"></i>
+    <button type="button" class="btn btn-light btn-block" (click)="removeAll()">
+      <i [ngClass]="[icons.trash]" aria-hidden="true"></i>
       &nbsp;
       <ng-container i18n>Remove all</ng-container>
     </button>
@@ -10,9 +10,9 @@
       <table>
         <tr>
           <td rowspan="3" class="icon-col text-center">
-            <span [ngClass]="['fa-stack fa-2x', notification.textClass]">
-              <i class="fa fa-circle fa-stack-2x"></i>
-              <i [ngClass]="['fa fa-stack-1x fa-inverse', notification.iconClass]"></i>
+            <span [ngClass]="[icons.stack, icons.large2x, notification.textClass]">
+              <i [ngClass]="[icons.circle, icons.stack2x]"></i>
+              <i [ngClass]="[icons.stack1x, icons.inverse, notification.iconClass]"></i>
             </span>
           </td>
           <td>
@@ -34,9 +34,8 @@
 
 <ng-template #emptyTpl>
   <div *ngIf="notifications.length === 0">
-    <div class="message">
-      There are no notifications.
-    </div>
+    <div class="message"
+         i18n>There are no notifications.</div>
   </div>
 </ng-template>
 
@@ -51,7 +50,7 @@
    outsideClick="true"
    i18n-title
    title="Recent Notifications">
-  <i class="fa fa-fw fa-bell"></i>
+  <i [ngClass]="[icons.bell]"></i>
   <span i18n
-        class="visible-xs-inline-block">Recent Notifications</span>
+        class="d-md-none">Recent Notifications</span>
 </a>

@@ -62,6 +62,7 @@
 #include "messages/MOSDPGTemp.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMarkMeDown.h"
+#include "messages/MOSDMarkMeDead.h"
 #include "messages/MOSDFull.h"
 #include "messages/MOSDPing.h"
 #include "messages/MOSDOp.h"
@@ -70,6 +71,8 @@
 #include "messages/MOSDRepOpReply.h"
 #include "messages/MOSDMap.h"
 #include "messages/MMonGetOSDMap.h"
+#include "messages/MMonGetPurgedSnaps.h"
+#include "messages/MMonGetPurgedSnapsReply.h"
 
 #include "messages/MOSDPGCreated.h"
 #include "messages/MOSDPGNotify.h"
@@ -439,6 +442,12 @@ Message *decode_message(CephContext *cct, int crcflags,
   case CEPH_MSG_MON_GET_OSDMAP:
     m = make_message<MMonGetOSDMap>();
     break;
+  case MSG_MON_GET_PURGED_SNAPS:
+    m = make_message<MMonGetPurgedSnaps>();
+    break;
+  case MSG_MON_GET_PURGED_SNAPS_REPLY:
+    m = make_message<MMonGetPurgedSnapsReply>();
+    break;
   case CEPH_MSG_MON_GET_VERSION:
     m = make_message<MMonGetVersion>();
     break;
@@ -466,6 +475,9 @@ Message *decode_message(CephContext *cct, int crcflags,
     break;
   case MSG_OSD_MARK_ME_DOWN:
     m = make_message<MOSDMarkMeDown>();
+    break;
+  case MSG_OSD_MARK_ME_DEAD:
+    m = make_message<MOSDMarkMeDead>();
     break;
   case MSG_OSD_FULL:
     m = make_message<MOSDFull>();
@@ -949,15 +961,12 @@ void Message::decode_trace(bufferlist::const_iterator &p, bool create)
 
 void encode_message(Message *msg, uint64_t features, bufferlist& payload)
 {
-  bufferlist front, middle, data;
   ceph_msg_footer_old old_footer;
-  ceph_msg_footer footer;
   msg->encode(features, MSG_CRC_ALL);
   encode(msg->get_header(), payload);
 
   // Here's where we switch to the old footer format.  PLR
-
-  footer = msg->get_footer();
+  ceph_msg_footer footer = msg->get_footer();
   old_footer.front_crc = footer.front_crc;   
   old_footer.middle_crc = footer.middle_crc;   
   old_footer.data_crc = footer.data_crc;   

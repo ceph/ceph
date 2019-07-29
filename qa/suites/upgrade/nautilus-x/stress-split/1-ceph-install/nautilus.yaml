@@ -5,11 +5,17 @@ tasks:
     branch: nautilus
 - print: "**** done install nautilus"
 - ceph:
+    conf:
+      global:
+        bluestore_warn_on_legacy_statfs: false
 - exec:
     osd.0:
       - ceph osd require-osd-release nautilus
       - ceph osd set-require-min-compat-client nautilus
 - print: "**** done ceph"
+- rgw:
+   - client.0
+- print: "**** done => started rgw client.0"
 overrides:
   ceph:
     conf:

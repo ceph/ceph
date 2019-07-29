@@ -2,10 +2,9 @@ import { Injectable } from '@angular/core';
 import { CanActivate, CanActivateChild, Router } from '@angular/router';
 
 import { AuthStorageService } from './auth-storage.service';
-import { ServicesModule } from './services.module';
 
 @Injectable({
-  providedIn: ServicesModule
+  providedIn: 'root'
 })
 export class AuthGuardService implements CanActivate, CanActivateChild {
   constructor(private router: Router, private authStorageService: AuthStorageService) {}

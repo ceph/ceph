@@ -68,6 +68,7 @@ add_subdirectory(system)
 if(WITH_FIO OR WITH_SYSTEM_FIO)
   add_subdirectory(fio)
 endif()
+add_subdirectory(lazy-omap-stats)
 
 # test_timers
 add_executable(ceph_test_timers
@@ -699,6 +700,28 @@ add_executable(unittest_bufferlist
 add_ceph_unittest(unittest_bufferlist)
 target_link_libraries(unittest_bufferlist global)
 
+# compiletest_cxx11_client
+add_executable(compiletest_cxx11_client
+  cxx11_client.cc
+  )
+if(CMAKE_VERSION VERSION_LESS "3.8")
+  # this is ugly as we'll end with -std=c++11 overriding the previous -std=c++17
+  # I would love to have a better way for old Cmakes
+  set_target_properties(compiletest_cxx11_client
+    PROPERTIES COMPILE_FLAGS "-std=c++11 -Werror -pedantic"
+    )
+else()
+  set_target_properties(compiletest_cxx11_client
+    PROPERTIES COMPILE_FLAGS "-Werror -pedantic"
+    CMAKE_CXX_STANDARD 11
+    CXX_STANDARD_REQUIRED ON
+    )
+endif()
+add_ceph_test(compiletest_cxx11_client
+  "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/compiletest_cxx11_client"
+  )
+target_link_libraries(compiletest_cxx11_client global)
+
 # unittest_xlist
 add_executable(unittest_xlist
   test_xlist.cc
@@ -859,6 +882,12 @@ add_executable(unittest_ipaddr
   test_ipaddr.cc)
 add_ceph_unittest(unittest_ipaddr)
 target_link_libraries(unittest_ipaddr mon global)
+
+# unittest_utime
+add_executable(unittest_utime
+  test_utime.cc)
+add_ceph_unittest(unittest_utime)
+target_link_libraries(unittest_utime mon global)
 
 # unittest_texttable
 add_executable(unittest_texttable

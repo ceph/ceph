@@ -12,8 +12,19 @@
 # If a version might represent an actual number (e.g. 0.80) quote it.
 #
 releases:
+  nautilus:
+    releases:
+      - version: 14.2.1
+        released: 2019-04-29
+      - version: 14.2.0
+        released: 2019-03-19
+
   mimic:
     releases:
+      - version: 13.2.6
+        released: 2019-06-04
+      - version: 13.2.5
+        released: 2019-03-13
       - version: 13.2.4
         released: 2019-01-07
       - version: 13.2.3
@@ -24,9 +35,14 @@ releases:
         released: 2018-07-01
       - version: 13.2.0
         released: 2018-06-01
+    target_eol: 2020-06-01
   
   luminous:
     releases:
+      - version: 12.2.12
+        released: 2019-04-12
+      - version: 12.2.11
+        released: 2019-01-31
       - version: 12.2.10
         released: 2018-11-27
       - version: 12.2.9
@@ -49,6 +65,7 @@ releases:
         released: 2017-09-01
       - version: 12.2.0
         released: 2017-08-01
+    target_eol: 2019-06-01
   
   kraken:
     target_eol: 2017-08-01
@@ -203,6 +220,18 @@ releases:
 
 development:
   releases:
+    - version: 14.1.1
+      released:  2019-03-11
+      skip_ref: true        
+    - version: 14.1.0
+      released:  2019-02-22
+      skip_ref: true  
+    - version: 14.0.1
+      released:  2018-11-05
+      skip_ref: true
+    - version: 14.0.0
+      released:  2018-05-06
+      skip_ref: true      
     - version: 13.1.0
       released: 2018-05-01
       skip_ref: true

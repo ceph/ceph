@@ -16,9 +16,9 @@
           <kbd i18n>Restore Image</kbd>.
         </p>
 
-        <div class="form-group"
-             [ngClass]="{'has-error': restoreForm.showError('name', formDir)}">
-          <label for="name"
+        <div class="form-group">
+          <label class="col-form-label"
+                 for="name"
                  i18n>New Name</label>
           <input type="text"
                  class="form-control"
@@ -27,7 +27,7 @@
                  autocomplete="off"
                  formControlName="name"
                  autofocus>
-          <span class="help-block"
+          <span class="invalid-feedback"
                 *ngIf="restoreForm.showError('name', formDir, 'required')"
                 i18n>This field is required.</span>
         </div>

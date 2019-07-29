@@ -55,8 +55,11 @@ int read_key(cls_method_context_t hctx, const string &key, T *t,
              bool ignore_enoent = false) {
   bufferlist bl;
   int r = cls_cxx_map_get_val(hctx, key, &bl);
-  if (r == -ENOENT && ignore_enoent) {
-    return 0;
+  if (r == -ENOENT) {
+    if (ignore_enoent) {
+      r = 0;
+    }
+    return r;
   } else if (r < 0) {
     CLS_ERR("failed to get omap key: %s", key.c_str());
     return r;
@@ -468,7 +471,7 @@ int journal_set_minimum_set(cls_method_context_t hctx, bufferlist *in,
   }
 
   if (current_active_set < object_set) {
-    CLS_ERR("active object set earlier than minimum: %" PRIu64
+    CLS_LOG(10, "active object set earlier than minimum: %" PRIu64
             " < %" PRIu64, current_active_set, object_set);
     return -EINVAL;
   }
@@ -1122,6 +1125,75 @@ int journal_object_guard_append(cls_method_context_t hctx, bufferlist *in,
   return 0;
 }
 
+/**
+ * Input:
+ * @param soft_max_size (uint64_t)
+ * @param data (bufferlist) data to append
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ * @returns -EOVERFLOW if object size is equal or more than soft_max_size
+ */
+int journal_object_append(cls_method_context_t hctx, bufferlist *in,
+                          bufferlist *out) {
+  uint64_t soft_max_size;
+  bufferlist data;
+  try {
+    auto iter = in->cbegin();
+    decode(soft_max_size, iter);
+    decode(data, iter);
+  } catch (const buffer::error &err) {
+    CLS_ERR("failed to decode input parameters: %s", err.what());
+    return -EINVAL;
+  }
+
+  uint64_t size = 0;
+  int r = cls_cxx_stat(hctx, &size, nullptr);
+  if (r < 0 && r != -ENOENT) {
+    CLS_ERR("append: failed to stat object: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  if (size >= soft_max_size) {
+    CLS_LOG(5, "journal object full: %" PRIu64 " >= %" PRIu64,
+            size, soft_max_size);
+    return -EOVERFLOW;
+  }
+
+  auto offset = size;
+  r = cls_cxx_write2(hctx, offset, data.length(), &data,
+                     CEPH_OSD_OP_FLAG_FADVISE_DONTNEED);
+  if (r < 0) {
+    CLS_ERR("append: error when writing: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  if (cls_get_min_compatible_client(hctx) < ceph_release_t::octopus) {
+    return 0;
+  }
+
+  auto min_alloc_size = cls_get_osd_min_alloc_size(hctx);
+  if (min_alloc_size == 0) {
+    min_alloc_size = 8;
+  }
+
+  CLS_LOG(20, "pad to %" PRIu64, min_alloc_size);
+
+  auto end = offset + data.length();
+  auto new_end = round_up_to(end, min_alloc_size);
+  if (new_end == end) {
+    return 0;
+  }
+
+  r = cls_cxx_truncate(hctx, new_end);
+  if (r < 0) {
+    CLS_ERR("append: error when truncating: %s", cpp_strerror(r).c_str());
+    return r;
+  }
+
+  return 0;
+}
+
 CLS_INIT(journal)
 {
   CLS_LOG(20, "Loaded journal class!");
@@ -1147,6 +1219,7 @@ CLS_INIT(journal)
   cls_method_handle_t h_journal_tag_create;
   cls_method_handle_t h_journal_tag_list;
   cls_method_handle_t h_journal_object_guard_append;
+  cls_method_handle_t h_journal_object_append;
 
   cls_register("journal", &h_class);
 
@@ -1224,4 +1297,6 @@ CLS_INIT(journal)
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           journal_object_guard_append,
                           &h_journal_object_guard_append);
+  cls_register_cxx_method(h_class, "append", CLS_METHOD_RD | CLS_METHOD_WR,
+                          journal_object_append, &h_journal_object_append);
 }

@@ -76,6 +76,35 @@ LockType CInode::nestlock_type(CEPH_LOCK_INEST);
 LockType CInode::flocklock_type(CEPH_LOCK_IFLOCK);
 LockType CInode::policylock_type(CEPH_LOCK_IPOLICY);
 
+std::string_view CInode::pin_name(int p) const
+{
+  switch (p) {
+    case PIN_DIRFRAG: return "dirfrag";
+    case PIN_CAPS: return "caps";
+    case PIN_IMPORTING: return "importing";
+    case PIN_OPENINGDIR: return "openingdir";
+    case PIN_REMOTEPARENT: return "remoteparent";
+    case PIN_BATCHOPENJOURNAL: return "batchopenjournal";
+    case PIN_SCATTERED: return "scattered";
+    case PIN_STICKYDIRS: return "stickydirs";
+      //case PIN_PURGING: return "purging";
+    case PIN_FREEZING: return "freezing";
+    case PIN_FROZEN: return "frozen";
+    case PIN_IMPORTINGCAPS: return "importingcaps";
+    case PIN_EXPORTINGCAPS: return "exportingcaps";
+    case PIN_PASTSNAPPARENT: return "pastsnapparent";
+    case PIN_OPENINGSNAPPARENTS: return "openingsnapparents";
+    case PIN_TRUNCATING: return "truncating";
+    case PIN_STRAY: return "stray";
+    case PIN_NEEDSNAPFLUSH: return "needsnapflush";
+    case PIN_DIRTYRSTAT: return "dirtyrstat";
+    case PIN_DIRTYPARENT: return "dirtyparent";
+    case PIN_DIRWAITER: return "dirwaiter";
+    case PIN_SCRUBQUEUE: return "scrubqueue";
+    default: return generic_pin_name(p);
+  }
+}
+
 //int cinode_pins[CINODE_NUM_PINS];  // counts
 ostream& CInode::print_db_line_prefix(ostream& out)
 {
@@ -92,8 +121,6 @@ struct cinode_lock_info_t cinode_lock_info[] = {
   { CEPH_LOCK_IXATTR, CEPH_CAP_XATTR_EXCL },
 };
 int num_cinode_locks = sizeof(cinode_lock_info) / sizeof(cinode_lock_info[0]);
-
-
 
 ostream& operator<<(ostream& out, const CInode& in)
 {
@@ -335,23 +362,28 @@ void CInode::remove_need_snapflush(CInode *snapin, snapid_t snapid, client_t cli
   }
 }
 
-bool CInode::split_need_snapflush(CInode *cowin, CInode *in)
+pair<bool,bool> CInode::split_need_snapflush(CInode *cowin, CInode *in)
 {
   dout(10) << __func__ << " [" << cowin->first << "," << cowin->last << "] for " << *cowin << dendl;
-  bool need_flush = false;
-  for (auto it = client_need_snapflush.lower_bound(cowin->first);
-       it != client_need_snapflush.end() && it->first < in->first; ) {
+  bool cowin_need_flush = false;
+  bool orig_need_flush = false;
+  auto it = client_need_snapflush.lower_bound(cowin->first);
+  while (it != client_need_snapflush.end() && it->first < in->first) {
     ceph_assert(!it->second.empty());
     if (cowin->last >= it->first) {
       cowin->auth_pin(this);
-      need_flush = true;
+      cowin_need_flush = true;
       ++it;
     } else {
       it = client_need_snapflush.erase(it);
     }
     in->auth_unpin(this);
   }
-  return need_flush;
+
+  if (it != client_need_snapflush.end() && it->first <= in->last)
+    orig_need_flush = true;
+
+  return make_pair(cowin_need_flush, orig_need_flush);
 }
 
 void CInode::mark_dirty_rstat()
@@ -438,6 +470,26 @@ void CInode::pop_and_dirty_projected_inode(LogSegment *ls)
   projected_nodes.pop_front();
 }
 
+CInode::mempool_xattr_map *CInode::get_projected_xattrs()
+{
+  if (num_projected_xattrs > 0) {
+    for (auto it = projected_nodes.rbegin(); it != projected_nodes.rend(); ++it)
+      if (it->xattrs)
+	return it->xattrs.get();
+  }
+  return &xattrs;
+}
+
+CInode::mempool_xattr_map *CInode::get_previous_projected_xattrs()
+{
+  if (num_projected_xattrs > 0) {
+    for (auto it = ++projected_nodes.rbegin(); it != projected_nodes.rend(); ++it)
+      if (it->xattrs)
+	return it->xattrs.get();
+  }
+  return &xattrs;
+}
+
 sr_t *CInode::prepare_new_srnode(snapid_t snapid)
 {
   const sr_t *cur_srnode = get_projected_srnode();
@@ -469,6 +521,18 @@ sr_t *CInode::prepare_new_srnode(snapid_t snapid)
     new_srnode->current_parent_since = get_oldest_snap();
   }
   return new_srnode;
+}
+
+const sr_t *CInode::get_projected_srnode() const {
+  if (num_projected_srnodes > 0) {
+    for (auto it = projected_nodes.rbegin(); it != projected_nodes.rend(); ++it)
+      if (it->snapnode != projected_inode::UNDEF_SRNODE)
+	return it->snapnode;
+  }
+  if (snaprealm)
+    return &snaprealm->srnode;
+  else
+    return NULL;
 }
 
 void CInode::project_snaprealm(sr_t *new_srnode)
@@ -1519,6 +1583,22 @@ void CInode::decode_store(bufferlist::const_iterator& bl)
 
 // ------------------
 // locking
+
+SimpleLock* CInode::get_lock(int type)
+{
+  switch (type) {
+    case CEPH_LOCK_IFILE: return &filelock;
+    case CEPH_LOCK_IAUTH: return &authlock;
+    case CEPH_LOCK_ILINK: return &linklock;
+    case CEPH_LOCK_IDFT: return &dirfragtreelock;
+    case CEPH_LOCK_IXATTR: return &xattrlock;
+    case CEPH_LOCK_ISNAP: return &snaplock;
+    case CEPH_LOCK_INEST: return &nestlock;
+    case CEPH_LOCK_IFLOCK: return &flocklock;
+    case CEPH_LOCK_IPOLICY: return &policylock;
+  }
+  return 0;
+}
 
 void CInode::set_object_info(MDSCacheObjectInfo &info)
 {
@@ -2957,6 +3037,29 @@ void CInode::choose_lock_states(int dirty_caps)
   choose_lock_state(&linklock, issued);
 }
 
+int CInode::count_nonstale_caps()
+{
+  int n = 0;
+  for (const auto &p : client_caps) {
+    if (!p.second.is_stale())
+      n++;
+  }
+  return n;
+}
+
+bool CInode::multiple_nonstale_caps()
+{
+  int n = 0;
+  for (const auto &p : client_caps) {
+    if (!p.second.is_stale()) {
+      if (n)
+	return true;
+      n++;
+    }
+  }
+  return false;
+}
+
 void CInode::set_mds_caps_wanted(mempool::mds_co::compact_map<int32_t,int32_t>& m)
 {
   bool old_empty = mds_caps_wanted.empty();
@@ -3501,24 +3604,24 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       int likes = get_caps_liked();
       int allowed = get_caps_allowed_for_client(session, cap, file_i);
       issue = (cap->wanted() | likes) & allowed;
-      cap->issue_norevoke(issue);
+      cap->issue_norevoke(issue, true);
       issue = cap->pending();
       dout(10) << "encode_inodestat issuing " << ccap_string(issue)
 	       << " seq " << cap->get_last_seq() << dendl;
     } else if (cap && cap->is_new() && !dir_realm) {
       // alway issue new caps to client, otherwise the caps get lost
       ceph_assert(cap->is_stale());
-      issue = cap->pending() | CEPH_CAP_PIN;
-      cap->issue_norevoke(issue);
+      ceph_assert(!cap->pending());
+      issue = CEPH_CAP_PIN;
+      cap->issue_norevoke(issue, true);
       dout(10) << "encode_inodestat issuing " << ccap_string(issue)
 	       << " seq " << cap->get_last_seq()
-	       << "(stale|new caps)" << dendl;
+	       << "(stale&new caps)" << dendl;
     }
 
     if (issue) {
       cap->set_last_issue();
       cap->set_last_issue_stamp(ceph_clock_now());
-      cap->clear_new();
       ecap.caps = issue;
       ecap.wanted = cap->wanted();
       ecap.cap_id = cap->get_cap_id();
@@ -4044,6 +4147,20 @@ void InodeStoreBase::dump(Formatter *f) const
 {
   inode.dump(f);
   f->dump_string("symlink", symlink);
+
+  f->open_array_section("xattrs");
+  for (const auto& [key, val] : xattrs) {
+    f->open_object_section("xattr");
+    f->dump_string("key", key);
+    std::string v(val.c_str(), val.length());
+    f->dump_string("val", v);
+    f->close_section();
+  }
+  f->close_section();
+  f->open_object_section("dirfragtree");
+  dirfragtree.dump(f);
+  f->close_section(); // dirfragtree
+  
   f->open_array_section("old_inodes");
   for (const auto &p : old_inodes) {
     f->open_object_section("old_inode");
@@ -4054,9 +4171,8 @@ void InodeStoreBase::dump(Formatter *f) const
   }
   f->close_section();  // old_inodes
 
-  f->open_object_section("dirfragtree");
-  dirfragtree.dump(f);
-  f->close_section(); // dirfragtree
+  f->dump_unsigned("oldest_snap", oldest_snap);
+  f->dump_unsigned("damage_flags", damage_flags);
 }
 
 

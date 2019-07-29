@@ -807,7 +807,9 @@ void PGMapDigest::dump_pool_stats_full(
           << pool_id;
     }
     float raw_used_rate = osd_map.pool_raw_used_rate(pool_id);
-    dump_object_stat_sum(tbl, f, stat, avail, raw_used_rate, verbose, pool);
+    bool per_pool = use_per_pool_stats();
+    dump_object_stat_sum(tbl, f, stat, avail, raw_used_rate, verbose, per_pool,
+			 pool);
     if (f) {
       f->close_section();  // stats
       f->close_section();  // pool
@@ -836,6 +838,8 @@ void PGMapDigest::dump_cluster_stats(stringstream *ss,
     f->dump_int("total_used_bytes", osd_sum.statfs.get_used());
     f->dump_int("total_used_raw_bytes", osd_sum.statfs.get_used_raw());
     f->dump_float("total_used_raw_ratio", osd_sum.statfs.get_used_raw_ratio());
+    f->dump_unsigned("num_osds", osd_sum.num_osds);
+    f->dump_unsigned("num_per_pool_osds", osd_sum.num_per_pool_osds);
     f->close_section();
     f->open_object_section("stats_by_class");
     for (auto& i : osd_sum_by_class) {
@@ -886,7 +890,7 @@ void PGMapDigest::dump_cluster_stats(stringstream *ss,
 void PGMapDigest::dump_object_stat_sum(
   TextTable &tbl, ceph::Formatter *f,
   const pool_stat_t &pool_stat, uint64_t avail,
-  float raw_used_rate, bool verbose,
+  float raw_used_rate, bool verbose, bool per_pool,
   const pg_pool_t *pool)
 {
   const object_stat_sum_t &sum = pool_stat.stats.sum;
@@ -895,8 +899,8 @@ void PGMapDigest::dump_object_stat_sum(
   if (sum.num_object_copies > 0) {
     raw_used_rate *= (float)(sum.num_object_copies - sum.num_objects_degraded) / sum.num_object_copies;
   }
-    
-  uint64_t used_bytes = pool_stat.get_allocated_bytes();
+
+  uint64_t used_bytes = pool_stat.get_allocated_bytes(per_pool);
 
   float used = 0.0;
   // note avail passed in is raw_avail, calc raw_used here.
@@ -908,7 +912,7 @@ void PGMapDigest::dump_object_stat_sum(
   }
   auto avail_res = raw_used_rate ? avail / raw_used_rate : 0;
   // an approximation for actually stored user data
-  auto stored_normalized = pool_stat.get_user_bytes(raw_used_rate);
+  auto stored_normalized = pool_stat.get_user_bytes(raw_used_rate, per_pool);
   if (f) {
     f->dump_int("stored", stored_normalized);
     f->dump_int("objects", sum.num_objects);
@@ -927,7 +931,7 @@ void PGMapDigest::dump_object_stat_sum(
       f->dump_int("compress_bytes_used", statfs.data_compressed_allocated);
       f->dump_int("compress_under_bytes", statfs.data_compressed_original);
       // Stored by user amplified by replication
-      f->dump_int("stored_raw", pool_stat.get_user_bytes(1.0));
+      f->dump_int("stored_raw", pool_stat.get_user_bytes(1.0, per_pool));
     }
   } else {
     tbl << stringify(byte_u_t(stored_normalized));
@@ -2336,10 +2340,11 @@ void PGMap::get_health_checks(
   typedef enum pg_consequence_t {
     UNAVAILABLE = 1,   // Client IO to the pool may block
     DEGRADED = 2,      // Fewer than the requested number of replicas are present
-    DEGRADED_FULL = 3, // Fewer than the request number of replicas may be present
-                       //  and insufficiet resources are present to fix this
-    DAMAGED = 4        // The data may be missing or inconsistent on disk and
+    BACKFILL_FULL = 3, // Backfill is blocked for space considerations
+                       // This may or may not be a deadlock condition.
+    DAMAGED = 4,        // The data may be missing or inconsistent on disk and
                        //  requires repair
+    RECOVERY_FULL = 5  // Recovery is blocked because OSDs are full
   } pg_consequence_t;
 
   // For a given PG state, how should it be reported at the pool level?
@@ -2382,8 +2387,8 @@ void PGMap::get_health_checks(
     { PG_STATE_SNAPTRIM_ERROR,   {DAMAGED,     {}} },
     { PG_STATE_RECOVERY_UNFOUND, {DAMAGED,     {}} },
     { PG_STATE_BACKFILL_UNFOUND, {DAMAGED,     {}} },
-    { PG_STATE_BACKFILL_TOOFULL, {DEGRADED_FULL, {}} },
-    { PG_STATE_RECOVERY_TOOFULL, {DEGRADED_FULL, {}} },
+    { PG_STATE_BACKFILL_TOOFULL, {BACKFILL_FULL, {}} },
+    { PG_STATE_RECOVERY_TOOFULL, {RECOVERY_FULL, {}} },
     { PG_STATE_DEGRADED,         {DEGRADED,    {}} },
     { PG_STATE_DOWN,             {UNAVAILABLE, {}} },
     // Delayed (wait until stuck) reports
@@ -2527,14 +2532,19 @@ void PGMap::get_health_checks(
         summary = "Degraded data redundancy: ";
         sev = HEALTH_WARN;
         break;
-      case DEGRADED_FULL:
-        health_code = "PG_DEGRADED_FULL";
-        summary = "Degraded data redundancy (low space): ";
-        sev = HEALTH_ERR;
+      case BACKFILL_FULL:
+        health_code = "PG_BACKFILL_FULL";
+        summary = "Low space hindering backfill (add storage if this doesn't resolve itself): ";
+        sev = HEALTH_WARN;
         break;
       case DAMAGED:
         health_code = "PG_DAMAGED";
         summary = "Possible data damage: ";
+        sev = HEALTH_ERR;
+        break;
+      case RECOVERY_FULL:
+        health_code = "PG_RECOVERY_FULL";
+        summary = "Full OSDs blocking recovery: ";
         sev = HEALTH_ERR;
         break;
       default:
@@ -2697,6 +2707,16 @@ void PGMap::get_health_checks(
 	 << " > max " << max_pg_per_osd << ")";
       checks->add("TOO_MANY_PGS", HEALTH_WARN, ss.str());
     }
+  }
+
+  // TOO_FEW_OSDS
+  auto warn_too_few_osds = cct->_conf.get_val<bool>("mon_warn_on_too_few_osds");
+  auto osd_pool_default_size = cct->_conf.get_val<uint64_t>("osd_pool_default_size");
+  if (warn_too_few_osds && osdmap.get_num_osds() < osd_pool_default_size) {
+    ostringstream ss;
+    ss << "OSD count " << osdmap.get_num_osds()
+	 << " < osd_pool_default_size " << osd_pool_default_size;
+    checks->add("TOO_FEW_OSDS", HEALTH_WARN, ss.str());
   }
 
   // SMALLER_PGP_NUM

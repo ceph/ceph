@@ -1,10 +1,9 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
-import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastModule } from 'ng2-toastr';
 import { TabsModule } from 'ngx-bootstrap/tabs';
+import { ToastrModule } from 'ngx-toastr';
 import { of as observableOf, throwError as observableThrowError } from 'rxjs';
 
 import {
@@ -33,7 +32,7 @@ describe('MgrModuleListComponent', () => {
       SharedModule,
       HttpClientTestingModule,
       TabsModule.forRoot(),
-      ToastModule.forRoot()
+      ToastrModule.forRoot()
     ],
     providers: [MgrModuleService, NotificationService, i18nProviders]
   });
@@ -50,57 +49,39 @@ describe('MgrModuleListComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  describe('show action buttons and drop down actions depending on permissions', () => {
-    let tableActions: TableActionsComponent;
-    let scenario: { fn; empty; single };
-    let permissionHelper: PermissionHelper;
+  it('should test all TableActions combinations', () => {
+    const permissionHelper: PermissionHelper = new PermissionHelper(component.permission);
+    const tableActions: TableActionsComponent = permissionHelper.setPermissionsAndGetActions(
+      component.tableActions
+    );
 
-    const getTableActionComponent = (): TableActionsComponent => {
-      fixture.detectChanges();
-      return fixture.debugElement.query(By.directive(TableActionsComponent)).componentInstance;
-    };
-
-    beforeEach(() => {
-      permissionHelper = new PermissionHelper(component.permission, () =>
-        getTableActionComponent()
-      );
-      scenario = {
-        fn: () => tableActions.getCurrentButton().name,
-        single: 'Edit',
-        empty: 'Edit'
-      };
-    });
-
-    describe('with read and update', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(0, 1, 0);
-      });
-
-      it('shows action button', () => permissionHelper.testScenarios(scenario));
-
-      it('shows all actions', () => {
-        expect(tableActions.tableActions.length).toBe(3);
-        expect(tableActions.tableActions).toEqual(component.tableActions);
-      });
-    });
-
-    describe('with only read', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(0, 0, 0);
-      });
-
-      it('shows no main action', () => {
-        permissionHelper.testScenarios({
-          fn: () => tableActions.getCurrentButton(),
-          single: undefined,
-          empty: undefined
-        });
-      });
-
-      it('shows no actions', () => {
-        expect(tableActions.tableActions.length).toBe(0);
-        expect(tableActions.tableActions).toEqual([]);
-      });
+    expect(tableActions).toEqual({
+      'create,update,delete': {
+        actions: ['Edit', 'Enable', 'Disable'],
+        primary: { multiple: 'Edit', executing: 'Edit', single: 'Edit', no: 'Edit' }
+      },
+      'create,update': {
+        actions: ['Edit', 'Enable', 'Disable'],
+        primary: { multiple: 'Edit', executing: 'Edit', single: 'Edit', no: 'Edit' }
+      },
+      'create,delete': {
+        actions: [],
+        primary: { multiple: '', executing: '', single: '', no: '' }
+      },
+      create: { actions: [], primary: { multiple: '', executing: '', single: '', no: '' } },
+      'update,delete': {
+        actions: ['Edit', 'Enable', 'Disable'],
+        primary: { multiple: 'Edit', executing: 'Edit', single: 'Edit', no: 'Edit' }
+      },
+      update: {
+        actions: ['Edit', 'Enable', 'Disable'],
+        primary: { multiple: 'Edit', executing: 'Edit', single: 'Edit', no: 'Edit' }
+      },
+      delete: { actions: [], primary: { multiple: '', executing: '', single: '', no: '' } },
+      'no-permissions': {
+        actions: [],
+        primary: { multiple: '', executing: '', single: '', no: '' }
+      }
     });
   });
 

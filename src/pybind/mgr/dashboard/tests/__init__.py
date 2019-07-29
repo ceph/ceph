@@ -78,6 +78,8 @@ class CLICommandTestMixin(KVStoreMockMixin):
 
 
 class ControllerTestCase(helper.CPWebCase):
+    _endpoints_cache = {}
+
     @classmethod
     def setup_controllers(cls, ctrl_classes, base_url=''):
         if not isinstance(ctrl_classes, list):
@@ -86,7 +88,17 @@ class ControllerTestCase(helper.CPWebCase):
         endpoint_list = []
         for ctrl in ctrl_classes:
             inst = ctrl()
-            for endpoint in ctrl.endpoints():
+
+            # We need to cache the controller endpoints because
+            # BaseController#endpoints method is not idempontent
+            # and a controller might be needed by more than one
+            # unit test.
+            if ctrl not in cls._endpoints_cache:
+                ctrl_endpoints = ctrl.endpoints()
+                cls._endpoints_cache[ctrl] = ctrl_endpoints
+
+            ctrl_endpoints = cls._endpoints_cache[ctrl]
+            for endpoint in ctrl_endpoints:
                 endpoint.inst = inst
                 endpoint_list.append(endpoint)
         endpoint_list = sorted(endpoint_list, key=lambda e: e.url)

@@ -1,6 +1,7 @@
 import { Component, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { FormControl, Validators } from '@angular/forms';
 
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import {
   RbdConfigurationEntry,
@@ -25,6 +26,9 @@ export class RbdConfigurationFormComponent implements OnInit {
   }>;
   @Output()
   changes = new EventEmitter<any>();
+
+  icons = Icons;
+
   ngDataReady = new EventEmitter<any>();
   initialData: RbdConfigurationEntry[];
   configurationType = RbdConfigurationType;

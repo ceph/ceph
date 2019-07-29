@@ -1,7 +1,5 @@
-import { browser } from 'protractor';
+import { PageHelper } from '../page-helper.po';
 
-export class ManagerModulesPage {
-  navigateTo() {
-    return browser.get('/#/mgr-modules');
-  }
+export class ManagerModulesPageHelper extends PageHelper {
+  pages = { index: '/#/mgr-modules' };
 }

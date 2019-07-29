@@ -240,7 +240,8 @@ void ProtocolV1::send_message(Message *m) {
     out_q[m->get_priority()].emplace_back(std::move(bl), m);
     ldout(cct, 15) << __func__ << " inline write is denied, reschedule m=" << m
                    << dendl;
-    if (can_write != WriteStatus::REPLACING) {
+    if (can_write != WriteStatus::REPLACING && !write_in_progress) {
+      write_in_progress = true;
       connection->center->dispatch_event_external(connection->write_handler);
     }
   }
@@ -345,9 +346,13 @@ void ProtocolV1::write_event() {
       } else if (r < 0) {
         ldout(cct, 1) << __func__ << " send msg failed" << dendl;
         break;
-      } else if (r > 0)
-        break;
+      } else if (r > 0) {
+	// Outbound message in-progress, thread will be re-awoken
+	// when the outbound socket is writeable again
+	break;
+      }
     } while (can_write == WriteStatus::CANWRITE);
+    write_in_progress = false;
     connection->write_lock.unlock();
 
     // if r > 0 mean data still lefted, so no need _try_send.
@@ -378,6 +383,7 @@ void ProtocolV1::write_event() {
       return;
     }
   } else {
+    write_in_progress = false;
     connection->write_lock.unlock();
     connection->lock.lock();
     connection->write_lock.lock();
@@ -1001,15 +1007,28 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
 
   state = OPENED;
 
+  ceph::mono_time fast_dispatch_time;
+
+  auto& conf = cct->_conf;
+  if ((conf->ms_blackhole_mon && connection->peer_type == CEPH_ENTITY_TYPE_MON)||
+      (conf->ms_blackhole_osd && connection->peer_type == CEPH_ENTITY_TYPE_OSD)||
+      (conf->ms_blackhole_mds && connection->peer_type == CEPH_ENTITY_TYPE_MDS)||
+      (conf->ms_blackhole_client &&
+       connection->peer_type == CEPH_ENTITY_TYPE_CLIENT)) {
+    ldout(cct, 10) << __func__ << " blackhole " << *message << dendl;
+    message->put();
+    goto out;
+  }
+
   connection->logger->inc(l_msgr_recv_messages);
   connection->logger->inc(
       l_msgr_recv_bytes,
       cur_msg_size + sizeof(ceph_msg_header) + sizeof(ceph_msg_footer));
 
   messenger->ms_fast_preprocess(message);
-  auto fast_dispatch_time = ceph::mono_clock::now();
+  fast_dispatch_time = ceph::mono_clock::now();
   connection->logger->tinc(l_msgr_running_recv_time,
-                           fast_dispatch_time - connection->recv_start_time);
+			   fast_dispatch_time - connection->recv_start_time);
   if (connection->delay_state) {
     double delay_period = 0;
     if (rand() % 10000 < cct->_conf->ms_inject_delay_probability * 10000.0) {
@@ -1032,6 +1051,7 @@ CtPtr ProtocolV1::handle_message_footer(char *buffer, int r) {
                                         connection->conn_id);
   }
 
+ out:
   // clean up local buffer references
   data_buf.clear();
   front.clear();
@@ -1174,6 +1194,7 @@ ssize_t ProtocolV1::write_message(Message *m, bufferlist &bl, bool more) {
 }
 
 void ProtocolV1::requeue_sent() {
+  write_in_progress = false;
   if (sent.empty()) {
     return;
   }
@@ -1233,6 +1254,7 @@ void ProtocolV1::discard_out_queue() {
     }
   }
   out_q.clear();
+  write_in_progress = false;
 }
 
 void ProtocolV1::reset_recv_state()
@@ -2305,6 +2327,7 @@ CtPtr ProtocolV1::replace(const AsyncConnectionRef& existing,
         << __func__ << " stop myself to swap existing" << dendl;
     exproto->can_write = WriteStatus::REPLACING;
     exproto->replacing = true;
+    exproto->write_in_progress = false;
     existing->state_offset = 0;
     // avoid previous thread modify event
     exproto->state = NONE;

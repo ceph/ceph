@@ -8,18 +8,18 @@ describe('MirrorHealthColorPipe', () => {
   });
 
   it('transforms "warning"', () => {
-    expect(pipe.transform('warning')).toBe('label label-warning');
+    expect(pipe.transform('warning')).toBe('badge badge-warning');
   });
 
   it('transforms "error"', () => {
-    expect(pipe.transform('error')).toBe('label label-danger');
+    expect(pipe.transform('error')).toBe('badge badge-danger');
   });
 
   it('transforms "success"', () => {
-    expect(pipe.transform('success')).toBe('label label-success');
+    expect(pipe.transform('success')).toBe('badge badge-success');
   });
 
   it('transforms others', () => {
-    expect(pipe.transform('abc')).toBe('label label-info');
+    expect(pipe.transform('abc')).toBe('badge badge-info');
   });
 });

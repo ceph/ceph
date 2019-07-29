@@ -284,24 +284,23 @@ ceph_set_health_checks(BaseMgrModule *self, PyObject *args)
       }
       string ks(k);
       if (ks == "severity") {
-	if (!PyString_Check(v)) {
+	if (auto [vs, valid] = PyString_ToString(v); !valid) {
 	  derr << __func__ << " check " << check_name
 	       << " severity value not string" << dendl;
 	  continue;
-	}
-	string vs(PyString_AsString(v));
-	if (vs == "warning") {
+	} else if (vs == "warning") {
 	  severity = HEALTH_WARN;
 	} else if (vs == "error") {
 	  severity = HEALTH_ERR;
 	}
       } else if (ks == "summary") {
-	if (!PyString_Check(v)) {
+	if (auto [vs, valid] = PyString_ToString(v); !valid) {
 	  derr << __func__ << " check " << check_name
-	       << " summary value not string" << dendl;
+	       << " summary value not [unicode] string" << dendl;
 	  continue;
+	} else {
+	  summary = std::move(vs);
 	}
-	summary = PyString_AsString(v);
       } else if (ks == "detail") {
 	if (!PyList_Check(v)) {
 	  derr << __func__ << " check " << check_name
@@ -310,12 +309,13 @@ ceph_set_health_checks(BaseMgrModule *self, PyObject *args)
 	}
 	for (int k = 0; k < PyList_Size(v); ++k) {
 	  PyObject *di = PyList_GET_ITEM(v, k);
-	  if (!PyString_Check(di)) {
+	  if (auto [vs, valid] = PyString_ToString(di); !valid) {
 	    derr << __func__ << " check " << check_name
-		 << " detail item " << k << " not a string" << dendl;
+		 << " detail item " << k << " not a [unicode] string" << dendl;
 	    continue;
+	  } else {
+	    detail.push_back(std::move(vs));
 	  }
-	  detail.push_back(PyString_AsString(di));
 	}
       } else {
 	derr << __func__ << " check " << check_name

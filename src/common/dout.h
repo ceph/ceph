@@ -127,18 +127,8 @@ struct is_dynamic<dynamic_marker_t<T>> : public std::true_type {};
       std::ostream* _dout = &_out;
 #define dendl_impl                              \
      "";                                        \
-      const std::string _s = _out.str();        \
-      if (_lv < 0) {                            \
-        _logger.error(_s.c_str());              \
-      } else if (_lv < 1) {                     \
-        _logger.warn(_s.c_str());               \
-      } else if (_lv < 5) {                     \
-        _logger.info(_s.c_str());               \
-      } else if (_lv < 10) {                    \
-        _logger.debug(_s.c_str());              \
-      } else {                                  \
-        _logger.trace(_s.c_str());              \
-      }                                         \
+      _logger.log(ceph::to_log_level(_lv),      \
+                  _out.str().c_str());          \
     }                                           \
   } while (0)
 #else

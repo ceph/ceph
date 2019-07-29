@@ -4,7 +4,11 @@ import { RouterTestingModule } from '@angular/router/testing';
 
 import { of } from 'rxjs';
 
-import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
+import {
+  configureTestBed,
+  expectItemTasks,
+  i18nProviders
+} from '../../../testing/unit-test-helper';
 import { ExecutingTask } from '../models/executing-task';
 import { SummaryService } from './summary.service';
 import { TaskListService } from './task-list.service';
@@ -62,16 +66,13 @@ describe('TaskListService', () => {
     expect(service).toBeTruthy();
   });
 
-  const addTask = (name: string, itemName: string) => {
+  const addTask = (name: string, itemName: string, progress?: number) => {
     const task = new ExecutingTask();
     task.name = name;
+    task.progress = progress;
     task.metadata = { name: itemName };
     tasks.push(task);
     summaryService.addRunningTask(task);
-  };
-
-  const expectItemTasks = (item: any, executing: string) => {
-    expect(item.cdExecuting).toBe(executing);
   };
 
   it('gets all items without any executing items', () => {
@@ -83,6 +84,14 @@ describe('TaskListService', () => {
     addTask('test/create', 'd');
     expect(list.length).toBe(4);
     expectItemTasks(list[3], 'Creating');
+  });
+
+  it('shows progress of current task if any above 0', () => {
+    addTask('test/edit', 'd', 97);
+    addTask('test/edit', 'e', 0);
+    expect(list.length).toBe(5);
+    expectItemTasks(list[3], 'Updating', 97);
+    expectItemTasks(list[4], 'Updating');
   });
 
   it('gets all items with one executing items', () => {
@@ -101,8 +110,8 @@ describe('TaskListService', () => {
     addTask('test/delete', 'b');
     addTask('test/delete', 'c');
     expect(list.length).toBe(3);
-    expectItemTasks(list[0], 'Creating, Updating, Deleting');
-    expectItemTasks(list[1], 'Updating, Deleting');
+    expectItemTasks(list[0], 'Creating..., Updating..., Deleting');
+    expectItemTasks(list[1], 'Updating..., Deleting');
     expectItemTasks(list[2], 'Deleting');
   });
 

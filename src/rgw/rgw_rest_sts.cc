@@ -355,7 +355,7 @@ void RGWHandler_REST_STS::rgw_sts_parse_input()
         if (pos != string::npos) {
            std::string key = t.substr(0, pos);
            std::string value = t.substr(pos + 1, t.size() - 1);
-           if (key == "RoleArn") {
+           if (key == "RoleArn" || key == "Policy") {
             value = url_decode(value);
            }
            s->info.args.append(key, value);

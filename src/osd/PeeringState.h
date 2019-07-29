@@ -34,10 +34,6 @@ struct PGPool {
   pg_pool_t info;
   SnapContext snapc;   // the default pool snapc, ready to go.
 
-  // these two sets are for < mimic only
-  interval_set<snapid_t> cached_removed_snaps;      // current removed_snaps set
-  interval_set<snapid_t> newly_removed_snaps;  // newly removed in the last epoch
-
   PGPool(CephContext* cct, OSDMapRef map, int64_t i, const pg_pool_t& info,
 	 const string& name)
     : cct(cct),
@@ -46,12 +42,57 @@ struct PGPool {
       name(name),
       info(info) {
     snapc = info.get_snap_context();
-    if (map->require_osd_release < ceph_release_t::mimic) {
-      info.build_removed_snaps(cached_removed_snaps);
-    }
   }
 
   void update(CephContext *cct, OSDMapRef map);
+};
+
+class PeeringCtx;
+
+// [primary only] content recovery state
+struct BufferedRecoveryMessages {
+  map<int, map<spg_t, pg_query_t> > query_map;
+  map<int, vector<pair<pg_notify_t, PastIntervals> > > info_map;
+  map<int, vector<pair<pg_notify_t, PastIntervals> > > notify_list;
+
+  BufferedRecoveryMessages() = default;
+  BufferedRecoveryMessages(PeeringCtx &);
+
+  void accept_buffered_messages(BufferedRecoveryMessages &m) {
+    for (auto &[target, qmap] : m.query_map) {
+      auto &omap = query_map[target];
+      for (auto &[pg, query] : qmap) {
+	omap[pg] = query;
+      }
+    }
+    for (auto &[target, ivec] : m.info_map) {
+      auto &ovec = info_map[target];
+      ovec.reserve(ovec.size() + ivec.size());
+      ovec.insert(ovec.end(), ivec.begin(), ivec.end());
+    }
+    for (auto &[target, nlist] : m.notify_list) {
+      auto &ovec = notify_list[target];
+      ovec.reserve(ovec.size() + nlist.size());
+      ovec.insert(ovec.end(), nlist.begin(), nlist.end());
+    }
+  }
+};
+
+struct PeeringCtx : BufferedRecoveryMessages {
+  ObjectStore::Transaction transaction;
+  HBHandle* handle = nullptr;
+
+  PeeringCtx() = default;
+
+  PeeringCtx(const PeeringCtx &) = delete;
+  PeeringCtx &operator=(const PeeringCtx &) = delete;
+
+  PeeringCtx(PeeringCtx &&) = default;
+  PeeringCtx &operator=(PeeringCtx &&) = default;
+
+  void reset_transaction() {
+    transaction = ObjectStore::Transaction();
+  }
 };
 
   /* Encapsulates PG recovery process */
@@ -72,7 +113,7 @@ public:
     /// Notify that info/history changed (generally to update scrub registration)
     virtual void on_info_history_change() = 0;
     /// Notify that a scrub has been requested
-    virtual void scrub_requested(bool deep, bool repair) = 0;
+    virtual void scrub_requested(bool deep, bool repair, bool need_auto = false) = 0;
 
     /// Return current snap_trimq size
     virtual uint64_t get_snap_trimq_size() const = 0;
@@ -224,58 +265,6 @@ public:
     virtual OstreamTemp get_clog_debug() = 0;
 
     virtual ~PeeringListener() {}
-  };
-
-  // [primary only] content recovery state
-  struct BufferedRecoveryMessages {
-    map<int, map<spg_t, pg_query_t> > query_map;
-    map<int, vector<pair<pg_notify_t, PastIntervals> > > info_map;
-    map<int, vector<pair<pg_notify_t, PastIntervals> > > notify_list;
-  };
-
-  struct PeeringCtx {
-    map<int, map<spg_t, pg_query_t> > query_map;
-    map<int, vector<pair<pg_notify_t, PastIntervals> > > info_map;
-    map<int, vector<pair<pg_notify_t, PastIntervals> > > notify_list;
-    ObjectStore::Transaction transaction;
-    HBHandle* handle = nullptr;
-
-    PeeringCtx() = default;
-
-    void reset_transaction() {
-      transaction = ObjectStore::Transaction();
-    }
-
-    void accept_buffered_messages(BufferedRecoveryMessages &m) {
-      for (map<int, map<spg_t, pg_query_t> >::iterator i = m.query_map.begin();
-	   i != m.query_map.end();
-	   ++i) {
-	map<spg_t, pg_query_t> &omap = query_map[i->first];
-	for (map<spg_t, pg_query_t>::iterator j = i->second.begin();
-	     j != i->second.end();
-	     ++j) {
-	  omap[j->first] = j->second;
-	}
-      }
-      for (map<int, vector<pair<pg_notify_t, PastIntervals> > >::iterator i
-	     = m.info_map.begin();
-	   i != m.info_map.end();
-	   ++i) {
-	vector<pair<pg_notify_t, PastIntervals> > &ovec =
-	  info_map[i->first];
-	ovec.reserve(ovec.size() + i->second.size());
-	ovec.insert(ovec.end(), i->second.begin(), i->second.end());
-      }
-      for (map<int, vector<pair<pg_notify_t, PastIntervals> > >::iterator i
-	     = m.notify_list.begin();
-	   i != m.notify_list.end();
-	   ++i) {
-	vector<pair<pg_notify_t, PastIntervals> > &ovec =
-	  notify_list[i->first];
-	ovec.reserve(ovec.size() + i->second.size());
-	ovec.insert(ovec.end(), i->second.begin(), i->second.end());
-      }
-    }
   };
 
 private:
@@ -1410,7 +1399,7 @@ public:
     set<pg_shard_t> *async_recovery,
     const OSDMapRef osdmap) const;
 
-  bool recoverable_and_ge_min_size(const vector<int> &want) const;
+  bool recoverable(const vector<int> &want) const;
   bool choose_acting(pg_shard_t &auth_log_shard,
 		     bool restrict_to_up_acting,
 		     bool *history_les_bound);
@@ -1514,15 +1503,16 @@ public:
 
   /// Init pg instance from disk state
   template <typename F>
-  void init_from_disk_state(
+  auto init_from_disk_state(
     pg_info_t &&info_from_disk,
     PastIntervals &&past_intervals_from_disk,
     F &&pg_log_init) {
     info = std::move(info_from_disk);
     last_written_info = info;
     past_intervals = std::move(past_intervals_from_disk);
-    pg_log_init(pg_log);
+    auto ret = pg_log_init(pg_log);
     log_weirdness();
+    return ret;
   }
 
   /// Set initial primary/acting

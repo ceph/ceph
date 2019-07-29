@@ -73,7 +73,7 @@ int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
       RGWBucketInfo bucket_info;
 
       ret = store->get_bucket_info(obj_ctx, user_id.tenant, bucket_ent.bucket.name,
-                                   bucket_info, nullptr, nullptr);
+                                   bucket_info, nullptr, null_yield, nullptr);
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: could not read bucket info: bucket=" << bucket_ent.bucket << " ret=" << ret << dendl;
         continue;
@@ -280,7 +280,7 @@ int rgw_get_user_info_from_index(RGWRados * const store,
   RGWUID uid;
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
-  int ret = rgw_get_system_obj(store, obj_ctx, pool, key, bl, NULL, &e.mtime);
+  int ret = rgw_get_system_obj(store, obj_ctx, pool, key, bl, NULL, &e.mtime, null_yield);
   if (ret < 0)
     return ret;
 
@@ -326,7 +326,7 @@ int rgw_get_user_info_by_uid(RGWRados *store,
 
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
   string oid = uid.to_str();
-  int ret = rgw_get_system_obj(store, obj_ctx, store->svc.zone->get_zone_params().user_uid_pool, oid, bl, objv_tracker, pmtime, pattrs, cache_info);
+  int ret = rgw_get_system_obj(store, obj_ctx, store->svc.zone->get_zone_params().user_uid_pool, oid, bl, objv_tracker, pmtime, null_yield, pattrs, cache_info);
   if (ret < 0) {
     return ret;
   }
@@ -1804,9 +1804,11 @@ int RGWUser::init(RGWUserAdminOpState& op_state)
     found = (rgw_get_user_info_by_uid(store, user_id, user_info, &op_state.objv) >= 0);
     op_state.found_by_uid = found;
   }
-  if (!user_email.empty() && !found) {
-    found = (rgw_get_user_info_by_email(store, user_email, user_info, &op_state.objv) >= 0);
-    op_state.found_by_email = found;
+  if (store->ctx()->_conf.get_val<bool>("rgw_user_unique_email")) {
+    if (!user_email.empty() && !found) {
+      found = (rgw_get_user_info_by_email(store, user_email, user_info, &op_state.objv) >= 0);
+      op_state.found_by_email = found;
+    }
   }
   if (!swift_user.empty() && !found) {
     found = (rgw_get_user_info_by_swift(store, swift_user, user_info, &op_state.objv) >= 0);
@@ -2081,7 +2083,7 @@ int RGWUser::add(RGWUserAdminOpState& op_state, std::string *err_msg)
   return 0;
 }
 
-int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg)
+int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg, optional_yield y)
 {
   int ret;
 
@@ -2115,7 +2117,7 @@ int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg)
 
     std::map<std::string, RGWBucketEnt>::iterator it;
     for (it = m.begin(); it != m.end(); ++it) {
-      ret = rgw_remove_bucket(store, ((*it).second).bucket, true);
+      ret = rgw_remove_bucket(store, ((*it).second).bucket, true, y);
       if (ret < 0) {
         set_err_msg(err_msg, "unable to delete user data");
         return ret;
@@ -2138,7 +2140,7 @@ int RGWUser::execute_remove(RGWUserAdminOpState& op_state, std::string *err_msg)
   return 0;
 }
 
-int RGWUser::remove(RGWUserAdminOpState& op_state, std::string *err_msg)
+int RGWUser::remove(RGWUserAdminOpState& op_state, optional_yield y, std::string *err_msg)
 {
   std::string subprocess_msg;
   int ret;
@@ -2149,7 +2151,7 @@ int RGWUser::remove(RGWUserAdminOpState& op_state, std::string *err_msg)
     return ret;
   }
 
-  ret = execute_remove(op_state, &subprocess_msg);
+  ret = execute_remove(op_state, &subprocess_msg, y);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to remove user, " + subprocess_msg);
     return ret;
@@ -2535,7 +2537,7 @@ int RGWUserAdminOp_User::modify(RGWRados *store, RGWUserAdminOpState& op_state,
 }
 
 int RGWUserAdminOp_User::remove(RGWRados *store, RGWUserAdminOpState& op_state,
-                  RGWFormatterFlusher& flusher)
+                  RGWFormatterFlusher& flusher, optional_yield y)
 {
   RGWUserInfo info;
   RGWUser user;
@@ -2544,7 +2546,7 @@ int RGWUserAdminOp_User::remove(RGWRados *store, RGWUserAdminOpState& op_state,
     return ret;
 
 
-  ret = user.remove(op_state, NULL);
+  ret = user.remove(op_state, y, NULL);
 
   if (ret == -ENOENT)
     ret = -ERR_NO_SUCH_USER;

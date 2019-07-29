@@ -1,13 +1,12 @@
-<div dropdown>
+<div dropdown
+     class="btn-group">
   <a dropdownToggle
      class="dropdown-toggle"
-     data-toggle="dropdown"
      i18n-title
      title="Logged in user">
-    <i class="fa fa-fw fa-user"></i>
+    <i [ngClass]="[icons.user]"></i>
     <span i18n
-          class="visible-xs-inline-block">Logged in user</span>
-    <span class="caret"></span>
+          class="d-md-none">Logged in user</span>
   </a>
   <ul *dropdownMenu
       class="dropdown-menu dropdown-menu-right"
@@ -19,11 +18,19 @@
          href="#">Signed in as
       <strong>{{ username }}</strong></a>
     </li>
-    <li class="divider dropdown-divider"></li>
+    <li class="dropdown-divider"></li>
+    <li *ngIf="!sso"
+        role="menuitem">
+      <a class="dropdown-item"
+         routerLink="/user-profile/edit">
+        <i [ngClass]="[icons.lock]"></i>
+        <span i18n>Change password</span>
+      </a>
+    </li>
     <li role="menuitem">
       <a class="dropdown-item"
          (click)="logout()">
-        <i class="fa fa-sign-out fa-fw"></i>
+        <i [ngClass]="[icons.signOut]"></i>
         <span i18n>Sign out</span>
       </a>
     </li>

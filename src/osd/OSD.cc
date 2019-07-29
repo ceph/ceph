@@ -71,6 +71,7 @@
 #include "messages/MOSDPing.h"
 #include "messages/MOSDFailure.h"
 #include "messages/MOSDMarkMeDown.h"
+#include "messages/MOSDMarkMeDead.h"
 #include "messages/MOSDFull.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDOpReply.h"
@@ -123,6 +124,9 @@
 #include "messages/MOSDPGPush.h"
 #include "messages/MOSDPGPushReply.h"
 #include "messages/MOSDPGPull.h"
+
+#include "messages/MMonGetPurgedSnaps.h"
+#include "messages/MMonGetPurgedSnapsReply.h"
 
 #include "common/perf_counters.h"
 #include "common/Timer.h"
@@ -198,6 +202,7 @@ CompatSet OSD::get_osd_initial_compat_set() {
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_MISSING);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_FASTINFO);
   ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_RECOVERY_DELETES);
+  ceph_osd_feature_incompat.insert(CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER2);
   return CompatSet(ceph_osd_feature_compat, ceph_osd_feature_ro_compat,
 		   ceph_osd_feature_incompat);
 }
@@ -2689,6 +2694,28 @@ float OSD::get_osd_delete_sleep()
   return cct->_conf.get_val<double>("osd_delete_sleep_hdd");
 }
 
+int OSD::get_recovery_max_active()
+{
+  if (cct->_conf->osd_recovery_max_active)
+    return cct->_conf->osd_recovery_max_active;
+  if (store_is_rotational)
+    return cct->_conf->osd_recovery_max_active_hdd;
+  else
+    return cct->_conf->osd_recovery_max_active_ssd;
+}
+
+float OSD::get_osd_snap_trim_sleep()
+{
+  float osd_snap_trim_sleep = cct->_conf.get_val<double>("osd_snap_trim_sleep");
+  if (osd_snap_trim_sleep > 0)
+    return osd_snap_trim_sleep;
+  if (!store_is_rotational && !journal_is_rotational)
+    return cct->_conf.get_val<double>("osd_snap_trim_sleep_ssd");
+  if (store_is_rotational && !journal_is_rotational)
+    return cct->_conf.get_val<double>("osd_snap_trim_sleep_hybrid");
+  return cct->_conf.get_val<double>("osd_snap_trim_sleep_hdd");
+}
+
 int OSD::init()
 {
   CompatSet initial, diff;
@@ -2839,6 +2866,17 @@ int OSD::init()
   initial = get_osd_initial_compat_set();
   diff = superblock.compat_features.unsupported(initial);
   if (superblock.compat_features.merge(initial)) {
+    // Are we adding SNAPMAPPER2?
+    if (diff.incompat.contains(CEPH_OSD_FEATURE_INCOMPAT_SNAPMAPPER2)) {
+      dout(1) << __func__ << " upgrade snap_mapper (first start as octopus)"
+	      << dendl;
+      auto ch = service.meta_ch;
+      auto hoid = make_snapmapper_oid();
+      unsigned max = cct->_conf->osd_target_transaction_size;
+      r = SnapMapper::convert_legacy(cct, store, ch, hoid, max);
+      if (r < 0)
+	goto out;
+    }
     // We need to persist the new compat_set before we
     // do anything else
     dout(5) << "Upgrading superblock adding: " << diff << dendl;
@@ -2854,6 +2892,14 @@ int OSD::init()
     dout(10) << "init creating/touching snapmapper object" << dendl;
     ObjectStore::Transaction t;
     t.touch(coll_t::meta(), OSD::make_snapmapper_oid());
+    r = store->queue_transaction(service.meta_ch, std::move(t));
+    if (r < 0)
+      goto out;
+  }
+  if (!store->exists(service.meta_ch, OSD::make_purged_snaps_oid())) {
+    dout(10) << "init creating/touching purged_snaps object" << dendl;
+    ObjectStore::Transaction t;
+    t.touch(coll_t::meta(), OSD::make_purged_snaps_oid());
     r = store->queue_transaction(service.meta_ch, std::move(t));
     if (r < 0)
       goto out;
@@ -3422,7 +3468,7 @@ int OSD::shutdown()
   osd_lock.Lock();
 
   boot_finisher.stop();
-  reset_heartbeat_peers();
+  reset_heartbeat_peers(true);
 
   tick_timer.shutdown();
 
@@ -3589,21 +3635,13 @@ int OSD::update_crush_location()
 		      double(1ull << 40 /* TB */)));
   }
 
-  std::multimap<string,string> loc = cct->crush_location.get_location();
-  dout(10) << __func__ << " crush location is " << loc << dendl;
+  dout(10) << __func__ << " crush location is " << cct->crush_location << dendl;
 
   string cmd =
     string("{\"prefix\": \"osd crush create-or-move\", ") +
-    string("\"id\": ") + stringify(whoami) + string(", ") +
-    string("\"weight\":") + weight + string(", ") +
-    string("\"args\": [");
-  for (multimap<string,string>::iterator p = loc.begin(); p != loc.end(); ++p) {
-    if (p != loc.begin())
-      cmd += ", ";
-    cmd += "\"" + p->first + "=" + p->second + "\"";
-  }
-  cmd += "]}";
-
+    string("\"id\": ") + stringify(whoami) + ", " +
+    string("\"weight\":") + weight + ", " +
+    string("\"args\": [") + stringify(cct->crush_location) + "]}";
   return mon_cmd_maybe_osd_create(cmd);
 }
 
@@ -4049,7 +4087,7 @@ PGRef OSD::handle_pg_create_info(const OSDMapRef& osdmap,
     return nullptr;
   }
 
-  PG::PeeringCtx rctx = create_context();
+  PeeringCtx rctx = create_context();
 
   OSDMapRef startmap = get_map(info->epoch);
 
@@ -4084,8 +4122,9 @@ PGRef OSD::handle_pg_create_info(const OSDMapRef& osdmap,
 		 << "the pool allows ec overwrites but is not stored in "
 		 << "bluestore, so deep scrubbing will not detect bitrot";
   }
-  PG::_create(rctx.transaction, pgid, pgid.get_split_bits(pp->get_pg_num()));
-  PG::_init(rctx.transaction, pgid, pp);
+  create_pg_collection(
+    rctx.transaction, pgid, pgid.get_split_bits(pp->get_pg_num()));
+  init_pg_ondisk(rctx.transaction, pgid, pp);
 
   int role = startmap->calc_pg_role(whoami, acting, acting.size());
   if (!pp->is_replicated() && role != pgid.shard) {
@@ -4116,6 +4155,8 @@ PGRef OSD::handle_pg_create_info(const OSDMapRef& osdmap,
     info->past_intervals,
     false,
     rctx.transaction);
+
+  pg->init_collection_pool_opts();
 
   if (pg->is_primary()) {
     Mutex::Locker locker(m_perf_queries_lock);
@@ -4388,9 +4429,9 @@ void OSD::maybe_update_heartbeat_peers()
 	dout(10) << "maybe_update_heartbeat_peers forcing update after " << dur << " seconds" << dendl;
 	heartbeat_set_peers_need_update();
 	last_heartbeat_resample = now;
-        if (is_waiting_for_healthy()) {
-	  reset_heartbeat_peers();   // we want *new* peers!
-        }
+	// automatically clean up any stale heartbeat peers
+	// if we are unhealthy, then clean all
+	reset_heartbeat_peers(is_waiting_for_healthy());
       }
     }
   }
@@ -4480,20 +4521,27 @@ void OSD::maybe_update_heartbeat_peers()
   dout(10) << "maybe_update_heartbeat_peers " << heartbeat_peers.size() << " peers, extras " << extras << dendl;
 }
 
-void OSD::reset_heartbeat_peers()
+void OSD::reset_heartbeat_peers(bool all)
 {
   ceph_assert(osd_lock.is_locked());
   dout(10) << "reset_heartbeat_peers" << dendl;
+  utime_t stale = ceph_clock_now();
+  stale -= cct->_conf.get_val<int64_t>("osd_heartbeat_stale");
   std::lock_guard l(heartbeat_lock);
-  while (!heartbeat_peers.empty()) {
-    HeartbeatInfo& hi = heartbeat_peers.begin()->second;
-    hi.con_back->mark_down();
-    if (hi.con_front) {
-      hi.con_front->mark_down();
+  for (auto it = heartbeat_peers.begin(); it != heartbeat_peers.end();) {
+    HeartbeatInfo& hi = it->second;
+    if (all || hi.is_stale(stale)) {
+      hi.con_back->mark_down();
+      if (hi.con_front) {
+        hi.con_front->mark_down();
+      }
+      // stop sending failure_report to mon too
+      failure_queue.erase(it->first);
+      heartbeat_peers.erase(it++);
+    } else {
+      it++;
     }
-    heartbeat_peers.erase(heartbeat_peers.begin());
   }
-  failure_queue.clear();
 }
 
 void OSD::handle_osd_ping(MOSDPing *m)
@@ -4564,7 +4612,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	if (is_active()) {
 	  ConnectionRef con = service.get_con_osd_cluster(from, curmap->get_epoch());
 	  if (con) {
-	    service.maybe_share_map(con.get(), get_osdmap(), m->map_epoch);
+	    service.maybe_share_map(con.get(), curmap, m->map_epoch);
 	  }
 	}
       } else if (!curmap->exists(from) ||
@@ -4658,7 +4706,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	if (is_active()) {
 	  ConnectionRef con = service.get_con_osd_cluster(from, curmap->get_epoch());
 	  if (con) {
-	    service.maybe_share_map(con.get(), get_osdmap(), m->map_epoch);
+	    service.maybe_share_map(con.get(), curmap, m->map_epoch);
 	  }
 	}
       }
@@ -4885,19 +4933,42 @@ void OSD::tick()
 
   if (is_waiting_for_healthy()) {
     start_boot();
-    if (is_waiting_for_healthy()) {
-      // failed to boot
-      std::lock_guard l(heartbeat_lock);
-      utime_t now = ceph_clock_now();
-      if (now - last_mon_heartbeat > cct->_conf->osd_mon_heartbeat_interval) {
-        last_mon_heartbeat = now;
-        dout(1) << __func__ << " checking mon for new map" << dendl;
-        osdmap_subscribe(osdmap->get_epoch() + 1, false);
-      }
+  }
+
+  if (is_waiting_for_healthy() || is_booting()) {
+    std::lock_guard l(heartbeat_lock);
+    utime_t now = ceph_clock_now();
+    if (now - last_mon_heartbeat > cct->_conf->osd_mon_heartbeat_interval) {
+      last_mon_heartbeat = now;
+      dout(1) << __func__ << " checking mon for new map" << dendl;
+      osdmap_subscribe(osdmap->get_epoch() + 1, false);
     }
   }
 
   do_waiters();
+
+  // scrub purged_snaps every deep scrub interval
+  {
+    const utime_t last = superblock.last_purged_snaps_scrub;
+    utime_t next = last;
+    next += cct->_conf->osd_scrub_min_interval;
+    std::mt19937 rng;
+    // use a seed that is stable for each scrub interval, but varies
+    // by OSD to avoid any herds.
+    rng.seed(whoami + superblock.last_purged_snaps_scrub.sec());
+    double r = (rng() % 1024) / 1024;
+    next +=
+      cct->_conf->osd_scrub_min_interval *
+      cct->_conf->osd_scrub_interval_randomize_ratio * r;
+    if (next < ceph_clock_now()) {
+      dout(20) << __func__ << " last_purged_snaps_scrub " << last
+	       << " next " << next << " ... now" << dendl;
+      scrub_purged_snaps();
+    } else {
+      dout(20) << __func__ << " last_purged_snaps_scrub " << last
+	       << " next " << next << dendl;
+    }
+  }
 
   tick_timer.add_event_after(get_tick_interval(), new C_Tick(this));
 }
@@ -5398,6 +5469,8 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
     heartbeat();
   }
 
+  const auto& monmap = monc->monmap;
+
   // if our map within recent history, try to add ourselves to the osdmap.
   if (osdmap->get_epoch() == 0) {
     derr << "waiting for initial osdmap" << dendl;
@@ -5408,7 +5481,7 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
     if (osdmap->get_epoch() > newest - 1) {
       exit(0);
     }
-  } else if (osdmap->test_flag(CEPH_OSDMAP_NOUP) || osdmap->is_noup(whoami)) {
+  } else if (osdmap->is_noup(whoami)) {
     derr << "osdmap NOUP flag is set, waiting for it to clear" << dendl;
   } else if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
     derr << "osdmap SORTBITWISE OSDMap flag is NOT set; please set it"
@@ -5419,6 +5492,11 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
   } else if (service.need_fullness_update()) {
     derr << "osdmap fullness state needs update" << dendl;
     send_full_update();
+  } else if (monmap.min_mon_release >= ceph_release_t::octopus &&
+	     superblock.purged_snaps_last < superblock.current_epoch) {
+    dout(10) << __func__ << " purged_snaps_last " << superblock.purged_snaps_last
+	     << " < newest_map " << superblock.current_epoch << dendl;
+    _get_purged_snaps();
   } else if (osdmap->get_epoch() >= oldest - 1 &&
 	     osdmap->get_epoch() + cct->_conf->osd_map_message_max > newest) {
 
@@ -5450,6 +5528,45 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
     osdmap_subscribe(osdmap->get_epoch() + 1, false);
   else
     osdmap_subscribe(oldest - 1, true);
+}
+
+void OSD::_get_purged_snaps()
+{
+  // NOTE: this is a naive, stateless implementaiton.  it may send multiple
+  // overlapping requests to the mon, which will be somewhat inefficient, but
+  // it should be reliable.
+  dout(10) << __func__ << " purged_snaps_last " << superblock.purged_snaps_last
+	   << ", newest_map " << superblock.current_epoch << dendl;
+  MMonGetPurgedSnaps *m = new MMonGetPurgedSnaps(
+    superblock.purged_snaps_last + 1,
+    superblock.current_epoch + 1);
+  monc->send_mon_message(m);
+}
+
+void OSD::handle_get_purged_snaps_reply(MMonGetPurgedSnapsReply *m)
+{
+  dout(10) << __func__ << " " << *m << dendl;
+  ObjectStore::Transaction t;
+  if (!is_preboot() ||
+      m->last < superblock.purged_snaps_last) {
+    goto out;
+  }
+  SnapMapper::record_purged_snaps(cct, store, service.meta_ch,
+				  make_purged_snaps_oid(), &t,
+				  m->purged_snaps);
+  superblock.purged_snaps_last = m->last;
+  write_superblock(t);
+  store->queue_transaction(
+    service.meta_ch,
+    std::move(t));
+  service.publish_superblock(superblock);
+  if (m->last < superblock.current_epoch) {
+    _get_purged_snaps();
+  } else {
+    start_boot();
+  }
+out:
+  m->put();
 }
 
 void OSD::send_full_update()
@@ -5823,8 +5940,10 @@ void OSD::send_beacon(const ceph::coarse_mono_clock::time_point& now)
     MOSDBeacon* beacon = nullptr;
     {
       std::lock_guard l{min_last_epoch_clean_lock};
-      beacon = new MOSDBeacon(osdmap->get_epoch(), min_last_epoch_clean);
-      std::swap(beacon->pgs, min_last_epoch_clean_pgs);
+      beacon = new MOSDBeacon(osdmap->get_epoch(),
+			      min_last_epoch_clean,
+			      superblock.last_purged_snaps_scrub);
+      beacon->pgs = min_last_epoch_clean_pgs;
       last_sent_beacon = now;
     }
     monc->send_mon_message(beacon);
@@ -5989,6 +6108,9 @@ COMMAND("cache status",
 COMMAND("send_beacon",
         "Send OSD beacon to mon immediately",
         "osd", "r")
+COMMAND("scrub_purged_snaps",
+	"Scrub purged_snaps vs snapmapper index",
+	"osd", "r")
 };
 
 void OSD::do_command(
@@ -6518,6 +6640,8 @@ int OSD::_do_command(
     if (is_active()) {
       send_beacon(ceph::coarse_mono_clock::now());
     }
+  } else if (prefix == "scrub_purged_snaps") {
+    scrub_purged_snaps();
   } else {
     ss << "unrecognized command '" << prefix << "'";
     r = -EINVAL;
@@ -6525,6 +6649,63 @@ int OSD::_do_command(
 
  out:
   return r;
+}
+
+void OSD::scrub_purged_snaps()
+{
+  dout(10) << __func__ << dendl;
+  ceph_assert(ceph_mutex_is_locked(osd_lock));
+  SnapMapper::Scrubber s(cct, store, service.meta_ch,
+			 make_snapmapper_oid(),
+			 make_purged_snaps_oid());
+  clog->debug() << "purged_snaps scrub starts";
+  osd_lock.unlock();
+  s.run();
+  if (s.stray.size()) {
+    clog->debug() << "purged_snaps scrub found " << s.stray.size() << " strays";
+  } else {
+    clog->debug() << "purged_snaps scrub ok";
+  }
+  set<pair<spg_t,snapid_t>> queued;
+  for (auto& [pool, snap, hash, shard] : s.stray) {
+    const pg_pool_t *pi = get_osdmap()->get_pg_pool(pool);
+    if (!pi) {
+      dout(20) << __func__ << " pool " << pool << " dne" << dendl;
+      continue;
+    }
+    pg_t pgid(pi->raw_hash_to_pg(hash), pool);
+    spg_t spgid(pgid, shard);
+    pair<spg_t,snapid_t> p(spgid, snap);
+    if (queued.count(p)) {
+      dout(20) << __func__ << " pg " << spgid << " snap " << snap
+	       << " already queued" << dendl;
+      continue;
+    }
+    PGRef pg = lookup_lock_pg(spgid);
+    if (!pg) {
+      dout(20) << __func__ << " pg " << spgid << " not found" << dendl;
+      continue;
+    }
+    queued.insert(p);
+    dout(10) << __func__ << " requeue pg " << spgid << " " << pg << " snap "
+	     << snap << dendl;
+    pg->queue_snap_retrim(snap);
+    pg->unlock();
+  }
+  osd_lock.Lock();
+  if (is_stopping()) {
+    return;
+  }
+  dout(10) << __func__ << " done queueing pgs, updating superblock" << dendl;
+  ObjectStore::Transaction t;
+  superblock.last_purged_snaps_scrub = ceph_clock_now();
+  write_superblock(t);
+  int tr = store->queue_transaction(service.meta_ch, std::move(t), nullptr);
+  ceph_assert(tr == 0);
+  if (is_active()) {
+    send_beacon(ceph::coarse_mono_clock::now());
+  }
+  dout(10) << __func__ << " done" << dendl;
 }
 
 void OSD::probe_smart(const string& only_devid, ostream& ss)
@@ -6872,6 +7053,9 @@ void OSD::_dispatch(Message *m)
   case CEPH_MSG_OSD_MAP:
     handle_osd_map(static_cast<MOSDMap*>(m));
     break;
+  case MSG_MON_GET_PURGED_SNAPS_REPLY:
+    handle_get_purged_snaps_reply(static_cast<MMonGetPurgedSnapsReply*>(m));
+    break;
 
     // osd
   case MSG_OSD_SCRUB:
@@ -7107,11 +7291,18 @@ void OSD::sched_scrub()
   if (!service.can_inc_scrubs_pending()) {
     return;
   }
-  if (!cct->_conf->osd_scrub_during_recovery && service.is_recovery_active()) {
-    dout(20) << __func__ << " not scheduling scrubs due to active recovery" << dendl;
-    return;
+  bool allow_requested_repair_only = false;
+  if (service.is_recovery_active()) {
+    if (!cct->_conf->osd_scrub_during_recovery && cct->_conf->osd_repair_during_recovery) {
+      dout(10) << __func__
+               << " will only schedule explicitly requested repair due to active recovery"
+               << dendl;
+      allow_requested_repair_only = true;
+    } else if (!cct->_conf->osd_scrub_during_recovery && !cct->_conf->osd_repair_during_recovery) {
+      dout(20) << __func__ << " not scheduling scrubs due to active recovery" << dendl;
+      return;
+    }
   }
-
 
   utime_t now = ceph_clock_now();
   bool time_permit = scrub_time_permit(now);
@@ -7139,6 +7330,26 @@ void OSD::sched_scrub()
       PGRef pg = _lookup_lock_pg(scrub.pgid);
       if (!pg)
 	continue;
+      // This has already started, so go on to the next scrub job
+      if (pg->scrubber.active) {
+	pg->unlock();
+	dout(30) << __func__ << ": already in progress pgid " << scrub.pgid << dendl;
+	continue;
+      }
+      // Skip other kinds of scrubing if only explicitly requested repairing is allowed
+      if (allow_requested_repair_only && !pg->scrubber.must_repair) {
+        pg->unlock();
+        dout(10) << __func__ << " skip " << scrub.pgid
+                 << " because repairing is not explicitly requested on it"
+                 << dendl;
+        continue;
+      }
+      // If it is reserving, let it resolve before going to the next scrub job
+      if (pg->scrubber.reserved) {
+	pg->unlock();
+	dout(30) << __func__ << ": reserve in progress pgid " << scrub.pgid << dendl;
+	break;
+      }
       dout(10) << "sched_scrub scrubbing " << scrub.pgid << " at " << scrub.sched_time
 	       << (pg->get_must_scrub() ? ", explicitly requested" :
 		   (load_is_low ? ", load_is_low" : " deadline < now"))
@@ -7151,6 +7362,27 @@ void OSD::sched_scrub()
     } while (service.next_scrub_stamp(scrub, &scrub));
   }
   dout(20) << "sched_scrub done" << dendl;
+}
+
+void OSD::resched_all_scrubs()
+{
+  dout(10) << __func__ << ": start" << dendl;
+  OSDService::ScrubJob scrub;
+  if (service.first_scrub_stamp(&scrub)) {
+    do {
+      dout(20) << __func__ << ": examine " << scrub.pgid << dendl;
+
+      PGRef pg = _lookup_lock_pg(scrub.pgid);
+      if (!pg)
+	continue;
+      if (!pg->scrubber.must_scrub && !pg->scrubber.need_auto) {
+        dout(20) << __func__ << ": reschedule " << scrub.pgid << dendl;
+        pg->on_info_history_change();
+      }
+      pg->unlock();
+    } while (service.next_scrub_stamp(scrub, &scrub));
+  }
+  dout(10) << __func__ << ": done" << dendl;
 }
 
 MPGStats* OSD::collect_pg_stats()
@@ -7187,6 +7419,7 @@ MPGStats* OSD::collect_pg_stats()
       });
   }
   store_statfs_t st;
+  bool per_pool_stats = false;
   for (auto p : pool_set) {
     int r = store->pool_statfs(p, &st);
     if (r == -ENOTSUP) {
@@ -7194,8 +7427,13 @@ MPGStats* OSD::collect_pg_stats()
     } else {
       assert(r >= 0);
       m->pool_stat[p] = st;
+      per_pool_stats = true;
     }
   }
+
+  // indicate whether we are reporting per-pool stats
+  m->osd_stat.num_osds = 1;
+  m->osd_stat.num_per_pool_osds = per_pool_stats ? 1 : 0;
 
   return m;
 }
@@ -7476,6 +7714,8 @@ void OSD::handle_osd_map(MOSDMap *m)
   ObjectStore::Transaction t;
   uint64_t txn_size = 0;
 
+  map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> purged_snaps;
+
   // store new maps: queue for disk and put in the osdmap cache
   epoch_t start = std::max(superblock.newest_map + 1, first);
   for (epoch_t e = start; e <= last; e++) {
@@ -7492,6 +7732,8 @@ void OSD::handle_osd_map(MOSDMap *m)
       bufferlist& bl = p->second;
 
       o->decode(bl);
+
+      purged_snaps[e] = o->get_new_purged_snaps();
 
       ghobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::meta(), fulloid, 0, bl.length(), bl);
@@ -7523,6 +7765,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       OSDMap::Incremental inc;
       auto p = bl.cbegin();
       inc.decode(p);
+
       if (o->apply_incremental(inc) < 0) {
 	derr << "ERROR: bad fsid?  i have " << osdmap->get_fsid() << " and inc has " << inc.fsid << dendl;
 	ceph_abort_msg("bad fsid");
@@ -7552,6 +7795,7 @@ void OSD::handle_osd_map(MOSDMap *m)
 	break;
       }
       got_full_map(e);
+      purged_snaps[e] = o->get_new_purged_snaps();
 
       ghobject_t fulloid = get_osdmap_pobject_name(e);
       t.write(coll_t::meta(), fulloid, 0, fbl.length(), fbl);
@@ -7646,6 +7890,18 @@ void OSD::handle_osd_map(MOSDMap *m)
     dout(20) << __func__ << " pg_num_history " << pg_num_history << dendl;
   }
 
+  // record new purged_snaps
+  if (superblock.purged_snaps_last == start - 1) {
+    SnapMapper::record_purged_snaps(cct, store, service.meta_ch,
+				    make_purged_snaps_oid(), &t,
+				    purged_snaps);
+    superblock.purged_snaps_last = last;
+  } else {
+    dout(10) << __func__ << " superblock purged_snaps_last is "
+	     << superblock.purged_snaps_last
+	     << ", not recording new purged_snaps" << dendl;
+  }
+
   // superblock and commit
   write_superblock(t);
   t.register_on_commit(new C_OnMapCommit(this, start, last, m));
@@ -7706,9 +7962,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
       }
     }
 
-    if ((osdmap->test_flag(CEPH_OSDMAP_NOUP) !=
-        newmap->test_flag(CEPH_OSDMAP_NOUP)) ||
-        (osdmap->is_noup(whoami) != newmap->is_noup(whoami))) {
+    if (osdmap->is_noup(whoami) != newmap->is_noup(whoami)) {
       dout(10) << __func__ << " NOUP flag changed in " << newmap->get_epoch()
 	       << dendl;
       if (is_booting()) {
@@ -7785,6 +8039,14 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
                         << " wrongly marked me down at e"
                         << osdmap->get_down_at(whoami);
 	}
+	if (monc->monmap.min_mon_release >= ceph_release_t::octopus) {
+	  // note that this is best-effort...
+	  monc->send_mon_message(
+	    new MOSDMarkMeDead(
+	      monc->get_fsid(),
+	      whoami,
+	      osdmap->get_epoch()));
+	}
       } else if (!osdmap->get_addrs(whoami).legacy_equals(
 		   client_messenger->get_myaddrs())) {
 	clog->error() << "map e" << osdmap->get_epoch()
@@ -7847,8 +8109,6 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	client_messenger->get_myaddrs().get_ports(&avoid_ports);
 #endif
 	cluster_messenger->get_myaddrs().get_ports(&avoid_ports);
-	hb_back_server_messenger->get_myaddrs().get_ports(&avoid_ports);
-	hb_front_server_messenger->get_myaddrs().get_ports(&avoid_ports);
 
 	int r = cluster_messenger->rebind(avoid_ports);
 	if (r != 0) {
@@ -7858,26 +8118,12 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
                   << " rebind cluster_messenger failed" << dendl;
         }
 
-	r = hb_back_server_messenger->rebind(avoid_ports);
-	if (r != 0) {
-	  do_shutdown = true;  // FIXME: do_restart?
-          network_error = true;
-          dout(0) << __func__ << " marked down:"
-                  << " rebind hb_back_server_messenger failed" << dendl;
-        }
-
-	r = hb_front_server_messenger->rebind(avoid_ports);
-	if (r != 0) {
-	  do_shutdown = true;  // FIXME: do_restart?
-          network_error = true;
-          dout(0) << __func__ << " marked down:" 
-                  << " rebind hb_front_server_messenger failed" << dendl;
-        }
-
+	hb_back_server_messenger->mark_down_all();
+	hb_front_server_messenger->mark_down_all();
 	hb_front_client_messenger->mark_down_all();
 	hb_back_client_messenger->mark_down_all();
 
-	reset_heartbeat_peers();
+	reset_heartbeat_peers(true);
       }
     }
   }
@@ -8008,7 +8254,7 @@ void OSD::_finish_splits(set<PGRef>& pgs)
   dout(10) << __func__ << " " << pgs << dendl;
   if (is_stopping())
     return;
-  PG::PeeringCtx rctx = create_context();
+  PeeringCtx rctx = create_context();
   for (set<PGRef>::iterator i = pgs.begin();
        i != pgs.end();
        ++i) {
@@ -8045,7 +8291,7 @@ bool OSD::advance_pg(
   epoch_t osd_epoch,
   PG *pg,
   ThreadPool::TPHandle &handle,
-  PG::PeeringCtx &rctx)
+  PeeringCtx &rctx)
 {
   if (osd_epoch <= pg->get_osdmap_epoch()) {
     return true;
@@ -8179,6 +8425,31 @@ bool OSD::advance_pg(
     pg->handle_advance_map(
       nextmap, lastmap, newup, up_primary,
       newacting, acting_primary, rctx);
+
+    auto oldpool = lastmap->get_pools().find(pg->pg_id.pool());
+    auto newpool = nextmap->get_pools().find(pg->pg_id.pool());
+    if (oldpool != lastmap->get_pools().end()
+        && newpool != nextmap->get_pools().end()) {
+      dout(20) << __func__
+	       << " new pool opts " << newpool->second.opts
+	       << " old pool opts " << oldpool->second.opts
+	       << dendl;
+
+      double old_min_interval = 0, new_min_interval = 0;
+      oldpool->second.opts.get(pool_opts_t::SCRUB_MIN_INTERVAL, &old_min_interval);
+      newpool->second.opts.get(pool_opts_t::SCRUB_MIN_INTERVAL, &new_min_interval);
+
+      double old_max_interval = 0, new_max_interval = 0;
+      oldpool->second.opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &old_max_interval);
+      newpool->second.opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &new_max_interval);
+
+      // Assume if an interval is change from set to unset or vice versa the actual config
+      // is different.  Keep it simple even if it is possible to call resched_all_scrub()
+      // unnecessarily.
+      if (old_min_interval != new_min_interval || old_max_interval != new_max_interval) {
+	pg->on_info_history_change();
+      }
+    }
 
     if (new_pg_num && old_pg_num != new_pg_num) {
       // check for split
@@ -8481,7 +8752,7 @@ void OSD::split_pgs(
   const set<spg_t> &childpgids, set<PGRef> *out_pgs,
   OSDMapRef curmap,
   OSDMapRef nextmap,
-  PG::PeeringCtx &rctx)
+  PeeringCtx &rctx)
 {
   unsigned pg_num = nextmap->get_pg_num(parent->pg_id.pool());
   parent->update_snap_mapper_bits(parent->get_pgid().get_split_bits(pg_num));
@@ -8520,6 +8791,8 @@ void OSD::split_pgs(
       i->pgid,
       child,
       split_bits);
+
+    child->init_collection_pool_opts();
 
     child->finish_split_stats(*stat_iter, rctx.transaction);
     child->unlock();
@@ -8629,12 +8902,12 @@ void OSD::handle_pg_create(OpRequestRef op)
 // ----------------------------------------
 // peering and recovery
 
-PG::PeeringCtx OSD::create_context()
+PeeringCtx OSD::create_context()
 {
-  return PG::PeeringCtx();
+  return PeeringCtx();
 }
 
-void OSD::dispatch_context_transaction(PG::PeeringCtx &ctx, PG *pg,
+void OSD::dispatch_context_transaction(PeeringCtx &ctx, PG *pg,
                                        ThreadPool::TPHandle *handle)
 {
   if (!ctx.transaction.empty() || ctx.transaction.has_contexts()) {
@@ -8646,7 +8919,7 @@ void OSD::dispatch_context_transaction(PG::PeeringCtx &ctx, PG *pg,
   }
 }
 
-void OSD::dispatch_context(PG::PeeringCtx &ctx, PG *pg, OSDMapRef curmap,
+void OSD::dispatch_context(PeeringCtx &ctx, PG *pg, OSDMapRef curmap,
                            ThreadPool::TPHandle *handle)
 {
   if (!service.get_osdmap()->is_up(whoami)) {
@@ -9056,7 +9329,7 @@ bool OSDService::_recover_now(uint64_t *available_pushes)
     return false;
   }
 
-  uint64_t max = cct->_conf->osd_recovery_max_active;
+  uint64_t max = osd->get_recovery_max_active();
   if (max <= recovery_ops_active + recovery_ops_reserved) {
     dout(15) << __func__ << " active " << recovery_ops_active
 	     << " + reserved " << recovery_ops_reserved
@@ -9132,7 +9405,7 @@ void OSD::do_recovery(
 	     << " on " << *pg << dendl;
 
     if (do_unfound) {
-      PG::PeeringCtx rctx = create_context();
+      PeeringCtx rctx = create_context();
       rctx.handle = &handle;
       pg->find_unfound(queued, rctx);
       dispatch_context(rctx, pg, pg->get_osdmap());
@@ -9149,7 +9422,7 @@ void OSDService::start_recovery_op(PG *pg, const hobject_t& soid)
   std::lock_guard l(recovery_lock);
   dout(10) << "start_recovery_op " << *pg << " " << soid
 	   << " (" << recovery_ops_active << "/"
-	   << cct->_conf->osd_recovery_max_active << " rops)"
+	   << osd->get_recovery_max_active() << " rops)"
 	   << dendl;
   recovery_ops_active++;
 
@@ -9165,7 +9438,8 @@ void OSDService::finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue)
   std::lock_guard l(recovery_lock);
   dout(10) << "finish_recovery_op " << *pg << " " << soid
 	   << " dequeue=" << dequeue
-	   << " (" << recovery_ops_active << "/" << cct->_conf->osd_recovery_max_active << " rops)"
+	   << " (" << recovery_ops_active << "/"
+	   << osd->get_recovery_max_active() << " rops)"
 	   << dendl;
 
   // adjust count
@@ -9183,6 +9457,9 @@ void OSDService::finish_recovery_op(PG *pg, const hobject_t& soid, bool dequeue)
 
 bool OSDService::is_recovery_active()
 {
+  if (cct->_conf->osd_debug_pretend_recovery_active) {
+    return true;
+  }
   return local_reserver.has_reservation() || remote_reserver.has_reservation();
 }
 
@@ -9308,7 +9585,7 @@ void OSD::dequeue_peering_evt(
   PGPeeringEventRef evt,
   ThreadPool::TPHandle& handle)
 {
-  PG::PeeringCtx rctx = create_context();
+  PeeringCtx rctx = create_context();
   auto curmap = sdata->get_osdmap();
   bool need_up_thru = false;
   epoch_t same_interval_since = 0;
@@ -9392,6 +9669,8 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_heartbeat_min_size",
     "osd_heartbeat_interval",
     "osd_object_clean_region_max_num_intervals",
+    "osd_scrub_min_interval",
+    "osd_scrub_max_interval",
     NULL
   };
   return KEYS;
@@ -9482,6 +9761,11 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
     ObjectCleanRegions::set_max_num_intervals(cct->_conf->osd_object_clean_region_max_num_intervals);
   }
 
+  if (changed.count("osd_scrub_min_interval") ||
+      changed.count("osd_scrub_max_interval")) {
+    resched_all_scrubs();
+    dout(0) << __func__ << ": scrub interval change" << dendl;
+  }
   check_config();
 }
 
@@ -10511,6 +10795,7 @@ void OSD::ShardedOpWQ::_enqueue(OpQueueItem&& item) {
   sdata->shard_lock.lock();
 
   dout(20) << __func__ << " " << item << dendl;
+  bool empty = sdata->pqueue->empty();
   if (priority >= osd->op_prio_cutoff)
     sdata->pqueue->enqueue_strict(
       item.get_owner(), priority, std::move(item));
@@ -10519,8 +10804,10 @@ void OSD::ShardedOpWQ::_enqueue(OpQueueItem&& item) {
       item.get_owner(), priority, cost, std::move(item));
   sdata->shard_lock.unlock();
 
-  std::lock_guard l{sdata->sdata_wait_lock};
-  sdata->sdata_cond.notify_one();
+  if (empty) {
+    std::lock_guard l{sdata->sdata_wait_lock};
+    sdata->sdata_cond.notify_one();
+  }
 }
 
 void OSD::ShardedOpWQ::_enqueue_front(OpQueueItem&& item)

@@ -8,19 +8,21 @@
           [formGroup]="osdFlagsForm"
           novalidate>
       <div class="modal-body osd-modal">
-        <div class="checkbox checkbox-primary"
+        <div class="custom-control custom-checkbox"
              *ngFor="let flag of flags; let last = last">
-          <input type="checkbox"
+          <input class="custom-control-input"
+                 type="checkbox"
                  [checked]="flag.value"
                  (change)="flag.value = !flag.value"
                  [name]="flag.code"
                  [id]="flag.code"
                  [disabled]="flag.disabled">
-          <label [for]="flag.code"
+          <label class="custom-control-label"
+                 [for]="flag.code"
                  ng-class="['tc_' + key]">
             <strong>{{ flag.name }}</strong>
             <br>
-            <span class="text-muted">{{ flag.description }}</span>
+            <span class="form-text text-muted">{{ flag.description }}</span>
           </label>
           <hr class="oa-hr-small"
               *ngIf="!last">
@@ -29,7 +31,8 @@
 
       <div class="modal-footer">
         <div class="button-group text-right">
-          <cd-submit-button (submitAction)="submitAction()"
+          <cd-submit-button *ngIf="permissions.osd.update"
+                            (submitAction)="submitAction()"
                             [form]="osdFlagsForm"
                             i18n>Submit</cd-submit-button>
           <cd-back-button [back]="bsModalRef.hide"

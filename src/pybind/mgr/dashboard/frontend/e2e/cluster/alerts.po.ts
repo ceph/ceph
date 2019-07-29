@@ -1,7 +1,5 @@
-import { browser } from 'protractor';
+import { PageHelper } from '../page-helper.po';
 
-export class AlertsPage {
-  navigateTo() {
-    return browser.get('/#/alerts');
-  }
+export class AlertsPageHelper extends PageHelper {
+  pages = { index: '/#/alerts' };
 }

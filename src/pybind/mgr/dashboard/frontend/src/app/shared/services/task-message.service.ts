@@ -5,7 +5,6 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import { Components } from '../enum/components.enum';
 import { FinishedTask } from '../models/finished-task';
 import { Task } from '../models/task';
-import { ServicesModule } from './services.module';
 
 export class TaskMessageOperation {
   running: string;
@@ -55,7 +54,7 @@ class TaskMessage {
 }
 
 @Injectable({
-  providedIn: ServicesModule
+  providedIn: 'root'
 })
 export class TaskMessageService {
   constructor(private i18n: I18n) {}
@@ -119,6 +118,10 @@ export class TaskMessageService {
       this.i18n(`mirror peer for pool '{{id}}'`, {
         id: `${metadata.pool_name}`
       })
+  };
+
+  grafana = {
+    update_dashboards: () => this.i18n('all dashboards')
   };
 
   messages = {
@@ -328,6 +331,12 @@ export class TaskMessageService {
     'nfs/edit': this.newTaskMessage(this.commonOperations.update, (metadata) => this.nfs(metadata)),
     'nfs/delete': this.newTaskMessage(this.commonOperations.delete, (metadata) =>
       this.nfs(metadata)
+    ),
+    // Grafana tasks
+    'grafana/dashboards/update': this.newTaskMessage(
+      this.commonOperations.update,
+      this.grafana.update_dashboards,
+      () => ({})
     )
   };
 
@@ -360,6 +369,18 @@ export class TaskMessageService {
   }
 
   _getTaskTitle(task: Task) {
+    if (task.name && task.name.startsWith('progress/')) {
+      // we don't fill the failure string because, at least for now, all
+      // progress module tasks will be considered successful
+      return this.newTaskMessage(
+        new TaskMessageOperation(
+          task.name.replace('progress/', ''),
+          '',
+          task.name.replace('progress/', '')
+        ),
+        (_metadata) => ''
+      );
+    }
     return this.messages[task.name] || this.defaultMessage;
   }
 

@@ -8,11 +8,9 @@ function(build_rocksdb)
   endif()
 
   if (WITH_CCACHE AND CCACHE_FOUND)
-    list(APPEND rocksdb_CMAKE_ARGS -DCMAKE_CXX_COMPILER=ccache)
-    list(APPEND rocksdb_CMAKE_ARGS -DCMAKE_CXX_COMPILER_ARG1=${CMAKE_CXX_COMPILER})
-  else()
-    list(APPEND rocksdb_CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER})
+    list(APPEND rocksdb_CMAKE_ARGS -DCMAKE_CXX_COMPILER_LAUNCHER=ccache)
   endif()
+  list(APPEND rocksdb_CMAKE_ARGS -DCMAKE_CXX_COMPILER=${CMAKE_CXX_COMPILER})
 
   list(APPEND rocksdb_CMAKE_ARGS -DWITH_SNAPPY=${SNAPPY_FOUND})
   if(SNAPPY_FOUND)
@@ -42,30 +40,38 @@ function(build_rocksdb)
   list(APPEND rocksdb_CMAKE_ARGS -G${CMAKE_GENERATOR})
   CHECK_C_COMPILER_FLAG("-Wno-stringop-truncation" HAS_WARNING_STRINGOP_TRUNCATION)
   if(HAS_WARNING_STRINGOP_TRUNCATION)
-    list(APPEND rocksdb_CMAKE_ARGS -DCMAKE_C_FLAGS="-Wno-stringop-truncation")
+    list(APPEND rocksdb_CMAKE_ARGS -DCMAKE_C_FLAGS=-Wno-stringop-truncation)
+  endif()
+  include(CheckCXXCompilerFlag)
+  check_cxx_compiler_flag("-Wno-deprecated-copy" HAS_WARNING_DEPRECATED_COPY)
+  if(HAS_WARNING_DEPRECATED_COPY)
+    set(rocksdb_CXX_FLAGS -Wno-deprecated-copy)
+  endif()
+  check_cxx_compiler_flag("-Wno-pessimizing-move" HAS_WARNING_PESSIMIZING_MOVE)
+  if(HAS_WARNING_PESSIMIZING_MOVE)
+    set(rocksdb_CXX_FLAGS "${rocksdb_CXX_FLAGS} -Wno-pessimizing-move")
+  endif()
+  if(rocksdb_CXX_FLAGS)
+    list(APPEND rocksdb_CMAKE_ARGS -DCMAKE_CXX_FLAGS='${rocksdb_CXX_FLAGS}')
   endif()
   # we use an external project and copy the sources to bin directory to ensure
   # that object files are built outside of the source tree.
   include(ExternalProject)
   set(rocksdb_SOURCE_DIR "${CMAKE_CURRENT_SOURCE_DIR}/rocksdb")
   set(rocksdb_BINARY_DIR "${CMAKE_CURRENT_BINARY_DIR}/rocksdb")
+  set(rocksdb_LIBRARY "${rocksdb_BINARY_DIR}/librocksdb.a")
   ExternalProject_Add(rocksdb_ext
     SOURCE_DIR "${rocksdb_SOURCE_DIR}"
     CMAKE_ARGS ${rocksdb_CMAKE_ARGS}
     BINARY_DIR "${rocksdb_BINARY_DIR}"
     BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target rocksdb
+    BUILD_ALWAYS TRUE
+    BUILD_BYPRODUCTS "${rocksdb_LIBRARY}"
     INSTALL_COMMAND "true")
-  # force rocksdb make to be called on each time
-  ExternalProject_Add_Step(rocksdb_ext forcebuild
-    DEPENDEES configure
-    DEPENDERS build
-    COMMAND "true"
-    ALWAYS 1)
 
   add_library(RocksDB::RocksDB STATIC IMPORTED)
   add_dependencies(RocksDB::RocksDB rocksdb_ext)
   set(rocksdb_INCLUDE_DIR "${rocksdb_SOURCE_DIR}/include")
-  set(rocksdb_LIBRARY "${rocksdb_BINARY_DIR}/librocksdb.a")
   foreach(ver "MAJOR" "MINOR" "PATCH")
     file(STRINGS "${rocksdb_INCLUDE_DIR}/rocksdb/version.h" ROCKSDB_VER_${ver}_LINE
       REGEX "^#define[ \t]+ROCKSDB_${ver}[ \t]+[0-9]+$")

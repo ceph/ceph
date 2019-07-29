@@ -46,10 +46,10 @@ if(WITH_FUSE)
     FuseStore.cc)
 endif(WITH_FUSE)
 
-if(WITH_PMEM)
+if(WITH_BLUESTORE_PMEM)
   list(APPEND libos_srcs
     bluestore/PMEMDevice.cc)
-endif(WITH_PMEM)
+endif()
 
 if(HAVE_LIBXFS)
   list(APPEND libos_srcs
@@ -71,11 +71,9 @@ if(WITH_SPDK)
     bluestore/NVMEDevice.cc)
 endif()
 
-add_library(os STATIC ${libos_srcs}
-  $<TARGET_OBJECTS:kv_objs>
-  $<TARGET_OBJECTS:common_prioritycache_obj>)
+add_library(os STATIC ${libos_srcs})
 
-target_link_libraries(os heap_profiler)
+target_link_libraries(os heap_profiler kv)
 
 if(WITH_BLUEFS)
   add_library(bluefs SHARED 
@@ -123,31 +121,9 @@ if(WITH_BLUESTORE)
     DESTINATION bin)
 endif()
 
-if(WITH_PMEM)
-  include(ExternalProject)
-  ExternalProject_Add(nvml_ext
-    DOWNLOAD_DIR ${CMAKE_BINARY_DIR}/src/
-    GIT_REPOSITORY "https://github.com/ceph/nvml.git"
-    GIT_TAG "dd622819dd4ee97d3920f913c70be"
-    SOURCE_DIR ${CMAKE_BINARY_DIR}/src/nvml
-    CONFIGURE_COMMAND ""
-    BUILD_COMMAND $(MAKE)
-    BUILD_IN_SOURCE 1
-    INSTALL_COMMAND "true")
-
-  ExternalProject_Add_Step(nvml_ext forcebuild
-    DEPENDEES configure
-    DEPENDERS build
-    COMMAND "true"
-    ALWAYS 1)
-  add_library(pmem STATIC IMPORTED GLOBAL)
-  add_dependencies(pmem nvml_ext)
-  set_target_properties(pmem PROPERTIES
-    IMPORTED_LOCATION "${CMAKE_BINARY_DIR}/src/nvml/src/nondebug/libpmem.a"
-    INTERFACE_LINK_LIBRARIES ${CMAKE_THREAD_LIBS_INIT})
-  target_link_libraries(os pmem)
-  target_include_directories(os SYSTEM PRIVATE "${CMAKE_BINARY_DIR}/src/nvml/src/include")
-endif(WITH_PMEM)
+if(WITH_BLUESTORE_PMEM)
+  target_link_libraries(os pmem::pmem)
+endif()
 
 if(WITH_LTTNG AND WITH_EVENTTRACE)
   add_dependencies(os eventtrace_tp)

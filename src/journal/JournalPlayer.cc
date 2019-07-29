@@ -1,9 +1,12 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
+#include "common/PriorityCache.h"
+#include "include/stringify.h"
 #include "journal/JournalPlayer.h"
 #include "journal/Entry.h"
 #include "journal/ReplayHandler.h"
+#include "journal/Types.h"
 #include "journal/Utils.h"
 
 #define dout_subsys ceph_subsys_journaler
@@ -13,6 +16,8 @@
 namespace journal {
 
 namespace {
+
+static const uint64_t MIN_FETCH_BYTES = 32768;
 
 struct C_HandleComplete : public Context {
   ReplayHandler *replay_handler;
@@ -49,11 +54,14 @@ struct C_HandleEntriesAvailable : public Context {
 JournalPlayer::JournalPlayer(librados::IoCtx &ioctx,
                              const std::string &object_oid_prefix,
                              const JournalMetadataPtr& journal_metadata,
-                             ReplayHandler *replay_handler)
+                             ReplayHandler *replay_handler,
+                             CacheManagerHandler *cache_manager_handler)
   : m_cct(NULL), m_object_oid_prefix(object_oid_prefix),
     m_journal_metadata(journal_metadata), m_replay_handler(replay_handler),
-    m_lock("JournalPlayer::m_lock"), m_state(STATE_INIT), m_splay_offset(0),
-    m_watch_enabled(false), m_watch_scheduled(false), m_watch_interval(0) {
+    m_cache_manager_handler(cache_manager_handler),
+    m_cache_rebalance_handler(this), m_lock("JournalPlayer::m_lock"),
+    m_state(STATE_INIT), m_splay_offset(0), m_watch_enabled(false),
+    m_watch_scheduled(false), m_watch_interval(0) {
   m_replay_handler->get();
   m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
@@ -76,6 +84,21 @@ JournalPlayer::JournalPlayer(librados::IoCtx &ioctx,
       m_commit_positions[splay_offset] = position;
     }
   }
+
+  if (m_cache_manager_handler != nullptr) {
+    m_cache_name = "JournalPlayer/" + stringify(m_ioctx.get_id()) + "/" +
+        m_object_oid_prefix;
+    auto order = m_journal_metadata->get_order();
+    auto splay_width = m_journal_metadata->get_splay_width();
+    uint64_t min_size = MIN_FETCH_BYTES * splay_width;
+    uint64_t max_size = (2 << order) * splay_width;
+
+    m_cache_manager_handler->register_cache(m_cache_name, min_size, max_size,
+                                            &m_cache_rebalance_handler);
+    m_max_fetch_bytes = 0;
+  } else {
+    m_max_fetch_bytes = 2 << m_journal_metadata->get_order();
+  }
 }
 
 JournalPlayer::~JournalPlayer() {
@@ -87,11 +110,21 @@ JournalPlayer::~JournalPlayer() {
     ceph_assert(!m_watch_scheduled);
   }
   m_replay_handler->put();
+
+  if (m_cache_manager_handler != nullptr) {
+    m_cache_manager_handler->unregister_cache(m_cache_name);
+  }
 }
 
 void JournalPlayer::prefetch() {
   Mutex::Locker locker(m_lock);
   ceph_assert(m_state == STATE_INIT);
+
+  if (m_cache_manager_handler != nullptr && m_max_fetch_bytes == 0) {
+    m_state = STATE_WAITCACHE;
+    return;
+  }
+
   m_state = STATE_PREFETCH;
 
   m_active_set = m_journal_metadata->get_active_set();
@@ -601,9 +634,9 @@ void JournalPlayer::fetch(uint64_t object_num) {
   ObjectPlayerPtr object_player(new ObjectPlayer(
     m_ioctx, m_object_oid_prefix, object_num, m_journal_metadata->get_timer(),
     m_journal_metadata->get_timer_lock(), m_journal_metadata->get_order(),
-    m_journal_metadata->get_settings().max_fetch_bytes));
+    m_max_fetch_bytes));
 
-  uint8_t splay_width = m_journal_metadata->get_splay_width();
+  auto splay_width = m_journal_metadata->get_splay_width();
   m_object_players[object_num % splay_width] = object_player;
   fetch(object_player);
 }
@@ -799,5 +832,48 @@ void JournalPlayer::notify_complete(int r) {
   m_journal_metadata->queue(new C_HandleComplete(
     m_replay_handler), r);
 }
+
+void JournalPlayer::handle_cache_rebalanced(uint64_t new_cache_bytes) {
+  Mutex::Locker locker(m_lock);
+
+  if (m_state == STATE_ERROR || m_shut_down) {
+    return;
+  }
+
+  auto splay_width = m_journal_metadata->get_splay_width();
+  m_max_fetch_bytes = p2align<uint64_t>(new_cache_bytes / splay_width, 4096);
+
+  ldout(m_cct, 10) << __func__ << ": new_cache_bytes=" << new_cache_bytes
+                   << ", max_fetch_bytes=" << m_max_fetch_bytes << dendl;
+
+  uint64_t min_bytes = MIN_FETCH_BYTES;
+
+  if (m_state == STATE_WAITCACHE) {
+    m_state = STATE_INIT;
+    if (m_max_fetch_bytes >= min_bytes) {
+      auto ctx = new FunctionContext(
+        [this](int r) {
+          prefetch();
+        });
+      m_journal_metadata->queue(ctx, 0);
+      return;
+    }
+  } else {
+    min_bytes = p2align<uint64_t>(min_bytes - (rand() % min_bytes) / 2, 4096);
+  }
+
+  if (m_max_fetch_bytes < min_bytes) {
+    lderr(m_cct) << __func__ << ": can't allocate enough memory from cache"
+                 << dendl;
+    m_state = STATE_ERROR;
+    notify_complete(-ENOMEM);
+    return;
+  }
+
+  for (auto &pair : m_object_players) {
+    pair.second->set_max_fetch_bytes(m_max_fetch_bytes);
+  }
+}
+
 
 } // namespace journal

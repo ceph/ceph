@@ -7,7 +7,7 @@ daemon.
 
 Copyright (C) 2013 Inktank Storage, Inc.
 
-LGPL2.1.  See file COPYING.
+LGPL-2.1 or LGPL-3.0.  See file COPYING.
 """
 from __future__ import print_function
 import copy
@@ -1154,10 +1154,15 @@ def validate_command(sigdict, args, verbose=False):
         else:
             bestcmds.append(cmd)
 
-    # Sort bestcmds by number of args so we can try shortest first
+    # Sort bestcmds by number of req args so we can try shortest first
     # (relies on a cmdsig being key,val where val is a list of len 1)
-    bestcmds_sorted = sorted(bestcmds, key=lambda c: len(c['sig']))
 
+    def grade(cmd):
+      # prefer optional arguments over required ones
+      sigs = cmd['sig']
+      return sum(map(lambda sig: sig.req, sigs))
+
+    bestcmds_sorted = sorted(bestcmds, key=grade)
     if verbose:
         print("bestcmds_sorted: ", file=sys.stderr)
         pprint.PrettyPrinter(stream=sys.stderr).pprint(bestcmds_sorted)

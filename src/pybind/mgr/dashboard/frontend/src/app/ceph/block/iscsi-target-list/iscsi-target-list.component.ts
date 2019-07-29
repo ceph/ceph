@@ -6,13 +6,15 @@ import { Subscription } from 'rxjs';
 
 import { IscsiService } from '../../../shared/api/iscsi.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { FinishedTask } from '../../../shared/models/finished-task';
-import { Permissions } from '../../../shared/models/permissions';
+import { Permission } from '../../../shared/models/permissions';
 import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { SummaryService } from '../../../shared/services/summary.service';
@@ -34,13 +36,14 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
   columns: CdTableColumn[];
   docsUrl: string;
   modalRef: BsModalRef;
-  permissions: Permissions;
+  permission: Permission;
   selection = new CdTableSelection();
   settings: any;
   status: string;
   summaryDataSubscription: Subscription;
   tableActions: CdTableAction[];
   targets = [];
+  icons = Icons;
 
   builders = {
     'iscsi/target/create': (metadata) => {
@@ -58,28 +61,29 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
     private cephReleaseNamePipe: CephReleaseNamePipe,
     private summaryservice: SummaryService,
     private modalService: BsModalService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    public actionLabels: ActionLabelsI18n
   ) {
-    this.permissions = this.authStorageService.getPermissions();
+    this.permission = this.authStorageService.getPermissions().iscsi;
 
     this.tableActions = [
       {
         permission: 'create',
-        icon: 'fa-plus',
-        routerLink: () => '/block/iscsi/targets/add',
-        name: this.i18n('Add')
+        icon: Icons.add,
+        routerLink: () => '/block/iscsi/targets/create',
+        name: this.actionLabels.CREATE
       },
       {
         permission: 'update',
-        icon: 'fa-pencil',
+        icon: Icons.edit,
         routerLink: () => `/block/iscsi/targets/edit/${this.selection.first().target_iqn}`,
-        name: this.i18n('Edit')
+        name: this.actionLabels.EDIT
       },
       {
         permission: 'delete',
-        icon: 'fa-times',
+        icon: Icons.destroy,
         click: () => this.deleteIscsiTargetModal(),
-        name: this.i18n('Delete')
+        name: this.actionLabels.DELETE
       }
     ];
   }

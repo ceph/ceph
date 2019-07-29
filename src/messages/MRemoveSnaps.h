@@ -19,7 +19,7 @@
 
 class MRemoveSnaps : public PaxosServiceMessage {
 public:
-  map<int, vector<snapid_t> > snaps;
+  map<int32_t, vector<snapid_t> > snaps;
   
 protected:
   MRemoveSnaps() : 

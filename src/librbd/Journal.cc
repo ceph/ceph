@@ -76,7 +76,7 @@ struct C_IsTagOwner : public Context {
       op_work_queue(op_work_queue), on_finish(on_finish),
       cct(reinterpret_cast<CephContext*>(io_ctx.cct())),
       journaler(new Journaler(io_ctx, image_id, Journal<>::IMAGE_CLIENT_ID,
-                              {})) {
+                              {}, nullptr)) {
   }
 
   void finish(int r) override {
@@ -113,7 +113,7 @@ struct C_GetTagOwner : public Context {
   C_GetTagOwner(librados::IoCtx &io_ctx, const std::string &image_id,
                 std::string *mirror_uuid, Context *on_finish)
     : mirror_uuid(mirror_uuid), on_finish(on_finish),
-      journaler(io_ctx, image_id, Journal<>::IMAGE_CLIENT_ID, {}) {
+      journaler(io_ctx, image_id, Journal<>::IMAGE_CLIENT_ID, {}, nullptr) {
   }
 
   virtual void finish(int r) {
@@ -459,7 +459,8 @@ int Journal<I>::request_resync(I *image_ctx) {
   CephContext *cct = image_ctx->cct;
   ldout(cct, 20) << __func__ << dendl;
 
-  Journaler journaler(image_ctx->md_ctx, image_ctx->id, IMAGE_CLIENT_ID, {});
+  Journaler journaler(image_ctx->md_ctx, image_ctx->id, IMAGE_CLIENT_ID, {},
+                      nullptr);
 
   Mutex lock("lock");
   journal::ImageClientMeta client_meta;
@@ -711,6 +712,26 @@ void Journal<I>::flush_commit_position(Context *on_finish) {
   Mutex::Locker locker(m_lock);
   ceph_assert(m_journaler != nullptr);
   m_journaler->flush_commit_position(on_finish);
+}
+
+template <typename I>
+void Journal<I>::user_flushed() {
+  if (m_state == STATE_READY && !m_user_flushed.exchange(true) &&
+      m_image_ctx.config.template get_val<bool>("rbd_journal_object_writethrough_until_flush")) {
+    Mutex::Locker locker(m_lock);
+    if (m_state == STATE_READY) {
+      CephContext *cct = m_image_ctx.cct;
+      ldout(cct, 5) << this << " " << __func__ << dendl;
+
+      ceph_assert(m_journaler != nullptr);
+      m_journaler->set_append_batch_options(
+        m_image_ctx.config.template get_val<uint64_t>("rbd_journal_object_flush_interval"),
+        m_image_ctx.config.template get_val<Option::size_t>("rbd_journal_object_flush_bytes"),
+        m_image_ctx.config.template get_val<double>("rbd_journal_object_flush_age"));
+    } else {
+      m_user_flushed = false;
+    }
+  }
 }
 
 template <typename I>
@@ -1074,7 +1095,7 @@ void Journal<I>::create_journaler() {
 
   m_journaler = new Journaler(m_work_queue, m_timer, m_timer_lock,
 			      m_image_ctx.md_ctx, m_image_ctx.id,
-			      IMAGE_CLIENT_ID, settings);
+			      IMAGE_CLIENT_ID, settings, nullptr);
   m_journaler->add_listener(&m_metadata_listener);
 
   Context *ctx = create_async_context_callback(
@@ -1168,11 +1189,16 @@ void Journal<I>::complete_event(typename Events::iterator it, int r) {
 template <typename I>
 void Journal<I>::start_append() {
   ceph_assert(m_lock.is_locked());
+
   m_journaler->start_append(
-    m_image_ctx.config.template get_val<uint64_t>("rbd_journal_object_flush_interval"),
-    m_image_ctx.config.template get_val<Option::size_t>("rbd_journal_object_flush_bytes"),
-    m_image_ctx.config.template get_val<double>("rbd_journal_object_flush_age"),
     m_image_ctx.config.template get_val<uint64_t>("rbd_journal_object_max_in_flight_appends"));
+  if (!m_image_ctx.config.template get_val<bool>("rbd_journal_object_writethrough_until_flush")) {
+    m_journaler->set_append_batch_options(
+      m_image_ctx.config.template get_val<uint64_t>("rbd_journal_object_flush_interval"),
+      m_image_ctx.config.template get_val<Option::size_t>("rbd_journal_object_flush_bytes"),
+      m_image_ctx.config.template get_val<double>("rbd_journal_object_flush_age"));
+  }
+
   transition_state(STATE_READY, 0);
 }
 

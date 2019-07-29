@@ -2,6 +2,7 @@ import { CommonModule } from '@angular/common';
 import { NgModule } from '@angular/core';
 import { FormsModule, ReactiveFormsModule } from '@angular/forms';
 
+import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
 import { ChartsModule } from 'ng2-charts/ng2-charts';
 import { AlertModule } from 'ngx-bootstrap/alert';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
@@ -12,6 +13,7 @@ import { TooltipModule } from 'ngx-bootstrap/tooltip';
 import { DirectivesModule } from '../directives/directives.module';
 import { PipesModule } from '../pipes/pipes.module';
 import { BackButtonComponent } from './back-button/back-button.component';
+import { ConfigOptionComponent } from './config-option/config-option.component';
 import { ConfirmationModalComponent } from './confirmation-modal/confirmation-modal.component';
 import { CriticalConfirmationModalComponent } from './critical-confirmation-modal/critical-confirmation-modal.component';
 import { ErrorPanelComponent } from './error-panel/error-panel.component';
@@ -43,7 +45,8 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     PipesModule,
     ModalModule.forRoot(),
     DirectivesModule,
-    BsDropdownModule
+    BsDropdownModule,
+    NgBootstrapFormValidationModule
   ],
   declarations: [
     ViewCacheComponent,
@@ -63,7 +66,8 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     GrafanaComponent,
     SelectComponent,
     BackButtonComponent,
-    RefreshSelectorComponent
+    RefreshSelectorComponent,
+    ConfigOptionComponent
   ],
   providers: [],
   exports: [
@@ -82,7 +86,8 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     LanguageSelectorComponent,
     GrafanaComponent,
     SelectComponent,
-    RefreshSelectorComponent
+    RefreshSelectorComponent,
+    ConfigOptionComponent
   ],
   entryComponents: [ModalComponent, CriticalConfirmationModalComponent, ConfirmationModalComponent]
 })

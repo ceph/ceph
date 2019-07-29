@@ -39,12 +39,13 @@ class Options(object):
     GRAFANA_API_URL = ('', str)
     GRAFANA_API_USERNAME = ('admin', str)
     GRAFANA_API_PASSWORD = ('admin', str)
+    GRAFANA_UPDATE_DASHBOARDS = (False, bool)
 
     # NFS Ganesha settings
     GANESHA_CLUSTERS_RADOS_POOL_NAMESPACE = ('', str)
 
     # Prometheus settings
-    PROMETHEUS_API_HOST = ('', str)  # Not in use ATM
+    PROMETHEUS_API_HOST = ('', str)
     ALERTMANAGER_API_HOST = ('', str)
 
     # iSCSI management settings

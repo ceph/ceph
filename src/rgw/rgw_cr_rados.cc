@@ -529,7 +529,7 @@ bool RGWOmapAppend::finish() {
 int RGWAsyncGetBucketInstanceInfo::_send_request()
 {
   RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
-  int r = store->get_bucket_instance_from_oid(obj_ctx, oid, bucket_info, NULL, NULL);
+  int r = store->get_bucket_instance_from_oid(obj_ctx, oid, bucket_info, NULL, NULL, null_yield);
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to get bucket instance info for "
         << oid << dendl;
@@ -682,7 +682,7 @@ int RGWAsyncRemoveObj::_send_request()
 
   RGWObjState *state;
 
-  int ret = store->get_obj_state(&obj_ctx, bucket_info, obj, &state);
+  int ret = store->get_obj_state(&obj_ctx, bucket_info, obj, &state, null_yield);
   if (ret < 0) {
     ldout(store->ctx(), 20) << __func__ << "(): get_obj_state() obj=" << obj << " returned ret=" << ret << dendl;
     return ret;
@@ -727,7 +727,7 @@ int RGWAsyncRemoveObj::_send_request()
   del_op.params.high_precision_time = true;
   del_op.params.zones_trace = &zones_trace;
 
-  ret = del_op.delete_obj();
+  ret = del_op.delete_obj(null_yield);
   if (ret < 0) {
     ldout(store->ctx(), 20) << __func__ << "(): delete_obj() obj=" << obj << " returned ret=" << ret << dendl;
   }
@@ -837,7 +837,7 @@ int RGWSyncLogTrimCR::request_complete()
     return r;
   }
   // nothing left to trim, update last_trim_marker
-  if (*last_trim_marker < to_marker) {
+  if (*last_trim_marker < to_marker && to_marker != max_marker) {
     *last_trim_marker = to_marker;
   }
   return 0;
@@ -849,7 +849,7 @@ int RGWAsyncStatObj::_send_request()
   rgw_raw_obj raw_obj;
   store->obj_to_raw(bucket_info.placement_rule, obj, &raw_obj);
   return store->raw_obj_stat(raw_obj, psize, pmtime, pepoch,
-                             nullptr, nullptr, objv_tracker);
+                             nullptr, nullptr, objv_tracker, null_yield);
 }
 
 RGWStatObjCR::RGWStatObjCR(RGWAsyncRadosProcessor *async_rados, RGWRados *store,

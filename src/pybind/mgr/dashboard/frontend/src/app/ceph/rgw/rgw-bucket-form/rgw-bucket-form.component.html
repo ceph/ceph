@@ -7,22 +7,19 @@
 <div class="col-sm-12 col-lg-6"
      *ngIf="!loading && !error">
   <form name="bucketForm"
-        class="form-horizontal"
         #frm="ngForm"
         [formGroup]="bucketForm"
         novalidate>
-    <div class="panel panel-default">
-      <div class="panel-heading">
-        <h3 i18n="form title|Example: Create Pool@@formTitle"
-            class="panel-title">{{ action | titlecase }} {{ resource | upperFirst }}</h3>
-      </div>
-      <div class="panel-body">
+    <div class="card">
+      <div i18n="form title|Example: Create Pool@@formTitle"
+           class="card-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
 
+      <div class="card-body">
         <!-- Id -->
-        <div class="form-group"
+        <div class="form-group row"
              *ngIf="editing">
           <label i18n
-                 class="col-sm-3 control-label"
+                 class="col-form-label col-sm-3"
                  for="id">Id</label>
           <div class="col-sm-9">
             <input id="id"
@@ -35,9 +32,8 @@
         </div>
 
         <!-- Name -->
-        <div class="form-group"
-             [ngClass]="{'has-error': bucketForm.showError('bid', frm)}">
-          <label class="control-label col-sm-3"
+        <div class="form-group row">
+          <label class="col-form-label col-sm-3"
                  for="bid">
             <ng-container i18n>Name</ng-container>
             <span class="required"
@@ -53,22 +49,21 @@
                    formControlName="bid"
                    [readonly]="editing"
                    autofocus>
-            <span class="help-block"
+            <span class="invalid-feedback"
                   *ngIf="bucketForm.showError('bid', frm, 'required')"
                   i18n>This field is required.</span>
-            <span class="help-block"
+            <span class="invalid-feedback"
                   *ngIf="bucketForm.showError('bid', frm, 'bucketNameInvalid')"
                   i18n>The value is not valid.</span>
-            <span class="help-block"
+            <span class="invalid-feedback"
                   *ngIf="bucketForm.showError('bid', frm, 'bucketNameExists')"
                   i18n>The chosen name is already in use.</span>
           </div>
         </div>
 
         <!-- Owner -->
-        <div class="form-group"
-             [ngClass]="{'has-error': bucketForm.showError('owner', frm)}">
-          <label class="control-label col-sm-3"
+        <div class="form-group row">
+          <label class="col-form-label col-sm-3"
                  for="owner">
             <ng-container i18n>Owner</ng-container>
             <span class="required"></span>
@@ -76,7 +71,7 @@
           <div class="col-sm-9">
             <select id="owner"
                     name="owner"
-                    class="form-control"
+                    class="form-control custom-select"
                     formControlName="owner">
               <option i18n
                       *ngIf="owners === null"
@@ -87,19 +82,56 @@
               <option *ngFor="let owner of owners"
                       [value]="owner">{{ owner }}</option>
             </select>
-            <span class="help-block"
+            <span class="invalid-feedback"
                   *ngIf="bucketForm.showError('owner', frm, 'required')"
                   i18n>This field is required.</span>
           </div>
         </div>
 
+        <!-- Placement target -->
+        <div class="form-group row">
+          <label class="col-form-label col-sm-3"
+                 for="placement-target">
+            <ng-container i18n>Placement target</ng-container>
+            <span class="required"
+                  *ngIf="!editing"></span>
+          </label>
+          <div class="col-sm-9">
+            <ng-template #placementTargetSelect>
+              <select id="placement-target"
+                      name="placement-target"
+                      formControlName="placement-target"
+                      class="form-control custom-select">
+                <option i18n
+                        *ngIf="placementTargets === null"
+                        [ngValue]="null">Loading...</option>
+                <option i18n
+                        *ngIf="placementTargets !== null"
+                        [ngValue]="null">-- Select a placement target --</option>
+                <option *ngFor="let placementTarget of placementTargets"
+                        [value]="placementTarget.name">{{ placementTarget.description }}</option>
+              </select>
+              <span class="invalid-feedback"
+                    *ngIf="bucketForm.showError('placement-target', frm, 'required')"
+                    i18n>This field is required.</span>
+            </ng-template>
+            <ng-container *ngIf="editing; else placementTargetSelect">
+              <input id="placement-target"
+                     name="placement-target"
+                     formControlName="placement-target"
+                     class="form-control"
+                     type="text"
+                     readonly>
+            </ng-container>
+          </div>
+        </div>
+
       </div>
-      <div class="panel-footer">
+      <div class="card-footer">
         <div class="button-group text-right">
-          <cd-submit-button
-            (submitAction)="submit()" [form]="bucketForm"
-            i18n="form action button|Example: Create Pool@@formActionButton"
-            type="button">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+          <cd-submit-button (submitAction)="submit()"
+                            i18n="form action button|Example: Create Pool@@formActionButton"
+                            [form]="bucketForm">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
           <cd-back-button></cd-back-button>
         </div>
       </div>

@@ -448,7 +448,7 @@ class Module(MgrModule):
                     self.log.exception("RADOS error reading omap: {0}".format(e))
                     raise
 
-        return 0, json.dumps(res, indent=4), ''
+        return 0, json.dumps(res, indent=4, sort_keys=True), ''
 
     def check_health(self):
         self.log.info('Check health')
@@ -478,11 +478,11 @@ class Module(MgrModule):
                dev['life_expectancy_max'] == '0.000000':
                 continue
             # life_expectancy_(min/max) is in the format of:
-            # '%Y-%m-%d %H:%M:%S.%f', e.g.:
-            # '2019-01-20 21:12:12.000000'
+            # '%Y-%m-%dT%H:%M:%S.%f%z', e.g.:
+            # '2019-01-20T21:12:12.000000Z'
             life_expectancy_max = datetime.strptime(
                 dev['life_expectancy_max'],
-                '%Y-%m-%d %H:%M:%S.%f')
+                '%Y-%m-%dT%H:%M:%S.%f%z')
             self.log.debug('device %s expectancy max %s', dev,
                            life_expectancy_max)
 
@@ -631,3 +631,7 @@ class Module(MgrModule):
                 return self.remote(plugin_name, 'predict_all_devices')
         except:
             return -1, '', 'unable to invoke diskprediction local or remote plugin'
+
+    def gather_device_report(self):
+        # write me
+        return {}

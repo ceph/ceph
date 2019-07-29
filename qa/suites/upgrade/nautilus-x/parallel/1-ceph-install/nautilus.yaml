@@ -25,6 +25,7 @@ tasks:
     conf:
       global:
         mon warn on pool no app: false
+        bluestore_warn_on_legacy_statfs: false
 - exec:
     osd.0:
       - ceph osd set-require-min-compat-client nautilus
@@ -34,6 +35,9 @@ tasks:
     mon.b:
     mon.c:
 - print: "**** done install.upgrade non-client hosts"
+- rgw:
+   - client.1
+- print: "**** done => started rgw client.1"
 - parallel:
     - workload
     - upgrade-sequence

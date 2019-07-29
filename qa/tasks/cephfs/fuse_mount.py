@@ -166,6 +166,7 @@ class FuseMount(CephFSMount):
     def gather_mount_info(self):
         status = self.admin_socket(['status'])
         self.id = status['id']
+        self.client_pid = status['metadata']['pid']
         try:
             self.inst = status['inst_str']
             self.addr = status['addr_str']

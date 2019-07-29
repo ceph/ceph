@@ -1496,7 +1496,8 @@ public:
 
   void handle_backoff(OpRequestRef& op);
 
-  int trim_object(bool first, const hobject_t &coid, OpContextUPtr *ctxp);
+  int trim_object(bool first, const hobject_t &coid, snapid_t snap_to_trim,
+		  OpContextUPtr *ctxp);
   void snap_trimmer(epoch_t e) override;
   void kick_snap_trim() override;
   void snap_trimmer_scrub_complete() override;
@@ -1552,13 +1553,13 @@ public:
     const pg_pool_t *pool,
     ObjectStore::Transaction &t) override {
     coll_t target = coll_t(child);
-    PG::_create(t, child, split_bits);
+    create_pg_collection(t, child, split_bits);
     t.split_collection(
       coll,
       split_bits,
       seed,
       target);
-    PG::_init(t, child, pool);
+    init_pg_ondisk(t, child, pool);
   }
 private:
 
@@ -1658,10 +1659,11 @@ private:
 	}
       };
       auto *pg = context< SnapTrimmer >().pg;
-      if (pg->cct->_conf->osd_snap_trim_sleep > 0) {
+      float osd_snap_trim_sleep = pg->osd->osd->get_osd_snap_trim_sleep();
+      if (osd_snap_trim_sleep > 0) {
 	std::lock_guard l(pg->osd->sleep_lock);
 	wakeup = pg->osd->sleep_timer.add_event_after(
-	  pg->cct->_conf->osd_snap_trim_sleep,
+	  osd_snap_trim_sleep,
 	  new OnTimer{pg, pg->get_osdmap_epoch()});
       } else {
 	post_event(SnapTrimTimerReady());

@@ -72,7 +72,7 @@ Run ``npm run doc-build`` to generate code docs in the ``documentation/``
 directory. To make them accesible locally for a web browser, run
 ``npm run doc-serve`` and they will become available at ``http://localhost:8444``.
 With ``npm run compodoc -- <opts>`` you may
-`fully configure it https://compodoc.app/guides/usage.html`_.
+`fully configure it <https://compodoc.app/guides/usage.html>`_.
 
 Code linting and formatting
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -139,13 +139,13 @@ There are a few ways how you can try to resolve this:
 Running End-to-End Tests
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-We use `Protractor <http://www.protractortest.org/>`__ to run our frontend e2e
+We use `Protractor <http://www.protractortest.org/>`__ to run our frontend E2E
 tests.
 
 Our ``run-frontend-e2e-tests.sh`` script will check if Chrome or Docker is
 installed and run the tests if either is found.
 
-Start all frontend e2e tests by running::
+Start all frontend E2E tests by running::
 
   $ ./run-frontend-e2e-tests.sh
 
@@ -170,15 +170,96 @@ Note:
   When using docker, as your device, you might need to run the script with sudo
   permissions.
 
+When developing E2E tests, it is not necessary to compile the frontend code
+on each change of the test files. When your development environment is
+running (``npm start``), you can point Protractor to just use this
+environment. To attach `Protractor <http://www.protractortest.org/>`__ to
+this process, run ``npm run e2e:dev``.
+
+Note::
+
+   In case you have a somewhat particular environment, you might need to adapt
+   `protractor.conf.js` to point to the appropriate destination.
+
 Writing End-to-End Tests
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-When writing e2e tests you don't want to recompile every time from scratch to
-try out if your test has succeeded. As usual you have your development server
-open (``npm start``) which already has compiled all files. To attach
-`Protractor <http://www.protractortest.org/>`__ to this process, instead of
-spinning up it's own server, you can use ``npm run e2e -- --dev-server-target``
-or just ``npm run e2e:dev`` which is equivalent.
+The PagerHelper class
+^^^^^^^^^^^^^^^^^^^^^
+
+The ``PageHelper`` class is supposed to be used for general purpose code that
+can be used on various pages or suites. Examples are
+``getTableCellByContent()``, ``getTabsCount()`` or ``checkCheckbox()``. Every
+method that could be useful on several pages belongs there. Also, methods
+which enhance the derived classes of the PageHelper belong there. A good
+example for such a case is the ``restrictTo()`` decorator. It ensures that a
+method implemented in a subclass of PageHelper is called on the correct page.
+It will also show a developer-friendly warning if this is not the case.
+
+Subclasses of PageHelper
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+Helper Methods
+""""""""""""""
+
+In order to make code reusable which is specific for a particular suite, make
+sure to put it in a derived class of the ``PageHelper``. For instance, when
+talking about the pool suite, such methods would be ``create()``, ``exist()``
+and ``delete()``. These methods are specific to a pool but are useful for other
+suites.
+
+Methods that return HTML elements (for instance of type ``ElementFinder`` or
+``ElementArrayFinder``, but also ``Promise<ElementFinder>``) which can only
+be found on a specific page, should be either implemented in the helper
+methods of the subclass of PageHelper or as own methods of the subclass of
+PageHelper.
+
+Registering a new PageHelper
+""""""""""""""""""""""""""""
+
+If you have to create a new Helper class derived from the ``PageHelper``,
+please also ensure that it is instantiated in the constructor of the
+``Helper`` class. That way it can automatically be used by all other suites.
+
+.. code:: TypeScript
+
+  class Helper {
+     // ...
+     pools: PoolPageHelper;
+
+     constructor() {
+        this.pools = new PoolPageHelper();
+     }
+
+     // ...
+  }
+
+Using PageHelpers
+"""""""""""""""""
+
+In any suite, an instance of the ``Helper`` class should be used to call
+various ``PageHelper`` objects and their methods. This makes all methods of all
+PageHelpers available to all suites.
+
+.. code:: TypeScript
+
+  it('should create a pool', () => {
+    helper.pools.exist(poolName, false).then(() => {
+      helper.pools.navigateTo('create');
+      helper.pools.create(poolName).then(() => {
+        helper.pools.navigateTo();
+        helper.pools.exist(poolName, true);
+      });
+    });
+  });
+
+Code Style
+^^^^^^^^^^
+
+Please refer to the official `Protractor style-guide
+<https://www.protractortest.org/#/style-guide>`__ for a better insight on how
+to write and structure tests as well as what exactly should be covered by
+end-to-end tests.
 
 Further Help
 ~~~~~~~~~~~~
@@ -220,7 +301,7 @@ Example:
     import { Component } from '@angular/core';
     import { Router } from '@angular/router';
 
-    import { ToastsManager } from 'ng2-toastr';
+    import { ToastrManager } from 'ngx-toastr';
 
     import { Credentials } from '../../../shared/models/credentials.model';
     import { HostService } from './services/host.service';
@@ -263,7 +344,7 @@ or removed to/from a set of items (e.g.: 'Add permission' to a user vs. 'Create
 
 In order to enforce the use of this wording, a service ``ActionLabelsI18n`` has
 been created, which provides translated labels for use in UI elements.
-    
+
 Frontend branding
 ~~~~~~~~~~~~~~~~~
 
@@ -1468,7 +1549,7 @@ decorators that can be used to add more information:
 
 * ``@EndpointDoc()`` for documentation of endpoints. It has four optional arguments
   (explained below): ``description``, ``group``, ``parameters`` and``responses``.
-* ``@ControllerDoc()`` for documentation of controller or group associated with 
+* ``@ControllerDoc()`` for documentation of controller or group associated with
   the endpoints. It only takes the two first arguments: ``description`` and``group``.
 
 
@@ -1477,7 +1558,7 @@ decorators that can be used to add more information:
 
 ``group``: By default, an endpoint is grouped together with other endpoints
 within the same controller class. ``group`` is a string that can be used to
-assign an endpoint or all endpoints in a class to another controller or a 
+assign an endpoint or all endpoints in a class to another controller or a
 conceived group name.
 
 
@@ -1511,7 +1592,7 @@ for nested parameters).
       'item2': (str, 'Description of item2', True),  # item2 is optional
       'item3': (str, 'Description of item3', True, 'foo'),  # item3 is optional with 'foo' as default value
   }, 'Description of my_dictionary')})
- 
+
 If the parameter is a ``list`` of primitive types, the type should be
 surrounded with square brackets.
 

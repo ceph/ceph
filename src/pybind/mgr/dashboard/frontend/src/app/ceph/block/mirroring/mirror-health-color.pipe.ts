@@ -6,12 +6,12 @@ import { Pipe, PipeTransform } from '@angular/core';
 export class MirrorHealthColorPipe implements PipeTransform {
   transform(value: any): any {
     if (value === 'warning') {
-      return 'label label-warning';
+      return 'badge badge-warning';
     } else if (value === 'error') {
-      return 'label label-danger';
+      return 'badge badge-danger';
     } else if (value === 'success') {
-      return 'label label-success';
+      return 'badge badge-success';
     }
-    return 'label label-info';
+    return 'badge badge-info';
   }
 }

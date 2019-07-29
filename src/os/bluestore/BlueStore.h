@@ -127,6 +127,7 @@ enum {
   l_bluestore_omap_upper_bound_lat,
   l_bluestore_omap_lower_bound_lat,
   l_bluestore_omap_next_lat,
+  l_bluestore_clist_lat,
   l_bluestore_last
 };
 
@@ -251,7 +252,7 @@ public:
     }
   };
 
-  struct Cache;
+  struct BufferCacheShard;
 
   /// map logical extent range (object) onto buffers
   struct BufferSpace {
@@ -279,7 +280,7 @@ public:
       ceph_assert(writing.empty());
     }
 
-    void _add_buffer(Cache* cache, Buffer *b, int level, Buffer *near) {
+    void _add_buffer(BufferCacheShard* cache, Buffer *b, int level, Buffer *near) {
       cache->_audit("_add_buffer start");
       buffer_map[b->offset].reset(b);
       if (b->is_writing()) {
@@ -299,21 +300,21 @@ public:
         }
       } else {
 	b->data.reassign_to_mempool(mempool::mempool_bluestore_cache_data);
-	cache->_add_buffer(b, level, near);
+	cache->_add(b, level, near);
       }
       cache->_audit("_add_buffer end");
     }
-    void _rm_buffer(Cache* cache, Buffer *b) {
+    void _rm_buffer(BufferCacheShard* cache, Buffer *b) {
       _rm_buffer(cache, buffer_map.find(b->offset));
     }
-    void _rm_buffer(Cache* cache,
+    void _rm_buffer(BufferCacheShard* cache,
 		    map<uint32_t, std::unique_ptr<Buffer>>::iterator p) {
       ceph_assert(p != buffer_map.end());
       cache->_audit("_rm_buffer start");
       if (p->second->is_writing()) {
         writing.erase(writing.iterator_to(*p->second));
       } else {
-	cache->_rm_buffer(p->second.get());
+	cache->_rm(p->second.get());
       }
       buffer_map.erase(p);
       cache->_audit("_rm_buffer end");
@@ -331,43 +332,47 @@ public:
     }
 
     // must be called under protection of the Cache lock
-    void _clear(Cache* cache);
+    void _clear(BufferCacheShard* cache);
 
     // return value is the highest cache_private of a trimmed buffer, or 0.
-    int discard(Cache* cache, uint32_t offset, uint32_t length) {
+    int discard(BufferCacheShard* cache, uint32_t offset, uint32_t length) {
       std::lock_guard l(cache->lock);
-      return _discard(cache, offset, length);
+      int ret = _discard(cache, offset, length);
+      cache->_trim();
+      return ret;
     }
-    int _discard(Cache* cache, uint32_t offset, uint32_t length);
+    int _discard(BufferCacheShard* cache, uint32_t offset, uint32_t length);
 
-    void write(Cache* cache, uint64_t seq, uint32_t offset, bufferlist& bl,
+    void write(BufferCacheShard* cache, uint64_t seq, uint32_t offset, bufferlist& bl,
 	       unsigned flags) {
       std::lock_guard l(cache->lock);
       Buffer *b = new Buffer(this, Buffer::STATE_WRITING, seq, offset, bl,
 			     flags);
       b->cache_private = _discard(cache, offset, bl.length());
       _add_buffer(cache, b, (flags & Buffer::FLAG_NOCACHE) ? 0 : 1, nullptr);
+      cache->_trim();
     }
-    void _finish_write(Cache* cache, uint64_t seq);
-    void did_read(Cache* cache, uint32_t offset, bufferlist& bl) {
+    void _finish_write(BufferCacheShard* cache, uint64_t seq);
+    void did_read(BufferCacheShard* cache, uint32_t offset, bufferlist& bl) {
       std::lock_guard l(cache->lock);
       Buffer *b = new Buffer(this, Buffer::STATE_CLEAN, 0, offset, bl);
       b->cache_private = _discard(cache, offset, bl.length());
       _add_buffer(cache, b, 1, nullptr);
+      cache->_trim();
     }
 
-    void read(Cache* cache, uint32_t offset, uint32_t length,
+    void read(BufferCacheShard* cache, uint32_t offset, uint32_t length,
 	      BlueStore::ready_regions_t& res,
 	      interval_set<uint32_t>& res_intervals,
 	      int flags = 0);
 
-    void truncate(Cache* cache, uint32_t offset) {
+    void truncate(BufferCacheShard* cache, uint32_t offset) {
       discard(cache, offset, (uint32_t)-1 - offset);
     }
 
-    void split(Cache* cache, size_t pos, BufferSpace &r);
+    void split(BufferCacheShard* cache, size_t pos, BufferSpace &r);
 
-    void dump(Cache* cache, Formatter *f) const {
+    void dump(BufferCacheShard* cache, Formatter *f) const {
       std::lock_guard l(cache->lock);
       f->open_array_section("buffers");
       for (auto& i : buffer_map) {
@@ -431,7 +436,7 @@ public:
     friend bool operator==(const SharedBlob &l, const SharedBlob &r) {
       return l.get_sbid() == r.get_sbid();
     }
-    inline Cache* get_cache() {
+    inline BufferCacheShard* get_cache() {
       return coll ? coll->cache : nullptr;
     }
     inline SharedBlobSet* get_parent() {
@@ -968,7 +973,7 @@ public:
       uint64_t min_alloc_size);
 
     /// return a collection of extents to perform GC on
-    const vector<bluestore_pextent_t>& get_extents_to_collect() const {
+    const interval_set<uint64_t>& get_extents_to_collect() const {
       return extents_to_collect;
     }
     GarbageCollector(CephContext* _cct) : cct(_cct) {}
@@ -999,7 +1004,7 @@ public:
                                          ///< specific write
 
     ///< protrusive extents that should be collected if GC takes place
-    vector<bluestore_pextent_t> extents_to_collect;
+    interval_set<uint64_t> extents_to_collect;
 
     boost::optional<uint64_t > used_alloc_unit; ///< last processed allocation
                                                 ///<  unit when traversing 
@@ -1021,8 +1026,6 @@ public:
     int64_t expected_for_release = 0;      ///< alloc units currently used by
                                            ///< compressed blobs that might
                                            ///< gone after GC
-    uint64_t gc_start_offset = 0;              ///starting offset for GC
-    uint64_t gc_end_offset = 0;                ///ending offset for GC
 
   protected:
     void process_protrusive_extents(const BlueStore::ExtentMap& extent_map, 
@@ -1057,6 +1060,7 @@ public:
     // track txc's that have not been committed to kv store (and whose
     // effects cannot be read via the kvdb read methods)
     std::atomic<int> flushing_count = {0};
+    std::atomic<int> waiting_count = {0};
     /// protect flush_txns
     ceph::mutex flush_lock = ceph::make_mutex("BlueStore::Onode::flush_lock");
     ceph::condition_variable flush_cond;   ///< wait here for uncommitted txns
@@ -1084,36 +1088,85 @@ public:
   };
   typedef boost::intrusive_ptr<Onode> OnodeRef;
 
-
-  /// a cache (shard) of onodes and buffers
-  struct Cache {
-    CephContext* cct;
+  /// A generic Cache Shard
+  struct CacheShard {
+    CephContext *cct;
     PerfCounters *logger;
 
     /// protect lru and other structures
     ceph::recursive_mutex lock = {
-      ceph::make_recursive_mutex("BlueStore::Cache::lock") };
+      ceph::make_recursive_mutex("BlueStore::CacheShard::lock") };
 
+    std::atomic<uint64_t> max = {0};
+    std::atomic<uint64_t> num = {0};
+
+    CacheShard(CephContext* cct) : cct(cct), logger(nullptr) {}
+    virtual ~CacheShard() {}
+
+    void set_max(uint64_t max_) {
+      max = max_;
+    }
+
+    uint64_t _get_num() {
+      return num;
+    }
+
+    virtual void _trim_to(uint64_t max) = 0;
+    void _trim() {
+      _trim_to(max);
+    }
+    void trim() {
+      std::lock_guard l(lock);
+      _trim();    
+    }
+    void flush() {
+      std::lock_guard l(lock);
+     _trim_to(0);
+    }
+
+#ifdef DEBUG_CACHE
+    virtual void _audit(const char *s) = 0;
+#else
+    void _audit(const char *s) { /* no-op */ }
+#endif
+  };
+
+  /// A Generic onode Cache Shard
+  struct OnodeCacheShard : public CacheShard {
+    std::array<std::pair<ghobject_t, mono_clock::time_point>, 64> dumped_onodes;
+  public:
+    OnodeCacheShard(CephContext* cct) : CacheShard(cct) {}
+    static OnodeCacheShard *create(CephContext* cct, string type,
+                                   PerfCounters *logger);
+    virtual void _add(OnodeRef& o, int level) = 0;
+    virtual void _rm(OnodeRef& o) = 0;
+    virtual void _touch(OnodeRef& o) = 0;
+    virtual void add_stats(uint64_t *onodes) = 0;
+
+    bool empty() {
+      return _get_num() == 0;
+    }
+  };
+
+  /// A Generic buffer Cache Shard
+  struct BufferCacheShard : public CacheShard {
     std::atomic<uint64_t> num_extents = {0};
     std::atomic<uint64_t> num_blobs = {0};
+    uint64_t buffer_bytes = 0;
 
-    static Cache *create(CephContext* cct, string type, PerfCounters *logger);
+  public:
+    BufferCacheShard(CephContext* cct) : CacheShard(cct) {}
+    static BufferCacheShard *create(CephContext* cct, string type, 
+                                    PerfCounters *logger);
+    virtual void _add(Buffer *b, int level, Buffer *near) = 0;
+    virtual void _rm(Buffer *b) = 0;
+    virtual void _move(BufferCacheShard *src, Buffer *b) = 0;
+    virtual void _touch(Buffer *b) = 0;
+    virtual void _adjust_size(Buffer *b, int64_t delta) = 0;
 
-    Cache(CephContext* cct) : cct(cct), logger(nullptr) {}
-    virtual ~Cache() {}
-
-    virtual void _add_onode(OnodeRef& o, int level) = 0;
-    virtual void _rm_onode(OnodeRef& o) = 0;
-    virtual void _touch_onode(OnodeRef& o) = 0;
-
-    virtual void _add_buffer(Buffer *b, int level, Buffer *near) = 0;
-    virtual void _rm_buffer(Buffer *b) = 0;
-    virtual void _move_buffer(Cache *src, Buffer *b) = 0;
-    virtual void _adjust_buffer_size(Buffer *b, int64_t delta) = 0;
-    virtual void _touch_buffer(Buffer *b) = 0;
-
-    virtual uint64_t _get_num_onodes() = 0;
-    virtual uint64_t _get_buffer_bytes() = 0;
+    uint64_t _get_bytes() {
+      return buffer_bytes;
+    }
 
     void add_extent() {
       ++num_extents;
@@ -1129,227 +1182,28 @@ public:
       --num_blobs;
     }
 
-    void trim(uint64_t onode_max, uint64_t buffer_max);
-
-    void trim_all();
-
-    virtual void _trim(uint64_t onode_max, uint64_t buffer_max) = 0;
-
-    virtual void add_stats(uint64_t *onodes, uint64_t *extents,
-			   uint64_t *blobs,
-			   uint64_t *buffers,
-			   uint64_t *bytes) = 0;
+    virtual void add_stats(uint64_t *extents,
+                           uint64_t *blobs,
+                           uint64_t *buffers,
+                           uint64_t *bytes) = 0;
 
     bool empty() {
       std::lock_guard l(lock);
-      return _get_num_onodes() == 0 && _get_buffer_bytes() == 0;
+      return _get_bytes() == 0;
     }
-
-#ifdef DEBUG_CACHE
-    virtual void _audit(const char *s) = 0;
-#else
-    void _audit(const char *s) { /* no-op */ }
-#endif
-  };
-
-  /// simple LRU cache for onodes and buffers
-  struct LRUCache : public Cache {
-  private:
-    typedef boost::intrusive::list<
-      Onode,
-      boost::intrusive::member_hook<
-        Onode,
-	boost::intrusive::list_member_hook<>,
-	&Onode::lru_item> > onode_lru_list_t;
-    typedef boost::intrusive::list<
-      Buffer,
-      boost::intrusive::member_hook<
-	Buffer,
-	boost::intrusive::list_member_hook<>,
-	&Buffer::lru_item> > buffer_lru_list_t;
-
-    onode_lru_list_t onode_lru;
-
-    buffer_lru_list_t buffer_lru;
-    uint64_t buffer_size = 0;
-
-  public:
-    LRUCache(CephContext* cct) : Cache(cct) {}
-    uint64_t _get_num_onodes() override {
-      return onode_lru.size();
-    }
-    void _add_onode(OnodeRef& o, int level) override {
-      if (level > 0)
-	onode_lru.push_front(*o);
-      else
-	onode_lru.push_back(*o);
-    }
-    void _rm_onode(OnodeRef& o) override {
-      auto q = onode_lru.iterator_to(*o);
-      onode_lru.erase(q);
-    }
-    void _touch_onode(OnodeRef& o) override;
-
-    uint64_t _get_buffer_bytes() override {
-      return buffer_size;
-    }
-    void _add_buffer(Buffer *b, int level, Buffer *near) override {
-      if (near) {
-	auto q = buffer_lru.iterator_to(*near);
-	buffer_lru.insert(q, *b);
-      } else if (level > 0) {
-	buffer_lru.push_front(*b);
-      } else {
-	buffer_lru.push_back(*b);
-      }
-      buffer_size += b->length;
-    }
-    void _rm_buffer(Buffer *b) override {
-      ceph_assert(buffer_size >= b->length);
-      buffer_size -= b->length;
-      auto q = buffer_lru.iterator_to(*b);
-      buffer_lru.erase(q);
-    }
-    void _move_buffer(Cache *src, Buffer *b) override {
-      src->_rm_buffer(b);
-      _add_buffer(b, 0, nullptr);
-    }
-    void _adjust_buffer_size(Buffer *b, int64_t delta) override {
-      ceph_assert((int64_t)buffer_size + delta >= 0);
-      buffer_size += delta;
-    }
-    void _touch_buffer(Buffer *b) override {
-      auto p = buffer_lru.iterator_to(*b);
-      buffer_lru.erase(p);
-      buffer_lru.push_front(*b);
-      _audit("_touch_buffer end");
-    }
-
-    void _trim(uint64_t onode_max, uint64_t buffer_max) override;
-
-    void add_stats(uint64_t *onodes, uint64_t *extents,
-		   uint64_t *blobs,
-		   uint64_t *buffers,
-		   uint64_t *bytes) override {
-      std::lock_guard l(lock);
-      *onodes += onode_lru.size();
-      *extents += num_extents;
-      *blobs += num_blobs;
-      *buffers += buffer_lru.size();
-      *bytes += buffer_size;
-    }
-
-#ifdef DEBUG_CACHE
-    void _audit(const char *s) override;
-#endif
-  };
-
-  // 2Q cache for buffers, LRU for onodes
-  struct TwoQCache : public Cache {
-  private:
-    // stick with LRU for onodes for now (fixme?)
-    typedef boost::intrusive::list<
-      Onode,
-      boost::intrusive::member_hook<
-        Onode,
-	boost::intrusive::list_member_hook<>,
-	&Onode::lru_item> > onode_lru_list_t;
-    typedef boost::intrusive::list<
-      Buffer,
-      boost::intrusive::member_hook<
-	Buffer,
-	boost::intrusive::list_member_hook<>,
-	&Buffer::lru_item> > buffer_list_t;
-
-    onode_lru_list_t onode_lru;
-
-    buffer_list_t buffer_hot;      ///< "Am" hot buffers
-    buffer_list_t buffer_warm_in;  ///< "A1in" newly warm buffers
-    buffer_list_t buffer_warm_out; ///< "A1out" empty buffers we've evicted
-    uint64_t buffer_bytes = 0;     ///< bytes
-
-    enum {
-      BUFFER_NEW = 0,
-      BUFFER_WARM_IN,   ///< in buffer_warm_in
-      BUFFER_WARM_OUT,  ///< in buffer_warm_out
-      BUFFER_HOT,       ///< in buffer_hot
-      BUFFER_TYPE_MAX
-    };
-
-    uint64_t buffer_list_bytes[BUFFER_TYPE_MAX] = {0}; ///< bytes per type
-
-  public:
-    TwoQCache(CephContext* cct) : Cache(cct) {}
-    uint64_t _get_num_onodes() override {
-      return onode_lru.size();
-    }
-    void _add_onode(OnodeRef& o, int level) override {
-      if (level > 0)
-	onode_lru.push_front(*o);
-      else
-	onode_lru.push_back(*o);
-    }
-    void _rm_onode(OnodeRef& o) override {
-      auto q = onode_lru.iterator_to(*o);
-      onode_lru.erase(q);
-    }
-    void _touch_onode(OnodeRef& o) override;
-
-    uint64_t _get_buffer_bytes() override {
-      return buffer_bytes;
-    }
-    void _add_buffer(Buffer *b, int level, Buffer *near) override;
-    void _rm_buffer(Buffer *b) override;
-    void _move_buffer(Cache *src, Buffer *b) override;
-    void _adjust_buffer_size(Buffer *b, int64_t delta) override;
-    void _touch_buffer(Buffer *b) override {
-      switch (b->cache_private) {
-      case BUFFER_WARM_IN:
-	// do nothing (somewhat counter-intuitively!)
-	break;
-      case BUFFER_WARM_OUT:
-	// move from warm_out to hot LRU
-	ceph_abort_msg("this happens via discard hint");
-	break;
-      case BUFFER_HOT:
-	// move to front of hot LRU
-	buffer_hot.erase(buffer_hot.iterator_to(*b));
-	buffer_hot.push_front(*b);
-	break;
-      }
-      _audit("_touch_buffer end");
-    }
-
-    void _trim(uint64_t onode_max, uint64_t buffer_max) override;
-
-    void add_stats(uint64_t *onodes, uint64_t *extents,
-		   uint64_t *blobs,
-		   uint64_t *buffers,
-		   uint64_t *bytes) override {
-      std::lock_guard l(lock);
-      *onodes += onode_lru.size();
-      *extents += num_extents;
-      *blobs += num_blobs;
-      *buffers += buffer_hot.size() + buffer_warm_in.size();
-      *bytes += buffer_bytes;
-    }
-
-#ifdef DEBUG_CACHE
-    void _audit(const char *s) override;
-#endif
   };
 
   struct OnodeSpace {
-  private:
-    Cache *cache;
+    OnodeCacheShard *cache;
 
+  private:
     /// forward lookups
     mempool::bluestore_cache_other::unordered_map<ghobject_t,OnodeRef> onode_map;
 
     friend class Collection; // for split_cache()
 
   public:
-    OnodeSpace(Cache *c) : cache(c) {}
+    OnodeSpace(OnodeCacheShard *c) : cache(c) {}
     ~OnodeSpace() {
       clear();
     }
@@ -1378,7 +1232,7 @@ public:
   struct Collection : public CollectionImpl {
     BlueStore *store;
     OpSequencerRef osr;
-    Cache *cache;       ///< our cache shard
+    BufferCacheShard *cache;       ///< our cache shard
     bluestore_cnode_t cnode;
     RWLock lock;
 
@@ -1394,7 +1248,7 @@ public:
     pool_opts_t pool_opts;
     ContextQueue *commit_queue;
 
-    OnodeRef get_onode(const ghobject_t& oid, bool create);
+    OnodeRef get_onode(const ghobject_t& oid, bool create, bool is_createop=false);
 
     // the terminology is confusing here, sorry!
     //
@@ -1435,7 +1289,7 @@ public:
     void flush() override;
     void flush_all_but_last();
 
-    Collection(BlueStore *ns, Cache *ca, coll_t c);
+    Collection(BlueStore *ns, OnodeCacheShard *oc, BufferCacheShard *bc, coll_t c);
   };
 
   class OmapIteratorImpl : public ObjectMap::ObjectMapIteratorImpl {
@@ -1455,6 +1309,10 @@ public:
     int next() override;
     string key() override;
     bufferlist value() override;
+    std::string tail_key() {
+      return tail;
+    }
+
     int status() override {
       return 0;
     }
@@ -1914,7 +1772,8 @@ private:
   mempool::bluestore_cache_other::unordered_map<coll_t, CollectionRef> coll_map;
   map<coll_t,CollectionRef> new_coll_map;
 
-  vector<Cache*> cache_shards;
+  vector<OnodeCacheShard*> onode_cache_shards;
+  vector<BufferCacheShard*> buffer_cache_shards;
 
   /// protect zombie_osr_set
   ceph::mutex zombie_osr_lock = ceph::make_mutex("BlueStore::zombie_osr_lock");
@@ -1950,12 +1809,14 @@ private:
   deque<TransContext*> kv_queue_unsubmitted; ///< ready, need submit by kv thread
   deque<TransContext*> kv_committing;        ///< currently syncing
   deque<DeferredBatch*> deferred_done_queue;   ///< deferred ios done
+  bool kv_sync_in_progress = false;
 
   KVFinalizeThread kv_finalize_thread;
   ceph::mutex kv_finalize_lock = ceph::make_mutex("BlueStore::kv_finalize_lock");
   ceph::condition_variable kv_finalize_cond;
   deque<TransContext*> kv_committing_to_finalize;   ///< pending finalization
   deque<DeferredBatch*> deferred_stable_to_finalize; ///< pending finalization
+  bool kv_finalize_in_progress = false;
 
   PerfCounters *logger = nullptr;
 
@@ -2029,7 +1890,6 @@ private:
     ceph::condition_variable cond;
     ceph::mutex lock = ceph::make_mutex("BlueStore::MempoolThread::lock");
     bool stop = false;
-    uint64_t autotune_cache_size = 0;
     std::shared_ptr<PriorityCache::PriCache> binned_kv_cache = nullptr;
     std::shared_ptr<PriorityCache::Manager> pcm = nullptr;
 
@@ -2124,8 +1984,8 @@ private:
 
       virtual uint64_t _get_used_bytes() const {
         uint64_t bytes = 0;
-        for (auto i : store->cache_shards) {
-          bytes += i->_get_buffer_bytes();
+        for (auto i : store->buffer_cache_shards) {
+          bytes += i->_get_bytes();
         }
         return bytes; 
       }
@@ -2156,7 +2016,7 @@ private:
 
   private:
     void _adjust_cache_settings();
-    void _trim_shards(bool interval_stats);
+    void _resize_shards(bool interval_stats);
     void _tune_cache_size(bool interval_stats);
     void _balance_cache(
         const std::list<std::shared_ptr<PriorityCache::PriCache>>& caches);
@@ -2297,7 +2157,7 @@ private:
   void _kv_sync_thread();
   void _kv_finalize_thread();
 
-  bluestore_deferred_op_t *_get_deferred_op(TransContext *txc, OnodeRef o);
+  bluestore_deferred_op_t *_get_deferred_op(TransContext *txc);
   void _deferred_queue(TransContext *txc);
 public:
   void deferred_try_submit();
@@ -2388,6 +2248,10 @@ public:
   bool wants_journal() override { return false; };
   bool allows_journal() override { return false; };
 
+  uint64_t get_min_alloc_size() const override {
+    return min_alloc_size;
+  }
+
   int get_devices(set<string> *ls) override;
 
   bool is_rotational() override;
@@ -2445,18 +2309,22 @@ public:
   void set_cache_shards(unsigned num) override;
   void dump_cache_stats(Formatter *f) override {
     int onode_count = 0, buffers_bytes = 0;
-    for (auto i: cache_shards) {
-      onode_count += i->_get_num_onodes();
-      buffers_bytes += i->_get_buffer_bytes();
+    for (auto i: onode_cache_shards) {
+      onode_count += i->_get_num();
+    }
+    for (auto i: buffer_cache_shards) {
+      buffers_bytes += i->_get_bytes();
     }
     f->dump_int("bluestore_onode", onode_count);
     f->dump_int("bluestore_buffers", buffers_bytes);
   }
   void dump_cache_stats(ostream& ss) override {
     int onode_count = 0, buffers_bytes = 0;
-    for (auto i: cache_shards) {
-      onode_count += i->_get_num_onodes();
-      buffers_bytes += i->_get_buffer_bytes();
+    for (auto i: onode_cache_shards) {
+      onode_count += i->_get_num();
+    }
+    for (auto i: buffer_cache_shards) {
+      buffers_bytes += i->_get_bytes();
     }
     ss << "bluestore_onode: " << onode_count;
     ss << "bluestore_buffers: " << buffers_bytes;
@@ -2680,9 +2548,17 @@ public:
     uint64_t size,
     PExtentVector* extents);
 
-  void log_latency_fn(int idx,
-		      const ceph::timespan& lat,
-		      std::function<string (const ceph::timespan& lat)> fn);
+  inline void log_latency(const char* name,
+    int idx,
+    const ceph::timespan& lat,
+    double lat_threshold,
+    const char* info = "") const;
+
+  inline void log_latency_fn(const char* name,
+    int idx,
+    const ceph::timespan& lat,
+    double lat_threshold,
+    std::function<string (const ceph::timespan& lat)> fn) const;
 
 private:
   bool _debug_data_eio(const ghobject_t& o) {
@@ -2768,6 +2644,7 @@ private:
     unsigned csum_order = 0;        ///< target checksum chunk order
 
     old_extent_map_t old_extents;   ///< must deref these blobs
+    interval_set<uint64_t> extents_to_gc; ///< extents for garbage collection
 
     struct write_item {
       uint64_t logical_offset;      ///< write logical offset
@@ -2886,7 +2763,6 @@ private:
   int _do_gc(TransContext *txc,
              CollectionRef& c,
              OnodeRef o,
-             const GarbageCollector& gc,
              const WriteContext& wctx,
              uint64_t *dirty_start,
              uint64_t *dirty_end);

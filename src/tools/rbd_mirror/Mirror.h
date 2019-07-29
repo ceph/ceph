@@ -7,6 +7,7 @@
 #include "common/ceph_context.h"
 #include "common/Mutex.h"
 #include "include/rados/librados.hpp"
+#include "include/utime.h"
 #include "ClusterWatcher.h"
 #include "PoolReplayer.h"
 #include "tools/rbd_mirror/Types.h"
@@ -16,6 +17,8 @@
 #include <memory>
 #include <atomic>
 
+namespace journal { class CacheManagerHandler; }
+
 namespace librbd { struct ImageCtx; }
 
 namespace rbd {
@@ -23,6 +26,7 @@ namespace mirror {
 
 template <typename> struct ServiceDaemon;
 template <typename> struct Threads;
+class CacheManagerHandler;
 class MirrorAdminSocketHook;
 
 /**
@@ -55,6 +59,9 @@ private:
 
   void update_pool_replayers(const PoolPeers &pool_peers);
 
+  void create_cache_manager();
+  void run_cache_manager(utime_t *next_run_interval);
+
   CephContext *m_cct;
   std::vector<const char*> m_args;
   Threads<librbd::ImageCtx> *m_threads = nullptr;
@@ -65,6 +72,7 @@ private:
 
   // monitor local cluster for config changes in peers
   std::unique_ptr<ClusterWatcher> m_local_cluster_watcher;
+  std::unique_ptr<CacheManagerHandler> m_cache_manager_handler;
   std::map<PoolPeer, std::unique_ptr<PoolReplayer<>>> m_pool_replayers;
   std::atomic<bool> m_stopping = { false };
   bool m_manual_stop = false;

@@ -112,9 +112,10 @@ def task(ctx, config):
             client.1:
               extra_args: ['--exclude', 'test_100_continue']
     """
+    assert hasattr(ctx, 'rgw'), 'rgw-logsocket must run after the rgw task'
     assert config is None or isinstance(config, list) \
         or isinstance(config, dict), \
-        "task s3tests only supports a list or dictionary for configuration"
+        "task rgw-logsocket only supports a list or dictionary for configuration"
     all_clients = ['client.{id}'.format(id=id_)
                    for id_ in teuthology.all_roles_of_type(ctx.cluster, 'client')]
     if config is None:
@@ -132,13 +133,16 @@ def task(ctx, config):
 
     s3tests_conf = {}
     for client in clients:
+        endpoint = ctx.rgw.role_endpoints.get(client)
+        assert endpoint, 'rgw-logsocket: no rgw endpoint for {}'.format(client)
+
         s3tests_conf[client] = ConfigObj(
             indent_type='',
             infile={
                 'DEFAULT':
                     {
-                    'port'      : 7280,
-                    'is_secure' : 'no',
+                    'port'      : endpoint.port,
+                    'is_secure' : endpoint.cert is not None,
                     },
                 'fixtures' : {},
                 's3 main'  : {},

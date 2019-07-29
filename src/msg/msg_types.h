@@ -489,16 +489,16 @@ struct entity_addr_t {
     }
     encode(nonce, bl);
     __u32 elen = get_sockaddr_len();
+#if (__FreeBSD__) || defined(__APPLE__)
+      elen -= sizeof(u.sa.sa_len);
+#endif
     encode(elen, bl);
     if (elen) {
-#if (__FreeBSD__) || defined(__APPLE__)
-      __le16 ss_family = u.sa.sa_family;
+      uint16_t ss_family = u.sa.sa_family;
+
       encode(ss_family, bl);
-      bl.append(u.sa.sa_data,
-		elen - sizeof(u.sa.sa_len) - sizeof(u.sa.sa_family));
-#else
-      bl.append((char*)get_sockaddr(), elen);
-#endif
+      elen -= sizeof(u.sa.sa_family);
+      bl.append(u.sa.sa_data, elen);
     }
     ENCODE_FINISH(bl);
   }
@@ -520,7 +520,8 @@ struct entity_addr_t {
     if (elen) {
 #if defined(__FreeBSD__) || defined(__APPLE__)
       u.sa.sa_len = 0;
-      __le16 ss_family;
+#endif
+      uint16_t ss_family;
       if (elen < sizeof(ss_family)) {
 	throw buffer::malformed_input("elen smaller than family len");
       }
@@ -531,17 +532,6 @@ struct entity_addr_t {
 	throw buffer::malformed_input("elen exceeds sockaddr len");
       }
       bl.copy(elen, u.sa.sa_data);
-#else
-      if (elen < sizeof(u.sa.sa_family)) {
-	throw ceph::buffer::malformed_input("elen smaller than family len");
-      }
-      bl.copy(sizeof(u.sa.sa_family), (char*)&u.sa.sa_family);
-      if (elen > get_sockaddr_len()) {
-	throw ceph::buffer::malformed_input("elen exceeds sockaddr len");
-      }
-      elen -= sizeof(u.sa.sa_family);
-      bl.copy(elen, u.sa.sa_data);
-#endif
     }
     DECODE_FINISH(bl);
   }
@@ -565,7 +555,7 @@ namespace std {
 template<> struct hash<entity_addr_t> {
   size_t operator()( const entity_addr_t& x ) const {
     static blobhash H;
-    return H((const char*)&x, sizeof(x));
+    return H(&x, sizeof(x));
   }
 };
 } // namespace std

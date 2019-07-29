@@ -277,6 +277,11 @@ public:
   virtual bool wants_journal() = 0;  //< prefers a journal
   virtual bool allows_journal() = 0; //< allows a journal
 
+  // return store min allocation size, if applicable
+  virtual uint64_t get_min_alloc_size() const {
+    return 0;
+  }
+
   /// enumerate hardware devices (by 'devname', e.g., 'sda' as in /sys/block/sda)
   virtual int get_devices(std::set<std::string> *devls) {
     return -EOPNOTSUPP;

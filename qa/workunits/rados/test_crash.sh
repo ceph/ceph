@@ -29,5 +29,11 @@ sudo systemctl restart ceph-crash
 sleep 30
 
 # must be 3 crashdumps registered and moved to crash/posted
-[ $(ceph crash ls | wc -l) = 3 ]  || exit 1
+[ $(ceph crash ls | wc -l) = 4 ]  || exit 1   # 4 here bc of the table header
 [ $(sudo find /var/lib/ceph/crash/posted/ -name meta | wc -l) = 3 ] || exit 1
+
+# there should be a health warning
+ceph health detail | grep RECENT_CRASH || exit 1
+ceph crash archive-all
+sleep 30
+ceph health detail | grep -c RECENT_CRASH | grep 0     # should be gone!

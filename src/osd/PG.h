@@ -176,8 +176,6 @@ public:
   const pg_shard_t pg_whoami;
   const spg_t pg_id;
 
-  using PeeringCtx = PeeringState::PeeringCtx;
-
 public:
   // -- members --
   const coll_t coll;
@@ -353,10 +351,10 @@ public:
   static int peek_map_epoch(ObjectStore *store, spg_t pgid, epoch_t *pepoch);
 
   static int get_latest_struct_v() {
-    return latest_struct_v;
+    return pg_latest_struct_v;
   }
   static int get_compat_struct_v() {
-    return compat_struct_v;
+    return pg_compat_struct_v;
   }
   static int read_info(
     ObjectStore *store, spg_t pgid, const coll_t &coll,
@@ -385,6 +383,7 @@ public:
 
   void scrub(epoch_t queued, ThreadPool::TPHandle &handle);
 
+  bool is_scrub_registered();
   void reg_next_scrub();
   void unreg_next_scrub();
 
@@ -396,12 +395,13 @@ public:
   void on_role_change() override;
   virtual void plpg_on_role_change() = 0;
 
+  void init_collection_pool_opts();
   void on_pool_change() override;
   virtual void plpg_on_pool_change() = 0;
 
   void on_info_history_change() override;
 
-  void scrub_requested(bool deep, bool repair) override;
+  void scrub_requested(bool deep, bool repair, bool need_auto = false) override;
 
   uint64_t get_snap_trimq_size() const override {
     return snap_trimq.size();
@@ -458,6 +458,8 @@ public:
 
   void on_active_actmap() override;
   void on_active_advmap(const OSDMapRef &osdmap) override;
+
+  void queue_snap_retrim(snapid_t snap);
 
   void on_backfill_reserved() override;
   void on_backfill_canceled() override;
@@ -566,6 +568,8 @@ public:
   virtual void get_dynamic_perf_stats(DynamicPerfStats *stats) {
   }
 
+  uint64_t get_min_alloc_size() const;
+
   // reference counting
 #ifdef PG_DEBUG_REFS
   uint64_t get_with_id();
@@ -596,8 +600,6 @@ public:
   OSDShardPGSlot *pg_slot = nullptr;
 protected:
   CephContext *cct;
-
-  const PGPool &pool;
 
   // locking and reference counting.
   // I destroy myself when the reference count hits zero.
@@ -648,13 +650,6 @@ protected:
 
 protected:
   __u8 info_struct_v = 0;
-  static const __u8 latest_struct_v = 10;
-  // v10 is the new past_intervals encoding
-  // v9 was fastinfo_key addition
-  // v8 was the move to a per-pg pgmeta object
-  // v7 was SnapMapper addition in 86658392516d5175b2756659ef7ffaaf95b0f8ad
-  // (first appeared in cuttlefish).
-  static const __u8 compat_struct_v = 10;
   void upgrade(ObjectStore *store);
 
 protected:
@@ -662,11 +657,11 @@ protected:
 
   // ------------------
   interval_set<snapid_t> snap_trimq;
+  set<snapid_t> snap_trimq_repeat;
 
   /* You should not use these items without taking their respective queue locks
    * (if they have one) */
   xlist<PG*>::item stat_queue_item;
-  bool scrub_registered = false;
   bool scrub_queued;
   bool recovery_queued;
 
@@ -1112,6 +1107,8 @@ public:
     OpRequestRef active_rep_scrub;
     utime_t scrub_reg_stamp;  // stamp we registered for
 
+    static utime_t scrub_must_stamp() { return utime_t(0,1); }
+
     omap_stat_t omap_stats  = (const struct omap_stat_t){ 0 };
 
     // For async sleep
@@ -1120,11 +1117,12 @@ public:
     utime_t sleep_start;
 
     // flags to indicate explicitly requested scrubs (by admin)
-    bool must_scrub, must_deep_scrub, must_repair;
+    bool must_scrub, must_deep_scrub, must_repair, need_auto;
 
     // Priority to use for scrub scheduling
     unsigned priority = 0;
 
+    bool time_for_deep;
     // this flag indicates whether we would like to do auto-repair of the PG or not
     bool auto_repair;
     // this flag indicates that we are scrubbing post repair to verify everything is fixed
@@ -1243,6 +1241,8 @@ public:
       must_scrub = false;
       must_deep_scrub = false;
       must_repair = false;
+      need_auto = false;
+      time_for_deep = false;
       auto_repair = false;
       check_repair = false;
       deep_scrub_on_error = false;
@@ -1407,10 +1407,6 @@ protected:
   void do_pending_flush();
 
 public:
-  static void _create(ObjectStore::Transaction& t, spg_t pgid, int bits);
-  static void _init(ObjectStore::Transaction& t,
-		    spg_t pgid, const pg_pool_t *pool);
-
   virtual void prepare_write(
     pg_info_t &info,
     pg_info_t &last_written_info,
@@ -1501,9 +1497,10 @@ protected:
 protected:
   PeeringState recovery_state;
 
-  /**
-   * Ref to pg_info_t in Peering state
-   */
+  // ref to recovery_state.pool
+  const PGPool &pool;
+
+  // ref to recovery_state.info
   const pg_info_t &info;
 };
 

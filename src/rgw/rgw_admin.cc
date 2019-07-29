@@ -1188,10 +1188,10 @@ static int init_bucket(const string& tenant_name, const string& bucket_name, con
     auto obj_ctx = store->svc.sysobj->init_obj_ctx();
     int r;
     if (bucket_id.empty()) {
-      r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, nullptr, pattrs);
+      r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, nullptr, null_yield, pattrs);
     } else {
       string bucket_instance_id = bucket_name + ":" + bucket_id;
-      r = store->get_bucket_instance_info(obj_ctx, bucket_instance_id, bucket_info, NULL, pattrs);
+      r = store->get_bucket_instance_info(obj_ctx, bucket_instance_id, bucket_info, NULL, pattrs, null_yield);
     }
     if (r < 0) {
       cerr << "could not get bucket info for bucket=" << bucket_name << std::endl;
@@ -1255,8 +1255,8 @@ static int read_decode_json(const string& infile, T& t)
 
   try {
     decode_json_obj(t, &p);
-  } catch (JSONDecoder::err& e) {
-    cout << "failed to decode JSON input: " << e.message << std::endl;
+  } catch (const JSONDecoder::err& e) {
+    cout << "failed to decode JSON input: " << e.what() << std::endl;
     return -EINVAL;
   }
   return 0;
@@ -1279,8 +1279,8 @@ static int read_decode_json(const string& infile, T& t, K *k)
 
   try {
     t.decode_json(&p, k);
-  } catch (JSONDecoder::err& e) {
-    cout << "failed to decode JSON input: " << e.message << std::endl;
+  } catch (const JSONDecoder::err& e) {
+    cout << "failed to decode JSON input: " << e.what() << std::endl;
     return -EINVAL;
   }
   return 0;
@@ -1372,7 +1372,7 @@ int set_bucket_quota(RGWRados *store, int opt_cmd,
   RGWBucketInfo bucket_info;
   map<string, bufferlist> attrs;
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
-  int r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, NULL, &attrs);
+  int r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, NULL, null_yield, &attrs);
   if (r < 0) {
     cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
     return -r;
@@ -1443,7 +1443,7 @@ int check_min_obj_stripe_size(RGWRados *store, RGWBucketInfo& bucket_info, rgw_o
   read_op.params.attrs = &attrs;
   read_op.params.obj_size = &obj_size;
 
-  int ret = read_op.prepare();
+  int ret = read_op.prepare(null_yield);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << dendl;
     return ret;
@@ -1505,7 +1505,7 @@ int check_obj_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, rgw_o
   RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
   RGWRados::Object::Read read_op(&op_target);
 
-  int ret = read_op.prepare();
+  int ret = read_op.prepare(null_yield);
   bool needs_fixing = (ret == -ENOENT);
 
   f->dump_bool("needs_fixing", needs_fixing);
@@ -1540,7 +1540,7 @@ int check_obj_tail_locator_underscore(RGWBucketInfo& bucket_info, rgw_obj& obj, 
   bool needs_fixing;
   string status;
 
-  int ret = store->fix_tail_obj_locator(bucket_info, key, fix, &needs_fixing);
+  int ret = store->fix_tail_obj_locator(bucket_info, key, fix, &needs_fixing, null_yield);
   if (ret < 0) {
     cerr << "ERROR: fix_tail_object_locator_underscore() returned ret=" << ret << std::endl;
     status = "failed";
@@ -1600,7 +1600,7 @@ int do_check_object_locator(const string& tenant_name, const string& bucket_name
 
   f->open_array_section("check_objects");
   do {
-    ret = list_op.list_objects(max_entries - count, &result, &common_prefixes, &truncated);
+    ret = list_op.list_objects(max_entries - count, &result, &common_prefixes, &truncated, null_yield);
     if (ret < 0) {
       cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
@@ -1640,7 +1640,7 @@ int set_bucket_sync_enabled(RGWRados *store, int opt_cmd, const string& tenant_n
   map<string, bufferlist> attrs;
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
-  int r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, NULL, &attrs);
+  int r = store->get_bucket_info(obj_ctx, tenant_name, bucket_name, bucket_info, NULL, null_yield, &attrs);
   if (r < 0) {
     cerr << "could not get bucket info for bucket=" << bucket_name << ": " << cpp_strerror(-r) << std::endl;
     return -r;
@@ -1856,8 +1856,8 @@ static int commit_period(RGWRealm& realm, RGWPeriod& period,
   // decode the response and store it back
   try {
     decode_json_obj(period, &p);
-  } catch (JSONDecoder::err& e) {
-    cout << "failed to decode JSON input: " << e.message << std::endl;
+  } catch (const JSONDecoder::err& e) {
+    cout << "failed to decode JSON input: " << e.what() << std::endl;
     return -EINVAL;
   }
   if (period.get_id().empty()) {
@@ -1982,8 +1982,8 @@ static int do_period_pull(RGWRESTConn *remote_conn, const string& url,
   }
   try {
     decode_json_obj(*period, &p);
-  } catch (JSONDecoder::err& e) {
-    cout << "failed to decode JSON input: " << e.message << std::endl;
+  } catch (const JSONDecoder::err& e) {
+    cout << "failed to decode JSON input: " << e.what() << std::endl;
     return -EINVAL;
   }
   ret = period->store_info(false);
@@ -2413,7 +2413,7 @@ static int bucket_source_sync_status(RGWRados *store, const RGWZone& zone,
   out << indented{width, "source zone"} << source.id << " (" << source.name << ")\n";
 
   // syncing from this zone?
-  if (!zone.syncs_from(source.id)) {
+  if (!zone.syncs_from(source.name)) {
     out << indented{width} << "not in sync_from\n";
     return 0;
   }
@@ -3907,8 +3907,8 @@ int main(int argc, const char **argv)
         realm.init(g_ceph_context, store->svc.sysobj, false);
         try {
           decode_json_obj(realm, &p);
-        } catch (JSONDecoder::err& e) {
-          cerr << "failed to decode JSON response: " << e.message << std::endl;
+        } catch (const JSONDecoder::err& e) {
+          cerr << "failed to decode JSON response: " << e.what() << std::endl;
           return EINVAL;
         }
         RGWPeriod period;
@@ -4891,6 +4891,28 @@ int main(int argc, const char **argv)
     return 0;
   }
 
+  bool non_master_cmd = (!store->svc.zone->is_meta_master() && !yes_i_really_mean_it);
+  std::set<int> non_master_ops_list = {OPT_USER_CREATE, OPT_USER_RM, 
+                                        OPT_USER_MODIFY, OPT_USER_ENABLE,
+                                        OPT_USER_SUSPEND, OPT_SUBUSER_CREATE,
+                                        OPT_SUBUSER_MODIFY, OPT_SUBUSER_RM,
+                                        OPT_BUCKET_LINK, OPT_BUCKET_UNLINK,
+                                        OPT_BUCKET_RESHARD, OPT_BUCKET_RM,
+                                        OPT_METADATA_PUT, OPT_METADATA_RM,
+                                        OPT_RESHARD_CANCEL, OPT_RESHARD_ADD,
+                                        OPT_MFA_CREATE, OPT_MFA_REMOVE,
+                                        OPT_MFA_RESYNC, OPT_CAPS_ADD,
+                                        OPT_CAPS_RM};
+
+  bool print_warning_message = (non_master_ops_list.find(opt_cmd) != non_master_ops_list.end() &&
+                                non_master_cmd);
+
+  if (print_warning_message) {
+      cerr << "Please run the command on master zone. Performing this operation on non-master zone leads to inconsistent metadata between zones" << std::endl;
+      cerr << "Are you sure you want to go ahead? (requires --yes-i-really-mean-it)" << std::endl;
+      return EINVAL;
+  }
+
   if (!user_id.empty()) {
     user_op.set_user_id(user_id);
     bucket_op.set_user_id(user_id);
@@ -5016,7 +5038,7 @@ int main(int argc, const char **argv)
     }
     break;
   case OPT_USER_RM:
-    ret = user.remove(user_op, &err_msg);
+    ret = user.remove(user_op, null_yield, &err_msg);
     if (ret < 0) {
       cerr << "could not remove user: " << err_msg << std::endl;
       return -ret;
@@ -5475,7 +5497,7 @@ int main(int argc, const char **argv)
       list_op.params.allow_unordered = bool(allow_unordered);
 
       do {
-        ret = list_op.list_objects(max_entries - count, &result, &common_prefixes, &truncated);
+        ret = list_op.list_objects(max_entries - count, &result, &common_prefixes, &truncated, null_yield);
         if (ret < 0) {
           cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) << std::endl;
           return -ret;
@@ -5822,7 +5844,7 @@ next:
 
     RGWObjState *state;
 
-    ret = store->get_obj_state(&rctx, bucket_info, obj, &state, false); /* don't follow olh */
+    ret = store->get_obj_state(&rctx, bucket_info, obj, &state, false, null_yield); /* don't follow olh */
     if (ret < 0) {
       return -ret;
     }
@@ -6034,7 +6056,7 @@ next:
     }
 
     map<string, bufferlist> attrs;
-    ret = obj->put(bl, attrs, dpp());
+    ret = obj->put(bl, attrs, dpp(), null_yield);
     if (ret < 0) {
       cerr << "ERROR: put object returned error: " << cpp_strerror(-ret) << std::endl;
     }
@@ -6083,7 +6105,7 @@ next:
       }
     }
     if (need_rewrite) {
-      ret = store->rewrite_obj(bucket_info, obj, dpp());
+      ret = store->rewrite_obj(bucket_info, obj, dpp(), null_yield);
       if (ret < 0) {
         cerr << "ERROR: object rewrite returned: " << cpp_strerror(-ret) << std::endl;
         return -ret;
@@ -6161,6 +6183,7 @@ next:
 	store->cls_bucket_list_ordered(bucket_info, RGW_NO_SHARD, marker,
 				       prefix, 1000, true,
 				       result, &is_truncated, &marker,
+                                       null_yield,
 				       bucket_object_check_filter);
 
       if (r < 0 && r != -ENOENT) {
@@ -6200,7 +6223,7 @@ next:
           if (!need_rewrite) {
             formatter->dump_string("status", "Skipped");
           } else {
-            r = store->rewrite_obj(bucket_info, obj, dpp());
+            r = store->rewrite_obj(bucket_info, obj, dpp(), null_yield);
             if (r == 0) {
               formatter->dump_string("status", "Success");
             } else {
@@ -6443,7 +6466,7 @@ next:
     read_op.params.attrs = &attrs;
     read_op.params.obj_size = &obj_size;
 
-    ret = read_op.prepare();
+    ret = read_op.prepare(null_yield);
     if (ret < 0) {
       cerr << "ERROR: failed to stat object, returned error: " << cpp_strerror(-ret) << std::endl;
       return 1;
@@ -6492,20 +6515,20 @@ next:
       }
       do_check_object_locator(tenant, bucket_name, fix, remove_bad, formatter);
     } else {
-      RGWBucketAdminOp::check_index(store, bucket_op, f);
+      RGWBucketAdminOp::check_index(store, bucket_op, f, null_yield);
     }
   }
 
   if (opt_cmd == OPT_BUCKET_RM) {
     if (!inconsistent_index) {
-      RGWBucketAdminOp::remove_bucket(store, bucket_op, bypass_gc, true);
+      RGWBucketAdminOp::remove_bucket(store, bucket_op, null_yield, bypass_gc, true);
     } else {
       if (!yes_i_really_mean_it) {
 	cerr << "using --inconsistent_index can corrupt the bucket index " << std::endl
 	<< "do you really mean it? (requires --yes-i-really-mean-it)" << std::endl;
 	return 1;
       }
-      RGWBucketAdminOp::remove_bucket(store, bucket_op, bypass_gc, false);
+      RGWBucketAdminOp::remove_bucket(store, bucket_op, null_yield, bypass_gc, false);
     }
   }
 

@@ -300,11 +300,17 @@ public:
   void touch_cap(Capability *cap) {
     caps.push_front(&cap->item_session_caps);
   }
+
   void touch_cap_bottom(Capability *cap) {
     caps.push_back(&cap->item_session_caps);
   }
+
   void touch_lease(ClientLease *r) {
     leases.push_back(&r->item_session_lease);
+  }
+
+  bool is_any_flush_waiter() {
+    return !waitfor_flush.empty();
   }
 
   // -- leases --
@@ -656,21 +662,6 @@ public:
     get_client_sessions(f);
   }
 
-  void replay_open_sessions(map<client_t,entity_inst_t>& client_map,
-			    map<client_t,client_metadata_t>& client_metadata_map) {
-    for (map<client_t,entity_inst_t>::iterator p = client_map.begin(); 
-	 p != client_map.end(); 
-	 ++p) {
-      Session *s = get_or_add_session(p->second);
-      auto q = client_metadata_map.find(p->first);
-      if (q != client_metadata_map.end())
-	s->info.client_metadata.merge(q->second);
-
-      set_state(s, Session::STATE_OPEN);
-      replay_dirty_session(s);
-    }
-  }
-
   // helpers
   entity_inst_t& get_inst(entity_name_t w) {
     ceph_assert(session_map.count(w));
@@ -718,7 +709,7 @@ protected:
   std::set<entity_name_t> dirty_sessions;
   std::set<entity_name_t> null_sessions;
   bool loaded_legacy = false;
-  void _mark_dirty(Session *session);
+  void _mark_dirty(Session *session, bool may_save);
 public:
 
   /**
@@ -729,7 +720,7 @@ public:
    * to the backing store.  Must have called
    * mark_projected previously for this session.
    */
-  void mark_dirty(Session *session);
+  void mark_dirty(Session *session, bool may_save=true);
 
   /**
    * Advance the projected version, and mark this
@@ -756,6 +747,14 @@ public:
    * and `projected` to account for that.
    */
   void replay_advance_version();
+
+  /**
+   * During replay, open sessions, advance versions and
+   * mark these sessions as dirty.
+   */
+  void replay_open_sessions(version_t event_cmapv,
+			    map<client_t,entity_inst_t>& client_map,
+			    map<client_t,client_metadata_t>& client_metadata_map);
 
   /**
    * For these session IDs, if a session exists with this ID, and it has
@@ -795,8 +794,7 @@ private:
 
 public:
   void hit_session(Session *session);
-  void handle_conf_change(const ConfigProxy &conf,
-                          const std::set <std::string> &changed);
+  void handle_conf_change(const std::set <std::string> &changed);
 };
 
 std::ostream& operator<<(std::ostream &out, const Session &s);

@@ -11,38 +11,17 @@
         <cd-table-actions [permission]="permissions.osd"
                           [selection]="selection"
                           class="btn-group"
+                          id="osd-actions"
                           [tableActions]="tableActions">
         </cd-table-actions>
-
-        <div class="btn-group"
-             dropdown>
-          <button type="button"
-                  class="btn btn-sm btn-default btn-label tc_configureCluster"
-                  (click)="configureClusterAction()">
-            <i class="fa fa-fw fa-cog"
-               aria-hidden="true">
-            </i>
-            <ng-container i18n>Set Cluster-wide Flags</ng-container>
-          </button>
-          <button type="button"
-                  dropdownToggle
-                  class="btn btn-sm btn-default dropdown-toggle dropdown-toggle-split">
-            <span class="caret caret-black"></span>
-          </button>
-          <ul *dropdownMenu
-              class="dropdown-menu"
-              role="menu">
-            <li role="menuitem">
-              <a class="dropdown-item"
-                 (click)="configureQosParamsAction()">
-                <i class="fa fa-fw fa-cog"
-                   aria-hidden="true">
-                </i>
-                <ng-container i18n>Set Cluster-wide Recovery Priority</ng-container>
-              </a>
-            </li>
-          </ul>
-        </div>
+        <cd-table-actions [permission]="{read: true}"
+                          [selection]="selection"
+                          dropDownOnly="Cluster-wide configuration"
+                          btnColor="light"
+                          class="btn-group"
+                          id="cluster-wide-actions"
+                          [tableActions]="clusterWideActions">
+        </cd-table-actions>
       </div>
 
       <cd-osd-details cdTableDetail
@@ -53,8 +32,8 @@
     <ng-template #statusColor
                  let-value="value">
       <span *ngFor="let state of value; last as last">
-        <span class="label"
-              [ngClass]="{'label-success': ['in', 'up'].includes(state), 'label-danger': ['down', 'out'].includes(state)}">{{ state }}</span>
+        <span class="badge"
+              [ngClass]="{'badge-success': ['in', 'up'].includes(state), 'badge-danger': ['down', 'out'].includes(state)}">{{ state }}</span>
         <span *ngIf="!last">&nbsp;</span>
       </span>
     </ng-template>
@@ -79,7 +58,7 @@
 <ng-template #markOsdConfirmationTpl
              let-markActionDescription="markActionDescription">
   <ng-container i18n><strong>OSD {{ selection.first().id }}</strong> will be marked
-  <strong>{{ markActionDescription }}</strong> if you proceed.</ng-container>
+<strong>{{ markActionDescription }}</strong> if you proceed.</ng-container>
 </ng-template>
 
 <ng-template #criticalConfirmationTpl
@@ -90,5 +69,5 @@
     <cd-warning-panel i18n>The OSD is not safe to destroy!</cd-warning-panel>
   </div>
   <ng-container i18n><strong>OSD {{ selection.first().id }}</strong> will be
-  <strong>{{ actionDescription }}</strong> if you proceed.</ng-container>
+<strong>{{ actionDescription }}</strong> if you proceed.</ng-container>
 </ng-template>

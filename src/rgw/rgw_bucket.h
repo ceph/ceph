@@ -209,15 +209,15 @@ extern int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id,
                              const string& tenant_name, const string& bucket_name, bool update_entrypoint = true);
 
 extern int rgw_remove_object(RGWRados *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key);
-extern int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children);
-extern int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket, int concurrent_max);
+extern int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children, optional_yield y);
+extern int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket, int concurrent_max, optional_yield y);
 
 extern int rgw_bucket_set_attrs(RGWRados *store, RGWBucketInfo& bucket_info,
                                 map<string, bufferlist>& attrs,
                                 RGWObjVersionTracker *objv_tracker);
 extern int rgw_object_get_attr(RGWRados* store, const RGWBucketInfo& bucket_info,
                                const rgw_obj& obj, const char* attr_name,
-                               bufferlist& out_bl);
+                               bufferlist& out_bl, optional_yield y);
 
 extern void check_bad_user_bucket_mapping(RGWRados *store, const rgw_user& user_id, bool fix);
 
@@ -319,6 +319,7 @@ public:
 
   int check_object_index(RGWBucketAdminOpState& op_state,
                          RGWFormatterFlusher& flusher,
+                         optional_yield y,
                          std::string *err_msg = NULL);
 
   int check_index(RGWBucketAdminOpState& op_state,
@@ -326,14 +327,14 @@ public:
           map<RGWObjCategory, RGWStorageStats>& calculated_stats,
           std::string *err_msg = NULL);
 
-  int remove(RGWBucketAdminOpState& op_state, bool bypass_gc = false, bool keep_index_consistent = true, std::string *err_msg = NULL);
+  int remove(RGWBucketAdminOpState& op_state, optional_yield y, bool bypass_gc = false, bool keep_index_consistent = true, std::string *err_msg = NULL);
   int link(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
   int unlink(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
   int set_quota(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
 
   int remove_object(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
   int policy_bl_to_stream(bufferlist& bl, ostream& o);
-  int get_policy(RGWBucketAdminOpState& op_state, RGWAccessControlPolicy& policy);
+  int get_policy(RGWBucketAdminOpState& op_state, RGWAccessControlPolicy& policy, optional_yield y);
 
   void clear_failure() { failure = false; }
 
@@ -354,9 +355,9 @@ public:
   static int link(RGWRados *store, RGWBucketAdminOpState& op_state, string *err_msg = NULL);
 
   static int check_index(RGWRados *store, RGWBucketAdminOpState& op_state,
-                  RGWFormatterFlusher& flusher);
+                  RGWFormatterFlusher& flusher, optional_yield y);
 
-  static int remove_bucket(RGWRados *store, RGWBucketAdminOpState& op_state, bool bypass_gc = false, bool keep_index_consistent = true);
+  static int remove_bucket(RGWRados *store, RGWBucketAdminOpState& op_state, optional_yield y, bool bypass_gc = false, bool keep_index_consistent = true);
   static int remove_object(RGWRados *store, RGWBucketAdminOpState& op_state);
   static int info(RGWRados *store, RGWBucketAdminOpState& op_state, RGWFormatterFlusher& flusher);
   static int limit_check(RGWRados *store, RGWBucketAdminOpState& op_state,

@@ -70,7 +70,9 @@ struct ReplayHandler : public ::journal::ReplayHandler {
   }
   void handle_complete(int r) override {
     std::stringstream ss;
-    if (r < 0) {
+    if (r == -ENOMEM) {
+      ss << "not enough memory in autotune cache";
+    } else if (r < 0) {
       ss << "replay completed with error: " << cpp_strerror(r);
     }
     replayer->handle_replay_complete(r, ss.str());
@@ -255,14 +257,14 @@ void ImageReplayer<I>::RemoteJournalerListener::handle_update(
 }
 
 template <typename I>
-ImageReplayer<I>::ImageReplayer(Threads<I> *threads,
-                                InstanceWatcher<I> *instance_watcher,
-                                RadosRef local,
-                                const std::string &local_mirror_uuid,
-                                int64_t local_pool_id,
-                                const std::string &global_image_id) :
+ImageReplayer<I>::ImageReplayer(
+    Threads<I> *threads, InstanceWatcher<I> *instance_watcher,
+    journal::CacheManagerHandler *cache_manager_handler, RadosRef local,
+    const std::string &local_mirror_uuid, int64_t local_pool_id,
+    const std::string &global_image_id) :
   m_threads(threads),
   m_instance_watcher(instance_watcher),
+  m_cache_manager_handler(cache_manager_handler),
   m_local(local),
   m_local_mirror_uuid(local_mirror_uuid),
   m_local_pool_id(local_pool_id),
@@ -439,16 +441,14 @@ void ImageReplayer<I>::prepare_remote_image() {
   journal::Settings journal_settings;
   journal_settings.commit_interval = cct->_conf.get_val<double>(
     "rbd_mirror_journal_commit_age");
-  journal_settings.max_fetch_bytes = cct->_conf.get_val<Option::size_t>(
-    "rbd_mirror_journal_max_fetch_bytes");
 
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_prepare_remote_image>(this);
   auto req = PrepareRemoteImageRequest<I>::create(
     m_threads, m_remote_image.io_ctx, m_global_image_id, m_local_mirror_uuid,
-    m_local_image_id, journal_settings, &m_remote_image.mirror_uuid,
-    &m_remote_image.image_id, &m_remote_journaler, &m_client_state,
-    &m_client_meta, ctx);
+    m_local_image_id, journal_settings, m_cache_manager_handler,
+    &m_remote_image.mirror_uuid, &m_remote_image.image_id, &m_remote_journaler,
+    &m_client_state, &m_client_meta, ctx);
   req->send();
 }
 
@@ -662,6 +662,7 @@ void ImageReplayer<I>::handle_start_replay(int r) {
   reschedule_update_status_task(30);
 
   if (on_replay_interrupted()) {
+    on_finish->complete(r);
     return;
   }
 
@@ -965,14 +966,13 @@ void ImageReplayer<I>::handle_replay_complete(int r, const std::string &error_de
   dout(10) << "r=" << r << dendl;
   if (r < 0) {
     derr << "replay encountered an error: " << cpp_strerror(r) << dendl;
-    set_state_description(r, error_desc);
   }
 
   {
     Mutex::Locker locker(m_lock);
     m_stop_requested = true;
   }
-  on_replay_interrupted();
+  on_stop_journal_replay(r, error_desc);
 }
 
 template <typename I>

@@ -2,10 +2,10 @@
                 i18n>Failed to load data.</cd-error-panel>
 
 <div class="dataTables_wrapper">
-  <div class="dataTables_header clearfix form-inline"
+  <div class="dataTables_header clearfix"
        *ngIf="toolHeader">
     <!-- actions -->
-    <div class="oadatatableactions">
+    <div class="cd-datatable-actions">
       <ng-content select=".table-actions"></ng-content>
     </div>
     <!-- end actions -->
@@ -15,21 +15,23 @@
     <!-- end filters -->
 
     <!-- search -->
-    <div class="input-group">
-      <span class="input-group-addon">
-        <i class="glyphicon glyphicon-search"></i>
+    <div class="input-group search">
+      <span class="input-group-prepend">
+        <span class="input-group-text">
+        <i [ngClass]="[icons.search]"></i>
+        </span>
       </span>
       <input class="form-control"
              type="text"
              [(ngModel)]="search"
              (keyup)="updateFilter()">
-      <span class="input-group-btn">
+      <div class="input-group-append">
         <button type="button"
-                class="btn btn-default clear-input tc_clearInputBtn"
+                class="btn btn-light"
                 (click)="updateFilter(true)">
-          <i class="icon-prepend fa fa-remove"></i>
+          <i class="icon-prepend {{ icons.destroy }}"></i>
         </button>
-      </span>
+      </div>
     </div>
     <!-- end search -->
 
@@ -49,22 +51,27 @@
     <!-- show hide columns -->
     <div class="widget-toolbar">
       <div dropdown
+           [autoClose]="false"
            class="dropdown tc_menuitem tc_menuitem_cluster">
         <a dropdownToggle
-           class="btn btn-sm btn-default dropdown-toggle tc_columnBtn"
+           class="btn btn-light dropdown-toggle tc_columnBtn"
            data-toggle="dropdown">
-          <i class="fa fa-lg fa-table"></i>
+          <i [ngClass]="[icons.large, icons.table]"></i>
         </a>
         <ul *dropdownMenu
-            class="dropdown-menu">
+            class="dropdown-menu px-3">
           <li *ngFor="let column of columns">
-            <label>
-              <input type="checkbox"
+
+            <div class="custom-control custom-checkbox">
+              <input class="custom-control-input"
+                     type="checkbox"
                      (change)="toggleColumn($event)"
                      [name]="column.prop"
+                     [id]="column.prop"
                      [checked]="!column.isHidden">
-              <span>{{ column.name }}</span>
-            </label>
+              <label class="custom-control-label"
+                     [for]="column.prop">{{ column.name }}</label>
+            </div>
           </li>
         </ul>
       </div>
@@ -74,15 +81,18 @@
     <!-- refresh button -->
     <div class="widget-toolbar tc_refreshBtn"
          *ngIf="fetchData.observers.length > 0">
-      <a (click)="refreshBtn()">
-        <i class="fa fa-lg fa-refresh"
+
+      <button type="button"
+              class="btn btn-light"
+              (click)="refreshBtn()">
+        <i [ngClass]="[icons.large, icons.refresh]"
            [class.fa-spin]="updating || loadingIndicator"></i>
-      </a>
+      </button>
     </div>
     <!-- end refresh button -->
   </div>
   <ngx-datatable #table
-                 class="bootstrap oadatatable"
+                 class="bootstrap cd-datatable"
                  [cssClasses]="paginationClasses"
                  [selectionType]="selectionType"
                  [selected]="selection.selected"
@@ -158,7 +168,7 @@
 
 <ng-template #checkIconTpl
              let-value="value">
-  <i class="fa fa-check fa-fw"
+  <i [ngClass]="[icons.check]"
      [hidden]="!value"></i>
 </ng-template>
 
@@ -171,11 +181,11 @@
 <ng-template #executingTpl
              let-row="row"
              let-value="value">
-  <i class="fa fa-spinner fa-spin fa-fw"
+  <i [ngClass]="[icons.spinner, icons.spin]"
      *ngIf="row.cdExecuting"></i>
   {{ value }}
   <span *ngIf="row.cdExecuting"
-        class="text-muted italic">({{ row.cdExecuting }}... )</span>
+        class="text-muted italic">({{ row.cdExecuting }})</span>
 </ng-template>
 
 <ng-template #classAddingTpl

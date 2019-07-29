@@ -501,7 +501,7 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
 
   RGWBucketInfo cur_bucket_info;
   ret = store->get_bucket_info(sysobj_ctx, orphan_bucket.tenant,
-			       orphan_bucket.name, cur_bucket_info, nullptr);
+			       orphan_bucket.name, cur_bucket_info, nullptr, null_yield);
   if (ret < 0) {
     if (ret == -ENOENT) {
       /* probably raced with bucket removal */
@@ -526,7 +526,7 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
   }
 
   RGWBucketInfo bucket_info;
-  ret = store->get_bucket_instance_info(sysobj_ctx, bucket_instance_id, bucket_info, nullptr, nullptr);
+  ret = store->get_bucket_instance_info(sysobj_ctx, bucket_instance_id, bucket_info, nullptr, nullptr, null_yield);
   if (ret < 0) {
     if (ret == -ENOENT) {
       /* probably raced with bucket removal */
@@ -553,7 +553,7 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
     vector<rgw_bucket_dir_entry> result;
 
     ret = list_op.list_objects(max_list_bucket_entries,
-                               &result, nullptr, &truncated);
+                               &result, nullptr, &truncated, null_yield);
     if (ret < 0) {
       cerr << "ERROR: store->list_objects(): " << cpp_strerror(-ret) << std::endl;
       return -ret;

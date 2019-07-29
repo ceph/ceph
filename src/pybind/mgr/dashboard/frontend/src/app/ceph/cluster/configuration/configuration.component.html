@@ -8,32 +8,40 @@
                     [selection]="selection"
                     [tableActions]="tableActions">
   </cd-table-actions>
-  <div class="table-filters">
+  <div class="table-filters form-inline">
     <div class="form-group filter"
          *ngFor="let filter of filters">
-      <label>{{ filter.label }}: </label>
-      <select class="form-control input-sm"
+      <label class="col-form-label">{{ filter.label }}: </label>
+      <select class="form-control custom-select"
               [(ngModel)]="filter.value"
               (ngModelChange)="updateFilter()">
         <option *ngFor="let opt of filter.options">{{ opt }}</option>
       </select>
     </div>
-    <a class="fa-stack" 
-       title="Reset filters" 
-       (click)="resetFilter()">
-      <i class="fa fa-filter fa-stack-2x"></i>
-      <i class="fa fa-times fa-stack-1x" style="margin-left: 8px; margin-top: 5px;"></i>
-    </a>
+
+    <div class="widget-toolbar tc_refreshBtn">
+      <button type="button"
+              title="Reset filters"
+              class="btn btn-light"
+              (click)="resetFilter()">
+        <span [ngClass]="[icons.stack]">
+          <i [ngClass]="[icons.filter, icons.stack2x]"></i>
+          <i [ngClass]="[icons.destroy, icons.stack1x]"
+             style="margin-left: 8px; margin-top: 5px;"></i>
+        </span>
+      </button>
+    </div>
   </div>
   <cd-configuration-details cdTableDetail
                             [selection]="selection">
   </cd-configuration-details>
 </cd-table>
 
-<ng-template #confValTpl let-value="value">
+<ng-template #confValTpl
+             let-value="value">
   <span *ngIf="value">
     <span *ngFor="let conf of value; last as isLast">
-      {{ conf.section }}: {{ conf.value }}{{ !isLast ? "," : "" }}<br/>
+      {{ conf.section }}: {{ conf.value }}{{ !isLast ? "," : "" }}<br />
     </span>
   </span>
 </ng-template>

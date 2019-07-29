@@ -12,8 +12,6 @@
  * 
  */
 
-
-
 #ifndef CEPH_CINODE_H
 #define CEPH_CINODE_H
 
@@ -55,17 +53,10 @@ class Session;
 struct ObjectOperation;
 class EMetaBlob;
 
-
-ostream& operator<<(ostream& out, const CInode& in);
-
 struct cinode_lock_info_t {
   int lock;
   int wr_caps;
 };
-
-extern cinode_lock_info_t cinode_lock_info[];
-extern int num_cinode_locks;
-
 
 /**
  * Base class for CInode, containing the backing store data and
@@ -79,14 +70,6 @@ public:
   typedef old_inode_t<mempool::mds_co::pool_allocator> mempool_old_inode;
   typedef mempool::mds_co::compact_map<snapid_t, mempool_old_inode> mempool_old_inode_map;
   typedef xattr_map<mempool::mds_co::pool_allocator> mempool_xattr_map; // FIXME bufferptr not in mempool
-
-  mempool_inode inode;        // the inode itself
-  mempool::mds_co::string                symlink;      // symlink dest, if symlink
-  mempool_xattr_map xattrs;
-  fragtree_t                 dirfragtree;  // dir frag tree, if any.  always consistent with our dirfrag map.
-  mempool_old_inode_map old_inodes;   // key = last, value.first = first
-  snapid_t                  oldest_snap = CEPH_NOSNAP;
-  damage_flags_t            damage_flags = 0;
 
   InodeStoreBase() {}
 
@@ -110,13 +93,18 @@ public:
   /* For use by offline tools */
   __u32 hash_dentry_name(std::string_view dn);
   frag_t pick_dirfrag(std::string_view dn);
+
+  mempool_inode inode;        // the inode itself
+  mempool::mds_co::string symlink;      // symlink dest, if symlink
+  mempool_xattr_map xattrs;
+  fragtree_t dirfragtree;  // dir frag tree, if any.  always consistent with our dirfrag map.
+  mempool_old_inode_map old_inodes;   // key = last, value.first = first
+  snapid_t oldest_snap = CEPH_NOSNAP;
+  damage_flags_t damage_flags = 0;
 };
 
 class InodeStore : public InodeStoreBase {
 public:
-  // FIXME bufferlist not part of mempool
-  bufferlist snap_blob;  // Encoded copy of SnapRealm, because we can't
-			 // rehydrate it without full MDCache
   void encode(bufferlist &bl, uint64_t features) const {
     InodeStoreBase::encode(bl, features, &snap_blob);
   }
@@ -131,6 +119,10 @@ public:
   }
 
   static void generate_test_instances(std::list<InodeStore*>& ls);
+
+  // FIXME bufferlist not part of mempool
+  bufferlist snap_blob;  // Encoded copy of SnapRealm, because we can't
+			 // rehydrate it without full MDCache
 };
 WRITE_CLASS_ENCODER_FEATURES(InodeStore)
 
@@ -151,6 +143,121 @@ WRITE_CLASS_ENCODER_FEATURES(InodeStoreBare)
 class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CInode> {
  public:
   MEMPOOL_CLASS_HELPERS();
+
+  using mempool_cap_map = mempool::mds_co::map<client_t, Capability>;
+  /**
+   * @defgroup Scrubbing and fsck
+   */
+
+  /**
+   * Report the results of validation against a particular inode.
+   * Each member is a pair of bools.
+   * <member>.first represents if validation was performed against the member.
+   * <member.second represents if the member passed validation.
+   * performed_validation is set to true if the validation was actually
+   * run. It might not be run if, for instance, the inode is marked as dirty.
+   * passed_validation is set to true if everything that was checked
+   * passed its validation.
+   */
+  struct validated_data {
+    template<typename T>struct member_status {
+      bool checked = false;
+      bool passed = false;
+      bool repaired = false;
+      int ondisk_read_retval = 0;
+      T ondisk_value;
+      T memory_value;
+      std::stringstream error_str;
+    };
+
+    struct raw_stats_t {
+      frag_info_t dirstat;
+      nest_info_t rstat;
+    };
+
+    validated_data() {}
+
+    void dump(Formatter *f) const;
+
+    bool all_damage_repaired() const;
+
+    bool performed_validation = false;
+    bool passed_validation = false;
+
+    member_status<inode_backtrace_t> backtrace;
+    member_status<mempool_inode> inode; // XXX should not be in mempool; wait for pmr
+    member_status<raw_stats_t> raw_stats;
+  };
+
+  // friends
+  friend class Server;
+  friend class Locker;
+  friend class Migrator;
+  friend class MDCache;
+  friend class StrayManager;
+  friend class CDir;
+  friend class CInodeExport;
+
+  class scrub_stamp_info_t {
+  public:
+    scrub_stamp_info_t() {}
+    void reset() {
+      scrub_start_version = last_scrub_version = 0;
+      scrub_start_stamp = last_scrub_stamp = utime_t();
+    }
+    /// version we started our latest scrub (whether in-progress or finished)
+    version_t scrub_start_version = 0;
+    /// time we started our latest scrub (whether in-progress or finished)
+    utime_t scrub_start_stamp;
+    /// version we started our most recent finished scrub
+    version_t last_scrub_version = 0;
+    /// time we started our most recent finished scrub
+    utime_t last_scrub_stamp;
+  };
+
+  class scrub_info_t : public scrub_stamp_info_t {
+  public:
+    scrub_info_t() {}
+
+    CDentry *scrub_parent = nullptr;
+    MDSContext *on_finish = nullptr;
+
+    bool last_scrub_dirty = false; /// are our stamps dirty with respect to disk state?
+    bool scrub_in_progress = false; /// are we currently scrubbing?
+    bool children_scrubbed = false;
+
+    /// my own (temporary) stamps and versions for each dirfrag we have
+    std::map<frag_t, scrub_stamp_info_t> dirfrag_stamps; // XXX not part of mempool
+
+    ScrubHeaderRef header;
+  };
+
+  /**
+   * Projection methods, used to store inode changes until they have been journaled,
+   * at which point they are popped.
+   * Usage:
+   * project_inode as needed. If you're changing xattrs or sr_t, then pass true
+   * as needed then change the xattrs/snapnode member as needed. (Dirty
+   * exception: project_past_snaprealm_parent allows you to project the
+   * snapnode after doing project_inode (i.e. you don't need to pass
+   * snap=true).
+   *
+   * Then, journal. Once journaling is done, pop_and_dirty_projected_inode.
+   * This function will take care of the inode itself, the xattrs, and the snaprealm.
+   */
+
+  class projected_inode {
+  public:
+    static sr_t* const UNDEF_SRNODE;
+
+    projected_inode() = delete;
+    explicit projected_inode(const mempool_inode &in) : inode(in) {}
+
+    mempool_inode inode;
+    std::unique_ptr<mempool_xattr_map> xattrs;
+    sr_t *snapnode = UNDEF_SRNODE;
+  };
+
   // -- pins --
   static const int PIN_DIRFRAG =         -1; 
   static const int PIN_CAPS =             2;  // client caps
@@ -174,34 +281,6 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const int PIN_DIRTYPARENT =      23;
   static const int PIN_DIRWAITER =        24;
   static const int PIN_SCRUBQUEUE =       25;
-
-  std::string_view pin_name(int p) const override {
-    switch (p) {
-    case PIN_DIRFRAG: return "dirfrag";
-    case PIN_CAPS: return "caps";
-    case PIN_IMPORTING: return "importing";
-    case PIN_OPENINGDIR: return "openingdir";
-    case PIN_REMOTEPARENT: return "remoteparent";
-    case PIN_BATCHOPENJOURNAL: return "batchopenjournal";
-    case PIN_SCATTERED: return "scattered";
-    case PIN_STICKYDIRS: return "stickydirs";
-      //case PIN_PURGING: return "purging";
-    case PIN_FREEZING: return "freezing";
-    case PIN_FROZEN: return "frozen";
-    case PIN_IMPORTINGCAPS: return "importingcaps";
-    case PIN_EXPORTINGCAPS: return "exportingcaps";
-    case PIN_PASTSNAPPARENT: return "pastsnapparent";
-    case PIN_OPENINGSNAPPARENTS: return "openingsnapparents";
-    case PIN_TRUNCATING: return "truncating";
-    case PIN_STRAY: return "stray";
-    case PIN_NEEDSNAPFLUSH: return "needsnapflush";
-    case PIN_DIRTYRSTAT: return "dirtyrstat";
-    case PIN_DIRTYPARENT: return "dirtyparent";
-    case PIN_DIRWAITER: return "dirwaiter";
-    case PIN_SCRUBQUEUE: return "scrubqueue";
-    default: return generic_pin_name(p);
-    }
-  }
 
   // -- dump flags --
   static const int DUMP_INODE_STORE_BASE = (1 << 0);
@@ -254,49 +333,23 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   // misc
   static const unsigned EXPORT_NONCE = 1; // nonce given to replicas created by export
 
+  // ---------------------------
+  CInode() = delete;
+  CInode(MDCache *c, bool auth=true, snapid_t f=2, snapid_t l=CEPH_NOSNAP);
+  ~CInode() override {
+    close_dirfrags();
+    close_snaprealm();
+    clear_file_locks();
+    ceph_assert(num_projected_xattrs == 0);
+    ceph_assert(num_projected_srnodes == 0);
+    ceph_assert(num_caps_wanted == 0);
+    ceph_assert(num_subtree_roots == 0);
+    ceph_assert(num_exporting_dirs == 0);
+  }
+
+  std::string_view pin_name(int p) const override;
+
   ostream& print_db_line_prefix(ostream& out) override;
-
- public:
-  MDCache *mdcache;
-
-  SnapRealm        *snaprealm = nullptr;
-  SnapRealm        *containing_realm = nullptr;
-  snapid_t          first, last;
-  mempool::mds_co::compact_set<snapid_t> dirty_old_rstats;
-
-  class scrub_stamp_info_t {
-  public:
-    /// version we started our latest scrub (whether in-progress or finished)
-    version_t scrub_start_version = 0;
-    /// time we started our latest scrub (whether in-progress or finished)
-    utime_t scrub_start_stamp;
-    /// version we started our most recent finished scrub
-    version_t last_scrub_version = 0;
-    /// time we started our most recent finished scrub
-    utime_t last_scrub_stamp;
-    scrub_stamp_info_t() {}
-    void reset() {
-      scrub_start_version = last_scrub_version = 0;
-      scrub_start_stamp = last_scrub_stamp = utime_t();
-    }
-  };
-
-  class scrub_info_t : public scrub_stamp_info_t {
-  public:
-    CDentry *scrub_parent = nullptr;
-    MDSContext *on_finish = nullptr;
-
-    bool last_scrub_dirty = false; /// are our stamps dirty with respect to disk state?
-    bool scrub_in_progress = false; /// are we currently scrubbing?
-    bool children_scrubbed = false;
-
-    /// my own (temporary) stamps and versions for each dirfrag we have
-    std::map<frag_t, scrub_stamp_info_t> dirfrag_stamps; // XXX not part of mempool
-
-    ScrubHeaderRef header;
-
-    scrub_info_t() {}
-  };
 
   const scrub_info_t *scrub_info() const{
     if (!scrub_infop)
@@ -371,17 +424,6 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     scrub_infop->on_finish = c;
   }
 
-private:
-  /**
-   * Create a scrub_info_t struct for the scrub_infop pointer.
-   */
-  void scrub_info_create() const;
-  /**
-   * Delete the scrub_info_t struct if it's not got any useful data
-   */
-  void scrub_maybe_delete_info();
-public:
-
   bool is_multiversion() const {
     return snaprealm ||  // other snaprealms will link to me
       inode.is_dir() ||  // links to me in other snaps
@@ -390,55 +432,12 @@ public:
   }
   snapid_t get_oldest_snap();
 
-  uint64_t last_journaled = 0;       // log offset for the last time i was journaled
-  //loff_t last_open_journaled;  // log offset for the last journaled EOpen
-  utime_t last_dirstat_prop;
-
-
-  // list item node for when we have unpropagated rstat data
-  elist<CInode*>::item dirty_rstat_item;
-
   bool is_dirty_rstat() {
     return state_test(STATE_DIRTYRSTAT);
   }
   void mark_dirty_rstat();
   void clear_dirty_rstat();
 
-  //bool hack_accessed = false;
-  //utime_t hack_load_stamp;
-
-  /**
-   * Projection methods, used to store inode changes until they have been journaled,
-   * at which point they are popped.
-   * Usage:
-   * project_inode as needed. If you're changing xattrs or sr_t, then pass true
-   * as needed then change the xattrs/snapnode member as needed. (Dirty
-   * exception: project_past_snaprealm_parent allows you to project the
-   * snapnode after doing project_inode (i.e. you don't need to pass
-   * snap=true).
-   *
-   * Then, journal. Once journaling is done, pop_and_dirty_projected_inode.
-   * This function will take care of the inode itself, the xattrs, and the snaprealm.
-   */
-
-  class projected_inode {
-  public:
-    static sr_t* const UNDEF_SRNODE;
-
-    mempool_inode inode;
-    std::unique_ptr<mempool_xattr_map> xattrs;
-    sr_t *snapnode = UNDEF_SRNODE;
-
-    projected_inode() = delete;
-    explicit projected_inode(const mempool_inode &in) : inode(in) {}
-  };
-
-private:
-  mempool::mds_co::list<projected_inode> projected_nodes;   // projected values (only defined while dirty)
-  size_t num_projected_xattrs = 0;
-  size_t num_projected_srnodes = 0;
-
-public:
   CInode::projected_inode &project_inode(bool xattr = false, bool snap = false);
   void pop_and_dirty_projected_inode(LogSegment *ls);
 
@@ -481,22 +480,8 @@ public:
       return &inode;
   }
 
-  mempool_xattr_map *get_projected_xattrs() {
-    if (num_projected_xattrs > 0) {
-      for (auto it = projected_nodes.rbegin(); it != projected_nodes.rend(); ++it)
-	if (it->xattrs)
-	  return it->xattrs.get();
-    }
-    return &xattrs;
-  }
-  mempool_xattr_map *get_previous_projected_xattrs() {
-    if (num_projected_xattrs > 0) {
-      for (auto it = ++projected_nodes.rbegin(); it != projected_nodes.rend(); ++it)
-	if (it->xattrs)
-	  return it->xattrs.get();
-    }
-    return &xattrs;
-  }
+  mempool_xattr_map *get_projected_xattrs();
+  mempool_xattr_map *get_previous_projected_xattrs();
 
   sr_t *prepare_new_srnode(snapid_t snapid);
   void project_snaprealm(sr_t *new_srnode);
@@ -505,17 +490,7 @@ public:
     project_snaprealm(new_srnode);
     return new_srnode;
   }
-  const sr_t *get_projected_srnode() const {
-    if (num_projected_srnodes > 0) {
-      for (auto it = projected_nodes.rbegin(); it != projected_nodes.rend(); ++it)
-	if (it->snapnode != projected_inode::UNDEF_SRNODE)
-	  return it->snapnode;
-    }
-    if (snaprealm)
-      return &snaprealm->srnode;
-    else
-      return NULL;
-  }
+  const sr_t *get_projected_srnode() const;
 
   void mark_snaprealm_global(sr_t *new_srnode);
   void clear_snaprealm_global(sr_t *new_srnode);
@@ -527,10 +502,6 @@ public:
   void project_snaprealm_past_parent(SnapRealm *newparent);
   void early_pop_projected_snaprealm();
 
-private:
-  void pop_projected_snaprealm(sr_t *next_snaprealm, bool early);
-
-public:
   mempool_old_inode& cow_old_inode(snapid_t follows, bool cow_head);
   void split_old_inode(snapid_t snap);
   mempool_old_inode *pick_old_inode(snapid_t last);
@@ -538,18 +509,6 @@ public:
   bool has_snap_data(snapid_t s);
   void purge_stale_snap_data(const std::set<snapid_t>& snaps);
 
-  // -- cache infrastructure --
-private:
-  mempool::mds_co::compact_map<frag_t,CDir*> dirfrags; // cached dir fragments under this Inode
-
-  //for the purpose of quickly determining whether there's a subtree root or exporting dir
-  int num_subtree_roots = 0;
-  int num_exporting_dirs = 0;
-
-  int stickydir_ref = 0;
-  scrub_info_t *scrub_infop = nullptr;
-
-public:
   bool has_dirfrags() { return !dirfrags.empty(); }
   CDir* get_dirfrag(frag_t fg) {
     auto pi = dirfrags.find(fg);
@@ -603,130 +562,9 @@ public:
   void get_stickydirs();
   void put_stickydirs();  
 
- protected:
-  // parent dentries in cache
-  CDentry         *parent = nullptr;             // primary link
-  mempool::mds_co::compact_set<CDentry*>    remote_parents;     // if hard linked
-
-  mempool::mds_co::list<CDentry*>   projected_parent;   // for in-progress rename, (un)link, etc.
-
-  mds_authority_t inode_auth = CDIR_AUTH_DEFAULT;
-
-  // -- distributed state --
-protected:
-  // file capabilities
-  using mempool_cap_map = mempool::mds_co::map<client_t, Capability>;
-  mempool_cap_map client_caps;         // client -> caps
-  mempool::mds_co::compact_map<int32_t, int32_t>      mds_caps_wanted;     // [auth] mds -> caps wanted
-  int replica_caps_wanted = 0; // [replica] what i've requested from auth
-  int num_caps_wanted = 0;
-
-public:
-  mempool::mds_co::compact_map<int, mempool::mds_co::set<client_t> > client_snap_caps;     // [auth] [snap] dirty metadata we still need from the head
-  mempool::mds_co::compact_map<snapid_t, mempool::mds_co::set<client_t> > client_need_snapflush;
-
   void add_need_snapflush(CInode *snapin, snapid_t snapid, client_t client);
   void remove_need_snapflush(CInode *snapin, snapid_t snapid, client_t client);
-  bool split_need_snapflush(CInode *cowin, CInode *in);
-
-protected:
-
-  ceph_lock_state_t *fcntl_locks = nullptr;
-  ceph_lock_state_t *flock_locks = nullptr;
-
-  ceph_lock_state_t *get_fcntl_lock_state() {
-    if (!fcntl_locks)
-      fcntl_locks = new ceph_lock_state_t(g_ceph_context, CEPH_LOCK_FCNTL);
-    return fcntl_locks;
-  }
-  void clear_fcntl_lock_state() {
-    delete fcntl_locks;
-    fcntl_locks = NULL;
-  }
-  ceph_lock_state_t *get_flock_lock_state() {
-    if (!flock_locks)
-      flock_locks = new ceph_lock_state_t(g_ceph_context, CEPH_LOCK_FLOCK);
-    return flock_locks;
-  }
-  void clear_flock_lock_state() {
-    delete flock_locks;
-    flock_locks = NULL;
-  }
-  void clear_file_locks() {
-    clear_fcntl_lock_state();
-    clear_flock_lock_state();
-  }
-  void _encode_file_locks(bufferlist& bl) const {
-    using ceph::encode;
-    bool has_fcntl_locks = fcntl_locks && !fcntl_locks->empty();
-    encode(has_fcntl_locks, bl);
-    if (has_fcntl_locks)
-      encode(*fcntl_locks, bl);
-    bool has_flock_locks = flock_locks && !flock_locks->empty();
-    encode(has_flock_locks, bl);
-    if (has_flock_locks)
-      encode(*flock_locks, bl);
-  }
-  void _decode_file_locks(bufferlist::const_iterator& p) {
-    using ceph::decode;
-    bool has_fcntl_locks;
-    decode(has_fcntl_locks, p);
-    if (has_fcntl_locks)
-      decode(*get_fcntl_lock_state(), p);
-    else
-      clear_fcntl_lock_state();
-    bool has_flock_locks;
-    decode(has_flock_locks, p);
-    if (has_flock_locks)
-      decode(*get_flock_lock_state(), p);
-    else
-      clear_flock_lock_state();
-  }
-
-  // LogSegment lists i (may) belong to
-public:
-  elist<CInode*>::item item_dirty;
-  elist<CInode*>::item item_caps;
-  elist<CInode*>::item item_open_file;
-  elist<CInode*>::item item_dirty_parent;
-  elist<CInode*>::item item_dirty_dirfrag_dir;
-  elist<CInode*>::item item_dirty_dirfrag_nest;
-  elist<CInode*>::item item_dirty_dirfrag_dirfragtree;
-  elist<CInode*>::item item_scrub;
-
-  // also update RecoveryQueue::RecoveryQueue() if you change this
-  elist<CInode*>::item& item_recover_queue = item_dirty_dirfrag_dir;
-  elist<CInode*>::item& item_recover_queue_front = item_dirty_dirfrag_nest;
-
-public:
-  int auth_pin_freeze_allowance = 0;
-
-  inode_load_vec_t pop;
-  elist<CInode*>::item item_pop_lru;
-
-  // friends
-  friend class Server;
-  friend class Locker;
-  friend class Migrator;
-  friend class MDCache;
-  friend class StrayManager;
-  friend class CDir;
-  friend class CInodeExport;
-
-  // ---------------------------
-  CInode() = delete;
-  CInode(MDCache *c, bool auth=true, snapid_t f=2, snapid_t l=CEPH_NOSNAP);
-  ~CInode() override {
-    close_dirfrags();
-    close_snaprealm();
-    clear_file_locks();
-    ceph_assert(num_projected_xattrs == 0);
-    ceph_assert(num_projected_srnodes == 0);
-    ceph_assert(num_caps_wanted == 0);
-    ceph_assert(num_subtree_roots == 0);
-    ceph_assert(num_exporting_dirs == 0);
-  }
-  
+  pair<bool,bool> split_need_snapflush(CInode *cowin, CInode *in);
 
   // -- accessors --
   bool is_root() const { return inode.ino == MDS_INO_ROOT; }
@@ -807,20 +645,11 @@ public:
   void fetch(MDSContext *fin);
   void _fetched(bufferlist& bl, bufferlist& bl2, Context *fin);  
 
-
   void build_backtrace(int64_t pool, inode_backtrace_t& bt);
   void store_backtrace(MDSContext *fin, int op_prio=-1);
   void _stored_backtrace(int r, version_t v, Context *fin);
   void fetch_backtrace(Context *fin, bufferlist *backtrace);
-protected:
-  /**
-   * Return the pool ID where we currently write backtraces for
-   * this inode (in addition to inode.old_pools)
-   *
-   * @returns a pool ID >=0
-   */
-  int64_t get_backtrace_pool() const;
-public:
+
   void mark_dirty_parent(LogSegment *ls, bool dirty_pool=false);
   void clear_dirty_parent();
   void verify_diri_backtrace(bufferlist &bl, int err);
@@ -852,10 +681,6 @@ public:
     _decode_locks_state(p, is_new);
   }
 
-  // -- waiting --
-protected:
-  mempool::mds_co::compact_map<frag_t, MDSContext::vec > waiting_on_dir;
-public:
   void add_dir_waiter(frag_t fg, MDSContext *c);
   void take_dir_waiting(frag_t fg, MDSContext::vec& ls);
   bool is_waiting_for_dir(frag_t fg) {
@@ -886,53 +711,13 @@ public:
   }
   void decode_import(bufferlist::const_iterator& p, LogSegment *ls);
   
-
   // for giving to clients
   int encode_inodestat(bufferlist& bl, Session *session, SnapRealm *realm,
 		       snapid_t snapid=CEPH_NOSNAP, unsigned max_bytes=0,
 		       int getattr_wants=0);
   void encode_cap_message(const ref_t<MClientCaps> &m, Capability *cap);
 
-
-  // -- locks --
-public:
-  static LockType versionlock_type;
-  static LockType authlock_type;
-  static LockType linklock_type;
-  static LockType dirfragtreelock_type;
-  static LockType filelock_type;
-  static LockType xattrlock_type;
-  static LockType snaplock_type;
-  static LockType nestlock_type;
-  static LockType flocklock_type;
-  static LockType policylock_type;
-
-  // FIXME not part of mempool
-  LocalLock  versionlock;
-  SimpleLock authlock;
-  SimpleLock linklock;
-  ScatterLock dirfragtreelock;
-  ScatterLock filelock;
-  SimpleLock xattrlock;
-  SimpleLock snaplock;
-  ScatterLock nestlock;
-  SimpleLock flocklock;
-  SimpleLock policylock;
-
-  SimpleLock* get_lock(int type) override {
-    switch (type) {
-    case CEPH_LOCK_IFILE: return &filelock;
-    case CEPH_LOCK_IAUTH: return &authlock;
-    case CEPH_LOCK_ILINK: return &linklock;
-    case CEPH_LOCK_IDFT: return &dirfragtreelock;
-    case CEPH_LOCK_IXATTR: return &xattrlock;
-    case CEPH_LOCK_ISNAP: return &snaplock;
-    case CEPH_LOCK_INEST: return &nestlock;
-    case CEPH_LOCK_IFLOCK: return &flocklock;
-    case CEPH_LOCK_IPOLICY: return &policylock;
-    }
-    return 0;
-  }
+  SimpleLock* get_lock(int type) override;
 
   void set_object_info(MDSCacheObjectInfo &info) override;
   void encode_lock_state(int type, bufferlist& bl) override;
@@ -957,10 +742,6 @@ public:
   void encode_snap(bufferlist& bl);
   void decode_snap(bufferlist::const_iterator& p);
 
-  // -- caps -- (new)
-  // client caps
-  client_t loner_cap = -1, want_loner_cap = -1;
-
   client_t get_loner() const { return loner_cap; }
   client_t get_wanted_loner() const { return want_loner_cap; }
 
@@ -982,25 +763,8 @@ public:
   void choose_lock_state(SimpleLock *lock, int allissued);
   void choose_lock_states(int dirty_caps);
 
-  int count_nonstale_caps() {
-    int n = 0;
-    for (const auto &p : client_caps) {
-      if (!p.second.is_stale())
-	n++;
-    }
-    return n;
-  }
-  bool multiple_nonstale_caps() {
-    int n = 0;
-    for (const auto &p : client_caps) {
-      if (!p.second.is_stale()) {
-	if (n)
-	  return true;
-	n++;
-      }
-    }
-    return false;
-  }
+  int count_nonstale_caps();
+  bool multiple_nonstale_caps();
 
   bool is_any_caps() { return !client_caps.empty(); }
   bool is_any_nonstale_caps() { return count_nonstale_caps(); }
@@ -1102,9 +866,7 @@ public:
   void last_put() override;
   void _put() override;
 
-
   // -- hierarchy stuff --
-public:
   void set_primary_parent(CDentry *p) {
     ceph_assert(parent == 0 ||
 	   g_conf().get_val<bool>("mds_hack_allow_loading_invalid_metadata"));
@@ -1129,7 +891,6 @@ public:
     projected_parent.pop_front();
   }
 
-public:
   void maybe_export_pin(bool update=false);
   void set_export_pin(mds_rank_t rank);
   mds_rank_t get_export_pin(bool inherit=true) const;
@@ -1137,51 +898,6 @@ public:
 
   void print(ostream& out) override;
   void dump(Formatter *f, int flags = DUMP_DEFAULT) const;
-
-  /**
-   * @defgroup Scrubbing and fsck
-   * @{
-   */
-
-  /**
-   * Report the results of validation against a particular inode.
-   * Each member is a pair of bools.
-   * <member>.first represents if validation was performed against the member.
-   * <member.second represents if the member passed validation.
-   * performed_validation is set to true if the validation was actually
-   * run. It might not be run if, for instance, the inode is marked as dirty.
-   * passed_validation is set to true if everything that was checked
-   * passed its validation.
-   */
-  struct validated_data {
-    template<typename T>struct member_status {
-      bool checked = false;
-      bool passed = false;
-      bool repaired = false;
-      int ondisk_read_retval = 0;
-      T ondisk_value;
-      T memory_value;
-      std::stringstream error_str;
-    };
-
-    bool performed_validation = false;
-    bool passed_validation = false;
-
-    struct raw_stats_t {
-      frag_info_t dirstat;
-      nest_info_t rstat;
-    };
-
-    member_status<inode_backtrace_t> backtrace;
-    member_status<mempool_inode> inode; // XXX should not be in mempool; wait for pmr
-    member_status<raw_stats_t> raw_stats;
-
-    validated_data() {}
-
-    void dump(Formatter *f) const;
-
-    bool all_damage_repaired() const;
-  };
 
   /**
    * Validate that the on-disk state of an inode matches what
@@ -1200,14 +916,191 @@ public:
                            MDSContext *fin);
   static void dump_validation_results(const validated_data& results,
                                       Formatter *f);
+
+  //bool hack_accessed = false;
+  //utime_t hack_load_stamp;
+
+  MDCache *mdcache;
+
+  SnapRealm        *snaprealm = nullptr;
+  SnapRealm        *containing_realm = nullptr;
+  snapid_t          first, last;
+  mempool::mds_co::compact_set<snapid_t> dirty_old_rstats;
+
+  uint64_t last_journaled = 0;       // log offset for the last time i was journaled
+  //loff_t last_open_journaled;  // log offset for the last journaled EOpen
+  utime_t last_dirstat_prop;
+
+  // list item node for when we have unpropagated rstat data
+  elist<CInode*>::item dirty_rstat_item;
+
+  mempool::mds_co::compact_map<int, mempool::mds_co::set<client_t> > client_snap_caps;     // [auth] [snap] dirty metadata we still need from the head
+  mempool::mds_co::compact_map<snapid_t, mempool::mds_co::set<client_t> > client_need_snapflush;
+
+  // LogSegment lists i (may) belong to
+  elist<CInode*>::item item_dirty;
+  elist<CInode*>::item item_caps;
+  elist<CInode*>::item item_open_file;
+  elist<CInode*>::item item_dirty_parent;
+  elist<CInode*>::item item_dirty_dirfrag_dir;
+  elist<CInode*>::item item_dirty_dirfrag_nest;
+  elist<CInode*>::item item_dirty_dirfrag_dirfragtree;
+  elist<CInode*>::item item_scrub;
+
+  // also update RecoveryQueue::RecoveryQueue() if you change this
+  elist<CInode*>::item& item_recover_queue = item_dirty_dirfrag_dir;
+  elist<CInode*>::item& item_recover_queue_front = item_dirty_dirfrag_nest;
+
+  int auth_pin_freeze_allowance = 0;
+
+  inode_load_vec_t pop;
+  elist<CInode*>::item item_pop_lru;
+
+  // -- locks --
+  static LockType versionlock_type;
+  static LockType authlock_type;
+  static LockType linklock_type;
+  static LockType dirfragtreelock_type;
+  static LockType filelock_type;
+  static LockType xattrlock_type;
+  static LockType snaplock_type;
+  static LockType nestlock_type;
+  static LockType flocklock_type;
+  static LockType policylock_type;
+
+  // FIXME not part of mempool
+  LocalLock  versionlock;
+  SimpleLock authlock;
+  SimpleLock linklock;
+  ScatterLock dirfragtreelock;
+  ScatterLock filelock;
+  SimpleLock xattrlock;
+  SimpleLock snaplock;
+  ScatterLock nestlock;
+  SimpleLock flocklock;
+  SimpleLock policylock;
+
+  // -- caps -- (new)
+  // client caps
+  client_t loner_cap = -1, want_loner_cap = -1;
+
+protected:
+  ceph_lock_state_t *get_fcntl_lock_state() {
+    if (!fcntl_locks)
+      fcntl_locks = new ceph_lock_state_t(g_ceph_context, CEPH_LOCK_FCNTL);
+    return fcntl_locks;
+  }
+  void clear_fcntl_lock_state() {
+    delete fcntl_locks;
+    fcntl_locks = NULL;
+  }
+  ceph_lock_state_t *get_flock_lock_state() {
+    if (!flock_locks)
+      flock_locks = new ceph_lock_state_t(g_ceph_context, CEPH_LOCK_FLOCK);
+    return flock_locks;
+  }
+  void clear_flock_lock_state() {
+    delete flock_locks;
+    flock_locks = NULL;
+  }
+  void clear_file_locks() {
+    clear_fcntl_lock_state();
+    clear_flock_lock_state();
+  }
+  void _encode_file_locks(bufferlist& bl) const {
+    using ceph::encode;
+    bool has_fcntl_locks = fcntl_locks && !fcntl_locks->empty();
+    encode(has_fcntl_locks, bl);
+    if (has_fcntl_locks)
+      encode(*fcntl_locks, bl);
+    bool has_flock_locks = flock_locks && !flock_locks->empty();
+    encode(has_flock_locks, bl);
+    if (has_flock_locks)
+      encode(*flock_locks, bl);
+  }
+  void _decode_file_locks(bufferlist::const_iterator& p) {
+    using ceph::decode;
+    bool has_fcntl_locks;
+    decode(has_fcntl_locks, p);
+    if (has_fcntl_locks)
+      decode(*get_fcntl_lock_state(), p);
+    else
+      clear_fcntl_lock_state();
+    bool has_flock_locks;
+    decode(has_flock_locks, p);
+    if (has_flock_locks)
+      decode(*get_flock_lock_state(), p);
+    else
+      clear_flock_lock_state();
+  }
+
+  /**
+   * Return the pool ID where we currently write backtraces for
+   * this inode (in addition to inode.old_pools)
+   *
+   * @returns a pool ID >=0
+   */
+  int64_t get_backtrace_pool() const;
+
+  // parent dentries in cache
+  CDentry         *parent = nullptr;             // primary link
+  mempool::mds_co::compact_set<CDentry*>    remote_parents;     // if hard linked
+
+  mempool::mds_co::list<CDentry*>   projected_parent;   // for in-progress rename, (un)link, etc.
+
+  mds_authority_t inode_auth = CDIR_AUTH_DEFAULT;
+
+  // -- distributed state --
+  // file capabilities
+  mempool_cap_map client_caps; // client -> caps
+  mempool::mds_co::compact_map<int32_t, int32_t> mds_caps_wanted;     // [auth] mds -> caps wanted
+  int replica_caps_wanted = 0; // [replica] what i've requested from auth
+  int num_caps_wanted = 0;
+
+  ceph_lock_state_t *fcntl_locks = nullptr;
+  ceph_lock_state_t *flock_locks = nullptr;
+
+  // -- waiting --
+  mempool::mds_co::compact_map<frag_t, MDSContext::vec > waiting_on_dir;
+
 private:
+
+  friend class ValidationContinuation;
+
+  /**
+   * Create a scrub_info_t struct for the scrub_infop pointer.
+   */
+  void scrub_info_create() const;
+  /**
+   * Delete the scrub_info_t struct if it's not got any useful data
+   */
+  void scrub_maybe_delete_info();
+
+  void pop_projected_snaprealm(sr_t *next_snaprealm, bool early);
+
   bool _validate_disk_state(class ValidationContinuation *c,
                             int rval, int stage);
-  friend class ValidationContinuation;
+
+  mempool::mds_co::list<projected_inode> projected_nodes;   // projected values (only defined while dirty)
+  size_t num_projected_xattrs = 0;
+  size_t num_projected_srnodes = 0;
+
+  // -- cache infrastructure --
+  mempool::mds_co::compact_map<frag_t,CDir*> dirfrags; // cached dir fragments under this Inode
+
+  //for the purpose of quickly determining whether there's a subtree root or exporting dir
+  int num_subtree_roots = 0;
+  int num_exporting_dirs = 0;
+
+  int stickydir_ref = 0;
+  scrub_info_t *scrub_infop = nullptr;
   /** @} Scrubbing and fsck */
 };
 
+ostream& operator<<(ostream& out, const CInode& in);
 ostream& operator<<(ostream& out, const CInode::scrub_stamp_info_t& si);
 
+extern cinode_lock_info_t cinode_lock_info[];
+extern int num_cinode_locks;
 #undef dout_context
 #endif

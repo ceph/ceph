@@ -1,7 +1,7 @@
 """
 Copyright (C) 2015 Red Hat, Inc.
 
-LGPL2.1.  See file COPYING.
+LGPL-2.1 or LGPL-3.0.  See file COPYING.
 """
 
 from contextlib import contextmanager
@@ -27,9 +27,11 @@ def to_bytes(param):
     Helper method that returns byte representation of the given parameter.
     '''
     if isinstance(param, str):
-        return param.encode()
+        return param.encode('utf-8')
+    elif param is None:
+        return param
     else:
-        return str(param).encode()
+        return str(param).encode('utf-8')
 
 class RadosError(Exception):
     """
@@ -306,7 +308,7 @@ class CephFSVolumeClient(object):
             # Identify auth IDs from auth meta filenames. The auth meta files
             # are named as, "$<auth_id><meta filename extension>"
             regex = "^\$(.*){0}$".format(re.escape(META_FILE_EXT))
-            match = re.search(regex, d.d_name)
+            match = re.search(regex, d.d_name.decode(encoding='utf-8'))
             if match:
                 auth_ids.append(match.group(1))
 
@@ -476,7 +478,7 @@ class CephFSVolumeClient(object):
             self.evict(premount_evict)
             log.debug("Premount eviction of {0} completes".format(premount_evict))
         log.debug("CephFS mounting...")
-        self.fs.mount(filesystem_name=self.fs_name)
+        self.fs.mount(filesystem_name=to_bytes(self.fs_name))
         log.debug("Connection to cephfs complete")
 
         # Recover from partial auth updates due to a previous
@@ -754,11 +756,12 @@ class CephFSVolumeClient(object):
             dir_handle = self.fs.opendir(root_path)
             d = self.fs.readdir(dir_handle)
             while d:
-                if d.d_name not in [".", ".."]:
+                d_name = d.d_name.decode(encoding='utf-8')
+                if d_name not in [".", ".."]:
                     # Do not use os.path.join because it is sensitive
                     # to string encoding, we just pass through dnames
                     # as byte arrays
-                    d_full = "{0}/{1}".format(root_path, d.d_name)
+                    d_full = u"{0}/{1}".format(root_path, d_name)
                     if d.is_dir():
                         rmtree(d_full)
                     else:

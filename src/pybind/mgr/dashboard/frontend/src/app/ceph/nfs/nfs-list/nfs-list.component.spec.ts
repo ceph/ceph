@@ -1,14 +1,14 @@
 import { HttpClientTestingModule, HttpTestingController } from '@angular/common/http/testing';
 import { ComponentFixture, fakeAsync, TestBed, tick } from '@angular/core/testing';
-import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastModule } from 'ng2-toastr';
 import { TabsModule } from 'ngx-bootstrap/tabs';
+import { ToastrModule } from 'ngx-toastr';
 import { BehaviorSubject, of } from 'rxjs';
 
 import {
   configureTestBed,
+  expectItemTasks,
   i18nProviders,
   PermissionHelper
 } from '../../../../testing/unit-test-helper';
@@ -39,7 +39,7 @@ describe('NfsListComponent', () => {
         HttpClientTestingModule,
         RouterTestingModule,
         SharedModule,
-        ToastModule.forRoot(),
+        ToastrModule.forRoot(),
         TabsModule.forRoot()
       ],
       providers: [TaskListService, i18nProviders]
@@ -127,10 +127,6 @@ describe('NfsListComponent', () => {
       summaryService.addRunningTask(task);
     };
 
-    const expectExportTasks = (expo: any, executing: string) => {
-      expect(expo.cdExecuting).toEqual(executing);
-    };
-
     beforeEach(() => {
       exports = [];
       addExport('a');
@@ -154,175 +150,60 @@ describe('NfsListComponent', () => {
       addTask('nfs/create', 'd');
       tick();
       expect(component.exports.length).toBe(4);
-      expectExportTasks(component.exports[0], undefined);
-      expectExportTasks(component.exports[1], undefined);
-      expectExportTasks(component.exports[2], undefined);
-      expectExportTasks(component.exports[3], 'Creating');
+      expectItemTasks(component.exports[0], undefined);
+      expectItemTasks(component.exports[1], undefined);
+      expectItemTasks(component.exports[2], undefined);
+      expectItemTasks(component.exports[3], 'Creating');
     }));
 
     it('should show when an existing export is being modified', () => {
       addTask('nfs/edit', 'a');
       addTask('nfs/delete', 'b');
       expect(component.exports.length).toBe(3);
-      expectExportTasks(component.exports[0], 'Updating');
-      expectExportTasks(component.exports[1], 'Deleting');
+      expectItemTasks(component.exports[0], 'Updating');
+      expectItemTasks(component.exports[1], 'Deleting');
     });
   });
 
-  describe('show action buttons and drop down actions depending on permissions', () => {
-    let tableActions: TableActionsComponent;
-    let scenario: { fn; empty; single };
-    let permissionHelper: PermissionHelper;
+  it('should test all TableActions combinations', () => {
+    const permissionHelper: PermissionHelper = new PermissionHelper(component.permission);
+    const tableActions: TableActionsComponent = permissionHelper.setPermissionsAndGetActions(
+      component.tableActions
+    );
 
-    const getTableActionComponent = (): TableActionsComponent => {
-      fixture.detectChanges();
-      return fixture.debugElement.query(By.directive(TableActionsComponent)).componentInstance;
-    };
-
-    beforeEach(() => {
-      permissionHelper = new PermissionHelper(component.permission, () =>
-        getTableActionComponent()
-      );
-      scenario = {
-        fn: () => tableActions.getCurrentButton().name,
-        single: 'Edit',
-        empty: 'Add'
-      };
-    });
-
-    describe('with all', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(1, 1, 1);
-      });
-
-      it(`shows 'Edit' for single selection else 'Add' as main action`, () =>
-        permissionHelper.testScenarios(scenario));
-
-      it('shows all actions', () => {
-        expect(tableActions.tableActions.length).toBe(3);
-        expect(tableActions.tableActions).toEqual(component.tableActions);
-      });
-    });
-
-    describe('with read, create and update', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(1, 1, 0);
-      });
-
-      it(`shows 'Edit' for single selection else 'Add' as main action`, () =>
-        permissionHelper.testScenarios(scenario));
-
-      it(`shows all actions except for 'Delete'`, () => {
-        expect(tableActions.tableActions.length).toBe(2);
-        component.tableActions.pop();
-        expect(tableActions.tableActions).toEqual(component.tableActions);
-      });
-    });
-
-    describe('with read, create and delete', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(1, 0, 1);
-      });
-
-      it(`shows 'Delete' for single selection else 'Add' as main action`, () => {
-        scenario.single = 'Delete';
-        permissionHelper.testScenarios(scenario);
-      });
-
-      it(`shows 'Add', and 'Delete'  action`, () => {
-        expect(tableActions.tableActions.length).toBe(2);
-        expect(tableActions.tableActions).toEqual([
-          component.tableActions[0],
-          component.tableActions[2]
-        ]);
-      });
-    });
-
-    describe('with read, edit and delete', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(0, 1, 1);
-      });
-
-      it(`shows always 'Edit' as main action`, () => {
-        scenario.empty = 'Edit';
-        permissionHelper.testScenarios(scenario);
-      });
-
-      it(`shows 'Edit' and 'Delete' actions`, () => {
-        expect(tableActions.tableActions.length).toBe(2);
-        expect(tableActions.tableActions).toEqual([
-          component.tableActions[1],
-          component.tableActions[2]
-        ]);
-      });
-    });
-
-    describe('with read and create', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(1, 0, 0);
-      });
-
-      it(`always shows 'Add' as main action`, () => {
-        scenario.single = 'Add';
-        permissionHelper.testScenarios(scenario);
-      });
-
-      it(`shows 'Add' action`, () => {
-        expect(tableActions.tableActions.length).toBe(1);
-        expect(tableActions.tableActions).toEqual([component.tableActions[0]]);
-      });
-    });
-
-    describe('with read and edit', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(0, 1, 0);
-      });
-
-      it(`shows always 'Edit' as main action`, () => {
-        scenario.empty = 'Edit';
-        permissionHelper.testScenarios(scenario);
-      });
-
-      it(`shows 'Edit' action`, () => {
-        expect(tableActions.tableActions.length).toBe(1);
-        expect(tableActions.tableActions).toEqual([component.tableActions[1]]);
-      });
-    });
-
-    describe('with read and delete', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(0, 0, 1);
-      });
-
-      it(`shows always 'Delete' as main action`, () => {
-        scenario.single = 'Delete';
-        scenario.empty = 'Delete';
-        permissionHelper.testScenarios(scenario);
-      });
-
-      it(`shows 'Delete' action`, () => {
-        expect(tableActions.tableActions.length).toBe(1);
-        expect(tableActions.tableActions).toEqual([component.tableActions[2]]);
-      });
-    });
-
-    describe('with only read', () => {
-      beforeEach(() => {
-        tableActions = permissionHelper.setPermissionsAndGetActions(0, 0, 0);
-      });
-
-      it('shows no main action', () => {
-        permissionHelper.testScenarios({
-          fn: () => tableActions.getCurrentButton(),
-          single: undefined,
-          empty: undefined
-        });
-      });
-
-      it('shows no actions', () => {
-        expect(tableActions.tableActions.length).toBe(0);
-        expect(tableActions.tableActions).toEqual([]);
-      });
+    expect(tableActions).toEqual({
+      'create,update,delete': {
+        actions: ['Create', 'Edit', 'Delete'],
+        primary: { multiple: 'Create', executing: 'Edit', single: 'Edit', no: 'Create' }
+      },
+      'create,update': {
+        actions: ['Create', 'Edit'],
+        primary: { multiple: 'Create', executing: 'Edit', single: 'Edit', no: 'Create' }
+      },
+      'create,delete': {
+        actions: ['Create', 'Delete'],
+        primary: { multiple: 'Create', executing: 'Delete', single: 'Delete', no: 'Create' }
+      },
+      create: {
+        actions: ['Create'],
+        primary: { multiple: 'Create', executing: 'Create', single: 'Create', no: 'Create' }
+      },
+      'update,delete': {
+        actions: ['Edit', 'Delete'],
+        primary: { multiple: 'Edit', executing: 'Edit', single: 'Edit', no: 'Edit' }
+      },
+      update: {
+        actions: ['Edit'],
+        primary: { multiple: 'Edit', executing: 'Edit', single: 'Edit', no: 'Edit' }
+      },
+      delete: {
+        actions: ['Delete'],
+        primary: { multiple: 'Delete', executing: 'Delete', single: 'Delete', no: 'Delete' }
+      },
+      'no-permissions': {
+        actions: [],
+        primary: { multiple: '', executing: '', single: '', no: '' }
+      }
     });
   });
 });

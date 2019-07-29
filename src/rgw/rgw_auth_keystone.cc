@@ -20,7 +20,6 @@
 #include "rgw_rest_s3.h"
 #include "rgw_auth_s3.h"
 
-#include "common/ceph_crypto_cms.h"
 #include "common/ceph_crypto.h"
 #include "common/Cond.h"
 
@@ -35,27 +34,6 @@ bool
 TokenEngine::is_applicable(const std::string& token) const noexcept
 {
   return ! token.empty() && ! cct->_conf->rgw_keystone_url.empty();
-}
-
-TokenEngine::token_envelope_t
-TokenEngine::decode_pki_token(const DoutPrefixProvider* dpp, const std::string& token) const
-{
-  ceph::buffer::list token_body_bl;
-  int ret = rgw_decode_b64_cms(cct, token, token_body_bl);
-  if (ret < 0) {
-    ldpp_dout(dpp, 20) << "cannot decode pki token" << dendl;
-    throw ret;
-  } else {
-    ldpp_dout(dpp, 20) << "successfully decoded pki token" << dendl;
-  }
-
-  TokenEngine::token_envelope_t token_body;
-  ret = token_body.parse(cct, token, token_body_bl, config.get_api_version());
-  if (ret < 0) {
-    throw ret;
-  }
-
-  return token_body;
 }
 
 boost::optional<TokenEngine::token_envelope_t>
@@ -230,8 +208,10 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
     return result_t::deny();
   }
 
-  /* Token ID is a concept that makes dealing with PKI tokens more effective.
-   * Instead of storing several kilobytes, a short hash can be burried. */
+  /* Token ID is a legacy of supporting the service-side validation
+   * of PKI/PKIz token type which are already-removed-in-OpenStack.
+   * The idea was to bury in cache only a short hash instead of few
+   * kilobytes. RadosGW doesn't do the local validation anymore. */
   const auto& token_id = rgw_get_token_id(token);
   ldpp_dout(dpp, 20) << "token_id=" << token_id << dendl;
 
@@ -245,18 +225,10 @@ TokenEngine::authenticate(const DoutPrefixProvider* dpp,
     return result_t::grant(std::move(apl));
   }
 
-  /* Retrieve token. */
-  if (rgw_is_pki_token(token)) {
-    try {
-      t = decode_pki_token(dpp, token);
-    } catch (...) {
-      /* Last resort. */
-      t = get_from_keystone(dpp, token);
-    }
-  } else {
-    /* Can't decode, just go to the Keystone server for validation. */
-    t = get_from_keystone(dpp, token);
-  }
+  /* Not in cache. Go to the Keystone for validation. This happens even
+   * for the legacy PKI/PKIz token types. That's it, after the PKI/PKIz
+   * RadosGW-side validation has been removed, we always ask Keystone. */
+  t = get_from_keystone(dpp, token);
 
   if (! t) {
     return result_t::deny(-EACCES);
@@ -459,8 +431,8 @@ std::pair<boost::optional<std::string>, int> EC2Engine::get_secret_from_keystone
       ldpp_dout(dpp, 0) << "Keystone credential not present in return from server" << dendl;
       return make_pair(boost::none, -EINVAL);
     }
-  } catch (JSONDecoder::err& err) {
-    ldpp_dout(dpp, 0) << "Keystone credential parse error: " << err.message << dendl;
+  } catch (const JSONDecoder::err& err) {
+    ldpp_dout(dpp, 0) << "Keystone credential parse error: " << err.what() << dendl;
     return make_pair(boost::none, -EINVAL);
   }
 

@@ -1,3 +1,6 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
 #include "pg_backend.h"
 
 #include <optional>
@@ -11,7 +14,7 @@
 
 #include "crimson/os/cyan_collection.h"
 #include "crimson/os/cyan_object.h"
-#include "crimson/os/cyan_store.h"
+#include "crimson/os/futurized_store.h"
 #include "replicated_backend.h"
 #include "ec_backend.h"
 #include "exceptions.h"
@@ -24,10 +27,10 @@ namespace {
 
 std::unique_ptr<PGBackend> PGBackend::create(const spg_t pgid,
                                              const pg_pool_t& pool,
-                                             ceph::os::CyanStore* store,
+					     ceph::os::CollectionRef coll,
+                                             ceph::os::FuturizedStore* store,
                                              const ec_profile_t& ec_profile)
 {
-  auto coll = store->open_collection(coll_t{pgid});
   switch (pool.type) {
   case pg_pool_t::TYPE_REPLICATED:
     return std::make_unique<ReplicatedBackend>(pgid.shard, coll, store);
@@ -43,7 +46,7 @@ std::unique_ptr<PGBackend> PGBackend::create(const spg_t pgid,
 
 PGBackend::PGBackend(shard_id_t shard,
                      CollectionRef coll,
-                     ceph::os::CyanStore* store)
+                     ceph::os::FuturizedStore* store)
   : shard{shard},
     coll{coll},
     store{store}
@@ -109,7 +112,7 @@ PGBackend::_load_os(const hobject_t& oid)
                          OI_ATTR).then_wrapped([oid, this](auto fut) {
     if (fut.failed()) {
       auto ep = std::move(fut).get_exception();
-      if (!ceph::os::CyanStore::EnoentException::is_class_of(ep)) {
+      if (!ceph::os::FuturizedStore::EnoentException::is_class_of(ep)) {
         std::rethrow_exception(ep);
       }
       return seastar::make_ready_future<cached_os_t>(
@@ -138,7 +141,7 @@ PGBackend::_load_ss(const hobject_t& oid)
     std::unique_ptr<SnapSet> snapset;
     if (fut.failed()) {
       auto ep = std::move(fut).get_exception();
-      if (!ceph::os::CyanStore::EnoentException::is_class_of(ep)) {
+      if (!ceph::os::FuturizedStore::EnoentException::is_class_of(ep)) {
         std::rethrow_exception(ep);
       } else {
         snapset = std::make_unique<SnapSet>();
@@ -253,6 +256,52 @@ bool PGBackend::maybe_create_new_object(
   return true;
 }
 
+seastar::future<> PGBackend::write(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& txn)
+{
+  const ceph_osd_op& op = osd_op.op;
+  uint64_t offset = op.extent.offset;
+  uint64_t length = op.extent.length;
+  bufferlist buf = osd_op.indata;
+  if (auto seq = os.oi.truncate_seq;
+      seq != 0 && op.extent.truncate_seq < seq) {
+    // old write, arrived after trimtrunc
+    if (offset + length > os.oi.size) {
+      // no-op
+      if (offset > os.oi.size) {
+	length = 0;
+	buf.clear();
+      } else {
+	// truncate
+	auto len = os.oi.size - offset;
+	buf.splice(len, length);
+	length = len;
+      }
+    }
+  } else if (op.extent.truncate_seq > seq) {
+    // write arrives before trimtrunc
+    if (os.exists && !os.oi.is_whiteout()) {
+      txn.truncate(coll->cid, ghobject_t{os.oi.soid}, op.extent.truncate_size);
+    }
+    os.oi.truncate_seq = op.extent.truncate_seq;
+    os.oi.truncate_size = op.extent.truncate_size;
+  }
+  maybe_create_new_object(os, txn);
+  if (length == 0) {
+    if (offset > os.oi.size) {
+      txn.truncate(coll->cid, ghobject_t{os.oi.soid}, op.extent.offset);
+    } else {
+      txn.nop();
+    }
+  } else {
+    txn.write(coll->cid, ghobject_t{os.oi.soid},
+	      offset, length, std::move(buf), op.flags);
+  }
+  return seastar::now();
+}
+
 seastar::future<> PGBackend::writefull(
   ObjectState& os,
   const OSDOp& osd_op,
@@ -282,6 +331,7 @@ seastar::future<> PGBackend::remove(ObjectState& os,
   txn.remove(coll->cid, ghobject_t{os.oi.soid, ghobject_t::NO_GEN, shard});
   os.oi.size = 0;
   os.oi.new_object();
+  os.exists = false;
   // todo: update watchers
   if (os.oi.is_whiteout()) {
     os.oi.clear_flag(object_info_t::FLAG_WHITEOUT);

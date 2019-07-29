@@ -27,6 +27,11 @@ from .exceptions import ViewCacheNoDataException
 from .settings import Settings
 from .services.auth import JwtManager
 
+try:
+    from typing import Any, AnyStr, Dict, List  # pylint: disable=unused-import
+except ImportError:
+    pass  # For typing only
+
 
 class RequestLoggingTool(cherrypy.Tool):
     def __init__(self):
@@ -670,7 +675,12 @@ def build_url(host, scheme=None, port=None):
     :rtype: str
     """
     try:
-        ipaddress.IPv6Address(six.u(host))
+        try:
+            u_host = six.u(host)
+        except TypeError:
+            u_host = host
+
+        ipaddress.IPv6Address(u_host)
         netloc = '[{}]'.format(host)
     except ValueError:
         netloc = host
@@ -759,6 +769,36 @@ def str_to_bool(val):
     if isinstance(val, bool):
         return val
     return bool(strtobool(val))
+
+
+def json_str_to_object(value):  # type: (AnyStr) -> Any
+    """
+    It converts a JSON valid string representation to object.
+
+    >>> result = json_str_to_object('{"a": 1}')
+    >>> result == {'a': 1}
+    True
+    """
+    if value == '':
+        return value
+
+    try:
+        # json.loads accepts binary input from version >=3.6
+        value = value.decode('utf-8')
+    except AttributeError:
+        pass
+
+    return json.loads(value)
+
+
+def partial_dict(orig, keys):  # type: (Dict, List[str]) -> Dict
+    """
+    It returns Dict containing only the selected keys of original Dict.
+
+    >>> partial_dict({'a': 1, 'b': 2}, ['b'])
+    {'b': 2}
+    """
+    return {k: orig[k] for k in keys}
 
 
 def get_request_body_params(request):

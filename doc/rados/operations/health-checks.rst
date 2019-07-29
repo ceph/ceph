@@ -201,7 +201,7 @@ ____________
 
 One or more cluster flags of interest has been set.  These flags include:
 
-* *full* - the cluster is flagged as full and cannot service writes
+* *full* - the cluster is flagged as full and cannot serve writes
 * *pauserd*, *pausewr* - paused reads or writes
 * *noup* - OSDs are not allowed to start
 * *nodown* - OSD failure reports are being ignored, such that the
@@ -223,7 +223,8 @@ With the exception of *full*, these flags can be set or cleared with::
 OSD_FLAGS
 _________
 
-One or more OSDs or CRUSH nodes has a flag of interest set.  These flags include:
+One or more OSDs or CRUSH {nodes,device classes} has a flag of interest set.
+These flags include:
 
 * *noup*: these OSDs are not allowed to start
 * *nodown*: failure reports for these OSDs will be ignored
@@ -232,15 +233,19 @@ One or more OSDs or CRUSH nodes has a flag of interest set.  These flags include
 * *noout*: if these OSDs are down they will not automatically be marked
   `out` after the configured interval
 
-These flags can be set and cleared with::
+These flags can be set and cleared in batch with::
 
-  ceph osd add-<flag> <osd-id-or-crush-node-name>
-  ceph osd rm-<flag> <osd-id-or-crush-node-name>
+  ceph osd set-group <flags> <who>
+  ceph osd unset-group <flags> <who>
 
 For example, ::
 
-  ceph osd rm-nodown osd.123
-  ceph osd rm-noout hostfoo
+  ceph osd set-group noup,noout osd.0 osd.1
+  ceph osd unset-group noup,noout osd.0 osd.1
+  ceph osd set-group noup,noout host-foo
+  ceph osd unset-group noup,noout host-foo
+  ceph osd set-group noup,noout class-hdd
+  ceph osd unset-group noup,noout class-hdd
 
 OLD_CRUSH_TUNABLES
 __________________
@@ -484,16 +489,27 @@ The state of specific problematic PGs can be queried with::
   ceph tell <pgid> query
 
 
-PG_DEGRADED_FULL
+PG_RECOVERY_FULL
 ________________
 
 Data redundancy may be reduced or at risk for some data due to a lack
 of free space in the cluster.  Specifically, one or more PGs has the
-*backfill_toofull* or *recovery_toofull* flag set, meaning that the
+*recovery_toofull* flag set, meaning that the
+cluster is unable to migrate or recover data because one or more OSDs
+is above the *full* threshold.
+
+See the discussion for *OSD_FULL* above for steps to resolve this condition.
+
+PG_BACKFILL_FULL
+________________
+
+Data redundancy may be reduced or at risk for some data due to a lack
+of free space in the cluster.  Specifically, one or more PGs has the
+*backfill_toofull* flag set, meaning that the
 cluster is unable to migrate or recover data because one or more OSDs
 is above the *backfillfull* threshold.
 
-See the discussion for *OSD_BACKFILLFULL* or *OSD_FULL* above for
+See the discussion for *OSD_BACKFILLFULL* above for
 steps to resolve this condition.
 
 PG_DAMAGED
@@ -673,6 +689,12 @@ the pool is too large and should be reduced or set to zero with::
 
 For more information, see :ref:`specifying_pool_target_size`.
 
+TOO_FEW_OSDS
+____________
+
+The number of OSDs in the cluster is below the configurable
+threshold of ``osd_pool_default_size``.
+
 SMALLER_PGP_NUM
 _______________
 
@@ -835,3 +857,43 @@ happen if they are misplaced or degraded (see *PG_AVAILABILITY* and
 You can manually initiate a scrub of a clean PG with::
 
   ceph pg deep-scrub <pgid>
+
+
+Miscellaneous
+-------------
+
+RECENT_CRASH
+____________
+
+One or more Ceph daemons has crashed recently, and the crash has not
+yet been archived (acknowledged) by the administrator.  This may
+indicate a software bug, a hardware problem (e.g., a failing disk), or
+some other problem.
+
+New crashes can be listed with::
+
+  ceph crash ls-new
+
+Information about a specific crash can be examined with::
+
+  ceph crash info <crash-id>
+
+This warning can be silenced by "archiving" the crash (perhaps after
+being examined by an administrator) so that it does not generate this
+warning::
+
+  ceph crash archive <crash-id>
+
+Similarly, all new crashes can be archived with::
+
+  ceph crash archive-all
+
+Archived crashes will still be visible via ``ceph crash ls`` but not
+``ceph crash ls-new``.
+
+The time period for what "recent" means is controlled by the option
+``mgr/crash/warn_recent_interval`` (default: two weeks).
+
+These warnings can be disabled entirely with::
+
+  ceph config set mgr/crash/warn_recent_interval 0

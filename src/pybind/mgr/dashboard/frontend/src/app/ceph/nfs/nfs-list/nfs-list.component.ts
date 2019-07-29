@@ -7,8 +7,10 @@ import { Subscription } from 'rxjs';
 
 import { NfsService } from '../../../shared/api/nfs.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
@@ -61,7 +63,8 @@ export class NfsListComponent implements OnInit, OnDestroy {
     private modalService: BsModalService,
     private nfsService: NfsService,
     private taskListService: TaskListService,
-    private taskWrapper: TaskWrapperService
+    private taskWrapper: TaskWrapperService,
+    public actionLabels: ActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().nfs;
     const getNfsUri = () =>
@@ -70,29 +73,29 @@ export class NfsListComponent implements OnInit, OnDestroy {
         this.selection.first().export_id
       )}`;
 
-    const addAction: CdTableAction = {
+    const createAction: CdTableAction = {
       permission: 'create',
-      icon: 'fa-plus',
-      routerLink: () => '/nfs/add',
+      icon: Icons.add,
+      routerLink: () => '/nfs/create',
       canBePrimary: (selection: CdTableSelection) => !selection.hasSingleSelection,
-      name: this.i18n('Add')
+      name: this.actionLabels.CREATE
     };
 
     const editAction: CdTableAction = {
       permission: 'update',
-      icon: 'fa-pencil',
+      icon: Icons.edit,
       routerLink: () => `/nfs/edit/${getNfsUri()}`,
-      name: this.i18n('Edit')
+      name: this.actionLabels.EDIT
     };
 
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: 'fa-times',
+      icon: Icons.destroy,
       click: () => this.deleteNfsModal(),
-      name: this.i18n('Delete')
+      name: this.actionLabels.DELETE
     };
 
-    this.tableActions = [addAction, editAction, deleteAction];
+    this.tableActions = [createAction, editAction, deleteAction];
   }
 
   ngOnInit() {

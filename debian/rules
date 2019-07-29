@@ -11,6 +11,11 @@ ifneq (,$(findstring WITH_STATIC_LIBSTDCXX,$(CEPH_EXTRA_CMAKE_ARGS)))
   # see http://tracker.ceph.com/issues/25209
   export DEB_LDFLAGS_MAINT_STRIP = -Wl,-Bsymbolic-functions
 endif
+ifeq (,$(findstring WITH_SEASTAR,$(CEPH_EXTRA_CMAKE_ARGS)))
+  export CEPH_OSD_BASENAME = ceph-osd
+else
+  export CEPH_OSD_BASENAME = crimson-osd
+endif
 
 extraopts += -DWITH_OCF=ON -DWITH_LTTNG=ON
 extraopts += -DWITH_PYTHON3=ON -DWITH_MGR_DASHBOARD_FRONTEND=OFF
@@ -93,7 +98,6 @@ override_dh_strip:
 	dh_strip -pceph-mon --dbg-package=ceph-mon-dbg
 	dh_strip -pceph-osd --dbg-package=ceph-osd-dbg
 	dh_strip -pceph-base --dbg-package=ceph-base-dbg
-	dh_strip -pceph-fuse --dbg-package=ceph-fuse-dbg
 	dh_strip -prbd-fuse --dbg-package=rbd-fuse-dbg
 	dh_strip -prbd-mirror --dbg-package=rbd-mirror-dbg
 	dh_strip -pceph-immutable-object-cache --dbg-package=ceph-immutable-object-cache-dbg

@@ -296,10 +296,60 @@ void RGWOp_Realm_Get::send_response()
   flusher.flush();
 }
 
+// GET /admin/realm?list
+class RGWOp_Realm_List : public RGWRESTOp {
+  std::string default_id;
+  std::list<std::string> realms;
+public:
+  int check_caps(RGWUserCaps& caps) override {
+    return caps.check_cap("zone", RGW_CAP_READ);
+  }
+  int verify_permission() override {
+    return check_caps(s->user->caps);
+  }
+  void execute() override;
+  void send_response() override;
+  const char* name() const override { return "list_realms"; }
+};
+
+void RGWOp_Realm_List::execute()
+{
+  {
+    // read default realm
+    RGWRealm realm(store->ctx(), store->svc.sysobj);
+    [[maybe_unused]] int ret = realm.read_default_id(default_id);
+  }
+  http_ret = store->svc.zone->list_realms(realms);
+  if (http_ret < 0)
+    lderr(store->ctx()) << "failed to list realms" << dendl;
+}
+
+void RGWOp_Realm_List::send_response()
+{
+  set_req_state_err(s, http_ret);
+  dump_errno(s);
+
+  if (http_ret < 0) {
+    end_header(s);
+    return;
+  }
+
+  s->formatter->open_object_section("realms_list");
+  encode_json("default_info", default_id, s->formatter);
+  encode_json("realms", realms, s->formatter);
+  s->formatter->close_section();
+  end_header(s, NULL, "application/json", s->formatter->get_len());
+  flusher.flush();
+}
+
 class RGWHandler_Realm : public RGWHandler_Auth_S3 {
 protected:
   using RGWHandler_Auth_S3::RGWHandler_Auth_S3;
-  RGWOp *op_get() override { return new RGWOp_Realm_Get; }
+  RGWOp *op_get() override {
+    if (s->info.args.sub_resource_exists("list"))
+      return new RGWOp_Realm_List;
+    return new RGWOp_Realm_Get;
+  }
 };
 
 RGWRESTMgr_Realm::RGWRESTMgr_Realm()

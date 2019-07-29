@@ -66,7 +66,8 @@ void PyModuleRegistry::init()
 
   std::list<std::string> failed_modules;
 
-  std::set<std::string> module_names = probe_modules();
+  const std::string module_path = g_conf().get_val<std::string>("mgr_module_path");
+  std::set<std::string> module_names = probe_modules(module_path);
   // Load python code
   for (const auto& module_name : module_names) {
     dout(1) << "Loading python module '" << module_name << "'" << dendl;
@@ -88,7 +89,9 @@ void PyModuleRegistry::init()
     // report its loading error
     modules[module_name] = std::move(mod);
   }
-
+  if (module_names.empty()) {
+    clog->error() << "No ceph-mgr modules found in " << module_path;
+  }
   if (!failed_modules.empty()) {
     clog->error() << "Failed to load ceph-mgr modules: " << joinify(
         failed_modules.begin(), failed_modules.end(), std::string(", "));
@@ -255,10 +258,8 @@ void PyModuleRegistry::shutdown()
   Py_Finalize();
 }
 
-std::set<std::string> PyModuleRegistry::probe_modules() const
+std::set<std::string> PyModuleRegistry::probe_modules(const std::string &path) const
 {
-  std::string path = g_conf().get_val<std::string>("mgr_module_path");
-
   DIR *dir = opendir(path.c_str());
   if (!dir) {
     return {};
@@ -416,7 +417,7 @@ void PyModuleRegistry::handle_config(const std::string &k, const std::string &v)
   std::lock_guard l(module_config.lock);
 
   if (!v.empty()) {
-    dout(4) << "Loaded module_config entry " << k << ":" << v << dendl;
+    dout(10) << "Loaded module_config entry " << k << ":" << v << dendl;
     module_config.config[k] = v;
   } else {
     module_config.config.erase(k);

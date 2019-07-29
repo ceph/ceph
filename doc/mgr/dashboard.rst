@@ -53,49 +53,52 @@ The dashboard provides the following features:
 * **Auditing**: the dashboard backend can be configured to log all PUT, POST
   and DELETE API requests in the Ceph audit log. See :ref:`dashboard-auditing`
   for instructions on how to enable this feature.
-* **Internationalization (I18N)**: use the dashboard in different languages.
+* **Internationalization (I18N)**: the dashboard can be used in different
+  languages that can be selected at run-time.
 
 Currently, Ceph Dashboard is capable of monitoring and managing the following
 aspects of your Ceph cluster:
 
-* **Overall cluster health**: Displays overall cluster status, performance
+* **Overall cluster health**: Display overall cluster status, performance
   and capacity metrics.
 * **Embedded Grafana Dashboards**: Ceph Dashboard is capable of embedding
   `Grafana <https://grafana.com>`_ dashboards in many locations, to display
   additional information and performance metrics gathered by the
   :ref:`mgr-prometheus`. See :ref:`dashboard-grafana` for details on how to
   configure this functionality.
-* **Cluster logs**: Display the latest updates to the cluster's event and audit
-  log files.
-* **Hosts**: Provides a list of all hosts associated to the cluster, which
+* **Cluster logs**: Display the latest updates to the cluster's event and
+  audit log files. Log entries can be filtered by priority, date or keyword.
+* **Hosts**: Display a list of all hosts associated to the cluster, which
   services are running and which version of Ceph is installed.
-* **Performance counters**: Displays detailed service-specific statistics for
+* **Performance counters**: Display detailed service-specific statistics for
   each running service.
-* **Monitors**: Lists all MONs, their quorum status, open sessions.
-* **Configuration Editor**: View all available configuration options,
+* **Monitors**: List all MONs, their quorum status, open sessions.
+* **Configuration Editor**: Display all available configuration options,
   their description, type and default values and edit the current values.
-* **Pools**: List all Ceph pools and their details (e.g. applications, placement
-  groups, replication size, EC profile, CRUSH ruleset, etc.)
-* **OSDs**: Lists all OSDs, their status and usage statistics as well as
-  detailed information like attributes (OSD map), metadata, performance counters
-  and usage histograms for read/write operations. Mark OSDs as up/down/out,
-  perform scrub operations. Select between different recovery profiles to adjust
-  the level of backfilling activity.
-* **iSCSI**: Lists all hosts that run the TCMU runner service, displaying all
+* **Pools**: List all Ceph pools and their details (e.g. applications,
+  placement groups, replication size, EC profile, CRUSH ruleset, etc.)
+* **OSDs**: List all OSDs, their status and usage statistics as well as
+  detailed information like attributes (OSD map), metadata, performance
+  counters and usage histograms for read/write operations. Mark OSDs
+  up/down/out, purge and reweight OSDs, perform scrub operations, modify
+  various scrub-related configuration options, select different profiles to
+  adjust the level of backfilling activity.
+* **iSCSI**: List all hosts that run the TCMU runner service, display all
   images and their performance characteristics (read/write ops, traffic).
   Create, modify and delete iSCSI targets (via ``ceph-iscsi``). See
   :ref:`dashboard-iscsi-management` for instructions on how to configure this
   feature.
-* **RBD**: Lists all RBD images and their properties (size, objects, features).
-  Create, copy, modify and delete RBD images. Create, delete and rollback
-  snapshots of selected images, protect/unprotect these snapshots against
-  modification. Copy or clone snapshots, flatten cloned images.
+* **RBD**: List all RBD images and their properties (size, objects, features).
+  Create, copy, modify and delete RBD images. Define various I/O or bandwidth
+  limitation settings on a global, per-pool or per-image level. Create, delete
+  and rollback snapshots of selected images, protect/unprotect these snapshots
+  against modification. Copy or clone snapshots, flatten cloned images.
 * **RBD mirroring**: Enable and configure RBD mirroring to a remote Ceph server.
   Lists all active sync daemons and their status, pools and RBD images including
   their synchronization state.
-* **CephFS**: Lists all active filesystem clients and associated pools,
+* **CephFS**: List all active filesystem clients and associated pools,
   including their usage statistics.
-* **Object Gateway**: Lists all active object gateways and their performance
+* **Object Gateway**: List all active object gateways and their performance
   counters. Display and manage (add/edit/delete) object gateway users and their
   details (e.g. quotas) as well as the users' buckets and their details (e.g.
   owner, quotas). See :ref:`dashboard-enabling-object-gateway` for configuration
@@ -170,15 +173,15 @@ For example, a key pair can be generated with a command similar to::
 The ``dashboard.crt`` file should then be signed by a CA. Once that is done, you
 can enable it for all Ceph manager instances by running the following commands::
 
-  $ ceph config-key set mgr/dashboard/crt -i dashboard.crt
-  $ ceph config-key set mgr/dashboard/key -i dashboard.key
+  $ ceph dashboard set-ssl-certificate -i dashboard.crt
+  $ ceph dashboard set-ssl-certificate-key -i dashboard.key
 
 If different certificates are desired for each manager instance for some reason,
 the name of the instance can be included as follows (where ``$name`` is the name
 of the ``ceph-mgr`` instance, usually the hostname)::
 
-  $ ceph config-key set mgr/dashboard/$name/crt -i dashboard.crt
-  $ ceph config-key set mgr/dashboard/$name/key -i dashboard.key
+  $ ceph dashboard set-ssl-certificate $name -i dashboard.crt
+  $ ceph dashboard set-ssl-certificate-key $name -i dashboard.key
 
 SSL can also be disabled by setting this configuration value::
 
@@ -357,8 +360,7 @@ Grafana on your preferred hosts, proceed with the following steps.
 
     $ ceph mgr module enable prometheus
 
-More details can be found on the `documentation <http://docs.ceph.com/docs/master/
-mgr/prometheus/>`_ of the prometheus module.
+More details can be found in the documentation of the :ref:`mgr-prometheus`.
 
 #. Add the corresponding scrape configuration to Prometheus. This may look
    like::
@@ -422,7 +424,7 @@ The format of url is : `<protocol>:<IP-address>:<port>`
   can't see the embedded Grafana dashboards after enabling them as outlined
   above, check your browser's documentation on how to unblock mixed content.
   Alternatively, consider enabling SSL/TLS support in Grafana.
-  
+
 You can directly access Grafana Instance as well to monitor your cluster.
 
 .. _dashboard-sso-support:
@@ -497,7 +499,8 @@ ways:
 #. Use both sources simultaneously.
 
 All three methods are going to notify you about alerts. You won't be notified
-twice if you use both sources.
+twice if you use both sources, but you need to consume at least the Alertmanager API
+in order to manage silences.
 
 #. Use the notification receiver of the dashboard:
 
@@ -523,18 +526,28 @@ twice if you use both sources.
    configuration checkout the `<http_config> documentation
    <https://prometheus.io/docs/alerting/configuration/#%3Chttp_config%3E>`_.
 
-#. Use the API of the Prometheus Alertmanager
+#. Use the API of Prometheus and the Alertmanager
 
-   This allows you to manage alerts. You will see all alerts, the Alertmanager
-   currently knows of, in the alerts listing. It can be found in the *Cluster*
-   submenu as *Alerts*. The alerts can be sorted by name, job, severity,
-   state and start time. Unfortunately it's not possible to know when an alert
+   This allows you to manage alerts and silences. You will see all alerts and silences
+   the Alertmanager currently knows of in the corresponding listing.
+   Both can be found in the *Cluster* submenu.
+
+   Alerts can be sorted by name, job, severity, state and start time.
+   Unfortunately it's not possible to know when an alert
    was sent out through a notification by the Alertmanager based on your
    configuration, that's why the dashboard will notify the user on any visible
    change to an alert and will notify the changed alert.
 
-   Currently it's not yet possible to silence an alert and expire an silenced
-   alert, but this is work in progress and will be added in a future release.
+   Silences can be sorted by id, creator, status, start, updated and end time.
+   Silences can be created in various ways, it's also possible to expire them.
+
+   #. Create from scratch
+
+   #. Based on a selected alert
+
+   #. Recreate from expired silence
+
+   #. Update a silence (which will recreate and expire it (default Alertmanager behaviour))
 
    To use it, specify the host and port of the Alertmanager server::
 
@@ -544,6 +557,16 @@ twice if you use both sources.
 
      $ ceph dashboard set-alertmanager-api-host 'http://localhost:9093'
 
+   To be able to show what a silence will match beforehand, you have to add the host
+   and port of the Prometheus server::
+
+     $ ceph dashboard set-prometheus-api-host <prometheus-host:port>  # default: ''
+
+   For example::
+
+     $ ceph dashboard set-prometheus-api-host 'http://localhost:9090'
+
+   After setting up the hosts, you have to refresh your the dashboard in your browser window.
 
 #. Use both methods
 

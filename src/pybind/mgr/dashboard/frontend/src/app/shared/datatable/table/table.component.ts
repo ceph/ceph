@@ -1,5 +1,6 @@
 import {
   AfterContentChecked,
+  ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
   EventEmitter,
@@ -22,6 +23,7 @@ import {
 import * as _ from 'lodash';
 import { Observable, timer as observableTimer } from 'rxjs';
 
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CellTemplate } from '../../enum/cell-template.enum';
 import { CdTableColumn } from '../../models/cd-table-column';
 import { CdTableFetchDataContext } from '../../models/cd-table-fetch-data-context';
@@ -31,7 +33,8 @@ import { CdUserConfig } from '../../models/cd-user-config';
 @Component({
   selector: 'cd-table',
   templateUrl: './table.component.html',
-  styleUrls: ['./table.component.scss']
+  styleUrls: ['./table.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TableComponent implements AfterContentChecked, OnInit, OnChanges, OnDestroy {
   @ViewChild(DatatableComponent)
@@ -136,6 +139,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   selection = new CdTableSelection();
 
   tableColumns: CdTableColumn[];
+  icons = Icons;
   cellTemplates: {
     [key: string]: TemplateRef<any>;
   } = {};
@@ -144,10 +148,10 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   loadingIndicator = true;
   loadingError = false;
   paginationClasses = {
-    pagerLeftArrow: 'i fa fa-angle-double-left',
-    pagerRightArrow: 'i fa fa-angle-double-right',
-    pagerPrevious: 'i fa fa-angle-left',
-    pagerNext: 'i fa fa-angle-right'
+    pagerLeftArrow: Icons.leftArrowDouble,
+    pagerRightArrow: Icons.rightArrowDouble,
+    pagerPrevious: Icons.leftArrow,
+    pagerNext: Icons.rightArrow
   };
   userConfig: CdUserConfig = {};
   tableName: string;
@@ -173,6 +177,9 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   }
 
   ngOnInit() {
+    // ngx-datatable triggers calculations each time mouse enters a row,
+    // this will prevent that.
+    window.addEventListener('mouseenter', (event) => event.stopPropagation(), true);
     this._addTemplates();
     if (!this.sorts) {
       // Check whether the specified identifier exists.
@@ -392,9 +399,10 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (!this.data) {
       return; // Wait for data
     }
-    this.rows = [...this.data];
     if (this.search.length > 0) {
       this.updateFilter();
+    } else {
+      this.rows = [...this.data];
     }
     this.reset();
     this.updateSelected();

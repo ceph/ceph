@@ -393,7 +393,7 @@ bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
 				   m->get_connection()->get_peer_type(),
 				   m->daemon_name);
 
-  dout(4) << "from " << m->get_connection() << "  " << key << dendl;
+  dout(10) << "from " << m->get_connection() << "  " << key << dendl;
 
   _send_configure(m->get_connection());
 
@@ -495,13 +495,13 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
   }
   key.second = m->daemon_name;
 
-  dout(4) << "from " << m->get_connection() << " " << key << dendl;
+  dout(10) << "from " << m->get_connection() << " " << key << dendl;
 
   if (m->get_connection()->get_peer_type() == entity_name_t::TYPE_CLIENT &&
       m->service_name.empty()) {
     // Clients should not be sending us stats unless they are declaring
     // themselves to be a daemon for some service.
-    dout(4) << "rejecting report from non-daemon client " << m->daemon_name
+    dout(10) << "rejecting report from non-daemon client " << m->daemon_name
 	    << dendl;
     m->get_connection()->mark_down();
     return true;
@@ -711,7 +711,7 @@ public:
     }
 
     if (r == 0) {
-      dout(4) << __func__ << " success" << dendl;
+      dout(20) << "success" << dendl;
     } else {
       derr << __func__ << " " << cpp_strerror(r) << " " << rs << dendl;
     }
@@ -787,8 +787,7 @@ bool DaemonServer::_handle_command(
   string prefix;
   cmd_getval(cct, cmdctx->cmdmap, "prefix", prefix);
 
-  dout(4) << "decoded " << cmdctx->cmdmap.size() << dendl;
-  dout(4) << "prefix=" << prefix << dendl;
+  dout(10) << "decoded-size=" << cmdctx->cmdmap.size() << " prefix=" << prefix  << dendl;
 
   if (prefix == "get_command_descriptions") {
     dout(10) << "reading commands from python modules" << dendl;
@@ -1216,39 +1215,21 @@ bool DaemonServer::_handle_command(
       return true;
     }
   } else if (prefix == "osd df") {
-    string method;
+    string method, filter;
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "output_method", method);
-    string filter_by;
-    string filter;
-    cmd_getval(g_ceph_context, cmdctx->cmdmap, "filter_by", filter_by);
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "filter", filter);
-    if (filter_by.empty() != filter.empty()) {
-      cmdctx->reply(-EINVAL, "you must specify both 'filter_by' and 'filter'");
-      return true;
-    }
     stringstream rs;
     r = cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pgmap) {
-        string class_name;
-        string item_name;
         // sanity check filter(s)
-        if (filter_by == "class") {
-          if (!osdmap.crush->class_exists(filter)) {
-            rs << "specified class '" << filter << "' does not exist";
-            return -EINVAL;
-          }
-          class_name = filter;
-        }
-        if (filter_by == "name") {
-          if (!osdmap.crush->name_exists(filter)) {
-            rs << "specified name '" << filter << "' does not exist";
-            return -EINVAL;
-          }
-          item_name = filter;
+        if (!filter.empty() &&
+             osdmap.lookup_pg_pool_name(filter) < 0 &&
+            !osdmap.crush->class_exists(filter) &&
+            !osdmap.crush->name_exists(filter)) {
+          rs << "'" << filter << "' not a pool, crush node or device class name";
+          return -EINVAL;
         }
 	print_osd_utilization(osdmap, pgmap, ss,
-                              f.get(), method == "tree",
-                              class_name, item_name);
-	
+                              f.get(), method == "tree", filter);
 	cmdctx->odata.append(ss);
 	return 0;
       });
@@ -2198,7 +2179,7 @@ bool DaemonServer::_handle_command(
     return true;
   }
 
-  dout(4) << "passing through " << cmdctx->cmdmap.size() << dendl;
+  dout(10) << "passing through " << cmdctx->cmdmap.size() << dendl;
   finisher.queue(new FunctionContext([this, cmdctx, handler_name, prefix](int r_) {
     std::stringstream ss;
 

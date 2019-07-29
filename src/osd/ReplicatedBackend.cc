@@ -282,7 +282,8 @@ void generate_transaction(
   vector<pg_log_entry_t> &log_entries,
   ObjectStore::Transaction *t,
   set<hobject_t> *added,
-  set<hobject_t> *removed)
+  set<hobject_t> *removed,
+  const ceph_release_t require_osd_release = ceph_release_t::unknown )
 {
   ceph_assert(t);
   ceph_assert(added);
@@ -323,7 +324,11 @@ void generate_transaction(
 	[&](const PGTransaction::ObjectOperation::Init::None &) {
 	},
 	[&](const PGTransaction::ObjectOperation::Init::Create &op) {
-	  t->touch(coll, goid);
+	  if (require_osd_release >= ceph_release_t::octopus) {
+	    t->create(coll, goid);
+	  } else {
+	    t->touch(coll, goid);
+	  }
 	},
 	[&](const PGTransaction::ObjectOperation::Init::Clone &op) {
 	  t->clone(
@@ -449,7 +454,8 @@ void ReplicatedBackend::submit_transaction(
     log_entries,
     &op_t,
     &added,
-    &removed);
+    &removed,
+    get_osdmap()->require_osd_release);
   ceph_assert(added.size() <= 1);
   ceph_assert(removed.size() <= 1);
 
@@ -1779,6 +1785,11 @@ bool ReplicatedBackend::handle_pull_response(
       a.second.rebuild();
     }
     pi.obc = get_parent()->get_obc(pi.recovery_info.soid, attrset);
+    if (attrset.find(SS_ATTR) != attrset.end()) {
+      bufferlist ssbv = attrset.at(SS_ATTR);
+      SnapSet ss(ssbv);
+      assert(ss.seq  == pi.obc->ssc->snapset.seq);
+    }
     pi.recovery_info.oi = pi.obc->obs.oi;
     pi.recovery_info = recalc_subsets(
       pi.recovery_info,

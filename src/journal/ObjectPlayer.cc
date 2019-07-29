@@ -12,6 +12,36 @@
 
 namespace journal {
 
+namespace {
+
+bool advance_to_last_pad_byte(uint32_t off, bufferlist::const_iterator *iter,
+                              uint32_t *pad_len, bool *partial_entry) {
+  const uint32_t MAX_PAD = 8;
+  auto pad_bytes = MAX_PAD - off % MAX_PAD;
+  auto next = *iter;
+
+  ceph_assert(!next.end());
+  if (*next != '\0') {
+    return false;
+  }
+
+  for (auto i = pad_bytes - 1; i > 0; i--) {
+    if ((++next).end()) {
+      *partial_entry = true;
+      return false;
+    }
+    if (*next != '\0') {
+      return false;
+    }
+  }
+
+  *iter = next;
+  *pad_len += pad_bytes;
+  return true;
+}
+
+} // anonymous namespace
+
 ObjectPlayer::ObjectPlayer(librados::IoCtx &ioctx,
                            const std::string &object_oid_prefix,
                            uint64_t object_num, SafeTimer &timer,
@@ -131,6 +161,7 @@ int ObjectPlayer::handle_fetch_complete(int r, const bufferlist &bl,
 
   clear_invalid_range(m_read_bl_off, m_read_bl.length());
   bufferlist::const_iterator iter{&m_read_bl, 0};
+  uint32_t pad_len = 0;
   while (!iter.end()) {
     uint32_t bytes_needed;
     uint32_t bl_off = iter.get_off();
@@ -149,11 +180,23 @@ int ObjectPlayer::handle_fetch_complete(int r, const bufferlist &bl,
         break;
       }
 
-      if (!invalid) {
+      if (!advance_to_last_pad_byte(m_read_bl_off + iter.get_off(), &iter,
+                                    &pad_len, &partial_entry)) {
         invalid_start_off = m_read_bl_off + bl_off;
         invalid = true;
-        lderr(m_cct) << ": detected corrupt journal entry at offset "
-                     << invalid_start_off << dendl;
+        if (partial_entry) {
+          if (full_fetch) {
+            lderr(m_cct) << ": partial pad at offset " << invalid_start_off
+                         << dendl;
+          } else {
+            ldout(m_cct, 20) << ": partial pad detected, will re-fetch"
+                             << dendl;
+          }
+        } else {
+          lderr(m_cct) << ": detected corrupt journal entry at offset "
+                       << invalid_start_off << dendl;
+        }
+        break;
       }
       ++iter;
       continue;
@@ -172,6 +215,8 @@ int ObjectPlayer::handle_fetch_complete(int r, const bufferlist &bl,
       m_invalid_ranges.insert(invalid_start_off,
                               invalid_end_off - invalid_start_off);
       invalid = false;
+
+      m_read_bl_off = invalid_end_off;
     }
 
     EntryKey entry_key(std::make_pair(entry.get_tag_tid(),
@@ -191,7 +236,8 @@ int ObjectPlayer::handle_fetch_complete(int r, const bufferlist &bl,
     iter = bufferlist::iterator(&m_read_bl, 0);
 
     // advance the decoded entry offset
-    m_read_bl_off += entry_len;
+    m_read_bl_off += entry_len + pad_len;
+    pad_len = 0;
   }
 
   if (invalid) {

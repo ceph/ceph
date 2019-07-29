@@ -17,6 +17,16 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
 
+BufferedRecoveryMessages::BufferedRecoveryMessages(PeeringCtx &ctx)
+  : query_map(std::move(ctx.query_map)),
+    info_map(std::move(ctx.info_map)),
+    notify_list(std::move(ctx.notify_list))
+{
+  ctx.query_map.clear();
+  ctx.info_map.clear();
+  ctx.notify_list.clear();
+}
+
 void PGPool::update(CephContext *cct, OSDMapRef map)
 {
   const pg_pool_t *pi = map->get_pg_pool(id);
@@ -32,66 +42,7 @@ void PGPool::update(CephContext *cct, OSDMapRef map)
     updated = true;
   }
 
-  if (map->require_osd_release >= ceph_release_t::mimic) {
-    // mimic tracks removed_snaps_queue in the OSDmap and purged_snaps
-    // in the pg_info_t, with deltas for both in each OSDMap.  we don't
-    // need to (and can't) track it here.
-    cached_removed_snaps.clear();
-    newly_removed_snaps.clear();
-  } else {
-    // legacy (<= luminous) removed_snaps tracking
-    if (updated) {
-      if (pi->maybe_updated_removed_snaps(cached_removed_snaps)) {
-	pi->build_removed_snaps(newly_removed_snaps);
-	if (cached_removed_snaps.subset_of(newly_removed_snaps)) {
-          interval_set<snapid_t> removed_snaps = newly_removed_snaps;
-          newly_removed_snaps.subtract(cached_removed_snaps);
-          cached_removed_snaps.swap(removed_snaps);
-	} else {
-          lgeneric_subdout(cct, osd, 0) << __func__
-		<< " cached_removed_snaps shrank from " << cached_removed_snaps
-		<< " to " << newly_removed_snaps << dendl;
-          cached_removed_snaps.swap(newly_removed_snaps);
-          newly_removed_snaps.clear();
-	}
-      } else {
-	newly_removed_snaps.clear();
-      }
-    } else {
-      /* 1) map->get_epoch() == cached_epoch + 1 &&
-       * 2) pi->get_snap_epoch() != map->get_epoch()
-       *
-       * From the if branch, 1 && 2 must be true.  From 2, we know that
-       * this map didn't change the set of removed snaps.  From 1, we
-       * know that our cached_removed_snaps matches the previous map.
-       * Thus, from 1 && 2, cached_removed snaps matches the current
-       * set of removed snaps and all we have to do is clear
-       * newly_removed_snaps.
-       */
-      newly_removed_snaps.clear();
-    }
-    lgeneric_subdout(cct, osd, 20)
-      << "PGPool::update cached_removed_snaps "
-      << cached_removed_snaps
-      << " newly_removed_snaps "
-      << newly_removed_snaps
-      << " snapc " << snapc
-      << (updated ? " (updated)":" (no change)")
-      << dendl;
-    if (cct->_conf->osd_debug_verify_cached_snaps) {
-      interval_set<snapid_t> actual_removed_snaps;
-      pi->build_removed_snaps(actual_removed_snaps);
-      if (!(actual_removed_snaps == cached_removed_snaps)) {
-	lgeneric_derr(cct) << __func__
-		   << ": mismatch between the actual removed snaps "
-		   << actual_removed_snaps
-		   << " and pool.cached_removed_snaps "
-		   << " pool.cached_removed_snaps " << cached_removed_snaps
-		   << dendl;
-      }
-      ceph_assert(actual_removed_snaps == cached_removed_snaps);
-    }
-  }
+  assert(map->require_osd_release >= ceph_release_t::mimic);
   if (info.is_pool_snaps_mode() && updated) {
     snapc = pi->get_snap_context();
   }
@@ -728,12 +679,12 @@ void PeeringState::on_new_interval()
 	     << get_pg_log().get_missing() << dendl;
 
   if (!pg_log.get_missing().may_include_deletes &&
-    get_osdmap()->test_flag(CEPH_OSDMAP_RECOVERY_DELETES)) {
+      !perform_deletes_during_peering()) {
     pl->rebuild_missing_set_with_deletes(pg_log);
   }
   ceph_assert(
-    pg_log.get_missing().may_include_deletes == get_osdmap()->test_flag(
-      CEPH_OSDMAP_RECOVERY_DELETES));
+    pg_log.get_missing().may_include_deletes ==
+    !perform_deletes_during_peering());
 
   pl->on_new_interval();
 }
@@ -742,7 +693,8 @@ void PeeringState::init_primary_up_acting(
   const vector<int> &newup,
   const vector<int> &newacting,
   int new_up_primary,
-  int new_acting_primary) {
+  int new_acting_primary)
+{
   actingset.clear();
   acting = newacting;
   for (uint8_t i = 0; i < acting.size(); ++i) {
@@ -762,26 +714,28 @@ void PeeringState::init_primary_up_acting(
 	  pool.info.is_erasure() ? shard_id_t(i) : shard_id_t::NO_SHARD));
   }
   if (!pool.info.is_erasure()) {
+    // replicated
     up_primary = pg_shard_t(new_up_primary, shard_id_t::NO_SHARD);
     primary = pg_shard_t(new_acting_primary, shard_id_t::NO_SHARD);
-    return;
-  }
-  up_primary = pg_shard_t();
-  primary = pg_shard_t();
-  for (uint8_t i = 0; i < up.size(); ++i) {
-    if (up[i] == new_up_primary) {
-      up_primary = pg_shard_t(up[i], shard_id_t(i));
-      break;
+  } else {
+    // erasure
+    up_primary = pg_shard_t();
+    primary = pg_shard_t();
+    for (uint8_t i = 0; i < up.size(); ++i) {
+      if (up[i] == new_up_primary) {
+	up_primary = pg_shard_t(up[i], shard_id_t(i));
+	break;
+      }
     }
-  }
-  for (uint8_t i = 0; i < acting.size(); ++i) {
-    if (acting[i] == new_acting_primary) {
-      primary = pg_shard_t(acting[i], shard_id_t(i));
-      break;
+    for (uint8_t i = 0; i < acting.size(); ++i) {
+      if (acting[i] == new_acting_primary) {
+	primary = pg_shard_t(acting[i], shard_id_t(i));
+	break;
+      }
     }
+    ceph_assert(up_primary.osd == new_up_primary);
+    ceph_assert(primary.osd == new_acting_primary);
   }
-  ceph_assert(up_primary.osd == new_up_primary);
-  ceph_assert(primary.osd == new_acting_primary);
 }
 
 void PeeringState::clear_recovery_state()
@@ -1594,7 +1548,7 @@ void PeeringState::calc_replicated_acting(
   }
 }
 
-bool PeeringState::recoverable_and_ge_min_size(const vector<int> &want) const
+bool PeeringState::recoverable(const vector<int> &want) const
 {
   unsigned num_want_acting = 0;
   set<pg_shard_t> have;
@@ -1607,23 +1561,25 @@ bool PeeringState::recoverable_and_ge_min_size(const vector<int> &want) const
           pool.info.is_erasure() ? shard_id_t(i) : shard_id_t::NO_SHARD));
     }
   }
-  // We go incomplete if below min_size for ec_pools since backfill
-  // does not currently maintain rollbackability
-  // Otherwise, we will go "peered", but not "active"
-  if (num_want_acting < pool.info.min_size &&
-      (pool.info.is_erasure() ||
-       !cct->_conf->osd_allow_recovery_below_min_size)) {
-    psdout(10) << __func__ << " failed, below min size" << dendl;
+
+  if (num_want_acting < pool.info.min_size) {
+    const bool recovery_ec_pool_below_min_size=
+      HAVE_FEATURE(get_osdmap()->get_up_osd_features(), SERVER_OCTOPUS);
+
+    if (pool.info.is_erasure() && !recovery_ec_pool_below_min_size) {
+      psdout(10) << __func__ << " failed, ec recovery below min size not supported by pre-octopus" << dendl;
+      return false;
+    } else if (!cct->_conf.get_val<bool>("osd_allow_recovery_below_min_size")) {
+      psdout(10) << __func__ << " failed, recovery below min size not enabled" << dendl;
+      return false;
+    }
+  }
+  if (missing_loc.get_recoverable_predicate()(have)) {
+    return true;
+  } else {
+    psdout(10) << __func__ << " failed, not recoverable " << dendl;
     return false;
   }
-
-  /* Check whether we have enough acting shards to later perform recovery */
-  if (!missing_loc.get_recoverable_predicate()(have)) {
-    psdout(10) << __func__ << " failed, not recoverable" << dendl;
-    return false;
-  }
-
-  return true;
 }
 
 void PeeringState::choose_async_recovery_ec(
@@ -1685,7 +1641,7 @@ void PeeringState::choose_async_recovery_ec(
     pg_shard_t cur_shard = rit->second;
     vector<int> candidate_want(*want);
     candidate_want[cur_shard.shard.id] = CRUSH_ITEM_NONE;
-    if (recoverable_and_ge_min_size(candidate_want)) {
+    if (recoverable(candidate_want)) {
       want->swap(candidate_want);
       async_recovery->insert(cur_shard);
     }
@@ -1852,7 +1808,7 @@ bool PeeringState::choose_acting(pg_shard_t &auth_log_shard_id,
       ss);
   psdout(10) << ss.str() << dendl;
 
-  if (!recoverable_and_ge_min_size(want)) {
+  if (!recoverable(want)) {
     want_acting.clear();
     return false;
   }
@@ -2150,34 +2106,25 @@ void PeeringState::activate(
   if (is_primary()) {
     // initialize snap_trimq
     interval_set<snapid_t> to_trim;
-    if (get_osdmap()->require_osd_release < ceph_release_t::mimic) {
-      psdout(20) << "activate - purged_snaps " << info.purged_snaps
-		 << " cached_removed_snaps " << pool.cached_removed_snaps
-		 << dendl;
-      to_trim = pool.cached_removed_snaps;
-    } else {
-      auto& removed_snaps_queue = get_osdmap()->get_removed_snaps_queue();
-      auto p = removed_snaps_queue.find(info.pgid.pgid.pool());
-      if (p != removed_snaps_queue.end()) {
-	dout(20) << "activate - purged_snaps " << info.purged_snaps
-		 << " removed_snaps " << p->second
-		 << dendl;
-	for (auto q : p->second) {
-	  to_trim.insert(q.first, q.second);
-	}
+    auto& removed_snaps_queue = get_osdmap()->get_removed_snaps_queue();
+    auto p = removed_snaps_queue.find(info.pgid.pgid.pool());
+    if (p != removed_snaps_queue.end()) {
+      dout(20) << "activate - purged_snaps " << info.purged_snaps
+	       << " removed_snaps " << p->second
+	       << dendl;
+      for (auto q : p->second) {
+	to_trim.insert(q.first, q.second);
       }
     }
     interval_set<snapid_t> purged;
     purged.intersection_of(to_trim, info.purged_snaps);
     to_trim.subtract(purged);
 
-    if (get_osdmap()->require_osd_release >= ceph_release_t::mimic) {
-      // adjust purged_snaps: PG may have been inactive while snaps were pruned
-      // from the removed_snaps_queue in the osdmap.  update local purged_snaps
-      // reflect only those snaps that we thought were pruned and were still in
-      // the queue.
-      info.purged_snaps.swap(purged);
-    }
+    // adjust purged_snaps: PG may have been inactive while snaps were pruned
+    // from the removed_snaps_queue in the osdmap.  update local purged_snaps
+    // reflect only those snaps that we thought were pruned and were still in
+    // the queue.
+    info.purged_snaps.swap(purged);
 
     // start up replicas
 
@@ -2198,15 +2145,7 @@ void PeeringState::activate(
 
       bool needs_past_intervals = pi.dne();
 
-      /*
-       * cover case where peer sort order was different and
-       * last_backfill cannot be interpreted
-       */
-      bool force_restart_backfill =
-	!pi.last_backfill.is_max() &&
-	!pi.last_backfill_bitwise;
-
-      if (pi.last_update == info.last_update && !force_restart_backfill) {
+      if (pi.last_update == info.last_update) {
         // empty log
 	if (!pi.last_backfill.is_max())
 	  pl->get_clog_info() << info.pgid << " continuing backfill to osd."
@@ -2235,7 +2174,6 @@ void PeeringState::activate(
       } else if (
 	pg_log.get_tail() > pi.last_update ||
 	pi.last_backfill == hobject_t() ||
-	force_restart_backfill ||
 	(backfill_targets.count(*i) && pi.last_backfill.is_max())) {
 	/* ^ This last case covers a situation where a replica is not contiguous
 	 * with the auth_log, but is contiguous with this replica.  Reshuffling
@@ -3278,20 +3216,18 @@ std::optional<pg_stat_t> PeeringState::prepare_stats_for_publish(
   utime_t cutoff = now;
   cutoff -= cct->_conf->osd_pg_stat_report_interval_max;
 
-  if (get_osdmap()->require_osd_release >= ceph_release_t::mimic) {
-    // share (some of) our purged_snaps via the pg_stats. limit # of intervals
-    // because we don't want to make the pg_stat_t structures too expensive.
-    unsigned max = cct->_conf->osd_max_snap_prune_intervals_per_epoch;
-    unsigned num = 0;
-    auto i = info.purged_snaps.begin();
-    while (num < max && i != info.purged_snaps.end()) {
-      pre_publish.purged_snaps.insert(i.get_start(), i.get_len());
-      ++num;
-      ++i;
-    }
-    psdout(20) << __func__ << " reporting purged_snaps "
-	       << pre_publish.purged_snaps << dendl;
+  // share (some of) our purged_snaps via the pg_stats. limit # of intervals
+  // because we don't want to make the pg_stat_t structures too expensive.
+  unsigned max = cct->_conf->osd_max_snap_prune_intervals_per_epoch;
+  unsigned num = 0;
+  auto i = info.purged_snaps.begin();
+  while (num < max && i != info.purged_snaps.end()) {
+    pre_publish.purged_snaps.insert(i.get_start(), i.get_len());
+    ++num;
+    ++i;
   }
+  psdout(20) << __func__ << " reporting purged_snaps "
+	     << pre_publish.purged_snaps << dendl;
 
   if (pg_stats_publish_valid && pre_publish == pg_stats_publish &&
       info.stats.last_fresh > cutoff) {
@@ -3353,6 +3289,10 @@ void PeeringState::init(
   info.stats.acting = acting;
   info.stats.acting_primary = new_acting_primary;
   info.stats.mapping_epoch = info.history.same_interval_since;
+
+  if (!perform_deletes_during_peering()) {
+    pg_log.set_missing_may_contain_deletes();
+  }
 
   if (backfill) {
     psdout(10) << __func__ << ": Setting backfill" << dendl;
@@ -3446,7 +3386,6 @@ bool PeeringState::append_log_entries_update_missing(
   bool invalidate_stats =
     pg_log.append_new_log_entries(
       info.last_backfill,
-      info.last_backfill_bitwise,
       entries,
       rollbacker.get());
 
@@ -3498,7 +3437,6 @@ void PeeringState::merge_new_log_entries(
     pg_info_t& pinfo(peer_info[peer]);
     bool invalidate_stats = PGLog::append_log_entries_update_missing(
       pinfo.last_backfill,
-      info.last_backfill_bitwise,
       entries,
       true,
       NULL,

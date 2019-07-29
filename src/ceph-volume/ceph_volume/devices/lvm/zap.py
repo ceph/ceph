@@ -1,12 +1,13 @@
 import argparse
 import os
 import logging
+import time
 
 from textwrap import dedent
 
 from ceph_volume import decorators, terminal, process
 from ceph_volume.api import lvm as api
-from ceph_volume.util import system, encryption, disk, arg_validators
+from ceph_volume.util import system, encryption, disk, arg_validators, str_to_int
 from ceph_volume.util.device import Device
 from ceph_volume.systemd import systemctl
 
@@ -17,12 +18,38 @@ mlogger = terminal.MultiLogger(__name__)
 def wipefs(path):
     """
     Removes the filesystem from an lv or partition.
+
+    Environment variables supported::
+
+    * ``CEPH_VOLUME_WIPEFS_TRIES``: Defaults to 8
+    * ``CEPH_VOLUME_WIPEFS_INTERVAL``: Defaults to 5
+
     """
-    process.run([
-        'wipefs',
-        '--all',
-        path
-    ])
+    tries = str_to_int(
+        os.environ.get('CEPH_VOLUME_WIPEFS_TRIES', 8)
+    )
+    interval = str_to_int(
+        os.environ.get('CEPH_VOLUME_WIPEFS_INTERVAL', 5)
+    )
+
+    for trying in range(tries):
+        stdout, stderr, exit_code = process.call([
+            'wipefs',
+            '--all',
+            path
+        ])
+        if exit_code != 0:
+            # this could narrow the retry by poking in the stderr of the output
+            # to verify that 'probing initialization failed' appears, but
+            # better to be broad in this retry to prevent missing on
+            # a different message that needs to be retried as well
+            terminal.warning(
+                'failed to wipefs device, will try again to workaround probable race condition'
+            )
+            time.sleep(interval)
+        else:
+            return
+    raise RuntimeError("could not complete wipefs on device: %s" % path)
 
 
 def zap_data(path):
@@ -77,7 +104,7 @@ def ensure_associated_lvs(lvs):
     wal_lvs = lvs._filter(lv_tags={'ceph.type': 'wal'})
     backing_devices = [
         (journal_lvs, 'journal'),
-        (db_lvs, 'block'),
+        (db_lvs, 'db'),
         (wal_lvs, 'wal')
     ]
 

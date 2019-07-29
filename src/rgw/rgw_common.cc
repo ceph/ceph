@@ -74,6 +74,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_INVALID_CORS_RULES_ERROR, {400, "InvalidRequest" }},
     { ERR_INVALID_WEBSITE_ROUTING_RULES_ERROR, {400, "InvalidRequest" }},
     { ERR_INVALID_ENCRYPTION_ALGORITHM, {400, "InvalidEncryptionAlgorithmError" }},
+    { ERR_INVALID_RETENTION_PERIOD,{400, "InvalidRetentionPeriod"}},
     { ERR_LIMIT_EXCEEDED, {400, "LimitExceeded" }},
     { ERR_LENGTH_REQUIRED, {411, "MissingContentLength" }},
     { EACCES, {403, "AccessDenied" }},
@@ -97,6 +98,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_NO_SUCH_SUBUSER, {404, "NoSuchSubUser"}},
     { ERR_NO_SUCH_ENTITY, {404, "NoSuchEntity"}},
     { ERR_NO_SUCH_CORS_CONFIGURATION, {404, "NoSuchCORSConfiguration"}},
+    { ERR_NO_SUCH_OBJECT_LOCK_CONFIGURATION, {404, "ObjectLockConfigurationNotFoundError"}},
     { ERR_METHOD_NOT_ALLOWED, {405, "MethodNotAllowed" }},
     { ETIMEDOUT, {408, "RequestTimeout" }},
     { EEXIST, {409, "BucketAlreadyExists" }},
@@ -121,6 +123,7 @@ rgw_http_errors rgw_http_s3_errors({
     { ERR_SERVICE_UNAVAILABLE, {503, "ServiceUnavailable"}},
     { ERR_RATE_LIMITED, {503, "SlowDown"}},
     { ERR_ZERO_IN_URL, {400, "InvalidRequest" }},
+    { ERR_NO_SUCH_TAG_SET, {404, "NoSuchTagSetError"}},
 });
 
 rgw_http_errors rgw_http_swift_errors({

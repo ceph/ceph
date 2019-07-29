@@ -50,8 +50,7 @@ least one :term:`Ceph Metadata Server` running.
 .. toctree:: 
 	:maxdepth: 1
 
-	Add/Remove MDS(s) <add-remove-mds>
-	MDS states <mds-states>
+	Provision/Add/Remove MDS(s) <add-remove-mds>
 	MDS failover and standby configuration <standby>
 	MDS Configuration Settings <mds-config-ref>
 	Client Configuration Settings <client-config-ref>
@@ -70,8 +69,8 @@ authentication keyring.
 .. toctree:: 
 	:maxdepth: 1
 
-	Create CephFS <createfs>
-	Mount CephFS <kernel>
+	Create a CephFS file system <createfs>
+	Mount CephFS with the Kernel Driver <kernel>
 	Mount CephFS as FUSE <fuse>
 	Mount CephFS in fstab <fstab>
 	Use the CephFS Shell <cephfs-shell>

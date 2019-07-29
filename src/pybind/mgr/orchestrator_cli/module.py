@@ -224,7 +224,7 @@ Usage:
         completion = self.add_stateless_service(svc_type, spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult()
+        return HandleCommandResult(stdout=str(completion.result))
 
     @_write_cli('orchestrator mds add',
                 "name=svc_arg,type=CephString",
@@ -235,11 +235,32 @@ Usage:
         return self._add_stateless_svc("mds", spec)
 
     @_write_cli('orchestrator rgw add',
-                "name=svc_arg,type=CephString",
-                'Create an RGW service')
-    def _rgw_add(self, svc_arg):
+                'name=svc_arg,type=CephString,req=false',
+                'Create an RGW service. A complete <rgw_spec> can be provided'\
+                ' using <-i> to customize completelly the RGW service')
+    def _rgw_add(self, svc_arg=None, inbuf=None):
+        """
+        """
+        usage = """
+Usage:
+  ceph orchestrator rgw add -i <json_file>
+  ceph orchestrator rgw add <zone_name>
+        """
+
+        if inbuf:
+            try:
+                rgw_spec = orchestrator.RGWSpec.from_json(json.loads(inbuf))
+            except ValueError as e:
+                msg = 'Failed to read JSON input: {}'.format(str(e)) + usage
+                return HandleCommandResult(-errno.EINVAL, stderr=msg)
+        elif svc_arg:
+                rgw_spec = orchestrator.RGWSpec()
+                rgw_spec.zone_name = svc_arg
+
         spec = orchestrator.StatelessServiceSpec()
-        spec.name = svc_arg
+        spec.service_spec = rgw_spec
+        spec.name = rgw_spec.rgw_zone
+
         return self._add_stateless_svc("rgw", spec)
 
     @_write_cli('orchestrator nfs add',
@@ -259,7 +280,7 @@ Usage:
         completion = self.remove_stateless_service(svc_type, svc_id)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult()
+        return HandleCommandResult(stdout=str(completion.result))
 
     @_write_cli('orchestrator mds rm',
                 "name=svc_id,type=CephString",
@@ -378,7 +399,7 @@ Usage:
         """
         mgr_map = self.get("mgr_map")
 
-        if module_name == "":
+        if module_name is None or module_name == "":
             self.set_module_option("orchestrator", None)
             return HandleCommandResult()
 
@@ -428,3 +449,9 @@ Usage:
                                            o, avail,
                                            " ({0})".format(why) if not avail else ""
                                        ))
+
+    def self_test(self):
+        old_orch = self._select_orchestrator()
+        self._set_backend('')
+        assert self._select_orchestrator() is None
+        self._set_backend(old_orch)

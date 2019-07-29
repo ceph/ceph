@@ -122,6 +122,7 @@ void PurgeQueue::create_logger()
   pcb.set_prio_default(PerfCountersBuilder::PRIO_USEFUL);
   pcb.add_u64(l_pq_executing_ops, "pq_executing_ops", "Purge queue ops in flight");
   pcb.add_u64(l_pq_executing, "pq_executing", "Purge queue tasks in flight");
+  pcb.add_u64(l_pq_item_in_journal, "pq_item_in_journal", "Purge item left in journal");
 
   logger.reset(pcb.create_perf_counters());
   g_ceph_context->get_perfcounters_collection()->add(logger.get());
@@ -140,6 +141,16 @@ void PurgeQueue::init()
 void PurgeQueue::activate()
 {
   std::lock_guard l(lock);
+
+  {
+    PurgeItem item;
+    bufferlist bl;
+
+    // calculate purge item serialized size stored in journal
+    // used to count how many items still left in journal later
+    ::encode(item, bl);
+    purge_item_journal_size = bl.length() + journaler.get_journal_envelope_size(); 
+  }
 
   if (readonly) {
     dout(10) << "skipping activate: PurgeQueue is readonly" << dendl;
@@ -393,7 +404,7 @@ void PurgeQueue::_go_readonly(int r)
   if (readonly) return;
   dout(1) << "going readonly because internal IO failed: " << strerror(-r) << dendl;
   readonly = true;
-  on_error->complete(r);
+  finisher.queue(on_error, r);
   on_error = nullptr;
   journaler.set_readonly();
   finish_contexts(g_ceph_context, waiting_for_recovery, r);
@@ -559,7 +570,8 @@ void PurgeQueue::_execute_item(
     // Also do this periodically even if not idle, so that the persisted
     // expire_pos doesn't fall too far behind our progress when consuming
     // a very long queue.
-    if (in_flight.empty() || journaler.write_head_needed()) {
+    if (!readonly &&
+	(in_flight.empty() || journaler.write_head_needed())) {
       journaler.write_head(nullptr);
     }
   }), &finisher));
@@ -612,6 +624,17 @@ void PurgeQueue::_execute_item_complete(
   logger->set(l_pq_executing, in_flight.size());
   dout(10) << "in_flight.size() now " << in_flight.size() << dendl;
 
+  uint64_t write_pos = journaler.get_write_pos(); 
+  uint64_t read_pos = journaler.get_read_pos(); 
+  uint64_t expire_pos = journaler.get_expire_pos(); 
+  uint64_t item_num = (write_pos - (in_flight.size() ? expire_pos : read_pos)) 
+		      / purge_item_journal_size;
+  dout(10) << "left purge items in journal: " << item_num 
+    << " (purge_item_journal_size/write_pos/read_pos/expire_pos) now at " 
+    << "(" << purge_item_journal_size << "/" << write_pos << "/" << read_pos 
+    << "/" << expire_pos << ")" << dendl;
+
+  logger->set(l_pq_item_in_journal, item_num);
   logger->inc(l_pq_executed);
 }
 
@@ -651,9 +674,7 @@ void PurgeQueue::update_op_limit(const MDSMap &mds_map)
   }
 }
 
-void PurgeQueue::handle_conf_change(const ConfigProxy& conf,
-			     const std::set <std::string> &changed,
-                             const MDSMap &mds_map)
+void PurgeQueue::handle_conf_change(const std::set<std::string>& changed, const MDSMap& mds_map)
 {
   if (changed.count("mds_max_purge_ops")
       || changed.count("mds_max_purge_ops_per_pg")) {
@@ -664,7 +685,7 @@ void PurgeQueue::handle_conf_change(const ConfigProxy& conf,
       // We might have gone from zero to a finite limit, so
       // might need to kick off consume.
       dout(4) << "maybe start work again (max_purge_files="
-              << conf->mds_max_purge_files << dendl;
+              << g_conf()->mds_max_purge_files << dendl;
       finisher.queue(new FunctionContext([this](int r){
         std::lock_guard l(lock);
         _consume();

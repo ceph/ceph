@@ -48,6 +48,7 @@ const static std::map<uint32_t, std::set<std::string>> always_on_modules = {
       "balancer",
       "devicehealth",
       "orchestrator_cli",
+      "rbd_support",
       "volumes",
     }
   },
@@ -59,7 +60,9 @@ const static std::map<uint32_t, std::set<std::string>> always_on_modules = {
       "balancer",
       "devicehealth",
       "orchestrator_cli",
+      "rbd_support",
       "volumes",
+      "pg_autoscaler",
     }
   }
 };
@@ -854,8 +857,9 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
   }
 
   string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
-  boost::scoped_ptr<Formatter> f(Formatter::create(format));
+  cmd_getval(g_ceph_context, cmdmap, "format", format);
+  boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty",
+						   "json-pretty"));
 
   string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
@@ -951,14 +955,10 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     }
     f->flush(rdata);
   } else if (prefix == "mgr versions") {
-    if (!f)
-      f.reset(Formatter::create("json-pretty"));
     count_metadata("ceph_version", f.get());
     f->flush(rdata);
     r = 0;
   } else if (prefix == "mgr count-metadata") {
-    if (!f)
-      f.reset(Formatter::create("json-pretty"));
     string field;
     cmd_getval(g_ceph_context, cmdmap, "property", field);
     count_metadata(field, f.get());

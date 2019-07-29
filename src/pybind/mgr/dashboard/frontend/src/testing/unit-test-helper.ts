@@ -4,15 +4,18 @@ import { AbstractControl } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
-import * as _ from 'lodash';
 
 import { TableActionsComponent } from '../app/shared/datatable/table-actions/table-actions.component';
+import { Icons } from '../app/shared/enum/icons.enum';
 import { CdFormGroup } from '../app/shared/forms/cd-form-group';
+import { CdTableAction } from '../app/shared/models/cd-table-action';
+import { CdTableSelection } from '../app/shared/models/cd-table-selection';
 import { Permission } from '../app/shared/models/permissions';
 import {
-  PrometheusAlert,
-  PrometheusNotification,
-  PrometheusNotificationAlert
+  AlertmanagerAlert,
+  AlertmanagerNotification,
+  AlertmanagerNotificationAlert,
+  PrometheusRule
 } from '../app/shared/models/prometheus-alerts';
 import { _DEV_ } from '../unit-test-configuration';
 
@@ -40,64 +43,74 @@ export function configureTestBed(configuration, useOldMethod?) {
 }
 
 export class PermissionHelper {
-  tableActions: TableActionsComponent;
+  tac: TableActionsComponent;
   permission: Permission;
-  getTableActionComponent: () => TableActionsComponent;
 
-  constructor(permission: Permission, getTableActionComponent: () => TableActionsComponent) {
+  constructor(permission: Permission) {
     this.permission = permission;
-    this.getTableActionComponent = getTableActionComponent;
   }
 
-  setPermissionsAndGetActions(
-    createPerm: number | boolean,
-    updatePerm: number | boolean,
-    deletePerm: number | boolean
-  ): TableActionsComponent {
-    this.permission.create = Boolean(createPerm);
-    this.permission.update = Boolean(updatePerm);
-    this.permission.delete = Boolean(deletePerm);
-    this.tableActions = this.getTableActionComponent();
-    return this.tableActions;
+  setPermissionsAndGetActions(tableActions: CdTableAction[]): any {
+    const result = {};
+    [true, false].forEach((create) => {
+      [true, false].forEach((update) => {
+        [true, false].forEach((deleteP) => {
+          this.permission.create = create;
+          this.permission.update = update;
+          this.permission.delete = deleteP;
+
+          this.tac = new TableActionsComponent();
+          this.tac.selection = new CdTableSelection();
+          this.tac.tableActions = [...tableActions];
+          this.tac.permission = this.permission;
+          this.tac.ngOnInit();
+
+          const perms = [];
+          if (create) {
+            perms.push('create');
+          }
+          if (update) {
+            perms.push('update');
+          }
+          if (deleteP) {
+            perms.push('delete');
+          }
+          const permissionText = perms.join(',');
+
+          result[permissionText !== '' ? permissionText : 'no-permissions'] = {
+            actions: this.tac.tableActions.map((action) => action.name),
+            primary: this.testScenarios()
+          };
+        });
+      });
+    });
+
+    return result;
   }
 
-  testScenarios({
-    fn,
-    empty,
-    single,
-    singleExecuting,
-    multiple
-  }: {
-    fn: () => any;
-    empty: any;
-    single: any;
-    singleExecuting?: any; // uses 'single' if not defined
-    multiple?: any; // uses 'empty' if not defined
-  }) {
-    this.testScenario(
-      // 'multiple selections'
-      [{}, {}],
-      fn,
-      _.isUndefined(multiple) ? empty : multiple
-    );
-    this.testScenario(
-      // 'select executing item'
-      [{ cdExecuting: 'someAction' }],
-      fn,
-      _.isUndefined(singleExecuting) ? single : singleExecuting
-    );
-    this.testScenario([{}], fn, single); // 'select non-executing item'
-    this.testScenario([], fn, empty); // 'no selection'
+  testScenarios() {
+    const result: any = {};
+    // 'multiple selections'
+    result.multiple = this.testScenario([{}, {}]);
+    // 'select executing item'
+    result.executing = this.testScenario([{ cdExecuting: 'someAction' }]);
+    // 'select non-executing item'
+    result.single = this.testScenario([{}]);
+    // 'no selection'
+    result.no = this.testScenario([]);
+
+    return result;
   }
 
-  private testScenario(selection: object[], fn: () => any, expected: any) {
+  private testScenario(selection: object[]) {
     this.setSelection(selection);
-    expect(fn()).toBe(expected);
+    const btn = this.tac.getCurrentButton();
+    return btn ? btn.name : '';
   }
 
   setSelection(selection: object[]) {
-    this.tableActions.selection.selected = selection;
-    this.tableActions.selection.update();
+    this.tac.selection.selected = selection;
+    this.tac.selection.update();
   }
 }
 
@@ -216,22 +229,52 @@ export class FixtureHelper {
 }
 
 export class PrometheusHelper {
-  createAlert(name, state = 'active', timeMultiplier = 1) {
+  createSilence(id) {
+    return {
+      id: id,
+      createdBy: `Creator of ${id}`,
+      comment: `A comment for ${id}`,
+      startsAt: new Date('2022-02-22T22:22:00').toISOString(),
+      endsAt: new Date('2022-02-23T22:22:00').toISOString(),
+      matchers: [
+        {
+          name: 'job',
+          value: 'someJob',
+          isRegex: true
+        }
+      ]
+    };
+  }
+
+  createRule(name, severity, alerts: any[]): PrometheusRule {
+    return {
+      name: name,
+      labels: {
+        severity: severity
+      },
+      alerts: alerts
+    } as PrometheusRule;
+  }
+
+  createAlert(name, state = 'active', timeMultiplier = 1): AlertmanagerAlert {
     return {
       fingerprint: name,
       status: { state },
       labels: {
-        alertname: name
+        alertname: name,
+        instance: 'someInstance',
+        job: 'someJob',
+        severity: 'someSeverity'
       },
       annotations: {
         summary: `${name} is ${state}`
       },
       generatorURL: `http://${name}`,
       startsAt: new Date(new Date('2022-02-22').getTime() * timeMultiplier).toString()
-    } as PrometheusAlert;
+    } as AlertmanagerAlert;
   }
 
-  createNotificationAlert(name, status = 'firing') {
+  createNotificationAlert(name, status = 'firing'): AlertmanagerNotificationAlert {
     return {
       status: status,
       labels: {
@@ -241,19 +284,19 @@ export class PrometheusHelper {
         summary: `${name} is ${status}`
       },
       generatorURL: `http://${name}`
-    } as PrometheusNotificationAlert;
+    } as AlertmanagerNotificationAlert;
   }
 
-  createNotification(alertNumber = 1, status = 'firing') {
+  createNotification(alertNumber = 1, status = 'firing'): AlertmanagerNotification {
     const alerts = [];
     for (let i = 0; i < alertNumber; i++) {
       alerts.push(this.createNotificationAlert('alert' + i, status));
     }
-    return { alerts, status } as PrometheusNotification;
+    return { alerts, status } as AlertmanagerNotification;
   }
 
   createLink(url) {
-    return `<a href="${url}" target="_blank"><i class="fa fa-line-chart"></i></a>`;
+    return `<a href="${url}" target="_blank"><i class="${Icons.lineChart}"></i></a>`;
   }
 }
 
@@ -274,3 +317,13 @@ const i18nProviders = [
 ];
 
 export { i18nProviders };
+
+export function expectItemTasks(item: any, executing: string, percentage?: number) {
+  if (executing) {
+    executing = executing + '...';
+    if (percentage) {
+      executing = `${executing} ${percentage}%`;
+    }
+  }
+  expect(item.cdExecuting).toBe(executing);
+}

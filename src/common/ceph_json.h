@@ -1,6 +1,7 @@
 #ifndef CEPH_JSON_H
 #define CEPH_JSON_H
 
+#include <stdexcept>
 #include <include/types.h>
 
 
@@ -110,10 +111,8 @@ void encode_json(const char *name, const JSONObj::data_val& v, ceph::Formatter *
 
 class JSONDecoder {
 public:
-  struct err {
-    std::string message;
-
-    err(const std::string& m) : message(m) {}
+  struct err : std::runtime_error {
+    using runtime_error::runtime_error;
   };
 
   JSONParser parser;
@@ -288,9 +287,9 @@ bool JSONDecoder::decode_json(const char *name, T& val, JSONObj *obj, bool manda
 
   try {
     decode_json_obj(val, *iter);
-  } catch (err& e) {
+  } catch (const err& e) {
     std::string s = std::string(name) + ": ";
-    s.append(e.message);
+    s.append(e.what());
     throw err(s);
   }
 
@@ -313,9 +312,9 @@ bool JSONDecoder::decode_json(const char *name, C& container, void (*cb)(C&, JSO
 
   try {
     decode_json_obj(container, cb, *iter);
-  } catch (err& e) {
+  } catch (const err& e) {
     std::string s = std::string(name) + ": ";
-    s.append(e.message);
+    s.append(e.what());
     throw err(s);
   }
 
@@ -333,10 +332,10 @@ void JSONDecoder::decode_json(const char *name, T& val, const T& default_val, JS
 
   try {
     decode_json_obj(val, *iter);
-  } catch (err& e) {
+  } catch (const err& e) {
     val = default_val;
     std::string s = std::string(name) + ": ";
-    s.append(e.message);
+    s.append(e.what());
     throw err(s);
   }
 }
@@ -357,10 +356,10 @@ bool JSONDecoder::decode_json(const char *name, boost::optional<T>& val, JSONObj
   try {
     val.reset(T());
     decode_json_obj(val.get(), *iter);
-  } catch (err& e) {
+  } catch (const err& e) {
     val.reset();
     std::string s = std::string(name) + ": ";
-    s.append(e.message);
+    s.append(e.what());
     throw err(s);
   }
 

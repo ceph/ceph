@@ -101,6 +101,7 @@ class MOSDPGNotify;
 class MOSDPGInfo;
 class MOSDPGRemove;
 class MOSDForceRecovery;
+class MMonGetPurgedSnapsReply;
 
 class OSD;
 
@@ -343,7 +344,7 @@ public:
       f->dump_stream("pgid") << i.pgid;
       f->dump_stream("sched_time") << i.sched_time;
       f->dump_stream("deadline") << i.deadline;
-      f->dump_bool("forced", i.sched_time == i.deadline);
+      f->dump_bool("forced", i.sched_time == PG::Scrubber::scrub_must_stamp());
       f->close_section();
     }
     f->close_section();
@@ -1183,6 +1184,12 @@ public:
 	object_t("snapmapper"),
 	0)));
   }
+  static ghobject_t make_purged_snaps_oid() {
+    return ghobject_t(hobject_t(
+      sobject_t(
+	object_t("purged_snaps"),
+	0)));
+  }
 
   static ghobject_t make_pg_log_oid(spg_t pg) {
     stringstream ss;
@@ -1401,6 +1408,14 @@ private:
     /// send time -> deadline -> remaining replies
     map<utime_t, pair<utime_t, int>> ping_history;
 
+    bool is_stale(utime_t stale) {
+      if (ping_history.empty()) {
+        return false;
+      }
+      utime_t oldest_deadline = ping_history.begin()->second.first;
+      return oldest_deadline <= stale;
+    }
+
     bool is_unhealthy(utime_t now) {
       if (ping_history.empty()) {
         /// we haven't sent a ping yet or we have got all replies,
@@ -1444,7 +1459,7 @@ private:
   void _remove_heartbeat_peer(int p);
   bool heartbeat_reset(Connection *con);
   void maybe_update_heartbeat_peers();
-  void reset_heartbeat_peers();
+  void reset_heartbeat_peers(bool all);
   bool heartbeat_peers_need_update() {
     return heartbeat_need_update.load();
   }
@@ -1700,7 +1715,7 @@ protected:
     epoch_t advance_to,
     PG *pg,
     ThreadPool::TPHandle &handle,
-    PG::PeeringCtx &rctx);
+    PeeringCtx &rctx);
   void consume_map();
   void activate_map();
 
@@ -1793,7 +1808,7 @@ protected:
     const set<spg_t> &childpgids, set<PGRef> *out_pgs,
     OSDMapRef curmap,
     OSDMapRef nextmap,
-    PG::PeeringCtx &rctx);
+    PeeringCtx &rctx);
   void _finish_splits(set<PGRef>& pgs);
 
   // == monitor interaction ==
@@ -1807,6 +1822,8 @@ protected:
   void _preboot(epoch_t oldest, epoch_t newest);
   void _send_boot();
   void _collect_metadata(map<string,string> *pmeta);
+  void _get_purged_snaps();
+  void handle_get_purged_snaps_reply(MMonGetPurgedSnapsReply *r);
 
   void start_waiting_for_healthy();
   bool _is_healthy();
@@ -1855,12 +1872,12 @@ protected:
   }
 
   // -- generic pg peering --
-  PG::PeeringCtx create_context();
-  void dispatch_context(PG::PeeringCtx &ctx, PG *pg, OSDMapRef curmap,
+  PeeringCtx create_context();
+  void dispatch_context(PeeringCtx &ctx, PG *pg, OSDMapRef curmap,
                         ThreadPool::TPHandle *handle = NULL);
-  void dispatch_context_transaction(PG::PeeringCtx &ctx, PG *pg,
+  void dispatch_context_transaction(PeeringCtx &ctx, PG *pg,
                                     ThreadPool::TPHandle *handle = NULL);
-  void discard_context(PG::PeeringCtx &ctx);
+  void discard_context(PeeringCtx &ctx);
   void do_notifies(map<int,
 		       vector<pair<pg_notify_t, PastIntervals> > >&
 		       notify_list,
@@ -1973,6 +1990,7 @@ protected:
 
   // -- scrubbing --
   void sched_scrub();
+  void resched_all_scrubs();
   bool scrub_random_backoff();
   bool scrub_load_below_threshold();
   bool scrub_time_permit(utime_t now);
@@ -2118,7 +2136,11 @@ private:
 
   float get_osd_recovery_sleep();
   float get_osd_delete_sleep();
+  float get_osd_snap_trim_sleep();
 
+  int get_recovery_max_active();
+
+  void scrub_purged_snaps();
   void probe_smart(const string& devid, ostream& ss);
 
 public:

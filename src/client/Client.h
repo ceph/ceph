@@ -413,7 +413,6 @@ public:
   int lookup_hash(inodeno_t ino, inodeno_t dirino, const char *name,
 		  const UserPerm& perms);
   int lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode=NULL);
-  int lookup_parent(Inode *in, const UserPerm& perms, Inode **parent=NULL);
   int lookup_name(Inode *in, Inode *parent, const UserPerm& perms);
   int close(int fd);
   loff_t lseek(int fd, loff_t offset, int whence);
@@ -503,7 +502,7 @@ public:
   int ll_lookupx(Inode *parent, const char *name, Inode **out,
 			struct ceph_statx *stx, unsigned want, unsigned flags,
 			const UserPerm& perms);
-  bool ll_forget(Inode *in, int count);
+  bool ll_forget(Inode *in, uint64_t count);
   bool ll_put(Inode *in);
   int ll_get_snap_ref(snapid_t snap);
 
@@ -652,7 +651,7 @@ public:
   int mark_caps_flushing(Inode *in, ceph_tid_t *ptid);
   void adjust_session_flushing_caps(Inode *in, MetaSession *old_s, MetaSession *new_s);
   void flush_caps_sync();
-  void flush_caps(Inode *in, MetaSession *session, bool sync=false);
+  void kick_flushing_caps(Inode *in, MetaSession *session);
   void kick_flushing_caps(MetaSession *session);
   void early_kick_flushing_caps(MetaSession *session);
   int get_caps(Inode *in, int need, int want, int *have, loff_t endoff);
@@ -671,13 +670,16 @@ public:
   void handle_cap_flushsnap_ack(MetaSession *session, Inode *in, const MConstRef<MClientCaps>& m);
   void handle_cap_grant(MetaSession *session, Inode *in, Cap *cap, const MConstRef<MClientCaps>& m);
   void cap_delay_requeue(Inode *in);
-  void send_cap(Inode *in, MetaSession *session, Cap *cap, bool sync,
+
+  void send_cap(Inode *in, MetaSession *session, Cap *cap, int flags,
 		int used, int want, int retain, int flush,
 		ceph_tid_t flush_tid);
 
+  void send_flush_snap(Inode *in, MetaSession *session, snapid_t follows, CapSnap& capsnap);
+
+  void flush_snaps(Inode *in);
   void get_cap_ref(Inode *in, int cap);
   void put_cap_ref(Inode *in, int cap);
-  void flush_snaps(Inode *in, bool all_again=false);
   void wait_sync_caps(Inode *in, ceph_tid_t want);
   void wait_sync_caps(ceph_tid_t want);
   void queue_cap_snap(Inode *in, SnapContext &old_snapc);
@@ -1037,7 +1039,7 @@ private:
   void _fragmap_remove_stopped_mds(Inode *in, mds_rank_t mds);
 
   void _ll_get(Inode *in);
-  int _ll_put(Inode *in, int num);
+  int _ll_put(Inode *in, uint64_t num);
   void _ll_drop_pins();
 
   Fh *_create_fh(Inode *in, int flags, int cmode, const UserPerm& perms);
@@ -1188,7 +1190,7 @@ private:
   int _lookup_parent(Inode *in, const UserPerm& perms, Inode **parent=NULL);
   int _lookup_name(Inode *in, Inode *parent, const UserPerm& perms);
   int _lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode=NULL);
-  bool _ll_forget(Inode *in, int count);
+  bool _ll_forget(Inode *in, uint64_t count);
 
 
   uint32_t deleg_timeout = 0;

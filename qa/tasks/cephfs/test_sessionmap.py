@@ -1,10 +1,12 @@
 from StringIO import StringIO
+import time
 import json
 import logging
 
 from tasks.cephfs.fuse_mount import FuseMount
 from teuthology.exceptions import CommandFailedError
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
+from teuthology.misc import sudo_write_file
 
 log = logging.getLogger(__name__)
 
@@ -147,27 +149,6 @@ class TestSessionMap(CephFSTestCase):
         self.assertEqual(table_json['0']['result'], 0)
         self.assertEqual(len(table_json['0']['data']['Sessions']), 0)
 
-    def _sudo_write_file(self, remote, path, data):
-        """
-        Write data to a remote file as super user
-
-        :param remote: Remote site.
-        :param path: Path on the remote being written to.
-        :param data: Data to be written.
-
-        Both perms and owner are passed directly to chmod.
-        """
-        remote.run(
-            args=[
-                'sudo',
-                'python',
-                '-c',
-                'import shutil, sys; shutil.copyfileobj(sys.stdin, file(sys.argv[1], "wb"))',
-                path,
-            ],
-            stdin=data,
-        )
-
     def _configure_auth(self, mount, id_name, mds_caps, osd_caps=None, mon_caps=None):
         """
         Set up auth credentials for a client mount, and write out the keyring
@@ -187,7 +168,7 @@ class TestSessionMap(CephFSTestCase):
             "mon", mon_caps
         )
         mount.client_id = id_name
-        self._sudo_write_file(mount.client_remote, mount.get_keyring_path(), out)
+        sudo_write_file(mount.client_remote, mount.get_keyring_path(), out)
         self.set_conf("client.{name}".format(name=id_name), "keyring", mount.get_keyring_path())
 
     def test_session_reject(self):
@@ -215,3 +196,41 @@ class TestSessionMap(CephFSTestCase):
         with self.assert_cluster_log("client session with non-allowable root '/baz' denied"):
             with self.assertRaises(CommandFailedError):
                 self.mount_b.mount(mount_path="/foo/bar")
+
+    def test_session_evict_blacklisted(self):
+        """
+        Check that mds evicts blacklisted client
+        """
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("Requires FUSE client to use is_blacklisted()")
+
+        self.fs.set_max_mds(2)
+        self.fs.wait_for_daemons()
+        status = self.fs.status()
+
+        self.mount_a.run_shell(["mkdir", "d0", "d1"])
+        self.mount_a.setfattr("d0", "ceph.dir.pin", "0")
+        self.mount_a.setfattr("d1", "ceph.dir.pin", "1")
+        self._wait_subtrees(status, 0, [('/d0', 0), ('/d1', 1)])
+
+        self.mount_a.run_shell(["touch", "d0/f0"])
+        self.mount_a.run_shell(["touch", "d1/f0"])
+        self.mount_b.run_shell(["touch", "d0/f1"])
+        self.mount_b.run_shell(["touch", "d1/f1"])
+
+        self.assert_session_count(2, mds_id=self.fs.get_rank(rank=0, status=status)['name'])
+        self.assert_session_count(2, mds_id=self.fs.get_rank(rank=1, status=status)['name'])
+
+        mount_a_client_id = self.mount_a.get_global_id()
+        self.fs.mds_asok(['session', 'evict', "%s" % mount_a_client_id],
+                         mds_id=self.fs.get_rank(rank=0, status=status)['name'])
+        self.wait_until_true(lambda: self.mount_a.is_blacklisted(), timeout=30)
+
+        # 10 seconds should be enough for evicting client
+        time.sleep(10)
+        self.assert_session_count(1, mds_id=self.fs.get_rank(rank=0, status=status)['name'])
+        self.assert_session_count(1, mds_id=self.fs.get_rank(rank=1, status=status)['name'])
+
+        self.mount_a.kill_cleanup()
+        self.mount_a.mount()
+        self.mount_a.wait_until_mounted()

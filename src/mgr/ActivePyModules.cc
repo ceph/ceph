@@ -346,7 +346,6 @@ PyObject *ActivePyModules::get_python(const std::string &what)
     return f.get();
   } else if (what == "osd_pool_stats") {
     int64_t poolid = -ENOENT;
-    string pool_name;
     cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap,
 					    const PGMap& pg_map) {
         PyEval_RestoreThread(tstate);
@@ -517,7 +516,7 @@ bool ActivePyModules::get_config(const std::string &module_name,
   const std::string global_key = PyModule::config_prefix
     + module_name + "/" + key;
 
-  dout(4) << __func__ << " key: " << global_key << dendl;
+  dout(20) << " key: " << global_key << dendl;
 
   std::lock_guard lock(module_config.lock);
   
@@ -559,10 +558,10 @@ PyObject *ActivePyModules::get_typed_config(
   }
   PyEval_RestoreThread(tstate);
   if (prefix.size()) {
-    dout(4) << __func__ << " [" << prefix << "/]" << key << " not found "
+    dout(10) << " [" << prefix << "/]" << key << " not found "
 	    << dendl;
   } else {
-    dout(4) << __func__ << " " << key << " not found " << dendl;
+    dout(10) << " " << key << " not found " << dendl;
   }
   Py_RETURN_NONE;
 }
@@ -703,7 +702,7 @@ PyObject* ActivePyModules::get_counter_python(
       const auto &avg_data = counter_instance.get_data_avg();
       for (const auto &datapoint : avg_data) {
         f.open_array_section("datapoint");
-        f.dump_unsigned("t", datapoint.t.sec());
+        f.dump_unsigned("t", datapoint.t.to_nsec());
         f.dump_unsigned("s", datapoint.s);
         f.dump_unsigned("c", datapoint.c);
         f.close_section();
@@ -712,7 +711,7 @@ PyObject* ActivePyModules::get_counter_python(
       const auto &data = counter_instance.get_data();
       for (const auto &datapoint : data) {
         f.open_array_section("datapoint");
-        f.dump_unsigned("t", datapoint.t.sec());
+        f.dump_unsigned("t", datapoint.t.to_nsec());
         f.dump_unsigned("v", datapoint.v);
         f.close_section();
       }
@@ -733,12 +732,12 @@ PyObject* ActivePyModules::get_latest_counter_python(
   {
     if (counter_type.type & PERFCOUNTER_LONGRUNAVG) {
       const auto &datapoint = counter_instance.get_latest_data_avg();
-      f.dump_unsigned("t", datapoint.t.sec());
+      f.dump_unsigned("t", datapoint.t.to_nsec());
       f.dump_unsigned("s", datapoint.s);
       f.dump_unsigned("c", datapoint.c);
     } else {
       const auto &datapoint = counter_instance.get_latest_data();
-      f.dump_unsigned("t", datapoint.t.sec());
+      f.dump_unsigned("t", datapoint.t.to_nsec());
       f.dump_unsigned("v", datapoint.v);
     }
   };

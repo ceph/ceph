@@ -3,7 +3,7 @@
         #formDir="ngForm"
         [formGroup]="form"
         novalidate>
-    <div [ngClass]="{'has-error': form.showError('filter', formDir)}">
+    <div>
       <input type="text"
              formControlName="filter"
              i18n-placeholder
@@ -11,7 +11,7 @@
              (keyup)="$event.keyCode == 13 ? selectOption() : updateFilter()"
              class="form-control text-center" />
       <ng-container *ngFor="let error of Object.keys(messages.customValidations)">
-        <span class="help-block text-center"
+        <span class="invalid-feedback text-center"
               *ngIf="form.showError('filter', formDir) && filter.hasError(error)">
           {{ messages.customValidations[error] }}
         </span>
@@ -23,7 +23,7 @@
        [ngClass]="{'help-block disabled': (data.length === selectionLimit || !option.enabled) && !option.selected}"
        (click)="triggerSelection(option)">
     <div class="select-menu-item-icon">
-      <i class="fa fa-check"
+      <i [ngClass]="[icons.check]"
          aria-hidden="true"
          *ngIf="option.selected"></i>
       &nbsp;
@@ -32,7 +32,7 @@
       {{ option.name }}
       <ng-container *ngIf="option.description">
         <br>
-        <small class="text-muted">
+        <small class="form-text text-muted">
           {{ option.description }}&nbsp;
         </small>
       </ng-container>
@@ -42,7 +42,7 @@
        class="select-menu-item"
        (click)="addCustomOption(filter.value)">
     <div class="select-menu-item-icon">
-      <i class="fa fa-tag"
+      <i [ngClass]="[icons.tag]"
          aria-hidden="true"></i>
       &nbsp;
     </div>
@@ -50,9 +50,9 @@
       {{ messages.add }} '{{ filter.value }}'
     </div>
   </div>
-  <div class="has-warning"
+  <div class="is-invalid"
        *ngIf="data.length === selectionLimit">
-    <span class="help-block text-center text-warning"
+    <span class="form-text text-muted text-center text-warning"
           [tooltip]="messages.selectionLimit.tooltip"
           *ngIf="data.length === selectionLimit">
       {{ messages.selectionLimit.text }}
@@ -66,14 +66,17 @@
    placement="bottom"
    container="body"
    outsideClick="true"
-   *ngIf="options.length > 0">
+   *ngIf="options.length > 0"
+   class="float-left">
   <ng-content></ng-content>
 </a>
-<span class="text-muted"
+
+<span class="form-text text-muted float-left"
       *ngIf="data.length === 0 && options.length > 0">
   {{ messages.empty }}
 </span>
-<span class="text-muted"
+
+<span class="form-text text-muted  float-left"
       *ngIf="options.length === 0">
   {{ messages.noOptions }}
 </span>

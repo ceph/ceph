@@ -10,6 +10,7 @@ import gevent
 import json
 import math
 from teuthology import misc as teuthology
+from tasks.cephfs.filesystem import MDSCluster
 
 log = logging.getLogger(__name__)
 
@@ -59,6 +60,7 @@ class MonitorThrasher:
                         in % (default: 0)
     freeze_mon_duration: how many seconds to freeze the mon (default: 15)
     scrub               Scrub after each iteration (default: True)
+    check_mds_failover  Check if mds failover happened (default: False)
 
     Note: if 'store-thrash' is set to True, then 'maintain-quorum' must also
           be set to True.
@@ -75,6 +77,7 @@ class MonitorThrasher:
         seed: 31337
         maintain_quorum: true
         thrash_many: true
+        check_mds_failover: True
     - ceph-fuse:
     - workunit:
         clients:
@@ -86,6 +89,7 @@ class MonitorThrasher:
         self.manager = manager
         self.manager.wait_for_clean()
 
+        self.e = None
         self.stopping = False
         self.logger = logger
         self.config = config
@@ -126,6 +130,12 @@ class MonitorThrasher:
                 'store_thrash is set, probability must be > 0'
             assert self.maintain_quorum, \
                 'store_thrash = true must imply maintain_quorum = true'
+
+        #MDS failover
+        self.mds_failover = self.config.get('check_mds_failover', False)
+
+        if self.mds_failover:
+            self.mds_cluster = MDSCluster(ctx)
 
         self.thread = gevent.spawn(self.do_thrash)
 
@@ -212,8 +222,25 @@ class MonitorThrasher:
 
     def do_thrash(self):
         """
-        Cotinuously loop and thrash the monitors.
+        _do_thrash() wrapper.
         """
+        try:
+            self._do_thrash()
+        except Exception as e:
+            # See _run exception comment for MDSThrasher
+            self.e = e
+            self.logger.exception("exception:")
+            # Allow successful completion so gevent doesn't see an exception.
+            # The DaemonWatchdog will observe the error and tear down the test.
+
+    def _do_thrash(self):
+        """
+        Continuously loop and thrash the monitors.
+        """
+        #status before mon thrashing
+        if self.mds_failover:
+            oldstatus = self.mds_cluster.status()
+
         self.log('start thrashing')
         self.log('seed: {s}, revive delay: {r}, thrash delay: {t} '\
                    'thrash many: {tm}, maintain quorum: {mq} '\
@@ -306,6 +333,13 @@ class MonitorThrasher:
                 self.log('waiting for {delay} secs before continuing thrashing'.format(
                     delay=self.thrash_delay))
                 time.sleep(self.thrash_delay)
+
+        #status after thrashing
+        if self.mds_failover:
+            status = self.mds_cluster.status()
+            assert not oldstatus.hadfailover(status), \
+                'MDS Failover'
+
 
 @contextlib.contextmanager
 def task(ctx, config):

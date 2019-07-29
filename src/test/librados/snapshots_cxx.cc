@@ -454,6 +454,49 @@ TEST_F(LibRadosSnapshotsSelfManagedPP, OrderSnap) {
   comp4->release();
 }
 
+TEST_F(LibRadosSnapshotsSelfManagedPP, ReusePurgedSnap) {
+  std::vector<uint64_t> my_snaps;
+  my_snaps.push_back(-2);
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_create(&my_snaps.back()));
+  ASSERT_TRUE(cluster.get_pool_is_selfmanaged_snaps_mode(pool_name));
+  ::std::reverse(my_snaps.begin(), my_snaps.end());
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0], my_snaps));
+  ::std::reverse(my_snaps.begin(), my_snaps.end());
+  char buf[bufsize];
+  memset(buf, 0xcc, sizeof(buf));
+  bufferlist bl1;
+  bl1.append(buf, sizeof(buf));
+  ASSERT_EQ(0, ioctx.write("foo", bl1, sizeof(buf), 0));
+
+  my_snaps.push_back(-2);
+  librados::AioCompletion *completion = cluster.aio_create_completion();
+  ioctx.aio_selfmanaged_snap_create(&my_snaps.back(), completion);
+  ASSERT_EQ(0, completion->wait_for_complete());
+  completion->release();
+
+  std::cout << "deleting snap " << my_snaps.back() << " in pool "
+	    << ioctx.get_pool_name() << std::endl;
+  completion = cluster.aio_create_completion();
+  ioctx.aio_selfmanaged_snap_remove(my_snaps.back(), completion);
+  ASSERT_EQ(0, completion->wait_for_complete());
+  completion->release();
+
+  std::cout << "waiting for snaps to purge" << std::endl;
+  sleep(15);
+
+  ::std::reverse(my_snaps.begin(), my_snaps.end());
+  ASSERT_EQ(0, ioctx.selfmanaged_snap_set_write_ctx(my_snaps[0], my_snaps));
+  ::std::reverse(my_snaps.begin(), my_snaps.end());
+  char buf2[sizeof(buf)];
+  memset(buf2, 0xdd, sizeof(buf2));
+  bufferlist bl2;
+  bl2.append(buf2, sizeof(buf2));
+  ASSERT_EQ(0, ioctx.write("foo", bl2, sizeof(buf2), 0));
+
+  // scrub it out?
+  //sleep(600);
+}
+
 // EC testing
 TEST_F(LibRadosSnapshotsECPP, SnapListPP) {
   char buf[bufsize];

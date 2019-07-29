@@ -177,10 +177,10 @@ public:
 
   virtual int collect_metadata(const std::string& prefix, std::map<std::string,std::string> *pm) const = 0;
 
-  virtual int get_devname(std::string *out) {
+  virtual int get_devname(std::string *out) const {
     return -ENOENT;
   }
-  virtual int get_devices(std::set<std::string> *ls) {
+  virtual int get_devices(std::set<std::string> *ls) const {
     std::string s;
     if (get_devname(&s) == 0) {
       ls->insert(s);

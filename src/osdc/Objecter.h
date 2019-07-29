@@ -41,12 +41,11 @@
 
 #include "messages/MOSDOp.h"
 #include "msg/Dispatcher.h"
-#include "osd/OSDMap.h"
 
+#include "osd/OSDMap.h"
 
 class Context;
 class Messenger;
-class OSDMap;
 class MonClient;
 class Message;
 class Finisher;
@@ -1175,6 +1174,10 @@ struct ObjectOperation {
     add_op(CEPH_OSD_OP_UNSET_MANIFEST);
   }
 
+  void tier_flush() {
+    add_op(CEPH_OSD_OP_TIER_FLUSH);
+  }
+
   void set_alloc_hint(uint64_t expected_object_size,
                       uint64_t expected_write_size,
 		      uint32_t flags) {
@@ -1228,7 +1231,7 @@ public:
   Finisher *finisher;
   ZTracer::Endpoint trace_endpoint;
 private:
-  OSDMap    *osdmap;
+  std::unique_ptr<OSDMap> osdmap;
 public:
   using Dispatcher::cct;
   std::multimap<std::string,std::string> crush_location;
@@ -1239,17 +1242,73 @@ private:
   std::atomic<uint64_t> last_tid{0};
   std::atomic<unsigned> inflight_ops{0};
   std::atomic<int> client_inc{-1};
-  uint64_t max_linger_id;
+  uint64_t max_linger_id{0};
   std::atomic<unsigned> num_in_flight{0};
   std::atomic<int> global_op_flags{0}; // flags which are applied to each IO op
-  bool keep_balanced_budget;
-  bool honor_osdmap_full;
-  bool osdmap_full_try;
+  bool keep_balanced_budget = false;
+  bool honor_osdmap_full = true;
+  bool osdmap_full_try = false;
 
   // If this is true, accumulate a set of blacklisted entities
   // to be drained by consume_blacklist_events.
-  bool blacklist_events_enabled;
+  bool blacklist_events_enabled = false;
   std::set<entity_addr_t> blacklist_events;
+  struct pg_mapping_t {
+    epoch_t epoch = 0;
+    std::vector<int> up;
+    int up_primary = -1;
+    std::vector<int> acting;
+    int acting_primary = -1;
+
+    pg_mapping_t() {}
+    pg_mapping_t(epoch_t epoch, std::vector<int> up, int up_primary,
+                 std::vector<int> acting, int acting_primary)
+               : epoch(epoch), up(up), up_primary(up_primary),
+                 acting(acting), acting_primary(acting_primary) {}
+  };
+  std::shared_mutex pg_mapping_lock;
+  // pool -> pg mapping
+  std::map<int64_t, std::vector<pg_mapping_t>> pg_mappings;
+
+  // convenient accessors
+  bool lookup_pg_mapping(const pg_t& pg, pg_mapping_t* pg_mapping) {
+    std::shared_lock l{pg_mapping_lock};
+    auto it = pg_mappings.find(pg.pool());
+    if (it == pg_mappings.end())
+      return false;
+    auto& mapping_array = it->second;
+    if (pg.ps() >= mapping_array.size())
+      return false;
+    if (mapping_array[pg.ps()].epoch != pg_mapping->epoch) // stale
+      return false;
+    *pg_mapping = mapping_array[pg.ps()];
+    return true;
+  }
+  void update_pg_mapping(const pg_t& pg, pg_mapping_t&& pg_mapping) {
+    std::lock_guard l{pg_mapping_lock};
+    auto& mapping_array = pg_mappings[pg.pool()];
+    ceph_assert(pg.ps() < mapping_array.size());
+    mapping_array[pg.ps()] = std::move(pg_mapping);
+  }
+  void prune_pg_mapping(const mempool::osdmap::map<int64_t,pg_pool_t>& pools) {
+    std::lock_guard l{pg_mapping_lock};
+    for (auto& pool : pools) {
+      auto& mapping_array = pg_mappings[pool.first];
+      size_t pg_num = pool.second.get_pg_num();
+      if (mapping_array.size() != pg_num) {
+        // catch both pg_num increasing & decreasing
+        mapping_array.resize(pg_num);
+      }
+    }
+    for (auto it = pg_mappings.begin(); it != pg_mappings.end(); ) {
+      if (!pools.count(it->first)) {
+        // pool is gone
+        pg_mappings.erase(it++);
+        continue;
+      }
+      it++;
+    }
+  }
 
 public:
   void maybe_request_map();
@@ -1259,8 +1318,8 @@ private:
 
   void _maybe_request_map();
 
-  version_t last_seen_osdmap_version;
-  version_t last_seen_pgmap_version;
+  version_t last_seen_osdmap_version = 0;
+  version_t last_seen_pgmap_version = 0;
 
   mutable std::shared_mutex rwlock;
   using lock_guard = std::lock_guard<decltype(rwlock)>;
@@ -1269,9 +1328,9 @@ private:
   using shunique_lock = ceph::shunique_lock<decltype(rwlock)>;
   ceph::timer<ceph::coarse_mono_clock> timer;
 
-  PerfCounters *logger;
+  PerfCounters *logger = nullptr;
 
-  uint64_t tick_event;
+  uint64_t tick_event = 0;
 
   void start_tick();
   void tick();
@@ -1279,7 +1338,7 @@ private:
 
   class RequestStateHook;
 
-  RequestStateHook *m_request_state_hook;
+  RequestStateHook *m_request_state_hook = nullptr;
 
 public:
   /*** track pending operations ***/
@@ -1589,6 +1648,7 @@ public:
     std::list<std::string> pools;
 
     std::map<std::string,pool_stat_t> *pool_stats;
+    bool *per_pool;
     Context *onfinish;
     uint64_t ontimeout;
 
@@ -1943,7 +2003,7 @@ public:
   bool _osdmap_full_flag() const;
   bool _osdmap_has_pool_full() const;
   void _prune_snapc(
-    const mempool::osdmap::map<int64_t, OSDMap::snap_interval_set_t>& new_removed_snaps,
+    const mempool::osdmap::map<int64_t, snap_interval_set_t>& new_removed_snaps,
     Op *op);
 
   bool target_should_be_paused(op_target_t *op);
@@ -2038,24 +2098,7 @@ private:
   Objecter(CephContext *cct_, Messenger *m, MonClient *mc,
 	   Finisher *fin,
 	   double mon_timeout,
-	   double osd_timeout) :
-    Dispatcher(cct_), messenger(m), monc(mc), finisher(fin),
-    trace_endpoint("0.0.0.0", 0, "Objecter"),
-    osdmap(new OSDMap),
-    max_linger_id(0),
-    keep_balanced_budget(false), honor_osdmap_full(true), osdmap_full_try(false),
-    blacklist_events_enabled(false),
-    last_seen_osdmap_version(0), last_seen_pgmap_version(0),
-    logger(NULL), tick_event(0), m_request_state_hook(NULL),
-    homeless_session(new OSDSession(cct, -1)),
-    mon_timeout(ceph::make_timespan(mon_timeout)),
-    osd_timeout(ceph::make_timespan(osd_timeout)),
-    op_throttle_bytes(cct, "objecter_bytes",
-		      cct->_conf->objecter_inflight_op_bytes),
-    op_throttle_ops(cct, "objecter_ops", cct->_conf->objecter_inflight_ops),
-    epoch_barrier(0),
-    retry_writes_after_first_reply(cct->_conf->objecter_retry_writes_after_first_reply)
-  { }
+	   double osd_timeout);
   ~Objecter() override;
 
   void init();
@@ -2106,8 +2149,7 @@ private:
     std::map<ceph_tid_t, Op*>& need_resend,
     std::list<LingerOp*>& need_resend_linger,
     std::map<ceph_tid_t, CommandOp*>& need_resend_command,
-    shunique_lock& sul,
-    const mempool::osdmap::map<int64_t,OSDMap::snap_interval_set_t> *gap_removed_snaps);
+    shunique_lock& sul);
 
   int64_t get_object_hash_position(int64_t pool, const std::string& key,
 				   const std::string& ns);
@@ -2961,7 +3003,9 @@ private:
   void _poolstat_submit(PoolStatOp *op);
 public:
   void handle_get_pool_stats_reply(MGetPoolStatsReply *m);
-  void get_pool_stats(std::list<std::string>& pools, std::map<std::string,pool_stat_t> *result,
+  void get_pool_stats(std::list<std::string>& pools,
+		      std::map<std::string,pool_stat_t> *result,
+		      bool *per_pool,
 		      Context *onfinish);
   int pool_stat_op_cancel(ceph_tid_t tid, int r);
   void _finish_pool_stat_op(PoolStatOp *op, int r);
@@ -3070,7 +3114,7 @@ public:
   void blacklist_self(bool set);
 
 private:
-  epoch_t epoch_barrier;
+  epoch_t epoch_barrier = 0;
   bool retry_writes_after_first_reply;
 public:
   void set_epoch_barrier(epoch_t epoch);

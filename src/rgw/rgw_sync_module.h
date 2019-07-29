@@ -51,6 +51,12 @@ public:
   }
   virtual RGWMetadataHandler *alloc_bucket_meta_handler();
   virtual RGWMetadataHandler *alloc_bucket_instance_meta_handler();
+
+  // indication whether the sync module start with full sync (default behavior)
+  // incremental sync would follow anyway
+  virtual bool should_full_sync() const {
+      return true;
+  }
 };
 
 typedef std::shared_ptr<RGWSyncModuleInstance> RGWSyncModuleInstanceRef;

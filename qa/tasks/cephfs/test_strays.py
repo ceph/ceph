@@ -114,7 +114,7 @@ class TestStrays(CephFSTestCase):
             self.set_conf('mds', 'mds_max_purge_files', "%d" % files)
             self.set_conf('mds', 'mds_max_purge_ops', "%d" % ops)
 
-            pgs = self.fs.mon_manager.get_pool_property(
+            pgs = self.fs.mon_manager.get_pool_int_property(
                 self.fs.get_data_pool_name(),
                 "pg_num"
             )

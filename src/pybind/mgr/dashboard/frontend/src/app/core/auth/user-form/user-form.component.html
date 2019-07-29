@@ -1,21 +1,17 @@
 <div class="col-sm-12 col-lg-6">
   <form name="userForm"
-        class="form-horizontal"
         #formDir="ngForm"
         [formGroup]="userForm"
         novalidate>
-    <div class="panel panel-default">
-      <div class="panel-heading">
-        <h3 i18n="form title|Example: Create Pool@@formTitle"
-            class="panel-title">{{ action | titlecase }} {{ resource | upperFirst }}</h3>
-      </div>
-      <div class="panel-body">
+    <div class="card">
+      <div i18n="form title|Example: Create Pool@@formTitle"
+           class="card-header">{{ action | titlecase }} {{ resource | upperFirst }}</div>
+      <div class="card-body">
 
         <!-- Username -->
-        <div class="form-group"
-             [ngClass]="{'has-error': userForm.showError('username', formDir)}">
-          <label class="control-label col-sm-3"
-                 for="name">
+        <div class="form-group row">
+          <label class="col-form-label col-sm-3"
+                 for="username">
             <ng-container i18n>Username</ng-container>
             <span class="required"
                   *ngIf="mode !== userFormMode.editing"></span>
@@ -28,18 +24,17 @@
                    name="username"
                    formControlName="username"
                    autofocus>
-            <span class="help-block"
+            <span class="invalid-feedback"
                   *ngIf="userForm.showError('username', formDir, 'required')"
                   i18n>This field is required.</span>
           </div>
         </div>
 
         <!-- Password -->
-        <div class="form-group"
-             [ngClass]="{'has-error': userForm.showError('password', formDir)}">
+        <div class="form-group row">
           <label i18n
-                 class="control-label col-sm-3"
-                 for="name">Password</label>
+                 class="col-form-label col-sm-3"
+                 for="password">Password</label>
           <div class="col-sm-9">
             <div class="input-group">
               <input class="form-control"
@@ -49,25 +44,24 @@
                      name="password"
                      autocomplete="new-password"
                      formControlName="password">
-              <span class="input-group-btn">
+              <span class="input-group-append">
                 <button type="button"
-                        class="btn btn-default"
+                        class="btn btn-light"
                         cdPasswordButton="password">
                 </button>
               </span>
             </div>
-            <span class="help-block"
+            <span class="invalid-feedback"
                   *ngIf="userForm.showError('password', formDir, 'required')"
                   i18n>This field is required.</span>
           </div>
         </div>
 
         <!-- Confirm password -->
-        <div class="form-group"
-             [ngClass]="{'has-error': userForm.showError('confirmpassword', formDir)}">
+        <div class="form-group row">
           <label i18n
-                 class="control-label col-sm-3"
-                 for="name">Confirm password</label>
+                 class="col-form-label col-sm-3"
+                 for="confirmpassword">Confirm password</label>
           <div class="col-sm-9">
             <div class="input-group">
               <input class="form-control"
@@ -76,26 +70,26 @@
                      id="confirmpassword"
                      name="confirmpassword"
                      formControlName="confirmpassword">
-              <span class="input-group-btn">
+              <span class="input-group-append">
                 <button type="button"
-                        class="btn btn-default"
+                        class="btn btn-light"
                         cdPasswordButton="confirmpassword">
                 </button>
               </span>
             </div>
-            <span class="help-block"
+            <span class="invalid-feedback"
                   *ngIf="userForm.showError('confirmpassword', formDir, 'required')"
                   i18n>This field is required.</span>
-            <span class="help-block"
+            <span class="invalid-feedback"
                   *ngIf="userForm.showError('confirmpassword', formDir, 'match')"
                   i18n>Password confirmation doesn't match the password.</span>
           </div>
         </div>
 
         <!-- Name -->
-        <div class="form-group">
+        <div class="form-group row">
           <label i18n
-                 class="control-label col-sm-3"
+                 class="col-form-label col-sm-3"
                  for="name">Full name</label>
           <div class="col-sm-9">
             <input class="form-control"
@@ -108,10 +102,9 @@
         </div>
 
         <!-- Email -->
-        <div class="form-group"
-             [ngClass]="{'has-error': userForm.showError('email', formDir)}">
+        <div class="form-group row">
           <label i18n
-                 class="control-label col-sm-3"
+                 class="col-form-label col-sm-3"
                  for="email">Email</label>
           <div class="col-sm-9">
             <input class="form-control"
@@ -121,32 +114,33 @@
                    name="email"
                    formControlName="email">
 
-            <span class="help-block"
+            <span class="invalid-feedback"
                   *ngIf="userForm.showError('email', formDir, 'email')"
                   i18n>Invalid email.</span>
           </div>
         </div>
 
         <!-- Roles -->
-        <label class="col-sm-3 control-label"
-               i18n>Roles</label>
-        <div class="col-sm-9">
-          <span class="form-control no-border full-height"
-                *ngIf="allRoles">
-            <cd-select-badges [data]="userForm.controls.roles.value"
-                              [options]="allRoles"
-                              [messages]="messages"></cd-select-badges>
-          </span>
+        <div class="form-group row">
+          <label class="col-sm-3 col-form-label"
+                 i18n>Roles</label>
+          <div class="col-sm-9">
+            <span class="no-border full-height"
+                  *ngIf="allRoles">
+              <cd-select-badges [data]="userForm.controls.roles.value"
+                                [options]="allRoles"
+                                [messages]="messages"></cd-select-badges>
+            </span>
+          </div>
+
         </div>
 
       </div>
-      <div class="panel-footer">
+      <div class="card-footer">
         <div class="button-group text-right">
-          <cd-submit-button
-            [form]="formDir"
-            (submitAction)="submit()"
-            i18n="form action button|Example: Create Pool@@formActionButton"
-            type="button">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
+          <cd-submit-button (submitAction)="submit()"
+                            i18n="form action button|Example: Create Pool@@formActionButton"
+                            [form]="formDir">{{ action | titlecase }} {{ resource | upperFirst }}</cd-submit-button>
           <cd-back-button></cd-back-button>
         </div>
       </div>

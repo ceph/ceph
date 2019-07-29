@@ -221,6 +221,7 @@ public:
   map<int, failure_info_t> failure_info;
   map<int,utime_t>    down_pending_out;  // osd down -> out
   bool priority_convert = false;
+  map<int64_t,set<snapid_t>> pending_pseudo_purged_snaps;
 
   map<int,double> osd_weight;
 
@@ -248,6 +249,35 @@ public:
     FAST_READ_ON,
     FAST_READ_DEFAULT
   };
+
+  struct CleanUpmapJob : public ParallelPGMapper::Job {
+    CephContext *cct;
+    const OSDMap& osdmap;
+    OSDMap::Incremental& pending_inc;
+    // lock to protect pending_inc form changing
+    // when checking is done
+    Mutex pending_inc_lock = {"CleanUpmapJob::pending_inc_lock"};
+
+    CleanUpmapJob(CephContext *cct, const OSDMap& om, OSDMap::Incremental& pi)
+      : ParallelPGMapper::Job(&om),
+        cct(cct),
+        osdmap(om),
+        pending_inc(pi) {}
+
+    void process(const vector<pg_t>& to_check) override {
+      vector<pg_t> to_cancel;
+      map<pg_t, mempool::osdmap::vector<pair<int,int>>> to_remap;
+      osdmap.check_pg_upmaps(cct, to_check, &to_cancel, &to_remap);
+      // don't bother taking lock if nothing changes
+      if (!to_cancel.empty() || !to_remap.empty()) {
+        std::lock_guard l(pending_inc_lock);
+        osdmap.clean_pg_upmaps(cct, &pending_inc, to_cancel, to_remap);
+      }
+    }
+
+    void process(int64_t poolid, unsigned ps_begin, unsigned ps_end) override {}
+    void complete() override {}
+  }; // public as this will need to be accessible from TestTestOSDMap.cc
 
   // svc
 public:
@@ -321,6 +351,7 @@ private:
 	osdmon->prime_pg_temp(*osdmap, pgid);
       }
     }
+    void process(const vector<pg_t>& pgs) override {}
     void complete() override {}
   };
   void maybe_prime_pg_temp();
@@ -371,6 +402,9 @@ private:
   bool prepare_mark_me_down(MonOpRequestRef op);
   void process_failures();
   void take_all_failures(list<MonOpRequestRef>& ls);
+
+  bool preprocess_mark_me_dead(MonOpRequestRef op);
+  bool prepare_mark_me_dead(MonOpRequestRef op);
 
   bool preprocess_full(MonOpRequestRef op);
   bool prepare_full(MonOpRequestRef op);
@@ -471,16 +505,49 @@ private:
   void clear_pool_flags(int64_t pool_id, uint64_t flags);
   bool update_pools_status();
 
-  string make_snap_epoch_key(int64_t pool, epoch_t epoch);
-  string make_snap_key(int64_t pool, snapid_t snap);
-  string make_snap_key_value(int64_t pool, snapid_t snap, snapid_t num,
-			     epoch_t epoch, bufferlist *v);
-  string make_snap_purged_key(int64_t pool, snapid_t snap);
-  string make_snap_purged_key_value(int64_t pool, snapid_t snap, snapid_t num,
-				    epoch_t epoch, bufferlist *v);
+  bool _is_removed_snap(int64_t pool_id, snapid_t snapid);
+  bool _is_pending_removed_snap(int64_t pool_id, snapid_t snapid);
+
+  string make_removed_snap_epoch_key(int64_t pool, epoch_t epoch);
+  string make_purged_snap_epoch_key(epoch_t epoch);
+
+  string _make_snap_key(bool purged, int64_t pool, snapid_t snap);
+  string _make_snap_key_value(bool purged,
+			      int64_t pool, snapid_t snap, snapid_t num,
+			      epoch_t epoch, bufferlist *v);
+  string make_removed_snap_key(int64_t pool, snapid_t snap) {
+    return _make_snap_key(false, pool, snap);
+  }
+  string make_removed_snap_key_value(int64_t pool, snapid_t snap, snapid_t num,
+				     epoch_t epoch, bufferlist *v) {
+    return _make_snap_key_value(false, pool, snap, num, epoch, v);
+  }
+  string make_purged_snap_key(int64_t pool, snapid_t snap) {
+    return _make_snap_key(true, pool, snap);
+  }
+  string make_purged_snap_key_value(int64_t pool, snapid_t snap, snapid_t num,
+				    epoch_t epoch, bufferlist *v) {
+    return _make_snap_key_value(true, pool, snap, num, epoch, v);
+  }
+
   bool try_prune_purged_snaps();
-  int lookup_pruned_snap(int64_t pool, snapid_t snap,
-			 snapid_t *begin, snapid_t *end);
+  int _lookup_snap(bool purged, int64_t pool, snapid_t snap,
+		   snapid_t *begin, snapid_t *end);
+  int lookup_removed_snap(int64_t pool, snapid_t snap,
+			  snapid_t *begin, snapid_t *end) {
+    return _lookup_snap(false, pool, snap, begin,end);
+  }
+  int lookup_purged_snap(int64_t pool, snapid_t snap,
+			 snapid_t *begin, snapid_t *end) {
+    return _lookup_snap(true, pool, snap, begin,end);
+  }
+
+  void insert_snap_update(
+    bool purged,
+    int64_t pool,
+    snapid_t start, snapid_t end,
+    epoch_t epoch,
+    MonitorDBStore::TransactionRef t);
 
   bool prepare_set_flag(MonOpRequestRef op, int flag);
   bool prepare_unset_flag(MonOpRequestRef op, int flag);
@@ -545,6 +612,8 @@ private:
 
   bool preprocess_remove_snaps(MonOpRequestRef op);
   bool prepare_remove_snaps(MonOpRequestRef op);
+
+  bool preprocess_get_purged_snaps(MonOpRequestRef op);
 
   int load_metadata(int osd, map<string, string>& m, ostream *err);
   void count_metadata(const string& field, Formatter *f);
@@ -661,10 +730,6 @@ public:
     send_incremental(op, start);
   }
 
-  void get_removed_snaps_range(
-    epoch_t start, epoch_t end,
-    mempool::osdmap::map<int64_t,OSDMap::snap_interval_set_t> *gap_removed_snaps);
-
   int get_version(version_t ver, bufferlist& bl) override;
   int get_version(version_t ver, uint64_t feature, bufferlist& bl);
 
@@ -686,6 +751,8 @@ public:
   void do_application_enable(int64_t pool_id, const std::string &app_name,
 			     const std::string &app_key="",
 			     const std::string &app_value="");
+  void do_set_pool_opt(int64_t pool_id, pool_opts_t::key_t opt,
+		       pool_opts_t::value_t);
 
   void add_flag(int flag) {
     if (!(osdmap.flags & flag)) {
