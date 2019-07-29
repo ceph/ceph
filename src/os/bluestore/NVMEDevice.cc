@@ -31,10 +31,10 @@
 
 #include <spdk/nvme.h>
 
+#include "include/intarith.h"
 #include "include/stringify.h"
 #include "include/types.h"
 #include "include/compat.h"
-#include "common/align.h"
 #include "common/errno.h"
 #include "common/debug.h"
 #include "common/perf_counters.h"
@@ -923,8 +923,8 @@ int NVMEDevice::read_random(uint64_t off, uint64_t len, char *buf, bool buffered
   ceph_assert(off < size);
   ceph_assert(off + len <= size);
 
-  uint64_t aligned_off = align_down(off, block_size);
-  uint64_t aligned_len = align_up(off+len, block_size) - aligned_off;
+  uint64_t aligned_off = p2align(off, block_size);
+  uint64_t aligned_len = p2roundup(off+len, block_size) - aligned_off;
   dout(5) << __func__ << " " << off << "~" << len
           << " aligned " << aligned_off << "~" << aligned_len << dendl;
   IOContext ioc(g_ceph_context, nullptr);
