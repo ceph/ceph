@@ -7021,6 +7021,7 @@ int BlueStore::_fsck(bool deep, bool repair)
     mempool::bluestore_fsck::pool_allocator<uint64_t>> uint64_t_btree_t;
   uint64_t_btree_t used_nids;
   uint64_t_btree_t used_omap_head;
+  uint64_t_btree_t used_per_pool_omap_head;
   uint64_t_btree_t used_pgmeta_omap_head;
   uint64_t_btree_t used_sbids;
 
@@ -7483,7 +7484,8 @@ int BlueStore::_fsck(bool deep, bool repair)
       // omap
       if (o->onode.has_omap()) {
 	auto& m =
-	  o->onode.is_pgmeta_omap() ? used_pgmeta_omap_head : used_omap_head;
+	  o->onode.is_pgmeta_omap() ? used_pgmeta_omap_head :
+	  (o->onode.is_perpool_omap() ? used_per_pool_omap_head : used_omap_head);
 	if (m.count(o->onode.nid)) {
 	  derr << "fsck error: " << oid << " omap_head " << o->onode.nid
 	       << " already in use" << dendl;
@@ -7832,7 +7834,23 @@ int BlueStore::_fsck(bool deep, bool repair)
       uint64_t omap_head;
       _key_decode_u64(it->key().c_str(), &omap_head);
       if (used_pgmeta_omap_head.count(omap_head) == 0) {
-	derr << "fsck error: found stray omap data on omap_head "
+	derr << "fsck error: found stray (pgmeta) omap data on omap_head "
+	     << omap_head << dendl;
+	++errors;
+      }
+    }
+  }
+  it = db->get_iterator(PREFIX_PERPOOL_OMAP);
+  if (it) {
+    for (it->lower_bound(string()); it->valid(); it->next()) {
+      uint64_t pool;
+      uint64_t omap_head;
+      string k = it->key();
+      char *c = k.c_str();
+      c = _key_decode_u64(c, &pool);
+      c = _key_decode_u64(c, &omap_head);
+      if (used_per_pool_omap_head.count(omap_head) == 0) {
+	derr << "fsck error: found stray (per-pool) omap data on omap_head "
 	     << omap_head << dendl;
 	++errors;
       }
