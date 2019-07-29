@@ -259,6 +259,19 @@ class LocalRemote(object):
                 return
             raise e
 
+    # XXX: accepts only two arugments to maintain compatibility with
+    # teuthology's mkdtemp.
+    def mkdtemp(self, suffix='', parentdir=None):
+        from tempfile import mkdtemp
+
+        # XXX: prefix had to be set without that this method failed against
+        # Python2.7 -
+        # > /usr/lib64/python2.7/tempfile.py(337)mkdtemp()
+        # -> file = _os.path.join(dir, prefix + name + suffix)
+        # (Pdb) p prefix
+        # None
+        return mkdtemp(suffix=suffix, prefix='', dir=parentdir)
+
     def _perform_checks_and_return_list_of_args(self, args, omit_sudo):
         # Since Python's shell simulation can only work when commands are
         # provided as a list of argumensts...
