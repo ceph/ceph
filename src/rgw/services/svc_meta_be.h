@@ -275,6 +275,5 @@ public:
 
   virtual int call(std::optional<RGWSI_MetaBackend_CtxParams> bectx_params,
                    std::function<int(Op *)> f);
-  virtual Op *alloc_op();
 };
 
