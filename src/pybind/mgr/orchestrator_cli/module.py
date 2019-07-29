@@ -54,7 +54,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         completion = self.add_host(host)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=str(completion.result))
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator host rm',
                 "name=host,type=CephString,req=true",
@@ -63,7 +63,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         completion = self.remove_host(host)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=str(completion.result))
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_read_cli('orchestrator host ls',
                desc='List hosts')
@@ -207,7 +207,7 @@ Usage:
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         self.log.warning(str(completion.result))
-        return HandleCommandResult(stdout=str(completion.result))
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator osd rm',
                 "name=svc_id,type=CephString,n=N",
@@ -221,7 +221,7 @@ Usage:
         completion = self.remove_osds(svc_id)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=str(completion.result))
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator mds add',
                 "name=svc_arg,type=CephString",
@@ -231,7 +231,7 @@ Usage:
         completion = self.add_mds(spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result)
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator rgw add',
                 'name=zone_name,type=CephString,req=false',
@@ -258,7 +258,7 @@ Usage:
         completion = self.add_rgw(rgw_spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=str(completion.result))
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator nfs add',
                 "name=svc_arg,type=CephString "
@@ -271,7 +271,7 @@ Usage:
         completion = self.add_nfs(spec)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=completion.result)
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator mds rm',
                 "name=svc_id,type=CephString",
@@ -280,7 +280,7 @@ Usage:
         completion = self.remove_mds(svc_id)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult()
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator rgw rm',
                 "name=svc_id,type=CephString",
@@ -289,7 +289,7 @@ Usage:
         completion = self.remove_rgw(svc_id)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult()
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator nfs rm',
                 "name=svc_id,type=CephString",
@@ -298,7 +298,7 @@ Usage:
         completion = self.remove_nfs(svc_id)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult()
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator nfs update',
                 "name=svc_id,type=CephString "
@@ -308,7 +308,7 @@ Usage:
         spec = orchestrator.NFSServiceSpec(svc_id, count=num)
         completion = self.update_nfs(spec)
         self._orchestrator_wait([completion])
-        return HandleCommandResult()
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator service',
                 "name=action,type=CephChoices,strings=start|stop|reload "
@@ -319,7 +319,7 @@ Usage:
         completion = self.service_action(action, svc_type, service_name=svc_name)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult()
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator service-instance',
                 "name=action,type=CephChoices,strings=start|stop|reload "
@@ -330,7 +330,7 @@ Usage:
         completion = self.service_action(action, svc_type, service_id=svc_id)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult()
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator mgr update',
                 "name=num,type=CephInt,req=true "
@@ -346,7 +346,7 @@ Usage:
         completion = self.update_mgrs(num, hosts)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=str(completion.result))
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator mon update',
                 "name=num,type=CephInt,req=true "
@@ -381,7 +381,7 @@ Usage:
         completion = self.update_mons(num, hosts)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
-        return HandleCommandResult(stdout=str(completion.result))
+        return HandleCommandResult(stdout=completion.result_str())
 
     @_write_cli('orchestrator set backend',
                 "name=module_name,type=CephString,req=true",

@@ -62,6 +62,11 @@ class _Completion(G):
         """
         raise NotImplementedError()
 
+    def result_str(self):
+        if self.result is None:
+            return ''
+        return str(self.result)
+
     @property
     def exception(self):
         # type: () -> Optional[Exception]
