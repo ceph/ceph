@@ -4,13 +4,10 @@
 #include <errno.h>
 #include "include/types.h"
 
+//Size of head leaving out urgent data
 #define QUEUE_HEAD_SIZE_1K 1024
-//Actual start offset of queue data
-#define QUEUE_START_OFFSET_1K QUEUE_HEAD_SIZE_1K
 
-#define QUEUE_HEAD_SIZE_4K (4 * 1024)
-//Actual start offset of queue data
-#define QUEUE_START_OFFSET_4K QUEUE_HEAD_SIZE_4K
+#define QUEUE_START_OFFSET_1K QUEUE_HEAD_SIZE_1K
 
 constexpr unsigned int QUEUE_HEAD_START = 0xDEAD;
 constexpr unsigned int QUEUE_ENTRY_START = 0xBEEF;

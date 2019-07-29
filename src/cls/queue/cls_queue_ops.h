@@ -4,25 +4,25 @@
 #include "cls/queue/cls_queue_types.h"
 
 struct cls_queue_init_op {
-  cls_queue_head head;
-  uint64_t head_size{0};
-  bool has_urgent_data{false};
+  uint64_t queue_size{0};
+  uint64_t max_urgent_data_size{0};
+  bufferlist bl_urgent_data;
 
   cls_queue_init_op() {}
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    encode(head, bl);
-    encode(head_size, bl);
-    encode(has_urgent_data, bl);
+    encode(queue_size, bl);
+    encode(max_urgent_data_size, bl);
+    encode(bl_urgent_data, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    decode(head, bl);
-    decode(head_size, bl);
-    decode(has_urgent_data, bl);
+    decode(queue_size, bl);
+    decode(max_urgent_data_size, bl);
+    decode(bl_urgent_data, bl);
     DECODE_FINISH(bl);
   }
 

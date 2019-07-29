@@ -12,8 +12,8 @@ void cls_queue_init(ObjectWriteOperation& op, const string& queue_name, uint64_t
 {
   bufferlist in;
   cls_queue_init_op call;
-  call.has_urgent_data = false;
-  call.head.queue_size = size;
+  call.max_urgent_data_size = 0;
+  call.queue_size = size;
   encode(call, in);
   op.exec(QUEUE_CLASS, QUEUE_INIT, in);
 }
