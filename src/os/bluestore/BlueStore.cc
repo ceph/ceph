@@ -5205,7 +5205,7 @@ int BlueStore::_minimal_open_bluefs(bool create)
     uint64_t start = p2align((bdev->get_size() - initial) / 2,
 			      cct->_conf->bluefs_alloc_size);
     //avoiding superblock overwrite
-    ceph_assert(cct->_conf->bluefs_alloc_size > _get_ondisk_reserved());
+    ceph_assert(cct->_conf->bluefs_alloc_size >= _get_ondisk_reserved());
     start = std::max(cct->_conf->bluefs_alloc_size, start);
 
     bluefs->add_block_extent(bluefs_shared_bdev, start, initial);
