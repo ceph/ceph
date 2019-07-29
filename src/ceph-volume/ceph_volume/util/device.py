@@ -282,7 +282,17 @@ class Device(object):
 
     @property
     def size(self):
-            return self.sys_api['size']
+        return self.sys_api['size']
+
+    @property
+    def lvm_size(self):
+        """
+        If this device was made into a PV it would lose 1GB in total size
+        due to the 1GB physical extent size we set when creating volume groups
+        """
+        size = disk.Size(b=self.size)
+        lvm_size = disk.Size(gb=size.gb.as_int()) - disk.Size(gb=1)
+        return lvm_size
 
     @property
     def is_lvm_member(self):

@@ -5,13 +5,13 @@ cluster: test
 public_network: "192.168.3.0/24"
 cluster_network: "192.168.4.0/24"
 monitor_interface: eth1
-osd_objectstore: "bluestore"
+osd_objectstore: "filestore"
 osd_scenario: lvm
 dmcrypt: true
-num_osds: 2
 ceph_origin: 'repository'
 ceph_repository: 'dev'
 copy_admin_key: false
+num_osds: 2
 devices:
   - /dev/sdb
   - /dev/sdc
