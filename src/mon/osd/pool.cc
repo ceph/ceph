@@ -188,6 +188,459 @@ bool is_unmanaged_snap_op_permitted(CephContext* cct,
 
 } // anonymous namespace
 
+bool OSDMonitor::prepare_pool_command(
+    MonOpRequestRef op,
+    const cmdmap_t& cmdmap)
+{
+
+  op->mark_osdmon_event(__func__);
+  bool ret = false;
+  stringstream ss;
+  string rs;
+  bufferlist rdata;
+  int err = 0;
+
+  string format;
+  cmd_getval(cct, cmdmap, "format", format, string("plain"));
+  boost::scoped_ptr<Formatter> f(Formatter::create(format));
+
+  string prefix;
+  cmd_getval(cct, cmdmap, "prefix", prefix);
+
+  if (prefix == "osd pool mksnap") {
+    string poolstr;
+    cmd_getval(cct, cmdmap, "pool", poolstr);
+    int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
+    if (pool < 0) {
+      ss << "unrecognized pool '" << poolstr << "'";
+      err = -ENOENT;
+      goto reply;
+    }
+    string snapname;
+    cmd_getval(cct, cmdmap, "snap", snapname);
+    const pg_pool_t *p = osdmap.get_pg_pool(pool);
+    if (p->is_unmanaged_snaps_mode()) {
+      ss << "pool " << poolstr << " is in unmanaged snaps mode";
+      err = -EINVAL;
+      goto reply;
+    } else if (p->snap_exists(snapname.c_str())) {
+      ss << "pool " << poolstr << " snap " << snapname << " already exists";
+      err = 0;
+      goto reply;
+    } else if (p->is_tier()) {
+      ss << "pool " << poolstr << " is a cache tier";
+      err = -EINVAL;
+      goto reply;
+    }
+    pg_pool_t *pp = 0;
+    if (pending_inc.new_pools.count(pool))
+      pp = &pending_inc.new_pools[pool];
+    if (!pp) {
+      pp = &pending_inc.new_pools[pool];
+      *pp = *p;
+    }
+    if (pp->snap_exists(snapname.c_str())) {
+      ss << "pool " << poolstr << " snap " << snapname << " already exists";
+    } else {
+      pp->add_snap(snapname.c_str(), ceph_clock_now());
+      pp->set_snap_epoch(pending_inc.epoch);
+      ss << "created pool " << poolstr << " snap " << snapname;
+    }
+    getline(ss, rs);
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+					      get_last_committed() + 1));
+    return true;
+  } else if (prefix == "osd pool rmsnap") {
+    string poolstr;
+    cmd_getval(cct, cmdmap, "pool", poolstr);
+    int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
+    if (pool < 0) {
+      ss << "unrecognized pool '" << poolstr << "'";
+      err = -ENOENT;
+      goto reply;
+    }
+    string snapname;
+    cmd_getval(cct, cmdmap, "snap", snapname);
+    const pg_pool_t *p = osdmap.get_pg_pool(pool);
+    if (p->is_unmanaged_snaps_mode()) {
+      ss << "pool " << poolstr << " is in unmanaged snaps mode";
+      err = -EINVAL;
+      goto reply;
+    } else if (!p->snap_exists(snapname.c_str())) {
+      ss << "pool " << poolstr << " snap " << snapname << " does not exist";
+      err = 0;
+      goto reply;
+    }
+    pg_pool_t *pp = 0;
+    if (pending_inc.new_pools.count(pool))
+      pp = &pending_inc.new_pools[pool];
+    if (!pp) {
+      pp = &pending_inc.new_pools[pool];
+      *pp = *p;
+    }
+    snapid_t sn = pp->snap_exists(snapname.c_str());
+    if (sn) {
+      pp->remove_snap(sn);
+      pp->set_snap_epoch(pending_inc.epoch);
+      ss << "removed pool " << poolstr << " snap " << snapname;
+    } else {
+      ss << "already removed pool " << poolstr << " snap " << snapname;
+    }
+    getline(ss, rs);
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+					      get_last_committed() + 1));
+    return true;
+  } else if (prefix == "osd pool create") {
+    int64_t pg_num, pg_num_min;
+    int64_t pgp_num;
+    cmd_getval(cct, cmdmap, "pg_num", pg_num, int64_t(0));
+    cmd_getval(cct, cmdmap, "pgp_num", pgp_num, pg_num);
+    cmd_getval(cct, cmdmap, "pg_num_min", pg_num_min, int64_t(0));
+
+    string pool_type_str;
+    cmd_getval(cct, cmdmap, "pool_type", pool_type_str);
+    if (pool_type_str.empty())
+      pool_type_str = g_conf().get_val<string>("osd_pool_default_type");
+
+    string poolstr;
+    cmd_getval(cct, cmdmap, "pool", poolstr);
+    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
+    if (pool_id >= 0) {
+      const pg_pool_t *p = osdmap.get_pg_pool(pool_id);
+      if (pool_type_str != p->get_type_name()) {
+	ss << "pool '" << poolstr << "' cannot change to type " << pool_type_str;
+ 	err = -EINVAL;
+      } else {
+	ss << "pool '" << poolstr << "' already exists";
+	err = 0;
+      }
+      goto reply;
+    }
+
+    int pool_type;
+    if (pool_type_str == "replicated") {
+      pool_type = pg_pool_t::TYPE_REPLICATED;
+    } else if (pool_type_str == "erasure") {
+      pool_type = pg_pool_t::TYPE_ERASURE;
+    } else {
+      ss << "unknown pool type '" << pool_type_str << "'";
+      err = -EINVAL;
+      goto reply;
+    }
+
+    bool implicit_rule_creation = false;
+    int64_t expected_num_objects = 0;
+    string rule_name;
+    cmd_getval(cct, cmdmap, "rule", rule_name);
+    string erasure_code_profile;
+    cmd_getval(cct, cmdmap, "erasure_code_profile", erasure_code_profile);
+
+    if (pool_type == pg_pool_t::TYPE_ERASURE) {
+      if (erasure_code_profile == "")
+	erasure_code_profile = "default";
+      //handle the erasure code profile
+      if (erasure_code_profile == "default") {
+	if (!osdmap.has_erasure_code_profile(erasure_code_profile)) {
+	  if (pending_inc.has_erasure_code_profile(erasure_code_profile)) {
+	    dout(20) << "erasure code profile " << erasure_code_profile << " already pending" << dendl;
+	    goto wait;
+	  }
+
+	  map<string,string> profile_map;
+	  err = osdmap.get_erasure_code_profile_default(cct,
+						      profile_map,
+						      &ss);
+	  if (err)
+	    goto reply;
+	  dout(20) << "erasure code profile " << erasure_code_profile << " set" << dendl;
+	  pending_inc.set_erasure_code_profile(erasure_code_profile, profile_map);
+	  goto wait;
+	}
+      }
+      if (rule_name == "") {
+	implicit_rule_creation = true;
+	if (erasure_code_profile == "default") {
+	  rule_name = "erasure-code";
+	} else {
+	  dout(1) << "implicitly use rule named after the pool: "
+		<< poolstr << dendl;
+	  rule_name = poolstr;
+	}
+      }
+      cmd_getval(g_ceph_context, cmdmap, "expected_num_objects",
+                 expected_num_objects, int64_t(0));
+    } else {
+      //NOTE:for replicated pool,cmd_map will put rule_name to erasure_code_profile field
+      //     and put expected_num_objects to rule field
+      if (erasure_code_profile != "") { // cmd is from CLI
+        if (rule_name != "") {
+          string interr;
+          expected_num_objects = strict_strtoll(rule_name.c_str(), 10, &interr);
+          if (interr.length()) {
+            ss << "error parsing integer value '" << rule_name << "': " << interr;
+            err = -EINVAL;
+            goto reply;
+          }
+        }
+        rule_name = erasure_code_profile;
+      } else { // cmd is well-formed
+        cmd_getval(g_ceph_context, cmdmap, "expected_num_objects",
+                   expected_num_objects, int64_t(0));
+      }
+    }
+
+    if (!implicit_rule_creation && rule_name != "") {
+      int rule;
+      err = get_crush_rule(rule_name, &rule, &ss);
+      if (err == -EAGAIN) {
+	wait_for_finished_proposal(op, new C_RetryMessage(this, op));
+	return true;
+      }
+      if (err)
+	goto reply;
+    }
+
+    if (expected_num_objects < 0) {
+      ss << "'expected_num_objects' must be non-negative";
+      err = -EINVAL;
+      goto reply;
+    }
+
+    if (expected_num_objects > 0 &&
+	cct->_conf->osd_objectstore == "filestore" &&
+	cct->_conf->filestore_merge_threshold > 0) {
+      ss << "'expected_num_objects' requires 'filestore_merge_threshold < 0'";
+      err = -EINVAL;
+      goto reply;
+    }
+
+    if (expected_num_objects == 0 &&
+	cct->_conf->osd_objectstore == "filestore" &&
+	cct->_conf->filestore_merge_threshold < 0) {
+      int osds = osdmap.get_num_osds();
+      if (osds && (pg_num >= 1024 || pg_num / osds >= 100)) {
+        ss << "For better initial performance on pools expected to store a "
+	   << "large number of objects, consider supplying the "
+	   << "expected_num_objects parameter when creating the pool.\n";
+      }
+    }
+
+    int64_t fast_read_param;
+    cmd_getval(cct, cmdmap, "fast_read", fast_read_param, int64_t(-1));
+    FastReadType fast_read = FAST_READ_DEFAULT;
+    if (fast_read_param == 0)
+      fast_read = FAST_READ_OFF;
+    else if (fast_read_param > 0)
+      fast_read = FAST_READ_ON;
+
+    int64_t repl_size = 0;
+    cmd_getval(cct, cmdmap, "size", repl_size);
+    int64_t target_size_bytes = 0;
+    double target_size_ratio = 0.0;
+    cmd_getval(cct, cmdmap, "target_size_bytes", target_size_bytes);
+    cmd_getval(cct, cmdmap, "target_size_ratio", target_size_ratio);
+
+    err = prepare_new_pool(poolstr,
+			   -1, // default crush rule
+			   rule_name,
+			   pg_num, pgp_num, pg_num_min,
+                           repl_size, target_size_bytes, target_size_ratio,
+			   erasure_code_profile, pool_type,
+                           (uint64_t)expected_num_objects,
+                           fast_read,
+			   &ss);
+    if (err < 0) {
+      switch(err) {
+      case -EEXIST:
+	ss << "pool '" << poolstr << "' already exists";
+	break;
+      case -EAGAIN:
+	wait_for_finished_proposal(op, new C_RetryMessage(this, op));
+	return true;
+      case -ERANGE:
+        goto reply;
+      default:
+	goto reply;
+	break;
+      }
+    } else {
+      ss << "pool '" << poolstr << "' created";
+    }
+    getline(ss, rs);
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+					      get_last_committed() + 1));
+    return true;
+
+  } else if (prefix == "osd pool delete" ||
+             prefix == "osd pool rm") {
+    // osd pool delete/rm <poolname> <poolname again> --yes-i-really-really-mean-it
+    string poolstr, poolstr2, sure;
+    cmd_getval(cct, cmdmap, "pool", poolstr);
+    cmd_getval(cct, cmdmap, "pool2", poolstr2);
+    int64_t pool = osdmap.lookup_pg_pool_name(poolstr.c_str());
+    if (pool < 0) {
+      ss << "pool '" << poolstr << "' does not exist";
+      err = 0;
+      goto reply;
+    }
+
+    bool force_no_fake = false;
+    cmd_getval(cct, cmdmap, "yes_i_really_really_mean_it", force_no_fake);
+    bool force = false;
+    cmd_getval(cct, cmdmap, "yes_i_really_really_mean_it_not_faking", force);
+    if (poolstr2 != poolstr ||
+	(!force && !force_no_fake)) {
+      ss << "WARNING: this will *PERMANENTLY DESTROY* all data stored in pool " << poolstr
+	 << ".  If you are *ABSOLUTELY CERTAIN* that is what you want, pass the pool name *twice*, "
+	 << "followed by --yes-i-really-really-mean-it.";
+      err = -EPERM;
+      goto reply;
+    }
+    err = _prepare_remove_pool(pool, &ss, force_no_fake);
+    if (err == -EAGAIN) {
+      wait_for_finished_proposal(op, new C_RetryMessage(this, op));
+      return true;
+    }
+    if (err < 0)
+      goto reply;
+    goto update;
+  } else if (prefix == "osd pool rename") {
+    string srcpoolstr, destpoolstr;
+    cmd_getval(cct, cmdmap, "srcpool", srcpoolstr);
+    cmd_getval(cct, cmdmap, "destpool", destpoolstr);
+    int64_t pool_src = osdmap.lookup_pg_pool_name(srcpoolstr.c_str());
+    int64_t pool_dst = osdmap.lookup_pg_pool_name(destpoolstr.c_str());
+
+    if (pool_src < 0) {
+      if (pool_dst >= 0) {
+        // src pool doesn't exist, dst pool does exist: to ensure idempotency
+        // of operations, assume this rename succeeded, as it is not changing
+        // the current state.  Make sure we output something understandable
+        // for whoever is issuing the command, if they are paying attention,
+        // in case it was not intentional; or to avoid a "wtf?" and a bug
+        // report in case it was intentional, while expecting a failure.
+        ss << "pool '" << srcpoolstr << "' does not exist; pool '"
+          << destpoolstr << "' does -- assuming successful rename";
+        err = 0;
+      } else {
+        ss << "unrecognized pool '" << srcpoolstr << "'";
+        err = -ENOENT;
+      }
+      goto reply;
+    } else if (pool_dst >= 0) {
+      // source pool exists and so does the destination pool
+      ss << "pool '" << destpoolstr << "' already exists";
+      err = -EEXIST;
+      goto reply;
+    }
+
+    int ret = _prepare_rename_pool(pool_src, destpoolstr);
+    if (ret == 0) {
+      ss << "pool '" << srcpoolstr << "' renamed to '" << destpoolstr << "'";
+    } else {
+      ss << "failed to rename pool '" << srcpoolstr << "' to '" << destpoolstr << "': "
+        << cpp_strerror(ret);
+    }
+    getline(ss, rs);
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, ret, rs,
+					      get_last_committed() + 1));
+    return true;
+
+  } else if (prefix == "osd pool set") {
+    err = prepare_command_pool_set(cmdmap, ss);
+    if (err == -EAGAIN)
+      goto wait;
+    if (err < 0)
+      goto reply;
+
+    getline(ss, rs);
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+						   get_last_committed() + 1));
+    return true;
+  } else if (prefix == "osd pool set-quota") {
+    string poolstr;
+    cmd_getval(cct, cmdmap, "pool", poolstr);
+    int64_t pool_id = osdmap.lookup_pg_pool_name(poolstr);
+    if (pool_id < 0) {
+      ss << "unrecognized pool '" << poolstr << "'";
+      err = -ENOENT;
+      goto reply;
+    }
+
+    string field;
+    cmd_getval(cct, cmdmap, "field", field);
+    if (field != "max_objects" && field != "max_bytes") {
+      ss << "unrecognized field '" << field << "'; should be 'max_bytes' or 'max_objects'";
+      err = -EINVAL;
+      goto reply;
+    }
+
+    // val could contain unit designations, so we treat as a string
+    string val;
+    cmd_getval(cct, cmdmap, "val", val);
+    string tss;
+    int64_t value;
+    if (field == "max_objects") {
+      value = strict_sistrtoll(val.c_str(), &tss);
+    } else if (field == "max_bytes") {
+      value = strict_iecstrtoll(val.c_str(), &tss);
+    } else {
+      ceph_abort_msg("unrecognized option");
+    }
+    if (!tss.empty()) {
+      ss << "error parsing value '" << val << "': " << tss;
+      err = -EINVAL;
+      goto reply;
+    }
+
+    pg_pool_t *pi = pending_inc.get_new_pool(pool_id, osdmap.get_pg_pool(pool_id));
+    if (field == "max_objects") {
+      pi->quota_max_objects = value;
+    } else if (field == "max_bytes") {
+      pi->quota_max_bytes = value;
+    } else {
+      ceph_abort_msg("unrecognized option");
+    }
+    ss << "set-quota " << field << " = " << value << " for pool " << poolstr;
+    rs = ss.str();
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
+					      get_last_committed() + 1));
+    return true;
+  } else if (prefix == "osd pool application enable" ||
+             prefix == "osd pool application disable" ||
+             prefix == "osd pool application set" ||
+             prefix == "osd pool application rm") {
+    err = prepare_command_pool_application(prefix, cmdmap, ss);
+    if (err == -EAGAIN) {
+      goto wait;
+    } else if (err < 0) {
+      goto reply;
+    } else {
+      goto update;
+    }
+  } else {
+    err = -EINVAL;
+  }
+
+ reply:
+  getline(ss, rs);
+  if (err < 0 && rs.length() == 0) {
+    rs = cpp_strerror(err);
+  }
+  mon->reply_command(op, err, rs, rdata, get_last_committed());
+  return ret;
+
+ update:
+  getline(ss, rs);
+  wait_for_finished_proposal(op,
+      new Monitor::C_Command(mon, op, 0, rs, get_last_committed() + 1));
+  return true;
+
+ wait:
+  wait_for_finished_proposal(op, new C_RetryMessage(this, op));
+  return true;
+}
+
 /*
  * pool reply
  *
