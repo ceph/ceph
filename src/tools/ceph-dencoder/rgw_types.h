@@ -4,6 +4,7 @@
 TYPE(RGWOLHInfo)
 TYPE(RGWObjManifestPart)
 TYPE(RGWObjManifest)
+TYPE(objexp_hint_entry)
 
 #include "rgw/rgw_zone.h"
 TYPE(RGWZoneParams)
