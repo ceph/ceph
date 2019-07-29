@@ -527,7 +527,7 @@ int RGWMetadataHandler_GenericMetaBE::get_shard_id(const string& entry, int *sha
 
 int RGWMetadataHandler_GenericMetaBE::list_keys_init(const string& marker, void **phandle)
 {
-  std::unique_ptr<RGWSI_MetaBackend_Handler::Op> op(be_handler->alloc_op());
+  auto op = std::make_unique<RGWSI_MetaBackend_Handler::Op_ManagedCtx>(be_handler);
 
   int ret = op->list_init(marker);
   if (ret < 0) {
@@ -541,7 +541,7 @@ int RGWMetadataHandler_GenericMetaBE::list_keys_init(const string& marker, void 
 
 int RGWMetadataHandler_GenericMetaBE::list_keys_next(void *handle, int max, list<string>& keys, bool *truncated)
 {
-  auto op = static_cast<RGWSI_MetaBackend_Handler::Op *>(handle);
+  auto op = static_cast<RGWSI_MetaBackend_Handler::Op_ManagedCtx *>(handle);
 
   int ret = op->list_next(max, &keys, truncated);
   if (ret < 0 && ret != -ENOENT) {
@@ -559,13 +559,13 @@ int RGWMetadataHandler_GenericMetaBE::list_keys_next(void *handle, int max, list
 
 void RGWMetadataHandler_GenericMetaBE::list_keys_complete(void *handle)
 {
-  auto op = static_cast<RGWSI_MetaBackend_Handler::Op *>(handle);
+  auto op = static_cast<RGWSI_MetaBackend_Handler::Op_ManagedCtx *>(handle);
   delete op;
 }
 
 string RGWMetadataHandler_GenericMetaBE::get_marker(void *handle)
 {
-  auto op = static_cast<RGWSI_MetaBackend_Handler::Op *>(handle);
+  auto op = static_cast<RGWSI_MetaBackend_Handler::Op_ManagedCtx *>(handle);
   string marker;
   int r = op->list_get_marker(&marker);
   if (r < 0) {
