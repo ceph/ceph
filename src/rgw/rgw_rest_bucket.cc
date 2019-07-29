@@ -11,6 +11,7 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+
 class RGWOp_Bucket_Info : public RGWRESTOp {
 
 public:
@@ -146,6 +147,14 @@ void RGWOp_Bucket_Link::execute()
   op_state.set_bucket_id(bucket_id);
   op_state.set_new_bucket_name(new_bucket_name);
 
+  if (!store->svc.zone->is_meta_master()) {
+  bufferlist data;
+  op_ret = forward_request_to_master(s, nullptr, store, data, nullptr);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
+    }
+  }
   http_ret = RGWBucketAdminOp::link(store, op_state);
 }
 
@@ -178,6 +187,14 @@ void RGWOp_Bucket_Unlink::execute()
   op_state.set_user_id(uid);
   op_state.set_bucket_name(bucket);
 
+  if (!store->svc.zone->is_meta_master()) {
+  bufferlist data;
+  op_ret = forward_request_to_master(s, nullptr, store, data, nullptr);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
+    }
+  }
   http_ret = RGWBucketAdminOp::unlink(store, op_state);
 }
 
@@ -208,6 +225,14 @@ void RGWOp_Bucket_Remove::execute()
   op_state.set_bucket_name(bucket);
   op_state.set_delete_children(delete_children);
 
+  if (!store->svc.zone->is_meta_master()) {
+  bufferlist data;
+  op_ret = forward_request_to_master(s, nullptr, store, data, nullptr);
+  if (op_ret < 0) {
+    ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+    return;
+    }
+  }
   http_ret = RGWBucketAdminOp::remove_bucket(store, op_state, s->yield);
 }
 
