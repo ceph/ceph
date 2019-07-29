@@ -767,17 +767,17 @@ exists.')
                     print_long(cephfs.getcwd().decode(
                         'utf-8') + path + '/' + path, is_dir, True)
                 elif args.long:
-                    print_long(cephfs.getcwd().decode('utf-8') +
-                               path +
-                               '/' +
-                               path,
+                    print_long(cephfs.getcwd().decode('utf-8')
+                               + path
+                               + '/'
+                               + path,
                                is_dir, False)
                 elif is_dir:
-                    values.append(colorama.Style.BRIGHT +
-                                  colorama.Fore.CYAN +
-                                  path +
-                                  '/' +
-                                  colorama.Style.RESET_ALL)
+                    values.append(colorama.Style.BRIGHT
+                                  + colorama.Fore.CYAN
+                                  + path
+                                  + '/'
+                                  + colorama.Style.RESET_ALL)
                 else:
                     values.append(path)
             if not args.long:
