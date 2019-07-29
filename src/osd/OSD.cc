@@ -4395,8 +4395,10 @@ void OSD::_remove_heartbeat_peer(int n)
 	   << " " << (q->second.con_front ? q->second.con_front->get_peer_addr() : entity_addr_t())
 	   << dendl;
   q->second.con_back->mark_down();
+  q->second.con_back->clear_priv();
   if (q->second.con_front) {
     q->second.con_front->mark_down();
+    q->second.con_front->clear_priv();
   }
   heartbeat_peers.erase(q);
 }
@@ -4527,8 +4529,10 @@ void OSD::reset_heartbeat_peers(bool all)
     HeartbeatInfo& hi = it->second;
     if (all || hi.is_stale(stale)) {
       hi.con_back->mark_down();
+      hi.con_back->clear_priv();
       if (hi.con_front) {
         hi.con_front->mark_down();
+	hi.con_front->clear_priv();
       }
       // stop sending failure_report to mon too
       failure_queue.erase(it->first);
@@ -4948,10 +4952,12 @@ bool OSD::heartbeat_reset(Connection *con)
 	       << ", reopening" << dendl;
       if (con != p->second.con_back) {
 	p->second.con_back->mark_down();
+	p->second.con_back->clear_priv();
       }
       p->second.con_back.reset(NULL);
       if (p->second.con_front && con != p->second.con_front) {
 	p->second.con_front->mark_down();
+	p->second.con_front->clear_priv();
       }
       p->second.con_front.reset(NULL);
       pair<ConnectionRef,ConnectionRef> newcon = service.get_con_osd_hb(p->second.peer, p->second.epoch);
@@ -7573,8 +7579,10 @@ void OSD::note_down_osd(int peer)
   map<int,HeartbeatInfo>::iterator p = heartbeat_peers.find(peer);
   if (p != heartbeat_peers.end()) {
     p->second.con_back->mark_down();
+    p->second.con_back->clear_priv();
     if (p->second.con_front) {
       p->second.con_front->mark_down();
+      p->second.con_front->clear_priv();
     }
     heartbeat_peers.erase(p);
   }
