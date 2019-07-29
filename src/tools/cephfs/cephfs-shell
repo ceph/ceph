@@ -171,7 +171,8 @@ def print_long(path, is_dir, human_readable):
     info = cephfs.stat(path)
     pretty = os.path.basename(path.decode('utf-8'))
     if is_dir:
-        pretty = colorama.Style.BRIGHT + colorama.Fore.CYAN + pretty + '/' + colorama.Style.RESET_ALL
+        pretty = colorama.Style.BRIGHT + colorama.Fore.CYAN + pretty + '/'
+        pretty += colorama.Style.RESET_ALL
     if human_readable:
         poutput('{}\t{:10s} {} {} {} {}'.format(
             mode_notation(info.st_mode),
