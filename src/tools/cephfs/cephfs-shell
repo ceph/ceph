@@ -1239,7 +1239,7 @@ sub-directories, files')
         return self.complete_filenames(text, line, begidx, endidx)
 
     stat_parser = argparse.ArgumentParser(
-                  description='Display file or file system status')
+        description='Display file or file system status')
     stat_parser.add_argument('paths', type=str, help='file paths',
                              action=path_to_bytes, nargs='+')
 
