@@ -9,7 +9,8 @@
 #  - events
 #  verbs:
 #  - create
-#  - update
+#  - patch
+#  - get
 
 # LogEntry class dynamically builds an object from a dict, so we need to 
 # disable the linter for the no-member error
@@ -51,6 +52,8 @@ else:
     config.load_incluster_config()
 
 DEFAULT_LOG_LEVEL = 'info'
+DEFAULT_HEARTBEAT_INTERVAL_SECS = 3600  # 1hr default
+DEFAULT_CONFIG_CHECK_SECS = 10
 
 ZERO = timedelta(0)
 
@@ -73,6 +76,7 @@ class HealthCheck(object):
         # msg looks like
         # 2019-07-17 02:59:12.714672 mon.a [WRN] Health check failed: Reduced data availability: 100 pgs inactive (PG_AVAILABILITY)
         # 2019-07-17 03:16:39.103929 mon.a [INF] Health check cleared: OSDMAP_FLAGS (was: nodown flag(s) set)
+        # 2019-07-29 04:28:13.123868 mon.a [WRN] Health check failed: nodown flag(s) set (OSDMAP_FLAGS)
 
         self.msg = None
         self.state = None
@@ -94,15 +98,17 @@ class HealthCheck(object):
                 self.text = ' '.join(msg_tokens[3:])
                 self.name = msg_tokens[3]
             else:   # WRN or ERR
-                self.text = ' '.join(msg_tokens[3:-2])
+                self.text = ' '.join(msg_tokens[3:-1])
                 self.name = tokens[-1][1:-1]
 
 
 class LogEntry(object):
     """ Log Object for Ceph log records """
     reason_map = {
-        "audit": "ConfigChange",
-        "cluster": "HealthCheck"
+        "audit": "Audit",
+        "cluster": "HealthCheck",
+        "config": "ClusterChange",
+        "heartbeat":"Heartbeat"
     }
 
     def __init__(self, *args, **kwargs):
@@ -146,11 +152,14 @@ class LogEntry(object):
 
     @property
     def event_name(self):
-        if self.msg_type == 'audit':
-            return 'ceph-mgr.audit.{}'.format(self.cmd).replace(' ', '_')
-        
+        if self.msg_type == 'heartbeat':
+            return 'ceph-mgr.Heartbeat'
         elif self.healthcheck:
             return 'ceph-mgr.health.{}'.format(self.healthcheck.name)
+        elif self.msg_type == 'audit':
+            return 'ceph-mgr.audit.{}'.format(self.cmd).replace(' ', '_')
+        elif self.msg_type == 'config':
+            return 'ceph-mgr.ConfigurationChange'
         else:
             return None
    
@@ -169,7 +178,7 @@ class LogEntry(object):
         elif self.healthcheck:
             return self.healthcheck.text
         else:
-            return None
+            return self.msg
 
 
 class KubernetesEvent(object):
@@ -291,15 +300,15 @@ class KubernetesEvent(object):
     def api_success(self):
         return self.api_status == 200
 
-    def update(self, msg=None):
-        if msg:
-            self.event_msg = msg
-        
+    def update(self, log_object):
+        self.event_msg = log_object.event_msg
+        self.event_type = log_object.event_type
         self.last_timestamp = datetime.now(UTC())
         self.count += 1
+        # change the event type if needed (warning -> normal)
 
         try:
-            self.api.patch_namespaced_event(self.event_name, self.namespace, self.body)
+            self.api.patch_namespaced_event(self.event_name, self.namespace, self.event_body)
         except ApiException as e:
             if e.status == 404:
                 # tried to patch but it's rolled out of k8s events
@@ -340,6 +349,7 @@ class EventProcessor(threading.Thread):
         self.log.warning("processing {}".format(str(log_object)))
         # self.log.warning("name would be {}".format(log_object.event_name))
         event_out = False
+        unique_name = True
 
         if log_object.msg_type == 'audit':
             # audit traffic : operator commands
@@ -352,33 +362,46 @@ class EventProcessor(threading.Thread):
         
         elif log_object.msg_type == 'cluster':
             # cluster messages : health checks
-            if log_object.healthcheck:
-                self.log.warning("cluster health check message detected")
+            if log_object.event_name:
                 event_out = True
+
+        elif log_object.msg_type in ['config', 'heartbeat']:
+            # configuration checker and heartbeat messages
+            event_out = True
+            unique_name = False
         else:
             # unknown msgtype?
             pass
 
         if event_out:
-            # TODO
-            # Why track the events? Just attempt a write, and if it fails update it
-            if log_object.event_name in self.events.keys():
-                self.log.warning("need to update an event")
-                self.events[log_object.event_name].update(log_object.event_msg)
-            else:
-                self.log.warning("adding an event")
+            # we don't cache non-unique event names
+            if not unique_name or log_object.event_name not in self.events.keys():
+                self.log.warning("[DBG] sending an event(unique={}) to kubernetes".format(unique_name))
                 event = KubernetesEvent(name=log_object.event_name,
                                         msg=log_object.event_msg,
                                         msg_type=log_object.event_type,
-                                        msg_reason=log_object.event_reason)
+                                        msg_reason=log_object.event_reason,
+                                        unique_name=unique_name)
                 event.write()
-                if event.api_success:
+                self.log.warning("[DBG] API status code is {}".format(event.api_status))
+                if event.api_success and unique_name:
                     self.events[log_object.event_name] = event
+            else:
+                # TODO
+                # Why track the events? Just attempt a write, and if it fails update it
+            
+                self.log.warning("[DBG] need to update an event")
+                event = self.events[log_object.event_name]
+                event.update(log_object)
+                self.log.warning("[DBG] update of an event ended {}".format(event.api_status))
+
+            self.log.warning("[DBG] events cache size {}".format(len(self.events.keys())))
+            self.log.warning("[DBG] events cache holds {}".format(','.join(self.events.keys())))
         else:
-            self.log.warning("ignoring log message {}".format(log_object.msg))
+            self.log.warning("[DBG] ignoring log message {}".format(log_object.msg))
 
     def run(self):
-        self.log.warning("[INF] Ceph Log processor thread started")
+        self.log.warning("[INF] Ceph event processing thread started")
         while True:
 
             try:
@@ -393,7 +416,22 @@ class EventProcessor(threading.Thread):
 
             time.sleep(0.5)
 
-        self.log.error("[INF] Ceph log processor thread exited")
+        self.log.error("[INF] Ceph event processing thread exited")
+
+class ListDiff(object):
+    def __init__(self, before, after):
+        self.before = set(before)
+        self.after = set(after)
+
+    @property
+    def removed(self):
+        return list(self.before - self.after)
+
+    @property
+    def added(self):
+        return list(self.after - self.before)
+
+
 
 class CephConfigWatcher(threading.Thread):
     """ Catch configuration changes within the cluster and generate events """
@@ -403,11 +441,18 @@ class CephConfigWatcher(threading.Thread):
         self.mgr = mgr
         self.server_map = dict()
         self.osd_map = dict()
-        self.service_lookup = dict()
+        self.service_map = dict()
+        
+        self.hearbeat_interval_secs = self.mgr.get_localized_module_option(
+            'heartbeat_interval_secs', DEFAULT_HEARTBEAT_INTERVAL_SECS)
+        self.config_check_secs = self.mgr.get_localized_module_option(
+            'config_check_secs', DEFAULT_CONFIG_CHECK_SECS)
+
         threading.Thread.__init__(self)
     
     @property
     def raw_capacity(self):
+        # Note. if the osd's are not online the capacity field will be 0
         return sum([self.osd_map[osd]['capacity'] for osd in self.osd_map])
     
     @property
@@ -419,22 +464,25 @@ class CephConfigWatcher(threading.Thread):
         return len(self.osd_map.keys())
 
     def fetch_servers(self):
+        """ return a server summary, and service summary """
         servers = self.mgr.list_servers()
-        server_map = dict()
+        server_map = dict()         # host -> services
+        service_map = dict()        # service -> host
         for server_info in servers:
-            service_map = dict()
+            services = dict()
             for svc in server_info['services']:
-                if svc.get('type') in service_map.keys():
-                    service_map[svc.get('type')].append(svc.get('id'))
+                if svc.get('type') in services.keys():
+                    services[svc.get('type')].append(svc.get('id'))
                 else:
-                    service_map[svc.get('type')] = list([svc.get('id')])
+                    services[svc.get('type')] = list([svc.get('id')])
                 # maintain the service xref map service -> host and version
-                self.service_lookup[(svc.get('type'), str(svc.get('id')))] = server_info.get('hostname')
-            server_map[server_info.get('hostname')] = service_map
+                service_map[(svc.get('type'), str(svc.get('id')))] = server_info.get('hostname', '')
+            server_map[server_info.get('hostname')] = services
 
-        return server_map
+        return server_map, service_map
     
-    def fetch_osd_map(self):
+    def fetch_osd_map(self, service_map):
+        """ create an osd map """
         stats = self.mgr.get('osd_stats')
         osd_map = dict()
 
@@ -444,7 +492,7 @@ class CephConfigWatcher(threading.Thread):
             osd_map[osd_id] = dict(
                 deviceclass=dev.get('class'),
                 capacity=0,
-                hostname=self.service_lookup['osd', osd_id]
+                hostname=service_map['osd', osd_id]
                 )
         
         for osd_stat in stats['osd_stats']:
@@ -453,33 +501,152 @@ class CephConfigWatcher(threading.Thread):
 
         return osd_map
 
+    def push_events(self, changes):
+        """ add config change to the global queue to generate an event in kubernetes """
+        for change in changes:
+            event_queue.put(change)
+
+    def send_hearbeat_msg(self):
+        """ send a health heartbeat event """
+
+        health_str = self.mgr.get('health')['json']
+        if json.loads(health_str)['status'] == 'HEALTH_OK':
+            health_text = 'Healthy'
+            level = 'INF'
+        else:
+            health_text = 'Unhealthy'
+            level = 'WRN'
+
+        health_msg = ("Cluster is {}, {} hosts, {} OSDs - Total Raw "
+                      "Capacity {}B".format(health_text, self.num_servers, self.num_osds, self.raw_capacity))
+
+        event_queue.put(LogEntry(
+            source="config",
+            msg_type="heartbeat",
+            msg=health_msg,
+            level=level,
+            tstamp=None)
+        )
+        
+        self.mgr.log.warning("[DBG] {}".format(health_msg))
+
+    def get_changes(self, server_map, osd_map):
+        """ detect changes in maps between current observation and the last """
+
+        changes = list()
+
+        # Check hosts
+        if set(self.server_map.keys()) == set(server_map.keys()):
+            # no hosts changes
+            pass
+        else:
+            # host changes detected, find out what
+            diff = ListDiff(self.server_map.keys(), server_map.keys())
+            host_msg = "Host '{}' has been {} the cluster"
+            for new in diff.added:
+                
+                changes.append(LogEntry(source="config",
+                                        msg_type="config",
+                                        msg=host_msg.format(new, 'added to'),
+                                        level="INF",
+                                        tstamp=None)
+                )
+
+            for removed in diff.removed:
+
+                changes.append(LogEntry(source="config",
+                                        msg_type="config",
+                                        msg=host_msg.format(removed, 'removed from'),
+                                        level="INF",
+                                        tstamp=None)
+                )
+  
+        before_osds = list()
+        for svr in self.server_map:
+            before_osds.extend(self.server_map[svr].get('osd',[]))
+
+        after_osds = list()
+        for svr in server_map:
+            after_osds.extend(server_map[svr].get('osd',[]))
+        
+        if set(before_osds) == set(after_osds):
+            # no change in osd id's
+            # TODO could check id an existing osd has moved hosts?
+            pass
+        else:
+            # osd changes detected
+            osd_msg = "Ceph OSD '{}' ({} @ {}B) has been {} host {}"
+
+            diff = ListDiff(before_osds, after_osds)
+            for new in diff.added:
+                changes.append(LogEntry(source="config",
+                                        msg_type="config",
+                                        msg=osd_msg.format(new, 
+                                                           osd_map[new]['deviceclass'],
+                                                           MgrModule.to_pretty_iec(osd_map[new]['capacity']),
+                                                           'added to',
+                                                           osd_map[new]['hostname']),
+                                        level="INF",
+                                        tstamp=None)
+                )
+
+            for removed in diff.removed:
+                changes.append(LogEntry(source="config",
+                                        msg_type="config",
+                                        msg=osd_msg.format(removed, 
+                                                           osd_map[removed]['deviceclass'],
+                                                           MgrModule.to_pretty_iec(osd_map[removed]['capacity']),
+                                                           'removed from',
+                                                           osd_map[removed]['hostname']),
+                                        level="INF",
+                                        tstamp=None)
+                )
+
+        return changes
+
     def run(self):
         self.mgr.log.warning("[INF] Ceph configuration watcher started")
         # TODO
-        # 1. every hour send a health event - ok/warning/error
-        # 2. send event if nodes added/removed from the cluster
-        # 3. send event if osd count increases/decreases
-        # 4. send event if service location changes
-        self.server_map = self.fetch_servers()
-        self.mgr.log.warning("[DBG] {}".format(self.service_lookup))
-        self.osd_map = self.fetch_osd_map()
+        # 1. every hour send a health event - ok/warning/error - unique
+        # 2. send event if nodes added/removed from the cluster - unique
+        # 3. send event if osd count increases/decreases - unique
+        # 4. send event if service location changes - unique
+        self.server_map, self.service_map = self.fetch_servers()
+        self.mgr.log.warning("[DBG] {}".format(self.server_map))
+        self.mgr.log.warning("[DBG] {}".format(self.service_map))
+        self.osd_map = self.fetch_osd_map(self.service_map)
         self.mgr.log.warning("[INF] {} hosts, {} OSDs, {}B Raw Capacity".format(self.num_servers, 
                                                                                self.num_osds,
                                                                                MgrModule.to_pretty_iec(self.raw_capacity)))
         self.mgr.log.warning("[DBG] server map : {}".format(self.server_map))
         self.mgr.log.warning("[DBG] osd map : {}".format(self.osd_map))
 
-        while True:
-            self.server_map = self.fetch_servers()
-            self.osd_map = self.fetch_osd_map()
+        self.send_hearbeat_msg()
 
-            self.mgr.log.error("[DBG] service map : {}".format(self.server_map))
-            self.mgr.log.error("[DBG] osd_map : {}".format(self.osd_map))
+        ctr = 0
+        
+        while True:
+            server_map, service_map = self.fetch_servers()
+            osd_map = self.fetch_osd_map(service_map)
+
+            changes = self.get_changes(server_map, osd_map)
+            if changes:
+                self.push_events(changes)
+
+            self.osd_map = osd_map
+            self.server_map = server_map
+            self.service_map = service_map
+
+            self.mgr.log.error("[DBG] service map : {}".format(server_map))
+            self.mgr.log.error("[DBG] osd_map : {}".format(osd_map))
             self.mgr.log.warning("[DBG] {} hosts, {} OSDs, {}B Raw Capacity".format(self.num_servers, 
                                                                         self.num_osds,
                                                                         MgrModule.to_pretty_iec(self.raw_capacity)))
-            time.sleep(10)    
-
+            time.sleep(self.config_check_secs)    
+            ctr += self.config_check_secs
+            if ctr%self.hearbeat_interval_secs == 0:
+                ctr = 0
+                self.send_hearbeat_msg()
 
 class Module(MgrModule):
     COMMANDS = [
@@ -490,7 +657,9 @@ class Module(MgrModule):
         }
     ]
     MODULE_OPTIONS = [
-        {'name': 'log_level'}
+        {'name': 'log_level'},
+        {'name': 'heartbeat_interval_secs'},
+        {'name': 'config_check_secs'}
     ]
 
     def __init__(self, *args, **kwargs):
@@ -500,7 +669,8 @@ class Module(MgrModule):
         super(Module, self).__init__(*args, **kwargs)
 
     def handle_command(self, inbuf, cmd):
-        return 0, json.dumps(self.event_processor.events), ""
+        # TODO Not working correctly
+        return 0, "", "\n".join(self.event_processor.events.keys())
 
     @staticmethod
     def can_run():
@@ -516,7 +686,7 @@ class Module(MgrModule):
         if sys.version_info[0] >= 3:
             channel = channel.decode('utf-8')
 
-        # TODO DEBUG ONLY LINE
+        # TODO DEBUG ONLY - REMOVE ME
         self.log.error("qsize={},line={},channel={},name={},who={},"
                        "stamp_sec={},seq={},level={},msg={}".format(event_queue.qsize(),line,channel,name,who,stamp_sec,
                        seq,level,msg))
