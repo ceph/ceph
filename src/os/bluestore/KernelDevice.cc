@@ -143,15 +143,15 @@ int KernelDevice::open(const string& p)
     goto out_fail;
   }
 
-  // Operate as though the block size is 4 KB.  The backing file
-  // blksize doesn't strictly matter except that some file systems may
-  // require a read/modify/write if we write something smaller than
-  // it.
   block_size = cct->_conf->bdev_block_size;
-  if (block_size != (unsigned)st.st_blksize) {
+  if (auto st_blksize = static_cast<uint64_t>(st.st_blksize);
+      block_size != st_blksize) {
+    auto new_block_size = p2roundup(block_size, st_blksize);
     dout(1) << __func__ << " backing device/file reports st_blksize "
-	    << st.st_blksize << ", using bdev_block_size "
-	    << block_size << " anyway" << dendl;
+	    << st_blksize << ". bdev_block_size is " << block_size << ". "
+	    << "round it up to an aligned boundary " << new_block_size
+	    << dendl;
+    block_size = new_block_size;
   }
 
 
@@ -860,6 +860,7 @@ int KernelDevice::aio_write(
   _aio_log_start(ioc, off, len);
 
 #ifdef HAVE_LIBAIO
+  const auto rw_io_max = p2align<uint64_t>(RW_IO_MAX, block_size);
   if (aio && dio && !buffered) {
     if (cct->_conf->bdev_inject_crash &&
 	rand() % cct->_conf->bdev_inject_crash == 0) {
@@ -877,7 +878,7 @@ int KernelDevice::aio_write(
       aio.preadv(off, len);
       ++injecting_crash;
     } else {
-      if (bl.length() <= RW_IO_MAX) {
+      if (bl.length() <= rw_io_max) {
 	// fast path (non-huge write)
 	ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
 	++ioc->num_pending;
@@ -889,12 +890,12 @@ int KernelDevice::aio_write(
 	dout(5) << __func__ << " 0x" << std::hex << off << "~" << len
 		<< std::dec << " aio " << &aio << dendl;
       } else {
-	// write in RW_IO_MAX-sized chunks
+	// write in rw_io_max-sized chunks
 	uint64_t prev_len = 0;
 	while (prev_len < bl.length()) {
 	  bufferlist tmp;
-	  if (prev_len + RW_IO_MAX < bl.length()) {
-	    tmp.substr_of(bl, prev_len, RW_IO_MAX);
+	  if (prev_len + rw_io_max < bl.length()) {
+	    tmp.substr_of(bl, prev_len, rw_io_max);
 	  } else {
 	    tmp.substr_of(bl, prev_len, bl.length() - prev_len);
 	  }

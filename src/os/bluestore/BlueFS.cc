@@ -590,13 +590,15 @@ int BlueFS::_write_super(int dev)
   dout(10) << __func__ << " super block length(encoded): " << bl.length() << dendl;
   dout(10) << __func__ << " superblock " << super.version << dendl;
   dout(10) << __func__ << " log_fnode " << super.log_fnode << dendl;
-  ceph_assert(bl.length() <= get_super_length());
-  bl.append_zero(get_super_length() - bl.length());
+  const auto block_size = bdev[dev]->get_block_size();
+  ceph_assert(bl.length() <= get_super_length(block_size));
+  bl.append_zero(get_super_length(block_size) - bl.length());
 
-  bdev[dev]->write(get_super_offset(), bl, false, WRITE_LIFE_SHORT);
+  bdev[dev]->write(get_super_offset(block_size),
+		   bl, false, WRITE_LIFE_SHORT);
   dout(20) << __func__ << " v " << super.version
            << " crc 0x" << std::hex << crc
-           << " offset 0x" << get_super_offset() << std::dec
+           << " offset 0x" << get_super_offset(block_size) << std::dec
            << dendl;
   return 0;
 }
@@ -610,7 +612,9 @@ int BlueFS::_open_super()
   int r;
 
   // always the second block
-  r = bdev[BDEV_DB]->read(get_super_offset(), get_super_length(),
+  const auto block_size = bdev[BDEV_DB]->get_block_size();
+  r = bdev[BDEV_DB]->read(get_super_offset(block_size),
+			  get_super_length(block_size),
 			  &bl, ioc[BDEV_DB], false);
   if (r < 0)
     return r;

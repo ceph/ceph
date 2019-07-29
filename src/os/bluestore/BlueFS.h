@@ -387,13 +387,11 @@ private:
   FileWriter *_create_writer(FileRef f);
   void _close_writer(FileWriter *h);
 
-  // always put the super in the second 4k block.  FIXME should this be
-  // block size independent?
-  unsigned get_super_offset() {
-    return 4096;
+  unsigned get_super_offset(uint64_t block_size) {
+    return p2roundup<unsigned>(4096, block_size);
   }
-  unsigned get_super_length() {
-    return 4096;
+  unsigned get_super_length(uint64_t block_size) {
+    return p2roundup<unsigned>(4096, block_size);
   }
 
   void _add_block_extent(unsigned bdev, uint64_t offset, uint64_t len);
