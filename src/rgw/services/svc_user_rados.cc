@@ -311,6 +311,16 @@ public:
       }
     }
 
+    for (const auto& [name, access_key] : old_info.access_keys) {
+      if (!new_info.access_keys.count(access_key.id)) {
+        ret = svc.user->remove_key_index(ctx, access_key, y);
+        if (ret < 0 && ret != -ENOENT) {
+          set_err_msg("ERROR: could not remove index for key " + access_key.id);
+          return ret;
+        }
+      }
+    }
+
     for (auto old_iter = old_info.swift_keys.begin(); old_iter != old_info.swift_keys.end(); ++old_iter) {
       const auto& swift_key = old_iter->second;
       auto new_iter = new_info.swift_keys.find(swift_key.id);
