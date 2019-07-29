@@ -562,3 +562,14 @@ void rgw_data_sync_status::generate_test_instances(list<rgw_data_sync_status*>& 
 {
   o.push_back(new rgw_data_sync_status);
 }
+
+void objexp_hint_entry::generate_test_instances(list<objexp_hint_entry*>& o)
+{
+  auto it = new objexp_hint_entry;
+  it->tenant = "tenant1";
+  it->bucket_name = "bucket1";
+  it->bucket_id = "1234";
+  it->obj_key = rgw_obj_key("obj");
+  o.push_back(it);
+  o.push_back(new objexp_hint_entry);
+}

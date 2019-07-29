@@ -84,6 +84,9 @@ TYPE(cls_refcount_read_op)
 TYPE(cls_refcount_read_ret)
 TYPE(obj_refcount)
 
+#include "cls/timeindex/cls_timeindex_types.h"
+TYPE(cls_timeindex_entry)
+
 #include "journal/Entry.h"
 TYPE(journal::Entry)
 
