@@ -18,7 +18,6 @@ static int cls_queue_init(cls_method_context_t hctx, bufferlist *in, bufferlist 
 {
   auto in_iter = in->cbegin();
   cls_queue_init_op op;
-  op.has_urgent_data = false;
   try {
     decode(op, in_iter);
   } catch (buffer::error& err) {

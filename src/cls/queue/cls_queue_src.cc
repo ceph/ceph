@@ -105,30 +105,15 @@ int queue_init(cls_method_context_t hctx, const cls_queue_init_op& op)
     return ret;
   }
 
-  head = std::move(op.head);
-
-  if (op.has_urgent_data) {
-    if (op.head_size == 0) {
-      head.max_head_size = QUEUE_HEAD_SIZE_4K;
-      head.tail.offset = head.front.offset = QUEUE_START_OFFSET_4K;
-    } else {
-      head.max_head_size = op.head_size;
-      head.tail.offset = head.front.offset = head.max_head_size;
-    }
-    bufferlist bl_non_urgent;
-    uint16_t queue_start = QUEUE_HEAD_START;
-    uint64_t queue_encoded_len = 0;//dummy value for calculating max size of urgent data
-    encode(queue_start, bl_non_urgent);
-    encode(queue_encoded_len, bl_non_urgent);
-    encode(head, bl_non_urgent);
-    head.max_urgent_data_size = head.max_head_size - (bl_non_urgent.length() - head.bl_urgent_data.length());
-  } else {
-    head.max_head_size = QUEUE_HEAD_SIZE_1K;
-    head.tail.offset = head.front.offset = QUEUE_START_OFFSET_1K;
-    head.max_urgent_data_size = 0;
+  if (op.bl_urgent_data.length() > 0) {
+    head.bl_urgent_data = op.bl_urgent_data;
   }
+
+  head.max_head_size = QUEUE_HEAD_SIZE_1K + op.max_urgent_data_size;
+  head.queue_size = op.queue_size + head.max_head_size;
+  head.max_urgent_data_size = op.max_urgent_data_size;
   head.tail.gen = head.front.gen = 0;
-  head.queue_size += head.max_head_size;
+  head.tail.offset = head.front.offset = head.max_head_size;
   
   CLS_LOG(20, "INFO: init_queue_op queue actual size %lu", head.queue_size);
   CLS_LOG(20, "INFO: init_queue_op head size %lu", head.max_head_size);
