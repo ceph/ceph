@@ -159,7 +159,7 @@ suffixes = ['B', 'K', 'M', 'G', 'T', 'P']
 
 def humansize(nbytes):
     i = 0
-    while nbytes >= 1024 and i < len(suffixes)-1:
+    while nbytes >= 1024 and i < len(suffixes) - 1:
         nbytes /= 1024.
         i += 1
     nbytes = math.ceil(nbytes)
@@ -1065,11 +1065,11 @@ sub-directories, files')
             if not is_dir_exists(i.d_name):
                 statfs = cephfs.statfs(i.d_name)
                 stat = cephfs.stat(i.d_name)
-                block_size = statfs['f_blocks']*statfs['f_bsize'] // 1024
+                block_size = statfs['f_blocks'] * statfs['f_bsize'] // 1024
                 available = block_size - stat.st_size
                 use = 0
                 if block_size > 0:
-                    use = (stat.st_size*100 // block_size)
+                    use = (stat.st_size * 100 // block_size)
                 self.poutput('{:25d}\t{:5d}\t{:10d}\t{:5s} {}'.format(
                     statfs['f_fsid'], stat.st_size, available,
                     str(int(use)) + '%', i.d_name.decode('utf-8')))
@@ -1223,7 +1223,7 @@ sub-directories, files')
         if line == 'all':
             for k in dir(self):
                 if k.startswith('do_'):
-                    self.poutput('-'*80)
+                    self.poutput('-' * 80)
                     super().do_help(k[3:])
             return
         parser = self.create_argparser(line)
@@ -1286,7 +1286,7 @@ if __name__ == '__main__':
     if args.batch:
         args.commands = ['load ' + args.batch, ',quit']
     if args.test:
-        args.commands.extend(['-t,'] + [arg+',' for arg in args.test])
+        args.commands.extend(['-t,'] + [arg + ',' for arg in args.test])
     sys.argv.clear()
     sys.argv.append(exe)
     sys.argv.extend([i.strip() for i in ' '.join(args.commands).split(',')])
