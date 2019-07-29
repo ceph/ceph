@@ -619,6 +619,13 @@ We provide a set of CLI commands to manage user accounts:
 
   $ ceph dashboard ac-user-set-password <username> <password>
 
+- *Change Password Hash*::
+
+  $ ceph dashboard ac-user-set-password-hash <username> <hash>
+
+  The hash must be a bcrypt hash and salt, e.g. ``$2b$12$Pt3Vq/rDt2y9glTPSV.VFegiLkQeIpddtkhoFetNApYmIJOY8gau2``.
+  This can be used to import users from an external database.
+
 - *Modify User (name, and email)*::
 
   $ ceph dashboard ac-user-set-info <username> <name> <email>
