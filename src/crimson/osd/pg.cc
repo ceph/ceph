@@ -260,6 +260,7 @@ void PG::do_peering_event(
   peering_state.handle_event(
     evt,
     &rctx);
+  peering_state.write_if_dirty(rctx.transaction);
 }
 
 void PG::do_peering_event(
