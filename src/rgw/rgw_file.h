@@ -2382,7 +2382,8 @@ public:
 
   RGWWriteRequest(CephContext* _cct, RGWUserInfo *_user, RGWFileHandle* _fh,
 		  const std::string& _bname, const std::string& _oname)
-    : RGWLibContinuedReq(_cct, _user), bucket_name(_bname), obj_name(_oname),
+    : RGWLibContinuedReq(_cct, _user),
+      bucket_name(_bname), obj_name(_oname),
       rgw_fh(_fh), filter(nullptr), real_ofs(0),
       bytes_written(0), eio(false) {
 
