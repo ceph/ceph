@@ -39,6 +39,9 @@ public:
   bool preprocess_query(MonOpRequestRef op) override;
   bool prepare_update(MonOpRequestRef op) override;
 
+  bool preprocess_command(MonOpRequestRef op);
+  bool prepare_command(MonOpRequestRef op);
+
   bool prepare_health_checks(MonOpRequestRef op);
 
   bool check_leader_health();
