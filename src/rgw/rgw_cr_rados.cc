@@ -873,7 +873,7 @@ int RGWRebiddableLeaseCR::operate()
       set_locked(false); /* moot at this point anyway */
       yield call(new RGWSimpleRadosUnlockCR(async_rados, store, obj, lock_name,
 					    cookie));
-    } // while loop
+    } // while(!going_down)
 
     ldout(store->ctx(), 20) << *this << ": exited !going_down loop " <<
       obj << ":" << lock_name << ", releasing_lock=" << releasing_lock <<
