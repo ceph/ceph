@@ -5655,7 +5655,7 @@ int BlueStore::allocate_bluefs_freespace(
 	      << " available 0x " << alloc->get_free()
 	      << std::dec << dendl;
 
-	alloc->dump();
+	_dump_alloc_on_failure();
 	alloc->release(*extents);
 	extents->clear();
 	return -ENOSPC;
