@@ -336,6 +336,7 @@ PG::do_osd_op(ObjectState& os, OSDOp& osd_op, ceph::os::Transaction& txn)
   // TODO: dispatch via call table?
   // TODO: we might want to find a way to unify both input and output
   // of each op.
+  logger().debug("handling op {}", ceph_osd_op_name(osd_op.op.op));
   switch (const ceph_osd_op& op = osd_op.op; op.op) {
   case CEPH_OSD_OP_SYNC_READ:
     [[fallthrough]];
@@ -366,6 +367,7 @@ PG::do_osd_op(ObjectState& os, OSDOp& osd_op, ceph::os::Transaction& txn)
   case CEPH_OSD_OP_DELETE:
     return backend->remove(os, txn);
   default:
+    logger().warn("unknown op {}", ceph_osd_op_name(op.op));
     throw std::runtime_error(
       fmt::format("op '{}' not supported", ceph_osd_op_name(op.op)));
   }
