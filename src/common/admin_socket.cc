@@ -317,6 +317,8 @@ bool AdminSocket::do_accept()
 	  c = "foo";
 	  break;
 	}
+	//wrap command with new protocol
+	c = "{\"prefix\": \"" + c + "\"}";
 	break;
       }
     } else {
@@ -340,7 +342,7 @@ bool AdminSocket::do_accept()
   string format;
   vector<string> cmdvec;
   stringstream errss;
-  cmdvec.push_back(cmd);
+  cmdvec.push_back(c);
   if (!cmdmap_from_json(cmdvec, &cmdmap, errss)) {
     ldout(m_cct, 0) << "AdminSocket: " << errss.str() << dendl;
     retry_sys_call(::close, connection_fd);
