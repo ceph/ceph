@@ -1123,6 +1123,7 @@ PG::Scrubber::Scrubber()
    active(false),
    shallow_errors(0), deep_errors(0), fixed(0),
    must_scrub(false), must_deep_scrub(false), must_repair(false),
+   need_auto(false), time_for_deep(false),
    auto_repair(false),
    check_repair(false),
    deep_scrub_on_error(false),
@@ -2359,6 +2360,12 @@ bool PG::queue_scrub()
   }
   // An interrupted recovery repair could leave this set.
   state_clear(PG_STATE_REPAIR);
+  if (scrubber.need_auto) {
+    scrubber.must_scrub = true;
+    scrubber.must_deep_scrub = true;
+    scrubber.auto_repair = true;
+    scrubber.need_auto = false;
+  }
   scrubber.priority = scrubber.must_scrub ?
          cct->_conf->osd_requested_scrub_priority : get_scrub_priority();
   scrubber.must_scrub = false;
@@ -4351,77 +4358,99 @@ void PG::requeue_map_waiters()
 // returns true if a scrub has been newly kicked off
 bool PG::sched_scrub()
 {
-  bool nodeep_scrub = false;
   ceph_assert(is_locked());
-  if (!(is_primary() && is_active() && is_clean() && !is_scrubbing())) {
+  ceph_assert(!is_scrubbing());
+  if (!(is_primary() && is_active() && is_clean())) {
     return false;
   }
 
-  double deep_scrub_interval = 0;
-  pool.info.opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL, &deep_scrub_interval);
-  if (deep_scrub_interval <= 0) {
-    deep_scrub_interval = cct->_conf->osd_deep_scrub_interval;
-  }
-  bool time_for_deep = ceph_clock_now() >=
-    info.history.last_deep_scrub_stamp + deep_scrub_interval;
-
-  bool deep_coin_flip = false;
-  // Only add random deep scrubs when NOT user initiated scrub
-  // If we randomize when noscrub set then it guarantees
-  // we will deep scrub because this function is called often.
-  if (!time_for_deep && !scrubber.must_scrub
-       && !(get_osdmap()->test_flag(CEPH_OSDMAP_NOSCRUB)
-	    || pool.info.has_flag(pg_pool_t::FLAG_NOSCRUB)))
-      deep_coin_flip = (rand() % 100) < cct->_conf->osd_deep_scrub_randomize_ratio * 100;
-  dout(20) << __func__ << ": time_for_deep=" << time_for_deep << " deep_coin_flip=" << deep_coin_flip << dendl;
-
-  time_for_deep = (time_for_deep || deep_coin_flip);
-
-  //NODEEP_SCRUB so ignore time initiated deep-scrub
-  if (get_osdmap()->test_flag(CEPH_OSDMAP_NODEEP_SCRUB) ||
-      pool.info.has_flag(pg_pool_t::FLAG_NODEEP_SCRUB)) {
-    time_for_deep = false;
-    nodeep_scrub = true;
-  }
-
-  if (!scrubber.must_scrub) {
-    ceph_assert(!scrubber.must_deep_scrub);
-
-    //NOSCRUB so skip regular scrubs
-    if ((get_osdmap()->test_flag(CEPH_OSDMAP_NOSCRUB) ||
-	 pool.info.has_flag(pg_pool_t::FLAG_NOSCRUB)) && !time_for_deep) {
-      if (scrubber.reserved) {
-        // cancel scrub if it is still in scheduling,
-        // so pgs from other pools where scrub are still legal
-        // have a chance to go ahead with scrubbing.
-        clear_scrub_reserved();
-        scrub_unreserve_replicas();
-      }
-      return false;
-    }
-  }
-
-  // Clear these in case user issues the scrub/repair command during
-  // the scheduling of the scrub/repair (e.g. request reservation)
-  scrubber.deep_scrub_on_error = false;
-  scrubber.auto_repair = false;
-  if (cct->_conf->osd_scrub_auto_repair
-      && get_pgbackend()->auto_repair_supported()
-      // respect the command from user, and not do auto-repair
-      && !scrubber.must_repair
-      && !scrubber.must_scrub
-      && !scrubber.must_deep_scrub) {
-    if (time_for_deep) {
-      dout(20) << __func__ << ": auto repair with deep scrubbing" << dendl;
-      scrubber.auto_repair = true;
-    } else {
-      dout(20) << __func__ << ": auto repair with scrubbing, rescrub if errors found" << dendl;
-      scrubber.deep_scrub_on_error = true;
-    }
-  }
-
-  bool ret = true;
+  // All processing the first time through commits us to whatever
+  // choices are made.
   if (!scrubber.reserved) {
+    dout(20) << __func__ << ": Start processing pg " << info.pgid << dendl;
+
+    bool allow_deep_scrub = !(get_osdmap()->test_flag(CEPH_OSDMAP_NODEEP_SCRUB) ||
+		       pool.info.has_flag(pg_pool_t::FLAG_NODEEP_SCRUB));
+    bool allow_scrub = !(get_osdmap()->test_flag(CEPH_OSDMAP_NOSCRUB) ||
+		  pool.info.has_flag(pg_pool_t::FLAG_NOSCRUB));
+    bool has_deep_errors = (info.stats.stats.sum.num_deep_scrub_errors > 0);
+    bool try_to_auto_repair = (cct->_conf->osd_scrub_auto_repair
+                               && get_pgbackend()->auto_repair_supported());
+
+    scrubber.time_for_deep = false;
+    // Clear these in case user issues the scrub/repair command during
+    // the scheduling of the scrub/repair (e.g. request reservation)
+    scrubber.deep_scrub_on_error = false;
+    scrubber.auto_repair = false;
+
+    // All periodic scrub handling goes here because must_scrub is
+    // always set for must_deep_scrub and must_repair.
+    if (!scrubber.must_scrub) {
+      ceph_assert(!scrubber.must_deep_scrub && !scrubber.must_repair);
+      // Handle deep scrub determination only if allowed
+      if (allow_deep_scrub) {
+        // Initial entry and scheduled scrubs without nodeep_scrub set get here
+        if (scrubber.need_auto) {
+	  dout(20) << __func__ << ": need repair after scrub errors" << dendl;
+          scrubber.time_for_deep = true;
+        } else {
+          double deep_scrub_interval = 0;
+          pool.info.opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL, &deep_scrub_interval);
+          if (deep_scrub_interval <= 0) {
+	    deep_scrub_interval = cct->_conf->osd_deep_scrub_interval;
+          }
+          scrubber.time_for_deep = ceph_clock_now() >=
+	          info.history.last_deep_scrub_stamp + deep_scrub_interval;
+
+          bool deep_coin_flip = false;
+	  // If we randomize when !allow_scrub && allow_deep_scrub, then it guarantees
+	  // we will deep scrub because this function is called often.
+	  if (!scrubber.time_for_deep && allow_scrub)
+	    deep_coin_flip = (rand() % 100) < cct->_conf->osd_deep_scrub_randomize_ratio * 100;
+          dout(20) << __func__ << ": time_for_deep=" << scrubber.time_for_deep << " deep_coin_flip=" << deep_coin_flip << dendl;
+
+          scrubber.time_for_deep = (scrubber.time_for_deep || deep_coin_flip);
+        }
+
+        if (!scrubber.time_for_deep && has_deep_errors) {
+	  osd->clog->info() << "osd." << osd->whoami
+			    << " pg " << info.pgid
+			    << " Deep scrub errors, upgrading scrub to deep-scrub";
+	  scrubber.time_for_deep = true;
+        }
+
+        if (try_to_auto_repair) {
+          if (scrubber.time_for_deep) {
+            dout(20) << __func__ << ": auto repair with deep scrubbing" << dendl;
+            scrubber.auto_repair = true;
+          } else if (allow_scrub) {
+            dout(20) << __func__ << ": auto repair with scrubbing, rescrub if errors found" << dendl;
+            scrubber.deep_scrub_on_error = true;
+          }
+        }
+      } else { // !allow_deep_scrub
+        dout(20) << __func__ << ": nodeep_scrub set" << dendl;
+        if (has_deep_errors) {
+          osd->clog->error() << "osd." << osd->whoami
+			     << " pg " << info.pgid
+			     << " Regular scrub skipped due to deep-scrub errors and nodeep-scrub set";
+          return false;
+        }
+      }
+
+      //NOSCRUB so skip regular scrubs
+      if (!allow_scrub && !scrubber.time_for_deep) {
+        return false;
+      }
+    // scrubber.must_scrub
+    } else if (!scrubber.must_deep_scrub && has_deep_errors) {
+	osd->clog->error() << "osd." << osd->whoami
+			   << " pg " << info.pgid
+			   << " Regular scrub request, deep-scrub details will be lost";
+    }
+    // Unless precluded this was handle above
+    scrubber.need_auto = false;
+
     ceph_assert(scrubber.reserved_peers.empty());
     if ((cct->_conf->osd_scrub_during_recovery || !osd->is_recovery_active()) &&
          osd->inc_scrubs_pending()) {
@@ -4431,47 +4460,36 @@ bool PG::sched_scrub()
       scrub_reserve_replicas();
     } else {
       dout(20) << __func__ << ": failed to reserve locally" << dendl;
-      ret = false;
+      return false;
     }
   }
+
   if (scrubber.reserved) {
     if (scrubber.reserve_failed) {
-      dout(20) << "sched_scrub: failed, a peer declined" << dendl;
+      dout(20) << __func__ << ": failed, a peer declined" << dendl;
       clear_scrub_reserved();
       scrub_unreserve_replicas();
-      ret = false;
-    } else if (scrubber.reserved_peers.size() == acting.size()) {
-      dout(20) << "sched_scrub: success, reserved self and replicas" << dendl;
-      if (time_for_deep) {
-	dout(10) << "sched_scrub: scrub will be deep" << dendl;
+      return false;
+    } else if (scrubber.reserved_peers.size() == actingset.size()) {
+      dout(20) << __func__ << ": success, reserved self and replicas" << dendl;
+      if (scrubber.time_for_deep) {
+	dout(10) << __func__ << ": scrub will be deep" << dendl;
 	state_set(PG_STATE_DEEP_SCRUB);
-      } else if (!scrubber.must_deep_scrub && info.stats.stats.sum.num_deep_scrub_errors) {
-	if (!nodeep_scrub) {
-	  osd->clog->info() << "osd." << osd->whoami
-			    << " pg " << info.pgid
-			    << " Deep scrub errors, upgrading scrub to deep-scrub";
-	  state_set(PG_STATE_DEEP_SCRUB);
-	} else if (!scrubber.must_scrub) {
-	  osd->clog->error() << "osd." << osd->whoami
-			     << " pg " << info.pgid
-			     << " Regular scrub skipped due to deep-scrub errors and nodeep-scrub set";
-	  clear_scrub_reserved();
-	  scrub_unreserve_replicas();
-	  return false;
-	} else {
-	  osd->clog->error() << "osd." << osd->whoami
-			     << " pg " << info.pgid
-			     << " Regular scrub request, deep-scrub details will be lost";
-	}
+	scrubber.time_for_deep = false;
       }
       queue_scrub();
     } else {
       // none declined, since scrubber.reserved is set
-      dout(20) << "sched_scrub: reserved " << scrubber.reserved_peers << ", waiting for replicas" << dendl;
+      dout(20) << __func__ << ": reserved " << scrubber.reserved_peers
+	       << ", waiting for replicas" << dendl;
     }
   }
+  return true;
+}
 
-  return ret;
+bool PG::is_scrub_registered()
+{
+  return !scrubber.scrub_reg_stamp.is_zero();
 }
 
 void PG::reg_next_scrub()
@@ -4481,9 +4499,9 @@ void PG::reg_next_scrub()
 
   utime_t reg_stamp;
   bool must = false;
-  if (scrubber.must_scrub) {
+  if (scrubber.must_scrub || scrubber.need_auto) {
     // Set the smallest time that isn't utime_t()
-    reg_stamp = utime_t(0,1);
+    reg_stamp = Scrubber::scrub_must_stamp();
     must = true;
   } else if (info.stats.stats_invalid && cct->_conf->osd_scrub_invalid_stats) {
     reg_stamp = ceph_clock_now();
@@ -4496,7 +4514,7 @@ void PG::reg_next_scrub()
   double scrub_min_interval = 0, scrub_max_interval = 0;
   pool.info.opts.get(pool_opts_t::SCRUB_MIN_INTERVAL, &scrub_min_interval);
   pool.info.opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &scrub_max_interval);
-  ceph_assert(scrubber.scrub_reg_stamp == utime_t());
+  ceph_assert(!is_scrub_registered());
   scrubber.scrub_reg_stamp = osd->reg_pg_scrub(info.pgid,
 					       reg_stamp,
 					       scrub_min_interval,
@@ -4508,10 +4526,31 @@ void PG::reg_next_scrub()
 
 void PG::unreg_next_scrub()
 {
-  if (is_primary()) {
+  if (is_scrub_registered()) {
     osd->unreg_pg_scrub(info.pgid, scrubber.scrub_reg_stamp);
     scrubber.scrub_reg_stamp = utime_t();
   }
+}
+
+void PG::on_info_history_change()
+{
+  unreg_next_scrub();
+  reg_next_scrub();
+}
+
+void PG::scrub_requested(bool deep, bool repair, bool need_auto)
+{
+  unreg_next_scrub();
+  if (need_auto) {
+    scrubber.need_auto = true;
+  } else {
+    scrubber.must_scrub = true;
+    scrubber.must_deep_scrub = deep || repair;
+    scrubber.must_repair = repair;
+    // User might intervene, so clear this
+    scrubber.need_auto = false;
+  }
+  reg_next_scrub();
 }
 
 void PG::do_replica_scrub_map(OpRequestRef op)
@@ -4704,8 +4743,8 @@ void PG::clear_scrub_reserved()
 void PG::scrub_reserve_replicas()
 {
   ceph_assert(backfill_targets.empty());
-  for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
-       i != acting_recovery_backfill.end();
+  for (set<pg_shard_t>::iterator i = actingset.begin();
+       i != actingset.end();
        ++i) {
     if (*i == pg_whoami) continue;
     dout(10) << "scrub requesting reserve from osd." << *i << dendl;
@@ -4721,8 +4760,8 @@ void PG::scrub_reserve_replicas()
 void PG::scrub_unreserve_replicas()
 {
   ceph_assert(backfill_targets.empty());
-  for (set<pg_shard_t>::iterator i = acting_recovery_backfill.begin();
-       i != acting_recovery_backfill.end();
+  for (set<pg_shard_t>::iterator i = actingset.begin();
+       i != actingset.end();
        ++i) {
     if (*i == pg_whoami) continue;
     dout(10) << "scrub requesting unreserve from osd." << *i << dendl;
@@ -5822,7 +5861,7 @@ void PG::scrub_finish()
 {
   dout(20) << __func__ << dendl;
   bool repair = state_test(PG_STATE_REPAIR);
-  bool do_deep_scrub = false;
+  bool do_auto_scrub = false;
   // if the repair request comes from auto-repair and large number of errors,
   // we would like to cancel auto-repair
   if (repair && scrubber.auto_repair
@@ -5835,12 +5874,13 @@ void PG::scrub_finish()
 
   // if a regular scrub had errors within the limit, do a deep scrub to auto repair.
   if (scrubber.deep_scrub_on_error
+      && scrubber.authoritative.size()
       && scrubber.authoritative.size() <= cct->_conf->osd_scrub_auto_repair_num_errors) {
     ceph_assert(!deep_scrub);
-    scrubber.deep_scrub_on_error = false;
-    do_deep_scrub = true;
+    do_auto_scrub = true;
     dout(20) << __func__ << " Try to auto repair after scrub errors" << dendl;
   }
+  scrubber.deep_scrub_on_error = false;
 
   // type-specific finish (can tally more errors)
   _scrub_finish();
@@ -5924,14 +5964,6 @@ void PG::scrub_finish()
     }
   }
   publish_stats_to_osd();
-  if (do_deep_scrub) {
-    // XXX: Auto scrub won't activate if must_scrub is set, but
-    // setting the scrub stamps affects what users see.
-    utime_t stamp = utime_t(0,1);
-    set_last_scrub_stamp(stamp);
-    set_last_deep_scrub_stamp(stamp);
-  }
-  reg_next_scrub();
 
   {
     ObjectStore::Transaction t;
@@ -5953,6 +5985,12 @@ void PG::scrub_finish()
 
   scrub_clear_state(has_error);
   scrub_unreserve_replicas();
+
+  if (do_auto_scrub) {
+    scrub_requested(false, false, true);
+  } else {
+    reg_next_scrub();
+  }
 
   if (is_active() && is_primary()) {
     share_pg_info();
@@ -6081,7 +6119,6 @@ void PG::merge_new_log_entries(
 
 void PG::update_history(const pg_history_t& new_history)
 {
-  unreg_next_scrub();
   if (info.history.merge(new_history)) {
     dout(20) << __func__ << " advanced history from " << new_history << dendl;
     dirty_info = true;
@@ -6091,7 +6128,7 @@ void PG::update_history(const pg_history_t& new_history)
       dirty_big_info = true;
     }
   }
-  reg_next_scrub();
+  on_info_history_change();
 }
 
 void PG::fulfill_info(
@@ -6295,8 +6332,6 @@ void PG::start_peering_interval(
   vector<int> oldacting, oldup;
   int oldrole = get_role();
 
-  unreg_next_scrub();
-
   if (is_primary()) {
     osd->clear_ready_to_merge(this);
   }
@@ -6488,7 +6523,7 @@ void PG::on_new_interval()
 {
   const OSDMapRef osdmap = get_osdmap();
 
-  reg_next_scrub();
+  on_info_history_change();
 
   // initialize features
   acting_features = CEPH_FEATURES_SUPPORTED_DEFAULT;
@@ -6601,6 +6636,10 @@ ostream& operator<<(ostream& out, const PG& pg)
     out << " MUST_DEEP_SCRUB";
   if (pg.scrubber.must_scrub)
     out << " MUST_SCRUB";
+  if (pg.scrubber.time_for_deep)
+    out << " TIME_FOR_DEEP";
+  if (pg.scrubber.need_auto)
+    out << " NEED_AUTO";
 
   //out << " (" << pg.pg_log.get_tail() << "," << pg.pg_log.get_head() << "]";
   if (pg.pg_log.get_missing().num_missing()) {
@@ -7402,11 +7441,7 @@ boost::statechart::result PG::RecoveryState::Primary::react(
 {
   PG *pg = context< RecoveryMachine >().pg;
   if (pg->is_primary()) {
-    pg->unreg_next_scrub();
-    pg->scrubber.must_scrub = true;
-    pg->scrubber.must_deep_scrub = evt.deep || evt.repair;
-    pg->scrubber.must_repair = evt.repair;
-    pg->reg_next_scrub();
+    pg->scrub_requested(evt.deep, evt.repair);
     ldout(pg->cct,10) << "marking for scrub" << dendl;
   }
   return discard_event();
@@ -8977,9 +9012,8 @@ boost::statechart::result PG::RecoveryState::Stray::react(const MLogRec& logevt)
   ObjectStore::Transaction* t = context<RecoveryMachine>().get_cur_transaction();
   if (msg->info.last_backfill == hobject_t()) {
     // restart backfill
-    pg->unreg_next_scrub();
     pg->info = msg->info;
-    pg->reg_next_scrub();
+    pg->on_info_history_change();
     pg->dirty_info = true;
     pg->dirty_big_info = true;  // maybe.
 

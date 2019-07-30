@@ -503,7 +503,7 @@ public:
       f->dump_stream("pgid") << i.pgid;
       f->dump_stream("sched_time") << i.sched_time;
       f->dump_stream("deadline") << i.deadline;
-      f->dump_bool("forced", i.sched_time == i.deadline);
+      f->dump_bool("forced", i.sched_time == PG::Scrubber::scrub_must_stamp());
       f->close_section();
     }
     f->close_section();
@@ -2148,6 +2148,7 @@ protected:
 
   // -- scrubbing --
   void sched_scrub();
+  void resched_all_scrubs();
   bool scrub_random_backoff();
   bool scrub_load_below_threshold();
   bool scrub_time_permit(utime_t now);
