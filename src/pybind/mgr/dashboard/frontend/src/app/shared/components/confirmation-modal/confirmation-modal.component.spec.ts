@@ -58,6 +58,12 @@ class MockComponent {
   basicModal() {
     this.openModal();
   }
+
+  customCancelModal() {
+    this.openModal({
+      onCancel: () => (this.returnValue = 'If you have todo something besides hiding the modal.')
+    });
+  }
 }
 
 describe('ConfirmationModalComponent', () => {
@@ -193,6 +199,40 @@ describe('ConfirmationModalComponent', () => {
       expect(fh.getText('.modal-body')).toBe(
         'The description of the confirmation modal is mandatory.'
       );
+    });
+  });
+
+  describe('custom cancel action', () => {
+    const expectCancelValue = () =>
+      expectReturnValue('If you have todo something besides hiding the modal.');
+
+    beforeEach(() => {
+      mockComponent.customCancelModal();
+    });
+
+    it('should use custom cancel action', () => {
+      fh.clickElement('.tc_backButton');
+      expectCancelValue();
+    });
+
+    it('should use custom cancel action if escape was pressed', () => {
+      hide('esc');
+      expectCancelValue();
+    });
+
+    it('should use custom cancel action if clicked outside the modal', () => {
+      hide('backdrop-click');
+      expectCancelValue();
+    });
+
+    it('should unsubscribe on destroy', () => {
+      hide('backdrop-click');
+      expectCancelValue();
+      const s = 'This value will not be changed.';
+      mockComponent.returnValue = s;
+      component.ngOnDestroy();
+      hide('backdrop-click');
+      expectReturnValue(s);
     });
   });
 });

@@ -1,7 +1,8 @@
-import { Component, OnInit, TemplateRef } from '@angular/core';
+import { Component, OnDestroy, OnInit, TemplateRef } from '@angular/core';
 import { FormGroup } from '@angular/forms';
 
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'cd-confirmation-modal',
@@ -23,9 +24,16 @@ export class ConfirmationModalComponent implements OnInit, OnDestroy {
   // Component only
   boundCancel = this.cancel.bind(this);
   confirmationForm: FormGroup;
+  private onHide: Subscription;
+  private canceled = false;
 
-  constructor(public modalRef: BsModalRef) {
+  constructor(public modalRef: BsModalRef, private modalService: BsModalService) {
     this.confirmationForm = new FormGroup({});
+    this.onHide = this.modalService.onHide.subscribe((e) => {
+      if (this.onCancel && (e || this.canceled)) {
+        this.onCancel();
+      }
+    });
   }
 
   ngOnInit() {
@@ -42,11 +50,13 @@ export class ConfirmationModalComponent implements OnInit, OnDestroy {
     }
   }
 
+  ngOnDestroy() {
+    this.onHide.unsubscribe();
+  }
+
   cancel() {
+    this.canceled = true;
     this.modalRef.hide();
-    if (this.onCancel) {
-      this.onCancel();
-    }
   }
 
   stopLoadingSpinner() {
