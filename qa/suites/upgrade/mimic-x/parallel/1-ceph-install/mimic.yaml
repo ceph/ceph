@@ -44,6 +44,9 @@ tasks:
     mon.b:
     mon.c:
 - print: "**** done install.upgrade non-client hosts"
+- rgw:
+   - client.1
+- print: "**** done => started rgw client.1"
 - parallel:
     - workload
     - upgrade-sequence
