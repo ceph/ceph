@@ -51,6 +51,7 @@ def _blkid_parser(output):
         'TYPE': 'TYPE',
         'PART_ENTRY_NAME': 'PARTLABEL',
         'PART_ENTRY_UUID': 'PARTUUID',
+        'PART_ENTRY_TYPE': 'PARTTYPE',
         'PTTYPE': 'PTTYPE',
     }
 
