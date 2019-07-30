@@ -5356,15 +5356,15 @@ void OSD::tick()
 
   if (is_waiting_for_healthy()) {
     start_boot();
-    if (is_waiting_for_healthy()) {
-      // failed to boot
-      std::lock_guard l(heartbeat_lock);
-      utime_t now = ceph_clock_now();
-      if (now - last_mon_heartbeat > cct->_conf->osd_mon_heartbeat_interval) {
-        last_mon_heartbeat = now;
-        dout(1) << __func__ << " checking mon for new map" << dendl;
-        osdmap_subscribe(osdmap->get_epoch() + 1, false);
-      }
+  }
+
+  if (is_waiting_for_healthy() || is_booting()) {
+    std::lock_guard l(heartbeat_lock);
+    utime_t now = ceph_clock_now();
+    if (now - last_mon_heartbeat > cct->_conf->osd_mon_heartbeat_interval) {
+      last_mon_heartbeat = now;
+      dout(1) << __func__ << " checking mon for new map" << dendl;
+      osdmap_subscribe(osdmap->get_epoch() + 1, false);
     }
   }
 
