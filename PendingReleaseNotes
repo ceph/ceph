@@ -132,3 +132,6 @@
 
 * New OSD daemon command dump_recovery_reservations which reveals the
   recovery locks held (in_progress) and waiting in priority queues.
+
+* New OSD daemon command dump_scrub_reservations which reveals the
+  scrub reservations that are active and pending.
