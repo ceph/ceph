@@ -11,8 +11,10 @@ function(distutils_install_module name)
         COMMAND ${CMAKE_COMMAND} -E create_symlink ${CMAKE_CURRENT_SOURCE_DIR}/${src} ${src})
     endif()
   endforeach()
-  add_custom_target(${name}-clone ALL
-    DEPENDS ${py_clone})
+  if(NOT TARGET ${name}-clone)
+    add_custom_target(${name}-clone ALL
+      DEPENDS ${py_clone})
+  endif()
   cmake_parse_arguments(DU "" "INSTALL_SCRIPT;PYTHON_VERSION" "" ${ARGN})
   if(DU_PYTHON_VERSION)
     set(python_version ${DU_PYTHON_VERSION})

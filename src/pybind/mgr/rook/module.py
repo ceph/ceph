@@ -4,6 +4,7 @@ import os
 import uuid
 try:
     from typing import List
+    from ceph.deployment.drive_group import DriveGroupSpec
 except ImportError:
     pass  # just for type checking
 
@@ -412,7 +413,7 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
                 "Updating NFS server count in {0} to {1}".format(spec.name, num))
 
     def create_osds(self, drive_group, all_hosts):
-        # type: (orchestrator.DriveGroupSpec, List[str]) -> RookWriteCompletion
+        # type: (DriveGroupSpec, List[str]) -> RookWriteCompletion
 
         assert len(drive_group.hosts(all_hosts)) == 1
         targets = []

@@ -8,7 +8,9 @@ except ImportError:
 
 from functools import wraps
 
-from mgr_module import MgrModule, HandleCommandResult, CLICommand
+from ceph.deployment.drive_group import DriveGroupSpec, DriveGroupValidationError, \
+    DeviceSelection
+from mgr_module import MgrModule, CLICommand, HandleCommandResult
 
 import orchestrator
 
@@ -171,7 +173,7 @@ Usage:
 
         if inbuf:
             try:
-                drive_group = orchestrator.DriveGroupSpec.from_json(json.loads(inbuf))
+                drive_group = DriveGroupSpec.from_json(json.loads(inbuf))
             except ValueError as e:
                 msg = 'Failed to read JSON input: {}'.format(str(e)) + usage
                 return HandleCommandResult(-errno.EINVAL, stderr=msg)
@@ -184,8 +186,8 @@ Usage:
                 msg = "Invalid host:device spec: '{}'".format(svc_arg) + usage
                 return HandleCommandResult(-errno.EINVAL, stderr=msg)
 
-            devs = orchestrator.DeviceSelection(paths=block_devices)
-            drive_group = orchestrator.DriveGroupSpec(node_name, data_devices=devs)
+            devs = DeviceSelection(paths=block_devices)
+            drive_group = DriveGroupSpec(node_name, data_devices=devs)
         else:
             return HandleCommandResult(-errno.EINVAL, stderr=usage)
 
@@ -198,7 +200,7 @@ Usage:
 
         try:
             drive_group.validate(all_hosts)
-        except orchestrator.DriveGroupValidationError as e:
+        except DriveGroupValidationError as e:
             return HandleCommandResult(-errno.EINVAL, stderr=str(e))
 
         completion = self.create_osds(drive_group, all_hosts)
