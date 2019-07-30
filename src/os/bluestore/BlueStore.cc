@@ -5129,7 +5129,10 @@ bool BlueStore::test_mount_in_use()
 int BlueStore::_minimal_open_bluefs(bool create)
 {
   int r;
-  bluefs = new BlueFS(cct);
+  if (cct->_conf->bluefs_alloc_size > 0)
+    bluefs = new BlueFS(cct);
+  else
+    bluefs = new BlueFS(cct, min_alloc_size); // using bluestore min_alloc_size
 
   string bfn;
   struct stat st;
@@ -5192,21 +5195,22 @@ int BlueStore::_minimal_open_bluefs(bool create)
       bdev->get_size() * (cct->_conf->bluestore_bluefs_min_ratio +
 			  cct->_conf->bluestore_bluefs_gift_ratio);
     initial = std::max(initial, cct->_conf->bluestore_bluefs_min);
-    if (cct->_conf->bluefs_alloc_size % min_alloc_size) {
+    uint64_t bluefs_alloc_size = bluefs->get_bluefs_alloc_size();
+    if (bluefs_alloc_size % min_alloc_size) {
       derr << __func__ << " bluefs_alloc_size 0x" << std::hex
-	    << cct->_conf->bluefs_alloc_size << " is not a multiple of "
+	    << bluefs_alloc_size << " is not a multiple of "
 	    << "min_alloc_size 0x" << min_alloc_size << std::dec << dendl;
       r = -EINVAL;
       goto free_bluefs;
     }
     // align to bluefs's alloc_size
-    initial = p2roundup(initial, cct->_conf->bluefs_alloc_size);
+    initial = p2roundup(initial, bluefs_alloc_size);
     // put bluefs in the middle of the device in case it is an HDD
     uint64_t start = p2align((bdev->get_size() - initial) / 2,
-			      cct->_conf->bluefs_alloc_size);
+			      bluefs_alloc_size);
     //avoiding superblock overwrite
-    ceph_assert(cct->_conf->bluefs_alloc_size > _get_ondisk_reserved());
-    start = std::max(cct->_conf->bluefs_alloc_size, start);
+    ceph_assert(bluefs_alloc_size >= _get_ondisk_reserved());
+    start = std::max(bluefs_alloc_size, start);
 
     bluefs->add_block_extent(bluefs_shared_bdev, start, initial);
     bluefs_extents.insert(start, initial);
@@ -5651,8 +5655,9 @@ int BlueStore::allocate_bluefs_freespace(
   ceph_assert(min_size <= size);
   if (size) {
     // round up to alloc size
-    min_size = p2roundup(min_size, cct->_conf->bluefs_alloc_size);
-    size = p2roundup(size, cct->_conf->bluefs_alloc_size);
+    uint64_t bluefs_alloc_size = bluefs->get_bluefs_alloc_size();
+    min_size = p2roundup(min_size, bluefs_alloc_size);
+    size = p2roundup(size, bluefs_alloc_size);
 
     PExtentVector extents_local;
     PExtentVector* extents = extents_out ? extents_out : &extents_local;
@@ -5667,7 +5672,7 @@ int BlueStore::allocate_bluefs_freespace(
       dout(10) << __func__ << " gifting " << gift
 	       << " (" << byte_u_t(gift) << ")" << dendl;
 
-      alloc_len = alloc->allocate(gift, cct->_conf->bluefs_alloc_size,
+      alloc_len = alloc->allocate(gift, bluefs_alloc_size,
 				  0, 0, extents);
       if (alloc_len > 0) {
 	allocated += alloc_len;
@@ -5680,7 +5685,7 @@ int BlueStore::allocate_bluefs_freespace(
 	      << " failed to allocate on 0x" << std::hex << gift
 	      << " min_size 0x" << min_size
 	      << " > allocated total 0x" << allocated
-	      << " bluefs_alloc_size 0x" << cct->_conf->bluefs_alloc_size
+	      << " bluefs_alloc_size 0x" << bluefs_alloc_size
 	      << " allocated 0x" << (alloc_len < 0 ? 0 : alloc_len)
 	      << " available 0x " << alloc->get_free()
 	      << std::dec << dendl;
@@ -5799,10 +5804,11 @@ int BlueStore::_balance_bluefs_freespace()
     bluefs_usage[bluefs_shared_bdev].first,
     bluefs_usage[bluefs_shared_bdev].second);
 
+  uint64_t bluefs_alloc_size = bluefs->get_bluefs_alloc_size();
   // reclaim from bluefs?
   if (delta < 0) {
     // round up to alloc size
-    auto reclaim = p2roundup(uint64_t(-delta), cct->_conf->bluefs_alloc_size);
+    auto reclaim = p2roundup(uint64_t(-delta), bluefs_alloc_size);
 
     // hard cap to fit into 32 bits
     reclaim = std::min<uint64_t>(reclaim, 1ull << 31);

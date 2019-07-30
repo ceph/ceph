@@ -44,6 +44,19 @@ static void slow_discard_cb(void *priv, void* priv2) {
 
 BlueFS::BlueFS(CephContext* cct)
   : cct(cct),
+    bluefs_alloc_size(_default_bluefs_alloc_size()),
+    bdev(MAX_BDEV),
+    ioc(MAX_BDEV),
+    block_all(MAX_BDEV)
+{
+  discard_cb[BDEV_WAL] = wal_discard_cb;
+  discard_cb[BDEV_DB] = db_discard_cb;
+  discard_cb[BDEV_SLOW] = slow_discard_cb;
+}
+
+BlueFS::BlueFS(CephContext* cct, uint64_t bluestore_min_alloc_size)
+  : cct(cct),
+    bluefs_alloc_size(bluestore_min_alloc_size),
     bdev(MAX_BDEV),
     ioc(MAX_BDEV),
     block_all(MAX_BDEV)
@@ -256,8 +269,7 @@ int BlueFS::reclaim_blocks(unsigned id, uint64_t want,
           << " want 0x" << std::hex << want << std::dec << dendl;
   ceph_assert(id < alloc.size());
   ceph_assert(alloc[id]);
-
-  int64_t got = alloc[id]->allocate(want, cct->_conf->bluefs_alloc_size, 0,
+  int64_t got = alloc[id]->allocate(want, bluefs_alloc_size, 0,
 				    extents);
   ceph_assert(got != 0);
   if (got < 0) {
@@ -443,7 +455,7 @@ void BlueFS::_init_alloc()
     ceph_assert(bdev[id]->get_size());
     alloc[id] = Allocator::create(cct, cct->_conf->bluefs_allocator,
 				  bdev[id]->get_size(),
-				  cct->_conf->bluefs_alloc_size);
+				  bluefs_alloc_size);
     interval_set<uint64_t>& p = block_all[id];
     for (interval_set<uint64_t>::iterator q = p.begin(); q != p.end(); ++q) {
       alloc[id]->init_add_free(q.get_start(), q.get_len());
@@ -1845,7 +1857,7 @@ void BlueFS::_compact_log_async(std::unique_lock<ceph::mutex>& l)
 
   // conservative estimate for final encoded size
   new_log_jump_to = round_up_to(t.op_bl.length() + super.block_size * 2,
-                                cct->_conf->bluefs_alloc_size);
+                                bluefs_alloc_size);
   t.op_jump(log_seq, new_log_jump_to);
 
   // allocate
@@ -2470,7 +2482,7 @@ int BlueFS::_expand_slow_device(uint64_t need, PExtentVector& extents)
 {
   int r = -ENOSPC;
   if (slow_dev_expander) {
-    auto min_alloc_size = cct->_conf->bluefs_alloc_size;
+    auto min_alloc_size = bluefs_alloc_size;
     int id = _get_slow_device_id();
     ceph_assert(id <= (int)alloc.size() && alloc[id]);
     auto min_need = round_up_to(need, min_alloc_size);
@@ -2493,7 +2505,7 @@ int BlueFS::_allocate_without_fallback(uint8_t id, uint64_t len,
   dout(10) << __func__ << " len 0x" << std::hex << len << std::dec
            << " from " << (int)id << dendl;
   assert(id < alloc.size());
-  uint64_t min_alloc_size = cct->_conf->bluefs_alloc_size;
+  uint64_t min_alloc_size = bluefs_alloc_size;
 
   uint64_t left = round_up_to(len, min_alloc_size);
 
@@ -2527,7 +2539,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
   dout(10) << __func__ << " len 0x" << std::hex << len << std::dec
            << " from " << (int)id << dendl;
   ceph_assert(id < alloc.size());
-  uint64_t min_alloc_size = cct->_conf->bluefs_alloc_size;
+  uint64_t min_alloc_size = bluefs_alloc_size;
 
   uint64_t left = round_up_to(len, min_alloc_size);
   int64_t alloc_len = 0;
@@ -2740,7 +2752,7 @@ int BlueFS::open_for_write(
 
 BlueFS::FileWriter *BlueFS::_create_writer(FileRef f)
 {
-  FileWriter *w = new FileWriter(f);
+  FileWriter *w = new FileWriter(f, bluefs_alloc_size);
   for (unsigned i = 0; i < MAX_BDEV; ++i) {
     if (bdev[i]) {
       w->iocv[i] = new IOContext(cct, NULL);

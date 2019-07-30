@@ -158,11 +158,11 @@ public:
     std::array<IOContext*,MAX_BDEV> iocv; ///< for each bdev
     std::array<bool, MAX_BDEV> dirty_devs;
 
-    FileWriter(FileRef f)
+    FileWriter(FileRef f, uint64_t bluefs_alloc_size)
       : file(f),
 	pos(0),
 	buffer_appender(buffer.get_page_aligned_appender(
-			  g_conf()->bluefs_alloc_size / CEPH_PAGE_SIZE)) {
+			  bluefs_alloc_size / CEPH_PAGE_SIZE)) {
       ++file->num_writers;
       iocv.fill(nullptr);
       dirty_devs.fill(false);
@@ -267,6 +267,9 @@ private:
     l_bluefs_max_bytes_slow,
   };
 
+  // BlueFS allocation size
+  uint64_t bluefs_alloc_size = 0;
+
   // cache
   mempool::bluefs::map<string, DirRef> dir_map;              ///< dirname -> Dir
   mempool::bluefs::unordered_map<uint64_t,FileRef> file_map; ///< ino -> File
@@ -338,6 +341,11 @@ private:
 			  uint64_t jump_to = 0);
   uint64_t _estimate_log_size();
   bool _should_compact_log();
+  uint64_t _default_bluefs_alloc_size() {
+    if (cct->_conf->bluefs_alloc_size > 0)
+      return cct->_conf->bluefs_alloc_size;
+    return 1024 * 1024U;
+  }
 
   enum {
     REMOVE_DB = 1,
@@ -400,6 +408,7 @@ private:
 
 public:
   BlueFS(CephContext* cct);
+  BlueFS(CephContext* cct, uint64_t bluestore_min_alloc_size);
   ~BlueFS();
 
   // the super is always stored on bdev 0
@@ -460,6 +469,10 @@ public:
   int mkdir(const string& dirname);
   int rmdir(const string& dirname);
   bool wal_is_rotational();
+
+  uint64_t get_bluefs_alloc_size() {
+    return bluefs_alloc_size;
+  }
 
   bool dir_exists(const string& dirname);
   int stat(const string& dirname, const string& filename,
