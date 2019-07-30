@@ -171,7 +171,7 @@ struct health_check_map_t {
 
   void dump_detail(std::string *plain) const {
     for (auto& p : checks) {
-      *plain += p.first + " " + p.second.summary + "\n";
+      *plain += p.first + ": " + p.second.summary + "\n";
       for (auto& d : p.second.detail) {
         *plain += "    ";
         *plain += d;
