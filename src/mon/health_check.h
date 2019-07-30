@@ -7,6 +7,7 @@
 #include <map>
 
 #include "include/health.h"
+#include "include/utime.h"
 #include "common/Formatter.h"
 
 struct health_check_t {
@@ -59,6 +60,33 @@ struct health_check_t {
 };
 WRITE_CLASS_DENC(health_check_t)
 
+
+struct health_mute_t {
+  std::string code;
+  utime_t ttl;
+
+  DENC(health_mute_t, v, p) {
+    DENC_START(1, 1, p);
+    denc(v.code, p);
+    denc(v.ttl, p);
+    DENC_FINISH(p);
+  }
+
+  void dump(ceph::Formatter *f) const {
+    f->dump_string("code", code);
+    if (ttl != utime_t()) {
+      f->dump_stream("ttl") << ttl;
+    }
+  }
+
+  static void generate_test_instances(std::list<health_mute_t*>& ls) {
+    ls.push_back(new health_mute_t);
+    ls.push_back(new health_mute_t);
+    ls.back()->code = "OSD_DOWN";
+    ls.back()->ttl = utime_t(1, 2);
+  }
+};
+WRITE_CLASS_DENC(health_mute_t)
 
 struct health_check_map_t {
   std::map<std::string,health_check_t> checks;
