@@ -473,6 +473,36 @@ void md_config_t::parse_env(unsigned entity_type,
       _set_val(values, tracker, dir, *o, CONF_ENV, &err);
     }
   }
+
+  // Apply pod memory limits:
+  //
+  // There are two types of resource requests: `limits` and `requests`.
+  //
+  // - Requests: Used by the K8s scheduler to determine on which nodes to
+  //   schedule the pods. This helps spread the pods to different nodes. This
+  //   value should be conservative in order to make sure all the pods are
+  //   schedulable. This corresponds to POD_MEMORY_REQUEST (set by the Rook
+  //   CRD) and is the target memory utilization we try to maintain for daemons
+  //   that respect it.
+  //
+  // - Limits: At runtime, the container runtime (and Linux) will use the
+  //   limits to see if the pod is using too many resources. In that case, the
+  //   pod will be killed/restarted automatically if the pod goes over the limit.
+  //   This should be higher than what is specified for requests (potentially
+  //   much higher). This corresponds to the cgroup memory limit that will
+  //   trigger the Linux OOM killer.
+  //
+  // Here are the documented best practices: https://kubernetes.io/docs/tasks/configure-pod-container/assign-cpu-resource/#motivation-for-cpu-requests-and-limits
+  //
+  // When the operator creates the CephCluster CR, it will need to generate the
+  // desired requests and limits. As long as we are conservative in our choice
+  // for requests and generous with the limits we should be in a good place to
+  // get started.
+  //
+  // The support in Rook is already there for applying the limits as seen in these links.
+  //
+  // Rook docs on the resource requests and limits: https://rook.io/docs/rook/v1.0/ceph-cluster-crd.html#cluster-wide-resources-configuration-settings
+  // Example CR settings: https://github.com/rook/rook/blob/6d2ef936698593036185aabcb00d1d74f9c7bfc1/cluster/examples/kubernetes/ceph/cluster.yaml#L90
   if (auto pod_req = getenv("POD_MEMORY_REQUEST"); pod_req) {
     string err;
     uint64_t v = atoll(pod_req);
@@ -486,6 +516,7 @@ void md_config_t::parse_env(unsigned entity_type,
       }
     }
   }
+
   if (getenv(args_var)) {
     vector<const char *> env_args;
     env_to_vec(env_args, args_var);
