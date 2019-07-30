@@ -1444,6 +1444,19 @@ private:
       }
       return !is_unhealthy(now);
     }
+
+    void clear_mark_down(Connection *except = nullptr) {
+      if (con_back && con_back != except) {
+	con_back->mark_down();
+	con_back->clear_priv();
+	con_back.reset(nullptr);
+      }
+      if (con_front && con_front != except) {
+	con_front->mark_down();
+	con_front->clear_priv();
+	con_front.reset(nullptr);
+      }
+    }
   };
 
   ceph::mutex heartbeat_lock = ceph::make_mutex("OSD::heartbeat_lock");
