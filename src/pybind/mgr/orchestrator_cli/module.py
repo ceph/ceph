@@ -116,15 +116,16 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
 
     @_read_cli('orchestrator service ls',
                "name=host,type=CephString,req=false "
-               "name=svc_type,type=CephChoices,strings=mon|mgr|osd|mds|nfs|rgw|rbd-mirror,req=false "
+               "name=svc_type,type=CephChoices,strings=mon|mgr|osd|mds|iscsi|nfs|rgw|rbd-mirror,req=false "
                "name=svc_id,type=CephString,req=false "
-               "name=format,type=CephChoices,strings=json|plain,req=false",
+               "name=format,type=CephChoices,strings=json|plain,req=false "
+               "name=refresh,type=CephBool,req=false",
                'List services known to orchestrator')
-    def _list_services(self, host=None, svc_type=None, svc_id=None, format='plain'):
+    def _list_services(self, host=None, svc_type=None, svc_id=None, format='plain', refresh=False):
         # XXX this is kind of confusing for people because in the orchestrator
         # context the service ID for MDS is the filesystem ID, not the daemon ID
 
-        completion = self.describe_service(svc_type, svc_id, host)
+        completion = self.describe_service(svc_type, svc_id, host, refresh=refresh)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         services = completion.result
