@@ -496,7 +496,7 @@ See the Dashboard documentation at http://docs.ceph.com/ for details and a
 detailed feature overview.
 
 %package mgr-diskprediction-local
-Summary:        ceph-mgr diskprediction_local plugin
+Summary:        Ceph Manager plugin for predicting disk failures
 BuildArch:      noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
@@ -519,7 +519,7 @@ ceph-mgr-diskprediction-local is a ceph-mgr plugin that tries to predict
 disk failures using local algorithms and machine-learning databases.
 
 %package mgr-diskprediction-cloud
-Summary:        ceph-mgr diskprediction_cloud plugin
+Summary:        Ceph Manager plugin for cloud-based disk failure prediction
 BuildArch:      noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
@@ -531,7 +531,7 @@ disk failures using services in the Google cloud.
 
 %package mgr-rook
 BuildArch:      noarch
-Summary:        ceph-mgr rook plugin
+Summary:        Ceph Manager plugin for Rook-based orchestration
 %if 0%{?suse_version}
 Group:          System/Filesystems
 %endif
@@ -542,7 +542,7 @@ ceph-mgr-rook is a ceph-mgr plugin for orchestration functions using
 a Rook backend.
 
 %package mgr-ssh
-Summary:        ceph-mgr ssh module
+Summary:        Ceph Manager plugin for SSH-based orchestration
 BuildArch:	noarch
 %if 0%{?suse_version}
 Group:          System/Filesystems
