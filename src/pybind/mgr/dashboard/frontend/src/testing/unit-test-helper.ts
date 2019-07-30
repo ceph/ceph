@@ -229,7 +229,7 @@ export class FixtureHelper {
    * Expect a specific element to be visible or not.
    */
   expectElementVisible(css: string, visibility: boolean) {
-    expect(Boolean(this.getElementByCss(css))).toBe(visibility);
+    expect(visibility).toBe(Boolean(this.getElementByCss(css)));
   }
 
   expectFormFieldToBe(css: string, value: string) {

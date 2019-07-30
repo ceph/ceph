@@ -117,7 +117,7 @@ describe('CriticalConfirmationModalComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  it('should focus the checkbox form field', () => {
+  it('should focus the checkbox form field', (done) => {
     fixture.detectChanges();
     fixture.whenStable().then(() => {
       const focused = fixture.debugElement.query(By.css(':focus'));
@@ -125,6 +125,7 @@ describe('CriticalConfirmationModalComponent', () => {
       expect(focused.attributes.type).toBe('checkbox');
       const element = document.getElementById('confirmation');
       expect(element === document.activeElement).toBeTruthy();
+      done();
     });
   });
 
