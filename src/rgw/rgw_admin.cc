@@ -5943,7 +5943,8 @@ next:
 
     formatter->open_array_section("entries");
 
-    for (int i = 0; i < max_shards; i++) {
+    int i = (specified_shard_id ? shard_id : 0);
+    for (; i < max_shards; i++) {
       RGWRados::BucketShard bs(store);
       int shard_id = (bucket_info.num_shards > 0  ? i : -1);
       int ret = bs.init(bucket, shard_id, nullptr /* no RGWBucketInfo */);
@@ -5971,6 +5972,9 @@ next:
         formatter->flush(cout);
       } while (is_truncated);
       formatter->flush(cout);
+
+      if (specified_shard_id)
+        break;
     }
     formatter->close_section();
     formatter->flush(cout);
