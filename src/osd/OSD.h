@@ -354,6 +354,7 @@ public:
   void inc_scrubs_active(bool reserved);
   void dec_scrubs_pending();
   void dec_scrubs_active();
+  void dump_scrub_reservations(Formatter *f);
 
   void reply_op_error(OpRequestRef op, int err);
   void reply_op_error(OpRequestRef op, int err, eversion_t v, version_t uv);
