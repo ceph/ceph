@@ -39,3 +39,6 @@ add_executable(unittest_mon_montypes
   )
 add_ceph_unittest(unittest_mon_montypes)
 target_link_libraries(unittest_mon_montypes mon global)
+if(FREEBSD)
+  target_link_libraries(unittest_mon_montypes rados_test_stub)
+endif()

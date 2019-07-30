@@ -16,4 +16,7 @@ target_link_libraries(ceph-immutable-object-cache
   librados
   StdFilesystem::filesystem
   global)
+if(FREEBSD)
+  target_link_libraries(ceph-immutable-object-cache rados_test_stub)
+endif()
 install(TARGETS ceph-immutable-object-cache DESTINATION bin)
