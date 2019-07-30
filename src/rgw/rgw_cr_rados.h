@@ -292,7 +292,7 @@ public:
 			RGWRados *_store, RGWObjVersionTracker *_objv_tracker,
 			const rgw_raw_obj& _obj, const string& _name,
 			const string& _cookie, uint32_t _duration_secs,
-			int32_t _bid_amount_secs = -1,
+			int32_t _bid_amount = -1,
 			uint32_t _bid_duration_secs = 0);
 };
 
@@ -1345,19 +1345,21 @@ public:
 
 
 class RGWBidManagerCR : public RGWCoroutine {
+  RGWRados *store;
   int shard_count;
   int recalc_interval_secs;
-  rados::cls::lock::BidSet<uint32_t> bids;
+  rados::cls::lock::BidSet<int32_t> bids;
 
   std::atomic<bool> going_down = { false };
   bool aborted{false};
 
 public:
 
-  RGWBidManagerCR(RGWRados *_store,
+  RGWBidManagerCR(RGWRados* _store,
 		  int _shard_count,
 		  int _recalc_interval_secs)
     : RGWCoroutine(_store->ctx()),
+      store(_store),
       shard_count(_shard_count),
       recalc_interval_secs(_recalc_interval_secs),
       bids(shard_count, 1)
