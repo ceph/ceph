@@ -1800,8 +1800,9 @@ public:
 
       if (work_period_end_unset == work_period_end) {
 	work_period_end = ceph::coarse_mono_clock::now() + work_duration;
+	tn->log(10, SSTR(*this << "took lease until " << work_period_end));
       }
-      tn->log(10, "took lease");
+
       // if the period has advanced, we can't use the existing marker
       if (sync_marker.realm_epoch < realm_epoch) {
         ldpp_dout(sync_env->dpp, 4) << "clearing marker=" << sync_marker.marker
@@ -1829,14 +1830,11 @@ public:
       do {
         if (!rebiddable_lease_cr->is_locked()) {
           lost_lock = true;
-          tn->log(10, "lost lease");
+          tn->log(10, "lost lease due to expiration");
           break;
         } else if (ceph::coarse_mono_clock::now() >= work_period_end) {
 	  work_period_done = true;
-          tn->log(10,
-		  SSTR(*this <<
-		       ": work period done; stopping work on shard " <<
-		       shard_id));
+          tn->log(10, "work period done");
           break;
 	}
 #define INCREMENTAL_MAX_ENTRIES 100
