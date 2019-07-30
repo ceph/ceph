@@ -5685,7 +5685,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	result = ClassHandler::get_instance().open_class(cname, &cls);
 	ceph_assert(result == 0);   // init_op_flags() already verified this works.
 
-	ClassHandler::ClassMethod *method = cls->get_method(mname.c_str());
+	ClassHandler::ClassMethod *method = cls->get_method(mname);
 	if (!method) {
 	  dout(10) << "call method " << cname << "." << mname << " does not exist" << dendl;
 	  result = -EOPNOTSUPP;

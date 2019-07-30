@@ -69,7 +69,7 @@ public:
     std::set<ClassData *> dependencies;         /* our dependencies */
     std::set<ClassData *> missing_dependencies; /* only missing dependencies */
 
-    ClassMethod *_get_method(const char *mname);
+    ClassMethod *_get_method(const std::string& mname);
 
     ClassMethod *register_method(const char *mname,
                                  int flags,
@@ -83,11 +83,11 @@ public:
                                      cls_cxx_filter_factory_t fn);
     void unregister_filter(ClassFilter *method);
 
-    ClassMethod *get_method(const char *mname) {
+    ClassMethod *get_method(const std::string& mname) {
       std::lock_guard l(handler->mutex);
       return _get_method(mname);
     }
-    int get_method_flags(const char *mname);
+    int get_method_flags(const std::string& mname);
 
     ClassFilter *get_filter(const std::string &filter_name) {
       std::lock_guard l(handler->mutex);
