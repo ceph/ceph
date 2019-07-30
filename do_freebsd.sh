@@ -24,16 +24,21 @@ CMAKE_C_FLAGS_DEBUG="$C_FLAGS_DEBUG $COMPILE_FLAGS"
 #   dashboard, because versions fetched are not working on FreeBSD.
  
 
+echo Keeping the old build
+if [ -d build.old ]; then
+    sudo mv build.old build.del
+    sudo rm -rf build.del &
+fi
 if [ -d build ]; then
-    mv build build.remove
-    rm -f build.remove &
+    sudo mv build build.old
 fi
 
+mkdir build
 ./do_cmake.sh "$*" \
 	-D WITH_CCACHE=ON \
 	-D CMAKE_BUILD_TYPE=Debug \
-	-D CMAKE_CXX_FLAGS_DEBUG="$CXX_FLAGS_DEBUG" \
-	-D CMAKE_C_FLAGS_DEBUG="$C_FLAGS_DEBUG" \
+	-D CMAKE_CXX_FLAGS_DEBUG="$CMAKE_CXX_FLAGS_DEBUG" \
+	-D CMAKE_C_FLAGS_DEBUG="$CMAKE_C_FLAGS_DEBUG" \
 	-D ENABLE_GIT_VERSION=OFF \
 	-D WITH_RADOSGW_AMQP_ENDPOINT=OFF \
 	-D WITH_SYSTEM_BOOST=ON \
@@ -41,7 +46,6 @@ fi
 	-D WITH_LTTNG=OFF \
 	-D WITH_BABELTRACE=OFF \
 	-D WITH_SEASTAR=OFF \
-	-D WITH_BLKID=OFF \
 	-D WITH_FUSE=ON \
 	-D WITH_KRBD=OFF \
 	-D WITH_XFS=OFF \
@@ -54,13 +58,38 @@ fi
 	-D WITH_SPDK=OFF \
 	2>&1 | tee cmake.log
 
-echo start building 
-date
-(cd build; gmake -j$NPROC $BUILDOPTS )
+echo -n "start building: "; date
+printenv
 
-echo start testing 
-date
-# And remove cores leftover from previous runs
-sudo rm -rf /tmp/cores.*
-(cd build; ctest -j$NPROC || ctest --rerun-failed --output-on-failure)
+cd build
+  gmake -j$CPUS V=1 VERBOSE=1 
+  gmake tests 
+  echo -n "start testing: "; date ;
+  ctest -j $CPUS || RETEST=1
+
+echo "Testing result, retest: = " $RETEST
+
+if [ $RETEST -eq 1 ]; then
+    # make sure no leftovers are there
+    killall ceph-osd || true
+    killall ceph-mgr || true
+    killall ceph-mds || true
+    killall ceph-mon || true
+    # clean up after testing
+    rm -rf td/* /tmp/td src/test/td/* || true
+    rm -rf /tmp/ceph-asok.* || true
+    rm -rf /tmp/cores.* || true
+    rm -rf /tmp/*.core || true
+
+    ctest --output-on-failure --rerun-failed
+fi
+
+STATUS=$?
+
+# cleanup after the fact
+rm -rf /tmp/tmp* /tmp/foo /tmp/pip* /tmp/big* /tmp/pymp* $TMPDIR || true
+
+echo -n "Ended: "; date 
+
+return $STATUS
 
