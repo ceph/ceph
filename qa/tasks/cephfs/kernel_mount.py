@@ -27,6 +27,9 @@ class KernelMount(CephFSMount):
         self.ipmi_domain = ipmi_domain
 
     def mount(self, mount_path=None, mount_fs_name=None):
+    def mount(self, mount_path=None, mount_fs_name=None, mountpoint=None):
+        if mountpoint is not None:
+            self.mountpoint = mountpoint
         self.setupfs(name=mount_fs_name)
 
         log.info('Mounting kclient client.{id} at {remote} {mnt}...'.format(
