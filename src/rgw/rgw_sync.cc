@@ -1514,11 +1514,15 @@ public:
   }
 
   int operate() override {
+    ldpp_dout(sync_env->dpp, 20) << "RGWMetaSyncShardCR::" << __func__ <<
+      " entered operate" << dendl;
     int r;
 #warning "what does this while loop do?"
     while (true) {
       switch (sync_marker.state) {
       case rgw_meta_sync_marker::FullSync:
+	ldpp_dout(sync_env->dpp, 20) << "RGWMetaSyncShardCR::" << __func__ <<
+	  " issuing full_sync" << dendl;
         r  = full_sync();
         if (r < 0) {
           ldpp_dout(sync_env->dpp, 10) << "sync: full_sync: shard_id=" << shard_id << " r=" << r << dendl;
@@ -1526,6 +1530,8 @@ public:
         }
         return 0;
       case rgw_meta_sync_marker::IncrementalSync:
+	ldpp_dout(sync_env->dpp, 20) << "RGWMetaSyncShardCR::" << __func__ <<
+	  " issuing incremental_sync" << dendl;
         r  = incremental_sync();
         if (r < 0) {
           ldpp_dout(sync_env->dpp, 10) <<
@@ -1533,8 +1539,12 @@ public:
 	    dendl;
           return set_cr_error(r);
         } else if (r == R_WORK_COMPLETE) {
+	  ldpp_dout(sync_env->dpp, 20) << "RGWMetaSyncShardCR::" << __func__ <<
+	    " incremental_sync work complete" << dendl;
 	  return 0;
 	} else if (r == R_WORK_PARTIAL) {
+	  ldpp_dout(sync_env->dpp, 20) << "RGWMetaSyncShardCR::" << __func__ <<
+	    " incremental_sync work partially complete" << dendl;
 	  continue; // loop back up and try for more work
 	}
       } // switch
@@ -1752,6 +1762,7 @@ public:
 				   * previous state */
 	work_period_end = work_period_end_unset;
         yield {
+	  tn->log(20, "creating RGWRebiddableLeaseCR");
           uint32_t lock_duration = cct->_conf->rgw_sync_lease_period;
           string lock_name = "sync_lock";
           RGWRados *store = sync_env->store;
@@ -1770,6 +1781,7 @@ public:
             tn->log(10, "failed to take lease");
             return rebiddable_lease_cr->get_ret_status();
           }
+	  tn->log(20, "do not yet have lock; will try again");
           set_sleeping(true);
           yield;
         }
@@ -1801,6 +1813,7 @@ public:
        */
       marker = max_marker = sync_marker.marker;
       /* inc sync */
+      tn->log(20, "doing work for incremental sync");
       do {
         if (!rebiddable_lease_cr->is_locked()) {
           lost_lock = true;
@@ -1808,7 +1821,10 @@ public:
           break;
         } else if (ceph::coarse_mono_clock::now() >= work_period_end) {
 	  work_period_done = true;
-          tn->log(10, "work period done; lease expired");
+          tn->log(10,
+		  SSTR(*this <<
+		       ": work period done; stopping work on shard " <<
+		       shard_id));
           break;
 	}
 #define INCREMENTAL_MAX_ENTRIES 100
@@ -1905,6 +1921,7 @@ public:
 	  yield wait(utime_t(INCREMENTAL_INTERVAL, 0));
 	}
       } while (can_adjust_marker);
+      tn->log(20, SSTR(*this << " exited work loop"));
 
       tn->unset_flag(RGW_SNS_FLAG_ACTIVE);
 
@@ -1914,6 +1931,8 @@ public:
       }
 
       if (work_period_done) {
+	tn->log(20, SSTR(*this << " work period done on shard " <<
+			 shard_id << "; releasing lock"));
 	yield rebiddable_lease_cr->release_lock();
 	work_period_end = work_period_end_unset;
 	return R_WORK_PARTIAL;
