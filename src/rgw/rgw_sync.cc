@@ -1786,6 +1786,18 @@ public:
           yield;
         }
       }
+
+      while (!rebiddable_lease_cr->is_locked()) {
+	if (rebiddable_lease_cr->is_done()) {
+	  drain_all();
+	  tn->log(10, "failed to take lease");
+	  return rebiddable_lease_cr->get_ret_status();
+	}
+	tn->log(20, "do not yet have lock; will try again");
+	set_sleeping(true);
+	yield;
+      }
+
       if (work_period_end_unset == work_period_end) {
 	work_period_end = ceph::coarse_mono_clock::now() + work_duration;
       }
@@ -2133,8 +2145,9 @@ public:
                                                                  rgw_raw_obj(pool, sync_env->status_oid()),
                                                                  sync_status.sync_info));
       } // infinite loop
+#warning "this probably is not the right place for this"
+      bid_manager->go_down();
     } // re-enter
-    bid_manager->go_down();
     return 0;
   }
 
