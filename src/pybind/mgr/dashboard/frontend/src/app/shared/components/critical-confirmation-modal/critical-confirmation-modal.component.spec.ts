@@ -6,7 +6,7 @@ import { By } from '@angular/platform-browser';
 import { BsModalRef, BsModalService, ModalModule } from 'ngx-bootstrap/modal';
 import { Observable, Subscriber, timer as observableTimer } from 'rxjs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, modalServiceShow } from '../../../../testing/unit-test-helper';
 import { DirectivesModule } from '../../directives/directives.module';
 import { CriticalConfirmationModalComponent } from './critical-confirmation-modal.component';
 
@@ -103,17 +103,11 @@ describe('CriticalConfirmationModalComponent', () => {
   beforeEach(() => {
     mockFixture = TestBed.createComponent(MockComponent);
     mockComponent = mockFixture.componentInstance;
-    // Mocking the modals as a lot would be left over
     spyOn(mockComponent.modalService, 'show').and.callFake((_modalComp, config) => {
-      const ref = new BsModalRef();
-      fixture = TestBed.createComponent(CriticalConfirmationModalComponent);
-      component = fixture.componentInstance;
-      if (config.initialState) {
-        component = Object.assign(component, config.initialState);
-      }
-      fixture.detectChanges();
-      ref.content = component;
-      return ref;
+      const data = modalServiceShow(CriticalConfirmationModalComponent, config);
+      fixture = data.fixture;
+      component = data.component;
+      return data.ref;
     });
     mockComponent.openCtrlDriven();
     mockFixture.detectChanges();
