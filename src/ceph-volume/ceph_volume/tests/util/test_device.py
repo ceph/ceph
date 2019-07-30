@@ -126,8 +126,6 @@ class TestDevice(object):
                              "disable_kernel_queries",
                              "disable_lvm_queries")
     def test_is_ceph_disk_lsblk(self, monkeypatch):
-        monkeypatch.setattr("ceph_volume.util.device.disk.blkid",
-                            lambda path: {'PARTLABEL': ""})
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member
 
@@ -144,8 +142,6 @@ class TestDevice(object):
                              "disable_kernel_queries",
                              "disable_lvm_queries")
     def test_is_ceph_disk_member_not_available_lsblk(self, monkeypatch):
-        monkeypatch.setattr("ceph_volume.util.device.disk.blkid",
-                            lambda path: {'PARTLABEL': ""})
         disk = device.Device("/dev/sda")
         assert disk.is_ceph_disk_member
         assert not disk.available
@@ -408,9 +404,10 @@ class TestCephDiskDevice(object):
         disk = device.Device("/dev/sda")
         assert disk.available
 
-    def test_is_member_lsblk(self, device_info, ceph_partlabel):
-        lsblk = {"PARTLABEL": ceph_partlabel}
-        device_info(lsblk=lsblk)
+    @pytest.mark.usefixtures("lsblk_ceph_disk_member",
+                             "disable_kernel_queries",
+                             "disable_lvm_queries")
+    def test_is_member_lsblk(self):
         disk = device.CephDiskDevice(device.Device("/dev/sda"))
 
         assert disk.is_member is True
@@ -422,20 +419,23 @@ class TestCephDiskDevice(object):
 
         assert disk.type == 'unknown'
 
-    def test_type_blkid(self, device_info, ceph_partlabel):
-        expected = ceph_partlabel.split()[-1].split('.')[-1]
-        lsblk = {"PARTLABEL": ""}
-        blkid = {"PARTLABEL": ceph_partlabel}
-        device_info(lsblk=lsblk, blkid=blkid)
+    ceph_types = ['data', 'wal', 'db', 'lockbox', 'journal', 'block']
+
+    @pytest.mark.usefixtures("blkid_ceph_disk_member",
+                             "disable_kernel_queries",
+                             "disable_lvm_queries")
+    def test_type_blkid(self, monkeypatch, device_info, ceph_partlabel):
+        monkeypatch.setattr("ceph_volume.util.device.disk.lsblk",
+                            lambda path: {'PARTLABEL': ''})
         disk = device.CephDiskDevice(device.Device("/dev/sda"))
 
-        assert disk.type == expected
+        assert disk.type in self.ceph_types
 
+    @pytest.mark.usefixtures("blkid_ceph_disk_member",
+                             "lsblk_ceph_disk_member",
+                             "disable_kernel_queries",
+                             "disable_lvm_queries")
     def test_type_lsblk(self, device_info, ceph_partlabel):
-        expected = ceph_partlabel.split()[-1].split('.')[-1]
-        lsblk = {"PARTLABEL": ceph_partlabel}
-        blkid = {"PARTLABEL": ''}
-        device_info(lsblk=lsblk, blkid=blkid)
         disk = device.CephDiskDevice(device.Device("/dev/sda"))
 
-        assert disk.type == expected
+        assert disk.type in self.ceph_types
