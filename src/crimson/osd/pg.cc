@@ -268,7 +268,7 @@ void PG::do_peering_event(
 {
   if (!peering_state.pg_has_reset_since(evt.get_epoch_requested())) {
     logger().debug("{} handling {}", __func__, evt.get_desc());
-    return do_peering_event(evt.get_event(), rctx);
+    do_peering_event(evt.get_event(), rctx);
   } else {
     logger().debug("{} ignoring {} -- pg has reset", __func__, evt.get_desc());
   }
