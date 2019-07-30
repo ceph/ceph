@@ -2444,6 +2444,12 @@ public:
     bufferlist *header,      ///< [out] omap header
     map<string, bufferlist> *out /// < [out] Key to value map
     ) override;
+  int _omap_get(
+    Collection *c,     ///< [in] Collection containing oid
+    const ghobject_t &oid,   ///< [in] Object containing omap
+    bufferlist *header,      ///< [out] omap header
+    map<string, bufferlist> *out /// < [out] Key to value map
+    );
 
   /// Get omap header
   int omap_get_header(
@@ -3069,7 +3075,7 @@ public:
     }
   };
 public:
-
+  void fix_per_pool_omap(KeyValueDB *db);
   bool remove_key(KeyValueDB *db, const string& prefix, const string& key);
   bool fix_shared_blob(KeyValueDB *db,
 		         uint64_t sbid,
@@ -3097,6 +3103,9 @@ public:
       ++to_repair_cnt;
     }
   }
+  void inc_repaired() {
+    ++to_repair_cnt;
+  }
 
   StoreSpaceTracker& get_space_usage_tracker() {
     return space_usage_tracker;
@@ -3110,6 +3119,7 @@ public:
 
 private:
   unsigned to_repair_cnt = 0;
+  KeyValueDB::Transaction fix_per_pool_omap_txn;
   KeyValueDB::Transaction fix_fm_leaked_txn;
   KeyValueDB::Transaction fix_fm_false_free_txn;
   KeyValueDB::Transaction remove_key_txn;
