@@ -1423,6 +1423,14 @@ void OSDService::dec_scrubs_active()
   sched_scrub_lock.Unlock();
 }
 
+void OSDService::dump_scrub_reservations(Formatter *f)
+{
+  std::lock_guard l{sched_scrub_lock};
+  f->dump_int("scrubs_active", scrubs_active);
+  f->dump_int("scrubs_pending", scrubs_pending);
+  f->dump_int("osd_max_scrubs", cct->_conf->osd_max_scrubs);
+}
+
 void OSDService::retrieve_epochs(epoch_t *_boot_epoch, epoch_t *_up_epoch,
                                  epoch_t *_bind_epoch) const
 {
@@ -2632,6 +2640,10 @@ will start to track new ops received afterwards.";
     service.remote_reserver.dump(f);
     f->close_section();
     f->close_section();
+  } else if (admin_command == "dump_scrub_reservations") {
+    f->open_object_section("scrub_reservations");
+    service.dump_scrub_reservations(f);
+    f->close_section();
   } else if (admin_command == "get_latest_osdmap") {
     get_latest_osdmap();
   } else if (admin_command == "heap") {
@@ -3460,6 +3472,10 @@ void OSD::final_init()
   r = admin_socket->register_command("dump_recovery_reservations", "dump_recovery_reservations",
 				     asok_hook,
 				     "show recovery reservations");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command("dump_scrub_reservations", "dump_scrub_reservations",
+				     asok_hook,
+				     "show scrub reservations");
   ceph_assert(r == 0);
   r = admin_socket->register_command("get_latest_osdmap", "get_latest_osdmap",
 				     asok_hook,
