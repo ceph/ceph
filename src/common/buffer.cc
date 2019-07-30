@@ -164,8 +164,7 @@ static ceph::spinlock debug_lock;
   public:
     MEMPOOL_CLASS_HELPERS();
 
-    raw_posix_aligned(unsigned l, unsigned _align) : raw(l) {
-      align = _align;
+    raw_posix_aligned(unsigned l, unsigned _align) : raw(l), align(_align) {
       ceph_assert((align >= sizeof(void *)) && (align & (align - 1)) == 0);
 #ifdef DARWIN
       data = (char *) valloc(len);
@@ -194,8 +193,7 @@ static ceph::spinlock debug_lock;
     unsigned align;
     char *realdata;
   public:
-    raw_hack_aligned(unsigned l, unsigned _align) : raw(l) {
-      align = _align;
+    raw_hack_aligned(unsigned l, unsigned _align) : raw(l), align(_align) {
       realdata = new char[len+align-1];
       unsigned off = ((unsigned)realdata) & (align-1);
       if (off)
