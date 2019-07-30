@@ -15,6 +15,7 @@
 
   vars:
     delegate_facts_host: True
+    dashboard_enabled: False
 
   pre_tasks:
     # If we can't get python2 installed before any module is used we will fail
@@ -85,6 +86,8 @@
   gather_facts: false
   become: True
   any_errors_fatal: true
+  vars:
+    dashboard_enabled: False
   tasks:
     - import_role:
         name: ceph-defaults
