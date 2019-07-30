@@ -134,52 +134,6 @@ struct health_check_map_t {
     }
   }
 
-  health_status_t dump_summary(ceph::Formatter *f, std::string *plain,
-			       const char *sep, bool detail) const {
-    health_status_t r = HEALTH_OK;
-    for (auto& p : checks) {
-      if (r > p.second.severity) {
-	r = p.second.severity;
-      }
-      if (f) {
-	f->open_object_section(p.first.c_str());
-	f->dump_stream("severity") << p.second.severity;
-
-        f->open_object_section("summary");
-        f->dump_string("message", p.second.summary);
-        f->close_section();
-
-	if (detail) {
-	  f->open_array_section("detail");
-	  for (auto& d : p.second.detail) {
-            f->open_object_section("detail_item");
-            f->dump_string("message", d);
-            f->close_section();
-	  }
-	  f->close_section();
-	}
-	f->close_section();
-      } else {
-	if (!plain->empty()) {
-	  *plain += sep;
-	}
-	*plain += p.second.summary;
-      }
-    }
-    return r;
-  }
-
-  void dump_detail(std::string *plain) const {
-    for (auto& p : checks) {
-      *plain += p.first + ": " + p.second.summary + "\n";
-      for (auto& d : p.second.detail) {
-        *plain += "    ";
-        *plain += d;
-        *plain += "\n";
-      }
-    }
-  }
-
   friend bool operator==(const health_check_map_t& l,
 			 const health_check_map_t& r) {
     return l.checks == r.checks;

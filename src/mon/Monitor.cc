@@ -2784,39 +2784,70 @@ health_status_t Monitor::get_health_status(
   const char *sep1,
   const char *sep2)
 {
+  health_check_map_t all;
+  for (auto& svc : paxos_service) {
+    all.merge(svc->get_health_checks());
+  }
   health_status_t r = HEALTH_OK;
+  for (auto& p : all.checks) {
+    if (r > p.second.severity) {
+      r = p.second.severity;
+    }
+  }
   if (f) {
     f->open_object_section("health");
-    f->open_object_section("checks");
-  }
-
-  string summary;
-  string *psummary = f ? nullptr : &summary;
-  for (auto& svc : paxos_service) {
-    r = std::min(r, svc->get_health_checks().dump_summary(
-		   f, psummary, sep2, want_detail));
-  }
-
-  if (f) {
-    f->close_section();
     f->dump_stream("status") << r;
+    f->open_object_section("checks");
+    for (auto& p : all.checks) {
+      f->open_object_section(p.first.c_str());
+      f->dump_stream("severity") << p.second.severity;
+
+      f->open_object_section("summary");
+      f->dump_string("message", p.second.summary);
+      f->close_section();
+      if (want_detail) {
+	f->open_array_section("detail");
+	for (auto& d : p.second.detail) {
+	  f->open_object_section("detail_item");
+	  f->dump_string("message", d);
+	  f->close_section();
+	}
+	f->close_section();
+      }
+      f->close_section();
+    }
+    f->close_section();
+    f->open_array_section("mutes");
+    for (auto& p : healthmon()->mutes) {
+      f->dump_object("mute", p.second);
+    }
+    f->close_section();
     f->close_section();
   } else {
     // one-liner: HEALTH_FOO[ thing1[; thing2 ...]]
+    string summary;
+    for (auto& p : all.checks) {
+      if (!summary.empty()) {
+	summary += sep2;
+      }
+      summary += p.second.summary;
+    }
     *plain = stringify(r);
     if (summary.size()) {
       *plain += sep1;
       *plain += summary;
     }
     *plain += "\n";
-  }
-
-  if (want_detail && !f) {
-    for (auto& svc : paxos_service) {
-      svc->get_health_checks().dump_detail(plain);
+    // detail
+    for (auto& p : all.checks) {
+      *plain += p.first + ": " + p.second.summary + "\n";
+      for (auto& d : p.second.detail) {
+        *plain += "    ";
+        *plain += d;
+        *plain += "\n";
+      }
     }
   }
-
   return r;
 }
 
