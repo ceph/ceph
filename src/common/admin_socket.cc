@@ -352,27 +352,51 @@ bool AdminSocket::do_accept()
     }
   }
 
-  bool rval = false;
+  bool rval;
+  bufferlist out;
+  rval = execute_command(c, out);
+  if (rval) {
+    uint32_t len = htonl(out.length());
+    int ret = safe_write(connection_fd, &len, sizeof(len));
+    if (ret < 0) {
+      lderr(m_cct) << "AdminSocket: error writing response length "
+          << cpp_strerror(ret) << dendl;
+      rval = false;
+    } else {
+      if (out.write_fd(connection_fd) >= 0)
+        rval = true;
+    }
+  }
+  VOID_TEMP_FAILURE_RETRY(close(connection_fd));
+  return rval;
+}
 
-  map<string, cmd_vartype> cmdmap;
+int AdminSocket::execute_command(const std::string& cmd, ceph::bufferlist& out)
+{
+  cmdmap_t cmdmap;
   string format;
   vector<string> cmdvec;
   stringstream errss;
-  cmdvec.push_back(c);
+  cmdvec.push_back(cmd);
   if (!cmdmap_from_json(cmdvec, &cmdmap, errss)) {
     ldout(m_cct, 0) << "AdminSocket: " << errss.str() << dendl;
-    VOID_TEMP_FAILURE_RETRY(close(connection_fd));
+    return false;
+  }
+  string match;
+  try {
+    cmd_getval(m_cct, cmdmap, "format", format);
+    cmd_getval(m_cct, cmdmap, "prefix", match);
+  } catch (const bad_cmd_get& e) {
     return false;
   }
   cmd_getval(m_cct, cmdmap, "format", format);
   if (format != "json" && format != "json-pretty" &&
       format != "xml" && format != "xml-pretty")
     format = "json-pretty";
-  cmd_getval(m_cct, cmdmap, "prefix", c);
 
   m_lock.Lock();
-  map<string,AdminSocketHook*>::iterator p;
-  string match = c;
+
+  decltype(m_hooks)::iterator p;
   while (match.size()) {
     p = m_hooks.find(match);
     if (p != m_hooks.end())
@@ -388,53 +412,45 @@ bool AdminSocket::do_accept()
     }
   }
 
-  bufferlist out;
   if (p == m_hooks.end()) {
-    lderr(m_cct) << "AdminSocket: request '" << c << "' not defined" << dendl;
-  } else {
-    string args;
-    if (match != c) {
-      args = c.substr(match.length() + 1);
-    }
-
-    // Drop lock to avoid cycles in cases where the hook takes
-    // the same lock that was held during calls to register/unregister,
-    // and set in_hook to allow unregister to wait for us before
-    // removing this hook.
-    in_hook = true;
-    auto match_hook = p->second;
+    lderr(m_cct) << "AdminSocket: request '" << cmd << "' not defined" << dendl;
     m_lock.Unlock();
-    bool success = match_hook->call(match, cmdmap, format, out);
-    m_lock.Lock();
-    in_hook = false;
-    in_hook_cond.Signal();
+    return false;
+  } 
+  string args;
+  if (match != cmd) {
+    args = cmd.substr(match.length() + 1);
+  }
 
-    if (!success) {
-      ldout(m_cct, 0) << "AdminSocket: request '" << match << "' args '" << args
-		      << "' to " << p->second << " failed" << dendl;
-      out.append("failed");
-    } else {
-      ldout(m_cct, 5) << "AdminSocket: request '" << match << "' '" << args
-		       << "' to " << p->second
-		       << " returned " << out.length() << " bytes" << dendl;
-    }
-    uint32_t len = htonl(out.length());
-    int ret = safe_write(connection_fd, &len, sizeof(len));
-    if (ret < 0) {
-      lderr(m_cct) << "AdminSocket: error writing response length "
-		   << cpp_strerror(ret) << dendl;
-    } else {
-      if (out.write_fd(connection_fd) >= 0)
-	rval = true;
-    }
+  // Drop lock to avoid cycles in cases where the hook takes
+  // the same lock that was held during calls to register/unregister,
+  // and set in_hook to allow unregister to wait for us before
+  // removing this hook.
+  in_hook = true;
+  auto match_hook = p->second;
+  m_lock.Unlock();
+  bool success = match_hook->call(match, cmdmap, format, out);
+  m_lock.Lock();
+  in_hook = false;
+  in_hook_cond.Signal();
+
+  if (!success) {
+    ldout(m_cct, 0) << "AdminSocket: request '" << match << "' args '" << args
+        << "' to " << p->second << " failed" << dendl;
+    out.append("failed");
+  } else {
+    ldout(m_cct, 5) << "AdminSocket: request '" << match << "' '" << args
+       << "' to " << p->second
+       << " returned " << out.length() << " bytes" << dendl;
   }
   m_lock.Unlock();
-
-  VOID_TEMP_FAILURE_RETRY(close(connection_fd));
-  return rval;
+  return true;
 }
 
-int AdminSocket::register_command(std::string command, std::string cmddesc, AdminSocketHook *hook, std::string help)
+int AdminSocket::register_command(std::string command,
+				  std::string cmddesc,
+				  AdminSocketHook *hook,
+				  std::string help)
 {
   int ret;
   m_lock.Lock();
