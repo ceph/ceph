@@ -1962,8 +1962,17 @@ int RGWUser::execute_user_rename(RGWUserAdminOpState& op_state, std::string *err
 
   rgw_user& uid = op_state.get_new_uid();
 
+  RGWUserInfo existing_uinfo;
+  if (!uid.empty()) {
+    ret = rgw_get_user_info_by_uid(store, uid, existing_uinfo);
+    if (ret >= 0) {
+      set_err_msg(err_msg, "user name given by --new-uid already exists");
+      return -EEXIST;
+    }
+  }
+
   if (old_uid.tenant != uid.tenant) {
-    set_err_msg(err_msg, "Users have to be under the same tenant namespace " 
+    set_err_msg(err_msg, "users have to be under the same tenant namespace"
                 + old_uid.tenant + "!=" + uid.tenant);
     return -EINVAL;
   }
