@@ -11,6 +11,9 @@
  * Foundation.  See file COPYING.
  *
  */
+#ifdef WITH_JAEGER
+#include "common/tracer.h"
+#endif
 
 #include "osd/scheduler/OpSchedulerItem.h"
 #include "osd/OSD.h"
@@ -23,6 +26,7 @@ void PGOpItem::run(
   PGRef& pg,
   ThreadPool::TPHandle &handle)
 {
+  jspan parent_span = JTracer::tracedFunction("op dequeued");
   osd->dequeue_op(pg, op, handle);
   pg->unlock();
 }

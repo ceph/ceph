@@ -913,6 +913,11 @@ void ECBackend::handle_sub_write(
   ECSubWrite &op,
   const ZTracer::Trace &trace)
 {
+
+#ifdef WITH_JAEGER
+  jspan handle_sub_write_span = JTracer::tracedFunction("sub_write_handling_begins");
+#endif
+
   if (msg)
     msg->mark_event("sub_op_started");
   trace.event("handle_sub_write");
@@ -980,6 +985,11 @@ void ECBackend::handle_sub_write(
     // dummy rollforward transaction doesn't get at_version (and doesn't advance it)
     get_parent()->op_applied(op.at_version);
   }
+
+#ifdef WITH_JAEGER
+  JTracer::tracedSubrountine(handle_sub_write_span, "sub_write_handle_ends");
+#endif
+
 }
 
 void ECBackend::handle_sub_read(
