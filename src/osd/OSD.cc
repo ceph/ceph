@@ -4394,12 +4394,7 @@ void OSD::_remove_heartbeat_peer(int n)
 	   << " " << q->second.con_back->get_peer_addr()
 	   << " " << (q->second.con_front ? q->second.con_front->get_peer_addr() : entity_addr_t())
 	   << dendl;
-  q->second.con_back->mark_down();
-  q->second.con_back->clear_priv();
-  if (q->second.con_front) {
-    q->second.con_front->mark_down();
-    q->second.con_front->clear_priv();
-  }
+  q->second.clear_mark_down();
   heartbeat_peers.erase(q);
 }
 
@@ -4528,12 +4523,7 @@ void OSD::reset_heartbeat_peers(bool all)
   for (auto it = heartbeat_peers.begin(); it != heartbeat_peers.end();) {
     HeartbeatInfo& hi = it->second;
     if (all || hi.is_stale(stale)) {
-      hi.con_back->mark_down();
-      hi.con_back->clear_priv();
-      if (hi.con_front) {
-        hi.con_front->mark_down();
-	hi.con_front->clear_priv();
-      }
+      hi.clear_mark_down();
       // stop sending failure_report to mon too
       failure_queue.erase(it->first);
       heartbeat_peers.erase(it++);
@@ -4950,16 +4940,7 @@ bool OSD::heartbeat_reset(Connection *con)
 	 p->second.con_front == con)) {
       dout(10) << "heartbeat_reset failed hb con " << con << " for osd." << p->second.peer
 	       << ", reopening" << dendl;
-      if (con != p->second.con_back) {
-	p->second.con_back->mark_down();
-	p->second.con_back->clear_priv();
-      }
-      p->second.con_back.reset(NULL);
-      if (p->second.con_front && con != p->second.con_front) {
-	p->second.con_front->mark_down();
-	p->second.con_front->clear_priv();
-      }
-      p->second.con_front.reset(NULL);
+      p->second.clear_mark_down(con);
       pair<ConnectionRef,ConnectionRef> newcon = service.get_con_osd_hb(p->second.peer, p->second.epoch);
       if (newcon.first) {
 	p->second.con_back = newcon.first.get();
@@ -7578,12 +7559,7 @@ void OSD::note_down_osd(int peer)
   failure_pending.erase(peer);
   map<int,HeartbeatInfo>::iterator p = heartbeat_peers.find(peer);
   if (p != heartbeat_peers.end()) {
-    p->second.con_back->mark_down();
-    p->second.con_back->clear_priv();
-    if (p->second.con_front) {
-      p->second.con_front->mark_down();
-      p->second.con_front->clear_priv();
-    }
+    p->second.clear_mark_down();
     heartbeat_peers.erase(p);
   }
 }
