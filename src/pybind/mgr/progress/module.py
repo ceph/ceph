@@ -433,7 +433,8 @@ class Module(MgrModule):
         # In the case of the osd coming back in, we might need to cancel
         # previous recovery event for that osd
         if marked == "in":
-            for ev_id, ev in self._events.items():
+            for ev_id in list(self._events):
+                ev = self.events[ev_id]
                 if isinstance(ev, PgRecoveryEvent) and osd_id in ev.which_osds:
                     self.log.info("osd.{0} came back in, cancelling event".format(
                         osd_id
@@ -486,7 +487,8 @@ class Module(MgrModule):
             self._osdmap_changed(old_osdmap, self._latest_osdmap)
         elif notify_type == "pg_summary":
             data = self.get("pg_dump")
-            for ev_id, ev in self._events.items():
+            for ev_id in list(self._events):
+                ev = self._events[ev_id]
                 if isinstance(ev, PgRecoveryEvent):
                     ev.pg_update(data, self.log)
                     self.maybe_complete(ev)
