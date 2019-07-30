@@ -169,15 +169,6 @@ struct health_check_map_t {
     return r;
   }
 
-  void dump_summary_compat(ceph::Formatter *f) const {
-    for (auto& p : checks) {
-      f->open_object_section("item");
-      f->dump_stream("severity") << p.second.severity;
-      f->dump_string("summary", p.second.summary);
-      f->close_section();
-    }
-  }
-
   void dump_detail(std::string *plain) const {
     for (auto& p : checks) {
       *plain += p.first + " " + p.second.summary + "\n";
