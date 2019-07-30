@@ -85,7 +85,7 @@ void RGWLifecycleConfiguration::add_rule(const LCRule& rule)
 
 bool RGWLifecycleConfiguration::_add_rule(const LCRule& rule)
 {
-  lc_op op;
+  lc_op op(rule.get_id());
   op.status = rule.is_enabled();
   if (rule.get_expiration().has_days()) {
     op.expiration = rule.get_expiration().get_days();
@@ -127,8 +127,8 @@ bool RGWLifecycleConfiguration::_add_rule(const LCRule& rule)
   if (rule.get_filter().has_tags()){
     op.obj_tags = rule.get_filter().get_tags();
   }
-  auto ret = prefix_map.emplace(std::move(prefix), std::move(op));
-  return ret.second;
+  prefix_map.emplace(std::move(prefix), std::move(op));
+  return true;
 }
 
 int RGWLifecycleConfiguration::check_and_add_rule(const LCRule& rule)
@@ -172,32 +172,10 @@ bool RGWLifecycleConfiguration::has_same_action(const lc_op& first, const lc_op&
   return false;
 }
 
-//Rules are conflicted: if one rule's prefix starts with other rule's prefix, and these two rules
-//define same action. 
+/* Formerly, this method checked for duplicate rules using an invalid
+ * method (prefix uniqueness). */
 bool RGWLifecycleConfiguration::valid() 
 {
-  if (prefix_map.size() < 2) {
-    return true;
-  }
-  auto cur_iter = prefix_map.begin();
-  while (cur_iter != prefix_map.end()) {
-    auto next_iter = cur_iter;
-    ++next_iter;
-    while (next_iter != prefix_map.end()) {
-      string c_pre = cur_iter->first;
-      string n_pre = next_iter->first;
-      if (n_pre.compare(0, c_pre.length(), c_pre) == 0) {
-        if (has_same_action(cur_iter->second, next_iter->second)) {
-          return false;
-        } else {
-          ++next_iter;
-        }
-      } else {
-        break;
-      }
-    }
-    ++cur_iter;
-  }
   return true;
 }
 
@@ -334,7 +312,8 @@ static bool obj_has_expired(CephContext *cct, ceph::real_time mtime, int days, c
   return (timediff >= cmp);
 }
 
-int RGWLC::handle_multipart_expiration(RGWRados::Bucket *target, const map<string, lc_op>& prefix_map)
+int RGWLC::handle_multipart_expiration(
+  RGWRados::Bucket *target, const multimap<string, lc_op>& prefix_map)
 {
   MultipartMetaFilter mp_filter;
   vector<rgw_bucket_dir_entry> objs;
@@ -407,6 +386,25 @@ static bool is_valid_op(const lc_op& op)
                || op.dm_expiration
                || !op.transitions.empty()
                || !op.noncur_transitions.empty()));
+}
+
+static inline bool has_all_tags(const lc_op& rule_action,
+				const RGWObjTags& object_tags)
+{
+  for (const auto& tag : object_tags.get_tags()) {
+
+    if (! rule_action.obj_tags)
+      return false;
+
+    const auto& rule_tags = rule_action.obj_tags->get_tags();
+    const auto& iter = rule_tags.find(tag.first);
+
+    if ((iter == rule_tags.end()) ||
+	(iter->second != tag.second))
+      return false;
+  }
+  /* all tags matched */
+  return true;
 }
 
 class LCObjsLister {
@@ -633,10 +631,7 @@ static int check_tags(lc_op_ctx& oc, bool *skip)
       return -EIO;
     }
 
-    if (!includes(dest_obj_tags.get_tags().begin(),
-                  dest_obj_tags.get_tags().end(),
-                  op.obj_tags->get_tags().begin(),
-                  op.obj_tags->get_tags().end())){
+    if (! has_all_tags(op, dest_obj_tags)) {
       ldout(oc.cct, 20) << __func__ << "() skipping obj " << oc.obj << " as tags do not match" << dendl;
       return 0;
     }
@@ -940,7 +935,6 @@ int LCOpRule::process(rgw_bucket_dir_entry& o)
 
 }
 
-
 int RGWLC::bucket_lc_process(string& shard_id)
 {
   RGWLifecycleConfiguration  config(cct);
@@ -968,7 +962,6 @@ int RGWLC::bucket_lc_process(string& shard_id)
   }
 
   RGWRados::Bucket target(store, bucket_info);
-  LCObjsLister ol(store, bucket_info);
 
   map<string, bufferlist>::iterator aiter = bucket_attrs.find(RGW_ATTR_LC);
   if (aiter == bucket_attrs.end())
@@ -982,7 +975,12 @@ int RGWLC::bucket_lc_process(string& shard_id)
       return -1;
     }
 
-  map<string, lc_op>& prefix_map = config.get_prefix_map();
+  multimap<string, lc_op>& prefix_map = config.get_prefix_map();
+
+  ldpp_dout(this, 10) << __func__ <<  "() prefix_map size="
+		      << prefix_map.size()
+		      << dendl;
+
   rgw_obj_key pre_marker;
   rgw_obj_key next_marker;
   for(auto prefix_iter = prefix_map.begin(); prefix_iter != prefix_map.end(); ++prefix_iter) {
@@ -997,6 +995,8 @@ int RGWLC::bucket_lc_process(string& shard_id)
     } else {
       pre_marker = next_marker;
     }
+
+    LCObjsLister ol(store, bucket_info);
     ol.set_prefix(prefix_iter->first);
 
     ret = ol.init();
@@ -1020,7 +1020,9 @@ int RGWLC::bucket_lc_process(string& shard_id)
       ldpp_dout(this, 20) << __func__ << "(): key=" << o.key << dendl;
       int ret = orule.process(o);
       if (ret < 0) {
-        ldpp_dout(this, 20) << "ERROR: orule.process() returned ret=" << ret << dendl;
+        ldpp_dout(this, 20) << "ERROR: orule.process() returned ret="
+			    << ret
+			    << dendl;
       }
 
       if (going_down()) {
