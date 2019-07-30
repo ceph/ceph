@@ -824,6 +824,9 @@ int RGWRebiddableLeaseCR::operate()
 	yield call(new RGWBiddedRadosLockCR(async_rados, store, obj, lock_name,
 					    cookie, lock_duration_secs,
 					    get_bid_func));
+        ldout(store->ctx(), 20) << *this << ": attempt to take lock " << obj <<
+	  ":" << lock_name << " retcode=" << retcode << dendl;
+
 	if (retcode == -EBUSY) {
 	  yield wait(utime_t(polling_interval_secs, 0));
 	}
@@ -834,9 +837,13 @@ int RGWRebiddableLeaseCR::operate()
       if (retcode < 0) {
         set_locked(false);
         ldout(store->ctx(), 20) << *this << ": couldn't lock " << obj <<
-	  ":" << lock_name << ": retcode=" << retcode << dendl;
+	  ":" << lock_name << " retcode=" << retcode << dendl;
         return set_state(RGWCoroutine_Error, retcode);
       }
+
+      ldout(store->ctx(), 20) << *this << ": acquired lock " << obj <<
+	":" << lock_name << dendl;
+
       set_locked(true);
 
       yield wait(utime_t(lock_duration_secs / 2, 0));
@@ -848,19 +855,29 @@ int RGWRebiddableLeaseCR::operate()
 					    get_bid_func));
 	if (retcode < 0) {
 	  set_locked(false);
-	  ldout(store->ctx(), 20) << *this << ": couldn't lock " << obj <<
-	    ":" << lock_name << ": retcode=" << retcode << dendl;
+	  ldout(store->ctx(), 20) << *this << ": couldn't renew lock " <<
+	    obj << ":" << lock_name << ": retcode=" << retcode << dendl;
 	  return set_state(RGWCoroutine_Error, retcode);
 	}
+	ldout(store->ctx(), 20) << *this << ": renewed lock " <<
+	  obj << ":" << lock_name << dendl;
 
 	yield wait(utime_t(lock_duration_secs / 2, 0));
       }
+
+      ldout(store->ctx(), 20) << *this << ": exited lock renewal loop " <<
+	obj << ":" << lock_name << ", releasing_lock=" << releasing_lock <<
+	", going_down=" << going_down << dendl;
 
       releasing_lock = false;
       set_locked(false); /* moot at this point anyway */
       yield call(new RGWSimpleRadosUnlockCR(async_rados, store, obj, lock_name,
 					    cookie));
     } // while loop
+
+    ldout(store->ctx(), 20) << *this << ": exited !going_down loop " <<
+      obj << ":" << lock_name << ", releasing_lock=" << releasing_lock <<
+      ", going_down=" << going_down << dendl;
 
     return set_state(RGWCoroutine_Done);
   } // reenter
