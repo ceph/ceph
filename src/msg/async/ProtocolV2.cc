@@ -1443,8 +1443,6 @@ CtPtr ProtocolV2::handle_message() {
     }
   }
 
-  message->set_connection(connection);
-
 #if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
   if (message->get_type() == CEPH_MSG_OSD_OP ||
       message->get_type() == CEPH_MSG_OSD_OPREPLY) {
