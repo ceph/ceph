@@ -7164,6 +7164,14 @@ int BlueStore::_fsck(bool deep, bool repair)
       errors += r;
   }
 
+  if (!per_pool_omap) {
+    derr << "fsck error: store not yet converted to per-pool omap" << dendl;
+    ++errors;
+    if (repair) {
+      repairer.fix_per_pool_omap(db);
+    }
+  }
+
   // get expected statfs; reset unaffected fields to be able to compare
   // structs
   statfs(&actual_statfs);
@@ -7492,6 +7500,61 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  ++errors;
 	} else {
 	  m.insert(o->onode.nid);
+	}
+	if (per_pool_omap &&
+	    (!o->onode.is_perpool_omap() && !o->onode.is_pgmeta_omap())) {
+	  derr << "fsck error: " << oid << " has omap that is not per-pool or pgmeta"
+	       << dendl;
+	  ++errors;
+	}
+	if (repair &&
+	    o->onode.has_omap() &&
+	    !o->onode.is_perpool_omap() &&
+	    !o->oid.is_pgmeta()) {
+	  derr << "fsck converting " << oid << " omap to per-pool" << dendl;
+	  used_omap_head.erase(o->onode.nid);
+	  used_per_pool_omap_head.insert(o->onode.nid);
+	  bufferlist h;
+	  map<string,bufferlist> kv;
+	  int r = _omap_get(c.get(), oid, &h, &kv);
+	  if (r < 0) {
+	    derr << " got " << r << " " << cpp_strerror(r) << dendl;
+	  } else {
+	    KeyValueDB::Transaction txn = db->get_transaction();
+	    // remove old keys
+	    const string& old_omap_prefix = o->get_omap_prefix();
+	    string old_head, old_tail;
+	    o->get_omap_header(&old_head);
+	    o->get_omap_tail(&old_tail);
+	    txn->rm_range_keys(old_omap_prefix, old_head, old_tail);
+	    txn->rmkey(old_omap_prefix, old_tail);
+	    // set flag
+	    o->onode.set_flag(bluestore_onode_t::FLAG_PERPOOL_OMAP);
+	    _record_onode(o, txn);
+	    const string& new_omap_prefix = o->get_omap_prefix();
+	    // head
+	    if (h.length()) {
+	      string new_head;
+	      o->get_omap_header(&new_head);
+	      txn->set(new_omap_prefix, new_head, h);
+	    }
+	    // tail
+	    string new_tail;
+	    o->get_omap_tail(&new_tail);
+	    bufferlist empty;
+	    txn->set(new_omap_prefix, new_tail, empty);
+	    // values
+	    string final_key;
+	    o->get_omap_key(string(), &final_key);
+	    size_t base_key_len = final_key.size();
+	    for (auto& i : kv) {
+	      final_key.resize(base_key_len);
+	      final_key += i.first;
+	      txn->set(new_omap_prefix, final_key, i.second);
+	    }
+	    db->submit_transaction_sync(txn);
+	    repairer.inc_repaired();
+	  }
 	}
       }
       expected_statfs->add(onode_statfs);
@@ -7846,7 +7909,7 @@ int BlueStore::_fsck(bool deep, bool repair)
       uint64_t pool;
       uint64_t omap_head;
       string k = it->key();
-      char *c = k.c_str();
+      const char *c = k.c_str();
       c = _key_decode_u64(c, &pool);
       c = _key_decode_u64(c, &omap_head);
       if (used_per_pool_omap_head.count(omap_head) == 0) {
@@ -9489,6 +9552,16 @@ int BlueStore::omap_get(
   )
 {
   Collection *c = static_cast<Collection *>(c_.get());
+  return _omap_get(c, oid, header, out);
+}
+
+int BlueStore::_omap_get(
+  Collection *c,    ///< [in] Collection containing oid
+  const ghobject_t &oid,   ///< [in] Object containing omap
+  bufferlist *header,      ///< [out] omap header
+  map<string, bufferlist> *out /// < [out] Key to value map
+  )
+{
   dout(15) << __func__ << " " << c->get_cid() << " oid " << oid << dendl;
   if (!c->exists)
     return -ENOENT;
@@ -14222,6 +14295,15 @@ bool BlueStoreRepairer::remove_key(KeyValueDB *db,
   return true;
 }
 
+void BlueStoreRepairer::fix_per_pool_omap(KeyValueDB *db)
+{
+  fix_per_pool_omap_txn = db->get_transaction();
+  ++to_repair_cnt;
+  bufferlist bl;
+  bl.append("1");
+  fix_per_pool_omap_txn->set(PREFIX_SUPER, "per_pool_omap", bl);
+}
+
 bool BlueStoreRepairer::fix_shared_blob(
   KeyValueDB *db,
   uint64_t sbid,
@@ -14312,6 +14394,10 @@ bool BlueStoreRepairer::preprocess_misreference(KeyValueDB *db)
 
 unsigned BlueStoreRepairer::apply(KeyValueDB* db)
 {
+  if (fix_per_pool_omap_txn) {
+    db->submit_transaction_sync(fix_per_pool_omap_txn);
+    fix_per_pool_omap_txn = nullptr;
+  }
   if (fix_fm_leaked_txn) {
     db->submit_transaction_sync(fix_fm_leaked_txn);
     fix_fm_leaked_txn = nullptr;
