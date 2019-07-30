@@ -167,7 +167,25 @@ version_t HealthMonitor::get_trim_to() const
 
 bool HealthMonitor::preprocess_query(MonOpRequestRef op)
 {
-  return false;
+  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  switch (m->get_type()) {
+  case MSG_MON_COMMAND:
+    try {
+      return preprocess_command(op);
+    } catch (const bad_cmd_get& e) {
+      bufferlist bl;
+      mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
+      return true;
+    }
+
+  case MSG_MON_HEALTH_CHECKS:
+    return false;
+
+  default:
+    mon->no_reply(op);
+    derr << "Unhandled message type " << m->get_type() << dendl;
+    return true;
+  }
 }
 
 bool HealthMonitor::prepare_update(MonOpRequestRef op)
@@ -178,7 +196,131 @@ bool HealthMonitor::prepare_update(MonOpRequestRef op)
   switch (m->get_type()) {
   case MSG_MON_HEALTH_CHECKS:
     return prepare_health_checks(op);
+  case MSG_MON_COMMAND:
+    return prepare_command(op);
   default:
+    return false;
+  }
+}
+
+bool HealthMonitor::preprocess_command(MonOpRequestRef op)
+{
+  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  std::stringstream ss;
+  bufferlist rdata;
+
+  cmdmap_t cmdmap;
+  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+    string rs = ss.str();
+    mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
+    return true;
+  }
+
+  MonSession *session = op->get_session();
+  if (!session) {
+    mon->reply_command(op, -EACCES, "access denied", rdata,
+		       get_last_committed());
+    return true;
+  }
+
+  string format;
+  cmd_getval(g_ceph_context, cmdmap, "format", format);
+  boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty",
+						   "json-pretty"));
+
+  string prefix;
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  int r = 0;
+
+//} else {
+    return false;
+//}
+
+reply:
+  string rs;
+  getline(ss, rs);
+  mon->reply_command(op, r, rs, rdata, get_last_committed());
+  return true;
+}
+
+bool HealthMonitor::prepare_command(MonOpRequestRef op)
+{
+  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+
+  std::stringstream ss;
+  bufferlist rdata;
+
+  cmdmap_t cmdmap;
+  if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
+    string rs = ss.str();
+    mon->reply_command(op, -EINVAL, rs, rdata, get_last_committed());
+    return true;
+  }
+
+  MonSession *session = op->get_session();
+  if (!session) {
+    mon->reply_command(op, -EACCES, "access denied", rdata, get_last_committed());
+    return true;
+  }
+
+  string format;
+  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
+  boost::scoped_ptr<Formatter> f(Formatter::create(format));
+
+  string prefix;
+  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+
+  int r = 0;
+
+  if (prefix == "health mute") {
+    string code;
+    if (!cmd_getval(g_ceph_context, cmdmap, "code", code) ||
+	code == "") {
+      r = -EINVAL;
+      ss << "must specify an alert code to mute";
+      goto out;
+    }
+    string ttl_str;
+    utime_t ttl;
+    if (cmd_getval(g_ceph_context, cmdmap, "ttl", ttl_str)) {
+      auto secs = parse_timespan(ttl_str);
+      if (secs == 0s) {
+	r = -EINVAL;
+	ss << "not a valid duration: " << ttl_str;
+	goto out;
+      }
+      ttl = ceph_clock_now();
+      ttl += std::chrono::duration<double>(secs).count();
+    }
+    auto& m = pending_mutes[code];
+    m.code = code;
+    m.ttl = ttl;
+  } else if (prefix == "health unmute") {
+    string code;
+    if (cmd_getval(g_ceph_context, cmdmap, "code", code)) {
+      pending_mutes.erase(code);
+    } else {
+      pending_mutes.clear();
+    }
+  } else {
+    ss << "Command '" << prefix << "' not implemented!";
+    r = -ENOSYS;
+  }
+
+out:
+  dout(4) << __func__ << " done, r=" << r << dendl;
+  /* Compose response */
+  string rs;
+  getline(ss, rs);
+
+  if (r >= 0) {
+    // success.. delay reply
+    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, r, rs,
+					      get_last_committed() + 1));
+    return true;
+  } else {
+    // reply immediately
+    mon->reply_command(op, r, rs, rdata, get_last_committed());
     return false;
   }
 }
