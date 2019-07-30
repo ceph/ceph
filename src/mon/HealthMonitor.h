@@ -22,6 +22,11 @@ class HealthMonitor : public PaxosService
   map<int,health_check_map_t> quorum_checks;  // for each quorum member
   health_check_map_t leader_checks;           // leader only
 
+  map<string,health_mute_t> pending_mutes;
+
+public:
+  map<string,health_mute_t> mutes;
+
 public:
   HealthMonitor(Monitor *m, Paxos *p, const string& service_name);
 

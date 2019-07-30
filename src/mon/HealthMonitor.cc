@@ -74,6 +74,17 @@ void HealthMonitor::update_from_paxos(bool *need_bootstrap)
     leader_checks.clear();
   }
 
+  {
+    bufferlist bl;
+    mon->store->get(service_name, "mutes", bl);
+    if (bl.length()) {
+      auto p = bl.cbegin();
+      decode(mutes, p);
+    } else {
+      mutes.clear();
+    }
+  }
+
   dout(20) << "dump:";
   JSONFormatter jf(true);
   jf.open_object_section("health");
@@ -92,6 +103,7 @@ void HealthMonitor::update_from_paxos(bool *need_bootstrap)
 void HealthMonitor::create_pending()
 {
   dout(10) << " " << version << dendl;
+  pending_mutes = mutes;
 }
 
 void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
@@ -106,6 +118,11 @@ void HealthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   bufferlist lbl;
   encode(leader_checks, lbl);
   t->put(service_name, "leader", lbl);
+  {
+    bufferlist bl;
+    encode(pending_mutes, bl);
+    t->put(service_name, "mutes", bl);
+  }
 
   health_check_map_t pending_health;
 
