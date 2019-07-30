@@ -159,9 +159,19 @@ class TestValidateDevices(object):
         result = activation.validate_devices({'type': 'filestore', 'journal': {}, 'data': {}})
         assert result is True
 
+    def test_filestore_without_type(self):
+        activation = activate.Activate([])
+        result = activation.validate_devices({'journal': {}, 'data': {}})
+        assert result is True
+
     def test_bluestore_with_all_devices(self):
         activation = activate.Activate([])
         result = activation.validate_devices({'type': 'bluestore', 'data': {}, 'block': {}})
+        assert result is True
+
+    def test_bluestore_without_type(self):
+        activation = activate.Activate([])
+        result = activation.validate_devices({'data': {}, 'block': {}})
         assert result is True
 
     def test_bluestore_is_default(self):
