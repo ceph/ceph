@@ -278,7 +278,7 @@ int RGWBucketReshard::clear_index_shard_reshard_status(RGWRados* store,
     int ret = set_resharding_status(store, bucket_info,
 				    bucket_info.bucket.bucket_id,
 				    (num_shards < 1 ? 1 : num_shards),
-				    CLS_RGW_RESHARD_NONE);
+				    CLS_RGW_RESHARD_NOT_RESHARDING);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "RGWBucketReshard::" << __func__ <<
 	" ERROR: error clearing reshard status from index shard " <<
@@ -382,7 +382,7 @@ public:
 	  " clear_index_shard_status returned " << ret << dendl;
       }
       bucket_info.new_bucket_instance_id.clear();
-      set_status(CLS_RGW_RESHARD_NONE); // clears new_bucket_instance as well
+      set_status(CLS_RGW_RESHARD_NOT_RESHARDING); // clears new_bucket_instance as well
     }
   }
 
