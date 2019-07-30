@@ -559,7 +559,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
         If no host provided the operation affects all the host in the OSDS role
 
 
-        :param drive_group: (orchestrator.DriveGroupSpec),
+        :param drive_group: (ceph.deployment.drive_group.DriveGroupSpec),
                             Drive group with the specification of drives to use
         :param all_hosts  : (List[str]),
                             List of hosts where the OSD's must be created

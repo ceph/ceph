@@ -250,12 +250,16 @@ OSD management
 .. automethod:: Orchestrator.replace_osds
 .. automethod:: Orchestrator.remove_osds
 
+.. py:currentmodule:: ceph.deployment.drive_group
+
 .. autoclass:: DeviceSelection
    :members:
 
 .. autoclass:: DriveGroupSpec
    :members:
    :exclude-members: from_json
+
+.. py:currentmodule:: orchestrator
 
 Stateless Services
 ------------------

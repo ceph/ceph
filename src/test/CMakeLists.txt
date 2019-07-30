@@ -573,6 +573,11 @@ if(WITH_MGR)
   list(APPEND tox_tests run-tox-mgr-orchestrator_cli)
   set(MGR_ORCHESTRATOR_CLI_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/mgr-orchestrator_cli-virtualenv)
   list(APPEND env_vars_for_tox_tests MGR_ORCHESTRATOR_CLI_VIRTUALENV=${MGR_ORCHESTRATOR_CLI_VIRTUALENV})
+
+  add_test(NAME run-tox-python-common
+           COMMAND bash ${CMAKE_SOURCE_DIR}/src/script/run_tox.sh
+           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/python-common )
+  list(APPEND tox_tests run-tox-python-common)
 endif()
 
 set_property(
