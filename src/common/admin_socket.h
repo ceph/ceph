@@ -94,6 +94,7 @@ public:
 
   void chown(uid_t uid, gid_t gid);
   void chmod(mode_t mode);
+  bool execute_command(const std::string& cmd, ceph::bufferlist& out);
 
 private:
 
