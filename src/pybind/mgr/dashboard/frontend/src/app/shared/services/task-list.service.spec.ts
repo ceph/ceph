@@ -57,7 +57,7 @@ describe('TaskListService', () => {
       (task) => task.name.startsWith('test'),
       (item, task) => item.name === task.metadata['name'],
       {
-        default: (task) => ({ name: task.metadata['name'] })
+        default: (metadata) => ({ name: metadata['name'] })
       }
     );
   });
