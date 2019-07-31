@@ -364,12 +364,20 @@ bool HealthMonitor::check_mutes()
 {
   bool changed = true;
   auto now = ceph_clock_now();
+  health_check_map_t all;
+  gather_all_health_checks(&all);
   auto p = pending_mutes.begin();
   while (p != pending_mutes.end()) {
     if (p->second.ttl != utime_t() &&
 	p->second.ttl <= now) {
       mon->clog->info() << "Health alert mute " << p->first
 			<< " cleared (passed TTL " << p->second.ttl << ")";
+      p = pending_mutes.erase(p);
+      changed = true;
+    } else if (!p->second.sticky &&
+	       all.checks.count(p->first) == 0) {
+      mon->clog->info() << "Health alert mute " << p->first
+			<< " cleared (health alert cleared)";
       p = pending_mutes.erase(p);
       changed = true;
     } else {
