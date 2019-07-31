@@ -1,12 +1,13 @@
-"""Sample code for disk failure prediction.
+"""Machine learning model for disk failure prediction.
 
-This sample code is a community version for anyone who is interested in Machine
-Learning and care about disk failure.
+This class provides serves the disk failure prediction module. It uses the
+models developed at the AICoE in the Office of the CTO at Red Hat.
 
-This class provides a disk failure prediction module. Given models dirpath to
-initialize a predictor instance and then use 6 days data to predict. Predict
-function will return a string to indicate disk failure status: "Good",
-"Warning", "Bad", or "Unknown".
+An instance of the predictor is initialized by providing the path to trained
+models. Then, to predict hard drive health and deduce time to failure, the
+predict function is called with 6 days worth of SMART data from the hard drive.
+It will return a string to indicate disk failure status: "Good", "Warning",
+"Bad", or "Unknown".
 
 An example code is as follows:
 
@@ -15,17 +16,15 @@ An example code is as follows:
 >>> if status:
 >>>     model.predict(disk_days)
 'Bad'
-
-
-Provided by ProphetStor Data Services Inc.
-http://www.prophetstor.com/
-
 """
-
-from __future__ import print_function
 import os
 import json
-import pickle
+import joblib
+import logging
+
+import numpy as np
+import pandas as pd
+from scipy import stats
 
 
 def get_diskfailurepredictor_path():
@@ -39,30 +38,33 @@ class DiskFailurePredictor(object):
 
     This class implements a disk failure prediction module.
     """
-
+    # json with manufacturer names as keys
+    # and features used for prediction as values
     CONFIG_FILE = "config.json"
-    EXCLUDED_ATTRS = ['smart_9_raw', 'smart_241_raw', 'smart_242_raw']
+    PREDICTION_CLASSES = {-1: "Unknown",
+                          0: "Good",
+                          1: "Warning",
+                          2: "Bad"}
+
 
     def __init__(self):
         """
         This function may throw exception due to wrong file operation.
         """
-
         self.model_dirpath = ""
         self.model_context = {}
 
-    def initialize(self, model_dirpath):
-        """
-        Initialize all models.
 
-        Args: None
+    def initialize(self, model_dirpath):
+        """Initialize all models. Save paths of all trained model files to list
+
+        Arguments:
+            model_dirpath {str} -- path to directory of trained models
 
         Returns:
-            Error message. If all goes well, return an empty string.
-
-        Raises:
+            str -- Error message. If all goes well, return None
         """
-
+        # read config file as json, if it exists
         config_path = os.path.join(model_dirpath, self.CONFIG_FILE)
         if not os.path.isfile(config_path):
             return "Missing config file: " + config_path
@@ -70,196 +72,124 @@ class DiskFailurePredictor(object):
             with open(config_path) as f_conf:
                 self.model_context = json.load(f_conf)
 
-        for model_name in self.model_context:
-            model_path = os.path.join(model_dirpath, model_name)
-
+        # ensure all manufacturers whose context is defined in config file
+        # have models and preprocessors saved inside model_dirpath
+        for manufacturer in self.model_context:
+            preprocessor_path = os.path.join(model_dirpath, manufacturer + '_preprocessor.joblib')
+            if not os.path.isfile(preprocessor_path):
+                return "Missing preprocessor file: {}".format(preprocessor_path)
+            model_path = os.path.join(model_dirpath, manufacturer + '_predictor.joblib')
             if not os.path.isfile(model_path):
-                return "Missing model file: " + model_path
+                return "Missing model file: {}".format(model_path)
 
         self.model_dirpath = model_dirpath
 
-    def __preprocess(self, disk_days):
-        """
-        Preprocess disk attributes.
 
-        Args:
-            disk_days: Refer to function predict(...).
+    def __format_raw_data(self, disk_days):
+        """Massages the input raw data into a form that can be used by the
+        predictor for preprocessing, feeding to model, etc. Specifically,
+        converts list of dictionaries to a pandas.DataFrame.
 
-        Returns:
-            new_disk_days: Processed disk days.
-        """
-
-        req_attrs = []
-        new_disk_days = []
-
-        attr_list = set.intersection(*[set(disk_day.keys())
-                                       for disk_day in disk_days])
-        for attr in attr_list:
-            if (attr.startswith('smart_') and attr.endswith('_raw')) and \
-                    attr not in self.EXCLUDED_ATTRS:
-                req_attrs.append(attr)
-
-        for disk_day in disk_days:
-            new_disk_day = {}
-            for attr in req_attrs:
-                if float(disk_day[attr]) >= 0.0:
-                    new_disk_day[attr] = disk_day[attr]
-
-            new_disk_days.append(new_disk_day)
-
-        return new_disk_days
-
-    @staticmethod
-    def __get_diff_attrs(disk_days):
-        """
-        Get 5 days differential attributes.
-
-        Args:
-            disk_days: Refer to function predict(...).
+        Arguments:
+            disk_days {list} -- list of n dictionaries representing SMART data
+                                from the past n days. Value of n depends on the
+                                Module defined in module.py
 
         Returns:
-            attr_list: All S.M.A.R.T. attributes used in given disk. Here we
-                       use intersection set of all disk days.
-
-            diff_disk_days: A list struct comprises 5 dictionaries, each
-                            dictionary contains differential attributes.
-
-        Raises:
-            Exceptions of wrong list/dict operations.
+            pandas.DataFrame -- df where each row holds SMART attributes and
+                                possibly other data for the drive from one day.
         """
+        # list of dictionaries to dataframe
+        df = pd.DataFrame(disk_days)
 
-        all_attrs = [set(disk_day.keys()) for disk_day in disk_days]
-        attr_list = list(set.intersection(*all_attrs))
-        attr_list = disk_days[0].keys()
-        prev_days = disk_days[:-1]
-        curr_days = disk_days[1:]
-        diff_disk_days = []
+        # change from dict type {'bytes': 123} to just float64 type 123
+        df['user_capacity'] = df['user_capacity'].apply(lambda x: x['bytes'])
 
-        for prev, cur in zip(prev_days, curr_days):
-            diff_disk_days.append({attr:(int(cur[attr]) - int(prev[attr]))
-                                   for attr in attr_list})
+        # change from dict type {'table': [{}, {}, {}]}  to list type [{}, {}, {}]
+        df['ata_smart_attributes'] = df['ata_smart_attributes'].apply(lambda x: x['table'])
 
-        return attr_list, diff_disk_days
+        # make a separate column for raw and normalized values of each smart id
+        for day_idx in range(len(disk_days)):
+            for attr_dict in df.iloc[0]['ata_smart_attributes']:
+                smart_id = attr_dict['id']
+                df.at[day_idx, 'smart_{}_raw'.format(smart_id)] = int(attr_dict['raw']['value'])
+                df.at[day_idx, 'smart_{}_normalized'.format(smart_id)] = int(attr_dict['value'])
 
-    def __get_best_models(self, attr_list):
-        """
-        Find the best model from model list according to given attribute list.
+        # drop the now-redundant column
+        df = df.drop('ata_smart_attributes', axis=1)
+        return df
 
-        Args:
-            attr_list: All S.M.A.R.T. attributes used in given disk.
+
+    def __preprocess(self, disk_days_df):
+        """Scales and transforms input dataframe to feed it to prediction model
+
+        Arguments:
+            disk_days_df {pandas.DataFrame} -- df where each row holds drive
+                                                features from one day.
 
         Returns:
-            modelpath: The best model for the given attribute list.
-            model_attrlist: 'Ordered' attribute list of the returned model.
-                            Must be aware that SMART attributes is in order.
-
-        Raises:
+            numpy.ndarray -- (n, d) shaped array of n days worth of data and d
+                                features, scaled
         """
+        # preprocessing may vary across manufactueres. so get manufacturer
+        manufacturer = DiskFailurePredictor.__get_manufacturer(disk_days_df['model_name'].iloc[0]).lower()
 
-        models = self.model_context.keys()
-
-        scores = []
-        for model_name in models:
-            scores.append(sum(attr in attr_list
-                              for attr in self.model_context[model_name]))
-        max_score = max(scores)
-
-        # Skip if too few matched attributes.
-        if max_score < 3:
-            print("Too few matched attributes")
+        # keep only the features used for prediction for current manufacturer
+        try:
+            disk_days_df = disk_days_df[self.model_context[manufacturer]]
+        except KeyError as e:
+            # TODO: change to log.error
+            print("Either SMART attributes mismatch for hard drive and prediction model,\
+                 or 'model_name' not available in input data")
+            print(e)
             return None
 
-        best_models = {}
-        best_model_indices = [idx for idx, score in enumerate(scores)
-                              if score > max_score - 2]
-        for model_idx in best_model_indices:
-            model_name = list(models)[model_idx]
-            model_path = os.path.join(self.model_dirpath, model_name)
-            model_attrlist = self.model_context[model_name]
-            best_models[model_path] = model_attrlist
+        # scale raw data
+        preprocessor_path = os.path.join(self.model_dirpath, manufacturer + '_preprocessor.joblib')
+        preprocessor = joblib.load(preprocessor_path)
+        disk_days_df = preprocessor.transform(disk_days_df)
+        return disk_days_df
 
-        return best_models
-        # return os.path.join(self.model_dirpath, model_name), model_attrlist
 
     @staticmethod
-    def __get_ordered_attrs(disk_days, model_attrlist):
-        """
-        Return ordered attributes of given disk days.
+    def __get_manufacturer(model_name):
+        """Returns the manufacturer name for a given hard drive model name
 
-        Args:
-            disk_days: Unordered disk days.
-            model_attrlist: Model's ordered attribute list.
+        Arguments:
+            model_name {str} -- hard drive model name
 
         Returns:
-            ordered_attrs: Ordered disk days.
-
-        Raises: None
+            str -- manufacturer name
         """
+        if model_name.startswith("W"):
+            return "WDC"
+        elif model_name.startswith("T"):
+            return "Toshiba"
+        elif model_name.startswith("S"):
+            return "Seagate"
+        elif model_name.startswith("Hi"):
+            return "Hitachi"
+        else:
+            return "HGST"
 
-        ordered_attrs = []
-
-        for one_day in disk_days:
-            one_day_attrs = []
-
-            for attr in model_attrlist:
-                if attr in one_day:
-                    one_day_attrs.append(one_day[attr])
-                else:
-                    one_day_attrs.append(0)
-
-            ordered_attrs.append(one_day_attrs)
-
-        return ordered_attrs
 
     def predict(self, disk_days):
-        """
-        Predict using given 6-days disk S.M.A.R.T. attributes.
+        # massage data into a format that can be fed to models
+        raw_df = self.__format_raw_data(disk_days)
 
-        Args:
-            disk_days: A list struct comprises 6 dictionaries. These
-                       dictionaries store 'consecutive' days of disk SMART
-                       attributes.
-        Returns:
-            A string indicates prediction result. One of following four strings
-            will be returned according to disk failure status:
-            (1) Good : Disk is health
-            (2) Warning : Disk has some symptoms but may not fail immediately
-            (3) Bad : Disk is in danger and data backup is highly recommended
-            (4) Unknown : Not enough data for prediction.
+        # preprocess
+        preprocessed_data = self.__preprocess(raw_df)
+        if preprocessed_data is None:
+            return DiskFailurePredictor.PREDICTION_CLASSES[-1]
 
-        Raises:
-            Pickle exceptions
-        """
+        # get model for current manufacturer
+        manufacturer = self.__get_manufacturer(raw_df['model_name'].iloc[0]).lower()
+        model_path = os.path.join(self.model_dirpath, manufacturer + '_predictor.joblib')
+        model = joblib.load(model_path)
 
-        all_pred = []
+        # predictions for each day
+        preds = model.predict(preprocessed_data)
 
-        proc_disk_days = self.__preprocess(disk_days)
-        attr_list, diff_data = DiskFailurePredictor.__get_diff_attrs(proc_disk_days)
-        modellist = self.__get_best_models(attr_list)
-        if modellist is None:
-            return "Unknown"
-
-        for modelpath in modellist:
-            model_attrlist = modellist[modelpath]
-            ordered_data = DiskFailurePredictor.__get_ordered_attrs(
-                diff_data, model_attrlist)
-
-            try:
-                with open(modelpath, 'rb') as f_model:
-                    clf = pickle.load(f_model)
-
-            except UnicodeDecodeError:
-                # Compatibility for python3
-                with open(modelpath, 'rb') as f_model:
-                    clf = pickle.load(f_model, encoding='latin1')
-
-            pred = clf.predict(ordered_data)
-
-            all_pred.append(1 if any(pred) else 0)
-
-        score = 2 ** sum(all_pred) - len(modellist)
-        if score > 10:
-            return "Bad"
-        if score > 4:
-            return "Warning"
-        return "Good"
+        # use majority vote to decide class. raise if a nan prediction exists
+        pred_class_id = stats.mode(preds, nan_policy='raise').mode[0]
+        return DiskFailurePredictor.PREDICTION_CLASSES[pred_class_id]
