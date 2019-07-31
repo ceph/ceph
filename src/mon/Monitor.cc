@@ -2767,7 +2767,7 @@ void Monitor::do_health_to_clog(bool force)
   dout(10) << __func__ << (force ? " (force)" : "") << dendl;
 
   string summary;
-  health_status_t level = get_health_status(false, nullptr, &summary);
+  health_status_t level = healthmon()->get_health_status(false, nullptr, &summary);
   if (!force &&
       summary == health_status_cache.summary &&
       level == health_status_cache.overall)
@@ -2775,126 +2775,6 @@ void Monitor::do_health_to_clog(bool force)
   clog->health(level) << "overall " << summary;
   health_status_cache.summary = summary;
   health_status_cache.overall = level;
-}
-
-health_status_t Monitor::get_health_status(
-  bool want_detail,
-  Formatter *f,
-  std::string *plain,
-  const char *sep1,
-  const char *sep2)
-{
-  health_check_map_t all;
-  healthmon()->gather_all_health_checks(&all);
-  health_status_t r = HEALTH_OK;
-  for (auto& p : all.checks) {
-    if (!healthmon()->mutes.count(p.first)) {
-      if (r > p.second.severity) {
-	r = p.second.severity;
-      }
-    }
-  }
-  if (f) {
-    f->open_object_section("health");
-    f->dump_stream("status") << r;
-    f->open_object_section("checks");
-    for (auto& p : all.checks) {
-      f->open_object_section(p.first.c_str());
-      f->dump_stream("severity") << p.second.severity;
-      f->dump_bool("muted", healthmon()->mutes.count(p.first));
-      f->open_object_section("summary");
-      f->dump_string("message", p.second.summary);
-      f->close_section();
-      if (want_detail) {
-	f->open_array_section("detail");
-	for (auto& d : p.second.detail) {
-	  f->open_object_section("detail_item");
-	  f->dump_string("message", d);
-	  f->close_section();
-	}
-	f->close_section();
-      }
-      f->close_section();
-    }
-    f->close_section();
-    f->open_array_section("mutes");
-    for (auto& p : healthmon()->mutes) {
-      f->dump_object("mute", p.second);
-    }
-    f->close_section();
-    f->close_section();
-  } else {
-    auto now = ceph_clock_now();
-    // one-liner: HEALTH_FOO[ thing1[; thing2 ...]]
-    string summary;
-    for (auto& p : all.checks) {
-      if (!healthmon()->mutes.count(p.first)) {
-	if (!summary.empty()) {
-	  summary += sep2;
-	}
-	summary += p.second.summary;
-      }
-    }
-    *plain = stringify(r);
-    if (summary.size()) {
-      *plain += sep1;
-      *plain += summary;
-    }
-    if (!healthmon()->mutes.empty()) {
-      if (summary.size()) {
-	*plain += sep2;
-      } else {
-	*plain += sep1;
-      }
-      *plain += "(muted:";
-      for (auto& p : healthmon()->mutes) {
-	*plain += " ";
-	*plain += p.first;
-	if (p.second.ttl) {
-	  if (p.second.ttl > now) {
-	    auto left = p.second.ttl;
-	    left -= now;
-	    *plain += "("s + utimespan_str(left) + ")";
-	  } else {
-	    *plain += "(0s)";
-	  }
-	}
-      }
-      *plain += ")";
-    }
-    *plain += "\n";
-    // detail
-    if (want_detail) {
-      for (auto& p : all.checks) {
-	auto q = healthmon()->mutes.find(p.first);
-	if (q != healthmon()->mutes.end()) {
-	  *plain += "(MUTED";
-	  if (q->second.ttl != utime_t()) {
-	    if (q->second.ttl > now) {
-	      auto left = q->second.ttl;
-	      left -= now;
-	      *plain += " ttl ";
-	      *plain += utimespan_str(left);
-	    } else {
-	      *plain += "0s";
-	    }
-	  }
-	  if (q->second.sticky) {
-	    *plain += ", STICKY";
-	  }
-	  *plain += ") ";
-	}
-	*plain += "["s + short_health_string(p.second.severity) + "] " +
-	  p.first + ": " + p.second.summary + "\n";
-	for (auto& d : p.second.detail) {
-	  *plain += "    ";
-	  *plain += d;
-	  *plain += "\n";
-	}
-      }
-    }
-  }
-  return r;
 }
 
 void Monitor::log_health(
@@ -3010,7 +2890,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
   mono_clock::time_point now = mono_clock::now();
   if (f) {
     f->dump_stream("fsid") << monmap->get_fsid();
-    get_health_status(false, f, nullptr);
+    healthmon()->get_health_status(false, f, nullptr);
     f->dump_unsigned("election_epoch", get_epoch());
     {
       f->open_array_section("quorum");
@@ -3056,8 +2936,8 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     ss << "    id:     " << monmap->get_fsid() << "\n";
 
     string health;
-    get_health_status(false, nullptr, &health,
-		      "\n            ", "\n            ");
+    healthmon()->get_health_status(false, nullptr, &health,
+				   "\n            ", "\n            ");
     ss << "    health: " << health << "\n";
 
     ss << "\n \n  services:\n";
@@ -3601,7 +3481,7 @@ void Monitor::handle_command(MonOpRequestRef op)
       rdata.append(ds);
     } else if (prefix == "health") {
       string plain;
-      get_health_status(detail == "detail", f.get(), f ? nullptr : &plain);
+      healthmon()->get_health_status(detail == "detail", f.get(), f ? nullptr : &plain);
       if (f) {
 	f->flush(rdata);
       } else {
@@ -3648,7 +3528,7 @@ void Monitor::handle_command(MonOpRequestRef op)
       tagstr = tagstr.substr(0, tagstr.find_last_of(' '));
     f->dump_string("tag", tagstr);
 
-    get_health_status(true, f.get(), nullptr);
+    healthmon()->get_health_status(true, f.get(), nullptr);
 
     monmon()->dump_info(f.get());
     osdmon()->dump_info(f.get());
@@ -4736,7 +4616,7 @@ void Monitor::handle_ping(MonOpRequestRef op)
   boost::scoped_ptr<Formatter> f(new JSONFormatter(true));
   f->open_object_section("pong");
 
-  get_health_status(false, f.get(), nullptr);
+  healthmon()->get_health_status(false, f.get(), nullptr);
   {
     stringstream ss;
     get_mon_status(f.get(), ss);

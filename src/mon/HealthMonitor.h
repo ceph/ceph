@@ -21,11 +21,9 @@ class HealthMonitor : public PaxosService
   version_t version = 0;
   map<int,health_check_map_t> quorum_checks;  // for each quorum member
   health_check_map_t leader_checks;           // leader only
+  map<string,health_mute_t> mutes;
 
   map<string,health_mute_t> pending_mutes;
-
-public:
-  map<string,health_mute_t> mutes;
 
 public:
   HealthMonitor(Monitor *m, Paxos *p, const string& service_name);
@@ -59,6 +57,12 @@ public:
   void tick() override;
 
   void gather_all_health_checks(health_check_map_t *all);
+  health_status_t get_health_status(
+    bool want_detail,
+    Formatter *f,
+    std::string *plain,
+    const char *sep1 = " ",
+    const char *sep2 = "; ");
 
   /**
    * @} // HealthMonitor_Inherited_h

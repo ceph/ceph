@@ -394,6 +394,126 @@ void HealthMonitor::gather_all_health_checks(health_check_map_t *all)
   }
 }
 
+health_status_t HealthMonitor::get_health_status(
+  bool want_detail,
+  Formatter *f,
+  std::string *plain,
+  const char *sep1,
+  const char *sep2)
+{
+  health_check_map_t all;
+  gather_all_health_checks(&all);
+  health_status_t r = HEALTH_OK;
+  for (auto& p : all.checks) {
+    if (!mutes.count(p.first)) {
+      if (r > p.second.severity) {
+	r = p.second.severity;
+      }
+    }
+  }
+  if (f) {
+    f->open_object_section("health");
+    f->dump_stream("status") << r;
+    f->open_object_section("checks");
+    for (auto& p : all.checks) {
+      f->open_object_section(p.first.c_str());
+      f->dump_stream("severity") << p.second.severity;
+      f->dump_bool("muted", mutes.count(p.first));
+      f->open_object_section("summary");
+      f->dump_string("message", p.second.summary);
+      f->close_section();
+      if (want_detail) {
+	f->open_array_section("detail");
+	for (auto& d : p.second.detail) {
+	  f->open_object_section("detail_item");
+	  f->dump_string("message", d);
+	  f->close_section();
+	}
+	f->close_section();
+      }
+      f->close_section();
+    }
+    f->close_section();
+    f->open_array_section("mutes");
+    for (auto& p : mutes) {
+      f->dump_object("mute", p.second);
+    }
+    f->close_section();
+    f->close_section();
+  } else {
+    auto now = ceph_clock_now();
+    // one-liner: HEALTH_FOO[ thing1[; thing2 ...]]
+    string summary;
+    for (auto& p : all.checks) {
+      if (!mutes.count(p.first)) {
+	if (!summary.empty()) {
+	  summary += sep2;
+	}
+	summary += p.second.summary;
+      }
+    }
+    *plain = stringify(r);
+    if (summary.size()) {
+      *plain += sep1;
+      *plain += summary;
+    }
+    if (!mutes.empty()) {
+      if (summary.size()) {
+	*plain += sep2;
+      } else {
+	*plain += sep1;
+      }
+      *plain += "(muted:";
+      for (auto& p : mutes) {
+	*plain += " ";
+	*plain += p.first;
+	if (p.second.ttl) {
+	  if (p.second.ttl > now) {
+	    auto left = p.second.ttl;
+	    left -= now;
+	    *plain += "("s + utimespan_str(left) + ")";
+	  } else {
+	    *plain += "(0s)";
+	  }
+	}
+      }
+      *plain += ")";
+    }
+    *plain += "\n";
+    // detail
+    if (want_detail) {
+      for (auto& p : all.checks) {
+	auto q = mutes.find(p.first);
+	if (q != mutes.end()) {
+	  *plain += "(MUTED";
+	  if (q->second.ttl != utime_t()) {
+	    if (q->second.ttl > now) {
+	      auto left = q->second.ttl;
+	      left -= now;
+	      *plain += " ttl ";
+	      *plain += utimespan_str(left);
+	    } else {
+	      *plain += "0s";
+	    }
+	  }
+	  if (q->second.sticky) {
+	    *plain += ", STICKY";
+	  }
+	  *plain += ") ";
+	}
+	*plain += "["s + short_health_string(p.second.severity) + "] " +
+	  p.first + ": " + p.second.summary + "\n";
+	for (auto& d : p.second.detail) {
+	  *plain += "    ";
+	  *plain += d;
+	  *plain += "\n";
+	}
+      }
+    }
+  }
+  return r;
+}
+
 bool HealthMonitor::check_member_health()
 {
   dout(20) << __func__ << dendl;
