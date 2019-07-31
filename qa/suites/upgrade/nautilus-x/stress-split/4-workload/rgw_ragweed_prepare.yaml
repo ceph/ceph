@@ -5,8 +5,8 @@ stress-tasks:
   - full_sequential:
      - sequential:
        - ragweed:
-           client.0:
+           client.1:
              default-branch: ceph-nautilus
-             rgw_server: client.0
+             rgw_server: client.1
              stages: prepare
-       - print: "**** done rgw ragweed prepare 4-workload"
+       - print: "**** done rgw ragweed prepare 4-workload on client.1"

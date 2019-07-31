@@ -12,4 +12,4 @@ tasks:
       default-branch: ceph-nautilus
       rgw_server: client.0
       stages: check
-- print: "**** done rgw ragweed check 7-workload"
+- print: "**** done rgw ragweed check 7-workload on client.0 - old, client.1 was upgraded"

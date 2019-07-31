@@ -15,7 +15,8 @@ tasks:
 - print: "**** done ceph"
 - rgw:
    - client.0
-- print: "**** done => started rgw client.0"
+   - client.1
+- print: "**** done => started rgw client.0 & client.1"
 overrides:
   ceph:
     conf:

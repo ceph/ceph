@@ -27,6 +27,7 @@ roles:
   - osd.1
   - osd.2
   - osd.3
+  - client.1
 - - mon.b
   - osd.4
   - osd.5

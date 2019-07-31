@@ -4,8 +4,8 @@ meta:
 rgw-final-workload:
   full_sequential:
   - ragweed:
-      client.1:
+      client.0:
         default-branch: ceph-master
-        rgw_server: client.1
+        rgw_server: client.0
         stages: check
   - print: "**** done ragweed check 4-final-workload"

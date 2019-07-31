@@ -3,6 +3,7 @@ meta:
    install ceph/nautilus latest
    run workload and upgrade-sequence in parallel
    upgrade the client node
+   start rgw on client.0 and client.1
 tasks:
 - install:
     branch: nautilus
@@ -36,8 +37,9 @@ tasks:
     mon.c:
 - print: "**** done install.upgrade non-client hosts"
 - rgw:
+   - client.0
    - client.1
-- print: "**** done => started rgw client.1"
+- print: "**** done => started rgw client.0 & client.1"
 - parallel:
     - workload
     - upgrade-sequence

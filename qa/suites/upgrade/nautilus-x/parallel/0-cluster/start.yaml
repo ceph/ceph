@@ -12,6 +12,7 @@ roles:
   - osd.1
   - osd.2
   - osd.3
+  - client.1
 - - mon.b
   - osd.4
   - osd.5
@@ -23,7 +24,6 @@ roles:
   - osd.10
   - osd.11
 - - client.0
-  - client.1
   - client.2
   - client.3
 overrides:

@@ -2,9 +2,15 @@ meta:
 - desc: |
    upgrade the ceph cluster,
    upgrate in two steps
-   step one ordering: mon.a, osd.0, osd.1, mds.a
-   step two ordering: mon.b, mon.c, osd.2, osd.3
-   step three ordering: client.1
+   ordering: 
+   mon.a
+   mon.b, mgr.x
+   mon.c
+   osd.0, osd.1, osd.2, osd.3
+   mds.a
+   osd.4, osd.5, osd.6, osd.7
+   osd.8, osd.9, osd.10, osd.11
+   ceph.rgw.client.1
    ceph expected to be healthy state after each step
 upgrade-sequence:
    sequential:
@@ -47,7 +53,8 @@ upgrade-sequence:
    - sleep:
        duration: 60
    - ceph.restart:
-       daemons: [rgw.*]
+       # restart all rgw clients as rgw.* 
+       daemons: [ceph.rgw.client.1]
        wait-for-healthy: true
    - sleep:
        duration: 60
