@@ -2785,9 +2785,7 @@ health_status_t Monitor::get_health_status(
   const char *sep2)
 {
   health_check_map_t all;
-  for (auto& svc : paxos_service) {
-    all.merge(svc->get_health_checks());
-  }
+  healthmon()->gather_all_health_checks(&all);
   health_status_t r = HEALTH_OK;
   for (auto& p : all.checks) {
     if (!healthmon()->mutes.count(p.first)) {

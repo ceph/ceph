@@ -379,6 +379,13 @@ bool HealthMonitor::check_mutes()
   return changed;
 }
 
+void HealthMonitor::gather_all_health_checks(health_check_map_t *all)
+{
+  for (auto& svc : mon->paxos_service) {
+    all->merge(svc->get_health_checks());
+  }
+}
+
 bool HealthMonitor::check_member_health()
 {
   dout(20) << __func__ << dendl;
