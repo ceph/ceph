@@ -1079,3 +1079,21 @@ Alternatively, the capabilities for the user can be updated with::
   ceph auth <entity-name> <daemon-type> <caps> [<daemon-type> <caps> ...]
 
 For more information about auth capabilities, see :ref:`user-management`.
+
+
+OSD_NO_DOWN_OUT_INTERVAL
+________________________
+
+The ``mon_osd_down_out_interval`` option is set to zero, which means
+that the system will not automatically perform any repair or healing
+operations after an OSD fails.  Instead, an administrator (or some
+other external entity) will need to manually mark down OSDs as 'out'
+(i.e., via ``ceph osd out <osd-id>``) in order to trigger recovery.
+
+This option is normally set to five or ten minutes--enough time for a
+host to power-cycle or reboot.
+
+This warning can silenced by setting the
+``mon_warn_on_osd_down_out_interval_zero`` to false::
+
+  ceph config global mon mon_warn_on_osd_down_out_interval_zero false
