@@ -36,7 +36,7 @@ export class ImagesPageHelper extends PageHelper {
     const base_url = '/#/block/rbd/edit/';
     const editURL = base_url
       .concat(pool)
-      .concat('/')
+      .concat('%2F')
       .concat(name);
     await browser.get(editURL);
 

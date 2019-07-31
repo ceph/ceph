@@ -2,7 +2,6 @@
   <ng-container i18n>Only available for RBD images with <strong>fast-diff</strong> enabled</ng-container>
 </ng-template>
 
-
 <tabset *ngIf="selection?.hasSingleSelection">
   <tab i18n-heading
        heading="Details">
@@ -96,9 +95,7 @@
           <td i18n
               class="bold">Parent</td>
           <td>
-            <span *ngIf="selectedItem.parent">{{ selectedItem.parent.pool_name }}
-              /{{ selectedItem.parent.image_name }}
-              @{{ selectedItem.parent.snap_name }}</span>
+            <span *ngIf="selectedItem.parent">{{ selectedItem.parent.pool_name }}<span *ngIf="selectedItem.parent.pool_namespace">/{{ selectedItem.parent.pool_namespace }}</span>/{{ selectedItem.parent.image_name }}@{{ selectedItem.parent.snap_name }}</span>
             <span *ngIf="!selectedItem.parent">-</span>
           </td>
         </tr>
@@ -120,6 +117,7 @@
     <cd-rbd-snapshot-list [snapshots]="selectedItem.snapshots"
                           [featuresName]="selectedItem.features_name"
                           [poolName]="selectedItem.pool_name"
+                          [namespace]="selectedItem.namespace"
                           [rbdName]="selectedItem.name"></cd-rbd-snapshot-list>
   </tab>
   <tab i18n-heading

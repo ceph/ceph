@@ -8,6 +8,7 @@ import { ToastrModule } from 'ngx-toastr';
 
 import { configureTestBed, i18nProviders } from '../testing/unit-test-helper';
 import { AppComponent } from './app.component';
+import { RbdService } from './shared/api/rbd.service';
 import { PipesModule } from './shared/pipes/pipes.module';
 import { AuthStorageService } from './shared/services/auth-storage.service';
 import { NotificationService } from './shared/services/notification.service';
@@ -26,7 +27,7 @@ describe('AppComponent', () => {
     ],
     declarations: [AppComponent],
     schemas: [NO_ERRORS_SCHEMA],
-    providers: [AuthStorageService, i18nProviders]
+    providers: [AuthStorageService, i18nProviders, RbdService]
   });
 
   beforeEach(() => {

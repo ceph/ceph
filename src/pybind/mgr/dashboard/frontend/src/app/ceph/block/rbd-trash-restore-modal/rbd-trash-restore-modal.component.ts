@@ -17,7 +17,9 @@ import { TaskWrapperService } from '../../../shared/services/task-wrapper.servic
 export class RbdTrashRestoreModalComponent implements OnInit {
   metaType: string;
   poolName: string;
+  namespace: string;
   imageName: string;
+  imageSpec: string;
   imageId: string;
   executingTasks: ExecutingTask[];
 
@@ -31,6 +33,7 @@ export class RbdTrashRestoreModalComponent implements OnInit {
   ) {}
 
   ngOnInit() {
+    this.imageSpec = this.rbdService.getImageSpec(this.poolName, this.namespace, this.imageName);
     this.restoreForm = this.fb.group({
       name: this.imageName
     });
@@ -42,11 +45,10 @@ export class RbdTrashRestoreModalComponent implements OnInit {
     this.taskWrapper
       .wrapTaskAroundCall({
         task: new FinishedTask('rbd/trash/restore', {
-          pool_name: this.poolName,
-          image_id: this.imageId,
+          image_id_spec: this.rbdService.getImageSpec(this.poolName, this.namespace, this.imageId),
           new_image_name: name
         }),
-        call: this.rbdService.restoreTrash(this.poolName, this.imageId, name)
+        call: this.rbdService.restoreTrash(this.poolName, this.namespace, this.imageId, name)
       })
       .subscribe(
         undefined,
