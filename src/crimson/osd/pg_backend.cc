@@ -247,6 +247,22 @@ seastar::future<bufferlist> PGBackend::read(const object_info_t& oi,
     });
 }
 
+seastar::future<> PGBackend::stat(
+  ObjectState& os,
+  OSDOp& osd_op)
+{
+  if (os.exists/* TODO: && !os.is_whiteout() */) {
+    logger().debug("stat os.oi.size={}, os.oi.mtime={}", os.oi.size, os.oi.mtime);
+    encode(os.oi.size, osd_op.outdata);
+    encode(os.oi.mtime, osd_op.outdata);
+  } else {
+    logger().debug("stat object does not exist");
+    throw ::object_not_found();
+  }
+  return seastar::now();
+  // TODO: ctx->delta_stats.num_rd++;
+}
+
 bool PGBackend::maybe_create_new_object(
   ObjectState& os,
   ceph::os::Transaction& txn)

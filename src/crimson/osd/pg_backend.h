@@ -47,6 +47,9 @@ public:
 				   size_t truncate_size,
 				   uint32_t truncate_seq,
 				   uint32_t flags);
+  seastar::future<> stat(
+    ObjectState& os,
+    OSDOp& osd_op);
   seastar::future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn);
