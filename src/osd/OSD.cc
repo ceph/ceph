@@ -2450,7 +2450,7 @@ will start to track new ops received afterwards.";
     }
 
     f->close_section(); //watchers
-  } else if (admin_command == "dump_reservations") {
+  } else if (admin_command == "dump_recovery_reservations") {
     f->open_object_section("reservations");
     f->open_object_section("local_reservations");
     service.local_reserver.dump(f);
@@ -3320,7 +3320,7 @@ void OSD::final_init()
 				     "show clients which have active watches,"
 				     " and on which objects");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_reservations", "dump_reservations",
+  r = admin_socket->register_command("dump_recovery_reservations", "dump_recovery_reservations",
 				     asok_hook,
 				     "show recovery reservations");
   ceph_assert(r == 0);
