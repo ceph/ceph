@@ -46,6 +46,7 @@ public:
 
   bool check_leader_health();
   bool check_member_health();
+  bool check_mutes();
 
   void create_initial() override;
   void update_from_paxos(bool *need_bootstrap) override;

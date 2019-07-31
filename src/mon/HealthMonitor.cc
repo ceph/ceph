@@ -349,9 +349,31 @@ void HealthMonitor::tick()
   if (check_leader_health()) {
     changed = true;
   }
+  if (check_mutes()) {
+    changed = true;
+  }
   if (changed) {
     propose_pending();
   }
+}
+
+bool HealthMonitor::check_mutes()
+{
+  bool changed = true;
+  auto now = ceph_clock_now();
+  auto p = pending_mutes.begin();
+  while (p != pending_mutes.end()) {
+    if (p->second.ttl != utime_t() &&
+	p->second.ttl <= now) {
+      mon->clog->info() << "Health alert mute " << p->first
+			<< " cleared (passed TTL " << p->second.ttl << ")";
+      p = pending_mutes.erase(p);
+      changed = true;
+    } else {
+      ++p;
+    }
+  }
+  return changed;
 }
 
 bool HealthMonitor::check_member_health()
