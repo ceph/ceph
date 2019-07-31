@@ -19,7 +19,9 @@ import { TaskWrapperService } from '../../../shared/services/task-wrapper.servic
 export class RbdTrashMoveModalComponent implements OnInit {
   metaType: string;
   poolName: string;
+  namespace: string;
   imageName: string;
+  imageSpec: string;
   executingTasks: ExecutingTask[];
 
   moveForm: CdFormGroup;
@@ -58,6 +60,7 @@ export class RbdTrashMoveModalComponent implements OnInit {
   }
 
   ngOnInit() {
+    this.imageSpec = this.rbdService.getImageSpec(this.poolName, this.namespace, this.imageName);
     this.pattern = `${this.poolName}/${this.imageName}`;
   }
 
@@ -76,10 +79,9 @@ export class RbdTrashMoveModalComponent implements OnInit {
     this.taskWrapper
       .wrapTaskAroundCall({
         task: new FinishedTask('rbd/trash/move', {
-          pool_name: this.poolName,
-          image_name: this.imageName
+          image_spec: this.imageSpec
         }),
-        call: this.rbdService.moveTrash(this.poolName, this.imageName, delay)
+        call: this.rbdService.moveTrash(this.poolName, this.namespace, this.imageName, delay)
       })
       .subscribe(undefined, undefined, () => {
         this.modalRef.hide();

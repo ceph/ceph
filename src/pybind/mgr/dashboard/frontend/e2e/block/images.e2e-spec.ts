@@ -23,14 +23,15 @@ describe('Images page', () => {
       await images.waitTextToBePresent(images.getBreadcrumb(), 'Images');
     });
 
-    it('should show three tabs', async () => {
-      await expect(images.getTabsCount()).toEqual(3);
+    it('should show four tabs', async () => {
+      await expect(images.getTabsCount()).toEqual(4);
     });
 
     it('should show text for all tabs', async () => {
       await expect(images.getTabText(0)).toEqual('Images');
-      await expect(images.getTabText(1)).toEqual('Trash');
-      await expect(images.getTabText(2)).toEqual('Overall Performance');
+      await expect(images.getTabText(1)).toEqual('Namespaces');
+      await expect(images.getTabText(2)).toEqual('Trash');
+      await expect(images.getTabText(3)).toEqual('Overall Performance');
     });
   });
 
