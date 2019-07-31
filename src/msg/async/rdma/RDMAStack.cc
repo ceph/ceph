@@ -530,8 +530,8 @@ void RDMADispatcher::handle_rx_event(ibv_wc *cqe, int rx_number)
   polled.clear();
 }
 
-RDMAWorker::RDMAWorker(CephContext *c, unsigned i)
-  : Worker(c, i),
+RDMAWorker::RDMAWorker(CephContext *c, unsigned worker_id)
+  : Worker(c, worker_id),
     tx_handler(new C_handle_cq_tx(this))
 {
   // initialize perf_logger
