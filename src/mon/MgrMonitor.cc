@@ -22,6 +22,7 @@
 #include "mgr/mgr_commands.h"
 #include "OSDMonitor.h"
 #include "ConfigMonitor.h"
+#include "HealthMonitor.h"
 
 #include "MgrMonitor.h"
 
@@ -633,7 +634,7 @@ void MgrMonitor::send_digests()
     auto mdigest = make_message<MMgrDigest>();
 
     JSONFormatter f;
-    mon->get_health_status(true, &f, nullptr, nullptr, nullptr);
+    mon->healthmon()->get_health_status(true, &f, nullptr, nullptr, nullptr);
     f.flush(mdigest->health_json);
     f.reset();
 
