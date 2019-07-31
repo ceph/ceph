@@ -58,6 +58,8 @@ public:
 
   void tick() override;
 
+  void gather_all_health_checks(health_check_map_t *all);
+
   /**
    * @} // HealthMonitor_Inherited_h
    */
