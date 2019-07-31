@@ -14,12 +14,16 @@ struct health_check_t {
   health_status_t severity;
   std::string summary;
   std::list<std::string> detail;
+  int64_t count = 0;
 
   DENC(health_check_t, v, p) {
-    DENC_START(1, 1, p);
+    DENC_START(2, 1, p);
     denc(v.severity, p);
     denc(v.summary, p);
     denc(v.detail, p);
+    if (struct_v >= 2) {
+      denc(v.count, p);
+    }
     DENC_FINISH(p);
   }
 
@@ -27,7 +31,8 @@ struct health_check_t {
 			 const health_check_t& r) {
     return l.severity == r.severity &&
       l.summary == r.summary &&
-      l.detail == r.detail;
+      l.detail == r.detail &&
+      l.count == r.count;
   }
   friend bool operator!=(const health_check_t& l,
 			 const health_check_t& r) {
@@ -39,6 +44,7 @@ struct health_check_t {
 
     f->open_object_section("summary");
     f->dump_string("message", summary);
+    f->dump_int("count", count);
     f->close_section();
 
     if (want_detail) {
@@ -58,6 +64,7 @@ struct health_check_t {
     ls.back()->severity = HEALTH_ERR;
     ls.back()->summary = "summarization";
     ls.back()->detail = {"one", "two", "three"};
+    ls.back()->count = 42;
   }
 };
 WRITE_CLASS_DENC(health_check_t)
@@ -117,14 +124,15 @@ struct health_check_map_t {
     ls.push_back(new health_check_map_t);
     ls.push_back(new health_check_map_t);
     {
-      auto& d = ls.back()->add("FOO", HEALTH_WARN, "foo");
+      auto& d = ls.back()->add("FOO", HEALTH_WARN, "foo", 2);
       d.detail.push_back("a");
       d.detail.push_back("b");
     }
     {
-      auto& d = ls.back()->add("BAR", HEALTH_ERR, "bar!");
+      auto& d = ls.back()->add("BAR", HEALTH_ERR, "bar!", 3);
       d.detail.push_back("c");
       d.detail.push_back("d");
+      d.detail.push_back("e");
     }
   }
 
@@ -140,19 +148,23 @@ struct health_check_map_t {
 
   health_check_t& add(const std::string& code,
 		      health_status_t severity,
-		      const std::string& summary) {
+		      const std::string& summary,
+		      int64_t count) {
     ceph_assert(checks.count(code) == 0);
     health_check_t& r = checks[code];
     r.severity = severity;
     r.summary = summary;
+    r.count = count;
     return r;
   }
   health_check_t& get_or_add(const std::string& code,
 			     health_status_t severity,
-			     const std::string& summary) {
+			     const std::string& summary,
+			     int64_t count) {
     health_check_t& r = checks[code];
     r.severity = severity;
     r.summary = summary;
+    r.count += count;
     return r;
   }
 
@@ -168,6 +180,7 @@ struct health_check_map_t {
 	  q->second.detail.end(),
 	  p.second.detail.begin(),
 	  p.second.detail.end());
+	q->second.count += p.second.count;
       }
     }
   }

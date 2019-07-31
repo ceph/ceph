@@ -418,7 +418,8 @@ void AuthMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   if (bad_detail.size()) {
     ostringstream ss;
     ss << bad_detail.size() << " auth entities have invalid capabilities";
-    health_check_t *check = &next.add("AUTH_BAD_CAPS", HEALTH_ERR, ss.str());
+    health_check_t *check = &next.add("AUTH_BAD_CAPS", HEALTH_ERR, ss.str(),
+				      bad_detail.size());
     for (auto& i : bad_detail) {
       for (auto& j : i.second) {
 	check->detail.push_back(j);

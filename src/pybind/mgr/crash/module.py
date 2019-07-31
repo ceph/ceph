@@ -87,6 +87,7 @@ class Module(MgrModule):
             health_checks['RECENT_CRASH'] = {
                 'severity': 'warning',
                 'summary': '%d daemons have recently crashed' % (num),
+                'count': num,
                 'detail': detail,
             }
         self.set_health_checks(health_checks)

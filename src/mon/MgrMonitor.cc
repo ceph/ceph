@@ -322,7 +322,7 @@ void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   if (pending_map.active_gid == 0) {
     auto level = should_warn_about_mgr_down();
     if (level != HEALTH_OK) {
-      next.add("MGR_DOWN", level, "no active mgr");
+      next.add("MGR_DOWN", level, "no active mgr", 0);
     } else {
       dout(10) << __func__ << " no health warning (never active and new cluster)"
 	       << dendl;
