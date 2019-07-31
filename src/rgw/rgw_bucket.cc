@@ -678,6 +678,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, optional_yield y, std::stri
     bucket_info.owner = user_info.user_id;
 
     // ...and encode the acl
+    attrs[RGW_ATTR_ACL].clear();
     policy.encode(attrs[RGW_ATTR_ACL]);
 
     r = bucket_ctl->store_bucket_instance_info(bucket, bucket_info, y,
