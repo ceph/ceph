@@ -673,9 +673,16 @@ class TaskHandler:
                 with self.module.rados.open_ioctx2(int(pool_id)) as ioctx:
                     self.load_task_queue(ioctx, pool_name)
 
-                    for namespace in rbd.RBD().namespace_list(ioctx):
+                    try:
+                        namespaces = rbd.RBD().namespace_list(ioctx)
+                    except rbd.OperationNotSupported:
+                        self.log.debug("Namespaces not supported")
+                        continue
+
+                    for namespace in namespaces:
                         ioctx.set_namespace(namespace)
                         self.load_task_queue(ioctx, pool_name)
+
             except rados.ObjectNotFound:
                 # pool DNE
                 pass
