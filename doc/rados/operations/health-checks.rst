@@ -965,6 +965,28 @@ You can manually initiate a scrub of a clean PG with::
   ceph pg deep-scrub <pgid>
 
 
+PG_SLOW_SNAP_TRIMMING
+_____________________
+
+The snapshot trim queue for one or more PGs has exceeded the
+configured warning threshold.  This indicates that either an extremely
+large number of snapshots were recently deleted, or that the OSDs are
+unable to trim snapshots quickly enough to keep up with the rate of
+new snapshot deletions.
+
+The warning threshold is controlled by the
+``mon_osd_snap_trim_queue_warn_on`` option (default: 32768).
+
+This warning may trigger if OSDs are under excessive load and unable
+to keep up with their background work, or if the OSDs' internal
+metadata database is heavily fragmented and unable to perform.  It may
+also indicate some other performance issue with the OSDs.
+
+The exact size of the snapshot trim queue is reported by the
+``snaptrimq_len`` field of ``ceph pg ls -f json-detail``.
+
+
+
 Miscellaneous
 -------------
 
