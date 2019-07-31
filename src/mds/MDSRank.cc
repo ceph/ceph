@@ -521,7 +521,7 @@ MDSRank::MDSRank(
 
   objecter->unset_honor_osdmap_full();
 
-  finisher = new Finisher(cct);
+  finisher = new Finisher(cct, "MDSRank", "MR_Finisher");
 
   mdcache = new MDCache(this, purge_queue);
   mdlog = new MDLog(this);
