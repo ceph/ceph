@@ -1036,6 +1036,7 @@ int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
                        bool buffered)
 {
   dout(5) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
+          << "buffered " << buffered
 	  << dendl;
   ceph_assert(len > 0);
   ceph_assert(off < size);
