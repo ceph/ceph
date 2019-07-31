@@ -34,20 +34,22 @@ struct health_check_t {
     return !(l == r);
   }
 
-  void dump(ceph::Formatter *f) const {
+  void dump(ceph::Formatter *f, bool want_detail=true) const {
     f->dump_stream("severity") << severity;
 
     f->open_object_section("summary");
     f->dump_string("message", summary);
     f->close_section();
 
-    f->open_array_section("detail");
-    for (auto& p : detail) {
-      f->open_object_section("detail_item");
-      f->dump_string("message", p);
+    if (want_detail) {
+      f->open_array_section("detail");
+      for (auto& p : detail) {
+	f->open_object_section("detail_item");
+	f->dump_string("message", p);
+	f->close_section();
+      }
       f->close_section();
     }
-    f->close_section();
   }
 
   static void generate_test_instances(std::list<health_check_t*>& ls) {

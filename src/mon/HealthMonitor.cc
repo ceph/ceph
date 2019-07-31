@@ -459,20 +459,8 @@ health_status_t HealthMonitor::get_health_status(
     f->open_object_section("checks");
     for (auto& p : all.checks) {
       f->open_object_section(p.first.c_str());
-      f->dump_stream("severity") << p.second.severity;
+      p.second.dump(f, want_detail);
       f->dump_bool("muted", mutes.count(p.first));
-      f->open_object_section("summary");
-      f->dump_string("message", p.second.summary);
-      f->close_section();
-      if (want_detail) {
-	f->open_array_section("detail");
-	for (auto& d : p.second.detail) {
-	  f->open_object_section("detail_item");
-	  f->dump_string("message", d);
-	  f->close_section();
-	}
-	f->close_section();
-      }
       f->close_section();
     }
     f->close_section();
