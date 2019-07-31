@@ -367,34 +367,25 @@ int EventCenter::process_events(unsigned timeout_microseconds,  ceph::timespan *
   int numevents;
   bool trigger_time = false;
   auto now = clock_type::now();
+  clock_type::time_point end_time = now + std::chrono::microseconds(timeout_microseconds);
 
   auto it = time_events.begin();
-  bool blocking = pollers.empty() && !external_num_events.load();
-  // If exists external events or poller, don't block
-  if (!blocking) {
-    if (it != time_events.end() && now >= it->first)
-      trigger_time = true;
-    tv.tv_sec = 0;
-    tv.tv_usec = 0;
-  } else {
-    clock_type::time_point shortest;
-    shortest = now + std::chrono::microseconds(timeout_microseconds); 
+  if (it != time_events.end() && end_time >= it->first) {
+    trigger_time = true;
+    end_time = it->first;
 
-    if (it != time_events.end() && shortest >= it->first) {
-      ldout(cct, 30) << __func__ << " shortest is " << shortest << " it->first is " << it->first << dendl;
-      shortest = it->first;
-      trigger_time = true;
-      if (shortest > now) {
-        timeout_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(
-            shortest - now).count();
-      } else {
-        shortest = now;
-        timeout_microseconds = 0;
-      }
+    if (end_time > now) {
+      timeout_microseconds = std::chrono::duration_cast<std::chrono::microseconds>(end_time - now).count();
+    } else {
+      timeout_microseconds = 0;
     }
-    tv.tv_sec = timeout_microseconds / 1000000;
-    tv.tv_usec = timeout_microseconds % 1000000;
   }
+
+  bool blocking = pollers.empty() && !external_num_events.load();
+  if (!blocking)
+    timeout_microseconds = 0;
+  tv.tv_sec = timeout_microseconds / 1000000;
+  tv.tv_usec = timeout_microseconds % 1000000;
 
   ldout(cct, 30) << __func__ << " wait second " << tv.tv_sec << " usec " << tv.tv_usec << dendl;
   vector<FiredFileEvent> fired_events;
