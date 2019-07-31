@@ -173,7 +173,7 @@ BlueFS *open_bluefs(
   const vector<string>& devs)
 {
   validate_path(cct, path, true);
-  BlueFS *fs = new BlueFS(cct);
+  BlueFS *fs = new BlueFS(cct, 0);
 
   add_devices(fs, cct, devs);
 

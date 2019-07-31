@@ -42,21 +42,9 @@ static void slow_discard_cb(void *priv, void* priv2) {
   bluefs->handle_discard(BlueFS::BDEV_SLOW, *tmp);
 }
 
-BlueFS::BlueFS(CephContext* cct)
-  : cct(cct),
-    bluefs_alloc_size(_default_bluefs_alloc_size()),
-    bdev(MAX_BDEV),
-    ioc(MAX_BDEV),
-    block_all(MAX_BDEV)
-{
-  discard_cb[BDEV_WAL] = wal_discard_cb;
-  discard_cb[BDEV_DB] = db_discard_cb;
-  discard_cb[BDEV_SLOW] = slow_discard_cb;
-}
-
 BlueFS::BlueFS(CephContext* cct, uint64_t bluestore_min_alloc_size)
   : cct(cct),
-    bluefs_alloc_size(bluestore_min_alloc_size),
+    bluefs_alloc_size(_default_bluefs_alloc_size(bluestore_min_alloc_size)),
     bdev(MAX_BDEV),
     ioc(MAX_BDEV),
     block_all(MAX_BDEV)

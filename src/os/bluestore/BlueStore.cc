@@ -5129,10 +5129,7 @@ bool BlueStore::test_mount_in_use()
 int BlueStore::_minimal_open_bluefs(bool create)
 {
   int r;
-  if (cct->_conf->bluefs_alloc_size > 0)
-    bluefs = new BlueFS(cct);
-  else
-    bluefs = new BlueFS(cct, min_alloc_size); // using bluestore min_alloc_size
+  bluefs = new BlueFS(cct, min_alloc_size); // using bluestore min_alloc_size
 
   string bfn;
   struct stat st;

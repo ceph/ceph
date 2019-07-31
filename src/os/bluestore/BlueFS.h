@@ -341,10 +341,13 @@ private:
 			  uint64_t jump_to = 0);
   uint64_t _estimate_log_size();
   bool _should_compact_log();
-  uint64_t _default_bluefs_alloc_size() {
-    if (cct->_conf->bluefs_alloc_size > 0)
+  uint64_t _default_bluefs_alloc_size(uint64_t bluestore_min_alloc_size) {
+    if (cct->_conf->bluefs_alloc_size > 0) {
+      if (bluestore_min_alloc_size > 0)
+        ceph_assert(cct->_conf->bluefs_alloc_size % bluestore_min_alloc_size == 0);
       return cct->_conf->bluefs_alloc_size;
-    return 1024 * 1024U;
+    }
+    return bluestore_min_alloc_size;
   }
 
   enum {
@@ -407,7 +410,6 @@ private:
   void _add_block_extent(unsigned bdev, uint64_t offset, uint64_t len);
 
 public:
-  BlueFS(CephContext* cct);
   BlueFS(CephContext* cct, uint64_t bluestore_min_alloc_size);
   ~BlueFS();
 
