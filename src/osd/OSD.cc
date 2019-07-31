@@ -233,8 +233,8 @@ OSDService::OSDService(OSD *osd) :
   publish_lock{ceph::make_mutex("OSDService::publish_lock")},
   pre_publish_lock{ceph::make_mutex("OSDService::pre_publish_lock")},
   max_oldest_map(0),
-  scrubs_pending(0),
-  scrubs_active(0),
+  scrubs_local(0),
+  scrubs_remote(0),
   agent_valid_iterator(false),
   agent_ops(0),
   flush_mode_high_count(0),
@@ -1195,79 +1195,76 @@ void OSDService::prune_pg_created()
 // --------------------------------------
 // dispatch
 
-bool OSDService::can_inc_scrubs_pending()
+bool OSDService::can_inc_scrubs()
 {
   bool can_inc = false;
   std::lock_guard l(sched_scrub_lock);
 
-  if (scrubs_pending + scrubs_active < cct->_conf->osd_max_scrubs) {
-    dout(20) << __func__ << " " << scrubs_pending << " -> " << (scrubs_pending+1)
-	     << " (max " << cct->_conf->osd_max_scrubs << ", active " << scrubs_active
-	     << ")" << dendl;
+  if (scrubs_local + scrubs_remote < cct->_conf->osd_max_scrubs) {
+    dout(20) << __func__ << " == true " << scrubs_local << " local + " << scrubs_remote
+	     << " remote < max " << cct->_conf->osd_max_scrubs << dendl;
     can_inc = true;
   } else {
-    dout(20) << __func__ << " " << scrubs_pending << " + " << scrubs_active
-	     << " active >= max " << cct->_conf->osd_max_scrubs << dendl;
+    dout(20) << __func__ << " == false " << scrubs_local << " local + " << scrubs_remote
+	     << " remote >= max " << cct->_conf->osd_max_scrubs << dendl;
   }
 
   return can_inc;
 }
 
-bool OSDService::inc_scrubs_pending()
+bool OSDService::inc_scrubs_local()
 {
   bool result = false;
   std::lock_guard l{sched_scrub_lock};
-  if (scrubs_pending + scrubs_active < cct->_conf->osd_max_scrubs) {
-    dout(20) << "inc_scrubs_pending " << scrubs_pending << " -> " << (scrubs_pending+1)
-	     << " (max " << cct->_conf->osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
+  if (scrubs_local + scrubs_remote < cct->_conf->osd_max_scrubs) {
+    dout(20) << __func__ << " " << scrubs_local << " -> " << (scrubs_local+1)
+	     << " (max " << cct->_conf->osd_max_scrubs << ", remote " << scrubs_remote << ")" << dendl;
     result = true;
-    ++scrubs_pending;
+    ++scrubs_local;
   } else {
-    dout(20) << "inc_scrubs_pending " << scrubs_pending << " + " << scrubs_active << " active >= max " << cct->_conf->osd_max_scrubs << dendl;
+    dout(20) << __func__ << " " << scrubs_local << " local + " << scrubs_remote << " remote >= max " << cct->_conf->osd_max_scrubs << dendl;
   }
   return result;
 }
 
-void OSDService::dec_scrubs_pending()
+void OSDService::dec_scrubs_local()
 {
   std::lock_guard l{sched_scrub_lock};
-  dout(20) << "dec_scrubs_pending " << scrubs_pending << " -> " << (scrubs_pending-1)
-	   << " (max " << cct->_conf->osd_max_scrubs << ", active " << scrubs_active << ")" << dendl;
-  --scrubs_pending;
-  ceph_assert(scrubs_pending >= 0);
+  dout(20) << __func__ << " " << scrubs_local << " -> " << (scrubs_local-1)
+	   << " (max " << cct->_conf->osd_max_scrubs << ", remote " << scrubs_remote << ")" << dendl;
+  --scrubs_local;
+  ceph_assert(scrubs_local >= 0);
 }
 
-void OSDService::inc_scrubs_active(bool reserved)
+bool OSDService::inc_scrubs_remote()
 {
+  bool result = false;
   std::lock_guard l{sched_scrub_lock};
-  ++(scrubs_active);
-  if (reserved) {
-    --(scrubs_pending);
-    dout(20) << "inc_scrubs_active " << (scrubs_active-1) << " -> " << scrubs_active
-	     << " (max " << cct->_conf->osd_max_scrubs
-	     << ", pending " << (scrubs_pending+1) << " -> " << scrubs_pending << ")" << dendl;
-    ceph_assert(scrubs_pending >= 0);
+  if (scrubs_local + scrubs_remote < cct->_conf->osd_max_scrubs) {
+    dout(20) << __func__ << " " << scrubs_remote << " -> " << (scrubs_remote+1)
+	     << " (max " << cct->_conf->osd_max_scrubs << ", local " << scrubs_local << ")" << dendl;
+    result = true;
+    ++scrubs_remote;
   } else {
-    dout(20) << "inc_scrubs_active " << (scrubs_active-1) << " -> " << scrubs_active
-	     << " (max " << cct->_conf->osd_max_scrubs
-	     << ", pending " << scrubs_pending << ")" << dendl;
+    dout(20) << __func__ << " " << scrubs_local << " local + " << scrubs_remote << " remote >= max " << cct->_conf->osd_max_scrubs << dendl;
   }
+  return result;
 }
 
-void OSDService::dec_scrubs_active()
+void OSDService::dec_scrubs_remote()
 {
   std::lock_guard l{sched_scrub_lock};
-  dout(20) << "dec_scrubs_active " << scrubs_active << " -> " << (scrubs_active-1)
-	   << " (max " << cct->_conf->osd_max_scrubs << ", pending " << scrubs_pending << ")" << dendl;
-  --scrubs_active;
-  ceph_assert(scrubs_active >= 0);
+  dout(20) << __func__ << " " << scrubs_remote << " -> " << (scrubs_remote-1)
+	   << " (max " << cct->_conf->osd_max_scrubs << ", local " << scrubs_local << ")" << dendl;
+  --scrubs_remote;
+  ceph_assert(scrubs_remote >= 0);
 }
 
 void OSDService::dump_scrub_reservations(Formatter *f)
 {
   std::lock_guard l{sched_scrub_lock};
-  f->dump_int("scrubs_active", scrubs_active);
-  f->dump_int("scrubs_pending", scrubs_pending);
+  f->dump_int("scrubs_local", scrubs_local);
+  f->dump_int("scrubs_remote", scrubs_remote);
   f->dump_int("osd_max_scrubs", cct->_conf->osd_max_scrubs);
 }
 
@@ -7654,7 +7651,7 @@ bool OSD::scrub_load_below_threshold()
 void OSD::sched_scrub()
 {
   // if not permitted, fail fast
-  if (!service.can_inc_scrubs_pending()) {
+  if (!service.can_inc_scrubs()) {
     return;
   }
   bool allow_requested_repair_only = false;
@@ -7711,7 +7708,7 @@ void OSD::sched_scrub()
         continue;
       }
       // If it is reserving, let it resolve before going to the next scrub job
-      if (pg->scrubber.reserved) {
+      if (pg->scrubber.local_reserved && !pg->scrubber.active) {
 	pg->unlock();
 	dout(30) << __func__ << ": reserve in progress pgid " << scrub.pgid << dendl;
 	break;
