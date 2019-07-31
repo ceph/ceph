@@ -2520,7 +2520,7 @@ void PGMap::get_health_checks(
             ss << " since forever";
           } else {
             utime_t dur = now - since;
-            ss << " for " << dur;
+            ss << " for " << utimespan_str(dur);
           }
           ss << ", current state " << pg_state_string(pg_info.state)
              << ", last acting " << pg_info.acting;
