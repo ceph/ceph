@@ -570,14 +570,14 @@ bool HealthMonitor::check_member_health()
   if (stats.fs_stats.avail_percent <= g_conf()->mon_data_avail_crit) {
     stringstream ss, ss2;
     ss << "mon%plurals% %names% %isorare% very low on available space";
-    auto& d = next.add("MON_DISK_CRIT", HEALTH_ERR, ss.str());
+    auto& d = next.add("MON_DISK_CRIT", HEALTH_ERR, ss.str(), 1);
     ss2 << "mon." << mon->name << " has " << stats.fs_stats.avail_percent
 	<< "% avail";
     d.detail.push_back(ss2.str());
   } else if (stats.fs_stats.avail_percent <= g_conf()->mon_data_avail_warn) {
     stringstream ss, ss2;
     ss << "mon%plurals% %names% %isorare% low on available space";
-    auto& d = next.add("MON_DISK_LOW", HEALTH_WARN, ss.str());
+    auto& d = next.add("MON_DISK_LOW", HEALTH_WARN, ss.str(), 1);
     ss2 << "mon." << mon->name << " has " << stats.fs_stats.avail_percent
 	<< "% avail";
     d.detail.push_back(ss2.str());
@@ -585,7 +585,7 @@ bool HealthMonitor::check_member_health()
   if (stats.store_stats.bytes_total >= g_conf()->mon_data_size_warn) {
     stringstream ss, ss2;
     ss << "mon%plurals% %names% %isorare% using a lot of disk space";
-    auto& d = next.add("MON_DISK_BIG", HEALTH_WARN, ss.str());
+    auto& d = next.add("MON_DISK_BIG", HEALTH_WARN, ss.str(), 1);
     ss2 << "mon." << mon->name << " is "
 	<< byte_u_t(stats.store_stats.bytes_total)
 	<< " >= mon_data_size_warn ("
@@ -611,7 +611,7 @@ bool HealthMonitor::check_member_health()
         g_conf()->mon_osd_down_out_interval == 0) {
       ostringstream ss, ds;
       ss << "mon%plurals% %names% %hasorhave% mon_osd_down_out_interval set to 0";
-      auto& d = next.add("OSD_NO_DOWN_OUT_INTERVAL", HEALTH_WARN, ss.str());
+      auto& d = next.add("OSD_NO_DOWN_OUT_INTERVAL", HEALTH_WARN, ss.str(), 1);
       ds << "mon." << mon->name << " has mon_osd_down_out_interval set to 0";
       d.detail.push_back(ds.str());
     }
@@ -669,7 +669,7 @@ bool HealthMonitor::check_leader_health()
       ostringstream ss;
       ss << (max-actual) << "/" << max << " mons down, quorum "
 	 << mon->get_quorum_names();
-      auto& d = next.add("MON_DOWN", HEALTH_WARN, ss.str());
+      auto& d = next.add("MON_DOWN", HEALTH_WARN, ss.str(), max - actual);
       set<int> q = mon->get_quorum();
       for (int i=0; i<max; i++) {
 	if (q.count(i) == 0) {
@@ -710,7 +710,7 @@ bool HealthMonitor::check_leader_health()
 	if (!warns.empty())
 	  ss << ",";
       }
-      auto& d = next.add("MON_CLOCK_SKEW", HEALTH_WARN, ss.str());
+      auto& d = next.add("MON_CLOCK_SKEW", HEALTH_WARN, ss.str(), details.size());
       d.detail.swap(details);
     }
   }
@@ -732,7 +732,8 @@ bool HealthMonitor::check_leader_health()
     if (!details.empty()) {
       ostringstream ss;
       ss << details.size() << " monitors have not enabled msgr2";
-      auto& d = next.add("MON_MSGR2_NOT_ENABLED", HEALTH_WARN, ss.str());
+      auto& d = next.add("MON_MSGR2_NOT_ENABLED", HEALTH_WARN, ss.str(),
+			 details.size());
       d.detail.swap(details);
     }
   }
