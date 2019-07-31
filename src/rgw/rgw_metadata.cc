@@ -240,14 +240,8 @@ int RGWMetadataLog::trim(int shard_id, const real_time& from_time, const real_ti
   string oid;
   get_shard_oid(shard_id, oid);
 
-  int ret;
-
-  ret = svc.cls->timelog.trim(oid, from_time, end_time, start_marker, end_marker, nullptr, null_yield);
-
-  if (ret == -ENOENT || ret == -ENODATA)
-    ret = 0;
-
-  return ret;
+  return svc.cls->timelog.trim(oid, from_time, end_time, start_marker,
+                               end_marker, nullptr, null_yield);
 }
   
 int RGWMetadataLog::lock_exclusive(int shard_id, timespan duration, string& zone_id, string& owner_id) {
