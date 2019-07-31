@@ -294,10 +294,23 @@ bool HealthMonitor::prepare_command(MonOpRequestRef op)
       ttl = ceph_clock_now();
       ttl += std::chrono::duration<double>(secs).count();
     }
+    health_check_map_t all;
+    gather_all_health_checks(&all);
+    string summary;
+    if (!sticky) {
+      auto p = all.checks.find(code);
+      if (p == all.checks.end()) {
+	r = -ENOENT;
+	ss << "health alert " << code << " is not currently raised";
+	goto out;
+      }
+      summary = p->second.summary;
+    }
     auto& m = pending_mutes[code];
     m.code = code;
     m.ttl = ttl;
     m.sticky = sticky;
+    m.summary = summary;
   } else if (prefix == "health unmute") {
     string code;
     if (cmd_getval(g_ceph_context, cmdmap, "code", code)) {
