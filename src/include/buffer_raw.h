@@ -24,6 +24,8 @@
 #include "include/spinlock.h"
 
 namespace ceph::buffer {
+inline namespace v14_2_0 {
+
   class raw {
   public:
     // In the future we might want to have a slab allocator here with few
@@ -118,6 +120,8 @@ public:
       last_crc_offset.second = std::numeric_limits<size_t>::max();
     }
   };
+
+} // inline namespace v14_2_0
 } // namespace ceph::buffer
 
 #endif // CEPH_BUFFER_RAW_H
