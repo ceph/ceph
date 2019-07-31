@@ -6642,8 +6642,12 @@ next:
     }
     RGWMetadataLog *meta_log = store->meta_mgr->get_log(period_id);
 
-    ret = meta_log->trim(shard_id, start_time.to_real_time(), end_time.to_real_time(), start_marker, end_marker);
-    if (ret < 0) {
+    // trim until -ENODATA
+    do {
+      ret = meta_log->trim(shard_id, start_time.to_real_time(),
+                           end_time.to_real_time(), start_marker, end_marker);
+    } while (ret == 0);
+    if (ret < 0 && ret != -ENODATA) {
       cerr << "ERROR: meta_log->trim(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }
