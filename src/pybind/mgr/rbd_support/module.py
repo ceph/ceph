@@ -312,7 +312,7 @@ class PerfHandler:
         for pool_key in list(self.user_queries.keys()):
             user_query = self.user_queries[pool_key]
             if user_query[QUERY_LAST_REQUEST] < expire_time:
-                self.module.unregister_osd_perf_queries(pool_key, user_query[QUERY_IDS])
+                self.unregister_osd_perf_queries(pool_key, user_query[QUERY_IDS])
                 del self.user_queries[pool_key]
 
     def register_osd_perf_queries(self, pool_id, namespace):
