@@ -3,12 +3,13 @@ tasks:
     osd.8:
     client.0:
 - ceph.restart:
-    daemons: [osd.8, osd.9, osd.10, osd.11]
+    daemons: [osd.8, osd.9, osd.10, osd.11,rgw.*]
     wait-for-healthy: false
     wait-for-osds-up: true
+- print: "**** done restarted/upgraded => osd.8, osd.9, osd.10, osd.11, rgw.*"
 - exec:
     osd.0:
       - ceph osd set pglog_hardlimit
       - ceph osd dump --format=json-pretty | grep "flags"
-- print: "**** try to set pglog_hardlimit again, should succeed"
+- print: "**** done try to set pglog_hardlimit again, should succeed"
 
