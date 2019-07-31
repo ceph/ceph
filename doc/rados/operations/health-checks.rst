@@ -75,6 +75,24 @@ If a monitor is configured to listen for v1 connections on a non-standard port (
 Manager
 -------
 
+MGR_DOWN
+________
+
+All manager daemons are currently down.  The cluster should normally
+have at least one running manager (``ceph-mgr``) daemon.  If no
+manager daemon is running, the cluster's ability to monitor itself will
+be compromised, and parts of the management API will become
+unavailable (for example, the dashboard will not work, and most CLI
+commands that report metrics or runtime state will block).  However,
+the cluster will still be able to perform all IO operations and
+recover from failures.
+
+The down manager daemon should generally be restarted as soon as
+possible to ensure that the cluster can be monitored (e.g., so that
+the ``ceph -s`` information is up to date, and/or metrics can be
+scraped by Prometheus).
+
+
 MGR_MODULE_DEPENDENCY
 _____________________
 
