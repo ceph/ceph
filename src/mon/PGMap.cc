@@ -3198,7 +3198,7 @@ void PGMap::get_health_checks(
     }
     if (!detail.empty()) {
       ostringstream ss;
-      ss << "application not enabled on " << detail.size() << " pool(s)";
+      ss << detail.size() << " pool(s) do not have an application enabled";
       auto& d = checks->add("POOL_APP_NOT_ENABLED", HEALTH_WARN, ss.str());
       stringstream tip;
       tip << "use 'ceph osd pool application enable <pool-name> "
