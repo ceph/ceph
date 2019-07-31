@@ -1,7 +1,7 @@
 # zstd
 
 # libzstd - build it statically
-set(ZSTD_C_FLAGS -fPIC -Wno-unused-variable -O3)
+set(ZSTD_C_FLAGS "-fPIC -Wno-unused-variable -O3")
 
 include(ExternalProject)
 ExternalProject_Add(zstd_ext
