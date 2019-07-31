@@ -297,6 +297,7 @@ bool HealthMonitor::prepare_command(MonOpRequestRef op)
     health_check_map_t all;
     gather_all_health_checks(&all);
     string summary;
+    int64_t count = 0;
     if (!sticky) {
       auto p = all.checks.find(code);
       if (p == all.checks.end()) {
@@ -304,6 +305,7 @@ bool HealthMonitor::prepare_command(MonOpRequestRef op)
 	ss << "health alert " << code << " is not currently raised";
 	goto out;
       }
+      count = p->second.count;
       summary = p->second.summary;
     }
     auto& m = pending_mutes[code];
@@ -311,6 +313,7 @@ bool HealthMonitor::prepare_command(MonOpRequestRef op)
     m.ttl = ttl;
     m.sticky = sticky;
     m.summary = summary;
+    m.count = count;
   } else if (prefix == "health unmute") {
     string code;
     if (cmd_getval(g_ceph_context, cmdmap, "code", code)) {
@@ -398,23 +401,26 @@ bool HealthMonitor::check_mutes()
 	changed = true;
 	continue;
       }
-      if (p->second.summary.size() && std::isdigit(p->second.summary[0])) {
-	int64_t mute_val = atoll(p->second.summary.c_str());
-	int64_t cur_val = atoll(q->second.summary.c_str());
-	if (cur_val > mute_val) {
+      if (p->second.count) {
+	// count-based mute
+	if (q->second.count > p->second.count) {
 	  mon->clog->info() << "Health alert mute " << p->first
-			    << " cleared (count increased from " << mute_val
-			    << " to " << cur_val << ")";
+			    << " cleared (count increased from " << p->second.count
+			    << " to " << q->second.count << ")";
 	  p = pending_mutes.erase(p);
 	  changed = true;
 	  continue;
 	}
-	if (p->second.summary != q->second.summary) {
-	  // update summary string for good measure
-	  p->second.summary = q->second.summary;
+	if (q->second.count < p->second.count) {
+	  // rachet down the mute
+	  dout(10) << __func__ << " mute " << p->first << " count "
+		   << p->second.count << " -> " << q->second.count
+		   << dendl;
+	  p->second.count = q->second.count;
 	  changed = true;
 	}
       } else {
+	// summary-based mute
 	if (p->second.summary != q->second.summary) {
 	  mon->clog->info() << "Health alert mute " << p->first
 			    << " cleared (summary changed)";
