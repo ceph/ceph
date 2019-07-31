@@ -70,6 +70,7 @@ EOF
     cd $TEMP_DIR
     virtualenv --python=${TEUTHOLOGY_PYTHON_BIN:-/usr/bin/python} venv
     source venv/bin/activate
+    pip install 'setuptools >= 12'
     eval pip install $TEUTHOLOGY_PY_REQS
     pip install -r $CURR_DIR/requirements.txt
     deactivate
