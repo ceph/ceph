@@ -71,6 +71,56 @@ listen for v2 connections on the new default 3300 port.
 If a monitor is configured to listen for v1 connections on a non-standard port (not 6789), then the monmap will need to be modified manually.
 
 
+MON_DISK_LOW
+____________
+
+One or more monitors is low on disk space.  This alert triggers if the
+available space on the file system storing the monitor database
+(normally ``/var/lib/ceph/mon``), as a percentage, drops below
+``mon_data_avail_warn`` (default: 30%).
+
+This may indicate that some other process or user on the system is
+filling up the same file system used by the monitor.  It may also
+indicate that the monitors database is large (see ``MON_DISK_BIG``
+below).
+
+If space cannot be freed, the monitor's data directory may need to be
+moved to another storage device or file system (while the monitor
+daemon is not running, of course).
+
+
+MON_DISK_CRIT
+_____________
+
+One or more monitors is critically low on disk space.  This alert
+triggers if the available space on the file system storing the monitor
+database (normally ``/var/lib/ceph/mon``), as a percentage, drops
+below ``mon_data_avail_crit`` (default: 5%).  See ``MON_DISK_LOW``, above.
+
+MON_DISK_BIG
+____________
+
+The database size for one or more monitors is very large.  This alert
+triggers if the size of the monitor's database is larger than
+``mon_data_size_warn`` (default: 15 GiB).
+
+A large database is unusual, but may not necessarily indicate a
+problem.  Monitor databases may grow in size when there are placement
+groups that have not reached an ``active+clean`` state in a long time.
+
+This may also indicate that the monitor's database is not properly
+compacting, which has been observed with some older versions of
+leveldb and rocksdb.  Forcing a compaction with ``ceph daemon mon.<id>
+compact`` may shrink the on-disk size.
+
+This warning may also indicate that the monitor has a bug that is
+preventing it from pruning the cluster metadata it stores.  If the
+problem persists, please report a bug.
+
+The warning threshold may be adjusted with::
+
+  ceph config set global mon_data_size_warn <size>
+
 
 Manager
 -------
