@@ -676,7 +676,11 @@ int execute_image_set(const po::variables_map &vm,
     return r;
   }
 
-  std::string value = utils::get_positional_argument(vm, 2);
+  std::string value = utils::get_positional_argument(vm, arg_index);
+  if (value.empty()) {
+    std::cerr << "rbd: image config value was not specified" << std::endl;
+    return -EINVAL;
+  }
 
   librados::Rados rados;
   librados::IoCtx io_ctx;
