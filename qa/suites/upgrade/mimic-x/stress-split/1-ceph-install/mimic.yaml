@@ -21,6 +21,9 @@ tasks:
       - ceph osd require-osd-release mimic
       - ceph osd set-require-min-compat-client mimic
 - print: "**** done ceph"
+- rgw:
+   - client.0
+- print: "**** done => started rgw client.0"
 overrides:
   ceph:
     conf:
