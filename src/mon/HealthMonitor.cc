@@ -274,12 +274,14 @@ bool HealthMonitor::prepare_command(MonOpRequestRef op)
 
   if (prefix == "health mute") {
     string code;
+    bool sticky = false;
     if (!cmd_getval(g_ceph_context, cmdmap, "code", code) ||
 	code == "") {
       r = -EINVAL;
       ss << "must specify an alert code to mute";
       goto out;
     }
+    cmd_getval(g_ceph_context, cmdmap, "sticky", sticky);
     string ttl_str;
     utime_t ttl;
     if (cmd_getval(g_ceph_context, cmdmap, "ttl", ttl_str)) {
@@ -295,6 +297,7 @@ bool HealthMonitor::prepare_command(MonOpRequestRef op)
     auto& m = pending_mutes[code];
     m.code = code;
     m.ttl = ttl;
+    m.sticky = sticky;
   } else if (prefix == "health unmute") {
     string code;
     if (cmd_getval(g_ceph_context, cmdmap, "code", code)) {

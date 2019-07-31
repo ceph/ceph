@@ -64,11 +64,13 @@ WRITE_CLASS_DENC(health_check_t)
 struct health_mute_t {
   std::string code;
   utime_t ttl;
+  bool sticky = false;
 
   DENC(health_mute_t, v, p) {
     DENC_START(1, 1, p);
     denc(v.code, p);
     denc(v.ttl, p);
+    denc(v.sticky, p);
     DENC_FINISH(p);
   }
 
@@ -77,6 +79,7 @@ struct health_mute_t {
     if (ttl != utime_t()) {
       f->dump_stream("ttl") << ttl;
     }
+    f->dump_bool("sticky", sticky);
   }
 
   static void generate_test_instances(std::list<health_mute_t*>& ls) {
@@ -84,6 +87,7 @@ struct health_mute_t {
     ls.push_back(new health_mute_t);
     ls.back()->code = "OSD_DOWN";
     ls.back()->ttl = utime_t(1, 2);
+    ls.back()->sticky = true;
   }
 };
 WRITE_CLASS_DENC(health_mute_t)

@@ -211,9 +211,13 @@ COMMAND_WITH_FLAG("injectargs " \
 COMMAND("status", "show cluster status", "mon", "r")
 COMMAND("health name=detail,type=CephChoices,strings=detail,req=false", \
 	"show cluster health", "mon", "r")
-COMMAND("health mute name=code,type=CephString name=ttl,type=CephString,req=false",
+COMMAND("health mute "\
+	"name=code,type=CephString " \
+	"name=ttl,type=CephString,req=false " \
+	"name=sticky,type=CephBool,req=false",
 	"mute health alert", "mon", "w")
-COMMAND("health unmute name=code,type=CephString,req=false",
+COMMAND("health unmute "\
+	"name=code,type=CephString,req=false",
 	"unmute existing health alert mute(s)", "mon", "w")
 COMMAND("time-sync-status", "show time sync status", "mon", "r")
 COMMAND("df name=detail,type=CephChoices,strings=detail,req=false", \
