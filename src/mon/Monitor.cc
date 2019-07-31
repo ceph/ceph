@@ -2790,8 +2790,10 @@ health_status_t Monitor::get_health_status(
   }
   health_status_t r = HEALTH_OK;
   for (auto& p : all.checks) {
-    if (r > p.second.severity) {
-      r = p.second.severity;
+    if (!healthmon()->mutes.count(p.first)) {
+      if (r > p.second.severity) {
+	r = p.second.severity;
+      }
     }
   }
   if (f) {
@@ -2801,7 +2803,7 @@ health_status_t Monitor::get_health_status(
     for (auto& p : all.checks) {
       f->open_object_section(p.first.c_str());
       f->dump_stream("severity") << p.second.severity;
-
+      f->dump_bool("muted", healthmon()->mutes.count(p.first));
       f->open_object_section("summary");
       f->dump_string("message", p.second.summary);
       f->close_section();
@@ -2824,27 +2826,70 @@ health_status_t Monitor::get_health_status(
     f->close_section();
     f->close_section();
   } else {
+    auto now = ceph_clock_now();
     // one-liner: HEALTH_FOO[ thing1[; thing2 ...]]
     string summary;
     for (auto& p : all.checks) {
-      if (!summary.empty()) {
-	summary += sep2;
+      if (!healthmon()->mutes.count(p.first)) {
+	if (!summary.empty()) {
+	  summary += sep2;
+	}
+	summary += p.second.summary;
       }
-      summary += p.second.summary;
     }
     *plain = stringify(r);
     if (summary.size()) {
       *plain += sep1;
       *plain += summary;
     }
+    if (!healthmon()->mutes.empty()) {
+      if (summary.size()) {
+	*plain += sep2;
+      } else {
+	*plain += sep1;
+      }
+      *plain += "(muted:";
+      for (auto& p : healthmon()->mutes) {
+	*plain += " ";
+	*plain += p.first;
+	if (p.second.ttl) {
+	  if (p.second.ttl > now) {
+	    auto left = p.second.ttl;
+	    left -= now;
+	    *plain += "("s + utimespan_str(left) + ")";
+	  } else {
+	    *plain += "(0s)";
+	  }
+	}
+      }
+      *plain += ")";
+    }
     *plain += "\n";
     // detail
-    for (auto& p : all.checks) {
-      *plain += p.first + ": " + p.second.summary + "\n";
-      for (auto& d : p.second.detail) {
-        *plain += "    ";
-        *plain += d;
-        *plain += "\n";
+    if (want_detail) {
+      for (auto& p : all.checks) {
+	auto q = healthmon()->mutes.find(p.first);
+	if (q != healthmon()->mutes.end()) {
+	  *plain += "(MUTED";
+	  if (q->second.ttl != utime_t()) {
+	    if (q->second.ttl > now) {
+	      auto left = q->second.ttl;
+	      left -= now;
+	      *plain += " ttl ";
+	      *plain += utimespan_str(left);
+	    } else {
+	      *plain += "0s";
+	    }
+	  }
+	  *plain += ") ";
+	}
+	*plain += "["s + short_health_string(p.second.severity) + "] " +
+	  p.first + ": " + p.second.summary + "\n";
+	for (auto& d : p.second.detail) {
+	  *plain += "    ";
+	  *plain += d;
+	  *plain += "\n";
+	}
       }
     }
   }
@@ -3416,6 +3461,10 @@ void Monitor::handle_command(MonOpRequestRef op)
       prefix != "mon ok-to-add-offline" &&
       prefix != "mon ok-to-rm") {
     monmon()->dispatch(op);
+    return;
+  }
+  if (module == "health" && prefix != "health") {
+    healthmon()->dispatch(op);
     return;
   }
   if (module == "auth" || prefix == "fs authorize") {
