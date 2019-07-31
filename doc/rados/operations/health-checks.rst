@@ -1054,3 +1054,28 @@ To re-enable telemetry (and make this warning go away),::
 To disable telemetry (and make this warning go away),::
 
   ceph telemetry off
+
+AUTH_BAD_CAPS
+_____________
+
+One or more auth users has capabilities that cannot be parsed by the
+monitor.  This generally indicates that the user will not be
+authorized to perform any action with one or more daemon types.
+
+This error is mostly likely to occur after an upgrade if the
+capabilities were set with an older version of Ceph that did not
+properly validate their syntax, or if the syntax of the capabilities
+has changed.
+
+The user in question can be removed with::
+
+  ceph auth rm <entity-name>
+
+(This will resolve the health alert, but obviously clients will not be
+able to authenticate as that user.)
+
+Alternatively, the capabilities for the user can be updated with::
+
+  ceph auth <entity-name> <daemon-type> <caps> [<daemon-type> <caps> ...]
+
+For more information about auth capabilities, see :ref:`user-management`.
