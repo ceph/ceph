@@ -387,15 +387,44 @@ bool HealthMonitor::check_mutes()
 			<< " cleared (passed TTL " << p->second.ttl << ")";
       p = pending_mutes.erase(p);
       changed = true;
-    } else if (!p->second.sticky &&
-	       all.checks.count(p->first) == 0) {
-      mon->clog->info() << "Health alert mute " << p->first
-			<< " cleared (health alert cleared)";
-      p = pending_mutes.erase(p);
-      changed = true;
-    } else {
-      ++p;
+      continue;
     }
+    if (!p->second.sticky) {
+      auto q = all.checks.find(p->first);
+      if (q == all.checks.end()) {
+	mon->clog->info() << "Health alert mute " << p->first
+			  << " cleared (health alert cleared)";
+	p = pending_mutes.erase(p);
+	changed = true;
+	continue;
+      }
+      if (p->second.summary.size() && std::isdigit(p->second.summary[0])) {
+	int64_t mute_val = atoll(p->second.summary.c_str());
+	int64_t cur_val = atoll(q->second.summary.c_str());
+	if (cur_val > mute_val) {
+	  mon->clog->info() << "Health alert mute " << p->first
+			    << " cleared (count increased from " << mute_val
+			    << " to " << cur_val << ")";
+	  p = pending_mutes.erase(p);
+	  changed = true;
+	  continue;
+	}
+	if (p->second.summary != q->second.summary) {
+	  // update summary string for good measure
+	  p->second.summary = q->second.summary;
+	  changed = true;
+	}
+      } else {
+	if (p->second.summary != q->second.summary) {
+	  mon->clog->info() << "Health alert mute " << p->first
+			    << " cleared (summary changed)";
+	  p = pending_mutes.erase(p);
+	  changed = true;
+	  continue;
+	}
+      }
+    }
+    ++p;
   }
   return changed;
 }
