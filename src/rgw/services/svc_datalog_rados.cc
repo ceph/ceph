@@ -80,10 +80,3 @@ int RGWSI_DataLog_RADOS::trim_entries(int shard_id, const real_time& start_time,
 {
   return log->trim_entries(shard_id, start_time, end_time, start_marker, end_marker);
 }
-
-int RGWSI_DataLog_RADOS::trim_entries(const real_time& start_time, const real_time& end_time,
-                                      const string& start_marker, const string& end_marker)
-{
-  return log->trim_entries(start_time, end_time, start_marker, end_marker);
-}
-
