@@ -448,6 +448,20 @@ risk.  For example, if osd ``$N`` has the error,::
   ceph-volume lvm zap /path/to/device
   ceph-volume lvm create --osd-id $N --data /path/to/device
 
+BLUESTORE_NO_COMPRESSION
+________________________
+
+One or more OSDs is unable to load a BlueStore compression plugin.
+This can be caused by a broken installation, in which the ``ceph-osd``
+binary does not match the compression plugins, or a recent upgrade
+that did not include a restart of the ``ceph-osd`` daemon.
+
+Verify that the package(s) on the host running the OSD(s) in question
+are correctly installed and that the OSD daemon(s) have been
+restarted.  If the problem persists, check the OSD log for any clues
+as to the source of the problem.
+
+
 
 Device health
 -------------
