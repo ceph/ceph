@@ -6698,6 +6698,48 @@ int BlueStore::umount()
   return 0;
 }
 
+int BlueStore::cold_open()
+{
+  int r = _open_path();
+  if (r < 0)
+    return r;
+  r = _open_fsid(false);
+  if (r < 0)
+    goto out_path;
+
+  r = _read_fsid(&fsid);
+  if (r < 0)
+    goto out_fsid;
+
+  r = _lock_fsid();
+  if (r < 0)
+    goto out_fsid;
+
+  r = _open_bdev(false);
+  if (r < 0)
+    goto out_fsid;
+  r = _open_db_and_around(true);
+  if (r < 0) {
+    goto out_bdev;
+  }
+  return 0;
+ out_bdev:
+  _close_bdev();
+ out_fsid:
+  _close_fsid();
+ out_path:
+  _close_path();
+  return r;
+}
+int BlueStore::cold_close()
+{
+  _close_db_and_around();
+  _close_bdev();
+  _close_fsid();
+  _close_path();
+  return 0;
+}
+
 static void apply(uint64_t off,
                   uint64_t len,
                   uint64_t granularity,
