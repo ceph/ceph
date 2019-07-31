@@ -75,6 +75,7 @@ struct health_mute_t {
   utime_t ttl;
   bool sticky = false;
   string summary;
+  int64_t count;
 
   DENC(health_mute_t, v, p) {
     DENC_START(1, 1, p);
@@ -82,6 +83,7 @@ struct health_mute_t {
     denc(v.ttl, p);
     denc(v.sticky, p);
     denc(v.summary, p);
+    denc(v.count, p);
     DENC_FINISH(p);
   }
 
@@ -92,6 +94,7 @@ struct health_mute_t {
     }
     f->dump_bool("sticky", sticky);
     f->dump_string("summary", summary);
+    f->dump_int("count", count);
   }
 
   static void generate_test_instances(std::list<health_mute_t*>& ls) {
@@ -101,6 +104,7 @@ struct health_mute_t {
     ls.back()->ttl = utime_t(1, 2);
     ls.back()->sticky = true;
     ls.back()->summary = "foo bar";
+    ls.back()->count = 2;
   }
 };
 WRITE_CLASS_DENC(health_mute_t)
