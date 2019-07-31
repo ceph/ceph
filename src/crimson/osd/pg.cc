@@ -368,6 +368,8 @@ PG::do_osd_op(ObjectState& os, OSDOp& osd_op, ceph::os::Transaction& txn)
     return backend->remove(os, txn);
   case CEPH_OSD_OP_CALL:
     return backend->call(os, osd_op, txn);
+  case CEPH_OSD_OP_STAT:
+    return backend->stat(os, osd_op);
   default:
     logger().warn("unknown op {}", ceph_osd_op_name(op.op));
     throw std::runtime_error(
