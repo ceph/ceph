@@ -14,6 +14,56 @@ from datetime import datetime
 from .. import mgr, logger
 
 
+def _progress_event_to_dashboard_task_common(event, task):
+    if event['refs'] and isinstance(event['refs'], dict):
+        refs = event['refs']
+        if refs['origin'] == "rbd_support":
+            # rbd mgr module event, we can transform this event into an rbd dashboard task
+            action_map = {
+                'remove': "delete",
+                'flatten': "flatten",
+                'trash remove': "trash/remove"
+            }
+            action = action_map.get(refs['action'], refs['action'])
+            task.update({
+                'name': "rbd/{}".format(action),
+                'metadata': refs,
+                'begin_time': "{}Z".format(datetime.fromtimestamp(event["started_at"])
+                                           .isoformat()),
+            })
+            return
+
+    task.update({
+        # we're prepending the "progress/" prefix to tag tasks that come
+        # from the progress module
+        'name': "progress/{}".format(event['message']),
+        'metadata': dict(event.get('refs', {})),
+        'begin_time': "{}Z".format(datetime.fromtimestamp(event["started_at"])
+                                   .isoformat()),
+    })
+
+
+
+def _progress_event_to_dashboard_task(event, completed=False):
+    task = {}
+    _progress_event_to_dashboard_task_common(event, task)
+    if not completed:
+        task.update({
+            'progress': int(100 * event['progress'])
+        })
+    else:
+        task.update({
+            'end_time': "{}Z".format(datetime.fromtimestamp(event['finished_at'])
+                                     .isoformat()),
+            'duration': event['finished_at'] - event['started_at'],
+            'progress': 100,
+            'success': 'failed' not in event,
+            'ret_value': None,
+            'exception': {'detail': event['failure_message']} if 'failed' in event else None
+        })
+    return task
+
+
 def get_progress_tasks():
     executing_t = []
     finished_t = []
@@ -21,30 +71,10 @@ def get_progress_tasks():
 
     for ev in progress_events['events']:
         logger.debug("[Progress] event=%s", ev)
-        executing_t.append({
-            # we're prepending the "progress/" prefix to tag tasks that come
-            # from the progress module
-            'name': "progress/{}".format(ev['message']),
-            'metadata': dict(ev['refs']),
-            'begin_time': "{}Z".format(datetime.fromtimestamp(ev["started_at"])
-                                       .isoformat()),
-            'progress': int(100 * ev['progress'])
-        })
+        executing_t.append(_progress_event_to_dashboard_task(ev))
 
     for ev in progress_events['completed']:
         logger.debug("[Progress] finished event=%s", ev)
-        finished_t.append({
-            'name': "progress/{}".format(ev['message']),
-            'metadata': dict(ev['refs']),
-            'begin_time': "{}Z".format(datetime.fromtimestamp(ev["started_at"])
-                                       .isoformat()),
-            'end_time': "{}Z".format(datetime.fromtimestamp(ev['finished_at'])
-                                     .isoformat()),
-            'duration': ev['finished_at'] - ev['started_at'],
-            'progress': 100,
-            'success': True,
-            'ret_value': None,
-            'exception': None
-        })
+        finished_t.append(_progress_event_to_dashboard_task(ev, True))
 
     return executing_t, finished_t
