@@ -7718,8 +7718,20 @@ next:
     if (ret < 0)
       return -ret;
 
-    ret = store->svc()->datalog_rados->trim_entries(start_time.to_real_time(), end_time.to_real_time(), start_marker, end_marker);
-    if (ret < 0) {
+    if (!specified_shard_id) {
+      cerr << "ERROR: requires a --shard-id" << std::endl;
+      return EINVAL;
+    }
+
+    // loop until -ENODATA
+    do {
+      auto datalog = store->svc()->datalog_rados;
+      ret = datalog->trim_entries(shard_id, start_time.to_real_time(),
+                                  end_time.to_real_time(),
+                                  start_marker, end_marker);
+    } while (ret == 0);
+
+    if (ret < 0 && ret != -ENODATA) {
       cerr << "ERROR: trim_entries(): " << cpp_strerror(-ret) << std::endl;
       return -ret;
     }

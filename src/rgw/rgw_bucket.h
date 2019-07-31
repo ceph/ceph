@@ -543,8 +543,6 @@ public:
 		   bool *truncated);
   int trim_entries(int shard_id, const real_time& start_time, const real_time& end_time,
                    const string& start_marker, const string& end_marker);
-  int trim_entries(const real_time& start_time, const real_time& end_time,
-                   const string& start_marker, const string& end_marker);
   int get_info(int shard_id, RGWDataChangesLogInfo *info);
 
   using LogMarker = RGWDataChangesLogMarker;
