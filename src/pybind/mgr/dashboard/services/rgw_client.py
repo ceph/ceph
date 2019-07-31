@@ -2,12 +2,20 @@
 from __future__ import absolute_import
 
 import re
+import ipaddress
 from distutils.util import strtobool
+import xml.etree.ElementTree as ET
+import six
 from ..awsauth import S3Auth
 from ..settings import Settings, Options
 from ..rest_client import RestClient, RequestException
-from ..tools import build_url, dict_contains_path, is_valid_ip_address
+from ..tools import build_url, dict_contains_path, json_str_to_object, partial_dict
 from .. import mgr, logger
+
+try:
+    from typing import Any, Dict, List  # pylint: disable=unused-import
+except ImportError:
+    pass  # For typing only
 
 
 class NoCredentialsException(RequestException):
@@ -125,9 +133,11 @@ def _parse_addr(value):
         #   Group 1: [
         #   Group 2: 2001:db8:85a3::8a2e:370:7334
         addr = match.group(3) if match.group(3) else match.group(2)
-        if not is_valid_ip_address(addr):
+        try:
+            ipaddress.ip_address(six.u(addr))
+            return addr
+        except ValueError:
             raise LookupError('Invalid RGW address \'{}\' found'.format(addr))
-        return addr
     raise LookupError('Failed to determine RGW address')
 
 
@@ -196,6 +206,7 @@ class RgwClient(RestClient):
     _port = None
     _ssl = None
     _user_instances = {}
+    _rgw_settings_snapshot = None
 
     @staticmethod
     def _load_settings():
@@ -230,8 +241,37 @@ class RgwClient(RestClient):
         # Append the instance to the internal map.
         RgwClient._user_instances[RgwClient._SYSTEM_USERID] = instance
 
+    def _get_daemon_zone_info(self):  # type: () -> Dict[str, Any]
+        return json_str_to_object(self.proxy('GET', 'config?type=zone', None, None))
+
+    def _get_daemon_zonegroup_map(self):  # type: () -> List[Dict[str, Any]]
+        zonegroups = json_str_to_object(
+            self.proxy('GET', 'config?type=zonegroup-map', None, None)
+        )
+
+        return [partial_dict(
+            zonegroup['val'],
+            ['api_name', 'zones']
+            ) for zonegroup in zonegroups['zonegroups']]
+
+    @staticmethod
+    def _rgw_settings():
+        return (Settings.RGW_API_HOST,
+                Settings.RGW_API_PORT,
+                Settings.RGW_API_ACCESS_KEY,
+                Settings.RGW_API_SECRET_KEY,
+                Settings.RGW_API_ADMIN_RESOURCE,
+                Settings.RGW_API_SCHEME,
+                Settings.RGW_API_USER_ID,
+                Settings.RGW_API_SSL_VERIFY)
+
     @staticmethod
     def instance(userid):
+        # Discard all cached instances if any rgw setting has changed
+        if RgwClient._rgw_settings_snapshot != RgwClient._rgw_settings():
+            RgwClient._rgw_settings_snapshot = RgwClient._rgw_settings()
+            RgwClient._user_instances.clear()
+
         if not RgwClient._user_instances:
             RgwClient._load_settings()
 
@@ -273,7 +313,7 @@ class RgwClient(RestClient):
                  secret_key,
                  host=None,
                  port=None,
-                 admin_path='admin',
+                 admin_path=None,
                  ssl=False):
 
         if not host and not RgwClient._host:
@@ -408,6 +448,37 @@ class RgwClient(RestClient):
             raise e
 
     @RestClient.api_put('/{bucket_name}')
-    def create_bucket(self, bucket_name, request=None):
-        logger.info("Creating bucket: %s", bucket_name)
-        return request()
+    def create_bucket(self, bucket_name, zonegroup=None, placement_target=None, request=None):
+        logger.info("Creating bucket: %s, zonegroup: %s, placement_target: %s",
+                    bucket_name, zonegroup, placement_target)
+        data = None
+        if zonegroup and placement_target:
+            create_bucket_configuration = ET.Element('CreateBucketConfiguration')
+            location_constraint = ET.SubElement(create_bucket_configuration, 'LocationConstraint')
+            location_constraint.text = '{}:{}'.format(zonegroup, placement_target)
+            data = ET.tostring(create_bucket_configuration, encoding='utf-8')
+
+        return request(data=data)
+
+    def get_placement_targets(self):  # type: () -> Dict[str, Any]
+        zone = self._get_daemon_zone_info()
+        # A zone without realm id can only belong to default zonegroup.
+        zonegroup_name = 'default'
+        if zone['realm_id']:
+            zonegroup_map = self._get_daemon_zonegroup_map()
+            for zonegroup in zonegroup_map:
+                for realm_zone in zonegroup['zones']:
+                    if realm_zone['id'] == zone['id']:
+                        zonegroup_name = zonegroup['api_name']
+                        break
+
+        placement_targets = []  # type: List[Dict]
+        for placement_pool in zone['placement_pools']:
+            placement_targets.append(
+                {
+                    'name': placement_pool['key'],
+                    'data_pool': placement_pool['val']['storage_classes']['STANDARD']['data_pool']
+                }
+            )
+
+        return {'zonegroup': zonegroup_name, 'placement_targets': placement_targets}

@@ -22,9 +22,7 @@
  * OSD sub op - for internal ops on pobjects between primary and replicas(/stripes/whatever)
  */
 
-class MOSDRepOp : public MessageInstance<MOSDRepOp, MOSDFastDispatchOp> {
-public:
-  friend factory;
+class MOSDRepOp : public MOSDFastDispatchOp {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
@@ -37,7 +35,7 @@ public:
 
   spg_t pgid;
 
-  bufferlist::const_iterator p;
+  ceph::buffer::list::const_iterator p;
   // Decoding flags. Decoding is only needed for messages caught by pipe reader.
   bool final_decode_needed;
 
@@ -48,7 +46,7 @@ public:
   __u8 acks_wanted;
 
   // transaction to exec
-  bufferlist logbl;
+  ceph::buffer::list logbl;
   pg_stat_t pg_stats;
 
   // subop metadata
@@ -63,7 +61,7 @@ public:
   hobject_t discard_temp_oid;  ///< previously used temp object that we can now stop tracking
 
   /// non-empty if this transaction involves a hit_set history update
-  boost::optional<pg_hit_set_history_t> updated_hit_set_history;
+  std::optional<pg_hit_set_history_t> updated_hit_set_history;
 
   epoch_t get_map_epoch() const override {
     return map_epoch;
@@ -80,6 +78,7 @@ public:
   }
 
   void decode_payload() override {
+    using ceph::decode;
     p = payload.cbegin();
     // split to partial and final
     decode(map_epoch, p);
@@ -94,6 +93,7 @@ public:
   }
 
   void finish_decode() {
+    using ceph::decode;
     if (!final_decode_needed)
       return; // Message is already final decoded
     decode(poid, p);
@@ -141,13 +141,13 @@ public:
   }
 
   MOSDRepOp()
-    : MessageInstance(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp{MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION},
       map_epoch(0),
       final_decode_needed(true), acks_wanted (0) {}
   MOSDRepOp(osd_reqid_t r, pg_shard_t from,
 	    spg_t p, const hobject_t& po, int aw,
 	    epoch_t mape, epoch_t min_epoch, ceph_tid_t rtid, eversion_t v)
-    : MessageInstance(MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp{MSG_OSD_REPOP, HEAD_VERSION, COMPAT_VERSION},
       map_epoch(mape),
       min_epoch(min_epoch),
       reqid(r),
@@ -164,7 +164,7 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "osd_repop"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "osd_repop(" << reqid
 	<< " " << pgid << " e" << map_epoch << "/" << min_epoch;
     if (!final_decode_needed) {
@@ -174,7 +174,9 @@ public:
     }
     out << ")";
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
-
 
 #endif

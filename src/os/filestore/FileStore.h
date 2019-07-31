@@ -160,6 +160,8 @@ private:
 
   void create_backend(unsigned long f_type);
 
+  string devname;
+
   int vdo_fd = -1;
   string vdo_name;
 
@@ -176,6 +178,8 @@ private:
     return cid.is_pg() && oid.hobj.pool <= -1;
   }
   void init_temp_collections();
+
+  void handle_eio();
 
   // ObjectMap
   boost::scoped_ptr<ObjectMap> object_map;

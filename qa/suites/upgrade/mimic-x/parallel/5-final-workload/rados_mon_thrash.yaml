@@ -12,7 +12,6 @@ tasks:
       thrash_delay: 1
   - print: "**** done mon_thrash 4-final-workload"
   - workunit:
-      branch: mimic
       clients:
         client.1:
           - rados/test.sh

@@ -20,7 +20,7 @@
               "id": -1,
               "name": "default",
               "type": "root",
-              "type_id": 10,
+              "type_id": 11,
               "children": [
                   -3
               ]

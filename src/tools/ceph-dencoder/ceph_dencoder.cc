@@ -14,35 +14,12 @@
 
 
 #include <errno.h>
-#include "include/types.h"
 #include "ceph_ver.h"
-#include "include/encoding.h"
-#include "include/ceph_features.h"
-#include "common/ceph_argparse.h"
+#include "include/types.h"
 #include "common/Formatter.h"
+#include "common/ceph_argparse.h"
 #include "common/errno.h"
-#include "msg/Message.h"
-#include "include/ceph_assert.h"
-
-#define TYPE(t)
-#define TYPE_STRAYDATA(t)
-#define TYPE_NONDETERMINISTIC(t)
-#define TYPE_FEATUREFUL(t)
-#define TYPE_FEATUREFUL_STRAYDATA(t)
-#define TYPE_FEATUREFUL_NONDETERMINISTIC(t)
-#define TYPE_FEATUREFUL_NOCOPY(t)
-#define TYPE_NOCOPY(t)
-#define MESSAGE(t)
-#include "tools/ceph-dencoder/types.h"
-#undef TYPE
-#undef TYPE_STRAYDATA
-#undef TYPE_NONDETERMINISTIC
-#undef TYPE_NOCOPY
-#undef TYPE_FEATUREFUL
-#undef TYPE_FEATUREFUL_STRAYDATA
-#undef TYPE_FEATUREFUL_NONDETERMINISTIC
-#undef TYPE_FEATUREFUL_NOCOPY
-#undef MESSAGE
+#include "denc_registry.h"
 
 #define MB(m) ((m) * 1024 * 1024)
 
@@ -73,240 +50,16 @@ void usage(ostream &out)
   out << "  select_test <n>     select generated test object as in-memory object\n";
   out << "  is_deterministic    exit w/ success if type encodes deterministically\n";
 }
-struct Dencoder {
-  virtual ~Dencoder() {}
-  virtual string decode(bufferlist bl, uint64_t seek) = 0;
-  virtual void encode(bufferlist& out, uint64_t features) = 0;
-  virtual void dump(ceph::Formatter *f) = 0;
-  virtual void copy() {
-    cerr << "copy operator= not supported" << std::endl;
-  }
-  virtual void copy_ctor() {
-    cerr << "copy ctor not supported" << std::endl;
-  }
-  virtual void generate() = 0;
-  virtual int num_generated() = 0;
-  virtual string select_generated(unsigned n) = 0;
-  virtual bool is_deterministic() = 0;
-  //virtual void print(ostream& out) = 0;
-};
-
-template<class T>
-class DencoderBase : public Dencoder {
-protected:
-  T* m_object;
-  list<T*> m_list;
-  bool stray_okay;
-  bool nondeterministic;
-
-public:
-  DencoderBase(bool stray_okay, bool nondeterministic)
-    : m_object(new T),
-      stray_okay(stray_okay),
-      nondeterministic(nondeterministic) {}
-  ~DencoderBase() override {
-    delete m_object;
-  }
-
-  string decode(bufferlist bl, uint64_t seek) override {
-    auto p = bl.cbegin();
-    p.seek(seek);
-    try {
-      using ceph::decode;
-      decode(*m_object, p);
-    }
-    catch (buffer::error& e) {
-      return e.what();
-    }
-    if (!stray_okay && !p.end()) {
-      ostringstream ss;
-      ss << "stray data at end of buffer, offset " << p.get_off();
-      return ss.str();
-    }
-    return string();
-  }
-
-  void encode(bufferlist& out, uint64_t features) override = 0;
-
-  void dump(ceph::Formatter *f) override {
-    m_object->dump(f);
-  }
-  void generate() override {
-    T::generate_test_instances(m_list);
-  }
-  int num_generated() override {
-    return m_list.size();
-  }
-  string select_generated(unsigned i) override {
-    // allow 0- or 1-based (by wrapping)
-    if (i == 0)
-      i = m_list.size();
-    if ((i == 0) || (i > m_list.size()))
-      return "invalid id for generated object";
-    m_object = *(std::next(m_list.begin(), i-1));
-    return string();
-  }
-
-  bool is_deterministic() override {
-    return !nondeterministic;
-  }
-};
-
-template<class T>
-class DencoderImplNoFeatureNoCopy : public DencoderBase<T> {
-public:
-  DencoderImplNoFeatureNoCopy(bool stray_ok, bool nondeterministic)
-    : DencoderBase<T>(stray_ok, nondeterministic) {}
-  void encode(bufferlist& out, uint64_t features) override {
-    out.clear();
-    using ceph::encode;
-    encode(*this->m_object, out);
-  }
-};
-
-template<class T>
-class DencoderImplNoFeature : public DencoderImplNoFeatureNoCopy<T> {
-public:
-  DencoderImplNoFeature(bool stray_ok, bool nondeterministic)
-    : DencoderImplNoFeatureNoCopy<T>(stray_ok, nondeterministic) {}
-  void copy() override {
-    T *n = new T;
-    *n = *this->m_object;
-    delete this->m_object;
-    this->m_object = n;
-  }
-  void copy_ctor() override {
-    T *n = new T(*this->m_object);
-    delete this->m_object;
-    this->m_object = n;
-  }
-};
-
-template<class T>
-class DencoderImplFeaturefulNoCopy : public DencoderBase<T> {
-public:
-  DencoderImplFeaturefulNoCopy(bool stray_ok, bool nondeterministic)
-    : DencoderBase<T>(stray_ok, nondeterministic) {}
-  void encode(bufferlist& out, uint64_t features) override {
-    out.clear();
-    using ceph::encode;
-    encode(*(this->m_object), out, features);
-  }
-};
-
-template<class T>
-class DencoderImplFeatureful : public DencoderImplFeaturefulNoCopy<T> {
-public:
-  DencoderImplFeatureful(bool stray_ok, bool nondeterministic)
-    : DencoderImplFeaturefulNoCopy<T>(stray_ok, nondeterministic) {}
-  void copy() override {
-    T *n = new T;
-    *n = *this->m_object;
-    delete this->m_object;
-    this->m_object = n;
-  }
-  void copy_ctor() override {
-    T *n = new T(*this->m_object);
-    delete this->m_object;
-    this->m_object = n;
-  }
-};
-
-template<class T>
-class MessageDencoderImpl : public Dencoder {
-  typename T::ref m_object;
-  list<typename T::ref> m_list;
-
-public:
-  MessageDencoderImpl() : m_object(T::create()) {}
-  ~MessageDencoderImpl() override {}
-
-  string decode(bufferlist bl, uint64_t seek) override {
-    auto p = bl.cbegin();
-    p.seek(seek);
-    try {
-      Message::ref n(decode_message(g_ceph_context, 0, p), false);
-      if (!n)
-	throw std::runtime_error("failed to decode");
-      if (n->get_type() != m_object->get_type()) {
-	stringstream ss;
-	ss << "decoded type " << n->get_type() << " instead of expected " << m_object->get_type();
-	throw std::runtime_error(ss.str());
-      }
-      m_object = boost::static_pointer_cast<typename T::ref::element_type, std::remove_reference<decltype(n)>::type::element_type>(n);
-    }
-    catch (buffer::error& e) {
-      return e.what();
-    }
-    if (!p.end()) {
-      ostringstream ss;
-      ss << "stray data at end of buffer, offset " << p.get_off();
-      return ss.str();
-    }
-    return string();
-  }
-
-  void encode(bufferlist& out, uint64_t features) override {
-    out.clear();
-    encode_message(m_object.get(), features, out);
-  }
-
-  void dump(ceph::Formatter *f) override {
-    m_object->dump(f);
-  }
-  void generate() override {
-    //T::generate_test_instances(m_list);
-  }
-  int num_generated() override {
-    return m_list.size();
-  }
-  string select_generated(unsigned i) override {
-    // allow 0- or 1-based (by wrapping)
-    if (i == 0)
-      i = m_list.size();
-    if ((i == 0) || (i > m_list.size()))
-      return "invalid id for generated object";
-    m_object = *(std::next(m_list.begin(), i-1));
-    return string();
-  }
-  bool is_deterministic() override {
-    return true;
-  }
-
-  //void print(ostream& out) {
-  //out << m_object << std::endl;
-  //}
-};
-
   
-
 int main(int argc, const char **argv)
 {
-  // dencoders
-  map<string,Dencoder*> dencoders;
+  register_common_dencoders();
+  register_mds_dencoders();
+  register_osd_dencoders();
+  register_rbd_dencoders();
+  register_rgw_dencoders();
 
-#define T_STR(x) #x
-#define T_STRINGIFY(x) T_STR(x)
-#define TYPE(t) dencoders[T_STRINGIFY(t)] = new DencoderImplNoFeature<t>(false, false);
-#define TYPE_STRAYDATA(t) dencoders[T_STRINGIFY(t)] = new DencoderImplNoFeature<t>(true, false);
-#define TYPE_NONDETERMINISTIC(t) dencoders[T_STRINGIFY(t)] = new DencoderImplNoFeature<t>(false, true);
-#define TYPE_FEATUREFUL(t) dencoders[T_STRINGIFY(t)] = new DencoderImplFeatureful<t>(false, false);
-#define TYPE_FEATUREFUL_STRAYDATA(t) dencoders[T_STRINGIFY(t)] = new DencoderImplFeatureful<t>(true, false);
-#define TYPE_FEATUREFUL_NONDETERMINISTIC(t) dencoders[T_STRINGIFY(t)] = new DencoderImplFeatureful<t>(false, true);
-#define TYPE_FEATUREFUL_NOCOPY(t) dencoders[T_STRINGIFY(t)] = new DencoderImplFeaturefulNoCopy<t>(false, false);
-#define TYPE_NOCOPY(t) dencoders[T_STRINGIFY(t)] = new DencoderImplNoFeatureNoCopy<t>(false, false);
-#define MESSAGE(t) dencoders[T_STRINGIFY(t)] = new MessageDencoderImpl<t>;
-#include "tools/ceph-dencoder/types.h"
-#undef TYPE
-#undef TYPE_STRAYDATA
-#undef TYPE_NONDETERMINISTIC
-#undef TYPE_NOCOPY
-#undef TYPE_FEATUREFUL
-#undef TYPE_FEATUREFUL_STRAYDATA
-#undef TYPE_FEATUREFUL_NONDETERMINISTIC
-#undef TYPE_FEATUREFUL_NOCOPY
-#undef T_STR
-#undef T_STRINGIFY
+  auto& dencoders = DencoderRegistry::instance().get();
 
   vector<const char*> args;
   argv_to_vec(argc, argv, args);
@@ -330,10 +83,8 @@ int main(int argc, const char **argv)
     } else if (*i == string("version")) {
       cout << CEPH_GIT_NICE_VER << std::endl;
     } else if (*i == string("list_types")) {
-      for (map<string,Dencoder*>::iterator p = dencoders.begin();
-	   p != dencoders.end();
-	   ++p)
-	cout << p->first << std::endl;
+      for (auto& dencoder : dencoders)
+	cout << dencoder.first << std::endl;
       exit(0);
     } else if (*i == string("type")) {
       ++i;
@@ -346,7 +97,7 @@ int main(int argc, const char **argv)
 	cerr << "class '" << cname << "' unknown" << std::endl;
 	exit(1);
       }
-      den = dencoders[cname];
+      den = dencoders[cname].get();
       den->generate();
     } else if (*i == string("skip")) {
       ++i;

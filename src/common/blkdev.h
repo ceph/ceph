@@ -22,6 +22,7 @@ enum blkdev_prop_t {
 
 extern int get_device_by_path(const char *path, char* partition, char* device, size_t max);
 
+extern std::string _decode_model_enc(const std::string& in);  // helper, exported only so we can unit test
 
 extern std::string get_device_id(const std::string& devname,
 				 std::string *err=0);

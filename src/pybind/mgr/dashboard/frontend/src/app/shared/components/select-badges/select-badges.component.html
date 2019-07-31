@@ -5,17 +5,17 @@
            [selectionLimit]="selectionLimit"
            [customBadges]="customBadges"
            [customBadgeValidators]="customBadgeValidators"
-           elemClass="margin-right-sm select-menu-edit"
+           elemClass="mr-2 select-menu-edit"
            (selection)="selection.emit($event)">
-  <i class="fa fa-fw fa-pencil"></i>
+  <i [ngClass]="[icons.edit]"></i>
 </cd-select>
 
 <span *ngFor="let dataItem of data">
-  <span class="badge badge-pill badge-primary margin-right-sm">
-    <span class="margin-right-sm">{{ dataItem }}</span>
+  <span class="badge badge-dark mr-2">
+    <span class="mr-2">{{ dataItem }}</span>
     <a class="badge-remove"
        (click)="cdSelect.removeItem(dataItem)">
-      <i class="fa fa-times"
+      <i [ngClass]="[icons.destroy]"
          aria-hidden="true"></i>
     </a>
   </span>

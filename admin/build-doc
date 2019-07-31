@@ -50,7 +50,7 @@ fi
 # for availability of commands
 set -e
 
-cat $TOPDIR/src/osd/PG.h $TOPDIR/src/osd/PG.cc | $TOPDIR/doc/scripts/gen_state_diagram.py > $TOPDIR/doc/dev/peering_graph.generated.dot
+cat $TOPDIR/src/osd/PeeringState.h $TOPDIR/src/osd/PeeringState.cc | $TOPDIR/doc/scripts/gen_state_diagram.py > $TOPDIR/doc/dev/peering_graph.generated.dot
 
 cd build-doc
 
@@ -118,7 +118,7 @@ for target in $sphinx_targets; do
             ;;
     esac
     # Build with -W so that warnings are treated as errors and this fails
-    $vdir/bin/sphinx-build -W -a -b $builder $extra_opt -d doctrees \
+    $vdir/bin/sphinx-build -W --keep-going -a -b $builder $extra_opt -d doctrees \
                            $TOPDIR/doc $TOPDIR/build-doc/output/$target
 
 
@@ -138,7 +138,7 @@ def json_serialize(obj):
         return obj.isoformat()
 
 with open("$TOPDIR/doc/releases/releases.yml", 'r') as fp:
-    releases = yaml.load(fp)
+    releases = yaml.safe_load(fp)
     print(json.dumps(releases, indent=2, default=json_serialize))
 EOF
 

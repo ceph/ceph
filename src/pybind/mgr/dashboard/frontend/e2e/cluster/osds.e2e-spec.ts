@@ -1,34 +1,35 @@
 import { Helper } from '../helper.po';
-import { OSDsPage } from './osds.po';
 
 describe('OSDs page', () => {
-  let page: OSDsPage;
+  let osds: Helper['osds'];
 
   beforeAll(() => {
-    page = new OSDsPage();
+    osds = new Helper().osds;
   });
 
   afterEach(() => {
     Helper.checkConsole();
   });
 
-  it('should open and show breadcrumb', () => {
-    page.navigateTo();
-    expect(Helper.getBreadcrumbText()).toEqual('OSDs');
-  });
+  describe('breadcrumb and tab tests', () => {
+    beforeAll(() => {
+      osds.navigateTo();
+    });
 
-  it('should show two tabs', () => {
-    page.navigateTo();
-    expect(Helper.getTabsCount()).toEqual(2);
-  });
+    it('should open and show breadcrumb', () => {
+      expect(osds.getBreadcrumbText()).toEqual('OSDs');
+    });
 
-  it('should show OSDs list tab at first', () => {
-    page.navigateTo();
-    expect(Helper.getTabText(0)).toEqual('OSDs List');
-  });
+    it('should show two tabs', () => {
+      expect(osds.getTabsCount()).toEqual(2);
+    });
 
-  it('should show overall performance as a second tab', () => {
-    page.navigateTo();
-    expect(Helper.getTabText(1)).toEqual('Overall Performance');
+    it('should show OSDs list tab at first', () => {
+      expect(osds.getTabText(0)).toEqual('OSDs List');
+    });
+
+    it('should show overall performance as a second tab', () => {
+      expect(osds.getTabText(1)).toEqual('Overall Performance');
+    });
   });
 });

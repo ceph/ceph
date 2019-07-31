@@ -1,7 +1,5 @@
-import { browser } from 'protractor';
+import { PageHelper } from '../page-helper.po';
 
-export class OSDsPage {
-  navigateTo() {
-    return browser.get('/#/osd');
-  }
+export class OSDsPageHelper extends PageHelper {
+  pages = { index: '/#/osd' };
 }

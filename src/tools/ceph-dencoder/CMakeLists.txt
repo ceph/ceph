@@ -9,7 +9,15 @@ if(HAS_VTA)
 endif()
 
 set(dencoder_srcs
+  denc_registry.cc
   ceph_dencoder.cc
+  common_types.cc
+  mds_types.cc
+  osd_types.cc
+  rbd_types.cc
+  rgw_types.cc
+  ../../include/uuid.cc
+  ../../include/utime.cc
   $<TARGET_OBJECTS:common_texttable_obj>)
 if(WITH_RADOSGW)
   list(APPEND dencoder_srcs

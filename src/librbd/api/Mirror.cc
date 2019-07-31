@@ -12,6 +12,7 @@
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
 #include "librbd/Journal.h"
+#include "librbd/Operations.h"
 #include "librbd/Utils.h"
 #include "librbd/api/Image.h"
 #include "librbd/mirror/DemoteRequest.h"
@@ -194,7 +195,7 @@ int Mirror<I>::image_enable(I *ictx, bool relax_same_pool_parent_check) {
 
   // is mirroring not enabled for the parent?
   {
-    RWLock::RLocker l(ictx->parent_lock);
+    RWLock::RLocker image_locker(ictx->image_lock);
     ImageCtx *parent = ictx->parent;
     if (parent) {
       if (relax_same_pool_parent_check &&
@@ -215,9 +216,16 @@ int Mirror<I>::image_enable(I *ictx, bool relax_same_pool_parent_check) {
     }
   }
 
-  if ((ictx->features & RBD_FEATURE_JOURNALING) == 0) {
-    lderr(cct) << "cannot enable mirroring: journaling is not enabled" << dendl;
-    return -EINVAL;
+  if (!ictx->test_features(RBD_FEATURE_JOURNALING)) {
+    uint64_t features = RBD_FEATURE_JOURNALING;
+    if (!ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
+      features |= RBD_FEATURE_EXCLUSIVE_LOCK;
+    }
+    r = ictx->operations->update_features(features, true);
+    if (r < 0) {
+      lderr(cct) << "cannot enable journaling: " << cpp_strerror(r) << dendl;
+      return r;
+    }
   }
 
   C_SaferCond ctx;
@@ -297,7 +305,7 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
     };
 
     {
-      RWLock::RLocker l(ictx->snap_lock);
+      RWLock::RLocker l(ictx->image_lock);
       map<librados::snap_t, SnapInfo> snap_info = ictx->snap_info;
       for (auto &info : snap_info) {
         cls::rbd::ParentImageSpec parent_spec{ictx->md_ctx.get_id(),
@@ -356,6 +364,12 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
       lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
       rollback = true;
       return r;
+    }
+
+    r = ictx->operations->update_features(RBD_FEATURE_JOURNALING, false);
+    if (r < 0) {
+      lderr(cct) << "cannot disable journaling: " << cpp_strerror(r) << dendl;
+      // not fatal
     }
   }
 

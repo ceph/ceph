@@ -946,7 +946,25 @@ void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix
   if (cf) {
     if (db->enable_rmrange) {
       string endprefix("\xff\xff\xff\xff");  // FIXME: this is cheating...
-      bat.DeleteRange(cf, string(), endprefix);
+      if (db->max_items_rmrange) {
+        uint64_t cnt = db->max_items_rmrange;
+        bat.SetSavePoint();
+        auto it = db->get_iterator(prefix);
+        for (it->seek_to_first();
+        it->valid();
+        it->next()) {
+          if (!cnt) {
+            bat.RollbackToSavePoint();
+            bat.DeleteRange(cf, string(), endprefix);
+            return;
+          }
+          bat.Delete(cf, rocksdb::Slice(it->key()));
+          --cnt;
+        }
+        bat.PopSavePoint();
+      } else {
+        bat.DeleteRange(cf, string(), endprefix);
+      }
     } else {
       auto it = db->get_iterator(prefix);
       for (it->seek_to_first();
@@ -959,9 +977,29 @@ void RocksDBStore::RocksDBTransactionImpl::rmkeys_by_prefix(const string &prefix
     if (db->enable_rmrange) {
       string endprefix = prefix;
       endprefix.push_back('\x01');
-      bat.DeleteRange(db->default_cf,
-		      combine_strings(prefix, string()),
-		      combine_strings(endprefix, string()));
+      if (db->max_items_rmrange) {
+        uint64_t cnt = db->max_items_rmrange;
+        bat.SetSavePoint();
+        auto it = db->get_iterator(prefix);
+        for (it->seek_to_first();
+             it->valid();
+             it->next()) {
+          if (!cnt) {
+            bat.RollbackToSavePoint();
+            bat.DeleteRange(db->default_cf,
+                combine_strings(prefix, string()),
+                combine_strings(endprefix, string()));
+            return;
+          }
+          bat.Delete(db->default_cf, combine_strings(prefix, it->key()));
+          --cnt;
+        }
+        bat.PopSavePoint();
+      } else {
+        bat.DeleteRange(db->default_cf,
+            combine_strings(prefix, string()),
+            combine_strings(endprefix, string()));
+      }
     } else {
       auto it = db->get_iterator(prefix);
       for (it->seek_to_first();
@@ -980,7 +1018,28 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
   auto cf = db->get_cf_handle(prefix);
   if (cf) {
     if (db->enable_rmrange) {
-      bat.DeleteRange(cf, rocksdb::Slice(start), rocksdb::Slice(end));
+      if (db->max_items_rmrange) {
+        uint64_t cnt = db->max_items_rmrange;
+        auto it = db->get_iterator(prefix);
+        bat.SetSavePoint();
+        it->lower_bound(start);
+        while (it->valid()) {
+          if (it->key() >= end) {
+            break;
+          }
+          if (!cnt) {
+            bat.RollbackToSavePoint();
+            bat.DeleteRange(cf, rocksdb::Slice(start), rocksdb::Slice(end));
+            return;
+          }
+          bat.Delete(cf, rocksdb::Slice(it->key()));
+          it->next();
+          --cnt;
+        }
+        bat.PopSavePoint();
+      } else {
+        bat.DeleteRange(cf, rocksdb::Slice(start), rocksdb::Slice(end));
+      }
     } else {
       auto it = db->get_iterator(prefix);
       it->lower_bound(start);
@@ -994,10 +1053,35 @@ void RocksDBStore::RocksDBTransactionImpl::rm_range_keys(const string &prefix,
     }
   } else {
     if (db->enable_rmrange) {
-      bat.DeleteRange(
-	db->default_cf,
-	rocksdb::Slice(combine_strings(prefix, start)),
-	rocksdb::Slice(combine_strings(prefix, end)));
+      if (db->max_items_rmrange) {
+        uint64_t cnt = db->max_items_rmrange;
+        auto it = db->get_iterator(prefix);
+        bat.SetSavePoint();
+        it->lower_bound(start);
+        while (it->valid()) {
+          if (it->key() >= end) {
+            break;
+          }
+          if (!cnt) {
+            bat.RollbackToSavePoint();
+            bat.DeleteRange(
+                db->default_cf,
+                rocksdb::Slice(combine_strings(prefix, start)),
+                rocksdb::Slice(combine_strings(prefix, end)));
+            return;
+          }
+          bat.Delete(db->default_cf,
+          combine_strings(prefix, it->key()));
+          it->next();
+          --cnt;
+        }
+        bat.PopSavePoint();
+      } else {
+        bat.DeleteRange(
+            db->default_cf,
+            rocksdb::Slice(combine_strings(prefix, start)),
+            rocksdb::Slice(combine_strings(prefix, end)));
+      }
     } else {
       auto it = db->get_iterator(prefix);
       it->lower_bound(start);
@@ -1238,15 +1322,18 @@ void RocksDBStore::compact_range_async(const string& start, const string& end)
       // dup; no-op
       return;
     }
-    if (p->first <= end && p->first > start) {
-      // merge with existing range to the right
-      compact_queue.push_back(make_pair(start, p->second));
+    if (start <= p->first && p->first <= end) {
+      // new region crosses start of existing range
+      // select right bound that is bigger
+      compact_queue.push_back(make_pair(start, end > p->second ? end : p->second));
       compact_queue.erase(p);
       logger->inc(l_rocksdb_compact_queue_merge);
       break;
     }
-    if (p->second >= start && p->second < end) {
-      // merge with existing range to the left
+    if (start <= p->second && p->second <= end) {
+      // new region crosses end of existing range
+      //p->first < p->second and p->second <= end, so p->first <= end.
+      //But we break if previous condition, so start > p->first.
       compact_queue.push_back(make_pair(p->first, end));
       compact_queue.erase(p);
       logger->inc(l_rocksdb_compact_queue_merge);

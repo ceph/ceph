@@ -2,9 +2,12 @@
 #include "config_values.h"
 
 #include "config.h"
+#if WITH_SEASTAR
+#include "crimson/common/log.h"
+#endif
 
 ConfigValues::set_value_result_t
-ConfigValues::set_value(const std::string& key,
+ConfigValues::set_value(const std::string_view key,
                         Option::value_t&& new_value,
                         int level)
 {  
@@ -30,7 +33,7 @@ ConfigValues::set_value(const std::string& key,
   }
 }
 
-int ConfigValues::rm_val(const std::string& key, int level)
+int ConfigValues::rm_val(const std::string_view key, int level)
 {
   auto i = values.find(key);
   if (i == values.end()) {
@@ -50,7 +53,7 @@ int ConfigValues::rm_val(const std::string& key, int level)
 }
 
 std::pair<Option::value_t, bool>
-ConfigValues::get_value(const std::string& name, int level) const
+ConfigValues::get_value(const std::string_view name, int level) const
 {
   auto p = values.find(name);
   if (p != values.end() && !p->second.empty()) {
@@ -75,10 +78,13 @@ void ConfigValues::set_logging(int which, const char* val)
     }
     subsys.set_log_level(which, log);
     subsys.set_gather_level(which, gather);
+#if WITH_SEASTAR
+    ceph::get_logger(which).set_level(ceph::to_log_level(log));
+#endif
   }
 }
 
-bool ConfigValues::contains(const std::string& key) const
+bool ConfigValues::contains(const std::string_view key) const
 {
   return values.count(key);
 }

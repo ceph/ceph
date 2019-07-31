@@ -78,6 +78,11 @@ public:
     m_refetch_state = refetch_state;
   }
 
+  inline void set_max_fetch_bytes(uint64_t max_fetch_bytes) {
+    Mutex::Locker locker(m_lock);
+    m_max_fetch_bytes = max_fetch_bytes;
+  }
+
 private:
   typedef std::pair<uint64_t, uint64_t> EntryKey;
   typedef boost::unordered_map<EntryKey, Entries::iterator> EntryKeys;

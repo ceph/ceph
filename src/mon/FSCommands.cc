@@ -59,11 +59,6 @@ class FlagSetHandler : public FileSystemCommandHandler
         return r;
       }
 
-      bool jewel = mon->get_quorum_con_features() & CEPH_FEATURE_SERVER_JEWEL;
-      if (flag_bool && !jewel) {
-        ss << "Multiple-filesystems are forbidden until all mons are updated";
-        return -EINVAL;
-      }
       if (!sure) {
 	ss << EXPERIMENTAL_WARNING;
       }
@@ -259,24 +254,32 @@ class FsNewHandler : public FileSystemCommandHandler
     mon->osdmon()->do_application_enable(metadata,
 					 pg_pool_t::APPLICATION_NAME_CEPHFS,
 					 "metadata", fs_name);
+    mon->osdmon()->do_set_pool_opt(metadata,
+				   pool_opts_t::RECOVERY_PRIORITY,
+				   static_cast<int64_t>(5));
+    mon->osdmon()->do_set_pool_opt(metadata,
+				   pool_opts_t::PG_NUM_MIN,
+				   static_cast<int64_t>(16));
+    mon->osdmon()->do_set_pool_opt(metadata,
+				   pool_opts_t::PG_AUTOSCALE_BIAS,
+				   static_cast<double>(4.0));
     mon->osdmon()->propose_pending();
 
     // All checks passed, go ahead and create.
-    auto fs = fsmap.create_filesystem(fs_name, metadata, data,
+    auto&& fs = fsmap.create_filesystem(fs_name, metadata, data,
         mon->get_quorum_con_features());
 
     ss << "new fs with metadata pool " << metadata << " and data pool " << data;
 
     // assign a standby to rank 0 to avoid health warnings
     std::string _name;
-    mds_gid_t gid = fsmap.find_replacement_for({fs->fscid, 0}, _name,
-        g_conf()->mon_force_standby_active);
+    mds_gid_t gid = fsmap.find_replacement_for({fs->fscid, 0}, _name);
 
     if (gid != MDS_GID_NONE) {
       const auto &info = fsmap.get_info_gid(gid);
       mon->clog->info() << info.human_name() << " assigned to filesystem "
           << fs_name << " as rank 0";
-      fsmap.promote(gid, fs, 0);
+      fsmap.promote(gid, *fs, 0);
     }
 
     return 0;
@@ -589,18 +592,31 @@ public:
       {
         fs->mds_map.set_session_autoclose((uint32_t)n);
       });
+    } else if (var == "allow_standby_replay") {
+      bool allow = false;
+      int r = parse_bool(val, &allow, ss);
+      if (r != 0) {
+        return r;
+      }
+
+      auto f = [allow](auto& fs) {
+        if (allow) {
+          fs->mds_map.set_standby_replay_allowed();
+        } else {
+          fs->mds_map.clear_standby_replay_allowed();
+        }
+      };
+      fsmap.modify_filesystem(fs->fscid, std::move(f));
     } else if (var == "min_compat_client") {
-      int vno = ceph_release_from_name(val.c_str());
-      if (vno <= 0) {
+      auto vno = ceph_release_from_name(val.c_str());
+      if (!vno) {
 	ss << "version " << val << " is not recognized";
 	return -EINVAL;
       }
-      fsmap.modify_filesystem(
-	  fs->fscid,
-	  [vno](std::shared_ptr<Filesystem> fs)
-	{
-	  fs->mds_map.set_min_compat_client((uint8_t)vno);
-	});
+      auto f = [vno](auto&& fs) {
+        fs->mds_map.set_min_compat_client(vno);
+      };
+      fsmap.modify_filesystem(fs->fscid, std::move(f));
     } else {
       ss << "unknown variable " << var;
       return -EINVAL;
@@ -958,30 +974,6 @@ FileSystemCommandHandler::load(Paxos *paxos)
         "fs set_default"));
 
   return handlers;
-}
-
-int FileSystemCommandHandler::parse_bool(
-      const std::string &bool_str,
-      bool *result,
-      std::ostream &ss)
-{
-  ceph_assert(result != nullptr);
-
-  string interr;
-  int64_t n = strict_strtoll(bool_str.c_str(), 10, &interr);
-
-  if (bool_str == "false" || bool_str == "no"
-      || (interr.length() == 0 && n == 0)) {
-    *result = false;
-    return 0;
-  } else if (bool_str == "true" || bool_str == "yes"
-      || (interr.length() == 0 && n == 1)) {
-    *result = true;
-    return 0;
-  } else {
-    ss << "value must be false|no|0 or true|yes|1";
-    return -EINVAL;
-  }
 }
 
 int FileSystemCommandHandler::_check_pool(

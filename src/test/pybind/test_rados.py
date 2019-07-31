@@ -10,6 +10,7 @@ import threading
 import json
 import errno
 import os
+import re
 import sys
 
 # Are we running Python 2.x
@@ -240,7 +241,7 @@ class TestRados(object):
 
     def test_get_fsid(self):
         fsid = self.rados.get_fsid()
-        eq(len(fsid), 36)
+        assert re.match('[0-9a-f\-]{36}', fsid, re.I)
 
     def test_blacklist_add(self):
         self.rados.blacklist_add("1.2.3.4/123", 1)
@@ -440,23 +441,23 @@ class TestIoctx(object):
     def test_set_omap(self):
         keys = ("1", "2", "3", "4")
         values = (b"aaa", b"bbb", b"ccc", b"\x04\x04\x04\x04")
-        with WriteOpCtx(self.ioctx) as write_op:
+        with WriteOpCtx() as write_op:
             self.ioctx.set_omap(write_op, keys, values)
             write_op.set_flags(LIBRADOS_OPERATION_SKIPRWLOCKS)
             self.ioctx.operate_write_op(write_op, "hw")
-        with ReadOpCtx(self.ioctx) as read_op:
+        with ReadOpCtx() as read_op:
             iter, ret = self.ioctx.get_omap_vals(read_op, "", "", 4)
             eq(ret, 0)
             self.ioctx.operate_read_op(read_op, "hw")
             next(iter)
             eq(list(iter), [("2", b"bbb"), ("3", b"ccc"), ("4", b"\x04\x04\x04\x04")])
-        with ReadOpCtx(self.ioctx) as read_op:
+        with ReadOpCtx() as read_op:
             iter, ret = self.ioctx.get_omap_vals(read_op, "2", "", 4)
             eq(ret, 0)
             self.ioctx.operate_read_op(read_op, "hw")
             eq(("3", b"ccc"), next(iter))
             eq(list(iter), [("4", b"\x04\x04\x04\x04")])
-        with ReadOpCtx(self.ioctx) as read_op:
+        with ReadOpCtx() as read_op:
             iter, ret = self.ioctx.get_omap_vals(read_op, "", "2", 4)
             eq(ret, 0)
             read_op.set_flags(LIBRADOS_OPERATION_BALANCE_READS)
@@ -474,7 +475,7 @@ class TestIoctx(object):
 
         keys = ("1", "2", "3", "4")
         values = (b"aaa", b"bbb", b"ccc", b"\x04\x04\x04\x04")
-        with WriteOpCtx(self.ioctx) as write_op:
+        with WriteOpCtx() as write_op:
             self.ioctx.set_omap(write_op, keys, values)
             comp = self.ioctx.operate_aio_write_op(write_op, "hw", cb, cb)
             comp.wait_for_complete()
@@ -484,7 +485,7 @@ class TestIoctx(object):
                     lock.wait()
             eq(comp.get_return_value(), 0)
 
-        with ReadOpCtx(self.ioctx) as read_op:
+        with ReadOpCtx() as read_op:
             iter, ret = self.ioctx.get_omap_vals(read_op, "", "", 4)
             eq(ret, 0)
             comp = self.ioctx.operate_aio_read_op(read_op, "hw", cb, cb)
@@ -498,7 +499,7 @@ class TestIoctx(object):
             eq(list(iter), [("2", b"bbb"), ("3", b"ccc"), ("4", b"\x04\x04\x04\x04")])
 
     def test_write_ops(self):
-        with WriteOpCtx(self.ioctx) as write_op:
+        with WriteOpCtx() as write_op:
             write_op.new(0)
             self.ioctx.operate_write_op(write_op, "write_ops")
             eq(self.ioctx.read('write_ops'), b'')
@@ -526,15 +527,15 @@ class TestIoctx(object):
     def test_get_omap_vals_by_keys(self):
         keys = ("1", "2", "3", "4")
         values = (b"aaa", b"bbb", b"ccc", b"\x04\x04\x04\x04")
-        with WriteOpCtx(self.ioctx) as write_op:
+        with WriteOpCtx() as write_op:
             self.ioctx.set_omap(write_op, keys, values)
             self.ioctx.operate_write_op(write_op, "hw")
-        with ReadOpCtx(self.ioctx) as read_op:
+        with ReadOpCtx() as read_op:
             iter, ret = self.ioctx.get_omap_vals_by_keys(read_op,("3","4",))
             eq(ret, 0)
             self.ioctx.operate_read_op(read_op, "hw")
             eq(list(iter), [("3", b"ccc"), ("4", b"\x04\x04\x04\x04")])
-        with ReadOpCtx(self.ioctx) as read_op:
+        with ReadOpCtx() as read_op:
             iter, ret = self.ioctx.get_omap_vals_by_keys(read_op,("3","4",))
             eq(ret, 0)
             with assert_raises(ObjectNotFound):
@@ -543,15 +544,15 @@ class TestIoctx(object):
     def test_get_omap_keys(self):
         keys = ("1", "2", "3")
         values = (b"aaa", b"bbb", b"ccc")
-        with WriteOpCtx(self.ioctx) as write_op:
+        with WriteOpCtx() as write_op:
             self.ioctx.set_omap(write_op, keys, values)
             self.ioctx.operate_write_op(write_op, "hw")
-        with ReadOpCtx(self.ioctx) as read_op:
+        with ReadOpCtx() as read_op:
             iter, ret = self.ioctx.get_omap_keys(read_op,"",2)
             eq(ret, 0)
             self.ioctx.operate_read_op(read_op, "hw")
             eq(list(iter), [("1", None), ("2", None)])
-        with ReadOpCtx(self.ioctx) as read_op:
+        with ReadOpCtx() as read_op:
             iter, ret = self.ioctx.get_omap_keys(read_op,"",2)
             eq(ret, 0)
             with assert_raises(ObjectNotFound):
@@ -560,13 +561,13 @@ class TestIoctx(object):
     def test_clear_omap(self):
         keys = ("1", "2", "3")
         values = (b"aaa", b"bbb", b"ccc")
-        with WriteOpCtx(self.ioctx) as write_op:
+        with WriteOpCtx() as write_op:
             self.ioctx.set_omap(write_op, keys, values)
             self.ioctx.operate_write_op(write_op, "hw")
-        with WriteOpCtx(self.ioctx) as write_op_1:
+        with WriteOpCtx() as write_op_1:
             self.ioctx.clear_omap(write_op_1)
             self.ioctx.operate_write_op(write_op_1, "hw")
-        with ReadOpCtx(self.ioctx) as read_op:
+        with ReadOpCtx() as read_op:
             iter, ret = self.ioctx.get_omap_vals_by_keys(read_op,("1",))
             eq(ret, 0)
             self.ioctx.operate_read_op(read_op, "hw")

@@ -263,8 +263,8 @@ void RGWMetadataSearchOp::execute()
 
   try {
     decode_json_obj(response, &jparser);
-  } catch (JSONDecoder::err& e) {
-    ldout(s->cct, 0) << "ERROR: failed to decode JSON input: " << e.message << dendl;
+  } catch (const JSONDecoder::err& e) {
+    ldout(s->cct, 0) << "ERROR: failed to decode JSON input: " << e.what() << dendl;
     op_ret = -EINVAL;
     return;
   }

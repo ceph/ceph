@@ -30,7 +30,7 @@ function run() {
     export CEPH_MON="127.0.0.1:7121" # git grep '\<7121\>' : there must be only one
     export CEPH_ARGS
     CEPH_ARGS+="--fsid=$(uuidgen) --auth-supported=none "
-    CEPH_ARGS+="--mon-host=$CEPH_MON --osd-objectstore=filestore"
+    CEPH_ARGS+="--mon-host=$CEPH_MON "
 
     export -n CEPH_CLI_TEST_DUP_COMMAND
     local funcs=${@:-$(set | sed -n -e 's/^\(TEST_[0-9a-z_]*\) .*/\1/p')}
@@ -100,12 +100,12 @@ function create_scenario() {
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --op list obj5 | grep \"snapid\":1)"
     OBJ5SAVE="$JSON"
     # Starts with a snapmap
-    ceph-osdomap-tool --no-mon-config --omap-path $dir/${osd}/current/omap --command dump-raw-keys > $dir/drk.log
-    grep "_USER_[0-9]*_USER_,MAP_.*[.]1[.]obj5[.][.]" $dir/drk.log || return 1
+    ceph-kvstore-tool bluestore-kv $dir/${osd} list 2> /dev/null > $dir/drk.log
+    grep "^M.*SNA_.*[.]1[.]obj5[.][.]$" $dir/drk.log || return 1
     ceph-objectstore-tool --data-path $dir/${osd} --rmtype nosnapmap "$JSON" remove || return 1
     # Check that snapmap is stil there
-    ceph-osdomap-tool --no-mon-config --omap-path $dir/${osd}/current/omap --command dump-raw-keys > $dir/drk.log
-    grep "_USER_[0-9]*_USER_,MAP_.*[.]1[.]obj5[.][.]" $dir/drk.log || return 1
+    ceph-kvstore-tool bluestore-kv $dir/${osd} list 2> /dev/null > $dir/drk.log
+    grep "^M.*SNA_.*[.]1[.]obj5[.][.]$" $dir/drk.log || return 1
     rm -f $dir/drk.log
 
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --op list obj5 | grep \"snapid\":4)"
@@ -120,13 +120,13 @@ function create_scenario() {
     ceph-objectstore-tool --data-path $dir/${osd} "$JSON" remove || return 1
 
     # Starts with a snapmap
-    ceph-osdomap-tool --no-mon-config --omap-path $dir/${osd}/current/omap --command dump-raw-keys > $dir/drk.log
-    grep "_USER_[0-9]*_USER_,MAP_.*[.]7[.]obj16[.][.]" $dir/drk.log || return 1
+    ceph-kvstore-tool bluestore-kv $dir/${osd} list 2> /dev/null > $dir/drk.log
+    grep "^M.*SNA_.*[.]7[.]obj16[.][.]$" $dir/drk.log || return 1
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --op list obj16 | grep \"snapid\":7)"
     ceph-objectstore-tool --data-path $dir/${osd} --rmtype snapmap "$JSON" remove || return 1
     # Check that snapmap is now removed
-    ceph-osdomap-tool --no-mon-config --omap-path $dir/${osd}/current/omap --command dump-raw-keys > $dir/drk.log
-    ! grep "_USER_[0-9]*_USER_,MAP_.*[.]7[.]obj16[.][.]" $dir/drk.log || return 1
+    ceph-kvstore-tool bluestore-kv $dir/${osd} list 2> /dev/null > $dir/drk.log
+    ! grep "^M.*SNA_.*[.]7[.]obj16[.][.]$" $dir/drk.log || return 1
     rm -f $dir/drk.log
 
     JSON="$(ceph-objectstore-tool --data-path $dir/${osd} --head --op list obj2)"
@@ -177,6 +177,10 @@ function TEST_scrub_snaps() {
     do
       run_osd $dir $osd || return 1
     done
+
+    # All scrubs done manually.  Don't want any unexpected scheduled scrubs.
+    ceph osd set noscrub || return 1
+    ceph osd set nodeep-scrub || return 1
 
     # Create a pool with a single pg
     create_pool $poolname 1 1
@@ -339,12 +343,7 @@ EOF
       "locator": "",
       "snap": "head",
       "snapset": {
-        "snap_context": {
-          "seq": 1,
-          "snaps": [
-            1
-          ]
-        },
+        "seq": 1,
         "clones": [
           {
             "snap": 1,
@@ -370,12 +369,7 @@ EOF
       "nspace": "",
       "name": "obj11",
       "snapset": {
-        "snap_context": {
-          "seq": 1,
-          "snaps": [
-            1
-          ]
-        },
+        "seq": 1,
         "clones": []
       }
     },
@@ -385,12 +379,7 @@ EOF
       "locator": "",
       "snap": "head",
       "snapset": {
-        "snap_context": {
-          "seq": 1,
-          "snaps": [
-            1
-          ]
-        },
+        "seq": 1,
         "clones": [
           {
             "snap": 1,
@@ -436,14 +425,7 @@ EOF
       "nspace": "",
       "name": "obj3",
       "snapset": {
-        "snap_context": {
-          "seq": 3,
-          "snaps": [
-            3,
-            2,
-            1
-          ]
-        },
+        "seq": 3,
         "clones": [
           {
             "snap": 1,
@@ -477,18 +459,7 @@ EOF
       "nspace": "",
       "name": "obj4",
       "snapset": {
-        "snap_context": {
-          "seq": 7,
-          "snaps": [
-            7,
-            6,
-            5,
-            4,
-            3,
-            2,
-            1
-          ]
-        },
+        "seq": 7,
         "clones": [
           {
             "snap": 7,
@@ -524,17 +495,7 @@ EOF
       "nspace": "",
       "name": "obj5",
       "snapset": {
-        "snap_context": {
-          "seq": 6,
-          "snaps": [
-            6,
-            5,
-            4,
-            3,
-            2,
-            1
-          ]
-        },
+        "seq": 6,
         "clones": [
           {
             "snap": 1,
@@ -585,12 +546,7 @@ EOF
       "nspace": "",
       "name": "obj6",
       "snapset": {
-        "snap_context": {
-          "seq": 1,
-          "snaps": [
-            1
-          ]
-        },
+        "seq": 1,
         "clones": []
       }
     },
@@ -606,10 +562,7 @@ EOF
       "nspace": "",
       "name": "obj7",
       "snapset": {
-        "snap_context": {
-          "seq": 0,
-          "snaps": []
-        },
+        "seq": 0,
         "clones": []
       }
     },
@@ -622,12 +575,7 @@ EOF
       "nspace": "",
       "name": "obj8",
       "snapset": {
-        "snap_context": {
-          "seq": 0,
-          "snaps": [
-            1
-          ]
-        },
+        "seq": 0,
         "clones": [
           {
             "snap": 1,
@@ -646,12 +594,7 @@ EOF
       "locator": "",
       "snap": "head",
       "snapset": {
-        "snap_context": {
-          "seq": 1,
-          "snaps": [
-            1
-          ]
-        },
+        "seq": 1,
         "clones": [
           {
             "snap": 1,
@@ -783,6 +726,10 @@ function _scrub_snaps_multi() {
       run_osd $dir $osd || return 1
     done
 
+    # All scrubs done manually.  Don't want any unexpected scheduled scrubs.
+    ceph osd set noscrub || return 1
+    ceph osd set nodeep-scrub || return 1
+
     # Create a pool with a single pg
     create_pool $poolname 1 1
     wait_for_clean || return 1
@@ -911,12 +858,7 @@ else
             "locator": "",
             "snap": "head",
             "snapset": {
-                "snap_context": {
-                    "seq": 1,
-                    "snaps": [
-                        1
-                    ]
-                },
+                "seq": 1,
                 "clones": [
                     {
                         "snap": 1,
@@ -936,12 +878,7 @@ else
             "locator": "",
             "snap": "head",
             "snapset": {
-                "snap_context": {
-                    "seq": 1,
-                    "snaps": [
-                        1
-                    ]
-                },
+                "seq": 1,
                 "clones": []
             },
             "errors": [
@@ -957,12 +894,7 @@ else
             "locator": "",
             "snap": "head",
             "snapset": {
-                "snap_context": {
-                    "seq": 1,
-                    "snaps": [
-                        1
-                    ]
-                },
+                "seq": 1,
                 "clones": [
                     {
                         "snap": 1,
@@ -982,17 +914,7 @@ else
             "locator": "",
             "snap": "head",
             "snapset": {
-                "snap_context": {
-                    "seq": 6,
-                    "snaps": [
-                        6,
-                        5,
-                        4,
-                        3,
-                        2,
-                        1
-                    ]
-                },
+                "seq": 6,
                 "clones": [
                     {
                         "snap": 1,
@@ -1043,12 +965,7 @@ else
             "locator": "",
             "snap": "head",
             "snapset": {
-                "snap_context": {
-                    "seq": 1,
-                    "snaps": [
-                        1
-                    ]
-                },
+                "seq": 1,
                 "clones": []
             },
             "errors": [
@@ -1064,10 +981,7 @@ else
             "locator": "",
             "snap": "head",
             "snapset": {
-                "snap_context": {
-                    "seq": 0,
-                    "snaps": []
-                },
+                "seq": 0,
                 "clones": []
             },
             "errors": [
@@ -1083,12 +997,7 @@ else
             "locator": "",
             "snap": "head",
             "snapset": {
-                "snap_context": {
-                    "seq": 0,
-                    "snaps": [
-                        1
-                    ]
-                },
+                "seq": 0,
                 "clones": [
                     {
                         "snap": 1,
@@ -1110,12 +1019,7 @@ else
             "locator": "",
             "snap": "head",
             "snapset": {
-                "snap_context": {
-                    "seq": 1,
-                    "snaps": [
-                        1
-                    ]
-                },
+                "seq": 1,
                 "clones": [
                     {
                         "snap": 1,

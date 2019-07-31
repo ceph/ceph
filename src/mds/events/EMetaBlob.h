@@ -104,7 +104,7 @@ public:
     void encode(bufferlist& bl, uint64_t features) const;
     void decode(bufferlist::const_iterator &bl);
     void dump(Formatter *f) const;
-    static void generate_test_instances(list<EMetaBlob::fullbit*>& ls);
+    static void generate_test_instances(std::list<EMetaBlob::fullbit*>& ls);
 
     void update_inode(MDSRank *mds, CInode *in);
     bool is_dirty() const { return (state & STATE_DIRTY); }
@@ -158,7 +158,7 @@ public:
 	  << " dirty=" << dirty << std::endl;
     }
     void dump(Formatter *f) const;
-    static void generate_test_instances(list<remotebit*>& ls);
+    static void generate_test_instances(std::list<remotebit*>& ls);
   };
   WRITE_CLASS_ENCODER(remotebit)
 
@@ -179,7 +179,7 @@ public:
     void encode(bufferlist& bl) const;
     void decode(bufferlist::const_iterator &bl);
     void dump(Formatter *f) const;
-    static void generate_test_instances(list<nullbit*>& ls);
+    static void generate_test_instances(std::list<nullbit*>& ls);
     void print(ostream& out) const {
       out << " nullbit dn " << dn << " [" << dnfirst << "," << dnlast << "] dnv " << dnv
 	  << " dirty=" << dirty << std::endl;
@@ -296,7 +296,7 @@ public:
     void encode(bufferlist& bl, uint64_t features) const;
     void decode(bufferlist::const_iterator &bl);
     void dump(Formatter *f) const;
-    static void generate_test_instances(list<dirlump*>& ls);
+    static void generate_test_instances(std::list<dirlump*>& ls);
   };
   WRITE_CLASS_ENCODER_FEATURES(dirlump)
 
@@ -341,7 +341,7 @@ private:
   entity_name_t get_client_name() const {return client_name;}
 
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<EMetaBlob*>& ls);
+  static void generate_test_instances(std::list<EMetaBlob*>& ls);
   // soft stateadd
   uint64_t last_subtree_map;
   uint64_t event_seq;

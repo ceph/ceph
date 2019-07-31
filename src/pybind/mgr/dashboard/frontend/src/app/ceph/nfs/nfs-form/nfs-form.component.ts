@@ -11,6 +11,8 @@ import { NfsService } from '../../../shared/api/nfs.service';
 import { RgwUserService } from '../../../shared/api/rgw-user.service';
 import { SelectMessages } from '../../../shared/components/select/select-messages.model';
 import { SelectOption } from '../../../shared/components/select/select-option.model';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
@@ -42,6 +44,7 @@ export class NfsFormComponent implements OnInit {
 
   allClusters: string[] = null;
   allDaemons = {};
+  icons = Icons;
 
   allFsals: any[] = [];
   allRgwUsers: any[] = [];
@@ -50,6 +53,9 @@ export class NfsFormComponent implements OnInit {
 
   nfsAccessType: any[] = this.nfsService.nfsAccessType;
   nfsSquash: any[] = this.nfsService.nfsSquash;
+
+  action: string;
+  resource: string;
 
   daemonsSelections: SelectOption[] = [];
   daemonsMessages = new SelectMessages(
@@ -77,9 +83,11 @@ export class NfsFormComponent implements OnInit {
     private formBuilder: CdFormBuilder,
     private taskWrapper: TaskWrapperService,
     private cdRef: ChangeDetectorRef,
-    private i18n: I18n
+    private i18n: I18n,
+    public actionLabels: ActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().pool;
+    this.resource = this.i18n('NFS export');
     this.createForm();
   }
 
@@ -96,6 +104,7 @@ export class NfsFormComponent implements OnInit {
     }
 
     if (this.isEdit) {
+      this.action = this.actionLabels.EDIT;
       this.route.params.subscribe((params: { cluster_id: string; export_id: string }) => {
         this.cluster_id = decodeURIComponent(params.cluster_id);
         this.export_id = decodeURIComponent(params.export_id);
@@ -104,25 +113,21 @@ export class NfsFormComponent implements OnInit {
         this.getData(promises);
       });
     } else {
+      this.action = this.actionLabels.CREATE;
       this.getData(promises);
     }
   }
 
   getData(promises) {
-    forkJoin(promises).subscribe(
-      (data: any[]) => {
-        this.resolveDaemons(data[0]);
-        this.resolvefsals(data[1]);
-        this.resolveClients(data[2]);
-        this.resolveFilesystems(data[3]);
-        if (data[4]) {
-          this.resolveModel(data[4]);
-        }
-      },
-      (error) => {
-        // this.error = error;
+    forkJoin(promises).subscribe((data: any[]) => {
+      this.resolveDaemons(data[0]);
+      this.resolvefsals(data[1]);
+      this.resolveClients(data[2]);
+      this.resolveFilesystems(data[3]);
+      if (data[4]) {
+        this.resolveModel(data[4]);
       }
-    );
+    });
   }
 
   createForm() {
@@ -174,12 +179,15 @@ export class NfsFormComponent implements OnInit {
       }),
       tag: new FormControl(''),
       pseudo: new FormControl('', {
-        validators: [Validators.required, Validators.pattern('^/[^><|&()]*$')]
+        validators: [
+          CdValidators.requiredIf({ protocolNfsv4: true }),
+          Validators.pattern('^/[^><|&()]*$')
+        ]
       }),
       access_type: new FormControl('RW', {
         validators: [Validators.required]
       }),
-      squash: new FormControl('None', {
+      squash: new FormControl('', {
         validators: [Validators.required]
       }),
       transportUDP: new FormControl(true, {
@@ -508,27 +516,27 @@ export class NfsFormComponent implements OnInit {
 
     requestModel.protocols = [];
     if (requestModel.protocolNfsv3) {
-      delete requestModel.protocolNfsv3;
       requestModel.protocols.push(3);
     } else {
       requestModel.tag = null;
     }
+    delete requestModel.protocolNfsv3;
     if (requestModel.protocolNfsv4) {
-      delete requestModel.protocolNfsv4;
       requestModel.protocols.push(4);
     } else {
       requestModel.pseudo = null;
     }
+    delete requestModel.protocolNfsv4;
 
     requestModel.transports = [];
     if (requestModel.transportTCP) {
-      delete requestModel.transportTCP;
       requestModel.transports.push('TCP');
     }
+    delete requestModel.transportTCP;
     if (requestModel.transportUDP) {
-      delete requestModel.transportUDP;
       requestModel.transports.push('UDP');
     }
+    delete requestModel.transportUDP;
 
     requestModel.clients.forEach((client) => {
       if (_.isString(client.addresses)) {
@@ -540,6 +548,14 @@ export class NfsFormComponent implements OnInit {
       } else {
         client.addresses = [];
       }
+
+      if (!client.squash) {
+        client.squash = requestModel.squash;
+      }
+
+      if (!client.access_type) {
+        client.access_type = requestModel.access_type;
+      }
     });
 
     if (requestModel.security_label === false || requestModel.fsal.name === 'RGW') {
@@ -550,9 +566,5 @@ export class NfsFormComponent implements OnInit {
     delete requestModel.sec_label_xattr;
 
     return requestModel;
-  }
-
-  cancelAction() {
-    this.router.navigate(['/nfs']);
   }
 }

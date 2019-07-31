@@ -15,18 +15,18 @@
 #ifndef CEPH_MMONMAP_H
 #define CEPH_MMONMAP_H
 
+#include "include/encoding.h"
 #include "include/ceph_features.h"
 #include "msg/Message.h"
+#include "msg/MessageRef.h"
 #include "mon/MonMap.h"
 
-class MMonMap : public MessageInstance<MMonMap> {
+class MMonMap : public Message {
 public:
-  friend factory;
+  ceph::buffer::list monmapbl;
 
-  bufferlist monmapbl;
-
-  MMonMap() : MessageInstance(CEPH_MSG_MON_MAP) { }
-  explicit MMonMap(bufferlist &bl) : MessageInstance(CEPH_MSG_MON_MAP) { 
+  MMonMap() : Message{CEPH_MSG_MON_MAP} { }
+  explicit MMonMap(ceph::buffer::list &bl) : Message{CEPH_MSG_MON_MAP} {
     monmapbl.claim(bl);
   }
 private:
@@ -50,9 +50,13 @@ public:
     encode(monmapbl, payload);
   }
   void decode_payload() override { 
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(monmapbl, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

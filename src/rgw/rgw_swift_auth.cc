@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <array>
+#include <algorithm>
 
 #include <boost/utility/string_view.hpp>
 #include <boost/container/static_vector.hpp>
@@ -108,7 +109,7 @@ void TempURLEngine::get_owner_info(const DoutPrefixProvider* dpp, const req_stat
   RGWBucketInfo bucket_info;
   int ret = store->get_bucket_info(*s->sysobj_ctx,
                                    bucket_tenant, bucket_name,
-                                   bucket_info, nullptr);
+                                   bucket_info, nullptr, null_yield);
   if (ret < 0) {
     throw ret;
   }
@@ -128,7 +129,7 @@ std::string TempURLEngine::convert_from_iso8601(std::string expires) const
    * for the HMAC calculations. We need to make the conversion. */
   struct tm date_t;
   if (!parse_iso8601(expires.c_str(), &date_t, nullptr, true)) {
-    return std::move(expires);
+    return expires;
   } else {
     return std::to_string(internal_timegm(&date_t));
   }
@@ -153,7 +154,20 @@ bool TempURLEngine::is_expired(const std::string& expires) const
   return false;
 }
 
-std::string extract_swift_subuser(const std::string& swift_user_name) {
+bool TempURLEngine::is_disallowed_header_present(const req_info& info) const
+{
+  static const auto headers = {
+    "HTTP_X_OBJECT_MANIFEST",
+  };
+
+  return std::any_of(std::begin(headers), std::end(headers),
+                     [&info](const char* header) {
+                       return info.env->exists(header);
+                     });
+}
+
+std::string extract_swift_subuser(const std::string& swift_user_name)
+{
   size_t pos = swift_user_name.find(':');
   if (std::string::npos == pos) {
     return swift_user_name;
@@ -298,6 +312,11 @@ TempURLEngine::authenticate(const DoutPrefixProvider* dpp, const req_state* cons
     return result_t::reject(-EPERM);
   }
 
+  if (is_disallowed_header_present(s->info)) {
+    ldout(cct, 5) << "temp url rejected due to disallowed header" << dendl;
+    return result_t::reject(-EINVAL);
+  }
+
   /* We need to verify two paths because of compliance with Swift, Tempest
    * and old versions of RadosGW. The second item will have the prefix
    * of Swift API entry point removed. */
@@ -398,7 +417,7 @@ ExternalTokenEngine::authenticate(const DoutPrefixProvider* dpp,
 
   ldpp_dout(dpp, 10) << "rgw_swift_validate_token url=" << url_buf << dendl;
 
-  int ret = validator.process();
+  int ret = validator.process(null_yield);
   if (ret < 0) {
     throw ret;
   }

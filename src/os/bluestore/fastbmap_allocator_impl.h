@@ -21,7 +21,7 @@ typedef uint64_t slot_t;
 struct interval_t
 {
   uint64_t offset = 0;
-  uint32_t length = 0;
+  uint64_t length = 0;
 
   interval_t() {}
   interval_t(uint64_t o, uint64_t l) : offset(o), length(l) {}
@@ -37,7 +37,7 @@ typedef std::vector<slot_t> slot_vector_t;
 #include "include/mempool.h"
 #include "common/ceph_mutex.h"
 
-typedef bluestore_pextent_t interval_t;
+typedef bluestore_interval_t<uint64_t, uint64_t> interval_t;
 typedef PExtentVector interval_vector_t;
 
 typedef mempool::bluestore_alloc::vector<slot_t> slot_vector_t;
@@ -86,6 +86,9 @@ public:
 
   virtual ~AllocatorLevel()
   {}
+
+  virtual void collect_stats(
+    std::map<size_t, size_t>& bins_overall) = 0;
 
 };
 
@@ -153,7 +156,6 @@ class AllocatorLevel01Loose : public AllocatorLevel01
     interval_vector_t* res)
   {
     auto it = res->rbegin();
-
     if (max_length) {
       if (it != res->rend() && it->offset + it->length == offset) {
 	auto l = max_length - it->length;
@@ -335,23 +337,23 @@ protected:
 
     auto pos = l0_pos_start;
     slot_t bits = (slot_t)1 << (l0_pos_start % d0);
-    slot_t& val_s = l0[pos / d0];
-    int64_t pos_e = std::min(l0_pos_end, (int64_t)p2roundup(l0_pos_start + 1, d0));
+    slot_t* val_s = &l0[pos / d0];
+    int64_t pos_e = std::min(l0_pos_end,
+                             p2roundup<int64_t>(l0_pos_start + 1, d0));
     while (pos < pos_e) {
-      val_s |= bits;
+      *val_s |=  bits;
       bits <<= 1;
       pos++;
     }
-    pos_e = std::min(l0_pos_end, (int64_t)p2align(l0_pos_end, d0));
-    auto idx = pos / d0;
+    pos_e = std::min(l0_pos_end, p2align<int64_t>(l0_pos_end, d0));
     while (pos < pos_e) {
-      l0[idx++] = all_slot_set;
+      *(++val_s) = all_slot_set;
       pos += d0;
     }
     bits = 1;
-    uint64_t& val_e = l0[pos / d0];
+    ++val_s;
     while (pos < l0_pos_end) {
-      val_e |= bits;
+      *val_s |= bits;
       bits <<= 1;
       pos++;
     }
@@ -465,6 +467,8 @@ public:
     }
     return res * l0_granularity;
   }
+  void collect_stats(
+    std::map<size_t, size_t>& bins_overall) override;
 };
 
 class AllocatorLevel01Compact : public AllocatorLevel01
@@ -474,6 +478,11 @@ class AllocatorLevel01Compact : public AllocatorLevel01
     return 8;
   }
 public:
+  void collect_stats(
+    std::map<size_t, size_t>& bins_overall) override
+  {
+    // not implemented
+  }
 };
 
 template <class L1>
@@ -501,6 +510,12 @@ public:
   inline uint64_t get_min_alloc_size() const
   {
     return l1.get_min_alloc_size();
+  }
+  void collect_stats(
+    std::map<size_t, size_t>& bins_overall) override {
+
+      std::lock_guard l(lock);
+      l1.collect_stats(bins_overall);
   }
 
 protected:
@@ -620,6 +635,11 @@ protected:
     ceph_assert(max_length == 0 || (max_length % min_length) == 0);
     ceph_assert(length >= min_length);
     ceph_assert((length % min_length) == 0);
+
+    uint64_t cap = 1ull << 31;
+    if (max_length == 0 || max_length >= cap) {
+      max_length = cap;
+    }
 
     uint64_t l1_w = slotset_width * l1._children_per_slot();
 

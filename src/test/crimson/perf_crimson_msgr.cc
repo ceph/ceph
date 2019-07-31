@@ -14,8 +14,8 @@
 
 #include "common/ceph_time.h"
 #include "messages/MOSDOp.h"
-#include "messages/MOSDOpReply.h"
 
+#include "crimson/auth/DummyAuth.h"
 #include "crimson/common/log.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Dispatcher.h"
@@ -32,28 +32,107 @@ seastar::logger& logger() {
   return ceph::get_logger(ceph_subsys_ms);
 }
 
-
 enum class perf_mode_t {
   both,
   client,
   server
 };
 
-static std::random_device rd;
-static std::default_random_engine rng{rd()};
+struct client_config {
+  entity_addr_t server_addr;
+  unsigned block_size;
+  unsigned ramptime;
+  unsigned msgtime;
+  unsigned jobs;
+  unsigned depth;
+  bool v1_crc_enabled;
 
-static seastar::future<> run(unsigned rounds,
-                             double keepalive_ratio,
-                             int bs,
-                             int depth,
-                             std::string addr,
-                             perf_mode_t mode)
+  std::string str() const {
+    std::ostringstream out;
+    out << "client[>> " << server_addr
+        << "](bs=" << block_size
+        << ", ramptime=" << ramptime
+        << ", msgtime=" << msgtime
+        << ", jobs=" << jobs
+        << ", depth=" << depth
+        << ", v1-crc-enabled=" << v1_crc_enabled
+        << ")";
+    return out.str();
+  }
+
+  static client_config load(bpo::variables_map& options) {
+    client_config conf;
+    entity_addr_t addr;
+    ceph_assert(addr.parse(options["addr"].as<std::string>().c_str(), nullptr));
+
+    conf.server_addr = addr;
+    conf.block_size = options["cbs"].as<unsigned>();
+    conf.ramptime = options["ramptime"].as<unsigned>();
+    conf.msgtime = options["msgtime"].as<unsigned>();
+    conf.jobs = options["jobs"].as<unsigned>();
+    conf.depth = options["depth"].as<unsigned>();
+    ceph_assert(conf.depth % conf.jobs == 0);
+    conf.v1_crc_enabled = options["v1-crc-enabled"].as<bool>();
+    return conf;
+  }
+};
+
+struct server_config {
+  entity_addr_t addr;
+  unsigned block_size;
+  unsigned core;
+  bool v1_crc_enabled;
+
+  std::string str() const {
+    std::ostringstream out;
+    out << "server[" << addr
+        << "](bs=" << block_size
+        << ", core=" << core
+        << ", v1-crc-enabled=" << v1_crc_enabled
+        << ")";
+    return out.str();
+  }
+
+  static server_config load(bpo::variables_map& options) {
+    server_config conf;
+    entity_addr_t addr;
+    ceph_assert(addr.parse(options["addr"].as<std::string>().c_str(), nullptr));
+
+    conf.addr = addr;
+    conf.block_size = options["sbs"].as<unsigned>();
+    conf.core = options["core"].as<unsigned>();
+    conf.v1_crc_enabled = options["v1-crc-enabled"].as<bool>();
+    return conf;
+  }
+};
+
+const unsigned SAMPLE_RATE = 7;
+
+static seastar::future<> run(
+    perf_mode_t mode,
+    const client_config& client_conf,
+    const server_config& server_conf)
 {
   struct test_state {
     struct Server final
         : public ceph::net::Dispatcher,
           public seastar::peering_sharded_service<Server> {
       ceph::net::Messenger *msgr = nullptr;
+      ceph::auth::DummyAuthClientServer dummy_auth;
+      const seastar::shard_id sid;
+      const seastar::shard_id msgr_sid;
+      std::string lname;
+      unsigned msg_len;
+      bufferlist msg_data;
+
+      Server(unsigned msgr_core, unsigned msg_len)
+        : sid{seastar::engine().cpu_id()},
+          msgr_sid{msgr_core},
+          msg_len{msg_len} {
+        lname = "server#";
+        lname += std::to_string(sid);
+        msg_data.append_zero(msg_len);
+      }
 
       Dispatcher* get_local_shard() override {
         return &(container().local());
@@ -61,34 +140,54 @@ static seastar::future<> run(unsigned rounds,
       seastar::future<> stop() {
         return seastar::make_ready_future<>();
       }
-      seastar::future<> ms_dispatch(ceph::net::ConnectionRef c,
+      seastar::future<> ms_dispatch(ceph::net::Connection* c,
                                     MessageRef m) override {
         ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
-        // reply
-        Ref<MOSDOp> req = boost::static_pointer_cast<MOSDOp>(m);
-        req->finish_decode();
-        return c->send(MessageRef{ new MOSDOpReply(req.get(), 0, 0, 0, false), false });
+
+        // server replies with MOSDOp to generate server-side write workload
+        const static pg_t pgid;
+        const static object_locator_t oloc;
+        const static hobject_t hobj(object_t(), oloc.key, CEPH_NOSNAP, pgid.ps(),
+                                    pgid.pool(), oloc.nspace);
+        static spg_t spgid(pgid);
+        MOSDOp *rep = new MOSDOp(0, 0, hobj, spgid, 0, 0, 0);
+        bufferlist data(msg_data);
+        rep->write(0, msg_len, data);
+        rep->set_tid(m->get_tid());
+        MessageRef msg = {rep, false};
+        return c->send(msg);
       }
 
-      seastar::future<> init(const entity_name_t& name,
-                             const std::string& lname,
-                             const uint64_t nonce,
-                             const entity_addr_t& addr) {
-        auto&& fut = ceph::net::Messenger::create(name, lname, nonce, 1);
-        return fut.then([this, addr](ceph::net::Messenger *messenger) {
-            return container().invoke_on_all([messenger](auto& server) {
-                server.msgr = messenger->get_local_shard();
-                server.msgr->set_crc_header();
-              }).then([messenger, addr] {
-                return messenger->bind(entity_addrvec_t{addr});
-              }).then([this, messenger] {
-                return messenger->start(this);
-              });
-          });
+      seastar::future<> init(bool v1_crc_enabled, const entity_addr_t& addr) {
+        return container().invoke_on(msgr_sid, [v1_crc_enabled, addr] (auto& server) {
+          // server msgr is always with nonce 0
+          auto&& fut = ceph::net::Messenger::create(entity_name_t::OSD(server.sid), server.lname, 0, server.sid);
+          return fut.then(
+            [&server, addr, v1_crc_enabled](ceph::net::Messenger *messenger) {
+              return server.container().invoke_on_all(
+                [messenger, v1_crc_enabled](auto& server) {
+                  server.msgr = messenger->get_local_shard();
+                  server.msgr->set_default_policy(ceph::net::SocketPolicy::stateless_server(0));
+                  server.msgr->set_auth_client(&server.dummy_auth);
+                  server.msgr->set_auth_server(&server.dummy_auth);
+                  if (v1_crc_enabled) {
+                    server.msgr->set_crc_header();
+                    server.msgr->set_crc_data();
+                  }
+                }).then([messenger, addr] {
+                  return messenger->bind(entity_addrvec_t{addr});
+                }).then([&server, messenger] {
+                  return messenger->start(&server);
+                });
+            });
+        });
       }
       seastar::future<> shutdown() {
-        ceph_assert(msgr);
-        return msgr->shutdown();
+        logger().info("{} shutdown...", lname);
+        return container().invoke_on(msgr_sid, [] (auto& server) {
+          ceph_assert(server.msgr);
+          return server.msgr->shutdown();
+        });
       }
     };
 
@@ -96,37 +195,91 @@ static seastar::future<> run(unsigned rounds,
         : public ceph::net::Dispatcher,
           public seastar::peering_sharded_service<Client> {
 
-      struct PingSession : public seastar::enable_shared_from_this<PingSession> {
-        unsigned count = 0u;
-        mono_time connected_time;
-        mono_time finish_time;
+      struct ConnStats {
+        mono_time connecting_time = mono_clock::zero();
+        mono_time connected_time = mono_clock::zero();
+        unsigned received_count = 0u;
+
+        mono_time start_time = mono_clock::zero();
+        unsigned start_count = 0u;
+
+        unsigned sampled_count = 0u;
+        double total_lat_s = 0.0;
+
+        // for reporting only
+        mono_time finish_time = mono_clock::zero();
+
+        void start() {
+          start_time = mono_clock::now();
+          start_count = received_count;
+          sampled_count = 0u;
+          total_lat_s = 0.0;
+          finish_time = mono_clock::zero();
+        }
       };
-      using PingSessionRef = seastar::shared_ptr<PingSession>;
+      ConnStats conn_stats;
 
-      unsigned rounds;
-      std::bernoulli_distribution keepalive_dist;
+      struct PeriodStats {
+        mono_time start_time = mono_clock::zero();
+        unsigned start_count = 0u;
+        unsigned sampled_count = 0u;
+        double total_lat_s = 0.0;
+
+        // for reporting only
+        mono_time finish_time = mono_clock::zero();
+        unsigned finish_count = 0u;
+        unsigned depth = 0u;
+
+        void reset(unsigned received_count, PeriodStats* snap = nullptr) {
+          if (snap) {
+            snap->start_time = start_time;
+            snap->start_count = start_count;
+            snap->sampled_count = sampled_count;
+            snap->total_lat_s = total_lat_s;
+            snap->finish_time = mono_clock::now();
+            snap->finish_count = received_count;
+          }
+          start_time = mono_clock::now();
+          start_count = received_count;
+          sampled_count = 0u;
+          total_lat_s = 0.0;
+        }
+      };
+      PeriodStats period_stats;
+
+      const seastar::shard_id sid;
+      std::string lname;
+
+      const unsigned jobs;
       ceph::net::Messenger *msgr = nullptr;
-      std::map<ceph::net::Connection*, seastar::promise<>> pending_conns;
-      std::map<ceph::net::ConnectionRef, PingSessionRef> sessions;
-      int msg_len;
+      const unsigned msg_len;
       bufferlist msg_data;
+      const unsigned nr_depth;
       seastar::semaphore depth;
+      std::vector<mono_time> time_msgs_sent;
+      ceph::auth::DummyAuthClientServer dummy_auth;
 
-      Client(unsigned rounds, double keepalive_ratio, int msg_len, int depth)
-        : rounds(rounds),
-          keepalive_dist(std::bernoulli_distribution{keepalive_ratio}),
-          depth(depth) {
-        bufferptr ptr(msg_len);
-        memset(ptr.c_str(), 0, msg_len);
-        msg_data.append(ptr);
+      unsigned sent_count = 0u;
+      ceph::net::ConnectionRef active_conn = nullptr;
+
+      bool stop_send = false;
+      seastar::promise<> stopped_send_promise;
+
+      Client(unsigned jobs, unsigned msg_len, unsigned depth)
+        : sid{seastar::engine().cpu_id()},
+          jobs{jobs},
+          msg_len{msg_len},
+          nr_depth{depth/jobs},
+          depth{nr_depth},
+          time_msgs_sent{depth/jobs, mono_clock::zero()} {
+        lname = "client#";
+        lname += std::to_string(sid);
+        msg_data.append_zero(msg_len);
       }
 
-      PingSessionRef find_session(ceph::net::ConnectionRef c) {
-        auto found = sessions.find(c);
-        if (found == sessions.end()) {
-          ceph_assert(false);
-        }
-        return found->second;
+      unsigned get_current_depth() const {
+        ceph_assert(depth.available_units() >= 0);
+        return nr_depth - depth.current();
       }
 
       Dispatcher* get_local_shard() override {
@@ -136,80 +289,284 @@ static seastar::future<> run(unsigned rounds,
         return seastar::now();
       }
       seastar::future<> ms_handle_connect(ceph::net::ConnectionRef conn) override {
-        logger().info("{}: connected to {}", *conn, conn->get_peer_addr());
-        auto session = seastar::make_shared<PingSession>();
-        auto [i, added] = sessions.emplace(conn, session);
-        std::ignore = i;
-        ceph_assert(added);
-        session->connected_time = mono_clock::now();
+        conn_stats.connected_time = mono_clock::now();
         return seastar::now();
       }
-      seastar::future<> ms_dispatch(ceph::net::ConnectionRef c,
+      seastar::future<> ms_dispatch(ceph::net::Connection* c,
                                     MessageRef m) override {
-        ceph_assert(m->get_type() == CEPH_MSG_OSD_OPREPLY);
-        depth.signal(1);
-        auto session = find_session(c);
-        ++(session->count);
+        // server replies with MOSDOp to generate server-side write workload
+        ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
 
-        if (session->count == rounds) {
-          logger().info("{}: finished receiving {} OPREPLYs", *c.get(), session->count);
-          session->finish_time = mono_clock::now();
-          return container().invoke_on_all([conn = c.get()](auto &client) {
-              auto found = client.pending_conns.find(conn);
-              ceph_assert(found != client.pending_conns.end());
-              found->second.set_value();
-            });
-        } else {
-          return seastar::now();
+        auto msg_id = m->get_tid();
+        if (msg_id % SAMPLE_RATE == 0) {
+          auto index = msg_id % time_msgs_sent.size();
+          ceph_assert(time_msgs_sent[index] != mono_clock::zero());
+          std::chrono::duration<double> cur_latency = mono_clock::now() - time_msgs_sent[index];
+          conn_stats.total_lat_s += cur_latency.count();
+          ++(conn_stats.sampled_count);
+          period_stats.total_lat_s += cur_latency.count();
+          ++(period_stats.sampled_count);
+          time_msgs_sent[index] = mono_clock::zero();
         }
+
+        ++(conn_stats.received_count);
+        depth.signal(1);
+
+        return seastar::now();
       }
 
-      seastar::future<> init(const entity_name_t& name,
-                             const std::string& lname,
-                             const uint64_t nonce) {
-        return ceph::net::Messenger::create(name, lname, nonce, 2)
-          .then([this](ceph::net::Messenger *messenger) {
-            return container().invoke_on_all([messenger](auto& client) {
-                client.msgr = messenger->get_local_shard();
+      // should start messenger at this shard?
+      bool is_active() {
+        ceph_assert(seastar::engine().cpu_id() == sid);
+        return sid != 0 && sid <= jobs;
+      }
+
+      seastar::future<> init(bool v1_crc_enabled) {
+        return container().invoke_on_all([v1_crc_enabled] (auto& client) {
+          if (client.is_active()) {
+            return ceph::net::Messenger::create(entity_name_t::OSD(client.sid), client.lname, client.sid, client.sid)
+            .then([&client, v1_crc_enabled] (ceph::net::Messenger *messenger) {
+              client.msgr = messenger;
+              client.msgr->set_default_policy(ceph::net::SocketPolicy::lossy_client(0));
+              client.msgr->set_require_authorizer(false);
+              client.msgr->set_auth_client(&client.dummy_auth);
+              client.msgr->set_auth_server(&client.dummy_auth);
+              if (v1_crc_enabled) {
                 client.msgr->set_crc_header();
-              }).then([this, messenger] {
-                return messenger->start(this);
-              });
-          });
+                client.msgr->set_crc_data();
+              }
+              return client.msgr->start(&client);
+            });
+          }
+          return seastar::now();
+        });
       }
 
       seastar::future<> shutdown() {
-        ceph_assert(msgr);
-        return msgr->shutdown();
+        return container().invoke_on_all([] (auto& client) {
+          if (client.is_active()) {
+            logger().info("{} shutdown...", client.lname);
+            ceph_assert(client.msgr);
+            return client.msgr->shutdown().then([&client] {
+              return client.stop_dispatch_messages();
+            });
+          }
+          return seastar::now();
+        });
       }
 
-      seastar::future<> dispatch_messages(const entity_addr_t& peer_addr, bool foreign_dispatch=true) {
-        mono_time start_time = mono_clock::now();
-        return msgr->connect(peer_addr, entity_name_t::TYPE_OSD)
-          .then([this, foreign_dispatch, start_time](auto conn) {
-            return seastar::futurize_apply([this, conn, foreign_dispatch] {
-                if (foreign_dispatch) {
-                  return do_dispatch_messages(&**conn);
-                } else {
-                  // NOTE: this could be faster if we don't switch cores in do_dispatch_messages().
-                  return container().invoke_on(conn->get()->shard_id(), [conn = &**conn](auto &client) {
-                      return client.do_dispatch_messages(conn);
-                    });
-                }
-              }).finally([this, conn, start_time] {
-                return container().invoke_on(conn->get()->shard_id(), [conn, start_time](auto &client) {
-                    auto session = client.find_session((*conn)->shared_from_this());
-                    std::chrono::duration<double> dur_handshake = session->connected_time - start_time;
-                    std::chrono::duration<double> dur_messaging = session->finish_time - session->connected_time;
-                    logger().info("{}: handshake {}, messaging {}",
-                                  **conn, dur_handshake.count(), dur_messaging.count());
-                  });
-              });
+      seastar::future<> connect_wait_verify(const entity_addr_t& peer_addr) {
+        return container().invoke_on_all([peer_addr] (auto& client) {
+          // start clients in active cores (#1 ~ #jobs)
+          if (client.is_active()) {
+            mono_time start_time = mono_clock::now();
+            return client.msgr->connect(peer_addr, entity_name_t::TYPE_OSD)
+            .then([&client] (auto conn) {
+              client.active_conn = conn->release();
+              // make sure handshake won't hurt the performance
+              return seastar::sleep(1s);
+            }).then([&client, start_time] {
+              if (client.conn_stats.connected_time == mono_clock::zero()) {
+                logger().error("\n{} not connected after 1s!\n", client.lname);
+                ceph_assert(false);
+              }
+              client.conn_stats.connecting_time = start_time;
+            });
+          }
+          return seastar::now();
+        });
+      }
+
+     private:
+      class TimerReport {
+       private:
+        const unsigned jobs;
+        const unsigned msgtime;
+        const unsigned bytes_of_block;
+
+        unsigned elapsed = 0u;
+        std::vector<mono_time> start_times;
+        std::vector<PeriodStats> snaps;
+        std::vector<ConnStats> summaries;
+
+       public:
+        TimerReport(unsigned jobs, unsigned msgtime, unsigned bs)
+          : jobs{jobs},
+            msgtime{msgtime},
+            bytes_of_block{bs},
+            start_times{jobs, mono_clock::zero()},
+            snaps{jobs},
+            summaries{jobs} {}
+
+        unsigned get_elapsed() const { return elapsed; }
+
+        PeriodStats& get_snap_by_job(seastar::shard_id sid) {
+          ceph_assert(sid >= 1 && sid <= jobs);
+          return snaps[sid - 1];
+        }
+
+        ConnStats& get_summary_by_job(seastar::shard_id sid) {
+          ceph_assert(sid >= 1 && sid <= jobs);
+          return summaries[sid - 1];
+        }
+
+        bool should_stop() const {
+          return elapsed >= msgtime;
+        }
+
+        seastar::future<> ticktock() {
+          return seastar::sleep(1s).then([this] {
+            ++elapsed;
           });
+        }
+
+        void report_header() {
+          std::ostringstream sout;
+          sout << std::setfill(' ')
+               << std::setw(7) << "sec"
+               << std::setw(6) << "depth"
+               << std::setw(8) << "IOPS"
+               << std::setw(8) << "MB/s"
+               << std::setw(8) << "lat(ms)";
+          std::cout << sout.str() << std::endl;
+        }
+
+        void report_period() {
+          if (elapsed == 1) {
+            // init this->start_times at the first period
+            for (unsigned i=0; i<jobs; ++i) {
+              start_times[i] = snaps[i].start_time;
+            }
+          }
+          std::chrono::duration<double> elapsed_d = 0s;
+          unsigned depth = 0u;
+          unsigned ops = 0u;
+          unsigned sampled_count = 0u;
+          double total_lat_s = 0.0;
+          for (const auto& snap: snaps) {
+            elapsed_d += (snap.finish_time - snap.start_time);
+            depth += snap.depth;
+            ops += (snap.finish_count - snap.start_count);
+            sampled_count += snap.sampled_count;
+            total_lat_s += snap.total_lat_s;
+          }
+          double elapsed_s = elapsed_d.count() / jobs;
+          double iops = ops/elapsed_s;
+          std::ostringstream sout;
+          sout << setfill(' ')
+               << std::setw(7) << elapsed_s
+               << std::setw(6) << depth
+               << std::setw(8) << iops
+               << std::setw(8) << iops * bytes_of_block / 1048576
+               << std::setw(8) << (total_lat_s / sampled_count * 1000);
+          std::cout << sout.str() << std::endl;
+        }
+
+        void report_summary() const {
+          std::chrono::duration<double> elapsed_d = 0s;
+          unsigned ops = 0u;
+          unsigned sampled_count = 0u;
+          double total_lat_s = 0.0;
+          for (const auto& summary: summaries) {
+            elapsed_d += (summary.finish_time - summary.start_time);
+            ops += (summary.received_count - summary.start_count);
+            sampled_count += summary.sampled_count;
+            total_lat_s += summary.total_lat_s;
+          }
+          double elapsed_s = elapsed_d.count() / jobs;
+          double iops = ops / elapsed_s;
+          std::ostringstream sout;
+          sout << "--------------"
+               << " summary "
+               << "--------------\n"
+               << setfill(' ')
+               << std::setw(7) << elapsed_s
+               << std::setw(6) << "-"
+               << std::setw(8) << iops
+               << std::setw(8) << iops * bytes_of_block / 1048576
+               << std::setw(8) << (total_lat_s / sampled_count * 1000)
+               << "\n";
+          std::cout << sout.str() << std::endl;
+        }
+      };
+
+      seastar::future<> report_period(TimerReport& report) {
+        return container().invoke_on_all([&report] (auto& client) {
+          if (client.is_active()) {
+            PeriodStats& snap = report.get_snap_by_job(client.sid);
+            client.period_stats.reset(client.conn_stats.received_count,
+                                      &snap);
+            snap.depth = client.get_current_depth();
+          }
+        }).then([&report] {
+          report.report_period();
+        });
+      }
+
+      seastar::future<> report_summary(TimerReport& report) {
+        return container().invoke_on_all([&report] (auto& client) {
+          if (client.is_active()) {
+            ConnStats& summary = report.get_summary_by_job(client.sid);
+            summary = client.conn_stats;
+            summary.finish_time = mono_clock::now();
+          }
+        }).then([&report] {
+          report.report_summary();
+        });
+      }
+
+     public:
+      seastar::future<> dispatch_with_timer(unsigned ramptime, unsigned msgtime) {
+        logger().info("[all clients]: start sending MOSDOps from {} clients", jobs);
+        return container().invoke_on_all([] (auto& client) {
+          if (client.is_active()) {
+            client.do_dispatch_messages(client.active_conn.get());
+          }
+        }).then([this, ramptime] {
+          logger().info("[all clients]: ramping up {} seconds...", ramptime);
+          return seastar::sleep(std::chrono::seconds(ramptime));
+        }).then([this] {
+          return container().invoke_on_all([] (auto& client) {
+            if (client.is_active()) {
+              client.conn_stats.start();
+              client.period_stats.reset(client.conn_stats.received_count);
+            }
+          });
+        }).then([this, msgtime] {
+          logger().info("[all clients]: reporting {} seconds...\n", msgtime);
+          return seastar::do_with(
+              TimerReport(jobs, msgtime, msg_len), [this] (auto& report) {
+            report.report_header();
+            return seastar::do_until(
+              [&report] { return report.should_stop(); },
+              [&report, this] {
+                return report.ticktock().then([&report, this] {
+                  // report period every 1s
+                  return report_period(report);
+                }).then([&report, this] {
+                  // report summary every 10s
+                  if (report.get_elapsed() % 10 == 0) {
+                    return report_summary(report);
+                  } else {
+                    return seastar::now();
+                  }
+                });
+              }
+            ).then([&report, this] {
+              // report the final summary
+              if (report.get_elapsed() % 10 != 0) {
+                return report_summary(report);
+              } else {
+                return seastar::now();
+              }
+            });
+          });
+        });
       }
 
      private:
       seastar::future<> send_msg(ceph::net::Connection* conn) {
+        ceph_assert(seastar::engine().cpu_id() == sid);
         return depth.wait(1).then([this, conn] {
           const static pg_t pgid;
           const static object_locator_t oloc;
@@ -220,96 +577,116 @@ static seastar::future<> run(unsigned rounds,
           bufferlist data(msg_data);
           m->write(0, msg_len, data);
           MessageRef msg = {m, false};
+
+          // use tid as the identity of each round
+          m->set_tid(sent_count);
+
+          // sample message latency
+          if (sent_count % SAMPLE_RATE == 0) {
+            auto index = sent_count % time_msgs_sent.size();
+            ceph_assert(time_msgs_sent[index] == mono_clock::zero());
+            time_msgs_sent[index] = mono_clock::now();
+          }
+
           return conn->send(msg);
         });
       }
 
-      seastar::future<> do_dispatch_messages(ceph::net::Connection* conn) {
-        return container().invoke_on_all([conn](auto& client) {
-            auto [i, added] = client.pending_conns.emplace(conn, seastar::promise<>());
-            std::ignore = i;
-            ceph_assert(added);
-          }).then([this, conn] {
-            return seastar::do_with(0u, 0u,
-                                    [this, conn](auto &count_ping, auto &count_keepalive) {
-                return seastar::do_until(
-                  [this, conn, &count_ping, &count_keepalive] {
-                    bool stop = (count_ping == rounds);
-                    if (stop) {
-                      logger().info("{}: finished sending {} OSDOPs with {} keepalives",
-                                    *conn, count_ping, count_keepalive);
-                    }
-                    return stop;
-                  },
-                  [this, conn, &count_ping, &count_keepalive] {
-                    return seastar::repeat([this, conn, &count_ping, &count_keepalive] {
-                        if (keepalive_dist(rng)) {
-                          return conn->keepalive()
-                            .then([&count_keepalive] {
-                              count_keepalive += 1;
-                              return seastar::make_ready_future<seastar::stop_iteration>(
-                                seastar::stop_iteration::no);
-                            });
-                        } else {
-                          return send_msg(conn)
-                            .then([&count_ping] {
-                              count_ping += 1;
-                              return seastar::make_ready_future<seastar::stop_iteration>(
-                                seastar::stop_iteration::yes);
-                            });
-                        }
-                      });
-                  }).then([this, conn] {
-                    auto found = pending_conns.find(conn);
-                    return found->second.get_future();
-                  });
-              });
-          });
+      class DepthBroken: public std::exception {};
+
+      seastar::future<> stop_dispatch_messages() {
+        stop_send = true;
+        depth.broken(DepthBroken());
+        return stopped_send_promise.get_future();
+      }
+
+      void do_dispatch_messages(ceph::net::Connection* conn) {
+        ceph_assert(seastar::engine().cpu_id() == sid);
+        ceph_assert(sent_count == 0);
+        conn_stats.start_time = mono_clock::now();
+        seastar::do_until(
+          [this] { return stop_send; },
+          [this, conn] {
+            sent_count += 1;
+            return send_msg(conn);
+          }
+        ).handle_exception_type([] (const DepthBroken& e) {
+          // ok, stopped by stop_dispatch_messages()
+        }).finally([this, conn] {
+          std::chrono::duration<double> dur_conn = conn_stats.connected_time - conn_stats.connecting_time;
+          std::chrono::duration<double> dur_msg = mono_clock::now() - conn_stats.start_time;
+          unsigned ops = conn_stats.received_count - conn_stats.start_count;
+          logger().info("{}: stopped sending OSDOPs.\n"
+                        "{}(depth={}):\n"
+                        "  connect time: {}s\n"
+                        "  messages received: {}\n"
+                        "  messaging time: {}s\n"
+                        "  latency: {}ms\n"
+                        "  IOPS: {}\n"
+                        "  throughput: {}MB/s\n",
+                        *conn,
+                        lname,
+                        nr_depth,
+                        dur_conn.count(),
+                        ops,
+                        dur_msg.count(),
+                        conn_stats.total_lat_s / conn_stats.sampled_count * 1000,
+                        ops / dur_msg.count(),
+                        ops / dur_msg.count() * msg_len / 1048576);
+          stopped_send_promise.set_value();
+        });
       }
     };
   };
 
   return seastar::when_all_succeed(
-      ceph::net::create_sharded<test_state::Server>(),
-      ceph::net::create_sharded<test_state::Client>(rounds, keepalive_ratio, bs, depth))
-    .then([rounds, keepalive_ratio, addr, mode](test_state::Server *server,
-                                                test_state::Client *client) {
-      entity_addr_t target_addr;
-      target_addr.parse(addr.c_str(), nullptr);
-      target_addr.set_type(entity_addr_t::TYPE_LEGACY);
+      ceph::net::create_sharded<test_state::Server>(server_conf.core, server_conf.block_size),
+      ceph::net::create_sharded<test_state::Client>(client_conf.jobs,
+                                                    client_conf.block_size, client_conf.depth))
+    .then([=](test_state::Server *server,
+              test_state::Client *client) {
       if (mode == perf_mode_t::both) {
+          logger().info("\nperf settings:\n  {}\n  {}\n",
+                        client_conf.str(), server_conf.str());
+          ceph_assert(seastar::smp::count >= 1+client_conf.jobs);
+          ceph_assert(client_conf.jobs > 0);
+          ceph_assert(seastar::smp::count >= 1+server_conf.core);
+          ceph_assert(server_conf.core == 0 || server_conf.core > client_conf.jobs);
           return seastar::when_all_succeed(
-              server->init(entity_name_t::OSD(0), "server", 0, target_addr),
-              client->init(entity_name_t::OSD(1), "client", 0))
-          // dispatch pingpoing
-            .then([client, target_addr] {
-              return client->dispatch_messages(target_addr, false);
-          // shutdown
+              server->init(server_conf.v1_crc_enabled, server_conf.addr),
+              client->init(client_conf.v1_crc_enabled))
+            .then([client, addr = client_conf.server_addr] {
+              return client->connect_wait_verify(addr);
+            }).then([client, ramptime = client_conf.ramptime,
+                     msgtime = client_conf.msgtime] {
+              return client->dispatch_with_timer(ramptime, msgtime);
             }).finally([client] {
-              logger().info("client shutdown...");
               return client->shutdown();
             }).finally([server] {
-              logger().info("server shutdown...");
               return server->shutdown();
             });
       } else if (mode == perf_mode_t::client) {
-          return client->init(entity_name_t::OSD(1), "client", 0)
-          // dispatch pingpoing
-            .then([client, target_addr] {
-              return client->dispatch_messages(target_addr, false);
-          // shutdown
+          logger().info("\nperf settings:\n  {}\n", client_conf.str());
+          ceph_assert(seastar::smp::count >= 1+client_conf.jobs);
+          ceph_assert(client_conf.jobs > 0);
+          return client->init(client_conf.v1_crc_enabled)
+            .then([client, addr = client_conf.server_addr] {
+              return client->connect_wait_verify(addr);
+            }).then([client, ramptime = client_conf.ramptime,
+                     msgtime = client_conf.msgtime] {
+              return client->dispatch_with_timer(ramptime, msgtime);
             }).finally([client] {
-              logger().info("client shutdown...");
               return client->shutdown();
             });
       } else { // mode == perf_mode_t::server
-          return server->init(entity_name_t::OSD(0), "server", 0, target_addr)
-          // dispatch pingpoing
+          ceph_assert(seastar::smp::count >= 1+server_conf.core);
+          logger().info("\nperf settings:\n  {}\n", server_conf.str());
+          return server->init(server_conf.v1_crc_enabled, server_conf.addr)
+          // dispatch ops
             .then([server] {
               return server->msgr->wait();
           // shutdown
             }).finally([server] {
-              logger().info("server shutdown...");
               return server->shutdown();
             });
       }
@@ -322,35 +699,37 @@ int main(int argc, char** argv)
 {
   seastar::app_template app;
   app.add_options()
-    ("addr", bpo::value<std::string>()->default_value("0.0.0.0:9010"),
-     "start server")
-    ("mode", bpo::value<int>()->default_value(0),
+    ("mode", bpo::value<unsigned>()->default_value(0),
      "0: both, 1:client, 2:server")
-    ("rounds", bpo::value<unsigned>()->default_value(65536),
-     "number of messaging rounds")
-    ("keepalive-ratio", bpo::value<double>()->default_value(0),
-     "ratio of keepalive in ping messages")
-    ("bs", bpo::value<int>()->default_value(4096),
-     "block size")
-    ("depth", bpo::value<int>()->default_value(512),
-     "io depth");
+    ("addr", bpo::value<std::string>()->default_value("v1:127.0.0.1:9010"),
+     "server address")
+    ("ramptime", bpo::value<unsigned>()->default_value(5),
+     "seconds of client ramp-up time")
+    ("msgtime", bpo::value<unsigned>()->default_value(15),
+     "seconds of client messaging time")
+    ("jobs", bpo::value<unsigned>()->default_value(1),
+     "number of client jobs (messengers)")
+    ("cbs", bpo::value<unsigned>()->default_value(4096),
+     "client block size")
+    ("depth", bpo::value<unsigned>()->default_value(512),
+     "client io depth")
+    ("core", bpo::value<unsigned>()->default_value(0),
+     "server running core")
+    ("sbs", bpo::value<unsigned>()->default_value(0),
+     "server block size")
+    ("v1-crc-enabled", bpo::value<bool>()->default_value(false),
+     "enable v1 CRC checks");
   return app.run(argc, argv, [&app] {
       auto&& config = app.configuration();
-      auto rounds = config["rounds"].as<unsigned>();
-      auto keepalive_ratio = config["keepalive-ratio"].as<double>();
-      auto bs = config["bs"].as<int>();
-      auto depth = config["depth"].as<int>();
-      auto addr = config["addr"].as<std::string>();
-      auto mode = config["mode"].as<int>();
-      logger().info("\nsettings:\n  addr={}\n  mode={}\n  rounds={}\n  keepalive-ratio={}\n  bs={}\n  depth={}",
-                    addr, mode, rounds, keepalive_ratio, bs, depth);
-      ceph_assert(mode >= 0 && mode <= 2);
+      auto mode = config["mode"].as<unsigned>();
+      ceph_assert(mode <= 2);
       auto _mode = static_cast<perf_mode_t>(mode);
-      return run(rounds, keepalive_ratio, bs, depth, addr, _mode)
-        .then([] {
-          std::cout << "successful" << std::endl;
+      auto server_conf = server_config::load(config);
+      auto client_conf = client_config::load(config);
+      return run(_mode, client_conf, server_conf).then([] {
+          logger().info("\nsuccessful!\n");
         }).handle_exception([] (auto eptr) {
-          std::cout << "failed" << std::endl;
+          logger().info("\nfailed!\n");
           return seastar::make_exception_future<>(eptr);
         });
     });

@@ -55,7 +55,7 @@ try {
     let changeOldProdFiles = replace.sync(optionsOldProd);
     let changeProdFiles = replace.sync(optionsNewProd);
     let changeDevFiles = replace.sync(optionsNewDev);
-    console.log('Environement variables has been set');
+    console.log('Environment variables have been set');
 }
 catch (error) {
     console.error('Error occurred:', error);

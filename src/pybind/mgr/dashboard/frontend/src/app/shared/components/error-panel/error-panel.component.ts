@@ -1,4 +1,5 @@
 import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Icons } from '../../../shared/enum/icons.enum';
 
 @Component({
   selector: 'cd-error-panel',
@@ -19,4 +20,6 @@ export class ErrorPanelComponent {
    */
   @Output()
   backAction = new EventEmitter();
+
+  icons = Icons;
 }

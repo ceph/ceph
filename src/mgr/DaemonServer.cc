@@ -158,14 +158,8 @@ entity_addrvec_t DaemonServer::get_myaddrs() const
   return msgr->get_myaddrs();
 }
 
-KeyStore *DaemonServer::ms_get_auth1_authorizer_keystore()
-{
-  return monc->rotating_secrets.get();
-}
-
 int DaemonServer::ms_handle_authentication(Connection *con)
 {
-  int ret = 0;
   MgrSession *s = new MgrSession(cct);
   con->set_priv(s);
   s->inst.addr = con->get_peer_addr();
@@ -180,27 +174,24 @@ int DaemonServer::ms_handle_authentication(Connection *con)
     dout(10) << " session " << s << " " << s->entity_name
 	     << " allow_all" << dendl;
     s->caps.set_allow_all();
-  }
-
-  if (caps_info.caps.length() > 0) {
+  } else if (caps_info.caps.length() > 0) {
     auto p = caps_info.caps.cbegin();
     string str;
     try {
       decode(str, p);
     }
     catch (buffer::error& e) {
-      ret = -EPERM;
-    }
-    bool success = s->caps.parse(str);
-    if (success) {
       dout(10) << " session " << s << " " << s->entity_name
-	       << " has caps " << s->caps << " '" << str << "'" << dendl;
-      ret = 1;
-    } else {
+               << " failed to decode caps" << dendl;
+      return -EPERM;
+    }
+    if (!s->caps.parse(str)) {
       dout(10) << " session " << s << " " << s->entity_name
 	       << " failed to parse caps '" << str << "'" << dendl;
-      ret = -EPERM;
+      return -EPERM;
     }
+    dout(10) << " session " << s << " " << s->entity_name
+             << " has caps " << s->caps << " '" << str << "'" << dendl;
   }
 
   if (con->get_peer_type() == CEPH_ENTITY_TYPE_OSD) {
@@ -211,22 +202,7 @@ int DaemonServer::ms_handle_authentication(Connection *con)
     osd_cons[s->osd_id].insert(con);
   }
 
-  return ret;
-}
-
-bool DaemonServer::ms_get_authorizer(
-  int dest_type,
-  AuthAuthorizer **authorizer)
-{
-  dout(10) << "type=" << ceph_entity_type_name(dest_type) << dendl;
-
-  if (dest_type == CEPH_ENTITY_TYPE_MON) {
-    return true;
-  }
-
-  *authorizer = monc->build_authorizer(dest_type);
-  dout(20) << "got authorizer " << *authorizer << dendl;
-  return *authorizer != NULL;
+  return 1;
 }
 
 bool DaemonServer::ms_handle_reset(Connection *con)
@@ -256,25 +232,24 @@ bool DaemonServer::ms_handle_refused(Connection *con)
   return false;
 }
 
-bool DaemonServer::ms_dispatch(Message *m)
+bool DaemonServer::ms_dispatch2(const ref_t<Message>& m)
 {
   // Note that we do *not* take ::lock here, in order to avoid
   // serializing all message handling.  It's up to each handler
   // to take whatever locks it needs.
   switch (m->get_type()) {
     case MSG_PGSTATS:
-      cluster_state.ingest_pgstats(static_cast<MPGStats*>(m));
+      cluster_state.ingest_pgstats(ref_cast<MPGStats>(m));
       maybe_ready(m->get_source().num());
-      m->put();
       return true;
     case MSG_MGR_REPORT:
-      return handle_report(static_cast<MMgrReport*>(m));
+      return handle_report(ref_cast<MMgrReport>(m));
     case MSG_MGR_OPEN:
-      return handle_open(static_cast<MMgrOpen*>(m));
+      return handle_open(ref_cast<MMgrOpen>(m));
     case MSG_MGR_CLOSE:
-      return handle_close(static_cast<MMgrClose*>(m));
+      return handle_close(ref_cast<MMgrClose>(m));
     case MSG_COMMAND:
-      return handle_command(static_cast<MCommand*>(m));
+      return handle_command(ref_cast<MCommand>(m));
     default:
       dout(1) << "Unhandled message type " << m->get_type() << dendl;
       return false;
@@ -410,7 +385,7 @@ static bool key_from_string(
   return true;
 }
 
-bool DaemonServer::handle_open(MMgrOpen *m)
+bool DaemonServer::handle_open(const ref_t<MMgrOpen>& m)
 {
   std::lock_guard l(lock);
 
@@ -418,7 +393,7 @@ bool DaemonServer::handle_open(MMgrOpen *m)
 				   m->get_connection()->get_peer_type(),
 				   m->daemon_name);
 
-  dout(4) << "from " << m->get_connection() << "  " << key << dendl;
+  dout(10) << "from " << m->get_connection() << "  " << key << dendl;
 
   _send_configure(m->get_connection());
 
@@ -481,11 +456,10 @@ bool DaemonServer::handle_open(MMgrOpen *m)
     daemon_connections.insert(m->get_connection());
   }
 
-  m->put();
   return true;
 }
 
-bool DaemonServer::handle_close(MMgrClose *m)
+bool DaemonServer::handle_close(const ref_t<MMgrClose>& m)
 {
   std::lock_guard l(lock);
 
@@ -507,11 +481,11 @@ bool DaemonServer::handle_close(MMgrClose *m)
   }
 
   // send same message back as a reply
-  m->get_connection()->send_message(m);
+  m->get_connection()->send_message2(m);
   return true;
 }
 
-bool DaemonServer::handle_report(MMgrReport *m)
+bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
 {
   DaemonKey key;
   if (!m->service_name.empty()) {
@@ -521,16 +495,15 @@ bool DaemonServer::handle_report(MMgrReport *m)
   }
   key.second = m->daemon_name;
 
-  dout(4) << "from " << m->get_connection() << " " << key << dendl;
+  dout(10) << "from " << m->get_connection() << " " << key << dendl;
 
   if (m->get_connection()->get_peer_type() == entity_name_t::TYPE_CLIENT &&
       m->service_name.empty()) {
     // Clients should not be sending us stats unless they are declaring
     // themselves to be a daemon for some service.
-    dout(4) << "rejecting report from non-daemon client " << m->daemon_name
+    dout(10) << "rejecting report from non-daemon client " << m->daemon_name
 	    << dendl;
     m->get_connection()->mark_down();
-    m->put();
     return true;
   }
 
@@ -600,7 +573,7 @@ bool DaemonServer::handle_report(MMgrReport *m)
   {
     std::lock_guard l(daemon->lock);
     auto &daemon_counters = daemon->perf_counters;
-    daemon_counters.update(m);
+    daemon_counters.update(*m.get());
 
     auto p = m->config_bl.cbegin();
     if (p != m->config_bl.end()) {
@@ -639,7 +612,6 @@ bool DaemonServer::handle_report(MMgrReport *m)
     osd_perf_metric_collector.process_reports(m->osd_perf_metric_reports);
   }
 
-  m->put();
   return true;
 }
 
@@ -719,16 +691,12 @@ bool DaemonServer::_allowed_command(
  */
 class CommandContext {
 public:
-  MCommand *m;
+  ceph::ref_t<MCommand> m;
   bufferlist odata;
   cmdmap_t cmdmap;
 
-  explicit CommandContext(MCommand *m_)
-    : m(m_) {
-  }
-
-  ~CommandContext() {
-    m->put();
+  explicit CommandContext(ceph::ref_t<MCommand> m)
+    : m{std::move(m)} {
   }
 
   void reply(int r, const std::stringstream &ss) {
@@ -743,7 +711,7 @@ public:
     }
 
     if (r == 0) {
-      dout(4) << __func__ << " success" << dendl;
+      dout(20) << "success" << dendl;
     } else {
       derr << __func__ << " " << cpp_strerror(r) << " " << rs << dendl;
     }
@@ -776,10 +744,10 @@ public:
   }
 };
 
-bool DaemonServer::handle_command(MCommand *m)
+bool DaemonServer::handle_command(const ref_t<MCommand>& m)
 {
   std::lock_guard l(lock);
-  std::shared_ptr<CommandContext> cmdctx = std::make_shared<CommandContext>(m);
+  auto cmdctx = std::make_shared<CommandContext>(m);
   try {
     return _handle_command(m, cmdctx);
   } catch (const bad_cmd_get& e) {
@@ -789,7 +757,7 @@ bool DaemonServer::handle_command(MCommand *m)
 }
 
 bool DaemonServer::_handle_command(
-  MCommand *m,
+  const ref_t<MCommand>& m,
   std::shared_ptr<CommandContext>& cmdctx)
 {
   auto priv = m->get_connection()->get_priv();
@@ -819,8 +787,7 @@ bool DaemonServer::_handle_command(
   string prefix;
   cmd_getval(cct, cmdctx->cmdmap, "prefix", prefix);
 
-  dout(4) << "decoded " << cmdctx->cmdmap.size() << dendl;
-  dout(4) << "prefix=" << prefix << dendl;
+  dout(10) << "decoded-size=" << cmdctx->cmdmap.size() << " prefix=" << prefix  << dendl;
 
   if (prefix == "get_command_descriptions") {
     dout(10) << "reading commands from python modules" << dendl;
@@ -1248,16 +1215,25 @@ bool DaemonServer::_handle_command(
       return true;
     }
   } else if (prefix == "osd df") {
-    string method;
+    string method, filter;
     cmd_getval(g_ceph_context, cmdctx->cmdmap, "output_method", method);
+    cmd_getval(g_ceph_context, cmdctx->cmdmap, "filter", filter);
+    stringstream rs;
     r = cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pgmap) {
+        // sanity check filter(s)
+        if (!filter.empty() &&
+             osdmap.lookup_pg_pool_name(filter) < 0 &&
+            !osdmap.crush->class_exists(filter) &&
+            !osdmap.crush->name_exists(filter)) {
+          rs << "'" << filter << "' not a pool, crush node or device class name";
+          return -EINVAL;
+        }
 	print_osd_utilization(osdmap, pgmap, ss,
-			      f.get(), method == "tree");
-	
+                              f.get(), method == "tree", filter);
 	cmdctx->odata.append(ss);
 	return 0;
       });
-    cmdctx->reply(r, "");
+    cmdctx->reply(r, rs);
     return true;
   } else if (prefix == "osd pool stats") {
     string pool_name;
@@ -1354,18 +1330,46 @@ bool DaemonServer::_handle_command(
 	    safe_to_destroy.insert(osd);
 	    continue;  // clearly safe to destroy
 	  }
+          set<int64_t> pools;
+          osdmap.get_pool_ids_by_osd(g_ceph_context, osd, &pools);
+          if (pools.empty()) {
+            // osd does not belong to any pools yet
+            safe_to_destroy.insert(osd);
+            continue;
+          }
+          if (osdmap.is_down(osd) && osdmap.is_out(osd)) {
+            // if osd is down&out and all relevant pools are active+clean,
+            // then should be safe to destroy
+            bool all_osd_pools_active_clean = true;
+            for (auto &ps: pg_map.pg_stat) {
+              auto& pg = ps.first;
+              auto state = ps.second.state;
+              if (!pools.count(pg.pool()))
+                continue;
+              if ((state & (PG_STATE_ACTIVE | PG_STATE_CLEAN)) !=
+                           (PG_STATE_ACTIVE | PG_STATE_CLEAN)) {
+                all_osd_pools_active_clean = false;
+                break;
+              }
+            }
+            if (all_osd_pools_active_clean) {
+              safe_to_destroy.insert(osd);
+              continue;
+            }
+          }
 	  auto q = pg_map.num_pg_by_osd.find(osd);
 	  if (q != pg_map.num_pg_by_osd.end()) {
-	    if (q->second.acting > 0 || q->second.up > 0) {
+	    if (q->second.acting > 0 || q->second.up_not_acting > 0) {
 	      active_osds.insert(osd);
-	      affected_pgs += q->second.acting + q->second.up;
+	      // XXX: For overlapping PGs, this counts them again
+	      affected_pgs += q->second.acting + q->second.up_not_acting;
 	      continue;
 	    }
 	  }
 	  if (num_active_clean < pg_map.num_pg) {
 	    // all pgs aren't active+clean; we need to be careful.
 	    auto p = pg_map.osd_stat.find(osd);
-	    if (p == pg_map.osd_stat.end()) {
+	    if (p == pg_map.osd_stat.end() || !osdmap.is_up(osd)) {
 	      missing_stats.insert(osd);
 	      continue;
 	    } else if (p->second.num_pgs > 0) {
@@ -1410,7 +1414,6 @@ bool DaemonServer::_handle_command(
       if (!r) {
         ss << "OSD(s) " << osds << " are safe to destroy without reducing data"
            << " durability.";
-        safe_to_destroy.swap(osds);
       }
       if (f) {
         f->open_object_section("osd_status");
@@ -1482,7 +1485,7 @@ bool DaemonServer::_handle_command(
       cmdctx->reply(r, ss);
       return true;
     }
-    map<pg_t,int> pg_delta;  // pgid -> net acting set size change
+    int touched_pgs = 0;
     int dangerous_pgs = 0;
     cluster_state.with_osdmap_and_pgmap([&](const OSDMap& osdmap, const PGMap& pg_map) {
 	if (pg_map.num_pg_unknown > 0) {
@@ -1491,35 +1494,40 @@ bool DaemonServer::_handle_command(
 	  r = -EAGAIN;
 	  return;
 	}
-	for (auto osd : osds) {
-	  auto p = pg_map.pg_by_osd.find(osd);
-	  if (p != pg_map.pg_by_osd.end()) {
-	    for (auto& pgid : p->second) {
-	      --pg_delta[pgid];
+	for (const auto& q : pg_map.pg_stat) {
+          set<int32_t> pg_acting;  // net acting sets (with no missing if degraded)
+	  bool found = false;
+	  if (q.second.state & PG_STATE_DEGRADED) {
+	    for (auto& anm : q.second.avail_no_missing) {
+	      if (osds.count(anm.osd)) {
+		found = true;
+		continue;
+	      }
+	      pg_acting.insert(anm.osd);
+	    }
+	  } else {
+	    for (auto& a : q.second.acting) {
+	      if (osds.count(a)) {
+		found = true;
+		continue;
+	      }
+	      pg_acting.insert(a);
 	    }
 	  }
-	}
-	for (auto& p : pg_delta) {
-	  auto q = pg_map.pg_stat.find(p.first);
-	  if (q == pg_map.pg_stat.end()) {
-	    ss << "missing information about " << p.first << "; cannot draw"
-	       << " any conclusions";
-	    r = -EAGAIN;
-	    return;
+	  if (!found) {
+	    continue;
 	  }
-	  if (!(q->second.state & PG_STATE_ACTIVE) ||
-	      (q->second.state & PG_STATE_DEGRADED)) {
-	    // we don't currently have a good way to tell *how* degraded
-	    // a degraded PG is, so we have to assume we cannot remove
-	    // any more replicas/shards.
+	  touched_pgs++;
+	  if (!(q.second.state & PG_STATE_ACTIVE) ||
+	      (q.second.state & PG_STATE_DEGRADED)) {
 	    ++dangerous_pgs;
 	    continue;
 	  }
-	  const pg_pool_t *pi = osdmap.get_pg_pool(p.first.pool());
+	  const pg_pool_t *pi = osdmap.get_pg_pool(q.first.pool());
 	  if (!pi) {
 	    ++dangerous_pgs; // pool is creating or deleting
 	  } else {
-	    if (q->second.acting.size() + p.second < pi->min_size) {
+	    if (pg_acting.size() < pi->min_size) {
 	      ++dangerous_pgs;
 	    }
 	  }
@@ -1530,14 +1538,15 @@ bool DaemonServer::_handle_command(
       return true;
     }
     if (dangerous_pgs) {
-      ss << dangerous_pgs << " PGs are already degraded or might become "
-	 << "unavailable";
+      ss << dangerous_pgs << " PGs are already too degraded, would become"
+	 << " too degraded or might become unavailable";
       cmdctx->reply(-EBUSY, ss);
       return true;
     }
     ss << "OSD(s) " << osds << " are ok to stop without reducing"
-       << " availability, provided there are no other concurrent failures"
-       << " or interventions. " << pg_delta.size() << " PGs are likely to be"
+       << " availability or risking data, provided there are no other concurrent failures"
+       << " or interventions." << std::endl;
+    ss << touched_pgs << " PGs are likely to be"
        << " degraded (but remain available) as a result.";
     cmdctx->reply(0, ss);
     return true;
@@ -2170,7 +2179,7 @@ bool DaemonServer::_handle_command(
     return true;
   }
 
-  dout(4) << "passing through " << cmdctx->cmdmap.size() << dendl;
+  dout(10) << "passing through " << cmdctx->cmdmap.size() << dendl;
   finisher.queue(new FunctionContext([this, cmdctx, handler_name, prefix](int r_) {
     std::stringstream ss;
 
@@ -2316,7 +2325,7 @@ void DaemonServer::send_report()
 	  jf.dump_object("health_checks", m->health_checks);
 	  jf.flush(*_dout);
 	  *_dout << dendl;
-          if (osdmap.require_osd_release >= CEPH_RELEASE_LUMINOUS) {
+          if (osdmap.require_osd_release >= ceph_release_t::luminous) {
               clog->debug() << "pgmap v" << pg_map.version << ": " << pg_map;
           }
 	});
@@ -2557,23 +2566,43 @@ void DaemonServer::adjust_pgs()
 	    // max_misplaced, to somewhat limit the magnitude of
 	    // our potential error here.
 	    int next;
-	    if (aggro) {
+	    static constexpr unsigned MAX_NUM_OBJECTS_PER_PG_FOR_LEAP = 1;
+	    pool_stat_t s = pg_map.get_pg_pool_sum_stat(i.first);
+	    if (aggro ||
+		// pool is (virtually) empty; just jump to final pgp_num?
+		(p.get_pgp_num_target() > p.get_pgp_num() &&
+		 s.stats.sum.num_objects <= (MAX_NUM_OBJECTS_PER_PG_FOR_LEAP *
+					     p.get_pgp_num_target()))) {
 	      next = target;
 	    } else {
 	      double room =
 		std::min<double>(max_misplaced - misplaced_ratio,
-				 misplaced_ratio / 2.0);
+				 max_misplaced / 2.0);
 	      unsigned estmax = std::max<unsigned>(
 		(double)p.get_pg_num() * room, 1u);
-	      int delta = target - p.get_pgp_num();
-	      next = p.get_pgp_num();
-	      if (delta < 0) {
-		next += std::max<int>(-estmax, delta);
-	      } else {
-		next += std::min<int>(estmax, delta);
-	      }
+	      next = std::clamp(target,
+				p.get_pgp_num() - estmax,
+				p.get_pgp_num() + estmax);
 	      dout(20) << " room " << room << " estmax " << estmax
-		       << " delta " << delta << " next " << next << dendl;
+		       << " delta " << (target-p.get_pgp_num())
+		       << " next " << next << dendl;
+	      if (p.get_pgp_num_target() == p.get_pg_num_target() &&
+		  p.get_pgp_num_target() < p.get_pg_num()) {
+		// since pgp_num is tracking pg_num, ceph is handling
+		// pgp_num.  so, be responsible: don't let pgp_num get
+		// too far out ahead of merges (if we are merging).
+		// this avoids moving lots of unmerged pgs onto a
+		// small number of OSDs where we might blow out the
+		// per-osd pg max.
+		unsigned max_outpace_merges =
+		  std::max<unsigned>(8, p.get_pg_num() * max_misplaced);
+		if (next + max_outpace_merges < p.get_pg_num()) {
+		  next = p.get_pg_num() - max_outpace_merges;
+		  dout(10) << "  using next " << next
+			   << " to avoid outpacing merges (max_outpace_merges "
+			   << max_outpace_merges << ")" << dendl;
+		}
+	      }
 	    }
 	    dout(10) << "pool " << i.first
 		     << " pgp_num_target " << p.get_pgp_num_target()
@@ -2709,21 +2738,18 @@ const char** DaemonServer::get_tracked_conf_keys() const
 void DaemonServer::handle_conf_change(const ConfigProxy& conf,
 				      const std::set <std::string> &changed)
 {
-  // We may be called within lock (via MCommand `config set`) or outwith the
-  // lock (via admin socket `config set`), so handle either case.
-  const bool initially_locked = lock.is_locked_by_me();
-  if (!initially_locked) {
-    lock.Lock();
-  }
 
   if (changed.count("mgr_stats_threshold") || changed.count("mgr_stats_period")) {
     dout(4) << "Updating stats threshold/period on "
             << daemon_connections.size() << " clients" << dendl;
     // Send a fresh MMgrConfigure to all clients, so that they can follow
     // the new policy for transmitting stats
-    for (auto &c : daemon_connections) {
-      _send_configure(c);
-    }
+    finisher.queue(new FunctionContext([this](int r) {
+      std::lock_guard l(lock);
+      for (auto &c : daemon_connections) {
+        _send_configure(c);
+      }
+    }));
   }
 }
 
@@ -2731,7 +2757,7 @@ void DaemonServer::_send_configure(ConnectionRef c)
 {
   ceph_assert(lock.is_locked_by_me());
 
-  auto configure = new MMgrConfigure();
+  auto configure = make_message<MMgrConfigure>();
   configure->stats_period = g_conf().get_val<int64_t>("mgr_stats_period");
   configure->stats_threshold = g_conf().get_val<int64_t>("mgr_stats_threshold");
 
@@ -2740,7 +2766,7 @@ void DaemonServer::_send_configure(ConnectionRef c)
         osd_perf_metric_collector.get_queries();
   }
 
-  c->send_message(configure);
+  c->send_message2(configure);
 }
 
 OSDPerfMetricQueryID DaemonServer::add_osd_perf_query(

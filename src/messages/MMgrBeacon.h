@@ -22,11 +22,8 @@
 #include "include/types.h"
 
 
-class MMgrBeacon : public MessageInstance<MMgrBeacon, PaxosServiceMessage> {
-public:
-  friend factory;
+class MMgrBeacon : public PaxosServiceMessage {
 private:
-
   static constexpr int HEAD_VERSION = 8;
   static constexpr int COMPAT_VERSION = 8;
 
@@ -50,16 +47,15 @@ protected:
 
 public:
   MMgrBeacon()
-    : MessageInstance(MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
+    : PaxosServiceMessage{MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION},
       gid(0), available(false)
-  {
-  }
+  {}
 
   MMgrBeacon(const uuid_d& fsid_, uint64_t gid_, const std::string &name_,
              entity_addrvec_t server_addrs_, bool available_,
 	     std::vector<MgrMap::ModuleInfo>&& modules_,
 	     map<string,string>&& metadata_)
-    : MessageInstance(MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION),
+    : PaxosServiceMessage{MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION},
       gid(gid_), server_addrs(server_addrs_), available(available_), name(name_),
       fsid(fsid_), modules(std::move(modules_)), metadata(std::move(metadata_))
   {
@@ -179,6 +175,9 @@ public:
       decode(modules, p);
     }
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 

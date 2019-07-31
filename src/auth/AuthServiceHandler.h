@@ -18,7 +18,7 @@
 #include <stddef.h>              // for NULL
 #include <stdint.h>              // for uint64_t
 #include "common/entity_name.h"  // for EntityName
-#include "include/buffer_fwd.h"  // for bufferlist
+#include "include/buffer_fwd.h"  // for ceph::buffer::list
 
 class CephContext;
 class KeyServer;
@@ -38,13 +38,13 @@ public:
 
   virtual int start_session(const EntityName& name,
 			    size_t connection_secret_required_length,
-			    bufferlist *result,
+			    ceph::buffer::list *result,
 			    AuthCapsInfo *caps,
 			    CryptoKey *session_key,
 			    std::string *connection_secret) = 0;
-  virtual int handle_request(bufferlist::const_iterator& indata,
+  virtual int handle_request(ceph::buffer::list::const_iterator& indata,
 			     size_t connection_secret_required_length,
-			     bufferlist *result,
+			     ceph::buffer::list *result,
 			     uint64_t *global_id,
 			     AuthCapsInfo *caps,
 			     CryptoKey *session_key,

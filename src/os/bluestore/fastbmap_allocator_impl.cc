@@ -23,7 +23,7 @@ inline interval_t _align2units(uint64_t offset, uint64_t len, uint64_t min_lengt
     auto delta_off = res.offset - offset;
     if (len > delta_off) {
       res.length = len - delta_off;
-      res.length = p2align(res.length, min_length);
+      res.length = p2align<uint64_t>(res.length, min_length);
       if (res.length) {
 	return res;
       }
@@ -31,7 +31,6 @@ inline interval_t _align2units(uint64_t offset, uint64_t len, uint64_t min_lengt
   }
   return interval_t();
 }
-
 
 interval_t AllocatorLevel01Loose::_get_longest_from_l0(uint64_t pos0,
   uint64_t pos1, uint64_t min_length, interval_t* tail) const
@@ -190,7 +189,7 @@ void AllocatorLevel01Loose::_analyze_partials(uint64_t pos_start,
 	    (ctx->min_affordable_len == 0 ||
 	      (longest.length < ctx->min_affordable_len))) {
 
-          ctx->min_affordable_len = p2align(longest.length, min_length);
+          ctx->min_affordable_len = p2align<uint64_t>(longest.length, min_length);
 	  ctx->min_affordable_offs = longest.offset;
         }
         if (mode == STOP_ON_PARTIAL) {
@@ -287,20 +286,22 @@ void AllocatorLevel01Loose::_mark_alloc_l0(int64_t l0_pos_start,
 
   int64_t pos = l0_pos_start;
   slot_t bits = (slot_t)1 << (l0_pos_start % d0);
-
-  while (pos < std::min(l0_pos_end, (int64_t)p2roundup(l0_pos_start, d0))) {
-    l0[pos / d0] &= ~bits;
+  slot_t* val_s = &l0[pos / d0];
+  int64_t pos_e = std::min(l0_pos_end, p2roundup<int64_t>(l0_pos_start + 1, d0));
+  while (pos < pos_e) {
+    (*val_s) &= ~bits;
     bits <<= 1;
     pos++;
   }
-
-  while (pos < std::min(l0_pos_end, (int64_t)p2align(l0_pos_end, d0))) {
-    l0[pos / d0] = all_slot_clear;
+  pos_e = std::min(l0_pos_end, p2align<int64_t>(l0_pos_end, d0));
+  while (pos < pos_e) {
+    *(++val_s) = all_slot_clear;
     pos += d0;
   }
   bits = 1;
+  ++val_s;
   while (pos < l0_pos_end) {
-    l0[pos / d0] &= ~bits;
+    (*val_s) &= ~bits;
     bits <<= 1;
     pos++;
   }
@@ -364,7 +365,7 @@ interval_t AllocatorLevel01Loose::_allocate_l1_contiguous(uint64_t length,
     if (ctx.affordable_len) {
       ceph_assert(ctx.affordable_len >= length);
       ceph_assert((length % l0_granularity) == 0);
-      auto pos_start = ctx.affordable_offs + length / l0_granularity;
+      auto pos_start = ctx.affordable_offs / l0_granularity;
       auto pos_end = (ctx.affordable_offs + length) / l0_granularity;
       _mark_alloc_l1_l0(pos_start, pos_end);
       res = interval_t(ctx.affordable_offs, length);
@@ -507,4 +508,39 @@ bool AllocatorLevel01Loose::_allocate_l1(uint64_t length,
     }
   }
   return _is_empty_l1(l1_pos_start, l1_pos_end);
+}
+
+void AllocatorLevel01Loose::collect_stats(
+  std::map<size_t, size_t>& bins_overall)
+{
+  size_t free_seq_cnt = 0;
+  for (auto slot : l0) {
+    if (slot == all_slot_set) {
+      free_seq_cnt += CHILD_PER_SLOT_L0;
+    } else if(slot != all_slot_clear) {
+      size_t pos = 0;
+      do {
+	auto pos1 = find_next_set_bit(slot, pos);
+	if (pos1 == pos) {
+	  free_seq_cnt++;
+	  pos = pos1 + 1;
+	} else {
+	  if (free_seq_cnt) {
+	    bins_overall[cbits(free_seq_cnt) - 1]++;
+	    free_seq_cnt = 0;
+	  }
+	  if (pos1 < bits_per_slot) {
+	    free_seq_cnt = 1;
+	  }
+          pos = pos1 + 1;
+	}
+      } while (pos < bits_per_slot);
+    } else if (free_seq_cnt) {
+      bins_overall[cbits(free_seq_cnt) - 1]++;
+      free_seq_cnt = 0;
+    }
+  }
+  if (free_seq_cnt) {
+    bins_overall[cbits(free_seq_cnt) - 1]++;
+  }
 }

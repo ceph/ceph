@@ -1,55 +1,9 @@
-@import '../../../../defaults';
+@import 'styles';
 
 cd-info-card {
   padding: 0 0.5vw 0 0.5vw;
-}
-
-.cd-container-flex {
-  margin: 0;
-  padding: 0;
-  display: -webkit-box;
-  display: -webkit-flex;
-  display: -ms-flexbox;
-  display: flex;
-  flex-flow: row wrap;
-  justify-content: space-between;
-}
-
-.cd-col-5 {
-  width: 20%;
-}
-
-@media (max-width: 1599px) {
-  .cd-col-5 {
-    width: 25%;
-  }
-}
-
-@media (max-width: $screen-md-max) {
-  .cd-col-5 {
-    width: 33%;
-  }
-}
-
-@media (max-width: $screen-sm-max) {
-  .cd-col-5 {
-    width: 50%;
-  }
-}
-
-@media (max-width: $screen-xs-max) {
-  cd-info-card {
-    padding: 0;
-  }
-
-  .cd-col-5 {
-    width: 100%;
-  }
-}
-
-.info-group {
-  margin: 0;
-  padding: 0;
+  @extend .d-flex;
+  @extend .flex-column;
 }
 
 ::ng-deep .pg-status-popover-wrapper {
@@ -86,4 +40,20 @@ cd-info-card {
 
 .mgr-active-name:hover {
   cursor: pointer;
+}
+
+::ng-deep cd-info-card {
+  @extend .col-12;
+  @extend .col-sm-12;
+  @extend .col-md-6;
+  @extend .col-lg-4;
+
+  &.cd-status-card {
+    @extend .col-xl-3;
+  }
+
+  &.cd-performance-card,
+  &.cd-capacity-card {
+    @extend .col-xl;
+  }
 }

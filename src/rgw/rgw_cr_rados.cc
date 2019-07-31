@@ -6,6 +6,7 @@
 #include "rgw_zone.h"
 #include "rgw_coroutine.h"
 #include "rgw_cr_rados.h"
+#include "rgw_sync_counters.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
@@ -103,7 +104,7 @@ int RGWAsyncGetSystemObj::_send_request()
                .set_objv_tracker(&objv_tracker)
                .set_attrs(pattrs)
 	       .set_raw_attrs(raw_attrs)
-               .read(&bl);
+               .read(&bl, null_yield);
 }
 
 RGWAsyncGetSystemObj::RGWAsyncGetSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWSI_SysObj *_svc,
@@ -140,7 +141,7 @@ int RGWAsyncPutSystemObj::_send_request()
   return sysobj.wop()
                .set_objv_tracker(&objv_tracker)
                .set_exclusive(exclusive)
-               .write_data(bl);
+               .write_data(bl, null_yield);
 }
 
 RGWAsyncPutSystemObj::RGWAsyncPutSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn,
@@ -163,7 +164,7 @@ int RGWAsyncPutSystemObjAttrs::_send_request()
                .set_objv_tracker(&objv_tracker)
                .set_exclusive(false)
                .set_attrs(attrs)
-               .write_attrs();
+               .write_attrs(null_yield);
 }
 
 RGWAsyncPutSystemObjAttrs::RGWAsyncPutSystemObjAttrs(RGWCoroutine *caller, RGWAioCompletionNotifier *cn,
@@ -528,7 +529,7 @@ bool RGWOmapAppend::finish() {
 int RGWAsyncGetBucketInstanceInfo::_send_request()
 {
   RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
-  int r = store->get_bucket_instance_from_oid(obj_ctx, oid, bucket_info, NULL, NULL);
+  int r = store->get_bucket_instance_from_oid(obj_ctx, oid, bucket_info, NULL, NULL, null_yield);
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to get bucket instance info for "
         << oid << dendl;
@@ -585,6 +586,7 @@ int RGWAsyncFetchRemoteObj::_send_request()
 
   rgw_obj dest_obj(bucket_info.bucket, dest_key.value_or(key));
 
+  std::optional<uint64_t> bytes_transferred;
   int r = store->fetch_remote_obj(obj_ctx,
                        user_id,
                        NULL, /* req_info */
@@ -611,10 +613,21 @@ int RGWAsyncFetchRemoteObj::_send_request()
                        NULL, /* string *petag, */
                        NULL, /* void (*progress_cb)(off_t, void *), */
                        NULL, /* void *progress_data*); */
-                       &zones_trace);
+                       dpp,
+                       &zones_trace,
+                       &bytes_transferred);
 
   if (r < 0) {
     ldout(store->ctx(), 0) << "store->fetch_remote_obj() returned r=" << r << dendl;
+    if (counters) {
+      counters->inc(sync_counters::l_fetch_err, 1);
+    }
+  } else if (counters) {
+    if (bytes_transferred) {
+      counters->inc(sync_counters::l_fetch, *bytes_transferred);
+    } else {
+      counters->inc(sync_counters::l_fetch_not_modified);
+    }
   }
   return r;
 }
@@ -669,7 +682,7 @@ int RGWAsyncRemoveObj::_send_request()
 
   RGWObjState *state;
 
-  int ret = store->get_obj_state(&obj_ctx, bucket_info, obj, &state);
+  int ret = store->get_obj_state(&obj_ctx, bucket_info, obj, &state, null_yield);
   if (ret < 0) {
     ldout(store->ctx(), 20) << __func__ << "(): get_obj_state() obj=" << obj << " returned ret=" << ret << dendl;
     return ret;
@@ -714,7 +727,7 @@ int RGWAsyncRemoveObj::_send_request()
   del_op.params.high_precision_time = true;
   del_op.params.zones_trace = &zones_trace;
 
-  ret = del_op.delete_obj();
+  ret = del_op.delete_obj(null_yield);
   if (ret < 0) {
     ldout(store->ctx(), 20) << __func__ << "(): delete_obj() obj=" << obj << " returned ret=" << ret << dendl;
   }
@@ -824,7 +837,7 @@ int RGWSyncLogTrimCR::request_complete()
     return r;
   }
   // nothing left to trim, update last_trim_marker
-  if (*last_trim_marker < to_marker) {
+  if (*last_trim_marker < to_marker && to_marker != max_marker) {
     *last_trim_marker = to_marker;
   }
   return 0;
@@ -836,7 +849,7 @@ int RGWAsyncStatObj::_send_request()
   rgw_raw_obj raw_obj;
   store->obj_to_raw(bucket_info.placement_rule, obj, &raw_obj);
   return store->raw_obj_stat(raw_obj, psize, pmtime, pepoch,
-                             nullptr, nullptr, objv_tracker);
+                             nullptr, nullptr, objv_tracker, null_yield);
 }
 
 RGWStatObjCR::RGWStatObjCR(RGWAsyncRadosProcessor *async_rados, RGWRados *store,

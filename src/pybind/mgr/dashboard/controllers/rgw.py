@@ -13,6 +13,7 @@ from ..rest_client import RequestException
 from ..security import Scope
 from ..services.ceph_service import CephService
 from ..services.rgw_client import RgwClient
+from ..tools import json_str_to_object
 
 
 @ApiController('/rgw', Scope.RGW)
@@ -96,11 +97,26 @@ class RgwRESTController(RESTController):
         try:
             instance = RgwClient.admin_instance()
             result = instance.proxy(method, path, params, None)
-            if json_response and result != '':
-                result = json.loads(result.decode('utf-8'))
+            if json_response:
+                result = json_str_to_object(result)
             return result
         except (DashboardException, RequestException) as e:
             raise DashboardException(e, http_status_code=500, component='rgw')
+
+
+@ApiController('/rgw/site', Scope.RGW)
+class RgwSite(RgwRESTController):
+
+    def list(self, query=None):
+        if query == 'placement-targets':
+            instance = RgwClient.admin_instance()
+            result = instance.get_placement_targets()
+        else:
+            # @TODO: (it'll be required for multisite workflows):
+            # by default, retrieve cluster realms/zonegroups map.
+            raise DashboardException(http_status_code=501, component='rgw', msg='Not Implemented')
+
+        return result
 
 
 @ApiController('/rgw/bucket', Scope.RGW)
@@ -128,10 +144,10 @@ class RgwBucket(RgwRESTController):
         result = self.proxy('GET', 'bucket', {'bucket': bucket})
         return self._append_bid(result)
 
-    def create(self, bucket, uid):
+    def create(self, bucket, uid, zonegroup=None, placement_target=None):
         try:
             rgw_client = RgwClient.instance(uid)
-            return rgw_client.create_bucket(bucket)
+            return rgw_client.create_bucket(bucket, zonegroup, placement_target)
         except RequestException as e:
             raise DashboardException(e, http_status_code=500, component='rgw')
 

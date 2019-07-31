@@ -507,7 +507,7 @@ public:
 };
 
 class RGWShardCollectCR : public RGWCoroutine {
-  int cur_shard;
+  int cur_shard = 0;
   int current_running;
   int max_concurrent;
   int status;
@@ -522,13 +522,18 @@ public:
   int operate() override;
 };
 
-// MetaLogTrimCR factory function
-RGWCoroutine* create_meta_log_trim_cr(const DoutPrefixProvider *dpp, RGWRados *store, RGWHTTPManager *http,
-                                      int num_shards, utime_t interval);
+// factory functions for meta sync coroutines needed in mdlog trimming
 
-// factory function for mdlog trim via radosgw-admin
-RGWCoroutine* create_admin_meta_log_trim_cr(const DoutPrefixProvider *dpp, RGWRados *store,
-                                            RGWHTTPManager *http,
-                                            int num_shards);
+RGWCoroutine* create_read_remote_mdlog_shard_info_cr(RGWMetaSyncEnv *env,
+                                                     const std::string& period,
+                                                     int shard_id,
+                                                     RGWMetadataLogInfo* info);
+
+RGWCoroutine* create_list_remote_mdlog_shard_cr(RGWMetaSyncEnv *env,
+                                                const std::string& period,
+                                                int shard_id,
+                                                const std::string& marker,
+                                                uint32_t max_entries,
+                                                rgw_mdlog_shard_data *result);
 
 #endif

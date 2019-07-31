@@ -38,13 +38,13 @@ function TEST_bluestore() {
 
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
-    run_osd_bluestore $dir 0 || return 1
+    run_osd $dir 0 || return 1
     osd_pid0=$(cat $dir/osd.0.pid)
-    run_osd_bluestore $dir 1 || return 1
+    run_osd $dir 1 || return 1
     osd_pid1=$(cat $dir/osd.1.pid)
-    run_osd_bluestore $dir 2 || return 1
+    run_osd $dir 2 || return 1
     osd_pid2=$(cat $dir/osd.2.pid)
-    run_osd_bluestore $dir 3 || return 1
+    run_osd $dir 3 || return 1
     osd_pid3=$(cat $dir/osd.3.pid)
 
     sleep 5
@@ -140,13 +140,13 @@ function TEST_bluestore() {
 
     ceph-bluestore-tool --path $dir/3 fsck || return 1
 
-    run_osd_bluestore $dir 0 || return 1
+    run_osd $dir 0 || return 1
     osd_pid0=$(cat $dir/osd.0.pid)
-    run_osd_bluestore $dir 1 || return 1
+    run_osd $dir 1 || return 1
     osd_pid1=$(cat $dir/osd.1.pid)
-    run_osd_bluestore $dir 2 || return 1
+    run_osd $dir 2 || return 1
     osd_pid2=$(cat $dir/osd.2.pid)
-    run_osd_bluestore $dir 3 || return 1
+    run_osd $dir 3 || return 1
     osd_pid3=$(cat $dir/osd.3.pid)
 
     wait_for_clean || return 1
@@ -218,13 +218,13 @@ function TEST_bluestore() {
 
     ceph-bluestore-tool --path $dir/3 fsck || return 1
 
-    run_osd_bluestore $dir 0 || return 1
+    run_osd $dir 0 || return 1
     osd_pid0=$(cat $dir/osd.0.pid)
-    run_osd_bluestore $dir 1 || return 1
+    run_osd $dir 1 || return 1
     osd_pid1=$(cat $dir/osd.1.pid)
-    run_osd_bluestore $dir 2 || return 1
+    run_osd $dir 2 || return 1
     osd_pid2=$(cat $dir/osd.2.pid)
-    run_osd_bluestore $dir 3 || return 1
+    run_osd $dir 3 || return 1
     osd_pid3=$(cat $dir/osd.3.pid)
 
     # write some objects
@@ -324,13 +324,13 @@ function TEST_bluestore() {
 
     ceph-bluestore-tool --path $dir/3 fsck || return 1
 
-    run_osd_bluestore $dir 0 || return 1
+    run_osd $dir 0 || return 1
     osd_pid0=$(cat $dir/osd.0.pid)
-    run_osd_bluestore $dir 1 || return 1
+    run_osd $dir 1 || return 1
     osd_pid1=$(cat $dir/osd.1.pid)
-    run_osd_bluestore $dir 2 || return 1
+    run_osd $dir 2 || return 1
     osd_pid2=$(cat $dir/osd.2.pid)
-    run_osd_bluestore $dir 3 || return 1
+    run_osd $dir 3 || return 1
     osd_pid3=$(cat $dir/osd.3.pid)
 
     # write some objects

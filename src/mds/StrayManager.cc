@@ -370,17 +370,7 @@ void StrayManager::advance_delayed()
       continue;
     }
 
-    const bool purging = eval_stray(dn);
-    if (!purging) {
-      derr << "Dentry " << *dn << " was purgeable but no longer is!" << dendl;
-      /*
-       * This can happen if a stray is purgeable, but has gained an extra
-       * reference by virtue of having its backtrace updated.
-       * FIXME perhaps we could simplify this further by
-       * avoiding writing the backtrace of purge-ready strays, so
-       * that this code could be more rigid?
-       */
-    }
+    eval_stray(dn);
   }
   logger->set(l_mdc_num_strays_delayed, num_strays_delayed);
 }
@@ -669,7 +659,7 @@ void StrayManager::reintegrate_stray(CDentry *straydn, CDentry *rdn)
   filepath dst;
   rdn->make_path(dst);
 
-  auto req = MClientRequest::create(CEPH_MDS_OP_RENAME);
+  auto req = make_message<MClientRequest>(CEPH_MDS_OP_RENAME);
   req->set_filepath(dst);
   req->set_filepath2(src);
   req->set_tid(mds->issue_tid());
@@ -698,7 +688,7 @@ void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
   dst.push_dentry(src[0]);
   dst.push_dentry(src[1]);
 
-  auto req = MClientRequest::create(CEPH_MDS_OP_RENAME);
+  auto req = make_message<MClientRequest>(CEPH_MDS_OP_RENAME);
   req->set_filepath(dst);
   req->set_filepath2(src);
   req->set_tid(mds->issue_tid());

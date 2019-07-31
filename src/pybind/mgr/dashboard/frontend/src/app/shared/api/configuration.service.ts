@@ -18,11 +18,19 @@ export class ConfigurationService {
     return this.http.get(`api/cluster_conf/${configOption}`);
   }
 
+  filter(configOptionNames: Array<string>) {
+    return this.http.get(`api/cluster_conf/filter?names=${configOptionNames.join(',')}`);
+  }
+
   create(configOption: ConfigFormCreateRequestModel) {
     return this.http.post('api/cluster_conf/', configOption);
   }
 
+  delete(configOption: string, section: string) {
+    return this.http.delete(`api/cluster_conf/${configOption}?section=${section}`);
+  }
+
   bulkCreate(configOptions: Object) {
-    return this.http.put('api/cluster_conf', configOptions);
+    return this.http.put('api/cluster_conf/', configOptions);
   }
 }

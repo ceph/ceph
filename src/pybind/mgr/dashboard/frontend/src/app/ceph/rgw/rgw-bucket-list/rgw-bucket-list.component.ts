@@ -6,18 +6,24 @@ import { forkJoin as observableForkJoin, Observable, Subscriber } from 'rxjs';
 
 import { RgwBucketService } from '../../../shared/api/rgw-bucket.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { Permission } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { URLBuilderService } from '../../../shared/services/url-builder.service';
+
+const BASE_URL = 'rgw/bucket';
 
 @Component({
   selector: 'cd-rgw-bucket-list',
   templateUrl: './rgw-bucket-list.component.html',
-  styleUrls: ['./rgw-bucket-list.component.scss']
+  styleUrls: ['./rgw-bucket-list.component.scss'],
+  providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
 export class RgwBucketListComponent {
   @ViewChild(TableComponent)
@@ -33,7 +39,9 @@ export class RgwBucketListComponent {
     private authStorageService: AuthStorageService,
     private rgwBucketService: RgwBucketService,
     private bsModalService: BsModalService,
-    private i18n: I18n
+    private i18n: I18n,
+    private urlBuilder: URLBuilderService,
+    public actionLabels: ActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().rgw;
     this.columns = [
@@ -52,21 +60,21 @@ export class RgwBucketListComponent {
       this.selection.first() && `${encodeURIComponent(this.selection.first().bid)}`;
     const addAction: CdTableAction = {
       permission: 'create',
-      icon: 'fa-plus',
-      routerLink: () => '/rgw/bucket/add',
-      name: this.i18n('Add')
+      icon: Icons.add,
+      routerLink: () => this.urlBuilder.getCreate(),
+      name: this.actionLabels.CREATE
     };
     const editAction: CdTableAction = {
       permission: 'update',
-      icon: 'fa-pencil',
-      routerLink: () => `/rgw/bucket/edit/${getBucketUri()}`,
-      name: this.i18n('Edit')
+      icon: Icons.edit,
+      routerLink: () => this.urlBuilder.getEdit(getBucketUri()),
+      name: this.actionLabels.EDIT
     };
     const deleteAction: CdTableAction = {
       permission: 'delete',
-      icon: 'fa-times',
+      icon: Icons.destroy,
       click: () => this.deleteAction(),
-      name: this.i18n('Delete')
+      name: this.actionLabels.DELETE
     };
     this.tableActions = [addAction, editAction, deleteAction];
   }

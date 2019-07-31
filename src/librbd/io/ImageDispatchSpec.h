@@ -7,6 +7,7 @@
 #include "include/int_types.h"
 #include "include/buffer.h"
 #include "common/zipkin_trace.h"
+#include "librbd/io/AioCompletion.h"
 #include "librbd/io/Types.h"
 #include "librbd/io/ReadResult.h"
 #include <boost/variant/variant.hpp>
@@ -16,8 +17,6 @@ namespace librbd {
 class ImageCtx;
 
 namespace io {
-
-class AioCompletion;
 
 template <typename ImageCtxT = ImageCtx>
 class ImageDispatchSpec {
@@ -30,10 +29,10 @@ public:
   };
 
   struct Discard {
-    bool skip_partial_discard;
+    uint32_t discard_granularity_bytes;
 
-    Discard(bool skip_partial_discard)
-      : skip_partial_discard(skip_partial_discard) {
+    Discard(uint32_t discard_granularity_bytes)
+      : discard_granularity_bytes(discard_granularity_bytes) {
     }
   };
 
@@ -82,10 +81,10 @@ public:
 
   static ImageDispatchSpec* create_discard_request(
       ImageCtxT &image_ctx, AioCompletion *aio_comp, uint64_t off, uint64_t len,
-      bool skip_partial_discard, const ZTracer::Trace &parent_trace) {
+      uint32_t discard_granularity_bytes, const ZTracer::Trace &parent_trace) {
     return new ImageDispatchSpec(image_ctx, aio_comp, {{off, len}},
-                                 Discard{skip_partial_discard}, 0,
-                                 parent_trace);
+                                 Discard{discard_granularity_bytes},
+                                 0, parent_trace);
   }
 
   static ImageDispatchSpec* create_write_request(
@@ -122,6 +121,10 @@ public:
                                  0, parent_trace);
   }
 
+  ~ImageDispatchSpec() {
+    m_aio_comp->put();
+  }
+
   void send();
   void fail(int r);
 
@@ -129,7 +132,7 @@ public:
 
   void start_op();
 
-  uint64_t tokens_requested(uint64_t flag);
+  bool tokens_requested(uint64_t flag, uint64_t *tokens);
 
   bool was_throttled(uint64_t flag) {
     return m_throttled_flag & flag;
@@ -140,7 +143,7 @@ public:
   }
 
   bool were_all_throttled() {
-    return m_throttled_flag & RBD_QOS_MASK;
+    return (m_throttled_flag & RBD_QOS_MASK) == RBD_QOS_MASK;
   }
 
 private:
@@ -161,6 +164,7 @@ private:
     : m_image_ctx(image_ctx), m_aio_comp(aio_comp),
       m_image_extents(std::move(image_extents)), m_request(std::move(request)),
       m_op_flags(op_flags), m_parent_trace(parent_trace) {
+    m_aio_comp->get();
   }
 
   ImageCtxT& m_image_ctx;

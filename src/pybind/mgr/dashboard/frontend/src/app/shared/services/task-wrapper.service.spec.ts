@@ -2,7 +2,7 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { inject, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastModule } from 'ng2-toastr';
+import { ToastrModule } from 'ngx-toastr';
 import { Observable } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
@@ -17,7 +17,7 @@ describe('TaskWrapperService', () => {
   let service: TaskWrapperService;
 
   configureTestBed({
-    imports: [HttpClientTestingModule, ToastModule.forRoot(), SharedModule, RouterTestingModule],
+    imports: [HttpClientTestingModule, ToastrModule.forRoot(), SharedModule, RouterTestingModule],
     providers: [TaskWrapperService, i18nProviders]
   });
 
@@ -76,7 +76,7 @@ describe('TaskWrapperService', () => {
 
     it('should call notifyTask if asynchronous task would have been finished', () => {
       const taskManager = TestBed.get(TaskManagerService);
-      spyOn(taskManager, 'subscribe').and.callFake((name, metadata, onTaskFinished) => {
+      spyOn(taskManager, 'subscribe').and.callFake((_name, _metadata, onTaskFinished) => {
         onTaskFinished();
       });
       callWrapTaskAroundCall(202, 'async').subscribe(null, null, () => (passed = true));

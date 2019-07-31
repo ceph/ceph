@@ -45,8 +45,8 @@ public:
     sync_reqid(0), synced(false) {}
 
   void resend_queries() override;
-  void handle_query_result(const MMDSTableRequest::const_ref &m) override;
-  void handle_notify_prep(const MMDSTableRequest::const_ref &m) override;
+  void handle_query_result(const cref_t<MMDSTableRequest> &m) override;
+  void handle_notify_prep(const cref_t<MMDSTableRequest> &m) override;
   void notify_commit(version_t tid) override;
 
   void prepare_create(inodeno_t dirino, std::string_view name, utime_t stamp,

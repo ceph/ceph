@@ -1,0 +1,96 @@
+<div class="modal-header">
+  <h4 class="modal-title pull-left"
+      i18n>Matcher</h4>
+  <button type="button"
+          class="close pull-right"
+          aria-label="Close"
+          (click)="bsModalRef.hide()">
+    <span aria-hidden="true">&times;</span>
+  </button>
+</div>
+
+<form class="form"
+      #formDir="ngForm"
+      [formGroup]="form"
+      novalidate>
+  <div class="modal-body">
+    <!-- Name -->
+    <div class="form-group row">
+      <label class="col-form-label col-sm-3"
+             for="name">
+        <ng-container i18n>Name</ng-container>
+        <span class="required"></span>
+      </label>
+      <div class="col-sm-9">
+        <select class="form-control"
+                id="name"
+                formControlName="name"
+                name="name">
+          <option [ngValue]="null"
+                  i18n>-- Select an attribute to match against --</option>
+          <option *ngFor="let attribute of nameAttributes"
+                  [value]="attribute">
+            {{ attribute }}
+          </option>
+        </select>
+        <span class="help-block"
+              *ngIf="form.showError('name', formDir, 'required')"
+              i18n>This field is required!</span>
+      </div>
+    </div>
+
+    <!-- Value -->
+    <div class="form-group row">
+      <label class="col-form-label col-sm-3"
+             for="value">
+        <ng-container i18n>Value</ng-container>
+        <span class="required"></span>
+      </label>
+      <div class="col-sm-9">
+        <input id="value"
+               class="form-control"
+               type="text"
+               [typeahead]="possibleValues"
+               [typeaheadMinLength]="0"
+               formControlName="value">
+        <span *ngIf="form.showError('value', formDir, 'required')"
+              class="help-block"
+              i18n>This field is required!</span>
+      </div>
+      <div *ngIf="form.getValue('value') && !form.getValue('isRegex') && matcherMatch"
+           class="offset-sm-3 col-sm-9 {{matcherMatch.cssClass}}"
+           id="match-state">
+        <span class="text-muted {{matcherMatch.cssClass}}">
+          {{matcherMatch.status}}
+        </span>
+      </div>
+    </div>
+
+    <!-- isRegex -->
+    <div class="form-group row">
+      <div class="offset-sm-3 col-sm-9">
+        <div class="custom-control custom-checkbox">
+          <input type="checkbox"
+                 class="custom-control-input"
+                 formControlName="isRegex"
+                 name="is-regex"
+                 id="is-regex">
+          <label for="is-regex"
+                 class="custom-control-label"
+                 i18n>Use regular expression</label>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal-footer">
+    <cd-submit-button (submitAction)="onSubmit()"
+                      [form]="form">
+      <ng-container i18n>{editMode, select, 1 {Update} other {Add}}</ng-container>
+    </cd-submit-button>
+    <cd-back-button [back]="bsModalRef.hide"
+                    name="Close"
+                    i18n-name>
+    </cd-back-button>
+  </div>
+</form>

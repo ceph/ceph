@@ -3,11 +3,13 @@ import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
+import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { ComponentsModule } from '../../components/components.module';
 import { CellTemplate } from '../../enum/cell-template.enum';
 import { CdTableColumn } from '../../models/cd-table-column';
+import { CdDatePipe } from '../../pipes/cd-date.pipe';
 import { TableComponent } from '../table/table.component';
 import { TableKeyValueComponent } from './table-key-value.component';
 
@@ -17,7 +19,13 @@ describe('TableKeyValueComponent', () => {
 
   configureTestBed({
     declarations: [TableComponent, TableKeyValueComponent],
-    imports: [FormsModule, NgxDatatableModule, ComponentsModule, RouterTestingModule]
+    imports: [
+      FormsModule,
+      NgxDatatableModule,
+      ComponentsModule,
+      RouterTestingModule,
+      BsDropdownModule.forRoot()
+    ]
   });
 
   beforeEach(() => {
@@ -180,6 +188,34 @@ describe('TableKeyValueComponent', () => {
       expect(component._convertValue(v({ sth: 'something' }))).toBe(undefined);
       component.renderObjects = true;
       expect(component._convertValue(v({ sth: 'something' }))).toEqual(v({ sth: 'something' }));
+    });
+
+    describe('automatically pipe utc dates through cdDate', () => {
+      let datePipe: CdDatePipe;
+
+      beforeEach(() => {
+        datePipe = TestBed.get(CdDatePipe);
+        spyOn(datePipe, 'transform').and.callThrough();
+      });
+
+      const expectTimeConversion = (date: string) => {
+        component.data = {
+          3: 'some time',
+          someKey: date
+        };
+        component.ngOnInit();
+        expect(component.tableData.length).toBe(2);
+        expect(datePipe.transform).toHaveBeenCalledWith(date);
+        expect(component.tableData[1].key).not.toBe(date);
+      };
+
+      it('converts some date', () => {
+        expectTimeConversion('2019-04-15 12:26:52.305285');
+      });
+
+      it('converts utc date', () => {
+        expectTimeConversion('2019-04-16T12:35:46.646300974Z');
+      });
     });
   });
 

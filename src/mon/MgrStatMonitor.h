@@ -104,6 +104,4 @@ public:
 		       bool verbose) const {
     digest.dump_pool_stats_full(osdm, ss, f, verbose);
   }
-
-  friend class C_Updated;
 };

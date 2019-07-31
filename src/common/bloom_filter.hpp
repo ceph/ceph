@@ -519,9 +519,9 @@ protected:
   }
 
 public:
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& bl);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list& bl) const;
+  void decode(ceph::buffer::list::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<bloom_filter*>& ls);
 };
 WRITE_CLASS_ENCODER(bloom_filter)
@@ -616,9 +616,9 @@ private:
 
   std::vector<std::size_t> size_list;
 public:
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& bl);
-  void dump(Formatter *f) const;
+  void encode(ceph::bufferlist& bl) const;
+  void decode(ceph::bufferlist::const_iterator& bl);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<compressible_bloom_filter*>& ls);
 };
 WRITE_CLASS_ENCODER(compressible_bloom_filter)

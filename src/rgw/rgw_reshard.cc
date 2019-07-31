@@ -278,7 +278,7 @@ int RGWBucketReshard::clear_index_shard_reshard_status(RGWRados* store,
     int ret = set_resharding_status(store, bucket_info,
 				    bucket_info.bucket.bucket_id,
 				    (num_shards < 1 ? 1 : num_shards),
-				    CLS_RGW_RESHARD_NONE);
+				    CLS_RGW_RESHARD_NOT_RESHARDING);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "RGWBucketReshard::" << __func__ <<
 	" ERROR: error clearing reshard status from index shard " <<
@@ -382,7 +382,7 @@ public:
 	  " clear_index_shard_status returned " << ret << dendl;
       }
       bucket_info.new_bucket_instance_id.clear();
-      set_status(CLS_RGW_RESHARD_NONE); // clears new_bucket_instance as well
+      set_status(CLS_RGW_RESHARD_NOT_RESHARDING); // clears new_bucket_instance as well
     }
   }
 
@@ -677,8 +677,6 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
                               bool verbose, ostream *out, Formatter *formatter,
 			      RGWReshard* reshard_log)
 {
-  Clock::time_point now;
-
   int ret = reshard_lock.lock();
   if (ret < 0) {
     return ret;
@@ -1009,7 +1007,7 @@ int RGWReshard::process_single_logshard(int logshard_num)
 	map<string, bufferlist> attrs;
 
 	ret = store->get_bucket_info(obj_ctx, entry.tenant, entry.bucket_name,
-				     bucket_info, nullptr, &attrs);
+				     bucket_info, nullptr, null_yield, &attrs);
 	if (ret < 0) {
 	  ldout(cct, 0) <<  __func__ << ": Error in get_bucket_info: " <<
 	    cpp_strerror(-ret) << dendl;
@@ -1079,7 +1077,7 @@ int RGWReshard::process_all_logshards()
     string logshard;
     get_logshard_oid(i, &logshard);
 
-    ldout(store->ctx(), 20) << "proceeding logshard = " << logshard << dendl;
+    ldout(store->ctx(), 20) << "processing logshard = " << logshard << dendl;
 
     ret = process_single_logshard(i);
     if (ret <0) {

@@ -4,21 +4,19 @@ from __future__ import absolute_import
 import unittest
 from mock import Mock, patch
 
+from . import KVStoreMockMixin
 from ..plugins.feature_toggles import FeatureToggles, Features
 
 
-class SettingsTest(unittest.TestCase):
-    CONFIG = {
-        'url_prefix': '',
-    }
-
+class SettingsTest(unittest.TestCase, KVStoreMockMixin):
     @classmethod
     def setUpClass(cls):
+        cls.mock_kv_store()
+        cls.CONFIG_KEY_DICT['url_prefix'] = ''
+
         # Mock MODULE_OPTIONS
         from .. import mgr
         cls.mgr = mgr
-        cls.mgr.get_module_option.side_effect = cls.CONFIG.__getitem__
-        cls. mgr.set_module_option.side_effect = cls.CONFIG.__setitem__
 
         # Populate real endpoint map
         from ..controllers import load_controllers
@@ -26,7 +24,7 @@ class SettingsTest(unittest.TestCase):
 
         # Initialize FeatureToggles plugin
         cls.plugin = FeatureToggles()
-        cls.CONFIG.update(
+        cls.CONFIG_KEY_DICT.update(
             {k['name']: k['default'] for k in cls.plugin.get_options()})
         cls.plugin.setup()
 

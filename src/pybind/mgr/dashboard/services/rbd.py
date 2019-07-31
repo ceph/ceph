@@ -1,8 +1,62 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import six
+
 import rbd
+
 from .. import mgr
+
+
+RBD_FEATURES_NAME_MAPPING = {
+    rbd.RBD_FEATURE_LAYERING: "layering",
+    rbd.RBD_FEATURE_STRIPINGV2: "striping",
+    rbd.RBD_FEATURE_EXCLUSIVE_LOCK: "exclusive-lock",
+    rbd.RBD_FEATURE_OBJECT_MAP: "object-map",
+    rbd.RBD_FEATURE_FAST_DIFF: "fast-diff",
+    rbd.RBD_FEATURE_DEEP_FLATTEN: "deep-flatten",
+    rbd.RBD_FEATURE_JOURNALING: "journaling",
+    rbd.RBD_FEATURE_DATA_POOL: "data-pool",
+    rbd.RBD_FEATURE_OPERATIONS: "operations",
+}
+
+
+def format_bitmask(features):
+    """
+    Formats the bitmask:
+
+    >>> format_bitmask(45)
+    ['deep-flatten', 'exclusive-lock', 'layering', 'object-map']
+    """
+    names = [val for key, val in RBD_FEATURES_NAME_MAPPING.items()
+             if key & features == key]
+    return sorted(names)
+
+
+def format_features(features):
+    """
+    Converts the features list to bitmask:
+
+    >>> format_features(['deep-flatten', 'exclusive-lock', 'layering', 'object-map'])
+    45
+
+    >>> format_features(None) is None
+    True
+
+    >>> format_features('deep-flatten, exclusive-lock')
+    32
+    """
+    if isinstance(features, six.string_types):
+        features = features.split(',')
+
+    if not isinstance(features, list):
+        return None
+
+    res = 0
+    for key, value in RBD_FEATURES_NAME_MAPPING.items():
+        if value in features:
+            res = key | res
+    return res
 
 
 class RbdConfiguration(object):

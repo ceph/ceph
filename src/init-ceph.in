@@ -141,7 +141,7 @@ stop_daemon() {
 	    cmd=\"kill $signal \$pid\"
 	    printf \"\$cmd...\"
 	    \$cmd
-	    sleep 1
+	    sleep 2
 	    continue
 	done
     fi"

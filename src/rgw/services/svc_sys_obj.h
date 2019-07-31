@@ -1,6 +1,7 @@
-#ifndef CEPH_RGW_SERVICES_SYS_OBJ_H
-#define CEPH_RGW_SERVICES_SYS_OBJ_H
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
+#pragma once
 
 #include "rgw/rgw_service.h"
 
@@ -93,12 +94,12 @@ public:
 
       ROp(Obj& _source) : source(_source) {}
 
-      int stat();
-      int read(int64_t ofs, int64_t end, bufferlist *pbl);
-      int read(bufferlist *pbl) {
-        return read(0, -1, pbl);
+      int stat(optional_yield y);
+      int read(int64_t ofs, int64_t end, bufferlist *pbl, optional_yield y);
+      int read(bufferlist *pbl, optional_yield y) {
+        return read(0, -1, pbl, y);
       }
-      int get_attr(const char *name, bufferlist *dest);
+      int get_attr(const char *name, bufferlist *dest, optional_yield y);
     };
 
     struct WOp {
@@ -142,12 +143,13 @@ public:
 
       WOp(Obj& _source) : source(_source) {}
 
-      int remove();
-      int write(bufferlist& bl);
+      int remove(optional_yield y);
+      int write(bufferlist& bl, optional_yield y);
 
-      int write_data(bufferlist& bl); /* write data only */
-      int write_attrs(); /* write attrs only */
-      int write_attr(const char *name, bufferlist& bl); /* write attrs only */
+      int write_data(bufferlist& bl, optional_yield y); /* write data only */
+      int write_attrs(optional_yield y); /* write attrs only */
+      int write_attr(const char *name, bufferlist& bl,
+                     optional_yield y); /* write attrs only */
     };
 
     struct OmapOp {
@@ -162,14 +164,13 @@ public:
 
       OmapOp(Obj& _source) : source(_source) {}
 
-      int get_all(std::map<string, bufferlist> *m);
-      int get_vals(const string& marker,
-                        uint64_t count,
-                        std::map<string, bufferlist> *m,
-                        bool *pmore);
-      int set(const std::string& key, bufferlist& bl);
-      int set(const map<std::string, bufferlist>& m);
-      int del(const std::string& key);
+      int get_all(std::map<string, bufferlist> *m, optional_yield y);
+      int get_vals(const string& marker, uint64_t count,
+                   std::map<string, bufferlist> *m,
+                   bool *pmore, optional_yield y);
+      int set(const std::string& key, bufferlist& bl, optional_yield y);
+      int set(const map<std::string, bufferlist>& m, optional_yield y);
+      int del(const std::string& key, optional_yield y);
     };
 
     struct WNOp {
@@ -177,9 +178,8 @@ public:
 
       WNOp(Obj& _source) : source(_source) {}
 
-      int notify(bufferlist& bl,
-		 uint64_t timeout_ms,
-		 bufferlist *pbl);
+      int notify(bufferlist& bl, uint64_t timeout_ms, bufferlist *pbl,
+                 optional_yield y);
     };
     ROp rop() {
       return ROp(*this);
@@ -270,6 +270,3 @@ public:
     return sysobj_svc->get_obj(*this, obj);
   }
 };
-
-#endif
-

@@ -173,8 +173,12 @@ static int get_obj_vals(cls_method_context_t hctx, const string& start, const st
   auto upper = std::lower_bound(lower, pkeys->end(), new_start, comp);
   pkeys->erase(lower, upper);
 
-  if (num_entries == (int)pkeys->size())
+  if (num_entries == (int)pkeys->size() || !(*pmore))
     return 0;
+
+  if (pkeys->size() && new_start < pkeys->rbegin()->first) {
+    new_start = pkeys->rbegin()->first;
+  }
 
   map<string, bufferlist> new_keys;
 
@@ -214,11 +218,13 @@ static void decreasing_str(uint64_t num, string *str)
 }
 
 /*
- * we now hold two different indexes for objects. The first one holds the list of objects in the
- * order that we want them to be listed. The second one only holds the objects instances (for
- * versioned objects), and they're not arranged in any particular order.
- * When listing objects we'll use the first index, when doing operations on the objects themselves
- * we'll use the second index. Note that regular objects only map to the first index anyway
+ * We hold two different indexes for objects. The first one holds the
+ * list of objects in the order that we want them to be listed. The
+ * second one only holds the objects instances (for versioned
+ * objects), and they're not arranged in any particular order. When
+ * listing objects we'll use the first index, when doing operations on
+ * the objects themselves we'll use the second index. Note that
+ * regular objects only map to the first index anyway
  */
 
 static void get_list_index_key(rgw_bucket_dir_entry& entry, string *index_key)
@@ -756,7 +762,8 @@ static void log_entry(const char *func, const char *str, rgw_bucket_olh_entry *e
 }
 
 template <class T>
-static int read_index_entry(cls_method_context_t hctx, string& name, T *entry)
+static int read_omap_entry(cls_method_context_t hctx, const std::string& name,
+                           T* entry)
 {
   bufferlist current_entry;
   int rc = cls_cxx_map_get_val(hctx, name, &current_entry);
@@ -768,8 +775,18 @@ static int read_index_entry(cls_method_context_t hctx, string& name, T *entry)
   try {
     decode(*entry, cur_iter);
   } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: read_index_entry(): failed to decode entry\n");
+    CLS_LOG(1, "ERROR: %s(): failed to decode entry\n", __func__);
     return -EIO;
+  }
+  return 0;
+}
+
+template <class T>
+static int read_index_entry(cls_method_context_t hctx, string& name, T* entry)
+{
+  int ret = read_omap_entry(hctx, name, entry);
+  if (ret < 0) {
+    return ret;
   }
 
   log_entry(__func__, "existing entry", entry);
@@ -1374,17 +1391,20 @@ static int convert_plain_entry_to_versioned(cls_method_context_t hctx, cls_rgw_o
 }
 
 /*
- * link an object version to an olh, update the relevant index entries. It will also handle the
- * deletion marker case. We have a few entries that we need to take care of. For object 'foo',
+ * Link an object version to an olh, update the relevant index
+ * entries. It will also handle the deletion marker case. We have a
+ * few entries that we need to take care of. For object 'foo',
  * instance BAR, we'd update the following (not actual encoding):
+ *
  *  - olh data: [BI_BUCKET_OLH_DATA_INDEX]foo
  *  - object instance data: [BI_BUCKET_OBJ_INSTANCE_INDEX]foo,BAR
  *  - object instance list entry: foo,123,BAR
  *
- *  The instance list entry needs to be ordered by newer to older, so we generate an appropriate
- *  number string that follows the name.
- *  The top instance for each object is marked appropriately.
- *  We generate instance entry for deletion markers here, as they are not created prior.
+ *  The instance list entry needs to be ordered by newer to older, so
+ *  we generate an appropriate number string that follows the name.
+ *  The top instance for each object is marked appropriately. We
+ *  generate instance entry for deletion markers here, as they are not
+ *  created prior.
  */
 static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
@@ -1422,20 +1442,25 @@ static int rgw_bucket_link_olh(cls_method_context_t hctx, bufferlist *in, buffer
       unmod.tv_nsec = 0;
     }
     if (mtime >= unmod) {
-      return 0; /* no need to set error, we just return 0 and avoid writing to the bi log */
+      return 0; /* no need tof set error, we just return 0 and avoid
+		 * writing to the bi log */
     }
   }
 
   bool removing;
 
   /*
-   * Special handling for null instance object / delete-marker. For these objects we're going to
-   * have separate instances for a data object vs. delete-marker to avoid collisions. We now check
-   * if we got to overwrite a previous entry, and in that case we'll remove its list entry.
+   * Special handling for null instance object / delete-marker. For
+   * these objects we're going to have separate instances for a data
+   * object vs. delete-marker to avoid collisions. We now check if we
+   * got to overwrite a previous entry, and in that case we'll remove
+   * its list entry.
    */
   if (op.key.instance.empty()) {
     BIVerObjEntry other_obj(hctx, op.key);
-    ret = other_obj.init(!op.delete_marker); /* try reading the other null versioned entry */
+    ret = other_obj.init(!op.delete_marker); /* try reading the other
+					      * null versioned
+					      * entry */
     existed = (ret >= 0 && !other_obj.is_delete_marker());
     if (ret >= 0 && other_obj.is_delete_marker() != op.delete_marker) {
       ret = other_obj.unlink_list_entry();
@@ -1676,7 +1701,8 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
   if (!obj.is_delete_marker()) {
     olh.update_log(CLS_RGW_OLH_OP_REMOVE_INSTANCE, op.op_tag, op.key, false);
   } else {
-    /* this is a delete marker, it's our responsibility to remove its instance entry */
+    /* this is a delete marker, it's our responsibility to remove its
+     * instance entry */
     ret = obj.unlink();
     if (ret < 0) {
       return ret;
@@ -1704,7 +1730,8 @@ static int rgw_bucket_unlink_instance(cls_method_context_t hctx, bufferlist *in,
     rgw_bucket_entry_ver ver;
     ver.epoch = (op.olh_epoch ? op.olh_epoch : olh.get_epoch());
 
-    real_time mtime = obj.mtime(); /* mtime has no real meaning in instance removal context */
+    real_time mtime = obj.mtime(); /* mtime has no real meaning in
+				    * instance removal context */
     ret = log_index_operation(hctx, op.key, CLS_RGW_OP_UNLINK_INSTANCE, op.op_tag,
                               mtime, ver,
                               CLS_RGW_STATE_COMPLETE, header.ver, header.max_marker,
@@ -3146,10 +3173,27 @@ int rgw_usage_log_clear(cls_method_context_t hctx, bufferlist *in, bufferlist *o
 
   return ret;
 }
+
 /*
- * We hold the garbage collection chain data under two different indexes: the first 'name' index
- * keeps them under a unique tag that represents the chains, and a second 'time' index keeps
- * them by their expiration timestamp
+ * We hold the garbage collection chain data under two different
+ * indexes: the first 'name' index keeps them under a unique tag that
+ * represents the chains, and a second 'time' index keeps them by
+ * their expiration timestamp. Each is prefixed differently (see
+ * gc_index_prefixes below).
+ *
+ * Since key-value data is listed in lexical order by keys, generally
+ * the name entries are retrieved first and then the time entries.
+ * When listing the entries via `gc_iterate_entries` one parameter is
+ * a marker, and if we were to pass "1_" (i.e.,
+ * gc_index_prefixes[GC_OBJ_TIME_INDEX]), the listing would skip over
+ * the 'name' entries and begin with the 'time' entries.
+ *
+ * Furthermore, the times are converted to strings such that lexical
+ * order correlates with chronological order, so the entries are
+ * returned chronologically from the earliest expiring to the latest
+ * expiring. This allows for starting at "1_" and to keep retrieving
+ * chunks of entries, and as long as they are prior to the current
+ * time, they're expired and processing can continue.
  */
 #define GC_OBJ_NAME_INDEX 0
 #define GC_OBJ_TIME_INDEX 1
@@ -3168,17 +3212,9 @@ static int gc_omap_get(cls_method_context_t hctx, int type, const string& key, c
   string index;
   prepend_index_prefix(key, type, &index);
 
-  bufferlist bl;
-  int ret = cls_cxx_map_get_val(hctx, index, &bl);
+  int ret = read_omap_entry(hctx, index, info);
   if (ret < 0)
     return ret;
-
-  try {
-    auto iter = bl.cbegin();
-    decode(*info, iter);
-  } catch (buffer::error& err) {
-    CLS_LOG(0, "ERROR: rgw_cls_gc_omap_get(): failed to decode index=%s\n", index.c_str());
-  }
 
   return 0;
 }
@@ -3231,23 +3267,36 @@ static int gc_update_entry(cls_method_context_t hctx, uint32_t expiration_secs,
       return ret;
     }
   }
+
+  // calculate time and time key
   info.time = ceph::real_clock::now();
   info.time += make_timespan(expiration_secs);
+  string time_key;
+  get_time_key(info.time, &time_key);
+
+  if (info.chain.objs.empty()) {
+    CLS_LOG(0,
+	    "WARNING: %s setting GC log entry with zero-length chain, "
+	    "tag='%s', timekey='%s'",
+	    __func__, info.tag.c_str(), time_key.c_str());
+  }
+
   ret = gc_omap_set(hctx, GC_OBJ_NAME_INDEX, info.tag, &info);
   if (ret < 0)
     return ret;
 
-  string key;
-  get_time_key(info.time, &key);
-  ret = gc_omap_set(hctx, GC_OBJ_TIME_INDEX, key, &info);
+  ret = gc_omap_set(hctx, GC_OBJ_TIME_INDEX, time_key, &info);
   if (ret < 0)
     goto done_err;
 
   return 0;
 
 done_err:
-  CLS_LOG(0, "ERROR: gc_set_entry error info.tag=%s, ret=%d\n", info.tag.c_str(), ret);
+
+  CLS_LOG(0, "ERROR: gc_set_entry error info.tag=%s, ret=%d\n",
+	  info.tag.c_str(), ret);
   gc_omap_remove(hctx, GC_OBJ_NAME_INDEX, info.tag);
+
   return ret;
 }
 
@@ -3304,16 +3353,22 @@ static int rgw_cls_gc_defer_entry(cls_method_context_t hctx, bufferlist *in, buf
   return gc_defer_entry(hctx, op.tag, op.expiration_secs);
 }
 
-static int gc_iterate_entries(cls_method_context_t hctx, const string& marker, bool expired_only,
-                              string& key_iter, uint32_t max_entries, bool *truncated,
-                              int (*cb)(cls_method_context_t, const string&, cls_rgw_gc_obj_info&, void *),
+static int gc_iterate_entries(cls_method_context_t hctx,
+			      const string& marker,
+			      bool expired_only,
+                              string& out_marker,
+			      uint32_t max_entries,
+			      bool *truncated,
+                              int (*cb)(cls_method_context_t,
+					const string&,
+					cls_rgw_gc_obj_info&,
+					void *),
                               void *param)
 {
-  CLS_LOG(10, "gc_iterate_range");
+  CLS_LOG(10, "gc_iterate_entries");
 
   map<string, bufferlist> keys;
   string filter_prefix, end_key;
-  uint32_t i = 0;
   string key;
 
   if (truncated)
@@ -3337,18 +3392,20 @@ static int gc_iterate_entries(cls_method_context_t hctx, const string& marker, b
 
   string filter;
 
-  int ret = cls_cxx_map_get_vals(hctx, start_key, filter, max_entries, &keys, truncated);
+  int ret = cls_cxx_map_get_vals(hctx, start_key, filter, max_entries,
+				 &keys, truncated);
   if (ret < 0)
     return ret;
 
-
   map<string, bufferlist>::iterator iter = keys.begin();
-  if (iter == keys.end())
+  if (iter == keys.end()) {
+    // if keys empty must not come back as truncated
+    ceph_assert(!truncated || !(*truncated));
     return 0;
+  }
 
-  uint32_t num_keys = keys.size();
-
-  for (; iter != keys.end(); ++iter, ++i) {
+  const string* last_key = nullptr; // last key processed, for end-marker
+  for (; iter != keys.end(); ++iter) {
     const string& key = iter->first;
     cls_rgw_gc_obj_info e;
 
@@ -3360,8 +3417,11 @@ static int gc_iterate_entries(cls_method_context_t hctx, const string& marker, b
       return 0;
     }
 
-    if (!key_in_index(key, GC_OBJ_TIME_INDEX))
+    if (!key_in_index(key, GC_OBJ_TIME_INDEX)) {
+      if (truncated)
+	*truncated = false;
       return 0;
+    }
 
     ret = gc_record_decode(iter->second, e);
     if (ret < 0)
@@ -3370,10 +3430,14 @@ static int gc_iterate_entries(cls_method_context_t hctx, const string& marker, b
     ret = cb(hctx, key, e, param);
     if (ret < 0)
       return ret;
+    last_key = &(iter->first); // update when callback successful
+  }
 
-    if (i == num_keys - 1) {
-      key_iter = key;
-    }
+  // set the out marker if either caller does not capture truncated or
+  // if they do capture and we are truncated
+  if (!truncated || *truncated) {
+    assert(last_key);
+    out_marker = *last_key;
   }
 
   return 0;
@@ -3465,6 +3529,29 @@ static int rgw_cls_gc_remove(cls_method_context_t hctx, bufferlist *in, bufferli
 
   return gc_remove(hctx, op.tags);
 }
+
+static int rgw_cls_lc_get_entry(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+{
+  auto in_iter = in->cbegin();
+
+  cls_rgw_lc_get_entry_op op;
+  try {
+    decode(op, in_iter);
+  } catch (buffer::error& err) {
+    CLS_LOG(1, "ERROR: rgw_cls_lc_set_entry(): failed to decode entry\n");
+    return -EINVAL;
+  }
+
+  rgw_lc_entry_t lc_entry;
+  int ret = read_omap_entry(hctx, op.marker, &lc_entry);
+  if (ret < 0)
+    return ret;
+
+  cls_rgw_lc_get_entry_ret op_ret(std::move(lc_entry));
+  encode(op_ret, *out);
+  return 0;
+}
+
 
 static int rgw_cls_lc_set_entry(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
@@ -3677,22 +3764,6 @@ static int rgw_reshard_list(cls_method_context_t hctx, bufferlist *in, bufferlis
   return 0;
 }
 
-static int get_reshard_entry(cls_method_context_t hctx, const string& key, cls_rgw_reshard_entry *entry)
-{
-  bufferlist bl;
-  int ret = cls_cxx_map_get_val(hctx, key, &bl);
-  if (ret < 0)
-    return ret;
-  auto iter = bl.cbegin();
-  try {
-    decode(*entry, iter);
-  } catch (buffer::error& err) {
-    CLS_LOG(0, "ERROR: %s : failed to decode entry %s\n", __func__, err.what());
-    return -EIO;
-  }
-  return 0;
-}
-
 static int rgw_reshard_get(cls_method_context_t hctx, bufferlist *in,  bufferlist *out)
 {
   auto in_iter = in->cbegin();
@@ -3708,7 +3779,7 @@ static int rgw_reshard_get(cls_method_context_t hctx, bufferlist *in,  bufferlis
   string key;
   cls_rgw_reshard_entry  entry;
   op.entry.get_key(&key);
-  int ret = get_reshard_entry(hctx, key, &entry);
+  int ret = read_omap_entry(hctx, key, &entry);
   if (ret < 0) {
     return ret;
   }
@@ -3734,7 +3805,7 @@ static int rgw_reshard_remove(cls_method_context_t hctx, bufferlist *in, bufferl
   string key;
   cls_rgw_reshard_entry  entry;
   cls_rgw_reshard_entry::generate_key(op.tenant, op.bucket_name, &key);
-  int ret = get_reshard_entry(hctx, key, &entry);
+  int ret = read_omap_entry(hctx, key, &entry);
   if (ret < 0) {
     return ret;
   }
@@ -3889,6 +3960,7 @@ CLS_INIT(rgw)
   cls_method_handle_t h_rgw_gc_set_entry;
   cls_method_handle_t h_rgw_gc_list;
   cls_method_handle_t h_rgw_gc_remove;
+  cls_method_handle_t h_rgw_lc_get_entry;
   cls_method_handle_t h_rgw_lc_set_entry;
   cls_method_handle_t h_rgw_lc_rm_entry;
   cls_method_handle_t h_rgw_lc_get_next_entry;
@@ -3951,6 +4023,7 @@ CLS_INIT(rgw)
   cls_register_cxx_method(h_class, RGW_GC_REMOVE, CLS_METHOD_RD | CLS_METHOD_WR, rgw_cls_gc_remove, &h_rgw_gc_remove);
 
   /* lifecycle bucket list */
+  cls_register_cxx_method(h_class, RGW_LC_GET_ENTRY, CLS_METHOD_RD, rgw_cls_lc_get_entry, &h_rgw_lc_get_entry);
   cls_register_cxx_method(h_class, RGW_LC_SET_ENTRY, CLS_METHOD_RD | CLS_METHOD_WR, rgw_cls_lc_set_entry, &h_rgw_lc_set_entry);
   cls_register_cxx_method(h_class, RGW_LC_RM_ENTRY, CLS_METHOD_RD | CLS_METHOD_WR, rgw_cls_lc_rm_entry, &h_rgw_lc_rm_entry);
   cls_register_cxx_method(h_class, RGW_LC_GET_NEXT_ENTRY, CLS_METHOD_RD, rgw_cls_lc_get_next_entry, &h_rgw_lc_get_next_entry);

@@ -25,16 +25,17 @@
       </div>
     </div>
 
+    <legend i18n>MDS performance counters</legend>
     <div class="row"
          *ngFor="let mdsCounter of objectValues(mdsCounters); trackBy: trackByFn">
-      <div class="cold-md-12">
+      <div class="col-md-12">
         <cd-cephfs-chart [mdsCounter]="mdsCounter"></cd-cephfs-chart>
       </div>
     </div>
   </tab>
   <tab i18n-heading
        heading="Clients: {{ clientCount }}"
-       (select)="clientsSelect=true"
+       (selectTab)="clientsSelect=true"
        (deselect)="clientsSelect=false">
     <cd-cephfs-clients [id]="id"
                        *ngIf="clientsSelect">
@@ -44,7 +45,7 @@
        *ngIf="grafanaPermission.read"
        heading="Performance Details">
     <cd-grafana [grafanaPath]="'mds-performance?var-mds_servers=mds.' + grafanaId"
-                uid="rRfFzWtik"
+                uid="tbO9LAiZz"
                 grafanaStyle="one">
     </cd-grafana>
   </tab>

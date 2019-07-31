@@ -17,10 +17,9 @@ import { CdNotificationConfig } from '../models/cd-notification';
 import { FinishedTask } from '../models/finished-task';
 import { AuthStorageService } from './auth-storage.service';
 import { NotificationService } from './notification.service';
-import { ServicesModule } from './services.module';
 
 @Injectable({
-  providedIn: ServicesModule
+  providedIn: 'root'
 })
 export class ApiInterceptorService implements HttpInterceptor {
   constructor(
@@ -33,7 +32,7 @@ export class ApiInterceptorService implements HttpInterceptor {
     return next.handle(request).pipe(
       catchError((resp) => {
         if (resp instanceof HttpErrorResponse) {
-          let showNotification = true;
+          let timeoutId: number;
           switch (resp.status) {
             case 400:
               const finishedTask = new FinishedTask();
@@ -50,20 +49,18 @@ export class ApiInterceptorService implements HttpInterceptor {
 
               finishedTask.success = false;
               finishedTask.exception = resp.error;
-              this.notificationService.notifyTask(finishedTask);
-              showNotification = false;
+              timeoutId = this.notificationService.notifyTask(finishedTask);
               break;
             case 401:
               this.authStorageService.remove();
               this.router.navigate(['/login']);
-              showNotification = false;
               break;
             case 403:
               this.router.navigate(['/403']);
               break;
+            default:
+              timeoutId = this.prepareNotification(resp);
           }
-
-          const timeoutId = showNotification ? this.prepareNotification(resp) : undefined;
 
           /**
            * Decorated preventDefault method (in case error previously had

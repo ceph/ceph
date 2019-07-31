@@ -15,12 +15,32 @@ class TestActivate(object):
         os.environ['CEPH_VOLUME_SIMPLE_JSON_DIR'] = '/non/existing/path'
         with pytest.raises(RuntimeError) as error:
             activate.Activate(['1', 'asdf']).main()
-        assert 'RuntimeError: Expected JSON config path not found' in str(error)
+        assert 'Expected JSON config path not found' in str(error.value)
 
     def test_main_spits_help_with_no_arguments(self, capsys):
         activate.Activate([]).main()
         stdout, stderr = capsys.readouterr()
         assert 'Activate OSDs by mounting devices previously configured' in stdout
+
+    def test_activate_all(self, is_root, monkeypatch):
+        '''
+        make sure Activate calls activate for each file returned by glob
+        '''
+        mocked_glob = []
+        def mock_glob(glob):
+            path = os.path.dirname(glob)
+            mocked_glob.extend(['{}/{}.json'.format(path, file_) for file_ in
+                                ['1', '2', '3']])
+            return mocked_glob
+        activate_files = []
+        def mock_activate(self, args):
+            activate_files.append(args.json_config)
+        monkeypatch.setattr('glob.glob', mock_glob)
+        monkeypatch.setattr(activate.Activate, 'activate', mock_activate)
+        activate.Activate(['--all']).main()
+        assert activate_files == mocked_glob
+
+
 
 
 class TestEnableSystemdUnits(object):
@@ -112,13 +132,13 @@ class TestValidateDevices(object):
         activation = activate.Activate([])
         with pytest.raises(RuntimeError) as error:
             activation.validate_devices({'type': 'filestore', 'data': {}})
-        assert 'Unable to activate filestore OSD due to missing devices' in str(error)
+        assert 'Unable to activate filestore OSD due to missing devices' in str(error.value)
 
     def test_filestore_missing_data(self):
         activation = activate.Activate([])
         with pytest.raises(RuntimeError) as error:
             activation.validate_devices({'type': 'filestore', 'journal': {}})
-        assert 'Unable to activate filestore OSD due to missing devices' in str(error)
+        assert 'Unable to activate filestore OSD due to missing devices' in str(error.value)
 
     def test_filestore_journal_device_found(self, capsys):
         activation = activate.Activate([])
@@ -139,9 +159,19 @@ class TestValidateDevices(object):
         result = activation.validate_devices({'type': 'filestore', 'journal': {}, 'data': {}})
         assert result is True
 
+    def test_filestore_without_type(self):
+        activation = activate.Activate([])
+        result = activation.validate_devices({'journal': {}, 'data': {}})
+        assert result is True
+
     def test_bluestore_with_all_devices(self):
         activation = activate.Activate([])
         result = activation.validate_devices({'type': 'bluestore', 'data': {}, 'block': {}})
+        assert result is True
+
+    def test_bluestore_without_type(self):
+        activation = activate.Activate([])
+        result = activation.validate_devices({'data': {}, 'block': {}})
         assert result is True
 
     def test_bluestore_is_default(self):
@@ -160,7 +190,7 @@ class TestValidateDevices(object):
         activation = activate.Activate([])
         with pytest.raises(RuntimeError) as error:
             activation.validate_devices({'type': 'bluestore', 'block': {}})
-        assert 'Unable to activate bluestore OSD due to missing devices' in str(error)
+        assert 'Unable to activate bluestore OSD due to missing devices' in str(error.value)
 
     def test_bluestore_block_device_found(self, capsys):
         activation = activate.Activate([])

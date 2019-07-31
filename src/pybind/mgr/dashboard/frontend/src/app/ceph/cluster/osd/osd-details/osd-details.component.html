@@ -44,8 +44,8 @@
   <tab i18n-heading
        *ngIf="grafanaPermission.read"
        heading="Performance Details">
-    <cd-grafana [grafanaPath]="'osd-device-details?var-osd_id=' + osd['id']"
-                uid="MKj_9ipiz"
+    <cd-grafana [grafanaPath]="'osd-device-details?var-osd=osd.' + osd['id']"
+                uid="CrAHE0iZz"
                 grafanaStyle="GrafanaStyles.two">
     </cd-grafana>
   </tab>

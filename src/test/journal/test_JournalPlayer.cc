@@ -78,7 +78,7 @@ public:
   journal::JournalPlayer *create_player(const std::string &oid,
                                         const journal::JournalMetadataPtr &metadata) {
     journal::JournalPlayer *player(new journal::JournalPlayer(
-      m_ioctx, oid + ".", metadata, &m_replay_hander));
+      m_ioctx, oid + ".", metadata, &m_replay_hander, nullptr));
     m_players.push_back(player);
     return player;
   }
@@ -143,7 +143,7 @@ public:
 
 typedef ::testing::Types<TestJournalPlayerParams<0>,
                          TestJournalPlayerParams<16> > TestJournalPlayerTypes;
-TYPED_TEST_CASE(TestJournalPlayer, TestJournalPlayerTypes);
+TYPED_TEST_SUITE(TestJournalPlayer, TestJournalPlayerTypes);
 
 TYPED_TEST(TestJournalPlayer, Prefetch) {
   std::string oid = this->get_temp_oid();

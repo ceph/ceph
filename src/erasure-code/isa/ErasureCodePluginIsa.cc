@@ -31,11 +31,11 @@
 // -----------------------------------------------------------------------------
 
 int ErasureCodePluginIsa::factory(const std::string &directory,
-		      ErasureCodeProfile &profile,
-                      ErasureCodeInterfaceRef *erasure_code,
-                      std::ostream *ss)
+                                  ceph::ErasureCodeProfile &profile,
+                                  ceph::ErasureCodeInterfaceRef *erasure_code,
+                                  std::ostream *ss)
 {
-    ErasureCodeIsa *interface;
+  ErasureCodeIsa *interface;
     std::string t;
     if (profile.find("technique") == profile.end())
       profile["technique"] = "reed_sol_van";
@@ -61,7 +61,7 @@ int ErasureCodePluginIsa::factory(const std::string &directory,
       delete interface;
       return r;
     }
-    *erasure_code = ErasureCodeInterfaceRef(interface);
+    *erasure_code = ceph::ErasureCodeInterfaceRef(interface);
     return 0;
 }
 
@@ -76,7 +76,7 @@ const char *__erasure_code_version()
 
 int __erasure_code_init(char *plugin_name, char *directory)
 {
-  ErasureCodePluginRegistry &instance = ErasureCodePluginRegistry::instance();
+  auto& instance = ceph::ErasureCodePluginRegistry::instance();
 
   return instance.add(plugin_name, new ErasureCodePluginIsa());
 }

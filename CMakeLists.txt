@@ -1,7 +1,8 @@
 cmake_minimum_required(VERSION 3.5.1)
+# remove cmake/modules/FindPython* once 3.12 is required
 
 project(ceph CXX C ASM)
-set(VERSION 14.1.0)
+set(VERSION 15.0.0)
 
 if(POLICY CMP0028)
   cmake_policy(SET CMP0028 NEW)
@@ -210,6 +211,8 @@ endif()
 
 find_package(Backtrace)
 
+option(WITH_RBD "Enable RADOS Block Device related targets" ON)
+
 if(LINUX)
   find_package(udev REQUIRED)
   set(HAVE_UDEV ${UDEV_FOUND})
@@ -221,9 +224,7 @@ elseif(FREEBSD)
   set(HAVE_BLKID OFF)
 else()
   set(HAVE_UDEV OFF)
-  message(STATUS "Not using udev")
   set(HAVE_BLKID OFF)
-  message(STATUS "Not using BLKID")
 endif(LINUX)
 
 option(WITH_OPENLDAP "OPENLDAP is here" ON)
@@ -267,6 +268,17 @@ if(WITH_BLUESTORE)
   endif()
 endif()
 
+include(CMakeDependentOption)
+CMAKE_DEPENDENT_OPTION(WITH_BLUESTORE_PMEM "Enable PMDK libraries" OFF
+  "WITH_BLUESTORE" OFF)
+
+CMAKE_DEPENDENT_OPTION(WITH_SYSTEM_PMDK "Require and build with system PMDK" OFF
+  "WITH_BLUESTORE_PMEM" OFF)
+
+if(WITH_BLUESTORE_PMEM)
+  set(HAVE_BLUESTORE_PMEM ON)
+endif()
+
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "i386|i686|amd64|x86_64|AMD64|aarch64")
   option(WITH_SPDK "Enable SPDK" ON)
 else()
@@ -281,19 +293,11 @@ if(WITH_SPDK)
   set(HAVE_SPDK TRUE)
 endif(WITH_SPDK)
 
-option(WITH_PMEM "Enable PMEM" OFF)
-if(WITH_PMEM)
-  set(HAVE_PMEM ON)
-  if(NOT WITH_BLUESTORE)
-    message(SEND_ERROR "Please enable WITH_BLUESTORE for using PMEM")
-  endif()
-endif()
-
 if(WITH_BLUESTORE)
-  if(NOT AIO_FOUND AND NOT HAVE_POSIXAIO AND NOT WITH_SPDK AND NOT WITH_PMEM)
+  if(NOT AIO_FOUND AND NOT HAVE_POSIXAIO AND NOT WITH_SPDK AND NOT WITH_BLUESTORE_PMEM)
     message(SEND_ERROR "WITH_BLUESTORE is ON, "
       "but none of the bluestore backends is enabled. "
-      "Please install libaio, or enable WITH_SPDK or WITH_PMEM (experimental)")
+      "Please install libaio, or enable WITH_SPDK or WITH_BLUESTORE_PMEM (experimental)")
   endif()
 endif()
 
@@ -311,14 +315,10 @@ option(WITH_LIBCEPHFS "libcephfs client library" ON)
 # key-value store
 option(WITH_KVS "Key value store is here" ON)
 
-# remote block storage
-option(WITH_RBD "Remote block storage is here" ON)
+option(WITH_KRBD "Enable Linux krbd support of 'rbd' utility" ON)
 
-# KERNEL remote block storage
-option(WITH_KRBD "Kernel Remote block storage is here" ON)
-
-if(WITH_KRBD AND WITHOUT_RBD)
-  message(FATAL_ERROR "Cannot have WITH_KRBD with WITH_RBD.")
+if(WITH_KRBD AND NOT WITH_RBD)
+  message(FATAL_ERROR "Cannot have WITH_KRBD without WITH_RBD.")
 endif()
 
 option(WITH_LEVELDB "LevelDB is here" ON)
@@ -386,6 +386,10 @@ else()
   set(EXE_LINKER_USE_PIE ${ENABLE_SHARED})
 endif()
 
+if (HAVE_LIBTCMALLOC AND TCMALLOC_VERSION_STRING VERSION_LESS 2.6.2)
+  set(LIBTCMALLOC_MISSING_ALIGNED_ALLOC ON)
+endif()
+
 if(WITH_LIBCEPHFS OR WITH_KRBD)
   find_package(keyutils REQUIRED)
 endif()
@@ -395,19 +399,8 @@ set(CMAKE_REQUIRED_INCLUDES ${CURL_INCLUDE_DIRS})
 set(CMAKE_REQUIRED_LIBRARIES ${CURL_LIBRARIES})
 CHECK_SYMBOL_EXISTS(curl_multi_wait curl/curl.h HAVE_CURL_MULTI_WAIT)
 
-find_package(NSS REQUIRED)
-find_package(NSPR REQUIRED)
 find_package(OpenSSL REQUIRED)
-# TODO: use NSS only for validation of the OpenSSL-based implementations
-set(USE_NSS 1)
-set(USE_OPENSSL 1)
-set(CRYPTO_LIBS ${NSS_LIBRARIES} ${NSPR_LIBRARIES} OpenSSL::Crypto)
-
-option(WITH_XIO "Enable XIO messaging" OFF)
-if(WITH_XIO)
-  find_package(xio REQUIRED)
-  set(HAVE_XIO ${XIO_FOUND})
-endif()
+set(CRYPTO_LIBS OpenSSL::Crypto)
 
 option(WITH_DPDK "Enable DPDK messaging" OFF)
 if(WITH_DPDK)
@@ -461,50 +454,40 @@ if(WITH_RADOSGW)
     message(WARNING "unable to run curl-config; rgw cannot make ssl requests to external systems reliably")
   endif()
 
-  if (WITH_RADOSGW_BEAST_FRONTEND AND WITH_RADOSGW_BEAST_OPENSSL)
-    find_package(OpenSSL REQUIRED)
-  else()
-    find_package(OpenSSL)
+  if (NOT NO_CURL_SSL_LINK)
+    message(STATUS "libcurl is linked with openssl: explicitly setting locks")
+    set(WITH_CURL_OPENSSL ON)
+  endif() # CURL_SSL_LINK
+  execute_process(
+    COMMAND
+      "sh" "-c"
+      "objdump -p ${OPENSSL_SSL_LIBRARY} | sed -n 's/^  SONAME  *//p'"
+    OUTPUT_VARIABLE LIBSSL_SONAME
+    ERROR_VARIABLE OBJDUMP_ERRORS
+    RESULT_VARIABLE OBJDUMP_RESULTS
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if (OBJDUMP_RESULTS)
+    message(FATAL_ERROR "can't run objdump: ${OBJDUMP_RESULTS}")
   endif()
-
-  if (OPENSSL_FOUND)
-    if (NOT NO_CURL_SSL_LINK)
-      message(STATUS "libcurl is linked with openssl: explicitly setting locks")
-      set(WITH_CURL_OPENSSL ON)
-    endif() # CURL_SSL_LINK
-    execute_process(
-      COMMAND
-	"sh" "-c"
-	"objdump -p ${OPENSSL_SSL_LIBRARY} | sed -n 's/^  SONAME  *//p'"
-      OUTPUT_VARIABLE LIBSSL_SONAME
-      ERROR_VARIABLE OBJDUMP_ERRORS
-      RESULT_VARIABLE OBJDUMP_RESULTS
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
-    if (OBJDUMP_RESULTS)
-      message(FATAL_ERROR "can't run objdump: ${OBJDUMP_RESULTS}")
-    endif()
-    if (NOT OBJDUMP_ERRORS STREQUAL "")
-      message(WARNING "message from objdump: ${OBJDUMP_ERRORS}")
-    endif()
-    execute_process(
-      COMMAND
-	"sh" "-c"
-	"objdump -p ${OPENSSL_CRYPTO_LIBRARY} | sed -n 's/^  SONAME  *//p'"
-      OUTPUT_VARIABLE LIBCRYPTO_SONAME
-      ERROR_VARIABLE OBJDUMP_ERRORS
-      RESULT_VARIABLE OBJDUMP_RESULTS
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
-    if (OBJDUMP_RESULTS)
-      message(FATAL_ERROR "can't run objdump: ${OBJDUMP_RESULTS}")
-    endif()
-    if (NOT OBJDUMP_ERRORS STREQUAL "")
-      message(WARNING "message from objdump: ${OBJDUMP_ERRORS}")
-    endif()
-    message(STATUS "ssl soname: ${LIBSSL_SONAME}")
-    message(STATUS "crypto soname: ${LIBCRYPTO_SONAME}")
-  else()
-    message(WARNING "ssl not found: rgw civetweb may fail to dlopen libssl libcrypto")
-  endif()  # OPENSSL_FOUND
+  if (NOT OBJDUMP_ERRORS STREQUAL "")
+    message(WARNING "message from objdump: ${OBJDUMP_ERRORS}")
+  endif()
+  execute_process(
+    COMMAND
+      "sh" "-c"
+      "objdump -p ${OPENSSL_CRYPTO_LIBRARY} | sed -n 's/^  SONAME  *//p'"
+    OUTPUT_VARIABLE LIBCRYPTO_SONAME
+    ERROR_VARIABLE OBJDUMP_ERRORS
+    RESULT_VARIABLE OBJDUMP_RESULTS
+    OUTPUT_STRIP_TRAILING_WHITESPACE)
+  if (OBJDUMP_RESULTS)
+    message(FATAL_ERROR "can't run objdump: ${OBJDUMP_RESULTS}")
+  endif()
+  if (NOT OBJDUMP_ERRORS STREQUAL "")
+    message(WARNING "message from objdump: ${OBJDUMP_ERRORS}")
+  endif()
+  message(STATUS "ssl soname: ${LIBSSL_SONAME}")
+  message(STATUS "crypto soname: ${LIBCRYPTO_SONAME}")
 endif (WITH_RADOSGW)
 
 #option for CephFS
@@ -514,15 +497,19 @@ option(WITH_CEPHFS "CephFS is enabled" ON)
 option(WITH_MGR "ceph-mgr is enabled" ON)
 if(WITH_MGR)
   # Please specify 3 or 3.[0-7] if you want to build with python3 support.
-  # FindPyhonInterp and FindPythonLibs think they belong to different families.
+  # FindPython thinks they belong to different families.
   set(MGR_PYTHON_VERSION "2.7" CACHE
-    STRING "minimal required version of python runtime for running mgr plugins. ")
-  find_package(PythonInterp ${MGR_PYTHON_VERSION} REQUIRED)
-  find_package(PythonLibs ${MGR_PYTHON_VERSION} REQUIRED)
-  set(MGR_PYTHON_EXECUTABLE ${PYTHON_EXECUTABLE})
-  set(MGR_PYTHON_LIBRARIES ${PYTHON_LIBRARIES})
-  set(MGR_PYTHON_VERSION_MAJOR ${PYTHON_VERSION_MAJOR})
-  set(MGR_PYTHON_VERSION_MINOR ${PYTHON_VERSION_MINOR})
+    STRING "required version of python runtime for running mgr plugins. ")
+  if(NOT MGR_PYTHON_VERSION MATCHES "^[23]$")
+    set(find_python_exact "EXACT")
+  endif()
+  find_package(Python ${MGR_PYTHON_VERSION} ${find_python_exact} REQUIRED
+    COMPONENTS Interpreter Development)
+  unset(find_python_exact)
+  set(MGR_PYTHON_EXECUTABLE ${Python_EXECUTABLE})
+  set(MGR_PYTHON_LIBRARIES ${Python_LIBRARIES})
+  set(MGR_PYTHON_VERSION_MAJOR ${Python_VERSION_MAJOR})
+  set(MGR_PYTHON_VERSION_MINOR ${Python_VERSION_MINOR})
   # Boost dependency check deferred to Boost section
 endif(WITH_MGR)
 
@@ -582,7 +569,10 @@ option(WITH_SYSTEM_FIO "require and build with system fio" OFF)
 if(WITH_SYSTEM_FIO)
   find_package(fio REQUIRED)
 elseif(WITH_FIO)
-  set(FIO_INCLUDE_DIR ${CMAKE_BINARY_DIR}/src/fio)
+  if (NOT FIO_INCLUDE_DIR)
+    # Use local external fio if include directory is not set
+    set(FIO_INCLUDE_DIR ${CMAKE_BINARY_DIR}/src/fio)
+  endif()
   include(BuildFIO)
   build_fio()
 endif()
@@ -609,7 +599,7 @@ endif()
 
 option(WITH_UBSAN "build with UBSAN" OFF)
 if(WITH_UBSAN)
-  list(APPEND sanitizers "undefined-behavior")
+  list(APPEND sanitizers "undefined_behavior")
 endif()
 
 if(sanitizers)
@@ -685,7 +675,7 @@ endif()
 include_directories(SYSTEM ${PROJECT_BINARY_DIR}/include)
 
 find_package(Threads REQUIRED)
-
+find_package(StdFilesystem)
 
 option(WITH_SELINUX "build SELinux policy" OFF)
 if(WITH_SELINUX)

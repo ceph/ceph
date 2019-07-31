@@ -40,6 +40,10 @@ static char *mount_resolve_src(const char *orig_str)
 	char *mount_path;
 	char *src;
 	char *buf = strdup(orig_str);
+	if (!buf) {
+		fprintf(stderr, "%s: failed to allocate memory\n", __func__);
+		return NULL;
+	}
 
 	mount_path = strstr(buf, ":/");
 	if (!mount_path) {
@@ -149,6 +153,8 @@ static char *parse_options(const char *data, int *filesys_flags)
 		} else if (strncmp(data, "noauto", 6) == 0) {
 			skip = 1;  /* ignore */
 		} else if (strncmp(data, "_netdev", 7) == 0) {
+			skip = 1;  /* ignore */
+		} else if (strncmp(data, "nofail", 6) == 0) {
 			skip = 1;  /* ignore */
 
 		} else if (strncmp(data, "secretfile", 10) == 0) {

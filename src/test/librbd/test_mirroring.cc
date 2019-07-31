@@ -113,6 +113,14 @@ public:
     ASSERT_EQ(mirror_state == RBD_MIRROR_IMAGE_ENABLED ? -ENOENT : -EINVAL,
               image.mirror_image_get_instance_id(&instance_id));
 
+    if (mirror_mode == RBD_MIRROR_MODE_IMAGE &&
+        mirror_state == RBD_MIRROR_IMAGE_DISABLED) {
+      // disabling image mirroring automatically disables journaling feature
+      uint64_t new_features;
+      ASSERT_EQ(0, image.features(&new_features));
+      ASSERT_EQ(0, new_features & RBD_FEATURE_JOURNALING);
+    }
+
     ASSERT_EQ(0, image.close());
     ASSERT_EQ(0, m_rbd.remove(m_ioctx, image_name.c_str()));
     ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
@@ -329,7 +337,7 @@ public:
       "remote-image-id", {{{}, "sync-point-snap", boost::none}}, {});
     librbd::journal::ClientData client_data(peer_client_meta);
 
-    journal::Journaler journaler(io_ctx, image_id, "peer-client", {});
+    journal::Journaler journaler(io_ctx, image_id, "peer-client", {}, nullptr);
     C_SaferCond init_ctx;
     journaler.init(&init_ctx);
     ASSERT_EQ(-ENOENT, init_ctx.wait());
@@ -375,6 +383,14 @@ TEST_F(TestMirroring, EnableImageMirror_In_MirrorModeDisabled) {
 TEST_F(TestMirroring, DisableImageMirror_In_MirrorModeImage) {
   uint64_t features = 0;
   features |= RBD_FEATURE_OBJECT_MAP;
+  features |= RBD_FEATURE_EXCLUSIVE_LOCK;
+  features |= RBD_FEATURE_JOURNALING;
+  check_mirror_image_disable(RBD_MIRROR_MODE_IMAGE, features, 0,
+      RBD_MIRROR_IMAGE_DISABLED);
+}
+
+TEST_F(TestMirroring, DisableImageMirror_In_MirrorModeImage_NoObjectMap) {
+  uint64_t features = 0;
   features |= RBD_FEATURE_EXCLUSIVE_LOCK;
   features |= RBD_FEATURE_JOURNALING;
   check_mirror_image_disable(RBD_MIRROR_MODE_IMAGE, features, 0,
@@ -470,12 +486,34 @@ TEST_F(TestMirroring, DisableJournalingWithPeer) {
   ASSERT_EQ(0, m_rbd.mirror_mode_set(m_ioctx, RBD_MIRROR_MODE_DISABLED));
 }
 
-TEST_F(TestMirroring, EnableImageMirror_WithoutJournaling) {
+TEST_F(TestMirroring, EnableImageMirror_In_MirrorModeDisabled_WithoutJournaling) {
   uint64_t features = 0;
   features |= RBD_FEATURE_OBJECT_MAP;
   features |= RBD_FEATURE_EXCLUSIVE_LOCK;
   check_mirror_image_enable(RBD_MIRROR_MODE_DISABLED, features, -EINVAL,
       RBD_MIRROR_IMAGE_DISABLED);
+}
+
+TEST_F(TestMirroring, EnableImageMirror_In_MirrorModePool_WithoutJournaling) {
+  uint64_t features = 0;
+  features |= RBD_FEATURE_OBJECT_MAP;
+  features |= RBD_FEATURE_EXCLUSIVE_LOCK;
+  check_mirror_image_enable(RBD_MIRROR_MODE_POOL, features, -EINVAL,
+      RBD_MIRROR_IMAGE_DISABLED);
+}
+
+TEST_F(TestMirroring, EnableImageMirror_In_MirrorModeImage_WithoutJournaling) {
+  uint64_t features = 0;
+  features |= RBD_FEATURE_OBJECT_MAP;
+  features |= RBD_FEATURE_EXCLUSIVE_LOCK;
+  check_mirror_image_enable(RBD_MIRROR_MODE_IMAGE, features, 0,
+      RBD_MIRROR_IMAGE_ENABLED);
+}
+
+TEST_F(TestMirroring, EnableImageMirror_In_MirrorModeImage_WithoutExclusiveLock) {
+  uint64_t features = 0;
+  check_mirror_image_enable(RBD_MIRROR_MODE_IMAGE, features, 0,
+      RBD_MIRROR_IMAGE_ENABLED);
 }
 
 TEST_F(TestMirroring, CreateImage_In_MirrorModeDisabled) {

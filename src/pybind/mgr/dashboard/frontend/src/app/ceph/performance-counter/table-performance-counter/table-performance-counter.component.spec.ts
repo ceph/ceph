@@ -28,6 +28,10 @@ describe('TablePerformanceCounterComponent', () => {
     expect(component.counters).toEqual([]);
   });
 
+  it('should have columns that are sortable', () => {
+    expect(component.columns.every((column) => Boolean(column.prop))).toBeTruthy();
+  });
+
   describe('Error handling', () => {
     const context = new CdTableFetchDataContext(() => {});
 

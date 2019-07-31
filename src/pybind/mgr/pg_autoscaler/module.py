@@ -7,8 +7,9 @@ import json
 import mgr_util
 import threading
 import uuid
+from six import itervalues, iteritems
 from collections import defaultdict
-from prettytable import PrettyTable
+from prettytable import PrettyTable, PLAIN_COLUMNS
 
 from mgr_module import MgrModule
 
@@ -109,10 +110,13 @@ class PgAutoscaler(MgrModule):
             table = PrettyTable(['POOL', 'SIZE', 'TARGET SIZE',
                                  'RATE', 'RAW CAPACITY',
                                  'RATIO', 'TARGET RATIO',
+                                 'BIAS',
                                  'PG_NUM',
 #                                 'IDEAL',
                                  'NEW PG_NUM', 'AUTOSCALE'],
                                 border=False)
+            table.left_padding_width = 0
+            table.right_padding_width = 1
             table.align['POOL'] = 'l'
             table.align['SIZE'] = 'r'
             table.align['TARGET SIZE'] = 'r'
@@ -120,6 +124,7 @@ class PgAutoscaler(MgrModule):
             table.align['RAW CAPACITY'] = 'r'
             table.align['RATIO'] = 'r'
             table.align['TARGET RATIO'] = 'r'
+            table.align['BIAS'] = 'r'
             table.align['PG_NUM'] = 'r'
 #            table.align['IDEAL'] = 'r'
             table.align['NEW PG_NUM'] = 'r'
@@ -145,6 +150,7 @@ class PgAutoscaler(MgrModule):
                     mgr_util.format_bytes(p['subtree_capacity'], 6),
                     '%.4f' % p['capacity_ratio'],
                     tr,
+                    p['bias'],
                     p['pg_num_target'],
 #                    p['pg_num_ideal'],
                     final,
@@ -189,7 +195,7 @@ class PgAutoscaler(MgrModule):
 
             # do we intersect an existing root?
             s = None
-            for prev in result.itervalues():
+            for prev in itervalues(result):
                 if osds & prev.osds:
                     s = prev
                     break
@@ -248,7 +254,7 @@ class PgAutoscaler(MgrModule):
         ret = []
 
         # iterate over all pools to determine how they should be sized
-        for pool_name, p in pools.iteritems():
+        for pool_name, p in iteritems(pools):
             pool_id = p['pool']
 
             # FIXME: we assume there is only one take per pool, but that
@@ -265,6 +271,7 @@ class PgAutoscaler(MgrModule):
             raw_used_rate = osdmap.pool_raw_used_rate(pool_id)
 
             pool_logical_used = pool_stats[pool_id]['bytes_used']
+            bias = p['options'].get('pg_autoscale_bias', 1.0)
             target_bytes = p['options'].get('target_size_bytes', 0)
 
             # What proportion of space are we using?
@@ -278,16 +285,17 @@ class PgAutoscaler(MgrModule):
             final_ratio = max(capacity_ratio, target_ratio)
 
             # So what proportion of pg allowance should we be using?
-            pool_pg_target = (final_ratio * root_map[root_id].pg_target) / raw_used_rate
+            pool_pg_target = (final_ratio * root_map[root_id].pg_target) / raw_used_rate * bias
 
             final_pg_target = max(p['options'].get('pg_num_min', PG_NUM_MIN),
                                   nearest_power_of_two(pool_pg_target))
 
-            self.log.info("Pool '{0}' root_id {1} using {2} of space, "
-                          "pg target {3} quantized to {4} (current {5})".format(
+            self.log.info("Pool '{0}' root_id {1} using {2} of space, bias {3}, "
+                          "pg target {4} quantized to {5} (current {6})".format(
                               p['pool_name'],
                               root_id,
                               final_ratio,
+                              bias,
                               pool_pg_target,
                               final_pg_target,
                               p['pg_num_target']
@@ -318,6 +326,7 @@ class PgAutoscaler(MgrModule):
                 'pg_num_ideal': int(pool_pg_target),
                 'pg_num_final': final_pg_target,
                 'would_adjust': adjust,
+                'bias': p.get('options', {}).get('pg_autoscale_bias', 1.0),
                 });
 
         return (ret, root_map, pool_root)
@@ -335,13 +344,13 @@ class PgAutoscaler(MgrModule):
         too_many = []
         health_checks = {}
 
-        total_ratio = dict([(r, 0.0) for r in root_map.iterkeys()])
-        total_target_ratio = dict([(r, 0.0) for r in root_map.iterkeys()])
-        target_ratio_pools = dict([(r, []) for r in root_map.iterkeys()])
+        total_ratio = dict([(r, 0.0) for r in iter(root_map)])
+        total_target_ratio = dict([(r, 0.0) for r in iter(root_map)])
+        target_ratio_pools = dict([(r, []) for r in iter(root_map)])
 
-        total_bytes = dict([(r, 0) for r in root_map.iterkeys()])
-        total_target_bytes = dict([(r, 0.0) for r in root_map.iterkeys()])
-        target_bytes_pools = dict([(r, []) for r in root_map.iterkeys()])
+        total_bytes = dict([(r, 0) for r in iter(root_map)])
+        total_target_bytes = dict([(r, 0.0) for r in iter(root_map)])
+        target_bytes_pools = dict([(r, []) for r in iter(root_map)])
 
         for p in ps:
             total_ratio[p['crush_root_id']] += max(p['actual_capacity_ratio'],
@@ -355,9 +364,6 @@ class PgAutoscaler(MgrModule):
             if p['target_bytes'] > 0:
                 total_target_bytes[p['crush_root_id']] += p['target_bytes'] * p['raw_used_rate']
                 target_bytes_pools[p['crush_root_id']].append(p['pool_name'])
-            if p['subtree_capacity'] == 0:
-                self.log.debug('skipping empty subtree %s', cr_name)
-                continue
             if not p['would_adjust']:
                 continue
             if p['pg_autoscale_mode'] == 'warn':
@@ -407,7 +413,7 @@ class PgAutoscaler(MgrModule):
             }
 
         too_much_target_ratio = []
-        for root_id, total in total_ratio.iteritems():
+        for root_id, total in iteritems(total_ratio):
             total_target = total_target_ratio[root_id]
             if total > 1.0:
                 too_much_target_ratio.append(
@@ -434,7 +440,7 @@ class PgAutoscaler(MgrModule):
             }
 
         too_much_target_bytes = []
-        for root_id, total in total_bytes.iteritems():
+        for root_id, total in iteritems(total_bytes):
             total_target = total_target_bytes[root_id]
             if total > root_map[root_id].capacity:
                 too_much_target_bytes.append(

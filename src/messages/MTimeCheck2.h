@@ -14,10 +14,8 @@
 
 #pragma once
 
-class MTimeCheck2 : public MessageInstance<MTimeCheck2> {
+class MTimeCheck2 : public Message {
 public:
-  friend factory;
-
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
 
@@ -35,9 +33,9 @@ public:
   map<int, double> skews;
   map<int, double> latencies;
 
-  MTimeCheck2() : MessageInstance(MSG_TIMECHECK2, HEAD_VERSION, COMPAT_VERSION) { }
+  MTimeCheck2() : Message{MSG_TIMECHECK2, HEAD_VERSION, COMPAT_VERSION} { }
   MTimeCheck2(int op) :
-    MessageInstance(MSG_TIMECHECK2, HEAD_VERSION, COMPAT_VERSION),
+    Message{MSG_TIMECHECK2, HEAD_VERSION, COMPAT_VERSION},
     op(op)
   { }
 
@@ -85,4 +83,7 @@ public:
     encode(skews, payload, features);
     encode(latencies, payload, features);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };

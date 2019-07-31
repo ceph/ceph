@@ -9,19 +9,35 @@ macro(build_spdk)
     find_package(aio REQUIRED)
     find_package(uuid REQUIRED)
   endif()
+
+  find_program (MAKE_EXECUTABLE NAMES make gmake)
+  if(CMAKE_MAKE_PROGRAM MATCHES "make")
+    # try to inherit command line arguments passed by parent "make" job
+    set(make_cmd "$(MAKE)")
+  else()
+    set(make_cmd "${MAKE_EXECUTABLE}")
+  endif()
+
+  set(spdk_CFLAGS "-fPIC")
+  include(CheckCCompilerFlag)
+  check_c_compiler_flag("-Wno-address-of-packed-member" HAS_WARNING_ADDRESS_OF_PACKED_MEMBER)
+  if(HAS_WARNING_ADDRESS_OF_PACKED_MEMBER)
+    set(spdk_CFLAGS "${spdk_CFLAGS} -Wno-address-of-packed-member")
+  endif()
   include(ExternalProject)
   ExternalProject_Add(spdk-ext
     DEPENDS dpdk-ext
     SOURCE_DIR ${CMAKE_SOURCE_DIR}/src/spdk
-    CONFIGURE_COMMAND ./configure --with-dpdk=${DPDK_DIR}
+    CONFIGURE_COMMAND ./configure --with-dpdk=${DPDK_DIR} --without-isal --without-vhost
     # unset $CFLAGS, otherwise it will interfere with how SPDK sets
     # its include directory.
     # unset $LDFLAGS, otherwise SPDK will fail to mock some functions.
-    BUILD_COMMAND env -i PATH=$ENV{PATH} CC=${CMAKE_C_COMPILER} $(MAKE) EXTRA_CFLAGS="-fPIC"
+    BUILD_COMMAND env -i PATH=$ENV{PATH} CC=${CMAKE_C_COMPILER} ${make_cmd} EXTRA_CFLAGS="${spdk_CFLAGS}"
     BUILD_IN_SOURCE 1
     INSTALL_COMMAND "true")
+  unset(make_cmd)
   ExternalProject_Get_Property(spdk-ext source_dir)
-  foreach(c nvme log lvol env_dpdk util)
+  foreach(c nvme log lvol env_dpdk sock util)
     add_library(spdk::${c} STATIC IMPORTED)
     add_dependencies(spdk::${c} spdk-ext)
     set_target_properties(spdk::${c} PROPERTIES

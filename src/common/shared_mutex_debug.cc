@@ -7,11 +7,11 @@
 
 namespace ceph {
 
-shared_mutex_debug::shared_mutex_debug(const std::string& n,
+shared_mutex_debug::shared_mutex_debug(std::string group,
                                        bool track_lock,
                                        bool enable_lock_dep,
                                        bool prioritize_write)
-  : mutex_debugging_base{n, false /* backtrace */},
+  : mutex_debugging_base{std::move(group), false /* backtrace */},
     track(track_lock),
     lockdep(enable_lock_dep)
 {

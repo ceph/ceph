@@ -257,7 +257,7 @@ int RGWRole::get_role_policy(const string& policy_name, string& perm_policy)
   const auto it = perm_policy_map.find(policy_name);
   if (it == perm_policy_map.end()) {
     ldout(cct, 0) << "ERROR: Policy name: " << policy_name << " not found" << dendl;
-    return -EINVAL;
+    return -ENOENT;
   } else {
     perm_policy = it->second;
   }
@@ -278,13 +278,13 @@ int RGWRole::delete_policy(const string& policy_name)
 
 void RGWRole::dump(Formatter *f) const
 {
-  encode_json("id", id , f);
-  encode_json("name", name , f);
-  encode_json("path", path, f);
-  encode_json("arn", arn, f);
-  encode_json("create_date", creation_date, f);
-  encode_json("max_session_duration", max_session_duration, f);
-  encode_json("assume_role_policy_document", trust_policy, f);
+  encode_json("RoleId", id , f);
+  encode_json("RoleName", name , f);
+  encode_json("Path", path, f);
+  encode_json("Arn", arn, f);
+  encode_json("CreateDate", creation_date, f);
+  encode_json("MaxSessionDuration", max_session_duration, f);
+  encode_json("AssumeRolePolicyDocument", trust_policy, f);
 }
 
 void RGWRole::decode_json(JSONObj *obj)
@@ -305,7 +305,7 @@ int RGWRole::read_id(const string& role_name, const string& tenant, string& role
   bufferlist bl;
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
-  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
+  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL, null_yield);
   if (ret < 0) {
     return ret;
   }
@@ -331,7 +331,7 @@ int RGWRole::read_info()
   bufferlist bl;
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
-  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
+  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL, null_yield);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed reading role info from pool: " << pool.name <<
                   ": " << id << ": " << cpp_strerror(-ret) << dendl;
@@ -358,7 +358,7 @@ int RGWRole::read_name()
   bufferlist bl;
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
 
-  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL);
+  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, NULL, NULL, null_yield);
   if (ret < 0) {
     ldout(cct, 0) << "ERROR: failed reading role name from pool: " << pool.name << ": "
                   << name << ": " << cpp_strerror(-ret) << dendl;

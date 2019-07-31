@@ -33,6 +33,10 @@ set(osd_srcs
   mClockOpClassQueue.cc
   mClockClientQueue.cc
   OpQueueItem.cc
+  PeeringState.cc
+  PGStateUtils.cc
+  MissingLoc.cc
+  osd_perf_counters.cc
   ${CMAKE_SOURCE_DIR}/src/common/TrackedOp.cc
   ${CMAKE_SOURCE_DIR}/src/objclass/class_api.cc
   ${CMAKE_SOURCE_DIR}/src/mgr/OSDPerfMetricTypes.cc
@@ -46,9 +50,7 @@ add_library(osd STATIC ${osd_srcs}
   $<TARGET_OBJECTS:global_common_objs>)
 target_link_libraries(osd
   PUBLIC dmclock::dmclock
-  PRIVATE
-  ${LEVELDB_LIBRARIES}
-  heap_profiler cpu_profiler ${CMAKE_DL_LIBS})
+  PRIVATE os heap_profiler cpu_profiler ${CMAKE_DL_LIBS})
 if(WITH_LTTNG)
   add_dependencies(osd osd-tp pg-tp)
 endif()

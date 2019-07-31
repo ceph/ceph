@@ -19,7 +19,7 @@
 #include <list>
 #include <vector>
 #include <utility>
-#include <boost/optional.hpp>
+#include <optional>
 #include <boost/intrusive/set.hpp>
 #include <boost/intrusive/list.hpp>
 #include "include/interval_set.h"
@@ -131,14 +131,14 @@ private:
 
     uint64_t offset;
     uint64_t length;
-    boost::optional<bufferlist> bl;
+    std::optional<bufferlist> bl;
 
     uint64_t get_length() const {
       return length;
     }
 
     bool is_pending() const {
-      return bl == boost::none;
+      return bl == std::nullopt;
     }
 
     bool pinned_by_write() const {
@@ -204,7 +204,7 @@ private:
 	UPDATE_PIN
       };
       type action = NONE;
-      boost::optional<bufferlist> bl;
+      std::optional<bufferlist> bl;
     };
     template <typename F>
     void traverse_update(

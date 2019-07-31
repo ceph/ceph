@@ -1,9 +1,11 @@
 import { Component, EventEmitter, OnInit, Output } from '@angular/core';
 import { Validators } from '@angular/forms';
 
+import { I18n } from '@ngx-translate/i18n-polyfill';
 import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CdFormBuilder } from '../../../shared/forms/cd-form-builder';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
@@ -36,13 +38,19 @@ export class ErasureCodeProfileFormComponent implements OnInit {
     ISA: 'isa' // Intel Storage Acceleration
   };
   plugin = this.PLUGIN.JERASURE;
+  action: string;
+  resource: string;
 
   constructor(
     private formBuilder: CdFormBuilder,
     public bsModalRef: BsModalRef,
     private taskWrapper: TaskWrapperService,
-    private ecpService: ErasureCodeProfileService
+    private ecpService: ErasureCodeProfileService,
+    private i18n: I18n,
+    public actionLabels: ActionLabelsI18n
   ) {
+    this.action = this.actionLabels.CREATE;
+    this.resource = this.i18n('EC Profile');
     this.createForm();
     this.setJerasureDefaults();
   }
@@ -239,7 +247,7 @@ export class ErasureCodeProfileFormComponent implements OnInit {
       })
       .subscribe(
         undefined,
-        (resp) => {
+        () => {
           this.form.setErrors({ cdSubmitButton: true });
         },
         () => {

@@ -48,7 +48,21 @@ const static std::map<uint32_t, std::set<std::string>> always_on_modules = {
       "balancer",
       "devicehealth",
       "orchestrator_cli",
+      "rbd_support",
       "volumes",
+    }
+  },
+  {
+    CEPH_RELEASE_OCTOPUS, {
+      "crash",
+      "status",
+      "progress",
+      "balancer",
+      "devicehealth",
+      "orchestrator_cli",
+      "rbd_support",
+      "volumes",
+      "pg_autoscaler",
     }
   }
 };
@@ -223,7 +237,7 @@ void MgrMonitor::update_from_paxos(bool *need_bootstrap)
 void MgrMonitor::prime_mgr_client()
 {
   dout(10) << __func__ << dendl;
-  mon->mgr_client.ms_dispatch(new MMgrMap(map));
+  mon->mgr_client.ms_dispatch2(make_message<MMgrMap>(map));
 }
 
 void MgrMonitor::create_pending()
@@ -573,7 +587,7 @@ void MgrMonitor::check_sub(Subscription *sub)
     if (sub->next <= map.get_epoch()) {
       dout(20) << "Sending map to subscriber " << sub->session->con
 	       << " " << sub->session->con->get_peer_addr() << dendl;
-      sub->session->con->send_message(new MMgrMap(map));
+      sub->session->con->send_message2(make_message<MMgrMap>(map));
       if (sub->onetime) {
         mon->session_map.remove_sub(sub);
       } else {
@@ -615,7 +629,7 @@ void MgrMonitor::send_digests()
   for (auto sub : *(mon->session_map.subs[type])) {
     dout(10) << __func__ << " sending digest to subscriber " << sub->session->con
 	     << " " << sub->session->con->get_peer_addr() << dendl;
-    MMgrDigest *mdigest = new MMgrDigest;
+    auto mdigest = make_message<MMgrDigest>();
 
     JSONFormatter f;
     mon->get_health_status(true, &f, nullptr, nullptr, nullptr);
@@ -627,7 +641,7 @@ void MgrMonitor::send_digests()
     f.flush(mdigest->mon_status_json);
     f.reset();
 
-    sub->session->con->send_message(mdigest);
+    sub->session->con->send_message2(mdigest);
   }
 
 timer:
@@ -651,10 +665,12 @@ void MgrMonitor::on_active()
   if (mon->is_leader()) {
     mon->clog->debug() << "mgrmap e" << map.epoch << ": " << map;
 
-    if (pending_map.always_on_modules != always_on_modules) {
+    if (HAVE_FEATURE(mon->get_quorum_con_features(), SERVER_NAUTILUS) &&
+	pending_map.always_on_modules != always_on_modules) {
       pending_map.always_on_modules = always_on_modules;
-      dout(4) << "always on modules changed "
-        << pending_map.get_always_on_modules() << dendl;
+      dout(4) << "always on modules changed, pending "
+	      << pending_map.get_always_on_modules()
+	      << " != wanted " << always_on_modules << dendl;
       propose_pending();
     }
   }
@@ -841,8 +857,9 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
   }
 
   string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("json-pretty"));
-  boost::scoped_ptr<Formatter> f(Formatter::create(format));
+  cmd_getval(g_ceph_context, cmdmap, "format", format);
+  boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty",
+						   "json-pretty"));
 
   string prefix;
   cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
@@ -938,14 +955,10 @@ bool MgrMonitor::preprocess_command(MonOpRequestRef op)
     }
     f->flush(rdata);
   } else if (prefix == "mgr versions") {
-    if (!f)
-      f.reset(Formatter::create("json-pretty"));
     count_metadata("ceph_version", f.get());
     f->flush(rdata);
     r = 0;
   } else if (prefix == "mgr count-metadata") {
-    if (!f)
-      f.reset(Formatter::create("json-pretty"));
     string field;
     cmd_getval(g_ceph_context, cmdmap, "property", field);
     count_metadata(field, f.get());

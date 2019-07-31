@@ -183,6 +183,18 @@ public:
   ~RGWPutObjTags_ObjStore() {};
 };
 
+class RGWGetBucketTags_ObjStore : public RGWGetBucketTags {
+public:
+  RGWGetBucketTags_ObjStore() = default;
+  virtual ~RGWGetBucketTags_ObjStore() = default; 
+};
+
+class RGWPutBucketTags_ObjStore: public RGWPutBucketTags {
+public:
+  RGWPutBucketTags_ObjStore() = default;
+  virtual ~RGWPutBucketTags_ObjStore() = default; 
+};
+
 class RGWListBuckets_ObjStore : public RGWListBuckets {
 public:
   RGWListBuckets_ObjStore() {}
@@ -473,6 +485,44 @@ public:
     ~RGWInfo_ObjStore() override = default;
 };
 
+class RGWPutBucketObjectLock_ObjStore : public RGWPutBucketObjectLock {
+public:
+  RGWPutBucketObjectLock_ObjStore() = default;
+  ~RGWPutBucketObjectLock_ObjStore() = default;
+  int get_params() override;
+};
+
+class RGWGetBucketObjectLock_ObjStore : public RGWGetBucketObjectLock {
+public:
+  RGWGetBucketObjectLock_ObjStore() = default;
+  ~RGWGetBucketObjectLock_ObjStore() override = default;
+};
+
+class RGWPutObjRetention_ObjStore : public RGWPutObjRetention {
+public:
+  RGWPutObjRetention_ObjStore() = default;
+  ~RGWPutObjRetention_ObjStore() override = default;
+};
+
+class RGWGetObjRetention_ObjStore : public RGWGetObjRetention {
+public:
+  RGWGetObjRetention_ObjStore() = default;
+  ~RGWGetObjRetention_ObjStore() = default;
+};
+
+class RGWPutObjLegalHold_ObjStore : public RGWPutObjLegalHold {
+public:
+  RGWPutObjLegalHold_ObjStore() = default;
+  ~RGWPutObjLegalHold_ObjStore() override = default;
+  int get_params() override;
+};
+
+class RGWGetObjLegalHold_ObjStore : public RGWGetObjLegalHold {
+public:
+  RGWGetObjLegalHold_ObjStore() = default;
+  ~RGWGetObjLegalHold_ObjStore() = default;
+};
+
 class RGWRESTOp : public RGWOp {
 protected:
   int http_ret;
@@ -505,6 +555,7 @@ protected:
 
   static int allocate_formatter(struct req_state *s, int default_formatter,
 				bool configurable);
+
 public:
   static constexpr int MAX_BUCKET_NAME_LEN = 255;
   static constexpr int MAX_OBJ_NAME_LEN = 1024;
@@ -514,6 +565,7 @@ public:
 
   static int validate_bucket_name(const string& bucket);
   static int validate_object_name(const string& object);
+  static int reallocate_formatter(struct req_state *s, int type);
 
   int init_permissions(RGWOp* op) override;
   int read_permissions(RGWOp* op) override;
@@ -730,7 +782,7 @@ static inline void dump_header_if_nonempty(struct req_state* s,
 static inline std::string compute_domain_uri(const struct req_state *s) {
   std::string uri = (!s->info.domain.empty()) ? s->info.domain :
     [&s]() -> std::string {
-    auto env = *(s->info.env);
+    RGWEnv const &env(*(s->info.env));
     std::string uri =
     env.get("SERVER_PORT_SECURE") ? "https://" : "http://";
     if (env.exists("SERVER_NAME")) {

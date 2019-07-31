@@ -73,7 +73,6 @@ const char** MgrStandby::get_tracked_conf_keys() const
     "clog_to_syslog",
     "clog_to_syslog_facility",
     "clog_to_syslog_level",
-    "osd_objectstore_fuse",
     "clog_to_graylog",
     "clog_to_graylog_host",
     "clog_to_graylog_port",
@@ -192,7 +191,7 @@ int MgrStandby::init()
 void MgrStandby::send_beacon()
 {
   ceph_assert(lock.is_locked_by_me());
-  dout(4) << state_str() << dendl;
+  dout(20) << state_str() << dendl;
 
   std::list<PyModuleRef> modules = py_module_registry.get_modules();
 
@@ -264,7 +263,8 @@ void MgrStandby::handle_signal(int signum)
 {
   ceph_assert(signum == SIGINT || signum == SIGTERM);
   derr << "*** Got signal " << sig_str(signum) << " ***" << dendl;
-  shutdown();
+  _exit(0);  // exit with 0 result code, as if we had done an orderly shutdown
+  //shutdown();
 }
 
 void MgrStandby::shutdown()
@@ -302,6 +302,14 @@ void MgrStandby::shutdown()
 
 void MgrStandby::respawn()
 {
+  // --- WARNING TO FUTURE COPY/PASTERS ---
+  // You must also add a call like
+  //
+  //   ceph_pthread_setname(pthread_self(), "ceph-mgr");
+  //
+  // to main() so that /proc/$pid/stat field 2 contains "(ceph-mgr)"
+  // instead of "(exe)", so that killall (and log rotation) will work.
+
   char *new_argv[orig_argc+1];
   dout(1) << " e: '" << orig_argv[0] << "'" << dendl;
   for (int i=0; i<orig_argc; i++) {
@@ -366,7 +374,7 @@ void MgrStandby::_update_log_config()
   }
 }
 
-void MgrStandby::handle_mgr_map(MMgrMap* mmap)
+void MgrStandby::handle_mgr_map(ref_t<MMgrMap> mmap)
 {
   auto &map = mmap->get_map();
   dout(4) << "received map epoch " << map.get_epoch() << dendl;
@@ -421,19 +429,19 @@ void MgrStandby::handle_mgr_map(MMgrMap* mmap)
   }
 }
 
-bool MgrStandby::ms_dispatch(Message *m)
+bool MgrStandby::ms_dispatch2(const ref_t<Message>& m)
 {
   std::lock_guard l(lock);
-  dout(4) << state_str() << " " << *m << dendl;
+  dout(10) << state_str() << " " << *m << dendl;
 
   if (m->get_type() == MSG_MGR_MAP) {
-    handle_mgr_map(static_cast<MMgrMap*>(m));
+    handle_mgr_map(ref_cast<MMgrMap>(m));
   }
   bool handled = false;
   if (active_mgr) {
     auto am = active_mgr;
     lock.Unlock();
-    handled = am->ms_dispatch(m);
+    handled = am->ms_dispatch2(m);
     lock.Lock();
   }
   if (m->get_type() == MSG_MGR_MAP) {
@@ -443,15 +451,6 @@ bool MgrStandby::ms_dispatch(Message *m)
   return handled;
 }
 
-
-bool MgrStandby::ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer)
-{
-  if (dest_type == CEPH_ENTITY_TYPE_MON)
-    return true;
-
-  *authorizer = monc.build_authorizer(dest_type);
-  return *authorizer != NULL;
-}
 
 bool MgrStandby::ms_handle_refused(Connection *con)
 {

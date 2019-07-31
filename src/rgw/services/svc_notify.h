@@ -1,6 +1,7 @@
-#ifndef CEPH_RGW_SERVICES_NOTIFY_H
-#define CEPH_RGW_SERVICES_NOTIFY_H
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
+#pragma once
 
 #include "rgw/rgw_service.h"
 
@@ -74,7 +75,8 @@ private:
   void _set_enabled(bool status);
   void set_enabled(bool status);
 
-  int robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl);
+  int robust_notify(RGWSI_RADOS::Obj& notify_obj, bufferlist& bl,
+                    optional_yield y);
 
   void schedule_context(Context *c);
 public:
@@ -91,10 +93,7 @@ public:
       virtual void set_enabled(bool status) = 0;
   };
 
-  int distribute(const string& key, bufferlist& bl);
+  int distribute(const string& key, bufferlist& bl, optional_yield y);
 
   void register_watch_cb(CB *cb);
 };
-
-#endif
-

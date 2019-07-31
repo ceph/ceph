@@ -34,6 +34,7 @@ void MgrStatMonitor::create_initial()
   dout(10) << __func__ << dendl;
   version = 0;
   service_map.epoch = 1;
+  pending_service_map_bl.clear();
   encode(service_map, pending_service_map_bl, CEPH_FEATURES_ALL);
 }
 
@@ -55,11 +56,12 @@ void MgrStatMonitor::update_from_paxos(bool *need_bootstrap)
       }
       dout(10) << __func__ << " v" << version
 	       << " service_map e" << service_map.epoch
-	       << " " << progress_events.size() << "progress events"
+	       << " " << progress_events.size() << " progress events"
 	       << dendl;
     }
     catch (buffer::error& e) {
-      derr << "failed to decode mgrstat state; luminous dev version?" << dendl;
+      derr << "failed to decode mgrstat state; luminous dev version? "
+	   << e.what() << dendl;
     }
   }
   check_subs();
@@ -198,7 +200,7 @@ bool MgrStatMonitor::prepare_report(MonOpRequestRef op)
   pending_progress_events.swap(m->progress_events);
   dout(10) << __func__ << " " << pending_digest << ", "
 	   << pending_health_checks.checks.size() << " health checks, "
-	   << progress_events.size() << "progress events" << dendl;
+	   << progress_events.size() << " progress events" << dendl;
   dout(20) << "pending_digest:\n";
   JSONFormatter jf(true);
   jf.open_object_section("pending_digest");
@@ -244,6 +246,7 @@ bool MgrStatMonitor::preprocess_getpoolstats(MonOpRequestRef op)
   }
   epoch_t ver = get_last_committed();
   auto reply = new MGetPoolStatsReply(m->fsid, m->get_tid(), ver);
+  reply->per_pool = digest.use_per_pool_stats();
   for (const auto& pool_name : m->pools) {
     const auto pool_id = mon->osdmon()->osdmap.lookup_pg_pool_name(pool_name);
     if (pool_id == -ENOENT)

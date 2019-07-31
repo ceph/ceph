@@ -17,11 +17,8 @@
 
 #include "msg/Message.h"
 
-class MMDSSnapUpdate : public MessageInstance<MMDSSnapUpdate> {
-public:
-  friend factory;
+class MMDSSnapUpdate : public Message {
 private:
-
   inodeno_t ino;
   __s16 snap_op;
 
@@ -32,9 +29,9 @@ public:
   bufferlist snap_blob;
 
 protected:
-  MMDSSnapUpdate() : MessageInstance(MSG_MDS_SNAPUPDATE) {}
+  MMDSSnapUpdate() : Message{MSG_MDS_SNAPUPDATE} {}
   MMDSSnapUpdate(inodeno_t i, version_t tid, int op) :
-    MessageInstance(MSG_MDS_SNAPUPDATE), ino(i), snap_op(op) {
+    Message{MSG_MDS_SNAPUPDATE}, ino(i), snap_op(op) {
       set_tid(tid);
     }
   ~MMDSSnapUpdate() override {}
@@ -58,6 +55,9 @@ public:
     decode(snap_op, p);
     decode(snap_blob, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

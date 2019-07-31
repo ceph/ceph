@@ -1,26 +1,31 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { ReactiveFormsModule } from '@angular/forms';
+import { RouterTestingModule } from '@angular/router/testing';
 
 import * as _ from 'lodash';
-import { ToastModule } from 'ng2-toastr';
 import { BsModalRef, ModalModule } from 'ngx-bootstrap/modal';
+import { ToastrModule } from 'ngx-toastr';
+import { of as observableOf } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../../../testing/unit-test-helper';
+import { ConfigurationService } from '../../../../shared/api/configuration.service';
 import { SharedModule } from '../../../../shared/shared.module';
 import { OsdRecvSpeedModalComponent } from './osd-recv-speed-modal.component';
 
 describe('OsdRecvSpeedModalComponent', () => {
   let component: OsdRecvSpeedModalComponent;
   let fixture: ComponentFixture<OsdRecvSpeedModalComponent>;
+  let configurationService: ConfigurationService;
 
   configureTestBed({
     imports: [
       HttpClientTestingModule,
       ModalModule.forRoot(),
       ReactiveFormsModule,
+      RouterTestingModule,
       SharedModule,
-      ToastModule.forRoot()
+      ToastrModule.forRoot()
     ],
     declarations: [OsdRecvSpeedModalComponent],
     providers: [BsModalRef, i18nProviders]
@@ -32,7 +37,7 @@ describe('OsdRecvSpeedModalComponent', () => {
     fixture = TestBed.createComponent(OsdRecvSpeedModalComponent);
     component = fixture.componentInstance;
     fixture.detectChanges();
-
+    configurationService = TestBed.get(ConfigurationService);
     configOptions = [
       {
         name: 'osd_max_backfills',
@@ -59,10 +64,42 @@ describe('OsdRecvSpeedModalComponent', () => {
         default: 0
       }
     ];
+    spyOn(configurationService, 'filter').and.returnValue(observableOf(configOptions));
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  describe('ngOnInit', () => {
+    let setPriority;
+    let setValidators;
+
+    beforeEach(() => {
+      setPriority = spyOn(component, 'setPriority').and.callThrough();
+      setValidators = spyOn(component, 'setValidators').and.callThrough();
+      component.ngOnInit();
+    });
+
+    it('should call setValidators', () => {
+      expect(setValidators).toHaveBeenCalled();
+    });
+
+    it('should get and set priority correctly', () => {
+      const defaultPriority = _.find(component.priorities, (p) => {
+        return _.isEqual(p.name, 'default');
+      });
+      expect(setPriority).toHaveBeenCalledWith(defaultPriority);
+    });
+
+    it('should set descriptions correctly', () => {
+      expect(component.priorityAttrs['osd_max_backfills'].desc).toBe('');
+      expect(component.priorityAttrs['osd_recovery_max_active'].desc).toBe('');
+      expect(component.priorityAttrs['osd_recovery_max_single_start'].desc).toBe('');
+      expect(component.priorityAttrs['osd_recovery_sleep'].desc).toBe(
+        'Time in seconds to sleep before next recovery or backfill op'
+      );
+    });
   });
 
   describe('setPriority', () => {

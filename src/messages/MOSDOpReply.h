@@ -29,16 +29,14 @@
  *
  */
 
-class MOSDOpReply : public MessageInstance<MOSDOpReply> {
-public:
-  friend factory;
+class MOSDOpReply : public Message {
 private:
   static constexpr int HEAD_VERSION = 8;
   static constexpr int COMPAT_VERSION = 2;
 
   object_t oid;
   pg_t pgid;
-  vector<OSDOp> ops;
+  std::vector<OSDOp> ops;
   bool bdata_encode;
   int64_t flags = 0;
   errorcode32_t result;
@@ -98,13 +96,13 @@ public:
 
   void add_flags(int f) { flags |= f; }
 
-  void claim_op_out_data(vector<OSDOp>& o) {
+  void claim_op_out_data(std::vector<OSDOp>& o) {
     ceph_assert(ops.size() == o.size());
     for (unsigned i = 0; i < o.size(); i++) {
       ops[i].outdata.claim(o[i].outdata);
     }
   }
-  void claim_ops(vector<OSDOp>& o) {
+  void claim_ops(std::vector<OSDOp>& o) {
     o.swap(ops);
     bdata_encode = false;
   }
@@ -128,13 +126,13 @@ public:
 
 public:
   MOSDOpReply()
-    : MessageInstance(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION),
+    : Message{CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION},
     bdata_encode(false) {
     do_redirect = false;
   }
   MOSDOpReply(const MOSDOp *req, int r, epoch_t e, int acktype,
 	      bool ignore_out_data)
-    : MessageInstance(CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION),
+    : Message{CEPH_MSG_OSD_OPREPLY, HEAD_VERSION, COMPAT_VERSION},
       oid(req->hobj.oid), pgid(req->pgid.pgid), ops(req->ops),
       bdata_encode(false) {
 
@@ -180,7 +178,7 @@ public:
       for (unsigned i = 0; i < head.num_ops; i++) {
 	encode(ops[i].op, payload);
       }
-      encode_nohead(oid.name, payload);
+      ceph::encode_nohead(oid.name, payload);
     } else {
       header.version = HEAD_VERSION;
       encode(oid, payload);
@@ -253,7 +251,7 @@ public:
       for (unsigned i = 0; i < head.num_ops; i++) {
 	decode(ops[i].op, p);
       }
-      decode_nohead(head.object_len, oid.name, p);
+      ceph::decode_nohead(head.object_len, oid.name, p);
       pgid = pg_t(head.layout.ol_pgid);
       result = (int32_t)head.result;
       flags = head.flags;
@@ -312,8 +310,8 @@ public:
   }
 
   std::string_view get_type_name() const override { return "osd_op_reply"; }
-  
-  void print(ostream& out) const override {
+
+  void print(std::ostream& out) const override {
     out << "osd_op_reply(" << get_tid()
 	<< " " << oid << " " << ops
 	<< " v" << get_replay_version()
@@ -334,6 +332,9 @@ public:
     out << ")";
   }
 
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 

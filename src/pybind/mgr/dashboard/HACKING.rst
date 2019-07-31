@@ -1,5 +1,5 @@
-Dashboard Developer Documentation
-====================================
+Ceph Dashboard Developer Documentation
+======================================
 
 .. contents:: Table of Contents
 
@@ -62,8 +62,17 @@ Build the Project
 ~~~~~~~~~~~~~~~~~
 
 Run ``npm run build`` to build the project. The build artifacts will be
-stored in the ``dist/`` directory. Use the ``-prod`` flag for a
-production build. Navigate to ``https://localhost:8443``.
+stored in the ``dist/`` directory. Use the ``--prod`` flag for a
+production build (``npm run build -- --prod``). Navigate to ``https://localhost:8443``.
+
+Build the Code Documentation
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Run ``npm run doc-build`` to generate code docs in the ``documentation/``
+directory. To make them accesible locally for a web browser, run
+``npm run doc-serve`` and they will become available at ``http://localhost:8444``.
+With ``npm run compodoc -- <opts>`` you may
+`fully configure it <https://compodoc.app/guides/usage.html>`_.
 
 Code linting and formatting
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -130,15 +139,21 @@ There are a few ways how you can try to resolve this:
 Running End-to-End Tests
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-We use `Protractor <http://www.protractortest.org/>`__ to run our frontend e2e
+We use `Protractor <http://www.protractortest.org/>`__ to run our frontend E2E
 tests.
 
 Our ``run-frontend-e2e-tests.sh`` script will check if Chrome or Docker is
 installed and run the tests if either is found.
 
-Start all frontend e2e tests by running::
+Start all frontend E2E tests by running::
 
   $ ./run-frontend-e2e-tests.sh
+
+Report:
+  After running the tests you can find the corresponding report as well as screenshots
+  of failed test cases by opening the following file in your browser:
+
+    src/pybind/mgr/dashboard/frontend/.protractor-report/index.html
 
 Device:
   You can force the script to use a specific device with the ``-d`` flag::
@@ -155,15 +170,96 @@ Note:
   When using docker, as your device, you might need to run the script with sudo
   permissions.
 
+When developing E2E tests, it is not necessary to compile the frontend code
+on each change of the test files. When your development environment is
+running (``npm start``), you can point Protractor to just use this
+environment. To attach `Protractor <http://www.protractortest.org/>`__ to
+this process, run ``npm run e2e:dev``.
+
+Note::
+
+   In case you have a somewhat particular environment, you might need to adapt
+   `protractor.conf.js` to point to the appropriate destination.
+
 Writing End-to-End Tests
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
-When writing e2e tests you don't want to recompile every time from scratch to
-try out if your test has succeeded. As usual you have your development server
-open (``npm start``) which already has compiled all files. To attach
-`Protractor <http://www.protractortest.org/>`__ to this process, instead of
-spinning up it's own server, you can use ``npm run e2e -- --dev-server-target``
-or just ``npm run e2e:dev`` which is equivalent.
+The PagerHelper class
+^^^^^^^^^^^^^^^^^^^^^
+
+The ``PageHelper`` class is supposed to be used for general purpose code that
+can be used on various pages or suites. Examples are
+``getTableCellByContent()``, ``getTabsCount()`` or ``checkCheckbox()``. Every
+method that could be useful on several pages belongs there. Also, methods
+which enhance the derived classes of the PageHelper belong there. A good
+example for such a case is the ``restrictTo()`` decorator. It ensures that a
+method implemented in a subclass of PageHelper is called on the correct page.
+It will also show a developer-friendly warning if this is not the case.
+
+Subclasses of PageHelper
+^^^^^^^^^^^^^^^^^^^^^^^^
+
+Helper Methods
+""""""""""""""
+
+In order to make code reusable which is specific for a particular suite, make
+sure to put it in a derived class of the ``PageHelper``. For instance, when
+talking about the pool suite, such methods would be ``create()``, ``exist()``
+and ``delete()``. These methods are specific to a pool but are useful for other
+suites.
+
+Methods that return HTML elements (for instance of type ``ElementFinder`` or
+``ElementArrayFinder``, but also ``Promise<ElementFinder>``) which can only
+be found on a specific page, should be either implemented in the helper
+methods of the subclass of PageHelper or as own methods of the subclass of
+PageHelper.
+
+Registering a new PageHelper
+""""""""""""""""""""""""""""
+
+If you have to create a new Helper class derived from the ``PageHelper``,
+please also ensure that it is instantiated in the constructor of the
+``Helper`` class. That way it can automatically be used by all other suites.
+
+.. code:: TypeScript
+
+  class Helper {
+     // ...
+     pools: PoolPageHelper;
+
+     constructor() {
+        this.pools = new PoolPageHelper();
+     }
+
+     // ...
+  }
+
+Using PageHelpers
+"""""""""""""""""
+
+In any suite, an instance of the ``Helper`` class should be used to call
+various ``PageHelper`` objects and their methods. This makes all methods of all
+PageHelpers available to all suites.
+
+.. code:: TypeScript
+
+  it('should create a pool', () => {
+    helper.pools.exist(poolName, false).then(() => {
+      helper.pools.navigateTo('create');
+      helper.pools.create(poolName).then(() => {
+        helper.pools.navigateTo();
+        helper.pools.exist(poolName, true);
+      });
+    });
+  });
+
+Code Style
+^^^^^^^^^^
+
+Please refer to the official `Protractor style-guide
+<https://www.protractortest.org/#/style-guide>`__ for a better insight on how
+to write and structure tests as well as what exactly should be covered by
+end-to-end tests.
 
 Further Help
 ~~~~~~~~~~~~
@@ -205,7 +301,7 @@ Example:
     import { Component } from '@angular/core';
     import { Router } from '@angular/router';
 
-    import { ToastsManager } from 'ng2-toastr';
+    import { ToastrManager } from 'ngx-toastr';
 
     import { Credentials } from '../../../shared/models/credentials.model';
     import { HostService } from './services/host.service';
@@ -229,6 +325,25 @@ Example:
     <cd-helper>
       Some <strong>helper</strong> html text
     </cd-helper>
+
+Terminology and wording
+~~~~~~~~~~~~~~~~~~~~~~~
+
+Instead of using the Ceph component names, the approach
+suggested is to use the logical/generic names (Block over RBD, Filesystem over
+CephFS, Object over RGW). Nevertheless, as Ceph-Dashboard cannot completely hide
+the Ceph internals, some Ceph-specific names might remain visible.
+
+Regarding the wording for action labels and other textual elements (form titles,
+buttons, etc.), the chosen approach is to follow `these guidelines
+<https://www.patternfly.org/styles/terminology-and-wording/#terminology-and-wording-for-action-labels>`_.
+As a rule of thumb, 'Create' and 'Delete' are the proper wording for most forms,
+instead of 'Add' and 'Remove', unless some already created item is either added
+or removed to/from a set of items (e.g.: 'Add permission' to a user vs. 'Create
+(new) permission').
+
+In order to enforce the use of this wording, a service ``ActionLabelsI18n`` has
+been created, which provides translated labels for use in UI elements.
 
 Frontend branding
 ~~~~~~~~~~~~~~~~~
@@ -299,16 +414,22 @@ parse the TypeScript files.
 When the command ran successfully, it should have created or updated the file
 ``src/locale/messages.xlf``.
 
-To make sure this file is always up to date in master branch, we added a
-validation in ``run-frontend-unittests.sh`` that will fail if it finds
-uncommitted translations.
+The file isn't tracked by git, you can just use it to start with the
+translation offline or add/update the resource files on transifex.
 
 Supported languages
 ~~~~~~~~~~~~~~~~~~~
 
-All our supported languages should be registeredd in
-``supported-languages.enum.ts``, this will then provide that list to both the
-language selectors in the frontend.
+All our supported languages should be registered in both exports in
+``supported-languages.enum.ts`` and have a corresponding test in
+``language-selector.component.spec.ts``.
+
+The ``SupportedLanguages`` enum will provide the list for the default language selection.
+
+The ``languageBootstrapMapping`` variable will provide the
+`language support <https://github.com/valor-software/ngx-bootstrap/tree/development/src/chronos/i18n>`_
+for ngx-bootstrap components like the
+`date picker <https://valor-software.com/ngx-bootstrap/#/datepicker#locales>`_.
 
 Translating process
 ~~~~~~~~~~~~~~~~~~~
@@ -1030,7 +1151,7 @@ The value of the class attribute is a pair composed by the default value for tha
 setting, and the python type of the value.
 
 By declaring the ``ADMIN_EMAIL_ADDRESS`` class attribute, when you restart the
-dashboard plugin, you will automatically gain two additional CLI commands to
+dashboard module, you will automatically gain two additional CLI commands to
 get and set that setting::
 
   $ ceph dashboard get-admin-email-address
@@ -1419,6 +1540,89 @@ Usage example:
     // ...
   }
 
+
+REST API documentation
+~~~~~~~~~~~~~~~~~~~~~~
+There is an automatically generated Swagger UI page for documentation of the REST
+API endpoints.However, by default it is not very detailed. There are two
+decorators that can be used to add more information:
+
+* ``@EndpointDoc()`` for documentation of endpoints. It has four optional arguments
+  (explained below): ``description``, ``group``, ``parameters`` and``responses``.
+* ``@ControllerDoc()`` for documentation of controller or group associated with
+  the endpoints. It only takes the two first arguments: ``description`` and``group``.
+
+
+``description``: A a string with a short (1-2 sentences) description of the object.
+
+
+``group``: By default, an endpoint is grouped together with other endpoints
+within the same controller class. ``group`` is a string that can be used to
+assign an endpoint or all endpoints in a class to another controller or a
+conceived group name.
+
+
+``parameters``: A dict used to describe path, query or request body parameters.
+By default, all parameters for an endpoint are listed on the Swagger UI page,
+including information of whether the parameter is optional/required and default
+values. However, there will be no description of the parameter and the parameter
+type will only be displayed in some cases.
+When adding information, each parameters should be described as in the example
+below. Note that the parameter type should be expressed as a built-in python
+type and not as a string. Allowed values are ``str``, ``int``, ``bool``, ``float``.
+
+.. code-block:: python
+
+ @EndpointDoc(parameters={'my_string': (str, 'Description of my_string')})
+
+For body parameters, more complex cases are possible. If the parameter is a
+dictionary, the type should be replaced with a ``dict`` containing its nested
+parameters. When describing nested parameters, the same format as other
+parameters is used. However, all nested parameters are set as required by default.
+If the nested parameter is optional this must be specified as for ``item2`` in
+the example below. If a nested parameters is set to optional, it is also
+possible to specify the default value (this will not be provided automatically
+for nested parameters).
+
+.. code-block:: python
+
+  @EndpointDoc(parameters={
+    'my_dictionary': ({
+      'item1': (str, 'Description of item1'),
+      'item2': (str, 'Description of item2', True),  # item2 is optional
+      'item3': (str, 'Description of item3', True, 'foo'),  # item3 is optional with 'foo' as default value
+  }, 'Description of my_dictionary')})
+
+If the parameter is a ``list`` of primitive types, the type should be
+surrounded with square brackets.
+
+.. code-block:: python
+
+  @EndpointDoc(parameters={'my_list': ([int], 'Description of my_list')})
+
+If the parameter is a ``list`` with nested parameters, the nested parameters
+should be placed in a dictionary and surrounded with square brackets.
+
+.. code-block:: python
+
+  @EndpointDoc(parameters={
+    'my_list': ([{
+      'list_item': (str, 'Description of list_item'),
+      'list_item2': (str, 'Description of list_item2')
+  }], 'Description of my_list')})
+
+
+``responses``: A dict used for describing responses. Rules for describing
+responses are the same as for request body parameters, with one difference:
+responses also needs to be assigned to the related response code as in the
+example below:
+
+.. code-block:: python
+
+  @EndpointDoc(responses={
+    '400':{'my_response': (str, 'Description of my_response')}
+
+
 Error Handling in Python
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -1502,12 +1706,12 @@ Plug-ins
 
 New functionality can be provided by means of a plug-in architecture. Among the
 benefits this approach brings in, loosely coupled development is one of the most
-notable. As the Ceph-Dashboard grows in feature richness, its code-base becomes
+notable. As the Ceph Dashboard grows in feature richness, its code-base becomes
 more and more complex. The hook-based nature of a plug-in architecture allows to
 extend functionality in a controlled manner, and isolate the scope of the
 changes.
 
-Ceph-Dashboard relies on `Pluggy <https://pluggy.readthedocs.io>`_ to provide
+Ceph Dashboard relies on `Pluggy <https://pluggy.readthedocs.io>`_ to provide
 for plug-ing support. On top of pluggy, an interface-based approach has been
 implemented, with some safety checks (method override and abstract method
 checks).
@@ -1518,13 +1722,13 @@ In order to create a new plugin, the following steps are required:
 #. Import the ``PLUGIN_MANAGER`` instance and the ``Interfaces``.
 #. Create a class extending the desired interfaces. The plug-in library will check if all the methods of the interfaces have been properly overridden.
 #. Register the plugin in the ``PLUGIN_MANAGER`` instance.
-#. Import the plug-in from within the Ceph-Dashboard ``module.py`` (currently no dynamic loading is implemented).
+#. Import the plug-in from within the Ceph Dashboard ``module.py`` (currently no dynamic loading is implemented).
 
 The available interfaces are the following:
 
 - ``CanMgr``: provides the plug-in with access to the ``mgr`` instance under ``self.mgr``.
-- ``CanLog``: provides the plug-in with access to the Ceph-Dashboard logger under ``self.log``.
-- ``Setupable``: requires overriding ``setup()`` hook. This method is run in the Ceph-Dashboard ``serve()`` method, right after CherryPy has been configured, but before it is started. It's a placeholder for the plug-in initialization logic.
+- ``CanLog``: provides the plug-in with access to the Ceph Dashboard logger under ``self.log``.
+- ``Setupable``: requires overriding ``setup()`` hook. This method is run in the Ceph Dashboard ``serve()`` method, right after CherryPy has been configured, but before it is started. It's a placeholder for the plug-in initialization logic.
 - ``HasOptions``: requires overriding ``get_options()`` hook by returning a list of ``Options()``. The options returned here are added to the ``MODULE_OPTIONS``.
 - ``HasCommands``: requires overriding ``register_commands()`` hook by defining the commands the plug-in can handle and decorating them with ``@CLICommand`. The commands can be optionally returned, so that they can be invoked externally (which makes unit testing easier).
 - ``HasControllers``: requires overriding ``get_controllers()`` hook by defining and returning the controllers as usual.

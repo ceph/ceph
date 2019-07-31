@@ -27,7 +27,8 @@ public:
     return m_mock_client;
   }
 
-  TestIoCtxImpl *clone() override {
+  MOCK_METHOD0(clone, TestIoCtxImpl*());
+  TestIoCtxImpl *do_clone() {
     TestIoCtxImpl *io_ctx_impl = new ::testing::NiceMock<MockTestMemIoCtxImpl>(
       m_mock_client, m_client, get_pool_id(), get_pool_name(), get_pool());
     io_ctx_impl->set_snap_read(get_snap_read());
@@ -60,9 +61,10 @@ public:
     return TestMemIoCtxImpl::assert_exists(oid);
   }
 
-  MOCK_METHOD2(create, int(const std::string&, bool));
-  int do_create(const std::string& oid, bool exclusive) {
-    return TestMemIoCtxImpl::create(oid, exclusive);
+  MOCK_METHOD3(create, int(const std::string&, bool, const SnapContext &));
+  int do_create(const std::string& oid, bool exclusive,
+                const SnapContext &snapc) {
+    return TestMemIoCtxImpl::create(oid, exclusive, snapc);
   }
 
   MOCK_METHOD3(cmpext, int(const std::string&, uint64_t, bufferlist&));
@@ -194,11 +196,12 @@ public:
   void default_to_parent() {
     using namespace ::testing;
 
+    ON_CALL(*this, clone()).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_clone));
     ON_CALL(*this, aio_notify(_, _, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_aio_notify));
     ON_CALL(*this, aio_watch(_, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_aio_watch));
     ON_CALL(*this, aio_unwatch(_, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_aio_unwatch));
     ON_CALL(*this, assert_exists(_)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_assert_exists));
-    ON_CALL(*this, create(_,_)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_create));
+    ON_CALL(*this, create(_, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_create));
     ON_CALL(*this, cmpext(_,_,_)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_cmpext));
     ON_CALL(*this, exec(_, _, _, _, _, _, _)).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_exec));
     ON_CALL(*this, get_instance_id()).WillByDefault(Invoke(this, &MockTestMemIoCtxImpl::do_get_instance_id));

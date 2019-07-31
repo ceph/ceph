@@ -149,7 +149,7 @@ Limitations
 .. _Placement Groups: ../../rados/operations/placement-groups
 .. _Install and Configure QEMU: ../qemu-rbd
 .. _Install and Configure libvirt: ../libvirt
-.. _KVM Hypervisor Host Installation: http://cloudstack.apache.org/docs/en-US/Apache_CloudStack/4.2.0/html/Installation_Guide/hypervisor-kvm-install-flow.html
-.. _Storage Tags: http://docs.cloudstack.apache.org/projects/cloudstack-administration/en/4.11/storage.html#storage-tags
-.. _Create a New Disk Offering: http://docs.cloudstack.apache.org/projects/cloudstack-administration/en/master/service_offerings.html#creating-a-new-disk-offering
+.. _KVM Hypervisor Host Installation: http://docs.cloudstack.apache.org/en/latest/installguide/hypervisor/kvm.html
+.. _Storage Tags: http://docs.cloudstack.apache.org/en/latest/adminguide/storage.html#storage-tags
+.. _Create a New Disk Offering: http://docs.cloudstack.apache.org/en/latest/adminguide/service_offerings.html#creating-a-new-disk-offering
 .. _User Management: ../../rados/operations/user-management

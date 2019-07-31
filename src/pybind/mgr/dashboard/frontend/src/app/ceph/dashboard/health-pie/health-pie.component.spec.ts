@@ -3,6 +3,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { configureTestBed } from '../../../../testing/unit-test-helper';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
+import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
 import { FormatterService } from '../../../shared/services/formatter.service';
 import { HealthPieComponent } from './health-pie.component';
 
@@ -13,7 +14,7 @@ describe('HealthPieComponent', () => {
   configureTestBed({
     schemas: [NO_ERRORS_SCHEMA],
     declarations: [HealthPieComponent],
-    providers: [DimlessBinaryPipe, FormatterService]
+    providers: [DimlessBinaryPipe, DimlessPipe, FormatterService]
   });
 
   beforeEach(() => {
@@ -23,34 +24,6 @@ describe('HealthPieComponent', () => {
 
   it('should create', () => {
     expect(component).toBeTruthy();
-  });
-
-  it('Set doughnut if nothing received', () => {
-    component.chartType = '';
-    fixture.detectChanges();
-
-    expect(component.chartConfig.chartType).toEqual('doughnut');
-  });
-
-  it('Set doughnut if not allowed value received', () => {
-    component.chartType = 'badType';
-    fixture.detectChanges();
-
-    expect(component.chartConfig.chartType).toEqual('doughnut');
-  });
-
-  it('Set doughnut if doughnut received', () => {
-    component.chartType = 'doughnut';
-    fixture.detectChanges();
-
-    expect(component.chartConfig.chartType).toEqual('doughnut');
-  });
-
-  it('Set pie if pie received', () => {
-    component.chartType = 'pie';
-    fixture.detectChanges();
-
-    expect(component.chartConfig.chartType).toEqual('pie');
   });
 
   it('Add slice border if there is more than one slice with numeric non zero value', () => {
@@ -80,5 +53,22 @@ describe('HealthPieComponent', () => {
     component.ngOnChanges();
 
     expect(component.chartConfig.dataset[0].data).toEqual(initialData);
+  });
+
+  describe('tooltip body', () => {
+    const tooltipBody = ['text: 10000'];
+
+    it('should return amount converted to appropriate units', () => {
+      component.isBytesData = false;
+      expect(component['getChartTooltipBody'](tooltipBody)).toEqual('text: 10 k');
+
+      component.isBytesData = true;
+      expect(component['getChartTooltipBody'](tooltipBody)).toEqual('text: 9.8 KiB');
+    });
+
+    it('should not return amount when showing label as tooltip', () => {
+      component.showLabelAsTooltip = true;
+      expect(component['getChartTooltipBody'](tooltipBody)).toEqual('text');
+    });
   });
 });

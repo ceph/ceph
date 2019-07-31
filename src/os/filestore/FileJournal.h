@@ -283,6 +283,8 @@ private:
   uint64_t last_committed_seq;
   uint64_t journaled_since_start;
 
+  string devname;
+
   /*
    * full states cycle at the beginnging of each commit epoch, when commit_start()
    * is called.

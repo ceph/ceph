@@ -11,6 +11,8 @@ import { IscsiService } from '../../../shared/api/iscsi.service';
 import { RbdService } from '../../../shared/api/rbd.service';
 import { SelectMessages } from '../../../shared/components/select/select-messages.model';
 import { SelectOption } from '../../../shared/components/select/select-option.model';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import { FinishedTask } from '../../../shared/models/finished-task';
@@ -28,7 +30,15 @@ export class IscsiTargetFormComponent implements OnInit {
   modalRef: BsModalRef;
   minimum_gateways = 1;
   target_default_controls: any;
+  target_controls_limits: any;
   disk_default_controls: any;
+  disk_controls_limits: any;
+  backstores: string[];
+  default_backstore: string;
+  unsupported_rbd_features: any;
+  required_rbd_features: any;
+
+  icons = Icons;
 
   isEdit = false;
   target_iqn: string;
@@ -71,7 +81,9 @@ export class IscsiTargetFormComponent implements OnInit {
 
   IQN_REGEX = /^iqn\.(19|20)\d\d-(0[1-9]|1[0-2])\.\D{2,3}(\.[A-Za-z0-9-]+)+(:[A-Za-z0-9-\.]+)*$/;
   USER_REGEX = /[\w\.:@_-]{8,64}/;
-  PASSWORD_REGEX = /[\w@\-_]{12,16}/;
+  PASSWORD_REGEX = /[\w@\-_\/]{12,16}/;
+  action: string;
+  resource: string;
 
   constructor(
     private iscsiService: IscsiService,
@@ -80,8 +92,11 @@ export class IscsiTargetFormComponent implements OnInit {
     private router: Router,
     private route: ActivatedRoute,
     private i18n: I18n,
-    private taskWrapper: TaskWrapperService
-  ) {}
+    private taskWrapper: TaskWrapperService,
+    public actionLabels: ActionLabelsI18n
+  ) {
+    this.resource = this.i18n('target');
+  }
 
   ngOnInit() {
     const promises: any[] = [
@@ -98,6 +113,7 @@ export class IscsiTargetFormComponent implements OnInit {
         promises.push(this.iscsiService.getTarget(this.target_iqn));
       });
     }
+    this.action = this.isEdit ? this.actionLabels.EDIT : this.actionLabels.CREATE;
 
     forkJoin(promises).subscribe((data: any[]) => {
       // iscsiService.listTargets
@@ -107,14 +123,36 @@ export class IscsiTargetFormComponent implements OnInit {
         .map((image) => `${image.pool}/${image.image}`)
         .value();
 
+      // iscsiService.settings()
+      this.minimum_gateways = data[3].config.minimum_gateways;
+      this.target_default_controls = data[3].target_default_controls;
+      this.target_controls_limits = data[3].target_controls_limits;
+      this.disk_default_controls = data[3].disk_default_controls;
+      this.disk_controls_limits = data[3].disk_controls_limits;
+      this.backstores = data[3].backstores;
+      this.default_backstore = data[3].default_backstore;
+      this.unsupported_rbd_features = data[3].unsupported_rbd_features;
+      this.required_rbd_features = data[3].required_rbd_features;
+
       // rbdService.list()
       this.imagesAll = _(data[1])
         .flatMap((pool) => pool.value)
-        .map((image) => `${image.pool_name}/${image.name}`)
-        .filter((image) => usedImages.indexOf(image) === -1)
+        .filter((image) => {
+          const imageId = `${image.pool_name}/${image.name}`;
+          if (usedImages.indexOf(imageId) !== -1) {
+            return false;
+          }
+          const validBackstores = this.getValidBackstores(image);
+          if (validBackstores.length === 0) {
+            return false;
+          }
+          return true;
+        })
         .value();
 
-      this.imagesSelections = this.imagesAll.map((image) => new SelectOption(false, image, ''));
+      this.imagesSelections = this.imagesAll.map(
+        (image) => new SelectOption(false, `${image.pool_name}/${image.name}`, '')
+      );
 
       // iscsiService.portals()
       const portals: SelectOption[] = [];
@@ -124,11 +162,6 @@ export class IscsiTargetFormComponent implements OnInit {
         });
       });
       this.portalsSelections = [...portals];
-
-      // iscsiService.settings()
-      this.minimum_gateways = data[3].config.minimum_gateways;
-      this.target_default_controls = data[3].target_default_controls;
-      this.disk_default_controls = data[3].disk_default_controls;
 
       this.createForm();
 
@@ -155,14 +188,16 @@ export class IscsiTargetFormComponent implements OnInit {
       }),
       disks: new FormControl([]),
       initiators: new FormArray([]),
-      groups: new FormArray([])
+      groups: new FormArray([]),
+      acl_enabled: new FormControl(false)
     });
   }
 
   resolveModel(res) {
     this.targetForm.patchValue({
       target_iqn: res.target_iqn,
-      target_controls: res.target_controls
+      target_controls: res.target_controls,
+      acl_enabled: res.acl_enabled
     });
 
     const portals = [];
@@ -178,7 +213,11 @@ export class IscsiTargetFormComponent implements OnInit {
     _.forEach(res.disks, (disk) => {
       const id = `${disk.pool}/${disk.image}`;
       disks.push(id);
-      this.imagesSettings[id] = disk.controls;
+      this.imagesSettings[id] = {
+        backstore: disk.backstore
+      };
+      this.imagesSettings[id][disk.backstore] = disk.controls;
+
       this.onImageSelection({ option: { name: id, selected: true } });
     });
     this.targetForm.patchValue({
@@ -194,7 +233,6 @@ export class IscsiTargetFormComponent implements OnInit {
 
     _.forEach(res.groups, (group) => {
       const fg = this.addGroup();
-      console.log(group);
       group.disks = _.map(group.disks, (disk) => `${disk.pool}/${disk.image}`);
       fg.patchValue(group);
       _.forEach(group.members, (member) => {
@@ -263,12 +301,31 @@ export class IscsiTargetFormComponent implements OnInit {
     });
   }
 
+  getDefaultBackstore(imageId) {
+    let result = this.default_backstore;
+    const image = this.getImageById(imageId);
+    if (!this.validFeatures(image, this.default_backstore)) {
+      this.backstores.forEach((backstore) => {
+        if (backstore !== this.default_backstore) {
+          if (this.validFeatures(image, backstore)) {
+            result = backstore;
+          }
+        }
+      });
+    }
+    return result;
+  }
+
   onImageSelection($event) {
     const option = $event.option;
 
     if (option.selected) {
       if (!this.imagesSettings[option.name]) {
-        this.imagesSettings[option.name] = {};
+        const defaultBackstore = this.getDefaultBackstore(option.name);
+        this.imagesSettings[option.name] = {
+          backstore: defaultBackstore
+        };
+        this.imagesSettings[option.name][defaultBackstore] = {};
       }
 
       _.forEach(this.imagesInitiatorSelections, (selections, i) => {
@@ -443,7 +500,7 @@ export class IscsiTargetFormComponent implements OnInit {
 
     const initiators = _.map(
       this.initiators.value,
-      (initiator) => new SelectOption(false, initiator.client_iqn, '')
+      (initiator) => new SelectOption(false, initiator.client_iqn, '', !initiator.cdIsInGroup)
     );
     this.groupMembersSelections.push(initiators);
 
@@ -458,11 +515,19 @@ export class IscsiTargetFormComponent implements OnInit {
   onGroupMemberSelection($event) {
     const option = $event.option;
 
-    this.initiators.controls.forEach((element) => {
+    let initiator_index: number;
+    this.initiators.controls.forEach((element, index) => {
       if (element.value.client_iqn === option.name) {
         element.patchValue({ luns: [] });
         element.get('cdIsInGroup').setValue(option.selected);
+        initiator_index = index;
       }
+    });
+
+    // Members can only be at one group at a time, so when a member is selected
+    // in one group we need to disable its selection in other groups
+    _.forEach(this.groupMembersSelections, (group) => {
+      group[initiator_index].enabled = !option.selected;
     });
   }
 
@@ -493,11 +558,12 @@ export class IscsiTargetFormComponent implements OnInit {
   }
 
   submit() {
-    const formValue = this.targetForm.value;
+    const formValue = _.cloneDeep(this.targetForm.value);
 
     const request = {
       target_iqn: this.targetForm.getValue('target_iqn'),
       target_controls: this.targetForm.getValue('target_controls'),
+      acl_enabled: this.targetForm.getValue('acl_enabled'),
       portals: [],
       disks: [],
       clients: [],
@@ -507,64 +573,71 @@ export class IscsiTargetFormComponent implements OnInit {
     // Disks
     formValue.disks.forEach((disk) => {
       const imageSplit = disk.split('/');
+      const backstore = this.imagesSettings[disk].backstore;
       request.disks.push({
         pool: imageSplit[0],
         image: imageSplit[1],
-        controls: this.imagesSettings[disk]
+        backstore: backstore,
+        controls: this.imagesSettings[disk][backstore]
       });
     });
 
     // Portals
     formValue.portals.forEach((portal) => {
-      const portalSplit = portal.split(':');
+      const index = portal.indexOf(':');
       request.portals.push({
-        host: portalSplit[0],
-        ip: portalSplit[1]
+        host: portal.substring(0, index),
+        ip: portal.substring(index + 1)
       });
     });
 
     // Clients
-    formValue.initiators.forEach((initiator) => {
-      if (!initiator.auth.user) {
-        initiator.auth.user = null;
-      }
-      if (!initiator.auth.password) {
-        initiator.auth.password = null;
-      }
-      if (!initiator.auth.mutual_user) {
-        initiator.auth.mutual_user = null;
-      }
-      if (!initiator.auth.mutual_password) {
-        initiator.auth.mutual_password = null;
-      }
+    if (request.acl_enabled) {
+      formValue.initiators.forEach((initiator) => {
+        if (!initiator.auth.user) {
+          initiator.auth.user = '';
+        }
+        if (!initiator.auth.password) {
+          initiator.auth.password = '';
+        }
+        if (!initiator.auth.mutual_user) {
+          initiator.auth.mutual_user = '';
+        }
+        if (!initiator.auth.mutual_password) {
+          initiator.auth.mutual_password = '';
+        }
+        delete initiator.cdIsInGroup;
 
-      const newLuns = [];
-      initiator.luns.forEach((lun) => {
-        const imageSplit = lun.split('/');
-        newLuns.push({
-          pool: imageSplit[0],
-          image: imageSplit[1]
+        const newLuns = [];
+        initiator.luns.forEach((lun) => {
+          const imageSplit = lun.split('/');
+          newLuns.push({
+            pool: imageSplit[0],
+            image: imageSplit[1]
+          });
         });
-      });
 
-      initiator.luns = newLuns;
-    });
-    request.clients = formValue.initiators;
+        initiator.luns = newLuns;
+      });
+      request.clients = formValue.initiators;
+    }
 
     // Groups
-    formValue.groups.forEach((group) => {
-      const newDisks = [];
-      group.disks.forEach((disk) => {
-        const imageSplit = disk.split('/');
-        newDisks.push({
-          pool: imageSplit[0],
-          image: imageSplit[1]
+    if (request.acl_enabled) {
+      formValue.groups.forEach((group) => {
+        const newDisks = [];
+        group.disks.forEach((disk) => {
+          const imageSplit = disk.split('/');
+          newDisks.push({
+            pool: imageSplit[0],
+            image: imageSplit[1]
+          });
         });
-      });
 
-      group.disks = newDisks;
-    });
-    request.groups = formValue.groups;
+        group.disks = newDisks;
+      });
+      request.groups = formValue.groups;
+    }
 
     let wrapTask;
     if (this.isEdit) {
@@ -597,7 +670,8 @@ export class IscsiTargetFormComponent implements OnInit {
   targetSettingsModal() {
     const initialState = {
       target_controls: this.targetForm.get('target_controls'),
-      target_default_controls: this.target_default_controls
+      target_default_controls: this.target_default_controls,
+      target_controls_limits: this.target_controls_limits
     };
 
     this.modalRef = this.modalService.show(IscsiTargetIqnSettingsModalComponent, { initialState });
@@ -607,11 +681,32 @@ export class IscsiTargetFormComponent implements OnInit {
     const initialState = {
       imagesSettings: this.imagesSettings,
       image: image,
-      disk_default_controls: this.disk_default_controls
+      disk_default_controls: this.disk_default_controls,
+      disk_controls_limits: this.disk_controls_limits,
+      backstores: this.getValidBackstores(this.getImageById(image))
     };
 
     this.modalRef = this.modalService.show(IscsiTargetImageSettingsModalComponent, {
       initialState
     });
+  }
+
+  validFeatures(image, backstore) {
+    const imageFeatures = image.features;
+    const requiredFeatures = this.required_rbd_features[backstore];
+    const unsupportedFeatures = this.unsupported_rbd_features[backstore];
+    // tslint:disable-next-line:no-bitwise
+    const validRequiredFeatures = (imageFeatures & requiredFeatures) === requiredFeatures;
+    // tslint:disable-next-line:no-bitwise
+    const validSupportedFeatures = (imageFeatures & unsupportedFeatures) === 0;
+    return validRequiredFeatures && validSupportedFeatures;
+  }
+
+  getImageById(imageId) {
+    return this.imagesAll.find((image) => imageId === `${image.pool_name}/${image.name}`);
+  }
+
+  getValidBackstores(image) {
+    return this.backstores.filter((backstore) => this.validFeatures(image, backstore));
   }
 }

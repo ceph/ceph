@@ -137,29 +137,25 @@ void global_pre_init(
   }
 
   // environment variables override (CEPH_ARGS, CEPH_KEYRING)
-  conf.parse_env();
+  conf.parse_env(cct->get_module_type());
 
   // command line (as passed by caller)
   conf.parse_argv(args);
 
-  if (!conf->no_mon_config) {
-    // make sure our mini-session gets legacy values
-    conf.apply_changes(nullptr);
+  if (conf->log_early &&
+      !cct->_log->is_started()) {
+    cct->_log->start();
+  }
 
-    MonClient mc_bootstrap(g_ceph_context);
-    if (mc_bootstrap.get_monmap_and_config() < 0) {
-      cct->_log->flush();
-      cerr << "failed to fetch mon config (--no-mon-config to skip)"
-	   << std::endl;
-      _exit(1);
-    }
+  if (!cct->_log->is_started()) {
+    cct->_log->start();
   }
 
   // do the --show-config[-val], if present in argv
   conf.do_argv_commands();
 
   // Now we're ready to complain about config file parse errors
-  g_conf().complain_about_parse_errors(g_ceph_context);
+  g_conf().complain_about_parse_error(g_ceph_context);
 }
 
 boost::intrusive_ptr<CephContext>
@@ -305,6 +301,28 @@ global_init(const std::map<std::string,std::string> *defaults,
   }
 #endif
 
+  //
+  // Utterly important to run first network connection after setuid().
+  // In case of rdma transport uverbs kernel module starts returning
+  // -EACCESS on each operation if credentials has been changed, see
+  // callers of ib_safe_file_access() for details.
+  //
+  // fork() syscall also matters, so daemonization won't work in case
+  // of rdma.
+  //
+  if (!g_conf()->no_mon_config) {
+    // make sure our mini-session gets legacy values
+    g_conf().apply_changes(nullptr);
+
+    MonClient mc_bootstrap(g_ceph_context);
+    if (mc_bootstrap.get_monmap_and_config() < 0) {
+      g_ceph_context->_log->flush();
+      cerr << "failed to fetch mon config (--no-mon-config to skip)"
+	   << std::endl;
+      _exit(1);
+    }
+  }
+
   // Expand metavariables. Invoke configuration observers. Open log file.
   g_conf().apply_changes(nullptr);
 
@@ -341,7 +359,7 @@ global_init(const std::map<std::string,std::string> *defaults,
   }
 
   // Now we're ready to complain about config file parse errors
-  g_conf().complain_about_parse_errors(g_ceph_context);
+  g_conf().complain_about_parse_error(g_ceph_context);
 
   // test leak checking
   if (g_conf()->debug_deliberately_leak_memory) {
@@ -385,7 +403,7 @@ int global_init_prefork(CephContext *cct)
   const auto& conf = cct->_conf;
   if (!conf->daemonize) {
 
-    if (pidfile_write(conf) < 0)
+    if (pidfile_write(conf->pid_file) < 0)
       exit(1);
 
     if ((cct->get_init_flags() & CINIT_FLAG_DEFER_DROP_PRIVILEGES) &&
@@ -466,7 +484,7 @@ void global_init_postfork_start(CephContext *cct)
   reopen_as_null(cct, STDIN_FILENO);
 
   const auto& conf = cct->_conf;
-  if (pidfile_write(conf) < 0)
+  if (pidfile_write(conf->pid_file) < 0)
     exit(1);
 
   if ((cct->get_init_flags() & CINIT_FLAG_DEFER_DROP_PRIVILEGES) &&

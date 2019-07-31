@@ -15,22 +15,28 @@
 #ifndef CEPH_MLOGACK_H
 #define CEPH_MLOGACK_H
 
-class MLogAck : public MessageInstance<MLogAck> {
-public:
-  friend factory;
+#include <iostream>
+#include <string>
+#include <string_view>
 
+#include "include/uuid.h"
+
+#include "msg/Message.h"
+
+class MLogAck : public Message {
+public:
   uuid_d fsid;
   version_t last = 0;
   std::string channel;
 
-  MLogAck() : MessageInstance(MSG_LOGACK) {}
-  MLogAck(uuid_d& f, version_t l) : MessageInstance(MSG_LOGACK), fsid(f), last(l) {}
+  MLogAck() : Message{MSG_LOGACK} {}
+  MLogAck(uuid_d& f, version_t l) : Message{MSG_LOGACK}, fsid(f), last(l) {}
 private:
   ~MLogAck() override {}
 
 public:
   std::string_view get_type_name() const override { return "log_ack"; }
-  void print(ostream& out) const override {
+  void print(std::ostream& out) const override {
     out << "log(last " << last << ")";
   }
 
@@ -48,6 +54,9 @@ public:
     if (!p.end())
       decode(channel, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

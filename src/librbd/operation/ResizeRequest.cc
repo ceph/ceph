@@ -17,7 +17,8 @@
 
 #define dout_subsys ceph_subsys_rbd
 #undef dout_prefix
-#define dout_prefix *_dout << "librbd::ResizeRequest: "
+#define dout_prefix *_dout << "librbd::operation::ResizeRequest: " << this \
+                           << " " << __func__ << ": "
 
 namespace librbd {
 namespace operation {
@@ -42,7 +43,7 @@ ResizeRequest<I>::~ResizeRequest() {
   I &image_ctx = this->m_image_ctx;
   ResizeRequest *next_req = NULL;
   {
-    RWLock::WLocker snap_locker(image_ctx.snap_lock);
+    RWLock::WLocker image_locker(image_ctx.image_lock);
     ceph_assert(m_xlist_item.remove_myself());
     if (!image_ctx.resize_reqs.empty()) {
       next_req = image_ctx.resize_reqs.front();
@@ -61,7 +62,7 @@ void ResizeRequest<I>::send() {
   ceph_assert(image_ctx.owner_lock.is_locked());
 
   {
-    RWLock::WLocker snap_locker(image_ctx.snap_lock);
+    RWLock::WLocker image_locker(image_ctx.image_lock);
     if (!m_xlist_item.is_on_list()) {
       image_ctx.resize_reqs.push_back(&m_xlist_item);
       if (image_ctx.resize_reqs.front() != this) {
@@ -93,7 +94,7 @@ template <typename I>
 void ResizeRequest<I>::send_pre_block_writes() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << dendl;
+  ldout(cct, 5) << dendl;
 
   image_ctx.io_work_queue->block_writes(create_context_callback<
     ResizeRequest<I>, &ResizeRequest<I>::handle_pre_block_writes>(this));
@@ -103,7 +104,7 @@ template <typename I>
 Context *ResizeRequest<I>::handle_pre_block_writes(int *result) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
+  ldout(cct, 5) << "r=" << *result << dendl;
 
   if (*result < 0) {
     lderr(cct) << "failed to block writes: " << cpp_strerror(*result) << dendl;
@@ -120,7 +121,7 @@ Context *ResizeRequest<I>::send_append_op_event() {
   CephContext *cct = image_ctx.cct;
 
   if (m_new_size < m_original_size && !m_allow_shrink) {
-    ldout(cct, 1) << " shrinking the image is not permitted" << dendl;
+    ldout(cct, 1) << "shrinking the image is not permitted" << dendl;
     image_ctx.io_work_queue->unblock_writes();
     this->async_complete(-EINVAL);
     return nullptr;
@@ -131,7 +132,7 @@ Context *ResizeRequest<I>::send_append_op_event() {
     return send_grow_object_map();
   }
 
-  ldout(cct, 5) << this << " " << __func__ << dendl;
+  ldout(cct, 5) << dendl;
   return nullptr;
 }
 
@@ -139,7 +140,7 @@ template <typename I>
 Context *ResizeRequest<I>::handle_append_op_event(int *result) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
+  ldout(cct, 5) << "r=" << *result << dendl;
 
   if (*result < 0) {
     lderr(cct) << "failed to commit journal entry: " << cpp_strerror(*result)
@@ -155,7 +156,7 @@ template <typename I>
 void ResizeRequest<I>::send_trim_image() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << dendl;
+  ldout(cct, 5) << dendl;
 
   RWLock::RLocker owner_locker(image_ctx.owner_lock);
   TrimRequest<I> *req = TrimRequest<I>::create(
@@ -169,7 +170,7 @@ template <typename I>
 Context *ResizeRequest<I>::handle_trim_image(int *result) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
+  ldout(cct, 5) << "r=" << *result << dendl;
 
   if (*result == -ERESTART) {
     ldout(cct, 5) << "resize operation interrupted" << dendl;
@@ -188,12 +189,12 @@ void ResizeRequest<I>::send_flush_cache() {
   I &image_ctx = this->m_image_ctx;
 
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << dendl;
+  ldout(cct, 5) << dendl;
 
   RWLock::RLocker owner_locker(image_ctx.owner_lock);
   auto ctx = create_context_callback<
     ResizeRequest<I>, &ResizeRequest<I>::handle_flush_cache>(this);
-  auto aio_comp = io::AioCompletion::create(
+  auto aio_comp = io::AioCompletion::create_and_start(
     ctx, util::get_image_ctx(&image_ctx), io::AIO_TYPE_FLUSH);
   auto req = io::ImageDispatchSpec<I>::create_flush_request(
     image_ctx, aio_comp, io::FLUSH_SOURCE_INTERNAL, {});
@@ -205,7 +206,7 @@ template <typename I>
 Context *ResizeRequest<I>::handle_flush_cache(int *result) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
+  ldout(cct, 5) << "r=" << *result << dendl;
 
   if (*result < 0) {
     lderr(cct) << "failed to flush cache: " << cpp_strerror(*result) << dendl;
@@ -220,7 +221,7 @@ template <typename I>
 void ResizeRequest<I>::send_invalidate_cache() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << dendl;
+  ldout(cct, 5) << dendl;
 
   // need to invalidate since we're deleting objects, and
   // ObjectCacher doesn't track non-existent objects
@@ -233,7 +234,7 @@ template <typename I>
 Context *ResizeRequest<I>::handle_invalidate_cache(int *result) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
+  ldout(cct, 5) << "r=" << *result << dendl;
 
   // ignore busy error -- writeback was successfully flushed so we might be
   // wasting some cache space for trimmed objects, but they will get purged
@@ -253,30 +254,32 @@ Context *ResizeRequest<I>::send_grow_object_map() {
   I &image_ctx = this->m_image_ctx;
 
   {
-    RWLock::WLocker snap_locker(image_ctx.snap_lock);
+    RWLock::WLocker image_locker(image_ctx.image_lock);
     m_shrink_size_visible = true;
   }
-  image_ctx.io_work_queue->unblock_writes();
 
   if (m_original_size == m_new_size) {
+    image_ctx.io_work_queue->unblock_writes();
     return this->create_context_finisher(0);
   } else if (m_new_size < m_original_size) {
+    image_ctx.io_work_queue->unblock_writes();
     send_flush_cache();
     return nullptr;
   }
 
   image_ctx.owner_lock.get_read();
-  image_ctx.snap_lock.get_read();
+  image_ctx.image_lock.get_read();
   if (image_ctx.object_map == nullptr) {
-    image_ctx.snap_lock.put_read();
+    image_ctx.image_lock.put_read();
     image_ctx.owner_lock.put_read();
 
-    send_post_block_writes();
+    // IO is still blocked
+    send_update_header();
     return nullptr;
   }
 
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << dendl;
+  ldout(cct, 5) << dendl;
 
   // should have been canceled prior to releasing lock
   ceph_assert(image_ctx.exclusive_lock == nullptr ||
@@ -285,7 +288,7 @@ Context *ResizeRequest<I>::send_grow_object_map() {
   image_ctx.object_map->aio_resize(
     m_new_size, OBJECT_NONEXISTENT, create_context_callback<
       ResizeRequest<I>, &ResizeRequest<I>::handle_grow_object_map>(this));
-  image_ctx.snap_lock.put_read();
+  image_ctx.image_lock.put_read();
   image_ctx.owner_lock.put_read();
   return nullptr;
 }
@@ -294,15 +297,17 @@ template <typename I>
 Context *ResizeRequest<I>::handle_grow_object_map(int *result) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
+  ldout(cct, 5) << "r=" << *result << dendl;
 
   if (*result < 0) {
-    lderr(cct) << this << " " << __func__ << ": failed to resize object map: "
+    lderr(cct) << "failed to resize object map: "
                << cpp_strerror(*result) << dendl;
+    image_ctx.io_work_queue->unblock_writes();
     return this->create_context_finisher(*result);
   }
 
-  send_post_block_writes();
+  // IO is still blocked
+  send_update_header();
   return nullptr;
 }
 
@@ -311,9 +316,9 @@ Context *ResizeRequest<I>::send_shrink_object_map() {
   I &image_ctx = this->m_image_ctx;
 
   image_ctx.owner_lock.get_read();
-  image_ctx.snap_lock.get_read();
+  image_ctx.image_lock.get_read();
   if (image_ctx.object_map == nullptr || m_new_size > m_original_size) {
-    image_ctx.snap_lock.put_read();
+    image_ctx.image_lock.put_read();
     image_ctx.owner_lock.put_read();
 
     update_size_and_overlap();
@@ -321,8 +326,7 @@ Context *ResizeRequest<I>::send_shrink_object_map() {
   }
 
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << " "
-                << "original_size=" << m_original_size << ", "
+  ldout(cct, 5) << "original_size=" << m_original_size << ", "
                 << "new_size=" << m_new_size << dendl;
 
   // should have been canceled prior to releasing lock
@@ -332,7 +336,7 @@ Context *ResizeRequest<I>::send_shrink_object_map() {
   image_ctx.object_map->aio_resize(
     m_new_size, OBJECT_NONEXISTENT, create_context_callback<
       ResizeRequest<I>, &ResizeRequest<I>::handle_shrink_object_map>(this));
-  image_ctx.snap_lock.put_read();
+  image_ctx.image_lock.put_read();
   image_ctx.owner_lock.put_read();
   return nullptr;
 }
@@ -341,10 +345,10 @@ template <typename I>
 Context *ResizeRequest<I>::handle_shrink_object_map(int *result) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
+  ldout(cct, 5) << "r=" << *result << dendl;
 
   if (*result < 0) {
-    lderr(cct) << this << " " << __func__ << ": failed to resize object map: "
+    lderr(cct) << "failed to resize object map: "
                << cpp_strerror(*result) << dendl;
     image_ctx.io_work_queue->unblock_writes();
     return this->create_context_finisher(*result);
@@ -358,7 +362,7 @@ template <typename I>
 void ResizeRequest<I>::send_post_block_writes() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << dendl;
+  ldout(cct, 5) << dendl;
 
   RWLock::RLocker owner_locker(image_ctx.owner_lock);
   image_ctx.io_work_queue->block_writes(create_context_callback<
@@ -369,7 +373,7 @@ template <typename I>
 Context *ResizeRequest<I>::handle_post_block_writes(int *result) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
+  ldout(cct, 5) << "r=" << *result << dendl;
 
   if (*result < 0) {
     image_ctx.io_work_queue->unblock_writes();
@@ -386,8 +390,7 @@ template <typename I>
 void ResizeRequest<I>::send_update_header() {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << " "
-                << "original_size=" << m_original_size << ", "
+  ldout(cct, 5) << "original_size=" << m_original_size << ", "
                 << "new_size=" << m_new_size << dendl;;
 
   // should have been canceled prior to releasing lock
@@ -418,7 +421,7 @@ template <typename I>
 Context *ResizeRequest<I>::handle_update_header(int *result) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
-  ldout(cct, 5) << this << " " << __func__ << ": r=" << *result << dendl;
+  ldout(cct, 5) << "r=" << *result << dendl;
 
   if (*result < 0) {
     lderr(cct) << "failed to update image header: " << cpp_strerror(*result)
@@ -433,7 +436,8 @@ Context *ResizeRequest<I>::handle_update_header(int *result) {
 template <typename I>
 void ResizeRequest<I>::compute_parent_overlap() {
   I &image_ctx = this->m_image_ctx;
-  RWLock::RLocker l2(image_ctx.parent_lock);
+  ceph_assert(image_ctx.image_lock.is_locked());
+
   if (image_ctx.parent == NULL) {
     m_new_parent_overlap = 0;
   } else {
@@ -445,16 +449,15 @@ template <typename I>
 void ResizeRequest<I>::update_size_and_overlap() {
   I &image_ctx = this->m_image_ctx;
   {
-    RWLock::WLocker snap_locker(image_ctx.snap_lock);
+    RWLock::WLocker image_locker(image_ctx.image_lock);
     image_ctx.size = m_new_size;
 
-    RWLock::WLocker parent_locker(image_ctx.parent_lock);
     if (image_ctx.parent != NULL && m_new_size < m_original_size) {
       image_ctx.parent_md.overlap = m_new_parent_overlap;
     }
   }
 
-  // blocked by POST_BLOCK_WRITES state
+  // blocked by PRE_BLOCK_WRITES (grow) or POST_BLOCK_WRITES (shrink) state
   image_ctx.io_work_queue->unblock_writes();
 }
 

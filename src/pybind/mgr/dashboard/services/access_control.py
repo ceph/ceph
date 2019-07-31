@@ -183,11 +183,25 @@ class User(object):
             self.lastUpdate = lastUpdate
 
     def refreshLastUpdate(self):
-        self.lastUpdate = int(time.mktime(time.gmtime()))
+        self.lastUpdate = int(time.time())
 
     def set_password(self, password):
-        self.password = password_hash(password)
+        self.set_password_hash(password_hash(password))
+
+    def set_password_hash(self, hashed_password):
+        self.password = hashed_password
         self.refreshLastUpdate()
+
+    def compare_password(self, password):
+        """
+        Compare the specified password with the user password.
+        :param password: The plain password to check.
+        :type password: str
+        :return: `True` if the passwords are equal, otherwise `False`.
+        :rtype: bool
+        """
+        pass_hash = password_hash(password, salt_password=self.password)
+        return pass_hash == self.password
 
     def set_roles(self, roles):
         self.roles = set(roles)
@@ -621,6 +635,25 @@ def ac_user_set_password(_, username, password):
         return -errno.ENOENT, '', str(ex)
 
 
+@CLIWriteCommand('dashboard ac-user-set-password-hash',
+                 'name=username,type=CephString '
+                 'name=hashed_password,type=CephString',
+                 'Set user password bcrypt hash')
+def ac_user_set_password_hash(_, username, hashed_password):
+    try:
+        # make sure the hashed_password is actually a bcrypt hash
+        bcrypt.checkpw(b'', hashed_password.encode('utf-8'))
+        user = mgr.ACCESS_CTRL_DB.get_user(username)
+        user.set_password_hash(hashed_password)
+
+        mgr.ACCESS_CTRL_DB.save()
+        return 0, json.dumps(user.to_dict()), ''
+    except ValueError:
+        return -errno.EINVAL, '', 'Invalid password hash'
+    except UserDoesNotExist as ex:
+        return -errno.ENOENT, '', str(ex)
+
+
 @CLIWriteCommand('dashboard ac-user-set-info',
                  'name=username,type=CephString '
                  'name=name,type=CephString '
@@ -650,8 +683,7 @@ class LocalAuthenticator(object):
         try:
             user = mgr.ACCESS_CTRL_DB.get_user(username)
             if user.password:
-                pass_hash = password_hash(password, user.password)
-                if pass_hash == user.password:
+                if user.compare_password(password):
                     return user.permissions_dict()
         except UserDoesNotExist:
             logger.debug("User '%s' does not exist", username)

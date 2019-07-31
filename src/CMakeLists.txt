@@ -1,4 +1,5 @@
 include(GetGitRevisionDescription)
+include(CheckCXXCompilerFlag)
 
 include(GNUInstallDirs)
 # for erasure and compressor plugins
@@ -36,6 +37,14 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wnon-virtual-dtor")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-unknown-pragmas")
 set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wno-ignored-qualifiers")
 set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -Wno-unknown-pragmas")
+CHECK_CXX_COMPILER_FLAG("-Wpessimizing-move" COMPILER_SUPPORTS_PESSIMIZING_MOVE)
+if(COMPILER_SUPPORTS_PESSIMIZING_MOVE)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wpessimizing-move")
+endif()
+CHECK_CXX_COMPILER_FLAG("-Wredundant-move" COMPILER_SUPPORTS_REDUNDANT_MOVE)
+if(COMPILER_SUPPORTS_REDUNDANT_MOVE)
+  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wredundant-move")
+endif()
 if(CMAKE_CXX_COMPILER_ID STREQUAL GNU)
   set(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -rdynamic")
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Wstrict-null-sentinel -Woverloaded-virtual")
@@ -106,13 +115,20 @@ endif()
 
 # require c++17
 if(CMAKE_VERSION VERSION_LESS "3.8")
-  include(CheckCXXCompilerFlag)
   CHECK_CXX_COMPILER_FLAG("-std=c++17" COMPILER_SUPPORTS_CXX17)
   if(NOT COMPILER_SUPPORTS_CXX17)
     message(FATAL_ERROR
       "The compiler ${CMAKE_CXX_COMPILER} has no C++17 support.")
   endif()
   set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++17")
+
+  # for compiletest_cxx11_client
+  CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
+  if(NOT COMPILER_SUPPORTS_CXX11)
+    message(FATAL_ERROR
+      "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support.")
+  endif()
+
   include(CheckCCompilerFlag)
   CHECK_C_COMPILER_FLAG("-std=gnu99" COMPILER_SUPPORTS_GNU99)
   if(NOT COMPILER_SUPPORTS_GNU99)
@@ -171,8 +187,6 @@ if(${ENABLE_COVERAGE})
   list(APPEND EXTRALIBS gcov)
 endif(${ENABLE_COVERAGE})
 
-include_directories(${NSS_INCLUDE_DIR} ${NSPR_INCLUDE_DIR})
-
 set(GCOV_PREFIX_STRIP 4)
 
 # the src/.git_version file may be written out by make-dist; otherwise
@@ -188,8 +202,6 @@ if(${ENABLE_GIT_VERSION})
     list(GET CEPH_GIT_SHA_AND_TAG 0 CEPH_GIT_VER)
     list(GET CEPH_GIT_SHA_AND_TAG 1 CEPH_GIT_NICE_VER)
   endif(${CEPH_GIT_VER} STREQUAL "GITDIR-NOTFOUND")
-  # remove 'v' prefix from raw git version
-  string(SUBSTRING ${CEPH_GIT_NICE_VER} 1 -1 CEPH_GIT_NICE_VER)
 else(${ENABLE_GIT_VERSION})
   set(CEPH_GIT_VER "no_version")
   set(CEPH_GIT_NICE_VER "Development")
@@ -219,28 +231,41 @@ endif()
 # Python stuff
 option(WITH_PYTHON2 "build python2 bindings" ON)
 if(WITH_PYTHON2)
-  find_package(PythonInterp 2 REQUIRED)
-  find_package(PythonLibs 2 REQUIRED)
+  find_package(Python2 REQUIRED
+    COMPONENTS Interpreter Development)
 endif()
 
-option(WITH_PYTHON3 "build python3 bindings" OFF)
+set(WITH_PYTHON3 "OFF" CACHE STRING "build python3 bindings with specified python3 version")
 if(WITH_PYTHON3)
-  find_package(Python3Interp 3 REQUIRED)
-  find_package(Python3Libs 3 REQUIRED)
+  if(WITH_PYTHON3 MATCHES "^(1|ON|YES|TRUE|Y)$")
+    set(WITH_PYTHON3 "3")
+  endif()
+  if(NOT WITH_PYTHON3 STREQUAL "3")
+    set(find_python3_exact "EXACT")
+  endif()
+  find_package(Python3 ${WITH_PYTHON3} ${find_python3_exact} REQUIRED
+    COMPONENTS Interpreter Development)
+  unset(find_python3_exact)
 endif()
 
 # the major version of the python bindings as a dependency of other
 # targets
 if(WITH_PYTHON2)
-  set(PY_BINDING_INFIX "")
+  set(PY_BINDING_INFIX 2)
 else()
   set(PY_BINDING_INFIX 3)
 endif()
-
-if(HAVE_XIO)
-  set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -I${XIO_INCLUDE_DIR}")
-  list(APPEND EXTRALIBS ${XIO_LIBRARY} pthread)
-endif(HAVE_XIO)
+# use python2 by default for python bindings, tools and tests, before
+# switching to python3
+# Python_EXECUTABLE` can be set by `find_package(Python ...)` also. and we do
+# call `find_package(Python ...)` in `ceph/CMakeLists.txt`. but we do so before
+# `add_subdirectory(src)` where `Python_EXECUTABLE` is set. so it's safe to
+# use this variable name and call `find_package(Python ...)`.
+if(WITH_PYTHON2)
+  set(Python_EXECUTABLE ${Python2_EXECUTABLE})
+else()
+  set(Python_EXECUTABLE ${Python3_EXECUTABLE})
+endif()
 
 # sort out which allocator to use
 if(ALLOCATOR STREQUAL "tcmalloc")
@@ -278,12 +303,13 @@ add_subdirectory(json_spirit)
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/xxHash")
 include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/rapidjson/include")
 
+find_package(fmt 5.2.1 QUIET)
+if(NOT fmt_FOUND)
+  message(STATUS "Could not find fmt, will build it")
+  add_subdirectory(fmt)
+endif()
+
 if(WITH_SEASTAR)
-  find_package(fmt 5.2.1 QUIET)
-  if(NOT fmt_FOUND)
-    message(STATUS "Could not find fmt, will build it")
-    add_subdirectory(seastar/fmt)
-  endif()
   find_package(c-ares 1.13.0 QUIET)
   if(NOT c-ares_FOUND)
     message(STATUS "Could not find c-ares, will build it")
@@ -297,7 +323,7 @@ if(WITH_SEASTAR)
   endmacro ()
   set(Seastar_HWLOC OFF CACHE BOOL "" FORCE)
   set(Seastar_STD_OPTIONAL_VARIANT_STRINGVIEW ON CACHE BOOL "" FORCE)
-  set(Seastar_CXX_FLAGS "-Wno-sign-compare;-Wno-attributes;-Wno-pessimizing-move;-Wno-address-of-packed-member" CACHE STRING "" FORCE)
+  set(Seastar_CXX_FLAGS "-Wno-error;-Wno-sign-compare;-Wno-attributes;-Wno-pessimizing-move;-Wno-address-of-packed-member" CACHE STRING "" FORCE)
   add_subdirectory(seastar)
   # create the directory so cmake won't complain when looking at the imported
   # target: Seastar exports this directory created at build-time
@@ -359,6 +385,7 @@ set(ceph_common_deps
   Boost::program_options
   Boost::date_time
   Boost::iostreams
+  StdFilesystem::filesystem
   ${BLKID_LIBRARIES}
   ${Backtrace_LIBRARIES}
   ${BLKIN_LIBRARIES}
@@ -388,6 +415,15 @@ endif()
 
 if(WITH_DPDK)
   list(APPEND ceph_common_deps common_async_dpdk)
+endif()
+
+if(WITH_BLUESTORE_PMEM)
+  if(WITH_SYSTEM_PMDK)
+    find_package(pmem REQUIRED)
+  else()
+    include(Buildpmem)
+    build_pmem()
+  endif()
 endif()
 
 add_library(common STATIC ${ceph_common_objs})
@@ -467,6 +503,7 @@ endif()
 
 add_subdirectory(pybind)
 add_subdirectory(ceph-volume)
+add_subdirectory(python-common)
 
 # Monitor
 add_subdirectory(mon)
@@ -509,7 +546,8 @@ if(WITH_FUSE)
   target_link_libraries(ceph-osd ${FUSE_LIBRARIES})
 endif()
 set_target_properties(ceph-osd PROPERTIES
-  POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE})
+  POSITION_INDEPENDENT_CODE ${EXE_LINKER_USE_PIE}
+  INSTALL_RPATH "")
 install(TARGETS ceph-osd DESTINATION bin)
 
 if (WITH_CEPHFS)
@@ -531,7 +569,8 @@ if(WITH_TESTS)
     find_package(GTest REQUIRED)
     find_package(GMock REQUIRED)
   else()
-    add_subdirectory(googletest/googlemock)
+    set(INSTALL_GTEST OFF CACHE BOOL "" FORCE)
+    add_subdirectory(googletest)
     add_library(GMock::GMock ALIAS gmock)
     add_library(GMock::Main ALIAS gmock_main)
     target_include_directories(gmock INTERFACE
@@ -746,7 +785,7 @@ if (WITH_RBD)
   add_dependencies(vstart cython${PY_BINDING_INFIX}_rbd)
 endif()
 if (WITH_CEPHFS)
-  add_dependencies(vstart ceph-mds)
+  add_dependencies(vstart ceph-mds cephfs cython${PY_BINDING_INFIX}_cephfs)
 endif()
 if(WITH_RADOSGW)
   add_dependencies(vstart radosgw radosgw-admin)

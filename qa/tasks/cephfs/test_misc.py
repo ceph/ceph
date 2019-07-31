@@ -1,5 +1,4 @@
 
-from unittest import SkipTest
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.orchestra.run import CommandFailedError, ConnectionLostError
@@ -21,7 +20,7 @@ class TestMisc(CephFSTestCase):
         """
 
         if not isinstance(self.mount_a, FuseMount):
-            raise SkipTest("Require FUSE client")
+            self.skipTest("Require FUSE client")
 
         # Enable debug. Client will requests CEPH_CAP_XATTR_SHARED
         # on lookup/open
@@ -52,6 +51,9 @@ class TestMisc(CephFSTestCase):
         self.assertGreaterEqual(rctime, t-10)
 
     def test_fs_new(self):
+        self.mount_a.umount_wait()
+        self.mount_b.umount_wait()
+
         data_pool_name = self.fs.get_data_pool_name()
 
         self.fs.mds_stop()
@@ -107,40 +109,6 @@ class TestMisc(CephFSTestCase):
         self.fs.mon_manager.raw_cluster_cmd('fs', 'new', self.fs.name,
                                             self.fs.metadata_pool_name,
                                             data_pool_name)
-
-    def test_evict_client(self):
-        """
-        Check that a slow client session won't get evicted if it's the
-        only session
-        """
-
-        session_autoclose = self.fs.get_var("session_autoclose")
-
-        self.mount_b.umount_wait()
-        ls_data = self.fs.mds_asok(['session', 'ls'])
-        self.assert_session_count(1, ls_data)
-
-        self.mount_a.kill()
-        self.mount_a.kill_cleanup()
-
-        time.sleep(session_autoclose * 1.5)
-        ls_data = self.fs.mds_asok(['session', 'ls'])
-        self.assert_session_count(1, ls_data)
-
-        self.mount_a.mount()
-        self.mount_a.wait_until_mounted()
-        self.mount_b.mount()
-        self.mount_b.wait_until_mounted()
-
-        ls_data = self._session_list()
-        self.assert_session_count(2, ls_data)
-
-        self.mount_a.kill()
-        self.mount_a.kill_cleanup()
-
-        time.sleep(session_autoclose * 1.5)
-        ls_data = self.fs.mds_asok(['session', 'ls'])
-        self.assert_session_count(1, ls_data)
 
     def test_cap_revoke_nonresponder(self):
         """

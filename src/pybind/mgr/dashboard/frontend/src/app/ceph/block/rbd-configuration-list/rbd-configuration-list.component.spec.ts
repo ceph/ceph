@@ -1,4 +1,3 @@
-import { SimpleChange } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { FormsModule } from '@angular/forms';
 import { RouterTestingModule } from '@angular/router/testing';
@@ -6,6 +5,7 @@ import { RouterTestingModule } from '@angular/router/testing';
 import { NgxDatatableModule } from '@swimlane/ngx-datatable';
 import { ChartsModule } from 'ng2-charts';
 import { AlertModule } from 'ngx-bootstrap/alert';
+import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { ErrorPanelComponent } from '../../../shared/components/error-panel/error-panel.component';
@@ -27,6 +27,7 @@ describe('RbdConfigurationListComponent', () => {
       NgxDatatableModule,
       RouterTestingModule,
       AlertModule,
+      BsDropdownModule.forRoot(),
       ChartsModule,
       PipesModule
     ],
@@ -59,9 +60,45 @@ describe('RbdConfigurationListComponent', () => {
     } as RbdConfigurationEntry;
 
     component.data = [fakeOption, realOption];
-    component.ngOnChanges({ name: new SimpleChange(null, null, null) });
+    component.ngOnChanges();
 
     expect(component.data.length).toBe(1);
     expect(component.data.pop()).toBe(realOption);
+  });
+
+  it('should filter the source column by its piped value', () => {
+    const poolConfTable = component.poolConfTable;
+    poolConfTable.data = [
+      {
+        name: 'rbd_qos_read_iops_burst',
+        source: 0,
+        value: '50'
+      },
+      {
+        name: 'rbd_qos_read_iops_limit',
+        source: 1,
+        value: '50'
+      },
+      {
+        name: 'rbd_qos_write_iops_limit',
+        source: 0,
+        value: '100'
+      },
+      {
+        name: 'rbd_qos_write_iops_burst',
+        source: 2,
+        value: '100'
+      }
+    ];
+    const filter = (keyword) => {
+      poolConfTable.search = keyword;
+      poolConfTable.updateFilter();
+      return poolConfTable.rows;
+    };
+    expect(filter('').length).toBe(4);
+    expect(filter('source:global').length).toBe(2);
+    expect(filter('source:pool').length).toBe(1);
+    expect(filter('source:image').length).toBe(1);
+    expect(filter('source:zero').length).toBe(0);
   });
 });

@@ -4,7 +4,6 @@
 
   <ng-container class="modal-content">
     <form name="scrubForm"
-          class="form-horizontal"
           #formDir="ngForm"
           [formGroup]="scrubForm"
           novalidate>
@@ -19,10 +18,10 @@
         <cd-submit-button (submitAction)="scrub()"
                           [form]="scrubForm"
                           i18n>Submit</cd-submit-button>
-
-        <button class="btn btn-link btn-sm"
-                (click)="bsModalRef.hide()"
-                i18n>Cancel</button>
+        <cd-back-button [back]="bsModalRef.hide"
+                        name="Cancel"
+                        i18n-name>
+        </cd-back-button>
       </div>
     </form>
   </ng-container>

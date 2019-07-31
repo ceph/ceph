@@ -5,15 +5,15 @@
 
 #include "msg/Message.h"
 #include "osd/osd_types.h"
-#include "osd/PGPeeringEvent.h"
 
-class MOSDPeeringOp : public MessageSubType<MOSDPeeringOp> {
+class PGPeeringEvent;
+
+class MOSDPeeringOp : public Message {
 public:
+  MOSDPeeringOp(int t, int version, int compat_version)
+    : Message{t, version, compat_version} {}
 
-template<typename... Args>
-  MOSDPeeringOp(Args&&... args) : MessageSubType(std::forward<Args>(args)...) {}
-
-  void print(ostream& out) const override final {
+  void print(std::ostream& out) const override final {
     out << get_type_name() << "("
 	<< get_spg() << " ";
     inner_print(out);
@@ -24,5 +24,5 @@ template<typename... Args>
   virtual epoch_t get_map_epoch() const = 0;
   virtual epoch_t get_min_epoch() const = 0;
   virtual PGPeeringEvent *get_event() = 0;
-  virtual void inner_print(ostream& out) const = 0;
+  virtual void inner_print(std::ostream& out) const = 0;
 };

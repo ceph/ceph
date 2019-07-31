@@ -42,7 +42,7 @@ public:
   void encode(bufferlist &bl) const;
   void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<Anchor*>& ls);
+  static void generate_test_instances(std::list<Anchor*>& ls);
 };
 WRITE_CLASS_ENCODER(Anchor)
 

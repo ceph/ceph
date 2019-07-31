@@ -17,9 +17,7 @@
 
 #include "msg/Message.h"
 
-class MExportDirFinish : public MessageInstance<MExportDirFinish> {
-public:
-  friend factory;
+class MExportDirFinish : public Message {
 private:
   dirfrag_t dirfrag;
   bool last;
@@ -31,7 +29,7 @@ private:
 protected:
   MExportDirFinish() : last(false) {}
   MExportDirFinish(dirfrag_t df, bool l, uint64_t tid) :
-    MessageInstance(MSG_MDS_EXPORTDIRFINISH), dirfrag(df), last(l) {
+    Message{MSG_MDS_EXPORTDIRFINISH}, dirfrag(df), last(l) {
     set_tid(tid);
   }
   ~MExportDirFinish() override {}
@@ -52,7 +50,9 @@ public:
     decode(dirfrag, p);
     decode(last, p);
   }
-
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

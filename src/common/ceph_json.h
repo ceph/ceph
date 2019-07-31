@@ -1,19 +1,11 @@
 #ifndef CEPH_JSON_H
 #define CEPH_JSON_H
 
+#include <stdexcept>
 #include <include/types.h>
 
-#ifdef _ASSERT_H
-#define NEED_ASSERT_H
-#pragma push_macro("_ASSERT_H")
-#endif
 
 #include "json_spirit/json_spirit.h"
-#undef _ASSERT_H
-
-#ifdef NEED_ASSERT_H
-#pragma pop_macro("_ASSERT_H")
-#endif
 
 #include "Formatter.h"
 
@@ -23,7 +15,7 @@ using namespace json_spirit;
 class JSONObj;
 
 class JSONObjIter {
-  typedef map<string, JSONObj *>::iterator map_iter_t;
+  typedef std::map<std::string, JSONObj *>::iterator map_iter_t;
   map_iter_t cur;
   map_iter_t last;
 
@@ -45,7 +37,7 @@ class JSONObj
   JSONObj *parent;
 public:
   struct data_val {
-    string str;
+    std::string str;
     bool quoted{false};
 
     void set(std::string_view s, bool q) {
@@ -54,13 +46,13 @@ public:
     }
   };
 protected:
-  string name; // corresponds to obj_type in XMLObj
-  Value data;
+  std::string name; // corresponds to obj_type in XMLObj
+  json_spirit::Value data;
   struct data_val val;
   bool data_quoted{false};
-  multimap<string, JSONObj *> children;
-  map<string, data_val> attr_map;
-  void handle_value(Value v);
+  std::multimap<std::string, JSONObj *> children;
+  std::map<std::string, data_val> attr_map;
+  void handle_value(json_spirit::Value v);
 
 public:
 
@@ -68,29 +60,29 @@ public:
 
   virtual ~JSONObj();
 
-  void init(JSONObj *p, Value v, string n);
+  void init(JSONObj *p, json_spirit::Value v, std::string n);
 
-  string& get_name() { return name; }
+  std::string& get_name() { return name; }
   data_val& get_data_val() { return val; }
-  const string& get_data() { return val.str; }
-  bool get_data(const string& key, data_val *dest);
+  const std::string& get_data() { return val.str; }
+  bool get_data(const std::string& key, data_val *dest);
   JSONObj *get_parent();
-  void add_child(string el, JSONObj *child);
-  bool get_attr(string name, data_val& attr);
-  JSONObjIter find(const string& name);
+  void add_child(std::string el, JSONObj *child);
+  bool get_attr(std::string name, data_val& attr);
+  JSONObjIter find(const std::string& name);
   JSONObjIter find_first();
-  JSONObjIter find_first(const string& name);
-  JSONObj *find_obj(const string& name);
+  JSONObjIter find_first(const std::string& name);
+  JSONObj *find_obj(const std::string& name);
 
-  friend ostream& operator<<(ostream &out,
-			     const JSONObj &obj); // does not work, FIXME
+  friend std::ostream& operator<<(std::ostream &out,
+                                  const JSONObj &obj); // does not work, FIXME
 
   bool is_array();
   bool is_object();
-  vector<string> get_array_elements();
+  std::vector<std::string> get_array_elements();
 };
 
-static inline ostream& operator<<(ostream &out, const JSONObj::data_val& dv) {
+inline std::ostream& operator<<(std::ostream &out, const JSONObj::data_val& dv) {
   const char *q = (dv.quoted ? "\"" : "");
    out << q << dv.str << q;
    return out;
@@ -99,7 +91,7 @@ static inline ostream& operator<<(ostream &out, const JSONObj::data_val& dv) {
 class JSONParser : public JSONObj
 {
   int buf_len;
-  string json_buffer;
+  std::string json_buffer;
   bool success;
 public:
   JSONParser();
@@ -115,21 +107,19 @@ public:
   void set_failure() { success = false; }
 };
 
-void encode_json(const char *name, const JSONObj::data_val& v, Formatter *f);
+void encode_json(const char *name, const JSONObj::data_val& v, ceph::Formatter *f);
 
 class JSONDecoder {
 public:
-  struct err {
-    string message;
-
-    err(const string& m) : message(m) {}
+  struct err : std::runtime_error {
+    using runtime_error::runtime_error;
   };
 
   JSONParser parser;
 
-  JSONDecoder(bufferlist& bl) {
+  JSONDecoder(ceph::buffer::list& bl) {
     if (!parser.parse(bl.c_str(), bl.length())) {
-      cout << "JSONDecoder::err()" << std::endl;
+      std::cout << "JSONDecoder::err()" << std::endl;
       throw JSONDecoder::err("failed to parse JSON input");
     }
   }
@@ -154,7 +144,7 @@ void decode_json_obj(T& val, JSONObj *obj)
   val.decode_json(obj);
 }
 
-static inline void decode_json_obj(string& val, JSONObj *obj)
+inline void decode_json_obj(std::string& val, JSONObj *obj)
 {
   val = obj->get_data();
 }
@@ -171,12 +161,12 @@ void decode_json_obj(long& val, JSONObj *obj);
 void decode_json_obj(unsigned& val, JSONObj *obj);
 void decode_json_obj(int& val, JSONObj *obj);
 void decode_json_obj(bool& val, JSONObj *obj);
-void decode_json_obj(bufferlist& val, JSONObj *obj);
+void decode_json_obj(ceph::buffer::list& val, JSONObj *obj);
 class utime_t;
 void decode_json_obj(utime_t& val, JSONObj *obj);
 
 template<class T>
-void decode_json_obj(list<T>& l, JSONObj *obj)
+void decode_json_obj(std::list<T>& l, JSONObj *obj)
 {
   l.clear();
 
@@ -191,7 +181,7 @@ void decode_json_obj(list<T>& l, JSONObj *obj)
 }
 
 template<class T>
-void decode_json_obj(deque<T>& l, JSONObj *obj)
+void decode_json_obj(std::deque<T>& l, JSONObj *obj)
 {
   l.clear();
 
@@ -206,7 +196,7 @@ void decode_json_obj(deque<T>& l, JSONObj *obj)
 }
 
 template<class T>
-void decode_json_obj(set<T>& l, JSONObj *obj)
+void decode_json_obj(std::set<T>& l, JSONObj *obj)
 {
   l.clear();
 
@@ -221,7 +211,7 @@ void decode_json_obj(set<T>& l, JSONObj *obj)
 }
 
 template<class T>
-void decode_json_obj(vector<T>& l, JSONObj *obj)
+void decode_json_obj(std::vector<T>& l, JSONObj *obj)
 {
   l.clear();
 
@@ -236,7 +226,7 @@ void decode_json_obj(vector<T>& l, JSONObj *obj)
 }
 
 template<class K, class V, class C = std::less<K> >
-void decode_json_obj(map<K, V, C>& m, JSONObj *obj)
+void decode_json_obj(std::map<K, V, C>& m, JSONObj *obj)
 {
   m.clear();
 
@@ -253,7 +243,7 @@ void decode_json_obj(map<K, V, C>& m, JSONObj *obj)
 }
 
 template<class K, class V>
-void decode_json_obj(multimap<K, V>& m, JSONObj *obj)
+void decode_json_obj(std::multimap<K, V>& m, JSONObj *obj)
 {
   m.clear();
 
@@ -288,7 +278,7 @@ bool JSONDecoder::decode_json(const char *name, T& val, JSONObj *obj, bool manda
   JSONObjIter iter = obj->find_first(name);
   if (iter.end()) {
     if (mandatory) {
-      string s = "missing mandatory field " + string(name);
+      std::string s = "missing mandatory field " + std::string(name);
       throw err(s);
     }
     val = T();
@@ -297,9 +287,9 @@ bool JSONDecoder::decode_json(const char *name, T& val, JSONObj *obj, bool manda
 
   try {
     decode_json_obj(val, *iter);
-  } catch (err& e) {
-    string s = string(name) + ": ";
-    s.append(e.message);
+  } catch (const err& e) {
+    std::string s = std::string(name) + ": ";
+    s.append(e.what());
     throw err(s);
   }
 
@@ -314,7 +304,7 @@ bool JSONDecoder::decode_json(const char *name, C& container, void (*cb)(C&, JSO
   JSONObjIter iter = obj->find_first(name);
   if (iter.end()) {
     if (mandatory) {
-      string s = "missing mandatory field " + string(name);
+      std::string s = "missing mandatory field " + std::string(name);
       throw err(s);
     }
     return false;
@@ -322,9 +312,9 @@ bool JSONDecoder::decode_json(const char *name, C& container, void (*cb)(C&, JSO
 
   try {
     decode_json_obj(container, cb, *iter);
-  } catch (err& e) {
-    string s = string(name) + ": ";
-    s.append(e.message);
+  } catch (const err& e) {
+    std::string s = std::string(name) + ": ";
+    s.append(e.what());
     throw err(s);
   }
 
@@ -342,10 +332,10 @@ void JSONDecoder::decode_json(const char *name, T& val, const T& default_val, JS
 
   try {
     decode_json_obj(val, *iter);
-  } catch (err& e) {
+  } catch (const err& e) {
     val = default_val;
-    string s = string(name) + ": ";
-    s.append(e.message);
+    std::string s = std::string(name) + ": ";
+    s.append(e.what());
     throw err(s);
   }
 }
@@ -356,7 +346,7 @@ bool JSONDecoder::decode_json(const char *name, boost::optional<T>& val, JSONObj
   JSONObjIter iter = obj->find_first(name);
   if (iter.end()) {
     if (mandatory) {
-      string s = "missing mandatory field " + string(name);
+      std::string s = "missing mandatory field " + std::string(name);
       throw err(s);
     }
     val = boost::none;
@@ -366,10 +356,10 @@ bool JSONDecoder::decode_json(const char *name, boost::optional<T>& val, JSONObj
   try {
     val.reset(T());
     decode_json_obj(val.get(), *iter);
-  } catch (err& e) {
+  } catch (const err& e) {
     val.reset();
-    string s = string(name) + ": ";
-    s.append(e.message);
+    std::string s = std::string(name) + ": ";
+    s.append(e.what());
     throw err(s);
   }
 
@@ -386,7 +376,7 @@ static void encode_json(const char *name, const T& val, ceph::Formatter *f)
 
 class utime_t;
 
-void encode_json(const char *name, const string& val, ceph::Formatter *f);
+void encode_json(const char *name, const std::string& val, ceph::Formatter *f);
 void encode_json(const char *name, const char *val, ceph::Formatter *f);
 void encode_json(const char *name, bool val, ceph::Formatter *f);
 void encode_json(const char *name, int val, ceph::Formatter *f);
@@ -395,14 +385,14 @@ void encode_json(const char *name, long val, ceph::Formatter *f);
 void encode_json(const char *name, unsigned long val, ceph::Formatter *f);
 void encode_json(const char *name, long long val, ceph::Formatter *f);
 void encode_json(const char *name, const utime_t& val, ceph::Formatter *f);
-void encode_json(const char *name, const bufferlist& bl, ceph::Formatter *f);
+void encode_json(const char *name, const ceph::buffer::list& bl, ceph::Formatter *f);
 void encode_json(const char *name, long long unsigned val, ceph::Formatter *f);
 
 template<class T>
 static void encode_json(const char *name, const std::list<T>& l, ceph::Formatter *f)
 {
   f->open_array_section(name);
-  for (typename std::list<T>::const_iterator iter = l.begin(); iter != l.end(); ++iter) {
+  for (auto iter = l.cbegin(); iter != l.cend(); ++iter) {
     encode_json("obj", *iter, f);
   }
   f->close_section();
@@ -411,7 +401,7 @@ template<class T>
 static void encode_json(const char *name, const std::deque<T>& l, ceph::Formatter *f)
 {
   f->open_array_section(name);
-  for (typename std::deque<T>::const_iterator iter = l.begin(); iter != l.end(); ++iter) {
+  for (auto iter = l.cbegin(); iter != l.cend(); ++iter) {
     encode_json("obj", *iter, f);
   }
   f->close_section();
@@ -420,7 +410,7 @@ template<class T, class Compare = std::less<T> >
 static void encode_json(const char *name, const std::set<T, Compare>& l, ceph::Formatter *f)
 {
   f->open_array_section(name);
-  for (typename std::set<T, Compare>::const_iterator iter = l.begin(); iter != l.end(); ++iter) {
+  for (auto iter = l.cbegin(); iter != l.cend(); ++iter) {
     encode_json("obj", *iter, f);
   }
   f->close_section();
@@ -430,7 +420,7 @@ template<class T>
 static void encode_json(const char *name, const std::vector<T>& l, ceph::Formatter *f)
 {
   f->open_array_section(name);
-  for (typename std::vector<T>::const_iterator iter = l.begin(); iter != l.end(); ++iter) {
+  for (auto iter = l.cbegin(); iter != l.cend(); ++iter) {
     encode_json("obj", *iter, f);
   }
   f->close_section();
@@ -440,7 +430,7 @@ template<class K, class V, class C = std::less<K> >
 static void encode_json(const char *name, const std::map<K, V, C>& m, ceph::Formatter *f)
 {
   f->open_array_section(name);
-  for (typename std::map<K, V, C>::const_iterator i = m.begin(); i != m.end(); ++i) {
+  for (auto i = m.cbegin(); i != m.cend(); ++i) {
     f->open_object_section("entry");
     encode_json("key", i->first, f);
     encode_json("val", i->second, f);
@@ -453,7 +443,7 @@ template<class K, class V>
 static void encode_json(const char *name, const std::multimap<K, V>& m, ceph::Formatter *f)
 {
   f->open_array_section(name);
-  for (typename std::multimap<K, V>::const_iterator i = m.begin(); i != m.end(); ++i) {
+  for (auto i = m.begin(); i != m.end(); ++i) {
     f->open_object_section("entry");
     encode_json("key", i->first, f);
     encode_json("val", i->second, f);
@@ -462,14 +452,13 @@ static void encode_json(const char *name, const std::multimap<K, V>& m, ceph::Fo
   f->close_section();
 }
 template<class K, class V>
-void encode_json_map(const char *name, const map<K, V>& m, ceph::Formatter *f)
+void encode_json_map(const char *name, const std::map<K, V>& m, ceph::Formatter *f)
 {
   f->open_array_section(name);
-  typename map<K,V>::const_iterator iter;
-  for (iter = m.begin(); iter != m.end(); ++iter) {
+  for (auto iter = m.cbegin(); iter != m.cend(); ++iter) {
     encode_json("obj", iter->second, f);
   }
-  f->close_section(); 
+  f->close_section();
 }
 
 
@@ -477,11 +466,10 @@ template<class K, class V>
 void encode_json_map(const char *name, const char *index_name,
                      const char *object_name, const char *value_name,
                      void (*cb)(const char *, const V&, ceph::Formatter *, void *), void *parent,
-                     const map<K, V>& m, ceph::Formatter *f)
+                     const std::map<K, V>& m, ceph::Formatter *f)
 {
   f->open_array_section(name);
-  typename map<K,V>::const_iterator iter;
-  for (iter = m.begin(); iter != m.end(); ++iter) {
+  for (auto iter = m.cbegin(); iter != m.cend(); ++iter) {
     if (index_name) {
       f->open_object_section("key_value");
       f->dump_string(index_name, iter->first);
@@ -510,24 +498,24 @@ void encode_json_map(const char *name, const char *index_name,
 template<class K, class V>
 void encode_json_map(const char *name, const char *index_name,
                      const char *object_name, const char *value_name,
-                     const map<K, V>& m, ceph::Formatter *f)
+                     const std::map<K, V>& m, ceph::Formatter *f)
 {
   encode_json_map<K, V>(name, index_name, object_name, value_name, NULL, NULL, m, f);
 }
 
 template<class K, class V>
 void encode_json_map(const char *name, const char *index_name, const char *value_name,
-                     const map<K, V>& m, ceph::Formatter *f)
+                     const std::map<K, V>& m, ceph::Formatter *f)
 {
   encode_json_map<K, V>(name, index_name, NULL, value_name, NULL, NULL, m, f);
 }
 
 class JSONFormattable : public ceph::JSONFormatter {
   JSONObj::data_val value;
-  vector<JSONFormattable> arr;
-  map<std::string, JSONFormattable> obj;
+  std::vector<JSONFormattable> arr;
+  std::map<std::string, JSONFormattable> obj;
 
-  vector<JSONFormattable *> enc_stack;
+  std::vector<JSONFormattable *> enc_stack;
   JSONFormattable *cur_enc;
 
 protected:
@@ -569,7 +557,7 @@ public:
     }
   }
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(2, 1, bl);
     encode((uint8_t)type, bl);
     encode(value.str, bl);
@@ -579,7 +567,7 @@ public:
     ENCODE_FINISH(bl);
   }
 
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(2, bl);
     uint8_t t;
     decode(t, bl);
@@ -604,11 +592,11 @@ public:
   long long val_long_long() const;
   bool val_bool() const;
 
-  const map<std::string, JSONFormattable> object() const {
+  const std::map<std::string, JSONFormattable> object() const {
     return obj;
   }
 
-  const vector<JSONFormattable>& array() const {
+  const std::vector<JSONFormattable>& array() const {
     return arr;
   }
 
@@ -648,8 +636,8 @@ public:
     return this->operator[](name)(T());
   }
 
-  string operator ()(const char *def_val) const {
-    return def(string(def_val));
+  std::string operator ()(const char *def_val) const {
+    return def(std::string(def_val));
   }
 
   int operator()(int def_val) const {
@@ -660,7 +648,7 @@ public:
     return def(def_val);
   }
 
-  bool exists(const string& name) const;
+  bool exists(const std::string& name) const;
   bool exists(size_t index) const;
 
   std::string def(const std::string& def_val) const;
@@ -674,12 +662,12 @@ public:
   int get_int(const std::string& name, int def_val) const;
   bool get_bool(const std::string& name, bool def_val) const;
 
-  int set(const string& name, const string& val);
-  int erase(const string& name);
+  int set(const std::string& name, const std::string& val);
+  int erase(const std::string& name);
 
   void derive_from(const JSONFormattable& jf);
 
-  void encode_json(const char *name, Formatter *f) const;
+  void encode_json(const char *name, ceph::Formatter *f) const;
 
   bool is_array() const {
     return (type == FMT_ARRAY);
@@ -687,6 +675,6 @@ public:
 };
 WRITE_CLASS_ENCODER(JSONFormattable)
 
-void encode_json(const char *name, const JSONFormattable& v, Formatter *f);
+void encode_json(const char *name, const JSONFormattable& v, ceph::Formatter *f);
 
 #endif

@@ -265,8 +265,9 @@
   type 6 pod
   type 7 room
   type 8 datacenter
-  type 9 region
-  type 10 root
+  type 9 zone
+  type 10 region
+  type 11 root
   
   # buckets
   host cephstore5522 {
@@ -787,8 +788,8 @@
   osdmaptool: osdmap file 'om'
   epoch 1
   fsid [0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12} (re)
-  created \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ (re)
-  modified \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}\.\d+ (re)
+  created \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+.\d\d\d\d (re)
+  modified \d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}\.\d+.\d\d\d\d (re)
   flags 
   crush_version 1
   full_ratio 0

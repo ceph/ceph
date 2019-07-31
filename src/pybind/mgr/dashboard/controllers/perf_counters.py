@@ -74,6 +74,11 @@ class MgrPerfCounter(PerfCounter):
     service_type = 'mgr'
 
 
+@ApiController('perf_counters/tcmu-runner', Scope.ISCSI)
+class TcmuRunnerPerfCounter(PerfCounter):
+    service_type = 'tcmu-runner'
+
+
 @ApiController('perf_counters')
 class PerfCounters(RESTController):
     def list(self):

@@ -1,7 +1,7 @@
-Local pool plugin
+Local Pool Module
 =================
 
-The *localpool* plugin can automatically create RADOS pools that are
+The *localpool* module can automatically create RADOS pools that are
 localized to a subset of the overall cluster.  For example, by default, it will
 create a pool for each distinct rack in the cluster.  This can be useful for some
 deployments that want to distribute some data locally as well as globally across the cluster .

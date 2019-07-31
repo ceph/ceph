@@ -90,7 +90,7 @@ export class SparklineComponent implements OnInit, OnChanges {
   constructor(private dimlessBinaryPipe: DimlessBinaryPipe) {}
 
   ngOnInit() {
-    const getStyleTop = (tooltip, positionY) => {
+    const getStyleTop = (tooltip) => {
       return tooltip.caretY - tooltip.height - tooltip.yPadding - 5 + 'px';
     };
 
@@ -117,7 +117,6 @@ export class SparklineComponent implements OnInit, OnChanges {
 
   ngOnChanges(changes: SimpleChanges) {
     this.datasets[0].data = changes['data'].currentValue;
-    this.datasets = [...this.datasets];
     this.labels = [...Array(changes['data'].currentValue.length)];
   }
 }

@@ -15,12 +15,11 @@ class CephContext;
 class RGWSI_Zone;
 
 template <class T>
-static int parse_decode_json(CephContext *cct, T& t, bufferlist& bl)
+static int parse_decode_json(T& t, bufferlist& bl)
 {
   JSONParser p;
-  int ret = p.parse(bl.c_str(), bl.length());
-  if (ret < 0) {
-    return ret;
+  if (!p.parse(bl.c_str(), bl.length())) {
+    return -EINVAL;
   }
 
   try {
@@ -216,7 +215,7 @@ int RGWRESTConn::get_json_resource(const string& resource, param_vec_t *params, 
     return ret;
   }
 
-  ret = parse_decode_json(cct, t, bl);
+  ret = parse_decode_json(t, bl);
   if (ret < 0) {
     return ret;
   }
@@ -302,8 +301,8 @@ public:
     return req.get_http_status();
   }
 
-  int wait(bufferlist *pbl) {
-    int ret = req.wait();
+  int wait(bufferlist *pbl, optional_yield y) {
+    int ret = req.wait(y);
     if (ret < 0) {
       return ret;
     }
@@ -316,7 +315,7 @@ public:
   }
 
   template <class T>
-  int wait(T *dest);
+  int wait(T *dest, optional_yield y);
 
   template <class T>
   int fetch(T *dest);
@@ -330,7 +329,7 @@ int RGWRESTReadResource::decode_resource(T *dest)
   if (ret < 0) {
     return ret;
   }
-  ret = parse_decode_json(cct, *dest, bl);
+  ret = parse_decode_json(*dest, bl);
   if (ret < 0) {
     return ret;
   }
@@ -353,9 +352,9 @@ int RGWRESTReadResource::fetch(T *dest)
 }
 
 template <class T>
-int RGWRESTReadResource::wait(T *dest)
+int RGWRESTReadResource::wait(T *dest, optional_yield y)
 {
-  int ret = req.wait();
+  int ret = req.wait(y);
   if (ret < 0) {
     return ret;
   }
@@ -411,9 +410,6 @@ public:
     return req.get_io_user_info();
   }
 
-  template <class T, class E>
-  int decode_resource(T *dest, E *err_result);
-
   int send(bufferlist& bl);
 
   int aio_send(bufferlist& bl);
@@ -426,61 +422,44 @@ public:
     return req.get_http_status();
   }
 
-  int wait(bufferlist *pbl) {
-    int ret = req.wait();
+  template <class E = int>
+  int wait(bufferlist *pbl, optional_yield y, E *err_result = nullptr) {
+    int ret = req.wait(y);
     *pbl = bl;
-    if (ret < 0) {
-      return ret;
+
+    if (ret < 0 && err_result ) {
+      ret = parse_decode_json(*err_result, bl);
     }
 
-    if (req.get_status() < 0) {
-      return req.get_status();
-    }
-    return 0;
+    return req.get_status();
   }
 
   template <class T, class E = int>
-  int wait(T *dest, E *err_result = nullptr);
+  int wait(T *dest, optional_yield y, E *err_result = nullptr);
 };
 
 template <class T, class E>
-int RGWRESTSendResource::decode_resource(T *dest, E *err_result)
+int RGWRESTSendResource::wait(T *dest, optional_yield y, E *err_result)
 {
-  int ret = req.get_status();
+  int ret = req.wait(y);
+  if (ret >= 0) {
+    ret = req.get_status();
+  }
+
+  if (ret < 0 && err_result) {
+    ret = parse_decode_json(*err_result, bl);
+  }
+
   if (ret < 0) {
-    if (err_result) {
-      parse_decode_json(cct, *err_result, bl);
-    }
     return ret;
   }
 
-  if (!dest) {
-    return 0;
-  }
-
-  ret = parse_decode_json(cct, *dest, bl);
+  ret = parse_decode_json(*dest, bl);
   if (ret < 0) {
     return ret;
   }
   return 0;
-}
 
-template <class T, class E>
-int RGWRESTSendResource::wait(T *dest, E *err_result)
-{
-  int ret = req.wait();
-  if (ret < 0) {
-    if (err_result) {
-      parse_decode_json(cct, *err_result, bl);
-    }
-    return ret;
-  }
-
-  ret = decode_resource(dest, err_result);
-  if (ret < 0) {
-    return ret;
-  }
-  return 0;
 }
 
 class RGWRESTPostResource : public RGWRESTSendResource {

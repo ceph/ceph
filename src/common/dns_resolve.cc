@@ -337,7 +337,7 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
 
     auto rdata = ns_rr_rdata(rr);
     uint16_t priority = ns_get16(rdata); rdata += NS_INT16SZ;
-    rdata += NS_INT16SZ;	// weight
+    uint16_t weight = ns_get16(rdata); rdata += NS_INT16SZ;
     uint16_t port = ns_get16(rdata); rdata += NS_INT16SZ;
     memset(full_target, 0, sizeof(full_target));
     ns_name_uncompress(ns_msg_base(handle), ns_msg_end(handle),
@@ -360,7 +360,7 @@ int DNSResolver::resolve_srv_hosts(CephContext *cct, const string& service_name,
 	return -EINVAL;
       }
       target = target.substr(0, end);
-      (*srv_hosts)[target] = {priority, addr};
+      (*srv_hosts)[target] = {priority, weight, addr};
     }
   }
   return 0;

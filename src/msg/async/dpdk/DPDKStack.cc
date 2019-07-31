@@ -203,7 +203,9 @@ DPDKWorker::Impl::~Impl()
   _dev->unset_local_queue(id);
 }
 
-int DPDKWorker::listen(entity_addr_t &sa, const SocketOptions &opt,
+int DPDKWorker::listen(entity_addr_t &sa,
+		       unsigned addr_slot,
+		       const SocketOptions &opt,
                        ServerSocket *sock)
 {
   ceph_assert(sa.get_family() == AF_INET);

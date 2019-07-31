@@ -97,8 +97,8 @@ struct TestMigration : public TestFixture {
                      librbd::ImageCtx *dst_ictx) {
     uint64_t src_size, dst_size;
     {
-      RWLock::RLocker src_locker(src_ictx->snap_lock);
-      RWLock::RLocker dst_locker(dst_ictx->snap_lock);
+      RWLock::RLocker src_locker(src_ictx->image_lock);
+      RWLock::RLocker dst_locker(dst_ictx->image_lock);
       src_size = src_ictx->get_image_size(src_ictx->snap_id);
       dst_size = dst_ictx->get_image_size(dst_ictx->snap_id);
     }
@@ -109,10 +109,10 @@ struct TestMigration : public TestFixture {
 
     if (dst_ictx->test_features(RBD_FEATURE_LAYERING)) {
       bool flags_set;
-      RWLock::RLocker dst_locker(dst_ictx->snap_lock);
+      RWLock::RLocker dst_locker(dst_ictx->image_lock);
       EXPECT_EQ(0, dst_ictx->test_flags(dst_ictx->snap_id,
                                         RBD_FLAG_OBJECT_MAP_INVALID,
-                                        dst_ictx->snap_lock, &flags_set));
+                                        dst_ictx->image_lock, &flags_set));
       EXPECT_FALSE(flags_set);
     }
 
@@ -141,8 +141,8 @@ struct TestMigration : public TestFixture {
                   << std::endl;
         char *c = getenv("TEST_RBD_MIGRATION_VERBOSE");
         if (c != NULL && *c != '\0') {
-          std::cout << "src block: " << std::endl; src_bl.hexdump(std::cout);
-          std::cout << "dst block: " << std::endl; dst_bl.hexdump(std::cout);
+          std::cout << "src block: " << src_ictx->id << ": " << std::endl; src_bl.hexdump(std::cout);
+          std::cout << "dst block: " << dst_ictx->id << ": " << std::endl; dst_bl.hexdump(std::cout);
         }
       }
       EXPECT_TRUE(src_bl.contents_equal(dst_bl));
@@ -157,6 +157,7 @@ struct TestMigration : public TestFixture {
     m_ictxs.insert(*ictx);
 
     ASSERT_EQ(0, (*ictx)->state->open(flags));
+    (*ictx)->discard_granularity_bytes = 0;
   }
 
   void open_image(librados::IoCtx& io_ctx, const std::string &name,

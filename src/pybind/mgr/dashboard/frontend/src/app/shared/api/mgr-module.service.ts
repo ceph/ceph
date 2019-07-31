@@ -1,6 +1,8 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
+import { Observable } from 'rxjs';
+
 import { ApiModule } from './api.module';
 
 @Injectable({
@@ -15,8 +17,8 @@ export class MgrModuleService {
    * Get the list of Ceph Mgr modules and their state (enabled/disabled).
    * @return {Observable<Object[]>}
    */
-  list() {
-    return this.http.get(`${this.url}`);
+  list(): Observable<Object[]> {
+    return this.http.get<Object[]>(`${this.url}`);
   }
 
   /**
@@ -24,7 +26,7 @@ export class MgrModuleService {
    * @param {string} module The name of the mgr module.
    * @return {Observable<Object>}
    */
-  getConfig(module: string) {
+  getConfig(module: string): Observable<Object> {
     return this.http.get(`${this.url}/${module}`);
   }
 
@@ -34,7 +36,7 @@ export class MgrModuleService {
    * @param {object} config The configuration.
    * @return {Observable<Object>}
    */
-  updateConfig(module: string, config: Object) {
+  updateConfig(module: string, config: Object): Observable<Object> {
     return this.http.put(`${this.url}/${module}`, { config: config });
   }
 
@@ -52,5 +54,14 @@ export class MgrModuleService {
    */
   disable(module: string) {
     return this.http.post(`${this.url}/${module}/disable`, null);
+  }
+
+  /**
+   * Get the Ceph Mgr module options.
+   * @param {string} module The name of the mgr module.
+   * @return {Observable<Object>}
+   */
+  getOptions(module: string): Observable<Object> {
+    return this.http.get(`${this.url}/${module}/options`);
   }
 }

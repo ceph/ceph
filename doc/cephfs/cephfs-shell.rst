@@ -14,6 +14,18 @@ Options :
     -b, --batch FILE      Process a batch file.
     -t, --test FILE       Test against transcript(s) in FILE
 
+
+.. note::
+
+    Latest version of the cmd2 module is required for running cephfs-shell.
+    If CephFS is installed through source, execute cephfs-shell in the build
+    directory. It can also be executed as following using virtualenv:
+
+.. code:: bash
+
+    [build]$ virtualenv -p python3 venv && source venv/bin/activate && pip3 install cmd2
+    [build]$ source vstart_environment.sh && source venv/bin/activate && python3 ../src/tools/cephfs/cephfs-shell
+
 Commands
 ========
 
@@ -254,6 +266,10 @@ shortcuts
 
 Lists shortcuts (aliases) available
 
+Usage :
+
+    shortcuts
+
 history
 -------
 
@@ -296,10 +312,10 @@ Usage :
 
 * Call without arguments for a list of settable parameters with their values.
 
- Options :
- -h     show this help message and exit
- -a     display read-only settings as well
- -l     describe function of parameter
+Options :
+  -h     show this help message and exit
+  -a     display read-only settings as well
+  -l     describe function of parameter
 
 edit
 ----
@@ -340,9 +356,21 @@ locate
 Find an item in Filesystem
 
 Usage:
+
      locate [options] <name>
 
 Options :
   -c       Count number of items found
   -i       Ignore case 
 
+stat
+------
+
+Display file status.
+
+Usage :
+
+     stat [-h] <file_name> [file_name ...]
+
+Options :
+  -h     Shows the help message

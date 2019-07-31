@@ -24,11 +24,9 @@
       register: osd_configs
 
     - name: activate all scanned OSDs
-      command: "ceph-volume --cluster={{ cluster }} simple activate --file {{ item.path }}"
+      command: "ceph-volume --cluster={{ cluster }} simple activate --all"
       environment:
         CEPH_VOLUME_DEBUG: 1
-      with_items:
-        - "{{ osd_configs.files }}"
 
 # zap tests
 

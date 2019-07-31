@@ -18,7 +18,7 @@ def auth(f):
             response.headers['WWW-Authenticate'] = 'Basic realm="Login Required"'
             return {'message': 'auth: No HTTP username/password'}
 
-        username, password = b64decode(request.authorization[1]).split(':')
+        username, password = b64decode(request.authorization[1]).decode('utf-8').split(':')
 
         # Check that the username exists
         if username not in context.instance.keys:

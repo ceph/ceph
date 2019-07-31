@@ -38,7 +38,7 @@ do_killall() {
     $SUDO killall -u $MYNAME $1
 }
 
-usage="usage: $0 [all] [mon] [mds] [osd] [rgw]\n"
+usage="usage: $0 [all] [mon] [mds] [osd] [rgw] [--crimson]\n"
 
 stop_all=1
 stop_mon=0
@@ -46,6 +46,7 @@ stop_mds=0
 stop_osd=0
 stop_mgr=0
 stop_rgw=0
+ceph_osd=ceph-osd
 
 while [ $# -ge 1 ]; do
     case $1 in
@@ -72,6 +73,9 @@ while [ $# -ge 1 ]; do
             stop_rgw=1
             stop_all=0
             ;;
+        --crimson)
+            ceph_osd=crimson-osd
+            ;;
         * )
             printf "$usage"
             exit
@@ -97,7 +101,7 @@ if [ $stop_all -eq 1 ]; then
         fi
     fi
 
-    for p in ceph-mon ceph-mds ceph-osd ceph-mgr radosgw lt-radosgw apache2 ; do
+    for p in ceph-mon ceph-mds $ceph_osd ceph-mgr radosgw lt-radosgw apache2 ; do
         for try in 0 1 1 1 1 ; do
             if ! pkill -u $MYUID $p ; then
                 break
@@ -107,14 +111,14 @@ if [ $stop_all -eq 1 ]; then
     done
 
     pkill -u $MYUID -f valgrind.bin.\*ceph-mon
-    $SUDO pkill -u $MYUID -f valgrind.bin.\*ceph-osd
+    $SUDO pkill -u $MYUID -f valgrind.bin.\*$ceph_osd
     pkill -u $MYUID -f valgrind.bin.\*ceph-mds
     asok_dir=`dirname $("${CEPH_BIN}"/ceph-conf -c ${conf_fn} --show-config-value admin_socket)`
     rm -rf "${asok_dir}"
 else
     [ $stop_mon -eq 1 ] && do_killall ceph-mon
     [ $stop_mds -eq 1 ] && do_killall ceph-mds
-    [ $stop_osd -eq 1 ] && do_killall ceph-osd
+    [ $stop_osd -eq 1 ] && do_killall $ceph_osd
     [ $stop_mgr -eq 1 ] && do_killall ceph-mgr
     [ $stop_rgw -eq 1 ] && do_killall radosgw lt-radosgw apache2
 fi

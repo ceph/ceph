@@ -33,6 +33,7 @@ setup_teuthology() {
     read -r -d '' TEUTHOLOGY_PY_REQS <<EOF
 apache-libcloud==2.2.1 \
 asn1crypto==0.22.0 \
+backports.ssl-match-hostname==3.5.0.1 \
 bcrypt==3.1.4 \
 certifi==2018.1.18 \
 cffi==1.10.0 \
@@ -67,8 +68,7 @@ EOF
 
 
     cd $TEMP_DIR
-
-    virtualenv --python=/usr/bin/python venv
+    virtualenv --python=${TEUTHOLOGY_PYTHON_BIN:-/usr/bin/python} venv
     source venv/bin/activate
     eval pip install $TEUTHOLOGY_PY_REQS
     pip install -r $CURR_DIR/requirements.txt
@@ -89,22 +89,25 @@ EOF
         fi
     fi
 
-#    export COVERAGE_ENABLED=true
-#    export COVERAGE_FILE=.coverage.mgr.dashboard
-
     cd $CURR_DIR
+
+    COVERAGE_VERSION=$(cat requirements.txt | grep coverage)
+    if [[ "$CEPH_MGR_PY_VERSION_MAJOR" == '3' ]]; then
+        pip3 install "$COVERAGE_VERSION"
+    else
+        pip install "$COVERAGE_VERSION"
+    fi
 }
 
 run_teuthology_tests() {
     cd "$BUILD_DIR"
     find ../src/pybind/mgr/dashboard/ -name '*.pyc' -exec rm -f {} \;
-    source $TEMP_DIR/venv/bin/activate
 
     OPTIONS=''
     TEST_CASES=''
     if [[ "$@" == '' || "$@" == '--create-cluster-only' ]]; then
       TEST_CASES=`for i in \`ls $BUILD_DIR/../qa/tasks/mgr/dashboard/test_*\`; do F=$(basename $i); M="${F%.*}"; echo -n " tasks.mgr.dashboard.$M"; done`
-      TEST_CASES="tasks.mgr.test_dashboard $TEST_CASES"
+      TEST_CASES="tasks.mgr.test_module_selftest tasks.mgr.test_dashboard $TEST_CASES"
       if [[ "$@" == '--create-cluster-only' ]]; then
         OPTIONS="$@"
       fi
@@ -115,11 +118,14 @@ run_teuthology_tests() {
     fi
 
     export PATH=$BUILD_DIR/bin:$PATH
+    source $TEMP_DIR/venv/bin/activate # Run after setting PATH as it does the last PATH export.
     export LD_LIBRARY_PATH=$BUILD_DIR/lib/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}/:$BUILD_DIR/lib
     export PYTHONPATH=$TEMP_DIR/teuthology:$BUILD_DIR/../qa:$BUILD_DIR/lib/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}/:$BUILD_DIR/../src/pybind
-    if [[ -z "$RGW" ]]; then
-        export RGW=1
-    fi
+    export RGW=${RGW:-1}
+
+    export COVERAGE_ENABLED=true
+    export COVERAGE_FILE=.coverage.mgr.dashboard
+    find . -iname "*${COVERAGE_FILE}*" -type f -delete
 
     eval python ../qa/tasks/vstart_runner.py $OPTIONS $TEST_CASES
 
@@ -131,6 +137,11 @@ cleanup_teuthology() {
     cd "$BUILD_DIR"
     killall ceph-mgr
     sleep 10
+    if [[ "$COVERAGE_ENABLED" == 'true' ]]; then
+        source $TEMP_DIR/venv/bin/activate
+        (coverage combine && coverage report) || true
+        deactivate
+    fi
     ../src/stop.sh
     sleep 5
 

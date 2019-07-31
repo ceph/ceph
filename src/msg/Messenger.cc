@@ -8,11 +8,7 @@
 
 #include "Messenger.h"
 
-#include "msg/simple/SimpleMessenger.h"
 #include "msg/async/AsyncMessenger.h"
-#ifdef HAVE_XIO
-#include "msg/xio/XioMessenger.h"
-#endif
 
 Messenger *Messenger::create_client_messenger(CephContext *cct, string lname)
 {
@@ -28,17 +24,11 @@ Messenger *Messenger::create(CephContext *cct, const string &type,
 {
   int r = -1;
   if (type == "random") {
-    r = ceph::util::generate_random_number(0, 1);
+    r = 0;
+    //r = ceph::util::generate_random_number(0, 1);
   }
-  if (r == 0 || type == "simple")
-    return new SimpleMessenger(cct, name, std::move(lname), nonce);
-  else if (r == 1 || type.find("async") != std::string::npos)
+  if (r == 0 || type.find("async") != std::string::npos)
     return new AsyncMessenger(cct, name, type, std::move(lname), nonce);
-#ifdef HAVE_XIO
-  else if ((type == "xio") &&
-	   cct->check_experimental_feature_enabled("ms-type-xio"))
-    return new XioMessenger(cct, name, std::move(lname), nonce, cflags);
-#endif
   lderr(cct) << "unrecognized ms_type '" << type << "'" << dendl;
   return nullptr;
 }
@@ -107,60 +97,3 @@ int Messenger::bindv(const entity_addrvec_t& addrs)
   return bind(addrs.legacy_addr());
 }
 
-bool Messenger::ms_deliver_verify_authorizer(
-  Connection *con,
-  int peer_type,
-  int protocol,
-  bufferlist& authorizer,
-  bufferlist& authorizer_reply,
-  bool& isvalid,
-  CryptoKey& session_key,
-  std::string *connection_secret,
-  std::unique_ptr<AuthAuthorizerChallenge> *challenge)
-{
-  if (authorizer.length() == 0) {
-    for (auto dis : dispatchers) {
-      if (!dis->require_authorizer) {
-	//ldout(cct,10) << __func__ << " tolerating missing authorizer" << dendl;
-	isvalid = true;
-	return true;
-      }
-    }
-  }
-  AuthAuthorizeHandler *ah = auth_registry.get_handler(peer_type, protocol);
-  if (get_mytype() == CEPH_ENTITY_TYPE_MON &&
-      peer_type != CEPH_ENTITY_TYPE_MON) {
-    // the monitor doesn't do authenticators for msgr1.
-    isvalid = true;
-    return true;
-  }
-  if (!ah) {
-    lderr(cct) << __func__ << " no AuthAuthorizeHandler found for protocol "
-	       << protocol << dendl;
-    isvalid = false;
-    return false;
-  }
-
-  for (auto dis : dispatchers) {
-    KeyStore *ks = dis->ms_get_auth1_authorizer_keystore();
-    if (ks) {
-      isvalid = ah->verify_authorizer(
-	cct,
-	ks,
-	authorizer,
-	0,
-	&authorizer_reply,
-	&con->peer_name,
-	&con->peer_global_id,
-	&con->peer_caps_info,
-	&session_key,
-	connection_secret,
-	challenge);
-      if (isvalid) {
-	return dis->ms_handle_authentication(con)>=0;
-      }
-      return true;
-    }
-  }
-  return false;
-}

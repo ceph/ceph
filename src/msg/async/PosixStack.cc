@@ -161,6 +161,9 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
   int fd() const override {
     return _fd;
   }
+  int socket_fd() const override {
+    return _fd;
+  }
   friend class PosixServerSocketImpl;
   friend class PosixNetworkStack;
 };
@@ -177,6 +180,7 @@ class PosixServerSocketImpl : public ServerSocketImpl {
   int accept(ConnectedSocket *sock, const SocketOptions &opts, entity_addr_t *out, Worker *w) override;
   void abort_accept() override {
     ::close(_fd);
+    _fd = -1;
   }
   int fd() const override {
     return _fd;

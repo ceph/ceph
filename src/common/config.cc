@@ -111,9 +111,7 @@ md_config_t::md_config_t(ConfigValues& values,
                 << std::endl;
       ceph_abort();
     }
-    schema.emplace(std::piecewise_construct,
-		   std::forward_as_tuple(i.name),
-		   std::forward_as_tuple(i));
+    schema.emplace(i.name, i);
   }
 
   // Define the debug_* options as well.
@@ -166,7 +164,7 @@ md_config_t::md_config_t(ConfigValues& values,
   // members if present.
   legacy_values = {
 #define OPTION(name, type) \
-    {std::string(STRINGIFY(name)), &ConfigValues::name},
+    {STRINGIFY(name), &ConfigValues::name},
 #define SAFE_OPTION(name, type) OPTION(name, type)
 #include "common/legacy_config_opts.h"
 #undef OPTION
@@ -242,7 +240,7 @@ void md_config_t::validate_schema()
   }
 }
 
-const Option *md_config_t::find_option(const string& name) const
+const Option *md_config_t::find_option(const std::string_view name) const
 {
   auto p = schema.find(name);
   if (p != schema.end()) {
@@ -253,7 +251,7 @@ const Option *md_config_t::find_option(const string& name) const
 
 void md_config_t::set_val_default(ConfigValues& values,
 				  const ConfigTracker& tracker,
-				  const string& name, const std::string& val)
+				  const string_view name, const std::string& val)
 {
   const Option *o = find_option(name);
   ceph_assert(o);
@@ -265,7 +263,7 @@ void md_config_t::set_val_default(ConfigValues& values,
 int md_config_t::set_mon_vals(CephContext *cct,
     ConfigValues& values,
     const ConfigTracker& tracker,
-    const map<string,string>& kv,
+    const map<string,string,less<>>& kv,
     config_callback config_cb)
 {
   ignored_mon_values.clear();
@@ -376,11 +374,13 @@ int md_config_t::parse_config_files(ConfigValues& values,
   for (c = conf_files.begin(); c != conf_files.end(); ++c) {
     cf.clear();
     string fn = *c;
-
-    int ret = cf.parse_file(fn.c_str(), &parse_errors, warnings);
-    if (ret == 0)
+    ostringstream oss;
+    int ret = cf.parse_file(fn.c_str(), &oss);
+    parse_error = oss.str();
+    if (ret == 0) {
       break;
-    else if (ret != -ENOENT)
+    }
+    if (ret != -ENOENT)
       return ret;
   }
   // it must have been all ENOENTs, that's the only way we got here
@@ -428,12 +428,10 @@ int md_config_t::parse_config_files(ConfigValues& values,
 
   // Warn about section names that look like old-style section names
   std::deque < std::string > old_style_section_names;
-  for (ConfFile::const_section_iter_t s = cf.sections_begin();
-       s != cf.sections_end(); ++s) {
-    const string &str(s->first);
-    if (((str.find("mds") == 0) || (str.find("mon") == 0) ||
-	 (str.find("osd") == 0)) && (str.size() > 3) && (str[3] != '.')) {
-      old_style_section_names.push_back(str);
+  for (auto& [name, section] : cf) {
+    if (((name.find("mds") == 0) || (name.find("mon") == 0) ||
+	 (name.find("osd") == 0)) && (name.size() > 3) && (name[3] != '.')) {
+      old_style_section_names.push_back(name);
     }
   }
   if (!old_style_section_names.empty()) {
@@ -453,7 +451,8 @@ int md_config_t::parse_config_files(ConfigValues& values,
   return 0;
 }
 
-void md_config_t::parse_env(ConfigValues& values,
+void md_config_t::parse_env(unsigned entity_type,
+			    ConfigValues& values,
 			    const ConfigTracker& tracker,
 			    const char *args_var)
 {
@@ -462,11 +461,11 @@ void md_config_t::parse_env(ConfigValues& values,
   if (!args_var) {
     args_var = "CEPH_ARGS";
   }
-  if (getenv("CEPH_KEYRING")) {
-    _set_val(values, tracker, getenv("CEPH_KEYRING"), *find_option("keyring"),
-	     CONF_ENV, nullptr);
+  if (auto s = getenv("CEPH_KEYRING"); s) {
+    string err;
+    _set_val(values, tracker, s, *find_option("keyring"), CONF_ENV, &err);
   }
-  if (const char *dir = getenv("CEPH_LIB")) {
+  if (auto dir = getenv("CEPH_LIB"); dir) {
     for (auto name : { "erasure_code_dir", "plugin_dir", "osd_class_dir" }) {
     std::string err;
       const Option *o = find_option(name);
@@ -474,6 +473,50 @@ void md_config_t::parse_env(ConfigValues& values,
       _set_val(values, tracker, dir, *o, CONF_ENV, &err);
     }
   }
+
+  // Apply pod memory limits:
+  //
+  // There are two types of resource requests: `limits` and `requests`.
+  //
+  // - Requests: Used by the K8s scheduler to determine on which nodes to
+  //   schedule the pods. This helps spread the pods to different nodes. This
+  //   value should be conservative in order to make sure all the pods are
+  //   schedulable. This corresponds to POD_MEMORY_REQUEST (set by the Rook
+  //   CRD) and is the target memory utilization we try to maintain for daemons
+  //   that respect it.
+  //
+  // - Limits: At runtime, the container runtime (and Linux) will use the
+  //   limits to see if the pod is using too many resources. In that case, the
+  //   pod will be killed/restarted automatically if the pod goes over the limit.
+  //   This should be higher than what is specified for requests (potentially
+  //   much higher). This corresponds to the cgroup memory limit that will
+  //   trigger the Linux OOM killer.
+  //
+  // Here are the documented best practices: https://kubernetes.io/docs/tasks/configure-pod-container/assign-cpu-resource/#motivation-for-cpu-requests-and-limits
+  //
+  // When the operator creates the CephCluster CR, it will need to generate the
+  // desired requests and limits. As long as we are conservative in our choice
+  // for requests and generous with the limits we should be in a good place to
+  // get started.
+  //
+  // The support in Rook is already there for applying the limits as seen in these links.
+  //
+  // Rook docs on the resource requests and limits: https://rook.io/docs/rook/v1.0/ceph-cluster-crd.html#cluster-wide-resources-configuration-settings
+  // Example CR settings: https://github.com/rook/rook/blob/6d2ef936698593036185aabcb00d1d74f9c7bfc1/cluster/examples/kubernetes/ceph/cluster.yaml#L90
+  if (auto pod_req = getenv("POD_MEMORY_REQUEST"); pod_req) {
+    string err;
+    uint64_t v = atoll(pod_req);
+    if (v) {
+      switch (entity_type) {
+      case CEPH_ENTITY_TYPE_OSD:
+	_set_val(values, tracker, stringify(v),
+		 *find_option("osd_memory_target"),
+		 CONF_ENV, &err);
+	break;
+      }
+    }
+  }
+
   if (getenv(args_var)) {
     vector<const char *> env_args;
     env_to_vec(env_args, args_var);
@@ -557,6 +600,9 @@ int md_config_t::parse_argv(ConfigValues& values,
     }
     else if (ceph_argparse_flag(args, i, "--no-mon-config", (char*)NULL)) {
       values.no_mon_config = true;
+    }
+    else if (ceph_argparse_flag(args, i, "--log-early", (char*)NULL)) {
+      values.log_early = true;
     }
     else if (ceph_argparse_flag(args, i, "--mon-config", (char*)NULL)) {
       values.no_mon_config = false;
@@ -662,7 +708,17 @@ int md_config_t::parse_option(ConfigValues& values,
     std::string as_option("--");
     as_option += opt.name;
     option_name = opt.name;
-    if (opt.type == Option::TYPE_BOOL) {
+    if (ceph_argparse_witharg(
+	  args, i, &val, err,
+	  string(string("--default-") + opt.name).c_str(), (char*)NULL)) {
+      if (!err.str().empty()) {
+        error_message = err.str();
+	ret = -EINVAL;
+	break;
+      }
+      ret = _set_val(values, tracker,  val, opt, CONF_DEFAULT, &error_message);
+      break;
+    } else if (opt.type == Option::TYPE_BOOL) {
       int res;
       if (ceph_argparse_binary_flag(args, i, &res, oss, as_option.c_str(),
 				    (char*)NULL)) {
@@ -779,7 +835,7 @@ int md_config_t::injectargs(ConfigValues& values,
 
 void md_config_t::set_val_or_die(ConfigValues& values,
 				 const ConfigTracker& tracker,
-				 const std::string &key,
+				 const std::string_view key,
 				 const std::string &val)
 {
   std::stringstream err;
@@ -792,7 +848,7 @@ void md_config_t::set_val_or_die(ConfigValues& values,
 
 int md_config_t::set_val(ConfigValues& values,
 			 const ConfigTracker& tracker,
-			 const std::string &key, const char *val,
+			 const std::string_view key, const char *val,
 			 std::stringstream *err_ss)
 {
   if (key.empty()) {
@@ -825,7 +881,7 @@ int md_config_t::set_val(ConfigValues& values,
   return -ENOENT;
 }
 
-int md_config_t::rm_val(ConfigValues& values, const std::string& key)
+int md_config_t::rm_val(ConfigValues& values, const std::string_view key)
 {
   return _rm_val(values, key, CONF_OVERRIDE);
 }
@@ -909,7 +965,7 @@ void md_config_t::get_config_bl(
 }
 
 int md_config_t::get_val(const ConfigValues& values,
-			 const std::string &key, char **buf, int len) const
+			 const std::string_view key, char **buf, int len) const
 {
   string k(ConfFile::normalize_key_name(key));
   return _get_val_cstr(values, k, buf, len);
@@ -917,7 +973,7 @@ int md_config_t::get_val(const ConfigValues& values,
 
 int md_config_t::get_val(
   const ConfigValues& values,
-  const std::string &key,
+  const std::string_view key,
   std::string *val) const
 {
   return conf_stringify(get_val_generic(values, key), val);
@@ -925,7 +981,7 @@ int md_config_t::get_val(
 
 Option::value_t md_config_t::get_val_generic(
   const ConfigValues& values,
-  const std::string &key) const
+  const std::string_view key) const
 {
   string k(ConfFile::normalize_key_name(key));
   return _get_val(values, k);
@@ -933,7 +989,7 @@ Option::value_t md_config_t::get_val_generic(
 
 Option::value_t md_config_t::_get_val(
   const ConfigValues& values,
-  const std::string &key,
+  const std::string_view key,
   expand_stack_t *stack,
   std::ostream *err) const
 {
@@ -1152,7 +1208,7 @@ Option::value_t md_config_t::_expand_meta(
 
 int md_config_t::_get_val_cstr(
   const ConfigValues& values,
-  const std::string &key, char **buf, int len) const
+  const std::string& key, char **buf, int len) const
 {
   if (key.empty())
     return -EINVAL;
@@ -1215,9 +1271,9 @@ void md_config_t::_get_my_sections(const ConfigValues& values,
 // Return a list of all sections
 int md_config_t::get_all_sections(std::vector <std::string> &sections) const
 {
-  for (ConfFile::const_section_iter_t s = cf.sections_begin();
-       s != cf.sections_end(); ++s) {
-    sections.push_back(s->first);
+  for (auto [section_name, section] : cf) {
+    sections.push_back(section_name);
+    std::ignore = section;
   }
   return 0;
 }
@@ -1225,7 +1281,7 @@ int md_config_t::get_all_sections(std::vector <std::string> &sections) const
 int md_config_t::get_val_from_conf_file(
   const ConfigValues& values,
   const std::vector <std::string> &sections,
-  const std::string &key,
+  const std::string_view key,
   std::string &out,
   bool emeta) const
 {
@@ -1243,13 +1299,11 @@ int md_config_t::get_val_from_conf_file(
 
 int md_config_t::_get_val_from_conf_file(
   const std::vector <std::string> &sections,
-  const std::string &key,
+  const std::string_view key,
   std::string &out) const
 {
-  std::vector <std::string>::const_iterator s = sections.begin();
-  std::vector <std::string>::const_iterator s_end = sections.end();
-  for (; s != s_end; ++s) {
-    int ret = cf.read(s->c_str(), key, out);
+  for (auto &s : sections) {
+    int ret = cf.read(s.c_str(), std::string{key}, out);
     if (ret == 0) {
       return 0;
     } else if (ret != -ENOENT) {
@@ -1268,6 +1322,7 @@ int md_config_t::_set_val(
   std::string *error_message)
 {
   Option::value_t new_value;
+  ceph_assert(error_message);
   int r = opt.parse_value(raw_val, &new_value, error_message);
   if (r < 0) {
     return r;
@@ -1320,13 +1375,13 @@ void md_config_t::_refresh(ConfigValues& values, const Option& opt)
 }
 
 int md_config_t::_rm_val(ConfigValues& values,
-			 const std::string& key,
+			 const std::string_view key,
 			 int level)
 {
   if (schema.count(key) == 0) {
     return -EINVAL;
   }
-  auto ret = values.rm_val(key, level);
+  auto ret = values.rm_val(std::string{key}, level);
   if (ret < 0) {
     return ret;
   }
@@ -1435,7 +1490,7 @@ void md_config_t::diff(
       // we only have a default value; exclude from diff
       return;
     }
-    f->open_object_section(name.c_str());
+    f->open_object_section(std::string{name}.c_str());
     const Option *o = find_option(name);
     dump(f, CONF_DEFAULT, _get_val_default(*o));
     for (auto& j : configs) {
@@ -1446,7 +1501,7 @@ void md_config_t::diff(
   });
 }
 
-void md_config_t::complain_about_parse_errors(CephContext *cct)
+void md_config_t::complain_about_parse_error(CephContext *cct)
 {
-  ::complain_about_parse_errors(cct, &parse_errors);
+  ::complain_about_parse_error(cct, parse_error);
 }

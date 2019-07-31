@@ -1,11 +1,10 @@
-@import '../../../../defaults';
+@import 'styles';
 
 p {
   font-family: monospace;
-  color: black;
 }
 
-.well {
+.card {
   div p {
     display: flex;
 
@@ -38,4 +37,25 @@ p {
   .info {
     color: $color-brand-teal;
   }
+}
+
+::ng-deep timepicker table tbody tr td {
+  input.bs-timepicker-field {
+    width: 3.5rem !important;
+    font-size: 1rem;
+    padding: 4px 6px;
+  }
+}
+
+label {
+  @extend .mr-2;
+}
+
+.form-group {
+  @extend .mr-3;
+  @extend .mb-3;
+}
+
+.middle {
+  padding-top: 7px;
 }

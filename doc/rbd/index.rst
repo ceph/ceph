@@ -39,19 +39,19 @@ to operate the :ref:`Ceph RADOS Gateway <object-gateway>`, the
    Ceph cluster.
 
 .. toctree::
-	:maxdepth: 1
+        :maxdepth: 1
 
-	Commands <rados-rbd-cmds>
-	Kernel Modules <rbd-ko>
-	Snapshots<rbd-snapshot>
-	Mirroring <rbd-mirroring>
-	LIO iSCSI Gateway <iscsi-overview>
-	QEMU <qemu-rbd>
-	libvirt <libvirt>
-	librbd Settings <rbd-config-ref/>
-	OpenStack <rbd-openstack>
-	CloudStack <rbd-cloudstack>
-	RBD Replay <rbd-replay>
+	Basic Commands <rados-rbd-cmds>
+
+.. toctree::
+        :maxdepth: 2
+
+        Operations <rbd-operations>
+
+.. toctree::
+	:maxdepth: 2
+
+        Integrations <rbd-integrations>
 
 .. toctree::
 	:maxdepth: 2

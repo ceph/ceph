@@ -34,39 +34,38 @@ public:
   void shut_down(Context* on_finish) override;
 
   bool read(
-      const std::string &oid, uint64_t object_no, uint64_t object_off,
-      uint64_t object_len, librados::snap_t snap_id, int op_flags,
+      uint64_t object_no, uint64_t object_off, uint64_t object_len,
+      librados::snap_t snap_id, int op_flags,
       const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
       ExtentMap* extent_map, int* object_dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
 
   bool discard(
-      const std::string &oid, uint64_t object_no, uint64_t object_off,
-      uint64_t object_len, const ::SnapContext &snapc, int discard_flags,
+      uint64_t object_no, uint64_t object_off, uint64_t object_len,
+      const ::SnapContext &snapc, int discard_flags,
       const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
       uint64_t* journal_tid, DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) override;
 
   bool write(
-      const std::string &oid, uint64_t object_no, uint64_t object_off,
-      ceph::bufferlist&& data, const ::SnapContext &snapc, int op_flags,
+      uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
+      const ::SnapContext &snapc, int op_flags,
       const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
       uint64_t* journal_tid, DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) override;
 
   bool write_same(
-      const std::string &oid, uint64_t object_no, uint64_t object_off,
-      uint64_t object_len, Extents&& buffer_extents, ceph::bufferlist&& data,
+      uint64_t object_no, uint64_t object_off, uint64_t object_len,
+      LightweightBufferExtents&& buffer_extents, ceph::bufferlist&& data,
       const ::SnapContext &snapc, int op_flags,
       const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
       uint64_t* journal_tid, DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) override;
 
   bool compare_and_write(
-      const std::string &oid, uint64_t object_no, uint64_t object_off,
-      ceph::bufferlist&& cmp_data, ceph::bufferlist&& write_data,
-      const ::SnapContext &snapc, int op_flags,
+      uint64_t object_no, uint64_t object_off, ceph::bufferlist&& cmp_data,
+      ceph::bufferlist&& write_data, const ::SnapContext &snapc, int op_flags,
       const ZTracer::Trace &parent_trace, uint64_t* mismatch_offset,
       int* object_dispatch_flags, uint64_t* journal_tid,
       DispatchResult* dispatch_result, Context** on_finish,
@@ -74,8 +73,8 @@ public:
 
   bool flush(
       FlushSource flush_source, const ZTracer::Trace &parent_trace,
-      DispatchResult* dispatch_result, Context** on_finish,
-      Context* on_dispatched) override {
+      uint64_t* journal_tid, DispatchResult* dispatch_result,
+      Context** on_finish, Context* on_dispatched) override {
     return false;
   }
 

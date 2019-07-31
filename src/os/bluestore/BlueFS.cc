@@ -124,6 +124,35 @@ void BlueFS::_init_logger()
 		    "Maximum bytes allocated from DB");
   b.add_u64_counter(l_bluefs_max_bytes_slow, "max_bytes_slow",
 		    "Maximum bytes allocated from SLOW");
+
+  b.add_u64_counter(l_bluefs_read_random_count, "read_random_count",
+		    "random read requests processed");
+  b.add_u64_counter(l_bluefs_read_random_bytes, "read_random_bytes",
+		    "Bytes requested in random read mode", NULL,
+		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+  b.add_u64_counter(l_bluefs_read_random_disk_count, "read_random_disk_count",
+		    "random reads requests going to disk");
+  b.add_u64_counter(l_bluefs_read_random_disk_bytes, "read_random_disk_bytes",
+		    "Bytes read from disk in random read mode", NULL,
+		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+  b.add_u64_counter(l_bluefs_read_random_buffer_count, "read_random_buffer_count",
+		    "random read requests processed using prefetch buffer");
+  b.add_u64_counter(l_bluefs_read_random_buffer_bytes, "read_random_buffer_bytes",
+		    "Bytes read from prefetch buffer in random read mode", NULL,
+		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+
+  b.add_u64_counter(l_bluefs_read_count, "read_count",
+		    "buffered read requests processed");
+  b.add_u64_counter(l_bluefs_read_bytes, "read_bytes",
+		    "Bytes requested in buffered read mode", NULL,
+		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+
+  b.add_u64_counter(l_bluefs_read_prefetch_count, "read_prefetch_count",
+		    "prefetch read requests processed");
+  b.add_u64_counter(l_bluefs_read_prefetch_bytes, "read_prefetch_bytes",
+		    "Bytes requested in prefetch read mode", NULL,
+		    PerfCountersBuilder::PRIO_USEFUL, unit_t(UNIT_BYTES));
+
   logger = b.create_perf_counters();
   cct->get_perfcounters_collection()->add(logger);
 }
@@ -305,7 +334,8 @@ void BlueFS::dump_block_extents(ostream& out)
         << " : own 0x" << block_all[i]
         << " = 0x" << owned
         << " : using 0x" << owned - free
-        << std::dec << "\n";
+	<< std::dec << "(" << byte_u_t(owned - free) << ")"
+        << "\n";
   }
 }
 
@@ -451,6 +481,7 @@ int BlueFS::mount()
   block_all.clear();
   block_all.resize(MAX_BDEV);
   _init_alloc();
+  _init_logger();
 
   r = _replay(false, false);
   if (r < 0) {
@@ -475,7 +506,6 @@ int BlueFS::mount()
            << std::hex << log_writer->pos << std::dec
            << dendl;
 
-  _init_logger();
   return 0;
 
  out:
@@ -629,6 +659,8 @@ int BlueFS::_replay(bool noop, bool to_stdout)
     log_file, cct->_conf->bluefs_max_prefetch,
     false,  // !random
     true);  // ignore eof
+
+  bool seen_recs = false;
   while (true) {
     ceph_assert((log_reader->buf.pos & ~super.block_mask()) == 0);
     uint64_t pos = log_reader->buf.pos;
@@ -657,15 +689,31 @@ int BlueFS::_replay(bool noop, bool to_stdout)
       }
     }
     if (uuid != super.uuid) {
-      dout(10) << __func__ << " 0x" << std::hex << pos << std::dec
-               << ": stop: uuid " << uuid << " != super.uuid " << super.uuid
-               << dendl;
+      if (seen_recs) {
+	dout(10) << __func__ << " 0x" << std::hex << pos << std::dec
+		 << ": stop: uuid " << uuid << " != super.uuid " << super.uuid
+		 << dendl;
+      } else {
+	derr << __func__ << " 0x" << std::hex << pos << std::dec
+		 << ": stop: uuid " << uuid << " != super.uuid " << super.uuid
+		 << ", block dump: \n";
+	bufferlist t;
+	t.substr_of(bl, 0, super.block_size);
+	t.hexdump(*_dout);
+	*_dout << dendl;
+      }
       break;
     }
     if (seq != log_seq + 1) {
-      dout(10) << __func__ << " 0x" << std::hex << pos << std::dec
-               << ": stop: seq " << seq << " != expected " << log_seq + 1
-               << dendl;
+      if (seen_recs) {
+	dout(10) << __func__ << " 0x" << std::hex << pos << std::dec
+		 << ": stop: seq " << seq << " != expected " << log_seq + 1
+		 << dendl;;
+      } else {
+	derr << __func__ << " 0x" << std::hex << pos << std::dec
+	     << ": stop: seq " << seq << " != expected " << log_seq + 1
+	     << dendl;;
+      }
       break;
     }
     if (more) {
@@ -674,24 +722,25 @@ int BlueFS::_replay(bool noop, bool to_stdout)
       bufferlist t;
       int r = _read(log_reader, &log_reader->buf, read_pos, more, &t, NULL);
       if (r < (int)more) {
-	dout(10) << __func__ << " 0x" << std::hex << pos
-                 << ": stop: len is 0x" << bl.length() + more << std::dec
-                 << ", which is past eof" << dendl;
+	derr  << __func__ << " 0x" << std::hex << pos
+              << ": stop: len is 0x" << bl.length() + more << std::dec
+              << ", which is past eof" << dendl;
 	break;
       }
       ceph_assert(r == (int)more);
       bl.claim_append(t);
       read_pos += r;
     }
+    seen_recs = true;
     bluefs_transaction_t t;
     try {
       auto p = bl.cbegin();
       decode(t, p);
     }
     catch (buffer::error& e) {
-      dout(10) << __func__ << " 0x" << std::hex << pos << std::dec
-               << ": stop: failed to decode: " << e.what()
-               << dendl;
+      derr << __func__ << " 0x" << std::hex << pos << std::dec
+           << ": stop: failed to decode: " << e.what()
+           << dendl;
       delete log_reader;
       return -EIO;
     }
@@ -1305,9 +1354,12 @@ void BlueFS::_drop_link(FileRef file)
 int BlueFS::_read_random(
   FileReader *h,         ///< [in] read from here
   uint64_t off,          ///< [in] offset
-  size_t len,            ///< [in] this many bytes
+  uint64_t len,          ///< [in] this many bytes
   char *out)             ///< [out] optional: or copy it here
 {
+  auto* buf = &h->buf;
+
+  int ret = 0;
   dout(10) << __func__ << " h " << h
            << " 0x" << std::hex << off << "~" << len << std::dec
 	   << " from " << h->file->fnode << dendl;
@@ -1323,24 +1375,60 @@ int BlueFS::_read_random(
     dout(20) << __func__ << " reaching (or past) eof, len clipped to 0x"
 	     << std::hex << len << std::dec << dendl;
   }
+  logger->inc(l_bluefs_read_random_count, 1);
+  logger->inc(l_bluefs_read_random_bytes, len);
 
-  int ret = 0;
+  std::shared_lock s_lock(h->lock);
   while (len > 0) {
-    uint64_t x_off = 0;
-    auto p = h->file->fnode.seek(off, &x_off);
-    uint64_t l = std::min(p->length - x_off, static_cast<uint64_t>(len));
-    dout(20) << __func__ << " read buffered 0x"
-             << std::hex << x_off << "~" << l << std::dec
-             << " of " << *p << dendl;
-    int r = bdev[p->bdev]->read_random(p->offset + x_off, l, out,
-				       cct->_conf->bluefs_buffered_io);
-    ceph_assert(r == 0);
-    off += l;
-    len -= l;
-    ret += l;
-    out += l;
-  }
+    if (off < buf->bl_off || off >= buf->get_buf_end()) {
+      s_lock.unlock();
+      uint64_t x_off = 0;
+      auto p = h->file->fnode.seek(off, &x_off);
+      uint64_t l = std::min(p->length - x_off, len);
+      dout(20) << __func__ << " read random 0x"
+	       << std::hex << x_off << "~" << l << std::dec
+	       << " of " << *p << dendl;
+      int r = bdev[p->bdev]->read_random(p->offset + x_off, l, out,
+					 cct->_conf->bluefs_buffered_io);
+      ceph_assert(r == 0);
+      off += l;
+      len -= l;
+      ret += l;
+      out += l;
 
+      logger->inc(l_bluefs_read_random_disk_count, 1);
+      logger->inc(l_bluefs_read_random_disk_bytes, l);
+      if (len > 0) {
+	s_lock.lock();
+      }
+    } else {
+      auto left = buf->get_buf_remaining(off);
+      int r = std::min(len, left);
+      logger->inc(l_bluefs_read_random_buffer_count, 1);
+      logger->inc(l_bluefs_read_random_buffer_bytes, r);
+      dout(20) << __func__ << " left 0x" << std::hex << left
+	      << " 0x" << off << "~" << len << std::dec
+	      << dendl;
+
+      if (out) {
+	// NOTE: h->bl is normally a contiguous buffer so c_str() is free.
+	memcpy(out, buf->bl.c_str() + off - buf->bl_off, r);
+	out += r;
+      }
+
+      dout(30) << __func__ << " result chunk (0x"
+	       << std::hex << r << std::dec << " bytes):\n";
+      bufferlist t;
+      t.substr_of(buf->bl, off - buf->bl_off, r);
+      t.hexdump(*_dout);
+      *_dout << dendl;
+
+      off += r;
+      len -= r;
+      ret += r;
+      buf->pos += r;
+    }
+  }
   dout(20) << __func__ << " got " << ret << dendl;
   --h->file->num_reading;
   return ret;
@@ -1354,9 +1442,12 @@ int BlueFS::_read(
   bufferlist *outbl,     ///< [out] optional: reference the result here
   char *out)             ///< [out] optional: or copy it here
 {
+  bool prefetch = !outbl && !out;
   dout(10) << __func__ << " h " << h
            << " 0x" << std::hex << off << "~" << len << std::dec
-	   << " from " << h->file->fnode << dendl;
+	   << " from " << h->file->fnode
+	   << (prefetch ? " prefetch" : "")
+	   << dendl;
 
   ++h->file->num_reading;
 
@@ -1369,32 +1460,49 @@ int BlueFS::_read(
     dout(20) << __func__ << " reaching (or past) eof, len clipped to 0x"
 	     << std::hex << len << std::dec << dendl;
   }
+  logger->inc(l_bluefs_read_count, 1);
+  logger->inc(l_bluefs_read_bytes, len);
+  if (prefetch) {
+    logger->inc(l_bluefs_read_prefetch_count, 1);
+    logger->inc(l_bluefs_read_prefetch_bytes, len);
+  }
+
   if (outbl)
     outbl->clear();
 
   int ret = 0;
+  std::shared_lock s_lock(h->lock);
   while (len > 0) {
     size_t left;
     if (off < buf->bl_off || off >= buf->get_buf_end()) {
-      buf->bl.clear();
-      buf->bl_off = off & super.block_mask();
-      uint64_t x_off = 0;
-      auto p = h->file->fnode.seek(buf->bl_off, &x_off);
-      uint64_t want = round_up_to(len + (off & ~super.block_mask()),
-				  super.block_size);
-      want = std::max(want, buf->max_prefetch);
-      uint64_t l = std::min(p->length - x_off, want);
-      uint64_t eof_offset = round_up_to(h->file->fnode.size, super.block_size);
-      if (!h->ignore_eof &&
-	  buf->bl_off + l > eof_offset) {
-	l = eof_offset - buf->bl_off;
+      s_lock.unlock();
+      std::unique_lock u_lock(h->lock);
+      if (off < buf->bl_off || off >= buf->get_buf_end()) {
+        // if precondition hasn't changed during locking upgrade.
+        buf->bl.clear();
+        buf->bl_off = off & super.block_mask();
+        uint64_t x_off = 0;
+        auto p = h->file->fnode.seek(buf->bl_off, &x_off);
+        uint64_t want = round_up_to(len + (off & ~super.block_mask()),
+				    super.block_size);
+        want = std::max(want, buf->max_prefetch);
+        uint64_t l = std::min(p->length - x_off, want);
+        uint64_t eof_offset = round_up_to(h->file->fnode.size, super.block_size);
+        if (!h->ignore_eof &&
+	    buf->bl_off + l > eof_offset) {
+	  l = eof_offset - buf->bl_off;
+        }
+        dout(20) << __func__ << " fetching 0x"
+                 << std::hex << x_off << "~" << l << std::dec
+                 << " of " << *p << dendl;
+        int r = bdev[p->bdev]->read(p->offset + x_off, l, &buf->bl, ioc[p->bdev],
+				    cct->_conf->bluefs_buffered_io);
+        ceph_assert(r == 0);
       }
-      dout(20) << __func__ << " fetching 0x"
-               << std::hex << x_off << "~" << l << std::dec
-               << " of " << *p << dendl;
-      int r = bdev[p->bdev]->read(p->offset + x_off, l, &buf->bl, ioc[p->bdev],
-				  cct->_conf->bluefs_buffered_io);
-      ceph_assert(r == 0);
+      u_lock.unlock();
+      s_lock.lock();
+      // we should recheck if buffer is valid after lock downgrade
+      continue; 
     }
     left = buf->get_buf_remaining(off);
     dout(20) << __func__ << " left 0x" << std::hex << left
@@ -1614,10 +1722,9 @@ void BlueFS::_rewrite_log_sync(bool allocate_with_fallback,
   uint64_t need = bl.length() + cct->_conf->bluefs_max_log_runway;
   dout(20) << __func__ << " need " << need << dendl;
 
-  mempool::bluefs::vector<bluefs_extent_t> old_extents;
-  uint64_t old_allocated = 0;
+  bluefs_fnode_t old_fnode;
   int r;
-  log_file->fnode.swap_extents(old_extents, old_allocated);
+  log_file->fnode.swap_extents(old_fnode);
   if (allocate_with_fallback) {
     r = _allocate(log_dev, need, &log_file->fnode);
     ceph_assert(r == 0);
@@ -1664,8 +1771,8 @@ void BlueFS::_rewrite_log_sync(bool allocate_with_fallback,
   _write_super(super_dev);
   flush_bdev();
 
-  dout(10) << __func__ << " release old log extents " << old_extents << dendl;
-  for (auto& r : old_extents) {
+  dout(10) << __func__ << " release old log extents " << old_fnode.extents << dendl;
+  for (auto& r : old_fnode.extents) {
     pending_release[r.bdev].insert(r.offset, r.length);
   }
 }
@@ -2366,6 +2473,7 @@ int BlueFS::_expand_slow_device(uint64_t need, PExtentVector& extents)
     auto min_alloc_size = cct->_conf->bluefs_alloc_size;
     int id = _get_slow_device_id();
     ceph_assert(id <= (int)alloc.size() && alloc[id]);
+    auto min_need = round_up_to(need, min_alloc_size);
     need = std::max(need,
       slow_dev_expander->get_recommended_expansion_delta(
         alloc[id]->get_free(), block_all[id].size()));
@@ -2374,7 +2482,7 @@ int BlueFS::_expand_slow_device(uint64_t need, PExtentVector& extents)
     dout(10) << __func__ << " expanding slow device by 0x"
              << std::hex << need << std::dec
 	     << dendl;
-    r = slow_dev_expander->allocate_freespace(need, extents);
+    r = slow_dev_expander->allocate_freespace(min_need, need, extents);
   }
   return r;
 }
@@ -2394,8 +2502,8 @@ int BlueFS::_allocate_without_fallback(uint8_t id, uint64_t len,
   }
   extents->reserve(4);  // 4 should be (more than) enough for most allocations
   int64_t alloc_len = alloc[id]->allocate(left, min_alloc_size, 0, extents);
-  if (alloc_len < (int64_t)left) {
-    if (alloc_len != 0) {
+  if (alloc_len < 0 || alloc_len < (int64_t)left) {
+    if (alloc_len > 0) {
       alloc[id]->release(*extents);
     }
     if (bdev[id])
@@ -2433,7 +2541,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
     extents.reserve(4);  // 4 should be (more than) enough for most allocations
     alloc_len = alloc[id]->allocate(left, min_alloc_size, hint, &extents);
   }
-  if (alloc_len < (int64_t)left) {
+  if (alloc_len < 0 || alloc_len < (int64_t)left) {
     if (alloc_len > 0) {
       alloc[id]->release(extents);
     }
@@ -2463,7 +2571,7 @@ int BlueFS::_allocate(uint8_t id, uint64_t len,
       ceph_assert(last_alloc);
       // try again
       alloc_len = last_alloc->allocate(left, min_alloc_size, hint, &extents);
-      if (alloc_len < (int64_t)left) {
+      if (alloc_len < 0 || alloc_len < (int64_t)left) {
 	if (alloc_len > 0) {
 	  last_alloc->release(extents);
 	}

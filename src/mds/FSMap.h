@@ -66,14 +66,26 @@ public:
    */
   bool has_standby_replay(mds_gid_t who) const
   {
+    return get_standby_replay(who) != MDS_GID_NONE;
+  }
+  mds_gid_t get_standby_replay(mds_gid_t who) const
+  {
     for (const auto &i : mds_map.mds_info) {
       const auto &info = i.second;
       if (info.state == MDSMap::STATE_STANDBY_REPLAY
           && info.rank == mds_map.mds_info.at(who).rank) {
-        return true;
+        return info.global_id;
       }
     }
-
+    return MDS_GID_NONE;
+  }
+  bool is_standby_replay(mds_gid_t who) const
+  {
+    auto p = mds_map.mds_info.find(who);
+    if (p != mds_map.mds_info.end() &&
+	p->second.state == MDSMap::STATE_STANDBY_REPLAY) {
+      return true;
+    }
     return false;
   }
 
@@ -173,6 +185,19 @@ public:
     return legacy_client_fscid;
   }
 
+  size_t get_num_standby() const {
+    return standby_daemons.size();
+  }
+
+  bool is_any_degraded() const {
+    for (auto& i : filesystems) {
+      if (i.second->mds_map.is_degraded()) {
+	return true;
+      }
+    }
+    return false;
+  }
+
   /**
    * Get state of all daemons (for all filesystems, including all standbys)
    */
@@ -192,6 +217,8 @@ public:
 
     return result;
   }
+
+  mds_gid_t get_available_standby() const;
 
   /**
    * Resolve daemon name to GID
@@ -265,7 +292,7 @@ public:
    */
   void promote(
       mds_gid_t standby_gid,
-      const Filesystem::ref& filesystem,
+      Filesystem& filesystem,
       mds_rank_t assigned_rank);
 
   /**
@@ -275,7 +302,7 @@ public:
    * @returns a list of any additional GIDs that were removed from the map
    * as a side effect (like standby replays)
    */
-  std::list<mds_gid_t> stop(mds_gid_t who);
+  std::vector<mds_gid_t> stop(mds_gid_t who);
 
   /**
    * The rank held by 'who', if any, is to be relinquished, and
@@ -325,11 +352,10 @@ public:
    * Mutator helper for Filesystem objects: expose a non-const
    * Filesystem pointer to `fn` and update epochs appropriately.
    */
-  void modify_filesystem(
-      const fs_cluster_id_t fscid,
-      std::function<void(Filesystem::ref)> fn)
+  template<typename T>
+  void modify_filesystem(fs_cluster_id_t fscid, T&& fn)
   {
-    auto fs = filesystems.at(fscid);
+    auto& fs = filesystems.at(fscid);
     fn(fs);
     fs->mds_map.epoch = epoch;
   }
@@ -338,20 +364,19 @@ public:
    * Apply a mutation to the mds_info_t structure for a particular
    * daemon (identified by GID), and make appropriate updates to epochs.
    */
-  void modify_daemon(
-      mds_gid_t who,
-      std::function<void(MDSMap::mds_info_t *info)> fn)
+  template<typename T>
+  void modify_daemon(mds_gid_t who, T&& fn)
   {
-    if (mds_roles.at(who) == FS_CLUSTER_ID_NONE) {
-      auto &info = standby_daemons.at(who);
-      fn(&info);
+    const auto& fscid = mds_roles.at(who);
+    if (fscid == FS_CLUSTER_ID_NONE) {
+      auto& info = standby_daemons.at(who);
+      fn(info);
       ceph_assert(info.state == MDSMap::STATE_STANDBY);
       standby_epochs[who] = epoch;
     } else {
-      const auto &fs = filesystems[mds_roles.at(who)];
-      auto &info = fs->mds_map.mds_info.at(who);
-      fn(&info);
-
+      auto& fs = filesystems.at(fscid);
+      auto& info = fs->mds_map.mds_info.at(who);
+      fn(info);
       fs->mds_map.epoch = epoch;
     }
   }
@@ -368,6 +393,16 @@ public:
     } else {
       return filesystems.at(fscid)->mds_map.mds_info.at(gid);
     }
+  }
+
+  bool is_standby_replay(mds_gid_t who) const
+  {
+    return filesystems.at(mds_roles.at(who))->is_standby_replay(who);
+  }
+
+  mds_gid_t get_standby_replay(mds_gid_t who) const
+  {
+    return filesystems.at(mds_roles.at(who))->get_standby_replay(who);
   }
 
   /**
@@ -404,7 +439,7 @@ public:
   void update_export_targets(mds_gid_t who, const std::set<mds_rank_t> &targets)
   {
     auto fscid = mds_roles.at(who);
-    modify_filesystem(fscid, [who, &targets](auto fs) {
+    modify_filesystem(fscid, [who, &targets](auto&& fs) {
       fs->mds_map.mds_info.at(who).export_targets = targets;
     });
   }
@@ -458,12 +493,7 @@ public:
     return false;
   }
 
-  mds_gid_t find_standby_for(mds_role_t mds, std::string_view name) const;
-
-  mds_gid_t find_unused_for(mds_role_t mds, bool force_standby_active) const;
-
-  mds_gid_t find_replacement_for(mds_role_t mds, std::string_view name,
-                                 bool force_standby_active) const;
+  mds_gid_t find_replacement_for(mds_role_t mds, std::string_view name) const;
 
   void get_health(list<pair<health_status_t,std::string> >& summary,
 		  list<pair<health_status_t,std::string> > *detail) const;
@@ -490,7 +520,7 @@ public:
   void print_summary(Formatter *f, ostream *out) const;
 
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<FSMap*>& ls);
+  static void generate_test_instances(std::list<FSMap*>& ls);
 };
 WRITE_CLASS_ENCODER_FEATURES(FSMap)
 

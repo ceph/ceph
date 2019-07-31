@@ -353,7 +353,7 @@ void Replay<I>::handle_event(const journal::AioDiscardEvent &event,
   if (!clipped_io(event.offset, aio_comp)) {
     io::ImageRequest<I>::aio_discard(&m_image_ctx, aio_comp,
                                      {{event.offset, event.length}},
-                                     event.skip_partial_discard, {});
+                                     event.discard_granularity_bytes, {});
   }
 
   if (flush_required) {
@@ -882,8 +882,7 @@ void Replay<I>::handle_event(const journal::UnknownEvent &event,
 
 template <typename I>
 void Replay<I>::handle_aio_modify_complete(Context *on_ready, Context *on_safe,
-                                           int r, std::set<int> &filters,
-                                           bool writeback_cache_enabled) {
+                                           int r, std::set<int> &filters) {
   Mutex::Locker locker(m_lock);
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << ": on_ready=" << on_ready << ", "
@@ -902,23 +901,8 @@ void Replay<I>::handle_aio_modify_complete(Context *on_ready, Context *on_safe,
     return;
   }
 
-  if (writeback_cache_enabled) {
-    // will be completed after next flush operation completes
-    m_aio_modify_safe_contexts.insert(on_safe);
-  } else {
-    // IO is safely stored on disk
-    ceph_assert(m_in_flight_aio_modify > 0);
-    --m_in_flight_aio_modify;
-
-    if (m_on_aio_ready != nullptr) {
-      ldout(cct, 10) << ": resuming paused AIO" << dendl;
-      m_on_aio_ready->complete(0);
-      m_on_aio_ready = nullptr;
-    }
-
-    ldout(cct, 20) << ": completing safe context: " << on_safe << dendl;
-    m_image_ctx.op_work_queue->queue(on_safe, 0);
-  }
+  // will be completed after next flush operation completes
+  m_aio_modify_safe_contexts.insert(on_safe);
 }
 
 template <typename I>
@@ -1097,18 +1081,13 @@ Replay<I>::create_aio_modify_completion(Context *on_ready,
   }
 
   ++m_in_flight_aio_modify;
-
-  bool writeback_cache_enabled = m_image_ctx.is_writeback_cache_enabled();
-  if (writeback_cache_enabled) {
-    m_aio_modify_unsafe_contexts.push_back(on_safe);
-  }
+  m_aio_modify_unsafe_contexts.push_back(on_safe);
 
   // FLUSH if we hit the low-water mark -- on_safe contexts are
   // completed by flushes-only so that we don't move the journal
   // commit position until safely on-disk
 
-  *flush_required = (writeback_cache_enabled &&
-                     m_aio_modify_unsafe_contexts.size() ==
+  *flush_required = (m_aio_modify_unsafe_contexts.size() ==
                        IN_FLIGHT_IO_LOW_WATER_MARK);
   if (*flush_required) {
     ldout(cct, 10) << ": hit AIO replay low-water mark: scheduling flush"
@@ -1131,8 +1110,7 @@ Replay<I>::create_aio_modify_completion(Context *on_ready,
   // event. when flushed, the completion of the next flush will fire the
   // on_safe callback
   auto aio_comp = io::AioCompletion::create_and_start<Context>(
-    new C_AioModifyComplete(this, on_ready, on_safe, std::move(filters),
-                            writeback_cache_enabled),
+    new C_AioModifyComplete(this, on_ready, on_safe, std::move(filters)),
     util::get_image_ctx(&m_image_ctx), aio_type);
   return aio_comp;
 }
@@ -1165,9 +1143,9 @@ template <typename I>
 bool Replay<I>::clipped_io(uint64_t image_offset, io::AioCompletion *aio_comp) {
   CephContext *cct = m_image_ctx.cct;
 
-  m_image_ctx.snap_lock.get_read();
+  m_image_ctx.image_lock.get_read();
   size_t image_size = m_image_ctx.size;
-  m_image_ctx.snap_lock.put_read();
+  m_image_ctx.image_lock.put_read();
 
   if (image_offset >= image_size) {
     // rbd-mirror image sync might race an IO event w/ associated resize between
@@ -1176,7 +1154,7 @@ bool Replay<I>::clipped_io(uint64_t image_offset, io::AioCompletion *aio_comp) {
     // it wouldn't have been recorded in the journal
     ldout(cct, 5) << ": no-op IO event beyond image size" << dendl;
     aio_comp->get();
-    aio_comp->unblock();
+    aio_comp->set_request_count(0);
     aio_comp->put();
     return true;
   }

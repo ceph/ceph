@@ -1,19 +1,23 @@
 import { Helper } from '../helper.po';
-import { MonitorsPage } from './monitors.po';
 
 describe('Monitors page', () => {
-  let page: MonitorsPage;
+  let monitors: Helper['monitors'];
 
   beforeAll(() => {
-    page = new MonitorsPage();
+    monitors = new Helper().monitors;
   });
 
   afterEach(() => {
     Helper.checkConsole();
   });
 
-  it('should open and show breadcrumb', () => {
-    page.navigateTo();
-    expect(Helper.getBreadcrumbText()).toEqual('Monitors');
+  describe('breadcrumb test', () => {
+    beforeAll(() => {
+      monitors.navigateTo();
+    });
+
+    it('should open and show breadcrumb', () => {
+      expect(monitors.getBreadcrumbText()).toEqual('Monitors');
+    });
   });
 });

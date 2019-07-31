@@ -34,11 +34,11 @@ using librbd::util::create_context_callback;
 template <typename I>
 InstanceReplayer<I>::InstanceReplayer(
     Threads<I> *threads, ServiceDaemon<I>* service_daemon,
-    RadosRef local_rados, const std::string &local_mirror_uuid,
-    int64_t local_pool_id)
+    journal::CacheManagerHandler *cache_manager_handler, RadosRef local_rados,
+    const std::string &local_mirror_uuid, int64_t local_pool_id)
   : m_threads(threads), m_service_daemon(service_daemon),
-    m_local_rados(local_rados), m_local_mirror_uuid(local_mirror_uuid),
-    m_local_pool_id(local_pool_id),
+    m_cache_manager_handler(cache_manager_handler), m_local_rados(local_rados),
+    m_local_mirror_uuid(local_mirror_uuid), m_local_pool_id(local_pool_id),
     m_lock("rbd::mirror::InstanceReplayer " + stringify(local_pool_id)) {
 }
 
@@ -142,7 +142,7 @@ void InstanceReplayer<I>::acquire_image(InstanceWatcher<I> *instance_watcher,
   auto it = m_image_replayers.find(global_image_id);
   if (it == m_image_replayers.end()) {
     auto image_replayer = ImageReplayer<I>::create(
-        m_threads, instance_watcher, m_local_rados,
+        m_threads, instance_watcher, m_cache_manager_handler, m_local_rados,
         m_local_mirror_uuid, m_local_pool_id, global_image_id);
 
     dout(10) << global_image_id << ": creating replayer " << image_replayer

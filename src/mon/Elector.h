@@ -49,7 +49,7 @@ class Elector {
   struct elector_info_t {
     uint64_t cluster_features = 0;
     mon_feature_t mon_features;
-    int mon_release = 0;
+    ceph_release_t mon_release{0};
     map<string,string> metadata;
   };
 

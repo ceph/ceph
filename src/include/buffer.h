@@ -64,10 +64,6 @@
 
 #define CEPH_BUFFER_API
 
-#if defined(HAVE_XIO)
-struct xio_reg_mem;
-class XioDispatchHook;
-#endif
 #ifdef HAVE_SEASTAR
 namespace seastar {
 template <typename T> class temporary_buffer;
@@ -77,9 +73,8 @@ class packet;
 }
 #endif // HAVE_SEASTAR
 class deleter;
-template<uint8_t S>
-struct sha_digest_t;
-using sha1_digest_t = sha_digest_t<20>;
+
+template<typename T> class DencDumper;
 
 namespace ceph {
 
@@ -104,6 +99,8 @@ struct unique_leakable_ptr : public std::unique_ptr<T, ceph::nop_delete<T>> {
 };
 
 namespace buffer CEPH_BUFFER_API {
+inline namespace v14_2_0 {
+
   /*
    * exceptions
    */
@@ -155,9 +152,6 @@ namespace buffer CEPH_BUFFER_API {
   class raw_claim_buffer;
 
 
-  class xio_mempool;
-  class xio_msg_buffer;
-
   /*
    * named constructors
    */
@@ -185,11 +179,6 @@ namespace buffer CEPH_BUFFER_API {
   /// destructed on this cpu
   raw* create(seastar::temporary_buffer<char>&& buf);
 #endif
-#if defined(HAVE_XIO)
-  raw* create_msg(unsigned len, char *buf, XioDispatchHook *m_hook);
-#endif
-
-inline namespace v14_2_0 {
 
   /*
    * a buffer pointer.  references (a subsequence of) a raw buffer.
@@ -735,9 +724,7 @@ inline namespace v14_2_0 {
 	//return off == bl->length();
       }
 
-      void advance(int o) = delete;
       void advance(unsigned o);
-      void advance(size_t o) { advance(static_cast<unsigned>(o)); }
       void seek(unsigned o);
       char operator*() const;
       iterator_impl& operator++();
@@ -818,6 +805,7 @@ inline namespace v14_2_0 {
       }
 
       friend class list;
+      template<typename Type> friend class ::DencDumper;
 
     public:
       ~contiguous_appender() {
@@ -836,7 +824,7 @@ inline namespace v14_2_0 {
 	pos += len;
 	return r;
       }
-      char *get_pos() {
+      char *get_pos() const {
 	return pos;
       }
 
@@ -867,7 +855,7 @@ inline namespace v14_2_0 {
 	}
       }
 
-      size_t get_logical_offset() {
+      size_t get_logical_offset() const {
 	return out_of_band_offset + (pos - space.bp_data);
       }
     };
@@ -1216,6 +1204,7 @@ inline namespace v14_2_0 {
 
     void write_stream(std::ostream &out) const;
     void hexdump(std::ostream &out, bool trailing_newline = true) const;
+    ssize_t pread_file(const char *fn, uint64_t off, uint64_t len, std::string *error);
     int read_file(const char *fn, std::string *error);
     ssize_t read_fd(int fd, size_t len);
     int write_file(const char *fn, int mode=0644);
@@ -1238,7 +1227,6 @@ inline namespace v14_2_0 {
     }
     uint32_t crc32c(uint32_t crc) const;
     void invalidate_crc();
-    sha1_digest_t sha1();
 
     // These functions return a bufferlist with a pointer to a single
     // static buffer. They /must/ not outlive the memory they
@@ -1308,7 +1296,7 @@ inline bool operator<=(bufferlist& l, bufferlist& r) {
 
 std::ostream& operator<<(std::ostream& out, const buffer::ptr& bp);
 
-std::ostream& operator<<(std::ostream& out, const raw &r);
+std::ostream& operator<<(std::ostream& out, const buffer::raw &r);
 
 std::ostream& operator<<(std::ostream& out, const buffer::list& bl);
 
@@ -1320,10 +1308,6 @@ inline bufferhash& operator<<(bufferhash& l, const bufferlist &r) {
 }
 
 } // namespace buffer
-
-#if defined(HAVE_XIO)
-xio_reg_mem* get_xio_mp(const buffer::ptr& bp);
-#endif
 
 } // namespace ceph
 

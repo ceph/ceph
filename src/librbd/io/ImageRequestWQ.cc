@@ -29,7 +29,7 @@ namespace {
 
 template <typename I>
 void flush_image(I& image_ctx, Context* on_finish) {
-  auto aio_comp = librbd::io::AioCompletion::create(
+  auto aio_comp = librbd::io::AioCompletion::create_and_start(
     on_finish, util::get_image_ctx(&image_ctx), librbd::io::AIO_TYPE_FLUSH);
   auto req = librbd::io::ImageDispatchSpec<I>::create_flush_request(
     image_ctx, aio_comp, librbd::io::FLUSH_SOURCE_INTERNAL, {});
@@ -137,9 +137,9 @@ ssize_t ImageRequestWQ<I>::write(uint64_t off, uint64_t len,
   ldout(cct, 20) << "ictx=" << &m_image_ctx << ", off=" << off << ", "
                  << "len = " << len << dendl;
 
-  m_image_ctx.snap_lock.get_read();
+  m_image_ctx.image_lock.get_read();
   int r = clip_io(util::get_image_ctx(&m_image_ctx), off, &len);
-  m_image_ctx.snap_lock.put_read();
+  m_image_ctx.image_lock.put_read();
   if (r < 0) {
     lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
     return r;
@@ -158,14 +158,14 @@ ssize_t ImageRequestWQ<I>::write(uint64_t off, uint64_t len,
 
 template <typename I>
 ssize_t ImageRequestWQ<I>::discard(uint64_t off, uint64_t len,
-				   bool skip_partial_discard) {
+				   uint32_t discard_granularity_bytes) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << "ictx=" << &m_image_ctx << ", off=" << off << ", "
                  << "len = " << len << dendl;
 
-  m_image_ctx.snap_lock.get_read();
+  m_image_ctx.image_lock.get_read();
   int r = clip_io(util::get_image_ctx(&m_image_ctx), off, &len);
-  m_image_ctx.snap_lock.put_read();
+  m_image_ctx.image_lock.put_read();
   if (r < 0) {
     lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
     return r;
@@ -173,7 +173,7 @@ ssize_t ImageRequestWQ<I>::discard(uint64_t off, uint64_t len,
 
   C_SaferCond cond;
   AioCompletion *c = AioCompletion::create(&cond);
-  aio_discard(c, off, len, skip_partial_discard, false);
+  aio_discard(c, off, len, discard_granularity_bytes, false);
 
   r = cond.wait();
   if (r < 0) {
@@ -189,9 +189,9 @@ ssize_t ImageRequestWQ<I>::writesame(uint64_t off, uint64_t len,
   ldout(cct, 20) << "ictx=" << &m_image_ctx << ", off=" << off << ", "
                  << "len = " << len << ", data_len " << bl.length() << dendl;
 
-  m_image_ctx.snap_lock.get_read();
+  m_image_ctx.image_lock.get_read();
   int r = clip_io(util::get_image_ctx(&m_image_ctx), off, &len);
-  m_image_ctx.snap_lock.put_read();
+  m_image_ctx.image_lock.put_read();
   if (r < 0) {
     lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
     return r;
@@ -218,9 +218,9 @@ ssize_t ImageRequestWQ<I>::compare_and_write(uint64_t off, uint64_t len,
   ldout(cct, 20) << "compare_and_write ictx=" << &m_image_ctx << ", off="
                  << off << ", " << "len = " << len << dendl;
 
-  m_image_ctx.snap_lock.get_read();
+  m_image_ctx.image_lock.get_read();
   int r = clip_io(util::get_image_ctx(&m_image_ctx), off, &len);
-  m_image_ctx.snap_lock.put_read();
+  m_image_ctx.image_lock.put_read();
   if (r < 0) {
     lderr(cct) << "invalid IO request: " << cpp_strerror(r) << dendl;
     return r;
@@ -338,7 +338,8 @@ void ImageRequestWQ<I>::aio_write(AioCompletion *c, uint64_t off, uint64_t len,
 
 template <typename I>
 void ImageRequestWQ<I>::aio_discard(AioCompletion *c, uint64_t off,
-				    uint64_t len, bool skip_partial_discard,
+				    uint64_t len,
+                                    uint32_t discard_granularity_bytes,
 				    bool native_async) {
   CephContext *cct = m_image_ctx.cct;
   FUNCTRACE(cct);
@@ -364,11 +365,11 @@ void ImageRequestWQ<I>::aio_discard(AioCompletion *c, uint64_t off,
   RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
   if (m_image_ctx.non_blocking_aio || writes_blocked()) {
     queue(ImageDispatchSpec<I>::create_discard_request(
-            m_image_ctx, c, off, len, skip_partial_discard, trace));
+            m_image_ctx, c, off, len, discard_granularity_bytes, trace));
   } else {
     c->start_op();
     ImageRequest<I>::aio_discard(&m_image_ctx, c, {{off, len}},
-				 skip_partial_discard, trace);
+                                 discard_granularity_bytes, trace);
     finish_in_flight_io();
   }
   trace.event("finish");
@@ -401,6 +402,7 @@ void ImageRequestWQ<I>::aio_flush(AioCompletion *c, bool native_async) {
     queue(ImageDispatchSpec<I>::create_flush_request(
             m_image_ctx, c, FLUSH_SOURCE_USER, trace));
   } else {
+    c->start_op();
     ImageRequest<I>::aio_flush(&m_image_ctx, c, FLUSH_SOURCE_USER, trace);
     finish_in_flight_io();
   }
@@ -660,7 +662,7 @@ void ImageRequestWQ<I>::handle_throttle_ready(int r, ImageDispatchSpec<I> *item,
   ceph_assert(m_io_throttled.load() > 0);
   item->set_throttled(flag);
   if (item->were_all_throttled()) {
-    this->requeue(item);
+    this->requeue_back(item);
     --m_io_throttled;
     this->signal();
   }
@@ -683,9 +685,8 @@ bool ImageRequestWQ<I>::needs_throttle(ImageDispatchSpec<I> *item) {
     }
 
     throttle = t.second;
-    tokens = item->tokens_requested(flag);
-
-    if (throttle->get<ImageRequestWQ<I>, ImageDispatchSpec<I>,
+    if (item->tokens_requested(flag, &tokens) &&
+        throttle->get<ImageRequestWQ<I>, ImageDispatchSpec<I>,
 	      &ImageRequestWQ<I>::handle_throttle_ready>(
 		tokens, this, item, flag)) {
       return true;
@@ -837,7 +838,6 @@ int ImageRequestWQ<I>::start_in_flight_io(AioCompletion *c) {
     CephContext *cct = m_image_ctx.cct;
     lderr(cct) << "IO received on closed image" << dendl;
 
-    c->get();
     c->fail(-ESHUTDOWN);
     return false;
   }
@@ -909,7 +909,7 @@ void ImageRequestWQ<I>::handle_acquire_lock(
   } else {
     // since IO was stalled for acquire -- original IO order is preserved
     // if we requeue this op for work queue processing
-    this->requeue(req);
+    this->requeue_front(req);
   }
 
   ceph_assert(m_io_blockers.load() > 0);
@@ -928,7 +928,7 @@ void ImageRequestWQ<I>::handle_refreshed(
   } else {
     // since IO was stalled for refresh -- original IO order is preserved
     // if we requeue this op for work queue processing
-    this->requeue(req);
+    this->requeue_front(req);
   }
 
   ceph_assert(m_io_blockers.load() > 0);

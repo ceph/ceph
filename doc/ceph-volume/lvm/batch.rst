@@ -32,8 +32,8 @@ with the ``batch`` sub-command. It allows a few different scenarios depending
 on the input of devices:
 
 #. Devices are all spinning HDDs: 1 OSD is created per device
-#. Devices are all spinning SSDs: 2 OSDs are created per device
-#. Devices are a mix of HDDS and SSDs: data is placed on the spinning device,
+#. Devices are all SSDs: 2 OSDs are created per device
+#. Devices are a mix of HDDs and SSDs: data is placed on the spinning device,
    the ``block.db`` is created on the SSD, as large as possible.
 
 
@@ -51,7 +51,7 @@ on the input of devices:
 
 #. Devices are all the same type (for example all spinning HDD or all SSDs):
    1 OSD is created per device, collocating the journal in the same HDD.
-#. Devices are a mix of HDDS and SSDs: data is placed on the spinning device,
+#. Devices are a mix of HDDs and SSDs: data is placed on the spinning device,
    while the journal is created on the SSD using the sizing options from
    ceph.conf and falling back to the default journal size of 5GB.
 

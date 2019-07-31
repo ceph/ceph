@@ -221,6 +221,18 @@ COMMAND("features", "report of connected features", \
         "mon", "r")
 COMMAND("quorum_status", "report status of monitor quorum", \
 	"mon", "r")
+COMMAND("mon ok-to-stop " \
+	"name=ids,type=CephString,n=N",
+	"check whether mon(s) can be safely stopped without reducing immediate " \
+	"availability",
+	"mon", "r")
+COMMAND("mon ok-to-add-offline",
+	"check whether adding a mon and not starting it would break quorum",
+	"mon", "r")
+COMMAND("mon ok-to-rm " \
+	"name=id,type=CephString",
+	"check whether removing the specified mon would break quorum",
+	"mon", "r")
 
 COMMAND_WITH_FLAG("mon_status", "report status of monitors", "mon", "r",
 	     FLAG(NOFORWARD))
@@ -313,6 +325,9 @@ COMMAND_WITH_FLAG("mds stop name=role,type=CephString", "stop mds", \
 COMMAND_WITH_FLAG("mds deactivate name=role,type=CephString",
         "clean up specified MDS rank (use with `set max_mds` to shrink cluster)", \
 	"mds", "rw", FLAG(OBSOLETE))
+COMMAND("mds ok-to-stop name=ids,type=CephString,n=N",
+	"check whether stopping the specified MDS would reduce immediate availability",
+	"mds", "r")
 COMMAND_WITH_FLAG("mds set_max_mds " \
 	"name=maxmds,type=CephInt,range=0", \
 	"set max MDS index", "mds", "rw", FLAG(OBSOLETE))
@@ -322,6 +337,9 @@ COMMAND_WITH_FLAG("mds set " \
 	"name=val,type=CephString "					\
 	"name=yes_i_really_mean_it,type=CephBool,req=false",			\
 	"set mds parameter <var> to <val>", "mds", "rw", FLAG(OBSOLETE))
+COMMAND_WITH_FLAG("mds freeze name=role_or_gid,type=CephString"
+	" name=val,type=CephString",
+	"freeze MDS yes/no", "mds", "rw", FLAG(HIDDEN))
 // arbitrary limit 0-20 below; worth standing on head to make it
 // relate to actual state definitions?
 // #include "include/ceph_fs.h"
@@ -396,7 +414,7 @@ COMMAND("fs set " \
 	"name=var,type=CephChoices,strings=max_mds|max_file_size"
         "|allow_new_snaps|inline_data|cluster_down|allow_dirfrags|balancer" \
         "|standby_count_wanted|session_timeout|session_autoclose" \
-        "|down|joinable|min_compat_client " \
+        "|allow_standby_replay|down|joinable|min_compat_client " \
 	"name=val,type=CephString "					\
 	"name=yes_i_really_mean_it,type=CephBool,req=false",			\
 	"set fs parameter <var> to <val>", "mds", "rw")
@@ -455,6 +473,16 @@ COMMAND("mon set-rank " \
 	"name=rank,type=CephInt",
 	"set the rank for the specified mon",
 	"mon", "rw")
+COMMAND("mon set-addrs " \
+	"name=name,type=CephString " \
+	"name=addrs,type=CephString",
+	"set the addrs (IPs and ports) a specific monitor binds to",
+	"mon", "rw")
+COMMAND("mon set-weight " \
+        "name=name,type=CephString " \
+        "name=weight,type=CephInt,range=0|65535",
+        "set the weight for the specified mon",
+        "mon", "rw")
 COMMAND("mon enable-msgr2",
 	"enable the msgr2 protocol on port 3300",
 	"mon", "rw")
@@ -466,6 +494,10 @@ COMMAND("osd stat", "print summary of OSD map", "osd", "r")
 COMMAND("osd dump " \
 	"name=epoch,type=CephInt,range=0,req=false",
 	"print summary of OSD map", "osd", "r")
+COMMAND("osd info " \
+	"name=id,type=CephOsdName,req=false",
+	"print osd's {id} information (instead of all osds from map)",
+	"osd", "r")
 COMMAND("osd tree " \
 	"name=epoch,type=CephInt,range=0,req=false " \
 	"name=states,type=CephChoices,strings=up|down|in|out|destroyed,n=N,req=false", \
@@ -691,6 +723,10 @@ COMMAND("osd crush class ls-osd " \
         "name=class,type=CephString,goodchars=[A-Za-z0-9-_]", \
         "list all osds belonging to the specific <class>", \
         "osd", "r")
+COMMAND("osd crush get-device-class " \
+        "name=ids,type=CephString,n=N", \
+        "get classes of specified osd(s) <id> [<id>...]", \
+        "osd", "r")
 COMMAND("osd crush weight-set ls",
 	"list crush weight sets",
 	"osd", "r")
@@ -765,21 +801,30 @@ COMMAND("osd erasure-code-profile ls", \
 	"list all erasure code profiles", \
 	"osd", "r")
 COMMAND("osd set " \
-	"name=key,type=CephChoices,strings=full|pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent|nosnaptrim|sortbitwise|recovery_deletes|require_jewel_osds|require_kraken_osds|pglog_hardlimit " \
+	"name=key,type=CephChoices,strings=full|pause|noup|nodown|" \
+	"noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|" \
+	"notieragent|nosnaptrim|pglog_hardlimit " \
         "name=yes_i_really_mean_it,type=CephBool,req=false", \
 	"set <key>", "osd", "rw")
 COMMAND("osd unset " \
-	"name=key,type=CephChoices,strings=full|pause|noup|nodown|noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|notieragent|nosnaptrim", \
+	"name=key,type=CephChoices,strings=full|pause|noup|nodown|"\
+	"noout|noin|nobackfill|norebalance|norecover|noscrub|nodeep-scrub|" \
+	"notieragent|nosnaptrim", \
 	"unset <key>", "osd", "rw")
 COMMAND("osd require-osd-release "\
-	"name=release,type=CephChoices,strings=luminous|mimic|nautilus " \
+	"name=release,type=CephChoices,strings=luminous|mimic|nautilus|octopus " \
         "name=yes_i_really_mean_it,type=CephBool,req=false", \
 	"set the minimum allowed OSD release to participate in the cluster",
 	"osd", "rw")
 COMMAND("osd down " \
-	"type=CephString,name=ids,n=N", \
+	"name=ids,type=CephString,n=N "
+	"name=definitely_dead,type=CephBool,req=false",	\
 	"set osd(s) <id> [<id>...] down, " \
         "or use <any|all> to set all osds down", \
+        "osd", "rw")
+COMMAND("osd stop " \
+        "type=CephString,name=ids,n=N", \
+        "stop the corresponding osd daemons and mark them as down", \
         "osd", "rw")
 COMMAND("osd out " \
 	"name=ids,type=CephString,n=N", \
@@ -797,49 +842,69 @@ COMMAND_WITH_FLAG("osd rm " \
         "or use <any|all> to remove all osds", \
 	"osd", "rw",
 	FLAG(DEPRECATED))
-COMMAND("osd add-noup " \
+COMMAND_WITH_FLAG("osd add-noup " \
         "name=ids,type=CephString,n=N", \
         "mark osd(s) <id> [<id>...] as noup, " \
         "or use <all|any> to mark all osds as noup", \
-        "osd", "rw")
-COMMAND("osd add-nodown " \
+        "osd", "rw",
+        FLAG(DEPRECATED))
+COMMAND_WITH_FLAG("osd add-nodown " \
         "name=ids,type=CephString,n=N", \
         "mark osd(s) <id> [<id>...] as nodown, " \
         "or use <all|any> to mark all osds as nodown", \
-        "osd", "rw")
-COMMAND("osd add-noin " \
+        "osd", "rw",
+        FLAG(DEPRECATED))
+COMMAND_WITH_FLAG("osd add-noin " \
         "name=ids,type=CephString,n=N", \
         "mark osd(s) <id> [<id>...] as noin, " \
         "or use <all|any> to mark all osds as noin", \
-        "osd", "rw")
-COMMAND("osd add-noout " \
+        "osd", "rw",
+        FLAG(DEPRECATED))
+COMMAND_WITH_FLAG("osd add-noout " \
         "name=ids,type=CephString,n=N", \
         "mark osd(s) <id> [<id>...] as noout, " \
         "or use <all|any> to mark all osds as noout", \
-        "osd", "rw")
-COMMAND("osd rm-noup " \
+        "osd", "rw",
+        FLAG(DEPRECATED))
+COMMAND_WITH_FLAG("osd rm-noup " \
         "name=ids,type=CephString,n=N", \
         "allow osd(s) <id> [<id>...] to be marked up " \
         "(if they are currently marked as noup), " \
         "can use <all|any> to automatically filter out all noup osds", \
-        "osd", "rw")
-COMMAND("osd rm-nodown " \
+        "osd", "rw",
+        FLAG(DEPRECATED))
+COMMAND_WITH_FLAG("osd rm-nodown " \
         "name=ids,type=CephString,n=N", \
         "allow osd(s) <id> [<id>...] to be marked down " \
         "(if they are currently marked as nodown), " \
         "can use <all|any> to automatically filter out all nodown osds", \
-        "osd", "rw")
-COMMAND("osd rm-noin " \
+        "osd", "rw",
+        FLAG(DEPRECATED))
+COMMAND_WITH_FLAG("osd rm-noin " \
         "name=ids,type=CephString,n=N", \
         "allow osd(s) <id> [<id>...] to be marked in " \
         "(if they are currently marked as noin), " \
         "can use <all|any> to automatically filter out all noin osds", \
-        "osd", "rw")
-COMMAND("osd rm-noout " \
+        "osd", "rw",
+        FLAG(DEPRECATED))
+COMMAND_WITH_FLAG("osd rm-noout " \
         "name=ids,type=CephString,n=N", \
         "allow osd(s) <id> [<id>...] to be marked out " \
         "(if they are currently marked as noout), " \
         "can use <all|any> to automatically filter out all noout osds", \
+        "osd", "rw",
+        FLAG(DEPRECATED))
+COMMAND("osd set-group " \
+        "name=flags,type=CephString "
+        "name=who,type=CephString,n=N", \
+        "set <flags> for batch osds or crush nodes, " \
+        "<flags> must be a comma-separated subset of {noup,nodown,noin,noout}", \
+        "osd", "rw")
+COMMAND("osd unset-group " \
+        "name=flags,type=CephString "
+        "name=who,type=CephString,n=N", \
+        "unset <flags> for batch osds or crush nodes, " \
+        "<flags> must be a comma-separated subset of {noup,nodown,noin,noout}", \
         "osd", "rw")
 COMMAND("osd reweight " \
 	"name=id,type=CephOsdName " \
@@ -976,11 +1041,11 @@ COMMAND("osd pool rename " \
 	"rename <srcpool> to <destpool>", "osd", "rw")
 COMMAND("osd pool get " \
 	"name=pool,type=CephPoolname " \
-	"name=var,type=CephChoices,strings=size|min_size|pg_num|pgp_num|crush_rule|hashpspool|nodelete|nopgchange|nosizechange|write_fadvise_dontneed|noscrub|nodeep-scrub|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|use_gmt_hitset|target_max_objects|target_max_bytes|cache_target_dirty_ratio|cache_target_dirty_high_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|erasure_code_profile|min_read_recency_for_promote|all|min_write_recency_for_promote|fast_read|hit_set_grade_decay_rate|hit_set_search_last_n|scrub_min_interval|scrub_max_interval|deep_scrub_interval|recovery_priority|recovery_op_priority|scrub_priority|compression_mode|compression_algorithm|compression_required_ratio|compression_max_blob_size|compression_min_blob_size|csum_type|csum_min_block|csum_max_block|allow_ec_overwrites|fingerprint_algorithm|pg_autoscale_mode|pg_num_min|target_size_bytes|target_size_ratio", \
+	"name=var,type=CephChoices,strings=size|min_size|pg_num|pgp_num|crush_rule|hashpspool|nodelete|nopgchange|nosizechange|write_fadvise_dontneed|noscrub|nodeep-scrub|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|use_gmt_hitset|target_max_objects|target_max_bytes|cache_target_dirty_ratio|cache_target_dirty_high_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|erasure_code_profile|min_read_recency_for_promote|all|min_write_recency_for_promote|fast_read|hit_set_grade_decay_rate|hit_set_search_last_n|scrub_min_interval|scrub_max_interval|deep_scrub_interval|recovery_priority|recovery_op_priority|scrub_priority|compression_mode|compression_algorithm|compression_required_ratio|compression_max_blob_size|compression_min_blob_size|csum_type|csum_min_block|csum_max_block|allow_ec_overwrites|fingerprint_algorithm|pg_autoscale_mode|pg_autoscale_bias|pg_num_min|target_size_bytes|target_size_ratio", \
 	"get pool parameter <var>", "osd", "r")
 COMMAND("osd pool set " \
 	"name=pool,type=CephPoolname " \
-	"name=var,type=CephChoices,strings=size|min_size|pg_num|pgp_num|crush_rule|hashpspool|nodelete|nopgchange|nosizechange|write_fadvise_dontneed|noscrub|nodeep-scrub|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|use_gmt_hitset|target_max_bytes|target_max_objects|cache_target_dirty_ratio|cache_target_dirty_high_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|min_read_recency_for_promote|min_write_recency_for_promote|fast_read|hit_set_grade_decay_rate|hit_set_search_last_n|scrub_min_interval|scrub_max_interval|deep_scrub_interval|recovery_priority|recovery_op_priority|scrub_priority|compression_mode|compression_algorithm|compression_required_ratio|compression_max_blob_size|compression_min_blob_size|csum_type|csum_min_block|csum_max_block|allow_ec_overwrites|fingerprint_algorithm|pg_autoscale_mode|pg_num_min|target_size_bytes|target_size_ratio " \
+	"name=var,type=CephChoices,strings=size|min_size|pg_num|pgp_num|pgp_num_actual|crush_rule|hashpspool|nodelete|nopgchange|nosizechange|write_fadvise_dontneed|noscrub|nodeep-scrub|hit_set_type|hit_set_period|hit_set_count|hit_set_fpp|use_gmt_hitset|target_max_bytes|target_max_objects|cache_target_dirty_ratio|cache_target_dirty_high_ratio|cache_target_full_ratio|cache_min_flush_age|cache_min_evict_age|min_read_recency_for_promote|min_write_recency_for_promote|fast_read|hit_set_grade_decay_rate|hit_set_search_last_n|scrub_min_interval|scrub_max_interval|deep_scrub_interval|recovery_priority|recovery_op_priority|scrub_priority|compression_mode|compression_algorithm|compression_required_ratio|compression_max_blob_size|compression_min_blob_size|csum_type|csum_min_block|csum_max_block|allow_ec_overwrites|fingerprint_algorithm|pg_autoscale_mode|pg_autoscale_bias|pg_num_min|target_size_bytes|target_size_ratio " \
 	"name=val,type=CephString " \
 	"name=yes_i_really_mean_it,type=CephBool,req=false", \
 	"set pool parameter <var> to <val>", "osd", "rw")
@@ -1162,15 +1227,18 @@ COMMAND("config help " \
 	"name=key,type=CephString",
 	"Describe a configuration option",
 	"config", "r")
+COMMAND("config ls",
+	"List available configuration options",
+	"config", "r")
 COMMAND("config assimilate-conf",
 	"Assimilate options from a conf, and return a new, minimal conf file",
 	"config", "rw")
 COMMAND("config log name=num,type=CephInt,req=False",
 	"Show recent history of config changes",
 	"config", "r")
-COMMAND("config reset" \
-	" name=num,type=CephInt",
-	"Revert configuration to previous state",
+COMMAND("config reset " \
+	"name=num,type=CephInt,range=0",
+	"Revert configuration to a historical version specified by <num>",
 	"config", "rw")
 COMMAND("config generate-minimal-conf",
 	"Generate a minimal ceph.conf file",

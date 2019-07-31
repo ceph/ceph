@@ -1,5 +1,6 @@
 import { Component, ElementRef, EventEmitter, Input, OnInit, Output } from '@angular/core';
 import { AbstractControl, FormGroup, FormGroupDirective, NgForm } from '@angular/forms';
+import { Icons } from '../../../shared/enum/icons.enum';
 
 import * as _ from 'lodash';
 
@@ -37,6 +38,7 @@ export class SubmitButtonComponent implements OnInit {
   disabled = false;
 
   loading = false;
+  icons = Icons;
 
   constructor(private elRef: ElementRef) {}
 

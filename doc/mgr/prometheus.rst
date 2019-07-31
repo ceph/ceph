@@ -1,12 +1,14 @@
+.. _mgr-prometheus:
+
 =================
-Prometheus plugin
+Prometheus Module
 =================
 
 Provides a Prometheus exporter to pass on Ceph performance counters
 from the collection point in ceph-mgr.  Ceph-mgr receives MMgrReport
 messages from all MgrClient processes (mons and OSDs, for instance)
 with performance counter schema data and actual counter data, and keeps
-a circular buffer of the last N samples.  This plugin creates an HTTP
+a circular buffer of the last N samples.  This module creates an HTTP
 endpoint (like all Prometheus exporters) and retrieves the latest sample
 of every counter when polled (or "scraped" in Prometheus terminology).
 The HTTP path and query parameters are ignored; all extant counters

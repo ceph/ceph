@@ -110,7 +110,7 @@ Port::Port(CephContext *cct, struct ibv_context* ictxt, uint8_t ipn): ctxt(ictxt
 
 
 Device::Device(CephContext *cct, ibv_device* d, struct ibv_context *dc)
-  : device(d), device_attr(new ibv_device_attr), active_port(nullptr)
+  : device(d), active_port(nullptr)
 {
   if (device == NULL) {
     lderr(cct) << __func__ << " device == NULL" << cpp_strerror(errno) << dendl;
@@ -126,15 +126,15 @@ Device::Device(CephContext *cct, ibv_device* d, struct ibv_context *dc)
     lderr(cct) << __func__ << " open rdma device failed. " << cpp_strerror(errno) << dendl;
     ceph_abort();
   }
-  int r = ibv_query_device(ctxt, device_attr);
-  if (r == -1) {
+  int r = ibv_query_device(ctxt, &device_attr);
+  if (r) {
     lderr(cct) << __func__ << " failed to query rdma device. " << cpp_strerror(errno) << dendl;
     ceph_abort();
   }
 }
 
 void Device::binding_port(CephContext *cct, int port_num) {
-  port_cnt = device_attr->phys_port_cnt;
+  port_cnt = device_attr.phys_port_cnt;
   for (uint8_t i = 0; i < port_cnt; ++i) {
     Port *port = new Port(cct, ctxt, i+1);
     if (i + 1 == port_num && port->get_port_attr()->state == IBV_PORT_ACTIVE) {
@@ -915,9 +915,9 @@ void Infiniband::init()
 
   support_srq = cct->_conf->ms_async_rdma_support_srq;
   if (support_srq)
-    rx_queue_len = device->device_attr->max_srq_wr;
+    rx_queue_len = device->device_attr.max_srq_wr;
   else
-    rx_queue_len = device->device_attr->max_qp_wr;
+    rx_queue_len = device->device_attr.max_qp_wr;
   if (rx_queue_len > cct->_conf->ms_async_rdma_receive_queue_len) {
     rx_queue_len = cct->_conf->ms_async_rdma_receive_queue_len;
     ldout(cct, 1) << __func__ << " receive queue length is " << rx_queue_len << " receive buffers" << dendl;
@@ -936,7 +936,7 @@ void Infiniband::init()
     ceph_abort();
   }
 
-  tx_queue_len = device->device_attr->max_qp_wr;
+  tx_queue_len = device->device_attr.max_qp_wr;
   if (tx_queue_len > cct->_conf->ms_async_rdma_send_buffers) {
     tx_queue_len = cct->_conf->ms_async_rdma_send_buffers;
     ldout(cct, 1) << __func__ << " assigning: " << tx_queue_len << " send buffers"  << dendl;
@@ -944,7 +944,7 @@ void Infiniband::init()
     ldout(cct, 0) << __func__ << " using the max allowed send buffers: " << tx_queue_len << dendl;
   }
 
-  ldout(cct, 1) << __func__ << " device allow " << device->device_attr->max_cqe
+  ldout(cct, 1) << __func__ << " device allow " << device->device_attr.max_cqe
                 << " completion entries" << dendl;
 
   memory_manager = new MemoryManager(cct, device, pd);
@@ -964,6 +964,7 @@ Infiniband::~Infiniband()
     ibv_destroy_srq(srq);
   delete memory_manager;
   delete pd;
+  delete device_list;
 }
 
 /**
@@ -1106,7 +1107,7 @@ int Infiniband::recv_msg(CephContext *cct, int sd, IBSYNMsg& im)
     r = -EINVAL;
   } else { // valid message
     sscanf(msg, "%hx:%x:%x:%x:%s", &(im.lid), &(im.qpn), &(im.psn), &(im.peer_qpn),gid);
-    wire_gid_to_gid(gid, &(im.gid));
+    wire_gid_to_gid(gid, &im);
     ldout(cct, 5) << __func__ << " recevd: " << im.lid << ", " << im.qpn << ", " << im.psn << ", " << im.peer_qpn << ", " << gid  << dendl;
   }
   return r;
@@ -1120,7 +1121,7 @@ int Infiniband::send_msg(CephContext *cct, int sd, IBSYNMsg& im)
   char msg[TCP_MSG_LEN];
   char gid[33];
 retry:
-  gid_to_wire_gid(&(im.gid), gid);
+  gid_to_wire_gid(im, gid);
   sprintf(msg, "%04x:%08x:%08x:%08x:%s", im.lid, im.qpn, im.psn, im.peer_qpn, gid);
   ldout(cct, 10) << __func__ << " sending: " << im.lid << ", " << im.qpn << ", " << im.psn
                  << ", " << im.peer_qpn << ", "  << gid  << dendl;
@@ -1149,7 +1150,7 @@ retry:
   return 0;
 }
 
-void Infiniband::wire_gid_to_gid(const char *wgid, union ibv_gid *gid)
+void Infiniband::wire_gid_to_gid(const char *wgid, IBSYNMsg* im)
 {
   char tmp[9];
   uint32_t v32;
@@ -1158,14 +1159,14 @@ void Infiniband::wire_gid_to_gid(const char *wgid, union ibv_gid *gid)
   for (tmp[8] = 0, i = 0; i < 4; ++i) {
     memcpy(tmp, wgid + i * 8, 8);
     sscanf(tmp, "%x", &v32);
-    *(uint32_t *)(&gid->raw[i * 4]) = ntohl(v32);
+    *(uint32_t *)(&im->gid.raw[i * 4]) = ntohl(v32);
   }
 }
 
-void Infiniband::gid_to_wire_gid(const union ibv_gid *gid, char wgid[])
+void Infiniband::gid_to_wire_gid(const IBSYNMsg& im, char wgid[])
 {
   for (int i = 0; i < 4; ++i)
-    sprintf(&wgid[i * 8], "%08x", htonl(*(uint32_t *)(gid->raw + i * 4)));
+    sprintf(&wgid[i * 8], "%08x", htonl(*(uint32_t *)(im.gid.raw + i * 4)));
 }
 
 Infiniband::QueuePair::~QueuePair()

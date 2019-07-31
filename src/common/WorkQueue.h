@@ -36,6 +36,7 @@ struct ThreadPool {
 #include "common/HeartbeatMap.h"
 #include "common/Thread.h"
 #include "include/Context.h"
+#include "common/HBHandle.h"
 
 class CephContext;
 
@@ -53,21 +54,21 @@ class ThreadPool : public md_config_obs_t {
   ceph::condition_variable _wait_cond;
 
 public:
-  class TPHandle {
+  class TPHandle : public HBHandle {
     friend class ThreadPool;
     CephContext *cct;
-    heartbeat_handle_d *hb;
+    ceph::heartbeat_handle_d *hb;
     ceph::coarse_mono_clock::rep grace;
     ceph::coarse_mono_clock::rep suicide_grace;
   public:
     TPHandle(
       CephContext *cct,
-      heartbeat_handle_d *hb,
+      ceph::heartbeat_handle_d *hb,
       time_t grace,
       time_t suicide_grace)
       : cct(cct), hb(hb), grace(grace), suicide_grace(suicide_grace) {}
-    void reset_tp_timeout();
-    void suspend_tp_timeout();
+    void reset_tp_timeout() override final;
+    void suspend_tp_timeout() override final;
   };
 private:
 
@@ -428,10 +429,15 @@ public:
       }
       return m_items.front();
     }
-    void requeue(T *item) {
+    void requeue_front(T *item) {
       std::lock_guard pool_locker(m_pool->_lock);
       _void_process_finish(nullptr);
       m_items.push_front(item);
+    }
+    void requeue_back(T *item) {
+      std::lock_guard pool_locker(m_pool->_lock);
+      _void_process_finish(nullptr);
+      m_items.push_back(item);
     }
     void signal() {
       std::lock_guard pool_locker(m_pool->_lock);
@@ -651,11 +657,11 @@ public:
     BaseShardedWQ(time_t ti, time_t sti):timeout_interval(ti), suicide_interval(sti) {}
     virtual ~BaseShardedWQ() {}
 
-    virtual void _process(uint32_t thread_index, heartbeat_handle_d *hb ) = 0;
+    virtual void _process(uint32_t thread_index, ceph::heartbeat_handle_d *hb ) = 0;
     virtual void return_waiting_threads() = 0;
     virtual void stop_return_waiting_threads() = 0;
     virtual bool is_shard_empty(uint32_t thread_index) = 0;
-  };      
+  };
 
   template <typename T>
   class ShardedWQ: public BaseShardedWQ {

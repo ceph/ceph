@@ -1598,12 +1598,12 @@ public:
           src_pg_ver = 0; /* all or nothing */
         }
       }
-      ldout(sync_env->cct, 0) << "AWS: download begin: z=" << sync_env->source_zone
+      ldout(sync_env->cct, 4) << "AWS: download begin: z=" << sync_env->source_zone
                               << " b=" << bucket_info.bucket << " k=" << key << " size=" << size
                               << " mtime=" << mtime << " etag=" << etag
                               << " zone_short_id=" << src_zone_short_id << " pg_ver=" << src_pg_ver
-                              << " attrs=" << attrs
                               << dendl;
+
 
       source_conn = sync_env->store->svc.zone->get_zone_conn_by_id(sync_env->source_zone);
       if (!source_conn) {

@@ -1,5 +1,6 @@
 import {
   AfterContentChecked,
+  ChangeDetectionStrategy,
   ChangeDetectorRef,
   Component,
   EventEmitter,
@@ -22,6 +23,7 @@ import {
 import * as _ from 'lodash';
 import { Observable, timer as observableTimer } from 'rxjs';
 
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CellTemplate } from '../../enum/cell-template.enum';
 import { CdTableColumn } from '../../models/cd-table-column';
 import { CdTableFetchDataContext } from '../../models/cd-table-fetch-data-context';
@@ -31,7 +33,8 @@ import { CdUserConfig } from '../../models/cd-user-config';
 @Component({
   selector: 'cd-table',
   templateUrl: './table.component.html',
-  styleUrls: ['./table.component.scss']
+  styleUrls: ['./table.component.scss'],
+  changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TableComponent implements AfterContentChecked, OnInit, OnChanges, OnDestroy {
   @ViewChild(DatatableComponent)
@@ -136,6 +139,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   selection = new CdTableSelection();
 
   tableColumns: CdTableColumn[];
+  icons = Icons;
   cellTemplates: {
     [key: string]: TemplateRef<any>;
   } = {};
@@ -144,10 +148,10 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   loadingIndicator = true;
   loadingError = false;
   paginationClasses = {
-    pagerLeftArrow: 'i fa fa-angle-double-left',
-    pagerRightArrow: 'i fa fa-angle-double-right',
-    pagerPrevious: 'i fa fa-angle-left',
-    pagerNext: 'i fa fa-angle-right'
+    pagerLeftArrow: Icons.leftArrowDouble,
+    pagerRightArrow: Icons.rightArrowDouble,
+    pagerPrevious: Icons.leftArrow,
+    pagerNext: Icons.rightArrow
   };
   userConfig: CdUserConfig = {};
   tableName: string;
@@ -162,7 +166,20 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
 
   constructor(private ngZone: NgZone, private cdRef: ChangeDetectorRef) {}
 
+  static prepareSearch(search: string) {
+    search = search.toLowerCase().replace(/,/g, '');
+    if (search.match(/['"][^'"]+['"]/)) {
+      search = search.replace(/['"][^'"]+['"]/g, (match: string) => {
+        return match.replace(/(['"])([^'"]+)(['"])/g, '$2').replace(/ /g, '+');
+      });
+    }
+    return search.split(' ').filter((word) => word);
+  }
+
   ngOnInit() {
+    // ngx-datatable triggers calculations each time mouse enters a row,
+    // this will prevent that.
+    window.addEventListener('mouseenter', (event) => event.stopPropagation(), true);
     this._addTemplates();
     if (!this.sorts) {
       // Check whether the specified identifier exists.
@@ -333,7 +350,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     return _.isEmpty(css) ? undefined : css;
   }
 
-  ngOnChanges(changes) {
+  ngOnChanges() {
     this.useData();
   }
 
@@ -382,9 +399,10 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (!this.data) {
       return; // Wait for data
     }
-    this.rows = [...this.data];
     if (this.search.length > 0) {
-      this.updateFilter(true);
+      this.updateFilter();
+    } else {
+      this.rows = [...this.data];
     }
     this.reset();
     this.updateSelected();
@@ -468,19 +486,13 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     this.userConfig.sorts = sorts;
   }
 
-  updateFilter(event?: any) {
-    if (!event) {
+  updateFilter(clearSearch = false) {
+    if (clearSearch) {
       this.search = '';
     }
-    let search = this.search.toLowerCase().replace(/,/g, '');
     const columns = this.columns.filter((c) => c.cellTransformation !== CellTemplate.sparkline);
-    if (search.match(/['"][^'"]+['"]/)) {
-      search = search.replace(/['"][^'"]+['"]/g, (match: string) => {
-        return match.replace(/(['"])([^'"]+)(['"])/g, '$2').replace(/ /g, '+');
-      });
-    }
     // update the rows
-    this.rows = this.subSearch(this.data, search.split(' ').filter((s) => s.length > 0), columns);
+    this.rows = this.subSearch(this.data, TableComponent.prepareSearch(this.search), columns);
     // Whenever the filter changes, always go back to the first page
     this.table.offset = 0;
   }
@@ -491,38 +503,33 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     }
     const searchTerms: string[] = currentSearch
       .pop()
-      .replace('+', ' ')
+      .replace(/\+/g, ' ')
       .split(':');
     const columnsClone = [...columns];
-    const dataClone = [...data];
-    const filterColumns = (columnName: string) =>
-      columnsClone.filter((c) => c.name.toLowerCase().indexOf(columnName) !== -1);
     if (searchTerms.length === 2) {
-      columns = filterColumns(searchTerms[0]);
+      columns = columnsClone.filter((c) => c.name.toLowerCase().indexOf(searchTerms[0]) !== -1);
     }
-    const searchTerm: string = _.last(searchTerms);
-    data = this.basicDataSearch(searchTerm, data, columns);
+    data = this.basicDataSearch(_.last(searchTerms), data, columns);
     // Checks if user searches for column but he is still typing
-    if (data.length === 0 && searchTerms.length === 1 && filterColumns(searchTerm).length > 0) {
-      data = dataClone;
-    }
     return this.subSearch(data, currentSearch, columnsClone);
   }
 
-  basicDataSearch(searchTerm: string, data: any[], columns: CdTableColumn[]) {
+  basicDataSearch(searchTerm: string, rows: any[], columns: CdTableColumn[]) {
     if (searchTerm.length === 0) {
-      return data;
+      return rows;
     }
-    return data.filter((d) => {
+    return rows.filter((row) => {
       return (
-        columns.filter((c) => {
-          let cellValue: any = _.get(d, c.prop);
-          if (!_.isUndefined(c.pipe)) {
-            cellValue = c.pipe.transform(cellValue);
+        columns.filter((col) => {
+          let cellValue: any = _.get(row, col.prop);
+
+          if (!_.isUndefined(col.pipe)) {
+            cellValue = col.pipe.transform(cellValue);
           }
-          if (_.isUndefined(cellValue)) {
-            return;
+          if (_.isUndefined(cellValue) || _.isNull(cellValue)) {
+            return false;
           }
+
           if (_.isArray(cellValue)) {
             cellValue = cellValue.join(' ');
           } else if (_.isNumber(cellValue) || _.isBoolean(cellValue)) {

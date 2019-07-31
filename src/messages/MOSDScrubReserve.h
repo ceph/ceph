@@ -17,9 +17,7 @@
 
 #include "MOSDFastDispatchOp.h"
 
-class MOSDScrubReserve : public MessageInstance<MOSDScrubReserve, MOSDFastDispatchOp> {
-public:
-  friend factory;
+class MOSDScrubReserve : public MOSDFastDispatchOp {
 private:
   static constexpr int HEAD_VERSION = 1;
   static constexpr int COMPAT_VERSION = 1;
@@ -43,13 +41,13 @@ public:
   }
 
   MOSDScrubReserve()
-    : MessageInstance(MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp{MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION},
       map_epoch(0), type(-1) {}
   MOSDScrubReserve(spg_t pgid,
 		   epoch_t map_epoch,
 		   int type,
 		   pg_shard_t from)
-    : MessageInstance(MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION),
+    : MOSDFastDispatchOp{MSG_OSD_SCRUB_RESERVE, HEAD_VERSION, COMPAT_VERSION},
       pgid(pgid), map_epoch(map_epoch),
       type(type), from(from) {}
 
@@ -92,6 +90,9 @@ public:
     encode(type, payload);
     encode(from, payload);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

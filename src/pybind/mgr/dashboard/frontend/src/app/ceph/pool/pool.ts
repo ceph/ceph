@@ -1,5 +1,5 @@
 import { ExecutingTask } from '../../shared/models/executing-task';
-import { PoolStat } from './pool-stat';
+import { PoolStats } from './pool-stat';
 
 export class Pool {
   cache_target_full_ratio_micro: number;
@@ -21,6 +21,12 @@ export class Pool {
   min_read_recency_for_promote: number;
   target_max_objects: number;
   pg_num: number;
+  pg_num_target: number;
+  pg_num_pending: number;
+  pg_placement_num: number;
+  pg_placement_num_target: number;
+  pg_autoscale_mode: string;
+  pg_status: string;
   type: string;
   pool_name: string;
   cache_min_evict_age: number;
@@ -57,15 +63,7 @@ export class Pool {
   last_change: string;
   min_write_recency_for_promote: number;
   read_tier: number;
-  pg_status: string;
-  stats?: {
-    bytes_used?: PoolStat;
-    max_avail?: PoolStat;
-    rd_bytes?: PoolStat;
-    wr_bytes?: PoolStat;
-    rd?: PoolStat;
-    wr?: PoolStat;
-  };
+  stats?: PoolStats;
   cdIsBinary?: boolean;
   configuration: { source: number; name: string; value: string }[];
 

@@ -130,6 +130,8 @@ public:
 
   void flush_commit_position(Context *on_finish);
 
+  void user_flushed();
+
   uint64_t append_write_event(uint64_t offset, size_t length,
                               const bufferlist &bl,
                               bool flush_entry);
@@ -290,6 +292,8 @@ private:
   Mutex m_event_lock;
   uint64_t m_event_tid;
   Events m_events;
+
+  std::atomic<bool> m_user_flushed = false;
 
   std::atomic<uint64_t> m_op_tid = { 0 };
   TidToFutures m_op_futures;

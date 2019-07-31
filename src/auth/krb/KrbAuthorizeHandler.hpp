@@ -21,7 +21,7 @@
 class KrbAuthorizeHandler : public AuthAuthorizeHandler {
   bool verify_authorizer(
     CephContext*,
-    KeyStore*,
+    const KeyStore&,
     const bufferlist&,
     size_t,
     bufferlist *,

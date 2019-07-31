@@ -4,30 +4,32 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { of } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
-import { TcmuIscsiService } from '../../../shared/api/tcmu-iscsi.service';
+import { IscsiService } from '../../../shared/api/iscsi.service';
 import { CephShortVersionPipe } from '../../../shared/pipes/ceph-short-version.pipe';
 import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
+import { IscsiBackstorePipe } from '../../../shared/pipes/iscsi-backstore.pipe';
 import { ListPipe } from '../../../shared/pipes/list.pipe';
 import { RelativeDatePipe } from '../../../shared/pipes/relative-date.pipe';
 import { FormatterService } from '../../../shared/services/formatter.service';
+import { SharedModule } from '../../../shared/shared.module';
 import { IscsiComponent } from './iscsi.component';
 
 describe('IscsiComponent', () => {
   let component: IscsiComponent;
   let fixture: ComponentFixture<IscsiComponent>;
-  let tcmuIscsiService: TcmuIscsiService;
+  let iscsiService: IscsiService;
   let tcmuiscsiData;
 
   const fakeService = {
-    tcmuiscsi: () => {
-      return new Promise(function(resolve, reject) {
+    overview: () => {
+      return new Promise(function() {
         return;
       });
     }
   };
 
   configureTestBed({
-    imports: [],
+    imports: [SharedModule],
     declarations: [IscsiComponent],
     schemas: [NO_ERRORS_SCHEMA],
     providers: [
@@ -35,8 +37,9 @@ describe('IscsiComponent', () => {
       DimlessPipe,
       FormatterService,
       RelativeDatePipe,
+      IscsiBackstorePipe,
       ListPipe,
-      { provide: TcmuIscsiService, useValue: fakeService },
+      { provide: IscsiService, useValue: fakeService },
       i18nProviders
     ]
   });
@@ -44,12 +47,12 @@ describe('IscsiComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(IscsiComponent);
     component = fixture.componentInstance;
-    tcmuIscsiService = TestBed.get(TcmuIscsiService);
+    iscsiService = TestBed.get(IscsiService);
     fixture.detectChanges();
     tcmuiscsiData = {
       images: []
     };
-    spyOn(tcmuIscsiService, 'tcmuiscsi').and.callFake(() => of(tcmuiscsiData));
+    spyOn(iscsiService, 'overview').and.callFake(() => of(tcmuiscsiData));
   });
 
   it('should create', () => {

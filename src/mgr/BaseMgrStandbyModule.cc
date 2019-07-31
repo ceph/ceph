@@ -64,18 +64,33 @@ static PyObject*
 ceph_get_module_option(BaseMgrStandbyModule *self, PyObject *args)
 {
   char *what = nullptr;
-  if (!PyArg_ParseTuple(args, "s:ceph_get_module_option", &what)) {
+  char *prefix = nullptr;
+  if (!PyArg_ParseTuple(args, "s|s:ceph_get_module_option", &what, &prefix)) {
     derr << "Invalid args!" << dendl;
     return nullptr;
   }
-
+  std::string final_key;
   std::string value;
-  bool found = self->this_module->get_config(what, &value);
+  bool found = false;
+  if (prefix) {
+    final_key = std::string(prefix) + "/" + what;
+    found = self->this_module->get_config(final_key, &value);
+  }
+  if (!found) {
+    final_key = what;
+    found = self->this_module->get_config(final_key, &value);
+  }
   if (found) {
-    dout(10) << __func__ << " " << what << " found: " << value.c_str() << dendl;
+    dout(10) << __func__ << " " << final_key << " found: " << value
+	     << dendl;
     return self->this_module->py_module->get_typed_option_value(what, value);
   } else {
-    dout(4) << __func__ << " " << what << " not found " << dendl;
+    if (prefix) {
+      dout(4) << __func__ << " [" << prefix << "/]" << what << " not found "
+	      << dendl;
+    } else {
+      dout(4) << __func__ << " " << what << " not found " << dendl;
+    }
     Py_RETURN_NONE;
   }
 }

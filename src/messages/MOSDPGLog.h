@@ -17,10 +17,9 @@
 #define CEPH_MOSDPGLOG_H
 
 #include "messages/MOSDPeeringOp.h"
+#include "osd/PGPeeringEvent.h"
 
-class MOSDPGLog : public MessageInstance<MOSDPGLog, MOSDPeeringOp> {
-public:
-  friend factory;
+class MOSDPGLog : public MOSDPeeringOp {
 private:
   static constexpr int HEAD_VERSION = 5;
   static constexpr int COMPAT_VERSION = 5;
@@ -68,12 +67,12 @@ public:
 	false));
   }
 
-  MOSDPGLog() : MessageInstance(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION) {
+  MOSDPGLog() : MOSDPeeringOp{MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION} {
     set_priority(CEPH_MSG_PRIO_HIGH); 
   }
   MOSDPGLog(shard_id_t to, shard_id_t from,
-	    version_t mv, pg_info_t& i, epoch_t query_epoch)
-    : MessageInstance(MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION),
+	    version_t mv, const pg_info_t& i, epoch_t query_epoch)
+    : MOSDPeeringOp{MSG_OSD_PG_LOG, HEAD_VERSION, COMPAT_VERSION},
       epoch(mv), query_epoch(query_epoch),
       to(to), from(from),
       info(i)  {
@@ -85,7 +84,7 @@ private:
 
 public:
   std::string_view get_type_name() const override { return "PGlog"; }
-  void inner_print(ostream& out) const override {
+  void inner_print(std::ostream& out) const override {
     // NOTE: log is not const, but operator<< doesn't touch fields
     // swapped out by OSD code.
     out << "log " << log
@@ -97,7 +96,7 @@ public:
     encode(epoch, payload);
     encode(info, payload);
     encode(log, payload);
-    encode(missing, payload);
+    encode(missing, payload, features);
     if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
       // pre-nautilus OSDs do not set last_peering_reset properly
       encode(epoch, payload);
@@ -109,6 +108,7 @@ public:
     encode(from, payload);
   }
   void decode_payload() override {
+    using ceph::decode;
     auto p = payload.cbegin();
     decode(epoch, p);
     decode(info, p);
@@ -119,6 +119,9 @@ public:
     decode(to, p);
     decode(from, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

@@ -3,9 +3,7 @@
 
 from __future__ import absolute_import
 
-import time
-
-from .helper import DashboardTestCase, JObj, JLeaf, JList
+from .helper import DashboardTestCase
 
 
 class RbdMirroringTest(DashboardTestCase):
@@ -32,7 +30,7 @@ class RbdMirroringTest(DashboardTestCase):
     def update_pool(cls, pool, mirror_mode):
         data = {'mirror_mode': mirror_mode}
         return cls._task_put('/api/block/mirroring/pool/{}'.format(pool),
-            data)
+                             data)
 
     @classmethod
     def list_peers(cls, pool):
@@ -53,12 +51,12 @@ class RbdMirroringTest(DashboardTestCase):
         data = {'cluster_name': cluster_name, 'client_id': client_id}
         data.update(kwargs)
         return cls._task_post('/api/block/mirroring/pool/{}/peer'.format(pool),
-            data)
+                              data)
 
     @classmethod
     def update_peer(cls, pool, peer_uuid, **kwargs):
         return cls._task_put('/api/block/mirroring/pool/{}/peer/{}'.format(pool, peer_uuid),
-            kwargs)
+                             kwargs)
 
     @classmethod
     def delete_peer(cls, pool, peer_uuid):

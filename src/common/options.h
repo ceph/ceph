@@ -220,7 +220,7 @@ struct Option {
     }
   }
 
-  void dump_value(const char *field_name, const value_t &v, Formatter *f) const;
+  void dump_value(const char *field_name, const value_t &v, ceph::Formatter *f) const;
 
   // Validate and potentially modify incoming string value
   int pre_validate(std::string *new_value, std::string *err) const;
@@ -361,8 +361,8 @@ struct Option {
     return *this;
   }
 
-  void dump(Formatter *f) const;
-  void print(ostream *out) const;
+  void dump(ceph::Formatter *f) const;
+  void print(std::ostream *out) const;
 
   bool has_flag(flag_t f) const {
     return flags & f;

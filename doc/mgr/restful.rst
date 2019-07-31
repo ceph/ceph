@@ -1,7 +1,7 @@
-restful plugin
+Restful Module
 ==============
 
-RESTful plugin offers the REST API access to the status of the cluster
+RESTful module offers the REST API access to the status of the cluster
 over an SSL-secured connection.
 
 Enabling
@@ -76,6 +76,39 @@ specific.  For example,::
 If the port is not configured, *restful* will bind to port ``8003``.
 If the address it not configured, the *restful* will bind to ``::``,
 which corresponds to all available IPv4 and IPv6 addresses.
+
+.. _creating-an-api-user:
+
+Creating an API User
+-----------------------
+
+To create an API user, please run the following command::
+
+  ceph restful create-key <username>
+
+Replace ``<username>`` with the desired name of the user. For example, to create a user named
+``api``::
+
+  $ ceph restful create-key api
+  52dffd92-a103-4a10-bfce-5b60f48f764e
+
+The UUID generated from ``ceph restful create-key api`` acts as the key for the user.
+
+To list all of your API keys, please run the following command::
+
+  ceph restful list-keys
+
+The ``ceph restful list-keys`` command will output in JSON::
+
+  {
+  	"api": "52dffd92-a103-4a10-bfce-5b60f48f764e"
+  }
+
+You can use ``curl`` in order to test your user with the API. Here is an example::
+
+  curl -k https://api:52dffd92-a103-4a10-bfce-5b60f48f764e@<ceph-mgr>:<port>/server
+
+In the case above, we are using ``GET`` to fetch information from the ``server`` endpoint.
 
 Load balancer
 -------------

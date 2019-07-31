@@ -118,9 +118,9 @@ public:
   /// decay histogram by N bits (default 1, for a halflife)
   void decay(int bits = 1);
 
-  void dump(Formatter *f) const;
-  void encode(bufferlist &bl) const;
-  void decode(bufferlist::const_iterator &bl);
+  void dump(ceph::Formatter *f) const;
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &bl);
   static void generate_test_instances(std::list<pow2_hist_t*>& o);
 };
 WRITE_CLASS_ENCODER(pow2_hist_t)

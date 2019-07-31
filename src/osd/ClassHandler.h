@@ -3,9 +3,11 @@
 #ifndef CEPH_CLASSHANDLER_H
 #define CEPH_CLASSHANDLER_H
 
+#include <variant>
+
 #include "include/types.h"
+#include "common/ceph_mutex.h"
 #include "objclass/objclass.h"
-#include "common/Mutex.h"
 
 //forward declaration
 class CephContext;
@@ -18,25 +20,28 @@ public:
   struct ClassData;
 
   struct ClassMethod {
-    struct ClassHandler::ClassData *cls;
-    string name;
-    int flags;
-    cls_method_call_t func;
-    cls_method_cxx_call_t cxx_func;
+    const std::string name;
+    using func_t = std::variant<cls_method_cxx_call_t, cls_method_call_t>;
+    func_t func;
+    int flags = 0;
+    ClassData *cls = nullptr;
 
-    int exec(cls_method_context_t ctx, bufferlist& indata, bufferlist& outdata);
+    int exec(cls_method_context_t ctx,
+	     ceph::bufferlist& indata,
+	     ceph::bufferlist& outdata);
     void unregister();
 
     int get_flags() {
       std::lock_guard l(cls->handler->mutex);
       return flags;
     }
-
-    ClassMethod() : cls(0), flags(0), func(0), cxx_func(0) {}
+    ClassMethod(const char* name, func_t call, int flags, ClassData* cls)
+      : name{name}, func{call}, flags{flags}, cls{cls}
+    {}
   };
 
   struct ClassFilter {
-    struct ClassHandler::ClassData *cls = nullptr;
+    ClassData *cls = nullptr;
     std::string name;
     cls_cxx_filter_factory_t fn;
 
@@ -55,17 +60,17 @@ public:
       CLASS_OPEN,            // initialized, usable
     } status;
 
-    string name;
+    std::string name;
     ClassHandler *handler;
     void *handle;
 
     bool whitelisted = false;
 
-    map<string, ClassMethod> methods_map;
-    map<string, ClassFilter> filters_map;
+    std::map<std::string, ClassMethod> methods_map;
+    std::map<std::string, ClassFilter> filters_map;
 
-    set<ClassData *> dependencies;         /* our dependencies */
-    set<ClassData *> missing_dependencies; /* only missing dependencies */
+    std::set<ClassData *> dependencies;         /* our dependencies */
+    std::set<ClassData *> missing_dependencies; /* only missing dependencies */
 
     ClassMethod *_get_method(const char *mname);
 
@@ -102,24 +107,22 @@ public:
   };
 
 private:
-  map<string, ClassData> classes;
+  std::map<std::string, ClassData> classes;
 
-  ClassData *_get_class(const string& cname, bool check_allowed);
+  ClassData *_get_class(const std::string& cname, bool check_allowed);
   int _load_class(ClassData *cls);
 
   static bool in_class_list(const std::string& cname,
       const std::string& list);
 
 public:
-  Mutex mutex;
+  ceph::mutex mutex = ceph::make_mutex("ClassHandler");
 
-  explicit ClassHandler(CephContext *cct_) : cct(cct_), mutex("ClassHandler") {}
+  explicit ClassHandler(CephContext *cct_) : cct(cct_) {}
 
   int open_all_classes();
+  int open_class(const std::string& cname, ClassData **pcls);
 
-  void add_embedded_class(const string& cname);
-  int open_class(const string& cname, ClassData **pcls);
-  
   ClassData *register_class(const char *cname);
   void unregister_class(ClassData *cls);
 

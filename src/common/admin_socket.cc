@@ -513,7 +513,7 @@ public:
       jf.open_object_section("version");
       if (command == "version") {
 	jf.dump_string("version", ceph_version_to_str());
-	jf.dump_string("release", ceph_release_name(ceph_release()));
+	jf.dump_string("release", ceph_release_to_str());
 	jf.dump_string("release_type", ceph_release_type());
       } else if (command == "git_version") {
 	jf.dump_string("git_version", git_version_to_str());

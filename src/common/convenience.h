@@ -21,10 +21,6 @@
 
 #include <boost/optional.hpp>
 
-#include "include/ceph_assert.h" // I despise you. Not you the reader, I'm talking
-                            // to the include file.
-
-
 #ifndef CEPH_COMMON_CONVENIENCE_H
 #define CEPH_COMMON_CONVENIENCE_H
 

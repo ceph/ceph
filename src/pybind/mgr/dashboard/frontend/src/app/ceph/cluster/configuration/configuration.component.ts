@@ -3,7 +3,9 @@ import { Component, OnInit, TemplateRef, ViewChild } from '@angular/core';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 
 import { ConfigurationService } from '../../../shared/api/configuration.service';
+import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
@@ -20,6 +22,7 @@ export class ConfigurationComponent implements OnInit {
   permission: Permission;
   tableActions: CdTableAction[];
   data = [];
+  icons = Icons;
   columns: CdTableColumn[];
   selection = new CdTableSelection();
   filters = [
@@ -83,16 +86,17 @@ export class ConfigurationComponent implements OnInit {
   constructor(
     private authStorageService: AuthStorageService,
     private configurationService: ConfigurationService,
-    private i18n: I18n
+    private i18n: I18n,
+    public actionLabels: ActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().configOpt;
     const getConfigOptUri = () =>
       this.selection.first() && `${encodeURIComponent(this.selection.first().name)}`;
     const editAction: CdTableAction = {
       permission: 'update',
-      icon: 'fa-pencil',
+      icon: Icons.edit,
       routerLink: () => `/configuration/edit/${getConfigOptUri()}`,
-      name: this.i18n('Edit'),
+      name: this.actionLabels.EDIT,
       disable: () => !this.isEditable(this.selection)
     };
     this.tableActions = [editAction];

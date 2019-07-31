@@ -28,8 +28,8 @@ public:
 template <class C, typename... Args>
 class CtFun : public Ct<C> {
 private:
-  using fn = Ct<C> *(C::*)(Args...);
-  fn _f;
+  using fn_t = Ct<C> *(C::*)(Args...);
+  fn_t _f;
   std::tuple<Args...> _params;
 
   template <std::size_t... Is>
@@ -38,7 +38,7 @@ private:
   }
 
 public:
-  CtFun(fn f) : _f(f) {}
+  CtFun(fn_t f) : _f(f) {}
 
   inline void setParams(Args... args) { _params = std::make_tuple(args...); }
   inline Ct<C> *call(C *foo) const override {
@@ -46,26 +46,53 @@ public:
   }
 };
 
-#define CONTINUATION_DECL(C, F, ...)                    \
-  std::unique_ptr<CtFun<C, ##__VA_ARGS__>> F##_cont_ =  \
-      std::make_unique<CtFun<C, ##__VA_ARGS__>>(&C::F); \
-  CtFun<C, ##__VA_ARGS__> *F##_cont = F##_cont_.get()
+using rx_buffer_t =
+    std::unique_ptr<buffer::ptr_node, buffer::ptr_node::disposer>;
 
-#define CONTINUATION_PARAM(V, C, ...) CtFun<C, ##__VA_ARGS__> *V##_cont
+template <class C>
+class CtRxNode : public Ct<C> {
+  using fn_t = Ct<C> *(C::*)(rx_buffer_t&&, int r);
+  fn_t _f;
+
+public:
+  mutable rx_buffer_t node;
+  int r;
+
+  CtRxNode(fn_t f) : _f(f) {}
+  void setParams(rx_buffer_t &&node, int r) {
+    this->node = std::move(node);
+    this->r = r;
+  }
+  inline Ct<C> *call(C *foo) const override {
+    return (foo->*_f)(std::move(node), r);
+  }
+};
+
+template <class C> using CONTINUATION_TYPE = CtFun<C>;
+template <class C> using CONTINUATION_TX_TYPE = CtFun<C, int>;
+template <class C> using CONTINUATION_RX_TYPE = CtFun<C, char*, int>;
+template <class C> using CONTINUATION_RXBPTR_TYPE = CtRxNode<C>;
+
+#define CONTINUATION_DECL(C, F, ...)                    \
+  CtFun<C, ##__VA_ARGS__> F##_cont { (&C::F) };
 
 #define CONTINUATION(F) F##_cont
-#define CONTINUE(F, ...) F##_cont->setParams(__VA_ARGS__), F##_cont
+#define CONTINUE(F, ...) (F##_cont.setParams(__VA_ARGS__), &F##_cont)
 
 #define CONTINUATION_RUN(CT)                                      \
   {                                                               \
-    Ct<std::remove_reference<decltype(*this)>::type> *_cont = CT; \
-    while (_cont) {                                               \
+    Ct<std::remove_reference<decltype(*this)>::type> *_cont = &CT;\
+    do {                                                          \
       _cont = _cont->call(this);                                  \
-    }                                                             \
+    } while (_cont);                                              \
   }
 
 #define READ_HANDLER_CONTINUATION_DECL(C, F) \
   CONTINUATION_DECL(C, F, char *, int)
+
+#define READ_BPTR_HANDLER_CONTINUATION_DECL(C, F) \
+  CtRxNode<C> F##_cont { (&C::F) };
+
 #define WRITE_HANDLER_CONTINUATION_DECL(C, F) CONTINUATION_DECL(C, F, int)
 
 //////////////////////////////////////////////////////////////////////

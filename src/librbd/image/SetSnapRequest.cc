@@ -48,7 +48,7 @@ void SetSnapRequest<I>::send() {
 template <typename I>
 void SetSnapRequest<I>::send_init_exclusive_lock() {
   {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::RLocker image_locker(m_image_ctx.image_lock);
     if (m_image_ctx.exclusive_lock != nullptr) {
       ceph_assert(m_image_ctx.snap_id == CEPH_NOSNAP);
       send_complete();
@@ -120,7 +120,7 @@ Context *SetSnapRequest<I>::handle_block_writes(int *result) {
   }
 
   {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::RLocker image_locker(m_image_ctx.image_lock);
     auto it = m_image_ctx.snap_info.find(m_snap_id);
     if (it == m_image_ctx.snap_info.end()) {
       ldout(cct, 5) << "failed to locate snapshot '" << m_snap_id << "'"
@@ -138,7 +138,7 @@ Context *SetSnapRequest<I>::handle_block_writes(int *result) {
 template <typename I>
 Context *SetSnapRequest<I>::send_shut_down_exclusive_lock(int *result) {
   {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
+    RWLock::RLocker image_locker(m_image_ctx.image_lock);
     m_exclusive_lock = m_image_ctx.exclusive_lock;
   }
 
@@ -178,8 +178,7 @@ Context *SetSnapRequest<I>::send_refresh_parent(int *result) {
   ParentImageInfo parent_md;
   bool refresh_parent;
   {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
-    RWLock::RLocker parent_locker(m_image_ctx.parent_lock);
+    RWLock::RLocker image_locker(m_image_ctx.image_lock);
 
     const auto parent_info = m_image_ctx.get_parent_info(m_snap_id);
     if (parent_info == nullptr) {
@@ -325,8 +324,7 @@ int SetSnapRequest<I>::apply() {
   ldout(cct, 10) << __func__ << dendl;
 
   RWLock::WLocker owner_locker(m_image_ctx.owner_lock);
-  RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
-  RWLock::WLocker parent_locker(m_image_ctx.parent_lock);
+  RWLock::WLocker image_locker(m_image_ctx.image_lock);
   if (m_snap_id != CEPH_NOSNAP) {
     ceph_assert(m_image_ctx.exclusive_lock == nullptr);
     int r = m_image_ctx.snap_set(m_snap_id);

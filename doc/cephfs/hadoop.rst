@@ -159,7 +159,7 @@ The output should resemble::
 
     pool 3 'hadoop1' rep size 1 min_size 1 crush_rule 0...
 
-where ``3`` is the pool id. Next we will use the pool id reference to register
+Where ``3`` is the pool id. Next we will use the pool id reference to register
 the pool as a data pool for storing file system data. ::
 
     ceph fs add_data_pool cephfs 3

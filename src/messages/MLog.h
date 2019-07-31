@@ -20,17 +20,15 @@
 
 #include <deque>
 
-class MLog : public MessageInstance<MLog, PaxosServiceMessage> {
+class MLog : public PaxosServiceMessage {
 public:
-  friend factory;
-
   uuid_d fsid;
   std::deque<LogEntry> entries;
   
-  MLog() : MessageInstance(MSG_LOG, 0) {}
+  MLog() : PaxosServiceMessage{MSG_LOG, 0} {}
   MLog(const uuid_d& f, const std::deque<LogEntry>& e)
-    : MessageInstance(MSG_LOG, 0), fsid(f), entries(e) { }
-  MLog(const uuid_d& f) : MessageInstance(MSG_LOG, 0), fsid(f) { }
+    : PaxosServiceMessage{MSG_LOG, 0}, fsid(f), entries(e) { }
+  MLog(const uuid_d& f) : PaxosServiceMessage(MSG_LOG, 0), fsid(f) { }
 private:
   ~MLog() override {}
 

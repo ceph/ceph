@@ -5,6 +5,7 @@
 #include "common/dout.h"
 #include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/Utils.h"
 #include "librbd/io/ObjectRequest.h"
 
 #define dout_subsys ceph_subsys_rbd
@@ -14,6 +15,8 @@
 
 namespace librbd {
 namespace io {
+
+using librbd::util::data_object_name;
 
 template <typename I>
 ObjectDispatch<I>::ObjectDispatch(I* image_ctx)
@@ -30,17 +33,17 @@ void ObjectDispatch<I>::shut_down(Context* on_finish) {
 
 template <typename I>
 bool ObjectDispatch<I>::read(
-    const std::string &oid, uint64_t object_no, uint64_t object_off,
-    uint64_t object_len, librados::snap_t snap_id, int op_flags,
-    const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
-    ExtentMap* extent_map, int* object_dispatch_flags,
-    DispatchResult* dispatch_result, Context** on_finish,
-    Context* on_dispatched) {
+    uint64_t object_no, uint64_t object_off, uint64_t object_len,
+    librados::snap_t snap_id, int op_flags, const ZTracer::Trace &parent_trace,
+    ceph::bufferlist* read_data, ExtentMap* extent_map,
+    int* object_dispatch_flags, DispatchResult* dispatch_result,
+    Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << oid << " " << object_off << "~" << object_len << dendl;
+  ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
+                 << object_off << "~" << object_len << dendl;
 
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
-  auto req = new ObjectReadRequest<I>(m_image_ctx, oid, object_no, object_off,
+  auto req = new ObjectReadRequest<I>(m_image_ctx, object_no, object_off,
                                       object_len, snap_id, op_flags,
                                       parent_trace, read_data, extent_map,
                                       on_dispatched);
@@ -50,35 +53,36 @@ bool ObjectDispatch<I>::read(
 
 template <typename I>
 bool ObjectDispatch<I>::discard(
-    const std::string &oid, uint64_t object_no, uint64_t object_off,
-    uint64_t object_len, const ::SnapContext &snapc, int discard_flags,
+    uint64_t object_no, uint64_t object_off, uint64_t object_len,
+    const ::SnapContext &snapc, int discard_flags,
     const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
     uint64_t* journal_tid, DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << oid << " " << object_off << "~" << object_len << dendl;
+  ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
+                 << object_off << "~" << object_len << dendl;
 
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
-  auto req = new ObjectDiscardRequest<I>(m_image_ctx, oid, object_no,
-                                         object_off, object_len, snapc,
-                                         discard_flags, parent_trace,
-                                         on_dispatched);
+  auto req = new ObjectDiscardRequest<I>(m_image_ctx, object_no, object_off,
+                                         object_len, snapc, discard_flags,
+                                         parent_trace, on_dispatched);
   req->send();
   return true;
 }
 
 template <typename I>
 bool ObjectDispatch<I>::write(
-    const std::string &oid, uint64_t object_no, uint64_t object_off,
-    ceph::bufferlist&& data, const ::SnapContext &snapc, int op_flags,
+    uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
+    const ::SnapContext &snapc, int op_flags,
     const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
     uint64_t* journal_tid, DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << oid << " " << object_off << "~" << data.length() << dendl;
+  ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
+                 << object_off << "~" << data.length() << dendl;
 
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
-  auto req = new ObjectWriteRequest<I>(m_image_ctx, oid, object_no, object_off,
+  auto req = new ObjectWriteRequest<I>(m_image_ctx, object_no, object_off,
                                        std::move(data), snapc, op_flags,
                                        parent_trace, on_dispatched);
   req->send();
@@ -87,17 +91,18 @@ bool ObjectDispatch<I>::write(
 
 template <typename I>
 bool ObjectDispatch<I>::write_same(
-    const std::string &oid, uint64_t object_no, uint64_t object_off,
-    uint64_t object_len, Extents&& buffer_extents, ceph::bufferlist&& data,
+    uint64_t object_no, uint64_t object_off, uint64_t object_len,
+    LightweightBufferExtents&& buffer_extents, ceph::bufferlist&& data,
     const ::SnapContext &snapc, int op_flags,
     const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
     uint64_t* journal_tid, DispatchResult* dispatch_result,
     Context** on_finish, Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << oid << " " << object_off << "~" << object_len << dendl;
+  ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
+                 << object_off << "~" << object_len << dendl;
 
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
-  auto req = new ObjectWriteSameRequest<I>(m_image_ctx, oid, object_no,
+  auto req = new ObjectWriteSameRequest<I>(m_image_ctx, object_no,
                                            object_off, object_len,
                                            std::move(data), snapc, op_flags,
                                            parent_trace, on_dispatched);
@@ -107,19 +112,18 @@ bool ObjectDispatch<I>::write_same(
 
 template <typename I>
 bool ObjectDispatch<I>::compare_and_write(
-    const std::string &oid, uint64_t object_no, uint64_t object_off,
-    ceph::bufferlist&& cmp_data, ceph::bufferlist&& write_data,
-    const ::SnapContext &snapc, int op_flags,
+    uint64_t object_no, uint64_t object_off, ceph::bufferlist&& cmp_data,
+    ceph::bufferlist&& write_data, const ::SnapContext &snapc, int op_flags,
     const ZTracer::Trace &parent_trace, uint64_t* mismatch_offset,
     int* object_dispatch_flags, uint64_t* journal_tid,
     DispatchResult* dispatch_result, Context** on_finish,
     Context* on_dispatched) {
   auto cct = m_image_ctx->cct;
-  ldout(cct, 20) << oid << " " << object_off << "~" << write_data.length()
-                 << dendl;
+  ldout(cct, 20) << data_object_name(m_image_ctx, object_no) << " "
+                 << object_off << "~" << write_data.length() << dendl;
 
   *dispatch_result = DISPATCH_RESULT_COMPLETE;
-  auto req = new ObjectCompareAndWriteRequest<I>(m_image_ctx, oid, object_no,
+  auto req = new ObjectCompareAndWriteRequest<I>(m_image_ctx, object_no,
                                                  object_off,
                                                  std::move(cmp_data),
                                                  std::move(write_data), snapc,

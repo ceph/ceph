@@ -364,7 +364,7 @@ int read_history(RGWRados *store, RGWMetadataLogHistory *state,
   auto& pool = store->svc.zone->get_zone_params().log_pool;
   const auto& oid = RGWMetadataLogHistory::oid;
   bufferlist bl;
-  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, objv_tracker, nullptr);
+  int ret = rgw_get_system_obj(store, obj_ctx, pool, oid, bl, objv_tracker, nullptr, null_yield);
   if (ret < 0) {
     return ret;
   }
@@ -372,7 +372,7 @@ int read_history(RGWRados *store, RGWMetadataLogHistory *state,
     /* bad history object, remove it */
     rgw_raw_obj obj(pool, oid);
     auto sysobj = obj_ctx.get_obj(obj);
-    ret = sysobj.wop().remove();
+    ret = sysobj.wop().remove(null_yield);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: meta history is empty, but cannot remove it (" << cpp_strerror(-ret) << ")" << dendl;
       return ret;
@@ -806,7 +806,7 @@ int RGWMetadataManager::prepare_mutate(RGWRados *store,
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
   int ret = rgw_get_system_obj(store, obj_ctx, pool, oid,
                                bl, objv_tracker, &orig_mtime,
-                               nullptr, nullptr);
+                               null_yield, nullptr, nullptr);
   if (ret < 0 && ret != -ENOENT) {
     return ret;
   }
@@ -1076,7 +1076,7 @@ int RGWMetadataManager::remove_from_heap(RGWMetadataHandler *handler, const stri
   rgw_raw_obj obj(heap_pool, oid);
   auto obj_ctx = store->svc.sysobj->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(obj);
-  int ret = sysobj.wop().remove();
+  int ret = sysobj.wop().remove(null_yield);
   if (ret < 0) {
     ldout(store->ctx(), 0) << "ERROR: sysobj.wop().remove() oid=" << oid << " returned ret=" << ret << dendl;
     return ret;
@@ -1146,7 +1146,7 @@ int RGWMetadataManager::remove_entry(RGWMetadataHandler *handler,
   auto sysobj = obj_ctx.get_obj(obj);
   ret = sysobj.wop()
               .set_objv_tracker(objv_tracker)
-              .remove();
+              .remove(null_yield);
   /* cascading ret into post_modify() */
 
   ret = post_modify(handler, section, key, log_data, objv_tracker, ret);

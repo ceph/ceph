@@ -11,16 +11,11 @@ ExternalProject_Add(zstd_ext
              -DCMAKE_C_FLAGS=${ZSTD_C_FLAGS}
              -DCMAKE_AR=${CMAKE_AR}
              -DCMAKE_POSITION_INDEPENDENT_CODE=${ENABLE_SHARED}
+             -G${CMAKE_GENERATOR}
   BINARY_DIR ${CMAKE_CURRENT_BINARY_DIR}/libzstd
-  BUILD_COMMAND $(MAKE) libzstd_static
+  BUILD_COMMAND ${CMAKE_COMMAND} --build <BINARY_DIR> --target libzstd_static
+  BUILD_BYPRODUCTS "${CMAKE_CURRENT_BINARY_DIR}/libzstd/lib/libzstd.a"
   INSTALL_COMMAND "true")
-
-# force zstd make to be called on each time
-ExternalProject_Add_Step(zstd_ext forcebuild
-  DEPENDEES configure
-  DEPENDERS build
-  COMMAND "true"
-  ALWAYS 1)
 
 add_library(zstd STATIC IMPORTED)
 set_target_properties(zstd PROPERTIES

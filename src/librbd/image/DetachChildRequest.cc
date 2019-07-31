@@ -10,6 +10,7 @@
 #include "librbd/ImageState.h"
 #include "librbd/Operations.h"
 #include "librbd/Utils.h"
+#include "librbd/trash/RemoveRequest.h"
 #include <string>
 
 #define dout_subsys ceph_subsys_rbd
@@ -31,8 +32,7 @@ DetachChildRequest<I>::~DetachChildRequest() {
 template <typename I>
 void DetachChildRequest<I>::send() {
   {
-    RWLock::RLocker snap_locker(m_image_ctx.snap_lock);
-    RWLock::RLocker parent_locker(m_image_ctx.parent_lock);
+    RWLock::RLocker image_locker(m_image_ctx.image_lock);
 
     // use oldest snapshot or HEAD for parent spec
     if (!m_image_ctx.snap_info.empty()) {
@@ -205,9 +205,94 @@ void DetachChildRequest<I>::handle_clone_v2_remove_snapshot(int r) {
   if (r < 0 && r != -ENOENT) {
     ldout(cct, 5) << "failed to remove trashed clone snapshot: "
                   << cpp_strerror(r) << dendl;
+    clone_v2_close_parent();
+    return;
   }
 
-  clone_v2_close_parent();
+  if (m_parent_image_ctx->snaps.empty()) {
+    clone_v2_get_parent_trash_entry();
+  } else {
+    clone_v2_close_parent();
+  }
+}
+
+template<typename I>
+void DetachChildRequest<I>::clone_v2_get_parent_trash_entry() {
+  auto cct = m_image_ctx.cct;
+  ldout(cct, 5) << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::trash_get_start(&op, m_parent_image_ctx->id);
+
+  m_out_bl.clear();
+  auto aio_comp = create_rados_callback<
+    DetachChildRequest<I>,
+    &DetachChildRequest<I>::handle_clone_v2_get_parent_trash_entry>(this);
+  int r = m_parent_io_ctx.aio_operate(RBD_TRASH, aio_comp, &op, &m_out_bl);
+  ceph_assert(r == 0);
+  aio_comp->release();
+}
+
+template<typename I>
+void DetachChildRequest<I>::handle_clone_v2_get_parent_trash_entry(int r) {
+  auto cct = m_image_ctx.cct;
+  ldout(cct, 5) << "r=" << r << dendl;
+
+  if (r < 0 && r != -ENOENT) {
+    ldout(cct, 5) << "failed to get parent trash entry: " << cpp_strerror(r)
+                  << dendl;
+    clone_v2_close_parent();
+    return;
+  }
+
+  bool in_trash = false;
+
+  if (r == 0) {
+    cls::rbd::TrashImageSpec trash_spec;
+    auto it = m_out_bl.cbegin();
+    r = cls_client::trash_get_finish(&it, &trash_spec);
+
+    if (r == 0 &&
+        trash_spec.source == cls::rbd::TRASH_IMAGE_SOURCE_USER_PARENT &&
+        trash_spec.state == cls::rbd::TRASH_IMAGE_STATE_NORMAL &&
+        trash_spec.deferment_end_time <= ceph_clock_now()) {
+      in_trash = true;
+    }
+  }
+
+  if (in_trash) {
+    clone_v2_remove_parent_from_trash();
+  } else {
+    clone_v2_close_parent();
+  }
+}
+
+template<typename I>
+void DetachChildRequest<I>::clone_v2_remove_parent_from_trash() {
+  auto cct = m_image_ctx.cct;
+  ldout(cct, 5) << dendl;
+
+  auto ctx = create_context_callback<
+    DetachChildRequest<I>,
+    &DetachChildRequest<I>::handle_clone_v2_remove_parent_from_trash>(this);
+  auto req = librbd::trash::RemoveRequest<I>::create(
+      m_parent_io_ctx, m_parent_image_ctx, m_image_ctx.op_work_queue, false,
+      m_no_op, ctx);
+  req->send();
+}
+
+template<typename I>
+void DetachChildRequest<I>::handle_clone_v2_remove_parent_from_trash(int r) {
+  auto cct = m_image_ctx.cct;
+  ldout(cct, 5) << "r=" << r << dendl;
+
+  if (r < 0) {
+    ldout(cct, 5) << "failed to remove parent image:" << cpp_strerror(r)
+                  << dendl;
+  }
+
+  m_parent_image_ctx = nullptr;
+  finish(0);
 }
 
 template<typename I>

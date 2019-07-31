@@ -58,7 +58,6 @@ public:
 
 class RGWGetObjTags_ObjStore_S3 : public RGWGetObjTags_ObjStore
 {
-  bufferlist tags_bl;
 public:
   RGWGetObjTags_ObjStore_S3() {}
   ~RGWGetObjTags_ObjStore_S3() {}
@@ -80,6 +79,26 @@ class RGWDeleteObjTags_ObjStore_S3 : public RGWDeleteObjTags
 {
 public:
   ~RGWDeleteObjTags_ObjStore_S3() override {}
+  void send_response() override;
+};
+
+class RGWGetBucketTags_ObjStore_S3 : public RGWGetBucketTags_ObjStore
+{
+  bufferlist tags_bl;
+public:
+  void send_response_data(bufferlist &bl) override;
+};
+
+class RGWPutBucketTags_ObjStore_S3 : public RGWPutBucketTags_ObjStore
+{
+public:
+  int get_params() override;
+  void send_response() override;
+};
+
+class RGWDeleteBucketTags_ObjStore_S3 : public RGWDeleteBucketTags
+{
+public:
   void send_response() override;
 };
 
@@ -107,12 +126,27 @@ public:
 };
 
 class RGWListBucket_ObjStore_S3 : public RGWListBucket_ObjStore {
-  bool objs_container;
-public:
+  protected:  bool objs_container;
+  int get_common_params();
+  void send_common_response();
+  void send_common_versioned_response();
+  public:
   RGWListBucket_ObjStore_S3() : objs_container(false) {
     default_max = 1000;
   }
   ~RGWListBucket_ObjStore_S3() override {}
+
+  int get_params() override;
+  void send_response() override;
+  void send_versioned_response();
+};
+
+class RGWListBucket_ObjStore_S3v2 : public RGWListBucket_ObjStore_S3 {
+  bool fetchOwner;
+public:
+  RGWListBucket_ObjStore_S3v2() :  fetchOwner(false) {
+  }
+  ~RGWListBucket_ObjStore_S3v2() override {}
 
   int get_params() override;
   void send_response() override;
@@ -434,6 +468,49 @@ public:
   void end_response() override;
 };
 
+class RGWPutBucketObjectLock_ObjStore_S3 : public RGWPutBucketObjectLock_ObjStore {
+public:
+  RGWPutBucketObjectLock_ObjStore_S3() {}
+  ~RGWPutBucketObjectLock_ObjStore_S3() override {}
+  void send_response() override;
+};
+
+class RGWGetBucketObjectLock_ObjStore_S3 : public RGWGetBucketObjectLock_ObjStore {
+public:
+  RGWGetBucketObjectLock_ObjStore_S3() {}
+  ~RGWGetBucketObjectLock_ObjStore_S3() {}
+  void send_response() override;
+};
+
+class RGWPutObjRetention_ObjStore_S3 : public RGWPutObjRetention_ObjStore {
+public:
+  RGWPutObjRetention_ObjStore_S3() {}
+  ~RGWPutObjRetention_ObjStore_S3() {}
+  int get_params() override;
+  void send_response() override;
+};
+
+class RGWGetObjRetention_ObjStore_S3 : public RGWGetObjRetention_ObjStore {
+public:
+  RGWGetObjRetention_ObjStore_S3() {}
+  ~RGWGetObjRetention_ObjStore_S3() {}
+  void send_response() override;
+};
+
+class RGWPutObjLegalHold_ObjStore_S3 : public RGWPutObjLegalHold_ObjStore {
+public:
+  RGWPutObjLegalHold_ObjStore_S3() {}
+  ~RGWPutObjLegalHold_ObjStore_S3() {}
+  void send_response() override;
+};
+
+class RGWGetObjLegalHold_ObjStore_S3 : public RGWGetObjLegalHold_ObjStore {
+public:
+  RGWGetObjLegalHold_ObjStore_S3() {}
+  ~RGWGetObjLegalHold_ObjStore_S3() {}
+  void send_response() override;
+};
+
 class RGWGetObjLayout_ObjStore_S3 : public RGWGetObjLayout {
 public:
   RGWGetObjLayout_ObjStore_S3() {}
@@ -522,6 +599,7 @@ public:
 class RGWHandler_REST_Service_S3 : public RGWHandler_REST_S3 {
 protected:
     bool isSTSenabled;
+    bool isIAMenabled;
     bool is_usage_op() {
     return s->info.args.exists("usage");
   }
@@ -530,8 +608,8 @@ protected:
   RGWOp *op_post() override;
 public:
    RGWHandler_REST_Service_S3(const rgw::auth::StrategyRegistry& auth_registry,
-                              bool isSTSenabled) :
-      RGWHandler_REST_S3(auth_registry), isSTSenabled(isSTSenabled) {}
+                              bool isSTSenabled, bool isIAMenabled) :
+      RGWHandler_REST_S3(auth_registry), isSTSenabled(isSTSenabled), isIAMenabled(isIAMenabled) {}
   ~RGWHandler_REST_Service_S3() override = default;
 };
 
@@ -549,11 +627,22 @@ protected:
   bool is_obj_update_op() override {
     return is_acl_op() || is_cors_op();
   }
+
+  bool is_tagging_op() {
+    return s->info.args.exists("tagging");
+  }
+ 
   bool is_request_payment_op() {
     return s->info.args.exists("requestPayment");
   }
   bool is_policy_op() {
     return s->info.args.exists("policy");
+  }
+  bool is_tagging_op() const {
+      return s->info.args.exists("tagging");
+  }
+  bool is_object_lock_op() {
+    return s->info.args.exists("object-lock");
   }
   RGWOp *get_obj_op(bool get_data);
 
@@ -576,8 +665,15 @@ protected:
   bool is_tagging_op() {
     return s->info.args.exists("tagging");
   }
+  bool is_obj_retention_op() {
+    return s->info.args.exists("retention");
+  }
+  bool is_obj_legal_hold_op() {
+    return s->info.args.exists("legal-hold");
+  }
+
   bool is_obj_update_op() override {
-    return is_acl_op() || is_tagging_op() ;
+    return is_acl_op() || is_tagging_op() || is_obj_retention_op() || is_obj_legal_hold_op();
   }
   RGWOp *get_obj_op(bool get_data);
 
@@ -596,10 +692,12 @@ class RGWRESTMgr_S3 : public RGWRESTMgr {
 private:
   bool enable_s3website;
   bool enable_sts;
+  bool enable_iam;
 public:
-  explicit RGWRESTMgr_S3(bool enable_s3website = false, bool enable_sts = false)
+  explicit RGWRESTMgr_S3(bool enable_s3website = false, bool enable_sts = false, bool enable_iam = false)
     : enable_s3website(enable_s3website),
-      enable_sts(enable_sts) {
+      enable_sts(enable_sts),
+      enable_iam(enable_iam) {
   }
 
   ~RGWRESTMgr_S3() override = default;
@@ -900,7 +998,7 @@ class STSEngine : public AWSEngine {
   acl_strategy_t get_acl_strategy() const { return nullptr; };
   auth_info_t get_creds_info(const STS::SessionToken& token) const noexcept;
 
-  int get_session_token(const boost::string_view& session_token,
+  int get_session_token(const DoutPrefixProvider* dpp, const boost::string_view& session_token,
                         STS::SessionToken& token) const;
 
   result_t authenticate(const DoutPrefixProvider* dpp, 

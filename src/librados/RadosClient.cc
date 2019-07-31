@@ -56,16 +56,6 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "librados: "
 
-bool librados::RadosClient::ms_get_authorizer(int dest_type,
-					      AuthAuthorizer **authorizer) {
-  //ldout(cct, 0) << "RadosClient::ms_get_authorizer type=" << dest_type << dendl;
-  /* monitor authorization is being handled on different layer */
-  if (dest_type == CEPH_ENTITY_TYPE_MON)
-    return true;
-  *authorizer = monclient.build_authorizer(dest_type);
-  return *authorizer != NULL;
-}
-
 librados::RadosClient::RadosClient(CephContext *cct_)
   : Dispatcher(cct_->get()),
     cct_deleter{cct_, [](CephContext *p) {p->put();}},
@@ -237,6 +227,11 @@ int librados::RadosClient::connect()
   if (state == CONNECTED)
     return -EISCONN;
   state = CONNECTING;
+
+  if (cct->_conf->log_early &&
+      !cct->_log->is_started()) {
+    cct->_log->start();
+  }
 
   {
     MonClient mc_bootstrap(cct);
@@ -454,7 +449,7 @@ int librados::RadosClient::get_min_compatible_osd(int8_t* require_osd_release)
 
   objecter->with_osdmap(
     [require_osd_release](const OSDMap& o) {
-      *require_osd_release = o.require_osd_release;
+      *require_osd_release = ceph::to_integer<int8_t>(o.require_osd_release);
     });
   return 0;
 }
@@ -469,8 +464,10 @@ int librados::RadosClient::get_min_compatible_client(int8_t* min_compat_client,
 
   objecter->with_osdmap(
     [min_compat_client, require_min_compat_client](const OSDMap& o) {
-      *min_compat_client = o.get_min_compat_client();
-      *require_min_compat_client = o.get_require_min_compat_client();
+      *min_compat_client =
+	ceph::to_integer<int8_t>(o.get_min_compat_client());
+      *require_min_compat_client =
+	ceph::to_integer<int8_t>(o.get_require_min_compat_client());
     });
   return 0;
 }
@@ -640,15 +637,17 @@ int librados::RadosClient::pool_list(std::list<std::pair<int64_t, string> >& v)
 }
 
 int librados::RadosClient::get_pool_stats(std::list<string>& pools,
-					  map<string,::pool_stat_t>& result)
+					  map<string,::pool_stat_t> *result,
+					  bool *per_pool)
 {
   Mutex mylock("RadosClient::get_pool_stats::mylock");
   Cond cond;
   bool done;
   int ret = 0;
 
-  objecter->get_pool_stats(pools, &result, new C_SafeCond(&mylock, &cond, &done,
-							  &ret));
+  objecter->get_pool_stats(pools, result, per_pool,
+			   new C_SafeCond(&mylock, &cond, &done,
+					  &ret));
 
   mylock.Lock();
   while (!done)

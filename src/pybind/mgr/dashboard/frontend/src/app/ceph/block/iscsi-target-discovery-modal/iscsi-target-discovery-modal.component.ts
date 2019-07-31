@@ -8,6 +8,8 @@ import { IscsiService } from '../../../shared/api/iscsi.service';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
+import { Permission } from '../../../shared/models/permissions';
+import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
 
 @Component({
@@ -17,21 +19,36 @@ import { NotificationService } from '../../../shared/services/notification.servi
 })
 export class IscsiTargetDiscoveryModalComponent implements OnInit {
   discoveryForm: CdFormGroup;
+  permission: Permission;
+  hasPermission: boolean;
 
   USER_REGEX = /[\w\.:@_-]{8,64}/;
-  PASSWORD_REGEX = /[\w@\-_]{12,16}/;
+  PASSWORD_REGEX = /[\w@\-_\/]{12,16}/;
 
   constructor(
+    private authStorageService: AuthStorageService,
     public bsModalRef: BsModalRef,
     private iscsiService: IscsiService,
     private notificationService: NotificationService,
     private i18n: I18n
   ) {
+    this.permission = this.authStorageService.getPermissions().iscsi;
+  }
+
+  ngOnInit() {
+    this.hasPermission = this.permission.update;
+    this.createForm();
+    this.iscsiService.getDiscovery().subscribe((auth) => {
+      this.discoveryForm.patchValue(auth);
+    });
+  }
+
+  createForm() {
     this.discoveryForm = new CdFormGroup({
-      user: new FormControl(''),
-      password: new FormControl(''),
-      mutual_user: new FormControl(''),
-      mutual_password: new FormControl('')
+      user: new FormControl({ value: '', disabled: !this.hasPermission }),
+      password: new FormControl({ value: '', disabled: !this.hasPermission }),
+      mutual_user: new FormControl({ value: '', disabled: !this.hasPermission }),
+      mutual_password: new FormControl({ value: '', disabled: !this.hasPermission })
     });
 
     CdValidators.validateIf(
@@ -89,19 +106,12 @@ export class IscsiTargetDiscoveryModalComponent implements OnInit {
     );
   }
 
-  ngOnInit() {
-    this.iscsiService.getDiscovery().subscribe((auth) => {
-      this.discoveryForm.patchValue(auth);
-    });
-  }
-
   submitAction() {
     this.iscsiService.updateDiscovery(this.discoveryForm.value).subscribe(
       () => {
         this.notificationService.show(
           NotificationType.success,
-          this.i18n('Discovery authentication was updated.'),
-          this.i18n('Discovery authentication')
+          this.i18n('Updated discovery authentication')
         );
         this.bsModalRef.hide();
       },

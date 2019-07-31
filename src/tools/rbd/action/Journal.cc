@@ -378,7 +378,7 @@ class Journaler : public ::journal::Journaler {
 public:
   Journaler(librados::IoCtx& io_ctx, const std::string& journal_id,
 	    const std::string &client_id) :
-    ::journal::Journaler(io_ctx, journal_id, client_id, {}) {
+    ::journal::Journaler(io_ctx, journal_id, client_id, {}, nullptr) {
   }
 
   int init() {
@@ -832,7 +832,7 @@ public:
     if (r < 0) {
       return r;
     }
-    m_journaler.start_append(0, 0, 0, 0);
+    m_journaler.start_append(0);
 
     int r1 = 0;
     bufferlist bl;
@@ -856,9 +856,9 @@ public:
       ExportEntry e;
       try {
 	decode_json_obj(e, &p);
-      } catch (JSONDecoder::err& err) {
+      } catch (const JSONDecoder::err& err) {
 	std::cerr << "rbd: error json decoding import data (entry " << n << "):"
-		  << err.message << std::endl;
+		  << err.what() << std::endl;
 	r = -EINVAL;
 	if (m_no_error) {
 	  r1 = r;

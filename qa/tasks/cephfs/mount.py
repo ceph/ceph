@@ -111,6 +111,28 @@ class CephFSMount(object):
                 return True
         return False
 
+    def create_file(self, filename='testfile', dirname=None, user=None,
+                    check_status=True):
+        assert(self.is_mounted())
+
+        if not os.path.isabs(filename):
+            if dirname:
+                if os.path.isabs(dirname):
+                    path = os.path.join(dirname, filename)
+                else:
+                    path = os.path.join(self.mountpoint, dirname, filename)
+            else:
+                path = os.path.join(self.mountpoint, filename)
+        else:
+            path = filename
+
+        if user:
+            args = ['sudo', '-u', user, '-s', '/bin/bash', '-c', 'touch ' + path]
+        else:
+            args = 'touch ' + path
+
+        return self.client_remote.run(args=args, check_status=check_status)
+
     def create_files(self):
         assert(self.is_mounted())
 
@@ -119,6 +141,11 @@ class CephFSMount(object):
             self.client_remote.run(args=[
                 'sudo', 'touch', os.path.join(self.mountpoint, suffix)
             ])
+
+    def test_create_file(self, filename='testfile', dirname=None, user=None,
+                         check_status=True):
+        return self.create_file(filename=filename, dirname=dirname, user=user,
+                                check_status=False)
 
     def check_files(self):
         assert(self.is_mounted())
@@ -155,10 +182,16 @@ class CephFSMount(object):
         p.wait()
         return p.stdout.getvalue().strip()
 
-    def run_shell(self, args, wait=True):
+    def run_shell(self, args, wait=True, stdin=None, check_status=True,
+                  omit_sudo=True):
+        if isinstance(args, str):
+            args = args.split()
+
         args = ["cd", self.mountpoint, run.Raw('&&'), "sudo"] + args
         return self.client_remote.run(args=args, stdout=StringIO(),
-                                      stderr=StringIO(), wait=wait)
+                                      stderr=StringIO(), wait=wait,
+                                      stdin=stdin, check_status=check_status,
+                                      omit_sudo=omit_sudo)
 
     def open_no_data(self, basename):
         """
@@ -175,7 +208,7 @@ class CephFSMount(object):
         ))
         p.wait()
 
-    def open_background(self, basename="background_file"):
+    def open_background(self, basename="background_file", write=True):
         """
         Open a file for writing, then block such that the client
         will hold a capability.
@@ -187,16 +220,25 @@ class CephFSMount(object):
 
         path = os.path.join(self.mountpoint, basename)
 
-        pyscript = dedent("""
-            import time
+        if write:
+            pyscript = dedent("""
+                import time
 
-            f = open("{path}", 'w')
-            f.write('content')
-            f.flush()
-            f.write('content2')
-            while True:
-                time.sleep(1)
-            """).format(path=path)
+                f = open("{path}", 'w')
+                f.write('content')
+                f.flush()
+                f.write('content2')
+                while True:
+                    time.sleep(1)
+                """).format(path=path)
+        else:
+            pyscript = dedent("""
+                import time
+
+                f = open("{path}", 'r')
+                while True:
+                    time.sleep(1)
+                """).format(path=path)
 
         rproc = self._run_python(pyscript)
         self.background_procs.append(rproc)
@@ -207,6 +249,22 @@ class CephFSMount(object):
         self.wait_for_visible(basename)
 
         return rproc
+
+    def wait_for_dir_empty(self, dirname, timeout=30):
+        i = 0
+        dirpath = os.path.join(self.mountpoint, dirname)
+        while i < timeout:
+            nr_entries = int(self.getfattr(dirpath, "ceph.dir.entries"))
+            if nr_entries == 0:
+                log.debug("Directory {0} seen empty from {1} after {2}s ".format(
+                    dirname, self.client_id, i))
+                return
+            else:
+                time.sleep(1)
+                i += 1
+
+        raise RuntimeError("Timed out after {0}s waiting for {1} to become empty from {2}".format(
+            i, dirname, self.client_id))
 
     def wait_for_visible(self, basename="background_file", timeout=30):
         i = 0
@@ -476,6 +534,14 @@ class CephFSMount(object):
         """
         self._kill_background(p)
         self.background_procs.remove(p)
+
+    def send_signal(self, signal):
+        signal = signal.lower()
+        if signal.lower() not in ['sigstop', 'sigcont', 'sigterm', 'sigkill']:
+            raise NotImplementedError
+
+        self.client_remote.run(args=['sudo', 'kill', '-{0}'.format(signal),
+                                self.client_pid], omit_sudo=False)
 
     def get_global_id(self):
         raise NotImplementedError()

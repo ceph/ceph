@@ -50,8 +50,6 @@ typedef boost::mt11213b gen_type;
 #define dout_prefix *_dout << " ceph_test_msgr "
 
 
-#if GTEST_HAS_PARAM_TEST
-
 #define CHECK_AND_WAIT_TRUE(expr) do {  \
   int n = 1000;                         \
   while (--n) {                         \
@@ -81,6 +79,7 @@ class MessengerTest : public ::testing::TestWithParam<const char*> {
     server_msgr->set_auth_server(&dummy_auth);
     client_msgr->set_auth_client(&dummy_auth);
     client_msgr->set_auth_server(&dummy_auth);
+    server_msgr->set_require_authorizer(false);
   }
   void TearDown() override {
     ASSERT_EQ(server_msgr->get_dispatch_queue_len(), 0);
@@ -115,8 +114,6 @@ class FakeDispatcher : public Dispatcher {
   explicit FakeDispatcher(bool s): Dispatcher(g_ceph_context), lock("FakeDispatcher::lock"),
                           is_server(s), got_new(false), got_remote_reset(false),
                           got_connect(false), loopback(false) {
-    // don't need authorizers
-    ms_set_require_authorizer(false);
   }
   bool ms_can_fast_dispatch_any() const override { return true; }
   bool ms_can_fast_dispatch(const Message *m) const override {
@@ -339,10 +336,6 @@ struct TestInterceptor : public Interceptor {
  * Scenario: A connects to B, and B connects to A at the same time.
  */ 
 TEST_P(MessengerTest, ConnectionRaceTest) {
-  if (string(GetParam()) == "simple") {
-    return;
-  }
-
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(false);
 
   TestInterceptor *cli_interceptor = new TestInterceptor();
@@ -431,10 +424,6 @@ TEST_P(MessengerTest, ConnectionRaceTest) {
  *    - A reconnects
  */ 
 TEST_P(MessengerTest, MissingServerIdenTest) {
-  if (string(GetParam()) == "simple") {
-    return;
-  }
-
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(false);
 
   TestInterceptor *cli_interceptor = new TestInterceptor();
@@ -515,10 +504,6 @@ TEST_P(MessengerTest, MissingServerIdenTest) {
  *    - B reconnects to A
  */ 
 TEST_P(MessengerTest, MissingServerIdenTest2) {
-  if (string(GetParam()) == "simple") {
-    return;
-  }
-
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(false);
 
   TestInterceptor *cli_interceptor = new TestInterceptor();
@@ -590,10 +575,6 @@ TEST_P(MessengerTest, MissingServerIdenTest2) {
  *    - A reconnects
  */ 
 TEST_P(MessengerTest, ReconnectTest) {
-  if (string(GetParam()) == "simple") {
-    return;
-  }
-
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
 
   TestInterceptor *cli_interceptor = new TestInterceptor();
@@ -692,10 +673,6 @@ TEST_P(MessengerTest, ReconnectTest) {
  *    - A reconnects // B reconnects
  */ 
 TEST_P(MessengerTest, ReconnectRaceTest) {
-  if (string(GetParam()) == "simple") {
-    return;
-  }
-
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
 
   TestInterceptor *cli_interceptor = new TestInterceptor();
@@ -817,10 +794,7 @@ TEST_P(MessengerTest, ReconnectRaceTest) {
 TEST_P(MessengerTest, SimpleTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   server_msgr->bind(bind_addr);
   server_msgr->add_dispatcher_head(&srv_dispatcher);
   server_msgr->start();
@@ -991,10 +965,7 @@ TEST_P(MessengerTest, SimpleMsgr2Test) {
 TEST_P(MessengerTest, NameAddrTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   server_msgr->bind(bind_addr);
   server_msgr->add_dispatcher_head(&srv_dispatcher);
   server_msgr->start();
@@ -1028,10 +999,7 @@ TEST_P(MessengerTest, NameAddrTest) {
 TEST_P(MessengerTest, FeatureTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   uint64_t all_feature_supported, feature_required, feature_supported = 0;
   for (int i = 0; i < 10; i++)
     feature_supported |= 1ULL << i;
@@ -1090,13 +1058,10 @@ TEST_P(MessengerTest, FeatureTest) {
 }
 
 TEST_P(MessengerTest, TimeoutTest) {
-  g_ceph_context->_conf.set_val("ms_tcp_read_timeout", "1");
+  g_ceph_context->_conf.set_val("ms_connection_idle_timeout", "1");
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   server_msgr->bind(bind_addr);
   server_msgr->add_dispatcher_head(&srv_dispatcher);
   server_msgr->start();
@@ -1128,17 +1093,14 @@ TEST_P(MessengerTest, TimeoutTest) {
 
   client_msgr->shutdown();
   client_msgr->wait();
-  g_ceph_context->_conf.set_val("ms_tcp_read_timeout", "900");
+  g_ceph_context->_conf.set_val("ms_connection_idle_timeout", "900");
 }
 
 TEST_P(MessengerTest, StatefulTest) {
   Message *m;
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   Messenger::Policy p = Messenger::Policy::stateful_server(0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
   p = Messenger::Policy::lossless_client(0);
@@ -1238,10 +1200,7 @@ TEST_P(MessengerTest, StatelessTest) {
   Message *m;
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   Messenger::Policy p = Messenger::Policy::stateless_server(0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
   p = Messenger::Policy::lossy_client(0);
@@ -1318,10 +1277,7 @@ TEST_P(MessengerTest, ClientStandbyTest) {
   Message *m;
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   Messenger::Policy p = Messenger::Policy::stateful_server(0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
   p = Messenger::Policy::lossless_peer(0);
@@ -1394,10 +1350,7 @@ TEST_P(MessengerTest, AuthTest) {
   g_ceph_context->_conf.set_val("auth_client_required", "cephx");
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   server_msgr->bind(bind_addr);
   server_msgr->add_dispatcher_head(&srv_dispatcher);
   server_msgr->start();
@@ -1446,10 +1399,7 @@ TEST_P(MessengerTest, AuthTest) {
 TEST_P(MessengerTest, MessageTest) {
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1");
-  else
-    bind_addr.parse("v2:127.0.0.1");
+  bind_addr.parse("v2:127.0.0.1");
   Messenger::Policy p = Messenger::Policy::stateful_server(0);
   server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
   p = Messenger::Policy::lossless_peer(0);
@@ -1556,8 +1506,6 @@ class SyntheticDispatcher : public Dispatcher {
   SyntheticDispatcher(bool s, SyntheticWorkload *wl):
       Dispatcher(g_ceph_context), lock("SyntheticDispatcher::lock"), is_server(s), got_new(false),
       got_remote_reset(false), got_connect(false), index(0), workload(wl) {
-    // don't need authorizers
-    ms_set_require_authorizer(false);
   }
   bool ms_can_fast_dispatch_any() const override { return true; }
   bool ms_can_fast_dispatch(const Message *m) const override {
@@ -1722,8 +1670,7 @@ class SyntheticWorkload {
     for (int i = 0; i < servers; ++i) {
       msgr = Messenger::create(g_ceph_context, type, entity_name_t::OSD(0),
                                "server", getpid()+i, 0);
-      snprintf(addr, sizeof(addr), "%s127.0.0.1:%d",
-	       (type == "simple") ? "v1:":"v2:",
+      snprintf(addr, sizeof(addr), "v2:127.0.0.1:%d",
 	       base_port+i);
       bind_addr.parse(addr);
       msgr->bind(bind_addr);
@@ -1741,8 +1688,7 @@ class SyntheticWorkload {
       msgr = Messenger::create(g_ceph_context, type, entity_name_t::CLIENT(-1),
                                "client", getpid()+i+servers, 0);
       if (cli_policy.standby) {
-        snprintf(addr, sizeof(addr), "%s127.0.0.1:%d",
-		 (type == "simple") ? "v1:":"v2:",
+        snprintf(addr, sizeof(addr), "v2:127.0.0.1:%d",
 		 base_port+i+servers);
         bind_addr.parse(addr);
         msgr->bind(bind_addr);
@@ -2136,8 +2082,6 @@ class MarkdownDispatcher : public Dispatcher {
   std::atomic<uint64_t> count = { 0 };
   explicit MarkdownDispatcher(bool s): Dispatcher(g_ceph_context), lock("MarkdownDispatcher::lock"),
                               last_mark(false) {
-    // don't need authorizers
-    ms_set_require_authorizer(false);
   }
   bool ms_can_fast_dispatch_any() const override { return false; }
   bool ms_can_fast_dispatch(const Message *m) const override {
@@ -2213,19 +2157,13 @@ TEST_P(MessengerTest, MarkdownTest) {
   DummyAuthClientServer dummy_auth(g_ceph_context);
   dummy_auth.auth_registry.refresh_config();
   entity_addr_t bind_addr;
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1:16800");
-  else
-    bind_addr.parse("v2:127.0.0.1:16800");
+  bind_addr.parse("v2:127.0.0.1:16800");
   server_msgr->bind(bind_addr);
   server_msgr->add_dispatcher_head(&srv_dispatcher);
   server_msgr->set_auth_client(&dummy_auth);
   server_msgr->set_auth_server(&dummy_auth);
   server_msgr->start();
-  if (string(GetParam()) == "simple")
-    bind_addr.parse("v1:127.0.0.1:16801");
-  else
-    bind_addr.parse("v2:127.0.0.1:16801");
+  bind_addr.parse("v2:127.0.0.1:16801");
   server_msgr2->bind(bind_addr);
   server_msgr2->add_dispatcher_head(&srv_dispatcher);
   server_msgr2->set_auth_client(&dummy_auth);
@@ -2273,27 +2211,13 @@ TEST_P(MessengerTest, MarkdownTest) {
   delete server_msgr2;
 }
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   Messenger,
   MessengerTest,
   ::testing::Values(
-    "async+posix",
-    "simple"
+    "async+posix"
   )
 );
-
-#else
-
-// Google Test may not support value-parameterized tests with some
-// compilers. If we use conditional compilation to compile out all
-// code referring to the gtest_main library, MSVC linker will not link
-// that library at all and consequently complain about missing entry
-// point defined in that library (fatal error LNK1561: entry point
-// must be defined). This dummy test keeps gtest_main linked in.
-TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
-
-#endif
-
 
 int main(int argc, char **argv) {
   vector<const char*> args;

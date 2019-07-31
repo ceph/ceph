@@ -6,24 +6,18 @@
 
 #include "include/int_types.h"
 #include "include/buffer.h"
-#include "common/WorkQueue.h"
-#include "librbd/ObjectMap.h"
 #include "include/rados/librados.hpp"
-#include "include/rbd_types.h"
-#include "cls/rbd/cls_rbd_types.h"
 #include "include/rbd/librbd.hpp"
+#include "cls/rbd/cls_rbd_types.h"
 #include "librbd/ImageCtx.h"
-#include "common/Timer.h"
-#include "librbd/journal/TypeTraits.h"
 
 class ConfigProxy;
 class Context;
+class ContextWQ;
 
 using librados::IoCtx;
 
-namespace journal {
-  class Journaler;
-}
+namespace journal { class Journaler; }
 
 namespace librbd {
 namespace image {

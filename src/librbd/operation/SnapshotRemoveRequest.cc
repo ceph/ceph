@@ -38,8 +38,7 @@ void SnapshotRemoveRequest<I>::send_op() {
 
   ceph_assert(image_ctx.owner_lock.is_locked());
   {
-    RWLock::RLocker snap_locker(image_ctx.snap_lock);
-    RWLock::RLocker object_map_locker(image_ctx.object_map_lock);
+    RWLock::RLocker image_locker(image_ctx.image_lock);
     if (image_ctx.snap_info.find(m_snap_id) == image_ctx.snap_info.end()) {
       lderr(cct) << "snapshot doesn't exist" << dendl;
       this->async_complete(-ENOENT);
@@ -55,7 +54,7 @@ bool SnapshotRemoveRequest<I>::should_complete(int r) {
   I &image_ctx = this->m_image_ctx;
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << "r=" << r << dendl;
-  if (r < 0) {
+  if (r < 0 && r != -EBUSY) {
     lderr(cct) << "encountered error: " << cpp_strerror(r) << dendl;
   }
   return true;
@@ -159,8 +158,7 @@ void SnapshotRemoveRequest<I>::detach_child() {
 
   bool detach_child = false;
   {
-    RWLock::RLocker snap_locker(image_ctx.snap_lock);
-    RWLock::RLocker parent_locker(image_ctx.parent_lock);
+    RWLock::RLocker image_locker(image_ctx.image_lock);
 
     cls::rbd::ParentImageSpec our_pspec;
     int r = image_ctx.get_parent_spec(m_snap_id, &our_pspec);
@@ -226,8 +224,7 @@ void SnapshotRemoveRequest<I>::remove_object_map() {
 
   {
     RWLock::RLocker owner_lock(image_ctx.owner_lock);
-    RWLock::WLocker snap_locker(image_ctx.snap_lock);
-    RWLock::RLocker object_map_locker(image_ctx.object_map_lock);
+    RWLock::WLocker image_locker(image_ctx.image_lock);
     if (image_ctx.object_map != nullptr) {
       ldout(cct, 5) << dendl;
 
@@ -333,7 +330,7 @@ void SnapshotRemoveRequest<I>::remove_snap_context() {
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << dendl;
 
-  RWLock::WLocker snap_locker(image_ctx.snap_lock);
+  RWLock::WLocker image_locker(image_ctx.image_lock);
   image_ctx.rm_snap(m_snap_namespace, m_snap_name, m_snap_id);
 }
 
@@ -341,8 +338,7 @@ template <typename I>
 int SnapshotRemoveRequest<I>::scan_for_parents(
     cls::rbd::ParentImageSpec &pspec) {
   I &image_ctx = this->m_image_ctx;
-  ceph_assert(image_ctx.snap_lock.is_locked());
-  ceph_assert(image_ctx.parent_lock.is_locked());
+  ceph_assert(image_ctx.image_lock.is_locked());
 
   if (pspec.pool_id != -1) {
     map<uint64_t, SnapInfo>::iterator it;

@@ -7,7 +7,6 @@ import {
   RbdConfigurationSection,
   RbdConfigurationType
 } from '../models/configuration';
-import { ServicesModule } from './services.module';
 
 /**
  * Define here which options should be made available under which section heading.
@@ -15,7 +14,7 @@ import { ServicesModule } from './services.module';
  * this information.
  */
 @Injectable({
-  providedIn: ServicesModule
+  providedIn: 'root'
 })
 export class RbdConfigurationService {
   readonly sections: RbdConfigurationSection[];

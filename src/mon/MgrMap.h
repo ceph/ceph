@@ -18,9 +18,10 @@
 #include <set>
 
 #include "msg/msg_types.h"
-#include "common/Formatter.h"
 #include "include/encoding.h"
 #include "include/utime.h"
+#include "common/Formatter.h"
+#include "common/ceph_releases.h"
 #include "common/version.h"
 #include "common/options.h"
 #include "common/Clock.h"
@@ -41,7 +42,7 @@ public:
     std::set<std::string> tags;
     std::set<std::string> see_also;
 
-    void encode(bufferlist& bl) const {
+    void encode(ceph::buffer::list& bl) const {
       ENCODE_START(1, 1, bl);
       encode(name, bl);
       encode(type, bl);
@@ -57,7 +58,7 @@ public:
       encode(see_also, bl);
       ENCODE_FINISH(bl);
     }
-    void decode(bufferlist::const_iterator& p) {
+    void decode(ceph::buffer::list::const_iterator& p) {
       DECODE_START(1, p);
       decode(name, p);
       decode(type, p);
@@ -73,7 +74,7 @@ public:
       decode(see_also, p);
       DECODE_FINISH(p);
     }
-    void dump(Formatter *f) const {
+    void dump(ceph::Formatter *f) const {
       f->dump_string("name", name);
       f->dump_string("type", Option::type_to_str(
 		       static_cast<Option::type_t>(type)));
@@ -113,7 +114,7 @@ public:
 
     // We do not include the module's `failed` field in the beacon,
     // because it is exposed via health checks.
-    void encode(bufferlist &bl) const {
+    void encode(ceph::buffer::list &bl) const {
       ENCODE_START(2, 1, bl);
       encode(name, bl);
       encode(can_run, bl);
@@ -122,7 +123,7 @@ public:
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::const_iterator &bl) {
+    void decode(ceph::buffer::list::const_iterator &bl) {
       DECODE_START(1, bl);
       decode(name, bl);
       decode(can_run, bl);
@@ -138,7 +139,7 @@ public:
       return (name == rhs.name) && (can_run == rhs.can_run);
     }
 
-    void dump(Formatter *f) const {
+    void dump(ceph::Formatter *f) const {
       f->open_object_section("module");
       f->dump_string("name", name);
       f->dump_bool("can_run", can_run);
@@ -168,7 +169,7 @@ public:
       : gid(0)
     {}
 
-    void encode(bufferlist& bl) const
+    void encode(ceph::buffer::list& bl) const
     {
       ENCODE_START(3, 1, bl);
       encode(gid, bl);
@@ -182,7 +183,7 @@ public:
       ENCODE_FINISH(bl);
     }
 
-    void decode(bufferlist::const_iterator& p)
+    void decode(ceph::buffer::list::const_iterator& p)
     {
       DECODE_START(3, p);
       decode(gid, p);
@@ -316,7 +317,7 @@ public:
     return false;
   }
 
-  bool have_name(const string& name) const {
+  bool have_name(const std::string& name) const {
     if (active_name == name) {
       return true;
     }
@@ -340,13 +341,13 @@ public:
   }
 
   std::set<std::string> get_always_on_modules() const {
-    auto it = always_on_modules.find(ceph_release());
+    auto it = always_on_modules.find(ceph::to_integer<uint32_t>(ceph_release()));
     if (it == always_on_modules.end())
       return {};
     return it->second;
   }
 
-  void encode(bufferlist& bl, uint64_t features) const
+  void encode(ceph::buffer::list& bl, uint64_t features) const
   {
     if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
       ENCODE_START(5, 1, bl);
@@ -358,7 +359,7 @@ public:
       encode(standbys, bl);
       encode(modules, bl);
 
-      // Pre-version 4 string list of available modules
+      // Pre-version 4 std::string std::list of available modules
       // (replaced by direct encode of ModuleInfo below)
       std::set<std::string> old_available_modules;
       for (const auto &i : available_modules) {
@@ -387,7 +388,7 @@ public:
     return;
   }
 
-  void decode(bufferlist::const_iterator& p)
+  void decode(ceph::buffer::list::const_iterator& p)
   {
     DECODE_START(7, p);
     decode(epoch, p);
@@ -431,7 +432,7 @@ public:
     DECODE_FINISH(p);
   }
 
-  void dump(Formatter *f) const {
+  void dump(ceph::Formatter *f) const {
     f->dump_int("epoch", epoch);
     f->dump_int("active_gid", get_active_gid());
     f->dump_string("active_name", get_active_name());
@@ -480,11 +481,11 @@ public:
     f->close_section();
   }
 
-  static void generate_test_instances(list<MgrMap*> &l) {
+  static void generate_test_instances(std::list<MgrMap*> &l) {
     l.push_back(new MgrMap);
   }
 
-  void print_summary(Formatter *f, std::ostream *ss) const
+  void print_summary(ceph::Formatter *f, std::ostream *ss) const
   {
     // One or the other, not both
     ceph_assert((ss != nullptr) != (f != nullptr));
@@ -524,13 +525,13 @@ public:
     }
   }
 
-  friend ostream& operator<<(ostream& out, const MgrMap& m) {
-    ostringstream ss;
+  friend std::ostream& operator<<(std::ostream& out, const MgrMap& m) {
+    std::ostringstream ss;
     m.print_summary(nullptr, &ss);
     return out << ss.str();
   }
 
-  friend ostream& operator<<(ostream& out, const std::vector<ModuleInfo>& mi) {
+  friend std::ostream& operator<<(std::ostream& out, const std::vector<ModuleInfo>& mi) {
     for (const auto &i : mi) {
       out << i.name << " ";
     }

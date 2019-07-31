@@ -18,13 +18,11 @@
  *
  */
 
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <errno.h>
+#include <cstdio>
+#include <cstdlib>
+#include <cstring>
+#include <cerrno>
 #include <algorithm>
-using namespace std;
-
 #include "common/debug.h"
 #include "ErasureCodeShec.h"
 extern "C" {
@@ -39,6 +37,10 @@ extern int* reed_sol_vandermonde_coding_matrix(int k, int m, int w);
 #define dout_subsys ceph_subsys_osd
 #undef dout_prefix
 #define dout_prefix _prefix(_dout)
+
+using namespace std;
+using namespace ceph;
+
 
 static ostream& _prefix(std::ostream* _dout)
 {

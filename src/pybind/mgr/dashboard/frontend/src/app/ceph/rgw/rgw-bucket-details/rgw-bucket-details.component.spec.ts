@@ -2,7 +2,7 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 
 import { TabsModule } from 'ngx-bootstrap/tabs';
 
-import { configureTestBed } from '../../../../testing/unit-test-helper';
+import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../shared/shared.module';
 import { RgwBucketDetailsComponent } from './rgw-bucket-details.component';
@@ -13,7 +13,8 @@ describe('RgwBucketDetailsComponent', () => {
 
   configureTestBed({
     declarations: [RgwBucketDetailsComponent],
-    imports: [SharedModule, TabsModule.forRoot()]
+    imports: [SharedModule, TabsModule.forRoot()],
+    providers: [i18nProviders]
   });
 
   beforeEach(() => {

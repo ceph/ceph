@@ -10,17 +10,22 @@
 #include "include/buffer.h"
 #include "kv/KeyValueDB.h"
 
-StoreTool::StoreTool(const string& type, const string& path, bool need_open_db)
+StoreTool::StoreTool(const string& type,
+		     const string& path,
+		     bool need_open_db,
+		     bool need_stats)
   : store_path(path)
 {
+
+  if (need_stats) {
+    g_conf()->rocksdb_perf = true;
+    g_conf()->rocksdb_collect_compaction_stats = true;
+  }
+
   if (type == "bluestore-kv") {
 #ifdef WITH_BLUESTORE
-    auto bluestore = new BlueStore(g_ceph_context, path);
-    KeyValueDB *db_ptr;
-    if (int r = bluestore->start_kv_only(&db_ptr, need_open_db); r < 0) {
+    if (load_bluestore(path, need_open_db) != 0)
       exit(1);
-    }
-    db = decltype(db){db_ptr, Deleter(bluestore)};
 #else
     cerr << "bluestore not compiled in" << std::endl;
     exit(1);
@@ -36,6 +41,18 @@ StoreTool::StoreTool(const string& type, const string& path, bool need_open_db)
       db.reset(db_ptr);
     }
   }
+}
+
+int StoreTool::load_bluestore(const string& path, bool need_open_db)
+{
+    auto bluestore = new BlueStore(g_ceph_context, path);
+    KeyValueDB *db_ptr;
+    int r = bluestore->start_kv_only(&db_ptr, need_open_db);
+    if (r < 0) {
+     return -EINVAL;
+    }
+    db = decltype(db){db_ptr, Deleter(bluestore)};
+    return 0;
 }
 
 uint32_t StoreTool::traverse(const string& prefix,
@@ -179,6 +196,38 @@ bool StoreTool::rm_prefix(const string& prefix)
   return (ret == 0);
 }
 
+void StoreTool::print_summary(const uint64_t total_keys, const uint64_t total_size,
+                              const uint64_t total_txs, const string& store_path,
+                              const string& other_path, const int duration) const
+{
+  std::cout << "summary:" << std::endl;
+  std::cout << "  copied " << total_keys << " keys" << std::endl;
+  std::cout << "  used " << total_txs << " transactions" << std::endl;
+  std::cout << "  total size " << byte_u_t(total_size) << std::endl;
+  std::cout << "  from '" << store_path << "' to '" << other_path << "'"
+            << std::endl;
+  std::cout << "  duration " << duration << " seconds" << std::endl;
+}
+
+int StoreTool::print_stats() const
+{
+  ostringstream ostr;
+  Formatter* f = Formatter::create("json-pretty", "json-pretty", "json-pretty");
+  int ret = -1;
+  if (g_conf()->rocksdb_perf) {
+    db->get_statistics(f);
+    ostr << "db_statistics ";
+    f->flush(ostr);
+    ret = 0;
+  } else {
+    ostr << "db_statistics not enabled";
+    f->flush(ostr);
+  }
+  std::cout <<  ostr.str() << std::endl;
+  delete f;
+  return ret;
+}
+
 int StoreTool::copy_store_to(const string& type, const string& other_path,
                              const int num_keys_per_tx,
                              const string& other_type)
@@ -238,13 +287,8 @@ int StoreTool::copy_store_to(const string& type, const string& other_path,
 
   } while (it->valid());
 
-  std::cout << "summary:" << std::endl;
-  std::cout << "  copied " << total_keys << " keys" << std::endl;
-  std::cout << "  used " << total_txs << " transactions" << std::endl;
-  std::cout << "  total size " << byte_u_t(total_size) << std::endl;
-  std::cout << "  from '" << store_path << "' to '" << other_path << "'"
-            << std::endl;
-  std::cout << "  duration " << duration() << " seconds" << std::endl;
+  print_summary(total_keys, total_size, total_txs, store_path, other_path,
+                duration());
 
   return 0;
 }

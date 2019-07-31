@@ -523,8 +523,9 @@ public:
   }
   void put_xlock() {
     ceph_assert(state == LOCK_XLOCK || state == LOCK_XLOCKDONE ||
-	   state == LOCK_XLOCKSNAP || is_locallock() ||
-	   state == LOCK_LOCK /* if we are a master of a slave */);
+	   state == LOCK_XLOCKSNAP || state == LOCK_LOCK_XLOCK ||
+	   state == LOCK_LOCK  || /* if we are a master of a slave */
+	   is_locallock());
     --more()->num_xlock;
     parent->put(MDSCacheObject::PIN_LOCK);
     if (more()->num_xlock == 0) {
@@ -560,10 +561,6 @@ public:
   void put_client_lease() {
     ceph_assert(is_leased());
     state_flags &= ~LEASED;
-  }
-
-  bool is_used() const {
-    return is_xlocked() || is_rdlocked() || is_wrlocked() || is_leased();
   }
 
   bool needs_recover() const {
@@ -656,15 +653,6 @@ public:
     state = get_replica_state();
   }
 
-  /** replicate_relax
-   * called on first replica creation.
-   */
-  void replicate_relax() {
-    ceph_assert(parent->is_auth());
-    ceph_assert(!parent->is_replicated());
-    if (state == LOCK_LOCK && !is_used())
-      state = LOCK_SYNC;
-  }
   bool remove_replica(int from) {
     if (is_gathering(from)) {
       remove_gather(from);

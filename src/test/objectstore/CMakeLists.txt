@@ -124,7 +124,7 @@ endif(WITH_BLUESTORE)
 add_executable(unittest_transaction
   test_transaction.cc)
 add_ceph_unittest(unittest_transaction)
-target_link_libraries(unittest_transaction os ceph-common ${XIO_LIBRARY})
+target_link_libraries(unittest_transaction os ceph-common)
 
 # unittest_memstore_clone
 add_executable(unittest_memstore_clone
@@ -132,3 +132,9 @@ add_executable(unittest_memstore_clone
   $<TARGET_OBJECTS:store_test_fixture>)
 add_ceph_unittest(unittest_memstore_clone)
 target_link_libraries(unittest_memstore_clone os global)
+
+add_executable(ceph_test_bmap_alloc_replay
+  bmap_allocator_replay_test.cc)
+target_link_libraries(ceph_test_bmap_alloc_replay os global ${UNITTEST_LIBS})
+install(TARGETS ceph_test_bmap_alloc_replay
+  DESTINATION bin)

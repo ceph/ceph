@@ -4,10 +4,13 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
+import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { PoolService } from '../../../shared/api/pool.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../shared/enum/cell-template.enum';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
 import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
@@ -19,13 +22,20 @@ import { DimlessPipe } from '../../../shared/pipes/dimless.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { TaskListService } from '../../../shared/services/task-list.service';
 import { TaskWrapperService } from '../../../shared/services/task-wrapper.service';
+import { URLBuilderService } from '../../../shared/services/url-builder.service';
 import { PgCategoryService } from '../../shared/pg-category.service';
 import { Pool } from '../pool';
+import { PoolStats } from '../pool-stat';
+
+const BASE_URL = 'pool';
 
 @Component({
   selector: 'cd-pool-list',
   templateUrl: './pool-list.component.html',
-  providers: [TaskListService],
+  providers: [
+    TaskListService,
+    { provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }
+  ],
   styleUrls: ['./pool-list.component.scss']
 })
 export class PoolListComponent implements OnInit {
@@ -46,6 +56,7 @@ export class PoolListComponent implements OnInit {
   tableActions: CdTableAction[];
   viewCacheStatusList: any[];
   selectionCacheTiers: any[] = [];
+  monAllowPoolDelete = false;
 
   constructor(
     private poolService: PoolService,
@@ -55,32 +66,49 @@ export class PoolListComponent implements OnInit {
     private modalService: BsModalService,
     private i18n: I18n,
     private pgCategoryService: PgCategoryService,
-    private dimlessPipe: DimlessPipe
+    private dimlessPipe: DimlessPipe,
+    private urlBuilder: URLBuilderService,
+    private configurationService: ConfigurationService,
+    public actionLabels: ActionLabelsI18n
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.tableActions = [
       {
         permission: 'create',
-        icon: 'fa-plus',
-        routerLink: () => '/pool/add',
-        name: this.i18n('Add')
+        icon: Icons.add,
+        routerLink: () => this.urlBuilder.getCreate(),
+        name: this.actionLabels.CREATE
       },
       {
         permission: 'update',
-        icon: 'fa-pencil',
-        routerLink: () => '/pool/edit/' + encodeURIComponent(this.selection.first().pool_name),
-        name: this.i18n('Edit')
+        icon: Icons.edit,
+        routerLink: () =>
+          this.urlBuilder.getEdit(encodeURIComponent(this.selection.first().pool_name)),
+        name: this.actionLabels.EDIT
       },
       {
         permission: 'delete',
-        icon: 'fa-trash-o',
+        icon: Icons.destroy,
         click: () => this.deletePoolModal(),
-        name: this.i18n('Delete')
+        name: this.actionLabels.DELETE,
+        disable: () => !this.selection.first() || !this.monAllowPoolDelete,
+        disableDesc: () => this.getDisableDesc()
       }
     ];
+
+    this.configurationService.get('mon_allow_pool_delete').subscribe((data: any) => {
+      if (_.has(data, 'value')) {
+        const monSection = _.find(data.value, (v) => {
+          return v.section === 'mon';
+        }) || { value: false };
+        this.monAllowPoolDelete = monSection.value === 'true' ? true : false;
+      }
+    });
   }
 
   ngOnInit() {
+    const compare = (prop: string, pool1: Pool, pool2: Pool) =>
+      _.get(pool1, prop) > _.get(pool2, prop) ? 1 : -1;
     this.columns = [
       {
         prop: 'pool_name',
@@ -103,7 +131,7 @@ export class PoolListComponent implements OnInit {
         name: this.i18n('PG Status'),
         flexGrow: 3,
         cellClass: ({ row, column, value }): any => {
-          return this.getPgStatusCellClass({ row, column, value });
+          return this.getPgStatusCellClass(row, column, value);
         }
       },
       {
@@ -128,16 +156,25 @@ export class PoolListComponent implements OnInit {
         name: this.i18n('Crush Ruleset'),
         flexGrow: 3
       },
-      { name: this.i18n('Usage'), cellTemplate: this.poolUsageTpl, flexGrow: 3 },
       {
-        prop: 'stats.rd_bytes.series',
+        name: this.i18n('Usage'),
+        prop: 'usage',
+        cellTemplate: this.poolUsageTpl,
+        flexGrow: 3
+      },
+      {
+        prop: 'stats.rd_bytes.rates',
         name: this.i18n('Read bytes'),
+        comparator: (_valueA, _valueB, rowA: Pool, rowB: Pool) =>
+          compare('stats.rd_bytes.latest', rowA, rowB),
         cellTransformation: CellTemplate.sparkline,
         flexGrow: 3
       },
       {
-        prop: 'stats.wr_bytes.series',
+        prop: 'stats.wr_bytes.rates',
         name: this.i18n('Write bytes'),
+        comparator: (_valueA, _valueB, rowA: Pool, rowB: Pool) =>
+          compare('stats.wr_bytes.latest', rowA, rowB),
         cellTransformation: CellTemplate.sparkline,
         flexGrow: 3
       },
@@ -165,7 +202,7 @@ export class PoolListComponent implements OnInit {
         this.table.reset(); // Disable loading indicator.
         this.viewCacheStatusList = [{ status: ViewCacheStatus.ValueException }];
       },
-      (task) => task.name.startsWith('pool/'),
+      (task) => task.name.startsWith(`${BASE_URL}/`),
       (pool, task) => task.metadata['pool_name'] === pool.pool_name,
       { default: (task: ExecutingTask) => new Pool(task.metadata['pool_name']) }
     );
@@ -183,14 +220,14 @@ export class PoolListComponent implements OnInit {
         itemDescription: 'Pool',
         submitActionObservable: () =>
           this.taskWrapper.wrapTaskAroundCall({
-            task: new FinishedTask('pool/delete', { pool_name: name }),
+            task: new FinishedTask(`${BASE_URL}/${URLVerbs.DELETE}`, { pool_name: name }),
             call: this.poolService.delete(name)
           })
       }
     });
   }
 
-  getPgStatusCellClass({ row, column, value }): object {
+  getPgStatusCellClass(_row, _column, value): object {
     return {
       'text-right': true,
       [`pg-${this.pgCategoryService.getTypeByStates(value)}`]: true
@@ -199,18 +236,27 @@ export class PoolListComponent implements OnInit {
 
   transformPoolsData(pools: any) {
     const requiredStats = ['bytes_used', 'max_avail', 'rd_bytes', 'wr_bytes', 'rd', 'wr'];
-    const emptyStat = { latest: 0, rate: 0, series: [] };
+    const emptyStat = { latest: 0, rate: 0, rates: [] };
 
     _.forEach(pools, (pool: Pool) => {
       pool['pg_status'] = this.transformPgStatus(pool['pg_status']);
-      const stats = {};
+      const stats: PoolStats = {};
       _.forEach(requiredStats, (stat) => {
         stats[stat] = pool.stats && pool.stats[stat] ? pool.stats[stat] : emptyStat;
       });
       pool['stats'] = stats;
+      const avail = stats.bytes_used.latest + stats.max_avail.latest;
+      pool['usage'] = avail > 0 ? stats.bytes_used.latest / avail : avail;
+
+      if (
+        !pool.cdExecuting &&
+        pool.pg_num + pool.pg_placement_num !== pool.pg_num_target + pool.pg_placement_num_target
+      ) {
+        pool['cdExecuting'] = 'Updating';
+      }
 
       ['rd_bytes', 'wr_bytes'].forEach((stat) => {
-        pool.stats[stat].series = pool.stats[stat].series.map((point) => point[1]);
+        pool.stats[stat].rates = pool.stats[stat].rates.map((point) => point[1]);
       });
       pool.cdIsBinary = true;
     });
@@ -234,5 +280,13 @@ export class PoolListComponent implements OnInit {
   getSelectionTiers() {
     const cacheTierIds = this.selection.hasSingleSelection ? this.selection.first()['tiers'] : [];
     this.selectionCacheTiers = this.pools.filter((pool) => cacheTierIds.includes(pool.pool));
+  }
+
+  getDisableDesc(): string | undefined {
+    if (!this.monAllowPoolDelete) {
+      return this.i18n(
+        'Pool deletion is disabled by the mon_allow_pool_delete configuration setting.'
+      );
+    }
   }
 }

@@ -193,6 +193,8 @@ int64_t StupidAllocator::allocate(
   if (max_alloc_size == 0) {
     max_alloc_size = want_size;
   }
+  // cap with 32-bit val
+  max_alloc_size = std::min(max_alloc_size, 0x10000000 - alloc_unit);
 
   while (allocated_size < want_size) {
     res = allocate_int(std::min(max_alloc_size, (want_size - allocated_size)),
@@ -206,10 +208,13 @@ int64_t StupidAllocator::allocate(
     bool can_append = true;
     if (!extents->empty()) {
       bluestore_pextent_t &last_extent  = extents->back();
-      if ((last_extent.end() == offset) &&
-	  ((last_extent.length + length) <= max_alloc_size)) {
-	can_append = false;
-	last_extent.length += length;
+      if (last_extent.end() == offset) {
+        uint64_t l64 = last_extent.length;
+        l64 += length;
+        if (l64 < 0x100000000 && l64 <= max_alloc_size) {
+	  can_append = false;
+	  last_extent.length += length;
+        }
       }
     }
     if (can_append) {
@@ -256,7 +261,7 @@ double StupidAllocator::get_fragmentation(uint64_t alloc_unit)
   uint64_t intervals = 0;
   {
     std::lock_guard l(lock);
-    max_intervals = p2roundup(num_free, alloc_unit) / alloc_unit;
+    max_intervals = p2roundup<uint64_t>(num_free, alloc_unit) / alloc_unit;
     for (unsigned bin = 0; bin < free.size(); ++bin) {
       intervals += free[bin].num_intervals();
     }

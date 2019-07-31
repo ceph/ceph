@@ -1,3 +1,6 @@
+
+.. _devices:
+
 Device Management
 =================
 
@@ -72,7 +75,42 @@ for a specific timestamp) with::
 Failure prediction
 ------------------
 
-TBD
+Ceph can predict life expectancy and device failures based on the
+health metrics it collects.  There are three modes:
+
+* *none*: disable device failure prediction.
+* *local*: use a pre-trained prediction model from the ceph-mgr daemon
+* *cloud*: share device health and performance metrics an external
+  cloud service run by ProphetStor, using either their free service or
+  a paid service with more accurate predictions
+
+The prediction mode can be configured with::
+
+  ceph config set global device_failure_prediction_mode <mode>
+
+Prediction normally runs in the background on a periodic basis, so it
+may take some time before life expectancy values are populated.  You
+can see the life expectancy of all devices in output from::
+
+  ceph device ls
+
+You can also query the metadata for a specific device with::
+
+  ceph device info <devid>
+
+You can explicitly force prediction of a device's life expectancy with::
+
+  ceph device predict-life-expectancy <devid>
+
+If you are not using Ceph's internal device failure prediction but
+have some external source of information about device failures, you
+can inform Ceph of a device's life expectancy with::
+
+  ceph device set-life-expectancy <devid> <from> [<to>]
+
+Life expectancies are expressed as a time interval so that
+uncertainty can be expressed in the form of a wide interval. The
+interval end can also be left unspecified.
 
 Health alerts
 -------------

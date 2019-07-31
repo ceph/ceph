@@ -28,8 +28,8 @@ class TestPrepareDevice(object):
         with pytest.raises(RuntimeError) as error:
             lvm.prepare.Prepare([]).prepare_device(
                     '/dev/var/foo', 'data', 'asdf', '0')
-        assert 'Cannot use device (/dev/var/foo)' in str(error)
-        assert 'A vg/lv path or an existing device is needed' in str(error)
+        assert 'Cannot use device (/dev/var/foo)' in str(error.value)
+        assert 'A vg/lv path or an existing device is needed' in str(error.value)
 
 
 class TestGetClusterFsid(object):
@@ -98,7 +98,7 @@ class TestPrepare(object):
         with pytest.raises(SystemExit) as error:
             lvm.prepare.Prepare(argv=['--filestore', '--data', '/dev/sdfoo']).main()
         expected = '--journal is required when using --filestore'
-        assert expected in str(error)
+        assert expected in str(error.value)
 
 
 class TestGetJournalLV(object):

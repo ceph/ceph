@@ -199,27 +199,14 @@ static int lock_obj(cls_method_context_t hctx,
 
   if (!lockers.empty()) {
     if (exclusive) {
-      std::stringstream locker_list;
-      bool first = true;
-      // there could be multiple lockers if they are all shared
-      for (const auto& l : lockers) {
-	if (first) {
-	  first = false;
-	} else {
-	  locker_list << ", ";
-	}
-	locker_list << "{name:" << l.first.locker <<
-	  ", addr:" << l.second.addr <<
-	  ", exp:";
-	const auto& exp = l.second.expiration;
-	if (exp.is_zero()) {
-	  locker_list << "never}";
-	} else {
-	  locker_list << exp.to_real_time() << "}";
-	}
-      }
-      CLS_LOG(20, "could not exclusive-lock object, already locked by [%s]",
-	      locker_list.str().c_str());
+      auto locker_lister =
+	[&lockers]() -> std::string {
+	  std::stringstream locker_list;
+	  locker_list << lockers;
+	  return locker_list.str();
+	};
+      CLS_LOG(20, "could not exclusive-lock object, already locked by %s",
+	      locker_lister().c_str());
       return -EBUSY;
     }
 

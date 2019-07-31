@@ -135,6 +135,38 @@ static void distro_detect(map<string, string> *m, CephContext *cct)
   }
 }
 
+int get_cgroup_memory_limit(uint64_t *limit)
+{
+  // /sys/fs/cgroup/memory/memory.limit_in_bytes
+
+  // the magic value 9223372036854771712 or 0x7ffffffffffff000
+  // appears to mean no limit.
+  FILE *f = fopen(PROCPREFIX "/sys/fs/cgroup/memory/memory.limit_in_bytes", "r");
+  if (!f) {
+    return -errno;
+  }
+  char buf[100];
+  int ret = 0;
+  long long value;
+  char *line = fgets(buf, sizeof(buf), f);
+  if (!line) {
+    ret = -EINVAL;
+    goto out;
+  }
+  if (sscanf(line, "%lld", &value) != 1) {
+    ret = -EINVAL;
+  }
+  if (value == 0x7ffffffffffff000) {
+    *limit = 0;  // no limit
+  } else {
+    *limit = value;
+  }
+out:
+  fclose(f);
+  return ret;
+}
+
+
 void collect_sys_info(map<string, string> *m, CephContext *cct)
 {
   // version
@@ -162,6 +194,10 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
   }
   if (const char *container_name = getenv("CONTAINER_NAME")) {
     (*m)["container_name"] = container_name;
+    in_container = true;
+  }
+  if (const char *container_image = getenv("CONTAINER_IMAGE")) {
+    (*m)["container_image"] = container_image;
     in_container = true;
   }
   if (in_container) {
@@ -213,7 +249,7 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
 	break;
       char key[40];
       long long value;
-      int r = sscanf(line, "%s %lld", key, &value);
+      int r = sscanf(line, "%39s %lld", key, &value);
       if (r == 2) {
 	if (strcmp(key, "MemTotal:") == 0)
 	  (*m)["mem_total_kb"] = boost::lexical_cast<string>(value);
@@ -223,11 +259,16 @@ void collect_sys_info(map<string, string> *m, CephContext *cct)
     }
     fclose(f);
   }
+  uint64_t cgroup_limit;
+  if (get_cgroup_memory_limit(&cgroup_limit) == 0 &&
+      cgroup_limit > 0) {
+    (*m)["mem_cgroup_limit"] = boost::lexical_cast<string>(cgroup_limit);
+  }
 
   // processor
   f = fopen(PROCPREFIX "/proc/cpuinfo", "r");
   if (f) {
-    char buf[100];
+    char buf[1024];
     while (!feof(f)) {
       char *line = fgets(buf, sizeof(buf), f);
       if (!line)
@@ -288,7 +329,7 @@ void dump_services(Formatter* f, const map<string, list<string> >& services, con
 
 // If non-printable characters found then convert bufferlist to
 // base64 encoded string indicating whether it did.
-string cleanbin(bufferlist &bl, bool &base64)
+string cleanbin(bufferlist &bl, bool &base64, bool show)
 {
   bufferlist::iterator it;
   for (it = bl.begin(); it != bl.end(); ++it) {
@@ -304,6 +345,8 @@ string cleanbin(bufferlist &bl, bool &base64)
   bufferlist b64;
   bl.encode_base64(b64);
   string encoded(b64.c_str(), b64.length());
+  if (show)
+    encoded = "Base64:" + encoded;
   base64 = true;
   return encoded;
 }
@@ -315,9 +358,7 @@ string cleanbin(string &str)
   bool base64;
   bufferlist bl;
   bl.append(str);
-  string result = cleanbin(bl, base64);
-  if (base64)
-    result = "Base64:" + result;
+  string result = cleanbin(bl, base64, true);
   return result;
 }
 

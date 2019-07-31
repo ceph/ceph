@@ -39,7 +39,6 @@ function TEST_osd_pool_get_set() {
 
     setup $dir || return 1
     run_mon $dir a || return 1
-    create_rbd_pool || return 1
     create_pool $TEST_POOL 8
 
     local flag
@@ -238,7 +237,7 @@ function TEST_mon_features() {
 
     # monmap must have not all k l m persistent
     # features set.
-    jqfilter='.monmap.features.persistent | length == 5'
+    jqfilter='.monmap.features.persistent | length == 6'
     jq_success "$jqinput" "$jqfilter" || return 1
     jqfilter='.monmap.features.persistent[]|select(. == "kraken")'
     jq_success "$jqinput" "$jqfilter" "kraken" || return 1
@@ -250,6 +249,8 @@ function TEST_mon_features() {
     jq_success "$jqinput" "$jqfilter" "osdmap-prune" || return 1
     jqfilter='.monmap.features.persistent[]|select(. == "nautilus")'
     jq_success "$jqinput" "$jqfilter" "nautilus" || return 1
+    jqfilter='.monmap.features.persistent[]|select(. == "octopus")'
+    jq_success "$jqinput" "$jqfilter" "octopus" || return 1
 
     CEPH_ARGS=$CEPH_ARGS_orig
     # that's all folks. thank you for tuning in.

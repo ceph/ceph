@@ -147,9 +147,10 @@ public:
   }
   void remove_cap(client_t client, Capability *cap) {
     cap->item_snaprealm_caps.remove_myself();
-    if (client_caps[client]->empty()) {
-      delete client_caps[client];
-      client_caps.erase(client);
+    auto found = client_caps.find(client);
+    if (found != client_caps.end() && found->second->empty()) {
+      delete found->second;
+      client_caps.erase(found);
     }
   }
 };

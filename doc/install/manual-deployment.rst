@@ -167,7 +167,7 @@ The procedure is as follows:
 #. Generate a bootstrap-osd keyring, generate a ``client.bootstrap-osd`` user and add
    the user to the keyring. ::
 
-	sudo ceph-authtool --create-keyring /var/lib/ceph/bootstrap-osd/ceph.keyring --gen-key -n client.bootstrap-osd --cap mon 'profile bootstrap-osd'
+	sudo ceph-authtool --create-keyring /var/lib/ceph/bootstrap-osd/ceph.keyring --gen-key -n client.bootstrap-osd --cap mon 'profile bootstrap-osd' --cap mgr 'allow r'
 
 #. Add the generated keys to the ``ceph.mon.keyring``. ::
 

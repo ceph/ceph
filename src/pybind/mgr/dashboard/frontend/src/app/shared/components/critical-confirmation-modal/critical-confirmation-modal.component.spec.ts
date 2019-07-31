@@ -17,16 +17,16 @@ export class MockModule {}
 
 @Component({
   template: `
-    <button type="button" class="btn btn-sm btn-primary" (click)="openCtrlDriven()">
-      <i class="fa fa-fw fa-times"></i>Deletion Ctrl-Test
+    <button type="button" class="btn btn-secondary" (click)="openCtrlDriven()">
+      <i class="fa fa-times"></i>Deletion Ctrl-Test
       <ng-template #ctrlDescription>
         The spinner is handled by the controller if you have use the modal as ViewChild in order to
         use it's functions to stop the spinner or close the dialog.
       </ng-template>
     </button>
 
-    <button type="button" class="btn btn-sm btn-primary" (click)="openModalDriven()">
-      <i class="fa fa-fw fa-times"></i>Deletion Modal-Test
+    <button type="button" class="btn btn-secondary" (click)="openModalDriven()">
+      <i class="fa fa-times"></i>Deletion Modal-Test
       <ng-template #modalDescription>
         The spinner is handled by the modal if your given deletion function returns a Observable.
       </ng-template>
@@ -104,7 +104,7 @@ describe('CriticalConfirmationModalComponent', () => {
     mockFixture = TestBed.createComponent(MockComponent);
     mockComponent = mockFixture.componentInstance;
     // Mocking the modals as a lot would be left over
-    spyOn(mockComponent.modalService, 'show').and.callFake((modalComp, config) => {
+    spyOn(mockComponent.modalService, 'show').and.callFake((_modalComp, config) => {
       const ref = new BsModalRef();
       fixture = TestBed.createComponent(CriticalConfirmationModalComponent);
       component = fixture.componentInstance;

@@ -5,10 +5,7 @@ daysUntilStale: 60
 
 # Number of days of inactivity before an Issue or Pull Request with the stale label is closed.
 # Set to false to disable. If disabled, issues still need to be closed manually, but will remain marked as stale.
-#daysUntilClose: 7
-
-# for now, don't close anything by setting this limit very high:
-daysUntilClose: 700
+daysUntilClose: 90
 
 # Issues or Pull Requests with these labels will never be considered stale. Set to `[]` to disable
 exemptLabels:
@@ -28,13 +25,13 @@ staleLabel: stale
 # Comment to post when marking as stale. Set to `false` to disable
 markComment: >
   This pull request has been automatically marked as stale because it
-  has not had recent activity. It will be closed if no further
-  activity occurs.
-
+  has not had any activity for 60 days. It will be closed if no further
+  activity occurs for another 30 days.
+  
   If you are a maintainer or core committer, please follow-up on this
-  issue to identify what steps should be taken by the author to move this
+  pull request to identify what steps should be taken by the author to move this
   proposed change forward.
-
+  
   If you are the author of this pull request, thank you for your proposed
   contribution.  If you believe this change is still appropriate, please
   ensure that any feedback has been addressed and ask for a code review.
@@ -44,8 +41,11 @@ markComment: >
 #   Your comment here.
 
 # Comment to post when closing a stale Issue or Pull Request.
-# closeComment: >
-#   Your comment here.
+closeComment: >
+  This pull request has been automatically closed because there has
+  been no activity for 90 days.  Please feel free to reopen this pull
+  request (or open a new one) if the proposed change is still
+  appropriate.  Thank you for your contribution!
 
 # Limit the number of actions per hour, from 1-30. Default is 30
 limitPerRun: 30

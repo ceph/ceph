@@ -1,7 +1,5 @@
-import { browser } from 'protractor';
+import { PageHelper } from '../page-helper.po';
 
-export class ImagesPage {
-  navigateTo() {
-    return browser.get('/#/block/rbd');
-  }
+export class ImagesPageHelper extends PageHelper {
+  pages = { index: '/#/block/rbd' };
 }

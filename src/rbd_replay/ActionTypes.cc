@@ -276,15 +276,15 @@ void ActionEntry::encode(bufferlist &bl) const {
 
 void ActionEntry::decode(bufferlist::const_iterator &it) {
   DECODE_START(1, it);
-  decode(struct_v, it);
+  decode_versioned(struct_v, it);
   DECODE_FINISH(it);
 }
 
 void ActionEntry::decode_unversioned(bufferlist::const_iterator &it) {
-  decode(0, it);
+  decode_versioned(0, it);
 }
 
-void ActionEntry::decode(__u8 version, bufferlist::const_iterator &it) {
+void ActionEntry::decode_versioned(__u8 version, bufferlist::const_iterator &it) {
   using ceph::decode;
   uint8_t action_type;
   decode(action_type, it);

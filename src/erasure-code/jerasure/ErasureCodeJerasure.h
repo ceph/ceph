@@ -20,7 +20,7 @@
 
 #include "erasure-code/ErasureCode.h"
 
-class ErasureCodeJerasure : public ErasureCode {
+class ErasureCodeJerasure : public ceph::ErasureCode {
 public:
   int k;
   std::string DEFAULT_K;
@@ -57,13 +57,13 @@ public:
   unsigned int get_chunk_size(unsigned int object_size) const override;
 
   int encode_chunks(const std::set<int> &want_to_encode,
-			    std::map<int, bufferlist> *encoded) override;
+		    std::map<int, ceph::buffer::list> *encoded) override;
 
   int decode_chunks(const std::set<int> &want_to_read,
-			    const std::map<int, bufferlist> &chunks,
-			    std::map<int, bufferlist> *decoded) override;
+		    const std::map<int, ceph::buffer::list> &chunks,
+		    std::map<int, ceph::buffer::list> *decoded) override;
 
-  int init(ErasureCodeProfile &profile, std::ostream *ss) override;
+  int init(ceph::ErasureCodeProfile &profile, std::ostream *ss) override;
 
   virtual void jerasure_encode(char **data,
                                char **coding,
@@ -76,9 +76,8 @@ public:
   virtual void prepare() = 0;
   static bool is_prime(int value);
 protected:
-  virtual int parse(ErasureCodeProfile &profile, std::ostream *ss);
+  virtual int parse(ceph::ErasureCodeProfile &profile, std::ostream *ss);
 };
-
 class ErasureCodeJerasureReedSolomonVandermonde : public ErasureCodeJerasure {
 public:
   int *matrix;
@@ -106,7 +105,7 @@ public:
   unsigned get_alignment() const override;
   void prepare() override;
 private:
-  int parse(ErasureCodeProfile &profile, std::ostream *ss) override;
+  int parse(ceph::ErasureCodeProfile& profile, std::ostream *ss) override;
 };
 
 class ErasureCodeJerasureReedSolomonRAID6 : public ErasureCodeJerasure {
@@ -135,7 +134,7 @@ public:
   unsigned get_alignment() const override;
   void prepare() override;
 private:
-  int parse(ErasureCodeProfile &profile, std::ostream *ss) override;
+  int parse(ceph::ErasureCodeProfile& profile, std::ostream *ss) override;
 };
 
 #define DEFAULT_PACKETSIZE "2048"
@@ -168,7 +167,7 @@ public:
   unsigned get_alignment() const override;
   void prepare_schedule(int *matrix);
 private:
-  int parse(ErasureCodeProfile &profile, std::ostream *ss) override;
+  int parse(ceph::ErasureCodeProfile& profile, std::ostream *ss) override;
 };
 
 class ErasureCodeJerasureCauchyOrig : public ErasureCodeJerasureCauchy {
@@ -219,11 +218,11 @@ public:
   virtual bool check_w(std::ostream *ss) const;
   virtual bool check_packetsize_set(std::ostream *ss) const;
   virtual bool check_packetsize(std::ostream *ss) const;
-  virtual int revert_to_default(ErasureCodeProfile &profile,
+  virtual int revert_to_default(ceph::ErasureCodeProfile& profile,
 				std::ostream *ss);
   void prepare() override;
 private:
-  int parse(ErasureCodeProfile &profile, std::ostream *ss) override;
+  int parse(ceph::ErasureCodeProfile& profile, std::ostream *ss) override;
 };
 
 class ErasureCodeJerasureBlaumRoth : public ErasureCodeJerasureLiberation {
@@ -249,7 +248,7 @@ public:
 
   void prepare() override;
 private:
-  int parse(ErasureCodeProfile &profile, std::ostream *ss) override;
+  int parse(ceph::ErasureCodeProfile& profile, std::ostream *ss) override;
 };
 
 #endif

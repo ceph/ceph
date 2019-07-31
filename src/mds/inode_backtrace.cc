@@ -40,7 +40,7 @@ void inode_backpointer_t::dump(Formatter *f) const
   f->dump_unsigned("version", version);
 }
 
-void inode_backpointer_t::generate_test_instances(list<inode_backpointer_t*>& ls)
+void inode_backpointer_t::generate_test_instances(std::list<inode_backpointer_t*>& ls)
 {
   ls.push_back(new inode_backpointer_t);
   ls.push_back(new inode_backpointer_t);
@@ -105,7 +105,7 @@ void inode_backtrace_t::dump(Formatter *f) const
   f->close_section();
 }
 
-void inode_backtrace_t::generate_test_instances(list<inode_backtrace_t*>& ls)
+void inode_backtrace_t::generate_test_instances(std::list<inode_backtrace_t*>& ls)
 {
   ls.push_back(new inode_backtrace_t);
   ls.push_back(new inode_backtrace_t);

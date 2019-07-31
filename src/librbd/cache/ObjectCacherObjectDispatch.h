@@ -23,11 +23,15 @@ namespace cache {
 template <typename ImageCtxT = ImageCtx>
 class ObjectCacherObjectDispatch : public io::ObjectDispatchInterface {
 public:
-  static ObjectCacherObjectDispatch* create(ImageCtxT* image_ctx) {
-    return new ObjectCacherObjectDispatch(image_ctx);
+  static ObjectCacherObjectDispatch* create(ImageCtxT* image_ctx,
+                                            size_t max_dirty,
+                                            bool writethrough_until_flush) {
+    return new ObjectCacherObjectDispatch(image_ctx, max_dirty,
+                                          writethrough_until_flush);
   }
 
-  ObjectCacherObjectDispatch(ImageCtxT* image_ctx);
+  ObjectCacherObjectDispatch(ImageCtxT* image_ctx, size_t max_dirty,
+                             bool writethrough_until_flush);
   ~ObjectCacherObjectDispatch() override;
 
   io::ObjectDispatchLayer get_object_dispatch_layer() const override {
@@ -38,39 +42,38 @@ public:
   void shut_down(Context* on_finish) override;
 
   bool read(
-      const std::string &oid, uint64_t object_no, uint64_t object_off,
-      uint64_t object_len, librados::snap_t snap_id, int op_flags,
+      uint64_t object_no, uint64_t object_off, uint64_t object_len,
+      librados::snap_t snap_id, int op_flags,
       const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
       io::ExtentMap* extent_map, int* object_dispatch_flags,
       io::DispatchResult* dispatch_result, Context** on_finish,
       Context* on_dispatched) override;
 
   bool discard(
-      const std::string &oid, uint64_t object_no, uint64_t object_off,
-      uint64_t object_len, const ::SnapContext &snapc, int discard_flags,
+      uint64_t object_no, uint64_t object_off, uint64_t object_len,
+      const ::SnapContext &snapc, int discard_flags,
       const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
       uint64_t* journal_tid, io::DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) override;
 
   bool write(
-      const std::string &oid, uint64_t object_no, uint64_t object_off,
-      ceph::bufferlist&& data, const ::SnapContext &snapc, int op_flags,
+      uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
+      const ::SnapContext &snapc, int op_flags,
       const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
       uint64_t* journal_tid, io::DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) override;
 
   bool write_same(
-      const std::string &oid, uint64_t object_no, uint64_t object_off,
-      uint64_t object_len, io::Extents&& buffer_extents,
-      ceph::bufferlist&& data, const ::SnapContext &snapc, int op_flags,
+      uint64_t object_no, uint64_t object_off, uint64_t object_len,
+      io::LightweightBufferExtents&& buffer_extents, ceph::bufferlist&& data,
+      const ::SnapContext &snapc, int op_flags,
       const ZTracer::Trace &parent_trace, int* object_dispatch_flags,
       uint64_t* journal_tid, io::DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) override;
 
   bool compare_and_write(
-      const std::string &oid, uint64_t object_no, uint64_t object_off,
-      ceph::bufferlist&& cmp_data, ceph::bufferlist&& write_data,
-      const ::SnapContext &snapc, int op_flags,
+      uint64_t object_no, uint64_t object_off, ceph::bufferlist&& cmp_data,
+      ceph::bufferlist&& write_data, const ::SnapContext &snapc, int op_flags,
       const ZTracer::Trace &parent_trace, uint64_t* mismatch_offset,
       int* object_dispatch_flags, uint64_t* journal_tid,
       io::DispatchResult* dispatch_result, Context** on_finish,
@@ -78,8 +81,8 @@ public:
 
   bool flush(
       io::FlushSource flush_source, const ZTracer::Trace &parent_trace,
-      io::DispatchResult* dispatch_result, Context** on_finish,
-      Context* on_dispatched) override;
+      uint64_t* journal_tid, io::DispatchResult* dispatch_result,
+      Context** on_finish, Context* on_dispatched) override;
 
   bool invalidate_cache(Context* on_finish) override;
   bool reset_existence_cache(Context* on_finish) override;
@@ -93,6 +96,8 @@ private:
   struct C_InvalidateCache;
 
   ImageCtxT* m_image_ctx;
+  size_t m_max_dirty;
+  bool m_writethrough_until_flush;
 
   Mutex m_cache_lock;
   ObjectCacher *m_object_cacher = nullptr;

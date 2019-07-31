@@ -107,7 +107,7 @@ private:
 
   uint8_t get_object_state() {
     I &image_ctx = this->m_image_ctx;
-    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    RWLock::RLocker image_locker(image_ctx.image_lock);
     for (std::vector<librados::clone_info_t>::const_iterator r =
            m_snap_set.clones.begin(); r != m_snap_set.clones.end(); ++r) {
       librados::snap_t from_snap_id;
@@ -137,7 +137,7 @@ private:
 
   uint64_t next_valid_snap_id(uint64_t snap_id) {
     I &image_ctx = this->m_image_ctx;
-    ceph_assert(image_ctx.snap_lock.is_locked());
+    ceph_assert(image_ctx.image_lock.is_locked());
 
     std::map<librados::snap_t, SnapInfo>::iterator it =
       image_ctx.snap_info.lower_bound(snap_id);
@@ -156,12 +156,10 @@ private:
     ceph_assert(image_ctx.exclusive_lock == nullptr ||
                 image_ctx.exclusive_lock->is_lock_owner());
 
-    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    RWLock::RLocker image_locker(image_ctx.image_lock);
     ceph_assert(image_ctx.object_map != nullptr);
 
-    RWLock::WLocker l(image_ctx.object_map_lock);
     uint8_t state = (*image_ctx.object_map)[m_object_no];
-
     ldout(cct, 10) << "C_VerifyObjectCallback::object_map_action"
 		   << " object " << image_ctx.get_object_name(m_object_no)
 		   << " state " << (int)state
@@ -243,7 +241,7 @@ void ObjectMapIterateRequest<I>::send_verify_objects() {
   uint64_t snap_id;
   uint64_t num_objects;
   {
-    RWLock::RLocker l(m_image_ctx.snap_lock);
+    RWLock::RLocker l(m_image_ctx.image_lock);
     snap_id = m_image_ctx.snap_id;
     num_objects = Striper::get_num_objects(m_image_ctx.layout,
                                            m_image_ctx.get_image_size(snap_id));
@@ -265,7 +263,7 @@ void ObjectMapIterateRequest<I>::send_verify_objects() {
 
 template <typename I>
 uint64_t ObjectMapIterateRequest<I>::get_image_size() const {
-  ceph_assert(m_image_ctx.snap_lock.is_locked());
+  ceph_assert(m_image_ctx.image_lock.is_locked());
   if (m_image_ctx.snap_id == CEPH_NOSNAP) {
     if (!m_image_ctx.resize_reqs.empty()) {
       return m_image_ctx.resize_reqs.front()->get_image_size();
@@ -289,7 +287,7 @@ void ObjectMapIterateRequest<I>::send_invalidate_object_map() {
 					     this->create_callback_context());
 
   ceph_assert(m_image_ctx.owner_lock.is_locked());
-  RWLock::WLocker snap_locker(m_image_ctx.snap_lock);
+  RWLock::WLocker image_locker(m_image_ctx.image_lock);
   req->send();
 }
 

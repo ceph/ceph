@@ -410,11 +410,9 @@ def cephfs_setup(ctx, config):
         fs = Filesystem(ctx, name='cephfs', create=True,
                         ec_profile=config.get('cephfs_ec_profile', None))
 
-        is_active_mds = lambda role: 'mds.' in role and not role.endswith('-s') and '-s-' not in role
-        all_roles = [item for remote_roles in mdss.remotes.values() for item in remote_roles]
-        num_active = len([r for r in all_roles if is_active_mds(r)])
-
-        fs.set_max_mds(config.get('max_mds', num_active))
+        max_mds = config.get('max_mds', 1)
+        if max_mds > 1:
+            fs.set_max_mds(max_mds)
 
     yield
 
@@ -494,9 +492,6 @@ def skeleton_config(ctx, roles, ips, mons, cluster='ceph'):
             if is_mds(role):
                 name = teuthology.ceph_role(role)
                 conf.setdefault(name, {})
-                if '-s-' in name:
-                    standby_mds = name[name.find('-s-') + 3:]
-                    conf[name]['mds standby for name'] = standby_mds
     return conf
 
 def create_simple_monmap(ctx, remote, conf, mons,
@@ -1296,7 +1291,9 @@ def osd_scrub_pgs(ctx, config):
         loop = False
         thiscnt = 0
         for (pgid, tmval) in timez:
-            pgtm = time.strptime(tmval[0:tmval.find('.')], '%Y-%m-%d %H:%M:%S')
+            t = tmval[0:tmval.find('.')]
+            t.replace(' ', 'T')
+            pgtm = time.strptime(t, '%Y-%m-%dT%H:%M:%S')
             if pgtm > check_time_now:
                 thiscnt += 1
             else:
@@ -1555,7 +1552,7 @@ def created_pool(ctx, config):
     """
     for new_pool in config:
         if new_pool not in ctx.managers['ceph'].pools:
-            ctx.managers['ceph'].pools[new_pool] = ctx.managers['ceph'].get_pool_property(
+            ctx.managers['ceph'].pools[new_pool] = ctx.managers['ceph'].get_pool_int_property(
                 new_pool, 'pg_num')
 
 

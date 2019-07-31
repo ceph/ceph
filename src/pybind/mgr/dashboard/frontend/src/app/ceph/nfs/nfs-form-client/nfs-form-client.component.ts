@@ -5,6 +5,7 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { NfsService } from '../../../shared/api/nfs.service';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 
 @Component({
@@ -18,6 +19,7 @@ export class NfsFormClientComponent {
 
   nfsSquash: any[] = this.nfsService.nfsSquash;
   nfsAccessType: any[] = this.nfsService.nfsAccessType;
+  icons = Icons;
 
   constructor(private nfsService: NfsService, private i18n: I18n) {}
 
@@ -52,8 +54,8 @@ export class NfsFormClientComponent {
       addresses: new FormControl('', {
         validators: [Validators.required, Validators.pattern(REGEX_LIST_IP)]
       }),
-      access_type: new FormControl(this.form.getValue('access_type')),
-      squash: new FormControl(this.form.getValue('squash'))
+      access_type: new FormControl(''),
+      squash: new FormControl('')
     });
 
     clients.push(fg);

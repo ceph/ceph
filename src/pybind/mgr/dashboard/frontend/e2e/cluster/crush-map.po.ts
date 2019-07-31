@@ -1,7 +1,5 @@
-import { browser } from 'protractor';
+import { PageHelper } from '../page-helper.po';
 
-export class CrushMapPage {
-  navigateTo() {
-    return browser.get('/#/crush-map');
-  }
+export class CrushMapPageHelper extends PageHelper {
+  pages = { index: '/#/crush-map' };
 }

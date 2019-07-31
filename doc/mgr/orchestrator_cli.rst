@@ -49,7 +49,8 @@ The relation between the names is the following:
 Configuration
 =============
 
-You can select the orchestrator module to use with the ``set backend`` command::
+To enable the orchestrator, please select the orchestrator module to use
+with the ``set backend`` command::
 
     ceph orchestrator set backend <module>
 
@@ -61,6 +62,14 @@ For example, to enable the Rook orchestrator module and use it with the CLI::
 You can then check backend is properly configured::
 
     ceph orchestrator status
+
+Disable the Orchestrator
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+To disable the orchestrator again, use the empty string ``""``::
+
+    ceph orchestrator set backend ""``
+    ceph mgr module disable rook
 
 Usage
 =====
@@ -113,6 +122,22 @@ filtered to a particular node:
 
     ceph orchestrator device ls [--host=...] [--refresh]
 
+Example::
+
+    # ceph orchestrator device ls
+    Host 192.168.121.206:
+    Device Path           Type       Size    Rotates  Available Model
+    /dev/sdb               hdd      50.0G       True       True ATA/QEMU HARDDISK
+    /dev/sda               hdd      50.0G       True      False ATA/QEMU HARDDISK
+
+    Host 192.168.121.181:
+    Device Path           Type       Size    Rotates  Available Model
+    /dev/sdb               hdd      50.0G       True       True ATA/QEMU HARDDISK
+    /dev/sda               hdd      50.0G       True      False ATA/QEMU HARDDISK
+
+.. note::
+    Output form Ansible orchestrator
+
 Create OSDs
 ^^^^^^^^^^^
 
@@ -124,8 +149,16 @@ Create OSDs on a group of devices on a single host::
 
 The output of ``osd create`` is not specified and may vary between orchestrator backends.
 
-Where ``drive.group.json`` is a JSON file containing the fields defined in :class:`orchestrator.DriveGroupSpec`
+Where ``drive.group.json`` is a JSON file containing the fields defined in
+:class:`ceph.deployment_utils.drive_group.DriveGroupSpec`
 
+Example::
+
+    # ceph orchestrator osd create 192.168.121.206:/dev/sdc
+    {"status": "OK", "msg": "", "data": {"event": "playbook_on_stats", "uuid": "7082f3ba-f5b7-4b7c-9477-e74ca918afcb", "stdout": "\r\nPLAY RECAP *********************************************************************\r\n192.168.121.206            : ok=96   changed=3    unreachable=0    failed=0   \r\n", "counter": 932, "pid": 10294, "created": "2019-05-28T22:22:58.527821", "end_line": 1170, "runner_ident": "083cad3c-8197-11e9-b07a-2016b900e38f", "start_line": 1166, "event_data": {"ignored": 0, "skipped": {"192.168.121.206": 186}, "ok": {"192.168.121.206": 96}, "artifact_data": {}, "rescued": 0, "changed": {"192.168.121.206": 3}, "pid": 10294, "dark": {}, "playbook_uuid": "409364a6-9d49-4e44-8b7b-c28e5b3adf89", "playbook": "add-osd.yml", "failures": {}, "processed": {"192.168.121.206": 1}}, "parent_uuid": "409364a6-9d49-4e44-8b7b-c28e5b3adf89"}}
+
+.. note::
+    Output form Ansible orchestrator
 
 Decommission an OSD
 ^^^^^^^^^^^^^^^^^^^
@@ -136,6 +169,13 @@ Decommission an OSD
 Removes one or more OSDs from the cluster and the host, if the OSDs are marked as
 ``destroyed``.
 
+Example::
+
+    # ceph orchestrator osd rm 4
+    {"status": "OK", "msg": "", "data": {"event": "playbook_on_stats", "uuid": "1a16e631-906d-48e0-9e24-fa7eb593cc0a", "stdout": "\r\nPLAY RECAP *********************************************************************\r\n192.168.121.158            : ok=2    changed=0    unreachable=0    failed=0   \r\n192.168.121.181            : ok=2    changed=0    unreachable=0    failed=0   \r\n192.168.121.206            : ok=2    changed=0    unreachable=0    failed=0   \r\nlocalhost                  : ok=31   changed=8    unreachable=0    failed=0   \r\n", "counter": 240, "pid": 10948, "created": "2019-05-28T22:26:09.264012", "end_line": 308, "runner_ident": "8c093db0-8197-11e9-b07a-2016b900e38f", "start_line": 301, "event_data": {"ignored": 0, "skipped": {"localhost": 37}, "ok": {"192.168.121.181": 2, "192.168.121.158": 2, "192.168.121.206": 2, "localhost": 31}, "artifact_data": {}, "rescued": 0, "changed": {"localhost": 8}, "pid": 10948, "dark": {}, "playbook_uuid": "a12ec40e-bce9-4bc9-b09e-2d8f76a5be02", "playbook": "shrink-osd.yml", "failures": {}, "processed": {"192.168.121.181": 1, "192.168.121.158": 1, "192.168.121.206": 1, "localhost": 1}}, "parent_uuid": "a12ec40e-bce9-4bc9-b09e-2d8f76a5be02"}}
+
+.. note::
+    Output form Ansible orchestrator
 
 ..
     Blink Device Lights
@@ -166,7 +206,7 @@ Update the number of monitor nodes::
 
     ceph orchestrator mon update <num> [host, host:network...]
 
-Each host can optionally specificy a network for the monitor to listen on.
+Each host can optionally specify a network for the monitor to listen on.
 
 Update the number of manager nodes::
 
@@ -193,11 +233,11 @@ services of a particular type via optional --type parameter
 
 ::
 
-    ceph orchestrator service ls [--host host] [--svc_type type] [--refresh|--no-cache]
+    ceph orchestrator service ls [--host host] [--svc_type type] [--refresh]
 
 Discover the status of a particular service::
 
-    ceph orchestrator service status <type> <name> [--refresh]
+    ceph orchestrator service ls --svc_type type --svc_id <name> [--refresh]
 
 
 Query the status of a particular service instance (mon, osd, mds, rgw).  For OSDs
@@ -213,6 +253,7 @@ The orchestrator is not responsible for configuring the services. Please look in
 documentation for details.
 
 The ``name`` parameter is an identifier of the group of instances:
+
 * a CephFS filesystem for a group of MDS daemons,
 * a zone name for a group of RGWs
 
@@ -244,18 +285,17 @@ This is an overview of the current implementation status of the orchestrators.
 =================================== ========= ====== ========= =====
  Command                             Ansible   Rook   DeepSea   SSH
 =================================== ========= ====== ========= =====
- host add                            ⚪         ⚪       ⚪         ✔️
- host ls                             ⚪         ⚪       ⚪         ✔️
- host rm                             ⚪         ⚪       ⚪         ✔️
+ host add                            ✔️         ⚪       ⚪         ✔️
+ host ls                             ✔️         ⚪       ⚪         ✔️
+ host rm                             ✔️         ⚪       ⚪         ✔️
  mgr update                          ⚪         ⚪       ⚪         ✔️
- mon update                          ⚪         ⚪       ⚪         ✔️
+ mon update                          ⚪         ✔️       ⚪         ✔️
  osd create                          ✔️         ✔️       ⚪         ✔️
  osd device {ident,fault}-{on,off}   ⚪         ⚪       ⚪         ⚪
  osd rm                              ✔️         ⚪       ⚪         ⚪
  device {ident,fault}-(on,off}       ⚪         ⚪       ⚪         ⚪
  device ls                           ✔️         ✔️       ✔️         ✔️
  service ls                          ⚪         ✔️       ✔️         ⚪
- service status                      ⚪         ✔️       ✔️         ⚪
  service-instance status             ⚪         ⚪       ⚪         ⚪
  iscsi {stop,start,reload}           ⚪         ⚪       ⚪         ⚪
  iscsi add                           ⚪         ⚪       ⚪         ⚪

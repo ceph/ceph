@@ -35,6 +35,8 @@ struct ObjectState {
 
   ObjectState(const object_info_t &oi_, bool exists_)
     : oi(oi_), exists(exists_) {}
+  ObjectState(object_info_t &&oi_, bool exists_)
+    : oi(std::move(oi_)), exists(exists_) {}
 };
 
 typedef std::shared_ptr<ObjectContext> ObjectContextRef;

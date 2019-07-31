@@ -4,7 +4,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { ActivatedRoute } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastModule } from 'ng2-toastr';
+import { ToastrModule } from 'ngx-toastr';
 
 import { ActivatedRouteStub } from '../../../../testing/activated-route-stub';
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
@@ -20,22 +20,36 @@ describe('IscsiTargetFormComponent', () => {
   const SETTINGS = {
     config: { minimum_gateways: 2 },
     disk_default_controls: {
-      hw_max_sectors: 1024,
-      osd_op_timeout: 30,
-      qfull_timeout: 5
+      'backstore:1': {
+        hw_max_sectors: 1024,
+        osd_op_timeout: 30
+      },
+      'backstore:2': {
+        qfull_timeout: 5
+      }
     },
     target_default_controls: {
       cmdsn_depth: 128,
       dataout_timeout: 20,
       immediate_data: 'Yes'
-    }
+    },
+    required_rbd_features: {
+      'backstore:1': 0,
+      'backstore:2': 0
+    },
+    unsupported_rbd_features: {
+      'backstore:1': 0,
+      'backstore:2': 0
+    },
+    backstores: ['backstore:1', 'backstore:2'],
+    default_backstore: 'backstore:1'
   };
 
   const LIST_TARGET = [
     {
       target_iqn: 'iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw',
       portals: [{ host: 'node1', ip: '192.168.100.201' }],
-      disks: [{ pool: 'rbd', image: 'disk_1', controls: {} }],
+      disks: [{ pool: 'rbd', image: 'disk_1', controls: {}, backstore: 'backstore:1' }],
       clients: [
         {
           client_iqn: 'iqn.1994-05.com.redhat:rh7-client',
@@ -116,7 +130,7 @@ describe('IscsiTargetFormComponent', () => {
         ReactiveFormsModule,
         HttpClientTestingModule,
         RouterTestingModule,
-        ToastModule.forRoot()
+        ToastrModule.forRoot()
       ],
       providers: [
         i18nProviders,
@@ -149,17 +163,17 @@ describe('IscsiTargetFormComponent', () => {
   });
 
   it('should only show images not used in other targets', () => {
-    expect(component.imagesAll).toEqual(['rbd/disk_2']);
+    expect(component.imagesAll).toEqual([RBD_LIST[1]['value'][1]]);
     expect(component.imagesSelections).toEqual([
-      { description: '', name: 'rbd/disk_2', selected: false }
+      { description: '', name: 'rbd/disk_2', selected: false, enabled: true }
     ]);
   });
 
   it('should generate portals selectOptions', () => {
     expect(component.portalsSelections).toEqual([
-      { description: '', name: 'node1:192.168.100.201', selected: false },
-      { description: '', name: 'node1:10.0.2.15', selected: false },
-      { description: '', name: 'node2:192.168.100.202', selected: false }
+      { description: '', name: 'node1:192.168.100.201', selected: false, enabled: true },
+      { description: '', name: 'node1:10.0.2.15', selected: false, enabled: true },
+      { description: '', name: 'node2:192.168.100.202', selected: false, enabled: true }
     ]);
   });
 
@@ -168,6 +182,7 @@ describe('IscsiTargetFormComponent', () => {
       disks: [],
       groups: [],
       initiators: [],
+      acl_enabled: false,
       portals: [],
       target_controls: {},
       target_iqn: component.targetForm.value.target_iqn
@@ -176,35 +191,46 @@ describe('IscsiTargetFormComponent', () => {
 
   it('should prepare data when selecting an image', () => {
     expect(component.imagesSettings).toEqual({});
-    component.onImageSelection({ option: { name: 'rbd/disk_1', selected: true } });
-    expect(component.imagesSettings).toEqual({ 'rbd/disk_1': {} });
+    component.onImageSelection({ option: { name: 'rbd/disk_2', selected: true } });
+    expect(component.imagesSettings).toEqual({
+      'rbd/disk_2': {
+        backstore: 'backstore:1',
+        'backstore:1': {}
+      }
+    });
   });
 
   it('should clean data when removing an image', () => {
-    component.onImageSelection({ option: { name: 'rbd/disk_1', selected: true } });
+    component.onImageSelection({ option: { name: 'rbd/disk_2', selected: true } });
     component.addGroup();
     component.groups.controls[0].patchValue({
       group_id: 'foo',
-      disks: ['rbd/disk_1']
+      disks: ['rbd/disk_2']
     });
 
     expect(component.groups.controls[0].value).toEqual({
-      disks: ['rbd/disk_1'],
+      disks: ['rbd/disk_2'],
       group_id: 'foo',
       members: []
     });
 
-    component.onImageSelection({ option: { name: 'rbd/disk_1', selected: false } });
+    component.onImageSelection({ option: { name: 'rbd/disk_2', selected: false } });
 
     expect(component.groups.controls[0].value).toEqual({ disks: [], group_id: 'foo', members: [] });
-    expect(component.imagesSettings).toEqual({ 'rbd/disk_1': {} });
+    expect(component.imagesSettings).toEqual({
+      'rbd/disk_2': {
+        backstore: 'backstore:1',
+        'backstore:1': {}
+      }
+    });
   });
 
   describe('should test initiators', () => {
     beforeEach(() => {
-      component.targetForm.patchValue({ disks: ['rbd/disk_1'] });
+      component.targetForm.patchValue({ disks: ['rbd/disk_2'], acl_enabled: true });
       component.addGroup().patchValue({ name: 'group_1' });
-      component.onImageSelection({ option: { name: 'rbd/disk_1', selected: true } });
+      component.addGroup().patchValue({ name: 'group_2' });
+      component.onImageSelection({ option: { name: 'rbd/disk_2', selected: true } });
 
       component.addInitiator();
       component.initiators.controls[0].patchValue({
@@ -222,16 +248,18 @@ describe('IscsiTargetFormComponent', () => {
         luns: []
       });
       expect(component.imagesInitiatorSelections).toEqual([
-        [{ description: '', name: 'rbd/disk_1', selected: false }]
+        [{ description: '', name: 'rbd/disk_2', selected: false, enabled: true }]
       ]);
       expect(component.groupMembersSelections).toEqual([
-        [{ description: '', name: 'iqn.initiator', selected: false }]
+        [{ description: '', name: 'iqn.initiator', selected: false, enabled: true }],
+        [{ description: '', name: 'iqn.initiator', selected: false, enabled: true }]
       ]);
     });
 
     it('should update data when changing an initiator name', () => {
       expect(component.groupMembersSelections).toEqual([
-        [{ description: '', name: 'iqn.initiator', selected: false }]
+        [{ description: '', name: 'iqn.initiator', selected: false, enabled: true }],
+        [{ description: '', name: 'iqn.initiator', selected: false, enabled: true }]
       ]);
 
       component.initiators.controls[0].patchValue({
@@ -240,7 +268,8 @@ describe('IscsiTargetFormComponent', () => {
       component.updatedInitiatorSelector();
 
       expect(component.groupMembersSelections).toEqual([
-        [{ description: '', name: 'iqn.initiator_new', selected: false }]
+        [{ description: '', name: 'iqn.initiator_new', selected: false, enabled: true }],
+        [{ description: '', name: 'iqn.initiator_new', selected: false, enabled: true }]
       ]);
     });
 
@@ -263,19 +292,19 @@ describe('IscsiTargetFormComponent', () => {
         group_id: 'foo',
         members: []
       });
-      expect(component.groupMembersSelections).toEqual([[]]);
+      expect(component.groupMembersSelections).toEqual([[], []]);
       expect(component.imagesInitiatorSelections).toEqual([]);
     });
 
     it('should remove images in the initiator when added in a group', () => {
       component.initiators.controls[0].patchValue({
-        luns: ['rbd/disk_1']
+        luns: ['rbd/disk_2']
       });
       expect(component.initiators.controls[0].value).toEqual({
         auth: { mutual_password: '', mutual_user: '', password: '', user: '' },
         cdIsInGroup: false,
         client_iqn: 'iqn.initiator',
-        luns: ['rbd/disk_1']
+        luns: ['rbd/disk_2']
       });
 
       component.addGroup();
@@ -297,12 +326,27 @@ describe('IscsiTargetFormComponent', () => {
         luns: []
       });
     });
+
+    it('should disabled the initiator when selected', () => {
+      expect(component.groupMembersSelections).toEqual([
+        [{ description: '', enabled: true, name: 'iqn.initiator', selected: false }],
+        [{ description: '', enabled: true, name: 'iqn.initiator', selected: false }]
+      ]);
+
+      component.groupMembersSelections[0][0].selected = true;
+      component.onGroupMemberSelection({ option: { name: 'iqn.initiator', selected: true } });
+
+      expect(component.groupMembersSelections).toEqual([
+        [{ description: '', enabled: false, name: 'iqn.initiator', selected: true }],
+        [{ description: '', enabled: false, name: 'iqn.initiator', selected: false }]
+      ]);
+    });
   });
 
   describe('should submit request', () => {
     beforeEach(() => {
-      component.targetForm.patchValue({ disks: ['rbd/disk_1'] });
-      component.onImageSelection({ option: { name: 'rbd/disk_1', selected: true } });
+      component.targetForm.patchValue({ disks: ['rbd/disk_2'], acl_enabled: true });
+      component.onImageSelection({ option: { name: 'rbd/disk_2', selected: true } });
       component.portals.setValue(['node1:192.168.100.201', 'node2:192.168.100.202']);
       component.addInitiator().patchValue({
         client_iqn: 'iqn.initiator'
@@ -310,7 +354,7 @@ describe('IscsiTargetFormComponent', () => {
       component.addGroup().patchValue({
         group_id: 'foo',
         members: ['iqn.initiator'],
-        disks: ['rbd/disk_1']
+        disks: ['rbd/disk_2']
       });
     });
 
@@ -326,15 +370,14 @@ describe('IscsiTargetFormComponent', () => {
       expect(req.request.body).toEqual({
         clients: [
           {
-            auth: { mutual_password: null, mutual_user: null, password: null, user: null },
-            cdIsInGroup: false,
+            auth: { mutual_password: '', mutual_user: '', password: '', user: '' },
             client_iqn: 'iqn.initiator',
             luns: []
           }
         ],
-        disks: [{ controls: {}, image: 'disk_1', pool: 'rbd' }],
+        disks: [{ backstore: 'backstore:1', controls: {}, image: 'disk_2', pool: 'rbd' }],
         groups: [
-          { disks: [{ image: 'disk_1', pool: 'rbd' }], group_id: 'foo', members: ['iqn.initiator'] }
+          { disks: [{ image: 'disk_2', pool: 'rbd' }], group_id: 'foo', members: ['iqn.initiator'] }
         ],
         new_target_iqn: component.targetForm.value.target_iqn,
         portals: [
@@ -342,7 +385,8 @@ describe('IscsiTargetFormComponent', () => {
           { host: 'node2', ip: '192.168.100.202' }
         ],
         target_controls: {},
-        target_iqn: component.target_iqn
+        target_iqn: component.target_iqn,
+        acl_enabled: true
       });
     });
 
@@ -354,16 +398,40 @@ describe('IscsiTargetFormComponent', () => {
       expect(req.request.body).toEqual({
         clients: [
           {
-            auth: { mutual_password: null, mutual_user: null, password: null, user: null },
-            cdIsInGroup: false,
+            auth: { mutual_password: '', mutual_user: '', password: '', user: '' },
             client_iqn: 'iqn.initiator',
             luns: []
           }
         ],
-        disks: [{ controls: {}, image: 'disk_1', pool: 'rbd' }],
+        disks: [{ backstore: 'backstore:1', controls: {}, image: 'disk_2', pool: 'rbd' }],
         groups: [
-          { disks: [{ image: 'disk_1', pool: 'rbd' }], group_id: 'foo', members: ['iqn.initiator'] }
+          {
+            disks: [{ image: 'disk_2', pool: 'rbd' }],
+            group_id: 'foo',
+            members: ['iqn.initiator']
+          }
         ],
+        portals: [
+          { host: 'node1', ip: '192.168.100.201' },
+          { host: 'node2', ip: '192.168.100.202' }
+        ],
+        target_controls: {},
+        target_iqn: component.targetForm.value.target_iqn,
+        acl_enabled: true
+      });
+    });
+
+    it('should call create with acl_enabled disabled', () => {
+      component.targetForm.patchValue({ acl_enabled: false });
+      component.submit();
+
+      const req = httpTesting.expectOne('api/iscsi/target');
+      expect(req.request.method).toBe('POST');
+      expect(req.request.body).toEqual({
+        clients: [],
+        disks: [{ backstore: 'backstore:1', controls: {}, image: 'disk_2', pool: 'rbd' }],
+        groups: [],
+        acl_enabled: false,
         portals: [
           { host: 'node1', ip: '192.168.100.201' },
           { host: 'node2', ip: '192.168.100.202' }

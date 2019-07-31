@@ -1,0 +1,18 @@
+<cd-table #table
+          [autoReload]="false"
+          [data]="modules"
+          [columns]="columns"
+          columnMode="flex"
+          selectionType="single"
+          (updateSelection)="updateSelection($event)"
+          identifier="module"
+          (fetchData)="getModuleList($event)">
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
+  <cd-mgr-module-details cdTableDetail
+                         [selection]="selection">
+  </cd-mgr-module-details>
+</cd-table>

@@ -82,10 +82,6 @@ void MDSMap::mds_info_t::dump(Formatter *f) const
   if (laggy_since != utime_t())
     f->dump_stream("laggy_since") << laggy_since;
   
-  f->dump_int("standby_for_rank", standby_for_rank);
-  f->dump_int("standby_for_fscid", standby_for_fscid);
-  f->dump_string("standby_for_name", standby_for_name);
-  f->dump_bool("standby_replay", standby_replay);
   f->open_array_section("export_targets");
   for (set<mds_rank_t>::iterator p = export_targets.begin();
        p != export_targets.end(); ++p) {
@@ -93,6 +89,7 @@ void MDSMap::mds_info_t::dump(Formatter *f) const
   }
   f->close_section();
   f->dump_unsigned("features", mds_features);
+  f->dump_unsigned("flags", flags);
 }
 
 void MDSMap::mds_info_t::print_summary(ostream &out) const
@@ -107,22 +104,15 @@ void MDSMap::mds_info_t::print_summary(ostream &out) const
   if (laggy()) {
     out << " laggy since " << laggy_since;
   }
-  if (standby_for_rank != -1 ||
-      !standby_for_name.empty()) {
-    out << " (standby for";
-    //if (standby_for_rank >= 0)
-      out << " rank " << standby_for_rank;
-    if (!standby_for_name.empty()) {
-      out << " '" << standby_for_name << "'";
-    }
-    out << ")";
-  }
   if (!export_targets.empty()) {
     out << " export_targets=" << export_targets;
   }
+  if (is_frozen()) {
+    out << " frozen";
+  }
 }
 
-void MDSMap::mds_info_t::generate_test_instances(list<mds_info_t*>& ls)
+void MDSMap::mds_info_t::generate_test_instances(std::list<mds_info_t*>& ls)
 {
   mds_info_t *sample = new mds_info_t();
   ls.push_back(sample);
@@ -145,8 +135,8 @@ void MDSMap::dump(Formatter *f) const
   f->dump_int("root", root);
   f->dump_int("session_timeout", session_timeout);
   f->dump_int("session_autoclose", session_autoclose);
-  f->dump_stream("min_compat_client") << (int)min_compat_client << " ("
-				      << ceph_release_name(min_compat_client) << ")";
+  f->dump_stream("min_compat_client") << ceph::to_integer<int>(min_compat_client) << " ("
+				      << min_compat_client << ")";
   f->dump_int("max_file_size", max_file_size);
   f->dump_int("last_failure", last_failure);
   f->dump_int("last_failure_osd_epoch", last_failure_osd_epoch);
@@ -197,7 +187,7 @@ void MDSMap::dump(Formatter *f) const
   f->dump_int("standby_count_wanted", std::max(0, standby_count_wanted));
 }
 
-void MDSMap::generate_test_instances(list<MDSMap*>& ls)
+void MDSMap::generate_test_instances(std::list<MDSMap*>& ls)
 {
   MDSMap *m = new MDSMap();
   m->max_mds = 1;
@@ -225,8 +215,8 @@ void MDSMap::print(ostream& out) const
   out << "session_timeout\t" << session_timeout << "\n"
       << "session_autoclose\t" << session_autoclose << "\n";
   out << "max_file_size\t" << max_file_size << "\n";
-  out << "min_compat_client\t" << (int)min_compat_client << " ("
-			       << ceph_release_name(min_compat_client) << ")\n";
+  out << "min_compat_client\t" << ceph::to_integer<int>(min_compat_client) << " ("
+			       << min_compat_client << ")\n";
   out << "last_failure\t" << last_failure << "\n"
       << "last_failure_osd_epoch\t" << last_failure_osd_epoch << "\n";
   out << "compat\t" << compat << "\n";
@@ -518,7 +508,7 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
 
 void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) const
 {
-  __u8 v = 8;
+  __u8 v = 9;
   if (!HAVE_FEATURE(features, SERVER_NAUTILUS)) {
     v = 7;
   }
@@ -535,12 +525,15 @@ void MDSMap::mds_info_t::encode_versioned(bufferlist& bl, uint64_t features) con
     encode(addrs, bl, features);
   }
   encode(laggy_since, bl);
-  encode(standby_for_rank, bl);
-  encode(standby_for_name, bl);
+  encode(MDS_RANK_NONE, bl); /* standby_for_rank */
+  encode(std::string(), bl); /* standby_for_name */
   encode(export_targets, bl);
   encode(mds_features, bl);
-  encode(standby_for_fscid, bl);
-  encode(standby_replay, bl);
+  encode(FS_CLUSTER_ID_NONE, bl); /* standby_for_fscid */
+  encode(false, bl);
+  if (v >= 9) {
+    encode(flags, bl);
+  }
   ENCODE_FINISH(bl);
 }
 
@@ -557,14 +550,14 @@ void MDSMap::mds_info_t::encode_unversioned(bufferlist& bl) const
   encode(state_seq, bl);
   encode(addrs.legacy_addr(), bl, 0);
   encode(laggy_since, bl);
-  encode(standby_for_rank, bl);
-  encode(standby_for_name, bl);
+  encode(MDS_RANK_NONE, bl);
+  encode(std::string(), bl);
   encode(export_targets, bl);
 }
 
 void MDSMap::mds_info_t::decode(bufferlist::const_iterator& bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(8, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(9, 4, 4, bl);
   decode(global_id, bl);
   decode(name, bl);
   decode(rank, bl);
@@ -573,17 +566,28 @@ void MDSMap::mds_info_t::decode(bufferlist::const_iterator& bl)
   decode(state_seq, bl);
   decode(addrs, bl);
   decode(laggy_since, bl);
-  decode(standby_for_rank, bl);
-  decode(standby_for_name, bl);
+  {
+    mds_rank_t standby_for_rank;
+    decode(standby_for_rank, bl);
+  }
+  {
+    std::string standby_for_name;
+    decode(standby_for_name, bl);
+  }
   if (struct_v >= 2)
     decode(export_targets, bl);
   if (struct_v >= 5)
     decode(mds_features, bl);
   if (struct_v >= 6) {
+    fs_cluster_id_t standby_for_fscid;
     decode(standby_for_fscid, bl);
   }
   if (struct_v >= 7) {
+    bool standby_replay;
     decode(standby_replay, bl);
+  }
+  if (struct_v >= 9) {
+    decode(flags, bl);
   }
   DECODE_FINISH(bl);
 }
@@ -686,7 +690,7 @@ void MDSMap::encode(bufferlist& bl, uint64_t features) const
   encode(cas_pool, bl);
 
   // kclient ignores everything from here
-  __u16 ev = 14;
+  __u16 ev = 15;
   encode(ev, bl);
   encode(compat, bl);
   encode(metadata_pool, bl);
@@ -836,7 +840,15 @@ void MDSMap::decode(bufferlist::const_iterator& p)
     decode(old_max_mds, p);
   }
 
-  if (ev >= 14) {
+  if (ev == 14) {
+    int8_t r;
+    decode(r, p);
+    if (r < 0) {
+      min_compat_client = ceph_release_t::unknown;
+    } else {
+      min_compat_client = ceph_release_t{static_cast<uint8_t>(r)};
+    }
+  } else if (ev > 14) {
     decode(min_compat_client, p);
   }
 

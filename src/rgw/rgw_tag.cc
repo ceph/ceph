@@ -8,10 +8,7 @@
 #include <boost/algorithm/string.hpp>
 
 #include "rgw_tag.h"
-
-static constexpr uint32_t MAX_OBJ_TAGS=10;
-static constexpr uint32_t MAX_TAG_KEY_SIZE=128;
-static constexpr uint32_t MAX_TAG_VAL_SIZE=256;
+#include "rgw_common.h"
 
 bool RGWObjTags::add_tag(const string&key, const string& val){
   return tag_map.emplace(std::make_pair(key,val)).second;
@@ -22,9 +19,9 @@ bool RGWObjTags::emplace_tag(std::string&& key, std::string&& val){
 }
 
 int RGWObjTags::check_and_add_tag(const string&key, const string& val){
-  if (tag_map.size() == MAX_OBJ_TAGS ||
-      key.size() > MAX_TAG_KEY_SIZE ||
-      val.size() > MAX_TAG_VAL_SIZE ||
+  if (tag_map.size() == max_obj_tags ||
+      key.size() > max_tag_key_size ||
+      val.size() > max_tag_val_size ||
       key.size() == 0){
     return -ERR_INVALID_TAG;
   }

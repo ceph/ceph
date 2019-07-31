@@ -166,6 +166,7 @@ struct PrepareRemoteImageRequest<librbd::MockTestImageCtx> {
                                            const std::string &local_mirror_uuid,
                                            const std::string &local_image_id,
                                            const journal::Settings &settings,
+                                           journal::CacheManagerHandler *cache_manager_handler,
                                            std::string *remote_mirror_uuid,
                                            std::string *remote_image_id,
                                            ::journal::MockJournalerProxy **remote_journaler,
@@ -396,6 +397,18 @@ public:
         }));
   }
 
+  void expect_flush_repeatedly(MockReplay& mock_replay,
+                               journal::MockJournaler& mock_journal) {
+    EXPECT_CALL(mock_replay, flush(_))
+      .WillRepeatedly(Invoke([this](Context* ctx) {
+                        m_threads->work_queue->queue(ctx, 0);
+                      }));
+    EXPECT_CALL(mock_journal, flush_commit_position(_))
+      .WillRepeatedly(Invoke([this](Context* ctx) {
+                        m_threads->work_queue->queue(ctx, 0);
+                      }));
+  }
+
   void expect_trash_move(MockImageDeleter& mock_image_deleter,
                          const std::string& global_image_id,
                          bool ignore_orphan, int r) {
@@ -590,7 +603,7 @@ public:
 
   void create_image_replayer(MockThreads &mock_threads) {
     m_image_replayer = new MockImageReplayer(
-      &mock_threads, &m_instance_watcher,
+      &mock_threads, &m_instance_watcher, nullptr,
       rbd::mirror::RadosRef(new librados::Rados(m_local_io_ctx)),
       "local_mirror_uuid", m_local_io_ctx.get_id(), "global image id");
     m_image_replayer->add_peer("peer_uuid", m_remote_io_ctx);
@@ -624,6 +637,7 @@ TEST_F(TestMockImageReplayer, StartStop) {
   MockEventPreprocessor mock_event_preprocessor;
   MockReplayStatusFormatter mock_replay_status_formatter;
 
+  expect_flush_repeatedly(mock_local_replay, mock_remote_journaler);
   expect_get_or_send_update(mock_replay_status_formatter);
 
   InSequence seq;
@@ -850,7 +864,6 @@ TEST_F(TestMockImageReplayer, GetRemoteImageIdError) {
 }
 
 TEST_F(TestMockImageReplayer, BootstrapError) {
-
   create_local_image();
   librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
 
@@ -883,6 +896,42 @@ TEST_F(TestMockImageReplayer, BootstrapError) {
   C_SaferCond start_ctx;
   m_image_replayer->start(&start_ctx);
   ASSERT_EQ(-EINVAL, start_ctx.wait());
+}
+
+TEST_F(TestMockImageReplayer, StopBeforeBootstrap) {
+  create_local_image();
+  librbd::MockTestImageCtx mock_local_image_ctx(*m_local_image_ctx);
+
+  journal::MockJournaler mock_remote_journaler;
+  MockThreads mock_threads(m_threads);
+  expect_work_queue_repeatedly(mock_threads);
+  expect_add_event_after_repeatedly(mock_threads);
+
+  MockImageDeleter mock_image_deleter;
+  MockPrepareLocalImageRequest mock_prepare_local_image_request;
+  MockPrepareRemoteImageRequest mock_prepare_remote_image_request;
+  MockReplayStatusFormatter mock_replay_status_formatter;
+
+  expect_get_or_send_update(mock_replay_status_formatter);
+
+  InSequence seq;
+  expect_send(mock_prepare_local_image_request, mock_local_image_ctx.id,
+              mock_local_image_ctx.name, "remote mirror uuid", 0);
+  expect_send(mock_prepare_remote_image_request, "remote mirror uuid",
+              m_remote_image_ctx->id, 0);
+  EXPECT_CALL(mock_remote_journaler, construct())
+    .WillOnce(Invoke([this]() {
+                m_image_replayer->stop(nullptr, true);
+              }));
+
+  EXPECT_CALL(mock_remote_journaler, remove_listener(_));
+  expect_shut_down(mock_remote_journaler, 0);
+
+  create_image_replayer(mock_threads);
+
+  C_SaferCond start_ctx;
+  m_image_replayer->start(&start_ctx);
+  ASSERT_EQ(-ECANCELED, start_ctx.wait());
 }
 
 TEST_F(TestMockImageReplayer, StartExternalReplayError) {
@@ -964,6 +1013,7 @@ TEST_F(TestMockImageReplayer, StopError) {
   MockEventPreprocessor mock_event_preprocessor;
   MockReplayStatusFormatter mock_replay_status_formatter;
 
+  expect_flush_repeatedly(mock_local_replay, mock_remote_journaler);
   expect_get_or_send_update(mock_replay_status_formatter);
 
   InSequence seq;
@@ -1032,6 +1082,7 @@ TEST_F(TestMockImageReplayer, Replay) {
   MockReplayStatusFormatter mock_replay_status_formatter;
   ::journal::MockReplayEntry mock_replay_entry;
 
+  expect_flush_repeatedly(mock_local_replay, mock_remote_journaler);
   expect_get_or_send_update(mock_replay_status_formatter);
   expect_get_commit_tid_in_debug(mock_replay_entry);
   expect_get_tag_tid_in_debug(mock_local_journal);
@@ -1141,6 +1192,7 @@ TEST_F(TestMockImageReplayer, DecodeError) {
   MockReplayStatusFormatter mock_replay_status_formatter;
   ::journal::MockReplayEntry mock_replay_entry;
 
+  expect_flush_repeatedly(mock_local_replay, mock_remote_journaler);
   expect_get_or_send_update(mock_replay_status_formatter);
   expect_get_commit_tid_in_debug(mock_replay_entry);
   expect_get_tag_tid_in_debug(mock_local_journal);
@@ -1242,6 +1294,7 @@ TEST_F(TestMockImageReplayer, DelayedReplay) {
   MockReplayStatusFormatter mock_replay_status_formatter;
   ::journal::MockReplayEntry mock_replay_entry;
 
+  expect_flush_repeatedly(mock_local_replay, mock_remote_journaler);
   expect_get_or_send_update(mock_replay_status_formatter);
   expect_get_commit_tid_in_debug(mock_replay_entry);
   expect_get_tag_tid_in_debug(mock_local_journal);
@@ -1291,7 +1344,7 @@ TEST_F(TestMockImageReplayer, DelayedReplay) {
   // process with delay
   EXPECT_CALL(mock_replay_entry, get_data());
   librbd::journal::EventEntry event_entry(
-    librbd::journal::AioDiscardEvent(123, 345, false), ceph_clock_now());
+    librbd::journal::AioDiscardEvent(123, 345, 0), ceph_clock_now());
   EXPECT_CALL(mock_local_replay, decode(_, _))
     .WillOnce(DoAll(SetArgPointee<1>(event_entry),
                     Return(0)));

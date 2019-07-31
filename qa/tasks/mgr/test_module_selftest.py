@@ -68,7 +68,6 @@ class TestModuleSelftest(MgrTestCase):
                 "osd", "pool", "delete", pool_name, pool_name,
                 "--yes-i-really-really-mean-it")
 
-
     def test_selftest_run(self):
         self._load_module("selftest")
         self.mgr_cluster.mon_manager.raw_cluster_cmd("mgr", "self-test", "run")
@@ -79,6 +78,10 @@ class TestModuleSelftest(MgrTestCase):
     def test_crash(self):
         self._selftest_plugin("crash")
 
+    def test_orchestrator_cli(self):
+        self._selftest_plugin("orchestrator_cli")
+
+
     def test_selftest_config_update(self):
         """
         That configuration updates are seen by running mgr modules
@@ -87,27 +90,23 @@ class TestModuleSelftest(MgrTestCase):
 
         def get_value():
             return self.mgr_cluster.mon_manager.raw_cluster_cmd(
-                    "mgr", "self-test", "config", "get", "testkey").strip()
+                "mgr", "self-test", "config", "get", "testkey").strip()
 
         self.assertEqual(get_value(), "None")
-
-        self.mgr_cluster.mon_manager.raw_cluster_cmd("config", "set",
-                "mgr", "mgr/selftest/testkey", "testvalue")
-
-        self.wait_until_equal(get_value, "testvalue",timeout=10)
-
-        active_id = self.mgr_cluster.get_active_id()
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "config", "set", "mgr", "mgr/selftest/testkey", "foo")
+        self.wait_until_equal(get_value, "foo", timeout=10)
 
         def get_localized_value():
             return self.mgr_cluster.mon_manager.raw_cluster_cmd(
-                    "mgr", "self-test", "config", "get_localized", "testlkey").strip()
+                "mgr", "self-test", "config", "get_localized", "testkey").strip()
 
-        self.mgr_cluster.mon_manager.raw_cluster_cmd("config", "set",
-                "mgr", "mgr/selftest/{0}/testlkey".format(active_id),
-                "test localized value")
-
-        self.wait_until_equal(get_localized_value, "test localized value",
-                              timeout=10)
+        self.assertEqual(get_localized_value(), "foo")
+        self.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "config", "set", "mgr", "mgr/selftest/{}/testkey".format(
+                self.mgr_cluster.get_active_id()),
+            "bar")
+        self.wait_until_equal(get_localized_value, "bar", timeout=10)
 
     def test_selftest_config_upgrade(self):
         """
@@ -197,7 +196,7 @@ class TestModuleSelftest(MgrTestCase):
         self._load_module("selftest")
 
         # Use the dashboard to test that the mgr is still able to do its job
-        self._assign_ports("dashboard", "server_port")
+        self._assign_ports("dashboard", "ssl_server_port")
         self._load_module("dashboard")
         self.mgr_cluster.mon_manager.raw_cluster_cmd("dashboard",
                                                      "create-self-signed-cert")

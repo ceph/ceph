@@ -10,6 +10,8 @@ import { forkJoin, Subscription } from 'rxjs';
 import { ErasureCodeProfileService } from '../../../shared/api/erasure-code-profile.service';
 import { PoolService } from '../../../shared/api/pool.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import {
@@ -62,6 +64,9 @@ export class PoolFormComponent implements OnInit {
     sourceType: RbdConfigurationSourceField;
   }>();
   currentConfigurationValues: { [configKey: string]: any } = {};
+  action: string;
+  resource: string;
+  icons = Icons;
 
   constructor(
     private dimlessBinaryPipe: DimlessBinaryPipe,
@@ -74,9 +79,12 @@ export class PoolFormComponent implements OnInit {
     private bsModalService: BsModalService,
     private taskWrapper: TaskWrapperService,
     private ecpService: ErasureCodeProfileService,
-    private i18n: I18n
+    private i18n: I18n,
+    public actionLabels: ActionLabelsI18n
   ) {
-    this.editing = this.router.url.startsWith('/pool/edit');
+    this.editing = this.router.url.startsWith(`/pool/${URLVerbs.EDIT}`);
+    this.action = this.editing ? this.actionLabels.EDIT : this.actionLabels.CREATE;
+    this.resource = this.i18n('pool');
     this.authenticate();
     this.createForm();
   }
@@ -109,7 +117,7 @@ export class PoolFormComponent implements OnInit {
     this.form = new CdFormGroup(
       {
         name: new FormControl('', {
-          validators: [Validators.pattern(/^[\.A-Za-z0-9_/-]+$/), Validators.required]
+          validators: [Validators.pattern(/^[.A-Za-z0-9_/-]+$/), Validators.required]
         }),
         poolType: new FormControl('', {
           validators: [Validators.required]
@@ -130,7 +138,11 @@ export class PoolFormComponent implements OnInit {
           validators: [Validators.required, Validators.min(1)]
         }),
         ecOverwrites: new FormControl(false),
-        compression: compressionForm
+        compression: compressionForm,
+        max_bytes: new FormControl(''),
+        max_objects: new FormControl(0, {
+          validators: [Validators.min(0)]
+        })
       },
       [
         CdValidators.custom('form', () => null),
@@ -215,7 +227,9 @@ export class PoolFormComponent implements OnInit {
       algorithm: pool.options.compression_algorithm,
       minBlobSize: this.dimlessBinaryPipe.transform(pool.options.compression_min_blob_size),
       maxBlobSize: this.dimlessBinaryPipe.transform(pool.options.compression_max_blob_size),
-      ratio: pool.options.compression_required_ratio
+      ratio: pool.options.compression_required_ratio,
+      max_bytes: this.dimlessBinaryPipe.transform(pool.quota_max_bytes),
+      max_objects: pool.quota_max_objects
     };
 
     Object.keys(dataMap).forEach((controlName: string) => {
@@ -224,6 +238,7 @@ export class PoolFormComponent implements OnInit {
         this.form.silentSet(controlName, value);
       }
     });
+    this.data.pgs = this.form.getValue('pgNum');
     this.data.applications.selected = pool.application_metadata;
   }
 
@@ -237,10 +252,27 @@ export class PoolFormComponent implements OnInit {
   private listenToChangesDuringAddEdit() {
     this.form.get('pgNum').valueChanges.subscribe((pgs) => {
       const change = pgs - this.data.pgs;
-      if (Math.abs(change) === 1) {
-        this.pgUpdate(undefined, change);
+      if (Math.abs(change) !== 1 || pgs === 2) {
+        this.data.pgs = pgs;
+        return;
       }
+      this.doPgPowerJump(change as 1 | -1);
     });
+  }
+
+  private doPgPowerJump(jump: 1 | -1) {
+    const power = this.calculatePgPower() + jump;
+    this.setPgs(jump === -1 ? Math.round(power) : Math.floor(power));
+  }
+
+  private calculatePgPower(pgs = this.form.getValue('pgNum')): number {
+    return Math.log(pgs) / Math.log(2);
+  }
+
+  private setPgs(power: number) {
+    const pgs = Math.pow(2, power < 0 ? 0 : power); // Set size the nearest accurate size.
+    this.data.pgs = pgs;
+    this.form.silentSet('pgNum', pgs);
   }
 
   private listenToChangesDuringAdd() {
@@ -350,7 +382,7 @@ export class PoolFormComponent implements OnInit {
       return;
     }
     const oldValue = this.data.pgs;
-    this.pgUpdate(pgs);
+    this.alignPgs(pgs);
     const newValue = this.data.pgs;
     if (!this.externalPgChange) {
       this.externalPgChange = oldValue !== newValue;
@@ -373,30 +405,12 @@ export class PoolFormComponent implements OnInit {
     }
   }
 
-  private pgUpdate(pgs?, jump?) {
-    pgs = _.isNumber(pgs) ? pgs : this.form.getValue('pgNum');
-    if (pgs < 1) {
-      pgs = 1;
-    }
-    let power = Math.round(Math.log(pgs) / Math.log(2));
-    if (_.isNumber(jump)) {
-      power += jump;
-    }
-    if (power < 0) {
-      power = 0;
-    }
-    pgs = Math.pow(2, power); // Set size the nearest accurate size.
-    this.data.pgs = pgs;
-    this.form.silentSet('pgNum', pgs);
+  private alignPgs(pgs = this.form.getValue('pgNum')) {
+    this.setPgs(Math.round(this.calculatePgPower(pgs < 1 ? 1 : pgs)));
   }
 
   private setComplexValidators() {
     if (this.editing) {
-      this.form
-        .get('pgNum')
-        .setValidators(
-          CdValidators.custom('noDecrease', (pgs) => this.data.pool && pgs < this.data.pool.pg_num)
-        );
       this.form
         .get('name')
         .setValidators([
@@ -468,15 +482,6 @@ export class PoolFormComponent implements OnInit {
     return this.form.getValue('mode') && this.form.get('mode').value.toLowerCase() !== 'none';
   }
 
-  pgKeyUp($e) {
-    const key = $e.key;
-    const included = (arr: string[]): number => (arr.indexOf(key) !== -1 ? 1 : 0);
-    const jump = included(['ArrowUp', '+']) - included(['ArrowDown', '-']);
-    if (jump) {
-      this.pgUpdate(undefined, jump);
-    }
-  }
-
   describeCrushStep(step: CrushStep) {
     return [
       step.op.replace('_', ' '),
@@ -532,7 +537,20 @@ export class PoolFormComponent implements OnInit {
             formControlName: 'erasureProfile',
             attr: 'name'
           },
-      { externalFieldName: 'rule_name', formControlName: 'crushRule', attr: 'rule_name' }
+      { externalFieldName: 'rule_name', formControlName: 'crushRule', attr: 'rule_name' },
+      {
+        externalFieldName: 'quota_max_bytes',
+        formControlName: 'max_bytes',
+        replaceFn: this.formatter.toBytes,
+        editable: true,
+        resetValue: this.editing ? 0 : undefined
+      },
+      {
+        externalFieldName: 'quota_max_objects',
+        formControlName: 'max_objects',
+        editable: true,
+        resetValue: this.editing ? 0 : undefined
+      }
     ]);
 
     if (this.info.is_all_bluestore) {
@@ -654,10 +672,10 @@ export class PoolFormComponent implements OnInit {
   private triggerApiTask(pool) {
     this.taskWrapper
       .wrapTaskAroundCall({
-        task: new FinishedTask('pool/' + (this.editing ? 'edit' : 'create'), {
+        task: new FinishedTask('pool/' + (this.editing ? URLVerbs.EDIT : URLVerbs.CREATE), {
           pool_name: pool.hasOwnProperty('srcpool') ? pool.srcpool : pool.pool
         }),
-        call: this.poolService[this.editing ? 'update' : 'create'](pool)
+        call: this.poolService[this.editing ? URLVerbs.UPDATE : URLVerbs.CREATE](pool)
       })
       .subscribe(
         undefined,

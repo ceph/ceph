@@ -12,9 +12,9 @@
 #include "librbd/io/AsyncOperation.h"
 #include "librbd/io/Types.h"
 
+#include <map>
 #include <string>
 #include <vector>
-#include <atomic>
 
 namespace ZTracer { struct Trace; }
 
@@ -24,28 +24,25 @@ struct ImageCtx;
 
 namespace io {
 
-struct AioCompletion;
 template <typename I> class AbstractObjectWriteRequest;
 
 template <typename ImageCtxT = librbd::ImageCtx>
 class CopyupRequest {
 public:
-  static CopyupRequest* create(ImageCtxT *ictx, const std::string &oid,
-                               uint64_t objectno, Extents &&image_extents,
+  static CopyupRequest* create(ImageCtxT *ictx, uint64_t objectno,
+                               Extents &&image_extents,
                                const ZTracer::Trace &parent_trace) {
-    return new CopyupRequest(ictx, oid, objectno, std::move(image_extents),
+    return new CopyupRequest(ictx, objectno, std::move(image_extents),
                              parent_trace);
   }
 
-  CopyupRequest(ImageCtxT *ictx, const std::string &oid, uint64_t objectno,
-                Extents &&image_extents, const ZTracer::Trace &parent_trace);
+  CopyupRequest(ImageCtxT *ictx, uint64_t objectno, Extents &&image_extents,
+                const ZTracer::Trace &parent_trace);
   ~CopyupRequest();
 
   void append_request(AbstractObjectWriteRequest<ImageCtxT> *req);
 
   void send();
-
-  void complete(int r);
 
 private:
   /**
@@ -57,65 +54,78 @@ private:
    *
    *              <start>
    *                 |
+   *      /---------/ \---------\
+   *      |                     |
+   *      v                     v
+   *  READ_FROM_PARENT      DEEP_COPY
+   *      |                     |
+   *      \---------\ /---------/
+   *                 |
+   *                 v (skip if not needed)
+   *         UPDATE_OBJECT_MAPS
+   *                 |
+   *                 v (skip if not needed)
+   *              COPYUP
+   *                 |
    *                 v
-   *    . . .STATE_READ_FROM_PARENT. . .
-   *    . .          |                 .
-   *    . .          v                 .
-   *    . .  STATE_OBJECT_MAP_HEAD     v (copy on read /
-   *    . .          |                 .  no HEAD rev. update)
-   *    v v          v                 .
-   *    . .    STATE_OBJECT_MAP. . . . .
-   *    . .          |
-   *    . .          v
-   *    . . . . > STATE_COPYUP
-   *    .            |
-   *    .            v
-   *    . . . . > <finish>
+   *              <finish>
    *
    * @endverbatim
    *
-   * The _OBJECT_MAP state is skipped if the object map isn't enabled or if
-   * an object map update isn't required. The _COPYUP state is skipped if
+   * The OBJECT_MAP state is skipped if the object map isn't enabled or if
+   * an object map update isn't required. The COPYUP state is skipped if
    * no data was read from the parent *and* there are no additional ops.
    */
-  enum State {
-    STATE_READ_FROM_PARENT,
-    STATE_OBJECT_MAP_HEAD, // only update the HEAD revision
-    STATE_OBJECT_MAP,      // update HEAD+snaps (if any)
-    STATE_COPYUP
-  };
 
-  ImageCtx *m_ictx;
-  std::string m_oid;
+  typedef std::vector<AbstractObjectWriteRequest<ImageCtxT> *> WriteRequests;
+
+  ImageCtxT *m_image_ctx;
   uint64_t m_object_no;
   Extents m_image_extents;
   ZTracer::Trace m_trace;
 
-  State m_state;
-  bool m_flatten;
+  bool m_flatten = false;
+  bool m_copyup_required = true;
+  bool m_copyup_is_zero = true;
+
+  std::map<uint64_t, uint64_t> m_copyup_extent_map;
   ceph::bufferlist m_copyup_data;
-  std::vector<AbstractObjectWriteRequest<ImageCtxT> *> m_pending_requests;
-  unsigned m_pending_copyups = 0;
 
   AsyncOperation m_async_op;
 
   std::vector<uint64_t> m_snap_ids;
+  bool m_first_snap_is_clean = false;
 
   Mutex m_lock;
+  WriteRequests m_pending_requests;
+  unsigned m_pending_copyups = 0;
 
-  void complete_requests(int r);
+  WriteRequests m_restart_requests;
+  bool m_append_request_permitted = true;
 
-  bool should_complete(int *r);
+  void read_from_parent();
+  void handle_read_from_parent(int r);
 
+  void deep_copy();
+  void handle_deep_copy(int r);
+
+  void update_object_maps();
+  void handle_update_object_maps(int r);
+
+  void copyup();
+  void handle_copyup(int r);
+
+  void finish(int r);
+  void complete_requests(bool override_restart_retval, int r);
+
+  void disable_append_requests();
   void remove_from_list();
-  void remove_from_list(Mutex &lock);
 
-  bool send_object_map_head();
-  bool send_object_map();
-  bool send_copyup();
   bool is_copyup_required();
   bool is_update_object_map_required(int r);
   bool is_deep_copy() const;
+
+  void compute_deep_copy_snap_ids();
 };
 
 } // namespace io

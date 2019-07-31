@@ -17,10 +17,15 @@ class optional_yield;
 
 struct obj_version;
 
+int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
+                   librados::IoCtx& ioctx,
+		   bool create = false,
+		   bool mostly_omap = false);
+
 int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs = NULL);
 int rgw_get_system_obj(RGWRados *rgwstore, RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
-                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, map<string, bufferlist> *pattrs = NULL,
+                       RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, map<string, bufferlist> *pattrs = NULL,
                        rgw_cache_entry_info *cache_info = NULL,
 		       boost::optional<obj_version> refresh_version = boost::none);
 int rgw_delete_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid,
@@ -41,6 +46,9 @@ int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
                       optional_yield y);
 int rgw_rados_operate(librados::IoCtx& ioctx, const std::string& oid,
                       librados::ObjectWriteOperation *op, optional_yield y);
+int rgw_rados_notify(librados::IoCtx& ioctx, const std::string& oid,
+                     bufferlist& bl, uint64_t timeout_ms, bufferlist* pbl,
+                     optional_yield y);
 
 int rgw_tools_init(CephContext *cct);
 void rgw_tools_cleanup();
@@ -147,7 +155,7 @@ public:
                                       bucket(_bucket),
                                       key(_key) {}
   public:
-    int put(bufferlist& data, map<string, bufferlist>& attrs); /* might modify attrs */
+    int put(bufferlist& data, map<string, bufferlist>& attrs, const DoutPrefixProvider *dpp, optional_yield y); /* might modify attrs */
 
     void set_mtime(const ceph::real_time& _mtime) {
       mtime = _mtime;

@@ -10,12 +10,14 @@ set(librbd_replay_srcs
     rbd_loc.cc
     Replayer.cc)
 add_library(rbd_replay STATIC ${librbd_replay_srcs})
-target_link_libraries(rbd_replay PRIVATE librbd librados global)
+target_link_libraries(rbd_replay
+  PUBLIC rbd_replay_types
+  PRIVATE librbd librados global)
 
 add_executable(rbd-replay
   rbd-replay.cc)
 target_link_libraries(rbd-replay
-  librbd librados global rbd_replay rbd_replay_types ceph-common)
+  librbd librados global rbd_replay ceph-common)
 install(TARGETS rbd-replay DESTINATION bin)
 
 set(librbd_replay_ios_srcs
@@ -29,7 +31,6 @@ if(HAVE_BABELTRACE)
   target_link_libraries(rbd-replay-prep
     rbd_replay
     rbd_replay_ios
-    rbd_replay_types
     librbd
     librados
     ceph-common

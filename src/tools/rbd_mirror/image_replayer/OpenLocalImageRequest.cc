@@ -46,7 +46,7 @@ struct MirrorExclusiveLockPolicy : public librbd::exclusive_lock::Policy {
     int r = -EROFS;
     {
       RWLock::RLocker owner_locker(image_ctx->owner_lock);
-      RWLock::RLocker snap_locker(image_ctx->snap_lock);
+      RWLock::RLocker image_locker(image_ctx->image_lock);
       if (image_ctx->journal == nullptr || image_ctx->journal->is_tag_owner()) {
         r = 0;
       }
@@ -108,7 +108,7 @@ void OpenLocalImageRequest<I>::send_open_image() {
                                  m_local_io_ctx, false);
   {
     RWLock::WLocker owner_locker((*m_local_image_ctx)->owner_lock);
-    RWLock::WLocker snap_locker((*m_local_image_ctx)->snap_lock);
+    RWLock::WLocker image_locker((*m_local_image_ctx)->image_lock);
     (*m_local_image_ctx)->set_exclusive_lock_policy(
       new MirrorExclusiveLockPolicy<I>(*m_local_image_ctx));
     (*m_local_image_ctx)->set_journal_policy(

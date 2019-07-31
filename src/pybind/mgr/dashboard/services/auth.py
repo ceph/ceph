@@ -43,7 +43,7 @@ class JwtManager(object):
             cls.init()
         ttl = mgr.get_module_option('jwt_token_ttl', cls.JWT_TOKEN_TTL)
         ttl = int(ttl)
-        now = int(time.mktime(time.gmtime()))
+        now = int(time.time())
         payload = {
             'iss': 'ceph-dashboard',
             'jti': str(uuid.uuid4()),

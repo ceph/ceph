@@ -5,6 +5,7 @@ Collect statistics from Ceph cluster and send this back to the Ceph project
 when user has opted-in
 """
 import errno
+import hashlib
 import json
 import re
 import requests
@@ -16,6 +17,7 @@ from collections import defaultdict
 
 from mgr_module import MgrModule
 
+ALL_CHANNELS = ['basic', 'ident', 'crash', 'device']
 
 class Module(MgrModule):
     config = dict()
@@ -40,7 +42,7 @@ class Module(MgrModule):
         {
             'name': 'enabled',
             'type': 'bool',
-            'default': True
+            'default': False
         },
         {
             'name': 'leaderboard',
@@ -70,19 +72,38 @@ class Module(MgrModule):
         {
             'name': 'interval',
             'type': 'int',
-            'default': 72
-        }
+            'default': 24,
+            'min': 8
+        },
+        {
+            'name': 'channel_basic',
+            'type': 'bool',
+            'default': True,
+            'description': 'Share basic cluster information (size, version)',
+        },
+        {
+            'name': 'channel_ident',
+            'type': 'bool',
+            'default': False,
+            'description': 'Share a user-provided description and/or contact email for the cluster',
+        },
+        {
+            'name': 'channel_crash',
+            'type': 'bool',
+            'default': True,
+            'description': 'Share metadata about Ceph daemon crashes (version, stack straces, etc)',
+        },
+        {
+            'name': 'channel_device',
+            'type': 'bool',
+            'default': True,
+            'description': 'Share device health metrics (e.g., SMART data)',
+        },
     ]
 
     COMMANDS = [
         {
-            "cmd": "telemetry config-set name=key,type=CephString "
-                   "name=value,type=CephString",
-            "desc": "Set a configuration value",
-            "perm": "rw"
-        },
-        {
-            "cmd": "telemetry config-show",
+            "cmd": "telemetry status",
             "desc": "Show current configuration",
             "perm": "r"
         },
@@ -92,9 +113,20 @@ class Module(MgrModule):
             "perm": "rw"
         },
         {
-            "cmd": "telemetry show",
+            "cmd": "telemetry show "
+                   "name=channels,type=CephString,n=N,req=False",
             "desc": "Show last report or report to be sent",
             "perm": "r"
+        },
+        {
+            "cmd": "telemetry on",
+            "desc": "Enable telemetry reports from this cluster",
+            "perm": "rw",
+        },
+        {
+            "cmd": "telemetry off",
+            "desc": "Disable telemetry reports from this cluster",
+            "perm": "rw",
         },
     ]
 
@@ -109,66 +141,16 @@ class Module(MgrModule):
         self.last_upload = None
         self.last_report = dict()
         self.report_id = None
+        self.salt = None
 
-    @staticmethod
-    def str_to_bool(string):
-        return str(string).lower() in ['true', 'yes', 'on']
+    def config_notify(self):
+        for opt in self.MODULE_OPTIONS:
+            setattr(self,
+                    opt['name'],
+                    self.get_module_option(opt['name']))
+            self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
 
-    @staticmethod
-    def is_valid_email(email):
-        regexp = "^.+@([?)[a-zA-Z0-9-.]+.([a-zA-Z]{2,3}|[0-9]{1,3})(]?))$"
-        try:
-            if len(email) <= 7 or len(email) > 255:
-                return False
-
-            if not re.match(regexp, email):
-                return False
-
-            return True
-        except:
-            pass
-
-        return False
-
-    @staticmethod
-    def parse_timestamp(timestamp):
-        return datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S.%f')
-
-    def set_config_option(self, option, value):
-        if option not in self.config_keys.keys():
-            raise RuntimeError('{} is a unknown configuration '
-                               'option'.format(option))
-
-        if option == 'interval':
-            try:
-                value = int(value)
-            except (ValueError, TypeError):
-                raise RuntimeError('invalid interval. Please provide a valid '
-                                   'integer')
-
-            if value < 24:
-                raise RuntimeError('interval should be set to at least 24 hours')
-
-        if option in ['leaderboard', 'enabled']:
-            value = self.str_to_bool(value)
-
-        if option == 'contact':
-            if value and not self.is_valid_email(value):
-                raise RuntimeError('{} is not a valid e-mail address as a '
-                                   'contact'.format(value))
-
-        if option in ['description', 'organization']:
-            if value and len(value) > 256:
-                raise RuntimeError('{} should be limited to 256 '
-                                   'characters'.format(option))
-
-        self.config[option] = value
-        return True
-
-    def init_module_config(self):
-        for key, default in self.config_keys.items():
-            self.set_config_option(key, self.get_module_option(key, default))
-
+    def load(self):
         self.last_upload = self.get_store('last_upload', None)
         if self.last_upload is not None:
             self.last_upload = int(self.last_upload)
@@ -177,6 +159,11 @@ class Module(MgrModule):
         if self.report_id is None:
             self.report_id = str(uuid.uuid4())
             self.set_store('report_id', self.report_id)
+
+        self.salt = self.get_store('salt', None)
+        if not self.salt:
+            self.salt = str(uuid.uuid4())
+            self.set_store('salt', self.salt)
 
     def gather_osd_metadata(self, osd_map):
         keys = ["osd_objectstore", "rotational"]
@@ -213,8 +200,8 @@ class Module(MgrModule):
         return metadata
 
     def gather_crashinfo(self):
-        crashdict = dict()
-        errno, crashids, err = self.remote('crash', 'do_ls', '', '')
+        crashlist = list()
+        errno, crashids, err = self.remote('crash', 'ls')
         if errno:
             return ''
         for crashid in crashids.split():
@@ -222,110 +209,158 @@ class Module(MgrModule):
             errno, crashinfo, err = self.remote('crash', 'do_info', cmd, '')
             if errno:
                 continue
-            crashdict[crashid] = json.loads(crashinfo)
-        return crashdict
+            c = json.loads(crashinfo)
+            del c['utsname_hostname']
+            (etype, eid) = c.get('entity_name', '').split('.')
+            m = hashlib.sha1()
+            m.update(self.salt.encode('utf-8'))
+            m.update(eid.encode('utf-8'))
+            m.update(self.salt.encode('utf-8'))
+            c['entity_name'] = etype + '.' + m.hexdigest()
+            crashlist.append(c)
+        return crashlist
 
-    def compile_report(self):
-        report = {'leaderboard': False, 'report_version': 1}
+    def get_active_channels(self):
+        r = []
+        if self.channel_basic:
+            r.append('basic')
+        if self.channel_crash:
+            r.append('crash')
+        if self.channel_device:
+            r.append('device')
+        return r
 
-        if self.str_to_bool(self.config['leaderboard']):
-            report['leaderboard'] = True
+    def gather_device_report(self):
+        try:
+            return self.remote('devicehealth', 'gather_device_report')
+        except:
+            return None
 
-        for option in ['description', 'contact', 'organization']:
-            report[option] = self.config.get(option, None)
-
-        mon_map = self.get('mon_map')
-        osd_map = self.get('osd_map')
-        service_map = self.get('service_map')
-        fs_map = self.get('fs_map')
-        df = self.get('df')
-
-        report['report_id'] = self.report_id
-        report['created'] = self.parse_timestamp(mon_map['created']).isoformat()
-
-        report['mon'] = {
-            'count': len(mon_map['mons']),
-            'features': mon_map['features']
+    def compile_report(self, channels=[]):
+        if not channels:
+            channels = self.get_active_channels()
+        report = {
+            'leaderboard': False,
+            'report_version': 1,
+            'report_timestamp': datetime.utcnow().isoformat(),
+            'report_id': self.report_id,
+            'channels': channels,
+            'channels_available': ALL_CHANNELS,
         }
 
-        num_pg = 0
-        report['pools'] = list()
-        for pool in osd_map['pools']:
-            num_pg += pool['pg_num']
-            report['pools'].append(
-                {
-                    'pool': pool['pool'],
-                    'type': pool['type'],
-                    'pg_num': pool['pg_num'],
-                    'pgp_num': pool['pg_placement_num'],
-                    'size': pool['size'],
-                    'min_size': pool['min_size'],
-                    'crush_rule': pool['crush_rule']
-                }
-            )
+        if 'ident' in channels:
+            if self.leaderboard:
+                report['leaderboard'] = True
+            for option in ['description', 'contact', 'organization']:
+                report[option] = getattr(self, option)
 
-        report['osd'] = {
-            'count': len(osd_map['osds']),
-            'require_osd_release': osd_map['require_osd_release'],
-            'require_min_compat_client': osd_map['require_min_compat_client']
-        }
+        if 'basic' in channels:
+            mon_map = self.get('mon_map')
+            osd_map = self.get('osd_map')
+            service_map = self.get('service_map')
+            fs_map = self.get('fs_map')
+            df = self.get('df')
 
-        report['fs'] = {
-            'count': len(fs_map['filesystems'])
-        }
+            report['created'] = mon_map['created']
 
-        report['metadata'] = dict()
-        report['metadata']['osd'] = self.gather_osd_metadata(osd_map)
-        report['metadata']['mon'] = self.gather_mon_metadata(mon_map)
+            report['mon'] = {
+                'count': len(mon_map['mons']),
+                'features': mon_map['features']
+            }
 
-        report['usage'] = {
-            'pools': len(df['pools']),
-            'pg_num:': num_pg,
-            'total_used_bytes': df['stats']['total_used_bytes'],
-            'total_bytes': df['stats']['total_bytes'],
-            'total_avail_bytes': df['stats']['total_avail_bytes']
-        }
+            num_pg = 0
+            report['pools'] = list()
+            for pool in osd_map['pools']:
+                num_pg += pool['pg_num']
+                report['pools'].append(
+                    {
+                        'pool': pool['pool'],
+                        'type': pool['type'],
+                        'pg_num': pool['pg_num'],
+                        'pgp_num': pool['pg_placement_num'],
+                        'size': pool['size'],
+                        'min_size': pool['min_size'],
+                        'crush_rule': pool['crush_rule']
+                    }
+                )
 
-        report['services'] = defaultdict(int)
-        for key, value in service_map['services'].items():
-            report['services'][key] += 1
+            report['osd'] = {
+                'count': len(osd_map['osds']),
+                'require_osd_release': osd_map['require_osd_release'],
+                'require_min_compat_client': osd_map['require_min_compat_client']
+            }
 
-        report['crashes'] = self.gather_crashinfo()
+            report['fs'] = {
+                'count': len(fs_map['filesystems'])
+            }
+
+            report['metadata'] = dict()
+            report['metadata']['osd'] = self.gather_osd_metadata(osd_map)
+            report['metadata']['mon'] = self.gather_mon_metadata(mon_map)
+
+            report['usage'] = {
+                'pools': len(df['pools']),
+                'pg_num:': num_pg,
+                'total_used_bytes': df['stats']['total_used_bytes'],
+                'total_bytes': df['stats']['total_bytes'],
+                'total_avail_bytes': df['stats']['total_avail_bytes']
+            }
+
+            report['services'] = defaultdict(int)
+            for key, value in service_map['services'].items():
+                report['services'][key] += 1
+
+        if 'crash' in channels:
+            report['crashes'] = self.gather_crashinfo()
+
+        if 'device' in channels:
+            report['devices'] = self.gather_device_report()
 
         return report
 
     def send(self, report):
-        self.log.info('Upload report to: %s', self.config['url'])
+        self.log.info('Upload report to: %s', self.url)
         proxies = dict()
-        if self.config['proxy']:
-            self.log.info('Using HTTP(S) proxy: %s', self.config['proxy'])
-            proxies['http'] = self.config['proxy']
-            proxies['https'] = self.config['proxy']
+        if self.proxy:
+            self.log.info('Using HTTP(S) proxy: %s', self.proxy)
+            proxies['http'] = self.proxy
+            proxies['https'] = self.proxy
 
-        requests.put(url=self.config['url'], json=report, proxies=proxies)
+        resp = requests.put(url=self.url, json=report, proxies=proxies)
+        if not resp.ok:
+            self.log.error("Report send failed: %d %s %s" %
+                           (resp.status_code, resp.reason, resp.text))
+        return resp
 
     def handle_command(self, inbuf, command):
-        if command['prefix'] == 'telemetry config-show':
-            return 0, json.dumps(self.config), ''
-        elif command['prefix'] == 'telemetry config-set':
-            key = command['key']
-            value = command['value']
-            if not value:
-                return -errno.EINVAL, '', 'Value should not be empty or None'
-
-            self.log.debug('Setting configuration option %s to %s', key, value)
-            self.set_config_option(key, value)
-            self.set_module_option(key, value)
-            return 0, 'Configuration option {0} updated'.format(key), ''
+        if command['prefix'] == 'telemetry status':
+            r = {}
+            for opt in self.MODULE_OPTIONS:
+                r[opt['name']] = getattr(self, opt['name'])
+            return 0, json.dumps(r, indent=4), ''
+        elif command['prefix'] == 'telemetry on':
+            self.set_module_option('enabled', True)
+            return 0, '', ''
+        elif command['prefix'] == 'telemetry off':
+            self.set_module_option('enabled', False)
+            return 0, '', ''
         elif command['prefix'] == 'telemetry send':
             self.last_report = self.compile_report()
-            self.send(self.last_report)
-            return 0, 'Report send to {0}'.format(self.config['url']), ''
+            resp = self.send(self.last_report)
+            if resp.ok:
+                return 0, 'Report sent to {0}'.format(self.url), ''
+            return 1, '', 'Failed to send report to %s: %d %s %s' % (
+                self.url,
+                resp.status_code,
+                resp.reason,
+                resp.text
+            )
+
         elif command['prefix'] == 'telemetry show':
-            report = self.last_report
-            if not report:
-                report = self.compile_report()
-            return 0, json.dumps(report), ''
+            report = self.compile_report(
+                channels=command.get('channels', None)
+            )
+            return 0, json.dumps(report, indent=4), ''
         else:
             return (-errno.EINVAL, '',
                     "Command not found '{0}'".format(command['prefix']))
@@ -343,23 +378,24 @@ class Module(MgrModule):
         self.event.set()
 
     def serve(self):
-        self.init_module_config()
+        self.load()
+        self.config_notify()
         self.run = True
 
         self.log.debug('Waiting for mgr to warm up')
         self.event.wait(10)
 
         while self.run:
-            if not self.config['enabled']:
+            if not self.enabled:
                 self.log.info('Not sending report until configured to do so')
                 self.event.wait(1800)
                 continue
 
             now = int(time.time())
             if not self.last_upload or (now - self.last_upload) > \
-                            self.config['interval'] * 3600:
+                            self.interval * 3600:
                 self.log.info('Compiling and sending report to %s',
-                              self.config['url'])
+                              self.url)
 
                 try:
                     self.last_report = self.compile_report()
@@ -367,9 +403,12 @@ class Module(MgrModule):
                     self.log.exception('Exception while compiling report:')
 
                 try:
-                    self.send(self.last_report)
-                    self.last_upload = now
-                    self.set_store('last_upload', str(now))
+                    resp = self.send(self.last_report)
+                    # self.send logs on failure; only update last_upload
+                    # if we succeed
+                    if resp.ok:
+                        self.last_upload = now
+                        self.set_store('last_upload', str(now))
                 except:
                     self.log.exception('Exception while sending report:')
             else:

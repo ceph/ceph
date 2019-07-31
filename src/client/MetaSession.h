@@ -52,9 +52,8 @@ struct MetaSession {
   xlist<MetaRequest*> requests;
   xlist<MetaRequest*> unsafe_requests;
   std::set<ceph_tid_t> flushing_caps_tids;
-  std::set<Inode*> early_flushing_caps;
 
-  MClientCapRelease::ref release;
+  ceph::ref_t<MClientCapRelease> release;
 
   MetaSession(mds_rank_t mds_num, ConnectionRef con,
 	      const entity_addrvec_t& addrs)

@@ -1,0 +1,27 @@
+@import 'defaults';
+
+.bg-info {
+  background-color: $color-progress-bar-info-bg !important;
+}
+
+.bg-freespace {
+  background-color: $color-progress-bar-freespace-bg !important;
+}
+
+.progress {
+  height: 20px;
+  position: relative;
+  margin-bottom: 0;
+
+  div.progress-bar {
+    position: static;
+  }
+
+  span {
+    position: absolute;
+    display: block;
+    width: 100%;
+    color: $color-progress-text;
+    font-weight: normal;
+  }
+}

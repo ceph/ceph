@@ -77,9 +77,12 @@ public:
 
   int init()
   {
-    common_init_finish(cct);
-
     int ret;
+
+    if (cct->_conf->log_early &&
+	!cct->_log->is_started()) {
+      cct->_log->start();
+    }
 
     {
       MonClient mc_bootstrap(cct);
@@ -87,6 +90,8 @@ public:
       if (ret < 0)
 	return ret;
     }
+
+    common_init_finish(cct);
 
     //monmap
     monclient = new MonClient(cct);
@@ -230,7 +235,7 @@ public:
     if (ret)
       return ret;
     cct->_conf.apply_changes(nullptr);
-    cct->_conf.complain_about_parse_errors(cct);
+    cct->_conf.complain_about_parse_error(cct);
     return 0;
   }
 
@@ -249,7 +254,7 @@ public:
   int conf_parse_env(const char *name)
   {
     auto& conf = cct->_conf;
-    conf.parse_env(name);
+    conf.parse_env(cct->get_module_type(), name);
     conf.apply_changes(nullptr);
     return 0;
   }
@@ -382,7 +387,7 @@ extern "C" int ceph_create(struct ceph_mount_info **cmount, const char * const i
   }
 
   CephContext *cct = common_preinit(iparams, CODE_ENVIRONMENT_LIBRARY, 0);
-  cct->_conf.parse_env(); // environment variables coverride
+  cct->_conf.parse_env(cct->get_module_type()); // environment variables coverride
   cct->_conf.apply_changes(nullptr);
   int ret = ceph_create_with_context(cmount, cct);
   cct->put();

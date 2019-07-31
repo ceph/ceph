@@ -1,12 +1,17 @@
-
 import ceph_module  # noqa
 
+try:
+    from typing import Set, Tuple, Iterator, Any
+except ImportError:
+    # just for type checking
+    pass
 import logging
 import json
 import six
 import threading
 from collections import defaultdict, namedtuple
 import rados
+import re
 import time
 
 PG_STATES = [
@@ -60,22 +65,48 @@ class CPlusPlusHandler(logging.Handler):
         self._module._ceph_log(ceph_level, self.format(record))
 
 
-def configure_logger(module_inst, name):
-    logger = logging.getLogger(name)
+def configure_logger(module_inst, module_name):
+    """
+    Create and configure the logger with the specified module.
 
-    # Don't filter any logs at the python level, leave it to C++
-    logger.setLevel(logging.DEBUG)
+    A handler will be added to the root logger which will redirect
+    the messages from all loggers (incl. 3rd party libraries) to the
+    Ceph log.
 
-    # FIXME: we should learn the log level from C++ land, and then
-    # avoid calling the C++ level log when we know a message is of
-    # an insufficient level to be ultimately output
-    logger.addHandler(CPlusPlusHandler(module_inst))
+    :param module_inst: The module instance.
+    :type module_inst: instance
+    :param module_name: The module name.
+    :type module_name: str
+    :return: Return the logger with the specified name.
+    """
+    logger = logging.getLogger(module_name)
+    # Don't filter any logs at the python level, leave it to C++.
+    # FIXME: We should learn the log level from C++ land, and then
+    #        avoid calling the C++ level log when we know a message
+    #        is of an insufficient level to be ultimately output.
+    logger.setLevel(logging.DEBUG)  # Don't use NOTSET
+
+    root_logger = logging.getLogger()
+    # Add handler to the root logger, thus this module and all
+    # 3rd party libraries will log their messages to the Ceph log.
+    root_logger.addHandler(CPlusPlusHandler(module_inst))
+    # Set the log level to ``ERROR`` to ensure that we only get
+    # those message from 3rd party libraries (only effective if
+    # they use the default log level ``NOTSET``).
+    # Check https://docs.python.org/3/library/logging.html#logging.Logger.setLevel
+    # for more information about how the effective log level is
+    # determined.
+    root_logger.setLevel(logging.ERROR)
 
     return logger
 
 
-def unconfigure_logger(module_inst, name):
-    logger = logging.getLogger(name)
+def unconfigure_logger(module_name=None):
+    """
+    :param module_name: The module name. Defaults to ``None``.
+    :type module_name: str or None
+    """
+    logger = logging.getLogger(module_name)
     rm_handlers = [
         h for h in logger.handlers if isinstance(h, CPlusPlusHandler)]
     for h in rm_handlers:
@@ -352,6 +383,11 @@ def CLIReadCommand(prefix, args="", desc=""):
 def CLIWriteCommand(prefix, args="", desc=""):
     return CLICommand(prefix, args, desc, "w")
 
+
+def _get_localized_key(prefix, key):
+    return '{}/{}'.format(prefix, key)
+
+
 class Option(dict):
     """
     Helper class to declare options for MODULE_OPTIONS list.
@@ -361,6 +397,7 @@ class Option(dict):
 
     TODO: type validation.
     """
+
     def __init__(
             self, name,
             default=None,
@@ -403,7 +440,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
                     self.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
 
     def __del__(self):
-        unconfigure_logger(self, self.module_name)
+        unconfigure_logger()
 
     @property
     def log(self):
@@ -429,8 +466,7 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
         """
         r = self._ceph_get_module_option(key)
         if r is None:
-            final_key = key.split('/')[-1]
-            return self.MODULE_OPTION_DEFAULTS.get(final_key, default)
+            return self.MODULE_OPTION_DEFAULTS.get(key, default)
         else:
             return r
 
@@ -450,13 +486,11 @@ class MgrStandbyModule(ceph_module.BaseMgrStandbyModule):
         return self._ceph_get_active_uri()
 
     def get_localized_module_option(self, key, default=None):
-        r = self.get_module_option(self.get_mgr_id() + '/' + key)
+        r = self._ceph_get_module_option(key, self.get_mgr_id())
         if r is None:
-            r = self.get_module_option(key)
-
-        if r is None:
-            r = default
-        return r
+            return self.MODULE_OPTION_DEFAULTS.get(key, default)
+        else:
+            return r
 
 
 class MgrModule(ceph_module.BaseMgrModule):
@@ -497,7 +531,7 @@ class MgrModule(ceph_module.BaseMgrModule):
 
         # If we're taking over from a standby module, let's make sure
         # its logger was unconfigured before we hook ours up
-        unconfigure_logger(self, self.module_name)
+        unconfigure_logger()
         self._logger = configure_logger(self, module_name)
 
         super(MgrModule, self).__init__(py_modules_ptr, this_ptr)
@@ -522,7 +556,7 @@ class MgrModule(ceph_module.BaseMgrModule):
                     self.MODULE_OPTION_DEFAULTS[o['name']] = str(o['default'])
 
     def __del__(self):
-        unconfigure_logger(self, self.module_name)
+        unconfigure_logger()
 
     @classmethod
     def _register_commands(cls):
@@ -629,6 +663,25 @@ class MgrModule(ceph_module.BaseMgrModule):
             return 'histogram'
 
         return ''
+
+    def _perfpath_to_path_labels(self, daemon, path):
+        label_names = ("ceph_daemon",)
+        labels = (daemon,)
+
+        if daemon.startswith('rbd-mirror.'):
+            match = re.match(
+                r'^rbd_mirror_([^/]+)/(?:(?:([^/]+)/)?)(.*)\.(replay(?:_bytes|_latency)?)$',
+                path
+            )
+            if match:
+                path = 'rbd_mirror_' + match.group(4)
+                pool = match.group(1)
+                namespace = match.group(2) or ''
+                image = match.group(3)
+                label_names += ('pool', 'namespace', 'image')
+                labels += (pool, namespace, image)
+
+        return path, label_names, labels,
 
     def _perfvalue_to_value(self, stattype, value):
         if stattype & self.PERFCOUNTER_TIME:
@@ -904,11 +957,11 @@ class MgrModule(ceph_module.BaseMgrModule):
             raise RuntimeError("Config option '{0}' is not in {1}.MODULE_OPTIONS".
                                format(key, self.__class__.__name__))
 
-    def _get_module_option(self, key, default):
-        r = self._ceph_get_module_option(self.module_name, key)
+    def _get_module_option(self, key, default, localized_prefix=""):
+        r = self._ceph_get_module_option(self.module_name, key,
+                                         localized_prefix)
         if r is None:
-            final_key = key.split('/')[-1]
-            return self.MODULE_OPTION_DEFAULTS.get(final_key, default)
+            return self.MODULE_OPTION_DEFAULTS.get(key, default)
         else:
             return r
 
@@ -950,15 +1003,8 @@ class MgrModule(ceph_module.BaseMgrModule):
         """
         return self._ceph_get_store_prefix(key_prefix)
 
-    def _get_localized(self, key, default, getter):
-        r = getter(self.get_mgr_id() + '/' + key, None)
-        if r is None:
-            r = getter(key, default)
-
-        return r
-
     def _set_localized(self, key, val, setter):
-        return setter(self.get_mgr_id() + '/' + key, val)
+        return setter(_get_localized_key(self.get_mgr_id(), key), val)
 
     def get_localized_module_option(self, key, default=None):
         """
@@ -968,10 +1014,11 @@ class MgrModule(ceph_module.BaseMgrModule):
         :return: str
         """
         self._validate_module_option(key)
-        return self._get_localized(key, default, self._get_module_option)
+        return self._get_module_option(key, default, self.get_mgr_id())
 
     def _set_module_option(self, key, val):
-        return self._ceph_set_module_option(self.module_name, key, str(val))
+        return self._ceph_set_module_option(self.module_name, key,
+                                            None if val is None else str(val))
 
     def set_module_option(self, key, val):
         """
@@ -1027,7 +1074,12 @@ class MgrModule(ceph_module.BaseMgrModule):
             return r
 
     def get_localized_store(self, key, default=None):
-        return self._get_localized(key, default, self.get_store)
+        r = self._ceph_get_store(_get_localized_key(self.get_mgr_id(), key))
+        if r is None:
+            r = self._ceph_get_store(key)
+            if r is None:
+                r = default
+        return r
 
     def set_localized_store(self, key, val):
         return self._set_localized(key, val, self.set_store)
@@ -1072,7 +1124,7 @@ class MgrModule(ceph_module.BaseMgrModule):
 
     def get_all_perf_counters(self, prio_limit=PRIO_USEFUL,
                               services=("mds", "mon", "osd",
-                                        "rbd-mirror", "rgw")):
+                                        "rbd-mirror", "rgw", "tcmu-runner")):
         """
         Return the perf counters currently known to this ceph-mgr
         instance, filtered by priority equal to or greater than `prio_limit`.
@@ -1156,8 +1208,8 @@ class MgrModule(ceph_module.BaseMgrModule):
 
         return self._ceph_have_mon_connection()
 
-    def update_progress_event(self, evid, desc, progress):
-        return self._ceph_update_progress_event(str(evid), str(desc), float(progress))
+    def update_progress_event(self, evid, desc, progress, duration):
+        return self._ceph_update_progress_event(str(evid), str(desc+" "+duration), float(progress))
 
     def complete_progress_event(self, evid):
         return self._ceph_complete_progress_event(str(evid))
@@ -1214,7 +1266,8 @@ class MgrModule(ceph_module.BaseMgrModule):
                             exception is raised.
         :param args: Argument tuple
         :param kwargs: Keyword argument dict
-        :return:
+        :raises RuntimeError: **Any** error raised within the method is converted to a RuntimeError
+        :raises ImportError: No such module
         """
         return self._ceph_dispatch_remote(module_name, method_name,
                                           args, kwargs)
@@ -1264,3 +1317,69 @@ class MgrModule(ceph_module.BaseMgrModule):
         :param int query_id: query ID
         """
         return self._ceph_get_osd_perf_counters(query_id)
+
+
+class PersistentStoreDict(object):
+    def __init__(self, mgr, prefix):
+        # type: (MgrModule, str) -> None
+        self.mgr = mgr
+        self.prefix = prefix + '.'
+
+    def _mk_store_key(self, key):
+        return self.prefix + key
+
+    def __missing__(self, key):
+        # KeyError won't work for the `in` operator.
+        # https://docs.python.org/3/reference/expressions.html#membership-test-details
+        raise IndexError('PersistentStoreDict: "{}" not found'.format(key))
+
+    def clear(self):
+        # Don't make any assumptions about the content of the values.
+        for item in six.iteritems(self.mgr.get_store_prefix(self.prefix)):
+            k, _ = item
+            self.mgr.set_store(k, None)
+
+    def __getitem__(self, item):
+        # type: (str) -> Any
+        key = self._mk_store_key(item)
+        try:
+            val = self.mgr.get_store(key)
+            if val is None:
+                self.__missing__(key)
+            return json.loads(val)
+        except (KeyError, AttributeError, IndexError, ValueError, TypeError):
+            logging.getLogger(__name__).exception('failed to deserialize')
+            self.mgr.set_store(key, None)
+            raise
+
+    def __setitem__(self, item, value):
+        # type: (str, Any) -> None
+        """
+        value=None is not allowed, as it will remove the key.
+        """
+        key = self._mk_store_key(item)
+        self.mgr.set_store(key, json.dumps(value) if value is not None else None)
+
+    def __delitem__(self, item):
+        self[item] = None
+
+    def __len__(self):
+        return len(self.keys())
+
+    def items(self):
+        # type: () -> Iterator[Tuple[str, Any]]
+        prefix_len = len(self.prefix)
+        try:
+            for item in six.iteritems(self.mgr.get_store_prefix(self.prefix)):
+                k, v = item
+                yield k[prefix_len:], json.loads(v)
+        except (KeyError, AttributeError, IndexError, ValueError, TypeError):
+            logging.getLogger(__name__).exception('failed to deserialize')
+            self.clear()
+
+    def keys(self):
+        # type: () -> Set[str]
+        return {item[0] for item in self.items()}
+
+    def __iter__(self):
+        return iter(self.keys())

@@ -2,6 +2,7 @@
 
 #include "auth/Auth.h"
 #include "messages/MPing.h"
+#include "crimson/auth/DummyAuth.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Dispatcher.h"
 #include "crimson/net/Messenger.h"
@@ -37,29 +38,25 @@ struct DummyAuthAuthorizer : public AuthAuthorizer {
 struct Server {
   ceph::thread::Throttle byte_throttler;
   ceph::net::Messenger& msgr;
+  ceph::auth::DummyAuthClientServer dummy_auth;
   struct ServerDispatcher : ceph::net::Dispatcher {
     unsigned count = 0;
     seastar::condition_variable on_reply;
-    seastar::future<> ms_dispatch(ceph::net::ConnectionRef c,
+    seastar::future<> ms_dispatch(ceph::net::Connection* c,
                                   MessageRef m) override {
       std::cout << "server got ping " << *m << std::endl;
       // reply with a pong
-      return c->send(MessageRef{new MPing(), false}).then([this] {
+      return c->send(make_message<MPing>()).then([this] {
         ++count;
         on_reply.signal();
       });
     }
     seastar::future<ceph::net::msgr_tag_t, bufferlist>
-    ms_verify_authorizer(peer_type_t peer_type,
+    ms_verify_authorizer(entity_type_t peer_type,
                          auth_proto_t protocol,
                          bufferlist& auth) override {
       return seastar::make_ready_future<ceph::net::msgr_tag_t, bufferlist>(
           0, bufferlist{});
-    }
-    seastar::future<std::unique_ptr<AuthAuthorizer>>
-    ms_get_authorizer(peer_type_t) override {
-      return seastar::make_ready_future<std::unique_ptr<AuthAuthorizer>>(
-          new DummyAuthAuthorizer{});
     }
   } dispatcher;
   Server(ceph::net::Messenger& msgr)
@@ -74,10 +71,11 @@ struct Server {
 struct Client {
   ceph::thread::Throttle byte_throttler;
   ceph::net::Messenger& msgr;
+  ceph::auth::DummyAuthClientServer dummy_auth;
   struct ClientDispatcher : ceph::net::Dispatcher {
     unsigned count = 0;
     seastar::condition_variable on_reply;
-    seastar::future<> ms_dispatch(ceph::net::ConnectionRef c,
+    seastar::future<> ms_dispatch(ceph::net::Connection* c,
                                   MessageRef m) override {
       std::cout << "client got pong " << *m << std::endl;
       ++count;
@@ -160,8 +158,12 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
           [addr, count](auto& server) mutable {
             std::cout << "server listening at " << addr << std::endl;
             // bind the server
+            server.msgr.set_default_policy(ceph::net::SocketPolicy::stateless_server(0));
             server.msgr.set_policy_throttler(entity_name_t::TYPE_OSD,
                                              &server.byte_throttler);
+            server.msgr.set_require_authorizer(false);
+            server.msgr.set_auth_client(&server.dummy_auth);
+            server.msgr.set_auth_server(&server.dummy_auth);
             return server.msgr.bind(entity_addrvec_t{addr})
               .then([&server] {
                 return server.msgr.start(&server.dispatcher);
@@ -182,15 +184,19 @@ seastar_echo(const entity_addr_t addr, echo_role role, unsigned count)
         return seastar::do_with(seastar_pingpong::Client{*msgr},
           [addr, count](auto& client) {
             std::cout << "client sending to " << addr << std::endl;
+            client.msgr.set_default_policy(ceph::net::SocketPolicy::lossy_client(0));
             client.msgr.set_policy_throttler(entity_name_t::TYPE_OSD,
                                              &client.byte_throttler);
+            client.msgr.set_require_authorizer(false);
+            client.msgr.set_auth_client(&client.dummy_auth);
+            client.msgr.set_auth_server(&client.dummy_auth);
             return client.msgr.start(&client.dispatcher)
               .then([addr, &client] {
                 return client.msgr.connect(addr, entity_name_t::TYPE_OSD);
               }).then([&disp=client.dispatcher, count](ceph::net::ConnectionXRef conn) {
                 return seastar::do_until(
                   [&disp,count] { return disp.count >= count; },
-                  [&disp,conn] { return (*conn)->send(MessageRef{new MPing(), false})
+                  [&disp,conn] { return (*conn)->send(make_message<MPing>())
                                    .then([&] { return disp.on_reply.wait(); });
                 });
               }).finally([&client] {

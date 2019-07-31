@@ -1,7 +1,5 @@
-import { browser } from 'protractor';
+import { PageHelper } from '../page-helper.po';
 
-export class IscsiPage {
-  navigateTo() {
-    return browser.get('/#/block/iscsi');
-  }
+export class IscsiPageHelper extends PageHelper {
+  pages = { index: '/#/block/iscsi/overview' };
 }

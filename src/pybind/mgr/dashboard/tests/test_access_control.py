@@ -7,7 +7,7 @@ import json
 import time
 import unittest
 
-from . import CmdException, exec_dashboard_cmd
+from . import CmdException, CLICommandTestMixin
 from .. import mgr
 from ..security import Scope, Permission
 from ..services.access_control import load_access_control_db, \
@@ -15,33 +15,16 @@ from ..services.access_control import load_access_control_db, \
                                       SYSTEM_ROLES
 
 
-class AccessControlTest(unittest.TestCase):
-    CONFIG_KEY_DICT = {}
-
-    @classmethod
-    def mock_set_module_option(cls, attr, val):
-        cls.CONFIG_KEY_DICT[attr] = val
-
-    @classmethod
-    def mock_get_module_option(cls, attr, default=None):
-        return cls.CONFIG_KEY_DICT.get(attr, default)
+class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
 
     @classmethod
     def setUpClass(cls):
-        mgr.set_module_option.side_effect = cls.mock_set_module_option
-        mgr.get_module_option.side_effect = cls.mock_get_module_option
-        # kludge below
-        mgr.set_store.side_effect = cls.mock_set_module_option
-        mgr.get_store.side_effect = cls.mock_get_module_option
+        cls.mock_kv_store()
         mgr.ACCESS_CONTROL_DB = None
 
     def setUp(self):
         self.CONFIG_KEY_DICT.clear()
         load_access_control_db()
-
-    @classmethod
-    def exec_cmd(cls, cmd, **kwargs):
-        return exec_dashboard_cmd(None, cmd, **kwargs)
 
     def load_persistent_db(self):
         config_key = AccessControlDB.accessdb_config_key()
@@ -578,6 +561,42 @@ class AccessControlTest(unittest.TestCase):
 
         self.assertEqual(ctx.exception.retcode, -errno.ENOENT)
         self.assertEqual(str(ctx.exception), "User 'admin' does not exist")
+
+    def test_set_user_password_hash(self):
+        user_orig = self.test_create_user()
+        user = self.exec_cmd('ac-user-set-password-hash', username='admin',
+                             hashed_password='$2b$12$Pt3Vq/rDt2y9glTPSV.'
+                                             'VFegiLkQeIpddtkhoFetNApYmIJOY8gau2')
+        pass_hash = password_hash('newpass', user['password'])
+        self.assertDictEqual(user, {
+            'username': 'admin',
+            'password': pass_hash,
+            'name': 'admin User',
+            'email': 'admin@user.com',
+            'lastUpdate': user['lastUpdate'],
+            'roles': []
+        })
+        self.validate_persistent_user('admin', [], pass_hash, 'admin User',
+                                      'admin@user.com')
+        self.assertGreaterEqual(user['lastUpdate'], user_orig['lastUpdate'])
+
+    def test_set_user_password_hash_nonexistent_user(self):
+        with self.assertRaises(CmdException) as ctx:
+            self.exec_cmd('ac-user-set-password-hash', username='admin',
+                          hashed_password='$2b$12$Pt3Vq/rDt2y9glTPSV.'
+                                          'VFegiLkQeIpddtkhoFetNApYmIJOY8gau2')
+
+        self.assertEqual(ctx.exception.retcode, -errno.ENOENT)
+        self.assertEqual(str(ctx.exception), "User 'admin' does not exist")
+
+    def test_set_user_password_hash_broken_hash(self):
+        self.test_create_user()
+        with self.assertRaises(CmdException) as ctx:
+            self.exec_cmd('ac-user-set-password-hash', username='admin',
+                          hashed_password='')
+
+        self.assertEqual(ctx.exception.retcode, -errno.EINVAL)
+        self.assertEqual(str(ctx.exception), 'Invalid password hash')
 
     def test_set_login_credentials(self):
         self.exec_cmd('set-login-credentials', username='admin',

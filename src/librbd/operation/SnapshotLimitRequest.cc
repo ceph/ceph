@@ -46,8 +46,7 @@ void SnapshotLimitRequest<I>::send_limit_snaps() {
   ldout(cct, 5) << this << " " << __func__ << dendl;
 
   {
-    RWLock::RLocker md_locker(image_ctx.md_lock);
-    RWLock::RLocker snap_locker(image_ctx.snap_lock);
+    RWLock::RLocker image_locker(image_ctx.image_lock);
 
     librados::ObjectWriteOperation op;
     cls_client::snapshot_set_limit(&op, m_snap_limit);

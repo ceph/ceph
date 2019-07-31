@@ -15,10 +15,7 @@ fi
 #	-D CMAKE_CXX_COMPILER="/usr/local/bin/clang++-devel" \
 #	-D CMAKE_C_COMPILER="/usr/local/bin/clang-devel" \
 COMPILE_FLAGS="-O0 -g"
-if [ `sysctl -n kern.osreldate` -le 1102000 ]; then
-    # We need to use the llvm linker for linking ceph-dencoder
-    COMPILE_FLAGS="$COMPILE_FLAGS -fuse-ld=/usr/bin/ld.lld"
-fi
+COMPILE_FLAGS="${COMPILE_FLAGS} -fuse-ld=/usr/local/bin/ld -Wno-unused-command-line-argument"
 CMAKE_CXX_FLAGS_DEBUG="$CXX_FLAGS_DEBUG $COMPILE_FLAGS"
 CMAKE_C_FLAGS_DEBUG="$C_FLAGS_DEBUG $COMPILE_FLAGS"
 

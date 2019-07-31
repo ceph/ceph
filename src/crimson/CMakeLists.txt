@@ -4,6 +4,7 @@ set_target_properties(crimson::cflags PROPERTIES
   INTERFACE_LINK_LIBRARIES Seastar::seastar)
 
 set(crimson_common_srcs
+  common/buffer_io.cc
   common/config_proxy.cc
   common/perf_counters_collection.cc
   common/assert.cc
@@ -23,6 +24,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/ceph_hash.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_time.cc
   ${PROJECT_SOURCE_DIR}/src/common/ceph_strings.cc
+  ${PROJECT_SOURCE_DIR}/src/common/ceph_releases.cc
   ${PROJECT_SOURCE_DIR}/src/common/cmdparse.cc
   ${PROJECT_SOURCE_DIR}/src/common/common_init.cc
   ${PROJECT_SOURCE_DIR}/src/common/compat.cc
@@ -63,6 +65,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/HTMLFormatter.cc
   ${PROJECT_SOURCE_DIR}/src/common/Formatter.cc
   ${PROJECT_SOURCE_DIR}/src/common/Graylog.cc
+  ${PROJECT_SOURCE_DIR}/src/common/ostream_temp.cc
   ${PROJECT_SOURCE_DIR}/src/common/LogEntry.cc
   ${PROJECT_SOURCE_DIR}/src/common/Mutex.cc
   ${PROJECT_SOURCE_DIR}/src/common/SubProcess.cc
@@ -70,6 +73,7 @@ add_library(crimson-common STATIC
   ${PROJECT_SOURCE_DIR}/src/common/Thread.cc
   ${PROJECT_SOURCE_DIR}/src/common/HeartbeatMap.cc
   ${PROJECT_SOURCE_DIR}/src/common/PluginRegistry.cc
+  ${PROJECT_SOURCE_DIR}/src/global/pidfile.cc
   ${PROJECT_SOURCE_DIR}/src/librbd/Features.cc
   ${PROJECT_SOURCE_DIR}/src/log/Log.cc
   ${PROJECT_SOURCE_DIR}/src/mgr/ServiceMap.cc
@@ -100,33 +104,45 @@ target_compile_definitions(crimson-common PRIVATE
   "CEPH_PKGLIBDIR=\"${CEPH_INSTALL_FULL_PKGLIBDIR}\""
   "CEPH_DATADIR=\"${CEPH_INSTALL_DATADIR}\"")
 
+set(crimson_common_deps
+  Boost::iostreams
+  Boost::random)
+
+if(NOT WITH_SYSTEM_BOOST)
+  list(APPEND crimson_common_deps ${ZLIB_LIBRARIES})
+endif()
+
 target_link_libraries(crimson-common
   PUBLIC
     json_spirit
   PRIVATE
     crc32
     crimson::cflags
-    Boost::iostreams
-    Boost::random
-    ${NSS_LIBRARIES} ${NSPR_LIBRARIES} OpenSSL::Crypto)
+    ${crimson_common_deps}
+    OpenSSL::Crypto)
 
 set(crimson_auth_srcs
   auth/KeyRing.cc)
+set(crimson_mgr_srcs
+  mgr/client.cc)
 set(crimson_mon_srcs
   mon/MonClient.cc
   ${PROJECT_SOURCE_DIR}/src/mon/MonSub.cc)
 set(crimson_net_srcs
-  net/Dispatcher.cc
   net/Errors.cc
   net/Messenger.cc
   net/SocketConnection.cc
   net/SocketMessenger.cc
-  net/Socket.cc)
+  net/Socket.cc
+  net/Protocol.cc
+  net/ProtocolV1.cc
+  net/ProtocolV2.cc)
 set(crimson_thread_srcs
   thread/ThreadPool.cc
   thread/Throttle.cc)
 add_library(crimson STATIC
   ${crimson_auth_srcs}
+  ${crimson_mgr_srcs}
   ${crimson_mon_srcs}
   ${crimson_net_srcs}
   ${crimson_thread_srcs}

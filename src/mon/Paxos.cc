@@ -1343,8 +1343,7 @@ void Paxos::leader_init()
   // discard pending transaction
   pending_proposal.reset();
 
-  finish_contexts(g_ceph_context, pending_finishers, -EAGAIN);
-  finish_contexts(g_ceph_context, committing_finishers, -EAGAIN);
+  reset_pending_committing_finishers();
 
   logger->inc(l_paxos_start_leader);
 
@@ -1375,9 +1374,8 @@ void Paxos::peon_init()
   pending_proposal.reset();
 
   // no chance to write now!
+  reset_pending_committing_finishers();
   finish_contexts(g_ceph_context, waiting_for_writeable, -EAGAIN);
-  finish_contexts(g_ceph_context, pending_finishers, -EAGAIN);
-  finish_contexts(g_ceph_context, committing_finishers, -EAGAIN);
 
   logger->inc(l_paxos_start_peon);
 }
@@ -1400,13 +1398,17 @@ void Paxos::restart()
   // discard pending transaction
   pending_proposal.reset();
 
-  finish_contexts(g_ceph_context, committing_finishers, -EAGAIN);
-  finish_contexts(g_ceph_context, pending_finishers, -EAGAIN);
+  reset_pending_committing_finishers();
   finish_contexts(g_ceph_context, waiting_for_active, -EAGAIN);
 
   logger->inc(l_paxos_restart);
 }
 
+void Paxos::reset_pending_committing_finishers()
+{
+  committing_finishers.splice(committing_finishers.end(), pending_finishers);
+  finish_contexts(g_ceph_context, committing_finishers, -EAGAIN);
+}
 
 void Paxos::dispatch(MonOpRequestRef op)
 {

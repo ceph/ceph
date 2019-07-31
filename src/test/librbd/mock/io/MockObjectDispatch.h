@@ -28,8 +28,8 @@ public:
                bool(uint64_t, uint64_t, uint64_t, librados::snap_t,
                     ceph::bufferlist*, ExtentMap*, DispatchResult*, Context*));
   bool read(
-      const std::string& oid, uint64_t object_no, uint64_t object_off,
-      uint64_t object_len, librados::snap_t snap_id, int op_flags,
+      uint64_t object_no, uint64_t object_off, uint64_t object_len,
+      librados::snap_t snap_id, int op_flags,
       const ZTracer::Trace& parent_trace, ceph::bufferlist* read_data,
       ExtentMap* extent_map, int* dispatch_flags,
       DispatchResult* dispatch_result, Context** on_finish,
@@ -42,8 +42,8 @@ public:
                bool(uint64_t, uint64_t, uint64_t, const ::SnapContext &, int,
                     int*, uint64_t*, DispatchResult*, Context*));
   bool discard(
-      const std::string &oid, uint64_t object_no, uint64_t object_off,
-      uint64_t object_len, const ::SnapContext &snapc, int discard_flags,
+      uint64_t object_no, uint64_t object_off, uint64_t object_len,
+      const ::SnapContext &snapc, int discard_flags,
       const ZTracer::Trace &parent_trace, int* dispatch_flags,
       uint64_t* journal_tid, DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) {
@@ -57,8 +57,8 @@ public:
                     const ::SnapContext &, int*, uint64_t*, DispatchResult*,
                     Context *));
   bool write(
-      const std::string &oid, uint64_t object_no, uint64_t object_off,
-      ceph::bufferlist&& data, const ::SnapContext &snapc, int op_flags,
+      uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
+      const ::SnapContext &snapc, int op_flags,
       const ZTracer::Trace &parent_trace, int* dispatch_flags,
       uint64_t* journal_tid, DispatchResult* dispatch_result,
       Context** on_finish, Context* on_dispatched) override {
@@ -67,12 +67,13 @@ public:
   }
 
   MOCK_METHOD10(execute_write_same,
-                bool(uint64_t, uint64_t, uint64_t, const Extents&,
+                bool(uint64_t, uint64_t, uint64_t,
+                     const LightweightBufferExtents&,
                      const ceph::bufferlist&, const ::SnapContext &, int*,
                      uint64_t*, DispatchResult*, Context *));
   bool write_same(
-      const std::string &oid, uint64_t object_no, uint64_t object_off,
-      uint64_t object_len, Extents&& buffer_extents, ceph::bufferlist&& data,
+      uint64_t object_no, uint64_t object_off, uint64_t object_len,
+      LightweightBufferExtents&& buffer_extents, ceph::bufferlist&& data,
       const ::SnapContext &snapc, int op_flags,
       const ZTracer::Trace &parent_trace, int* dispatch_flags,
       uint64_t* journal_tid, DispatchResult* dispatch_result,
@@ -87,9 +88,8 @@ public:
                     const ceph::bufferlist&, uint64_t*, int*, uint64_t*,
                     DispatchResult*, Context *));
   bool compare_and_write(
-      const std::string &oid, uint64_t object_no, uint64_t object_off,
-      ceph::bufferlist&& cmp_data, ceph::bufferlist&& write_data,
-      const ::SnapContext &snapc, int op_flags,
+      uint64_t object_no, uint64_t object_off, ceph::bufferlist&& cmp_data,
+      ceph::bufferlist&& write_data, const ::SnapContext &snapc, int op_flags,
       const ZTracer::Trace &parent_trace, uint64_t* mismatch_offset,
       int* dispatch_flags, uint64_t* journal_tid,
       DispatchResult* dispatch_result, Context** on_finish,
@@ -100,12 +100,13 @@ public:
                                      dispatch_result, on_dispatched);
   }
 
-  MOCK_METHOD3(execute_flush, bool(FlushSource, DispatchResult*,
+  MOCK_METHOD4(execute_flush, bool(FlushSource, uint64_t*, DispatchResult*,
                                    Context*));
   bool flush(FlushSource flush_source, const ZTracer::Trace &parent_trace,
-             DispatchResult* dispatch_result, Context** on_finish,
-             Context* on_dispatched) {
-    return execute_flush(flush_source, dispatch_result, on_dispatched);
+             uint64_t* journal_tid, DispatchResult* dispatch_result,
+             Context** on_finish, Context* on_dispatched) {
+    return execute_flush(flush_source, journal_tid, dispatch_result,
+                         on_dispatched);
   }
 
   MOCK_METHOD1(invalidate_cache, bool(Context*));

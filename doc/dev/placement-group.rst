@@ -97,8 +97,17 @@ User-visible PG States
 *down*
   a replica with necessary data is down, so the pg is offline
 
-*replay*
-  the PG is waiting for clients to replay operations after an OSD crashed
+*recovery_unfound*
+  recovery could not finish because object(s) are unfound.
+
+*backfill_unfound*
+  backfill could not finish because object(s) are unfound.
+
+*premerge*
+  the PG is in a quiesced-IO state due to an impending PG merge.  That
+  happens when pg_num_pending < pg_num, and applies to the PGs with
+  pg_num_pending <= ps < pg_num as well as the corresponding peer PG
+  that it is merging with.
 
 *scrubbing*
   the PG is being checked for inconsistencies
@@ -120,19 +129,8 @@ User-visible PG States
 *recovering*
   objects are being migrated/synchronized with replicas
 
-*recovery_wait*
-  the PG is waiting for the local/remote recovery reservations
-
-*backfilling*
-  a special case of recovery, in which the entire contents of
-  the PG are scanned and synchronized, instead of inferring what
-  needs to be transferred from the PG logs of recent operations
-
 *backfill_wait*
   the PG is waiting in line to start backfill
-
-*backfill_toofull*
-  backfill reservation rejected, OSD too full
 
 *incomplete*
   a pg is missing a necessary period of history from its
@@ -147,8 +145,66 @@ User-visible PG States
   the PG is temporarily mapped to a different set of OSDs from what
   CRUSH specified
 
-*premerge*
-  the PG is in a quiesced-IO state due to an impending PG merge.  That
-  happens when pg_num_pending < pg_num, and applies to the PGs with
-  pg_num_pending <= ps < pg_num as well as the corresponding peer PG
-  that it is merging with.
+*deep*
+  In conjunction with *scrubbing* the scrub is a deep scrub
+
+*backfilling*
+  a special case of recovery, in which the entire contents of
+  the PG are scanned and synchronized, instead of inferring what
+  needs to be transferred from the PG logs of recent operations
+
+*backfill_toofull*
+  backfill reservation rejected, OSD too full
+
+*recovery_wait*
+  the PG is waiting for the local/remote recovery reservations
+
+*undersized*
+  the PG can't select enough OSDs given its size
+
+*activating*
+  the PG is peered but not yet active
+
+*peered*
+  the PG peered but can't go active
+
+*snaptrim*
+  the PG is trimming snaps
+
+*snaptrim_wait*
+  the PG is queued to trim snaps
+
+*recovery_toofull*
+  recovery reservation rejected, OSD too full
+
+*snaptrim_error*
+  the PG could not complete snap trimming due to errors
+
+*forced_recovery*
+  the PG has been marked for highest priority recovery
+
+*forced_backfill*
+  the PG has been marked for highest priority backfill
+
+*failed_repair*
+  an attempt to repair the PG has failed.  Manual intervention is required.
+
+
+OMAP STATISTICS
+===============
+
+Omap statistics are gathered during deep scrub and displayed in the output of
+the following commands::
+
+  ceph pg dump
+  ceph pg dump all
+  ceph pg dump summary
+  ceph pg dump pgs
+  ceph pg dump pools
+  ceph pg ls
+
+As these statistics are not updated continuously they may be quite inaccurate in
+an environment where deep scrubs are run infrequently and/or there is a lot of
+omap activity. As such they should not be relied on for exact accuracy but
+rather used as a guide. Running a deep scrub and checking these statistics
+immediately afterwards should give a good indication of current omap usage.

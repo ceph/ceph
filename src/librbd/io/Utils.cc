@@ -10,7 +10,7 @@ namespace io {
 namespace util {
 
 bool assemble_write_same_extent(
-    const ObjectExtent &object_extent, const ceph::bufferlist& data,
+    const LightweightObjectExtent &object_extent, const ceph::bufferlist& data,
     ceph::bufferlist *ws_data, bool force_write) {
   size_t data_len = data.length();
 

@@ -27,7 +27,7 @@ required when running Ceph Filesystem clients.
   responsible for keeping track of runtime metrics and the current
   state of the Ceph cluster, including storage utilization, current
   performance metrics, and system load.  The Ceph Manager daemons also
-  host python-based plugins to manage and expose Ceph cluster
+  host python-based modules to manage and expose Ceph cluster
   information, including a web-based :ref:`mgr-dashboard` and
   `REST API`_.  At least two managers are normally required for high
   availability.

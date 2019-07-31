@@ -1,20 +1,22 @@
 #!/usr/bin/env bash
+# -*- mode:sh; tab-width:4; sh-basic-offset:4; indent-tabs-mode:nil -*-
+# vim: softtabstop=4 shiftwidth=4 expandtab
 
 # abort on failure
 set -e
 
 if [ -n "$VSTART_DEST" ]; then
-  SRC_PATH=`dirname $0`
-  SRC_PATH=`(cd $SRC_PATH; pwd)`
+    SRC_PATH=`dirname $0`
+    SRC_PATH=`(cd $SRC_PATH; pwd)`
 
-  CEPH_DIR=$SRC_PATH
-  CEPH_BIN=${PWD}/bin
-  CEPH_LIB=${PWD}/lib
+    CEPH_DIR=$SRC_PATH
+    CEPH_BIN=${PWD}/bin
+    CEPH_LIB=${PWD}/lib
 
-  CEPH_CONF_PATH=$VSTART_DEST
-  CEPH_DEV_DIR=$VSTART_DEST/dev
-  CEPH_OUT_DIR=$VSTART_DEST/out
-  CEPH_ASOK_DIR=$VSTART_DEST/out
+    CEPH_CONF_PATH=$VSTART_DEST
+    CEPH_DEV_DIR=$VSTART_DEST/dev
+    CEPH_OUT_DIR=$VSTART_DEST/out
+    CEPH_ASOK_DIR=$VSTART_DEST/out
 fi
 
 get_cmake_variable() {
@@ -24,37 +26,39 @@ get_cmake_variable() {
 
 # for running out of the CMake build directory
 if [ -e CMakeCache.txt ]; then
-  # Out of tree build, learn source location from CMakeCache.txt
-  CEPH_ROOT=$(get_cmake_variable ceph_SOURCE_DIR)
-  CEPH_BUILD_DIR=`pwd`
-  [ -z "$MGR_PYTHON_PATH" ] && MGR_PYTHON_PATH=$CEPH_ROOT/src/pybind/mgr
-  CEPH_MGR_PY_VERSION_MAJOR=$(get_cmake_variable MGR_PYTHON_VERSION | cut -d '.' -f1)
-  if [ -n "$CEPH_MGR_PY_VERSION_MAJOR" ]; then
-      CEPH_PY_VERSION_MAJOR=${CEPH_MGR_PY_VERSION_MAJOR}
-  else
-      if [ $(get_cmake_variable WITH_PYTHON2) = ON ]; then
-          CEPH_PY_VERSION_MAJOR=2
-      else
-          CEPH_PY_VERSION_MAJOR=3
-      fi
-  fi
+    # Out of tree build, learn source location from CMakeCache.txt
+    CEPH_ROOT=$(get_cmake_variable ceph_SOURCE_DIR)
+    CEPH_BUILD_DIR=`pwd`
+    [ -z "$MGR_PYTHON_PATH" ] && MGR_PYTHON_PATH=$CEPH_ROOT/src/pybind/mgr
+    CEPH_MGR_PY_VERSION_MAJOR=$(get_cmake_variable MGR_PYTHON_VERSION | cut -d '.' -f 1)
+    if [ -n "$CEPH_MGR_PY_VERSION_MAJOR" ]; then
+        CEPH_PY_VERSION_MAJOR=${CEPH_MGR_PY_VERSION_MAJOR}
+    else
+        if [ $(get_cmake_variable WITH_PYTHON2) = ON ]; then
+            CEPH_PY_VERSION_MAJOR=2
+        else
+            CEPH_PY_VERSION_MAJOR=3
+        fi
+    fi
 fi
 
 # use CEPH_BUILD_ROOT to vstart from a 'make install' 
 if [ -n "$CEPH_BUILD_ROOT" ]; then
-        [ -z "$CEPH_BIN" ] && CEPH_BIN=$CEPH_BUILD_ROOT/bin
-        [ -z "$CEPH_LIB" ] && CEPH_LIB=$CEPH_BUILD_ROOT/lib
-        [ -z "$EC_PATH" ] && EC_PATH=$CEPH_LIB/erasure-code
-        [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB/rados-classes
-        # make install should install python extensions into PYTHONPATH
+    [ -z "$CEPH_BIN" ] && CEPH_BIN=$CEPH_BUILD_ROOT/bin
+    [ -z "$CEPH_LIB" ] && CEPH_LIB=$CEPH_BUILD_ROOT/lib
+    [ -z "$EC_PATH" ] && EC_PATH=$CEPH_LIB/erasure-code
+    [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB/rados-classes
+    # make install should install python extensions into PYTHONPATH
 elif [ -n "$CEPH_ROOT" ]; then
-        [ -z "$PYBIND" ] && PYBIND=$CEPH_ROOT/src/pybind
-        [ -z "$CEPH_BIN" ] && CEPH_BIN=$CEPH_BUILD_DIR/bin
-        [ -z "$CEPH_ADM" ] && CEPH_ADM=$CEPH_BIN/ceph
-        [ -z "$INIT_CEPH" ] && INIT_CEPH=$CEPH_BUILD_DIR/bin/init-ceph
-        [ -z "$CEPH_LIB" ] && CEPH_LIB=$CEPH_BUILD_DIR/lib
-        [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB
-        [ -z "$EC_PATH" ] && EC_PATH=$CEPH_LIB
+    [ -z "$CEPHFS_SHELL" ] && CEPHFS_SHELL=$CEPH_ROOT/src/tools/cephfs/cephfs-shell
+    [ -z "$PYBIND" ] && PYBIND=$CEPH_ROOT/src/pybind
+    [ -z "$CEPH_BIN" ] && CEPH_BIN=$CEPH_BUILD_DIR/bin
+    [ -z "$CEPH_ADM" ] && CEPH_ADM=$CEPH_BIN/ceph
+    [ -z "$INIT_CEPH" ] && INIT_CEPH=$CEPH_BIN/init-ceph
+    [ -z "$CEPH_LIB" ] && CEPH_LIB=$CEPH_BUILD_DIR/lib
+    [ -z "$OBJCLASS_PATH" ] && OBJCLASS_PATH=$CEPH_LIB
+    [ -z "$EC_PATH" ] && EC_PATH=$CEPH_LIB
+    [ -z "$CEPH_PYTHON_COMMON" ] && CEPH_PYTHON_COMMON=$CEPH_ROOT/src/python-common
 fi
 
 if [ -z "${CEPH_VSTART_WRAPPER}" ]; then
@@ -63,7 +67,10 @@ fi
 
 [ -z "$PYBIND" ] && PYBIND=./pybind
 
-export PYTHONPATH=$PYBIND:$CEPH_LIB/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}:$PYTHONPATH
+[ -n "$CEPH_PYTHON_COMMON" ] && CEPH_PYTHON_COMMON="$CEPH_PYTHON_COMMON:"
+CYTHON_PYTHONPATH="$CEPH_LIB/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}"
+export PYTHONPATH=$PYBIND:$CYTHON_PYTHONPATH:$CEPH_PYTHON_COMMON$PYTHONPATH
+
 export LD_LIBRARY_PATH=$CEPH_LIB:$LD_LIBRARY_PATH
 export DYLD_LIBRARY_PATH=$CEPH_LIB:$DYLD_LIBRARY_PATH
 # Suppress logging for regular use that indicated that we are using a
@@ -115,6 +122,7 @@ standby=0
 debug=0
 ip=""
 nodaemon=0
+redirect=0
 smallmds=0
 short=0
 ec=0
@@ -128,6 +136,7 @@ if [ `uname` = FreeBSD ]; then
 else
     objectstore="bluestore"
 fi
+ceph_osd=ceph-osd
 rgw_frontend="beast"
 rgw_compression=""
 lockdep=${LOCKDEP:-1}
@@ -137,12 +146,13 @@ pci_id=""
 with_mgr_dashboard=true
 if [[ "$(get_cmake_variable WITH_MGR_DASHBOARD_FRONTEND)" != "ON" ]] ||
    [[ "$(get_cmake_variable WITH_RBD)" != "ON" ]]; then
-  echo "ceph-mgr dashboard not built - disabling."
-  with_mgr_dashboard=false
+    echo "ceph-mgr dashboard not built - disabling."
+    with_mgr_dashboard=false
 fi
 
 filestore_path=
 kstore_path=
+bluestore_dev=
 
 VSTART_SEC="client.vstart.sh"
 
@@ -167,6 +177,7 @@ usage=$usage"\t-n, --new\n"
 usage=$usage"\t-N, --not-new: reuse existing cluster config (default)\n"
 usage=$usage"\t--valgrind[_{osd,mds,mon,rgw}] 'toolname args...'\n"
 usage=$usage"\t--nodaemon: use ceph-run as wrapper for mon/osd/mds\n"
+usage=$usage"\t--redirect-output: only useful with nodaemon, directs output to log file\n"
 usage=$usage"\t--smallmds: limit mds cache size\n"
 usage=$usage"\t-m ip:port\t\tspecify monitor address\n"
 usage=$usage"\t-k keep old configuration files\n"
@@ -193,168 +204,181 @@ usage=$usage"\t--bluestore-spdk <vendor>:<device>: enable SPDK and specify the P
 usage=$usage"\t--msgr1: use msgr1 only\n"
 usage=$usage"\t--msgr2: use msgr2 only\n"
 usage=$usage"\t--msgr21: use msgr2 and msgr1\n"
+usage=$usage"\t--crimson: use crimson-osd instead of ceph-osd\n"
+usage=$usage"\t--osd-args: specify any extra osd specific options\n"
+usage=$usage"\t--bluestore-devs: comma-separated list of blockdevs to use for bluestore\n"
 
 usage_exit() {
-	printf "$usage"
-	exit
+    printf "$usage"
+    exit
 }
 
 while [ $# -ge 1 ]; do
 case $1 in
     -d | --debug )
-	    debug=1
-	    ;;
+        debug=1
+        ;;
     -s | --standby_mds)
-	    standby=1
-	    ;;
+        standby=1
+        ;;
     -l | --localhost )
-	    ip="127.0.0.1"
-	    ;;
+        ip="127.0.0.1"
+        ;;
     -i )
-	    [ -z "$2" ] && usage_exit
-	    ip="$2"
-	    shift
-	    ;;
+        [ -z "$2" ] && usage_exit
+        ip="$2"
+        shift
+        ;;
     -e )
-	    ec=1
-	    ;;
+        ec=1
+        ;;
     --new | -n )
-	    new=1
-	    ;;
+        new=1
+        ;;
     --not-new | -N )
 	new=0
 	;;
     --short )
-	    short=1
-	    ;;
+        short=1
+        ;;
+    --crimson )
+        ceph_osd=crimson-osd
+        ;;
+    --osd-args )
+        extra_osd_args="$2"
+        shift
+        ;;
     --msgr1 )
-	msgr="1"
-	;;
+        msgr="1"
+        ;;
     --msgr2 )
-	msgr="2"
-	;;
+        msgr="2"
+        ;;
     --msgr21 )
-	msgr="21"
-	;;
+        msgr="21"
+        ;;
     --valgrind )
-	    [ -z "$2" ] && usage_exit
-	    valgrind=$2
-	    shift
-	    ;;
+        [ -z "$2" ] && usage_exit
+        valgrind=$2
+        shift
+        ;;
     --valgrind_args )
-	valgrind_args="$2"
-	shift
-	;;
+        valgrind_args="$2"
+        shift
+        ;;
     --valgrind_mds )
-	    [ -z "$2" ] && usage_exit
-	    valgrind_mds=$2
-	    shift
-	    ;;
+        [ -z "$2" ] && usage_exit
+        valgrind_mds=$2
+        shift
+        ;;
     --valgrind_osd )
-	    [ -z "$2" ] && usage_exit
-	    valgrind_osd=$2
-	    shift
-	    ;;
+        [ -z "$2" ] && usage_exit
+        valgrind_osd=$2
+        shift
+        ;;
     --valgrind_mon )
-	    [ -z "$2" ] && usage_exit
-	    valgrind_mon=$2
-	    shift
-	    ;;
+        [ -z "$2" ] && usage_exit
+        valgrind_mon=$2
+        shift
+        ;;
     --valgrind_mgr )
-	    [ -z "$2" ] && usage_exit
-	    valgrind_mgr=$2
-	    shift
-	    ;;
+        [ -z "$2" ] && usage_exit
+        valgrind_mgr=$2
+        shift
+        ;;
     --valgrind_rgw )
-	    [ -z "$2" ] && usage_exit
-	    valgrind_rgw=$2
-	    shift
-	    ;;
+        [ -z "$2" ] && usage_exit
+        valgrind_rgw=$2
+        shift
+        ;;
     --nodaemon )
-	    nodaemon=1
-	    ;;
+        nodaemon=1
+        ;;
+    --redirect-output)
+        redirect=1
+        ;;
     --smallmds )
-	    smallmds=1
-	    ;;
+        smallmds=1
+        ;;
     --rgw_port )
-            CEPH_RGW_PORT=$2
-            shift
-            ;;
+        CEPH_RGW_PORT=$2
+        shift
+        ;;
     --rgw_frontend )
-            rgw_frontend=$2
-            shift
-            ;;
+        rgw_frontend=$2
+        shift
+        ;;
     --rgw_compression )
-            rgw_compression=$2
-            shift
-            ;;
+        rgw_compression=$2
+        shift
+        ;;
     --kstore_path )
-	kstore_path=$2
-	shift
-	;;
+        kstore_path=$2
+        shift
+        ;;
     --filestore_path )
-	filestore_path=$2
-	shift
-	;;
+        filestore_path=$2
+        shift
+        ;;
     -m )
-	    [ -z "$2" ] && usage_exit
-	    MON_ADDR=$2
-	    shift
-	    ;;
+        [ -z "$2" ] && usage_exit
+        MON_ADDR=$2
+        shift
+        ;;
     -x )
-	    cephx=1 # this is on be default, flag exists for historical consistency
-	    ;;
+        cephx=1 # this is on be default, flag exists for historical consistency
+        ;;
     -X )
-	    cephx=0
-	    ;;
-    
+        cephx=0
+        ;;
+
     -g | --gssapi)
-	    gssapi_authx=1 
-	    ;;
+        gssapi_authx=1
+        ;;
     -G)
-	    gssapi_authx=0 
-	    ;;
+        gssapi_authx=0
+        ;;
 
     -k )
-	    if [ ! -r $conf_fn ]; then
-	        echo "cannot use old configuration: $conf_fn not readable." >&2
-	        exit
-	    fi
-	    overwrite_conf=0
-	    ;;
+        if [ ! -r $conf_fn ]; then
+            echo "cannot use old configuration: $conf_fn not readable." >&2
+            exit
+        fi
+        overwrite_conf=0
+        ;;
     --memstore )
-	    objectstore="memstore"
-	    ;;
+        objectstore="memstore"
+        ;;
     -b | --bluestore )
-	    objectstore="bluestore"
-	    ;;
+        objectstore="bluestore"
+        ;;
     -f | --filestore )
-	    objectstore="filestore"
-	    ;;
+        objectstore="filestore"
+        ;;
     -K | --kstore )
-            objectstore="kstore"
-            ;;
+        objectstore="kstore"
+        ;;
     --hitset )
-	    hitset="$hitset $2 $3"
-	    shift
-	    shift
-	    ;;
+        hitset="$hitset $2 $3"
+        shift
+        shift
+        ;;
     -o )
-	    extra_conf="$extra_conf	$2
+        extra_conf="$extra_conf	$2
 "
-	    shift
-	    ;;
+        shift
+        ;;
     --cache )
-	    if [ -z "$cache" ]; then
-		cache="$2"
-	    else
-		cache="$cache $2"
-	    fi
-	    shift
-	    ;;
+        if [ -z "$cache" ]; then
+            cache="$2"
+        else
+            cache="$cache $2"
+        fi
+        shift
+        ;;
     --nolockdep )
-            lockdep=0
-            ;;
+        lockdep=0
+        ;;
     --multimds)
         CEPH_MAX_MDS="$2"
         shift
@@ -368,8 +392,18 @@ case $1 in
         spdk_enabled=1
         shift
         ;;
+    --bluestore-devs )
+        IFS=',' read -r -a bluestore_dev <<< "$2"
+        for dev in "${bluestore_dev[@]}"; do
+            if [ ! -b $dev -o ! -w $dev ]; then
+                echo "All --bluestore-devs must refer to writable block devices"
+                exit 1
+            fi
+        done
+        shift
+        ;;
     * )
-	    usage_exit
+        usage_exit
 esac
 shift
 done
@@ -381,31 +415,31 @@ fi
 if [ "$overwrite_conf" -eq 0 ]; then
     CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf  -c $conf_fn --show-config-value admin_socket)`
     mkdir -p $CEPH_ASOK_DIR
-    MON=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_mon 2>/dev/null` && \
+    MON=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_mon 2>/dev/null` && \
         CEPH_NUM_MON="$MON"
-    OSD=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_osd 2>/dev/null` && \
+    OSD=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_osd 2>/dev/null` && \
         CEPH_NUM_OSD="$OSD"
-    MDS=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_mds 2>/dev/null` && \
+    MDS=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_mds 2>/dev/null` && \
         CEPH_NUM_MDS="$MDS"
-    MGR=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_mgr 2>/dev/null` && \
+    MGR=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_mgr 2>/dev/null` && \
         CEPH_NUM_MGR="$MGR"
-    RGW=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC num_rgw 2>/dev/null` && \
+    RGW=`$CEPH_BIN/ceph-conf -c $conf_fn --name $VSTART_SEC --lookup num_rgw 2>/dev/null` && \
         CEPH_NUM_RGW="$RGW"
 else
     if [ "$new" -ne 0 ]; then
         # only delete if -n
-	if [ -e "$conf_fn" ]; then
-	  asok_dir=`dirname $($CEPH_BIN/ceph-conf  -c $conf_fn --show-config-value admin_socket)`
-	  rm -- "$conf_fn"
-	  if [ $asok_dir != /var/run/ceph ]; then
-            [ -d $asok_dir ] && rm -f $asok_dir/* && rmdir $asok_dir
-	  fi
-	fi
-	if [ -z "$CEPH_ASOK_DIR" ]; then
+        if [ -e "$conf_fn" ]; then
+            asok_dir=`dirname $($CEPH_BIN/ceph-conf  -c $conf_fn --show-config-value admin_socket)`
+            rm -- "$conf_fn"
+            if [ $asok_dir != /var/run/ceph ]; then
+                [ -d $asok_dir ] && rm -f $asok_dir/* && rmdir $asok_dir
+            fi
+        fi
+        if [ -z "$CEPH_ASOK_DIR" ]; then
             CEPH_ASOK_DIR=`mktemp -u -d "${TMPDIR:-/tmp}/ceph-asok.XXXXXX"`
         fi
     else
-	if [ -z "$CEPH_ASOK_DIR" ]; then
+        if [ -z "$CEPH_ASOK_DIR" ]; then
             CEPH_ASOK_DIR=`dirname $($CEPH_BIN/ceph-conf -c $conf_fn --show-config-value admin_socket)`
         fi
         # -k is implied... (doesn't make sense otherwise)
@@ -436,8 +470,17 @@ prun() {
     "$@"
 }
 
+prun_to_file() {
+	f=$1
+	shift
+	quoted_print "$@"
+	"$@" >> $f
+}
+
 run() {
     type=$1
+    shift
+    num=$1
     shift
     eval "valg=\$valgrind_$type"
     [ -z "$valg" ] && valg="$valgrind"
@@ -448,20 +491,53 @@ run() {
     else
         if [ "$nodaemon" -eq 0 ]; then
             prun "$@"
+        elif [ "$redirect" -eq 0 ]; then
+            prunb ${CEPH_ROOT}/src/ceph-run "$@" -f
         else
-            prunb ./ceph-run "$@" -f
+            ( prunb ${CEPH_ROOT}/src/ceph-run "$@" -f ) >$CEPH_OUT_DIR/$type.$num.stdout 2>&1
         fi
     fi
 }
 
 wconf() {
-	if [ "$overwrite_conf" -eq 1 ]; then
-		cat >> "$conf_fn"
-	fi
+    if [ "$overwrite_conf" -eq 1 ]; then
+        cat >> "$conf_fn"
+    fi
 }
 
 get_pci_selector() {
-    lspci -mm -n -D -d $pci_id | cut -d' ' -f1
+    which_pci=$1
+    lspci -mm -n -D -d $pci_id | cut -d ' ' -f 1 | sed -n $which_pci'p'
+}
+
+get_pci_selector_num() {
+    lspci -mm -n -D -d $pci_id | cut -d' ' -f 1 | wc -l
+}
+
+do_rgw_conf() {
+
+    if [ $CEPH_NUM_RGW -eq 0 ]; then
+        return 0
+    fi
+
+    # setup each rgw on a sequential port, starting at $CEPH_RGW_PORT.
+    # individual rgw's ids will be their ports.
+    current_port=$CEPH_RGW_PORT
+    for n in $(seq 1 $CEPH_NUM_RGW); do
+        wconf << EOF
+[client.rgw.${current_port}]
+        rgw frontends = $rgw_frontend port=${current_port}
+        admin socket = ${CEPH_OUT_DIR}/radosgw.${current_port}.asok
+        ; needed for s3tests
+        rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
+        rgw crypt require ssl = false
+        ; uncomment the following to set LC days as the value in seconds;
+        ; needed for passing lc time based s3-tests (can be verbose)
+        ; rgw lc debug interval = 10
+EOF
+        current_port=$((current_port + 1))
+done
+
 }
 
 prepare_conf() {
@@ -475,23 +551,26 @@ prepare_conf() {
 
     local mgr_modules="restful iostat"
     if $with_mgr_dashboard; then
-      mgr_modules="dashboard $mgr_modules"
+        mgr_modules="dashboard $mgr_modules"
     fi
 
     local msgr_conf=''
     if [ $msgr -eq 21 ]; then
-	msgr_conf="ms bind msgr2 = true
-ms bind msgr1 = true
+        msgr_conf="
+        ms bind msgr2 = true
+        ms bind msgr1 = true
 ";
     fi
     if [ $msgr -eq 2 ]; then
-	msgr_conf="ms bind msgr2 = true
-ms bind msgr1 = false
+	msgr_conf="
+        ms bind msgr2 = true
+        ms bind msgr1 = false
 ";
     fi
     if [ $msgr -eq 1 ]; then
-	msgr_conf="ms bind msgr2 = false
-ms bind msgr1 = true
+	msgr_conf="
+        ms bind msgr2 = false
+        ms bind msgr1 = true
 ";
     fi
 
@@ -514,80 +593,78 @@ ms bind msgr1 = true
         plugin dir = $CEPH_LIB
         filestore fd cache size = 32
         run dir = $CEPH_OUT_DIR
-	crash dir = $CEPH_OUT_DIR
+        crash dir = $CEPH_OUT_DIR
         enable experimental unrecoverable data corrupting features = *
-	osd_crush_chooseleaf_type = 0
-	debug asok assert abort = true
+        osd_crush_chooseleaf_type = 0
+        debug asok assert abort = true
 $msgr_conf
 $extra_conf
 EOF
-	if [ "$lockdep" -eq 1 ] ; then
-		wconf <<EOF
+    if [ "$lockdep" -eq 1 ] ; then
+        wconf <<EOF
         lockdep = true
 EOF
-	fi
-	if [ "$cephx" -eq 1 ] ; then
-		wconf <<EOF
-	auth cluster required = cephx
-	auth service required = cephx
-	auth client required = cephx
+    fi
+    if [ "$cephx" -eq 1 ] ; then
+        wconf <<EOF
+        auth cluster required = cephx
+        auth service required = cephx
+        auth client required = cephx
 EOF
-	elif [ "$gssapi_authx" -eq 1 ] ; then
-		wconf <<EOF
-	auth cluster required = gss
-	auth service required = gss
-	auth client required = gss
-	gss ktab client file = $CEPH_DEV_DIR/gss_\$name.keytab
+    elif [ "$gssapi_authx" -eq 1 ] ; then
+        wconf <<EOF
+        auth cluster required = gss
+        auth service required = gss
+        auth client required = gss
+        gss ktab client file = $CEPH_DEV_DIR/gss_\$name.keytab
 EOF
-	else 
-		wconf <<EOF
-	auth cluster required = none
-	auth service required = none
-	auth client required = none
+    else
+        wconf <<EOF
+        auth cluster required = none
+        auth service required = none
+        auth client required = none
 EOF
-	fi
-	if [ "$short" -eq 1 ]; then
-		COSDSHORT="        osd max object name len = 460
+    fi
+    if [ "$short" -eq 1 ]; then
+        COSDSHORT="        osd max object name len = 460
         osd max object namespace len = 64"
-	fi
-        if [ "$objectstore" == "bluestore" ]; then
-            if [ "$spdk_enabled" -eq 1 ]; then
-                if [ "$(get_pci_selector)" == "" ]; then
-                    echo "Not find the specified NVME device, please check."
-                    exit
-                fi
-                BLUESTORE_OPTS="        bluestore_block_db_path = \"\"
+    fi
+    if [ "$objectstore" == "bluestore" ]; then
+        if [ "$spdk_enabled" -eq 1 ]; then
+            if [ "$(get_pci_selector_num)" -eq 0 ]; then
+                echo "Not find the specified NVME device, please check." >&2
+                exit
+            fi
+            if [ $(get_pci_selector_num) -lt $CEPH_NUM_OSD ]; then
+                echo "OSD number ($CEPH_NUM_OSD) is greater than NVME SSD number ($(get_pci_selector_num)), please check." >&2
+                exit
+            fi
+            BLUESTORE_OPTS="        bluestore_block_db_path = \"\"
         bluestore_block_db_size = 0
         bluestore_block_db_create = false
         bluestore_block_wal_path = \"\"
         bluestore_block_wal_size = 0
         bluestore_block_wal_create = false
-        bluestore_spdk_mem = 2048
-        bluestore_block_path = spdk:$(get_pci_selector)"
-            else
-                BLUESTORE_OPTS="        bluestore block db path = $CEPH_DEV_DIR/osd\$id/block.db.file
-        bluestore block db size = 67108864
+        bluestore_spdk_mem = 2048"
+        else
+            BLUESTORE_OPTS="        bluestore block db path = $CEPH_DEV_DIR/osd\$id/block.db.file
+        bluestore block db size = 1073741824
         bluestore block db create = true
         bluestore block wal path = $CEPH_DEV_DIR/osd\$id/block.wal.file
         bluestore block wal size = 1048576000
         bluestore block wal create = true"
-            fi
         fi
-	wconf <<EOF
+    fi
+    wconf <<EOF
 [client]
         keyring = $keyring_fn
         log file = $CEPH_OUT_DIR/\$name.\$pid.log
         admin socket = $CEPH_ASOK_DIR/\$name.\$pid.asok
 $extra_conf
-[client.rgw]
-        rgw frontends = $rgw_frontend port=$CEPH_RGW_PORT
-        admin socket = ${CEPH_OUT_DIR}/radosgw.${CEPH_RGW_PORT}.asok
-        ; needed for s3tests
-        rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
-        rgw crypt require ssl = false
-        ; uncomment the following to set LC days as the value in seconds;
-        ; needed for passing lc time based s3-tests (can be verbose)
-        ; rgw lc debug interval = 10
+EOF
+
+	do_rgw_conf
+	wconf << EOF
 [mds]
 $DAEMONOPTS
         mds data = $CEPH_DEV_DIR/mds.\$id
@@ -642,135 +719,138 @@ start_mon() {
     do
         [ $count -eq $CEPH_NUM_MON ] && break;
         count=$(($count + 1))
-        if [ -z "$MONS" ];
-        then
-	        MONS="$f"
+        if [ -z "$MONS" ]; then
+	    MONS="$f"
         else
-	        MONS="$MONS $f"
+	    MONS="$MONS $f"
         fi
     done
 
     if [ "$new" -eq 1 ]; then
-		if [ `echo $IP | grep '^127\\.'` ]
-		then
-			echo
-			echo "NOTE: hostname resolves to loopback; remote hosts will not be able to"
-			echo "  connect.  either adjust /etc/hosts, or edit this script to use your"
-			echo "  machine's real IP."
-			echo
-		fi
+        if [ `echo $IP | grep '^127\\.'` ]; then
+            echo
+            echo "NOTE: hostname resolves to loopback; remote hosts will not be able to"
+            echo "  connect.  either adjust /etc/hosts, or edit this script to use your"
+            echo "  machine's real IP."
+            echo
+        fi
 
-		prun $SUDO "$CEPH_BIN/ceph-authtool" --create-keyring --gen-key --name=mon. "$keyring_fn" --cap mon 'allow *'
-		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.admin \
-			--cap mon 'allow *' \
-			--cap osd 'allow *' \
-			--cap mds 'allow *' \
-			--cap mgr 'allow *' \
-			"$keyring_fn"
+        prun $SUDO "$CEPH_BIN/ceph-authtool" --create-keyring --gen-key --name=mon. "$keyring_fn" --cap mon 'allow *'
+        prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.admin \
+             --cap mon 'allow *' \
+             --cap osd 'allow *' \
+             --cap mds 'allow *' \
+             --cap mgr 'allow *' \
+             "$keyring_fn"
 
-		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.fs\
-		   --cap mon 'allow r' \
-			--cap osd 'allow rw tag cephfs data=*' \
-			--cap mds 'allow rwp' \
-			"$keyring_fn"
+        prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.fs\
+             --cap mon 'allow r' \
+             --cap osd 'allow rw tag cephfs data=*' \
+             --cap mds 'allow rwp' \
+             "$keyring_fn"
 
-		prun $SUDO "$CEPH_BIN/ceph-authtool" --gen-key --name=client.rgw \
-		    --cap mon 'allow rw' \
-		    --cap osd 'allow rwx' \
-		    --cap mgr 'allow rw' \
-		    "$keyring_fn"
-
-		# build a fresh fs monmap, mon fs
-		local params=()
-		local count=0
-		local mon_host=""
-		for f in $MONS
-		do
-		    if [ $msgr -eq 1 ]; then
-			A="v1:$IP:$(($CEPH_PORT+$count+1))"
-		    fi
-		    if [ $msgr -eq 2 ]; then
-			A="v2:$IP:$(($CEPH_PORT+$count+1))"
-		    fi
-		    if [ $msgr -eq 21 ]; then
-			A="[v2:$IP:$(($CEPH_PORT+$count)),v1:$IP:$(($CEPH_PORT+$count+1))]"
-		    fi
-		    params+=("--addv" "$f" "$A")
-		    mon_host="$mon_host $A"
-		    wconf <<EOF
+        # build a fresh fs monmap, mon fs
+        local params=()
+        local count=0
+        local mon_host=""
+        for f in $MONS
+        do
+            if [ $msgr -eq 1 ]; then
+                A="v1:$IP:$(($CEPH_PORT+$count+1))"
+            fi
+            if [ $msgr -eq 2 ]; then
+                A="v2:$IP:$(($CEPH_PORT+$count+1))"
+            fi
+            if [ $msgr -eq 21 ]; then
+                A="[v2:$IP:$(($CEPH_PORT+$count)),v1:$IP:$(($CEPH_PORT+$count+1))]"
+            fi
+            params+=("--addv" "$f" "$A")
+            mon_host="$mon_host $A"
+            wconf <<EOF
 [mon.$f]
         host = $HOSTNAME
         mon data = $CEPH_DEV_DIR/mon.$f
 EOF
-		    count=$(($count + 2))
-		done
-		wconf <<EOF
+            count=$(($count + 2))
+        done
+        wconf <<EOF
 [global]
         mon host = $mon_host
 EOF
-		prun "$CEPH_BIN/monmaptool" --create --clobber "${params[@]}" --print "$monmap_fn"
+        prun "$CEPH_BIN/monmaptool" --create --clobber "${params[@]}" --print "$monmap_fn"
 
-		for f in $MONS
-		do
-			prun rm -rf -- "$CEPH_DEV_DIR/mon.$f"
-			prun mkdir -p "$CEPH_DEV_DIR/mon.$f"
-			prun "$CEPH_BIN/ceph-mon" --mkfs -c "$conf_fn" -i "$f" --monmap="$monmap_fn" --keyring="$keyring_fn"
-		done
+        for f in $MONS
+        do
+            prun rm -rf -- "$CEPH_DEV_DIR/mon.$f"
+            prun mkdir -p "$CEPH_DEV_DIR/mon.$f"
+            prun "$CEPH_BIN/ceph-mon" --mkfs -c "$conf_fn" -i "$f" --monmap="$monmap_fn" --keyring="$keyring_fn"
+        done
 
-		prun rm -- "$monmap_fn"
-	fi
+        prun rm -- "$monmap_fn"
+    fi
 
-	# start monitors
-	for f in $MONS
-	do
-		run 'mon' $CEPH_BIN/ceph-mon -i $f $ARGS $CMON_ARGS
-	done
+    # start monitors
+    for f in $MONS
+    do
+        run 'mon' $f $CEPH_BIN/ceph-mon -i $f $ARGS $CMON_ARGS
+    done
 }
 
 start_osd() {
-    for osd in `seq 0 $((CEPH_NUM_OSD-1))`
+    for osd in `seq 0 $(($CEPH_NUM_OSD-1))`
     do
-	    if [ "$new" -eq 1 ]; then
-		    wconf <<EOF
+	if [ "$new" -eq 1 ]; then
+            wconf <<EOF
 [osd.$osd]
         host = $HOSTNAME
 EOF
+            if [ "$spdk_enabled" -eq 1 ]; then
+                wconf <<EOF
+        bluestore_block_path = spdk:$(get_pci_selector $((osd+1)))
+EOF
+            fi
 
             rm -rf $CEPH_DEV_DIR/osd$osd || true
             if command -v btrfs > /dev/null; then
                 for f in $CEPH_DEV_DIR/osd$osd/*; do btrfs sub delete $f &> /dev/null || true; done
             fi
-	    if [ -n "$filestore_path" ]; then
-		ln -s $filestore_path $CEPH_DEV_DIR/osd$osd
-	    elif [ -n "$kstore_path" ]; then
-		ln -s $kstore_path $CEPH_DEV_DIR/osd$osd
-	    else
-		mkdir -p $CEPH_DEV_DIR/osd$osd
-	    fi
+            if [ -n "$filestore_path" ]; then
+                ln -s $filestore_path $CEPH_DEV_DIR/osd$osd
+            elif [ -n "$kstore_path" ]; then
+                ln -s $kstore_path $CEPH_DEV_DIR/osd$osd
+            else
+                mkdir -p $CEPH_DEV_DIR/osd$osd
+                if [ -n "${bluestore_dev[$osd]}" ]; then
+                    dd if=/dev/zero of=${bluestore_dev[$osd]} bs=1M count=1
+                    ln -s ${bluestore_dev[$osd]} $CEPH_DEV_DIR/osd$osd/block
+                    wconf <<EOF
+        bluestore fsck on mount = false
+EOF
+                fi
+            fi
 
             local uuid=`uuidgen`
             echo "add osd$osd $uuid"
-	    OSD_SECRET=$($CEPH_BIN/ceph-authtool --gen-print-key)
-	    echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > $CEPH_DEV_DIR/osd$osd/new.json
+            OSD_SECRET=$($CEPH_BIN/ceph-authtool --gen-print-key)
+            echo "{\"cephx_secret\": \"$OSD_SECRET\"}" > $CEPH_DEV_DIR/osd$osd/new.json
             ceph_adm osd new $uuid -i $CEPH_DEV_DIR/osd$osd/new.json
-	    rm $CEPH_DEV_DIR/osd$osd/new.json
-            $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid
+            rm $CEPH_DEV_DIR/osd$osd/new.json
+            $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS --mkfs --key $OSD_SECRET --osd-uuid $uuid
 
             local key_fn=$CEPH_DEV_DIR/osd$osd/keyring
-	    cat > $key_fn<<EOF
+            cat > $key_fn<<EOF
 [osd.$osd]
-	key = $OSD_SECRET
+        key = $OSD_SECRET
 EOF
-            echo adding osd$osd key to auth repository
-            ceph_adm -i "$key_fn" auth add osd.$osd osd "allow *" mon "allow profile osd" mgr "allow profile osd"
         fi
         echo start osd.$osd
-        run 'osd' $SUDO $CEPH_BIN/ceph-osd -i $osd $ARGS $COSD_ARGS
+        run 'osd' $osd $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS $COSD_ARGS
     done
 }
 
 start_mgr() {
     local mgr=0
+    local ssl=${DASHBOARD_SSL:-1}
     # avoid monitors on nearby ports (which test/*.sh use extensively)
     MGR_PORT=$(($CEPH_PORT + 1000))
     for name in x y z a b c d e f g h i j k l m n o p
@@ -789,11 +869,18 @@ start_mgr() {
 EOF
 
             if $with_mgr_dashboard ; then
-                ceph_adm config set mgr mgr/dashboard/$name/server_port $MGR_PORT --force
+                local port_option="ssl_server_port"
+                local http_proto="https"
+                if [ "$ssl" == "0" ]; then
+                    port_option="server_port"
+                    http_proto="http"
+                    ceph_adm config set mgr mgr/dashboard/ssl false --force
+                fi
+                ceph_adm config set mgr mgr/dashboard/$name/$port_option $MGR_PORT --force
                 if [ $mgr -eq 1 ]; then
-                    DASH_URLS="https://$IP:$MGR_PORT"
+                    DASH_URLS="$http_proto://$IP:$MGR_PORT"
                 else
-                    DASH_URLS+=", https://$IP:$MGR_PORT"
+                    DASH_URLS+=", $http_proto://$IP:$MGR_PORT"
                 fi
             fi
 	    MGR_PORT=$(($MGR_PORT + 1000))
@@ -808,7 +895,7 @@ EOF
         fi
 
         echo "Starting mgr.${name}"
-        run 'mgr' $CEPH_BIN/ceph-mgr -i $name $ARGS
+        run 'mgr' $name $CEPH_BIN/ceph-mgr -i $name $ARGS
     done
 
     # use tell mgr here because the first mgr might not have activated yet
@@ -817,8 +904,10 @@ EOF
         # setting login credentials for dashboard
         if $with_mgr_dashboard; then
             ceph_adm tell mgr dashboard ac-user-create admin admin administrator
-            if ! ceph_adm tell mgr dashboard create-self-signed-cert;  then
-                echo dashboard module not working correctly!
+            if [ "$ssl" != "0" ]; then
+                if ! ceph_adm tell mgr dashboard create-self-signed-cert;  then
+                    echo dashboard module not working correctly!
+                fi
             fi
         fi
 
@@ -837,39 +926,39 @@ start_mds() {
     local mds=0
     for name in a b c d e f g h i j k l m n o p
     do
-	    [ $mds -eq $CEPH_NUM_MDS ] && break
-	    mds=$(($mds + 1))
+        [ $mds -eq $CEPH_NUM_MDS ] && break
+        mds=$(($mds + 1))
 
-	    if [ "$new" -eq 1 ]; then
-	        prun mkdir -p "$CEPH_DEV_DIR/mds.$name"
-	        key_fn=$CEPH_DEV_DIR/mds.$name/keyring
-	        wconf <<EOF
+        if [ "$new" -eq 1 ]; then
+            prun mkdir -p "$CEPH_DEV_DIR/mds.$name"
+            key_fn=$CEPH_DEV_DIR/mds.$name/keyring
+            wconf <<EOF
 [mds.$name]
         host = $HOSTNAME
 EOF
-		    if [ "$standby" -eq 1 ]; then
-		        mkdir -p $CEPH_DEV_DIR/mds.${name}s
-			    wconf <<EOF
-       mds standby for rank = $mds
+            if [ "$standby" -eq 1 ]; then
+                mkdir -p $CEPH_DEV_DIR/mds.${name}s
+                wconf <<EOF
+        mds standby for rank = $mds
 [mds.${name}s]
         mds standby replay = true
         mds standby for name = ${name}
 EOF
-	        fi
-	        prun $SUDO "$CEPH_BIN/ceph-authtool" --create-keyring --gen-key --name="mds.$name" "$key_fn"
-	        ceph_adm -i "$key_fn" auth add "mds.$name" mon 'allow profile mds' osd 'allow rw tag cephfs *=*' mds 'allow' mgr 'allow profile mds'
-	        if [ "$standby" -eq 1 ]; then
-			    prun $SUDO "$CEPH_BIN/ceph-authtool" --create-keyring --gen-key --name="mds.${name}s" \
-				     "$CEPH_DEV_DIR/mds.${name}s/keyring"
-			    ceph_adm -i "$CEPH_DEV_DIR/mds.${name}s/keyring" auth add "mds.${name}s" \
-				         mon 'allow profile mds' osd 'allow *' mds 'allow' mgr 'allow profile mds'
-	        fi
-	    fi
+            fi
+            prun $SUDO "$CEPH_BIN/ceph-authtool" --create-keyring --gen-key --name="mds.$name" "$key_fn"
+            ceph_adm -i "$key_fn" auth add "mds.$name" mon 'allow profile mds' osd 'allow rw tag cephfs *=*' mds 'allow' mgr 'allow profile mds'
+            if [ "$standby" -eq 1 ]; then
+                prun $SUDO "$CEPH_BIN/ceph-authtool" --create-keyring --gen-key --name="mds.${name}s" \
+                     "$CEPH_DEV_DIR/mds.${name}s/keyring"
+                ceph_adm -i "$CEPH_DEV_DIR/mds.${name}s/keyring" auth add "mds.${name}s" \
+                             mon 'allow profile mds' osd 'allow *' mds 'allow' mgr 'allow profile mds'
+            fi
+        fi
 
-	    run 'mds' $CEPH_BIN/ceph-mds -i $name $ARGS $CMDS_ARGS
-	    if [ "$standby" -eq 1 ]; then
-	        run 'mds' $CEPH_BIN/ceph-mds -i ${name}s $ARGS $CMDS_ARGS
-	    fi
+        run 'mds' $name $CEPH_BIN/ceph-mds -i $name $ARGS $CMDS_ARGS
+        if [ "$standby" -eq 1 ]; then
+            run 'mds' $name $CEPH_BIN/ceph-mds -i ${name}s $ARGS $CMDS_ARGS
+        fi
 
         #valgrind --tool=massif $CEPH_BIN/ceph-mds $ARGS --mds_log_max_segments 2 --mds_thrash_fragments 0 --mds_thrash_exports 0 > m  #--debug_ms 20
         #$CEPH_BIN/ceph-mds -d $ARGS --mds_thrash_fragments 0 --mds_thrash_exports 0 #--debug_ms 20
@@ -883,11 +972,14 @@ EOF
                 ceph_adm fs flag set enable_multiple true --yes-i-really-mean-it
             fi
 
+	    # wait for volume module to load
+	    while ! ceph_adm fs volume ls ; do sleep 1 ; done
+
             local fs=0
             for name in a b c d e f g h i j k l m n o p
             do
-		ceph_adm fs volume create ${name}
-		ceph_adm fs authorize ${name} "client.fs_${name}" / rwp
+                ceph_adm fs volume create ${name}
+                ceph_adm fs authorize ${name} "client.fs_${name}" / rwp
                 fs=$(($fs + 1))
                 [ $fs -eq $CEPH_NUM_FS ] && break
             done
@@ -906,23 +998,22 @@ else
         debug mon = 20
         debug paxos = 20
         debug auth = 20
-	debug mgrc = 20
+        debug mgrc = 20
         debug ms = 1'
 fi
 
 if [ -n "$MON_ADDR" ]; then
-	CMON_ARGS=" -m "$MON_ADDR
-	COSD_ARGS=" -m "$MON_ADDR
-	CMDS_ARGS=" -m "$MON_ADDR
+    CMON_ARGS=" -m "$MON_ADDR
+    COSD_ARGS=" -m "$MON_ADDR
+    CMDS_ARGS=" -m "$MON_ADDR
 fi
 
-if [ -z "$CEPH_PORT" ]
-then
-  while [ true ]
-  do
-    CEPH_PORT="$(echo $(( RANDOM % 1000 + 40000 )))"
-    ss -a -n | egrep ":${CEPH_PORT} .+LISTEN" 1>/dev/null 2>&1 || break
-  done
+if [ -z "$CEPH_PORT" ]; then
+    while [ true ]
+    do
+        CEPH_PORT="$(echo $(( RANDOM % 1000 + 40000 )))"
+        ss -a -n | egrep "\<LISTEN\>.+:${CEPH_PORT}\s+" 1>/dev/null 2>&1 || break
+    done
 fi
 
 [ -z "$INIT_CEPH" ] && INIT_CEPH=$CEPH_BIN/init-ceph
@@ -948,11 +1039,11 @@ if [ -n "$ip" ]; then
 else
     echo hostname $HOSTNAME
     if [ -x "$(which ip 2>/dev/null)" ]; then
-	IP_CMD="ip addr"
+        IP_CMD="ip addr"
     else
-	IP_CMD="ifconfig"
+        IP_CMD="ifconfig"
     fi
-    # filter out IPv6 and localhost addresses
+    # filter out IPv4 and localhost addresses
     IP="$($IP_CMD | sed -En 's/127.0.0.1//;s/.*inet (addr:)?(([0-9]*\.){3}[0-9]*).*/\2/p' | head -n1)"
     # if nothing left, try using localhost address, it might work
     if [ -z "$IP" ]; then IP="127.0.0.1"; fi
@@ -969,6 +1060,17 @@ ceph_adm() {
     else
         prun $SUDO "$CEPH_ADM" -c "$conf_fn" "$@"
     fi
+}
+
+ceph_adm_to_file() {
+	f=$1
+	shift
+
+	if [ "$cephx" -eq 1 ]; then
+		prun_to_file $f $SUDO "$CEPH_ADM" -c "$conf_fn" -k "$keyring_fn" "$@"
+	else
+		prun_to_file $f $SUDO "$CEPH_ADM" -c "$conf_fn" "$@"
+	fi
 }
 
 if [ "$new" -eq 1 ]; then
@@ -1005,8 +1107,8 @@ mds_debug_subtrees = true
 EOF
 
     if [ "$debug" -ne 0 ]; then
-	echo Setting debug configs ...
-	cat <<EOF | $CEPH_BIN/ceph -c $conf_fn config assimilate-conf -i -
+        echo Setting debug configs ...
+        cat <<EOF | $CEPH_BIN/ceph -c $conf_fn config assimilate-conf -i -
 [mgr]
 debug_ms = 1
 debug_mgr = 20
@@ -1052,8 +1154,8 @@ fi
 if [ "$smallmds" -eq 1 ]; then
     wconf <<EOF
 [mds]
-	mds log max segments = 2
-	mds cache size = 10000
+        mds log max segments = 2
+        mds cache size = 10000
 EOF
 fi
 
@@ -1087,10 +1189,10 @@ fi
 
 do_cache() {
     while [ -n "$*" ]; do
-	p="$1"
-	shift
-	echo "creating cache for pool $p ..."
-	ceph_adm <<EOF
+        p="$1"
+        shift
+        echo "creating cache for pool $p ..."
+        ceph_adm <<EOF
 osd pool create ${p}-cache 8
 osd tier add $p ${p}-cache
 osd tier cache-mode ${p}-cache writeback
@@ -1102,12 +1204,12 @@ do_cache $cache
 
 do_hitsets() {
     while [ -n "$*" ]; do
-	pool="$1"
-	type="$2"
-	shift
-	shift
-	echo "setting hit_set on pool $pool type $type ..."
-	ceph_adm <<EOF
+        pool="$1"
+        type="$2"
+        shift
+        shift
+        echo "setting hit_set on pool $pool type $type ..."
+        ceph_adm <<EOF
 osd pool set $pool hit_set_type $type
 osd pool set $pool hit_set_count 8
 osd pool set $pool hit_set_period 30
@@ -1166,7 +1268,7 @@ do_rgw_create_users()
 do_rgw()
 {
     if [ "$new" -eq 1 ]; then
-	do_rgw_create_users
+        do_rgw_create_users
         if [ -n "$rgw_compression" ]; then
             echo "setting compression type=$rgw_compression"
             $CEPH_BIN/radosgw-admin zone placement modify -c $conf_fn --rgw-zone=default --placement-id=default-placement --compression=$rgw_compression > /dev/null
@@ -1175,7 +1277,7 @@ do_rgw()
     # Start server
     RGWDEBUG=""
     if [ "$debug" -ne 0 ]; then
-        RGWDEBUG="--debug-rgw=20"
+        RGWDEBUG="--debug-rgw=20 --debug-ms=1"
     fi
 
     local CEPH_RGW_PORT_NUM="${CEPH_RGW_PORT}"
@@ -1187,14 +1289,29 @@ do_rgw()
     fi
     RGWSUDO=
     [ $CEPH_RGW_PORT_NUM -lt 1024 ] && RGWSUDO=sudo
-    n=$(($CEPH_NUM_RGW - 1))
-    i=0
-    for rgw in j k l m n o p q r s t u v; do
-        current_port=$((CEPH_RGW_PORT_NUM + i))
+
+    current_port=$CEPH_RGW_PORT
+    for n in $(seq 1 $CEPH_NUM_RGW); do
+        rgw_name="client.rgw.${current_port}"
+
+        ceph_adm_to_file $keyring_fn auth get-or-create $rgw_name \
+            mon 'allow rw' \
+            osd 'allow rwx' \
+            mgr 'allow rw' \
+
         echo start rgw on http${CEPH_RGW_HTTPS}://localhost:${current_port}
-        run 'rgw' $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn --log-file=${CEPH_OUT_DIR}/radosgw.${current_port}.log --admin-socket=${CEPH_OUT_DIR}/radosgw.${current_port}.asok --pid-file=${CEPH_OUT_DIR}/radosgw.${current_port}.pid ${RGWDEBUG} --debug-ms=1 -n client.rgw "--rgw_frontends=${rgw_frontend} port=${current_port}${CEPH_RGW_HTTPS}"
+        run 'rgw' $current_port $RGWSUDO $CEPH_BIN/radosgw -c $conf_fn \
+            --log-file=${CEPH_OUT_DIR}/radosgw.${current_port}.log \
+            --admin-socket=${CEPH_OUT_DIR}/radosgw.${current_port}.asok \
+            --pid-file=${CEPH_OUT_DIR}/radosgw.${current_port}.pid \
+            ${RGWDEBUG} \
+            -n ${rgw_name} \
+            "--rgw_frontends=${rgw_frontend} port=${current_port}${CEPH_RGW_HTTPS}"
+
         i=$(($i + 1))
         [ $i -eq $CEPH_NUM_RGW ] && break
+
+        current_port=$((current_port+1))
     done
 }
 if [ "$CEPH_NUM_RGW" -gt 0 ]; then
@@ -1214,13 +1331,27 @@ if [ "$new" -eq 1 ]; then
     echo ""
 fi
 echo ""
-echo "export PYTHONPATH=./pybind:$PYTHONPATH"
-echo "export LD_LIBRARY_PATH=$CEPH_LIB"
+# add header to the environment file
+{
+    echo "#"
+    echo "# source this file into your shell to set up the environment."
+    echo "# For example:"
+    echo "# $ . $CEPH_DIR/vstart_environment.sh"
+    echo "#"
+} > $CEPH_DIR/vstart_environment.sh
+{
+    echo "export PYTHONPATH=$PYBIND:$CYTHON_PYTHONPATH:$CEPH_PYTHON_COMMON\$PYTHONPATH"
+    echo "export LD_LIBRARY_PATH=$CEPH_LIB:\$LD_LIBRARY_PATH"
 
-if [ "$CEPH_DIR" != "$PWD" ]; then
-    echo "export CEPH_CONF=$conf_fn"
-    echo "export CEPH_KEYRING=$keyring_fn"
-fi
+    if [ "$CEPH_DIR" != "$PWD" ]; then
+        echo "export CEPH_CONF=$conf_fn"
+        echo "export CEPH_KEYRING=$keyring_fn"
+    fi
+
+    if [ -n "$CEPHFS_SHELL" ]; then
+        echo "alias cephfs-shell=$CEPHFS_SHELL"
+    fi
+} | tee -a $CEPH_DIR/vstart_environment.sh
 
 echo "CEPH_DEV=1"
 

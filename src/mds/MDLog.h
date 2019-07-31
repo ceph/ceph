@@ -124,6 +124,7 @@ protected:
   map<uint64_t,LogSegment*> segments;
   set<LogSegment*> expiring_segments;
   set<LogSegment*> expired_segments;
+  std::size_t pre_segments_size = 0;            // the num of segments when the mds finished replay-journal, to calc the num of segments growing
   uint64_t event_seq;
   int expiring_events;
   int expired_events;

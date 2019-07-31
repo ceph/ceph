@@ -98,7 +98,7 @@ ostream &operator<<(ostream &lhs, const ECBackend::read_result_t &rhs)
   lhs << "read_result_t(r=" << rhs.r
       << ", errors=" << rhs.errors;
   if (rhs.attrs) {
-    lhs << ", attrs=" << rhs.attrs.get();
+    lhs << ", attrs=" << *(rhs.attrs);
   } else {
     lhs << ", noattrs";
   }
@@ -220,13 +220,11 @@ void ECBackend::_failed_push(const hobject_t &hoid,
   eversion_t v = recovery_ops[hoid].v;
   recovery_ops.erase(hoid);
 
-  list<pg_shard_t> fl;
+  set<pg_shard_t> fl;
   for (auto&& i : res.errors) {
-    fl.push_back(i.first);
+    fl.insert(i.first);
   }
-  get_parent()->failed_push(fl, hoid);
-  get_parent()->backfill_add_missing(hoid, v);
-  get_parent()->finish_degraded_object(hoid);
+  get_parent()->on_failed_pull(fl, hoid, v);
 }
 
 struct OnRecoveryReadComplete :
@@ -285,7 +283,8 @@ struct RecoveryMessages {
 
 void ECBackend::handle_recovery_push(
   const PushOp &op,
-  RecoveryMessages *m)
+  RecoveryMessages *m,
+  bool is_repair)
 {
   if (get_parent()->check_failsafe_full()) {
     dout(10) << __func__ << " Out of space (failsafe) processing push request." << dendl;
@@ -361,6 +360,8 @@ void ECBackend::handle_recovery_push(
     if ((get_parent()->pgb_is_primary())) {
       ceph_assert(recovery_ops.count(op.soid));
       ceph_assert(recovery_ops[op.soid].obc);
+      if (get_parent()->pg_is_repair())
+        get_parent()->inc_osd_stat_repaired();
       get_parent()->on_local_recover(
 	op.soid,
 	op.recovery_info,
@@ -368,6 +369,9 @@ void ECBackend::handle_recovery_push(
 	false,
 	&m->t);
     } else {
+      // If primary told us this is a repair, bump osd_stat_t::num_objects_repaired
+      if (is_repair)
+        get_parent()->inc_osd_stat_repaired();
       get_parent()->on_local_recover(
 	op.soid,
 	op.recovery_info,
@@ -410,7 +414,7 @@ void ECBackend::handle_recovery_push_reply(
 void ECBackend::handle_recovery_read_complete(
   const hobject_t &hoid,
   boost::tuple<uint64_t, uint64_t, map<pg_shard_t, bufferlist> > &to_read,
-  boost::optional<map<string, bufferlist> > attrs,
+  std::optional<map<string, bufferlist> > attrs,
   RecoveryMessages *m)
 {
   dout(10) << __func__ << ": returned " << hoid << " "
@@ -517,6 +521,7 @@ void ECBackend::dispatch_recovery_messages(RecoveryMessages &m, int priority)
     msg->pgid = spg_t(get_parent()->get_info().pgid.pgid, i->first.shard);
     msg->pushes.swap(i->second);
     msg->compute_cost(cct);
+    msg->is_repair = get_parent()->pg_is_repair();
     get_parent()->send_message(
       i->first.osd,
       msg);
@@ -682,6 +687,8 @@ void ECBackend::continue_recovery_op(
 	  stat.num_bytes_recovered = op.recovery_info.size;
 	  stat.num_keys_recovered = 0; // ??? op ... omap_entries.size(); ?
 	  stat.num_objects_recovered = 1;
+	  if (get_parent()->pg_is_repair())
+	    stat.num_objects_repaired = 1;
 	  get_parent()->on_global_recover(op.hoid, stat, false);
 	  dout(10) << __func__ << ": WRITING return " << op << dendl;
 	  recovery_ops.erase(op.hoid);
@@ -823,7 +830,7 @@ bool ECBackend::_handle_message(
     for (vector<PushOp>::const_iterator i = op->pushes.begin();
 	 i != op->pushes.end();
 	 ++i) {
-      handle_recovery_push(*i, &rm);
+      handle_recovery_push(*i, &rm, op->is_repair);
     }
     dispatch_recovery_messages(rm, priority);
     return true;
@@ -1475,7 +1482,7 @@ void ECBackend::submit_transaction(
   const eversion_t &trim_to,
   const eversion_t &roll_forward_to,
   const vector<pg_log_entry_t> &log_entries,
-  boost::optional<pg_hit_set_history_t> &hset_history,
+  std::optional<pg_hit_set_history_t> &hset_history,
   Context *on_all_commit,
   ceph_tid_t tid,
   osd_reqid_t reqid,
@@ -1973,7 +1980,8 @@ bool ECBackend::try_reads_to_commit()
       &trans,
       &(op->temp_added),
       &(op->temp_cleared),
-      get_parent()->get_dpp());
+      get_parent()->get_dpp(),
+      get_osdmap()->require_osd_release);
   }
 
   dout(20) << __func__ << ": " << cache << dendl;
@@ -2095,7 +2103,7 @@ bool ECBackend::try_finish_rmw()
   if (op->version > committed_to)
     committed_to = op->version;
 
-  if (get_osdmap()->require_osd_release >= CEPH_RELEASE_KRAKEN) {
+  if (get_osdmap()->require_osd_release >= ceph_release_t::kraken) {
     if (op->version > get_parent()->get_log().get_can_rollback_to() &&
 	waiting_reads.empty() &&
 	waiting_commit.empty()) {

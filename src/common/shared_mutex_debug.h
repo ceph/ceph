@@ -19,11 +19,7 @@ class shared_mutex_debug :
   std::atomic<unsigned> nrlock{0};
 
 public:
-  // Mutex concept is DefaultConstructible
-  shared_mutex_debug()
-    : shared_mutex_debug{std::string{}}
-  {}
-  shared_mutex_debug(const std::string& n,
+  shared_mutex_debug(std::string group,
 		     bool track_lock=true,
 		     bool enable_lock_dep=true,
 		     bool prioritize_write=false);

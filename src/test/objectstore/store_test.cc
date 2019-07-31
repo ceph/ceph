@@ -48,8 +48,6 @@ typedef boost::mt11213b gen_type;
 const uint64_t DEF_STORE_TEST_BLOCKDEV_SIZE = 10240000000;
 #define dout_context g_ceph_context
 
-#if GTEST_HAS_PARAM_TEST
-
 static bool bl_eq(bufferlist& expected, bufferlist& actual)
 {
   if (expected.contents_equal(actual))
@@ -1320,6 +1318,7 @@ TEST_P(StoreTestSpecificAUSize, BluestoreStatFSTest) {
     return;
   StartDeferred(65536);
   SetVal(g_conf(), "bluestore_compression_mode", "force");
+  SetVal(g_conf(), "bluestore_max_blob_size", "524288");
   // just a big number to disble gc
   SetVal(g_conf(), "bluestore_gc_enable_total_threshold", "100000");
   SetVal(g_conf(), "bluestore_fsck_on_umount", "true");
@@ -6188,7 +6187,7 @@ TEST_P(StoreTest, BluestoreOnOffCSumTest) {
 }
 #endif
 
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   ObjectStore,
   StoreTest,
   ::testing::Values(
@@ -6200,7 +6199,7 @@ INSTANTIATE_TEST_CASE_P(
     "kstore"));
 
 // Note: instantiate all stores to preserve store numbering order only
-INSTANTIATE_TEST_CASE_P(
+INSTANTIATE_TEST_SUITE_P(
   ObjectStore,
   StoreTestSpecificAUSize,
   ::testing::Values(
@@ -6210,18 +6209,6 @@ INSTANTIATE_TEST_CASE_P(
     "bluestore",
 #endif
     "kstore"));
-
-#else
-
-// Google Test may not support value-parameterized tests with some
-// compilers. If we use conditional compilation to compile out all
-// code referring to the gtest_main library, MSVC linker will not link
-// that library at all and consequently complain about missing entry
-// point defined in that library (fatal error LNK1561: entry point
-// must be defined). This dummy test keeps gtest_main linked in.
-TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
-
-#endif
 
 void doMany4KWritesTest(boost::scoped_ptr<ObjectStore>& store,
                         unsigned max_objects,
@@ -7636,11 +7623,11 @@ TEST_P(StoreTest, allocateBlueFSTest) {
 
   uint64_t to_alloc = g_conf().get_val<Option::size_t>("bluefs_alloc_size");
 
-  int r = bstore->allocate_bluefs_freespace(to_alloc, nullptr);
+  int r = bstore->allocate_bluefs_freespace(to_alloc, to_alloc, nullptr);
   ASSERT_EQ(r, 0);
-  r = bstore->allocate_bluefs_freespace(statfs.total, nullptr);
+  r = bstore->allocate_bluefs_freespace(statfs.total, statfs.total, nullptr);
   ASSERT_EQ(r, -ENOSPC);
-  r = bstore->allocate_bluefs_freespace(to_alloc * 16, nullptr);
+  r = bstore->allocate_bluefs_freespace(to_alloc * 16, to_alloc * 16, nullptr);
   ASSERT_EQ(r, 0);
   store->umount();
   ASSERT_EQ(store->fsck(false), 0); // do fsck explicitly
@@ -7731,6 +7718,148 @@ TEST_P(StoreTest, mergeRegionTest) {
     ASSERT_EQ(final_len, static_cast<uint64_t>(r));
   }
 }
+
+TEST_P(StoreTestSpecificAUSize, BluestoreEnforceHWSettingsHdd) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "hdd");
+  StartDeferred(0x1000);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t(sobject_t("Object", CEPH_NOSNAP)));
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl, orig;
+    string s(g_ceph_context->_conf->bluestore_max_blob_size_hdd, '0');
+    bl.append(s);
+    t.write(cid, hoid, 0, bl.length(), bl);
+    cerr << "write" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    const PerfCounters* logger = store->get_perf_counters();
+    ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 1u);
+  }
+}
+  
+TEST_P(StoreTestSpecificAUSize, BluestoreEnforceHWSettingsSsd) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_debug_enforce_settings", "ssd");
+  StartDeferred(0x1000);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t(sobject_t("Object", CEPH_NOSNAP)));
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl, orig;
+    string s(g_ceph_context->_conf->bluestore_max_blob_size_ssd * 8, '0');
+    bl.append(s);
+    t.write(cid, hoid, 0, bl.length(), bl);
+    cerr << "write" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    const PerfCounters* logger = store->get_perf_counters();
+    ASSERT_EQ(logger->get(l_bluestore_write_big_blobs), 8u);
+  }
+}
+  
+TEST_P(StoreTestSpecificAUSize, ReproNoBlobMultiTest) {
+
+  if(string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_block_db_create", "true");
+  SetVal(g_conf(), "bluestore_block_db_size", "4294967296");
+  SetVal(g_conf(), "bluestore_block_size", "12884901888");
+  SetVal(g_conf(), "bluestore_max_blob_size", "524288");
+
+  g_conf().apply_changes(nullptr);
+
+  StartDeferred(65536);
+
+  int r;
+  coll_t cid;
+  ghobject_t hoid(hobject_t(sobject_t("Object 1", CEPH_NOSNAP)));
+  ghobject_t hoid2 = hoid;
+  hoid2.hobj.snap = 1;
+
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    bool exists = store->exists(ch, hoid);
+    ASSERT_TRUE(!exists);
+
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    cerr << "Creating object " << hoid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    exists = store->exists(ch, hoid);
+    ASSERT_EQ(true, exists);
+  }
+  {
+    uint64_t offs = 0;
+    bufferlist bl;
+    const int size = 0x100;
+    bufferptr ap(size);
+    memset(ap.c_str(), 'a', size);
+    bl.append(ap);
+    int i = 0;
+    uint64_t  blob_size = 524288;
+    uint64_t total = 0;
+    for (i = 0; i <= 512; i++) {
+      offs = 0 + i * size;
+      ObjectStore::Transaction t;
+      ghobject_t hoid2 = hoid;
+      hoid2.hobj.snap = i + 1;
+      while (offs < 128 * 1024 * 1024) {
+
+        t.write(cid, hoid, offs, ap.length(), bl);
+       offs += blob_size;
+       total += ap.length();
+      }
+      t.clone(cid, hoid, hoid2);
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    cerr << "Total written = " << total << std::endl;
+  }
+  {
+    cerr << "Finalizing" << std::endl;
+    const PerfCounters* logger = store->get_perf_counters();
+    ASSERT_GE(logger->get(l_bluestore_gc_merged), 1024*1024*1024);
+  }
+}
+
 #endif  // WITH_BLUESTORE
 
 int main(int argc, char **argv) {

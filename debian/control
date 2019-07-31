@@ -26,11 +26,15 @@ Build-Depends: cmake (>= 3.5),
                libbabeltrace-ctf-dev,
                libbabeltrace-dev,
                libblkid-dev (>= 2.17),
+# Crimson      libc-ares-dev,
+# Crimson      libcrypto++-dev,
                libcunit1-dev,
                libcurl4-openssl-dev,
                libexpat1-dev,
                libfuse-dev,
                libgoogle-perftools-dev [i386 amd64 arm64],
+# Crimson      libgnutls28-dev,
+# Crimson      libhwloc-dev,
                libibverbs-dev,
                librdmacm-dev,
                libkeyutils-dev,
@@ -41,15 +45,23 @@ Build-Depends: cmake (>= 3.5),
                libncurses-dev,
                libnss3-dev,
                liboath-dev,
+# Crimson      libnuma-dev,
+# Crimson      libpciaccess-dev,
+# Crimson      libprotobuf-dev,
+# Crimson      libsctp-dev,
                libsnappy-dev,
                libssl-dev,
                libtool,
                libudev-dev,
+               libnl-genl-3-dev,
                libxml2-dev,
+# Crimson      libyaml-cpp-dev,
                librabbitmq-dev,
                lsb-release,
                parted,
+               patch,
                pkg-config,
+# Crimson      protobuf-compiler,
                python (>= 2.7),
                python-all-dev,
                python-cherrypy3,
@@ -68,7 +80,9 @@ Build-Depends: cmake (>= 3.5),
 # Make-Check   python-werkzeug,
                python3-all-dev,
                python3-setuptools,
+# Crimson      ragel,
 # Make-Check   socat,
+# Crimson      systemtap-sdt-dev,
                uuid-dev,
                uuid-runtime,
                valgrind,
@@ -208,10 +222,12 @@ Package: ceph-mgr-dashboard
 Architecture: all
 Depends: ceph-mgr (= ${binary:Version}),
          python-cherrypy3,
+         python-ipaddress,
          python-jwt,
          python-openssl,
          python-bcrypt,
          python-werkzeug,
+         python-routes,
          ${misc:Depends},
          ${python:Depends},
          ${shlibs:Depends},
@@ -425,6 +441,31 @@ Description: debugging symbols for rbd-fuse
  .
  This package contains the debugging symbols for rbd-fuse.
 
+Package: ceph-immutable-object-cache
+Architecture: linux-any
+Depends: librados2 (= ${binary:Version}),
+         ${misc:Depends},
+         ${shlibs:Depends},
+Description: Ceph daemon for immutable object cache
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.  This is a daemon for immutable
+ object cache.
+
+Package: ceph-immutable-object-cache-dbg
+Architecture: linux-any
+Section: debug
+Priority: extra
+Depends: ceph-immutable-object-cache (= ${binary:Version}),
+	 ${misc:Depends},
+Description: debugging symbols for ceph-immutable-object-cache
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.  This is a daemon for immutable
+ object cache.
+ .
+ This package contains the debugging symbols for ceph-immutable-object-cache.
+
 Package: rbd-mirror
 Architecture: linux-any
 Depends: ceph-common (= ${binary:Version}),
@@ -487,6 +528,7 @@ Architecture: linux-any
 Depends: librbd1 (= ${binary:Version}),
          python-cephfs (= ${binary:Version}),
          python-ceph-argparse (= ${binary:Version}),
+         python-ceph-common (= ${binary:Version}),
          python-prettytable,
          python-rados (= ${binary:Version}),
          python-rbd (= ${binary:Version}),
@@ -1158,6 +1200,32 @@ Description: Python 3 utility libraries for Ceph CLI
  .
  This package contains types and routines for Python 3 used by the
  Ceph CLI as well as the RESTful interface.
+
+Package: python-ceph-common
+Architecture: all
+Section: python
+Depends: ${misc:Depends},
+         ${python:Depends},
+Description: Python 2 utility libraries for Ceph
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains data structures, classes and functions used by Ceph.
+ It also contains utilities used for the SSH orchestrator.
+
+Package: python3-ceph-common
+Architecture: all
+Section: python
+Depends: ${misc:Depends},
+         ${python3:Depends},
+Description: Python 3 utility libraries for Ceph
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains data structures, classes and functions used by Ceph.
+ It also contains utilities used for the SSH orchestrator.
 
 Package: libcephfs-java
 Section: java

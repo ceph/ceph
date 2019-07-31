@@ -9,8 +9,12 @@ import errno
 import json
 from mgr_module import MgrModule
 import os
-from string import maketrans
 from threading import Event
+
+try:
+    from string import maketrans
+except ImportError:
+    maketrans = str.maketrans
 
 from .common import DP_MGR_STAT_ENABLED, DP_MGR_STAT_DISABLED
 from .task import MetricsRunner, SmartRunner, PredictRunner, TestRunner
@@ -22,16 +26,23 @@ CUSTOMER_ALPHABET = "ABCDEFG&HIJKLMN@OQRS.TUV(WXYZabcd)efghijlmn-opqrstu*vwxyz01
 ORIGIN_ALPHABET = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/"
 
 
-def encode_string(value):
+def get_transtable():
     transtable = maketrans(ORIGIN_ALPHABET, CUSTOMER_ALPHABET)
-    e = base64.b64encode(value)
-    return e.translate(transtable)[:-1]
+    return transtable
 
 
-def decode_string(value):
+def get_reverse_transtable():
     transtable = maketrans(CUSTOMER_ALPHABET, ORIGIN_ALPHABET)
-    e = str(value).translate(transtable) + "="
-    return base64.b64decode(e)
+    return transtable
+
+
+def encode_string(value):
+    if len(value) == 0:
+        return ""
+    transtable = get_transtable()
+    e = str((base64.b64encode(str(value).encode())).decode("utf-8"))
+    e = e.rstrip("=")
+    return e.translate(transtable)
 
 
 class Module(MgrModule):
@@ -71,11 +82,11 @@ class Module(MgrModule):
         },
         {
             'name': 'diskprediction_ssl_target_name_override',
-            'default': 'api.diskprophet.com'
+            'default': 'localhost'
         },
         {
             'name': 'diskprediction_default_authority',
-            'default': 'api.diskprophet.com'
+            'default': 'localhost'
         },
         {
             'name': 'sleep_interval',
@@ -387,7 +398,7 @@ class Module(MgrModule):
                         restart_agent = True
                         break
             except Exception as IOError:
-                self.log.error('disk prediction plugin faield to started and try to restart')
+                self.log.error('disk prediction plugin failed to started and try to restart')
                 restart_agent = True
 
             if restart_agent:

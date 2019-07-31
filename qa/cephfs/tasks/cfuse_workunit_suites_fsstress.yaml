@@ -1,5 +1,6 @@
 tasks:
 - workunit:
+    timeout: 6h
     clients:
       all:
         - suites/fsstress.sh

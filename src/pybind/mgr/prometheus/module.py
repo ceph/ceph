@@ -1,4 +1,5 @@
 import cherrypy
+from distutils.version import StrictVersion
 import json
 import errno
 import math
@@ -8,14 +9,28 @@ import socket
 import threading
 import time
 from mgr_module import MgrModule, MgrStandbyModule, CommandResult, PG_STATES
+from mgr_util import get_default_addr
 from rbd import RBD
 
 # Defaults for the Prometheus HTTP server.  Can also set in config-key
 # see https://github.com/prometheus/prometheus/wiki/Default-port-allocations
 # for Prometheus exporter port registry
 
-DEFAULT_ADDR = '::'
 DEFAULT_PORT = 9283
+
+# When the CherryPy server in 3.2.2 (and later) starts it attempts to verify
+# that the ports its listening on are in fact bound. When using the any address
+# "::" it tries both ipv4 and ipv6, and in some environments (e.g. kubernetes)
+# ipv6 isn't yet configured / supported and CherryPy throws an uncaught
+# exception.
+if cherrypy is not None:
+    v = StrictVersion(cherrypy.__version__)
+    # the issue was fixed in 3.2.3. it's present in 3.2.2 (current version on
+    # centos:7) and back to at least 3.0.0.
+    if StrictVersion("3.1.2") <= v < StrictVersion("3.2.3"):
+        # https://github.com/cherrypy/cherrypy/issues/1100
+        from cherrypy.process import servers
+        servers.wait_for_occupied_port = lambda host, port: None
 
 
 # cherrypy likes to sys.exit on error.  don't let it take us down too!
@@ -50,6 +65,10 @@ DF_CLUSTER = ['total_bytes', 'total_used_bytes', 'total_used_raw_bytes']
 DF_POOL = ['max_avail', 'stored', 'stored_raw', 'objects', 'dirty',
            'quota_bytes', 'quota_objects', 'rd', 'rd_bytes', 'wr', 'wr_bytes']
 
+OSD_POOL_STATS = ('recovering_objects_per_sec', 'recovering_bytes_per_sec',
+                  'recovering_keys_per_sec', 'num_objects_recovered',
+                  'num_bytes_recovered', 'num_bytes_recovered')
+
 OSD_FLAGS = ('noup', 'nodown', 'noout', 'noin', 'nobackfill', 'norebalance',
              'norecover', 'noscrub', 'nodeep-scrub')
 
@@ -60,6 +79,14 @@ MDS_METADATA = ('ceph_daemon', 'fs_id', 'hostname', 'public_addr', 'rank',
 
 MON_METADATA = ('ceph_daemon', 'hostname',
                 'public_addr', 'rank', 'ceph_version')
+
+MGR_METADATA = ('ceph_daemon', 'hostname', 'ceph_version')
+
+MGR_STATUS = ('ceph_daemon',)
+
+MGR_MODULE_STATUS = ('name',)
+
+MGR_MODULE_CAN_RUN = ('name',)
 
 OSD_METADATA = ('back_iface', 'ceph_daemon', 'cluster_addr', 'device_class',
                 'front_iface', 'hostname', 'objectstore', 'public_addr',
@@ -102,8 +129,7 @@ class Metric(object):
 
         def promethize(path):
             ''' replace illegal metric name characters '''
-            result = path.replace('.', '_').replace(
-                '+', '_plus').replace('::', '_')
+            result = re.sub(r'[./\s]|::', '_', path).replace('+', '_plus')
 
             # Hyphens usually turn into underscores, unless they are
             # trailing
@@ -227,6 +253,30 @@ class Module(MgrModule):
             'MON Metadata',
             MON_METADATA
         )
+        metrics['mgr_metadata'] = Metric(
+            'gauge',
+            'mgr_metadata',
+            'MGR metadata',
+            MGR_METADATA
+        )
+        metrics['mgr_status'] = Metric(
+            'gauge',
+            'mgr_status',
+            'MGR status (0=standby, 1=active)',
+            MGR_STATUS
+        )
+        metrics['mgr_module_status'] = Metric(
+            'gauge',
+            'mgr_module_status',
+            'MGR module status (0=disabled, 1=enabled, 2=auto-enabled)',
+            MGR_MODULE_STATUS
+        )
+        metrics['mgr_module_can_run'] = Metric(
+            'gauge',
+            'mgr_module_can_run',
+            'MGR module runnable state i.e. can it run (0=no, 1=yes)',
+            MGR_MODULE_CAN_RUN
+        )
         metrics['osd_metadata'] = Metric(
             'untyped',
             'osd_metadata',
@@ -294,6 +344,14 @@ class Module(MgrModule):
                 'OSD stat {}'.format(stat),
                 ('ceph_daemon',)
             )
+        for stat in OSD_POOL_STATS:
+            path = 'pool_{}'.format(stat)
+            metrics[path] = Metric(
+                'gauge',
+                path,
+                "OSD pool stats: {}".format(stat),
+                ('pool_id',)
+            )
         for state in PG_STATES:
             path = 'pg_{}'.format(state)
             metrics[path] = Metric(
@@ -332,6 +390,17 @@ class Module(MgrModule):
             health_status_to_number(health['status'])
         )
 
+    def get_pool_stats(self):
+        # retrieve pool stats to provide per pool recovery metrics
+        # (osd_pool_stats moved to mgr in Mimic)
+        pstats = self.get('osd_pool_stats')
+        for pool in pstats['pool_stats']:
+            for stat in OSD_POOL_STATS:
+                self.metrics['pool_{}'.format(stat)].set(
+                    pool['recovery_rate'].get(stat, 0),
+                    (pool['pool_id'],)
+                )
+
     def get_df(self):
         # maybe get the to-be-exported metrics from a config?
         df = self.get('df')
@@ -348,7 +417,6 @@ class Module(MgrModule):
     def get_fs(self):
         fs_map = self.get('fs_map')
         servers = self.get_service_list()
-        active_daemons = []
         for fs in fs_map['filesystems']:
             # collect fs metadata
             data_pools = ",".join([str(pool)
@@ -385,6 +453,50 @@ class Module(MgrModule):
             self.metrics['mon_quorum_status'].set(in_quorum, (
                 'mon.{}'.format(id_),
             ))
+
+    def get_mgr_status(self):
+        mgr_map = self.get('mgr_map')
+        servers = self.get_service_list()
+
+        active = mgr_map['active_name']
+        standbys = [s.get('name') for s in mgr_map['standbys']]
+
+        all_mgrs = list(standbys)
+        all_mgrs.append(active)
+
+        all_modules = {module.get('name'):module.get('can_run') for module in mgr_map['available_modules']}
+
+        for mgr in all_mgrs:
+            host_version = servers.get((mgr, 'mgr'), ('', ''))
+            if mgr == active:
+                _state = 1
+                ceph_release = host_version[1].split()[-2] # e.g. nautilus
+            else:
+                _state = 0
+            
+            self.metrics['mgr_metadata'].set(1, (
+                'mgr.{}'.format(mgr), host_version[0],
+                host_version[1]
+            ))
+            self.metrics['mgr_status'].set(_state, (
+                'mgr.{}'.format(mgr), 
+            ))
+        always_on_modules = mgr_map['always_on_modules'][ceph_release]
+        active_modules = list(always_on_modules)
+        active_modules.extend(mgr_map['modules'])
+
+        for mod_name in all_modules.keys():
+
+            if mod_name in always_on_modules:
+                _state = 2
+            elif mod_name in active_modules:
+                _state = 1
+            else:
+                _state = 0
+
+            _can_run = 1 if all_modules[mod_name] else 0
+            self.metrics['mgr_module_status'].set(_state, (mod_name,))
+            self.metrics['mgr_module_can_run'].set(_can_run, (mod_name,))
 
     def get_pg_status(self):
         # TODO add per pool status?
@@ -463,9 +575,8 @@ class Module(MgrModule):
                     break
 
             if dev_class is None:
-                self.log.info(
-                    "OSD {0} is missing from CRUSH map, skipping output".format(
-                        id_))
+                self.log.info("OSD {0} is missing from CRUSH map, "
+                              "skipping output".format(id_))
                 continue
 
             host_version = servers.get((str(id_), 'osd'), ('', ''))
@@ -498,15 +609,14 @@ class Module(MgrModule):
                     'osd.{}'.format(id_),
                 ))
 
-            osd_objectstore = osd_metadata.get('osd_objectstore', None)
-            if osd_objectstore == "filestore":
+            if obj_store == "filestore":
                 # collect filestore backend device
                 osd_dev_node = osd_metadata.get(
                     'backend_filestore_dev_node', None)
                 # collect filestore journal device
                 osd_wal_dev_node = osd_metadata.get('osd_journal', '')
                 osd_db_dev_node = ''
-            elif osd_objectstore == "bluestore":
+            elif obj_store == "bluestore":
                 # collect bluestore backend device
                 osd_dev_node = osd_metadata.get(
                     'bluestore_bdev_dev_node', None)
@@ -532,7 +642,6 @@ class Module(MgrModule):
                 self.log.info("Missing dev node metadata for osd {0}, skipping "
                               "occupation record for this osd".format(id_))
 
-        pool_meta = []
         for pool in osd_map['pools']:
             self.metrics['pool_metadata'].set(
                 1, (pool['pool'], pool['pool_name']))
@@ -544,7 +653,8 @@ class Module(MgrModule):
                 hostname, version = value
                 self.metrics['rgw_metadata'].set(
                     1,
-                    ('{}.{}'.format(service_type, service_id), hostname, version)
+                    ('{}.{}'.format(service_type, service_id),
+                     hostname, version)
                 )
             elif service_type == 'rbd-mirror':
                 mirror_metadata = self.get_metadata('rbd-mirror', service_id)
@@ -792,9 +902,11 @@ class Module(MgrModule):
 
         self.get_health()
         self.get_df()
+        self.get_pool_stats()
         self.get_fs()
         self.get_osd_stats()
         self.get_quorum_status()
+        self.get_mgr_status()
         self.get_metadata_and_osd_status()
         self.get_pg_status()
         self.get_num_objects()
@@ -806,6 +918,9 @@ class Module(MgrModule):
                 if not stattype or stattype == 'histogram':
                     self.log.debug('ignoring %s, type %s' % (path, stattype))
                     continue
+
+                path, label_names, labels = self._perfpath_to_path_labels(
+                    daemon, path)
 
                 # Get the value of the counter
                 value = self._perfvalue_to_value(
@@ -819,9 +934,9 @@ class Module(MgrModule):
                             stattype,
                             _path,
                             counter_info['description'] + ' Total',
-                            ("ceph_daemon",),
+                            label_names,
                         )
-                    self.metrics[_path].set(value, (daemon,))
+                    self.metrics[_path].set(value, labels)
 
                     _path = path + '_count'
                     if _path not in self.metrics:
@@ -829,18 +944,18 @@ class Module(MgrModule):
                             'counter',
                             _path,
                             counter_info['description'] + ' Count',
-                            ("ceph_daemon",),
+                            label_names,
                         )
-                    self.metrics[_path].set(counter_info['count'], (daemon,))
+                    self.metrics[_path].set(counter_info['count'], labels,)
                 else:
                     if path not in self.metrics:
                         self.metrics[path] = Metric(
                             stattype,
                             path,
                             counter_info['description'],
-                            ("ceph_daemon",),
+                            label_names,
                         )
-                    self.metrics[path].set(value, (daemon,))
+                    self.metrics[path].set(value, labels)
 
         self.get_rbd_stats()
 
@@ -911,11 +1026,11 @@ class Module(MgrModule):
             def index(self):
                 return '''<!DOCTYPE html>
 <html>
-	<head><title>Ceph Exporter</title></head>
-	<body>
-		<h1>Ceph Exporter</h1>
-		<p><a href='/metrics'>Metrics</a></p>
-	</body>
+    <head><title>Ceph Exporter</title></head>
+    <body>
+        <h1>Ceph Exporter</h1>
+        <p><a href='/metrics'>Metrics</a></p>
+    </body>
 </html>'''
 
             @cherrypy.expose
@@ -930,7 +1045,8 @@ class Module(MgrModule):
 
             @staticmethod
             def _metrics(instance):
-                # Return cached data if available and collected before the cache times out
+                # Return cached data if available and collected before the
+                # cache times out
                 if instance.collect_cache and time.time() - instance.collect_time < instance.collect_timeout:
                     cherrypy.response.headers['Content-Type'] = 'text/plain'
                     return instance.collect_cache
@@ -949,7 +1065,7 @@ class Module(MgrModule):
             'scrape_interval', 5.0)
 
         server_addr = self.get_localized_module_option(
-            'server_addr', DEFAULT_ADDR)
+            'server_addr', get_default_addr())
         server_port = self.get_localized_module_option(
             'server_port', DEFAULT_PORT)
         self.log.info(
@@ -991,7 +1107,8 @@ class StandbyModule(MgrStandbyModule):
         self.shutdown_event = threading.Event()
 
     def serve(self):
-        server_addr = self.get_localized_module_option('server_addr', '::')
+        server_addr = self.get_localized_module_option(
+            'server_addr', get_default_addr())
         server_port = self.get_localized_module_option(
             'server_port', DEFAULT_PORT)
         self.log.info("server_addr: %s server_port: %s" %
@@ -1010,11 +1127,11 @@ class StandbyModule(MgrStandbyModule):
                 active_uri = module.get_active_uri()
                 return '''<!DOCTYPE html>
 <html>
-	<head><title>Ceph Exporter</title></head>
-	<body>
-		<h1>Ceph Exporter</h1>
+    <head><title>Ceph Exporter</title></head>
+    <body>
+        <h1>Ceph Exporter</h1>
         <p><a href='{}metrics'>Metrics</a></p>
-	</body>
+    </body>
 </html>'''.format(active_uri)
 
             @cherrypy.expose

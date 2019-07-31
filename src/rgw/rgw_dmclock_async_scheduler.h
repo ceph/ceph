@@ -82,7 +82,12 @@ class AsyncScheduler : public md_config_obs_t, public Scheduler {
   using Completion = async::Completion<Signature, async::AsBase<Request>>;
 
   using Clock = ceph::coarse_real_clock;
+#if BOOST_VERSION < 107000
   using Timer = boost::asio::basic_waitable_timer<Clock>;
+#else
+  using Timer = boost::asio::basic_waitable_timer<Clock,
+        boost::asio::wait_traits<Clock>, executor_type>;
+#endif
   Timer timer; //< timer for the next scheduled request
 
   CephContext *const cct;

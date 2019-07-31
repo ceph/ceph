@@ -18,8 +18,6 @@
 #include <boost/random/uniform_int.hpp>
 typedef boost::mt11213b gen_type;
 
-#if GTEST_HAS_PARAM_TEST
-
 class AllocTest : public ::testing::TestWithParam<const char*> {
 
 public:
@@ -225,6 +223,16 @@ TEST_P(AllocTest, test_alloc_non_aligned_len)
   EXPECT_EQ(want_size, alloc->allocate(want_size, alloc_unit, 0, &extents));
 }
 
+TEST_P(AllocTest, test_alloc_39334)
+{
+  uint64_t block = 0x4000;
+  uint64_t size = 0x5d00000000;
+
+  init_alloc(size, block);
+  alloc->init_add_free(0x4000, 0x5cffffc000);
+  EXPECT_EQ(size - block, alloc->get_free());
+}
+
 TEST_P(AllocTest, test_alloc_fragmentation)
 {
   uint64_t capacity = 4 * 1024 * 1024;
@@ -313,17 +321,51 @@ TEST_P(AllocTest, test_alloc_bug_24598)
 
   EXPECT_EQ(static_cast<int64_t>(want_size),
 	    alloc->allocate(want_size, 0x100000, 0, 0, &tmp));
+  EXPECT_EQ(1u, tmp.size());
   EXPECT_EQ(0x4b00000u, tmp[0].offset);
   EXPECT_EQ(0x200000u, tmp[0].length);
-  EXPECT_EQ(1u, tmp.size());
 }
 
-INSTANTIATE_TEST_CASE_P(
+//Verifies issue from
+//http://tracker.ceph.com/issues/40703
+//
+TEST_P(AllocTest, test_alloc_big2)
+{
+  int64_t block_size = 4096;
+  int64_t blocks = 1048576 * 2;
+  int64_t mas = 1024*1024;
+  init_alloc(blocks*block_size, block_size);
+  alloc->init_add_free(0, blocks * block_size);
+
+  PExtentVector extents;
+  uint64_t need = block_size * blocks / 4; // 2GB
+  EXPECT_EQ(need,
+      alloc->allocate(need, mas, 0, &extents));
+  need = block_size * blocks / 4; // 2GB
+  EXPECT_EQ(need,
+      alloc->allocate(need, mas, 0, &extents));
+  EXPECT_TRUE(extents[0].length > 0);
+}
+
+//Verifies stuck 4GB chunk allocation
+//in StupidAllocator
+//
+TEST_P(AllocTest, test_alloc_big3)
+{
+  int64_t block_size = 4096;
+  int64_t blocks = 1048576 * 2;
+  int64_t mas = 1024*1024;
+  init_alloc(blocks*block_size, block_size);
+  alloc->init_add_free(0, blocks * block_size);
+
+  PExtentVector extents;
+  uint64_t need = block_size * blocks / 2; // 4GB
+  EXPECT_EQ(need,
+      alloc->allocate(need, mas, 0, &extents));
+  EXPECT_TRUE(extents[0].length > 0);
+}
+
+INSTANTIATE_TEST_SUITE_P(
   Allocator,
   AllocTest,
   ::testing::Values("stupid", "bitmap"));
-
-#else
-
-TEST(DummyTest, ValueParameterizedTestsAreNotSupportedOnThisPlatform) {}
-#endif

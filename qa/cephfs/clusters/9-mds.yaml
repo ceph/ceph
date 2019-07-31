@@ -2,6 +2,9 @@ roles:
 - [mon.a, mon.c, mgr.y, mds.a, mds.b, mds.c, mds.d, osd.0, osd.1, osd.2, osd.3]
 - [mon.b, mgr.x, mds.e, mds.f, mds.g, mds.h, mds.i, osd.4, osd.5, osd.6, osd.7]
 - [client.0, client.1]
+overrides:
+  ceph:
+    max_mds: 9
 openstack:
 - volumes: # attached to each instance
     count: 4

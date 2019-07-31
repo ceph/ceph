@@ -310,8 +310,7 @@ void SnapshotUnprotectRequest<I>::send_unprotect_snap_rollback() {
 template <typename I>
 int SnapshotUnprotectRequest<I>::verify_and_send_unprotect_snap_start() {
   I &image_ctx = this->m_image_ctx;
-  RWLock::RLocker md_locker(image_ctx.md_lock);
-  RWLock::RLocker snap_locker(image_ctx.snap_lock);
+  RWLock::RLocker image_locker(image_ctx.image_lock);
 
   CephContext *cct = image_ctx.cct;
   if ((image_ctx.features & RBD_FEATURE_LAYERING) == 0) {

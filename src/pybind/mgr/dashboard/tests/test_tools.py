@@ -7,12 +7,11 @@ import cherrypy
 from cherrypy.lib.sessions import RamSession
 from mock import patch
 
+from . import ControllerTestCase
 from ..services.exception import handle_rados_error
-from .helper import ControllerTestCase
 from ..controllers import RESTController, ApiController, Controller, \
                           BaseController, Proxy
-from ..tools import is_valid_ipv6_address, dict_contains_path, \
-                    RequestLoggingTool
+from ..tools import dict_contains_path, json_str_to_object, partial_dict, RequestLoggingTool
 
 
 # pylint: disable=W0613
@@ -172,14 +171,6 @@ class RequestLoggingToolTest(ControllerTestCase):
 
 class TestFunctions(unittest.TestCase):
 
-    def test_is_valid_ipv6_address(self):
-        self.assertTrue(is_valid_ipv6_address('::'))
-        self.assertTrue(is_valid_ipv6_address('::1'))
-        self.assertFalse(is_valid_ipv6_address('127.0.0.1'))
-        self.assertFalse(is_valid_ipv6_address('localhost'))
-        self.assertTrue(is_valid_ipv6_address('1200:0000:AB00:1234:0000:2552:7777:1313'))
-        self.assertFalse(is_valid_ipv6_address('1200::AB00:1234::2552:7777:1313'))
-
     def test_dict_contains_path(self):
         x = {'a': {'b': {'c': 'foo'}}}
         self.assertTrue(dict_contains_path(x, ['a', 'b', 'c']))
@@ -187,3 +178,19 @@ class TestFunctions(unittest.TestCase):
         self.assertTrue(dict_contains_path(x, ['a']))
         self.assertFalse(dict_contains_path(x, ['a', 'c']))
         self.assertTrue(dict_contains_path(x, []))
+
+    def test_json_str_to_object(self):
+        expected_result = {'a': 1, 'b': 'bbb'}
+        self.assertEqual(expected_result, json_str_to_object('{"a": 1, "b": "bbb"}'))
+        self.assertEqual(expected_result, json_str_to_object(b'{"a": 1, "b": "bbb"}'))
+        self.assertEqual('', json_str_to_object(''))
+        self.assertRaises(TypeError, json_str_to_object, None)
+
+    def test_partial_dict(self):
+        expected_result = {'a': 1, 'c': 3}
+        self.assertEqual(expected_result, partial_dict({'a': 1, 'b': 2, 'c': 3}, ['a', 'c']))
+        self.assertEqual({}, partial_dict({'a': 1, 'b': 2, 'c': 3}, []))
+        self.assertEqual({}, partial_dict({}, []))
+        self.assertRaises(KeyError, partial_dict, {'a': 1, 'b': 2, 'c': 3}, ['d'])
+        self.assertRaises(TypeError, partial_dict, None, ['a'])
+        self.assertRaises(TypeError, partial_dict, {'a': 1, 'b': 2, 'c': 3}, None)

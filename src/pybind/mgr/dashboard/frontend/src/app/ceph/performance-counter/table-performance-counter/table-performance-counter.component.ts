@@ -49,6 +49,7 @@ export class TablePerformanceCounterComponent implements OnInit {
       },
       {
         name: this.i18n('Value'),
+        prop: 'value',
         cellTemplate: this.valueTpl,
         flexGrow: 1
       }

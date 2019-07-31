@@ -3,7 +3,6 @@ from __future__ import absolute_import
 
 import logging
 import urllib
-import six
 
 from .helper import DashboardTestCase, JObj, JList, JLeaf
 
@@ -132,7 +131,9 @@ class RgwBucketTest(RgwTestCase):
             '/api/rgw/bucket',
             params={
                 'bucket': 'teuth-test-bucket',
-                'uid': 'admin'
+                'uid': 'admin',
+                'zonegroup': 'default',
+                'placement_target': 'default-placement'
             })
         self.assertStatus(201)
         data = self.jsonBody()
@@ -202,7 +203,9 @@ class RgwBucketTest(RgwTestCase):
             '/api/rgw/bucket',
             params={
                 'bucket': 'teuth-test-bucket',
-                'uid': 'testx$teuth-test-user'
+                'uid': 'testx$teuth-test-user',
+                'zonegroup': 'default',
+                'placement_target': 'default-placement'
             })
         self.assertStatus(201)
         # It's not possible to validate the result because there

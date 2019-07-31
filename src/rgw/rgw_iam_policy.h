@@ -29,6 +29,7 @@
 #include "rgw_basic_types.h"
 #include "rgw_iam_policy_keywords.h"
 #include "rgw_string.h"
+#include "rgw_arn.h"
 
 class RGWRados;
 namespace rgw {
@@ -36,8 +37,6 @@ namespace auth {
 class Identity;
 }
 }
-struct rgw_obj;
-struct rgw_bucket;
 
 namespace rgw {
 namespace IAM {
@@ -96,41 +95,50 @@ static constexpr std::uint64_t s3DeleteObjectTagging = 50;
 static constexpr std::uint64_t s3GetObjectVersionTagging = 51;
 static constexpr std::uint64_t s3PutObjectVersionTagging = 52;
 static constexpr std::uint64_t s3DeleteObjectVersionTagging = 53;
-static constexpr std::uint64_t s3All = 54;
+static constexpr std::uint64_t s3PutBucketObjectLockConfiguration = 54;
+static constexpr std::uint64_t s3GetBucketObjectLockConfiguration = 55;
+static constexpr std::uint64_t s3PutObjectRetention = 56;
+static constexpr std::uint64_t s3GetObjectRetention = 57;
+static constexpr std::uint64_t s3PutObjectLegalHold = 58;
+static constexpr std::uint64_t s3GetObjectLegalHold = 59;
+static constexpr std::uint64_t s3BypassGovernanceRetention = 60;
+static constexpr std::uint64_t s3All = 61;
 
-static constexpr std::uint64_t iamPutUserPolicy = 55;
-static constexpr std::uint64_t iamGetUserPolicy = 56;
-static constexpr std::uint64_t iamDeleteUserPolicy = 57;
-static constexpr std::uint64_t iamListUserPolicies = 58;
-static constexpr std::uint64_t iamCreateRole = 59;
-static constexpr std::uint64_t iamDeleteRole = 60;
-static constexpr std::uint64_t iamModifyRole = 61;
-static constexpr std::uint64_t iamGetRole = 62;
-static constexpr std::uint64_t iamListRoles = 63;
-static constexpr std::uint64_t iamPutRolePolicy = 64;
-static constexpr std::uint64_t iamGetRolePolicy = 65;
-static constexpr std::uint64_t iamListRolePolicies = 66;
-static constexpr std::uint64_t iamDeleteRolePolicy = 67;
-static constexpr std::uint64_t iamAll = 68;
-static constexpr std::uint64_t stsAssumeRole = 69;
-static constexpr std::uint64_t stsAssumeRoleWithWebIdentity = 70;
-static constexpr std::uint64_t stsGetSessionToken = 71;
-static constexpr std::uint64_t stsAll = 72;
+static constexpr std::uint64_t iamPutUserPolicy = 62;
+static constexpr std::uint64_t iamGetUserPolicy = 63;
+static constexpr std::uint64_t iamDeleteUserPolicy = 64;
+static constexpr std::uint64_t iamListUserPolicies = 65;
+static constexpr std::uint64_t iamCreateRole = 66;
+static constexpr std::uint64_t iamDeleteRole = 67;
+static constexpr std::uint64_t iamModifyRole = 68;
+static constexpr std::uint64_t iamGetRole = 69;
+static constexpr std::uint64_t iamListRoles = 70;
+static constexpr std::uint64_t iamPutRolePolicy = 71;
+static constexpr std::uint64_t iamGetRolePolicy = 72;
+static constexpr std::uint64_t iamListRolePolicies = 73;
+static constexpr std::uint64_t iamDeleteRolePolicy = 74;
+static constexpr std::uint64_t iamAll = 75;
+static constexpr std::uint64_t stsAssumeRole = 76;
+static constexpr std::uint64_t stsAssumeRoleWithWebIdentity = 77;
+static constexpr std::uint64_t stsGetSessionToken = 78;
+static constexpr std::uint64_t stsAll = 79;
 
-static constexpr std::uint64_t s3Count = s3DeleteObjectVersionTagging + 1;
+static constexpr std::uint64_t s3Count = s3BypassGovernanceRetention + 1;
 static constexpr std::uint64_t allCount = stsAll + 1;
 
 using Action_t = bitset<allCount>;
 using NotAction_t = Action_t;
 
 static const Action_t None(0);
-static const Action_t s3AllValue("111111111111111111111111111111111111111111111111111111");
-static const Action_t iamAllValue("11111111111110000000000000000000000000000000000000000000000000000000");
-static const Action_t stsAllValue("111000000000000000000000000000000000000000000000000000000000000000000000");
+static const Action_t s3AllValue("1111111111111111111111111111111111111111111111111111111111111");
+static const Action_t iamAllValue("111111111111100000000000000000000000000000000000000000000000000000000000000");
+static const Action_t stsAllValue("1110000000000000000000000000000000000000000000000000000000000000000000000000000");
 //Modify allValue if more Actions are added
-static const Action_t allValue("1111111111111111111111111111111111111111111111111111111111111111111111111");
+static const Action_t allValue("11111111111111111111111111111111111111111111111111111111111111111111111111111111");
 
 namespace {
+// Please update the table in doc/radosgw/s3/authentication.rst if you
+// modify this function.
 inline int op_to_perm(std::uint64_t op) {
   switch (op) {
   case s3GetObject:
@@ -139,6 +147,8 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetObjectVersionTorrent:
   case s3GetObjectTagging:
   case s3GetObjectVersionTagging:
+  case s3GetObjectRetention:
+  case s3GetObjectLegalHold:
   case s3ListAllMyBuckets:
   case s3ListBucket:
   case s3ListBucketMultipartUploads:
@@ -157,6 +167,9 @@ inline int op_to_perm(std::uint64_t op) {
   case s3DeleteObjectTagging:
   case s3DeleteObjectVersionTagging:
   case s3RestoreObject:
+  case s3PutObjectRetention:
+  case s3PutObjectLegalHold:
+  case s3BypassGovernanceRetention:
     return RGW_PERM_WRITE;
 
   case s3GetAccelerateConfiguration:
@@ -174,6 +187,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3GetObjectAcl:
   case s3GetObjectVersionAcl:
   case s3GetReplicationConfiguration:
+  case s3GetBucketObjectLockConfiguration:
     return RGW_PERM_READ_ACP;
 
   case s3DeleteBucketPolicy:
@@ -193,6 +207,7 @@ inline int op_to_perm(std::uint64_t op) {
   case s3PutObjectAcl:
   case s3PutObjectVersionAcl:
   case s3PutReplicationConfiguration:
+  case s3PutBucketObjectLockConfiguration:
     return RGW_PERM_WRITE_ACP;
 
   case s3All:
@@ -203,70 +218,6 @@ inline int op_to_perm(std::uint64_t op) {
 }
 
 using Environment = boost::container::flat_map<std::string, std::string>;
-
-enum struct Partition {
-  aws, aws_cn, aws_us_gov, wildcard
-  // If we wanted our own ARNs for principal type unique to us
-  // (maybe to integrate better with Swift) or for anything else we
-  // provide that doesn't map onto S3, we could add an 'rgw'
-  // partition type.
-};
-
-enum struct Service {
-  apigateway, appstream, artifact, autoscaling, aws_portal, acm,
-  cloudformation, cloudfront, cloudhsm, cloudsearch, cloudtrail,
-  cloudwatch, events, logs, codebuild, codecommit, codedeploy,
-  codepipeline, cognito_idp, cognito_identity, cognito_sync,
-  config, datapipeline, dms, devicefarm, directconnect,
-  ds, dynamodb, ec2, ecr, ecs, ssm, elasticbeanstalk, elasticfilesystem,
-  elasticloadbalancing, elasticmapreduce, elastictranscoder, elasticache,
-  es, gamelift, glacier, health, iam, importexport, inspector, iot,
-  kms, kinesisanalytics, firehose, kinesis, lambda, lightsail,
-  machinelearning, aws_marketplace, aws_marketplace_management,
-  mobileanalytics, mobilehub, opsworks, opsworks_cm, polly,
-  redshift, rds, route53, route53domains, sts, servicecatalog,
-  ses, sns, sqs, s3, swf, sdb, states, storagegateway, support,
-  trustedadvisor, waf, workmail, workspaces, wildcard
-};
-
-struct ARN {
-  Partition partition;
-  Service service;
-  std::string region;
-  // Once we refit tenant, we should probably use that instead of a
-  // string.
-  std::string account;
-  std::string resource;
-
-  ARN()
-    : partition(Partition::wildcard), service(Service::wildcard) {}
-  ARN(Partition partition, Service service, std::string region,
-      std::string account, std::string resource)
-    : partition(partition), service(service), region(std::move(region)),
-      account(std::move(account)), resource(std::move(resource)) {}
-  ARN(const rgw_obj& o);
-  ARN(const rgw_bucket& b);
-  ARN(const rgw_bucket& b, const std::string& o);
-  ARN(const string& resource_name, const string& type, const string& tenant, bool has_path=false);
-
-  static boost::optional<ARN> parse(const std::string& s,
-				    bool wildcard = false);
-  std::string to_string() const;
-
-  // `this` is the pattern
-  bool match(const ARN& candidate) const;
-};
-
-inline std::string to_string(const ARN& a) {
-  return a.to_string();
-}
-
-inline std::ostream& operator <<(std::ostream& m, const ARN& a) {
-  return m << to_string(a);
-}
-
-bool operator ==(const ARN& l, const ARN& r);
-bool operator <(const ARN& l, const ARN& r);
 
 using Address = std::bitset<128>;
 struct MaskedIP {
@@ -523,16 +474,6 @@ struct Policy {
 
 std::ostream& operator <<(ostream& m, const Policy& p);
 }
-}
-
-namespace std {
-template<>
-struct hash<::rgw::IAM::Service> {
-  size_t operator()(const ::rgw::IAM::Service& s) const noexcept {
-    // Invoke a default-constructed hash object for int.
-    return hash<int>()(static_cast<int>(s));
-  }
-};
 }
 
 #endif

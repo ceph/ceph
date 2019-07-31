@@ -122,6 +122,9 @@ void RemoveRequest<I>::handle_pre_remove_image(int r) {
   ldout(m_cct, 5) << "r=" << r << dendl;
 
   if (r < 0) {
+    if (r == -ECHILD) {
+      r = -ENOTEMPTY;
+    }
     send_close_image(r);
     return;
   }
@@ -149,8 +152,10 @@ void RemoveRequest<I>::handle_trim_image(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
   if (r < 0) {
-    lderr(m_cct) << "warning: failed to remove some object(s): "
+    lderr(m_cct) << "failed to remove some object(s): "
                  << cpp_strerror(r) << dendl;
+    send_close_image(r);
+    return;
   }
 
   if (m_old_format) {

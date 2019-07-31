@@ -41,7 +41,7 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesInMemoryFlag) {
 
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker snap_locker(ictx->snap_lock);
+    RWLock::WLocker image_locker(ictx->image_lock);
     request->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -67,7 +67,7 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesHeadOnDiskFlag) {
 
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker snap_locker(ictx->snap_lock);
+    RWLock::WLocker image_locker(ictx->image_lock);
     request->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -96,7 +96,7 @@ TEST_F(TestMockObjectMapInvalidateRequest, UpdatesSnapOnDiskFlag) {
 
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker snap_locker(ictx->snap_lock);
+    RWLock::WLocker image_locker(ictx->image_lock);
     request->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -117,7 +117,7 @@ TEST_F(TestMockObjectMapInvalidateRequest, SkipOnDiskUpdateWithoutLock) {
 
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker snap_locker(ictx->snap_lock);
+    RWLock::WLocker image_locker(ictx->image_lock);
     request->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -141,7 +141,7 @@ TEST_F(TestMockObjectMapInvalidateRequest, IgnoresOnDiskUpdateFailure) {
 
   {
     RWLock::RLocker owner_locker(ictx->owner_lock);
-    RWLock::WLocker snap_locker(ictx->snap_lock);
+    RWLock::WLocker image_locker(ictx->image_lock);
     request->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());

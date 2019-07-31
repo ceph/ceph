@@ -111,27 +111,18 @@
 /* DPDK conditional compilation */
 #cmakedefine HAVE_DPDK
 
-/* PMEM conditional compilation */
-#cmakedefine HAVE_PMEM
+/* PMEM_DEVICE (OSD) conditional compilation */
+#cmakedefine HAVE_BLUESTORE_PMEM
 
 /* Defined if LevelDB supports bloom filters */
 #cmakedefine HAVE_LEVELDB_FILTER_POLICY
 
 /* Define if you have tcmalloc */
 #cmakedefine HAVE_LIBTCMALLOC
+#cmakedefine LIBTCMALLOC_MISSING_ALIGNED_ALLOC
 
 /* Define if have curl_multi_wait() */
 #cmakedefine HAVE_CURL_MULTI_WAIT 1
-
-/* Define if using NSS. */
-#cmakedefine USE_NSS
-
-/* Define if using OpenSSL. */
-#cmakedefine USE_OPENSSL
-
-/* Accelio conditional compilation */
-#cmakedefine HAVE_XIO
-
 
 /* AsyncMessenger RDMA conditional compilation */
 #cmakedefine HAVE_RDMA

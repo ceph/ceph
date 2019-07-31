@@ -153,6 +153,7 @@ namespace mirror {
 namespace image_deleter {
 
 using ::testing::_;
+using ::testing::DoAll;
 using ::testing::InSequence;
 using ::testing::Invoke;
 using ::testing::Return;

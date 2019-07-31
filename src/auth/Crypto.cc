@@ -14,13 +14,11 @@
 #include <array>
 #include <sstream>
 #include <limits>
-
 #include <fcntl.h>
 
+#include <openssl/aes.h>
+
 #include "Crypto.h"
-#ifdef USE_OPENSSL
-# include <openssl/aes.h>
-#endif
 
 #include "include/ceph_assert.h"
 #include "common/Clock.h"
@@ -131,6 +129,20 @@ std::size_t CryptoKeyHandler::decrypt(
   return todo_len;
 }
 
+sha256_digest_t CryptoKeyHandler::hmac_sha256(
+  const ceph::bufferlist& in) const
+{
+  ceph::crypto::HMACSHA256 hmac((const unsigned char*)secret.c_str(), secret.length());
+
+  for (const auto& bptr : in.buffers()) {
+    hmac.Update((const unsigned char *)bptr.c_str(), bptr.length());
+  }
+  sha256_digest_t ret;
+  hmac.Final(ret.v);
+
+  return ret;
+}
+
 // ---------------------------------------------------
 
 class CryptoNoneKeyHandler : public CryptoKeyHandler {
@@ -188,7 +200,6 @@ public:
   CryptoKeyHandler *get_key_handler(const bufferptr& secret, string& error) override;
 };
 
-#ifdef USE_OPENSSL
 // when we say AES, we mean AES-128
 static constexpr const std::size_t AES_KEY_LEN{16};
 static constexpr const std::size_t AES_BLOCK_LEN{16};
@@ -234,7 +245,7 @@ public:
     //   16 + p2align(10, 16) -> 16
     //   16 + p2align(16, 16) -> 32 including 16 bytes for padding.
     ceph::bufferptr out_tmp{static_cast<unsigned>(
-      AES_BLOCK_LEN + p2align(in.length(), AES_BLOCK_LEN))};
+      AES_BLOCK_LEN + p2align<std::size_t>(in.length(), AES_BLOCK_LEN))};
 
     // let's pad the data
     std::uint8_t pad_len = out_tmp.length() - in.length();
@@ -301,9 +312,7 @@ public:
     if (out.buf == nullptr) {
       // 16 + p2align(10, 16) -> 16
       // 16 + p2align(16, 16) -> 32
-      const std::size_t needed = \
-        AES_BLOCK_LEN + p2align(in.length, AES_BLOCK_LEN);
-      return needed;
+      return AES_BLOCK_LEN + p2align<std::size_t>(in.length, AES_BLOCK_LEN);
     }
 
     // how many bytes of in.buf hang outside the alignment boundary and how
@@ -365,11 +374,6 @@ public:
     return in.length - pad_len;
   }
 };
-
-#else
-# error "No supported crypto implementation found."
-#endif
-
 
 
 // ------------------------------------------------------------

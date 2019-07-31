@@ -23,22 +23,15 @@ export LC_ALL=C # the following is vulnerable to i18n
 
 ARCH=$(uname -m)
 
-function install_seastar_deps {
-    if [ $WITH_SEASTAR ]; then
-        $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y \
-              ragel libc-ares-dev libhwloc-dev libnuma-dev libpciaccess-dev \
-              libcrypto++-dev libgnutls28-dev libsctp-dev libprotobuf-dev \
-              protobuf-compiler systemtap-sdt-dev libyaml-cpp-dev
-    fi
-}
-
 function munge_ceph_spec_in {
+    local with_seastar=$1
+    shift
     local for_make_check=$1
     shift
     local OUTFILE=$1
     sed -e 's/@//g' < ceph.spec.in > $OUTFILE
     # http://rpm.org/user_doc/conditional_builds.html
-    if [ $WITH_SEASTAR ]; then
+    if $with_seastar; then
         sed -i -e 's/%bcond_with seastar/%bcond_without seastar/g' $OUTFILE
     fi
     if $for_make_check; then
@@ -49,6 +42,8 @@ function munge_ceph_spec_in {
 function munge_debian_control {
     local version=$1
     shift
+    local with_seastar=$1
+    shift
     local for_make_check=$1
     shift
     local control=$1
@@ -58,6 +53,9 @@ function munge_debian_control {
 	    grep -v babeltrace debian/control > $control
 	    ;;
     esac
+    if $with_seastar; then
+	sed -i -e 's/^# Crimson[[:space:]]//g' $control
+    fi
     if $for_make_check; then
         sed -i 's/^# Make-Check[[:space:]]/             /g' $control
     fi
@@ -70,15 +68,15 @@ function ensure_decent_gcc_on_ubuntu {
     local old=$(gcc -dumpfullversion -dumpversion)
     local new=$1
     local codename=$2
-    if dpkg --compare-versions $old ge 7.0; then
+    if dpkg --compare-versions $old ge ${new}.0; then
 	return
     fi
 
     if [ ! -f /usr/bin/g++-${new} ]; then
 	$SUDO tee /etc/apt/sources.list.d/ubuntu-toolchain-r.list <<EOF
 deb [lang=none] http://ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $codename main
-deb [arch=amd64 lang=none] http://mirror.cs.uchicago.edu/ubuntu-toolchain-r $codename main
-deb [arch=amd64,i386 lang=none] http://mirror.yandex.ru/mirrors/launchpad/ubuntu-toolchain-r $codename main
+deb [arch=amd64 lang=none] http://mirror.nullivex.com/ppa/ubuntu-toolchain-r-test $codename main
+deb [arch=amd64 lang=none] http://deb.rug.nl/ppa/mirror/ppa.launchpad.net/ubuntu-toolchain-r/test/ubuntu $codename main
 EOF
 	# import PPA's signing key into APT's keyring
 	cat << ENDOFKEY | $SUDO apt-key add -
@@ -97,7 +95,7 @@ msyaQpNl/m/lNtOLhR64v5ZybofB2EWkMxUzX8D/FQ==
 -----END PGP PUBLIC KEY BLOCK-----
 ENDOFKEY
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y || true
-	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y g++-7
+	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y g++-${new}
     fi
 
     case $codename in
@@ -105,6 +103,8 @@ ENDOFKEY
             old=4.8;;
         xenial)
             old=5;;
+        bionic)
+            old=7;;
     esac
     $SUDO update-alternatives --remove-all gcc || true
     $SUDO update-alternatives \
@@ -165,6 +165,7 @@ function install_boost_on_ubuntu {
 	ceph-libboost-random1.67-dev \
 	ceph-libboost-regex1.67-dev \
 	ceph-libboost-system1.67-dev \
+	ceph-libboost-test1.67-dev \
 	ceph-libboost-thread1.67-dev \
 	ceph-libboost-timer1.67-dev
 }
@@ -183,11 +184,11 @@ function ensure_decent_gcc_on_rh {
 	    cat <<EOF
 Your GCC is too old. Please run following command to add DTS to your environment:
 
-scl enable devtoolset-7 bash
+scl enable devtoolset-8 bash
 
 Or add following line to the end of ~/.bashrc to add it permanently:
 
-source scl_source enable devtoolset-7
+source scl_source enable devtoolset-8
 
 see https://www.softwarecollections.org/en/scls/rhscl/devtoolset-7/ for more details.
 EOF
@@ -196,11 +197,17 @@ EOF
 	    source /opt/rh/devtoolset-$dts_ver/enable
 	fi
     fi
+    if [ $(rpm -q --queryformat "%{VERSION}" devtoolset-$dts_ver-gcc-c++) = 8.3.1 ]; then
+        # rollback to avoid using a buggy version
+        $SUDO yum remove -y devtoolset-8-gcc-c++ devtoolset-8-gcc devtoolset-8-libstdc++-devel
+        $SUDO yum install -y devtoolset-8-gcc-c++-8.2.1-3.el7
+    fi
 }
 
 if [ x$(uname)x = xFreeBSDx ]; then
     $SUDO pkg install -yq \
         devel/babeltrace \
+        devel/binutils \
         devel/git \
         devel/gperf \
         devel/gmake \
@@ -246,7 +253,7 @@ if [ x$(uname)x = xFreeBSDx ]; then
         www/npm \
         www/fcgi \
         security/nss \
-        security/kbr5 \
+        security/krb5 \
         security/oath-toolkit \
         sysutils/flock \
         sysutils/fusefs-libs \
@@ -265,6 +272,7 @@ else
     else
         for_make_check=false
     fi
+    [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false
     source /etc/os-release
     case $ID in
     debian|ubuntu|devuan)
@@ -273,14 +281,15 @@ else
         $SUDO apt-get install -y dpkg-dev
         case "$VERSION" in
             *Trusty*)
-                ensure_decent_gcc_on_ubuntu 7 trusty
+                ensure_decent_gcc_on_ubuntu 8 trusty
                 ;;
             *Xenial*)
-                ensure_decent_gcc_on_ubuntu 7 xenial
-                install_boost_on_ubuntu xenial
+                ensure_decent_gcc_on_ubuntu 8 xenial
+                [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu xenial
                 ;;
             *Bionic*)
-                install_boost_on_ubuntu bionic
+                ensure_decent_gcc_on_ubuntu 9 bionic
+                [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu bionic
                 ;;
             *)
                 $SUDO apt-get install -y gcc
@@ -293,7 +302,7 @@ else
         touch $DIR/status
 
 	backports=""
-	control=$(munge_debian_control "$VERSION" "$for_make_check" "debian/control")
+	control=$(munge_debian_control "$VERSION" "$with_seastar" "$for_make_check" "debian/control")
         case "$VERSION" in
             *squeeze*|*wheezy*)
                 backports="-t $codename-backports"
@@ -305,7 +314,6 @@ else
 	# work is done
 	$SUDO env DEBIAN_FRONTEND=noninteractive mk-build-deps --install --remove --tool="apt-get -y --no-install-recommends $backports" $control || exit 1
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
-	install_seastar_deps
 	if [ "$control" != "debian/control" ] ; then rm $control; fi
 	$SUDO apt-get install -y libxmlsec1 libxmlsec1-nss libxmlsec1-openssl libxmlsec1-dev
         ;;
@@ -342,22 +350,25 @@ else
 		    case $(uname -m) in
 			x86_64)
 			    $SUDO yum -y install centos-release-scl
-			    dts_ver=7
+			    dts_ver=8
 			    ;;
 			aarch64)
 			    $SUDO yum -y install centos-release-scl-rh
 			    $SUDO yum-config-manager --disable centos-sclo-rh
 			    $SUDO yum-config-manager --enable centos-sclo-rh-testing
-			    dts_ver=7
+			    dts_ver=8
 			    ;;
 		    esac
                 elif test $ID = rhel -a $MAJOR_VERSION = 7 ; then
-                    $SUDO yum-config-manager --enable rhel-server-rhscl-7-rpms
-                    dts_ver=7
+                    $SUDO yum-config-manager \
+			  --enable rhel-server-rhscl-7-rpms \
+			  --enable rhel-7-server-devtools-rpms
+                    dts_ver=8
                 fi
                 ;;
         esac
-        munge_ceph_spec_in $for_make_check $DIR/ceph.spec
+        munge_ceph_spec_in $with_seastar $for_make_check $DIR/ceph.spec
+        $SUDO $yumdnf install -y \*rpm-macros
         $SUDO $builddepcmd $DIR/ceph.spec 2>&1 | tee $DIR/yum-builddep.out
         [ ${PIPESTATUS[0]} -ne 0 ] && exit 1
 	if [ -n "$dts_ver" ]; then
@@ -371,7 +382,7 @@ else
         echo "Using zypper to install dependencies"
         zypp_install="zypper --gpg-auto-import-keys --non-interactive install --no-recommends"
         $SUDO $zypp_install systemd-rpm-macros
-        munge_ceph_spec_in $for_make_check $DIR/ceph.spec
+        munge_ceph_spec_in $with_seastar $for_make_check $DIR/ceph.spec
         $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
         $SUDO $zypp_install libxmlsec1-1 libxmlsec1-nss1 libxmlsec1-openssl1 xmlsec1-devel xmlsec1-openssl-devel
         ;;

@@ -4,6 +4,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
+import _ = require('lodash');
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 import { EMPTY, of } from 'rxjs';
@@ -32,10 +33,14 @@ describe('OsdListComponent', () => {
   let component: OsdListComponent;
   let fixture: ComponentFixture<OsdListComponent>;
   let modalServiceShowSpy: jasmine.Spy;
+  let osdService: OsdService;
 
   const fakeAuthStorageService = {
     getPermissions: () => {
-      return new Permissions({ osd: ['read', 'update', 'create', 'delete'] });
+      return new Permissions({
+        'config-opt': ['read', 'update', 'create', 'delete'],
+        osd: ['read', 'update', 'create', 'delete']
+      });
     }
   };
 
@@ -90,8 +95,8 @@ describe('OsdListComponent', () => {
 
   beforeEach(() => {
     fixture = TestBed.createComponent(OsdListComponent);
-    fixture.detectChanges();
     component = fixture.componentInstance;
+    osdService = TestBed.get(OsdService);
     modalServiceShowSpy = spyOn(TestBed.get(BsModalService), 'show').and.stub();
   });
 
@@ -100,37 +105,191 @@ describe('OsdListComponent', () => {
     expect(component).toBeTruthy();
   });
 
-  describe('show table actions as defined', () => {
-    let tableActions: TableActionsComponent;
-    let scenario: { fn; empty; single };
-    let permissionHelper: PermissionHelper;
+  it('should have columns that are sortable', () => {
+    fixture.detectChanges();
+    expect(component.columns.every((column) => Boolean(column.prop))).toBeTruthy();
+  });
 
-    const getTableActionComponent = () => {
-      fixture.detectChanges();
-      return fixture.debugElement.query(By.directive(TableActionsComponent)).componentInstance;
-    };
+  describe('getOsdList', () => {
+    let osds;
 
-    beforeEach(() => {
-      permissionHelper = new PermissionHelper(component.permissions.osd, () =>
-        getTableActionComponent()
-      );
-      scenario = {
-        fn: () => tableActions.getCurrentButton().name,
-        single: 'Scrub',
-        empty: 'Scrub'
-      };
-      tableActions = permissionHelper.setPermissionsAndGetActions(1, 1, 1);
+    const createOsd = (n: number) => ({
+      in: 'in',
+      up: 'up',
+      stats_history: {
+        op_out_bytes: [[n, n], [n * 2, n * 2]],
+        op_in_bytes: [[n * 3, n * 3], [n * 4, n * 4]]
+      },
+      stats: {
+        stat_bytes_used: n * n,
+        stat_bytes: n * n * n
+      }
     });
 
-    it('shows action button', () => permissionHelper.testScenarios(scenario));
+    const expectAttributeOnEveryOsd = (attr: string) =>
+      expect(component.osds.every((osd) => Boolean(_.get(osd, attr)))).toBeTruthy();
 
-    it('shows all actions', () => {
-      expect(tableActions.tableActions.length).toBe(9);
-      expect(tableActions.tableActions).toEqual(component.tableActions);
+    beforeEach(() => {
+      spyOn(osdService, 'getList').and.callFake(() => of(osds));
+      osds = [createOsd(1), createOsd(2), createOsd(3)];
+      component.getOsdList();
+    });
+
+    it('should replace "this.osds" with new data', () => {
+      expect(component.osds.length).toBe(3);
+      expect(osdService.getList).toHaveBeenCalledTimes(1);
+
+      osds = [createOsd(4)];
+      component.getOsdList();
+      expect(component.osds.length).toBe(1);
+      expect(osdService.getList).toHaveBeenCalledTimes(2);
+    });
+
+    it('should have custom attribute "collectedStates"', () => {
+      expectAttributeOnEveryOsd('collectedStates');
+      expect(component.osds[0].collectedStates).toEqual(['in', 'up']);
+    });
+
+    it('should have custom attribute "stats_history.out_bytes"', () => {
+      expectAttributeOnEveryOsd('stats_history.out_bytes');
+      expect(component.osds[0].stats_history.out_bytes).toEqual([1, 2]);
+    });
+
+    it('should have custom attribute "stats_history.in_bytes"', () => {
+      expectAttributeOnEveryOsd('stats_history.in_bytes');
+      expect(component.osds[0].stats_history.in_bytes).toEqual([3, 4]);
+    });
+
+    it('should have custom attribute "stats.usage"', () => {
+      expectAttributeOnEveryOsd('stats.usage');
+      expect(component.osds[0].stats.usage).toBe(1);
+      expect(component.osds[1].stats.usage).toBe(0.5);
+      expect(component.osds[2].stats.usage).toBe(3 / 9);
+    });
+
+    it('should have custom attribute "cdIsBinary" to be true', () => {
+      expectAttributeOnEveryOsd('cdIsBinary');
+      expect(component.osds[0].cdIsBinary).toBe(true);
+    });
+  });
+
+  describe('show osd actions as defined', () => {
+    const getOsdActions = () => {
+      fixture.detectChanges();
+      return fixture.debugElement.query(By.css('#cluster-wide-actions')).componentInstance
+        .dropDownActions;
+    };
+
+    it('shows osd actions after osd-actions', () => {
+      fixture.detectChanges();
+      expect(fixture.debugElement.query(By.css('#cluster-wide-actions'))).toBe(
+        fixture.debugElement.queryAll(By.directive(TableActionsComponent))[1]
+      );
+    });
+
+    it('shows both osd actions', () => {
+      const osdActions = getOsdActions();
+      expect(osdActions).toEqual(component.clusterWideActions);
+      expect(osdActions.length).toBe(3);
+    });
+
+    it('shows only "Flags" action', () => {
+      component.permissions.configOpt.read = false;
+      const osdActions = getOsdActions();
+      expect(osdActions[0].name).toBe('Flags');
+      expect(osdActions.length).toBe(1);
+    });
+
+    it('shows only "Recovery Priority" action', () => {
+      component.permissions.osd.read = false;
+      const osdActions = getOsdActions();
+      expect(osdActions[0].name).toBe('Recovery Priority');
+      expect(osdActions[1].name).toBe('PG scrub');
+      expect(osdActions.length).toBe(2);
+    });
+
+    it('shows no osd actions', () => {
+      component.permissions.configOpt.read = false;
+      component.permissions.osd.read = false;
+      const osdActions = getOsdActions();
+      expect(osdActions).toEqual([]);
+    });
+  });
+
+  it('should test all TableActions combinations', () => {
+    const permissionHelper: PermissionHelper = new PermissionHelper(component.permissions.osd);
+    const tableActions: TableActionsComponent = permissionHelper.setPermissionsAndGetActions(
+      component.tableActions
+    );
+
+    expect(tableActions).toEqual({
+      'create,update,delete': {
+        actions: [
+          'Scrub',
+          'Deep Scrub',
+          'Reweight',
+          'Mark Out',
+          'Mark In',
+          'Mark Down',
+          'Mark Lost',
+          'Purge',
+          'Destroy'
+        ],
+        primary: { multiple: 'Scrub', executing: 'Scrub', single: 'Scrub', no: 'Scrub' }
+      },
+      'create,update': {
+        actions: ['Scrub', 'Deep Scrub', 'Reweight', 'Mark Out', 'Mark In', 'Mark Down'],
+        primary: { multiple: 'Scrub', executing: 'Scrub', single: 'Scrub', no: 'Scrub' }
+      },
+      'create,delete': {
+        actions: ['Mark Lost', 'Purge', 'Destroy'],
+        primary: {
+          multiple: 'Mark Lost',
+          executing: 'Mark Lost',
+          single: 'Mark Lost',
+          no: 'Mark Lost'
+        }
+      },
+      create: { actions: [], primary: { multiple: '', executing: '', single: '', no: '' } },
+      'update,delete': {
+        actions: [
+          'Scrub',
+          'Deep Scrub',
+          'Reweight',
+          'Mark Out',
+          'Mark In',
+          'Mark Down',
+          'Mark Lost',
+          'Purge',
+          'Destroy'
+        ],
+        primary: { multiple: 'Scrub', executing: 'Scrub', single: 'Scrub', no: 'Scrub' }
+      },
+      update: {
+        actions: ['Scrub', 'Deep Scrub', 'Reweight', 'Mark Out', 'Mark In', 'Mark Down'],
+        primary: { multiple: 'Scrub', executing: 'Scrub', single: 'Scrub', no: 'Scrub' }
+      },
+      delete: {
+        actions: ['Mark Lost', 'Purge', 'Destroy'],
+        primary: {
+          multiple: 'Mark Lost',
+          executing: 'Mark Lost',
+          single: 'Mark Lost',
+          no: 'Mark Lost'
+        }
+      },
+      'no-permissions': {
+        actions: [],
+        primary: { multiple: '', executing: '', single: '', no: '' }
+      }
     });
   });
 
   describe('test table actions in submenu', () => {
+    beforeEach(() => {
+      fixture.detectChanges();
+    });
+
     beforeEach(fakeAsync(() => {
       // The menu needs a click to render the dropdown!
       const dropDownToggle = fixture.debugElement.query(By.css('.dropdown-toggle'));
@@ -143,7 +302,7 @@ describe('OsdListComponent', () => {
       const tableActionElement = fixture.debugElement.query(By.directive(TableActionsComponent));
       const toClassName = TestBed.get(TableActionsComponent).toClassName;
       const getActionClasses = (action: CdTableAction) =>
-        tableActionElement.query(By.css('.' + toClassName(action.name))).classes;
+        tableActionElement.query(By.css(`.${toClassName(action.name)} .dropdown-item`)).classes;
 
       component.tableActions.forEach((action) => {
         expect(getActionClasses(action).disabled).toBe(true);
@@ -160,7 +319,8 @@ describe('OsdListComponent', () => {
     const expectOpensModal = (actionName: string, modalClass): void => {
       openActionModal(actionName);
 
-      expect(modalServiceShowSpy.calls.any()).toBe(true, 'modalService.show called');
+      // @TODO: check why tsc is complaining when passing 'expectationFailOutput' param.
+      expect(modalServiceShowSpy.calls.any()).toBeTruthy();
       expect(modalServiceShowSpy.calls.first().args[0]).toBe(modalClass);
 
       modalServiceShowSpy.calls.reset();
@@ -189,11 +349,9 @@ describe('OsdListComponent', () => {
   describe('tests if the correct methods are called on confirmation', () => {
     const expectOsdServiceMethodCalled = (
       actionName: string,
-      osdServiceMethodName: string
+      osdServiceMethodName: 'markOut' | 'markIn' | 'markDown' | 'markLost' | 'purge' | 'destroy'
     ): void => {
-      const osdServiceSpy = spyOn(TestBed.get(OsdService), osdServiceMethodName).and.callFake(
-        () => EMPTY
-      );
+      const osdServiceSpy = spyOn(osdService, osdServiceMethodName).and.callFake(() => EMPTY);
       openActionModal(actionName);
       const initialState = modalServiceShowSpy.calls.first().args[1].initialState;
       const submit = initialState.onSubmit || initialState.submitAction;

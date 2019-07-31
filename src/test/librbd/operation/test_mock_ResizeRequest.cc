@@ -158,7 +158,6 @@ public:
       .WillOnce(Invoke([&mock_image_ctx, &mock_io_image_dispatch_spec, r]() {
                   auto aio_comp = mock_io_image_dispatch_spec.s_instance->aio_comp;
                   auto ctx = new FunctionContext([aio_comp](int r) {
-                    aio_comp->get();
                     aio_comp->fail(r);
                   });
                   mock_image_ctx.image_ctx->op_work_queue->queue(ctx, r);
@@ -227,9 +226,7 @@ TEST_F(TestMockOperationResizeRequest, GrowSuccess) {
   InSequence seq;
   expect_block_writes(mock_image_ctx, 0);
   expect_append_op_event(mock_image_ctx, true, 0);
-  expect_unblock_writes(mock_image_ctx);
   expect_grow_object_map(mock_image_ctx);
-  expect_block_writes(mock_image_ctx, 0);
   expect_update_header(mock_image_ctx, 0);
   expect_unblock_writes(mock_image_ctx);
   expect_commit_op_event(mock_image_ctx, 0);
@@ -388,11 +385,17 @@ TEST_F(TestMockOperationResizeRequest, PostBlockWritesError) {
   expect_block_writes(mock_image_ctx, 0);
   expect_append_op_event(mock_image_ctx, true, 0);
   expect_unblock_writes(mock_image_ctx);
-  expect_grow_object_map(mock_image_ctx);
+
+  MockTrimRequest mock_trim_request;
+  auto mock_io_image_dispatch_spec = new MockIoImageDispatchSpec();
+  expect_flush_cache(mock_image_ctx, *mock_io_image_dispatch_spec, 0);
+  expect_invalidate_cache(mock_image_ctx, 0);
+  expect_trim(mock_image_ctx, mock_trim_request, 0);
   expect_block_writes(mock_image_ctx, -EINVAL);
   expect_unblock_writes(mock_image_ctx);
   expect_commit_op_event(mock_image_ctx, -EINVAL);
-  ASSERT_EQ(-EINVAL, when_resize(mock_image_ctx, ictx->size * 2, true, 0, false));
+  ASSERT_EQ(-EINVAL, when_resize(mock_image_ctx, ictx->size / 2, true, 0,
+                                 false));
 }
 
 TEST_F(TestMockOperationResizeRequest, UpdateHeaderError) {
@@ -409,9 +412,7 @@ TEST_F(TestMockOperationResizeRequest, UpdateHeaderError) {
   InSequence seq;
   expect_block_writes(mock_image_ctx, 0);
   expect_append_op_event(mock_image_ctx, true, 0);
-  expect_unblock_writes(mock_image_ctx);
   expect_grow_object_map(mock_image_ctx);
-  expect_block_writes(mock_image_ctx, 0);
   expect_update_header(mock_image_ctx, -EINVAL);
   expect_unblock_writes(mock_image_ctx);
   expect_commit_op_event(mock_image_ctx, -EINVAL);

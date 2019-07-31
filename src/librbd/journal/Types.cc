@@ -75,22 +75,38 @@ void AioDiscardEvent::encode(bufferlist& bl) const {
   using ceph::encode;
   encode(offset, bl);
   encode(length, bl);
+  bool skip_partial_discard = (discard_granularity_bytes > 0);
   encode(skip_partial_discard, bl);
+  encode(discard_granularity_bytes, bl);
 }
 
 void AioDiscardEvent::decode(__u8 version, bufferlist::const_iterator& it) {
   using ceph::decode;
   decode(offset, it);
   decode(length, it);
+
+  bool skip_partial_discard = false;
   if (version >= 4) {
     decode(skip_partial_discard, it);
+  }
+
+  if (version >= 5) {
+    decode(discard_granularity_bytes, it);
+  } else {
+    if (skip_partial_discard) {
+      // use a size larger than the maximum object size which will
+      // truncated down to object size during IO processing
+      discard_granularity_bytes = std::numeric_limits<uint32_t>::max();
+    } else {
+      discard_granularity_bytes = 0;
+    }
   }
 }
 
 void AioDiscardEvent::dump(Formatter *f) const {
   f->dump_unsigned("offset", offset);
   f->dump_unsigned("length", length);
-  f->dump_bool("skip_partial_discard", skip_partial_discard);
+  f->dump_unsigned("discard_granularity_bytes", discard_granularity_bytes);
 }
 
 uint32_t AioWriteEvent::get_fixed_size() {
@@ -399,7 +415,7 @@ EventType EventEntry::get_event_type() const {
 }
 
 void EventEntry::encode(bufferlist& bl) const {
-  ENCODE_START(4, 1, bl);
+  ENCODE_START(5, 1, bl);
   boost::apply_visitor(EncodeVisitor(bl), event);
   ENCODE_FINISH(bl);
   encode_metadata(bl);
@@ -501,7 +517,7 @@ void EventEntry::decode_metadata(bufferlist::const_iterator& it) {
 
 void EventEntry::generate_test_instances(std::list<EventEntry *> &o) {
   o.push_back(new EventEntry(AioDiscardEvent()));
-  o.push_back(new EventEntry(AioDiscardEvent(123, 345, false), utime_t(1, 1)));
+  o.push_back(new EventEntry(AioDiscardEvent(123, 345, 4096), utime_t(1, 1)));
 
   bufferlist bl;
   bl.append(std::string(32, '1'));

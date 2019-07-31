@@ -17,6 +17,8 @@
 #include "include/str_map.h"
 #include "include/str_list.h"
 
+#include <boost/algorithm/string.hpp>
+
 #include "json_spirit/json_spirit.h"
 
 using namespace std;
@@ -56,19 +58,13 @@ int get_json_str_map(
   }
   return 0;
 }
+
 string trim(const string& str) {
-  size_t start = 0;
-  size_t end = str.size() - 1;
-  while (start <= end && isspace(str[start]) != 0) {
-    ++start;
-  }
-  while (start <= end && isspace(str[end]) != 0) {
-    --end;
-  }
-  if (start <= end) {
-    return str.substr(start, end - start + 1);
-  }
-  return string();
+  return boost::algorithm::trim_copy_if(
+    str,
+    [](unsigned char c) {
+      return std::isspace(c);
+    });
 }
 
 int get_str_map(

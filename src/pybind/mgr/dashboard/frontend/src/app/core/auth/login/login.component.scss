@@ -1,4 +1,4 @@
-@import '../../../../defaults';
+@import 'defaults';
 
 ::ng-deep .login {
   height: 100%;
@@ -22,10 +22,17 @@
   .btn-password:focus {
     outline-color: $color-password-toggle-focus;
   }
+}
 
-  .checkbox-primary input[type='checkbox']:checked + label::before,
-  .checkbox-primary input[type='radio']:checked + label::before {
-    background-color: $color-login-checkbox-bg;
-    border-color: $color-login-checkbox-border;
+// This will override the colors applied by chrome
+@keyframes autofill {
+  to {
+    color: $color-password-toggle-text;
+    background-color: $color-password-toggle-bg;
   }
+}
+
+input:-webkit-autofill {
+  animation-name: autofill;
+  animation-fill-mode: both;
 }

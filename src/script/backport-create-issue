@@ -101,7 +101,7 @@ def connect_to_redmine(a):
 def releases():
     return ('argonaut', 'bobtail', 'cuttlefish', 'dumpling', 'emperor',
             'firefly', 'giant', 'hammer', 'infernalis', 'jewel', 'kraken',
-            'luminous', 'mimic')
+            'luminous', 'mimic', 'nautilus')
 
 def populate_status_dict(r):
     for status in r.issue_status.all():
@@ -189,7 +189,7 @@ def update_relations(r, issue, dry_run):
             logging.error(url(issue) + " requires backport to " +
                 "unknown release " + release)
             break
-        subject = release + ": " + issue['subject']
+        subject = (release + ": " + issue['subject'])[:255]
         if dry_run:
             logging.info(url(issue) + " add backport to " + release)
             continue

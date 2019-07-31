@@ -296,7 +296,10 @@ TEST(BufferPtr, assignment) {
   //
   {
     bufferptr original(len);
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wself-assign-overloaded"
     original = original;
+#pragma clang diagnostic pop
     ASSERT_EQ(1, original.raw_nref());
     ASSERT_EQ((unsigned)0, original.offset());
     ASSERT_EQ(len, original.length());
@@ -741,7 +744,10 @@ TEST(BufferListIterator, operator_assign) {
   bl.append("ABC", 3);
   bufferlist::iterator i(&bl, 1);
 
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wself-assign-overloaded"
   i = i;
+#pragma clang diagnostic pop
   EXPECT_EQ('B', *i);
   bufferlist::iterator j;
   j = i;
@@ -2863,46 +2869,6 @@ TEST(BufferList, TestIsProvidedBuffer) {
   ASSERT_TRUE(bl.is_provided_buffer(buff));
   bl.append_zero(100);
   ASSERT_FALSE(bl.is_provided_buffer(buff));
-}
-
-TEST(BufferList, TestSHA1) {
-  {
-    bufferlist bl;
-    sha1_digest_t sha1 = bl.sha1();
-    EXPECT_EQ("da39a3ee5e6b4b0d3255bfef95601890afd80709", sha1.to_str());
-  }
-  {
-    bufferlist bl;
-    bl.append("");
-    sha1_digest_t sha1 = bl.sha1();
-    EXPECT_EQ("da39a3ee5e6b4b0d3255bfef95601890afd80709", sha1.to_str());
-  }
-  {
-    bufferlist bl;
-    bl.append("Hello");
-    sha1_digest_t sha1 = bl.sha1();
-    EXPECT_EQ("f7ff9e8b7bb2e09b70935a5d785e0cc5d9d0abf0", sha1.to_str());
-  }
-  {
-    bufferlist bl, bl2;
-    bl.append("Hello");
-    bl2.append(", world!");
-    bl.claim_append(bl2);
-    sha1_digest_t sha1 = bl.sha1();
-    EXPECT_EQ("943a702d06f34599aee1f8da8ef9f7296031d699", sha1.to_str());
-    bl2.append("  How are you today?");
-    bl.claim_append(bl2);
-    sha1 = bl.sha1();
-    EXPECT_EQ("778b5d10e5133aa28fb8de71d35b6999b9a25eb4", sha1.to_str());
-  }
-  {
-    bufferptr p(65536);
-    memset(p.c_str(), 0, 65536);
-    bufferlist bl;
-    bl.append(p);
-    sha1_digest_t sha1 = bl.sha1();
-    EXPECT_EQ("1adc95bebe9eea8c112d40cd04ab7a8d75c4f961", sha1.to_str());
-  }
 }
 
 TEST(BufferHash, all) {

@@ -67,6 +67,7 @@ struct ImageReplayer<librbd::MockTestImageCtx> {
   static ImageReplayer *create(
     Threads<librbd::MockTestImageCtx> *threads,
     InstanceWatcher<librbd::MockTestImageCtx> *instance_watcher,
+    journal::CacheManagerHandler *cache_manager_handler,
     RadosRef local, const std::string &local_mirror_uuid, int64_t local_pool_id,
     const std::string &global_image_id) {
     ceph_assert(s_instance != nullptr);
@@ -170,7 +171,7 @@ TEST_F(TestMockInstanceReplayer, AcquireReleaseImage) {
   MockInstanceWatcher mock_instance_watcher;
   MockImageReplayer mock_image_replayer;
   MockInstanceReplayer instance_replayer(
-    &mock_threads, &mock_service_daemon,
+    &mock_threads, &mock_service_daemon, nullptr,
     rbd::mirror::RadosRef(new librados::Rados(m_local_io_ctx)),
     "local_mirror_uuid", m_local_io_ctx.get_id());
   std::string global_image_id("global_image_id");
@@ -239,7 +240,7 @@ TEST_F(TestMockInstanceReplayer, RemoveFinishedImage) {
   MockInstanceWatcher mock_instance_watcher;
   MockImageReplayer mock_image_replayer;
   MockInstanceReplayer instance_replayer(
-    &mock_threads, &mock_service_daemon,
+    &mock_threads, &mock_service_daemon, nullptr,
     rbd::mirror::RadosRef(new librados::Rados(m_local_io_ctx)),
     "local_mirror_uuid", m_local_io_ctx.get_id());
   std::string global_image_id("global_image_id");
@@ -311,7 +312,7 @@ TEST_F(TestMockInstanceReplayer, Reacquire) {
   MockInstanceWatcher mock_instance_watcher;
   MockImageReplayer mock_image_replayer;
   MockInstanceReplayer instance_replayer(
-    &mock_threads, &mock_service_daemon,
+    &mock_threads, &mock_service_daemon, nullptr,
     rbd::mirror::RadosRef(new librados::Rados(m_local_io_ctx)),
     "local_mirror_uuid", m_local_io_ctx.get_id());
   std::string global_image_id("global_image_id");

@@ -12,9 +12,9 @@ import { HealthService } from '../../../shared/api/health.service';
 import { Permissions } from '../../../shared/models/permissions';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { FeatureTogglesService } from '../../../shared/services/feature-toggles.service';
+import { RefreshIntervalService } from '../../../shared/services/refresh-interval.service';
 import { SharedModule } from '../../../shared/shared.module';
 import { PgCategoryService } from '../../shared/pg-category.service';
-import { HealthPieColor } from '../health-pie/health-pie-color.enum';
 import { HealthPieComponent } from '../health-pie/health-pie.component';
 import { MdsSummaryPipe } from '../mds-summary.pipe';
 import { MgrSummaryPipe } from '../mgr-summary.pipe';
@@ -38,8 +38,8 @@ describe('HealthComponent', () => {
     client_perf: {},
     scrub_status: 'Inactive',
     pools: [],
-    df: { stats: { total_objects: 0 } },
-    pg_info: {}
+    df: { stats: {} },
+    pg_info: { object_stats: { num_objects: 0 } }
   };
   const fakeAuthStorageService = {
     getPermissions: () => {
@@ -62,7 +62,8 @@ describe('HealthComponent', () => {
     providers: [
       i18nProviders,
       { provide: AuthStorageService, useValue: fakeAuthStorageService },
-      PgCategoryService
+      PgCategoryService,
+      RefreshIntervalService
     ]
   });
 
@@ -246,32 +247,41 @@ describe('HealthComponent', () => {
     expect(preparePgStatus).toHaveBeenCalled();
   });
 
+  it('event binding "prepareObjects" is called', () => {
+    const prepareObjects = spyOn(component, 'prepareObjects');
+
+    fixture.detectChanges();
+
+    expect(prepareObjects).toHaveBeenCalled();
+  });
+
   describe('preparePgStatus', () => {
+    const calcPercentage = (data) => Math.round((data / 10) * 100) || 0;
+
     const expectedChart = (data: number[]) => ({
-      colors: [
-        {
-          backgroundColor: [
-            HealthPieColor.DEFAULT_GREEN,
-            HealthPieColor.DEFAULT_BLUE,
-            HealthPieColor.DEFAULT_ORANGE,
-            HealthPieColor.DEFAULT_RED
-          ]
-        }
+      labels: [
+        `Clean (${calcPercentage(data[0])}%)`,
+        `Working (${calcPercentage(data[1])}%)`,
+        `Warning (${calcPercentage(data[2])}%)`,
+        `Unknown (${calcPercentage(data[3])}%)`
       ],
-      labels: ['Clean', 'Working', 'Warning', 'Unknown'],
+      options: {},
       dataset: [{ data: data }]
     });
 
     it('gets no data', () => {
-      const chart = { dataset: [{}] };
-      component.preparePgStatus(chart, { pg_info: {} });
+      const chart = { dataset: [{}], options: {} };
+      component.preparePgStatus(chart, {
+        pg_info: { pgs_per_osd: 0 }
+      });
       expect(chart).toEqual(expectedChart([undefined, undefined, undefined, undefined]));
     });
 
     it('gets data from all categories', () => {
-      const chart = { dataset: [{}] };
+      const chart = { dataset: [{}], options: {} };
       component.preparePgStatus(chart, {
         pg_info: {
+          pgs_per_osd: 10,
           statuses: {
             'clean+active+scrubbing+nonMappedState': 4,
             'clean+active+scrubbing': 2,
@@ -311,6 +321,19 @@ describe('HealthComponent', () => {
       component.healthData['client_perf'] = { read_op_per_sec: 2, write_op_per_sec: 3 };
 
       expect(component.isClientReadWriteChartShowable()).toBeTruthy();
+    });
+  });
+
+  describe('calcPercentage', () => {
+    it('returns correct value', () => {
+      expect(component['calcPercentage'](1, undefined)).toEqual(0);
+      expect(component['calcPercentage'](1, null)).toEqual(0);
+      expect(component['calcPercentage'](1, 0)).toEqual(0);
+      expect(component['calcPercentage'](undefined, 1)).toEqual(0);
+      expect(component['calcPercentage'](null, 1)).toEqual(0);
+      expect(component['calcPercentage'](0, 1)).toEqual(0);
+      expect(component['calcPercentage'](2.346, 10)).toEqual(23);
+      expect(component['calcPercentage'](2.35, 10)).toEqual(24);
     });
   });
 });

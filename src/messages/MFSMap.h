@@ -20,10 +20,8 @@
 #include "mds/FSMap.h"
 #include "include/ceph_features.h"
 
-class MFSMap : public MessageInstance<MFSMap> {
+class MFSMap : public Message {
 public:
-  friend factory;
-
   epoch_t epoch;
   bufferlist encoded;
 
@@ -31,12 +29,12 @@ public:
   const FSMap& get_fsmap() const {return fsmap;}
 
   MFSMap() : 
-    MessageInstance(CEPH_MSG_FS_MAP), epoch(0) {}
+    Message{CEPH_MSG_FS_MAP}, epoch(0) {}
   MFSMap(const uuid_d &f, const FSMap &fsmap_) :
-    MessageInstance(CEPH_MSG_FS_MAP), epoch(fsmap_.get_epoch())
-  {
-    fsmap = fsmap_;
-  }
+    Message{CEPH_MSG_FS_MAP},
+    epoch(fsmap_.get_epoch()),
+    fsmap{fsmap_}
+  {}
 private:
   FSMap fsmap;
 

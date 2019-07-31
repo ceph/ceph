@@ -78,7 +78,10 @@ struct KeyServerData {
   }
 
   void clear_secrets() {
+    version = 0;
     secrets.clear();
+    rotating_ver = 0;
+    rotating_secrets.clear();
   }
 
   void add_auth(const EntityName& name, EntityAuth& auth) {

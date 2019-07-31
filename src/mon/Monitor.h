@@ -102,18 +102,6 @@ class PaxosService;
 class PerfCounters;
 class AdminSocketHook;
 
-class MMonGetMap;
-class MMonGetVersion;
-class MMonMetadata;
-class MMonSync;
-class MMonScrub;
-class MMonProbe;
-struct MMonSubscribe;
-struct MRoute;
-struct MForward;
-struct MTimeCheck2;
-struct MMonHealth;
-
 #define COMPAT_SET_LOC "feature_set"
 
 class C_MonContext final : public FunctionContext {
@@ -263,7 +251,7 @@ private:
    */
   mon_feature_t quorum_mon_features;
 
-  int quorum_min_mon_release = -1;
+  ceph_release_t quorum_min_mon_release{ceph_release_t::unknown};
 
   set<string> outside_quorum;
 
@@ -616,12 +604,12 @@ public:
   void win_election(epoch_t epoch, set<int>& q,
 		    uint64_t features,
                     const mon_feature_t& mon_features,
-		    int min_mon_release,
+		    ceph_release_t min_mon_release,
 		    const map<int,Metadata>& metadata);
   void lose_election(epoch_t epoch, set<int>& q, int l,
 		     uint64_t features,
                      const mon_feature_t& mon_features,
-		     int min_mon_release);
+		     ceph_release_t min_mon_release);
   // end election (called by Elector)
   void finish_election();
 
@@ -904,8 +892,7 @@ public:
   void dispatch_op(MonOpRequestRef op);
   //mon_caps is used for un-connected messages from monitors
   MonCap mon_caps;
-  bool ms_get_authorizer(int dest_type, AuthAuthorizer **authorizer) override;
-  KeyStore *ms_get_auth1_authorizer_keystore();
+  bool get_authorizer(int dest_type, AuthAuthorizer **authorizer);
 public: // for AuthMonitor msgr1:
   int ms_handle_authentication(Connection *con) override;
 private:
@@ -1058,6 +1045,7 @@ public:
 #define CEPH_MON_FEATURE_INCOMPAT_LUMINOUS CompatSet::Feature(9, "luminous ondisk layout")
 #define CEPH_MON_FEATURE_INCOMPAT_MIMIC CompatSet::Feature(10, "mimic ondisk layout")
 #define CEPH_MON_FEATURE_INCOMPAT_NAUTILUS CompatSet::Feature(11, "nautilus ondisk layout")
+#define CEPH_MON_FEATURE_INCOMPAT_OCTOPUS CompatSet::Feature(12, "octopus ondisk layout")
 // make sure you add your feature to Monitor::get_supported_features
 
 

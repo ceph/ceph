@@ -1,34 +1,33 @@
 import { Injectable } from '@angular/core';
 
 import * as _ from 'lodash';
-import { ToastOptions, ToastsManager } from 'ng2-toastr';
+import { IndividualConfig, ToastrService } from 'ngx-toastr';
 import { BehaviorSubject } from 'rxjs';
 
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotification, CdNotificationConfig } from '../models/cd-notification';
 import { FinishedTask } from '../models/finished-task';
 import { CdDatePipe } from '../pipes/cd-date.pipe';
-import { ServicesModule } from './services.module';
 import { TaskMessageService } from './task-message.service';
 
 @Injectable({
-  providedIn: ServicesModule
+  providedIn: 'root'
 })
 export class NotificationService {
   private hideToasties = false;
 
   // Observable sources
   private dataSource = new BehaviorSubject<CdNotification[]>([]);
-  private queuedNotifications: CdNotificationConfig[] = [];
 
   // Observable streams
   data$ = this.dataSource.asObservable();
 
-  private queueTimeoutId: number;
+  private queued: CdNotificationConfig[] = [];
+  private queuedTimeoutId: number;
   KEY = 'cdNotifications';
 
   constructor(
-    public toastr: ToastsManager,
+    public toastr: ToastrService,
     private taskMessageService: TaskMessageService,
     private cdDatePipe: CdDatePipe
   ) {
@@ -36,7 +35,7 @@ export class NotificationService {
     let notifications: CdNotification[] = [];
 
     if (_.isString(stringNotifications)) {
-      notifications = JSON.parse(stringNotifications, (key, value) => {
+      notifications = JSON.parse(stringNotifications, (_key, value) => {
         if (_.isPlainObject(value)) {
           return _.assign(new CdNotification(), value);
         }
@@ -68,21 +67,6 @@ export class NotificationService {
     localStorage.setItem(this.KEY, JSON.stringify(recent));
   }
 
-  queueNotifications(notifications: CdNotificationConfig[]) {
-    this.queuedNotifications = this.queuedNotifications.concat(notifications);
-    this.cancel(this.queueTimeoutId);
-    this.queueTimeoutId = window.setTimeout(() => {
-      this.sendQueuedNotifications();
-    }, 500);
-  }
-
-  private sendQueuedNotifications() {
-    _.uniqWith(this.queuedNotifications, _.isEqual).forEach((notification) => {
-      this.show(notification);
-    });
-    this.queuedNotifications = [];
-  }
-
   /**
    * Method for showing a notification.
    * @param {NotificationType} type toastr type
@@ -97,7 +81,7 @@ export class NotificationService {
     type: NotificationType,
     title: string,
     message?: string,
-    options?: any | ToastOptions,
+    options?: any | IndividualConfig,
     application?: string
   ): number;
   show(config: CdNotificationConfig | (() => CdNotificationConfig)): number;
@@ -105,7 +89,7 @@ export class NotificationService {
     arg: NotificationType | CdNotificationConfig | (() => CdNotificationConfig),
     title?: string,
     message?: string,
-    options?: any | ToastOptions,
+    options?: any | IndividualConfig,
     application?: string
   ): number {
     return window.setTimeout(() => {
@@ -123,10 +107,48 @@ export class NotificationService {
           application
         );
       }
+      this.queueToShow(config);
+    }, 10);
+  }
+
+  private queueToShow(config: CdNotificationConfig) {
+    this.cancel(this.queuedTimeoutId);
+    if (!this.queued.find((c) => _.isEqual(c, config))) {
+      this.queued.push(config);
+    }
+    this.queuedTimeoutId = window.setTimeout(() => {
+      this.showQueued();
+    }, 500);
+  }
+
+  private showQueued() {
+    this.getUnifiedTitleQueue().forEach((config) => {
       const notification = new CdNotification(config);
       this.save(notification);
       this.showToasty(notification);
-    }, 10);
+    });
+  }
+
+  private getUnifiedTitleQueue(): CdNotificationConfig[] {
+    return Object.values(this.queueShiftByTitle()).map((configs) => {
+      const config = configs[0];
+      if (configs.length > 1) {
+        config.message = '<ul>' + configs.map((c) => `<li>${c.message}</li>`).join('') + '</ul>';
+      }
+      return config;
+    });
+  }
+
+  private queueShiftByTitle(): { [key: string]: CdNotificationConfig[] } {
+    const byTitle: { [key: string]: CdNotificationConfig[] } = {};
+    let config: CdNotificationConfig;
+    while ((config = this.queued.shift())) {
+      if (!byTitle[config.title]) {
+        byTitle[config.title] = [];
+      }
+      byTitle[config.title].push(config);
+    }
+    return byTitle;
   }
 
   private showToasty(notification: CdNotification) {
@@ -145,12 +167,12 @@ export class NotificationService {
   renderTimeAndApplicationHtml(notification: CdNotification): string {
     return `<small class="date">${this.cdDatePipe.transform(
       notification.timestamp
-    )}</small><i class="pull-right custom-icon ${notification.applicationClass}" title="${
+    )}</small><i class="float-right custom-icon ${notification.applicationClass}" title="${
       notification.application
     }"></i>`;
   }
 
-  notifyTask(finishedTask: FinishedTask, success: boolean = true) {
+  notifyTask(finishedTask: FinishedTask, success: boolean = true): number {
     let notification: CdNotificationConfig;
     if (finishedTask.success && success) {
       notification = new CdNotificationConfig(
@@ -164,7 +186,7 @@ export class NotificationService {
         this.taskMessageService.getErrorMessage(finishedTask)
       );
     }
-    this.show(notification);
+    return this.show(notification);
   }
 
   /**

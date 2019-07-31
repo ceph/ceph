@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
-from .helper import ControllerTestCase
+from . import ControllerTestCase
 from ..controllers import BaseController, RESTController, Controller, \
                           ApiController, Endpoint
 

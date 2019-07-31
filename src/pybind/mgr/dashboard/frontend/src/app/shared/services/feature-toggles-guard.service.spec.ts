@@ -52,7 +52,7 @@ describe('FeatureTogglesGuardService', () => {
 
     ngZone.run(() => {
       service
-        .canActivate(<ActivatedRouteSnapshot>{ routeConfig: { path: path } }, null)
+        .canActivate(<ActivatedRouteSnapshot>{ routeConfig: { path: path } })
         .subscribe((val) => (result = val));
     });
     tick();

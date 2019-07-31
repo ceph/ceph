@@ -21,9 +21,7 @@
 #include "include/types.h"
 #include "osd/osd_types.h"
 
-class MOSDBoot : public MessageInstance<MOSDBoot, PaxosServiceMessage> {
-public:
-  friend factory;
+class MOSDBoot : public PaxosServiceMessage {
 private:
   static constexpr int HEAD_VERSION = 7;
   static constexpr int COMPAT_VERSION = 7;
@@ -37,7 +35,7 @@ private:
   uint64_t osd_features;
 
   MOSDBoot()
-    : MessageInstance(MSG_OSD_BOOT, 0, HEAD_VERSION, COMPAT_VERSION),
+    : PaxosServiceMessage{MSG_OSD_BOOT, 0, HEAD_VERSION, COMPAT_VERSION},
       boot_epoch(0), osd_features(0)
   { }
   MOSDBoot(OSDSuperblock& s, epoch_t e, epoch_t be,
@@ -45,7 +43,7 @@ private:
 	   const entity_addrvec_t& hb_front_addr_ref,
            const entity_addrvec_t& cluster_addr_ref,
 	   uint64_t feat)
-    : MessageInstance(MSG_OSD_BOOT, e, HEAD_VERSION, COMPAT_VERSION),
+    : PaxosServiceMessage{MSG_OSD_BOOT, e, HEAD_VERSION, COMPAT_VERSION},
       sb(s),
       hb_back_addrs(hb_back_addr_ref),
       hb_front_addrs(hb_front_addr_ref),
@@ -115,6 +113,9 @@ public:
     decode(metadata, p);
     decode(osd_features, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

@@ -24,19 +24,19 @@ struct ServiceMap {
     utime_t start_stamp;       ///< timestamp daemon started/registered
     std::map<std::string,std::string> metadata;  ///< static metadata
 
-    void encode(bufferlist& bl, uint64_t features) const;
-    void decode(bufferlist::const_iterator& p);
-    void dump(Formatter *f) const;
+    void encode(ceph::buffer::list& bl, uint64_t features) const;
+    void decode(ceph::buffer::list::const_iterator& p);
+    void dump(ceph::Formatter *f) const;
     static void generate_test_instances(std::list<Daemon*>& ls);
   };
 
   struct Service {
-    map<std::string,Daemon> daemons;
-    std::string summary;   ///< summary status string for 'ceph -s'
+    std::map<std::string,Daemon> daemons;
+    std::string summary;   ///< summary status std::string for 'ceph -s'
 
-    void encode(bufferlist& bl, uint64_t features) const;
-    void decode(bufferlist::const_iterator& p);
-    void dump(Formatter *f) const;
+    void encode(ceph::buffer::list& bl, uint64_t features) const;
+    void decode(ceph::buffer::list::const_iterator& p);
+    void dump(ceph::Formatter *f) const;
     static void generate_test_instances(std::list<Service*>& ls);
 
     std::string get_summary() const {
@@ -49,10 +49,22 @@ struct ServiceMap {
       std::ostringstream ss;
       ss << daemons.size() << (daemons.size() > 1 ? " daemons" : " daemon")
 	 << " active";
+
+      if (!daemons.empty()) {
+	ss << " (";
+	for (auto p = daemons.begin(); p != daemons.end(); ++p) {
+	  if (p != daemons.begin()) {
+	    ss << ", ";
+	  }
+	  ss << p->first;
+	}
+	ss << ")";
+      }
+
       return ss.str();
     }
 
-    void count_metadata(const string& field,
+    void count_metadata(const std::string& field,
 			std::map<std::string,int> *out) const {
       for (auto& p : daemons) {
 	auto q = p.second.metadata.find(field);
@@ -68,11 +80,11 @@ struct ServiceMap {
 
   epoch_t epoch = 0;
   utime_t modified;
-  map<std::string,Service> services;
+  std::map<std::string,Service> services;
 
-  void encode(bufferlist& bl, uint64_t features) const;
-  void decode(bufferlist::const_iterator& p);
-  void dump(Formatter *f) const;
+  void encode(ceph::buffer::list& bl, uint64_t features) const;
+  void decode(ceph::buffer::list::const_iterator& p);
+  void dump(ceph::Formatter *f) const;
   static void generate_test_instances(std::list<ServiceMap*>& ls);
 
   Daemon* get_daemon(const std::string& service,

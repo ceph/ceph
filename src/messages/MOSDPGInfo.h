@@ -19,9 +19,7 @@
 #include "msg/Message.h"
 #include "osd/osd_types.h"
 
-class MOSDPGInfo : public MessageInstance<MOSDPGInfo> {
-public:
-  friend factory;
+class MOSDPGInfo : public Message {
 private:
   static constexpr int HEAD_VERSION = 5;
   static constexpr int COMPAT_VERSION = 5;
@@ -29,17 +27,22 @@ private:
   epoch_t epoch = 0;
 
 public:
-  vector<pair<pg_notify_t,PastIntervals> > pg_list;
+  using pg_list_t = std::vector<std::pair<pg_notify_t,PastIntervals>>;
+  pg_list_t pg_list;
 
   epoch_t get_epoch() const { return epoch; }
 
   MOSDPGInfo()
-    : MessageInstance(MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION) {
-    set_priority(CEPH_MSG_PRIO_HIGH);
-  }
-  MOSDPGInfo(version_t mv)
-    : MessageInstance(MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION),
-      epoch(mv) {
+    : MOSDPGInfo{0, {}}
+  {}
+  MOSDPGInfo(epoch_t mv)
+    : MOSDPGInfo(mv, {})
+  {}
+  MOSDPGInfo(epoch_t mv, pg_list_t&& l)
+    : Message{MSG_OSD_PG_INFO, HEAD_VERSION, COMPAT_VERSION},
+      epoch{mv},
+      pg_list{std::move(l)}
+  {
     set_priority(CEPH_MSG_PRIO_HIGH);
   }
 private:
@@ -70,6 +73,9 @@ public:
     decode(epoch, p);
     decode(pg_list, p);
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

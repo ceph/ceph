@@ -4,6 +4,7 @@ import { ValidatorFn } from '@angular/forms';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
+import { Icons } from '../../../shared/enum/icons.enum';
 import { SelectMessages } from '../select/select-messages.model';
 import { SelectOption } from '../select/select-option.model';
 
@@ -31,6 +32,8 @@ export class SelectBadgesComponent {
 
   @ViewChild('cdSelect')
   cdSelect;
+
+  icons = Icons;
 
   constructor(private i18n: I18n) {}
 }

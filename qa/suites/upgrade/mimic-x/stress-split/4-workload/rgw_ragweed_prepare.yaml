@@ -1,0 +1,14 @@
+meta:
+- desc: |
+   rgw ragweed prepare before upgrade
+stress-tasks:
+  - full_sequential:
+     - sequential:
+       - rgw:
+         - client.0
+       - ragweed:
+           client.0:
+             default-branch: ceph-nautilus
+             rgw_server: client.0
+             stages: prepare
+       - print: "**** done rgw ragweed prepare 4-workload"

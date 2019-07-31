@@ -1,34 +1,35 @@
 import { Helper } from '../helper.po';
-import { HostsPage } from './hosts.po';
 
 describe('Hosts page', () => {
-  let page: HostsPage;
+  let hosts: Helper['hosts'];
 
   beforeAll(() => {
-    page = new HostsPage();
+    hosts = new Helper().hosts;
   });
 
   afterEach(() => {
     Helper.checkConsole();
   });
 
-  it('should open and show breadcrumb', () => {
-    page.navigateTo();
-    expect(Helper.getBreadcrumbText()).toEqual('Hosts');
-  });
+  describe('breadcrumb and tab tests', () => {
+    beforeAll(() => {
+      hosts.navigateTo();
+    });
 
-  it('should show two tabs', () => {
-    page.navigateTo();
-    expect(Helper.getTabsCount()).toEqual(2);
-  });
+    it('should open and show breadcrumb', () => {
+      expect(hosts.getBreadcrumbText()).toEqual('Hosts');
+    });
 
-  it('should show hosts list tab at first', () => {
-    page.navigateTo();
-    expect(Helper.getTabText(0)).toEqual('Hosts List');
-  });
+    it('should show two tabs', () => {
+      expect(hosts.getTabsCount()).toEqual(2);
+    });
 
-  it('should show overall performance as a second tab', () => {
-    page.navigateTo();
-    expect(Helper.getTabText(1)).toEqual('Overall Performance');
+    it('should show hosts list tab at first', () => {
+      expect(hosts.getTabText(0)).toEqual('Hosts List');
+    });
+
+    it('should show overall performance as a second tab', () => {
+      expect(hosts.getTabText(1)).toEqual('Overall Performance');
+    });
   });
 });

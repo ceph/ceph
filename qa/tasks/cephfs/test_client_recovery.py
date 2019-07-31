@@ -14,8 +14,6 @@ from teuthology.orchestra.run import CommandFailedError, ConnectionLostError
 from tasks.cephfs.fuse_mount import FuseMount
 from tasks.cephfs.cephfs_test_case import CephFSTestCase
 from teuthology.packaging import get_package_version
-from unittest import SkipTest
-
 
 log = logging.getLogger(__name__)
 
@@ -45,6 +43,7 @@ class TestClientNetworkRecovery(CephFSTestCase):
         """
 
         session_timeout = self.fs.get_var("session_timeout")
+        self.fs.mds_asok(['config', 'set', 'mds_defer_session_stale', 'false'])
 
         # We only need one client
         self.mount_b.umount_wait()
@@ -213,12 +212,22 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_a.wait_until_mounted()
         self.mount_a.create_destroy()
 
-    def test_stale_caps(self):
+    def _test_stale_caps(self, write):
         session_timeout = self.fs.get_var("session_timeout")
 
         # Capability release from stale session
         # =====================================
-        cap_holder = self.mount_a.open_background()
+        if write:
+            cap_holder = self.mount_a.open_background()
+        else:
+            self.mount_a.run_shell(["touch", "background_file"])
+            self.mount_a.umount_wait()
+            self.mount_a.mount()
+            self.mount_a.wait_until_mounted()
+            cap_holder = self.mount_a.open_background(write=False)
+
+        self.assert_session_count(2)
+        mount_a_gid = self.mount_a.get_global_id()
 
         # Wait for the file to be visible from another client, indicating
         # that mount_a has completed its network ops
@@ -238,6 +247,11 @@ class TestClientRecovery(CephFSTestCase):
 
             # Should have succeeded
             self.assertEqual(cap_waiter.exitstatus, 0)
+
+            if write:
+                self.assert_session_count(1)
+            else:
+                self.assert_session_state(mount_a_gid, "stale")
 
             cap_waited = b - a
             log.info("cap_waiter waited {0}s".format(cap_waited))
@@ -259,6 +273,12 @@ class TestClientRecovery(CephFSTestCase):
         self.mount_a.mount()
         self.mount_a.wait_until_mounted()
 
+    def test_stale_read_caps(self):
+        self._test_stale_caps(False)
+
+    def test_stale_write_caps(self):
+        self._test_stale_caps(True)
+
     def test_evicted_caps(self):
         # Eviction while holding a capability
         # ===================================
@@ -276,6 +296,9 @@ class TestClientRecovery(CephFSTestCase):
 
         # Simulate client death
         self.mount_a.kill()
+
+        # wait for it to die so it doesn't voluntarily release buffer cap
+        time.sleep(5)
 
         try:
             # The waiter should get stuck waiting for the capability
@@ -488,7 +511,7 @@ class TestClientRecovery(CephFSTestCase):
 
     def test_stale_renew(self):
         if not isinstance(self.mount_a, FuseMount):
-            raise SkipTest("Require FUSE client to handle signal STOP/CONT")
+            self.skipTest("Require FUSE client to handle signal STOP/CONT")
 
         session_timeout = self.fs.get_var("session_timeout")
 
@@ -511,9 +534,9 @@ class TestClientRecovery(CephFSTestCase):
 
         self.assert_session_state(mount_b_gid, "open")
         time.sleep(session_timeout * 1.5)  # Long enough for MDS to consider session stale
-        self.assert_session_state(mount_b_gid, "stale")
 
         self.mount_a.run_shell(["touch", "testdir/file2"])
+        self.assert_session_state(mount_b_gid, "stale")
 
         # resume ceph-fuse process of mount_b
         self.mount_b.client_remote.run(args=["sudo", "kill", "-CONT", mount_b_pid])
@@ -525,8 +548,9 @@ class TestClientRecovery(CephFSTestCase):
         Check that abort_conn() skips closing mds sessions.
         """
         if not isinstance(self.mount_a, FuseMount):
-            raise SkipTest("Testing libcephfs function")
+            self.skipTest("Testing libcephfs function")
 
+        self.fs.mds_asok(['config', 'set', 'mds_defer_session_stale', 'false'])
         session_timeout = self.fs.get_var("session_timeout")
 
         self.mount_a.umount_wait()
@@ -546,3 +570,37 @@ class TestClientRecovery(CephFSTestCase):
         self.assert_session_state(gid, "open")
         time.sleep(session_timeout * 1.5)  # Long enough for MDS to consider session stale
         self.assert_session_state(gid, "stale")
+
+    def test_dont_mark_unresponsive_client_stale(self):
+        """
+        Test that an unresponsive client holding caps is not marked stale or
+        evicted unless another clients wants its caps.
+        """
+        if not isinstance(self.mount_a, FuseMount):
+            self.skipTest("Require FUSE client to handle signal STOP/CONT")
+
+        # XXX: To conduct this test we need at least two clients since a
+        # single client is never evcited by MDS.
+        SESSION_TIMEOUT = 30
+        SESSION_AUTOCLOSE = 50
+        time_at_beg = time.time()
+        mount_a_gid = self.mount_a.get_global_id()
+        mount_a_pid = self.mount_a.client_pid
+        self.fs.set_var('session_timeout', SESSION_TIMEOUT)
+        self.fs.set_var('session_autoclose', SESSION_AUTOCLOSE)
+        self.assert_session_count(2, self.fs.mds_asok(['session', 'ls']))
+
+        # test that client holding cap not required by any other client is not
+        # marked stale when it becomes unresponsive.
+        self.mount_a.run_shell(['mkdir', 'dir'])
+        self.mount_a.send_signal('sigstop')
+        time.sleep(SESSION_TIMEOUT + 2)
+        self.assert_session_state(mount_a_gid, "open")
+
+        # test that other clients have to wait to get the caps from
+        # unresponsive client until session_autoclose.
+        self.mount_b.run_shell(['stat', 'dir'])
+        self.assert_session_count(1, self.fs.mds_asok(['session', 'ls']))
+        self.assertLess(time.time(), time_at_beg + SESSION_AUTOCLOSE)
+
+        self.mount_a.send_signal('sigcont')

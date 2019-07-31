@@ -192,15 +192,9 @@ ostream& CDir::print_db_line_prefix(ostream& out)
 
 CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   cache(mdcache), inode(in), frag(fg),
-  first(2),
   dirty_rstat_inodes(member_offset(CInode, dirty_rstat_item)),
-  projected_version(0),
   dirty_dentries(member_offset(CDentry, item_dir_dirty)),
   item_dirty(this), item_new(this),
-  num_head_items(0), num_head_null(0),
-  num_snap_items(0), num_snap_null(0),
-  num_dirty(0), committing_version(0), committed_version(0),
-  dir_auth_pins(0),
   dir_rep(REP_NONE),
   pop_me(mdcache->decayrate),
   pop_nested(mdcache->decayrate),
@@ -208,8 +202,6 @@ CDir::CDir(CInode *in, frag_t fg, MDCache *mdcache, bool auth) :
   pop_auth_subtree_nested(mdcache->decayrate),
   pop_spread(mdcache->decayrate),
   pop_lru_subdirs(member_offset(CInode, item_pop_lru)),
-  num_dentries_nested(0), num_dentries_auth_subtree(0),
-  num_dentries_auth_subtree_nested(0),
   dir_auth(CDIR_AUTH_DEFAULT)
 {
   // auth
@@ -986,7 +978,7 @@ void CDir::init_fragment_pins()
     get(PIN_SUBTREE);
 }
 
-void CDir::split(int bits, list<CDir*>& subs, MDSContext::vec& waiters, bool replay)
+void CDir::split(int bits, std::vector<CDir*>* subs, MDSContext::vec& waiters, bool replay)
 {
   dout(10) << "split by " << bits << " bits on " << *this << dendl;
 
@@ -1033,7 +1025,7 @@ void CDir::split(int bits, list<CDir*>& subs, MDSContext::vec& waiters, bool rep
 
     dout(10) << " subfrag " << fg << " " << *f << dendl;
     subfrags[n++] = f;
-    subs.push_back(f);
+    subs->push_back(f);
 
     f->set_dir_auth(get_dir_auth());
     f->freeze_tree_state = freeze_tree_state;
@@ -1088,14 +1080,16 @@ void CDir::split(int bits, list<CDir*>& subs, MDSContext::vec& waiters, bool rep
   finish_old_fragment(waiters, replay);
 }
 
-void CDir::merge(list<CDir*>& subs, MDSContext::vec& waiters, bool replay)
+void CDir::merge(const std::vector<CDir*>& subs, MDSContext::vec& waiters, bool replay)
 {
   dout(10) << "merge " << subs << dendl;
+
+  ceph_assert(subs.size() > 0);
 
   set_dir_auth(subs.front()->get_dir_auth());
   freeze_tree_state = subs.front()->freeze_tree_state;
 
-  for (auto dir : subs) {
+  for (const auto& dir : subs) {
     ceph_assert(get_dir_auth() == dir->get_dir_auth());
     ceph_assert(freeze_tree_state == dir->freeze_tree_state);
   }
@@ -1110,7 +1104,7 @@ void CDir::merge(list<CDir*>& subs, MDSContext::vec& waiters, bool replay)
 
   map<string_snap_t, MDSContext::vec > dentry_waiters;
 
-  for (auto dir : subs) {
+  for (const auto& dir : subs) {
     dout(10) << " subfrag " << dir->get_frag() << " " << *dir << dendl;
     ceph_assert(!dir->is_auth() || dir->is_complete() || replay);
 
@@ -2830,11 +2824,9 @@ void CDir::verify_fragstat()
 
 void CDir::_walk_tree(std::function<bool(CDir*)> callback)
 {
-
   deque<CDir*> dfq;
   dfq.push_back(this);
 
-  vector<CDir*> dfv;
   while (!dfq.empty()) {
     CDir *dir = dfq.front();
     dfq.pop_front();
@@ -2847,13 +2839,12 @@ void CDir::_walk_tree(std::function<bool(CDir*)> callback)
       if (!in->is_dir())
 	continue;
 
-      in->get_nested_dirfrags(dfv);
+      auto&& dfv = in->get_nested_dirfrags();
       for (auto& dir : dfv) {
 	auto ret = callback(dir);
 	if (ret)
 	  dfq.push_back(dir);
       }
-      dfv.clear();
     }
   }
 }
@@ -3419,26 +3410,23 @@ int CDir::scrub_dentry_next(MDSContext *cb, CDentry **dnout)
   return rval;
 }
 
-void CDir::scrub_dentries_scrubbing(list<CDentry*> *out_dentries)
+std::vector<CDentry*> CDir::scrub_dentries_scrubbing()
 {
   dout(20) << __func__ << dendl;
   ceph_assert(scrub_infop && scrub_infop->directory_scrubbing);
 
-  for (set<dentry_key_t>::iterator i =
-        scrub_infop->directories_scrubbing.begin();
-      i != scrub_infop->directories_scrubbing.end();
-      ++i) {
-    CDentry *d = lookup(i->name, i->snapid);
+  std::vector<CDentry*> result;
+  for (auto& scrub_info : scrub_infop->directories_scrubbing) {
+    CDentry *d = lookup(scrub_info.name, scrub_info.snapid);
     ceph_assert(d);
-    out_dentries->push_back(d);
+    result.push_back(d);
   }
-  for (set<dentry_key_t>::iterator i = scrub_infop->others_scrubbing.begin();
-      i != scrub_infop->others_scrubbing.end();
-      ++i) {
-    CDentry *d = lookup(i->name, i->snapid);
+  for (auto& scrub_info : scrub_infop->others_scrubbing) {
+    CDentry *d = lookup(scrub_info.name, scrub_info.snapid);
     ceph_assert(d);
-    out_dentries->push_back(d);
+    result.push_back(d);
   }
+  return result;
 }
 
 void CDir::scrub_dentry_finished(CDentry *dn)

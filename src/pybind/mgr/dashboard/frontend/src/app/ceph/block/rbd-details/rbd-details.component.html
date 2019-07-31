@@ -10,54 +10,54 @@
       <tbody>
         <tr>
           <td i18n
-              class="bold col-sm-1">Name</td>
-          <td class="col-sm-3">{{ selectedItem.name }}</td>
+              class="bold w-25">Name</td>
+          <td class="w-75">{{ selectedItem.name }}</td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Pool</td>
-          <td class="col-sm-3">{{ selectedItem.pool_name }}</td>
+              class="bold">Pool</td>
+          <td>{{ selectedItem.pool_name }}</td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Data Pool</td>
-          <td class="col-sm-3">{{ selectedItem.data_pool | empty }}</td>
+              class="bold">Data Pool</td>
+          <td>{{ selectedItem.data_pool | empty }}</td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Created</td>
-          <td class="col-sm-3">{{ selectedItem.timestamp | cdDate }}</td>
+              class="bold">Created</td>
+          <td>{{ selectedItem.timestamp | cdDate }}</td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Size</td>
-          <td class="col-sm-3">{{ selectedItem.size | dimlessBinary }}</td>
+              class="bold">Size</td>
+          <td>{{ selectedItem.size | dimlessBinary }}</td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Objects</td>
-          <td class="col-sm-3">{{ selectedItem.num_objs | dimless }}</td>
+              class="bold">Objects</td>
+          <td>{{ selectedItem.num_objs | dimless }}</td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Object size</td>
-          <td class="col-sm-3">{{ selectedItem.obj_size | dimlessBinary }}</td>
+              class="bold">Object size</td>
+          <td>{{ selectedItem.obj_size | dimlessBinary }}</td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Features</td>
-          <td class="col-sm-3">
+              class="bold">Features</td>
+          <td>
             <span *ngFor="let feature of selectedItem.features_name">
-              <span class="badge badge-pill badge-primary margin-right-sm">{{ feature }}</span>
+              <span class="badge badge-dark mr-2">{{ feature }}</span>
             </span>
           </td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Provisioned</td>
-          <td class="col-sm-3">
+              class="bold">Provisioned</td>
+          <td>
             <span *ngIf="selectedItem.features_name?.indexOf('fast-diff') === -1">
-              <span class="text-muted"
+              <span class="form-text text-muted"
                     [tooltip]="usageNotAvailableTooltipTpl"
                     placement="right"
                     i18n>N/A</span>
@@ -69,10 +69,10 @@
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Total provisioned</td>
-          <td class="col-sm-3">
+              class="bold">Total provisioned</td>
+          <td>
             <span *ngIf="selectedItem.features_name?.indexOf('fast-diff') === -1">
-              <span class="text-muted"
+              <span class="form-text text-muted"
                     [tooltip]="usageNotAvailableTooltipTpl"
                     placement="right"
                     i18n>N/A</span>
@@ -84,18 +84,18 @@
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Striping unit</td>
-          <td class="col-sm-3">{{ selectedItem.stripe_unit | dimlessBinary }}</td>
+              class="bold">Striping unit</td>
+          <td>{{ selectedItem.stripe_unit | dimlessBinary }}</td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Striping count</td>
-          <td class="col-sm-3">{{ selectedItem.stripe_count }}</td>
+              class="bold">Striping count</td>
+          <td>{{ selectedItem.stripe_count }}</td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Parent</td>
-          <td class="col-sm-3">
+              class="bold">Parent</td>
+          <td>
             <span *ngIf="selectedItem.parent">{{ selectedItem.parent.pool_name }}
               /{{ selectedItem.parent.image_name }}
               @{{ selectedItem.parent.snap_name }}</span>
@@ -104,13 +104,13 @@
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Block name prefix</td>
-          <td class="col-sm-3">{{ selectedItem.block_name_prefix }}</td>
+              class="bold">Block name prefix</td>
+          <td>{{ selectedItem.block_name_prefix }}</td>
         </tr>
         <tr>
           <td i18n
-              class="bold col-sm-1">Order</td>
-          <td class="col-sm-3">{{ selectedItem.order }}</td>
+              class="bold">Order</td>
+          <td>{{ selectedItem.order }}</td>
         </tr>
       </tbody>
     </table>

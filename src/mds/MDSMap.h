@@ -25,14 +25,15 @@
 #include <errno.h>
 
 #include "include/types.h"
-#include "common/Clock.h"
+#include "include/ceph_features.h"
 #include "include/health.h"
+#include "include/CompatSet.h"
 
+#include "common/Clock.h"
+#include "common/Formatter.h"
+#include "common/ceph_releases.h"
 #include "common/config.h"
 
-#include "include/CompatSet.h"
-#include "include/ceph_features.h"
-#include "common/Formatter.h"
 #include "mds/mdstypes.h"
 
 class CephContext;
@@ -100,32 +101,35 @@ public:
   } DaemonState;
 
   struct mds_info_t {
-    mds_gid_t global_id;
+    mds_gid_t global_id = MDS_GID_NONE;
     std::string name;
-    mds_rank_t rank;
-    int32_t inc;
-    MDSMap::DaemonState state;
-    version_t state_seq;
+    mds_rank_t rank = MDS_RANK_NONE;
+    int32_t inc = 0;
+    MDSMap::DaemonState state = STATE_STANDBY;
+    version_t state_seq = 0;
     entity_addrvec_t addrs;
     utime_t laggy_since;
-    mds_rank_t standby_for_rank;
-    std::string standby_for_name;
-    fs_cluster_id_t standby_for_fscid;
-    bool standby_replay;
     std::set<mds_rank_t> export_targets;
     uint64_t mds_features = 0;
+    uint64_t flags = 0;
+    enum mds_flags : uint64_t {
+      FROZEN = 1 << 0,
+    };
 
-    mds_info_t() : global_id(MDS_GID_NONE), rank(MDS_RANK_NONE), inc(0),
-                   state(STATE_STANDBY), state_seq(0),
-                   standby_for_rank(MDS_RANK_NONE),
-                   standby_for_fscid(FS_CLUSTER_ID_NONE),
-                   standby_replay(false)
-    { }
+    mds_info_t() = default;
 
     bool laggy() const { return !(laggy_since == utime_t()); }
     void clear_laggy() { laggy_since = utime_t(); }
 
-    entity_addrvec_t get_addrs() const {
+    bool is_degraded() const {
+      return STATE_REPLAY <= state && state <= STATE_CLIENTREPLAY;
+    }
+
+    void freeze() { flags |= mds_flags::FROZEN; }
+    void unfreeze() { flags &= ~mds_flags::FROZEN; }
+    bool is_frozen() const { return flags&mds_flags::FROZEN; }
+
+    const entity_addrvec_t& get_addrs() const {
       return addrs;
     }
 
@@ -140,7 +144,7 @@ public:
     // The long form name for use in cluster log messages`
     std::string human_name() const;
 
-    static void generate_test_instances(list<mds_info_t*>& ls);
+    static void generate_test_instances(std::list<mds_info_t*>& ls);
   private:
     void encode_versioned(bufferlist& bl, uint64_t features) const;
     void encode_unversioned(bufferlist& bl) const;
@@ -169,7 +173,7 @@ protected:
   __u32 session_autoclose = 300;
   uint64_t max_file_size = 1ULL<<40; /* 1TB */
 
-  int8_t min_compat_client = -1;
+  ceph_release_t min_compat_client{ceph_release_t::unknown};
 
   std::vector<int64_t> data_pools;  // file data pools available to clients (via an ioctl).  first is the default.
   int64_t cas_pool = -1;            // where CAS objects go
@@ -232,8 +236,8 @@ public:
   uint64_t get_max_filesize() const { return max_file_size; }
   void set_max_filesize(uint64_t m) { max_file_size = m; }
 
-  uint8_t get_min_compat_client() const { return min_compat_client; }
-  void set_min_compat_client(uint8_t version) { min_compat_client = version; }
+  ceph_release_t get_min_compat_client() const { return min_compat_client; }
+  void set_min_compat_client(ceph_release_t version) { min_compat_client = version; }
   
   int get_flags() const { return flags; }
   bool test_flag(int f) const { return flags & f; }
@@ -250,6 +254,15 @@ public:
   void clear_snaps_allowed() { clear_flag(CEPH_MDSMAP_ALLOW_SNAPS); }
   bool allows_snaps() const { return test_flag(CEPH_MDSMAP_ALLOW_SNAPS); }
   bool was_snaps_ever_allowed() const { return ever_allowed_features & CEPH_MDSMAP_ALLOW_SNAPS; }
+
+  void set_standby_replay_allowed() {
+    set_flag(CEPH_MDSMAP_ALLOW_STANDBY_REPLAY);
+    ever_allowed_features |= CEPH_MDSMAP_ALLOW_STANDBY_REPLAY;
+    explicitly_allowed_features |= CEPH_MDSMAP_ALLOW_STANDBY_REPLAY;
+  }
+  void clear_standby_replay_allowed() { clear_flag(CEPH_MDSMAP_ALLOW_STANDBY_REPLAY); }
+  bool allows_standby_replay() const { return test_flag(CEPH_MDSMAP_ALLOW_STANDBY_REPLAY); }
+  bool was_standby_replay_ever_allowed() const { return ever_allowed_features & CEPH_MDSMAP_ALLOW_STANDBY_REPLAY; }
 
   void set_multimds_snaps_allowed() {
     set_flag(CEPH_MDSMAP_ALLOW_MULTIMDS_SNAPS);
@@ -541,20 +554,33 @@ public:
     return is_clientreplay(m) || is_active(m) || is_stopping(m);
   }
 
-  bool is_followable(mds_rank_t m) const {
-    return (is_resolve(m) ||
-	    is_replay(m) ||
-	    is_rejoin(m) ||
-	    is_clientreplay(m) ||
-	    is_active(m) ||
-	    is_stopping(m));
+  mds_gid_t get_standby_replay(mds_rank_t r) const {
+    for (auto& [gid,info] : mds_info) {
+      if (info.rank == r && info.state == STATE_STANDBY_REPLAY) {
+        return gid;
+      }
+    }
+    return MDS_GID_NONE;
+  }
+  bool has_standby_replay(mds_rank_t r) const {
+    return get_standby_replay(r) != MDS_GID_NONE;
+  }
+
+  bool is_followable(mds_rank_t r) const {
+    if (auto it1 = up.find(r); it1 != up.end()) {
+      if (auto it2 = mds_info.find(it1->second); it2 != mds_info.end()) {
+        auto& info = it2->second;
+        if (!info.is_degraded() && !has_standby_replay(r)) {
+          return true;
+        }
+      }
+    }
+    return false;
   }
 
   bool is_laggy_gid(mds_gid_t gid) const {
-    if (!mds_info.count(gid))
-      return false;
-    std::map<mds_gid_t,mds_info_t>::const_iterator p = mds_info.find(gid);
-    return p->second.laggy();
+    auto it = mds_info.find(gid);
+    return it == mds_info.end() ? false : it->second.laggy();
   }
 
   // degraded = some recovery in process.  fixes active membership and
@@ -562,11 +588,10 @@ public:
   bool is_degraded() const {
     if (!failed.empty() || !damaged.empty())
       return true;
-    for (std::map<mds_gid_t,mds_info_t>::const_iterator p = mds_info.begin();
-	 p != mds_info.end();
-	 ++p)
-      if (p->second.state >= STATE_REPLAY && p->second.state <= STATE_CLIENTREPLAY)
-	return true;
+    for (const auto& p : mds_info) {
+      if (p.second.is_degraded())
+        return true;
+    }
     return false;
   }
   bool is_any_failed() const {
@@ -644,7 +669,7 @@ public:
   void print_summary(Formatter *f, ostream *out) const;
 
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<MDSMap*>& ls);
+  static void generate_test_instances(std::list<MDSMap*>& ls);
 
   static bool state_transition_valid(DaemonState prev, DaemonState next);
 };

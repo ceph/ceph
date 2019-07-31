@@ -336,6 +336,16 @@ int cls_cxx_replace(cls_method_context_t hctx, int ofs, int len, bufferlist *inb
   return (*pctx)->pg->do_osd_ops(*pctx, ops);
 }
 
+int cls_cxx_truncate(cls_method_context_t hctx, int ofs)
+{
+  PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext **)hctx;
+  vector<OSDOp> ops(1);
+  ops[0].op.op = CEPH_OSD_OP_TRUNCATE;
+  ops[0].op.extent.offset = ofs;
+  ops[0].op.extent.length = 0;
+  return (*pctx)->pg->do_osd_ops(*pctx, ops);
+}
+
 int cls_cxx_getxattr(cls_method_context_t hctx, const char *name,
                      bufferlist *outbl)
 {
@@ -692,10 +702,16 @@ uint64_t cls_get_client_features(cls_method_context_t hctx)
   return ctx->op->get_req()->get_connection()->get_features();
 }
 
-int8_t cls_get_required_osd_release(cls_method_context_t hctx)
+ceph_release_t cls_get_required_osd_release(cls_method_context_t hctx)
 {
   PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
   return ctx->pg->get_osdmap()->require_osd_release;
+}
+
+ceph_release_t cls_get_min_compatible_client(cls_method_context_t hctx)
+{
+  PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
+  return ctx->pg->get_osdmap()->get_require_min_compat_client();
 }
 
 void cls_cxx_subop_version(cls_method_context_t hctx, string *s)
@@ -779,4 +795,10 @@ bool cls_has_chunk(cls_method_context_t hctx, string fp_oid)
   }
 
   return false;
+}
+
+uint64_t cls_get_osd_min_alloc_size(cls_method_context_t hctx) {
+  PrimaryLogPG::OpContext *ctx = *(PrimaryLogPG::OpContext **)hctx;
+
+  return ctx->pg->get_min_alloc_size();
 }

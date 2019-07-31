@@ -145,7 +145,7 @@ public:
   template <typename ImageReplayerT = rbd::mirror::ImageReplayer<> >
   void create_replayer() {
     m_replayer = new ImageReplayerT(
-        m_threads.get(), m_instance_watcher,
+        m_threads.get(), m_instance_watcher, nullptr,
         rbd::mirror::RadosRef(new librados::Rados(m_local_ioctx)),
         m_local_mirror_uuid, m_local_ioctx.get_id(), m_global_image_id);
     m_replayer->add_peer("peer uuid", m_remote_ioctx);
@@ -240,6 +240,8 @@ public:
   {
     std::string master_client_id = "";
     std::string mirror_client_id = m_local_mirror_uuid;
+
+    m_replayer->flush();
 
     C_SaferCond cond;
     uint64_t minimum_set;
@@ -387,7 +389,7 @@ public:
   int64_t m_remote_pool_id;
   std::string m_remote_image_id;
   std::string m_global_image_id;
-  rbd::mirror::ImageReplayer<> *m_replayer;
+  rbd::mirror::ImageReplayer<> *m_replayer = nullptr;
   C_WatchCtx *m_watch_ctx;
   uint64_t m_watch_handle;
   char m_test_data[TEST_IO_SIZE + 1];

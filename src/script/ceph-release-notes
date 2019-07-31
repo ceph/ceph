@@ -41,7 +41,7 @@ reviewed_by_re = re.compile(r"Rev(.*)By", re.IGNORECASE)
 labels = {'bluestore', 'build/ops', 'cephfs', 'common', 'core', 'mgr',
           'mon', 'performance', 'pybind', 'rdma', 'rgw', 'rbd', 'tests',
           'tools'}
-merge_re = re.compile("Merge pull request #(\d+).*")
+merge_re = re.compile("Merge (pull request|PR) #(\d+).*")
 # prefixes is the list of commit description prefixes we recognize
 prefixes = ['bluestore', 'build/ops', 'cephfs', 'cephx', 'cli', 'cmake',
             'common', 'core', 'crush', 'doc', 'fs', 'librados', 'librbd',
@@ -147,7 +147,7 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
         merge = merge_re.match(commit.summary)
         if not merge:
             continue
-        number = merge.group(1)
+        number = merge.group(2)
         print ("Considering PR#" + number)
         # do not pick up ceph/ceph-qa-suite.git PRs
         if int(number) < 1311:
@@ -184,7 +184,7 @@ def make_release_notes(gh, repo, ref, plaintext, verbose, strict, use_tags):
 
         if strict:
             title_re = (
-                '^(?:hammer|infernalis|jewel|kraken):\s+(' +
+                '^(?:hammer|infernalis|jewel|kraken|luminous|mimic|nautilus):\s+(' +
                 '|'.join(prefixes) +
                 ')(:.*)'
             )

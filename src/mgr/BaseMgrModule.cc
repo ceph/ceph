@@ -139,6 +139,9 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
 
   MonCommandCompletion *command_c = new MonCommandCompletion(self->py_modules,
       completion, tag, PyThreadState_Get());
+
+  PyThreadState *tstate = PyEval_SaveThread();
+
   if (std::string(type) == "mon") {
 
     // Wait for the latest OSDMap after each command we send to
@@ -151,7 +154,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
     auto c = new FunctionContext([command_c, self](int command_r){
       self->py_modules->get_objecter().wait_for_latest_osdmap(
           new FunctionContext([command_c, command_r](int wait_r){
-            command_c->finish(command_r);
+            command_c->complete(command_r);
           })
       );
     });
@@ -162,7 +165,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
         {},
         &command_c->outbl,
         &command_c->outs,
-        c);
+        new C_OnFinisher(c, &self->py_modules->cmd_finisher));
   } else if (std::string(type) == "osd") {
     std::string err;
     uint64_t osd_id = strict_strtoll(name, 10, &err);
@@ -170,6 +173,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
       delete command_c;
       string msg("invalid osd_id: ");
       msg.append("\"").append(name).append("\"");
+      PyEval_RestoreThread(tstate);
       PyErr_SetString(PyExc_ValueError, msg.c_str());
       return nullptr;
     }
@@ -182,7 +186,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
         &tid,
         &command_c->outbl,
         &command_c->outs,
-        command_c);
+        new C_OnFinisher(command_c, &self->py_modules->cmd_finisher));
   } else if (std::string(type) == "mds") {
     int r = self->py_modules->get_client().mds_command(
         name,
@@ -190,10 +194,11 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
         {},
         &command_c->outbl,
         &command_c->outs,
-        command_c);
+        new C_OnFinisher(command_c, &self->py_modules->cmd_finisher));
     if (r != 0) {
       string msg("failed to send command to mds: ");
       msg.append(cpp_strerror(r));
+      PyEval_RestoreThread(tstate);
       PyErr_SetString(PyExc_RuntimeError, msg.c_str());
       return nullptr;
     }
@@ -203,6 +208,7 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
       delete command_c;
       string msg("invalid pgid: ");
       msg.append("\"").append(name).append("\"");
+      PyEval_RestoreThread(tstate);
       PyErr_SetString(PyExc_ValueError, msg.c_str());
       return nullptr;
     }
@@ -215,16 +221,19 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
         &tid,
         &command_c->outbl,
         &command_c->outs,
-        command_c);
+        new C_OnFinisher(command_c, &self->py_modules->cmd_finisher));
+    PyEval_RestoreThread(tstate);
     return nullptr;
   } else {
     delete command_c;
     string msg("unknown service type: ");
     msg.append(type);
+    PyEval_RestoreThread(tstate);
     PyErr_SetString(PyExc_ValueError, msg.c_str());
     return nullptr;
   }
 
+  PyEval_RestoreThread(tstate);
   Py_RETURN_NONE;
 }
 
@@ -275,24 +284,23 @@ ceph_set_health_checks(BaseMgrModule *self, PyObject *args)
       }
       string ks(k);
       if (ks == "severity") {
-	if (!PyString_Check(v)) {
+	if (auto [vs, valid] = PyString_ToString(v); !valid) {
 	  derr << __func__ << " check " << check_name
 	       << " severity value not string" << dendl;
 	  continue;
-	}
-	string vs(PyString_AsString(v));
-	if (vs == "warning") {
+	} else if (vs == "warning") {
 	  severity = HEALTH_WARN;
 	} else if (vs == "error") {
 	  severity = HEALTH_ERR;
 	}
       } else if (ks == "summary") {
-	if (!PyString_Check(v)) {
+	if (auto [vs, valid] = PyString_ToString(v); !valid) {
 	  derr << __func__ << " check " << check_name
-	       << " summary value not string" << dendl;
+	       << " summary value not [unicode] string" << dendl;
 	  continue;
+	} else {
+	  summary = std::move(vs);
 	}
-	summary = PyString_AsString(v);
       } else if (ks == "detail") {
 	if (!PyList_Check(v)) {
 	  derr << __func__ << " check " << check_name
@@ -301,12 +309,13 @@ ceph_set_health_checks(BaseMgrModule *self, PyObject *args)
 	}
 	for (int k = 0; k < PyList_Size(v); ++k) {
 	  PyObject *di = PyList_GET_ITEM(v, k);
-	  if (!PyString_Check(di)) {
+	  if (auto [vs, valid] = PyString_ToString(di); !valid) {
 	    derr << __func__ << " check " << check_name
-		 << " detail item " << k << " not a string" << dendl;
+		 << " detail item " << k << " not a [unicode] string" << dendl;
 	    continue;
+	  } else {
+	    detail.push_back(std::move(vs));
 	  }
-	  detail.push_back(PyString_AsString(di));
 	}
       } else {
 	derr << __func__ << " check " << check_name
@@ -391,11 +400,18 @@ ceph_get_module_option(BaseMgrModule *self, PyObject *args)
 {
   char *module = nullptr;
   char *key = nullptr;
-  if (!PyArg_ParseTuple(args, "ss:ceph_get_module_option", &module, &key)) {
+  char *prefix = nullptr;
+  if (!PyArg_ParseTuple(args, "ss|s:ceph_get_module_option", &module, &key,
+			&prefix)) {
     derr << "Invalid args!" << dendl;
     return nullptr;
   }
-  auto pResult = self->py_modules->get_typed_config(module, key);
+  std::string str_prefix;
+  if (prefix) {
+    str_prefix = prefix;
+  }
+  assert(self->this_module->py_module);
+  auto pResult = self->py_modules->get_typed_config(module, key, str_prefix);
   return pResult;
 }
 
@@ -427,7 +443,9 @@ ceph_set_module_option(BaseMgrModule *self, PyObject *args)
   if (value) {
     val = value;
   }
+  PyThreadState *tstate = PyEval_SaveThread();
   self->py_modules->set_config(module, key, val);
+  PyEval_RestoreThread(tstate);
 
   Py_RETURN_NONE;
 }
@@ -465,7 +483,9 @@ ceph_store_set(BaseMgrModule *self, PyObject *args)
   if (value) {
     val = value;
   }
+  PyThreadState *tstate = PyEval_SaveThread();
   self->py_modules->set_store(self->this_module->get_name(), key, val);
+  PyEval_RestoreThread(tstate);
 
   Py_RETURN_NONE;
 }
@@ -832,7 +852,7 @@ ceph_add_osd_perf_query(BaseMgrModule *self, PyObject *args)
             }
             d.regex_str = PyString_AsString(param_value);
             try {
-              d.regex = {d.regex_str.c_str()};
+              d.regex = d.regex_str.c_str();
             } catch (const std::regex_error& e) {
               derr << __func__ << " query " << query_param_name << " item " << j
                    << " contains invalid regex " << d.regex_str << dendl;

@@ -8,7 +8,7 @@ import * as moment from 'moment';
 export class RelativeDatePipe implements PipeTransform {
   constructor() {}
 
-  transform(value: any, args?: any): any {
+  transform(value: any): any {
     if (!value) {
       return 'unknown';
     }

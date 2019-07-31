@@ -3,9 +3,12 @@
 
 #pragma once
 
+#include <cstdint>
 #include <vector>
+#include "include/buffer_fwd.h"
 
-class EntityName;
+class AuthConnectionMeta;
+class Connection;
 class CryptoKey;
 
 class AuthClient {
@@ -18,14 +21,14 @@ public:
     AuthConnectionMeta *auth_meta,
     uint32_t *method,
     std::vector<uint32_t> *preferred_modes,
-    bufferlist *out) = 0;
+    ceph::buffer::list *out) = 0;
 
   /// Handle server's request to continue the handshake
   virtual int handle_auth_reply_more(
     Connection *con,
     AuthConnectionMeta *auth_meta,
-    const bufferlist& bl,
-    bufferlist *reply) = 0;
+    const ceph::buffer::list& bl,
+    ceph::buffer::list *reply) = 0;
 
   /// Handle server's indication that authentication succeeded
   virtual int handle_auth_done(
@@ -33,7 +36,7 @@ public:
     AuthConnectionMeta *auth_meta,
     uint64_t global_id,
     uint32_t con_mode,
-    const bufferlist& bl,
+    const ceph::buffer::list& bl,
     CryptoKey *session_key,
     std::string *connection_secret) = 0;
 

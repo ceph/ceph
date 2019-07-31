@@ -77,7 +77,8 @@ int TestWatchNotify::list_watchers(int64_t pool_id, const std::string& nspace,
          watcher->watch_handles.begin();
        it != watcher->watch_handles.end(); ++it) {
     obj_watch_t obj;
-    strcpy(obj.addr, it->second.addr.c_str());
+    strncpy(obj.addr, it->second.addr.c_str(), sizeof(obj.addr) - 1);
+    obj.addr[sizeof(obj.addr) - 1] = '\0';
     obj.watcher_id = static_cast<int64_t>(it->second.gid);
     obj.cookie = it->second.handle;
     obj.timeout_seconds = 30;

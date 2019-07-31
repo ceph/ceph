@@ -4,32 +4,28 @@ import os
 import threading
 import functools
 import uuid
-from subprocess import check_output
+from subprocess import check_output, CalledProcessError
 
-from mgr_module import MgrModule
+from mgr_module import MgrModule, PersistentStoreDict
 
 import orchestrator
 
 
-all_completions = []
 
 
-class TestReadCompletion(orchestrator.ReadCompletion):
+class TestCompletionMixin(object):
+    all_completions = []  # Hacky global
 
-    def __init__(self, cb):
-        super(TestReadCompletion, self).__init__()
+    def __init__(self, cb, message, *args, **kwargs):
+        super(TestCompletionMixin, self).__init__(*args, **kwargs)
         self.cb = cb
         self._result = None
         self._complete = False
 
-        self.message = "<read op>"
+        self.message = message
+        self.id = str(uuid.uuid4())
 
-        global all_completions
-        all_completions.append(self)
-
-    def __str__(self):
-        return "TestReadCompletion(result={} message={})".format(self.result, self.message)
-
+        TestCompletionMixin.all_completions.append(self)
 
     @property
     def result(self):
@@ -41,38 +37,22 @@ class TestReadCompletion(orchestrator.ReadCompletion):
 
     def execute(self):
         self._result = self.cb()
+        self.executed = True
         self._complete = True
 
-
-class TestWriteCompletion(orchestrator.WriteCompletion):
-    def __init__(self, execute_cb, message):
-        super(TestWriteCompletion, self).__init__()
-        self.execute_cb = execute_cb
-
-        # Executed means I executed my API call, it may or may
-        # not have succeeded
-        self.executed = False
-
-        self._result = None
-
-        self.effective = False
-
-        self.id = str(uuid.uuid4())
-
-        self.message = message
-
-        self.error = None
-
-        # XXX hacky global
-        global all_completions
-        all_completions.append(self)
-
     def __str__(self):
-        return "TestWriteCompletion(executed={} result={} id={} message={} error={})".format(self.executed, self._result, self.id, self.message,  self.error)
+        return "{}(result={} message={}, exception={})".format(self.__class__.__name__, self.result,
+                                                               self.message, self.exception)
 
-    @property
-    def result(self):
-        return self._result
+
+class TestReadCompletion(TestCompletionMixin, orchestrator.ReadCompletion):
+    def __init__(self, cb):
+        super(TestReadCompletion, self).__init__(cb, "<read op>")
+
+
+class TestWriteCompletion(TestCompletionMixin, orchestrator.WriteCompletion):
+    def __init__(self, cb, message):
+        super(TestWriteCompletion, self).__init__(cb, message)
 
     @property
     def is_persistent(self):
@@ -80,17 +60,7 @@ class TestWriteCompletion(orchestrator.WriteCompletion):
 
     @property
     def is_effective(self):
-        return self.effective
-
-    @property
-    def is_errored(self):
-        return self.error is not None
-
-    def execute(self):
-        if not self.executed:
-            self._result = self.execute_cb()
-            self.executed = True
-            self.effective = True
+        return self._complete
 
 
 def deferred_write(message):
@@ -125,18 +95,9 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     The implementation is similar to the Rook orchestrator, but simpler.
     """
-    def _progress(self, *args, **kwargs):
-        try:
-            self.remote("progress", *args, **kwargs)
-        except ImportError:
-            # If the progress module is disabled that's fine,
-            # they just won't see the output.
-            pass
 
     def wait(self, completions):
         self.log.info("wait: completions={0}".format(completions))
-
-        incomplete = False
 
         # Our `wait` implementation is very simple because everything's
         # just an API call.
@@ -151,28 +112,16 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
             if c.is_complete:
                 continue
 
-            if not c.is_read:
-                self._progress("update", c.id, c.message, 0.5)
-
             try:
                 c.execute()
             except Exception as e:
                 self.log.exception("Completion {0} threw an exception:".format(
                     c.message
                 ))
-                c.error = e
+                c.exception = e
                 c._complete = True
-                if not c.is_read:
-                    self._progress("complete", c.id)
-            else:
-                if c.is_complete:
-                    if not c.is_read:
-                        self._progress("complete", c.id)
 
-            if not c.is_complete:
-                incomplete = True
-
-        return not incomplete
+        return all(c.is_complete for c in completions)
 
     def available(self):
         return True, ""
@@ -195,9 +144,9 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
             # in case we had a caller that wait()'ed on them long enough
             # to get persistence but not long enough to get completion
 
-            global all_completions
-            self.wait(all_completions)
-            all_completions = [c for c in all_completions if not c.is_complete]
+            self.wait(TestCompletionMixin.all_completions)
+            TestCompletionMixin.all_completions = [c for c in TestCompletionMixin.all_completions if
+                                                   not c.is_complete]
 
             self._shutdown.wait(5)
 
@@ -214,8 +163,11 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
             cmd = """
             . {tmpdir}/ceph-volume-virtualenv/bin/activate
             ceph-volume inventory --format json
-            """.format(tmpdir=os.environ.get('TMPDIR', '/tmp'))
-            c_v_out = check_output(cmd, shell=True)
+            """
+            try:
+                c_v_out = check_output(cmd.format(tmpdir=os.environ.get('TMPDIR', '/tmp')), shell=True)
+            except (OSError, CalledProcessError):
+                c_v_out = check_output(cmd.format(tmpdir='.'),shell=True)
 
         for out in c_v_out.splitlines():
             if not out.startswith(b'-->') and not out.startswith(b' stderr'):
@@ -229,7 +181,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         raise Exception('c-v failed')
 
     @deferred_read
-    def describe_service(self, service_type=None, service_id=None, node_name=None):
+    def describe_service(self, service_type=None, service_id=None, node_name=None, refresh=False):
         """
         There is no guarantee which daemons are returned by describe_service, except that
         it returns the mgr we're running in.
@@ -270,12 +222,26 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     def remove_stateless_service(self, service_type, id_):
         pass
 
+    @deferred_write("update_stateless_service")
+    def update_stateless_service(self, service_type, spec):
+        pass
+
     @deferred_read
     def get_hosts(self):
         return [orchestrator.InventoryNode('localhost', [])]
 
     @deferred_write("add_host")
     def add_host(self, host):
+        if host == 'raise_no_support':
+            raise orchestrator.OrchestratorValidationError("MON count must be either 1, 3 or 5")
+        if host == 'raise_bug':
+            raise ZeroDivisionError()
+        if host == 'raise_not_implemented':
+            raise NotImplementedError()
+        if host == 'raise_no_orchestrator':
+            raise orchestrator.NoOrchestrator()
+        if host == 'raise_import_error':
+            raise ImportError("test_orchestrator not enabled")
         assert isinstance(host, str)
 
     @deferred_write("remove_host")

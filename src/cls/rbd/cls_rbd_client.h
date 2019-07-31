@@ -1,4 +1,4 @@
-// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*- 
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #ifndef CEPH_LIBRBD_CLS_RBD_CLIENT_H
@@ -6,12 +6,12 @@
 
 #include "cls/lock/cls_lock_types.h"
 #include "cls/rbd/cls_rbd_types.h"
-#include "common/bit_vector.hpp"
 #include "common/snap_types.h"
 #include "include/types.h"
 #include "include/rados/librados_fwd.hpp"
 
 class Context;
+namespace ceph { template <uint8_t> class BitVector; }
 
 namespace librbd {
 namespace cls_client {
@@ -597,8 +597,16 @@ void assert_snapc_seq(librados::ObjectWriteOperation *op,
                       uint64_t snapc_seq,
                       cls::rbd::AssertSnapcSeqState state);
 
+void copyup(librados::ObjectWriteOperation *op, bufferlist data);
 int copyup(librados::IoCtx *ioctx, const std::string &oid,
            bufferlist data);
+
+void sparse_copyup(librados::ObjectWriteOperation *op,
+                   const std::map<uint64_t, uint64_t> &extent_map,
+                   bufferlist data);
+int sparse_copyup(librados::IoCtx *ioctx, const std::string &oid,
+                  const std::map<uint64_t, uint64_t> &extent_map,
+                  bufferlist data);
 
 void sparsify(librados::ObjectWriteOperation *op, size_t sparse_size,
               bool remove_empty);

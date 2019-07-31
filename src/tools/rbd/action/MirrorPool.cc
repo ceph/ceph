@@ -451,6 +451,7 @@ private:
       finalize_action();
     }
     m_throttle.end_op(r);
+    delete this;
   }
 
 };

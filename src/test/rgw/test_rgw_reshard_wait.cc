@@ -17,15 +17,16 @@
 #include <gtest/gtest.h>
 
 using namespace std::chrono_literals;
+using Clock = RGWReshardWait::Clock;
 
 TEST(ReshardWait, wait_block)
 {
   constexpr ceph::timespan wait_duration = 10ms;
   RGWReshardWait waiter(wait_duration);
 
-  const ceph::real_time start = ceph::real_clock::now();
+  const auto start = Clock::now();
   EXPECT_EQ(0, waiter.wait(null_yield));
-  const ceph::timespan elapsed = ceph::real_clock::now() - start;
+  const ceph::timespan elapsed = Clock::now() - start;
 
   EXPECT_LE(wait_duration, elapsed); // waited at least 10ms
   waiter.stop();
@@ -39,7 +40,7 @@ TEST(ReshardWait, stop_block)
   RGWReshardWait long_waiter(long_duration);
   RGWReshardWait short_waiter(short_duration);
 
-  const ceph::real_time start = ceph::real_clock::now();
+  const auto start = Clock::now();
   std::thread thread([&long_waiter] {
     EXPECT_EQ(-ECANCELED, long_waiter.wait(null_yield));
   });
@@ -49,7 +50,7 @@ TEST(ReshardWait, stop_block)
   long_waiter.stop(); // cancel long waiter
 
   thread.join();
-  const ceph::timespan elapsed = ceph::real_clock::now() - start;
+  const ceph::timespan elapsed = Clock::now() - start;
 
   EXPECT_LE(short_duration, elapsed); // waited at least 10ms
   EXPECT_GT(long_duration, elapsed); // waited less than 10s
@@ -67,13 +68,13 @@ TEST(ReshardWait, wait_yield)
       EXPECT_EQ(0, waiter.wait(optional_yield{context, yield}));
     });
 
+  const auto start = Clock::now();
   EXPECT_EQ(1u, context.poll()); // spawn
   EXPECT_FALSE(context.stopped());
 
-  const ceph::real_time start = ceph::real_clock::now();
   EXPECT_EQ(1u, context.run_one()); // timeout
   EXPECT_TRUE(context.stopped());
-  const ceph::timespan elapsed = ceph::real_clock::now() - start;
+  const ceph::timespan elapsed = Clock::now() - start;
 
   EXPECT_LE(wait_duration, elapsed); // waited at least 10ms
   waiter.stop();
@@ -93,17 +94,17 @@ TEST(ReshardWait, stop_yield)
       EXPECT_EQ(-ECANCELED, long_waiter.wait(optional_yield{context, yield}));
     });
 
+  const auto start = Clock::now();
   EXPECT_EQ(1u, context.poll()); // spawn
   EXPECT_FALSE(context.stopped());
 
-  const ceph::real_time start = ceph::real_clock::now();
   EXPECT_EQ(0, short_waiter.wait(null_yield));
 
   long_waiter.stop(); // cancel long waiter
 
   EXPECT_EQ(1u, context.run_one_for(short_duration)); // timeout
   EXPECT_TRUE(context.stopped());
-  const ceph::timespan elapsed = ceph::real_clock::now() - start;
+  const ceph::timespan elapsed = Clock::now() - start;
 
   EXPECT_LE(short_duration, elapsed); // waited at least 10ms
   EXPECT_GT(long_duration, elapsed); // waited less than 10s
@@ -140,10 +141,11 @@ TEST(ReshardWait, stop_multiple)
     boost::asio::spawn(context, async_waiter);
     boost::asio::spawn(context, async_waiter);
   }
+
+  const auto start = Clock::now();
   EXPECT_EQ(4u, context.poll()); // spawn
   EXPECT_FALSE(context.stopped());
 
-  const ceph::real_time start = ceph::real_clock::now();
   EXPECT_EQ(0, short_waiter.wait(null_yield));
 
   long_waiter.stop(); // cancel long waiter
@@ -154,7 +156,7 @@ TEST(ReshardWait, stop_multiple)
   for (auto& thread : threads) {
     thread.join();
   }
-  const ceph::timespan elapsed = ceph::real_clock::now() - start;
+  const ceph::timespan elapsed = Clock::now() - start;
 
   EXPECT_LE(short_duration, elapsed); // waited at least 10ms
   EXPECT_GT(long_duration, elapsed); // waited less than 10s

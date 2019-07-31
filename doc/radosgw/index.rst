@@ -40,6 +40,7 @@ you may write data with one API and retrieve it with the other.
 
    Manual Install w/Civetweb <../../install/install-ceph-gateway>
    HTTP Frontends <frontends>
+   Pool Placement and Storage Classes <placement>
    Multisite Configuration <multisite>
    Configuring Pools <pools>
    Config Reference <config-ref>
@@ -66,4 +67,5 @@ you may write data with one API and retrieve it with the other.
    troubleshooting
    Manpage radosgw <../../man/8/radosgw>
    Manpage radosgw-admin <../../man/8/radosgw-admin>
+   QAT Acceleration for Encryption and Compression <qat-accel>
 

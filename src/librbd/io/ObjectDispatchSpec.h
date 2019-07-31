@@ -35,12 +35,11 @@ private:
 
 public:
   struct RequestBase {
-    std::string oid;
     uint64_t object_no;
     uint64_t object_off;
 
-    RequestBase(const std::string& oid, uint64_t object_no, uint64_t object_off)
-      : oid(oid), object_no(object_no), object_off(object_off) {
+    RequestBase(uint64_t object_no, uint64_t object_off)
+      : object_no(object_no), object_off(object_off) {
     }
   };
 
@@ -50,10 +49,10 @@ public:
     ceph::bufferlist* read_data;
     ExtentMap* extent_map;
 
-    ReadRequest(const std::string& oid, uint64_t object_no, uint64_t object_off,
-                uint64_t object_len, librados::snap_t snap_id,
-                ceph::bufferlist* read_data, ExtentMap* extent_map)
-      : RequestBase(oid, object_no, object_off),
+    ReadRequest(uint64_t object_no, uint64_t object_off, uint64_t object_len,
+                librados::snap_t snap_id, ceph::bufferlist* read_data,
+                ExtentMap* extent_map)
+      : RequestBase(object_no, object_off),
         object_len(object_len), snap_id(snap_id), read_data(read_data),
         extent_map(extent_map) {
     }
@@ -63,10 +62,9 @@ public:
     ::SnapContext snapc;
     uint64_t journal_tid;
 
-    WriteRequestBase(const std::string& oid, uint64_t object_no,
-                     uint64_t object_off, const ::SnapContext& snapc,
-                     uint64_t journal_tid)
-      : RequestBase(oid, object_no, object_off), snapc(snapc),
+    WriteRequestBase(uint64_t object_no, uint64_t object_off,
+                     const ::SnapContext& snapc, uint64_t journal_tid)
+      : RequestBase(object_no, object_off), snapc(snapc),
         journal_tid(journal_tid) {
     }
   };
@@ -75,11 +73,10 @@ public:
     uint64_t object_len;
     int discard_flags;
 
-    DiscardRequest(const std::string& oid, uint64_t object_no,
-                   uint64_t object_off, uint64_t object_len,
+    DiscardRequest(uint64_t object_no, uint64_t object_off, uint64_t object_len,
                    int discard_flags, const ::SnapContext& snapc,
                    uint64_t journal_tid)
-      : WriteRequestBase(oid, object_no, object_off, snapc, journal_tid),
+      : WriteRequestBase(object_no, object_off, snapc, journal_tid),
         object_len(object_len), discard_flags(discard_flags) {
     }
   };
@@ -87,24 +84,25 @@ public:
   struct WriteRequest : public WriteRequestBase {
     ceph::bufferlist data;
 
-    WriteRequest(const std::string& oid, uint64_t object_no,
-                 uint64_t object_off, ceph::bufferlist&& data,
-                 const ::SnapContext& snapc, uint64_t journal_tid)
-      : WriteRequestBase(oid, object_no, object_off, snapc, journal_tid),
+    WriteRequest(uint64_t object_no, uint64_t object_off,
+                 ceph::bufferlist&& data, const ::SnapContext& snapc,
+                 uint64_t journal_tid)
+      : WriteRequestBase(object_no, object_off, snapc, journal_tid),
         data(std::move(data)) {
     }
   };
 
   struct WriteSameRequest : public WriteRequestBase {
     uint64_t object_len;
-    Extents buffer_extents;
+    LightweightBufferExtents buffer_extents;
     ceph::bufferlist data;
 
-    WriteSameRequest(const std::string& oid, uint64_t object_no,
-                     uint64_t object_off, uint64_t object_len,
-                     Extents&& buffer_extents, ceph::bufferlist&& data,
-                     const ::SnapContext& snapc, uint64_t journal_tid)
-    : WriteRequestBase(oid, object_no, object_off, snapc, journal_tid),
+    WriteSameRequest(uint64_t object_no, uint64_t object_off,
+                     uint64_t object_len,
+                     LightweightBufferExtents&& buffer_extents,
+                     ceph::bufferlist&& data, const ::SnapContext& snapc,
+                     uint64_t journal_tid)
+    : WriteRequestBase(object_no, object_off, snapc, journal_tid),
       object_len(object_len), buffer_extents(std::move(buffer_extents)),
       data(std::move(data)) {
     }
@@ -115,11 +113,11 @@ public:
     ceph::bufferlist data;
     uint64_t* mismatch_offset;
 
-    CompareAndWriteRequest(const std::string& oid, uint64_t object_no,
-                           uint64_t object_off, ceph::bufferlist&& cmp_data,
-                           ceph::bufferlist&& data, uint64_t* mismatch_offset,
+    CompareAndWriteRequest(uint64_t object_no, uint64_t object_off,
+                           ceph::bufferlist&& cmp_data, ceph::bufferlist&& data,
+                           uint64_t* mismatch_offset,
                            const ::SnapContext& snapc, uint64_t journal_tid)
-      : WriteRequestBase(oid, object_no, object_off, snapc, journal_tid),
+      : WriteRequestBase(object_no, object_off, snapc, journal_tid),
         cmp_data(std::move(cmp_data)), data(std::move(data)),
         mismatch_offset(mismatch_offset) {
     }
@@ -127,8 +125,10 @@ public:
 
   struct FlushRequest {
     FlushSource flush_source;
+    uint64_t journal_tid;
 
-    FlushRequest(FlushSource flush_source) : flush_source(flush_source) {
+    FlushRequest(FlushSource flush_source, uint64_t journal_tid)
+      : flush_source(flush_source), journal_tid(journal_tid) {
     }
   };
 
@@ -153,13 +153,13 @@ public:
   template <typename ImageCtxT>
   static ObjectDispatchSpec* create_read(
       ImageCtxT* image_ctx, ObjectDispatchLayer object_dispatch_layer,
-      const std::string &oid, uint64_t object_no, uint64_t object_off,
-      uint64_t object_len, librados::snap_t snap_id, int op_flags,
+      uint64_t object_no, uint64_t object_off, uint64_t object_len,
+      librados::snap_t snap_id, int op_flags,
       const ZTracer::Trace &parent_trace, ceph::bufferlist* read_data,
       ExtentMap* extent_map, Context* on_finish) {
     return new ObjectDispatchSpec(image_ctx->io_object_dispatcher,
                                   object_dispatch_layer,
-                                  ReadRequest{oid, object_no, object_off,
+                                  ReadRequest{object_no, object_off,
                                               object_len, snap_id, read_data,
                                               extent_map},
                                   op_flags, parent_trace, on_finish);
@@ -168,13 +168,12 @@ public:
   template <typename ImageCtxT>
   static ObjectDispatchSpec* create_discard(
       ImageCtxT* image_ctx, ObjectDispatchLayer object_dispatch_layer,
-      const std::string &oid, uint64_t object_no, uint64_t object_off,
-      uint64_t object_len, const ::SnapContext &snapc, int discard_flags,
-      uint64_t journal_tid, const ZTracer::Trace &parent_trace,
-      Context *on_finish) {
+      uint64_t object_no, uint64_t object_off, uint64_t object_len,
+      const ::SnapContext &snapc, int discard_flags, uint64_t journal_tid,
+      const ZTracer::Trace &parent_trace, Context *on_finish) {
     return new ObjectDispatchSpec(image_ctx->io_object_dispatcher,
                                   object_dispatch_layer,
-                                  DiscardRequest{oid, object_no, object_off,
+                                  DiscardRequest{object_no, object_off,
                                                  object_len, discard_flags,
                                                  snapc, journal_tid},
                                   0, parent_trace, on_finish);
@@ -183,13 +182,12 @@ public:
   template <typename ImageCtxT>
   static ObjectDispatchSpec* create_write(
       ImageCtxT* image_ctx, ObjectDispatchLayer object_dispatch_layer,
-      const std::string &oid, uint64_t object_no, uint64_t object_off,
-      ceph::bufferlist&& data, const ::SnapContext &snapc, int op_flags,
-      uint64_t journal_tid, const ZTracer::Trace &parent_trace,
-      Context *on_finish) {
+      uint64_t object_no, uint64_t object_off, ceph::bufferlist&& data,
+      const ::SnapContext &snapc, int op_flags, uint64_t journal_tid,
+      const ZTracer::Trace &parent_trace, Context *on_finish) {
     return new ObjectDispatchSpec(image_ctx->io_object_dispatcher,
                                   object_dispatch_layer,
-                                  WriteRequest{oid, object_no, object_off,
+                                  WriteRequest{object_no, object_off,
                                                std::move(data), snapc,
                                                journal_tid},
                                   op_flags, parent_trace, on_finish);
@@ -198,14 +196,13 @@ public:
   template <typename ImageCtxT>
   static ObjectDispatchSpec* create_write_same(
       ImageCtxT* image_ctx, ObjectDispatchLayer object_dispatch_layer,
-      const std::string &oid, uint64_t object_no, uint64_t object_off,
-      uint64_t object_len, Extents&& buffer_extents,
-      ceph::bufferlist&& data, const ::SnapContext &snapc, int op_flags,
-      uint64_t journal_tid, const ZTracer::Trace &parent_trace,
-      Context *on_finish) {
+      uint64_t object_no, uint64_t object_off, uint64_t object_len,
+      LightweightBufferExtents&& buffer_extents, ceph::bufferlist&& data,
+      const ::SnapContext &snapc, int op_flags, uint64_t journal_tid,
+      const ZTracer::Trace &parent_trace, Context *on_finish) {
     return new ObjectDispatchSpec(image_ctx->io_object_dispatcher,
                                   object_dispatch_layer,
-                                  WriteSameRequest{oid, object_no, object_off,
+                                  WriteSameRequest{object_no, object_off,
                                                    object_len,
                                                    std::move(buffer_extents),
                                                    std::move(data), snapc,
@@ -216,14 +213,13 @@ public:
   template <typename ImageCtxT>
   static ObjectDispatchSpec* create_compare_and_write(
       ImageCtxT* image_ctx, ObjectDispatchLayer object_dispatch_layer,
-      const std::string &oid, uint64_t object_no, uint64_t object_off,
-      ceph::bufferlist&& cmp_data, ceph::bufferlist&& write_data,
-      const ::SnapContext &snapc, uint64_t *mismatch_offset, int op_flags,
-      uint64_t journal_tid, const ZTracer::Trace &parent_trace,
-      Context *on_finish) {
+      uint64_t object_no, uint64_t object_off, ceph::bufferlist&& cmp_data,
+      ceph::bufferlist&& write_data, const ::SnapContext &snapc,
+      uint64_t *mismatch_offset, int op_flags, uint64_t journal_tid,
+      const ZTracer::Trace &parent_trace, Context *on_finish) {
     return new ObjectDispatchSpec(image_ctx->io_object_dispatcher,
                                   object_dispatch_layer,
-                                  CompareAndWriteRequest{oid, object_no,
+                                  CompareAndWriteRequest{object_no,
                                                          object_off,
                                                          std::move(cmp_data),
                                                          std::move(write_data),
@@ -235,11 +231,11 @@ public:
   template <typename ImageCtxT>
   static ObjectDispatchSpec* create_flush(
       ImageCtxT* image_ctx, ObjectDispatchLayer object_dispatch_layer,
-      FlushSource flush_source, const ZTracer::Trace &parent_trace,
-      Context *on_finish) {
+      FlushSource flush_source, uint64_t journal_tid,
+      const ZTracer::Trace &parent_trace, Context *on_finish) {
     return new ObjectDispatchSpec(image_ctx->io_object_dispatcher,
                                   object_dispatch_layer,
-                                  FlushRequest{flush_source}, 0,
+                                  FlushRequest{flush_source, journal_tid}, 0,
                                   parent_trace, on_finish);
   }
 

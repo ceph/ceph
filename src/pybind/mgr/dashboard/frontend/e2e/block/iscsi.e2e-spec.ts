@@ -1,19 +1,23 @@
 import { Helper } from '../helper.po';
-import { IscsiPage } from './iscsi.po';
 
 describe('Iscsi Page', () => {
-  let page: IscsiPage;
+  let iscsi: Helper['iscsi'];
 
   beforeAll(() => {
-    page = new IscsiPage();
+    iscsi = new Helper().iscsi;
   });
 
   afterEach(() => {
     Helper.checkConsole();
   });
 
-  it('should open and show breadcrumb', () => {
-    page.navigateTo();
-    expect(Helper.getBreadcrumbText()).toEqual('Overview');
+  describe('breadcrumb test', () => {
+    beforeAll(() => {
+      iscsi.navigateTo();
+    });
+
+    it('should open and show breadcrumb', () => {
+      expect(iscsi.getBreadcrumbText()).toEqual('Overview');
+    });
   });
 });

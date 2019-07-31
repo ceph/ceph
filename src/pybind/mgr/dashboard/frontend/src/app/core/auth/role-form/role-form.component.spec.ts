@@ -5,7 +5,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastModule } from 'ng2-toastr';
+import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
@@ -37,7 +37,7 @@ describe('RoleFormComponent', () => {
         RouterTestingModule.withRoutes(routes),
         HttpClientTestingModule,
         ReactiveFormsModule,
-        ToastModule.forRoot(),
+        ToastrModule.forRoot(),
         SharedModule
       ],
       declarations: [RoleFormComponent, FakeComponent],
@@ -123,7 +123,9 @@ describe('RoleFormComponent', () => {
         cephfs: ['read', 'delete'],
         grafana: ['update']
       });
-      component.onClickHeaderCheckbox('scope', { target: { checked: false } });
+      component.onClickHeaderCheckbox('scope', ({
+        target: { checked: false }
+      } as unknown) as Event);
       const scopes_permissions = form.getValue('scopes_permissions');
       expect(scopes_permissions).toEqual({});
     });
@@ -134,7 +136,7 @@ describe('RoleFormComponent', () => {
         cephfs: ['create', 'update'],
         grafana: ['delete']
       });
-      component.onClickHeaderCheckbox('scope', { target: { checked: true } });
+      component.onClickHeaderCheckbox('scope', ({ target: { checked: true } } as unknown) as Event);
       const scopes_permissions = form.getValue('scopes_permissions');
       const keys = Object.keys(scopes_permissions);
       expect(keys).toEqual(['cephfs', 'grafana']);

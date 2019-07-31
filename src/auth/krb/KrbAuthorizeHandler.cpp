@@ -21,7 +21,7 @@
 
 bool KrbAuthorizeHandler::verify_authorizer(
   CephContext* ceph_ctx,
-  KeyStore* keys,
+  const KeyStore& keys,
   const bufferlist& authorizer_data,
   size_t connection_secret_required_len,
   bufferlist *authorizer_reply,

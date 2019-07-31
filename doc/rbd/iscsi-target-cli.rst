@@ -17,11 +17,11 @@ install, and configure the Ceph iSCSI gateway for basic operation.
 
    -  ``targetcli-2.1.fb47`` or newer package
 
-   -  ``python-rtslib-2.1.fb64`` or newer package
+   -  ``python-rtslib-2.1.fb68`` or newer package
 
-   -  ``tcmu-runner-1.3.0`` or newer package
+   -  ``tcmu-runner-1.4.0`` or newer package
 
-   -  ``ceph-iscsi-2.7`` or newer package
+   -  ``ceph-iscsi-3.2`` or newer package
 
      .. important::
         If previous versions of these packages exist, then they must
@@ -203,9 +203,6 @@ to create a iSCSI target and export a RBD image as LUN 0.
        > /iscsi-target...-igw/gateways> cd /disks
        > /disks> create pool=rbd image=disk_1 size=90G
 
-   .. warning::
-       There can not be any periods (.) in the pool name or in the image name.
-
 #. Create a client with the initiator name iqn.1994-05.com.redhat:rh7-client:
 
    ::
@@ -218,7 +215,7 @@ to create a iSCSI target and export a RBD image as LUN 0.
 
    ::
 
-       > /iscsi-target...at:rh7-client>  auth chap=myiscsiusername/myiscsipassword
+       > /iscsi-target...at:rh7-client>  auth username=myiscsiusername password=myiscsipassword
 
    .. warning::
       CHAP must always be configured. Without CHAP, the target will
@@ -228,6 +225,6 @@ to create a iSCSI target and export a RBD image as LUN 0.
 
    ::
 
-       > /iscsi-target...at:rh7-client> disk add rbd.disk_1
+       > /iscsi-target...at:rh7-client> disk add rbd/disk_1
 
 The next step is to configure the iSCSI initiators.

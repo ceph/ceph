@@ -89,6 +89,7 @@ enum {
   l_pq_executing_ops,
   l_pq_executing,
   l_pq_executed,
+  l_pq_item_in_journal,
   l_pq_last
 };
 
@@ -163,9 +164,11 @@ protected:
       uint64_t expire_to);
 
   bool recovered;
-  std::list<Context*> waiting_for_recovery;
+  std::vector<Context*> waiting_for_recovery;
 
   void _go_readonly(int r);
+
+  size_t purge_item_journal_size;
 
 public:
   void init();
@@ -208,9 +211,7 @@ public:
 
   void update_op_limit(const MDSMap &mds_map);
 
-  void handle_conf_change(const ConfigProxy& conf,
-                          const std::set <std::string> &changed,
-                          const MDSMap &mds_map);
+  void handle_conf_change(const std::set<std::string>& changed, const MDSMap& mds_map);
 
   PurgeQueue(
       CephContext *cct_,

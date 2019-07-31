@@ -1,7 +1,7 @@
-Insights plugin
+Insights Module
 ===============
 
-The insights plugin collects and exposes system information to the Insights Core
+The insights module collects and exposes system information to the Insights Core
 data analysis framework. It is intended to replace explicit interrogation of
 Ceph CLIs and daemon admin sockets, reducing the API surface that Insights
 depends on. The insights reports contains the following:

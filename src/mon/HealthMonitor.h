@@ -16,9 +16,6 @@
 
 #include "mon/PaxosService.h"
 
-//forward declaration
-namespace ceph { class Formatter; }
-
 class HealthMonitor : public PaxosService
 {
   version_t version = 0;

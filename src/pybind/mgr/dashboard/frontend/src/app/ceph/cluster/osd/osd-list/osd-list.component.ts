@@ -7,8 +7,10 @@ import { Observable } from 'rxjs';
 import { OsdService } from '../../../../shared/api/osd.service';
 import { ConfirmationModalComponent } from '../../../../shared/components/confirmation-modal/confirmation-modal.component';
 import { CriticalConfirmationModalComponent } from '../../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
+import { ActionLabelsI18n } from '../../../../shared/constants/app.constants';
 import { TableComponent } from '../../../../shared/datatable/table/table.component';
 import { CellTemplate } from '../../../../shared/enum/cell-template.enum';
+import { Icons } from '../../../../shared/enum/icons.enum';
 import { CdTableAction } from '../../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
@@ -16,6 +18,7 @@ import { Permissions } from '../../../../shared/models/permissions';
 import { DimlessBinaryPipe } from '../../../../shared/pipes/dimless-binary.pipe';
 import { AuthStorageService } from '../../../../shared/services/auth-storage.service';
 import { OsdFlagsModalComponent } from '../osd-flags-modal/osd-flags-modal.component';
+import { OsdPgScrubModalComponent } from '../osd-pg-scrub-modal/osd-pg-scrub-modal.component';
 import { OsdRecvSpeedModalComponent } from '../osd-recv-speed-modal/osd-recv-speed-modal.component';
 import { OsdReweightModalComponent } from '../osd-reweight-modal/osd-reweight-modal.component';
 import { OsdScrubModalComponent } from '../osd-scrub-modal/osd-scrub-modal.component';
@@ -45,6 +48,8 @@ export class OsdListComponent implements OnInit {
   tableActions: CdTableAction[];
   bsModalRef: BsModalRef;
   columns: CdTableColumn[];
+  clusterWideActions: CdTableAction[];
+  icons = Icons;
 
   osds = [];
   selection = new CdTableSelection();
@@ -58,54 +63,55 @@ export class OsdListComponent implements OnInit {
     private osdService: OsdService,
     private dimlessBinaryPipe: DimlessBinaryPipe,
     private modalService: BsModalService,
-    private i18n: I18n
+    private i18n: I18n,
+    public actionLabels: ActionLabelsI18n
   ) {
     this.permissions = this.authStorageService.getPermissions();
     this.tableActions = [
       {
-        name: this.i18n('Scrub'),
+        name: this.actionLabels.SCRUB,
         permission: 'update',
-        icon: 'fa-stethoscope',
+        icon: Icons.analyse,
         click: () => this.scrubAction(false),
         disable: () => !this.hasOsdSelected
       },
       {
-        name: this.i18n('Deep Scrub'),
+        name: this.actionLabels.DEEP_SCRUB,
         permission: 'update',
-        icon: 'fa-cog',
+        icon: Icons.deepCheck,
         click: () => this.scrubAction(true),
         disable: () => !this.hasOsdSelected
       },
       {
-        name: this.i18n('Reweight'),
+        name: this.actionLabels.REWEIGHT,
         permission: 'update',
         click: () => this.reweight(),
         disable: () => !this.hasOsdSelected,
-        icon: 'fa-balance-scale'
+        icon: Icons.reweight
       },
       {
-        name: this.i18n('Mark Out'),
+        name: this.actionLabels.MARK_OUT,
         permission: 'update',
         click: () => this.showConfirmationModal(this.i18n('out'), this.osdService.markOut),
         disable: () => this.isNotSelectedOrInState('out'),
-        icon: 'fa-arrow-left'
+        icon: Icons.left
       },
       {
-        name: this.i18n('Mark In'),
+        name: this.actionLabels.MARK_IN,
         permission: 'update',
         click: () => this.showConfirmationModal(this.i18n('in'), this.osdService.markIn),
         disable: () => this.isNotSelectedOrInState('in'),
-        icon: 'fa-arrow-right'
+        icon: Icons.right
       },
       {
-        name: this.i18n('Mark Down'),
+        name: this.actionLabels.MARK_DOWN,
         permission: 'update',
         click: () => this.showConfirmationModal(this.i18n('down'), this.osdService.markDown),
         disable: () => this.isNotSelectedOrInState('down'),
-        icon: 'fa-arrow-down'
+        icon: Icons.down
       },
       {
-        name: this.i18n('Mark Lost'),
+        name: this.actionLabels.MARK_LOST,
         permission: 'delete',
         click: () =>
           this.showCriticalConfirmationModal(
@@ -115,10 +121,10 @@ export class OsdListComponent implements OnInit {
             this.osdService.markLost
           ),
         disable: () => this.isNotSelectedOrInState('up'),
-        icon: 'fa-unlink'
+        icon: Icons.flatten
       },
       {
-        name: this.i18n('Purge'),
+        name: this.actionLabels.PURGE,
         permission: 'delete',
         click: () =>
           this.showCriticalConfirmationModal(
@@ -128,10 +134,10 @@ export class OsdListComponent implements OnInit {
             this.osdService.purge
           ),
         disable: () => this.isNotSelectedOrInState('up'),
-        icon: 'fa-eraser'
+        icon: Icons.erase
       },
       {
-        name: this.i18n('Destroy'),
+        name: this.actionLabels.DESTROY,
         permission: 'delete',
         click: () =>
           this.showCriticalConfirmationModal(
@@ -141,19 +147,42 @@ export class OsdListComponent implements OnInit {
             this.osdService.destroy
           ),
         disable: () => this.isNotSelectedOrInState('up'),
-        icon: 'fa-remove'
+        icon: Icons.destroy
       }
     ];
   }
 
   ngOnInit() {
+    this.clusterWideActions = [
+      {
+        name: this.i18n('Flags'),
+        icon: Icons.flag,
+        click: () => this.configureFlagsAction(),
+        permission: 'read',
+        visible: () => this.permissions.osd.read
+      },
+      {
+        name: this.i18n('Recovery Priority'),
+        icon: Icons.deepCheck,
+        click: () => this.configureQosParamsAction(),
+        permission: 'read',
+        visible: () => this.permissions.configOpt.read
+      },
+      {
+        name: this.i18n('PG scrub'),
+        icon: Icons.analyse,
+        click: () => this.configurePgScrubAction(),
+        permission: 'read',
+        visible: () => this.permissions.configOpt.read
+      }
+    ];
     this.columns = [
       { prop: 'host.name', name: this.i18n('Host') },
       { prop: 'id', name: this.i18n('ID'), cellTransformation: CellTemplate.bold },
       { prop: 'collectedStates', name: this.i18n('Status'), cellTemplate: this.statusColor },
       { prop: 'stats.numpg', name: this.i18n('PGs') },
       { prop: 'stats.stat_bytes', name: this.i18n('Size'), pipe: this.dimlessBinaryPipe },
-      { name: this.i18n('Usage'), cellTemplate: this.osdUsageTpl },
+      { prop: 'stats.usage', name: this.i18n('Usage'), cellTemplate: this.osdUsageTpl },
       {
         prop: 'stats_history.out_bytes',
         name: this.i18n('Read bytes'),
@@ -221,11 +250,11 @@ export class OsdListComponent implements OnInit {
 
   getOsdList() {
     this.osdService.getList().subscribe((data: any[]) => {
-      this.osds = data;
-      data.map((osd) => {
+      this.osds = data.map((osd) => {
         osd.collectedStates = OsdListComponent.collectStates(osd);
         osd.stats_history.out_bytes = osd.stats_history.op_out_bytes.map((i) => i[1]);
         osd.stats_history.in_bytes = osd.stats_history.op_in_bytes.map((i) => i[1]);
+        osd.stats.usage = osd.stats.stat_bytes_used / osd.stats.stat_bytes;
         osd.cdIsBinary = true;
         return osd;
       });
@@ -245,7 +274,7 @@ export class OsdListComponent implements OnInit {
     this.bsModalRef = this.modalService.show(OsdScrubModalComponent, { initialState });
   }
 
-  configureClusterAction() {
+  configureFlagsAction() {
     this.bsModalRef = this.modalService.show(OsdFlagsModalComponent, {});
   }
 
@@ -305,5 +334,9 @@ export class OsdListComponent implements OnInit {
 
   configureQosParamsAction() {
     this.bsModalRef = this.modalService.show(OsdRecvSpeedModalComponent, {});
+  }
+
+  configurePgScrubAction() {
+    this.bsModalRef = this.modalService.show(OsdPgScrubModalComponent, { class: 'modal-lg' });
   }
 }

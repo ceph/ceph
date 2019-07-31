@@ -142,8 +142,8 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
 
   // inject a discard operation into the journal
   inject_into_journal(ictx,
-                      librbd::journal::AioDiscardEvent(0, payload.size(),
-                                                       ictx->skip_partial_discard));
+                      librbd::journal::AioDiscardEvent(
+                        0, payload.size(), ictx->discard_granularity_bytes));
   close_image(ictx);
 
   // re-open the journal so that it replays the new entry
@@ -155,7 +155,7 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
                                 librbd::io::ReadResult{read_result}, 0);
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
-  if (ictx->skip_partial_discard) {
+  if (ictx->discard_granularity_bytes > 0) {
     ASSERT_EQ(payload, read_payload);
   } else {
     ASSERT_EQ(std::string(read_payload.size(), '\0'), read_payload);
@@ -170,11 +170,11 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
 
   // replay several envents and check the commit position
   inject_into_journal(ictx,
-                      librbd::journal::AioDiscardEvent(0, payload.size(),
-                                                       ictx->skip_partial_discard));
+                      librbd::journal::AioDiscardEvent(
+                        0, payload.size(), ictx->discard_granularity_bytes));
   inject_into_journal(ictx,
-                      librbd::journal::AioDiscardEvent(0, payload.size(),
-                                                       ictx->skip_partial_discard));
+                      librbd::journal::AioDiscardEvent(
+                        0, payload.size(), ictx->discard_granularity_bytes));
   close_image(ictx);
 
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
@@ -186,7 +186,7 @@ TEST_F(TestJournalReplay, AioDiscardEvent) {
   // verify lock ordering constraints
   aio_comp = new librbd::io::AioCompletion();
   ictx->io_work_queue->aio_discard(aio_comp, 0, read_payload.size(),
-                                   ictx->skip_partial_discard);
+                                   ictx->discard_granularity_bytes);
   ASSERT_EQ(0, aio_comp->wait_for_complete());
   aio_comp->release();
 }
@@ -328,7 +328,7 @@ TEST_F(TestJournalReplay, SnapCreate) {
   ASSERT_EQ(1, current_entry);
 
   {
-    RWLock::RLocker snap_locker(ictx->snap_lock);
+    RWLock::RLocker image_locker(ictx->image_lock);
     ASSERT_NE(CEPH_NOSNAP, ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(),
 					     "snap"));
   }
@@ -395,7 +395,7 @@ TEST_F(TestJournalReplay, SnapUnprotect) {
 					     "snap"));
   uint64_t snap_id;
   {
-    RWLock::RLocker snap_locker(ictx->snap_lock);
+    RWLock::RLocker image_locker(ictx->image_lock);
     snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(), "snap");
     ASSERT_NE(CEPH_NOSNAP, snap_id);
   }
@@ -450,7 +450,7 @@ TEST_F(TestJournalReplay, SnapRename) {
 					     "snap"));
   uint64_t snap_id;
   {
-    RWLock::RLocker snap_locker(ictx->snap_lock);
+    RWLock::RLocker image_locker(ictx->image_lock);
     snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(), "snap");
     ASSERT_NE(CEPH_NOSNAP, snap_id);
   }
@@ -478,7 +478,7 @@ TEST_F(TestJournalReplay, SnapRename) {
   ASSERT_EQ(0, ictx->state->refresh());
 
   {
-    RWLock::RLocker snap_locker(ictx->snap_lock);
+    RWLock::RLocker image_locker(ictx->image_lock);
     snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(), "snap2");
     ASSERT_NE(CEPH_NOSNAP, snap_id);
   }
@@ -563,7 +563,7 @@ TEST_F(TestJournalReplay, SnapRemove) {
   ASSERT_EQ(initial_entry + 2, current_entry);
 
   {
-    RWLock::RLocker snap_locker(ictx->snap_lock);
+    RWLock::RLocker image_locker(ictx->image_lock);
     uint64_t snap_id = ictx->get_snap_id(cls::rbd::UserSnapshotNamespace(),
 					 "snap");
     ASSERT_EQ(CEPH_NOSNAP, snap_id);
@@ -857,7 +857,7 @@ TEST_F(TestJournalReplay, ObjectPosition) {
 
   // user flush requests are ignored when journaling + cache are enabled
   C_SaferCond flush_ctx;
-  aio_comp = librbd::io::AioCompletion::create(
+  aio_comp = librbd::io::AioCompletion::create_and_start(
     &flush_ctx, ictx, librbd::io::AIO_TYPE_FLUSH);
   auto req = librbd::io::ImageDispatchSpec<>::create_flush_request(
     *ictx, aio_comp, librbd::io::FLUSH_SOURCE_INTERNAL, {});

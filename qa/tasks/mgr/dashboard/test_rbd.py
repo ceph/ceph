@@ -144,13 +144,14 @@ class RbdTest(DashboardTestCase):
         img = cls._get('/api/block/image/{}/{}'.format(pool, name))
 
         cls._task_post("/api/block/image/{}/{}/move_trash".format(pool, name),
-                        {'delay': delay})
+                       {'delay': delay})
 
         return img['id']
 
     @classmethod
     def remove_trash(cls, pool, image_id, image_name, force=False):
-        return cls._task_delete('/api/block/image/trash/{}/{}/?image_name={}&force={}'.format('rbd', image_id, image_name, force))
+        return cls._task_delete('/api/block/image/trash/{}/{}/?image_name={}&force={}'.format(
+            'rbd', image_id, image_name, force))
 
     @classmethod
     def get_trash(cls, pool, image_id):
@@ -352,7 +353,7 @@ class RbdTest(DashboardTestCase):
         res = self.create_image('rbd', 'test_rbd_twice', 10240)
         self.assertStatus(400)
         self.assertEqual(res, {"code": '17', 'status': 400, "component": "rbd",
-                               "detail": "[errno 17] error creating image",
+                               "detail": "[errno 17] RBD image already exists (error creating image)",
                                'task': {'name': 'rbd/create',
                                         'metadata': {'pool_name': 'rbd',
                                                      'image_name': 'test_rbd_twice'}}})
@@ -411,7 +412,7 @@ class RbdTest(DashboardTestCase):
         res = self.remove_image('rbd', 'i_dont_exist')
         self.assertStatus(400)
         self.assertEqual(res, {u'code': u'2', "status": 400, "component": "rbd",
-                               "detail": "[errno 2] error removing image",
+                               "detail": "[errno 2] RBD image not found (error removing image)",
                                'task': {'name': 'rbd/delete',
                                         'metadata': {'pool_name': 'rbd',
                                                      'image_name': 'i_dont_exist'}}})
@@ -478,6 +479,7 @@ class RbdTest(DashboardTestCase):
         self._validate_image(img, features_name=["layering"])
         self.edit_image('rbd', 'edit_img',
                         features=["fast-diff", "object-map", "exclusive-lock"])
+        self.assertStatus(200)
         img = self._get('/api/block/image/rbd/edit_img')
         self.assertStatus(200)
         self._validate_image(img, features_name=['exclusive-lock',
@@ -485,6 +487,7 @@ class RbdTest(DashboardTestCase):
                                                  'object-map'])
         self.edit_image('rbd', 'edit_img',
                         features=["journaling", "exclusive-lock"])
+        self.assertStatus(200)
         img = self._get('/api/block/image/rbd/edit_img')
         self.assertStatus(200)
         self._validate_image(img, features_name=['exclusive-lock',
@@ -687,9 +690,8 @@ class RbdTest(DashboardTestCase):
 
     def test_default_features(self):
         default_features = self._get('/api/block/image/default_features')
-        self.assertEqual(default_features, ['deep-flatten', 'exclusive-lock',
-                                             'fast-diff', 'layering',
-                                             'object-map'])
+        self.assertEqual(default_features, [
+            'deep-flatten', 'exclusive-lock', 'fast-diff', 'layering', 'object-map'])
 
     def test_image_with_special_name(self):
         rbd_name = 'test/rbd'
@@ -737,7 +739,8 @@ class RbdTest(DashboardTestCase):
     def test_restore_trash(self):
         id = self.create_image_in_trash('rbd', 'test_rbd')
 
-        self._task_post('/api/block/image/trash/{}/{}/restore'.format('rbd', id), {'new_image_name': 'test_rbd'})
+        self._task_post('/api/block/image/trash/{}/{}/restore'.format('rbd', id),
+                        {'new_image_name': 'test_rbd'})
 
         self._get('/api/block/image/rbd/test_rbd')
         self.assertStatus(200)

@@ -1,6 +1,7 @@
-#ifndef CEPH_RGW_SERVICES_ZONE_H
-#define CEPH_RGW_SERVICES_ZONE_H
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
 
+#pragma once
 
 #include "rgw/rgw_service.h"
 
@@ -36,7 +37,7 @@ class RGWSI_Zone : public RGWServiceInstance
 
   RGWRESTConn *rest_master_conn{nullptr};
   map<string, RGWRESTConn *> zone_conn_map;
-  map<string, RGWRESTConn *> zone_data_sync_from_map;
+  std::vector<const RGWZone*> data_sync_source_zones;
   map<string, RGWRESTConn *> zone_data_notify_to_map;
   map<string, RGWRESTConn *> zonegroup_conn_map;
 
@@ -89,8 +90,8 @@ public:
     return zone_conn_map;
   }
 
-  map<string, RGWRESTConn *>& get_zone_data_sync_from_map() {
-    return zone_data_sync_from_map;
+  std::vector<const RGWZone*>& get_data_sync_source_zones() {
+    return data_sync_source_zones;
   }
 
   map<string, RGWRESTConn *>& get_zone_data_notify_to_map() {
@@ -130,5 +131,3 @@ public:
   int list_periods(list<string>& periods);
   int list_periods(const string& current_period, list<string>& periods);
 };
-
-#endif

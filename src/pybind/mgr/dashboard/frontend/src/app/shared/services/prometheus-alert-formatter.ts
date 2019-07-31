@@ -2,41 +2,39 @@ import { Injectable } from '@angular/core';
 
 import * as _ from 'lodash';
 
+import { Icons } from '../../shared/enum/icons.enum';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
 import {
-  PrometheusAlert,
-  PrometheusCustomAlert,
-  PrometheusNotificationAlert
+  AlertmanagerAlert,
+  AlertmanagerNotificationAlert,
+  PrometheusCustomAlert
 } from '../models/prometheus-alerts';
 import { NotificationService } from './notification.service';
-import { ServicesModule } from './services.module';
 
 @Injectable({
-  providedIn: ServicesModule
+  providedIn: 'root'
 })
 export class PrometheusAlertFormatter {
   constructor(private notificationService: NotificationService) {}
 
   sendNotifications(notifications: CdNotificationConfig[]) {
-    if (notifications.length > 0) {
-      this.notificationService.queueNotifications(notifications);
-    }
+    notifications.forEach((n) => this.notificationService.show(n));
   }
 
   convertToCustomAlerts(
-    alerts: (PrometheusNotificationAlert | PrometheusAlert)[]
+    alerts: (AlertmanagerNotificationAlert | AlertmanagerAlert)[]
   ): PrometheusCustomAlert[] {
     return _.uniqWith(
       alerts.map((alert) => {
         return {
           status: _.isObject(alert.status)
-            ? (alert as PrometheusAlert).status.state
-            : this.getPrometheusNotificationStatus(alert as PrometheusNotificationAlert),
+            ? (alert as AlertmanagerAlert).status.state
+            : this.getPrometheusNotificationStatus(alert as AlertmanagerNotificationAlert),
           name: alert.labels.alertname,
           url: alert.generatorURL,
           summary: alert.annotations.summary,
-          fingerprint: _.isObject(alert.status) && (alert as PrometheusAlert).fingerprint
+          fingerprint: _.isObject(alert.status) && (alert as AlertmanagerAlert).fingerprint
         };
       }),
       _.isEqual
@@ -46,7 +44,7 @@ export class PrometheusAlertFormatter {
   /*
    * This is needed because NotificationAlerts don't use 'active'
    */
-  private getPrometheusNotificationStatus(alert: PrometheusNotificationAlert): string {
+  private getPrometheusNotificationStatus(alert: AlertmanagerNotificationAlert): string {
     const state = alert.status;
     return state === 'firing' ? 'active' : state;
   }
@@ -71,6 +69,8 @@ export class PrometheusAlertFormatter {
   }
 
   private appendSourceLink(alert: PrometheusCustomAlert, message: string): string {
-    return `${message} <a href="${alert.url}" target="_blank"><i class="fa fa-line-chart"></i></a>`;
+    return `${message} <a href="${alert.url}" target="_blank"><i class="${
+      Icons.lineChart
+    }"></i></a>`;
   }
 }

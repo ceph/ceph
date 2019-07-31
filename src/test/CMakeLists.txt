@@ -38,7 +38,6 @@ endif()
 if(WITH_RBD)
   add_subdirectory(librbd)
 endif(WITH_RBD)
-add_subdirectory(messenger)
 if (WITH_CEPHFS)
   add_subdirectory(mds)
 endif()
@@ -51,6 +50,7 @@ add_subdirectory(os)
 add_subdirectory(osd)
 add_subdirectory(osdc)
 add_subdirectory(pybind)
+add_subdirectory(immutable_object_cache)
 if(WITH_RADOSGW)
   set(rgw_libs rgw_a)
   if(WITH_RADOSGW_AMQP_ENDPOINT)
@@ -68,6 +68,7 @@ add_subdirectory(system)
 if(WITH_FIO OR WITH_SYSTEM_FIO)
   add_subdirectory(fio)
 endif()
+add_subdirectory(lazy-omap-stats)
 
 # test_timers
 add_executable(ceph_test_timers
@@ -469,7 +470,6 @@ endif(HAVE_BLKID OR FREEBSD)
 
 # ceph_test_admin_socket_output
 
-find_package(StdFilesystem)
 if(StdFilesystem_FOUND)
   add_executable(ceph_test_admin_socket_output
     test_admin_socket_output.cc
@@ -573,6 +573,18 @@ if(WITH_MGR)
   list(APPEND tox_tests run-tox-mgr-orchestrator_cli)
   set(MGR_ORCHESTRATOR_CLI_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/mgr-orchestrator_cli-virtualenv)
   list(APPEND env_vars_for_tox_tests MGR_ORCHESTRATOR_CLI_VIRTUALENV=${MGR_ORCHESTRATOR_CLI_VIRTUALENV})
+
+  add_test(NAME run-tox-python-common
+           COMMAND bash ${CMAKE_SOURCE_DIR}/src/script/run_tox.sh
+           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/python-common )
+  list(APPEND tox_tests run-tox-python-common)
+endif()
+
+if(WITH_CEPHFS_SHELL)
+  add_test(NAME run-tox-cephfs-shell COMMAND bash ${CMAKE_SOURCE_DIR}/src/tools/cephfs/run-tox.sh)
+  list(APPEND tox_tests run-tox-cephfs-shell)
+  set(CEPHFS_SHELL_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/cephfs-shell-virtualenv)
+  list(APPEND env_vars_for_tox_tests CEPHFS_SHELL_VIRTUALENV=${CEPHFS_SHELL_VIRTUALENV})
 endif()
 
 set_property(
@@ -699,6 +711,28 @@ add_executable(unittest_bufferlist
   )
 add_ceph_unittest(unittest_bufferlist)
 target_link_libraries(unittest_bufferlist global)
+
+# compiletest_cxx11_client
+add_executable(compiletest_cxx11_client
+  cxx11_client.cc
+  )
+if(CMAKE_VERSION VERSION_LESS "3.8")
+  # this is ugly as we'll end with -std=c++11 overriding the previous -std=c++17
+  # I would love to have a better way for old Cmakes
+  set_target_properties(compiletest_cxx11_client
+    PROPERTIES COMPILE_FLAGS "-std=c++11 -Werror -pedantic"
+    )
+else()
+  set_target_properties(compiletest_cxx11_client
+    PROPERTIES COMPILE_FLAGS "-Werror -pedantic"
+    CMAKE_CXX_STANDARD 11
+    CXX_STANDARD_REQUIRED ON
+    )
+endif()
+add_ceph_test(compiletest_cxx11_client
+  "${CMAKE_RUNTIME_OUTPUT_DIRECTORY}/compiletest_cxx11_client"
+  )
+target_link_libraries(compiletest_cxx11_client global)
 
 # unittest_xlist
 add_executable(unittest_xlist
@@ -861,6 +895,12 @@ add_executable(unittest_ipaddr
 add_ceph_unittest(unittest_ipaddr)
 target_link_libraries(unittest_ipaddr mon global)
 
+# unittest_utime
+add_executable(unittest_utime
+  test_utime.cc)
+add_ceph_unittest(unittest_utime)
+target_link_libraries(unittest_utime mon global)
+
 # unittest_texttable
 add_executable(unittest_texttable
   test_texttable.cc
@@ -892,5 +932,9 @@ target_link_libraries(unittest_pageset global)
 add_executable(unittest_any test_any.cc)
 add_ceph_unittest(unittest_any)
 target_link_libraries(unittest_any)
+
+# unittest_weighted_shuffle
+add_executable(unittest_weighted_shuffle test_weighted_shuffle.cc)
+add_ceph_unittest(unittest_weighted_shuffle)
 
 #make check ends here

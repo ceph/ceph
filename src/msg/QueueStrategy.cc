@@ -46,11 +46,11 @@ void QueueStrategy::ds_dispatch(Message *m) {
 void QueueStrategy::entry(QSThread *thrd)
 {
   for (;;) {
-    Message::ref m;
+    ref_t<Message> m;
     lock.Lock();
     for (;;) {
       if (! mqueue.empty()) {
-	m = Message::ref(&mqueue.front(), false);
+	m = ref_t<Message>(&mqueue.front(), false);
 	mqueue.pop_front();
 	break;
       }
@@ -102,7 +102,7 @@ void QueueStrategy::start()
   lock.Lock();
   threads.reserve(n_threads);
   for (int ix = 0; ix < n_threads; ++ix) {
-    string thread_name = "ms_xio_qs_";
+    string thread_name = "ms_qs_";
     thread_name.append(std::to_string(ix));
     auto thrd = std::make_unique<QSThread>(this);
     thrd->create(thread_name.c_str());

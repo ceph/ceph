@@ -35,7 +35,7 @@ namespace mutex_debug_detail {
 class mutex_debugging_base
 {
 protected:
-  std::string name;
+  std::string group;
   int id;
   bool backtrace; // gather backtrace on lock acquisition
 
@@ -48,8 +48,7 @@ protected:
   void _locked(); // just locked
   void _will_unlock(); // about to unlock
 
-  mutex_debugging_base(const std::string &n, bool bt = false);
-  mutex_debugging_base(const char *n, bool bt = false);
+  mutex_debugging_base(std::string group, bool bt = false);
   ~mutex_debugging_base();
 
 public:
@@ -98,13 +97,8 @@ private:
 public:
   static constexpr bool recursive = Recursive;
 
-  // Mutex concept is DefaultConstructible
-  mutex_debug_impl(const std::string &n, bool bt = false)
-    : mutex_debugging_base(n, bt) {
-    _init();
-  }
-  mutex_debug_impl(const char *n, bool bt = false)
-    : mutex_debugging_base(n, bt) {
+  mutex_debug_impl(std::string group, bool bt = false)
+    : mutex_debugging_base(group, bt) {
     _init();
   }
 

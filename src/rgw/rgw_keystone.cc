@@ -15,90 +15,12 @@
 
 #include "rgw_common.h"
 #include "rgw_keystone.h"
-#include "common/ceph_crypto_cms.h"
 #include "common/armor.h"
 #include "common/Cond.h"
 #include "rgw_perf_counters.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
-
-int rgw_open_cms_envelope(CephContext * const cct,
-                          const std::string& src,
-                          std::string& dst)             /* out */
-{
-#define BEGIN_CMS "-----BEGIN CMS-----"
-#define END_CMS "-----END CMS-----"
-
-  int start = src.find(BEGIN_CMS);
-  if (start < 0) {
-    ldout(cct, 0) << "failed to find " << BEGIN_CMS << " in response" << dendl;
-    return -EINVAL;
-  }
-  start += sizeof(BEGIN_CMS) - 1;
-
-  int end = src.find(END_CMS);
-  if (end < 0) {
-    ldout(cct, 0) << "failed to find " << END_CMS << " in response" << dendl;
-    return -EINVAL;
-  }
-
-  string s = src.substr(start, end - start);
-
-  int pos = 0;
-
-  do {
-    int next = s.find('\n', pos);
-    if (next < 0) {
-      dst.append(s.substr(pos));
-      break;
-    } else {
-      dst.append(s.substr(pos, next - pos));
-    }
-    pos = next + 1;
-  } while (pos < (int)s.size());
-
-  return 0;
-}
-
-int rgw_decode_b64_cms(CephContext * const cct,
-                       const string& signed_b64,
-                       bufferlist& bl)
-{
-  bufferptr signed_ber(signed_b64.size() * 2);
-  char *dest = signed_ber.c_str();
-  const char *src = signed_b64.c_str();
-  size_t len = signed_b64.size();
-  char buf[len + 1];
-  buf[len] = '\0';
-
-  for (size_t i = 0; i < len; i++, src++) {
-    if (*src != '-') {
-      buf[i] = *src;
-    } else {
-      buf[i] = '/';
-    }
-  }
-
-  int ret = ceph_unarmor(dest, dest + signed_ber.length(), buf,
-                         buf + signed_b64.size());
-  if (ret < 0) {
-    ldout(cct, 0) << "ceph_unarmor() failed, ret=" << ret << dendl;
-    return ret;
-  }
-
-  bufferlist signed_ber_bl;
-  signed_ber_bl.append(signed_ber);
-
-  ret = ceph_decode_cms(cct, signed_ber_bl, bl);
-  if (ret < 0) {
-    ldout(cct, 0) << "ceph_decode_cms returned " << ret << dendl;
-    return ret;
-  }
-
-  return 0;
-}
-
 #define PKI_ANS1_PREFIX "MII"
 
 bool rgw_is_pki_token(const string& token)
@@ -122,24 +44,6 @@ void rgw_get_token_id(const string& token, string& token_id)
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   buf_to_hex(m, CEPH_CRYPTO_MD5_DIGESTSIZE, calc_md5);
   token_id = calc_md5;
-}
-
-bool rgw_decode_pki_token(CephContext * const cct,
-                          const string& token,
-                          bufferlist& bl)
-{
-  if (!rgw_is_pki_token(token)) {
-    return false;
-  }
-
-  int ret = rgw_decode_b64_cms(cct, token, bl);
-  if (ret < 0) {
-    return false;
-  }
-
-  ldout(cct, 20) << "successfully decoded pki token" << dendl;
-
-  return true;
 }
 
 
@@ -300,7 +204,7 @@ int Service::issue_admin_token_request(CephContext* const cct,
 
   token_req.set_url(token_url);
 
-  const int ret = token_req.process();
+  const int ret = token_req.process(null_yield);
   if (ret < 0) {
     return ret;
   }
@@ -374,7 +278,7 @@ int Service::get_keystone_barbican_token(CephContext * const cct,
   token_req.set_url(token_url);
 
   ldout(cct, 20) << "Requesting secret from barbican url=" << token_url << dendl;
-  const int ret = token_req.process();
+  const int ret = token_req.process(null_yield);
   if (ret < 0) {
     ldout(cct, 20) << "Barbican process error:" << token_bl.c_str() << dendl;
     return ret;
@@ -455,8 +359,8 @@ int TokenEnvelope::parse(CephContext* const cct,
     } else {
       return -ENOTSUP;
     }
-  } catch (JSONDecoder::err& err) {
-    ldout(cct, 0) << "Keystone token parse error: " << err.message << dendl;
+  } catch (const JSONDecoder::err& err) {
+    ldout(cct, 0) << "Keystone token parse error: " << err.what() << dendl;
     return -EINVAL;
   }
 
@@ -572,141 +476,9 @@ void TokenCache::invalidate(const std::string& token_id)
   tokens.erase(iter);
 }
 
-int TokenCache::RevokeThread::check_revoked()
-{
-  std::string url;
-  std::string token;
-
-  bufferlist bl;
-  RGWGetRevokedTokens req(cct, "GET", "", &bl);
-
-  if (rgw::keystone::Service::get_admin_token(cct, *cache, config, token) < 0) {
-    return -EINVAL;
-  }
-
-  url = config.get_endpoint_url();
-  if (url.empty()) {
-    return -EINVAL;
-  }
-
-  req.append_header("X-Auth-Token", token);
-
-  const auto keystone_version = config.get_api_version();
-  if (keystone_version == rgw::keystone::ApiVersion::VER_2) {
-    url.append("v2.0/tokens/revoked");
-  } else if (keystone_version == rgw::keystone::ApiVersion::VER_3) {
-    url.append("v3/auth/tokens/OS-PKI/revoked");
-  }
-
-  req.set_url(url);
-
-  req.set_send_length(0);
-  int ret = req.process();
-  if (ret < 0) {
-    return ret;
-  }
-
-  bl.append((char)0); // NULL terminate for debug output
-
-  ldout(cct, 10) << "request returned " << bl.c_str() << dendl;
-
-  JSONParser parser;
-
-  if (!parser.parse(bl.c_str(), bl.length())) {
-    ldout(cct, 0) << "malformed json" << dendl;
-    return -EINVAL;
-  }
-
-  JSONObjIter iter = parser.find_first("signed");
-  if (iter.end()) {
-    ldout(cct, 0) << "revoked tokens response is missing signed section" << dendl;
-    return -EINVAL;
-  }
-
-  JSONObj *signed_obj = *iter;
-  const std::string signed_str = signed_obj->get_data();
-
-  ldout(cct, 10) << "signed=" << signed_str << dendl;
-
-  std::string signed_b64;
-  ret = rgw_open_cms_envelope(cct, signed_str, signed_b64);
-  if (ret < 0) {
-    return ret;
-  }
-
-  ldout(cct, 10) << "content=" << signed_b64 << dendl;
-  
-  bufferlist json;
-  ret = rgw_decode_b64_cms(cct, signed_b64, json);
-  if (ret < 0) {
-    return ret;
-  }
-
-  ldout(cct, 10) << "ceph_decode_cms: decoded: " << json.c_str() << dendl;
-
-  JSONParser list_parser;
-  if (!list_parser.parse(json.c_str(), json.length())) {
-    ldout(cct, 0) << "malformed json" << dendl;
-    return -EINVAL;
-  }
-
-  JSONObjIter revoked_iter = list_parser.find_first("revoked");
-  if (revoked_iter.end()) {
-    ldout(cct, 0) << "no revoked section in json" << dendl;
-    return -EINVAL;
-  }
-
-  JSONObj *revoked_obj = *revoked_iter;
-
-  JSONObjIter tokens_iter = revoked_obj->find_first();
-  for (; !tokens_iter.end(); ++tokens_iter) {
-    JSONObj *o = *tokens_iter;
-
-    JSONObj *token = o->find_obj("id");
-    if (!token) {
-      ldout(cct, 0) << "bad token in array, missing id" << dendl;
-      continue;
-    }
-
-    const std::string token_id = token->get_data();
-    cache->invalidate(token_id);
-  }
-  
-  return 0;
-}
-
 bool TokenCache::going_down() const
 {
   return down_flag;
-}
-
-void* TokenCache::RevokeThread::entry()
-{
-  do {
-    ldout(cct, 2) << "keystone revoke thread: start" << dendl;
-    int r = check_revoked();
-    if (r < 0) {
-      ldout(cct, 0) << "ERROR: keystone revocation processing returned error r="
-                    << r << dendl;
-    }
-
-    if (cache->going_down()) {
-      break;
-    }
-
-    lock.Lock();
-    cond.WaitInterval(lock,
-		      utime_t(cct->_conf->rgw_keystone_revocation_interval, 0));
-    lock.Unlock();
-  } while (!cache->going_down());
-
-  return nullptr;
-}
-
-void TokenCache::RevokeThread::stop()
-{
-  Mutex::Locker l(lock);
-  cond.Signal();
 }
 
 }; /* namespace keystone */

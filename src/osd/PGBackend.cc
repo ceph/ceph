@@ -197,7 +197,7 @@ void PGBackend::rollback(
       temp.append(t);
       temp.swap(t);
     }
-    void setattrs(map<string, boost::optional<bufferlist> > &attrs) override {
+    void setattrs(map<string, std::optional<bufferlist> > &attrs) override {
       ObjectStore::Transaction temp;
       pg->rollback_setattrs(hoid, attrs, &temp);
       temp.append(t);
@@ -438,15 +438,15 @@ int PGBackend::objects_get_attrs(
 
 void PGBackend::rollback_setattrs(
   const hobject_t &hoid,
-  map<string, boost::optional<bufferlist> > &old_attrs,
+  map<string, std::optional<bufferlist> > &old_attrs,
   ObjectStore::Transaction *t) {
   map<string, bufferlist> to_set;
   ceph_assert(!hoid.is_temp());
-  for (map<string, boost::optional<bufferlist> >::iterator i = old_attrs.begin();
+  for (map<string, std::optional<bufferlist> >::iterator i = old_attrs.begin();
        i != old_attrs.end();
        ++i) {
     if (i->second) {
-      to_set[i->first] = i->second.get();
+      to_set[i->first] = *(i->second);
     } else {
       t->rmattr(
 	coll,
@@ -1010,8 +1010,8 @@ void PGBackend::be_compare_scrubmaps(
   map<hobject_t, set<pg_shard_t>> &missing,
   map<hobject_t, set<pg_shard_t>> &inconsistent,
   map<hobject_t, list<pg_shard_t>> &authoritative,
-  map<hobject_t, pair<boost::optional<uint32_t>,
-                      boost::optional<uint32_t>>> &missing_digest,
+  map<hobject_t, pair<std::optional<uint32_t>,
+                      std::optional<uint32_t>>> &missing_digest,
   int &shallow_errors, int &deep_errors,
   Scrub::Store *store,
   const spg_t& pgid,
@@ -1147,7 +1147,7 @@ void PGBackend::be_compare_scrubmaps(
     }
 
     if (fix_digest) {
-      boost::optional<uint32_t> data_digest, omap_digest;
+      std::optional<uint32_t> data_digest, omap_digest;
       ceph_assert(auth_object.digest_present);
       data_digest = auth_object.digest;
       if (auth_object.omap_digest_present) {
@@ -1199,7 +1199,7 @@ void PGBackend::be_compare_scrubmaps(
 	utime_t age = now - auth_oi.local_mtime;
 	if (update == FORCE ||
 	    age > cct->_conf->osd_deep_scrub_update_digest_min_age) {
-          boost::optional<uint32_t> data_digest, omap_digest;
+          std::optional<uint32_t> data_digest, omap_digest;
           if (auth_object.digest_present) {
             data_digest = auth_object.digest;
 	    dout(20) << __func__ << " will update data digest on " << *k << dendl;
@@ -1227,32 +1227,38 @@ out:
   }
 }
 
-void PGBackend::be_large_omap_check(const map<pg_shard_t,ScrubMap*> &maps,
+void PGBackend::be_omap_checks(const map<pg_shard_t,ScrubMap*> &maps,
   const set<hobject_t> &master_set,
-  int& large_omap_objects,
+  omap_stat_t& omap_stats,
   ostream &warnstream) const
 {
-  bool needs_check = false;
+  bool needs_omap_check = false;
   for (const auto& map : maps) {
-    if (map.second->has_large_omap_object_errors) {
-      needs_check = true;
+    if (map.second->has_large_omap_object_errors || map.second->has_omap_keys) {
+      needs_omap_check = true;
       break;
     }
   }
 
-  if (!needs_check) {
-    return;
+  if (!needs_omap_check) {
+    return; // Nothing to do
   }
 
-  // Iterate through objects and check large omap object flag
+  // Iterate through objects and update omap stats
   for (const auto& k : master_set) {
     for (const auto& map : maps) {
+      if (map.first != get_parent()->primary_shard()) {
+        // Only set omap stats for the primary
+        continue;
+      }
       auto it = map.second->objects.find(k);
       if (it == map.second->objects.end())
         continue;
       ScrubMap::object& obj = it->second;
+      omap_stats.omap_bytes += obj.object_omap_bytes;
+      omap_stats.omap_keys += obj.object_omap_keys;
       if (obj.large_omap_object_found) {
-        large_omap_objects++;
+        omap_stats.large_omap_objects++;
         warnstream << "Large omap object found. Object: " << k << " Key count: "
                    << obj.large_omap_object_key_count << " Size (bytes): "
                    << obj.large_omap_object_value_size << '\n';

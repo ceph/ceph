@@ -52,6 +52,7 @@
 #define RGW_GC_REMOVE "gc_remove"
 
 /* lifecycle bucket list */
+#define RGW_LC_GET_ENTRY "lc_get_entry"
 #define RGW_LC_SET_ENTRY "lc_set_entry"
 #define RGW_LC_RM_ENTRY "lc_rm_entry"
 #define RGW_LC_GET_NEXT_ENTRY "lc_get_next_entry"

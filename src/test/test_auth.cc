@@ -23,6 +23,9 @@ TEST(AuthRegistry, con_modes)
 					     CEPH_CON_MODE_CRC };
   const std::vector<uint32_t> secure = { CEPH_CON_MODE_SECURE };
 
+  cct->_conf.set_val(
+    "enable_experimental_unrecoverable_data_corrupting_features", "*");
+
   // baseline: everybody agrees
   cct->_set_module_type(CEPH_ENTITY_TYPE_CLIENT);
   cct->_conf.set_val("ms_cluster_mode", "crc secure");

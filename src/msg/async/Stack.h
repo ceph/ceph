@@ -33,6 +33,7 @@ class ConnectedSocketImpl {
   virtual void shutdown() = 0;
   virtual void close() = 0;
   virtual int fd() const = 0;
+  virtual int socket_fd() const = 0;
 };
 
 class ConnectedSocket;
@@ -129,6 +130,9 @@ class ConnectedSocket {
   int fd() const {
     return _csi->fd();
   }
+  int socket_fd() const {
+    return _csi->socket_fd();
+  }
 
   explicit operator bool() const {
     return _csi.get();
@@ -207,6 +211,9 @@ enum {
   l_msgr_running_recv_time,
   l_msgr_running_fast_dispatch_time,
 
+  l_msgr_send_messages_queue_lat,
+  l_msgr_handle_ack_lat,
+
   l_msgr_last,
 };
 
@@ -246,6 +253,9 @@ class Worker {
     plb.add_time(l_msgr_running_send_time, "msgr_running_send_time", "The total time of message sending");
     plb.add_time(l_msgr_running_recv_time, "msgr_running_recv_time", "The total time of message receiving");
     plb.add_time(l_msgr_running_fast_dispatch_time, "msgr_running_fast_dispatch_time", "The total time of fast dispatch");
+
+    plb.add_time_avg(l_msgr_send_messages_queue_lat, "msgr_send_messages_queue_lat", "Network sent messages lat");
+    plb.add_time_avg(l_msgr_handle_ack_lat, "msgr_handle_ack_lat", "Connection handle ack lat");
 
     perf_logger = plb.create_perf_counters();
     cct->get_perfcounters_collection()->add(perf_logger);

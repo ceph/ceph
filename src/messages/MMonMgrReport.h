@@ -21,10 +21,7 @@
 #include "mon/health_check.h"
 #include "mon/PGMap.h"
 
-class MMonMgrReport
-  : public MessageInstance<MMonMgrReport, PaxosServiceMessage> {
-public:
-  friend factory;
+class MMonMgrReport : public PaxosServiceMessage {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
@@ -36,7 +33,7 @@ public:
   std::map<std::string,ProgressEvent> progress_events;
 
   MMonMgrReport()
-    : MessageInstance(MSG_MON_MGR_REPORT, 0, HEAD_VERSION, COMPAT_VERSION)
+    : PaxosServiceMessage{MSG_MON_MGR_REPORT, 0, HEAD_VERSION, COMPAT_VERSION}
   {}
 private:
   ~MMonMgrReport() override {}
@@ -70,7 +67,7 @@ public:
       decode(digest, p);
       bufferlist bl;
       encode(digest, bl, features);
-      data.swap(bl);
+      set_data(bl);
     }
   }
   void decode_payload() override {
@@ -82,6 +79,9 @@ public:
       decode(progress_events, p);
     }
   }
+private:
+  template<class T, typename... Args>
+  friend boost::intrusive_ptr<T> ceph::make_message(Args&&... args);
 };
 
 #endif

@@ -1,3 +1,5 @@
+.. _ceph-iscsi:
+
 ==================
 Ceph iSCSI Gateway
 ==================

@@ -1,34 +1,35 @@
 import { Helper } from '../helper.po';
-import { LogsPage } from './logs.po';
 
 describe('Logs page', () => {
-  let page: LogsPage;
+  let logs: Helper['logs'];
 
   beforeAll(() => {
-    page = new LogsPage();
+    logs = new Helper().logs;
   });
 
   afterEach(() => {
     Helper.checkConsole();
   });
 
-  it('should open and show breadcrumb', () => {
-    page.navigateTo();
-    expect(Helper.getBreadcrumbText()).toEqual('Logs');
-  });
+  describe('breadcrumb and tab tests', () => {
+    beforeAll(() => {
+      logs.navigateTo();
+    });
 
-  it('should show two tabs', () => {
-    page.navigateTo();
-    expect(Helper.getTabsCount()).toEqual(2);
-  });
+    it('should open and show breadcrumb', () => {
+      expect(logs.getBreadcrumbText()).toEqual('Logs');
+    });
 
-  it('should show cluster logs tab at first', () => {
-    page.navigateTo();
-    expect(Helper.getTabText(0)).toEqual('Cluster Logs');
-  });
+    it('should show two tabs', () => {
+      expect(logs.getTabsCount()).toEqual(2);
+    });
 
-  it('should show audit logs as a second tab', () => {
-    page.navigateTo();
-    expect(Helper.getTabText(1)).toEqual('Audit Logs');
+    it('should show cluster logs tab at first', () => {
+      expect(logs.getTabText(0)).toEqual('Cluster Logs');
+    });
+
+    it('should show audit logs as a second tab', () => {
+      expect(logs.getTabText(1)).toEqual('Audit Logs');
+    });
   });
 });

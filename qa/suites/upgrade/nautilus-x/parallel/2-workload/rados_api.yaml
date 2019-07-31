@@ -1,0 +1,11 @@
+meta:
+- desc: |
+   object class functional tests
+workload:
+  full_sequential:
+    - workunit:
+        branch: nautilus
+        clients:
+          client.0:
+            - cls
+    - print: "**** done cls 2-workload"

@@ -51,4 +51,30 @@ describe('ConfigurationService', () => {
     expect(req.request.method).toBe('POST');
     expect(req.request.body).toEqual(configOption);
   });
+
+  it('should call bulkCreate', () => {
+    const configOptions = {
+      configOption1: { section: 'section', value: 'value' },
+      configOption2: { section: 'section', value: 'value' }
+    };
+    service.bulkCreate(configOptions).subscribe();
+    const req = httpTesting.expectOne('api/cluster_conf/');
+    expect(req.request.method).toBe('PUT');
+    expect(req.request.body).toEqual(configOptions);
+  });
+
+  it('should call filter', () => {
+    const configOptions = ['configOption1', 'configOption2', 'configOption3'];
+    service.filter(configOptions).subscribe();
+    const req = httpTesting.expectOne(
+      'api/cluster_conf/filter?names=configOption1,configOption2,configOption3'
+    );
+    expect(req.request.method).toBe('GET');
+  });
+
+  it('should call delete', () => {
+    service.delete('testOption', 'testSection').subscribe();
+    const reg = httpTesting.expectOne('api/cluster_conf/testOption?section=testSection');
+    expect(reg.request.method).toBe('DELETE');
+  });
 });

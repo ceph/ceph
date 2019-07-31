@@ -39,7 +39,7 @@ struct link_rollback {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<link_rollback*>& ls);
+  static void generate_test_instances(std::list<link_rollback*>& ls);
 };
 WRITE_CLASS_ENCODER(link_rollback)
 
@@ -60,7 +60,7 @@ struct rmdir_rollback {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<rmdir_rollback*>& ls);
+  static void generate_test_instances(std::list<rmdir_rollback*>& ls);
 };
 WRITE_CLASS_ENCODER(rmdir_rollback)
 
@@ -79,7 +79,7 @@ struct rename_rollback {
     void encode(bufferlist& bl) const;
     void decode(bufferlist::const_iterator& bl);
     void dump(Formatter *f) const;
-    static void generate_test_instances(list<drec*>& ls);
+    static void generate_test_instances(std::list<drec*>& ls);
   };
   WRITE_CLASS_MEMBER_ENCODER(drec)
 
@@ -93,7 +93,7 @@ struct rename_rollback {
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
   void dump(Formatter *f) const;
-  static void generate_test_instances(list<rename_rollback*>& ls);
+  static void generate_test_instances(std::list<rename_rollback*>& ls);
 };
 WRITE_CLASS_ENCODER(rename_rollback::drec)
 WRITE_CLASS_ENCODER(rename_rollback)
@@ -148,7 +148,7 @@ public:
   void encode(bufferlist& bl, uint64_t features) const override;
   void decode(bufferlist::const_iterator& bl) override;
   void dump(Formatter *f) const override;
-  static void generate_test_instances(list<ESlaveUpdate*>& ls);
+  static void generate_test_instances(std::list<ESlaveUpdate*>& ls);
 
   void replay(MDSRank *mds) override;
 };

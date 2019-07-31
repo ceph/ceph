@@ -108,20 +108,20 @@ protected:
   // priority queue for outbound msgs
   std::map<int, std::list<std::pair<bufferlist, Message *>>> out_q;
   bool keepalive;
+  bool write_in_progress = false;
 
   __u32 connect_seq, peer_global_seq;
   std::atomic<uint64_t> in_seq{0};
   std::atomic<uint64_t> out_seq{0};
   std::atomic<uint64_t> ack_left{0};
 
-  CryptoKey session_key;
   std::shared_ptr<AuthSessionHandler> session_security;
-  std::unique_ptr<AuthAuthorizerChallenge> authorizer_challenge;  // accept side
 
   // Open state
   ceph_msg_connect connect_msg;
   ceph_msg_connect_reply connect_reply;
-  bufferlist authorizer_buf;
+  bufferlist authorizer_buf;  // auth(orizer) payload read off the wire
+  bufferlist authorizer_more;  // connect-side auth retry (we added challenge)
 
   utime_t backoff;  // backoff time
   utime_t recv_stamp;
@@ -144,10 +144,10 @@ protected:
 
   State state;
 
-  void run_continuation(CtPtr continuation);
-  CtPtr read(CONTINUATION_PARAM(next, ProtocolV1, char *, int), int len,
+  void run_continuation(CtPtr pcontinuation);
+  CtPtr read(CONTINUATION_RX_TYPE<ProtocolV1> &next, int len,
              char *buffer = nullptr);
-  CtPtr write(CONTINUATION_PARAM(next, ProtocolV1, int), bufferlist &bl);
+  CtPtr write(CONTINUATION_TX_TYPE<ProtocolV1> &next,bufferlist &bl);
   inline CtPtr _fault() {  // helper fault method that stops continuation
     fault();
     return nullptr;
@@ -226,7 +226,6 @@ public:
   // Client Protocol
 private:
   int global_seq;
-  AuthAuthorizer *authorizer;
 
   CONTINUATION_DECL(ProtocolV1, send_client_banner);
   WRITE_HANDLER_CONTINUATION_DECL(ProtocolV1, handle_client_banner_write);
@@ -284,7 +283,7 @@ protected:
   CtPtr send_connect_message_reply(char tag, ceph_msg_connect_reply &reply,
                                    bufferlist &authorizer_reply);
   CtPtr handle_connect_message_reply_write(int r);
-  CtPtr replace(AsyncConnectionRef existing, ceph_msg_connect_reply &reply,
+  CtPtr replace(const AsyncConnectionRef& existing, ceph_msg_connect_reply &reply,
                 bufferlist &authorizer_reply);
   CtPtr open(ceph_msg_connect_reply &reply, bufferlist &authorizer_reply);
   CtPtr handle_ready_connect_message_reply_write(int r);

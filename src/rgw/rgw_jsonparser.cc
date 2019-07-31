@@ -114,8 +114,8 @@ int main(int argc, char **argv) {
 
   try {
     ui.decode_json(&parser);
-  } catch (JSONDecoder::err& e) {
-    cout << "failed to decode JSON input: " << e.message << std::endl;
+  } catch (const JSONDecoder::err& e) {
+    cout << "failed to decode JSON input: " << e.what() << std::endl;
     exit(1);
   }
 

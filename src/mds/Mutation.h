@@ -67,6 +67,7 @@ public:
       WRLOCK		= 2,
       XLOCK		= 4,
       REMOTE_WRLOCK	= 8,
+      STATE_PIN		= 16, // no RW after locked, just pin lock state
     };
     SimpleLock* lock;
     mutable unsigned flags;
@@ -85,6 +86,7 @@ public:
       flags &= ~REMOTE_WRLOCK;
       wrlock_target = MDS_RANK_NONE;
     }
+    bool is_state_pin() const { return !!(flags & STATE_PIN); }
   };
 
   struct LockOpVec : public vector<LockOp> {
@@ -101,6 +103,9 @@ public:
     void add_remote_wrlock(SimpleLock *lock, mds_rank_t rank) {
       ceph_assert(rank != MDS_RANK_NONE);
       emplace_back(lock, LockOp::REMOTE_WRLOCK, rank);
+    }
+    void lock_scatter_gather(SimpleLock *lock) {
+      emplace_back(lock, LockOp::WRLOCK | LockOp::STATE_PIN);
     }
     void sort_and_merge();
 
@@ -143,7 +148,7 @@ public:
 
   // for applying projected inode changes
   list<CInode*> projected_inodes;
-  list<CDir*> projected_fnodes;
+  std::vector<CDir*> projected_fnodes;
   list<ScatterLock*> updated_locks;
 
   list<CInode*> dirty_cow_inodes;
@@ -229,8 +234,8 @@ typedef boost::intrusive_ptr<MutationImpl> MutationRef;
 
 
 
-/** active_request_t
- * state we track for requests we are currently processing.
+/**
+ * MDRequestImpl: state we track for requests we are currently processing.
  * mostly information about locks held, so that we can drop them all
  * the request is finished or forwarded.  see request_*().
  */
@@ -239,7 +244,7 @@ struct MDRequestImpl : public MutationImpl {
   elist<MDRequestImpl*>::item item_session_request;  // if not on list, op is aborted.
 
   // -- i am a client (master) request
-  MClientRequest::const_ref client_request; // client request (if any)
+  cref_t<MClientRequest> client_request; // client request (if any)
 
   // store up to two sets of dn vectors, inode pointers, for request path1 and path2.
   vector<CDentry*> dn[2];
@@ -266,7 +271,7 @@ struct MDRequestImpl : public MutationImpl {
   map<vinodeno_t, ceph_seq_t> cap_releases;  
 
   // -- i am a slave request
-  MMDSSlaveRequest::const_ref slave_request; // slave request (if one is pending; implies slave == true)
+  cref_t<MMDSSlaveRequest> slave_request; // slave request (if one is pending; implies slave == true)
 
   // -- i am an internal op
   int internal_op;
@@ -340,8 +345,8 @@ struct MDRequestImpl : public MutationImpl {
   struct Params {
     metareqid_t reqid;
     __u32 attempt;
-    MClientRequest::const_ref client_req;
-    Message::const_ref triggering_slave_req;
+    cref_t<MClientRequest> client_req;
+    cref_t<Message> triggering_slave_req;
     mds_rank_t slave_to;
     utime_t initiated;
     utime_t throttled, all_read, dispatched;
@@ -397,8 +402,8 @@ struct MDRequestImpl : public MutationImpl {
   void print(ostream &out) const override;
   void dump(Formatter *f) const override;
 
-  MClientRequest::const_ref release_client_request();
-  void reset_slave_request(const MMDSSlaveRequest::const_ref& req=nullptr);
+  cref_t<MClientRequest> release_client_request();
+  void reset_slave_request(const cref_t<MMDSSlaveRequest>& req=nullptr);
 
   // TrackedOp stuff
   typedef boost::intrusive_ptr<MDRequestImpl> Ref;

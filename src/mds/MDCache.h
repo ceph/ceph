@@ -124,7 +124,7 @@ class MDCache {
   using clock = ceph::coarse_mono_clock;
   using time = ceph::coarse_mono_time;
 
-  typedef std::map<mds_rank_t, MCacheExpire::ref> expiremap;
+  typedef std::map<mds_rank_t, ref_t<MCacheExpire>> expiremap;
 
   // my master
   MDSRank *mds;
@@ -305,6 +305,9 @@ public:
 
 
   // -- subtrees --
+private:
+  static const unsigned int SUBTREES_COUNT_THRESHOLD = 5;
+  static const unsigned int SUBTREES_DEPTH_THRESHOLD = 5;
 protected:
   /* subtree keys and each tree's non-recursive nested subtrees (the "bounds") */
   map<CDir*,set<CDir*> > subtrees;
@@ -359,12 +362,52 @@ public:
   void project_subtree_rename(CInode *diri, CDir *olddir, CDir *newdir);
   void adjust_subtree_after_rename(CInode *diri, CDir *olddir, bool pop);
 
-  void get_auth_subtrees(set<CDir*>& s);
-  void get_fullauth_subtrees(set<CDir*>& s);
+  auto get_auth_subtrees() {
+    std::vector<CDir*> c;
+    for (auto& p : subtrees) {
+      auto& root = p.first;
+      if (root->is_auth()) {
+        c.push_back(root);
+      }
+    }
+    return c;
+  }
 
-  int num_subtrees();
-  int num_subtrees_fullauth();
-  int num_subtrees_fullnonauth();
+  auto get_fullauth_subtrees() {
+    std::vector<CDir*> c;
+    for (auto& p : subtrees) {
+      auto& root = p.first;
+      if (root->is_full_dir_auth()) {
+        c.push_back(root);
+      }
+    }
+    return c;
+  }
+  auto num_subtrees_fullauth() const {
+    std::size_t n = 0;
+    for (auto& p : subtrees) {
+      auto& root = p.first;
+      if (root->is_full_dir_auth()) {
+        ++n;
+      }
+    }
+    return n;
+  }
+
+  auto num_subtrees_fullnonauth() const {
+    std::size_t n = 0;
+    for (auto& p : subtrees) {
+      auto& root = p.first;
+      if (root->is_full_dir_nonauth()) {
+        ++n;
+      }
+    }
+    return n;
+  }
+
+  auto num_subtrees() const {
+    return subtrees.size();
+  }
 
   
 protected:
@@ -374,8 +417,8 @@ protected:
 public:
   int get_num_client_requests();
 
-  MDRequestRef request_start(const MClientRequest::const_ref& req);
-  MDRequestRef request_start_slave(metareqid_t rid, __u32 attempt, const Message::const_ref &m);
+  MDRequestRef request_start(const cref_t<MClientRequest>& req);
+  MDRequestRef request_start_slave(metareqid_t rid, __u32 attempt, const cref_t<Message> &m);
   MDRequestRef request_start_internal(int op);
   bool have_request(metareqid_t rid) {
     return active_requests.count(rid);
@@ -479,10 +522,10 @@ protected:
   set<mds_rank_t> resolve_ack_gather;	// nodes i need a resolve_ack from
   set<version_t> resolve_snapclient_commits;
   map<metareqid_t, mds_rank_t> resolve_need_rollback;  // rollbacks i'm writing to the journal
-  map<mds_rank_t, MMDSResolve::const_ref> delayed_resolve;
+  map<mds_rank_t, cref_t<MMDSResolve>> delayed_resolve;
   
-  void handle_resolve(const MMDSResolve::const_ref &m);
-  void handle_resolve_ack(const MMDSResolveAck::const_ref &m);
+  void handle_resolve(const cref_t<MMDSResolve> &m);
+  void handle_resolve_ack(const cref_t<MMDSResolveAck> &m);
   void process_delayed_resolve();
   void discard_delayed_resolve(mds_rank_t who);
   void maybe_resolve_finish();
@@ -579,16 +622,16 @@ protected:
   list<SimpleLock*> rejoin_eval_locks;
   MDSContext::vec rejoin_waiters;
 
-  void rejoin_walk(CDir *dir, const MMDSCacheRejoin::ref &rejoin);
-  void handle_cache_rejoin(const MMDSCacheRejoin::const_ref &m);
-  void handle_cache_rejoin_weak(const MMDSCacheRejoin::const_ref &m);
+  void rejoin_walk(CDir *dir, const ref_t<MMDSCacheRejoin> &rejoin);
+  void handle_cache_rejoin(const cref_t<MMDSCacheRejoin> &m);
+  void handle_cache_rejoin_weak(const cref_t<MMDSCacheRejoin> &m);
   CInode* rejoin_invent_inode(inodeno_t ino, snapid_t last);
   CDir* rejoin_invent_dirfrag(dirfrag_t df);
-  void handle_cache_rejoin_strong(const MMDSCacheRejoin::const_ref &m);
-  void rejoin_scour_survivor_replicas(mds_rank_t from, const MMDSCacheRejoin::const_ref &ack,
+  void handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &m);
+  void rejoin_scour_survivor_replicas(mds_rank_t from, const cref_t<MMDSCacheRejoin> &ack,
 				      set<vinodeno_t>& acked_inodes,
 				      set<SimpleLock *>& gather_locks);
-  void handle_cache_rejoin_ack(const MMDSCacheRejoin::const_ref &m);
+  void handle_cache_rejoin_ack(const cref_t<MMDSCacheRejoin> &m);
   void rejoin_send_acks();
   void rejoin_trim_undef_inodes();
   void maybe_send_pending_rejoins() {
@@ -676,12 +719,12 @@ public:
   bool process_imported_caps();
   void choose_lock_states_and_reconnect_caps();
   void prepare_realm_split(SnapRealm *realm, client_t client, inodeno_t ino,
-			   map<client_t,MClientSnap::ref>& splits);
-  void prepare_realm_merge(SnapRealm *realm, SnapRealm *parent_realm, map<client_t,MClientSnap::ref>& splits);
-  void send_snaps(map<client_t,MClientSnap::ref>& splits);
+			   map<client_t,ref_t<MClientSnap>>& splits);
+  void prepare_realm_merge(SnapRealm *realm, SnapRealm *parent_realm, map<client_t,ref_t<MClientSnap>>& splits);
+  void send_snaps(map<client_t,ref_t<MClientSnap>>& splits);
   Capability* rejoin_import_cap(CInode *in, client_t client, const cap_reconnect_t& icr, mds_rank_t frommds);
   void finish_snaprealm_reconnect(client_t client, SnapRealm *realm, snapid_t seq,
-				  map<client_t,MClientSnap::ref>& updates);
+				  map<client_t,ref_t<MClientSnap>>& updates);
   Capability* try_reconnect_cap(CInode *in, Session *session);
   void export_remaining_imported_caps();
 
@@ -731,9 +774,7 @@ public:
  public:
   explicit MDCache(MDSRank *m, PurgeQueue &purge_queue_);
   ~MDCache();
-  void handle_conf_change(const ConfigProxy& conf,
-                          const std::set <std::string> &changed,
-                          const MDSMap &mds_map);
+  void handle_conf_change(const std::set<std::string>& changed, const MDSMap& mds_map);
   
   // debug
   void log_stat();
@@ -1022,15 +1063,15 @@ protected:
   void _open_ino_backtrace_fetched(inodeno_t ino, bufferlist& bl, int err);
   void _open_ino_parent_opened(inodeno_t ino, int ret);
   void _open_ino_traverse_dir(inodeno_t ino, open_ino_info_t& info, int err);
-  void _open_ino_fetch_dir(inodeno_t ino, const MMDSOpenIno::const_ref &m, CDir *dir, bool parent);
-  int open_ino_traverse_dir(inodeno_t ino, const MMDSOpenIno::const_ref &m,
+  void _open_ino_fetch_dir(inodeno_t ino, const cref_t<MMDSOpenIno> &m, CDir *dir, bool parent);
+  int open_ino_traverse_dir(inodeno_t ino, const cref_t<MMDSOpenIno> &m,
 			    const vector<inode_backpointer_t>& ancestors,
 			    bool discover, bool want_xlocked, mds_rank_t *hint);
   void open_ino_finish(inodeno_t ino, open_ino_info_t& info, int err);
   void do_open_ino(inodeno_t ino, open_ino_info_t& info, int err);
   void do_open_ino_peer(inodeno_t ino, open_ino_info_t& info);
-  void handle_open_ino(const MMDSOpenIno::const_ref &m, int err=0);
-  void handle_open_ino_reply(const MMDSOpenInoReply::const_ref &m);
+  void handle_open_ino(const cref_t<MMDSOpenIno> &m, int err=0);
+  void handle_open_ino_reply(const cref_t<MMDSOpenInoReply> &m);
   friend class C_IO_MDC_OpenInoBacktraceFetched;
   friend struct C_MDC_OpenInoTraverseDir;
   friend struct C_MDC_OpenInoParentOpened;
@@ -1057,8 +1098,8 @@ public:
 
   void find_ino_peers(inodeno_t ino, MDSContext *c, mds_rank_t hint=MDS_RANK_NONE);
   void _do_find_ino_peer(find_ino_peer_info_t& fip);
-  void handle_find_ino(const MMDSFindIno::const_ref &m);
-  void handle_find_ino_reply(const MMDSFindInoReply::const_ref &m);
+  void handle_find_ino(const cref_t<MMDSFindIno> &m);
+  void handle_find_ino_reply(const cref_t<MMDSFindInoReply> &m);
   void kick_find_ino_peers(mds_rank_t who);
 
   // -- snaprealms --
@@ -1069,7 +1110,7 @@ public:
   void create_global_snaprealm();
   void do_realm_invalidate_and_update_notify(CInode *in, int snapop, bool notify_clients=true);
   void send_snap_update(CInode *in, version_t stid, int snap_op);
-  void handle_snap_update(const MMDSSnapUpdate::const_ref &m);
+  void handle_snap_update(const cref_t<MMDSSnapUpdate> &m);
   void notify_global_snaprealm_update(int snap_op);
 
   // -- stray --
@@ -1084,12 +1125,12 @@ protected:
 
   // == messages ==
  public:
-  void dispatch(const Message::const_ref &m);
+  void dispatch(const cref_t<Message> &m);
 
  protected:
   // -- replicas --
-  void handle_discover(const MDiscover::const_ref &dis);
-  void handle_discover_reply(const MDiscoverReply::const_ref &m);
+  void handle_discover(const cref_t<MDiscover> &dis);
+  void handle_discover_reply(const cref_t<MDiscoverReply> &m);
   friend class C_MDC_Join;
 
 public:
@@ -1110,8 +1151,8 @@ public:
   void send_dentry_link(CDentry *dn, MDRequestRef& mdr);
   void send_dentry_unlink(CDentry *dn, CDentry *straydn, MDRequestRef& mdr);
 protected:
-  void handle_dentry_link(const MDentryLink::const_ref &m);
-  void handle_dentry_unlink(const MDentryUnlink::const_ref &m);
+  void handle_dentry_link(const cref_t<MDentryLink> &m);
+  void handle_dentry_unlink(const cref_t<MDentryUnlink> &m);
 
 
   // -- fragmenting --
@@ -1129,8 +1170,8 @@ private:
 
   struct fragment_info_t {
     int bits;
-    list<CDir*> dirs;
-    list<CDir*> resultfrags;
+    std::vector<CDir*> dirs;
+    std::vector<CDir*> resultfrags;
     MDRequestRef mdr;
     set<mds_rank_t> notify_ack_waiting;
     bool finishing = false;
@@ -1148,21 +1189,21 @@ private:
   typedef map<dirfrag_t,fragment_info_t>::iterator fragment_info_iterator;
 
   void adjust_dir_fragments(CInode *diri, frag_t basefrag, int bits,
-			    list<CDir*>& frags, MDSContext::vec& waiters, bool replay);
+			    std::vector<CDir*>* frags, MDSContext::vec& waiters, bool replay);
   void adjust_dir_fragments(CInode *diri,
-			    list<CDir*>& srcfrags,
+			    const std::vector<CDir*>& srcfrags,
 			    frag_t basefrag, int bits,
-			    list<CDir*>& resultfrags, 
+			    std::vector<CDir*>* resultfrags,
 			    MDSContext::vec& waiters,
 			    bool replay);
   CDir *force_dir_fragment(CInode *diri, frag_t fg, bool replay=true);
   void get_force_dirfrag_bound_set(const vector<dirfrag_t>& dfs, set<CDir*>& bounds);
 
-  bool can_fragment(CInode *diri, list<CDir*>& dirs);
-  void fragment_freeze_dirs(list<CDir*>& dirs);
+  bool can_fragment(CInode *diri, const std::vector<CDir*>& dirs);
+  void fragment_freeze_dirs(const std::vector<CDir*>& dirs);
   void fragment_mark_and_complete(MDRequestRef& mdr);
   void fragment_frozen(MDRequestRef& mdr, int r);
-  void fragment_unmark_unfreeze_dirs(list<CDir*>& dirs);
+  void fragment_unmark_unfreeze_dirs(const std::vector<CDir*>& dirs);
   void fragment_drop_locks(fragment_info_t &info);
   void fragment_maybe_finish(const fragment_info_iterator& it);
   void dispatch_fragment_dir(MDRequestRef& mdr);
@@ -1179,8 +1220,8 @@ private:
   friend class C_MDC_FragmentCommit;
   friend class C_IO_MDC_FragmentPurgeOld;
 
-  void handle_fragment_notify(const MMDSFragmentNotify::const_ref &m);
-  void handle_fragment_notify_ack(const MMDSFragmentNotifyAck::const_ref &m);
+  void handle_fragment_notify(const cref_t<MMDSFragmentNotify> &m);
+  void handle_fragment_notify_ack(const cref_t<MMDSFragmentNotifyAck> &m);
 
   void add_uncommitted_fragment(dirfrag_t basedirfrag, int bits, const frag_vec_t& old_frag,
 				LogSegment *ls, bufferlist *rollback=NULL);
@@ -1209,19 +1250,22 @@ public:
   //void handle_inode_update(MInodeUpdate *m);
 
   int send_dir_updates(CDir *in, bool bcast=false);
-  void handle_dir_update(const MDirUpdate::const_ref &m);
+  void handle_dir_update(const cref_t<MDirUpdate> &m);
 
   // -- cache expiration --
-  void handle_cache_expire(const MCacheExpire::const_ref &m);
+  void handle_cache_expire(const cref_t<MCacheExpire> &m);
   // delayed cache expire
   map<CDir*, expiremap> delayed_expire; // subtree root -> expire msg
   void process_delayed_expire(CDir *dir);
   void discard_delayed_expire(CDir *dir);
 
+  // -- mdsmap --
+  void handle_mdsmap(const MDSMap &mdsmap);
+
 protected:
   int dump_cache(std::string_view fn, Formatter *f);
 public:
-  int dump_cache() { return dump_cache(NULL, NULL); }
+  int dump_cache() { return dump_cache({}, nullptr); }
   int dump_cache(std::string_view filename);
   int dump_cache(Formatter *f);
   void dump_tree(CInode *in, const int cur_depth, const int max_depth, Formatter *f);
@@ -1234,7 +1278,7 @@ public:
   // == crap fns ==
  public:
   void show_cache();
-  void show_subtrees(int dbl=10);
+  void show_subtrees(int dbl=10, bool force_print=false);
 
   CInode *hack_pick_random_inode() {
     ceph_assert(!inode_map.empty());
@@ -1275,6 +1319,7 @@ public:
 public:
   /* Because exports may fail, this set lets us keep track of inodes that need exporting. */
   std::set<CInode *> export_pin_queue;
+  std::set<CInode *> export_pin_delayed_queue;
 
   OpenFileTable open_file_table;
 };

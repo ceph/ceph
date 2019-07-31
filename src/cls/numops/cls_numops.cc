@@ -28,6 +28,11 @@
 
 #define DECIMAL_PRECISION 10
 
+using ceph::bufferlist;
+using std::string;
+using ceph::decode;
+using ceph::encode;
+
 CLS_VER(1,0)
 CLS_NAME(numops)
 

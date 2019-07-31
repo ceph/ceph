@@ -19,7 +19,6 @@
 #include "krb/KrbSessionHandler.hpp"
 #endif
 #include "none/AuthNoneSessionHandler.h"
-#include "unknown/AuthUnknownSessionHandler.h"
 
 #include "common/ceph_crypto.h"
 #define dout_subsys ceph_subsys_auth
@@ -32,9 +31,9 @@ AuthSessionHandler *get_auth_session_handler(
 {
 
   // Should add code to only print the SHA1 hash of the key, unless in secure debugging mode
-
+#ifndef WITH_SEASTAR
   ldout(cct,10) << "In get_auth_session_handler for protocol " << protocol << dendl;
- 
+#endif
   switch (protocol) {
   case CEPH_AUTH_CEPHX:
     // if there is no session key, there is no session handler.
@@ -44,8 +43,6 @@ AuthSessionHandler *get_auth_session_handler(
     return new CephxSessionHandler(cct, key, features);
   case CEPH_AUTH_NONE:
     return new AuthNoneSessionHandler();
-  case CEPH_AUTH_UNKNOWN:
-    return new AuthUnknownSessionHandler();
 #ifdef HAVE_GSSAPI
   case CEPH_AUTH_GSS: 
     return new KrbSessionHandler();

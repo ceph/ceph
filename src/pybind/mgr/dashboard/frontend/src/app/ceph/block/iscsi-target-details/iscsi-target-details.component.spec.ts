@@ -7,6 +7,9 @@ import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../shared/shared.module';
 import { IscsiTargetDetailsComponent } from './iscsi-target-details.component';
 
+import * as _ from 'lodash';
+import { Icons } from '../../../shared/enum/icons.enum';
+
 describe('IscsiTargetDetailsComponent', () => {
   let component: IscsiTargetDetailsComponent;
   let fixture: ComponentFixture<IscsiTargetDetailsComponent>;
@@ -24,26 +27,46 @@ describe('IscsiTargetDetailsComponent', () => {
     component.settings = {
       config: { minimum_gateways: 2 },
       disk_default_controls: {
-        hw_max_sectors: 1024,
-        max_data_area_mb: 8
+        'backstore:1': {
+          hw_max_sectors: 1024,
+          max_data_area_mb: 8
+        },
+        'backstore:2': {
+          hw_max_sectors: 1024,
+          max_data_area_mb: 8
+        }
       },
       target_default_controls: {
         cmdsn_depth: 128,
         dataout_timeout: 20
-      }
+      },
+      backstores: ['backstore:1', 'backstore:2'],
+      default_backstore: 'backstore:1'
     };
     component.selection = new CdTableSelection();
     component.selection.selected = [
       {
         target_iqn: 'iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw',
         portals: [{ host: 'node1', ip: '192.168.100.201' }],
-        disks: [{ pool: 'rbd', image: 'disk_1', controls: { hw_max_sectors: 1 } }],
+        disks: [
+          {
+            pool: 'rbd',
+            image: 'disk_1',
+            backstore: 'backstore:1',
+            controls: { hw_max_sectors: 1 }
+          }
+        ],
         clients: [
           {
             client_iqn: 'iqn.1994-05.com.redhat:rh7-client',
             luns: [{ pool: 'rbd', image: 'disk_1' }],
             auth: {
               user: 'myiscsiusername'
+            },
+            info: {
+              alias: 'myhost',
+              ip_address: ['192.168.200.1'],
+              state: { LOGGED_IN: ['node1'] }
             }
           }
         ],
@@ -73,8 +96,13 @@ describe('IscsiTargetDetailsComponent', () => {
 
     expect(component.data).toBeUndefined();
     expect(component.metadata).toEqual({
-      'client_iqn.1994-05.com.redhat:rh7-client': { user: 'myiscsiusername' },
-      disk_rbd_disk_1: { hw_max_sectors: 1 },
+      'client_iqn.1994-05.com.redhat:rh7-client': {
+        user: 'myiscsiusername',
+        alias: 'myhost',
+        ip_address: ['192.168.200.1'],
+        logged_in: ['node1']
+      },
+      disk_rbd_disk_1: { backstore: 'backstore:1', controls: { hw_max_sectors: 1 } },
       root: { dataout_timeout: 2 }
     });
     expect(component.tree).toEqual({
@@ -82,7 +110,10 @@ describe('IscsiTargetDetailsComponent', () => {
         {
           children: [{ id: 'disk_rbd_disk_1', value: 'rbd/disk_1' }],
           settings: {
-            cssClasses: { expanded: 'fa fa-fw fa-hdd-o fa-lg', leaf: 'fa fa-fw fa-hdd-o' },
+            cssClasses: {
+              expanded: _.join([Icons.large, Icons.disk], ' '),
+              leaf: _.join([Icons.disk], ' ')
+            },
             selectionAllowed: false
           },
           value: 'Disks'
@@ -90,7 +121,10 @@ describe('IscsiTargetDetailsComponent', () => {
         {
           children: [{ value: 'node1:192.168.100.201' }],
           settings: {
-            cssClasses: { expanded: 'fa fa-fw fa-server fa-lg', leaf: 'fa fa-fw fa-server fa-lg' },
+            cssClasses: {
+              expanded: _.join([Icons.large, Icons.server], ' '),
+              leaf: _.join([Icons.large, Icons.server], ' ')
+            },
             selectionAllowed: false
           },
           value: 'Portals'
@@ -102,17 +136,24 @@ describe('IscsiTargetDetailsComponent', () => {
                 {
                   id: 'disk_rbd_disk_1',
                   settings: {
-                    cssClasses: { expanded: 'fa fa-fw fa-hdd-o fa-lg', leaf: 'fa fa-fw fa-hdd-o' }
+                    cssClasses: {
+                      expanded: _.join([Icons.large, Icons.disk], ' '),
+                      leaf: _.join([Icons.disk], ' ')
+                    }
                   },
                   value: 'rbd/disk_1'
                 }
               ],
               id: 'client_iqn.1994-05.com.redhat:rh7-client',
+              status: 'logged_in',
               value: 'iqn.1994-05.com.redhat:rh7-client'
             }
           ],
           settings: {
-            cssClasses: { expanded: 'fa fa-fw fa-user fa-lg', leaf: 'fa fa-fw fa-user' },
+            cssClasses: {
+              expanded: _.join([Icons.large, Icons.user], ' '),
+              leaf: _.join([Icons.user], ' ')
+            },
             selectionAllowed: false
           },
           value: 'Initiators'
@@ -120,14 +161,20 @@ describe('IscsiTargetDetailsComponent', () => {
         {
           children: [],
           settings: {
-            cssClasses: { expanded: 'fa fa-fw fa-users fa-lg', leaf: 'fa fa-fw fa-users' },
+            cssClasses: {
+              expanded: _.join([Icons.large, Icons.user], ' '),
+              leaf: _.join([Icons.user], ' ')
+            },
             selectionAllowed: false
           },
           value: 'Groups'
         }
       ],
       id: 'root',
-      settings: { cssClasses: { expanded: 'fa fa-fw fa-bullseye fa-lg' }, static: true },
+      settings: {
+        cssClasses: { expanded: _.join([Icons.large, Icons.bullseye], ' ') },
+        static: true
+      },
       value: 'iqn.2003-01.com.redhat.iscsi-gw:iscsi-igw'
     });
   });
@@ -153,7 +200,8 @@ describe('IscsiTargetDetailsComponent', () => {
       component.onNodeSelected(node);
       expect(component.data).toEqual([
         { current: 1, default: 1024, displayName: 'hw_max_sectors' },
-        { current: 8, default: 8, displayName: 'max_data_area_mb' }
+        { current: 8, default: 8, displayName: 'max_data_area_mb' },
+        { current: 'backstore:1', default: 'backstore:1', displayName: 'backstore' }
       ]);
     });
 
@@ -162,7 +210,10 @@ describe('IscsiTargetDetailsComponent', () => {
       const node = new NodeEvent(tree);
       component.onNodeSelected(node);
       expect(component.data).toEqual([
-        { current: 'myiscsiusername', default: undefined, displayName: 'user' }
+        { current: 'myiscsiusername', default: undefined, displayName: 'user' },
+        { current: 'myhost', default: undefined, displayName: 'alias' },
+        { current: ['192.168.200.1'], default: undefined, displayName: 'ip_address' },
+        { current: ['node1'], default: undefined, displayName: 'logged_in' }
       ]);
     });
 

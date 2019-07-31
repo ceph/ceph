@@ -4,24 +4,52 @@ ceph-mgr orchestrator interface
 
 Please see the ceph-mgr module developer's guide for more information.
 """
+import sys
+import time
+import fnmatch
+import uuid
+import string
+import random
+import datetime
+
 import six
 
+from mgr_module import MgrModule, PersistentStoreDict
 from mgr_util import format_bytes
 
 try:
-    from typing import TypeVar, Generic, List, Optional, Union, Tuple
+    from ceph.deployment.drive_group import DriveGroupSpec
+    from typing import TypeVar, Generic, List, Optional, Union, Tuple, Iterator
+
     T = TypeVar('T')
     G = Generic[T]
 except ImportError:
     T, G = object, object
 
-import time
-import fnmatch
 
-class NoOrchestrator(Exception):
-    def __init__(self):
-        super(NoOrchestrator, self).__init__("No orchestrator configured (try "
-                                             "`ceph orchestrator set backend`)")
+class OrchestratorError(Exception):
+    """
+    General orchestrator specific error.
+
+    Used for deployment, configuration or user errors.
+
+    It's not intended for programming errors or orchestrator internal errors.
+    """
+
+
+class NoOrchestrator(OrchestratorError):
+    """
+    No orchestrator in configured.
+    """
+    def __init__(self, msg="No orchestrator configured (try `ceph orchestrator set backend`)"):
+        super(NoOrchestrator, self).__init__(msg)
+
+
+class OrchestratorValidationError(OrchestratorError):
+    """
+    Raised when an orchestrator doesn't support a specific feature.
+    """
+
 
 class _Completion(G):
     @property
@@ -33,6 +61,21 @@ class _Completion(G):
         completion.
         """
         raise NotImplementedError()
+
+    @property
+    def exception(self):
+        # type: () -> Optional[Exception]
+        """
+        Holds an exception object.
+        """
+        try:
+            return self.__exception
+        except AttributeError:
+            return None
+
+    @exception.setter
+    def exception(self, value):
+        self.__exception = value
 
     @property
     def is_read(self):
@@ -47,12 +90,40 @@ class _Completion(G):
     @property
     def is_errored(self):
         # type: () -> bool
-        raise NotImplementedError()
+        """
+        Has the completion failed. Default implementation looks for
+        self.exception. Can be overwritten.
+        """
+        return self.exception is not None
 
     @property
     def should_wait(self):
         # type: () -> bool
         raise NotImplementedError()
+
+
+def raise_if_exception(c):
+    # type: (_Completion) -> None
+    """
+    :raises OrchestratorError: Some user error or a config error.
+    :raises Exception: Some internal error
+    """
+    def copy_to_this_subinterpreter(r_obj):
+        # This is something like `return pickle.loads(pickle.dumps(r_obj))`
+        # Without importing anything.
+        r_cls = r_obj.__class__
+        if r_cls.__module__ == '__builtin__':
+            return r_obj
+        my_cls = getattr(sys.modules[r_cls.__module__], r_cls.__name__)
+        if id(my_cls) == id(r_cls):
+            return r_obj
+        my_obj = my_cls.__new__(my_cls)
+        for k,v in r_obj.__dict__.items():
+            setattr(my_obj, k, copy_to_this_subinterpreter(v))
+        return my_obj
+
+    if c.exception is not None:
+        raise copy_to_this_subinterpreter(c.exception)
 
 
 class ReadCompletion(_Completion):
@@ -78,6 +149,23 @@ class ReadCompletion(_Completion):
         return not self.is_complete
 
 
+class TrivialReadCompletion(ReadCompletion):
+    """
+    This is the trivial completion simply wrapping a result.
+    """
+    def __init__(self, result):
+        super(TrivialReadCompletion, self).__init__()
+        self._result = result
+
+    @property
+    def result(self):
+        return self._result
+
+    @property
+    def is_complete(self):
+        return True
+
+
 class WriteCompletion(_Completion):
     """
     ``Orchestrator`` implementations should inherit from this
@@ -86,7 +174,17 @@ class WriteCompletion(_Completion):
     """
 
     def __init__(self):
-        pass
+        self.progress_id = str(uuid.uuid4())
+
+        #: if a orchestrator module can provide a more detailed
+        #: progress information, it needs to also call ``progress.update()``.
+        self.progress = 0.5
+
+    def __str__(self):
+        """
+        ``__str__()`` is used for determining the message for progress events.
+        """
+        return super(WriteCompletion, self).__str__()
 
     @property
     def is_persistent(self):
@@ -155,7 +253,7 @@ class Orchestrator(object):
         return True
 
     def available(self):
-        # type: () -> Tuple[Optional[bool], Optional[str]]
+        # type: () -> Tuple[bool, str]
         """
         Report whether we can talk to the orchestrator.  This is the
         place to give the user a meaningful message if the orchestrator
@@ -167,13 +265,16 @@ class Orchestrator(object):
         (e.g. based on a periodic background ping of the orchestrator)
         if that's necessary to make this method fast.
 
-        Do not override this method if you don't have a meaningful
-        status to return: the default None, None return value is used
-        to indicate that a module is unable to indicate its availability.
+        ..note:: `True` doesn't mean that the desired functionality
+            is actually available in the orchestrator. I.e. this
+            won't work as expected::
+
+                >>> if OrchestratorClientMixin().available()[0]:  # wrong.
+                ...     OrchestratorClientMixin().get_hosts()
 
         :return: two-tuple of boolean, string
         """
-        return None, None
+        raise NotImplementedError()
 
     def wait(self, completions):
         """
@@ -229,8 +330,8 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def describe_service(self, service_type=None, service_id=None, node_name=None):
-        # type: (str, str, str) -> ReadCompletion[List[ServiceDescription]]
+    def describe_service(self, service_type=None, service_id=None, node_name=None, refresh=False):
+        # type: (Optional[str], Optional[str], Optional[str], bool) -> ReadCompletion[List[ServiceDescription]]
         """
         Describe a service (of any kind) that is already configured in
         the orchestrator.  For example, when viewing an OSD in the dashboard
@@ -332,8 +433,8 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def update_stateless_service(self, service_type, id_, spec):
-        # type: (str, str, StatelessServiceSpec) -> WriteCompletion
+    def update_stateless_service(self, service_type, spec):
+        # type: (str, StatelessServiceSpec) -> WriteCompletion
         """
         This is about changing / redeploying existing services. Like for
         example changing the number of service instances.
@@ -342,7 +443,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def remove_stateless_service(self, service_type, id_):
+    def remove_stateless_service(self, service_type, id_resource):
         # type: (str, str) -> WriteCompletion
         """
         Uninstalls an existing service from the cluster.
@@ -373,38 +474,6 @@ class Orchestrator(object):
         :return: List of strings
         """
         raise NotImplementedError()
-
-    def add_stateful_service_rule(self, service_type, stateful_service_spec,
-                                  placement_spec):
-        """
-        Stateful service rules serve two purposes:
-         - Optionally delegate device selection to the orchestrator
-         - Enable the orchestrator to auto-assimilate new hardware if it
-           matches the placement spec, without any further calls from ceph-mgr.
-
-        To create a confidence-inspiring UI workflow, use test_stateful_service_rule
-        beforehand to show the user where stateful services will be placed
-        if they proceed.
-        """
-        raise NotImplementedError()
-
-    def test_stateful_service_rule(self, service_type, stateful_service_spec,
-                                   placement_spec):
-        """
-        See add_stateful_service_rule.
-        """
-        raise NotImplementedError()
-
-    def remove_stateful_service_rule(self, service_type, id_):
-        """
-        This will remove the *rule* but not the services that were
-        created as a result.  Those should be converted into statically
-        placed services as if they had been created with add_stateful_service,
-        so that they can be removed with remove_stateless_service
-        if desired.
-        """
-        raise NotImplementedError()
-
 
 class UpgradeSpec(object):
     # Request to orchestrator to initiate an upgrade to a particular
@@ -441,13 +510,16 @@ class ServiceDescription(object):
     is literally up this second, it's a description of where the orchestrator
     has decided the service should run.
     """
-    def __init__(self):
+
+    def __init__(self, nodename=None, container_id=None, service=None, service_instance=None,
+                 service_type=None, version=None, rados_config_location=None,
+                 service_url=None, status=None, status_desc=None):
         # Node is at the same granularity as InventoryNode
-        self.nodename = None
+        self.nodename = nodename
 
         # Not everyone runs in containers, but enough people do to
         # justify having this field here.
-        self.container_id = None
+        self.container_id = container_id
 
         # Some services can be deployed in groups. For example, mds's can
         # have an active and standby daemons, and nfs-ganesha can run daemons
@@ -458,33 +530,33 @@ class ServiceDescription(object):
         # Filesystem name in the FSMap).
         #
         # Single-instance services should leave this set to None
-        self.service = None
+        self.service = service
 
         # The orchestrator will have picked some names for daemons,
         # typically either based on hostnames or on pod names.
         # This is the <foo> in mds.<foo>, the ID that will appear
         # in the FSMap/ServiceMap.
-        self.service_instance = None
+        self.service_instance = service_instance
 
         # The type of service (osd, mon, mgr, etc.)
-        self.service_type = None
+        self.service_type = service_type
 
         # Service version that was deployed
-        self.version = None
+        self.version = version
 
         # Location of the service configuration when stored in rados
         # object. Format: "rados://<pool>/[<namespace/>]<object>"
-        self.rados_config_location = None
+        self.rados_config_location = rados_config_location
 
         # If the service exposes REST-like API, this attribute should hold
         # the URL.
-        self.service_url = None
+        self.service_url = service_url
 
         # Service status: -1 error, 0 stopped, 1 running
-        self.status = None
+        self.status = status
 
         # Service status description when status == -1.
-        self.status_desc = None
+        self.status_desc = status_desc
 
     def to_json(self):
         out = {
@@ -501,142 +573,9 @@ class ServiceDescription(object):
         }
         return {k: v for (k, v) in out.items() if v is not None}
 
-
-class DeviceSelection(object):
-    """
-    Used within :class:`myclass.DriveGroupSpec` to specify the devices
-    used by the Drive Group.
-
-    Any attributes (even none) can be included in the device
-    specification structure.
-    """
-
-    def __init__(self, paths=None, id_model=None, size=None, rotates=None, count=None):
-        # type: (List[str], str, str, bool, int) -> None
-        """
-        ephemeral drive group device specification
-
-        TODO: translate from the user interface (Drive Groups) to an actual list of devices.
-        """
-        if paths is None:
-            paths = []
-
-        #: List of absolute paths to the devices.
-        self.paths = paths  # type: List[str]
-
-        #: A wildcard string. e.g: "SDD*"
-        self.id_model = id_model
-
-        #: Size specification of format LOW:HIGH.
-        #: Can also take the the form :HIGH, LOW:
-        #: or an exact value (as ceph-volume inventory reports)
-        self.size = size
-
-        #: is the drive rotating or not
-        self.rotates = rotates
-
-        #: if this is present limit the number of drives to this number.
-        self.count = count
-        self.validate()
-
-    def validate(self):
-        props = [self.id_model, self.size, self.rotates, self.count]
-        if self.paths and any(p is not None for p in props):
-            raise DriveGroupValidationError('DeviceSelection: `paths` and other parameters are mutually exclusive')
-        if not any(p is not None for p in [self.paths] + props):
-            raise DriveGroupValidationError('DeviceSelection cannot be empty')
-
     @classmethod
-    def from_json(cls, device_spec):
-        return cls(**device_spec)
-
-
-class DriveGroupValidationError(Exception):
-    """
-    Defining an exception here is a bit problematic, cause you cannot properly catch it,
-    if it was raised in a different mgr module.
-    """
-
-    def __init__(self, msg):
-        super(DriveGroupValidationError, self).__init__('Failed to validate Drive Group: ' + msg)
-
-class DriveGroupSpec(object):
-    """
-    Describe a drive group in the same form that ceph-volume
-    understands.
-    """
-    def __init__(self, host_pattern, data_devices, db_devices=None, wal_devices=None, journal_devices=None,
-                 osds_per_device=None, objectstore='bluestore', encrypted=False, db_slots=None,
-                 wal_slots=None):
-        # type: (str, DeviceSelection, Optional[DeviceSelection], Optional[DeviceSelection], Optional[DeviceSelection], int, str, bool, int, int) -> ()
-
-        # concept of applying a drive group to a (set) of hosts is tightly
-        # linked to the drive group itself
-        #
-        #: An fnmatch pattern to select hosts. Can also be a single host.
-        self.host_pattern = host_pattern
-
-        #: A :class:`orchestrator.DeviceSelection`
-        self.data_devices = data_devices
-
-        #: A :class:`orchestrator.DeviceSelection`
-        self.db_devices = db_devices
-
-        #: A :class:`orchestrator.DeviceSelection`
-        self.wal_devices = wal_devices
-
-        #: A :class:`orchestrator.DeviceSelection`
-        self.journal_devices = journal_devices
-
-        #: Number of osd daemons per "DATA" device.
-        #: To fully utilize nvme devices multiple osds are required.
-        self.osds_per_device = osds_per_device
-
-        #: ``filestore`` or ``bluestore``
-        self.objectstore = objectstore
-
-        #: ``true`` or ``false``
-        self.encrypted = encrypted
-
-        #: How many OSDs per DB device
-        self.db_slots = db_slots
-
-        #: How many OSDs per WAL device
-        self.wal_slots = wal_slots
-
-        # FIXME: needs ceph-volume support
-        #: Optional: mapping of drive to OSD ID, used when the
-        #: created OSDs are meant to replace previous OSDs on
-        #: the same node.
-        self.osd_id_claims = {}
-
-    @classmethod
-    def from_json(self, json_drive_group):
-        """
-        Initialize 'Drive group' structure
-
-        :param json_drive_group: A valid json string with a Drive Group
-               specification
-        """
-        args = {k: (DeviceSelection.from_json(v) if k.endswith('_devices') else v) for k, v in
-                json_drive_group.items()}
-        return DriveGroupSpec(**args)
-
-    def hosts(self, all_hosts):
-        return fnmatch.filter(all_hosts, self.host_pattern)
-
-    def validate(self, all_hosts):
-        if not isinstance(self.host_pattern, six.string_types):
-            raise DriveGroupValidationError('host_pattern must be of type string')
-
-        specs = [self.data_devices, self.db_devices, self.wal_devices, self.journal_devices]
-        for s in filter(None, specs):
-            s.validate()
-        if self.objectstore not in ('filestore', 'bluestore'):
-            raise DriveGroupValidationError("objectstore not in ('filestore', 'bluestore')")
-        if not self.hosts(all_hosts):
-            raise DriveGroupValidationError(
-                "host_pattern '{}' does not match any hosts".format(self.host_pattern))
+    def from_json(cls, data):
+        return cls(**data)
 
 
 class StatelessServiceSpec(object):
@@ -658,14 +597,75 @@ class StatelessServiceSpec(object):
         # within one ceph cluster.
         self.name = ""
 
-        # Minimum and maximum number of service instances
-        self.min_size = 1
-        self.max_size = 1
+        # Count of service instances
+        self.count = 1
 
         # Arbitrary JSON-serializable object.
         # Maybe you're using e.g. kubenetes and you want to pass through
         # some replicaset special sauce for autoscaling?
         self.extended = {}
+
+        # Object with specific settings for the service
+        self.service_spec = None
+
+class RGWSpec(object):
+    """
+    Settings to configure a multisite Ceph RGW
+    """
+    def __init__(self, hosts=None, rgw_multisite=True, rgw_zone="Default_Zone",
+              rgw_zonemaster=True, rgw_zonesecondary=False,
+              rgw_multisite_proto="http", rgw_frontend_port="8080",
+              rgw_zonegroup="Main", rgw_zone_user="zone.user",
+              rgw_realm="RGW_Realm", system_access_key=None,
+              system_secret_key=None):
+
+        self.hosts = hosts
+        self.rgw_multisite = rgw_multisite
+        self.rgw_zone = rgw_zone
+        self.rgw_zonemaster = rgw_zonemaster
+        self.rgw_zonesecondary = rgw_zonesecondary
+        self.rgw_multisite_proto = rgw_multisite_proto
+        self.rgw_frontend_port = rgw_frontend_port
+
+        if hosts:
+            self.rgw_multisite_endpoint_addr = hosts[0]
+
+            self.rgw_multisite_endpoints_list = ",".join(
+                ["{}://{}:{}".format(self.rgw_multisite_proto,
+                                    host,
+                                    self.rgw_frontend_port) for host in hosts])
+
+        self.rgw_zonegroup = rgw_zonegroup
+        self.rgw_zone_user = rgw_zone_user
+        self.rgw_realm = rgw_realm
+
+        if system_access_key:
+            self.system_access_key = system_access_key
+        else:
+            self.system_access_key = self.genkey(20)
+        if system_secret_key:
+            self.system_secret_key = system_secret_key
+        else:
+            self.system_secret_key = self.genkey(40)
+
+    def genkey(self, nchars):
+        """ Returns a random string of nchars
+
+        :nchars : Length of the returned string
+        """
+
+        return ''.join(random.choice(string.ascii_uppercase +
+                                     string.ascii_lowercase +
+                                     string.digits) for _ in range(nchars))
+
+    @classmethod
+    def from_json(self, json_rgw_spec):
+        """
+        Initialize 'RGWSpec' object geting data from a json estructure
+        :param json_rgw_spec: A valid json string with a the RGW settings
+        """
+        args = {k:v for k, v in json_rgw_spec.items()}
+        return RGWSpec(**args)
 
 
 class InventoryFilter(object):
@@ -707,7 +707,7 @@ class InventoryDevice(object):
     def __init__(self, blank=False, type=None, id=None, size=None,
                  rotates=False, available=False, dev_id=None, extended=None,
                  metadata_space_free=None):
-        # type: (bool, str, str, int, bool, bool. str, dict, bool) -> None
+        # type: (bool, str, str, int, bool, bool, str, dict, bool) -> None
 
         self.blank = blank
 
@@ -758,6 +758,10 @@ class InventoryDevice(object):
         dev.extended = data
         return dev
 
+    @classmethod
+    def from_ceph_volume_inventory_list(cls, datas):
+        return [cls.from_ceph_volume_inventory(d) for d in datas]
+
     def pretty_print(self, only_header=False):
         """Print a human friendly line with the information of the device
 
@@ -795,13 +799,20 @@ class InventoryNode(object):
     def to_json(self):
         return {'name': self.name, 'devices': [d.to_json() for d in self.devices]}
 
+    @classmethod
+    def from_nested_items(cls, hosts):
+        devs = InventoryDevice.from_ceph_volume_inventory_list
+        return [cls(item[0], devs(item[1].data)) for item in hosts]
+
 
 def _mk_orch_methods(cls):
     # Needs to be defined outside of for.
     # Otherwise meth is always bound to last key
     def shim(method_name):
         def inner(self, *args, **kwargs):
-            return self._oremote(method_name, args, kwargs)
+            completion = self._oremote(method_name, args, kwargs)
+            self._update_completion_progress(completion, 0)
+            return completion
         return inner
 
     for meth in Orchestrator.__dict__:
@@ -812,34 +823,187 @@ def _mk_orch_methods(cls):
 
 @_mk_orch_methods
 class OrchestratorClientMixin(Orchestrator):
+    """
+    A module that inherents from `OrchestratorClientMixin` can directly call
+    all :class:`Orchestrator` methods without manually calling remote.
+
+    Every interface method from ``Orchestrator`` is converted into a stub method that internally
+    calls :func:`OrchestratorClientMixin._oremote`
+
+    >>> class MyModule(OrchestratorClientMixin):
+    ...    def func(self):
+    ...        completion = self.add_host('somehost')  # calls `_oremote()`
+    ...        self._orchestrator_wait([completion])
+    ...        self.log.debug(completion.result)
+
+    """
+
+    def set_mgr(self, mgr):
+        # type: (MgrModule) -> None
+        """
+        Useable in the Dashbord that uses a global ``mgr``
+        """
+
+        self.__mgr = mgr  # Make sure we're not overwriting any other `mgr` properties
+
     def _oremote(self, meth, args, kwargs):
         """
         Helper for invoking `remote` on whichever orchestrator is enabled
+
+        :raises RuntimeError: If the remote method failed.
+        :raises OrchestratorError: orchestrator failed to perform
+        :raises ImportError: no `orchestrator_cli` module or backend not found.
         """
         try:
-            o = self._select_orchestrator()
+            mgr = self.__mgr
         except AttributeError:
-            o = self.remote('orchestrator_cli', '_select_orchestrator')
+            mgr = self
+        try:
+            o = mgr._select_orchestrator()
+        except AttributeError:
+            o = mgr.remote('orchestrator_cli', '_select_orchestrator')
 
         if o is None:
             raise NoOrchestrator()
 
-        self.log.debug("_oremote {} -> {}.{}(*{}, **{})".format(self.module_name, o, meth, args, kwargs))
-        return self.remote(o, meth, *args, **kwargs)
+        mgr.log.debug("_oremote {} -> {}.{}(*{}, **{})".format(mgr.module_name, o, meth, args, kwargs))
+        return mgr.remote(o, meth, *args, **kwargs)
+
+    def _update_completion_progress(self, completion, force_progress=None):
+        # type: (WriteCompletion, Optional[float]) -> None
+        try:
+            progress = force_progress if force_progress is not None else completion.progress
+            if completion.is_complete:
+                self.remote("progress", "complete", completion.progress_id)
+            else:
+                self.remote("progress", "update", completion.progress_id, str(completion), progress,
+                            ["orchestrator"])
+        except AttributeError:
+            # No WriteCompletion. Ignore.
+            pass
+        except ImportError:
+            # If the progress module is disabled that's fine,
+            # they just won't see the output.
+            pass
 
     def _orchestrator_wait(self, completions):
         # type: (List[_Completion]) -> None
         """
-        Helper to wait for completions to complete (reads) or
+        Wait for completions to complete (reads) or
         become persistent (writes).
 
         Waits for writes to be *persistent* but not *effective*.
+
+        :param completions: List of Completions
+        :raises NoOrchestrator:
+        :raises ImportError: no `orchestrator_cli` module or backend not found.
         """
+        for c in completions:
+            self._update_completion_progress(c)
         while not self.wait(completions):
             if any(c.should_wait for c in completions):
                 time.sleep(5)
             else:
                 break
+        for c in completions:
+            self._update_completion_progress(c)
 
-        if all(hasattr(c, 'error') and getattr(c, 'error') for c in completions):
-            raise Exception([getattr(c, 'error') for c in completions])
+
+class OutdatableData(object):
+    DATEFMT = '%Y-%m-%d %H:%M:%S.%f'
+
+    def __init__(self, data=None, last_refresh=None):
+        # type: (Optional[dict], Optional[datetime.datetime]) -> None
+        self._data = data
+        if data is not None and last_refresh is None:
+            self.last_refresh = datetime.datetime.utcnow()
+        else:
+            self.last_refresh = last_refresh
+
+    def json(self):
+        if self.last_refresh is not None:
+            timestr = self.last_refresh.strftime(self.DATEFMT)
+        else:
+            timestr = None
+
+        return {
+            "data": self._data,
+            "last_refresh": timestr,
+        }
+
+    @property
+    def data(self):
+        return self._data
+
+    # @data.setter
+    # No setter, as it doesn't work as expected: It's not saved in store automatically
+
+    @classmethod
+    def time_from_string(cls, timestr):
+        if timestr is None:
+            return None
+        # drop the 'Z' timezone indication, it's always UTC
+        timestr = timestr.rstrip('Z')
+        return datetime.datetime.strptime(timestr, cls.DATEFMT)
+
+
+    @classmethod
+    def from_json(cls, data):
+        return cls(data['data'], cls.time_from_string(data['last_refresh']))
+
+    def outdated(self, timeout_min=None):
+        if timeout_min is None:
+            timeout_min = 10
+        if self.last_refresh is None:
+            return True
+        cutoff = datetime.datetime.utcnow() - datetime.timedelta(
+            minutes=timeout_min)
+        return self.last_refresh < cutoff
+
+    def __repr__(self):
+        return 'OutdatableData(data={}, last_refresh={})'.format(self._data, self.last_refresh)
+
+
+class OutdatableDictMixin(object):
+    """
+    Toolbox for implementing a cache. As every orchestrator has
+    different needs, we cannot implement any logic here.
+    """
+
+    def __getitem__(self, item):
+        # type: (str) -> OutdatableData
+        return OutdatableData.from_json(super(OutdatableDictMixin, self).__getitem__(item))
+
+    def __setitem__(self, key, value):
+        # type: (str, OutdatableData) -> None
+        val = None if value is None else value.json()
+        super(OutdatableDictMixin, self).__setitem__(key, val)
+
+    def items(self):
+        # type: () -> Iterator[Tuple[str, OutdatableData]]
+        for item in super(OutdatableDictMixin, self).items():
+            k, v = item
+            yield k, OutdatableData.from_json(v)
+
+    def items_filtered(self, keys=None):
+        if keys:
+            return [(host, self[host]) for host in keys]
+        else:
+            return list(self.items())
+
+    def any_outdated(self, timeout=None):
+        items = self.items()
+        if not list(items):
+            return True
+        return any([i[1].outdated(timeout) for i in items])
+
+    def remove_outdated(self):
+        outdated = [item[0] for item in self.items() if item[1].outdated()]
+        for o in outdated:
+            del self[o]
+
+class OutdatablePersistentDict(OutdatableDictMixin, PersistentStoreDict):
+    pass
+
+class OutdatableDict(OutdatableDictMixin, dict):
+    pass
