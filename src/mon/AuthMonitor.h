@@ -129,8 +129,8 @@ private:
     pending_auth.push_back(inc);
   }
 
-  /* validate mon/osd/mds caps ; don't care about caps for other services as
-   * we don't know how to validate them */
+  /* validate mon/osd/mds caps; fail on unrecognized service/type */
+  bool valid_caps(const string& type, const string& caps, ostream *out);
   bool valid_caps(const vector<string>& caps, ostream *out);
 
   void on_active() override;

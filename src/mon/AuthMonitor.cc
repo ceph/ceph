@@ -1043,6 +1043,35 @@ int AuthMonitor::do_osd_new(
   return 0;
 }
 
+bool AuthMonitor::valid_caps(
+    const string& type,
+    const string& caps,
+    ostream *out)
+{
+  if (type == "mon" || type == "mgr") {
+    MonCap tmp;
+    if (!tmp.parse(caps, out)) {
+      return false;
+    }
+  } else if (type == "osd") {
+    OSDCap ocap;
+    if (!ocap.parse(caps, out)) {
+      return false;
+    }
+  } else if (type == "mds") {
+    MDSAuthCaps mdscap;
+    if (!mdscap.parse(g_ceph_context, caps, out)) {
+      return false;
+    }
+  } else {
+    if (out) {
+      *out << "unknown cap type '" << type << "'";
+    }
+    return false;
+  }
+  return true;
+}
+
 bool AuthMonitor::valid_caps(const vector<string>& caps, ostream *out)
 {
   for (vector<string>::const_iterator p = caps.begin();
@@ -1051,23 +1080,7 @@ bool AuthMonitor::valid_caps(const vector<string>& caps, ostream *out)
       *out << "cap '" << *p << "' has no value";
       return false;
     }
-    if (*p == "mon" || *p == "mgr") {
-      MonCap tmp;
-      if (!tmp.parse(*(p+1), out)) {
-	return false;
-      }
-    } else if (*p == "osd") {
-      OSDCap ocap;
-      if (!ocap.parse(*(p+1), out)) {
-	return false;
-      }
-    } else if (*p == "mds") {
-      MDSAuthCaps mdscap;
-      if (!mdscap.parse(g_ceph_context, *(p+1), out)) {
-	return false;
-      }
-    } else {
-      *out << "unknown cap type '" << *p << "'";
+    if (!valid_caps(*p, *(p+1), out)) {
       return false;
     }
   }
@@ -1355,11 +1368,6 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     string mds_cap_string, osd_cap_string;
     string osd_cap_wanted = "r";
 
-    if (!valid_caps(caps_vec, &ss)) {
-      err = -EINVAL;
-      goto done;
-    }
-
     for (auto it = caps_vec.begin();
 	 it != caps_vec.end() && (it + 1) != caps_vec.end();
 	 it += 2) {
@@ -1400,6 +1408,12 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
       { "osd", _encode_cap(osd_cap_string) },
       { "mds", _encode_cap(mds_cap_string) }
     };
+
+    if (!valid_caps("osd", osd_cap_string, &ss) ||
+	!valid_caps("mds", mds_cap_string, &ss)) {
+      err = -EINVAL;
+      goto done;
+    }
 
     EntityAuth entity_auth;
     if (mon->key_server.get_auth(entity, entity_auth)) {
