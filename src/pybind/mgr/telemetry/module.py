@@ -17,7 +17,13 @@ from collections import defaultdict
 
 from mgr_module import MgrModule
 
+
 ALL_CHANNELS = ['basic', 'ident', 'crash', 'device']
+
+LICENSE='sharing-1-0'
+LICENSE_NAME='Community Data License Agreement - Sharing - Version 1.0'
+LICENSE_URL='https://cdla.io/sharing-1-0/'
+
 
 class Module(MgrModule):
     config = dict()
@@ -119,7 +125,7 @@ class Module(MgrModule):
             "perm": "r"
         },
         {
-            "cmd": "telemetry on",
+            "cmd": "telemetry on name=license,type=CephString,req=false",
             "desc": "Enable telemetry reports from this cluster",
             "perm": "rw",
         },
@@ -246,6 +252,7 @@ class Module(MgrModule):
             'report_id': self.report_id,
             'channels': channels,
             'channels_available': ALL_CHANNELS,
+            'license': LICENSE,
         }
 
         if 'ident' in channels:
@@ -339,6 +346,8 @@ class Module(MgrModule):
                 r[opt['name']] = getattr(self, opt['name'])
             return 0, json.dumps(r, indent=4), ''
         elif command['prefix'] == 'telemetry on':
+            if command.get('license') != LICENSE:
+                return -errno.EPERM, '', "Telemetry data is licensed under the " + LICENSE_NAME + " (" + LICENSE_URL + ").\nTo enable, add '--license " + LICENSE + "' to the 'ceph telemetry on' command."
             self.set_module_option('enabled', True)
             return 0, '', ''
         elif command['prefix'] == 'telemetry off':
