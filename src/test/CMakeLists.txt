@@ -559,32 +559,22 @@ if(WITH_MGR)
   set(MGR_DASHBOARD_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/mgr-dashboard-virtualenv)
   list(APPEND env_vars_for_tox_tests MGR_DASHBOARD_VIRTUALENV=${MGR_DASHBOARD_VIRTUALENV})
 
-  add_test(NAME run-tox-mgr-insights COMMAND bash ${CMAKE_SOURCE_DIR}/src/pybind/mgr/insights/run-tox.sh)
-  list(APPEND tox_tests run-tox-mgr-insights)
-  set(MGR_INSIGHTS_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/mgr-insights-virtualenv)
-  list(APPEND env_vars_for_tox_tests MGR_INSIGHTS_VIRTUALENV=${MGR_INSIGHTS_VIRTUALENV})
+  add_tox_test(mgr-insights
+    ${CMAKE_SOURCE_DIR}/src/pybind/mgr/insights)
 
-  add_test(NAME run-tox-mgr-ansible COMMAND bash ${CMAKE_SOURCE_DIR}/src/pybind/mgr/ansible/run-tox.sh)
-  list(APPEND tox_tests run-tox-mgr-ansible)
-  set(MGR_ANSIBLE_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/mgr-ansible-virtualenv)
-  list(APPEND env_vars_for_tox_tests MGR_ANSIBLE_VIRTUALENV=${MGR_ANSIBLE_VIRTUALENV})
+  add_tox_test(mgr-ansible
+    ${CMAKE_SOURCE_DIR}/src/pybind/mgr/ansible)
 
-  add_test(NAME run-tox-mgr-orchestrator_cli COMMAND bash ${CMAKE_SOURCE_DIR}/src/pybind/mgr/orchestrator_cli/run-tox.sh)
-  list(APPEND tox_tests run-tox-mgr-orchestrator_cli)
-  set(MGR_ORCHESTRATOR_CLI_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/mgr-orchestrator_cli-virtualenv)
-  list(APPEND env_vars_for_tox_tests MGR_ORCHESTRATOR_CLI_VIRTUALENV=${MGR_ORCHESTRATOR_CLI_VIRTUALENV})
+  add_tox_test(mgr-orchestrator_cli
+    ${CMAKE_SOURCE_DIR}/src/pybind/mgr/orchestrator_cli)
 
-  add_test(NAME run-tox-python-common
-           COMMAND bash ${CMAKE_SOURCE_DIR}/src/script/run_tox.sh
-           WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/python-common )
-  list(APPEND tox_tests run-tox-python-common)
+  add_tox_test(python-common
+    ${CMAKE_SOURCE_DIR}/src/python-common)
 endif()
 
 if(WITH_CEPHFS_SHELL)
-  add_test(NAME run-tox-cephfs-shell COMMAND bash ${CMAKE_SOURCE_DIR}/src/tools/cephfs/run-tox.sh)
-  list(APPEND tox_tests run-tox-cephfs-shell)
-  set(CEPHFS_SHELL_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/cephfs-shell-virtualenv)
-  list(APPEND env_vars_for_tox_tests CEPHFS_SHELL_VIRTUALENV=${CEPHFS_SHELL_VIRTUALENV})
+  add_tox_test(cephfs-shell
+    ${CMAKE_SOURCE_DIR}/src/tools/cephfs)
 endif()
 
 set_property(
