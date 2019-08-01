@@ -136,20 +136,16 @@
 
         <!-- Enabled -->
         <div class="form-group row" *ngIf="!isCurrentUser()">
-          <label class="col-sm-3 col-form-label"
-                 i18n>Enabled</label>
-          <div class="col-sm-9">
-            <div class="btn-group"
-                 btnRadioGroup
-                 formControlName="enabled">
-              <label [btnRadio]="true"
-                     class="btn btn-primary"
-                     tabindex="0"
-                     role="button">Enabled</label>
-              <label [btnRadio]="false"
-                     class="btn btn-primary"
-                     tabindex="0"
-                     role="button">Disabled</label>
+          <div class="offset-sm-3 col-sm-9">
+            <div class="custom-control custom-checkbox">
+              <input type="checkbox"
+                     class="custom-control-input"
+                     id="enabled"
+                     name="enabled"
+                     formControlName="enabled">
+              <label class="custom-control-label"
+                     for="enabled"
+                     i18n>Enabled</label>
             </div>
           </div>
         </div>
