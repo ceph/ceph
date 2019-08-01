@@ -37,20 +37,23 @@ public:
   ~ImageSyncThrottler() override;
 
   void set_max_concurrent_syncs(uint32_t max);
-  void start_op(const std::string &id, Context *on_start);
-  bool cancel_op(const std::string &id);
-  void finish_op(const std::string &id);
-  void drain(int r);
+  void start_op(const std::string &ns, const std::string &id,
+                Context *on_start);
+  bool cancel_op(const std::string &ns, const std::string &id);
+  void finish_op(const std::string &ns, const std::string &id);
+  void drain(const std::string &ns, int r);
 
   void print_status(ceph::Formatter *f, std::stringstream *ss);
 
 private:
+  typedef std::pair<std::string, std::string> Id;
+  
   CephContext *m_cct;
   ceph::mutex m_lock;
   uint32_t m_max_concurrent_syncs;
-  std::list<std::string> m_queue;
-  std::map<std::string, Context *> m_queued_ops;
-  std::set<std::string> m_inflight_ops;
+  std::list<Id> m_queue;
+  std::map<Id, Context *> m_queued_ops;
+  std::set<Id> m_inflight_ops;
 
   const char **get_tracked_conf_keys() const override;
   void handle_conf_change(const ConfigProxy& conf,

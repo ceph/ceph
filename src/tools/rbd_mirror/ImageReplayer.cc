@@ -258,19 +258,17 @@ void ImageReplayer<I>::RemoteJournalerListener::handle_update(
 
 template <typename I>
 ImageReplayer<I>::ImageReplayer(
-    Threads<I> *threads, InstanceWatcher<I> *instance_watcher,
-    journal::CacheManagerHandler *cache_manager_handler, RadosRef local,
-    const std::string &local_mirror_uuid, int64_t local_pool_id,
-    const std::string &global_image_id) :
-  m_threads(threads),
+    librados::IoCtx &local_io_ctx, const std::string &local_mirror_uuid,
+    const std::string &global_image_id, Threads<I> *threads,
+    InstanceWatcher<I> *instance_watcher,
+    journal::CacheManagerHandler *cache_manager_handler) :
+  m_local_io_ctx(local_io_ctx), m_local_mirror_uuid(local_mirror_uuid),
+  m_global_image_id(global_image_id), m_threads(threads),
   m_instance_watcher(instance_watcher),
   m_cache_manager_handler(cache_manager_handler),
-  m_local(local),
-  m_local_mirror_uuid(local_mirror_uuid),
-  m_local_pool_id(local_pool_id),
-  m_global_image_id(global_image_id), m_local_image_name(global_image_id),
-  m_lock(ceph::make_mutex("rbd::mirror::ImageReplayer " + stringify(local_pool_id) + " " +
-    global_image_id)),
+  m_local_image_name(global_image_id),
+  m_lock(ceph::make_mutex("rbd::mirror::ImageReplayer " +
+      stringify(local_io_ctx.get_id()) + " " + global_image_id)),
   m_progress_cxt(this),
   m_journal_listener(new JournalListener(this)),
   m_remote_listener(this)
@@ -279,15 +277,7 @@ ImageReplayer<I>::ImageReplayer(
   // name.  When the image name becomes known on start the asok commands will be
   // re-registered using "remote_pool_name/remote_image_name" name.
 
-  std::string pool_name;
-  int r = m_local->pool_reverse_lookup(m_local_pool_id, &pool_name);
-  if (r < 0) {
-    derr << "error resolving local pool " << m_local_pool_id
-	 << ": " << cpp_strerror(r) << dendl;
-    pool_name = stringify(m_local_pool_id);
-  }
-
-  m_name = pool_name + "/" + m_global_image_id;
+  m_name = admin_socket_hook_name(global_image_id);
   register_admin_socket_hook();
 }
 
@@ -380,17 +370,6 @@ void ImageReplayer<I>::start(Context *on_finish, bool manual)
     return;
   }
 
-  m_local_ioctx.reset(new librados::IoCtx{});
-  r = m_local->ioctx_create2(m_local_pool_id, *m_local_ioctx);
-  if (r < 0) {
-    m_local_ioctx.reset();
-
-    derr << "error opening ioctx for local pool " << m_local_pool_id
-         << ": " << cpp_strerror(r) << dendl;
-    on_start_fail(r, "error opening local pool");
-    return;
-  }
-
   prepare_local_image();
 }
 
@@ -402,7 +381,7 @@ void ImageReplayer<I>::prepare_local_image() {
   Context *ctx = create_context_callback<
     ImageReplayer, &ImageReplayer<I>::handle_prepare_local_image>(this);
   auto req = PrepareLocalImageRequest<I>::create(
-    *m_local_ioctx, m_global_image_id, &m_local_image_id, &m_local_image_name,
+    m_local_io_ctx, m_global_image_id, &m_local_image_id, &m_local_image_name,
     &m_local_image_tag_owner, m_threads->work_queue, ctx);
   req->send();
 }
@@ -437,7 +416,7 @@ void ImageReplayer<I>::prepare_remote_image() {
   ceph_assert(!m_peers.empty());
   m_remote_image = {*m_peers.begin()};
 
-  auto cct = static_cast<CephContext *>(m_local->cct());
+  auto cct = static_cast<CephContext *>(m_local_io_ctx.cct());
   journal::Settings journal_settings;
   journal_settings.commit_interval = cct->_conf.get_val<double>(
     "rbd_mirror_journal_commit_age");
@@ -508,7 +487,7 @@ void ImageReplayer<I>::bootstrap() {
     auto ctx = create_context_callback<
       ImageReplayer, &ImageReplayer<I>::handle_bootstrap>(this);
     request = BootstrapRequest<I>::create(
-      m_threads, *m_local_ioctx, m_remote_image.io_ctx, m_instance_watcher,
+      m_threads, m_local_io_ctx, m_remote_image.io_ctx, m_instance_watcher,
       &m_local_image_ctx, m_local_image_id, m_remote_image.image_id,
       m_global_image_id, m_local_mirror_uuid, m_remote_image.mirror_uuid,
       m_remote_journaler, &m_client_state, &m_client_meta, ctx,
@@ -667,7 +646,7 @@ void ImageReplayer<I>::handle_start_replay(int r) {
   }
 
   {
-    CephContext *cct = static_cast<CephContext *>(m_local->cct());
+    CephContext *cct = static_cast<CephContext *>(m_local_io_ctx.cct());
     double poll_seconds = cct->_conf.get_val<double>(
       "rbd_mirror_journal_poll_age");
 
@@ -702,9 +681,7 @@ void ImageReplayer<I>::on_start_fail(int r, const std::string &desc)
       }
 
       set_state_description(r, desc);
-      if (m_local_ioctx) {
-        update_mirror_image_status(false, boost::none);
-      }
+      update_mirror_image_status(false, boost::none);
       reschedule_update_status_task(-1);
       shut_down(r);
     });
@@ -1474,10 +1451,9 @@ void ImageReplayer<I>::send_mirror_status_update(const OptionalState &opt_state)
   librados::ObjectWriteOperation op;
   librbd::cls_client::mirror_image_status_set(&op, m_global_image_id, status);
 
-  ceph_assert(m_local_ioctx);
   librados::AioCompletion *aio_comp = create_rados_callback<
     ImageReplayer<I>, &ImageReplayer<I>::handle_mirror_status_update>(this);
-  int r = m_local_ioctx->aio_operate(RBD_MIRRORING, aio_comp, &op);
+  int r = m_local_io_ctx.aio_operate(RBD_MIRRORING, aio_comp, &op);
   ceph_assert(r == 0);
   aio_comp->release();
 }
@@ -1597,9 +1573,7 @@ void ImageReplayer<I>::shut_down(int r) {
   // chain the shut down sequence (reverse order)
   Context *ctx = new FunctionContext(
     [this, r](int _r) {
-      if (m_local_ioctx) {
-        update_mirror_image_status(true, STATE_STOPPED);
-      }
+      update_mirror_image_status(true, STATE_STOPPED);
       handle_shut_down(r);
     });
 
@@ -1731,7 +1705,7 @@ void ImageReplayer<I>::handle_shut_down(int r) {
     auto ctx = new FunctionContext([this, r](int) {
       handle_shut_down(r);
     });
-    ImageDeleter<I>::trash_move(*m_local_ioctx, m_global_image_id,
+    ImageDeleter<I>::trash_move(m_local_io_ctx, m_global_image_id,
                                 resync_requested, m_threads->work_queue, ctx);
     return;
   }
@@ -1832,7 +1806,7 @@ void ImageReplayer<I>::register_admin_socket_hook() {
     if (r == 0) {
       m_asok_hook = asok_hook;
 
-      CephContext *cct = static_cast<CephContext *>(m_local->cct());
+      CephContext *cct = static_cast<CephContext *>(m_local_io_ctx.cct());
       auto prio = cct->_conf.get_val<int64_t>("rbd_mirror_perf_stats_prio");
       PerfCountersBuilder plb(g_ceph_context, "rbd_mirror_" + m_name,
                               l_rbd_mirror_first, l_rbd_mirror_last);
@@ -1873,7 +1847,8 @@ template <typename I>
 void ImageReplayer<I>::reregister_admin_socket_hook() {
   {
     std::lock_guard locker{m_lock};
-    auto name = m_local_ioctx->get_pool_name() + "/" + m_local_image_name;
+
+    auto name = admin_socket_hook_name(m_local_image_name);
     if (m_asok_hook != nullptr && m_name == name) {
       return;
     }
@@ -1881,6 +1856,17 @@ void ImageReplayer<I>::reregister_admin_socket_hook() {
   }
   unregister_admin_socket_hook();
   register_admin_socket_hook();
+}
+
+template <typename I>
+std::string ImageReplayer<I>::admin_socket_hook_name(
+    const std::string &image_name) const {
+  std::string name = m_local_io_ctx.get_namespace();
+  if (!name.empty()) {
+    name += "/";
+  }
+
+  return m_local_io_ctx.get_pool_name() + "/" + name + image_name;
 }
 
 template <typename I>

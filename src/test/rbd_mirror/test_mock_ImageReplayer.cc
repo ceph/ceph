@@ -603,9 +603,8 @@ public:
 
   void create_image_replayer(MockThreads &mock_threads) {
     m_image_replayer = new MockImageReplayer(
-      &mock_threads, &m_instance_watcher, nullptr,
-      rbd::mirror::RadosRef(new librados::Rados(m_local_io_ctx)),
-      "local_mirror_uuid", m_local_io_ctx.get_id(), "global image id");
+        m_local_io_ctx, "local_mirror_uuid", "global image id",
+        &mock_threads, &m_instance_watcher, nullptr);
     m_image_replayer->add_peer("peer_uuid", m_remote_io_ctx);
   }
 
