@@ -1,3 +1,4 @@
+.. _health-checks:
 
 =============
 Health checks

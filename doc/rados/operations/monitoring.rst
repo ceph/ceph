@@ -159,6 +159,62 @@ to a health state:
     2017-07-25 10:11:13.535493 mon.a mon.0 172.21.9.34:6789/0 110 : cluster [INF] Health check cleared: PG_DEGRADED (was: Degraded data redundancy: 2 pgs unclean, 2 pgs degraded, 2 pgs undersized)
     2017-07-25 10:11:13.535577 mon.a mon.0 172.21.9.34:6789/0 111 : cluster [INF] Cluster is now healthy
 
+Muting health checks
+--------------------
+
+Health checks can be muted so that they do not affect the overall
+reported status of the cluster.  Alerts are specified using the health
+check code (see :ref:`health-checks`)::
+
+  ceph health mute <code>
+
+For example, if there is a health warning, muting it will make the
+cluster report an overall status of ``HEALTH_OK``.  For example, to
+mute an ``OSD_DOWN`` alert,::
+
+  ceph health mute OSD_DOWN
+
+Mutes are reported as part of the short and long form of the ``ceph health`` command.
+For example, in the above scenario, the cluster would report::
+
+  $ ceph health
+  HEALTH_OK (muted: OSD_DOWN)
+  $ ceph health detail
+  HEALTH_OK (muted: OSD_DOWN)
+  (MUTED) OSD_DOWN 1 osds down
+      osd.1 is down
+
+A mute can be explicitly removed with::
+
+  ceph health unmute <code>
+
+For example,::
+
+  ceph health unmute OSD_DOWN
+
+A health check mute may optionally have a TTL (time to live)
+associated with it, such that the mute will automatically expire
+after the specified period of time has elapsed.  The TTL is specified as an optional
+duration argument, e.g.::
+
+  ceph health mute OSD_DOWN 4h    # mute for 4 hours
+  ceph health mute MON_DOWN 15m   # mute for 15  minutes
+
+Normally, if a muted health alert is resolved (e.g., in the example
+above, the OSD comes back up), the mute goes away.  If the alert comes
+back later, it will be reported in the usual way.
+
+It is possible to make a mute "sticky" such that the mute will remain even if the
+alert clears.  For example,::
+
+  ceph health mute OSD_DOWN 1h --sticky   # ignore any/all down OSDs for next hour
+
+Most health mutes also disappear if the extent of an alert gets worse.  For example,
+if there is one OSD down, and the alert is muted, the mute will disappear if one
+or more additional OSDs go down.  This is true for any health alert that involves
+a count indicating how much or how many of something is triggering the warning or
+error.
+
 
 Detecting configuration issues
 ==============================
