@@ -7142,8 +7142,8 @@ int RGWRados::block_while_resharding(RGWRados::BucketShard *bs,
   // new_bucket_id and returns 0, otherwise it returns a negative
   // error code
   auto fetch_new_bucket_id =
-    [this, bucket_info](const std::string& log_tag,
-			std::string* new_bucket_id) -> int {
+    [this, &bucket_info](const std::string& log_tag,
+			 std::string* new_bucket_id) -> int {
       RGWBucketInfo fresh_bucket_info = bucket_info;
       int ret = try_refresh_bucket_info(fresh_bucket_info, nullptr);
       if (ret < 0) {
