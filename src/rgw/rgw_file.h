@@ -1222,10 +1222,13 @@ namespace rgw {
 			    RGWFileHandle::FHCache::FLAG_LOCK);
       /* LATCHED */
       if (! fh) {
+	if (unlikely(fhk == root_fh.fh.fh_hk)) {
+	  /* lookup for root of this fs */
+	  fh = &root_fh;
+	  goto out;
+	}
 	lsubdout(get_context(), rgw, 0)
-	  << __func__ << " handle lookup failed <"
-	  << fhk.fh_hk.bucket << "," << fhk.fh_hk.object << ">"
-	  << "(need persistent handles)"
+	  << __func__ << " handle lookup failed " << fhk
 	  << dendl;
 	goto out;
       }
