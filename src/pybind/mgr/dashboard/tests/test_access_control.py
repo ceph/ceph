@@ -580,7 +580,8 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'name': 'admin User',
             'email': 'admin@user.com',
             'lastUpdate': user['lastUpdate'],
-            'roles': []
+            'roles': [],
+            'enabled': True
         })
         self.validate_persistent_user('admin', [], pass_hash, 'admin User',
                                       'admin@user.com')
