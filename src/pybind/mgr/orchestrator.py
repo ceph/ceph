@@ -62,6 +62,11 @@ class _Completion(G):
         """
         raise NotImplementedError()
 
+    def result_str(self):
+        if self.result is None:
+            return ''
+        return str(self.result)
+
     @property
     def exception(self):
         # type: () -> Optional[Exception]
@@ -227,6 +232,9 @@ class WriteCompletion(_Completion):
         """
         return not self.is_persistent
 
+def _hide_in_features(f):
+    f._hide_in_features = True
+    return f
 
 class Orchestrator(object):
     """
@@ -247,6 +255,7 @@ class Orchestrator(object):
     while you scan hosts every time.
     """
 
+    @_hide_in_features
     def is_orchestrator_module(self):
         """
         Enable other modules to interrogate this module to discover
@@ -256,6 +265,7 @@ class Orchestrator(object):
         """
         return True
 
+    @_hide_in_features
     def available(self):
         # type: () -> Tuple[bool, str]
         """
@@ -269,7 +279,8 @@ class Orchestrator(object):
         (e.g. based on a periodic background ping of the orchestrator)
         if that's necessary to make this method fast.
 
-        ..note:: `True` doesn't mean that the desired functionality
+        .. note::
+            `True` doesn't mean that the desired functionality
             is actually available in the orchestrator. I.e. this
             won't work as expected::
 
@@ -280,6 +291,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    @_hide_in_features
     def wait(self, completions):
         """
         Given a list of Completion instances, progress any which are
@@ -295,6 +307,36 @@ class Orchestrator(object):
         :rtype: bool
         """
         raise NotImplementedError()
+
+    @_hide_in_features
+    def get_feature_set(self):
+        """Describes which methods this orchestrator implements
+
+        .. note::
+            `True` doesn't mean that the desired functionality
+            is actually possible in the orchestrator. I.e. this
+            won't work as expected::
+
+                >>> api = OrchestratorClientMixin()
+                ... if api.get_feature_set()['get_hosts']['available']:  # wrong.
+                ...     api.get_hosts()
+
+            It's better to ask for forgiveness instead::
+
+                >>> try:
+                ...     OrchestratorClientMixin().get_hosts()
+                ... except (OrchestratorError, NotImplementedError):
+                ...     ...
+
+
+        :returns: Dict of API method names to ``{'available': True or False}``
+        """
+        module = self.__class__
+        features = {a: {'available': getattr(Orchestrator, a, None) != getattr(module, a)}
+                    for a in Orchestrator.__dict__
+                    if not a.startswith('_') and not getattr(getattr(Orchestrator, a), '_hide_in_features', False)
+                    }
+        return features
 
     def add_host(self, host):
         # type: (str) -> WriteCompletion
@@ -428,38 +470,66 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def add_stateless_service(self, service_type, spec):
-        # type: (str, StatelessServiceSpec) -> WriteCompletion
-        """
-        Installing and adding a completely new service to the cluster.
+    def add_mds(self, spec):
+        # type: (StatelessServiceSpec) -> WriteCompletion
+        """Create a new MDS cluster"""
+        raise NotImplementedError()
 
-        This is not about starting services.
+    def remove_mds(self, name):
+        # type: (str) -> WriteCompletion
+        """Remove an MDS cluster"""
+        raise NotImplementedError()
+
+    def update_mds(self, spec):
+        # type: (StatelessServiceSpec) -> WriteCompletion
+        """
+        Update / redeploy existing MDS cluster
+        Like for example changing the number of service instances.
         """
         raise NotImplementedError()
 
-    def update_stateless_service(self, service_type, spec):
-        # type: (str, StatelessServiceSpec) -> WriteCompletion
-        """
-        This is about changing / redeploying existing services. Like for
-        example changing the number of service instances.
+    def add_nfs(self, spec):
+        # type: (NFSServiceSpec) -> WriteCompletion
+        """Create a new MDS cluster"""
+        raise NotImplementedError()
 
-        :rtype: WriteCompletion
+    def remove_nfs(self, name):
+        # type: (str) -> WriteCompletion
+        """Remove a NFS cluster"""
+        raise NotImplementedError()
+
+    def update_nfs(self, spec):
+        # type: (NFSServiceSpec) -> WriteCompletion
+        """
+        Update / redeploy existing NFS cluster
+        Like for example changing the number of service instances.
         """
         raise NotImplementedError()
 
-    def remove_stateless_service(self, service_type, id_resource):
-        # type: (str, str) -> WriteCompletion
-        """
-        Uninstalls an existing service from the cluster.
+    def add_rgw(self, spec):
+        # type: (RGWSpec) -> WriteCompletion
+        """Create a new MDS zone"""
+        raise NotImplementedError()
 
-        This is not about stopping services.
+    def remove_rgw(self, zone):
+        # type: (str) -> WriteCompletion
+        """Remove a RGW zone"""
+        raise NotImplementedError()
+
+    def update_rgw(self, spec):
+        # type: (StatelessServiceSpec) -> WriteCompletion
+        """
+        Update / redeploy existing RGW zone
+        Like for example changing the number of service instances.
         """
         raise NotImplementedError()
 
+    @_hide_in_features
     def upgrade_start(self, upgrade_spec):
         # type: (UpgradeSpec) -> WriteCompletion
         raise NotImplementedError()
 
+    @_hide_in_features
     def upgrade_status(self):
         # type: () -> ReadCompletion[UpgradeStatusSpec]
         """
@@ -470,6 +540,7 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
+    @_hide_in_features
     def upgrade_available(self):
         # type: () -> ReadCompletion[List[str]]
         """
@@ -588,86 +659,118 @@ class StatelessServiceSpec(object):
     """
     Details of stateless service creation.
 
-    This is *not* supposed to contain all the configuration
-    of the services: it's just supposed to be enough information to
-    execute the binaries.
+    Request to orchestrator for a group of stateless services
+    such as MDS, RGW or iscsi gateway
     """
+    # This structure is supposed to be enough information to
+    # start the services.
 
-    def __init__(self):
-        self.placement = PlacementSpec()
+    def __init__(self, name, placement=None, count=None):
+        self.placement = PlacementSpec() if placement is None else placement
 
-        # Give this set of statelss services a name: typically it would
-        # be the name of a CephFS filesystem, RGW zone, etc.  Must be unique
-        # within one ceph cluster.
-        self.name = ""
+        #: Give this set of statelss services a name: typically it would
+        #: be the name of a CephFS filesystem, RGW zone, etc.  Must be unique
+        #: within one ceph cluster.
+        self.name = name
 
-        # Count of service instances
-        self.count = 1
+        #: Count of service instances
+        self.count = 1 if count is None else count
 
-        # Arbitrary JSON-serializable object.
-        # Maybe you're using e.g. kubenetes and you want to pass through
-        # some replicaset special sauce for autoscaling?
-        self.extended = {}
+    def validate_add(self):
+        if not self.name:
+            raise OrchestratorValidationError('Cannot add Service: Name required')
 
-        # Object with specific settings for the service
-        self.service_spec = None
 
-class RGWSpec(object):
+class NFSServiceSpec(StatelessServiceSpec):
+    def __init__(self, name, pool=None, namespace=None, count=1, placement=None):
+        super(NFSServiceSpec, self).__init__(name, placement, count)
+
+        #: RADOS pool where NFS client recovery data is stored.
+        self.pool = pool
+
+        #: RADOS namespace where NFS client recovery data is stored in the pool.
+        self.namespace = namespace
+
+    def validate_add(self):
+        super(NFSServiceSpec, self).validate_add()
+
+        if not self.pool:
+            raise OrchestratorValidationError('Cannot add NFS: No Pool specified')
+
+
+class RGWSpec(StatelessServiceSpec):
     """
-    Settings to configure a multisite Ceph RGW
-    """
-    def __init__(self, hosts=None, rgw_multisite=True, rgw_zone="Default_Zone",
-              rgw_zonemaster=True, rgw_zonesecondary=False,
-              rgw_multisite_proto="http", rgw_frontend_port="8080",
-              rgw_zonegroup="Main", rgw_zone_user="zone.user",
-              rgw_realm="RGW_Realm", system_access_key=None,
-              system_secret_key=None):
+    Settings to configure a (multisite) Ceph RGW
 
+    """
+    def __init__(self,
+                 rgw_zone,  # type: str
+                 hosts=None,  # type: Optional[List[str]]
+                 rgw_multisite=None,  # type: Optional[bool]
+                 rgw_zonemaster=None,  # type: Optional[bool]
+                 rgw_zonesecondary=None,  # type: Optional[bool]
+                 rgw_multisite_proto=None,  # type: Optional[str]
+                 rgw_frontend_port=None,  # type: Optional[int]
+                 rgw_zonegroup=None,  # type: Optional[str]
+                 rgw_zone_user=None,  # type: Optional[str]
+                 rgw_realm=None,  # type: Optional[str]
+                 system_access_key=None,  # type: Optional[str]
+                 system_secret_key=None,  # type: Optional[str]
+                 count=None  # type: Optional[int]
+                 ):
+        # Regarding default values. Ansible has a `set_rgwspec_defaults` that sets
+        # default values that makes sense for Ansible. Rook has default values implemented
+        # in Rook itself. Thus we don't set any defaults here in this class.
+
+        super(RGWSpec, self).__init__(name=rgw_zone, count=count)
+
+        #: List of hosts where RGWs should run. Not for Rook.
         self.hosts = hosts
+
+        #: is multisite
         self.rgw_multisite = rgw_multisite
-        self.rgw_zone = rgw_zone
         self.rgw_zonemaster = rgw_zonemaster
         self.rgw_zonesecondary = rgw_zonesecondary
         self.rgw_multisite_proto = rgw_multisite_proto
         self.rgw_frontend_port = rgw_frontend_port
 
-        if hosts:
-            self.rgw_multisite_endpoint_addr = hosts[0]
-
-            self.rgw_multisite_endpoints_list = ",".join(
-                ["{}://{}:{}".format(self.rgw_multisite_proto,
-                                    host,
-                                    self.rgw_frontend_port) for host in hosts])
-
         self.rgw_zonegroup = rgw_zonegroup
         self.rgw_zone_user = rgw_zone_user
         self.rgw_realm = rgw_realm
 
-        if system_access_key:
-            self.system_access_key = system_access_key
-        else:
-            self.system_access_key = self.genkey(20)
-        if system_secret_key:
-            self.system_secret_key = system_secret_key
-        else:
-            self.system_secret_key = self.genkey(40)
+        self.system_access_key = system_access_key
+        self.system_secret_key = system_secret_key
+
+    @property
+    def rgw_multisite_endpoint_addr(self):
+        """Returns the first host. Not supported for Rook."""
+        return self.hosts[0]
+
+    @property
+    def rgw_multisite_endpoints_list(self):
+        return ",".join(["{}://{}:{}".format(self.rgw_multisite_proto,
+                             host,
+                             self.rgw_frontend_port) for host in self.hosts])
 
     def genkey(self, nchars):
         """ Returns a random string of nchars
 
         :nchars : Length of the returned string
         """
+        # TODO Python 3: use Secrets module instead.
 
         return ''.join(random.choice(string.ascii_uppercase +
                                      string.ascii_lowercase +
                                      string.digits) for _ in range(nchars))
 
     @classmethod
-    def from_json(self, json_rgw_spec):
+    def from_json(cls, json_rgw_spec):
+        # type: (dict) -> RGWSpec
         """
-        Initialize 'RGWSpec' object geting data from a json estructure
-        :param json_rgw_spec: A valid json string with a the RGW settings
+        Initialize 'RGWSpec' object data from a json structure
+        :param json_rgw_spec: A valid dict with a the RGW settings
         """
+        # TODO: also add PlacementSpec(**json_rgw_spec['placement'])
         args = {k:v for k, v in json_rgw_spec.items()}
         return RGWSpec(**args)
 

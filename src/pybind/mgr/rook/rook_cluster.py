@@ -355,9 +355,8 @@ class RookCluster(object):
             self.rook_api_post("cephfilesystems/", body=rook_fs)
 
     def add_nfsgw(self, spec):
+        # type: (orchestrator.NFSServiceSpec) -> None
         # TODO use spec.placement
-        # TODO warn if spec.extended has entries we don't kow how
-        #      to action.
 
         rook_nfsgw = {
             "apiVersion": self.rook_env.api_name,
@@ -368,7 +367,7 @@ class RookCluster(object):
             },
             "spec": {
                 "rados": {
-                    "pool": spec.extended["pool"]
+                    "pool": spec.pool
                 },
                 "server": {
                     "active": spec.count,
@@ -376,13 +375,14 @@ class RookCluster(object):
             }
         }
 
-        if "namespace" in spec.extended:
-            rook_nfsgw["spec"]["rados"]["namespace"] = spec.extended["namespace"]
+        if spec.namespace:
+            rook_nfsgw["spec"]["rados"]["namespace"] = spec.namespace
 
         with self.ignore_409("NFS cluster '{0}' already exists".format(spec.name)):
             self.rook_api_post("cephnfses/", body=rook_nfsgw)
 
     def add_objectstore(self, spec):
+        # type: (orchestrator.RGWSpec) -> None
         rook_os = {
             "apiVersion": self.rook_env.api_name,
             "kind": "CephObjectStore",
@@ -405,25 +405,17 @@ class RookCluster(object):
                 },
                 "gateway": {
                     "type": "s3",
-                    "port": 80,
-                    "instances": 1,
+                    "port": spec.rgw_frontend_port if spec.rgw_frontend_port is not None else 80,
+                    "instances": spec.count,
                     "allNodes": False
                 }
             }
         }
-        
+
         with self.ignore_409("CephObjectStore '{0}' already exists".format(spec.name)):
             self.rook_api_post("cephobjectstores/", body=rook_os)
 
-    def rm_service(self, service_type, service_id):
-        assert service_type in ("mds", "rgw", "nfs")
-
-        if service_type == "mds":
-            rooktype = "cephfilesystems"
-        elif service_type == "rgw":
-            rooktype = "cephobjectstores"
-        elif service_type == "nfs":
-            rooktype = "cephnfses"
+    def rm_service(self, rooktype, service_id):
 
         objpath = "{0}/{1}".format(rooktype, service_id)
 
@@ -431,7 +423,7 @@ class RookCluster(object):
             self.rook_api_delete(objpath)
         except ApiException as e:
             if e.status == 404:
-                log.info("{0} service '{1}' does not exist".format(service_type, service_id))
+                log.info("{0} service '{1}' does not exist".format(rooktype, service_id))
                 # Idempotent, succeed.
             else:
                 raise
