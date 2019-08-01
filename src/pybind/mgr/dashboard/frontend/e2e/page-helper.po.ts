@@ -121,4 +121,23 @@ export abstract class PageHelper {
     const url = this.pages[page];
     return browser.get(url);
   }
+
+  getDataTable() {
+    return $$('cd-table');
+  }
+
+  getStatusTable() {
+    // Grabs striped tables
+    return $$('.table.table-striped');
+  }
+
+  getLegends() {
+    // Grabs legends above tables
+    return $$('legend');
+  }
+
+  getDataTableHeaders() {
+    // Gets column headers of table
+    return $$('.datatable-header');
+  }
 }
