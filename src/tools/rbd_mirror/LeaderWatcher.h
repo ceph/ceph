@@ -14,7 +14,6 @@
 #include "librbd/managed_lock/Types.h"
 #include "librbd/watcher/Types.h"
 #include "Instances.h"
-#include "MirrorStatusWatcher.h"
 #include "tools/rbd_mirror/instances/Types.h"
 #include "tools/rbd_mirror/leader_watcher/Types.h"
 
@@ -63,11 +62,8 @@ private:
    *  CREATE_OBJECT  * * * * *  (error)               UNREGISTER_WATCH
    *     |                   *                                ^
    *     v                   *                                |
-   *  REGISTER_WATCH * * * * *                        SHUT_DOWN_STATUS_WATCHER
-   *     |                   *                                ^
-   *     v                   *                                |
-   *  INIT_STATUS_WATCHER  * *                        SHUT_DOWN_LEADER_LOCK
-   *     |                                                    |
+   *  REGISTER_WATCH * * * * *                        SHUT_DOWN_LEADER_LOCK
+   *     |                                                    ^
    *     |           (no leader heartbeat and acquire failed) |
    *     | BREAK_LOCK <-------------------------------------\ |
    *     |    |                 (no leader heartbeat)       | | (shut down)
@@ -216,7 +212,6 @@ private:
   Context *m_on_shut_down_finish = nullptr;
   uint64_t m_acquire_attempts = 0;
   int m_ret_val = 0;
-  MirrorStatusWatcher<ImageCtxT> *m_status_watcher = nullptr;
   Instances<ImageCtxT> *m_instances = nullptr;
   librbd::managed_lock::Locker m_locker;
 
@@ -263,12 +258,6 @@ private:
 
   void release_leader_lock();
   void handle_release_leader_lock(int r);
-
-  void init_status_watcher();
-  void handle_init_status_watcher(int r);
-
-  void shut_down_status_watcher();
-  void handle_shut_down_status_watcher(int r);
 
   void init_instances();
   void handle_init_instances(int r);

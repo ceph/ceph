@@ -34,14 +34,14 @@ using librbd::util::create_context_callback;
 
 template <typename I>
 InstanceReplayer<I>::InstanceReplayer(
+    librados::IoCtx &local_io_ctx, const std::string &local_mirror_uuid,
     Threads<I> *threads, ServiceDaemon<I>* service_daemon,
-    journal::CacheManagerHandler *cache_manager_handler, RadosRef local_rados,
-    const std::string &local_mirror_uuid, int64_t local_pool_id)
-  : m_threads(threads), m_service_daemon(service_daemon),
-    m_cache_manager_handler(cache_manager_handler), m_local_rados(local_rados),
-    m_local_mirror_uuid(local_mirror_uuid), m_local_pool_id(local_pool_id),
-    m_lock(ceph::make_mutex(
-      "rbd::mirror::InstanceReplayer " + stringify(local_pool_id))) {
+    journal::CacheManagerHandler *cache_manager_handler)
+  : m_local_io_ctx(local_io_ctx), m_local_mirror_uuid(local_mirror_uuid),
+    m_threads(threads), m_service_daemon(service_daemon),
+    m_cache_manager_handler(cache_manager_handler),
+    m_lock(ceph::make_mutex("rbd::mirror::InstanceReplayer " +
+        stringify(local_io_ctx.get_id()))) {
 }
 
 template <typename I>
@@ -144,8 +144,8 @@ void InstanceReplayer<I>::acquire_image(InstanceWatcher<I> *instance_watcher,
   auto it = m_image_replayers.find(global_image_id);
   if (it == m_image_replayers.end()) {
     auto image_replayer = ImageReplayer<I>::create(
-        m_threads, instance_watcher, m_cache_manager_handler, m_local_rados,
-        m_local_mirror_uuid, m_local_pool_id, global_image_id);
+        m_local_io_ctx, m_local_mirror_uuid, global_image_id,
+        m_threads, instance_watcher, m_cache_manager_handler);
 
     dout(10) << global_image_id << ": creating replayer " << image_replayer
              << dendl;
@@ -267,6 +267,27 @@ void InstanceReplayer<I>::stop()
 }
 
 template <typename I>
+void InstanceReplayer<I>::stop(Context *on_finish)
+{
+  dout(10) << dendl;
+
+  auto cct = static_cast<CephContext *>(m_local_io_ctx.cct());
+  auto gather_ctx = new C_Gather(cct, on_finish);
+  {
+    std::lock_guard locker{m_lock};
+
+    m_manual_stop = true;
+
+    for (auto &kv : m_image_replayers) {
+      auto &image_replayer = kv.second;
+      image_replayer->stop(gather_ctx->new_sub(), true);
+    }
+  }
+
+  gather_ctx->activate();
+}
+
+template <typename I>
 void InstanceReplayer<I>::restart()
 {
   dout(10) << dendl;
@@ -359,12 +380,15 @@ void InstanceReplayer<I>::start_image_replayers(int r) {
     start_image_replayer(current_it->second);
   }
 
-  m_service_daemon->add_or_update_attribute(
-    m_local_pool_id, SERVICE_DAEMON_ASSIGNED_COUNT_KEY, image_count);
-  m_service_daemon->add_or_update_attribute(
-    m_local_pool_id, SERVICE_DAEMON_WARNING_COUNT_KEY, warning_count);
-  m_service_daemon->add_or_update_attribute(
-    m_local_pool_id, SERVICE_DAEMON_ERROR_COUNT_KEY, error_count);
+  // TODO: add namespace support to service daemon
+  if (m_local_io_ctx.get_namespace().empty()) {
+    m_service_daemon->add_or_update_attribute(
+      m_local_io_ctx.get_id(), SERVICE_DAEMON_ASSIGNED_COUNT_KEY, image_count);
+    m_service_daemon->add_or_update_attribute(
+      m_local_io_ctx.get_id(), SERVICE_DAEMON_WARNING_COUNT_KEY, warning_count);
+    m_service_daemon->add_or_update_attribute(
+      m_local_io_ctx.get_id(), SERVICE_DAEMON_ERROR_COUNT_KEY, error_count);
+  }
 
   m_async_op_tracker.finish_op();
 }
@@ -490,7 +514,7 @@ void InstanceReplayer<I>::schedule_image_state_check_task() {
       queue_start_image_replayers();
     });
 
-  auto cct = static_cast<CephContext *>(m_local_rados->cct());
+  auto cct = static_cast<CephContext *>(m_local_io_ctx.cct());
   int after = cct->_conf.get_val<uint64_t>(
     "rbd_mirror_image_state_check_interval");
 

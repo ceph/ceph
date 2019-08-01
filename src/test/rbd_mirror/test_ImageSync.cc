@@ -18,6 +18,7 @@
 #include "librbd/io/ReadResult.h"
 #include "librbd/journal/Types.h"
 #include "tools/rbd_mirror/ImageSync.h"
+#include "tools/rbd_mirror/ImageSyncThrottler.h"
 #include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/Threads.h"
 
@@ -72,8 +73,11 @@ public:
     create_and_open(m_local_io_ctx, &m_local_image_ctx);
     create_and_open(m_remote_io_ctx, &m_remote_image_ctx);
 
+    auto cct = reinterpret_cast<CephContext*>(m_local_io_ctx.cct());
+    m_image_sync_throttler = rbd::mirror::ImageSyncThrottler<>::create(cct);
+
     m_instance_watcher = rbd::mirror::InstanceWatcher<>::create(
-        m_local_io_ctx, m_threads->work_queue, nullptr);
+        m_local_io_ctx, m_threads->work_queue, nullptr, m_image_sync_throttler);
     m_instance_watcher->handle_acquire_leader();
 
     m_remote_journaler = new ::journal::Journaler(
@@ -90,12 +94,13 @@ public:
   }
 
   void TearDown() override {
-    TestFixture::TearDown();
-
     m_instance_watcher->handle_release_leader();
 
     delete m_remote_journaler;
     delete m_instance_watcher;
+    delete m_image_sync_throttler;
+
+    TestFixture::TearDown();
   }
 
   void create_and_open(librados::IoCtx &io_ctx, librbd::ImageCtx **image_ctx) {
@@ -121,6 +126,7 @@ public:
 
   librbd::ImageCtx *m_remote_image_ctx;
   librbd::ImageCtx *m_local_image_ctx;
+ rbd::mirror::ImageSyncThrottler<> *m_image_sync_throttler;
   rbd::mirror::InstanceWatcher<> *m_instance_watcher;
   ::journal::Journaler *m_remote_journaler;
   librbd::journal::MirrorPeerClientMeta m_client_meta;

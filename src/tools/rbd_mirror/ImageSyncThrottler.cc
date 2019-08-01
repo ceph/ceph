@@ -49,7 +49,11 @@ ImageSyncThrottler<I>::~ImageSyncThrottler() {
 }
 
 template <typename I>
-void ImageSyncThrottler<I>::start_op(const std::string &id, Context *on_start) {
+void ImageSyncThrottler<I>::start_op(const std::string &ns,
+                                     const std::string &id_,
+                                     Context *on_start) {
+  Id id{ns, id_};
+
   dout(20) << "id=" << id << dendl;
 
   int r = 0;
@@ -82,7 +86,10 @@ void ImageSyncThrottler<I>::start_op(const std::string &id, Context *on_start) {
 }
 
 template <typename I>
-bool ImageSyncThrottler<I>::cancel_op(const std::string &id) {
+bool ImageSyncThrottler<I>::cancel_op(const std::string &ns,
+                                      const std::string &id_) {
+  Id id{ns, id_};
+
   dout(20) << "id=" << id << dendl;
 
   Context *on_start = nullptr;
@@ -106,10 +113,13 @@ bool ImageSyncThrottler<I>::cancel_op(const std::string &id) {
 }
 
 template <typename I>
-void ImageSyncThrottler<I>::finish_op(const std::string &id) {
+void ImageSyncThrottler<I>::finish_op(const std::string &ns,
+                                      const std::string &id_) {
+  Id id{ns, id_};
+
   dout(20) << "id=" << id << dendl;
 
-  if (cancel_op(id)) {
+  if (cancel_op(ns, id_)) {
     return;
   }
 
@@ -139,18 +149,33 @@ void ImageSyncThrottler<I>::finish_op(const std::string &id) {
 }
 
 template <typename I>
-void ImageSyncThrottler<I>::drain(int r) {
-  dout(20) << dendl;
+void ImageSyncThrottler<I>::drain(const std::string &ns, int r) {
+  dout(20) << "ns=" << ns << dendl;
 
-  std::map<std::string, Context *> queued_ops;
+  std::map<Id, Context *> queued_ops;
   {
     std::lock_guard locker{m_lock};
-    std::swap(m_queued_ops, queued_ops);
-    m_queue.clear();
-    m_inflight_ops.clear();
+    for (auto it = m_queued_ops.begin(); it != m_queued_ops.end(); ) {
+      if (it->first.first == ns) {
+        queued_ops[it->first] = it->second;
+        m_queue.remove(it->first);
+        it = m_queued_ops.erase(it);
+      } else {
+        it++;
+      }
+    }
+    for (auto it = m_inflight_ops.begin(); it != m_inflight_ops.end(); ) {
+      if (it->first == ns) {
+        dout(20) << "inflight_op " << *it << dendl;
+        it = m_inflight_ops.erase(it);
+      } else {
+        it++;
+      }
+    }
   }
 
   for (auto &it : queued_ops) {
+    dout(20) << "queued_op " << it.first << dendl;
     it.second->complete(r);
   }
 }
