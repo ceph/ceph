@@ -7,6 +7,7 @@ set(lib_mon_srcs
   PaxosService.cc
   OSDMonitor.cc
   osd/pool.cc
+  osd/crush.cc
   MDSMonitor.cc
   CommandHandler.cc
   FSCommands.cc
