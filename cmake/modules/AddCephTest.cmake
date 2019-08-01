@@ -50,3 +50,27 @@ function(add_ceph_unittest unittest_name)
   add_ceph_test(${unittest_name} "${UNITTEST}")
   target_link_libraries(${unittest_name} ${UNITTEST_LIBS})
 endfunction()
+
+function(add_tox_test name tox_path)
+  set(test_name run-tox-${name})
+  add_test(
+    NAME ${test_name}
+    COMMAND ${CMAKE_SOURCE_DIR}/src/script/run_tox.sh
+              --source-dir ${CMAKE_SOURCE_DIR}
+              --build-dir ${CMAKE_BINARY_DIR}
+              --with-python2 ${WITH_PYTHON2}
+              --with-python3 ${WITH_PYTHON3}
+              --tox-path ${tox_path}
+              --venv-path ${CEPH_BUILD_VIRTUALENV}/${name})
+  set_property(
+    TEST ${test_name}
+    PROPERTY ENVIRONMENT
+    CEPH_ROOT=${CMAKE_SOURCE_DIR}
+    CEPH_BIN=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
+    CEPH_LIB=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
+    CEPH_BUILD_VIRTUALENV=${CEPH_BUILD_VIRTUALENV}
+    LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib
+    PATH=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}:${CMAKE_SOURCE_DIR}/src:$ENV{PATH}
+    PYTHONPATH=${CMAKE_SOURCE_DIR}/src/pybind)
+  list(APPEND tox_test run-tox-${name})
+endfunction()
