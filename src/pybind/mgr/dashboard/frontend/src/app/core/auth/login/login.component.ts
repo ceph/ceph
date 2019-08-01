@@ -6,6 +6,7 @@ import { BsModalService } from 'ngx-bootstrap/modal';
 import { AuthService } from '../../../shared/api/auth.service';
 import { Credentials } from '../../../shared/models/credentials';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
+import { NotificationService } from '../../../shared/services/notification.service';
 
 @Component({
   selector: 'cd-login',
@@ -20,6 +21,7 @@ export class LoginComponent implements OnInit {
     private authService: AuthService,
     private authStorageService: AuthStorageService,
     private bsModalService: BsModalService,
+    private notificationService: NotificationService,
     private router: Router
   ) {}
 
@@ -34,6 +36,7 @@ export class LoginComponent implements OnInit {
       for (let i = 1; i <= modalsCount; i++) {
         this.bsModalService.hide(i);
       }
+      this.notificationService.removePermanentNotifications();
       let token = null;
       if (window.location.hash.indexOf('access_token=') !== -1) {
         token = window.location.hash.split('access_token=')[1];

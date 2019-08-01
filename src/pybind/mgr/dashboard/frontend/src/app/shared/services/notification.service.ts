@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 
 import * as _ from 'lodash';
-import { IndividualConfig, ToastrService } from 'ngx-toastr';
+import { ActiveToast, IndividualConfig, OverlayContainer, ToastrService } from 'ngx-toastr';
 import { BehaviorSubject } from 'rxjs';
 
 import { NotificationType } from '../enum/notification-type.enum';
@@ -25,7 +25,11 @@ export class NotificationService {
   private queuedTimeoutId: number;
   KEY = 'cdNotifications';
 
-  constructor(public toastr: ToastrService, private taskMessageService: TaskMessageService) {
+  constructor(
+    public toastr: ToastrService,
+    private taskMessageService: TaskMessageService,
+    private overlayContainer: OverlayContainer
+  ) {
     const stringNotifications = localStorage.getItem(this.KEY);
     let notifications: CdNotificationConfig[] = [];
 
@@ -70,6 +74,8 @@ export class NotificationService {
    *   for error notifications only.
    * @param {*} [options] toastr compatible options, used when creating a toastr
    * @param {string} [application] Only needed if notification comes from an external application
+   * @param {number} [errorCode] Error code number given by the backend service.
+   * @param {boolean} [isPermanent] Set if the notification will be closed by itself.
    * @returns The timeout ID that is set to be able to cancel the notification.
    */
   show(
@@ -77,7 +83,9 @@ export class NotificationService {
     title: string,
     message?: string,
     options?: any | IndividualConfig,
-    application?: string
+    application?: string,
+    errorCode?: number,
+    isPermanent?: boolean
   ): number;
   show(config: CdNotificationConfig | (() => CdNotificationConfig)): number;
   show(
@@ -85,25 +93,141 @@ export class NotificationService {
     title?: string,
     message?: string,
     options?: any | IndividualConfig,
-    application?: string
+    application?: string,
+    errorCode?: number,
+    isPermanent?: boolean
   ): number {
-    return window.setTimeout(() => {
-      let config: CdNotificationConfig;
-      if (_.isFunction(arg)) {
-        config = arg() as CdNotificationConfig;
-      } else if (_.isObject(arg)) {
-        config = arg as CdNotificationConfig;
-      } else {
-        config = new CdNotificationConfig(
-          arg as NotificationType,
-          title,
-          message,
-          options,
-          application
-        );
+    const getConfig = () =>
+      this.getNotificationConfig(arg, title, message, options, application, errorCode, isPermanent);
+    const config = getConfig();
+    if (config.isPermanent) {
+      return this.permToShow(config);
+    } else {
+      return window.setTimeout(() => {
+        this.queueToShow(getConfig());
+      }, 10);
+    }
+  }
+
+  getPermanentNotifications() {
+    const permanentNotifications = [];
+    this.toastr.toasts.forEach((toast) => {
+      if (toast.toastRef.componentInstance.options.isPermanent) {
+        permanentNotifications.push(toast);
       }
-      this.queueToShow(config);
-    }, 10);
+    });
+    return permanentNotifications;
+  }
+
+  removePermanentNotifications() {
+    this.getPermanentNotifications().forEach((notification) => {
+      this.toastr.remove(notification.toastId);
+    });
+    const elementClasses = [
+      {
+        element: this.getBodyElement(),
+        cssClass: 'modal-open'
+      },
+      {
+        element: this.getContainerElement(),
+        cssClass: 'block-ui'
+      }
+    ];
+    this.setCssClass(elementClasses, false);
+  }
+
+  private getBodyElement() {
+    return document.getElementsByTagName('body')[0];
+  }
+
+  private getContainerElement() {
+    return this.overlayContainer.getContainerElement();
+  }
+
+  private setCssClass(elementClasses: { element: HTMLElement; cssClass: string }[], add = true) {
+    elementClasses.forEach((elementClass) => {
+      const element = elementClass.element;
+      const cssClass = elementClass.cssClass;
+      if (add) {
+        if (!element.classList.contains(cssClass)) {
+          element.classList.add(cssClass);
+        }
+      } else {
+        if (element.classList.contains(cssClass)) {
+          element.classList.remove(cssClass);
+        }
+      }
+    });
+  }
+
+  private getNotificationConfig(
+    arg: NotificationType | CdNotificationConfig | (() => CdNotificationConfig),
+    title?: string,
+    message?: string,
+    options?: any | IndividualConfig,
+    application?: string,
+    errorCode?: number,
+    isPermanent?: boolean
+  ): CdNotificationConfig {
+    let config: CdNotificationConfig;
+    if (_.isFunction(arg)) {
+      config = arg() as CdNotificationConfig;
+    } else if (_.isObject(arg)) {
+      config = arg as CdNotificationConfig;
+    } else {
+      config = new CdNotificationConfig(
+        arg as NotificationType,
+        title,
+        message,
+        options,
+        application,
+        errorCode,
+        isPermanent
+      );
+    }
+    return config;
+  }
+
+  private permToShow(config: CdNotificationConfig) {
+    const existingToast = _.find(this.toastr.toasts, (t) => {
+      if (t.toastRef.componentInstance.title === config.title) {
+        return t;
+      }
+    }) as ActiveToast<any>;
+    if (existingToast) {
+      const existingMessage = existingToast.message.includes(config.message);
+      if (existingMessage) {
+        return;
+      }
+      let messageUpdate = '';
+      if (existingToast.message.includes('</ul>')) {
+        messageUpdate = _.replace(existingToast.message, '</ul>', '');
+        messageUpdate = messageUpdate + '<li>' + config.message + '</li></ul>';
+      } else {
+        messageUpdate =
+          '<ul><li>' + existingToast.message + '</li><li>' + config.message + '</li></ul>';
+      }
+      this.toastr.remove(existingToast.toastId);
+      config.message = messageUpdate;
+    }
+
+    const elementClasses = [
+      {
+        element: this.getBodyElement(),
+        cssClass: 'modal-open'
+      },
+      {
+        element: this.getContainerElement(),
+        cssClass: 'block-ui'
+      }
+    ];
+    this.setCssClass(elementClasses);
+    const newNotification = this.toastr[['error', 'info', 'success'][config.type]](
+      config.message,
+      config.title,
+      config.options
+    );
+    return newNotification.toastId;
   }
 
   private queueToShow(config: CdNotificationConfig) {

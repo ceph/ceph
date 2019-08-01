@@ -4,6 +4,7 @@ import { fakeAsync, TestBed, tick } from '@angular/core/testing';
 import { Router } from '@angular/router';
 
 import { ToastrService } from 'ngx-toastr';
+import { of as observableOf } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
 import { AppModule } from '../../app.module';
@@ -36,15 +37,34 @@ describe('ApiInterceptorService', () => {
     expect(router.navigate).toHaveBeenCalledWith(...expectedCallParams);
   };
 
-  const runNotificationTest = (error, errorOpts, expectedCallParams) => {
+  const runNotificationTest = (error, errorOpts, expectedCallParams, isPermanent = false) => {
     httpError(error, errorOpts);
     httpTesting.verify();
+
     expect(notificationService.show).toHaveBeenCalled();
-    expect(notificationService.save).toHaveBeenCalledWith(expectedCallParams);
+    if (!isPermanent) {
+      expect(notificationService.save).toHaveBeenCalledWith(expectedCallParams);
+    }
   };
 
-  const createCdNotification = (type, title?, message?, options?, application?, errorCode?, isPermanent?) => {
-    return new CdNotificationConfig(type, title, message, options, application, errorCode, isPermanent);
+  const createCdNotification = (
+    type,
+    title?,
+    message?,
+    options?,
+    application?,
+    errorCode?,
+    isPermanent?
+  ) => {
+    return new CdNotificationConfig(
+      type,
+      title,
+      message,
+      options,
+      application,
+      errorCode,
+      isPermanent
+    );
   };
 
   configureTestBed({
@@ -71,6 +91,7 @@ describe('ApiInterceptorService', () => {
     notificationService = TestBed.get(NotificationService);
     spyOn(notificationService, 'show').and.callThrough();
     spyOn(notificationService, 'save');
+    spyOn(notificationService, 'getPermanentNotifications').and.returnValue(observableOf([]));
 
     router = TestBed.get(Router);
     spyOn(router, 'navigate');
@@ -111,7 +132,27 @@ describe('ApiInterceptorService', () => {
           status: 500,
           statusText: 'Foo Bar'
         },
-        createCdNotification(0, '500 - Foo Bar', 'foobar')
+        createCdNotification(0, '500 - Foo Bar', 'foobar', undefined, undefined, 500)
+      );
+    });
+
+    it('should use a specific title if one is given', () => {
+      runNotificationTest(
+        'foobar',
+        {
+          status: 504,
+          statusText: 'Gateway Timeout'
+        },
+        createCdNotification(
+          0,
+          'Ceph Dashboard backend service not reachable',
+          'foobar',
+          undefined,
+          undefined,
+          504,
+          true
+        ),
+        true
       );
     });
 
@@ -122,7 +163,8 @@ describe('ApiInterceptorService', () => {
           status: 504,
           statusText: 'AAA bbb CCC'
         },
-        createCdNotification(0, '504 - AAA bbb CCC', 'abc')
+        createCdNotification(0, '504 - AAA bbb CCC', 'abc', null, null, 504, true),
+        true
       );
     });
 
@@ -140,7 +182,10 @@ describe('ApiInterceptorService', () => {
         createCdNotification(
           0,
           '0 - Unknown Error',
-          'Http failure response for api/xyz: 0 Unknown Error'
+          'Http failure response for api/xyz: 0 Unknown Error',
+          undefined,
+          undefined,
+          0
         )
       );
     });
@@ -151,7 +196,14 @@ describe('ApiInterceptorService', () => {
         {
           status: 502
         },
-        createCdNotification(0, '502 - Unknown Error', 'Http failure response for api/xyz: 502 ')
+        createCdNotification(
+          0,
+          '502 - Unknown Error',
+          'Http failure response for api/xyz: 502 ',
+          undefined,
+          undefined,
+          502
+        )
       );
     });
 
@@ -210,7 +262,7 @@ describe('ApiInterceptorService', () => {
       });
       expectSaveToHaveBeenCalled(true);
       expect(notificationService.save).toHaveBeenCalledWith(
-        createCdNotification(0, '500 - Unknown Error', msg, undefined, 'Prometheus')
+        createCdNotification(0, '500 - Unknown Error', msg, undefined, 'Prometheus', 500)
       );
     }));
   });
