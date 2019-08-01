@@ -264,9 +264,20 @@ OSD management
 Stateless Services
 ------------------
 
-.. automethod:: Orchestrator.add_stateless_service
-.. automethod:: Orchestrator.update_stateless_service
-.. automethod:: Orchestrator.remove_stateless_service
+.. autoclass:: StatelessServiceSpec
+
+.. automethod:: Orchestrator.add_mds
+.. automethod:: Orchestrator.remove_mds
+.. automethod:: Orchestrator.update_mds
+.. automethod:: Orchestrator.add_rgw
+.. automethod:: Orchestrator.remove_rgw
+.. automethod:: Orchestrator.update_rgw
+
+.. autoclass:: NFSServiceSpec
+
+.. automethod:: Orchestrator.add_nfs
+.. automethod:: Orchestrator.remove_nfs
+.. automethod:: Orchestrator.update_nfs
 
 Upgrades
 --------
@@ -281,6 +292,7 @@ Utility
 -------
 
 .. automethod:: Orchestrator.available
+.. automethod:: Orchestrator.get_feature_set
 
 Client Modules
 --------------

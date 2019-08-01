@@ -231,10 +231,9 @@ class VolumeClient(object):
         return self.mgr.mon_command(command)
 
     def create_mds(self, fs_name):
-        spec = orchestrator.StatelessServiceSpec()
-        spec.name = fs_name
+        spec = orchestrator.StatelessServiceSpec(fs_name)
         try:
-            completion = self.mgr.add_stateless_service("mds", spec)
+            completion = self.mgr.add_mds(spec)
             self.mgr._orchestrator_wait([completion])
             orchestrator.raise_if_exception(completion)
         except (ImportError, orchestrator.OrchestratorError):
@@ -276,7 +275,7 @@ class VolumeClient(object):
         self.connection_pool.del_fs_handle(volname)
         # Tear down MDS daemons
         try:
-            completion = self.mgr.remove_stateless_service("mds", volname)
+            completion = self.mgr.remove_mds(volname)
             self.mgr._orchestrator_wait([completion])
             orchestrator.raise_if_exception(completion)
         except (ImportError, orchestrator.OrchestratorError):
