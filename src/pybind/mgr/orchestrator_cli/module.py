@@ -1,6 +1,8 @@
 import errno
 import json
 
+from prettytable import PrettyTable
+
 try:
     from typing import Dict, List
 except ImportError:
@@ -132,8 +134,10 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         orchestrator.raise_if_exception(completion)
         services = completion.result
 
+        def ukn(s):
+            return '<unknown>' if s is None else s
         # Sort the list for display
-        services.sort(key=lambda s: (s.service_type, s.nodename, s.service_instance))
+        services.sort(key=lambda s: (ukn(s.service_type), ukn(s.nodename), ukn(s.service_instance)))
 
         if len(services) == 0:
             return HandleCommandResult(stdout="No services reported")
@@ -141,22 +145,31 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
             data = [s.to_json() for s in services]
             return HandleCommandResult(stdout=json.dumps(data))
         else:
-            lines = []
+            table = PrettyTable(
+                ['type', 'id', 'host', 'container', 'version', 'status', 'description'],
+                border=False)
             for s in services:
-                if s.service == None:
+                if s.service is None:
                     service_id = s.service_instance
                 else:
                     service_id = "{0}.{1}".format(s.service, s.service_instance)
+                status = {
+                    -1: 'error',
+                    0: 'stopped',
+                    1: 'running',
+                    None: '<unknown>'
+                }[s.status]
 
-                lines.append("{0} {1} {2} {3} {4} {5}".format(
+                table.add_row((
                     s.service_type,
                     service_id,
-                    s.nodename,
-                    s.container_id,
-                    s.version,
-                    s.rados_config_location))
+                    ukn(s.nodename),
+                    ukn(s.container_id),
+                    ukn(s.version),
+                    status,
+                    ukn(s.status_desc)))
 
-            return HandleCommandResult(stdout="\n".join(lines))
+            return HandleCommandResult(stdout=table.get_string())
 
     @_write_cli('orchestrator osd create',
                 "name=svc_arg,type=CephString,req=false",
