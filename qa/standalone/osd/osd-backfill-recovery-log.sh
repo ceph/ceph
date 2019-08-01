@@ -49,11 +49,10 @@ function _common_test() {
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
     export CEPH_ARGS
-    export EXTRA_OPTS=" $extra_opts"
 
     for osd in $(seq 0 $(expr $OSDS - 1))
     do
-      run_osd $dir $osd || return 1
+      run_osd $dir $osd $extra_opts || return 1
     done
 
     create_pool test 1 1
@@ -64,7 +63,7 @@ function _common_test() {
     done
 
     # Mark out all OSDs for this pool
-    ceph osd out $(ceph pg dump pgs --format=json | jq '.pg_stats[0].up[]')
+    ceph osd out $(ceph pg dump pgs --format=json | jq '.[0].up[]')
     if [ "$moreobjects" != "0" ]; then
       for j in $(seq 1 $moreobjects)
       do
@@ -74,7 +73,7 @@ function _common_test() {
     sleep 1
     wait_for_clean
 
-    newprimary=$(ceph pg dump pgs --format=json | jq '.pg_stats[0].up_primary')
+    newprimary=$(ceph pg dump pgs --format=json | jq '.[0].up_primary')
     kill_daemons
 
     ERRORS=0
