@@ -380,14 +380,7 @@ class AccessControlDB(object):
                 # If version 1 does not exist, check if migration of VERSION "0" needs to be done
                 check_migrate_v0_to_current()
 
-        if self.VERSION == 1:  # current version
-            check_migrate_v0_to_current()
-
-        elif self.VERSION == 2:  # current version
-            check_migrate_v1_to_current()
-
-        else:
-            raise NotImplementedError()
+        check_migrate_v1_to_current()
 
     @classmethod
     def load(cls):
