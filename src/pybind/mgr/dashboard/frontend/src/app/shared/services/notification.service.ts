@@ -5,9 +5,8 @@ import { IndividualConfig, ToastrService } from 'ngx-toastr';
 import { BehaviorSubject } from 'rxjs';
 
 import { NotificationType } from '../enum/notification-type.enum';
-import { CdNotification, CdNotificationConfig } from '../models/cd-notification';
+import { CdNotificationConfig } from '../models/cd-notification';
 import { FinishedTask } from '../models/finished-task';
-import { CdDatePipe } from '../pipes/cd-date.pipe';
 import { TaskMessageService } from './task-message.service';
 
 @Injectable({
@@ -17,7 +16,7 @@ export class NotificationService {
   private hideToasties = false;
 
   // Observable sources
-  private dataSource = new BehaviorSubject<CdNotification[]>([]);
+  private dataSource = new BehaviorSubject<CdNotificationConfig[]>([]);
 
   // Observable streams
   data$ = this.dataSource.asObservable();
@@ -26,18 +25,14 @@ export class NotificationService {
   private queuedTimeoutId: number;
   KEY = 'cdNotifications';
 
-  constructor(
-    public toastr: ToastrService,
-    private taskMessageService: TaskMessageService,
-    private cdDatePipe: CdDatePipe
-  ) {
+  constructor(public toastr: ToastrService, private taskMessageService: TaskMessageService) {
     const stringNotifications = localStorage.getItem(this.KEY);
-    let notifications: CdNotification[] = [];
+    let notifications: CdNotificationConfig[] = [];
 
     if (_.isString(stringNotifications)) {
       notifications = JSON.parse(stringNotifications, (_key, value) => {
         if (_.isPlainObject(value)) {
-          return _.assign(new CdNotification(), value);
+          return _.assign(new CdNotificationConfig(), value);
         }
         return value;
       });
@@ -57,7 +52,7 @@ export class NotificationService {
   /**
    * Method used for saving a shown notification (check show() method).
    */
-  save(notification: CdNotification) {
+  save(notification: CdNotificationConfig) {
     const recent = this.dataSource.getValue();
     recent.push(notification);
     while (recent.length > 10) {
@@ -123,9 +118,8 @@ export class NotificationService {
 
   private showQueued() {
     this.getUnifiedTitleQueue().forEach((config) => {
-      const notification = new CdNotification(config);
-      this.save(notification);
-      this.showToasty(notification);
+      this.save(config);
+      this.showToasty(config);
     });
   }
 
@@ -151,25 +145,16 @@ export class NotificationService {
     return byTitle;
   }
 
-  private showToasty(notification: CdNotification) {
+  private showToasty(notification: CdNotificationConfig) {
     // Exit immediately if no toasty should be displayed.
     if (this.hideToasties) {
       return;
     }
     this.toastr[['error', 'info', 'success'][notification.type]](
-      (notification.message ? notification.message + '<br>' : '') +
-        this.renderTimeAndApplicationHtml(notification),
+      notification.message,
       notification.title,
       notification.options
     );
-  }
-
-  renderTimeAndApplicationHtml(notification: CdNotification): string {
-    return `<small class="date">${this.cdDatePipe.transform(
-      notification.timestamp
-    )}</small><i class="float-right custom-icon ${notification.applicationClass}" title="${
-      notification.application
-    }"></i>`;
   }
 
   notifyTask(finishedTask: FinishedTask, success: boolean = true): number {

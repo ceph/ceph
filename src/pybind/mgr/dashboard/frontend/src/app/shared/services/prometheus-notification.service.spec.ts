@@ -44,6 +44,9 @@ describe('PrometheusNotificationService', () => {
   });
 
   beforeEach(() => {
+    const baseTime = new Date('2022-02-22T00:00:00.000Z');
+    spyOn(Date.prototype, 'toJSON').and.returnValue(baseTime);
+
     prometheus = new PrometheusHelper();
 
     service = TestBed.get(PrometheusNotificationService);

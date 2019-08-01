@@ -1,41 +1,50 @@
+import * as _ from 'lodash';
+
 import { IndividualConfig } from 'ngx-toastr';
-import { Icons } from '../enum/icons.enum';
+import { ToastComponent } from '../components/toast/toast.component';
 import { NotificationType } from '../enum/notification-type.enum';
 
+export interface CdIndividualConfig extends IndividualConfig {
+  application: string;
+  type: NotificationType;
+  timestamp: string;
+  isPermanent: boolean;
+  errorCode: number;
+}
+
 export class CdNotificationConfig {
-  applicationClass: string;
-
-  private classes = {
-    Ceph: 'ceph-icon',
-    Prometheus: 'prometheus-icon'
-  };
-
   constructor(
     public type: NotificationType = NotificationType.info,
     public title?: string,
     public message?: string, // Use this for additional information only
-    public options?: any | IndividualConfig,
-    public application: string = 'Ceph'
+    public options?: any | CdIndividualConfig,
+    public application: string = 'Ceph',
+    public errorCode?: number,
+    public isPermanent: boolean = false
   ) {
-    this.applicationClass = this.classes[this.application];
+    const minimalCdConf = this.getMinimalCdConfig();
+    this.options = this.options ? _.merge(this.options, minimalCdConf) : minimalCdConf;
+    if (this.isPermanent) {
+      this.options = _.merge(this.options, this.getPermanentConfig());
+    }
   }
-}
 
-export class CdNotification extends CdNotificationConfig {
-  timestamp: string;
-  textClass: string;
-  iconClass: string;
+  getPermanentConfig(): Partial<CdIndividualConfig> {
+    return {
+      disableTimeOut: true,
+      positionClass: 'toast-top-full-width',
+      tapToDismiss: false
+    };
+  }
 
-  private textClasses = ['text-danger', 'text-info', 'text-success'];
-  private iconClasses = [Icons.warning, Icons.info, Icons.check];
-
-  constructor(private config: CdNotificationConfig = new CdNotificationConfig()) {
-    super(config.type, config.title, config.message, config.options, config.application);
-    delete this.config;
-    /* string representation of the Date object so it can be directly compared
-    with the timestamps parsed from localStorage */
-    this.timestamp = new Date().toJSON();
-    this.iconClass = this.iconClasses[this.type];
-    this.textClass = this.textClasses[this.type];
+  getMinimalCdConfig(): Partial<CdIndividualConfig> {
+    return {
+      application: this.application,
+      toastComponent: ToastComponent,
+      type: this.type,
+      timestamp: new Date().toJSON(),
+      isPermanent: this.isPermanent,
+      errorCode: this.errorCode
+    };
   }
 }

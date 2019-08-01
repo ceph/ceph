@@ -5,6 +5,7 @@ import * as _ from 'lodash';
 import { ToastrService } from 'ngx-toastr';
 
 import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
+import { ToastComponent } from '../components/toast/toast.component';
 import { NotificationType } from '../enum/notification-type.enum';
 import { CdNotificationConfig } from '../models/cd-notification';
 import { FinishedTask } from '../models/finished-task';
@@ -51,7 +52,7 @@ describe('NotificationService', () => {
       'cdNotifications',
       '[{"type":2,"message":"foobar","timestamp":"2018-05-24T09:41:32.726Z"}]'
     );
-    service = new NotificationService(null, null, null);
+    service = new NotificationService(null, null);
     expect(service['dataSource'].getValue().length).toBe(1);
   }));
 
@@ -216,28 +217,29 @@ describe('NotificationService', () => {
       );
     });
 
-    it('should show with only title defined', () => {
+    it('should show only title as defined', () => {
       service.show(NotificationType.info, 'Some info');
-      expect(toastr.info).toHaveBeenCalledWith(
-        `<small class="date">${time}</small>` +
-          '<i class="float-right custom-icon ceph-icon" title="Ceph"></i>',
-        'Some info',
-        undefined
-      );
+      expect(toastr.info).toHaveBeenCalledWith(undefined, 'Some info', {
+        application: 'Ceph',
+        timestamp: time,
+        toastComponent: ToastComponent,
+        type: 1,
+        isPermanent: false
+      });
     });
 
-    it('should show with title and message defined', () => {
+    it('should show title and message as defined', () => {
       service.show(
         () =>
           new CdNotificationConfig(NotificationType.error, 'Some error', 'Some operation failed')
       );
-      expect(toastr.error).toHaveBeenCalledWith(
-        'Some operation failed<br>' +
-          `<small class="date">${time}</small>` +
-          '<i class="float-right custom-icon ceph-icon" title="Ceph"></i>',
-        'Some error',
-        undefined
-      );
+      expect(toastr.error).toHaveBeenCalledWith('Some operation failed', 'Some error', {
+        application: 'Ceph',
+        timestamp: time,
+        toastComponent: ToastComponent,
+        type: 0,
+        isPermanent: false
+      });
     });
 
     it('should show with title, message and application defined', () => {
@@ -250,13 +252,13 @@ describe('NotificationService', () => {
           'Prometheus'
         )
       );
-      expect(toastr.success).toHaveBeenCalledWith(
-        'Some alert resolved<br>' +
-          `<small class="date">${time}</small>` +
-          '<i class="float-right custom-icon prometheus-icon" title="Prometheus"></i>',
-        'Alert resolved',
-        undefined
-      );
+      expect(toastr.success).toHaveBeenCalledWith('Some alert resolved', 'Alert resolved', {
+        application: 'Prometheus',
+        timestamp: time,
+        toastComponent: ToastComponent,
+        type: 2,
+        isPermanent: false
+      });
     });
   });
 });

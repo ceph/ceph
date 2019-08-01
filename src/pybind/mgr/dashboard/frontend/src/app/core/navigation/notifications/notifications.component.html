@@ -24,7 +24,9 @@
           </td>
         </tr>
         <tr>
-          <td [innerHtml]="notificationService.renderTimeAndApplicationHtml(notification)"></td>
+          <td>
+            <cd-toast-footer [config]="notification.options"></cd-toast-footer>
+          </td>
         </tr>
       </table>
       <hr>

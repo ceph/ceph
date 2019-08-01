@@ -7,7 +7,7 @@ import { ToastrService } from 'ngx-toastr';
 
 import { configureTestBed, i18nProviders } from '../../../testing/unit-test-helper';
 import { AppModule } from '../../app.module';
-import { CdNotification, CdNotificationConfig } from '../models/cd-notification';
+import { CdNotificationConfig } from '../models/cd-notification';
 import { ApiInterceptorService } from './api-interceptor.service';
 import { NotificationService } from './notification.service';
 
@@ -43,8 +43,8 @@ describe('ApiInterceptorService', () => {
     expect(notificationService.save).toHaveBeenCalledWith(expectedCallParams);
   };
 
-  const createCdNotification = (type, title?, message?, options?, application?) => {
-    return new CdNotification(new CdNotificationConfig(type, title, message, options, application));
+  const createCdNotification = (type, title?, message?, options?, application?, errorCode?, isPermanent?) => {
+    return new CdNotificationConfig(type, title, message, options, application, errorCode, isPermanent);
   };
 
   configureTestBed({
@@ -62,8 +62,8 @@ describe('ApiInterceptorService', () => {
   });
 
   beforeEach(() => {
-    const baseTime = new Date('2022-02-22');
-    spyOn(global, 'Date').and.returnValue(baseTime);
+    const baseTime = new Date('2022-02-22T00:00:00.000Z');
+    spyOn(Date.prototype, 'toJSON').and.returnValue(baseTime);
 
     httpClient = TestBed.get(HttpClient);
     httpTesting = TestBed.get(HttpTestingController);
