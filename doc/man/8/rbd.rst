@@ -537,13 +537,13 @@ Commands
 :command:`mv` *src-image-spec* *dest-image-spec*
   Rename an image.  Note: rename across pools is not supported.
 
-:command:`namespace create` *pool-name* *namespace-name*
+:command:`namespace create` *pool-name*/*namespace-name*
   Create a new image namespace within the pool.
 
 :command:`namespace list` *pool-name*
   List image namespaces defined within the pool.
 
-:command:`namespace remove` *pool-name* *namespace-name*
+:command:`namespace remove` *pool-name*/*namespace-name*
   Remove an empty image namespace from the pool.
 
 :command:`object-map check` *image-spec* | *snap-spec*
