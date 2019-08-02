@@ -4684,16 +4684,16 @@ std::vector<Option> get_global_options() {
     .set_description("Run fsck at mount"),
 
     Option("bluestore_fsck_on_mount_deep", Option::TYPE_BOOL, Option::LEVEL_DEV)
-    .set_default(true)
-    .set_description("Run deep fsck at mount"),
+    .set_default(false)
+    .set_description("Run deep fsck at mount when bluestore_fsck_on_mount is set to true"),
 
     Option("bluestore_fsck_on_umount", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description("Run fsck at umount"),
 
     Option("bluestore_fsck_on_umount_deep", Option::TYPE_BOOL, Option::LEVEL_DEV)
-    .set_default(true)
-    .set_description("Run deep fsck at umount"),
+    .set_default(false)
+    .set_description("Run deep fsck at umount when bluestore_fsck_on_umount is set to true"),
 
     Option("bluestore_fsck_on_mkfs", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
