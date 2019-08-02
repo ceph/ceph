@@ -1001,7 +1001,7 @@ int Session::check_access(CInode *in, unsigned mask,
   if (!auth_caps.is_capable(path, in->inode.uid, in->inode.gid, in->inode.mode,
 			    caller_uid, caller_gid, caller_gid_list, mask,
 			    new_uid, new_gid,
-			    socket_addr)) {
+			    info.inst.addr)) {
     return -EACCES;
   }
   return 0;

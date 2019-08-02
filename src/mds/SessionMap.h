@@ -172,7 +172,6 @@ public:
 protected:
   ConnectionRef connection;
 public:
-  entity_addr_t socket_addr;
   xlist<Session*>::item item_session_list;
 
   list<ref_t<Message>> preopen_out_queue;  ///< messages for client, queued before they connect
@@ -422,8 +421,11 @@ public:
 
   void set_connection(ConnectionRef con) {
     connection = std::move(con);
-    if (connection) {
-      socket_addr = connection->get_peer_socket_addr();
+    auto& c = connection;
+    if (c) {
+      info.auth_name = c->get_peer_entity_name();
+      info.inst.addr = c->get_peer_socket_addr();
+      info.inst.name = entity_name_t(c->get_peer_type(), c->get_peer_global_id());
     }
   }
   const ConnectionRef& get_connection() const {
