@@ -1,6 +1,7 @@
 import os
 import pytest
 from ceph_volume.util import disk
+from ceph_volume.util.constants import ceph_disk_guids
 from ceph_volume.api import lvm as lvm_api
 from ceph_volume import conf, configuration
 
@@ -190,6 +191,67 @@ def tmpfile(tmpdir):
             fp.write(contents)
         return path
     return generate_file
+
+
+@pytest.fixture
+def disable_kernel_queries(monkeypatch):
+    '''
+    This speeds up calls to Device and Disk
+    '''
+    monkeypatch.setattr("ceph_volume.util.device.disk.get_devices", lambda: {})
+    monkeypatch.setattr("ceph_volume.util.disk.udevadm_property", lambda *a, **kw: {})
+
+
+@pytest.fixture
+def disable_lvm_queries(monkeypatch):
+    '''
+    This speeds up calls to Device and Disk
+    '''
+    monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path: None)
+    monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv", lambda vg_name, lv_uuid: None)
+
+
+@pytest.fixture(params=[
+    '', 'ceph data', 'ceph journal', 'ceph block',
+    'ceph block.wal', 'ceph block.db', 'ceph lockbox'])
+def ceph_partlabel(request):
+    return request.param
+
+
+@pytest.fixture(params=list(ceph_disk_guids.keys()))
+def ceph_parttype(request):
+    return request.param
+
+
+@pytest.fixture
+def lsblk_ceph_disk_member(monkeypatch, request, ceph_partlabel, ceph_parttype):
+    monkeypatch.setattr("ceph_volume.util.device.disk.lsblk",
+                        lambda path: {'PARTLABEL': ceph_partlabel})
+    # setting blkid here too in order to be able to fall back to PARTTYPE based
+    # membership
+    monkeypatch.setattr("ceph_volume.util.device.disk.blkid",
+                        lambda path: {'PARTLABEL': '',
+                                      'PARTTYPE': ceph_parttype})
+
+
+@pytest.fixture
+def blkid_ceph_disk_member(monkeypatch, request, ceph_partlabel, ceph_parttype):
+    monkeypatch.setattr("ceph_volume.util.device.disk.blkid",
+                        lambda path: {'PARTLABEL': ceph_partlabel,
+                                      'PARTTYPE': ceph_parttype})
+
+
+@pytest.fixture(params=[
+    ('gluster partition', 'gluster partition'),
+    # falls back to blkid
+    ('', 'gluster partition'),
+    ('gluster partition', ''),
+])
+def device_info_not_ceph_disk_member(monkeypatch, request):
+    monkeypatch.setattr("ceph_volume.util.device.disk.lsblk",
+                        lambda path: {'PARTLABEL': request.param[0]})
+    monkeypatch.setattr("ceph_volume.util.device.disk.blkid",
+                        lambda path: {'PARTLABEL': request.param[1]})
 
 
 @pytest.fixture
