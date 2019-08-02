@@ -4,4 +4,5 @@ export class UserFormModel {
   name: string;
   email: string;
   roles: Array<string>;
+  enabled: boolean;
 }

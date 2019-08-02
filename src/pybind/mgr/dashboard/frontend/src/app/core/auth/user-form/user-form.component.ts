@@ -76,7 +76,10 @@ export class UserFormComponent implements OnInit {
         email: new FormControl('', {
           validators: [Validators.email]
         }),
-        roles: new FormControl([])
+        roles: new FormControl([]),
+        enabled: new FormControl(true, {
+          validators: [Validators.required]
+        })
       },
       {
         validators: [CdValidators.match('password', 'confirmpassword')]
@@ -119,14 +122,14 @@ export class UserFormComponent implements OnInit {
   }
 
   setResponse(response: UserFormModel) {
-    ['username', 'name', 'email', 'roles'].forEach((key) =>
+    ['username', 'name', 'email', 'roles', 'enabled'].forEach((key) =>
       this.userForm.get(key).setValue(response[key])
     );
   }
 
   getRequest(): UserFormModel {
     const userFormModel = new UserFormModel();
-    ['username', 'password', 'name', 'email', 'roles'].forEach(
+    ['username', 'password', 'name', 'email', 'roles', 'enabled'].forEach(
       (key) => (userFormModel[key] = this.userForm.get(key).value)
     );
     return userFormModel;
@@ -169,7 +172,7 @@ export class UserFormComponent implements OnInit {
     }
   }
 
-  private isCurrentUser(): boolean {
+  public isCurrentUser(): boolean {
     return this.authStorageService.getUsername() === this.userForm.getValue('username');
   }
 
