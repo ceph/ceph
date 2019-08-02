@@ -5,9 +5,86 @@
 #include "StupidAllocator.h"
 #include "BitmapAllocator.h"
 #include "common/debug.h"
-
+#include "common/admin_socket.h"
 #define dout_subsys ceph_subsys_bluestore
 
+class Allocator::SocketHook : public AdminSocketHook {
+  Allocator *alloc;
+
+  std::string name;
+public:
+  explicit SocketHook(Allocator *alloc, const std::string& _name) : alloc(alloc), name(_name)
+  {
+    AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+    if (name.empty()) {
+      name = to_string((uintptr_t)this);
+    }
+    if (admin_socket) {
+      int r = admin_socket->register_command(("bluestore allocator dump " + name).c_str(),
+                                           ("bluestore allocator dump " + name).c_str(),
+                                           this,
+                                           "dump allocator free regions");
+      if (r != 0)
+        alloc = nullptr; //some collision, disable
+      if (alloc) {
+        r = admin_socket->register_command(("bluestore allocator score " + name).c_str(),
+                                           ("bluestore allocator score " + name).c_str(),
+                                           this,
+                                           "give score on allocator fragmentation (0-no fragmentation, 1-absolute fragmentation)");
+        ceph_assert(r == 0);
+      }
+    }
+  }
+  ~SocketHook()
+  {
+    AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+    if (admin_socket && alloc) {
+      int r = admin_socket->unregister_command(("bluestore allocator dump " + name).c_str());
+      ceph_assert(r == 0);
+      r = admin_socket->unregister_command(("bluestore allocator score " + name).c_str());
+      ceph_assert(r == 0);
+    }
+  }
+
+  bool call(std::string_view command, const cmdmap_t& cmdmap,
+            std::string_view format, bufferlist& out) override {
+    stringstream ss;
+    bool r = true;
+    if (command == "bluestore allocator dump " + name) {
+      Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
+      f->open_array_section("free_regions");
+      auto iterated_allocation = [&](size_t off, size_t len) {
+        ceph_assert(len > 0);
+        f->open_object_section("free");
+        char off_hex[30];
+        char len_hex[30];
+        snprintf(off_hex, sizeof(off_hex) - 1, "0x%lx", off);
+        snprintf(len_hex, sizeof(len_hex) - 1, "0x%lx", len);
+        f->dump_string("offset", off_hex);
+        f->dump_string("length", len_hex);
+        f->close_section();
+      };
+      alloc->dump(iterated_allocation);
+
+
+      f->close_section();
+      f->flush(ss);
+    } else if (command == "bluestore allocator score " + name) {
+      Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
+      f->open_object_section("fragmentation_score");
+      f->dump_float("fragmentation_rating", alloc->get_fragmentation_score());
+      f->close_section();
+      f->flush(ss);
+      delete f;
+    } else {
+      ss << "Invalid command" << std::endl;
+      r = false;
+    }
+    out.append(ss);
+    return r;
+  }
+
+};
 Allocator::Allocator(const std::string& name)
 {
   asok_hook = new SocketHook(this, name);
@@ -16,6 +93,7 @@ Allocator::Allocator(const std::string& name)
 
 Allocator::~Allocator()
 {
+  delete asok_hook;
 }
 
 
