@@ -441,6 +441,7 @@ class CephConfigWatcher(threading.Thread):
         self.mgr = mgr
         self.server_map = dict()
         self.osd_map = dict()
+        self.pool_map = dict()
         self.service_map = dict()
         
         self.hearbeat_interval_secs = self.mgr.get_localized_module_option(
@@ -462,6 +463,10 @@ class CephConfigWatcher(threading.Thread):
     @property
     def num_osds(self):
         return len(self.osd_map.keys())
+    
+    @property
+    def num_pools(self):
+        return len(self.pool_map.keys())
 
     def fetch_servers(self):
         """ return a server summary, and service summary """
@@ -481,9 +486,34 @@ class CephConfigWatcher(threading.Thread):
 
         return server_map, service_map
     
+    def fetch_pools(self):
+        interesting = ["type", "size", "min_size"]
+        # pools = [{'pool': 1, 'pool_name': 'replicapool', 'flags': 1, 'flags_names': 'hashpspool', 
+        #           'type': 1, 'size': 3, 'min_size': 1, 'crush_rule': 1, 'object_hash': 2, 'pg_autoscale_mode': 'warn', 
+        #           'pg_num': 100, 'pg_placement_num': 100, 'pg_placement_num_target': 100, 'pg_num_target': 100, 'pg_num_pending': 100, 
+        #           'last_pg_merge_meta': {'ready_epoch': 0, 'last_epoch_started': 0, 'last_epoch_clean': 0, 'source_pgid': '0.0', 
+        #           'source_version': "0'0", 'target_version': "0'0"}, 'auid': 0, 'snap_mode': 'selfmanaged', 'snap_seq': 0, 'snap_epoch': 0,
+        #           'pool_snaps': [], 'quota_max_bytes': 0, 'quota_max_objects': 0, 'tiers': [], 'tier_of': -1, 'read_tier': -1, 
+        #           'write_tier': -1, 'cache_mode': 'none', 'target_max_bytes': 0, 'target_max_objects': 0, 
+        #           'cache_target_dirty_ratio_micro': 400000, 'cache_target_dirty_high_ratio_micro': 600000, 
+        #           'cache_target_full_ratio_micro': 800000, 'cache_min_flush_age': 0, 'cache_min_evict_age': 0, 
+        #           'erasure_code_profile': '', 'hit_set_params': {'type': 'none'}, 'hit_set_period': 0, 'hit_set_count': 0, 
+        #           'use_gmt_hitset': True, 'min_read_recency_for_promote': 0, 'min_write_recency_for_promote': 0, 
+        #           'hit_set_grade_decay_rate': 0, 'hit_set_search_last_n': 0, 'grade_table': [], 'stripe_width': 0, 
+        #           'expected_num_objects': 0, 'fast_read': False, 'options': {}, 'application_metadata': {'rbd': {}}, 
+        #           'create_time': '2019-08-02 02:23:01.618519', 'last_change': '19', 'last_force_op_resend': '0', 
+        #           'last_force_op_resend_prenautilus': '0', 'last_force_op_resend_preluminous': '0', 'removed_snaps': '[]'}]
+        pools = self.mgr.get('osd_map')['pools']
+        pool_map = dict()
+        for pool in pools:
+            pool_map[pool.get('pool_name')] = {k:pool.get(k) for k in interesting}
+        return pool_map
+
+
     def fetch_osd_map(self, service_map):
         """ create an osd map """
         stats = self.mgr.get('osd_stats')
+
         osd_map = dict()
 
         devices = self.mgr.get('osd_map_crush')['devices']
@@ -517,8 +547,11 @@ class CephConfigWatcher(threading.Thread):
             health_text = 'Unhealthy'
             level = 'WRN'
 
-        health_msg = ("Cluster is {}, {} hosts, {} OSDs - Total Raw "
-                      "Capacity {}B".format(health_text, self.num_servers, self.num_osds, self.raw_capacity))
+        hsfx = 's' if self.num_servers > 1 else ''
+        psfx = 's' if self.num_pools > 1 else ''
+        health_msg = ("Cluster is {}, {} host{}, {} pool{}, {} OSDs - Total Raw "
+                      "Capacity {}B".format(health_text, self.num_servers, hsfx, self.num_pools, psfx,
+                                            self.num_osds, self.raw_capacity))
 
         event_queue.put(LogEntry(
             source="config",
@@ -530,12 +563,8 @@ class CephConfigWatcher(threading.Thread):
         
         self.mgr.log.warning("[DBG] {}".format(health_msg))
 
-    def get_changes(self, server_map, osd_map):
-        """ detect changes in maps between current observation and the last """
-
+    def _check_hosts(self, server_map):
         changes = list()
-
-        # Check hosts
         if set(self.server_map.keys()) == set(server_map.keys()):
             # no hosts changes
             pass
@@ -560,7 +589,10 @@ class CephConfigWatcher(threading.Thread):
                                         level="INF",
                                         tstamp=None)
                 )
-  
+        return changes
+
+    def _check_osds(self,server_map, osd_map):
+        changes = list()
         before_osds = list()
         for svr in self.server_map:
             before_osds.extend(self.server_map[svr].get('osd',[]))
@@ -601,17 +633,87 @@ class CephConfigWatcher(threading.Thread):
                                         level="INF",
                                         tstamp=None)
                 )
+        return changes
+
+    def _check_pools(self, pool_map):
+        changes = list()
+        if self.pool_map.keys() == pool_map.keys():
+            # no pools added/removed
+            pass
+        else:
+            # Pool changes
+            diff = ListDiff(self.pool_map.keys(), pool_map.keys())
+            pool_msg = "Pool '{}' has been {} the cluster"
+            for new in diff.added:
+                
+                changes.append(LogEntry(source="config",
+                                        msg_type="config",
+                                        msg=pool_msg.format(new, 'added to'),
+                                        level="INF",
+                                        tstamp=None)
+                )
+
+            for removed in diff.removed:
+
+                changes.append(LogEntry(source="config",
+                                        msg_type="config",
+                                        msg=pool_msg.format(removed, 'removed from'),
+                                        level="INF",
+                                        tstamp=None)
+                )
+        
+        # check pool configuration changes
+        for pool_name in pool_map:
+            if pool_map[pool_name] == self.pool_map[pool_name]:
+                # no changes
+                pass
+            else:
+                # determine the change and add it to the change list
+                size_diff = pool_map[pool_name]['size'] - self.pool_map[pool_name]['size']
+                if size_diff:
+                    if size_diff < 0:
+                        msg = "Data protection level of pool '{}' reduced to {} copies".format(pool_name,
+                                                                                               pool_map[pool_name]['size'])
+                        level = 'WRN'
+                    else:
+                        msg = "Data protection level of pool '{}' increased to {} copies".format(pool_name,
+                                                                                                 pool_map[pool_name]['size'])
+                        level = 'INF'
+
+                    changes.append(LogEntry(source="config",
+                                   msg_type="config",
+                                   msg=msg,
+                                   level=level,
+                                   tstamp=None)
+                                   )
+
+                if pool_map[pool_name]['min_size'] != self.pool_map[pool_name]['min_size']:
+                    changes.append(LogEntry(source="config",
+                                   msg_type="config",
+                                   msg="Minimum acceptable number of replicas in pool '{}' has changed".format(pool_name),
+                                   level='WRN',
+                                   tstamp=None)
+                                   )
+
+        return changes
+
+    def get_changes(self, server_map, osd_map, pool_map):
+        """ detect changes in maps between current observation and the last """
+
+        changes = list()
+
+        changes.extend(self._check_hosts(server_map))
+        changes.extend(self._check_osds(server_map, osd_map))
+        changes.extend(self._check_pools(pool_map))
 
         return changes
 
     def run(self):
         self.mgr.log.warning("[INF] Ceph configuration watcher started")
         # TODO
-        # 1. every hour send a health event - ok/warning/error - unique
-        # 2. send event if nodes added/removed from the cluster - unique
-        # 3. send event if osd count increases/decreases - unique
-        # 4. send event if service location changes - unique
+        # 1. send event if service location changes - unique
         self.server_map, self.service_map = self.fetch_servers()
+        self.pool_map = self.fetch_pools()
         self.mgr.log.warning("[DBG] {}".format(self.server_map))
         self.mgr.log.warning("[DBG] {}".format(self.service_map))
         self.osd_map = self.fetch_osd_map(self.service_map)
@@ -627,13 +729,15 @@ class CephConfigWatcher(threading.Thread):
         
         while True:
             server_map, service_map = self.fetch_servers()
+            pool_map = self.fetch_pools()
             osd_map = self.fetch_osd_map(service_map)
 
-            changes = self.get_changes(server_map, osd_map)
+            changes = self.get_changes(server_map, osd_map, pool_map)
             if changes:
                 self.push_events(changes)
 
             self.osd_map = osd_map
+            self.pool_map = pool_map
             self.server_map = server_map
             self.service_map = service_map
 
