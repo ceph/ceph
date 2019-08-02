@@ -10,8 +10,8 @@
 #undef dout_prefix
 #define dout_prefix *_dout << "stupidalloc 0x" << this << " "
 
-StupidAllocator::StupidAllocator(CephContext* cct)
-  : cct(cct), num_free(0),
+StupidAllocator::StupidAllocator(CephContext* cct, const std::string& name)
+  : Allocator(name), cct(cct), num_free(0),
     free(10),
     last_alloc(0)
 {

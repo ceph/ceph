@@ -4841,7 +4841,7 @@ int BlueStore::_open_alloc()
 
   alloc = Allocator::create(cct, cct->_conf->bluestore_allocator,
                             bdev->get_size(),
-                            min_alloc_size);
+                            min_alloc_size, "block");
   if (!alloc) {
     lderr(cct) << __func__ << " Allocator::unknown alloc type "
                << cct->_conf->bluestore_allocator

@@ -10,7 +10,9 @@
 
 BitmapAllocator::BitmapAllocator(CephContext* _cct,
 					 int64_t capacity,
-					 int64_t alloc_unit) :
+					 int64_t alloc_unit,
+					 const std::string& name) :
+    Allocator(name),
     cct(_cct)
 {
   ldout(cct, 10) << __func__ << " 0x" << std::hex << capacity << "/"
