@@ -551,7 +551,7 @@ class CephConfigWatcher(threading.Thread):
         psfx = 's' if self.num_pools > 1 else ''
         health_msg = ("Cluster is {}, {} host{}, {} pool{}, {} OSDs - Total Raw "
                       "Capacity {}B".format(health_text, self.num_servers, hsfx, self.num_pools, psfx,
-                                            self.num_osds, self.raw_capacity))
+                                            self.num_osds, MgrModule.to_pretty_iec(self.raw_capacity)))
 
         event_queue.put(LogEntry(
             source="config",
