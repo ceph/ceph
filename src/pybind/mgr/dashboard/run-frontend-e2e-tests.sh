@@ -67,6 +67,8 @@ jq .[].target=\"$BASE_URL\" proxy.conf.json.sample > proxy.conf.json
 . $BUILD_DIR/src/pybind/mgr/dashboard/node-env/bin/activate
 
 if [ "$DEVICE" == "chrome" ]; then
+    npm list webdriver-manager
+    npm info webdriver-manager
     npm run e2e:ci || stop 1
     stop 0
 elif [ "$DEVICE" == "docker" ]; then
