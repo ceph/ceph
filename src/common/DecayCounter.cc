@@ -51,7 +51,7 @@ void DecayCounter::dump(Formatter *f) const
 {
   decay();
   f->dump_float("value", val);
-  f->dump_float("halflife", rate.k);
+  f->dump_float("halflife", rate.get_halflife());
 }
 
 void DecayCounter::generate_test_instances(std::list<DecayCounter*>& ls)
