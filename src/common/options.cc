@@ -6700,6 +6700,26 @@ std::vector<Option> get_rgw_options() {
     .set_long_description(
         "Time in seconds between attempts to trim sync logs."),
 
+    Option("rgw_sync_work_period", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_min(1 * 60) /* 1 minute */
+    .set_default(10 * 60) /* 10 minutes */
+    .set_description("Sync work period length")
+    .set_long_description("Time in seconds a shard sync process will work before giving up lock."),
+
+    Option("rgw_sync_poll_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_min(15) /* 15 seconds */
+    .set_default(1 * 60) /* 1 minutes */
+    .set_description("Interval between polls to take shard sync lock")
+    .set_long_description("Time in seconds between polling attemps for the shard lock bids."),
+
+    Option("rgw_sync_bid_shuffle_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+#if 1 // temporary
+    .set_min(30) /* 1 minute */
+#endif
+    .set_default(3 * 60) /* 3 minutes */
+    .set_description("Lock bid shuffle interval")
+    .set_long_description("Time in seconds between shuffles of the shard lock bids."),
+
     Option("rgw_sync_log_trim_max_buckets", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(16)
     .set_description("Maximum number of buckets to trim per interval")
@@ -6801,10 +6821,19 @@ std::vector<Option> get_rgw_options() {
     .set_description("")
     .add_service("rgw"),
 
-    Option("rgw_reshard_bucket_lock_duration", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("rgw_reshard_bucket_lock_duration",
+	   Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(360)
     .set_min(30)
-    .set_description("Number of seconds the timeout on the reshard locks (bucket reshard lock and reshard log lock) are set to. As a reshard proceeds these locks can be renewed/extended. If too short, reshards cannot complete and will fail, causing a future reshard attempt. If too long a hung or crashed reshard attempt will keep the bucket locked for an extended period, not allowing RGW to detect the failed reshard attempt and recover.")
+    .set_description("Number of seconds a bucket reshard luck is taken")
+    .set_long_description(
+      "Number of seconds the timeout on the reshard locks (bucket reshard "
+      "lock and reshard log lock) are set to. As a reshard proceeds these "
+      "locks can be renewed/extended. If too short, reshards cannot complete "
+      "and will fail, causing a future reshard attempt. If too long a hung "
+      "or crashed reshard attempt will keep the bucket locked for an extended "
+      "period, not allowing RGW to detect the failed reshard attempt and "
+      "recover.")
     .add_tag("performance")
     .add_service("rgw"),
     

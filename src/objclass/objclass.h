@@ -42,10 +42,14 @@ extern int cls_getxattr(cls_method_context_t hctx, const char *name,
                                  char **outdata, int *outdatalen);
 extern int cls_setxattr(cls_method_context_t hctx, const char *name,
                                  const char *value, int val_len);
-/** This will fill in the passed origin pointer with the origin of the
- * request which activated your class call. */
+/** Copies the origin of the request which activated your class call
+ *  into the structure pointed at. */
 extern int cls_get_request_origin(cls_method_context_t hctx,
-                                  entity_inst_t *origin);
+                                  entity_inst_t* origin);
+/** Copies the pointer of the hobject_t into the pointer pointed
+ *  at. */
+extern int cls_get_obj_info(cls_method_context_t hctx,
+			    hobject_t** obj_info);
 
 /* class registration api */
 extern int cls_unregister(cls_handle_t);

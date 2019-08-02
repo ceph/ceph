@@ -30,7 +30,10 @@ namespace rados {
                 const string& name, ClsLockType type,
                 const string& cookie, const string& tag,
                 const string& description,
-                const utime_t& duration, uint8_t flags)
+                const utime_t& duration,
+		uint8_t flags,
+		int32_t bid_amount,
+		const utime_t& bid_duration)
       {
         cls_lock_lock_op op;
         op.name = name;
@@ -40,20 +43,28 @@ namespace rados {
         op.description = description;
         op.duration = duration;
         op.flags = flags;
+	op.bid_amount = bid_amount;
+	op.bid_duration = bid_duration;
         bufferlist in;
         encode(op, in);
         rados_op->exec("lock", "lock", in);
       }
 
       int lock(IoCtx *ioctx,
-               const string& oid,
-               const string& name, ClsLockType type,
-               const string& cookie, const string& tag,
-               const string& description, const utime_t& duration,
-	       uint8_t flags)
+	       const string& oid,
+	       const string& name,
+	       ClsLockType type,
+	       const string& cookie,
+	       const string& tag,
+	       const string& description,
+	       const utime_t& duration,
+	       uint8_t flags,
+	       int32_t bid_amount,
+	       const utime_t& bid_duration)
       {
         ObjectWriteOperation op;
-        lock(&op, name, type, cookie, tag, description, duration, flags);
+        lock(&op, name, type, cookie, tag, description, duration, flags,
+	     bid_amount, bid_duration);
         return ioctx->operate(oid, &op);
       }
 
@@ -142,6 +153,7 @@ namespace rados {
 			       map<locker_id_t, locker_info_t> *lockers,
 			       ClsLockType *type, string *tag)
       {
+#warning should this retrieve active bids too?
         cls_lock_get_info_reply ret;
         try {
           decode(ret, *iter);
@@ -168,6 +180,7 @@ namespace rados {
                         map<locker_id_t, locker_info_t> *lockers,
                         ClsLockType *type, string *tag)
       {
+#warning should this retrieve active bids too (see above)?
         ObjectReadOperation op;
         get_lock_info_start(&op, name);
 	bufferlist out;
@@ -226,37 +239,46 @@ namespace rados {
       void Lock::lock_shared(ObjectWriteOperation *op)
       {
         lock(op, name, LOCK_SHARED,
-             cookie, tag, description, duration, flags);
+	     cookie, tag, description, duration, flags,
+	     bid_amount, bid_duration);
       }
 
       int Lock::lock_shared(IoCtx *ioctx, const string& oid)
       {
-        return lock(ioctx, oid, name, LOCK_SHARED,
-                    cookie, tag, description, duration, flags);
+        return rados::cls::lock::lock(ioctx, oid, name, LOCK_SHARED,
+				      cookie, tag, description, duration,
+				      flags, bid_amount, bid_duration);
       }
 
       void Lock::lock_exclusive(ObjectWriteOperation *op)
       {
-        lock(op, name, LOCK_EXCLUSIVE,
-             cookie, tag, description, duration, flags);
+	rados::cls::lock::lock(op, name, LOCK_EXCLUSIVE,
+			       cookie, tag, description, duration, flags,
+			       bid_amount, bid_duration);
       }
 
       int Lock::lock_exclusive(IoCtx *ioctx, const string& oid)
       {
-        return lock(ioctx, oid, name, LOCK_EXCLUSIVE,
-                    cookie, tag, description, duration, flags);
+        return rados::cls::lock::lock(ioctx, oid, name, LOCK_EXCLUSIVE,
+				      cookie, tag, description, duration,
+				      flags,
+				      bid_amount, bid_duration);
       }
 
       void Lock::lock_exclusive_ephemeral(ObjectWriteOperation *op)
       {
-        lock(op, name, LOCK_EXCLUSIVE_EPHEMERAL,
-             cookie, tag, description, duration, flags);
+	rados::cls::lock::lock(op, name, LOCK_EXCLUSIVE_EPHEMERAL,
+			       cookie, tag, description, duration, flags,
+			       bid_amount, bid_duration);
       }
 
       int Lock::lock_exclusive_ephemeral(IoCtx *ioctx, const string& oid)
       {
-        return lock(ioctx, oid, name, LOCK_EXCLUSIVE_EPHEMERAL,
-                    cookie, tag, description, duration, flags);
+        return rados::cls::lock::lock(ioctx, oid, name,
+				      LOCK_EXCLUSIVE_EPHEMERAL,
+				      cookie, tag, description, duration,
+				      flags,
+				      bid_amount, bid_duration);
       }
 
       void Lock::unlock(ObjectWriteOperation *op)

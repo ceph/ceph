@@ -534,6 +534,13 @@ do_rgw_conf() {
         ; uncomment the following to set LC days as the value in seconds;
         ; needed for passing lc time based s3-tests (can be verbose)
         ; rgw lc debug interval = 10
+
+        rgw_md_log_max_shards = 5
+        rgw_data_log_num_shards = 3
+        rgw_sync_poll_interval = 30
+        rgw_sync_bid_shuffle_interval = 45
+        rgw_sync_work_period = 61
+        debug rgw = 20
 EOF
         current_port=$((current_port + 1))
 done
@@ -678,6 +685,7 @@ $DAEMONOPTS
 $extra_conf
 [osd]
 $DAEMONOPTS
+        debug objclass = 20
         osd_check_max_object_name_len_on_startup = false
         osd data = $CEPH_DEV_DIR/osd\$id
         osd journal = $CEPH_DEV_DIR/osd\$id/journal
