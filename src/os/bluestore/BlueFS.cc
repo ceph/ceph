@@ -441,6 +441,7 @@ void BlueFS::_init_alloc()
       continue;
     }
     ceph_assert(bdev[id]->get_size());
+    ceph_assert(bluefs_alloc_size != 0);
     alloc[id] = Allocator::create(cct, cct->_conf->bluefs_allocator,
 				  bdev[id]->get_size(),
 				  bluefs_alloc_size);
