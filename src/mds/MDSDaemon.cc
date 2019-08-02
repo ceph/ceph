@@ -1220,9 +1220,6 @@ void MDSDaemon::ms_handle_accept(Connection *con)
   // request to open a session (initial state of Session is `closed`)
   if (!s) {
     s = new Session(con);
-    s->info.auth_name = con->get_peer_entity_name();
-    s->info.inst.addr = con->get_peer_socket_addr();
-    s->info.inst.name = n;
     dout(10) << " new session " << s << " for " << s->info.inst
 	     << " con " << con << dendl;
     con->set_priv(RefCountedPtr{s, false});
