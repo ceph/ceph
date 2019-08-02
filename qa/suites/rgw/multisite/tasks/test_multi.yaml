@@ -5,6 +5,7 @@ tasks:
 - install:
 - ceph: {cluster: c1}
 - ceph: {cluster: c2}
+- openssl_keys:
 - rgw:
     c1.client.0:
       port: 8000

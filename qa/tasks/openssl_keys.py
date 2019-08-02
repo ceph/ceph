@@ -66,20 +66,8 @@ class OpenSSLKeys(Task):
         self.cadir = '/'.join((misc.get_testdir(self.ctx), 'ca'))
 
         for name, config in self.config.items():
-            # names must be unique to avoid clobbering each others files
-            if name in self.ctx.ssl_certificates:
-                raise ConfigError('ssl: duplicate certificate name {}'.format(name))
-
             # create the key and certificate
             cert = self.create_cert(name, config)
-
-            self.ctx.ssl_certificates[name] = cert
-            self.certs.append(cert)
-
-            # install as trusted on the requested clients
-            for client in config.get('install', []):
-                installed = self.install_cert(cert, client)
-                self.installed.append(installed)
 
     def teardown(self):
         """
@@ -95,6 +83,14 @@ class OpenSSLKeys(Task):
         """
         Create a certificate with the given configuration.
         """
+        cert = config.get('cert', None)
+        if cert: # already loaded
+            return cert
+
+        # names must be unique to avoid clobbering each others files
+        if name in self.ctx.ssl_certificates:
+            raise ConfigError('ssl: duplicate certificate name {}'.format(name))
+
         cert = argparse.Namespace()
         cert.name = name
         cert.key_type = config.get('key-type', 'rsa:2048')
@@ -119,8 +115,18 @@ class OpenSSLKeys(Task):
             # the ca certificate must have been created by a prior ssl task
             ca_cert = self.ctx.ssl_certificates.get(ca, None)
             if not ca_cert:
-                raise ConfigError('ssl: ca {} not found for certificate {}'
-                        .format(ca, cert.name))
+                # load from config if we haven't yet
+                ca_config = self.config.pop(ca)
+                if not ca_config:
+                    raise ConfigError('ssl: ca {} not found for certificate {}'
+                            .format(ca, cert.name))
+
+                log.info('creating ca cert {} for cert {}'.format(ca, cert.name))
+                ca_cert = self.create_cert(ca, ca_config)
+
+                ca_config['cert'] = ca_cert
+                self.ctx.ssl_certificates[ca] = ca_cert
+                self.certs.append(ca_cert)
 
             # these commands are run on the ca certificate's client because
             # they need access to its private key and cert
@@ -160,6 +166,14 @@ class OpenSSLKeys(Task):
         if config.get('embed-key', False):
             # append the private key to the certificate file
             cert.remote.run(args=['cat', cert.key, run.Raw('>>'), cert.certificate])
+
+        self.ctx.ssl_certificates[name] = cert
+        self.certs.append(cert)
+
+        # install as trusted on the requested clients
+        for client in config.get('install', []):
+            installed = self.install_cert(cert, client)
+            self.installed.append(installed)
 
         return cert
 
@@ -206,7 +220,8 @@ class OpenSSLKeys(Task):
         """
         Uninstall a certificate from the trusted certificate store.
         """
-        installed.remote.run(args=['sudo', 'rm', installed.path])
+        # 'rm -f' because it may have been installed for two clients on the same remote
+        installed.remote.run(args=['sudo', 'rm', '-f', installed.path])
         installed.remote.run(args=installed.command)
 
     def remote_copy_file(self, from_remote, from_path, to_remote, to_path):

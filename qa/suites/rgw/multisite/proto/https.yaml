@@ -1,0 +1,24 @@
+overrides:
+  openssl_keys:
+    root:
+      client: c1.client.0
+      key-type: rsa:4096
+      cn: teuthology
+      install: [c1.client.0, c2.client.0]
+    rgw.c1:
+      client: c1.client.0
+      ca: root
+      embed-key: true
+    rgw.c2:
+      client: c2.client.0
+      ca: root
+      embed-key: true
+  rgw:
+    c1.client.0:
+      ssl certificate: rgw.c1
+    c1.client.1:
+      ssl certificate: rgw.c1
+    c2.client.0:
+      ssl certificate: rgw.c2
+    c2.client.1:
+      ssl certificate: rgw.c2
