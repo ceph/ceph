@@ -1000,10 +1000,9 @@ int RGWBucket::remove_object(RGWBucketAdminOpState& op_state, std::string *err_m
   return 0;
 }
 
-static void dump_bucket_index(map<string, rgw_bucket_dir_entry> result,  Formatter *f)
+static void dump_bucket_index(const RGWRados::ent_map_t& result,  Formatter *f)
 {
-  map<string, rgw_bucket_dir_entry>::iterator iter;
-  for (iter = result.begin(); iter != result.end(); ++iter) {
+  for (auto iter = result.begin(); iter != result.end(); ++iter) {
     f->dump_string("object", iter->first);
    }
 }
@@ -1167,7 +1166,8 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
   Formatter *formatter = flusher.get_formatter();
   formatter->open_object_section("objects");
   while (is_truncated) {
-    map<string, rgw_bucket_dir_entry> result;
+    RGWRados::ent_map_t result;
+    result.reserve(1000);
 
     int r = store->cls_bucket_list_ordered(bucket_info, RGW_NO_SHARD,
 					   marker, prefix, 1000, true,

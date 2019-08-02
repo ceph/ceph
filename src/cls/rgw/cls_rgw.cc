@@ -433,7 +433,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
     if (rc < 0)
       return rc;
 
-    std::map<string, rgw_bucket_dir_entry>& m = new_dir.m;
+    auto& m = new_dir.m;
 
     done = keys.empty();
 

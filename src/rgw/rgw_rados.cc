@@ -2459,7 +2459,9 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max_p,
 		     << "[" << cur_marker.instance << "]"
 		     << dendl;
     }
-    std::map<string, rgw_bucket_dir_entry> ent_map;
+
+    ent_map_t ent_map;
+    ent_map.reserve(read_ahead);
     int r = store->cls_bucket_list_ordered(target->get_bucket_info(),
 					   shard_id,
 					   cur_marker,
@@ -9123,7 +9125,7 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
 				      const string& prefix,
 				      uint32_t num_entries,
 				      bool list_versions,
-				      map<string, rgw_bucket_dir_entry>& m,
+				      ent_map_t& m,
 				      bool *is_truncated,
 				      rgw_obj_index_key *last_entry,
                                       optional_yield y,
@@ -9151,8 +9153,8 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
     return r;
 
   // Create a list of iterators that are used to iterate each shard
-  vector<map<string, struct rgw_bucket_dir_entry>::iterator> vcurrents;
-  vector<map<string, struct rgw_bucket_dir_entry>::iterator> vends;
+  vector<RGWRados::ent_map_t::iterator> vcurrents;
+  vector<RGWRados::ent_map_t::iterator> vends;
   vector<string> vnames;
   vcurrents.reserve(list_results.size());
   vends.reserve(list_results.size());
