@@ -874,18 +874,16 @@ void SessionMap::save_if_dirty(const std::set<entity_name_t> &tgt_sessions,
  * Calculate the length of the `requests` member list,
  * because elist does not have a size() method.
  *
- * O(N) runtime.  This would be const, but elist doesn't
- * have const iterators.
+ * O(N) runtime.
  */
-size_t Session::get_request_count()
+size_t Session::get_request_count() const
 {
   size_t result = 0;
 
-  elist<MDRequestImpl*>::iterator p = requests.begin(
-      member_offset(MDRequestImpl, item_session_request));
-  while (!p.end()) {
+  auto it = requests.begin(member_offset(MDRequestImpl, item_session_request));
+  while (!it.end()) {
     ++result;
-    ++p;
+    ++it;
   }
 
   return result;

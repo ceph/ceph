@@ -176,8 +176,11 @@ public:
 
   list<ref_t<Message>> preopen_out_queue;  ///< messages for client, queued before they connect
 
-  elist<MDRequestImpl*> requests;
-  size_t get_request_count();
+  /* This is mutable to allow get_request_count to be const. elist does not
+   * support const iterators yet.
+   */
+  mutable elist<MDRequestImpl*> requests;
+  size_t get_request_count() const;
 
   interval_set<inodeno_t> pending_prealloc_inos; // journaling prealloc, will be added to prealloc_inos
 
