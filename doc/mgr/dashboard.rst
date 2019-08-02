@@ -779,13 +779,6 @@ to allow direct connections to the manager nodes, you could set up a proxy that
 automatically forwards incoming requests to the currently active ceph-mgr
 instance.
 
-.. note::
-  Note that putting the dashboard behind a load-balancing proxy like `HAProxy
-  <https://www.haproxy.org/>`_ currently has some limitations, particularly if
-  you require the traffic between the proxy and the dashboard to be encrypted
-  via SSL/TLS. See `BUG#24662 <https://tracker.ceph.com/issues/24662>`_ for
-  details.
-
 Configuring a URL Prefix
 ^^^^^^^^^^^^^^^^^^^^^^^^
 
@@ -800,6 +793,71 @@ to use hyperlinks that include your prefix, you can set the
 
 so you can access the dashboard at ``http://$IP:$PORT/$PREFIX/``.
 
+Disable the redirection
+^^^^^^^^^^^^^^^^^^^^^^^
+
+If the dashboard is behind a load-balancing proxy like `HAProxy <https://www.haproxy.org/>`_
+you might want to disable the redirection behaviour to prevent situations that
+internal (unresolvable) URL's are published to the frontend client. Use the
+following command to get the dashboard to respond with a HTTP error (500 by default)
+instead of redirecting to the active dashboard::
+
+  $ ceph config set mgr mgr/dashboard/standby_behaviour "error"
+
+To reset the setting to the default redirection behaviour, use the following command::
+
+  $ ceph config set mgr mgr/dashboard/standby_behaviour "redirect"
+
+Configure the error status code
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+When the redirection behaviour is disabled, then you want to customize the HTTP status
+code of standby dashboards. To do so you need to run the command::
+
+  $ ceph config set mgr mgr/dashboard/standby_error_status_code 503
+
+HAProxy example configuration
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+Below you will find an example configuration for SSL/TLS pass through using
+`HAProxy <https://www.haproxy.org/>`_.
+
+Please note that the configuration works under the following conditions.
+If the dashboard fails over, the front-end client might receive a HTTP redirect
+(303) response and will be redirected to an unresolvable host. This happens when
+the failover occurs during two HAProxy health checks. In this situation the
+previously active dashboard node will now respond with a 303 which points to
+the new active node. To prevent that situation you should consider to disable
+the redirection behaviour on standby nodes.
+
+::
+
+  defaults
+    log global
+    option log-health-checks
+    timeout connect 5s
+    timeout client 50s
+    timeout server 450s
+
+  frontend dashboard_front
+    mode http
+    bind *:80
+    option httplog
+    redirect scheme https code 301 if !{ ssl_fc }
+
+  frontend dashboard_front_ssl
+    mode tcp
+    bind *:443
+    option tcplog
+    default_backend dashboard_back_ssl
+
+  backend dashboard_back_ssl
+    mode tcp
+    option httpchk GET /
+    http-check expect status 200
+    server x <HOST>:<PORT> check-ssl check verify none
+    server y <HOST>:<PORT> check-ssl check verify none
+    server z <HOST>:<PORT> check-ssl check verify none
 
 .. _dashboard-auditing:
 
