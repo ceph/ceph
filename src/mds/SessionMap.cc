@@ -1037,7 +1037,6 @@ void SessionMap::handle_conf_change(const std::set<std::string>& changed)
 
   if (changed.count("mds_request_load_average_decay_rate")) {
     auto d = g_conf().get_val<double>("mds_request_load_average_decay_rate");
-    dout(20) << __func__ << " decay rate changed to " << d << dendl;
 
     decay_rate = d;
     total_load_avg = DecayCounter(d);
