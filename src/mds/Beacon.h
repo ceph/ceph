@@ -12,7 +12,7 @@
  * 
  */
 
-
+//test
 #ifndef BEACON_STATE_H
 #define BEACON_STATE_H
 
