@@ -8,17 +8,31 @@
 
 #define dout_subsys ceph_subsys_bluestore
 
-Allocator *Allocator::create(CephContext* cct, string type,
-                             int64_t size, int64_t block_size)
+Allocator::Allocator(const std::string& name)
 {
+  asok_hook = new SocketHook(this, name);
+}
+
+
+Allocator::~Allocator()
+{
+}
+
+
+Allocator *Allocator::create(CephContext* cct, string type,
+                             int64_t size, int64_t block_size, const std::string& name)
+{
+  Allocator* alloc = nullptr;
   if (type == "stupid") {
-    return new StupidAllocator(cct);
+    alloc = new StupidAllocator(cct, name);
   } else if (type == "bitmap") {
-    return new BitmapAllocator(cct, size, block_size);
+    alloc = new BitmapAllocator(cct, size, block_size, name);
   }
-  lderr(cct) << "Allocator::" << __func__ << " unknown alloc type "
+  if (alloc == nullptr) {
+    lderr(cct) << "Allocator::" << __func__ << " unknown alloc type "
 	     << type << dendl;
-  return nullptr;
+  }
+  return alloc;
 }
 
 void Allocator::release(const PExtentVector& release_vec)

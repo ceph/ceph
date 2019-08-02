@@ -21,7 +21,8 @@ class FreelistManager;
 
 class Allocator {
 public:
-  virtual ~Allocator() {}
+  explicit Allocator(const std::string& name);
+  virtual ~Allocator();
 
   /*
    * Allocate required number of blocks in n number of extents.
@@ -59,8 +60,9 @@ public:
   }
   virtual double get_fragmentation_score();
   virtual void shutdown() = 0;
+
   static Allocator *create(CephContext* cct, string type, int64_t size,
-			   int64_t block_size);
+			   int64_t block_size, const std::string& name = "");
 };
 
 #endif
