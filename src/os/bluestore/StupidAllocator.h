@@ -35,7 +35,7 @@ class StupidAllocator : public Allocator {
     uint64_t alloc_unit);
 
 public:
-  StupidAllocator(CephContext* cct);
+  StupidAllocator(CephContext* cct, const std::string& name = "");
   ~StupidAllocator() override;
 
   int64_t allocate(

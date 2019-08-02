@@ -17,7 +17,7 @@ class BitmapAllocator : public Allocator,
   CephContext* cct;
 
 public:
-  BitmapAllocator(CephContext* _cct, int64_t capacity, int64_t alloc_unit);
+  BitmapAllocator(CephContext* _cct, int64_t capacity, int64_t alloc_unit, const std::string& name);
   ~BitmapAllocator() override
   {
   }

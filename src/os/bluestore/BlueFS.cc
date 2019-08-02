@@ -441,9 +441,15 @@ void BlueFS::_init_alloc()
       continue;
     }
     ceph_assert(bdev[id]->get_size());
+    std::string name = "bluefs-";
+    const char* devnames[] = {"wal","db","slow"};
+    if (id <= BDEV_SLOW)
+      name += devnames[id];
+    else
+      name += to_string(uintptr_t(this));
     alloc[id] = Allocator::create(cct, cct->_conf->bluefs_allocator,
 				  bdev[id]->get_size(),
-				  cct->_conf->bluefs_alloc_size);
+				  cct->_conf->bluefs_alloc_size, name);
     interval_set<uint64_t>& p = block_all[id];
     for (interval_set<uint64_t>::iterator q = p.begin(); q != p.end(); ++q) {
       alloc[id]->init_add_free(q.get_start(), q.get_len());
