@@ -32,4 +32,14 @@ describe('RGW daemons page', () => {
       expect(daemons.getTabText(1)).toEqual('Overall Performance');
     });
   });
+
+  describe('details and performance counters table tests', () => {
+    beforeAll(() => {
+      daemons.navigateTo();
+    });
+
+    it('should check that details/performance tables are visible when daemon is selected', () => {
+      daemons.checkTables();
+    });
+  });
 });
