@@ -205,6 +205,26 @@ test_duplicate_task() {
   ceph rbd task cancel ${TASK_ID_1}
 }
 
+test_duplicate_name() {
+  echo "test_duplicate_name"
+
+  local IMAGE=`uuidgen`
+  rbd create --size 1G --image-shared ${POOL}/${IMAGE}
+  local TASK_ID_1=`ceph rbd task add remove ${POOL}/${IMAGE} | jq --raw-output ".id"`
+
+  wait_for task_dne ${TASK_ID_1}
+
+  rbd create --size 1G --image-shared ${POOL}/${IMAGE}
+  local TASK_ID_2=`ceph rbd task add remove ${POOL}/${IMAGE} | jq --raw-output ".id"`
+
+  [[ "${TASK_ID_1}" != "${TASK_ID_2}" ]]
+  wait_for task_dne ${TASK_ID_2}
+
+  local TASK_ID_3=`ceph rbd task add remove ${POOL}/${IMAGE} | jq --raw-output ".id"`
+
+  [[ "${TASK_ID_2}" == "${TASK_ID_3}" ]]
+}
+
 test_progress() {
   echo "test_progress"
 
@@ -250,6 +270,7 @@ test_migration_abort
 test_list
 test_cancel
 test_duplicate_task
+test_duplicate_name
 test_progress
 
 echo OK
