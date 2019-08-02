@@ -606,8 +606,8 @@ public:
   }
 
   bool is_any_state(int state) const {
-    map<int,xlist<Session*>* >::const_iterator p = by_state.find(state);
-    if (p == by_state.end() || p->second->empty())
+    auto it = by_state.find(state);
+    if (it == by_state.end() || it->second->empty())
       return false;
     return true;
   }
