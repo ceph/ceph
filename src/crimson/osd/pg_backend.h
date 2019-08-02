@@ -72,10 +72,6 @@ public:
   seastar::future<std::vector<hobject_t>, hobject_t> list_objects(
     const hobject_t& start,
     uint64_t limit);
-  seastar::future<> call(
-    ObjectState& os,
-    OSDOp& osd_op,
-    ceph::os::Transaction& txn);
 
   virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
 

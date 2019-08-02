@@ -81,6 +81,10 @@ public:
     return pgid;
   }
 
+  PGBackend& get_backend() {
+    return *backend;
+  }
+
   // EpochSource
   epoch_t get_osdmap_epoch() const final {
     return peering_state.get_osdmap_epoch();
@@ -394,6 +398,10 @@ public:
   }
   bool get_need_up_thru() const {
     return peering_state.get_need_up_thru();
+  }
+
+  const auto& get_pool() const {
+    return peering_state.get_pool();
   }
 
   /// initialize created PG

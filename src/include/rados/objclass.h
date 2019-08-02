@@ -57,14 +57,7 @@ typedef void *cls_method_handle_t;
  *
  * A context for the method of the object class.
  */
-#ifdef WITH_SEASTAR
-typedef struct {
-  class PGBackend *backend = nullptr;
-  class ObjectState *os = nullptr;
-} cls_method_context_t;
-#else
 typedef void* cls_method_context_t;
-#endif // WITH_SEASTAR
 
 /*class utils*/
 extern int cls_log(int level, const char *format, ...)

@@ -8,6 +8,7 @@
 #include "common/debug.h"
 
 #include "crimson/osd/exceptions.h"
+#include "crimson/osd/ops_executer.h"
 #include "crimson/osd/pg_backend.h"
 
 #include "objclass/objclass.h"
@@ -71,7 +72,7 @@ int cls_cxx_stat(cls_method_context_t hctx, uint64_t *size, time_t *mtime)
 
   // we're blocking here which presumes execution in Seastar's thread.
   try {
-    hctx.backend->stat(*hctx.os, op).get();
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
   } catch (ceph::osd::error& e) {
     return -e.code().value();
   }
