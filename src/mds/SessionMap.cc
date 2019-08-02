@@ -570,21 +570,32 @@ void SessionMapStore::decode_legacy(bufferlist::const_iterator& p)
   }
 }
 
+void Session::dump(Formatter *f) const
+{
+  f->dump_int("id", info.inst.name.num());
+  f->dump_object("entity", info.inst);
+  f->dump_string("state", get_state_name());
+  f->dump_int("num_leases", leases.size());
+  f->dump_int("num_caps", caps.size());
+  if (is_open() || is_stale()) {
+    f->dump_unsigned("request_load_avg", get_load_avg());
+  }
+  f->dump_float("uptime", get_session_uptime());
+  f->dump_unsigned("requests_in_flight", get_request_count());
+  f->dump_unsigned("completed_requests", get_num_completed_requests());
+  f->dump_bool("reconnecting", reconnecting);
+  f->dump_object("recall_caps", recall_caps);
+  f->dump_object("release_caps", release_caps);
+  f->dump_object("recall_caps_throttle", recall_caps_throttle);
+  f->dump_object("recall_caps_throttle2o", recall_caps_throttle2o);
+  info.dump(f);
+}
+
 void SessionMapStore::dump(Formatter *f) const
 {
-  f->open_array_section("Sessions");
-  for (ceph::unordered_map<entity_name_t,Session*>::const_iterator p = session_map.begin();
-       p != session_map.end();
-       ++p)  {
-    f->open_object_section("Session");
-    f->open_object_section("entity name");
-    p->first.dump(f);
-    f->close_section(); // entity name
-    f->dump_string("state", p->second->get_state_name());
-    f->open_object_section("Session info");
-    p->second->info.dump(f);
-    f->close_section(); // Session info
-    f->close_section(); // Session
+  f->open_array_section("sessions");
+  for (const auto& p : session_map) {
+    f->dump_object("session", *p.second);
   }
   f->close_section(); // Sessions
 }

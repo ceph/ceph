@@ -1207,6 +1207,7 @@ void Server::reconnect_clients(MDSContext *reconnect_done_)
   for (auto session : sessions) {
     if (session->is_open()) {
       client_reconnect_gather.insert(session->get_client());
+      session->set_reconnecting(true);
       session->last_cap_renew = now;
     }
   }
@@ -1356,6 +1357,7 @@ void Server::handle_client_reconnect(const cref_t<MClientReconnect> &m)
 
     // remove from gather set
     client_reconnect_gather.erase(from);
+    session->set_reconnecting(false);
     if (client_reconnect_gather.empty())
       reconnect_gather_finish();
   }

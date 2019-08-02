@@ -96,8 +96,11 @@ public:
     }
   }
 
+  void dump(Formatter *f) const;
+
 private:
   int state = STATE_CLOSED;
+  bool reconnecting = false;
   uint64_t state_seq = 0;
   int importing_count = 0;
   friend class SessionMap;
@@ -155,6 +158,9 @@ public:
       state_seq++;
     }
   }
+
+  void set_reconnecting(bool s) { reconnecting = s; }
+
   void decode(bufferlist::const_iterator &p);
   template<typename T>
   void set_client_metadata(T&& meta)
