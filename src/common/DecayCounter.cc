@@ -29,8 +29,8 @@ void DecayCounter::decode(bufferlist::const_iterator &p)
 {
   DECODE_START_LEGACY_COMPAT_LEN(5, 4, 4, p);
   if (struct_v < 2) {
-    double half_life = 0.0;
-    decode(half_life, p);
+    double k = 0.0;
+    decode(k, p);
   }
   if (struct_v < 3) {
     double k = 0.0;
