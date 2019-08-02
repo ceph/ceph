@@ -6182,7 +6182,7 @@ next:
     formatter->dump_string("bucket", bucket_name);
     formatter->open_array_section("objects");
     while (is_truncated) {
-      map<string, rgw_bucket_dir_entry> result;
+      RGWRados::ent_map_t result;
       int r =
 	store->cls_bucket_list_ordered(bucket_info, RGW_NO_SHARD, marker,
 				       prefix, 1000, true,
@@ -6197,8 +6197,7 @@ next:
       if (r == -ENOENT)
         break;
 
-      map<string, rgw_bucket_dir_entry>::iterator iter;
-      for (iter = result.begin(); iter != result.end(); ++iter) {
+      for (auto iter = result.begin(); iter != result.end(); ++iter) {
         rgw_obj_key key = iter->second.key;
         rgw_bucket_dir_entry& entry = iter->second;
 
