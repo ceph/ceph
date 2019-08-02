@@ -12,7 +12,6 @@ class MonitorTest(DashboardTestCase):
         self._get('/api/monitor')
         self.assertStatus(403)
 
-
     def test_monitor_default(self):
         data = self._get("/api/monitor")
         self.assertStatus(200)
