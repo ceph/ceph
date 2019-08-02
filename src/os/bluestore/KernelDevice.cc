@@ -20,6 +20,7 @@
 #include <sys/file.h>
 
 #include "KernelDevice.h"
+#include "include/intarith.h"
 #include "include/types.h"
 #include "include/compat.h"
 #include "include/stringify.h"
@@ -29,7 +30,6 @@
 #include "bsm/audit_errno.h"
 #endif
 #include "common/debug.h"
-#include "common/align.h"
 #include "common/numa.h"
 
 #include "global/global_context.h"
@@ -1019,8 +1019,8 @@ int KernelDevice::aio_read(
 
 int KernelDevice::direct_read_unaligned(uint64_t off, uint64_t len, char *buf)
 {
-  uint64_t aligned_off = align_down(off, block_size);
-  uint64_t aligned_len = align_up(off+len, block_size) - aligned_off;
+  uint64_t aligned_off = p2align(off, block_size);
+  uint64_t aligned_len = p2roundup(off+len, block_size) - aligned_off;
   bufferptr p = buffer::create_small_page_aligned(aligned_len);
   int r = 0;
 
