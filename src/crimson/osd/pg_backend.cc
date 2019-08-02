@@ -257,7 +257,7 @@ seastar::future<> PGBackend::stat(
     encode(os.oi.mtime, osd_op.outdata);
   } else {
     logger().debug("stat object does not exist");
-    throw ::object_not_found();
+    throw ceph::osd::object_not_found{};
   }
   return seastar::now();
   // TODO: ctx->delta_stats.num_rd++;
@@ -451,9 +451,9 @@ seastar::future<> PGBackend::call(
 #endif
 
 
-  return seastar::async([&osd_op, method, indata=std::move(indata)]() mutable {
+  return seastar::async([this,&os,&osd_op, method, indata=std::move(indata)]() mutable {
     ceph::bufferlist outdata;
-    const auto ret = method->exec((cls_method_context_t)&osd_op, indata, outdata);
+    const auto ret = method->exec(cls_method_context_t{this, &os}, indata, outdata);
     if (ret < 0) {
       throw ceph::osd::make_error(ret);
     }
