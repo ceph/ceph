@@ -549,16 +549,19 @@ void SessionMapStore::decode_legacy(bufferlist::const_iterator& p)
       auto p2 = p;
       Session *s = new Session(ConnectionRef());
       s->info.decode(p);
-      if (session_map.count(s->info.inst.name)) {
-	// eager client connected too fast!  aie.
-	dout(10) << " already had session for " << s->info.inst.name << ", recovering" << dendl;
-	entity_name_t n = s->info.inst.name;
-	delete s;
-	s = session_map[n];
-	p = p2;
-	s->info.decode(p);
-      } else {
-	session_map[s->info.inst.name] = s;
+      {
+        auto& name = s->info.inst.name;
+        auto it = session_map.find(name);
+        if (it != session_map.end()) {
+	  // eager client connected too fast!  aie.
+	  dout(10) << " already had session for " << name << ", recovering" << dendl;
+	  delete s;
+	  s = it->second;
+	  p = p2;
+	  s->info.decode(p);
+        } else {
+	  it->second = s;
+        }
       }
       s->set_state(Session::STATE_OPEN);
       s->set_load_avg_decay_rate(decay_rate);
