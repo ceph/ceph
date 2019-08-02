@@ -1137,6 +1137,20 @@ class TestImage(object):
             for option in image.config_list():
                 eq(option['source'], RBD_CONFIG_SOURCE_CONFIG)
 
+    def test_image_config_set_and_get_and_remove(self):
+        with Image(ioctx, image_name) as image:
+            for option in image.config_list():
+                eq(option['source'], RBD_CONFIG_SOURCE_CONFIG)
+
+            image.config_set("rbd_request_timed_out_seconds", "100")
+            modify_value = image.config_get("rbd_request_timed_out_seconds")
+            eq(modify_value, '100')
+
+            image.config_remove("rbd_request_timed_out_seconds")
+
+            for option in image.config_list():
+                eq(option['source'], RBD_CONFIG_SOURCE_CONFIG)
+
     def test_sparsify(self):
         assert_raises(InvalidArgument, self.image.sparsify, 16)
         self.image.sparsify(4096)
