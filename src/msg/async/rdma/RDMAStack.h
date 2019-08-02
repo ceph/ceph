@@ -207,6 +207,7 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
   int post_backlog = 0;
 
   void notify();
+  void buffer_prefetch(void);
   ssize_t read_buffers(char* buf, size_t len);
   int post_work_request(std::vector<Chunk*>&);
   size_t tx_copy_chunk(std::vector<Chunk*> &tx_buffers, size_t req_copy_len,
