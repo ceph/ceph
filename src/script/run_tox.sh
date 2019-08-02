@@ -28,6 +28,46 @@ function get_tox_path() {
     fi
 }
 
+function get_env_list_for_dashboard() {
+    local with_python2=$1
+    shift
+    local with_python3=$1
+    shift
+    local env_list
+    if $with_python2; then
+        if [ $# -gt 0 ]; then
+            env_list+="py27-run,"
+        else
+            env_list+="py27-cov,py27-lint,py27-check,"
+        fi
+    fi
+    if $with_python3; then
+        if [ $# -gt 0 ]; then
+            env_list+="py3-run,"
+        else
+            env_list+="py3-cov,py3-lint,py3-check,"
+        fi
+    fi
+    # use bash string manipulation to strip off any trailing comma
+    echo "${env_list%,}"
+}
+
+function get_env_list() {
+    local with_python2=$1
+    shift
+    local with_python3=$1
+    shift
+    local env_list
+    if $with_python2; then
+        env_list+="py27,"
+    fi
+    if $with_python3; then
+        env_list+="py3,"
+    fi
+    # use bash string manipulation to strip off any trailing comma
+    echo "${env_list%,}"
+}
+
 function main() {
     local tox_path
     local script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
@@ -71,15 +111,23 @@ function main() {
         esac
     done
 
+    # normalize options
+    [ "$with_python2" = "ON" ] && with_python2=true || with_python2=false
+    # WITH_PYTHON3 might be set to "ON" or to the python3 RPM version number
+    # prevailing on the system - e.g. "3", "36"
+    [[ "$with_python3" =~ (^3|^ON) ]] && with_python3=true || with_python3=false
+
+    local test_name
     if [ -z "$tox_path" ]; then
         # try harder
-        local test_name
         if [ $# -gt 0 ]; then
             test_name=$1
             shift
         fi
         tox_path=$(get_tox_path $test_name)
         venv_path="$build_dir/$test_name"
+    else
+        test_name=$(basename $tox_path)
     fi
 
     if [ ! -f ${venv_path}/bin/activate ]; then
@@ -91,17 +139,13 @@ function main() {
     # tox.ini will take care of this.
     export CEPH_BUILD_DIR=$build_dir
 
-    if [ "$with_python2" = "ON" ]; then
-        ENV_LIST+="py27,"
+    local env_list
+    if [ $test_name = "dashboard" ]; then
+        env_list=$(get_env_list_for_dashboard $with_python2 $with_python3 "$@")
+    else
+        env_list=$(get_env_list $with_python2 $with_python3)
     fi
-    # WITH_PYTHON3 might be set to "ON" or to the python3 RPM version number
-    # prevailing on the system - e.g. "3", "36"
-    if [[ "$with_python3" =~ (^3|^ON) ]]; then
-        ENV_LIST+="py3,"
-    fi
-    # use bash string manipulation to strip off any trailing comma
-    ENV_LIST=${ENV_LIST%,}
-    tox -c $tox_path/tox.ini -e "${ENV_LIST}" "$@"
+    tox -c $tox_path/tox.ini -e "$env_list" "$@"
 }
 
 main "$@"

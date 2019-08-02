@@ -1,12 +1,3 @@
-set(MGR_DASHBOARD_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/mgr-dashboard-virtualenv)
-
-add_custom_target(mgr-dashboard-test-venv
-  COMMAND
-  ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python=${MGR_PYTHON_EXECUTABLE} ${MGR_DASHBOARD_VIRTUALENV}
-  WORKING_DIRECTORY ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard
-  COMMENT "dashboard tests virtualenv is being created")
-add_dependencies(tests mgr-dashboard-test-venv)
-
 include(CMakeParseArguments)
 function(add_npm_command)
   set(options NODEENV)
