@@ -4,7 +4,6 @@ import threading
 import datetime
 import uuid
 import time
-
 import json
 
 
@@ -24,19 +23,20 @@ class Event(object):
     objects (osds, pools) this relates to.
     """
 
-    def __init__(self, message, refs, started_at=None):
+    def __init__(self, message, refs, started_at=None, add_to_ceph_s=True):
         self._message = message
         self._refs = refs
         self.started_at = started_at if started_at else time.time()
         self.id = None
         self.update_duration_event()
+        self._add_to_ceph_s = add_to_ceph_s
 
     def _refresh(self):
         global _module
         _module.log.debug('refreshing mgr for %s (%s) at %f' % (self.id, self._message,
                                                                 self.progress))
-        self.update_duration_event()
-        _module.update_progress_event(self.id, self._message, self.progress, self._duration_str)
+        self.update_duration_event()  
+        _module.update_progress_event(self.id, self._message, self.progress, self._duration_str, self._add_to_ceph_s)
 
     @property
     def message(self):
@@ -61,7 +61,9 @@ class Event(object):
     @property
     def failure_message(self):
         return None
-
+    @property
+    def add_to_ceph_s(self):
+        return self._add_to_ceph_s
     def summary(self):
         return "{0} {1} {2}".format(self.progress, self.message, self.duration_str)
 
@@ -100,6 +102,7 @@ class Event(object):
         # Update duration of event in seconds/minutes/hours
 
         duration = time.time() - self.started_at
+
         self._duration_str = time.strftime("(since %Hh %Mm %Ss)", time.gmtime(duration))
 
 class GhostEvent(Event):
@@ -109,10 +112,11 @@ class GhostEvent(Event):
     """
 
     def __init__(self, my_id, message, refs, started_at, finished_at=None,
-                 failed=False, failure_message=None):
+                 failed=False, failure_message=None, add_to_ceph_s=True):
         super(GhostEvent, self).__init__(message, refs, started_at)
         self.finished_at = finished_at if finished_at else time.time()
         self.id = my_id
+        self._add_to_ceph_s = add_to_ceph_s
 
         if failed:
             self._failed = True
@@ -138,7 +142,8 @@ class GhostEvent(Event):
             "message": self.message,
             "refs": self._refs,
             "started_at": self.started_at,
-            "finished_at": self.finished_at
+            "finished_at": self.finished_at,
+            "add_to_ceph_s": self._add_to_ceph_s
         }
         if self._failed:
             d["failed"] = True
@@ -182,6 +187,55 @@ class RemoteEvent(Event):
     def failure_message(self):
         return self._failure_message if self._failed else None
 
+class GlobalRecoveryEvent(Event):
+    """
+    An event whoese completion is determined by active+clean/total_pg_num
+    """
+
+    def __init__(self, message, refs, add_to_ceph_s, start_epoch, active_clean_num):
+        super(GlobalRecoveryEvent, self).__init__(message, refs)
+
+        self._add_to_ceph_s = add_to_ceph_s
+        self._progress = 0.0
+        self.id = str(uuid.uuid4())
+        self._start_epoch = start_epoch
+        self._active_clean_num = active_clean_num
+
+        self._refresh()
+
+    def global_event_update_progress(self, pg_dump, log):
+
+        "Update progress of Global Recovery Event"
+
+        pgs = pg_dump['pg_stats']
+        total_pg_num = len(pgs)
+        new_active_clean_num = 0
+        for pg in pgs:
+
+            if int(pg['reported_epoch']) < int(self._start_epoch):
+                continue
+
+            state = pg['state']
+
+            states = state.split("+")
+
+            if "active" in states and "clean" in states:
+                new_active_clean_num += 1
+ 
+        if self._active_clean_num != new_active_clean_num:
+            # Have this case to know when need to update
+            # the progress
+            try:
+                # Might be that total_pg_num is 0
+                self._progress = float(new_active_clean_num) / total_pg_num
+            except ZeroDivisionError:
+                self._progress = 0.0
+
+        self._refresh()
+
+    @property
+    def progress(self):
+        return self._progress
 
 class PgRecoveryEvent(Event):
     """
@@ -318,14 +372,21 @@ class PgId(object):
 class Module(MgrModule):
     COMMANDS = [
         {"cmd": "progress",
-         "desc": "Show progress of recovery operations",
+         "desc": "Show global progress of recovery operations",
          "perm": "r"},
         {"cmd": "progress json",
-         "desc": "Show machine readable progress information",
+         "desc": "Show machine readable global progress information",
          "perm": "r"},
         {"cmd": "progress clear",
          "desc": "Reset progress tracking",
-         "perm": "rw"}
+         "perm": "rw"},
+        {"cmd": "progress details",
+         "desc": "Show all progress of recovery operations",
+         "perm": "r"},
+        {"cmd": "progress json details",
+         "desc": "Show machine readable all progress information",
+         "perm": "r"}
+
     ]
 
     MODULE_OPTIONS = [
@@ -485,17 +546,61 @@ class Module(MgrModule):
                 old_osdmap.get_epoch(), self._latest_osdmap.get_epoch()
             ))
             self._osdmap_changed(old_osdmap, self._latest_osdmap)
+
         elif notify_type == "pg_summary":
+            global_event = False
             data = self.get("pg_dump")
+
             for ev_id in list(self._events):
                 ev = self._events[ev_id]
+                # Check for types of events 
+                # we have to update
                 if isinstance(ev, PgRecoveryEvent):
                     ev.pg_update(data, self.log)
                     self.maybe_complete(ev)
+                elif isinstance(ev, GlobalRecoveryEvent):
+                    global_event = True
+                    ev.global_event_update_progress(data, self.log)
+                    self.maybe_complete(ev)
+
+            if not global_event:
+                # If there is no global event 
+                # we create one
+                self._pg_state_changed(data)
 
     def maybe_complete(self, event):
         if event.progress >= 1.0:
             self._complete(event)
+
+    def _pg_state_changed(self, pg_dump):
+
+        # This function both constructs and updates
+        # the global recovery event if one of the
+        # PGs is not at active+clean state
+ 
+        pgs = pg_dump['pg_stats']
+        total_pg_num = len(pgs)
+        active_clean_num = 0
+        for pg in pgs:
+            state = pg['state']
+
+            states = state.split("+")
+
+            if "active" in states and "clean" in states:
+                active_clean_num += 1
+        try:
+            # There might be a case where there is no pg_num
+            progress = float(active_clean_num) / total_pg_num
+        except ZeroDivisionError:
+            return
+        if progress < 1.0:
+            ev = GlobalRecoveryEvent("Global Recovery Event",
+                    refs=[("global","")],
+                    add_to_ceph_s=True,
+                    start_epoch=self.get_osdmap().get_epoch(),
+                    active_clean_num=active_clean_num)
+            ev.global_event_update_progress(pg_dump, self.log)
+            self._events[ev.id] = ev
 
     def _save(self):
         self.log.info("Writing back {0} completed events".format(
@@ -598,7 +703,7 @@ class Module(MgrModule):
 
         self._completed_events.append(
             GhostEvent(ev.id, ev.message, ev.refs, ev.started_at,
-                       failed=ev.failed, failure_message=ev.failure_message))
+                       failed=ev.failed, failure_message=ev.failure_message, add_to_ceph_s=ev._add_to_ceph_s))
         del self._events[ev.id]
         self._prune_completed_events()
         self._dirty = True
@@ -652,12 +757,41 @@ class Module(MgrModule):
         else:
             return 0, "", "Nothing in progress"
 
+    def _handle_global_ls(self):
+        if len(self._events) or len(self._completed_events):
+            out = ""
+            global_events = list(filter(lambda x: x._add_to_ceph_s, self._events.values()))
+            chrono_order = sorted(global_events,
+                                  key=lambda x: x.started_at, reverse=True)
+            for ev in chrono_order:
+                out += ev.twoline_progress()
+                out += "\n"
+
+            if len(self._completed_events):
+                # TODO: limit number of completed events to show
+                out += "\n"
+                for ev in self._completed_events:
+                    if ev._add_to_ceph_s:
+                        out += "[{0}]: {1}\n".format("Complete" if not ev.failed else "Failed",
+                                                     ev.twoline_progress())
+
+            return 0, out, ""
+        else:
+            return 0, "", "Nothing in progress"
+
+
     def _json(self):
         return {
             'events': [ev.to_json() for ev in self._events.values()],
             'completed': [ev.to_json() for ev in self._completed_events]
         }
 
+    def _global_json(self):
+        return {
+            'events': [ev.to_json() for ev in self._events.values() if ev._add_to_ceph_s],
+            'completed': [ev.to_json() for ev in self._completed_events if ev._add_to_ceph_s]
+        }
+ 
     def _handle_clear(self):
         self._events = {}
         self._completed_events = []
@@ -668,6 +802,9 @@ class Module(MgrModule):
 
     def handle_command(self, _, cmd):
         if cmd['prefix'] == "progress":
+            return self._handle_global_ls()
+
+        elif cmd['prefix'] == "progress details":
             return self._handle_ls()
         elif cmd['prefix'] == "progress clear":
             # The clear command isn't usually needed - it's to enable
@@ -676,6 +813,8 @@ class Module(MgrModule):
             # that never finishes)
             return self._handle_clear()
         elif cmd['prefix'] == "progress json":
-            return 0, json.dumps(self._json(), indent=2), ""
+            return 0, json.dumps(self._global_json(), indent=2), ""
+        elif cmd['prefix'] == "progress details json":
+                return 0, json.dumps(self._json(), indent=2), ""
         else:
             raise NotImplementedError(cmd['prefix'])

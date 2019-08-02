@@ -103,13 +103,14 @@ class TestProgress(MgrTestCase):
             self.mgr_cluster.mon_manager.raw_cluster_cmd(
                 'osd', 'out', str(osd_id))
 
-        # Wait for a progress event to pop up
-        self.wait_until_equal(lambda: len(self._all_events()), 1,
+        # Wait for a progress event and global to pop up
+        self.wait_until_equal(lambda: len(self._events_in_progress()), 2,
                               timeout=self.EVENT_CREATION_PERIOD)
-        ev = self._all_events()[0]
+        ev = self._events_in_progress()[0]
+        global_ev = self._events_in_progress()[1]
         log.info(json.dumps(ev, indent=1))
         self.assertIn("Rebalancing after osd.0 marked out", ev['message'])
-        
+        self.assertIn("Global Recovery Event", global_ev['message'])
         return ev
 
     def _simulate_back_in(self, osd_ids, initial_event):
@@ -124,14 +125,16 @@ class TestProgress(MgrTestCase):
 
             
         # Wait for progress event marked in to pop up
-        self.wait_until_equal(lambda: len(self._events_in_progress()), 1,
+        self.wait_until_equal(lambda: len(self._events_in_progress()), 2,
                               timeout=self.EVENT_CREATION_PERIOD)
 
-        new_event = self._events_in_progress()[0]
+        new_event = self._events_in_progress()[1]
+        global_ev = self._events_in_progress()[0]
         log.info(json.dumps(new_event, indent=1))
-        self.assertIn("Rebalancing after osd.0 marked in", new_event['message'])    
-        
-        return new_event
+        self.assertIn("Rebalancing after osd.0 marked in", new_event['message'])
+        self.assertIn("Global Recovery Event", global_ev['message'])
+        return new_event, global_ev
+
 
     def _is_quiet(self):
         """
@@ -199,10 +202,13 @@ class TestProgress(MgrTestCase):
         """
         ev1 = self._simulate_failure()
 
-        ev2 = self._simulate_back_in([0], ev1)
+        ev2, global_event = self._simulate_back_in([0], ev1)
         
         # Wait for progress event to ultimately complete
         self.wait_until_true(lambda: self._is_complete(ev2['id']),
+                             timeout=self.RECOVERY_PERIOD)
+
+        self.wait_until_true(lambda: self._is_complete(global_event['id']),
                              timeout=self.RECOVERY_PERIOD)
 
         self.assertTrue(self._is_quiet())

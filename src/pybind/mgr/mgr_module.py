@@ -1208,8 +1208,8 @@ class MgrModule(ceph_module.BaseMgrModule):
 
         return self._ceph_have_mon_connection()
 
-    def update_progress_event(self, evid, desc, progress, duration):
-        return self._ceph_update_progress_event(str(evid), str(desc+" "+duration), float(progress))
+    def update_progress_event(self, evid, desc, progress, duration, add_to_ceph_s):
+        return self._ceph_update_progress_event(str(evid), str(desc+" "+duration), float(progress), bool(add_to_ceph_s))
 
     def complete_progress_event(self, evid):
         return self._ceph_complete_progress_event(str(evid))
