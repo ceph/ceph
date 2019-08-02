@@ -3884,7 +3884,7 @@ int OSD::shutdown()
   osd_lock.Lock();
 
   boot_finisher.stop();
-  reset_heartbeat_peers();
+  reset_heartbeat_peers(true);
 
   tick_timer.shutdown();
 
@@ -4857,9 +4857,9 @@ void OSD::maybe_update_heartbeat_peers()
 	dout(10) << "maybe_update_heartbeat_peers forcing update after " << dur << " seconds" << dendl;
 	heartbeat_set_peers_need_update();
 	last_heartbeat_resample = now;
-        if (is_waiting_for_healthy()) {
-	  reset_heartbeat_peers();   // we want *new* peers!
-        }
+	// automatically clean up any stale heartbeat peers
+	// if we are unhealthy, then clean all
+	reset_heartbeat_peers(is_waiting_for_healthy());
       }
     }
   }
@@ -4949,20 +4949,27 @@ void OSD::maybe_update_heartbeat_peers()
   dout(10) << "maybe_update_heartbeat_peers " << heartbeat_peers.size() << " peers, extras " << extras << dendl;
 }
 
-void OSD::reset_heartbeat_peers()
+void OSD::reset_heartbeat_peers(bool all)
 {
   ceph_assert(osd_lock.is_locked());
   dout(10) << "reset_heartbeat_peers" << dendl;
+  utime_t stale = ceph_clock_now();
+  stale -= cct->_conf.get_val<int64_t>("osd_heartbeat_stale");
   std::lock_guard l(heartbeat_lock);
-  while (!heartbeat_peers.empty()) {
-    HeartbeatInfo& hi = heartbeat_peers.begin()->second;
-    hi.con_back->mark_down();
-    if (hi.con_front) {
-      hi.con_front->mark_down();
+  for (auto it = heartbeat_peers.begin(); it != heartbeat_peers.end();) {
+    HeartbeatInfo& hi = it->second;
+    if (all || hi.is_stale(stale)) {
+      hi.con_back->mark_down();
+      if (hi.con_front) {
+        hi.con_front->mark_down();
+      }
+      // stop sending failure_report to mon too
+      failure_queue.erase(it->first);
+      heartbeat_peers.erase(it++);
+    } else {
+      it++;
     }
-    heartbeat_peers.erase(heartbeat_peers.begin());
   }
-  failure_queue.clear();
 }
 
 void OSD::handle_osd_ping(MOSDPing *m)
@@ -8403,7 +8410,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	hb_front_client_messenger->mark_down_all();
 	hb_back_client_messenger->mark_down_all();
 
-	reset_heartbeat_peers();
+	reset_heartbeat_peers(true);
       }
     }
   }

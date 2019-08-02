@@ -3328,6 +3328,13 @@ std::vector<Option> get_global_options() {
     .set_default(20)
     .set_description(""),
 
+    Option("osd_heartbeat_stale", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(600)
+    .set_description("Interval (in seconds) we mark an unresponsive heartbeat peer as stale.")
+    .set_long_description("Automatically mark unresponsive heartbeat sessions as stale and tear them down. "
+		          "The primary benefit is that OSD doesn't need to keep a flood of "
+			  "blocked heartbeat messages around in memory."),
+
     Option("osd_heartbeat_min_peers", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(10)
     .set_description(""),
