@@ -601,8 +601,7 @@ public:
   // sessions
   void decode_legacy(bufferlist::const_iterator& blp) override;
   bool empty() const { return session_map.empty(); }
-  const ceph::unordered_map<entity_name_t, Session*>& get_sessions() const
-  {
+  const auto& get_sessions() const {
     return session_map;
   }
 
