@@ -1,5 +1,5 @@
 
-from mgr_module import MgrModule, CommandResult
+from mgr_module import MgrModule, CommandResult, PersistentStoreDict
 import threading
 import random
 import json
@@ -142,7 +142,7 @@ class Module(MgrModule):
             try:
                 r = self.remote(command['module'], "self_test")
             except RuntimeError as e:
-                return -1, '', "Test failed: {0}".format(e.message)
+                return -1, '', "Test failed: {0}".format(e)
             else:
                 return 0, str(r), "Self-test OK"
         elif command['prefix'] == 'mgr self-test health set':
@@ -170,7 +170,7 @@ class Module(MgrModule):
         try:
             checks = json.loads(command["checks"])
         except Exception as e:
-            return -1, "", "Failed to decode JSON input: {}".format(e.message)
+            return -1, "", "Failed to decode JSON input: {}".format(e)
 
         try:
             for check, info in six.iteritems(checks):
@@ -180,7 +180,7 @@ class Module(MgrModule):
                     "detail": [str(m) for m in info["detail"]]
                 }
         except Exception as e:
-            return -1, "", "Invalid health check format: {}".format(e.message)
+            return -1, "", "Invalid health check format: {}".format(e)
 
         self.set_health_checks(self._health)
         return 0, "", ""
@@ -198,9 +198,9 @@ class Module(MgrModule):
 
     def _insights_set_now_offset(self, inbuf, command):
         try:
-            hours = long(command["hours"])
+            hours = int(command["hours"])
         except Exception as e:
-            return -1, "", "Timestamp must be numeric: {}".format(e.message)
+            return -1, "", "Timestamp must be numeric: {}".format(e)
 
         self.remote("insights", "testing_set_now_time_offset", hours)
         return 0, "", ""
@@ -214,6 +214,7 @@ class Module(MgrModule):
         self._self_test_store()
         self._self_test_misc()
         self._self_test_perf_counters()
+        self._self_persistent_store_dict()
 
     def _self_test_getters(self):
         self.version
@@ -385,6 +386,25 @@ class Module(MgrModule):
         #inc.set_crush_compat_weight_set_weights
 
         self.log.info("Finished self-test procedure.")
+
+    def _self_persistent_store_dict(self):
+        self.test_dict = PersistentStoreDict(self, 'test_dict')
+        for i in "abcde":
+            self.test_dict[i] = {i:1}
+        assert self.test_dict.keys() == set("abcde")
+        assert 'a' in self.test_dict
+        del self.test_dict['a']
+        assert self.test_dict.keys() == set("bcde"), self.test_dict.keys()
+        assert 'a' not in self.test_dict
+        self.test_dict.clear()
+        assert not self.test_dict, dict(self.test_dict.items())
+        self.set_store('test_dict.a', 'invalid json')
+        try:
+            self.test_dict['a']
+            assert False
+        except ValueError:
+            pass
+        assert not self.test_dict, dict(self.test_dict.items())
 
     def _test_remote_calls(self):
         # Test making valid call
