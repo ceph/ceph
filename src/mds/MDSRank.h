@@ -633,7 +633,7 @@ public:
   void handle_osd_map();
   void update_log_config();
 
-  const char** get_tracked_conf_keys() const final;
+  const char** get_tracked_conf_keys() const override final;
   void handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed) override;
 
   bool handle_command(
