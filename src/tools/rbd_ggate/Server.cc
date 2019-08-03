@@ -31,9 +31,9 @@ void Server::run() {
   dout(20) << "entering run loop" << dendl;
 
   {
-    std::lock_guard locker{m_lock};
+    std::unique_lock locker{m_lock};
     while (!m_stopping) {
-      m_cond.WaitInterval(m_lock, utime_t(1, 0));
+      m_cond.wait_for(locker, 1s);
     }
   }
 
@@ -79,14 +79,14 @@ void Server::io_finish(IOContext *ctx) {
 
   ctx->item.remove_myself();
   m_io_finished.push_back(&ctx->item);
-  m_cond.Signal();
+  m_cond.notify_all();
 }
 
 Server::IOContext *Server::wait_io_finish() {
   dout(20) << dendl;
 
   std::unique_lock locker{m_lock};
-  m_cond.wait(locker, [this] { return !m_io_finished.empty() || m_stopping});
+  m_cond.wait(locker, [this]() { return (!m_io_finished.empty() || m_stopping); });
 
   if (m_io_finished.empty()) {
     return nullptr;
@@ -103,10 +103,10 @@ void Server::wait_clean() {
 
   ceph_assert(!m_reader_thread.is_started());
 
-  std::lock_guard locker{m_lock};
+  std::unique_lock locker{m_lock};
 
   while (!m_io_pending.empty()) {
-    m_cond.Wait(m_lock);
+    m_cond.wait(locker);
   }
 
   while (!m_io_finished.empty()) {
@@ -166,7 +166,7 @@ void Server::reader_entry() {
       }
       std::lock_guard locker{m_lock};
       m_stopping = true;
-      m_cond.Signal();
+      m_cond.notify_all();
       return;
     }
 
@@ -199,7 +199,7 @@ void Server::reader_entry() {
       c->release();
       std::lock_guard locker{m_lock};
       m_stopping = true;
-      m_cond.Signal();
+      m_cond.notify_all();
       return;
     }
   }
@@ -225,7 +225,7 @@ void Server::writer_entry() {
       derr << ctx.get() << ": send: " << cpp_strerror(r) << dendl;
       std::lock_guard locker{m_lock};
       m_stopping = true;
-      m_cond.Signal();
+      m_cond.notify_all();
       return;
     }
     dout(20) << ctx.get() << " finish" << dendl;
