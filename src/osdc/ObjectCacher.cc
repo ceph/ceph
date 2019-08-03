@@ -1845,7 +1845,7 @@ void ObjectCacher::_maybe_wait_for_writeback(uint64_t len,
     flusher_cond.notify_all();
     stat_dirty_waiting += len;
     ++stat_nr_dirty_waiters;
-    std::unique_lock l{lock, std:adopt_lock};
+    std::unique_lock l{lock, std::adopt_lock};
     stat_cond.wait(l);
     l.release();
     stat_dirty_waiting -= len;
