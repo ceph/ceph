@@ -120,9 +120,19 @@ int cls_cxx_write2(cls_method_context_t hctx,
   return 0;
 }
 
-int cls_cxx_write_full(cls_method_context_t hctx, bufferlist *inbl)
+int cls_cxx_write_full(cls_method_context_t hctx, bufferlist * const inbl)
 {
-  return 0;
+  OSDOp op;
+  op.op.op = CEPH_OSD_OP_WRITEFULL;
+  op.op.extent.offset = 0;
+  op.op.extent.length = inbl->length();
+  op.indata = *inbl;
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    return 0;
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
 }
 
 int cls_cxx_replace(cls_method_context_t hctx,
