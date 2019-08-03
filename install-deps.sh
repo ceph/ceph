@@ -124,6 +124,22 @@ ENDOFKEY
     $SUDO ln -nsf /usr/bin/g++ /usr/bin/$(uname -m)-linux-gnu-g++
 }
 
+function ensure_decent_cmake_on_ubuntu {
+    local new=$1
+    if command -v cmake > /dev/null; then
+        local old=$(cmake --version | grep -Po 'version \K[0-9].*')
+        if dpkg --compare-versions $old ge $new; then
+          return
+        fi
+    fi
+    $SUDO curl --silent https://apt.kitware.com/keys/kitware-archive-latest.asc | $SUDO apt-key add -
+    $SUDO tee /etc/apt/sources.list.d/kitware.list <<EOF
+deb https://apt.kitware.com/ubuntu/ xenial main
+EOF
+    $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y || true
+    $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y cmake
+}
+
 function install_pkg_on_ubuntu {
     local project=$1
     shift
@@ -284,6 +300,7 @@ else
                 ensure_decent_gcc_on_ubuntu 8 trusty
                 ;;
             *Xenial*)
+                ensure_decent_cmake_on_ubuntu 3.10.1
                 ensure_decent_gcc_on_ubuntu 8 xenial
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu xenial
                 ;;

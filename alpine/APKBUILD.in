@@ -1,7 +1,7 @@
 # Contributor: John Coyle <dx9err@gmail.com>
 # Maintainer: John Coyle <dx9err@gmail.com>
 pkgname=ceph
-pkgver=@VERSION@
+pkgver=@PROJECT_VERSION@
 pkgrel=@RPM_RELEASE@
 pkgdesc="Ceph is a distributed object store and file system"
 pkgusers="ceph"

@@ -116,7 +116,7 @@ echo "including src/.git_version, ceph.spec"
 
 for spec in ceph.spec.in alpine/APKBUILD.in; do
     cat $spec |
-        sed "s/@VERSION@/$rpm_version/g" |
+        sed "s/@PROJECT_VERSION@/$rpm_version/g" |
         sed "s/@RPM_RELEASE@/$rpm_release/g" |
         sed "s/@TARBALL_BASENAME@/ceph-$version/g" > `echo $spec | sed 's/.in$//'`
 done
