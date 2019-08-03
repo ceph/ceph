@@ -115,9 +115,9 @@ private:
   static bool in_class_list(const std::string& cname,
       const std::string& list);
 
-public:
   ceph::mutex mutex = ceph::make_mutex("ClassHandler");
 
+public:
   explicit ClassHandler(CephContext *cct_) : cct(cct_) {}
 
   int open_all_classes();
@@ -127,6 +127,8 @@ public:
   void unregister_class(ClassData *cls);
 
   void shutdown();
+
+  static ClassHandler& get_instance();
 };
 
 
