@@ -17,7 +17,7 @@ public:
     Client *client = in->client;
 
     // Called back via Timer, which takes client_lock for us
-    ceph_assert(client->client_lock.is_locked_by_me());
+    ceph_assert(ceph_mutex_is_locked_by_me(client->client_lock));
 
     lsubdout(client->cct, client, 0) << __func__ <<
 	  ": delegation return timeout for inode 0x" <<

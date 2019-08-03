@@ -6,7 +6,7 @@
 
 #include "include/int_types.h"
 #include "include/rados/librados.hpp"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "cls/journal/cls_journal_types.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
@@ -17,7 +17,6 @@
 
 class Context;
 class ContextWQ;
-class Mutex;
 class SafeTimer;
 namespace journal { class Journaler; }
 namespace librbd { class ImageCtx; }
@@ -163,7 +162,7 @@ private:
   ProgressContext *m_progress_ctx;
   bool *m_do_resync;
 
-  mutable Mutex m_lock;
+  mutable ceph::mutex m_lock;
   bool m_canceled = false;
 
   Tags m_remote_tags;

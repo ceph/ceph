@@ -47,8 +47,7 @@ Notify::Notify(
     notify_id(notify_id),
     version(version),
     osd(osd),
-    cb(NULL),
-    lock("Notify::lock") {}
+    cb(NULL) {}
 
 NotifyRef Notify::makeNotifyRef(
   ConnectionRef client,
@@ -75,27 +74,27 @@ class NotifyTimeoutCB : public CancelableContext {
 public:
   explicit NotifyTimeoutCB(NotifyRef notif) : notif(notif), canceled(false) {}
   void finish(int) override {
-    notif->osd->watch_lock.Unlock();
-    notif->lock.Lock();
+    notif->osd->watch_lock.unlock();
+    notif->lock.lock();
     if (!canceled)
       notif->do_timeout(); // drops lock
     else
-      notif->lock.Unlock();
-    notif->osd->watch_lock.Lock();
+      notif->lock.unlock();
+    notif->osd->watch_lock.lock();
   }
   void cancel() override {
-    ceph_assert(notif->lock.is_locked_by_me());
+    ceph_assert(ceph_mutex_is_locked(notif->lock));
     canceled = true;
   }
 };
 
 void Notify::do_timeout()
 {
-  ceph_assert(lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked(lock));
   dout(10) << "timeout" << dendl;
   cb = nullptr;
   if (is_discarded()) {
-    lock.Unlock();
+    lock.unlock();
     return;
   }
 
@@ -104,7 +103,7 @@ void Notify::do_timeout()
   ceph_assert(complete);
   set<WatchRef> _watchers;
   _watchers.swap(watchers);
-  lock.Unlock();
+  lock.unlock();
 
   for (set<WatchRef>::iterator i = _watchers.begin();
        i != _watchers.end();
@@ -120,28 +119,26 @@ void Notify::do_timeout()
 
 void Notify::register_cb()
 {
-  ceph_assert(lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked(lock));
   {
-    osd->watch_lock.Lock();
+    std::lock_guard l{osd->watch_lock};
     cb = new NotifyTimeoutCB(self.lock());
     if (!osd->watch_timer.add_event_after(timeout, cb)) {
       cb = nullptr;
     }
-    osd->watch_lock.Unlock();
   }
 }
 
 void Notify::unregister_cb()
 {
-  ceph_assert(lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked(lock));
   if (!cb)
     return;
   cb->cancel();
   {
-    osd->watch_lock.Lock();
+    std::lock_guard l{osd->watch_lock};
     osd->watch_timer.cancel_event(cb);
     cb = nullptr;
-    osd->watch_lock.Unlock();
   }
 }
 
@@ -245,14 +242,14 @@ public:
     OSDService *osd(watch->osd);
     ldout(osd->cct, 10) << "HandleWatchTimeout" << dendl;
     boost::intrusive_ptr<PrimaryLogPG> pg(watch->pg);
-    osd->watch_lock.Unlock();
+    osd->watch_lock.unlock();
     pg->lock();
     watch->cb = nullptr;
     if (!watch->is_discarded() && !canceled)
       watch->pg->handle_watch_timeout(watch);
     delete this; // ~Watch requires pg lock!
     pg->unlock();
-    osd->watch_lock.Lock();
+    osd->watch_lock.lock();
   }
 };
 

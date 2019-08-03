@@ -22,7 +22,7 @@
 #include "include/utime.h"
 #include "include/types.h"
 #include "include/encoding.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Clock.h"
 #include "common/Formatter.h"
 #include "global/global_context.h"
@@ -518,9 +518,9 @@ protected:
   bool verbose;//if true, display lots of debug output
 
   //shared variables protected with mutexes
-  Mutex client_index_lock;
+  ceph::mutex client_index_lock = ceph::make_mutex("client_index_lock");
   int client_index; //names of new objects are client_name.client_index
-  Mutex icache_lock;
+  ceph::mutex icache_lock = ceph::make_mutex("icache_lock");
   IndexCache icache;
   friend struct index_data;
 
@@ -771,9 +771,7 @@ KvFlatBtreeAsync(int k_val, string name, int cache, double cache_r,
     cache_size(cache),
     cache_refresh(cache_r),
     verbose(verb),
-    client_index_lock("client_index_lock"),
     client_index(0),
-    icache_lock("icache_lock"),
     icache(cache)
   {}
 

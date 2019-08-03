@@ -106,7 +106,7 @@ class PurgeQueue
 protected:
   CephContext *cct;
   const mds_rank_t rank;
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("PurgeQueue");
   bool readonly = false;
 
   int64_t metadata_pool;

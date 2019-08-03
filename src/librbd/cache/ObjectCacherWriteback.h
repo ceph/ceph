@@ -9,7 +9,6 @@
 #include "osdc/WritebackHandler.h"
 #include <queue>
 
-class Mutex;
 class Context;
 
 namespace librbd {
@@ -20,7 +19,7 @@ namespace cache {
 
 class ObjectCacherWriteback : public WritebackHandler {
 public:
-  ObjectCacherWriteback(ImageCtx *ictx, Mutex& lock);
+  ObjectCacherWriteback(ImageCtx *ictx, ceph::mutex& lock);
 
   // Note that oloc, trunc_size, and trunc_seq are ignored
   void read(const object_t& oid, uint64_t object_no,
@@ -64,7 +63,7 @@ private:
   void complete_writes(const std::string& oid);
 
   ceph_tid_t m_tid;
-  Mutex& m_lock;
+  ceph::mutex& m_lock;
   librbd::ImageCtx *m_ictx;
   ceph::unordered_map<std::string, std::queue<write_result_d*> > m_writes;
   friend class C_OrderedWrite;

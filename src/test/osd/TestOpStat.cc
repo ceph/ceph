@@ -8,15 +8,13 @@
 #include "TestOpStat.h"
 
 void TestOpStat::begin(TestOp *in) {
-  stat_lock.Lock();
+  std::lock_guard l{stat_lock};
   stats[in->getType()].begin(in);
-  stat_lock.Unlock();
 }
 
 void TestOpStat::end(TestOp *in) {
-  stat_lock.Lock();
+  std::lock_guard l{stat_lock};
   stats[in->getType()].end(in);
-  stat_lock.Unlock();
 }
 
 void TestOpStat::TypeStatus::export_latencies(map<double,uint64_t> &in) const
@@ -36,7 +34,7 @@ void TestOpStat::TypeStatus::export_latencies(map<double,uint64_t> &in) const
   
 std::ostream & operator<<(std::ostream &out, const TestOpStat &rhs)
 {
-  rhs.stat_lock.Lock();
+  std::lock_guard l{rhs.stat_lock};
   for (auto i = rhs.stats.begin();
        i != rhs.stats.end();
        ++i) {
@@ -56,6 +54,5 @@ std::ostream & operator<<(std::ostream &out, const TestOpStat &rhs)
 	  << j->second / 1000 << "ms" << std::endl;
     }
   }
-  rhs.stat_lock.Unlock();
   return out;
 }

@@ -52,22 +52,22 @@ struct ObjectCopyRequest<librbd::MockTestImageCtx> {
       librbd::MockTestImageCtx *dst_image_ctx, const SnapMap &snap_map,
       uint64_t object_number, bool flatten, Context *on_finish) {
     ceph_assert(s_instance != nullptr);
-    Mutex::Locker locker(s_instance->lock);
+    std::lock_guard locker{s_instance->lock};
     s_instance->snap_map = &snap_map;
     s_instance->object_contexts[object_number] = on_finish;
-    s_instance->cond.Signal();
+    s_instance->cond.notify_all();
     return s_instance;
   }
 
   MOCK_METHOD0(send, void());
 
-  Mutex lock;
-  Cond cond;
+  ceph::mutex lock = ceph::make_mutex("lock");
+  ceph::condition_variable cond;
 
   const SnapMap *snap_map = nullptr;
   std::map<uint64_t, Context *> object_contexts;
 
-  ObjectCopyRequest() : lock("lock") {
+  ObjectCopyRequest() {
     s_instance = this;
   }
 };
@@ -170,10 +170,10 @@ public:
 
   bool complete_object_copy(MockObjectCopyRequest &mock_object_copy_request,
                             uint64_t object_num, Context **object_ctx, int r) {
-    Mutex::Locker locker(mock_object_copy_request.lock);
+    std::unique_lock locker{mock_object_copy_request.lock};
     while (mock_object_copy_request.object_contexts.count(object_num) == 0) {
-      if (mock_object_copy_request.cond.WaitInterval(mock_object_copy_request.lock,
-                                                     utime_t(10, 0)) != 0) {
+      if (mock_object_copy_request.cond.wait_for(locker, 10s) ==
+	  std::cv_status::timeout) {
         return false;
       }
     }
@@ -188,10 +188,10 @@ public:
   }
 
   SnapMap wait_for_snap_map(MockObjectCopyRequest &mock_object_copy_request) {
-    Mutex::Locker locker(mock_object_copy_request.lock);
+    std::unique_lock locker{mock_object_copy_request.lock};
     while (mock_object_copy_request.snap_map == nullptr) {
-      if (mock_object_copy_request.cond.WaitInterval(mock_object_copy_request.lock,
-                                                     utime_t(10, 0)) != 0) {
+      if (mock_object_copy_request.cond.wait_for(locker, 10s) ==
+	  std::cv_status::timeout) {
         return SnapMap();
       }
     }

@@ -6,7 +6,7 @@
 
 #include <atomic>
 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/shunique_lock.h"
 #include "common/admin_socket.h"
 
@@ -41,7 +41,7 @@ class RGWSyncTraceNode final {
   uint16_t state{0};
   std::string status;
 
-  Mutex lock{"RGWSyncTraceNode::lock"};
+  ceph::mutex lock = ceph::make_mutex("RGWSyncTraceNode::lock");
 
   std::string type;
   std::string id;

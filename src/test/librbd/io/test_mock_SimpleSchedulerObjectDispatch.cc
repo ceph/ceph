@@ -45,10 +45,10 @@ struct TestMockIoSimpleSchedulerObjectDispatch : public TestMockFixture {
   typedef SimpleSchedulerObjectDispatch<librbd::MockTestImageCtx> MockSimpleSchedulerObjectDispatch;
 
   MockSafeTimer m_mock_timer;
-  Mutex m_mock_timer_lock;
+  ceph::mutex m_mock_timer_lock =
+    ceph::make_mutex("TestMockIoSimpleSchedulerObjectDispatch::Mutex");
 
-  TestMockIoSimpleSchedulerObjectDispatch()
-    : m_mock_timer_lock("TestMockIoSimpleSchedulerObjectDispatch::Mutex") {
+  TestMockIoSimpleSchedulerObjectDispatch() {
     MockTestImageCtx::set_timer_instance(&m_mock_timer, &m_mock_timer_lock);
     EXPECT_EQ(0, _rados.conf_set("rbd_io_scheduler_simple_max_delay", "1"));
   }
@@ -80,7 +80,7 @@ struct TestMockIoSimpleSchedulerObjectDispatch : public TestMockFixture {
 
   void expect_add_timer_task(Context **timer_task) {
     EXPECT_CALL(m_mock_timer, add_event_at(_, _))
-      .WillOnce(Invoke([timer_task](utime_t, Context *task) {
+      .WillOnce(Invoke([timer_task](ceph::real_clock::time_point, Context *task) {
                   *timer_task = task;
                   return task;
                 }));
@@ -97,7 +97,7 @@ struct TestMockIoSimpleSchedulerObjectDispatch : public TestMockFixture {
   }
 
   void run_timer_task(Context *timer_task) {
-    Mutex::Locker timer_locker(m_mock_timer_lock);
+    std::lock_guard timer_locker{m_mock_timer_lock};
     timer_task->complete(0);
   }
 };

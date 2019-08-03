@@ -259,13 +259,13 @@ void RGWMetadataLog::mark_modified(int shard_id)
   }
   lock.unlock();
 
-  RWLock::WLocker wl(lock);
+  std::unique_lock wl{lock};
   modified_shards.insert(shard_id);
 }
 
 void RGWMetadataLog::read_clear_modified(set<int> &modified)
 {
-  RWLock::WLocker wl(lock);
+  std::unique_lock wl{lock};
   modified.swap(modified_shards);
   modified_shards.clear();
 }

@@ -19,7 +19,7 @@
 #include <set>
 #include <string>
 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/LogClient.h"
 #include "common/Timer.h"
 
@@ -76,7 +76,7 @@ protected:
 
   epoch_t pending_service_map_dirty = 0;
 
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("DaemonServer");
 
   static void _generate_command_map(cmdmap_t& cmdmap,
                                     map<string,string> &param_str_map);

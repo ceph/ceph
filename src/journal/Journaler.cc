@@ -43,8 +43,7 @@ std::string Journaler::object_oid_prefix(int pool_id,
   return JOURNAL_OBJECT_PREFIX + stringify(pool_id) + "." + journal_id + ".";
 }
 
-Journaler::Threads::Threads(CephContext *cct)
-    : timer_lock("Journaler::timer_lock") {
+Journaler::Threads::Threads(CephContext *cct) {
   thread_pool = new ThreadPool(cct, "Journaler::thread_pool", "tp_journal", 1);
   thread_pool->start();
 
@@ -56,7 +55,7 @@ Journaler::Threads::Threads(CephContext *cct)
 
 Journaler::Threads::~Threads() {
   {
-    Mutex::Locker timer_locker(timer_lock);
+    std::lock_guard timer_locker{timer_lock};
     timer->shutdown();
   }
   delete timer;
@@ -82,7 +81,7 @@ Journaler::Journaler(librados::IoCtx &header_ioctx,
 }
 
 Journaler::Journaler(ContextWQ *work_queue, SafeTimer *timer,
-                     Mutex *timer_lock, librados::IoCtx &header_ioctx,
+                     ceph::mutex *timer_lock, librados::IoCtx &header_ioctx,
 		     const std::string &journal_id,
 		     const std::string &client_id, const Settings &settings,
                      CacheManagerHandler *cache_manager_handler)
@@ -92,7 +91,7 @@ Journaler::Journaler(ContextWQ *work_queue, SafeTimer *timer,
 }
 
 void Journaler::set_up(ContextWQ *work_queue, SafeTimer *timer,
-                       Mutex *timer_lock, librados::IoCtx &header_ioctx,
+                       ceph::mutex *timer_lock, librados::IoCtx &header_ioctx,
                        const std::string &journal_id,
                        const Settings &settings) {
   m_header_ioctx.dup(header_ioctx);

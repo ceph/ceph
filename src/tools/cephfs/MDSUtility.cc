@@ -21,7 +21,6 @@
 MDSUtility::MDSUtility() :
   Dispatcher(g_ceph_context),
   objecter(NULL),
-  lock("MDSUtility::lock"),
   finisher(g_ceph_context, "MDSUtility", "fn_mds_utility"),
   waiting_for_mds_map(NULL),
   inited(false)
@@ -91,22 +90,22 @@ int MDSUtility::init()
   objecter->wait_for_osd_map();
 
   // Prepare to receive MDS map and request it
-  Mutex init_lock("MDSUtility:init");
-  Cond cond;
+  ceph::mutex init_lock = ceph::make_mutex("MDSUtility:init");
+  ceph::condition_variable cond;
   bool done = false;
   ceph_assert(!fsmap->get_epoch());
-  lock.Lock();
-  waiting_for_mds_map = new C_SafeCond(&init_lock, &cond, &done, NULL);
-  lock.Unlock();
+  lock.lock();
+  waiting_for_mds_map = new C_SafeCond(init_lock, cond, &done, NULL);
+  lock.unlock();
   monc->sub_want("fsmap", 0, CEPH_SUBSCRIBE_ONETIME);
   monc->renew_subs();
 
   // Wait for MDS map
   dout(4) << "waiting for MDS map..." << dendl;
-  init_lock.Lock();
-  while (!done)
-    cond.Wait(init_lock);
-  init_lock.Unlock();
+  {
+    std::unique_lock locker{init_lock};
+    cond.wait(locker, [&done] { return done; });
+  }
   dout(4) << "Got MDS map " << fsmap->get_epoch() << dendl;
 
   finisher.start();
@@ -120,9 +119,9 @@ void MDSUtility::shutdown()
 {
   finisher.stop();
 
-  lock.Lock();
+  lock.lock();
   objecter->shutdown();
-  lock.Unlock();
+  lock.unlock();
   monc->shutdown();
   messenger->shutdown();
   messenger->wait();
@@ -131,7 +130,7 @@ void MDSUtility::shutdown()
 
 bool MDSUtility::ms_dispatch(Message *m)
 {
-   Mutex::Locker locker(lock);
+  std::lock_guard locker{lock};
    switch (m->get_type()) {
    case CEPH_MSG_FS_MAP:
      handle_fs_map((MFSMap*)m);

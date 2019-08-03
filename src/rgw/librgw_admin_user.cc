@@ -89,31 +89,31 @@ namespace rgw {
 		      CEPH_ENTITY_TYPE_CLIENT,
 		      CODE_ENVIRONMENT_UTILITY, 0);
 
-    Mutex mutex("main");
+    ceph::mutex mutex = ceph::make_mutex("main");
     SafeTimer init_timer(g_ceph_context, mutex);
     init_timer.init();
-    mutex.Lock();
+    mutex.lock();
     init_timer.add_event_after(g_conf()->rgw_init_timeout, new C_InitTimeout);
-    mutex.Unlock();
+    mutex.unlock();
 
     common_init_finish(g_ceph_context);
 
     store = RGWStoreManager::get_storage(g_ceph_context, false, false, false, false, false);
 
     if (!store) {
-      mutex.Lock();
+      mutex.lock();
       init_timer.cancel_all_events();
       init_timer.shutdown();
-      mutex.Unlock();
+      mutex.unlock();
 
       derr << "Couldn't init storage provider (RADOS)" << dendl;
       return -EIO;
     }
 
-    mutex.Lock();
+    mutex.lock();
     init_timer.cancel_all_events();
     init_timer.shutdown();
-    mutex.Unlock();
+    mutex.unlock();
 
     rgw_user_init(store);
 

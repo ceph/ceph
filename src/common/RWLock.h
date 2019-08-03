@@ -122,7 +122,12 @@ public:
   void put_read() const {
     unlock();
   }
-
+  void lock_shared() {
+    get_read();
+  }
+  void unlock_shared() {
+    put_read();
+  }
   // write
   void get_write(bool lockdep=true) {
     if (lockdep && this->lockdep && g_lockdep)
@@ -148,7 +153,9 @@ public:
   void put_write() {
     unlock();
   }
-
+  void lock() {
+    get_write();
+  }
   void get(bool for_write) {
     if (for_write) {
       get_write();

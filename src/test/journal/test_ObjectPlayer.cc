@@ -4,7 +4,6 @@
 #include "journal/ObjectPlayer.h"
 #include "journal/Entry.h"
 #include "include/stringify.h"
-#include "common/Mutex.h"
 #include "common/Timer.h"
 #include "gtest/gtest.h"
 #include "test/librados/test.h"

@@ -1744,9 +1744,9 @@ struct AioUnlockCompletion : public librados::ObjectOperationCompletion {
     rados_callback_t cb = completion->callback_complete;
     void *cb_arg = completion->callback_complete_arg;
     cb(completion, cb_arg);
-    completion->lock.Lock();
+    completion->lock.lock();
     completion->callback_complete = NULL;
-    completion->cond.Signal();
+    completion->cond.notify_all();
     completion->put_unlock();
   }
 };

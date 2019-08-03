@@ -20,9 +20,9 @@
 #include "os/filestore/FileStore.h"
 #include "include/Context.h"
 #include "common/ceph_argparse.h"
-#include "global/global_init.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Cond.h"
+#include "global/global_init.h"
 #include <boost/scoped_ptr.hpp>
 #include <boost/random/mersenne_twister.hpp>
 #include <boost/random/uniform_int.hpp>
@@ -52,24 +52,24 @@ typename T::iterator rand_choose(T &cont) {
 
 class OnApplied : public Context {
 public:
-  Mutex *lock;
-  Cond *cond;
+  ceph::mutex *lock;
+  ceph::condition_variable *cond;
   int *in_progress;
   ObjectStore::Transaction *t;
-  OnApplied(Mutex *lock,
-	    Cond *cond,
+  OnApplied(ceph::mutex *lock,
+	    ceph::condition_variable *cond,
 	    int *in_progress,
 	    ObjectStore::Transaction *t)
     : lock(lock), cond(cond),
       in_progress(in_progress), t(t) {
-    Mutex::Locker l(*lock);
+    std::lock_guard l{*lock};
     (*in_progress)++;
   }
 
   void finish(int r) override {
-    Mutex::Locker l(*lock);
+    std::lock_guard l{*lock};
     (*in_progress)--;
-    cond->Signal();
+    cond->notify_all();
   }
 };
 
@@ -87,8 +87,8 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
 		int run,
 		int transsize, int ops,
 		ostream &out) {
-  Mutex lock("lock");
-  Cond cond;
+  ceph::mutex lock = ceph::make_mutex("lock");
+  ceph::condition_variable cond;
   int in_flight = 0;
   ObjectStore::Sequencer osr(__func__);
   ObjectStore::Transaction t;
@@ -116,9 +116,8 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
   uint64_t start = get_time();
   for (int i = 0; i < ops; ++i) {
     {
-      Mutex::Locker l(lock);
-      while (in_flight >= THREADS)
-	cond.Wait(lock);
+      std::unique_lock l{lock};
+      cond.wait(l, [&] { in_flight < THREADS; });
     }
     ObjectStore::Transaction *t = new ObjectStore::Transaction;
     map<coll_t, pair<set<string>, ObjectStore::Sequencer*> >::iterator iter =
@@ -141,9 +140,8 @@ uint64_t do_run(ObjectStore *store, int attrsize, int numattrs,
     delete t;
   }
   {
-    Mutex::Locker l(lock);
-    while (in_flight)
-      cond.Wait(lock);
+    std::unique_lock l{lock};
+    cond.wait(l, [&] { return in_flight == 0; });
   }
   return get_time() - start;
 }

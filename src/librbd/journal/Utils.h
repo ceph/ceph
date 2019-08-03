@@ -10,7 +10,6 @@
 #include <list>
 
 struct CephContext;
-struct Mutex;
 
 namespace librbd {
 namespace journal {
@@ -21,14 +20,14 @@ namespace util {
 
 struct C_DecodeTag : public Context {
   CephContext *cct;
-  Mutex *lock;
+  ceph::mutex *lock;
   uint64_t *tag_tid;
   TagData *tag_data;
   Context *on_finish;
 
   cls::journal::Tag tag;
 
-  C_DecodeTag(CephContext *cct, Mutex *lock, uint64_t *tag_tid,
+  C_DecodeTag(CephContext *cct, ceph::mutex *lock, uint64_t *tag_tid,
               TagData *tag_data, Context *on_finish)
     : cct(cct), lock(lock), tag_tid(tag_tid), tag_data(tag_data),
       on_finish(on_finish) {
@@ -51,14 +50,14 @@ struct C_DecodeTags : public Context {
   typedef std::list<cls::journal::Tag> Tags;
 
   CephContext *cct;
-  Mutex *lock;
+  ceph::mutex *lock;
   uint64_t *tag_tid;
   TagData *tag_data;
   Context *on_finish;
 
   Tags tags;
 
-  C_DecodeTags(CephContext *cct, Mutex *lock, uint64_t *tag_tid,
+  C_DecodeTags(CephContext *cct, ceph::mutex *lock, uint64_t *tag_tid,
                TagData *tag_data, Context *on_finish)
     : cct(cct), lock(lock), tag_tid(tag_tid), tag_data(tag_data),
       on_finish(on_finish) {

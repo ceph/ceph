@@ -9,8 +9,6 @@
 #include "common/bit_vector.hpp"
 #include "librbd/AsyncRequest.h"
 
-class RWLock;
-
 namespace librbd {
 namespace object_map {
 
@@ -42,7 +40,7 @@ public:
    * otherwise, the state machine proceeds to remove the object map.
    */
 
-  SnapshotRemoveRequest(ImageCtx &image_ctx, RWLock* object_map_lock,
+  SnapshotRemoveRequest(ImageCtx &image_ctx, ceph::shared_mutex* object_map_lock,
                         ceph::BitVector<2> *object_map, uint64_t snap_id,
                         Context *on_finish)
     : AsyncRequest(image_ctx, on_finish),
@@ -58,7 +56,7 @@ protected:
   }
 
 private:
-  RWLock* m_object_map_lock;
+  ceph::shared_mutex* m_object_map_lock;
   ceph::BitVector<2> &m_object_map;
   uint64_t m_snap_id;
   uint64_t m_next_snap_id;

@@ -100,8 +100,10 @@ public:
     class ReceiveCB;
 
 private:
-  Mutex lock;
-  Mutex write_lock;
+  ceph::mutex lock =
+    ceph::make_mutex("RGWHTTPStreamRWRequest");
+  ceph::mutex write_lock =
+    ceph::make_mutex("RGWHTTPStreamRWRequest::write_lock");
   ReceiveCB *cb{nullptr};
   RGWWriteDrainCB *write_drain_cb{nullptr};
   bufferlist outbl;
@@ -132,12 +134,11 @@ public:
   };
 
   RGWHTTPStreamRWRequest(CephContext *_cct, const string& _method, const string& _url,
-                         param_vec_t *_headers, param_vec_t *_params) : RGWHTTPSimpleRequest(_cct, _method, _url, _headers, _params),
-                                                                        lock("RGWHTTPStreamRWRequest"), write_lock("RGWHTTPStreamRWRequest::write_lock") {
+                         param_vec_t *_headers, param_vec_t *_params) : RGWHTTPSimpleRequest(_cct, _method, _url, _headers, _params) {
   }
   RGWHTTPStreamRWRequest(CephContext *_cct, const string& _method, const string& _url, ReceiveCB *_cb,
                          param_vec_t *_headers, param_vec_t *_params) : RGWHTTPSimpleRequest(_cct, _method, _url, _headers, _params),
-                                                                        lock("RGWHTTPStreamRWRequest"), write_lock("RGWHTTPStreamRWRequest::write_lock"), cb(_cb) {
+									cb(_cb) {
   }
   virtual ~RGWHTTPStreamRWRequest() override {}
 

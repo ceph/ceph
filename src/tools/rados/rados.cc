@@ -764,10 +764,10 @@ public:
     return total;
   }
 
-  Mutex lock;
-  Cond cond;
+  ceph::mutex lock = ceph::make_mutex("LoadGen");
+  ceph::condition_variable cond;
 
-  explicit LoadGen(Rados *_rados) : rados(_rados), going_down(false), lock("LoadGen") {
+  explicit LoadGen(Rados *_rados) : rados(_rados), going_down(false) {
     read_percent = 80;
     min_obj_len = 1024;
     max_obj_len = 5ull * 1024ull * 1024ull * 1024ull;
@@ -788,7 +788,7 @@ public:
   void cleanup();
 
   void io_cb(completion_t c, LoadGenOp *op) {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
 
     total_completed += op->len;
 
@@ -807,7 +807,7 @@ public:
 
     delete op;
 
-    cond.Signal();
+    cond.notify_all();
   }
 };
 
@@ -936,14 +936,14 @@ void LoadGen::gen_op(LoadGenOp *op)
 
 uint64_t LoadGen::gen_next_op()
 {
-  lock.Lock();
+  lock.lock();
 
   LoadGenOp *op = new LoadGenOp(this);
   gen_op(op);
   op->id = max_op++;
   pending_ops[op->id] = op;
 
-  lock.Unlock();
+  lock.unlock();
 
   run_op(op);
 
@@ -959,20 +959,20 @@ int LoadGen::run()
   uint32_t total_sec = 0;
 
   while (1) {
-    lock.Lock();
-    utime_t one_second(1, 0);
-    cond.WaitInterval(lock, one_second);
-    lock.Unlock();
+    {
+      std::unique_lock l{lock};
+      cond.wait_for(l, 1s);
+    }
     utime_t now = ceph_clock_now();
 
     if (now > end_time)
       break;
 
     uint64_t expected = total_expected();
-    lock.Lock();
+    lock.lock();
     uint64_t sent = total_sent;
     uint64_t completed = total_completed;
-    lock.Unlock();
+    lock.unlock();
 
     if (now - stamp_time >= utime_t(1, 0)) {
       double rate = (double)cur_completed_rate() / (1024 * 1024);
@@ -993,14 +993,14 @@ int LoadGen::run()
 
   // get a reference to all pending requests
   vector<librados::AioCompletion *> completions;
-  lock.Lock();
+  lock.lock();
   going_down = true;
   map<int, LoadGenOp *>::iterator iter;
   for (iter = pending_ops.begin(); iter != pending_ops.end(); ++iter) {
     LoadGenOp *op = iter->second;
     completions.push_back(op->completion);
   }
-  lock.Unlock();
+  lock.unlock();
 
   cout << "waiting for all operations to complete" << std::endl;
 

@@ -28,7 +28,6 @@ ClusterState::ClusterState(
   const MgrMap& mgrmap)
   : monc(monc_),
     objecter(objecter_),
-    lock("ClusterState"),
     mgr_map(mgrmap)
 {}
 
