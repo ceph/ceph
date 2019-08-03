@@ -40,12 +40,11 @@ struct ManagedLock<MockExclusiveLockImageCtx> {
               const std::string& oid, librbd::MockImageWatcher *watcher,
               managed_lock::Mode  mode, bool blacklist_on_break_lock,
               uint32_t blacklist_expire_seconds)
-    : m_lock("ManagedLock::m_lock") {
-  }
+  {}
 
   virtual ~ManagedLock() = default;
 
-  mutable Mutex m_lock;
+  mutable ceph::mutex m_lock = ceph::make_mutex("ManagedLock::m_lock");
 
   virtual void shutdown_handler(int r, Context *) = 0;
   virtual void pre_acquire_lock_handler(Context *) = 0;
@@ -294,7 +293,7 @@ public:
                 MockExclusiveLock &exclusive_lock) {
     C_SaferCond ctx;
     {
-      RWLock::WLocker owner_locker(mock_image_ctx.owner_lock);
+      std::unique_lock owner_locker{mock_image_ctx.owner_lock};
       exclusive_lock.init(mock_image_ctx.features, &ctx);
     }
     return ctx.wait();
@@ -336,7 +335,7 @@ public:
                      MockExclusiveLock &exclusive_lock) {
     C_SaferCond ctx;
     {
-      RWLock::WLocker owner_locker(mock_image_ctx.owner_lock);
+      std::unique_lock owner_locker{mock_image_ctx.owner_lock};
       exclusive_lock.shut_down(&ctx);
     }
     return ctx.wait();
@@ -344,7 +343,7 @@ public:
 
   bool is_lock_owner(MockExclusiveLockImageCtx &mock_image_ctx,
                      MockExclusiveLock &exclusive_lock) {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     return exclusive_lock.is_lock_owner();
   }
 };

@@ -20,7 +20,6 @@
 #include "mdstypes.h"
 
 class Objecter;
-class Mutex;
 
 // This always lives in the same location for a given MDS
 // instance, it tells the daemon where to look for the journal.

@@ -40,7 +40,7 @@ bool MetadataRemoveRequest<I>::should_complete(int r) {
 template <typename I>
 void MetadataRemoveRequest<I>::send_metadata_remove() {
   I &image_ctx = this->m_image_ctx;
-  ceph_assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(image_ctx.owner_lock));
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;

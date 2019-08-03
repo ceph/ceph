@@ -26,7 +26,7 @@ bool is_limited(const std::map<OSDPerfMetricQueryID,
 } // anonymous namespace
 
 OSDPerfMetricCollector::OSDPerfMetricCollector(Listener &listener)
-  : listener(listener), lock("OSDPerfMetricCollector::lock") {
+  : listener(listener) {
 }
 
 std::map<OSDPerfMetricQuery, OSDPerfMetricLimits>

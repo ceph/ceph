@@ -25,7 +25,7 @@ using util::create_rados_callback;
 namespace object_map {
 
 template <typename I>
-RefreshRequest<I>::RefreshRequest(I &image_ctx, RWLock* object_map_lock,
+RefreshRequest<I>::RefreshRequest(I &image_ctx, ceph::shared_mutex* object_map_lock,
                                   ceph::BitVector<2> *object_map,
                                   uint64_t snap_id, Context *on_finish)
   : m_image_ctx(image_ctx), m_object_map_lock(object_map_lock),
@@ -36,7 +36,7 @@ RefreshRequest<I>::RefreshRequest(I &image_ctx, RWLock* object_map_lock,
 template <typename I>
 void RefreshRequest<I>::send() {
   {
-    RWLock::RLocker image_locker(m_image_ctx.image_lock);
+    std::shared_lock image_locker{m_image_ctx.image_lock};
     m_object_count = Striper::get_num_objects(
       m_image_ctx.layout, m_image_ctx.get_image_size(m_snap_id));
   }
@@ -52,13 +52,13 @@ template <typename I>
 void RefreshRequest<I>::apply() {
   uint64_t num_objs;
   {
-    RWLock::RLocker image_locker(m_image_ctx.image_lock);
+    std::shared_lock image_locker{m_image_ctx.image_lock};
     num_objs = Striper::get_num_objects(
       m_image_ctx.layout, m_image_ctx.get_image_size(m_snap_id));
   }
   ceph_assert(m_on_disk_object_map.size() >= num_objs);
 
-  RWLock::WLocker object_map_locker(*m_object_map_lock);
+  std::unique_lock object_map_locker{*m_object_map_lock};
   *m_object_map = m_on_disk_object_map;
 }
 
@@ -173,8 +173,8 @@ void RefreshRequest<I>::send_invalidate() {
   InvalidateRequest<I> *req = InvalidateRequest<I>::create(
     m_image_ctx, m_snap_id, true, ctx);
 
-  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-  RWLock::WLocker image_locker(m_image_ctx.image_lock);
+  std::shared_lock owner_locker{m_image_ctx.owner_lock};
+  std::unique_lock image_locker{m_image_ctx.image_lock};
   req->send();
 }
 
@@ -207,8 +207,8 @@ void RefreshRequest<I>::send_resize_invalidate() {
   InvalidateRequest<I> *req = InvalidateRequest<I>::create(
     m_image_ctx, m_snap_id, true, ctx);
 
-  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-  RWLock::WLocker image_locker(m_image_ctx.image_lock);
+  std::shared_lock owner_locker{m_image_ctx.owner_lock};
+  std::unique_lock image_locker{m_image_ctx.image_lock};
   req->send();
 }
 
@@ -278,8 +278,8 @@ void RefreshRequest<I>::send_invalidate_and_close() {
     m_image_ctx, m_snap_id, false, ctx);
 
   lderr(cct) << "object map too large: " << m_object_count << dendl;
-  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-  RWLock::WLocker image_locker(m_image_ctx.image_lock);
+  std::shared_lock owner_locker{m_image_ctx.owner_lock};
+  std::unique_lock image_locker{m_image_ctx.image_lock};
   req->send();
 }
 
@@ -295,7 +295,7 @@ Context *RefreshRequest<I>::handle_invalidate_and_close(int *ret_val) {
     *ret_val = -EFBIG;
   }
 
-  RWLock::WLocker object_map_locker(*m_object_map_lock);
+  std::unique_lock object_map_locker{*m_object_map_lock};
   m_object_map->clear();
   return m_on_finish;
 }

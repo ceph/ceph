@@ -42,20 +42,19 @@ void rbd_bencher_completion(void *c, void *pc);
 
 struct rbd_bencher {
   librbd::Image *image;
-  Mutex lock;
-  Cond cond;
+  ceph::mutex lock = ceph::make_mutex("rbd_bencher::lock");
+  ceph::condition_variable cond;
   int in_flight;
 
   explicit rbd_bencher(librbd::Image *i)
     : image(i),
-      lock("rbd_bencher::lock"),
       in_flight(0) {
   }
 
   bool start_write(int max, uint64_t off, uint64_t len, bufferlist& bl,
                    int op_flags) {
     {
-      Mutex::Locker l(lock);
+      std::lock_guard l{lock};
       if (in_flight >= max)
         return false;
       in_flight++;
@@ -68,11 +67,9 @@ struct rbd_bencher {
   }
 
   void wait_for(int max) {
-    Mutex::Locker l(lock);
+    std::unique_lock l{lock};
     while (in_flight > max) {
-      utime_t dur;
-      dur.set_from_double(.2);
-      cond.WaitInterval(lock, dur);
+      cond.wait_for(l, 200ms);
     }
   }
 
@@ -87,10 +84,10 @@ void rbd_bencher_completion(void *vc, void *pc) {
     cout << "write error: " << cpp_strerror(ret) << std::endl;
     exit(ret < 0 ? -ret : ret);
   }
-  b->lock.Lock();
+  b->lock.lock();
   b->in_flight--;
-  b->cond.Signal();
-  b->lock.Unlock();
+  b->cond.notify_all();
+  b->lock.unlock();
   c->release();
 }
 

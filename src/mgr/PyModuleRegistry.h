@@ -38,7 +38,7 @@
 class PyModuleRegistry
 {
 private:
-  mutable Mutex lock{"PyModuleRegistry::lock"};
+  mutable ceph::mutex lock = ceph::make_mutex("PyModuleRegistry::lock");
   LogChannelRef clog;
 
   std::map<std::string, PyModuleRef> modules;

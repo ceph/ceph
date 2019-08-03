@@ -32,7 +32,7 @@
 #include "include/page.h"
 #include "common/debug.h"
 #include "common/errno.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/perf_counters.h"
 #include "msg/msg_types.h"
 #include "msg/async/net_handler.h"
@@ -236,7 +236,7 @@ class Infiniband {
       MemoryManager& manager;
       uint32_t buffer_size;
       uint32_t num_chunk = 0;
-      Mutex lock;
+      ceph::mutex lock = ceph::make_mutex("cluster_lock");
       std::vector<Chunk*> free_chunks;
       char *base = nullptr;
       char *end = nullptr;
@@ -275,7 +275,7 @@ class Infiniband {
       static void free(char * const block);
 
       static MemPoolContext  *g_ctx;
-      static Mutex lock;
+      static ceph::mutex lock;
     };
 
     /**
@@ -366,7 +366,7 @@ class Infiniband {
   void wire_gid_to_gid(const char *wgid, IBSYNMsg* im);
   void gid_to_wire_gid(const IBSYNMsg& im, char wgid[]);
   CephContext *cct;
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("IB lock");
   bool initialized = false;
   const std::string &device_name;
   uint8_t port_num;

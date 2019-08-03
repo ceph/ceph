@@ -10,7 +10,7 @@ namespace rbd {
 namespace mirror {
 
 template <typename I>
-Threads<I>::Threads(CephContext *cct) : timer_lock("Threads::timer_lock") {
+Threads<I>::Threads(CephContext *cct) {
   thread_pool = new ThreadPool(cct, "Journaler::thread_pool", "tp_journal",
                                cct->_conf.get_val<uint64_t>("rbd_op_threads"),
                                "rbd_op_threads");
@@ -27,7 +27,7 @@ Threads<I>::Threads(CephContext *cct) : timer_lock("Threads::timer_lock") {
 template <typename I>
 Threads<I>::~Threads() {
   {
-    Mutex::Locker timer_locker(timer_lock);
+    std::lock_guard timer_locker{timer_lock};
     timer->shutdown();
   }
   delete timer;

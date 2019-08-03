@@ -5,7 +5,7 @@
 #define CEPH_LIBRBD_MIRROR_DISABLE_REQUEST_H
 
 #include "include/buffer.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "cls/journal/cls_journal_types.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include <map>
@@ -92,7 +92,8 @@ private:
   std::map<std::string, int> m_ret;
   std::map<std::string, int> m_current_ops;
   int m_error_result = 0;
-  mutable Mutex m_lock;
+  mutable ceph::mutex m_lock =
+    ceph::make_mutex("mirror::DisableRequest::m_lock");
 
   void send_get_mirror_image();
   Context *handle_get_mirror_image(int *result);

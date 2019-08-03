@@ -16,8 +16,7 @@ namespace immutable_obj_cache {
 SimplePolicy::SimplePolicy(CephContext *cct, uint64_t cache_size,
                            uint64_t max_inflight, double watermark)
   : cct(cct), m_watermark(watermark), m_max_inflight_ops(max_inflight),
-    m_max_cache_size(cache_size),
-    m_cache_map_lock("rbd::cache::SimplePolicy::m_cache_map_lock") {
+    m_max_cache_size(cache_size) {
 
   ldout(cct, 20) << "max cache size= " << m_max_cache_size
                  << " ,watermark= " << m_watermark
@@ -39,7 +38,7 @@ SimplePolicy::~SimplePolicy() {
 cache_status_t SimplePolicy::alloc_entry(std::string file_name) {
   ldout(cct, 20) << "alloc entry for: " << file_name << dendl;
 
-  RWLock::WLocker wlocker(m_cache_map_lock);
+  std::unique_lock wlocker{m_cache_map_lock};
 
   // cache hit when promoting
   if (m_cache_map.find(file_name) != m_cache_map.end()) {
@@ -64,7 +63,7 @@ cache_status_t SimplePolicy::alloc_entry(std::string file_name) {
 cache_status_t SimplePolicy::lookup_object(std::string file_name) {
   ldout(cct, 20) << "lookup: " << file_name << dendl;
 
-  RWLock::RLocker rlocker(m_cache_map_lock);
+  std::shared_lock rlocker{m_cache_map_lock};
 
   auto entry_it = m_cache_map.find(file_name);
   // simply promote on first lookup
@@ -88,7 +87,7 @@ void SimplePolicy::update_status(std::string file_name,
   ldout(cct, 20) << "update status for: " << file_name
                  << " new status = " << new_status << dendl;
 
-  RWLock::WLocker locker(m_cache_map_lock);
+  std::unique_lock locker{m_cache_map_lock};
 
   auto entry_it = m_cache_map.find(file_name);
   if (entry_it == m_cache_map.end()) {
@@ -155,7 +154,7 @@ int SimplePolicy::evict_entry(std::string file_name) {
 cache_status_t SimplePolicy::get_status(std::string file_name) {
   ldout(cct, 20) << file_name << dendl;
 
-  RWLock::RLocker locker(m_cache_map_lock);
+  std::shared_lock locker{m_cache_map_lock};
   auto entry_it = m_cache_map.find(file_name);
   if (entry_it == m_cache_map.end()) {
     return OBJ_CACHE_NONE;
@@ -167,7 +166,7 @@ cache_status_t SimplePolicy::get_status(std::string file_name) {
 void SimplePolicy::get_evict_list(std::list<std::string>* obj_list) {
   ldout(cct, 20) << dendl;
 
-  RWLock::WLocker locker(m_cache_map_lock);
+  std::unique_lock locker{m_cache_map_lock};
   // check free ratio, pop entries from LRU
   if ((double)m_cache_size / m_max_cache_size > (1 - m_watermark)) {
     // TODO(dehao): make this configurable
@@ -190,7 +189,7 @@ uint64_t SimplePolicy::get_free_size() {
 
 uint64_t SimplePolicy::get_promoting_entry_num() {
   uint64_t index = 0;
-  RWLock::RLocker rlocker(m_cache_map_lock);
+  std::shared_lock rlocker{m_cache_map_lock};
   for (auto it : m_cache_map) {
     if (it.second->status == OBJ_CACHE_SKIP) {
       index++;

@@ -66,7 +66,7 @@ BootstrapRequest<I>::BootstrapRequest(
     m_remote_mirror_uuid(remote_mirror_uuid), m_journaler(journaler),
     m_client_state(client_state), m_client_meta(client_meta),
     m_progress_ctx(progress_ctx), m_do_resync(do_resync),
-    m_lock(unique_lock_name("BootstrapRequest::m_lock", this)) {
+    m_lock(ceph::make_mutex(unique_lock_name("BootstrapRequest::m_lock", this))) {
   dout(10) << dendl;
 }
 
@@ -77,7 +77,7 @@ BootstrapRequest<I>::~BootstrapRequest() {
 
 template <typename I>
 bool BootstrapRequest<I>::is_syncing() const {
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   return (m_image_sync != nullptr);
 }
 
@@ -92,7 +92,7 @@ template <typename I>
 void BootstrapRequest<I>::cancel() {
   dout(10) << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   m_canceled = true;
 
   if (m_image_sync != nullptr) {
@@ -311,9 +311,9 @@ void BootstrapRequest<I>::handle_open_local_image(int r) {
 
   I *local_image_ctx = (*m_local_image_ctx);
   {
-    local_image_ctx->image_lock.get_read();
+    local_image_ctx->image_lock.lock_shared();
     if (local_image_ctx->journal == nullptr) {
-      local_image_ctx->image_lock.put_read();
+      local_image_ctx->image_lock.unlock_shared();
 
       derr << "local image does not support journaling" << dendl;
       m_ret_val = -EINVAL;
@@ -323,7 +323,7 @@ void BootstrapRequest<I>::handle_open_local_image(int r) {
 
     r = (*m_local_image_ctx)->journal->is_resync_requested(m_do_resync);
     if (r < 0) {
-      local_image_ctx->image_lock.put_read();
+      local_image_ctx->image_lock.unlock_shared();
 
       derr << "failed to check if a resync was requested" << dendl;
       m_ret_val = r;
@@ -335,7 +335,7 @@ void BootstrapRequest<I>::handle_open_local_image(int r) {
     m_local_tag_data = local_image_ctx->journal->get_tag_data();
     dout(10) << "local tag=" << m_local_tag_tid << ", "
              << "local tag data=" << m_local_tag_data << dendl;
-    local_image_ctx->image_lock.put_read();
+    local_image_ctx->image_lock.unlock_shared();
   }
 
   if (m_local_tag_data.mirror_uuid != m_remote_mirror_uuid && !m_primary) {
@@ -481,9 +481,9 @@ void BootstrapRequest<I>::create_local_image() {
   dout(15) << "local_image_id=" << m_local_image_id << dendl;
   update_progress("CREATE_LOCAL_IMAGE");
 
-  m_remote_image_ctx->image_lock.get_read();
+  m_remote_image_ctx->image_lock.lock_shared();
   std::string image_name = m_remote_image_ctx->name;
-  m_remote_image_ctx->image_lock.put_read();
+  m_remote_image_ctx->image_lock.unlock_shared();
 
   Context *ctx = create_context_callback<
     BootstrapRequest<I>, &BootstrapRequest<I>::handle_create_local_image>(
@@ -664,7 +664,7 @@ void BootstrapRequest<I>::image_sync() {
   }
 
   {
-    Mutex::Locker locker(m_lock);
+    std::unique_lock locker{m_lock};
     if (m_canceled) {
       m_ret_val = -ECANCELED;
     } else {
@@ -681,9 +681,9 @@ void BootstrapRequest<I>::image_sync() {
 
       m_image_sync->get();
 
-      m_lock.Unlock();
+      locker.unlock();
       update_progress("IMAGE_SYNC");
-      m_lock.Lock();
+      locker.lock();
 
       m_image_sync->send();
       return;
@@ -699,7 +699,7 @@ void BootstrapRequest<I>::handle_image_sync(int r) {
   dout(15) << "r=" << r << dendl;
 
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     m_image_sync->put();
     m_image_sync = nullptr;
 

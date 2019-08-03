@@ -386,7 +386,7 @@ public:
 };
 
 class RGWCRHTTPGetDataCB : public RGWHTTPStreamRWRequest::ReceiveCB {
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("RGWCRHTTPGetDataCB");
   RGWCoroutinesEnv *env;
   RGWCoroutine *cr;
   RGWHTTPStreamRWRequest *req;

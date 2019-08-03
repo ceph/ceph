@@ -237,7 +237,7 @@ TEST_F(TestMockOperationTrimRequest, SuccessRemove) {
   MockTrimRequest *req = new MockTrimRequest(
     mock_image_ctx, &cond_ctx, m_image_size, 0, progress_ctx);
   {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -296,7 +296,7 @@ TEST_F(TestMockOperationTrimRequest, SuccessCopyUp) {
   MockTrimRequest *req = new MockTrimRequest(
     mock_image_ctx, &cond_ctx, 2 * ictx->get_object_size(), 0, progress_ctx);
   {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -329,7 +329,7 @@ TEST_F(TestMockOperationTrimRequest, SuccessBoundary) {
   MockTrimRequest *req = new MockTrimRequest(
     mock_image_ctx, &cond_ctx, ictx->get_object_size(), 1, progress_ctx);
   {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
   }
   ASSERT_EQ(0, cond_ctx.wait());
@@ -381,7 +381,7 @@ TEST_F(TestMockOperationTrimRequest, RemoveError) {
   MockTrimRequest *req = new MockTrimRequest(
     mock_image_ctx, &cond_ctx, m_image_size, 0, progress_ctx);
   {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
   }
   ASSERT_EQ(-EPERM, cond_ctx.wait());
@@ -431,7 +431,7 @@ TEST_F(TestMockOperationTrimRequest, CopyUpError) {
   MockTrimRequest *req = new MockTrimRequest(
     mock_image_ctx, &cond_ctx, 2 * ictx->get_object_size(), 0, progress_ctx);
   {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
   }
   ASSERT_EQ(-EINVAL, cond_ctx.wait());
@@ -464,7 +464,7 @@ TEST_F(TestMockOperationTrimRequest, BoundaryError) {
   MockTrimRequest *req = new MockTrimRequest(
     mock_image_ctx, &cond_ctx, ictx->get_object_size(), 1, progress_ctx);
   {
-    RWLock::RLocker owner_locker(mock_image_ctx.owner_lock);
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
     req->send();
   }
   ASSERT_EQ(-EINVAL, cond_ctx.wait());

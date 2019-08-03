@@ -6,7 +6,7 @@
 
 #include "librbd/io/ObjectDispatchInterface.h"
 #include "include/interval_set.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "librbd/io/Types.h"
 #include <map>
 #include <set>
@@ -142,7 +142,7 @@ private:
   size_t m_init_max_dirty;
   size_t m_max_dirty;
 
-  Mutex m_lock;
+  ceph::mutex m_lock;
   bool m_user_flushed = false;
 
   uint64_t m_last_tid = 0;

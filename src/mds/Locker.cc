@@ -1094,7 +1094,7 @@ public:
   C_Locker_Eval(Locker *l, MDSCacheObject *pp, int m) : LockerContext(l), p(pp), mask(m) {
     // We are used as an MDSCacheObject waiter, so should
     // only be invoked by someone already holding the big lock.
-    ceph_assert(locker->mds->mds_lock.is_locked_by_me());
+    ceph_assert(ceph_mutex_is_locked_by_me(locker->mds->mds_lock));
     p->get(MDSCacheObject::PIN_PTRWAITER);    
   }
   void finish(int r) override {

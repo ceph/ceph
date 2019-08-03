@@ -30,7 +30,6 @@ enum {
   AUTH_MODE_MON_MAX = 19,
 };
 
-class Cond;
 
 struct EntityAuth {
   CryptoKey key;

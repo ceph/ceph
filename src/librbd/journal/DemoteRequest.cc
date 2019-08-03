@@ -26,7 +26,7 @@ using librbd::util::create_context_callback;
 template <typename I>
 DemoteRequest<I>::DemoteRequest(I &image_ctx, Context *on_finish)
   : m_image_ctx(image_ctx), m_on_finish(on_finish),
-    m_lock("DemoteRequest::m_lock") {
+    m_lock(ceph::make_mutex("DemoteRequest::m_lock")) {
 }
 
 template <typename I>

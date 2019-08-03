@@ -8,7 +8,7 @@
 #include "include/buffer_fwd.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/WorkQueue.h"
 #include <list>
 
@@ -49,7 +49,7 @@ private:
   CephContext *m_cct;
   std::string m_oid;
 
-  Mutex m_aio_notify_lock;
+  ceph::mutex m_aio_notify_lock;
   size_t m_pending_aio_notifies = 0;
   Contexts m_aio_notify_flush_ctxs;
 

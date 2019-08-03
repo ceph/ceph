@@ -41,7 +41,7 @@ SnapshotRenameRequest<I>::SnapshotRenameRequest(I &image_ctx,
 template <typename I>
 journal::Event SnapshotRenameRequest<I>::create_event(uint64_t op_tid) const {
   I &image_ctx = this->m_image_ctx;
-  ceph_assert(image_ctx.image_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(image_ctx.image_lock));
 
   std::string src_snap_name;
   auto snap_info_it = image_ctx.snap_info.find(m_snap_id);
@@ -77,8 +77,8 @@ bool SnapshotRenameRequest<I>::should_complete(int r) {
 template <typename I>
 void SnapshotRenameRequest<I>::send_rename_snap() {
   I &image_ctx = this->m_image_ctx;
-  ceph_assert(image_ctx.owner_lock.is_locked());
-  RWLock::RLocker image_locker(image_ctx.image_lock);
+  ceph_assert(ceph_mutex_is_locked(image_ctx.owner_lock));
+  std::shared_lock image_locker{image_ctx.image_lock};
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;

@@ -34,6 +34,7 @@
 #include "include/mempool.h"
 #include "common/bloom_filter.hpp"
 #include "common/Finisher.h"
+#include "common/ceph_mutex.h"
 #include "common/Throttle.h"
 #include "common/perf_counters.h"
 #include "common/PriorityCache.h"
@@ -1234,7 +1235,8 @@ public:
     OpSequencerRef osr;
     BufferCacheShard *cache;       ///< our cache shard
     bluestore_cnode_t cnode;
-    RWLock lock;
+    ceph::shared_mutex lock =
+      ceph::make_shared_mutex("BlueStore::Collection::lock", true, false);
 
     bool exists;
 
@@ -1768,7 +1770,7 @@ private:
   int fsid_fd = -1;  ///< open handle (locked) to $path/fsid
   bool mounted = false;
 
-  RWLock coll_lock = {"BlueStore::coll_lock"};  ///< rwlock to protect coll_map
+  ceph::shared_mutex coll_lock = ceph::make_shared_mutex("BlueStore::coll_lock");  ///< rwlock to protect coll_map
   mempool::bluestore_cache_other::unordered_map<coll_t, CollectionRef> coll_map;
   map<coll_t,CollectionRef> new_coll_map;
 
@@ -1822,7 +1824,8 @@ private:
 
   list<CollectionRef> removed_collections;
 
-  RWLock debug_read_error_lock = {"BlueStore::debug_read_error_lock"};
+  ceph::shared_mutex debug_read_error_lock =
+    ceph::make_shared_mutex("BlueStore::debug_read_error_lock");
   set<ghobject_t> debug_data_error_objects;
   set<ghobject_t> debug_mdata_error_objects;
 
@@ -2512,11 +2515,11 @@ public:
 
   // error injection
   void inject_data_error(const ghobject_t& o) override {
-    RWLock::WLocker l(debug_read_error_lock);
+    std::unique_lock l(debug_read_error_lock);
     debug_data_error_objects.insert(o);
   }
   void inject_mdata_error(const ghobject_t& o) override {
-    RWLock::WLocker l(debug_read_error_lock);
+    std::unique_lock l(debug_read_error_lock);
     debug_mdata_error_objects.insert(o);
   }
 
@@ -2565,19 +2568,19 @@ private:
     if (!cct->_conf->bluestore_debug_inject_read_err) {
       return false;
     }
-    RWLock::RLocker l(debug_read_error_lock);
+    std::shared_lock l(debug_read_error_lock);
     return debug_data_error_objects.count(o);
   }
   bool _debug_mdata_eio(const ghobject_t& o) {
     if (!cct->_conf->bluestore_debug_inject_read_err) {
       return false;
     }
-    RWLock::RLocker l(debug_read_error_lock);
+    std::shared_lock l(debug_read_error_lock);
     return debug_mdata_error_objects.count(o);
   }
   void _debug_obj_on_delete(const ghobject_t& o) {
     if (cct->_conf->bluestore_debug_inject_read_err) {
-      RWLock::WLocker l(debug_read_error_lock);
+      std::unique_lock l(debug_read_error_lock);
       debug_data_error_objects.erase(o);
       debug_mdata_error_objects.erase(o);
     }

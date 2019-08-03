@@ -38,7 +38,7 @@ namespace {
 template <typename I>
 snap_t get_group_snap_id(I* ictx,
                          const cls::rbd::SnapshotNamespace& in_snap_namespace) {
-  ceph_assert(ictx->image_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(ictx->image_lock));
   auto it = ictx->snap_ids.lower_bound({in_snap_namespace, ""});
   if (it != ictx->snap_ids.end() && it->first.first == in_snap_namespace) {
     return it->second;
@@ -261,10 +261,10 @@ int group_snap_remove_by_record(librados::IoCtx& group_ioctx,
     on_finishes[i] = new C_SaferCond;
 
     std::string snap_name;
-    ictx->image_lock.get_read();
+    ictx->image_lock.lock_shared();
     snap_t snap_id = get_group_snap_id(ictx, ne);
     r = ictx->get_snap_name(snap_id, &snap_name);
-    ictx->image_lock.put_read();
+    ictx->image_lock.unlock_shared();
 
     if (r >= 0) {
       ldout(cct, 20) << "removing individual snapshot from image " << ictx->name
@@ -363,14 +363,14 @@ int group_snap_rollback_by_record(librados::IoCtx& group_ioctx,
 
   ldout(cct, 20) << "Requesting exclusive locks for images" << dendl;
   for (auto ictx: ictxs) {
-    RWLock::RLocker owner_lock(ictx->owner_lock);
+    std::shared_lock owner_lock{ictx->owner_lock};
     if (ictx->exclusive_lock != nullptr) {
       ictx->exclusive_lock->block_requests(-EBUSY);
     }
   }
   for (int i = 0; i < snap_count; ++i) {
     ImageCtx *ictx = ictxs[i];
-    RWLock::RLocker owner_lock(ictx->owner_lock);
+    std::shared_lock owner_lock{ictx->owner_lock};
 
     on_finishes[i] = new C_SaferCond;
     if (ictx->exclusive_lock != nullptr) {
@@ -398,12 +398,12 @@ int group_snap_rollback_by_record(librados::IoCtx& group_ioctx,
     ImageCtx *ictx = ictxs[i];
     on_finishes[i] = new C_SaferCond;
 
-    RWLock::RLocker owner_locker(ictx->owner_lock);
+    std::shared_lock owner_locker{ictx->owner_lock};
     std::string snap_name;
-    ictx->image_lock.get_read();
+    ictx->image_lock.lock_shared();
     snap_t snap_id = get_group_snap_id(ictx, ne);
     r = ictx->get_snap_name(snap_id, &snap_name);
-    ictx->image_lock.put_read();
+    ictx->image_lock.unlock_shared();
 
     if (r >= 0) {
       ldout(cct, 20) << "rolling back to individual snapshot for image " << ictx->name
@@ -928,14 +928,14 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
   ldout(cct, 20) << "Requesting exclusive locks for images" << dendl;
 
   for (auto ictx: ictxs) {
-    RWLock::RLocker owner_lock(ictx->owner_lock);
+    std::shared_lock owner_lock{ictx->owner_lock};
     if (ictx->exclusive_lock != nullptr) {
       ictx->exclusive_lock->block_requests(-EBUSY);
     }
   }
   for (int i = 0; i < image_count; ++i) {
     ImageCtx *ictx = ictxs[i];
-    RWLock::RLocker owner_lock(ictx->owner_lock);
+    std::shared_lock owner_lock{ictx->owner_lock};
 
     on_finishes[i] = new C_SaferCond;
     if (ictx->exclusive_lock != nullptr) {
@@ -980,9 +980,9 @@ int Group<I>::snap_create(librados::IoCtx& group_ioctx,
       ret_code = r;
     } else {
       ImageCtx *ictx = ictxs[i];
-      ictx->image_lock.get_read();
+      ictx->image_lock.lock_shared();
       snap_t snap_id = get_group_snap_id(ictx, ne);
-      ictx->image_lock.put_read();
+      ictx->image_lock.unlock_shared();
       if (snap_id == CEPH_NOSNAP) {
 	ldout(cct, 20) << "Couldn't find created snapshot with namespace: "
                        << ne << dendl;
@@ -1018,10 +1018,10 @@ remove_image_snaps:
 
     on_finishes[i] = new C_SaferCond;
     std::string snap_name;
-    ictx->image_lock.get_read();
+    ictx->image_lock.lock_shared();
     snap_t snap_id = get_group_snap_id(ictx, ne);
     r = ictx->get_snap_name(snap_id, &snap_name);
-    ictx->image_lock.put_read();
+    ictx->image_lock.unlock_shared();
     if (r >= 0) {
       ictx->operations->snap_remove(ne, snap_name.c_str(), on_finishes[i]);
     } else {

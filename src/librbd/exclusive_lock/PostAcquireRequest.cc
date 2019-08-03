@@ -108,7 +108,7 @@ void PostAcquireRequest<I>::send_open_journal() {
 
   bool journal_enabled;
   {
-    RWLock::RLocker image_locker(m_image_ctx.image_lock);
+    std::shared_lock image_locker{m_image_ctx.image_lock};
     journal_enabled = (m_image_ctx.test_features(RBD_FEATURE_JOURNALING,
                                                  m_image_ctx.image_lock) &&
                        !m_image_ctx.get_journal_policy()->journal_disabled());
@@ -153,7 +153,7 @@ void PostAcquireRequest<I>::send_allocate_journal_tag() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << dendl;
 
-  RWLock::RLocker image_locker(m_image_ctx.image_lock);
+  std::shared_lock image_locker{m_image_ctx.image_lock};
   using klass = PostAcquireRequest<I>;
   Context *ctx = create_context_callback<
     klass, &klass::handle_allocate_journal_tag>(this);
@@ -272,7 +272,7 @@ void PostAcquireRequest<I>::handle_close_object_map(int r) {
 template <typename I>
 void PostAcquireRequest<I>::apply() {
   {
-    RWLock::WLocker image_locker(m_image_ctx.image_lock);
+    std::unique_lock image_locker{m_image_ctx.image_lock};
     ceph_assert(m_image_ctx.object_map == nullptr);
     m_image_ctx.object_map = m_object_map;
 
@@ -286,7 +286,7 @@ void PostAcquireRequest<I>::apply() {
 
 template <typename I>
 void PostAcquireRequest<I>::revert() {
-  RWLock::WLocker image_locker(m_image_ctx.image_lock);
+  std::unique_lock image_locker{m_image_ctx.image_lock};
   m_image_ctx.object_map = nullptr;
   m_image_ctx.journal = nullptr;
 

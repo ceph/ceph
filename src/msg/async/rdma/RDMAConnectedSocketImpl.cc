@@ -22,7 +22,7 @@
 RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, Infiniband* ib, RDMADispatcher* s,
 						 RDMAWorker *w)
   : cct(cct), connected(0), error(0), infiniband(ib),
-    dispatcher(s), worker(w), lock("RDMAConnectedSocketImpl::lock"),
+    dispatcher(s), worker(w),
     is_server(false), con_handler(new C_handle_connection(this)),
     active(false), pending(false)
 {
@@ -54,7 +54,7 @@ RDMAConnectedSocketImpl::~RDMAConnectedSocketImpl()
     dispatcher->post_chunk_to_pool(buffers[i]);
   }
 
-  Mutex::Locker l(lock);
+  std::lock_guard l{lock};
   if (notify_fd >= 0)
     ::close(notify_fd);
   if (tcp_fd >= 0)
@@ -64,7 +64,7 @@ RDMAConnectedSocketImpl::~RDMAConnectedSocketImpl()
 
 void RDMAConnectedSocketImpl::pass_wc(std::vector<ibv_wc> &&v)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l{lock};
   if (wc.empty())
     wc = std::move(v);
   else
@@ -74,7 +74,7 @@ void RDMAConnectedSocketImpl::pass_wc(std::vector<ibv_wc> &&v)
 
 void RDMAConnectedSocketImpl::get_wc(std::vector<ibv_wc> &w)
 {
-  Mutex::Locker l(lock);
+  std::lock_guard l{lock};
   if (wc.empty())
     return ;
   w.swap(wc);
@@ -421,7 +421,7 @@ ssize_t RDMAConnectedSocketImpl::send(bufferlist &bl, bool more)
   if (!bytes)
     return 0;
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     pending_bl.claim_append(bl);
     if (!connected) {
       ldout(cct, 20) << __func__ << " fake send to upper, QP: " << my_msg.qpn << dendl;
@@ -439,7 +439,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
 {
   if (error)
     return -error;
-  Mutex::Locker l(lock);
+  std::lock_guard l{lock};
   size_t bytes = pending_bl.length();
   ldout(cct, 20) << __func__ << " we need " << bytes << " bytes. iov size: "
                  << pending_bl.buffers().size() << dendl;

@@ -30,8 +30,9 @@ namespace mirror {
 template <typename I>
 ImageSyncThrottler<I>::ImageSyncThrottler(CephContext *cct)
   : m_cct(cct),
-    m_lock(librbd::util::unique_lock_name("rbd::mirror::ImageSyncThrottler",
-                                          this)),
+    m_lock(ceph::make_mutex(
+      librbd::util::unique_lock_name("rbd::mirror::ImageSyncThrottler",
+				     this))),
     m_max_concurrent_syncs(cct->_conf.get_val<uint64_t>(
       "rbd_mirror_concurrent_image_syncs")) {
   dout(20) << "max_concurrent_syncs=" << m_max_concurrent_syncs << dendl;
@@ -42,7 +43,7 @@ template <typename I>
 ImageSyncThrottler<I>::~ImageSyncThrottler() {
   m_cct->_conf.remove_observer(this);
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   ceph_assert(m_inflight_ops.empty());
   ceph_assert(m_queue.empty());
 }
@@ -53,7 +54,7 @@ void ImageSyncThrottler<I>::start_op(const std::string &id, Context *on_start) {
 
   int r = 0;
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
 
     if (m_inflight_ops.count(id) > 0) {
       dout(20) << "duplicate for already started op " << id << dendl;
@@ -86,7 +87,7 @@ bool ImageSyncThrottler<I>::cancel_op(const std::string &id) {
 
   Context *on_start = nullptr;
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     auto it = m_queued_ops.find(id);
     if (it != m_queued_ops.end()) {
       dout(20) << "canceled queued sync for " << id << dendl;
@@ -114,7 +115,7 @@ void ImageSyncThrottler<I>::finish_op(const std::string &id) {
 
   Context *on_start = nullptr;
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
 
     m_inflight_ops.erase(id);
 
@@ -143,7 +144,7 @@ void ImageSyncThrottler<I>::drain(int r) {
 
   std::map<std::string, Context *> queued_ops;
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     std::swap(m_queued_ops, queued_ops);
     m_queue.clear();
     m_inflight_ops.clear();
@@ -160,7 +161,7 @@ void ImageSyncThrottler<I>::set_max_concurrent_syncs(uint32_t max) {
 
   std::list<Context *> ops;
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     m_max_concurrent_syncs = max;
 
     // Start waiting ops in the case of available free slots
@@ -186,10 +187,10 @@ void ImageSyncThrottler<I>::set_max_concurrent_syncs(uint32_t max) {
 }
 
 template <typename I>
-void ImageSyncThrottler<I>::print_status(Formatter *f, std::stringstream *ss) {
+void ImageSyncThrottler<I>::print_status(ceph::Formatter *f, std::stringstream *ss) {
   dout(20) << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
 
   if (f) {
     f->dump_int("max_parallel_syncs", m_max_concurrent_syncs);

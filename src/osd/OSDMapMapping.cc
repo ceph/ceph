@@ -135,7 +135,7 @@ void ParallelPGMapper::Job::finish_one()
 	finish = ceph_clock_now();
 	complete();
       }
-      cond.Signal();
+      cond.notify_all();
       fin = onfinish;
       onfinish = nullptr;
     }

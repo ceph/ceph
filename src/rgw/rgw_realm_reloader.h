@@ -55,8 +55,8 @@ class RGWRealmReloader : public RGWRealmWatcher::Watcher {
   /// Finisher because it allows us to cancel events that were scheduled while
   /// reload() is still running
   SafeTimer timer;
-  Mutex mutex; //< protects access to timer and reload_scheduled
-  Cond cond; //< to signal reload() after an invalid realm config
+  ceph::mutex mutex; //< protects access to timer and reload_scheduled
+  ceph::condition_variable cond; //< to signal reload() after an invalid realm config
   C_Reload* reload_scheduled; //< reload() context if scheduled
 };
 

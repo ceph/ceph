@@ -132,7 +132,7 @@ public:
 class RGWBackoffControlCR : public RGWCoroutine
 {
   RGWCoroutine *cr;
-  Mutex lock;
+  ceph::mutex lock;
 
   RGWSyncBackoff backoff;
   bool reset_backoff;
@@ -144,7 +144,7 @@ protected:
     return &reset_backoff;
   }
 
-  Mutex& cr_lock() {
+  ceph::mutex& cr_lock() {
     return lock;
   }
 
@@ -153,8 +153,11 @@ protected:
   }
 
 public:
-  RGWBackoffControlCR(CephContext *_cct, bool _exit_on_error) : RGWCoroutine(_cct), cr(NULL), lock("RGWBackoffControlCR::lock:" + stringify(this)),
-                                                                reset_backoff(false), exit_on_error(_exit_on_error) {
+  RGWBackoffControlCR(CephContext *_cct, bool _exit_on_error)
+    : RGWCoroutine(_cct),
+      cr(nullptr),
+      lock(ceph::make_mutex("RGWBackoffControlCR::lock:" + stringify(this))),
+      reset_backoff(false), exit_on_error(_exit_on_error) {
   }
 
   ~RGWBackoffControlCR() override {
@@ -263,14 +266,14 @@ class RGWMetaSyncStatusManager : public DoutPrefixProvider {
     }
   };
 
-  RWLock ts_to_shard_lock;
+  ceph::shared_mutex ts_to_shard_lock = ceph::make_shared_mutex("ts_to_shard_lock");
   map<utime_shard, int> ts_to_shard;
   vector<string> clone_markers;
 
 public:
   RGWMetaSyncStatusManager(RGWRados *_store, RGWAsyncRadosProcessor *async_rados)
-    : store(_store), master_log(this, store, async_rados, this),
-      ts_to_shard_lock("ts_to_shard_lock") {}
+    : store(_store), master_log(this, store, async_rados, this)
+  {}
   int init();
 
   int read_sync_status(rgw_meta_sync_status *sync_status) {

@@ -10,12 +10,12 @@
 #include "common/Finisher.h"
 #include "os/filestore/FileJournal.h"
 #include "include/Context.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/safe_io.h"
 #include "os/filestore/JournalingObjectStore.h"
 
 Finisher *finisher;
-Cond sync_cond;
+ceph::condition_variable sync_cond;
 char path[200];
 uuid_d fsid;
 struct test_info {
@@ -28,37 +28,32 @@ struct test_info {
 };
 
 // ----
-Cond cond;
-Mutex wait_lock("lock");
+ceph::condition_variable cond;
+ceph::mutex wait_lock = ceph::make_mutex("lock");
 bool done;
 
 void wait()
 {
-  wait_lock.Lock();
-  while (!done)
-    cond.Wait(wait_lock);
-  wait_lock.Unlock();
+  std::unique_lock l{wait_lock};
+  cond.wait(l, [] { return done; });
 }
 
 // ----
 class C_Sync {
 public:
-  Cond cond;
-  Mutex lock;
-  bool done;
+  ceph::condition_variable cond;
+  ceph::mutex lock = ceph::make_mutex("C_Sync::lock");
+  bool done = false;
   C_SafeCond *c;
 
-  C_Sync()
-    : lock("C_Sync::lock"), done(false) {
-    c = new C_SafeCond(&lock, &cond, &done);
+  C_Sync() {
+    c = new C_SafeCond(lock, cond, &done);
   }
   ~C_Sync() {
-    lock.Lock();
+    std::unique_lock l{lock};
     //cout << "wait" << std::endl;
-    while (!done)
-      cond.Wait(lock);
+    cond.wait(l, [this] { return done; });
     //cout << "waited" << std::endl;
-    lock.Unlock();
   }
 };
 
@@ -145,7 +140,7 @@ TEST(TestFileJournal, WriteSmall) {
     bl.append("small");
     int orig_len = fj.prepare_entry(tls, &bl);
     fj.reserve_throttle_and_backoff(bl.length());
-    fj.submit_entry(1, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
+    fj.submit_entry(1, bl, orig_len, new C_SafeCond(wait_lock, cond, &done));
     wait();
 
     fj.close();
@@ -174,7 +169,7 @@ TEST(TestFileJournal, WriteBig) {
     vector<ObjectStore::Transaction> tls;
     int orig_len = fj.prepare_entry(tls, &bl);
     fj.reserve_throttle_and_backoff(bl.length());
-    fj.submit_entry(1, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
+    fj.submit_entry(1, bl, orig_len, new C_SafeCond(wait_lock, cond, &done));
     wait();
     fj.close();
   }
@@ -193,7 +188,7 @@ TEST(TestFileJournal, WriteMany) {
     ASSERT_EQ(0, fj.create());
     ASSERT_EQ(0, fj.make_writeable());
 
-    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
+    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(wait_lock, cond, &done));
 
     vector<ObjectStore::Transaction> tls;
     bufferlist bl;
@@ -226,7 +221,7 @@ TEST(TestFileJournal, WriteManyVecs) {
     ASSERT_EQ(0, fj.create());
     ASSERT_EQ(0, fj.make_writeable());
 
-    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
+    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(wait_lock, cond, &done));
 
     bufferlist first;
     first.append("small");
@@ -278,7 +273,7 @@ TEST(TestFileJournal, ReplaySmall) {
     ASSERT_EQ(0, fj.create());
     ASSERT_EQ(0, fj.make_writeable());
 
-    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
+    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(wait_lock, cond, &done));
 
     bufferlist bl;
     bl.append("small");
@@ -338,7 +333,7 @@ TEST(TestFileJournal, ReplayCorrupt) {
     ASSERT_EQ(0, fj.create());
     ASSERT_EQ(0, fj.make_writeable());
 
-    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
+    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(wait_lock, cond, &done));
 
     const char *needle =    "i am a needle";
     const char *newneedle = "in a haystack";
@@ -525,7 +520,7 @@ TEST(TestFileJournal, ReplayDetectCorruptFooterMagic) {
     ASSERT_EQ(0, fj.create());
     ASSERT_EQ(0, fj.make_writeable());
 
-    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
+    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(wait_lock, cond, &done));
 
     const char *needle =    "i am a needle";
     for (unsigned i = 1; i <= 4; ++i) {
@@ -542,7 +537,7 @@ TEST(TestFileJournal, ReplayDetectCorruptFooterMagic) {
     bl.append("needle");
     int orig_len = fj.prepare_entry(tls, &bl);
     fj.reserve_throttle_and_backoff(bl.length());
-    fj.submit_entry(5, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
+    fj.submit_entry(5, bl, orig_len, new C_SafeCond(wait_lock, cond, &done));
     wait();
 
     fj.close();
@@ -584,7 +579,7 @@ TEST(TestFileJournal, ReplayDetectCorruptPayload) {
     ASSERT_EQ(0, fj.create());
     ASSERT_EQ(0, fj.make_writeable());
 
-    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
+    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(wait_lock, cond, &done));
 
     const char *needle =    "i am a needle";
     for (unsigned i = 1; i <= 4; ++i) {
@@ -601,7 +596,7 @@ TEST(TestFileJournal, ReplayDetectCorruptPayload) {
     bl.append("needle");
     int orig_len = fj.prepare_entry(tls, &bl);
     fj.reserve_throttle_and_backoff(bl.length());
-    fj.submit_entry(5, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
+    fj.submit_entry(5, bl, orig_len, new C_SafeCond(wait_lock, cond, &done));
     wait();
 
     fj.close();
@@ -643,7 +638,7 @@ TEST(TestFileJournal, ReplayDetectCorruptHeader) {
     ASSERT_EQ(0, fj.create());
     ASSERT_EQ(0, fj.make_writeable());
 
-    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(&wait_lock, &cond, &done));
+    C_GatherBuilder gb(g_ceph_context, new C_SafeCond(wait_lock, cond, &done));
 
     const char *needle =    "i am a needle";
     for (unsigned i = 1; i <= 4; ++i) {
@@ -660,7 +655,7 @@ TEST(TestFileJournal, ReplayDetectCorruptHeader) {
     bl.append("needle");
     int orig_len = fj.prepare_entry(tls, &bl);
     fj.reserve_throttle_and_backoff(bl.length());
-    fj.submit_entry(5, bl, orig_len, new C_SafeCond(&wait_lock, &cond, &done));
+    fj.submit_entry(5, bl, orig_len, new C_SafeCond(wait_lock, cond, &done));
     wait();
 
     fj.close();

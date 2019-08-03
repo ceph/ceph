@@ -5,7 +5,7 @@
 #define CEPH_RBD_MIRROR_H
 
 #include "common/ceph_context.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "include/rados/librados.hpp"
 #include "include/utime.h"
 #include "ClusterWatcher.h"
@@ -65,8 +65,8 @@ private:
   CephContext *m_cct;
   std::vector<const char*> m_args;
   Threads<librbd::ImageCtx> *m_threads = nullptr;
-  Mutex m_lock;
-  Cond m_cond;
+  ceph::mutex m_lock = ceph::make_mutex("rbd::mirror::Mirror");
+  ceph::condition_variable m_cond;
   RadosRef m_local;
   std::unique_ptr<ServiceDaemon<librbd::ImageCtx>> m_service_daemon;
 

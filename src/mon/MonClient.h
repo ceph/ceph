@@ -132,8 +132,8 @@ private:
 struct MonClientPinger : public Dispatcher,
 			 public AuthClient {
 
-  Mutex lock;
-  Cond ping_recvd_cond;
+  ceph::mutex lock = ceph::make_mutex("MonClientPinger::lock");
+  ceph::condition_variable ping_recvd_cond;
   std::string *result;
   bool done;
   RotatingKeyRing *keyring;
@@ -143,24 +143,24 @@ struct MonClientPinger : public Dispatcher,
 		  RotatingKeyRing *keyring,
 		  std::string *res_) :
     Dispatcher(cct_),
-    lock("MonClientPinger::lock"),
     result(res_),
     done(false),
     keyring(keyring)
   { }
 
   int wait_for_reply(double timeout = 0.0) {
-    utime_t until = ceph_clock_now();
-    until += (timeout > 0 ? timeout : cct->_conf->client_mount_timeout);
-    done = false;
-
-    int ret = 0;
-    while (!done) {
-      ret = ping_recvd_cond.WaitUntil(lock, until);
-      if (ret == ETIMEDOUT)
-        break;
+    std::unique_lock locker{lock};
+    if (timeout <= 0) {
+      timeout = cct->_conf->client_mount_timeout;
     }
-    return ret;
+    done = false;
+    if (ping_recvd_cond.wait_for(locker,
+				 ceph::make_timespan(timeout),
+				 [this] { return done; })) {
+      return 0;
+    } else {
+      return ETIMEDOUT;
+    }
   }
 
   bool ms_dispatch(Message *m) override {
@@ -175,14 +175,14 @@ struct MonClientPinger : public Dispatcher,
       decode(*result, p);
     }
     done = true;
-    ping_recvd_cond.SignalAll();
+    ping_recvd_cond.notify_all();
     m->put();
     return true;
   }
   bool ms_handle_reset(Connection *con) override {
     std::lock_guard l(lock);
     done = true;
-    ping_recvd_cond.SignalAll();
+    ping_recvd_cond.notify_all();
     return true;
   }
   void ms_handle_remote_reset(Connection *con) override {}
@@ -247,7 +247,7 @@ private:
 
   EntityName entity_name;
 
-  mutable Mutex monc_lock;
+  mutable ceph::mutex monc_lock = ceph::make_mutex("MonClient::monc_lock");
   SafeTimer timer;
   Finisher finisher;
 
@@ -275,7 +275,7 @@ private:
 
   // monclient
   bool want_monmap;
-  Cond map_cond;
+  ceph::condition_variable map_cond;
   bool passthrough_monmap = false;
   bool got_config = false;
 
@@ -283,7 +283,7 @@ private:
   std::unique_ptr<AuthClientHandler> auth;
   uint32_t want_keys = 0;
   uint64_t global_id = 0;
-  Cond auth_cond;
+  ceph::condition_variable auth_cond;
   int authenticate_err = 0;
   bool authenticated = false;
 

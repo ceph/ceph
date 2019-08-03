@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/stringify.h"
+#include "common/Cond.h"
 #include "common/Timer.h"
 #include "common/debug.h"
 #include "common/errno.h"
@@ -39,7 +40,8 @@ InstanceReplayer<I>::InstanceReplayer(
   : m_threads(threads), m_service_daemon(service_daemon),
     m_cache_manager_handler(cache_manager_handler), m_local_rados(local_rados),
     m_local_mirror_uuid(local_mirror_uuid), m_local_pool_id(local_pool_id),
-    m_lock("rbd::mirror::InstanceReplayer " + stringify(local_pool_id)) {
+    m_lock(ceph::make_mutex(
+      "rbd::mirror::InstanceReplayer " + stringify(local_pool_id))) {
 }
 
 template <typename I>
@@ -63,7 +65,7 @@ void InstanceReplayer<I>::init(Context *on_finish) {
   Context *ctx = new FunctionContext(
     [this, on_finish] (int r) {
       {
-        Mutex::Locker timer_locker(m_threads->timer_lock);
+        std::lock_guard timer_locker{m_threads->timer_lock};
         schedule_image_state_check_task();
       }
       on_finish->complete(0);
@@ -84,7 +86,7 @@ template <typename I>
 void InstanceReplayer<I>::shut_down(Context *on_finish) {
   dout(10) << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
 
   ceph_assert(m_on_shut_down == nullptr);
   m_on_shut_down = on_finish;
@@ -103,7 +105,7 @@ void InstanceReplayer<I>::add_peer(std::string peer_uuid,
                                    librados::IoCtx io_ctx) {
   dout(10) << peer_uuid << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   auto result = m_peers.insert(Peer(peer_uuid, io_ctx)).second;
   ceph_assert(result);
 }
@@ -112,7 +114,7 @@ template <typename I>
 void InstanceReplayer<I>::release_all(Context *on_finish) {
   dout(10) << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
 
   C_Gather *gather_ctx = new C_Gather(g_ceph_context, on_finish);
   for (auto it = m_image_replayers.begin(); it != m_image_replayers.end();
@@ -135,7 +137,7 @@ void InstanceReplayer<I>::acquire_image(InstanceWatcher<I> *instance_watcher,
                                         Context *on_finish) {
   dout(10) << "global_image_id=" << global_image_id << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
 
   ceph_assert(m_on_shut_down == nullptr);
 
@@ -173,7 +175,7 @@ void InstanceReplayer<I>::release_image(const std::string &global_image_id,
                                         Context *on_finish) {
   dout(10) << "global_image_id=" << global_image_id << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   ceph_assert(m_on_shut_down == nullptr);
 
   auto it = m_image_replayers.find(global_image_id);
@@ -201,7 +203,7 @@ void InstanceReplayer<I>::remove_peer_image(const std::string &global_image_id,
   dout(10) << "global_image_id=" << global_image_id << ", "
            << "peer_mirror_uuid=" << peer_mirror_uuid << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   ceph_assert(m_on_shut_down == nullptr);
 
   auto it = m_image_replayers.find(global_image_id);
@@ -224,7 +226,7 @@ void InstanceReplayer<I>::print_status(Formatter *f, stringstream *ss) {
     return;
   }
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
 
   f->open_array_section("image_replayers");
   for (auto &kv : m_image_replayers) {
@@ -239,7 +241,7 @@ void InstanceReplayer<I>::start()
 {
   dout(10) << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
 
   m_manual_stop = false;
 
@@ -254,7 +256,7 @@ void InstanceReplayer<I>::stop()
 {
   dout(10) << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
 
   m_manual_stop = true;
 
@@ -269,7 +271,7 @@ void InstanceReplayer<I>::restart()
 {
   dout(10) << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
 
   m_manual_stop = false;
 
@@ -284,7 +286,7 @@ void InstanceReplayer<I>::flush()
 {
   dout(10) << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
 
   for (auto &kv : m_image_replayers) {
     auto &image_replayer = kv.second;
@@ -295,7 +297,7 @@ void InstanceReplayer<I>::flush()
 template <typename I>
 void InstanceReplayer<I>::start_image_replayer(
     ImageReplayer<I> *image_replayer) {
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   std::string global_image_id = image_replayer->get_global_image_id();
   if (!image_replayer->is_stopped()) {
@@ -333,7 +335,7 @@ template <typename I>
 void InstanceReplayer<I>::start_image_replayers(int r) {
   dout(10) << dendl;
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   if (m_on_shut_down != nullptr) {
     return;
   }
@@ -395,7 +397,7 @@ void InstanceReplayer<I>::stop_image_replayer(ImageReplayer<I> *image_replayer,
              << after << " sec (task " << ctx << ")" << dendl;
     ctx = new FunctionContext(
       [this, after, ctx] (int r) {
-        Mutex::Locker timer_locker(m_threads->timer_lock);
+        std::lock_guard timer_locker{m_threads->timer_lock};
         m_threads->timer->add_event_after(after, ctx);
       });
     m_threads->work_queue->queue(ctx, 0);
@@ -418,7 +420,7 @@ void InstanceReplayer<I>::handle_wait_for_ops(int r) {
 
   ceph_assert(r == 0);
 
-  Mutex::Locker locker(m_lock);
+  std::lock_guard locker{m_lock};
   stop_image_replayers();
 }
 
@@ -426,7 +428,7 @@ template <typename I>
 void InstanceReplayer<I>::stop_image_replayers() {
   dout(10) << dendl;
 
-  ceph_assert(m_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_lock));
 
   Context *ctx = create_async_context_callback(
     m_threads->work_queue, create_context_callback<InstanceReplayer<I>,
@@ -447,7 +449,7 @@ void InstanceReplayer<I>::handle_stop_image_replayers(int r) {
 
   Context *on_finish = nullptr;
   {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
 
     for (auto &it : m_image_replayers) {
       ceph_assert(it.second->is_stopped());
@@ -463,7 +465,7 @@ void InstanceReplayer<I>::handle_stop_image_replayers(int r) {
 
 template <typename I>
 void InstanceReplayer<I>::cancel_image_state_check_task() {
-  Mutex::Locker timer_locker(m_threads->timer_lock);
+  std::lock_guard timer_locker{m_threads->timer_lock};
 
   if (m_image_state_check_task == nullptr) {
     return;
@@ -477,12 +479,12 @@ void InstanceReplayer<I>::cancel_image_state_check_task() {
 
 template <typename I>
 void InstanceReplayer<I>::schedule_image_state_check_task() {
-  ceph_assert(m_threads->timer_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_threads->timer_lock));
   ceph_assert(m_image_state_check_task == nullptr);
 
   m_image_state_check_task = new FunctionContext(
     [this](int r) {
-      ceph_assert(m_threads->timer_lock.is_locked());
+      ceph_assert(ceph_mutex_is_locked(m_threads->timer_lock));
       m_image_state_check_task = nullptr;
       schedule_image_state_check_task();
       queue_start_image_replayers();

@@ -79,8 +79,8 @@ class WBThrottle : Thread, public md_config_obs_t {
   CephContext *cct;
   PerfCounters *logger;
   bool stopping;
-  Mutex lock;
-  Cond cond;
+  ceph::mutex lock = ceph::make_mutex("WBThrottle::lock");
+  ceph::condition_variable cond;
 
 
   /**
@@ -89,7 +89,7 @@ class WBThrottle : Thread, public md_config_obs_t {
   list<ghobject_t> lru;
   ceph::unordered_map<ghobject_t, list<ghobject_t>::iterator> rev_lru;
   void remove_object(const ghobject_t &oid) {
-    ceph_assert(lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(lock));
     ceph::unordered_map<ghobject_t, list<ghobject_t>::iterator>::iterator iter =
       rev_lru.find(oid);
     if (iter == rev_lru.end())
@@ -115,6 +115,7 @@ class WBThrottle : Thread, public md_config_obs_t {
 
   /// get next flush to perform
   bool get_next_should_flush(
+    std::unique_lock<ceph::mutex>& locker,
     boost::tuple<ghobject_t, FDRef, PendingWB> *next ///< [out] next to flush
     ); ///< @return false if we are shutting down
 public:
@@ -152,7 +153,7 @@ public:
   void stop();
   /// Set fs as XFS or BTRFS
   void set_fs(FS new_fs) {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     fs = new_fs;
     set_from_conf();
   }

@@ -96,7 +96,7 @@ public:
   }
 
   void expect_test_features(MockTestImageCtx &mock_image_ctx, uint64_t features,
-                            RWLock &lock, bool enabled) {
+                            ceph::shared_mutex &lock, bool enabled) {
     EXPECT_CALL(mock_image_ctx, test_features(features, _))
                   .WillOnce(Return(enabled));
   }

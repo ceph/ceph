@@ -92,13 +92,13 @@ int RGWBackoffControlCR::operate() {
     // retry the operation until it succeeds
     while (true) {
       yield {
-        Mutex::Locker l(lock);
+	std::lock_guard l{lock};
         cr = alloc_cr();
         cr->get();
         call(cr);
       }
       {
-        Mutex::Locker l(lock);
+	std::lock_guard l{lock};
         cr->put();
         cr = NULL;
       }
@@ -341,7 +341,7 @@ int RGWMetaSyncStatusManager::init()
     shard_objs[i] = rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, sync_env.shard_obj_name(i));
   }
 
-  RWLock::WLocker wl(ts_to_shard_lock);
+  std::unique_lock wl{ts_to_shard_lock};
   for (int i = 0; i < num_shards; i++) {
     clone_markers.push_back(string());
     utime_shard ut;
@@ -1417,8 +1417,8 @@ class RGWMetaSyncShardCR : public RGWCoroutine {
   string raw_key;
   rgw_mdlog_entry mdlog_entry;
 
-  Mutex inc_lock;
-  Cond inc_cond;
+  ceph::mutex inc_lock = ceph::make_mutex("RGWMetaSyncShardCR::inc_lock");
+  ceph::condition_variable inc_cond;
 
   boost::asio::coroutine incremental_cr;
   boost::asio::coroutine full_cr;
@@ -1451,7 +1451,7 @@ public:
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), pool(_pool),
       period(period), realm_epoch(realm_epoch), mdlog(mdlog),
       shard_id(_shard_id), sync_marker(_marker),
-      period_marker(period_marker), inc_lock("RGWMetaSyncShardCR::inc_lock"),
+      period_marker(period_marker),
       reset_backoff(_reset_backoff), tn(_tn) {
     *reset_backoff = false;
   }

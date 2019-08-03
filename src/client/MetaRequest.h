@@ -64,9 +64,9 @@ public:
   xlist<MetaRequest*>::item unsafe_dir_item;
   xlist<MetaRequest*>::item unsafe_target_item;
 
-  Cond  *caller_cond;          // who to take up
-  Cond  *dispatch_cond;        // who to kick back
-  list<Cond*> waitfor_safe;
+  ceph::condition_variable *caller_cond;          // who to take up
+  ceph::condition_variable *dispatch_cond;        // who to kick back
+  list<ceph::condition_variable*> waitfor_safe;
 
   InodeRef target;
   UserPerm perms;

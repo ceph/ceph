@@ -53,7 +53,7 @@ void MgrClient::init()
 
 void MgrClient::shutdown()
 {
-  std::lock_guard l(lock);
+  std::unique_lock l(lock);
   ldout(cct, 10) << dendl;
 
   if (connect_retry_callback) {
@@ -73,10 +73,9 @@ void MgrClient::shutdown()
     m->daemon_name = daemon_name;
     m->service_name = service_name;
     session->con->send_message2(m);
-    utime_t timeout;
-    timeout.set_from_double(cct->_conf.get_val<double>(
+    auto timeout = ceph::make_timespan(cct->_conf.get_val<double>(
 			      "mgr_client_service_daemon_unregister_timeout"));
-    shutdown_cond.WaitInterval(lock, timeout);
+    shutdown_cond.wait_for(l, timeout);
   }
 
   timer.shutdown();
@@ -112,7 +111,7 @@ bool MgrClient::ms_dispatch2(const ref_t<Message>& m)
 
 void MgrClient::reconnect()
 {
-  ceph_assert(lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
 
   if (session) {
     ldout(cct, 4) << "Terminating session with "
@@ -131,10 +130,11 @@ void MgrClient::reconnect()
     return;
   }
 
-  if (last_connect_attempt != utime_t()) {
-    utime_t now = ceph_clock_now();
-    utime_t when = last_connect_attempt;
-    when += cct->_conf.get_val<double>("mgr_connect_retry_interval");
+  if (!clock_t::is_zero(last_connect_attempt)) {
+    auto now = clock_t::now();
+    auto when = last_connect_attempt +
+      ceph::make_timespan(
+        cct->_conf.get_val<double>("mgr_connect_retry_interval"));
     if (now < when) {
       if (!connect_retry_callback) {
 	connect_retry_callback = timer.add_event_at(
@@ -156,7 +156,7 @@ void MgrClient::reconnect()
 
   ldout(cct, 4) << "Starting new session with " << map.get_active_addrs()
 		<< dendl;
-  last_connect_attempt = ceph_clock_now();
+  last_connect_attempt = clock_t::now();
 
   session.reset(new MgrSessionState());
   session->con = msgr->connect_to(CEPH_ENTITY_TYPE_MGR,
@@ -203,7 +203,7 @@ void MgrClient::_send_open()
 
 bool MgrClient::handle_mgr_map(ref_t<MMgrMap> m)
 {
-  ceph_assert(lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
 
   ldout(cct, 20) << *m << dendl;
 
@@ -253,7 +253,7 @@ void MgrClient::_send_stats()
 
 void MgrClient::_send_report()
 {
-  ceph_assert(lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
   ceph_assert(session);
   report_callback = nullptr;
 
@@ -376,7 +376,7 @@ void MgrClient::_send_pgstats()
 
 bool MgrClient::handle_mgr_configure(ref_t<MMgrConfigure> m)
 {
-  ceph_assert(lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
 
   ldout(cct, 20) << *m << dendl;
 
@@ -408,7 +408,7 @@ bool MgrClient::handle_mgr_configure(ref_t<MMgrConfigure> m)
 bool MgrClient::handle_mgr_close(ref_t<MMgrClose> m)
 {
   service_daemon = false;
-  shutdown_cond.Signal();
+  shutdown_cond.notify_all();
   return true;
 }
 
@@ -444,7 +444,7 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
 
 bool MgrClient::handle_command_reply(ref_t<MCommandReply> m)
 {
-  ceph_assert(lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(lock));
 
   ldout(cct, 20) << *m << dendl;
 

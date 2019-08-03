@@ -6,8 +6,7 @@
 #include "journal/JournalMetadata.h"
 #include "journal/ReplayHandler.h"
 #include "include/stringify.h"
-#include "common/Cond.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "gtest/gtest.h"
 #include "test/journal/RadosTestFixture.h"
 #include <list>
@@ -23,30 +22,30 @@ public:
   static const uint64_t max_fetch_bytes = T::max_fetch_bytes;
 
   struct ReplayHandler : public journal::ReplayHandler {
-    Mutex lock;
-    Cond cond;
+    ceph::mutex lock = ceph::make_mutex("lock");
+    ceph::condition_variable cond;
     bool entries_available;
     bool complete;
     int complete_result;
 
     ReplayHandler()
-      : lock("lock"), entries_available(false), complete(false),
+      : entries_available(false), complete(false),
         complete_result(0) {}
 
     void get() override {}
     void put() override {}
 
     void handle_entries_available() override {
-      Mutex::Locker locker(lock);
+      std::lock_guard locker{lock};
       entries_available = true;
-      cond.Signal();
+      cond.notify_all();
     }
 
     void handle_complete(int r) override {
-      Mutex::Locker locker(lock);
+      std::lock_guard locker{lock};
       complete = true;
       complete_result = r;
-      cond.Signal();
+      cond.notify_all();
     }
   };
 
@@ -97,11 +96,11 @@ public:
         break;
       }
 
-      Mutex::Locker locker(m_replay_hander.lock);
+      std::unique_lock locker{m_replay_hander.lock};
       if (m_replay_hander.entries_available) {
         m_replay_hander.entries_available = false;
-      } else if (m_replay_hander.cond.WaitInterval(
-          m_replay_hander.lock, utime_t(10, 0)) != 0) {
+      } else if (m_replay_hander.cond.wait_for(locker, 10s) ==
+		 std::cv_status::timeout) {
         break;
       }
     }
@@ -109,14 +108,14 @@ public:
   }
 
   bool wait_for_complete(journal::JournalPlayer *player) {
-    Mutex::Locker locker(m_replay_hander.lock);
+    std::unique_lock locker{m_replay_hander.lock};
     while (!m_replay_hander.complete) {
       journal::Entry entry;
       uint64_t commit_tid;
       player->try_pop_front(&entry, &commit_tid);
 
-      if (m_replay_hander.cond.WaitInterval(
-            m_replay_hander.lock, utime_t(10, 0)) != 0) {
+      if (m_replay_hander.cond.wait_for(locker, 10s) ==
+	  std::cv_status::timeout) {
         return false;
       }
     }

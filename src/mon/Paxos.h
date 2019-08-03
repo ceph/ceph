@@ -276,7 +276,7 @@ private:
    */
   int commits_started = 0;
 
-  Cond shutdown_cond;
+  ceph::condition_variable shutdown_cond;
 
 public:
   /**
@@ -402,7 +402,7 @@ private:
    * keep leases. Each lease will have an expiration date, which may or may
    * not be extended. 
    */
-  utime_t lease_expire;
+  ceph::real_clock::time_point lease_expire;
   /**
    * List of callbacks waiting for our state to change into STATE_ACTIVE.
    */

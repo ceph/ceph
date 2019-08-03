@@ -149,7 +149,7 @@ OpTracker::OpTracker(CephContext *cct_, bool tracking, uint32_t num_shards):
   num_optracker_shards(num_shards),
   complaint_time(0), log_threshold(0),
   tracking_enabled(tracking),
-  lock("OpTracker::lock"), cct(cct_) {
+  cct(cct_) {
     for (uint32_t i = 0; i < num_optracker_shards; i++) {
       char lock_name[32] = {0};
       snprintf(lock_name, sizeof(lock_name), "%s:%" PRIu32, "OpTracker::ShardedLock", i);
@@ -171,7 +171,7 @@ bool OpTracker::dump_historic_ops(Formatter *f, bool by_duration, set<string> fi
   if (!tracking_enabled)
     return false;
 
-  RWLock::RLocker l(lock);
+  std::shared_lock l{lock};
   utime_t now = ceph_clock_now();
   history.dump_ops(now, f, filters, by_duration);
   return true;
@@ -206,7 +206,7 @@ bool OpTracker::dump_historic_slow_ops(Formatter *f, set<string> filters)
   if (!tracking_enabled)
     return false;
 
-  RWLock::RLocker l(lock);
+  std::shared_lock l{lock};
   utime_t now = ceph_clock_now();
   history.dump_slow_ops(now, f, filters);
   return true;
@@ -217,7 +217,7 @@ bool OpTracker::dump_ops_in_flight(Formatter *f, bool print_only_blocked, set<st
   if (!tracking_enabled)
     return false;
 
-  RWLock::RLocker l(lock);
+  std::shared_lock l{lock};
   f->open_object_section("ops_in_flight"); // overall dump
   uint64_t total_ops_in_flight = 0;
   f->open_array_section("ops"); // list of TrackedOps
@@ -252,7 +252,7 @@ bool OpTracker::register_inflight_op(TrackedOp *i)
   if (!tracking_enabled)
     return false;
 
-  RWLock::RLocker l(lock);
+  std::shared_lock l{lock};
   uint64_t current_seq = ++seq;
   uint32_t shard_index = current_seq % num_optracker_shards;
   ShardedTrackingData* sdata = sharded_in_flight_list[shard_index];
@@ -282,7 +282,7 @@ void OpTracker::unregister_inflight_op(TrackedOp* const i)
 
 void OpTracker::record_history_op(TrackedOpRef&& i)
 {
-  RWLock::RLocker l(lock);
+  std::shared_lock l{lock};
   history.insert(ceph_clock_now(), std::move(i));
 }
 
@@ -296,7 +296,7 @@ bool OpTracker::visit_ops_in_flight(utime_t* oldest_secs,
   utime_t oldest_op = now;
   uint64_t total_ops_in_flight = 0;
 
-  RWLock::RLocker l(lock);
+  std::shared_lock l{lock};
   for (const auto sdata : sharded_in_flight_list) {
     ceph_assert(sdata);
     std::lock_guard locker(sdata->ops_in_flight_lock_sharded);

@@ -32,7 +32,7 @@ void ResizeRequest::resize(ceph::BitVector<2> *object_map, uint64_t num_objs,
 void ResizeRequest::send() {
   CephContext *cct = m_image_ctx.cct;
 
-  RWLock::WLocker l(*m_object_map_lock);
+  std::unique_lock l{*m_object_map_lock};
   m_num_objs = Striper::get_num_objects(m_image_ctx.layout, m_new_size);
 
   std::string oid(ObjectMap<>::object_map_name(m_image_ctx.id, m_snap_id));
@@ -57,7 +57,7 @@ void ResizeRequest::finish_request() {
   ldout(cct, 5) << this << " resizing in-memory object map: "
 		<< m_num_objs << dendl;
 
-  RWLock::WLocker object_map_locker(*m_object_map_lock);
+  std::unique_lock object_map_locker{*m_object_map_lock};
   resize(m_object_map, m_num_objs, m_default_object_state);
 }
 

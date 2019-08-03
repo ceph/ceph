@@ -12,7 +12,7 @@
 
 #include "include/types.h"
 #include "include/rados/librados.hpp"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Cond.h"
 #include "common/iso_8601.h"
 #include "common/Thread.h"
@@ -462,11 +462,11 @@ class RGWLC : public DoutPrefixProvider {
     const DoutPrefixProvider *dpp;
     CephContext *cct;
     RGWLC *lc;
-    Mutex lock;
-    Cond cond;
+    ceph::mutex lock = ceph::make_mutex("LCWorker");
+    ceph::condition_variable cond;
 
   public:
-    LCWorker(const DoutPrefixProvider* _dpp, CephContext *_cct, RGWLC *_lc) : dpp(_dpp), cct(_cct), lc(_lc), lock("LCWorker") {}
+    LCWorker(const DoutPrefixProvider* _dpp, CephContext *_cct, RGWLC *_lc) : dpp(_dpp), cct(_cct), lc(_lc) {}
     void *entry() override;
     void stop();
     bool should_work(utime_t& now);

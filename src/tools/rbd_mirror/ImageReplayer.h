@@ -5,7 +5,7 @@
 #define CEPH_RBD_MIRROR_IMAGE_REPLAYER_H
 
 #include "common/AsyncOpTracker.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/WorkQueue.h"
 #include "include/rados/librados.hpp"
 #include "cls/journal/cls_journal_types.h"
@@ -85,25 +85,25 @@ public:
   ImageReplayer(const ImageReplayer&) = delete;
   ImageReplayer& operator=(const ImageReplayer&) = delete;
 
-  bool is_stopped() { Mutex::Locker l(m_lock); return is_stopped_(); }
-  bool is_running() { Mutex::Locker l(m_lock); return is_running_(); }
-  bool is_replaying() { Mutex::Locker l(m_lock); return is_replaying_(); }
+  bool is_stopped() { std::lock_guard l{m_lock}; return is_stopped_(); }
+  bool is_running() { std::lock_guard l{m_lock}; return is_running_(); }
+  bool is_replaying() { std::lock_guard l{m_lock}; return is_replaying_(); }
 
-  std::string get_name() { Mutex::Locker l(m_lock); return m_name; };
+  std::string get_name() { std::lock_guard l{m_lock}; return m_name; };
   void set_state_description(int r, const std::string &desc);
 
   // TODO temporary until policy handles release of image replayers
   inline bool is_finished() const {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     return m_finished;
   }
   inline void set_finished(bool finished) {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     m_finished = finished;
   }
 
   inline bool is_blacklisted() const {
-    Mutex::Locker locker(m_lock);
+    std::lock_guard locker{m_lock};
     return (m_last_r == -EBLACKLISTED);
   }
 
@@ -204,7 +204,7 @@ protected:
 
   virtual void on_start_fail(int r, const std::string &desc);
   virtual bool on_start_interrupted();
-  virtual bool on_start_interrupted(Mutex& lock);
+  virtual bool on_start_interrupted(ceph::mutex& lock);
 
   virtual void on_stop_journal_replay(int r = 0, const std::string &desc = "");
 
@@ -285,7 +285,7 @@ private:
   std::string m_local_image_name;
   std::string m_name;
 
-  mutable Mutex m_lock;
+  mutable ceph::mutex m_lock;
   State m_state = STATE_STOPPED;
   std::string m_state_desc;
 

@@ -12,7 +12,7 @@
  *
  */
 
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Cond.h"
 #include "common/admin_socket.h"
 #include "common/admin_socket_client.h"
@@ -197,15 +197,15 @@ TEST(AdminSocket, RegisterCommandPrefixes) {
 
 class BlockingHook : public AdminSocketHook {
 public:
-  Mutex _lock;
-  Cond _cond;
+  ceph::mutex _lock = ceph::make_mutex("BlockingHook::_lock");
+  ceph::condition_variable _cond;
 
-  BlockingHook() : _lock("BlockingHook::_lock") {}
+  BlockingHook() = default;
 
   bool call(std::string_view command, const cmdmap_t& cmdmap,
 	    std::string_view format, bufferlist& result) override {
-    Mutex::Locker l(_lock);
-    _cond.Wait(_lock);
+    std::unique_lock l{_lock};
+    _cond.wait(l);
     return true;
   }
 };
@@ -255,8 +255,8 @@ TEST(AdminSocketClient, Ping) {
     EXPECT_NE(std::string::npos, result.find("Resource temporarily unavailable"));
     ASSERT_FALSE(ok);
     {
-      Mutex::Locker l(blocking->_lock);
-      blocking->_cond.Signal();
+      std::lock_guard l{blocking->_lock};
+      blocking->_cond.notify_all();
     }
     ASSERT_TRUE(asoct.shutdown());
     delete blocking;

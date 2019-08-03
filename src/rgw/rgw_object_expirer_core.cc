@@ -278,9 +278,8 @@ void *RGWObjectExpirer::OEWorker::entry() {
 
     secs -= end.sec();
 
-    lock.Lock();
-    cond.WaitInterval(lock, utime_t(secs, 0));
-    lock.Unlock();
+    std::unique_lock l{lock};
+    cond.wait_for(l, std::chrono::seconds(secs));
   } while (!oe->going_down());
 
   return NULL;
@@ -288,7 +287,7 @@ void *RGWObjectExpirer::OEWorker::entry() {
 
 void RGWObjectExpirer::OEWorker::stop()
 {
-  Mutex::Locker l(lock);
-  cond.Signal();
+  std::lock_guard l{lock};
+  cond.notify_all();
 }
 

@@ -362,10 +362,10 @@ class TokenBucketThrottle {
   uint64_t m_avg = 0;
   uint64_t m_burst = 0;
   SafeTimer *m_timer;
-  Mutex *m_timer_lock;
+  ceph::mutex *m_timer_lock;
   FunctionContext *m_token_ctx = nullptr;
   std::list<Blocker> m_blockers;
-  Mutex m_lock;
+  ceph::mutex m_lock;
 
   // minimum of the filling period.
   uint64_t m_tick_min = 50;
@@ -409,7 +409,7 @@ class TokenBucketThrottle {
 public:
   TokenBucketThrottle(CephContext *cct, const std::string &name,
                       uint64_t capacity, uint64_t avg,
-                      SafeTimer *timer, Mutex *timer_lock);
+                      SafeTimer *timer, ceph::mutex *timer_lock);
 
   ~TokenBucketThrottle();
 

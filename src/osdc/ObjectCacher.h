@@ -400,7 +400,7 @@ class ObjectCacher {
   bool scattered_write;
 
   string name;
-  Mutex& lock;
+  ceph::mutex& lock;
 
   uint64_t max_dirty, target_dirty, max_size, max_objects;
   ceph::timespan max_dirty_age;
@@ -422,7 +422,7 @@ class ObjectCacher {
   LRU   bh_lru_dirty, bh_lru_rest;
   LRU   ob_lru;
 
-  Cond flusher_cond;
+  ceph::condition_variable flusher_cond;
   bool flusher_stop;
   void flusher_entry();
   class FlusherThread : public Thread {
@@ -452,7 +452,7 @@ class ObjectCacher {
   void close_object(Object *ob);
 
   // bh stats
-  Cond  stat_cond;
+  ceph::condition_variable  stat_cond;
 
   loff_t stat_clean;
   loff_t stat_zero;
@@ -554,7 +554,7 @@ class ObjectCacher {
   void purge(Object *o);
 
   int64_t reads_outstanding;
-  Cond read_cond;
+  ceph::condition_variable read_cond;
 
   int _readx(OSDRead *rd, ObjectSet *oset, Context *onfinish,
 	     bool external_call, ZTracer::Trace *trace);
@@ -577,7 +577,7 @@ class ObjectCacher {
 
 
 
-  ObjectCacher(CephContext *cct_, string name, WritebackHandler& wb, Mutex& l,
+  ObjectCacher(CephContext *cct_, string name, WritebackHandler& wb, ceph::mutex& l,
 	       flush_set_callback_t flush_callback,
 	       void *flush_callback_arg,
 	       uint64_t max_bytes, uint64_t max_objects,
@@ -590,10 +590,10 @@ class ObjectCacher {
   }
   void stop() {
     ceph_assert(flusher_thread.is_started());
-    lock.Lock();  // hmm.. watch out for deadlock!
+    lock.lock();  // hmm.. watch out for deadlock!
     flusher_stop = true;
-    flusher_cond.Signal();
-    lock.Unlock();
+    flusher_cond.notify_all();
+    lock.unlock();
     flusher_thread.join();
   }
 
@@ -618,7 +618,7 @@ private:
   // write blocking
   int _wait_for_write(OSDWrite *wr, uint64_t len, ObjectSet *oset,
                       ZTracer::Trace *trace, Context *onfreespace);
-  void maybe_wait_for_writeback(uint64_t len, ZTracer::Trace *trace);
+  void _maybe_wait_for_writeback(uint64_t len, ZTracer::Trace *trace);
   bool _flush_set_finish(C_GatherBuilder *gather, Context *onfinish);
 
   void _discard(ObjectSet *oset, const vector<ObjectExtent>& exls,
@@ -698,7 +698,7 @@ public:
     OSDWrite *wr = prepare_write(snapc, bl, mtime, flags, 0);
     Striper::file_to_extents(cct, oset->ino, layout, offset, len,
 			     oset->truncate_size, wr->extents);
-    return writex(wr, oset, NULL);
+    return writex(wr, oset, nullptr);
   }
 
   bool file_flush(ObjectSet *oset, file_layout_t *layout,

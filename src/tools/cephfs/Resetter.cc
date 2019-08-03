@@ -71,8 +71,8 @@ int Resetter::init(mds_role_t role_, const std::string &type, bool hard)
 
 int Resetter::reset()
 {
-  Mutex mylock("Resetter::reset::lock");
-  Cond cond;
+  ceph::mutex mylock = ceph::make_mutex("Resetter::reset::lock");
+  ceph::condition_variable cond;
   bool done;
   int r;
 
@@ -83,16 +83,14 @@ int Resetter::reset()
       fs->mds_map.get_metadata_pool(),
       CEPH_FS_ONDISK_MAGIC,
       objecter, 0, 0, &finisher);
-
-  lock.Lock();
-  journaler.recover(new C_SafeCond(&mylock, &cond, &done, &r));
-  lock.Unlock();
-
-  mylock.Lock();
-  while (!done)
-    cond.Wait(mylock);
-  mylock.Unlock();
-
+  {
+    std::lock_guard locker{lock};
+    journaler.recover(new C_SafeCond(mylock, cond, &done, &r));
+  }
+  {
+    std::unique_lock locker{mylock};
+    cond.wait(locker, [&done] { return done; });
+  }
   if (r != 0) {
     if (r == -ENOENT) {
       cerr << "journal does not exist on-disk. Did you set a bad rank?"
@@ -106,7 +104,7 @@ int Resetter::reset()
     }
   }
 
-  lock.Lock();
+  lock.lock();
   uint64_t old_start = journaler.get_read_pos();
   uint64_t old_end = journaler.get_write_pos();
   uint64_t old_len = old_end - old_start;
@@ -123,15 +121,13 @@ int Resetter::reset()
   journaler.set_writeable();
 
   cout << "writing journal head" << std::endl;
-  journaler.write_head(new C_SafeCond(&mylock, &cond, &done, &r));
-  lock.Unlock();
-
-  mylock.Lock();
-  while (!done)
-    cond.Wait(mylock);
-  mylock.Unlock();
-
-  Mutex::Locker l(lock);
+  journaler.write_head(new C_SafeCond(mylock, cond, &done, &r));
+  lock.unlock();
+  {
+    std::unique_lock locker{mylock};
+    cond.wait(locker, [&done] { return done; });
+  }
+  std::lock_guard l{lock};
   if (r != 0) {
     return r;
   }
@@ -163,7 +159,7 @@ int Resetter::reset_hard()
 
   C_SaferCond cond;
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     journaler.write_head(&cond);
   }
   
@@ -175,7 +171,7 @@ int Resetter::reset_hard()
   
   if (is_mdlog) // reset event is specific for mdlog journal
   {
-    Mutex::Locker l(lock);
+    std::lock_guard l{lock};
     r = _write_reset_event(&journaler);
     if (r != 0) {
       derr << "Error writing EResetJournal: " << cpp_strerror(r) << dendl;

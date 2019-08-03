@@ -16,9 +16,8 @@
 
 #include "common/config_fwd.h"
 #include "common/Cond.h"
-#include "common/Mutex.h"
-#include "common/RWLock.h"
 #include "common/Timer.h"
+#include "common/ceph_mutex.h"
 #include "common/ceph_time.h"
 #include "include/rados/librados.h"
 #include "include/rados/librados.hpp"
@@ -68,8 +67,8 @@ private:
 
   Objecter *objecter;
 
-  Mutex lock;
-  Cond cond;
+  ceph::mutex lock = ceph::make_mutex("librados::RadosClient::lock");
+  ceph::condition_variable cond;
   SafeTimer timer;
   int refcnt;
 

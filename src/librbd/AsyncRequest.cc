@@ -43,7 +43,7 @@ Context *AsyncRequest<T>::create_async_callback_context() {
 
 template <typename T>
 void AsyncRequest<T>::start_request() {
-  Mutex::Locker async_ops_locker(m_image_ctx.async_ops_lock);
+  std::lock_guard async_ops_locker{m_image_ctx.async_ops_lock};
   m_image_ctx.async_requests.push_back(&m_xlist_item);
 }
 
@@ -51,7 +51,7 @@ template <typename T>
 void AsyncRequest<T>::finish_request() {
   decltype(m_image_ctx.async_requests_waiters) waiters;
   {
-    Mutex::Locker async_ops_locker(m_image_ctx.async_ops_lock);
+    std::lock_guard async_ops_locker{m_image_ctx.async_ops_lock};
     ceph_assert(m_xlist_item.remove_myself());
 
     if (m_image_ctx.async_requests.empty()) {

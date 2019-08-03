@@ -39,8 +39,8 @@ using librbd::util::unique_lock_name;
 
 Policy::Policy(librados::IoCtx &ioctx)
   : m_ioctx(ioctx),
-    m_map_lock(unique_lock_name("rbd::mirror::image_map::Policy::m_map_lock",
-               this)) {
+    m_map_lock(ceph::make_shared_mutex(
+     unique_lock_name("rbd::mirror::image_map::Policy::m_map_lock", this))) {
 
   // map should at least have once instance
   std::string instance_id = stringify(ioctx.get_instance_id());
@@ -51,7 +51,7 @@ void Policy::init(
     const std::map<std::string, cls::rbd::MirrorImageMap> &image_mapping) {
   dout(20) << dendl;
 
-  RWLock::WLocker map_lock(m_map_lock);
+  std::unique_lock map_lock{m_map_lock};
   for (auto& it : image_mapping) {
     ceph_assert(!it.second.instance_id.empty());
     auto map_result = m_map[it.second.instance_id].emplace(it.first);
@@ -72,7 +72,7 @@ void Policy::init(
 LookupInfo Policy::lookup(const std::string &global_image_id) {
   dout(20) << "global_image_id=" << global_image_id << dendl;
 
-  RWLock::RLocker map_lock(m_map_lock);
+  std::shared_lock map_lock{m_map_lock};
   LookupInfo info;
 
   auto it = m_image_states.find(global_image_id);
@@ -86,7 +86,7 @@ LookupInfo Policy::lookup(const std::string &global_image_id) {
 bool Policy::add_image(const std::string &global_image_id) {
   dout(5) << "global_image_id=" << global_image_id << dendl;
 
-  RWLock::WLocker map_lock(m_map_lock);
+  std::unique_lock map_lock{m_map_lock};
   auto image_state_result = m_image_states.emplace(global_image_id,
                                                    ImageState{});
   auto& image_state = image_state_result.first->second;
@@ -101,7 +101,7 @@ bool Policy::add_image(const std::string &global_image_id) {
 bool Policy::remove_image(const std::string &global_image_id) {
   dout(5) << "global_image_id=" << global_image_id << dendl;
 
-  RWLock::WLocker map_lock(m_map_lock);
+  std::unique_lock map_lock{m_map_lock};
   auto it = m_image_states.find(global_image_id);
   if (it == m_image_states.end()) {
     return false;
@@ -115,7 +115,7 @@ void Policy::add_instances(const InstanceIds &instance_ids,
                            GlobalImageIds* global_image_ids) {
   dout(5) << "instance_ids=" << instance_ids << dendl;
 
-  RWLock::WLocker map_lock(m_map_lock);
+  std::unique_lock map_lock{m_map_lock};
   for (auto& instance : instance_ids) {
     ceph_assert(!instance.empty());
     m_map.emplace(instance, std::set<std::string>{});
@@ -157,14 +157,14 @@ void Policy::add_instances(const InstanceIds &instance_ids,
 
 void Policy::remove_instances(const InstanceIds &instance_ids,
                               GlobalImageIds* global_image_ids) {
-  RWLock::WLocker map_lock(m_map_lock);
+  std::unique_lock map_lock{m_map_lock};
   remove_instances(m_map_lock, instance_ids, global_image_ids);
 }
 
-void Policy::remove_instances(const RWLock& lock,
+void Policy::remove_instances(const ceph::shared_mutex& lock,
                               const InstanceIds &instance_ids,
                               GlobalImageIds* global_image_ids) {
-  ceph_assert(m_map_lock.is_wlocked());
+  ceph_assert(ceph_mutex_is_wlocked(m_map_lock));
   dout(5) << "instance_ids=" << instance_ids << dendl;
 
   for (auto& instance_id : instance_ids) {
@@ -201,7 +201,7 @@ void Policy::remove_instances(const RWLock& lock,
 }
 
 ActionType Policy::start_action(const std::string &global_image_id) {
-  RWLock::WLocker map_lock(m_map_lock);
+  std::unique_lock map_lock{m_map_lock};
 
   auto it = m_image_states.find(global_image_id);
   ceph_assert(it != m_image_states.end());
@@ -222,7 +222,7 @@ ActionType Policy::start_action(const std::string &global_image_id) {
 }
 
 bool Policy::finish_action(const std::string &global_image_id, int r) {
-  RWLock::WLocker map_lock(m_map_lock);
+  std::unique_lock map_lock{m_map_lock};
 
   auto it = m_image_states.find(global_image_id);
   ceph_assert(it != m_image_states.end());
@@ -291,7 +291,7 @@ void Policy::execute_policy_action(
 }
 
 void Policy::map(const std::string& global_image_id, ImageState* image_state) {
-  ceph_assert(m_map_lock.is_wlocked());
+  ceph_assert(ceph_mutex_is_wlocked(m_map_lock));
 
   std::string instance_id = image_state->instance_id;
   if (instance_id != UNMAPPED_INSTANCE_ID && !is_dead_instance(instance_id)) {
@@ -315,7 +315,7 @@ void Policy::map(const std::string& global_image_id, ImageState* image_state) {
 
 void Policy::unmap(const std::string &global_image_id,
                    ImageState* image_state) {
-  ceph_assert(m_map_lock.is_wlocked());
+  ceph_assert(ceph_mutex_is_wlocked(m_map_lock));
 
   std::string instance_id = image_state->instance_id;
   if (instance_id == UNMAPPED_INSTANCE_ID) {
@@ -338,7 +338,7 @@ void Policy::unmap(const std::string &global_image_id,
 }
 
 bool Policy::is_image_shuffling(const std::string &global_image_id) {
-  ceph_assert(m_map_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_map_lock));
 
   auto it = m_image_states.find(global_image_id);
   ceph_assert(it != m_image_states.end());
@@ -353,7 +353,7 @@ bool Policy::is_image_shuffling(const std::string &global_image_id) {
 }
 
 bool Policy::can_shuffle_image(const std::string &global_image_id) {
-  ceph_assert(m_map_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(m_map_lock));
 
   CephContext *cct = reinterpret_cast<CephContext *>(m_ioctx.cct());
   int migration_throttle = cct->_conf.get_val<uint64_t>(

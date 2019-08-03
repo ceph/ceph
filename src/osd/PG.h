@@ -98,10 +98,10 @@ class PGRecoveryStats {
     per_state_info() : enter(0), exit(0), events(0) {}
   };
   map<const char *,per_state_info> info;
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("PGRecoverStats::lock");
 
   public:
-  PGRecoveryStats() : lock("PGRecoverStats::lock") {}
+  PGRecoveryStats() = default;
 
   void reset() {
     std::lock_guard l(lock);
@@ -217,14 +217,8 @@ public:
     handle.reset_tp_timeout();
   }
   void lock(bool no_lockdep = false) const;
-  void unlock() const {
-    //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
-    ceph_assert(!recovery_state.debug_has_dirty_state());
-    _lock.Unlock();
-  }
-  bool is_locked() const {
-    return _lock.is_locked();
-  }
+  void unlock() const;
+  bool is_locked() const;
 
   const spg_t& get_pgid() const {
     return pg_id;
@@ -607,12 +601,14 @@ protected:
   // get() should be called on pointer copy (to another thread, etc.).
   // put() should be called on destruction of some previously copied pointer.
   // unlock() when done with the current pointer (_most common_).
-  mutable Mutex _lock = {"PG::_lock"};
-
+  mutable ceph::mutex _lock = ceph::make_mutex("PG::_lock");
+#ifndef CEPH_DEBUG_MUTEX
+  mutable std::thread::id locked_by;
+#endif
   std::atomic<unsigned int> ref{0};
 
 #ifdef PG_DEBUG_REFS
-  Mutex _ref_id_lock = {"PG::_ref_id_lock"};
+  ceph::mutex _ref_id_lock = ceph::make_mutex("PG::_ref_id_lock");
   map<uint64_t, string> _live_ids;
   map<string, uint64_t> _tag_counts;
   uint64_t _ref_id = 0;
@@ -686,7 +682,8 @@ protected:
   void set_probe_targets(const set<pg_shard_t> &probe_set) override;
   void clear_probe_targets() override;
 
-  Mutex heartbeat_peer_lock;
+  ceph::mutex heartbeat_peer_lock =
+    ceph::make_mutex("PG::heartbeat_peer_lock");
   set<int> heartbeat_peers;
   set<int> probe_targets;
 
@@ -836,7 +833,7 @@ public:
   // The value of num_bytes could be negative,
   // but we don't let info.stats.stats.sum.num_bytes go negative.
   void add_num_bytes(int64_t num_bytes) {
-    ceph_assert(_lock.is_locked_by_me());
+    ceph_assert(ceph_mutex_is_locked_by_me(_lock));
     if (num_bytes) {
       recovery_state.update_stats(
 	[num_bytes](auto &history, auto &stats) {
@@ -849,7 +846,7 @@ public:
     }
   }
   void sub_num_bytes(int64_t num_bytes) {
-    ceph_assert(_lock.is_locked_by_me());
+    ceph_assert(ceph_mutex_is_locked_by_me(_lock));
     ceph_assert(num_bytes >= 0);
     if (num_bytes) {
       recovery_state.update_stats(
@@ -865,7 +862,7 @@ public:
 
   // Only used in testing so not worried about needing the PG lock here
   int64_t get_stats_num_bytes() {
-    Mutex::Locker l(_lock);
+    std::lock_guard l{_lock};
     int num_bytes = info.stats.stats.sum.num_bytes;
     if (pool.info.is_erasure()) {
       num_bytes /= (int)get_pgbackend()->get_ec_data_chunk_count();
@@ -976,7 +973,8 @@ protected:
   object_stat_collection_t unstable_stats;
 
   // publish stats
-  Mutex pg_stats_publish_lock;
+  ceph::mutex pg_stats_publish_lock =
+    ceph::make_mutex("PG::pg_stats_publish_lock");
   bool pg_stats_publish_valid;
   pg_stat_t pg_stats_publish;
 
@@ -1060,7 +1058,8 @@ protected:
   friend class C_DeleteMore;
 
   // -- backoff --
-  Mutex backoff_lock;  // orders inside Backoff::lock
+  ceph::mutex backoff_lock = // orders inside Backoff::lock
+    ceph::make_mutex("PG::backoff_lock");
   map<hobject_t,set<BackoffRef>> backoffs;
 
   void add_backoff(SessionRef s, const hobject_t& begin, const hobject_t& end);

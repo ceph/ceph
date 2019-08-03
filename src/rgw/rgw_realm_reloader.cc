@@ -31,7 +31,7 @@ RGWRealmReloader::RGWRealmReloader(RGWRados*& store, std::map<std::string, std::
     service_map_meta(service_map_meta),
     frontends(frontends),
     timer(store->ctx(), mutex, USE_SAFE_TIMER_CALLBACKS),
-    mutex("RGWRealmReloader"),
+    mutex(ceph::make_mutex("RGWRealmReloader")),
     reload_scheduled(nullptr)
 {
   timer.init();
@@ -39,7 +39,7 @@ RGWRealmReloader::RGWRealmReloader(RGWRados*& store, std::map<std::string, std::
 
 RGWRealmReloader::~RGWRealmReloader()
 {
-  Mutex::Locker lock(mutex);
+  std::lock_guard lock{mutex};
   timer.shutdown();
 }
 
@@ -60,7 +60,7 @@ void RGWRealmReloader::handle_notify(RGWRealmNotify type,
 
   CephContext *const cct = store->ctx();
 
-  Mutex::Locker lock(mutex);
+  std::lock_guard lock{mutex};
   if (reload_scheduled) {
     ldout(cct, 4) << "Notification on realm, reconfiguration "
         "already scheduled" << dendl;
@@ -68,7 +68,7 @@ void RGWRealmReloader::handle_notify(RGWRealmNotify type,
   }
 
   reload_scheduled = new C_Reload(this);
-  cond.SignalOne(); // wake reload() if it blocked on a bad configuration
+  cond.notify_one(); // wake reload() if it blocked on a bad configuration
 
   // schedule reload() without delay
   timer.add_event_after(0, reload_scheduled);
@@ -96,7 +96,7 @@ void RGWRealmReloader::reload()
   {
     // allow a new notify to reschedule us. it's important that we do this
     // before we start loading the new realm, or we could miss some updates
-    Mutex::Locker lock(mutex);
+    std::lock_guard lock{mutex};
     reload_scheduled = nullptr;
   }
 
@@ -115,7 +115,7 @@ void RGWRealmReloader::reload()
 
     RGWRados* store_cleanup = nullptr;
     {
-      Mutex::Locker lock(mutex);
+      std::unique_lock lock{mutex};
 
       // failure to recreate RGWRados is not a recoverable error, but we
       // don't want to assert or abort the entire cluster.  instead, just
@@ -126,9 +126,7 @@ void RGWRealmReloader::reload()
             "configuration update. Waiting for a new update." << dendl;
 
         // sleep until another event is scheduled
-        while (!reload_scheduled)
-          cond.Wait(mutex);
-
+	cond.wait(lock, [this] { return reload_scheduled; });
         ldout(cct, 1) << "Woke up with a new configuration, retrying "
             "RGWRados initialization." << dendl;
       }

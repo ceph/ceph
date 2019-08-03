@@ -52,28 +52,26 @@ struct RGWSysObjState {
 
 class RGWSysObjectCtxBase {
   std::map<rgw_raw_obj, RGWSysObjState> objs_state;
-  RWLock lock;
+  ceph::shared_mutex lock = ceph::make_shared_mutex("RGWSysObjectCtxBase");
 
 public:
-  explicit RGWSysObjectCtxBase() : lock("RGWSysObjectCtxBase") {}
+  RGWSysObjectCtxBase() = default;
 
-  RGWSysObjectCtxBase(const RGWSysObjectCtxBase& rhs) : objs_state(rhs.objs_state),
-                                                  lock("RGWSysObjectCtxBase") {}
-  RGWSysObjectCtxBase(const RGWSysObjectCtxBase&& rhs) : objs_state(std::move(rhs.objs_state)),
-                                                   lock("RGWSysObjectCtxBase") {}
+  RGWSysObjectCtxBase(const RGWSysObjectCtxBase& rhs) : objs_state(rhs.objs_state) {}
+  RGWSysObjectCtxBase(const RGWSysObjectCtxBase&& rhs) : objs_state(std::move(rhs.objs_state)) {}
 
   RGWSysObjState *get_state(const rgw_raw_obj& obj) {
     RGWSysObjState *result;
     std::map<rgw_raw_obj, RGWSysObjState>::iterator iter;
-    lock.get_read();
+    lock.lock_shared();
     assert (!obj.empty());
     iter = objs_state.find(obj);
     if (iter != objs_state.end()) {
       result = &iter->second;
-      lock.unlock();
+      lock.unlock_shared();
     } else {
-      lock.unlock();
-      lock.get_write();
+      lock.unlock_shared();
+      lock.lock();
       result = &objs_state[obj];
       lock.unlock();
     }
@@ -81,12 +79,12 @@ public:
   }
 
   void set_prefetch_data(rgw_raw_obj& obj) {
-    RWLock::WLocker wl(lock);
+    std::unique_lock wl{lock};
     assert (!obj.empty());
     objs_state[obj].prefetch_data = true;
   }
   void invalidate(const rgw_raw_obj& obj) {
-    RWLock::WLocker wl(lock);
+    std::unique_lock wl{lock};
     auto iter = objs_state.find(obj);
     if (iter == objs_state.end()) {
       return;

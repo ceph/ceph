@@ -10,7 +10,7 @@
 #include "include/buffer_fwd.h"
 #include "include/rados/librados_fwd.hpp"
 #include "common/AsyncOpTracker.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "librbd/Watcher.h"
 #include "tools/rbd_mirror/instances/Types.h"
 
@@ -74,8 +74,9 @@ private:
     INSTANCE_STATE_REMOVING
   };
 
+  using clock_t = ceph::real_clock;
   struct Instance {
-    utime_t acked_time{};
+    clock_t::time_point acked_time{};
     InstanceState state = INSTANCE_STATE_ADDING;
   };
 
@@ -134,7 +135,7 @@ private:
   instances::Listener& m_listener;
   CephContext *m_cct;
 
-  Mutex m_lock;
+  ceph::mutex m_lock;
   InstanceIds m_instance_ids;
   std::map<std::string, Instance> m_instances;
   Context *m_on_finish = nullptr;
@@ -154,11 +155,11 @@ private:
   void wait_for_ops();
   void handle_wait_for_ops(int r);
 
-  void remove_instances(const utime_t& time);
+  void remove_instances(const clock_t::time_point& time);
   void handle_remove_instances(int r, const InstanceIds& instance_ids);
 
   void cancel_remove_task();
-  void schedule_remove_task(const utime_t& time);
+  void schedule_remove_task(const clock_t::time_point& time);
 };
 
 } // namespace mirror

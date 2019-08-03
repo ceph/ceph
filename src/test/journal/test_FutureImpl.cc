@@ -3,7 +3,6 @@
 
 #include "journal/FutureImpl.h"
 #include "common/Cond.h"
-#include "common/Mutex.h"
 #include "gtest/gtest.h"
 #include "test/journal/RadosTestFixture.h"
 

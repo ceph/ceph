@@ -159,7 +159,7 @@ private:
   InstanceReplayer<ImageCtxT> *m_instance_replayer;
   std::string m_instance_id;
 
-  mutable Mutex m_lock;
+  mutable ceph::mutex m_lock;
   librbd::ManagedLock<ImageCtxT> *m_instance_lock;
   Context *m_on_finish = nullptr;
   int m_ret_val = 0;
@@ -210,7 +210,7 @@ private:
   bool unsuspend_notify_request(C_NotifyInstanceRequest *req);
   void unsuspend_notify_requests();
 
-  void notify_sync_complete(const Mutex& lock, const std::string &sync_id);
+  void notify_sync_complete(const ceph::mutex& lock, const std::string &sync_id);
   void handle_notify_sync_request(C_SyncRequest *sync_ctx, int r);
   void handle_notify_sync_complete(C_SyncRequest *sync_ctx, int r);
 

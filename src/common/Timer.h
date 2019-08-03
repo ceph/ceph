@@ -15,8 +15,9 @@
 #ifndef CEPH_TIMER_H
 #define CEPH_TIMER_H
 
-#include "Cond.h"
-#include "Mutex.h"
+#include <map>
+#include "ceph_time.h"
+#include "ceph_mutex.h"
 
 class CephContext;
 class Context;
@@ -25,8 +26,8 @@ class SafeTimerThread;
 class SafeTimer
 {
   CephContext *cct;
-  Mutex& lock;
-  Cond cond;
+  ceph::mutex& lock;
+  ceph::condition_variable cond;
   bool safe_callbacks;
 
   friend class SafeTimerThread;
@@ -35,8 +36,11 @@ class SafeTimer
   void timer_thread();
   void _shutdown();
 
-  std::multimap<utime_t, Context*> schedule;
-  std::map<Context*, std::multimap<utime_t, Context*>::iterator> events;
+  using clock_t = ceph::real_clock;
+  using scheduled_map_t = std::multimap<clock_t::time_point, Context*>;
+  scheduled_map_t schedule;
+  using event_lookup_map_t = std::map<Context*, scheduled_map_t::iterator>;
+  event_lookup_map_t events;
   bool stopping;
 
   void dump(const char *caller = 0) const;
@@ -56,7 +60,7 @@ public:
    * If you are able to relax requirements on cancelled callbacks, then
    * setting safe_callbacks = false eliminates the lock cycle issue.
    * */
-  SafeTimer(CephContext *cct, Mutex &l, bool safe_callbacks=true);
+  SafeTimer(CephContext *cct, ceph::mutex &l, bool safe_callbacks=true);
   virtual ~SafeTimer();
 
   /* Call with the event_lock UNLOCKED.
@@ -71,7 +75,7 @@ public:
   /* Schedule an event in the future
    * Call with the event_lock LOCKED */
   Context* add_event_after(double seconds, Context *callback);
-  Context* add_event_at(utime_t when, Context *callback);
+  Context* add_event_at(clock_t::time_point when, Context *callback);
 
   /* Cancel an event.
    * Call with the event_lock LOCKED

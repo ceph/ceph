@@ -55,7 +55,7 @@ static int civetweb_callback(struct mg_connection* conn)
 int RGWCivetWebFrontend::process(struct mg_connection*  const conn)
 {
   /* Hold a read lock over access to env.store for reconfiguration. */
-  RWLock::RLocker lock(env.mutex);
+  std::shared_lock lock{env.mutex};
 
   RGWCivetWeb cw_client(conn);
   auto real_client_io = rgw::io::add_reordering(

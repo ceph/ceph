@@ -20,7 +20,6 @@
 
 #include "common/cmdparse.h"
 #include "common/LogEntry.h"
-#include "common/Mutex.h"
 #include "common/Thread.h"
 #include "mon/health_check.h"
 #include "mgr/Gil.h"

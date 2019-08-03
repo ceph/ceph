@@ -18,8 +18,7 @@
 #include "common/lru_map.h"
 #include "common/RefCountedObj.h"
 #include "common/Thread.h"
-#include "common/Mutex.h"
-#include "common/RWLock.h"
+#include "common/ceph_mutex.h"
 
 #include "rgw_common.h"
 #include "rgw_rados.h"
@@ -448,11 +447,11 @@ class RGWUserStatsCache : public RGWQuotaCache<rgw_user> {
     CephContext *cct;
     RGWUserStatsCache *stats;
 
-    Mutex lock;
-    Cond cond;
+    ceph::mutex lock = ceph::make_mutex("RGWUserStatsCache::BucketsSyncThread");
+    ceph::condition_variable cond;
   public:
 
-    BucketsSyncThread(CephContext *_cct, RGWUserStatsCache *_s) : cct(_cct), stats(_s), lock("RGWUserStatsCache::BucketsSyncThread") {}
+    BucketsSyncThread(CephContext *_cct, RGWUserStatsCache *_s) : cct(_cct), stats(_s) {}
 
     void *entry() override {
       ldout(cct, 20) << "BucketsSyncThread: start" << dendl;
@@ -474,9 +473,10 @@ class RGWUserStatsCache : public RGWQuotaCache<rgw_user> {
         if (stats->going_down())
           break;
 
-        lock.Lock();
-        cond.WaitInterval(lock, utime_t(cct->_conf->rgw_user_quota_bucket_sync_interval, 0));
-        lock.Unlock();
+	std::unique_lock locker{lock};
+	cond.wait_for(
+          locker,
+          std::chrono::seconds(cct->_conf->rgw_user_quota_bucket_sync_interval));
       } while (!stats->going_down());
       ldout(cct, 20) << "BucketsSyncThread: done" << dendl;
 
@@ -484,8 +484,8 @@ class RGWUserStatsCache : public RGWQuotaCache<rgw_user> {
     }
 
     void stop() {
-      Mutex::Locker l(lock);
-      cond.Signal();
+      std::lock_guard l{lock};
+      cond.notify_all();
     }
   };
 
@@ -500,11 +500,11 @@ class RGWUserStatsCache : public RGWQuotaCache<rgw_user> {
     CephContext *cct;
     RGWUserStatsCache *stats;
 
-    Mutex lock;
-    Cond cond;
+    ceph::mutex lock = ceph::make_mutex("RGWUserStatsCache::UserSyncThread");
+    ceph::condition_variable cond;
   public:
 
-    UserSyncThread(CephContext *_cct, RGWUserStatsCache *_s) : cct(_cct), stats(_s), lock("RGWUserStatsCache::UserSyncThread") {}
+    UserSyncThread(CephContext *_cct, RGWUserStatsCache *_s) : cct(_cct), stats(_s) {}
 
     void *entry() override {
       ldout(cct, 20) << "UserSyncThread: start" << dendl;
@@ -517,9 +517,8 @@ class RGWUserStatsCache : public RGWQuotaCache<rgw_user> {
         if (stats->going_down())
           break;
 
-        lock.Lock();
-        cond.WaitInterval(lock, utime_t(cct->_conf->rgw_user_quota_sync_interval, 0));
-        lock.Unlock();
+	std::unique_lock l{lock};
+        cond.wait_for(l, std::chrono::seconds(cct->_conf->rgw_user_quota_sync_interval));
       } while (!stats->going_down());
       ldout(cct, 20) << "UserSyncThread: done" << dendl;
 
@@ -527,8 +526,8 @@ class RGWUserStatsCache : public RGWQuotaCache<rgw_user> {
     }
 
     void stop() {
-      Mutex::Locker l(lock);
-      cond.Signal();
+      std::lock_guard l{lock};
+      cond.notify_all();
     }
   };
 

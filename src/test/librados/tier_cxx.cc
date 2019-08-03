@@ -2221,8 +2221,8 @@ TEST_F(LibRadosTwoPoolsPP, FlushTryFlushRaces) {
 
 
 IoCtx *read_ioctx = 0;
-Mutex test_lock("FlushReadRaces::lock");
-Cond cond;
+ceph::mutex test_lock = ceph::make_mutex("FlushReadRaces::lock");
+ceph::condition_variable cond;
 int max_reads = 100;
 int num_reads = 0; // in progress
 
@@ -2241,14 +2241,13 @@ void start_flush_read()
 void flush_read_race_cb(completion_t cb, void *arg)
 {
   //cout << " finished read" << std::endl;
-  test_lock.Lock();
+  std::lock_guard l{test_lock};
   if (num_reads > max_reads) {
     num_reads--;
-    cond.Signal();
+    cond.notify_all();
   } else {
     start_flush_read();
   }
-  test_lock.Unlock();
 }
 
 TEST_F(LibRadosTwoPoolsPP, TryFlushReadRace) {
@@ -2285,12 +2284,12 @@ TEST_F(LibRadosTwoPoolsPP, TryFlushReadRace) {
 
   // start a continuous stream of reads
   read_ioctx = &ioctx;
-  test_lock.Lock();
+  test_lock.lock();
   for (int i = 0; i < max_reads; ++i) {
     start_flush_read();
     num_reads++;
   }
-  test_lock.Unlock();
+  test_lock.unlock();
 
   // try-flush
   ObjectReadOperation op;
@@ -2306,11 +2305,9 @@ TEST_F(LibRadosTwoPoolsPP, TryFlushReadRace) {
   completion->release();
 
   // stop reads
-  test_lock.Lock();
-  max_reads = 0;
-  while (num_reads > 0)
-    cond.Wait(test_lock);
-  test_lock.Unlock();
+  std::unique_lock locker{test_lock};
+  max_reads = 0;  
+  cond.wait(locker, [] { return num_reads == 0;});
 }
 
 TEST_F(LibRadosTierPP, HitSetNone) {
@@ -5537,12 +5534,12 @@ TEST_F(LibRadosTwoPoolsECPP, TryFlushReadRace) {
 
   // start a continuous stream of reads
   read_ioctx = &ioctx;
-  test_lock.Lock();
+  test_lock.lock();
   for (int i = 0; i < max_reads; ++i) {
     start_flush_read();
     num_reads++;
   }
-  test_lock.Unlock();
+  test_lock.unlock();
 
   // try-flush
   ObjectReadOperation op;
@@ -5558,11 +5555,9 @@ TEST_F(LibRadosTwoPoolsECPP, TryFlushReadRace) {
   completion->release();
 
   // stop reads
-  test_lock.Lock();
-  max_reads = 0;
-  while (num_reads > 0)
-    cond.Wait(test_lock);
-  test_lock.Unlock();
+  std::unique_lock locker{test_lock};
+  max_reads = 0;  
+  cond.wait(locker, [] { return num_reads == 0;});
 }
 
 TEST_F(LibRadosTierECPP, CallForcesPromote) {

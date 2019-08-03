@@ -64,7 +64,7 @@ public:
 
   int send() override {
     I &image_ctx = this->m_image_ctx;
-    ceph_assert(image_ctx.owner_lock.is_locked());
+    ceph_assert(ceph_mutex_is_locked(image_ctx.owner_lock));
 
     CephContext *cct = image_ctx.cct;
     ldout(cct, 10) << this << " scanning pool '" << m_pool.second << "'"
@@ -183,7 +183,7 @@ bool SnapshotUnprotectRequest<I>::should_complete(int r) {
     return should_complete_error();
   }
 
-  RWLock::RLocker owner_lock(image_ctx.owner_lock);
+  std::shared_lock owner_lock{image_ctx.owner_lock};
   bool finished = false;
   switch (m_state) {
   case STATE_UNPROTECT_SNAP_START:
@@ -205,7 +205,7 @@ bool SnapshotUnprotectRequest<I>::should_complete(int r) {
 template <typename I>
 bool SnapshotUnprotectRequest<I>::should_complete_error() {
   I &image_ctx = this->m_image_ctx;
-  RWLock::RLocker owner_locker(image_ctx.owner_lock);
+  std::shared_lock owner_locker{image_ctx.owner_lock};
   CephContext *cct = image_ctx.cct;
   lderr(cct) << this << " " << __func__ << ": "
              << "ret_val=" << m_ret_val << dendl;
@@ -222,7 +222,7 @@ bool SnapshotUnprotectRequest<I>::should_complete_error() {
 template <typename I>
 void SnapshotUnprotectRequest<I>::send_unprotect_snap_start() {
   I &image_ctx = this->m_image_ctx;
-  ceph_assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(image_ctx.owner_lock));
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
@@ -237,7 +237,7 @@ void SnapshotUnprotectRequest<I>::send_unprotect_snap_start() {
 template <typename I>
 void SnapshotUnprotectRequest<I>::send_scan_pool_children() {
   I &image_ctx = this->m_image_ctx;
-  ceph_assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(image_ctx.owner_lock));
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
@@ -270,7 +270,7 @@ void SnapshotUnprotectRequest<I>::send_scan_pool_children() {
 template <typename I>
 void SnapshotUnprotectRequest<I>::send_unprotect_snap_finish() {
   I &image_ctx = this->m_image_ctx;
-  ceph_assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(image_ctx.owner_lock));
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
@@ -290,7 +290,7 @@ void SnapshotUnprotectRequest<I>::send_unprotect_snap_finish() {
 template <typename I>
 void SnapshotUnprotectRequest<I>::send_unprotect_snap_rollback() {
   I &image_ctx = this->m_image_ctx;
-  ceph_assert(image_ctx.owner_lock.is_locked());
+  ceph_assert(ceph_mutex_is_locked(image_ctx.owner_lock));
 
   CephContext *cct = image_ctx.cct;
   ldout(cct, 5) << this << " " << __func__ << dendl;
@@ -310,7 +310,7 @@ void SnapshotUnprotectRequest<I>::send_unprotect_snap_rollback() {
 template <typename I>
 int SnapshotUnprotectRequest<I>::verify_and_send_unprotect_snap_start() {
   I &image_ctx = this->m_image_ctx;
-  RWLock::RLocker image_locker(image_ctx.image_lock);
+  std::shared_lock image_locker{image_ctx.image_lock};
 
   CephContext *cct = image_ctx.cct;
   if ((image_ctx.features & RBD_FEATURE_LAYERING) == 0) {

@@ -138,8 +138,8 @@ protected:
 
   int64_t mdsmap_up_features;
   map<uint64_t,list<PendingEvent> > pending_events; // log segment -> event list
-  Mutex submit_mutex;
-  Cond submit_cond;
+  ceph::mutex submit_mutex = ceph::make_mutex("MDLog::submit_mutex");
+  ceph::condition_variable submit_cond;
 
   void set_safe_pos(uint64_t pos)
   {
@@ -206,7 +206,6 @@ public:
                       recovery_thread(this),
                       event_seq(0), expiring_events(0), expired_events(0),
 		      mdsmap_up_features(0),
-                      submit_mutex("MDLog::submit_mutex"),
                       submit_thread(this),
                       cur_event(NULL) { }		  
   ~MDLog();
@@ -227,9 +226,10 @@ public:
     _prepare_new_segment();
   }
   void journal_segment_subtree_map(MDSContext *onsync=NULL) {
-    submit_mutex.Lock();
-    _journal_segment_subtree_map(onsync);
-    submit_mutex.Unlock();
+    {
+      std::lock_guard l{submit_mutex};
+      _journal_segment_subtree_map(onsync);
+    }
     if (onsync)
       flush();
   }
@@ -284,13 +284,13 @@ public:
   void submit_entry(LogEvent *e, MDSLogContextBase *c = 0) {
     std::lock_guard l(submit_mutex);
     _submit_entry(e, c);
-    submit_cond.Signal();
+    submit_cond.notify_all();
   }
   void start_submit_entry(LogEvent *e, MDSLogContextBase *c = 0) {
     std::lock_guard l(submit_mutex);
     _start_entry(e);
     _submit_entry(e, c);
-    submit_cond.Signal();
+    submit_cond.notify_all();
   }
   bool entry_is_open() const { return cur_event != NULL; }
 

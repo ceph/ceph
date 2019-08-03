@@ -7,7 +7,6 @@
 #include "test/librbd/mock/MockOperations.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librados_test_stub/MockTestMemRadosClient.h"
-#include "common/Mutex.h"
 #include "librbd/MirroringWatcher.h"
 #include "librbd/journal/PromoteRequest.h"
 #include "librbd/mirror/DisableRequest.h"

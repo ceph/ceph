@@ -60,8 +60,8 @@ protected:
 
   std::unique_ptr<MgrSessionState> session;
 
-  Mutex lock = {"MgrClient::lock"};
-  Cond shutdown_cond;
+  ceph::mutex lock = ceph::make_mutex("MgrClient::lock");
+  ceph::condition_variable shutdown_cond;
 
   uint32_t stats_period = 0;
   uint32_t stats_threshold = 0;
@@ -69,7 +69,8 @@ protected:
 
   CommandTable<MgrCommand> command_table;
 
-  utime_t last_connect_attempt;
+  using clock_t = ceph::real_clock;
+  clock_t::time_point last_connect_attempt;
 
   uint64_t last_config_bl_version = 0;
 
