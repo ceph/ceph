@@ -47,4 +47,8 @@ if(WITH_CEPHFS_SHELL)
     distutils_install_module(cephfs-shell
       PYTHON_VERSION 3)
   endif()
+  if(WITH_TESTS)
+    include(AddCephTest)
+    add_tox_test(cephfs-shell ${CMAKE_CURRENT_SOURCE_DIR})
+  endif()
 endif()
