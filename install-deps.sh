@@ -125,6 +125,10 @@ ENDOFKEY
 }
 
 function ensure_decent_cmake_on_ubuntu {
+    # TODO: remove me after a while
+    # remove Kitware Apt Archive Automatic Signing Key
+    $SUDO apt-key del 40CD72DA
+    $SUDO rm -f /etc/apt/sources.list.d/kitware.list
     local new=$1
     if command -v cmake > /dev/null; then
         local old=$(cmake --version | grep -Po 'version \K[0-9].*')
@@ -132,12 +136,12 @@ function ensure_decent_cmake_on_ubuntu {
           return
         fi
     fi
-    $SUDO curl --silent https://apt.kitware.com/keys/kitware-archive-latest.asc | $SUDO apt-key add -
-    $SUDO tee /etc/apt/sources.list.d/kitware.list <<EOF
-deb https://apt.kitware.com/ubuntu/ xenial main
-EOF
-    $SUDO env DEBIAN_FRONTEND=noninteractive apt-get update -y || true
-    $SUDO env DEBIAN_FRONTEND=noninteractive apt-get install -y cmake
+    install_pkg_on_ubuntu \
+	ceph-cmake \
+	d278b9d28de0f6b88f56dfe1e8bf684a41577210 \
+	xenial \
+	force \
+	cmake
 }
 
 function install_pkg_on_ubuntu {
@@ -147,13 +151,19 @@ function install_pkg_on_ubuntu {
     shift
     local codename=$1
     shift
+    local force=$1
+    shift
     local pkgs=$@
     local missing_pkgs
-    for pkg in $pkgs; do
-	if ! dpkg -s $pkg &> /dev/null; then
-	    missing_pkgs+=" $pkg"
-	fi
-    done
+    if [ $force = "force" ]; then
+	missing_pkgs="$@"
+    else
+	for pkg in $pkgs; do
+	    if ! dpkg -s $pkg &> /dev/null; then
+		missing_pkgs+=" $pkg"
+	    fi
+	done
+    fi
     if test -n "$missing_pkgs"; then
 	local shaman_url="https://shaman.ceph.com/api/repos/${project}/master/${sha1}/ubuntu/${codename}/repo"
 	$SUDO curl --silent --location $shaman_url --output /etc/apt/sources.list.d/$project.list
@@ -168,6 +178,7 @@ function install_boost_on_ubuntu {
 	ceph-libboost1.67 \
 	dd38c27740c1f9a9e6719a07eef84a1369dc168b \
 	$codename \
+	check \
 	ceph-libboost-atomic1.67-dev \
 	ceph-libboost-chrono1.67-dev \
 	ceph-libboost-container1.67-dev \
@@ -300,8 +311,8 @@ else
                 ensure_decent_gcc_on_ubuntu 8 trusty
                 ;;
             *Xenial*)
-                ensure_decent_cmake_on_ubuntu 3.10.1
                 ensure_decent_gcc_on_ubuntu 8 xenial
+                ensure_decent_cmake_on_ubuntu 3.10.1
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu xenial
                 ;;
             *Bionic*)
