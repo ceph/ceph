@@ -53,6 +53,15 @@ endfunction()
 
 function(add_tox_test name tox_path)
   set(test_name run-tox-${name})
+  set(venv_path ${CEPH_BUILD_VIRTUALENV}/${name}-virtualenv)
+  add_custom_command(
+    OUTPUT ${venv_path}/bin/activate
+    COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh ${venv_path}
+    WORKING_DIRECTORY ${tox_path}
+    COMMENT "preparing venv for ${name}")
+  add_custom_target(${name}-venv
+    DEPENDS ${venv_path}/bin/activate)
+  add_dependencies(tests ${name}-venv)
   add_test(
     NAME ${test_name}
     COMMAND ${CMAKE_SOURCE_DIR}/src/script/run_tox.sh
@@ -61,7 +70,7 @@ function(add_tox_test name tox_path)
               --with-python2 ${WITH_PYTHON2}
               --with-python3 ${WITH_PYTHON3}
               --tox-path ${tox_path}
-              --venv-path ${CEPH_BUILD_VIRTUALENV}/${name})
+              --venv-path ${venv_path})
   set_property(
     TEST ${test_name}
     PROPERTY ENVIRONMENT
