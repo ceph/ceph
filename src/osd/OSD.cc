@@ -2978,7 +2978,7 @@ int OSD::init()
       pgs.insert(pg);
     }
     for (auto pg : pgs) {
-      pg->lock();
+      std::scoped_lock l{*pg};
       set<pair<spg_t,epoch_t>> new_children;
       set<pair<spg_t,epoch_t>> merge_pgs;
       service.identify_splits_and_merges(pg->get_osdmap(), osdmap, pg->pg_id,
@@ -2995,7 +2995,6 @@ int OSD::init()
 	}
 	assert(merge_pgs.empty());
       }
-      pg->unlock();
     }
   }
 
@@ -9994,9 +9993,8 @@ void OSD::set_perf_queries(
   _get_pgs(&pgs);
   for (auto& pg : pgs) {
     if (pg->is_primary()) {
-      pg->lock();
+      std::scoped_lock l{*pg};
       pg->set_dynamic_perf_stats_queries(supported_queries);
-      pg->unlock();
     }
   }
 }
