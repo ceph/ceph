@@ -540,24 +540,6 @@ add_ceph_test(test_objectstore_memstore.sh ${CMAKE_CURRENT_SOURCE_DIR}/test_obje
 
 add_ceph_test(smoke.sh ${CMAKE_CURRENT_SOURCE_DIR}/smoke.sh)
 
-if(WITH_MGR)
-  add_tox_test(mgr-dashboard
-    ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard)
-  add_tox_test(mgr-insights
-    ${CMAKE_SOURCE_DIR}/src/pybind/mgr/insights)
-  add_tox_test(mgr-ansible
-    ${CMAKE_SOURCE_DIR}/src/pybind/mgr/ansible)
-  add_tox_test(mgr-orchestrator_cli
-    ${CMAKE_SOURCE_DIR}/src/pybind/mgr/orchestrator_cli)
-  add_tox_test(python-common
-    ${CMAKE_SOURCE_DIR}/src/python-common)
-endif()
-
-if(WITH_CEPHFS_SHELL)
-  add_tox_test(cephfs-shell
-    ${CMAKE_SOURCE_DIR}/src/tools/cephfs)
-endif()
-
 set_property(
   TEST ${tox_tests}
   PROPERTY ENVIRONMENT ${env_vars_for_tox_tests})
