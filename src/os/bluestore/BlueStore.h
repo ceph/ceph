@@ -2020,13 +2020,6 @@ private:
   private:
     void _adjust_cache_settings();
     void _resize_shards(bool interval_stats);
-    void _tune_cache_size(bool interval_stats);
-    void _balance_cache(
-        const std::list<std::shared_ptr<PriorityCache::PriCache>>& caches);
-    void _balance_cache_pri(
-        int64_t *mem_avail, 
-        const std::list<std::shared_ptr<PriorityCache::PriCache>>& caches, 
-        PriorityCache::Priority pri);
   } mempool_thread;
 
   // --------------------------------------------------------
