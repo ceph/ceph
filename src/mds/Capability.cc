@@ -159,6 +159,8 @@ Capability::Capability(CInode *i, Session *s, uint64_t id) :
   if (session) {
     session->touch_cap_bottom(this);
     cap_gen = session->get_cap_gen();
+    if (session->is_stale())
+      --cap_gen; // not valid
 
     auto& conn = session->get_connection();
     if (conn) {
@@ -189,20 +191,8 @@ bool Capability::is_valid() const
 
 void Capability::revalidate()
 {
-  if (is_valid())
-    return;
-
-  if (_pending & ~CEPH_CAP_PIN)
-    inc_last_seq();
-
-  bool was_revoking = _issued & ~_pending;
-  _pending = _issued = CEPH_CAP_PIN;
-  _revokes.clear();
-
-  cap_gen = session->get_cap_gen();
-
-  if (was_revoking)
-    maybe_clear_notable();
+  if (!is_valid())
+    cap_gen = session->get_cap_gen();
 }
 
 void Capability::mark_notable()
