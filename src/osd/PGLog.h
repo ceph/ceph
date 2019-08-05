@@ -979,7 +979,7 @@ protected:
       ldpp_dout(dpp, 10) << __func__ << ": more recent entry found: "
 			 << *objiter->second << ", already merged" << dendl;
 
-      ceph_assert(objiter->second->version > last_divergent_update);
+      ceph_assert(objiter->second->version >= last_divergent_update);
 
       // ensure missing has been updated appropriately
       if (objiter->second->is_update() ||
