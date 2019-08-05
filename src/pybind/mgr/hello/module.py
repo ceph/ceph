@@ -51,12 +51,41 @@ class Hello(MgrModule):
         },
     ]
 
+    # These are "native" Ceph options that this module cares about.
+    NATIVE_OPTIONS = [
+        'mgr_tick_period',
+    ]
+
     def __init__(self, *args, **kwargs):
         super(Hello, self).__init__(*args, **kwargs)
 
         # set up some members to enable the serve() method and shutdown
         self.run = True
         self.event = Event()
+
+        # ensure config options members are initialized; see config_notify()
+        self.config_notify()
+
+
+    def config_notify(self):
+        """
+        This method is called whenever one of our config options is changed.
+        """
+        # This is some boilerplate that stores MODULE_OPTIONS in a class
+        # member, so that, for instance, the 'emphatic' option is always
+        # available as 'self.emphatic'.
+        for opt in self.MODULE_OPTIONS:
+            setattr(self,
+                    opt['name'],
+                    self.get_module_option(opt['name']) or opt['default'])
+            self.log.debug(' mgr option %s = %s',
+                           opt['name'], getattr(self, opt['name']))
+        # Do the same for the native options.
+        for opt in self.NATIVE_OPTIONS:
+            setattr(self,
+                    opt,
+                    self.get_ceph_option(opt))
+            self.log.debug(' native option %s = %s', opt, getattr(self, opt))
 
     def handle_command(self, inbuf, cmd):
         self.log.info("hello_world_info")
@@ -83,7 +112,12 @@ class Hello(MgrModule):
         """
         self.log.info("Starting")
         while self.run:
-            sleep_interval = 5
+            # Do some useful background work here.
+
+            # Use mgr_tick_period (default: 2) here just to illustrate
+            # consuming native ceph options.  Any real background work
+            # would presumably have some more appropriate frequency.
+            sleep_interval = int(self.mgr_tick_period)
             self.log.debug('Sleeping for %d seconds', sleep_interval)
             ret = self.event.wait(sleep_interval)
             self.event.clear()
