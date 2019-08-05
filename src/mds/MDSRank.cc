@@ -26,6 +26,7 @@
 
 #include "MDSDaemon.h"
 #include "MDSMap.h"
+#include "MetricAggregator.h"
 #include "SnapClient.h"
 #include "SnapServer.h"
 #include "MDBalancer.h"
@@ -820,6 +821,11 @@ void MDSRankDispatcher::shutdown()
   mdcache->shutdown();
 
   purge_queue.shutdown();
+
+  // shutdown metric aggergator
+  if (metric_aggregator != nullptr) {
+    metric_aggregator->shutdown();
+  }
 
   mds_lock.unlock();
   finisher->stop(); // no flushing
@@ -2022,6 +2028,15 @@ void MDSRank::active_start()
     mdcache->open_root();
   }
 
+  // metric aggregation is solely done by rank 0
+  if (is_rank0()) {
+    dout(10) << __func__ << ": initializing metric aggregator" << dendl;
+    ceph_assert(metric_aggregator == nullptr);
+    metric_aggregator = std::make_unique<MetricAggregator>(cct, this, mgrc);
+    metric_aggregator->init();
+    messenger->add_dispatcher_tail(metric_aggregator.get());
+  }
+
   mdcache->clean_open_file_lists();
   mdcache->export_remaining_imported_caps();
   finish_contexts(g_ceph_context, waiting_for_replay);  // kick waiters
@@ -2448,6 +2463,9 @@ void MDSRankDispatcher::handle_mds_map(
     }
   }
   mdcache->handle_mdsmap(*mdsmap);
+  if (metric_aggregator != nullptr) {
+    metric_aggregator->notify_mdsmap(*mdsmap);
+  }
 }
 
 void MDSRank::handle_mds_recovery(mds_rank_t who)
