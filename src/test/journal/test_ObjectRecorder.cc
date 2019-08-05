@@ -114,10 +114,10 @@ public:
     uint64_t m_flush_bytes = std::numeric_limits<uint64_t>::max();
     double m_flush_age = 600;
     uint64_t m_max_in_flight_appends = 0;
+    Handler m_handler;
     using ObjectRecorders =
       std::list<std::pair<journal::ObjectRecorderPtr, ceph::mutex*>>;
     ObjectRecorders m_object_recorders;
-    Handler m_handler;
   };
 
   journal::AppendBuffer create_append_buffer(uint64_t tag_tid, uint64_t entry_tid,
