@@ -53,9 +53,25 @@ function(add_ceph_unittest unittest_name)
   target_link_libraries(${unittest_name} ${UNITTEST_LIBS})
 endfunction()
 
-function(add_tox_test name tox_path)
+function(add_tox_test name)
   set(test_name run-tox-${name})
   set(venv_path ${CEPH_BUILD_VIRTUALENV}/${name}-virtualenv)
+  cmake_parse_arguments(TOXTEST "" "TOX_PATH" "TOX_ENVS" ${ARGN})
+  if(DEFINED TOXTEST_TOX_PATH)
+    set(tox_path ${TOXTEST_TOX_PATH})
+  else()
+    set(tox_path ${CMAKE_CURRENT_SOURCE_DIR})
+  endif()
+  if(WITH_PYTHON2)
+    list(APPEND tox_envs py27)
+  endif()
+  if(WITH_PYTHON3)
+    list(APPEND tox_envs py3)
+  endif()
+  if(DEFINED TOXTEST_TOX_ENVS)
+    set(tox_envs ${TOXTEST_TOX_ENVS})
+  endif()
+  string(REPLACE ";" "," tox_envs "${tox_envs}")
   add_custom_command(
     OUTPUT ${venv_path}/bin/activate
     COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh ${venv_path}
@@ -69,9 +85,8 @@ function(add_tox_test name tox_path)
     COMMAND ${CMAKE_SOURCE_DIR}/src/script/run_tox.sh
               --source-dir ${CMAKE_SOURCE_DIR}
               --build-dir ${CMAKE_BINARY_DIR}
-              --with-python2 ${WITH_PYTHON2}
-              --with-python3 ${WITH_PYTHON3}
               --tox-path ${tox_path}
+              --tox-envs ${tox_envs}
               --venv-path ${venv_path})
   set_property(
     TEST ${test_name}

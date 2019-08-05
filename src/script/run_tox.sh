@@ -28,56 +28,15 @@ function get_tox_path() {
     fi
 }
 
-function get_env_list_for_dashboard() {
-    local with_python2=$1
-    shift
-    local with_python3=$1
-    shift
-    local env_list
-    if $with_python2; then
-        if [ $# -gt 0 ]; then
-            env_list+="py27-run,"
-        else
-            env_list+="py27-cov,py27-lint,py27-check,"
-        fi
-    fi
-    if $with_python3; then
-        if [ $# -gt 0 ]; then
-            env_list+="py3-run,"
-        else
-            env_list+="py3-cov,py3-lint,py3-check,"
-        fi
-    fi
-    # use bash string manipulation to strip off any trailing comma
-    echo "${env_list%,}"
-}
-
-function get_env_list() {
-    local with_python2=$1
-    shift
-    local with_python3=$1
-    shift
-    local env_list
-    if $with_python2; then
-        env_list+="py27,"
-    fi
-    if $with_python3; then
-        env_list+="py3,"
-    fi
-    # use bash string manipulation to strip off any trailing comma
-    echo "${env_list%,}"
-}
-
 function main() {
     local tox_path
     local script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
     local build_dir=$script_dir/../../build
     local source_dir=$(get_cmake_variable $build_dir ceph_SOURCE_DIR)
-    local with_python2=$(get_cmake_variable $build_dir WITH_PYTHON2)
-    local with_python3=$(get_cmake_variable $build_dir WITH_PYTHON3)
-    local parsed
+    local tox_envs
+    local options
 
-    options=$(${GETOPT} --name "$0" --options '' --longoptions "source-dir:,build-dir:,with-python2:,with-python3:,tox-path:,venv-path:" -- "$@")
+    options=$(${GETOPT} --name "$0" --options '' --longoptions "source-dir:,build-dir:,tox-path:,tox-envs:,venv-path:" -- "$@")
     if [ $? -ne 0 ]; then
         exit 2
     fi
@@ -90,14 +49,11 @@ function main() {
             --build-dir)
                 build_dir=$2
                 shift 2;;
-            --with-python2)
-                with_python2=$2
-                shift 2;;
-            --with-python3)
-                with_python3=$2
-                shift 2;;
             --tox-path)
                 tox_path=$2
+                shift 2;;
+            --tox-envs)
+                tox_envs=$2
                 shift 2;;
             --venv-path)
                 venv_path=$2
@@ -139,13 +95,7 @@ function main() {
     # tox.ini will take care of this.
     export CEPH_BUILD_DIR=$build_dir
 
-    local env_list
-    if [ $test_name = "dashboard" ]; then
-        env_list=$(get_env_list_for_dashboard $with_python2 $with_python3 "$@")
-    else
-        env_list=$(get_env_list $with_python2 $with_python3)
-    fi
-    tox -c $tox_path/tox.ini -e "$env_list" "$@"
+    tox -c $tox_path/tox.ini -e "$tox_envs" "$@"
 }
 
 main "$@"
