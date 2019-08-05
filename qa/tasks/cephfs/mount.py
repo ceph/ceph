@@ -217,6 +217,18 @@ class CephFSMount(object):
         ))
         p.wait()
 
+    def open_file(self, filename, mode=os.O_RDONLY):
+	assert(self.is_mounted)
+
+	path = os.path.join(self.mountpoint, filename)
+	f = os.open(path, mode)
+	return f
+
+    def close_file(self, fd):
+	assert(fd > 0)
+
+	os.close(fd)
+
     def open_background(self, basename="background_file", write=True):
         """
         Open a file for writing, then block such that the client
