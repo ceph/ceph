@@ -652,6 +652,7 @@ function run_osd() {
     ceph_args+=" --pid-file=$dir/\$name.pid"
     ceph_args+=" --osd-max-object-name-len=460"
     ceph_args+=" --osd-max-object-namespace-len=64"
+    ceph_args+=" --bluefs-alloc-size=1048576"
     ceph_args+=" --enable-experimental-unrecoverable-data-corrupting-features=*"
     ceph_args+=" "
     ceph_args+="$@"
