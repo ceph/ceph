@@ -955,6 +955,9 @@ struct bluestore_onode_t {
   void set_omap_flags() {
     set_flag(FLAG_OMAP | FLAG_PERPOOL_OMAP);
   }
+  void set_omap_flags_pgmeta() {
+    set_flag(FLAG_OMAP | FLAG_PGMETA_OMAP);
+  }
 
   void clear_omap_flag() {
     clear_flag(FLAG_OMAP);
