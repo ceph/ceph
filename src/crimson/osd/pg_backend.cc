@@ -402,13 +402,13 @@ seastar::future<> PGBackend::setxattr(
 
   if (local_conf()->osd_max_attr_size > 0 &&
       osd_op.op.xattr.value_len > local_conf()->osd_max_attr_size) {
-    throw ceph::osd::error::from_intret(-EFBIG);
+    throw ceph::osd::make_error(-EFBIG);
   }
 
   const auto max_name_len = std::min<uint64_t>(
     store->get_max_attr_name_length(), local_conf()->osd_max_attr_name_len);
   if (osd_op.op.xattr.name_len > max_name_len) {
-    throw ceph::osd::error::from_intret(-ENAMETOOLONG);
+    throw ceph::osd::make_error(-ENAMETOOLONG);
   }
 
   maybe_create_new_object(os, txn);
