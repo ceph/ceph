@@ -3287,7 +3287,7 @@ const string& BlueStore::Onode::get_omap_prefix()
 
 void BlueStore::Onode::get_omap_header(string *out)
 {
-  if (onode.is_perpool_omap()) {
+  if (onode.is_perpool_omap() && !onode.is_pgmeta_omap()) {
     _key_encode_u64(oid.hobj.pool, out);
   }
   _key_encode_u64(onode.nid, out);
@@ -3296,7 +3296,7 @@ void BlueStore::Onode::get_omap_header(string *out)
 
 void BlueStore::Onode::get_omap_key(const string& key, string *out)
 {
-  if (onode.is_perpool_omap()) {
+  if (onode.is_perpool_omap() && !onode.is_pgmeta_omap()) {
     _key_encode_u64(oid.hobj.pool, out);
   }
   _key_encode_u64(onode.nid, out);
@@ -3306,7 +3306,7 @@ void BlueStore::Onode::get_omap_key(const string& key, string *out)
 
 void BlueStore::Onode::rewrite_omap_key(const string& old, string *out)
 {
-  if (onode.is_perpool_omap()) {
+  if (onode.is_perpool_omap() && !onode.is_pgmeta_omap()) {
     _key_encode_u64(oid.hobj.pool, out);
   }
   _key_encode_u64(onode.nid, out);
@@ -3315,7 +3315,7 @@ void BlueStore::Onode::rewrite_omap_key(const string& old, string *out)
 
 void BlueStore::Onode::get_omap_tail(string *out)
 {
-  if (onode.is_perpool_omap()) {
+  if (onode.is_perpool_omap() && !onode.is_pgmeta_omap()) {
     _key_encode_u64(oid.hobj.pool, out);
   }
   _key_encode_u64(onode.nid, out);
@@ -3324,7 +3324,7 @@ void BlueStore::Onode::get_omap_tail(string *out)
 
 void BlueStore::Onode::decode_omap_key(const string& key, string *user_key)
 {
-  if (onode.is_perpool_omap()) {
+  if (onode.is_perpool_omap() && !onode.is_pgmeta_omap()) {
     *user_key = key.substr(sizeof(uint64_t)*2 + 1);
   } else {
     *user_key = key.substr(sizeof(uint64_t) + 1);
