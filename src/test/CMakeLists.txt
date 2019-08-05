@@ -540,43 +540,6 @@ add_ceph_test(test_objectstore_memstore.sh ${CMAKE_CURRENT_SOURCE_DIR}/test_obje
 
 add_ceph_test(smoke.sh ${CMAKE_CURRENT_SOURCE_DIR}/smoke.sh)
 
-# XXX are these safe to remove? they used to be around for ceph-disk tox testing
-set(env_vars_for_tox_tests
-  CEPH_BUILD_DIR=${CMAKE_BINARY_DIR}
-  CEPH_ROOT=${CMAKE_SOURCE_DIR}
-  CEPH_BIN=${CMAKE_RUNTIME_OUTPUT_DIRECTORY}
-  CEPH_LIB=${CMAKE_LIBRARY_OUTPUT_DIRECTORY}
-  CEPH_BUILD_VIRTUALENV=${CEPH_BUILD_VIRTUALENV}
-  LD_LIBRARY_PATH=${CMAKE_BINARY_DIR}/lib
-  PATH=$ENV{PATH}:${CMAKE_RUNTIME_OUTPUT_DIRECTORY}:${CMAKE_SOURCE_DIR}/src
-  PYTHONPATH=${CMAKE_SOURCE_DIR}/src/pybind
-  WITH_PYTHON2=${WITH_PYTHON2}
-  WITH_PYTHON3=${WITH_PYTHON3})
-
-if(WITH_MGR)
-  add_test(NAME run-tox-mgr-dashboard COMMAND bash ${CMAKE_SOURCE_DIR}/src/pybind/mgr/dashboard/run-tox.sh)
-  list(APPEND tox_tests run-tox-mgr-dashboard)
-  set(MGR_DASHBOARD_VIRTUALENV ${CEPH_BUILD_VIRTUALENV}/mgr-dashboard-virtualenv)
-  list(APPEND env_vars_for_tox_tests MGR_DASHBOARD_VIRTUALENV=${MGR_DASHBOARD_VIRTUALENV})
-
-  add_tox_test(mgr-insights
-    ${CMAKE_SOURCE_DIR}/src/pybind/mgr/insights)
-
-  add_tox_test(mgr-ansible
-    ${CMAKE_SOURCE_DIR}/src/pybind/mgr/ansible)
-
-  add_tox_test(mgr-orchestrator_cli
-    ${CMAKE_SOURCE_DIR}/src/pybind/mgr/orchestrator_cli)
-
-  add_tox_test(python-common
-    ${CMAKE_SOURCE_DIR}/src/python-common)
-endif()
-
-if(WITH_CEPHFS_SHELL)
-  add_tox_test(cephfs-shell
-    ${CMAKE_SOURCE_DIR}/src/tools/cephfs)
-endif()
-
 set_property(
   TEST ${tox_tests}
   PROPERTY ENVIRONMENT ${env_vars_for_tox_tests})
