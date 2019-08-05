@@ -49,6 +49,10 @@ TEST(BlueFS, mkfs) {
   uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
   uuid_d fsid;
+  g_ceph_context->_conf.set_val(
+    "bluefs_alloc_size",
+    "1048576");
+  g_ceph_context->_conf.apply_changes(nullptr);
   BlueFS fs(g_ceph_context, 0);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn, false));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
@@ -59,6 +63,10 @@ TEST(BlueFS, mkfs) {
 TEST(BlueFS, mkfs_mount) {
   uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
+  g_ceph_context->_conf.set_val(
+    "bluefs_alloc_size",
+    "1048576");
+  g_ceph_context->_conf.apply_changes(nullptr);
   BlueFS fs(g_ceph_context, 0);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn, false));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
@@ -74,6 +82,10 @@ TEST(BlueFS, mkfs_mount) {
 TEST(BlueFS, write_read) {
   uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
+  g_ceph_context->_conf.set_val(
+    "bluefs_alloc_size",
+    "1048576");
+  g_ceph_context->_conf.apply_changes(nullptr);
   BlueFS fs(g_ceph_context, 0);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn, false));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
@@ -106,6 +118,10 @@ TEST(BlueFS, write_read) {
 TEST(BlueFS, small_appends) {
   uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
+  g_ceph_context->_conf.set_val(
+    "bluefs_alloc_size",
+    "1048576");
+  g_ceph_context->_conf.apply_changes(nullptr);
   BlueFS fs(g_ceph_context, 0);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn, false));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
@@ -139,6 +155,10 @@ TEST(BlueFS, very_large_write) {
   // we'll write a ~3G file, so allocate more than that for the whole fs
   uint64_t size = 1048576 * 1024 * 8ull;
   string fn = get_temp_bdev(size);
+  g_ceph_context->_conf.set_val(
+    "bluefs_alloc_size",
+    "1048576");
+  g_ceph_context->_conf.apply_changes(nullptr);
   BlueFS fs(g_ceph_context, 0);
 
   bool old = g_ceph_context->_conf.get_val<bool>("bluefs_buffered_io");
@@ -403,6 +423,10 @@ TEST(BlueFS, test_simple_compaction_sync) {
     "true");
   uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
+  g_ceph_context->_conf.set_val(
+    "bluefs_alloc_size",
+    "1048576");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   BlueFS fs(g_ceph_context, 0);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn, false));
@@ -456,6 +480,10 @@ TEST(BlueFS, test_simple_compaction_async) {
     "false");
   uint64_t size = 1048576 * 128;
   string fn = get_temp_bdev(size);
+  g_ceph_context->_conf.set_val(
+    "bluefs_alloc_size",
+    "1048576");
+  g_ceph_context->_conf.apply_changes(nullptr);
 
   BlueFS fs(g_ceph_context, 0);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, fn, false));
