@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include <cstdarg>
+#include <cstring>
 #include "common/ceph_context.h"
 #include "common/ceph_releases.h"
 #include "common/config.h"
@@ -165,7 +166,18 @@ int cls_cxx_setxattr(cls_method_context_t hctx,
                      const char *name,
                      bufferlist *inbl)
 {
-  return 0;
+  OSDOp op;
+  op.op.op = CEPH_OSD_OP_SETXATTR;
+  op.op.xattr.name_len = std::strlen(name);
+  op.op.xattr.value_len = inbl->length();
+  op.indata.append(name, op.op.xattr.name_len);
+  op.indata.append(*inbl);
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    return 0;
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
 }
 
 int cls_cxx_snap_revert(cls_method_context_t hctx, snapid_t snapid)
