@@ -6580,7 +6580,8 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
   unexpirables.clear();
 
   // trim dentries from the LRU until count is reached
-  while (!throttled && (cache_toofull() || count > 0)) {
+  // if mds is in standbyreplay and will trim all inodes which aren't in segments
+  while (!throttled && (cache_toofull() || count > 0 || is_standby_replay)) {
     throttled |= trim_counter_start+trimmed >= trim_threshold;
     if (throttled) break;
     CDentry *dn = static_cast<CDentry*>(lru.lru_expire());
@@ -6589,7 +6590,10 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
     }
     if ((is_standby_replay && dn->get_linkage()->inode &&
         dn->get_linkage()->inode->item_open_file.is_on_list())) {
-      unexpirables.push_back(dn);
+      // we move the inodes that need to be trimmed to the end of the lru queue.
+      // refer to MDCache::standby_trim_segment
+      lru.lru_insert_bot(dn);
+      break;
     } else if (trim_dentry(dn, expiremap)) {
       unexpirables.push_back(dn);
     } else {
@@ -7242,36 +7246,62 @@ void MDCache::try_trim_non_auth_subtree(CDir *dir)
 
 void MDCache::standby_trim_segment(LogSegment *ls)
 {
+  auto try_trim_inode = [this](CInode *in) {
+    if (in->get_num_ref() == 0 &&
+	!in->item_open_file.is_on_list() &&
+	in->parent != NULL &&
+	in->parent->get_num_ref() == 0){
+      touch_dentry_bottom(in->parent);
+    }
+  };
+
+  auto try_trim_dentry = [this](CDentry *dn) {
+    if (dn->get_num_ref() > 0)
+      return;
+    auto in = dn->get_linkage()->inode;
+    if(in && in->item_open_file.is_on_list())
+      return;
+    touch_dentry_bottom(dn);
+  };
+  
   ls->new_dirfrags.clear_list();
   ls->open_files.clear_list();
 
   while (!ls->dirty_dirfrags.empty()) {
     CDir *dir = ls->dirty_dirfrags.front();
     dir->mark_clean();
+    if (dir->inode)
+      try_trim_inode(dir->inode);
   }
   while (!ls->dirty_inodes.empty()) {
     CInode *in = ls->dirty_inodes.front();
     in->mark_clean();
+    try_trim_inode(in);
   }
   while (!ls->dirty_dentries.empty()) {
     CDentry *dn = ls->dirty_dentries.front();
     dn->mark_clean();
+    try_trim_dentry(dn);
   }
   while (!ls->dirty_parent_inodes.empty()) {
     CInode *in = ls->dirty_parent_inodes.front();
     in->clear_dirty_parent();
+    try_trim_inode(in);
   }
   while (!ls->dirty_dirfrag_dir.empty()) {
     CInode *in = ls->dirty_dirfrag_dir.front();
     in->filelock.remove_dirty();
+    try_trim_inode(in);
   }
   while (!ls->dirty_dirfrag_nest.empty()) {
     CInode *in = ls->dirty_dirfrag_nest.front();
     in->nestlock.remove_dirty();
+    try_trim_inode(in);
   }
   while (!ls->dirty_dirfrag_dirfragtree.empty()) {
     CInode *in = ls->dirty_dirfrag_dirfragtree.front();
     in->dirfragtreelock.remove_dirty();
+    try_trim_inode(in);
   }
 }
 
