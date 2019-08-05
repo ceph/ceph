@@ -28,10 +28,6 @@ namespace ceph::osd {
 
 seastar::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
 {
-  if (!os->exists) {
-    throw ceph::osd::object_not_found();
-  }
-
   std::string cname, mname;
   ceph::bufferlist indata;
   try {
@@ -67,6 +63,10 @@ seastar::future<> OpsExecuter::do_op_call(OSDOp& osd_op)
   }
 
   const auto flags = method->get_flags();
+  if (!os->exists && (flags & CLS_METHOD_WR) == 0) {
+    throw ceph::osd::object_not_found{};
+  }
+
 #if 0
   if (flags & CLS_METHOD_WR) {
     ctx->user_modify = true;
