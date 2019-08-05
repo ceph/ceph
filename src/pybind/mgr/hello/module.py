@@ -65,7 +65,7 @@ class Hello(MgrModule):
     def __init__(self, *args, **kwargs):
         super(Hello, self).__init__(*args, **kwargs)
 
-        # set up some members to enable the serve() method and shutdown
+        # set up some members to enable the serve() method and shutdown()
         self.run = True
         self.event = Event()
 
@@ -140,7 +140,7 @@ class Hello(MgrModule):
     def shutdown(self):
         """
         This method is called by the mgr when the module needs to shut
-        down (i.e., when the serve() function needs to exit.
+        down (i.e., when the serve() function needs to exit).
         """
         self.log.info('Stopping')
         self.run = False
