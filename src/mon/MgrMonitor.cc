@@ -63,6 +63,7 @@ const static std::map<uint32_t, std::set<std::string>> always_on_modules = {
       "rbd_support",
       "volumes",
       "pg_autoscaler",
+      "telemetry",
     }
   }
 };
