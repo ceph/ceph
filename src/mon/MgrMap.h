@@ -490,7 +490,18 @@ public:
     // One or the other, not both
     ceph_assert((ss != nullptr) != (f != nullptr));
     if (f) {
-      dump(f);
+      f->dump_bool("available", available);
+      f->dump_int("num_standbys", standbys.size());
+      f->open_array_section("modules");
+      for (auto& i : modules) {
+	f->dump_string("module", i);
+      }
+      f->close_section();
+      f->open_object_section("services");
+      for (const auto &i : services) {
+	f->dump_string(i.first.c_str(), i.second);
+      }
+      f->close_section();
     } else {
       utime_t now = ceph_clock_now();
       if (get_active_gid() != 0) {

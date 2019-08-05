@@ -100,3 +100,6 @@
 * monitors now have a `ceph osd info` command that will provide information
   on all osds, or provided osds, thus simplifying the process of having to
   parse `osd dump` for the same information.
+
+* The `mgrmap` metadata included in the structured ``ceph status`` (``ceph -s``)
+  output is now more concise.
