@@ -220,7 +220,7 @@ public:
     ls.clear();
   }
 
-  void swap(std::list<Context *>& ls) {
+  void move_to(std::list<Context *>& ls) {
     ls.clear();
     std::scoped_lock l(q_mutex);
     if (!q.empty()) {
