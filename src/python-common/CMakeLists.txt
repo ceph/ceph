@@ -13,5 +13,5 @@ endforeach()
 
 if(WITH_TESTS)
   include(AddCephTest)
-  add_tox_test(python-common ${CMAKE_CURRENT_SOURCE_DIR})
+  add_tox_test(python-common)
 endif()

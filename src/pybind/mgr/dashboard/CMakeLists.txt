@@ -98,5 +98,12 @@ endif(WITH_MGR_DASHBOARD_FRONTEND AND NOT CMAKE_SYSTEM_PROCESSOR MATCHES "aarch6
 
 if(WITH_TESTS)
   include(AddCephTest)
-  add_tox_test(mgr-dashboard ${CMAKE_CURRENT_SOURCE_DIR})
+  if(WITH_PYTHON2)
+    list(APPEND dashboard_tox_envs py27-cov py27-lint py27-check)
+  endif()
+  if(WITH_PYTHON3)
+    list(APPEND dashboard_tox_envs py3-cov py3-lint py3-check)
+  endif()
+  add_tox_test(mgr-dashboard
+    TOX_ENVS ${dashboard_tox_envs})
 endif()
