@@ -1366,6 +1366,9 @@ def send_command(cluster, target=('mon', ''), cmd=None, inbuf=b'', timeout=0,
                 cluster.osd_command, osdid, cmd, inbuf, timeout=timeout)
 
         elif target[0] == 'mgr':
+            if verbose:
+                print('submit {0} to {1}'.format(cmd, target[0]),
+                      file=sys.stderr)
             ret, outbuf, outs = run_in_thread(
                 cluster.mgr_command, cmd, inbuf, timeout=timeout)
 
