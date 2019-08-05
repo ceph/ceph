@@ -2190,6 +2190,9 @@ class CephManager:
         Find the number of active pgs.
         """
         pgs = self.get_pg_stats()
+        return self._get_num_active(pgs)
+
+    def _get_num_active(self, pgs):
         num = 0
         for pg in pgs:
             if pg['state'].count('active') and not pg['state'].count('stale'):
@@ -2234,9 +2237,12 @@ class CephManager:
         Find the number of PGs that are peered
         """
         pgs = self.get_pg_stats()
+        return self._get_num_peered(pgs)
+
+    def _get_num_peered(self, pgs):
         num = 0
         for pg in pgs:
-            if (pg['state'].count('peered')):
+            if pg['state'].count('peered') and not pg['state'].count('stale'):
                  num += 1
         return num
 
@@ -2449,7 +2455,8 @@ class CephManager:
         """
         Wrapper to check if all PGs are active or peered
         """
-        return (self.get_num_active() + self.get_num_peered()) == self.get_num_pgs()
+        pgs = self.get_pg_stats()
+        return self._get_num_active(pgs) + self._get_num_peered(pgs) == len(pgs)
 
     def wait_till_active(self, timeout=None):
         """
