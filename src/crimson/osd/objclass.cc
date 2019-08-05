@@ -109,7 +109,18 @@ int cls_cxx_read2(cls_method_context_t hctx,
                   bufferlist *outbl,
                   uint32_t op_flags)
 {
-  return 0;
+  OSDOp op;
+  op.op.op = CEPH_OSD_OP_SYNC_READ;
+  op.op.extent.offset = ofs;
+  op.op.extent.length = len;
+  op.op.flags = op_flags;
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
+  outbl->claim(op.outdata);
+  return outbl->length();
 }
 
 int cls_cxx_write2(cls_method_context_t hctx,
