@@ -101,5 +101,6 @@
   on all osds, or provided osds, thus simplifying the process of having to
   parse `osd dump` for the same information.
 
-* The `mgrmap` metadata included in the structured ``ceph status`` (``ceph -s``)
-  output is now more concise.
+* The structured output of ``ceph status`` or ``ceph -s`` is now more
+  concise, particularly the `mgrmap` and `monmap` sections, and the
+  structure of the `osdmap` section has been cleaned up.

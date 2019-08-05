@@ -356,6 +356,14 @@ void MonMap::dump(Formatter *f) const
   f->close_section();
 }
 
+void MonMap::dump_summary(Formatter *f) const
+{
+  f->dump_unsigned("epoch", epoch);
+  f->dump_string("min_mon_release_name", ceph::to_string(min_mon_release));
+  f->dump_unsigned("num_mons", ranks.size());
+}
+
+
 // an ambiguous mon addr may be legacy or may be msgr2--we aren' sure.
 // when that happens we need to try them both (unless we can
 // reasonably infer from the port number which it is).
