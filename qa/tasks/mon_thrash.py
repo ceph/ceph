@@ -11,6 +11,7 @@ import json
 import math
 from teuthology import misc as teuthology
 from tasks.cephfs.filesystem import MDSCluster
+from tasks.thrasher import Thrasher
 
 log = logging.getLogger(__name__)
 
@@ -21,7 +22,7 @@ def _get_mons(ctx):
     mons = [f[len('mon.'):] for f in teuthology.get_mon_names(ctx)]
     return mons
 
-class MonitorThrasher:
+class MonitorThrasher(Thrasher):
     """
     How it works::
 
@@ -85,11 +86,11 @@ class MonitorThrasher:
             - mon/workloadgen.sh
     """
     def __init__(self, ctx, manager, config, logger):
+        super(MonitorThrasher, self).__init__()
         self.ctx = ctx
         self.manager = manager
         self.manager.wait_for_clean()
 
-        self.e = None
         self.stopping = False
         self.logger = logger
         self.config = config
@@ -228,7 +229,7 @@ class MonitorThrasher:
             self._do_thrash()
         except Exception as e:
             # See _run exception comment for MDSThrasher
-            self.e = e
+            self.exception = e
             self.logger.exception("exception:")
             # Allow successful completion so gevent doesn't see an exception.
             # The DaemonWatchdog will observe the error and tear down the test.

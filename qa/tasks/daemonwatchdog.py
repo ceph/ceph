@@ -23,7 +23,7 @@ class DaemonWatchdog(Greenlet):
     """
 
     def __init__(self, ctx, config, thrashers):
-        Greenlet.__init__(self)
+        super(DaemonWatchdog, self).__init__()
         self.ctx = ctx
         self.config = config
         self.e = None
@@ -106,7 +106,7 @@ class DaemonWatchdog(Greenlet):
                     del daemon_failure_time[name]
 
             for thrasher in self.thrashers:
-                if thrasher.e is not None:
+                if thrasher.exception is not None:
                     self.log("thrasher on fs.{name} failed".format(name=thrasher.fs.name))
                     bark = True
 

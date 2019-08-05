@@ -14,10 +14,11 @@ from gevent.event import Event
 from teuthology import misc as teuthology
 
 from tasks.cephfs.filesystem import MDSCluster, Filesystem
+from tasks.thrasher import Thrasher
 
 log = logging.getLogger(__name__)
 
-class MDSThrasher(Greenlet):
+class MDSThrasher(Greenlet, Thrasher, object):
     """
     MDSThrasher::
 
@@ -97,11 +98,10 @@ class MDSThrasher(Greenlet):
     """
 
     def __init__(self, ctx, manager, config, fs, max_mds):
-        Greenlet.__init__(self)
+        super(MDSThrasher, self).__init__()
 
         self.config = config
         self.ctx = ctx
-        self.e = None
         self.logger = log.getChild('fs.[{f}]'.format(f = fs.name))
         self.fs = fs
         self.manager = manager
@@ -136,7 +136,7 @@ class MDSThrasher(Greenlet):
             #   File "/usr/lib/python2.7/traceback.py", line 13, in _print
             #     file.write(str+terminator)
             # 2017-02-03T14:34:01.261 CRITICAL:root:IOError
-            self.e = e
+            self.exception = e
             self.logger.exception("exception:")
             # allow successful completion so gevent doesn't see an exception...
 
@@ -425,7 +425,7 @@ def task(ctx, config):
     finally:
         log.info('joining mds_thrasher')
         thrasher.stop()
-        if thrasher.e:
+        if thrasher.exception is not None:
             raise RuntimeError('error during thrashing')
         thrasher.join()
         log.info('done joining')
