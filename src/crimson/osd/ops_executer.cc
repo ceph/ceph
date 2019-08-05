@@ -181,6 +181,8 @@ OpsExecuter::do_osd_op(OSDOp& osd_op)
     return backend.writefull(*os, osd_op, txn);
   case CEPH_OSD_OP_SETALLOCHINT:
     return seastar::now();
+  case CEPH_OSD_OP_SETXATTR:
+    return backend.setxattr(*os, osd_op, txn);
   case CEPH_OSD_OP_PGNLS:
     return do_pgnls(osd_op.indata, os->oi.soid.get_namespace(), op.pgls.count)
       .then([&osd_op](bufferlist bl) {
