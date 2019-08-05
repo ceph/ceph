@@ -4947,6 +4947,7 @@ int BlueStore::_open_db(bool create)
       return -EINVAL;
     }
     bluefs = new BlueFS(cct);
+    bluefs->set_slow_device_expander(this);
 
     string bfn;
     struct stat st;
@@ -5241,6 +5242,25 @@ int BlueStore::_reconcile_bluefs_freespace()
   }
 
   return 0;
+}
+
+size_t BlueStore::available_freespace(uint64_t alloc_size) {
+  size_t total = 0;
+  auto iterated_allocation = [&](size_t off, size_t len) {
+    //only count in size that is alloc_size aligned
+    size_t dist_to_alignment;
+    size_t offset_in_block = off & (alloc_size - 1);
+    if (offset_in_block == 0)
+      dist_to_alignment = 0;
+    else
+      dist_to_alignment = alloc_size - offset_in_block;
+    if (dist_to_alignment >= len)
+      return;
+    len -= dist_to_alignment;
+    total += len & ~(alloc_size - 1);
+  };
+  alloc->dump(iterated_allocation);
+  return total;
 }
 
 void BlueStore::_dump_alloc_on_rebalance_failure()
