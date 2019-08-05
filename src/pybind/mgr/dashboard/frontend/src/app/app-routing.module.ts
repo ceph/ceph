@@ -179,7 +179,7 @@ const routes: Routes = [
     canActivate: [AuthGuardService],
     canActivateChild: [AuthGuardService],
     data: { breadcrumbs: 'Pools' },
-    loadChildren: './ceph/pool/pool.module#RoutedPoolModule'
+    loadChildren: () => import('./ceph/pool/pool.module').then((m) => m.RoutedPoolModule)
   },
   // Block
   {
@@ -187,7 +187,7 @@ const routes: Routes = [
     canActivateChild: [AuthGuardService],
     canActivate: [AuthGuardService],
     data: { breadcrumbs: true, text: 'Block', path: null },
-    loadChildren: './ceph/block/block.module#RoutedBlockModule'
+    loadChildren: () => import('./ceph/block/block.module').then((m) => m.RoutedBlockModule)
   },
   // Filesystems
   {
@@ -209,7 +209,7 @@ const routes: Routes = [
       text: 'Object Gateway',
       path: null
     },
-    loadChildren: './ceph/rgw/rgw.module#RoutedRgwModule'
+    loadChildren: () => import('./ceph/rgw/rgw.module').then((m) => m.RoutedRgwModule)
   },
   // User/Role Management
   {
@@ -217,7 +217,7 @@ const routes: Routes = [
     canActivate: [AuthGuardService],
     canActivateChild: [AuthGuardService],
     data: { breadcrumbs: 'User management', path: null },
-    loadChildren: './core/auth/auth.module#RoutedAuthModule'
+    loadChildren: () => import('./core/auth/auth.module').then((m) => m.RoutedAuthModule)
   },
   // User Profile
   {

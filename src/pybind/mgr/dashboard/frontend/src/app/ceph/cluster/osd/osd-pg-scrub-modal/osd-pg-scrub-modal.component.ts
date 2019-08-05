@@ -24,11 +24,11 @@ export class OsdPgScrubModalComponent {
   resource: string;
   permissions: Permissions;
 
-  @ViewChild('basicOptionsValues')
+  @ViewChild('basicOptionsValues', { static: true })
   basicOptionsValues: ConfigOptionComponent;
   basicOptions: Array<string> = OsdPgScrubModalOptions.basicOptions;
 
-  @ViewChild('advancedOptionsValues')
+  @ViewChild('advancedOptionsValues', { static: false })
   advancedOptionsValues: ConfigOptionComponent;
   advancedOptions: Array<string> = OsdPgScrubModalOptions.advancedOptions;
 

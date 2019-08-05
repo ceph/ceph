@@ -12,7 +12,7 @@ import { CephShortVersionPipe } from '../../../../shared/pipes/ceph-short-versio
   styleUrls: ['./daemon-list.component.scss']
 })
 export class DaemonListComponent implements OnInit, OnDestroy {
-  @ViewChild('healthTmpl')
+  @ViewChild('healthTmpl', { static: true })
   healthTmpl: TemplateRef<any>;
 
   subs: Subscription;

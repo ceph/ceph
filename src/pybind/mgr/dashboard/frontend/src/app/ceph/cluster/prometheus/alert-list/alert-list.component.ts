@@ -20,7 +20,7 @@ const BASE_URL = 'silence'; // as only silence actions can be used
   styleUrls: ['./alert-list.component.scss']
 })
 export class AlertListComponent implements OnInit {
-  @ViewChild('externalLinkTpl')
+  @ViewChild('externalLinkTpl', { static: true })
   externalLinkTpl: TemplateRef<any>;
   columns: CdTableColumn[];
   tableActions: CdTableAction[];

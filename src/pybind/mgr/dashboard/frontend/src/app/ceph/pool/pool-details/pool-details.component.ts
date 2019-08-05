@@ -23,7 +23,7 @@ export class PoolDetailsComponent implements OnChanges {
   permissions: Permissions;
   @Input()
   cacheTiers: any[];
-  @ViewChild(TabsetComponent)
+  @ViewChild(TabsetComponent, { static: false })
   tabsetChild: TabsetComponent;
   selectedPoolConfiguration: RbdConfigurationEntry[];
 

@@ -32,11 +32,11 @@ import { RbdTrashRestoreModalComponent } from '../rbd-trash-restore-modal/rbd-tr
   providers: [TaskListService]
 })
 export class RbdTrashListComponent implements OnInit {
-  @ViewChild(TableComponent)
+  @ViewChild(TableComponent, { static: true })
   table: TableComponent;
-  @ViewChild('expiresTpl')
+  @ViewChild('expiresTpl', { static: true })
   expiresTpl: TemplateRef<any>;
-  @ViewChild('deleteTpl')
+  @ViewChild('deleteTpl', { static: true })
   deleteTpl: TemplateRef<any>;
 
   icons = Icons;

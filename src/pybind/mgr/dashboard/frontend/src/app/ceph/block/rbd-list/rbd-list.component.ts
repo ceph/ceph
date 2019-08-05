@@ -39,15 +39,15 @@ const BASE_URL = 'block/rbd';
   ]
 })
 export class RbdListComponent implements OnInit {
-  @ViewChild(TableComponent)
+  @ViewChild(TableComponent, { static: true })
   table: TableComponent;
-  @ViewChild('usageTpl')
+  @ViewChild('usageTpl', { static: false })
   usageTpl: TemplateRef<any>;
-  @ViewChild('parentTpl')
+  @ViewChild('parentTpl', { static: true })
   parentTpl: TemplateRef<any>;
-  @ViewChild('nameTpl')
+  @ViewChild('nameTpl', { static: false })
   nameTpl: TemplateRef<any>;
-  @ViewChild('flattenTpl')
+  @ViewChild('flattenTpl', { static: true })
   flattenTpl: TemplateRef<any>;
 
   permission: Permission;

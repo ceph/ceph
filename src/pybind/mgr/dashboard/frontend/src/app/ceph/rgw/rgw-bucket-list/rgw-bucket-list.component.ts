@@ -26,7 +26,7 @@ const BASE_URL = 'rgw/bucket';
   providers: [{ provide: URLBuilderService, useValue: new URLBuilderService(BASE_URL) }]
 })
 export class RgwBucketListComponent {
-  @ViewChild(TableComponent)
+  @ViewChild(TableComponent, { static: true })
   table: TableComponent;
 
   permission: Permission;

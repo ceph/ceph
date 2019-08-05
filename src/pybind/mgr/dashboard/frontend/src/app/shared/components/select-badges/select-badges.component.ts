@@ -30,7 +30,7 @@ export class SelectBadgesComponent {
   @Output()
   selection = new EventEmitter();
 
-  @ViewChild('cdSelect')
+  @ViewChild('cdSelect', { static: true })
   cdSelect;
 
   icons = Icons;
