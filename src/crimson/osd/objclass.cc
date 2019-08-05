@@ -164,7 +164,17 @@ int cls_cxx_getxattr(cls_method_context_t hctx,
                      const char *name,
                      bufferlist *outbl)
 {
-  return 0;
+  OSDOp op;
+  op.op.op = CEPH_OSD_OP_GETXATTR;
+  op.op.xattr.name_len = strlen(name);
+  op.indata.append(name, op.op.xattr.name_len);
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    outbl->claim(op.outdata);
+    return outbl->length();
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
 }
 
 int cls_cxx_getxattrs(cls_method_context_t hctx,

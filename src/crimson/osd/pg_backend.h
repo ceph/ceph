@@ -76,6 +76,9 @@ public:
     ObjectState& os,
     const OSDOp& osd_op,
     ceph::os::Transaction& trans);
+  seastar::future<> getxattr(
+    ObjectState& os,
+    OSDOp& osd_op);
 
   virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
 

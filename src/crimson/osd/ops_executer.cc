@@ -174,6 +174,8 @@ OpsExecuter::do_osd_op(OSDOp& osd_op)
       osd_op.outdata = std::move(bl);
       return seastar::now();
     });
+  case CEPH_OSD_OP_GETXATTR:
+    return backend.getxattr(os, osd_op);
   case CEPH_OSD_OP_WRITE:
     return backend.write(*os, osd_op, txn);
   case CEPH_OSD_OP_WRITEFULL:
