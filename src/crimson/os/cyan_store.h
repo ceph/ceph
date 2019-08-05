@@ -84,6 +84,7 @@ public:
 		  const std::string& value) final;
   int read_meta(const std::string& key, std::string* value) final;
   uuid_d get_fsid() const final;
+  unsigned get_max_attr_name_length() const final;
 
 private:
   int _remove(const coll_t& cid, const ghobject_t& oid);

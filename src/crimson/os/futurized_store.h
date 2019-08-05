@@ -105,6 +105,7 @@ public:
 		  const std::string& value) = 0;
   virtual int read_meta(const std::string& key, std::string* value) = 0;
   virtual uuid_d get_fsid() const  = 0;
+  virtual unsigned get_max_attr_name_length() const = 0;
 };
 
 }

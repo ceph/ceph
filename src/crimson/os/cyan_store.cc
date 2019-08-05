@@ -631,4 +631,10 @@ uuid_d CyanStore::get_fsid() const
 {
   return osd_fsid;
 }
+
+unsigned CyanStore::get_max_attr_name_length() const
+{
+  // arbitrary limitation exactly like in the case of MemStore.
+  return 256;
+}
 }
