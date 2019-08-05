@@ -25,6 +25,8 @@ namespace {
   }
 }
 
+using ceph::common::local_conf;
+
 std::unique_ptr<PGBackend> PGBackend::create(pg_t pgid,
 					     const pg_shard_t pg_shard,
                                              const pg_pool_t& pool,
@@ -389,4 +391,39 @@ PGBackend::list_objects(const hobject_t& start, uint64_t limit)
       return seastar::make_ready_future<std::vector<hobject_t>, hobject_t>(
         objects, next.hobj);
     });
+}
+
+seastar::future<> PGBackend::setxattr(
+  ObjectState& os,
+  const OSDOp& osd_op,
+  ceph::os::Transaction& txn)
+{
+  //++ctx->num_write;
+
+  if (local_conf()->osd_max_attr_size > 0 &&
+      osd_op.op.xattr.value_len > local_conf()->osd_max_attr_size) {
+    throw ceph::osd::error::from_intret(-EFBIG);
+  }
+
+  const auto max_name_len = std::min<uint64_t>(
+    store->get_max_attr_name_length(), local_conf()->osd_max_attr_name_len);
+  if (osd_op.op.xattr.name_len > max_name_len) {
+    throw ceph::osd::error::from_intret(-ENAMETOOLONG);
+  }
+
+  maybe_create_new_object(os, txn);
+
+  std::string name;
+  ceph::bufferlist val;
+  {
+    auto bp = osd_op.indata.cbegin();
+    std::string aname;
+    bp.copy(osd_op.op.xattr.name_len, aname);
+    name = "_" + aname;
+    bp.copy(osd_op.op.xattr.value_len, val);
+  }
+
+  txn.setattr(coll->cid, ghobject_t{os.oi.soid}, name, val);
+  return seastar::now();
+  //ctx->delta_stats.num_wr++;
 }
