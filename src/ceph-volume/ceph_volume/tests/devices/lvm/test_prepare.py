@@ -68,7 +68,7 @@ class TestPrepare(object):
             lvm.prepare.Prepare(argv=['--data', '/dev/sdfoo', '--filestore', '--bluestore']).main()
         stdout, stderr = capsys.readouterr()
         expected = 'Cannot use --filestore (filestore) with --bluestore (bluestore)'
-        assert expected in stdout
+        assert expected in stderr
 
     def test_excludes_other_filestore_bluestore_flags(self, capsys, device_info):
         device_info()
@@ -79,7 +79,7 @@ class TestPrepare(object):
             ]).main()
         stdout, stderr = capsys.readouterr()
         expected = 'Cannot use --bluestore (bluestore) with --journal (filestore)'
-        assert expected in stdout
+        assert expected in stderr
 
     def test_excludes_block_and_journal_flags(self, capsys, device_info):
         device_info()
@@ -90,7 +90,7 @@ class TestPrepare(object):
             ]).main()
         stdout, stderr = capsys.readouterr()
         expected = 'Cannot use --block.db (bluestore) with --journal (filestore)'
-        assert expected in stdout
+        assert expected in stderr
 
     def test_journal_is_required_with_filestore(self, is_root, monkeypatch, device_info):
         monkeypatch.setattr("os.path.exists", lambda path: True)
