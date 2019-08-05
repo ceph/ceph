@@ -7,7 +7,7 @@ See doc/mgr/hello.rst for more info.
 
 from mgr_module import MgrModule, HandleCommandResult
 from threading import Event
-
+import errno
 
 class Hello(MgrModule):
     # these are CLI commands we implement
@@ -15,7 +15,13 @@ class Hello(MgrModule):
         {
             "cmd": "hello "
                    "name=person_name,type=CephString,req=false",
-            "desc": "Prints hello world to mgr.x.log",
+            "desc": "Say hello",
+            "perm": "r"
+        },
+        {
+            "cmd": "count "
+                   "name=num,type=CephInt",
+            "desc": "Do some counting",
             "perm": "r"
         },
     ]
@@ -88,22 +94,31 @@ class Hello(MgrModule):
             self.log.debug(' native option %s = %s', opt, getattr(self, opt))
 
     def handle_command(self, inbuf, cmd):
-        self.log.info("hello_world_info")
-        self.log.debug("hello_world_debug")
-        self.log.error("hello_world_error")
-
-        status_code = 0
-        output_buffer = "Output buffer is for data results"
-        output_string = "Output string is for informative text"
-        if 'person_name' in cmd:
-            message = "Hello, " + cmd['person_name']
-        else:
-            message = "Hello " + self.get_module_option('place')
-        if self.get_module_option('emphatic'):
-            message += '!'
-
-        return HandleCommandResult(retval=status_code, stdout=output_buffer,
-                                   stderr=message + "\n" + output_string)
+        ret = 0
+        out = ''
+        err = ''
+        if cmd['prefix'] == 'hello':
+            if 'person_name' in cmd:
+                out = "Hello, " + cmd['person_name']
+            else:
+                out = "Hello " + self.get_module_option('place')
+            if self.get_module_option('emphatic'):
+                out += '!'
+        elif cmd['prefix'] == 'count':
+            num = cmd.get('num', 0)
+            if num < 1:
+                err = 'That\'s too small a number'
+                ret = -errno.EINVAL
+            elif num > 10:
+                err = 'That\'s too big a number'
+                ret = -errno.EINVAL
+            else:
+                out = 'Hello, I am the count!\n'
+                out += ', '.join([str(x) for x in range(1, num + 1)]) + '!'
+        return HandleCommandResult(
+            retval=ret,   # exit code
+            stdout=out,   # stdout
+            stderr=err)
 
     def serve(self):
         """
