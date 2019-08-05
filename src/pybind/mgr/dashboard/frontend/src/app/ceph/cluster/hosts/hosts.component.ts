@@ -23,7 +23,7 @@ export class HostsComponent implements OnInit {
   cdParams = { fromLink: '/hosts' };
   selection = new CdTableSelection();
 
-  @ViewChild('servicesTpl')
+  @ViewChild('servicesTpl', { static: true })
   public servicesTpl: TemplateRef<any>;
 
   constructor(

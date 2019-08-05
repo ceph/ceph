@@ -34,7 +34,7 @@ class Item {
   styleUrls: ['./table-key-value.component.scss']
 })
 export class TableKeyValueComponent implements OnInit, OnChanges {
-  @ViewChild(TableComponent)
+  @ViewChild(TableComponent, { static: true })
   table: TableComponent;
 
   @Input()

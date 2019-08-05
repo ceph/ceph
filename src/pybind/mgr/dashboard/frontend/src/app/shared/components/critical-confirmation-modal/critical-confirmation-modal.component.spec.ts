@@ -34,9 +34,9 @@ export class MockModule {}
   `
 })
 class MockComponent {
-  @ViewChild('ctrlDescription')
+  @ViewChild('ctrlDescription', { static: true })
   ctrlDescription: TemplateRef<any>;
-  @ViewChild('modalDescription')
+  @ViewChild('modalDescription', { static: true })
   modalDescription: TemplateRef<any>;
   someData = [1, 2, 3, 4, 5];
   finished: number[];

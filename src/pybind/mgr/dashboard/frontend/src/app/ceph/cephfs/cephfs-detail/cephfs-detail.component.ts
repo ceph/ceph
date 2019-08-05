@@ -16,9 +16,9 @@ import { AuthStorageService } from '../../../shared/services/auth-storage.servic
   styleUrls: ['./cephfs-detail.component.scss']
 })
 export class CephfsDetailComponent implements OnChanges, OnInit {
-  @ViewChild('poolUsageTpl')
+  @ViewChild('poolUsageTpl', { static: true })
   poolUsageTpl: TemplateRef<any>;
-  @ViewChild('activityTmpl')
+  @ViewChild('activityTmpl', { static: true })
   activityTmpl: TemplateRef<any>;
 
   @Input()

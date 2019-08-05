@@ -29,19 +29,19 @@ import { OsdScrubModalComponent } from '../osd-scrub-modal/osd-scrub-modal.compo
   styleUrls: ['./osd-list.component.scss']
 })
 export class OsdListComponent implements OnInit {
-  @ViewChild('statusColor')
+  @ViewChild('statusColor', { static: true })
   statusColor: TemplateRef<any>;
-  @ViewChild('osdUsageTpl')
+  @ViewChild('osdUsageTpl', { static: true })
   osdUsageTpl: TemplateRef<any>;
-  @ViewChild('markOsdConfirmationTpl')
+  @ViewChild('markOsdConfirmationTpl', { static: true })
   markOsdConfirmationTpl: TemplateRef<any>;
-  @ViewChild('criticalConfirmationTpl')
+  @ViewChild('criticalConfirmationTpl', { static: true })
   criticalConfirmationTpl: TemplateRef<any>;
-  @ViewChild(TableComponent)
+  @ViewChild(TableComponent, { static: true })
   tableComponent: TableComponent;
-  @ViewChild('reweightBodyTpl')
+  @ViewChild('reweightBodyTpl', { static: false })
   reweightBodyTpl: TemplateRef<any>;
-  @ViewChild('safeToDestroyBodyTpl')
+  @ViewChild('safeToDestroyBodyTpl', { static: false })
   safeToDestroyBodyTpl: TemplateRef<any>;
 
   permissions: Permissions;

@@ -64,10 +64,18 @@ describe('NfsFormComponent', () => {
     httpTesting.expectOne('ui-api/nfs-ganesha/cephx/clients').flush(['admin', 'fs', 'rgw']);
     httpTesting.expectOne('ui-api/nfs-ganesha/cephfs/filesystems').flush([{ id: 1, name: 'a' }]);
     httpTesting.expectOne('api/rgw/user').flush(['test', 'dev']);
-    httpTesting.expectOne('api/rgw/user/dev').flush({ suspended: 0, user_id: 'dev', keys: ['a'] });
-    httpTesting
-      .expectOne('api/rgw/user/test')
-      .flush({ suspended: 1, user_id: 'test', keys: ['a'] });
+    const user_dev = {
+      suspended: 0,
+      user_id: 'dev',
+      keys: ['a']
+    };
+    httpTesting.expectOne('api/rgw/user/dev').flush(user_dev);
+    const user_test = {
+      suspended: 1,
+      user_id: 'test',
+      keys: ['a']
+    };
+    httpTesting.expectOne('api/rgw/user/test').flush(user_test);
     httpTesting.verify();
   });
 

@@ -21,11 +21,11 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
   @Input()
   settings: any;
 
-  @ViewChild('highlightTpl')
+  @ViewChild('highlightTpl', { static: true })
   highlightTpl: TemplateRef<any>;
 
   private detailTable: TableComponent;
-  @ViewChild('detailTable')
+  @ViewChild('detailTable', { static: false })
   set content(content: TableComponent) {
     this.detailTable = content;
     if (content) {
