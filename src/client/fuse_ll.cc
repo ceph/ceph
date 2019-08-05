@@ -651,6 +651,12 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg, st
       fuse_reply_ioctl(req, 0, &l, sizeof(struct ceph_ioctl_layout));
     }
     break;
+    case CEPH_IOC_RSTATFLUSH: {
+      Fh* fh = (Fh*)fi->fh;
+      cfuse->client->rstat_flush(fh->inode);
+      fuse_reply_ioctl(req, 0, NULL, 0);
+    }
+    break;
     default:
       fuse_reply_err(req, EINVAL);
   }
@@ -963,6 +969,9 @@ static void do_init(void *data, fuse_conn_info *conn)
   }
   if(conn->capable & FUSE_CAP_EXPORT_SUPPORT)
     conn->want |= FUSE_CAP_EXPORT_SUPPORT;
+
+  if (conn->capable & FUSE_CAP_IOCTL_DIR)
+    conn->want |= FUSE_CAP_IOCTL_DIR;
 #endif
 
   if (cfuse->fd_on_success) {

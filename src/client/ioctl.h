@@ -48,4 +48,6 @@ struct ceph_ioctl_dataloc {
 
 #define CEPH_IOC_LAZYIO _IO(CEPH_IOCTL_MAGIC, 4)
 
+#define CEPH_IOC_RSTATFLUSH _IO(CEPH_IOCTL_MAGIC, 6)
+
 #endif
