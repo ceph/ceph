@@ -52,7 +52,6 @@ int cls_getxattr(cls_method_context_t hctx, const char *name,
                                  char **outdata, int *outdatalen)
 {
   PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext **)hctx;
-  bufferlist name_data;
   vector<OSDOp> nops(1);
   OSDOp& op = nops[0];
   int r;
@@ -77,7 +76,6 @@ int cls_setxattr(cls_method_context_t hctx, const char *name,
                                  const char *value, int val_len)
 {
   PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext **)hctx;
-  bufferlist name_data;
   vector<OSDOp> nops(1);
   OSDOp& op = nops[0];
   int r;
@@ -256,7 +254,6 @@ int cls_cxx_getxattr(cls_method_context_t hctx, const char *name,
                      bufferlist *outbl)
 {
   PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext **)hctx;
-  bufferlist name_data;
   vector<OSDOp> nops(1);
   OSDOp& op = nops[0];
   int r;
@@ -297,7 +294,6 @@ int cls_cxx_setxattr(cls_method_context_t hctx, const char *name,
                      bufferlist *inbl)
 {
   PrimaryLogPG::OpContext **pctx = (PrimaryLogPG::OpContext **)hctx;
-  bufferlist name_data;
   vector<OSDOp> nops(1);
   OSDOp& op = nops[0];
   int r;
