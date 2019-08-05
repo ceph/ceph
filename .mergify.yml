@@ -1,0 +1,36 @@
+---
+pull_request_rules:
+  - name: PR can be merged
+    conditions:
+      - label=dashboard
+      # Only PRs to master (no releases)
+      - base=master
+      # Checks passing
+      - status-success=Signed-off-by
+      - status-success=Unmodified Submodules
+      - status-success=make check
+      - status-success=ceph dashboard tests
+      - "status-success=Docs: build check"
+      # Approvals, no changes requested, no unaddressed comments
+      # https://doc.mergify.io/examples.html#require-all-requested-reviews-to-be-approved
+      - "#approved-reviews-by>=2"
+      - "#review-requested=0"
+      - "#changes-requested-reviews-by=0"
+      - "#commented-reviews-by=0"
+      - approved-reviews-by=@ceph/dashboard
+      # Formal check
+      - "title~=^mgr/dashboard: "
+      # Labels required
+      - label!=DNM
+      # Extra safety (as mergify does not support !~, we use negative lookahead)
+      - "label~=(?!^needs-.*)"
+      - "label~=(?!^wip-.*)"
+    actions:
+      # This is the intended behaviour, but in the meantime, let's just label
+      # these PRs and see whether we're happy with the results
+      # merge:
+      #   method: merge
+      #   strict: true
+      label:
+        add:
+          - mergeable
