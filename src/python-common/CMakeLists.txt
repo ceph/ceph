@@ -10,3 +10,8 @@ foreach(python_version ${py_vers})
   distutils_install_module(ceph
     PYTHON_VERSION ${python_version})
 endforeach()
+
+if(WITH_TESTS)
+  include(AddCephTest)
+  add_tox_test(python-common)
+endif()

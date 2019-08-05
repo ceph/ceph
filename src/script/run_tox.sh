@@ -8,6 +8,37 @@ else
     GETOPT=getopt
 fi
 
+function usage() {
+    local prog_name=$(basename $1)
+    shift
+    cat <<EOF
+$prog_name [options] ... [test_name]
+
+options:
+
+  [-h|--help]         display this help message
+  [--source-dir dir]  root source directory of Ceph. deduced by the path of this script by default.
+  [--build-dir dir]   build directory of Ceph. "\$source_dir/build" by default.
+  [--tox-path dir]    directory in which "tox.ini" is located. if "test_name" is not specified, it is the current directory by default, otherwise the script will try to find a directory with the name of specified \$test_name with a "tox.ini" under it.
+  <--tox-envs envs>   tox envlist. this option is required.
+  [--venv-path]       the python virtualenv path. \$build_dir/\$test_name by default.
+
+example:
+
+following command will run tox with envlist of "py27,py3" using the "tox.ini" in current directory.
+
+  $prog_name --tox-env py27,py3
+
+following command will run tox with envlist of "py27" using "src/pybind/mgr/ansible/tox.ini"
+
+  $prog_name --tox-env py27 ansible
+
+following command will run tox with envlist of "py27" using "/ceph/src/python-common/tox.ini"
+
+  $prog_name --tox-env py27 --tox-path /ceph/src/python-common
+EOF
+}
+
 function get_cmake_variable() {
     local cmake_cache=$1/CMakeCache.txt
     shift
@@ -33,31 +64,30 @@ function main() {
     local script_dir="$( cd "$( dirname "${BASH_SOURCE[0]}" )" >/dev/null 2>&1 && pwd )"
     local build_dir=$script_dir/../../build
     local source_dir=$(get_cmake_variable $build_dir ceph_SOURCE_DIR)
-    local with_python2=$(get_cmake_variable $build_dir WITH_PYTHON2)
-    local with_python3=$(get_cmake_variable $build_dir WITH_PYTHON3)
-    local parsed
+    local tox_envs
+    local options
 
-    options=$(${GETOPT} --name "$0" --options '' --longoptions "source-dir:,build-dir:,with-python2:,with-python3:,tox-path:,venv-path:" -- "$@")
+    options=$(${GETOPT} --name "$0" --options 'h' --longoptions "help,source-dir:,build-dir:,tox-path:,tox-envs:,venv-path:" -- "$@")
     if [ $? -ne 0 ]; then
         exit 2
     fi
     eval set -- "${options}"
     while true; do
         case "$1" in
+            -h|--help)
+                usage $0
+                exit 0;;
             --source-dir)
                 source_dir=$2
                 shift 2;;
             --build-dir)
                 build_dir=$2
                 shift 2;;
-            --with-python2)
-                with_python2=$2
-                shift 2;;
-            --with-python3)
-                with_python3=$2
-                shift 2;;
             --tox-path)
                 tox_path=$2
+                shift 2;;
+            --tox-envs)
+                tox_envs=$2
                 shift 2;;
             --venv-path)
                 venv_path=$2
@@ -71,15 +101,23 @@ function main() {
         esac
     done
 
+    # normalize options
+    [ "$with_python2" = "ON" ] && with_python2=true || with_python2=false
+    # WITH_PYTHON3 might be set to "ON" or to the python3 RPM version number
+    # prevailing on the system - e.g. "3", "36"
+    [[ "$with_python3" =~ (^3|^ON) ]] && with_python3=true || with_python3=false
+
+    local test_name
     if [ -z "$tox_path" ]; then
         # try harder
-        local test_name
         if [ $# -gt 0 ]; then
             test_name=$1
             shift
         fi
         tox_path=$(get_tox_path $test_name)
         venv_path="$build_dir/$test_name"
+    else
+        test_name=$(basename $tox_path)
     fi
 
     if [ ! -f ${venv_path}/bin/activate ]; then
@@ -91,17 +129,7 @@ function main() {
     # tox.ini will take care of this.
     export CEPH_BUILD_DIR=$build_dir
 
-    if [ "$with_python2" = "ON" ]; then
-        ENV_LIST+="py27,"
-    fi
-    # WITH_PYTHON3 might be set to "ON" or to the python3 RPM version number
-    # prevailing on the system - e.g. "3", "36"
-    if [[ "$with_python3" =~ (^3|^ON) ]]; then
-        ENV_LIST+="py3,"
-    fi
-    # use bash string manipulation to strip off any trailing comma
-    ENV_LIST=${ENV_LIST%,}
-    tox -c $tox_path/tox.ini -e "${ENV_LIST}" "$@"
+    tox -c $tox_path/tox.ini -e "$tox_envs" "$@"
 }
 
 main "$@"
