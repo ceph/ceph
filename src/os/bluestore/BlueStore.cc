@@ -11021,7 +11021,6 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
   {
     uint64_t costs = 0;
     {
-      std::lock_guard l2(osr->qlock);
       for (auto& i : b->txcs) {
 	TransContext *txc = &i;
 	txc->log_state_latency(logger, l_bluestore_state_deferred_aio_wait_lat);
