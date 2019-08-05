@@ -195,24 +195,26 @@ class ContextQueue {
   std::mutex q_mutex;
   ceph::mutex& mutex;
   ceph::condition_variable& cond;
+  std::atomic_bool q_empty = true;
 public:
   ContextQueue(ceph::mutex& mut,
 	       ceph::condition_variable& con)
     : mutex(mut), cond(con) {}
 
   void queue(std::list<Context *>& ls) {
-    bool empty = false;
+    bool was_empty = false;
     {
       std::scoped_lock l(q_mutex);
       if (q.empty()) {
 	q.swap(ls);
-	empty = true;
+	was_empty = true;
       } else {
 	q.insert(q.end(), ls.begin(), ls.end());
       }
+      q_empty = q.empty();
     }
 
-    if (empty) {
+    if (was_empty) {
       std::scoped_lock l{mutex};
       cond.notify_all();
     }
@@ -226,11 +228,11 @@ public:
     if (!q.empty()) {
       q.swap(ls);
     }
+    q_empty = true;
   }
 
   bool empty() {
-    std::scoped_lock l(q_mutex);
-    return q.empty();
+    return q_empty;
   }
 };
 
