@@ -22,6 +22,7 @@ from teuthology.contextutil import safe_while
 from teuthology.orchestra.remote import Remote
 from teuthology.orchestra import run
 from teuthology.exceptions import CommandFailedError
+from tasks.thrasher import Thrasher
 
 try:
     from subprocess import DEVNULL # py3k
@@ -100,11 +101,12 @@ class PoolType:
     ERASURE_CODED = 3
 
 
-class Thrasher:
+class OSDThrasher(Thrasher):
     """
     Object used to thrash Ceph
     """
     def __init__(self, manager, config, logger):
+        super(OSDThrasher, self).__init__()
         self.ceph_manager = manager
         self.cluster = manager.cluster
         self.ceph_manager.wait_for_clean()
@@ -955,6 +957,19 @@ class Thrasher:
             val -= prob
         return None
 
+    def do_thrash(self):
+        """
+        _do_thrash() wrapper.
+        """
+        try:
+            self._do_thrash()
+        except Exception as e:
+            # See _run exception comment for MDSThrasher
+            self.exception = e
+            self.logger.exception("exception:")
+            # Allow successful completion so gevent doesn't see an exception.
+            # The DaemonWatchdog will observe the error and tear down the test.
+
     def log_exc(func):
         @wraps(func)
         def wrapper(self):
@@ -1047,7 +1062,7 @@ class Thrasher:
         self.ceph_manager.raw_cluster_cmd('osd', 'unset', 'nodeep-scrub')
 
     @log_exc
-    def do_thrash(self):
+    def _do_thrash(self):
         """
         Loop to select random actions to thrash ceph manager with.
         """
