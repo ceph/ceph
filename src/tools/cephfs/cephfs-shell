@@ -55,7 +55,7 @@ shell = None
 
 
 def poutput(s, end='\n'):
-    shell.poutput(s, end)
+    shell.poutput(s, end=end)
 
 
 def setup_cephfs(config_file):
@@ -725,12 +725,12 @@ exists.')
                 if dirs:
                     paths.extend(dirs)
                 else:
-                    self.poutput(path, ':\n')
+                    self.poutput(path, end=':\n')
                 items = sorted(items, key=lambda item: item.d_name)
             else:
                 if path != '' and path != cephfs.getcwd().decode(
                         'utf-8') and len(paths) > 1:
-                    self.poutput(path, ':\n')
+                    self.poutput(path, end=':\n')
                 items = sorted(ls(path),
                                key=lambda item: item.d_name)
             if not args.all:
@@ -769,7 +769,7 @@ exists.')
             if not args.long:
                 print_list(values, shutil.get_terminal_size().columns)
                 if path != paths[-1]:
-                    self.poutput('\n')
+                    self.poutput('')
 
     def complete_rmdir(self, text, line, begidx, endidx):
         """
