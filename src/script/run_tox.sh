@@ -8,6 +8,37 @@ else
     GETOPT=getopt
 fi
 
+function usage() {
+    local prog_name=$(basename $1)
+    shift
+    cat <<EOF
+$prog_name [options] ... [test_name]
+
+options:
+
+  [-h|--help]         display this help message
+  [--source-dir dir]  root source directory of Ceph. deduced by the path of this script by default.
+  [--build-dir dir]   build directory of Ceph. "\$source_dir/build" by default.
+  [--tox-path dir]    directory in which "tox.ini" is located. if "test_name" is not specified, it is the current directory by default, otherwise the script will try to find a directory with the name of specified \$test_name with a "tox.ini" under it.
+  <--tox-envs envs>   tox envlist. this option is required.
+  [--venv-path]       the python virtualenv path. \$build_dir/\$test_name by default.
+
+example:
+
+following command will run tox with envlist of "py27,py3" using the "tox.ini" in current directory.
+
+  $prog_name --tox-env py27,py3
+
+following command will run tox with envlist of "py27" using "src/pybind/mgr/ansible/tox.ini"
+
+  $prog_name --tox-env py27 ansible
+
+following command will run tox with envlist of "py27" using "/ceph/src/python-common/tox.ini"
+
+  $prog_name --tox-env py27 --tox-path /ceph/src/python-common
+EOF
+}
+
 function get_cmake_variable() {
     local cmake_cache=$1/CMakeCache.txt
     shift
@@ -36,13 +67,16 @@ function main() {
     local tox_envs
     local options
 
-    options=$(${GETOPT} --name "$0" --options '' --longoptions "source-dir:,build-dir:,tox-path:,tox-envs:,venv-path:" -- "$@")
+    options=$(${GETOPT} --name "$0" --options 'h' --longoptions "help,source-dir:,build-dir:,tox-path:,tox-envs:,venv-path:" -- "$@")
     if [ $? -ne 0 ]; then
         exit 2
     fi
     eval set -- "${options}"
     while true; do
         case "$1" in
+            -h|--help)
+                usage $0
+                exit 0;;
             --source-dir)
                 source_dir=$2
                 shift 2;;
