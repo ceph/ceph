@@ -75,6 +75,7 @@
 	debug auth = 20
 	mon reweight min pgs per osd = 4
 	mon reweight min bytes per osd = 10
+	mgr/telemetry/nag = false
 
 [mon]
 	debug ms = 1

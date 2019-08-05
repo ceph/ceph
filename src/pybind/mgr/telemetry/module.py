@@ -24,6 +24,27 @@ LICENSE='sharing-1-0'
 LICENSE_NAME='Community Data License Agreement - Sharing - Version 1.0'
 LICENSE_URL='https://cdla.io/sharing-1-0/'
 
+# If the telemetry revision has changed since this point, re-require
+# an opt-in.  This should happen each time we add new information to
+# the telemetry report.
+LAST_REVISION_RE_OPT_IN = 2
+
+# Latest revision of the telemetry report.  Bump this each time we make
+# *any* change.
+REVISION = 2
+
+# History of revisions
+# --------------------
+#
+# Version 1:
+#   Mimic and/or nautilus are lumped together here, since
+#   we didn't track revisions yet.
+#
+# Version 2:
+#   - added revision tracking, nagging, etc.
+#   - added config option changes
+#   - added channels
+#   - added explicit license acknowledgement to the opt-in process
 
 class Module(MgrModule):
     config = dict()
@@ -49,6 +70,11 @@ class Module(MgrModule):
             'name': 'enabled',
             'type': 'bool',
             'default': False
+        },
+        {
+            'name': 'last_opt_revision',
+            'type': 'int',
+            'default': 1,
         },
         {
             'name': 'leaderboard',
@@ -155,6 +181,8 @@ class Module(MgrModule):
                     opt['name'],
                     self.get_module_option(opt['name']))
             self.log.debug(' %s = %s', opt['name'], getattr(self, opt['name']))
+        # wake up serve() thread
+        self.event.set()
 
     def load(self):
         self.last_upload = self.get_store('last_upload', None)
@@ -378,9 +406,11 @@ class Module(MgrModule):
             if command.get('license') != LICENSE:
                 return -errno.EPERM, '', "Telemetry data is licensed under the " + LICENSE_NAME + " (" + LICENSE_URL + ").\nTo enable, add '--license " + LICENSE + "' to the 'ceph telemetry on' command."
             self.set_module_option('enabled', True)
+            self.set_module_option('last_opt_revision', REVISION)
             return 0, '', ''
         elif command['prefix'] == 'telemetry off':
             self.set_module_option('enabled', False)
+            self.set_module_option('last_opt_revision', REVISION)
             return 0, '', ''
         elif command['prefix'] == 'telemetry send':
             self.last_report = self.compile_report()
@@ -415,6 +445,18 @@ class Module(MgrModule):
         self.run = False
         self.event.set()
 
+    def refresh_health_checks(self):
+        health_checks = {}
+        if self.enabled and self.last_opt_revision < LAST_REVISION_RE_OPT_IN:
+            health_checks['TELEMETRY_CHANGED'] = {
+                'severity': 'warning',
+                'summary': 'Telemetry requires re-opt-in',
+                'detail': [
+                    'telemetry report includes new information; must re-opt-in (or out)'
+                ]
+            }
+        self.set_health_checks(health_checks)
+
     def serve(self):
         self.load()
         self.config_notify()
@@ -424,8 +466,14 @@ class Module(MgrModule):
         self.event.wait(10)
 
         while self.run:
+            self.refresh_health_checks()
+
+            if self.last_opt_revision < LAST_REVISION_RE_OPT_IN:
+                self.log.debug('Not sending report until user re-opts-in')
+                self.event.wait(1800)
+                continue
             if not self.enabled:
-                self.log.info('Not sending report until configured to do so')
+                self.log.debug('Not sending report until configured to do so')
                 self.event.wait(1800)
                 continue
 
@@ -450,7 +498,7 @@ class Module(MgrModule):
                 except:
                     self.log.exception('Exception while sending report:')
             else:
-                self.log.info('Interval for sending new report has not expired')
+                self.log.debug('Interval for sending new report has not expired')
 
             sleep = 3600
             self.log.debug('Sleeping for %d seconds', sleep)

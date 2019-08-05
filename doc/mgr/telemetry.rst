@@ -47,15 +47,6 @@ the way Ceph is used.
 
 Data is sent over HTTPS to *telemetry.ceph.com*.
 
-Enabling the module
--------------------
-
-The module must first be enabled.  Note that even if the module is
-enabled, telemetry is still "off" by default, so simply enabling the
-module will *NOT* result in any data being shared.::
-
-  ceph mgr module enable telemetry
-
 Sample report
 -------------
 
