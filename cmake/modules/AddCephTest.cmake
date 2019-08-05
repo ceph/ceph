@@ -25,19 +25,21 @@ endfunction()
 
 option(WITH_GTEST_PARALLEL "Enable running gtest based tests in parallel" OFF)
 if(WITH_GTEST_PARALLEL)
-  set(gtest_parallel_source_dir ${CMAKE_CURRENT_BINARY_DIR}/gtest-parallel)
-  include(ExternalProject)
-  ExternalProject_Add(gtest-parallel_ext
-    SOURCE_DIR "${gtest_parallel_source_dir}"
-    GIT_REPOSITORY "https://github.com/google/gtest-parallel.git"
-    GIT_TAG "master"
-    CONFIGURE_COMMAND ""
-    BUILD_COMMAND ""
-    INSTALL_COMMAND "")
-  add_dependencies(tests gtest-parallel_ext)
-  find_package(Python REQUIRED)
-  set(GTEST_PARALLEL_COMMAND
-    ${Python_EXECUTABLE} ${gtest_parallel_source_dir}/gtest-parallel)
+  if(NOT TARGET gtest-parallel_ext)
+    set(gtest_parallel_source_dir ${CMAKE_CURRENT_BINARY_DIR}/gtest-parallel)
+    include(ExternalProject)
+    ExternalProject_Add(gtest-parallel_ext
+      SOURCE_DIR "${gtest_parallel_source_dir}"
+      GIT_REPOSITORY "https://github.com/google/gtest-parallel.git"
+      GIT_TAG "master"
+      CONFIGURE_COMMAND ""
+      BUILD_COMMAND ""
+      INSTALL_COMMAND "")
+    add_dependencies(tests gtest-parallel_ext)
+    find_package(Python REQUIRED)
+    set(GTEST_PARALLEL_COMMAND
+      ${Python_EXECUTABLE} ${gtest_parallel_source_dir}/gtest-parallel)
+  endif()
 endif()
 
 #sets uniform compiler flags and link libraries
