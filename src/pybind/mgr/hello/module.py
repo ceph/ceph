@@ -20,18 +20,34 @@ class Hello(MgrModule):
         },
     ]
 
-    # these are module options we understand.  These can be set with
-    # 'ceph config set global mgr/hello/<name> <value>'.  e.g.,
-    # 'ceph config set global mgr/hello/place Earth'
+    # These are module options we understand.  These can be set with
+    #
+    #   ceph config set global mgr/hello/<name> <value>
+    #
+    # e.g.,
+    #
+    #   ceph config set global mgr/hello/place Earth
+    #
     MODULE_OPTIONS = [
         {
             'name': 'place',
             'default': 'world',
+            'desc': 'a place in the world',
+            'runtime': True,   # can be updated at runtime (no mgr restart)
         },
         {
             'name': 'emphatic',
             'type': 'bool',
+            'desc': 'whether to say it loudly',
             'default': True,
+            'runtime': True,
+        },
+        {
+            'name': 'foo',
+            'type': 'enum',
+            'enum_allowed': [ 'a', 'b', 'c' ],
+            'default': 'a',
+            'runtime': True,
         },
     ]
 
