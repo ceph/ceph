@@ -13306,9 +13306,10 @@ int BlueStore::_omap_setkeys(TransContext *txc,
   auto p = bl.cbegin();
   __u32 num;
   if (!o->onode.has_omap()) {
-    o->onode.set_omap_flags();
     if (o->oid.is_pgmeta()) {
-      o->onode.flags |= bluestore_onode_t::FLAG_PGMETA_OMAP;
+      o->onode.set_omap_flags_pgmeta();
+    } else {
+      o->onode.set_omap_flags();
     }
     txc->write_onode(o);
 
@@ -13350,9 +13351,10 @@ int BlueStore::_omap_setheader(TransContext *txc,
   int r;
   string key;
   if (!o->onode.has_omap()) {
-    o->onode.set_omap_flags();
     if (o->oid.is_pgmeta()) {
-      o->onode.flags |= bluestore_onode_t::FLAG_PGMETA_OMAP;
+      o->onode.set_omap_flags_pgmeta();
+    } else {
+      o->onode.set_omap_flags();
     }
     txc->write_onode(o);
 
@@ -13505,9 +13507,10 @@ int BlueStore::_clone(TransContext *txc,
   }
   if (oldo->onode.has_omap()) {
     dout(20) << __func__ << " copying omap data" << dendl;
-    newo->onode.set_omap_flags();
     if (newo->oid.is_pgmeta()) {
-      newo->onode.flags |= bluestore_onode_t::FLAG_PGMETA_OMAP;
+      newo->onode.set_omap_flags_pgmeta();
+    } else {
+      newo->onode.set_omap_flags();
     }
     const string& prefix = newo->get_omap_prefix();
     KeyValueDB::Iterator it = db->get_iterator(prefix);
