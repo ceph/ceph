@@ -120,6 +120,7 @@ class SnapClient;
 class MDSTableServer;
 class MDSTableClient;
 class Messenger;
+class MetricAggregator;
 class Objecter;
 class MonClient;
 class MgrClient;
@@ -535,6 +536,8 @@ class MDSRank {
     // because its init/shutdown happens at the top level.
     PurgeQueue purge_queue;
 
+    std::unique_ptr<MetricAggregator> metric_aggregator;
+
     list<cref_t<Message>> waiting_for_nolaggy;
     MDSContext::que finished_queue;
     // Dispatch, retry, queues
@@ -582,6 +585,10 @@ private:
     void get_task_status(std::map<std::string, std::string> *status);
     void schedule_update_timer_task();
     void send_task_status();
+
+    bool is_rank0() const {
+      return whoami == (mds_rank_t)0;
+    }
 
     mono_time starttime = mono_clock::zero();
     boost::asio::io_context& ioc;
