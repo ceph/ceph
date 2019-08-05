@@ -6610,6 +6610,11 @@ std::pair<bool, uint64_t> MDCache::trim_lru(uint64_t count, expiremap& expiremap
  */
 std::pair<bool, uint64_t> MDCache::trim(uint64_t count)
 {
+  if (!open) {
+    dout(0) << "skip trim because mdcache not opened yet" << dendl; 
+    return std::pair<bool, uint64_t>(false, 0);
+  }
+
   uint64_t used = cache_size();
   uint64_t limit = cache_memory_limit;
   expiremap expiremap;
