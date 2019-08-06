@@ -949,6 +949,25 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       int ret = cls_cxx_map_set_val(hctx, idx, &new_key_bl);
       if (ret < 0)
 	return ret;
+
+      string instance_list_idx;
+      struct rgw_bucket_dir_entry instance_list_entry;
+      get_list_index_key(entry, &instance_list_idx);
+      int ret_tmp = read_index_entry(hctx, instance_list_idx, &instance_list_entry);
+      if (ret_tmp == -ENOENT) {
+      } else if (ret_tmp < 0) {
+      } else {
+        int flags_tmp = instance_list_entry.flags;
+        instance_list_entry = entry;
+        instance_list_entry.flags = flags_tmp;
+        bufferlist instance_list_key_bl;
+        ::encode(instance_list_entry, instance_list_key_bl)
+        ret_tmp = cls_cxx_map_set_val(hctx, instance_list_idx, &instance_list_key_bl);
+        if (ret_tmp < 0) {
+          return ret_tmp;
+        }
+      }
+
     }
     break;
   }
