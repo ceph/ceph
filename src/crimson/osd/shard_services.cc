@@ -27,12 +27,14 @@ namespace {
 namespace ceph::osd {
 
 ShardServices::ShardServices(
+  OSDMapService &osdmap_service,
   ceph::net::Messenger &cluster_msgr,
   ceph::net::Messenger &public_msgr,
   ceph::mon::Client &monc,
   ceph::mgr::Client &mgrc,
   ceph::os::FuturizedStore &store)
-    : cluster_msgr(cluster_msgr),
+    : osdmap_service(osdmap_service),
+      cluster_msgr(cluster_msgr),
       public_msgr(public_msgr),
       monc(monc),
       mgrc(mgrc),
@@ -243,6 +245,12 @@ seastar::future<> ShardServices::osdmap_subscribe(version_t epoch, bool force_re
   } else {
     return seastar::now();
   }
+}
+
+HeartbeatStampsRef ShardServices::get_hb_stamps(int peer)
+{
+#warning writeme
+  return HeartbeatStampsRef();
 }
 
 };

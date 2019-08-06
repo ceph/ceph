@@ -686,6 +686,8 @@ void PeeringState::on_new_interval()
     pg_log.get_missing().may_include_deletes ==
     !perform_deletes_during_peering());
 
+  init_hb_stamps();
+
   pl->on_new_interval();
 }
 
@@ -737,6 +739,29 @@ void PeeringState::init_primary_up_acting(
     ceph_assert(primary.osd == new_acting_primary);
   }
 }
+
+void PeeringState::init_hb_stamps()
+{
+  if (is_primary()) {
+    // we care about all other osds in the acting set
+    hb_stamps.resize(acting.size() - 1);
+    unsigned i = 0;
+    for (auto p : acting) {
+      if (p == CRUSH_ITEM_NONE || p == get_primary().osd) {
+	continue;
+      }
+      hb_stamps[i++] = pl->get_hb_stamps(p);
+    }
+    hb_stamps.resize(i);
+  } else if (is_replica()) {
+    // we care about just the primary
+    hb_stamps.resize(1);
+    hb_stamps[0] = pl->get_hb_stamps(get_primary().osd);
+  } else {
+    hb_stamps.clear();
+  }
+}
+
 
 void PeeringState::clear_recovery_state()
 {

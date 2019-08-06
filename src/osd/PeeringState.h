@@ -78,6 +78,99 @@ struct BufferedRecoveryMessages {
   }
 };
 
+struct HeartbeatStamps : public RefCountedObject {
+  mutable ceph::mutex lock = ceph::make_mutex("HeartbeatStamps::lock");
+
+  const int osd;
+
+  // we maintain an upper and lower bound on the delta between our local
+  // mono_clock time (minus the startup_time) to the peer OSD's mono_clock
+  // time (minus its startup_time).
+  //
+  // delta is (remote_clock_time - local_clock_time), so that
+  // local_time + delta -> peer_time, and peer_time - delta -> local_time.
+  //
+  // we have an upper and lower bound value on this delta, meaning the
+  // value of the remote clock is somewhere between [my_time + lb, my_time + ub]
+  //
+  // conversely, if we have a remote timestamp T, then that is
+  // [T - ub, T - lb] in terms of the local clock.  i.e., if you are
+  // substracting the delta, then take care that you swap the role of the
+  // lb and ub values.
+
+  /// lower bound on peer clock - local clock
+  std::optional<ceph::signedspan> peer_clock_delta_lb;
+
+  /// upper bound on peer clock - local clock
+  std::optional<ceph::signedspan> peer_clock_delta_ub;
+
+  /// highest up_from we've seen from this rank
+  epoch_t up_from = 0;
+
+  HeartbeatStamps(int o)
+    : RefCountedObject(NULL, 0),
+      osd(o) {}
+
+  void print(ostream& out) const {
+    std::lock_guard l(lock);
+    out << "hbstamp(osd." << osd << " up_from " << up_from
+	<< " peer_clock_delta [";
+    if (peer_clock_delta_lb) {
+      out << *peer_clock_delta_lb;
+    }
+    out << ",";
+    if (peer_clock_delta_ub) {
+      out << *peer_clock_delta_ub;
+    }
+    out << "])";
+  }
+
+  void sent_ping(std::optional<ceph::signedspan> *delta_ub) {
+    std::lock_guard l(lock);
+    // the non-primaries need a lower bound on remote clock - local clock.  if
+    // we assume the transit for the last ping_reply was
+    // instantaneous, that would be (the negative of) our last
+    // peer_clock_delta_lb value.
+    if (peer_clock_delta_lb) {
+      *delta_ub = - *peer_clock_delta_lb;
+    }
+  }
+
+  void got_ping(epoch_t this_up_from,
+		ceph::signedspan now,
+		ceph::signedspan peer_send_stamp,
+		std::optional<ceph::signedspan> delta_ub,
+		ceph::signedspan *out_delta_ub) {
+    std::lock_guard l(lock);
+    if (this_up_from < up_from) {
+      return;
+    }
+    if (this_up_from > up_from) {
+      up_from = this_up_from;
+    }
+    peer_clock_delta_lb = peer_send_stamp - now;
+    peer_clock_delta_ub = delta_ub;
+    *out_delta_ub = - *peer_clock_delta_lb;
+  }
+
+  void got_ping_reply(ceph::signedspan now,
+		      ceph::signedspan peer_send_stamp,
+		      std::optional<ceph::signedspan> delta_ub) {
+    std::lock_guard l(lock);
+    peer_clock_delta_lb = peer_send_stamp - now;
+    peer_clock_delta_ub = delta_ub;
+  }
+
+};
+typedef boost::intrusive_ptr<HeartbeatStamps> HeartbeatStampsRef;
+
+inline ostream& operator<<(ostream& out, const HeartbeatStamps& hb)
+{
+  hb.print(out);
+  return out;
+}
+
+
 struct PeeringCtx : BufferedRecoveryMessages {
   ObjectStore::Transaction transaction;
   HBHandle* handle = nullptr;
@@ -123,6 +216,9 @@ public:
       int osd, Message *m, epoch_t epoch, bool share_map_update=false) = 0;
     /// Send pg_created to mon
     virtual void send_pg_created(pg_t pgid) = 0;
+
+    virtual ceph::signedspan get_mnow() = 0;
+    virtual HeartbeatStampsRef get_hb_stamps(int peer) = 0;
 
     // ============ Flush state ==================
     /**
@@ -1235,6 +1331,8 @@ public:
   /// union of acting, recovery, and backfill targets
   set<pg_shard_t> acting_recovery_backfill;
 
+  vector<HeartbeatStampsRef> hb_stamps;
+
   bool send_notify = false; ///< True if a notify needs to be sent to the primary
 
   bool dirty_info = false;          ///< small info structu on disk out of date
@@ -1521,6 +1619,7 @@ public:
     const vector<int> &newacting,
     int new_up_primary,
     int new_acting_primary);
+  void init_hb_stamps();
 
   /// Set initial role
   void set_role(int r) {
