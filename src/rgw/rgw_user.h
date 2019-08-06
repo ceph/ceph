@@ -161,6 +161,7 @@ struct RGWUserAdminOpState {
   std::string user_email;
   std::string display_name;
   rgw_user new_user_id;
+  bool overwrite_new_user = false;
   int32_t max_buckets;
   __u8 suspended;
   __u8 admin;
@@ -264,6 +265,9 @@ struct RGWUserAdminOpState {
       return;
 
     new_user_id = id;
+  }
+  void set_overwrite_new_user(bool b) {
+    overwrite_new_user = b;
   }
 
   void set_user_email(std::string& email) {
@@ -456,6 +460,7 @@ struct RGWUserAdminOpState {
   std::string get_user_email() { return user_email; }
   std::string get_display_name() { return display_name; }
   rgw_user& get_new_uid() { return new_user_id; }
+  bool get_overwrite_new_user() const { return overwrite_new_user; }
   map<int, std::string>& get_temp_url_keys() { return temp_url_keys; }
 
   RGWUserInfo&  get_user_info() { return info; }
