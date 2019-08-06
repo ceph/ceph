@@ -1969,8 +1969,9 @@ int RGWUser::execute_user_rename(RGWUserAdminOpState& op_state, std::string *err
   stub_user_info.user_id = uid;
 
   RGWObjVersionTracker objv;
+  const bool exclusive = !op_state.get_overwrite_new_user(); // overwrite if requested
 
-  ret = rgw_store_user_info(store, stub_user_info, nullptr, &objv, real_time(), true);
+  ret = rgw_store_user_info(store, stub_user_info, nullptr, &objv, real_time(), exclusive);
   if (ret == -EEXIST) {
     set_err_msg(err_msg, "user name given by --new-uid already exists");
     return ret;
