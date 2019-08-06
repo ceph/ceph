@@ -116,20 +116,18 @@ std::vector<OperationRef> handle_pg_notify(
   std::vector<OperationRef> ret;
   ret.reserve(m->get_pg_list().size());
   const int from = m->get_source().num();
-  for (auto &p : m->get_pg_list()) {
-    auto& [pg_notify, past_intervals] = p;
+  for (auto& pg_notify : m->get_pg_list()) {
     spg_t pgid{pg_notify.info.pgid.pgid, pg_notify.to};
     MNotifyRec notify{pgid,
 		      pg_shard_t{from, pg_notify.from},
 		      pg_notify,
-		      0, // the features is not used
-		      past_intervals};
+		      0}; // the features is not used
     logger().debug("handle_pg_notify on {} from {}", pgid.pgid, from);
     auto create_info = new PGCreateInfo{
       pgid,
       pg_notify.query_epoch,
       pg_notify.info.history,
-      past_intervals,
+      pg_notify.past_intervals,
       false};
     auto op = osd.get_shard_services().start_operation<PeeringSubEvent>(
       state,
@@ -157,8 +155,7 @@ std::vector<OperationRef> handle_pg_info(
   std::vector<OperationRef> ret;
   ret.reserve(m->pg_list.size());
   const int from = m->get_source().num();
-  for (auto &p : m->pg_list) {
-    auto& pg_notify = p.first;
+  for (auto& pg_notify : m->pg_list) {
     spg_t pgid{pg_notify.info.pgid.pgid, pg_notify.to};
     logger().debug("handle_pg_info on {} from {}", pgid.pgid, from);
     MInfoRec info{pg_shard_t{from, pg_notify.from},
@@ -193,8 +190,8 @@ public:
 	from.shard, pgid.shard,
 	evt.get_epoch_sent(),
 	osd.get_shard_services().get_osdmap()->get_epoch(),
-	empty),
-      PastIntervals());
+	empty,
+	PastIntervals()));
   }
 };
 

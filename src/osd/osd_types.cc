@@ -3344,23 +3344,27 @@ void pg_info_t::generate_test_instances(list<pg_info_t*>& o)
 // -- pg_notify_t --
 void pg_notify_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 2, bl);
   encode(query_epoch, bl);
   encode(epoch_sent, bl);
   encode(info, bl);
   encode(to, bl);
   encode(from, bl);
+  encode(past_intervals, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_notify_t::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START(2, bl);
+  DECODE_START(3, bl);
   decode(query_epoch, bl);
   decode(epoch_sent, bl);
   decode(info, bl);
   decode(to, bl);
   decode(from, bl);
+  if (struct_v >= 3) {
+    decode(past_intervals, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -3375,12 +3379,15 @@ void pg_notify_t::dump(Formatter *f) const
     info.dump(f);
     f->close_section();
   }
+  f->dump_object("past_intervals", past_intervals);
 }
 
 void pg_notify_t::generate_test_instances(list<pg_notify_t*>& o)
 {
-  o.push_back(new pg_notify_t(shard_id_t(3), shard_id_t::NO_SHARD, 1, 1, pg_info_t()));
-  o.push_back(new pg_notify_t(shard_id_t(0), shard_id_t(0), 3, 10, pg_info_t()));
+  o.push_back(new pg_notify_t(shard_id_t(3), shard_id_t::NO_SHARD, 1, 1,
+			      pg_info_t(), PastIntervals()));
+  o.push_back(new pg_notify_t(shard_id_t(0), shard_id_t(0), 3, 10,
+			      pg_info_t(), PastIntervals()));
 }
 
 ostream &operator<<(ostream &lhs, const pg_notify_t &notify)
@@ -3392,6 +3399,7 @@ ostream &operator<<(ostream &lhs, const pg_notify_t &notify)
       notify.to != shard_id_t::NO_SHARD)
     lhs << " " << (unsigned)notify.from
 	<< "->" << (unsigned)notify.to;
+  lhs << " " << notify.past_intervals;
   return lhs << ")";
 }
 
