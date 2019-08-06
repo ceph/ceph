@@ -485,6 +485,8 @@ void md_config_t::parse_env(unsigned entity_type,
   //   CRD) and is the target memory utilization we try to maintain for daemons
   //   that respect it.
   //
+  //   If POD_MEMORY_REQUEST is present, we use it as the target.
+  //
   // - Limits: At runtime, the container runtime (and Linux) will use the
   //   limits to see if the pod is using too many resources. In that case, the
   //   pod will be killed/restarted automatically if the pod goes over the limit.
@@ -492,28 +494,69 @@ void md_config_t::parse_env(unsigned entity_type,
   //   much higher). This corresponds to the cgroup memory limit that will
   //   trigger the Linux OOM killer.
   //
-  // Here are the documented best practices: https://kubernetes.io/docs/tasks/configure-pod-container/assign-cpu-resource/#motivation-for-cpu-requests-and-limits
+  //   If POD_MEMORY_LIMIT is present, we use it as the /default/ value for
+  //   the target, which means it will only apply if the *_memory_target option
+  //   isn't set via some other path (e.g., POD_MEMORY_REQUEST, or the cluster
+  //   config, or whatever.)
+  //
+  // Here are the documented best practices:
+  //   https://kubernetes.io/docs/tasks/configure-pod-container/assign-cpu-resource/#motivation-for-cpu-requests-and-limits
   //
   // When the operator creates the CephCluster CR, it will need to generate the
   // desired requests and limits. As long as we are conservative in our choice
   // for requests and generous with the limits we should be in a good place to
   // get started.
   //
-  // The support in Rook is already there for applying the limits as seen in these links.
+  // The support in Rook is already there for applying the limits as seen in
+  // these links.
   //
-  // Rook docs on the resource requests and limits: https://rook.io/docs/rook/v1.0/ceph-cluster-crd.html#cluster-wide-resources-configuration-settings
-  // Example CR settings: https://github.com/rook/rook/blob/6d2ef936698593036185aabcb00d1d74f9c7bfc1/cluster/examples/kubernetes/ceph/cluster.yaml#L90
-  if (auto pod_req = getenv("POD_MEMORY_REQUEST"); pod_req) {
+  // Rook docs on the resource requests and limits:
+  //   https://rook.io/docs/rook/v1.0/ceph-cluster-crd.html#cluster-wide-resources-configuration-settings
+  // Example CR settings:
+  //   https://github.com/rook/rook/blob/6d2ef936698593036185aabcb00d1d74f9c7bfc1/cluster/examples/kubernetes/ceph/cluster.yaml#L90
+  //
+  uint64_t pod_limit = 0, pod_request = 0;
+  if (auto pod_lim = getenv("POD_MEMORY_LIMIT"); pod_lim) {
     string err;
-    uint64_t v = atoll(pod_req);
+    uint64_t v = atoll(pod_lim);
     if (v) {
       switch (entity_type) {
       case CEPH_ENTITY_TYPE_OSD:
-	_set_val(values, tracker, stringify(v),
-		 *find_option("osd_memory_target"),
-		 CONF_ENV, &err);
-	break;
+        {
+	  double cgroup_ratio = get_val<double>(
+	    values, "osd_memory_target_cgroup_limit_ratio");
+	  if (cgroup_ratio > 0.0) {
+	    pod_limit = v * cgroup_ratio;
+	    // set osd_memory_target *default* based on cgroup limit, so that
+	    // it can be overridden by any explicit settings elsewhere.
+	    set_val_default(values, tracker,
+			    "osd_memory_target", stringify(pod_limit));
+	  }
+	}
       }
+    }
+  }
+  if (auto pod_req = getenv("POD_MEMORY_REQUEST"); pod_req) {
+    if (uint64_t v = atoll(pod_req); v) {
+      pod_request = v;
+    }
+  }
+  if (pod_request && pod_limit) {
+    // If both LIMIT and REQUEST are set, ensure that we use the
+    // min of request and limit*ratio.  This is important
+    // because k8s set set LIMIT == REQUEST if only LIMIT is
+    // specified, and we want to apply the ratio in that case,
+    // even though REQUEST is present.
+    pod_request = std::min<uint64_t>(pod_request, pod_limit);
+  }
+  if (pod_request) {
+    string err;
+    switch (entity_type) {
+    case CEPH_ENTITY_TYPE_OSD:
+      _set_val(values, tracker, stringify(pod_request),
+	       *find_option("osd_memory_target"),
+	       CONF_ENV, &err);
+      break;
     }
   }
 
