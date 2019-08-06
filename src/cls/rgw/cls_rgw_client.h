@@ -437,6 +437,10 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
                             bool list_versions,
                             rgw_cls_list_ret* result);
 
+void cls_rgw_bilog_list(librados::ObjectReadOperation& op,
+                        const std::string& marker, uint32_t max,
+                        cls_rgw_bi_log_list_ret *pdata, int *ret = nullptr);
+
 class CLSRGWIssueBILogList : public CLSRGWConcurrentIO {
   map<int, cls_rgw_bi_log_list_ret>& result;
   BucketIndexShardsManager& marker_mgr;
@@ -450,6 +454,10 @@ public:
     CLSRGWConcurrentIO(io_ctx, oids, max_aio), result(bi_log_lists),
     marker_mgr(_marker_mgr), max(_max) {}
 };
+
+void cls_rgw_bilog_trim(librados::ObjectWriteOperation& op,
+                        const std::string& start_marker,
+                        const std::string& end_marker);
 
 class CLSRGWIssueBILogTrim : public CLSRGWConcurrentIO {
   BucketIndexShardsManager& start_marker_mgr;
