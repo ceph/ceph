@@ -2498,8 +2498,9 @@ void PeeringState::activate(
       }
 
       if (m) {
-	dout(10) << "activate peer osd." << peer << " sending " << m->log << dendl;
-	//m->log.print(cout);
+	dout(10) << "activate peer osd." << peer << " sending " << m->log
+		 << dendl;
+	m->lease = get_lease();
 	pl->send_cluster_message(peer.osd, m, get_osdmap_epoch());
       }
 
@@ -5959,6 +5960,9 @@ boost::statechart::result PeeringState::ReplicaActive::react(const MLogRec& loge
   ObjectStore::Transaction &t = context<PeeringMachine>().get_cur_transaction();
   ps->merge_log(t, logevt.msg->info, logevt.msg->log, logevt.from);
   ceph_assert(ps->pg_log.get_head() == ps->info.last_update);
+  if (logevt.msg->lease) {
+    ps->proc_lease(*logevt.msg->lease);
+  }
 
   return discard_event();
 }
@@ -6059,6 +6063,9 @@ boost::statechart::result PeeringState::Stray::react(const MLogRec& logevt)
     ps->pg_log.reset_backfill();
   } else {
     ps->merge_log(t, msg->info, msg->log, logevt.from);
+  }
+  if (logevt.msg->lease) {
+    ps->proc_lease(*logevt.msg->lease);
   }
 
   ceph_assert(ps->pg_log.get_head() == ps->info.last_update);
