@@ -123,6 +123,7 @@ extern int rgw_delete_user(RGWRados *store, RGWUserInfo& user, RGWObjVersionTrac
  */
 extern int rgw_remove_key_index(RGWRados *store, RGWAccessKey& access_key);
 extern int rgw_remove_uid_index(RGWRados *store, rgw_user& uid);
+extern int rgw_remove_user_buckets_index(RGWRados *store, rgw_user& uid);
 extern int rgw_remove_email_index(RGWRados *store, string& email);
 extern int rgw_remove_swift_name_index(RGWRados *store, string& swift_name);
 
