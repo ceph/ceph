@@ -95,9 +95,7 @@ struct MLogRec : boost::statechart::event< MLogRec > {
   pg_shard_t from;
   boost::intrusive_ptr<MOSDPGLog> msg;
   MLogRec(pg_shard_t from, MOSDPGLog *msg);
-  void print(std::ostream *out) const {
-    *out << "MLogRec from " << from;
-  }
+  void print(std::ostream *out) const;
 };
 
 struct MNotifyRec : boost::statechart::event< MNotifyRec > {
