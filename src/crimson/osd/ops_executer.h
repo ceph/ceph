@@ -33,11 +33,33 @@ class OpsExecuter {
   PGBackend& backend;
   ceph::os::Transaction txn;
 
+  size_t num_read = 0;    ///< count read ops
+  size_t num_write = 0;   ///< count update ops
+
   seastar::future<ceph::bufferlist> do_pgnls(
     ceph::bufferlist& indata,
     const std::string& nspace,
     uint64_t limit);
   seastar::future<> do_op_call(class OSDOp& osd_op);
+
+  template <class Func>
+  auto do_const_op(Func&& f) {
+    // TODO: pass backend as read-only
+    return std::forward<Func>(f)(backend, const_cast<const ObjectState&>(*os));
+  }
+
+  template <class Func>
+  auto do_read_op(Func&& f) {
+    ++num_read;
+    // TODO: pass backend as read-only
+    return std::forward<Func>(f)(backend, const_cast<const ObjectState&>(*os));
+  }
+
+  template <class Func>
+  auto do_write_op(Func&& f) {
+    ++num_write;
+    return std::forward<Func>(f)(backend, *os, txn);
+  }
 
 public:
   OpsExecuter(PGBackend::cached_os_t os, PG& pg)

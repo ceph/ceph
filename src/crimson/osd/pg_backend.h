@@ -48,7 +48,7 @@ public:
 				   uint32_t truncate_seq,
 				   uint32_t flags);
   seastar::future<> stat(
-    ObjectState& os,
+    const ObjectState& os,
     OSDOp& osd_op);
   seastar::future<> remove(
     ObjectState& os,
@@ -77,7 +77,7 @@ public:
     const OSDOp& osd_op,
     ceph::os::Transaction& trans);
   seastar::future<> getxattr(
-    ObjectState& os,
+    const ObjectState& os,
     OSDOp& osd_op);
 
   virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
