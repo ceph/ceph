@@ -372,42 +372,42 @@ void osd_stat_t::dump(Formatter *f) const
     f->open_object_section("interface");
     f->dump_string("interface", "back");
     f->open_object_section("average");
-    f->dump_int("1min", i.second.back_pingtime[0]);
-    f->dump_int("5min", i.second.back_pingtime[1]);
-    f->dump_int("15min", i.second.back_pingtime[2]);
+    f->dump_format_unquoted("1min", "%s", fixed_u_to_string(i.second.back_pingtime[0],3).c_str());
+    f->dump_format_unquoted("5min", "%s", fixed_u_to_string(i.second.back_pingtime[1],3).c_str());
+    f->dump_format_unquoted("15min", "%s", fixed_u_to_string(i.second.back_pingtime[2],3).c_str());
     f->close_section(); // average
     f->open_object_section("min");
-    f->dump_int("1min", i.second.back_min[0]);
-    f->dump_int("5min", i.second.back_min[1]);
-    f->dump_int("15min", i.second.back_min[2]);
+    f->dump_format_unquoted("1min", "%s", fixed_u_to_string(i.second.back_min[0],3).c_str());
+    f->dump_format_unquoted("5min", "%s", fixed_u_to_string(i.second.back_min[1],3).c_str());
+    f->dump_format_unquoted("15min", "%s", fixed_u_to_string(i.second.back_min[2],3).c_str());
     f->close_section(); // min
     f->open_object_section("max");
-    f->dump_int("1min", i.second.back_max[0]);
-    f->dump_int("5min", i.second.back_max[1]);
-    f->dump_int("15min", i.second.back_max[2]);
+    f->dump_format_unquoted("1min", "%s", fixed_u_to_string(i.second.back_max[0],3).c_str());
+    f->dump_format_unquoted("5min", "%s", fixed_u_to_string(i.second.back_max[1],3).c_str());
+    f->dump_format_unquoted("15min", "%s", fixed_u_to_string(i.second.back_max[2],3).c_str());
     f->close_section(); // max
-    f->dump_int("last", i.second.back_last);
+    f->dump_format_unquoted("last", "%s", fixed_u_to_string(i.second.back_last,3).c_str());
     f->close_section(); // interface
 
     if (i.second.front_pingtime[0] != 0) {
       f->open_object_section("interface");
       f->dump_string("interface", "front");
       f->open_object_section("average");
-      f->dump_int("1min", i.second.front_pingtime[0]);
-      f->dump_int("5min", i.second.front_pingtime[1]);
-      f->dump_int("15min", i.second.front_pingtime[2]);
+      f->dump_format_unquoted("1min", "%s", fixed_u_to_string(i.second.front_pingtime[0],3).c_str());
+      f->dump_format_unquoted("5min", "%s", fixed_u_to_string(i.second.front_pingtime[1],3).c_str());
+      f->dump_format_unquoted("15min", "%s", fixed_u_to_string(i.second.front_pingtime[2],3).c_str());
       f->close_section(); // average
       f->open_object_section("min");
-      f->dump_int("1min", i.second.front_min[0]);
-      f->dump_int("5min", i.second.front_min[1]);
-      f->dump_int("15min", i.second.front_min[2]);
+      f->dump_format_unquoted("1min", "%s", fixed_u_to_string(i.second.front_min[0],3).c_str());
+      f->dump_format_unquoted("5min", "%s", fixed_u_to_string(i.second.front_min[1],3).c_str());
+      f->dump_format_unquoted("15min", "%s", fixed_u_to_string(i.second.front_min[2],3).c_str());
       f->close_section(); // min
       f->open_object_section("max");
-      f->dump_int("1min", i.second.front_max[0]);
-      f->dump_int("5min", i.second.front_max[1]);
-      f->dump_int("15min", i.second.front_max[2]);
+      f->dump_format_unquoted("1min", "%s", fixed_u_to_string(i.second.front_max[0],3).c_str());
+      f->dump_format_unquoted("5min", "%s", fixed_u_to_string(i.second.front_max[1],3).c_str());
+      f->dump_format_unquoted("15min", "%s", fixed_u_to_string(i.second.front_max[2],3).c_str());
       f->close_section(); // max
-      f->dump_int("last", i.second.front_last);
+      f->dump_format_unquoted("last", "%s", fixed_u_to_string(i.second.front_last,3).c_str());
       f->close_section(); // interface
     }
     f->close_section(); // interfaces
