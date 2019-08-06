@@ -91,6 +91,10 @@ public:
   /* For test/debug output */
   void dump(ceph::Formatter *f) const;
 
+  void decode_json(JSONObj *obj);
+  static void xattrs_cb(InodeStoreBase::mempool_xattr_map& c, JSONObj *obj);
+  static void old_indoes_cb(InodeStoreBase::mempool_old_inode_map& c, JSONObj *obj);
+  
   /* For use by offline tools */
   __u32 hash_dentry_name(std::string_view dn);
   frag_t pick_dirfrag(std::string_view dn);
