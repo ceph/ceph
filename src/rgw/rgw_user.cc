@@ -2063,15 +2063,10 @@ int RGWUser::execute_user_rename(RGWUserAdminOpState& op_state, std::string *err
 
   // update the 'stub user' with all of the other fields and rewrite all of the
   // associated index objects
-  RGWUserInfo user_info = old_user_info;
-  user_info.user_id = stub_user_info.user_id;
+  op_state.get_user_info().user_id = uid;
+  op_state.objv = objv;
 
-  ret = rgw_store_user_info(store, user_info, &old_user_info, &objv, real_time(), false);
-  if (ret < 0) {
-    set_err_msg(err_msg, "unable to store new user info");
-    return ret;
-  }
-  return 0;
+  return update(op_state, err_msg);
 }
 
 int RGWUser::execute_rename(RGWUserAdminOpState& op_state, RGWUserInfo& old_user_info, std::string *err_msg)
