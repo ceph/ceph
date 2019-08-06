@@ -474,17 +474,26 @@ int cls_rgw_clear_olh(IoCtx& io_ctx, librados::ObjectWriteOperation& op, string&
   return op_ret;
 }
 
-static bool issue_bi_log_list_op(librados::IoCtx& io_ctx, const string& oid, int shard_id,
-                                 BucketIndexShardsManager& marker_mgr, uint32_t max, BucketIndexAioManager *manager,
-    cls_rgw_bi_log_list_ret *pdata) {
-  bufferlist in;
+void cls_rgw_bilog_list(librados::ObjectReadOperation& op,
+                        const std::string& marker, uint32_t max,
+                        cls_rgw_bi_log_list_ret *pdata, int *ret)
+{
   cls_rgw_bi_log_list_op call;
-  call.marker = marker_mgr.get(shard_id, "");
+  call.marker = marker;
   call.max = max;
-  encode(call, in);
 
+  bufferlist in;
+  encode(call, in);
+  op.exec(RGW_CLASS, RGW_BI_LOG_LIST, in, new ClsBucketIndexOpCtx<cls_rgw_bi_log_list_ret>(pdata, ret));
+}
+
+static bool issue_bi_log_list_op(librados::IoCtx& io_ctx, const string& oid, int shard_id,
+                                 BucketIndexShardsManager& marker_mgr, uint32_t max,
+                                 BucketIndexAioManager *manager,
+                                 cls_rgw_bi_log_list_ret *pdata)
+{
   librados::ObjectReadOperation op;
-  op.exec(RGW_CLASS, RGW_BI_LOG_LIST, in, new ClsBucketIndexOpCtx<cls_rgw_bi_log_list_ret>(pdata, NULL));
+  cls_rgw_bilog_list(op, marker_mgr.get(shard_id, ""), max, pdata, nullptr);
   return manager->aio_operate(io_ctx, oid, &op);
 }
 
@@ -493,16 +502,26 @@ int CLSRGWIssueBILogList::issue_op(int shard_id, const string& oid)
   return issue_bi_log_list_op(io_ctx, oid, shard_id, marker_mgr, max, &manager, &result[shard_id]);
 }
 
+void cls_rgw_bilog_trim(librados::ObjectWriteOperation& op,
+                        const std::string& start_marker,
+                        const std::string& end_marker)
+{
+  cls_rgw_bi_log_trim_op call;
+  call.start_marker = start_marker;
+  call.end_marker = end_marker;
+
+  bufferlist in;
+  encode(call, in);
+  op.exec(RGW_CLASS, RGW_BI_LOG_TRIM, in);
+}
+
 static bool issue_bi_log_trim(librados::IoCtx& io_ctx, const string& oid, int shard_id,
                               BucketIndexShardsManager& start_marker_mgr,
                               BucketIndexShardsManager& end_marker_mgr, BucketIndexAioManager *manager) {
-  bufferlist in;
   cls_rgw_bi_log_trim_op call;
-  call.start_marker = start_marker_mgr.get(shard_id, "");
-  call.end_marker = end_marker_mgr.get(shard_id, "");
-  encode(call, in);
-  ObjectWriteOperation op;
-  op.exec(RGW_CLASS, RGW_BI_LOG_TRIM, in);
+  librados::ObjectWriteOperation op;
+  cls_rgw_bilog_trim(op, start_marker_mgr.get(shard_id, ""),
+                     end_marker_mgr.get(shard_id, ""));
   return manager->aio_operate(io_ctx, oid, &op);
 }
 
