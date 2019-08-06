@@ -341,6 +341,9 @@ constexpr unsigned long long operator"" _M (unsigned long long n) {
 constexpr unsigned long long operator"" _G (unsigned long long n) {
   return n << 30;
 }
+constexpr unsigned long long operator"" _T (unsigned long long n) {
+  return n << 40;
+}
 
 std::vector<Option> get_global_options() {
   return std::vector<Option>({
@@ -4371,7 +4374,7 @@ std::vector<Option> get_global_options() {
     .set_description("Path to block device/file"),
 
     Option("bluestore_block_size", Option::TYPE_SIZE, Option::LEVEL_DEV)
-    .set_default(10_G)
+    .set_default(1_T)
     .set_flag(Option::FLAG_CREATE)
     .set_description("Size of file to create for backing bluestore"),
 
