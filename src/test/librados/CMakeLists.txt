@@ -194,3 +194,8 @@ add_executable(ceph_test_rados_completion_speed
   completion_speed.cc)
 target_link_libraries(ceph_test_rados_completion_speed
   librados ${UNITTEST_LIBS} radostest-cxx)
+
+add_executable(ceph_test_rados_op_speed
+  op_speed.cc)
+target_link_libraries(ceph_test_rados_op_speed
+  librados ${UNITTEST_LIBS} radostest-cxx)
