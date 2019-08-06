@@ -1936,7 +1936,7 @@ int RGWUser::check_op(RGWUserAdminOpState& op_state, std::string *err_msg)
   return 0;
 }
 
-int RGWUser::execute_user_rename(RGWUserAdminOpState& op_state, std::string *err_msg)
+int RGWUser::execute_rename(RGWUserAdminOpState& op_state, std::string *err_msg)
 {
   int ret;
   bool populated = op_state.is_populated();
@@ -2068,60 +2068,6 @@ int RGWUser::execute_user_rename(RGWUserAdminOpState& op_state, std::string *err
 
   return update(op_state, err_msg);
 }
-
-int RGWUser::execute_rename(RGWUserAdminOpState& op_state, RGWUserInfo& old_user_info, std::string *err_msg)
-{
-  std::string subprocess_msg;
-  int ret = 0;
-
-  rgw_user& user_id = op_state.get_user_id();
-
-  RGWUserInfo user_info;
-  user_info = old_user_info;
-  user_info.user_id = user_id;
-
-  // update swift_keys with new user id
-  auto modify_keys = user_info.swift_keys;
-  map<string, RGWAccessKey>::iterator it;
-
-  user_info.swift_keys.clear();
-
-  for (it = modify_keys.begin(); it != modify_keys.end(); it++) {
-
-    RGWAccessKey old_key;
-    old_key = it->second;
-
-    std::string id;
-    user_id.to_str(id);
-    id.append(":");
-    id.append(old_key.subuser);
-
-    old_key.id = id;
-    user_info.swift_keys[id] = old_key;
-  }
-
-  op_state.set_user_info(user_info);
-  op_state.set_initialized();
-
-  // update the helper objects
-  ret = init_members(op_state);
-  if (ret < 0) {
-    set_err_msg(err_msg, "unable to initialize user");
-    return ret;
-  }
-
-  ret = rgw_store_user_info(store, user_info, &old_info, &op_state.objv, real_time(), false);
-  if (ret < 0) {
-    set_err_msg(err_msg, "unable to store user info");
-    return ret;
-  }
-
-  old_info = user_info;
-  set_populated();
-
-  return 0;
-}
-
 
 int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
 {
@@ -2282,7 +2228,7 @@ int RGWUser::rename(RGWUserAdminOpState& op_state, std::string *err_msg)
     return ret;
   }
 
-  ret = execute_user_rename(op_state, &subprocess_msg);
+  ret = execute_rename(op_state, &subprocess_msg);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to rename user, " + subprocess_msg);
     return ret;
