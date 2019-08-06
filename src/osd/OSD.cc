@@ -2667,21 +2667,21 @@ will start to track new ops received afterwards.";
       f->dump_int("to osd", sitem.to);
       f->dump_string("interface", (sitem.back ? "back" : "front"));
       f->open_object_section("average");
-      f->dump_int("1min", sitem.times[0]);
-      f->dump_int("5min", sitem.times[1]);
-      f->dump_int("15min", sitem.times[2]);
+      f->dump_format_unquoted("1min", "%s", fixed_u_to_string(sitem.times[0],3).c_str());
+      f->dump_format_unquoted("5min", "%s", fixed_u_to_string(sitem.times[1],3).c_str());
+      f->dump_format_unquoted("15min", "%s", fixed_u_to_string(sitem.times[2],3).c_str());
       f->close_section();  // average
       f->open_object_section("min");
-      f->dump_int("1min", sitem.min[0]);
-      f->dump_int("5min", sitem.min[1]);
-      f->dump_int("15min", sitem.min[2]);
+      f->dump_format_unquoted("1min", "%s", fixed_u_to_string(sitem.max[0],3).c_str());
+      f->dump_format_unquoted("5min", "%s", fixed_u_to_string(sitem.max[1],3).c_str());
+      f->dump_format_unquoted("15min", "%s", fixed_u_to_string(sitem.max[2],3).c_str());
       f->close_section();  // min
       f->open_object_section("max");
-      f->dump_int("1min", sitem.max[0]);
-      f->dump_int("5min", sitem.max[1]);
-      f->dump_int("15min", sitem.max[2]);
+      f->dump_format_unquoted("1min", "%s", fixed_u_to_string(sitem.max[0],3).c_str());
+      f->dump_format_unquoted("5min", "%s", fixed_u_to_string(sitem.max[1],3).c_str());
+      f->dump_format_unquoted("15min", "%s", fixed_u_to_string(sitem.max[2],3).c_str());
       f->close_section();  // max
-      f->dump_int("last", sitem.last);
+      f->dump_format_unquoted("last", "%s", fixed_u_to_string(sitem.last,3).c_str());
       f->close_section();  // entry
     }
     f->close_section(); // entries
