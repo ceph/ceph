@@ -385,30 +385,38 @@ struct rgw_cls_list_op
   cls_rgw_obj_key start_obj;
   uint32_t num_entries;
   string filter_prefix;
+  string delimiter;
   bool list_versions;
 
   rgw_cls_list_op() : num_entries(0), list_versions(false) {}
 
   void encode(bufferlist &bl) const {
-    ENCODE_START(5, 4, bl);
+    ENCODE_START(6, 4, bl);
     encode(num_entries, bl);
     encode(filter_prefix, bl);
     encode(start_obj, bl);
     encode(list_versions, bl);
+    encode(delimiter, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &bl) {
-    DECODE_START_LEGACY_COMPAT_LEN(5, 2, 2, bl);
+    DECODE_START_LEGACY_COMPAT_LEN(6, 2, 2, bl);
     if (struct_v < 4) {
       decode(start_obj.name, bl);
     }
     decode(num_entries, bl);
-    if (struct_v >= 3)
+    if (struct_v >= 3) {
       decode(filter_prefix, bl);
-    if (struct_v >= 4)
+    }
+    if (struct_v >= 4) {
       decode(start_obj, bl);
-    if (struct_v >= 5)
+    }
+    if (struct_v >= 5) {
       decode(list_versions, bl);
+    }
+    if (struct_v >= 6) {
+      decode(delimiter, bl);
+    }
     DECODE_FINISH(bl);
   }
   void dump(Formatter *f) const;

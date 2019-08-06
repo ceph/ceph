@@ -421,8 +421,11 @@ TEST_F(cls_rgw, index_list)
   map<int, string> oids = { {0, bucket_oid} };
   map<int, struct rgw_cls_list_ret> list_results;
   cls_rgw_obj_key start_key("", "");
-  int r = CLSRGWIssueBucketList(ioctx, start_key, "", 1000, true, oids, list_results, 1)();
-
+  string empty_prefix;
+  string empty_delimiter;
+  int r = CLSRGWIssueBucketList(ioctx, start_key,
+				empty_prefix, empty_delimiter,
+				1000, true, oids, list_results, 1)();
   ASSERT_EQ(r, 0);
   ASSERT_EQ(1u, list_results.size());
 

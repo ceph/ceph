@@ -6247,19 +6247,21 @@ next:
     bool is_truncated = true;
 
     rgw_obj_index_key marker;
-    string prefix;
+    string empty_prefix;
+    string empty_delimiter;
 
     formatter->open_object_section("result");
     formatter->dump_string("bucket", bucket_name);
     formatter->open_array_section("objects");
     while (is_truncated) {
       RGWRados::ent_map_t result;
-      int r =
-	store->getRados()->cls_bucket_list_ordered(bucket_info, RGW_NO_SHARD, marker,
-				       prefix, 1000, true,
-				       result, &is_truncated, &marker,
-                                       null_yield,
-				       rgw_bucket_object_check_filter);
+      int r = store->getRados()->cls_bucket_list_ordered(
+	bucket_info, RGW_NO_SHARD,
+	marker, empty_prefix, empty_delimiter,
+	1000, true,
+	result, &is_truncated, &marker,
+	null_yield,
+	rgw_bucket_object_check_filter);
       if (r < 0 && r != -ENOENT) {
         cerr << "ERROR: failed operation r=" << r << std::endl;
       }

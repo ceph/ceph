@@ -347,6 +347,12 @@ struct rgw_bucket_dir_entry {
   static constexpr uint16_t FLAG_DELETE_MARKER =      0x4;
   /* object is versioned, a placeholder for the plain entry */
   static constexpr uint16_t FLAG_VER_MARKER =         0x8;
+  /* object is a proxy; it is not listed in the bucket index but is a
+   * prefix ending with a delimiter, perhaps common to multiple
+   * entries; it is only useful when a delimiter is used and
+   * represents a "subdirectory" (again, ending in a delimiter) that
+   * may contain one or more actual entries/objects */
+  static constexpr uint16_t FLAG_COMMON_PREFIX =   0x8000;
 
   cls_rgw_obj_key key;
   rgw_bucket_entry_ver ver;
@@ -423,6 +429,9 @@ struct rgw_bucket_dir_entry {
   }
   bool is_valid() const {
     return (flags & rgw_bucket_dir_entry::FLAG_VER_MARKER) == 0;
+  }
+  bool is_common_prefix() const {
+    return flags & rgw_bucket_dir_entry::FLAG_COMMON_PREFIX;
   }
 
   void dump(Formatter *f) const;
