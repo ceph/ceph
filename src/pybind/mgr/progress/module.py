@@ -372,7 +372,7 @@ class Module(MgrModule):
 
     def balancer_crush_compat(self, old_map, old_dump, new_map, msg):
         # For the crush compat to use in creating a PgRecovery event
-        
+
         osd_list = []
         affected_pgs = []
         for pool in old_dump['pools']:
@@ -387,10 +387,10 @@ class Module(MgrModule):
 
                 new_up_acting = new_map.pg_to_up_acting_osds(pool['pool'], ps)
                 new_osds = set(new_up_acting['acting'])
-                osds_dif = old_osds - new_osds
-                osd_list = osd_list + list(osds_dif)
-                is_relocated = len(osds_dif) > 0
-                self.log.debug("new_up_acting: {0}".format(json.dumps(new_up_acting,indent=2)))
+                osds_delta = old_osds - new_osds
+                osd_list = osd_list + list(osds_delta)
+                is_relocated = len(osds_delta) > 0
+                self.log.debug("new_up_acting: {0}".format(json.dumps(new_up_acting, indent=2)))
                 if is_relocated:
                     affected_pgs.append(PgId(pool_id, ps))
 
@@ -399,13 +399,11 @@ class Module(MgrModule):
                         "Balancer crush-compat %s" % msg,
                         refs=[("Balancer", "crush-compat")],
                         which_pgs=affected_pgs,
-                        evacuate_osds=osd_list,
+                        which_osds=osd_list,
                         start_epoch=self.get_osdmap().get_epoch()
                         )
             ev.pg_update(self.get("pg_dump"), self.log)
             self._events[ev.id] = ev
-
-
 
     def _osd_in_out(self, old_map, old_dump, new_map, osd_id, marked):
         # A function that will create or complete an event when an
@@ -428,7 +426,6 @@ class Module(MgrModule):
                 # Check the osd_id being in the acting set for both old
                 # and new maps to cover both out and in cases
                 was_on_out_or_in_osd = osd_id in old_osds or osd_id in new_osds
-
                 if not was_on_out_or_in_osd:
                     continue
 
@@ -458,7 +455,6 @@ class Module(MgrModule):
                     # This PG didn't get a new location, we'll log it
                     unmoved_pgs.append(PgId(pool_id, ps))
 
- 
         # In the case that we ignored some PGs, log the reason why (we may
         # not end up creating a progress event)
         if len(unmoved_pgs):
@@ -467,7 +463,6 @@ class Module(MgrModule):
 
         self.log.warn("{0} PGs affected by osd.{1} being marked {2}".format(
             len(affected_pgs), osd_id, marked))
-
 
         # In the case of the osd coming back in, we might need to cancel
         # previous recovery event for that osd
@@ -629,8 +624,8 @@ class Module(MgrModule):
         ev._refresh()
 
     def add_event(self, ev):
-            self._events[ev.id] = ev
-            return None
+        self._events[ev.id] = ev
+        return None
 
     def _complete(self, ev):
         duration = (time.time() - ev.started_at)
@@ -722,12 +717,10 @@ class Module(MgrModule):
             return 0, json.dumps(self._json(), indent=2), ""
         else:
             raise NotImplementedError(cmd['prefix'])
-    
+
     # For other module to use.
     def construct_pgid(self, pool_id, ps):
         return PgId(pool_id, ps)
 
-    def construct_pg_recovery_event(self, message, refs, which_pgs, evacuate_osds, start_epoch):
-        return PgRecoveryEvent(message, refs, which_pgs,
-                evacuate_osds, start_epoch)
-
+    def construct_pg_recovery_event(self, message, refs, which_pgs, which_osds, start_epoch):
+        return PgRecoveryEvent(message, refs, which_pgs, which_osds, start_epoch)

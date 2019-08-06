@@ -292,7 +292,7 @@ class Module(MgrModule):
         {
             'name': 'upmap_max_iterations',
             'type': 'uint',
-            'default': 10,
+            'default': 60,
             'desc': 'maximum upmap optimization iterations',
             'runtime': True,
         },
@@ -1264,12 +1264,12 @@ class Module(MgrModule):
             self.log.info('ceph osd pg-upmap-items %s mappings %s', item['pgid'],
                           item['mappings'])
             osdlist = []
-            evacuate_osds = []
+            which_osds = []
             affected_pgs = [] 
             for m in item['mappings']:
                 osdlist += [m['from'], m['to']]
-                if m['from'] not in evacuate_osds:
-                    evacuate_osds += [m['from']]
+                if m['from'] not in which_osds:
+                    which_osds += [m['from']]
                 temp_list = item['pgid'].split('.')
                 pg_obj = self.remote('progress', 'construct_pgid', pool_id=int(temp_list[0]), ps=int(temp_list[1]))
                 affected_pgs.append(pg_obj)
@@ -1291,11 +1291,11 @@ class Module(MgrModule):
                 return r, outs
         plan.mode = self.get_module_option('mode')
         if plan.mode == 'upmap':
-            ev=self.remote('progress', 'construct_pg_recovery_event', 
-                        message= "Balancer upmap %s" % plan.message,
+            ev = self.remote('progress', 'construct_pg_recovery_event', 
+                        message="Balancer upmap %s" % plan.message,
                         refs=[("Balancer", "upmap")],
                         which_pgs=affected_pgs,
-                        evacuate_osds=evacuate_osds,
+                        which_osds=which_osds,
                         start_epoch=self.get_osdmap().get_epoch()
                         )
             ev.pg_update(self.get("pg_dump"), self.log)
