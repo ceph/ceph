@@ -842,7 +842,6 @@ OPTION(rocksdb_perf, OPT_BOOL) // Enabling this will have 5-10% impact on perfor
 OPTION(rocksdb_collect_compaction_stats, OPT_BOOL) //For rocksdb, this behavior will be an overhead of 5%~10%, collected only rocksdb_perf is enabled.
 OPTION(rocksdb_collect_extended_stats, OPT_BOOL) //For rocksdb, this behavior will be an overhead of 5%~10%, collected only rocksdb_perf is enabled.
 OPTION(rocksdb_collect_memory_stats, OPT_BOOL) //For rocksdb, this behavior will be an overhead of 5%~10%, collected only rocksdb_perf is enabled.
-OPTION(rocksdb_enable_rmrange, OPT_BOOL) // see https://github.com/facebook/rocksdb/blob/master/include/rocksdb/db.h#L253
 
 // rocksdb options that will be used for omap(if omap_backend is rocksdb)
 OPTION(filestore_rocksdb_options, OPT_STR)

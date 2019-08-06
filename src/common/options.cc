@@ -4000,15 +4000,6 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description(""),
 
-    Option("rocksdb_enable_rmrange", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description("Refer to github.com/facebook/rocksdb/wiki/DeleteRange-Implementation"),
-
-    Option("rocksdb_max_items_rmrange", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(1024)
-    .set_description("Delete Range will be called if number of keys exceeded, must enable rocksdb_enable_rmrange first")
-    .add_see_also("rocksdb_enable_rmrange"),
-
     Option("rocksdb_bloom_bits_per_key", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(20)
     .set_description("Number of bits per key to use for RocksDB's bloom filters.")
