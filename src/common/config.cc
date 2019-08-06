@@ -1492,7 +1492,11 @@ void md_config_t::diff(
     }
     f->open_object_section(std::string{name}.c_str());
     const Option *o = find_option(name);
-    dump(f, CONF_DEFAULT, _get_val_default(*o));
+    if (configs.size() &&
+	configs.begin()->first != CONF_DEFAULT) {
+      // show compiled-in default only if an override default wasn't provided
+      dump(f, CONF_DEFAULT, _get_val_default(*o));
+    }
     for (auto& j : configs) {
       dump(f, j.first, j.second);
     }
