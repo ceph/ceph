@@ -829,6 +829,7 @@ add_custom_target(cephfs_testing DEPENDS
     ceph-fuse
     ceph-dencoder
     cephfs-journal-tool
+    cephfs-meta-injection
     cephfs-data-scan
     cephfs-table-tool)
 

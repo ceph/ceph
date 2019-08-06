@@ -55,6 +55,15 @@ void frag_info_t::dump(Formatter *f) const
   f->dump_unsigned("change_attr", change_attr);
 }
 
+void frag_info_t::decode_json(JSONObj *obj){
+
+  JSONDecoder::decode_json("version", version, obj, true);
+  //JSONDecoder::decode_json("mtime", mtime, obj, true);   // remove now
+  JSONDecoder::decode_json("num_files", nfiles, obj, true);
+  JSONDecoder::decode_json("num_subdirs", nsubdirs, obj, true);
+  JSONDecoder::decode_json("change_attr", change_attr, obj, true);
+}
+
 void frag_info_t::generate_test_instances(std::list<frag_info_t*>& ls)
 {
   ls.push_back(new frag_info_t);
@@ -126,6 +135,16 @@ void nest_info_t::dump(Formatter *f) const
   f->dump_stream("rctime") << rctime;
 }
 
+void nest_info_t::decode_json(JSONObj *obj){
+
+  JSONDecoder::decode_json("version", version, obj, true);
+  JSONDecoder::decode_json("rbytes", rbytes, obj, true);
+  JSONDecoder::decode_json("rfiles", rfiles, obj, true);
+  JSONDecoder::decode_json("rsubdirs", rsubdirs, obj, true);
+  JSONDecoder::decode_json("rsnaps", rsnaps, obj, true);
+  //JSONDecoder::decode_json("rctime", rctime, obj, true);   // remove now
+}
+
 void nest_info_t::generate_test_instances(std::list<nest_info_t*>& ls)
 {
   ls.push_back(new nest_info_t);
@@ -162,6 +181,12 @@ void quota_info_t::dump(Formatter *f) const
 {
   f->dump_int("max_bytes", max_bytes);
   f->dump_int("max_files", max_files);
+}
+
+void  quota_info_t::decode_json(JSONObj *obj){
+
+  JSONDecoder::decode_json("max_bytes", max_bytes, obj, true);
+  JSONDecoder::decode_json("max_files", max_files, obj, true);
 }
 
 void quota_info_t::generate_test_instances(std::list<quota_info_t *>& ls)
@@ -210,6 +235,12 @@ void client_writeable_range_t::dump(Formatter *f) const
   f->dump_unsigned("last", range.last);
   f->close_section();
   f->dump_unsigned("follows", follows);
+}
+
+void client_writeable_range_t::byte_range_t::decode_json(JSONObj *obj){
+
+  JSONDecoder::decode_json("first", first, obj, true);
+  JSONDecoder::decode_json("last", last, obj, true);
 }
 
 void client_writeable_range_t::generate_test_instances(std::list<client_writeable_range_t*>& ls)

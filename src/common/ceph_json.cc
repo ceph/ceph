@@ -478,6 +478,19 @@ void decode_json_obj(utime_t& val, JSONObj *obj)
   }
 }
 
+void decode_json_obj(ceph_dir_layout& i, JSONObj *obj){
+
+    unsigned tmp;
+    JSONDecoder::decode_json("dir_hash", tmp, obj, true);
+    i.dl_dir_hash = tmp;
+    JSONDecoder::decode_json("unused1", tmp, obj, true);
+    i.dl_unused1 = tmp;
+    JSONDecoder::decode_json("unused2", tmp, obj, true);
+    i.dl_unused2 = tmp;
+    JSONDecoder::decode_json("unused3", tmp, obj, true);
+    i.dl_unused3 = tmp;
+}
+
 void encode_json(const char *name, const string& val, Formatter *f)
 {
   f->dump_string(name, val);
