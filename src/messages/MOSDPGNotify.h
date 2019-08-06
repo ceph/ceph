@@ -25,7 +25,7 @@
 
 class MOSDPGNotify : public Message {
 private:
-  static constexpr int HEAD_VERSION = 6;
+  static constexpr int HEAD_VERSION = 7;
   static constexpr int COMPAT_VERSION = 6;
 
   epoch_t epoch = 0;
@@ -33,8 +33,8 @@ private:
   /// the current epoch if this is not being sent in response to a
   /// query. This allows the recipient to disregard responses to old
   /// queries.
-  using pg_list_t = std::vector<std::pair<pg_notify_t,PastIntervals>>;
-  pg_list_t pg_list;   // pgid -> version
+  using pg_list_t = std::vector<pg_notify_t>;
+  pg_list_t pg_list;
 
  public:
   version_t get_epoch() const { return epoch; }
@@ -59,13 +59,35 @@ public:
 
   void encode_payload(uint64_t features) override {
     using ceph::encode;
+    header.version = HEAD_VERSION;
     encode(epoch, payload);
+    if (!HAVE_FEATURE(features, SERVER_OCTOPUS)) {
+      // pretend to be vector<pair<pg_notify_t,PastIntervals>>
+      header.version = 6;
+      encode((uint32_t)pg_list.size(), payload);
+      for (auto& i : pg_list) {
+	encode(i, payload);   // this embeds a dup (ignored) PastIntervals
+	encode(i.past_intervals, payload);
+      }
+      return;
+    }
     encode(pg_list, payload);
   }
 
   void decode_payload() override {
     auto p = payload.cbegin();
     decode(epoch, p);
+    if (header.version == 6) {
+      // decode legacy vector<pair<pg_notify_t,PastIntervals>>
+      uint32_t num;
+      decode(num, p);
+      pg_list.resize(num);
+      for (unsigned i = 0; i < num; ++i) {
+	decode(pg_list[i], p);
+	decode(pg_list[i].past_intervals, p);
+      }
+      return;
+    }
     decode(pg_list, p);
   }
   void print(ostream& out) const override {
@@ -75,7 +97,7 @@ public:
          ++i) {
       if (i != pg_list.begin())
 	out << " ";
-      out << i->first << "=" << i->second;
+      out << *i;
     }
     out << " epoch " << epoch
 	<< ")";

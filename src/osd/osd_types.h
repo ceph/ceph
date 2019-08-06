@@ -2993,35 +2993,6 @@ struct pg_fast_info_t {
 WRITE_CLASS_ENCODER(pg_fast_info_t)
 
 
-struct pg_notify_t {
-  epoch_t query_epoch;
-  epoch_t epoch_sent;
-  pg_info_t info;
-  shard_id_t to;
-  shard_id_t from;
-  pg_notify_t() :
-    query_epoch(0), epoch_sent(0), to(shard_id_t::NO_SHARD),
-    from(shard_id_t::NO_SHARD) {}
-  pg_notify_t(
-    shard_id_t to,
-    shard_id_t from,
-    epoch_t query_epoch,
-    epoch_t epoch_sent,
-    const pg_info_t &info)
-    : query_epoch(query_epoch),
-      epoch_sent(epoch_sent),
-      info(info), to(to), from(from) {
-    ceph_assert(from == info.pgid.shard);
-  }
-  void encode(ceph::buffer::list &bl) const;
-  void decode(ceph::buffer::list::const_iterator &p);
-  void dump(ceph::Formatter *f) const;
-  static void generate_test_instances(std::list<pg_notify_t*> &o);
-};
-WRITE_CLASS_ENCODER(pg_notify_t)
-std::ostream &operator<<(std::ostream &lhs, const pg_notify_t &notify);
-
-
 class OSDMap;
 /**
  * PastIntervals -- information needed to determine the PriorSet and
@@ -3522,6 +3493,38 @@ PastIntervals::PriorSet::PriorSet(
 	   << (pg_down ? " pg_down":"")
 	   << dendl;
 }
+
+struct pg_notify_t {
+  epoch_t query_epoch;
+  epoch_t epoch_sent;
+  pg_info_t info;
+  shard_id_t to;
+  shard_id_t from;
+  PastIntervals past_intervals;
+  pg_notify_t() :
+    query_epoch(0), epoch_sent(0), to(shard_id_t::NO_SHARD),
+    from(shard_id_t::NO_SHARD) {}
+  pg_notify_t(
+    shard_id_t to,
+    shard_id_t from,
+    epoch_t query_epoch,
+    epoch_t epoch_sent,
+    const pg_info_t &info,
+    const PastIntervals& pi)
+    : query_epoch(query_epoch),
+      epoch_sent(epoch_sent),
+      info(info), to(to), from(from),
+      past_intervals(pi) {
+    ceph_assert(from == info.pgid.shard);
+  }
+  void encode(ceph::buffer::list &bl) const;
+  void decode(ceph::buffer::list::const_iterator &p);
+  void dump(ceph::Formatter *f) const;
+  static void generate_test_instances(std::list<pg_notify_t*> &o);
+};
+WRITE_CLASS_ENCODER(pg_notify_t)
+std::ostream &operator<<(std::ostream &lhs, const pg_notify_t &notify);
+
 
 /** 
  * pg_query_t - used to ask a peer for information about a pg.

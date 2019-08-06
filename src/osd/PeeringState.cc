@@ -1935,8 +1935,7 @@ bool PeeringState::search_for_missing(
 	from.shard, pg_whoami.shard,
 	get_osdmap_epoch(),
 	get_osdmap_epoch(),
-	tinfo),
-      past_intervals);
+	tinfo, past_intervals));
   }
   return found_missing;
 }
@@ -2034,9 +2033,7 @@ void PeeringState::activate(
   ObjectStore::Transaction& t,
   epoch_t activation_epoch,
   map<int, map<spg_t,pg_query_t> >& query_map,
-  map<int,
-  vector<
-  pair<pg_notify_t, PastIntervals> > > *activator_map,
+  map<int,vector<pg_notify_t>> *activator_map,
   PeeringCtxWrapper &ctx)
 {
   ceph_assert(!is_peered());
@@ -2161,8 +2158,8 @@ void PeeringState::activate(
 	      peer.shard, pg_whoami.shard,
 	      get_osdmap_epoch(),
 	      get_osdmap_epoch(),
-	      info),
-	    past_intervals);
+	      info,
+	      past_intervals));
 	} else {
 	  psdout(10) << "activate peer osd." << peer
 		     << " is up to date, but sending pg_log anyway" << dendl;
@@ -2374,8 +2371,8 @@ void PeeringState::share_pg_info()
 	pg_shard.shard, pg_whoami.shard,
 	get_osdmap_epoch(),
 	get_osdmap_epoch(),
-	info),
-      past_intervals);
+	info,
+	past_intervals));
     pl->send_cluster_message(pg_shard.osd, m, get_osdmap_epoch());
   }
 }
@@ -2542,8 +2539,8 @@ void PeeringState::fulfill_query(const MQuery& query, PeeringCtxWrapper &rctx)
 	notify_info.first.shard, pg_whoami.shard,
 	query.query_epoch,
 	get_osdmap_epoch(),
-	notify_info.second),
-      past_intervals);
+	notify_info.second,
+	past_intervals));
   } else {
     update_history(query.query.history);
     fulfill_log(query.from, query.query, query.query_epoch);
@@ -4080,8 +4077,8 @@ boost::statechart::result PeeringState::Reset::react(const ActMap&)
 	ps->get_primary().shard, ps->pg_whoami.shard,
 	ps->get_osdmap_epoch(),
 	ps->get_osdmap_epoch(),
-	ps->info),
-      ps->past_intervals);
+	ps->info,
+	ps->past_intervals));
   }
 
   ps->update_heartbeat_peers();
@@ -5606,7 +5603,8 @@ boost::statechart::result PeeringState::ReplicaActive::react(
     ps->get_primary().shard, ps->pg_whoami.shard,
     ps->get_osdmap_epoch(),
     ps->get_osdmap_epoch(),
-    ps->info);
+    ps->info,
+    PastIntervals());
 
   i.info.history.last_epoch_started = evt.activation_epoch;
   i.info.history.last_interval_started = i.info.history.same_interval_since;
@@ -5616,7 +5614,7 @@ boost::statechart::result PeeringState::ReplicaActive::react(
     ps->state_set(PG_STATE_PEERED);
   }
 
-  m->pg_list.emplace_back(i, PastIntervals());
+  m->pg_list.emplace_back(i);
   pl->send_cluster_message(
     ps->get_primary().osd,
     m,
@@ -5664,8 +5662,8 @@ boost::statechart::result PeeringState::ReplicaActive::react(const ActMap&)
 	ps->get_primary().shard, ps->pg_whoami.shard,
 	ps->get_osdmap_epoch(),
 	ps->get_osdmap_epoch(),
-	ps->info),
-      ps->past_intervals);
+	ps->info,
+	ps->past_intervals));
   }
   return discard_event();
 }
@@ -5784,8 +5782,8 @@ boost::statechart::result PeeringState::Stray::react(const ActMap&)
 	ps->get_primary().shard, ps->pg_whoami.shard,
 	ps->get_osdmap_epoch(),
 	ps->get_osdmap_epoch(),
-	ps->info),
-      ps->past_intervals);
+	ps->info,
+	ps->past_intervals));
   }
   return discard_event();
 }
