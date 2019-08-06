@@ -1684,7 +1684,7 @@ class Toolbox(DeepSea):
             self.log.info("OSD {} is ->{}<-.".format(osd, store))
             if store != file_or_blue:
                 self.log.warning("OSD {} has objectstore ->{}<- which is not ->{}<-".
-                                 format(osd, store))
+                                 format(osd, store, file_or_blue))
                 all_green = False
         assert all_green, "One or more OSDs is not {}".format(file_or_blue)
 
