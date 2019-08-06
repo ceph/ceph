@@ -83,6 +83,54 @@ Bucket resharding status
 
    # radosgw-admin reshard status --bucket <bucket_name>
 
+The output is a json array of 3 objects (reshard_status, new_bucket_instance_id, num_shards) per shard.
+
+For example, the output at different Dynamic Resharding stages is shown below:
+
+``1. Before resharding occurred:``
+::
+
+  [
+    {
+        "reshard_status": "not-resharding",
+        "new_bucket_instance_id": "",
+        "num_shards": -1
+    }
+  ]
+
+``2. During resharding:``
+::
+
+  [
+    {
+        "reshard_status": "in-progress",
+        "new_bucket_instance_id": "1179f470-2ebf-4630-8ec3-c9922da887fd.8652.1",
+        "num_shards": 2
+    },
+    {
+        "reshard_status": "in-progress",
+        "new_bucket_instance_id": "1179f470-2ebf-4630-8ec3-c9922da887fd.8652.1",
+        "num_shards": 2
+    }
+  ]
+
+``3, After resharding completed:``
+::
+
+  [
+    {
+        "reshard_status": "not-resharding",
+        "new_bucket_instance_id": "",
+        "num_shards": -1
+    },
+    {
+        "reshard_status": "not-resharding",
+        "new_bucket_instance_id": "",
+        "num_shards": -1
+    }
+  ]
+
+
 Cancel pending bucket resharding
 --------------------------------
 
