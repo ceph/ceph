@@ -11003,18 +11003,22 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
   DeferredBatch *b = osr->deferred_running;
 
   {
-    std::lock_guard l(deferred_lock);
+    deferred_lock.lock();
     ceph_assert(osr->deferred_running == b);
     osr->deferred_running = nullptr;
     if (!osr->deferred_pending) {
       dout(20) << __func__ << " dequeueing" << dendl;
       auto q = deferred_queue.iterator_to(*osr);
       deferred_queue.erase(q);
-    } else if (deferred_aggressive) {
-      dout(20) << __func__ << " queuing async deferred_try_submit" << dendl;
-      deferred_finisher.queue(new C_DeferredTrySubmit(this));
+      deferred_lock.unlock();
     } else {
-      dout(20) << __func__ << " leaving queued, more pending" << dendl;
+      deferred_lock.unlock();
+      if (deferred_aggressive) {
+	dout(20) << __func__ << " queuing async deferred_try_submit" << dendl;
+	deferred_finisher.queue(new C_DeferredTrySubmit(this));
+      } else {
+	dout(20) << __func__ << " leaving queued, more pending" << dendl;
+      }
     }
   }
 
