@@ -1485,9 +1485,7 @@ void md_config_t::diff(
   string name) const
 {
   values.for_each([this, f, &values] (auto& name, auto& configs) {
-    if (configs.size() == 1 &&
-	configs.begin()->first == CONF_DEFAULT) {
-      // we only have a default value; exclude from diff
+    if (configs.empty()) {
       return;
     }
     f->open_object_section(std::string{name}.c_str());
