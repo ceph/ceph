@@ -2071,7 +2071,8 @@ int RGWUser::execute_user_rename(RGWUserAdminOpState& op_state, std::string *err
         return ret;
       }
 
-      ret = rgw_bucket_chown(store, user_info, new_bucket_info, obj_marker, attrs);
+      ret = rgw_bucket_chown(store, new_bucket_info, uid,
+                             old_user_info.display_name, obj_marker);
       if (ret < 0) {
         set_err_msg(err_msg, "failed to run bucket chown" + cpp_strerror(-ret));
         return ret;
