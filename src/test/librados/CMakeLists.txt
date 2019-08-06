@@ -190,3 +190,7 @@ target_link_libraries(unittest_librados_config
   librados
   ${BLKID_LIBRARIES} ${GSSAPI_LIBRARIES} ${OPENLDAP_LIBRARIES})
 
+add_executable(ceph_test_rados_completion_speed
+  completion_speed.cc)
+target_link_libraries(ceph_test_rados_completion_speed
+  librados ${UNITTEST_LIBS} radostest-cxx)
