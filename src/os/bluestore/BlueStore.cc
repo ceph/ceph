@@ -11030,17 +11030,17 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
       }
     }
     throttle_deferred_bytes.put(costs);
-    std::lock_guard l(kv_lock);
-    deferred_done_queue.emplace_back(b);
   }
 
-  // in the normal case, do not bother waking up the kv thread; it will
-  // catch us on the next commit anyway.
-  if (deferred_aggressive) {
+  {
     std::lock_guard l(kv_lock);
-    if (!kv_sync_in_progress) {
-      kv_sync_in_progress = true;
-      kv_cond.notify_one();
+    deferred_done_queue.emplace_back(b);
+
+    // in the normal case, do not bother waking up the kv thread; it will
+    // catch us on the next commit anyway.
+    if (deferred_aggressive && !kv_sync_in_progress) {
+	kv_sync_in_progress = true;
+	kv_cond.notify_one();
     }
   }
 }
