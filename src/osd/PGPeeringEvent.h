@@ -73,10 +73,21 @@ struct MInfoRec : boost::statechart::event< MInfoRec > {
   pg_shard_t from;
   pg_info_t info;
   epoch_t msg_epoch;
-  MInfoRec(pg_shard_t from, const pg_info_t &info, epoch_t msg_epoch) :
-    from(from), info(info), msg_epoch(msg_epoch) {}
+  std::optional<pg_lease_t> lease;
+  std::optional<pg_lease_ack_t> lease_ack;
+  MInfoRec(pg_shard_t from, const pg_info_t &info, epoch_t msg_epoch,
+	   std::optional<pg_lease_t> l = {},
+	   std::optional<pg_lease_ack_t> la = {})
+    : from(from), info(info), msg_epoch(msg_epoch),
+      lease(l), lease_ack(la) {}
   void print(std::ostream *out) const {
     *out << "MInfoRec from " << from << " info: " << info;
+    if (lease) {
+      *out << " " << *lease;
+    }
+    if (lease_ack) {
+      *out << " " << *lease_ack;
+    }
   }
 };
 

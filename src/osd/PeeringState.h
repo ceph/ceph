@@ -88,7 +88,9 @@ struct BufferedRecoveryMessages {
   void send_query(int to, spg_t spgid, const pg_query_t &q);
   void send_info(int to, spg_t to_spgid,
 		 epoch_t min_epoch, epoch_t cur_epoch,
-		 const pg_info_t &info);
+		 const pg_info_t &info,
+		 std::optional<pg_lease_t> lease = {},
+		 std::optional<pg_lease_ack_t> lease_ack = {});
 };
 
 struct HeartbeatStamps : public RefCountedObject {
@@ -236,8 +238,11 @@ struct PeeringCtxWrapper {
   }
   void send_info(int to, spg_t to_spgid,
 		 epoch_t min_epoch, epoch_t cur_epoch,
-		 const pg_info_t &info) {
-    msgs.send_info(to, to_spgid, min_epoch, cur_epoch, info);
+		 const pg_info_t &info,
+		 std::optional<pg_lease_t> lease = {},
+		 std::optional<pg_lease_ack_t> lease_ack = {}) {
+    msgs.send_info(to, to_spgid, min_epoch, cur_epoch, info,
+		   lease, lease_ack);
   }
 };
 

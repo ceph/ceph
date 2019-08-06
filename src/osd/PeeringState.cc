@@ -63,7 +63,9 @@ void BufferedRecoveryMessages::send_info(
   spg_t to_spgid,
   epoch_t min_epoch,
   epoch_t cur_epoch,
-  const pg_info_t &info)
+  const pg_info_t &info,
+  std::optional<pg_lease_t> lease,
+  std::optional<pg_lease_ack_t> lease_ack)
 {
   if (require_osd_release >= ceph_release_t::octopus) {
     send_osd_message(
@@ -72,7 +74,9 @@ void BufferedRecoveryMessages::send_info(
 	to_spgid,
 	info,
 	cur_epoch,
-	min_epoch)
+	min_epoch,
+	lease,
+	lease_ack)
       );
   } else {
     send_osd_message(
@@ -1203,7 +1207,8 @@ void PeeringState::recalc_readable_until()
   }
   readable_until = min;
   readable_until_ub = min;
-  dout(20) << __func__ << " readable_until[_ub] " << readable_until << dendl;
+  dout(20) << __func__ << " readable_until[_ub] " << readable_until
+	   << " (sent " << readable_until_ub_sent << ")" << dendl;
 }
 
 bool PeeringState::check_prior_readable_down_osds(const OSDMapRef& map)
@@ -2406,7 +2411,8 @@ void PeeringState::activate(
 	    spg_t(info.pgid.pgid, peer.shard),
 	    get_osdmap_epoch(), // fixme: use lower epoch?
 	    get_osdmap_epoch(),
-	    info);
+	    info,
+	    get_lease());
 	} else {
 	  psdout(10) << "activate peer osd." << peer
 		     << " is up to date, but sending pg_log anyway" << dendl;
@@ -5631,13 +5637,16 @@ boost::statechart::result PeeringState::Active::react(const MInfoRec& infoevt)
   ceph_assert(ps->is_primary());
 
   ceph_assert(!ps->acting_recovery_backfill.empty());
+  if (infoevt.lease_ack) {
+    ps->proc_lease_ack(infoevt.from.osd, *infoevt.lease_ack);
+  }
   // don't update history (yet) if we are active and primary; the replica
   // may be telling us they have activated (and committed) but we can't
   // share that until _everyone_ does the same.
   if (ps->is_acting_recovery_backfill(infoevt.from) &&
       ps->peer_activated.count(infoevt.from) == 0) {
     psdout(10) << " peer osd." << infoevt.from
-		       << " activated and committed" << dendl;
+	       << " activated and committed" << dendl;
     ps->peer_activated.insert(infoevt.from);
     ps->blocked_by.erase(infoevt.from.shard);
     pl->publish_stats_to_osd();
@@ -5831,8 +5840,6 @@ void PeeringState::Active::all_activated_and_committed()
   ceph_assert(!ps->acting_recovery_backfill.empty());
   ceph_assert(ps->blocked_by.empty());
 
-  ps->send_lease();
-
   // Degraded?
   ps->update_calc_stats();
   if (ps->info.stats.stats.sum.num_objects_degraded) {
@@ -5907,7 +5914,9 @@ boost::statechart::result PeeringState::ReplicaActive::react(
     spg_t(ps->info.pgid.pgid, ps->get_primary().shard),
     epoch,
     epoch,
-    i);
+    i,
+    {}, /* lease */
+    ps->get_lease_ack());
 
   if (ps->acting.size() >= ps->pool.info.min_size) {
     ps->state_set(PG_STATE_ACTIVE);
@@ -6069,6 +6078,10 @@ boost::statechart::result PeeringState::Stray::react(const MInfoRec& infoevt)
     ps->rewind_divergent_log(t, infoevt.info.last_update);
     ps->info.stats = infoevt.info.stats;
     ps->info.hit_set = infoevt.info.hit_set;
+  }
+
+  if (infoevt.lease) {
+    ps->proc_lease(*infoevt.lease);
   }
 
   ceph_assert(infoevt.info.last_update == ps->info.last_update);
