@@ -210,6 +210,7 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, string&
 void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
                             const cls_rgw_obj_key& start_obj,
                             const std::string& filter_prefix,
+                            const std::string& delimiter,
                             uint32_t num_entries,
                             bool list_versions,
                             rgw_cls_list_ret* result)
@@ -218,28 +219,38 @@ void cls_rgw_bucket_list_op(librados::ObjectReadOperation& op,
   rgw_cls_list_op call;
   call.start_obj = start_obj;
   call.filter_prefix = filter_prefix;
+  call.delimiter = delimiter;
   call.num_entries = num_entries;
   call.list_versions = list_versions;
   encode(call, in);
 
-  op.exec(RGW_CLASS, RGW_BUCKET_LIST, in, new ClsBucketIndexOpCtx<rgw_cls_list_ret>(result, NULL));
+  op.exec(RGW_CLASS, RGW_BUCKET_LIST, in,
+	  new ClsBucketIndexOpCtx<rgw_cls_list_ret>(result, NULL));
 }
 
-static bool issue_bucket_list_op(librados::IoCtx& io_ctx, const string& oid,
+static bool issue_bucket_list_op(librados::IoCtx& io_ctx,
+				 const string& oid,
 				 const cls_rgw_obj_key& start_obj,
 				 const string& filter_prefix,
-				 uint32_t num_entries, bool list_versions,
+				 const string& delimiter,
+				 uint32_t num_entries,
+				 bool list_versions,
 				 BucketIndexAioManager *manager,
-				 rgw_cls_list_ret *pdata) {
+				 rgw_cls_list_ret *pdata)
+{
   librados::ObjectReadOperation op;
-  cls_rgw_bucket_list_op(op, start_obj, filter_prefix,
+  cls_rgw_bucket_list_op(op,
+			 start_obj, filter_prefix, delimiter,
                          num_entries, list_versions, pdata);
   return manager->aio_operate(io_ctx, oid, &op);
 }
 
 int CLSRGWIssueBucketList::issue_op(int shard_id, const string& oid)
 {
-  return issue_bucket_list_op(io_ctx, oid, start_obj, filter_prefix, num_entries, list_versions, &manager, &result[shard_id]);
+  return issue_bucket_list_op(io_ctx, oid,
+			      start_obj, filter_prefix, delimiter,
+			      num_entries, list_versions, &manager,
+			      &result[shard_id]);
 }
 
 void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_attr_prefixes)
@@ -577,8 +588,12 @@ void cls_rgw_suggest_changes(ObjectWriteOperation& o, bufferlist& updates)
 
 int CLSRGWIssueGetDirHeader::issue_op(int shard_id, const string& oid)
 {
-  cls_rgw_obj_key nokey;
-  return issue_bucket_list_op(io_ctx, oid, nokey, "", 0, false, &manager, &result[shard_id]);
+  cls_rgw_obj_key empty_key;
+  string empty_prefix;
+  string empty_delimiter;
+  return issue_bucket_list_op(io_ctx, oid,
+			      empty_key, empty_prefix, empty_delimiter,
+			      0, false, &manager, &result[shard_id]);
 }
 
 static bool issue_resync_bi_log(librados::IoCtx& io_ctx, const string& oid, BucketIndexAioManager *manager)

@@ -1004,6 +1004,7 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
   store->getRados()->cls_obj_set_bucket_tag_timeout(bucket_info, BUCKET_TAG_TIMEOUT);
 
   string prefix;
+  string empty_delimiter;
   rgw_obj_index_key marker;
   bool is_truncated = true;
 
@@ -1014,8 +1015,9 @@ int RGWBucket::check_object_index(RGWBucketAdminOpState& op_state,
     result.reserve(listing_max_entries);
 
     int r = store->getRados()->cls_bucket_list_ordered(
-      bucket_info, RGW_NO_SHARD, marker, prefix, listing_max_entries, true,
-      result, &is_truncated, &marker, y, bucket_object_check_filter);
+      bucket_info, RGW_NO_SHARD, marker, prefix, empty_delimiter,
+      listing_max_entries, true, result, &is_truncated, &marker, y,
+      rgw_bucket_object_check_filter);
     if (r == -ENOENT) {
       break;
     } else if (r < 0 && r != -ENOENT) {

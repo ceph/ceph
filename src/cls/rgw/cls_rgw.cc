@@ -5,6 +5,8 @@
 
 #include <errno.h>
 
+#include <boost/algorithm/string.hpp>
+
 #include "objclass/objclass.h"
 #include "cls/rgw/cls_rgw_ops.h"
 #include "cls/rgw/cls_rgw_const.h"
@@ -439,94 +441,175 @@ static int read_bucket_header(cls_method_context_t hctx,
 
 int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 {
+  // maximum number of calls to get_obj_vals we'll try; compromise
+  // between wanting to return the requested # of entries, but not
+  // wanting to slow down this op with too many omap reads
+  constexpr int max_attempts = 8;
+
   auto iter = in->cbegin();
 
   rgw_cls_list_op op;
   try {
     decode(op, iter);
   } catch (buffer::error& err) {
-    CLS_LOG(1, "ERROR: rgw_bucket_list(): failed to decode request\n");
+    CLS_LOG(1, "ERROR: %s: failed to decode request\n", __func__);
     return -EINVAL;
   }
 
   rgw_cls_list_ret ret;
   rgw_bucket_dir& new_dir = ret.dir;
+  auto& name_entry_map = new_dir.m; // map of keys to entries
+
   int rc = read_bucket_header(hctx, &new_dir.header);
   if (rc < 0) {
-    CLS_LOG(1, "ERROR: rgw_bucket_list(): failed to read header\n");
+    CLS_LOG(1, "ERROR: %s: failed to read header\n", __func__);
     return rc;
   }
 
-  map<string, bufferlist> keys;
-  std::map<string, bufferlist>::iterator kiter;
-  string start_after_key;
-  encode_list_index_key(hctx, op.start_obj, &start_key);
-  bool done = false;
-  uint32_t left_to_read = op.num_entries;
-  bool more;
+  string start_after_key;   // key that we can start listing at, one of a)
+                            // sent in by caller, b) last item visited, or
+                            // c) when delimiter present, a key that will
+                            // move past the subdirectory
+  encode_list_index_key(hctx, op.start_obj, &start_after_key);
 
-  do {
-    rc = get_obj_vals(hctx, start_after_key, op.filter_prefix, left_to_read, &keys, &more);
-    if (rc < 0)
+  string previous_key; // last key stored in result, so if we have to
+		       // call get_obj_vals multiple times, we do not
+		       // add the overlap to result
+  string previous_prefix_key; // last prefix_key stored in result, so
+			      // we can skip over entries with the
+			      // same prefix_key
+
+  bool done = false;   // whether we need to keep calling get_obj_vals
+  bool more = true;    // output parameter of get_obj_vals
+  bool has_delimiter = !op.delimiter.empty();
+
+  if (has_delimiter &&
+      boost::algorithm::ends_with(start_after_key, op.delimiter)) {
+    // advance past all subdirectory entries if we start after a
+    // subdirectory
+    start_after_key = cls_rgw_after_delim(start_after_key);
+  }
+
+  for (int attempt = 0;
+       attempt < max_attempts &&
+	 more &&
+	 !done &&
+	 name_entry_map.size() < op.num_entries;
+       ++attempt) {
+    map<string, bufferlist> keys;
+    rc = get_obj_vals(hctx, start_after_key, op.filter_prefix,
+		      op.num_entries - name_entry_map.size(),
+		      &keys, &more);
+    if (rc < 0) {
       return rc;
-
-    auto& m = new_dir.m;
+    }
 
     done = keys.empty();
 
-    for (kiter = keys.begin(); kiter != keys.end(); ++kiter) {
-      rgw_bucket_dir_entry entry;
-
+    for (auto kiter = keys.cbegin(); kiter != keys.cend(); ++kiter) {
       if (!bi_is_objs_index(kiter->first)) {
+	// we're done if we walked off the end of the objects area of
+	// the bucket index
         done = true;
         break;
       }
 
-      bufferlist& entrybl = kiter->second;
-      auto eiter = entrybl.cbegin();
+      rgw_bucket_dir_entry entry;
       try {
+	const bufferlist& entrybl = kiter->second;
+	auto eiter = entrybl.cbegin();
         decode(entry, eiter);
       } catch (buffer::error& err) {
-        CLS_LOG(1, "ERROR: rgw_bucket_list(): failed to decode entry, key=%s\n", kiter->first.c_str());
+        CLS_LOG(1, "ERROR: %s: failed to decode entry, key=%s\n",
+		__func__, kiter->first.c_str());
         return -EINVAL;
       }
 
+      start_after_key = kiter->first;
+      CLS_LOG(20, "%s: working on key=%s len=%zu",
+	      __func__, kiter->first.c_str(), kiter->first.size());
+
       cls_rgw_obj_key key;
       uint64_t ver;
-
-      start_key = kiter->first;
-      CLS_LOG(20, "start_key=%s len=%zu", start_key.c_str(), start_key.size());
-
       int ret = decode_list_index_key(kiter->first, &key, &ver);
       if (ret < 0) {
-        CLS_LOG(0, "ERROR: failed to decode list index key (%s)\n", escape_str(kiter->first).c_str());
+        CLS_LOG(0, "ERROR: %s: failed to decode list index key (%s)\n",
+		__func__, escape_str(kiter->first).c_str());
         continue;
       }
 
       if (!entry.is_valid()) {
-        CLS_LOG(20, "entry %s[%s] is not valid\n", key.name.c_str(), key.instance.c_str());
+        CLS_LOG(20, "%s: entry %s[%s] is not valid\n",
+		__func__, key.name.c_str(), key.instance.c_str());
         continue;
       }
       
       // filter out noncurrent versions, delete markers, and initial marker
-      if (!op.list_versions && (!entry.is_visible() || op.start_obj.name == key.name)) {
-        CLS_LOG(20, "entry %s[%s] is not visible\n", key.name.c_str(), key.instance.c_str());
+      if (!op.list_versions &&
+	  (!entry.is_visible() || op.start_obj.name == key.name)) {
+        CLS_LOG(20, "%s: entry %s[%s] is not visible\n",
+		__func__, key.name.c_str(), key.instance.c_str());
         continue;
       }
-      if (m.size() < op.num_entries) {
-        m[kiter->first] = entry;
-      }
-      left_to_read--;
 
-      CLS_LOG(20, "got entry %s[%s] m.size()=%d\n", key.name.c_str(), key.instance.c_str(), (int)m.size());
-    }
-  } while (left_to_read > 0 && !done);
+      if (has_delimiter) {
+        int delim_pos = key.name.find(op.delimiter, op.filter_prefix.size());
+
+        if (delim_pos >= 0) {
+	  /* extract key with trailing delimiter */
+          string prefix_key =
+	    key.name.substr(0, delim_pos + op.delimiter.length());
+
+	  if (prefix_key == previous_prefix_key) {
+	    continue; // we've already added this;
+	  } else {
+	    previous_prefix_key = prefix_key;
+	  }
+
+	  if (name_entry_map.size() < op.num_entries) {
+	    rgw_bucket_dir_entry proxy_entry;
+	    cls_rgw_obj_key proxy_key(prefix_key);
+	    proxy_entry.key = cls_rgw_obj_key(proxy_key);
+	    proxy_entry.flags = rgw_bucket_dir_entry::FLAG_COMMON_PREFIX;
+	    name_entry_map[prefix_key] = proxy_entry;
+
+	    CLS_LOG(20, "%s: got common prefix entry %s[%s] num entries=%lu\n",
+		    __func__, proxy_key.name.c_str(), proxy_key.instance.c_str(),
+		    name_entry_map.size());
+	  }
+
+	  // make sure that if this is the last item added to the
+	  // result from this call to get_obj_vals, the next call will
+	  // skip past rest of "subdirectory"
+	  start_after_key = cls_rgw_after_delim(prefix_key);
+
+	  // advance to past this subdirectory, but then back up one,
+	  // so the loop increment will put us in the right place
+	  kiter = keys.lower_bound(start_after_key);
+	  --kiter;
+
+          continue;
+        }
+
+	// no delimiter after prefix found, so this is a "top-level"
+	// item and we can just fall through
+      }
+
+      if (name_entry_map.size() < op.num_entries &&
+	  kiter->first != previous_key) {
+        name_entry_map[kiter->first] = entry;
+	previous_key = kiter->first;
+	CLS_LOG(20, "%s: got object entry %s[%s] num entries=%d\n",
+		__func__, key.name.c_str(), key.instance.c_str(),
+		int(name_entry_map.size()));
+      }
+    } // for (auto kiter...
+  } // for (int attempt...
 
   ret.is_truncated = more && !done;
-
   encode(ret, *out);
   return 0;
-}
+} // rgw_bucket_list
 
 static int check_index(cls_method_context_t hctx,
 		       rgw_bucket_dir_header *existing_header,
@@ -4083,4 +4166,3 @@ CLS_INIT(rgw)
 
   return;
 }
-
