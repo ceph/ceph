@@ -145,7 +145,8 @@ static char *parse_options(const char *data, int *filesys_flags)
 			*filesys_flags |= MS_NODIRATIME;
 		} else if (strncmp(data, "relatime", 8) == 0) {
 			*filesys_flags |= MS_RELATIME;
-
+		} else if (strncmp(data, "strictatime", 11) == 0) {
+			*filesys_flags |= MS_STRICTATIME;
 		} else if (strncmp(data, "noauto", 6) == 0) {
 			skip = 1;  /* ignore */
 		} else if (strncmp(data, "_netdev", 7) == 0) {
