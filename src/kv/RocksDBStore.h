@@ -119,8 +119,6 @@ public:
   /// compact the underlying rocksdb store
   bool compact_on_mount;
   bool disableWAL;
-  bool enable_rmrange;
-  const uint64_t max_items_rmrange;
   void compact() override;
 
   void compact_async() override {
@@ -159,9 +157,7 @@ public:
     compact_queue_stop(false),
     compact_thread(this),
     compact_on_mount(false),
-    disableWAL(false),
-    enable_rmrange(cct->_conf->rocksdb_enable_rmrange),
-    max_items_rmrange(cct->_conf.get_val<uint64_t>("rocksdb_max_items_rmrange"))
+    disableWAL(false)
   {}
 
   ~RocksDBStore() override;
