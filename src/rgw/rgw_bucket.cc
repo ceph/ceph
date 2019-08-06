@@ -222,7 +222,9 @@ int rgw_set_bucket_acl(RGWRados* store, ACLOwner& owner, rgw_bucket& bucket, RGW
   return 0;
 }
 
-int rgw_bucket_chown(RGWRados* const store, RGWUserInfo& user_info, RGWBucketInfo& bucket_info, const string& marker, map<string, bufferlist>& attrs)
+int rgw_bucket_chown(RGWRados* const store, RGWBucketInfo& bucket_info,
+                     const rgw_user& uid, const std::string& display_name,
+                     const string& marker)
 {
   RGWObjectCtx obj_ctx(store);
   std::vector<rgw_bucket_dir_entry> objs;
@@ -258,6 +260,7 @@ int rgw_bucket_chown(RGWRados* const store, RGWUserInfo& user_info, RGWBucketInf
         RGWRados::Object op_target(store, bucket_info, obj_ctx, r_obj);
         RGWRados::Object::Read read_op(&op_target);
 
+        map<string, bufferlist> attrs;
         read_op.params.attrs = &attrs;
         ret = read_op.prepare(null_yield);
         if (ret < 0){
@@ -288,12 +291,12 @@ int rgw_bucket_chown(RGWRados* const store, RGWUserInfo& user_info, RGWBucketInf
 
           //Create a grant and add grant
           ACLGrant grant;
-          grant.set_canon(bucket_info.owner, user_info.display_name, RGW_PERM_FULL_CONTROL);
+          grant.set_canon(bucket_info.owner, display_name, RGW_PERM_FULL_CONTROL);
           acl.add_grant(&grant);
 
           //Update the ACL owner to the new user
-          owner.set_id(bucket_info.owner);
-          owner.set_name(user_info.display_name);
+          owner.set_id(uid);
+          owner.set_name(display_name);
           policy.set_owner(owner);
 
           bl.clear();
@@ -1099,31 +1102,17 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state,
   return 0;
 }
 
-int RGWBucket::chown(RGWBucketAdminOpState& op_state,
-	map<string, bufferlist>& attrs, const string& marker, std::string *err_msg)
+int RGWBucket::chown(RGWBucketAdminOpState& op_state, const string& marker, std::string *err_msg)
 {
-  //after bucket link
-  rgw_bucket& bucket = op_state.get_bucket();
-  tenant = bucket.tenant;
-  bucket_name = bucket.name;
-
-  RGWBucketInfo bucket_info;
-  RGWSysObjectCtx sys_ctx = store->svc.sysobj->init_obj_ctx();
-
-  int ret = store->get_bucket_info(sys_ctx, tenant, bucket_name, bucket_info, NULL, null_yield, &attrs);
-  if (ret < 0) {
-    set_err_msg(err_msg, "bucket info failed: tenant: " + tenant + "bucket_name: " + bucket_name + " " + cpp_strerror(-ret));
-    return ret;
-  }
-
   RGWUserInfo user_info;
-  ret = rgw_get_user_info_by_uid(store, bucket_info.owner, user_info);
+  int ret = rgw_get_user_info_by_uid(store, bucket_info.owner, user_info);
   if (ret < 0) {
     set_err_msg(err_msg, "user info failed: " + cpp_strerror(-ret));
     return ret;
   }
 
-  ret = rgw_bucket_chown(store, user_info, bucket_info, marker, attrs);
+  ret = rgw_bucket_chown(store, bucket_info, user_info.user_id,
+                         user_info.display_name, marker);
   if (ret < 0) {
     set_err_msg(err_msg, "Failed to change object ownership" + cpp_strerror(-ret));
   }
@@ -1584,7 +1573,7 @@ int RGWBucketAdminOp::chown(RGWRados *store, RGWBucketAdminOpState& op_state, co
   if (ret < 0)
     return ret;
 
-  return bucket.chown(op_state, attrs, marker, err);
+  return bucket.chown(op_state, marker, err);
 
 }
 
