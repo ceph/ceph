@@ -397,12 +397,20 @@ could be "doc:", "osd:", or "common:". One can use::
 
      git log
 
-for more examples. Please use this "subsystem: short description"
-convention for naming pull requests (PRs) also, as it feeds directly
-into the script that generates release notes and it's tedious to clean
-up at release time. This document places no limit on the length of PR
-titles, but be aware that they are subject to editing as part of the
-release process.
+for more examples. It is also conventional to use the imperative mood in the
+commit title. For example::
+
+     mds: add perf counter for finisher of MDSRank
+
+or::
+
+     osd: make the ClassHandler::mutex private
+
+For GitHub, please use this "subsystem: short description" convention for
+naming pull requests (PRs). These titles feed directly into the script that
+generates release notes and it is tedious to clean up non-conformant PR titles
+at release time.  This document places no limit on the length of PR titles, but
+be aware that they are subject to editing as part of the release process.
 
 Commit message
 ^^^^^^^^^^^^^^
