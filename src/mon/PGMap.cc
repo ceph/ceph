@@ -2836,7 +2836,7 @@ void PGMap::get_health_checks(
          << (osdmap.is_down(sback.from) ? " (down)" : "")
 	 << " to osd." << sback.to
          << (osdmap.is_down(sback.to) ? " (down)" : "")
-	 << " " << sback.pingtime << " usec"
+	 << " " << fixed_u_to_string(sback.pingtime, 3) << " msec"
 	 << (sback.improving ? " possibly improving" : "");
       detail_back.push_back(ss.str());
     }
@@ -2853,14 +2853,14 @@ void PGMap::get_health_checks(
          << (osdmap.is_down(sfront.from) ? " (down)" : "")
          << " to osd." << sfront.to
          << (osdmap.is_down(sfront.to) ? " (down)" : "")
-	 << " " << sfront.pingtime << " usec"
+	 << " " << fixed_u_to_string(sfront.pingtime, 3) << " msec"
 	 << (sfront.improving ? " possibly improving" : "");
       detail_front.push_back(ss.str());
     }
     if (detail_back.size() != 0) {
       ostringstream ss;
       ss << "Long heartbeat ping times on back interface seen, longest is "
-	 << back_sorted.rbegin()->pingtime  << " usec";
+	 << fixed_u_to_string(back_sorted.rbegin()->pingtime, 3) << " msec";
       auto& d = checks->add("OSD_SLOW_PING_TIME_BACK", HEALTH_WARN, ss.str(),
 		      back_sorted.size());
       d.detail.swap(detail_back);
@@ -2868,7 +2868,7 @@ void PGMap::get_health_checks(
     if (detail_front.size() != 0) {
       ostringstream ss;
       ss << "Long heartbeat ping times on front interface seen, longest is "
-	 << front_sorted.rbegin()->pingtime  << " usec";
+	 << fixed_u_to_string(front_sorted.rbegin()->pingtime, 3) << " msec";
       auto& d = checks->add("OSD_SLOW_PING_TIME_FRONT", HEALTH_WARN, ss.str(),
 		      front_sorted.size());
       d.detail.swap(detail_front);
