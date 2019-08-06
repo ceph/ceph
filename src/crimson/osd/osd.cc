@@ -61,12 +61,12 @@ OSD::OSD(int id, uint32_t nonce,
     public_msgr{public_msgr},
     monc{new ceph::mon::Client{public_msgr, *this}},
     mgrc{new ceph::mgr::Client{public_msgr, *this}},
-    heartbeat{new Heartbeat{*this, *monc, hb_front_msgr, hb_back_msgr}},
-    heartbeat_timer{[this] { update_heartbeat_peers(); }},
     store{ceph::os::FuturizedStore::create(
       local_conf().get_val<std::string>("osd_objectstore"),
       local_conf().get_val<std::string>("osd_data"))},
-    shard_services{cluster_msgr, public_msgr, *monc, *mgrc, *store},
+    shard_services{*this, cluster_msgr, public_msgr, *monc, *mgrc, *store},
+    heartbeat{new Heartbeat{shard_services, *monc, hb_front_msgr, hb_back_msgr}},
+    heartbeat_timer{[this] { update_heartbeat_peers(); }},
     osdmap_gate("OSD::osdmap_gate", std::make_optional(std::ref(shard_services)))
 {
   osdmaps[0] = boost::make_local_shared<OSDMap>();
@@ -184,6 +184,8 @@ namespace {
 seastar::future<> OSD::start()
 {
   logger().info("start");
+
+  startup_time = ceph::mono_clock::now();
 
   return store->mount().then([this] {
     meta_coll = make_unique<OSDMeta>(store->open_collection(coll_t::meta()),

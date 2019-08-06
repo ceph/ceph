@@ -174,6 +174,16 @@ void PG::log_state_exit(
     events);
 }
 
+ceph::signedspan PG::get_mnow()
+{
+  return shard_services.get_mnow();
+}
+
+HeartbeatStampsRef PG::get_hb_stamps(int peer)
+{
+  return shard_services.get_hb_stamps(peer);
+}
+
 void PG::init(
   ceph::os::CollectionRef coll,
   int role,

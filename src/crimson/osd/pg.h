@@ -377,6 +377,9 @@ public:
     return OstreamTemp(CLOG_ERROR, nullptr);
   }
 
+  ceph::signedspan get_mnow() final;
+  HeartbeatStampsRef get_hb_stamps(int peer) final;
+
   // Utility
   bool is_primary() const {
     return peering_state.is_primary();
