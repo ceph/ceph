@@ -247,7 +247,7 @@ seastar::future<bufferlist> PGBackend::read(const object_info_t& oi,
 }
 
 seastar::future<> PGBackend::stat(
-  ObjectState& os,
+  const ObjectState& os,
   OSDOp& osd_op)
 {
   if (os.exists/* TODO: && !os.is_whiteout() */) {
@@ -398,8 +398,6 @@ seastar::future<> PGBackend::setxattr(
   const OSDOp& osd_op,
   ceph::os::Transaction& txn)
 {
-  //++ctx->num_write;
-
   if (local_conf()->osd_max_attr_size > 0 &&
       osd_op.op.xattr.value_len > local_conf()->osd_max_attr_size) {
     throw ceph::osd::make_error(-EFBIG);
@@ -429,7 +427,7 @@ seastar::future<> PGBackend::setxattr(
 }
 
 seastar::future<> PGBackend::getxattr(
-  ObjectState& os,
+  const ObjectState& os,
   OSDOp& osd_op)
 {
   std::string name;
