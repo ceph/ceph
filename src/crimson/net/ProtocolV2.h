@@ -101,6 +101,12 @@ class ProtocolV2 final : public Protocol {
   void reset_session(bool full);
   seastar::future<entity_type_t, entity_addr_t> banner_exchange();
 
+  enum class next_step_t {
+    ready,
+    wait,
+    none,       // protocol should have been aborted or failed
+  };
+
   // CONNECTING (client)
   seastar::future<> handle_auth_reply();
   inline seastar::future<> client_auth() {
@@ -109,9 +115,9 @@ class ProtocolV2 final : public Protocol {
   }
   seastar::future<> client_auth(std::vector<uint32_t> &allowed_methods);
 
-  seastar::future<bool> process_wait();
-  seastar::future<bool> client_connect();
-  seastar::future<bool> client_reconnect();
+  seastar::future<next_step_t> process_wait();
+  seastar::future<next_step_t> client_connect();
+  seastar::future<next_step_t> client_reconnect();
   void execute_connecting();
 
   // ACCEPTING (server)
@@ -119,16 +125,16 @@ class ProtocolV2 final : public Protocol {
   seastar::future<> _handle_auth_request(bufferlist& auth_payload, bool more);
   seastar::future<> server_auth();
 
-  seastar::future<bool> send_wait();
+  seastar::future<next_step_t> send_wait();
 
-  seastar::future<bool> handle_existing_connection(SocketConnectionRef existing);
-  seastar::future<bool> server_connect();
+  seastar::future<next_step_t> handle_existing_connection(SocketConnectionRef existing);
+  seastar::future<next_step_t> server_connect();
 
-  seastar::future<bool> read_reconnect();
-  seastar::future<bool> send_retry(uint64_t connect_seq);
-  seastar::future<bool> send_retry_global(uint64_t global_seq);
-  seastar::future<bool> send_reset(bool full);
-  seastar::future<bool> server_reconnect();
+  seastar::future<next_step_t> read_reconnect();
+  seastar::future<next_step_t> send_retry(uint64_t connect_seq);
+  seastar::future<next_step_t> send_retry_global(uint64_t global_seq);
+  seastar::future<next_step_t> send_reset(bool full);
+  seastar::future<next_step_t> server_reconnect();
 
   void execute_accepting();
 
@@ -136,7 +142,7 @@ class ProtocolV2 final : public Protocol {
   seastar::future<> finish_auth();
 
   // ACCEPTING/REPLACING (server)
-  seastar::future<> send_server_ident();
+  seastar::future<next_step_t> send_server_ident();
 
   // REPLACING (server)
   seastar::future<> send_reconnect_ok();
