@@ -206,6 +206,19 @@ class Remote(object):
         r.remote = self
         return r
 
+    def mkdtemp(self, suffix=None, parentdir=None):
+        """
+        Create a temporary directory on remote machine and return it's path.
+        """
+        args = ['mktemp', '-d']
+
+        if suffix:
+            args.append('--suffix=%s' % suffix)
+        if parentdir:
+            args.append('--tmpdir=%s' % parentdir)
+
+        return self.sh(args).strip()
+
     def mktemp(self):
         """
         Make a remote temporary file
