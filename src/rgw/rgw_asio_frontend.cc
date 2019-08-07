@@ -146,9 +146,15 @@ void handle_connection(boost::asio::io_context& context,
       RGWRequest req{env.store->get_new_req_id()};
 
       auto& socket = stream.lowest_layer();
+      const auto& remote_endpoint = socket.remote_endpoint(ec);
+      if (ec) {
+        ldout(cct, 1) << "failed to connect client: " << ec.message() << dendl;
+        return;
+      }
+
       StreamIO real_client{cct, stream, parser, yield, buffer, is_ssl,
                            socket.local_endpoint(),
-                           socket.remote_endpoint()};
+                           remote_endpoint};
 
       auto real_client_io = rgw::io::add_reordering(
                               rgw::io::add_buffering(cct,
