@@ -2111,6 +2111,13 @@ private:
   void _set_alloc_sizes();
   void _set_blob_size();
   void _set_finisher_num();
+  int _is_bluefs(bool create, bool* ret);
+  /*
+   * opens both DB and dependant super_meta, FreelistManager and allocator
+   * in the proper order
+   */
+  int _open_db_and_around();
+  void _close_db_and_around();
 
   int _open_bdev(bool create);
   void _close_bdev();
