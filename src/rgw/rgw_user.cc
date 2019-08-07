@@ -1936,6 +1936,21 @@ int RGWUser::check_op(RGWUserAdminOpState& op_state, std::string *err_msg)
   return 0;
 }
 
+// update swift_keys with new user id
+static void rename_swift_keys(const rgw_user& user,
+                              std::map<std::string, RGWAccessKey>& keys)
+{
+  std::string user_id;
+  user.to_str(user_id);
+
+  auto modify_keys = std::move(keys);
+  for (auto& [k, key] : modify_keys) {
+    std::string id = user_id + ":" + key.subuser;
+    key.id = id;
+    keys[id] = std::move(key);
+  }
+}
+
 int RGWUser::execute_rename(RGWUserAdminOpState& op_state, std::string *err_msg)
 {
   int ret;
@@ -2063,8 +2078,11 @@ int RGWUser::execute_rename(RGWUserAdminOpState& op_state, std::string *err_msg)
 
   // update the 'stub user' with all of the other fields and rewrite all of the
   // associated index objects
-  op_state.get_user_info().user_id = uid;
+  RGWUserInfo& user_info = op_state.get_user_info();
+  user_info.user_id = uid;
   op_state.objv = objv;
+
+  rename_swift_keys(uid, user_info.swift_keys);
 
   return update(op_state, err_msg);
 }
