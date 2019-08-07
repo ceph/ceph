@@ -10277,14 +10277,17 @@ void BlueStore::_txc_finish(TransContext *txc)
 
       osr->q.pop_front();
       releasing_txc.push_back(*txc);
-      notify = true;
     }
-    if (notify) {
-      osr->qcond.notify_all();
-    }
+
     if (osr->q.empty()) {
       dout(20) << __func__ << " osr " << osr << " q now empty" << dendl;
       empty = true;
+    }
+
+    // only drain()/drain_preceding() need wakeup,
+    // other cases use kv_submitted_waiters
+    if (notify || empty) {
+      osr->qcond.notify_all();
     }
   }
   while (!releasing_txc.empty()) {
