@@ -199,4 +199,4 @@ class TestMixedTypeWithExplicitDevices(object):
         with pytest.raises(RuntimeError) as error:
             bluestore.MixedType(args, [hdd], [], [ssd]).computed['osds'][0]
         expected = 'Unable to use device 1.50 GB /dev/sda, LVs would be smaller than 1GB'
-        assert expected in str(error), str(error)
+        assert expected in str(error.value), str(error.value)
