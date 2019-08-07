@@ -79,6 +79,9 @@ public:
   seastar::future<> getxattr(
     const ObjectState& os,
     OSDOp& osd_op);
+  seastar::future<ceph::bufferptr> getxattr(
+    const hobject_t& soid,
+    std::string_view key);
 
   virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
 

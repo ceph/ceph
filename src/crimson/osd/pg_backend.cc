@@ -438,15 +438,21 @@ seastar::future<> PGBackend::getxattr(
     bp.copy(osd_op.op.xattr.name_len, aname);
     name = "_" + aname;
   }
-  return store->get_attr(coll, ghobject_t{os.oi.soid}, name).then(
-    [&osd_op] (ceph::bufferptr val) {
-      osd_op.outdata.clear();
-      osd_op.outdata.push_back(std::move(val));
-      osd_op.op.xattr.value_len = osd_op.outdata.length();
-      //ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
+  return getxattr(os.oi.soid, name).then([&osd_op] (ceph::bufferptr val) {
+    osd_op.outdata.clear();
+    osd_op.outdata.push_back(std::move(val));
+    osd_op.op.xattr.value_len = osd_op.outdata.length();
+    //ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
   }).handle_exception_type(
     [] (ceph::os::FuturizedStore::EnoentException& e) {
       return seastar::make_exception_future<>(ceph::osd::object_not_found{});
   });
   //ctx->delta_stats.num_rd++;
+}
+
+seastar::future<ceph::bufferptr> PGBackend::getxattr(
+  const hobject_t& soid,
+  std::string_view key)
+{
+  return store->get_attr(coll, ghobject_t{soid}, key);
 }
