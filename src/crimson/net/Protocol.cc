@@ -96,6 +96,16 @@ void Protocol::notify_keepalive_ack(utime_t _keepalive_ack)
   write_event();
 }
 
+void Protocol::reset_write()
+{
+  assert(write_state != write_state_t::open);
+  conn.out_seq = 0;
+  conn.out_q.clear();
+  conn.sent.clear();
+  need_keepalive = false;
+  keepalive_ack = std::nullopt;
+}
+
 seastar::future<stop_t> Protocol::do_write_dispatch_sweep()
 {
   switch (write_state) {
