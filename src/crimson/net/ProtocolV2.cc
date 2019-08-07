@@ -777,9 +777,11 @@ seastar::future<bool> ProtocolV2::client_reconnect()
           auto retry = RetryGlobalFrame::Decode(rx_segments_data.back());
           logger().warn("{} GOT RetryGlobalFrame: gs={}",
                         conn, retry.global_seq());
-          global_seq = messenger.get_global_seq(retry.global_seq());
-          logger().warn("{} UPDATE: gs={}", conn, global_seq);
-          return client_reconnect();
+          return messenger.get_global_seq(retry.global_seq()).then([this] (auto gs) {
+            global_seq = gs;
+            logger().warn("{} UPDATE: gs={}", conn, global_seq);
+            return client_reconnect();
+          });
         });
       case Tag::SESSION_RETRY:
         return read_frame_payload().then([this] {
@@ -835,11 +837,12 @@ void ProtocolV2::execute_connecting()
   seastar::with_gate(pending_dispatch, [this] {
       // we don't know my socket_port yet
       conn.set_ephemeral_port(0, SocketConnection::side_t::none);
-      enable_recording();
-      global_seq = messenger.get_global_seq();
-      logger().debug("{} UPDATE: gs={}", conn, global_seq);
-      return Socket::connect(conn.peer_addr)
-        .then([this](SocketFRef sock) {
+      return messenger.get_global_seq().then([this] (auto gs) {
+          global_seq = gs;
+          enable_recording();
+          logger().debug("{} UPDATE: gs={}", conn, global_seq);
+          return Socket::connect(conn.peer_addr);
+        }).then([this](SocketFRef sock) {
           logger().debug("{} socket connected", conn);
           socket = std::move(sock);
           if (state == state_t::CLOSING) {
@@ -1409,52 +1412,55 @@ seastar::future<> ProtocolV2::send_server_ident()
 {
   // send_server_ident() logic
 
-  // this is required for the case when this connection is being replaced
-  // TODO
-  // out_seq = discard_requeued_up_to(out_seq, 0);
-  conn.in_seq = 0;
-
-  if (!conn.policy.lossy) {
-    server_cookie = ceph::util::generate_random_number<uint64_t>(1, -1ll);
-  }
-
-  uint64_t flags = 0;
-  if (conn.policy.lossy) {
-    flags = flags | CEPH_MSG_CONNECT_LOSSY;
-  }
-
   // refered to async-conn v2: not assign gs to global_seq
-  uint64_t gs = messenger.get_global_seq();
-  auto server_ident = ServerIdentFrame::Encode(
-          messenger.get_myaddrs(),
-          messenger.get_myname().num(),
-          gs,
-          conn.policy.features_supported,
-          conn.policy.features_required | msgr2_required,
-          flags,
-          server_cookie);
+  return messenger.get_global_seq().then([this] (auto gs) {
+    logger().debug("{} UPDATE: gs={} for server ident", conn, global_seq);
 
-  logger().debug("{} WRITE ServerIdentFrame: addrs={}, gid={},"
-                 " gs={}, features_supported={}, features_required={},"
-                 " flags={}, cookie={}",
-                 conn, messenger.get_myaddrs(), messenger.get_myname().num(),
-                 gs, conn.policy.features_supported,
-                 conn.policy.features_required | msgr2_required,
-                 flags, server_cookie);
+    // this is required for the case when this connection is being replaced
+    // TODO
+    // out_seq = discard_requeued_up_to(out_seq, 0);
+    conn.in_seq = 0;
 
-  conn.set_features(connection_features);
+    if (!conn.policy.lossy) {
+      server_cookie = ceph::util::generate_random_number<uint64_t>(1, -1ll);
+    }
 
-  // notify
-  seastar::with_gate(pending_dispatch, [this] {
-    return dispatcher.ms_handle_accept(
-        seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
-    .handle_exception([this] (std::exception_ptr eptr) {
-      logger().error("{} ms_handle_accept caught exception: {}", conn, eptr);
-      ceph_abort("unecpected exception from ms_handle_accept()");
+    uint64_t flags = 0;
+    if (conn.policy.lossy) {
+      flags = flags | CEPH_MSG_CONNECT_LOSSY;
+    }
+
+    auto server_ident = ServerIdentFrame::Encode(
+            messenger.get_myaddrs(),
+            messenger.get_myname().num(),
+            gs,
+            conn.policy.features_supported,
+            conn.policy.features_required | msgr2_required,
+            flags,
+            server_cookie);
+
+    logger().debug("{} WRITE ServerIdentFrame: addrs={}, gid={},"
+                   " gs={}, features_supported={}, features_required={},"
+                   " flags={}, cookie={}",
+                   conn, messenger.get_myaddrs(), messenger.get_myname().num(),
+                   gs, conn.policy.features_supported,
+                   conn.policy.features_required | msgr2_required,
+                   flags, server_cookie);
+
+    conn.set_features(connection_features);
+
+    // notify
+    seastar::with_gate(pending_dispatch, [this] {
+      return dispatcher.ms_handle_accept(
+          seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
+      .handle_exception([this] (std::exception_ptr eptr) {
+        logger().error("{} ms_handle_accept caught exception: {}", conn, eptr);
+        ceph_abort("unecpected exception from ms_handle_accept()");
+      });
     });
-  });
 
-  return write_frame(server_ident);
+    return write_frame(server_ident);
+  });
 }
 
 // REPLACING state

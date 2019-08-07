@@ -35,7 +35,6 @@ using SocketPolicy = ceph::net::Policy<Throttle>;
 class Messenger {
   entity_name_t my_name;
   entity_addrvec_t my_addrs;
-  uint32_t global_seq = 0;
   uint32_t crc_flags = 0;
   ceph::auth::AuthClient* auth_client = nullptr;
   ceph::auth::AuthServer* auth_server = nullptr;
@@ -78,13 +77,6 @@ public:
   /// stop listenening and wait for all connections to close. safe to destruct
   /// after this future becomes available
   virtual seastar::future<> shutdown() = 0;
-
-  uint32_t get_global_seq(uint32_t old=0) {
-    if (old > global_seq) {
-      global_seq = old;
-    }
-    return ++global_seq;
-  }
 
   uint32_t get_crc_flags() const {
     return crc_flags;

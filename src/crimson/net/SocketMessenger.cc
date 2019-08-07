@@ -372,3 +372,14 @@ void SocketMessenger::unregister_conn(SocketConnectionRef conn)
   ceph_assert(found->second == conn);
   connections.erase(found);
 }
+
+seastar::future<uint32_t>
+SocketMessenger::get_global_seq(uint32_t old)
+{
+  return container().invoke_on(0, [old] (auto& msgr) {
+    if (old > msgr.global_seq) {
+      msgr.global_seq = old;
+    }
+    return ++msgr.global_seq;
+  });
+}

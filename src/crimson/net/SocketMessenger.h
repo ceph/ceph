@@ -42,6 +42,7 @@ class SocketMessenger final : public Messenger, public seastar::peering_sharded_
   const uint32_t nonce;
   // specifying we haven't learned our addr; set false when we find it.
   bool need_addr = true;
+  uint32_t global_seq = 0;
 
   seastar::future<> accept(seastar::connected_socket socket,
                            seastar::socket_address paddr);
@@ -108,6 +109,7 @@ class SocketMessenger final : public Messenger, public seastar::peering_sharded_
   void set_policy_throttler(entity_type_t peer_type, Throttle* throttle) override;
 
  public:
+  seastar::future<uint32_t> get_global_seq(uint32_t old=0);
   seastar::future<> learned_addr(const entity_addr_t &peer_addr_for_me,
                                  const SocketConnection& conn);
 
