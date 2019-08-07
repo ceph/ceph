@@ -983,6 +983,7 @@ OPTION(bdev_nvme_retry_count, OPT_INT) // -1 means by default which is 4
 OPTION(objectstore_blackhole, OPT_BOOL)
 
 OPTION(bluefs_alloc_size, OPT_U64)
+OPTION(bluefs_shared_alloc_size, OPT_U64)
 OPTION(bluefs_max_prefetch, OPT_U64)
 OPTION(bluefs_min_log_runway, OPT_U64)  // alloc when we get this low
 OPTION(bluefs_max_log_runway, OPT_U64)  // alloc this much at a time
