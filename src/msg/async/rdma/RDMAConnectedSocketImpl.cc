@@ -489,38 +489,37 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
 
   std::vector<Chunk*> tx_buffers;
   auto it = std::cbegin(pending_bl.buffers());
-  auto copy_it = it;
-  size_t total = 0;
-  size_t need_reserve_bytes = 0;
+  auto copy_start = it;
+  size_t total_copied = 0, wait_copy_len = 0;
   while (it != pending_bl.buffers().end()) {
     if (infiniband->is_tx_buffer(it->raw_c_str())) {
-      if (need_reserve_bytes) {
-        size_t copied = tx_copy_chunk(tx_buffers, need_reserve_bytes, copy_it, it);
-        total += copied;
-        if (copied < need_reserve_bytes)
+      if (wait_copy_len) {
+        size_t copied = tx_copy_chunk(tx_buffers, wait_copy_len, copy_start, it);
+        total_copied += copied;
+        if (copied < wait_copy_len)
           goto sending;
-        need_reserve_bytes = 0;
+        wait_copy_len = 0;
       }
-      ceph_assert(copy_it == it);
+      ceph_assert(copy_start == it);
       tx_buffers.push_back(infiniband->get_tx_chunk_by_buffer(it->raw_c_str()));
-      total += it->length();
-      ++copy_it;
+      total_copied += it->length();
+      ++copy_start;
     } else {
-      need_reserve_bytes += it->length();
+      wait_copy_len += it->length();
     }
     ++it;
   }
-  if (need_reserve_bytes)
-    total += tx_copy_chunk(tx_buffers, need_reserve_bytes, copy_it, it);
+  if (wait_copy_len)
+    total_copied += tx_copy_chunk(tx_buffers, wait_copy_len, copy_start, it);
 
  sending:
-  if (total == 0)
+  if (total_copied == 0)
     return -EAGAIN;
-  ceph_assert(total <= pending_bl.length());
+  ceph_assert(total_copied <= pending_bl.length());
   bufferlist swapped;
-  if (total < pending_bl.length()) {
+  if (total_copied < pending_bl.length()) {
     worker->perf_logger->inc(l_msgr_rdma_tx_parital_mem);
-    pending_bl.splice(total, pending_bl.length()-total, &swapped);
+    pending_bl.splice(total_copied, pending_bl.length() - total_copied, &swapped);
     pending_bl.swap(swapped);
   } else {
     pending_bl.clear();
@@ -533,7 +532,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
   if (r < 0)
     return r;
 
-  ldout(cct, 20) << __func__ << " finished sending " << bytes << " bytes." << dendl;
+  ldout(cct, 20) << __func__ << " finished sending " << total_copied << " bytes." << dendl;
   return pending_bl.length() ? -EAGAIN : 0;
 }
 
