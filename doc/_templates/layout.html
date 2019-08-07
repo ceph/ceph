@@ -1,5 +1,6 @@
 {% extends "!layout.html" %}
 
 {%- block extrahead %}
+    <meta http-equiv="Content-Security-Policy" content="script-src-elem 'unsafe-inline' http://ayni.ceph.com; style-src 'unsafe-inline'; font-src https://fonts.googleapis.com https://fonts.gstatic.com">
     <script type="text/javascript" src="http://ayni.ceph.com/public/js/ceph.js"></script>
 {% endblock %}
