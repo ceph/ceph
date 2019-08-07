@@ -35,11 +35,14 @@
         </div>
 
         <!-- Password -->
-        <div class="form-group"
-             [ngClass]="{'has-error': userForm.showError('password', formDir)}">
-          <label i18n
-                 class="control-label col-sm-3"
-                 for="name">Password</label>
+        <div class="form-group">
+          <label class="control-label col-sm-3"
+                 for="password">
+          <ng-container i18n>Password</ng-container>
+          <cd-helper class="text-pre"
+                     html="{{ requiredPasswordRulesMessage }}">
+          </cd-helper>
+          </label>     
           <div class="col-sm-9">
             <div class="input-group">
               <input class="form-control"
@@ -56,9 +59,18 @@
                 </button>
               </span>
             </div>
-            <span class="help-block"
+            <div class="passwordStrengthLevel">
+              <div class="{{ passwordStrengthLevel }}"
+                   data-toggle="tooltip"
+                   title="{{ passwordStrengthDescription }}">
+              </div>
+            </div>
+            <span class="invalid-feedback"
                   *ngIf="userForm.showError('password', formDir, 'required')"
                   i18n>This field is required.</span>
+            <span class="invalid-feedback"
+                  *ngIf="userForm.showError('password', formDir, 'checkPassword')"
+                  i18n>Too weak</span>
           </div>
         </div>
 

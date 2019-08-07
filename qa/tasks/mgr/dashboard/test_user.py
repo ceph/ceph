@@ -24,7 +24,7 @@ class UserTest(DashboardTestCase):
 
     def test_crud_user(self):
         self._create_user(username='user1',
-                          password='mypassword',
+                          password='mypassword10#',
                           name='My Name',
                           email='my@email.com',
                           roles=['administrator'])
@@ -75,7 +75,7 @@ class UserTest(DashboardTestCase):
 
     def test_create_user_already_exists(self):
         self._create_user(username='admin',
-                          password='mypassword',
+                          password='mypassword10#',
                           name='administrator',
                           email='my@email.com',
                           roles=['administrator'])
@@ -85,7 +85,7 @@ class UserTest(DashboardTestCase):
 
     def test_create_user_invalid_role(self):
         self._create_user(username='user1',
-                          password='mypassword',
+                          password='mypassword10#',
                           name='My Name',
                           email='my@email.com',
                           roles=['invalid-role'])
@@ -130,16 +130,71 @@ class UserTest(DashboardTestCase):
         self.assertStatus(400)
         self.assertError(code='invalid_old_password', component='user')
 
-    def test_change_password(self):
-        self.create_user('test1', 'test1', ['read-only'])
-        self.login('test1', 'test1')
+    def test_change_password_as_old_password(self):
+        self.create_user('test1', 'mypassword10#', ['read-only'])
+        self.login('test1', 'mypassword10#')
         self._post('/api/user/test1/change_password', {
-            'old_password': 'test1',
-            'new_password': 'foo'
+            'old_password': 'mypassword10#',
+            'new_password': 'mypassword10#'
+        })
+        self.assertStatus(400)
+        self.assertError(code='the_same_as_old_password', component='user')
+        self.delete_user('test1')
+
+    def test_change_password_contains_username(self):
+        self.create_user('test1', 'mypassword10#', ['read-only'])
+        self.login('test1', 'mypassword10#')
+        self._post('/api/user/test1/change_password', {
+            'old_password': 'mypassword10#',
+            'new_password': 'mypasstest1@#'
+        })
+        self.assertStatus(400)
+        self.assertError(code='contains_username', component='user')
+        self.delete_user('test1')
+
+    def test_change_password_contains_forbidden_words(self):
+        self.create_user('test1', 'mypassword10#', ['read-only'])
+        self.login('test1', 'mypassword10#')
+        self._post('/api/user/test1/change_password', {
+            'old_password': 'mypassword10#',
+            'new_password': 'mypassOSD01'
+        })
+        self.assertStatus(400)
+        self.assertError(code='contains_forbidden_words', component='user')
+        self.delete_user('test1')
+
+    def test_change_password_contains_sequential_characters(self):
+        self.create_user('test1', 'mypassword10#', ['read-only'])
+        self.login('test1', 'mypassword10#')
+        self._post('/api/user/test1/change_password', {
+            'old_password': 'mypassword10#',
+            'new_password': 'mypass123456!@$'
+        })
+        self.assertStatus(400)
+        self.assertError(code='contains_sequential_characters', component='user')
+        self.delete_user('test1')    
+
+    def test_change_password_contains_repetetive_characters(self):
+        self.create_user('test1', 'mypassword10#', ['read-only'])
+        self.login('test1', 'mypassword10#')
+        self._post('/api/user/test1/change_password', {
+            'old_password': 'mypassword10#',
+            'new_password': 'aaaaA1@!#'
+        })
+        self.assertStatus(400)
+        self.assertError(code='contains_repetetive_characters', component='user')
+        self.delete_user('test1')
+
+    def test_change_password(self):
+        self.create_user('test1', 'mypassword10#', ['read-only'])
+        self.login('test1', 'mypassword10#')
+        self._post('/api/user/test1/change_password', {
+            'old_password': 'mypassword10#',
+            'new_password': 'newpassword01#'
         })
         self.assertStatus(200)
         self.logout()
-        self._post('/api/auth', {'username': 'test1', 'password': 'test1'})
+        self._post('/api/auth', {'username': 'test1', 'password': 'mypassword10#'})
         self.assertStatus(400)
         self.assertError(code='invalid_credentials', component='auth')
         self.delete_user('test1')

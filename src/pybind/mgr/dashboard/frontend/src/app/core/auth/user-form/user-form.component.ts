@@ -12,11 +12,13 @@ import { UserService } from '../../../shared/api/user.service';
 import { ConfirmationModalComponent } from '../../../shared/components/confirmation-modal/confirmation-modal.component';
 import { SelectMessages } from '../../../shared/components/select/select-messages.model';
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
+import { Icons } from '../../../shared/enum/icons.enum';
 import { NotificationType } from '../../../shared/enum/notification-type.enum';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 import { CdValidators } from '../../../shared/forms/cd-validators';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { NotificationService } from '../../../shared/services/notification.service';
+import { UserChangePasswordService } from '../../../shared/services/user-change-password.service';
 import { UserFormMode } from './user-form-mode.enum';
 import { UserFormRoleModel } from './user-form-role.model';
 import { UserFormModel } from './user-form.model';
@@ -41,6 +43,10 @@ export class UserFormComponent implements OnInit {
   messages = new SelectMessages({ empty: 'There are no roles.' }, this.i18n);
   action: string;
   resource: string;
+  requiredPasswordRulesMessage: string;
+  passwordStrengthLevel: string;
+  passwordStrengthDescription: string;
+  icons = Icons;
 
   constructor(
     private authService: AuthService,
@@ -52,7 +58,8 @@ export class UserFormComponent implements OnInit {
     private userService: UserService,
     private notificationService: NotificationService,
     private i18n: I18n,
-    public actionLabels: ActionLabelsI18n
+    public actionLabels: ActionLabelsI18n,
+    private userChangePasswordService: UserChangePasswordService
   ) {
     this.resource = this.i18n('user');
     this.createForm();
@@ -60,6 +67,7 @@ export class UserFormComponent implements OnInit {
   }
 
   createForm() {
+    this.requiredPasswordRulesMessage = this.userChangePasswordService.getPasswordRulesMessage();
     this.userForm = new CdFormGroup(
       {
         username: new FormControl('', {
@@ -67,7 +75,11 @@ export class UserFormComponent implements OnInit {
         }),
         name: new FormControl(''),
         password: new FormControl('', {
-          validators: []
+          validators: [
+            CdValidators.custom('checkPassword', () => {
+              return this.userForm && this.checkPassword(this.userForm.getValue('password'));
+            })
+          ]
         }),
         confirmpassword: new FormControl('', {
           updateOn: 'blur',
@@ -169,7 +181,15 @@ export class UserFormComponent implements OnInit {
     }
   }
 
-  private isCurrentUser(): boolean {
+  checkPassword(password: string) {
+    [
+      this.passwordStrengthLevel,
+      this.passwordStrengthDescription
+    ] = this.userChangePasswordService.checkPasswordComplexity(password);
+    return password && this.passwordStrengthLevel === 'passwordStrengthLevel0';
+  }
+
+  public isCurrentUser(): boolean {
     return this.authStorageService.getUsername() === this.userForm.getValue('username');
   }
 

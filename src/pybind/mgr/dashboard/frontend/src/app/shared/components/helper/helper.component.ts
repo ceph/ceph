@@ -7,6 +7,9 @@ import { Component, Input } from '@angular/core';
 })
 export class HelperComponent {
   @Input()
+  class: string;
+
+  @Input()
   html: any;
 
   constructor() {}
