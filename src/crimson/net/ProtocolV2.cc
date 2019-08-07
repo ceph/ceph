@@ -416,11 +416,7 @@ void ProtocolV2::reset_session(bool full)
   if (full) {
     client_cookie = generate_client_cookie();
     peer_global_seq = 0;
-    conn.out_seq = 0;
-    // TODO:
-    // discard_out_queue();
-    // message_seq = 0;
-    // ack_left = 0;
+    reset_write();
     seastar::with_gate(pending_dispatch, [this] {
       return dispatcher.ms_handle_remote_reset(
           seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))

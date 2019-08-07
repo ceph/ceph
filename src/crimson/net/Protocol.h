@@ -102,6 +102,8 @@ class Protocol {
 
   void notify_keepalive_ack(utime_t keepalive_ack);
 
+  void reset_write();
+
   bool is_queued() const {
     return (!conn.out_q.empty() ||
             need_keepalive ||
