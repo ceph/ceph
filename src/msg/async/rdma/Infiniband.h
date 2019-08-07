@@ -37,9 +37,9 @@
 #include "msg/msg_types.h"
 #include "msg/async/net_handler.h"
 
-#define HUGE_PAGE_SIZE (2 * 1024 * 1024)
-#define ALIGN_TO_PAGE_SIZE(x) \
-  (((x) + HUGE_PAGE_SIZE -1) / HUGE_PAGE_SIZE * HUGE_PAGE_SIZE)
+#define HUGE_PAGE_SIZE_2MB (2 * 1024 * 1024)
+#define ALIGN_TO_PAGE_2MB(x) \
+    (((x) + (HUGE_PAGE_SIZE_2MB - 1)) & ~(HUGE_PAGE_SIZE_2MB - 1))
 
 #define PSN_LEN 24
 #define PSN_MSK ((1 << PSN_LEN) - 1)
