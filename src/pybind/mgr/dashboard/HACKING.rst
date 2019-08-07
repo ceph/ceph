@@ -185,7 +185,7 @@ Writing End-to-End Tests
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
 The PagerHelper class
-^^^^^^^^^^^^^^^^^^^^^
+.....................
 
 The ``PageHelper`` class is supposed to be used for general purpose code that
 can be used on various pages or suites. Examples are
@@ -197,7 +197,7 @@ method implemented in a subclass of PageHelper is called on the correct page.
 It will also show a developer-friendly warning if this is not the case.
 
 Subclasses of PageHelper
-^^^^^^^^^^^^^^^^^^^^^^^^
+........................
 
 Helper Methods
 """"""""""""""
@@ -254,7 +254,7 @@ PageHelpers available to all suites.
   });
 
 Code Style
-^^^^^^^^^^
+..........
 
 Please refer to the official `Protractor style-guide
 <https://www.protractortest.org/#/style-guide>`__ for a better insight on how
