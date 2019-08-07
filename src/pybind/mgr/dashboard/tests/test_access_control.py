@@ -69,8 +69,8 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         self.assertNotIn(rolename, db['roles'])
 
     def validate_persistent_user(self, username, roles, password=None,
-                                 name=None, email=None, last_update=None,
-                                 enabled=True):
+                                 name=None, email=None, last_pwd_update=None,
+                                 last_update=None, enabled=True):
         db = self.load_persistent_db()
         self.assertIn('users', db)
         self.assertIn(username, db['users'])
@@ -82,6 +82,8 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             self.assertEqual(db['users'][username]['name'], name)
         if email:
             self.assertEqual(db['users'][username]['email'], email)
+        if last_pwd_update:
+            self.assertEqual(db['users'][username]['last_pwd_update'], last_pwd_update)
         if last_update:
             self.assertEqual(db['users'][username]['lastUpdate'], last_update)
         self.assertEqual(db['users'][username]['enabled'], enabled)
@@ -286,11 +288,13 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'name': '{} User'.format(username),
             'email': '{}@user.com'.format(username),
             'roles': [rolename] if rolename else [],
-            'enabled': enabled
-        })
+            'enabled': enabled,
+            'last_pwd_update': user['last_pwd_update']
+            })
         self.validate_persistent_user(username, [rolename] if rolename else [],
                                       pass_hash, '{} User'.format(username),
                                       '{}@user.com'.format(username),
+                                      user['last_pwd_update'],
                                       user['lastUpdate'], enabled)
         return user
 
@@ -379,6 +383,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             self.assertDictContainsSubset({'roles': uroles}, user)
         self.validate_persistent_user(username, uroles)
         self.assertGreaterEqual(user['lastUpdate'], user_orig['lastUpdate'])
+        self.assertGreaterEqual(user['last_pwd_update'], user_orig['last_pwd_update'])
 
     def test_add_user_roles2(self):
         user_orig = self.test_create_user()
@@ -388,7 +393,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             {'roles': ['block-manager', 'pool-manager']}, user)
         self.validate_persistent_user('admin', ['block-manager',
                                                 'pool-manager'])
-        self.assertGreaterEqual(user['lastUpdate'], user_orig['lastUpdate'])
+        self.assertGreaterEqual(user['last_pwd_update'], user_orig['last_pwd_update'])
 
     def test_add_user_roles_not_existent_user(self):
         with self.assertRaises(CmdException) as ctx:
@@ -490,7 +495,8 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'name': 'admin User',
             'email': 'admin@user.com',
             'roles': ['block-manager', 'pool-manager'],
-            'enabled': True
+            'enabled': True,
+            'last_pwd_update': user['last_pwd_update']
         })
 
     def test_show_nonexistent_user(self):
@@ -532,11 +538,14 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'email': 'admin@admin.com',
             'lastUpdate': user['lastUpdate'],
             'roles': [],
-            'enabled': True
+            'enabled': True,
+            'last_pwd_update': user['last_pwd_update']
+
         })
         self.validate_persistent_user('admin', [], pass_hash, 'Admin Name',
                                       'admin@admin.com')
         self.assertEqual(user['lastUpdate'], user_orig['lastUpdate'])
+        self.assertEqual(user['last_pwd_update'], user_orig['last_pwd_update'])
 
     def test_set_user_info_nonexistent_user(self):
         with self.assertRaises(CmdException) as ctx:
@@ -558,11 +567,13 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'email': 'admin@user.com',
             'lastUpdate': user['lastUpdate'],
             'roles': [],
-            'enabled': True
+            'enabled': True,
+            'last_pwd_update': user['last_pwd_update']
         })
         self.validate_persistent_user('admin', [], pass_hash, 'admin User',
                                       'admin@user.com')
         self.assertGreaterEqual(user['lastUpdate'], user_orig['lastUpdate'])
+        self.assertGreaterEqual(user['last_pwd_update'], user_orig['last_pwd_update'])
 
     def test_set_user_password_nonexistent_user(self):
         with self.assertRaises(CmdException) as ctx:
@@ -585,11 +596,13 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'email': 'admin@user.com',
             'lastUpdate': user['lastUpdate'],
             'roles': [],
-            'enabled': True
+            'enabled': True,
+            'last_pwd_update': user['last_pwd_update']
         })
         self.validate_persistent_user('admin', [], pass_hash, 'admin User',
                                       'admin@user.com')
         self.assertGreaterEqual(user['lastUpdate'], user_orig['lastUpdate'])
+        self.assertGreaterEqual(user['last_pwd_update'], user_orig['last_pwd_update'])
 
     def test_set_user_password_hash_nonexistent_user(self):
         with self.assertRaises(CmdException) as ctx:
@@ -622,6 +635,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'lastUpdate': user['lastUpdate'],
             'roles': ['administrator'],
             'enabled': True,
+            'last_pwd_update': user['last_pwd_update']
         })
         self.validate_persistent_user('admin', ['administrator'], pass_hash,
                                       None, None)
@@ -639,7 +653,8 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'email': 'admin@user.com',
             'lastUpdate': user['lastUpdate'],
             'roles': ['read-only'],
-            'enabled': True
+            'enabled': True,
+            'last_pwd_update': user['last_pwd_update']
         })
         self.validate_persistent_user('admin', ['read-only'], pass_hash,
                                       'admin User', 'admin@user.com')
@@ -655,7 +670,8 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
                         "roles": ["block-manager", "test_role"],
                         "name": "admin User",
                         "email": "admin@user.com",
-                        "lastUpdate": {}
+                        "lastUpdate": {},
+                        "last_pwd_update": {}
                     }}
                 }},
                 "roles": {{
@@ -670,8 +686,9 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
                 }},
                 "version": 1
             }}
-        '''.format(int(round(time.time())), Scope.ISCSI, Permission.READ,
-                   Permission.UPDATE, Scope.POOL, Permission.CREATE)
+        '''.format(int(round(time.time())), int(round(time.time())),
+                   Scope.ISCSI, Permission.READ, Permission.UPDATE,
+                   Scope.POOL, Permission.CREATE)
 
         load_access_control_db()
         role = self.exec_cmd('ac-role-show', rolename="test_role")
@@ -692,7 +709,8 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'name': 'admin User',
             'email': 'admin@user.com',
             'roles': ['block-manager', 'test_role'],
-            'enabled': True
+            'enabled': True,
+            'last_pwd_update': user['last_pwd_update']
         })
 
     def test_load_v2(self):
@@ -709,6 +727,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
                         "roles": ["block-manager", "test_role"],
                         "name": "admin User",
                         "email": "admin@user.com",
+                        "last_pwd_update": {},
                         "lastUpdate": {},
                         "enabled": true
                     }}
@@ -725,8 +744,9 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
                 }},
                 "version": 1
             }}
-        '''.format(int(round(time.time())), Scope.ISCSI, Permission.READ,
-                   Permission.UPDATE, Scope.POOL, Permission.CREATE)
+        '''.format(int(round(time.time())), int(round(time.time())),
+                   Scope.ISCSI, Permission.READ, Permission.UPDATE,
+                   Scope.POOL, Permission.CREATE)
 
         load_access_control_db()
         role = self.exec_cmd('ac-role-show', rolename="test_role")
@@ -747,7 +767,8 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'name': 'admin User',
             'email': 'admin@user.com',
             'roles': ['block-manager', 'test_role'],
-            'enabled': True
+            'enabled': True,
+            'last_pwd_update': user['last_pwd_update']
         })
 
     def test_update_from_previous_version_v1(self):
@@ -764,5 +785,6 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'name': None,
             'email': None,
             'roles': ['administrator'],
-            'enabled': True
+            'enabled': True,
+            'last_pwd_update': user['last_pwd_update']
         })

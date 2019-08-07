@@ -26,7 +26,14 @@ export class AuthService {
       .post('api/auth', credentials)
       .toPromise()
       .then((resp: LoginResponse) => {
-        this.authStorageService.set(resp.username, resp.token, resp.permissions, resp.sso);
+        this.authStorageService.set(
+          resp.username,
+          resp.token,
+          resp.permissions,
+          resp.sso,
+          resp.force_change_pwd
+        );
+        return resp.force_change_pwd;
       });
   }
 

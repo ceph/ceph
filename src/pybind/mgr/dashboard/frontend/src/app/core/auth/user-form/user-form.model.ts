@@ -5,4 +5,5 @@ export class UserFormModel {
   email: string;
   roles: Array<string>;
   enabled: boolean;
+  force_change_pwd: boolean;
 }

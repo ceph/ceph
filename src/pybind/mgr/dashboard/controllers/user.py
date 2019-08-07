@@ -1,6 +1,8 @@
 # -*- coding: utf-8 -*-
 from __future__ import absolute_import
 
+import time
+
 import cherrypy
 
 from . import BaseController, ApiController, RESTController, Endpoint
@@ -43,6 +45,10 @@ def check_password_complexity(password, username, old_password=None):
                                  component='user')
 
 
+def if_force_change_pwd(force_change_pwd):
+    return time.time() if not force_change_pwd else None
+
+
 @ApiController('/user', Scope.USER)
 class User(RESTController):
     @staticmethod
@@ -75,7 +81,7 @@ class User(RESTController):
         return User._user_to_dict(user)
 
     def create(self, username=None, password=None, name=None, email=None,
-               roles=None, enabled=True):
+               roles=None, enabled=True, force_change_pwd=False):
         if not username:
             raise DashboardException(msg='Username is required',
                                      code='username_required',
@@ -87,7 +93,8 @@ class User(RESTController):
             check_password_complexity(password, username)
         try:
             user = mgr.ACCESS_CTRL_DB.create_user(username, password, name,
-                                                  email, enabled)
+                                                  email, enabled,
+                                                  if_force_change_pwd(force_change_pwd))
         except UserAlreadyExists:
             raise DashboardException(msg='Username already exists',
                                      code='username_already_exists',
@@ -110,7 +117,7 @@ class User(RESTController):
         mgr.ACCESS_CTRL_DB.save()
 
     def set(self, username, password=None, name=None, email=None, roles=None,
-            enabled=None):
+            enabled=None, force_change_pwd=False):
         if JwtManager.get_username() == username and enabled is False:
             raise DashboardException(msg='You are not allowed to disable your user',
                                      code='cannot_disable_current_user',
@@ -125,7 +132,7 @@ class User(RESTController):
             user_roles = User._get_user_roles(roles)
         if password:
             check_password_complexity(password, username)
-            user.set_password(password)
+            user.set_password(password, if_force_change_pwd(force_change_pwd))
         user.name = name
         user.email = email
         if enabled is not None:
@@ -153,5 +160,5 @@ class UserChangePassword(BaseController):
                                      code='invalid_old_password',
                                      component='user')
         check_password_complexity(new_password, username, old_password)
-        user.set_password(new_password)
+        user.set_password(new_password, if_force_change_pwd(False))
         mgr.ACCESS_CTRL_DB.save()

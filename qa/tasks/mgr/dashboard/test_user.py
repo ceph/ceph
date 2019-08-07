@@ -48,6 +48,7 @@ class UserTest(DashboardTestCase):
             'email': 'my@email.com',
             'roles': ['administrator'],
             'lastUpdate': user['lastUpdate'],
+            'last_pwd_update': user['last_pwd_update'],
             'enabled': True
         })
 
@@ -64,6 +65,7 @@ class UserTest(DashboardTestCase):
             'email': 'mynew@email.com',
             'roles': ['block-manager'],
             'lastUpdate': user['lastUpdate'],
+            'last_pwd_update': user['last_pwd_update'],
             'enabled': True
         })
 
@@ -93,6 +95,7 @@ class UserTest(DashboardTestCase):
             'email': 'klara@musterfrau.com',
             'roles': ['administrator'],
             'lastUpdate': user['lastUpdate'],
+            'last_pwd_update': user['last_pwd_update'],
             'enabled': False
         })
 
@@ -111,6 +114,7 @@ class UserTest(DashboardTestCase):
             'email': None,
             'roles': ['administrator'],
             'lastUpdate': user['lastUpdate'],
+            'last_pwd_update': user['last_pwd_update'],
             'enabled': True
         }])
 

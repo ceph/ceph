@@ -81,6 +81,13 @@ export class UserPasswordFormComponent {
         validators: [CdValidators.match('newpassword', 'confirmnewpassword')]
       }
     );
+
+    if (this.authStorageService.getForceChangePwd()) {
+      this.notificationService.show(
+        NotificationType.info,
+        this.i18n('You have to change password after the first login.')
+      );
+    }
   }
 
   checkPassword(password: string) {

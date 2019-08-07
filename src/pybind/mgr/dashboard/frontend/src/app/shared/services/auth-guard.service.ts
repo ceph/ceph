@@ -11,7 +11,9 @@ export class AuthGuardService implements CanActivate, CanActivateChild {
 
   canActivate() {
     if (this.authStorageService.isLoggedIn()) {
-      return true;
+      return (
+        this.router.url !== '/user-profile/edit' || !this.authStorageService.getForceChangePwd()
+      );
     }
     this.router.navigate(['/login']);
     return false;

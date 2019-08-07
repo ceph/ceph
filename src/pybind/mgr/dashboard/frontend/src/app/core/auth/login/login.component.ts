@@ -54,7 +54,13 @@ export class LoginComponent implements OnInit {
             window.location.replace(login.login_url);
           }
         } else {
-          this.authStorageService.set(login.username, token, login.permissions, login.sso);
+          this.authStorageService.set(
+            login.username,
+            token,
+            login.permissions,
+            login.sso,
+            login.force_change_pwd
+          );
           this.router.navigate(['']);
         }
       });
@@ -62,8 +68,12 @@ export class LoginComponent implements OnInit {
   }
 
   login() {
-    this.authService.login(this.model).then(() => {
-      this.router.navigate(['']);
+    this.authService.login(this.model).then((forceChangePwd: Boolean) => {
+      if (forceChangePwd) {
+        this.router.navigate(['/user-profile/edit']);
+      } else {
+        this.router.navigate(['']);
+      }
     });
   }
 }

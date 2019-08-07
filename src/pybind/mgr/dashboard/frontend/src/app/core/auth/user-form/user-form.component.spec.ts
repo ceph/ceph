@@ -151,7 +151,8 @@ describe('UserFormComponent', () => {
         name: 'User 0',
         email: 'user0@email.com',
         roles: ['administrator'],
-        enabled: true
+        enabled: true,
+        force_change_pwd: false
       };
       formHelper.setMultipleValues(user);
       formHelper.setValue('confirmpassword', user.password);
@@ -171,7 +172,8 @@ describe('UserFormComponent', () => {
       name: 'User 1',
       email: 'user1@email.com',
       roles: ['administrator'],
-      enabled: true
+      enabled: true,
+      force_change_pwd: false
     };
     const roles = [
       {
@@ -262,7 +264,8 @@ describe('UserFormComponent', () => {
         name: 'User 1',
         email: 'user1@email.com',
         roles: ['administrator'],
-        enabled: true
+        enabled: true,
+        force_change_pwd: false
       });
       userReq.flush({});
       expect(router.navigate).toHaveBeenCalledWith(['/user-management/users']);

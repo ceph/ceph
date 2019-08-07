@@ -3,4 +3,5 @@ export class LoginResponse {
   token: string;
   permissions: object;
   sso: boolean;
+  force_change_pwd: boolean;
 }

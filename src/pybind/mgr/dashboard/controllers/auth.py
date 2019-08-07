@@ -30,7 +30,8 @@ class Auth(RESTController):
                 'token': token,
                 'username': username,
                 'permissions': user_perms,
-                'sso': mgr.SSO_DB.protocol == 'saml2'
+                'sso': mgr.SSO_DB.protocol == 'saml2',
+                'force_change_pwd': AuthManager.check_force_change_pwd(username)
             }
 
         logger.debug('Login failed')

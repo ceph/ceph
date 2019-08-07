@@ -239,7 +239,7 @@ SYSTEM_ROLES = {
 
 class User(object):
     def __init__(self, username, password, name=None, email=None, roles=None,
-                 last_update=None, enabled=True):
+                 last_pwd_update=time.time(), last_update=None, enabled=True):
         self.username = username
         self.password = password
         self.name = name
@@ -248,6 +248,7 @@ class User(object):
             self.roles = set()
         else:
             self.roles = roles
+        self.last_pwd_update = self.set_last_pwd_update(last_pwd_update)
         if last_update is None:
             self.refresh_last_update()
         else:
@@ -256,6 +257,9 @@ class User(object):
 
     def refresh_last_update(self):
         self.last_update = int(time.time())
+
+    def check_force_change_pwd(self):
+        return not self.last_pwd_update
 
     @property
     def enabled(self):
@@ -266,7 +270,12 @@ class User(object):
         self._enabled = value
         self.refresh_last_update()
 
-    def set_password(self, password):
+    @staticmethod
+    def set_last_pwd_update(last_pwd_update):
+        return int(last_pwd_update) if last_pwd_update else None
+
+    def set_password(self, password, last_pwd_update=time.time()):
+        self.last_pwd_update = self.set_last_pwd_update(last_pwd_update)
         self.set_password_hash(password_hash(password))
 
     def set_password_hash(self, hashed_password):
@@ -324,6 +333,7 @@ class User(object):
             'roles': sorted([r.name for r in self.roles]),
             'name': self.name,
             'email': self.email,
+            'last_pwd_update': self.last_pwd_update,
             'lastUpdate': self.last_update,
             'enabled': self.enabled
         }
@@ -332,7 +342,8 @@ class User(object):
     def from_dict(cls, u_dict, roles):
         return User(u_dict['username'], u_dict['password'], u_dict['name'],
                     u_dict['email'], {roles[r] for r in u_dict['roles']},
-                    u_dict['lastUpdate'], u_dict['enabled'])
+                    u_dict['last_pwd_update'], u_dict['lastUpdate'],
+                    u_dict['enabled'])
 
 
 class AccessControlDB(object):
@@ -372,12 +383,14 @@ class AccessControlDB(object):
 
             del self.roles[name]
 
-    def create_user(self, username, password, name, email, enabled=True):
+    def create_user(self, username, password, name, email, enabled=True,
+                    last_pwd_update=time.time()):
         logger.debug("creating user: username=%s", username)
         with self.lock:
             if username in self.users:
                 raise UserAlreadyExists(username)
-            user = User(username, password_hash(password), name, email, enabled=enabled)
+            user = User(username, password_hash(password), name, email,
+                        last_pwd_update=last_pwd_update, enabled=enabled)
             self.users[username] = user
             return user
 
@@ -629,7 +642,8 @@ def ac_user_create_cmd(_, username, password=None, rolename=None, name=None,
         role = SYSTEM_ROLES[rolename]
 
     try:
-        user = mgr.ACCESS_CTRL_DB.create_user(username, password, name, email, enabled)
+        user = mgr.ACCESS_CTRL_DB.create_user(username, password, name, email,
+                                              enabled)
     except UserAlreadyExists as ex:
         return -errno.EEXIST, '', str(ex)
 
@@ -822,3 +836,11 @@ class LocalAuthenticator(object):
     def authorize(self, username, scope, permissions):
         user = mgr.ACCESS_CTRL_DB.get_user(username)
         return user.authorize(scope, permissions)
+
+    def check_force_change_pwd(self, username):
+        try:
+            user = mgr.ACCESS_CTRL_DB.get_user(username)
+            return user.check_force_change_pwd()
+        except UserDoesNotExist:
+            logger.debug("User '%s' does not exist", username)
+        return False
