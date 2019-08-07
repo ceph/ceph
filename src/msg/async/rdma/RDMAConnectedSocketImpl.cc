@@ -19,20 +19,20 @@
 #undef dout_prefix
 #define dout_prefix *_dout << " RDMAConnectedSocketImpl "
 
-RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, Infiniband* ib, RDMADispatcher* s,
+RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, shared_ptr<Infiniband> &ib, RDMADispatcher* s,
 						 RDMAWorker *w)
-  : cct(cct), connected(0), error(0), infiniband(ib),
+  : cct(cct), connected(0), error(0), ib(ib),
     dispatcher(s), worker(w),
     is_server(false), con_handler(new C_handle_connection(this)),
     active(false), pending(false)
 {
   if (!cct->_conf->ms_async_rdma_cm) {
-    qp = infiniband->create_queue_pair(cct, s->get_tx_cq(), s->get_rx_cq(), IBV_QPT_RC, NULL);
+    qp = ib->create_queue_pair(cct, s->get_tx_cq(), s->get_rx_cq(), IBV_QPT_RC, NULL);
     my_msg.qpn = qp->get_local_qp_number();
     my_msg.psn = qp->get_initial_psn();
-    my_msg.lid = infiniband->get_lid();
+    my_msg.lid = ib->get_lid();
     my_msg.peer_qpn = 0;
-    my_msg.gid = infiniband->get_gid();
+    my_msg.gid = ib->get_gid();
     notify_fd = eventfd(0, EFD_CLOEXEC|EFD_NONBLOCK);
     dispatcher->register_qp(qp, this);
     dispatcher->perf_logger->inc(l_msgr_rdma_created_queue_pair);
@@ -98,13 +98,13 @@ int RDMAConnectedSocketImpl::activate()
   qpa.ah_attr.grh.hop_limit = 6;
   qpa.ah_attr.grh.dgid = peer_msg.gid;
 
-  qpa.ah_attr.grh.sgid_index = infiniband->get_device()->get_gid_idx();
+  qpa.ah_attr.grh.sgid_index = ib->get_device()->get_gid_idx();
 
   qpa.ah_attr.dlid = peer_msg.lid;
   qpa.ah_attr.sl = cct->_conf->ms_async_rdma_sl;
   qpa.ah_attr.grh.traffic_class = cct->_conf->ms_async_rdma_dscp;
   qpa.ah_attr.src_path_bits = 0;
-  qpa.ah_attr.port_num = (uint8_t)(infiniband->get_ib_physical_port());
+  qpa.ah_attr.port_num = (uint8_t)(ib->get_ib_physical_port());
 
   ldout(cct, 20) << __func__ << " Choosing gid_index " << (int)qpa.ah_attr.grh.sgid_index << ", sl " << (int)qpa.ah_attr.sl << dendl;
 
@@ -189,7 +189,7 @@ int RDMAConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, const S
   ldout(cct, 20) << __func__ << " tcp_fd: " << tcp_fd << dendl;
   net.set_priority(tcp_fd, opts.priority, peer_addr.get_family());
   my_msg.peer_qpn = 0;
-  r = infiniband->send_msg(cct, tcp_fd, my_msg);
+  r = ib->send_msg(cct, tcp_fd, my_msg);
   if (r < 0)
     return r;
 
@@ -199,7 +199,7 @@ int RDMAConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, const S
 
 void RDMAConnectedSocketImpl::handle_connection() {
   ldout(cct, 20) << __func__ << " QP: " << my_msg.qpn << " tcp_fd: " << tcp_fd << " notify_fd: " << notify_fd << dendl;
-  int r = infiniband->recv_msg(cct, tcp_fd, peer_msg);
+  int r = ib->recv_msg(cct, tcp_fd, peer_msg);
   if (r <= 0) {
     if (r != -EAGAIN) {
       dispatcher->perf_logger->inc(l_msgr_rdma_handshake_errors);
@@ -224,7 +224,7 @@ void RDMAConnectedSocketImpl::handle_connection() {
       ceph_assert(!r);
     }
     notify();
-    r = infiniband->send_msg(cct, tcp_fd, my_msg);
+    r = ib->send_msg(cct, tcp_fd, my_msg);
     if (r < 0) {
       ldout(cct, 1) << __func__ << " send client ack failed." << dendl;
       dispatcher->perf_logger->inc(l_msgr_rdma_handshake_errors);
@@ -238,7 +238,7 @@ void RDMAConnectedSocketImpl::handle_connection() {
       }
       r = activate();
       ceph_assert(!r);
-      r = infiniband->send_msg(cct, tcp_fd, my_msg);
+      r = ib->send_msg(cct, tcp_fd, my_msg);
       if (r < 0) {
         ldout(cct, 1) << __func__ << " server ack failed." << dendl;
         dispatcher->perf_logger->inc(l_msgr_rdma_handshake_errors);
@@ -475,7 +475,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
   auto copy_start = it;
   size_t total_copied = 0, wait_copy_len = 0;
   while (it != pending_bl.buffers().end()) {
-    if (infiniband->is_tx_buffer(it->raw_c_str())) {
+    if (ib->is_tx_buffer(it->raw_c_str())) {
       if (wait_copy_len) {
         size_t copied = tx_copy_chunk(tx_buffers, wait_copy_len, copy_start, it);
         total_copied += copied;
@@ -484,7 +484,7 @@ ssize_t RDMAConnectedSocketImpl::submit(bool more)
         wait_copy_len = 0;
       }
       ceph_assert(copy_start == it);
-      tx_buffers.push_back(infiniband->get_tx_chunk_by_buffer(it->raw_c_str()));
+      tx_buffers.push_back(ib->get_tx_chunk_by_buffer(it->raw_c_str()));
       total_copied += it->length();
       ++copy_start;
     } else {
@@ -650,7 +650,7 @@ void RDMAConnectedSocketImpl::set_accept_fd(int sd)
 
 void RDMAConnectedSocketImpl::post_chunks_to_rq(int num)
 {
-  post_backlog += num - infiniband->post_chunks_to_rq(num, qp->get_qp());
+  post_backlog += num - ib->post_chunks_to_rq(num, qp->get_qp());
 }
 
 void RDMAConnectedSocketImpl::update_post_backlog()
