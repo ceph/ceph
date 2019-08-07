@@ -53,6 +53,7 @@ class DefaultStrategy : public rgw::auth::Strategy,
                         public rgw::auth::TokenExtractor,
                         public rgw::auth::WebIdentityApplier::Factory {
   RGWRados* const store;
+  ImplicitTenants& implicit_tenant_context;
 
   /* The engine. */
   const WebTokenEngine web_token_engine;
@@ -74,8 +75,10 @@ class DefaultStrategy : public rgw::auth::Strategy,
 
 public:
   DefaultStrategy(CephContext* const cct,
+                  ImplicitTenants& implicit_tenant_context,
                   RGWRados* const store)
     : store(store),
+      implicit_tenant_context(implicit_tenant_context),
       web_token_engine(cct,
                         static_cast<rgw::auth::TokenExtractor*>(this),
                         static_cast<rgw::auth::WebIdentityApplier::Factory*>(this)) {

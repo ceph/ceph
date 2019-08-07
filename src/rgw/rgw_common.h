@@ -1268,6 +1268,10 @@ struct rgw_bucket {
     return (tenant == b.tenant) && (name == b.name) && \
            (bucket_id == b.bucket_id);
   }
+  bool operator!=(const rgw_bucket& b) const {
+    return (tenant != b.tenant) || (name != b.name) ||
+           (bucket_id != b.bucket_id);
+  }
 };
 WRITE_CLASS_ENCODER(rgw_bucket)
 
@@ -1599,6 +1603,7 @@ struct RGWBucketEntryPoint
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
+  static void generate_test_instances(list<RGWBucketEntryPoint*>& o);
 };
 WRITE_CLASS_ENCODER(RGWBucketEntryPoint)
 

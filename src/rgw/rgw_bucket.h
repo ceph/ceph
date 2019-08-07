@@ -200,14 +200,25 @@ extern int rgw_read_user_buckets(RGWRados *store,
 				 bool* is_truncated,
                                  uint64_t default_amount = 1000);
 
+struct rgw_ep_info {
+    RGWBucketEntryPoint &ep;
+    map<string, bufferlist>& attrs;
+    rgw_ep_info(RGWBucketEntryPoint &ep, map<string, bufferlist>& attrs)
+	: ep(ep), attrs(attrs) { }
+};
+
 extern int rgw_link_bucket(RGWRados* store,
                            const rgw_user& user_id,
                            rgw_bucket& bucket,
                            ceph::real_time creation_time,
-                           bool update_entrypoint = true);
+                           bool update_entrypoint = true,
+                           rgw_ep_info *pinfo = nullptr);
 extern int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id,
                              const string& tenant_name, const string& bucket_name, bool update_entrypoint = true);
-
+extern int rgw_bucket_chown(RGWRados* const store, RGWUserInfo& user_info, RGWBucketInfo& bucket_info,
+                             const string& marker, map<string, bufferlist>& attrs);
+extern int rgw_set_bucket_acl(RGWRados* store, ACLOwner& owner, rgw_bucket& bucket,
+                              RGWBucketInfo& bucket_info, bufferlist& bl);
 extern int rgw_remove_object(RGWRados *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key);
 extern int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children, optional_yield y);
 extern int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket, int concurrent_max, optional_yield y);
@@ -227,6 +238,7 @@ struct RGWBucketAdminOpState {
   std::string bucket_name;
   std::string bucket_id;
   std::string object_name;
+  std::string new_bucket_name;
 
   bool list_buckets;
   bool stat_buckets;
@@ -256,6 +268,9 @@ struct RGWBucketAdminOpState {
   }
   void set_object(std::string& object_str) {
     object_name = object_str;
+  }
+  void set_new_bucket_name(std::string& new_bucket_str) {
+    new_bucket_name = new_bucket_str;
   }
   void set_quota(RGWQuotaInfo& value) {
     quota = value;
@@ -312,7 +327,8 @@ class RGWBucket
 
 public:
   RGWBucket() : store(NULL), handle(NULL), failure(false) {}
-  int init(RGWRados *storage, RGWBucketAdminOpState& op_state);
+  int init(RGWRados *storage, RGWBucketAdminOpState& op_state,
+              std::string *err_msg = NULL, map<string, bufferlist> *pattrs = NULL);
 
   int check_bad_index_multipart(RGWBucketAdminOpState& op_state,
               RGWFormatterFlusher& flusher, std::string *err_msg = NULL);
@@ -328,7 +344,9 @@ public:
           std::string *err_msg = NULL);
 
   int remove(RGWBucketAdminOpState& op_state, optional_yield y, bool bypass_gc = false, bool keep_index_consistent = true, std::string *err_msg = NULL);
-  int link(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
+  int link(RGWBucketAdminOpState& op_state, map<string, bufferlist>& attrs,
+	std::string *err_msg = NULL);
+  int chown(RGWBucketAdminOpState& op_state,  map<string, bufferlist>& attrs, const string& marker, std::string *err_msg = NULL);
   int unlink(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
   int set_quota(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
 
@@ -353,6 +371,7 @@ public:
 
   static int unlink(RGWRados *store, RGWBucketAdminOpState& op_state);
   static int link(RGWRados *store, RGWBucketAdminOpState& op_state, string *err_msg = NULL);
+  static int chown(RGWRados *store, RGWBucketAdminOpState& op_state, const string& marker, string *err_msg = NULL);
 
   static int check_index(RGWRados *store, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher, optional_yield y);

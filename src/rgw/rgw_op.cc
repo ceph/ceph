@@ -448,7 +448,7 @@ static int modify_obj_attr(RGWRados *store, struct req_state *s, const rgw_obj& 
   RGWRados::Object::Read read_op(&op_target);
 
   read_op.params.attrs = &attrs;
-  
+
   int r = read_op.prepare(s->yield);
   if (r < 0) {
     return r;
