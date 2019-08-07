@@ -49,6 +49,8 @@ const std::error_category& net_category()
           return "address in use";
         case error::broken_pipe:
           return "broken pipe";
+        case error::protocol_aborted:
+          return "protocol aborted";
         default:
           return "unknown";
       }
