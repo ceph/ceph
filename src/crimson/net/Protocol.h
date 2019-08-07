@@ -84,6 +84,12 @@ class Protocol {
 
   void notify_keepalive_ack(utime_t keepalive_ack);
 
+  bool is_queued() const {
+    return (!conn.out_q.empty() ||
+            need_keepalive ||
+            keepalive_ack.has_value());
+  }
+
  private:
   write_state_t write_state = write_state_t::none;
   // wait until current state changed
