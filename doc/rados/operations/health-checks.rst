@@ -335,6 +335,59 @@ needs to be stopped and BlueFS informed of the device size change with::
 
   ceph-bluestore-tool bluefs-bdev-expand --path /var/lib/ceph/osd/ceph-$ID
 
+BLUEFS_AVAILABLE_SPACE
+______________________
+
+To check how much space is free for BlueFS do::
+
+  ceph daemon osd.123 bluestore bluefs available
+
+This will output up to 3 values: `BDEV_DB free`, `BDEV_SLOW free` and
+`available_from_bluestore`. `BDEV_DB` and `BDEV_SLOW` report amount of space that
+has been acquired by BlueFS and is considered free. Value `available_from_bluestore`
+denotes ability of BlueStore to relinquish more space to BlueFS.
+It is normal that this value is different from amount of BlueStore free space, as
+BlueFS allocation unit is typically larger than BlueStore allocation unit.
+This means that only part of BlueStore free space will be acceptable for BlueFS.
+
+BLUEFS_LOW_SPACE
+_________________
+
+If BlueFS is running low on available free space and there is little
+`available_from_bluestore` one can consider reducing BlueFS allocation unit size.
+To simulate available space when allocation unit is different do::
+
+  ceph daemon osd.123 bluestore bluefs available <alloc-unit-size>
+
+BLUESTORE_FRAGMENTATION
+_______________________
+
+As BlueStore works free space on underlying storage will get fragmented.
+This is normal and unavoidable but excessive fragmentation will cause slowdown.
+To inspect BlueStore fragmentation one can do::
+
+  ceph daemon osd.123 bluestore allocator score block
+
+Score is given in [0-1] range.
+[0.0 .. 0.4] tiny fragmentation
+[0.4 .. 0.7] small, acceptable fragmentation
+[0.7 .. 0.9] considerable, but safe fragmentation
+[0.9 .. 1.0] severe fragmentation, may impact BlueFS ability to get space from BlueStore
+
+If detailed report of free fragments is required do::
+
+  ceph daemon osd.123 bluestore allocator dump block
+
+In case when handling OSD process that is not running fragmentation can be
+inspected with `ceph-bluestore-tool`.
+Get fragmentation score::
+
+  ceph-bluestore-tool --path /var/lib/ceph/osd/ceph-123 --allocator block free-score
+
+And dump detailed free chunks::
+
+  ceph-bluestore-tool --path /var/lib/ceph/osd/ceph-123 --allocator block free-dump
+
 BLUESTORE_LEGACY_STATFS
 _______________________
 

@@ -18,6 +18,7 @@
 
 #include "os/bluestore/BlueFS.h"
 #include "os/bluestore/BlueStore.h"
+#include "common/admin_socket.h"
 
 namespace po = boost::program_options;
 
@@ -224,6 +225,7 @@ int main(int argc, char **argv)
   string action;
   string log_file;
   string key, value;
+  vector<string> allocs_name;
   int log_level = 30;
   bool fsck_deep = false;
   po::options_description po_options("Options");
@@ -239,10 +241,26 @@ int main(int argc, char **argv)
     ("deep", po::value<bool>(&fsck_deep), "deep fsck (read all data)")
     ("key,k", po::value<string>(&key), "label metadata key name")
     ("value,v", po::value<string>(&value), "label metadata value")
+    ("allocator", po::value<vector<string>>(&allocs_name), "allocator to inspect: 'block'/'bluefs-wal'/'bluefs-db'/'bluefs-slow'")
     ;
   po::options_description po_positional("Positional options");
   po_positional.add_options()
-    ("command", po::value<string>(&action), "fsck, repair, bluefs-export, bluefs-bdev-sizes, bluefs-bdev-expand, bluefs-bdev-new-db, bluefs-bdev-new-wal, bluefs-bdev-migrate, show-label, set-label-key, rm-label-key, prime-osd-dir, bluefs-log-dump")
+    ("command", po::value<string>(&action),
+        "fsck, "
+        "repair, "
+        "bluefs-export, "
+        "bluefs-bdev-sizes, "
+        "bluefs-bdev-expand, "
+        "bluefs-bdev-new-db, "
+        "bluefs-bdev-new-wal, "
+        "bluefs-bdev-migrate, "
+        "show-label, "
+        "set-label-key, "
+        "rm-label-key, "
+        "prime-osd-dir, "
+        "bluefs-log-dump, "
+        "free-dump, "
+        "free-score")
     ;
   po::options_description po_all("All options");
   po_all.add(po_options).add(po_positional);
@@ -357,7 +375,24 @@ int main(int argc, char **argv)
       exit(EXIT_FAILURE);
     }
   }
-
+  if (action == "free-score" || action == "free-dump") {
+    if (path.empty()) {
+      cerr << "must specify bluestore path" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+    for (auto name : allocs_name) {
+      if (!name.empty() &&
+          name != "block" &&
+          name != "bluefs-db" &&
+          name != "bluefs-wal" &&
+          name != "bluefs-slow") {
+        cerr << "unknown allocator '" << name << "'" << std::endl;
+        exit(EXIT_FAILURE);
+      }
+    }
+    if (allocs_name.empty())
+      allocs_name = vector<string>{"block", "bluefs-db", "bluefs-wal", "bluefs-slow"};
+  }
   vector<const char*> args;
   if (log_file.size()) {
     args.push_back("--log-file");
@@ -792,6 +827,31 @@ int main(int argc, char **argv)
       }
       return r;
     }
+  } else  if (action == "free-dump" || action == "free-score") {
+    AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
+    ceph_assert(admin_socket);
+    std::string action_name = action == "free-dump" ? "dump" : "score";
+    validate_path(cct.get(), path, false);
+    BlueStore bluestore(cct.get(), path);
+    int r = bluestore.cold_open();
+    if (r < 0) {
+      cerr << "error from cold_open: " << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    }
+
+    for (auto alloc_name : allocs_name) {
+      ceph::bufferlist out;
+      bool b = admin_socket->execute_command(
+          "{\"prefix\": \"bluestore allocator " + action_name + " " + alloc_name + "\"}", out);
+      if (!b) {
+        cerr << "failure querying '" << alloc_name << "'" << std::endl;
+        exit(EXIT_FAILURE);
+      }
+      cout << alloc_name << ":" << std::endl;
+      cout << std::string(out.c_str(),out.length()) << std::endl;
+    }
+
+    bluestore.cold_close();
   } else {
     cerr << "unrecognized action " << action << std::endl;
     return 1;

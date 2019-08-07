@@ -22,6 +22,7 @@ Synopsis
 | **ceph-bluestore-tool** bluefs-bdev-new-wal --path *osd path* --dev-target *new-device*
 | **ceph-bluestore-tool** bluefs-bdev-new-db --path *osd path* --dev-target *new-device*
 | **ceph-bluestore-tool** bluefs-bdev-migrate --path *osd path* --dev-target *new-device* --devs-source *device1* [--devs-source *device2*]
+| **ceph-bluestore-tool** free-dump|free-score --path *osd path* [ --allocator block/bluefs-wal/bluefs-db/bluefs-slow ]
 
 
 Description
@@ -81,6 +82,15 @@ Commands
 
    Show device label(s).	   
 
+:command:`free-dump` --path *osd path* [ --allocator block/bluefs-wal/bluefs-db/bluefs-slow ]
+
+   Dump all free regions in allocator.
+
+:command:`free-score` --path *osd path* [ --allocator block/bluefs-wal/bluefs-db/bluefs-slow ]
+
+   Give a [0-1] number that represents quality of fragmentation in allocator.
+   0 represents case when all free space is in one chunk. 1 represents worst possible fragmentation.
+
 Options
 =======
 
@@ -116,6 +126,10 @@ Options
 .. option:: --deep
 
    deep scrub/repair (read and validate object data, not just metadata)
+
+.. option:: --allocator *name*
+
+   Useful for *free-dump* and *free-score* actions. Selects allocator(s).
 
 Device labels
 =============

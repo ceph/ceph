@@ -63,6 +63,13 @@ public:
     uint64_t min_size,
     uint64_t size,
     PExtentVector& extents) = 0;
+  /** Reports amount of space that can be transferred to BlueFS.
+   * This gives either current state, when alloc_size is currently used
+   * BlueFS's size, or simulation when alloc_size is different.
+   * @params
+   * alloc_size - allocation unit size to check
+   */
+  virtual size_t available_freespace(uint64_t alloc_size) = 0;
 };
 
 class BlueFS {
@@ -305,6 +312,9 @@ private:
 
   BlueFSDeviceExpander* slow_dev_expander = nullptr;
 
+  class SocketHook;
+  SocketHook* asok_hook = nullptr;
+
   void _init_logger();
   void _shutdown_logger();
   void _update_logger_stats();
@@ -318,6 +328,7 @@ private:
   void _drop_link(FileRef f);
 
   int _get_slow_device_id() { return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB; }
+  const char* get_device_name(unsigned id);
   int _expand_slow_device(uint64_t min_size, PExtentVector& extents);
   int _allocate(uint8_t bdev, uint64_t len,
 		bluefs_fnode_t* node);
