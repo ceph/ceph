@@ -1,3 +1,4 @@
-Sphinx == 1.6.3
--e git+https://github.com/ceph/sphinx-ditaa.git@py3#egg=sphinx-ditaa
-breathe == 4.11.1
+Sphinx == 2.1.2
+git+https://github.com/ceph/sphinx-ditaa.git@py3#egg=sphinx-ditaa
+breathe == 4.13.1
+pyyaml >= 5.1.2
