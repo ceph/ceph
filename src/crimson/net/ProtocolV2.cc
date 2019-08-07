@@ -54,12 +54,17 @@ seastar::logger& logger() {
   return ceph::get_logger(ceph_subsys_ms);
 }
 
-seastar::future<> abort_in_fault() {
+void abort_in_fault() {
   throw std::system_error(make_error_code(ceph::net::error::negotiation_failure));
 }
 
-seastar::future<> abort_in_close() {
-  throw std::system_error(make_error_code(ceph::net::error::connection_aborted));
+void abort_protocol() {
+  throw std::system_error(make_error_code(ceph::net::error::protocol_aborted));
+}
+
+void abort_in_close(ceph::net::ProtocolV2& proto) {
+  proto.close();
+  abort_protocol();
 }
 
 inline void expect_tag(const Tag& expected,
@@ -500,13 +505,13 @@ seastar::future<entity_type_t, entity_addr_t> ProtocolV2::banner_exchange()
         logger().error("{} peer does not support all required features"
                        " required={} peer_supported={}",
                        conn, required_features, peer_supported_features);
-        abort_in_close();
+        abort_in_close(*this);
       }
       if ((supported_features & peer_required_features) != peer_required_features) {
         logger().error("{} we do not support all peer required features"
                        " peer_required={} supported={}",
                        conn, peer_required_features, supported_features);
-        abort_in_close();
+        abort_in_close(*this);
       }
       this->peer_required_features = peer_required_features;
       if (this->peer_required_features == 0) {
@@ -631,7 +636,7 @@ seastar::future<> ProtocolV2::client_auth(std::vector<uint32_t> &allowed_methods
   } catch (const ceph::auth::error& e) {
     logger().error("{} get_initial_auth_request returned {}", conn, e);
     dispatch_reset();
-    abort_in_close();
+    abort_in_close(*this);
     return seastar::now();
   }
 }
@@ -848,7 +853,7 @@ void ProtocolV2::execute_connecting()
           if (state == state_t::CLOSING) {
             return socket->close().then([this] {
               logger().warn("{} is closed during Socket::connect()", conn);
-              abort_in_fault();
+              abort_protocol();
             });
           }
           return seastar::now();
@@ -861,7 +866,7 @@ void ProtocolV2::execute_connecting()
                           conn, ceph_entity_type_name(conn.get_peer_type()),
                           ceph_entity_type_name(_peer_type));
             dispatch_reset();
-            abort_in_close();
+            abort_in_close(*this);
           }
           conn.set_ephemeral_port(_my_addr_from_peer.get_port(),
                                   SocketConnection::side_t::connector);
@@ -965,7 +970,8 @@ seastar::future<> ProtocolV2::_handle_auth_request(bufferlist& auth_payload, boo
    }
    case -EBUSY: {
     logger().warn("{} auth_server handle_auth_request returned -EBUSY", conn);
-    return abort_in_fault();
+    abort_in_fault();
+    return seastar::now();
    }
    default: {
     logger().warn("{} auth_server handle_auth_request returned {}", conn, r);
@@ -1035,7 +1041,7 @@ seastar::future<bool> ProtocolV2::handle_existing_connection(SocketConnectionRef
                   " in favor of existing connection {}",
                   conn, peer_global_seq, exproto->peer_global_seq, *existing);
     dispatch_reset();
-    abort_in_close();
+    abort_in_close(*this);
   }
 
   if (existing->policy.lossy) {
