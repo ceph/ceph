@@ -7546,6 +7546,10 @@ std::vector<Option> get_mds_options() {
     .set_default(64_K)
     .set_description("maximum aggregate size of extended attributes on a file"),
 
+    Option("mds_cache_trim_interval", Option::TYPE_SECS, Option::LEVEL_ADVANCED)
+    .set_default(1)
+    .set_description("interval in seconds between cache trimming"),
+
     Option("mds_cache_size", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("maximum number of inodes in MDS cache (<=0 is unlimited)")

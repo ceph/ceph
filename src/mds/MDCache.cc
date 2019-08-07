@@ -157,6 +157,36 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   bottom_lru.lru_set_midpoint(0);
 
   decayrate.set_halflife(g_conf()->mds_decay_halflife);
+
+  upkeeper = std::thread([this]() {
+    std::unique_lock lock(upkeep_mutex);
+    while (!upkeep_trim_shutdown.load()) {
+      auto now = clock::now();
+      auto since = now-upkeep_last_trim;
+      auto interval = clock::duration(g_conf().get_val<std::chrono::seconds>("mds_cache_trim_interval"));
+      if (since >= interval*.90) {
+        lock.unlock(); /* mds_lock -> upkeep_mutex */
+        std::scoped_lock mds_lock(mds->mds_lock);
+        lock.lock();
+        if (upkeep_trim_shutdown.load())
+          return;
+        if (mds->is_cache_trimmable()) {
+          dout(20) << "upkeep thread trimming cache; last trim " << since << " ago" << dendl;
+          trim_client_leases();
+          trim();
+          check_memory_usage();
+          mds->server->recall_client_state(nullptr, Server::RecallFlags::ENFORCE_MAX);
+          upkeep_last_trim = clock::now();
+        } else {
+          dout(10) << "cache not ready for trimming" << dendl;
+        }
+      } else {
+        interval -= since;
+      }
+      dout(20) << "upkeep thread waiting interval " << interval << dendl;
+      upkeep_cvar.wait_for(lock, interval);
+    }
+  });
 }
 
 MDCache::~MDCache() 
@@ -164,6 +194,8 @@ MDCache::~MDCache()
   if (logger) {
     g_ceph_context->get_perfcounters_collection()->remove(logger.get());
   }
+  if (upkeeper.joinable())
+    upkeeper.join();
 }
 
 void MDCache::handle_conf_change(const ConfigProxy& conf,
@@ -205,6 +237,11 @@ void MDCache::log_stat()
 
 bool MDCache::shutdown()
 {
+  {
+    std::scoped_lock lock(upkeep_mutex);
+    upkeep_trim_shutdown = true;
+    upkeep_cvar.notify_one();
+  }
   if (lru.lru_get_size() > 0) {
     dout(7) << "WARNING: mdcache shutdown with non-empty cache" << dendl;
     //show_cache();

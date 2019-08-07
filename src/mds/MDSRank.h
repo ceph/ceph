@@ -229,6 +229,10 @@ class MDSRank {
     bool is_cluster_degraded() const { return cluster_degraded; }
     bool allows_multimds_snaps() const { return mdsmap->allows_multimds_snaps(); }
 
+    bool is_cache_trimmable() const {
+      return is_clientreplay() || is_active() || is_stopping();
+    }
+
     void handle_write_error(int err);
 
     void handle_conf_change(const ConfigProxy& conf,

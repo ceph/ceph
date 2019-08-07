@@ -742,13 +742,7 @@ void MDSRankDispatcher::tick()
   }
 
   // ...
-  if (is_clientreplay() || is_active() || is_stopping()) {
-    mdcache->trim_client_leases();
-    mdcache->trim();
-    mdcache->check_memory_usage();
-
-    server->recall_client_state(nullptr, Server::RecallFlags::ENFORCE_MAX);
-
+  if (is_cache_trimmable()) {
     server->find_idle_sessions();
     server->evict_cap_revoke_non_responders();
     locker->tick();

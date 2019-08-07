@@ -17,7 +17,9 @@
 #ifndef CEPH_MDCACHE_H
 #define CEPH_MDCACHE_H
 
+#include <atomic>
 #include <string_view>
+#include <thread>
 
 #include "common/DecayCounter.h"
 #include "include/types.h"
@@ -1319,6 +1321,13 @@ public:
   std::set<CInode *> export_pin_queue;
 
   OpenFileTable open_file_table;
+
+private:
+  std::thread upkeeper;
+  ceph::mutex upkeep_mutex = ceph::make_mutex("MDCache::upkeep_mutex");
+  ceph::condition_variable upkeep_cvar;
+  time upkeep_last_trim = time::min();
+  std::atomic<bool> upkeep_trim_shutdown{false};
 };
 
 class C_MDS_RetryRequest : public MDSInternalContext {
