@@ -104,7 +104,7 @@ def stdout(msg):
 
 
 def stderr(msg):
-    return _Write(prefix=yellow(' stderr: ')).raw(msg)
+    return _Write(prefix=yellow(' stderr: '), _writer=sys.stderr).raw(msg)
 
 
 def write(msg):
@@ -112,19 +112,19 @@ def write(msg):
 
 
 def error(msg):
-    return _Write(prefix=red_arrow).raw(msg)
+    return _Write(prefix=red_arrow, _writer=sys.stderr).raw(msg)
 
 
 def info(msg):
-    return _Write(prefix=blue_arrow).raw(msg)
+    return _Write(prefix=blue_arrow, _writer=sys.stderr).raw(msg)
 
 
 def debug(msg):
-    return _Write(prefix=blue_arrow).raw(msg)
+    return _Write(prefix=blue_arrow, _writer=sys.stderr).raw(msg)
 
 
 def warning(msg):
-    return _Write(prefix=yellow_arrow).raw(msg)
+    return _Write(prefix=yellow_arrow, _writer=sys.stderr).raw(msg)
 
 
 def success(msg):
