@@ -34,7 +34,7 @@ import re
 import time
 from redminelib import Redmine  # https://pypi.org/project/python-redmine/
 
-redmine_endpoint = "http://tracker.ceph.com"
+redmine_endpoint = "https://tracker.ceph.com"
 project_name = "Ceph"
 release_id = 16
 delay_seconds = 5
