@@ -1,18 +1,25 @@
-# capture ceph cluster changes and events and push them to the kubernetes
-# events API
+# Integrate with the kubernetes events API. 
+# This module sends events to Kubernetes, and also captures/tracks all events
+# in the rook-ceph namespace so kubernetes activity like pod restarts,
+# imagepulls etc can be seen from within the ceph cluster itself.
 #
-# This module requires an rbac policy in kubernetes to allow the mgr service
-# to interact with the events api endpoints
+# To interact with the events API, the mgr service to access needs to be 
+# granted additional permissions
+# e.g. kubectl -n rook-ceph edit clusterrole rook-ceph-mgr-cluster-rules
+#
+# These are the changes needed;
 # - apiGroups:
-#  - ""
-#  resources:
-#  - events
-#  verbs:
-#  - create
-#  - patch
-#  - get
+#   - ""
+#   resources:
+#   - events
+#   verbs:
+#   - create
+#   - patch
+#   - list
+#   - get
+#   - watch
 
-# LogEntry class dynamically builds an object from a dict, so we need to 
+# LogEntry class dynamically builds an object from a set of args,
 # disable the linter for the no-member error
 # pylint: disable=no-member
 
@@ -25,6 +32,7 @@ import threading
 
 from datetime import datetime, timedelta, tzinfo
 from urllib3.exceptions import MaxRetryError
+from collections import OrderedDict
 
 import rados
 from mgr_module import MgrModule
@@ -40,7 +48,7 @@ finally:
     event_queue = queue.Queue()
 
 try:
-    from kubernetes import client, config
+    from kubernetes import client, config, watch
     from kubernetes.client.rest import ApiException
 except ImportError:
     kubernetes_imported = False
@@ -58,6 +66,11 @@ DEFAULT_CONFIG_CHECK_SECS = 10
 ZERO = timedelta(0)
 
 
+def text_suffix(num):
+    """Define a text suffix based on a value i.e. turn host into hosts"""
+    return '' if num == 1 else 's'
+
+
 class UTC(tzinfo):
     """UTC"""
 
@@ -71,8 +84,10 @@ class UTC(tzinfo):
         return ZERO
 
 class HealthCheck(object):
+    """Transform a healthcheck msg into it's component parts"""
+
     def __init__(self, msg):
-        """ transform a healthcheck msg into it's component parts """
+
         # msg looks like
         # 2019-07-17 02:59:12.714672 mon.a [WRN] Health check failed: Reduced data availability: 100 pgs inactive (PG_AVAILABILITY)
         # 2019-07-17 03:16:39.103929 mon.a [INF] Health check cleared: OSDMAP_FLAGS (was: nodown flag(s) set)
@@ -103,12 +118,14 @@ class HealthCheck(object):
 
 
 class LogEntry(object):
-    """ Log Object for Ceph log records """
+    """Generic 'log' object"""
+
     reason_map = {
         "audit": "Audit",
         "cluster": "HealthCheck",
         "config": "ClusterChange",
-        "heartbeat":"Heartbeat"
+        "heartbeat":"Heartbeat",
+        "startup": "Started"
     }
 
     def __init__(self, *args, **kwargs):
@@ -128,7 +145,7 @@ class LogEntry(object):
 
     @property
     def cmd(self):
-        """ Look at the msg string and extract the command content """
+        """Look at the msg string and extract the command content"""
 
         # msg looks like 'from=\'client.205306 \' entity=\'client.admin\' cmd=\'[{"prefix": "osd set", "key": "nodown"}]\': finished'
         if self.msg_type != 'audit':
@@ -153,13 +170,15 @@ class LogEntry(object):
     @property
     def event_name(self):
         if self.msg_type == 'heartbeat':
-            return 'ceph-mgr.Heartbeat'
+            return 'mgr.Heartbeat'
         elif self.healthcheck:
-            return 'ceph-mgr.health.{}'.format(self.healthcheck.name)
+            return 'mgr.health.{}'.format(self.healthcheck.name)
         elif self.msg_type == 'audit':
-            return 'ceph-mgr.audit.{}'.format(self.cmd).replace(' ', '_')
+            return 'mgr.audit.{}'.format(self.cmd).replace(' ', '_')
         elif self.msg_type == 'config':
-            return 'ceph-mgr.ConfigurationChange'
+            return 'mgr.ConfigurationChange'
+        elif self.msg_type == 'startup':
+            return "mgr.k8sevents-module"
         else:
             return None
    
@@ -180,20 +199,111 @@ class LogEntry(object):
         else:
             return self.msg
 
+class RookCeph(object):
+    """Establish environment defaults when interacting with rook-ceph"""
 
-class KubernetesEvent(object):
     pod_name = os.environ['POD_NAME']
     host = os.environ['NODE_NAME']
     namespace = os.environ.get('POD_NAMESPACE', 'rook-ceph')
     cluster_name = os.environ.get('ROOK_CEPH_CLUSTER_CRD_NAME', 'rook-ceph')
     api = client.CoreV1Api()
 
-    def __init__(self, name, msg, msg_type, msg_reason, unique_name=True):
+
+class NamespaceWatcher(RookCeph, threading.Thread):
+    """Watch events in a given namespace 
+    
+    Using the watch package we can listen to event traffic in the namespace to 
+    get an idea of what kubernetes related events surround the ceph cluster. The
+    thing to bear in mind is that events have a TTL enforced by the kube-apiserver
+    so this stream will only really show activity inside this retention window.
+    """
+    daemon = True
+
+    def __init__(self, logger, namespace=None):
+        super(NamespaceWatcher, self).__init__()
+        self.log = logger
+        if namespace:                       # override the default
+            self.namespace = namespace
+        self.events = OrderedDict()
+        self.lock = threading.Lock()
+        self.health = "OK"
+        self.active = None
+        self.resource_version = None
+
+    def fetch(self):
+        # clear the cache on every call to fetch
+        self.events.clear()
+        try:
+            resp = self.api.list_namespaced_event(self.namespace)
+        # TODO - test for auth problem to be more specific in the except clause
+        except:
+            self.active = False
+            self.health = "[WRN] Unable to access events API (list_namespaced_event call failed)"
+            self.log.warning(self.health)
+        else:
+            self.active = True
+            self.resource_version = resp.metadata.resource_version
+
+            # TODO this fetches the events, but storing them like this is not preserving the 
+            # creation timestamp of the event itself - it's just using arrival order
+            
+            for item in resp.items:
+                self.events[item.metadata.name] = item
+            self.log.warning('[INF] added {} events'.format(len(resp.items)))
+
+    def run(self):
+        self.fetch()
+        if self.active:
+            self.log.warning("[INF] Namespace event watcher started")
+
+            func = getattr(self.api, "list_namespaced_event")
+
+            try:
+                w = watch.Watch()
+                # execute generator to continually watch resource for changes
+                for item in w.stream(func, namespace=self.namespace, resource_version=self.resource_version, watch=True):
+                    obj = item['object']
+
+                    with self.lock:
+
+                        if item['type'] in ['ADDED', 'MODIFIED']:
+                            # self.log.warning("[DBG] ADD: {}".format(item))
+                            self.events[obj.metadata.name] = obj
+
+                        elif item['type'] == 'DELETED':
+                            # self.log.warning("[DBG] DEL: {}".format(item))
+                            del self.events[obj.metadata.name]
+                        
+            # TODO test the exception for auth problem (403?)
+ 
+            # Attribute error is generated when urllib3 on the system is old and doesn't have a
+            # read_chunked method
+            except AttributeError as e:
+                self.health = ("[WRN] : Unable to 'watch' events API in namespace {} - "
+                            "incompatible urllib3? ({})".format(self.namespace, e))
+                self.active = False
+                self.log.warning(self.health)
+            except BaseException:
+                self.health = "[ERR] Unexpected {} Exception @ line {}".format(sys.exc_info()[0].__name__, 
+                                                                               sys.exc_info()[2].tb_lineno)
+                self.active = False
+
+            self.log.warning("[WRN] Namespace event watcher stopped")
+            if self.health != 'OK':
+                self.log.error(self.health)
+
+
+class KubernetesEvent(RookCeph):
+
+    def __init__(self, log_entry, unique_name=True):
+        super(KubernetesEvent, self).__init__()
+
+        self.event_name = log_entry.event_name
+        self.event_msg = log_entry.event_msg
+        self.event_type = log_entry.event_type
+        self.event_reason = log_entry.event_reason
         self.unique_name = unique_name
-        self.event_name = name
-        self.event_msg = msg
-        self.event_type = msg_type
-        self.event_reason = msg_reason
+
         self.api_status = 200
         self.count = 1
         self.first_timestamp = None
@@ -206,20 +316,26 @@ class KubernetesEvent(object):
         else:
             obj_meta = client.V1ObjectMeta(generate_name="{}".format(self.event_name))
 
-        obj_ref = client.V1ObjectReference(kind="CephCluster", 
+        # field_path is needed to prevent problems in the namespacewatcher when
+        # deleted event are received
+        obj_ref = client.V1ObjectReference(kind="CephCluster",
+                                           field_path='spec.containers{mgr}', 
                                            name=self.event_name, 
                                            namespace=self.namespace)
+
         event_source = client.V1EventSource(component="ceph-mgr", 
                                             host=self.host)
-        return  client.V1Event(involved_object=obj_ref, 
-                               metadata=obj_meta, 
-                               message=self.event_msg, 
-                               count=self.count, 
-                               type=self.event_type,
-                               reason=self.event_reason,
-                               source=event_source, 
-                               first_timestamp=self.first_timestamp,
-                               last_timestamp=self.last_timestamp)
+        return  client.V1Event(
+                    involved_object=obj_ref, 
+                    metadata=obj_meta, 
+                    message=self.event_msg, 
+                    count=self.count, 
+                    type=self.event_type,
+                    reason=self.event_reason,
+                    source=event_source, 
+                    first_timestamp=self.first_timestamp,
+                    last_timestamp=self.last_timestamp
+                )
 
     def write(self):
 
@@ -300,18 +416,17 @@ class KubernetesEvent(object):
     def api_success(self):
         return self.api_status == 200
 
-    def update(self, log_object):
-        self.event_msg = log_object.event_msg
-        self.event_type = log_object.event_type
+    def update(self, log_entry):
+        self.event_msg = log_entry.event_msg
+        self.event_type = log_entry.event_type
         self.last_timestamp = datetime.now(UTC())
         self.count += 1
-        # change the event type if needed (warning -> normal)
 
         try:
             self.api.patch_namespaced_event(self.event_name, self.namespace, self.event_body)
         except ApiException as e:
             if e.status == 404:
-                # tried to patch but it's rolled out of k8s events
+                # tried to patch 404 indicates it's TTL has expired
                 try:
                     self.api.create_namespaced_event(self.namespace, self.event_body)
                 except ApiException as e:
@@ -323,20 +438,31 @@ class KubernetesEvent(object):
 
 
 class EventProcessor(threading.Thread):
+    """Handle a global queue used to track events we want to send/update to kubernetes"""
+
     daemon = True
     can_run = True
 
     def __init__(self, logger):
         self.events = dict()
         self.log = logger
+        self.health = 'OK'
         threading.Thread.__init__(self)
 
     def startup(self):
-        event = KubernetesEvent(name="ceph-mgr.k8sevent-module",
-                                msg="Ceph log -> event tracking started",
-                                msg_type="Normal",
-                                msg_reason="Started",
-                                unique_name=False)
+        """Log an event to show we're active"""
+        
+        event = KubernetesEvent(
+            LogEntry(
+                source='self',
+                msg='Ceph log -> event tracking started',
+                msg_type='startup',
+                level='INF',
+                tstamp=None
+            ),
+            unique_name=False
+        )
+        
         event.write()
         return event.api_success
     
@@ -376,29 +502,19 @@ class EventProcessor(threading.Thread):
         if event_out:
             # we don't cache non-unique event names
             if not unique_name or log_object.event_name not in self.events.keys():
-                self.log.warning("[DBG] sending an event(unique={}) to kubernetes".format(unique_name))
-                event = KubernetesEvent(name=log_object.event_name,
-                                        msg=log_object.event_msg,
-                                        msg_type=log_object.event_type,
-                                        msg_reason=log_object.event_reason,
+                event = KubernetesEvent(log_entry=log_object,
                                         unique_name=unique_name)
                 event.write()
-                self.log.warning("[DBG] API status code is {}".format(event.api_status))
+                self.log.warning("[DBG] event(unique={}) creation ended : {}".format(unique_name, event.api_status))
                 if event.api_success and unique_name:
                     self.events[log_object.event_name] = event
             else:
-                # TODO
-                # Why track the events? Just attempt a write, and if it fails update it
-            
-                self.log.warning("[DBG] need to update an event")
                 event = self.events[log_object.event_name]
                 event.update(log_object)
-                self.log.warning("[DBG] update of an event ended {}".format(event.api_status))
+                self.log.warning("[DBG] event update ended : {}".format(event.api_status))
 
-            self.log.warning("[DBG] events cache size {}".format(len(self.events.keys())))
-            self.log.warning("[DBG] events cache holds {}".format(','.join(self.events.keys())))
         else:
-            self.log.warning("[DBG] ignoring log message {}".format(log_object.msg))
+            self.log.warning("[DBG] ignored message : {}".format(log_object.msg))
 
     def run(self):
         self.log.warning("[INF] Ceph event processing thread started")
@@ -409,14 +525,21 @@ class EventProcessor(threading.Thread):
             except queue.Empty:
                 pass
             else:
-                self.process(log_object)
+                try:
+                    self.process(log_object)
+                except BaseException:
+                    self.health = "[ERR] Unexpected {} Exception @ line {}".format(sys.exc_info()[0].__name__, 
+                                                                                   sys.exc_info()[2].tb_lineno)
+                    break
             
             if not self.can_run:
                 break
 
             time.sleep(0.5)
 
-        self.log.error("[INF] Ceph event processing thread exited")
+        self.log.warning("[WRN] Ceph event processing thread stopped")
+        if self.health != 'OK':
+            self.log.error(self.health)
 
 class ListDiff(object):
     def __init__(self, before, after):
@@ -432,9 +555,9 @@ class ListDiff(object):
         return list(self.after - self.before)
 
 
-
 class CephConfigWatcher(threading.Thread):
-    """ Catch configuration changes within the cluster and generate events """
+    """Detect configuration changes within the cluster and generate human readable events"""
+
     daemon = True
 
     def __init__(self, mgr):
@@ -443,8 +566,9 @@ class CephConfigWatcher(threading.Thread):
         self.osd_map = dict()
         self.pool_map = dict()
         self.service_map = dict()
+        self.health = "OK"
         
-        self.hearbeat_interval_secs = self.mgr.get_localized_module_option(
+        self.heartbeat_interval_secs = self.mgr.get_localized_module_option(
             'heartbeat_interval_secs', DEFAULT_HEARTBEAT_INTERVAL_SECS)
         self.config_check_secs = self.mgr.get_localized_module_option(
             'config_check_secs', DEFAULT_CONFIG_CHECK_SECS)
@@ -469,7 +593,7 @@ class CephConfigWatcher(threading.Thread):
         return len(self.pool_map.keys())
 
     def fetch_servers(self):
-        """ return a server summary, and service summary """
+        """Return a server summary, and service summary"""
         servers = self.mgr.list_servers()
         server_map = dict()         # host -> services
         service_map = dict()        # service -> host
@@ -511,7 +635,7 @@ class CephConfigWatcher(threading.Thread):
 
 
     def fetch_osd_map(self, service_map):
-        """ create an osd map """
+        """Create an osd map"""
         stats = self.mgr.get('osd_stats')
 
         osd_map = dict()
@@ -532,12 +656,15 @@ class CephConfigWatcher(threading.Thread):
         return osd_map
 
     def push_events(self, changes):
-        """ add config change to the global queue to generate an event in kubernetes """
+        """Add config change to the global queue to generate an event in kubernetes"""
         for change in changes:
             event_queue.put(change)
 
     def send_hearbeat_msg(self):
-        """ send a health heartbeat event """
+        """Send a health heartbeat event"""
+        if self.num_osds > 0 and self.raw_capacity == 0:
+            # we have osds, but the stats aren't available yet, so skip the heartbeat
+            return
 
         health_str = self.mgr.get('health')['json']
         if json.loads(health_str)['status'] == 'HEALTH_OK':
@@ -547,22 +674,30 @@ class CephConfigWatcher(threading.Thread):
             health_text = 'Unhealthy'
             level = 'WRN'
 
-        hsfx = 's' if self.num_servers > 1 else ''
-        psfx = 's' if self.num_pools > 1 else ''
-        health_msg = ("Cluster is {}, {} host{}, {} pool{}, {} OSDs - Total Raw "
-                      "Capacity {}B".format(health_text, self.num_servers, hsfx, self.num_pools, psfx,
+        health_msg = ("Cluster state: {}. {} host{}, {} pool{}, {} OSDs. Raw "
+                      "Capacity {}B".format(health_text, self.num_servers, text_suffix(self.num_servers),
+                                            self.num_pools, text_suffix(self.num_pools),
                                             self.num_osds, MgrModule.to_pretty_iec(self.raw_capacity)))
 
-        event_queue.put(LogEntry(
-            source="config",
-            msg_type="heartbeat",
-            msg=health_msg,
-            level=level,
-            tstamp=None)
+        event_queue.put(
+            LogEntry(
+                source="config",
+                msg_type="heartbeat",
+                msg=health_msg,
+                level=level,
+                tstamp=None
+            )
         )
-        
-        self.mgr.log.warning("[DBG] {}".format(health_msg))
 
+    def _generate_logentry(self, msg):
+        return LogEntry(
+                source="config",
+                msg_type="config",
+                msg=msg,
+                level='INF',
+                tstamp=None
+        )
+    
     def _check_hosts(self, server_map):
         changes = list()
         if set(self.server_map.keys()) == set(server_map.keys()):
@@ -573,22 +708,15 @@ class CephConfigWatcher(threading.Thread):
             diff = ListDiff(self.server_map.keys(), server_map.keys())
             host_msg = "Host '{}' has been {} the cluster"
             for new in diff.added:
-                
-                changes.append(LogEntry(source="config",
-                                        msg_type="config",
-                                        msg=host_msg.format(new, 'added to'),
-                                        level="INF",
-                                        tstamp=None)
+                changes.append(self._generate_logentry(
+                                    msg=host_msg.format(new, 'added to'))
                 )
 
             for removed in diff.removed:
-
-                changes.append(LogEntry(source="config",
-                                        msg_type="config",
-                                        msg=host_msg.format(removed, 'removed from'),
-                                        level="INF",
-                                        tstamp=None)
+                changes.append(self._generate_logentry(
+                                    msg=host_msg.format(removed, 'removed from'))
                 )
+
         return changes
 
     def _check_osds(self,server_map, osd_map):
@@ -603,7 +731,6 @@ class CephConfigWatcher(threading.Thread):
         
         if set(before_osds) == set(after_osds):
             # no change in osd id's
-            # TODO could check id an existing osd has moved hosts?
             pass
         else:
             # osd changes detected
@@ -611,94 +738,90 @@ class CephConfigWatcher(threading.Thread):
 
             diff = ListDiff(before_osds, after_osds)
             for new in diff.added:
-                changes.append(LogEntry(source="config",
-                                        msg_type="config",
-                                        msg=osd_msg.format(new, 
-                                                           osd_map[new]['deviceclass'],
-                                                           MgrModule.to_pretty_iec(osd_map[new]['capacity']),
-                                                           'added to',
-                                                           osd_map[new]['hostname']),
-                                        level="INF",
-                                        tstamp=None)
+                changes.append(self._generate_logentry(
+                                    msg=osd_msg.format(
+                                            new, 
+                                            osd_map[new]['deviceclass'],
+                                            MgrModule.to_pretty_iec(osd_map[new]['capacity']),
+                                            'added to',
+                                            osd_map[new]['hostname']))
                 )
 
             for removed in diff.removed:
-                changes.append(LogEntry(source="config",
-                                        msg_type="config",
-                                        msg=osd_msg.format(removed, 
-                                                           osd_map[removed]['deviceclass'],
-                                                           MgrModule.to_pretty_iec(osd_map[removed]['capacity']),
-                                                           'removed from',
-                                                           osd_map[removed]['hostname']),
-                                        level="INF",
-                                        tstamp=None)
+                changes.append(self._generate_logentry(
+                                    msg=osd_msg.format(
+                                        removed,
+                                        osd_map[removed]['deviceclass'],
+                                        MgrModule.to_pretty_iec(osd_map[removed]['capacity']),
+                                        'removed from',
+                                        osd_map[removed]['hostname']))
                 )
+
         return changes
 
     def _check_pools(self, pool_map):
         changes = list()
+
+        # self.mgr.log.warning("DBG - pool map looks like {}".format(pool_map))
         if self.pool_map.keys() == pool_map.keys():
             # no pools added/removed
             pass
         else:
+            # self.mgr.log.warning("[DBG] pool changes detected")
             # Pool changes
             diff = ListDiff(self.pool_map.keys(), pool_map.keys())
             pool_msg = "Pool '{}' has been {} the cluster"
             for new in diff.added:
-                
-                changes.append(LogEntry(source="config",
-                                        msg_type="config",
-                                        msg=pool_msg.format(new, 'added to'),
-                                        level="INF",
-                                        tstamp=None)
+                changes.append(self._generate_logentry(
+                                    msg=pool_msg.format(new, 'added to'))
                 )
 
             for removed in diff.removed:
-
-                changes.append(LogEntry(source="config",
-                                        msg_type="config",
-                                        msg=pool_msg.format(removed, 'removed from'),
-                                        level="INF",
-                                        tstamp=None)
+                changes.append(self._generate_logentry(
+                                    msg=pool_msg.format(removed, 'removed from'))
                 )
-        
+
         # check pool configuration changes
         for pool_name in pool_map:
+            if not self.pool_map.get(pool_name, dict()):
+                # pool didn't exist before so just skip the checks
+                continue
+
             if pool_map[pool_name] == self.pool_map[pool_name]:
-                # no changes
-                pass
+                # no changes - dicts match in key and value
+                continue
             else:
                 # determine the change and add it to the change list
                 size_diff = pool_map[pool_name]['size'] - self.pool_map[pool_name]['size']
-                if size_diff:
+                if size_diff != 0:
                     if size_diff < 0:
                         msg = "Data protection level of pool '{}' reduced to {} copies".format(pool_name,
-                                                                                               pool_map[pool_name]['size'])
+                                                                                            pool_map[pool_name]['size'])
                         level = 'WRN'
                     else:
                         msg = "Data protection level of pool '{}' increased to {} copies".format(pool_name,
-                                                                                                 pool_map[pool_name]['size'])
+                                                                                                pool_map[pool_name]['size'])
                         level = 'INF'
 
                     changes.append(LogEntry(source="config",
-                                   msg_type="config",
-                                   msg=msg,
-                                   level=level,
-                                   tstamp=None)
-                                   )
+                                msg_type="config",
+                                msg=msg,
+                                level=level,
+                                tstamp=None)
+                                )
 
                 if pool_map[pool_name]['min_size'] != self.pool_map[pool_name]['min_size']:
                     changes.append(LogEntry(source="config",
-                                   msg_type="config",
-                                   msg="Minimum acceptable number of replicas in pool '{}' has changed".format(pool_name),
-                                   level='WRN',
-                                   tstamp=None)
-                                   )
+                                msg_type="config",
+                                msg="Minimum acceptable number of replicas in pool '{}' has changed".format(pool_name),
+                                level='WRN',
+                                tstamp=None)
+                                )
 
         return changes
 
     def get_changes(self, server_map, osd_map, pool_map):
-        """ detect changes in maps between current observation and the last """
+        """Detect changes in maps between current observation and the last"""
 
         changes = list()
 
@@ -706,57 +829,75 @@ class CephConfigWatcher(threading.Thread):
         changes.extend(self._check_osds(server_map, osd_map))
         changes.extend(self._check_pools(pool_map))
 
+        # TODO
+        # Could generate an event if a ceph daemon has moved hosts
+        # (assumes the ceph metadata host information is valid - which may not be the case)
+
         return changes
 
     def run(self):
         self.mgr.log.warning("[INF] Ceph configuration watcher started")
-        # TODO
-        # 1. send event if service location changes - unique
+
         self.server_map, self.service_map = self.fetch_servers()
         self.pool_map = self.fetch_pools()
-        self.mgr.log.warning("[DBG] {}".format(self.server_map))
-        self.mgr.log.warning("[DBG] {}".format(self.service_map))
+        # self.mgr.log.warning("[DBG] server map {}".format(self.server_map))
+        # self.mgr.log.warning("[DBG] service map {}".format(self.service_map))
         self.osd_map = self.fetch_osd_map(self.service_map)
-        self.mgr.log.warning("[INF] {} hosts, {} OSDs, {}B Raw Capacity".format(self.num_servers, 
-                                                                               self.num_osds,
-                                                                               MgrModule.to_pretty_iec(self.raw_capacity)))
-        self.mgr.log.warning("[DBG] server map : {}".format(self.server_map))
-        self.mgr.log.warning("[DBG] osd map : {}".format(self.osd_map))
-
-        self.send_hearbeat_msg()
+        # self.mgr.log.warning("[DBG] osd map {}".format(self.osd_map))
 
         ctr = 0
         
         while True:
-            server_map, service_map = self.fetch_servers()
-            pool_map = self.fetch_pools()
-            osd_map = self.fetch_osd_map(service_map)
 
-            changes = self.get_changes(server_map, osd_map, pool_map)
-            if changes:
-                self.push_events(changes)
+            try:
+                start_time = time.time()
+                server_map, service_map = self.fetch_servers()
+                pool_map = self.fetch_pools()
+                osd_map = self.fetch_osd_map(service_map)
 
-            self.osd_map = osd_map
-            self.pool_map = pool_map
-            self.server_map = server_map
-            self.service_map = service_map
+                changes = self.get_changes(server_map, osd_map, pool_map)
+                if changes:
+                    self.push_events(changes)
 
-            self.mgr.log.error("[DBG] service map : {}".format(server_map))
-            self.mgr.log.error("[DBG] osd_map : {}".format(osd_map))
-            self.mgr.log.warning("[DBG] {} hosts, {} OSDs, {}B Raw Capacity".format(self.num_servers, 
-                                                                        self.num_osds,
-                                                                        MgrModule.to_pretty_iec(self.raw_capacity)))
-            time.sleep(self.config_check_secs)    
-            ctr += self.config_check_secs
-            if ctr%self.hearbeat_interval_secs == 0:
-                ctr = 0
-                self.send_hearbeat_msg()
+                self.osd_map = osd_map
+                self.pool_map = pool_map
+                self.server_map = server_map
+                self.service_map = service_map
+
+                checks_duration = time.time() - start_time
+                if checks_duration > self.config_check_secs:
+                    new_interval = self.config_check_secs * 2
+                    self.mgr.log.warning("[WRN] k8sevents check interval warning. "
+                                         "Current checks {}s, interval is {}. "
+                                         "Increasing interval to {}".format(int(checks_duration),
+                                                                            self.config_check_secs,
+                                                                            new_interval))
+                    self.config_check_secs = new_interval
+
+                time.sleep(self.config_check_secs)    
+                ctr += self.config_check_secs
+                if ctr%self.heartbeat_interval_secs == 0:
+                    ctr = 0
+                    self.send_hearbeat_msg()
+            except BaseException:
+                self.health = "[ERR] Unexpected {} Exception @ line {}".format(sys.exc_info()[0].__name__, 
+                                                                               sys.exc_info()[2].tb_lineno)
+                break
+
+        self.mgr.log.warning("[WRN] Ceph configuration watcher stopped")
+        if self.health != 'OK':
+            self.mgr.log.error(self.health)
 
 class Module(MgrModule):
     COMMANDS = [
         {
-            "cmd": "dumpevents",
-            "desc": "Show the vars created",
+            "cmd": "k8sevents namespace",
+            "desc": "Show all Kuberenetes events from the rook-ceph namespace",
+            "perm": "r"
+        },
+        {
+            "cmd": "k8sevents ceph",
+            "desc": "Show only Ceph related events tracked & sent to the kubernetes cluster",
             "perm": "r"
         }
     ]
@@ -770,54 +911,96 @@ class Module(MgrModule):
         self.run = True
         self.event_processor = None
         self.config_watcher = None
+        self.ns_watcher = None
         super(Module, self).__init__(*args, **kwargs)
 
+    def fetch_events(self):
+        """Interface to expose current events to another mgr module"""
+        # TODO
+        return dict()
+
+    def show_all_events(self):
+        """Show all events we're holding from the ceph namespace - most recent 1st"""
+
+        max_name_length = max([len(k) for k in self.ns_watcher.events])
+        max_msg_length = max([len(self.ns_watcher.events[k].message) for k in self.ns_watcher.events])
+        fmt = "{:<20}  {:>5}  {:<" + str(max_msg_length) + "}  {:<" + str(max_name_length) + "}\n"
+        s = fmt.format("Last Seen", "Count", "Message", "Event Object Name")
+
+        for event_name in sorted(self.ns_watcher.events, 
+                                 key = lambda name: self.ns_watcher.events[name].last_timestamp,
+                                 reverse=True):
+
+            event = self.ns_watcher.events[event_name]
+
+            s += fmt.format(
+                    datetime.strftime(event.last_timestamp,"%Y/%m/%d %H:%M:%S"),
+                    event.count,
+                    event.message,
+                    event_name
+            )
+
+        return 0, "", s
+
+    def show_ceph_events(self):
+        if len(self.event_processor.events.keys()) > 0:
+            s = "\n".join(self.event_processor.events.keys())
+        else:
+            s = "No events\n"
+        return 0, "", s
+
     def handle_command(self, inbuf, cmd):
-        # TODO Not working correctly
-        return 0, "", "\n".join(self.event_processor.events.keys())
+        # TODO Should we implement dynamic options for the monitoring?
+        if cmd["prefix"] == "k8sevents namespace":
+            return self.show_all_events()
+        elif cmd["prefix"] == "k8sevents ceph":
+            return self.show_ceph_events()
+        else:
+            raise NotImplementedError(cmd["prefix"])
 
     @staticmethod
     def can_run():
-        """ Determine whether the pre-reqs for the module are in place """
+        """Determine whether the pre-reqs for the module are in place"""
 
         if not kubernetes_imported:
             return False, "kubernetes python client is unavailable"
         return True, ""
 
     def log_callback(self, arg, line, channel, name, who, stamp_sec, stamp_nsec, seq, level, msg):
-        """ Receive the ceph log entry and add it to the global queue """
+        """Receive the ceph log entry and add it to the global queue"""
 
         if sys.version_info[0] >= 3:
             channel = channel.decode('utf-8')
 
-        # TODO DEBUG ONLY - REMOVE ME
-        self.log.error("qsize={},line={},channel={},name={},who={},"
-                       "stamp_sec={},seq={},level={},msg={}".format(event_queue.qsize(),line,channel,name,who,stamp_sec,
-                       seq,level,msg))
+        # self.log.error("qsize={},line={},channel={},name={},who={},"
+        #                "stamp_sec={},seq={},level={},msg={}".format(event_queue.qsize(),line,channel,name,who,stamp_sec,
+        #                seq,level,msg))
         
-        log_object = LogEntry(
-            source='log',
-            msg_type=channel,
-            msg=line.decode('utf-8'),
-            level=level[1:-1].decode('utf-8'),
-            tstamp=stamp_sec
+        event_queue.put(
+            LogEntry(
+                source='log',
+                msg_type=channel,
+                msg=line.decode('utf-8'),
+                level=level[1:-1].decode('utf-8'),
+                tstamp=stamp_sec
+            )
         )
 
-        event_queue.put(log_object)
-
     def watch_ceph_log(self):
-        """ Initiate the log_monitor2 call to mimic ceph -w behavior """
+        """Initiate the log_monitor2 call to mimic ceph -w behavior"""
 
         level = self.get_localized_module_option(
             'log_level', DEFAULT_LOG_LEVEL)
 
-        # thread established is a daemon thread
+        # create a daemon thread for monitor_log2
         run_in_thread(self.rados.monitor_log2, level, self.log_callback, 0)
 
     def serve(self):
 
         self.event_processor = EventProcessor(logger=self.log)
         self.config_watcher = CephConfigWatcher(self)
+        self.ns_watcher = NamespaceWatcher(logger=self.log)
+
         if self.event_processor.ok:
             self.log.warning("[INF] Ceph Log processor thread starting")
             self.event_processor.start()        # start log consumer thread
@@ -825,9 +1008,11 @@ class Module(MgrModule):
             self.watch_ceph_log()               # start the log producer thread
             self.log.warning("[INF] Ceph config watcher thread starting")
             self.config_watcher.start()
+            self.log.warning("[INF] Rook-ceph namespace events watcher starting")
+            self.ns_watcher.start()
 
             while True:
-
+                # stay alive
                 time.sleep(0.5)
 
         else:
