@@ -127,7 +127,7 @@ class ProtocolV2 final : public Protocol {
 
   seastar::future<next_step_t> send_wait();
 
-  seastar::future<next_step_t> handle_existing_connection(SocketConnectionRef existing);
+  seastar::future<next_step_t> handle_existing_connection(SocketConnectionRef existing_conn);
   seastar::future<next_step_t> server_connect();
 
   seastar::future<next_step_t> read_reconnect();
