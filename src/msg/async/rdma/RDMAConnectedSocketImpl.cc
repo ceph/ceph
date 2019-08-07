@@ -19,15 +19,16 @@
 #undef dout_prefix
 #define dout_prefix *_dout << " RDMAConnectedSocketImpl "
 
-RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, shared_ptr<Infiniband> &ib, RDMADispatcher* s,
-						 RDMAWorker *w)
+RDMAConnectedSocketImpl::RDMAConnectedSocketImpl(CephContext *cct, shared_ptr<Infiniband> &ib,
+                                                 shared_ptr<RDMADispatcher>& rdma_dispatcher,
+                                                 RDMAWorker *w)
   : cct(cct), connected(0), error(0), ib(ib),
-    dispatcher(s), worker(w),
+    dispatcher(rdma_dispatcher), worker(w),
     is_server(false), con_handler(new C_handle_connection(this)),
     active(false), pending(false)
 {
   if (!cct->_conf->ms_async_rdma_cm) {
-    qp = ib->create_queue_pair(cct, s->get_tx_cq(), s->get_rx_cq(), IBV_QPT_RC, NULL);
+    qp = ib->create_queue_pair(cct, dispatcher->get_tx_cq(), dispatcher->get_rx_cq(), IBV_QPT_RC, NULL);
     my_msg.qpn = qp->get_local_qp_number();
     my_msg.psn = qp->get_initial_psn();
     my_msg.lid = ib->get_lid();

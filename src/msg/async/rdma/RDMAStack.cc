@@ -560,9 +560,7 @@ RDMAWorker::~RDMAWorker()
 
 void RDMAWorker::initialize()
 {
-  if (!dispatcher) {
-    dispatcher = &stack->get_dispatcher();
-  }
+  ceph_assert(dispatcher);
 }
 
 int RDMAWorker::listen(entity_addr_t &sa, unsigned addr_slot,
@@ -655,7 +653,8 @@ void RDMAWorker::handle_pending_message()
 }
 
 RDMAStack::RDMAStack(CephContext *cct, const string &t)
-  : NetworkStack(cct, t), ib(make_shared<Infiniband>(cct)), dispatcher(cct, ib)
+  : NetworkStack(cct, t), ib(make_shared<Infiniband>(cct)),
+    rdma_dispatcher(make_shared<RDMADispatcher>(cct, ib))
 {
   ldout(cct, 20) << __func__ << " constructing RDMAStack..." << dendl;
 
@@ -663,9 +662,10 @@ RDMAStack::RDMAStack(CephContext *cct, const string &t)
   for (unsigned i = 0; i < num; ++i) {
     RDMAWorker* w = dynamic_cast<RDMAWorker*>(get_worker(i));
     w->set_stack(this);
+    w->set_dispatcher(rdma_dispatcher);
     w->set_ib(ib);
   }
-  ldout(cct, 20) << " creating RDMAStack:" << this << " with dispatcher:" << &dispatcher << dendl;
+  ldout(cct, 20) << " creating RDMAStack:" << this << " with dispatcher:" << rdma_dispatcher.get() << dendl;
 }
 
 RDMAStack::~RDMAStack()

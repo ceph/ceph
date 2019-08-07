@@ -135,7 +135,7 @@ class RDMAWorker : public Worker {
   shared_ptr<Infiniband> ib;
   EventCallbackRef tx_handler;
   std::list<RDMAConnectedSocketImpl*> pending_sent_conns;
-  RDMADispatcher* dispatcher = nullptr;
+  shared_ptr<RDMADispatcher> dispatcher;
   ceph::mutex lock = ceph::make_mutex("RDMAWorker::lock");
 
   class C_handle_cq_tx : public EventCallback {
@@ -164,6 +164,7 @@ class RDMAWorker : public Worker {
   }
   void handle_pending_message();
   void set_stack(RDMAStack *s) { stack = s; }
+  void set_dispatcher(shared_ptr<RDMADispatcher>& dispatcher) { this->dispatcher = dispatcher; }
   void set_ib(shared_ptr<Infiniband> &ib) {this->ib = ib;}
   void notify_worker() {
     center.dispatch_event_external(tx_handler);
@@ -192,7 +193,7 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
   int connected;
   int error;
   shared_ptr<Infiniband> ib;
-  RDMADispatcher* dispatcher;
+  shared_ptr<RDMADispatcher> dispatcher;
   RDMAWorker* worker;
   std::vector<Chunk*> buffers;
   int notify_fd = -1;
@@ -216,8 +217,8 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
       const decltype(std::cbegin(pending_bl.buffers()))& end);
 
  public:
-  RDMAConnectedSocketImpl(CephContext *cct, shared_ptr<Infiniband>& ib, RDMADispatcher* s
-                          RDMAWorker *w);
+  RDMAConnectedSocketImpl(CephContext *cct, shared_ptr<Infiniband>& ib,
+      shared_ptr<RDMADispatcher>& rdma_dispatcher, RDMAWorker *w);
   virtual ~RDMAConnectedSocketImpl();
 
   void pass_wc(std::vector<ibv_wc> &&v);
@@ -273,8 +274,8 @@ enum RDMA_CM_STATUS {
 
 class RDMAIWARPConnectedSocketImpl : public RDMAConnectedSocketImpl {
   public:
-    RDMAIWARPConnectedSocketImpl(CephContext *cct, shared_ptr<Infiniband>& ib, RDMADispatcher* s,
-                          RDMAWorker *w, RDMACMInfo *info = nullptr);
+    RDMAIWARPConnectedSocketImpl(CephContext *cct, shared_ptr<Infiniband>& ib,
+        shared_ptr<RDMADispatcher>& rdma_dispatcher, RDMAWorker *w, RDMACMInfo *info = nullptr);
     ~RDMAIWARPConnectedSocketImpl();
     virtual int try_connect(const entity_addr_t&, const SocketOptions &opt) override;
     virtual void close() override;
@@ -314,12 +315,13 @@ class RDMAServerSocketImpl : public ServerSocketImpl {
     NetHandler net;
     int server_setup_socket;
     shared_ptr<Infiniband> ib;
-    RDMADispatcher *dispatcher;
+    shared_ptr<RDMADispatcher> dispatcher;
     RDMAWorker *worker;
     entity_addr_t sa;
 
  public:
-  RDMAServerSocketImpl(CephContext *cct, shared_ptr<Infiniband>& ib, RDMADispatcher *s,
+  RDMAServerSocketImpl(CephContext *cct, shared_ptr<Infiniband>& ib,
+                       shared_ptr<RDMADispatcher>& rdma_dispatcher,
 		       RDMAWorker *w, entity_addr_t& a, unsigned slot);
 
   virtual int listen(entity_addr_t &sa, const SocketOptions &opt);
@@ -331,8 +333,9 @@ class RDMAServerSocketImpl : public ServerSocketImpl {
 class RDMAIWARPServerSocketImpl : public RDMAServerSocketImpl {
   public:
     RDMAIWARPServerSocketImpl(
-      CephContext *cct, shared_ptr<Infiniband>& ib, RDMADispatcher *s, RDMAWorker *w,
-      entity_addr_t& addr, unsigned addr_slot);
+      CephContext *cct, shared_ptr<Infiniband>& ib,
+      shared_ptr<RDMADispatcher>& rdma_dispatcher,
+      RDMAWorker* w, entity_addr_t& addr, unsigned addr_slot);
     virtual int listen(entity_addr_t &sa, const SocketOptions &opt) override;
     virtual int accept(ConnectedSocket *s, const SocketOptions &opts, entity_addr_t *out, Worker *w) override;
     virtual void abort_accept() override;
@@ -345,7 +348,7 @@ class RDMAStack : public NetworkStack {
   vector<std::thread> threads;
   PerfCounters *perf_counter;
   shared_ptr<Infiniband> ib;
-  RDMADispatcher dispatcher;
+  shared_ptr<RDMADispatcher> rdma_dispatcher;
 
   std::atomic<bool> fork_finished = {false};
 
@@ -357,7 +360,6 @@ class RDMAStack : public NetworkStack {
 
   virtual void spawn_worker(unsigned i, std::function<void ()> &&func) override;
   virtual void join_worker(unsigned i) override;
-  RDMADispatcher &get_dispatcher() { return dispatcher; }
   virtual bool is_ready() override { return fork_finished.load(); };
   virtual void ready() override { fork_finished = true; };
 };
