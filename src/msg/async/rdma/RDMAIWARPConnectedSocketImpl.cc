@@ -7,9 +7,10 @@
 #define TIMEOUT_MS 3000
 #define RETRY_COUNT 7
 
-RDMAIWARPConnectedSocketImpl::RDMAIWARPConnectedSocketImpl(CephContext *cct, shared_ptr<Infiniband>& ib, RDMADispatcher* s,
-						 RDMAWorker *w, RDMACMInfo *info)
-  : RDMAConnectedSocketImpl(cct, ib, s, w), cm_con_handler(new C_handle_cm_connection(this))
+RDMAIWARPConnectedSocketImpl::RDMAIWARPConnectedSocketImpl(CephContext *cct, shared_ptr<Infiniband>& ib,
+                                                           shared_ptr<RDMADispatcher>& rdma_dispatcher,
+                                                           RDMAWorker *w, RDMACMInfo *info)
+  : RDMAConnectedSocketImpl(cct, ib, rdma_dispatcher, w), cm_con_handler(new C_handle_cm_connection(this))
 {
   status = IDLE;
   notify_fd = eventfd(0, EFD_CLOEXEC|EFD_NONBLOCK);

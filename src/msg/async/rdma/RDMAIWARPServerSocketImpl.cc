@@ -9,8 +9,9 @@
 
 RDMAIWARPServerSocketImpl::RDMAIWARPServerSocketImpl(
   CephContext *cct, shared_ptr<Infiniband>& ib,
-  RDMADispatcher *s, RDMAWorker *w, entity_addr_t& a, unsigned addr_slot)
-  : RDMAServerSocketImpl(cct, ib, s, w, a, addr_slot)
+  shared_ptr<RDMADispatcher>& rdma_dispatcher, RDMAWorker *w,
+  entity_addr_t& a, unsigned addr_slot)
+  : RDMAServerSocketImpl(cct, ib, rdma_dispatcher, w, a, addr_slot)
 {
 }
 
