@@ -23,6 +23,7 @@ else:
     str_type = str
 
 cdef int AT_SYMLINK_NOFOLLOW = 0x100
+cdef int CEPH_STATX_BASIC_STATS = 0x7ffu
 
 cdef extern from "Python.h":
     # These are in cpython/string.pxd, but use "object" types instead of
@@ -1196,12 +1197,12 @@ cdef class LibCephFS(object):
 
         if follow_symlink:
             with nogil:
-                # FIXME: replace magic number with CEPH_STATX_BASIC_STATS
-                ret = ceph_statx(self.cluster, _path, &stx, 0x7ffu, 0)
+                ret = ceph_statx(self.cluster, _path, &stx,
+                                 CEPH_STATX_BASIC_STATS, 0)
         else:
             with nogil:
-                ret = ceph_statx(self.cluster, _path, &stx, 0x7ffu,
-                                 AT_SYMLINK_NOFOLLOW)
+                ret = ceph_statx(self.cluster, _path, &stx,
+                                 CEPH_STATX_BASIC_STATS, AT_SYMLINK_NOFOLLOW)
 
         if ret < 0:
             raise make_ex(ret, "error in stat: {}".format(path.decode('utf-8')))
@@ -1240,8 +1241,8 @@ cdef class LibCephFS(object):
             statx stx
 
         with nogil:
-            # FIXME: replace magic number with CEPH_STATX_BASIC_STATS
-            ret = ceph_fstatx(self.cluster, _fd, &stx, 0x7ffu, 0)
+            ret = ceph_fstatx(self.cluster, _fd, &stx,
+                              CEPH_STATX_BASIC_STATS, 0)
         if ret < 0:
             raise make_ex(ret, "error in fsat")
         return StatResult(st_dev=stx.stx_dev, st_ino=stx.stx_ino,
