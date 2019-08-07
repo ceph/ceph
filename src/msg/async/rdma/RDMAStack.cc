@@ -531,7 +531,7 @@ void RDMADispatcher::handle_rx_event(ibv_wc *cqe, int rx_number)
 }
 
 RDMAWorker::RDMAWorker(CephContext *c, unsigned i)
-  : Worker(c, i), stack(nullptr),
+  : Worker(c, i),
     tx_handler(new C_handle_cq_tx(this))
 {
   // initialize perf_logger
@@ -661,7 +661,6 @@ RDMAStack::RDMAStack(CephContext *cct, const string &t)
   unsigned num = get_num_worker();
   for (unsigned i = 0; i < num; ++i) {
     RDMAWorker* w = dynamic_cast<RDMAWorker*>(get_worker(i));
-    w->set_stack(this);
     w->set_dispatcher(rdma_dispatcher);
     w->set_ib(ib);
   }

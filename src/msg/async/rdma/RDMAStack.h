@@ -131,7 +131,6 @@ class RDMAWorker : public Worker {
   typedef Infiniband::MemoryManager::Chunk Chunk;
   typedef Infiniband::MemoryManager MemoryManager;
   typedef std::vector<Chunk*>::iterator ChunkIter;
-  RDMAStack *stack;
   shared_ptr<Infiniband> ib;
   EventCallbackRef tx_handler;
   std::list<RDMAConnectedSocketImpl*> pending_sent_conns;
@@ -156,14 +155,12 @@ class RDMAWorker : public Worker {
 		     const SocketOptions &opts, ServerSocket *) override;
   virtual int connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket) override;
   virtual void initialize() override;
-  RDMAStack *get_stack() { return stack; }
   int get_reged_mem(RDMAConnectedSocketImpl *o, std::vector<Chunk*> &c, size_t bytes);
   void remove_pending_conn(RDMAConnectedSocketImpl *o) {
     ceph_assert(center.in_thread());
     pending_sent_conns.remove(o);
   }
   void handle_pending_message();
-  void set_stack(RDMAStack *s) { stack = s; }
   void set_dispatcher(shared_ptr<RDMADispatcher>& dispatcher) { this->dispatcher = dispatcher; }
   void set_ib(shared_ptr<Infiniband> &ib) {this->ib = ib;}
   void notify_worker() {
