@@ -172,9 +172,8 @@ void ProtocolV2::start_accept(SocketFRef&& sock,
 
 void ProtocolV2::enable_recording()
 {
-  ceph_assert(!rxbuf.length());
-  ceph_assert(!txbuf.length());
-  ceph_assert(!record_io);
+  rxbuf.clear();
+  txbuf.clear();
   record_io = true;
 }
 
@@ -861,7 +860,6 @@ void ProtocolV2::execute_connecting()
             logger().debug("{} UPDATE: gs={}, cc={} for connect",
                            conn, global_seq, client_cookie);
           }
-          enable_recording();
           return Socket::connect(conn.peer_addr);
         }).then([this](SocketFRef sock) {
           logger().debug("{} socket connected", conn);
@@ -874,6 +872,9 @@ void ProtocolV2::execute_connecting()
           }
           return seastar::now();
         }).then([this] {
+          auth_meta = seastar::make_lw_shared<AuthConnectionMeta>();
+          session_stream_handlers = { nullptr, nullptr };
+          enable_recording();
           return banner_exchange();
         }).then([this] (entity_type_t _peer_type,
                         entity_addr_t _my_addr_from_peer) {
@@ -1344,6 +1345,8 @@ void ProtocolV2::execute_accepting()
 {
   trigger_state(state_t::ACCEPTING, write_state_t::none, false);
   seastar::with_gate(pending_dispatch, [this] {
+      auth_meta = seastar::make_lw_shared<AuthConnectionMeta>();
+      session_stream_handlers = { nullptr, nullptr };
       enable_recording();
       return banner_exchange()
         .then([this] (entity_type_t _peer_type,
