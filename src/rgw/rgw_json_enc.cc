@@ -1760,3 +1760,8 @@ void objexp_hint_entry::dump(Formatter *f) const
   encode_json("exp_time", ut, f);
   f->close_section();
 }
+
+void rgw_user::dump(Formatter *f) const
+{
+  ::encode_json("user", *this, f);
+}
