@@ -146,15 +146,20 @@ class Validation(SESQA):
         In order to "hide" an existing disk from the ceph.c_v in teuthology
         the disk is formatted and mounted.
         """
-        # :TODO: make this random and find correct disk device
-        osd_id = "2"
         total_osds = self.master_remote.sh(number_of_osds_in_cluster)
-        assert int(total_osds) == 4, "Unexpected number of osds {} (expected 4)".format(total_osds)
+        osd_id = 0
+        disks = self._get_drive_group_limit()
+        assert int(total_osds) == disks, "Unexpected number of osds {} (expected {})".format(total_osds, disks)
         self.master_remote.sh("sudo ceph osd tree --format json | tee before.json")
-        self.master_remote.sh("sudo salt-run osd.replace {} 2>/dev/null".format(osd_id))
-        self.master_remote.sh("sudo mkfs.ext4 -F /dev/vdd; sudo mount /dev/vdd /mnt")
+        osd_path = self.master_remote.sh("sudo salt '*' cephdisks.find_by_osd_id {} --out json | jq -j '.[][].path'".format(osd_id))
+        self.master_remote.sh("sudo salt-run osd.replace {}".format(osd_id))
+        self.master_remote.sh("""
+          sudo sgdisk -Z {path} &&
+          sudo mkfs.ext4 -F {path} &&
+          sudo mount {path} /mnt && sync && lsblk &&
+          sudo ceph-volume inventory""".format(path=osd_path))
         self.master_remote.sh("sudo salt-run disks.c_v_commands 2>/dev/null")
-        # Output is like: ceph-volume lvm batch --no-auto /dev/vdf --yes --osd-ids 2
+        # Output is like: ceph-volume lvm batch --no-auto /dev/vdb --yes --osd-ids 2
 
     def drive_replace_check(self, **kwargs):
         """
@@ -163,10 +168,18 @@ class Validation(SESQA):
         Replaced osd_id should be back in the osd tree once stage.3 is ran
         """
         total_osds = self.master_remote.sh(number_of_osds_in_cluster)
-        assert int(total_osds) == 4, "Unexpected number of osds {} (expected 4)".format(total_osds)
+        disks = self._get_drive_group_limit()
+        assert int(total_osds) == disks, "Unexpected number of osds {} (expected {})".format(total_osds, disks)
         self.master_remote.sh("sudo ceph osd tree --format json | tee after.json")
         self.master_remote.sh("diff before.json after.json && echo 'Drive Replaced OK'")
 
+    def _get_drive_group_limit(self, **kwargs):
+        """
+        Helper to get drive_groups limit field value
+        """
+        drive_group = next(x for x in self.ctx['config']['tasks'] \
+                   if 'deepsea' in x and 'drive_group' in x['deepsea'])
+        return int(drive_group['deepsea']['drive_group']['custom']['data_devices']['limit'])
 
 task = SESQA
 validation = Validation
