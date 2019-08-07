@@ -32,6 +32,10 @@ export class AuthStorageService {
     return localStorage.getItem('dashboard_username');
   }
 
+  getForceChangePwd() {
+    return localStorage.getItem('forceChangePwd') === 'true';
+  }
+
   getPermissions(): Permissions {
     return JSON.parse(
       localStorage.getItem('dashboard_permissions') || JSON.stringify(new Permissions({}))

@@ -3,6 +3,8 @@ from __future__ import absolute_import
 
 import cherrypy
 
+from datetime import datetime
+
 from . import BaseController, ApiController, RESTController, Endpoint
 from .. import mgr
 from ..exceptions import DashboardException, UserAlreadyExists, \
@@ -10,6 +12,10 @@ from ..exceptions import DashboardException, UserAlreadyExists, \
 from ..security import Scope
 from ..services.access_control import SYSTEM_ROLES
 from ..services.auth import JwtManager
+
+
+def if_forceChangePwd(forceChangePwd):
+    return datetime.utcnow() if not forceChangePwd else None
 
 
 @ApiController('/user', Scope.USER)
@@ -44,7 +50,7 @@ class User(RESTController):
         return User._user_to_dict(user)
 
     def create(self, username=None, password=None, name=None, email=None,
-               roles=None, enabled=True):
+               roles=None, enabled=True, forceChangePwd=False):
         if not username:
             raise DashboardException(msg='Username is required',
                                      code='username_required',
@@ -54,7 +60,8 @@ class User(RESTController):
             user_roles = User._get_user_roles(roles)
         try:
             user = mgr.ACCESS_CTRL_DB.create_user(username, password, name,
-                                                  email, enabled)
+                                                  email, enabled,
+                                                  if_forceChangePwd(forceChangePwd))
         except UserAlreadyExists:
             raise DashboardException(msg='Username already exists',
                                      code='username_already_exists',
@@ -77,7 +84,7 @@ class User(RESTController):
         mgr.ACCESS_CTRL_DB.save()
 
     def set(self, username, password=None, name=None, email=None, roles=None,
-            enabled=None):
+            enabled=None, forceChangePwd=False):
         if JwtManager.get_username() == username and enabled is False:
             raise DashboardException(msg='You are not allowed to disable your user',
                                      code='cannot_disable_current_user',
@@ -91,7 +98,7 @@ class User(RESTController):
         if roles:
             user_roles = User._get_user_roles(roles)
         if password:
-            user.set_password(password)
+            user.set_password(password, if_forceChangePwd(forceChangePwd))
         user.name = name
         user.email = email
         if enabled is not None:
@@ -118,5 +125,5 @@ class UserChangePassword(BaseController):
             raise DashboardException(msg='Invalid old password',
                                      code='invalid_old_password',
                                      component='user')
-        user.set_password(new_password)
+        user.set_password(new_password, if_forceChangePwd(False))
         mgr.ACCESS_CTRL_DB.save()

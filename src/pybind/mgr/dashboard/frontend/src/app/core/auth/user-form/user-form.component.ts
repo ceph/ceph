@@ -79,7 +79,8 @@ export class UserFormComponent implements OnInit {
         roles: new FormControl([]),
         enabled: new FormControl(true, {
           validators: [Validators.required]
-        })
+        }),
+        forceChangePwd: new FormControl(true)
       },
       {
         validators: [CdValidators.match('password', 'confirmpassword')]
@@ -122,14 +123,14 @@ export class UserFormComponent implements OnInit {
   }
 
   setResponse(response: UserFormModel) {
-    ['username', 'name', 'email', 'roles', 'enabled'].forEach((key) =>
+    ['username', 'name', 'email', 'roles', 'enabled', 'forceChangePwd'].forEach((key) =>
       this.userForm.get(key).setValue(response[key])
     );
   }
 
   getRequest(): UserFormModel {
     const userFormModel = new UserFormModel();
-    ['username', 'password', 'name', 'email', 'roles', 'enabled'].forEach(
+    ['username', 'password', 'name', 'email', 'roles',  'enabled', 'forceChangePwd'].forEach(
       (key) => (userFormModel[key] = this.userForm.get(key).value)
     );
     return userFormModel;

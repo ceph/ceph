@@ -10,6 +10,8 @@ import time
 
 import bcrypt
 
+from datetime import datetime
+
 from mgr_module import CLIReadCommand, CLIWriteCommand
 
 from .. import mgr, logger
@@ -168,11 +170,12 @@ SYSTEM_ROLES = {
 
 class User(object):
     def __init__(self, username, password, name=None, email=None, roles=None,
-                 lastUpdate=None, enabled=True):
+                 lastPwdUpdate=datetime.utcnow(), lastUpdate=None, enabled=True):
         self.username = username
         self.password = password
         self.name = name
         self.email = email
+        self.lastPwdUpdate = lastPwdUpdate
         if roles is None:
             self.roles = set()
         else:
@@ -186,6 +189,9 @@ class User(object):
     def refreshLastUpdate(self):
         self.lastUpdate = int(time.time())
 
+    def check_forceChangePwd(self):
+        return not self.lastPwdUpdate
+
     @property
     def enabled(self):
         return self._enabled
@@ -195,7 +201,8 @@ class User(object):
         self._enabled = value
         self.refreshLastUpdate()
 
-    def set_password(self, password):
+    def set_password(self, password, lastPwdUpdate):
+        self.lastPwdUpdate = lastPwdUpdate
         self.set_password_hash(password_hash(password))
 
     def set_password_hash(self, hashed_password):
@@ -253,6 +260,7 @@ class User(object):
             'roles': sorted([r.name for r in self.roles]),
             'name': self.name,
             'email': self.email,
+            'lastPwdUpdate': str(self.lastPwdUpdate),
             'lastUpdate': self.lastUpdate,
             'enabled': self.enabled
         }
@@ -261,7 +269,7 @@ class User(object):
     def from_dict(cls, u_dict, roles):
         return User(u_dict['username'], u_dict['password'], u_dict['name'],
                     u_dict['email'], {roles[r] for r in u_dict['roles']},
-                    u_dict['lastUpdate'])
+                    u_dict['lastPwdUpdate'], u_dict['lastUpdate'])
 
 
 class AccessControlDB(object):
@@ -301,12 +309,14 @@ class AccessControlDB(object):
 
             del self.roles[name]
 
-    def create_user(self, username, password, name, email, enabled=True):
+    def create_user(self, username, password, name, email, enabled=True, 
+                    lastPwdUpdate=datetime.utcnow()):
         logger.debug("AC: creating user: username=%s", username)
         with self.lock:
             if username in self.users:
                 raise UserAlreadyExists(username)
-            user = User(username, password_hash(password), name, email, enabled=enabled)
+            user = User(username, password_hash(password), name, email,
+                        lastPwdUpdate=lastPwdUpdate, enabled=enabled)
             self.users[username] = user
             return user
 
@@ -751,3 +761,11 @@ class LocalAuthenticator(object):
     def authorize(self, username, scope, permissions):
         user = mgr.ACCESS_CTRL_DB.get_user(username)
         return user.authorize(scope, permissions)
+
+    def check_forceChangePwd(self, username):
+        try:
+            user = mgr.ACCESS_CTRL_DB.get_user(username)
+            return user.check_forceChangePwd()
+        except UserDoesNotExist:
+            logger.debug("User '%s' does not exist", username)
+        return False

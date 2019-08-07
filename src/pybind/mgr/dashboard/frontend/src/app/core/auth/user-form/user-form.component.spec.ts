@@ -136,7 +136,8 @@ describe('UserFormComponent', () => {
       name: 'User 1',
       email: 'user1@email.com',
       roles: ['administrator'],
-      enabled: true
+      enabled: true,
+      forceChangePwd: true
     };
     const roles = [
       {
@@ -227,7 +228,8 @@ describe('UserFormComponent', () => {
         name: 'User 1',
         email: 'user1@email.com',
         roles: ['administrator'],
-        enabled: true
+        enabled: true,
+        forceChangePwd: true
       });
       userReq.flush({});
       expect(router.navigate).toHaveBeenCalledWith(['/user-management/users']);
