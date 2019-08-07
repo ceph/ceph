@@ -184,8 +184,10 @@ ProtocolV1::handle_connect_reply(msgr_tag_t tag)
     reset_session();
     return seastar::make_ready_future<stop_t>(stop_t::no);
   case CEPH_MSGR_TAG_RETRY_GLOBAL:
-    h.global_seq = messenger.get_global_seq(h.reply.global_seq);
-    return seastar::make_ready_future<stop_t>(stop_t::no);
+    return messenger.get_global_seq(h.reply.global_seq).then([this] (auto gs) {
+      h.global_seq = gs;
+      return seastar::make_ready_future<stop_t>(stop_t::no);
+    });
   case CEPH_MSGR_TAG_RETRY_SESSION:
     ceph_assert(h.reply.connect_seq > h.connect_seq);
     h.connect_seq = h.reply.connect_seq;
@@ -327,6 +329,9 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
           }
           return seastar::now();
         }).then([this] {
+          return messenger.get_global_seq();
+        }).then([this] (auto gs) {
+          h.global_seq = gs;
           // read server's handshake header
           return socket->read(server_header_size);
         }).then([this] (bufferlist headerbl) {
@@ -357,7 +362,6 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
           bufferlist bl;
           bl.append(buffer::create_static(banner_size, banner));
           ::encode(messenger.get_myaddr(), bl, 0);
-          h.global_seq = messenger.get_global_seq();
           return socket->write_flush(std::move(bl));
         }).then([=] {
           return seastar::repeat([this] {
@@ -399,25 +403,27 @@ seastar::future<stop_t> ProtocolV1::send_connect_reply(
 seastar::future<stop_t> ProtocolV1::send_connect_reply_ready(
     msgr_tag_t tag, bufferlist&& authorizer_reply)
 {
-  h.global_seq = messenger.get_global_seq();
-  h.reply.tag = tag;
-  h.reply.features = conn.policy.features_supported;
-  h.reply.global_seq = h.global_seq;
-  h.reply.connect_seq = h.connect_seq;
-  h.reply.flags = 0;
-  if (conn.policy.lossy) {
-    h.reply.flags = h.reply.flags | CEPH_MSG_CONNECT_LOSSY;
-  }
-  h.reply.authorizer_len = authorizer_reply.length();
+  return messenger.get_global_seq(
+    ).then([this, tag, auth_len = authorizer_reply.length()] (auto gs) {
+      h.global_seq = gs;
+      h.reply.tag = tag;
+      h.reply.features = conn.policy.features_supported;
+      h.reply.global_seq = h.global_seq;
+      h.reply.connect_seq = h.connect_seq;
+      h.reply.flags = 0;
+      if (conn.policy.lossy) {
+        h.reply.flags = h.reply.flags | CEPH_MSG_CONNECT_LOSSY;
+      }
+      h.reply.authorizer_len = auth_len;
 
-  session_security.reset(
-      get_auth_session_handler(nullptr,
-                               auth_meta->auth_method,
-                               auth_meta->session_key,
-                               conn.features));
+      session_security.reset(
+          get_auth_session_handler(nullptr,
+                                   auth_meta->auth_method,
+                                   auth_meta->session_key,
+                                   conn.features));
 
-  return socket->write(make_static_packet(h.reply))
-    .then([this, reply=std::move(authorizer_reply)]() mutable {
+      return socket->write(make_static_packet(h.reply));
+    }).then([this, reply=std::move(authorizer_reply)]() mutable {
       if (reply.length()) {
         return socket->write(std::move(reply));
       } else {
