@@ -115,7 +115,6 @@ class MgrModuleTelemetryTest(MgrModuleTestCase):
                     'description': str,
                     'enabled': bool,
                     'interval': int,
-                    'last_opt_revision': int,
                     'leaderboard': bool,
                     'organization': str,
                     'proxy': str,
