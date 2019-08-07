@@ -13,7 +13,6 @@
  */
 #include "include/int_types.h"
 #include <errno.h>
-
 #include "common/deleter.h"
 #include "common/dout.h"
 #include "common/errno.h"
