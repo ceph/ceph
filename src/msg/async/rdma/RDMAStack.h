@@ -78,7 +78,6 @@ class RDMADispatcher {
     ceph::make_mutex("RDMADispatcher::for worker pending list");
   // fixme: lockfree
   std::list<RDMAWorker*> pending_workers;
-  RDMAStack* stack;
 
   class C_handle_cq_async : public EventCallback {
     RDMADispatcher *dispatcher;
@@ -93,7 +92,7 @@ class RDMADispatcher {
  public:
   PerfCounters *perf_logger;
 
-  explicit RDMADispatcher(CephContext* c, RDMAStack* s, shared_ptr<Infiniband>& ib);
+  explicit RDMADispatcher(CephContext* c, shared_ptr<Infiniband>& ib);
   virtual ~RDMADispatcher();
   void handle_async_event();
 
@@ -109,7 +108,6 @@ class RDMADispatcher {
     pending_workers.push_back(w);
     ++num_pending_workers;
   }
-  RDMAStack* get_stack() { return stack; }
   RDMAConnectedSocketImpl* get_conn_lockless(uint32_t qp);
   QueuePair* get_qp(uint32_t qp);
   void erase_qpn_lockless(uint32_t qpn);

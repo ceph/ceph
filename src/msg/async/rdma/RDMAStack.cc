@@ -43,9 +43,8 @@ RDMADispatcher::~RDMADispatcher()
   delete async_handler;
 }
 
-RDMADispatcher::RDMADispatcher(CephContext* c, RDMAStack* s, shared_ptr<Infiniband>& ib)
-  : cct(c), ib(ib), async_handler(new C_handle_cq_async(this)),
-  stack(s)
+RDMADispatcher::RDMADispatcher(CephContext* c, shared_ptr<Infiniband>& ib)
+  : cct(c), ib(ib), async_handler(new C_handle_cq_async(this))
 {
   PerfCountersBuilder plb(cct, "AsyncMessenger::RDMADispatcher", l_msgr_rdma_dispatcher_first, l_msgr_rdma_dispatcher_last);
 
@@ -656,7 +655,7 @@ void RDMAWorker::handle_pending_message()
 }
 
 RDMAStack::RDMAStack(CephContext *cct, const string &t)
-  : NetworkStack(cct, t), ib(make_shared<Infiniband>(cct)), dispatcher(cct, this, ib)
+  : NetworkStack(cct, t), ib(make_shared<Infiniband>(cct)), dispatcher(cct, ib)
 {
   ldout(cct, 20) << __func__ << " constructing RDMAStack..." << dendl;
 
