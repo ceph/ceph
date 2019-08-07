@@ -219,29 +219,20 @@ class Remote(object):
 
         return self.sh(args).strip()
 
-    def mktemp(self):
+    def mktemp(self, suffix=None, parentdir=None):
         """
         Make a remote temporary file
 
-        Returns: the name of the temp file created using
-                 tempfile.mkstemp
+        Returns: the path of the temp file created.
         """
-        py_cmd = "import os; import tempfile; import sys;" + \
-            "(fd,fname) = tempfile.mkstemp();" + \
-            "os.close(fd);" + \
-            "sys.stdout.write(fname.rstrip());" + \
-            "sys.stdout.flush()"
-        args = [
-            'python',
-            '-c',
-            py_cmd,
-            ]
-        proc = self.run(
-            args=args,
-            stdout=StringIO(),
-            )
-        data = proc.stdout.getvalue()
-        return data
+        args = ['mktemp']
+
+        if suffix:
+            args.append('--suffix=%s' % suffix)
+        if parentdir:
+            args.append('--tmpdir=%s' % parentdir)
+
+        return self.sh(args).strip()
 
     def sh(self, script, **kwargs):
         """
