@@ -40,6 +40,7 @@ class RDMADispatcher {
 
   std::thread t;
   CephContext *cct;
+  shared_ptr<Infiniband> ib;
   Infiniband::CompletionQueue* tx_cq = nullptr;
   Infiniband::CompletionQueue* rx_cq = nullptr;
   Infiniband::CompletionChannel *tx_cc = nullptr, *rx_cc = nullptr;
@@ -92,7 +93,7 @@ class RDMADispatcher {
  public:
   PerfCounters *perf_logger;
 
-  explicit RDMADispatcher(CephContext* c, RDMAStack* s);
+  explicit RDMADispatcher(CephContext* c, RDMAStack* s, shared_ptr<Infiniband>& ib);
   virtual ~RDMADispatcher();
   void handle_async_event();
 
@@ -133,6 +134,7 @@ class RDMAWorker : public Worker {
   typedef Infiniband::MemoryManager MemoryManager;
   typedef std::vector<Chunk*>::iterator ChunkIter;
   RDMAStack *stack;
+  shared_ptr<Infiniband> ib;
   EventCallbackRef tx_handler;
   std::list<RDMAConnectedSocketImpl*> pending_sent_conns;
   RDMADispatcher* dispatcher = nullptr;
@@ -164,6 +166,7 @@ class RDMAWorker : public Worker {
   }
   void handle_pending_message();
   void set_stack(RDMAStack *s) { stack = s; }
+  void set_ib(shared_ptr<Infiniband> &ib) {this->ib = ib;}
   void notify_worker() {
     center.dispatch_event_external(tx_handler);
   }
@@ -190,7 +193,7 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
   IBSYNMsg my_msg;
   int connected;
   int error;
-  Infiniband* infiniband;
+  shared_ptr<Infiniband> ib;
   RDMADispatcher* dispatcher;
   RDMAWorker* worker;
   std::vector<Chunk*> buffers;
@@ -215,7 +218,7 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
       const decltype(std::cbegin(pending_bl.buffers()))& end);
 
  public:
-  RDMAConnectedSocketImpl(CephContext *cct, Infiniband* ib, RDMADispatcher* s,
+  RDMAConnectedSocketImpl(CephContext *cct, shared_ptr<Infiniband>& ib, RDMADispatcher* s
                           RDMAWorker *w);
   virtual ~RDMAConnectedSocketImpl();
 
@@ -272,7 +275,7 @@ enum RDMA_CM_STATUS {
 
 class RDMAIWARPConnectedSocketImpl : public RDMAConnectedSocketImpl {
   public:
-    RDMAIWARPConnectedSocketImpl(CephContext *cct, Infiniband* ib, RDMADispatcher* s,
+    RDMAIWARPConnectedSocketImpl(CephContext *cct, shared_ptr<Infiniband>& ib, RDMADispatcher* s,
                           RDMAWorker *w, RDMACMInfo *info = nullptr);
     ~RDMAIWARPConnectedSocketImpl();
     virtual int try_connect(const entity_addr_t&, const SocketOptions &opt) override;
@@ -312,13 +315,13 @@ class RDMAServerSocketImpl : public ServerSocketImpl {
     CephContext *cct;
     NetHandler net;
     int server_setup_socket;
-    Infiniband* infiniband;
+    shared_ptr<Infiniband> ib;
     RDMADispatcher *dispatcher;
     RDMAWorker *worker;
     entity_addr_t sa;
 
  public:
-  RDMAServerSocketImpl(CephContext *cct, Infiniband* i, RDMADispatcher *s,
+  RDMAServerSocketImpl(CephContext *cct, shared_ptr<Infiniband>& ib, RDMADispatcher *s,
 		       RDMAWorker *w, entity_addr_t& a, unsigned slot);
 
   virtual int listen(entity_addr_t &sa, const SocketOptions &opt);
@@ -330,7 +333,7 @@ class RDMAServerSocketImpl : public ServerSocketImpl {
 class RDMAIWARPServerSocketImpl : public RDMAServerSocketImpl {
   public:
     RDMAIWARPServerSocketImpl(
-      CephContext *cct, Infiniband *i, RDMADispatcher *s, RDMAWorker *w,
+      CephContext *cct, shared_ptr<Infiniband>& ib, RDMADispatcher *s, RDMAWorker *w,
       entity_addr_t& addr, unsigned addr_slot);
     virtual int listen(entity_addr_t &sa, const SocketOptions &opt) override;
     virtual int accept(ConnectedSocket *s, const SocketOptions &opts, entity_addr_t *out, Worker *w) override;
@@ -343,7 +346,7 @@ class RDMAIWARPServerSocketImpl : public RDMAServerSocketImpl {
 class RDMAStack : public NetworkStack {
   vector<std::thread> threads;
   PerfCounters *perf_counter;
-  Infiniband ib;
+  shared_ptr<Infiniband> ib;
   RDMADispatcher dispatcher;
 
   std::atomic<bool> fork_finished = {false};
@@ -357,7 +360,6 @@ class RDMAStack : public NetworkStack {
   virtual void spawn_worker(unsigned i, std::function<void ()> &&func) override;
   virtual void join_worker(unsigned i) override;
   RDMADispatcher &get_dispatcher() { return dispatcher; }
-  Infiniband &get_infiniband() { return ib; }
   virtual bool is_ready() override { return fork_finished.load(); };
   virtual void ready() override { fork_finished = true; };
 };

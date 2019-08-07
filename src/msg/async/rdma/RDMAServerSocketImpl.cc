@@ -25,10 +25,10 @@
 #define dout_prefix *_dout << " RDMAServerSocketImpl "
 
 RDMAServerSocketImpl::RDMAServerSocketImpl(
-  CephContext *cct, Infiniband* i, RDMADispatcher *s, RDMAWorker *w,
+  CephContext *cct, shared_ptr<Infiniband>& ib, RDMADispatcher *s, RDMAWorker *w,
   entity_addr_t& a, unsigned slot)
   : ServerSocketImpl(a.get_type(), slot),
-    cct(cct), net(cct), server_setup_socket(-1), infiniband(i),
+    cct(cct), net(cct), server_setup_socket(-1), ib(ib),
     dispatcher(s), worker(w), sa(a)
 {
 }
@@ -111,7 +111,7 @@ int RDMAServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions &opt
 
   RDMAConnectedSocketImpl* server;
   //Worker* w = dispatcher->get_stack()->get_worker();
-  server = new RDMAConnectedSocketImpl(cct, infiniband, dispatcher, dynamic_cast<RDMAWorker*>(w));
+  server = new RDMAConnectedSocketImpl(cct, ib, dispatcher, dynamic_cast<RDMAWorker*>(w));
   server->set_accept_fd(sd);
   ldout(cct, 20) << __func__ << " accepted a new QP, tcp_fd: " << sd << dendl;
   std::unique_ptr<RDMAConnectedSocketImpl> csi(server);
