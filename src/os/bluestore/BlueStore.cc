@@ -5136,8 +5136,9 @@ int BlueStore::_minimal_open_bluefs(bool create)
 
   bfn = path + "/block.db";
   if (::stat(bfn.c_str(), &st) == 0) {
-    r = bluefs->add_block_device(BlueFS::BDEV_DB, bfn,
-	  create && cct->_conf->bdev_enable_discard);
+    r = bluefs->add_block_device(
+      BlueFS::BDEV_DB, bfn,
+      create && cct->_conf->bdev_enable_discard);
     if (r < 0) {
       derr << __func__ << " add block device(" << bfn << ") returned: "
             << cpp_strerror(r) << dendl;
@@ -5216,7 +5217,7 @@ int BlueStore::_minimal_open_bluefs(bool create)
   bfn = path + "/block.wal";
   if (::stat(bfn.c_str(), &st) == 0) {
     r = bluefs->add_block_device(BlueFS::BDEV_WAL, bfn,
-      create && cct->_conf->bdev_enable_discard);
+				 create && cct->_conf->bdev_enable_discard);
     if (r < 0) {
       derr << __func__ << " add block device(" << bfn << ") returned: "
 	    << cpp_strerror(r) << dendl;
@@ -6277,7 +6278,7 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
     ceph_assert(r == 0);
 
     r = bluefs->add_block_device(BlueFS::BDEV_NEWWAL, p,
-      cct->_conf->bdev_enable_discard);
+				 cct->_conf->bdev_enable_discard);
     ceph_assert(r == 0);
 
     if (bluefs->bdev_support_label(BlueFS::BDEV_NEWWAL)) {
@@ -6298,7 +6299,7 @@ int BlueStore::add_new_bluefs_device(int id, const string& dev_path)
     ceph_assert(r == 0);
 
     r = bluefs->add_block_device(BlueFS::BDEV_NEWDB, p,
-      cct->_conf->bdev_enable_discard);
+				 cct->_conf->bdev_enable_discard);
     ceph_assert(r == 0);
 
     if (bluefs->bdev_support_label(BlueFS::BDEV_NEWDB)) {
@@ -6441,7 +6442,7 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
     target_size = cct->_conf->bluestore_block_wal_size;
 
     r = bluefs->add_block_device(BlueFS::BDEV_NEWWAL, dev_path,
-      cct->_conf->bdev_enable_discard);
+				 cct->_conf->bdev_enable_discard);
     ceph_assert(r == 0);
 
     if (bluefs->bdev_support_label(BlueFS::BDEV_NEWWAL)) {
@@ -6458,7 +6459,7 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
     target_size = cct->_conf->bluestore_block_db_size;
 
     r = bluefs->add_block_device(BlueFS::BDEV_NEWDB, dev_path,
-      cct->_conf->bdev_enable_discard);
+				 cct->_conf->bdev_enable_discard);
     ceph_assert(r == 0);
 
     if (bluefs->bdev_support_label(BlueFS::BDEV_NEWDB)) {
