@@ -2293,6 +2293,8 @@ public:
   int write_meta(const std::string& key, const std::string& value) override;
   int read_meta(const std::string& key, std::string *value) override;
 
+  int cold_open();
+  int cold_close();
 
   int fsck(bool deep) override {
     return _fsck(deep, false);
@@ -2894,7 +2896,7 @@ private:
     PExtentVector& extents) override {
     return allocate_bluefs_freespace(min_size, size, &extents);
   };
-
+  size_t available_freespace(uint64_t alloc_size) override;
   inline bool _use_rotational_settings();
 };
 

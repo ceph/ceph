@@ -4926,7 +4926,7 @@ int BlueStore::_open_alloc()
 
   alloc = Allocator::create(cct, cct->_conf->bluestore_allocator,
                             bdev->get_size(),
-                            min_alloc_size);
+                            min_alloc_size, "block");
   if (!alloc) {
     lderr(cct) << __func__ << " Allocator::unknown alloc type "
                << cct->_conf->bluestore_allocator
@@ -5702,6 +5702,25 @@ int BlueStore::allocate_bluefs_freespace(
     }
   }
   return 0;
+}
+
+size_t BlueStore::available_freespace(uint64_t alloc_size) {
+  size_t total = 0;
+  auto iterated_allocation = [&](size_t off, size_t len) {
+    //only count in size that is alloc_size aligned
+    size_t dist_to_alignment;
+    size_t offset_in_block = off & (alloc_size - 1);
+    if (offset_in_block == 0)
+      dist_to_alignment = 0;
+    else
+      dist_to_alignment = alloc_size - offset_in_block;
+    if (dist_to_alignment >= len)
+      return;
+    len -= dist_to_alignment;
+    total += p2align(len, alloc_size);
+  };
+  alloc->dump(iterated_allocation);
+  return total;
 }
 
 int64_t BlueStore::_get_bluefs_size_delta(uint64_t bluefs_free, uint64_t bluefs_total)
@@ -6752,6 +6771,48 @@ int BlueStore::umount()
       return -EIO;
     }
   }
+  return 0;
+}
+
+int BlueStore::cold_open()
+{
+  int r = _open_path();
+  if (r < 0)
+    return r;
+  r = _open_fsid(false);
+  if (r < 0)
+    goto out_path;
+
+  r = _read_fsid(&fsid);
+  if (r < 0)
+    goto out_fsid;
+
+  r = _lock_fsid();
+  if (r < 0)
+    goto out_fsid;
+
+  r = _open_bdev(false);
+  if (r < 0)
+    goto out_fsid;
+  r = _open_db_and_around(true);
+  if (r < 0) {
+    goto out_bdev;
+  }
+  return 0;
+ out_bdev:
+  _close_bdev();
+ out_fsid:
+  _close_fsid();
+ out_path:
+  _close_path();
+  return r;
+}
+int BlueStore::cold_close()
+{
+  _close_db_and_around();
+  _close_bdev();
+  _close_fsid();
+  _close_path();
   return 0;
 }
 
