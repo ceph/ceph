@@ -1682,6 +1682,7 @@ public:
 	  auto it = q.rbegin();
 	  it++;
 	  if (it->state >= TransContext::STATE_KV_SUBMITTED) {
+	    --kv_submitted_waiters;
 	    return;
           }
 	}
