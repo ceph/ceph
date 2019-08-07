@@ -306,6 +306,7 @@ private:
   vector<IOContext*> ioc;                     ///< IOContexts for bdevs
   vector<interval_set<uint64_t> > block_all;  ///< extents in bdev we own
   vector<Allocator*> alloc;                   ///< allocators for bdevs
+  vector<uint64_t> alloc_size;                ///< alloc size for each device
   vector<interval_set<uint64_t>> pending_release; ///< extents to release
 
   BlockDevice::aio_callback_t discard_cb[3]; //discard callbacks for each dev
@@ -423,6 +424,9 @@ public:
 
   void collect_metadata(map<string,string> *pm, unsigned skip_bdev_id);
   void get_devices(set<string> *ls);
+  uint64_t get_alloc_size(int id) {
+    return alloc_size[id];
+  }
   int fsck();
 
   int device_migrate_to_new(
