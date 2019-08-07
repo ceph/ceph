@@ -1637,7 +1637,7 @@ public:
 
     void drain_preceding(TransContext *txc) {
       std::unique_lock l(qlock);
-      while (!q.empty() && &q.front() != txc)
+      while (&q.front() != txc)
 	qcond.wait(l);
     }
 
