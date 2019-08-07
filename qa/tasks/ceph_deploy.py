@@ -381,16 +381,15 @@ def build_ceph_cluster(ctx, config):
         # try the next block which will wait up to 15 minutes to gatherkeys.
         execute_ceph_deploy(mon_create_nodes)
 
-        # create-keys is explicit now
-        # http://tracker.ceph.com/issues/16036
-        mons = ctx.cluster.only(teuthology.is_type('mon'))
-        for remote in mons.remotes.iterkeys():
-            remote.run(args=['sudo', 'ceph-create-keys', '--cluster', 'ceph',
-                             '--id', remote.shortname])
-
         estatus_gather = execute_ceph_deploy(gather_keys)
         if estatus_gather != 0:
             raise RuntimeError("ceph-deploy: Failed during gather keys")
+
+        # install admin key on mons (ceph-create-keys doesn't do this any more)
+        mons = ctx.cluster.only(teuthology.is_type('mon'))
+        for remote in mons.remotes.iterkeys():
+            execute_ceph_deploy('./ceph-deploy admin ' + remote.shortname)
+
         # create osd's
         if config.get('use-ceph-volume', False):
             no_of_osds = ceph_volume_osd_create(ctx, config)
@@ -512,24 +511,16 @@ def build_ceph_cluster(ctx, config):
         if config.get('keep_running'):
             return
         log.info('Stopping ceph...')
-        ctx.cluster.run(args=['sudo', 'stop', 'ceph-all', run.Raw('||'),
-                              'sudo', 'service', 'ceph', 'stop', run.Raw('||'),
-                              'sudo', 'systemctl', 'stop', 'ceph.target'])
-
-        # Are you really not running anymore?
-        # try first with the init tooling
-        # ignoring the status so this becomes informational only
-        ctx.cluster.run(
-            args=[
-                'sudo', 'status', 'ceph-all', run.Raw('||'),
-                'sudo', 'service', 'ceph', 'status', run.Raw('||'),
-                'sudo', 'systemctl', 'status', 'ceph.target'],
-            check_status=False)
+        ctx.cluster.run(args=['sudo', 'systemctl', 'stop', 'ceph.target'],
+                        check_status=False)
+        time.sleep(4)
 
         # and now just check for the processes themselves, as if upstart/sysvinit
         # is lying to us. Ignore errors if the grep fails
         ctx.cluster.run(args=['sudo', 'ps', 'aux', run.Raw('|'),
                               'grep', '-v', 'grep', run.Raw('|'),
+                              'grep', 'ceph'], check_status=False)
+        ctx.cluster.run(args=['sudo', 'systemctl', run.Raw('|'),
                               'grep', 'ceph'], check_status=False)
 
         if ctx.archive is not None:
@@ -710,9 +701,7 @@ def cli_test(ctx, config):
         yield
     finally:
         log.info("cleaning up")
-        ctx.cluster.run(args=['sudo', 'stop', 'ceph-all', run.Raw('||'),
-                              'sudo', 'service', 'ceph', 'stop', run.Raw('||'),
-                              'sudo', 'systemctl', 'stop', 'ceph.target'],
+        ctx.cluster.run(args=['sudo', 'systemctl', 'stop', 'ceph.target'],
                         check_status=False)
         time.sleep(4)
         for i in range(3):
