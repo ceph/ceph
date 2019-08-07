@@ -110,6 +110,9 @@ option {
 .text-monospace {
   font-family: monospace;
 }
+.text-pre {
+  white-space: pre;
+}
 
 /* Buttons */
 .btn-light {
@@ -396,4 +399,34 @@ bfv-messages {
 // https://github.com/adrianhurt/play-bootstrap/issues/118
 .form-group.has-error .invalid-feedback {
   display: block;
+}
+
+//Displaying the password strength
+.passwordStrengthLevel {
+  flex: 100%;
+  margin-top: 2px;
+  .passwordStrengthLevel1,
+  .passwordStrengthLevel2,
+  .passwordStrengthLevel3,
+  .passwordStrengthLevel4 {
+    border-radius: 0.25rem;
+    height: 13px;
+  }
+
+  .passwordStrengthLevel1 {
+    width: 25%;
+    background: $color-solid-red;
+  }
+  .passwordStrengthLevel2 {
+    width: 50%;
+    background: $color-bright-yellow;
+  }
+  .passwordStrengthLevel3 {
+    width: 75%;
+    background: $color-bright-green;
+  }
+  .passwordStrengthLevel4 {
+    width: 100%;
+    background: $color-green;
+  }
 }
