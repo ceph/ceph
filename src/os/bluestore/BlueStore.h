@@ -2095,7 +2095,7 @@ private:
   void _close_fm();
   int _open_alloc();
   void _close_alloc();
-  int _open_collections(int *errors=0);
+  int _open_collections(int64_t *errors=0);
   void _close_collections();
 
   int _setup_block_symlink_or_file(string name, string path, uint64_t size,
@@ -2196,7 +2196,7 @@ private:
   void _fsck_check_pool_statfs(
     per_pool_statfs& expected_pool_statfs,
     bool need_per_pool_stats,
-    int& errors,
+    int64_t& errors,
     BlueStoreRepairer* repairer);
 
   void _buffer_cache_write(
