@@ -958,15 +958,13 @@ seastar::future<> ProtocolV1::fault()
     messenger.unregister_conn(seastar::static_pointer_cast<SocketConnection>(
         conn.shared_from_this()));
   }
-  if (h.backoff.count()) {
-    h.backoff += h.backoff;
-  } else {
-    h.backoff = conf.ms_initial_backoff;
-  }
-  if (h.backoff > conf.ms_max_backoff) {
-    h.backoff = conf.ms_max_backoff;
-  }
-  return seastar::sleep(h.backoff);
+  // XXX: we decided not to support lossless connection in v1. as the
+  // client's default policy is
+  // Messenger::Policy::lossy_client(CEPH_FEATURE_OSDREPLYMUX) which is
+  // lossy. And by the time of crimson-osd's GA, the in-cluster communication
+  // will all be performed using v2 protocol.
+  ceph_abort("lossless policy not supported for v1");
+  return seastar::now();
 }
 
 } // namespace ceph::net
