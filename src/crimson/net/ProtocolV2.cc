@@ -693,6 +693,7 @@ ProtocolV2::client_connect()
       case Tag::SERVER_IDENT:
         return read_frame_payload().then([this] {
           // handle_server_ident() logic
+          requeue_sent();
           auto server_ident = ServerIdentFrame::Decode(rx_segments_data.back());
           logger().debug("{} GOT ServerIdentFrame:"
                          " addrs={}, gid={}, gs={},"
@@ -815,8 +816,8 @@ ProtocolV2::client_reconnect()
           auto reconnect_ok = ReconnectOkFrame::Decode(rx_segments_data.back());
           logger().debug("{} GOT ReconnectOkFrame: msg_seq={}",
                          conn, reconnect_ok.msg_seq());
+          requeue_up_to(reconnect_ok.msg_seq());
           // TODO
-          // discard_requeued_up_to()
           // backoff = utime_t();
           return dispatcher.ms_handle_connect(
               seastar::static_pointer_cast<SocketConnection>(
@@ -1476,8 +1477,7 @@ ProtocolV2::send_server_ident()
     logger().debug("{} UPDATE: gs={} for server ident", conn, global_seq);
 
     // this is required for the case when this connection is being replaced
-    // TODO
-    // out_seq = discard_requeued_up_to(out_seq, 0);
+    requeue_up_to(0);
     conn.in_seq = 0;
 
     if (!conn.policy.lossy) {
@@ -1587,14 +1587,6 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
   return bl;
 }
 
-void ProtocolV2::handle_message_ack(seq_num_t seq) {
-  if (conn.policy.lossy) {  // lossy connections don't keep sent messages
-    return;
-  }
-
-  // TODO: lossless policy
-}
-
 seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
 {
   return read_frame_payload()
@@ -1672,7 +1664,7 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
     if (!conn.policy.lossy) {
       // ++ack_left;
     }
-    handle_message_ack(current_header.ack_seq);
+    ack_writes(current_header.ack_seq);
 
     // TODO: change MessageRef with seastar::shared_ptr
     auto msg_ref = MessageRef{message, false};
@@ -1728,7 +1720,7 @@ void ProtocolV2::execute_ready()
               // handle_message_ack() logic
               auto ack = AckFrame::Decode(rx_segments_data.back());
               logger().debug("{} GOT AckFrame: seq={}", ack.seq());
-              handle_message_ack(ack.seq());
+              ack_writes(ack.seq());
             });
           case Tag::KEEPALIVE2:
             return read_frame_payload().then([this] {
