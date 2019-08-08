@@ -212,7 +212,7 @@ struct OnReadComplete : public Context {
     if (r == -EIO && !pg->get_pool().require_rollback()) {
       pg->clog_error() << pg->get_coll() << " " << opcontext->new_obs.oi.soid
                        << " failed to read: " << r;
-      pg->rep_repair_primary_object(opcontext->new_obs.oi.soid, opcontext->op);
+      pg->rep_repair_primary_object(opcontext->new_obs.oi.soid, opcontext);
     }
     opcontext->finish_read(pg);
   }
@@ -2471,7 +2471,7 @@ int PrimaryLogPG::do_manifest_flush(OpRequestRef op, ObjectContextRef obc, Flush
     ObjectOperation obj_op;
     bufferlist chunk_data;
     int r = pgbackend->objects_read_sync(
-	soid, iter->first, tgt_length, 0, &chunk_data);
+	soid, info.pgid.shard, iter->first, tgt_length, 0, obc->obs.oi.size, &chunk_data, std::nullopt, false);
     if (r < 0) {
       dout(0) << __func__ << " read fail " << " offset: " << tgt_offset
 	      << " len: " << tgt_length << " r: " << r << dendl;
@@ -4917,7 +4917,7 @@ struct FillInVerifyExtent : public Context {
   void finish(int len) override {
     *rval = len;
     // whole object?  can we verify the checksum?
-    if (maybe_crc && len == size) {
+    if (maybe_crc && len >= 0 && (uint64_t)len == size) {
       uint32_t crc = outdatap->crc32c(-1);
       if (maybe_crc != crc) {
         osd->clog->error() << std::hex << " full-object read crc 0x" << crc
@@ -5385,12 +5385,11 @@ int PrimaryLogPG::do_read(OpContext *ctx, OSDOp& osd_op, bool sync) {
 
   // read into a buffer
   int result = 0;
-  boost::optional<uint32_t> maybe_crc;
+  std::optional<uint32_t> maybe_crc;
   // If there is a data digest and it is possible we are reading
   // entire object, pass the digest.  FillInVerifyExtent will
   // will check the oi.size again.
-  if (!skip_data_digest &&
-      oi.is_data_digest() && op.extent.offset == 0 &&
+  if (oi.is_data_digest() && op.extent.offset == 0 &&
       op.extent.length >= oi.size)
     maybe_crc = oi.data_digest;
   if (trimmed_read && op.extent.length == 0) {
@@ -5453,23 +5452,21 @@ int PrimaryLogPG::do_sparse_read(OpContext *ctx, OSDOp& osd_op) {
   }
 
   if (length > 0) {
-    boost::optional<uint32_t> maybe_crc;
+    std::optional<uint32_t> maybe_crc;
     // Why SPARSE_READ need checksum? In fact, librbd always use sparse-read.
     // Maybe at first, there is no much whole objects. With continued use, more
     // and more whole object exist. So from this point, for sparse-read add
     // checksum make sense.
-    if (!skip_data_digest &&
-	oi.is_data_digest() && op.extent.offset == 0 &&
-        op.extent.length >= oi.size && !pool.info.ec_pool())
+    if (oi.is_data_digest() && op.extent.offset == 0 &&
+        op.extent.length >= oi.size && !pool.info.is_erasure())
       maybe_crc = oi.data_digest;
     ctx->pending_async_reads.emplace_back(
         offset, length, op.flags, &osd_op.outdata,
         new ToSparseReadResult(&osd_op.rval, &osd_op.outdata, offset,
-                               &op.extent.length, pool.info.ec_pool()),
+                               &op.extent.length, pool.info.is_erasure()),
         maybe_crc,
         true);
     dout(10) << " async_read (was sparse_read) noted for " << soid << dendl;
-
     ctx->op_finishers[ctx->current_osd_subop_num].reset(
       new ReadFinisher(osd_op));
   } else {
@@ -5534,9 +5531,72 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     case CEPH_OSD_OP_CACHE_UNPIN:
     case CEPH_OSD_OP_SET_REDIRECT:
     case CEPH_OSD_OP_TIER_PROMOTE:
-		   soid.snap.val, oi.size, oi.truncate_seq, op.extent.offset,
-		   op.extent.length, op.extent.truncate_size,
-		   op.extent.truncate_seq);
+    case CEPH_OSD_OP_TIER_FLUSH:
+      break;
+    default:
+      if (op.op & CEPH_OSD_OP_MODE_WR)
+	ctx->user_modify = true;
+    }
+
+    // munge -1 truncate to 0 truncate
+    if (ceph_osd_op_uses_extent(op.op) &&
+        op.extent.truncate_seq == 1 &&
+        op.extent.truncate_size == (-1ULL)) {
+      op.extent.truncate_size = 0;
+      op.extent.truncate_seq = 0;
+    }
+
+    // munge ZERO -> TRUNCATE?  (don't munge to DELETE or we risk hosing attributes)
+    if (op.op == CEPH_OSD_OP_ZERO &&
+        obs.exists &&
+        op.extent.offset < static_cast<Option::size_t>(osd->osd_max_object_size) &&
+        op.extent.length >= 1 &&
+        op.extent.length <= static_cast<Option::size_t>(osd->osd_max_object_size) &&
+	op.extent.offset + op.extent.length >= oi.size) {
+      if (op.extent.offset >= oi.size) {
+        // no-op
+	goto fail;
+      }
+      dout(10) << " munging ZERO " << op.extent.offset << "~" << op.extent.length
+	       << " -> TRUNCATE " << op.extent.offset << " (old size is " << oi.size << ")" << dendl;
+      op.op = CEPH_OSD_OP_TRUNCATE;
+    }
+
+    switch (op.op) {
+      
+      // --- READS ---
+
+    case CEPH_OSD_OP_CMPEXT:
+      ++ctx->num_read;
+      tracepoint(osd, do_osd_op_pre_extent_cmp, soid.oid.name.c_str(),
+		 soid.snap.val, oi.size, oi.truncate_seq, op.extent.offset,
+		 op.extent.length, op.extent.truncate_size,
+		 op.extent.truncate_seq);
+
+      if (op_finisher == nullptr) {
+	result = do_extent_cmp(ctx, osd_op);
+      } else {
+	result = op_finisher->execute();
+      }
+      break;
+
+    case CEPH_OSD_OP_SYNC_READ:
+      if (pool.info.is_erasure()) {
+	result = -EOPNOTSUPP;
+	break;
+      }
+      sync_read = true;
+      // fall through
+    case CEPH_OSD_OP_READ:
+      ++ctx->num_read;
+      tracepoint(osd, do_osd_op_pre_read, soid.oid.name.c_str(),
+		 soid.snap.val, oi.size, oi.truncate_seq, op.extent.offset,
+		 op.extent.length, op.extent.truncate_size,
+		 op.extent.truncate_seq);
+      if (op_finisher == nullptr) {
+	if (!ctx->data_off) {
+	  ctx->data_off = op.extent.offset;
+	}
 	result = do_read(ctx, osd_op, sync_read);
       } else {
 	result = op_finisher->execute();
@@ -5545,6 +5605,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_CHECKSUM:
       ++ctx->num_read;
+      {
 	tracepoint(osd, do_osd_op_pre_checksum, soid.oid.name.c_str(),
 		   soid.snap.val, oi.size, oi.truncate_seq, op.checksum.type,
 		   op.checksum.offset, op.checksum.length,
@@ -5584,11 +5645,11 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     /* map extents */
     case CEPH_OSD_OP_SPARSE_READ:
+      tracepoint(osd, do_osd_op_pre_sparse_read, soid.oid.name.c_str(),
+		 soid.snap.val, oi.size, oi.truncate_seq, op.extent.offset,
+		 op.extent.length, op.extent.truncate_size,
+		 op.extent.truncate_seq);
       if (op_finisher == nullptr) {
-        tracepoint(osd, do_osd_op_pre_sparse_read, soid.oid.name.c_str(),
-		   soid.snap.val, oi.size, oi.truncate_seq, op.extent.offset,
-		   op.extent.length, op.extent.truncate_size,
-		   op.extent.truncate_seq);
 	result = do_sparse_read(ctx, osd_op);
       } else {
 	result = op_finisher->execute();
@@ -8543,9 +8604,9 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp,
       uint64_t max_read = std::min(oi.size - cursor.data_offset, (uint64_t)left);
       if (cb) {
 	async_read_started = true;
-	ctx->pending_async_reads.emplace_back(cursor.data_offset, max_read,
-                                            osd_op.op.flags, &bl, cb, boost::none,
-                                            false);
+        ctx->pending_async_reads.emplace_back(cursor.data_offset, max_read,
+                                        osd_op.op.flags, &bl, cb,
+                                        std::nullopt, false);
 	cb->len = max_read;
 
         ctx->op_finishers[ctx->current_osd_subop_num].reset(
@@ -8555,8 +8616,7 @@ int PrimaryLogPG::do_copy_get(OpContext *ctx, bufferlist::const_iterator& bp,
 	dout(10) << __func__ << ": async_read noted for " << soid << dendl;
       } else {
 	result = pgbackend->objects_read_sync(
-	  oi.soid, info.pgid.shard, cursor.data_offset, max_read,
-          osd_op.op.flags, oi.size, &bl, boost::none, false);
+	  oi.soid, info.pgid.shard, cursor.data_offset, max_read, osd_op.op.flags, oi.size, &bl, std::nullopt, false);
 	if (result < 0)
 	  return result;
       }

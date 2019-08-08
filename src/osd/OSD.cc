@@ -2005,11 +2005,11 @@ struct OSD::ReadContext {
   list<PGBackend::ReadItem> items;
   hobject_t soid;
   shard_id_t shard;
-  unsigned size;
+  uint64_t size;
   std::unique_ptr<Context> on_finish;
   PrimaryLogPGRef pg;
   ReadContext(list<PGBackend::ReadItem> &&items, const hobject_t &soid,
-              const shard_id_t &shard, unsigned size,
+              const shard_id_t &shard, uint64_t size,
               Context *on_finish, PrimaryLogPG *pg):
     items(std::move(items)), soid(soid), shard(shard), size(size),
     on_finish(on_finish), pg(pg){}
@@ -2176,8 +2176,8 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
     cct->_conf->osd_command_thread_suicide_timeout,
     &command_tp),
   read_wq(
-    cct->_conf->get_val<long>("osd_read_thread_timeout"),
-    cct->_conf->get_val<long>("osd_read_thread_suicide_timeout"),
+    cct->_conf.get_val<int64_t>("osd_read_thread_timeout"),
+    cct->_conf.get_val<int64_t>("osd_read_thread_suicide_timeout"),
     &read_tp),
   service(this)
 {

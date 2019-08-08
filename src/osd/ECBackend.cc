@@ -2147,9 +2147,9 @@ int ECBackend::objects_read_sync(
   uint64_t off,
   uint64_t len,
   uint32_t op_flags,
-  unsigned size,
+  uint64_t size,
   bufferlist *bl,
-  boost::optional<uint32_t> maybe_crc,
+  std::optional<uint32_t> maybe_crc,
   bool sparse)
 {
   return -EOPNOTSUPP;

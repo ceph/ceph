@@ -252,14 +252,14 @@ int ReplicatedBackend::objects_read_sync(
   uint64_t off,
   uint64_t len,
   uint32_t op_flags,
-  unsigned size,
+  uint64_t size,
   bufferlist *bl,
-  boost::optional<uint32_t> maybe_crc,
+  std::optional<uint32_t> maybe_crc,
   bool sparse)
 {
   if(!sparse) {
     int r = store->read(ch, ghobject_t(soid), off, len, *bl, op_flags);
-    if (maybe_crc && r == size) {
+    if (maybe_crc && r >= 0 && (uint64_t)r == size) {
       uint32_t crc = bl->crc32c(-1);
       if (maybe_crc != crc) {
         derr << std::hex << " full-object read crc 0x" << crc
@@ -317,7 +317,7 @@ int ReplicatedBackend::objects_read_sync(
 
   // verify trailing hole?
   if (cct->_conf->osd_verify_sparse_read_holes) {
-    uint64_t end = MIN(off + len, size);
+    uint64_t end = std::min(off + len, size);
     if (last < end) {
       bufferlist t;
       uint64_t len = end - last;

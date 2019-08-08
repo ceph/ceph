@@ -560,9 +560,9 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      uint64_t off,
      uint64_t len,
      uint32_t op_flags,
-     unsigned size,
+     uint64_t size,
      bufferlist *bl,
-     boost::optional<uint32_t> maybe_crc,
+     std::optional<uint32_t> maybe_crc,
      bool sparse) = 0;
 
    struct ReadItem {
@@ -571,10 +571,10 @@ typedef std::shared_ptr<const OSDMap> OSDMapRef;
      unsigned flags;
      bufferlist *out;
      std::unique_ptr<Context> on_finish;
-     boost::optional<uint32_t> maybe_crc;
+     std::optional<uint32_t> maybe_crc;
      bool sparse;
      ReadItem(uint64_t o, uint64_t l, unsigned f, bufferlist *out, Context *fin,
-              boost::optional<uint32_t> c, bool s):
+              std::optional<uint32_t> c, bool s):
         off(o), len(l), flags(f), out(out), on_finish(fin), maybe_crc(c), sparse(s) {}
    };
    virtual void objects_read_async(
