@@ -37,6 +37,8 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
   @Input()
   snapshots: RbdSnapshotModel[] = [];
   @Input()
+  featuresName: string[];
+  @Input()
   poolName: string;
   @Input()
   rbdName: string;
@@ -79,21 +81,6 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
     private actionLabels: ActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().rbdImage;
-    const actions = new RbdSnapshotActionsModel(this.i18n, this.actionLabels);
-    actions.create.click = () => this.openCreateSnapshotModal();
-    actions.rename.click = () => this.openEditSnapshotModal();
-    actions.protect.click = () => this.toggleProtection();
-    actions.unprotect.click = () => this.toggleProtection();
-    const getImageUri = () =>
-      this.selection.first() &&
-      `${encodeURIComponent(this.poolName)}/${encodeURIComponent(
-        this.rbdName
-      )}/${encodeURIComponent(this.selection.first().name)}`;
-    actions.clone.routerLink = () => `/block/rbd/clone/${getImageUri()}`;
-    actions.copy.routerLink = () => `/block/rbd/copy/${getImageUri()}`;
-    actions.rollback.click = () => this.rollbackModal();
-    actions.deleteSnap.click = () => this.deleteSnapshotModal();
-    this.tableActions = actions.ordering;
   }
 
   ngOnInit() {
@@ -135,6 +122,22 @@ export class RbdSnapshotListComponent implements OnInit, OnChanges {
   }
 
   ngOnChanges() {
+    const actions = new RbdSnapshotActionsModel(this.i18n, this.actionLabels, this.featuresName);
+    actions.create.click = () => this.openCreateSnapshotModal();
+    actions.rename.click = () => this.openEditSnapshotModal();
+    actions.protect.click = () => this.toggleProtection();
+    actions.unprotect.click = () => this.toggleProtection();
+    const getImageUri = () =>
+      this.selection.first() &&
+      `${encodeURIComponent(this.poolName)}/${encodeURIComponent(
+        this.rbdName
+      )}/${encodeURIComponent(this.selection.first().name)}`;
+    actions.clone.routerLink = () => `/block/rbd/clone/${getImageUri()}`;
+    actions.copy.routerLink = () => `/block/rbd/copy/${getImageUri()}`;
+    actions.rollback.click = () => this.rollbackModal();
+    actions.deleteSnap.click = () => this.deleteSnapshotModal();
+    this.tableActions = actions.ordering;
+
     const itemFilter = (entry, task) => {
       return entry.name === task.metadata['snapshot_name'];
     };
