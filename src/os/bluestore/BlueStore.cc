@@ -7014,6 +7014,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  << (repair ? " repair" : " check")
 	  << (deep ? " (deep)" : " (shallow)") << " start" << dendl;
   int64_t errors = 0;
+  int64_t warnings = 0;
   unsigned repaired = 0;
 
   typedef btree::btree_set<
@@ -7165,8 +7166,16 @@ int BlueStore::_fsck(bool deep, bool repair)
   }
 
   if (!per_pool_omap) {
-    derr << "fsck error: store not yet converted to per-pool omap" << dendl;
-    ++errors;
+    const char *w;
+    if (cct->_conf->bluestore_fsck_error_on_no_per_pool_omap) {
+      w = "error";
+      ++errors;
+    } else {
+      w = "warning";
+      ++warnings;
+    }
+    derr << "fsck " << w << ": store not yet converted to per-pool omap"
+	 << dendl;
     if (repair) {
       repairer.fix_per_pool_omap(db);
     }
@@ -7501,11 +7510,23 @@ int BlueStore::_fsck(bool deep, bool repair)
 	} else {
 	  m.insert(o->onode.nid);
 	}
-	if (per_pool_omap &&
-	    (!o->onode.is_perpool_omap() && !o->onode.is_pgmeta_omap())) {
-	  derr << "fsck error: " << oid << " has omap that is not per-pool or pgmeta"
-	       << dendl;
-	  ++errors;
+	if (!o->onode.is_perpool_omap() && !o->onode.is_pgmeta_omap()) {
+	  if (per_pool_omap) {
+	    derr << "fsck error: " << oid
+		 << " has omap that is not per-pool or pgmeta" << dendl;
+	    ++errors;
+	  } else {
+	    const char *w;
+	    if (cct->_conf->bluestore_fsck_error_on_no_per_pool_omap) {
+	      ++errors;
+	      w = "error";
+	    } else {
+	      ++warnings;
+	      w = "warning";
+	    }
+	    derr << "fsck " << w << ": " << oid
+		 << " has omap that is not per-pool or pgmeta" << dendl;
+	  }
 	}
 	if (repair &&
 	    o->onode.has_omap() &&
@@ -8079,8 +8100,10 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  << dendl;
 
   utime_t duration = ceph_clock_now() - start;
-  dout(1) << __func__ << " <<<FINISH>>> with " << errors << " errors, " << repaired
-	  << " repaired, " << (errors - (int)repaired) << " remaining in "
+  dout(1) << __func__ << " <<<FINISH>>> with " << errors << " errors, "
+	  << warnings << " warnings, "
+	  << repaired << " repaired, "
+	  << (errors + warnings - (int)repaired) << " remaining in "
 	  << duration << " seconds" << dendl;
   return errors - (int)repaired;
 }
