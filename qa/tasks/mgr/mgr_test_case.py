@@ -34,10 +34,8 @@ class MgrCluster(CephCluster):
         self.mgr_daemons[mgr_id].restart()
 
     def get_mgr_map(self):
-        status = json.loads(
-            self.mon_manager.raw_cluster_cmd("status", "--format=json-pretty"))
-
-        return status["mgrmap"]
+        return json.loads(
+            self.mon_manager.raw_cluster_cmd("mgr", "dump", "--format=json-pretty"))
 
     def get_active_id(self):
         return self.get_mgr_map()["active_name"]
