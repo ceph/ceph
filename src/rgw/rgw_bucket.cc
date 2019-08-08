@@ -2715,18 +2715,15 @@ void RGWDataChangesLog::ChangesRenewThread::stop()
 void RGWDataChangesLog::mark_modified(int shard_id, const rgw_bucket_shard& bs)
 {
   auto key = bs.get_key();
-  modified_lock.lock_shared();
-  map<int, set<string> >::iterator iter = modified_shards.find(shard_id);
-  if (iter != modified_shards.end()) {
-    set<string>& keys = iter->second;
-    if (keys.find(key) != keys.end()) {
-      modified_lock.unlock();
+  {
+    std::shared_lock rl{modified_lock}; // read lock to check for existence
+    auto shard = modified_shards.find(shard_id);
+    if (shard != modified_shards.end() && shard->second.count(key)) {
       return;
     }
   }
-  modified_lock.unlock();
 
-  std::unique_lock wl{modified_lock};
+  std::unique_lock wl{modified_lock}; // write lock for insertion
   modified_shards[shard_id].insert(key);
 }
 
