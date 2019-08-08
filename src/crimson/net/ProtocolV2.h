@@ -47,7 +47,7 @@ class ProtocolV2 final : public Protocol {
     READY,
     STANDBY,
     WAIT,
-    REPLACING,      // ?
+    REPLACING,
     CLOSING
   };
   state_t state = state_t::NONE;
@@ -60,7 +60,7 @@ class ProtocolV2 final : public Protocol {
                                       "READY",
                                       "STANDBY",
                                       "WAIT",
-                                      "REPLACING",      // ?
+                                      "REPLACING",
                                       "CLOSING"};
     return statenames[static_cast<int>(state)];
   }
@@ -151,6 +151,11 @@ class ProtocolV2 final : public Protocol {
   seastar::future<> server_auth();
 
   seastar::future<next_step_t> send_wait();
+  seastar::future<next_step_t> reuse_connection(ProtocolV2* existing_proto,
+                                                bool do_reset=false,
+                                                bool reconnect=false,
+                                                uint64_t conn_seq=0,
+                                                uint64_t msg_seq=0);
 
   seastar::future<next_step_t> handle_existing_connection(SocketConnectionRef existing_conn);
   seastar::future<next_step_t> server_connect();
@@ -170,7 +175,19 @@ class ProtocolV2 final : public Protocol {
   seastar::future<next_step_t> send_server_ident();
 
   // REPLACING (server)
-  seastar::future<> send_reconnect_ok();
+  void trigger_replacing(bool reconnect,
+                         bool do_reset,
+                         SocketFRef&& new_socket,
+                         AuthConnectionMetaRef&& new_auth_meta,
+                         ceph::crypto::onwire::rxtx_t new_rxtx,
+                         uint64_t new_peer_global_seq,
+                         // !reconnect
+                         uint64_t new_client_cookie,
+                         entity_name_t new_peer_name,
+                         uint64_t new_conn_features,
+                         // reconnect
+                         uint64_t new_connect_seq,
+                         uint64_t new_msg_seq);
 
   // READY
   seastar::future<> read_message(utime_t throttle_stamp);
