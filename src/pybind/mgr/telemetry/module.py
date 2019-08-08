@@ -466,6 +466,8 @@ class Module(MgrModule):
         self.event.wait(10)
 
         while self.run:
+            self.event.clear()
+
             self.refresh_health_checks()
 
             if self.last_opt_revision < LAST_REVISION_RE_OPT_IN:
