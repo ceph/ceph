@@ -23,10 +23,9 @@ class colorize(str):
     """
 
     def __init__(self, string):
-        self.stdout = sys.__stdout__
         self.appends = ''
         self.prepends = ''
-        self.isatty = self.stdout.isatty()
+        self.isatty = sys.__stderr__.isatty()
 
     def _set_attributes(self):
         """
@@ -81,11 +80,12 @@ yellow_arrow = yellow('--> ')
 class _Write(object):
 
     def __init__(self, _writer=None, prefix='', suffix='', flush=False):
-        if _writer is None:
-            _writer = sys.stdout
+        # we can't set sys.stderr as the default for _writer. Otherwise
+        # pytest's capturing gets confused
+        if not _writer:
+            _writer = sys.stderr
         self._writer = _Write._unicode_output_stream(_writer)
-        if _writer is sys.stdout:
-            sys.stdout = self._writer
+        sys.stderr = self._writer
         self.suffix = suffix
         self.prefix = prefix
         self.flush = flush
@@ -94,7 +94,7 @@ class _Write(object):
     def _unicode_output_stream(stream):
         # wrapper for given stream, so it can write unicode without throwing
         # exception
-        # sys.stdout.encoding is None if !isatty
+        # sys.stderr.encoding is None if !isatty
         encoding = stream.encoding or ''
         if encoding.upper() in ('UTF-8', 'UTF8'):
             # already using unicode encoding, nothing to do
@@ -105,7 +105,7 @@ class _Write(object):
             return stream.__class__(stream.buffer, encoding, 'replace',
                                     stream.newlines, stream.line_buffering)
         else:
-            # in python2, stdout is but a "file"
+            # in python2, stderr is but a "file"
             return codecs.getwriter(encoding)(stream, 'replace')
 
     def bold(self, string):
@@ -127,7 +127,7 @@ def stdout(msg):
 
 
 def stderr(msg):
-    return _Write(prefix=yellow(' stderr: '), _writer=sys.stderr).raw(msg)
+    return _Write(prefix=yellow(' stderr: ')).raw(msg)
 
 
 def write(msg):
@@ -135,19 +135,19 @@ def write(msg):
 
 
 def error(msg):
-    return _Write(prefix=red_arrow, _writer=sys.stderr).raw(msg)
+    return _Write(prefix=red_arrow).raw(msg)
 
 
 def info(msg):
-    return _Write(prefix=blue_arrow, _writer=sys.stderr).raw(msg)
+    return _Write(prefix=blue_arrow).raw(msg)
 
 
 def debug(msg):
-    return _Write(prefix=blue_arrow, _writer=sys.stderr).raw(msg)
+    return _Write(prefix=blue_arrow).raw(msg)
 
 
 def warning(msg):
-    return _Write(prefix=yellow_arrow, _writer=sys.stderr).raw(msg)
+    return _Write(prefix=yellow_arrow).raw(msg)
 
 
 def success(msg):
@@ -210,7 +210,7 @@ def subhelp(mapper):
     """
     Look at every value of every key in the mapper and will output any
     ``class.help`` possible to return it as a string that will be sent to
-    stdout.
+    stderr.
     """
     help_text_lines = []
     for key, value in mapper.items():
