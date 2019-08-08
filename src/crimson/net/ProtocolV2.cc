@@ -843,7 +843,7 @@ void ProtocolV2::execute_connecting()
   if (socket) {
     socket->shutdown();
   }
-  seastar::with_gate(pending_dispatch, [this] {
+  execution_done = seastar::with_gate(pending_dispatch, [this] {
       // we don't know my socket_port yet
       conn.set_ephemeral_port(0, SocketConnection::side_t::none);
       return messenger.get_global_seq().then([this] (auto gs) {
@@ -1683,7 +1683,7 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
 void ProtocolV2::execute_ready()
 {
   trigger_state(state_t::READY, write_state_t::open, false);
-  seastar::with_gate(pending_dispatch, [this] {
+  execution_done = seastar::with_gate(pending_dispatch, [this] {
     return seastar::keep_doing([this] {
       return read_main_preamble()
       .then([this] (Tag tag) {
