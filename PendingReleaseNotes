@@ -116,3 +116,18 @@
 
 * New OSD daemon command dump_scrub_reservations which reveals the
   scrub reservations that are held for local (primary) and remote (replica) PGs.
+
+14.2.6
+------
+
+* The following OSD memory config options related to bluestore cache autotuning can now
+  be configured during runtime:
+
+    - osd_memory_base (default: 768 MB)
+    - osd_memory_cache_min (default: 128 MB)
+    - osd_memory_expected_fragmentation (default: 0.15)
+    - osd_memory_target (default: 4 GB)
+
+  The above options can be set with::
+
+    ceph config set global <option> <value>
