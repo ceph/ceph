@@ -40,11 +40,11 @@ class ProtocolV2 final : public Protocol {
   enum class state_t {
     NONE = 0,
     ACCEPTING,
+    SERVER_WAIT,
     CONNECTING,
     READY,
     STANDBY,
     WAIT,           // ? CLIENT_WAIT
-    SERVER_WAIT,    // ?
     REPLACING,      // ?
     CLOSING
   };
@@ -53,11 +53,11 @@ class ProtocolV2 final : public Protocol {
   static const char *get_state_name(state_t state) {
     const char *const statenames[] = {"NONE",
                                       "ACCEPTING",
+                                      "SERVER_WAIT",
                                       "CONNECTING",
                                       "READY",
                                       "STANDBY",
                                       "WAIT",           // ? CLIENT_WAIT
-                                      "SERVER_WAIT",    // ?
                                       "REPLACING",      // ?
                                       "CLOSING"};
     return statenames[static_cast<int>(state)];

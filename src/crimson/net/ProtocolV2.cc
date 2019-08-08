@@ -1785,16 +1785,24 @@ void ProtocolV2::execute_wait()
 
 void ProtocolV2::execute_server_wait()
 {
-  // TODO not implemented
-  // trigger_state(state_t::SERVER_WAIT, write_state_t::delay, false);
-  ceph_assert(false);
+  trigger_state(state_t::SERVER_WAIT, write_state_t::delay, false);
+  execution_done = seastar::with_gate(pending_dispatch, [this] {
+    return read_exactly(1).then([this] (auto bl) {
+      logger().warn("{} SERVER_WAIT got read, abort", conn);
+      abort_in_fault();
+    }).handle_exception([this] (std::exception_ptr eptr) {
+      logger().debug("{} execute_server_wait(): got exception {} at state {}",
+                     conn, eptr, get_state_name(state));
+      close();
+    });
+  });
 }
 
 // CLOSING state
 
 void ProtocolV2::trigger_close()
 {
-  if (state == state_t::ACCEPTING) {
+  if (state == state_t::ACCEPTING || state == state_t::SERVER_WAIT) {
     messenger.unaccept_conn(
       seastar::static_pointer_cast<SocketConnection>(
         conn.shared_from_this()));
