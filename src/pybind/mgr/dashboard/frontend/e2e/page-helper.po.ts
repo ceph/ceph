@@ -1,4 +1,4 @@
-import { $, $$, browser, by, element, ElementFinder, promise } from 'protractor';
+import { $, $$, browser, by, element, ElementFinder, promise, protractor } from 'protractor';
 
 interface Pages {
   index: string;
@@ -114,6 +114,12 @@ export abstract class PageHelper {
         );
       }
     });
+  }
+
+  // used when .clear() does not work on a text box, sends a Ctrl + a, BACKSPACE
+  inputClear(elem) {
+    elem.sendKeys(protractor.Key.chord(protractor.Key.CONTROL, 'a'));
+    elem.sendKeys(protractor.Key.BACK_SPACE);
   }
 
   navigateTo(page = null) {
