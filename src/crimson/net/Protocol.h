@@ -44,7 +44,8 @@ class Protocol {
       const std::deque<MessageRef>& msgs,
       size_t num_msgs,
       bool require_keepalive,
-      std::optional<utime_t> keepalive_ack) = 0;
+      std::optional<utime_t> keepalive_ack,
+      bool require_ack) = 0;
 
  public:
   const proto_t proto_type;
@@ -102,6 +103,8 @@ class Protocol {
 
   void notify_keepalive_ack(utime_t keepalive_ack);
 
+  void notify_ack();
+
   void requeue_up_to(seq_num_t seq);
 
   void requeue_sent();
@@ -110,6 +113,7 @@ class Protocol {
 
   bool is_queued() const {
     return (!conn.out_q.empty() ||
+            ack_left > 0 ||
             need_keepalive ||
             keepalive_ack.has_value());
   }
@@ -123,6 +127,7 @@ class Protocol {
 
   bool need_keepalive = false;
   std::optional<utime_t> keepalive_ack = std::nullopt;
+  uint64_t ack_left = 0;
   bool write_dispatching = false;
   // Indicate if we are in the middle of writing.
   bool open_write = false;

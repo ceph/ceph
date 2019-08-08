@@ -96,6 +96,14 @@ void Protocol::notify_keepalive_ack(utime_t _keepalive_ack)
   write_event();
 }
 
+void Protocol::notify_ack()
+{
+  if (!conn.policy.lossy) {
+    ++ack_left;
+    write_event();
+  }
+}
+
 void Protocol::requeue_sent()
 {
   assert(write_state != write_state_t::open);
@@ -146,6 +154,7 @@ void Protocol::reset_write()
   conn.sent.clear();
   need_keepalive = false;
   keepalive_ack = std::nullopt;
+  ack_left = 0;
 }
 
 void Protocol::ack_writes(seq_num_t seq)
@@ -177,14 +186,18 @@ seastar::future<stop_t> Protocol::do_write_dispatch_sweep()
                        conn.pending_q.begin(),
                        conn.pending_q.end());
     }
+    auto acked = ack_left;
+    assert(acked == 0 || conn.in_seq > 0);
     // sweep all pending writes with the concrete Protocol
     return socket->write(do_sweep_messages(
-        conn.pending_q, num_msgs, need_keepalive, keepalive_ack))
-    .then([this, prv_keepalive_ack=keepalive_ack] {
+        conn.pending_q, num_msgs, need_keepalive, keepalive_ack, acked > 0)
+    ).then([this, prv_keepalive_ack=keepalive_ack, acked] {
       need_keepalive = false;
       if (keepalive_ack == prv_keepalive_ack) {
         keepalive_ack = std::nullopt;
       }
+      assert(ack_left >= acked);
+      ack_left -= acked;
       if (!is_queued()) {
         // good, we have nothing pending to send now.
         return socket->flush().then([this] {
