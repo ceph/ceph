@@ -64,6 +64,7 @@ describe('RbdSnapshotListComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(RbdSnapshotListComponent);
     component = fixture.componentInstance;
+    component.ngOnChanges();
     summaryService = TestBed.get(SummaryService);
   });
 
