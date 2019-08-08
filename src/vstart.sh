@@ -528,12 +528,6 @@ do_rgw_conf() {
 [client.rgw.${current_port}]
         rgw frontends = $rgw_frontend port=${current_port}
         admin socket = ${CEPH_OUT_DIR}/radosgw.${current_port}.asok
-        ; needed for s3tests
-        rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
-        rgw crypt require ssl = false
-        ; uncomment the following to set LC days as the value in seconds;
-        ; needed for passing lc time based s3-tests (can be verbose)
-        ; rgw lc debug interval = 10
 EOF
         current_port=$((current_port + 1))
 done
@@ -660,6 +654,14 @@ EOF
         keyring = $keyring_fn
         log file = $CEPH_OUT_DIR/\$name.\$pid.log
         admin socket = $CEPH_ASOK_DIR/\$name.\$pid.asok
+
+[client.rgw]
+        ; needed for s3tests
+        rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
+        rgw crypt require ssl = false
+        ; uncomment the following to set LC days as the value in seconds;
+        ; needed for passing lc time based s3-tests (can be verbose)
+        ; rgw lc debug interval = 10
 $extra_conf
 EOF
 
