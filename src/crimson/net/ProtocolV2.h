@@ -32,6 +32,8 @@ class ProtocolV2 final : public Protocol {
       std::optional<utime_t> keepalive_ack,
       bool require_ack) override;
 
+  void notify_write() override;
+
  private:
   SocketMessenger &messenger;
 

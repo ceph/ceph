@@ -265,6 +265,7 @@ seastar::future<stop_t> Protocol::do_write_dispatch_sweep()
 
 void Protocol::write_event()
 {
+  notify_write();
   if (write_dispatching) {
     // already dispatching
     return;

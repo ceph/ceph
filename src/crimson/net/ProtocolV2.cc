@@ -1759,9 +1759,17 @@ void ProtocolV2::execute_ready()
 
 void ProtocolV2::execute_standby()
 {
-  // TODO not implemented
-  // trigger_state(state_t::STANDBY, write_state_t::delay, false);
-  ceph_assert(false);
+  trigger_state(state_t::STANDBY, write_state_t::delay, true);
+  if (socket) {
+    socket->shutdown();
+  }
+}
+
+void ProtocolV2::notify_write()
+{
+  if (unlikely(state == state_t::STANDBY && !conn.policy.server)) {
+    execute_connecting();
+  }
 }
 
 // WAIT state
