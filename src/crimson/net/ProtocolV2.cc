@@ -127,10 +127,28 @@ inline ostream& operator<<(
 
 namespace ceph::net {
 
+seastar::future<> ProtocolV2::Timer::backoff(double seconds)
+{
+  logger().warn("{} waiting {} seconds ...", conn, seconds);
+  cancel();
+  last_dur_ = seconds;
+  as = seastar::abort_source();
+  auto dur = std::chrono::duration_cast<seastar::lowres_clock::duration>(
+      std::chrono::duration<double>(seconds));
+  return seastar::sleep_abortable(dur, *as
+  ).handle_exception_type([this] (const seastar::sleep_aborted& e) {
+    logger().warn("{} wait aborted", conn);
+    abort_protocol();
+  });
+}
+
 ProtocolV2::ProtocolV2(Dispatcher& dispatcher,
                        SocketConnection& conn,
                        SocketMessenger& messenger)
-  : Protocol(proto_t::v2, dispatcher, conn), messenger{messenger} {}
+  : Protocol(proto_t::v2, dispatcher, conn),
+    messenger{messenger},
+    protocol_timer{conn}
+{}
 
 ProtocolV2::~ProtocolV2() {}
 
@@ -741,7 +759,6 @@ ProtocolV2::client_connect()
             connect_seq = 0;
             server_cookie = 0;
           }
-          // TODO: backoff = utime_t();
 
           return dispatcher.ms_handle_connect(
               seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
@@ -817,8 +834,6 @@ ProtocolV2::client_reconnect()
           logger().debug("{} GOT ReconnectOkFrame: msg_seq={}",
                          conn, reconnect_ok.msg_seq());
           requeue_up_to(reconnect_ok.msg_seq());
-          // TODO
-          // backoff = utime_t();
           return dispatcher.ms_handle_connect(
               seastar::static_pointer_cast<SocketConnection>(
                 conn.shared_from_this()))
@@ -932,7 +947,7 @@ void ProtocolV2::execute_connecting()
             break;
            }
            case next_step_t::wait: {
-            execute_wait();
+            execute_wait(true);
             break;
            }
            default: {
@@ -1684,6 +1699,7 @@ void ProtocolV2::execute_ready()
 {
   trigger_state(state_t::READY, write_state_t::open, false);
   execution_done = seastar::with_gate(pending_dispatch, [this] {
+    protocol_timer.cancel();
     return seastar::keep_doing([this] {
       return read_main_preamble()
       .then([this] (Tag tag) {
@@ -1774,11 +1790,31 @@ void ProtocolV2::notify_write()
 
 // WAIT state
 
-void ProtocolV2::execute_wait()
+void ProtocolV2::execute_wait(bool max_backoff)
 {
-  // TODO not implemented
-  // trigger_state(state_t::WAIT, write_state_t::delay, false);
-  ceph_assert(false);
+  trigger_state(state_t::WAIT, write_state_t::delay, true);
+  if (socket) {
+    socket->shutdown();
+  }
+  execution_done = seastar::with_gate(pending_dispatch,
+                                      [this, max_backoff] {
+    double backoff = protocol_timer.last_dur();
+    if (max_backoff) {
+      backoff = conf.ms_max_backoff;
+    } else if (backoff > 0) {
+      backoff = std::min(conf.ms_max_backoff, 2 * backoff);
+    } else {
+      backoff = conf.ms_initial_backoff;
+    }
+    return protocol_timer.backoff(backoff).then([this] {
+      execute_connecting();
+    }).handle_exception([this] (std::exception_ptr eptr) {
+      logger().debug("{} execute_wait(): got exception {} at state {}, abort",
+                     conn, eptr, get_state_name(state));
+      assert(state == state_t::REPLACING ||
+             state == state_t::CLOSING);
+    });
+  });
 }
 
 // SERVER_WAIT state
@@ -1814,6 +1850,8 @@ void ProtocolV2::trigger_close()
     // cannot happen
     ceph_assert(false);
   }
+
+  protocol_timer.cancel();
 
   if (!socket) {
     ceph_assert(state == state_t::CONNECTING);

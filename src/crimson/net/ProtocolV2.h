@@ -3,6 +3,8 @@
 
 #pragma once
 
+#include <seastar/core/sleep.hh>
+
 #include "Protocol.h"
 #include "msg/async/frames_v2.h"
 #include "msg/async/crypto_onwire.h"
@@ -44,7 +46,7 @@ class ProtocolV2 final : public Protocol {
     CONNECTING,
     READY,
     STANDBY,
-    WAIT,           // ? CLIENT_WAIT
+    WAIT,
     REPLACING,      // ?
     CLOSING
   };
@@ -57,7 +59,7 @@ class ProtocolV2 final : public Protocol {
                                       "CONNECTING",
                                       "READY",
                                       "STANDBY",
-                                      "WAIT",           // ? CLIENT_WAIT
+                                      "WAIT",
                                       "REPLACING",      // ?
                                       "CLOSING"};
     return statenames[static_cast<int>(state)];
@@ -75,6 +77,24 @@ class ProtocolV2 final : public Protocol {
   uint64_t connect_seq = 0;
 
   seastar::future<> execution_done = seastar::now();
+
+  class Timer {
+    double last_dur_ = 0.0;
+    const SocketConnection& conn;
+    std::optional<seastar::abort_source> as;
+   public:
+    Timer(SocketConnection& conn) : conn(conn) {}
+    double last_dur() const { return last_dur_; }
+    seastar::future<> backoff(double seconds);
+    void cancel() {
+      last_dur_ = 0.0;
+      if (as) {
+        as->request_abort();
+        as = std::nullopt;
+      }
+    }
+  };
+  Timer protocol_timer;
 
  // TODO: Frame related implementations, probably to a separate class.
  private:
@@ -160,7 +180,7 @@ class ProtocolV2 final : public Protocol {
   void execute_standby();
 
   // WAIT
-  void execute_wait();
+  void execute_wait(bool max_backoff);
 
   // SERVER_WAIT
   void execute_server_wait();
