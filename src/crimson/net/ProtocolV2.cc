@@ -1337,13 +1337,14 @@ ProtocolV2::server_reconnect()
                    reconnect.msg_seq());
 
     // can peer_addrs be changed on-the-fly?
-    if (conn.peer_addr != reconnect.addrs().front()) {
-      logger().error("{} peer identifies as {}, while conn.peer_addr={}",
-                     conn, reconnect.addrs().front(), conn.peer_addr);
-      ceph_assert(false);
-    }
     // TODO: change peer_addr to entity_addrvec_t
-    ceph_assert(conn.peer_addr == conn.target_addr);
+    if (conn.peer_addr != reconnect.addrs().front()) {
+      logger().error("{} peer identifies as {}, while conn.peer_addr={},"
+                     " reconnect failed",
+                     conn, reconnect.addrs().front(), conn.peer_addr);
+      throw std::system_error(
+          make_error_code(ceph::net::error::bad_peer_address));
+    }
     peer_global_seq = reconnect.global_seq();
 
     SocketConnectionRef existing_conn = messenger.lookup_conn(conn.peer_addr);
