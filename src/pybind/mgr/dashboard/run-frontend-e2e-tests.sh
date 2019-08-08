@@ -45,7 +45,7 @@ cd ../../../../${BUILD_DIR}
 FULL_PATH_BUILD_DIR=`pwd`
 
 if [ "$BASE_URL" == "" ]; then
-    MGR=2 RGW=1 ../src/vstart.sh -n -d
+    MGR=1 RGW=1 ../src/vstart.sh -n -d
     sleep 10
 
     # Create an Object Gateway User
@@ -57,6 +57,13 @@ if [ "$BASE_URL" == "" ]; then
     ./bin/ceph dashboard set-rgw-api-secret-key $(./bin/radosgw-admin user info --uid=dev | jq -r .keys[0].secret_key)
     # Set SSL verify to False
     ./bin/ceph dashboard set-rgw-api-ssl-verify False
+    # Enable Prometheus module
+    ./bin/ceph mgr module enable prometheus
+    sleep 10
+    # Set Alertmanager API Host
+    ./bin/ceph dashboard set-alertmanager-api-host 'http://localhost:9093'
+    # Set Prometheus server
+    ./bin/ceph dashboard set-prometheus-api-host 'http://localhost:9090'
 
     # Disable PG autoscaling for new pools. This is a temporary workaround.
     # e2e tests for pools should be adapted to remove this workaround after
