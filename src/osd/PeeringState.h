@@ -52,8 +52,8 @@ class PeeringCtx;
 // [primary only] content recovery state
 struct BufferedRecoveryMessages {
   map<int, map<spg_t, pg_query_t> > query_map;
-  map<int, vector<pair<pg_notify_t, PastIntervals> > > info_map;
-  map<int, vector<pair<pg_notify_t, PastIntervals> > > notify_list;
+  map<int, vector<pg_notify_t>> info_map;
+  map<int, vector<pg_notify_t>> notify_list;
 
   BufferedRecoveryMessages() = default;
   BufferedRecoveryMessages(PeeringCtx &);
@@ -371,8 +371,8 @@ private:
   struct PeeringCtxWrapper {
     utime_t start_time;
     map<int, map<spg_t, pg_query_t> > &query_map;
-    map<int, vector<pair<pg_notify_t, PastIntervals> > > &info_map;
-    map<int, vector<pair<pg_notify_t, PastIntervals> > > &notify_list;
+    map<int, vector<pg_notify_t>> &info_map;
+    map<int, vector<pg_notify_t>> &notify_list;
     ObjectStore::Transaction &transaction;
     HBHandle * const handle = nullptr;
 
@@ -392,9 +392,8 @@ private:
 
     PeeringCtxWrapper(PeeringCtxWrapper &&ctx) = default;
 
-    void send_notify(pg_shard_t to,
-		     const pg_notify_t &info, const PastIntervals &pi) {
-      notify_list[to.osd].emplace_back(info, pi);
+    void send_notify(pg_shard_t to, const pg_notify_t &n) {
+      notify_list[to.osd].emplace_back(n);
     }
   };
 public:
@@ -570,7 +569,7 @@ public:
       return state->rctx->query_map;
     }
 
-    map<int, vector<pair<pg_notify_t, PastIntervals> > > &get_info_map() {
+    map<int, vector<pg_notify_t>> &get_info_map() {
       ceph_assert(state->rctx);
       return state->rctx->info_map;
     }
@@ -580,10 +579,9 @@ public:
       return *(state->rctx);
     }
 
-    void send_notify(pg_shard_t to,
-	       const pg_notify_t &info, const PastIntervals &pi) {
+    void send_notify(pg_shard_t to, const pg_notify_t &n) {
       ceph_assert(state->rctx);
-      state->rctx->send_notify(to, info, pi);
+      state->rctx->send_notify(to, n);
     }
   };
   friend class PeeringMachine;
@@ -1512,7 +1510,7 @@ public:
     ObjectStore::Transaction& t,
     epoch_t activation_epoch,
     map<int, map<spg_t,pg_query_t> >& query_map,
-    map<int, vector<pair<pg_notify_t, PastIntervals> > > *activator_map,
+    map<int, vector<pg_notify_t>> *activator_map,
     PeeringCtxWrapper &ctx);
 
   void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead);

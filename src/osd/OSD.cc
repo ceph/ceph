@@ -8985,30 +8985,25 @@ void OSD::dispatch_context(PeeringCtx &ctx, PG *pg, OSDMapRef curmap,
  */
 
 void OSD::do_notifies(
-  map<int,vector<pair<pg_notify_t,PastIntervals> > >& notify_list,
+  map<int,vector<pg_notify_t>>& notify_list,
   OSDMapRef curmap)
 {
-  for (map<int,
-	   vector<pair<pg_notify_t,PastIntervals> > >::iterator it =
-	 notify_list.begin();
-       it != notify_list.end();
-       ++it) {
-    if (!curmap->is_up(it->first)) {
-      dout(20) << __func__ << " skipping down osd." << it->first << dendl;
+  for (auto& [osd, notifies] : notify_list) {
+    if (!curmap->is_up(osd)) {
+      dout(20) << __func__ << " skipping down osd." << osd << dendl;
       continue;
     }
     ConnectionRef con = service.get_con_osd_cluster(
-      it->first, curmap->get_epoch());
+      osd, curmap->get_epoch());
     if (!con) {
-      dout(20) << __func__ << " skipping osd." << it->first
-	       << " (NULL con)" << dendl;
+      dout(20) << __func__ << " skipping osd." << osd << " (NULL con)" << dendl;
       continue;
     }
     service.maybe_share_map(con.get(), curmap);
-    dout(7) << __func__ << " osd." << it->first
-	    << " on " << it->second.size() << " PGs" << dendl;
+    dout(7) << __func__ << " osd." << osd
+	    << " on " << notifies.size() << " PGs" << dendl;
     MOSDPGNotify *m = new MOSDPGNotify(curmap->get_epoch(),
-				       std::move(it->second));
+				       std::move(notifies));
     con->send_message(m);
   }
 }
@@ -9044,35 +9039,27 @@ void OSD::do_queries(map<int, map<spg_t,pg_query_t> >& query_map,
 }
 
 
-void OSD::do_infos(map<int,
-		       vector<pair<pg_notify_t, PastIntervals> > >& info_map,
+void OSD::do_infos(map<int,vector<pg_notify_t>>& info_map,
 		   OSDMapRef curmap)
 {
-  for (map<int,
-	   vector<pair<pg_notify_t, PastIntervals> > >::iterator p =
-	 info_map.begin();
-       p != info_map.end();
-       ++p) {
-    if (!curmap->is_up(p->first)) {
-      dout(20) << __func__ << " skipping down osd." << p->first << dendl;
+  for (auto& [osd, notifies] : info_map) {
+    if (!curmap->is_up(osd)) {
+      dout(20) << __func__ << " skipping down osd." << osd << dendl;
       continue;
     }
-    for (vector<pair<pg_notify_t,PastIntervals> >::iterator i = p->second.begin();
-	 i != p->second.end();
-	 ++i) {
-      dout(20) << __func__ << " sending info " << i->first.info
-	       << " to shard " << p->first << dendl;
+    for (auto& i : notifies) {
+      dout(20) << __func__ << " sending info " << i.info
+	       << " to osd " << osd << dendl;
     }
     ConnectionRef con = service.get_con_osd_cluster(
-      p->first, curmap->get_epoch());
+      osd, curmap->get_epoch());
     if (!con) {
-      dout(20) << __func__ << " skipping osd." << p->first
-	       << " (NULL con)" << dendl;
+      dout(20) << __func__ << " skipping osd." << osd << " (NULL con)" << dendl;
       continue;
     }
     service.maybe_share_map(con.get(), curmap);
     MOSDPGInfo *m = new MOSDPGInfo(curmap->get_epoch());
-    m->pg_list = p->second;
+    m->pg_list = std::move(notifies);
     con->send_message(m);
   }
   info_map.clear();
@@ -9184,24 +9171,23 @@ void OSD::handle_fast_pg_notify(MOSDPGNotify* m)
   }
   int from = m->get_source().num();
   for (auto& p : m->get_pg_list()) {
-    spg_t pgid(p.first.info.pgid.pgid, p.first.to);
+    spg_t pgid(p.info.pgid.pgid, p.to);
     enqueue_peering_evt(
       pgid,
       PGPeeringEventRef(
 	std::make_shared<PGPeeringEvent>(
-	  p.first.epoch_sent,
-	  p.first.query_epoch,
+	  p.epoch_sent,
+	  p.query_epoch,
 	  MNotifyRec(
-	    pgid, pg_shard_t(from, p.first.from),
-	    p.first,
-	    m->get_connection()->get_features(),
-	    p.second),
+	    pgid, pg_shard_t(from, p.from),
+	    p,
+	    m->get_connection()->get_features()),
 	  true,
 	  new PGCreateInfo(
 	    pgid,
-	    p.first.query_epoch,
-	    p.first.info.history,
-	    p.second,
+	    p.query_epoch,
+	    p.info.history,
+	    p.past_intervals,
 	    false)
 	  )));
   }
@@ -9218,14 +9204,14 @@ void OSD::handle_fast_pg_info(MOSDPGInfo* m)
   int from = m->get_source().num();
   for (auto& p : m->pg_list) {
     enqueue_peering_evt(
-      spg_t(p.first.info.pgid.pgid, p.first.to),
+      spg_t(p.info.pgid.pgid, p.to),
       PGPeeringEventRef(
 	std::make_shared<PGPeeringEvent>(
-	  p.first.epoch_sent, p.first.query_epoch,
+	  p.epoch_sent, p.query_epoch,
 	  MInfoRec(
-	    pg_shard_t(from, p.first.from),
-	    p.first.info,
-	    p.first.epoch_sent)))
+	    pg_shard_t(from, p.from),
+	    p.info,
+	    p.epoch_sent)))
       );
   }
   m->put();
@@ -9316,14 +9302,13 @@ void OSD::handle_pg_query_nopg(const MQuery& q)
 	osdmap->get_epoch(), empty,
 	q.query.epoch_sent);
     } else {
-      vector<pair<pg_notify_t,PastIntervals>> ls;
+      vector<pg_notify_t> ls;
       ls.push_back(
-	make_pair(
-	  pg_notify_t(
-	    q.query.from, q.query.to,
-	    q.query.epoch_sent,
-	    osdmap->get_epoch(),
-	    empty),
+	pg_notify_t(
+	  q.query.from, q.query.to,
+	  q.query.epoch_sent,
+	  osdmap->get_epoch(),
+	  empty,
 	  PastIntervals()));
       m = new MOSDPGNotify(osdmap->get_epoch(), std::move(ls));
     }
