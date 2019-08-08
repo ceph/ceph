@@ -1612,7 +1612,7 @@ class CephManager:
         """
         Get status from cluster
         """
-        status = self.raw_cluster_cmd('status', '--format=json-pretty')
+        status = self.raw_cluster_cmd('status', '--format=json')
         return json.loads(status)
 
     def raw_osd_status(self):
