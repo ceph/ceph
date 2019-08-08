@@ -1,56 +1,8 @@
-<ng-template #notificationsTpl>
-  <div *ngIf="notifications.length > 0">
-    <button type="button" class="btn btn-light btn-block" (click)="removeAll()">
-      <i [ngClass]="[icons.trash]" aria-hidden="true"></i>
-      &nbsp;
-      <ng-container i18n>Remove all</ng-container>
-    </button>
-    <hr>
-    <div *ngFor="let notification of notifications">
-      <table>
-        <tr>
-          <td rowspan="3" class="icon-col text-center">
-            <span [ngClass]="[icons.stack, icons.large2x, notification.textClass]">
-              <i [ngClass]="[icons.circle, icons.stack2x]"></i>
-              <i [ngClass]="[icons.stack1x, icons.inverse, notification.iconClass]"></i>
-            </span>
-          </td>
-          <td>
-            <strong>{{ notification.title }}</strong>
-          </td>
-        </tr>
-        <tr>
-          <td [innerHtml]="notification.message">
-          </td>
-        </tr>
-        <tr>
-          <td [innerHtml]="notificationService.renderTimeAndApplicationHtml(notification)"></td>
-        </tr>
-      </table>
-      <hr>
-    </div>
-  </div>
-</ng-template>
-
-<ng-template #emptyTpl>
-  <div *ngIf="notifications.length === 0">
-    <div class="message"
-         i18n>There are no notifications.</div>
-  </div>
-</ng-template>
-
-<ng-template #popTpl>
-  <ng-container *ngTemplateOutlet="notificationsTpl"></ng-container>
-  <ng-container *ngTemplateOutlet="emptyTpl"></ng-container>
-</ng-template>
-
-<a [popover]="popTpl"
-   placement="bottom"
-   container="body"
-   outsideClick="true"
-   i18n-title
-   title="Recent Notifications">
+<a i18n-title
+   title="Tasks and Notifications"
+   [ngClass]="{ 'running': hasRunningTasks }"
+   (click)="toggleSidebar()">
   <i [ngClass]="[icons.bell]"></i>
-  <span i18n
-        class="d-md-none">Recent Notifications</span>
+  <span class="d-md-none"
+        i18n>Tasks and Notifications</span>
 </a>
