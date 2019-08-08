@@ -5862,7 +5862,7 @@ int BlueStore::_balance_bluefs_freespace()
   return ret;
 }
 
-int BlueStore::_open_collections(int *errors)
+int BlueStore::_open_collections(int64_t *errors)
 {
   dout(10) << __func__ << dendl;
   ceph_assert(coll_map.empty());
@@ -6857,7 +6857,7 @@ int BlueStore::_fsck_check_extents(
 void BlueStore::_fsck_check_pool_statfs(
   BlueStore::per_pool_statfs& expected_pool_statfs,
   bool need_per_pool_stats,
-  int& errors,
+  int64_t& errors,
   BlueStoreRepairer* repairer)
 {
   auto it = db->get_iterator(PREFIX_STAT);
@@ -7013,7 +7013,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  << " <<<START>>>"
 	  << (repair ? " repair" : " check")
 	  << (deep ? " (deep)" : " (shallow)") << " start" << dendl;
-  int errors = 0;
+  int64_t errors = 0;
   unsigned repaired = 0;
 
   typedef btree::btree_set<
