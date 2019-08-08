@@ -47,6 +47,8 @@ class Protocol {
       std::optional<utime_t> keepalive_ack,
       bool require_ack) = 0;
 
+  virtual void notify_write() {};
+
  public:
   const proto_t proto_type;
 
