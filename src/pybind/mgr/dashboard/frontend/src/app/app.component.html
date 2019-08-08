@@ -1,8 +1,26 @@
-<block-ui>
-  <cd-navigation *ngIf="!isLoginActive()"></cd-navigation>
-  <div class="container-fluid"
-       [ngClass]="{'full-height':isLoginActive(), 'dashboard':isDashboardPage()} ">
-    <cd-breadcrumbs></cd-breadcrumbs>
-    <router-outlet></router-outlet>
+<!-- Container for sidebar(s) + page content -->
+<ng-sidebar-container>
+
+  <!-- A sidebar -->
+  <ng-sidebar #sidebar
+              [(opened)]="sidebarOpened"
+              [animate]="sidebarAnimate"
+              position="end"
+              mode="over"
+              autoFocus="false"
+              closeOnClickOutside="true">
+    <cd-notifications-sidebar *ngIf="!isLoginActive()"></cd-notifications-sidebar>
+  </ng-sidebar>
+
+  <!-- Page content -->
+  <div ng-sidebar-content>
+    <block-ui>
+      <cd-navigation *ngIf="!isLoginActive()"></cd-navigation>
+      <div class="container-fluid"
+           [ngClass]="{'full-height':isLoginActive(), 'dashboard':isDashboardPage()} ">
+        <cd-breadcrumbs></cd-breadcrumbs>
+        <router-outlet></router-outlet>
+      </div>
+    </block-ui>
   </div>
-</block-ui>
+</ng-sidebar-container>
