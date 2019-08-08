@@ -1,4 +1,5 @@
 import pytest
+import logging
 from ceph_volume.tests.conftest import Factory
 from ceph_volume import process
 
@@ -28,6 +29,7 @@ def mock_call(monkeypatch):
 class TestCall(object):
 
     def test_stderr_terminal_and_logfile(self, mock_call, caplog, capsys):
+        caplog.set_level(logging.INFO)
         mock_call(stdout='stdout\n', stderr='some stderr message\n')
         process.call(['ls'], terminal_verbose=True)
         out, err = capsys.readouterr()
@@ -38,6 +40,7 @@ class TestCall(object):
         assert 'some stderr message' in err
 
     def test_stderr_terminal_and_logfile_off(self, mock_call, caplog, capsys):
+        caplog.set_level(logging.INFO)
         mock_call(stdout='stdout\n', stderr='some stderr message\n')
         process.call(['ls'], terminal_verbose=False)
         out, err = capsys.readouterr()
@@ -48,6 +51,7 @@ class TestCall(object):
         assert out == ''
 
     def test_verbose_on_failure(self, mock_call, caplog, capsys):
+        caplog.set_level(logging.INFO)
         mock_call(stdout='stdout\n', stderr='stderr\n', returncode=1)
         process.call(['ls'], terminal_verbose=False, logfile_verbose=False)
         out, err = capsys.readouterr()
@@ -55,9 +59,11 @@ class TestCall(object):
         assert 'Running command: ' in log_lines
         assert 'ls' in log_lines
         assert 'stderr' in log_lines
-        assert 'stdout: stdout' in out
+        assert 'stdout: stdout' in err
+        assert out == ''
 
     def test_silent_verbose_on_failure(self, mock_call, caplog, capsys):
+        caplog.set_level(logging.INFO)
         mock_call(stdout='stdout\n', stderr='stderr\n', returncode=1)
         process.call(['ls'], verbose_on_failure=False)
         out, err = capsys.readouterr()
