@@ -4135,6 +4135,7 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_cache_autotune_interval",
     "bluestore_no_per_pool_stats_tolerance",
     "bluestore_warn_on_legacy_statfs",
+    "bluestore_warn_on_no_per_pool_omap",
     NULL
   };
   return KEYS;
@@ -4146,6 +4147,9 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("bluestore_no_per_pool_stats_tolerance") ||
       changed.count("bluestore_warn_on_legacy_statfs")) {
     _check_legacy_statfs_alert();
+  }
+  if (changed.count("bluestore_warn_on_no_per_pool_omap")) {
+    _check_no_per_pool_omap_alert();
   }
 
   if (changed.count("bluestore_csum_type")) {
@@ -8453,6 +8457,18 @@ void BlueStore::_check_legacy_statfs_alert()
   legacy_statfs_alert = s;
 }
 
+void BlueStore::_check_no_per_pool_omap_alert()
+{
+  string s;
+  if (!per_pool_omap &&
+      cct->_conf->bluestore_warn_on_no_per_pool_omap) {
+    s = "legacy (not per-pool) omap detected, "
+      "suggest to run store repair to measure per-pool omap usage";
+  }
+  std::lock_guard l(qlock);
+  no_per_pool_omap_alert = s;
+}
+
 // ---------------
 // cache
 
@@ -9979,6 +9995,7 @@ int BlueStore::_open_super_meta()
     } else {
       dout(10) << __func__ << " per_pool_omap not present" << dendl;
     }
+    _check_no_per_pool_omap_alert();
   }
 
   _open_statfs();
@@ -14254,6 +14271,11 @@ void BlueStore::_log_alerts(osd_alert_list_t& alerts)
     alerts.emplace(
       "BLUEFS_SPILLOVER",
       spillover_alert);
+  }
+  if (!no_per_pool_omap_alert.empty()) {
+    alerts.emplace(
+      "BLUESTORE_NO_PER_POOL_OMAP",
+      no_per_pool_omap_alert);
   }
   string s0(failed_cmode);
 

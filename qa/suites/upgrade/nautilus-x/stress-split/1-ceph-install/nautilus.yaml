@@ -8,6 +8,7 @@ tasks:
     conf:
       global:
         bluestore_warn_on_legacy_statfs: false
+        bluestore warn on no per pool omap: false
 - exec:
     osd.0:
       - ceph osd require-osd-release nautilus
