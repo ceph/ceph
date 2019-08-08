@@ -26,7 +26,11 @@ import boto
 import os
 import sys
 
-bucket_name = sys.argv[1]
+if len(sys.argv) > 0:
+  bucket_name = sys.argv[1]
+else:
+  print "bucket name is empty"
+  sys.exit(0)
 conn = S3Connection(calling_format=OrdinaryCallingFormat(), is_secure=False,
                 aws_access_key_id=os.environ["AKEY"],
                 aws_secret_access_key=os.environ["SKEY"])
