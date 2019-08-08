@@ -8,6 +8,9 @@ logger = logging.getLogger(__name__)
 # TODO: add code to run non-ACL tests too.
 # TODO: get tests running with SCRATCH_DEV and SCRATCH_DIR.
 # TODO: make xfstests-dev tests running without running `make install`.
+# TODO: make xfstests-dev compatible with ceph-fuse. xfstests-dev remounts
+# CephFS before running tests using kernel, so ceph-fuse mounts are never
+# actually testsed.
 class XFSTestsDev(CephFSTestCase):
 
     def setUp(self):
