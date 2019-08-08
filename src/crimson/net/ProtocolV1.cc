@@ -680,7 +680,8 @@ ceph::bufferlist ProtocolV1::do_sweep_messages(
     const std::deque<MessageRef>& msgs,
     size_t num_msgs,
     bool require_keepalive,
-    std::optional<utime_t> _keepalive_ack)
+    std::optional<utime_t> _keepalive_ack,
+    bool require_ack)
 {
   static const size_t RESERVE_MSG_SIZE = sizeof(CEPH_MSGR_TAG_MSG) +
                                          sizeof(ceph_msg_header) +
@@ -709,6 +710,15 @@ ceph::bufferlist ProtocolV1::do_sweep_messages(
     logger().trace("{} write keepalive2 ack {}", conn, *_keepalive_ack);
     k.ack.stamp = ceph_timespec(*_keepalive_ack);
     bl.append(create_static(k.ack));
+  }
+
+  if (require_ack) {
+    // XXX: we decided not to support lossless connection in v1. as the
+    // client's default policy is
+    // Messenger::Policy::lossy_client(CEPH_FEATURE_OSDREPLYMUX) which is
+    // lossy. And by the time of crimson-osd's GA, the in-cluster communication
+    // will all be performed using v2 protocol.
+    ceph_abort("lossless policy not supported for v1");
   }
 
   std::for_each(msgs.begin(), msgs.begin()+num_msgs, [this, &bl](const MessageRef& msg) {

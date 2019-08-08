@@ -1540,7 +1540,8 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
     const std::deque<MessageRef>& msgs,
     size_t num_msgs,
     bool require_keepalive,
-    std::optional<utime_t> _keepalive_ack)
+    std::optional<utime_t> _keepalive_ack,
+    bool require_ack)
 {
   ceph::bufferlist bl;
 
@@ -1554,6 +1555,11 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
     bl.append(keepalive_ack_frame.get_buffer(session_stream_handlers));
   }
 
+  if (require_ack && !num_msgs) {
+    auto ack_frame = AckFrame::Encode(conn.in_seq);
+    bl.append(ack_frame.get_buffer(session_stream_handlers));
+  }
+
   std::for_each(msgs.begin(), msgs.begin()+num_msgs, [this, &bl](const MessageRef& msg) {
     // TODO: move to common code
     // set priority
@@ -1563,8 +1569,6 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
 
     ceph_assert(!msg->get_seq() && "message already has seq");
     msg->set_seq(++conn.out_seq);
-    uint64_t ack_seq = conn.in_seq;
-    // ack_left = 0;
 
     ceph_msg_header &header = msg->get_header();
     ceph_msg_footer &footer = msg->get_footer();
@@ -1573,7 +1577,7 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
                              header.type,       header.priority,
                              header.version,
                              0,                 header.data_off,
-                             ack_seq,
+                             conn.in_seq,
                              footer.flags,      header.compat_version,
                              header.reserved};
 
@@ -1661,9 +1665,7 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
     conn.in_seq = message->get_seq();
     logger().debug("{} <== #{} === {} ({})",
 		   conn, message->get_seq(), *message, message->get_type());
-    if (!conn.policy.lossy) {
-      // ++ack_left;
-    }
+    notify_ack();
     ack_writes(current_header.ack_seq);
 
     // TODO: change MessageRef with seastar::shared_ptr
