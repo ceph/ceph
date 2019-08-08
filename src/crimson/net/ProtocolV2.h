@@ -149,7 +149,6 @@ class ProtocolV2 final : public Protocol {
 
   // READY
   seastar::future<> read_message(utime_t throttle_stamp);
-  void handle_message_ack(seq_num_t seq);
   void execute_ready();
 
   // STANDBY

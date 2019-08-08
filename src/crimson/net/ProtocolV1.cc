@@ -459,12 +459,12 @@ seastar::future<stop_t> ProtocolV1::replace_existing(
     reply_tag = CEPH_MSGR_TAG_READY;
   }
   if (!existing->is_lossy()) {
-    // reset the in_seq if this is a hard reset from peer,
-    // otherwise we respect our original connection's value
-    conn.in_seq = is_reset_from_peer ? 0 : existing->rx_seq_num();
-    // steal outgoing queue and out_seq
-    existing->requeue_sent();
-    std::tie(conn.out_seq, conn.out_q) = existing->get_out_queue();
+    // XXX: we decided not to support lossless connection in v1. as the
+    // client's default policy is
+    // Messenger::Policy::lossy_client(CEPH_FEATURE_OSDREPLYMUX) which is
+    // lossy. And by the time
+    // will all be performed using v2 protocol.
+    ceph_abort("lossless policy not supported for v1");
   }
   seastar::do_with(
     std::move(existing),

@@ -96,6 +96,48 @@ void Protocol::notify_keepalive_ack(utime_t _keepalive_ack)
   write_event();
 }
 
+void Protocol::requeue_sent()
+{
+  assert(write_state != write_state_t::open);
+  if (conn.sent.empty()) {
+    return;
+  }
+
+  conn.out_seq -= conn.sent.size();
+  logger().debug("{} requeue {} items, revert out_seq to {}",
+                 conn, conn.sent.size(), conn.out_seq);
+  for (MessageRef& msg : conn.sent) {
+    msg->clear_payload();
+    msg->set_seq(0);
+  }
+  conn.out_q.insert(conn.out_q.begin(),
+                    std::make_move_iterator(conn.sent.begin()),
+                    std::make_move_iterator(conn.sent.end()));
+  conn.sent.clear();
+}
+
+void Protocol::requeue_up_to(seq_num_t seq)
+{
+  assert(write_state != write_state_t::open);
+  if (conn.sent.empty() && conn.out_q.empty()) {
+    logger().debug("{} nothing to requeue, reset out_seq from {} to seq {}",
+                   conn, conn.out_seq, seq);
+    conn.out_seq = seq;
+    return;
+  }
+  logger().debug("{} discarding sent items by seq {} (sent_len={}, out_seq={})",
+                 conn, seq, conn.sent.size(), conn.out_seq);
+  while (!conn.sent.empty()) {
+    auto cur_seq = conn.sent.front()->get_seq();
+    if (cur_seq == 0 || cur_seq > seq) {
+      break;
+    } else {
+      conn.sent.pop_front();
+    }
+  }
+  requeue_sent();
+}
+
 void Protocol::reset_write()
 {
   assert(write_state != write_state_t::open);
@@ -104,6 +146,18 @@ void Protocol::reset_write()
   conn.sent.clear();
   need_keepalive = false;
   keepalive_ack = std::nullopt;
+}
+
+void Protocol::ack_writes(seq_num_t seq)
+{
+  if (conn.policy.lossy) {  // lossy connections don't keep sent messages
+    return;
+  }
+  while (!conn.sent.empty() && conn.sent.front()->get_seq() <= seq) {
+    logger().trace("{} got ack seq {} >= {}, pop {}",
+                   conn, seq, conn.sent.front()->get_seq(), conn.sent.front());
+    conn.sent.pop_front();
+  }
 }
 
 seastar::future<stop_t> Protocol::do_write_dispatch_sweep()
@@ -118,6 +172,11 @@ seastar::future<stop_t> Protocol::do_write_dispatch_sweep()
 
     conn.pending_q.clear();
     conn.pending_q.swap(conn.out_q);
+    if (!conn.policy.lossy) {
+      conn.sent.insert(conn.sent.end(),
+                       conn.pending_q.begin(),
+                       conn.pending_q.end());
+    }
     // sweep all pending writes with the concrete Protocol
     return socket->write(do_sweep_messages(
         conn.pending_q, num_msgs, need_keepalive, keepalive_ack))

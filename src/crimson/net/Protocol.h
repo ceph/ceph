@@ -102,6 +102,10 @@ class Protocol {
 
   void notify_keepalive_ack(utime_t keepalive_ack);
 
+  void requeue_up_to(seq_num_t seq);
+
+  void requeue_sent();
+
   void reset_write();
 
   bool is_queued() const {
@@ -109,6 +113,8 @@ class Protocol {
             need_keepalive ||
             keepalive_ack.has_value());
   }
+
+  void ack_writes(seq_num_t seq);
 
  private:
   write_state_t write_state = write_state_t::none;

@@ -101,23 +101,12 @@ class SocketConnection : public Connection {
   void start_accept(SocketFRef&& socket,
                     const entity_addr_t& peer_addr);
 
-  seq_num_t rx_seq_num() const {
-    return in_seq;
-  }
-
   bool is_server_side() const {
     return policy.server;
   }
 
   bool is_lossy() const {
     return policy.lossy;
-  }
-
-  /// move all messages in the sent list back into the queue
-  void requeue_sent();
-
-  std::tuple<seq_num_t, std::deque<MessageRef>> get_out_queue() {
-    return {out_seq, std::move(out_q)};
   }
 
   friend class Protocol;
