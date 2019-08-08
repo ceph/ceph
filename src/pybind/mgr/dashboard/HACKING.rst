@@ -562,19 +562,19 @@ Alternatively, you can use Python's native package installation method::
   $ pip install tox
   $ pip install coverage
 
-To run the tests, run ``run-tox.sh`` in the dashboard directory (where
+To run the tests, run ``run_tox.sh`` in the dashboard directory (where
 ``tox.ini`` is located)::
 
   ## Run Python 2+3 tests+lint commands:
-  $ ./run-tox.sh
+  $ ../../../script/run_tox.sh --tox-env py27-cov,py27-lint,py27-check,py3-cov,py3-lint,py3-check
 
   ## Run Python 3 tests+lint commands:
-  $ WITH_PYTHON2=OFF ./run-tox.sh
+  $ ../../../script/run_tox.sh --tox-env py3-cov,py3-lint,py3-check
 
   ## Run Python 3 arbitrary command (e.g. 1 single test):
-  $ WITH_PYTHON2=OFF ./run-tox.sh pytest tests/test_rgw_client.py::RgwClientTest::test_ssl_verify
+  $ ../../../script/run_tox.sh --tox-env py3-run "" -- pytest tests/test_rgw_client.py::RgwClientTest::test_ssl_verify
 
-You can also run tox instead of ``run-tox.sh``::
+You can also run tox instead of ``run_tox.sh``::
 
   ## Run Python 3 tests command:
   $ CEPH_BUILD_DIR=.tox tox -e py3-cov

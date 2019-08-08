@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
 
+set -x
 set -e
 
 if [ `uname` = FreeBSD ]; then
