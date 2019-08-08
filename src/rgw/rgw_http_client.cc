@@ -108,12 +108,7 @@ struct rgw_http_req_data : public RefCountedObject {
     }
   }
 
-  bool _is_done() {
-    return done;
-  }
-
   bool is_done() {
-    std::lock_guard l{lock};
     return done;
   }
 
@@ -895,7 +890,7 @@ void RGWHTTPManager::_unlink_request(rgw_http_req_data *req_data)
   if (req_data->curl_handle) {
     curl_multi_remove_handle((CURLM *)multi_handle, req_data->get_easy_handle());
   }
-  if (!req_data->_is_done()) {
+  if (!req_data->is_done()) {
     _finish_request(req_data, -ECANCELED);
   }
 }
