@@ -393,12 +393,12 @@ class CephFSShell(Cmd):
             return self.delimiter_complete(text, line, begidx, endidx, completions, '/')
         return completions
 
-    def onecmd(self, line):
+    def onecmd(self, line, **kwargs):
         """
         Global error catcher
         """
         try:
-            res = Cmd.onecmd(self, line)
+            res = Cmd.onecmd(self, line, **kwargs)
             if self.interactive:
                 self.set_prompt()
             return res
