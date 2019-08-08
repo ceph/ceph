@@ -70,4 +70,53 @@ describe('Images page', () => {
       await pools.exist(poolName, false);
     });
   });
+
+  describe('move to trash, restore and purge image tests', () => {
+    const poolName = 'trashpool';
+    const imageName = 'trashimage';
+    const newImageName = 'newtrashimage';
+
+    beforeAll(async () => {
+      await pools.navigateTo('create'); // Need pool for image testing
+      await pools.create(poolName, 8, 'rbd');
+      await pools.navigateTo();
+      await pools.exist(poolName, true);
+
+      await images.navigateTo(); // Need image for trash testing
+      await images.createImage(imageName, poolName, '1');
+      await expect(images.getTableCell(imageName).isPresent()).toBe(true);
+    });
+
+    it('should move the image to the trash', async () => {
+      await images.moveToTrash(imageName);
+      await expect(images.getTableCell(imageName).isPresent()).toBe(true);
+    });
+
+    it('should restore image to images table', async () => {
+      await images.restoreImage(imageName, newImageName);
+      await expect(images.getTableCell(newImageName).isPresent()).toBe(true);
+    });
+
+    it('should purge trash in images trash tab', async () => {
+      await images.navigateTo();
+      // Have had issues with image not restoring fast enough, thus these tests/waits are here
+      await images.waitPresence(
+        images.getTableCell(newImageName),
+        'Timed out waiting for image to restore'
+      );
+      await images.waitClickable(
+        images.getTableCell(newImageName),
+        'Timed out waiting for image to be clickable'
+      );
+      await images.moveToTrash(newImageName);
+      await images.purgeTrash(newImageName, poolName);
+    });
+
+    afterAll(async () => {
+      await pools.navigateTo();
+      await pools.delete(poolName); // Deletes images test pool
+      await pools.navigateTo();
+      await pools.exist(poolName, false);
+    });
+  });
 });
