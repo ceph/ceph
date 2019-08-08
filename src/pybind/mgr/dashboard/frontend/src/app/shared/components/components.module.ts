@@ -8,6 +8,7 @@ import { AlertModule } from 'ngx-bootstrap/alert';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ModalModule } from 'ngx-bootstrap/modal';
 import { PopoverModule } from 'ngx-bootstrap/popover';
+import { ProgressbarModule } from 'ngx-bootstrap/progressbar';
 import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
 import { DirectivesModule } from '../directives/directives.module';
@@ -22,6 +23,7 @@ import { HelperComponent } from './helper/helper.component';
 import { LanguageSelectorComponent } from './language-selector/language-selector.component';
 import { LoadingPanelComponent } from './loading-panel/loading-panel.component';
 import { ModalComponent } from './modal/modal.component';
+import { NotificationsSidebarComponent } from './notifications-sidebar/notifications-sidebar.component';
 import { RefreshSelectorComponent } from './refresh-selector/refresh-selector.component';
 import { SelectBadgesComponent } from './select-badges/select-badges.component';
 import { SelectComponent } from './select/select.component';
@@ -37,6 +39,7 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     ReactiveFormsModule,
     AlertModule.forRoot(),
     PopoverModule.forRoot(),
+    ProgressbarModule.forRoot(),
     TooltipModule.forRoot(),
     ChartsModule,
     ReactiveFormsModule,
@@ -55,6 +58,7 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     UsageBarComponent,
     LoadingPanelComponent,
     ModalComponent,
+    NotificationsSidebarComponent,
     CriticalConfirmationModalComponent,
     ConfirmationModalComponent,
     LanguageSelectorComponent,
@@ -76,6 +80,7 @@ import { ViewCacheComponent } from './view-cache/view-cache.component';
     LoadingPanelComponent,
     UsageBarComponent,
     ModalComponent,
+    NotificationsSidebarComponent,
     LanguageSelectorComponent,
     GrafanaComponent,
     SelectComponent,

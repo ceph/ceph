@@ -4,6 +4,7 @@ import { NotificationType } from '../enum/notification-type.enum';
 
 export class CdNotificationConfig {
   applicationClass: string;
+  isFinishedTask = false;
 
   private classes = {
     Ceph: 'ceph-icon',
@@ -25,6 +26,7 @@ export class CdNotification extends CdNotificationConfig {
   timestamp: string;
   textClass: string;
   iconClass: string;
+  duration: number;
 
   private textClasses = ['text-danger', 'text-info', 'text-success'];
   private iconClasses = [Icons.warning, Icons.info, Icons.check];
@@ -37,5 +39,6 @@ export class CdNotification extends CdNotificationConfig {
     this.timestamp = new Date().toJSON();
     this.iconClass = this.iconClasses[this.type];
     this.textClass = this.textClasses[this.type];
+    this.isFinishedTask = config.isFinishedTask;
   }
 }

@@ -5,7 +5,7 @@ export class CrushMapPageHelper extends PageHelper {
   pages = { index: '/#/crush-map' };
 
   getPageTitle() {
-    return $('.card-header').getText();
+    return $('cd-crushmap .card-header').getText();
   }
 
   getCrushNode(idx) {

@@ -8,9 +8,11 @@ import { JwtModule } from '@auth0/angular-jwt';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { BlockUIModule } from 'ng-block-ui';
 import { NgBootstrapFormValidationModule } from 'ng-bootstrap-form-validation';
+import { SidebarModule } from 'ng-sidebar';
 import { AccordionModule } from 'ngx-bootstrap/accordion';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { TabsModule } from 'ngx-bootstrap/tabs';
+import { WebStorageModule } from 'ngx-store';
 import { ToastrModule } from 'ngx-toastr';
 
 import { AppRoutingModule } from './app-routing.module';
@@ -52,7 +54,9 @@ registerLocaleData(LocaleHelper.getLocaleData(), LocaleHelper.getLocale());
         tokenGetter: jwtTokenGetter
       }
     }),
-    NgBootstrapFormValidationModule.forRoot()
+    NgBootstrapFormValidationModule.forRoot(),
+    SidebarModule.forRoot(),
+    WebStorageModule
   ],
   exports: [SharedModule],
   providers: [
