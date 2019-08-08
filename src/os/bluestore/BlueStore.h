@@ -41,6 +41,7 @@
 
 #include "bluestore_types.h"
 #include "BlockDevice.h"
+#include "BlueFS.h"
 #include "common/EventTrace.h"
 
 class Allocator;
@@ -124,6 +125,7 @@ enum {
 };
 
 class BlueStore : public ObjectStore,
+                  public BlueFSDeviceExpander,
 		  public md_config_obs_t {
   // -----------------------------------------------------
   // types
@@ -2111,6 +2113,13 @@ private:
   void _set_alloc_sizes();
   void _set_blob_size();
   void _set_finisher_num();
+  int _is_bluefs(bool create, bool* ret);
+  /*
+   * opens both DB and dependant super_meta, FreelistManager and allocator
+   * in the proper order
+   */
+  int _open_db_and_around();
+  void _close_db_and_around();
 
   int _open_bdev(bool create);
   void _close_bdev();
@@ -2303,6 +2312,8 @@ public:
   int write_meta(const std::string& key, const std::string& value) override;
   int read_meta(const std::string& key, std::string *value) override;
 
+  int cold_open();
+  int cold_close();
 
   int fsck(bool deep) override {
     return _fsck(deep, false);
@@ -2846,6 +2857,8 @@ private:
 			CollectionRef& c,
 			CollectionRef& d,
 			unsigned bits, int rem);
+private:
+  size_t available_freespace(uint64_t alloc_size) override;
 };
 
 inline ostream& operator<<(ostream& out, const BlueStore::OpSequencer& s) {

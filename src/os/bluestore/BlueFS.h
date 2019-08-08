@@ -38,6 +38,19 @@ enum {
   l_bluefs_last,
 };
 
+class BlueFSDeviceExpander {
+protected:
+  ~BlueFSDeviceExpander() {}
+public:
+  /** Reports amount of space that can be transferred to BlueFS.
+   * This gives either current state, when alloc_size is currently used
+   * BlueFS's size, or simulation when alloc_size is different.
+   * @params
+   * alloc_size - allocation unit size to check
+   */
+  virtual size_t available_freespace(uint64_t alloc_size) = 0;
+};
+
 class BlueFS {
 public:
   CephContext* cct;
@@ -255,6 +268,11 @@ private:
   vector<Allocator*> alloc;                   ///< allocators for bdevs
   vector<interval_set<uint64_t>> pending_release; ///< extents to release
 
+  BlueFSDeviceExpander* slow_dev_expander = nullptr;
+
+  class SocketHook;
+  SocketHook* asok_hook = nullptr;
+
   void _init_logger();
   void _shutdown_logger();
   void _update_logger_stats();
@@ -267,6 +285,8 @@ private:
   FileRef _get_file(uint64_t ino);
   void _drop_link(FileRef f);
 
+  int _get_slow_device_id() { return bdev[BDEV_SLOW] ? BDEV_SLOW : BDEV_DB; }
+  const char* get_device_name(unsigned id);
   int _allocate(uint8_t bdev, uint64_t len,
 		bluefs_fnode_t* node);
   int _flush_range(FileWriter *h, uint64_t offset, uint64_t length);
@@ -394,6 +414,9 @@ public:
   /// sync any uncommitted state to disk
   void sync_metadata();
 
+   void set_slow_device_expander(BlueFSDeviceExpander* a) {
+    slow_dev_expander = a;
+  }
   int add_block_device(unsigned bdev, const string& path);
   bool bdev_support_label(unsigned id);
   uint64_t get_block_device_size(unsigned bdev);

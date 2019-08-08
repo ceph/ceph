@@ -17,7 +17,7 @@ class BitmapAllocator : public Allocator,
   CephContext* cct;
 
 public:
-  BitmapAllocator(CephContext* _cct, int64_t capacity, int64_t alloc_unit);
+  BitmapAllocator(CephContext* _cct, int64_t capacity, int64_t alloc_unit, const std::string& name);
   ~BitmapAllocator() override
   {
   }
@@ -36,6 +36,7 @@ public:
   }
 
   void dump() override;
+  void dump(std::function<void(uint64_t offset, uint64_t length)> notify) override;
   double get_fragmentation(uint64_t) override
   {
     return _get_fragmentation();
