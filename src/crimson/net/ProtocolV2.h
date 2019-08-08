@@ -72,6 +72,8 @@ class ProtocolV2 final : public Protocol {
   uint64_t peer_global_seq = 0;
   uint64_t connect_seq = 0;
 
+  seastar::future<> execution_done = seastar::now();
+
  // TODO: Frame related implementations, probably to a separate class.
  private:
   bool record_io = false;
