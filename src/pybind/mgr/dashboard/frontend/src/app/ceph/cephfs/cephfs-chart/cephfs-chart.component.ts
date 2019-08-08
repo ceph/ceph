@@ -1,5 +1,6 @@
 import { Component, ElementRef, Input, OnChanges, OnInit, ViewChild } from '@angular/core';
 
+import { ChartDataSets, ChartOptions, ChartPoint, ChartType } from 'chart.js';
 import * as _ from 'lodash';
 import * as moment from 'moment';
 
@@ -22,7 +23,84 @@ export class CephfsChartComponent implements OnChanges, OnInit {
   lhsCounter = 'mds_mem.ino';
   rhsCounter = 'mds_server.handle_client_request';
 
-  chart: any;
+  chart: {
+    datasets: ChartDataSets[];
+    options: ChartOptions;
+    chartType: ChartType;
+  } = {
+    datasets: [
+      {
+        label: this.lhsCounter,
+        yAxisID: 'LHS',
+        data: [],
+        lineTension: 0.1
+      },
+      {
+        label: this.rhsCounter,
+        yAxisID: 'RHS',
+        data: [],
+        lineTension: 0.1
+      }
+    ],
+    options: {
+      title: {
+        text: '',
+        display: true
+      },
+      responsive: true,
+      maintainAspectRatio: false,
+      legend: {
+        position: 'top'
+      },
+      scales: {
+        xAxes: [
+          {
+            position: 'top',
+            type: 'time',
+            time: {
+              displayFormats: {
+                quarter: 'MMM YYYY'
+              }
+            },
+            ticks: {
+              maxRotation: 0
+            }
+          }
+        ],
+        yAxes: [
+          {
+            id: 'LHS',
+            type: 'linear',
+            position: 'left'
+          },
+          {
+            id: 'RHS',
+            type: 'linear',
+            position: 'right'
+          }
+        ]
+      },
+      tooltips: {
+        enabled: false,
+        mode: 'index',
+        intersect: false,
+        position: 'nearest',
+        callbacks: {
+          // Pick the Unix timestamp of the first tooltip item.
+          title: (tooltipItems, data): string => {
+            let ts = 0;
+            if (tooltipItems.length > 0) {
+              const item = tooltipItems[0];
+              const point = data.datasets[item.datasetIndex].data[item.index] as ChartPoint;
+              ts = point.x as number;
+            }
+            return ts.toString();
+          }
+        }
+      }
+    },
+    chartType: 'line'
+  };
 
   constructor() {}
 
@@ -30,128 +108,58 @@ export class CephfsChartComponent implements OnChanges, OnInit {
     if (_.isUndefined(this.mdsCounter)) {
       return;
     }
-
-    const getTitle = (ts) => {
-      return moment(ts, 'x').format('LTS');
-    };
-
-    const getStyleTop = (tooltip) => {
-      return tooltip.caretY - tooltip.height - 15 + 'px';
-    };
-
-    const getStyleLeft = (tooltip) => {
-      return tooltip.caretX + 'px';
-    };
-
-    const chartTooltip = new ChartTooltip(
-      this.chartCanvas,
-      this.chartTooltip,
-      getStyleLeft,
-      getStyleTop
-    );
-    chartTooltip.getTitle = getTitle;
-    chartTooltip.checkOffset = true;
-
-    const lhsData = this.convert_timeseries(this.mdsCounter[this.lhsCounter]);
-    const rhsData = this.delta_timeseries(this.mdsCounter[this.rhsCounter]);
-
-    this.chart = {
-      datasets: [
-        {
-          label: this.lhsCounter,
-          yAxisID: 'LHS',
-          data: lhsData,
-          tension: 0.1
-        },
-        {
-          label: this.rhsCounter,
-          yAxisID: 'RHS',
-          data: rhsData,
-          tension: 0.1
-        }
-      ],
-      options: {
-        title: {
-          text: this.mdsCounter.name,
-          display: true
-        },
-        responsive: true,
-        maintainAspectRatio: false,
-        legend: {
-          position: 'top'
-        },
-        scales: {
-          xAxes: [
-            {
-              position: 'top',
-              type: 'time',
-              time: {
-                displayFormats: {
-                  quarter: 'MMM YYYY'
-                }
-              },
-              ticks: {
-                maxRotation: 0
-              }
-            }
-          ],
-          yAxes: [
-            {
-              id: 'LHS',
-              type: 'linear',
-              position: 'left',
-              min: 0
-            },
-            {
-              id: 'RHS',
-              type: 'linear',
-              position: 'right',
-              min: 0
-            }
-          ]
-        },
-        tooltips: {
-          enabled: false,
-          mode: 'index',
-          intersect: false,
-          position: 'nearest',
-          callbacks: {
-            // Pick the Unix timestamp of the first tooltip item.
-            title: function(tooltipItems, data) {
-              let ts = 0;
-              if (tooltipItems.length > 0) {
-                const item = tooltipItems[0];
-                ts = data.datasets[item.datasetIndex].data[item.index].x;
-              }
-              return ts;
-            }
-          },
-          custom: (tooltip) => {
-            chartTooltip.customTooltips(tooltip);
-          }
-        }
-      },
-      chartType: 'line'
-    };
+    this.setChartTooltip();
+    this.updateChart();
   }
 
   ngOnChanges() {
-    if (!this.chart) {
+    if (_.isUndefined(this.mdsCounter)) {
       return;
     }
-
-    const lhsData = this.convert_timeseries(this.mdsCounter[this.lhsCounter]);
-    const rhsData = this.delta_timeseries(this.mdsCounter[this.rhsCounter]);
-
-    this.chart.datasets[0].data = lhsData;
-    this.chart.datasets[1].data = rhsData;
+    this.updateChart();
   }
 
-  // Convert ceph-mgr's time series format (list of 2-tuples
-  // with seconds-since-epoch timestamps) into what chart.js
-  // can handle (list of objects with millisecs-since-epoch
-  // timestamps)
-  convert_timeseries(sourceSeries) {
+  private setChartTooltip() {
+    const chartTooltip = new ChartTooltip(
+      this.chartCanvas,
+      this.chartTooltip,
+      (tooltip) => tooltip.caretX + 'px',
+      (tooltip) => tooltip.caretY - tooltip.height - 15 + 'px'
+    );
+    chartTooltip.getTitle = (ts) => moment(ts, 'x').format('LTS');
+    chartTooltip.checkOffset = true;
+    const chartOptions: ChartOptions = {
+      title: {
+        text: this.mdsCounter.name
+      },
+      tooltips: {
+        custom: (tooltip) => chartTooltip.customTooltips(tooltip)
+      }
+    };
+    _.merge(this.chart, { options: chartOptions });
+  }
+
+  private updateChart() {
+    const chartDataSets: ChartDataSets[] = [
+      {
+        data: this.convertTimeSeries(this.mdsCounter[this.lhsCounter])
+      },
+      {
+        data: this.deltaTimeSeries(this.mdsCounter[this.rhsCounter])
+      }
+    ];
+    _.merge(this.chart, {
+      datasets: chartDataSets
+    });
+  }
+
+  /**
+   * Convert ceph-mgr's time series format (list of 2-tuples
+   * with seconds-since-epoch timestamps) into what chart.js
+   * can handle (list of objects with millisecs-since-epoch
+   * timestamps)
+   */
+  private convertTimeSeries(sourceSeries) {
     const data = [];
     _.each(sourceSeries, (dp) => {
       data.push({
@@ -159,11 +167,10 @@ export class CephfsChartComponent implements OnChanges, OnInit {
         y: dp[1]
       });
     });
-
     return data;
   }
 
-  delta_timeseries(sourceSeries) {
+  private deltaTimeSeries(sourceSeries) {
     let i;
     let prev = sourceSeries[0];
     const result = [];
