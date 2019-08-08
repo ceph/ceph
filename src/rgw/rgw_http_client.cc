@@ -60,12 +60,14 @@ struct rgw_http_req_data : public RefCountedObject {
   auto async_wait(ExecutionContext& ctx, CompletionToken&& token) {
     boost::asio::async_completion<CompletionToken, Signature> init(token);
     auto& handler = init.completion_handler;
-    completion = Completion::create(ctx.get_executor(), std::move(handler));
+    {
+      std::unique_lock l{lock};
+      completion = Completion::create(ctx.get_executor(), std::move(handler));
+    }
     return init.result.get();
   }
 
   int wait(optional_yield y) {
-    std::unique_lock l{lock};
     if (done) {
       return ret;
     }
@@ -82,6 +84,7 @@ struct rgw_http_req_data : public RefCountedObject {
       dout(20) << "WARNING: blocking http request" << dendl;
     }
 #endif
+    std::unique_lock l{lock};
     cond.wait(l);
     return ret;
   }
