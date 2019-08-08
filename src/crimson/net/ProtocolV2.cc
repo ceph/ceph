@@ -790,9 +790,10 @@ ProtocolV2::client_reconnect()
                                           global_seq,
                                           connect_seq,
                                           conn.in_seq);
-  logger().debug("{} WRITE ReconnectFrame: client_cookie={},"
+  logger().debug("{} WRITE ReconnectFrame: addrs={}, client_cookie={},"
                  " server_cookie={}, gs={}, cs={}, msg_seq={}",
-                 conn, client_cookie, server_cookie,
+                 conn, messenger.get_myaddrs(),
+                 client_cookie, server_cookie,
                  global_seq, connect_seq, conn.in_seq);
   return write_frame(reconnect).then([this] {
     return read_main_preamble();
@@ -806,7 +807,7 @@ ProtocolV2::client_reconnect()
                         conn, retry.global_seq());
           return messenger.get_global_seq(retry.global_seq()).then([this] (auto gs) {
             global_seq = gs;
-            logger().warn("{} UPDATE: gs={}", conn, global_seq);
+            logger().warn("{} UPDATE: gs={} for retry global", conn, global_seq);
             return client_reconnect();
           });
         });
@@ -1330,9 +1331,10 @@ ProtocolV2::server_reconnect()
     // handle_reconnect() logic
     auto reconnect = ReconnectFrame::Decode(rx_segments_data.back());
 
-    logger().debug("{} GOT ReconnectFrame: client_cookie={}, server_cookie={},"
-                   " gs={}, cs={}, msg_seq={}",
-                   conn, reconnect.client_cookie(), reconnect.server_cookie(),
+    logger().debug("{} GOT ReconnectFrame: addrs={}, client_cookie={},"
+                   " server_cookie={}, gs={}, cs={}, msg_seq={}",
+                   conn, reconnect.addrs(),
+                   reconnect.client_cookie(), reconnect.server_cookie(),
                    reconnect.global_seq(), reconnect.connect_seq(),
                    reconnect.msg_seq());
 
@@ -1613,7 +1615,7 @@ ProtocolV2::send_server_ident()
           seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
       .handle_exception([this] (std::exception_ptr eptr) {
         logger().error("{} ms_handle_accept caught exception: {}", conn, eptr);
-        ceph_abort("unecpected exception from ms_handle_accept()");
+        ceph_abort("unexpected exception from ms_handle_accept()");
       });
     });
 
@@ -1904,7 +1906,7 @@ void ProtocolV2::execute_ready()
             return read_frame_payload().then([this] {
               // handle_message_ack() logic
               auto ack = AckFrame::Decode(rx_segments_data.back());
-              logger().debug("{} GOT AckFrame: seq={}", ack.seq());
+              logger().debug("{} GOT AckFrame: seq={}", conn, ack.seq());
               ack_writes(ack.seq());
             });
           case Tag::KEEPALIVE2:
