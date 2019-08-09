@@ -8047,17 +8047,16 @@ void MDCache::dispatch(const cref_t<Message> &m)
   }
 }
 
-int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,     // who
-                           const filepath& path,                   // what
-                           vector<CDentry*> *pdnvec,         // result
-                           CInode **pin,
-                           int onfail)
+int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
+                           const filepath& path, int flags,
+                           vector<CDentry*> *pdnvec, CInode **pin)
 {
-  bool discover = (onfail == MDS_TRAVERSE_DISCOVER);
-  bool null_okay = (onfail == MDS_TRAVERSE_DISCOVERXLOCK);
-  bool forward = (onfail == MDS_TRAVERSE_FORWARD);
+  bool discover = (flags & MDS_TRAVERSE_DISCOVER);
+  bool forward = !discover;
+  bool last_xlocked = (flags & MDS_TRAVERSE_LAST_XLOCKED);
 
-  ceph_assert(!forward || mdr);  // forward requires a request
+  if (forward)
+    ceph_assert(mdr);  // forward requires a request
 
   snapid_t snapid = CEPH_NOSNAP;
   if (mdr)
@@ -8156,7 +8155,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,     // who
         // discover?
 	dout(10) << "traverse: need dirfrag " << fg << ", doing discover from " << *cur << dendl;
 	discover_path(cur, snapid, path.postfixpath(depth), cf.build(),
-		      null_okay);
+		      last_xlocked);
 	if (mds->logger) mds->logger->inc(l_mds_traverse_discover);
         return 1;
       }
@@ -8193,7 +8192,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,     // who
     CDentry::linkage_t *dnl = dn ? dn->get_projected_linkage() : 0;
 
     // null and last_bit and xlocked by me?
-    if (dnl && dnl->is_null() && null_okay) {
+    if (dnl && dnl->is_null() && last_xlocked) {
       dout(10) << "traverse: hit null dentry at tail of traverse, succeeding" << dendl;
       if (pdnvec)
 	pdnvec->push_back(dn);
@@ -8253,7 +8252,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,     // who
             return -EIO;
           }
           open_remote_dentry(dn, true, cf.build(),
-			     (null_okay && depth == path.depth() - 1));
+			     (last_xlocked && depth == path.depth() - 1));
 	  if (mds->logger) mds->logger->inc(l_mds_traverse_remote_ino);
           return 1;
         }        
@@ -8339,10 +8338,10 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,     // who
 	discover = true;
       }
 
-      if ((discover || null_okay)) {
+      if ((discover)) {
 	dout(7) << "traverse: discover from " << path[depth] << " from " << *curdir << dendl;
 	discover_path(curdir, snapid, path.postfixpath(depth), cf.build(),
-		      null_okay);
+		      last_xlocked);
 	if (mds->logger) mds->logger->inc(l_mds_traverse_discover);
         return 1;
       } 
@@ -9164,7 +9163,7 @@ void MDCache::handle_find_ino_reply(const cref_t<MMDSFindInoReply> &m)
       vector<CDentry*> trace;
       CF_MDS_RetryMessageFactory cf(mds, m);
       MDRequestRef null_ref;
-      int r = path_traverse(null_ref, cf, m->path, &trace, NULL, MDS_TRAVERSE_DISCOVER);
+      int r = path_traverse(null_ref, cf, m->path, MDS_TRAVERSE_DISCOVER, &trace);
       if (r > 0)
 	return; 
       dout(0) << "handle_find_ino_reply failed with " << r << " on " << m->path 
@@ -10721,7 +10720,7 @@ void MDCache::handle_dir_update(const cref_t<MDirUpdate> &m)
       dout(5) << "trying discover on dir_update for " << path << dendl;
       CF_MDS_RetryMessageFactory cf(mds, m);
       MDRequestRef null_ref;
-      int r = path_traverse(null_ref, cf, path, &trace, &in, MDS_TRAVERSE_DISCOVER);
+      int r = path_traverse(null_ref, cf, path, MDS_TRAVERSE_DISCOVER, &trace, &in);
       if (r > 0)
         return;
       if (r == 0 &&
