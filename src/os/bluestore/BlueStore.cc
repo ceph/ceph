@@ -10071,10 +10071,6 @@ void BlueStore::_txc_state_proc(TransContext *txc)
       {
 	std::lock_guard l(kv_lock);
 	kv_queue.push_back(txc);
-	if (!kv_sync_in_progress) {
-	  kv_sync_in_progress = true;
-	  kv_cond.notify_one();
-	}
 	if (txc->state != TransContext::STATE_KV_SUBMITTED) {
 	  kv_queue_unsubmitted.push_back(txc);
 	  ++txc->osr->kv_committing_serially;
@@ -10082,6 +10078,11 @@ void BlueStore::_txc_state_proc(TransContext *txc)
 	if (txc->had_ios)
 	  kv_ios++;
 	kv_throttle_costs += txc->cost;
+
+	if (!kv_sync_in_progress) {
+	  kv_sync_in_progress = true;
+	  kv_cond.notify_one();
+	}
       }
       return;
     case TransContext::STATE_KV_SUBMITTED:
