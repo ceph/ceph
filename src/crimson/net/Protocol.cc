@@ -6,6 +6,7 @@
 #include "auth/Auth.h"
 
 #include "crimson/common/log.h"
+#include "Errors.h"
 #include "Socket.h"
 #include "SocketConnection.h"
 
@@ -29,6 +30,7 @@ Protocol::Protocol(proto_t type,
 Protocol::~Protocol()
 {
   ceph_assert(pending_dispatch.is_closed());
+  assert(!exit_open);
 }
 
 bool Protocol::is_connected() const
@@ -101,6 +103,9 @@ seastar::future<stop_t> Protocol::do_write_dispatch_sweep()
     size_t num_msgs = conn.out_q.size();
     // we must have something to write...
     ceph_assert(is_queued());
+    assert(!open_write);
+    open_write = true;
+
     MessageRef front_msg;
     if (likely(num_msgs)) {
       front_msg = conn.out_q.front();
@@ -126,19 +131,46 @@ seastar::future<stop_t> Protocol::do_write_dispatch_sweep()
             // the dispatching can ONLY stop now
             ceph_assert(write_dispatching);
             write_dispatching = false;
+            assert(open_write);
+            open_write = false;
             return seastar::make_ready_future<stop_t>(stop_t::yes);
           } else {
             // something is pending to send during flushing
+            assert(open_write);
+            open_write = false;
             return seastar::make_ready_future<stop_t>(stop_t::no);
           }
         });
       } else {
         // messages were enqueued during socket write
+        assert(open_write);
+        open_write = false;
         return seastar::make_ready_future<stop_t>(stop_t::no);
       }
+    }).handle_exception_type([this] (const std::system_error& e) {
+      if (e.code() != error::broken_pipe &&
+          e.code() != error::connection_reset) {
+        logger().error("{} do_write_dispatch_sweep(): unexpected error {}",
+                       conn, e);
+        ceph_abort();
+      }
+
+      logger().debug("{} do_write_dispatch_sweep() fault: {}", conn, e);
+      assert(open_write);
+      open_write = false;
+      if (exit_open) {
+        exit_open->set_value();
+        exit_open = std::nullopt;
+      }
+      socket->shutdown();
+      if (write_state == write_state_t::open) {
+        write_state = write_state_t::delay;
+      }
+      return seastar::make_ready_future<stop_t>(stop_t::no);
     }).handle_exception([this] (std::exception_ptr eptr) {
-      logger().warn("{} do_write_dispatch_sweep() fault: {}", conn, eptr);
-      close();
+      logger().error("{} do_write_dispatch_sweep(): unexpected exception {}",
+                     conn, eptr);
+      ceph_abort();
       return seastar::make_ready_future<stop_t>(stop_t::no);
     });
    }
