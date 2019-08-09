@@ -135,6 +135,9 @@ struct inconsistent_obj_wrapper : librados::inconsistent_obj_t {
   void set_hinfo_inconsistency() {
     errors |= obj_err_t::HINFO_INCONSISTENCY;
   }
+  void set_size_too_large() {
+    errors |= obj_err_t::SIZE_TOO_LARGE;
+  }
   void add_shard(const pg_shard_t& pgs, const shard_info_wrapper& shard);
   void set_auth_missing(const hobject_t& hoid,
                         const map<pg_shard_t, ScrubMap*>&,
