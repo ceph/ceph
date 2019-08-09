@@ -758,6 +758,18 @@ bool PGBackend::be_compare_scrub_objects(
 		<< " from shard " << auth_shard;
     obj_result.set_size_mismatch();
   }
+  // If the replica is too large and we didn't already count it for this object
+  //
+  if (candidate.size > cct->_conf->osd_max_object_size
+      && !obj_result.has_size_too_large()) {
+    if (error != CLEAN)
+      errorstream << ", ";
+    error = FOUND_ERROR;
+    errorstream << "size " << candidate.size
+		<< " > " << cct->_conf->osd_max_object_size
+		<< " is too large";
+    obj_result.set_size_too_large();
+  }
   for (map<string,bufferptr>::const_iterator i = auth.attrs.begin();
        i != auth.attrs.end();
        ++i) {
