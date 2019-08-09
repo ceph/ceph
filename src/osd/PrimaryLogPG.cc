@@ -1033,13 +1033,13 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 
   int result = 0;
   string cname, mname;
-  PGLSFilter *filter = NULL;
 
   snapid_t snapid = m->get_snapid();
 
   vector<OSDOp> ops = m->ops;
 
   for (vector<OSDOp>::iterator p = ops.begin(); p != ops.end(); ++p) {
+    std::unique_ptr<PGLSFilter> filter;
     OSDOp& osd_op = *p;
     auto bp = p->indata.cbegin();
     switch (p->op.op) {
@@ -1053,11 +1053,11 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	result = -EINVAL;
 	break;
       }
-      if (filter) {
-	delete filter;
-	filter = NULL;
+      {
+        PGLSFilter* tmp_filter;
+        result = get_pgls_filter(bp, &tmp_filter);
+        filter.reset(tmp_filter);
       }
-      result = get_pgls_filter(bp, &filter);
       if (result < 0)
         break;
 
@@ -1223,11 +1223,12 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	result = -EINVAL;
 	break;
       }
-      if (filter) {
-	delete filter;
-	filter = NULL;
+
+      {
+        PGLSFilter* tmp_filter;
+        result = get_pgls_filter(bp, &tmp_filter);
+        filter.reset(tmp_filter);
       }
-      result = get_pgls_filter(bp, &filter);
       if (result < 0)
         break;
 
@@ -1392,7 +1393,6 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	  }
 	  if (is_unreadable_object(oid)) {
 	    wait_for_unreadable_object(oid, op);
-            delete filter;
 	    return;
 	  }
 	  result = osd->store->read(ch, ghobject_t(oid), 0, 0, osd_op.outdata);
@@ -1421,7 +1421,6 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
   reply->set_result(result);
   reply->set_reply_versions(info.last_update, info.last_user_version);
   osd->send_message_osd_client(reply, m->get_connection());
-  delete filter;
 }
 
 int PrimaryLogPG::do_scrub_ls(MOSDOp *m, OSDOp *osd_op)
