@@ -238,7 +238,7 @@ namespace rgw {
     };
 
     void clear_state();
-    void advance_mtime();
+    void advance_mtime(uint32_t flags = FLAG_NONE);
 
     boost::variant<file, directory> variant_type;
 
@@ -436,7 +436,7 @@ namespace rgw {
 	state.ctime = st->st_ctim;
     }
 
-    int stat(struct stat* st) {
+    int stat(struct stat* st, uint32_t flags = FLAG_NONE) {
       /* partial Unix attrs */
       memset(st, 0, sizeof(struct stat));
       st->st_dev = state.dev;
@@ -450,7 +450,7 @@ namespace rgw {
       switch (fh.fh_type) {
       case RGW_FS_TYPE_DIRECTORY:
 	/* virtual directories are always invalid */
-	advance_mtime();
+	advance_mtime(flags);
 	st->st_nlink = state.nlink;
 	break;
       case RGW_FS_TYPE_FILE:
@@ -1077,7 +1077,7 @@ namespace rgw {
       fh_key fhk = parent->make_fhk(obj_name);
 
       lsubdout(get_context(), rgw, 10)
-	<< __func__ << " lookup called on "
+	<< __func__ << " called on "
 	<< parent->object_name() << " for " << key_name
 	<< " (" << obj_name << ")"
 	<< " -> " << fhk
