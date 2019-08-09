@@ -1196,6 +1196,26 @@ Miscellaneous
 :Type: Integer
 :Default: 300
 
+``mon osd cache size min``
+
+:Description: The minimum amount of bytes to be kept mapped in memory for osd
+               monitor caches.
+:Type: 64-bit Integer
+:Default: 134217728
+
+``mon memory target``
+
+:Description: The amount of bytes pertaining to osd monitor caches and kv cache
+              to be kept mapped in memory with cache auto-tuning enabled.
+:Type: 64-bit Integer
+:Default: 2147483648
+
+``mon memory autotune``
+
+:Description: Autotune the cache memory being used for osd monitors and kv
+              database.
+:Type: Boolean
+:Default: True
 
 
 .. _Paxos: https://en.wikipedia.org/wiki/Paxos_(computer_science)
