@@ -20,6 +20,7 @@
 #include "include/stringify.h"
 #include "include/random.h"
 #include "common/perf_counters.h"
+#include "common/TracepointProvider.h"
 
 #include <fio.h>
 #include <optgroup.h>
@@ -335,6 +336,9 @@ struct Engine {
   }
 };
 
+TracepointProvider::Traits bluestore_tracepoint_traits("libbluestore_tp.so",
+						       "bluestore_tracing");
+
 Engine::Engine(thread_data* td)
   : ref_count(0),
     unlink(td->o.unlink),
@@ -362,6 +366,8 @@ Engine::Engine(thread_data* td)
 		    CODE_ENVIRONMENT_UTILITY,
 		    CINIT_FLAG_NO_DEFAULT_CONFIG_FILE);
   common_init_finish(g_ceph_context);
+
+  TracepointProvider::initialize<bluestore_tracepoint_traits>(g_ceph_context);
 
   // create the ObjectStore
   os.reset(ObjectStore::create(g_ceph_context,
