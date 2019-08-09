@@ -26,7 +26,6 @@ class KernelMount(CephFSMount):
         self.ipmi_password = ipmi_password
         self.ipmi_domain = ipmi_domain
 
-    def mount(self, mount_path=None, mount_fs_name=None):
     def mount(self, mount_path=None, mount_fs_name=None, mountpoint=None):
         if mountpoint is not None:
             self.mountpoint = mountpoint
@@ -35,14 +34,8 @@ class KernelMount(CephFSMount):
         log.info('Mounting kclient client.{id} at {remote} {mnt}...'.format(
             id=self.client_id, remote=self.client_remote, mnt=self.mountpoint))
 
-        self.client_remote.run(
-            args=[
-                'mkdir',
-                '--',
-                self.mountpoint,
-            ],
-            timeout=(5*60),
-        )
+        self.client_remote.run(args=['mkdir', '-p', self.mountpoint],
+                               timeout=(5*60))
 
         if mount_path is None:
             mount_path = "/"

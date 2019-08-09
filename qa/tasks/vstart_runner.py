@@ -479,13 +479,7 @@ class LocalFuseMount(FuseMount):
             self.mountpoint = mountpoint
         self.setupfs(name=mount_fs_name)
 
-        self.client_remote.run(
-            args=[
-                'mkdir',
-                '--',
-                self.mountpoint,
-            ],
-        )
+        self.client_remote.run(args=['mkdir', '-p', self.mountpoint])
 
         def list_connections():
             self.client_remote.run(
