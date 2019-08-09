@@ -493,11 +493,10 @@ Context *PG::finish_recovery()
 
 void PG::_finish_recovery(Context *c)
 {
-  lock();
+  std::scoped_lock locker{*this};
   // When recovery is initiated by a repair, that flag is left on
   state_clear(PG_STATE_REPAIR);
   if (recovery_state.is_deleting()) {
-    unlock();
     return;
   }
   if (c == finish_sync_event) {
@@ -517,7 +516,6 @@ void PG::_finish_recovery(Context *c)
   } else {
     dout(10) << "_finish_recovery -- stale" << dendl;
   }
-  unlock();
 }
 
 void PG::start_recovery_op(const hobject_t& soid)
@@ -885,10 +883,9 @@ void PG::init(
 void PG::shutdown()
 {
   ch->flush();
-  lock();
+  std::scoped_lock l{*this};
   recovery_state.shutdown();
   on_shutdown();
-  unlock();
 }
 
 #pragma GCC diagnostic ignored "-Wpragmas"
@@ -3318,11 +3315,10 @@ struct FlushState {
   epoch_t epoch;
   FlushState(PG *pg, epoch_t epoch) : pg(pg), epoch(epoch) {}
   ~FlushState() {
-    pg->lock();
+    std::scoped_lock l{*pg};
     if (!pg->pg_has_reset_since(epoch)) {
       pg->recovery_state.complete_flush();
     }
-    pg->unlock();
   }
 };
 typedef std::shared_ptr<FlushState> FlushStateRef;
@@ -3749,12 +3745,11 @@ void PG::do_delete_work(ObjectStore::Transaction &t)
         dout(20) << __func__ << " wake up at "
                  << ceph_clock_now()
 	         << ", re-queuing delete" << dendl;
-        lock();
+        std::scoped_lock locker{*this};
         delete_needs_sleep = false;
         if (!pg_has_reset_since(e)) {
           osd->queue_for_pg_delete(get_pgid(), e);
         }
-        unlock();
       });
 
       auto delete_schedule_time = ceph::real_clock::now();
@@ -3881,9 +3876,8 @@ ostream& operator<<(ostream& out, const PG::BackfillInterval& bi)
 
 void PG::dump_pgstate_history(Formatter *f)
 {
-  lock();
+  std::scoped_lock l{*this};
   recovery_state.dump_history(f);
-  unlock();
 }
 
 void PG::dump_missing(Formatter *f)
