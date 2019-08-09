@@ -5073,8 +5073,14 @@ int main(int argc, const char **argv)
     output_user_info = false;
     break;
   case OPT_USER_RENAME:
+    if (yes_i_really_mean_it) {
+      user_op.set_overwrite_new_user(true);
+    }
     ret = user.rename(user_op, &err_msg);
     if (ret < 0) {
+      if (ret == -EEXIST) {
+        err_msg += ". to overwrite this user, add --yes-i-really-mean-it";
+      }
       cerr << "could not rename user: " << err_msg << std::endl;
       return -ret;
     }
