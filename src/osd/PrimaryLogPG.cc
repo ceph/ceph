@@ -3291,6 +3291,23 @@ void PrimaryLogPG::refcount_manifest(ObjectContextRef obc, object_locator_t oloc
   }
 }  
 
+int PrimaryLogPG::check_offset_and_length_manifest(uint64_t offset, uint64_t length,
+  object_info_t& oi)
+{
+  auto last_chunk = oi.manifest.chunk_map.rbegin();
+  if (last_chunk == oi.manifest.chunk_map.rend()) {
+    return -EINVAL;
+  }
+  if (offset + length > last_chunk->first + last_chunk->second.length) {
+    dout(0) << " needs unset-manifest before modifying this rannge " 
+	    << " offset: " << offset << " length: " << length 
+	    << " chunk offset: " << last_chunk->first
+	    << " chunk length: " << last_chunk->second.length << dendl;
+    return -EINVAL;
+  }
+  return 0;
+}
+  
 void PrimaryLogPG::do_proxy_chunked_read(OpRequestRef op, ObjectContextRef obc, int op_index,
 					 uint64_t chunk_index, uint64_t req_offset, uint64_t req_length,
 					 uint64_t req_total_len, bool write_ordered)
@@ -6284,6 +6301,13 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	if (result < 0)
 	  break;
 
+	if (obs.oi.has_manifest()) {
+	  ceph_assert(obs.oi.manifest.is_chunked());
+	  result = check_offset_and_length_manifest(0, op.extent.length, obs.oi);
+	  if (result < 0)
+	    break;
+	}
+
 	if (pool.info.has_flag(pg_pool_t::FLAG_WRITE_FADVISE_DONTNEED))
 	  op.flags = op.flags | CEPH_OSD_OP_FLAG_FADVISE_DONTNEED;
 
@@ -6400,6 +6424,13 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
           static_cast<Option::size_t>(osd->osd_max_object_size), get_dpp());
         if (result < 0)
 	  break;
+
+	if (obs.oi.has_manifest()) {
+	  ceph_assert(obs.oi.manifest.is_chunked());
+	  result = check_offset_and_length_manifest(op.extent.offset, op.extent.length, obs.oi);
+	  if (result < 0)
+	    break;
+	}
 
 	if (op.extent.truncate_seq) {
 	  ceph_assert(op.extent.offset == op.extent.truncate_size);

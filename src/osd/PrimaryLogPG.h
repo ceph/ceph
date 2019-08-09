@@ -1471,6 +1471,8 @@ protected:
   void cancel_manifest_ops(bool requeue, vector<ceph_tid_t> *tids);
   void refcount_manifest(ObjectContextRef obc, object_locator_t oloc, hobject_t soid,
                          SnapContext snapc, bool get, RefCountCallback *cb, uint64_t offset);
+  int check_offset_and_length_manifest(uint64_t offset, uint64_t length,
+				       object_info_t& oi);
 
   friend struct C_ProxyChunkRead;
   friend class PromoteManifestCallback;
