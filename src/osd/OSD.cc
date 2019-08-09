@@ -10555,8 +10555,8 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   }
 
   list<Context *> oncommits;
-  if (is_smallest_thread_index && !sdata->context_queue.empty()) {
-    sdata->context_queue.swap(oncommits);
+  if (is_smallest_thread_index) {
+    sdata->context_queue.move_to(oncommits);
   }
 
   if (sdata->pqueue->empty()) {
