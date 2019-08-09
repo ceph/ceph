@@ -3322,7 +3322,8 @@ void Locker::_update_cap_fields(CInode *in, int dirty, const cref_t<MClientCaps>
       else
 	pi->inline_data.free_data();
     }
-    if ((dirty & CEPH_CAP_FILE_EXCL) && atime != pi->atime) {
+    if (((dirty & CEPH_CAP_FILE_EXCL) && atime != pi->atime) ||
+	((dirty & CEPH_CAP_FILE_RD|CEPH_CAP_FILE_WR) && atime > pi->atime)) {
       dout(7) << "  atime " << pi->atime << " -> " << atime
 	      << " for " << *in << dendl;
       pi->atime = atime;
