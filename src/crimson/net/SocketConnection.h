@@ -63,6 +63,7 @@ class SocketConnection : public Connection {
 
   // messages to be resent after connection gets reset
   std::deque<MessageRef> out_q;
+  std::deque<MessageRef> pending_q;
   // messages sent, but not yet acked by peer
   std::deque<MessageRef> sent;
 
