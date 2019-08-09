@@ -77,7 +77,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         return HandleCommandResult(stdout=result)
 
     @_read_cli('orchestrator device ls',
-               "name=host,type=CephString,n=N,req=false "
+               "name=host,type=CephString,req=false "
                "name=format,type=CephChoices,strings=json|plain,req=false "
                "name=refresh,type=CephBool,req=false",
                'List devices on a node')
@@ -90,7 +90,7 @@ class OrchestratorCli(orchestrator.OrchestratorClientMixin, MgrModule):
         date hardware inventory is fine as long as hardware ultimately appears
         in the output of this command.
         """
-        nf = orchestrator.InventoryFilter(nodes=host) if host else None
+        nf = orchestrator.InventoryFilter(nodes=[host]) if host else None
 
         completion = self.get_inventory(node_filter=nf, refresh=refresh)
 

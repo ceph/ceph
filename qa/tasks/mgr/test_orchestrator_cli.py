@@ -45,10 +45,9 @@ class TestOrchestratorCli(MgrTestCase):
         ret = self._orch_cmd("device", "ls", "--refresh")
         self.assertIn("localhost:", ret)
 
-    def test_device_ls_hoshs(self):
-        ret = self._orch_cmd("device", "ls", "localhost", "host1")
+    def test_device_ls_hosts(self):
+        ret = self._orch_cmd("device", "ls", "localhost")
         self.assertIn("localhost:", ret)
-
 
     def test_device_ls_json(self):
         ret = self._orch_cmd("device", "ls", "--format", "json")
