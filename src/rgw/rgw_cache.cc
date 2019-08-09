@@ -11,24 +11,25 @@
 
 int ObjectCache::get(const string& name, ObjectCacheInfo& info, uint32_t mask, rgw_cache_entry_info *cache_info)
 {
-  std::shared_lock l{lock};
 
+  std::shared_lock rl{lock};
   if (!enabled) {
     return -ENOENT;
   }
-
   auto iter = cache_map.find(name);
   if (iter == cache_map.end()) {
     ldout(cct, 10) << "cache get: name=" << name << " : miss" << dendl;
-    if (perfcounter)
+    if (perfcounter) {
       perfcounter->inc(l_rgw_cache_miss);
+    }
     return -ENOENT;
   }
+
   if (expiry.count() &&
        (ceph::coarse_mono_clock::now() - iter->second.info.time_added) > expiry) {
     ldout(cct, 10) << "cache get: name=" << name << " : expiry miss" << dendl;
-    lock.unlock();
-    lock.lock();
+    rl.unlock();
+    std::unique_lock wl{lock};  // write lock for insertion
     // check that wasn't already removed by other thread
     iter = cache_map.find(name);
     if (iter != cache_map.end()) {
@@ -37,8 +38,9 @@ int ObjectCache::get(const string& name, ObjectCacheInfo& info, uint32_t mask, r
       remove_lru(name, iter->second.lru_iter);
       cache_map.erase(iter);
     }
-    if(perfcounter)
+    if (perfcounter) {
       perfcounter->inc(l_rgw_cache_miss);
+    }
     return -ENOENT;
   }
 
@@ -47,9 +49,8 @@ int ObjectCache::get(const string& name, ObjectCacheInfo& info, uint32_t mask, r
   if (lru_counter - entry->lru_promotion_ts > lru_window) {
     ldout(cct, 20) << "cache get: touching lru, lru_counter=" << lru_counter
                    << " promotion_ts=" << entry->lru_promotion_ts << dendl;
-    lock.unlock();
-    lock.lock(); /* promote lock to writer */
-
+    rl.unlock();
+    std::unique_lock wl{lock};  // write lock for insertion
     /* need to redo this because entry might have dropped off the cache */
     iter = cache_map.find(name);
     if (iter == cache_map.end()) {
