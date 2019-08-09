@@ -2367,6 +2367,7 @@ struct osd_stat_t {
 
   uint32_t num_osds = 0;
   uint32_t num_per_pool_osds = 0;
+  uint32_t num_per_pool_omap_osds = 0;
 
   osd_stat_t() : snap_trim_queue_len(0), num_snap_trimming(0),
        num_shards_repaired(0)	{}
@@ -2381,6 +2382,7 @@ struct osd_stat_t {
     num_pgs += o.num_pgs;
     num_osds += o.num_osds;
     num_per_pool_osds += o.num_per_pool_osds;
+    num_per_pool_omap_osds += o.num_per_pool_omap_osds;
     for (const auto& a : o.os_alerts) {
       auto& target = os_alerts[a.first];
       for (auto& i : a.second) {
@@ -2398,6 +2400,7 @@ struct osd_stat_t {
     num_pgs -= o.num_pgs;
     num_osds -= o.num_osds;
     num_per_pool_osds -= o.num_per_pool_osds;
+    num_per_pool_omap_osds -= o.num_per_pool_omap_osds;
     for (const auto& a : o.os_alerts) {
       auto& target = os_alerts[a.first];
       for (auto& i : a.second) {
@@ -2425,7 +2428,8 @@ inline bool operator==(const osd_stat_t& l, const osd_stat_t& r) {
     l.os_perf_stat == r.os_perf_stat &&
     l.num_pgs == r.num_pgs &&
     l.num_osds == r.num_osds &&
-    l.num_per_pool_osds == r.num_per_pool_osds;
+    l.num_per_pool_osds == r.num_per_pool_osds &&
+    l.num_per_pool_omap_osds == r.num_per_pool_omap_osds;
 }
 inline bool operator!=(const osd_stat_t& l, const osd_stat_t& r) {
   return !(l == r);
@@ -2509,31 +2513,45 @@ struct pool_stat_t {
   // In legacy mode used and netto values are the same. But for new per-pool
   // collection 'used' provides amount of space ALLOCATED at all related OSDs 
   // and 'netto' is amount of stored user data.
-  uint64_t get_allocated_bytes(bool per_pool) const {
-    uint64_t allocated_bytes;
+  uint64_t get_allocated_data_bytes(bool per_pool) const {
     if (per_pool) {
-      allocated_bytes = store_stats.allocated;
+      return store_stats.allocated;
     } else {
       // legacy mode, use numbers from 'stats'
-      allocated_bytes = stats.sum.num_bytes +
-	stats.sum.num_bytes_hit_set_archive;
+      return stats.sum.num_bytes + stats.sum.num_bytes_hit_set_archive;
     }
-    // omap is not broken out by pool by nautilus bluestore
-    allocated_bytes += stats.sum.num_omap_bytes;
-    return allocated_bytes;
   }
-  uint64_t get_user_bytes(float raw_used_rate, bool per_pool) const {
-    uint64_t user_bytes;
-    if (per_pool) {
-      user_bytes = raw_used_rate ? store_stats.data_stored / raw_used_rate : 0;
+  uint64_t get_allocated_omap_bytes(bool per_pool_omap) const {
+    if (per_pool_omap) {
+      return store_stats.omap_allocated;
     } else {
-      // legacy mode, use numbers from 'stats'
-      user_bytes = stats.sum.num_bytes +
-	stats.sum.num_bytes_hit_set_archive;
+      // omap is not broken out by pool by nautilus bluestore; report the
+      // scrub value.  this will be imprecise in that it won't account for
+      // any storage overhead/efficiency.
+      return stats.sum.num_omap_bytes;
     }
-    // omap is not broken out by pool by nautilus bluestore
-    user_bytes += stats.sum.num_omap_bytes;
-    return user_bytes;
+  }
+  uint64_t get_user_data_bytes(float raw_used_rate, ///< space amp factor
+			       bool per_pool) const {
+    // NOTE: we need the space amp factor so that we can work backwards from
+    // the raw utilization to the amount of data that the user actually stored.
+    if (per_pool) {
+      return raw_used_rate ? store_stats.data_stored / raw_used_rate : 0;
+    } else {
+      // legacy mode, use numbers from 'stats'.  note that we do NOT use the
+      // raw_used_rate factor here because we are working from the PG stats
+      // directly.
+      return stats.sum.num_bytes + stats.sum.num_bytes_hit_set_archive;
+    }
+  }
+  uint64_t get_user_omap_bytes(float raw_used_rate, ///< space amp factor
+			       bool per_pool_omap) const {
+    if (per_pool_omap) {
+      return raw_used_rate ? store_stats.omap_allocated / raw_used_rate : 0;
+    } else {
+      // omap usage is lazily reported during scrub; this value may lag.
+      return stats.sum.num_omap_bytes;
+    }
   }
 
   void dump(ceph::Formatter *f) const;

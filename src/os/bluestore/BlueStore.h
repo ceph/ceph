@@ -1086,6 +1086,13 @@ public:
       if (--nref == 0)
 	delete this;
     }
+
+    const string& get_omap_prefix();
+    void get_omap_header(string *out);
+    void get_omap_key(const string& key, string *out);
+    void rewrite_omap_key(const string& old, string *out);
+    void get_omap_tail(string *out);
+    void decode_omap_key(const string& key, string *user_key);
   };
   typedef boost::intrusive_ptr<Onode> OnodeRef;
 
@@ -1842,6 +1849,8 @@ private:
 		std::numeric_limits<decltype(min_alloc_size)>::digits,
 		"not enough bits for min_alloc_size");
 
+  bool per_pool_omap = false;
+
   ///< maximum allocation unit (power of 2)
   std::atomic<uint64_t> max_alloc_size = {0};
 
@@ -2082,7 +2091,7 @@ private:
   void _close_fm();
   int _open_alloc();
   void _close_alloc();
-  int _open_collections(int *errors=0);
+  int _open_collections(int64_t *errors=0);
   void _close_collections();
 
   int _setup_block_symlink_or_file(string name, string path, uint64_t size,
@@ -2183,7 +2192,7 @@ private:
   void _fsck_check_pool_statfs(
     per_pool_statfs& expected_pool_statfs,
     bool need_per_pool_stats,
-    int& errors,
+    int64_t& errors,
     BlueStoreRepairer* repairer);
 
   void _buffer_cache_write(
@@ -2219,9 +2228,9 @@ private:
 
   // -- ondisk version ---
 public:
-  const int32_t latest_ondisk_format = 2;        ///< our version
+  const int32_t latest_ondisk_format = 3;        ///< our version
   const int32_t min_readable_ondisk_format = 1;  ///< what we can read
-  const int32_t min_compat_ondisk_format = 2;    ///< who can read us
+  const int32_t min_compat_ondisk_format = 3;    ///< who can read us
 
 private:
   int32_t ondisk_format = 0;  ///< value detected on mount
@@ -2362,7 +2371,8 @@ public:
 public:
   int statfs(struct store_statfs_t *buf,
              osd_alert_list_t* alerts = nullptr) override;
-  int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf) override;
+  int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf,
+		  bool *per_pool_omap) override;
 
   void collect_metadata(map<string,string> *pm) override;
 
@@ -2432,6 +2442,12 @@ public:
     bufferlist *header,      ///< [out] omap header
     map<string, bufferlist> *out /// < [out] Key to value map
     ) override;
+  int _omap_get(
+    Collection *c,     ///< [in] Collection containing oid
+    const ghobject_t &oid,   ///< [in] Object containing omap
+    bufferlist *header,      ///< [out] omap header
+    map<string, bufferlist> *out /// < [out] Key to value map
+    );
 
   /// Get omap header
   int omap_get_header(
@@ -2586,6 +2602,7 @@ private:
   set<string> failed_compressors;
   string spillover_alert;
   string legacy_statfs_alert;
+  string no_per_pool_omap_alert;
   string disk_size_mismatch_alert;
 
   void _log_alerts(osd_alert_list_t& alerts);
@@ -2614,6 +2631,7 @@ private:
   }
 
   void _check_legacy_statfs_alert();
+  void _check_no_per_pool_omap_alert();
   void _set_disk_size_mismatch_alert(const string& s) {
     std::lock_guard l(qlock);
     disk_size_mismatch_alert = s;
@@ -2821,7 +2839,7 @@ private:
   int _rmattrs(TransContext *txc,
 	       CollectionRef& c,
 	       OnodeRef& o);
-  void _do_omap_clear(TransContext *txc, const string& prefix, uint64_t id);
+  void _do_omap_clear(TransContext *txc, OnodeRef &o);
   int _omap_clear(TransContext *txc,
 		  CollectionRef& c,
 		  OnodeRef& o);
@@ -3057,7 +3075,7 @@ public:
     }
   };
 public:
-
+  void fix_per_pool_omap(KeyValueDB *db);
   bool remove_key(KeyValueDB *db, const string& prefix, const string& key);
   bool fix_shared_blob(KeyValueDB *db,
 		         uint64_t sbid,
@@ -3085,6 +3103,9 @@ public:
       ++to_repair_cnt;
     }
   }
+  void inc_repaired() {
+    ++to_repair_cnt;
+  }
 
   StoreSpaceTracker& get_space_usage_tracker() {
     return space_usage_tracker;
@@ -3098,6 +3119,7 @@ public:
 
 private:
   unsigned to_repair_cnt = 0;
+  KeyValueDB::Transaction fix_per_pool_omap_txn;
   KeyValueDB::Transaction fix_fm_leaked_txn;
   KeyValueDB::Transaction fix_fm_false_free_txn;
   KeyValueDB::Transaction remove_key_txn;

@@ -234,7 +234,8 @@ int MemStore::statfs(struct store_statfs_t *st, osd_alert_list_t* alerts)
   return 0;
 }
 
-int MemStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf)
+int MemStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf,
+			  bool *per_pool_omap)
 {
   return -ENOTSUP;
 }

@@ -759,8 +759,16 @@ void PGMapDigest::dump_pool_stats_full(
     tbl.define_column("POOL", TextTable::LEFT, TextTable::LEFT);
     tbl.define_column("ID", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("STORED", TextTable::LEFT, TextTable::RIGHT);
+    if (verbose) {
+      tbl.define_column("(DATA)", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("(OMAP)", TextTable::LEFT, TextTable::RIGHT);
+    }
     tbl.define_column("OBJECTS", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("USED", TextTable::LEFT, TextTable::RIGHT);
+    if (verbose) {
+      tbl.define_column("(DATA)", TextTable::LEFT, TextTable::RIGHT);
+      tbl.define_column("(OMAP)", TextTable::LEFT, TextTable::RIGHT);
+    }
     tbl.define_column("%USED", TextTable::LEFT, TextTable::RIGHT);
     tbl.define_column("MAX AVAIL", TextTable::LEFT, TextTable::RIGHT);
 
@@ -808,8 +816,9 @@ void PGMapDigest::dump_pool_stats_full(
     }
     float raw_used_rate = osd_map.pool_raw_used_rate(pool_id);
     bool per_pool = use_per_pool_stats();
+    bool per_pool_omap = use_per_pool_omap_stats();
     dump_object_stat_sum(tbl, f, stat, avail, raw_used_rate, verbose, per_pool,
-			 pool);
+			 per_pool_omap, pool);
     if (f) {
       f->close_section();  // stats
       f->close_section();  // pool
@@ -840,6 +849,7 @@ void PGMapDigest::dump_cluster_stats(stringstream *ss,
     f->dump_float("total_used_raw_ratio", osd_sum.statfs.get_used_raw_ratio());
     f->dump_unsigned("num_osds", osd_sum.num_osds);
     f->dump_unsigned("num_per_pool_osds", osd_sum.num_per_pool_osds);
+    f->dump_unsigned("num_per_pool_omap_osds", osd_sum.num_per_pool_omap_osds);
     f->close_section();
     f->open_object_section("stats_by_class");
     for (auto& i : osd_sum_by_class) {
@@ -890,7 +900,7 @@ void PGMapDigest::dump_cluster_stats(stringstream *ss,
 void PGMapDigest::dump_object_stat_sum(
   TextTable &tbl, ceph::Formatter *f,
   const pool_stat_t &pool_stat, uint64_t avail,
-  float raw_used_rate, bool verbose, bool per_pool,
+  float raw_used_rate, bool verbose, bool per_pool, bool per_pool_omap,
   const pg_pool_t *pool)
 {
   const object_stat_sum_t &sum = pool_stat.stats.sum;
@@ -900,7 +910,9 @@ void PGMapDigest::dump_object_stat_sum(
     raw_used_rate *= (float)(sum.num_object_copies - sum.num_objects_degraded) / sum.num_object_copies;
   }
 
-  uint64_t used_bytes = pool_stat.get_allocated_bytes(per_pool);
+  uint64_t used_data_bytes = pool_stat.get_allocated_data_bytes(per_pool);
+  uint64_t used_omap_bytes = pool_stat.get_allocated_omap_bytes(per_pool_omap);
+  uint64_t used_bytes = used_data_bytes + used_omap_bytes;
 
   float used = 0.0;
   // note avail passed in is raw_avail, calc raw_used here.
@@ -912,12 +924,26 @@ void PGMapDigest::dump_object_stat_sum(
   }
   auto avail_res = raw_used_rate ? avail / raw_used_rate : 0;
   // an approximation for actually stored user data
-  auto stored_normalized = pool_stat.get_user_bytes(raw_used_rate, per_pool);
+  auto stored_data_normalized = pool_stat.get_user_data_bytes(
+    raw_used_rate, per_pool);
+  auto stored_omap_normalized = pool_stat.get_user_omap_bytes(
+    raw_used_rate, per_pool_omap);
+  auto stored_normalized = stored_data_normalized + stored_omap_normalized;
+  // same, amplied by replication or EC
+  auto stored_raw = stored_normalized * raw_used_rate;
   if (f) {
     f->dump_int("stored", stored_normalized);
+    if (verbose) {
+      f->dump_int("stored_data", stored_data_normalized);
+      f->dump_int("stored_omap", stored_omap_normalized);
+    }
     f->dump_int("objects", sum.num_objects);
     f->dump_int("kb_used", shift_round_up(used_bytes, 10));
     f->dump_int("bytes_used", used_bytes);
+    if (verbose) {
+      f->dump_int("data_bytes_used", used_data_bytes);
+      f->dump_int("omap_bytes_used", used_omap_bytes);
+    }
     f->dump_float("percent_used", used);
     f->dump_unsigned("max_avail", avail_res);
     if (verbose) {
@@ -931,12 +957,20 @@ void PGMapDigest::dump_object_stat_sum(
       f->dump_int("compress_bytes_used", statfs.data_compressed_allocated);
       f->dump_int("compress_under_bytes", statfs.data_compressed_original);
       // Stored by user amplified by replication
-      f->dump_int("stored_raw", pool_stat.get_user_bytes(1.0, per_pool));
+      f->dump_int("stored_raw", stored_raw);
     }
   } else {
     tbl << stringify(byte_u_t(stored_normalized));
+    if (verbose) {
+      tbl << stringify(byte_u_t(stored_data_normalized));
+      tbl << stringify(byte_u_t(stored_omap_normalized));
+    }
     tbl << stringify(si_u_t(sum.num_objects));
     tbl << stringify(byte_u_t(used_bytes));
+    if (verbose) {
+      tbl << stringify(byte_u_t(used_data_bytes));
+      tbl << stringify(byte_u_t(used_omap_bytes));
+    }
     tbl << percentify(used*100);
     tbl << stringify(byte_u_t(avail_res));
     if (verbose) {
@@ -3034,6 +3068,8 @@ void PGMap::get_health_checks(
 	summary = "Legacy BlueStore stats reporting detected";
       } else if (asum.first == "BLUESTORE_DISK_SIZE_MISMATCH") {
 	summary = "BlueStore has dangerous mismatch between block device and free list sizes";
+      } else if (asum.first == "BLUESTORE_NO_PER_POOL_OMAP") {
+	summary = "Legacy BlueStore does not track omap usage by pool";
       }
       summary += " on ";
       summary += stringify(asum.second.first);

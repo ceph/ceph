@@ -1113,7 +1113,8 @@ ObjectStore::CollectionHandle KStore::create_new_collection(const coll_t& cid)
   return c;
 }
 
-int KStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf)
+int KStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf,
+			bool *per_pool_omap)
 {
   return -ENOTSUP;
 }

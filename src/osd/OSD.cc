@@ -7462,8 +7462,9 @@ MPGStats* OSD::collect_pg_stats()
   }
   store_statfs_t st;
   bool per_pool_stats = false;
+  bool per_pool_omap_stats = false;
   for (auto p : pool_set) {
-    int r = store->pool_statfs(p, &st);
+    int r = store->pool_statfs(p, &st, &per_pool_omap_stats);
     if (r == -ENOTSUP) {
       break;
     } else {
@@ -7476,6 +7477,7 @@ MPGStats* OSD::collect_pg_stats()
   // indicate whether we are reporting per-pool stats
   m->osd_stat.num_osds = 1;
   m->osd_stat.num_per_pool_osds = per_pool_stats ? 1 : 0;
+  m->osd_stat.num_per_pool_omap_osds = per_pool_omap_stats ? 1 : 0;
 
   return m;
 }
