@@ -127,7 +127,7 @@ class TestProgress(MgrTestCase):
         self.wait_until_equal(lambda: len(self._events_in_progress()), 1,
                               timeout=self.EVENT_CREATION_PERIOD)
 
-        new_event = self._all_events()[0]
+        new_event = self._events_in_progress()[0]
         log.info(json.dumps(new_event, indent=1))
         self.assertIn("Rebalancing after osd.0 marked in", new_event['message'])    
         
