@@ -3390,7 +3390,7 @@ CDir *Server::traverse_to_auth_dir(MDRequestRef& mdr, vector<CDentry*> &trace, f
   // traverse to parent dir
   CInode *diri;
   CF_MDS_MDRContextFactory cf(mdcache, mdr);
-  int r = mdcache->path_traverse(mdr, cf, refpath, &trace, &diri, MDS_TRAVERSE_FORWARD);
+  int r = mdcache->path_traverse(mdr, cf, refpath, 0, &trace, &diri);
   if (r > 0) return 0; // delayed
   if (r < 0) {
     if (r == -ESTALE) {
@@ -3429,7 +3429,7 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n,
 
   // traverse
   CF_MDS_MDRContextFactory cf(mdcache, mdr);
-  int r = mdcache->path_traverse(mdr, cf, refpath, &mdr->dn[n], &mdr->in[n], MDS_TRAVERSE_FORWARD);
+  int r = mdcache->path_traverse(mdr, cf, refpath, 0, &mdr->dn[n], &mdr->in[n]);
   if (r > 0)
     return NULL; // delayed
   if (r < 0) {  // error
@@ -4199,8 +4199,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
 
   if (!excl) {
     CF_MDS_MDRContextFactory cf(mdcache, mdr);
-    int r = mdcache->path_traverse(mdr, cf, req->get_filepath(),
-				   &mdr->dn[0], NULL, MDS_TRAVERSE_FORWARD);
+    int r = mdcache->path_traverse(mdr, cf, req->get_filepath(), 0, &mdr->dn[0]);
     if (r > 0) return;
     if (r == 0) {
       // it existed.
@@ -6749,7 +6748,7 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   vector<CDentry*> trace;
   CInode *in;
   CF_MDS_MDRContextFactory cf(mdcache, mdr);
-  int r = mdcache->path_traverse(mdr, cf, refpath, &trace, &in, MDS_TRAVERSE_FORWARD);
+  int r = mdcache->path_traverse(mdr, cf, refpath, 0, &trace, &in);
   if (r > 0) return;
   if (r < 0) {
     if (r == -ESTALE) {
@@ -7137,7 +7136,9 @@ void Server::handle_slave_rmdir_prep(MDRequestRef& mdr)
   dout(10) << " src " << srcpath << dendl;
   CInode *in;
   CF_MDS_MDRContextFactory cf(mdcache, mdr);
-  int r = mdcache->path_traverse(mdr, cf, srcpath, &trace, &in, MDS_TRAVERSE_DISCOVERXLOCK);
+  int r = mdcache->path_traverse(mdr, cf, srcpath,
+				 MDS_TRAVERSE_DISCOVER | MDS_TRAVERSE_LAST_XLOCKED,
+				 &trace, &in);
   if (r > 0) return;
   if (r == -ESTALE) {
     mdcache->find_ino_peers(srcpath.get_ino(), new C_MDS_RetryRequest(mdcache, mdr),
@@ -7533,7 +7534,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   ceph_assert(destdir->is_auth());
 
   CF_MDS_MDRContextFactory cf(mdcache, mdr);
-  int r = mdcache->path_traverse(mdr, cf, srcpath, &srctrace, NULL, MDS_TRAVERSE_DISCOVER);
+  int r = mdcache->path_traverse(mdr, cf, srcpath, MDS_TRAVERSE_DISCOVER, &srctrace);
   if (r > 0)
     return; // delayed
   if (r < 0) {
@@ -8691,7 +8692,9 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
   dout(10) << " dest " << destpath << dendl;
   vector<CDentry*> trace;
   CF_MDS_MDRContextFactory cf(mdcache, mdr);
-  int r = mdcache->path_traverse(mdr, cf, destpath, &trace, NULL, MDS_TRAVERSE_DISCOVERXLOCK);
+  int r = mdcache->path_traverse(mdr, cf, destpath,
+				 MDS_TRAVERSE_DISCOVER | MDS_TRAVERSE_LAST_XLOCKED,
+				 &trace);
   if (r > 0) return;
   if (r == -ESTALE) {
     mdcache->find_ino_peers(destpath.get_ino(), new C_MDS_RetryRequest(mdcache, mdr),
@@ -8709,7 +8712,9 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
   filepath srcpath(mdr->slave_request->srcdnpath);
   dout(10) << " src " << srcpath << dendl;
   CInode *srci = nullptr;
-  r = mdcache->path_traverse(mdr, cf, srcpath, &trace, &srci, MDS_TRAVERSE_DISCOVERXLOCK);
+  r = mdcache->path_traverse(mdr, cf, srcpath,
+			     MDS_TRAVERSE_DISCOVER | MDS_TRAVERSE_LAST_XLOCKED,
+			     &trace, &srci);
   if (r > 0) return;
   ceph_assert(r == 0);
 
