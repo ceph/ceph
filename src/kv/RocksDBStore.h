@@ -197,7 +197,8 @@ public:
     return logger;
   }
 
-  int64_t estimate_prefix_size(const string& prefix) override;
+  int64_t estimate_prefix_size(const string& prefix,
+			       const string& key_prefix) override;
 
   struct  RocksWBHandler: public rocksdb::WriteBatch::Handler {
     std::string seen ;

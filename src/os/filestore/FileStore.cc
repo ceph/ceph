@@ -786,7 +786,8 @@ int FileStore::statfs(struct store_statfs_t *buf0, osd_alert_list_t* alerts)
   return 0;
 }
 
-int FileStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf)
+int FileStore::pool_statfs(uint64_t pool_id, struct store_statfs_t *buf,
+			   bool *per_pool_omap)
 {
   return -ENOTSUP;
 }

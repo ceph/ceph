@@ -13,6 +13,7 @@ overrides:
     conf:
       global:
         bluestore warn on legacy statfs: false
+        bluestore warn on no per pool omap: false
       mon:
         mon warn on osd down out interval zero: false
 

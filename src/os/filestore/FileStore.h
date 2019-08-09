@@ -522,7 +522,8 @@ public:
 
   int statfs(struct store_statfs_t *buf,
              osd_alert_list_t* alerts = nullptr) override;
-  int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf) override;
+  int pool_statfs(uint64_t pool_id, struct store_statfs_t *buf,
+		  bool *per_pool_omap) override;
 
   int _do_transactions(
     vector<Transaction> &tls, uint64_t op_seq,
