@@ -8189,53 +8189,43 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
 
     // dentry
     CDentry *dn = curdir->lookup(path[depth], snapid);
-    CDentry::linkage_t *dnl = dn ? dn->get_projected_linkage() : 0;
+    if (dn) {
+      if (!dn->lock.can_read(client) &&
+	  !(last_xlocked && depth == path.depth() - 1) &&
+	  !(dn->lock.is_xlocked() && dn->lock.get_xlock_by() == mdr)) {
+	dout(10) << "traverse: non-readable dentry at " << *dn << dendl;
+	dn->lock.add_waiter(SimpleLock::WAIT_RD, cf.build());
+	if (mds->logger)
+	  mds->logger->inc(l_mds_traverse_lock);
+	if (dn->is_auth() && dn->lock.is_unstable_and_locked())
+	  mds->mdlog->flush();
+	return 1;
+      }
 
-    // null and last_bit and xlocked by me?
-    if (dnl && dnl->is_null() && last_xlocked) {
-      dout(10) << "traverse: hit null dentry at tail of traverse, succeeding" << dendl;
       if (pdnvec)
 	pdnvec->push_back(dn);
-      if (pin)
-	*pin = 0;
-      break; // done!
-    }
 
-    if (dnl &&
-	dn->lock.is_xlocked() &&
-	dn->lock.get_xlock_by() != mdr &&
-	!dn->lock.can_read(client) &&
-	(dnl->is_null() || forward)) {
-      dout(10) << "traverse: xlocked dentry at " << *dn << dendl;
-      dn->lock.add_waiter(SimpleLock::WAIT_RD, cf.build());
-      if (mds->logger) mds->logger->inc(l_mds_traverse_lock);
-      mds->mdlog->flush();
-      return 1;
-    }
-    
-    // can we conclude ENOENT?
-    if (dnl && dnl->is_null()) {
-      if (dn->lock.can_read(client) ||
-	  (dn->lock.is_xlocked() && dn->lock.get_xlock_by() == mdr)) {
-        dout(10) << "traverse: miss on null+readable dentry " << path[depth] << " " << *dn << dendl;
-	if (pdnvec) {
-	  if (depth == path.depth() - 1)
-	    pdnvec->push_back(dn);
-	  else
+      CDentry::linkage_t *dnl = dn->get_projected_linkage();
+      // can we conclude ENOENT?
+      if (dnl->is_null()) {
+	if (pin)
+	  *pin = nullptr;
+
+	if (depth == path.depth() - 1) {
+	  if (last_xlocked) {
+	    dout(10) << "traverse: null+tail+xlocked dentry at " << *dn << dendl;
+	    break;
+	  }
+	} else {
+	  if (pdnvec)
 	    pdnvec->clear();   // do not confuse likes of rdlock_path_pin_ref();
 	}
-        return -ENOENT;
-      } else {
-        dout(10) << "miss on dentry " << *dn << ", can't read due to lock" << dendl;
-        dn->lock.add_waiter(SimpleLock::WAIT_RD, cf.build());
-        return 1;
+	dout(10) << "traverse: null+readable dentry at " << *dn << dendl;
+	return -ENOENT;
       }
-    }
 
-    if (dnl && !dnl->is_null()) {
-      CInode *in = dnl->get_inode();
-      
       // do we have inode?
+      CInode *in = dnl->get_inode();
       if (!in) {
         ceph_assert(dnl->is_remote());
         // do i have it?
@@ -8267,14 +8257,11 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
 
       // add to trace, continue.
       touch_inode(cur);
-      if (pdnvec)
-	pdnvec->push_back(dn);
       if (pin)
 	*pin = cur;
       depth++;
       continue;
     }
-    
 
     // MISS.  dentry doesn't exist.
     dout(12) << "traverse: miss on dentry " << path[depth] << " in " << *curdir << dendl;
