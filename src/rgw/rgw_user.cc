@@ -417,18 +417,17 @@ int rgw_remove_key_index(RGWRados *store, RGWAccessKey& access_key)
 
 int rgw_remove_uid_index(RGWRados *store, rgw_user& uid)
 {
-  RGWObjVersionTracker objv_tracker;
-  RGWUserInfo info;
-  int ret = rgw_get_user_info_by_uid(store, uid, info, &objv_tracker, NULL);
-  if (ret < 0)
-    return ret;
+  return store->meta_mgr->remove_entry(user_meta_handler, uid.to_str(), nullptr);
+}
 
-  string oid = uid.to_str();
-  ret = store->meta_mgr->remove_entry(user_meta_handler, oid, &objv_tracker);
-  if (ret < 0)
-    return ret;
-
-  return 0;
+int rgw_remove_user_buckets_index(RGWRados *store, rgw_user& uid)
+{
+  string buckets_obj_id;
+  rgw_get_buckets_obj(uid, buckets_obj_id);
+  rgw_raw_obj uid_bucks(store->svc.zone->get_zone_params().user_uid_pool, buckets_obj_id);
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto sysobj = obj_ctx.get_obj(uid_bucks);
+  return sysobj.wop().remove(null_yield);
 }
 
 int rgw_remove_email_index(RGWRados *store, string& email)
@@ -489,26 +488,19 @@ int rgw_delete_user(RGWRados *store, RGWUserInfo& info, RGWObjVersionTracker& ob
     return ret;
   }
 
-  string buckets_obj_id;
-  rgw_get_buckets_obj(info.user_id, buckets_obj_id);
-  rgw_raw_obj uid_bucks(store->svc.zone->get_zone_params().user_uid_pool, buckets_obj_id);
   ldout(store->ctx(), 10) << "removing user buckets index" << dendl;
-  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(uid_bucks);
-  ret = sysobj.wop().remove(null_yield);
+  ret = rgw_remove_user_buckets_index(store, info.user_id);
   if (ret < 0 && ret != -ENOENT) {
-    ldout(store->ctx(), 0) << "ERROR: could not remove " << info.user_id << ":" << uid_bucks << ", should be fixed (err=" << ret << ")" << dendl;
+    ldout(store->ctx(), 0) << "ERROR: could not remove user buckets index object for "
+        << info.user_id << ": " << ret << dendl;
     return ret;
   }
 
-  string key;
-  info.user_id.to_str(key);
-  
-  rgw_raw_obj uid_obj(store->svc.zone->get_zone_params().user_uid_pool, key);
   ldout(store->ctx(), 10) << "removing user index: " << info.user_id << dendl;
-  ret = store->meta_mgr->remove_entry(user_meta_handler, key, &objv_tracker);
-  if (ret < 0 && ret != -ENOENT && ret  != -ECANCELED) {
-    ldout(store->ctx(), 0) << "ERROR: could not remove " << info.user_id << ":" << uid_obj << ", should be fixed (err=" << ret << ")" << dendl;
+  ret = rgw_remove_uid_index(store, info.user_id);
+  if (ret < 0 && ret != -ENOENT) {
+    ldout(store->ctx(), 0) << "ERROR: could not remove " << info.user_id
+        << ": " << ret << dendl;
     return ret;
   }
 
@@ -633,6 +625,11 @@ static bool remove_old_indexes(RGWRados *store,
     ret = rgw_remove_uid_index(store, old_info.user_id);
     if (ret < 0 && ret != -ENOENT) {
       set_err_msg(err_msg, "ERROR: could not remove index for uid " + old_info.user_id.to_str());
+      success = false;
+    }
+    ret = rgw_remove_user_buckets_index(store, old_info.user_id);
+    if (ret < 0 && ret != -ENOENT) {
+      set_err_msg(err_msg, "ERROR: could not remove buckets index for uid " + old_info.user_id.to_str());
       success = false;
     }
   }
@@ -1939,7 +1936,22 @@ int RGWUser::check_op(RGWUserAdminOpState& op_state, std::string *err_msg)
   return 0;
 }
 
-int RGWUser::execute_user_rename(RGWUserAdminOpState& op_state, std::string *err_msg)
+// update swift_keys with new user id
+static void rename_swift_keys(const rgw_user& user,
+                              std::map<std::string, RGWAccessKey>& keys)
+{
+  std::string user_id;
+  user.to_str(user_id);
+
+  auto modify_keys = std::move(keys);
+  for (auto& [k, key] : modify_keys) {
+    std::string id = user_id + ":" + key.subuser;
+    key.id = id;
+    keys[id] = std::move(key);
+  }
+}
+
+int RGWUser::execute_rename(RGWUserAdminOpState& op_state, std::string *err_msg)
 {
   int ret;
   bool populated = op_state.is_populated();
@@ -1961,43 +1973,32 @@ int RGWUser::execute_user_rename(RGWUserAdminOpState& op_state, std::string *err
   RGWUserInfo old_user_info = op_state.get_user_info();
 
   rgw_user& uid = op_state.get_new_uid();
-
-  RGWUserInfo existing_uinfo;
-  if (!uid.empty()) {
-    ret = rgw_get_user_info_by_uid(store, uid, existing_uinfo);
-    if (ret >= 0) {
-      set_err_msg(err_msg, "user name given by --new-uid already exists");
-      return -EEXIST;
-    }
-  }
-
   if (old_uid.tenant != uid.tenant) {
-    set_err_msg(err_msg, "users have to be under the same tenant namespace"
-                + old_uid.tenant + "!=" + uid.tenant);
+    set_err_msg(err_msg, "users have to be under the same tenant namespace "
+                + old_uid.tenant + " != " + uid.tenant);
     return -EINVAL;
   }
-  
-  string display_name = old_user_info.display_name;
-  RGWUserAdminOpState new_op_state;
-  new_op_state.set_user_id(uid);
 
-  std::string subprocess_msg;
-  ret = execute_rename(new_op_state, old_user_info, &subprocess_msg);
-  if (ret < 0) {
-    set_err_msg(err_msg, "unable to create new user, " + subprocess_msg);
+  // create a stub user and write only the uid index and buckets object
+  RGWUserInfo stub_user_info;
+  stub_user_info.user_id = uid;
+
+  RGWObjVersionTracker objv;
+  const bool exclusive = !op_state.get_overwrite_new_user(); // overwrite if requested
+
+  ret = rgw_store_user_info(store, stub_user_info, nullptr, &objv, real_time(), exclusive);
+  if (ret == -EEXIST) {
+    set_err_msg(err_msg, "user name given by --new-uid already exists");
     return ret;
   }
-
-  RGWUserInfo user_info;
-  ret = rgw_get_user_info_by_uid(store, uid, user_info);
   if (ret < 0) {
-    set_err_msg(err_msg, "failed to fetch user info");
+    set_err_msg(err_msg, "unable to store new user info");
     return ret;
-    }
+  }
 
   ACLOwner owner;
   RGWAccessControlPolicy policy_instance;
-  policy_instance.create_default(uid, display_name);
+  policy_instance.create_default(uid, old_user_info.display_name);
   owner = policy_instance.get_owner();
   bufferlist aclbl;
   policy_instance.encode(aclbl);
@@ -2024,29 +2025,23 @@ int RGWUser::execute_user_rename(RGWUserAdminOpState& op_state, std::string *err
 
     for (it = m.begin(); it != m.end(); ++it) {
       RGWBucketEnt obj = it->second;
-      ret = rgw_unlink_bucket(store, old_uid, obj.bucket.tenant, obj.bucket.name);
-      if (ret < 0) {
-        set_err_msg(err_msg, "error unlinking bucket " + cpp_strerror(-ret));
-        return ret;
-      }
-
       marker = it->first;
 
       RGWBucketInfo bucket_info;
       RGWSysObjectCtx sys_ctx = store->svc.sysobj->init_obj_ctx();
-      
+
       ret = store->get_bucket_info(sys_ctx, obj.bucket.tenant, obj.bucket.name,
-      bucket_info, NULL, null_yield, &attrs);
+                                   bucket_info, NULL, null_yield, &attrs);
       if (ret < 0) {
-        set_err_msg(err_msg, "failed to fetch bucket info for bucket= " + obj.bucket.name);
+        set_err_msg(err_msg, "failed to fetch bucket info for bucket=" + obj.bucket.name);
         return ret;
       }
-    
+
       ret = rgw_set_bucket_acl(store, owner, obj.bucket, bucket_info, aclbl);
       if (ret < 0) {
         set_err_msg(err_msg, "failed to set acl on bucket " + obj.bucket.name);
         return ret;
-    }
+      }
 
       RGWBucketEntryPoint ep;
       ep.bucket = bucket_info.bucket;
@@ -2065,13 +2060,14 @@ int RGWUser::execute_user_rename(RGWUserAdminOpState& op_state, std::string *err
 
       RGWBucketInfo new_bucket_info;
       ret = store->get_bucket_info(sys_ctx, obj.bucket.tenant, obj.bucket.name,
-      new_bucket_info, NULL, null_yield, &attrs);
+                                   new_bucket_info, NULL, null_yield);
       if (ret < 0) {
         set_err_msg(err_msg, "failed to fetch bucket info for bucket= " + obj.bucket.name);
         return ret;
       }
 
-      ret = rgw_bucket_chown(store, user_info, new_bucket_info, obj_marker, attrs);
+      ret = rgw_bucket_chown(store, new_bucket_info, uid,
+                             old_user_info.display_name, obj_marker);
       if (ret < 0) {
         set_err_msg(err_msg, "failed to run bucket chown" + cpp_strerror(-ret));
         return ret;
@@ -2080,86 +2076,16 @@ int RGWUser::execute_user_rename(RGWUserAdminOpState& op_state, std::string *err
 
   } while (is_truncated);
 
-  // delete only the old user index without calling execute_remove()
-  string buckets_obj_id;
-  rgw_get_buckets_obj(old_uid, buckets_obj_id);
-  rgw_raw_obj uid_bucks(store->svc.zone->get_zone_params().user_uid_pool, buckets_obj_id);
-  ldout(store->ctx(), 10) << "removing user buckets index" << dendl;
-  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
-  auto sysobj = obj_ctx.get_obj(uid_bucks);
-  ret = sysobj.wop().remove(null_yield);
-  if (ret < 0 && ret != -ENOENT) {
-    ldout(store->ctx(), 0) << "ERROR: could not remove " << old_uid << ":" << uid_bucks << ", should be fixed (err=" << ret << ")" << dendl;
-    return ret;
-  }
+  // update the 'stub user' with all of the other fields and rewrite all of the
+  // associated index objects
+  RGWUserInfo& user_info = op_state.get_user_info();
+  user_info.user_id = uid;
+  op_state.objv = objv;
 
-  string key;
-  old_uid.to_str(key);
-  
-  rgw_raw_obj uid_obj(store->svc.zone->get_zone_params().user_uid_pool, key);
-  ldout(store->ctx(), 10) << "removing user index: " << old_uid << dendl;
-  ret = store->meta_mgr->remove_entry(user_meta_handler, key, &op_state.objv);
-  if (ret < 0 && ret != -ENOENT && ret  != -ECANCELED) {
-    ldout(store->ctx(), 0) << "ERROR: could not remove " << old_uid << ":" << uid_obj << ", should be fixed (err=" << ret << ")" << dendl;
-    return ret;
-  }
+  rename_swift_keys(uid, user_info.swift_keys);
 
-  return 0;
+  return update(op_state, err_msg);
 }
-
-int RGWUser::execute_rename(RGWUserAdminOpState& op_state, RGWUserInfo& old_user_info, std::string *err_msg)
-{
-  std::string subprocess_msg;
-  int ret = 0;
-
-  rgw_user& user_id = op_state.get_user_id();
-
-  RGWUserInfo user_info;
-  user_info = old_user_info;
-  user_info.user_id = user_id;
-
-  // update swift_keys with new user id
-  auto modify_keys = user_info.swift_keys;
-  map<string, RGWAccessKey>::iterator it;
-
-  user_info.swift_keys.clear();
-
-  for (it = modify_keys.begin(); it != modify_keys.end(); it++) {
-
-    RGWAccessKey old_key;
-    old_key = it->second;
-
-    std::string id;
-    user_id.to_str(id);
-    id.append(":");
-    id.append(old_key.subuser);
-
-    old_key.id = id;
-    user_info.swift_keys[id] = old_key;
-  }
-
-  op_state.set_user_info(user_info);
-  op_state.set_initialized();
-
-  // update the helper objects
-  ret = init_members(op_state);
-  if (ret < 0) {
-    set_err_msg(err_msg, "unable to initialize user");
-    return ret;
-  }
-
-  ret = rgw_store_user_info(store, user_info, &old_info, &op_state.objv, real_time(), false);
-  if (ret < 0) {
-    set_err_msg(err_msg, "unable to store user info");
-    return ret;
-  }
-
-  old_info = user_info;
-  set_populated();
-
-  return 0;
-}
-
 
 int RGWUser::execute_add(RGWUserAdminOpState& op_state, std::string *err_msg)
 {
@@ -2320,7 +2246,7 @@ int RGWUser::rename(RGWUserAdminOpState& op_state, std::string *err_msg)
     return ret;
   }
 
-  ret = execute_user_rename(op_state, &subprocess_msg);
+  ret = execute_rename(op_state, &subprocess_msg);
   if (ret < 0) {
     set_err_msg(err_msg, "unable to rename user, " + subprocess_msg);
     return ret;
