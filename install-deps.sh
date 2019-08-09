@@ -266,11 +266,10 @@ if [ x$(uname)x = xFreeBSDx ]; then
         textproc/py-sphinx \
         emulators/fuse \
         java/junit \
-        lang/python \
-        lang/python27 \
         lang/python36 \
         devel/py-pip \
         devel/py-flake8 \
+        devel/py-tox \
         devel/py-argparse \
         devel/py-nose \
         devel/py-prettytable \
