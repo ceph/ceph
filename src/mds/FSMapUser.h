@@ -23,19 +23,14 @@
 class FSMapUser {
 public:
   struct fs_info_t {
-    fs_cluster_id_t cid;
-    std::string name;
-    fs_info_t() : cid(FS_CLUSTER_ID_NONE) {}
+    fs_info_t() {}
     void encode(bufferlist& bl, uint64_t features) const;
     void decode(bufferlist::const_iterator &bl);
+    std::string name;
+    fs_cluster_id_t cid = FS_CLUSTER_ID_NONE;
   };
 
-  epoch_t epoch;
-  fs_cluster_id_t legacy_client_fscid;
-  std::map<fs_cluster_id_t, fs_info_t> filesystems;
-
-  FSMapUser()
-    : epoch(0), legacy_client_fscid(FS_CLUSTER_ID_NONE) { }
+  FSMapUser() {}
 
   epoch_t get_epoch() const { return epoch; }
 
@@ -54,6 +49,10 @@ public:
   void print_summary(Formatter *f, ostream *out);
 
   static void generate_test_instances(std::list<FSMapUser*>& ls);
+
+  std::map<fs_cluster_id_t, fs_info_t> filesystems;
+  fs_cluster_id_t legacy_client_fscid = FS_CLUSTER_ID_NONE;
+  epoch_t epoch = 0;
 };
 WRITE_CLASS_ENCODER_FEATURES(FSMapUser::fs_info_t)
 WRITE_CLASS_ENCODER_FEATURES(FSMapUser)
