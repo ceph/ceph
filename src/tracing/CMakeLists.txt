@@ -45,6 +45,7 @@ set(osd_traces oprequest.tp osd.tp pg.tp)
 add_tracing_library(osd_tp "${osd_traces}" 1.0.0)
 add_tracing_library(rados_tp librados.tp 2.0.0)
 add_tracing_library(os_tp objectstore.tp 1.0.0)
+add_tracing_library(bluestore_tp bluestore.tp 1.0.0)
 add_tracing_library(rgw_op_tp rgw_op.tp 1.0.0)
 add_tracing_library(rgw_rados_tp rgw_rados.tp 1.0.0)
 

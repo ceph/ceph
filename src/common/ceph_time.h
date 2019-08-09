@@ -503,6 +503,20 @@ struct converts_to_timespec<Clock, std::void_t<decltype(
 template <typename Clock>
 constexpr bool converts_to_timespec_v = converts_to_timespec<Clock>::value;
 
+template<typename Rep, typename T>
+static Rep to_seconds(T t) {
+  return std::chrono::duration_cast<
+    std::chrono::duration<Rep>>(t).count();
+}
+
+template<typename Rep, typename T>
+static Rep to_microseconds(T t) {
+  return std::chrono::duration_cast<
+    std::chrono::duration<
+      Rep,
+      std::micro>>(t).count();
+}
+
 } // namespace ceph
 
 #endif // COMMON_CEPH_TIME_H
