@@ -538,7 +538,8 @@ void KernelDevice::_aio_thread()
 	      "This may suggest HW issue. Please check your dmesg!");
           }
         } else if (aio[i]->length != (uint64_t)r) {
-          derr << "aio to " << aio[i]->offset << "~" << aio[i]->length
+          derr << "aio to 0x" << std::hex << aio[i]->offset
+	       << "~" << aio[i]->length << std::dec
                << " but returned: " << r << dendl;
           ceph_abort_msg("unexpected aio return value: does not match length");
         }
