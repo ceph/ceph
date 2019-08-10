@@ -1610,8 +1610,6 @@ public:
 
     ceph::buffer::list filter;
 
-    ceph::buffer::list extra_info;
-
     // The budget associated with this context, once it is set (>= 0),
     // the budget is not get/released on OP basis, instead the budget
     // is acquired before sending the first OP and released upon receiving
