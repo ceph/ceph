@@ -81,8 +81,7 @@ protected:
 public:
   PGLSFilter();
   virtual ~PGLSFilter();
-  virtual bool filter(const hobject_t &obj, ceph::buffer::list& xattr_data,
-                      ceph::buffer::list& outdata) = 0;
+  virtual bool filter(const hobject_t &obj, ceph::buffer::list& xattr_data) = 0;
 
   /**
    * Arguments passed from the RADOS client.  Implementations must

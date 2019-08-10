@@ -1410,7 +1410,7 @@ protected:
   int do_sparse_read(OpContext *ctx, OSDOp& osd_op);
   int do_writesame(OpContext *ctx, OSDOp& osd_op);
 
-  bool pgls_filter(PGLSFilter *filter, hobject_t& sobj, bufferlist& outdata);
+  bool pgls_filter(PGLSFilter *filter, hobject_t& sobj);
   int get_pgls_filter(bufferlist::const_iterator& iter, PGLSFilter **pfilter);
 
   map<hobject_t, list<OpRequestRef>> in_progress_proxy_ops;
