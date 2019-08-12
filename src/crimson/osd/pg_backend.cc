@@ -365,7 +365,7 @@ seastar::future<> PGBackend::remove(ObjectState& os,
 }
 
 seastar::future<std::vector<hobject_t>, hobject_t>
-PGBackend::list_objects(const hobject_t& start, uint64_t limit)
+PGBackend::list_objects(const hobject_t& start, uint64_t limit) const
 {
   auto gstart = start.is_min() ? ghobject_t{} : ghobject_t{start, 0, shard};
   return store->list_objects(coll,

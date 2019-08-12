@@ -71,7 +71,7 @@ public:
     eversion_t ver);
   seastar::future<std::vector<hobject_t>, hobject_t> list_objects(
     const hobject_t& start,
-    uint64_t limit);
+    uint64_t limit) const;
   seastar::future<> setxattr(
     ObjectState& os,
     const OSDOp& osd_op,
