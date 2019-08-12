@@ -59,6 +59,7 @@
 #include "messages/MOSDOp.h"
 #include "common/EventTrace.h"
 #include "osd/osd_perf_counters.h"
+#include "common/Finisher.h"
 
 #define CEPH_OSD_PROTOCOL    10 /* cluster internal */
 
@@ -556,8 +557,8 @@ public:
 
   // -- backfill_reservation --
   Finisher reserver_finisher;
-  AsyncReserver<spg_t> local_reserver;
-  AsyncReserver<spg_t> remote_reserver;
+  AsyncReserver<spg_t, Finisher> local_reserver;
+  AsyncReserver<spg_t, Finisher> remote_reserver;
 
   // -- pg merge --
   ceph::mutex merge_lock = ceph::make_mutex("OSD::merge_lock");
@@ -605,7 +606,7 @@ public:
   void prune_pg_created();
   void send_pg_created();
 
-  AsyncReserver<spg_t> snap_reserver;
+  AsyncReserver<spg_t, Finisher> snap_reserver;
   void queue_recovery_context(PG *pg, GenContext<ThreadPool::TPHandle&> *c);
   void queue_for_snap_trim(PG *pg);
   void queue_for_scrub(PG *pg, bool with_high_priority);
