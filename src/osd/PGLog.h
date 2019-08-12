@@ -847,8 +847,7 @@ protected:
     const hobject_t &hoid,               ///< [in] object we are merging
     const mempool::osd_pglog::list<pg_log_entry_t> &orig_entries, ///< [in] entries for hoid to merge
     const pg_info_t &info,              ///< [in] info for merging entries
-    eversion_t olog_can_rollback_to,     ///< [in] rollback boundary
-    eversion_t original_can_rollback_to,     ///< [in] original rollback boundary
+    eversion_t olog_can_rollback_to,     ///< [in] rollback boundary of input InedexedLog
     missing_type &missing,               ///< [in,out] missing to adjust, use
     LogEntryHandler *rollbacker,         ///< [in] optional rollbacker object
     const DoutPrefixProvider *dpp        ///< [in] logging provider
@@ -1012,17 +1011,11 @@ protected:
     ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
                        << " olog_can_rollback_to: "
                        << olog_can_rollback_to << dendl;
-    ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
-                       << " original_crt: "
-                       << original_can_rollback_to << dendl;
     /// Distinguish between 4) and 5)
     for (list<pg_log_entry_t>::const_reverse_iterator i = entries.rbegin();
 	 i != entries.rend();
 	 ++i) {
-      /// Use original_can_rollback_to instead of olog_can_rollback_to to check
-      //  if we can rollback or not. This is to ensure that we don't try to rollback
-      //  to an object that has been deleted and doesn't exist.
-      if (!i->can_rollback() || i->version <= original_can_rollback_to) {
+      if (!i->can_rollback() || i->version <= olog_can_rollback_to) {
 	ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid << " cannot rollback "
 			   << *i << dendl;
 	can_rollback = false;
@@ -1035,7 +1028,7 @@ protected:
       for (list<pg_log_entry_t>::const_reverse_iterator i = entries.rbegin();
 	   i != entries.rend();
 	   ++i) {
-	assert(i->can_rollback() && i->version > original_can_rollback_to);
+	assert(i->can_rollback() && i->version > olog_can_rollback_to);
 	ldpp_dout(dpp, 10) << __func__ << ": hoid " << hoid
 			   << " rolling back " << *i << dendl;
 	if (rollbacker)
@@ -1071,8 +1064,7 @@ protected:
     const IndexedLog &log,               ///< [in] log to merge against
     mempool::osd_pglog::list<pg_log_entry_t> &entries,       ///< [in] entries to merge
     const pg_info_t &oinfo,              ///< [in] info for merging entries
-    eversion_t olog_can_rollback_to,     ///< [in] rollback boundary
-    eversion_t original_can_rollback_to, ///< [in] original rollback boundary
+    eversion_t olog_can_rollback_to,     ///< [in] rollback boundary of input IndexedLog
     missing_type &omissing,              ///< [in,out] missing to adjust, use
     LogEntryHandler *rollbacker,         ///< [in] optional rollbacker object
     const DoutPrefixProvider *dpp        ///< [in] logging provider
@@ -1088,7 +1080,6 @@ protected:
 	i->second,
 	oinfo,
 	olog_can_rollback_to,
-        original_can_rollback_to,
 	omissing,
 	rollbacker,
 	dpp);
@@ -1111,7 +1102,6 @@ protected:
       oe.soid,
       entries,
       info,
-      log.get_can_rollback_to(),
       log.get_can_rollback_to(),
       missing,
       rollbacker,
