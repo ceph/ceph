@@ -4,9 +4,11 @@ ceph-mgr orchestrator interface
 
 Please see the ceph-mgr module developer's guide for more information.
 """
+import copy
 import sys
 import time
 import fnmatch
+from functools import wraps
 import uuid
 import string
 import random
@@ -573,6 +575,17 @@ class PlacementSpec(object):
         self.label = None
 
 
+def handle_type_error(method):
+    @wraps(method)
+    def inner(cls, *args, **kwargs):
+        try:
+            return method(cls, *args, **kwargs)
+        except TypeError as e:
+            error_msg = '{}: {}'.format(cls.__name__, e)
+        raise OrchestratorValidationError(error_msg)
+    return inner
+
+
 class ServiceDescription(object):
     """
     For responding to queries about the status of a particular service,
@@ -649,6 +662,7 @@ class ServiceDescription(object):
         return {k: v for (k, v) in out.items() if v is not None}
 
     @classmethod
+    @handle_type_error
     def from_json(cls, data):
         return cls(**data)
 
@@ -851,6 +865,11 @@ class InventoryDevice(object):
                     extended=self.extended)
 
     @classmethod
+    @handle_type_error
+    def from_json(cls, data):
+        return cls(**data)
+
+    @classmethod
     def from_ceph_volume_inventory(cls, data):
         # TODO: change InventoryDevice itself to mirror c-v inventory closely!
 
@@ -905,6 +924,21 @@ class InventoryNode(object):
 
     def to_json(self):
         return {'name': self.name, 'devices': [d.to_json() for d in self.devices]}
+
+    @classmethod
+    def from_json(cls, data):
+        try:
+            _data = copy.deepcopy(data)
+            name = _data.pop('name')
+            devices = [InventoryDevice.from_json(device)
+                       for device in _data.pop('devices')]
+            if _data:
+                error_msg = 'Unknown key(s) in Inventory: {}'.format(','.join(_data.keys()))
+                raise OrchestratorValidationError(error_msg)
+            return cls(name, devices)
+        except KeyError as e:
+            error_msg = '{} is required for {}'.format(e, cls.__name__)
+            raise OrchestratorValidationError(error_msg)
 
     @classmethod
     def from_nested_items(cls, hosts):
