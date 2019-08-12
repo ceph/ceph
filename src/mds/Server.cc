@@ -442,6 +442,9 @@ void Server::handle_client_session(const MClientSession::const_ref &m)
 
   if (!session) {
     dout(0) << " ignoring sessionless msg " << *m << dendl;
+    auto reply = MClientSession::create(CEPH_SESSION_REJECT);
+    reply->metadata["error_string"] = "sessionless";
+    mds->send_message(reply, m->get_connection());
     return;
   }
 
@@ -1232,8 +1235,13 @@ void Server::handle_client_reconnect(const MClientReconnect::const_ref &m)
 	  << (m->has_more() ? " (more)" : "") << dendl;
   client_t from = m->get_source().num();
   Session *session = mds->get_session(m);
-  if (!session)
+  if (!session) {
+    dout(0) << " ignoring sessionless msg " << *m << dendl;
+    auto reply = MClientSession::create(CEPH_SESSION_REJECT);
+    reply->metadata["error_string"] = "sessionless";
+    mds->send_message(reply, m->get_connection());
     return;
+  }
 
   if (!mds->is_reconnect() && mds->get_want_state() == CEPH_MDS_STATE_RECONNECT) {
     dout(10) << " we're almost in reconnect state (mdsmap delivery race?); waiting" << dendl;
