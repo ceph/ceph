@@ -174,6 +174,15 @@ bool TrimRequest<I>::should_complete(int r)
 
 template <typename I>
 void TrimRequest<I>::send() {
+  I &image_ctx = this->m_image_ctx;
+  CephContext *cct = image_ctx.cct;
+
+  if (!image_ctx.data_ctx.is_valid()) {
+    lderr(cct) << "missing data pool" << dendl;
+    send_finish(-ENODEV);
+    return;
+  }
+
   send_pre_trim();
 }
 
