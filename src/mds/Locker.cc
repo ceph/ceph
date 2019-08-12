@@ -2200,8 +2200,12 @@ bool Locker::revoke_stale_caps(Session *session)
     cap->revoke();
 
     if (in->is_auth() &&
-	in->inode.client_ranges.count(cap->get_client()))
+	in->inode.client_ranges.count(cap->get_client())) {
+      if (in->state_test(CInode::STATE_RECOVERING))
+	mds->mdcache->recovery_queue.prioritize(in);
+      else
       in->state_set(CInode::STATE_NEEDSRECOVER);
+    }
 
     // eval lock/inode may finish contexts, which may modify other cap's position
     // in the session->caps.
