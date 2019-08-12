@@ -185,6 +185,23 @@ void ElectionLogic::receive_propose(int from, epoch_t mepoch)
     return;
   }
 
+  switch (strategy) {
+  case CLASSIC:
+    propose_classic_handler(from);
+    break;
+  case DISALLOW:
+    propose_disallow_handler(from);
+    break;
+  case CONNECTIVITY:
+    propose_connectivity_handler(from);
+    break;
+  default:
+    ceph_assert(0 == "how did election strategy become an invalid value?");
+  }
+}
+
+void ElectionLogic::propose_disallow_handler(int from)
+{
   const set<int>& disallowed_leaders = elector->get_disallowed_leaders();
   int my_rank = elector->get_my_rank();
   bool me_disallowed = disallowed_leaders.count(my_rank);
@@ -218,6 +235,37 @@ void ElectionLogic::receive_propose(int from, epoch_t mepoch)
   }
 }
 
+void ElectionLogic::propose_classic_handler(int from)
+{
+  if (elector->get_my_rank() < from) {
+    // i would win over them.
+    if (leader_acked >= 0) {        // we already acked someone
+      ceph_assert(leader_acked < from);  // and they still win, of course
+      ldout(cct, 5) << "no, we already acked " << leader_acked << dendl;
+    } else {
+      // wait, i should win!
+      if (!electing_me) {
+	elector->trigger_new_election();
+      }
+    }
+  } else {
+    // they would win over me
+    if (leader_acked < 0 || // haven't acked anyone yet, or
+	leader_acked > from ||   // they would win over who you did ack, or
+	leader_acked == from) {  // this is the guy we're already deferring to
+      defer(from);
+    } else {
+      // ignore them!
+      ldout(cct, 5) << "no, we already acked " << leader_acked << dendl;
+    }
+  }
+}
+
+void ElectionLogic::propose_connectivity_handler(int from)
+{
+  ceph_assert(0);
+}
+
 void ElectionLogic::receive_ack(int from, epoch_t from_epoch)
 {
   ceph_assert(from_epoch % 2 == 1); // sender in an election epoch
@@ -240,10 +288,29 @@ void ElectionLogic::receive_ack(int from, epoch_t from_epoch)
   }
 }
 
+bool ElectionLogic::victory_makes_sense(int from)
+{
+  bool makes_sense = false;
+  switch (strategy) {
+  case CLASSIC:
+    makes_sense = (from < elector->get_my_rank());
+    break;
+  case DISALLOW:
+    makes_sense = (from < elector->get_my_rank()) ||
+      elector->get_disallowed_leaders().count(elector->get_my_rank());
+    break;
+  case CONNECTIVITY:
+    // TODO: actually do soemthing here!
+    makes_sense = true;
+  default:
+    ceph_assert(0 == "how did you get a nonsense election strategy assigned?");
+  }
+  return makes_sense;
+}
+
 bool ElectionLogic::receive_victory_claim(int from, epoch_t from_epoch)
 {
-  ceph_assert(from < elector->get_my_rank() || elector->get_disallowed_leaders().count(elector->get_my_rank()));
-  ceph_assert(from_epoch % 2 == 0);  
+  ceph_assert(victory_makes_sense(from));
 
   leader_acked = -1;
 
