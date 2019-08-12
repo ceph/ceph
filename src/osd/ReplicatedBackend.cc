@@ -2082,13 +2082,18 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
     out_op->data_included.clear();
   }
 
-  for (interval_set<uint64_t>::iterator p = out_op->data_included.begin();
-       p != out_op->data_included.end();
-       ++p) {
-    bufferlist bit;
+  bufferlist databl;
+  uint64_t actual_end = 0;
+  if (!out_op->data_included.empty()) {
+    // issue a single read op instead of reading each extent separately
+    // synchronously, which can become horribly inefficient
+    // if the physical layout of the pushing object get massively fragmented..
+    auto offset = out_op->data_included.range_start();
+    auto length = out_op->data_included.range_end() -
+                  out_op->data_included.range_start();
     int r = store->read(ch, ghobject_t(recovery_info.soid),
-		p.get_start(), p.get_len(), bit,
-                cache_dont_need ? CEPH_OSD_OP_FLAG_FADVISE_DONTNEED: 0);
+                        offset, length, databl,
+                        cache_dont_need ? CEPH_OSD_OP_FLAG_FADVISE_DONTNEED : 0);
     if (cct->_conf->osd_debug_random_push_read_error &&
         (rand() % (int)(cct->_conf->osd_debug_random_push_read_error * 100.0)) == 0) {
       dout(0) << __func__ << ": inject EIO " << recovery_info.soid << dendl;
@@ -2097,25 +2102,42 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
     if (r < 0) {
       return r;
     }
-    if (p.get_len() != bit.length()) {
-      dout(10) << " extent " << p.get_start() << "~" << p.get_len()
-	       << " is actually " << p.get_start() << "~" << bit.length()
-	       << dendl;
+    actual_end = out_op->data_included.range_start() + databl.length();
+  }
+
+  for (interval_set<uint64_t>::iterator p = out_op->data_included.begin();
+       p != out_op->data_included.end();
+       ++p) {
+    auto databl_offset = p.get_start() - out_op->data_included.range_start();
+    if (p.get_start() + p.get_len() > actual_end) {
+      ceph_assert(actual_end >= p.get_start());
+      auto actual_len = actual_end - p.get_start();
+      dout(10) << " extent " << std::hex
+               << "0x" << p.get_start() << "~" << p.get_len()
+               << " is actually "
+               << "0x" << p.get_start() << "~" << actual_len
+               << std::dec << dendl;
       interval_set<uint64_t>::iterator save = p++;
-      if (bit.length() == 0)
-        out_op->data_included.erase(save);     //Remove this empty interval
-      else
-        save.set_len(bit.length());
+      if (actual_len == 0) {
+        out_op->data_included.erase(save); // Remove this empty interval
+      } else {
+        save.set_len(actual_len); // fix length
+        bufferlist t;
+        t.substr_of(databl, databl_offset, actual_len);
+        out_op->data.append(t);
+      }
       // Remove any other intervals present
       while (p != out_op->data_included.end()) {
         interval_set<uint64_t>::iterator save = p++;
         out_op->data_included.erase(save);
       }
       new_progress.data_complete = true;
-      out_op->data.claim_append(bit);
       break;
     }
-    out_op->data.claim_append(bit);
+    bufferlist t;
+    t.substr_of(databl, databl_offset, p.get_len());
+    // copy so databl stay unchanged
+    out_op->data.append(t);
   }
   if (progress.first && out_op->data_included.begin().get_start() == 0 &&
       out_op->data.length() == oi.size && oi.is_data_digest()) {
