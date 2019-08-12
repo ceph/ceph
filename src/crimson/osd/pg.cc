@@ -21,6 +21,8 @@
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGNotify.h"
 #include "messages/MOSDPGQuery.h"
+#include "messages/MOSDRepOp.h"
+#include "messages/MOSDRepOpReply.h"
 
 #include "osd/OSDMap.h"
 
@@ -80,10 +82,11 @@ PG::PG(
     osdmap{osdmap},
     backend(
       PGBackend::create(
-        pgid,
+	pgid.pgid,
+	pg_shard,
 	pool,
 	coll_ref,
-	&shard_services.get_store(),
+	shard_services,
 	profile)),
     peering_state(
       shard_services.get_cct(),
@@ -122,6 +125,11 @@ bool PG::try_flush_or_schedule_async() {
 	  PeeringState::IntervalFlush());
       });
   return false;
+}
+
+void PG::on_activate(interval_set<snapid_t>)
+{
+  projected_last_update = peering_state.get_info().last_update;
 }
 
 void PG::on_activate_complete()
@@ -252,6 +260,7 @@ void PG::do_peering_event(
   peering_state.handle_event(
     evt,
     &rctx);
+  peering_state.write_if_dirty(rctx.transaction);
 }
 
 void PG::do_peering_event(
@@ -259,7 +268,7 @@ void PG::do_peering_event(
 {
   if (!peering_state.pg_has_reset_since(evt.get_epoch_requested())) {
     logger().debug("{} handling {}", __func__, evt.get_desc());
-    return do_peering_event(evt.get_event(), rctx);
+    do_peering_event(evt.get_event(), rctx);
   } else {
     logger().debug("{} ignoring {} -- pg has reset", __func__, evt.get_desc());
   }
@@ -406,6 +415,27 @@ seastar::future<bufferlist> PG::do_pgnls(bufferlist& indata,
   });
 }
 
+seastar::future<> PG::submit_transaction(boost::local_shared_ptr<ObjectState>&& os,
+					 ceph::os::Transaction&& txn,
+					 const MOSDOp& req)
+{
+  epoch_t map_epoch = get_osdmap_epoch();
+  eversion_t at_version{map_epoch, projected_last_update.version + 1};
+  return backend->mutate_object(peering_state.get_acting_recovery_backfill(),
+				std::move(os),
+				std::move(txn),
+				req,
+				peering_state.get_last_peering_reset(),
+				map_epoch,
+				at_version).then([this](auto acked) {
+    for (const auto& peer : acked) {
+      peering_state.update_peer_last_complete_ondisk(
+        peer.shard, peer.last_complete_ondisk);
+    }
+    return seastar::now();
+  });
+}
+
 seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
 {
   return seastar::do_with(std::move(m), ceph::os::Transaction{},
@@ -420,8 +450,11 @@ seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
         return do_osd_op(*pos, osd_op, txn);
       }).then([&txn,m,this,os=std::move(os)]() mutable {
         // XXX: the entire lambda could be scheduled conditionally. ::if_then()?
-        return txn.empty() ? seastar::now()
-                           : backend->mutate_object(std::move(os), std::move(txn), *m);
+	if (txn.empty()) {
+	  return seastar::now();
+	} else {
+	  return submit_transaction(std::move(os), std::move(txn), *m);
+	}
       });
     }).then([m,this] {
       auto reply = make_message<MOSDOpReply>(m.get(), 0, get_osdmap_epoch(),
@@ -452,6 +485,29 @@ seastar::future<> PG::handle_op(ceph::net::Connection* conn,
   }).then([conn](Ref<MOSDOpReply> reply) {
     return conn->send(reply);
   });
+}
+
+seastar::future<> PG::handle_rep_op(Ref<MOSDRepOp> req)
+{
+  ceph::os::Transaction txn;
+  auto encoded_txn = req->get_data().cbegin();
+  decode(txn, encoded_txn);
+  return shard_services.get_store().do_transaction(coll_ref, std::move(txn))
+    .then([req, lcod=peering_state.get_info().last_complete, this] {
+      peering_state.update_last_complete_ondisk(lcod);
+      const auto map_epoch = get_osdmap_epoch();
+      auto reply = make_message<MOSDRepOpReply>(
+        req.get(), pg_whoami, 0,
+	map_epoch, req->get_min_epoch(), CEPH_OSD_FLAG_ONDISK);
+      reply->set_last_complete_ondisk(lcod);
+      return shard_services.send_to_osd(req->from.osd, reply, map_epoch);
+    });
+}
+
+void PG::handle_rep_op_reply(ceph::net::Connection* conn,
+			     const MOSDRepOpReply& m)
+{
+  backend->got_rep_op_reply(m);
 }
 
 }
