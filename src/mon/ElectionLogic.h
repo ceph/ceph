@@ -153,6 +153,13 @@ class ElectionLogic {
    */
   int leader_acked;
 public:
+  enum election_strategy {
+    CLASSIC = 1, // the original rank-based one
+    DISALLOW, // disallow a set from being leader
+    CONNECTIVITY // includes DISALLOW, extends to prefer stronger connections
+  };
+  election_strategy strategy;
+    
   /**
    * Indicates if we are participating in the quorum.
    *
@@ -183,8 +190,17 @@ public:
   ElectionLogic(ElectionOwner *e, ConnectionTracker *t,
 		CephContext *c) : elector(e), peer_tracker(t), cct(c),
 				  leader_acked(-1),
+				  strategy(CLASSIC),
 				  participating(true),
 				  electing_me(false) {}
+  /**
+   * Set the election strategy to use. If this is not consistent across the
+   * electing cluster, you're going to have a bad time.
+   * Defaults to CLASSIC.
+   */
+  void set_election_strategy(election_strategy es) {
+    strategy = es;
+  }
   /**
    * If there are no other peers in this Paxos group, ElectionOwner
    * can simply declare victory and we will make it so.
@@ -230,14 +246,8 @@ public:
    *	  outside the quorum; given its old state, it's fair to assume it just
    *	  started, so we should start new elections so it may rejoin
    *
-   * If we did not ignore the received message, then we know that this message
-   * was sent by some other node proposing itself to become the Leader. So, we
-   * will take one of the following actions:
-   *
-   *  @li Ignore it because we already acked another node with higher rank
-   *  @li Ignore it and start a new election because we outrank it
-   *  @li Defer to it because it outranks us and the node we previously
-   *	  acked, if any
+   * We pass the propose off to a propose_*_handler function based
+   * on the election strategy we're using.
    *
    * @pre   Message epoch is from the current or a newer epoch
    * @param mepoch The epoch of the proposal
@@ -321,6 +331,31 @@ private:
    */
   void bump_epoch(epoch_t e);
   /**
+   * Handle a proposal from another rank using the classic strategy.
+   * We will take one of the following actions:
+   *
+   *  @li Ignore it because we already acked another node with higher rank
+   *  @li Ignore it and start a new election because we outrank it
+   *  @li Defer to it because it outranks us and the node we previously
+   *	  acked, if any
+   */
+  void propose_classic_handler(int from);
+  /**
+   * Handle a proposal from another rank using our disallow strategy.
+   * This is the same as the classic strategy except we also disallow
+   * certain ranks from becoming the leader.
+   */
+  void propose_disallow_handler(int from);
+  /**
+   * Handle a proposal from another rank using the connectivity strategy.
+   * We will choose to defer or not based on the ordered criteria:
+   *
+   * @li Whether the other monitor (or ourself) is on the disallow list
+   * @li Whether the other monitor or ourself has the most connectivity to peers
+   * @li Whether the other monitor or ourself has the lower rank
+   */
+  void propose_connectivity_handler(int from);
+  /**
    * Defer the current election to some other monitor.
    *
    * This means that we will ack some other monitor and drop out from the run
@@ -358,6 +393,11 @@ private:
    * @post  We invoked message_victory() on the ElectionOwner
    */
   void declare_victory();
+  /**
+   * This is just a helper function to validate that the victory claim we
+   * get from another rank makes any sense.
+   */
+  bool victory_makes_sense(int from);
 };
 
 #endif
