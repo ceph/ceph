@@ -37,7 +37,7 @@ class TestVolume(object):
             main.Volume(argv=['ceph-volume', '--cluster', 'barnacle', 'lvm', '--help'])
         # make sure we aren't causing an actual error
         assert error.value.code == 0
-        log = caplog.records[1]
+        log = caplog.records[-1]
         assert log.message == 'ignoring inability to load ceph.conf'
         assert log.levelname == 'ERROR'
 
@@ -46,6 +46,6 @@ class TestVolume(object):
             main.Volume(argv=['ceph-volume', '--cluster', 'barnacle', 'lvm', '--help'])
         # make sure we aren't causing an actual error
         assert error.value.code == 0
-        log = caplog.records[0]
+        log = caplog.records[-2]
         assert log.message == 'Running command: ceph-volume --cluster barnacle lvm --help'
         assert log.levelname == 'INFO'
