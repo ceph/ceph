@@ -8693,7 +8693,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
   vector<CDentry*> trace;
   CF_MDS_MDRContextFactory cf(mdcache, mdr);
   int r = mdcache->path_traverse(mdr, cf, destpath,
-				 MDS_TRAVERSE_DISCOVER | MDS_TRAVERSE_LAST_XLOCKED,
+				 MDS_TRAVERSE_DISCOVER | MDS_TRAVERSE_LAST_XLOCKED | MDS_TRAVERSE_WANT_DENTRY,
 				 &trace);
   if (r > 0) return;
   if (r == -ESTALE) {
@@ -8718,9 +8718,6 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
   if (r > 0) return;
   ceph_assert(r == 0);
 
-  // srcpath must not point to a null dentry
-  ceph_assert(srci != nullptr);
-      
   CDentry *srcdn = trace.back();
   CDentry::linkage_t *srcdnl = srcdn->get_projected_linkage();
   dout(10) << " srcdn " << *srcdn << dendl;

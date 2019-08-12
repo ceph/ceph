@@ -8054,6 +8054,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
   bool discover = (flags & MDS_TRAVERSE_DISCOVER);
   bool forward = !discover;
   bool last_xlocked = (flags & MDS_TRAVERSE_LAST_XLOCKED);
+  bool want_dentry = (flags & MDS_TRAVERSE_WANT_DENTRY);
 
   if (forward)
     ceph_assert(mdr);  // forward requires a request
@@ -8208,19 +8209,14 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
       CDentry::linkage_t *dnl = dn->get_projected_linkage();
       // can we conclude ENOENT?
       if (dnl->is_null()) {
-	if (pin)
-	  *pin = nullptr;
-
+	dout(10) << "traverse: null+readable dentry at " << *dn << dendl;
 	if (depth == path.depth() - 1) {
-	  if (last_xlocked) {
-	    dout(10) << "traverse: null+tail+xlocked dentry at " << *dn << dendl;
+	  if (want_dentry)
 	    break;
-	  }
 	} else {
 	  if (pdnvec)
 	    pdnvec->clear();   // do not confuse likes of rdlock_path_pin_ref();
 	}
-	dout(10) << "traverse: null+readable dentry at " << *dn << dendl;
 	return -ENOENT;
       }
 
@@ -8263,6 +8259,8 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
       continue;
     }
 
+    ceph_assert(!dn);
+
     // MISS.  dentry doesn't exist.
     dout(12) << "traverse: miss on dentry " << path[depth] << " in " << *curdir << dendl;
 
@@ -8275,24 +8273,26 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
         // file not found
 	if (pdnvec) {
 	  // instantiate a null dn?
-	  if (depth < path.depth()-1){
+	  if (depth < path.depth() - 1) {
 	    dout(20) << " didn't traverse full path; not returning pdnvec" << dendl;
-	    dn = NULL;
-	  } else if (dn) {
-	    ceph_abort(); // should have fallen out in ->is_null() check above
-	  } else if (curdir->is_frozen()) {
-	    dout(20) << " not adding null to frozen dir " << dendl;
 	  } else if (snapid < CEPH_MAXSNAP) {
 	    dout(20) << " not adding null for snapid " << snapid << dendl;
+	  } else if (curdir->is_frozen()) {
+	    dout(7) << "traverse: " << *curdir << " is frozen, waiting" << dendl;
+	    curdir->add_waiter(CDir::WAIT_UNFREEZE, cf.build());
+	    return 1;
 	  } else {
 	    // create a null dentry
 	    dn = curdir->add_null_dentry(path[depth]);
 	    dout(20) << " added null " << *dn << dendl;
 	  }
-	  if (dn)
+	  if (dn) {
 	    pdnvec->push_back(dn);
-	  else
+	    if (want_dentry)
+	      break;
+	  } else {
 	    pdnvec->clear();   // do not confuse likes of rdlock_path_pin_ref();
+	  }
 	}
         return -ENOENT;
       } else {

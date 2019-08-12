@@ -113,6 +113,7 @@ enum {
 // flags for path_traverse();
 static const int MDS_TRAVERSE_DISCOVER		= (1 << 0);
 static const int MDS_TRAVERSE_LAST_XLOCKED	= (1 << 1);
+static const int MDS_TRAVERSE_WANT_DENTRY	= (1 << 2);
 
 // flags for predirty_journal_parents()
 static const int PREDIRTY_PRIMARY = 1; // primary dn, adjust nested accounting
@@ -769,8 +770,10 @@ class MDCache {
    * MDS_TRAVERSE_DISCOVER: Instead of forwarding request, path_traverse()
    * attempts to look up the path from a different MDS (and bring them into
    * its cache as replicas).
-   * MDS_TRAVERSE_LAST_XLOCKED: path_traverse() will succeed on xlocked tail
-   * dentry (return 0 even it's null).
+   * MDS_TRAVERSE_LAST_XLOCKED: path_traverse() will procceed when xlocked tail
+   * dentry is encountered.
+   * MDS_TRAVERSE_WANT_DENTRY: Caller wants tail dentry. Add a null dentry if
+   * tail dentry does not exist. return 0 even tail dentry is null.
    *
    * @param pdnvec Data return parameter -- on success, contains a
    * vector of dentries. On failure, is either empty or contains the
