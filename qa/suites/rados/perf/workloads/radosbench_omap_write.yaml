@@ -1,0 +1,7 @@
+tasks:
+- radosbench:
+    clients: [client.0]
+    write-omap: True
+    objectsize: 4096
+    size: 4096
+    time: 300

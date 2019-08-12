@@ -1,0 +1,15 @@
+roles:
+  - [client.0, mon.a, mgr.x, osd.0, osd.1, osd.2]
+
+tasks:
+  - install:
+  - ceph:
+      log-whitelist:
+        - Reduced data availability
+        - OSD_.*DOWN
+        - \(RECENT_CRASH\)
+  - workunit:
+      clients:
+         client.0:
+           - rados/test_crash.sh
+  - ceph.restart: [osd.*]

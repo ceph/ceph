@@ -1,0 +1,31 @@
+overrides:
+  ceph:
+    mon_bind_addrvec: false
+    mon_bind_msgr2: false
+    crush_tunables: hammer
+    conf:
+      global:
+        ms bind msgr2: false
+      mon:
+        mon osd initial require min compat client: hammer
+tasks:
+- install:
+    branch: hammer
+    downgrade_packages: ['librbd1', 'librados2']
+    exclude_packages:
+      - librados3
+      - ceph-mgr-dashboard
+      - ceph-mgr-diskprediction-local
+      - ceph-mgr-diskprediction-cloud
+      - ceph-mgr-rook
+      - ceph-mgr-ssh
+      - ceph-mgr
+      - libcephfs2
+      - libcephfs-devel
+      - libcephfs-dev
+      - libradospp-devel
+    extra_packages: ['librados2']
+- install.upgrade:
+    mon.a:
+    mon.b:
+    mon.c:

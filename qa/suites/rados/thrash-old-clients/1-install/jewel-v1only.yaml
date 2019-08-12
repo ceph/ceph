@@ -1,0 +1,27 @@
+overrides:
+  ceph:
+    mon_bind_addrvec: false
+    mon_bind_msgr2: false
+    conf:
+      global:
+        ms type: async
+        ms bind msgr2: false
+tasks:
+- install:
+    branch: jewel
+    exclude_packages:
+      - librados3
+      - ceph-mgr-dashboard
+      - ceph-mgr-diskprediction-local
+      - ceph-mgr-diskprediction-cloud
+      - ceph-mgr-rook
+      - ceph-mgr-ssh
+      - ceph-mgr
+      - libcephfs2
+      - libcephfs-devel
+      - libcephfs-dev
+    extra_packages: ['librados2']
+- install.upgrade:
+    mon.a:
+    mon.b:
+    mon.c:

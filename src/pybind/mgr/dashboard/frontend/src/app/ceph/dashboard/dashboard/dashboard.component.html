@@ -1,0 +1,13 @@
+<div>
+  <cd-refresh-selector></cd-refresh-selector>
+  <tabset *ngIf="hasGrafana">
+    <tab i18n-heading
+         heading="Health">
+      <cd-health></cd-health>
+    </tab>
+    <tab i18n-heading
+         heading="Statistics">
+    </tab>
+  </tabset>
+  <cd-health *ngIf="!hasGrafana"></cd-health>
+</div>

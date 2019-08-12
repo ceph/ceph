@@ -1,0 +1,64 @@
+meta:
+- desc: |
+   upgrade the ceph cluster,
+   upgrate in two steps
+   step one ordering: mon.a
+   step two ordering: mon.b,mgr.x
+   step three ordering: mon.c
+   step four ordering: osd.0, osd.1
+   step five ordering: mds.a, msd.b
+   step six ordering: osd.4, osd.5
+   step seven ordering: osd.2, osd.3
+   step eight ordering: rgw.*
+   ceph expected to be healthy state after each step
+upgrade-sequence:
+   sequential:
+   - ceph.restart:
+       daemons: [mon.a]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - ceph.restart:
+       daemons: [mon.b, mgr.x,rgw.*]
+       wait-for-healthy: true
+       mon-health-to-clog: false
+   - sleep:
+       duration: 60
+   - ceph.restart:
+       daemons: [mon.c]
+       wait-for-healthy: false
+       mon-health-to-clog: false
+   - exec:
+       mon.a:
+         - ceph config set global mon_warn_on_msgr2_not_enabled false
+   - ceph.healthy:
+   - sleep:
+       duration: 60
+   - ceph.restart:
+       daemons: [osd.0, osd.1]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - ceph.restart: [mds.a, mds.b]
+   - sleep:
+       duration: 60
+   - ceph.restart:
+       daemons: [osd.4, osd.5]
+       wait-for-healthy: true
+   - sleep:
+       duration: 60
+   - sleep:
+       duration: 60
+   - ceph.restart:
+       daemons: [osd.2, osd.3]
+       wait-for-healthy: false
+       wait-for-osds-up: true
+   - sleep:
+       duration: 60
+   - ceph.restart:
+       daemons: [rgw.*]
+       wait-for-healthy: false
+       wait-for-osds-up: true
+   - sleep:
+       duration: 60
+

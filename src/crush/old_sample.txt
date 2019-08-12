@@ -1,0 +1,82 @@
+
+# first define our types
+<types>
+	<type osd>
+	   type_id = 0
+	</type>
+	<type cab>
+	   type_id = 2
+	</type>
+	<type row>
+	   type_id = 3
+	</type>
+	<type pool>
+	   type_id = 10
+	</type>
+</types>
+
+# hierarchy
+<devices>
+	<osd osd001>
+		id 1
+		weight 500
+	</osd>
+	<osd osd002>
+		id 2
+		weight 500
+	</osd>
+	<osd osd003>
+		id 3
+		weight 500
+	</osd>
+	<osd osd004>
+		id 4
+		weight 500
+	</osd>
+	<osd osd005>
+		id 5
+		weight 500
+	</osd>
+</devices>
+
+<buckets>
+	<cab cab-d2>
+		alg straw
+		id   -12
+		<item osd001/>
+		<item osd002/>
+		<item osd003/>
+		<item osd004>
+		      weight 600
+		</item>
+	</cab>
+	
+#	<pool newlayout>
+#		<item satapool>
+#			weight 1.0
+#		</item>
+#		<item fcpool>
+#			weight 3.0
+#		</item>
+#	</pool>
+</buckets>
+
+<devices>
+	<osd osd006>
+		id 5
+		weight 500
+	</osd>
+</devices>
+
+# rules
+<rules>
+	<rule normal>
+		pool 0
+		type replicated
+		min_size 1
+		mix_size 4
+		step take root
+		step choose_indep 0 osd
+		step emit
+	</rule>
+</rules>

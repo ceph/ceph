@@ -1,0 +1,21 @@
+{% extends "!page.html" %}
+{% block body %}
+
+<div id="dev-warning" class="admonition note" style="display:none;">
+  <p class="first admonition-title">Notice</p>
+  <p class="last">This document is for a development version of Ceph.</p>
+</div>
+
+<div id="eol-warning" class="admonition warning" style="display:none;">
+  <p class="first admonition-title">Warning</p>
+  <p class="last">This document is for an unsupported version of Ceph.</p>
+</div>
+
+{%- if edit_on_github_url %}
+  <div id="docubetter" align="right" style="display:none; padding: 15px; font-weight: bold;">
+    <a id="edit-on-github" href="{{ edit_on_github_url }}" rel="nofollow">{{ _('Edit on GitHub')}}</a> | <a href="https://github.com/ceph/ceph/projects/4">Report a Documentation Bug</a>
+  </div>
+{%- endif %}
+
+  {{ super() }}
+{% endblock %}

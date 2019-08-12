@@ -1,0 +1,4 @@
+tasks:
+- exec:
+    client.0:
+      - sudo ceph osd set-require-min-compat-client octopus

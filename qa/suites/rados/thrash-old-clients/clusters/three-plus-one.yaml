@@ -1,0 +1,14 @@
+roles:
+- [mon.a, mgr.y, osd.0, osd.1, osd.2, osd.3, client.0]
+- [mon.b, mgr.x, osd.4, osd.5, osd.6, osd.7, client.1]
+- [mon.c, osd.8, osd.9, osd.10, osd.11]
+- [client.2]
+openstack:
+- volumes: # attached to each instance
+    count: 4
+    size: 10 # GB
+overrides:
+  ceph:
+    conf:
+      osd:
+        osd shutdown pgref assert: true

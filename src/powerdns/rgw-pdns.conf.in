@@ -1,0 +1,15 @@
+[powerdns]
+listen_addr = 127.0.0.1
+listen_port = 6780
+
+dns_zone = rgw.local.lan
+dns_soa_record = dns1.icann.org. hostmaster.icann.org. 2012080849 7200 3600 1209600 3600
+dns_soa_ttl = 3600
+dns_default_ttl = 60
+
+rgw_access_key = myAccessKey
+rgw_secret_key = mySecretKey
+rgw_endpoint = localhost
+rgw_admin_entry = admin
+
+debug = no

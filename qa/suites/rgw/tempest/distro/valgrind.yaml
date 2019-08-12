@@ -1,0 +1,5 @@
+os_type: centos
+overrides:
+  rgw:
+    client.0:
+      valgrind: [--tool=memcheck, --max-threads=1024] # http://tracker.ceph.com/issues/25214

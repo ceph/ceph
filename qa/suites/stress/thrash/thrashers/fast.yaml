@@ -1,0 +1,9 @@
+tasks:
+- install:
+- ceph:
+    log-whitelist:
+    - but it is still running
+    - objects unfound and apparently lost
+- thrashosds:
+    op_delay: 1
+    chance_down: 10

@@ -1,0 +1,130 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+%language=C++
+%compare-strncmp
+%define class-name keyword_hash
+%define lookup-function-name lookup
+%struct-type
+struct Keyword {
+  const char* name;
+  TokenKind kind;
+  TokenID id;
+  uint64_t specific;
+  bool arrayable;
+  bool objectable;
+};
+%%
+# Top-level
+#
+Version, TokenKind::top, TokenID::Version, 0, false, false
+Id, TokenKind::top, TokenID::Id, 0, false, false
+Statement, TokenKind::top, TokenID::Statement, 0, true, true
+#
+# Statement level
+#
+Sid, TokenKind::statement, TokenID::Sid, 0, false, false
+Effect, TokenKind::statement, TokenID::Effect, 0, false, false
+Principal, TokenKind::statement, TokenID::Principal, 0, false, true
+NotPrincipal, TokenKind::statement, TokenID::NotPrincipal, 0, true, true
+Action, TokenKind::statement, TokenID::Action, 0, true, false
+NotAction, TokenKind::statement, TokenID::NotAction, 0, true, false
+Resource, TokenKind::statement, TokenID::Resource, 0, true, false
+NotResource, TokenKind::statement, TokenID::NotResource, 0, true, false
+Condition, TokenKind::statement, TokenID::Condition, 0, true, true
+#
+# Condition operators
+#
+# String
+StringEquals, TokenKind::cond_op, TokenID::StringEquals, (uint64_t) Type::string, true, true
+StringNotEquals, TokenKind::cond_op, TokenID::StringNotEquals, (uint64_t) Type::string, true, true
+StringEqualsIgnoreCase, TokenKind::cond_op, TokenID::StringEqualsIgnoreCase, (uint64_t) Type::string, true, true
+StringNotEqualsIgnoreCase, TokenKind::cond_op, TokenID::StringNotEqualsIgnoreCase, (uint64_t) Type::string, true, true
+StringLike, TokenKind::cond_op, TokenID::StringLike, (uint64_t) Type::string, true, true,
+StringNotLike, TokenKind::cond_op, TokenID::StringNotLike, (uint64_t) Type::string, true, true
+# Numeric
+NumericEquals, TokenKind::cond_op, TokenID::NumericEquals, (uint64_t) Type::number, true, true
+NumericNotEquals, TokenKind::cond_op, TokenID::NumericNotEquals, (uint64_t) Type::number, true, true
+NumericLessThan, TokenKind::cond_op, TokenID::NumericLessThan, (uint64_t) Type::number, true, true
+NumericLessThanEquals, TokenKind::cond_op, TokenID::NumericLessThanEquals, (uint64_t) Type::number, true, true
+NumericGreaterThan, TokenKind::cond_op, TokenID::NumericGreaterThan, (uint64_t) Type::number, true, true
+NumericGreaterThanEquals, TokenKind::cond_op, TokenID::NumericGreaterThanEquals, (uint64_t) Type::number, true, true
+# Date
+DateEquals, TokenKind::cond_op, TokenID::DateEquals, (uint64_t) Type::date, true, true
+DateNotEquals, TokenKind::cond_op, TokenID::DateNotEquals, (uint64_t) Type::date, true, true
+DateLessThan, TokenKind::cond_op, TokenID::DateLessThan, (uint64_t) Type::date, true, true
+DateLessThanEquals, TokenKind::cond_op, TokenID::DateLessThanEquals, (uint64_t) Type::date, true, true
+DateGreaterThan, TokenKind::cond_op, TokenID::DateGreaterThan, (uint64_t) Type::date, true, true
+DateGreaterThanEquals, TokenKind::cond_op, TokenID::DateGreaterThanEquals, (uint64_t) Type::date, true, true
+# Bool
+Bool, TokenKind::cond_op, TokenID::Bool, (uint64_t) Type::boolean, true, true
+# Binary
+BinaryEquals, TokenKind::cond_op, TokenID::BinaryEquals, (uint64_t) Type::binary, true, true
+# IP Address
+IpAddress, TokenKind::cond_op, TokenID::IpAddress, (uint64_t) Type::ipaddr, true, true
+NotIpAddress, TokenKind::cond_op, TokenID::NotIpAddress, (uint64_t) Type::ipaddr, true, true
+# Amazon Resource Names
+ArnEquals, TokenKind::cond_op, TokenID::ArnEquals, (uint64_t) Type::arn, true, true
+ArnNotEquals, TokenKind::cond_op, TokenID::ArnNotEquals, (uint64_t) Type::arn, true, true
+ArnLike, TokenKind::cond_op, TokenID::ArnLike, (uint64_t) Type::arn, true, true
+ArnNotLike, TokenKind::cond_op, TokenID::ArnNotLike, (uint64_t) Type::arn, true, true
+# Null
+Null, TokenKind::cond_op, TokenID::Null, (uint64_t) Type::null, true, true
+#
+# Condition keys
+#
+# AWS
+#aws:CurrentTime, TokenKind::cond_key, TokenID::awsCurrentTime, (uint64_t) Type::date, true, false
+#aws:EpochTime, TokenKind::cond_key, TokenID::awsEpochTime, (uint64_t) Type::date, true, false
+#aws:TokenIssueTime, TokenKind::cond_key, TokenID::awsTokenIssueTime, (uint64_t) Type::date, true, false
+#aws:MultiFactorAuthPresent, TokenKind::cond_key, TokenID::awsMultiFactorAuthPresent, (uint64_t) Type::boolean, true, false
+#aws:MultiFactorAuthAge, TokenKind::cond_key, TokenID::awsMultiFactorAuthAge, (uint64_t) Type::number, true, false
+#aws:PrincipalType, TokenKind::cond_key, TokenID::awsPrincipalType, (uint64_t) Type::string, true, false
+#aws:Referer, TokenKind::cond_key, TokenID::awsReferer, (uint64_t) Type::string, true, false
+#aws:SecureTransport, TokenKind::cond_key, TokenID::awsSecureTransport, (uint64_t) Type::boolean, true, false
+#aws:SourceArn, TokenKind::cond_key, TokenID::awsSourceArn, (uint64_t) Type::arn, true, false
+#aws:SourceIp, TokenKind::cond_key, TokenID::awsSourceIp, (uint64_t) Type::ipaddr, true, false
+#aws:SourceVpc, TokenKind::cond_key, TokenID::awsSourceVpc, (uint64_t) Type::string, true, false
+#aws:SourceVpce, TokenKind::cond_key, TokenID::awsSourceVpce, (uint64_t) Type::string, true, false
+#aws:UserAgent, TokenKind::cond_key, TokenID::awsUserAgent, (uint64_t) Type::string, true, false
+#aws:userid, TokenKind::cond_key, TokenID::awsuserid, (uint64_t) Type::string, true, false
+#aws:username, TokenKind::cond_key, TokenID::awsusername, (uint64_t) Type::string, true, false
+# S3
+#s3:x-amz-acl, TokenKind::cond_key, TokenID::s3x_amz_acl, (uint64_t) Type::string, true, false
+#s3:x-amz-grant-read, TokenKind::cond_key, TokenID::s3x_amz_grant_permission, (uint64_t) Type::boolean, true, false
+#s3:x-amz-grant-write, TokenKind::cond_key, TokenID::s3x_amz_grant_permission, (uint64_t) Type::boolean, true, false
+#s3:x-amz-grant-read-acp, TokenKind::cond_key, TokenID::s3x_amz_grant_permission, (uint64_t) Type::boolean, true, false
+#s3:x-amz-grant-write-acp, TokenKind::cond_key, TokenID::s3x_amz_grant_permission, (uint64_t) Type::boolean, true, false
+#s3:x-amz-grant-full-control, TokenKind::cond_key, TokenID::s3x_amz_grant_permission, (uint64_t) Type::boolean, true, false
+#s3:x-amz-copy-source, TokenKind::cond_key, TokenID::s3x_amz_copy_source, (uint64_t) Type::string, true, false
+#s3:x-amz-server-side-encryption, TokenKind::cond_key, TokenID::s3x_amz_server_side_encryption, (uint64_t) Type::boolean, true, false
+#s3:x-amz-server-side-encryption-aws-kms-key-id, TokenKind::cond_key, TokenID::s3x_amz_server_side_encryption_aws_kms_key_id, (uint64_t) Type::arn, true, false
+#s3:x-amz-metadata-directive, TokenKind::cond_key, TokenID::s3x_amz_metadata_directive, (uint64_t) Type::string, true, false
+#s3:x-amz-storage-class, TokenKind::cond_key, TokenID::s3x_amz_storage_class, (uint64_t) Type::string, true, false
+#s3:VersionId, TokenKind::cond_key, TokenID::s3VersionId, (uint64_t) Type::string, true, false
+#s3:LocationConstraint, TokenKind::cond_key, TokenID::s3LocationConstraint, (uint64_t) Type::string, true, false
+#s3:prefix, TokenKind::cond_key, TokenID::s3prefix, (uint64_t) Type::string, true, false
+#s3:delimiter, TokenKind::cond_key, TokenID::s3delimiter, (uint64_t) Type::string, true, false
+#s3:max-keys, TokenKind::cond_key, TokenID::s3max_keys, (uint64_t) Type::number, true, false
+#s3:signatureversion, TokenKind::cond_key, TokenID::s3signatureversion, (uint64_t) Type::string, true, false
+#s3:authType, TokenKind::cond_key, TokenID::s3authType, (uint64_t) Type::string, true, false
+#s3:signatureAge, TokenKind::cond_key, TokenID::s3signatureAge, (uint64_t) Type::number, true, false
+#s3:x-amz-content-sha256, TokenKind::cond_key, TokenID::s3x_amz_content_sha256, (uint64_t) Type::string, true, false
+# STS
+#sts:authentication, TokenKind::cond_key, TokenID::stsauthentication, (uint64_t) Type::boolean, true, false
+#
+# Version Keywords
+#
+2008-10-17, TokenKind::version_key, TokenID::v2008_10_17, (uint64_t) Version::v2008_10_17, false, false
+2012-10-17, TokenKind::version_key, TokenID::v2012_10_17, (uint64_t) Version::v2012_10_17, false, false
+#
+# Effect Keywords
+#
+Allow, TokenKind::effect_key, TokenID::Allow, (uint64_t) Effect::Allow, false, false
+Deny, TokenKind::effect_key, TokenID::Deny, (uint64_t) Effect::Deny, false, false
+#
+# Principal types
+#
+AWS, TokenKind::princ_type, TokenID::AWS, 0, true, false
+Federated, TokenKind::princ_type, TokenID::Federated, 0, true, false
+Service, TokenKind::princ_type, TokenID::Service, 0, true, false
+CanonicalUser, TokenKind::princ_type, TokenID::CanonicalUser, 0, true, false

@@ -1,0 +1,1148 @@
+commit b5a67f0e1d15385bc0d60a6da6e7fc810bde6047 (tag: refs/tags/v0.80.9, refs/remotes/gh/firefly)
+Author: Jenkins <jenkins@inktank.com>
+Date:   Mon Mar 9 10:42:08 2015 -0700
+
+    0.80.9
+
+commit 37901afd1556257151c029395caa1143e84860f2
+Merge: 00e5947 3dac68a
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Tue Mar 3 15:58:53 2015 +0100
+
+    Merge pull request #3852 from dachary/wip-10965-rgw-firefly
+    
+    rgw: enable ipv6 in civetweb
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 00e5947a28f7810a28329d2f4901aed09a289421
+Merge: 293222a b13f483
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Tue Mar 3 15:58:39 2015 +0100
+
+    Merge pull request #3853 from dachary/wip-10907-rgw-firefly
+    
+    rgw: pass civetweb configurables to civetweb
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 293222a284c072a13950831205c106fec7a400df
+Merge: 6512b06 d57b38f
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Tue Mar 3 15:58:25 2015 +0100
+
+    Merge pull request #3851 from dachary/wip-10978-rgw-firefly
+    
+    rgw: don't overwrite bucket / object owner when setting acls
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit d57b38f85b683dfb365c3cb98362d486594f9eb3
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri Feb 27 15:32:50 2015 -0800
+
+    rgw: don't overwrite bucket / object owner when setting acls
+    
+    Fixes: #10978
+    Backport: hammer, firefly
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit eb13f2d4b60c031f16139f7cc4237c012644dd78)
+    
+    Conflicts:
+    	src/rgw/rgw_op.cc : trivial s/.empty()/== NULL/
+
+commit b13f483e51b37a768c7f4313b6933bf648950c7d
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Tue Feb 17 15:05:40 2015 -0800
+
+    rgw: pass civetweb configurables to civetweb
+    
+    Fixes: #10907
+    Backport: firefly
+    
+    Pass any configurables in the rgw frontends config line to civetweb.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 986d7554426764a149621ba733c5c075b94e0431)
+
+commit 3dac68a17a909b212a36b0a3c0ae2c47d323deee
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri Feb 27 08:14:27 2015 -0800
+
+    civetweb: update submodule
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit f28fe744285117a1715eac0d08911cdb37285103)
+
+commit 14aca3af18119a76c1cdfa6d71e6085d360e45e2
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri Feb 27 08:14:41 2015 -0800
+
+    rgw: update makefile to enable civetweb config
+    
+    Fixes: #10965
+    Backport: hammer, firefly
+    
+    Civetweb compilation now includes conf header to enable ipv6.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit caa90225bad9fe5e9c275e6189b3396b4d396e3f)
+    
+    Conflicts:
+    	src/rgw/Makefile.am
+               radosgw_CFLAGS = -Icivetweb/include
+            was not yet changed into
+               radosgw_CFLAGS = -I$(srcdir)/civetweb/include
+            in firefly
+
+commit 6512b06fc8a80e3befbe15b543f8850991f74e8a
+Merge: 7b748c6 555cc42
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sat Feb 28 16:47:55 2015 +0100
+
+    Merge pull request #3820 from tchaikov/firefly-pg-leak-10421
+    
+    osd: fix PG leak in SnapTrimWQ._clear()
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 7b748c62764311572342593820ce3f28f74fe9ca
+Merge: d971c95 da95149
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sat Feb 28 16:46:42 2015 +0100
+
+    Merge pull request #3772 from ceph/wip-10883-firefly
+    
+    osd: Fix FileJournal wrap to get header out first
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit d971c95c3d8b48494d05b68f40c4c9a4cc6f87a8
+Merge: 0820041 e539971
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Sat Feb 28 16:45:48 2015 +0100
+
+    Merge pull request #3521 from dzafman/wip-10676
+    
+    Backport doc fixes that appear to apply to firefly
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit 555cc42fc826fd801f0d45187429079d4072d129
+Author: Kefu Chai <kchai@redhat.com>
+Date:   Tue Feb 10 16:29:45 2015 +0800
+
+    osd: fix PG leak in SnapTrimWQ._clear()
+    
+    Fixes: #10421
+    Signed-off-by: Kefu Chai <kchai@redhat.com>
+    (cherry picked from commit 01e154d592d6cdbf3f859cf1b4357e803536a6b4)
+
+commit 0820041e6515c82c41b81b9e6825e2dd5fcb8165
+Merge: 6565774 702dbc0
+Author: Gregory Farnum <greg@gregs42.com>
+Date:   Thu Feb 26 15:59:24 2015 -0800
+
+    Merge pull request #3730 from ceph/wip-firefly-flock
+    
+    backport ceph-fuse file locking patches to Firefly
+    
+    Reviewed-by: Yan, Zheng <zyan@redhat.com>
+
+commit 6565774d0356efc6225ad561bb13e7cf11da7b1e
+Merge: 7ab02ee 08c2fda
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Thu Feb 26 14:18:10 2015 -0800
+
+    Merge pull request #3406 from ceph/wip-10299-firefly
+    
+    librbd: complete all pending aio ops prior to closing image
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 08c2fda12cf46937a09a59bb032379c3c5321292
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Dec 15 10:53:53 2014 -0500
+
+    librbd: complete all pending aio ops prior to closing image
+    
+    It was possible for an image to be closed while aio operations
+    were still outstanding.  Now all aio operations are tracked and
+    completed before the image is closed.
+    
+    Fixes: #10299
+    Backport: giant, firefly, dumpling
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+
+commit 7ab02ee5afb3d017b94d58c3dfc7731f7a3866d9
+Merge: 0c0a552 c23e42e
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Thu Feb 26 14:12:29 2015 -0800
+
+    Merge pull request #3404 from ceph/wip-10270-firefly
+    
+    librbd: gracefully handle deleted/renamed pools
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit 0c0a5520b1b883bcdd5b865b217ba61e471e3ca2
+Merge: 9ef7743 836ab86
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Thu Feb 26 13:31:37 2015 -0800
+
+    Merge pull request #3410 from ceph/wip-9854-firefly
+    
+    osdc: Constrain max number of in-flight read requests
+    
+    Reviewed-by: Josh Durgin <jdurgin@redhat.com>
+
+commit da951497b7e5ec227aa6a5e459b0d04d8b88ef13 (refs/remotes/gh/wip-10883-firefly)
+Author: David Zafman <dzafman@redhat.com>
+Date:   Wed Feb 18 16:21:12 2015 -0800
+
+    osd: Fix FileJournal wrap to get header out first
+    
+    Correct and restore assert that was removed
+    
+    Cause by f46b1b473fce0322a672b16c7739e569a45054b6
+    Fixes: #10883
+    Backport: dumpling, firefly, giant
+    
+    Signed-off-by: David Zafman <dzafman@redhat.com>
+    (cherry picked from commit 970bb4901f93575709421b5b25c3eff213de61b8)
+
+commit 702dbc0a247c149d53b52d1929f9880bc99d0522
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Wed Oct 15 12:00:58 2014 +0800
+
+    qa/workunits/fs/misc: Add a workunit for file lock interruption
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit ac92c455a9aa19e4288acdf0c9a746e03a640efb)
+
+commit d2523b82c5c7b29293d70a66ba95493a1564a840
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Wed Oct 15 12:03:46 2014 +0800
+
+    mds: fix neighbor lock check
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit b0e6e85aa08ea74cd209aad04f3f0bf991761e12)
+
+commit f9b6b66b05ddadef043d81676728bf40730ea16c
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Mon Oct 13 11:34:18 2014 +0800
+
+    client: use finisher to abort MDS request
+    
+    When a request is interrupted, libfuse first locks an internal mutex,
+    then calls the interrupt callback. libfuse need to lock the same mutex
+    when unregistering interrupt callback. We unregister interrupt callback
+    while client_lock is locked, so we can't acquiring the client_lock in
+    the interrupt callback.
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit 09699454e729592d426aeff5b578697e850af12e)
+    
+    Conflicts:
+    	src/client/Client.cc
+    	src/client/Client.h
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com>
+
+commit ea355e9ca5203b77e6f74ca4a3e39ce23cc86f67
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Thu Oct 9 13:16:18 2014 +0800
+
+    client: use atomic variable to track reference of MetaRequeset
+    
+    this allow us to increase reference count of MetaRequest while not holding
+    the client_lock
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit e464a7765230c504b3e3b88bcb1106f67b7c3eb9)
+
+commit ccbdf514717cb0e48d67b57197d6e538faeea415
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Mon Oct 13 10:44:46 2014 +0800
+
+    client: allow interrupting blocked file lock operation
+    
+    This commit introduce two new types of setfilelock request. Unlike
+    setfilelock (UNLOCK) request, these two new types of setfilelock request
+    do not drop locks that have alread been acquired, they only interrupt
+    blocked setfilelock request.
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit 4134c149d3759dd6a3aaa1a353b77bbfe8e9491b)
+
+commit 875e2fcb060554941d94714ad48ebbc0cbbf8077
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Thu Oct 9 09:42:08 2014 +0800
+
+    client: register callback for fuse interrupt
+    
+    libfuse allows program to reigster a callback for interrupt. When a file
+    system operation is interrupted, the fuse kernel driver sends interupt
+    request to libfuse. libfuse calls the interrupt callback when receiving
+    interrupt request.
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit 289e8b4a7efa1ae6427115af9bbe541c9e1f0e90)
+
+commit c96aabbd54b24a0273af21a450cd6f517fe4ada0
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Sat Oct 4 09:14:44 2014 +0800
+
+    client: add helper function that updates lock state
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit 6a2303a6b6d97f2a6d1422e42d3d88991857618f)
+    
+    Conflicts:
+    	src/client/Client.h
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com>
+
+commit ebbd3ca66722cdc61b56d243baf8e63f7b8c1c1b
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Thu Oct 2 20:21:36 2014 +0800
+
+    fuse: enable fuse_multithreaded by default
+    
+    GETFILELOCK MDS request may block for a long time, so we need to
+    use multithread event loop,
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit b17b43a8660ed0db29fbecf44798265e47712f85)
+
+commit 924e6f2b6b03456a8b18d8b158b8f325051f0519
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Thu Oct 2 19:07:41 2014 +0800
+
+    client: posix file lock support
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit a1b2c8ff955b30807ac53ce6bdc97cf61a7262ca)
+    
+    Conflicts:
+    	src/client/Client.cc
+    	src/client/Client.h
+    	src/client/Inode.h
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com>
+
+commit 82994946bdcb95867a61e0acf443e30b13925a34
+Author: Yan, Zheng <zyan@redhat.com>
+Date:   Thu Oct 2 18:02:50 2014 +0800
+
+    common: link mds/flock.o to libcommon
+    
+    later commit will use this code to track file locks held by cephfs
+    client.
+    
+    Signed-off-by: Yan, Zheng <zyan@redhat.com>
+    (cherry picked from commit e075c27c3554380c59dce0cc17ef0944eb415025)
+    
+    Conflicts:
+    	src/mds/Makefile.am
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com>
+
+commit 9ef77430f3d46789b0ba1a2afa42729627734500
+Merge: 1205867 b668566
+Author: Loic Dachary <ldachary@redhat.com>
+Date:   Fri Feb 13 18:34:11 2015 +0100
+
+    Merge pull request #3684 from ceph/wip-crush-straw-firefly
+    
+    osd: backport straw bucket fixes and all other recent crush goodness to firefly
+    
+    Reviewed-by: Loic Dachary <ldachary@redhat.com>
+
+commit b668566fd8148414b8074f096b85b22c42ed3af9 (refs/remotes/gh/wip-crush-straw-firefly)
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Jan 16 09:02:28 2015 -0800
+
+    crush/builder: fix warnings
+    
+    crush/builder.c: In function 'crush_remove_list_bucket_item':
+    crush/builder.c:977:13: warning: comparison between signed and unsigned integer expressions [-Wsign-compare]
+      if (weight < bucket->h.weight)
+                 ^
+    crush/builder.c: In function 'crush_remove_tree_bucket_item':
+    crush/builder.c:1031:14: warning: comparison between signed and unsigned integer expressions [-Wsign-compare]
+       if (weight < bucket->h.weight)
+                  ^
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 14eb1a73c71d81b7f193fce27c59cb3babf3e74a)
+
+commit 247afa4efe7d11b5ef06e094680b50ea30d7d5e3
+Author: Loic Dachary <loic-201408@dachary.org>
+Date:   Wed Oct 15 17:02:58 2014 -0700
+
+    crush: improve constness of CrushWrapper methods
+    
+    A number of CrushWrapper get methods or predicates were not const
+    because they need to maintain transparently the rmaps. Make the rmaps
+    mutable and update the constness of the methods to match what the caller
+    would expect.
+    
+    Signed-off-by: Loic Dachary <loic-201408@dachary.org>
+    (cherry picked from commit 236895eea65f8706baa5fdef96fb00ad5b82218c)
+
+commit c59279a25b6c53e0ab3988b0f00ae3cce94f33d7
+Author: Xiaoxi Chen <xiaoxi.chen@intel.com>
+Date:   Fri Sep 5 10:56:36 2014 +0800
+
+    Change CrushWrapper::crush to private
+    
+    Currently in CrushWrapper, the member "struct crush_map *crush"  is a public member,
+    so people can break the encapsulation and manipulate directly to the crush structure.
+    
+    This is not a good practice for encapsulation and will lead to inconsistent if code
+    mix use the CrushWrapper API and crush C API.A simple example could be:
+    1.some code use crush_add_rule(C-API) to add a rule, which will not set the have_rmap flag to false in CrushWrapper
+    2.another code using CrushWrapper trying to look up the newly added rule by name will get a -ENOENT.
+    
+    This patch move CrushWrapper::crush to private, together with three reverse map(type_rmap, name_rmap, rule_name_rmap)
+    and also change codes accessing the CrushWrapper::crush to make it compile.
+    
+    Signed-off-by: Xiaoxi Chen <xiaoxi.chen@intel.com>
+    (cherry picked from commit d734600f9251b52f525faa35441e2b5dd660161b)
+
+commit 9fc2fd50aec94233528870aaa371347238a6ea75
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jul 11 06:58:57 2014 -0700
+
+    crush: include CRUSH_V3, v2/v3 rules checks in dump_tunables()
+    
+    Backport: firefly
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit cf94cf3531a349bbd1fc6ee56c3fc260110a252a)
+
+commit f6009a614a3689cc9a96f55b35e70362be4ec64b
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Dec 5 15:58:03 2014 -0800
+
+    mon: 'osd crush reweight-all'
+    
+    This corresponds to the crushtool --reweight command.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 89b2feea8d53b9dc15ab5ae7f5920ad19c8bba18)
+
+commit d5d7495432dd023ed8c9ba2ac08222f06afee48f
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Dec 5 15:55:24 2014 -0800
+
+    crush: set straw_calc_version=1 for default+optimal; do not touch for presets
+    
+    When using the presets for compatibility (i.e., based on version), do not
+    touch the straw behavior, as it does not affect mapping or compatibility.
+    However, make a point of setting it by default and for optimal.
+    
+    For most users, this means that they will not see any change unless they
+    explicitly enable the new behavior, or switch to default or optimal
+    tunables.  The idea is that if they touched it, they shouldn't be
+    too surprised by the subsequent data movement.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit dd7b58f3b1aa1febfc6dc227937df93ee6e284eb)
+    
+    (Note: differs from original in that the hammer tunable profile is not
+    present)
+
+commit 5b7b7599123a9d7a837ded52946bd553b09b1ac7
+Author: Sage Weil <sage@redhat.com>
+Date:   Wed Dec 3 22:30:00 2014 -0800
+
+    crush/builder: a note about the original crush_calc_straw()
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit adf5c6de0aca24a53d3c7b4e7eeb0a5dce9db0f1)
+
+commit 3ab835b059fd74a525cc2a8ebe8b6a1453e0cc87
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Dec 2 16:43:16 2014 -0800
+
+    mon: add 'osd crush {get,set}-tunable <name> [value]' commands
+    
+    For now, just add the straw_calc_version tunable.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 9000068ae45a8b89315c152b7d5509ac873f2957)
+    
+    Conflicts:
+    	src/mon/OSDMonitor.cc
+
+commit 884414c5788bac9a269f01b26cbc0c55850c34f6
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Dec 2 16:33:11 2014 -0800
+
+    crush: fix crush_calc_straw() scalers when there are duplicate weights
+    
+    The straw bucket was originally tested with uniform weights and with a
+    few more complicated patterns, like a stair step (1,2,3,4,5,6,7,8,9).  And
+    it worked!
+    
+    However, it does not behave with a pattern like
+     1, 2, 2, 3, 3, 4, 4
+    
+    Strangely, it does behave with
+     1, 1, 2, 2, 3, 3, 4, 4
+    
+    and more usefully it does behave with
+     1, 2, 2.001, 3, 3.001, 4, 4.001
+    
+    That is, the logic that explicitly copes with weights that are duplicates
+    is broken.
+    
+    The fix is to simply remove the special handling for duplicate weights --
+    it isn't necessary and doesn't work correctly anyway.
+    
+    Add a test that compares the mapping result of  [1, 2, 2, 3, 3, ...] with
+    [1, 2, 2.001, 3, 3.001, ...] and verifies that the difference is small.
+    With the fix, we get .00012, whereas the original implementation gets
+    .015.
+    
+    Note that this changes the straw bucket scalar *precalculated* values that
+    are encoded with the map, and only when the admin opts into the new behavior.
+    
+    Backport: giant, firefly
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 43d5c7caa7ce478477bde1bbd4f0649b5159cdcf)
+
+commit bf677093302f475a23de541471ddde6a7c7153b6
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Dec 2 14:50:21 2014 -0800
+
+    crush: fix distortion of straw scalers by 0-weight items
+    
+    The presence of a 0-weight item in a straw bucket should have no effect
+    on the placement of other items.  Add a test validating that and fix
+    crush_calc_straw() to fix the distortion.
+    
+    Note that this effects the *precalculation* of the straw bucket inputs and
+    does not effect the actually mapping process given a compiled or encoded
+    CRUSH map, and only when straw_calc_version == 1 (i.e., the admin opted in
+    to the new behavior).
+    
+    Backport: giant, firefly
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 85498bc8f62ca56506b33f3c5ec4fc4b111ed73d)
+
+commit e02574ef5d3b66e73424a16460366de2d36eded3
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Dec 2 14:49:42 2014 -0800
+
+    crush/builder: break out new version 1 of crush_calc_straw
+    
+    No change, yet.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 7c1203635f2b5911f281ce3a441905df6e9bd103)
+
+commit c7312a47865c758e67852999803d8aa90ff809c1
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Dec 2 14:45:04 2014 -0800
+
+    crush: pass crush_map * to various builder methods
+    
+    In particular, we will need it for crush_calc_straw().
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit f35a3d88cb944c292e966f679ac7a8d7a1cd3093)
+    
+    Conflicts:
+    	src/crush/CrushWrapper.cc
+
+commit 5137cc656548d942d0f21ba3ef28a5b7d4d21831
+Author: Rongze Zhu <zrzhit@gmail.com>
+Date:   Fri Oct 10 19:18:00 2014 +0800
+
+    crush: fix incorrect use of adjust_item_weight method
+    
+    adjust_item_weight method will adjust all buckets which the item
+    inside. If the osd.0 in host=fake01 and host=fake02, we execute
+    "ceph osd crush osd.0 10 host=fake01", it not only will adjust fake01's
+    weight, but also will adjust fake02's weight.
+    
+    the patch add adjust_item_weightf_in_loc method and fix remove_item,
+    _remove_item_under, update_item, insert_item, detach_bucket methods.
+    
+    Signed-off-by: Rongze Zhu <zrzhit@gmail.com>
+    (cherry picked from commit 9850227d2f0ca2f692a154de2c14a0a08e751f08)
+    
+    Conflicts:
+    	src/crush/CrushWrapper.cc
+
+commit 80ec22014deb8536b9c34e8d57b286052898d05a
+Author: Sage Weil <sage@redhat.com>
+Date:   Thu Nov 13 10:59:22 2014 -0800
+
+    crush/CrushWrapper: fix detach_bucket
+    
+    In commit 9850227d2f0ca2f692a154de2c14a0a08e751f08 we changed the call that
+    changed the weight of all instances of item to one that explicitly
+    changes it in the parent bucket, but parent_id may not be valid at the
+    call site.  Move this into the conditional block to fix.
+    
+    Fixes: #10095
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 6f8b96a9fe4793906c74a571109a457aca7ca220)
+
+commit 5bc554ac5a7a4cd86b873bfc4f4313c91287b52c
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Dec 2 14:10:49 2014 -0800
+
+    crush: default to straw_calc_version 1
+    
+    Stick with bobtail tunables where it affects compatibility.  Use v1 of
+    straw_calc, though, since that does not, and we want the best for new
+    clusters.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 9565621d6007302fdd68ba27b6aef22e487f0985)
+
+commit cfc718a5a1fec937cf00e6c2b55f66d4390088bb
+Author: Sage Weil <sage@redhat.com>
+Date:   Fri Feb 13 08:30:35 2015 -0800
+
+    crush: add straw_calc_version tunable
+    
+    It doesn't do anything, yet.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 50e2ceefee6a5dfbecbe54890139b1fa80a313c8)
+    
+    (Modified from original to not create the 'hammer' tunable profile, which
+    we will not backport in its entirety.)
+
+commit 1205867d3afe6d457483f9f51aaee79cca74e040
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Mon Feb 2 16:43:35 2015 +0100
+
+    qa: use correct binary path on rpm-based systems
+    
+    Fixes: #10715
+    Signed-off-by: Josh Durgin <jdurgin@redhat.com>
+    (cherry picked from commit 05ce2aa1bf030ea225300b48e7914577a412b38c)
+
+commit da4146a5e03503083e6bc5c12984c06f41a3b4be
+Author: Greg Farnum <gfarnum@redhat.com>
+Date:   Thu Feb 5 21:12:17 2015 -0800
+
+    fsync-tester: print info about PATH and locations of lsof lookup
+    
+    We're seeing the lsof invocation fail (as not found) in testing and nobody can
+    identify why. Since attempting to reproduce the issue has not worked, this
+    patch will gather data from a genuinely in-vitro location.
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com>
+    (cherry picked from commit a85051483874ff5b8b0fb50426a3577040457596)
+
+commit 61b4f09848796faeacf7eb78dd6dc06513beb737
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Dec 2 14:04:34 2014 -0800
+
+    crush/CrushWrapper: dump chooseleaf_vary_r with other tunables
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit c133a83fe7b77e2a7e7c711cb8ab943c59ff0885)
+
+commit e4939ed5535cc4678cf1d1ae80906290448e6590
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Dec 2 10:12:25 2014 -0800
+
+    crush/CrushTester: add new --show-mappings option
+    
+    This makes --show-utilization and --show-statistics usable.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 3877f00877f53e9f86630c2d89e81ab9cff729ec)
+
+commit 8c48ebbf13e6bdb689b4b8ae58ac811653ad2acc
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Dec 2 10:11:57 2014 -0800
+
+    crushtool/CrushTester: output utilization even with 1 batch
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 294b06c6424f4cb69394976add826d9725073b50)
+
+commit e9faab9f296af9cf26b9475afd3562c3f3b9236b
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Dec 2 10:08:18 2014 -0800
+
+    crush: recalculate straw scalers during a reweight
+    
+    The crushtool --reweight function triggers a fresh calculation of bucket
+    weights so that they are always the sum of the item weights.  In the
+    straw bucket case, the weights were updated but the corresponding straw
+    scalers were not being recalculated.  The result is that there was not
+    effect on placement in adjusted buckets until the next time a bucket item's
+    weight was adjusted.
+    
+    Backport: giant, firefly
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 35062937f174a45fb13d9c177eaa1fe4ed5ff4c2)
+
+commit 4c951e9dc1ca31429119de15755caf3d73f6ffce
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Dec 2 08:36:41 2014 -0800
+
+    osdmaptool: --test-map-pgs-dump
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 7a99b489909b368bade36d8cc9722ad33d03a2e8)
+
+commit 3cb5d08feee4811624dd495f74912824203edf00
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Dec 2 06:53:20 2014 -0800
+
+    crush: add dprintk's for crush_calc_straw
+    
+    These are compiled out by default.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 946bebd94b109642f95710802e892c59eb4f0b76)
+
+commit ca8471d65fb2cf7d2247d823c5436faa273efda5
+Author: Rongze Zhu <zrzhit@gmail.com>
+Date:   Tue Nov 11 00:13:42 2014 +0800
+
+    crush: fix tree bucket functions
+    
+    There are incorrect nodes' weight in tree bucket when construct tree
+    bucket. The tree bucket don't store item id in items array, so the tree
+    bucket will not work correctly. The patch fix above bugs and add a
+    simple test for tree bucket.
+    
+    Signed-off-by: Rongze Zhu <zrzhit@gmail.com>
+    (cherry picked from commit 13425488882d360fa740613dfcfd0d098c1b7616)
+
+commit af502f25b04cd0758b753941ecf0b1b59d33ea9e
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Nov 11 11:16:58 2014 -0800
+
+    crush/builder: replace printf with an empty dprintk macro
+    
+    This mirrors mapper.c.
+    
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit e444b221733360cdea4f4bbdbbbfbf2b6ee30ff5)
+
+commit 26966c4aa9cd79cb53db052553a5fc5653f2591b
+Author: Greg Farnum <gfarnum@redhat.com>
+Date:   Thu Nov 6 17:48:01 2014 -0800
+
+    qa: use sudo even more when rsyncing /usr
+    
+    Signed-off-by: Greg Farnum <gfarnum@redhat.com>
+    (cherry picked from commit 3aa7797741f9cff06053a2f31550fe6929039692)
+
+commit 6af48421c0ba6195e9a1607053c42eeb62b14ccb
+Author: Greg Farnum <greg@inktank.com>
+Date:   Tue Oct 21 10:55:06 2014 -0700
+
+    qa: use sudo when rsyncing /usr so we can read everything
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit fa07c04231db2d130de54647957ffab4a7a53733)
+
+commit 861a18b1f7dd5bdcbb85bc3fa15d1719bb4b2813
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu Jan 15 16:31:22 2015 -0800
+
+    rgw: fix partial GET in swift
+    
+    Fixes: #10553
+    backport: firefly, giant
+    
+    Don't set the ret code to reflect partial download, just set the
+    response status when needed.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 7e1553cedff90fa0fefded65cde87ad068eb5f0c)
+
+commit e539971e2d528b4de6009ea44565f037acb2be66 (refs/remotes/gh/wip-10676)
+Author: Nilamdyuti Goswami <ngoswami@redhat.com>
+Date:   Thu Dec 18 17:13:27 2014 +0530
+
+    doc: Adds updated man page for ceph under man/
+    
+    Signed-off-by: Nilamdyuti Goswami <ngoswami@redhat.com>
+    (cherry picked from commit 8de9a0f437822c770600c19a9f61977745b7e530)
+
+commit 15596ffe388147b7984457041a38cbb9f472556c
+Author: Nilamdyuti Goswami <ngoswami@redhat.com>
+Date:   Sat Dec 13 02:27:45 2014 +0530
+
+    doc: Adds man page for ceph under man/.
+    
+    Signed-off-by: Nilamdyuti Goswami <ngoswami@redhat.com>
+    (cherry picked from commit ffd6c7e49686f8f92ddb400ffdec62520708e64b)
+
+commit 893e5cd1f4fd5ea77d65f0e78cc8cff88eb19c1a
+Author: Nilamdyuti Goswami <ngoswami@redhat.com>
+Date:   Sat Dec 13 02:24:41 2014 +0530
+
+    doc: Adds man page for ceph.
+    
+    Signed-off-by: Nilamdyuti Goswami <ngoswami@redhat.com>
+    (cherry picked from commit 76da87a64ca6b3cc0ceeaf63e19a9f440d6f4161)
+
+commit 8d29a4a231666830914903b95599d80da7b97def
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Dec 15 17:04:32 2014 -0800
+
+    osd: handle no-op write with snapshot case
+    
+    If we have a transaction that does something to the object but it !exists
+    both before and after, we will continue through the write path.  If the
+    snapdir object already exists, and we try to create it again, we will
+    leak a snapdir obc and lock and later crash on an assert when the obc
+    is destroyed:
+    
+    0> 2014-12-06 01:49:51.750163 7f08d6ade700 -1 osd/osd_types.h: In function 'ObjectContext::~ObjectContext()' thread 7f08d6ade700 time 2014-12-06 01:49:51.605411
+    osd/osd_types.h: 2944: FAILED assert(rwstate.empty())
+    
+    Fix is to not recreated the snapdir if it already exists.
+    
+    Fixes: #10262
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 02fae9fc54c10b5a932102bac43f32199d4cb612)
+
+commit 8ba48d10c252b28cde5b4da1286421db12b57cc2
+Author: Sage Weil <sage@redhat.com>
+Date:   Mon Jan 19 18:28:20 2015 -0800
+
+    ceph_test_rados_api_misc: do not assert rbd feature match
+    
+    This test fails on upgrades when we (or the server) have new
+    features.  Make it less fragile.
+    
+    Fixes: #10576
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 9147c62989871cea8b3a85b02c53017825efb55b)
+
+commit 836ab86d89ae15ed5b228ff656bc81c7cc3495aa
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Oct 27 14:47:19 2014 -0400
+
+    osdc: Constrain max number of in-flight read requests
+    
+    Constrain the number of in-flight RADOS read requests to the
+    cache size.  This reduces the chance of the cache memory
+    ballooning during certain scenarios like copy-up which can
+    invoke many concurrent read requests.
+    
+    Fixes: #9854
+    Backport: giant, firefly, dumpling
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 068d68850d09dfcaccc5a3ce85c80b2f6d808ea9)
+
+commit 2964efaf327cf798f892a6722eb4e24f2ffa0fde
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Jan 19 12:46:00 2015 -0500
+
+    Revert "Enforce cache size on read requests"
+    
+    This reverts commit b7784dc1baa47560a733fe9dcd2acec51bc93165.
+
+commit e4c5b153735aba3f84554a50243f779f36568373
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Jan 19 12:45:25 2015 -0500
+
+    Revert "rbd: ObjectCacher reads can hang when reading sparse files"
+    
+    This reverts commit 711a7e6f81983ff2091caa0f232af914a04a041c.
+
+commit c23e42e78ea3ba44706951a728e2ccb74cac7b33
+Author: Jason Dillaman <dillaman@redhat.com>
+Date:   Mon Jan 19 10:28:56 2015 -0500
+
+    librbd: gracefully handle deleted/renamed pools
+    
+    snap_unprotect and list_children both attempt to scan all
+    pools. If a pool is deleted or renamed during the scan,
+    the methods would previously return -ENOENT. Both methods
+    have been modified to more gracefully handle this condition.
+    
+    Fixes: #10270
+    Backport: giant, firefly
+    Signed-off-by: Jason Dillaman <dillaman@redhat.com>
+    (cherry picked from commit 436923c68b77c900b7774fbef918c0d6e1614a36)
+
+commit 24c13d87039d4f61df0bcabdb8862e0e94fe575d
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri Dec 12 05:24:01 2014 -0800
+
+    rgw: change multipart upload id magic
+    
+    Fixes: #10271
+    Backport: firefly, giant
+    
+    Some clients can't sign requests correctly with the original magic
+    prefix.
+    
+    Reported-by: Georgios Dimitrakakis <giorgis@acmac.uoc.gr>
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 5fc7a0be67a03ed63fcc8408f8d71a31a1841076)
+
+commit 617002d3ff469ef409a83e35d4f4fd6a0b5b1278
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu Dec 11 09:07:10 2014 -0800
+
+    rgw: url decode http query params correctly
+    
+    Fixes: #10271
+    Backport: firefly
+    
+    This got broken by the fix for #8702. Since we now only url_decode if
+    we're in query, we need to specify that we're in query when decoding
+    these args.
+    
+    Reported-by: Georgios Dimitrakakis <giorgis@acmac.uoc.gr>
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 21e07eb6abacb085f81b65acd706b46af29ffc03)
+
+commit d7ccf71d962cec1571f53c9392f9b58350569062
+Author: Josh Durgin <jdurgin@redhat.com>
+Date:   Wed Jan 14 15:01:38 2015 -0800
+
+    qa: ignore duplicates in rados ls
+    
+    These can happen with split or with state changes due to reordering
+    results within the hash range requested. It's easy enough to filter
+    them out at this stage.
+    
+    Backport: giant, firefly
+    Signed-off-by: Josh Durgin <jdurgin@redhat.com>
+    (cherry picked from commit e7cc6117adf653a4915fb7a75fac68f8fa0239ec)
+
+commit aef69572588a0dfad58df94cb0d0980d0590d8e4
+Merge: 69eaad7 534624b
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu Jan 15 16:40:48 2015 -0800
+
+    Merge branch 'wip-firefly-rgw-backports' into firefly
+
+commit 534624b7e9decc880e88496355a6fbbe008ede5f
+Author: Sage Weil <sage@redhat.com>
+Date:   Tue Oct 21 17:59:30 2014 -0700
+
+    init-radosgw.sysv: set ulimit -n before starting daemon
+    
+    If we do the ulimit inside the daemon command we will have already
+    dropped privs and will fail.
+    
+    Fixes: #9587
+    Backport: giant, firefly
+    Signed-off-by: Sage Weil <sage@redhat.com>
+    (cherry picked from commit 9803cedf54a7baff45ccd0e0f65d2bc220958a46)
+
+commit fd49cbc535d0d7fa64ebfa458386b47c8ec8616e
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri Dec 12 17:07:30 2014 -0800
+
+    rgw: use s->bucket_attrs instead of trying to read obj attrs
+    
+    Fixes: #10307
+    Backport: firefly, giant
+    
+    This is needed, since we can't really read the bucket attrs by trying to
+    read the bucket entry point attrs. We already have the bucket attrs
+    anyway, use these.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 5cf193c8686196d5235889e68cb5ea8f1fc8e556)
+
+commit 79bfffb55a0b3a302368e34417d62f74b82dc224
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed Nov 5 13:40:55 2014 -0800
+
+    rgw: remove swift user manifest (DLO) hash calculation
+    
+    Fixes: #9973
+    Backport: firefly, giant
+    
+    Previously we were iterating through the parts, creating hash of the
+    parts etags (as S3 does for multipart uploads). However, swift just
+    calculates the etag for the empty manifest object.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit ef6d3ad964d34bc526dc4435486bd5c8cdc3b230)
+    
+    Conflicts:
+    	src/rgw/rgw_op.cc
+
+commit ac799f0834783590cbb6eb91784c8e0753cb1e03
+Author: Lei Dong <leidong@yahoo-inc.com>
+Date:   Mon Oct 27 10:29:48 2014 +0800
+
+    fix can not disable max_size quota
+    
+    Currently if we enable quota and set max_size = -1, it doesn’t
+    mean max_size is unlimited as expected. Instead, it means object
+    with any size is not allowed to upload because of “QuotaExceeded”.
+    The root cause is the function rgw_rounded_kb which convert max_size
+    to max_size_kb returns 0 for -1 because it takes an unsigned int
+    but we pass an int to it. A simple fix is check max_size before
+    it’s rounded to max_size_kb.
+    
+    Test case:
+    1 enable and set quota:
+    radosgw-admin quota enable --uid={user_id} --quota-scope=user
+    radosgw-admin quota set --quota-scope=user --uid={user_id}\
+     --max-objects=100 --max-size=-1
+    2 upload any object with non-zero length
+    it will return 403 with “QuotaExceeded” and return 200 if you apply the fix.
+    
+    Fixes: #9907
+    Backport: giant, firefly
+    Signed-off-by: Dong Lei leidong@yahoo-inc.com
+    (cherry picked from commit abd3fd3ef9ee9999b99811937af60b7a5e673e35)
+
+commit 30963fdc98f5650a68b5737729920d43459b5899
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Tue Sep 23 12:43:55 2014 -0700
+
+    rgw: rados->set_attrs() updates bucket index
+    
+    Fixes: #5595
+    Backport: dumpling, firefly
+    We need to update the bucket index when updating object attrs, otherwise
+    we're missing meta changes that need to be registered. It also
+    solves issue of bucket index not knowing about object acl changes,
+    although this one still requires some more work.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit f833f12a200ecc2c4f74ddb443d6fa61b7ad14db)
+
+commit 31f5e332c616dbb7f7338af3ab37ac65ff66f733
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Tue Nov 4 22:05:03 2014 -0800
+
+    rgw: RGWRados::get_obj() returns wrong len if len == 0
+    
+    Fixes: #9877
+    We only updated if len was > 0, should update it if r >= 0. This was the
+    culprit for issue #9877.
+    Backport: giant, firefly
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit fe7bf06366adaf787816d1e68f5e3f68e8c91134)
+
+commit 8682d1b15e097ececd927dfbd096dbb46403afca
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed Nov 5 13:28:02 2014 -0800
+
+    rgw: send back ETag on S3 object copy
+    
+    Fixes: #9479
+    Backport: firefly, giant
+    We didn't send the etag back correctly. Original code assumed the etag
+    resided in the attrs, but attrs only contained request attrs.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit b1bfc3a7e0c9088f01f8ff770ae14f569fbc570d)
+    
+    Conflicts:
+    	src/rgw/rgw_rados.cc
+
+commit 2d61fc76e97e5e28cf24cc6e341d49a8fe47059c
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed Nov 5 12:35:42 2014 -0800
+
+    rgw: S3 object copy content type fix
+    
+    Fixes: #9478
+    Backport: firefly, giant
+    Content type for S3 object copy response should be set to
+    application/xml.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 31963459a0a869c4d32f55baa629f36df33eaa90)
+
+commit 011a8c3bd621337e5a1746f18882be20d3854b14
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Fri Dec 12 11:20:26 2014 -0800
+
+    rgw: http headers need to end with \r\n
+    
+    Fixes: #9254
+    Backport: firefly, giant
+    
+    Reported-by: Benedikt Fraunhofer <fraunhofer@traced.net>
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 7409ab3df18fb312dd6c9f79084f889c523afdce)
+    
+    Conflicts:
+    	src/rgw/rgw_civetweb.cc
+    	src/rgw/rgw_fcgi.cc
+
+commit 71d119f2952716aa1f75817e1daaf5fb67ecde94
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed Jan 7 13:56:14 2015 -0800
+
+    rgw: index swift keys appropriately
+    
+    Fixes: #10471
+    Backport: firefly, giant
+    
+    We need to index the swift keys by the full uid:subuser when decoding
+    the json representation, to keep it in line with how we store it when
+    creating it through other mechanism.
+    
+    Reported-by: hemant burman <hemant.burman@gmail.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 478629bd2f3f32afbe6e93eaebb8a8fa01af356f)
+
+commit 7b89a827a063acf78a848a34c1c3298db213950f
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu Nov 20 10:36:05 2014 -0800
+
+    rgw-admin: create subuser if needed when creating user
+    
+    Fixes: #10103
+    Backport: firefly, giant
+    This turned up after fixing #9973. Earlier we also didn't create the
+    subuser in this case, but we didn't really read the subuser info when it
+    was authenticating. Now we do that as required, so we end up failing the
+    authentication. This only applies to cases where a subuser was created
+    using 'user create', and not the 'subuser create' command.
+    
+    Reviewed-by: Sage Weil <sage@redhat.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 9ba17a321db06d3d76c9295e411c76842194b25c)
+
+commit 9ee29b5355e9ffeac76707e8d4070bfff5dc99d5
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Wed Nov 5 14:38:46 2014 -0800
+
+    rgw: update swift subuser perm masks when authenticating
+    
+    Fixes: #9918
+    Backport: firefly, giant
+    It seems that we weren't setting the swift perm mask correctly.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit 5d9f36f757a7272c24d2c9adc31db1ed5e712992)
+
+commit d298fdda2aa177e1a4b43ca94a2292435a50dea4
+Author: Yehuda Sadeh <yehuda@redhat.com>
+Date:   Thu Oct 23 17:39:42 2014 -0700
+
+    rgw: send http status reason explicitly in fastcgi
+    
+    There are issues in certain versions of apache 2.4, where the reason is
+    not sent back. Instead, just provide the reason explicitly.
+    
+    Backport: firefly, giant
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@redhat.com>
+    (cherry picked from commit a9dd4af401328e8f9071dee52470a0685ceb296b)

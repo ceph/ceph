@@ -1,0 +1,296 @@
+#!/bin/sh
+#
+#   OCF resource agent for mapping and unmapping
+#   RADOS Block Devices (RBDs)
+#
+#   License:      GNU Lesser General Public License (LGPL) 2.1 or 3.0
+#   (c) 2012 Florian Haas, hastexo
+#
+
+# Initialization:
+: ${OCF_FUNCTIONS_DIR=${OCF_ROOT}/lib/heartbeat}
+. ${OCF_FUNCTIONS_DIR}/ocf-shellfuncs
+
+# Convenience variables
+# When sysconfdir isn't passed in as a configure flag,
+# it's defined in terms of prefix
+prefix=@prefix@
+
+# Defaults
+OCF_RESKEY_pool_default="rbd"
+OCF_RESKEY_cephconf_default="@sysconfdir@/@PACKAGE_TARNAME@/@PACKAGE_TARNAME@.conf"
+: ${OCF_RESKEY_pool=${OCF_RESKEY_pool_default}}
+: ${OCF_RESKEY_cephconf=${OCF_RESKEY_cephconf_default}}
+
+rbd_meta_data() {
+    cat <<EOF
+<?xml version="1.0"?>
+<!DOCTYPE resource-agent SYSTEM "ra-api-1.dtd">
+<resource-agent name="rbd" version="0.1">
+  <version>0.1</version>
+  <longdesc lang="en">
+Manages RADOS Block Devices (RBDs) as a highly available
+resource. Maps and unmaps RBDs as needed.
+  </longdesc>
+  <shortdesc lang="en">Maps and unmaps RADOS Block Devices</shortdesc>
+  <parameters>
+    <parameter name="name" unique="0" required="1">
+      <longdesc lang="en">
+      Name of the RBD device.
+      </longdesc>
+      <shortdesc lang="en">RBD device name</shortdesc>
+      <content type="string"/>
+    </parameter>
+    <parameter name="pool" unique="0" required="0">
+      <longdesc lang="en">
+      Name of the RADOS pool where the RBD has been created
+      </longdesc>
+      <shortdesc lang="en">RADOS pool name</shortdesc>
+      <content type="string" default="${OCF_RESKEY_pool_default}"/>
+    </parameter>
+    <parameter name="snap" unique="0" required="0">
+      <longdesc lang="en">
+      Name of the device snapshot to map.
+      </longdesc>
+      <shortdesc lang="en">Snapshot name</shortdesc>
+      <content type="string"/>
+    </parameter>
+    <parameter name="cephconf" unique="0" required="0">
+      <longdesc lang="en">
+      Location of the Ceph configuration file
+      </longdesc>
+      <shortdesc lang="en">Ceph configuration file</shortdesc>
+      <content type="string" default="${OCF_RESKEY_cephconf_default}"/>
+    </parameter>
+    <parameter name="mon" unique="0" required="0">
+      <longdesc lang="en">
+      Address (or comma-separated list of addresses) of
+      monitor servers to connect to. Overrides values from
+      configuration file.
+      </longdesc>
+      <shortdesc lang="en">Monitor address(es)</shortdesc>
+      <content type="string"/>
+    </parameter>
+    <parameter name="user" unique="0" required="0">
+      <longdesc lang="en">
+      Username to use when mapping the device. Required
+      if Ceph authentication is enabled on the monitor.
+      </longdesc>
+      <shortdesc lang="en">Authentication username</shortdesc>
+      <content type="string"/>
+    </parameter>
+    <parameter name="secret" unique="0" required="0">
+      <longdesc lang="en">
+      File containing an authentication secret. Required
+      if Ceph authentication is enabled on the monitor.
+      </longdesc>
+      <shortdesc lang="en">Authentication secret file</shortdesc>
+      <content type="string"/>
+    </parameter>
+  </parameters>
+  <actions>
+    <action name="start"        timeout="20" />
+    <action name="stop"         timeout="20" />
+    <action name="monitor"      timeout="20"
+                                interval="10" depth="0" />
+    <action name="meta-data"    timeout="5" />
+    <action name="validate-all"   timeout="20" />
+  </actions>
+</resource-agent>
+EOF
+}
+
+rbd_usage() {
+        cat <<EOF
+usage: $0 {start|stop|status|monitor|validate-all|meta-data}
+
+Expects to have a fully populated OCF RA-compliant environment set.
+EOF
+}
+
+# rbd command wrapper: builds an option string for invoking RBD based
+# on resource parameters, and invokes rbd through ocf_run.
+do_rbd() {
+    local rbd_options
+
+    if [ -n "${OCF_RESKEY_cephconf}" ]; then
+        rbd_options="$rbd_options -c ${OCF_RESKEY_cephconf}"
+    fi
+    if [ -n "${OCF_RESKEY_mon}" ]; then
+        rbd_options="$rbd_options -m ${OCF_RESKEY_mon}"
+    fi
+
+    ocf_run rbd $rbd_options $@
+}
+
+# Convenience function that uses "rbd device list" to retrieve the
+# mapped device name from the pool, RBD name, and snapshot.
+find_rbd_dev() {
+    local sedpat
+
+    # Example output from "rbd device list" (tab separated):
+    # id        pool    image   snap    device
+    # 0         rbd     test    -       /dev/rbd0
+
+    # Build the sed pattern, substituting "-" for the snapshot name if
+    # it's unset
+    sedpat="[0-9]\+[ \t]\+${OCF_RESKEY_pool}[ \t]\+${OCF_RESKEY_name}[ \t]\+${OCF_RESKEY_snap:--}[ \t]\+\(/dev/rbd[0-9]\+\).*"
+
+    # Run "rbd device list", filter out the header line, then try to
+    # extract the device name
+    rbd device list | tail -n +2 | sed -n -e "s,$sedpat,\1,p"
+}
+
+rbd_validate_all() {
+    # Test for configuration errors first
+    if [ -z "$OCF_RESKEY_name" ]; then
+       ocf_log err 'Required parameter "name" is unset!'
+       exit $OCF_ERR_CONFIGURED
+    fi
+
+    # Test for required binaries
+    check_binary rbd
+
+    return $OCF_SUCCESS
+}
+
+rbd_monitor() {
+    local rc
+    local rbd_dev
+
+    if ! [ -d /sys/bus/rbd ]; then
+        ocf_log debug "rbd module is not loaded"
+        return $OCF_NOT_RUNNING
+    fi
+
+    rbd_dev=`find_rbd_dev`
+
+    if [ -z "$rbd_dev" ]; then
+        ocf_log debug "RBD device is unmapped"
+        rc=$OCF_NOT_RUNNING
+    elif [ -b "$rbd_dev" ]; then
+        ocf_log debug "RBD device is mapped to $rbd_dev"
+        rc=$OCF_SUCCESS
+    else
+        # Device is listed, but the corresponding path is not a block
+        # device.
+        ocf_log err "$rbd_dev is not a block device!"
+        rc=$OCF_ERR_GENERIC
+    fi
+
+    return $rc
+}
+
+rbd_start() {
+    local rbd_map_options
+    local rbd_name
+
+    # if resource is already running, bail out early
+    if rbd_monitor; then
+        ocf_log info "Resource is already running"
+        return $OCF_SUCCESS
+    fi
+
+    # actually start up the resource here (make sure to immediately
+    # exit with an $OCF_ERR_ error code if anything goes seriously
+    # wrong)
+
+    if [ ! -d /sys/bus/rbd ]; then
+        ocf_run modprobe -v rbd || exit $OCF_ERR_INSTALLED
+    fi
+
+    if [ -n "${OCF_RESKEY_user}" ]; then
+        rbd_map_options="--id ${OCF_RESKEY_user}"
+    fi
+    if [ -n "${OCF_RESKEY_secret}" ]; then
+        rbd_map_options="$rbd_map_options --keyfile ${OCF_RESKEY_secret}"
+    fi
+
+    rbd_name="${OCF_RESKEY_pool}/${OCF_RESKEY_name}"
+    if [ -n "${OCF_RESKEY_snap}" ]; then
+        rbd_name="$rbd_name@${OCF_RESKEY_snap}"
+    fi
+
+    do_rbd device map $rbd_name $rbd_map_options || exit $OCF_ERR_GENERIC
+
+    # After the resource has been started, check whether it started up
+    # correctly. If the resource starts asynchronously, the agent may
+    # spin on the monitor function here -- if the resource does not
+    # start up within the defined timeout, the cluster manager will
+    # consider the start action failed
+    while ! rbd_monitor; do
+        ocf_log debug "Resource has not started yet, waiting"
+        sleep 1
+    done
+
+    # only return $OCF_SUCCESS if _everything_ succeeded as expected
+    return $OCF_SUCCESS
+}
+
+rbd_stop() {
+    local rc
+    local rbd_dev
+
+    rbd_monitor
+    rc=$?
+    case "$rc" in
+        "$OCF_SUCCESS")
+            # Currently running. Normal, expected behavior.
+            ocf_log debug "Resource is currently running"
+            ;;
+        "$OCF_NOT_RUNNING")
+            # Currently not running. Nothing to do.
+            ocf_log info "Resource is already stopped"
+            return $OCF_SUCCESS
+            ;;
+    esac
+
+    # actually shut down the resource here (make sure to immediately
+    # exit with an $OCF_ERR_ error code if anything goes seriously
+    # wrong)
+    rbd_dev=`find_rbd_dev`
+    do_rbd device unmap $rbd_dev || exit $OCF_ERR_GENERIC
+
+    # After the resource has been stopped, check whether it shut down
+    # correctly. If the resource stops asynchronously, the agent may
+    # spin on the monitor function here -- if the resource does not
+    # shut down within the defined timeout, the cluster manager will
+    # consider the stop action failed
+    while rbd_monitor; do
+        ocf_log debug "Resource has not stopped yet, waiting"
+        sleep 1
+    done
+
+    # only return $OCF_SUCCESS if _everything_ succeeded as expected
+    return $OCF_SUCCESS
+
+}
+
+# Make sure meta-data and usage always succeed
+case $__OCF_ACTION in
+meta-data)      rbd_meta_data
+                exit $OCF_SUCCESS
+                ;;
+usage|help)     rbd_usage
+                exit $OCF_SUCCESS
+                ;;
+esac
+
+# Anything other than meta-data and usage must pass validation
+rbd_validate_all || exit $?
+
+# Translate each action into the appropriate function call
+case $__OCF_ACTION in
+start)          rbd_start;;
+stop)           rbd_stop;;
+status|monitor) rbd_monitor;;
+validate-all)   ;;
+*)              rbd_usage
+                exit $OCF_ERR_UNIMPLEMENTED
+                ;;
+esac
+rc=$?
+
+# The resource agent may optionally log a debug message
+ocf_log debug "${OCF_RESOURCE_INSTANCE} $__OCF_ACTION returned $rc"
+exit $rc

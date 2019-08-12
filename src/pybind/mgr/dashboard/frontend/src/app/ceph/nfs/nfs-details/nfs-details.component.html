@@ -1,0 +1,19 @@
+<tabset *ngIf="selection?.hasSingleSelection">
+  <tab heading="Details"
+       i18n-heading>
+    <cd-table-key-value [data]="data">
+    </cd-table-key-value>
+  </tab>
+
+  <tab heading="Clients ({{ clients.length }})"
+       i18n-heading>
+    <cd-table #table
+              [data]="clients"
+              columnMode="flex"
+              [columns]="clientsColumns"
+              identifier="addresses"
+              forceIdentifier="true"
+              selectionType="">
+    </cd-table>
+  </tab>
+</tabset>

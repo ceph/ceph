@@ -1,0 +1,61 @@
+#include "include/int_types.h"
+
+TRACEPOINT_EVENT(eventtrace, func_enter,
+    TP_ARGS(
+        const char*, file,
+        const char*, func,
+        uint32_t, line),
+    TP_FIELDS(
+        ctf_string(file, file)
+        ctf_string(func, func)
+        ctf_integer(uint32_t, line, line)
+    )
+)
+
+TRACEPOINT_EVENT(eventtrace, func_exit,
+    TP_ARGS(
+        const char*, file,
+        const char*, func),
+    TP_FIELDS(
+        ctf_string(file, file)
+        ctf_string(func, func)
+    )
+)
+
+TRACEPOINT_EVENT(eventtrace, oid_event,
+    TP_ARGS(
+        const char*, oid,
+        const char*, event,
+        const char*, context,
+        const char*, file,
+        const char*, func,
+        uint32_t, line),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_string(event, event)
+        ctf_string(context, context)
+        ctf_string(file, file)
+        ctf_string(func, func)
+        ctf_integer(uint32_t, line, line)
+    )
+)
+
+TRACEPOINT_EVENT(eventtrace, oid_elapsed,
+    TP_ARGS(
+        const char*, oid,
+        const char*, event,
+        const char*, context,
+        double, elapsed,
+        const char*, file,
+        const char*, func,
+        uint32_t, line),
+    TP_FIELDS(
+        ctf_string(oid, oid)
+        ctf_string(event, event)
+        ctf_string(context, context)
+        ctf_float(double, elapsed, elapsed)
+        ctf_string(file, file)
+        ctf_string(func, func)
+        ctf_integer(uint32_t, line, line)
+    )
+)

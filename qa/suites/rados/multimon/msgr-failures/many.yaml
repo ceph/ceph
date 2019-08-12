@@ -1,0 +1,6 @@
+overrides:
+  ceph:
+    conf:
+      global:
+        ms inject socket failures: 1000
+        mon mgr beacon grace: 90

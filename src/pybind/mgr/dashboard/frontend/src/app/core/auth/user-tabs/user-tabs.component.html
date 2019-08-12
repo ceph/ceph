@@ -1,0 +1,12 @@
+<tabset>
+  <tab heading="Users"
+       i18n-heading
+       [active]="url === '/user-management/users'"
+       (selectTab)="navigateTo('/user-management/users')">
+  </tab>
+  <tab heading="Roles"
+       i18n-heading
+       [active]="url === '/user-management/roles'"
+       (selectTab)="navigateTo('/user-management/roles')">
+  </tab>
+</tabset>

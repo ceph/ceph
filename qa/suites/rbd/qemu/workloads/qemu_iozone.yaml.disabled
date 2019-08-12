@@ -1,0 +1,6 @@
+tasks:
+- qemu:
+    all:
+      test: qa/workunits/suites/iozone.sh
+      image_size: 20480
+exclude_arch: armv7l

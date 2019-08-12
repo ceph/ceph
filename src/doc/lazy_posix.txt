@@ -1,0 +1,53 @@
+
+http://www.usenix.org/events/fast05/wips/slides/welch.pdf
+
+
+
+-- STATLITE
+  statlite(const char *filename, struct statlite *buf);
+  fstatlite(int fd, struct statlite *buf);
+  lstatlite(const char *filename, struct statlite *buf);
+
+  * file size, mtime are optionally not guaranteed to be correct
+  * mask field to specify which fields you need to be correct
+
+
+-- READDIR+
+
+  struct dirent_plus *readdirplus(DIR *dirp);
+  int readdirplus_r(DIR *dirp, struct dirent_plus *entry, struct dirent_plus **result);
+  struct dirent_lite *readdirlite(DIR *dirp);
+  int readdirlite_r(DIR *dirp, struct dirent_lite *entry, struct dirent_lite **result);
+
+  * plus returns lstat
+  * lite returns lstatlite
+
+
+-- lazy i/o integrity
+
+  FIXME: currently missing call to flag an Fd/file has lazy.  used to be O_LAZY on open, but no more.
+
+  * relax data coherency
+  * writes may not be visible until lazyio_propagate, fsync, close
+
+  lazyio_propagate(int fd, off_t offset, size_t count);
+   * my writes are safe
+
+  lazyio_synchronize(int fd, off_t offset, size_t count);
+   * i will see everyone else's propagated writes
+
+-- read/write non-serial vectors
+
+  ssize_t readx(int fd, const struct iovec *iov, size_t iov_count, struct xtvec *xtv, size_t xtv_count);
+  ssize_t writex(int fd, const struct iovec *iov, size_t iov_count, struct xtvec *xtv, size_t xtv_count);
+
+ * like readv/writev, but serial
+ * 
+
+
+int lockg(int fd, int cmd, lgid_t *lgid)
+   group locks
+
+int openg(char *path, int mode, fh_t *handle);
+   portable file handle
+int sutoc(fh_t *fh);

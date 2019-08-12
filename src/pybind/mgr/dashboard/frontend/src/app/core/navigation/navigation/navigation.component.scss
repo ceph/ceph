@@ -1,0 +1,179 @@
+@import 'defaults';
+
+/* Navbar */
+::ng-deep .cd-navbar-top {
+  margin-bottom: 0;
+  background: $color-navbar-bg;
+  border: 0;
+  border-radius: 0;
+
+  .cd-navbar-brand {
+    border-top: 4px solid $color-nav-top-bar;
+
+    .navbar-brand,
+    .navbar-brand:hover {
+      color: $color-navbar-brand;
+      height: auto;
+      padding: 0;
+    }
+
+    .navbar-brand > img {
+      height: 25px;
+    }
+
+    .navbar-toggler {
+      border: 0;
+
+      &:focus,
+      &:hover {
+        outline: 0;
+      }
+
+      .fa-navicon {
+        color: $color-nav-toggle-bar;
+      }
+    }
+
+    .navbar-collapse {
+      padding: 0;
+    }
+
+    .cd-navbar-utility > .active > a {
+      color: $color-nav-links;
+      background-color: $color-nav-links-hover;
+    }
+
+    .cd-navbar-utility > li > .open > a,
+    .cd-navbar-utility > li > .open > a:focus,
+    .cd-navbar-utility > li > .open > a:hover {
+      color: $color-nav-links;
+      border-color: transparent;
+      background-color: transparent;
+    }
+  }
+
+  .navbar-nav > li > .cd-navbar > [dropdown] > a,
+  .navbar-nav > li > .cd-navbar > a,
+  .navbar-nav > li > a {
+    color: $color-nav-links;
+    line-height: 1;
+    padding: 10px 18px !important;
+    position: relative;
+    display: block;
+    text-decoration: none;
+  }
+
+  .navbar-nav .nav-link,
+  .navbar-nav .nav-link:hover {
+    color: $color-nav-links;
+  }
+
+  .navbar-nav > li > .cd-navbar > [dropdown] > a:hover,
+  .navbar-nav > li > .cd-navbar > [dropdown].open > a,
+  .navbar-nav > li > .cd-navbar > a:hover,
+  .navbar-nav > li > a:hover,
+  .navbar-nav > li:hover {
+    background-color: $color-nav-links-hover;
+  }
+
+  .navbar-nav > .open > .cd-navbar > [dropdown] > a,
+  .navbar-nav > .open > .cd-navbar > [dropdown] > a:hover,
+  .navbar-nav > .open > .cd-navbar > a,
+  .navbar-nav > .open > .cd-navbar > a:focus,
+  .navbar-nav > .open > .cd-navbar > a:hover,
+  .navbar-nav > .open > .cd-navbar > li > a:focus,
+  .navbar-nav > .open > a,
+  .navbar-nav > .open > a:focus,
+  .navbar-nav > .open > a:hover {
+    color: $color-nav-links;
+    border-color: transparent;
+    background-color: transparent;
+  }
+
+  .cd-navbar-primary {
+    font-size: 1.2em;
+  }
+
+  .cd-navbar-primary > li > a {
+    border: 0;
+  }
+
+  .cd-navbar-primary > .active > a,
+  .cd-navbar-primary > .active > a:focus,
+  .cd-navbar-primary > .active > a:hover {
+    color: $color-nav-links;
+    background-color: $color-nav-links-hover;
+    border: 0;
+  }
+
+  @media (min-width: $screen-md-min) {
+    .navbar-primary > li > a {
+      border-bottom: 4px solid transparent;
+    }
+
+    .cd-navbar-primary > .active > a,
+    .cd-navbar-primary > .active > a:focus,
+    .cd-navbar-primary > .active > a:hover {
+      background-color: transparent;
+      border-bottom: 4px solid $color-nav-bottom-bar;
+    }
+
+    .cd-navbar-utility {
+      border-bottom: 0;
+      position: absolute;
+      right: 0;
+      top: 0;
+      font-size: 1.1rem;
+    }
+  }
+
+  @media (max-width: $screen-sm-max) {
+    .navbar-nav {
+      margin: 0;
+
+      .fa {
+        margin-right: 0.5em;
+      }
+
+      .open .dropdown-menu {
+        border: 0;
+        padding-top: 0;
+        padding-bottom: 0;
+        background-color: $color-nav-open-bg;
+      }
+
+      .open .dropdown-menu > li > a {
+        padding: 5px 15px 5px 35px;
+        color: $color-nav-links;
+      }
+
+      .open .dropdown-menu > .active > a {
+        background-color: $color-nav-active-link-bg;
+      }
+
+      & > li > a:hover {
+        background-color: $color-nav-active-link-bg;
+      }
+    }
+
+    .cd-navbar-primary {
+      margin-top: 5px;
+      border-top: 1px solid $color-nav-border-top-collapse;
+    }
+
+    .cd-navbar-utility {
+      border-top: 1px solid $color-nav-border-top-collapse;
+      font-size: 1.2em;
+
+      .btn-group {
+        display: block;
+      }
+    }
+
+    .cd-navbar-primary > .active > a,
+    .cd-navbar-primary > .active > a:focus,
+    .cd-navbar-primary > .active > a:hover {
+      background-color: $color-nav-active-link-bg;
+    }
+  }
+}

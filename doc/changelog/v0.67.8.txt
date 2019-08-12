@@ -1,0 +1,1220 @@
+commit ffc58b4ea6a3ea10e91050aaa28d14d87dea5656 (tag: refs/tags/v0.67.8, refs/remotes/gh/dumpling)
+Author: Jenkins <jenkins@inktank.com>
+Date:   Thu May 1 11:18:24 2014 +0000
+
+    0.67.8
+
+commit 4b16b70c53be83481efefcf394eca99c73bb9805
+Merge: 5a6b351 fb0944e
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Apr 30 15:15:48 2014 -0700
+
+    Merge pull request #1743 from ceph/wip-mon-backports.dumpling
+    
+    mon: OSDMonitor: HEALTH_WARN on 'mon osd down out interval == 0'
+    
+    Reviewed-by: Sage Weil <sage@inktank.com>
+
+commit fb0944e22acf6f8b6cefb59cc4c41dc48087bfd7
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Wed Apr 30 17:13:30 2014 +0100
+
+    mon: OSDMonitor: HEALTH_WARN on 'mon osd down out interval == 0'
+    
+    A 'status' or 'health' request will return a HEALTH_WARN whenever the
+    monitor handling the request has the option set to zero.
+    
+    Fixes: 7784
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit b2112d5087b449d3b019678cb266ff6fa897897e)
+
+commit 5a6b35160417423db7c6ff892627f084ab610dfe
+Author: Sandon Van Ness <sandon@inktank.com>
+Date:   Tue Mar 4 16:15:15 2014 -0800
+
+    Make symlink  of librbd to qemu's folder so it can detect it.
+    
+    Per issue #7293.
+    
+    Signed-off-by: Sandon Van Ness <sandon@inktank.com>
+    (cherry picked from commit 65f3354903fdbdb81468a84b8049ff19c00f91ba)
+
+commit 735a90a95eea01dbcce5026758895117c2842627
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Apr 25 14:11:27 2014 -0700
+
+    rgw: fix url escaping
+    
+    Fixes: #8202
+    This fixes the radosgw side of issue #8202. Needed to cast value
+    to unsigned char, otherwise it'd get padded.
+    
+    Backport: dumpling
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit bcf92c496aba0dfde432290fc2df5620a2767313)
+
+commit 438b57890dfce04226d769389a601d35b74e11fe
+Merge: c049967 476b929
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Apr 25 16:00:24 2014 -0700
+
+    Merge pull request #1700 from xanpeng/patch-1
+    
+    Fix error in mkcephfs.rst
+    
+    Signed-off-by: Xan Peng <xanpeng@gmail.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+
+commit 476b929ecc5b7351a5be3024817b900976a90a3e
+Author: xanpeng <xanpeng@gmail.com>
+Date:   Mon Apr 21 11:30:42 2014 +0800
+
+    Update mkcephfs.rst
+    
+    There should be no blank between mount options.
+
+commit c049967af829497f8a62e0cbbd6031f85ead8a59
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Tue Apr 1 17:27:01 2014 -0700
+
+    auth: add rwlock to AuthClientHandler to prevent races
+    
+    For cephx, build_authorizer reads a bunch of state (especially the
+    current session_key) which can be updated by the MonClient. With no
+    locks held, Pipe::connect() calls SimpleMessenger::get_authorizer()
+    which ends up calling RadosClient::get_authorizer() and then
+    AuthClientHandler::bulid_authorizer(). This unsafe usage can lead to
+    crashes like:
+    
+    Program terminated with signal 11, Segmentation fault.
+    0x00007fa0d2ddb7cb in ceph::buffer::ptr::release (this=0x7f987a5e3070) at common/buffer.cc:370
+    370 common/buffer.cc: No such file or directory.
+    in common/buffer.cc
+    (gdb) bt
+    0x00007fa0d2ddb7cb in ceph::buffer::ptr::release (this=0x7f987a5e3070) at common/buffer.cc:370
+    0x00007fa0d2ddec00 in ~ptr (this=0x7f989c03b830) at ./include/buffer.h:171
+    ceph::buffer::list::rebuild (this=0x7f989c03b830) at common/buffer.cc:817
+    0x00007fa0d2ddecb9 in ceph::buffer::list::c_str (this=0x7f989c03b830) at common/buffer.cc:1045
+    0x00007fa0d2ea4dc2 in Pipe::connect (this=0x7fa0c4307340) at msg/Pipe.cc:907
+    0x00007fa0d2ea7d73 in Pipe::writer (this=0x7fa0c4307340) at msg/Pipe.cc:1518
+    0x00007fa0d2eb44dd in Pipe::Writer::entry (this=<value optimized out>) at msg/Pipe.h:59
+    0x00007fa0e0f5f9d1 in start_thread (arg=0x7f987a5e4700) at pthread_create.c:301
+    0x00007fa0de560b6d in clone () at ../sysdeps/unix/sysv/linux/x86_64/clone.S:115
+    
+    and
+    
+    Error in `qemu-system-x86_64': invalid fastbin entry (free): 0x00007ff12887ff20
+    *** ======= Backtrace: =========
+    /lib/x86_64-linux-gnu/libc.so.6(+0x80a46)[0x7ff3dea1fa46]
+    /usr/lib/librados.so.2(+0x29eb03)[0x7ff3e3d43b03]
+    /usr/lib/librados.so.2(_ZNK9CryptoKey7encryptEP11CephContextRKN4ceph6buffer4listERS4_RSs+0x71)[0x7ff3e3d42661]
+    /usr/lib/librados.so.2(_Z21encode_encrypt_enc_blIN4ceph6buffer4listEEvP11CephContextRKT_RK9CryptoKeyRS2_RSs+0xfe)[0x7ff3e3d417de]
+    /usr/lib/librados.so.2(_Z14encode_encryptIN4ceph6buffer4listEEiP11CephContextRKT_RK9CryptoKeyRS2_RSs+0xa2)[0x7ff3e3d41912]
+    /usr/lib/librados.so.2(_ZN19CephxSessionHandler12sign_messageEP7Message+0x242)[0x7ff3e3d40de2]
+    /usr/lib/librados.so.2(_ZN4Pipe6writerEv+0x92b)[0x7ff3e3e61b2b]
+    /usr/lib/librados.so.2(_ZN4Pipe6Writer5entryEv+0xd)[0x7ff3e3e6c7fd]
+    /lib/x86_64-linux-gnu/libpthread.so.0(+0x7f8e)[0x7ff3ded6ff8e]
+    /lib/x86_64-linux-gnu/libc.so.6(clone+0x6d)[0x7ff3dea99a0d]
+    
+    Fix this by adding an rwlock to AuthClientHandler. A simpler fix would
+    be to move RadosClient::get_authorizer() into the MonClient() under
+    the MonClient lock, but this would not catch all uses of other
+    Authorizer, e.g. for verify_authorizer() and it would serialize
+    independent connection attempts.
+    
+    This mainly matters for cephx, but none and unknown can have the
+    global_id reset as well.
+    
+    Partially-fixes: #6480
+    Backport: dumpling, emperor
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 2cc76bcd12d803160e98fa73810de2cb916ef1ff)
+
+commit 2b4b00b76b245b1ac6f95e4537b1d1a4656715d5
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Tue Apr 1 11:37:29 2014 -0700
+
+    pipe: only read AuthSessionHandler under pipe_lock
+    
+    session_security, the AuthSessionHandler for a Pipe, is deleted and
+    recreated while the pipe_lock is held. read_message() is called
+    without pipe_lock held, and examines session_security. To make this
+    safe, make session_security a shared_ptr and take a reference to it
+    while the pipe_lock is still held, and use that shared_ptr in
+    read_message().
+    
+    This may have caused crashes like:
+    
+    *** Error in `qemu-system-x86_64': invalid fastbin entry (free): 0x00007f42a4002de0 ***
+    ======= Backtrace: =========
+    /lib/x86_64-linux-gnu/libc.so.6(+0x80a46)[0x7f452f1f3a46]
+    /usr/lib/x86_64-linux-gnu/libnss3.so(PK11_FreeSymKey+0xa8)[0x7f452e72ff98]
+    /usr/lib/librados.so.2(+0x2a18cd)[0x7f453451a8cd]
+    /usr/lib/librados.so.2(_ZNK9CryptoKey7encryptEP11CephContextRKN4ceph6buffer4listERS4_RSs+0x71)[0x7f4534519421]
+    /usr/lib/librados.so.2(_Z21encode_encrypt_enc_blIN4ceph6buffer4listEEvP11CephContextRKT_RK9CryptoKeyRS2_RSs+0xfe)[0x7f453451859e]
+    /usr/lib/librados.so.2(_Z14encode_encryptIN4ceph6buffer4listEEiP11CephContextRKT_RK9CryptoKeyRS2_RSs+0xa2)[0x7f45345186d2]
+    /usr/lib/librados.so.2(_ZN19CephxSessionHandler23check_message_signatureEP7Message+0x246)[0x7f4534516866]
+    /usr/lib/librados.so.2(_ZN4Pipe12read_messageEPP7Message+0xdcc)[0x7f453462ecbc]
+    /usr/lib/librados.so.2(_ZN4Pipe6readerEv+0xa5c)[0x7f453464059c]
+    /usr/lib/librados.so.2(_ZN4Pipe6Reader5entryEv+0xd)[0x7f4534643ecd]
+    /lib/x86_64-linux-gnu/libpthread.so.0(+0x7f8e)[0x7f452f543f8e]
+    /lib/x86_64-linux-gnu/libc.so.6(clone+0x6d)[0x7f452f26da0d]
+    
+    Partially-fixes: #6480
+    Backport: dumpling, emperor
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit 1d74170a4c252f35968ccfbec8e432582e92f638)
+
+commit 48895a46015c9d6d67543816f5a400c21aa206b1 (refs/remotes/gh/wip-objectcacher-flusher-dumpling)
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Jan 3 12:51:15 2014 -0800
+
+    osdc/ObjectCacher: back off less during flush
+    
+    In cce990efc8f2a58c8d0fa11c234ddf2242b1b856 we added a limit to avoid
+    holding the lock for too long.  However, if we back off, we currently
+    wait for a full second, which is probably a bit much--we really just want
+    to give other threads a chance.
+    
+    Backport: emperor
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit e2ee52879e9de260abbf5eacbdabbd71973a6a83)
+
+commit f3b5ba6f25010291a2918bdd286f1b39570bb907
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Oct 1 09:28:29 2013 -0700
+
+    osdc/ObjectCacher: limit writeback IOs generated while holding lock
+    
+    While analyzing a log from Mike Dawson I saw a long stall while librbd's
+    objectcacher was starting lots (many hundreds) of IOs.  Limit the amount of
+    time we spend doing this at a time to allow IO replies to be processed so
+    that the cache remains responsive.
+    
+    I'm not sure this warrants a tunable (which we would need to add for both
+    libcephfs and librbd).
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit cce990efc8f2a58c8d0fa11c234ddf2242b1b856)
+
+commit 06f27fc6446d47b853208357ec4277c5dc10d9fe
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Apr 8 10:52:43 2014 -0700
+
+    os/FileStore: reset journal state on umount
+    
+    We observed a sequence like:
+    
+     - replay journal
+       - sets JournalingObjectStore applied_op_seq
+     - umount
+     - mount
+       - initiate commit with prevous applied_op_seq
+     - replay journal
+       - commit finishes
+       - on replay commit, we fail assert op > committed_seq
+    
+    Although strictly speaking the assert failure is harmless here, in general
+    we should not let state leak through from a previous mount into this
+    mount or else assertions are in general more difficult to reason about.
+    
+    Fixes: #8019
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 4de49e8676748b6ab4716ff24fd0a465548594fc)
+
+commit b29238729f87c73dfdcf16dddcf293577678dea2
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue Nov 5 14:54:20 2013 -0800
+
+    rgw: deny writes to a secondary zone by non-system users
+    
+    Fixes: #6678
+    We don't want to allow regular users to write to secondary zones,
+    otherwise we'd end up with data inconsistencies.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 6961b5254f16ac3362c3a51f5490328d23640dbf)
+    
+    Conflicts:
+    	src/rgw/rgw_rados.h
+
+commit 051a17eb008d75aa6b0737873318a2e7273501ab
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Apr 5 16:58:55 2014 -0700
+
+    mon: wait for quorum for MMonGetVersion
+    
+    We should not respond to checks for map versions when we are in the
+    probing or electing states or else clients will get incorrect results when
+    they ask what the latest map version is.
+    
+    Fixes: #7997
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 67fd4218d306c0d2c8f0a855a2e5bf18fa1d659e)
+
+commit 0716516da05eee967796fb71eb2f85c86afc40f1
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Feb 19 08:59:07 2014 -0800
+
+    rgw: fix swift range response
+    
+    Fixes: #7099
+    Backport: dumpling
+    The range response header was broken in swift.
+    
+    Reported-by: Julien Calvet <julien.calvet@neurea.com>
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 0427f61544529ab4e0792b6afbb23379fe722de1)
+
+commit 94a1deefcfe525a7e698a1ae70a3bb561b6157de
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Fri Nov 22 15:41:49 2013 -0800
+
+    rgw: don't log system requests in usage log
+    
+    Fixes: 6889
+    System requets should not be logged in the usage log.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 42ef8ba543c7bf13c5aa3b6b4deaaf8a0f9c58b6)
+
+commit 23fed8fc427e7077c61f86168a42f61a5f73867d
+Author: Greg Farnum <greg@inktank.com>
+Date:   Fri Apr 4 16:06:05 2014 -0700
+
+    OSD: _share_map_outgoing whenever sending a message to a peer
+    
+    This ensures that they get new maps before an op which requires them (that
+    they would then request from the monitor).
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 232ac1a52a322d163d8d8dbc4a7da4b6a9acb709)
+
+commit c45e15fd5cbe57a34c743b2835ecc30ee5a43963
+Author: Xihui He <xihuihe@gmail.com>
+Date:   Mon Dec 30 12:04:10 2013 +0800
+
+    msgr: fix rebind() race
+    stop the accepter and mark all pipes down before rebind to avoid race
+    
+    Fixes: #6992
+    
+    Signed-off-by: Xihui He xihuihe@gmail.com
+    (cherry picked from commit f8e413f9c79a3a2a12801f5f64a2f612de3f06a0)
+
+commit 3d31cf012a59e1fea8080b13bdc06c9021ba0656
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Nov 26 13:20:21 2013 -0800
+
+    PG: retry GetLog() each time we get a notify in Incomplete
+    
+    If for some reason there are no up OSDs in the history which
+    happen to have usable copies of the pg, it's possible that
+    there is a usable copy elsewhere on the cluster which will
+    become known to the primary if it waits.
+    
+    Fixes: #6909
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 964c8e978f86713e37a13b4884a6c0b9b41b5bae)
+
+commit 1f80bbdf45439c7224ed52e4956973fc6d007848
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Mar 17 15:37:44 2014 -0700
+
+    os/FileJournal: return errors on make_writeable() if reopen fails
+    
+    This is why #7738 is resulting in a crash instead of an error.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit aed074401d2834a5b04edd1b7f6b4f36336f6293)
+
+commit 62d942294a54208cdc82aebf8b536d164cae5dc6
+Author: Sage Weil <sage@inktank.com>
+Date:   Mon Mar 17 16:21:17 2014 -0700
+
+    mon/Paxos: commit only after entire quorum acks
+    
+    If a subset of the quorum accepts the proposal and we commit, we will start
+    sharing the new state.  However, the mon that didn't yet reply with the
+    accept may still be sharing the old and stale value.
+    
+    The simplest way to prevent this is not to commit until the entire quorum
+    replies.  In the general case, there are no failures and this is just fine.
+    In the failure case, we will call a new election and have a smaller quorum
+    of (live) nodes and will recommit the same value.
+    
+    A more performant solution would be to have a separate message invalidate
+    the old state and commit once we have all invalidations and a majority of
+    accepts.  This will lower latency a bit in the non-failure case, but not
+    change the failure case significantly.  Later!
+    
+    Fixes: #7736
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit fa1d957c115a440e162dba1b1002bc41fc1eac43)
+
+commit 2160c72b393893896be581e89a42c4e37b79cb23
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Thu Mar 13 14:04:19 2014 -0700
+
+    PrioritizedQueue: cap costs at max_tokens_per_subqueue
+    
+    Otherwise, you can get a recovery op in the queue which has a cost
+    higher than the max token value.  It won't get serviced until all other
+    queues also do not have enough tokens and higher priority queues are
+    empty.
+    
+    Fixes: #7706
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 2722a0a487e77ea2aa0d18caec0bdac50cb6a264)
+
+commit 1dd42e0f75fe1f5363f92bd5a4506812e54b8fb5
+Author: Dan Mick <dan.mick@inktank.com>
+Date:   Thu Apr 3 13:59:59 2014 -0700
+
+    Fix byte-order dependency in calculation of initial challenge
+    
+    Fixes: #7977
+    Signed-off-by: Dan Mick <dan.mick@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 4dc62669ecd679bc4d0ef2b996b2f0b45b8b4dc7)
+
+commit c66b61f9dcad217429e4876d27881d9fb2e7666f
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Tue Dec 31 17:00:06 2013 -0800
+
+    rbd: return 0 and an empty list when pool is entirely empty
+    
+    rbd_list will return -ENOENT when no rbd_directory object
+    exists. Handle this in the cli tool and interpret it as success with
+    an empty list.
+    
+    Add this to the release notes since it changes command line behavior.
+    
+    Fixes: #6693
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit ac547a5b7dc94282f079aef78e66348d99d9d5e9)
+    
+    Conflicts:
+    	PendingReleaseNotes
+    	src/rbd.cc
+
+commit 60b7aa96abfe09f7e9a263fa3f9b72c556dee8cb
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Nov 20 18:35:34 2013 -0800
+
+    test: use older names for module setup/teardown
+    
+    setUp and tearDown require nosetests 0.11, but 0.10.4 is the latest on
+    centos. Rename to use the older aliases, which still work with newer
+    versions of nosetests as well.
+    
+    Fixes: #6368
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+    Reviewed-by: Dan Mick <dan.mick@inktank.com>
+    (cherry picked from commit f753d56a9edba6ce441520ac9b52b93bd8f1b5b4)
+
+commit b405bfa49ec31f0c6d8636c4bdde17ee1f81deb7
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Sun Nov 3 11:06:10 2013 -0800
+
+    OSD: don't clear peering_wait_for_split in advance_map()
+    
+    I really don't know why I added this...  Ops can be discarded from the
+    waiting_for_pg queue if we aren't primary simply because there must have
+    been an exchange of peering events before subops will be sent within a
+    particular epoch.  Thus, any events in the waiting_for_pg queue must be
+    client ops which should only be seen by the primary.  Peering events, on
+    the other hand, should only be discarded if we are in a new interval,
+    and that check might as well be performed in the peering wq.
+    
+    Fixes: #6681
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 9ab513334c7ff9544bac07bd420c6d5d200cf535)
+
+commit a498c940bd630cb103d17ad8532a11122439411d
+Merge: 225fc97 80e0a0a
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Apr 2 12:57:30 2014 -0700
+
+    Merge remote-tracking branch 'gh/wip-7888-dumpling' into dumpling
+
+commit 225fc97f228490dfc13c2e4deed8fecffdb28c5e
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Nov 5 21:48:53 2013 -0800
+
+    PG: fix operator<<,log_wierdness log bound warning
+    
+    Split may cause holes such that head != tail and yet
+    log.empty().
+    
+    Fixes: #6722
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit c6826c1e8a301b2306530c6e5d0f4a3160c4e691)
+
+commit 26eeab43f3f703a25e7ba62c75d0382d15e38263
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Nov 5 17:47:48 2013 -0800
+
+    PGLog::rewind_divergent_log: log may not contain newhead
+    
+    Due to split, there may be a hole at newhead.
+    
+    Fixes: #6722
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit f4648bc6fec89c870e0c47b38b2f13496742b10f)
+
+commit 040abd75ad45bbcc05b24c9dddbd2026dd35e659
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Mar 29 14:23:21 2014 -0700
+
+    qa/workunits/fs/misc/layout_vxattrs: ceph.file.layout is not listed
+    
+    As of 08a3d6bd428c5e78dd4a10e6ee97540f66f9729c.  A similar change was made
+    in the kernel.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 4f9f7f878953b29cd5f56a8e0834832d6e3a9cec)
+
+commit f5aa492a338ff711f3a45e4ebbf0d6b187b5f78e
+Merge: fef70cb 84cb345
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Mar 28 18:01:08 2014 -0700
+
+    Merge pull request #1519 from ceph/wip-6951-dumpling
+    
+    rgw: reset objv tracker on bucket recreation
+
+commit fef70cbb52cf1ad12db45998b38858d9bbc3360d
+Merge: 9bfbce3 f443ff3
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Mar 28 17:02:39 2014 -0700
+
+    Merge pull request #1559 from ceph/wip-7881-dumpling
+    
+    Wip 7881 dumpling
+    
+    Reviewed-by: Sage Weil <sage@inktank.com>
+
+commit 80e0a0a8fee2f6f903f612734b2cc72eae703eae (refs/remotes/gh/wip-7888-dumpling)
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Mar 27 21:33:21 2014 -0700
+
+    mon/MonClient: use keepalive2 to verify the mon session is live
+    
+    Verify that the mon is responding by checking the keepalive2 reply
+    timestamp.  We cannot rely solely on TCP timing out and returning an
+    error.
+    
+    Fixes: #7888
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 056151a6334c054505c54e59af40f203a0721f28)
+
+commit 8723218379e80725a449b0594a4b15eb1c236b05
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Mar 27 21:09:13 2014 -0700
+
+    msgr: add KEEPALIVE2 feature
+    
+    This is similar to KEEPALIVE, except a timestamp is also exchanged.  It is
+    sent with the KEEPALIVE, and then returned with the ACK.  The last
+    received stamp is stored in the Connection so that it can be queried for
+    liveness.  Since all of the users of keepalive are already regularly
+    triggering a keepalive, they can check the liveness at the same time.
+    
+    See #7888.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit d747d79fd5ea8662a809c5636dfd2eaaa9bf8f5d)
+    
+    Conflicts:
+    
+    	src/include/ceph_features.h
+
+commit a2f0974f8b3567c0385494a0b2c828ade6ca8e1c
+Author: Greg Farnum <greg@inktank.com>
+Date:   Wed Mar 26 15:58:10 2014 -0700
+
+    Pipe: rename keepalive->send_keepalive
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    (cherry picked from commit 38d4c71a456c1cc9a5044dbcae5378836a34484d)
+
+commit 9bfbce30678742515025ca235c4443bb3a69199f
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Mar 26 21:52:00 2014 -0700
+
+    client: pin Inode during readahead
+    
+    Make sure the Inode does not go away while a readahead is in progress.  In
+    particular:
+    
+     - read_async
+       - start a readahead
+       - get actual read from cache, return
+     - close/release
+       - call ObjectCacher::release_set() and get unclean > 0, assert
+    
+    Fixes: #7867
+    Backport: emperor, dumpling
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit f1c7b4ef0cd064a9cb86757f17118d17913850db)
+
+commit 232445578a2c6d0fb974e55378057fce473095f7
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Mar 28 12:34:07 2014 -0700
+
+    osdc/ObjectCacher: call read completion even when no target buffer
+    
+    If we do no assemble a target bl, we still want to return a valid return
+    code with the number of bytes read-ahead so that the C_RetryRead completion
+    will see this as a finish and call the caller's provided Context.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 032d4ec53e125ad91ad27ce58da6f38dcf1da92e)
+
+commit f443ff3006d41a7b0a2d7b649e8def0ffef6df12
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Wed Oct 30 16:54:39 2013 -0700
+
+    PGLog: remove obsolete assert in merge_log
+    
+    This assert assumes that if olog.head != log.head, olog contains
+    a log entry at log.head, which may not be true since pg splitting
+    might have left the log with arbitrary holes.
+    
+    Related: 0c2769d3321bff6e85ec57c85a08ee0b8e751bcb
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 353813b2e1a98901b876790c7c531f8a202c661d)
+
+commit 636e53c0f4fc43e9bfc1c8e7214cab9e0b46a359
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Mon Sep 30 15:54:27 2013 -0700
+
+    PGLog: on split, leave log head alone
+    
+    This way last_update doesn't go backwards.
+    
+    Fixes: 6447
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    (cherry picked from commit 0c2769d3321bff6e85ec57c85a08ee0b8e751bcb)
+
+commit a0a560a9f04311306a9784fa3c6ea2586d637f56
+Merge: 466cd53 41d5e9a
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Mar 26 17:18:24 2014 -0700
+
+    Merge pull request #1539 from ceph/wip-6910-dumpling
+    
+    PG: don't query unfound on empty pgs
+
+commit 41d5e9ab39e69c80bec1cb0627004c3fae6dc81d
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Nov 26 19:17:59 2013 -0800
+
+    PG: don't query unfound on empty pgs
+    
+    When the replica responds, it responds with a notify
+    rather than a log, which the primary then ignores since
+    it is already in the peer_info map.  Rather than fix that
+    we'll simply not send queries to peers we already know to
+    have no unfound objects.
+    
+    Fixes: #6910
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit 838b6c8387087543ce50837277f7f6b52ae87d00)
+
+commit 466cd536ed7e541a36d88bce43683a2d9e2ca283
+Merge: 2ef0d6a c188949
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Mar 21 14:53:23 2014 -0700
+
+    Merge pull request #1313 from ceph/dumpling-osd-subscribe
+    
+    Dumpling backport: clean up osd subscriptions
+
+commit 2ef0d6a25bf8c0cfb38768c157c29ba52295f3ca
+Merge: 77e46d0 bdd96c6
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Mar 21 14:52:20 2014 -0700
+
+    Merge pull request #1485 from ceph/wip-7212.dumpling
+    
+    backport 7212 fixes to dumpling
+
+commit 84cb345e4f12a9b1db5e384411492a9d88f17dd8
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Wed Feb 19 08:11:56 2014 -0800
+
+    rgw: reset objv tracker on bucket recreation
+    
+    Fixes: #6951
+    If we cannot create a new bucket (as it already existed), we need to
+    read the old bucket's info. However, this was failing as we were holding
+    the objv tracker that we created for the bucket creation. We need to
+    clear it, as subsequent read using it will fail.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 859ed33ed7f9a96f4783dfb3e130d5eb60c622dd)
+
+commit 77e46d0d7984f2d3ee0e15f27d2961a637c20b45
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Wed Nov 6 14:33:03 2013 -0800
+
+    ReplicatedPG: don't skip missing if sentries is empty on pgls
+    
+    Formerly, if sentries is empty, we skip missing.  In general,
+    we need to continue adding items from missing until we get
+    to next (returned from collection_list_partial) to avoid
+    missing any objects.
+    
+    Fixes: #6633
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: David Zafman <david.zafman@inktank.com>
+    (cherry picked from commit c7a30b881151e08b37339bb025789921e7115288)
+
+commit bdd96c620f33fb8f48f30f8d543af3290e6c934a
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Feb 15 08:59:51 2014 -0800
+
+    mon/Elector: bootstrap on timeout
+    
+    Currently if an election times out we call a new
+    election.  If we have never joined a quorum, bootstrap
+    instead. This is heavier weight, but captures the case
+    where, during bootstrap:
+    
+     - a and b have learned each others' addresses
+     - everybody calls an election
+     - a and b form a quorum
+     - c loops trying to call an election, but is ignored
+       because a and b don't see its address in the monmap
+    
+    See logs:
+      ubuntu@teuthology:/var/lib/teuthworker/archive/sage-2014-02-14_13:50:04-ceph-deploy-wip-7212-sage-b-testing-basic-plana/83194
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit a4bcb1f8129a4ece97bd3419abf1ff45d260ad8e)
+    (cherry picked from commit 143ec0281aa8b640617a3fe19a430248ce3b514c)
+
+commit 68fcc63c0423a2071b7b944ea6c3448282a78a09
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Feb 14 11:25:52 2014 -0800
+
+    mon: tell MonmapMonitor first about winning an election
+    
+    It is important in the bootstrap case that the very first paxos round
+    also codify the contents of the monmap itself in order to avoid any manner
+    of confusing scenarios where subsequent elections are called and people
+    try to recover and modify paxos without agreeing on who the quorum
+    participants are.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit ad7f5dd481a7f45dfe6b50d27ad45abc40950510)
+    (cherry picked from commit e073a062d56099b5fb4311be2a418f7570e1ffd9)
+
+commit a3e57b7231cb28c2e0a896f747537ebdbe3a4e96
+Author: Sage Weil <sage@inktank.com>
+Date:   Fri Feb 14 11:13:26 2014 -0800
+
+    mon: only learn peer addresses when monmap == 0
+    
+    It is only safe to dynamically update the address for a peer mon in our
+    monmap if we are in the midst of the initial quorum formation (i.e.,
+    monmap.epoch == 0).  If it is a later epoch, we have formed our initial
+    quorum and any and all monmap changes need to be agreed upon by the quorum
+    and committed via paxos.
+    
+    Fixes: #7212
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 7bd2104acfeff0c9aa5e648d82ed372f901f767f)
+    (cherry picked from commit 1996fd89fb3165a63449b135e05841579695aabd)
+
+commit 21ed54201bd4b0f02c07f6f96a63a5720057f011
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Mon Mar 17 14:37:09 2014 +0000
+
+    ceph.in: do not allow using 'tell' with interactive mode
+    
+    This avoids a lot of hassle when dealing with to whom tell each command
+    on interactive mode, and even more so if multiple targets are specified.
+    
+    As so, 'tell' commands should be used while on interactive mode instead.
+    
+    Backport: dumpling,emperor
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit e39c213c1d230271d23b74086664c2082caecdb9)
+
+commit be0205c33ccbab3b6f105bdf4da114658a981557
+Author: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+Date:   Wed Mar 12 22:56:44 2014 +0100
+
+    RGWListBucketMultiparts: init max_uploads/default_max with 0
+    
+    CID 717377 (#1 of 1): Uninitialized scalar field (UNINIT_CTOR)
+     2. uninit_member: Non-static class member "max_uploads" is not initialized
+        in this constructor nor in any functions that it calls.
+     4. uninit_member: Non-static class member "default_max" is not initialized
+        in this constructor nor in any functions that it calls.
+    
+    Signed-off-by: Danny Al-Gaaf <danny.al-gaaf@bisect.de>
+    (cherry picked from commit b23a141d54ffb39958aba9da7f87544674fa0e50)
+
+commit 6c3d4fbeb9cc50eca6eba12cfe7fed64b34eec3d
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Mar 13 14:49:30 2014 -0700
+
+    ceph_test_rados: wait for commit, not ack
+    
+    First, this is what we wanted in the first place
+    
+    Second, if we wait for ACK, we may look at a user_version value that is
+    not stable.
+    
+    Fixes: #7705
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit f2124c5846f1e9cb44e66eb2e957b8c7df3e19f4)
+    
+    Conflicts:
+    
+    	src/test/osd/RadosModel.h
+
+commit 2daed5ff99dab238b696da5aba3816c4f5d763e8
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Thu Mar 13 09:50:16 2014 -0700
+
+    test-upgrade-firefly: skip watch-notify system test
+    
+    This also fails on mixed version clusters due to watch on a
+    non-existent object returning ENOENT in firefly and 0 in dumpling.
+    
+    Reviewed-by: Sage Weil <sage.weil@inktank.com>
+    Signed-off-by: Josh Durgin <josh.durgin@inktank.com>
+
+commit 90a21d8cf6df5fe14b2dc9b2c175983b6bb017ce
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Mar 12 21:30:12 2014 -0700
+
+    qa/workunit/rados/test-upgrade-firefly: skip watch-notify test
+    
+    A watch on a non-existent object now returns ENOENT in firefly; skip this
+    test as it will fail on a hybrid or upgraded cluster.
+    
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit 32fdca6d9c2e3b923db7f21568bd315ab2c1c4ad
+Merge: 6700dd0 cd7986c
+Author: Sage Weil <sage@inktank.com>
+Date:   Tue Mar 11 21:33:40 2014 -0700
+
+    Merge pull request #1411 from ceph/wip-7076-dumpling
+    
+    dumpling backport of watchers check for rbd_remove()
+
+commit 6700dd068e236473343d15eee6307d44156958a3
+Author: Ray Lv <xiangyulv@gmail.com>
+Date:   Wed Feb 26 21:17:32 2014 +0800
+
+    rgw: off-by-one in rgw_trim_whitespace()
+    
+    Fixes: #7543
+    Backport: dumpling
+    
+    Reviewed-by: Yehuda Sadeh <yehuda@inktank.com>
+    Signed-off-by: Ray Lv <raylv@yahoo-inc.com>
+    (cherry picked from commit 195d53a7fc695ed954c85022fef6d2a18f68fe20)
+
+commit cd7986caf6baee5f9d6498b113b3382e66dd6f77
+Author: Ilya Dryomov <ilya.dryomov@inktank.com>
+Date:   Wed Jan 29 16:12:01 2014 +0200
+
+    rbd: check for watchers before trimming an image on 'rbd rm'
+    
+    Check for watchers before trimming image data to try to avoid getting
+    into the following situation:
+    
+      - user does 'rbd rm' on a mapped image with an fs mounted from it
+      - 'rbd rm' trims (removes) all image data, only header is left
+      - 'rbd rm' tries to remove a header and fails because krbd has a
+        watcher registered on the header
+      - at this point image cannot be unmapped because of the mounted fs
+      - fs cannot be unmounted because all its data and metadata is gone
+    
+    Unfortunately, this fix doesn't make it impossible to happen (the
+    required atomicity isn't there), but it's a big improvement over the
+    status quo.
+    
+    Fixes: http://tracker.ceph.com/issues/7076
+    
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+    Signed-off-by: Ilya Dryomov <ilya.dryomov@inktank.com>
+    (cherry picked from commit 0a553cfa81b06e75585ab3c39927e307ec0f4cb6)
+
+commit a931aaa6cc104d63b20c0cbe9e3af4006c3abfaf
+Merge: b476d32 f5668b3
+Author: Sage Weil <sage@inktank.com>
+Date:   Sun Mar 9 10:56:31 2014 -0700
+
+    Merge pull request #1407 from dachary/wip-7188-dumpling
+    
+    common: ping existing admin socket before unlink (dumpling)
+    
+    Reviewed-by: Sage Weil <sage@inktank.com>
+
+commit f5668b363b0724f385bebded3cbc7f363893f985
+Author: Loic Dachary <loic@dachary.org>
+Date:   Sat Feb 15 11:43:13 2014 +0100
+
+    common: ping existing admin socket before unlink
+    
+    When a daemon initializes it tries to create an admin socket and unlinks
+    any pre-existing file, regardless. If such a file is in use, it causes
+    the existing daemon to loose its admin socket.
+    
+    The AdminSocketClient::ping is implemented to probe an existing socket,
+    using the "0" message. The AdminSocket::bind_and_listen function is
+    modified to call ping() on when it finds existing file. It unlinks the
+    file only if the ping fails.
+    
+    http://tracker.ceph.com/issues/7188 fixes: #7188
+    
+    Backport: emperor, dumpling
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    (cherry picked from commit 45600789f1ca399dddc5870254e5db883fb29b38)
+
+commit b476d324c69d4e6018191a7ffea8c9d6c1dfa008
+Merge: d3e13a7 5133dd6
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Mar 5 14:19:31 2014 -0800
+
+    Merge pull request #1366 from ceph/wip-6820.dumpling
+    
+    mon: OSDMonitor: don't crash if formatter is invalid during osd crush dump
+
+commit d3e13a7cdab42fa33182680f45fe21b4f9dc4b20
+Merge: c218c99 9c626e0
+Author: Josh Durgin <josh.durgin@inktank.com>
+Date:   Wed Mar 5 12:45:57 2014 -0800
+
+    Merge pull request #1377 from ceph/wip-7584
+    
+    qa/workunit/rados/test-upgrade-firely.sh
+    
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+
+commit 9c626e0b18f538eb60883da01713ba629220e35e
+Author: Sage Weil <sage@inktank.com>
+Date:   Wed Mar 5 12:37:10 2014 -0800
+
+    qa/workunit/rados/test-upgrade-firely.sh
+    
+    Skip the tests that don't pass when run against firefly OSDs.
+    
+    Fixes: #7584
+    Signed-off-by: Sage Weil <sage@inktank.com>
+
+commit c218c999ecebe41e6de6fde76e85cc765cad8257
+Merge: 0eabbf1 24711cd
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Mar 4 07:28:44 2014 -0800
+
+    Merge pull request #1357 from ceph/wip-dumpling-removewq
+    
+    OSD: ping tphandle during pg removal
+    
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+
+commit 5133dd60e272d3fcbaacd5662a708ee4cf0db46d
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Fri Nov 22 02:17:16 2013 +0000
+
+    mon: OSDMonitor: don't crash if formatter is invalid during osd crush dump
+    
+    Code would assume a formatter would always be defined. If a 'plain'
+    formatter or even an invalid formatter were to be supplied, the monitor
+    would crash and burn in poor style.
+    
+    Fixes: 6820
+    Backport: emperor
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    (cherry picked from commit 49d2fb71422fe4edfe5795c001104fb5bc8c98c3)
+
+commit 24711cd49f85dbe827d41c4bcad2700cd6c42ad7
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Oct 15 13:11:29 2013 -0700
+
+    OSD: ping tphandle during pg removal
+    
+    Fixes: #6528
+    Signed-off-by: Samuel Just <sam.just@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    
+    (cherry picked from commit c658258d9e2f590054a30c0dee14a579a51bda8c)
+    
+    Conflicts:
+    	src/osd/OSD.cc
+
+commit 0eabbf145e1c44f4d128b192cc77b708f180c968
+Merge: fe8915a 9d5d931
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Feb 25 15:47:05 2014 -0800
+
+    Merge pull request #1316 from ceph/dumpling-6922
+    
+    Dumpling: Prevent extreme PG split multipliers
+    
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+
+commit fe8915ae7e182340d1e22154e852895742c7da51
+Merge: 87822cc 5667566
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Feb 25 15:45:45 2014 -0800
+
+    Merge pull request #1315 from ceph/dumpling-hashpspool
+    
+    mon: OSDMonitor: allow (un)setting 'hashpspool' flag via 'osd pool set'
+    
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+
+commit 87822ccc862b533132c1fe232dfe4b7b17b816ad
+Merge: 0ae3352 37fbcb9
+Author: Samuel Just <sam.just@inktank.com>
+Date:   Tue Feb 25 15:44:39 2014 -0800
+
+    Merge pull request #1314 from ceph/dumpling-osd-pgstatsack
+    
+    Dumpling osd pgstatsack
+    
+    Reviewed-by: Samuel Just <sam.just@inktank.com>
+
+commit 5667566313b69dca011e897b2fa752356ad8901b
+Author: Joao Eduardo Luis <joao.luis@inktank.com>
+Date:   Thu Oct 10 17:43:48 2013 -0700
+
+    mon: OSDMonitor: allow (un)setting 'hashpspool' flag via 'osd pool set'
+    
+    Signed-off-by: Joao Eduardo Luis <joao.luis@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 1c2886964a0c005545abab0cf8feae7e06ac02a8)
+    
+    Conflicts:
+    
+    	src/mon/MonCommands.h
+    	src/mon/OSDMonitor.cc
+    
+    mon: ceph hashpspool false clears the flag
+    instead of toggling it.
+    Signed-off-by: Loic Dachary <loic@dachary.org>
+    Reviewed-by: Christophe Courtaut <christophe.courtaut@gmail.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 589e2fa485b94244c79079f249428d4d545fca18
+    
+    Replace some of the infrastructure required by this command that
+    was not present in Dumpling with single-use code.
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+
+commit 9d5d931c60104823b3b20dcfb09480d65ffaa5ed
+Author: Greg Farnum <greg@inktank.com>
+Date:   Tue Dec 3 10:57:09 2013 -0800
+
+    OSDMonitor: use a different approach to prevent extreme multipliers on PG splits
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit d8ccd73968fbd0753ca08916ebf1062cdb4d5ac1)
+    
+    Conflicts:
+    
+    	src/mon/OSDMonitor.cc
+
+commit c0c4448dc7df7900a564a6745903398cd39be7f1
+Author: Greg Farnum <greg@inktank.com>
+Date:   Mon Dec 2 15:13:40 2013 -0800
+
+    OSDMonitor: prevent extreme multipliers on PG splits
+    
+    Fixes: #6922
+    Backport: emperor
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit f57dad6461171c903e8b5255eaed300374b00e74)
+    
+    Conflicts:
+    
+    	src/mon/OSDMonitor.cc
+
+commit c1889497b93ae9f0a946b11d9f5f6fcc7427e934
+Author: Sage Weil <sage@inktank.com>
+Date:   Sat Feb 22 08:08:37 2014 -0800
+
+    osd: fix off-by-one is boot subscription
+    
+    If we have osdmap N, we want to onetime subscribe
+    starting at N+1.  Among other things, it means we
+    hear when the NOUP flag is cleared.
+    
+    This appears to have broken somewhere around
+    3c76b81f2f96b790b72f2088164ed8e9d5efbba1.
+    
+    Fixes: #7511
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Sam Just <sam.just@inktank.com>
+    (cherry picked from commit 70d23b9a0ad9af5ca35a627a7f93c7e610e17549)
+    Reviewed-by: Greg Farnum <greg@inktank.com>
+
+commit 4584f60653bee0305e85418323d80332ceecd0cf
+Author: Greg Farnum <greg@inktank.com>
+Date:   Tue Feb 11 12:51:19 2014 -0800
+
+    OSD: use the osdmap_subscribe helper
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 3c76b81f2f96b790b72f2088164ed8e9d5efbba1)
+
+commit 61b2aeee7c37e03d5f6691c08c7760c48a85a2e1
+Author: Greg Farnum <greg@inktank.com>
+Date:   Tue Feb 11 13:34:39 2014 -0800
+
+    OSD: create a helper for handling OSDMap subscriptions, and clean them up
+    
+    We've had some trouble with not clearing out subscription requests and
+    overloading the monitors (though only because of other bugs). Write a
+    helper for handling subscription requests that we can use to centralize
+    safety logic. Clear out the subscription whenever we get a map that covers
+    it; if there are more maps available than we received, we will issue another
+    subscription request based on "m->newest_map" at the end of handle_osd_map().
+    
+    Notice that the helper will no longer request old maps which we already have,
+    and that unless forced it will not dispatch multiple subscribe requests
+    to a single monitor.
+    Skipping old maps is safe:
+    1) we only trim old maps when the monitor tells us to,
+    2) we do not send messages to our peers until we have updated our maps
+    from the monitor.
+    That means only old and broken OSDs will send us messages based on maps
+    in our past, and we can (and should) ignore any directives from them anyway.
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 6db3ae851d1c936de045390d18b1c6ae95f2a209)
+    
+    Conflicts:
+    
+    	src/osd/OSD.h
+
+commit d93d67d1a315d8abe8d1cd9d7ea83417a19e2406
+Author: Greg Farnum <greg@inktank.com>
+Date:   Tue Feb 11 13:31:26 2014 -0800
+
+    monc: new fsub_want_increment( function to make handling subscriptions easier
+    
+    Provide a subscription-modifying function which will not decrement
+    the start version.
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 5b9c187caf6f7847aaa4a1003d200158dd32bf63)
+
+commit 37fbcb958f79bbfcba57c516b4862a14c52be398
+Author: Greg Farnum <greg@inktank.com>
+Date:   Wed Feb 12 11:30:15 2014 -0800
+
+    OSD: disable the PGStatsAck timeout when we are reconnecting to a monitor
+    
+    Previously, the timeout counter started as soon as we issued the reopen,
+    but if the reconnect process itself took a while, we might time out and
+    issue another reopen just as we get to the point where it's possible to
+    get work done. Since the mon client has its own reconnect timeouts (that is,
+    the OSD doesn't need to trigger those), we instead disable our timeouts
+    while the reconnect is happening, and then turn them back on again starting
+    from when we get the reconnect callback.
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 64cedf6fa3ee309cc96554286bfb805e4ca89439)
+    
+    Conflicts:
+    
+    	src/osd/OSD.cc
+
+commit 9be395e870c50d97604ef41f17667cc566fd84e1
+Author: Greg Farnum <greg@inktank.com>
+Date:   Wed Feb 12 13:51:48 2014 -0800
+
+    monc: backoff the timeout period when reconnecting
+    
+    If the monitors are systematically slowing down, we don't want to spam
+    them with reconnect attempts every three seconds. Instead, every time
+    we issue a reconnect, multiply our timeout period by a configurable; when
+    we complete the connection, reduce that multipler by 50%. This should let
+    us respond to monitor load.
+    Of course, we don't want to do that for initial startup in the case of a
+    couple down monitors, so don't apply the backoff until we've successfully
+    connected to a monitor at least once.
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 794c86fd289bd62a35ed14368fa096c46736e9a2)
+
+commit 8f4c20bdab153d1603cc99186d8d3e3970aa8976
+Author: Greg Farnum <greg@inktank.com>
+Date:   Wed Feb 12 13:37:50 2014 -0800
+
+    monc: set "hunting" to true when we reopen the mon session
+    
+    If we don't have a connecton to a monitor, we want to retry to another
+    monitor regardless of whether it's the first time or not.
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 60da8abe0ebf17ce818d6fcc6391401878123bb7)
+
+commit c6317558e0d3c8c62aecee0d95a839f93303f681
+Author: Greg Farnum <greg@inktank.com>
+Date:   Tue Feb 11 17:53:56 2014 -0800
+
+    monc: let users specify a callback when they reopen their monitor session
+    
+    Then the callback is triggered when a new session is established, and the
+    daemon can do whatever it likes. There are no guarantees about how long it
+    might take to trigger, though. In particular we call the provided callback
+    while not holding our own lock in order to avoid deadlock. This could lead
+    to some funny ordering from the user's perspective if they call
+    reopen_session() again before getting the callback, but there's no way around
+    that, so they just have to use it appropriately.
+    
+    Signed-off-by: Greg Farnum <greg@inktank.com>
+    Reviewed-by: Sage Weil <sage@inktank.com>
+    (cherry picked from commit 1a8c43474bf36bfcf2a94bf9b7e756a2a99f33fd)
+
+commit 0ae335298b85daba5125a3da4ad26d598c76ecab (refs/remotes/gh/multi-object-delete)
+Author: Yehuda Sadeh <yehuda@inktank.com>
+Date:   Tue Feb 11 16:54:05 2014 -0800
+
+    rgw: multi object delete should be idempotent
+    
+    Fixes: #7346
+    When doing a multi object delete, if an object does not exist then we
+    should return a success code for that object.
+    
+    Signed-off-by: Yehuda Sadeh <yehuda@inktank.com>
+    (cherry picked from commit 8ca3d95bf633ea9616852cec74f02285a03071d5)
+    
+    Conflicts:
+    	src/rgw/rgw_op.cc

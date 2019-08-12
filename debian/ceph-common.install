@@ -1,0 +1,44 @@
+#! /usr/bin/dh-exec --with=install
+
+etc/bash_completion.d/ceph
+etc/bash_completion.d/rados
+etc/bash_completion.d/radosgw-admin
+etc/bash_completion.d/rbd
+lib/systemd/system/ceph.target
+lib/systemd/system/rbdmap.service
+usr/bin/ceph
+usr/bin/ceph-authtool
+usr/bin/ceph-conf
+usr/bin/ceph-dencoder
+usr/bin/ceph-rbdnamer
+usr/bin/ceph-syn
+usr/bin/cephfs-data-scan
+usr/bin/cephfs-journal-tool
+usr/bin/cephfs-table-tool
+usr/bin/rados
+usr/bin/radosgw-admin
+usr/bin/rbd
+usr/bin/rbdmap
+usr/bin/rbd-replay*
+usr/bin/ceph-post-file
+usr/sbin/mount.ceph sbin
+usr/lib/ceph/compressor/*
+usr/lib/ceph/crypto/* [amd64]
+usr/share/man/man8/ceph-authtool.8
+usr/share/man/man8/ceph-conf.8
+usr/share/man/man8/ceph-dencoder.8
+usr/share/man/man8/ceph-rbdnamer.8
+usr/share/man/man8/ceph-syn.8
+usr/share/man/man8/ceph-post-file.8
+usr/share/man/man8/ceph.8
+usr/share/man/man8/mount.ceph.8
+usr/share/man/man8/rados.8
+usr/share/man/man8/radosgw-admin.8
+usr/share/man/man8/rbd.8
+usr/share/man/man8/rbdmap.8
+usr/share/man/man8/rbd-replay*.8
+usr/share/ceph/known_hosts_drop.ceph.com
+usr/share/ceph/id_rsa_drop.ceph.com
+usr/share/ceph/id_rsa_drop.ceph.com.pub
+etc/ceph/rbdmap
+lib/udev/rules.d/50-rbd.rules

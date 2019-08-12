@@ -1,0 +1,28 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+      - \(POOL_
+      - \(CACHE_POOL_
+      - \(SMALLER_PGP_NUM\)
+      - \(OBJECT_
+      - \(SLOW_OPS\)
+      - \(TOO_FEW_PGS\)
+    conf:
+      client:
+        rbd cache: true
+      global:
+        ms inject socket failures: 5000
+tasks:
+- install: null
+- ceph:
+    fs: xfs
+- thrashosds:
+    timeout: 1200
+- rbd_fsx:
+    clients:
+    - client.0
+    ops: 2000

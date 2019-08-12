@@ -1,0 +1,32 @@
+#!/usr/bin/python
+from __future__ import print_function
+
+import SimpleHTTPServer
+import SocketServer
+import os
+import sys
+
+path = os.path.dirname(sys.argv[0])
+os.chdir(path)
+os.chdir('..')
+os.chdir('build-doc/output/html')
+
+class ReusingTCPServer(SimpleHTTPServer.SimpleHTTPRequestHandler):
+    allow_reuse_address = True
+
+    def send_head(self):
+        # horrible kludge because SimpleHTTPServer is buggy wrt
+        # slash-redirecting of requests with query arguments, and will
+        # redirect to /foo?q=bar/ -- wrong slash placement
+        self.path = self.path.split('?', 1)[0]
+        return SimpleHTTPServer.SimpleHTTPRequestHandler.send_head(self)
+
+httpd = SocketServer.TCPServer(
+    ("", 8080),
+    ReusingTCPServer,
+    )
+try:
+    print("Serving doc at port: http://localhost:8080")
+    httpd.serve_forever()
+except KeyboardInterrupt:
+    pass

@@ -1,0 +1,48 @@
+meta:
+- desc: |
+   Run ceph on two nodes,
+   with a separate client 0,1,2 third node.
+   Use xfs beneath the osds.
+   CephFS tests running on client 2,3
+   #Note-To enable RHEL runs on ovh nodes, add the following to overrides
+   #ansible.cephlab:
+   # skip_tags: entitlements,packages,repos
+roles:
+- - mon.a
+  - mgr.x
+  - mds.a
+  - osd.0
+  - osd.1
+- - mon.b
+  - mgr.y
+  - osd.2
+  - osd.3
+- - mon.c
+  - mds.b
+  - osd.4
+  - osd.5
+- - client.0
+  - client.1
+  - client.2
+  - client.3
+overrides:
+  ceph:
+    mon_bind_msgr2: false
+    mon_bind_addrvec: false
+    log-whitelist:
+    - scrub mismatch
+    - ScrubResult
+    - wrongly marked
+    - \(POOL_APP_NOT_ENABLED\)
+    - \(SLOW_OPS\)
+    - overall HEALTH_
+    - \(MON_MSGR2_NOT_ENABLED\)
+    conf:
+      global:
+        enable experimental unrecoverable data corrupting features: "*"
+      mon:
+        mon warn on osd down out interval zero: false
+      osd:
+        osd_class_load_list: "*"
+        osd_class_default_list: "*"
+    fs: xfs

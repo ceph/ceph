@@ -1,0 +1,22 @@
+overrides:
+  ceph:
+    conf:
+      mon:
+        mon debug extra checks: true
+        mon min osdmap epochs: 100
+        mon osdmap full prune enabled: true
+        mon osdmap full prune min: 200
+        mon osdmap full prune interval: 10
+        mon osdmap full prune txsize: 100
+      osd:
+        osd beacon report interval: 10
+    log-whitelist:
+      # setting/unsetting noup will trigger health warns,
+      # causing tests to fail due to health warns, even if
+      # the tests themselves are successful.
+      - \(OSDMAP_FLAGS\)
+tasks:
+- workunit:
+    clients:
+      client.0:
+        - mon/test_mon_osdmap_prune.sh

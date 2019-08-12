@@ -1,0 +1,58 @@
+roles:
+- - mon.a
+  - mon.b
+  - mon.c
+  - mgr.x
+  - osd.0
+  - osd.1
+openstack:
+  - volumes: # attached to each instance
+      count: 2
+      size: 20 # GB
+tasks:
+- install:
+- ceph:
+    fs: xfs
+    conf:
+      osd:
+        osd recovery sleep: .1
+        osd objectstore: filestore
+    log-whitelist:
+      - \(POOL_APP_NOT_ENABLED\)
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(OBJECT_
+      - \(PG_
+      - overall HEALTH
+- exec:
+    osd.0:
+      - ceph osd pool create foo 32
+      - ceph osd pool application enable foo foo
+      - rados -p foo bench 30 write -b 4096 --no-cleanup
+      - ceph osd set noup
+- ceph.restart:
+    daemons: [osd.0]
+    wait-for-up: false
+    wait-for-healthy: false
+- exec:
+    osd.0:
+      - sleep 5
+      - rados -p foo bench 3 write -b 4096 --no-cleanup
+      - ceph osd unset noup
+      - sleep 10
+      - ceph osd set noup
+- ceph.restart:
+    daemons: [osd.1]
+    wait-for-up: false
+    wait-for-healthy: false
+- exec:
+    osd.0:
+      - ceph osd out 0
+      - sleep 10
+      - ceph osd unset noup
+- ceph.healthy:
+      wait-for-healthy: false # only wait for osds up and pgs clean, ignore misplaced
+- exec:
+    osd.0:
+      - ceph osd in 0
+- ceph.healthy:

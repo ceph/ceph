@@ -1,0 +1,38 @@
+@import 'defaults';
+
+::ng-deep .login {
+  height: 100%;
+
+  .row {
+    color: $color-login-row-text;
+    background-color: $color-login-row-bg;
+  }
+
+  h1 {
+    margin-top: 0;
+    margin-bottom: 30px;
+  }
+
+  .btn-password,
+  .form-control {
+    color: $color-password-toggle-text;
+    background-color: $color-password-toggle-bg;
+  }
+
+  .btn-password:focus {
+    outline-color: $color-password-toggle-focus;
+  }
+}
+
+// This will override the colors applied by chrome
+@keyframes autofill {
+  to {
+    color: $color-password-toggle-text;
+    background-color: $color-password-toggle-bg;
+  }
+}
+
+input:-webkit-autofill {
+  animation-name: autofill;
+  animation-fill-mode: both;
+}

@@ -1,0 +1,47 @@
+
+# devices
+device 1 osd001
+device 2 osd002
+device 3 osd003 down   # same as offload 1.0
+device 4 osd004 offload 0       # 0.0 -> normal, 1.0 -> failed
+device 5 osd005 offload 0.1
+device 6 osd006 offload 0.1
+
+# hierarchy
+type 0 osd   # 'device' is actually the default for 0
+type 2 cab
+type 3 row
+type 10 pool
+
+cab root {
+       id -1         # optional
+       alg tree     # required
+       item osd001
+       item osd002 weight 600 pos 1
+       item osd003 weight 600 pos 0
+       item osd004 weight 600 pos 3
+       item osd005 weight 600 pos 4
+}
+
+# rules
+rule normal {
+     # these are required.
+     pool 0
+     type replicated 
+     min_size 1
+     max_size 4
+     # need 1 or more of these.
+     step take root
+     step choose firstn 0 type osd
+     step emit
+}
+
+rule {
+     pool 1
+     type erasure
+     min_size 3
+     max_size 6
+     step take root
+     step choose indep 0 type osd
+     step emit
+}

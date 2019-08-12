@@ -1,0 +1,22 @@
+<cd-select #cdSelect
+           [data]="data"
+           [options]="options"
+           [messages]="messages"
+           [selectionLimit]="selectionLimit"
+           [customBadges]="customBadges"
+           [customBadgeValidators]="customBadgeValidators"
+           elemClass="mr-2 select-menu-edit"
+           (selection)="selection.emit($event)">
+  <i [ngClass]="[icons.edit]"></i>
+</cd-select>
+
+<span *ngFor="let dataItem of data">
+  <span class="badge badge-dark mr-2">
+    <span class="mr-2">{{ dataItem }}</span>
+    <a class="badge-remove"
+       (click)="cdSelect.removeItem(dataItem)">
+      <i [ngClass]="[icons.destroy]"
+         aria-hidden="true"></i>
+    </a>
+  </span>
+</span>

@@ -1,0 +1,6 @@
+usr/bin/librados-config
+usr/include/rados/librados.h
+usr/include/rados/rados_types.h
+usr/lib/librados.so
+usr/lib/librados_tp.so
+usr/share/man/man8/librados-config.8

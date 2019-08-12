@@ -1,0 +1,20 @@
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2, osd.3, osd.4, osd.5, osd.6, osd.7, osd.8, osd.9, client.0]
+tasks:
+- install:
+- ceph:
+    conf:
+      osd:
+# we may land on ext4
+        osd max object name len: 400
+        osd max object namespace len: 64
+    log-whitelist:
+      - but it is still running
+      - overall HEALTH_
+      - \(OSDMAP_FLAGS\)
+      - \(OSD_
+      - \(PG_
+- workunit:
+    clients:
+      all:
+        - rados/test_health_warnings.sh

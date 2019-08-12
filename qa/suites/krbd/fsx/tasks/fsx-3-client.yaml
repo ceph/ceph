@@ -1,0 +1,10 @@
+tasks:
+- rbd_fsx:
+    clients: [client.0, client.1, client.2]
+    ops: 10000
+    krbd: true
+    readbdy: 512
+    writebdy: 512
+    truncbdy: 512
+    holebdy: 512
+    punch_holes: true

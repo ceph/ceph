@@ -1,0 +1,259 @@
+#!/usr/bin/env python3
+#
+# backport-create-issue
+#
+# Standalone version of the "backport-create-issue" subcommand of
+# "ceph-workbench" by Loic Dachary.
+#
+# This script scans Redmine (tracker.ceph.com) for issues in "Pending Backport"
+# status and creates backport issues for them, based on the contents of the
+# "Backport" field while trying to avoid creating duplicate backport issues.
+#
+# Copyright (C) 2015 <contact@redhat.com>
+# Copyright (C) 2018, SUSE LLC
+#
+# Author: Loic Dachary <loic@dachary.org>
+# Author: Nathan Cutler <ncutler@suse.com>
+# 
+# This program is free software: you can redistribute it and/or modify
+# it under the terms of the GNU Affero General Public License as
+# published by the Free Software Foundation, either version 3 of the
+# License, or (at your option) any later version.
+#
+# This program is distributed in the hope that it will be useful,
+# but WITHOUT ANY WARRANTY; without even the implied warranty of
+# MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+# GNU Affero General Public License for more details.
+#
+# You should have received a copy of the GNU Affero General Public License
+# along with this program.  If not, see http://www.gnu.org/licenses/>
+#
+import argparse
+import logging
+import re
+import time
+from redminelib import Redmine  # https://pypi.org/project/python-redmine/
+
+redmine_endpoint = "http://tracker.ceph.com"
+project_name = "Ceph"
+release_id = 16
+delay_seconds = 5
+#
+# NOTE: release_id is hard-coded because
+# http://www.redmine.org/projects/redmine/wiki/Rest_CustomFields
+# requires administrative permissions. If and when
+# https://www.redmine.org/issues/18875
+# is resolved, it could maybe be replaced by the following code:
+#
+# for field in redmine.custom_field.all():
+#     if field.name == 'Release':
+#         release_id = field.id
+#
+status2status_id = {}
+project_id2project = {}
+tracker2tracker_id = {}
+version2version_id = {}
+
+def usage():
+    logging.error("Command-line arguments must include either a Redmine key (--key) "
+                  "or a Redmine username and password (via --user and --password). "
+                  "Optionally, one or more issue numbers can be given via positional "
+                  "argument(s). In the absence of positional arguments, the script "
+                  "will loop through all issues in Pending Backport status.")
+    exit(-1)
+
+def parse_arguments():
+    parser = argparse.ArgumentParser()
+    parser.add_argument("issue_numbers", nargs='*', help="Issue number")
+    parser.add_argument("--key", help="Redmine user key")
+    parser.add_argument("--user", help="Redmine user")
+    parser.add_argument("--password", help="Redmine password")
+    parser.add_argument("--debug", help="Show debug-level messages",
+                        action="store_true")
+    parser.add_argument("--dry-run", help="Do not write anything to Redmine",
+                        action="store_true")
+    return parser.parse_args()
+
+def set_logging_level(a):
+    if a.debug:
+        logging.basicConfig(level=logging.DEBUG)
+    else:
+        logging.basicConfig(level=logging.INFO)
+    return None
+
+def report_dry_run(a):
+    if a.dry_run:
+         logging.info("Dry run: nothing will be written to Redmine")
+    else:
+         logging.warning("Missing issues will be created in Backport tracker "
+                         "of the relevant Redmine project")
+
+def connect_to_redmine(a):
+    if a.key:
+        logging.info("Redmine key was provided; using it")
+        return Redmine(redmine_endpoint, key=a.key)
+    elif a.user and a.password:
+        logging.info("Redmine username and password were provided; using them")
+        return Redmine(redmine_endpoint, username=a.user, password=a.password)
+    else:
+        usage()
+
+def releases():
+    return ('argonaut', 'bobtail', 'cuttlefish', 'dumpling', 'emperor',
+            'firefly', 'giant', 'hammer', 'infernalis', 'jewel', 'kraken',
+            'luminous', 'mimic', 'nautilus')
+
+def populate_status_dict(r):
+    for status in r.issue_status.all():
+        status2status_id[status.name] = status.id
+    logging.debug("Statuses {}".format(status2status_id))
+    return None
+
+# not used currently, but might be useful
+def populate_version_dict(r, p_id):
+    versions = r.version.filter(project_id=p_id)
+    for version in versions:
+        version2version_id[version.name] = version.id
+    #logging.debug("Versions {}".format(version2version_id))
+    return None
+
+def populate_tracker_dict(r):
+    for tracker in r.tracker.all():
+        tracker2tracker_id[tracker.name] = tracker.id
+    logging.debug("Trackers {}".format(tracker2tracker_id))
+    return None
+
+def has_tracker(r, p_id, tracker_name):
+    for tracker in get_project(r, p_id).trackers:
+        if tracker['name'] == tracker_name:
+            return True
+    return False
+
+def get_project(r, p_id):
+    if p_id not in project_id2project:
+        p_obj = r.project.get(p_id, include='trackers')
+        project_id2project[p_id] = p_obj
+    return project_id2project[p_id]
+
+def url(issue):
+    return redmine_endpoint + "/issues/" + str(issue['id'])
+
+def set_backport(issue):
+    for field in issue['custom_fields']:
+        if field['name'] == 'Backport' and field['value'] != 0:
+            issue['backports'] = set(re.findall('\w+', field['value']))
+            logging.debug("backports for " + str(issue['id']) +
+                          " is " + str(field['value']) + " " +
+                          str(issue['backports']))
+            return True
+    return False
+
+def get_release(issue):
+    for field in issue.custom_fields:
+        if field['name'] == 'Release':
+            return field['value']
+
+def update_relations(r, issue, dry_run):
+    relations = r.issue_relation.filter(issue_id=issue['id'])
+    existing_backports = set()
+    for relation in relations:
+        other = r.issue.get(relation['issue_to_id'])
+        if other['tracker']['name'] != 'Backport':
+            logging.debug(url(issue) + " ignore relation to " +
+                url(other) + " because it is not in the Backport " +
+                "tracker")
+            continue
+        if relation['relation_type'] != 'copied_to':
+            logging.error(url(issue) + " unexpected relation '" +
+                relation['relation_type'] + "' to " + url(other))
+            continue
+        release = get_release(other)
+        if release in existing_backports:
+            logging.error(url(issue) + " duplicate " + release +
+                          " backport issue detected")
+            continue
+        existing_backports.add(release)
+        logging.debug(url(issue) + " backport to " + release + " is " +
+            redmine_endpoint + "/issues/" + str(relation['issue_to_id']))
+    if existing_backports == issue['backports']:
+        logging.debug(url(issue) + " has all the required backport issues")
+        return None
+    if existing_backports.issuperset(issue['backports']):
+        logging.error(url(issue) + " has more backport issues (" +
+            ",".join(sorted(existing_backports)) + ") than expected (" +
+            ",".join(sorted(issue['backports'])) + ")")
+        return None
+    backport_tracker_id = tracker2tracker_id['Backport']
+    for release in issue['backports'] - existing_backports:
+        if release not in releases():
+            logging.error(url(issue) + " requires backport to " +
+                "unknown release " + release)
+            break
+        subject = (release + ": " + issue['subject'])[:255]
+        if dry_run:
+            logging.info(url(issue) + " add backport to " + release)
+            continue
+        other = r.issue.create(project_id=issue['project']['id'],
+                               tracker_id=backport_tracker_id,
+                               subject=subject,
+                               priority='Normal',
+                               target_version=None,
+                               custom_fields=[{
+                                   "id": release_id,
+                                   "value": release,
+                               }])
+        logging.debug("Rate-limiting to avoid seeming like a spammer")
+        time.sleep(delay_seconds)
+        r.issue_relation.create(issue_id=issue['id'],
+                                issue_to_id=other['id'],
+                                relation_type='copied_to')
+        logging.info(url(issue) + " added backport to " +
+                     release + " " + url(other))
+    return None
+
+def iterate_over_backports(r, issues, dry_run):
+    counter = 0
+    for issue in issues:
+        counter += 1
+        logging.debug("{} ({}) {}".format(issue.id, issue.project,
+            issue.subject))
+        print('{}\r'.format(issue.id), end='', flush=True)
+        if not has_tracker(r, issue['project']['id'], 'Backport'):
+            logging.info("{} skipped because the project {} does not "
+                "have a Backport tracker".format(url(issue),
+                issue['project']['name']))
+            continue
+        if not set_backport(issue):
+            logging.error(url(issue) + " no backport field")
+            continue
+        if len(issue['backports']) == 0:
+            logging.error(url(issue) + " the backport field is empty")
+        update_relations(r, issue, dry_run)
+    logging.info("Processed {} issues with status Pending Backport"
+                 .format(counter))
+    return None
+
+
+if __name__ == '__main__':
+    args = parse_arguments()
+    set_logging_level(args)
+    report_dry_run(args)
+    redmine = connect_to_redmine(args)
+    project = redmine.project.get(project_name)
+    ceph_project_id = project.id
+    logging.debug("Project {} has ID {}".format(project_name, ceph_project_id))
+    populate_status_dict(redmine)
+    pending_backport_status_id = status2status_id["Pending Backport"]
+    logging.debug("Pending Backport status has ID {}"
+        .format(pending_backport_status_id))
+    populate_tracker_dict(redmine)
+    if args.issue_numbers:
+        issue_list = ','.join(args.issue_numbers)
+        logging.info("Processing issue list ->{}<-".format(issue_list))
+        issues = redmine.issue.filter(project_id=ceph_project_id,
+                                      issue_id=issue_list,
+                                      status_id=pending_backport_status_id)
+    else:
+        issues = redmine.issue.filter(project_id=ceph_project_id,
+                                      status_id=pending_backport_status_id)
+    iterate_over_backports(redmine, issues, args.dry_run)

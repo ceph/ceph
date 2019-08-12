@@ -1,0 +1,19 @@
+commit a129e85cdc3446a427fffffe4c31617d49024946 (tag: refs/tags/v0.80.3)
+Author: Jenkins <jenkins@inktank.com>
+Date:   Fri Jul 11 17:14:12 2014 +0000
+
+    0.80.3
+
+commit 8589c108dd5f00471986deae72d88811ccf0627f (refs/remotes/gh/firefly)
+Author: Sage Weil <sage@inktank.com>
+Date:   Thu Jul 10 10:36:16 2014 -0700
+
+    rgw: fix RGWObjManifestRule decoder
+    
+    Only decode the new field if it is a new struct.
+    
+    Fixes: #8804
+    Backport: firefly
+    Signed-off-by: Sage Weil <sage@inktank.com>
+    Reviewed-by: Josh Durgin <josh.durgin@inktank.com>
+    (cherry picked from commit c4afaf9dabd261853a44b2e08f0911c075c1cd3a)

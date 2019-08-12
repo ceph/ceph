@@ -1,0 +1,99 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab
+
+#ifndef CEPH_OBJEXP_H
+#define CEPH_OBJEXP_H
+
+#include <atomic>
+#include <string>
+#include <cerrno>
+#include <sstream>
+#include <iostream>
+
+#include "auth/Crypto.h"
+
+#include "common/armor.h"
+#include "common/ceph_json.h"
+#include "common/config.h"
+#include "common/ceph_argparse.h"
+#include "common/Formatter.h"
+#include "common/errno.h"
+
+#include "common/ceph_mutex.h"
+#include "common/Cond.h"
+#include "common/Thread.h"
+
+#include "global/global_init.h"
+
+#include "include/utime.h"
+#include "include/str_list.h"
+
+#include "rgw_user.h"
+#include "rgw_bucket.h"
+#include "rgw_rados.h"
+#include "rgw_acl.h"
+#include "rgw_acl_s3.h"
+#include "rgw_log.h"
+#include "rgw_formats.h"
+#include "rgw_usage.h"
+
+class RGWObjectExpirer {
+protected:
+  RGWRados *store;
+
+  int init_bucket_info(const std::string& tenant_name,
+                       const std::string& bucket_name,
+                       const std::string& bucket_id,
+                       RGWBucketInfo& bucket_info);
+
+  class OEWorker : public Thread {
+    CephContext *cct;
+    RGWObjectExpirer *oe;
+    ceph::mutex lock = ceph::make_mutex("OEWorker");
+    ceph::condition_variable cond;
+
+  public:
+    OEWorker(CephContext * const cct,
+             RGWObjectExpirer * const oe)
+      : cct(cct),
+        oe(oe) {
+    }
+
+    void *entry() override;
+    void stop();
+  };
+
+  OEWorker *worker{nullptr};
+  std::atomic<bool> down_flag = { false };
+
+public:
+  explicit RGWObjectExpirer(RGWRados *_store)
+    : store(_store), worker(NULL) {
+  }
+  ~RGWObjectExpirer() {
+    stop_processor();
+  }
+
+  int garbage_single_object(objexp_hint_entry& hint);
+
+  void garbage_chunk(std::list<cls_timeindex_entry>& entries, /* in  */
+                     bool& need_trim);                        /* out */
+
+  void trim_chunk(const std::string& shard,
+                  const utime_t& from,
+                  const utime_t& to,
+                  const string& from_marker,
+                  const string& to_marker);
+
+  bool process_single_shard(const std::string& shard,
+                            const utime_t& last_run,
+                            const utime_t& round_start);
+
+  bool inspect_all_shards(const utime_t& last_run,
+                          const utime_t& round_start);
+
+  bool going_down();
+  void start_processor();
+  void stop_processor();
+};
+#endif /* CEPH_OBJEXP_H */

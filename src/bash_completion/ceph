@@ -1,0 +1,50 @@
+#
+# Ceph - scalable distributed file system
+#
+# This is free software; you can redistribute it and/or
+# modify it under the terms of the GNU Lesser General Public
+# License version 2.1, as published by the Free Software
+# Foundation.
+#
+
+_ceph()
+{
+    local options_noarg="-h --help -s --status -w --watch --watch-debug --watch-info --watch-sec --watch-warn --watch-error --version -v --verbose --concise"
+    local options_arg="-c --conf -i --in-file -o --out-file --id --user -n --name --cluster --admin-daemon --admin-socket -f --format --connect-timeout"
+    local cnt=${#COMP_WORDS[@]}
+    local cur=${COMP_WORDS[COMP_CWORD]}
+    local prev=${COMP_WORDS[COMP_CWORD-1]}
+
+    if [[ " -c --conf -i --in-file -o --out-file " =~ " ${prev} " ]]
+    then
+	#default autocomplete for options (file autocomplete)
+	compopt -o default
+	COMPREPLY=()
+	return 0
+    fi
+    if [[ "${cur:0:1}" == "-" ]] ;
+    then
+	COMPREPLY=( $(compgen -W "${options_noarg} ${options_arg}" -- $cur) )
+	return 0
+    fi
+    declare -A hint_args
+    for (( i=1 ; i<cnt ; i++ ))
+    do
+	#skip this word if it is option
+	if [[ " ${options_noarg} " =~ " ${COMP_WORDS[i]} " ]]
+	then 
+	    continue 
+	fi
+	#skip this word and next if it is option with arg
+	if [[ " ${options_arg} " =~ " ${COMP_WORDS[i]} " ]]
+	then 
+	    ((i++)); 
+	    continue
+	fi
+	hint_args[$((i-1))]="${COMP_WORDS[i]}"
+    done
+
+    local IFS=$'\n'
+    COMPREPLY=( $(${COMP_WORDS[0]} --completion "${hint_args[@]}" 2>/dev/null) )
+}
+complete -F _ceph ceph

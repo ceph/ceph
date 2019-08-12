@@ -1,0 +1,15 @@
+overrides:
+  ceph:
+    log-whitelist:
+      - reached quota
+      - \(POOL_APP_NOT_ENABLED\)
+      - \(PG_AVAILABILITY\)
+    conf:
+      mon:
+        mon warn on pool no app: false
+tasks:
+- ceph-fuse:
+- workunit:
+    clients:
+      client.0:
+        - rados/test.sh

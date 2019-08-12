@@ -1,0 +1,6 @@
+lib/systemd/system/ceph-radosgw*
+usr/bin/radosgw
+usr/bin/radosgw-es
+usr/bin/radosgw-object-expirer
+usr/bin/radosgw-token
+usr/share/man/man8/radosgw.8

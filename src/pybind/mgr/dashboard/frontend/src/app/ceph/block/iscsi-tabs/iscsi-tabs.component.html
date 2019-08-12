@@ -1,0 +1,12 @@
+<tabset>
+  <tab heading="Overview"
+       i18n-heading
+       [active]="url === '/block/iscsi/overview'"
+       (selectTab)="navigateTo('/block/iscsi/overview')">
+  </tab>
+  <tab heading="Targets"
+       i18n-heading
+       [active]="url === '/block/iscsi/targets'"
+       (selectTab)="navigateTo('/block/iscsi/targets')">
+  </tab>
+</tabset>

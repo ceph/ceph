@@ -1,0 +1,14 @@
+roles:
+- [mon.a, mgr.x, osd.0, osd.1, osd.2, client.0]
+tasks:
+- install:
+- ceph:
+    fs: xfs
+    wait-for-scrub: false
+    log-whitelist:
+      - \(PG_
+      - \(OSD_
+      - \(OBJECT_
+      - overall HEALTH
+- rgw: [client.0]
+- ssh_keys:

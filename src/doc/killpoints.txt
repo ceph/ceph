@@ -1,0 +1,42 @@
+Kill arguments in code:
+mds_kill_mdstable_at
+mds_kill_export_at
+mds_kill_import_at
+
+mds_kill_mdstable_at:
+1: (Server) After receiving MMDStableRequest
+2: (Server) After logging request, before sending reply to client
+3: (Client) After receiving Agree from Server
+4: (Client) Prior to sending Commit to server, but after making local change
+5: (Server) After receiving commit message from client (before doing so)
+6: (Server) After logging commit, before sending Ack
+7: (Client) After receiving commit Ack from server
+8: (Client) After logging Ack from server
+
+mds_kill_export_at:
+1: After moving to STATE_EXPORTING
+2: After sending MExportDirDiscover
+3: After receiving MExportDirDiscoverAck and auth_unpin'ing.
+4: After sending MExportDirPrep
+5: After receiving MExportDirPrepAck
+6: After sending out MExportDirNotify to all replicas
+7: After switching to state EXPORT_EXPORTING
+   (all replicas have acked ExportDirNotify)
+8: After sending MExportDir to recipient
+9: After receipt of MExportAck (new state: EXPORT_LOGGINGFINISH)
+10: After logging EExport to journal
+11: After sending out MExportDirNotify (new state: EXPORT_NOTIFYING)
+12: After receiving MExportDirNotifyAck from all bystanders
+13: After sending MExportDirFinish to importer
+
+mds_kill_import_at:
+1: After moving to IMPORT_DISCOVERING
+2: After moving to IMPORT_DISCOVERED and sending MExportDirDiscoverAck
+3: After moving to IMPORT_PREPPING.
+4: After moving to IMPORT_PREPPED and sending MExportDirPrepAck
+5: After receiving MExportDir message
+6: After moving to IMPORT_LOGGINGSTART and writing EImportStart
+7: After moving to IMPORT_ACKING.
+8: After sending out MExportDirAck
+9: After logging EImportFinish
+10: After entering IMPORT_ABORTING.

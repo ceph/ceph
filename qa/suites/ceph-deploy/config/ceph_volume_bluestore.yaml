@@ -1,0 +1,7 @@
+overrides:
+   ceph-deploy:
+      use-ceph-volume: True
+      bluestore: True
+      conf:
+        osd:
+          bluestore fsck on mount: true
