@@ -321,6 +321,9 @@ void Server::handle_client_session(MClientSession *m)
 
   if (!session) {
     dout(0) << " ignoring sessionless msg " << *m << dendl;
+    MClientSession *reply = new MClientSession(CEPH_SESSION_REJECT);
+    reply->metadata["error_string"] = "sessionless";
+    mds->send_message(reply, m->get_connection());
     m->put();
     return;
   }
@@ -1022,6 +1025,10 @@ void Server::handle_client_reconnect(MClientReconnect *m)
   client_t from = m->get_source().num();
   Session *session = mds->get_session(m);
   if (!session) {
+    dout(0) << " ignoring sessionless msg " << *m << dendl;
+    MClientSession *reply = new MClientSession(CEPH_SESSION_REJECT);
+    reply->metadata["error_string"] = "sessionless";
+    mds->send_message(reply, m->get_connection());
     m->put();
     return;
   }
