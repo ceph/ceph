@@ -87,7 +87,7 @@ public:
                                          CollectionRef c,
                                          const ghobject_t& start,
                                          const ghobject_t& end,
-                                         uint64_t limit) = 0;
+                                         uint64_t limit) const = 0;
   virtual seastar::future<bool, omap_values_t> omap_get_values(
     CollectionRef c,           ///< [in] collection
     const ghobject_t &oid,     ///< [in] oid

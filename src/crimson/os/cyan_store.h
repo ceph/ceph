@@ -64,7 +64,7 @@ public:
     CollectionRef c,
     const ghobject_t& start,
     const ghobject_t& end,
-    uint64_t limit) final;
+    uint64_t limit) const final;
 
   /// Retrieves paged set of values > start (if present)
   seastar::future<bool, omap_values_t> omap_get_values(

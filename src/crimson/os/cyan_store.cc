@@ -126,7 +126,7 @@ seastar::future<std::vector<ghobject_t>, ghobject_t>
 CyanStore::list_objects(CollectionRef c,
                         const ghobject_t& start,
                         const ghobject_t& end,
-                        uint64_t limit)
+                        uint64_t limit) const
 {
   logger().debug("{} {} {} {} {}",
                  __func__, c->cid, start, end, limit);
