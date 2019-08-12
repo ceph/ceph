@@ -142,16 +142,16 @@ class RESTControllerTest(ControllerTestCase):
         )
 
         self._get('/foo/wait_task_exception')
-        while self.jsonBody():
+        while self.json_body():
             time.sleep(0.5)
             self._get('/foo/wait_task_exception')
 
     def test_internal_server_error(self):
         self._get('/foo/internal_server_error')
         self.assertStatus(500)
-        self.assertIn('unexpected condition', self.jsonBody()['detail'])
+        self.assertIn('unexpected condition', self.json_body()['detail'])
 
     def test_404(self):
         self._get('/foonot_found')
         self.assertStatus(404)
-        self.assertIn('detail', self.jsonBody())
+        self.assertIn('detail', self.json_body())
