@@ -23,7 +23,7 @@ from ..services.exception import handle_rados_error, handle_rbd_error, \
 
 
 # pylint: disable=not-callable
-def RbdTask(name, metadata, wait_for):
+def RbdTask(name, metadata, wait_for):  # noqa: N802
     def composed_decorator(func):
         func = handle_rados_error('pool')(func)
         func = handle_rbd_error()(func)
@@ -53,7 +53,7 @@ def _sort_features(features, enable=True):
     journaling depends on exclusive-lock
     fast-diff depends on object-map
     """
-    ORDER = ['exclusive-lock', 'journaling', 'object-map', 'fast-diff']
+    ORDER = ['exclusive-lock', 'journaling', 'object-map', 'fast-diff']  # noqa: N806
 
     def key_func(feat):
         try:

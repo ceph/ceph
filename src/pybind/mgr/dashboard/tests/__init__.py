@@ -148,7 +148,7 @@ class ControllerTestCase(helper.CPWebCase):
             logger.info("task finished immediately")
             return
 
-        res = self.jsonBody()
+        res = self.json_body()
         self.assertIsInstance(res, dict)
         self.assertIn('name', res)
         self.assertIn('metadata', res)
@@ -174,7 +174,7 @@ class ControllerTestCase(helper.CPWebCase):
                                 self.task_metadata)
                     time.sleep(1)
                     self.tc._get('/api/task?name={}'.format(self.task_name))
-                    res = self.tc.jsonBody()
+                    res = self.tc.json_body()
                     for task in res['finished_tasks']:
                         if task['metadata'] == self.task_metadata:
                             # task finished
@@ -217,21 +217,21 @@ class ControllerTestCase(helper.CPWebCase):
     def _task_put(self, url, data=None, timeout=60):
         self._task_request('PUT', url, data, timeout)
 
-    def jsonBody(self):
+    def json_body(self):
         body_str = self.body.decode('utf-8') if isinstance(self.body, bytes) else self.body
         return json.loads(body_str)
 
-    def assertJsonBody(self, data, msg=None):
+    def assertJsonBody(self, data, msg=None):  # noqa: N802
         """Fail if value != self.body."""
-        json_body = self.jsonBody()
+        json_body = self.json_body()
         if data != json_body:
             if msg is None:
                 msg = 'expected body:\n%r\n\nactual body:\n%r' % (
                     data, json_body)
             self._handlewebError(msg)
 
-    def assertInJsonBody(self, data, msg=None):
-        json_body = self.jsonBody()
+    def assertInJsonBody(self, data, msg=None):  # noqa: N802
+        json_body = self.json_body()
         if data not in json_body:
             if msg is None:
                 msg = 'expected %r to be in %r' % (data, json_body)
