@@ -136,6 +136,9 @@ public:
   template<class T>
   static bool decode_json(const char *name, boost::optional<T>& val, JSONObj *obj, bool mandatory = false);
 
+  template<class T>
+  static bool decode_json(const char *name, std::optional<T>& val, JSONObj *obj, bool mandatory = false);
+
 };
 
 template<class T>
@@ -383,6 +386,32 @@ bool JSONDecoder::decode_json(const char *name, boost::optional<T>& val, JSONObj
 }
 
 template<class T>
+bool JSONDecoder::decode_json(const char *name, std::optional<T>& val, JSONObj *obj, bool mandatory)
+{
+  JSONObjIter iter = obj->find_first(name);
+  if (iter.end()) {
+    if (mandatory) {
+      std::string s = "missing mandatory field " + std::string(name);
+      throw err(s);
+    }
+    val.reset();
+    return false;
+  }
+
+  try {
+    val.emplace();
+    decode_json_obj(*val, *iter);
+  } catch (const err& e) {
+    val.reset();
+    std::string s = std::string(name) + ": ";
+    s.append(e.what());
+    throw err(s);
+  }
+
+  return true;
+}
+
+template<class T>
 static void encode_json(const char *name, const T& val, ceph::Formatter *f)
 {
   f->open_object_section(name);
@@ -541,6 +570,16 @@ void encode_json_map(const char *name, const char *index_name, const char *value
 {
   encode_json_map<K, V>(name, index_name, NULL, value_name, NULL, NULL, m, f);
 }
+
+template <class T>
+static void encode_json(const char *name, const std::optional<T>& o, ceph::Formatter *f)
+{
+  if (!o) {
+    return;
+  }
+  encode_json(name, *o, f);
+}
+
 
 class JSONFormattable : public ceph::JSONFormatter {
   JSONObj::data_val value;

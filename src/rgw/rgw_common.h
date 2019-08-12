@@ -1400,7 +1400,7 @@ inline ostream& operator<<(ostream& out, const RGWBucketIndexType &index_type)
   }
 }
 
-struct RGWBucketSyncPolicy;
+struct rgw_sync_policy_info;
 class RGWSI_Zone;
 
 struct RGWBucketInfo {
@@ -1450,8 +1450,7 @@ struct RGWBucketInfo {
 
   RGWObjectLock obj_lock;
 
-  std::shared_ptr<const RGWBucketSyncPolicy> sync_policy;
-
+  std::shared_ptr<const rgw_sync_policy_info> sync_policy;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);
@@ -1473,7 +1472,7 @@ struct RGWBucketInfo {
     return swift_versioning && !versioned();
   }
 
-  void set_sync_policy(RGWBucketSyncPolicy&& policy);
+  void set_sync_policy(rgw_sync_policy_info&& policy);
 
   bool empty_sync_policy() const;
   bool bucket_is_sync_source(const string& zone_id) const;

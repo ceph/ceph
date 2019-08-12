@@ -16,6 +16,7 @@
 #include "rgw_sync.h"
 #include "rgw_orphan.h"
 #include "rgw_bucket_sync.h"
+#include "rgw_tools.h"
 
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
@@ -357,7 +358,8 @@ static struct rgw_flags_desc rgw_perms[] = {
  { 0, NULL }
 };
 
-static void mask_to_str(rgw_flags_desc *mask_list, uint32_t mask, char *buf, int len)
+template <class T>
+static void mask_to_str(T *mask_list, uint32_t mask, char *buf, int len)
 {
   const char *sep = "";
   int pos = 0;
@@ -368,7 +370,7 @@ static void mask_to_str(rgw_flags_desc *mask_list, uint32_t mask, char *buf, int
   while (mask) {
     uint32_t orig_mask = mask;
     for (int i = 0; mask_list[i].mask; i++) {
-      struct rgw_flags_desc *desc = &mask_list[i];
+      T *desc = &mask_list[i];
       if ((mask & desc->mask) == desc->mask) {
         pos += snprintf(buf + pos, len - pos, "%s%s", sep, desc->str);
         if (pos == len)
@@ -830,44 +832,89 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   reshard_status = (cls_rgw_reshard_status)rs;
 }
 
-void RGWBucketSyncPolicy::rule::dump(Formatter *f) const
+void rgw_sync_group_info::dump(Formatter *f) const
 {
+  encode_json("id", id, f);
+  encode_json("config", config, f);
+}
+
+void rgw_sync_group_info::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("config", config, obj);
+}
+
+static struct rgw_flags_desc sync_group_flags_desc[] = {
+ { rgw_sync_group_info::CONFIG_FLAG_DR, "mirror" },
+ { rgw_sync_group_info::CONFIG_FLAG_NONE, "none" },
+ { 0, NULL }
+};
+
+void rgw_sync_group_info::_config::dump(Formatter *f) const
+{
+  char buf[256];
+  mask_to_str(sync_group_flags_desc, flags, buf, sizeof(buf));
+  encode_json("flags", (const char *)buf, f);
+}
+
+static struct rgw_name_to_flag sync_group_flags_mapping[] = {
+                  {"mirror",  rgw_sync_group_info::CONFIG_FLAG_DR},
+		  {"none", 0},
+		  {NULL, 0} };
+
+
+
+void rgw_sync_group_info::_config::decode_json(JSONObj *obj)
+{
+  string s;
+  JSONDecoder::decode_json("flags", s, obj);
+  uint32_t f = 0;
+  rgw_parse_list_of_flags(sync_group_flags_mapping, s, &f);
+  flags = f;
+}
+
+void rgw_sync_instance_info::dump(Formatter *f) const
+{
+  encode_json("id", id, f);
+  encode_json("sync_groups", sync_groups, f);
   encode_json("zone_id", zone_id, f);
-  encode_json("dest_bucket", dest_bucket, f);
-  encode_json("source_obj_prefix", source_obj_prefix, f);
-  encode_json("dest_obj_prefix", dest_obj_prefix, f);
-}
-
-void RGWBucketSyncPolicy::rule::decode_json(JSONObj *obj)
-{
-  JSONDecoder::decode_json("zone_id", zone_id, obj);
-  JSONDecoder::decode_json("dest_bucket", dest_bucket, obj);
-  JSONDecoder::decode_json("source_obj_prefix", source_obj_prefix, obj);
-  JSONDecoder::decode_json("dest_obj_prefix", dest_obj_prefix, obj);
-}
-
-void RGWBucketSyncPolicy::target::dump(Formatter *f) const
-{
-  encode_json("target_zone_id", target_zone_id, f);
-  encode_json("rules", rules, f);
-}
-
-void RGWBucketSyncPolicy::target::decode_json(JSONObj *obj)
-{
-  JSONDecoder::decode_json("target_zone_id", target_zone_id, obj);
-  JSONDecoder::decode_json("rules", rules, obj);
-}
-
-void RGWBucketSyncPolicy::dump(Formatter *f) const
-{
   encode_json("bucket", bucket, f);
-  encode_json("targets", targets, f);
+  encode_json("obj_prefix", obj_prefix, f);
+  encode_json("sync_from", sync_from, f);
 }
 
-void RGWBucketSyncPolicy::decode_json(JSONObj *obj)
+void rgw_sync_instance_info::decode_json(JSONObj *obj)
 {
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("sync_groups", sync_groups, obj);
+  JSONDecoder::decode_json("zone_id", zone_id, obj);
   JSONDecoder::decode_json("bucket", bucket, obj);
-  JSONDecoder::decode_json("targets", targets, obj);
+  JSONDecoder::decode_json("obj_prefix", obj_prefix, obj);
+  JSONDecoder::decode_json("sync_from", sync_from, obj);
+}
+
+void rgw_sync_instance_info::sync_pipe::dump(Formatter *f) const
+{
+  encode_json("source", source, f);
+  encode_json("target_prefix", target_prefix, f);
+}
+
+void rgw_sync_instance_info::sync_pipe::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("source", source, obj);
+  JSONDecoder::decode_json("target_prefix", target_prefix, obj);
+}
+
+void rgw_sync_policy_info::dump(Formatter *f) const
+{
+  encode_json("groups", groups, f);
+  encode_json("entries", entries, f);
+}
+
+void rgw_sync_policy_info::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("groups", groups, obj);
+  JSONDecoder::decode_json("entries", entries, obj);
 }
 
 void rgw_obj_key::dump(Formatter *f) const
@@ -1172,6 +1219,7 @@ void RGWZoneGroup::dump(Formatter *f) const
   encode_json_map("placement_targets", placement_targets, f); /* more friendly representation */
   encode_json("default_placement", default_placement, f);
   encode_json("realm_id", realm_id, f);
+  encode_json("sync_policy", sync_policy, f);
 }
 
 static void decode_zones(map<string, RGWZone>& zones, JSONObj *o)

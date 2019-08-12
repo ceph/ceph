@@ -64,6 +64,22 @@ void rgw_datalog_shard_data::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("entries", entries, obj);
 };
 
+void rgw_sync_group_info::encode(bufferlist& bl) const
+{
+  ENCODE_START(1, 1, bl);
+  encode(id, bl);
+  encode(config, bl);
+  ENCODE_FINISH(bl);
+}
+
+void rgw_sync_group_info::decode(bufferlist::const_iterator& bl)
+{
+  DECODE_START(1, bl);
+  decode(id, bl);
+  decode(config, bl);
+  DECODE_FINISH(bl);
+}
+
 class RGWReadDataSyncStatusMarkersCR : public RGWShardCollectCR {
   static constexpr int MAX_CONCURRENT_SHARDS = 16;
 
@@ -3263,6 +3279,88 @@ int RGWBucketShardIncrementalSyncCR::operate()
   }
   return 0;
 }
+
+class RGWRunBucketSourcesSyncCR : public RGWCoroutine {
+  RGWDataSyncEnv *sync_env;
+  rgw_bucket_shard bs;
+  rgw_bucket_source_sync_info info;
+  RGWMetaSyncEnv meta_sync_env;
+
+  const std::string status_oid;
+
+  boost::intrusive_ptr<RGWContinuousLeaseCR> lease_cr;
+  boost::intrusive_ptr<RGWCoroutinesStack> lease_stack;
+
+  RGWSyncTraceNodeRef tn;
+
+public:
+  RGWRunBucketSourcesSyncCR(RGWDataSyncEnv *_sync_env, const rgw_bucket_shard& _bs, const RGWSyncTraceNodeRef& _tn_parent)
+    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), bs(_bs),
+      status_oid(RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, bs)),
+      tn(sync_env->sync_tracer->add_node(_tn_parent, "bucket_source",
+                                         SSTR(bucket_shard_str{bs}))) {
+  }
+  ~RGWRunBucketSyncCoroutine() override {
+    if (lease_cr) {
+      lease_cr->abort();
+    }
+  }
+
+  int operate() override;
+};
+
+int RGWRunBucketSourcesSyncCR::operate()
+{
+  reenter(this) {
+    yield {
+      set_status("acquiring sync lock");
+      auto store = sync_env->store;
+      lease_cr.reset(new RGWContinuousLeaseCR(sync_env->async_rados, store,
+                                              rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, status_oid),
+                                              "sync_lock",
+                                              cct->_conf->rgw_sync_lease_period,
+                                              this));
+      lease_stack.reset(spawn(lease_cr.get(), false));
+    }
+    while (!lease_cr->is_locked()) {
+      if (lease_cr->is_done()) {
+        tn->log(5, "failed to take lease");
+        set_status("lease lock failed, early abort");
+        return set_cr_error(lease_cr->get_ret_status());
+      }
+      set_sleeping(true);
+      yield;
+    }
+
+    tn->log(10, "took lease");
+    yield call(new RGWReadBucketSourcesInfoCR(sync_env, bs.bucket, &info));
+    if (retcode < 0 && retcode != -ENOENT) {
+      tn->log(0, "ERROR: failed to read sync status for bucket");
+      lease_cr->go_down();
+      drain_all();
+      return set_cr_error(retcode);
+    }
+
+    if (retcode == -ENOENT) {
+      rgw_bucket_sync_pipe sync_pipe;
+      sync_pipe.init_default(bs);
+      info.pipes.push_back(sync_pipe);
+    }
+
+    yield {
+      for (auto pipe : info.pipes) {
+        spawn(new RGWRunBucketSyncCoroutine(sync_env, pipe, &tn));
+      }
+    }
+
+    lease_cr->go_down();
+    drain_all();
+    return set_cr_done();
+  }
+
+  return 0;
+}
+#endif
 
 int RGWRunBucketSyncCoroutine::operate()
 {
