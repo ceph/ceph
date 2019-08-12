@@ -402,7 +402,7 @@ class ObjectCacher {
   string name;
   ceph::mutex& lock;
 
-  uint64_t max_dirty, target_dirty, max_size, max_objects;
+  uint64_t max_dirty, target_dirty, max_size, max_objects, max_object_ops;
   ceph::timespan max_dirty_age;
   bool block_writes_upfront;
 
@@ -666,6 +666,9 @@ public:
   }
   void set_max_dirty_age(double a) {
     max_dirty_age = make_timespan(a);
+  }
+  void set_max_object_ops(int64_t v) {
+    max_object_ops = v;
   }
   void set_max_objects(int64_t v) {
     max_objects = v;

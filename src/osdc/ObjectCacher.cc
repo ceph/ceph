@@ -1778,6 +1778,11 @@ int ObjectCacher::writex(OSDWrite *wr, ObjectSet *oset, Context *onfreespace,
     bh->last_write = now;
 
     o->try_merge_bh(bh);
+    if (o->data.size() >= cct->_conf->client_oc_max_object_ops
+      && !(o->data.size() % cct->_Conf->client_oc_max_object_ops)) {
+      ldout(cct,10) << "object:" << o << "ops on an object:" << o->data.size() <<dendl;
+      flush(o,0,0);
+    }
   }
 
   if (perfcounter) {

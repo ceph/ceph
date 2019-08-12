@@ -353,6 +353,7 @@ OPTION(client_oc_size, OPT_INT)    // MB * n
 OPTION(client_oc_max_dirty, OPT_INT)    // MB * n  (dirty OR tx.. bigish)
 OPTION(client_oc_target_dirty, OPT_INT) // target dirty (keep this smallish)
 OPTION(client_oc_max_dirty_age, OPT_DOUBLE)      // max age in cache before writeback
+OPTION(client_oc_max_object_ops,OPT_INT) //max number ops on an object
 OPTION(client_oc_max_objects, OPT_INT)      // max objects in cache
 OPTION(client_debug_getattr_caps, OPT_BOOL) // check if MDS reply contains wanted caps
 OPTION(client_debug_force_sync_read, OPT_BOOL)     // always read synchronously (go to osds)
