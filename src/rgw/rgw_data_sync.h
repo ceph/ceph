@@ -16,6 +16,8 @@
 #include "rgw_sync_module.h"
 #include "rgw_sync_trace.h"
 
+class JSONObj;
+
 struct rgw_bucket_sync_pipe {
   rgw_bucket_shard source_bs;
   RGWBucketInfo dest_bucket_info;
@@ -256,6 +258,136 @@ struct rgw_bucket_entry_owner {
 
   void decode_json(JSONObj *obj);
 };
+
+struct rgw_sync_group_info {
+  static constexpr int CONFIG_FLAG_NONE = 0x0;
+  static constexpr int CONFIG_FLAG_DR   = 0x1;
+
+  std::string id;
+
+  struct _config {
+    int flags{CONFIG_FLAG_NONE};
+
+    void encode(bufferlist& bl) const {
+      ENCODE_START(1, 1, bl);
+      encode(flags, bl);
+      ENCODE_FINISH(bl);
+    }
+
+    void decode(bufferlist::const_iterator& bl) {
+      DECODE_START(1, bl);
+      decode(flags, bl);
+      DECODE_FINISH(bl);
+    }
+
+    void dump(ceph::Formatter *f) const;
+    void decode_json(JSONObj *obj);
+  } config;
+
+  void encode(bufferlist& bl) const;
+  void decode(bufferlist::const_iterator& bl);
+
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_sync_group_info::_config)
+WRITE_CLASS_ENCODER(rgw_sync_group_info)
+
+struct rgw_sync_instance_info {
+  std::string id;
+
+  std::optional<std::set<std::string> > sync_groups; /* name of groups entity belongs to */
+  std::optional<std::string> zone_id;
+  std::optional<rgw_bucket> bucket;
+  std::optional<std::string> obj_prefix;
+
+  struct sync_pipe {
+    string source;
+    string target_prefix;
+
+    bool operator<(const sync_pipe& rhs) const {
+      if (source == rhs.source) {
+        return (target_prefix < rhs.target_prefix);
+      }
+      return (source  < rhs.source);
+    }
+
+    void encode(bufferlist& bl) const {
+      ENCODE_START(1, 1, bl);
+      encode(source, bl);
+      encode(target_prefix, bl);
+      ENCODE_FINISH(bl);
+    }
+
+    void decode(bufferlist::const_iterator& bl) {
+      DECODE_START(1, bl);
+      decode(source, bl);
+      decode(target_prefix, bl);
+      DECODE_FINISH(bl);
+    }
+
+    void dump(ceph::Formatter *f) const;
+    void decode_json(JSONObj *obj);
+  };
+
+  std::optional<std::set<sync_pipe> > sync_from; /* optional group/entity ids */
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(id, bl);
+    encode(sync_groups, bl);
+    encode(zone_id, bl);
+    encode(bucket, bl);
+    encode(obj_prefix, bl);
+    encode(sync_from, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(id, bl);
+    decode(sync_groups, bl);
+    decode(zone_id, bl);
+    decode(bucket, bl);
+    decode(obj_prefix, bl);
+    decode(sync_from, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_sync_instance_info::sync_pipe)
+WRITE_CLASS_ENCODER(rgw_sync_instance_info)
+
+struct rgw_sync_policy_info {
+  std::vector<rgw_sync_group_info> groups;
+  std::vector<rgw_sync_instance_info> entries;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(groups, bl);
+    encode(entries, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(groups, bl);
+    decode(entries, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+
+  bool empty() const {
+    return groups.empty() &&
+           entries.empty();
+  }
+
+};
+WRITE_CLASS_ENCODER(rgw_sync_policy_info)
 
 class RGWSyncErrorLogger;
 class RGWRESTConn;
