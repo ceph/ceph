@@ -37,6 +37,9 @@
 #include "rgw_frontend.h"
 #include "rgw_http_client_curl.h"
 #include "rgw_perf_counters.h"
+#ifdef WITH_RADOSGW_AMQP_ENDPOINT
+#include "rgw_amqp.h"
+#endif
 #if defined(WITH_RADOSGW_BEAST_FRONTEND)
 #include "rgw_asio_frontend.h"
 #endif /* WITH_RADOSGW_BEAST_FRONTEND */
@@ -367,6 +370,14 @@ int main(int argc, const char **argv)
     }
   }
 
+  if (pubsub_enabled) {
+#ifdef WITH_RADOSGW_AMQP_ENDPOINT
+    if (!rgw::amqp::init(cct.get())) {
+        dout(1) << "ERROR: failed to initialize AMQP manager" << dendl;
+    }
+#endif
+  }
+
   if (apis_map.count("swift") > 0) {
     RGWRESTMgr_SWIFT* const swift_resource = new RGWRESTMgr_SWIFT;
 
@@ -593,6 +604,9 @@ int main(int argc, const char **argv)
   rgw_http_client_cleanup();
   rgw::curl::cleanup_curl();
   g_conf().remove_observer(&implicit_tenant_context);
+#ifdef WITH_RADOSGW_AMQP_ENDPOINT
+  rgw::amqp::shutdown();
+#endif
 
   rgw_perf_stop(g_ceph_context);
 

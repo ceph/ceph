@@ -48,6 +48,8 @@
 #include "rgw_putobj_processor.h"
 #include "rgw_crypt.h"
 #include "rgw_perf_counters.h"
+#include "rgw_notify.h"
+#include "rgw_notify_event_type.h"
 
 #include "services/svc_zone.h"
 #include "services/svc_quota.h"
@@ -4047,6 +4049,15 @@ void RGWPutObj::execute()
       return;
     }
   }
+
+  // send request to notification manager
+  const auto ret = rgw::notify::publish(s, mtime, etag, rgw::notify::ObjectCreatedPut, store);
+  if (ret < 0) {
+    ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
+	// TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
+	// this should be global conf (probably returnign a different handler)
+    // so we don't need to read the configured values before we perform it
+  }
 }
 
 int RGWPostObj::verify_permission()
@@ -4267,6 +4278,14 @@ void RGWPostObj::execute()
       return;
     }
   } while (is_next_file_to_upload());
+  // send request to notification manager
+  const auto ret = rgw::notify::publish(s, real_time(), etag, rgw::notify::ObjectCreatedPost, store);
+  if (ret < 0) {
+    ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
+	// TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
+	// this should be global conf (probably returnign a different handler)
+    // so we don't need to read the configured values before we perform it
+  }
 }
 
 
@@ -4809,6 +4828,15 @@ void RGWDeleteObj::execute()
   } else {
     op_ret = -EINVAL;
   }
+  // TODO: add etag calculation
+  std::string etag;
+  const auto ret = rgw::notify::publish(s, real_time(), etag, rgw::notify::ObjectRemovedDelete, store);
+  if (ret < 0) {
+    ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
+	// TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
+	// this should be global conf (probably returnign a different handler)
+    // so we don't need to read the configured values before we perform it
+  }
 }
 
 bool RGWCopyObj::parse_copy_location(const boost::string_view& url_src,
@@ -5113,6 +5141,15 @@ void RGWCopyObj::execute()
 			   copy_obj_progress_cb, (void *)this, 
                            this,
                            s->yield);
+  
+  // TODO: use s3:ObjectCreated:Copy
+  const auto ret = rgw::notify::publish(s, mtime, etag, rgw::notify::ObjectCreatedCopy, store);
+  if (ret < 0) {
+    ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
+	// TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
+	// this should be global conf (probably returnign a different handler)
+    // so we don't need to read the configured values before we perform it
+  }
 }
 
 int RGWGetACLs::verify_permission()

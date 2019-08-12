@@ -39,6 +39,19 @@ void set_valid_user(const std::string& user, const std::string& password) {
   VALID_PASSWORD = password;
 }
 
+std::atomic<unsigned> g_tag_skip = 0;
+std::atomic<int> g_multiple = 0;
+
+void set_multiple(unsigned tag_skip) {
+    g_multiple = 1;
+    g_tag_skip = tag_skip;
+}
+
+void reset_multiple() {
+    g_multiple = 0;
+    g_tag_skip = 0;
+}
+
 bool FAIL_NEXT_WRITE(false);
 bool FAIL_NEXT_READ(false);
 bool REPLY_ACK(true);
@@ -250,28 +263,49 @@ int amqp_simple_wait_frame_noblock(amqp_connection_state_t state, amqp_frame_t *
     // "wait" for queue
     usleep(tv->tv_sec*1000000+tv->tv_usec);
     // read from queue
-    if (REPLY_ACK) {
-      if (state->ack_list.pop(state->ack)) {
-        decoded_frame->frame_type = AMQP_FRAME_METHOD;
+    if (g_multiple) {
+      // pop multiples and reply once at the end
+      for (auto i = 0U; i < g_tag_skip; ++i) {
+        if (REPLY_ACK && !state->ack_list.pop(state->ack)) {
+          // queue is empty
+          return AMQP_STATUS_TIMEOUT;
+        } else if (!REPLY_ACK && !state->nack_list.pop(state->nack)) {
+          // queue is empty
+          return AMQP_STATUS_TIMEOUT;
+        }
+      }
+      if (REPLY_ACK) {
+        state->ack.multiple = g_multiple;
         decoded_frame->payload.method.id = AMQP_BASIC_ACK_METHOD;
         decoded_frame->payload.method.decoded = &state->ack;
-        state->reply.reply_type = AMQP_RESPONSE_NORMAL;
-        return AMQP_STATUS_OK;
       } else {
-        // queue is empty
-        return AMQP_STATUS_TIMEOUT;
-      }
-    } else {
-      if (state->nack_list.pop(state->nack)) {
-        decoded_frame->frame_type = AMQP_FRAME_METHOD;
+        state->nack.multiple = g_multiple;
         decoded_frame->payload.method.id = AMQP_BASIC_NACK_METHOD;
         decoded_frame->payload.method.decoded = &state->nack;
-        state->reply.reply_type = AMQP_RESPONSE_NORMAL;
-        return AMQP_STATUS_OK;
-      } else {
-        // queue is empty
-        return AMQP_STATUS_TIMEOUT;
       }
+      decoded_frame->frame_type = AMQP_FRAME_METHOD;
+      state->reply.reply_type = AMQP_RESPONSE_NORMAL;
+      reset_multiple();
+      return AMQP_STATUS_OK;
+    }
+    // pop replies one by one
+    if (REPLY_ACK && state->ack_list.pop(state->ack)) {
+      state->ack.multiple = g_multiple;
+      decoded_frame->frame_type = AMQP_FRAME_METHOD;
+      decoded_frame->payload.method.id = AMQP_BASIC_ACK_METHOD;
+      decoded_frame->payload.method.decoded = &state->ack;
+      state->reply.reply_type = AMQP_RESPONSE_NORMAL;
+      return AMQP_STATUS_OK;
+    } else if (!REPLY_ACK && state->nack_list.pop(state->nack)) {
+      state->nack.multiple = g_multiple;
+      decoded_frame->frame_type = AMQP_FRAME_METHOD;
+      decoded_frame->payload.method.id = AMQP_BASIC_NACK_METHOD;
+      decoded_frame->payload.method.decoded = &state->nack;
+      state->reply.reply_type = AMQP_RESPONSE_NORMAL;
+      return AMQP_STATUS_OK;
+    } else {
+      // queue is empty
+      return AMQP_STATUS_TIMEOUT;
     }
   }
   return AMQP_STATUS_CONNECTION_CLOSED;

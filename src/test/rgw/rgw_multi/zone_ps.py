@@ -189,7 +189,8 @@ class PSTopicS3:
 
     def del_config(self):
         """delete topic"""
-        self.client.delete_topic(TopicArn=self.topic_arn)
+        result = self.client.delete_topic(TopicArn=self.topic_arn)
+        return result['ResponseMetadata']['HTTPStatusCode']
     
     def get_list(self):
         """list all topics"""
