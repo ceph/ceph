@@ -6692,3 +6692,11 @@ void init_pg_ondisk(
   encode(struct_v, values[string(infover_key)]);
   t.omap_setkeys(coll, pgmeta_oid, values);
 }
+
+PGLSFilter::PGLSFilter() : cct(nullptr)
+{
+}
+
+PGLSFilter::~PGLSFilter()
+{
+}
