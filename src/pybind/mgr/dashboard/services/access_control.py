@@ -170,11 +170,12 @@ SYSTEM_ROLES = {
 
 class User(object):
     def __init__(self, username, password, name=None, email=None, roles=None,
-                 lastUpdate=None):
+                 lastUpdate=None, enabled=None):
         self.username = username
         self.password = password
         self.name = name
         self.email = email
+        self.enabled = enabled
         if roles is None:
             self.roles = set()
         else:
@@ -231,14 +232,15 @@ class User(object):
             'roles': sorted([r.name for r in self.roles]),
             'name': self.name,
             'email': self.email,
-            'lastUpdate': self.lastUpdate
+            'lastUpdate': self.lastUpdate,
+            'enabled': self.enabled
         }
 
     @classmethod
     def from_dict(cls, u_dict, roles):
         return User(u_dict['username'], u_dict['password'], u_dict['name'],
                     u_dict['email'], {roles[r] for r in u_dict['roles']},
-                    u_dict['lastUpdate'])
+                    u_dict['lastUpdate'], u_dict['enabled'])
 
 
 class AccessControlDB(object):

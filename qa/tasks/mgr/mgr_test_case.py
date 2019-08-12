@@ -108,9 +108,23 @@ class MgrTestCase(CephTestCase):
         cls.setup_mgrs()
 
     @classmethod
+    def _unload_module(cls, module_name):
+        def is_disabled():
+            enabled_modules = json.loads(cls.mgr_cluster.mon_manager.raw_cluster_cmd(
+                'mgr', 'module', 'ls'))['enabled_modules']
+            return module_name not in enabled_modules
+
+        if is_disabled():
+            return
+
+        log.info("Unloading Mgr module %s ...", module_name)
+        cls.mgr_cluster.mon_manager.raw_cluster_cmd('mgr', 'module', 'disable', module_name)
+        cls.wait_until_true(is_disabled, timeout=30)
+
+    @classmethod
     def _load_module(cls, module_name):
         loaded = json.loads(cls.mgr_cluster.mon_manager.raw_cluster_cmd(
-                   "mgr", "module", "ls"))['enabled_modules']
+            "mgr", "module", "ls"))['enabled_modules']
         if module_name in loaded:
             # The enable command is idempotent, but our wait for a restart
             # isn't, so let's return now if it's already loaded
@@ -120,7 +134,7 @@ class MgrTestCase(CephTestCase):
 
         # check if the the module is configured as an always on module
         mgr_daemons = json.loads(cls.mgr_cluster.mon_manager.raw_cluster_cmd(
-                   "mgr", "metadata"))
+            "mgr", "metadata"))
 
         for daemon in mgr_daemons:
             if daemon["name"] == initial_mgr_map["active_name"]:
@@ -129,9 +143,10 @@ class MgrTestCase(CephTestCase):
                 if module_name in always_on:
                     return
 
+        log.info("Loading Mgr module %s ...", module_name)
         initial_gid = initial_mgr_map['active_gid']
-        cls.mgr_cluster.mon_manager.raw_cluster_cmd("mgr", "module", "enable",
-                                                    module_name, "--force")
+        cls.mgr_cluster.mon_manager.raw_cluster_cmd(
+            "mgr", "module", "enable", module_name, "--force")
 
         # Wait for the module to load
         def has_restarted():
@@ -139,7 +154,7 @@ class MgrTestCase(CephTestCase):
             done = mgr_map['active_gid'] != initial_gid and mgr_map['available']
             if done:
                 log.info("Restarted after module load (new active {0}/{1})".format(
-                    mgr_map['active_name'] , mgr_map['active_gid']))
+                    mgr_map['active_name'], mgr_map['active_gid']))
             return done
         cls.wait_until_true(has_restarted, timeout=30)
 

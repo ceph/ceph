@@ -59,6 +59,34 @@ class UserTest(DashboardTestCase):
         self._delete('/api/user/user1')
         self.assertStatus(204)
 
+    def test_crd_disabled_user(self):
+        self._create_user(username='klara',
+                          password='123456789',
+                          name='Klara Musterfrau',
+                          email='klara@musterfrau.com',
+                          roles=['administrator'],
+                          enabled=False)
+        self.assertStatus(201)
+        user = self.jsonBody()
+
+        # Restart dashboard module.
+        self._unload_module('dashboard')
+        self._load_module('dashboard')
+
+        self._get('/api/user/klara')
+        self.assertStatus(200)
+        self.assertJsonBody({
+            'username': 'klara',
+            'name': 'Klara Musterfrau',
+            'email': 'klara@musterfrau.com',
+            'roles': ['administrator'],
+            'lastUpdate': user['lastUpdate'],
+            'enabled': False
+        })
+
+        self._delete('/api/user/klara')
+        self.assertStatus(204)
+
     def test_list_users(self):
         self._get('/api/user')
         self.assertStatus(200)
