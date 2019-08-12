@@ -15,7 +15,6 @@
 #ifndef ASYNC_RESERVER_H
 #define ASYNC_RESERVER_H
 
-#include "common/Finisher.h"
 #include "common/Formatter.h"
 
 #define rdout(x) lgeneric_subdout(cct,reserver,x)
@@ -27,10 +26,10 @@
  * linear with respect to the total number of priorities used
  * over all time.
  */
-template <typename T>
+template <typename T, typename F>
 class AsyncReserver {
   CephContext *cct;
-  Finisher *f;
+  F *f;
   unsigned max_allowed;
   unsigned min_priority;
   ceph::mutex lock = ceph::make_mutex("AsyncReserver::lock");
@@ -122,7 +121,7 @@ class AsyncReserver {
 public:
   AsyncReserver(
     CephContext *cct,
-    Finisher *f,
+    F *f,
     unsigned max_allowed,
     unsigned min_priority = 0)
     : cct(cct),
