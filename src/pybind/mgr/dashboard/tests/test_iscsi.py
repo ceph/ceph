@@ -475,7 +475,7 @@ class IscsiClientMock(object):
             "gateways": {},
             "targets": {},
             "updated": "",
-            "version": 5
+            "version": 9
         }
 
     @classmethod
@@ -544,14 +544,21 @@ class IscsiClientMock(object):
             "portals": {}
         }
 
-    def create_gateway(self, target_iqn, gateway_name, ip_address):
+    def create_gateway(self, target_iqn, gateway_name, ip_addresses):
         target_config = self.config['targets'][target_iqn]
         if 'ip_list' not in target_config:
             target_config['ip_list'] = []
-        target_config['ip_list'] += ip_address
+        target_config['ip_list'] += ip_addresses
         target_config['portals'][gateway_name] = {
-            "portal_ip_address": ip_address[0]
+            "portal_ip_addresses": ip_addresses
         }
+
+    def delete_gateway(self, target_iqn, gateway_name):
+        target_config = self.config['targets'][target_iqn]
+        portal_config = target_config['portals'][gateway_name]
+        for ip in portal_config['portal_ip_addresses']:
+            target_config['ip_list'].remove(ip)
+        target_config['portals'].pop(gateway_name)
 
     def create_disk(self, pool, image, backstore):
         image_id = '{}/{}'.format(pool, image)

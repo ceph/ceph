@@ -109,6 +109,11 @@ class IscsiClient(RestClient):
     def get_gatewayinfo(self, request=None):
         return request()
 
+    @RestClient.api_delete('/api/gateway/{target_iqn}/{gateway_name}')
+    def delete_gateway(self, target_iqn, gateway_name, request=None):
+        logger.debug("iSCSI: Deleting gateway: %s/%s", target_iqn, gateway_name)
+        return request()
+
     @RestClient.api_put('/api/disk/{pool}/{image}')
     def create_disk(self, pool, image, backstore, request=None):
         logger.debug("iSCSI[%s] Creating disk: %s/%s", self.gateway_name, pool, image)
