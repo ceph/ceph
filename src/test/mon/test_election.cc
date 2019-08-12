@@ -43,11 +43,12 @@ struct Election {
   map<int, Owner*> electors;
   map<int, set<int> > blocked_messages;
   int count;
+  ElectionLogic::election_strategy election_strategy;
   set<int> disallowed_leaders;
 
   vector< function<void()> > messages;
 
-  Election(int c);
+  Election(int c, ElectionLogic::election_strategy es=ElectionLogic::CLASSIC);
   ~Election();
   // ElectionOwner interfaces
   int get_paxos_size() { return count; }
@@ -83,11 +84,14 @@ struct Owner : public ElectionOwner {
   int timer_steps; // timesteps until we trigger timeout
   bool timer_election; // the timeout is for normal election, or victory
 
- Owner(int r, Election *p) : parent(p), rank(r), persisted_epoch(0),
+ Owner(int r, ElectionLogic::election_strategy es,
+       Election *p) : parent(p), rank(r), persisted_epoch(0),
     ever_joined(false),
     logic(this, g_ceph_context),
     victory_accepters(0),
-    timer_steps(-1), timer_election(true) {}
+    timer_steps(-1), timer_election(true) {
+        logic.set_election_strategy(es);
+  }
     
   // in-memory store: just save to variable
   void persist_epoch(epoch_t e) { persisted_epoch = e; }
@@ -204,10 +208,10 @@ struct Owner : public ElectionOwner {
   const char *prefix_name() { return "Owner:         "; }
 };
 
-Election::Election(int c) : count(c)
+Election::Election(int c, ElectionLogic::election_strategy es) : count(c), election_strategy(es)
 {
   for (int i = 0; i < count; ++i) {
-    electors[i] = new Owner(i, this);
+    electors[i] = new Owner(i, election_strategy, this);
   }
 }
 
@@ -393,7 +397,7 @@ TEST(election, disallowed_doesnt_win)
 {
   int MON_COUNT = 5;
   for (int i = 0; i < MON_COUNT - 1; ++i) {
-    Election election(MON_COUNT);
+    Election election(MON_COUNT, ElectionLogic::DISALLOW);
     for (int j = 0; j <= i; ++j) {
       election.add_disallowed_leader(j);
     }
