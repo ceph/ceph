@@ -428,7 +428,7 @@ seastar::future<> PGBackend::setxattr(
 
 seastar::future<> PGBackend::getxattr(
   const ObjectState& os,
-  OSDOp& osd_op)
+  OSDOp& osd_op) const
 {
   std::string name;
   ceph::bufferlist val;
@@ -452,7 +452,7 @@ seastar::future<> PGBackend::getxattr(
 
 seastar::future<ceph::bufferptr> PGBackend::getxattr(
   const hobject_t& soid,
-  std::string_view key)
+  std::string_view key) const
 {
   return store->get_attr(coll, ghobject_t{soid}, key);
 }
