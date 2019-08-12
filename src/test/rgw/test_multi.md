@@ -14,9 +14,18 @@ Since we use the same entry point file for all tests, running specific tests is 
 ```
 $ nosetests test_multi.py:<specific_test_name>
 ```
+To run miltiple tests based on wildcard string, use the following format:
+```
+$ nosetests test_multi.py -m "<wildcard string>"
+```
 Note that the test to run, does not have to be inside the `test_multi.py` file.
 Note that different options for running specific and multiple tests exists in the [nose documentation](https://nose.readthedocs.io/en/latest/usage.html#options), as well as other options to control the execution of the tests.
 ## Configuration
+### Environment Variables
+Following RGW environment variables are taken into consideration when running the tests:
+ - `RGW_FRONTEND`: used to change frontend to 'civetweb' or 'beast' (default)
+ - `RGW_VALGRIND`: used to run the radosgw under valgrind. e.g. RGW_VALGRIND=yes
+Other environment variables used to configure elements other than RGW can also be used as they are used in vstart.sh. E.g. MON, OSD, MGR, MSD
 The configuration file for the run has 3 sections:
 ### Default
 This section holds the following parameters:
@@ -41,6 +50,8 @@ This section holds the following parameters:
 ### Elasticsearch
 *TODO*
 ### Cloud
+*TODO*
+### PubSub
 *TODO*
 ## Writing Tests
 New tests should be added into the `/path/to/ceph/src/test/rgw/rgw_multi` subdirectory.

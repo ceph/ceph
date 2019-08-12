@@ -12,6 +12,8 @@
 #include "rgw_rest.h"
 #include "rgw_rest_s3.h"
 #include "rgw_arn.h"
+#include "rgw_zone.h"
+#include "services/svc_zone.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -333,7 +335,7 @@ int notif_bucket_path(const string& path, std::string& bucket_name) {
 class RGWPSCreateNotif_ObjStore : public RGWPSCreateNotifOp {
 private:
   std::string topic_name;
-  std::set<std::string, ltstr_nocase> events;
+  rgw::notify::EventTypeList events;
 
   int get_params() override {
     bool exists;
@@ -343,9 +345,17 @@ private:
       return -EINVAL;
     }
 
-    string events_str = s->info.args.get("events", &exists);
+    std::string events_str = s->info.args.get("events", &exists);
     if (exists) {
-      get_str_set(events_str, ",", events);
+        rgw::notify::from_string_list(events_str, events);
+        if (std::find(events.begin(), events.end(), rgw::notify::UnknownEvent) != events.end()) {
+            ldout(s->cct, 1) << "invalid event type in list: " << events_str << dendl;
+            return -EINVAL;
+        }
+    } else {
+        // if no events are provided, we assume all events
+        events.push_back(rgw::notify::ObjectCreated);
+        events.push_back(rgw::notify::ObjectRemoved);
     }
     return notif_bucket_path(s->object.name, bucket_name);
   }

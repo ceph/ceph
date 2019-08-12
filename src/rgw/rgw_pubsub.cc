@@ -1,6 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab ft=cpp
 
+#include "services/svc_zone.h"
 #include "rgw_b64.h"
 #include "rgw_sal.h"
 #include "rgw_pubsub.h"
@@ -12,6 +13,20 @@
 
 #define dout_subsys ceph_subsys_rgw
 
+void do_decode_xml_obj(rgw::notify::EventTypeList& l, const string& name, XMLObj *obj)
+{
+  l.clear();
+
+  XMLObjIter iter = obj->find(name);
+  XMLObj *o;
+
+  while ((o = iter.get_next())) {
+    std::string val;
+    decode_xml_obj(val, o);
+    l.push_back(rgw::notify::from_string(val));
+  }
+}
+
 bool rgw_pubsub_s3_notification::decode_xml(XMLObj *obj) {
   const auto throw_if_missing = true;
   RGWXMLDecoder::decode_xml("Id", id, obj, throw_if_missing);
@@ -21,8 +36,8 @@ bool rgw_pubsub_s3_notification::decode_xml(XMLObj *obj) {
   do_decode_xml_obj(events, "Event", obj);
   if (events.empty()) {
     // if no events are provided, we assume all events
-    events.push_back("s3:ObjectCreated:*");
-    events.push_back("s3:ObjectRemoved:*");
+    events.push_back(rgw::notify::ObjectCreated);
+    events.push_back(rgw::notify::ObjectRemoved);
   }
   return true;
 }
@@ -31,7 +46,7 @@ void rgw_pubsub_s3_notification::dump_xml(Formatter *f) const {
   ::encode_xml("Id", id, f);
   ::encode_xml("Topic", topic_arn.c_str(), f);
   for (const auto& event : events) {
-    ::encode_xml("Event", event, f);
+    ::encode_xml("Event", rgw::notify::to_string(event), f);
   }
 }
 
@@ -53,14 +68,7 @@ void rgw_pubsub_s3_record::dump(Formatter *f) const {
   encode_json("awsRegion", awsRegion, f);
   utime_t ut(eventTime);
   encode_json("eventTime", ut, f);
-  if (eventName == "OBJECT_CREATE") {
-    encode_json("eventName", "ObjectCreated", f);
-  }
-  else if (eventName == "OBJECT_DELETE") {
-    encode_json("eventName", "ObjectRemoved", f);
-  } else {
-    encode_json("eventName", "UNKNOWN_EVENT", f);
-  }
+  encode_json("eventName", eventName, f);
   {
     Formatter::ObjectSection s(*f, "userIdentity");
     encode_json("principalId", userIdentity, f);
@@ -86,6 +94,7 @@ void rgw_pubsub_s3_record::dump(Formatter *f) const {
             encode_json("principalId", bucket_ownerIdentity, f);
         }
         encode_json("arn", bucket_arn, f);
+        encode_json("id", bucket_id, f);
     }
     {
         Formatter::ObjectSection sub_s(*f, "object");
@@ -94,6 +103,7 @@ void rgw_pubsub_s3_record::dump(Formatter *f) const {
         encode_json("etag", object_etag, f);
         encode_json("versionId", object_versionId, f);
         encode_json("sequencer", object_sequencer, f);
+        encode_json("metadata", x_meta_map, f);
     }
   }
   encode_json("eventId", id, f);
@@ -102,7 +112,7 @@ void rgw_pubsub_s3_record::dump(Formatter *f) const {
 void rgw_pubsub_event::dump(Formatter *f) const
 {
   encode_json("id", id, f);
-  encode_json("event", event, f);
+  encode_json("event", event_name, f);
   utime_t ut(timestamp);
   encode_json("timestamp", ut, f);
   encode_json("info", info, f);
@@ -122,6 +132,15 @@ void rgw_pubsub_topic::dump_xml(Formatter *f) const
   encode_xml("Name", name, f);
   encode_xml("EndPoint", dest, f);
   encode_xml("TopicArn", arn, f);
+}
+
+void encode_json(const char *name, const rgw::notify::EventTypeList& l, Formatter *f)
+{
+  f->open_array_section(name);
+  for (auto iter = l.cbegin(); iter != l.cend(); ++iter) {
+    f->dump_string("obj", rgw::notify::to_ceph_string(*iter));
+  }
+  f->close_section();
 }
 
 void rgw_pubsub_topic_filter::dump(Formatter *f) const
@@ -165,14 +184,14 @@ void rgw_pubsub_sub_dest::dump(Formatter *f) const
   encode_json("oid_prefix", oid_prefix, f);
   encode_json("push_endpoint", push_endpoint, f);
   encode_json("push_endpoint_args", push_endpoint_args, f);
-  encode_json("arn_topic", arn_topic, f);
+  encode_json("push_endpoint_topic", arn_topic, f);
 }
 
 void rgw_pubsub_sub_dest::dump_xml(Formatter *f) const
 {
   encode_xml("EndpointAddress", push_endpoint, f);
   encode_xml("EndpointArgs", push_endpoint_args, f);
-  encode_xml("TopicArn", arn_topic, f);
+  encode_xml("EndpointTopic", arn_topic, f);
 }
 
 void rgw_pubsub_sub_config::dump(Formatter *f) const
@@ -184,23 +203,11 @@ void rgw_pubsub_sub_config::dump(Formatter *f) const
   encode_json("s3_id", s3_id, f);
 }
 
-RGWUserPubSub::RGWUserPubSub(rgw::sal::RGWRadosStore *_store, const rgw_user& _user) : store(_store),
-                                                                        user(_user),
-                                                                        obj_ctx(store->svc()->sysobj->init_obj_ctx())
-{
-  get_user_meta_obj(&user_meta_obj);
-}
-
-void RGWUserPubSub::get_user_meta_obj(rgw_raw_obj *obj) const {
-  *obj = rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, user_meta_oid());
-}
-
-void RGWUserPubSub::get_bucket_meta_obj(const rgw_bucket& bucket, rgw_raw_obj *obj) const {
-  *obj = rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, bucket_meta_oid(bucket));
-}
-
-void RGWUserPubSub::get_sub_meta_obj(const string& name, rgw_raw_obj *obj) const {
-  *obj = rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, sub_meta_oid(name));
+RGWUserPubSub::RGWUserPubSub(rgw::sal::RGWRadosStore* _store, const rgw_user& _user) : 
+                            store(_store),
+                            user(_user),
+                            obj_ctx(store->svc()->sysobj->init_obj_ctx()) {
+    get_user_meta_obj(&user_meta_obj);
 }
 
 int RGWUserPubSub::remove(const rgw_raw_obj& obj, RGWObjVersionTracker *objv_tracker)
@@ -216,8 +223,8 @@ int RGWUserPubSub::remove(const rgw_raw_obj& obj, RGWObjVersionTracker *objv_tra
 int RGWUserPubSub::read_user_topics(rgw_pubsub_user_topics *result, RGWObjVersionTracker *objv_tracker)
 {
   int ret = read(user_meta_obj, result, objv_tracker);
-  if (ret < 0 && ret != -ENOENT) {
-    ldout(store->ctx(), 1) << "ERROR: failed to read topics info: ret=" << ret << dendl;
+  if (ret < 0) {
+    ldout(store->ctx(), 10) << "WARNING: failed to read topics info: ret=" << ret << dendl;
     return ret;
   }
   return 0;
@@ -283,7 +290,26 @@ int RGWUserPubSub::get_topic(const string& name, rgw_pubsub_topic_subs *result)
   return 0;
 }
 
-int RGWUserPubSub::Bucket::create_notification(const string& topic_name, const EventTypeList& events)
+int RGWUserPubSub::get_topic(const string& name, rgw_pubsub_topic *result)
+{
+  rgw_pubsub_user_topics topics;
+  int ret = get_user_topics(&topics);
+  if (ret < 0) {
+    ldout(store->ctx(), 1) << "ERROR: failed to read topics info: ret=" << ret << dendl;
+    return ret;
+  }
+
+  auto iter = topics.topics.find(name);
+  if (iter == topics.topics.end()) {
+    ldout(store->ctx(), 1) << "ERROR: topic not found" << dendl;
+    return -ENOENT;
+  }
+
+  *result = iter->second.topic;
+  return 0;
+}
+
+int RGWUserPubSub::Bucket::create_notification(const string& topic_name, const rgw::notify::EventTypeList& events, const std::string& notif_name)
 {
   rgw_pubsub_topic_subs user_topic_info;
   rgw::sal::RGWRadosStore *store = ps->store;
@@ -310,6 +336,7 @@ int RGWUserPubSub::Bucket::create_notification(const string& topic_name, const E
   auto& topic_filter = bucket_topics.topics[topic_name];
   topic_filter.topic = user_topic_info.topic;
   topic_filter.events = events;
+  topic_filter.s3_id = notif_name;
 
   ret = write_topics(bucket_topics, &objv_tracker);
   if (ret < 0) {
@@ -363,10 +390,11 @@ int RGWUserPubSub::create_topic(const string& name, const rgw_pubsub_sub_dest& d
 
   int ret = read_user_topics(&topics, &objv_tracker);
   if (ret < 0 && ret != -ENOENT) {
+    // its not an error if not topics exist, we create one
     ldout(store->ctx(), 1) << "ERROR: failed to read topics info: ret=" << ret << dendl;
     return ret;
   }
-
+ 
   rgw_pubsub_topic_subs& new_topic = topics.topics[name];
   new_topic.topic.user = user;
   new_topic.topic.name = name;
@@ -391,6 +419,10 @@ int RGWUserPubSub::remove_topic(const string& name)
   if (ret < 0 && ret != -ENOENT) {
     ldout(store->ctx(), 1) << "ERROR: failed to read topics info: ret=" << ret << dendl;
     return ret;
+  } else if (ret == -ENOENT) {
+      // its not an error if no topics exist, just a no-op
+      ldout(store->ctx(), 10) << "WARNING: failed to read topics info, deletion is a no-op: ret=" << ret << dendl;
+      return 0;
   }
 
   topics.topics.erase(name);
@@ -450,13 +482,13 @@ int RGWUserPubSub::Sub::subscribe(const string& topic, const rgw_pubsub_sub_dest
   int ret = ps->read_user_topics(&topics, &user_objv_tracker);
   if (ret < 0) {
     ldout(store->ctx(), 1) << "ERROR: failed to read topics info: ret=" << ret << dendl;
-    return ret;
+    return ret != -ENOENT ? ret : -EINVAL;
   }
 
   auto iter = topics.topics.find(topic);
   if (iter == topics.topics.end()) {
     ldout(store->ctx(), 1) << "ERROR: cannot add subscription to topic: topic not found" << dendl;
-    return -ENOENT;
+    return -EINVAL;
   }
 
   auto& t = iter->second;
@@ -506,10 +538,9 @@ int RGWUserPubSub::Sub::unsubscribe(const string& _topic)
 
   int ret = ps->read_user_topics(&topics, &objv_tracker);
   if (ret < 0) {
-    ldout(store->ctx(), 1) << "ERROR: failed to read topics info: ret=" << ret << dendl;
-  }
-
-  if (ret >= 0) {
+    // not an error - could be that topic was already deleted
+    ldout(store->ctx(), 10) << "WARNING: failed to read topics info: ret=" << ret << dendl;
+  } else {
     auto iter = topics.topics.find(topic);
     if (iter != topics.topics.end()) {
       auto& t = iter->second;
@@ -648,6 +679,18 @@ int RGWUserPubSub::SubWithEvents<EventType>::remove_event(const string& event_id
     ldout(store->ctx(), 1) << "ERROR: failed to remove event (obj=" << obj << "): ret=" << ret << dendl;
   }
   return 0;
+}
+
+void RGWUserPubSub::get_user_meta_obj(rgw_raw_obj *obj) const {
+  *obj = rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, user_meta_oid());
+}
+
+void RGWUserPubSub::get_bucket_meta_obj(const rgw_bucket& bucket, rgw_raw_obj *obj) const {
+  *obj = rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, bucket_meta_oid(bucket));
+}
+
+void RGWUserPubSub::get_sub_meta_obj(const string& name, rgw_raw_obj *obj) const {
+  *obj = rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, sub_meta_oid(name));
 }
 
 template<typename EventType>

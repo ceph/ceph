@@ -8,6 +8,7 @@ import threading
 import subprocess
 import socket
 import time
+import os
 from .tests import get_realm, \
     ZonegroupConns, \
     zonegroup_meta_checkpoint, \
@@ -27,11 +28,18 @@ from nose.tools import assert_not_equal, assert_equal
 # configure logging for the tests module
 log = logging.getLogger(__name__)
 
-skip_push_tests = True
+skip_push_tests = False
 
 ####################################
 # utility functions for pubsub tests
 ####################################
+
+def set_contents_from_string(key, content):
+    try:
+        key.set_contents_from_string(content)
+    except Exception as e:
+        print 'Error: ' + str(e) 
+
 
 # HTTP endpoint functions
 # multithreaded streaming server, based on: https://stackoverflow.com/questions/46210672/
@@ -92,17 +100,19 @@ class HTTPServerThread(threading.Thread):
     def get_events(self):
         return self.httpd.events
 
+    def reset_events(self):
+        self.httpd.events = []
+
 
 class StreamingHTTPServer:
     """multi-threaded http server class also holding list of events received into the handler
     each thread has its own server, and all servers share the same socket"""
-    def __init__(self, host, port, num_workers=20):
+    def __init__(self, host, port, num_workers=100):
         addr = (host, port)
         self.sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
         self.sock.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
         self.sock.bind(addr)
-        # maximum of 10 connection backlog on the listener
-        self.sock.listen(20)
+        self.sock.listen(num_workers)
         self.workers = [HTTPServerThread(i, self.sock, addr) for i in range(num_workers)]
 
     def verify_s3_events(self, keys, exact_match=False, deletions=False):
@@ -110,6 +120,7 @@ class StreamingHTTPServer:
         events = []
         for worker in self.workers:
             events += worker.get_events()
+            worker.reset_events()
         verify_s3_records_by_elements(events, keys, exact_match=exact_match, deletions=deletions)
 
     def verify_events(self, keys, exact_match=False, deletions=False):
@@ -117,6 +128,7 @@ class StreamingHTTPServer:
         events = []
         for worker in self.workers:
             events += worker.get_events()
+            worker.reset_events()
         verify_events_by_elements(events, keys, exact_match=exact_match, deletions=deletions)
 
     def close(self):
@@ -262,10 +274,10 @@ def verify_s3_records_by_elements(records, keys, exact_match=False, deletions=Fa
         for record in records:
             if record['s3']['bucket']['name'] == key.bucket.name and \
                 record['s3']['object']['key'] == key.name:
-                if deletions and record['eventName'] == 'ObjectRemoved':
+                if deletions and 'ObjectRemoved' in record['eventName']:
                     key_found = True
                     break
-                elif not deletions and record['eventName'] == 'ObjectCreated':
+                elif not deletions and 'ObjectCreated' in record['eventName']:
                     key_found = True
                     break
         if not key_found:
@@ -329,9 +341,10 @@ def clean_rabbitmq(proc): #, data_dir, log_dir)
     #    log.info('rabbitmq directories already removed')
 
 
-def init_env():
+def init_env(require_ps=True):
     """initialize the environment"""
-    check_ps_configured()
+    if require_ps:
+        check_ps_configured()
 
     realm = get_realm()
     zonegroup = realm.master_zonegroup()
@@ -349,7 +362,8 @@ def init_env():
             zones.append(conn)
 
     assert_not_equal(len(zones), 0)
-    assert_not_equal(len(ps_zones), 0)
+    if require_ps:
+        assert_not_equal(len(ps_zones), 0)
     return zones, ps_zones
 
 
@@ -592,43 +606,443 @@ def test_ps_s3_notification():
     # delete the bucket
     zones[0].delete_bucket(bucket_name)
 
-
-def test_ps_s3_notification_on_master():
+def test_ps_s3_topic_on_master():
     """ test s3 notification set/get/delete on master """
-    zones, _  = init_env()
+    zones, _  = init_env(require_ps=False)
     realm = get_realm()
     zonegroup = realm.master_zonegroup()
     bucket_name = gen_bucket_name()
-    # create bucket on the first of the rados zones
-    zones[0].create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+   
+    # create s3 topics
+    endpoint_address = 'amqp://127.0.0.1:7001'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
+    topic_conf1 = PSTopicS3(zones[0].conn, topic_name+'_1', zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn = topic_conf1.set_config()
+    assert_equal(topic_arn,
+                 'arn:aws:sns:' + zonegroup.name + ':' + get_tenant() + ':' + topic_name + '_1')
+
+    endpoint_address = 'http://127.0.0.1:9001'
+    endpoint_args = 'push-endpoint='+endpoint_address
+    topic_conf2 = PSTopicS3(zones[0].conn, topic_name+'_2', zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn = topic_conf2.set_config()
+    assert_equal(topic_arn,
+                 'arn:aws:sns:' + zonegroup.name + ':' + get_tenant() + ':' + topic_name + '_2')
+    endpoint_address = 'http://127.0.0.1:9002'
+    endpoint_args = 'push-endpoint='+endpoint_address
+    topic_conf3 = PSTopicS3(zones[0].conn, topic_name+'_3', zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn = topic_conf3.set_config()
+    assert_equal(topic_arn,
+                 'arn:aws:sns:' + zonegroup.name + ':' + get_tenant() + ':' + topic_name + '_3')
+
+    try:
+        # get topic 3
+        result, status = topic_conf3.get_config()
+        assert_equal(status, 200)
+        assert_equal(topic_arn, result['GetTopicResponse']['GetTopicResult']['Topic']['TopicArn'])
+        assert_equal(endpoint_address, result['GetTopicResponse']['GetTopicResult']['Topic']['EndPoint']['EndpointAddress'])
+        # Note that endpoint args may be ordered differently in the result
+
+        # delete topic 1
+        result = topic_conf1.del_config()
+        assert_equal(status, 200)
+
+        # try to get a deleted topic (1)
+        _, status = topic_conf1.get_config()
+        assert_equal(status, 404)
+
+        # get the remaining 2 topics
+        result = topic_conf1.get_list()
+        assert_equal(len(result['Topics']), 2)
+        
+        # delete topics
+        result = topic_conf2.del_config()
+        # TODO: should be 200OK
+        # assert_equal(status, 200)
+        result = topic_conf3.del_config()
+        # TODO: should be 200OK
+        # assert_equal(status, 200)
+
+        # get topic list, make sure it is empty
+        result = topic_conf1.get_list()
+        assert_equal(len(result['Topics']), 0)
+    except AssertionError as e:
+        # topics are stored at user level, so cleanup is needed
+        # to prevent failures in consequent runs
+        topic_conf1.del_config()
+        topic_conf2.del_config()
+        topic_conf3.del_config()
+        raise e
+
+
+def test_ps_s3_notification_on_master():
+    """ test s3 notification set/get/delete on master """
+    zones, _  = init_env(require_ps=False)
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+    bucket_name = gen_bucket_name()
+    # create bucket
+    bucket = zones[0].create_bucket(bucket_name)
     topic_name = bucket_name + TOPIC_SUFFIX
     # create s3 topic
-    topic_conf = PSTopicS3(zones[0].conn, topic_name, zonegroup.name)
+    endpoint_address = 'amqp://127.0.0.1:7001'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
+    topic_conf = PSTopicS3(zones[0].conn, topic_name, zonegroup.name, endpoint_args=endpoint_args)
     topic_arn = topic_conf.set_config()
     # create s3 notification
     notification_name = bucket_name + NOTIFICATION_SUFFIX
-    topic_conf_list = [{'Id': notification_name,
+    topic_conf_list = [{'Id': notification_name+'_1',
                         'TopicArn': topic_arn,
                         'Events': ['s3:ObjectCreated:*']
+                       },
+                       {'Id': notification_name+'_2',
+                        'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectRemoved:*']
+                       },
+                       {'Id': notification_name+'_3',
+                        'TopicArn': topic_arn,
+                        'Events': []
                        }]
     s3_notification_conf = PSNotificationS3(zones[0].conn, bucket_name, topic_conf_list)
-    response, status = s3_notification_conf.set_config()
+    _, status = s3_notification_conf.set_config()
     assert_equal(status/100, 2)
 
     # get notifications on a bucket
-    response, status = s3_notification_conf.get_config()
+    response, status = s3_notification_conf.get_config(notification=notification_name+'_1')
     assert_equal(status/100, 2)
-    assert_equal(len(response['TopicConfigurations']), 1)
-    assert_equal(response['TopicConfigurations'][0]['TopicArn'], topic_arn)
+    assert_equal(response['NotificationConfiguration']['TopicConfiguration']['Topic'], topic_arn)
 
     # delete specific notifications
-    _, status = s3_notification_conf.del_config(notification=notification_name)
+    _, status = s3_notification_conf.del_config(notification=notification_name+'_1')
     assert_equal(status/100, 2)
+
+    # get the remaining 2 notifications on a bucket
+    response, status = s3_notification_conf.get_config()
+    assert_equal(status/100, 2)
+    assert_equal(len(response['TopicConfigurations']), 2)
+    assert_equal(response['TopicConfigurations'][0]['TopicArn'], topic_arn)
+    assert_equal(response['TopicConfigurations'][1]['TopicArn'], topic_arn)
+
+    # delete remaining notifications
+    _, status = s3_notification_conf.del_config()
+    assert_equal(status/100, 2)
+
+    # make sure that the notifications are now deleted
+    _, status = s3_notification_conf.get_config()
 
     # cleanup
     topic_conf.del_config()
     # delete the bucket
     zones[0].delete_bucket(bucket_name)
+
+
+def test_ps_s3_notification_errors_on_master():
+    """ test s3 notification set/get/delete on master """
+    zones, _  = init_env(require_ps=False)
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+    bucket_name = gen_bucket_name()
+    # create bucket
+    bucket = zones[0].create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+    # create s3 topic
+    endpoint_address = 'amqp://127.0.0.1:7001'
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
+    topic_conf = PSTopicS3(zones[0].conn, topic_name, zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+
+    # create s3 notification with invalid event name
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name,
+                        'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectCreated:Kaboom']
+                       }]
+    s3_notification_conf = PSNotificationS3(zones[0].conn, bucket_name, topic_conf_list)
+    try:
+      result, status = s3_notification_conf.set_config()
+    except Exception as error:
+      print str(error) + ' - is expected'
+    else:
+      assert False, 'invalid event name is expected to fail'
+
+    # create s3 notification with missing name
+    topic_conf_list = [{'Id': '',
+                        'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectCreated:Put']
+                       }]
+    s3_notification_conf = PSNotificationS3(zones[0].conn, bucket_name, topic_conf_list)
+    try:
+      _, _ = s3_notification_conf.set_config()
+    except Exception as error:
+      print str(error) + ' - is expected'
+    else:
+      assert False, 'missing notification name is expected to fail'
+
+    # create s3 notification with invalid topic ARN
+    topic_conf_list = [{'Id': notification_name,
+                        'TopicArn': 'kaboom',
+                        'Events': ['s3:ObjectCreated:Put']
+                       }]
+    s3_notification_conf = PSNotificationS3(zones[0].conn, bucket_name, topic_conf_list)
+    try:
+      _, _ = s3_notification_conf.set_config()
+    except Exception as error:
+      print str(error) + ' - is expected'
+    else:
+      assert False, 'invalid ARN is expected to fail'
+
+    # create s3 notification with wrong bucket
+    topic_conf_list = [{'Id': notification_name,
+                        'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectCreated:Put']
+                       }]
+    s3_notification_conf = PSNotificationS3(zones[0].conn, 'kaboom', topic_conf_list)
+    try:
+      _, _ = s3_notification_conf.set_config()
+    except Exception as error:
+      print str(error) + ' - is expected'
+    else:
+      assert False, 'unknown bucket is expected to fail'
+
+    # cleanup
+    topic_conf.del_config()
+    # delete the bucket
+    zones[0].delete_bucket(bucket_name)
+
+
+def test_objcet_timing():
+    return SkipTest("only used in manual testing")
+    zones, _  = init_env(require_ps=False)
+    
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = zones[0].create_bucket(bucket_name)
+    # create objects in the bucket (async)
+    print 'creating objects...'
+    number_of_objects = 1000
+    client_threads = []
+    start_time = time.time()
+    content = str(bytearray(os.urandom(1024*1024)))
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+
+    time_diff = time.time() - start_time
+    print 'average time for object creation: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+    
+    print 'total number of objects: ' + str(len(list(bucket.list())))
+
+    print 'deleting objects...'
+    client_threads = []
+    start_time = time.time()
+    for key in bucket.list():
+        thr = threading.Thread(target = key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+    
+    time_diff = time.time() - start_time
+    print 'average time for object deletion: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+    
+    # cleanup
+    zones[0].delete_bucket(bucket_name)
+
+
+def test_ps_s3_notification_push_amqp_on_master():
+    """ test pushing amqp s3 notification on master """
+    if skip_push_tests:
+        return SkipTest("PubSub push tests don't run in teuthology")
+    hostname = get_ip()
+    proc = init_rabbitmq()
+    if proc is  None:
+        return SkipTest('end2end amqp tests require rabbitmq-server installed')
+    zones, _  = init_env(require_ps=False)
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+    
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = zones[0].create_bucket(bucket_name)
+    topic_name1 = bucket_name + TOPIC_SUFFIX + '_1'
+    topic_name2 = bucket_name + TOPIC_SUFFIX + '_2'
+
+    # start amqp receivers
+    exchange = 'ex1'
+    task1, receiver1 = create_amqp_receiver_thread(exchange, topic_name1)
+    task2, receiver2 = create_amqp_receiver_thread(exchange, topic_name2)
+    task1.start()
+    task2.start()
+
+    # create two s3 topic
+    endpoint_address = 'amqp://' + hostname
+    # with acks from broker
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=' + exchange +'&amqp-ack-level=broker'
+    topic_conf1 = PSTopicS3(zones[0].conn, topic_name1, zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn1 = topic_conf1.set_config()
+    # without acks from broker
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=' + exchange +'&amqp-ack-level=none'
+    topic_conf2 = PSTopicS3(zones[0].conn, topic_name2, zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn2 = topic_conf2.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name+'_1', 'TopicArn': topic_arn1,
+                         'Events': []
+                       },
+                       {'Id': notification_name+'_2', 'TopicArn': topic_arn2,
+                         'Events': ['s3:ObjectCreated:*']
+                       }]
+
+    s3_notification_conf = PSNotificationS3(zones[0].conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # create objects in the bucket (async)
+    number_of_objects = 100
+    client_threads = []
+    start_time = time.time()
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        content = 'bar'
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+
+    time_diff = time.time() - start_time
+    print 'average time for creation + qmqp notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+
+    print 'wait for 5sec for the messages...'
+    time.sleep(5)
+
+    # check amqp receiver
+    keys = list(bucket.list())
+    print 'total number of objects: ' + str(len(keys))
+    receiver1.verify_s3_events(keys, exact_match=True)
+    receiver2.verify_s3_events(keys, exact_match=True)
+    
+    # delete objects from the bucket
+    client_threads = []
+    start_time = time.time()
+    for key in bucket.list():
+        thr = threading.Thread(target = key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+    
+    time_diff = time.time() - start_time
+    print 'average time for creation + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+
+    print 'wait for 5sec for the messages...'
+    time.sleep(5)
+    
+    # check amqp receiver 1 for deletions
+    receiver1.verify_s3_events(keys, exact_match=True, deletions=True)
+    # check amqp receiver 2 has no deletions
+    try:
+        receiver1.verify_s3_events(keys, exact_match=False, deletions=True)
+    except:
+        pass
+    else:
+        err = 'amqp receiver 2 should have no deletions'
+        assert False, err
+
+
+    # cleanup
+    stop_amqp_receiver(receiver1, task1)
+    stop_amqp_receiver(receiver2, task2)
+    s3_notification_conf.del_config()
+    topic_conf1.del_config()
+    topic_conf2.del_config()
+    # delete the bucket
+    zones[0].delete_bucket(bucket_name)
+    clean_rabbitmq(proc)
+
+
+def test_ps_s3_notification_push_http_on_master():
+    """ test pushing http s3 notification on master """
+    if skip_push_tests:
+        return SkipTest("PubSub push tests don't run in teuthology")
+    hostname = get_ip()
+    zones, _  = init_env(require_ps=False)
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+    
+    # create random port for the http server
+    host = get_ip()
+    port = random.randint(10000, 20000)
+    # start an http server in a separate thread
+    number_of_objects = 10
+    http_server = StreamingHTTPServer(host, port, num_workers=number_of_objects)
+    
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = zones[0].create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # create s3 topic
+    endpoint_address = 'http://'+host+':'+str(port)
+    endpoint_args = 'push-endpoint='+endpoint_address
+    topic_conf = PSTopicS3(zones[0].conn, topic_name, zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name,
+                        'TopicArn': topic_arn,
+                        'Events': []
+                       }]
+    s3_notification_conf = PSNotificationS3(zones[0].conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # create objects in the bucket
+    client_threads = []
+    start_time = time.time()
+    content = 'bar'
+    for i in range(number_of_objects):
+        key = bucket.new_key(str(i))
+        thr = threading.Thread(target = set_contents_from_string, args=(key, content,))
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+
+    time_diff = time.time() - start_time
+    print 'average time for creation + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+
+    print 'wait for 5sec for the messages...'
+    time.sleep(5)
+    
+    # check http receiver
+    keys = list(bucket.list())
+    print 'total number of objects: ' + str(len(keys))
+    http_server.verify_s3_events(keys, exact_match=True)
+    
+    # delete objects from the bucket
+    client_threads = []
+    start_time = time.time()
+    for key in bucket.list():
+        thr = threading.Thread(target = key.delete, args=())
+        thr.start()
+        client_threads.append(thr)
+    [thr.join() for thr in client_threads] 
+    
+    time_diff = time.time() - start_time
+    print 'average time for creation + http notification is: ' + str(time_diff*1000/number_of_objects) + ' milliseconds'
+
+    print 'wait for 5sec for the messages...'
+    time.sleep(5)
+    
+    # check http receiver
+    http_server.verify_s3_events(keys, exact_match=True, deletions=True)
+    
+    # cleanup
+    topic_conf.del_config()
+    s3_notification_conf.del_config(notification=notification_name)
+    # delete the bucket
+    zones[0].delete_bucket(bucket_name)
+    http_server.close()
 
 
 def test_ps_topic():
@@ -661,33 +1075,6 @@ def test_ps_topic():
     assert_equal(parsed_result['Code'], 'NoSuchKey')
 
 
-def test_ps_s3_topic():
-    """ test set/get/delete of s3 topic """
-    zones, _ = init_env()
-    realm = get_realm()
-    zonegroup = realm.master_zonegroup()
-    bucket_name = gen_bucket_name()
-    topic_name = bucket_name+TOPIC_SUFFIX
-
-    # create topic
-    topic_conf = PSTopicS3(zones[0].conn, topic_name, zonegroup.name)
-    topic_arn = topic_conf.set_config()
-    assert_equal(topic_arn,
-                 'arn:aws:sns:' + zonegroup.name + ':' + get_tenant() + ':' + topic_name)
-
-    # list topics
-    result = topic_conf.get_list()
-    assert len(result['Topics']) > 0
-
-    # get topic
-    result, status  = topic_conf.get_config()
-    assert_equal(status/100, 2)
-    assert_equal(topic_arn, result['GetTopicResponse']['GetTopicResult']['Topic']['TopicArn'])
-
-    # delete topic
-    topic_conf.del_config()
-
-
 def test_ps_topic_with_endpoint():
     """ test set topic with endpoint"""
     _, ps_zones = init_env()
@@ -709,33 +1096,6 @@ def test_ps_topic_with_endpoint():
     assert_equal(parsed_result['topic']['name'], topic_name)
     assert_equal(parsed_result['topic']['dest']['push_endpoint'], dest_endpoint)
     # cleanup
-    topic_conf.del_config()
-
-
-def test_ps_s3_topic_with_endpoint():
-    """ test set/get/delete of s3 topic with endpoint """
-    zones, _ = init_env()
-    realm = get_realm()
-    zonegroup = realm.master_zonegroup()
-    bucket_name = gen_bucket_name()
-    topic_name = bucket_name+TOPIC_SUFFIX
-
-    # create topic
-    endpoint_address = 'amqp://127.0.0.1:7001'
-    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=amqp.direct&amqp-ack-level=none'
-    topic_conf = PSTopicS3(zones[0].conn, topic_name, zonegroup.name, endpoint_args)
-    topic_arn = topic_conf.set_config()
-    assert_equal(topic_arn,
-                 'arn:aws:sns:' + zonegroup.name + ':' + get_tenant() + ':' + topic_name)
-
-    # get topic
-    result, status  = topic_conf.get_config()
-    assert_equal(status/100, 2)
-    assert_equal(topic_arn, result['GetTopicResponse']['GetTopicResult']['Topic']['TopicArn'])
-    assert_equal(endpoint_address, result['GetTopicResponse']['GetTopicResult']['Topic']['EndPoint']['EndpointAddress'])
-    # Note that endpoint args may be ordered differently in the result
-
-    # delete topic
     topic_conf.del_config()
 
 
@@ -1206,6 +1566,76 @@ def test_ps_creation_triggers():
     zones[0].delete_bucket(bucket_name)
 
 
+def test_ps_s3_creation_triggers_on_master():
+    """ test object creation s3 notifications in using put/copy/post on master"""
+    if skip_push_tests:
+        return SkipTest("PubSub push tests don't run in teuthology")
+    hostname = get_ip()
+    proc = init_rabbitmq()
+    if proc is  None:
+        return SkipTest('end2end amqp tests require rabbitmq-server installed')
+    zones, _  = init_env(require_ps=False)
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+    
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = zones[0].create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # start amqp receiver
+    exchange = 'ex1'
+    task, receiver = create_amqp_receiver_thread(exchange, topic_name)
+    task.start()
+
+    # create s3 topic
+    endpoint_address = 'amqp://' + hostname
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=' + exchange +'&amqp-ack-level=broker'
+    topic_conf = PSTopicS3(zones[0].conn, topic_name, zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name,'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectCreated:Put', 's3:ObjectCreated:Copy', 's3:ObjectCreated:Post']
+                       }]
+
+    s3_notification_conf = PSNotificationS3(zones[0].conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # create objects in the bucket using PUT
+    key = bucket.new_key('put')
+    key.set_contents_from_string('bar')
+    # create objects in the bucket using COPY
+    bucket.copy_key('copy', bucket.name, key.name)
+    # create objects in the bucket using multi-part upload
+    fp = tempfile.TemporaryFile(mode='w')
+    fp.write('bar')
+    fp.close()
+    uploader = bucket.initiate_multipart_upload('multipart')
+    fp = tempfile.TemporaryFile(mode='r')
+    uploader.upload_part_from_file(fp, 1)
+    uploader.complete_upload()
+    fp.close()
+
+    print 'wait for 5sec for the messages...'
+    time.sleep(5)
+
+    # check amqp receiver
+    keys = list(bucket.list())
+    receiver.verify_s3_events(keys, exact_match=True)
+
+    # cleanup
+    stop_amqp_receiver(receiver, task)
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    for key in bucket.list():
+        key.delete()
+    # delete the bucket
+    zones[0].delete_bucket(bucket_name)
+    clean_rabbitmq(proc)
+
+
 def test_ps_versioned_deletion():
     """ test notification of deletion markers """
     zones, ps_zones = init_env()
@@ -1221,8 +1651,10 @@ def test_ps_versioned_deletion():
     # wait for sync
     zone_meta_checkpoint(ps_zones[0].zone)
     # create notifications
+    # TODO use 'DELETE_MARKER_CREATE'
+    event_type = 'OBJECT_DELETE'
     notification_conf = PSNotification(ps_zones[0].conn, bucket_name,
-                                       topic_name, "OBJECT_DELETE")
+                                       topic_name, event_type)
     _, status = notification_conf.set_config()
     assert_equal(status/100, 2)
     # create subscription
@@ -1249,7 +1681,7 @@ def test_ps_versioned_deletion():
     parsed_result = json.loads(result)
     for event in parsed_result['events']:
         log.debug('Event key: "' + str(event['info']['key']['name']) + '" type: "' + str(event['event']) + '"')
-        assert_equal(str(event['event']), 'OBJECT_DELETE')
+        assert_equal(str(event['event']), event_type)
 
     # TODO: verify we have exactly 2 events
     assert len(parsed_result['events']) >= 2
@@ -1268,6 +1700,136 @@ def test_ps_versioned_deletion():
     sub_conf.del_config()
     notification_conf.del_config()
     topic_conf.del_config()
+
+
+def test_ps_s3_metadata_on_master():
+    """ test s3 notification of metadata on master """
+    if skip_push_tests:
+        return SkipTest("PubSub push tests don't run in teuthology")
+    hostname = get_ip()
+    proc = init_rabbitmq()
+    if proc is  None:
+        return SkipTest('end2end amqp tests require rabbitmq-server installed')
+    zones, _  = init_env(require_ps=False)
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+    
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = zones[0].create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # start amqp receiver
+    exchange = 'ex1'
+    task, receiver = create_amqp_receiver_thread(exchange, topic_name)
+    task.start()
+
+    # create s3 topic
+    endpoint_address = 'amqp://' + hostname
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=' + exchange +'&amqp-ack-level=broker'
+    topic_conf = PSTopicS3(zones[0].conn, topic_name, zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name,'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectCreated:*']
+                       }]
+
+    s3_notification_conf = PSNotificationS3(zones[0].conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # create objects in the bucket
+    key = bucket.new_key('foo')
+    key.set_metadata('meta1', 'This is my metadata value')
+    key.set_contents_from_string('aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa')
+    keys = list(bucket.list())
+    print 'wait for 5sec for the messages...'
+    time.sleep(5)
+    # check amqp receiver
+    receiver.verify_s3_events(keys, exact_match=True)
+
+    # cleanup
+    stop_amqp_receiver(receiver, task)
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    for key in bucket.list():
+        key.delete()
+    # delete the bucket
+    zones[0].delete_bucket(bucket_name)
+    clean_rabbitmq(proc)
+
+
+def test_ps_s3_versioned_deletion_on_master():
+    """ test s3 notification of deletion markers on master """
+    if skip_push_tests:
+        return SkipTest("PubSub push tests don't run in teuthology")
+    hostname = get_ip()
+    proc = init_rabbitmq()
+    if proc is  None:
+        return SkipTest('end2end amqp tests require rabbitmq-server installed')
+    zones, _  = init_env(require_ps=False)
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+    
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = zones[0].create_bucket(bucket_name)
+    bucket.configure_versioning(True)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # start amqp receiver
+    exchange = 'ex1'
+    task, receiver = create_amqp_receiver_thread(exchange, topic_name)
+    task.start()
+
+    # create s3 topic
+    endpoint_address = 'amqp://' + hostname
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=' + exchange +'&amqp-ack-level=broker'
+    topic_conf = PSTopicS3(zones[0].conn, topic_name, zonegroup.name, endpoint_args=endpoint_args)
+    topic_arn = topic_conf.set_config()
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    # TODO use s3:ObjectRemoved:DeleteMarkerCreated once supported in the code
+    topic_conf_list = [{'Id': notification_name,'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectRemoved:Delete', 's3:ObjectCreated:Put']
+                       }]
+    s3_notification_conf = PSNotificationS3(zones[0].conn, bucket_name, topic_conf_list)
+    response, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    # create objects in the bucket
+    key = bucket.new_key('foo')
+    key.set_contents_from_string('bar')
+    v1 = key.version_id
+    key.set_contents_from_string('kaboom')
+    v2 = key.version_id
+    keys = list(bucket.list())
+    
+    print 'wait for 5sec for the messages...'
+    time.sleep(5)
+    
+    # check amqp receiver
+    # Note: should not do exact match in case of versioned objects
+    receiver.verify_s3_events(keys, exact_match=False)
+    # set delete markers
+    bucket.delete_key(key.name, version_id=v2)
+    bucket.delete_key(key.name, version_id=v1)
+
+    print 'wait for 5sec for the messages...'
+    time.sleep(5)
+
+    # check amqp receiver
+    # Note: should not do exact match in case of versioned objects
+    receiver.verify_s3_events(keys, exact_match=False, deletions=True)
+
+    # cleanup
+    stop_amqp_receiver(receiver, task)
+    s3_notification_conf.del_config()
+    topic_conf.del_config()
+    # delete the bucket
+    zones[0].delete_bucket(bucket_name)
+    clean_rabbitmq(proc)
 
 
 def test_ps_push_http():
@@ -1426,7 +1988,7 @@ def test_ps_push_amqp():
     # create subscription
     sub_conf = PSSubscription(ps_zones[0].conn, bucket_name+SUB_SUFFIX,
                               topic_name, endpoint='amqp://'+hostname,
-                              endpoint_args='amqp-exchange='+exchange+'&amqp-ack-level=none')
+                              endpoint_args='amqp-exchange='+exchange+'&amqp-ack-level=broker')
     _, status = sub_conf.set_config()
     assert_equal(status/100, 2)
     # create objects in the bucket
@@ -1946,7 +2508,7 @@ def test_ps_s3_multiple_topics_notification():
     keys = list(bucket.list())
     # TODO: use exact match
     verify_s3_records_by_elements(parsed_result['Records'], keys, exact_match=False)
-    http_server.verify_s3_events(keys, exact_match=True)
+    http_server.verify_s3_events(keys, exact_match=False)
 
     # cleanup
     stop_amqp_receiver(receiver, amqp_task)

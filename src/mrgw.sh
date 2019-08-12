@@ -20,6 +20,10 @@ vstart_path=`dirname $0`
 name=$1
 port=$2
 
+if [ ! -z "$RGW_FRONTEND_THREADS" ]; then
+    set_frontend_threads="num_threads=$RGW_FRONTEND_THREADS"
+fi
+
 shift 2
 
 run_root=$script_root/run/$name
@@ -33,6 +37,6 @@ $vstart_path/mrun $name ceph -c $run_root/ceph.conf \
 	-k $run_root/keyring auth get-or-create client.rgw.$port mon \
 	'allow rw' osd 'allow rwx' mgr 'allow rw' >> $run_root/keyring
 
-$vstart_path/mrun $name radosgw --rgw-frontends="$rgw_frontend port=$port" \
+$vstart_path/mrun $name radosgw --rgw-frontends="$rgw_frontend port=$port $set_frontend_threads" \
 	-n client.rgw.$port --pid-file=$pidfile \
 	--admin-socket=$asokfile "$@" --log-file=$logfile

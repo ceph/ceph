@@ -185,6 +185,8 @@ TEST_F(TestAMQP, MaxConnections)
 
 std::atomic<bool> callback_invoked = false;
 
+std::atomic<int> callbacks_invoked = 0;
+
 // note: because these callback are shared among different "publish" calls
 // they should be used on different connections
 
@@ -198,6 +200,25 @@ void my_callback_expect_nack(int rc) {
   callback_invoked = true;
 }
 
+void my_callback_expect_multiple_acks(int rc) {
+  EXPECT_EQ(0, rc);
+  ++callbacks_invoked;
+}
+
+class dynamic_callback_wrapper {
+    dynamic_callback_wrapper() = default;
+public:
+    static dynamic_callback_wrapper* create() {
+        return new dynamic_callback_wrapper;
+    }
+    void callback(int rc) {
+      EXPECT_EQ(0, rc);
+      ++callbacks_invoked;
+      delete this;
+    }
+};
+
+
 TEST_F(TestAMQP, ReceiveAck)
 {
   callback_invoked = false;
@@ -210,6 +231,63 @@ TEST_F(TestAMQP, ReceiveAck)
   std::this_thread::sleep_for(wait_time);
   EXPECT_TRUE(callback_invoked);
   callback_invoked = false;
+  amqp_mock::set_valid_host("localhost");
+}
+
+TEST_F(TestAMQP, ReceiveMultipleAck)
+{
+  callbacks_invoked = 0;
+  const std::string host("localhost1");
+  amqp_mock::set_valid_host(host);
+  amqp::connection_ptr_t conn = amqp::connect("amqp://" + host, "ex1");
+  EXPECT_TRUE(conn);
+  const auto NUMBER_OF_CALLS = 100;
+  for (auto i=0; i < NUMBER_OF_CALLS; ++i) {
+    auto rc = publish_with_confirm(conn, "topic", "message", my_callback_expect_multiple_acks);
+    EXPECT_EQ(rc, 0);
+  }
+  std::this_thread::sleep_for(wait_time);
+  EXPECT_EQ(callbacks_invoked, NUMBER_OF_CALLS);
+  callbacks_invoked = 0;
+  amqp_mock::set_valid_host("localhost");
+}
+
+TEST_F(TestAMQP, ReceiveAckForMultiple)
+{
+  callbacks_invoked = 0;
+  const std::string host("localhost1");
+  amqp_mock::set_valid_host(host);
+  amqp::connection_ptr_t conn = amqp::connect("amqp://" + host, "ex1");
+  EXPECT_TRUE(conn);
+  amqp_mock::set_multiple(59);
+  const auto NUMBER_OF_CALLS = 100;
+  for (auto i=0; i < NUMBER_OF_CALLS; ++i) {
+    auto rc = publish_with_confirm(conn, "topic", "message", my_callback_expect_multiple_acks);
+    EXPECT_EQ(rc, 0);
+  }
+  std::this_thread::sleep_for(wait_time);
+  EXPECT_EQ(callbacks_invoked, NUMBER_OF_CALLS);
+  callbacks_invoked = 0;
+  amqp_mock::set_valid_host("localhost");
+}
+
+TEST_F(TestAMQP, DynamicCallback)
+{
+  callbacks_invoked = 0;
+  const std::string host("localhost1");
+  amqp_mock::set_valid_host(host);
+  amqp::connection_ptr_t conn = amqp::connect("amqp://" + host, "ex1");
+  EXPECT_TRUE(conn);
+  amqp_mock::set_multiple(59);
+  const auto NUMBER_OF_CALLS = 100;
+  for (auto i=0; i < NUMBER_OF_CALLS; ++i) {
+    auto rc = publish_with_confirm(conn, "topic", "message",
+            std::bind(&dynamic_callback_wrapper::callback, dynamic_callback_wrapper::create(), std::placeholders::_1));
+    EXPECT_EQ(rc, 0);
+  }
+  std::this_thread::sleep_for(wait_time);
+  EXPECT_EQ(callbacks_invoked, NUMBER_OF_CALLS);
+  callbacks_invoked = 0;
   amqp_mock::set_valid_host("localhost");
 }
 
@@ -335,5 +413,59 @@ TEST_F(TestAMQP, RetryFailWrite)
   EXPECT_TRUE(callback_invoked);
   callback_invoked = false;
   amqp_mock::set_valid_host("localhost");
+}
+
+int fail_after = -1;
+int recover_after = -1;
+bool expect_zero_rc = true;
+
+void my_callback_triggering_failure(int rc) {
+  if (expect_zero_rc) {
+      EXPECT_EQ(rc, 0);
+  } else {
+      EXPECT_NE(rc, 0);
+  }
+  ++callbacks_invoked;
+  if (fail_after == callbacks_invoked) {
+    amqp_mock::FAIL_NEXT_READ = true;
+    expect_zero_rc = false;
+
+  }
+  if (recover_after == callbacks_invoked) {
+    amqp_mock::FAIL_NEXT_READ = false;
+  }
+}
+
+TEST_F(TestAMQP, AcksWithReconnect)
+{
+  callbacks_invoked = 0;
+  const std::string host("localhost1");
+  amqp_mock::set_valid_host(host);
+  amqp::connection_ptr_t conn = amqp::connect("amqp://" + host, "ex1");
+  EXPECT_TRUE(conn);
+  amqp_mock::set_multiple(59);
+  // failure will take effect after: max(59, 70)
+  fail_after = 70;
+  // all callback are flushed during failure, so, recover will take effect after: max(90, 100)
+  recover_after = 90;
+  const auto NUMBER_OF_CALLS = 100;
+  for (auto i = 0; i < NUMBER_OF_CALLS; ++i) {
+    auto rc = publish_with_confirm(conn, "topic", "message", my_callback_triggering_failure);
+    EXPECT_EQ(rc, 0);
+  }
+  // connection failes before multiple acks
+  std::this_thread::sleep_for(wait_time);
+  EXPECT_EQ(callbacks_invoked, NUMBER_OF_CALLS);
+  // publish more mesages
+  expect_zero_rc = true;
+  for (auto i = 0; i < NUMBER_OF_CALLS; ++i) {
+    auto rc = publish_with_confirm(conn, "topic", "message", my_callback_triggering_failure);
+    EXPECT_EQ(rc, 0);
+  }
+  std::this_thread::sleep_for(wait_time);
+  EXPECT_EQ(callbacks_invoked, 2*NUMBER_OF_CALLS);
+  callbacks_invoked = 0;
+  amqp_mock::set_valid_host("localhost");
+  fail_after = -1;
 }
 
