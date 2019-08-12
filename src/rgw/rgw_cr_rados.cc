@@ -11,6 +11,7 @@
 #include "services/svc_zone.h"
 #include "services/svc_zone_utils.h"
 #include "services/svc_sys_obj.h"
+#include "services/svc_cls.h"
 
 #include "cls/lock/cls_lock_client.h"
 #include "cls/rgw/cls_rgw_client.h"
@@ -65,9 +66,9 @@ void RGWAsyncRadosProcessor::RGWWQ::_dump_queue() {
   }
 }
 
-RGWAsyncRadosProcessor::RGWAsyncRadosProcessor(RGWRados *_store, int num_threads)
-  : store(_store), m_tp(store->ctx(), "RGWAsyncRadosProcessor::m_tp", "rados_async", num_threads),
-    req_throttle(store->ctx(), "rgw_async_rados_ops", num_threads * 2),
+RGWAsyncRadosProcessor::RGWAsyncRadosProcessor(CephContext *_cct, int num_threads)
+  : cct(_cct), m_tp(cct, "RGWAsyncRadosProcessor::m_tp", "rados_async", num_threads),
+    req_throttle(_cct, "rgw_async_rados_ops", num_threads * 2),
     req_wq(this, g_conf()->rgw_op_thread_timeout,
     g_conf()->rgw_op_thread_suicide_timeout, &m_tp) {
 }
@@ -202,7 +203,7 @@ int RGWAsyncLockSystemObj::_send_request()
   l.set_cookie(cookie);
   l.set_may_renew(true);
 
-  return l.lock_exclusive(&ref.ioctx, ref.obj.oid);
+  return l.lock_exclusive(&ref.pool.ioctx(), ref.obj.oid);
 }
 
 RGWAsyncLockSystemObj::RGWAsyncLockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
@@ -228,7 +229,7 @@ int RGWAsyncUnlockSystemObj::_send_request()
 
   l.set_cookie(cookie);
 
-  return l.unlock(&ref.ioctx, ref.obj.oid);
+  return l.unlock(&ref.pool.ioctx(), ref.obj.oid);
 }
 
 RGWAsyncUnlockSystemObj::RGWAsyncUnlockSystemObj(RGWCoroutine *caller, RGWAioCompletionNotifier *cn, RGWRados *_store,
@@ -271,7 +272,7 @@ int RGWRadosSetOmapKeysCR::send_request()
   op.omap_set(entries);
 
   cn = stack->create_completion_notifier();
-  return ref.ioctx.aio_operate(ref.obj.oid, cn->completion(), &op);
+  return ref.pool.ioctx().aio_operate(ref.obj.oid, cn->completion(), &op);
 }
 
 int RGWRadosSetOmapKeysCR::request_complete()
@@ -309,7 +310,7 @@ int RGWRadosGetOmapKeysCR::send_request() {
   op.omap_get_keys2(marker, max_entries, &result->entries, &result->more, nullptr);
 
   cn = stack->create_completion_notifier(result);
-  return result->ref.ioctx.aio_operate(result->ref.obj.oid, cn->completion(), &op, NULL);
+  return result->ref.pool.ioctx().aio_operate(result->ref.obj.oid, cn->completion(), &op, NULL);
 }
 
 int RGWRadosGetOmapKeysCR::request_complete()
@@ -344,7 +345,7 @@ int RGWRadosRemoveOmapKeysCR::send_request() {
   op.omap_rm_keys(keys);
 
   cn = stack->create_completion_notifier();
-  return ref.ioctx.aio_operate(ref.obj.oid, cn->completion(), &op);
+  return ref.pool.ioctx().aio_operate(ref.obj.oid, cn->completion(), &op);
 }
 
 int RGWRadosRemoveOmapKeysCR::request_complete()
@@ -529,10 +530,10 @@ bool RGWOmapAppend::finish() {
 int RGWAsyncGetBucketInstanceInfo::_send_request()
 {
   RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
-  int r = store->get_bucket_instance_from_oid(obj_ctx, oid, bucket_info, NULL, NULL, null_yield);
+  int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, nullptr, nullptr, null_yield);
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: failed to get bucket instance info for "
-        << oid << dendl;
+        << bucket << dendl;
     return r;
   }
 
@@ -563,7 +564,7 @@ int RGWRadosBILogTrimCR::send_request()
   op.exec(RGW_CLASS, RGW_BI_LOG_TRIM, in);
 
   cn = stack->create_completion_notifier();
-  return bs.index_ctx.aio_operate(bs.bucket_obj, cn->completion(), &op);
+  return bs.bucket_obj.aio_operate(cn->completion(), &op);
 }
 
 int RGWRadosBILogTrimCR::request_complete()
@@ -775,7 +776,7 @@ int RGWRadosTimelogAddCR::send_request()
   set_status() << "sending request";
 
   cn = stack->create_completion_notifier();
-  return store->time_log_add(oid, entries, cn->completion(), true);
+  return store->svc.cls->timelog.add(oid, entries, cn->completion(), true, null_yield);
 }
 
 int RGWRadosTimelogAddCR::request_complete()
@@ -807,8 +808,9 @@ int RGWRadosTimelogTrimCR::send_request()
   set_status() << "sending request";
 
   cn = stack->create_completion_notifier();
-  return store->time_log_trim(oid, start_time, end_time, from_marker,
-                              to_marker, cn->completion());
+  return store->svc.cls->timelog.trim(oid, start_time, end_time, from_marker,
+                                      to_marker, cn->completion(),
+                                      null_yield);
 }
 
 int RGWRadosTimelogTrimCR::request_complete()
@@ -903,7 +905,7 @@ int RGWRadosNotifyCR::send_request()
   set_status() << "sending request";
 
   cn = stack->create_completion_notifier();
-  return ref.ioctx.aio_notify(ref.obj.oid, cn->completion(), request,
+  return ref.pool.ioctx().aio_notify(ref.obj.oid, cn->completion(), request,
                               timeout_ms, response);
 }
 

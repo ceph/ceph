@@ -21,13 +21,28 @@ endfunction()
 
 set(librgw_common_srcs
   services/svc_finisher.cc
+  services/svc_bi_rados.cc
+  services/svc_bilog_rados.cc
+  services/svc_bucket.cc
+  services/svc_bucket_sobj.cc
+  services/svc_cls.cc
+  services/svc_datalog_rados.cc
+  services/svc_mdlog.cc
+  services/svc_meta.cc
+  services/svc_meta_be.cc
+  services/svc_meta_be_otp.cc
+  services/svc_meta_be_sobj.cc
   services/svc_notify.cc
+  services/svc_otp.cc
   services/svc_quota.cc
   services/svc_sync_modules.cc
   services/svc_rados.cc
   services/svc_sys_obj.cc
   services/svc_sys_obj_cache.cc
   services/svc_sys_obj_core.cc
+  services/svc_tier_rados.cc
+  services/svc_user.cc
+  services/svc_user_rados.cc
   services/svc_zone.cc
   services/svc_zone_utils.cc
   rgw_service.cc
@@ -60,6 +75,7 @@ set(librgw_common_srcs
   rgw_metadata.cc
   rgw_multi.cc
   rgw_multi_del.cc
+  rgw_obj_manifest.cc
   rgw_pubsub.cc
   rgw_sync.cc
   rgw_data_sync.cc

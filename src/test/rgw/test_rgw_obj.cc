@@ -17,6 +17,7 @@
 #include "common/Formatter.h"
 #include "rgw/rgw_common.h"
 #include "rgw/rgw_rados.h"
+#include "rgw/services/svc_tier_rados.h"
 #include "test_rgw_common.h"
 #define GTEST
 #ifdef GTEST
@@ -180,7 +181,7 @@ static void test_obj_to_raw(test_rgw_env& env, const rgw_bucket& b,
   ASSERT_EQ(raw_obj.oid, test_rgw_get_obj_oid(obj));
 
   rgw_obj new_obj;
-  rgw_raw_obj_to_obj(b, raw_obj, &new_obj);
+  RGWSI_Tier_RADOS::raw_obj_to_obj(b, raw_obj, &new_obj);
 
   dump(f, "new_obj", new_obj);
 

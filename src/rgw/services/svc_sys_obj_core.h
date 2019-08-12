@@ -6,92 +6,13 @@
 #include "rgw/rgw_service.h"
 
 #include "svc_rados.h"
+#include "svc_sys_obj.h"
+#include "svc_sys_obj_core_types.h"
 
 
 class RGWSI_Zone;
 
 struct rgw_cache_entry_info;
-
-struct RGWSysObjState {
-  rgw_raw_obj obj;
-  bool has_attrs{false};
-  bool exists{false};
-  uint64_t size{0};
-  ceph::real_time mtime;
-  uint64_t epoch{0};
-  bufferlist obj_tag;
-  bool has_data{false};
-  bufferlist data;
-  bool prefetch_data{false};
-  uint64_t pg_ver{0};
-
-  /* important! don't forget to update copy constructor */
-
-  RGWObjVersionTracker objv_tracker;
-
-  map<string, bufferlist> attrset;
-  RGWSysObjState() {}
-  RGWSysObjState(const RGWSysObjState& rhs) : obj (rhs.obj) {
-    has_attrs = rhs.has_attrs;
-    exists = rhs.exists;
-    size = rhs.size;
-    mtime = rhs.mtime;
-    epoch = rhs.epoch;
-    if (rhs.obj_tag.length()) {
-      obj_tag = rhs.obj_tag;
-    }
-    has_data = rhs.has_data;
-    if (rhs.data.length()) {
-      data = rhs.data;
-    }
-    prefetch_data = rhs.prefetch_data;
-    pg_ver = rhs.pg_ver;
-    objv_tracker = rhs.objv_tracker;
-  }
-};
-
-class RGWSysObjectCtxBase {
-  std::map<rgw_raw_obj, RGWSysObjState> objs_state;
-  ceph::shared_mutex lock = ceph::make_shared_mutex("RGWSysObjectCtxBase");
-
-public:
-  RGWSysObjectCtxBase() = default;
-
-  RGWSysObjectCtxBase(const RGWSysObjectCtxBase& rhs) : objs_state(rhs.objs_state) {}
-  RGWSysObjectCtxBase(const RGWSysObjectCtxBase&& rhs) : objs_state(std::move(rhs.objs_state)) {}
-
-  RGWSysObjState *get_state(const rgw_raw_obj& obj) {
-    RGWSysObjState *result;
-    std::map<rgw_raw_obj, RGWSysObjState>::iterator iter;
-    lock.lock_shared();
-    assert (!obj.empty());
-    iter = objs_state.find(obj);
-    if (iter != objs_state.end()) {
-      result = &iter->second;
-      lock.unlock_shared();
-    } else {
-      lock.unlock_shared();
-      lock.lock();
-      result = &objs_state[obj];
-      lock.unlock();
-    }
-    return result;
-  }
-
-  void set_prefetch_data(rgw_raw_obj& obj) {
-    std::unique_lock wl{lock};
-    assert (!obj.empty());
-    objs_state[obj].prefetch_data = true;
-  }
-  void invalidate(const rgw_raw_obj& obj) {
-    std::unique_lock wl{lock};
-    auto iter = objs_state.find(obj);
-    if (iter == objs_state.end()) {
-      return;
-    }
-    objs_state.erase(iter);
-  }
-};
 
 class RGWSI_SysObj_Core : public RGWServiceInstance
 {
@@ -102,19 +23,8 @@ protected:
   RGWSI_RADOS *rados_svc{nullptr};
   RGWSI_Zone *zone_svc{nullptr};
 
-  struct GetObjState {
-    RGWSI_RADOS::Obj rados_obj;
-    bool has_rados_obj{false};
-    uint64_t last_ver{0};
-
-    GetObjState() {}
-
-    int get_rados_obj(RGWSI_RADOS *rados_svc,
-                      RGWSI_Zone *zone_svc,
-                      const rgw_raw_obj& obj,
-                      RGWSI_RADOS::Obj **pobj);
-  };
-
+  using GetObjState = RGWSI_SysObj_Core_GetObjState;
+  using PoolListImplInfo = RGWSI_SysObj_Core_PoolListImplInfo;
 
   void core_init(RGWSI_RADOS *_rados_svc,
                  RGWSI_Zone *_zone_svc) {
@@ -129,7 +39,7 @@ protected:
                        optional_yield y);
 
   virtual int read(RGWSysObjectCtxBase& obj_ctx,
-                   GetObjState& read_state,
+                   RGWSI_SysObj_Obj_GetObjState& read_state,
                    RGWObjVersionTracker *objv_tracker,
                    const rgw_raw_obj& obj,
                    bufferlist *bl, off_t ofs, off_t end,
@@ -189,6 +99,22 @@ protected:
                      uint64_t timeout_ms, bufferlist *pbl,
                      optional_yield y);
 
+  virtual int pool_list_prefixed_objs(const rgw_pool& pool,
+                                      const string& prefix,
+                                      std::function<void(const string&)> cb);
+
+  virtual int pool_list_objects_init(const rgw_pool& pool,
+                                     const std::string& marker,
+                                     const std::string& prefix,
+                                     RGWSI_SysObj::Pool::ListCtx *ctx);
+  virtual int pool_list_objects_next(RGWSI_SysObj::Pool::ListCtx& ctx,
+                                     int max,
+                                     vector<string> *oids,
+                                     bool *is_truncated);
+
+  virtual int pool_list_objects_get_marker(RGWSI_SysObj::Pool::ListCtx& _ctx,
+                                           string *marker);
+
   /* wrappers */
   int get_system_obj_state_impl(RGWSysObjectCtxBase *rctx,
                                 const rgw_raw_obj& obj, RGWSysObjState **state,
@@ -200,7 +126,7 @@ protected:
                            optional_yield y);
 
   int stat(RGWSysObjectCtxBase& obj_ctx,
-           GetObjState& state,
+           RGWSI_SysObj_Obj_GetObjState& state,
            const rgw_raw_obj& obj,
            map<string, bufferlist> *attrs,
 	   bool raw_attrs,

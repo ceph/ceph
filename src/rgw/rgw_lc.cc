@@ -19,6 +19,7 @@
 #include "rgw_lc.h"
 #include "rgw_zone.h"
 #include "rgw_string.h"
+#include "rgw_multi.h"
 
 // this seems safe to use, at least for now--arguably, we should
 // prefer header-only fmt, in general
@@ -27,6 +28,8 @@
 #include "fmt/format.h"
 
 #include "services/svc_sys_obj.h"
+#include "services/svc_zone.h"
+#include "services/svc_tier_rados.h"
 
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
@@ -1443,7 +1446,9 @@ int RGWLC::set_bucket_config(RGWBucketInfo& bucket_info,
 
   attrs[RGW_ATTR_LC] = std::move(lc_bl);
 
-  int ret = rgw_bucket_set_attrs(store, bucket_info, attrs, &bucket_info.objv_tracker);
+  int ret = store->ctl.bucket->set_bucket_instance_attrs(bucket_info, attrs,
+							 &bucket_info.objv_tracker,
+							 null_yield);
   if (ret < 0)
     return ret;
 
@@ -1463,8 +1468,9 @@ int RGWLC::remove_bucket_config(RGWBucketInfo& bucket_info,
 {
   map<string, bufferlist> attrs = bucket_attrs;
   attrs.erase(RGW_ATTR_LC);
-  int ret = rgw_bucket_set_attrs(store, bucket_info, attrs,
-				&bucket_info.objv_tracker);
+  int ret = store->ctl.bucket->set_bucket_instance_attrs(bucket_info, attrs,
+							 &bucket_info.objv_tracker,
+							 null_yield);
 
   rgw_bucket& bucket = bucket_info.bucket;
 

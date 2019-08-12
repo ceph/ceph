@@ -1838,7 +1838,7 @@ int RGWHandler_REST::init_permissions(RGWOp* op)
     if (! s->user->user_id.empty() && s->auth.identity->get_identity_type() != TYPE_ROLE) {
       try {
         map<string, bufferlist> uattrs;
-        if (auto ret = rgw_get_user_attrs_by_uid(store, s->user->user_id, uattrs); ! ret) {
+        if (auto ret = store->ctl.user->get_attrs_by_uid(s->user->user_id, &uattrs, null_yield); ! ret) {
           if (s->iam_user_policies.empty()) {
             s->iam_user_policies = get_iam_user_policy_from_attr(s->cct, store, uattrs, s->user->user_id.tenant);
           } else {

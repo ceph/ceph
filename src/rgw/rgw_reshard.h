@@ -8,16 +8,20 @@
 #include <functional>
 
 #include <boost/intrusive/list.hpp>
+#include <boost/asio/basic_waitable_timer.hpp>
 
 #include "include/rados/librados.hpp"
 #include "common/ceph_time.h"
+#include "common/async/yield_context.h"
 #include "cls/rgw/cls_rgw_types.h"
 #include "cls/lock/cls_lock_client.h"
-#include "rgw_bucket.h"
+
+#include "rgw_common.h"
 
 
 class CephContext;
 class RGWRados;
+class RGWReshard;
 
 class RGWBucketReshardLock {
   using Clock = ceph::coarse_mono_clock;

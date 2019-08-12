@@ -11,6 +11,7 @@
 
 #include "rgw_sync_trace.h"
 #include "rgw_rados.h"
+#include "rgw_worker.h"
 
 
 #define dout_context g_ceph_context

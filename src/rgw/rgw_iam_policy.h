@@ -31,7 +31,6 @@
 #include "rgw_string.h"
 #include "rgw_arn.h"
 
-class RGWRados;
 namespace rgw {
 namespace auth {
 class Identity;

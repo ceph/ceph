@@ -4,7 +4,6 @@
 #ifndef CEPH_RGWCACHE_H
 #define CEPH_RGWCACHE_H
 
-#include "rgw_rados.h"
 #include <string>
 #include <map>
 #include <unordered_map>
@@ -12,6 +11,9 @@
 #include "include/utime.h"
 #include "include/ceph_assert.h"
 #include "common/ceph_mutex.h"
+
+#include "cls/version/cls_version_types.h"
+#include "rgw_common.h"
 
 enum {
   UPDATE_OBJ,
@@ -23,8 +25,6 @@ enum {
 #define CACHE_FLAG_META           0x04
 #define CACHE_FLAG_MODIFY_XATTRS  0x08
 #define CACHE_FLAG_OBJV           0x10
-
-#define mydout(v) lsubdout(T::cct, rgw, v)
 
 struct ObjectMetaInfo {
   uint64_t size;

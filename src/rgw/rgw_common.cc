@@ -435,6 +435,23 @@ std::ostream& operator<<(std::ostream& oss, const rgw_err &err)
   return oss;
 }
 
+void rgw_add_amz_meta_header(
+  std::map<std::string, std::string>& x_meta_map,
+  const std::string& k,
+  const std::string& v)
+{
+  auto it = x_meta_map.find(k);
+  if (it != x_meta_map.end()) {
+    std::string old = it->second;
+    boost::algorithm::trim_right(old);
+    old.append(",");
+    old.append(v);
+    x_meta_map[k] = old;
+  } else {
+    x_meta_map[k] = v;
+  }
+}
+
 string rgw_string_unquote(const string& s)
 {
   if (s[0] != '"' || s.size() < 2)

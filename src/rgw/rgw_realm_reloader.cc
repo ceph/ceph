@@ -161,10 +161,6 @@ void RGWRealmReloader::reload()
   // finish initializing the new store
   ldout(cct, 1) << " - REST subsystem init" << dendl;
   rgw_rest_init(cct, store, store->svc.zone->get_zonegroup());
-  ldout(cct, 1) << " - user subsystem init" << dendl;
-  rgw_user_init(store);
-  ldout(cct, 1) << " - user subsystem init" << dendl;
-  rgw_bucket_init(store->meta_mgr);
   ldout(cct, 1) << " - usage subsystem init" << dendl;
   rgw_log_usage_init(cct, store);
 
