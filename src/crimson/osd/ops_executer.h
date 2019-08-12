@@ -39,14 +39,6 @@ class OpsExecuter {
   size_t num_read = 0;    ///< count read ops
   size_t num_write = 0;   ///< count update ops
 
-  seastar::future<bool, hobject_t> pgls_filter(
-    /*const*/PGLSFilter& filter,
-    const hobject_t& sobj);
-  seastar::future<ceph::bufferlist> do_pgnls_common(
-    const hobject_t& lower_bound,
-    const std::string& nspace,
-    uint64_t limit,
-    PGLSFilter* filter = nullptr);
   seastar::future<> do_pgnls(OSDOp& osd_op);
   seastar::future<> do_pgnls_filtered(OSDOp& osd_op);
 

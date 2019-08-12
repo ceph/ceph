@@ -159,9 +159,9 @@ static inline std::unique_ptr<const PGLSFilter> get_pgls_filter(
   return filter;
 }
 
-seastar::future<bool, hobject_t> OpsExecuter::pgls_filter(
+static seastar::future<bool, hobject_t> pgls_filter(
   const PGLSFilter& filter,
-  const PGBackend& backend,
+  PGBackend& backend,
   const hobject_t& sobj)
 {
   if (const auto xattr = filter.get_xattr(); !xattr.empty()) {
@@ -187,15 +187,15 @@ seastar::future<bool, hobject_t> OpsExecuter::pgls_filter(
   }
 }
 
-seastar::future<ceph::bufferlist>
-OpsExecuter::do_pgnls_common(
+static seastar::future<ceph::bufferlist> do_pgnls_common(
+  const hobject_t& pg_start,
+  const hobject_t& pg_end,
+  PGBackend& backend,
   const hobject_t& lower_bound,
   const std::string& nspace,
-  uint64_t limit,
+  const uint64_t limit,
   const PGLSFilter* const filter)
 {
-  const auto pg_start = pg.get_pgid().pgid.get_hobj_start();
-  auto pg_end = pg.get_pgid().pgid.get_hobj_end(pg.get_pool().info.get_pg_num());
   if (!(lower_bound.is_min() ||
         lower_bound.is_max() ||
         (lower_bound >= pg_start && lower_bound < pg_end))) {
@@ -204,7 +204,7 @@ OpsExecuter::do_pgnls_common(
   }
 
   return backend.list_objects(lower_bound, limit).then(
-    [this, filter, nspace](auto objects, auto next) {
+    [&backend, filter, nspace](auto objects, auto next) {
       auto in_my_namespace = [&nspace](const hobject_t& obj) {
         using ceph::common::local_conf;
         if (obj.get_namespace() == local_conf()->osd_hit_set_namespace) {
@@ -215,7 +215,7 @@ OpsExecuter::do_pgnls_common(
           return obj.get_namespace() == nspace;
         }
       };
-      auto to_pglsed = [this, filter] (const hobject_t& obj) {
+      auto to_pglsed = [&backend, filter] (const hobject_t& obj) {
         // this transformation looks costly. However, I don't have any
         // reason to think PGLS* operations are critical for, let's say,
         // general performance.
@@ -225,7 +225,7 @@ OpsExecuter::do_pgnls_common(
         // 2) avoid the space to keep the tuple<bool, object> even if
         // the object is filtered out".
         if (filter) {
-          return pgls_filter(*filter, obj);
+          return pgls_filter(*filter, backend, obj);
         } else {
           return seastar::make_ready_future<bool, hobject_t>(true, obj);
         }
@@ -276,7 +276,10 @@ seastar::future<> OpsExecuter::do_pgnls(OSDOp& osd_op)
   } catch (const buffer::error&) {
     throw std::invalid_argument("unable to decode PGNLS handle");
   }
-  return do_pgnls_common(lower_bound, os->oi.soid.get_namespace(), osd_op.op.pgls.count)
+  const auto pg_start = pg.get_pgid().pgid.get_hobj_start();
+  const auto pg_end = \
+    pg.get_pgid().pgid.get_hobj_end(pg.get_pool().info.get_pg_num());
+  return do_pgnls_common(pg_start, pg_end, backend, lower_bound, os->oi.soid.get_namespace(), osd_op.op.pgls.count, nullptr /* no filter */)
     .then([&osd_op](bufferlist bl) {
       osd_op.outdata = std::move(bl);
       return seastar::now();
@@ -309,7 +312,10 @@ seastar::future<> OpsExecuter::do_pgnls_filtered(OSDOp& osd_op)
                  static_cast<const void*>(filter.get()));
   return seastar::do_with(std::move(filter),
     [this, &osd_op, lower_bound=std::move(lower_bound)](auto&& filter) {
-      return do_pgnls_common(lower_bound, os->oi.soid.get_namespace(),
+      const auto pg_start = pg.get_pgid().pgid.get_hobj_start();
+      const auto pg_end = \
+        pg.get_pgid().pgid.get_hobj_end(pg.get_pool().info.get_pg_num());
+      return do_pgnls_common(pg_start, pg_end, backend, lower_bound, os->oi.soid.get_namespace(),
                              osd_op.op.pgls.count, filter.get())
         .then([&osd_op](bufferlist bl) {
           osd_op.outdata = std::move(bl);
