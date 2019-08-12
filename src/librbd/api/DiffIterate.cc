@@ -239,6 +239,10 @@ int DiffIterate<I>::diff_iterate(I *ictx,
   ldout(ictx->cct, 20) << "diff_iterate " << ictx << " off = " << off
       		 << " len = " << len << dendl;
 
+  if (!ictx->data_ctx.is_valid()) {
+    return -ENODEV;
+  }
+
   // ensure previous writes are visible to listsnaps
   C_SaferCond flush_ctx;
   {
@@ -276,6 +280,8 @@ int DiffIterate<I>::diff_iterate(I *ictx,
 template <typename I>
 int DiffIterate<I>::execute() {
   CephContext* cct = m_image_ctx.cct;
+
+  ceph_assert(m_image_ctx.data_ctx.is_valid());
 
   librados::IoCtx head_ctx;
   librados::snap_t from_snap_id = 0;

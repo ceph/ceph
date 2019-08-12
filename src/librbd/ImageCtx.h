@@ -234,7 +234,7 @@ namespace librbd {
     ~ImageCtx();
     void init();
     void shutdown();
-    void init_layout();
+    void init_layout(int64_t pool_id);
     void perf_start(std::string name);
     void perf_stop();
     void set_read_flag(unsigned flag);
