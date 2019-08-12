@@ -9,9 +9,6 @@
 #include "common/version.h"
 #include "common/Formatter.h"
 
-#define _STR(x) #x
-#define STRINGIFY(x) _STR(x)
-
 namespace ceph {
 
 void BackTrace::print(std::ostream& out) const
