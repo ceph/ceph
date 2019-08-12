@@ -35,6 +35,7 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
 
   void set_peer_type(entity_type_t peer_type) { peer_name._type = peer_type; }
   void set_peer_id(int64_t peer_id) { peer_name._num = peer_id; }
+  void set_peer_name(entity_name_t name) { peer_name = name; }
 
  public:
   uint64_t peer_global_id = 0;
