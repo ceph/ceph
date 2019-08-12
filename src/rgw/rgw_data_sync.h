@@ -9,10 +9,8 @@
 #include "common/RWLock.h"
 #include "common/ceph_json.h"
 
-
 #include "rgw_coroutine.h"
 #include "rgw_http_client.h"
-#include "rgw_bucket.h"
 
 #include "rgw_sync_module.h"
 #include "rgw_sync_trace.h"
@@ -270,6 +268,9 @@ struct RGWDataSyncEnv {
   string status_oid();
 };
 
+class RGWRados;
+class RGWDataChangesLogInfo;
+
 class RGWRemoteDataLog : public RGWCoroutinesManager {
   const DoutPrefixProvider *dpp;
   RGWRados *store;
@@ -287,12 +288,7 @@ class RGWRemoteDataLog : public RGWCoroutinesManager {
 
 public:
   RGWRemoteDataLog(const DoutPrefixProvider *dpp, RGWRados *_store,
-                   RGWAsyncRadosProcessor *async_rados)
-    : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
-      dpp(dpp), store(_store), async_rados(async_rados),
-      http_manager(store->ctx(), completion_mgr),
-      data_sync_cr(NULL),
-      initialized(false) {}
+                   RGWAsyncRadosProcessor *async_rados);
   int init(const string& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger,
            RGWSyncTraceManager *_sync_tracer, RGWSyncModuleInstanceRef& module,
            PerfCounters* _counters);
@@ -312,7 +308,6 @@ public:
 
 class RGWDataSyncStatusManager : public DoutPrefixProvider {
   RGWRados *store;
-  rgw_rados_ref ref;
 
   string source_zone;
   RGWRESTConn *conn;
@@ -381,7 +376,7 @@ public:
   }
 
   // implements DoutPrefixProvider
-  CephContext *get_cct() const override { return store->ctx(); }
+  CephContext *get_cct() const override;
   unsigned get_subsys() const override;
   std::ostream& gen_prefix(std::ostream& out) const override;
 };
@@ -518,11 +513,7 @@ public:
   RGWRemoteBucketLog(const DoutPrefixProvider *_dpp, RGWRados *_store,
                      RGWBucketSyncStatusManager *_sm,
                      RGWAsyncRadosProcessor *_async_rados,
-                     RGWHTTPManager *_http_manager)
-    : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
-      dpp(_dpp), store(_store), status_manager(_sm),
-      async_rados(_async_rados), http_manager(_http_manager)
-  {}
+                     RGWHTTPManager *_http_manager);
 
   int init(const string& _source_zone, RGWRESTConn *_conn,
            const rgw_bucket& bucket, int shard_id,
@@ -564,13 +555,7 @@ class RGWBucketSyncStatusManager : public DoutPrefixProvider {
 
 public:
   RGWBucketSyncStatusManager(RGWRados *_store, const string& _source_zone,
-                             const rgw_bucket& bucket) : store(_store),
-                                                                                     cr_mgr(_store->ctx(), _store->get_cr_registry()),
-                                                                                     http_manager(store->ctx(), cr_mgr.get_completion_mgr()),
-                                                                                     source_zone(_source_zone),
-                                                                                     conn(NULL), error_logger(NULL),
-                                                                                     bucket(bucket),
-                                                                                     num_shards(0) {}
+                             const rgw_bucket& bucket);
   ~RGWBucketSyncStatusManager();
 
   int init();
@@ -582,7 +567,7 @@ public:
   static string obj_status_oid(const string& source_zone, const rgw_obj& obj); /* can be used by sync modules */
 
   // implements DoutPrefixProvider
-  CephContext *get_cct() const override { return store->ctx(); }
+  CephContext *get_cct() const override;
   unsigned get_subsys() const override;
   std::ostream& gen_prefix(std::ostream& out) const override;
 

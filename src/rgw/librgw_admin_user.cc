@@ -115,8 +115,6 @@ namespace rgw {
     init_timer.shutdown();
     mutex.unlock();
 
-    rgw_user_init(store);
-
     init_async_signal_handler();
     register_async_signal_handler(SIGUSR1, handle_sigterm);
 

@@ -224,7 +224,7 @@ int RGWSI_Zone::list_regions(list<string>& regions)
   RGWZoneGroup zonegroup;
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(zonegroup.get_pool(cct));
 
-  return syspool.op().list_prefixed_objs(region_info_oid_prefix, &regions);
+  return syspool.list_prefixed_objs(region_info_oid_prefix, &regions);
 }
 
 int RGWSI_Zone::list_zonegroups(list<string>& zonegroups)
@@ -232,7 +232,7 @@ int RGWSI_Zone::list_zonegroups(list<string>& zonegroups)
   RGWZoneGroup zonegroup;
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(zonegroup.get_pool(cct));
 
-  return syspool.op().list_prefixed_objs(zonegroup_names_oid_prefix, &zonegroups);
+  return syspool.list_prefixed_objs(zonegroup_names_oid_prefix, &zonegroups);
 }
 
 int RGWSI_Zone::list_zones(list<string>& zones)
@@ -240,7 +240,7 @@ int RGWSI_Zone::list_zones(list<string>& zones)
   RGWZoneParams zoneparams;
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(zoneparams.get_pool(cct));
 
-  return syspool.op().list_prefixed_objs(zone_names_oid_prefix, &zones);
+  return syspool.list_prefixed_objs(zone_names_oid_prefix, &zones);
 }
 
 int RGWSI_Zone::list_realms(list<string>& realms)
@@ -248,7 +248,7 @@ int RGWSI_Zone::list_realms(list<string>& realms)
   RGWRealm realm(cct, sysobj_svc);
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(realm.get_pool(cct));
 
-  return syspool.op().list_prefixed_objs(realm_names_oid_prefix, &realms);
+  return syspool.list_prefixed_objs(realm_names_oid_prefix, &realms);
 }
 
 int RGWSI_Zone::list_periods(list<string>& periods)
@@ -256,7 +256,7 @@ int RGWSI_Zone::list_periods(list<string>& periods)
   RGWPeriod period;
   list<string> raw_periods;
   RGWSI_SysObj::Pool syspool = sysobj_svc->get_pool(period.get_pool(cct));
-  int ret = syspool.op().list_prefixed_objs(period.get_info_oid_prefix(), &raw_periods);
+  int ret = syspool.list_prefixed_objs(period.get_info_oid_prefix(), &raw_periods);
   if (ret < 0) {
     return ret;
   }
@@ -885,6 +885,13 @@ bool RGWSI_Zone::find_zone_id_by_name(const string& name, string *id) {
   }
   *id = i->second; 
   return true;
+}
+
+bool RGWSI_Zone::need_to_sync() const
+{
+  return !(zonegroup->master_zone.empty() ||
+	   !rest_master_conn ||
+	   current_period->get_id().empty());
 }
 
 bool RGWSI_Zone::need_to_log_data() const

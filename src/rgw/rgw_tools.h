@@ -7,8 +7,13 @@
 #include <string>
 
 #include "include/types.h"
+#include "include/ceph_hash.h"
+
 #include "common/ceph_time.h"
+
 #include "rgw_common.h"
+
+class RGWSI_SysObj;
 
 class RGWRados;
 class RGWSysObjectCtx;
@@ -17,18 +22,53 @@ class optional_yield;
 
 struct obj_version;
 
+
 int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
                    librados::IoCtx& ioctx,
 		   bool create = false,
 		   bool mostly_omap = false);
 
-int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
+#define RGW_NO_SHARD -1
+
+#define RGW_SHARDS_PRIME_0 7877
+#define RGW_SHARDS_PRIME_1 65521
+
+extern const std::string MP_META_SUFFIX;
+
+static inline int rgw_shards_max()
+{
+  return RGW_SHARDS_PRIME_1;
+}
+
+// only called by rgw_shard_id and rgw_bucket_shard_index
+static inline int rgw_shards_mod(unsigned hval, int max_shards)
+{
+  if (max_shards <= RGW_SHARDS_PRIME_0) {
+    return hval % RGW_SHARDS_PRIME_0 % max_shards;
+  }
+  return hval % RGW_SHARDS_PRIME_1 % max_shards;
+}
+
+// used for logging and tagging
+static inline int rgw_shard_id(const string& key, int max_shards)
+{
+  return rgw_shards_mod(ceph_str_hash_linux(key.c_str(), key.size()),
+			max_shards);
+}
+
+void rgw_shard_name(const string& prefix, unsigned max_shards, const string& key, string& name, int *shard_id);
+void rgw_shard_name(const string& prefix, unsigned max_shards, const string& section, const string& key, string& name);
+void rgw_shard_name(const string& prefix, unsigned shard_id, string& name);
+
+int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs = NULL);
-int rgw_get_system_obj(RGWRados *rgwstore, RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
+int rgw_put_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
+                       RGWObjVersionTracker *objv_tracker, real_time set_mtime, optional_yield y, map<string, bufferlist> *pattrs = NULL);
+int rgw_get_system_obj(RGWSysObjectCtx& obj_ctx, const rgw_pool& pool, const string& key, bufferlist& bl,
                        RGWObjVersionTracker *objv_tracker, real_time *pmtime, optional_yield y, map<string, bufferlist> *pattrs = NULL,
                        rgw_cache_entry_info *cache_info = NULL,
 		       boost::optional<obj_version> refresh_version = boost::none);
-int rgw_delete_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid,
+int rgw_delete_system_obj(RGWSI_SysObj *sysobj_svc, const rgw_pool& pool, const string& oid,
                           RGWObjVersionTracker *objv_tracker);
 
 const char *rgw_find_mime_by_ext(string& ext);

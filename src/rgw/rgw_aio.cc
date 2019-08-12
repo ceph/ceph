@@ -89,7 +89,7 @@ Aio::OpFunc aio_abstract(Op&& op, boost::asio::io_context& context,
       auto ex = get_associated_executor(init.completion_handler);
 
       auto& ref = r.obj.get_ref();
-      librados::async_operate(context, ref.ioctx, ref.obj.oid, &op, 0,
+      librados::async_operate(context, ref.pool.ioctx(), ref.obj.oid, &op, 0,
                               bind_executor(ex, Handler{aio, r}));
     };
 }

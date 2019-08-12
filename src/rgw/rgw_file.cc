@@ -29,6 +29,8 @@
 #include "rgw_perf_counters.h"
 #include "common/errno.h"
 
+#include "services/svc_zone.h"
+
 #include <atomic>
 
 #define dout_subsys ceph_subsys_rgw

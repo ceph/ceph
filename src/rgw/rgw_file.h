@@ -973,7 +973,7 @@ namespace rgw {
     }
 
     int authorize(RGWRados* store) {
-      int ret = rgw_get_user_info_by_access_key(store, key.id, user);
+      int ret = store->ctl.user->get_info_by_access_key(key.id, &user, null_yield);
       if (ret == 0) {
 	RGWAccessKey* k = user.get_key(key.id);
 	if (!k || (k->key != key.key))
@@ -992,9 +992,10 @@ namespace rgw {
 	}
 	if (token.valid() && (ldh->auth(token.id, token.key) == 0)) {
 	  /* try to store user if it doesn't already exist */
-	  if (rgw_get_user_info_by_uid(store, token.id, user) < 0) {
-	    int ret = rgw_store_user_info(store, user, NULL, NULL, real_time(),
-					  true);
+	  if (store->ctl.user->get_info_by_uid(token.id, &user, null_yield) < 0) {
+	    int ret = store->ctl.user->store_info(user, null_yield,
+                                                  RGWUserCtl::PutParams()
+                                                  .set_exclusive(true));
 	    if (ret < 0) {
 	      lsubdout(get_context(), rgw, 10)
 		<< "NOTICE: failed to store new user's info: ret=" << ret
@@ -1276,7 +1277,8 @@ namespace rgw {
 
     void update_user() {
       RGWUserInfo _user = user;
-      int ret = rgw_get_user_info_by_access_key(rgwlib.get_store(), key.id, user);
+      auto user_ctl = rgwlib.get_store()->ctl.user;
+      int ret = user_ctl->get_info_by_access_key(key.id, &user, null_yield);
       if (ret != 0)
         user = _user;
     }

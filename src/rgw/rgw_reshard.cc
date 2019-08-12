@@ -124,7 +124,7 @@ public:
     if (ret < 0) {
       return ret;
     }
-    ret = bs.index_ctx.aio_operate(bs.bucket_obj, c, &op);
+    ret = bs.bucket_obj.aio_operate(c, &op);
     if (ret < 0) {
       derr << "ERROR: failed to store entries in target bucket shard (bs=" << bs.bucket << "/" << bs.shard_id << ") error=" << cpp_strerror(-ret) << dendl;
       return ret;
@@ -299,7 +299,6 @@ static int create_new_bucket_instance(RGWRados *store,
   new_bucket_info = bucket_info;
 
   store->create_bucket_id(&new_bucket_info.bucket.bucket_id);
-  new_bucket_info.bucket.oid.clear();
 
   new_bucket_info.num_shards = new_num_shards;
   new_bucket_info.objv_tracker.clear();
@@ -307,7 +306,7 @@ static int create_new_bucket_instance(RGWRados *store,
   new_bucket_info.new_bucket_instance_id.clear();
   new_bucket_info.reshard_status = 0;
 
-  int ret = store->init_bucket_index(new_bucket_info, new_bucket_info.num_shards);
+  int ret = store->svc.bi->init_index(new_bucket_info);
   if (ret < 0) {
     cerr << "ERROR: failed to init new bucket indexes: " << cpp_strerror(-ret) << std::endl;
     return ret;
@@ -631,7 +630,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
     return -EIO;
   }
 
-  ret = rgw_link_bucket(store, new_bucket_info.owner, new_bucket_info.bucket, bucket_info.creation_time);
+  ret = store->ctl.bucket->link_bucket(new_bucket_info.owner, new_bucket_info.bucket, bucket_info.creation_time, null_yield);
   if (ret < 0) {
     lderr(store->ctx()) << "failed to link new bucket instance (bucket_id=" << new_bucket_info.bucket.bucket_id << ": " << cpp_strerror(-ret) << ")" << dendl;
     return ret;
@@ -649,27 +648,7 @@ int RGWBucketReshard::do_reshard(int num_shards,
 
 int RGWBucketReshard::get_status(list<cls_rgw_bucket_instance_entry> *status)
 {
-  librados::IoCtx index_ctx;
-  map<int, string> bucket_objs;
-
-  int r = store->open_bucket_index(bucket_info, index_ctx, bucket_objs);
-  if (r < 0) {
-    return r;
-  }
-
-  for (auto i : bucket_objs) {
-    cls_rgw_bucket_instance_entry entry;
-
-    int ret = cls_rgw_get_bucket_resharding(index_ctx, i.second, &entry);
-    if (ret < 0 && ret != -ENOENT) {
-      lderr(store->ctx()) << "ERROR: " << __func__ << ": cls_rgw_get_bucket_resharding() returned ret=" << ret << dendl;
-      return ret;
-    }
-
-    status->push_back(entry);
-  }
-
-  return 0;
+  return store->svc.bi_rados->get_reshard_status(bucket_info, status);
 }
 
 
@@ -722,16 +701,15 @@ int RGWBucketReshard::execute(int num_shards, int max_op_entries,
   // best effort and don't report out an error; the lock isn't needed
   // at this point since all we're using a best effor to to remove old
   // shard objects
-  ret = store->clean_bucket_index(bucket_info, bucket_info.num_shards);
+  ret = store->svc.bi->clean_index(bucket_info);
   if (ret < 0) {
     lderr(store->ctx()) << "Error: " << __func__ <<
       " failed to clean up old shards; " <<
       "RGWRados::clean_bucket_index returned " << ret << dendl;
   }
 
-  ret = rgw_bucket_instance_remove_entry(store,
-					 bucket_info.bucket.get_key(),
-					 nullptr);
+  ret = store->ctl.bucket->remove_bucket_instance_info(bucket_info.bucket,
+                                                       bucket_info, null_yield);
   if (ret < 0) {
     lderr(store->ctx()) << "Error: " << __func__ <<
       " failed to clean old bucket info object \"" <<
@@ -753,17 +731,16 @@ error_out:
   // since the real problem is the issue that led to this error code
   // path, we won't touch ret and instead use another variable to
   // temporarily error codes
-  int ret2 = store->clean_bucket_index(new_bucket_info,
-				       new_bucket_info.num_shards);
+  int ret2 = store->svc.bi->clean_index(new_bucket_info);
   if (ret2 < 0) {
     lderr(store->ctx()) << "Error: " << __func__ <<
       " failed to clean up shards from failed incomplete resharding; " <<
       "RGWRados::clean_bucket_index returned " << ret2 << dendl;
   }
 
-  ret2 = rgw_bucket_instance_remove_entry(store,
-					  new_bucket_info.bucket.get_key(),
-					  nullptr);
+  ret2 = store->ctl.bucket->remove_bucket_instance_info(new_bucket_info.bucket,
+                                                        new_bucket_info,
+							null_yield);
   if (ret2 < 0) {
     lderr(store->ctx()) << "Error: " << __func__ <<
       " failed to clean bucket info object \"" <<

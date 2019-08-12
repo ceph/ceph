@@ -6,10 +6,56 @@
 
 #include <map>
 #include "rgw_xml.h"
-#include "rgw_rados.h"
+#include "rgw_obj_manifest.h"
+#include "rgw_compression_types.h"
 
 #define MULTIPART_UPLOAD_ID_PREFIX_LEGACY "2/"
 #define MULTIPART_UPLOAD_ID_PREFIX "2~" // must contain a unique char that may not come up in gen_rand_alpha()
+
+class RGWMPObj;
+
+struct RGWUploadPartInfo {
+  uint32_t num;
+  uint64_t size;
+  uint64_t accounted_size{0};
+  string etag;
+  ceph::real_time modified;
+  RGWObjManifest manifest;
+  RGWCompressionInfo cs_info;
+
+  RGWUploadPartInfo() : num(0), size(0) {}
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(4, 2, bl);
+    encode(num, bl);
+    encode(size, bl);
+    encode(etag, bl);
+    encode(modified, bl);
+    encode(manifest, bl);
+    encode(cs_info, bl);
+    encode(accounted_size, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START_LEGACY_COMPAT_LEN(4, 2, 2, bl);
+    decode(num, bl);
+    decode(size, bl);
+    decode(etag, bl);
+    decode(modified, bl);
+    if (struct_v >= 3)
+      decode(manifest, bl);
+    if (struct_v >= 4) {
+      decode(cs_info, bl);
+      decode(accounted_size, bl);
+    } else {
+      accounted_size = size;
+    }
+    DECODE_FINISH(bl);
+  }
+  void dump(Formatter *f) const;
+  static void generate_test_instances(list<RGWUploadPartInfo*>& o);
+};
+WRITE_CLASS_ENCODER(RGWUploadPartInfo)
 
 class RGWMultiCompleteUpload : public XMLObj
 {
@@ -55,31 +101,6 @@ public:
   RGWMultiXMLParser() {}
   ~RGWMultiXMLParser() override {}
 };
-
-/**
- * A filter to a) test whether an object name is a multipart meta
- * object, and b) filter out just the key used to determine the bucket
- * index shard.
- *
- * Objects for multipart meta have names adorned with an upload id and
- * other elements -- specifically a ".", MULTIPART_UPLOAD_ID_PREFIX,
- * unique id, and MP_META_SUFFIX. This filter will return true when
- * the name provided is such. It will also extract the key used for
- * bucket index shard calculation from the adorned name.
- */
-class MultipartMetaFilter : public RGWAccessListFilter {
-public:
-  MultipartMetaFilter() {}
-
-  /**
-   * @param name [in] The object name as it appears in the bucket index.
-   * @param key [out] An output parameter that will contain the bucket
-   *        index key if this entry is in the form of a multipart meta object.
-   * @return true if the name provided is in the form of a multipart meta
-   *         object, false otherwise
-   */
-  bool filter(const string& name, string& key) override;
-}; // class MultipartMetaFilter
 
 extern bool is_v2_upload_id(const string& upload_id);
 

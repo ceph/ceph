@@ -27,6 +27,7 @@
 #include "rgw_user.h"
 
 #include "services/svc_sys_obj.h"
+#include "services/svc_meta.h"
 
 #include <atomic>
 
@@ -415,7 +416,7 @@ public:
 int UserAsyncRefreshHandler::init_fetch()
 {
   ldout(store->ctx(), 20) << "initiating async quota refresh for user=" << user << dendl;
-  int r = store->get_user_stats_async(user, this);
+  int r = store->ctl.user->read_stats_async(user, this);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket info for user=" << user << dendl;
 
@@ -614,7 +615,7 @@ public:
 
 int RGWUserStatsCache::fetch_stats_from_storage(const rgw_user& user, const rgw_bucket& bucket, RGWStorageStats& stats)
 {
-  int r = store->get_user_stats(user, stats);
+  int r = store->ctl.user->read_stats(user, &stats);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get user stats for user=" << user << dendl;
     return r;
@@ -627,17 +628,15 @@ int RGWUserStatsCache::sync_bucket(const rgw_user& user, rgw_bucket& bucket)
 {
   RGWBucketInfo bucket_info;
 
-  RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
-
-  int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL, null_yield);
+  int r = store->ctl.bucket->read_bucket_instance_info(bucket, &bucket_info, null_yield);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket << " r=" << r << dendl;
     return r;
   }
 
-  r = rgw_bucket_sync_user_stats(store, user, bucket_info);
+  r = store->ctl.bucket->sync_user_stats(user, bucket_info);
   if (r < 0) {
-    ldout(store->ctx(), 0) << "ERROR: rgw_bucket_sync_user_stats() for user=" << user << ", bucket=" << bucket << " returned " << r << dendl;
+    ldout(store->ctx(), 0) << "ERROR: sync_user_stats() for user=" << user << ", bucket=" << bucket << " returned " << r << dendl;
     return r;
   }
 
@@ -646,21 +645,24 @@ int RGWUserStatsCache::sync_bucket(const rgw_user& user, rgw_bucket& bucket)
 
 int RGWUserStatsCache::sync_user(const rgw_user& user)
 {
-  cls_user_header header;
   string user_str = user.to_str();
-  int ret = store->cls_user_get_header(user_str, &header);
+  RGWStorageStats stats;
+  ceph::real_time last_stats_sync;
+  ceph::real_time last_stats_update;
+
+  int ret = store->ctl.user->read_stats(user_str, &stats, &last_stats_sync, &last_stats_update);
   if (ret < 0) {
     ldout(store->ctx(), 5) << "ERROR: can't read user header: ret=" << ret << dendl;
     return ret;
   }
 
   if (!store->ctx()->_conf->rgw_user_quota_sync_idle_users &&
-      header.last_stats_update < header.last_stats_sync) {
+      last_stats_update < last_stats_sync) {
     ldout(store->ctx(), 20) << "user is idle, not doing a full sync (user=" << user << ")" << dendl;
     return 0;
   }
 
-  real_time when_need_full_sync = header.last_stats_sync;
+  real_time when_need_full_sync = last_stats_sync;
   when_need_full_sync += make_timespan(store->ctx()->_conf->rgw_user_quota_sync_wait_time);
   
   // check if enough time passed since last full sync
@@ -680,7 +682,7 @@ int RGWUserStatsCache::sync_all_users()
   string key = "user";
   void *handle;
 
-  int ret = store->meta_mgr->list_keys_init(key, &handle);
+  int ret = store->ctl.meta.mgr->list_keys_init(key, &handle);
   if (ret < 0) {
     ldout(store->ctx(), 10) << "ERROR: can't get key: ret=" << ret << dendl;
     return ret;
@@ -691,7 +693,7 @@ int RGWUserStatsCache::sync_all_users()
 
   do {
     list<string> keys;
-    ret = store->meta_mgr->list_keys_next(handle, max, keys, &truncated);
+    ret = store->ctl.meta.mgr->list_keys_next(handle, max, keys, &truncated);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: lists_keys_next(): ret=" << ret << dendl;
       goto done;
@@ -713,7 +715,7 @@ int RGWUserStatsCache::sync_all_users()
 
   ret = 0;
 done:
-  store->meta_mgr->list_keys_complete(handle);
+  store->ctl.meta.mgr->list_keys_complete(handle);
   return ret;
 }
 

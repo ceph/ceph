@@ -290,7 +290,7 @@ static const char *get_acl_header(const RGWEnv *env,
   return env->get(header, NULL);
 }
 
-static int parse_grantee_str(RGWRados *store, string& grantee_str,
+static int parse_grantee_str(RGWUserCtl *user_ctl, string& grantee_str,
         const struct s3_acl_header *perm, ACLGrant& grant)
 {
   string id_type, id_val_quoted;
@@ -306,14 +306,14 @@ static int parse_grantee_str(RGWRados *store, string& grantee_str,
   string id_val = rgw_trim_quotes(id_val_quoted);
 
   if (strcasecmp(id_type.c_str(), "emailAddress") == 0) {
-    ret = rgw_get_user_info_by_email(store, id_val, info);
+    ret = user_ctl->get_info_by_email(id_val, &info, null_yield);
     if (ret < 0)
       return ret;
 
     grant.set_canon(info.user_id, info.display_name, rgw_perm);
   } else if (strcasecmp(id_type.c_str(), "id") == 0) {
     rgw_user user(id_val);
-    ret = rgw_get_user_info_by_uid(store, user, info);
+    ret = user_ctl->get_info_by_uid(user, &info, null_yield);
     if (ret < 0)
       return ret;
 
@@ -331,7 +331,7 @@ static int parse_grantee_str(RGWRados *store, string& grantee_str,
   return 0;
 }
 
-static int parse_acl_header(RGWRados *store, const RGWEnv *env,
+static int parse_acl_header(RGWUserCtl *user_ctl, const RGWEnv *env,
          const struct s3_acl_header *perm, std::list<ACLGrant>& _grants)
 {
   std::list<string> grantees;
@@ -346,7 +346,7 @@ static int parse_acl_header(RGWRados *store, const RGWEnv *env,
 
   for (list<string>::iterator it = grantees.begin(); it != grantees.end(); ++it) {
     ACLGrant grant;
-    int ret = parse_grantee_str(store, *it, perm, grant);
+    int ret = parse_grantee_str(user_ctl, *it, perm, grant);
     if (ret < 0)
       return ret;
 
@@ -451,13 +451,13 @@ static const s3_acl_header acl_header_perms[] = {
   {0, NULL}
 };
 
-int RGWAccessControlPolicy_S3::create_from_headers(RGWRados *store, const RGWEnv *env, ACLOwner& _owner)
+int RGWAccessControlPolicy_S3::create_from_headers(RGWUserCtl *user_ctl, const RGWEnv *env, ACLOwner& _owner)
 {
   std::list<ACLGrant> grants;
   int r = 0;
 
   for (const struct s3_acl_header *p = acl_header_perms; p->rgw_perm; p++) {
-    r = parse_acl_header(store, env, p, grants);
+    r = parse_acl_header(user_ctl, env, p, grants);
     if (r < 0) {
       return r;
     }
@@ -474,7 +474,7 @@ int RGWAccessControlPolicy_S3::create_from_headers(RGWRados *store, const RGWEnv
 /*
   can only be called on object that was parsed
  */
-int RGWAccessControlPolicy_S3::rebuild(RGWRados *store, ACLOwner *owner, RGWAccessControlPolicy& dest)
+int RGWAccessControlPolicy_S3::rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RGWAccessControlPolicy& dest)
 {
   if (!owner)
     return -EINVAL;
@@ -487,7 +487,7 @@ int RGWAccessControlPolicy_S3::rebuild(RGWRados *store, ACLOwner *owner, RGWAcce
   }
 
   RGWUserInfo owner_info;
-  if (rgw_get_user_info_by_uid(store, owner->get_id(), owner_info) < 0) {
+  if (user_ctl->get_info_by_uid(owner->get_id(), &owner_info, null_yield) < 0) {
     ldout(cct, 10) << "owner info does not exist" << dendl;
     return -EINVAL;
   }
@@ -520,7 +520,7 @@ int RGWAccessControlPolicy_S3::rebuild(RGWRados *store, ACLOwner *owner, RGWAcce
         }
         email = u.id;
         ldout(cct, 10) << "grant user email=" << email << dendl;
-        if (rgw_get_user_info_by_email(store, email, grant_user) < 0) {
+        if (user_ctl->get_info_by_email(email, &grant_user, null_yield) < 0) {
           ldout(cct, 10) << "grant user email not found or other error" << dendl;
           return -ERR_UNRESOLVABLE_EMAIL;
         }
@@ -535,7 +535,7 @@ int RGWAccessControlPolicy_S3::rebuild(RGWRados *store, ACLOwner *owner, RGWAcce
           }
         }
     
-        if (grant_user.user_id.empty() && rgw_get_user_info_by_uid(store, uid, grant_user) < 0) {
+        if (grant_user.user_id.empty() && user_ctl->get_info_by_uid(uid, &grant_user, null_yield) < 0) {
           ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
           return -EINVAL;
         } else {

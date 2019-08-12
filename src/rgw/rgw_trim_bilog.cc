@@ -29,8 +29,10 @@
 #include "rgw_rados.h"
 #include "rgw_zone.h"
 #include "rgw_sync.h"
+#include "rgw_bucket.h"
 
 #include "services/svc_zone.h"
+#include "services/svc_meta.h"
 
 #include <boost/asio/yield.hpp>
 #include "include/ceph_assert.h"
@@ -262,18 +264,18 @@ class BucketTrimWatcher : public librados::WatchCtx2 {
     }
 
     // register a watch on the realm's control object
-    r = ref.ioctx.watch2(ref.obj.oid, &handle, this);
+    r = ref.pool.ioctx().watch2(ref.obj.oid, &handle, this);
     if (r == -ENOENT) {
       constexpr bool exclusive = true;
-      r = ref.ioctx.create(ref.obj.oid, exclusive);
+      r = ref.pool.ioctx().create(ref.obj.oid, exclusive);
       if (r == -EEXIST || r == 0) {
-        r = ref.ioctx.watch2(ref.obj.oid, &handle, this);
+        r = ref.pool.ioctx().watch2(ref.obj.oid, &handle, this);
       }
     }
     if (r < 0) {
       lderr(store->ctx()) << "Failed to watch " << ref.obj
           << " with " << cpp_strerror(-r) << dendl;
-      ref.ioctx.close();
+      ref.pool.ioctx().close();
       return r;
     }
 
@@ -282,24 +284,24 @@ class BucketTrimWatcher : public librados::WatchCtx2 {
   }
 
   int restart() {
-    int r = ref.ioctx.unwatch2(handle);
+    int r = ref.pool.ioctx().unwatch2(handle);
     if (r < 0) {
       lderr(store->ctx()) << "Failed to unwatch on " << ref.obj
           << " with " << cpp_strerror(-r) << dendl;
     }
-    r = ref.ioctx.watch2(ref.obj.oid, &handle, this);
+    r = ref.pool.ioctx().watch2(ref.obj.oid, &handle, this);
     if (r < 0) {
       lderr(store->ctx()) << "Failed to restart watch on " << ref.obj
           << " with " << cpp_strerror(-r) << dendl;
-      ref.ioctx.close();
+      ref.pool.ioctx().close();
     }
     return r;
   }
 
   void stop() {
     if (handle) {
-      ref.ioctx.unwatch2(handle);
-      ref.ioctx.close();
+      ref.pool.ioctx().unwatch2(handle);
+      ref.pool.ioctx().close();
     }
   }
 
@@ -324,7 +326,7 @@ class BucketTrimWatcher : public librados::WatchCtx2 {
     } catch (const buffer::error& e) {
       lderr(store->ctx()) << "Failed to decode notification: " << e.what() << dendl;
     }
-    ref.ioctx.notify_ack(ref.obj.oid, notify_id, cookie, reply);
+    ref.pool.ioctx().notify_ack(ref.obj.oid, notify_id, cookie, reply);
   }
 
   /// reestablish the watch if it gets disconnected
@@ -416,6 +418,7 @@ class BucketTrimInstanceCR : public RGWCoroutine {
   RGWHTTPManager *const http;
   BucketTrimObserver *const observer;
   std::string bucket_instance;
+  rgw_bucket bucket;
   const std::string& zone_id; //< my zone id
   RGWBucketInfo bucket_info; //< bucket instance info to locate bucket indices
   int child_ret = 0;
@@ -432,8 +435,9 @@ class BucketTrimInstanceCR : public RGWCoroutine {
       http(http), observer(observer),
       bucket_instance(bucket_instance),
       zone_id(store->svc.zone->get_zone().id),
-      peer_status(store->svc.zone->get_zone_data_notify_to_map().size())
-  {}
+      peer_status(store->svc.zone->get_zone_data_notify_to_map().size()) {
+    rgw_bucket_parse_bucket_key(cct, bucket_instance, &bucket, nullptr);
+  }
 
   int operate() override;
 };
@@ -463,8 +467,8 @@ int BucketTrimInstanceCR::operate()
         ++p;
       }
       // in parallel, read the local bucket instance info
-      spawn(new RGWGetBucketInstanceInfoCR(store->get_async_rados(), store,
-                                           bucket_instance, &bucket_info),
+      spawn(new RGWGetBucketInstanceInfoCR(store->svc.rados->get_async_processor(), store,
+                                           bucket, &bucket_info),
             false);
     }
     // wait for a response from each peer. all must respond to attempt trim
@@ -785,7 +789,7 @@ int BucketTrimCR::operate()
       // read BucketTrimStatus for marker position
       set_status("reading trim status");
       using ReadStatus = RGWSimpleRadosReadCR<BucketTrimStatus>;
-      yield call(new ReadStatus(store->get_async_rados(), store->svc.sysobj, obj,
+      yield call(new ReadStatus(store->svc.rados->get_async_processor(), store->svc.sysobj, obj,
                                 &status, true, &objv));
       if (retcode < 0) {
         ldout(cct, 10) << "failed to read bilog trim status: "
@@ -820,7 +824,8 @@ int BucketTrimCR::operate()
           return buckets.size() < config.buckets_per_interval;
         };
 
-        call(new MetadataListCR(cct, store->get_async_rados(), store->meta_mgr,
+        call(new MetadataListCR(cct, store->svc.rados->get_async_processor(),
+                                store->ctl.meta.mgr,
                                 section, status.marker, cb));
       }
       if (retcode < 0) {
@@ -843,7 +848,7 @@ int BucketTrimCR::operate()
       status.marker = std::move(last_cold_marker);
       ldout(cct, 20) << "writing bucket trim marker=" << status.marker << dendl;
       using WriteStatus = RGWSimpleRadosWriteCR<BucketTrimStatus>;
-      yield call(new WriteStatus(store->get_async_rados(), store->svc.sysobj, obj,
+      yield call(new WriteStatus(store->svc.rados->get_async_processor(), store->svc.sysobj, obj,
                                  status, &objv));
       if (retcode < 0) {
         ldout(cct, 4) << "failed to write updated trim status: "
@@ -905,7 +910,7 @@ int BucketTrimPollCR::operate()
 
       // prevent others from trimming for our entire wait interval
       set_status("acquiring trim lock");
-      yield call(new RGWSimpleRadosLockCR(store->get_async_rados(), store,
+      yield call(new RGWSimpleRadosLockCR(store->svc.rados->get_async_processor(), store,
                                           obj, name, cookie,
                                           config.trim_interval_sec));
       if (retcode < 0) {
@@ -918,7 +923,7 @@ int BucketTrimPollCR::operate()
       if (retcode < 0) {
         // on errors, unlock so other gateways can try
         set_status("unlocking");
-        yield call(new RGWSimpleRadosUnlockCR(store->get_async_rados(), store,
+        yield call(new RGWSimpleRadosUnlockCR(store->svc.rados->get_async_processor(), store,
                                               obj, name, cookie));
       }
     }
