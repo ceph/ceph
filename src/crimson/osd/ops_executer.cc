@@ -109,8 +109,7 @@ static inline std::unique_ptr<const PGLSFilter> get_pgls_filter(
   // storing non-const PGLSFilter for the sake of ::init()
   std::unique_ptr<PGLSFilter> filter;
   if (type.compare("plain") == 0) {
-    //filter = std::make_unique<PGLSPlainFilter>();
-    ::operation_not_supported();
+    filter = std::make_unique<PGLSPlainFilter>();
   } else {
     std::size_t dot = type.find(".");
     if (dot == type.npos || dot == 0 || dot == type.size() - 1) {
