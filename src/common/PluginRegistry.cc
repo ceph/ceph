@@ -93,6 +93,9 @@ int PluginRegistry::add(const std::string& type,
   }
   ldout(cct, 1) << __func__ << " " << type << " " << name
 		<< " " << plugin << dendl;
+  if (!plugins.count(type)){
+    plugins[type] = std::map<std::string,Plugin*>();
+  }
   plugins[type][name] = plugin;
   return 0;
 }
