@@ -8240,6 +8240,10 @@ std::vector<Option> get_mds_client_options() {
     .set_default(5.0)
     .set_description("maximum age of dirty pages in object cache (seconds)"),
 
+    Option("client_oc_max_object_ops", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(10000)
+    .set_description("maximum number of ops on an object"),
+
     Option("client_oc_max_objects", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1000)
     .set_description("maximum number of objects in cache"),
