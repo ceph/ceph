@@ -853,7 +853,7 @@ public:
     RGWObjVersionTracker *objv_tracker{nullptr};
     ceph::real_time mtime;
     bool exclusive{false};
-    map<string, bufferlist> *attrs;
+    map<string, bufferlist> *attrs{nullptr};
 
     PutParams() {}
 
