@@ -4127,6 +4127,7 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_max_blob_size",
     "bluestore_max_blob_size_ssd",
     "bluestore_max_blob_size_hdd",
+    "osd_memory_target_baseon_cgroup",
     "osd_memory_target",
     "osd_memory_target_cgroup_limit_ratio",
     "osd_memory_base",
@@ -4307,9 +4308,11 @@ int BlueStore::_set_cache_sizes()
 {
   // set osd_memory_target *default* based on cgroup limit?
   // (do this before we fetch the osd_memory_target value!)
+  bool osd_memory_target_baseon_cgroup = cct->_conf.get_val<bool>(
+    "osd_memory_target_baseon_group");
   double cgroup_ratio = cct->_conf.get_val<double>(
     "osd_memory_target_cgroup_limit_ratio");
-  if (cgroup_ratio > 0.0) {
+  if (osd_memory_target_baseon_cgroup && cgroup_ratio > 0.0) {
     uint64_t cgroup_limit = 0;
     if (get_cgroup_memory_limit(&cgroup_limit) == 0 &&
 	cgroup_limit) {

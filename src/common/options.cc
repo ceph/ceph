@@ -4154,6 +4154,11 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description(""),
 
+    Option("osd_memory_target_baseon_cgroup", Option::TYPE_BOOL, Option::LEVEL_BASIC)
+    .set_default(false)
+    .add_see_also("bluestore_cache_autotune")
+    .set_description("Set osd_memory_target based on cgroup limit."),
+
     Option("osd_memory_target", Option::TYPE_SIZE, Option::LEVEL_BASIC)
     .set_default(4_G)
     .add_see_also("bluestore_cache_autotune")
