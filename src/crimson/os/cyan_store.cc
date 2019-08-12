@@ -201,7 +201,7 @@ seastar::future<ceph::bufferlist> CyanStore::read(CollectionRef c,
 
 seastar::future<ceph::bufferptr> CyanStore::get_attr(CollectionRef c,
                                                      const ghobject_t& oid,
-                                                     std::string_view name)
+                                                     std::string_view name) const
 {
   logger().debug("{} {} {}",
                 __func__, c->cid, oid);

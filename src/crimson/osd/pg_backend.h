@@ -78,10 +78,10 @@ public:
     ceph::os::Transaction& trans);
   seastar::future<> getxattr(
     const ObjectState& os,
-    OSDOp& osd_op);
+    OSDOp& osd_op) const;
   seastar::future<ceph::bufferptr> getxattr(
     const hobject_t& soid,
-    std::string_view key);
+    std::string_view key) const;
 
   virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
 

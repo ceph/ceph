@@ -51,7 +51,7 @@ public:
 				   uint32_t op_flags = 0) final;
   seastar::future<ceph::bufferptr> get_attr(CollectionRef c,
 					    const ghobject_t& oid,
-					    std::string_view name) final;
+					    std::string_view name) const final;
   seastar::future<attrs_t> get_attrs(CollectionRef c,
                                      const ghobject_t& oid) final;
 
