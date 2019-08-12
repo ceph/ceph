@@ -59,6 +59,11 @@ describe('IscsiTargetDetailsComponent', () => {
             luns: [{ pool: 'rbd', image: 'disk_1' }],
             auth: {
               user: 'myiscsiusername'
+            },
+            info: {
+              alias: 'myhost',
+              ip_address: ['192.168.200.1'],
+              state: { LOGGED_IN: ['node1'] }
             }
           }
         ],
@@ -88,7 +93,12 @@ describe('IscsiTargetDetailsComponent', () => {
 
     expect(component.data).toBeUndefined();
     expect(component.metadata).toEqual({
-      'client_iqn.1994-05.com.redhat:rh7-client': { user: 'myiscsiusername' },
+      'client_iqn.1994-05.com.redhat:rh7-client': {
+        user: 'myiscsiusername',
+        alias: 'myhost',
+        ip_address: ['192.168.200.1'],
+        logged_in: ['node1']
+      },
       disk_rbd_disk_1: { backstore: 'backstore:1', controls: { hw_max_sectors: 1 } },
       root: { dataout_timeout: 2 }
     });
@@ -123,6 +133,7 @@ describe('IscsiTargetDetailsComponent', () => {
                 }
               ],
               id: 'client_iqn.1994-05.com.redhat:rh7-client',
+              status: 'logged_in',
               value: 'iqn.1994-05.com.redhat:rh7-client'
             }
           ],
@@ -178,7 +189,10 @@ describe('IscsiTargetDetailsComponent', () => {
       const node = new NodeEvent(tree);
       component.onNodeSelected(node);
       expect(component.data).toEqual([
-        { current: 'myiscsiusername', default: undefined, displayName: 'user' }
+        { current: 'myiscsiusername', default: undefined, displayName: 'user' },
+        { current: 'myhost', default: undefined, displayName: 'alias' },
+        { current: ['192.168.200.1'], default: undefined, displayName: 'ip_address' },
+        { current: ['node1'], default: undefined, displayName: 'logged_in' }
       ]);
     });
 
