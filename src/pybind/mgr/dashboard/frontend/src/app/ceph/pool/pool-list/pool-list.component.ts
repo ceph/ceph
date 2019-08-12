@@ -4,6 +4,7 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 
+import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { PoolService } from '../../../shared/api/pool.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ActionLabelsI18n, URLVerbs } from '../../../shared/constants/app.constants';
@@ -54,6 +55,7 @@ export class PoolListComponent implements OnInit {
   tableActions: CdTableAction[];
   viewCacheStatusList: any[];
   selectionCacheTiers: any[] = [];
+  monAllowPoolDelete = false;
 
   constructor(
     private poolService: PoolService,
@@ -65,6 +67,7 @@ export class PoolListComponent implements OnInit {
     private pgCategoryService: PgCategoryService,
     private dimlessPipe: DimlessPipe,
     private urlBuilder: URLBuilderService,
+    private configurationService: ConfigurationService,
     public actionLabels: ActionLabelsI18n
   ) {
     this.permissions = this.authStorageService.getPermissions();
@@ -86,9 +89,20 @@ export class PoolListComponent implements OnInit {
         permission: 'delete',
         icon: 'fa-trash-o',
         click: () => this.deletePoolModal(),
-        name: this.actionLabels.DELETE
+        name: this.actionLabels.DELETE,
+        disable: () => !this.selection.first() || !this.monAllowPoolDelete,
+        disableDesc: () => this.getDisableDesc()
       }
     ];
+
+    this.configurationService.get('mon_allow_pool_delete').subscribe((data: any) => {
+      if (_.has(data, 'value')) {
+        const monSection = _.find(data.value, (v) => {
+          return v.section === 'mon';
+        }) || { value: false };
+        this.monAllowPoolDelete = monSection.value === 'true' ? true : false;
+      }
+    });
   }
 
   ngOnInit() {
@@ -252,5 +266,13 @@ export class PoolListComponent implements OnInit {
   getSelectionTiers() {
     const cacheTierIds = this.selection.hasSingleSelection ? this.selection.first()['tiers'] : [];
     this.selectionCacheTiers = this.pools.filter((pool) => cacheTierIds.includes(pool.pool));
+  }
+
+  getDisableDesc(): string | undefined {
+    if (!this.monAllowPoolDelete) {
+      return this.i18n(
+        'Pool deletion is disabled by the mon_allow_pool_delete configuration setting.'
+      );
+    }
   }
 }

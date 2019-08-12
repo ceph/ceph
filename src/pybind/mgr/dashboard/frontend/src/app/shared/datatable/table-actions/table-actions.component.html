@@ -24,7 +24,8 @@
     <ng-container *ngFor="let action of dropDownActions">
       <li role="menuitem"
           class="{{ toClassName(action['name']) }}"
-          [ngClass]="{'disabled': disableSelectionAction(action)}">
+          [ngClass]="{'disabled': disableSelectionAction(action)}"
+          data-toggle="tooltip" title="{{ useDisableDesc(action) }}">
         <a class="dropdown-item"
            (click)="useClickAction(action)"
            [routerLink]="useRouterLink(action)">

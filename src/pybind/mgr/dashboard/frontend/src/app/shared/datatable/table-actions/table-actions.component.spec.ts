@@ -284,4 +284,51 @@ describe('TableActionsComponent', () => {
     expect(component.toClassName('Mark x down')).toBe('mark-x-down');
     expect(component.toClassName('?Su*per!')).toBe('super');
   });
+
+  describe('useDisableDesc', () => {
+    it('should return a description if disableDesc is set for action', () => {
+      const deleteWithDescAction: CdTableAction = {
+        permission: 'delete',
+        icon: 'fa-times',
+        canBePrimary: (selection: CdTableSelection) => selection.hasSelection,
+        disableDesc: () => {
+          return 'Delete action disabled description';
+        },
+        name: 'DeleteDesc'
+      };
+
+      expect(component.useDisableDesc(deleteWithDescAction)).toBe(
+        'Delete action disabled description'
+      );
+    });
+
+    it('should return no description if disableDesc is not set for action', () => {
+      expect(component.useDisableDesc(deleteAction)).toBeUndefined();
+    });
+  });
+
+  describe('useClickAction', () => {
+    const editClickAction: CdTableAction = {
+      permission: 'update',
+      icon: 'fa-pencil',
+      name: 'Edit',
+      click: () => {
+        return 'Edit action click';
+      }
+    };
+
+    it('should call click action if action is not disabled', () => {
+      editClickAction.disable = () => {
+        return false;
+      };
+      expect(component.useClickAction(editClickAction)).toBe('Edit action click');
+    });
+
+    it('should not call click action if action is disabled', () => {
+      editClickAction.disable = () => {
+        return true;
+      };
+      expect(component.useClickAction(editClickAction)).toBeFalsy();
+    });
+  });
 });
