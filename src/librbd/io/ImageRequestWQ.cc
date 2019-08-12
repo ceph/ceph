@@ -844,6 +844,15 @@ int ImageRequestWQ<I>::start_in_flight_io(AioCompletion *c) {
     return false;
   }
 
+  if (!m_image_ctx.data_ctx.is_valid()) {
+    CephContext *cct = m_image_ctx.cct;
+    lderr(cct) << "missing data pool" << dendl;
+
+    c->get();
+    c->fail(-ENODEV);
+    return false;
+  }
+
   m_in_flight_ios++;
   return true;
 }

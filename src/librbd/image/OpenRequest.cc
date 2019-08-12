@@ -473,13 +473,19 @@ Context *OpenRequest<I>::handle_v2_get_data_pool(int *result) {
     *result = util::create_ioctx(m_image_ctx->md_ctx, "data pool", data_pool_id,
                                  {}, &m_image_ctx->data_ctx);
     if (*result < 0) {
-      send_close_image(*result);
-      return nullptr;
+      if (*result != -ENOENT) {
+        send_close_image(*result);
+        return nullptr;
+      }
+      m_image_ctx->data_ctx.close();
+    } else {
+      m_image_ctx->data_ctx.set_namespace(m_image_ctx->md_ctx.get_namespace());
     }
-    m_image_ctx->data_ctx.set_namespace(m_image_ctx->md_ctx.get_namespace());
+  } else {
+    data_pool_id = m_image_ctx->md_ctx.get_id();
   }
 
-  m_image_ctx->init_layout();
+  m_image_ctx->init_layout(data_pool_id);
   send_refresh();
   return nullptr;
 }
@@ -516,7 +522,8 @@ Context *OpenRequest<I>::handle_refresh(int *result) {
 template <typename I>
 Context *OpenRequest<I>::send_init_cache(int *result) {
   // cache is disabled or parent image context
-  if (!m_image_ctx->cache || m_image_ctx->child != nullptr) {
+  if (!m_image_ctx->cache || m_image_ctx->child != nullptr ||
+      !m_image_ctx->data_ctx.is_valid()) {
     return send_register_watch(result);
   }
 
