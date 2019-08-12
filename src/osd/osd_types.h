@@ -6126,4 +6126,14 @@ public:
   virtual bool reject_empty_xattr() const { return true; }
 };
 
+class PGLSPlainFilter : public PGLSFilter {
+  std::string val;
+public:
+  int init(ceph::bufferlist::const_iterator &params) override;
+  ~PGLSPlainFilter() override {}
+  bool filter(const hobject_t& obj,
+              const ceph::bufferlist& xattr_data) const override;
+};
+
+
 #endif
