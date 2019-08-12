@@ -119,6 +119,9 @@ enum {
   l_osdc_osdop_cmpxattr,
   l_osdc_osdop_rmxattr,
   l_osdc_osdop_resetxattrs,
+  l_osdc_osdop_tmap_up,
+  l_osdc_osdop_tmap_put,
+  l_osdc_osdop_tmap_get,
   l_osdc_osdop_call,
   l_osdc_osdop_watch,
   l_osdc_osdop_notify,
@@ -2339,6 +2342,10 @@ void Objecter::_send_op_account(Op *op)
     case CEPH_OSD_OP_CMPXATTR: code = l_osdc_osdop_cmpxattr; break;
     case CEPH_OSD_OP_RMXATTR: code = l_osdc_osdop_rmxattr; break;
     case CEPH_OSD_OP_RESETXATTRS: code = l_osdc_osdop_resetxattrs; break;
+    case CEPG_OSD_OP_TMAPUP: code = l_osdc_osdop_tmap_up; break;
+    case CEPG_OSD_OP_TMAPPUT: code = l_osdc_osdop_tmap_put; break;
+    case CEPG_OSD_OP_TMAPGET: code = l_osdc_osdop_tmap_get; break;
+
 
     // OMAP read operations
     case CEPH_OSD_OP_OMAPGETVALS:
