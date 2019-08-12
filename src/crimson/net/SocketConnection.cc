@@ -71,16 +71,6 @@ seastar::future<> SocketConnection::close()
     });
 }
 
-void SocketConnection::requeue_sent()
-{
-  out_seq -= sent.size();
-  while (!sent.empty()) {
-    auto m = sent.front();
-    sent.pop_front();
-    out_q.push_back(std::move(m));
-  }
-}
-
 bool SocketConnection::update_rx_seq(seq_num_t seq)
 {
   if (seq <= in_seq) {

@@ -23,7 +23,6 @@ class Socket
   seastar::output_stream<char> out;
 
 #ifndef NDEBUG
-  bool down = false;
   bool closed = false;
 #endif
 

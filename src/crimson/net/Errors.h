@@ -32,6 +32,7 @@ enum class error {
   invalid_argument,
   address_in_use,
   broken_pipe,
+  protocol_aborted,
 };
 
 /// net error category

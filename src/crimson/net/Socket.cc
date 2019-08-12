@@ -87,10 +87,6 @@ Socket::read_exactly(size_t bytes) {
 }
 
 void Socket::shutdown() {
-#ifndef NDEBUG
-  ceph_assert(!down);
-  down = true;
-#endif
   socket.shutdown_input();
   socket.shutdown_output();
 }

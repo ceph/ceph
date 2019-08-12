@@ -30,7 +30,8 @@ class ProtocolV1 final : public Protocol {
       const std::deque<MessageRef>& msgs,
       size_t num_msgs,
       bool require_keepalive,
-      std::optional<utime_t> keepalive_ack) override;
+      std::optional<utime_t> keepalive_ack,
+      bool require_ack) override;
 
  private:
   SocketMessenger &messenger;
