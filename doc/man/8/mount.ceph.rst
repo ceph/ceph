@@ -126,6 +126,11 @@ Options
 :command:`noasyncreaddir`
   no dcache readdir
 
+Mount Secrets
+=============
+If the `secret` and `secretfile` options are not specified on the command-line
+then the mount helper will spawn a child process that will use the standard
+ceph library routines to find a keyring and fetch the secret from it.
 
 Examples
 ========

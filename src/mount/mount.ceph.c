@@ -4,6 +4,9 @@
 #include <errno.h>
 #include <sys/mount.h>
 #include <stdbool.h>
+#include <sys/mman.h>
+#include <wait.h>
+#include <cap-ng.h>
 
 #include "common/module.h"
 #include "common/secret.h"
@@ -24,6 +27,7 @@ static const char * const EMPTY_STRING = "";
 #define CEPH_AUTH_NAME_DEFAULT "guest"
 
 #include "mtab.c"
+#include "keyring.h"
 
 static void block_signals (int how)
 {
@@ -90,6 +94,91 @@ static char *mount_resolve_src(const char *orig_str)
 
 	free(buf);
 	return src;
+}
+
+static int
+drop_capabilities()
+{
+	capng_setpid(getpid());
+	capng_clear(CAPNG_SELECT_BOTH);
+	if (capng_update(CAPNG_ADD, CAPNG_PERMITTED, CAP_DAC_READ_SEARCH)) {
+		fprintf(stderr, "Unable to update permitted capability set.\n");
+		return EX_SYSERR;
+	}
+	if (capng_update(CAPNG_ADD, CAPNG_EFFECTIVE, CAP_DAC_READ_SEARCH)) {
+		fprintf(stderr, "Unable to update effective capability set.\n");
+		return EX_SYSERR;
+	}
+	if (capng_apply(CAPNG_SELECT_BOTH)) {
+		fprintf(stderr, "Unable to apply new capability set.\n");
+		return EX_SYSERR;
+	}
+	return 0;
+}
+
+/*
+ * Attempt to grab the mount secret out of the ceph keyring file. Starting up
+ * a CephContext may involve activity that is dangerous for a privileged
+ * process, so we fork a child process and have it drop privileges before
+ * doing so.
+ *
+ * If the child finds a secret, it will be copied into the mmap'ed buffer
+ * and the child will exit with a status of 0. If the child doesn't exit with
+ * a 0 status, or the resulting string doesn't pass sanity checks, return an
+ * error so the caller knows not to use it.
+ */
+static int fetch_keyring_secret(const char *name, char *dst)
+{
+	int ret = 0;
+	pid_t pid;
+	char *secret;
+
+	secret = mmap((void *)0, MAX_SECRET_LEN, PROT_READ | PROT_WRITE,
+			MAP_ANONYMOUS | MAP_SHARED, -1, 0);
+	if (secret == (char *)-1) {
+		fprintf(stderr, "Unable to allocate memory: %s\n",
+				strerror(errno));
+		return EX_SYSERR;
+	}
+
+	pid = fork();
+	if (pid < 0) {
+		fprintf(stderr, "fork() failure: %s\n", strerror(errno));
+		ret = EX_SYSERR;
+		goto out;
+	}
+
+	if (pid == 0) {
+		/* child */
+		ret = drop_capabilities();
+		if (!ret)
+			ret = get_keyring_secret(name, secret, MAX_SECRET_LEN);
+		exit(ret ? 1 : 0);
+	} else {
+		/* parent */
+		size_t len;
+		pid = wait(&ret);
+		if (!WIFEXITED(ret)) {
+			fprintf(stderr, "Child process terminated abnormally.\n");
+			ret = EX_SYSERR;
+			goto out;
+		}
+		ret = WEXITSTATUS(ret);
+		if (ret) {
+			fprintf(stderr, "Child exited with status %d\n", ret);
+			ret = EX_SYSERR;
+			goto out;
+		}
+
+		len = strnlen(secret, MAX_SECRET_LEN) + 1;
+		if (len > MAX_SECRET_LEN)
+			ret = EX_SYSERR;
+		else
+			memcpy(dst, secret, len);
+	}
+out:
+	munmap(secret, MAX_SECRET_LEN);
+	return ret;
 }
 
 /*
@@ -245,6 +334,23 @@ static char *parse_options(const char *data, int *filesys_flags)
 	} else {
 		name_pos = safe_cat(&name, &name_len, name_pos, saw_name);
 	}
+
+	if (!saw_secret && !is_kernel_secret(name)) {
+		int ret = fetch_keyring_secret(name, secret);
+
+		/*
+		 * If fetching the secret doesn't work, then just try to
+		 * mount without it.
+		 */
+		if (ret) {
+			mount_ceph_debug("fetch_keyring_secret returned %d\n",
+					 ret);
+		} else {
+			mount_ceph_debug("found key %s\n", secret);
+			saw_secret = secret;
+		}
+	}
+
 	if (saw_secret || is_kernel_secret(name)) {
 		int ret;
 		char secret_option[MAX_SECRET_OPTION_LEN];

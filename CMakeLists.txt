@@ -398,6 +398,11 @@ if(WITH_LIBCEPHFS OR WITH_KRBD)
   find_package(keyutils REQUIRED)
 endif()
 
+if(WITH_LIBCEPHFS)
+  find_package(PkgConfig REQUIRED)
+  pkg_check_modules(CAPNG REQUIRED libcap-ng)
+endif()
+
 find_package(CURL REQUIRED)
 set(CMAKE_REQUIRED_INCLUDES ${CURL_INCLUDE_DIRS})
 set(CMAKE_REQUIRED_LIBRARIES ${CURL_LIBRARIES})
