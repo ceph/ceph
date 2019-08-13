@@ -118,14 +118,14 @@ void RGWPutUserPolicy::execute()
 
   RGWUserInfo info;
   rgw_user user_id(user_name);
-  op_ret = rgw_get_user_info_by_uid(store, user_id, info);
+  op_ret = store->ctl.user->get_info_by_uid(user_id, &info, s->yield);
   if (op_ret < 0) {
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;
   }
 
   map<string, bufferlist> uattrs;
-  op_ret = rgw_get_user_attrs_by_uid(store, user_id, uattrs);
+  op_ret = store->ctl.user->get_attrs_by_uid(user_id, &uattrs, s->yield);
   if (op_ret == -ENOENT) {
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;
@@ -144,7 +144,10 @@ void RGWPutUserPolicy::execute()
     uattrs[RGW_ATTR_USER_POLICY] = in_bl;
 
     RGWObjVersionTracker objv_tracker;
-    op_ret = rgw_store_user_info(store, info, &info, &objv_tracker, real_time(), false, &uattrs);
+    op_ret = store->ctl.user->store_info(info, s->yield,
+                                         RGWUserCtl::PutParams()
+                                         .set_objv_tracker(&objv_tracker)
+                                         .set_attrs(&uattrs));
     if (op_ret < 0) {
       op_ret = -ERR_INTERNAL_ERROR;
     }
@@ -190,7 +193,7 @@ void RGWGetUserPolicy::execute()
 
   rgw_user user_id(user_name);
   map<string, bufferlist> uattrs;
-  op_ret = rgw_get_user_attrs_by_uid(store, user_id, uattrs);
+  op_ret = store->ctl.user->get_attrs_by_uid(user_id, &uattrs, s->yield);
   if (op_ret == -ENOENT) {
     ldout(s->cct, 0) << "ERROR: attrs not found for user" << user_name << dendl;
     op_ret = -ERR_NO_SUCH_ENTITY;
@@ -254,7 +257,7 @@ void RGWListUserPolicies::execute()
 
   rgw_user user_id(user_name);
   map<string, bufferlist> uattrs;
-  op_ret = rgw_get_user_attrs_by_uid(store, user_id, uattrs);
+  op_ret = store->ctl.user->get_attrs_by_uid(user_id, &uattrs, s->yield);
   if (op_ret == -ENOENT) {
     ldout(s->cct, 0) << "ERROR: attrs not found for user" << user_name << dendl;
     op_ret = -ERR_NO_SUCH_ENTITY;
@@ -315,16 +318,12 @@ void RGWDeleteUserPolicy::execute()
   }
 
   RGWUserInfo info;
-  rgw_user user_id(user_name);
-  op_ret = rgw_get_user_info_by_uid(store, user_id, info);
-  if (op_ret < 0) {
-    op_ret = -ERR_NO_SUCH_ENTITY;
-    return;
-  }
-
   map<string, bufferlist> uattrs;
-  op_ret = rgw_get_user_attrs_by_uid(store, user_id, uattrs);
-  if (op_ret == -ENOENT) {
+  rgw_user user_id(user_name);
+  op_ret = store->ctl.user->get_info_by_uid(user_id, &info, s->yield,
+                                            RGWUserCtl::GetParams()
+                                            .set_attrs(&uattrs));
+  if (op_ret < 0) {
     op_ret = -ERR_NO_SUCH_ENTITY;
     return;
   }
@@ -341,7 +340,11 @@ void RGWDeleteUserPolicy::execute()
       uattrs[RGW_ATTR_USER_POLICY] = in_bl;
 
       RGWObjVersionTracker objv_tracker;
-      op_ret = rgw_store_user_info(store, info, &info, &objv_tracker, real_time(), false, &uattrs);
+      op_ret = store->ctl.user->store_info(info, s->yield,
+                                           RGWUserCtl::PutParams()
+                                           .set_old_info(&info)
+                                           .set_objv_tracker(&objv_tracker)
+                                           .set_attrs(&uattrs));
       if (op_ret < 0) {
         op_ret = -ERR_INTERNAL_ERROR;
       }

@@ -19,7 +19,6 @@
 
 #include <array>
 
-#include <boost/algorithm/string.hpp>
 #include <boost/utility/string_view.hpp>
 
 #include "common/ceph_crypto.h"
@@ -130,8 +129,6 @@ using ceph::crypto::MD5;
 #define RGW_ATTR_CRYPT_KEYMD5   RGW_ATTR_CRYPT_PREFIX "keymd5"
 #define RGW_ATTR_CRYPT_KEYID    RGW_ATTR_CRYPT_PREFIX "keyid"
 #define RGW_ATTR_CRYPT_KEYSEL   RGW_ATTR_CRYPT_PREFIX "keysel"
-
-#define RGW_BUCKETS_OBJ_SUFFIX ".buckets"
 
 #define RGW_FORMAT_PLAIN        0
 #define RGW_FORMAT_XML          1
@@ -1145,16 +1142,27 @@ inline ostream& operator<<(ostream& out, const rgw_raw_obj& o) {
   return out;
 }
 
+struct rgw_bucket_key {
+  std::string tenant;
+  std::string name;
+  std::string bucket_id;
+
+  rgw_bucket_key(const std::string& _tenant,
+                 const std::string& _name,
+                 const std::string& _bucket_id) : tenant(_tenant),
+                                                  name(_name),
+                                                  bucket_id(_bucket_id) {}
+  rgw_bucket_key(const std::string& _tenant,
+                 const std::string& _name) : tenant(_tenant),
+                                             name(_name) {}
+}; 
+
 struct rgw_bucket {
   std::string tenant;
   std::string name;
   std::string marker;
   std::string bucket_id;
   rgw_data_placement_target explicit_placement;
-
-  std::string oid; /*
-                    * runtime in-memory only info. If not empty, points to the bucket instance object
-                    */
 
   rgw_bucket() { }
   // cppcheck-suppress noExplicitConstructor
@@ -1166,6 +1174,9 @@ struct rgw_bucket {
     explicit_placement(b.explicit_placement.data_pool,
                        b.explicit_placement.data_extra_pool,
                        b.explicit_placement.index_pool) {}
+  rgw_bucket(const rgw_bucket_key& bk) : tenant(bk.tenant),
+                                         name(bk.name),
+                                         bucket_id(bk.bucket_id) {}
   rgw_bucket(const rgw_bucket&) = default;
   rgw_bucket(rgw_bucket&&) = default;
 
@@ -1238,7 +1249,6 @@ struct rgw_bucket {
 
   void update_bucket_id(const string& new_bucket_id) {
     bucket_id = new_bucket_id;
-    oid.clear();
   }
 
   // format a key for the bucket/instance. pass delim=0 to skip a field
@@ -1301,6 +1311,12 @@ struct rgw_bucket_shard {
   }
 };
 
+struct rgw_bucket_placement {
+  rgw_placement_rule placement_rule;
+  rgw_bucket bucket;
+
+  void dump(Formatter *f) const;
+};
 
 struct RGWObjVersionTracker {
   obj_version read_version;
@@ -1391,7 +1407,6 @@ struct RGWBucketInfo {
   rgw_placement_rule placement_rule;
   bool has_instance_obj;
   RGWObjVersionTracker objv_tracker; /* we don't need to serialize this, for runtime tracking */
-  obj_version ep_objv; /* entry point object version, for runtime tracking only */
   RGWQuotaInfo quota;
 
   // Represents the number of bucket index object shards:
@@ -2009,6 +2024,7 @@ struct req_state : DoutPrefixProvider {
   string redirect;
 
   RGWBucketInfo bucket_info;
+  obj_version bucket_ep_objv;
   real_time bucket_mtime;
   std::map<std::string, ceph::bufferlist> bucket_attrs;
   bool bucket_exists{false};
@@ -2445,22 +2461,10 @@ static inline uint64_t rgw_rounded_objsize_kb(uint64_t bytes)
 
 /* implement combining step, S3 header canonicalization;  k is a
  * valid header and in lc form */
-static inline void add_amz_meta_header(
+void rgw_add_amz_meta_header(
   std::map<std::string, std::string>& x_meta_map,
   const std::string& k,
-  const std::string& v)
-{
-  auto it = x_meta_map.find(k);
-  if (it != x_meta_map.end()) {
-    std::string old = it->second;
-    boost::algorithm::trim_right(old);
-    old.append(",");
-    old.append(v);
-    x_meta_map[k] = old;
-  } else {
-    x_meta_map[k] = v;
-  }
-} /* add_amz_meta_header */
+  const std::string& v);
 
 extern string rgw_string_unquote(const string& s);
 extern void parse_csv_string(const string& ival, vector<string>& ovals);

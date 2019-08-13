@@ -16,6 +16,7 @@
 #include "rgw_aio.h"
 #include "rgw_putobj_processor.h"
 #include "rgw_multi.h"
+#include "rgw_compression.h"
 #include "services/svc_sys_obj.h"
 
 #define dout_subsys ceph_subsys_rgw
@@ -384,7 +385,7 @@ int MultipartObjectProcessor::prepare_head()
   }
 
   rgw_raw_obj stripe_obj = manifest_gen.get_cur_obj(store);
-  rgw_raw_obj_to_obj(head_obj.bucket, stripe_obj, &head_obj);
+  RGWSI_Tier_RADOS::raw_obj_to_obj(head_obj.bucket, stripe_obj, &head_obj);
   head_obj.index_hash_source = target_obj.key.name;
 
   r = writer.set_stripe_obj(stripe_obj);
@@ -560,7 +561,7 @@ int AppendObjectProcessor::prepare(optional_yield y)
       size_t pos = s.find("-");
       cur_etag = s.substr(0, pos);
     }
-    cur_manifest = &astate->manifest;
+    cur_manifest = &(*astate->manifest);
     manifest.set_prefix(cur_manifest->get_prefix());
   }
   manifest.set_multipart_part_rule(store->ctx()->_conf->rgw_obj_stripe_size, cur_part_num);

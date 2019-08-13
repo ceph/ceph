@@ -162,7 +162,7 @@ static inline void get_v2_qs_map(const req_info& info,
   for (const auto& elt : params) {
     std::string k = boost::algorithm::to_lower_copy(elt.first);
     if (k.find("x-amz-meta-") == /* offset */ 0) {
-      add_amz_meta_header(qs_map, k, elt.second);
+      rgw_add_amz_meta_header(qs_map, k, elt.second);
     }
   }
 }

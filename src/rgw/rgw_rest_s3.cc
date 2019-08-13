@@ -48,6 +48,7 @@
 #include "rgw_zone.h"
 
 #include "services/svc_zone.h"
+#include "services/svc_cls.h"
 
 #include "include/ceph_assert.h"
 #include "rgw_role.h"
@@ -757,9 +758,9 @@ void RGWGetUsage_ObjStore_S3::send_response()
        formatter->open_object_section("Stats");
      }
 
-     encode_json("TotalBytes", header.stats.total_bytes, formatter);
-     encode_json("TotalBytesRounded", header.stats.total_bytes_rounded, formatter);
-     encode_json("TotalEntries", header.stats.total_entries, formatter);
+     encode_json("TotalBytes", stats.size, formatter);
+     encode_json("TotalBytesRounded", stats.size_rounded, formatter);
+     encode_json("TotalEntries", stats.num_objects, formatter);
 
      if (s->cct->_conf->rgw_rest_getusage_op_compat) {
        formatter->close_section(); //Stats
@@ -1489,7 +1490,7 @@ static int create_s3_policy(struct req_state *s, RGWRados *store,
     if (!s->canned_acl.empty())
       return -ERR_INVALID_REQUEST;
 
-    return s3policy.create_from_headers(store, s->info.env, owner);
+    return s3policy.create_from_headers(store->ctl.user, s->info.env, owner);
   }
 
   return s3policy.create_canned(owner, s->bucket_owner, s->canned_acl);
@@ -1665,7 +1666,7 @@ static inline void map_qs_metadata(struct req_state* s)
   for (const auto& elt : params) {
     std::string k = boost::algorithm::to_lower_copy(elt.first);
     if (k.find("x-amz-meta-") == /* offset */ 0) {
-      add_amz_meta_header(s->info.x_meta_map, k, elt.second);
+      rgw_add_amz_meta_header(s->info.x_meta_map, k, elt.second);
     }
   }
 }
@@ -3893,7 +3894,7 @@ static int verify_mfa(RGWRados *store, RGWUserInfo *user, const string& mfa_str,
     return -EACCES;
   }
 
-  int ret = store->check_mfa(user->user_id, serial, pin);
+  int ret = store->svc.cls->mfa.check_mfa(user->user_id, serial, pin, null_yield);
   if (ret < 0) {
     ldpp_dout(dpp, 20) << "NOTICE: failed to check MFA, serial=" << serial << dendl;
     return -EACCES;
@@ -4934,7 +4935,7 @@ rgw::auth::s3::LocalEngine::authenticate(
   RGWUserInfo user_info;
   /* TODO(rzarzynski): we need to have string-view taking variant. */
   const std::string access_key_id = _access_key_id.to_string();
-  if (rgw_get_user_info_by_access_key(store, access_key_id, user_info) < 0) {
+  if (rgw_get_user_info_by_access_key(ctl->user, access_key_id, user_info) < 0) {
       ldpp_dout(dpp, 5) << "error reading user info, uid=" << access_key_id
               << " can't authenticate" << dendl;
       return result_t::deny(-ERR_INVALID_ACCESS_KEY);
@@ -5099,7 +5100,7 @@ rgw::auth::s3::STSEngine::authenticate(
   vector<string> role_policies;
   string role_name;
   if (! token.roleId.empty()) {
-    RGWRole role(s->cct, store, token.roleId);
+    RGWRole role(s->cct, ctl, token.roleId);
     if (role.get_by_id() < 0) {
       return result_t::deny(-EPERM);
     }
@@ -5120,7 +5121,7 @@ rgw::auth::s3::STSEngine::authenticate(
 
   if (! token.user.empty() && token.acct_type != TYPE_ROLE) {
     // get user info
-    int ret = rgw_get_user_info_by_uid(store, token.user, user_info, NULL);
+    int ret = rgw_get_user_info_by_uid(ctl->user, token.user, user_info, NULL);
     if (ret < 0) {
       ldpp_dout(dpp, 5) << "ERROR: failed reading user info: uid=" << token.user << dendl;
       return result_t::reject(-EPERM);

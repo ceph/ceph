@@ -17,6 +17,7 @@
 #define RGW_REST_LOG_H
 
 #include "rgw_metadata.h"
+#include "rgw_mdlog.h"
 
 class RGWOp_BILog_List : public RGWRESTOp {
   bool sent_header;
@@ -248,34 +249,6 @@ public:
   void send_response() override;
   const char* name() const override {
     return "get_data_changes_log_shard_info";
-  }
-};
-
-class RGWOp_DATALog_Lock : public RGWRESTOp {
-public:
-  RGWOp_DATALog_Lock() {}
-  ~RGWOp_DATALog_Lock() override {}
-
-  int check_caps(RGWUserCaps& caps) override {
-    return caps.check_cap("datalog", RGW_CAP_WRITE);
-  }
-  void execute() override;
-  const char* name() const override {
-    return "lock_datalog_object";
-  }
-};
-
-class RGWOp_DATALog_Unlock : public RGWRESTOp {
-public:
-  RGWOp_DATALog_Unlock() {}
-  ~RGWOp_DATALog_Unlock() override {}
-
-  int check_caps(RGWUserCaps& caps) override {
-    return caps.check_cap("datalog", RGW_CAP_WRITE);
-  }
-  void execute() override;
-  const char* name() const override {
-    return "unlock_datalog_object";
   }
 };
 

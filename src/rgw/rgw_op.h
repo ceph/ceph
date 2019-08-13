@@ -34,13 +34,13 @@
 
 #include "rgw_common.h"
 #include "rgw_dmclock.h"
-#include "rgw_rados.h"
 #include "rgw_user.h"
 #include "rgw_bucket.h"
 #include "rgw_acl.h"
 #include "rgw_cors.h"
 #include "rgw_quota.h"
 #include "rgw_putobj.h"
+#include "rgw_multi.h"
 
 #include "rgw_lc.h"
 #include "rgw_torrent.h"
@@ -50,6 +50,7 @@
 #include "cls/rgw/cls_rgw_client.h"
 
 #include "services/svc_sys_obj.h"
+#include "services/svc_tier_rados.h"
 
 #include "include/ceph_assert.h"
 
@@ -57,6 +58,7 @@ using ceph::crypto::SHA1;
 
 struct req_state;
 class RGWOp;
+class RGWRados;
 
 
 namespace rgw {
@@ -70,27 +72,24 @@ class StrategyRegistry;
 }
 
 int rgw_op_get_bucket_policy_from_attr(CephContext *cct,
-                                       RGWRados *store,
+                                       RGWUserCtl *user_ctl,
                                        RGWBucketInfo& bucket_info,
                                        map<string, bufferlist>& bucket_attrs,
                                        RGWAccessControlPolicy *policy);
 
 class RGWHandler {
 protected:
-  RGWRados* store;
-  struct req_state* s;
+  RGWRados *store{nullptr};
+  struct req_state *s{nullptr};
 
   int do_init_permissions();
   int do_read_permissions(RGWOp* op, bool only_bucket);
 
 public:
-  RGWHandler()
-    : store(nullptr),
-      s(nullptr) {
-  }
+  RGWHandler() {}
   virtual ~RGWHandler();
 
-  virtual int init(RGWRados* store,
+  virtual int init(RGWRados *store,
                    struct req_state* _s,
                    rgw::io::BasicClient* cio);
 
@@ -745,6 +744,7 @@ protected:
   map<string, rgw_usage_log_entry> summary_map;
   map<string, cls_user_bucket_entry> buckets_usage;
   cls_user_header header;
+  RGWStorageStats stats;
 public:
   RGWGetUsage() : sent_data(false), show_log_entries(true), show_log_sum(true){
   }

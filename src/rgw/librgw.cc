@@ -55,6 +55,8 @@
 #include "rgw_http_client_curl.h"
 #include "rgw_perf_counters.h"
 
+#include "services/svc_zone.h"
+
 #include <errno.h>
 #include <thread>
 #include <string>
@@ -548,8 +550,6 @@ namespace rgw {
     ldh->init();
     ldh->bind();
 
-    rgw_user_init(store);
-    rgw_bucket_init(store->meta_mgr);
     rgw_log_usage_init(g_ceph_context, store);
 
     // XXX ex-RGWRESTMgr_lib, mgr->set_logging(true)
@@ -627,7 +627,7 @@ namespace rgw {
 
   int RGWLibIO::set_uid(RGWRados *store, const rgw_user& uid)
   {
-    int ret = rgw_get_user_info_by_uid(store, uid, user_info, NULL);
+    int ret = store->ctl.user->get_info_by_uid(uid, &user_info, null_yield);
     if (ret < 0) {
       derr << "ERROR: failed reading user info: uid=" << uid << " ret="
 	   << ret << dendl;

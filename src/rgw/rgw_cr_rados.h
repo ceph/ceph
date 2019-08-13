@@ -14,6 +14,7 @@
 #include <atomic>
 
 #include "services/svc_sys_obj.h"
+#include "services/svc_bucket.h"
 
 class RGWAsyncRadosRequest : public RefCountedObject {
   RGWCoroutine *caller;
@@ -68,7 +69,7 @@ class RGWAsyncRadosProcessor {
   deque<RGWAsyncRadosRequest *> m_req_queue;
   std::atomic<bool> going_down = { false };
 protected:
-  RGWRados *store;
+  CephContext *cct;
   ThreadPool m_tp;
   Throttle req_throttle;
 
@@ -92,7 +93,7 @@ protected:
   } req_wq;
 
 public:
-  RGWAsyncRadosProcessor(RGWRados *_store, int num_threads);
+  RGWAsyncRadosProcessor(CephContext *_cct, int num_threads);
   ~RGWAsyncRadosProcessor() {}
   void start();
   void stop();
@@ -785,14 +786,14 @@ public:
 
 class RGWAsyncGetBucketInstanceInfo : public RGWAsyncRadosRequest {
   RGWRados *store;
-  const std::string oid;
+  rgw_bucket bucket;
 
 protected:
   int _send_request() override;
 public:
   RGWAsyncGetBucketInstanceInfo(RGWCoroutine *caller, RGWAioCompletionNotifier *cn,
-                                RGWRados *_store, const std::string& oid)
-    : RGWAsyncRadosRequest(caller, cn), store(_store), oid(oid) {}
+                                RGWRados *_store, const rgw_bucket& bucket)
+    : RGWAsyncRadosRequest(caller, cn), store(_store), bucket(bucket) {}
 
   RGWBucketInfo bucket_info;
 };
@@ -800,24 +801,17 @@ public:
 class RGWGetBucketInstanceInfoCR : public RGWSimpleCoroutine {
   RGWAsyncRadosProcessor *async_rados;
   RGWRados *store;
-  const std::string oid;
+  rgw_bucket bucket;
   RGWBucketInfo *bucket_info;
 
   RGWAsyncGetBucketInstanceInfo *req{nullptr};
   
 public:
-  // metadata key constructor
-  RGWGetBucketInstanceInfoCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
-                             const std::string& meta_key, RGWBucketInfo *_bucket_info)
-    : RGWSimpleCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
-      oid(RGW_BUCKET_INSTANCE_MD_PREFIX + meta_key),
-      bucket_info(_bucket_info) {}
   // rgw_bucket constructor
   RGWGetBucketInstanceInfoCR(RGWAsyncRadosProcessor *_async_rados, RGWRados *_store,
-                             const rgw_bucket& bucket, RGWBucketInfo *_bucket_info)
+                             const rgw_bucket& _bucket, RGWBucketInfo *_bucket_info)
     : RGWSimpleCoroutine(_store->ctx()), async_rados(_async_rados), store(_store),
-      oid(RGW_BUCKET_INSTANCE_MD_PREFIX + bucket.get_key(':')),
-      bucket_info(_bucket_info) {}
+      bucket(_bucket), bucket_info(_bucket_info) {}
   ~RGWGetBucketInstanceInfoCR() override {
     request_cleanup();
   }
@@ -829,7 +823,7 @@ public:
   }
 
   int send_request() override {
-    req = new RGWAsyncGetBucketInstanceInfo(this, stack->create_completion_notifier(), store, oid);
+    req = new RGWAsyncGetBucketInstanceInfo(this, stack->create_completion_notifier(), store, bucket);
     async_rados->queue(req);
     return 0;
   }

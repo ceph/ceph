@@ -12,12 +12,11 @@
 #include "rgw_common.h"
 #include "rgw_tools.h"
 
-#include "rgw_rados.h"
-
 #include "rgw_string.h"
 
 #include "common/Formatter.h"
 #include "rgw_formats.h"
+#include "rgw_metadata.h"
 
 #define RGW_USER_ANON_ID "anonymous"
 
@@ -26,6 +25,13 @@
 #define RAND_SUBUSER_LEN 5
 
 #define XMLNS_AWS_S3 "http://s3.amazonaws.com/doc/2006-03-01/"
+
+class RGWRados;
+class RGWUserCtl;
+class RGWBucketCtl;
+class RGWUserBuckets;
+
+class RGWGetUserStats_CB;
 
 /**
  * A string wrapper that includes encode/decode functions
@@ -61,36 +67,38 @@ extern void rgw_get_anon_user(RGWUserInfo& info);
  * Save the given user information to storage.
  * Returns: 0 on success, -ERR# on failure.
  */
-extern int rgw_store_user_info(RGWRados *store,
+extern int rgw_store_user_info(RGWUserCtl *user_ctl,
                                RGWUserInfo& info,
                                RGWUserInfo *old_info,
                                RGWObjVersionTracker *objv_tracker,
                                real_time mtime,
                                bool exclusive,
-                               map<string, bufferlist> *pattrs = NULL);
+                               map<string, bufferlist> *pattrs = nullptr);
 
 /**
  * Given an user_id, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_uid(RGWRados *store,
+extern int rgw_get_user_info_by_uid(RGWUserCtl *user_ctl,
                                     const rgw_user& user_id,
                                     RGWUserInfo& info,
-                                    RGWObjVersionTracker *objv_tracker = NULL,
-                                    real_time *pmtime                     = NULL,
-                                    rgw_cache_entry_info *cache_info   = NULL,
-                                    map<string, bufferlist> *pattrs    = NULL);
+                                    RGWObjVersionTracker *objv_tracker = nullptr,
+                                    real_time *pmtime                  = nullptr,
+                                    rgw_cache_entry_info *cache_info   = nullptr,
+                                    map<string, bufferlist> *pattrs    = nullptr);
 /**
  * Given an email, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_email(RGWRados *store, string& email, RGWUserInfo& info,
-                                      RGWObjVersionTracker *objv_tracker = NULL, real_time *pmtime = NULL);
+extern int rgw_get_user_info_by_email(RGWUserCtl *user_ctl,
+                                      string& email, RGWUserInfo& info,
+                                      RGWObjVersionTracker *objv_tracker = NULL,
+                                      real_time *pmtime = nullptr);
 /**
  * Given an swift username, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_swift(RGWRados *store,
+extern int rgw_get_user_info_by_swift(RGWUserCtl *user_ctl,
                                       const string& swift_name,
                                       RGWUserInfo& info,        /* out */
                                       RGWObjVersionTracker *objv_tracker = nullptr,
@@ -99,33 +107,11 @@ extern int rgw_get_user_info_by_swift(RGWRados *store,
  * Given an access key, finds the user info associated with it.
  * returns: 0 on success, -ERR# on failure (including nonexistence)
  */
-extern int rgw_get_user_info_by_access_key(RGWRados* store,
+extern int rgw_get_user_info_by_access_key(RGWUserCtl *user_ctl,
                                            const std::string& access_key,
                                            RGWUserInfo& info,
                                            RGWObjVersionTracker* objv_tracker = nullptr,
                                            real_time* pmtime = nullptr);
-/**
- * Get all the custom metadata stored for user specified in @user_id
- * and put it into @attrs.
- * Returns: 0 on success, -ERR# on failure.
- */
-extern int rgw_get_user_attrs_by_uid(RGWRados *store,
-                                     const rgw_user& user_id,
-                                     map<string, bufferlist>& attrs,
-                                     RGWObjVersionTracker *objv_tracker = NULL);
-/**
- * Given an RGWUserInfo, deletes the user and its bucket ACLs.
- */
-extern int rgw_delete_user(RGWRados *store, RGWUserInfo& user, RGWObjVersionTracker& objv_tracker);
-
-/*
- * remove the different indexes
- */
-extern int rgw_remove_key_index(RGWRados *store, RGWAccessKey& access_key);
-extern int rgw_remove_uid_index(RGWRados *store, rgw_user& uid);
-extern int rgw_remove_user_buckets_index(RGWRados *store, rgw_user& uid);
-extern int rgw_remove_email_index(RGWRados *store, string& email);
-extern int rgw_remove_swift_name_index(RGWRados *store, string& swift_name);
 
 extern void rgw_perm_to_str(uint32_t mask, char *buf, int len);
 extern uint32_t rgw_str_to_perm(const char *str);
@@ -562,17 +548,18 @@ class RGWUser;
 
 class RGWAccessKeyPool
 {
-  RGWUser *user;
+  RGWUser *user{nullptr};
 
   std::map<std::string, int, ltstr_nocase> key_type_map;
   rgw_user user_id;
-  RGWRados *store;
+  RGWRados *store{nullptr};
+  RGWUserCtl *user_ctl{nullptr};
 
-  map<std::string, RGWAccessKey> *swift_keys;
-  map<std::string, RGWAccessKey> *access_keys;
+  map<std::string, RGWAccessKey> *swift_keys{nullptr};
+  map<std::string, RGWAccessKey> *access_keys{nullptr};
 
   // we don't want to allow keys for the anonymous user or a null user
-  bool keys_allowed;
+  bool keys_allowed{false};
 
 private:
   int create_key(RGWUserAdminOpState& op_state, std::string *err_msg = NULL);
@@ -592,7 +579,6 @@ private:
   int remove(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
 public:
   explicit RGWAccessKeyPool(RGWUser* usr);
-  ~RGWAccessKeyPool();
 
   int init(RGWUserAdminOpState& op_state);
 
@@ -606,13 +592,14 @@ public:
 
 class RGWSubUserPool
 {
-  RGWUser *user;
+  RGWUser *user{nullptr};
 
   rgw_user user_id;
-  RGWRados *store;
-  bool subusers_allowed;
+  RGWRados *store{nullptr};
+  RGWUserCtl *user_ctl{nullptr};
+  bool subusers_allowed{false};
 
-  map<string, RGWSubUser> *subuser_map;
+  map<string, RGWSubUser> *subuser_map{nullptr};
 
 private:
   int check_op(RGWUserAdminOpState& op_state, std::string *err_msg = NULL);
@@ -627,7 +614,6 @@ private:
   int modify(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
 public:
   explicit RGWSubUserPool(RGWUser *user);
-  ~RGWSubUserPool();
 
   bool exists(std::string subuser);
   int init(RGWUserAdminOpState& op_state);
@@ -642,9 +628,9 @@ public:
 
 class RGWUserCapPool
 {
-  RGWUserCaps *caps;
-  bool caps_allowed;
-  RGWUser *user;
+  RGWUserCaps *caps{nullptr};
+  bool caps_allowed{false};
+  RGWUser *user{nullptr};
 
 private:
   int add(RGWUserAdminOpState& op_state, std::string *err_msg, bool defer_save);
@@ -652,7 +638,6 @@ private:
 
 public:
   explicit RGWUserCapPool(RGWUser *user);
-  ~RGWUserCapPool();
 
   int init(RGWUserAdminOpState& op_state);
 
@@ -668,10 +653,11 @@ class RGWUser
 
 private:
   RGWUserInfo old_info;
-  RGWRados *store;
+  RGWRados *store{nullptr};
+  RGWUserCtl *user_ctl{nullptr};
 
   rgw_user user_id;
-  bool info_stored;
+  bool info_stored{false};
 
   void set_populated() { info_stored = true; }
   void clear_populated() { info_stored = false; }
@@ -692,7 +678,6 @@ private:
 
 public:
   RGWUser();
-  ~RGWUser();
 
   int init(RGWRados *storage, RGWUserAdminOpState& op_state);
 
@@ -701,6 +686,7 @@ public:
   int init_members(RGWUserAdminOpState& op_state);
 
   RGWRados *get_store() { return store; }
+  RGWUserCtl *get_user_ctl() { return user_ctl; }
 
   /* API Contracted Members */
   RGWUserCapPool caps;
@@ -787,8 +773,192 @@ public:
 		  RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher);
 };
 
-class RGWMetadataManager;
+struct RGWUserCompleteInfo {
+  RGWUserInfo info;
+  map<string, bufferlist> attrs;
+  bool has_attrs{false};
 
-extern void rgw_user_init(RGWRados *store);
+  void dump(Formatter * const f) const {
+    info.dump(f);
+    encode_json("attrs", attrs, f);
+  }
+
+  void decode_json(JSONObj *obj) {
+    decode_json_obj(info, obj);
+    has_attrs = JSONDecoder::decode_json("attrs", attrs, obj);
+  }
+};
+
+class RGWUserMetadataObject : public RGWMetadataObject {
+  RGWUserCompleteInfo uci;
+public:
+  RGWUserMetadataObject() {}
+  RGWUserMetadataObject(const RGWUserCompleteInfo& _uci, const obj_version& v, real_time m)
+      : uci(_uci) {
+    objv = v;
+    mtime = m;
+  }
+
+  void dump(Formatter *f) const override {
+    uci.dump(f);
+  }
+
+  RGWUserCompleteInfo& get_uci() {
+    return uci;
+  }
+};
+
+class RGWUserMetadataHandler;
+
+class RGWUserCtl
+{
+  struct Svc {
+    RGWSI_Zone *zone{nullptr};
+    RGWSI_User *user{nullptr};
+  } svc;
+
+  struct Ctl {
+    RGWBucketCtl *bucket{nullptr};
+  } ctl;
+
+  RGWUserMetadataHandler *umhandler;
+  RGWSI_MetaBackend_Handler *be_handler{nullptr};
+  
+public:
+  RGWUserCtl(RGWSI_Zone *zone_svc,
+             RGWSI_User *user_svc,
+             RGWUserMetadataHandler *_umhandler);
+
+  void init(RGWBucketCtl *bucket_ctl) {
+    ctl.bucket = bucket_ctl;
+  }
+
+  RGWBucketCtl *get_bucket_ctl() {
+    return ctl.bucket;
+  }
+
+  struct GetParams {
+    RGWObjVersionTracker *objv_tracker{nullptr};
+    ceph::real_time *mtime{nullptr};
+    rgw_cache_entry_info *cache_info{nullptr};
+    map<string, bufferlist> *attrs{nullptr};
+
+    GetParams() {}
+
+    GetParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+      objv_tracker = _objv_tracker;
+      return *this;
+    }
+
+    GetParams& set_mtime(ceph::real_time *_mtime) {
+      mtime = _mtime;
+      return *this;
+    }
+
+    GetParams& set_cache_info(rgw_cache_entry_info *_cache_info) {
+      cache_info = _cache_info;
+      return *this;
+    }
+
+    GetParams& set_attrs(map<string, bufferlist> *_attrs) {
+      attrs = _attrs;
+      return *this;
+    }
+  };
+
+  struct PutParams {
+    RGWUserInfo *old_info{nullptr};
+    RGWObjVersionTracker *objv_tracker{nullptr};
+    ceph::real_time mtime;
+    bool exclusive{false};
+    map<string, bufferlist> *attrs{nullptr};
+
+    PutParams() {}
+
+    PutParams& set_old_info(RGWUserInfo *_info) {
+      old_info = _info;
+      return *this;
+    }
+
+    PutParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+      objv_tracker = _objv_tracker;
+      return *this;
+    }
+
+    PutParams& set_mtime(const ceph::real_time& _mtime) {
+      mtime = _mtime;
+      return *this;
+    }
+
+    PutParams& set_exclusive(bool _exclusive) {
+      exclusive = _exclusive;
+      return *this;
+    }
+
+    PutParams& set_attrs(map<string, bufferlist> *_attrs) {
+      attrs = _attrs;
+      return *this;
+    }
+  };
+
+  struct RemoveParams {
+    RGWObjVersionTracker *objv_tracker{nullptr};
+
+    RemoveParams() {}
+
+    RemoveParams& set_objv_tracker(RGWObjVersionTracker *_objv_tracker) {
+      objv_tracker = _objv_tracker;
+      return *this;
+    }
+  };
+
+  int get_info_by_uid(const rgw_user& uid, RGWUserInfo *info,
+                      optional_yield y, const GetParams& params = {});
+  int get_info_by_email(const string& email, RGWUserInfo *info,
+                        optional_yield y, const GetParams& params = {});
+  int get_info_by_swift(const string& swift_name, RGWUserInfo *info,
+                        optional_yield y, const GetParams& params = {});
+  int get_info_by_access_key(const string& access_key, RGWUserInfo *info,
+                             optional_yield y, const GetParams& params = {});
+
+  int get_attrs_by_uid(const rgw_user& user_id,
+                       map<string, bufferlist> *attrs,
+                       optional_yield y,
+                       RGWObjVersionTracker *objv_tracker = nullptr);
+
+  int store_info(const RGWUserInfo& info, optional_yield y,
+                 const PutParams& params = {});
+  int remove_info(const RGWUserInfo& info, optional_yield y,
+                  const RemoveParams& params = {});
+
+  int add_bucket(const rgw_user& user,
+                 const rgw_bucket& bucket,
+                 ceph::real_time creation_time);
+  int remove_bucket(const rgw_user& user,
+                    const rgw_bucket& bucket);
+  int list_buckets(const rgw_user& user,
+                   const string& marker,
+                   const string& end_marker,
+                   uint64_t max,
+                   bool need_stats,
+                   RGWUserBuckets *buckets,
+                   bool *is_truncated,
+                   uint64_t default_max = 1000);
+
+  int flush_bucket_stats(const rgw_user& user,
+                         const RGWBucketEnt& ent);
+  int complete_flush_stats(const rgw_user& user);
+  int reset_stats(const rgw_user& user);
+  int read_stats(const rgw_user& user, RGWStorageStats *stats,
+		 ceph::real_time *last_stats_sync = nullptr,     /* last time a full stats sync completed */
+		 ceph::real_time *last_stats_update = nullptr);   /* last time a stats update was done */
+  int read_stats_async(const rgw_user& user, RGWGetUserStats_CB *ctx);
+};
+
+class RGWUserMetaHandlerAllocator {
+public:
+  static RGWMetadataHandler *alloc(RGWSI_User *user_svc);
+};
+
 
 #endif

@@ -11,11 +11,13 @@
 class RGWSI_Notify;
 
 class RGWSI_SysObj_Cache_CB;
+class RGWSI_SysObj_Cache_ASocketHook;
 
 class RGWSI_SysObj_Cache : public RGWSI_SysObj_Core
 {
   friend class RGWSI_SysObj_Cache_CB;
   friend class RGWServices_Def;
+  friend class ASocketHandler;
 
   RGWSI_Notify *notify_svc{nullptr};
   ObjectCache cache;
@@ -32,6 +34,7 @@ protected:
   }
 
   int do_start() override;
+  void shutdown() override;
 
   int raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_time *pmtime, uint64_t *epoch,
                map<string, bufferlist> *attrs, bufferlist *first_chunk,
@@ -39,7 +42,7 @@ protected:
                optional_yield y) override;
 
   int read(RGWSysObjectCtxBase& obj_ctx,
-           GetObjState& read_state,
+           RGWSI_SysObj_Obj_GetObjState& read_state,
            RGWObjVersionTracker *objv_tracker,
            const rgw_raw_obj& obj,
            bufferlist *bl, off_t ofs, off_t end,
@@ -90,7 +93,7 @@ protected:
   void set_enabled(bool status);
 
 public:
-  RGWSI_SysObj_Cache(CephContext *cct) : RGWSI_SysObj_Core(cct) {
+  RGWSI_SysObj_Cache(CephContext *cct) : RGWSI_SysObj_Core(cct), asocket(this) {
     cache.set_ctx(cct);
   }
 
@@ -99,10 +102,37 @@ public:
   void register_chained_cache(RGWChainedCache *cc);
   void unregister_chained_cache(RGWChainedCache *cc);
 
-  void call_list(const std::optional<std::string>& filter, Formatter* f);
-  int call_inspect(const std::string& target, Formatter* f);
-  int call_erase(const std::string& target);
-  int call_zap();
+  class ASocketHandler {
+    RGWSI_SysObj_Cache *svc;
+
+    std::unique_ptr<RGWSI_SysObj_Cache_ASocketHook> hook;
+
+  public:
+    ASocketHandler(RGWSI_SysObj_Cache *_svc);
+    ~ASocketHandler();
+
+    int start();
+    void shutdown();
+
+    // `call_list` must iterate over all cache entries and call
+    // `cache_list_dump_helper` with the supplied Formatter on any that
+    // include `filter` as a substring.
+    //
+    void call_list(const std::optional<std::string>& filter, Formatter* f);
+
+    // `call_inspect` must look up the requested target and, if found,
+    // dump it to the supplied Formatter and return true. If not found,
+    // it must return false.
+    //
+    int call_inspect(const std::string& target, Formatter* f);
+
+    // `call_erase` must erase the requested target and return true. If
+    // the requested target does not exist, it should return false.
+    int call_erase(const std::string& target);
+
+    // `call_zap` must erase the cache.
+    int call_zap();
+  } asocket;
 };
 
 template <class T>

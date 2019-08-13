@@ -229,7 +229,7 @@ public:
     rgw_user uid(uid_str);
 
     RGWUserInfo user_info;
-    int ret = rgw_get_user_info_by_uid(env.store, uid, user_info, NULL);
+    int ret = env.store->ctl.user->get_info_by_uid(uid, &user_info, null_yield);
     if (ret < 0) {
       derr << "ERROR: failed reading user info: uid=" << uid << " ret="
 	   << ret << dendl;
@@ -273,7 +273,7 @@ class RGWFrontendPauser : public RGWRealmReloader::Pauser {
     /* Initialize the registry of auth strategies which will coordinate
      * the dynamic reconfiguration. */
     auto auth_registry = \
-      rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenants, store);
+      rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenants, store->pctl);
 
     for (auto frontend : frontends)
       frontend->unpause_with_new_config(store, auth_registry);

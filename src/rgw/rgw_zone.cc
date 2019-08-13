@@ -1343,7 +1343,7 @@ void RGWPeriod::fork()
 static int read_sync_status(RGWRados *store, rgw_meta_sync_status *sync_status)
 {
   // initialize a sync status manager to read the status
-  RGWMetaSyncStatusManager mgr(store, store->get_async_rados());
+  RGWMetaSyncStatusManager mgr(store, store->svc.rados->get_async_processor());
   int r = mgr.init();
   if (r < 0) {
     return r;
@@ -1532,7 +1532,6 @@ int get_zones_pool_set(CephContext* cct,
     }
     if (zone.get_id() != my_zone_id) {
       pool_names.insert(zone.domain_root);
-      pool_names.insert(zone.metadata_heap);
       pool_names.insert(zone.control_pool);
       pool_names.insert(zone.gc_pool);
       pool_names.insert(zone.log_pool);
@@ -1605,9 +1604,6 @@ int RGWZoneParams::fix_pool_names()
   }
 
   domain_root = fix_zone_pool_dup(pools, name, ".rgw.meta:root", domain_root);
-  if (!metadata_heap.name.empty()) {
-    metadata_heap = fix_zone_pool_dup(pools, name, ".rgw.meta:heap", metadata_heap);
-  }
   control_pool = fix_zone_pool_dup(pools, name, ".rgw.control", control_pool);
   gc_pool = fix_zone_pool_dup(pools, name ,".rgw.log:gc", gc_pool);
   lc_pool = fix_zone_pool_dup(pools, name ,".rgw.log:lc", lc_pool);

@@ -8,6 +8,7 @@
 #include "rgw_xml.h"
 #include "rgw_arn.h"
 #include "rgw_pubsub_push.h"
+#include "rgw_rados.h"
 
 #define dout_subsys ceph_subsys_rgw
 
@@ -161,9 +162,28 @@ void rgw_pubsub_sub_config::dump(Formatter *f) const
   encode_json("s3_id", s3_id, f);
 }
 
+RGWUserPubSub::RGWUserPubSub(RGWRados *_store, const rgw_user& _user) : store(_store),
+                                                                        user(_user),
+                                                                        obj_ctx(store->svc.sysobj->init_obj_ctx())
+{
+  get_user_meta_obj(&user_meta_obj);
+}
+
+void RGWUserPubSub::get_user_meta_obj(rgw_raw_obj *obj) const {
+  *obj = rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, user_meta_oid());
+}
+
+void RGWUserPubSub::get_bucket_meta_obj(const rgw_bucket& bucket, rgw_raw_obj *obj) const {
+  *obj = rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, bucket_meta_oid(bucket));
+}
+
+void RGWUserPubSub::get_sub_meta_obj(const string& name, rgw_raw_obj *obj) const {
+  *obj = rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, sub_meta_oid(name));
+}
+
 int RGWUserPubSub::remove(const rgw_raw_obj& obj, RGWObjVersionTracker *objv_tracker)
 {
-  int ret = rgw_delete_system_obj(store, obj.pool, obj.oid, objv_tracker);
+  int ret = rgw_delete_system_obj(store->svc.sysobj, obj.pool, obj.oid, objv_tracker);
   if (ret < 0) {
     return ret;
   }

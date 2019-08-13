@@ -6,7 +6,9 @@
 
 #include "rgw_tools.h"
 #include "rgw_zone.h"
+#include "rgw_rados.h"
 #include "services/svc_sys_obj.h"
+#include "services/svc_zone.h"
 
 class XMLObj;
 
@@ -450,11 +452,7 @@ class RGWUserPubSub
   int write_user_topics(const rgw_pubsub_user_topics& topics, RGWObjVersionTracker *objv_tracker);
 
 public:
-  RGWUserPubSub(RGWRados *_store, const rgw_user& _user) : store(_store),
-                                                           user(_user),
-                                                           obj_ctx(store->svc.sysobj->init_obj_ctx()) {
-    get_user_meta_obj(&user_meta_obj);
-  }
+  RGWUserPubSub(RGWRados *_store, const rgw_user& _user);
 
   class Bucket {
     friend class RGWUserPubSub;
@@ -563,17 +561,9 @@ public:
     return std::make_shared<SubWithEvents<rgw_pubsub_s3_record>>(this, sub);
   }
 
-  void get_user_meta_obj(rgw_raw_obj *obj) const {
-    *obj = rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, user_meta_oid());
-  }
-
-  void get_bucket_meta_obj(const rgw_bucket& bucket, rgw_raw_obj *obj) const {
-    *obj = rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, bucket_meta_oid(bucket));
-  }
-
-  void get_sub_meta_obj(const string& name, rgw_raw_obj *obj) const {
-    *obj = rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, sub_meta_oid(name));
-  }
+  void get_user_meta_obj(rgw_raw_obj *obj) const;
+  void get_bucket_meta_obj(const rgw_bucket& bucket, rgw_raw_obj *obj) const;
+  void get_sub_meta_obj(const string& name, rgw_raw_obj *obj) const;
 
   // get all topics defined for the user and populate them into "result"
   // return 0 on success or if no topics exist, error code otherwise
@@ -601,7 +591,7 @@ template <class T>
 int RGWUserPubSub::read(const rgw_raw_obj& obj, T *result, RGWObjVersionTracker *objv_tracker)
 {
   bufferlist bl;
-  int ret = rgw_get_system_obj(store, obj_ctx,
+  int ret = rgw_get_system_obj(obj_ctx,
                                obj.pool, obj.oid,
                                bl,
                                objv_tracker,
@@ -626,7 +616,8 @@ int RGWUserPubSub::write(const rgw_raw_obj& obj, const T& info, RGWObjVersionTra
   bufferlist bl;
   encode(info, bl);
 
-  int ret = rgw_put_system_obj(store, obj.pool, obj.oid,
+  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  int ret = rgw_put_system_obj(obj_ctx, obj.pool, obj.oid,
                            bl, false, objv_tracker,
                            real_time());
   if (ret < 0) {

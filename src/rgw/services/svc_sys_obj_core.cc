@@ -9,10 +9,10 @@
 
 #define dout_subsys ceph_subsys_rgw
 
-int RGWSI_SysObj_Core::GetObjState::get_rados_obj(RGWSI_RADOS *rados_svc,
-                                                  RGWSI_Zone *zone_svc,
-                                                  const rgw_raw_obj& obj,
-                                                  RGWSI_RADOS::Obj **pobj)
+int RGWSI_SysObj_Core_GetObjState::get_rados_obj(RGWSI_RADOS *rados_svc,
+                                                 RGWSI_Zone *zone_svc,
+                                                 const rgw_raw_obj& obj,
+                                                 RGWSI_RADOS::Obj **pobj)
 {
   if (!has_rados_obj) {
     if (obj.oid.empty()) {
@@ -151,7 +151,7 @@ int RGWSI_SysObj_Core::raw_stat(const rgw_raw_obj& obj, uint64_t *psize, real_ti
 }
 
 int RGWSI_SysObj_Core::stat(RGWSysObjectCtxBase& obj_ctx,
-                            GetObjState& state,
+                            RGWSI_SysObj_Obj_GetObjState& _state,
                             const rgw_raw_obj& obj,
                             map<string, bufferlist> *attrs,
 			    bool raw_attrs,
@@ -193,7 +193,7 @@ int RGWSI_SysObj_Core::stat(RGWSysObjectCtxBase& obj_ctx,
 }
 
 int RGWSI_SysObj_Core::read(RGWSysObjectCtxBase& obj_ctx,
-                            GetObjState& read_state,
+                            RGWSI_SysObj_Obj_GetObjState& _read_state,
                             RGWObjVersionTracker *objv_tracker,
                             const rgw_raw_obj& obj,
                             bufferlist *bl, off_t ofs, off_t end,
@@ -203,6 +203,8 @@ int RGWSI_SysObj_Core::read(RGWSysObjectCtxBase& obj_ctx,
                             boost::optional<obj_version>,
                             optional_yield y)
 {
+  auto& read_state = static_cast<GetObjState&>(_read_state);
+
   uint64_t len;
   librados::ObjectReadOperation op;
 
@@ -620,3 +622,85 @@ int RGWSI_SysObj_Core::write_data(const rgw_raw_obj& obj,
   return 0;
 }
 
+int RGWSI_SysObj_Core::pool_list_prefixed_objs(const rgw_pool& pool, const string& prefix,
+                                               std::function<void(const string&)> cb)
+{
+  bool is_truncated;
+
+  auto rados_pool = rados_svc->pool(pool);
+
+  auto op = rados_pool.op();
+
+  RGWAccessListFilterPrefix filter(prefix);
+
+  int r = op.init(string(), &filter);
+  if (r < 0) {
+    return r;
+  }
+
+  do {
+    vector<string> oids;
+#define MAX_OBJS_DEFAULT 1000
+    int r = op.get_next(MAX_OBJS_DEFAULT, &oids, &is_truncated);
+    if (r < 0) {
+      return r;
+    }
+    for (auto& val : oids) {
+      if (val.size() > prefix.size()) {
+        cb(val.substr(prefix.size()));
+      }
+    }
+  } while (is_truncated);
+
+  return 0;
+}
+
+int RGWSI_SysObj_Core::pool_list_objects_init(const rgw_pool& pool,
+                                              const string& marker,
+                                              const string& prefix,
+                                              RGWSI_SysObj::Pool::ListCtx *_ctx)
+{
+  _ctx->impl.emplace<PoolListImplInfo>(prefix);
+
+  auto& ctx = static_cast<PoolListImplInfo&>(*_ctx->impl);
+
+  ctx.pool = rados_svc->pool(pool);
+  ctx.op = ctx.pool.op();
+
+  int r = ctx.op.init(marker, &ctx.filter);
+  if (r < 0) {
+    ldout(cct, 10) << "failed to list objects pool_iterate_begin() returned r=" << r << dendl;
+    return r;
+  }
+  return 0;
+}
+
+int RGWSI_SysObj_Core::pool_list_objects_next(RGWSI_SysObj::Pool::ListCtx& _ctx,
+                                              int max,
+                                              vector<string> *oids,
+                                              bool *is_truncated)
+{
+  if (!_ctx.impl) {
+    return -EINVAL;
+  }
+  auto& ctx = static_cast<PoolListImplInfo&>(*_ctx.impl);
+  int r = ctx.op.get_next(max, oids, is_truncated);
+  if (r < 0) {
+    if(r != -ENOENT)
+      ldout(cct, 10) << "failed to list objects pool_iterate returned r=" << r << dendl;
+    return r;
+  }
+
+  return oids->size();
+}
+
+int RGWSI_SysObj_Core::pool_list_objects_get_marker(RGWSI_SysObj::Pool::ListCtx& _ctx,
+                                                    string *marker)
+{
+  if (!_ctx.impl) {
+    return -EINVAL;
+  }
+
+  auto& ctx = static_cast<PoolListImplInfo&>(*_ctx.impl);
+  return ctx.op.get_marker(marker);
+}
