@@ -26,6 +26,11 @@
 
 #include "PrimaryLogPG.h"
 
+
+#ifdef WITH_JAEGER
+#include "common/tracer.h"
+#endif
+
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
 #define DOUT_PREFIX_ARGS this
@@ -987,7 +992,7 @@ void ECBackend::handle_sub_write(
   }
 
 #ifdef WITH_JAEGER
-  JTracer::tracedSubrountine(handle_sub_write_span, "sub_write_handle_ends");
+  JTracer::tracedSubroutine(handle_sub_write_span, "sub_write_handle_ends");
 #endif
 
 }

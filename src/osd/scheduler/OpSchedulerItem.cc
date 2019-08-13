@@ -11,14 +11,15 @@
  * Foundation.  See file COPYING.
  *
  */
-#ifdef WITH_JAEGER
-#include "common/tracer.h"
-#endif
 
 #include "osd/scheduler/OpSchedulerItem.h"
 #include "osd/OSD.h"
 
 namespace ceph::osd::scheduler {
+
+#ifdef WITH_JAEGER
+#include "common/tracer.h"
+#endif
 
 void PGOpItem::run(
   OSD *osd,

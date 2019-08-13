@@ -8542,7 +8542,7 @@ int PrimaryLogPG::prepare_transaction(OpContext *ctx)
 void PrimaryLogPG::finish_ctx(OpContext *ctx, int log_op_type, int result)
 {
 #ifdef WITH_JAEGER
-  jspan finish_ctx_span = JTracer::tracedFunction(“finish_ctx_begins”);
+  jspan finish_ctx_span = JTracer::tracedFunction("finish_ctx_begins");
 #endif
 
   const hobject_t& soid = ctx->obs->oi.soid;
@@ -10595,13 +10595,14 @@ void PrimaryLogPG::eval_repop(RepGather *repop)
 #ifdef WITH_JAEGER
   JTracer::tracedSubroutine(eval_repop_span, "eval_repop_ends");
   eval_repop_span->Finish();
+#endif
 }
 
 void PrimaryLogPG::issue_repop(RepGather *repop, OpContext *ctx)
 {
 
 #ifdef WITH_JAEGER
-  jspan issue_repop_span->tracedFunction("issue_repop_begins");
+  jspan issue_repop_span = JTracer::tracedFunction("issue_repop_begins");
 #endif
 
   FUNCTRACE(cct);
