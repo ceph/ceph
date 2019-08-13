@@ -19,24 +19,21 @@
 #   - get
 #   - watch
 
-# LogEntry class dynamically builds an object from a set of args,
-# disable the linter for the no-member error
-# pylint: disable=no-member
-
 
 import os
 import sys
 import time
 import json
+import logging
 import threading
 
-from datetime import datetime, timedelta, tzinfo
+from datetime import datetime, timedelta, timezone
 from urllib3.exceptions import MaxRetryError
 from collections import OrderedDict
 
 import rados
 from mgr_module import MgrModule
-from ceph_argparse import json_command, run_in_thread
+from ceph_argparse import run_in_thread
 
 try:
     import queue
@@ -56,32 +53,31 @@ except ImportError:
     config = None
 else:
     kubernetes_imported = True
-    # load kubernetes config
+    # Apply the kubernetes config from the cluster 
     config.load_incluster_config()
 
+    # The watch.Watch.stream method can provide event objects that have involved_object = None
+    # which causes an exception in the generator. A workaround is discussed for a similar issue
+    # in https://github.com/kubernetes-client/python/issues/376 which has been used here
+    # pylint: disable=no-member
+    from kubernetes.client.models.v1_event import V1Event
+    def local_involved_object(self, involved_object):
+        if involved_object is None:
+            involved_object = client.V1ObjectReference(api_version="1")
+        self._involved_object = involved_object
+    V1Event.involved_object = V1Event.involved_object.setter(local_involved_object)
+    #setattr(V1Event, 'involved_object', property(fget=V1Event.involved_object.fget, fset=local_involved_object))
+
 DEFAULT_LOG_LEVEL = 'info'
-DEFAULT_HEARTBEAT_INTERVAL_SECS = 3600  # 1hr default
 DEFAULT_CONFIG_CHECK_SECS = 10
+DEFAULT_CEPH_EVENT_RETENTION_DAYS = 7
 
-ZERO = timedelta(0)
-
+log = logging.getLogger(__name__)
 
 def text_suffix(num):
     """Define a text suffix based on a value i.e. turn host into hosts"""
     return '' if num == 1 else 's'
 
-
-class UTC(tzinfo):
-    """UTC"""
-
-    def utcoffset(self, dt):
-        return ZERO
-
-    def tzname(self, dt):
-        return "UTC"
-
-    def dst(self, dt):
-        return ZERO
 
 class HealthCheck(object):
     """Transform a healthcheck msg into it's component parts"""
@@ -128,17 +124,18 @@ class LogEntry(object):
         "startup": "Started"
     }
 
-    def __init__(self, *args, **kwargs):
+    def __init__(self, source, msg, msg_type, level, tstamp=None):
 
-        # self.update(**kwargs) - python3 syntax
-        for k,v in kwargs.items():
-            setattr(self, k, v)
+        self.source = source
+        self.msg = msg
+        self.msg_type = msg_type
+        self.level = level
+        self.tstamp = tstamp
+        self.healthcheck = None
         
-
         if 'health check ' in self.msg.lower():
             self.healthcheck = HealthCheck(self.msg)
-        else:
-            self.healthcheck = None
+
     
     def __str__(self):
         return "source={}, msg_type={}, msg={}, level={}, tstamp={}".format(self.source,self.msg_type,self.msg,self.level,self.tstamp)
@@ -208,8 +205,13 @@ class RookCeph(object):
     cluster_name = os.environ.get('ROOK_CEPH_CLUSTER_CRD_NAME', 'rook-ceph')
     api = client.CoreV1Api()
 
+class BaseThread(threading.Thread):
+    health = 'OK'
+    reported = False
+    daemon = True
 
-class NamespaceWatcher(RookCeph, threading.Thread):
+
+class NamespaceWatcher(RookCeph, BaseThread):
     """Watch events in a given namespace 
     
     Using the watch package we can listen to event traffic in the namespace to 
@@ -217,16 +219,13 @@ class NamespaceWatcher(RookCeph, threading.Thread):
     thing to bear in mind is that events have a TTL enforced by the kube-apiserver
     so this stream will only really show activity inside this retention window.
     """
-    daemon = True
 
-    def __init__(self, logger, namespace=None):
+    def __init__(self, namespace=None):
         super(NamespaceWatcher, self).__init__()
-        self.log = logger
         if namespace:                       # override the default
             self.namespace = namespace
         self.events = OrderedDict()
         self.lock = threading.Lock()
-        self.health = "OK"
         self.active = None
         self.resource_version = None
 
@@ -239,7 +238,7 @@ class NamespaceWatcher(RookCeph, threading.Thread):
         except:
             self.active = False
             self.health = "[WRN] Unable to access events API (list_namespaced_event call failed)"
-            self.log.warning(self.health)
+            log.warning(self.health)
         else:
             self.active = True
             self.resource_version = resp.metadata.resource_version
@@ -249,48 +248,59 @@ class NamespaceWatcher(RookCeph, threading.Thread):
             
             for item in resp.items:
                 self.events[item.metadata.name] = item
-            self.log.warning('[INF] added {} events'.format(len(resp.items)))
+            log.info('[INF] added {} events'.format(len(resp.items)))
 
     def run(self):
         self.fetch()
+        func = getattr(self.api, "list_namespaced_event")
+
         if self.active:
-            self.log.warning("[INF] Namespace event watcher started")
+            log.info("[INF] Namespace event watcher started")
 
-            func = getattr(self.api, "list_namespaced_event")
+            
+            while True:
 
-            try:
-                w = watch.Watch()
-                # execute generator to continually watch resource for changes
-                for item in w.stream(func, namespace=self.namespace, resource_version=self.resource_version, watch=True):
-                    obj = item['object']
+                try:
+                    w = watch.Watch()
+                    # execute generator to continually watch resource for changes
+                    for item in w.stream(func, namespace=self.namespace, resource_version=self.resource_version, watch=True):
+                        obj = item['object']
 
-                    with self.lock:
+                        with self.lock:
 
-                        if item['type'] in ['ADDED', 'MODIFIED']:
-                            # self.log.warning("[DBG] ADD: {}".format(item))
-                            self.events[obj.metadata.name] = obj
+                            if item['type'] in ['ADDED', 'MODIFIED']:
+                                self.events[obj.metadata.name] = obj
 
-                        elif item['type'] == 'DELETED':
-                            # self.log.warning("[DBG] DEL: {}".format(item))
-                            del self.events[obj.metadata.name]
-                        
-            # TODO test the exception for auth problem (403?)
- 
-            # Attribute error is generated when urllib3 on the system is old and doesn't have a
-            # read_chunked method
-            except AttributeError as e:
-                self.health = ("[WRN] : Unable to 'watch' events API in namespace {} - "
-                            "incompatible urllib3? ({})".format(self.namespace, e))
-                self.active = False
-                self.log.warning(self.health)
-            except BaseException:
-                self.health = "[ERR] Unexpected {} Exception @ line {}".format(sys.exc_info()[0].__name__, 
-                                                                               sys.exc_info()[2].tb_lineno)
-                self.active = False
+                            elif item['type'] == 'DELETED':
+                                del self.events[obj.metadata.name]
+                            
+                # TODO test the exception for auth problem (403?)
+    
+                # Attribute error is generated when urllib3 on the system is old and doesn't have a
+                # read_chunked method
+                except AttributeError as e:
+                    self.health = ("[WRN] : Unable to 'watch' events API in namespace {} - "
+                                "incompatible urllib3? ({})".format(self.namespace, e))
+                    self.active = False
+                    log.warning(self.health)
+                    break
 
-            self.log.warning("[WRN] Namespace event watcher stopped")
-            if self.health != 'OK':
-                self.log.error(self.health)
+                except ApiException as e:
+                    # refresh the resource_version & watcher
+                    log.warning("[WRN] API exception caught in watcher ({})".format(e))
+                    log.info("[INF] Restarting namespace watcher")
+                    self.fetch()
+
+                except Exception:
+                    self.health = "{} Exception at {}".format(
+                        sys.exc_info()[0].__name__,
+                        datetime.strftime(datetime.now(),"%Y/%m/%d %H:%M:%S")
+                    )
+                    log.exception(self.health)
+                    self.active = False
+                    break
+
+            log.warning("[WRN] Namespace event watcher stopped")
 
 
 class KubernetesEvent(RookCeph):
@@ -299,7 +309,7 @@ class KubernetesEvent(RookCeph):
         super(KubernetesEvent, self).__init__()
 
         self.event_name = log_entry.event_name
-        self.event_msg = log_entry.event_msg
+        self.message = log_entry.event_msg
         self.event_type = log_entry.event_type
         self.event_reason = log_entry.event_reason
         self.unique_name = unique_name
@@ -328,7 +338,7 @@ class KubernetesEvent(RookCeph):
         return  client.V1Event(
                     involved_object=obj_ref, 
                     metadata=obj_meta, 
-                    message=self.event_msg, 
+                    message=self.message, 
                     count=self.count, 
                     type=self.event_type,
                     reason=self.event_reason,
@@ -339,7 +349,7 @@ class KubernetesEvent(RookCeph):
 
     def write(self):
 
-        now=datetime.now(UTC())
+        now=datetime.now(timezone.utc)
 
         self.first_timestamp = now
         self.last_timestamp = now
@@ -417,9 +427,9 @@ class KubernetesEvent(RookCeph):
         return self.api_status == 200
 
     def update(self, log_entry):
-        self.event_msg = log_entry.event_msg
+        self.message = log_entry.event_msg
         self.event_type = log_entry.event_type
-        self.last_timestamp = datetime.now(UTC())
+        self.last_timestamp = datetime.now(timezone.utc)
         self.count += 1
 
         try:
@@ -437,17 +447,16 @@ class KubernetesEvent(RookCeph):
             self.api_status = 200 
 
 
-class EventProcessor(threading.Thread):
+class EventProcessor(BaseThread):
     """Handle a global queue used to track events we want to send/update to kubernetes"""
 
-    daemon = True
     can_run = True
 
-    def __init__(self, logger):
+    def __init__(self, config_watcher, event_retention_days):
+        super(EventProcessor, self).__init__()
         self.events = dict()
-        self.log = logger
-        self.health = 'OK'
-        threading.Thread.__init__(self)
+        self.config_watcher = config_watcher
+        self.event_retention_days = event_retention_days
 
     def startup(self):
         """Log an event to show we're active"""
@@ -470,17 +479,32 @@ class EventProcessor(threading.Thread):
     def ok(self):
         return self.startup()
 
+    def prune_events(self):
+
+        oldest = datetime.now(timezone.utc) - timedelta(days=self.event_retention_days)
+        local_events = dict(self.events)
+
+        for event_name in sorted(local_events,
+                                 key = lambda name: local_events[name].last_timestamp):
+            event = local_events[event_name]
+            if event.last_timestamp >= oldest:
+                break
+            else:
+                # drop this event
+                log.debug("[DBG] removing old event : {}".format(event_name))
+                del self.events[event_name]
+
     def process(self, log_object):
         
-        self.log.warning("processing {}".format(str(log_object)))
-        # self.log.warning("name would be {}".format(log_object.event_name))
+        log.debug("[DBG] k8sevents processing : {}".format(str(log_object)))
+
         event_out = False
         unique_name = True
 
         if log_object.msg_type == 'audit':
             # audit traffic : operator commands
             if log_object.msg.endswith('finished'):
-                self.log.warning("finished msg seen")
+                log.debug("[DBG] k8sevents received command finished msg")
                 event_out = True
             else:
                 # NO OP - ignoring 'dispatch' log records
@@ -491,33 +515,42 @@ class EventProcessor(threading.Thread):
             if log_object.event_name:
                 event_out = True
 
-        elif log_object.msg_type in ['config', 'heartbeat']:
-            # configuration checker and heartbeat messages
+        elif log_object.msg_type == 'config':
+            # configuration checker messages 
             event_out = True
             unique_name = False
+            
+        elif log_object.msg_type == 'heartbeat':
+            # hourly health message summary from Ceph
+            event_out = True
+            unique_name = False
+            log_object.msg = str(self.config_watcher)
+
         else:
-            # unknown msgtype?
-            pass
+            log.warning("[WRN] k8sevents received unknown msg_type - {}".format(log_object.msg_type))
 
         if event_out:
-            # we don't cache non-unique event names
+            # we don't cache non-unique events like heartbeats or config changes
             if not unique_name or log_object.event_name not in self.events.keys():
                 event = KubernetesEvent(log_entry=log_object,
                                         unique_name=unique_name)
                 event.write()
-                self.log.warning("[DBG] event(unique={}) creation ended : {}".format(unique_name, event.api_status))
+                log.debug("[DBG] event(unique={}) creation ended : {}".format(unique_name, event.api_status))
                 if event.api_success and unique_name:
                     self.events[log_object.event_name] = event
             else:
                 event = self.events[log_object.event_name]
                 event.update(log_object)
-                self.log.warning("[DBG] event update ended : {}".format(event.api_status))
+                log.debug("[DBG] event update ended : {}".format(event.api_status))
+
+            self.prune_events()
 
         else:
-            self.log.warning("[DBG] ignored message : {}".format(log_object.msg))
+            log.debug("[DBG] k8sevents ignored message : {}".format(log_object.msg))
 
     def run(self):
-        self.log.warning("[INF] Ceph event processing thread started")
+        log.info("[INF] Ceph event processing thread started")
+
         while True:
 
             try:
@@ -527,9 +560,12 @@ class EventProcessor(threading.Thread):
             else:
                 try:
                     self.process(log_object)
-                except BaseException:
-                    self.health = "[ERR] Unexpected {} Exception @ line {}".format(sys.exc_info()[0].__name__, 
-                                                                                   sys.exc_info()[2].tb_lineno)
+                except Exception:
+                    self.health = "{} Exception at {}".format(
+                        sys.exc_info()[0].__name__,
+                        datetime.strftime(datetime.now(),"%Y/%m/%d %H:%M:%S")
+                    )
+                    log.exception(self.health)
                     break
             
             if not self.can_run:
@@ -537,9 +573,8 @@ class EventProcessor(threading.Thread):
 
             time.sleep(0.5)
 
-        self.log.warning("[WRN] Ceph event processing thread stopped")
-        if self.health != 'OK':
-            self.log.error(self.health)
+        log.warning("[WRN] Ceph event processing thread stopped")
+
 
 class ListDiff(object):
     def __init__(self, before, after):
@@ -554,11 +589,13 @@ class ListDiff(object):
     def added(self):
         return list(self.after - self.before)
 
+    @property
+    def is_equal(self):
+        return self.before == self.after
 
-class CephConfigWatcher(threading.Thread):
+
+class CephConfigWatcher(BaseThread):
     """Detect configuration changes within the cluster and generate human readable events"""
-
-    daemon = True
 
     def __init__(self, mgr):
         self.mgr = mgr
@@ -566,10 +603,7 @@ class CephConfigWatcher(threading.Thread):
         self.osd_map = dict()
         self.pool_map = dict()
         self.service_map = dict()
-        self.health = "OK"
         
-        self.heartbeat_interval_secs = self.mgr.get_localized_module_option(
-            'heartbeat_interval_secs', DEFAULT_HEARTBEAT_INTERVAL_SECS)
         self.config_check_secs = self.mgr.get_localized_module_option(
             'config_check_secs', DEFAULT_CONFIG_CHECK_SECS)
 
@@ -591,6 +625,19 @@ class CephConfigWatcher(threading.Thread):
     @property
     def num_pools(self):
         return len(self.pool_map.keys())
+
+    def __str__(self):
+        s = ''
+
+        s += "{} : {:>3} host{}, {} pool{}, {} OSDs. Raw Capacity {}B".format(
+            json.loads(self.mgr.get('health')['json'])['status'],
+            self.num_servers, 
+            text_suffix(self.num_servers),
+            self.num_pools, 
+            text_suffix(self.num_pools),
+            self.num_osds, 
+            MgrModule.to_pretty_iec(self.raw_capacity))
+        return s
 
     def fetch_servers(self):
         """Return a server summary, and service summary"""
@@ -657,39 +704,11 @@ class CephConfigWatcher(threading.Thread):
 
     def push_events(self, changes):
         """Add config change to the global queue to generate an event in kubernetes"""
+        log.debug("[DBG] {} events will be generated")
         for change in changes:
             event_queue.put(change)
 
-    def send_hearbeat_msg(self):
-        """Send a health heartbeat event"""
-        if self.num_osds > 0 and self.raw_capacity == 0:
-            # we have osds, but the stats aren't available yet, so skip the heartbeat
-            return
-
-        health_str = self.mgr.get('health')['json']
-        if json.loads(health_str)['status'] == 'HEALTH_OK':
-            health_text = 'Healthy'
-            level = 'INF'
-        else:
-            health_text = 'Unhealthy'
-            level = 'WRN'
-
-        health_msg = ("Cluster state: {}. {} host{}, {} pool{}, {} OSDs. Raw "
-                      "Capacity {}B".format(health_text, self.num_servers, text_suffix(self.num_servers),
-                                            self.num_pools, text_suffix(self.num_pools),
-                                            self.num_osds, MgrModule.to_pretty_iec(self.raw_capacity)))
-
-        event_queue.put(
-            LogEntry(
-                source="config",
-                msg_type="heartbeat",
-                msg=health_msg,
-                level=level,
-                tstamp=None
-            )
-        )
-
-    def _generate_logentry(self, msg):
+    def _generate_config_logentry(self, msg):
         return LogEntry(
                 source="config",
                 msg_type="config",
@@ -699,8 +718,9 @@ class CephConfigWatcher(threading.Thread):
         )
     
     def _check_hosts(self, server_map):
+        log.debug("[DBG] k8sevents checking host membership")
         changes = list()
-        if set(self.server_map.keys()) == set(server_map.keys()):
+        if ListDiff(self.server_map.keys(), server_map.keys()).is_equal:
             # no hosts changes
             pass
         else:
@@ -708,18 +728,19 @@ class CephConfigWatcher(threading.Thread):
             diff = ListDiff(self.server_map.keys(), server_map.keys())
             host_msg = "Host '{}' has been {} the cluster"
             for new in diff.added:
-                changes.append(self._generate_logentry(
+                changes.append(self._generate_config_logentry(
                                     msg=host_msg.format(new, 'added to'))
                 )
 
             for removed in diff.removed:
-                changes.append(self._generate_logentry(
+                changes.append(self._generate_config_logentry(
                                     msg=host_msg.format(removed, 'removed from'))
                 )
 
         return changes
 
     def _check_osds(self,server_map, osd_map):
+        log.debug("[DBG] k8sevents checking OSD configuration")
         changes = list()
         before_osds = list()
         for svr in self.server_map:
@@ -738,7 +759,7 @@ class CephConfigWatcher(threading.Thread):
 
             diff = ListDiff(before_osds, after_osds)
             for new in diff.added:
-                changes.append(self._generate_logentry(
+                changes.append(self._generate_config_logentry(
                                     msg=osd_msg.format(
                                             new, 
                                             osd_map[new]['deviceclass'],
@@ -748,7 +769,7 @@ class CephConfigWatcher(threading.Thread):
                 )
 
             for removed in diff.removed:
-                changes.append(self._generate_logentry(
+                changes.append(self._generate_config_logentry(
                                     msg=osd_msg.format(
                                         removed,
                                         osd_map[removed]['deviceclass'],
@@ -761,23 +782,21 @@ class CephConfigWatcher(threading.Thread):
 
     def _check_pools(self, pool_map):
         changes = list()
-
-        # self.mgr.log.warning("DBG - pool map looks like {}".format(pool_map))
+        log.debug("[DBG] k8sevents checking pool configurations")
         if self.pool_map.keys() == pool_map.keys():
             # no pools added/removed
             pass
         else:
-            # self.mgr.log.warning("[DBG] pool changes detected")
             # Pool changes
             diff = ListDiff(self.pool_map.keys(), pool_map.keys())
             pool_msg = "Pool '{}' has been {} the cluster"
             for new in diff.added:
-                changes.append(self._generate_logentry(
+                changes.append(self._generate_config_logentry(
                                     msg=pool_msg.format(new, 'added to'))
                 )
 
             for removed in diff.removed:
-                changes.append(self._generate_logentry(
+                changes.append(self._generate_config_logentry(
                                     msg=pool_msg.format(removed, 'removed from'))
                 )
 
@@ -836,16 +855,12 @@ class CephConfigWatcher(threading.Thread):
         return changes
 
     def run(self):
-        self.mgr.log.warning("[INF] Ceph configuration watcher started")
+        log.info("[INF] Ceph configuration watcher started")
 
         self.server_map, self.service_map = self.fetch_servers()
         self.pool_map = self.fetch_pools()
-        # self.mgr.log.warning("[DBG] server map {}".format(self.server_map))
-        # self.mgr.log.warning("[DBG] service map {}".format(self.service_map))
-        self.osd_map = self.fetch_osd_map(self.service_map)
-        # self.mgr.log.warning("[DBG] osd map {}".format(self.osd_map))
 
-        ctr = 0
+        self.osd_map = self.fetch_osd_map(self.service_map)
         
         while True:
 
@@ -867,44 +882,48 @@ class CephConfigWatcher(threading.Thread):
                 checks_duration = time.time() - start_time
                 if checks_duration > self.config_check_secs:
                     new_interval = self.config_check_secs * 2
-                    self.mgr.log.warning("[WRN] k8sevents check interval warning. "
-                                         "Current checks {}s, interval is {}. "
-                                         "Increasing interval to {}".format(int(checks_duration),
-                                                                            self.config_check_secs,
-                                                                            new_interval))
+                    log.warning("[WRN] k8sevents check interval warning. "
+                                "Current checks {}s, interval is {}. "
+                                "Increasing interval to {}".format(int(checks_duration),
+                                                                   self.config_check_secs,
+                                                                   new_interval))
                     self.config_check_secs = new_interval
 
                 time.sleep(self.config_check_secs)    
-                ctr += self.config_check_secs
-                if ctr%self.heartbeat_interval_secs == 0:
-                    ctr = 0
-                    self.send_hearbeat_msg()
-            except BaseException:
-                self.health = "[ERR] Unexpected {} Exception @ line {}".format(sys.exc_info()[0].__name__, 
-                                                                               sys.exc_info()[2].tb_lineno)
+            
+            except Exception:
+                self.health = "{} Exception at {}".format(
+                    sys.exc_info()[0].__name__,
+                    datetime.strftime(datetime.now(),"%Y/%m/%d %H:%M:%S")
+                )
+                log.exception(self.health)
                 break
 
-        self.mgr.log.warning("[WRN] Ceph configuration watcher stopped")
-        if self.health != 'OK':
-            self.mgr.log.error(self.health)
+        log.warning("[WRN] Ceph configuration watcher stopped")
+
 
 class Module(MgrModule):
     COMMANDS = [
         {
-            "cmd": "k8sevents namespace",
-            "desc": "Show all Kuberenetes events from the rook-ceph namespace",
+            "cmd": "k8sevents status",
+            "desc": "Show the status of the data gathering threads",
+            "perm": "r"
+        },
+        {
+            "cmd": "k8sevents list",
+            "desc": "List all current Kuberenetes events from the Ceph namespace",
             "perm": "r"
         },
         {
             "cmd": "k8sevents ceph",
-            "desc": "Show only Ceph related events tracked & sent to the kubernetes cluster",
+            "desc": "List Ceph events tracked & sent to the kubernetes cluster",
             "perm": "r"
         }
     ]
     MODULE_OPTIONS = [
         {'name': 'log_level'},
-        {'name': 'heartbeat_interval_secs'},
-        {'name': 'config_check_secs'}
+        {'name': 'config_check_secs'},
+        {'name': 'ceph_event_retention_days'}
     ]
 
     def __init__(self, *args, **kwargs):
@@ -912,26 +931,25 @@ class Module(MgrModule):
         self.event_processor = None
         self.config_watcher = None
         self.ns_watcher = None
+        self.trackers = list()
         super(Module, self).__init__(*args, **kwargs)
 
-    def fetch_events(self):
+    def fetch_events(self, limit=None):
         """Interface to expose current events to another mgr module"""
         # TODO
-        return dict()
+        raise NotImplementedError
 
-    def show_all_events(self):
-        """Show all events we're holding from the ceph namespace - most recent 1st"""
+    def _show_events(self, events):
 
-        max_name_length = max([len(k) for k in self.ns_watcher.events])
-        max_msg_length = max([len(self.ns_watcher.events[k].message) for k in self.ns_watcher.events])
-        fmt = "{:<20}  {:>5}  {:<" + str(max_msg_length) + "}  {:<" + str(max_name_length) + "}\n"
+        max_msg_length = max([len(events[k].message) for k in events])
+        fmt = "{:<20}  {:>5}  {:<" + str(max_msg_length) + "}  {}\n"
         s = fmt.format("Last Seen", "Count", "Message", "Event Object Name")
 
-        for event_name in sorted(self.ns_watcher.events, 
-                                 key = lambda name: self.ns_watcher.events[name].last_timestamp,
+        for event_name in sorted(events, 
+                                 key = lambda name: events[name].last_timestamp,
                                  reverse=True):
 
-            event = self.ns_watcher.events[event_name]
+            event = events[event_name]
 
             s += fmt.format(
                     datetime.strftime(event.last_timestamp,"%Y/%m/%d %H:%M:%S"),
@@ -939,22 +957,34 @@ class Module(MgrModule):
                     event.message,
                     event_name
             )
+        s += "Total : {:>3}\n".format(len(events))
+        return s
 
-        return 0, "", s
+    def show_events(self, events):
+        """Show events we're holding from the ceph namespace - most recent 1st"""
 
-    def show_ceph_events(self):
-        if len(self.event_processor.events.keys()) > 0:
-            s = "\n".join(self.event_processor.events.keys())
+        if len(events):
+            return 0, "", self._show_events(events)
         else:
-            s = "No events\n"
+            return 0, "", "No events"
+
+    def show_status(self):
+        s = "Tracker Health\n"
+        for t in self.trackers:
+            s += "- {} : {}\n".format(t.__class__.__name__, t.health)
+        s += "Tracked Events\n"
+        s += "- namespace  : {:>3}\n".format(len(self.ns_watcher.events))
+        s += "- ceph events: {:>3}\n".format(len(self.event_processor.events))
         return 0, "", s
 
     def handle_command(self, inbuf, cmd):
         # TODO Should we implement dynamic options for the monitoring?
-        if cmd["prefix"] == "k8sevents namespace":
-            return self.show_all_events()
+        if cmd["prefix"] == "k8sevents status":
+            return self.show_status()
+        elif cmd["prefix"] == "k8sevents list":
+            return self.show_events(self.ns_watcher.events)
         elif cmd["prefix"] == "k8sevents ceph":
-            return self.show_ceph_events()
+            return self.show_events(self.event_processor.events)
         else:
             raise NotImplementedError(cmd["prefix"])
 
@@ -972,10 +1002,12 @@ class Module(MgrModule):
         if sys.version_info[0] >= 3:
             channel = channel.decode('utf-8')
 
-        # self.log.error("qsize={},line={},channel={},name={},who={},"
-        #                "stamp_sec={},seq={},level={},msg={}".format(event_queue.qsize(),line,channel,name,who,stamp_sec,
-        #                seq,level,msg))
-        
+        _msg = msg.decode('utf-8')
+        # if this is an hourly heartbeat type message from the cluster channel, we'll
+        # rename it
+        if 'overall HEALTH' in _msg:    
+            channel = 'heartbeat'
+
         event_queue.put(
             LogEntry(
                 source='log',
@@ -997,32 +1029,43 @@ class Module(MgrModule):
 
     def serve(self):
 
-        self.event_processor = EventProcessor(logger=self.log)
+        ceph_event_retention_days = self.get_localized_module_option(
+            'ceph_event_retention_days', DEFAULT_CEPH_EVENT_RETENTION_DAYS)
+
         self.config_watcher = CephConfigWatcher(self)
-        self.ns_watcher = NamespaceWatcher(logger=self.log)
+        self.event_processor = EventProcessor(self.config_watcher, ceph_event_retention_days)
+        self.ns_watcher = NamespaceWatcher()
 
         if self.event_processor.ok:
-            self.log.warning("[INF] Ceph Log processor thread starting")
+            log.info("[INF] Ceph Log processor thread starting")
             self.event_processor.start()        # start log consumer thread
-            self.log.warning("[INF] Ceph log watcher thread starting")
+            log.info("[INF] Ceph log watcher thread starting")
             self.watch_ceph_log()               # start the log producer thread
-            self.log.warning("[INF] Ceph config watcher thread starting")
+            log.info("[INF] Ceph config watcher thread starting")
             self.config_watcher.start()
-            self.log.warning("[INF] Rook-ceph namespace events watcher starting")
+            log.info("[INF] Rook-ceph namespace events watcher starting")
             self.ns_watcher.start()
 
+            self.trackers.extend([self.event_processor, self.config_watcher, self.ns_watcher])
+            
             while True:
                 # stay alive
-                time.sleep(0.5)
+                time.sleep(1)
+
+                trackers = self.trackers
+                for t in trackers:
+                    if not t.is_alive() and not t.reported:
+                        log.error("[ERR] k8sevents tracker thread '{}' stopped: {}".format(t.__class__.__name__, t.health))
+                        t.reported = True
 
         else:
-            self.log.warning('[WRN] Unable to access kubernetes event API - check RBAC rules')
-            self.log.warning("[WRN] k8sevents module exiting")
+            log.warning('[WRN] Unable to access kubernetes event API - check RBAC rules')
+            log.warning("[WRN] k8sevents module exiting")
             self.run = False
 
     def shutdown(self):
         self.run = False
-        self.log.error("Shutting down k8sevents module")
+        log.info("Shutting down k8sevents module")
         self.event_processor.can_run = False
 
         if self._rados:
