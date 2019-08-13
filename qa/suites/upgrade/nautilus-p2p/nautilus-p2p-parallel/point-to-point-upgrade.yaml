@@ -136,6 +136,10 @@ workload_nautilus:
            rgw_server: client.0
            scan_for_encryption_keys: false
      - print: "**** done s3tests workload_nautilus"
+     - rbd_fsx:
+         clients: [client.0]
+         size: 134217728
+     - print: "**** done rbd_fsx workload_nautilus"
 
 upgrade-sequence_nautilus:
    sequential:
