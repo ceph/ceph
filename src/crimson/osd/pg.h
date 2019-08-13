@@ -84,6 +84,9 @@ public:
   PGBackend& get_backend() {
     return *backend;
   }
+  const PGBackend& get_backend() const {
+    return *backend;
+  }
 
   // EpochSource
   epoch_t get_osdmap_epoch() const final {

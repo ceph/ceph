@@ -39,28 +39,32 @@ class OpsExecuter {
   size_t num_read = 0;    ///< count read ops
   size_t num_write = 0;   ///< count update ops
 
-  seastar::future<> do_pgnls(OSDOp& osd_op);
-  seastar::future<> do_pgnls_filtered(OSDOp& osd_op);
-
   seastar::future<> do_op_call(class OSDOp& osd_op);
 
   template <class Func>
   auto do_const_op(Func&& f) {
     // TODO: pass backend as read-only
-    return std::forward<Func>(f)(backend, const_cast<const ObjectState&>(*os));
+    return std::forward<Func>(f)(backend, std::as_const(*os));
   }
 
   template <class Func>
   auto do_read_op(Func&& f) {
     ++num_read;
     // TODO: pass backend as read-only
-    return std::forward<Func>(f)(backend, const_cast<const ObjectState&>(*os));
+    return do_const_op(std::forward<Func>(f));
   }
 
   template <class Func>
   auto do_write_op(Func&& f) {
     ++num_write;
     return std::forward<Func>(f)(backend, *os, txn);
+  }
+
+  // PG operations are being provided with pg instead of os.
+  template <class Func>
+  auto do_pg_op(Func&& f) {
+    return std::forward<Func>(f)(std::as_const(pg),
+                                 std::as_const(os->oi.soid.get_namespace()));
   }
 
 public:
