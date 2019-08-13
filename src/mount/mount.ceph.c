@@ -338,13 +338,13 @@ int main(int argc, char *argv[])
 	retval = parse_arguments(argc, argv, &src, &node, &opts);
 	if (retval) {
 		usage(argv[0]);
-		exit((retval > 0) ? EXIT_SUCCESS : EXIT_FAILURE);
+		exit((retval > 0) ? 0 : EX_USAGE);
 	}
 
 	rsrc = mount_resolve_src(src);
 	if (!rsrc) {
 		printf("failed to resolve source\n");
-		exit(1);
+		exit(EX_USAGE);
 	}
 
 	/* Ensure the ceph key_type is available */
@@ -353,13 +353,13 @@ int main(int argc, char *argv[])
 	popts = parse_options(opts, &flags);
 	if (!popts) {
 		printf("failed to parse ceph_options\n");
-		exit(1);
+		exit(EX_USAGE);
 	}
 
 	block_signals(SIG_BLOCK);
 
 	if (mount(rsrc, node, "ceph", flags, popts)) {
-		retval = errno;
+		retval = EX_FAIL;
 		switch (errno) {
 		case ENODEV:
 			printf("mount error: ceph filesystem not supported by the system\n");
