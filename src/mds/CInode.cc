@@ -389,7 +389,7 @@ pair<bool,bool> CInode::split_need_snapflush(CInode *cowin, CInode *in)
 void CInode::mark_dirty_rstat()
 {
   if (!state_test(STATE_DIRTYRSTAT)) {
-    dout(10) << __func__ << dendl;
+    dout(10) << __func__ << " " << *this << dendl;
     state_set(STATE_DIRTYRSTAT);
     get(PIN_DIRTYRSTAT);
     CDentry *pdn = get_projected_parent_dn();
@@ -397,6 +397,7 @@ void CInode::mark_dirty_rstat()
       CDir *pdir = pdn->dir;
       pdir->dirty_rstat_inodes.push_back(&dirty_rstat_item);
       mdcache->mds->locker->mark_updated_scatterlock(&pdir->inode->nestlock);
+      pdir->get_inode()->nestlock.new_dirty_childrstat();
     } else {
       // under cross-MDS rename.
       // DIRTYRSTAT flag will get cleared when rename finishes
@@ -407,10 +408,14 @@ void CInode::mark_dirty_rstat()
 void CInode::clear_dirty_rstat()
 {
   if (state_test(STATE_DIRTYRSTAT)) {
-    dout(10) << __func__ << dendl;
+    dout(10) << __func__ << " " << *this << dendl;
     state_clear(STATE_DIRTYRSTAT);
     put(PIN_DIRTYRSTAT);
     dirty_rstat_item.remove_myself();
+
+    CDentry *pdn = get_projected_parent_dn();
+    CDir *pdir = pdn->dir;
+    pdir->get_inode()->nestlock.dirty_childrstat_cleaned();
   }
 }
 
