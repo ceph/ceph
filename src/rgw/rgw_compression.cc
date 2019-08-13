@@ -98,7 +98,7 @@ int RGWGetObj_Decompress::handle_data(bufferlist& bl, off_t bl_ofs, off_t bl_len
     in_bl.copy(ofs_in_bl, first_block->len, tmp);
     int cr = compressor->decompress(tmp, out_bl);
     if (cr < 0) {
-      lderr(cct) << "Compression failed with exit code " << cr << dendl;
+      lderr(cct) << "Decompression failed with exit code " << cr << dendl;
       return cr;
     }
     ++first_block;
