@@ -168,6 +168,7 @@ class RemoteEvent(Event):
         self._progress = 1.0
         self._failed = True
         self._failure_message = message
+        self._refresh()
 
     def set_message(self, message):
         self._message = message
