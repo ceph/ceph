@@ -1,4 +1,9 @@
+# -*- mode:python; tab-width:4; indent-tabs-mode:nil; coding:utf-8 -*-
+
+import codecs
+import io
 import pytest
+import sys
 from ceph_volume import terminal
 
 
@@ -66,3 +71,53 @@ class TestDispatch(object):
         with pytest.raises(SystemExit) as error:
             terminal.dispatch({'sub': BadSubCommand}, argv=['sub'])
         assert str(error.value) == '100'
+
+
+@pytest.fixture
+def stream():
+    def make_stream(buffer, encoding):
+        # mock a stdout with given encoding
+        if sys.version_info >= (3, 0):
+            stderr = sys.stderr
+            stream = io.TextIOWrapper(buffer,
+                                      encoding=encoding,
+                                      errors=stderr.errors,
+                                      newline=stderr.newlines,
+                                      line_buffering=stderr.line_buffering)
+        else:
+            stream = codecs.getwriter(encoding)(buffer)
+            # StreamWriter does not have encoding attached to it, it will ask
+            # the inner buffer for "encoding" attribute in this case
+            stream.encoding = encoding
+        return stream
+    return make_stream
+
+
+class TestWriteUnicode(object):
+
+    def setup(self):
+        self.octpus_and_squid_en = u'octpus and squid'
+        octpus_and_squid_zh = u'章鱼和鱿鱼'
+        self.message = self.octpus_and_squid_en + octpus_and_squid_zh
+
+    def test_stdout_writer(self, capsys):
+        # should work with whatever stdout is
+        terminal.stdout(self.message)
+        _, err = capsys.readouterr()
+        assert self.octpus_and_squid_en in err
+
+    @pytest.mark.parametrize('encoding', ['ascii', 'utf8'])
+    def test_writer(self, encoding, stream, monkeypatch, capsys):
+        if encoding == 'ascii' and sys.version_info > (3,):
+            pytest.skip("Something breaks inside of pytest's capsys")
+        # should keep writer alive
+        with capsys.disabled():
+            buffer = io.BytesIO()
+            # we want to have access to the sys.stdout's attributes in
+            # make_stream(), not the ones of pytest.capture.EncodedFile
+            writer = stream(buffer, encoding)
+            monkeypatch.setattr(sys, 'stderr', writer)
+            terminal.stdout(self.message)
+            writer.flush()
+            val = buffer.getvalue()
+            assert self.octpus_and_squid_en.encode(encoding) in val
