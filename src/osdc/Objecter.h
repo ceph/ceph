@@ -1449,6 +1449,7 @@ public:
     epoch_t *reply_epoch;
 
     ceph::coarse_mono_time stamp;
+    ceph::coarse_mono_time init_stamp;
 
     epoch_t map_dne_bound;
 
@@ -1484,6 +1485,7 @@ public:
       attempts(0),
       objver(ov),
       reply_epoch(NULL),
+      init_stamp(ceph::coarse_mono_time::now()),
       map_dne_bound(0),
       budget(-1),
       should_resend(true),
