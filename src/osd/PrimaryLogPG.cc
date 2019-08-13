@@ -6208,7 +6208,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	notify_info_t n;
 	n.timeout = timeout;
 	n.notify_id = osd->get_next_id(get_osdmap_epoch());
-	n.cookie = op.watch.cookie;
+	n.cookie = op.notify.cookie;
         n.bl = bl;
 	ctx->notifies.push_back(n);
 
