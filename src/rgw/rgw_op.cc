@@ -2874,8 +2874,8 @@ int RGWCreateBucket::verify_permission()
 }
 
 int forward_request_to_master(struct req_state *s, obj_version *objv,
-				    rgw::sal::RGWRadosStore *store, bufferlist& in_data,
-				    JSONParser *jp, req_info *forward_info)
+                              rgw::sal::RGWRadosStore *store, bufferlist& in_data,
+                              JSONParser *jp, req_info *forward_info)
 {
   if (!store->svc()->zone->get_master_conn()) {
     ldpp_dout(s, 0) << "rest connection is invalid" << dendl;
