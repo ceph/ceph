@@ -9,6 +9,7 @@
 #include "cls_rgw_ops.h"
 #include "cls_rgw_const.h"
 #include "common/RefCountedObj.h"
+#include "common/strtol.h"
 #include "include/compat.h"
 #include "common/ceph_time.h"
 #include "common/ceph_mutex.h"
