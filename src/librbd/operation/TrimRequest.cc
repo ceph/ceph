@@ -272,8 +272,31 @@ void TrimRequest<I>::send_remove_objects() {
   AsyncObjectThrottle<I> *throttle = new AsyncObjectThrottle<I>(
     this, image_ctx, context_factory, ctx, &m_prog_ctx, m_delete_start,
     m_num_objects);
-  throttle->start_ops(
-    image_ctx.config.template get_val<uint64_t>("rbd_concurrent_management_ops"));
+
+  if((image_ctx.features & RBD_FEATURE_OBJECT_MAP) != 0 && image_ctx.object_map != nullptr){ 
+    bufferlist tmplist = image_ctx.object_map->m_object_map.get_data();
+    char* pmap = tmplist.c_str();
+    char mask = (char)image_ctx.object_map->m_object_map.MASK;
+    uint64_t len = tmplist.length();
+    uint64_t ono = m_delete_start;
+    for (uint64_t i = 0; i < len; ++i) {
+      char tmpdata = pmap[i];
+      int j = image_ctx.object_map->m_object_map.ELEMENTS_PER_BLOCK;
+      while(j > 0){
+        if((tmpdata & mask) == OBJECT_EXISTS || (tmpdata & mask) == OBJECT_PENDING){
+          ono = i * 4 + j - 1;
+          throttle->m_discreted_objects.push_back(ono);
+          ldout(image_ctx.cct, 20) << " m_end_object_no = " << m_num_objects << " send op index: " << ono  << dendl;
+        }
+        tmpdata = tmpdata >> image_ctx.object_map->m_object_map.BIT_COUNT;
+        j--;
+      }
+    }
+    throttle->start_ops_discreted(image_ctx.concurrent_management_ops);
+  }
+  else {
+    throttle->start_ops(image_ctx.concurrent_management_ops);
+  }
 }
 
 template<typename I>
