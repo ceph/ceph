@@ -70,6 +70,29 @@ listen for v2 connections on the new default 3300 port.
 
 If a monitor is configured to listen for v1 connections on a non-standard port (not 6789), then the monmap will need to be modified manually.
 
+MON_DISK_LOW
+____________
+
+The filesystem on which the monitor DB resides is low on space.  The warning and error thresholds can be managed by
+adjusting the settings `mon_data_avail_warn` and `mon_data_avail_crit`.  Do so with caution, since there are
+situations in which the monitor DB can expand quite a bit, and it is prudent to maintain a healthy margin of
+available space.
+
+MON_DISK_CRIT
+____________
+
+The filesystem on which the monitor DB resides is critically low on space.  This must be addressed immediately
+to avoid a monitor and possibly cluster availability outage.  Resolutions include searching the filesystem for
+large/runaway log or temporary files.  High debug settings on various modules may also result in logfile bloat which
+in turn can trigger these warnings.
+
+MON_DISK_BIG
+____________
+
+The monitor's database has become very large.  Causes include substantial and sustained topology changes.  Inflated
+DBs can cause operations against monitors to become slow, especially if located on a slow HDD.  This will usually
+clear itself once the topology changes complete and all OSDs are `up`/`in`.  You may need to manually compact
+the DBs if they do not seem to shrink on their own. 
 
 
 Manager
