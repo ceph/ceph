@@ -24,7 +24,18 @@ extern "C" {
 /* Buffer size for secret= option */
 #define SECRET_OPTION_BUFSIZE (sizeof("secret=") + MAX_SECRET_LEN + 1)
 
+/* 2k should be enough for anyone? */
+#define MON_LIST_BUFSIZE	2048
+
 void mount_ceph_debug(const char *fmt, ...);
+
+struct ceph_config_info {
+	char		cci_secret[SECRET_BUFSIZE];	// auth secret
+	char		cci_mons[MON_LIST_BUFSIZE];	// monitor addrs
+};
+
+void mount_ceph_get_config_info(const char *config_file, const char *name,
+				struct ceph_config_info *cci);
 
 #ifdef __cplusplus
 }
