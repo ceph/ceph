@@ -719,8 +719,11 @@ class Module(MgrModule):
             raise NotImplementedError(cmd['prefix'])
 
     # For other module to use.
-    def construct_pgid(self, pool_id, ps):
+
+    @staticmethod
+    def create_pgid(pool_id, ps):
         return PgId(pool_id, ps)
 
-    def construct_pg_recovery_event(self, message, refs, which_pgs, which_osds, start_epoch):
-        return PgRecoveryEvent(message, refs, which_pgs, which_osds, start_epoch)
+    @staticmethod
+    def create_pg_recovery_event(message, refs, pgs, osds, start_epoch):
+        return PgRecoveryEvent(message, refs, pgs, osds, start_epoch)

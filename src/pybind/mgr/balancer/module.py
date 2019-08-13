@@ -292,7 +292,7 @@ class Module(MgrModule):
         {
             'name': 'upmap_max_iterations',
             'type': 'uint',
-            'default': 60,
+            'default': 10,
             'desc': 'maximum upmap optimization iterations',
             'runtime': True,
         },
@@ -1260,18 +1260,18 @@ class Module(MgrModule):
             commands.append(result)
         
         # FIXME loop can be optimized
+        osdlist = []
+        which_osds = []
+        affected_pgs = []
         for item in incdump.get('new_pg_upmap_items', []):
             self.log.info('ceph osd pg-upmap-items %s mappings %s', item['pgid'],
                           item['mappings'])
-            osdlist = []
-            which_osds = []
-            affected_pgs = [] 
             for m in item['mappings']:
                 osdlist += [m['from'], m['to']]
                 if m['from'] not in which_osds:
                     which_osds += [m['from']]
-                temp_list = item['pgid'].split('.')
-                pg_obj = self.remote('progress', 'construct_pgid', pool_id=int(temp_list[0]), ps=int(temp_list[1]))
+                pool_id, seed = item['pgid'].split('.')
+                pg_obj = self.remote('progress', 'create_pgid', pool_id=int(pool_id, base=16), ps=int(seed, base=16))
                 affected_pgs.append(pg_obj)
 
             result = CommandResult('foo')
@@ -1291,11 +1291,11 @@ class Module(MgrModule):
                 return r, outs
         plan.mode = self.get_module_option('mode')
         if plan.mode == 'upmap':
-            ev = self.remote('progress', 'construct_pg_recovery_event', 
+            ev = self.remote('progress', 'create_pg_recovery_event', 
                         message="Balancer upmap %s" % plan.message,
                         refs=[("Balancer", "upmap")],
-                        which_pgs=affected_pgs,
-                        which_osds=which_osds,
+                        pgs=affected_pgs,
+                        osds=which_osds,
                         start_epoch=self.get_osdmap().get_epoch()
                         )
             ev.pg_update(self.get("pg_dump"), self.log)
