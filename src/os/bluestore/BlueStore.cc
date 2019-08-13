@@ -10528,8 +10528,7 @@ void BlueStore::_txc_finish(TransContext *txc)
       dout(20) << __func__ << "  txc " << txc << " " << txc->get_state_name()
 	       << dendl;
       if (txc->state != TransContext::STATE_DONE) {
-	if (txc->state == TransContext::STATE_PREPARE &&
-	  deferred_aggressive) {
+	if (osr->kv_drain_preceding_waiters && txc->state == TransContext::STATE_PREPARE) {
 	  // for _osr_drain_preceding()
           notify = true;
 	}
@@ -10542,14 +10541,17 @@ void BlueStore::_txc_finish(TransContext *txc)
 
       osr->q.pop_front();
       releasing_txc.push_back(*txc);
-      notify = true;
     }
-    if (notify) {
-      osr->qcond.notify_all();
-    }
+
     if (osr->q.empty()) {
       dout(20) << __func__ << " osr " << osr << " q now empty" << dendl;
       empty = true;
+    }
+
+    // only drain()/drain_preceding() need wakeup,
+    // other cases use kv_submitted_waiters
+    if (notify || empty) {
+      osr->qcond.notify_all();
     }
   }
   while (!releasing_txc.empty()) {
@@ -10647,7 +10649,7 @@ void BlueStore::_osr_drain_preceding(TransContext *txc)
 {
   OpSequencer *osr = txc->osr.get();
   dout(10) << __func__ << " " << txc << " osr " << osr << dendl;
-  ++deferred_aggressive; // FIXME: maybe osr-local aggressive flag?
+  osr->kv_drain_preceding_waiters++;
   {
     // submit anything pending
     deferred_lock.lock();
@@ -10666,7 +10668,7 @@ void BlueStore::_osr_drain_preceding(TransContext *txc)
     }
   }
   osr->drain_preceding(txc);
-  --deferred_aggressive;
+  osr->kv_drain_preceding_waiters--;
   dout(10) << __func__ << " " << osr << " done" << dendl;
 }
 
@@ -11268,18 +11270,22 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
   DeferredBatch *b = osr->deferred_running;
 
   {
-    std::lock_guard l(deferred_lock);
+    deferred_lock.lock();
     ceph_assert(osr->deferred_running == b);
     osr->deferred_running = nullptr;
     if (!osr->deferred_pending) {
       dout(20) << __func__ << " dequeueing" << dendl;
       auto q = deferred_queue.iterator_to(*osr);
       deferred_queue.erase(q);
-    } else if (deferred_aggressive) {
-      dout(20) << __func__ << " queuing async deferred_try_submit" << dendl;
-      deferred_finisher.queue(new C_DeferredTrySubmit(this));
+      deferred_lock.unlock();
     } else {
-      dout(20) << __func__ << " leaving queued, more pending" << dendl;
+      deferred_lock.unlock();
+      if (deferred_aggressive) {
+	dout(20) << __func__ << " queuing async deferred_try_submit" << dendl;
+	deferred_finisher.queue(new C_DeferredTrySubmit(this));
+      } else {
+	dout(20) << __func__ << " leaving queued, more pending" << dendl;
+      }
     }
   }
 
@@ -11294,17 +11300,17 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
       }
     }
     throttle_deferred_bytes.put(costs);
-    std::lock_guard l(kv_lock);
-    deferred_done_queue.emplace_back(b);
   }
 
-  // in the normal case, do not bother waking up the kv thread; it will
-  // catch us on the next commit anyway.
-  if (deferred_aggressive) {
+  {
     std::lock_guard l(kv_lock);
-    if (!kv_sync_in_progress) {
-      kv_sync_in_progress = true;
-      kv_cond.notify_one();
+    deferred_done_queue.emplace_back(b);
+
+    // in the normal case, do not bother waking up the kv thread; it will
+    // catch us on the next commit anyway.
+    if (deferred_aggressive && !kv_sync_in_progress) {
+	kv_sync_in_progress = true;
+	kv_cond.notify_one();
     }
   }
 }
