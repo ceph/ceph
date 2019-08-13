@@ -1620,6 +1620,8 @@ public:
 
     std::atomic_int kv_submitted_waiters = {0};
 
+    std::atomic_int kv_drain_preceding_waiters = {0};
+
     std::atomic_bool zombie = {false};    ///< in zombie_osr set (collection going away)
 
     OpSequencer(BlueStore *store, const coll_t& c)
@@ -1644,7 +1646,7 @@ public:
 
     void drain_preceding(TransContext *txc) {
       std::unique_lock l(qlock);
-      while (!q.empty() && &q.front() != txc)
+      while (&q.front() != txc)
 	qcond.wait(l);
     }
 
@@ -1689,6 +1691,7 @@ public:
 	  auto it = q.rbegin();
 	  it++;
 	  if (it->state >= TransContext::STATE_KV_SUBMITTED) {
+	    --kv_submitted_waiters;
 	    return;
           }
 	}
