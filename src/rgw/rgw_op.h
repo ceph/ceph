@@ -2380,5 +2380,4 @@ static inline int parse_value_and_bound(
   return 0;
 }
 
-
 #endif /* CEPH_RGW_OP_H */

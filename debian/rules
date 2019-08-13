@@ -138,6 +138,7 @@ override_dh_python3:
 	  dh_python3 -p python3-$$binding;      \
 	done
 	dh_python3 -p python3-ceph-argparse
+	dh_python3 -p python3-ceph-common
 	dh_python3 -p cephfs-shell
 
 # do not run tests

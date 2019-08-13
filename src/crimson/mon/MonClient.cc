@@ -83,7 +83,7 @@ public:
   // v1 and v2
   seastar::future<> close();
   bool is_my_peer(const entity_addr_t& addr) const;
-  AuthAuthorizer* get_authorizer(peer_type_t peer) const;
+  AuthAuthorizer* get_authorizer(entity_type_t peer) const;
   KeyStore& get_keys();
   seastar::future<> renew_tickets();
   seastar::future<> renew_rotating_keyring();
@@ -176,7 +176,7 @@ seastar::future<> Connection::renew_rotating_keyring()
   });
 }
 
-AuthAuthorizer* Connection::get_authorizer(peer_type_t peer) const
+AuthAuthorizer* Connection::get_authorizer(entity_type_t peer) const
 {
   if (auth) {
     return auth->build_authorizer(peer);

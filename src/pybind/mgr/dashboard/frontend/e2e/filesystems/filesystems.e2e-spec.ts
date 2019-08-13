@@ -1,11 +1,10 @@
 import { Helper } from '../helper.po';
-import { FilesystemsPage } from './filesystems.po';
 
 describe('Filesystems page', () => {
-  let page: FilesystemsPage;
+  let filesystems: Helper['filesystems'];
 
   beforeAll(() => {
-    page = new FilesystemsPage();
+    filesystems = new Helper().filesystems;
   });
 
   afterEach(() => {
@@ -14,11 +13,11 @@ describe('Filesystems page', () => {
 
   describe('breadcrumb test', () => {
     beforeAll(() => {
-      page.navigateTo();
+      filesystems.navigateTo();
     });
 
     it('should open and show breadcrumb', () => {
-      expect(FilesystemsPage.getBreadcrumbText()).toEqual('Filesystems');
+      expect(filesystems.getBreadcrumbText()).toEqual('Filesystems');
     });
   });
 });

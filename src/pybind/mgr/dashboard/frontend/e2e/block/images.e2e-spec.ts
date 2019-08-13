@@ -1,11 +1,10 @@
 import { Helper } from '../helper.po';
-import { ImagesPage } from './images.po';
 
 describe('Images page', () => {
-  let page: ImagesPage;
+  let images: Helper['images'];
 
   beforeAll(() => {
-    page = new ImagesPage();
+    images = new Helper().images;
   });
 
   afterEach(() => {
@@ -14,21 +13,21 @@ describe('Images page', () => {
 
   describe('breadcrumb and tab tests', () => {
     beforeAll(() => {
-      page.navigateTo();
+      images.navigateTo();
     });
 
     it('should open and show breadcrumb', () => {
-      expect(ImagesPage.getBreadcrumbText()).toEqual('Images');
+      expect(images.getBreadcrumbText()).toEqual('Images');
     });
 
     it('should show three tabs', () => {
-      expect(ImagesPage.getTabsCount()).toEqual(3);
+      expect(images.getTabsCount()).toEqual(3);
     });
 
     it('should show text for all tabs', () => {
-      expect(ImagesPage.getTabText(0)).toEqual('Images');
-      expect(ImagesPage.getTabText(1)).toEqual('Trash');
-      expect(ImagesPage.getTabText(2)).toEqual('Overall Performance');
+      expect(images.getTabText(0)).toEqual('Images');
+      expect(images.getTabText(1)).toEqual('Trash');
+      expect(images.getTabText(2)).toEqual('Overall Performance');
     });
   });
 });

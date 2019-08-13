@@ -1,4 +1,5 @@
-<div class="chart-container">
+<div class="chart-container"
+     *ngIf="chart?.datasets">
   <canvas baseChart
           #chartCanvas
           [datasets]="chart?.datasets"

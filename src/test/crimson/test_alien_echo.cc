@@ -52,7 +52,7 @@ struct Server {
       });
     }
     seastar::future<ceph::net::msgr_tag_t, bufferlist>
-    ms_verify_authorizer(peer_type_t peer_type,
+    ms_verify_authorizer(entity_type_t peer_type,
                          auth_proto_t protocol,
                          bufferlist& auth) override {
       return seastar::make_ready_future<ceph::net::msgr_tag_t, bufferlist>(

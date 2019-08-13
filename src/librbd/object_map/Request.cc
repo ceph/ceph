@@ -57,8 +57,8 @@ bool Request::invalidate() {
 
   m_state = STATE_INVALIDATE;
 
-  RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
-  RWLock::WLocker image_locker(m_image_ctx.image_lock);
+  std::shared_lock owner_locker{m_image_ctx.owner_lock};
+  std::unique_lock image_locker{m_image_ctx.image_lock};
   InvalidateRequest<> *req = new InvalidateRequest<>(m_image_ctx, m_snap_id,
                                                      true,
                                                      create_callback_context());

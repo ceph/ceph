@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component } from '@angular/core';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { SortDirection, SortPropDir } from '@swimlane/ngx-datatable';
 
@@ -32,7 +32,7 @@ const BASE_URL = 'silence';
   templateUrl: './silence-list.component.html',
   styleUrls: ['./silence-list.component.scss']
 })
-export class SilenceListComponent implements OnInit {
+export class SilenceListComponent {
   silences: AlertmanagerSilence[] = [];
   columns: CdTableColumn[];
   tableActions: CdTableAction[];
@@ -58,11 +58,8 @@ export class SilenceListComponent implements OnInit {
     private succeededLabels: SucceededActionLabelsI18n
   ) {
     this.permission = this.authStorageService.getPermissions().prometheus;
-  }
-
-  ngOnInit() {
     const selectionExpired = (selection: CdTableSelection) =>
-      selection.first() && selection.first().status.state === 'expired';
+      selection.first() && selection.first().status && selection.first().status.state === 'expired';
     this.tableActions = [
       {
         permission: 'create',

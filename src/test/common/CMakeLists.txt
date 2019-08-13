@@ -242,13 +242,6 @@ add_executable(unittest_mutex_debug
 add_ceph_unittest(unittest_mutex_debug)
 target_link_libraries(unittest_mutex_debug ceph-common)
 
-# unittest_mutex
-add_executable(unittest_mutex
-  test_mutex.cc
-  )
-add_ceph_unittest(unittest_mutex)
-target_link_libraries(unittest_mutex ceph-common)
-
 # unittest_shunique_lock
 add_executable(unittest_shunique_lock
   test_shunique_lock.cc

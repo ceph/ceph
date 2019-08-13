@@ -848,6 +848,14 @@ void inode_t<Allocator>::dump(Formatter *f) const
   f->dump_unsigned("backtrace_version", backtrace_version);
 
   f->dump_string("stray_prior_path", stray_prior_path);
+  f->dump_unsigned("max_size_ever", max_size_ever);
+
+  f->open_object_section("quota");
+  quota.dump(f);
+  f->close_section();
+
+  f->dump_stream("last_scrub_stamp") << last_scrub_stamp;
+  f->dump_unsigned("last_scrub_version", last_scrub_version);
 }
 
 template<template<typename> class Allocator>
@@ -1138,6 +1146,7 @@ struct client_metadata_t {
   iterator find(const std::string& key) const { return kv_map.find(key); }
   iterator begin() const { return kv_map.begin(); }
   iterator end() const { return kv_map.end(); }
+  void erase(iterator it) { kv_map.erase(it); }
   std::string& operator[](const std::string& key) { return kv_map[key]; }
   void merge(const client_metadata_t& other) {
     kv_map.insert(other.kv_map.begin(), other.kv_map.end());

@@ -49,7 +49,8 @@ The relation between the names is the following:
 Configuration
 =============
 
-You can select the orchestrator module to use with the ``set backend`` command::
+To enable the orchestrator, please select the orchestrator module to use
+with the ``set backend`` command::
 
     ceph orchestrator set backend <module>
 
@@ -61,6 +62,14 @@ For example, to enable the Rook orchestrator module and use it with the CLI::
 You can then check backend is properly configured::
 
     ceph orchestrator status
+
+Disable the Orchestrator
+~~~~~~~~~~~~~~~~~~~~~~~~
+
+To disable the orchestrator again, use the empty string ``""``::
+
+    ceph orchestrator set backend ""``
+    ceph mgr module disable rook
 
 Usage
 =====
@@ -140,7 +149,8 @@ Create OSDs on a group of devices on a single host::
 
 The output of ``osd create`` is not specified and may vary between orchestrator backends.
 
-Where ``drive.group.json`` is a JSON file containing the fields defined in :class:`orchestrator.DriveGroupSpec`
+Where ``drive.group.json`` is a JSON file containing the fields defined in
+:class:`ceph.deployment_utils.drive_group.DriveGroupSpec`
 
 Example::
 
@@ -223,11 +233,11 @@ services of a particular type via optional --type parameter
 
 ::
 
-    ceph orchestrator service ls [--host host] [--svc_type type] [--refresh|--no-cache]
+    ceph orchestrator service ls [--host host] [--svc_type type] [--refresh]
 
 Discover the status of a particular service::
 
-    ceph orchestrator service status <type> <name> [--refresh]
+    ceph orchestrator service ls --svc_type type --svc_id <name> [--refresh]
 
 
 Query the status of a particular service instance (mon, osd, mds, rgw).  For OSDs
@@ -280,13 +290,12 @@ This is an overview of the current implementation status of the orchestrators.
  host rm                             ✔️         ⚪       ⚪         ✔️
  mgr update                          ⚪         ⚪       ⚪         ✔️
  mon update                          ⚪         ✔️       ⚪         ✔️
- osd create                          ✔️          ✔️       ⚪         ✔️
+ osd create                          ✔️         ✔️       ⚪         ✔️
  osd device {ident,fault}-{on,off}   ⚪         ⚪       ⚪         ⚪
  osd rm                              ✔️         ⚪       ⚪         ⚪
  device {ident,fault}-(on,off}       ⚪         ⚪       ⚪         ⚪
  device ls                           ✔️         ✔️       ✔️         ✔️
  service ls                          ⚪         ✔️       ✔️         ⚪
- service status                      ⚪         ✔️       ✔️         ⚪
  service-instance status             ⚪         ⚪       ⚪         ⚪
  iscsi {stop,start,reload}           ⚪         ⚪       ⚪         ⚪
  iscsi add                           ⚪         ⚪       ⚪         ⚪

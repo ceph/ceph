@@ -19,7 +19,7 @@
         <div class="form-group row"
              *ngIf="editing">
           <label i18n
-                 class="col-sm-3 col-form-label"
+                 class="col-form-label col-sm-3"
                  for="id">Id</label>
           <div class="col-sm-9">
             <input id="id"
@@ -85,6 +85,44 @@
             <span class="invalid-feedback"
                   *ngIf="bucketForm.showError('owner', frm, 'required')"
                   i18n>This field is required.</span>
+          </div>
+        </div>
+
+        <!-- Placement target -->
+        <div class="form-group row">
+          <label class="col-form-label col-sm-3"
+                 for="placement-target">
+            <ng-container i18n>Placement target</ng-container>
+            <span class="required"
+                  *ngIf="!editing"></span>
+          </label>
+          <div class="col-sm-9">
+            <ng-template #placementTargetSelect>
+              <select id="placement-target"
+                      name="placement-target"
+                      formControlName="placement-target"
+                      class="form-control custom-select">
+                <option i18n
+                        *ngIf="placementTargets === null"
+                        [ngValue]="null">Loading...</option>
+                <option i18n
+                        *ngIf="placementTargets !== null"
+                        [ngValue]="null">-- Select a placement target --</option>
+                <option *ngFor="let placementTarget of placementTargets"
+                        [value]="placementTarget.name">{{ placementTarget.description }}</option>
+              </select>
+              <span class="invalid-feedback"
+                    *ngIf="bucketForm.showError('placement-target', frm, 'required')"
+                    i18n>This field is required.</span>
+            </ng-template>
+            <ng-container *ngIf="editing; else placementTargetSelect">
+              <input id="placement-target"
+                     name="placement-target"
+                     formControlName="placement-target"
+                     class="form-control"
+                     type="text"
+                     readonly>
+            </ng-container>
           </div>
         </div>
 

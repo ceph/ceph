@@ -32,15 +32,19 @@ class SocketConnection : public Connection {
   SocketMessenger& messenger;
   std::unique_ptr<Protocol> protocol;
 
-  // if acceptor side, socket_port is different from peer_addr.get_port();
-  // if connector side, socket_port is different from my_addr.get_port().
+  // if acceptor side, ephemeral_port is different from peer_addr.get_port();
+  // if connector side, ephemeral_port is different from my_addr.get_port().
   enum class side_t {
     none,
     acceptor,
     connector
   };
   side_t side = side_t::none;
-  uint16_t socket_port = 0;
+  uint16_t ephemeral_port = 0;
+  void set_ephemeral_port(uint16_t port, side_t _side) {
+    ephemeral_port = port;
+    side = _side;
+  }
 
   ceph::net::Policy<ceph::thread::Throttle> policy;
   uint64_t features;
@@ -59,6 +63,7 @@ class SocketConnection : public Connection {
 
   // messages to be resent after connection gets reset
   std::deque<MessageRef> out_q;
+  std::deque<MessageRef> pending_q;
   // messages sent, but not yet acked by peer
   std::deque<MessageRef> sent;
 
@@ -73,10 +78,6 @@ class SocketConnection : public Connection {
   ~SocketConnection() override;
 
   Messenger* get_messenger() const override;
-
-  int get_peer_type() const override {
-    return peer_type;
-  }
 
   seastar::future<bool> is_connected() override;
 
@@ -100,23 +101,12 @@ class SocketConnection : public Connection {
   void start_accept(SocketFRef&& socket,
                     const entity_addr_t& peer_addr);
 
-  seq_num_t rx_seq_num() const {
-    return in_seq;
-  }
-
   bool is_server_side() const {
     return policy.server;
   }
 
   bool is_lossy() const {
     return policy.lossy;
-  }
-
-  /// move all messages in the sent list back into the queue
-  void requeue_sent();
-
-  std::tuple<seq_num_t, std::deque<MessageRef>> get_out_queue() {
-    return {out_seq, std::move(out_q)};
   }
 
   friend class Protocol;

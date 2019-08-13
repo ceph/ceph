@@ -94,6 +94,14 @@ void rgw_get_errno_s3(rgw_http_error *e , int err_no)
   }
 }
 
+static inline std::string get_s3_expiration_header(
+  struct req_state* s,
+  const ceph::real_time& mtime)
+{
+  return rgw::lc::s3_expiration_header(
+    s, s->object, s->tagset, mtime, s->bucket_attrs);
+}
+
 struct response_attr_param {
   const char *param;
   const char *http_attr;
@@ -186,6 +194,8 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   map<string, string>::iterator riter;
   bufferlist metadata_bl;
 
+  string expires = get_s3_expiration_header(s, lastmod);
+
   if (sent_header)
     goto send_data;
 
@@ -257,6 +267,8 @@ int RGWGetObj_ObjStore_S3::send_response_data(bufferlist& bl, off_t bl_ofs,
   dump_content_length(s, total_len);
   dump_last_modified(s, lastmod);
   dump_header_if_nonempty(s, "x-amz-version-id", version_id);
+  dump_header_if_nonempty(s, "x-amz-expiration", expires);
+
   if (attrs.find(RGW_ATTR_APPEND_PART_NUM) != attrs.end()) {
     dump_header(s, "x-rgw-object-type", "Appendable");
     dump_header(s, "x-rgw-next-append-position", s->obj_size);
@@ -830,7 +842,7 @@ if (ret < 0) {
 }
 s->info.args.get_bool("fetch-owner", &fetchOwner, false);
 startAfter = s->info.args.get("start-after");
-marker = s->info.args.get("ContinuationToken");
+marker = s->info.args.get("continuation-token");
 if(marker.empty()) {
   marker = startAfter;
 }
@@ -934,9 +946,12 @@ void RGWListBucket_ObjStore_S3::send_versioned_response()
       } else {
         s->formatter->dump_string("Type", "Normal");
       }
-      s->formatter->close_section();
+      s->formatter->close_section(); // Version/DeleteMarker
     }
-    s->formatter->close_section();
+    if (objs_container) {
+      s->formatter->close_section(); // Entries
+    }
+    s->formatter->close_section(); // ListVersionsResult
   }
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
@@ -1862,16 +1877,21 @@ void RGWPutObj_ObjStore_S3::send_response()
 	s->cct->_conf->rgw_s3_success_create_obj_status);
       set_req_state_err(s, op_ret);
     }
+
+    string expires = get_s3_expiration_header(s, mtime);
+
     if (copy_source.empty()) {
       dump_errno(s);
       dump_etag(s, etag);
       dump_content_length(s, 0);
       dump_header_if_nonempty(s, "x-amz-version-id", version_id);
+      dump_header_if_nonempty(s, "x-amz-expiration", expires);
       for (auto &it : crypt_http_responses)
         dump_header(s, it.first, it.second);
     } else {
       dump_errno(s);
       dump_header_if_nonempty(s, "x-amz-version-id", version_id);
+      dump_header_if_nonempty(s, "x-amz-expiration", expires);
       end_header(s, this, "application/xml");
       dump_start(s);
       struct tm tmp;
@@ -3563,18 +3583,22 @@ RGWOp *RGWHandler_REST_Service_S3::op_post()
 RGWOp *RGWHandler_REST_Bucket_S3::get_obj_op(bool get_data)
 {
   // Non-website mode
-  int list_type = 1;
-  s->info.args.get_int("list-type", &list_type, 1);
-
-   // Non-website mode    // Non-website mode
   if (get_data) {   
-    if (list_type == 1) {
-       return new RGWListBucket_ObjStore_S3;     
-    } else if(list_type == 2) {
-      return new RGWListBucket_ObjStore_S3v2;
-    } } else {
-    return new RGWStatBucket_ObjStore_S3;    
-  }   }
+    int list_type = 1;
+    s->info.args.get_int("list-type", &list_type, 1);
+    switch (list_type) {
+      case 1:
+        return new RGWListBucket_ObjStore_S3;
+      case 2:
+        return new RGWListBucket_ObjStore_S3v2;
+      default:
+        ldpp_dout(s, 5) << __func__ << ": unsupported list-type " << list_type << dendl;
+        return new RGWListBucket_ObjStore_S3;
+    }
+  } else {
+    return new RGWStatBucket_ObjStore_S3;
+  }
+}
 
 RGWOp *RGWHandler_REST_Bucket_S3::op_get()
 {

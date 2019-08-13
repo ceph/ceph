@@ -2,5 +2,12 @@
 
 <cd-table [data]="clients.data"
           [columns]="clients.columns"
-          (fetchData)="refresh()">
+          (fetchData)="refresh($event)"
+          selectionType="single"
+          (updateSelection)="updateSelection($event)">
+  <cd-table-actions class="table-actions"
+                    [permission]="permission"
+                    [selection]="selection"
+                    [tableActions]="tableActions">
+  </cd-table-actions>
 </cd-table>

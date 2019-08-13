@@ -66,9 +66,9 @@ template <typename I>
 void DemoteRequest<I>::acquire_lock() {
   CephContext *cct = m_image_ctx.cct;
 
-  m_image_ctx.owner_lock.get_read();
+  m_image_ctx.owner_lock.lock_shared();
   if (m_image_ctx.exclusive_lock == nullptr) {
-    m_image_ctx.owner_lock.put_read();
+    m_image_ctx.owner_lock.unlock_shared();
     lderr(cct) << "exclusive lock is not active" << dendl;
     finish(-EINVAL);
     return;
@@ -80,7 +80,7 @@ void DemoteRequest<I>::acquire_lock() {
   m_blocked_requests = true;
 
   if (m_image_ctx.exclusive_lock->is_lock_owner()) {
-    m_image_ctx.owner_lock.put_read();
+    m_image_ctx.owner_lock.unlock_shared();
     demote();
     return;
   }
@@ -90,7 +90,7 @@ void DemoteRequest<I>::acquire_lock() {
   auto ctx = create_context_callback<
     DemoteRequest<I>, &DemoteRequest<I>::handle_acquire_lock>(this);
   m_image_ctx.exclusive_lock->acquire_lock(ctx);
-  m_image_ctx.owner_lock.put_read();
+  m_image_ctx.owner_lock.unlock_shared();
 }
 
 template <typename I>
@@ -104,16 +104,16 @@ void DemoteRequest<I>::handle_acquire_lock(int r) {
     return;
   }
 
-  m_image_ctx.owner_lock.get_read();
+  m_image_ctx.owner_lock.lock_shared();
   if (m_image_ctx.exclusive_lock != nullptr &&
       !m_image_ctx.exclusive_lock->is_lock_owner()) {
     r = m_image_ctx.exclusive_lock->get_unlocked_op_error();
-    m_image_ctx.owner_lock.put_read();
+    m_image_ctx.owner_lock.unlock_shared();
     lderr(cct) << "failed to acquire exclusive lock" << dendl;
     finish(r);
     return;
   }
-  m_image_ctx.owner_lock.put_read();
+  m_image_ctx.owner_lock.unlock_shared();
 
   demote();
 }
@@ -146,9 +146,9 @@ void DemoteRequest<I>::release_lock() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << dendl;
 
-  m_image_ctx.owner_lock.get_read();
+  m_image_ctx.owner_lock.lock_shared();
   if (m_image_ctx.exclusive_lock == nullptr) {
-    m_image_ctx.owner_lock.put_read();
+    m_image_ctx.owner_lock.unlock_shared();
     finish(0);
     return;
   }
@@ -156,7 +156,7 @@ void DemoteRequest<I>::release_lock() {
   auto ctx = create_context_callback<
     DemoteRequest<I>, &DemoteRequest<I>::handle_release_lock>(this);
   m_image_ctx.exclusive_lock->release_lock(ctx);
-  m_image_ctx.owner_lock.put_read();
+  m_image_ctx.owner_lock.unlock_shared();
 }
 
 template <typename I>
@@ -179,7 +179,7 @@ void DemoteRequest<I>::finish(int r) {
   }
 
   {
-    RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+    std::shared_lock owner_locker{m_image_ctx.owner_lock};
     if (m_blocked_requests && m_image_ctx.exclusive_lock != nullptr) {
       m_image_ctx.exclusive_lock->unblock_requests();
     }

@@ -17,7 +17,7 @@
              *ngFor="let moduleOption of moduleOptions | keyvalue">
 
           <!-- Field label -->
-          <label class="col-form-label col-sm-3"
+          <label class="col-form-label col-sm-5"
                  for="{{ moduleOption.value.name }}">
             {{ moduleOption.value.name }}
             <cd-helper *ngIf="moduleOption.value.long_desc || moduleOption.value.desc">

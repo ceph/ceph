@@ -20,6 +20,14 @@
                    *ngIf="!isRadio(setting.key)"
                    type="number"
                    [formControlName]="setting.key">
+            <span class="invalid-feedback"
+                  *ngIf="settingsForm.showError(setting.key, formDir, 'min')">
+              <ng-container i18n>Must be greater than or equal to {{ target_controls_limits[setting.key]['min'] }}.</ng-container>
+            </span>
+            <span class="invalid-feedback"
+                  *ngIf="settingsForm.showError(setting.key, formDir, 'max')">
+              <ng-container i18n>Must be less than or equal to {{ target_controls_limits[setting.key]['max'] }}.</ng-container>
+            </span>
 
             <ng-container *ngIf="isRadio(setting.key)">
               <br>

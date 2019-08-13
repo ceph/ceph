@@ -51,7 +51,7 @@ public:
   }
 
   void send() {
-    assert(mds->mds_lock.is_locked());
+    assert(ceph_mutex_is_locked(mds->mds_lock));
 
     dout(20) << __func__ << dendl;
 
@@ -253,7 +253,7 @@ public:
   void send() {
     // not really a hard requirement here, but lets ensure this in
     // case we change the logic here.
-    assert(mds->mds_lock.is_locked());
+    assert(ceph_mutex_is_locked(mds->mds_lock));
 
     dout(20) << __func__ << dendl;
     f->open_object_section("result");
@@ -270,7 +270,6 @@ private:
     C_ContextTimeout(MDSRank *mds, uint64_t timeout, Context *on_finish)
       : MDSInternalContext(mds),
         timeout(timeout),
-        lock("mds::context::timeout", false, true),
         on_finish(on_finish) {
     }
     ~C_ContextTimeout() {
@@ -308,7 +307,7 @@ private:
     }
 
     uint64_t timeout;
-    Mutex lock;
+    ceph::mutex lock = ceph::make_mutex("mds::context::timeout");
     Context *on_finish = nullptr;
     Context *timer_task = nullptr;
   };
@@ -473,7 +472,7 @@ private:
 
 MDSRank::MDSRank(
     mds_rank_t whoami_,
-    Mutex &mds_lock_,
+    ceph::mutex &mds_lock_,
     LogChannelRef &clog_,
     SafeTimer &timer_,
     Beacon &beacon_,
@@ -499,17 +498,10 @@ MDSRank::MDSRank(
     cluster_degraded(false), stopping(false),
     purge_queue(g_ceph_context, whoami_,
       mdsmap_->get_metadata_pool(), objecter,
-      new FunctionContext(
-          [this](int r){
-          // Purge Queue operates inside mds_lock when we're calling into
-          // it, and outside when in background, so must handle both cases.
-          if (mds_lock.is_locked_by_me()) {
-            handle_write_error(r);
-          } else {
-            std::lock_guard l(mds_lock);
-            handle_write_error(r);
-          }
-        }
+      new FunctionContext([this](int r) {
+	  std::lock_guard l(mds_lock);
+	  handle_write_error(r);
+	}
       )
     ),
     progress_thread(this), dispatch_depth(0),
@@ -528,7 +520,7 @@ MDSRank::MDSRank(
 
   objecter->unset_honor_osdmap_full();
 
-  finisher = new Finisher(cct);
+  finisher = new Finisher(cct, "MDSRank", "MR_Finisher");
 
   mdcache = new MDCache(this, purge_queue);
   mdlog = new MDLog(this);
@@ -825,6 +817,8 @@ void MDSRankDispatcher::shutdown()
 
   dout(1) << __func__ << ": shutting down rank " << whoami << dendl;
 
+  g_conf().remove_observer(this);
+
   timer.shutdown();
 
   // MDLog has to shut down before the finisher, because some of its
@@ -836,9 +830,9 @@ void MDSRankDispatcher::shutdown()
 
   purge_queue.shutdown();
 
-  mds_lock.Unlock();
+  mds_lock.unlock();
   finisher->stop(); // no flushing
-  mds_lock.Lock();
+  mds_lock.lock();
 
   if (objecter->initialized)
     objecter->shutdown();
@@ -851,12 +845,12 @@ void MDSRankDispatcher::shutdown()
 
   // release mds_lock for finisher/messenger threads (e.g.
   // MDSDaemon::ms_handle_reset called from Messenger).
-  mds_lock.Unlock();
+  mds_lock.unlock();
 
   // shut down messenger
   messenger->shutdown();
 
-  mds_lock.Lock();
+  mds_lock.lock();
 
   // Workaround unclean shutdown: HeartbeatMap will assert if
   // worker is not removed (as we do in ~MDS), but ~MDS is not
@@ -931,7 +925,7 @@ void MDSRank::respawn()
 void MDSRank::damaged()
 {
   ceph_assert(whoami != MDS_RANK_NONE);
-  ceph_assert(mds_lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
 
   beacon.set_want_state(*mdsmap, MDSMap::STATE_DAMAGED);
   monc->flush_log();  // Flush any clog error from before we were called
@@ -973,13 +967,13 @@ void MDSRank::handle_write_error(int err)
 
 void *MDSRank::ProgressThread::entry()
 {
-  std::lock_guard l(mds->mds_lock);
+  std::unique_lock l(mds->mds_lock);
   while (true) {
-    while (!mds->stopping &&
-	   mds->finished_queue.empty() &&
-	   (mds->waiting_for_nolaggy.empty() || mds->beacon.is_laggy())) {
-      cond.Wait(mds->mds_lock);
-    }
+    cond.wait(l, [this] {
+      return (mds->stopping ||
+	      !mds->finished_queue.empty() ||
+	      (!mds->waiting_for_nolaggy.empty() && !mds->beacon.is_laggy()));
+    });
 
     if (mds->stopping) {
       break;
@@ -994,18 +988,18 @@ void *MDSRank::ProgressThread::entry()
 
 void MDSRank::ProgressThread::shutdown()
 {
-  ceph_assert(mds->mds_lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
   ceph_assert(mds->stopping);
 
   if (am_self()) {
     // Stopping is set, we will fall out of our main loop naturally
   } else {
     // Kick the thread to notice mds->stopping, and join it
-    cond.Signal();
-    mds->mds_lock.Unlock();
+    cond.notify_all();
+    mds->mds_lock.unlock();
     if (is_started())
       join();
-    mds->mds_lock.Lock();
+    mds->mds_lock.lock();
   }
 }
 
@@ -1233,7 +1227,7 @@ bool MDSRank::handle_deferrable_message(const cref_t<Message> &m)
  */
 void MDSRank::_advance_queues()
 {
-  ceph_assert(mds_lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
 
   if (!finished_queue.empty()) {
     dout(7) << "mds has " << finished_queue.size() << " queued contexts" << dendl;
@@ -1622,7 +1616,7 @@ void MDSRank::boot_start(BootStep step, int r)
 
 void MDSRank::validate_sessions()
 {
-  ceph_assert(mds_lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
   bool valid = true;
 
   // Identify any sessions which have state inconsistent with other,
@@ -2399,6 +2393,8 @@ void MDSRankDispatcher::handle_mds_map(
   if (oldmap.get_max_mds() != mdsmap->get_max_mds()) {
     purge_queue.update_op_limit(*mdsmap);
   }
+
+  mdcache->handle_mdsmap(*mdsmap);
 }
 
 void MDSRank::handle_mds_recovery(mds_rank_t who)
@@ -2461,11 +2457,10 @@ bool MDSRankDispatcher::handle_asok_command(std::string_view command,
       ss << "no target epoch given";
       return true;
     }
-
-    mds_lock.Lock();
-    set_osd_epoch_barrier(target_epoch);
-    mds_lock.Unlock();
-
+    {
+      std::lock_guard l(mds_lock);
+      set_osd_epoch_barrier(target_epoch);
+    }
     C_SaferCond cond;
     bool already_got = objecter->wait_for_map(target_epoch, &cond);
     if (!already_got) {
@@ -2485,8 +2480,7 @@ bool MDSRankDispatcher::handle_asok_command(std::string_view command,
       ss << "Invalid client_id specified";
       return true;
     }
-
-    mds_lock.Lock();
+    std::lock_guard l(mds_lock);
     std::stringstream dss;
     bool evicted = evict_client(strtol(client_id.c_str(), 0, 10), true,
         g_conf()->mds_session_blacklist_on_evict, dss);
@@ -2494,7 +2488,17 @@ bool MDSRankDispatcher::handle_asok_command(std::string_view command,
       dout(15) << dss.str() << dendl;
       ss << dss.str();
     }
-    mds_lock.Unlock();
+  } else if (command == "session config") {
+    int64_t client_id;
+    std::string option;
+    std::string value;
+
+    cmd_getval(g_ceph_context, cmdmap, "client_id", client_id);
+    cmd_getval(g_ceph_context, cmdmap, "option", option);
+    bool got_value = cmd_getval(g_ceph_context, cmdmap, "value", value);
+
+    std::lock_guard l(mds_lock);
+    config_client(client_id, !got_value, option, value, ss);
   } else if (command == "scrub_path") {
     string path;
     vector<string> scrubop_vec;
@@ -3320,11 +3324,47 @@ void MDSRankDispatcher::handle_osd_map()
   objecter->maybe_request_map();
 }
 
+int MDSRank::config_client(int64_t session_id, bool remove,
+			   const std::string& option, const std::string& value,
+			   std::ostream& ss)
+{
+  Session *session = sessionmap.get_session(entity_name_t(CEPH_ENTITY_TYPE_CLIENT, session_id));
+  if (!session) {
+    ss << "session " << session_id << " not in sessionmap!";
+    return -ENOENT;
+  }
+
+  if (option == "timeout") {
+    if (remove) {
+      auto it = session->info.client_metadata.find("timeout");
+      if (it == session->info.client_metadata.end()) {
+	ss << "Nonexistent config: " << option;
+	return -ENODATA;
+      }
+      session->info.client_metadata.erase(it);
+    } else {
+      char *end;
+      strtoul(value.c_str(), &end, 0);
+      if (*end) {
+	ss << "Invalid config for timeout: " << value;
+	return -EINVAL;
+      }
+      session->info.client_metadata[option] = value;
+    }
+    //sessionmap._mark_dirty(session, true);
+  } else {
+    ss << "Invalid config option: " << option;
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
 bool MDSRank::evict_client(int64_t session_id,
     bool wait, bool blacklist, std::ostream& err_ss,
     Context *on_killed)
 {
-  ceph_assert(mds_lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
 
   // Mutually exclusive args
   ceph_assert(!(wait && on_killed != nullptr));
@@ -3360,7 +3400,7 @@ bool MDSRank::evict_client(int64_t session_id,
   std::vector<std::string> cmd = {tmp};
 
   auto kill_client_session = [this, session_id, wait, on_killed](){
-    ceph_assert(mds_lock.is_locked_by_me());
+    ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
     Session *session = sessionmap.get_session(
         entity_name_t(CEPH_ENTITY_TYPE_CLIENT, session_id));
     if (session) {
@@ -3370,9 +3410,9 @@ bool MDSRank::evict_client(int64_t session_id,
         C_SaferCond on_safe;
         server->kill_session(session, &on_safe);
 
-        mds_lock.Unlock();
+        mds_lock.unlock();
         on_safe.wait();
-        mds_lock.Lock();
+        mds_lock.lock();
       }
     } else {
       dout(1) << "session " << session_id << " was removed while we waited "
@@ -3387,7 +3427,7 @@ bool MDSRank::evict_client(int64_t session_id,
   };
 
   auto apply_blacklist = [this, cmd](std::function<void ()> fn){
-    ceph_assert(mds_lock.is_locked_by_me());
+    ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
 
     Context *on_blacklist_done = new FunctionContext([this, fn](int r) {
       objecter->wait_for_latest_osdmap(
@@ -3413,9 +3453,9 @@ bool MDSRank::evict_client(int64_t session_id,
     if (blacklist) {
       C_SaferCond inline_ctx;
       apply_blacklist([&inline_ctx](){inline_ctx.complete(0);});
-      mds_lock.Unlock();
+      mds_lock.unlock();
       inline_ctx.wait();
-      mds_lock.Lock();
+      mds_lock.lock();
     }
 
     // We dropped mds_lock, so check that session still exists
@@ -3460,7 +3500,7 @@ Context *MDSRank::create_async_exec_context(C_ExecAndReply *ctx) {
 
 MDSRankDispatcher::MDSRankDispatcher(
     mds_rank_t whoami_,
-    Mutex &mds_lock_,
+    ceph::mutex &mds_lock_,
     LogChannelRef &clog_,
     SafeTimer &timer_,
     Beacon &beacon_,
@@ -3471,7 +3511,9 @@ MDSRankDispatcher::MDSRankDispatcher(
     Context *suicide_hook_)
   : MDSRank(whoami_, mds_lock_, clog_, timer_, beacon_, mdsmap_,
       msgr, monc_, respawn_hook_, suicide_hook_)
-{}
+{
+  g_conf().add_observer(this);
+}
 
 bool MDSRankDispatcher::handle_command(
   const cmdmap_t &cmdmap,
@@ -3518,6 +3560,17 @@ bool MDSRankDispatcher::handle_command(
     evict_clients(filter, m);
 
     *need_reply = false;
+    return true;
+  } else if (prefix == "session config" || prefix == "client config") {
+    int64_t client_id;
+    std::string option;
+    std::string value;
+
+    cmd_getval(g_ceph_context, cmdmap, "client_id", client_id);
+    cmd_getval(g_ceph_context, cmdmap, "option", option);
+    bool got_value = cmd_getval(g_ceph_context, cmdmap, "value", value);
+
+    *r = config_client(client_id, !got_value, option, value, *ss);
     return true;
   } else if (prefix == "damage ls") {
     JSONFormatter f(true);
@@ -3595,3 +3648,85 @@ epoch_t MDSRank::get_osd_epoch() const
   return objecter->with_osdmap(std::mem_fn(&OSDMap::get_epoch));  
 }
 
+const char** MDSRankDispatcher::get_tracked_conf_keys() const
+{
+  static const char* KEYS[] = {
+    "mds_op_complaint_time", "mds_op_log_threshold",
+    "mds_op_history_size", "mds_op_history_duration",
+    "mds_enable_op_tracker",
+    "mds_log_pause",
+    // clog & admin clog
+    "clog_to_monitors",
+    "clog_to_syslog",
+    "clog_to_syslog_facility",
+    "clog_to_syslog_level",
+    "clog_to_graylog",
+    "clog_to_graylog_host",
+    "clog_to_graylog_port",
+    // MDCache
+    "mds_cache_size",
+    "mds_cache_memory_limit",
+    "mds_cache_reservation",
+    "mds_health_cache_threshold",
+    "mds_cache_mid",
+    "mds_dump_cache_threshold_formatter",
+    "mds_cache_trim_decay_rate",
+    "mds_dump_cache_threshold_file",
+    // MDBalancer
+    "mds_bal_fragment_dirs",
+    "mds_bal_fragment_interval",
+    // PurgeQueue
+    "mds_max_purge_ops",
+    "mds_max_purge_ops_per_pg",
+    "mds_max_purge_files",
+    // Migrator
+    "mds_max_export_size",
+    "mds_inject_migrator_session_race",
+    "host",
+    "fsid",
+    "mds_cap_revoke_eviction_timeout",
+    // SessionMap
+    "mds_request_load_average_decay_rate",
+    "mds_recall_max_decay_rate",
+    NULL
+  };
+  return KEYS;
+}
+
+void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed)
+{
+  // XXX with or without mds_lock!
+
+  if (changed.count("mds_op_complaint_time") || changed.count("mds_op_log_threshold")) {
+    op_tracker.set_complaint_and_threshold(conf->mds_op_complaint_time, conf->mds_op_log_threshold);
+  }
+  if (changed.count("mds_op_history_size") || changed.count("mds_op_history_duration")) {
+    op_tracker.set_history_size_and_duration(conf->mds_op_history_size, conf->mds_op_history_duration);
+  }
+  if (changed.count("mds_enable_op_tracker")) {
+    op_tracker.set_tracking(conf->mds_enable_op_tracker);
+  }
+  if (changed.count("clog_to_monitors") ||
+      changed.count("clog_to_syslog") ||
+      changed.count("clog_to_syslog_level") ||
+      changed.count("clog_to_syslog_facility") ||
+      changed.count("clog_to_graylog") ||
+      changed.count("clog_to_graylog_host") ||
+      changed.count("clog_to_graylog_port") ||
+      changed.count("host") ||
+      changed.count("fsid")) {
+    update_log_config();
+  }
+
+  finisher->queue(new FunctionContext([this, changed](int r) {
+    std::scoped_lock lock(mds_lock);
+
+    if (changed.count("mds_log_pause") && !g_conf()->mds_log_pause) {
+      mdlog->kick_submitter();
+    }
+    sessionmap.handle_conf_change(changed);
+    server->handle_conf_change(changed);
+    mdcache->handle_conf_change(changed, *mdsmap);
+    purge_queue.handle_conf_change(changed, *mdsmap);
+  }));
+}

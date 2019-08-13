@@ -324,7 +324,7 @@ void generate_transaction(
 	[&](const PGTransaction::ObjectOperation::Init::None &) {
 	},
 	[&](const PGTransaction::ObjectOperation::Init::Create &op) {
-	  if (require_osd_release >= ceph_release_t::nautilus) {
+	  if (require_osd_release >= ceph_release_t::octopus) {
 	    t->create(coll, goid);
 	  } else {
 	    t->touch(coll, goid);
@@ -1785,6 +1785,11 @@ bool ReplicatedBackend::handle_pull_response(
       a.second.rebuild();
     }
     pi.obc = get_parent()->get_obc(pi.recovery_info.soid, attrset);
+    if (attrset.find(SS_ATTR) != attrset.end()) {
+      bufferlist ssbv = attrset.at(SS_ATTR);
+      SnapSet ss(ssbv);
+      assert(ss.seq  == pi.obc->ssc->snapset.seq);
+    }
     pi.recovery_info.oi = pi.obc->obs.oi;
     pi.recovery_info = recalc_subsets(
       pi.recovery_info,

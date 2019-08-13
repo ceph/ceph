@@ -5,7 +5,7 @@
 #define RBD_MIRROR_IMAGE_REPLAYER_REPLAY_STATUS_FORMATTER_H
 
 #include "include/Context.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "cls/journal/cls_journal_types.h"
 #include "librbd/journal/Types.h"
 #include "librbd/journal/TypeTraits.h"
@@ -38,7 +38,7 @@ public:
 private:
   Journaler *m_journaler;
   std::string m_mirror_uuid;
-  Mutex m_lock;
+  ceph::mutex m_lock;
   Context *m_on_finish = nullptr;
   cls::journal::ObjectPosition m_master_position;
   cls::journal::ObjectPosition m_mirror_position;

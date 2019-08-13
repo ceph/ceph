@@ -95,8 +95,9 @@ class RocksDBStore : public KeyValueDB {
   int load_rocksdb_options(bool create_if_missing, rocksdb::Options& opt);
 
   // manage async compactions
-  Mutex compact_queue_lock;
-  Cond compact_queue_cond;
+  ceph::mutex compact_queue_lock =
+    ceph::make_mutex("RocksDBStore::compact_thread_lock");
+  ceph::condition_variable compact_queue_cond;
   list< pair<string,string> > compact_queue;
   bool compact_queue_stop;
   class CompactThread : public Thread {
@@ -155,7 +156,6 @@ public:
     db(NULL),
     env(static_cast<rocksdb::Env*>(p)),
     dbstats(NULL),
-    compact_queue_lock("RocksDBStore::compact_thread_lock"),
     compact_queue_stop(false),
     compact_thread(this),
     compact_on_mount(false),
@@ -197,7 +197,8 @@ public:
     return logger;
   }
 
-  int64_t estimate_prefix_size(const string& prefix) override;
+  int64_t estimate_prefix_size(const string& prefix,
+			       const string& key_prefix) override;
 
   struct  RocksWBHandler: public rocksdb::WriteBatch::Handler {
     std::string seen ;

@@ -216,33 +216,72 @@ describe('OsdListComponent', () => {
     });
   });
 
-  describe('show table actions as defined', () => {
-    let tableActions: TableActionsComponent;
-    let scenario: { fn; empty; single };
-    let permissionHelper: PermissionHelper;
+  it('should test all TableActions combinations', () => {
+    const permissionHelper: PermissionHelper = new PermissionHelper(component.permissions.osd);
+    const tableActions: TableActionsComponent = permissionHelper.setPermissionsAndGetActions(
+      component.tableActions
+    );
 
-    const getTableActionComponent = () => {
-      fixture.detectChanges();
-      return fixture.debugElement.query(By.css('#osd-actions')).componentInstance;
-    };
-
-    beforeEach(() => {
-      permissionHelper = new PermissionHelper(component.permissions.osd, () =>
-        getTableActionComponent()
-      );
-      scenario = {
-        fn: () => tableActions.getCurrentButton().name,
-        single: 'Scrub',
-        empty: 'Scrub'
-      };
-      tableActions = permissionHelper.setPermissionsAndGetActions(1, 1, 1);
-    });
-
-    it('shows action button', () => permissionHelper.testScenarios(scenario));
-
-    it('shows all actions', () => {
-      expect(tableActions.tableActions.length).toBe(9);
-      expect(tableActions.tableActions).toEqual(component.tableActions);
+    expect(tableActions).toEqual({
+      'create,update,delete': {
+        actions: [
+          'Scrub',
+          'Deep Scrub',
+          'Reweight',
+          'Mark Out',
+          'Mark In',
+          'Mark Down',
+          'Mark Lost',
+          'Purge',
+          'Destroy'
+        ],
+        primary: { multiple: 'Scrub', executing: 'Scrub', single: 'Scrub', no: 'Scrub' }
+      },
+      'create,update': {
+        actions: ['Scrub', 'Deep Scrub', 'Reweight', 'Mark Out', 'Mark In', 'Mark Down'],
+        primary: { multiple: 'Scrub', executing: 'Scrub', single: 'Scrub', no: 'Scrub' }
+      },
+      'create,delete': {
+        actions: ['Mark Lost', 'Purge', 'Destroy'],
+        primary: {
+          multiple: 'Mark Lost',
+          executing: 'Mark Lost',
+          single: 'Mark Lost',
+          no: 'Mark Lost'
+        }
+      },
+      create: { actions: [], primary: { multiple: '', executing: '', single: '', no: '' } },
+      'update,delete': {
+        actions: [
+          'Scrub',
+          'Deep Scrub',
+          'Reweight',
+          'Mark Out',
+          'Mark In',
+          'Mark Down',
+          'Mark Lost',
+          'Purge',
+          'Destroy'
+        ],
+        primary: { multiple: 'Scrub', executing: 'Scrub', single: 'Scrub', no: 'Scrub' }
+      },
+      update: {
+        actions: ['Scrub', 'Deep Scrub', 'Reweight', 'Mark Out', 'Mark In', 'Mark Down'],
+        primary: { multiple: 'Scrub', executing: 'Scrub', single: 'Scrub', no: 'Scrub' }
+      },
+      delete: {
+        actions: ['Mark Lost', 'Purge', 'Destroy'],
+        primary: {
+          multiple: 'Mark Lost',
+          executing: 'Mark Lost',
+          single: 'Mark Lost',
+          no: 'Mark Lost'
+        }
+      },
+      'no-permissions': {
+        actions: [],
+        primary: { multiple: '', executing: '', single: '', no: '' }
+      }
     });
   });
 

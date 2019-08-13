@@ -493,6 +493,7 @@ inline namespace v14_2_0 {
                    std::string tgt_oid, uint64_t tgt_offset, int flag = 0);
     void tier_promote();
     void unset_manifest();
+    void tier_flush();
 
 
     friend class IoCtx;

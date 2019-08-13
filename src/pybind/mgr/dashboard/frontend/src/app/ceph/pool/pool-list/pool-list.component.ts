@@ -39,12 +39,12 @@ const BASE_URL = 'pool';
   styleUrls: ['./pool-list.component.scss']
 })
 export class PoolListComponent implements OnInit {
-  @ViewChild(TableComponent)
+  @ViewChild(TableComponent, { static: true })
   table: TableComponent;
-  @ViewChild('poolUsageTpl')
+  @ViewChild('poolUsageTpl', { static: true })
   poolUsageTpl: TemplateRef<any>;
 
-  @ViewChild('poolConfigurationSourceTpl')
+  @ViewChild('poolConfigurationSourceTpl', { static: false })
   poolConfigurationSourceTpl: TemplateRef<any>;
 
   pools: Pool[] = [];
@@ -247,6 +247,13 @@ export class PoolListComponent implements OnInit {
       pool['stats'] = stats;
       const avail = stats.bytes_used.latest + stats.max_avail.latest;
       pool['usage'] = avail > 0 ? stats.bytes_used.latest / avail : avail;
+
+      if (
+        !pool.cdExecuting &&
+        pool.pg_num + pool.pg_placement_num !== pool.pg_num_target + pool.pg_placement_num_target
+      ) {
+        pool['cdExecuting'] = 'Updating';
+      }
 
       ['rd_bytes', 'wr_bytes'].forEach((stat) => {
         pool.stats[stat].rates = pool.stats[stat].rates.map((point) => point[1]);

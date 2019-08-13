@@ -207,6 +207,11 @@ class IscsiTarget(RESTController):
             raise DashboardException(msg='Target does not exist',
                                      code='target_does_not_exist',
                                      component='iscsi')
+        target_info = IscsiClient.instance().get_targetinfo(target_iqn)
+        if target_info['num_sessions'] > 0:
+            raise DashboardException(msg='Target has active sessions',
+                                     code='target_has_active_sessions',
+                                     component='iscsi')
         IscsiTarget._delete(target_iqn, config, 0, 100)
 
     @iscsi_target_task('create', {'target_iqn': '{target_iqn}'})
@@ -223,7 +228,7 @@ class IscsiTarget(RESTController):
             raise DashboardException(msg='Target already exists',
                                      code='target_already_exists',
                                      component='iscsi')
-        IscsiTarget._validate(target_iqn, portals, disks, groups)
+        IscsiTarget._validate(target_iqn, target_controls, portals, disks, groups)
         IscsiTarget._create(target_iqn, target_controls, acl_enabled, portals, disks, clients,
                             groups, 0, 100, config)
 
@@ -245,7 +250,7 @@ class IscsiTarget(RESTController):
             raise DashboardException(msg='Target IQN already in use',
                                      code='target_iqn_already_in_use',
                                      component='iscsi')
-        IscsiTarget._validate(new_target_iqn, portals, disks, groups)
+        IscsiTarget._validate(new_target_iqn, target_controls, portals, disks, groups)
         config = IscsiTarget._delete(target_iqn, config, 0, 50, new_target_iqn, target_controls,
                                      portals, disks, clients, groups)
         IscsiTarget._create(new_target_iqn, target_controls, acl_enabled, portals, disks, clients,
@@ -412,7 +417,7 @@ class IscsiTarget(RESTController):
         return False
 
     @staticmethod
-    def _validate(target_iqn, portals, disks, groups):
+    def _validate(target_iqn, target_controls, portals, disks, groups):
         if not target_iqn:
             raise DashboardException(msg='Target IQN is required',
                                      code='target_iqn_required',
@@ -429,6 +434,26 @@ class IscsiTarget(RESTController):
             raise DashboardException(msg=msg,
                                      code='portals_required',
                                      component='iscsi')
+
+        # 'target_controls_limits' was introduced in ceph-iscsi > 3.2
+        # When using an older `ceph-iscsi` version these validations will
+        # NOT be executed beforehand
+        if 'target_controls_limits' in settings:
+            for target_control_name, target_control_value in target_controls.items():
+                limits = settings['target_controls_limits'].get(target_control_name)
+                if limits is not None:
+                    min_value = limits.get('min')
+                    if min_value is not None and target_control_value < min_value:
+                        raise DashboardException(msg='Target control {} must be >= '
+                                                     '{}'.format(target_control_name, min_value),
+                                                 code='target_control_invalid_min',
+                                                 component='iscsi')
+                    max_value = limits.get('max')
+                    if max_value is not None and target_control_value > max_value:
+                        raise DashboardException(msg='Target control {} must be <= '
+                                                     '{}'.format(target_control_name, max_value),
+                                                 code='target_control_invalid_max',
+                                                 component='iscsi')
 
         for portal in portals:
             gateway_name = portal['host']
@@ -448,6 +473,26 @@ class IscsiTarget(RESTController):
             unsupported_rbd_features = settings['unsupported_rbd_features'][backstore]
             IscsiTarget._validate_image(pool, image, backstore, required_rbd_features,
                                         unsupported_rbd_features)
+
+            # 'disk_controls_limits' was introduced in ceph-iscsi > 3.2
+            # When using an older `ceph-iscsi` version these validations will
+            # NOT be executed beforehand
+            if 'disk_controls_limits' in settings:
+                for disk_control_name, disk_control_value in disk['controls'].items():
+                    limits = settings['disk_controls_limits'][backstore].get(disk_control_name)
+                    if limits is not None:
+                        min_value = limits.get('min')
+                        if min_value is not None and disk_control_value < min_value:
+                            raise DashboardException(msg='Disk control {} must be >= '
+                                                         '{}'.format(disk_control_name, min_value),
+                                                     code='disk_control_invalid_min',
+                                                     component='iscsi')
+                        max_value = limits.get('max')
+                        if max_value is not None and disk_control_value > max_value:
+                            raise DashboardException(msg='Disk control {} must be <= '
+                                                         '{}'.format(disk_control_name, max_value),
+                                                     code='disk_control_invalid_max',
+                                                     component='iscsi')
 
         initiators = []
         for group in groups:

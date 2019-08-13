@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormControl } from '@angular/forms';
+import { FormControl, Validators } from '@angular/forms';
 
 import * as _ from 'lodash';
 import { BsModalRef } from 'ngx-bootstrap/modal';
@@ -15,6 +15,7 @@ import { CdFormGroup } from '../../../shared/forms/cd-form-group';
 export class IscsiTargetIqnSettingsModalComponent implements OnInit {
   target_controls: FormControl;
   target_default_controls: any;
+  target_controls_limits: any;
 
   settingsForm: CdFormGroup;
   helpText: any;
@@ -26,7 +27,16 @@ export class IscsiTargetIqnSettingsModalComponent implements OnInit {
     this.helpText = this.iscsiService.targetAdvancedSettings;
 
     _.forIn(this.target_default_controls, (_value, key) => {
-      fg[key] = new FormControl(this.target_controls.value[key]);
+      const validators = [];
+      if (this.target_controls_limits && key in this.target_controls_limits) {
+        if ('min' in this.target_controls_limits[key]) {
+          validators.push(Validators.min(this.target_controls_limits[key]['min']));
+        }
+        if ('max' in this.target_controls_limits[key]) {
+          validators.push(Validators.max(this.target_controls_limits[key]['max']));
+        }
+      }
+      fg[key] = new FormControl(this.target_controls.value[key], { validators: validators });
     });
 
     this.settingsForm = new CdFormGroup(fg);

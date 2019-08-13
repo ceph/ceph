@@ -562,3 +562,43 @@ void rgw_data_sync_status::generate_test_instances(list<rgw_data_sync_status*>& 
 {
   o.push_back(new rgw_data_sync_status);
 }
+
+void objexp_hint_entry::generate_test_instances(list<objexp_hint_entry*>& o)
+{
+  auto it = new objexp_hint_entry;
+  it->tenant = "tenant1";
+  it->bucket_name = "bucket1";
+  it->bucket_id = "1234";
+  it->obj_key = rgw_obj_key("obj");
+  o.push_back(it);
+  o.push_back(new objexp_hint_entry);
+}
+
+void RGWBucketEntryPoint::generate_test_instances(list<RGWBucketEntryPoint*>& o)
+{
+  RGWBucketEntryPoint *bp = new RGWBucketEntryPoint();
+  init_bucket(&bp->bucket, "tenant", "bucket", "pool", ".index.pool", "marker", "10");
+  bp->owner = "owner";
+  bp->creation_time = ceph::real_clock::from_ceph_timespec({{2}, {3}});
+
+  o.push_back(bp);
+  o.push_back(new RGWBucketEntryPoint);
+}
+
+void rgw_user::generate_test_instances(list<rgw_user*>& o)
+{
+  rgw_user *u = new rgw_user("tenant", "user");
+
+  o.push_back(u);
+  o.push_back(new rgw_user);
+}
+
+void obj_version::generate_test_instances(list<obj_version*>& o)
+{
+  obj_version *v = new obj_version;
+  v->ver = 5;
+  v->tag = "tag";
+
+  o.push_back(v);
+  o.push_back(new obj_version);
+}

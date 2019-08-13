@@ -23,6 +23,7 @@ import { NfsListComponent } from './ceph/nfs/nfs-list/nfs-list.component';
 import { PerformanceCounterComponent } from './ceph/performance-counter/performance-counter/performance-counter.component';
 import { LoginComponent } from './core/auth/login/login.component';
 import { SsoNotFoundComponent } from './core/auth/sso/sso-not-found/sso-not-found.component';
+import { UserPasswordFormComponent } from './core/auth/user-password-form/user-password-form.component';
 import { ForbiddenComponent } from './core/forbidden/forbidden.component';
 import { NotFoundComponent } from './core/not-found/not-found.component';
 import { ActionLabels, URLVerbs } from './shared/constants/app.constants';
@@ -30,6 +31,7 @@ import { BreadcrumbsResolver, IBreadcrumb } from './shared/models/breadcrumbs';
 import { AuthGuardService } from './shared/services/auth-guard.service';
 import { FeatureTogglesGuardService } from './shared/services/feature-toggles-guard.service';
 import { ModuleStatusGuardService } from './shared/services/module-status-guard.service';
+import { NoSsoGuardService } from './shared/services/no-sso-guard.service';
 
 export class PerformanceCounterBreadcrumbsResolver extends BreadcrumbsResolver {
   resolve(route: ActivatedRouteSnapshot) {
@@ -177,7 +179,7 @@ const routes: Routes = [
     canActivate: [AuthGuardService],
     canActivateChild: [AuthGuardService],
     data: { breadcrumbs: 'Pools' },
-    loadChildren: './ceph/pool/pool.module#RoutedPoolModule'
+    loadChildren: () => import('./ceph/pool/pool.module').then((m) => m.RoutedPoolModule)
   },
   // Block
   {
@@ -185,7 +187,7 @@ const routes: Routes = [
     canActivateChild: [AuthGuardService],
     canActivate: [AuthGuardService],
     data: { breadcrumbs: true, text: 'Block', path: null },
-    loadChildren: './ceph/block/block.module#RoutedBlockModule'
+    loadChildren: () => import('./ceph/block/block.module').then((m) => m.RoutedBlockModule)
   },
   // Filesystems
   {
@@ -207,15 +209,30 @@ const routes: Routes = [
       text: 'Object Gateway',
       path: null
     },
-    loadChildren: './ceph/rgw/rgw.module#RoutedRgwModule'
+    loadChildren: () => import('./ceph/rgw/rgw.module').then((m) => m.RoutedRgwModule)
   },
-  // Dashboard Settings
+  // User/Role Management
   {
     path: 'user-management',
     canActivate: [AuthGuardService],
     canActivateChild: [AuthGuardService],
     data: { breadcrumbs: 'User management', path: null },
-    loadChildren: './core/auth/auth.module#RoutedAuthModule'
+    loadChildren: () => import('./core/auth/auth.module').then((m) => m.RoutedAuthModule)
+  },
+  // User Profile
+  {
+    path: 'user-profile',
+    canActivate: [AuthGuardService],
+    canActivateChild: [AuthGuardService],
+    data: { breadcrumbs: 'User profile', path: null },
+    children: [
+      {
+        path: URLVerbs.EDIT,
+        component: UserPasswordFormComponent,
+        canActivate: [NoSsoGuardService],
+        data: { breadcrumbs: ActionLabels.EDIT }
+      }
+    ]
   },
   // NFS
   {

@@ -369,6 +369,18 @@ export class TaskMessageService {
   }
 
   _getTaskTitle(task: Task) {
+    if (task.name && task.name.startsWith('progress/')) {
+      // we don't fill the failure string because, at least for now, all
+      // progress module tasks will be considered successful
+      return this.newTaskMessage(
+        new TaskMessageOperation(
+          task.name.replace('progress/', ''),
+          '',
+          task.name.replace('progress/', '')
+        ),
+        (_metadata) => ''
+      );
+    }
     return this.messages[task.name] || this.defaultMessage;
   }
 

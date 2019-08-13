@@ -58,7 +58,10 @@ class HealthTest(DashboardTestCase):
                 'status': str,
             }),
             'hosts': int,
-            'iscsi_daemons': int,
+            'iscsi_daemons': JObj({
+                'up': int,
+                'down': int
+            }),
             'mgr_map': JObj({
                 'active_name': str,
                 'standbys': JList(JLeaf(dict))
@@ -120,9 +123,13 @@ class HealthTest(DashboardTestCase):
                 'pools': JList(JObj({
                     'stats': JObj({
                         'stored': int,
+                        'stored_data': int,
+                        'stored_omap': int,
                         'objects': int,
                         'kb_used': int,
                         'bytes_used': int,
+                        'data_bytes_used': int,
+                        'omap_bytes_used': int,
                         'percent_used': float,
                         'max_avail': int,
                         'quota_objects': int,
@@ -146,7 +153,8 @@ class HealthTest(DashboardTestCase):
                     'total_used_raw_bytes': int,
                     'total_used_raw_ratio': float,
                     'num_osds': int,
-                    'num_per_pool_osds': int
+                    'num_per_pool_osds': int,
+                    'num_per_pool_omap_osds': int
                 })
             }),
             'fs_map': JObj({
@@ -183,7 +191,10 @@ class HealthTest(DashboardTestCase):
                 'status': str,
             }),
             'hosts': int,
-            'iscsi_daemons': int,
+            'iscsi_daemons': JObj({
+                'up': int,
+                'down': int
+            }),
             'mgr_map': JObj({
                 'active_addr': str,
                 'active_addrs': JObj({

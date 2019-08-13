@@ -10,6 +10,7 @@ import { AuthStorageService } from '../../../shared/services/auth-storage.servic
   styleUrls: ['./identity.component.scss']
 })
 export class IdentityComponent implements OnInit {
+  sso: boolean;
   username: string;
   icons = Icons;
 
@@ -17,6 +18,7 @@ export class IdentityComponent implements OnInit {
 
   ngOnInit() {
     this.username = this.authStorageService.getUsername();
+    this.sso = this.authStorageService.isSSO();
   }
 
   logout() {

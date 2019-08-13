@@ -1,5 +1,5 @@
 import { PageHelper } from '../page-helper.po';
 
-export class AlertsPage extends PageHelper {
+export class AlertsPageHelper extends PageHelper {
   pages = { index: '/#/alerts' };
 }

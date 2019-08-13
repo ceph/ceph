@@ -22,6 +22,10 @@ class Socket
   seastar::input_stream<char> in;
   seastar::output_stream<char> out;
 
+#ifndef NDEBUG
+  bool closed = false;
+#endif
+
   /// buffer state for read()
   struct {
     bufferlist buffer;
@@ -38,6 +42,12 @@ class Socket
       // the default buffer size 8192 is too small that may impact our write
       // performance. see seastar::net::connected_socket::output()
       out(socket.output(65536)) {}
+
+  ~Socket() {
+#ifndef NDEBUG
+    assert(closed);
+#endif
+  }
 
   Socket(Socket&& o) = delete;
 
@@ -56,6 +66,7 @@ class Socket
 				      seastar::socket_address paddr) {
         entity_addr_t peer_addr;
         peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
+        peer_addr.set_type(entity_addr_t::TYPE_ANY);
         return seastar::make_ready_future<SocketFRef, entity_addr_t>(
           seastar::make_foreign(std::make_unique<Socket>(std::move(socket),
 							 construct_tag{})),
@@ -79,12 +90,20 @@ class Socket
     return out.write(std::move(buf)).then([this] { return out.flush(); });
   }
 
+  // preemptively disable further reads or writes, can only be shutdown once.
+  void shutdown();
+
   /// Socket can only be closed once.
-  seastar::future<> close() {
-    return seastar::smp::submit_to(sid, [this] {
-        return seastar::when_all(
-          in.close(), out.close()).discard_result();
-      });
+  seastar::future<> close();
+
+  // shutdown input_stream only, for tests
+  void force_shutdown_in() {
+    socket.shutdown_input();
+  }
+
+  // shutdown output_stream only, for tests
+  void force_shutdown_out() {
+    socket.shutdown_output();
   }
 };
 

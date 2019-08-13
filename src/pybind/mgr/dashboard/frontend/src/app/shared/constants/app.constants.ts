@@ -58,6 +58,8 @@ export enum ActionLabels {
   /* Non-standard actions */
   COPY = 'Copy',
   CLONE = 'Clone',
+  UPDATE = 'Update',
+  EVICT = 'Evict',
 
   /* Read-only */
   SHOW = 'Show',
@@ -84,6 +86,7 @@ export class ActionLabelsI18n {
   CLONE: string;
   DEEP_SCRUB: string;
   DESTROY: string;
+  EVICT: string;
   FLATTEN: string;
   MARK_DOWN: string;
   MARK_IN: string;
@@ -101,6 +104,7 @@ export class ActionLabelsI18n {
   UNPROTECT: string;
   RECREATE: string;
   EXPIRE: string;
+  CHANGE: string;
 
   constructor(private i18n: I18n) {
     /* Create a new item */
@@ -124,6 +128,7 @@ export class ActionLabelsI18n {
     this.COPY = this.i18n('Copy');
     this.DEEP_SCRUB = this.i18n('Deep Scrub');
     this.DESTROY = this.i18n('Destroy');
+    this.EVICT = this.i18n('Evict');
     this.FLATTEN = this.i18n('Flatten');
     this.MARK_DOWN = this.i18n('Mark Down');
     this.MARK_IN = this.i18n('Mark In');
@@ -139,6 +144,7 @@ export class ActionLabelsI18n {
     this.SHOW = this.i18n('Show');
     this.TRASH = this.i18n('Move to Trash');
     this.UNPROTECT = this.i18n('Unprotect');
+    this.CHANGE = this.i18n('Change');
 
     /* Prometheus wording */
     this.RECREATE = this.i18n('Recreate');
@@ -178,6 +184,7 @@ export class SucceededActionLabelsI18n {
   SHOWED: string;
   TRASHED: string;
   UNPROTECTED: string;
+  CHANGE: string;
   RECREATED: string;
   EXPIRED: string;
 
@@ -218,6 +225,7 @@ export class SucceededActionLabelsI18n {
     this.SHOWED = this.i18n('Showed');
     this.TRASHED = this.i18n('Moved to Trash');
     this.UNPROTECTED = this.i18n('Unprotected');
+    this.CHANGE = this.i18n('Change');
 
     /* Prometheus wording */
     this.RECREATED = this.i18n('Recreated');

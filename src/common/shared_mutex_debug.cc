@@ -7,13 +7,14 @@
 
 namespace ceph {
 
-shared_mutex_debug::shared_mutex_debug(const std::string& n,
+shared_mutex_debug::shared_mutex_debug(std::string group,
                                        bool track_lock,
                                        bool enable_lock_dep,
                                        bool prioritize_write)
-  : mutex_debugging_base{n, false /* backtrace */},
-    track(track_lock),
-    lockdep(enable_lock_dep)
+  : mutex_debugging_base{std::move(group),
+                         enable_lock_dep,
+                         false /* backtrace */},
+    track(track_lock)
 {
 #ifdef HAVE_PTHREAD_RWLOCKATTR_SETKIND_NP
   if (prioritize_write) {
@@ -40,13 +41,13 @@ shared_mutex_debug::shared_mutex_debug(const std::string& n,
 // exclusive
 void shared_mutex_debug::lock()
 {
-  if (g_lockdep && lockdep) {
+  if (_enable_lockdep()) {
     _will_lock();
   }
   if (int r = pthread_rwlock_wrlock(&rwlock); r != 0) {
     throw std::system_error(r, std::generic_category());
   }
-  if (lockdep && g_lockdep) {
+  if (_enable_lockdep()) {
     _locked();
   }
   _post_lock();
@@ -57,7 +58,7 @@ bool shared_mutex_debug::try_lock()
   int r = pthread_rwlock_trywrlock(&rwlock);
   switch (r) {
   case 0:
-    if (lockdep && g_lockdep) {
+    if (_enable_lockdep()) {
       _locked();
     }
     _post_lock();
@@ -72,7 +73,7 @@ bool shared_mutex_debug::try_lock()
 void shared_mutex_debug::unlock()
 {
   _pre_unlock();
-  if (lockdep && g_lockdep) {
+  if (_enable_lockdep()) {
     _will_unlock();
   }
   if (int r = pthread_rwlock_unlock(&rwlock); r != 0) {
@@ -83,13 +84,13 @@ void shared_mutex_debug::unlock()
 // shared locking
 void shared_mutex_debug::lock_shared()
 {
-  if (lockdep && g_lockdep) {
+  if (_enable_lockdep()) {
     _will_lock();
   }
   if (int r = pthread_rwlock_rdlock(&rwlock); r != 0) {
     throw std::system_error(r, std::generic_category());
   }
-  if (lockdep && g_lockdep) {
+  if (_enable_lockdep()) {
     _locked();
   }
   _post_lock_shared();
@@ -97,12 +98,12 @@ void shared_mutex_debug::lock_shared()
 
 bool shared_mutex_debug::try_lock_shared()
 {
-  if (lockdep && g_lockdep) {
+  if (_enable_lockdep()) {
     _will_unlock();
   }
   switch (int r = pthread_rwlock_rdlock(&rwlock); r) {
   case 0:
-    if (lockdep && g_lockdep) {
+    if (_enable_lockdep()) {
       _locked();
     }
     _post_lock_shared();
@@ -117,7 +118,7 @@ bool shared_mutex_debug::try_lock_shared()
 void shared_mutex_debug::unlock_shared()
 {
   _pre_unlock_shared();
-  if (lockdep && g_lockdep) {
+  if (_enable_lockdep()) {
     _will_unlock();
   }
   if (int r = pthread_rwlock_unlock(&rwlock); r != 0) {

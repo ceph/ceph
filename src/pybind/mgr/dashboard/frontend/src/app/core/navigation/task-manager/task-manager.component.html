@@ -12,7 +12,11 @@
               <i [ngClass]="[icons.stack1x, icons.spinner, icons.spin, icons.inverse]"></i>
             </span>
           </td>
-          <td colspan="3"><strong>{{ executingTask.description }}</strong></td>
+          <td colspan="3"><strong>{{ executingTask.description }}</strong>
+            <div class="progress">
+              <progressbar class="progress-striped active" max="100" [value]="executingTask.progress" [striped]="true" [animate]="true"></progressbar>
+            </div>
+          </td>
         </tr>
         <tr>
           <td colspan="2">
@@ -21,8 +25,7 @@
           <td class="text-right italic" nowrap *ngIf="executingTask.progress"><span>{{ executingTask.progress }} %</span></td>
         </tr>
       </table>
-      <hr>
-    </div>
+    </div> 
   </div>
   <!-- Finished -->
   <div *ngIf="finishedTasks.length > 0">
@@ -78,7 +81,6 @@
    i18n-title
    title="Background Tasks">
   <i [ngClass]="[icon]"></i>
-  <span i18n
-        class="d-md-none">Background Tasks</span>
+  <span i18n class="d-md-none">Background Tasks</span>
   <span *ngIf="executingTasks.length > 0"> ({{ executingTasks.length }})</span>
 </a>

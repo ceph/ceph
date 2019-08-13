@@ -78,9 +78,9 @@ export class ConfigurationComponent implements OnInit {
     }
   ];
 
-  @ViewChild('confValTpl')
+  @ViewChild('confValTpl', { static: true })
   public confValTpl: TemplateRef<any>;
-  @ViewChild('confFlagTpl')
+  @ViewChild('confFlagTpl', { static: false })
   public confFlagTpl: TemplateRef<any>;
 
   constructor(

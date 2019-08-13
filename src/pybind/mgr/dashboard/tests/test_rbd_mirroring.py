@@ -7,6 +7,7 @@ from . import ControllerTestCase
 from .. import mgr
 from ..controllers.summary import Summary
 from ..controllers.rbd_mirroring import RbdMirroringSummary
+from ..services import progress
 
 
 mock_list_servers = [{
@@ -66,6 +67,9 @@ class RbdMirroringSummaryControllerTest(ControllerTestCase):
         mgr.version = 'ceph version 13.1.0-534-g23d3751b89 ' \
                       '(23d3751b897b31d2bda57aeaf01acb5ff3c4a9cd) ' \
                       'nautilus (dev)'
+
+        progress.get_progress_tasks = mock.MagicMock()
+        progress.get_progress_tasks.return_value = ([], [])
 
         # pylint: disable=protected-access
         RbdMirroringSummary._cp_config['tools.authenticate.on'] = False

@@ -381,7 +381,7 @@ void Server::finish_reclaim_session(Session *session, const ref_t<MClientReclaim
     if (reply) {
       int64_t session_id = session->get_client().v;
       send_reply = new FunctionContext([this, session_id, reply](int r) {
-	    assert(mds->mds_lock.is_locked_by_me());
+	    assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
 	    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(session_id));
 	    if (!session) {
 	      return;
@@ -1081,8 +1081,7 @@ void Server::evict_cap_revoke_non_responders() {
   }
 }
 
-void Server::handle_conf_change(const ConfigProxy& conf,
-                                const std::set <std::string> &changed) {
+void Server::handle_conf_change(const std::set<std::string>& changed) {
   if (changed.count("mds_cap_revoke_eviction_timeout")) {
     cap_revoke_eviction_timeout = g_conf().get_val<double>("mds_cap_revoke_eviction_timeout");
     dout(20) << __func__ << " cap revoke eviction timeout changed to "
@@ -1099,7 +1098,7 @@ void Server::handle_conf_change(const ConfigProxy& conf,
  */
 void Server::kill_session(Session *session, Context *on_safe)
 {
-  ceph_assert(mds->mds_lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
 
   if ((session->is_opening() ||
        session->is_open() ||

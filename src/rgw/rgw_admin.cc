@@ -84,6 +84,7 @@ void usage()
   cout << "  user create                create a new user\n" ;
   cout << "  user modify                modify user\n";
   cout << "  user info                  get user info\n";
+  cout << "  user rename                rename user\n";
   cout << "  user rm                    remove user\n";
   cout << "  user suspend               suspend a user\n";
   cout << "  user enable                re-enable user after suspension\n";
@@ -105,6 +106,7 @@ void usage()
   cout << "  bucket stats               returns bucket statistics\n";
   cout << "  bucket rm                  remove bucket\n";
   cout << "  bucket check               check bucket index\n";
+  cout << "  bucket chown               link bucket to specified user and update its object ACLs\n";
   cout << "  bucket reshard             reshard bucket\n";
   cout << "  bucket rewrite             rewrite all objects in the specified bucket\n";
   cout << "  bucket sync disable        disable bucket sync\n";
@@ -242,6 +244,7 @@ void usage()
   cout << "options:\n";
   cout << "   --tenant=<tenant>         tenant name\n";
   cout << "   --uid=<id>                user id\n";
+  cout << "   --new-uid=<id>            new user id\n";
   cout << "   --subuser=<name>          subuser name\n";
   cout << "   --access-key=<key>        S3 access key\n";
   cout << "   --email=<email>           user's email address\n";
@@ -265,6 +268,8 @@ void usage()
   cout << "   --start-date=<date>       start date in the format yyyy-mm-dd\n";
   cout << "   --end-date=<date>         end date in the format yyyy-mm-dd\n";
   cout << "   --bucket-id=<bucket-id>   bucket id\n";
+  cout << "   --bucket-new-name=<bucket>\n";
+  cout << "                             for bucket link: optional new name\n";
   cout << "   --shard-id=<shard-id>     optional for: \n";
   cout << "                               mdlog list\n";
   cout << "                               data sync status\n";
@@ -387,6 +392,7 @@ enum {
   OPT_USER_CREATE,
   OPT_USER_INFO,
   OPT_USER_MODIFY,
+  OPT_USER_RENAME,
   OPT_USER_RM,
   OPT_USER_SUSPEND,
   OPT_USER_ENABLE,
@@ -413,6 +419,7 @@ enum {
   OPT_BUCKET_RM,
   OPT_BUCKET_REWRITE,
   OPT_BUCKET_RESHARD,
+  OPT_BUCKET_CHOWN,
   OPT_POLICY,
   OPT_POOL_ADD,
   OPT_POOL_RM,
@@ -640,6 +647,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_USER_INFO;
     if (strcmp(cmd, "modify") == 0)
       return OPT_USER_MODIFY;
+    if (strcmp(cmd, "rename") == 0)
+      return OPT_USER_RENAME;
     if (strcmp(cmd, "rm") == 0)
       return OPT_USER_RM;
     if (strcmp(cmd, "suspend") == 0)
@@ -678,6 +687,8 @@ static int get_cmd(const char *cmd, const char *prev_cmd, const char *prev_prev_
       return OPT_BUCKET_STATS;
     if (strcmp(cmd, "rm") == 0)
       return OPT_BUCKET_RM;
+    if (strcmp(cmd, "chown") == 0)
+      return OPT_BUCKET_CHOWN;
     if (strcmp(cmd, "rewrite") == 0)
       return OPT_BUCKET_REWRITE;
     if (strcmp(cmd, "reshard") == 0)
@@ -2742,6 +2753,7 @@ int main(int argc, const char **argv)
 
   rgw_user user_id;
   string tenant;
+  rgw_user new_user_id;
   std::string access_key, secret_key, user_email, display_name;
   std::string bucket_name, pool_name, object;
   rgw_pool pool;
@@ -2784,6 +2796,7 @@ int main(int argc, const char **argv)
   bool set_temp_url_key = false;
   map<int, string> temp_url_keys;
   string bucket_id;
+  string new_bucket_name;
   Formatter *formatter = NULL;
   int purge_data = false;
   int pretty_format = false;
@@ -2900,6 +2913,8 @@ int main(int argc, const char **argv)
       break;
     } else if (ceph_argparse_witharg(args, i, &val, "-i", "--uid", (char*)NULL)) {
       user_id.from_str(val);
+    } else if (ceph_argparse_witharg(args, i, &val, "-i", "--new-uid", (char*)NULL)) {
+      new_user_id.from_str(val);
     } else if (ceph_argparse_witharg(args, i, &val, "--tenant", (char*)NULL)) {
       tenant = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--access-key", (char*)NULL)) {
@@ -3044,6 +3059,8 @@ int main(int argc, const char **argv)
         cerr << "bad bucket-id" << std::endl;
         exit(1);
       }
+    } else if (ceph_argparse_witharg(args, i, &val, "--bucket-new-name", (char*)NULL)) {
+      new_bucket_name = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
       format = val;
     } else if (ceph_argparse_witharg(args, i, &val, "--categories", (char*)NULL)) {
@@ -3304,6 +3321,11 @@ int main(int argc, const char **argv)
       }
       user_id.tenant = tenant;
     }
+
+    if (!new_user_id.empty() && !tenant.empty()) {
+      new_user_id.tenant = tenant;
+    }
+
     /* check key parameter conflict */
     if ((!access_key.empty()) && gen_access_key) {
         cerr << "ERROR: key parameter conflict, --access-key & --gen-access-key" << std::endl;
@@ -4891,6 +4913,28 @@ int main(int argc, const char **argv)
     return 0;
   }
 
+  bool non_master_cmd = (!store->svc.zone->is_meta_master() && !yes_i_really_mean_it);
+  std::set<int> non_master_ops_list = {OPT_USER_CREATE, OPT_USER_RM, 
+                                        OPT_USER_MODIFY, OPT_USER_ENABLE,
+                                        OPT_USER_SUSPEND, OPT_SUBUSER_CREATE,
+                                        OPT_SUBUSER_MODIFY, OPT_SUBUSER_RM,
+                                        OPT_BUCKET_LINK, OPT_BUCKET_UNLINK,
+                                        OPT_BUCKET_RESHARD, OPT_BUCKET_RM,
+                                        OPT_METADATA_PUT, OPT_METADATA_RM,
+                                        OPT_RESHARD_CANCEL, OPT_RESHARD_ADD,
+                                        OPT_MFA_CREATE, OPT_MFA_REMOVE,
+                                        OPT_MFA_RESYNC, OPT_CAPS_ADD,
+                                        OPT_CAPS_RM};
+
+  bool print_warning_message = (non_master_ops_list.find(opt_cmd) != non_master_ops_list.end() &&
+                                non_master_cmd);
+
+  if (print_warning_message) {
+      cerr << "Please run the command on master zone. Performing this operation on non-master zone leads to inconsistent metadata between zones" << std::endl;
+      cerr << "Are you sure you want to go ahead? (requires --yes-i-really-mean-it)" << std::endl;
+      return EINVAL;
+  }
+
   if (!user_id.empty()) {
     user_op.set_user_id(user_id);
     bucket_op.set_user_id(user_id);
@@ -4901,6 +4945,10 @@ int main(int argc, const char **argv)
 
   if (!user_email.empty())
     user_op.set_user_email(user_email);
+
+  if (!user_id.empty()) {
+    user_op.set_new_user_id(new_user_id);
+  }
 
   if (!access_key.empty())
     user_op.set_access_key(access_key);
@@ -4967,7 +5015,7 @@ int main(int argc, const char **argv)
   // RGWUser to use for user operations
   RGWUser user;
   int ret = 0;
-  if (!user_id.empty() || !subuser.empty()) {
+  if (!(user_id.empty() && access_key.empty()) || !subuser.empty()) {
     ret = user.init(store, user_op);
     if (ret < 0) {
       cerr << "user.init failed: " << cpp_strerror(-ret) << std::endl;
@@ -4990,8 +5038,8 @@ int main(int argc, const char **argv)
 
   switch (opt_cmd) {
   case OPT_USER_INFO:
-    if (user_id.empty()) {
-      cerr << "ERROR: uid not specified" << std::endl;
+    if (user_id.empty() && access_key.empty()) {
+      cerr << "ERROR: --uid or --access-key required" << std::endl;
       return EINVAL;
     }
     break;
@@ -5023,6 +5071,20 @@ int main(int argc, const char **argv)
     }
 
     output_user_info = false;
+    break;
+  case OPT_USER_RENAME:
+    if (yes_i_really_mean_it) {
+      user_op.set_overwrite_new_user(true);
+    }
+    ret = user.rename(user_op, &err_msg);
+    if (ret < 0) {
+      if (ret == -EEXIST) {
+        err_msg += ". to overwrite this user, add --yes-i-really-mean-it";
+      }
+      cerr << "could not rename user: " << err_msg << std::endl;
+      return -ret;
+    }
+
     break;
   case OPT_USER_ENABLE:
   case OPT_USER_SUSPEND:
@@ -5507,6 +5569,7 @@ int main(int argc, const char **argv)
 
   if (opt_cmd == OPT_BUCKET_LINK) {
     bucket_op.set_bucket_id(bucket_id);
+    bucket_op.set_new_bucket_name(new_bucket_name);
     string err;
     int r = RGWBucketAdminOp::link(store, bucket_op, &err);
     if (r < 0) {
@@ -5519,6 +5582,20 @@ int main(int argc, const char **argv)
     int r = RGWBucketAdminOp::unlink(store, bucket_op);
     if (r < 0) {
       cerr << "failure: " << cpp_strerror(-r) << std::endl;
+      return -r;
+    }
+  }
+
+  if (opt_cmd == OPT_BUCKET_CHOWN) {
+
+    bucket_op.set_bucket_name(bucket_name);
+    bucket_op.set_new_bucket_name(new_bucket_name);
+    string err;
+    string marker;
+
+    int r = RGWBucketAdminOp::chown(store, bucket_op, marker, &err);
+    if (r < 0) {
+      cerr << "failure: " << cpp_strerror(-r) << ": " << err << std::endl;
       return -r;
     }
   }
@@ -5921,7 +5998,8 @@ next:
 
     formatter->open_array_section("entries");
 
-    for (int i = 0; i < max_shards; i++) {
+    int i = (specified_shard_id ? shard_id : 0);
+    for (; i < max_shards; i++) {
       RGWRados::BucketShard bs(store);
       int shard_id = (bucket_info.num_shards > 0  ? i : -1);
       int ret = bs.init(bucket, shard_id, nullptr /* no RGWBucketInfo */);
@@ -5949,6 +6027,9 @@ next:
         formatter->flush(cout);
       } while (is_truncated);
       formatter->flush(cout);
+
+      if (specified_shard_id)
+        break;
     }
     formatter->close_section();
     formatter->flush(cout);
@@ -6156,7 +6237,7 @@ next:
     formatter->dump_string("bucket", bucket_name);
     formatter->open_array_section("objects");
     while (is_truncated) {
-      map<string, rgw_bucket_dir_entry> result;
+      RGWRados::ent_map_t result;
       int r =
 	store->cls_bucket_list_ordered(bucket_info, RGW_NO_SHARD, marker,
 				       prefix, 1000, true,
@@ -6171,8 +6252,7 @@ next:
       if (r == -ENOENT)
         break;
 
-      map<string, rgw_bucket_dir_entry>::iterator iter;
-      for (iter = result.begin(); iter != result.end(); ++iter) {
+      for (auto iter = result.begin(); iter != result.end(); ++iter) {
         rgw_obj_key key = iter->second.key;
         rgw_bucket_dir_entry& entry = iter->second;
 

@@ -1,11 +1,10 @@
 import { Helper } from '../helper.po';
-import { IscsiPage } from './iscsi.po';
 
 describe('Iscsi Page', () => {
-  let page: IscsiPage;
+  let iscsi: Helper['iscsi'];
 
   beforeAll(() => {
-    page = new IscsiPage();
+    iscsi = new Helper().iscsi;
   });
 
   afterEach(() => {
@@ -14,11 +13,11 @@ describe('Iscsi Page', () => {
 
   describe('breadcrumb test', () => {
     beforeAll(() => {
-      page.navigateTo();
+      iscsi.navigateTo();
     });
 
     it('should open and show breadcrumb', () => {
-      expect(IscsiPage.getBreadcrumbText()).toEqual('Overview');
+      expect(iscsi.getBreadcrumbText()).toEqual('Overview');
     });
   });
 });

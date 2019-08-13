@@ -136,7 +136,6 @@ Monitor::Monitor(CephContext* cct_, string nm, MonitorDBStore *s,
   rank(-1), 
   messenger(m),
   con_self(m ? m->get_loopback_connection() : NULL),
-  lock("Monitor::lock"),
   timer(cct_, lock),
   finisher(cct_, "mon_finisher", "fin"),
   cpu_tp(cct, "Monitor::cpu_tp", "cpu_tp", g_conf()->mon_cpu_threads),
@@ -551,7 +550,7 @@ void Monitor::handle_conf_change(const ConfigProxy& conf,
       changed.count("mon_health_to_clog_interval") ||
       changed.count("mon_health_to_clog_tick_interval")) {
     finisher.queue(new C_MonContext(this, [this, changed](int) {
-      Mutex::Locker l(lock);
+      std::lock_guard l{lock};
       health_to_clog_update_conf(changed);
     }));
   }
@@ -559,7 +558,7 @@ void Monitor::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("mon_scrub_interval")) {
     int scrub_interval = conf->mon_scrub_interval;
     finisher.queue(new C_MonContext(this, [this, scrub_interval](int) {
-      Mutex::Locker l(lock);
+      std::lock_guard l{lock};
       scrub_update_interval(scrub_interval);
     }));
   }
@@ -624,14 +623,13 @@ int Monitor::sanitize_options()
 
 int Monitor::preinit()
 {
-  lock.Lock();
+  std::unique_lock l(lock);
 
   dout(1) << "preinit fsid " << monmap->fsid << dendl;
 
   int r = sanitize_options();
   if (r < 0) {
     derr << "option sanitization failed!" << dendl;
-    lock.Unlock();
     return r;
   }
 
@@ -691,7 +689,6 @@ int Monitor::preinit()
     if (r == -ENOENT)
       r = write_fsid();
     if (r < 0) {
-      lock.Unlock();
       return r;
     }
   }
@@ -726,7 +723,6 @@ int Monitor::preinit()
               << "'mon_force_quorum_join' is set -- allowing boot" << dendl;
     } else {
       derr << "commit suicide!" << dendl;
-      lock.Unlock();
       return -ENOENT;
     }
   }
@@ -788,7 +784,6 @@ int Monitor::preinit()
 	write_default_keyring(bl);
       } else {
 	derr << "unable to load initial keyring " << g_conf()->keyring << dendl;
-	lock.Unlock();
 	return r;
       }
     }
@@ -798,7 +793,8 @@ int Monitor::preinit()
   AdminSocket* admin_socket = cct->get_admin_socket();
 
   // unlock while registering to avoid mon_lock -> admin socket lock dependency.
-  lock.Unlock();
+  l.unlock();
+
   r = admin_socket->register_command("mon_status", "mon_status", admin_hook,
 				     "show current monitor status");
   ceph_assert(r == 0);
@@ -857,7 +853,7 @@ int Monitor::preinit()
                                     "show recent slow ops");
   ceph_assert(r == 0);
 
-  lock.Lock();
+  l.lock();
 
   // add ourselves as a conf observer
   g_conf().add_observer(this);
@@ -868,7 +864,6 @@ int Monitor::preinit()
 
   auth_registry.refresh_config();
 
-  lock.Unlock();
   return 0;
 }
 
@@ -973,7 +968,7 @@ void Monitor::shutdown()
 {
   dout(1) << "shutdown" << dendl;
 
-  lock.Lock();
+  lock.lock();
 
   wait_for_paxos_write();
 
@@ -984,9 +979,9 @@ void Monitor::shutdown()
 
   state = STATE_SHUTDOWN;
 
-  lock.Unlock();
+  lock.unlock();
   g_conf().remove_observer(this);
-  lock.Lock();
+  lock.lock();
 
   if (admin_hook) {
     cct->get_admin_socket()->unregister_commands(admin_hook);
@@ -998,10 +993,10 @@ void Monitor::shutdown()
 
   mgr_client.shutdown();
 
-  lock.Unlock();
+  lock.unlock();
   finisher.wait_for_empty();
   finisher.stop();
-  lock.Lock();
+  lock.lock();
 
   // clean up
   paxos->shutdown();
@@ -1021,7 +1016,7 @@ void Monitor::shutdown()
   log_client.shutdown();
 
   // unlock before msgr shutdown...
-  lock.Unlock();
+  lock.unlock();
 
   // shutdown messenger before removing logger from perfcounter collection, 
   // otherwise _ms_dispatch() will try to update deleted logger
@@ -1045,9 +1040,9 @@ void Monitor::wait_for_paxos_write()
 {
   if (paxos->is_writing() || paxos->is_writing_previous()) {
     dout(10) << __func__ << " flushing pending write" << dendl;
-    lock.Unlock();
+    lock.unlock();
     store->flush();
-    lock.Lock();
+    lock.lock();
     dout(10) << __func__ << " flushed pending write" << dendl;
   }
 }
@@ -2215,7 +2210,7 @@ void Monitor::win_election(epoch_t epoch, set<int>& active, uint64_t features,
         dout(20) << __func__ << " healthmon proposing, waiting" << dendl;
         healthmon()->wait_for_finished_proposal(nullptr, new C_MonContext(this,
               [this](int r){
-                ceph_assert(lock.is_locked_by_me());
+                ceph_assert(ceph_mutex_is_locked_by_me(lock));
                 do_health_to_clog_interval();
               }));
 
@@ -2654,14 +2649,14 @@ void Monitor::health_tick_stop()
   }
 }
 
-utime_t Monitor::health_interval_calc_next_update()
+ceph::real_clock::time_point Monitor::health_interval_calc_next_update()
 {
-  utime_t now = ceph_clock_now();
+  auto now = ceph::real_clock::now();
 
-  time_t secs = now.sec();
-  int remainder = secs % cct->_conf->mon_health_to_clog_interval;
+  auto secs = std::chrono::duration_cast<std::chrono::seconds>(now.time_since_epoch());
+  int remainder = secs.count() % cct->_conf->mon_health_to_clog_interval;
   int adjustment = cct->_conf->mon_health_to_clog_interval - remainder;
-  utime_t next = utime_t(secs + adjustment, 0);
+  auto next = secs + std::chrono::seconds(adjustment);
 
   dout(20) << __func__
     << " now: " << now << ","
@@ -2669,7 +2664,7 @@ utime_t Monitor::health_interval_calc_next_update()
     << " interval: " << cct->_conf->mon_health_to_clog_interval
     << dendl;
 
-  return next;
+  return ceph::real_clock::time_point{next};
 }
 
 void Monitor::health_interval_start()
@@ -2682,7 +2677,7 @@ void Monitor::health_interval_start()
   }
 
   health_interval_stop();
-  utime_t next = health_interval_calc_next_update();
+  auto next = health_interval_calc_next_update();
   health_interval_event = new C_MonContext(this, [this](int r) {
       if (r < 0)
         return;
@@ -2955,7 +2950,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
 	  mono_clock::now() - quorum_since).count());
     }
     f->open_object_section("monmap");
-    monmap->dump(f);
+    monmap->dump_summary(f);
     f->close_section();
     f->open_object_section("osdmap");
     osdmon()->osdmap.print_summary(f, cout, string(12, ' '));
@@ -4481,6 +4476,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
     case CEPH_MSG_POOLOP:
     case MSG_OSD_BEACON:
     case MSG_OSD_MARK_ME_DOWN:
+    case MSG_OSD_MARK_ME_DEAD:
     case MSG_OSD_FULL:
     case MSG_OSD_FAILURE:
     case MSG_OSD_BOOT:

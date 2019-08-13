@@ -139,9 +139,7 @@ describe('TaskManagerMessageService', () => {
         defaultMsg = `RBD '${metadata.pool_name}/${metadata.image_name}'`;
         childMsg = `RBD '${metadata.child_pool_name}/${metadata.child_image_name}'`;
         destinationMsg = `RBD '${metadata.dest_pool_name}/${metadata.dest_image_name}'`;
-        snapMsg = `RBD snapshot '${metadata.pool_name}/${metadata.image_name}@${
-          metadata.snapshot_name
-        }'`;
+        snapMsg = `RBD snapshot '${metadata.pool_name}/${metadata.image_name}@${metadata.snapshot_name}'`;
         finishedTask.metadata = metadata;
       });
 

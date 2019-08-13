@@ -1,11 +1,10 @@
 import { Helper } from '../helper.po';
-import { MirroringPage } from './mirroring.po';
 
 describe('Mirroring page', () => {
-  let page: MirroringPage;
+  let mirroring: Helper['mirroring'];
 
   beforeAll(() => {
-    page = new MirroringPage();
+    mirroring = new Helper().mirroring;
   });
 
   afterEach(() => {
@@ -14,21 +13,21 @@ describe('Mirroring page', () => {
 
   describe('breadcrumb and tab tests', () => {
     beforeAll(() => {
-      page.navigateTo();
+      mirroring.navigateTo();
     });
 
     it('should open and show breadcrumb', () => {
-      expect(MirroringPage.getBreadcrumbText()).toEqual('Mirroring');
+      expect(mirroring.getBreadcrumbText()).toEqual('Mirroring');
     });
 
     it('should show three tabs', () => {
-      expect(MirroringPage.getTabsCount()).toEqual(3);
+      expect(mirroring.getTabsCount()).toEqual(3);
     });
 
     it('should show text for all tabs', () => {
-      expect(MirroringPage.getTabText(0)).toEqual('Issues');
-      expect(MirroringPage.getTabText(1)).toEqual('Syncing');
-      expect(MirroringPage.getTabText(2)).toEqual('Ready');
+      expect(mirroring.getTabText(0)).toEqual('Issues');
+      expect(mirroring.getTabText(1)).toEqual('Syncing');
+      expect(mirroring.getTabText(2)).toEqual('Ready');
     });
   });
 });

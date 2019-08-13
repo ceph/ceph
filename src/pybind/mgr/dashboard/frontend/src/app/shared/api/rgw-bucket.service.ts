@@ -48,10 +48,13 @@ export class RgwBucketService {
     return this.http.get(`${this.url}/${bucket}`);
   }
 
-  create(bucket: string, uid: string) {
+  create(bucket: string, uid: string, zonegroup: string, placementTarget: string) {
     let params = new HttpParams();
     params = params.append('bucket', bucket);
     params = params.append('uid', uid);
+    params = params.append('zonegroup', zonegroup);
+    params = params.append('placement_target', placementTarget);
+
     return this.http.post(this.url, null, { params: params });
   }
 

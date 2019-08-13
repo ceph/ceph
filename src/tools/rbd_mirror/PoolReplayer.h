@@ -5,8 +5,7 @@
 #define CEPH_RBD_MIRROR_POOL_REPLAYER_H
 
 #include "common/AsyncOpTracker.h"
-#include "common/Cond.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/WorkQueue.h"
 #include "include/rados/librados.hpp"
 
@@ -220,8 +219,8 @@ private:
   PeerSpec m_peer;
   std::vector<const char*> m_args;
 
-  mutable Mutex m_lock;
-  Cond m_cond;
+  mutable ceph::mutex m_lock;
+  ceph::condition_variable m_cond;
   std::atomic<bool> m_stopping = { false };
   bool m_manual_stop = false;
   bool m_blacklisted = false;

@@ -774,9 +774,7 @@ public:
  public:
   explicit MDCache(MDSRank *m, PurgeQueue &purge_queue_);
   ~MDCache();
-  void handle_conf_change(const ConfigProxy& conf,
-                          const std::set <std::string> &changed,
-                          const MDSMap &mds_map);
+  void handle_conf_change(const std::set<std::string>& changed, const MDSMap& mds_map);
   
   // debug
   void log_stat();
@@ -1261,6 +1259,9 @@ public:
   void process_delayed_expire(CDir *dir);
   void discard_delayed_expire(CDir *dir);
 
+  // -- mdsmap --
+  void handle_mdsmap(const MDSMap &mdsmap);
+
 protected:
   int dump_cache(std::string_view fn, Formatter *f);
 public:
@@ -1318,6 +1319,7 @@ public:
 public:
   /* Because exports may fail, this set lets us keep track of inodes that need exporting. */
   std::set<CInode *> export_pin_queue;
+  std::set<CInode *> export_pin_delayed_queue;
 
   OpenFileTable open_file_table;
 };

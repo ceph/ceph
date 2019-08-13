@@ -70,6 +70,7 @@ EOF
     cd $TEMP_DIR
     virtualenv --python=${TEUTHOLOGY_PYTHON_BIN:-/usr/bin/python} venv
     source venv/bin/activate
+    pip install 'setuptools >= 12'
     eval pip install $TEUTHOLOGY_PY_REQS
     pip install -r $CURR_DIR/requirements.txt
     deactivate
@@ -120,7 +121,8 @@ run_teuthology_tests() {
     export PATH=$BUILD_DIR/bin:$PATH
     source $TEMP_DIR/venv/bin/activate # Run after setting PATH as it does the last PATH export.
     export LD_LIBRARY_PATH=$BUILD_DIR/lib/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}/:$BUILD_DIR/lib
-    export PYTHONPATH=$TEMP_DIR/teuthology:$BUILD_DIR/../qa:$BUILD_DIR/lib/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}/:$BUILD_DIR/../src/pybind
+    local source_dir=$(dirname "$BUILD_DIR")
+    export PYTHONPATH=$TEMP_DIR/teuthology:$source_dir/qa:$BUILD_DIR/lib/cython_modules/lib.${CEPH_PY_VERSION_MAJOR}/:$source_dir/src/pybind:$source_dir/src/python-common
     export RGW=${RGW:-1}
 
     export COVERAGE_ENABLED=true

@@ -8,6 +8,7 @@
 #include <boost/algorithm/string.hpp>
 
 #include "rgw_tag.h"
+#include "rgw_common.h"
 
 bool RGWObjTags::add_tag(const string&key, const string& val){
   return tag_map.emplace(std::make_pair(key,val)).second;

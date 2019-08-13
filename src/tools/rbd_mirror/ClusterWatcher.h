@@ -9,7 +9,7 @@
 #include <set>
 
 #include "common/ceph_context.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "common/Timer.h"
 #include "include/rados/librados.hpp"
 #include "tools/rbd_mirror/Types.h"
@@ -37,7 +37,7 @@ public:
   typedef std::set<PeerSpec, PeerSpecCompare> Peers;
   typedef std::map<int64_t, Peers>  PoolPeers;
 
-  ClusterWatcher(RadosRef cluster, Mutex &lock,
+  ClusterWatcher(RadosRef cluster, ceph::mutex &lock,
                  ServiceDaemon<librbd::ImageCtx>* service_daemon);
   ~ClusterWatcher() = default;
   ClusterWatcher(const ClusterWatcher&) = delete;
@@ -51,7 +51,7 @@ private:
   typedef std::unordered_map<int64_t, service_daemon::CalloutId> ServicePools;
 
   RadosRef m_cluster;
-  Mutex &m_lock;
+  ceph::mutex &m_lock;
   ServiceDaemon<librbd::ImageCtx>* m_service_daemon;
 
   ServicePools m_service_pools;

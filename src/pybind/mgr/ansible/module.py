@@ -11,13 +11,14 @@ import os
 import errno
 import tempfile
 import requests
-from OpenSSL import crypto, SSL
 
 from mgr_module import MgrModule, Option, CLIWriteCommand
 import orchestrator
+from mgr_util import verify_tls_files, ServerConfigException
 
 from .ansible_runner_svc import Client, PlayBookExecution, ExecutionStatusCode,\
-                                AnsibleRunnerServiceError
+                                AnsibleRunnerServiceError, InventoryGroup,\
+                                URL_MANAGE_GROUP, URL_ADD_RM_HOSTS
 
 from .output_wizards import ProcessInventory, ProcessPlaybookResult, \
                             ProcessHostsList
@@ -38,17 +39,22 @@ ADD_OSD_PLAYBOOK = "add-osd.yml"
 # Used in the remove_osds method
 REMOVE_OSD_PLAYBOOK = "shrink-osd.yml"
 
+# General multi purpose cluster playbook
+SITE_PLAYBOOK = "site.yml"
+
+# General multi-purpose playbook for removing daemons
+PURGE_PLAYBOOK = "purge-cluster.yml"
+
 # Default name for the inventory group for hosts managed by the Orchestrator
 ORCHESTRATOR_GROUP = "orchestrator"
 
 # URLs for Ansible Runner Operations
-# Add or remove host in one group
-URL_ADD_RM_HOSTS = "api/v1/hosts/{host_name}/groups/{inventory_group}"
 
 # Retrieve the groups where the host is included in.
 URL_GET_HOST_GROUPS = "api/v1/hosts/{host_name}"
-# Manage groups
-URL_MANAGE_GROUP = "api/v1/groups/{group_name}"
+
+
+
 # URLs for Ansible Runner Operations
 URL_GET_HOSTS = "api/v1/hosts"
 
@@ -190,6 +196,10 @@ class PlaybookOperation(AnsibleReadOperation):
         # An aditional filter of result events based in the event
         self.event_filter_list = [""]
 
+        # A dict with groups and hosts to remove from inventory if operation is
+        # succesful. Ex: {"group1": ["host1"], "group2": ["host3", "host4"]}
+        self.clean_hosts_on_success = {}
+
         # Playbook execution object
         self.pb_execution = PlayBookExecution(client,
                                               playbook,
@@ -219,6 +229,10 @@ class PlaybookOperation(AnsibleReadOperation):
         if self._is_complete:
             self.update_result()
 
+            # Clean hosts if operation is succesful
+            if self._status == ExecutionStatusCode.SUCCESS:
+                self.clean_inventory()
+
         return self._status
 
     def execute_playbook(self):
@@ -242,22 +256,30 @@ class PlaybookOperation(AnsibleReadOperation):
         processed_result = []
 
         if self._is_errored:
-            processed_result = self.pb_execution.get_result(["runner_on_failed",
+            raw_result = self.pb_execution.get_result(["runner_on_failed",
                                                        "runner_on_unreachable",
                                                        "runner_on_no_hosts",
                                                        "runner_on_async_failed",
                                                        "runner_item_on_failed"])
-
         elif self._is_complete:
             raw_result = self.pb_execution.get_result(self.event_filter_list)
 
-            if self.output_wizard:
-                processed_result = self.output_wizard.process(self.pb_execution.play_uuid,
-                                                              raw_result)
-            else:
-                processed_result = raw_result
+        if self.output_wizard:
+            processed_result = self.output_wizard.process(self.pb_execution.play_uuid,
+                                                          raw_result)
+        else:
+            processed_result = raw_result
 
         self._result = processed_result
+
+    def clean_inventory(self):
+        """ Remove hosts from inventory groups
+        """
+
+        for group, hosts in self.clean_hosts_on_success.items():
+            InventoryGroup(group, self.ar_client).clean(hosts)
+            del self.clean_hosts_on_success[group]
+
 
 
 class AnsibleChangeOperation(orchestrator.WriteCompletion):
@@ -537,7 +559,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
         If no host provided the operation affects all the host in the OSDS role
 
 
-        :param drive_group: (orchestrator.DriveGroupSpec),
+        :param drive_group: (ceph.deployment.drive_group.DriveGroupSpec),
                             Drive group with the specification of drives to use
         :param all_hosts  : (List[str]),
                             List of hosts where the OSD's must be created
@@ -673,6 +695,125 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         return ARSChangeOperation(self.ar_client, self.log, operations)
 
+    def add_rgw(self, spec):
+        # type: (orchestrator.RGWSpec) -> PlaybookOperation
+        """ Add a RGW service in the cluster
+
+        : spec        : an Orchestrator.RGWSpec object
+
+        : returns     : Completion object
+        """
+
+
+        # Add the hosts to the inventory in the right group
+        hosts = spec.hosts
+        if not hosts:
+            raise orchestrator.OrchestratorError("No hosts provided. "
+                "At least one destination host is needed to install the RGW "
+                "service")
+
+        def set_rgwspec_defaults(spec):
+            spec.rgw_multisite = spec.rgw_multisite if spec.rgw_multisite is not None else True
+            spec.rgw_zonemaster = spec.rgw_zonemaster if spec.rgw_zonemaster is not None else True
+            spec.rgw_zonesecondary = spec.rgw_zonesecondary \
+                if spec.rgw_zonesecondary is not None else False
+            spec.rgw_multisite_proto = spec.rgw_multisite_proto \
+                if spec.rgw_multisite_proto is not None else "http"
+            spec.rgw_frontend_port = spec.rgw_frontend_port \
+                if spec.rgw_frontend_port is not None else 8080
+
+            spec.rgw_zonegroup = spec.rgw_zonegroup if spec.rgw_zonegroup is not None else "Main"
+            spec.rgw_zone_user = spec.rgw_zone_user if spec.rgw_zone_user is not None else "zone.user"
+            spec.rgw_realm = spec.rgw_realm if spec.rgw_realm is not None else "RGW_Realm"
+
+            spec.system_access_key = spec.system_access_key \
+                if spec.system_access_key is not None else spec.genkey(20)
+            spec.system_secret_key = spec.system_secret_key \
+                if spec.system_secret_key is not None else spec.genkey(40)
+
+        set_rgwspec_defaults(spec)
+        InventoryGroup("rgws", self.ar_client).update(hosts)
+
+        # Limit playbook execution to certain hosts
+        limited = ",".join(hosts)
+
+        # Add the settings for this service
+        extravars = {k:v for (k,v) in spec.__dict__.items() if k.startswith('rgw_')}
+        extravars['rgw_zone'] = spec.name
+        extravars['rgw_multisite_endpoint_addr'] = spec.rgw_multisite_endpoint_addr
+        extravars['rgw_multisite_endpoints_list'] = spec.rgw_multisite_endpoints_list
+        extravars['rgw_frontend_port'] = str(spec.rgw_frontend_port)
+
+        # Group hosts by resource (used in rm ops)
+        resource_group = "rgw_zone_{}".format(spec.name)
+        InventoryGroup(resource_group, self.ar_client).update(hosts)
+
+
+        # Execute the playbook to create the service
+        playbook_operation = PlaybookOperation(client=self.ar_client,
+                                               playbook=SITE_PLAYBOOK,
+                                               logger=self.log,
+                                               result_pattern="",
+                                               params=extravars,
+                                               querystr_dict={"limit": limited})
+
+        # Filter to get the result
+        playbook_operation.output_wizard = ProcessPlaybookResult(self.ar_client,
+                                                                 self.log)
+        playbook_operation.event_filter_list = ["playbook_on_stats"]
+
+        # Execute the playbook
+        self._launch_operation(playbook_operation)
+
+        return playbook_operation
+
+    def remove_rgw(self, zone):
+        """ Remove a RGW service providing <zone>
+
+        :zone : <zone name> of the RGW
+                            ...
+        : returns    : Completion object
+        """
+
+
+        # Ansible Inventory group for the kind of service
+        group = "rgws"
+
+        # get the list of hosts where to remove the service
+        # (hosts in resource group)
+        resource_group = "rgw_zone_{}".format(zone)
+
+        hosts_list = list(InventoryGroup(resource_group, self.ar_client))
+        limited = ",".join(hosts_list)
+
+        # Avoid manual confirmation
+        extravars = {"ireallymeanit": "yes"}
+
+        # Execute the playbook to remove the service
+        playbook_operation = PlaybookOperation(client=self.ar_client,
+                                               playbook=PURGE_PLAYBOOK,
+                                               logger=self.log,
+                                               result_pattern="",
+                                               params=extravars,
+                                               querystr_dict={"limit": limited})
+
+        # Filter to get the result
+        playbook_operation.output_wizard = ProcessPlaybookResult(self.ar_client,
+                                                                 self.log)
+        playbook_operation.event_filter_list = ["playbook_on_stats"]
+
+        # Cleaning of inventory after a sucessful operation
+        clean_inventory = {}
+        clean_inventory[resource_group] = hosts_list
+        clean_inventory[group] = hosts_list
+        playbook_operation.clean_hosts_on_success = clean_inventory
+
+        # Execute the playbook
+        self.log.info("Removing service rgw for resource %s", zone)
+        self._launch_operation(playbook_operation)
+
+        return playbook_operation
+
     def _launch_operation(self, ansible_operation):
         """Launch the operation and add the operation to the completion objects
         ongoing
@@ -690,9 +831,6 @@ class Module(MgrModule, orchestrator.Orchestrator):
         """Verify mandatory settings for the module and provide help to
            configure properly the orchestrator
         """
-
-        the_crt = None
-        the_key = None
 
         # Retrieve TLS content to use and check them
         # First try to get certiticate and key content for this manager instance
@@ -722,8 +860,10 @@ class Module(MgrModule, orchestrator.Orchestrator):
         self.client_cert_fname = generate_temp_file("crt", the_crt)
         self.client_key_fname = generate_temp_file("key", the_key)
 
-        self.status_message = verify_tls_files(self.client_cert_fname,
-                                               self.client_key_fname)
+        try:
+            verify_tls_files(self.client_cert_fname, self.client_key_fname)
+        except ServerConfigException as e:
+            self.status_message = str(e)
 
         if self.status_message:
             self.log.error(self.status_message)
@@ -854,51 +994,4 @@ def generate_temp_file(key, content):
 
     return fname
 
-def verify_tls_files(crt_file, key_file):
-    """Basic checks for TLS certificate and key files
 
-    :crt_file : Name of the certificate file
-    :key_file : name of the certificate public key file
-
-    :returns  :  String with error description
-    """
-
-    # Check we have files
-    if not crt_file or not key_file:
-        return "no certificate/key configured"
-
-    if not os.path.isfile(crt_file):
-        return "certificate {} does not exist".format(crt_file)
-
-    if not os.path.isfile(key_file):
-        return "Public key {} does not exist".format(key_file)
-
-    # Do some validations to the private key and certificate:
-    # - Check the type and format
-    # - Check the certificate expiration date
-    # - Check the consistency of the private key
-    # - Check that the private key and certificate match up
-    try:
-        with open(crt_file) as fcrt:
-            x509 = crypto.load_certificate(crypto.FILETYPE_PEM, fcrt.read())
-            if x509.has_expired():
-                return "Certificate {} has been expired".format(crt_file)
-    except (ValueError, crypto.Error) as ex:
-        return "Invalid certificate {}: {}".format(crt_file, str(ex))
-    try:
-        with open(key_file) as fkey:
-            pkey = crypto.load_privatekey(crypto.FILETYPE_PEM, fkey.read())
-            pkey.check()
-    except (ValueError, crypto.Error) as ex:
-        return "Invalid private key {}: {}".format(key_file, str(ex))
-    try:
-        context = SSL.Context(SSL.TLSv1_METHOD)
-        context.use_certificate_file(crt_file, crypto.FILETYPE_PEM)
-        context.use_privatekey_file(key_file, crypto.FILETYPE_PEM)
-        context.check_privatekey()
-    except crypto.Error as ex:
-        return "Private key {} and certificate {} do not match up: {}".format(
-                key_file, crt_file, str(ex))
-
-    # Everything OK
-    return ""

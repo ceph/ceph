@@ -5,4 +5,5 @@ tasks:
       - overall HEALTH_
       - \(MON_DOWN\)
       - \(PG_AVAILABILITY\)
+      - \(SLOW_OPS\)
 - mon_recovery:

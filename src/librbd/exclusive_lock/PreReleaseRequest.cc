@@ -109,7 +109,7 @@ void PreReleaseRequest<I>::send_block_writes() {
     klass, &klass::handle_block_writes>(this);
 
   {
-    RWLock::RLocker owner_locker(m_image_ctx.owner_lock);
+    std::shared_lock owner_locker{m_image_ctx.owner_lock};
     // setting the lock as required will automatically cause the IO
     // queue to re-request the lock if any IO is queued
     if (m_image_ctx.clone_copy_on_read ||
@@ -165,7 +165,7 @@ void PreReleaseRequest<I>::send_invalidate_cache() {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << dendl;
 
-  RWLock::RLocker owner_lock(m_image_ctx.owner_lock);
+  std::shared_lock owner_lock{m_image_ctx.owner_lock};
   Context *ctx = create_context_callback<
       PreReleaseRequest<I>,
       &PreReleaseRequest<I>::handle_invalidate_cache>(this);
@@ -212,7 +212,7 @@ void PreReleaseRequest<I>::handle_flush_notifies(int r) {
 template <typename I>
 void PreReleaseRequest<I>::send_close_journal() {
   {
-    RWLock::WLocker image_locker(m_image_ctx.image_lock);
+    std::unique_lock image_locker{m_image_ctx.image_lock};
     std::swap(m_journal, m_image_ctx.journal);
   }
 
@@ -248,7 +248,7 @@ void PreReleaseRequest<I>::handle_close_journal(int r) {
 template <typename I>
 void PreReleaseRequest<I>::send_close_object_map() {
   {
-    RWLock::WLocker image_locker(m_image_ctx.image_lock);
+    std::unique_lock image_locker{m_image_ctx.image_lock};
     std::swap(m_object_map, m_image_ctx.object_map);
   }
 

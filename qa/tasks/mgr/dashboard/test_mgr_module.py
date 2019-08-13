@@ -111,14 +111,18 @@ class MgrModuleTelemetryTest(MgrModuleTestCase):
             data,
             JObj(
                 sub_elems={
-                    'contact': JLeaf(str),
-                    'description': JLeaf(str),
-                    'enabled': JLeaf(bool),
-                    'interval': JLeaf(int),
-                    'leaderboard': JLeaf(bool),
-                    'organization': JLeaf(str),
-                    'proxy': JLeaf(str),
-                    'url': JLeaf(str)
+                    'channel_basic': bool,
+                    'channel_ident': bool,
+                    'channel_crash': bool,
+                    'channel_device': bool,
+                    'contact': str,
+                    'description': str,
+                    'enabled': bool,
+                    'interval': int,
+                    'leaderboard': bool,
+                    'organization': str,
+                    'proxy': str,
+                    'url': str
                 }))
 
     def test_put(self):

@@ -22,7 +22,7 @@ import { PoolEditPeerModalComponent } from '../pool-edit-peer-modal/pool-edit-pe
   styleUrls: ['./pool-list.component.scss']
 })
 export class PoolListComponent implements OnInit, OnDestroy {
-  @ViewChild('healthTmpl')
+  @ViewChild('healthTmpl', { static: true })
   healthTmpl: TemplateRef<any>;
 
   subs: Subscription;

@@ -21,7 +21,6 @@
 #include "include/Context.h"
 #include "common/ceph_argparse.h"
 #include "global/global_init.h"
-#include "common/Mutex.h"
 #include "common/Cond.h"
 #include "common/errno.h"
 #include "include/stringify.h"

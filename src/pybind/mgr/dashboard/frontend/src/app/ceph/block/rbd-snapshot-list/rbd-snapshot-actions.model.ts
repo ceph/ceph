@@ -1,4 +1,5 @@
 import { I18n } from '@ngx-translate/i18n-polyfill';
+import * as _ from 'lodash';
 
 import { ActionLabelsI18n } from '../../../shared/constants/app.constants';
 import { Icons } from '../../../shared/enum/icons.enum';
@@ -18,7 +19,7 @@ export class RbdSnapshotActionsModel {
   deleteSnap: CdTableAction;
   ordering: CdTableAction[];
 
-  constructor(i18n: I18n, actionLabels: ActionLabelsI18n) {
+  constructor(i18n: I18n, actionLabels: ActionLabelsI18n, featuresName: string[]) {
     this.i18n = i18n;
 
     this.create = {
@@ -49,7 +50,10 @@ export class RbdSnapshotActionsModel {
       permission: 'create',
       canBePrimary: (selection: CdTableSelection) => selection.hasSingleSelection,
       disable: (selection: CdTableSelection) =>
-        !selection.hasSingleSelection || selection.first().cdExecuting,
+        !selection.hasSingleSelection ||
+        selection.first().cdExecuting ||
+        !_.isUndefined(this.getCloneDisableDesc(featuresName)),
+      disableDesc: () => this.getCloneDisableDesc(featuresName),
       icon: Icons.clone,
       name: actionLabels.CLONE
     };
@@ -86,5 +90,11 @@ export class RbdSnapshotActionsModel {
       this.rollback,
       this.deleteSnap
     ];
+  }
+
+  getCloneDisableDesc(featuresName: string[]): string | undefined {
+    if (!featuresName.includes('layering')) {
+      return this.i18n('Parent image must support Layering');
+    }
   }
 }

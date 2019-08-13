@@ -272,12 +272,12 @@ int main(int argc, const char **argv)
   if (g_conf()->daemonize) {
     global_init_daemonize(g_ceph_context);
   }
-  Mutex mutex("main");
+  ceph::mutex mutex = ceph::make_mutex("main");
   SafeTimer init_timer(g_ceph_context, mutex);
   init_timer.init();
-  mutex.Lock();
+  mutex.lock();
   init_timer.add_event_after(g_conf()->rgw_init_timeout, new C_InitTimeout);
-  mutex.Unlock();
+  mutex.unlock();
 
   common_init_finish(g_ceph_context);
 
@@ -310,10 +310,10 @@ int main(int argc, const char **argv)
 				 g_conf().get_val<bool>("rgw_dynamic_resharding"),
 				 g_conf()->rgw_cache_enabled);
   if (!store) {
-    mutex.Lock();
+    mutex.lock();
     init_timer.cancel_all_events();
     init_timer.shutdown();
-    mutex.Unlock();
+    mutex.unlock();
 
     derr << "Couldn't init storage provider (RADOS)" << dendl;
     return EIO;
@@ -326,10 +326,10 @@ int main(int argc, const char **argv)
 
   rgw_rest_init(g_ceph_context, store, store->svc.zone->get_zonegroup());
 
-  mutex.Lock();
+  mutex.lock();
   init_timer.cancel_all_events();
   init_timer.shutdown();
-  mutex.Unlock();
+  mutex.unlock();
 
   rgw_user_init(store);
   rgw_bucket_init(store->meta_mgr);
@@ -420,8 +420,10 @@ int main(int argc, const char **argv)
 
   /* Initialize the registry of auth strategies which will coordinate
    * the dynamic reconfiguration. */
+  rgw::auth::ImplicitTenants implicit_tenant_context{g_conf()};
+  g_conf().add_observer(&implicit_tenant_context);
   auto auth_registry = \
-    rgw::auth::StrategyRegistry::create(g_ceph_context, store);
+    rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenant_context, store);
 
   /* Header custom behavior */
   rest.register_x_headers(g_conf()->rgw_log_http_headers);
@@ -541,7 +543,7 @@ int main(int argc, const char **argv)
 
   // add a watcher to respond to realm configuration changes
   RGWPeriodPusher pusher(store);
-  RGWFrontendPauser pauser(fes, &pusher);
+  RGWFrontendPauser pauser(fes, implicit_tenant_context, &pusher);
   RGWRealmReloader reloader(store, service_map_meta, &pauser);
 
   RGWRealmWatcher realm_watcher(g_ceph_context, store->svc.zone->get_realm());
@@ -593,6 +595,7 @@ int main(int argc, const char **argv)
   rgw_shutdown_resolver();
   rgw_http_client_cleanup();
   rgw::curl::cleanup_curl();
+  g_conf().remove_observer(&implicit_tenant_context);
 
   rgw_perf_stop(g_ceph_context);
 

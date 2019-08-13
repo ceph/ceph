@@ -1,6 +1,7 @@
 import { Component, OnDestroy, OnInit, ViewChild } from '@angular/core';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
+import * as _ from 'lodash';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
 import { Subscription } from 'rxjs';
 
@@ -14,7 +15,7 @@ import { CdTableAction } from '../../../shared/models/cd-table-action';
 import { CdTableColumn } from '../../../shared/models/cd-table-column';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { FinishedTask } from '../../../shared/models/finished-task';
-import { Permissions } from '../../../shared/models/permissions';
+import { Permission } from '../../../shared/models/permissions';
 import { CephReleaseNamePipe } from '../../../shared/pipes/ceph-release-name.pipe';
 import { AuthStorageService } from '../../../shared/services/auth-storage.service';
 import { SummaryService } from '../../../shared/services/summary.service';
@@ -29,14 +30,14 @@ import { IscsiTargetDiscoveryModalComponent } from '../iscsi-target-discovery-mo
   providers: [TaskListService]
 })
 export class IscsiTargetListComponent implements OnInit, OnDestroy {
-  @ViewChild(TableComponent)
+  @ViewChild(TableComponent, { static: false })
   table: TableComponent;
 
   available: boolean = undefined;
   columns: CdTableColumn[];
   docsUrl: string;
   modalRef: BsModalRef;
-  permissions: Permissions;
+  permission: Permission;
   selection = new CdTableSelection();
   settings: any;
   status: string;
@@ -64,7 +65,7 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
     private taskWrapper: TaskWrapperService,
     public actionLabels: ActionLabelsI18n
   ) {
-    this.permissions = this.authStorageService.getPermissions();
+    this.permission = this.authStorageService.getPermissions().iscsi;
 
     this.tableActions = [
       {
@@ -83,7 +84,9 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
         permission: 'delete',
         icon: Icons.destroy,
         click: () => this.deleteIscsiTargetModal(),
-        name: this.actionLabels.DELETE
+        name: this.actionLabels.DELETE,
+        disable: () => !this.selection.first() || !_.isUndefined(this.getDeleteDisableDesc()),
+        disableDesc: () => this.getDeleteDisableDesc()
       }
     ];
   }
@@ -142,6 +145,12 @@ export class IscsiTargetListComponent implements OnInit, OnDestroy {
   ngOnDestroy() {
     if (this.summaryDataSubscription) {
       this.summaryDataSubscription.unsubscribe();
+    }
+  }
+
+  getDeleteDisableDesc(): string | undefined {
+    if (this.selection.first() && this.selection.first()['info']['num_sessions']) {
+      return this.i18n('Target has active sessions');
     }
   }
 

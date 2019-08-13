@@ -650,14 +650,14 @@ RocksDBStore::~RocksDBStore()
 void RocksDBStore::close()
 {
   // stop compaction thread
-  compact_queue_lock.Lock();
+  compact_queue_lock.lock();
   if (compact_thread.is_started()) {
     compact_queue_stop = true;
-    compact_queue_cond.Signal();
-    compact_queue_lock.Unlock();
+    compact_queue_cond.notify_all();
+    compact_queue_lock.unlock();
     compact_thread.join();
   } else {
-    compact_queue_lock.Unlock();
+    compact_queue_lock.unlock();
   }
 
   if (logger)
@@ -691,7 +691,8 @@ void RocksDBStore::split_stats(const std::string &s, char delim, std::vector<std
     }
 }
 
-int64_t RocksDBStore::estimate_prefix_size(const string& prefix)
+int64_t RocksDBStore::estimate_prefix_size(const string& prefix,
+					   const string& key_prefix)
 {
   auto cf = get_cf_handle(prefix);
   uint64_t size = 0;
@@ -699,15 +700,15 @@ int64_t RocksDBStore::estimate_prefix_size(const string& prefix)
     //rocksdb::DB::INCLUDE_MEMTABLES |  // do not include memtables...
     rocksdb::DB::INCLUDE_FILES;
   if (cf) {
-    string start(1, '\x00');
-    string limit("\xff\xff\xff\xff");
+    string start = key_prefix + string(1, '\x00');
+    string limit = key_prefix + string("\xff\xff\xff\xff");
     rocksdb::Range r(start, limit);
     db->GetApproximateSizes(cf, &r, 1, &size, flags);
   } else {
-    string limit = prefix + "\xff\xff\xff\xff";
-    rocksdb::Range r(prefix, limit);
-    db->GetApproximateSizes(default_cf,
-			    &r, 1, &size, flags);
+    string start = prefix + key_prefix;
+    string limit = prefix + key_prefix + "\xff\xff\xff\xff";
+    rocksdb::Range r(start, limit);
+    db->GetApproximateSizes(default_cf, &r, 1, &size, flags);
   }
   return size;
 }
@@ -1288,25 +1289,24 @@ void RocksDBStore::compact()
 
 void RocksDBStore::compact_thread_entry()
 {
-  compact_queue_lock.Lock();
+  std::unique_lock l{compact_queue_lock};
   while (!compact_queue_stop) {
     while (!compact_queue.empty()) {
       pair<string,string> range = compact_queue.front();
       compact_queue.pop_front();
       logger->set(l_rocksdb_compact_queue_len, compact_queue.size());
-      compact_queue_lock.Unlock();
+      l.unlock();
       logger->inc(l_rocksdb_compact_range);
       if (range.first.empty() && range.second.empty()) {
         compact();
       } else {
         compact_range(range.first, range.second);
       }
-      compact_queue_lock.Lock();
+      l.lock();
       continue;
     }
-    compact_queue_cond.Wait(compact_queue_lock);
+    compact_queue_cond.wait(l);
   }
-  compact_queue_lock.Unlock();
 }
 
 void RocksDBStore::compact_range_async(const string& start, const string& end)
@@ -1346,7 +1346,7 @@ void RocksDBStore::compact_range_async(const string& start, const string& end)
     compact_queue.push_back(make_pair(start, end));
     logger->set(l_rocksdb_compact_queue_len, compact_queue.size());
   }
-  compact_queue_cond.Signal();
+  compact_queue_cond.notify_all();
   if (!compact_thread.is_started()) {
     compact_thread.create("rstore_compact");
   }

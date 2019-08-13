@@ -4,7 +4,6 @@
 #ifndef CEPH_LIBRBD_CACHE_PARENT_CACHER_OBJECT_DISPATCH_H
 #define CEPH_LIBRBD_CACHE_PARENT_CACHER_OBJECT_DISPATCH_H
 
-#include "common/Mutex.h"
 #include "librbd/io/ObjectDispatchInterface.h"
 #include "tools/immutable_object_cache/CacheClient.h"
 #include "librbd/cache/TypeTraits.h"

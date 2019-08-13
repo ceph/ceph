@@ -16,7 +16,12 @@
 #include "messages/MOSDMap.h"
 #include "messages/MOSDOp.h"
 #include "messages/MOSDPGLog.h"
+#include "messages/MOSDRepOpReply.h"
 #include "messages/MPGStats.h"
+
+#include "os/Transaction.h"
+#include "osd/PGPeeringEvent.h"
+#include "osd/PeeringState.h"
 
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Connection.h"
@@ -24,18 +29,16 @@
 #include "crimson/os/cyan_collection.h"
 #include "crimson/os/cyan_object.h"
 #include "crimson/os/futurized_store.h"
-#include "os/Transaction.h"
 #include "crimson/osd/heartbeat.h"
 #include "crimson/osd/osd_meta.h"
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_backend.h"
 #include "crimson/osd/pg_meta.h"
-#include "osd/PGPeeringEvent.h"
-#include "osd/PeeringState.h"
+#include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_operations/compound_peering_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_operations/pg_advance_map.h"
-#include "crimson/osd/osd_operations/client_request.h"
+#include "crimson/osd/osd_operations/replicated_request.h"
 
 namespace {
   seastar::logger& logger() {
@@ -61,12 +64,12 @@ OSD::OSD(int id, uint32_t nonce,
     public_msgr{public_msgr},
     monc{new ceph::mon::Client{public_msgr, *this}},
     mgrc{new ceph::mgr::Client{public_msgr, *this}},
-    heartbeat{new Heartbeat{*this, *monc, hb_front_msgr, hb_back_msgr}},
-    heartbeat_timer{[this] { update_heartbeat_peers(); }},
     store{ceph::os::FuturizedStore::create(
       local_conf().get_val<std::string>("osd_objectstore"),
       local_conf().get_val<std::string>("osd_data"))},
-    shard_services{cluster_msgr, public_msgr, *monc, *mgrc, *store},
+    shard_services{*this, cluster_msgr, public_msgr, *monc, *mgrc, *store},
+    heartbeat{new Heartbeat{shard_services, *monc, hb_front_msgr, hb_back_msgr}},
+    heartbeat_timer{[this] { update_heartbeat_peers(); }},
     osdmap_gate("OSD::osdmap_gate", std::make_optional(std::ref(shard_services)))
 {
   osdmaps[0] = boost::make_local_shared<OSDMap>();
@@ -185,6 +188,8 @@ seastar::future<> OSD::start()
 {
   logger().info("start");
 
+  startup_time = ceph::mono_clock::now();
+
   return store->mount().then([this] {
     meta_coll = make_unique<OSDMeta>(store->open_collection(coll_t::meta()),
                                      store.get());
@@ -198,6 +203,29 @@ seastar::future<> OSD::start()
     osdmap = std::move(map);
     return load_pgs();
   }).then([this] {
+
+    uint64_t osd_required =
+      CEPH_FEATURE_UID |
+      CEPH_FEATURE_PGID64 |
+      CEPH_FEATURE_OSDENC;
+    using ceph::net::SocketPolicy;
+
+    public_msgr.set_default_policy(SocketPolicy::stateless_server(0));
+    public_msgr.set_policy(entity_name_t::TYPE_MON,
+                           SocketPolicy::lossy_client(osd_required));
+    public_msgr.set_policy(entity_name_t::TYPE_MGR,
+                           SocketPolicy::lossy_client(osd_required));
+    public_msgr.set_policy(entity_name_t::TYPE_OSD,
+                           SocketPolicy::stateless_server(0));
+
+    cluster_msgr.set_default_policy(SocketPolicy::stateless_server(0));
+    cluster_msgr.set_policy(entity_name_t::TYPE_MON,
+                            SocketPolicy::lossy_client(0));
+    cluster_msgr.set_policy(entity_name_t::TYPE_OSD,
+                            SocketPolicy::lossless_peer(osd_required));
+    cluster_msgr.set_policy(entity_name_t::TYPE_CLIENT,
+                            SocketPolicy::stateless_server(0));
+
     dispatchers.push_front(this);
     dispatchers.push_front(monc.get());
     dispatchers.push_front(mgrc.get());
@@ -452,6 +480,10 @@ seastar::future<> OSD::ms_dispatch(ceph::net::Connection* conn, MessageRef m)
     return seastar::now();
   case MSG_OSD_PG_LOG:
     return handle_pg_log(conn, boost::static_pointer_cast<MOSDPGLog>(m));
+  case MSG_OSD_REPOP:
+    return handle_rep_op(conn, boost::static_pointer_cast<MOSDRepOp>(m));
+  case MSG_OSD_REPOPREPLY:
+    return handle_rep_op_reply(conn, boost::static_pointer_cast<MOSDRepOpReply>(m));
   default:
     logger().info("{} unhandled message {}", __func__, *m);
     return seastar::now();
@@ -824,6 +856,30 @@ seastar::future<> OSD::handle_osd_op(ceph::net::Connection* conn,
     *this,
     conn->get_shared(),
     std::move(m));
+  return seastar::now();
+}
+
+seastar::future<> OSD::handle_rep_op(ceph::net::Connection* conn,
+				     Ref<MOSDRepOp> m)
+{
+  m->finish_decode();
+  shard_services.start_operation<RepRequest>(
+    *this,
+    conn->get_shared(),
+    std::move(m));
+  return seastar::now();
+}
+
+seastar::future<> OSD::handle_rep_op_reply(ceph::net::Connection* conn,
+					   Ref<MOSDRepOpReply> m)
+{
+  const auto& pgs = pg_map.get_pgs();
+  if (auto pg = pgs.find(m->get_spg()); pg != pgs.end()) {
+    m->finish_decode();
+    pg->second->handle_rep_op_reply(conn, *m);
+  } else {
+    logger().warn("stale reply: {}", *m);
+  }
   return seastar::now();
 }
 

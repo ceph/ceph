@@ -25,17 +25,19 @@ namespace {
   }
 }
 
-std::unique_ptr<PGBackend> PGBackend::create(const spg_t pgid,
+std::unique_ptr<PGBackend> PGBackend::create(pg_t pgid,
+					     const pg_shard_t pg_shard,
                                              const pg_pool_t& pool,
 					     ceph::os::CollectionRef coll,
-                                             ceph::os::FuturizedStore* store,
+					     ceph::osd::ShardServices& shard_services,
                                              const ec_profile_t& ec_profile)
 {
   switch (pool.type) {
   case pg_pool_t::TYPE_REPLICATED:
-    return std::make_unique<ReplicatedBackend>(pgid.shard, coll, store);
+    return std::make_unique<ReplicatedBackend>(pgid, pg_shard,
+					       coll, shard_services);
   case pg_pool_t::TYPE_ERASURE:
-    return std::make_unique<ECBackend>(pgid.shard, coll, store,
+    return std::make_unique<ECBackend>(pg_shard.shard, coll, shard_services,
                                        std::move(ec_profile),
                                        pool.stripe_width);
   default:
@@ -157,11 +159,15 @@ PGBackend::_load_ss(const hobject_t& oid)
   });
 }
 
-seastar::future<>
+seastar::future<ceph::osd::acked_peers_t>
 PGBackend::mutate_object(
+  std::set<pg_shard_t> pg_shards,
   cached_os_t&& os,
   ceph::os::Transaction&& txn,
-  const MOSDOp& m)
+  const MOSDOp& m,
+  epoch_t min_epoch,
+  epoch_t map_epoch,
+  eversion_t ver)
 {
   logger().trace("mutate_object: num_ops={}", txn.get_num_ops());
   if (os->exists) {
@@ -185,7 +191,8 @@ PGBackend::mutate_object(
     // reset cached ObjectState without enforcing eviction
     os->oi = object_info_t(os->oi.soid);
   }
-  return store->do_transaction(coll, std::move(txn));
+  return _submit_transaction(std::move(pg_shards), os->oi.soid, std::move(txn),
+			     m.get_reqid(), min_epoch, map_epoch, ver);
 }
 
 seastar::future<>
@@ -254,6 +261,52 @@ bool PGBackend::maybe_create_new_object(
     // TODO: delta_stats.num_whiteouts--
   }
   return true;
+}
+
+seastar::future<> PGBackend::write(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& txn)
+{
+  const ceph_osd_op& op = osd_op.op;
+  uint64_t offset = op.extent.offset;
+  uint64_t length = op.extent.length;
+  bufferlist buf = osd_op.indata;
+  if (auto seq = os.oi.truncate_seq;
+      seq != 0 && op.extent.truncate_seq < seq) {
+    // old write, arrived after trimtrunc
+    if (offset + length > os.oi.size) {
+      // no-op
+      if (offset > os.oi.size) {
+	length = 0;
+	buf.clear();
+      } else {
+	// truncate
+	auto len = os.oi.size - offset;
+	buf.splice(len, length);
+	length = len;
+      }
+    }
+  } else if (op.extent.truncate_seq > seq) {
+    // write arrives before trimtrunc
+    if (os.exists && !os.oi.is_whiteout()) {
+      txn.truncate(coll->cid, ghobject_t{os.oi.soid}, op.extent.truncate_size);
+    }
+    os.oi.truncate_seq = op.extent.truncate_seq;
+    os.oi.truncate_size = op.extent.truncate_size;
+  }
+  maybe_create_new_object(os, txn);
+  if (length == 0) {
+    if (offset > os.oi.size) {
+      txn.truncate(coll->cid, ghobject_t{os.oi.soid}, op.extent.offset);
+    } else {
+      txn.nop();
+    }
+  } else {
+    txn.write(coll->cid, ghobject_t{os.oi.soid},
+	      offset, length, std::move(buf), op.flags);
+  }
+  return seastar::now();
 }
 
 seastar::future<> PGBackend::writefull(

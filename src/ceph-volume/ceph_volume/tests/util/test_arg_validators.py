@@ -70,7 +70,7 @@ class TestExcludeGroupOptions(object):
             self.parser, ['filestore', 'bluestore'], argv=argv
         )
         stdout, stderr = capsys.readouterr()
-        assert 'Cannot use --filestore (filestore) with --bluestore (bluestore)' in stdout
+        assert 'Cannot use --filestore (filestore) with --bluestore (bluestore)' in stderr
 
 
 class TestValidDevice(object):

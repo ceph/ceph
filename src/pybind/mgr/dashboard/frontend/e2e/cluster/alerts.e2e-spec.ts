@@ -1,11 +1,10 @@
 import { Helper } from '../helper.po';
-import { AlertsPage } from './alerts.po';
 
 describe('Alerts page', () => {
-  let page: AlertsPage;
+  let alerts: Helper['alerts'];
 
   beforeAll(() => {
-    page = new AlertsPage();
+    alerts = new Helper().alerts;
   });
 
   afterEach(() => {
@@ -14,11 +13,11 @@ describe('Alerts page', () => {
 
   describe('breadcrumb test', () => {
     beforeAll(() => {
-      page.navigateTo();
+      alerts.navigateTo();
     });
 
     it('should open and show breadcrumb', () => {
-      expect(AlertsPage.getBreadcrumbText()).toEqual('Alerts');
+      expect(alerts.getBreadcrumbText()).toEqual('Alerts');
     });
   });
 });

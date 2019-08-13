@@ -9,6 +9,8 @@
 #include "osd_operation.h"
 #include "msg/MessageRef.h"
 #include "crimson/os/cyan_collection.h"
+#include "osd/PeeringState.h"
+#include "crimson/osd/osdmap_service.h"
 
 namespace ceph::net {
   class Messenger;
@@ -38,6 +40,7 @@ namespace ceph::osd {
  */
 class ShardServices {
   using cached_map_t = boost::local_shared_ptr<const OSDMap>;
+  OSDMapService &osdmap_service;
   ceph::net::Messenger &cluster_msgr;
   ceph::net::Messenger &public_msgr;
   ceph::mon::Client &monc;
@@ -51,6 +54,7 @@ class ShardServices {
 
 public:
   ShardServices(
+    OSDMapService &osdmap_service,
     ceph::net::Messenger &cluster_msgr,
     ceph::net::Messenger &public_msgr,
     ceph::mon::Client &monc,
@@ -68,6 +72,11 @@ public:
 
   CephContext *get_cct() {
     return &cct;
+  }
+
+  // OSDMapService
+  const OSDMapService &get_osdmap_service() const {
+    return osdmap_service;
   }
 
   // Op Tracking
@@ -141,6 +150,13 @@ public:
   void prune_pg_created();
 
   seastar::future<> osdmap_subscribe(version_t epoch, bool force_request);
+
+  // Time state
+  ceph::mono_time startup_time = ceph::mono_clock::now();
+  ceph::signedspan get_mnow() const {
+    return ceph::mono_clock::now() - startup_time;
+  }
+  HeartbeatStampsRef get_hb_stamps(int peer);
 };
 
 

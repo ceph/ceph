@@ -27,6 +27,11 @@ class CephfsTest(DashboardTestCase):
         self.assertIn('status', data)
         self.assertIn('data', data)
 
+    def test_cephfs_evict_client_does_not_exist(self):
+        fs_id = self.fs.get_namespace_id()
+        data = self._delete("/api/cephfs/{}/client/1234".format(fs_id))
+        self.assertStatus(404)
+
     def test_cephfs_get(self):
         fs_id = self.fs.get_namespace_id()
         data = self._get("/api/cephfs/{}/".format(fs_id))

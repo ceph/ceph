@@ -25,6 +25,7 @@
 #include "common/RefCountedObj.h"
 #include "common/ThrottleInterface.h"
 #include "common/config.h"
+#include "common/ref.h"
 #include "common/debug.h"
 #include "common/zipkin_trace.h"
 #include "include/ceph_assert.h" // Because intrusive_ptr clobbers our assert...
@@ -71,6 +72,7 @@
 #define MSG_OSD_ALIVE        73
 #define MSG_OSD_MARK_ME_DOWN 74
 #define MSG_OSD_FULL         75
+#define MSG_OSD_MARK_ME_DEAD 123
 
 // removed right after luminous
 //#define MSG_OSD_SUBOP        76
@@ -519,22 +521,8 @@ private:
 };
 
 namespace ceph {
-template<typename T> using ref_t = boost::intrusive_ptr<T>;
-template<typename T> using cref_t = boost::intrusive_ptr<const T>;
-template<class T, class U>
-boost::intrusive_ptr<T> ref_cast(const boost::intrusive_ptr<U>& r) noexcept {
-  return static_cast<T*>(r.get());
-}
-template<class T, class U>
-boost::intrusive_ptr<T> ref_cast(boost::intrusive_ptr<U>&& r) noexcept {
-  return {static_cast<T*>(r.detach()), false};
-}
-template<class T, class U>
-boost::intrusive_ptr<const T> ref_cast(const boost::intrusive_ptr<const U>& r) noexcept {
-  return static_cast<const T*>(r.get());
-}
 template<class T, typename... Args>
-boost::intrusive_ptr<T> make_message(Args&&... args) {
+ceph::ref_t<T> make_message(Args&&... args) {
   return {new T(std::forward<Args>(args)...), false};
 }
 }

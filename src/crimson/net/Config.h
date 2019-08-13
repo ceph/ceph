@@ -18,8 +18,8 @@ constexpr struct simple_md_config_t {
   bool cephx_service_require_signatures = false;
   bool ms_die_on_old_message = true;
   bool ms_die_on_skipped_message = true;
-  std::chrono::milliseconds ms_initial_backoff = 200ms;
-  std::chrono::milliseconds ms_max_backoff = 15000ms;
+  double ms_initial_backoff = .2;
+  double ms_max_backoff = 15.0;
   std::chrono::milliseconds threadpool_empty_queue_max_wait = 100ms;
   size_t osd_client_message_size_cap = 500ULL << 20;
 } conf;

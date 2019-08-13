@@ -7,7 +7,8 @@
 #include "include/int_types.h"
 #include "include/Context.h"
 #include "include/rados/librados.hpp"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
+#include "common/containers.h"
 #include "journal/Future.h"
 #include "journal/FutureImpl.h"
 #include "journal/JournalMetadata.h"
@@ -90,13 +91,13 @@ private:
   Listener m_listener;
   ObjectHandler m_object_handler;
 
-  Mutex m_lock;
+  ceph::mutex m_lock;
 
   uint32_t m_in_flight_advance_sets = 0;
   uint32_t m_in_flight_object_closes = 0;
   uint64_t m_current_set;
   ObjectRecorderPtrs m_object_ptrs;
-  std::vector<std::shared_ptr<Mutex>> m_object_locks;
+  ceph::containers::tiny_vector<ceph::mutex> m_object_locks;
 
   FutureImplPtr m_prev_future;
 
@@ -111,7 +112,7 @@ private:
   void close_and_advance_object_set(uint64_t object_set);
 
   ObjectRecorderPtr create_object_recorder(uint64_t object_number,
-                                           std::shared_ptr<Mutex> lock);
+                                           ceph::mutex* lock);
   void create_next_object_recorder(ObjectRecorderPtr object_recorder);
 
   void handle_update();
@@ -121,13 +122,13 @@ private:
 
   void lock_object_recorders() {
     for (auto& lock : m_object_locks) {
-      lock->Lock();
+      lock.lock();
     }
   }
 
   void unlock_object_recorders() {
     for (auto& lock : m_object_locks) {
-      lock->Unlock();
+      lock.unlock();
     }
   }
 };

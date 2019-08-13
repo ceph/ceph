@@ -37,21 +37,21 @@ import { CdUserConfig } from '../../models/cd-user-config';
   changeDetection: ChangeDetectionStrategy.OnPush
 })
 export class TableComponent implements AfterContentChecked, OnInit, OnChanges, OnDestroy {
-  @ViewChild(DatatableComponent)
+  @ViewChild(DatatableComponent, { static: true })
   table: DatatableComponent;
-  @ViewChild('tableCellBoldTpl')
+  @ViewChild('tableCellBoldTpl', { static: true })
   tableCellBoldTpl: TemplateRef<any>;
-  @ViewChild('sparklineTpl')
+  @ViewChild('sparklineTpl', { static: true })
   sparklineTpl: TemplateRef<any>;
-  @ViewChild('routerLinkTpl')
+  @ViewChild('routerLinkTpl', { static: true })
   routerLinkTpl: TemplateRef<any>;
-  @ViewChild('checkIconTpl')
+  @ViewChild('checkIconTpl', { static: true })
   checkIconTpl: TemplateRef<any>;
-  @ViewChild('perSecondTpl')
+  @ViewChild('perSecondTpl', { static: true })
   perSecondTpl: TemplateRef<any>;
-  @ViewChild('executingTpl')
+  @ViewChild('executingTpl', { static: true })
   executingTpl: TemplateRef<any>;
-  @ViewChild('classAddingTpl')
+  @ViewChild('classAddingTpl', { static: true })
   classAddingTpl: TemplateRef<any>;
 
   // This is the array with the items to be shown.
@@ -179,14 +179,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
   ngOnInit() {
     // ngx-datatable triggers calculations each time mouse enters a row,
     // this will prevent that.
-    window.addEventListener(
-      'mouseenter',
-      function(event) {
-        event.stopPropagation();
-      },
-      true
-    );
-
+    window.addEventListener('mouseenter', (event) => event.stopPropagation(), true);
     this._addTemplates();
     if (!this.sorts) {
       // Check whether the specified identifier exists.

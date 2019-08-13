@@ -1,13 +1,37 @@
-v14.2.1 Nautilus
+v14.2.2 Nautilus
 ================
 
-This is the first bug fix release of Ceph Nautilus release series. We recommend
-all nautilus users upgrade to this release. For upgrading from older releases of
+This is the second bug fix release of Ceph Nautilus release series. We recommend
+all Nautilus users upgrade to this release. For upgrading from older releases of
 ceph, general guidelines for upgrade to nautilus must be followed
 :ref:`nautilus-old-upgrade`.
 
 Notable Changes
 ---------------
+
+* The no{up,down,in,out} related commands have been revamped.
+  There are now 2 ways to set the no{up,down,in,out} flags:
+  the old 'ceph osd [un]set <flag>' command, which sets cluster-wide flags;
+  and the new 'ceph osd [un]set-group <flags> <who>' command,
+  which sets flags in batch at the granularity of any crush node,
+  or device class.
+
+* radosgw-admin introduces two subcommands that allow the
+  managing of expire-stale objects that might be left behind after a
+  bucket reshard in earlier versions of RGW. One subcommand lists such
+  objects and the other deletes them. Read the troubleshooting section
+  of the dynamic resharding docs for details.
+
+* Earlier Nautilus releases (14.2.1 and 14.2.0) have an issue where
+  deploying a single new (Nautilus) BlueStore OSD on an upgraded
+  cluster (i.e. one that was originally deployed pre-Nautilus) breaks
+  the pool utilization stats reported by ``ceph df``.  Until all OSDs
+  have been reprovisioned or updated (via ``ceph-bluestore-tool
+  repair``), the pool stats will show values that are lower than the
+  true value.  This is resolved in 14.2.2, such that the cluster only
+  switches to using the more accurate per-pool stats after *all* OSDs
+  are 14.2.2 (or later), are BlueStore, and (if they were created
+  prior to Nautilus) have been updated via the ``repair`` function.
 
 * The default value for `mon_crush_min_required_version` has been
   changed from `firefly` to `hammer`, which means the cluster will
@@ -31,6 +55,231 @@ Notable Changes
   ensuring that all clients are hammer or newer allows new features
   only supported for `straw2` buckets to be used, including the
   `crush-compat` mode for the :ref:`balancer`.
+
+Changelog
+---------
+
+* bluestore: backport more bluestore alerts (`pr#27645 <https://github.com/ceph/ceph/pull/27645>`_, Sage Weil, Igor Fedotov)
+* bluestore: call fault_range prior to looking for blob to reuse (`pr#27525 <https://github.com/ceph/ceph/pull/27525>`_, Igor Fedotov)
+* bluestore: correctly measure deferred writes into new blobs (`issue#38816 <http://tracker.ceph.com/issues/38816>`_, `pr#27819 <https://github.com/ceph/ceph/pull/27819>`_, Sage Weil)
+* bluestore: dump before "no-spanning blob id" abort (`pr#28028 <https://github.com/ceph/ceph/pull/28028>`_, Igor Fedotov)
+* bluestore: fix for FreeBSD iocb structure (`issue#39612 <http://tracker.ceph.com/issues/39612>`_, `pr#28007 <https://github.com/ceph/ceph/pull/28007>`_, Willem Jan Withagen)
+* bluestore: fix missing discard in BlueStore::_kv_sync_thread (`issue#39672 <http://tracker.ceph.com/issues/39672>`_, `pr#28258 <https://github.com/ceph/ceph/pull/28258>`_, Junhui Tang)
+* bluestore: fix out-of-bound access in bmap allocator (`pr#27740 <https://github.com/ceph/ceph/pull/27740>`_, Igor Fedotov)
+* bluestore: fix duplicate allocations in bmap allocator (`issue#40080 <http://tracker.ceph.com/issues/40080>`_, `pr#28646 <https://github.com/ceph/ceph/pull/28646>`_, Igor Fedotov)
+* build/ops: Ceph RPM build fails on openSUSE Tumbleweed with GCC 9 (`issue#40067 <http://tracker.ceph.com/issues/40067>`_, `issue#39974 <http://tracker.ceph.com/issues/39974>`_, `pr#28299 <https://github.com/ceph/ceph/pull/28299>`_, Martin Liška)
+* build/ops: cmake: Fix build against ncurses with separate libtinfo (`pr#27532 <https://github.com/ceph/ceph/pull/27532>`_, Lars Wendler)
+* build/ops: cmake: set empty-string RPATH for ceph-osd (`issue#40301 <http://tracker.ceph.com/issues/40301>`_, `issue#40295 <http://tracker.ceph.com/issues/40295>`_, `pr#28516 <https://github.com/ceph/ceph/pull/28516>`_, Nathan Cutler)
+* build/ops: do_cmake.sh: source not found (`issue#39981 <http://tracker.ceph.com/issues/39981>`_, `issue#40003 <http://tracker.ceph.com/issues/40003>`_, `pr#28215 <https://github.com/ceph/ceph/pull/28215>`_, Nathan Cutler)
+* build/ops: python3 pybind RPMs do not replace their python2 counterparts on upgrade even though they should (`issue#40099 <http://tracker.ceph.com/issues/40099>`_, `issue#40232 <http://tracker.ceph.com/issues/40232>`_, `pr#28469 <https://github.com/ceph/ceph/pull/28469>`_, Nathan Cutler)
+* build/ops: rpm: install grafana dashboards world readable (`pr#28392 <https://github.com/ceph/ceph/pull/28392>`_, Jan Fajerski)
+* build/ops: selinux: Update the policy for RHEL8 (`pr#28511 <https://github.com/ceph/ceph/pull/28511>`_, Boris Ranto)
+* ceph-volume: add utility functions (`pr#27791 <https://github.com/ceph/ceph/pull/27791>`_, Mohamad Gebai)
+* ceph-volume: broken assertion errors after pytest changes (`pr#28925 <https://github.com/ceph/ceph/pull/28925>`_, Alfredo Deza)
+* ceph-volume: look for rotational data in lsblk (`pr#27723 <https://github.com/ceph/ceph/pull/27723>`_, Andrew Schoen)
+* ceph-volume: tests add a sleep in tox for slow OSDs after booting (`pr#28924 <https://github.com/ceph/ceph/pull/28924>`_, Alfredo Deza)
+* ceph-volume: use the Device.rotational property instead of sys_api (`pr#29028 <https://github.com/ceph/ceph/pull/29028>`_, Andrew Schoen)
+* cephfs-shell: Revert "cephfs.pyx: add py3 compatibility (`pr#28641 <https://github.com/ceph/ceph/pull/28641>`_, Varsha Rao)
+* cephfs-shell: ls command produces error: no colorize attribute found error (`issue#39376 <http://tracker.ceph.com/issues/39376>`_, `issue#39378 <http://tracker.ceph.com/issues/39378>`_, `issue#38740 <http://tracker.ceph.com/issues/38740>`_, `issue#39379 <http://tracker.ceph.com/issues/39379>`_, `issue#39197 <http://tracker.ceph.com/issues/39197>`_, `issue#39377 <http://tracker.ceph.com/issues/39377>`_, `pr#27677 <https://github.com/ceph/ceph/pull/27677>`_, Milind Changire, Varsha Rao)
+* cephfs-shell: misc. cephfs-shell backports (`issue#40314 <http://tracker.ceph.com/issues/40314>`_, `issue#40471 <http://tracker.ceph.com/issues/40471>`_, `issue#40418 <http://tracker.ceph.com/issues/40418>`_, `issue#40469 <http://tracker.ceph.com/issues/40469>`_, `issue#40313 <http://tracker.ceph.com/issues/40313>`_, `issue#39937 <http://tracker.ceph.com/issues/39937>`_, `issue#39678 <http://tracker.ceph.com/issues/39678>`_, `issue#40244 <http://tracker.ceph.com/issues/40244>`_, `issue#39404 <http://tracker.ceph.com/issues/39404>`_, `issue#40243 <http://tracker.ceph.com/issues/40243>`_, `issue#39165 <http://tracker.ceph.com/issues/39165>`_, `issue#40470 <http://tracker.ceph.com/issues/40470>`_, `issue#40455 <http://tracker.ceph.com/issues/40455>`_, `issue#39936 <http://tracker.ceph.com/issues/39936>`_, `issue#40217 <http://tracker.ceph.com/issues/40217>`_, `pr#28681 <https://github.com/ceph/ceph/pull/28681>`_, Patrick Donnelly, Varsha Rao, Milind Changire)
+* cephfs-shell: mkdir error for relative path (`issue#39960 <http://tracker.ceph.com/issues/39960>`_, `pr#28616 <https://github.com/ceph/ceph/pull/28616>`_, Varsha Rao)
+* cephfs: FSAL_CEPH assertion failed in Client::_lookup_name: "parent->is_dir() (`issue#40085 <http://tracker.ceph.com/issues/40085>`_, `issue#40161 <http://tracker.ceph.com/issues/40161>`_, `pr#28612 <https://github.com/ceph/ceph/pull/28612>`_, Jeff Layton)
+* cephfs: ceph_volume_client: Too many arguments for "WriteOpCtx (`issue#39050 <http://tracker.ceph.com/issues/39050>`_, `issue#38946 <http://tracker.ceph.com/issues/38946>`_, `pr#27893 <https://github.com/ceph/ceph/pull/27893>`_, Ramana Raja)
+* cephfs: client: ceph.dir.rctime xattr value incorrectly prefixes 09 to the nanoseconds component (`issue#40167 <http://tracker.ceph.com/issues/40167>`_, `pr#28500 <https://github.com/ceph/ceph/pull/28500>`_, David Disseldorp)
+* cephfs: client: fix "ceph.snap.btime" vxattr value (`issue#40169 <http://tracker.ceph.com/issues/40169>`_, `pr#28499 <https://github.com/ceph/ceph/pull/28499>`_, David Disseldorp)
+* cephfs: client: fix fuse client hang because its bad session PipeConnection (`issue#39686 <http://tracker.ceph.com/issues/39686>`_, `issue#39305 <http://tracker.ceph.com/issues/39305>`_, `pr#28375 <https://github.com/ceph/ceph/pull/28375>`_, Guan yunfei)
+* cephfs: kclient: nofail option not supported (`issue#39232 <http://tracker.ceph.com/issues/39232>`_, `pr#27851 <https://github.com/ceph/ceph/pull/27851>`_, Kenneth Waegeman)
+* cephfs: mds: Expose CephFS snapshot creation time to clients (`issue#39471 <http://tracker.ceph.com/issues/39471>`_, `pr#27901 <https://github.com/ceph/ceph/pull/27901>`_, David Disseldorp)
+* cephfs: mds: MDSTableServer.cc: 83: FAILED assert(version == tid) (`issue#39211 <http://tracker.ceph.com/issues/39211>`_, `issue#38835 <http://tracker.ceph.com/issues/38835>`_, `pr#27853 <https://github.com/ceph/ceph/pull/27853>`_, "Yan, Zheng")
+* cephfs: mds: avoid sending too many osd requests at once after mds restarts (`issue#40028 <http://tracker.ceph.com/issues/40028>`_, `issue#40040 <http://tracker.ceph.com/issues/40040>`_, `pr#28582 <https://github.com/ceph/ceph/pull/28582>`_, simon gao)
+* cephfs: mds: behind on trimming and "[dentry] was purgeable but no longer is! (`issue#39222 <http://tracker.ceph.com/issues/39222>`_, `issue#38679 <http://tracker.ceph.com/issues/38679>`_, `pr#27879 <https://github.com/ceph/ceph/pull/27879>`_, "Yan, Zheng")
+* cephfs: mds: better output of 'ceph health detail (`issue#39266 <http://tracker.ceph.com/issues/39266>`_, `pr#27846 <https://github.com/ceph/ceph/pull/27846>`_, Shen Hang')
+* cephfs: mds: check dir fragment to split dir if mkdir makes it oversized (`issue#39690 <http://tracker.ceph.com/issues/39690>`_, `pr#28394 <https://github.com/ceph/ceph/pull/28394>`_, Erqi Chen)
+* cephfs: mds: check directory split after rename (`issue#39199 <http://tracker.ceph.com/issues/39199>`_, `issue#38994 <http://tracker.ceph.com/issues/38994>`_, `pr#27736 <https://github.com/ceph/ceph/pull/27736>`_, Shen Hang)
+* cephfs: mds: drop reconnect message from non-existent session (`issue#39026 <http://tracker.ceph.com/issues/39026>`_, `issue#39192 <http://tracker.ceph.com/issues/39192>`_, `pr#27714 <https://github.com/ceph/ceph/pull/27714>`_, Shen Hang)
+* cephfs: mds: fail to resolve snapshot name contains '_' (`issue#39473 <http://tracker.ceph.com/issues/39473>`_, `pr#27849 <https://github.com/ceph/ceph/pull/27849>`_, "Yan, Zheng')
+* cephfs: mds: fix 'is session in blacklist' check in Server::apply_blacklist() (`issue#40236 <http://tracker.ceph.com/issues/40236>`_, `issue#40061 <http://tracker.ceph.com/issues/40061>`_, `pr#28618 <https://github.com/ceph/ceph/pull/28618>`_, "Yan, Zheng')
+* cephfs: mds: fix corner case of replaying open sessions (`pr#28580 <https://github.com/ceph/ceph/pull/28580>`_, "Yan, Zheng")
+* cephfs: mds: high debug logging with many subtrees is slow (`issue#38876 <http://tracker.ceph.com/issues/38876>`_, `pr#27892 <https://github.com/ceph/ceph/pull/27892>`_, Rishabh Dave)
+* cephfs: mds: initialize cap_revoke_eviction_timeout with conf (`issue#39209 <http://tracker.ceph.com/issues/39209>`_, `issue#38844 <http://tracker.ceph.com/issues/38844>`_, `pr#27842 <https://github.com/ceph/ceph/pull/27842>`_, simon gao)
+* cephfs: mds: output lock state in format dump (`issue#39645 <http://tracker.ceph.com/issues/39645>`_, `issue#39670 <http://tracker.ceph.com/issues/39670>`_, `pr#28233 <https://github.com/ceph/ceph/pull/28233>`_, Zhi Zhang)
+* cephfs: mds: reset heartbeat during long-running loops in recovery (`issue#40223 <http://tracker.ceph.com/issues/40223>`_, `pr#28611 <https://github.com/ceph/ceph/pull/28611>`_, "Yan, Zheng")
+* cephfs: mds: there is an assertion when calling Beacon::shutdown() (`issue#39214 <http://tracker.ceph.com/issues/39214>`_, `issue#38822 <http://tracker.ceph.com/issues/38822>`_, `pr#27852 <https://github.com/ceph/ceph/pull/27852>`_, huanwen ren)
+* cephfs: mount: key parsing fail when doing a remount (`issue#40164 <http://tracker.ceph.com/issues/40164>`_, `pr#28610 <https://github.com/ceph/ceph/pull/28610>`_, Luis Henriques)
+* cephfs: pybind: added lseek() (`pr#28333 <https://github.com/ceph/ceph/pull/28333>`_, Xiaowei Chu)
+* common/assert: include ceph_abort_msg(arg) arg in log output (`pr#27824 <https://github.com/ceph/ceph/pull/27824>`_, Sage Weil)
+* common/options: annotate some options; enable some runtime updates (`pr#27818 <https://github.com/ceph/ceph/pull/27818>`_, Sage Weil)
+* common/options: update mon_crush_min_required_version=hammer (`pr#27625 <https://github.com/ceph/ceph/pull/27625>`_, Sage Weil)
+* common/util: handle long lines in /proc/cpuinfo (`issue#38296 <http://tracker.ceph.com/issues/38296>`_, `issue#39476 <http://tracker.ceph.com/issues/39476>`_, `pr#28141 <https://github.com/ceph/ceph/pull/28141>`_, Sage Weil)
+* common: Clang requires a default constructor, but it can be empty (`issue#39561 <http://tracker.ceph.com/issues/39561>`_, `issue#39573 <http://tracker.ceph.com/issues/39573>`_, `pr#28131 <https://github.com/ceph/ceph/pull/28131>`_, Willem Jan Withagen)
+* common: fix parse_env nullptr deref (`pr#28382 <https://github.com/ceph/ceph/pull/28382>`_, Patrick Donnelly)
+* common: make cluster_network work (`issue#39671 <http://tracker.ceph.com/issues/39671>`_, `pr#28248 <https://github.com/ceph/ceph/pull/28248>`_, Jianpeng Ma)
+* common: parse ISO 8601 datetime format (`issue#40087 <http://tracker.ceph.com/issues/40087>`_, `pr#28325 <https://github.com/ceph/ceph/pull/28325>`_, Sage Weil)
+* core: Give recovery for inactive PGs a higher priority (`issue#39504 <http://tracker.ceph.com/issues/39504>`_, `issue#38195 <http://tracker.ceph.com/issues/38195>`_, `pr#27854 <https://github.com/ceph/ceph/pull/27854>`_, David Zafman)
+* core: mon,osd: add no{out,down,in,out} flags on CRUSH nodes (`pr#27623 <https://github.com/ceph/ceph/pull/27623>`_, xie xingguo, Sage Weil)
+* core: mon/Elector: format mon_release correctly (`issue#39419 <http://tracker.ceph.com/issues/39419>`_, `pr#27771 <https://github.com/ceph/ceph/pull/27771>`_, Sage Weil)
+* core: mon/Monitor: allow probe if MMonProbe::mon_release == 0 (`issue#38850 <http://tracker.ceph.com/issues/38850>`_, `pr#28262 <https://github.com/ceph/ceph/pull/28262>`_, Sage Weil)
+* core: mon: fix off-by-one rendering progress bar (`pr#28398 <https://github.com/ceph/ceph/pull/28398>`_, Sage Weil)
+* core: mon: use per-pool stats only when all OSDs are reporting (`pr#29032 <https://github.com/ceph/ceph/pull/29032>`_, Sage Weil)
+* core: monitoring: Provide a base set of Prometheus alert manager rules that notify the user about common Ceph error conditions (`issue#39540 <http://tracker.ceph.com/issues/39540>`_, `pr#27998 <https://github.com/ceph/ceph/pull/27998>`_, Jan Fajerski)
+* core: monitoring: update Grafana dashboards (`issue#39652 <http://tracker.ceph.com/issues/39652>`_, `issue#40006 <http://tracker.ceph.com/issues/40006>`_, `issue#39971 <http://tracker.ceph.com/issues/39971>`_, `issue#39932 <http://tracker.ceph.com/issues/39932>`_, `pr#28101 <https://github.com/ceph/ceph/pull/28101>`_, Kiefer Chang, Jan Fajerski)
+* core: osd/OSD.cc: make osd bench description consistent with parameters (`issue#39006 <http://tracker.ceph.com/issues/39006>`_, `issue#39375 <http://tracker.ceph.com/issues/39375>`_, `pr#28035 <https://github.com/ceph/ceph/pull/28035>`_, Neha Ojha)
+* core: osd/OSDMap: Replace get_out_osds with get_out_existing_osds (`issue#39421 <http://tracker.ceph.com/issues/39421>`_, `issue#39154 <http://tracker.ceph.com/issues/39154>`_, `pr#28072 <https://github.com/ceph/ceph/pull/28072>`_, Brad Hubbard)
+* core: osd/PG: discover missing objects when an OSD peers and PG is degraded (`pr#27744 <https://github.com/ceph/ceph/pull/27744>`_, Jonas Jelten)
+* core: osd/PG: do not use approx_missing_objects pre-nautilus (`issue#39512 <http://tracker.ceph.com/issues/39512>`_, `pr#28160 <https://github.com/ceph/ceph/pull/28160>`_, Neha Ojha)
+* core: osd/PG: fix last_complete re-calculation on splitting (`issue#39539 <http://tracker.ceph.com/issues/39539>`_, `issue#26958 <http://tracker.ceph.com/issues/26958>`_, `pr#28219 <https://github.com/ceph/ceph/pull/28219>`_, xie xingguo)
+* core: osd/PG: skip rollforward when !transaction_applied during append_log() (`issue#36739 <http://tracker.ceph.com/issues/36739>`_, `issue#38881 <http://tracker.ceph.com/issues/38881>`_, `pr#27654 <https://github.com/ceph/ceph/pull/27654>`_, Neha Ojha)
+* core: osd/PGLog: preserve original_crt to check rollbackability (`issue#36739 <http://tracker.ceph.com/issues/36739>`_, `issue#39043 <http://tracker.ceph.com/issues/39043>`_, `pr#27632 <https://github.com/ceph/ceph/pull/27632>`_, Neha Ojha)
+* core: osd: Don't evict after a flush if intersecting scrub range (`issue#38840 <http://tracker.ceph.com/issues/38840>`_, `issue#39519 <http://tracker.ceph.com/issues/39519>`_, `pr#28205 <https://github.com/ceph/ceph/pull/28205>`_, David Zafman')
+* core: osd: Don't include user changeable flag in snaptrim related assert (`issue#39699 <http://tracker.ceph.com/issues/39699>`_, `issue#38124 <http://tracker.ceph.com/issues/38124>`_, `pr#28203 <https://github.com/ceph/ceph/pull/28203>`_, David Zafman')
+* core: osd: FAILED ceph_assert(attrs || !pg_log.get_missing().is_missing(soid) || (it_objects != pg_log.get_log().objects.end() && it_objects->second->op == pg_log_entry_t::LOST_REVERT)) in PrimaryLogPG::get_object_context() (`issue#38931 <http://tracker.ceph.com/issues/38931>`_, `issue#39219 <http://tracker.ceph.com/issues/39219>`_, `issue#38784 <http://tracker.ceph.com/issues/38784>`_, `pr#27839 <https://github.com/ceph/ceph/pull/27839>`_, xie xingguo)
+* core: osd: Include dups in copy_after() and copy_up_to() (`issue#39304 <http://tracker.ceph.com/issues/39304>`_, `pr#28088 <https://github.com/ceph/ceph/pull/28088>`_, David Zafman)
+* core: osd: Increase log level of messages which unnecessarily fill up logs (`pr#27687 <https://github.com/ceph/ceph/pull/27687>`_, David Zafman)
+* core: osd: Output Base64 encoding of CRC header if binary data present (`issue#39738 <http://tracker.ceph.com/issues/39738>`_, `pr#28504 <https://github.com/ceph/ceph/pull/28504>`_, David Zafman)
+* core: osd: Primary won't automatically repair replica on pulling error (`issue#39101 <http://tracker.ceph.com/issues/39101>`_, `issue#39184 <http://tracker.ceph.com/issues/39184>`_, `pr#27711 <https://github.com/ceph/ceph/pull/27711>`_, xie xingguo, David Zafman')
+* core: osd: revamp {noup,nodown,noin,noout} related commands (`pr#28400 <https://github.com/ceph/ceph/pull/28400>`_, xie xingguo)
+* core: osd: shutdown recovery_request_timer earlier (`issue#39205 <http://tracker.ceph.com/issues/39205>`_, `pr#27803 <https://github.com/ceph/ceph/pull/27803>`_, Zengran Zhang)
+* core: osd: take heartbeat_lock when calling heartbeat() (`issue#39514 <http://tracker.ceph.com/issues/39514>`_, `issue#39439 <http://tracker.ceph.com/issues/39439>`_, `pr#28164 <https://github.com/ceph/ceph/pull/28164>`_, Sage Weil)
+* doc: add LAZYIO (`issue#39051 <http://tracker.ceph.com/issues/39051>`_, `issue#38729 <http://tracker.ceph.com/issues/38729>`_, `pr#27899 <https://github.com/ceph/ceph/pull/27899>`_, "Yan, Zheng")
+* doc: add documentation for "fs set min_compat_client" (`issue#39130 <http://tracker.ceph.com/issues/39130>`_, `issue#39176 <http://tracker.ceph.com/issues/39176>`_, `pr#27900 <https://github.com/ceph/ceph/pull/27900>`_, Patrick Donnelly)
+* doc: cleanup HTTP Frontends documentation (`issue#38874 <http://tracker.ceph.com/issues/38874>`_, `pr#27922 <https://github.com/ceph/ceph/pull/27922>`_, Casey Bodley)
+* doc: dashboard documentation changes (`pr#27642 <https://github.com/ceph/ceph/pull/27642>`_, Tatjana Dehler, Lenz Grimmer)
+* doc: orchestrator_cli: Rook orch supports mon update (`issue#39169 <http://tracker.ceph.com/issues/39169>`_, `issue#39137 <http://tracker.ceph.com/issues/39137>`_, `pr#27488 <https://github.com/ceph/ceph/pull/27488>`_, Sebastian Wagner)
+* doc: osd_internals/async_recovery: update cost calculation (`pr#28046 <https://github.com/ceph/ceph/pull/28046>`_, Neha Ojha)
+* doc: rados/operations/devices: document device prediction (`pr#27752 <https://github.com/ceph/ceph/pull/27752>`_, Sage Weil)
+* mgr/ActivePyModules: handle_command - fix broken lock (`issue#39235 <http://tracker.ceph.com/issues/39235>`_, `issue#39308 <http://tracker.ceph.com/issues/39308>`_, `pr#27939 <https://github.com/ceph/ceph/pull/27939>`_, xie xingguo)
+* mgr/BaseMgrModule: run MonCommandCompletion on the finisher (`issue#39397 <http://tracker.ceph.com/issues/39397>`_, `issue#39335 <http://tracker.ceph.com/issues/39335>`_, `pr#27699 <https://github.com/ceph/ceph/pull/27699>`_, Sage Weil)
+* mgr/ansible: Host ls implementation (`issue#39559 <http://tracker.ceph.com/issues/39559>`_, `pr#27919 <https://github.com/ceph/ceph/pull/27919>`_, Juan Miguel Olmo Mart\xc3\xadnez)
+* mgr/balancer: various compat weight-set fixes (`pr#28279 <https://github.com/ceph/ceph/pull/28279>`_, xie xingguo)
+* mgr/dashboard: Add custom dialogue for configuring PG scrub parameters (`issue#40059 <http://tracker.ceph.com/issues/40059>`_, `pr#28555 <https://github.com/ceph/ceph/pull/28555>`_, Tatjana Dehler)
+* mgr/dashboard: Admin resource not honored (`issue#39338 <http://tracker.ceph.com/issues/39338>`_, `issue#39467 <http://tracker.ceph.com/issues/39467>`_, `pr#27868 <https://github.com/ceph/ceph/pull/27868>`_, Wido den Hollander)
+* mgr/dashboard: Angular is creating multiple instances of the same service (`issue#39996 <http://tracker.ceph.com/issues/39996>`_, `issue#40075 <http://tracker.ceph.com/issues/40075>`_, `pr#28312 <https://github.com/ceph/ceph/pull/28312>`_, Tiago Melo)
+* mgr/dashboard: Avoid merge conflicts in messages.xlf by auto-generating it at build time? (`issue#39658 <http://tracker.ceph.com/issues/39658>`_, `pr#28178 <https://github.com/ceph/ceph/pull/28178>`_, Sebastian Krah)
+* mgr/dashboard: Display correct dialog title (`pr#28189 <https://github.com/ceph/ceph/pull/28189>`_, Volker Theile)
+* mgr/dashboard: Error creating NFS client without squash (`issue#40074 <http://tracker.ceph.com/issues/40074>`_, `pr#28311 <https://github.com/ceph/ceph/pull/28311>`_, Tiago Melo)
+* mgr/dashboard: KV-table transforms dates through pipe (`issue#39558 <http://tracker.ceph.com/issues/39558>`_, `pr#28021 <https://github.com/ceph/ceph/pull/28021>`_, Stephan M\xc3\xbcller)
+* mgr/dashboard: Localization for date picker module (`issue#39371 <http://tracker.ceph.com/issues/39371>`_, `pr#27673 <https://github.com/ceph/ceph/pull/27673>`_, Stephan M\xc3\xbcller)
+* mgr/dashboard: Manager should complain about wrong dashboard certificate (`issue#39346 <http://tracker.ceph.com/issues/39346>`_, `pr#27742 <https://github.com/ceph/ceph/pull/27742>`_, Volker Theile)
+* mgr/dashboard: NFS clients information is not displayed in the details view (`issue#40057 <http://tracker.ceph.com/issues/40057>`_, `pr#28318 <https://github.com/ceph/ceph/pull/28318>`_, Tiago Melo)
+* mgr/dashboard: NFS export creation: Add more info to the validation message of the field Pseudo (`issue#39975 <http://tracker.ceph.com/issues/39975>`_, `issue#39327 <http://tracker.ceph.com/issues/39327>`_, `pr#28320 <https://github.com/ceph/ceph/pull/28320>`_, Tiago Melo)
+* mgr/dashboard: Only one root node is shown in the crush map viewer (`issue#39647 <http://tracker.ceph.com/issues/39647>`_, `issue#40077 <http://tracker.ceph.com/issues/40077>`_, `pr#28316 <https://github.com/ceph/ceph/pull/28316>`_, Tiago Melo)
+* mgr/dashboard: Push Grafana dashboards on startup (`pr#28635 <https://github.com/ceph/ceph/pull/28635>`_, Zack Cerza)
+* mgr/dashboard: Queue notifications as default (`issue#39560 <http://tracker.ceph.com/issues/39560>`_, `pr#28022 <https://github.com/ceph/ceph/pull/28022>`_, Stephan M\xc3\xbcller)
+* mgr/dashboard: RBD snapshot name suggestion with local time suffix (`issue#39534 <http://tracker.ceph.com/issues/39534>`_, `pr#27890 <https://github.com/ceph/ceph/pull/27890>`_, Stephan M\xc3\xbcller)
+* mgr/dashboard: Reduce the number of renders on the tables (`issue#39944 <http://tracker.ceph.com/issues/39944>`_, `issue#40076 <http://tracker.ceph.com/issues/40076>`_, `pr#28315 <https://github.com/ceph/ceph/pull/28315>`_, Tiago Melo)
+* mgr/dashboard: Some validations are not updated and prevent the submission of a form (`issue#40030 <http://tracker.ceph.com/issues/40030>`_, `pr#28319 <https://github.com/ceph/ceph/pull/28319>`_, Tiago Melo)
+* mgr/dashboard: Unable to see tcmu-runner perf counters (`issue#39988 <http://tracker.ceph.com/issues/39988>`_, `pr#28191 <https://github.com/ceph/ceph/pull/28191>`_, Ricardo Marques)
+* mgr/dashboard: Unify the look of dashboard charts (`issue#39384 <http://tracker.ceph.com/issues/39384>`_, `issue#39961 <http://tracker.ceph.com/issues/39961>`_, `pr#28175 <https://github.com/ceph/ceph/pull/28175>`_, Tiago Melo)
+* mgr/dashboard: Validate if any client belongs to more than one group (`issue#39036 <http://tracker.ceph.com/issues/39036>`_, `issue#39454 <http://tracker.ceph.com/issues/39454>`_, `pr#27760 <https://github.com/ceph/ceph/pull/27760>`_, Tiago Melo)
+* mgr/dashboard: code documentation (`issue#39345 <http://tracker.ceph.com/issues/39345>`_, `issue#36243 <http://tracker.ceph.com/issues/36243>`_, `pr#27746 <https://github.com/ceph/ceph/pull/27746>`_, Ernesto Puerta)
+* mgr/dashboard: iSCSI GET requests should not be logged (`pr#28024 <https://github.com/ceph/ceph/pull/28024>`_, Ricardo Marques)
+* mgr/dashboard: iSCSI form does not support IPv6 (`pr#28026 <https://github.com/ceph/ceph/pull/28026>`_, Ricardo Marques)
+* mgr/dashboard: iSCSI form is showing a warning (`issue#39452 <http://tracker.ceph.com/issues/39452>`_, `issue#39324 <http://tracker.ceph.com/issues/39324>`_, `pr#27758 <https://github.com/ceph/ceph/pull/27758>`_, Tiago Melo)
+* mgr/dashboard: iSCSI should allow exporting an RBD image with Journaling enabled (`pr#28011 <https://github.com/ceph/ceph/pull/28011>`_, Ricardo Marques)
+* mgr/dashboard: inconsistent result when editing a RBD image's features (`issue#39993 <http://tracker.ceph.com/issues/39993>`_, `issue#39933 <http://tracker.ceph.com/issues/39933>`_, `pr#28218 <https://github.com/ceph/ceph/pull/28218>`_, Kiefer Chang')
+* mgr/dashboard: incorrect help message for minimum blob size (`issue#39624 <http://tracker.ceph.com/issues/39624>`_, `issue#39664 <http://tracker.ceph.com/issues/39664>`_, `pr#28062 <https://github.com/ceph/ceph/pull/28062>`_, Kiefer Chang)
+* mgr/dashboard: local variable 'cluster_id' referenced before assignment error when trying to list NFS Ganesha daemons (`issue#40031 <http://tracker.ceph.com/issues/40031>`_, `pr#28261 <https://github.com/ceph/ceph/pull/28261>`_, Nur Faizin')
+* mgr/dashboard: make auth token work with UTC times only (`issue#39524 <http://tracker.ceph.com/issues/39524>`_, `issue#39300 <http://tracker.ceph.com/issues/39300>`_, `pr#27942 <https://github.com/ceph/ceph/pull/27942>`_, Ricardo Dias)
+* mgr/dashboard: openssl exception when verifying certificates of HTTPS requests (`issue#39962 <http://tracker.ceph.com/issues/39962>`_, `issue#39628 <http://tracker.ceph.com/issues/39628>`_, `pr#28163 <https://github.com/ceph/ceph/pull/28163>`_, Ricardo Dias)
+* mgr/dashboard: orchestrator mgr modules assert failure on iscsi service request (`issue#40037 <http://tracker.ceph.com/issues/40037>`_, `pr#28552 <https://github.com/ceph/ceph/pull/28552>`_, Sebastian Wagner)
+* mgr/dashboard: show degraded/misplaced/unfound objects (`pr#28584 <https://github.com/ceph/ceph/pull/28584>`_, Alfonso Mart\xc3\xadnez)
+* mgr/orchestrator: Remove "(add|test|remove)_stateful_service_rule (`issue#38808 <http://tracker.ceph.com/issues/38808>`_, `pr#27043 <https://github.com/ceph/ceph/pull/27043>`_, Sebastian Wagner)
+* mgr/orchestrator: add progress events to all orchestrators (`pr#28040 <https://github.com/ceph/ceph/pull/28040>`_, Sebastian Wagner)
+* mgr/progress: behave if pgs disappear (due to a racing pg merge) (`issue#38157 <http://tracker.ceph.com/issues/38157>`_, `issue#39344 <http://tracker.ceph.com/issues/39344>`_, `pr#27608 <https://github.com/ceph/ceph/pull/27608>`_, Sage Weil)
+* mgr/prometheus: replace whitespaces in metrics' names (`pr#27886 <https://github.com/ceph/ceph/pull/27886>`_, Alfonso Mart\xc3\xadnez')
+* mgr/rook: Added missing rgw daemons in service ls (`issue#39171 <http://tracker.ceph.com/issues/39171>`_, `issue#39312 <http://tracker.ceph.com/issues/39312>`_, `pr#27864 <https://github.com/ceph/ceph/pull/27864>`_, Sebastian Wagner)
+* mgr/rook: Fix RGW creation (`issue#39158 <http://tracker.ceph.com/issues/39158>`_, `issue#39313 <http://tracker.ceph.com/issues/39313>`_, `pr#27863 <https://github.com/ceph/ceph/pull/27863>`_, Sebastian Wagner)
+* mgr/rook: Remove support for Rook older than v0.9 (`issue#39356 <http://tracker.ceph.com/issues/39356>`_, `issue#39278 <http://tracker.ceph.com/issues/39278>`_, `pr#27862 <https://github.com/ceph/ceph/pull/27862>`_, Sebastian Wagner)
+* mgr/test_orchestrator: AttributeError: 'TestWriteCompletion' object has no attribute 'id (`issue#39536 <http://tracker.ceph.com/issues/39536>`_, `pr#27920 <https://github.com/ceph/ceph/pull/27920>`_, Sebastian Wagner')
+* mgr/volumes: FS subvolumes enhancements (`issue#40429 <http://tracker.ceph.com/issues/40429>`_, `pr#28767 <https://github.com/ceph/ceph/pull/28767>`_, Ramana Raja)
+* mgr/volumes: add CephFS subvolumes library (`issue#39750 <http://tracker.ceph.com/issues/39750>`_, `issue#40152 <http://tracker.ceph.com/issues/40152>`_, `issue#39949 <http://tracker.ceph.com/issues/39949>`_, `issue#40014 <http://tracker.ceph.com/issues/40014>`_, `issue#39610 <http://tracker.ceph.com/issues/39610>`_, `pr#28429 <https://github.com/ceph/ceph/pull/28429>`_, Sage Weil, Venky Shankar, Ramana Raja, Rishabh Dave)
+* mgr/volumes: refactor volume module (`issue#40378 <http://tracker.ceph.com/issues/40378>`_, `issue#39969 <http://tracker.ceph.com/issues/39969>`_, `pr#28595 <https://github.com/ceph/ceph/pull/28595>`_, Venky Shankar)
+* mgr: Update the restful module in nautilus (`pr#28291 <https://github.com/ceph/ceph/pull/28291>`_, Kefu Chai, Boris Ranto)
+* mgr: deadlock (`issue#39040 <http://tracker.ceph.com/issues/39040>`_, `issue#39425 <http://tracker.ceph.com/issues/39425>`_, `pr#28098 <https://github.com/ceph/ceph/pull/28098>`_, xie xingguo)
+* mgr: fix pgp_num adjustments (`issue#38626 <http://tracker.ceph.com/issues/38626>`_, `pr#27876 <https://github.com/ceph/ceph/pull/27876>`_, Sage Weil, Marius Schiffer)
+* mgr: log an error if we can't find any modules to load (`issue#40090 <http://tracker.ceph.com/issues/40090>`_, `pr#28347 <https://github.com/ceph/ceph/pull/28347>`_, Tim Serong')
+* monitoring: pybind/mgr: fix format for rbd-mirror prometheus metrics (`pr#28485 <https://github.com/ceph/ceph/pull/28485>`_, Mykola Golub)
+* msg/async: connection race + winner fault can leave connection stuck at replacing foreve (`issue#39241 <http://tracker.ceph.com/issues/39241>`_, `issue#37499 <http://tracker.ceph.com/issues/37499>`_, `issue#39448 <http://tracker.ceph.com/issues/39448>`_, `issue#38493 <http://tracker.ceph.com/issues/38493>`_, `pr#27915 <https://github.com/ceph/ceph/pull/27915>`_, Jason Dillaman, xie xingguo)
+* msg/async/ProtocolV[12]: add ms_learn_addr_from_peer (`pr#28589 <https://github.com/ceph/ceph/pull/28589>`_, Sage Weil)
+* msg: output peer address when detecting bad CRCs (`issue#39367 <http://tracker.ceph.com/issues/39367>`_, `pr#27857 <https://github.com/ceph/ceph/pull/27857>`_, Greg Farnum)
+* pybind: Add 'RBD_FEATURE_MIGRATING' to rbd.pyx (`issue#39609 <http://tracker.ceph.com/issues/39609>`_, `issue#39736 <http://tracker.ceph.com/issues/39736>`_, `pr#28482 <https://github.com/ceph/ceph/pull/28482>`_, Ricardo Marques')
+* pybind: Rados.get_fsid() returning bytes in python3 (`issue#40192 <http://tracker.ceph.com/issues/40192>`_, `issue#38381 <http://tracker.ceph.com/issues/38381>`_, `pr#28476 <https://github.com/ceph/ceph/pull/28476>`_, Jason Dillaman)
+* rbd: krbd: fix rbd map hang due to udev return subsystem unordered (`issue#39089 <http://tracker.ceph.com/issues/39089>`_, `issue#39315 <http://tracker.ceph.com/issues/39315>`_, `pr#28019 <https://github.com/ceph/ceph/pull/28019>`_, Zhi Zhang)
+* rbd: librbd: async open/close should free ImageCtx before issuing callback (`issue#39428 <http://tracker.ceph.com/issues/39428>`_, `issue#39031 <http://tracker.ceph.com/issues/39031>`_, `pr#28121 <https://github.com/ceph/ceph/pull/28121>`_, Jason Dillaman)
+* rbd: librbd: avoid dereferencing an empty container during deep-copy (`issue#40368 <http://tracker.ceph.com/issues/40368>`_, `issue#40379 <http://tracker.ceph.com/issues/40379>`_, `pr#28577 <https://github.com/ceph/ceph/pull/28577>`_, Jason Dillaman)
+* rbd: librbd: do not allow to deep copy migrating image (`issue#39224 <http://tracker.ceph.com/issues/39224>`_, `pr#27882 <https://github.com/ceph/ceph/pull/27882>`_, Mykola Golub)
+* rbd: librbd: fix issues with object-map/fast-diff feature interlock (`issue#39946 <http://tracker.ceph.com/issues/39946>`_, `issue#39521 <http://tracker.ceph.com/issues/39521>`_, `pr#28127 <https://github.com/ceph/ceph/pull/28127>`_, Jason Dillaman)
+* rbd: librbd: fixed several race conditions related to copyup (`issue#39195 <http://tracker.ceph.com/issues/39195>`_, `issue#39021 <http://tracker.ceph.com/issues/39021>`_, `pr#28132 <https://github.com/ceph/ceph/pull/28132>`_, Jason Dillaman)
+* rbd: librbd: make flush be queued by QOS throttler (`issue#38869 <http://tracker.ceph.com/issues/38869>`_, `pr#28120 <https://github.com/ceph/ceph/pull/28120>`_, Mykola Golub)
+* rbd: librbd: re-add support for nautilus clients talking to jewel clusters (`issue#39450 <http://tracker.ceph.com/issues/39450>`_, `pr#27936 <https://github.com/ceph/ceph/pull/27936>`_, Jason Dillaman)
+* rbd: librbd: support EC data pool images sparsify (`issue#39226 <http://tracker.ceph.com/issues/39226>`_, `pr#27903 <https://github.com/ceph/ceph/pull/27903>`_, Mykola Golub)
+* rbd: rbd-mirror: clear out bufferlist prior to listing mirror images (`issue#39462 <http://tracker.ceph.com/issues/39462>`_, `issue#39407 <http://tracker.ceph.com/issues/39407>`_, `pr#28122 <https://github.com/ceph/ceph/pull/28122>`_, Jason Dillaman)
+* rbd: rbd-mirror: image replayer should periodically flush IO and commit positions (`issue#39257 <http://tracker.ceph.com/issues/39257>`_, `issue#39288 <http://tracker.ceph.com/issues/39288>`_, `pr#27937 <https://github.com/ceph/ceph/pull/27937>`_, Jason Dillaman)
+* rgw: Evaluating bucket policies also while reading permissions for an\xe2\x80\xa6 (`issue#38638 <http://tracker.ceph.com/issues/38638>`_, `issue#39273 <http://tracker.ceph.com/issues/39273>`_, `pr#27918 <https://github.com/ceph/ceph/pull/27918>`_, Pritha Srivastava)
+* rgw: admin: handle delete_at attr in object stat output (`pr#27827 <https://github.com/ceph/ceph/pull/27827>`_, Abhishek Lekshmanan)
+* rgw: beast: multiple v4 and v6 endpoints with the same port will cause failure (`issue#39746 <http://tracker.ceph.com/issues/39746>`_, `issue#39038 <http://tracker.ceph.com/issues/39038>`_, `pr#28541 <https://github.com/ceph/ceph/pull/28541>`_, Abhishek Lekshmanan)
+* rgw: beast: set a default port for endpoints (`issue#39048 <http://tracker.ceph.com/issues/39048>`_, `issue#39000 <http://tracker.ceph.com/issues/39000>`_, `pr#27660 <https://github.com/ceph/ceph/pull/27660>`_, Abhishek Lekshmanan)
+* rgw: bucket stats report mtime in UTC (`pr#27826 <https://github.com/ceph/ceph/pull/27826>`_, Alfonso Mart\xc3\xadnez, Casey Bodley)
+* rgw: clean up some logging (`issue#39503 <http://tracker.ceph.com/issues/39503>`_, `pr#27953 <https://github.com/ceph/ceph/pull/27953>`_, J. Eric Ivancich)
+* rgw: cloud sync module fails to sync multipart objects (`issue#39684 <http://tracker.ceph.com/issues/39684>`_, `pr#28064 <https://github.com/ceph/ceph/pull/28064>`_, Abhishek Lekshmanan)
+* rgw: cloud sync module logs attrs in the log (`issue#39574 <http://tracker.ceph.com/issues/39574>`_, `pr#27954 <https://github.com/ceph/ceph/pull/27954>`_, Nathan Cutler)
+* rgw: crypto: throw DigestException from Digest and HMAC (`issue#39676 <http://tracker.ceph.com/issues/39676>`_, `issue#39456 <http://tracker.ceph.com/issues/39456>`_, `pr#28309 <https://github.com/ceph/ceph/pull/28309>`_, Matt Benjamin)
+* rgw: document CreateBucketConfiguration for s3 PUT Bucket request (`issue#39597 <http://tracker.ceph.com/issues/39597>`_, `issue#39601 <http://tracker.ceph.com/issues/39601>`_, `pr#28512 <https://github.com/ceph/ceph/pull/28512>`_, Casey Bodley)
+* rgw: fix Multisite sync corruption (`pr#28383 <https://github.com/ceph/ceph/pull/28383>`_, Tianshan Qu, Casey Bodley, Xiaoxi CHEN)
+* rgw: fix bucket may redundantly list keys after BI_PREFIX_CHAR (`issue#39984 <http://tracker.ceph.com/issues/39984>`_, `issue#40148 <http://tracker.ceph.com/issues/40148>`_, `pr#28410 <https://github.com/ceph/ceph/pull/28410>`_, Casey Bodley, Tianshan Qu)
+* rgw: fix default_placement containing "/" when storage_class is standard (`issue#39745 <http://tracker.ceph.com/issues/39745>`_, `issue#39380 <http://tracker.ceph.com/issues/39380>`_, `pr#28538 <https://github.com/ceph/ceph/pull/28538>`_, mkogan1)
+* rgw: inefficient unordered bucket listing (`issue#39410 <http://tracker.ceph.com/issues/39410>`_, `issue#39393 <http://tracker.ceph.com/issues/39393>`_, `pr#27924 <https://github.com/ceph/ceph/pull/27924>`_, Casey Bodley)
+* rgw: librgw: unexpected crash when creating bucket (`issue#39575 <http://tracker.ceph.com/issues/39575>`_, `pr#27955 <https://github.com/ceph/ceph/pull/27955>`_, Tao CHEN)
+* rgw: limit entries in remove_olh_pending_entries() (`issue#39178 <http://tracker.ceph.com/issues/39178>`_, `issue#39118 <http://tracker.ceph.com/issues/39118>`_, `pr#27664 <https://github.com/ceph/ceph/pull/27664>`_, Casey Bodley)
+* rgw: list bucket with start marker and delimiter will miss next object with char '0' (`issue#40762 <http://tracker.ceph.com/issues/40762>`_, `issue#39989 <http://tracker.ceph.com/issues/39989>`_, `pr#29022 <https://github.com/ceph/ceph/pull/29022>`_, Tianshan Qu)
+* rgw: multisite log trimming only checks peers that sync from us (`issue#39283 <http://tracker.ceph.com/issues/39283>`_, `pr#27814 <https://github.com/ceph/ceph/pull/27814>`_, Casey Bodley)
+* rgw: multisite: add perf counters to data sync (`issue#38549 <http://tracker.ceph.com/issues/38549>`_, `issue#38918 <http://tracker.ceph.com/issues/38918>`_, `pr#27921 <https://github.com/ceph/ceph/pull/27921>`_, Abhishek Lekshmanan, Casey Bodley)
+* rgw: multisite: mismatch of bucket creation times from List Buckets (`issue#39635 <http://tracker.ceph.com/issues/39635>`_, `issue#39735 <http://tracker.ceph.com/issues/39735>`_, `pr#28444 <https://github.com/ceph/ceph/pull/28444>`_, Casey Bodley)
+* rgw: multisite: period pusher gets 403 Forbidden against other zonegroups (`issue#39287 <http://tracker.ceph.com/issues/39287>`_, `issue#39414 <http://tracker.ceph.com/issues/39414>`_, `pr#27952 <https://github.com/ceph/ceph/pull/27952>`_, Casey Bodley)
+* rgw: race condition between resharding and ops waiting on resharding (`issue#39202 <http://tracker.ceph.com/issues/39202>`_, `pr#27800 <https://github.com/ceph/ceph/pull/27800>`_, J. Eric Ivancich)
+* rgw: radosgw-admin: add tenant argument to reshard cancel (`issue#39018 <http://tracker.ceph.com/issues/39018>`_, `pr#27630 <https://github.com/ceph/ceph/pull/27630>`_, Abhishek Lekshmanan)
+* rgw: rgw_file: save etag and acl info in setattr (`issue#39228 <http://tracker.ceph.com/issues/39228>`_, `pr#27904 <https://github.com/ceph/ceph/pull/27904>`_, Tao Chen)
+* rgw: swift object expiry fails when a bucket reshards (`issue#39740 <http://tracker.ceph.com/issues/39740>`_, `pr#28537 <https://github.com/ceph/ceph/pull/28537>`_, Abhishek Lekshmanan)
+* rgw: unittest_rgw_dmclock_scheduler does not need Boost_LIBRARIES (`issue#39577 <http://tracker.ceph.com/issues/39577>`_, `pr#27944 <https://github.com/ceph/ceph/pull/27944>`_, Willem Jan Withagen)
+* rgw: update resharding documentation (`issue#39046 <http://tracker.ceph.com/issues/39046>`_, `pr#27923 <https://github.com/ceph/ceph/pull/27923>`_, J. Eric Ivancich)
+* tests: added `bluestore_warn_on_legacy_statfs: false` setting (`issue#40467 <http://tracker.ceph.com/issues/40467>`_, `pr#28723 <https://github.com/ceph/ceph/pull/28723>`_, Yuri Weinstein)
+* tests: added ragweed coverage to stress-split\\* upgrade suites (`issue#40452 <http://tracker.ceph.com/issues/40452>`_, `issue#40467 <http://tracker.ceph.com/issues/40467>`_, `pr#28661 <https://github.com/ceph/ceph/pull/28661>`_, Yuri Weinstein)
+* tests: added v14.2.1 (`issue#40181 <http://tracker.ceph.com/issues/40181>`_, `pr#28416 <https://github.com/ceph/ceph/pull/28416>`_, Yuri Weinstein)
+* tests: cannot schedule kcephfs/multimds (`issue#40116 <http://tracker.ceph.com/issues/40116>`_, `pr#28369 <https://github.com/ceph/ceph/pull/28369>`_, Patrick Donnelly)
+* tests: centos 7.6 etc (`pr#27439 <https://github.com/ceph/ceph/pull/27439>`_, Sage Weil)
+* tests: ceph-ansible: ceph-ansible requires ansible 2.8 (`issue#40602 <http://tracker.ceph.com/issues/40602>`_, `issue#40669 <http://tracker.ceph.com/issues/40669>`_, `pr#28871 <https://github.com/ceph/ceph/pull/28871>`_, Brad Hubbard)
+* tests: ceph-ansible: cephfs_pools variable pgs should be pg_num (`issue#40670 <http://tracker.ceph.com/issues/40670>`_, `issue#40605 <http://tracker.ceph.com/issues/40605>`_, `pr#28872 <https://github.com/ceph/ceph/pull/28872>`_, Brad Hubbard)
+* tests: cephfs-shell: teuthology tests (`issue#39935 <http://tracker.ceph.com/issues/39935>`_, `issue#39526 <http://tracker.ceph.com/issues/39526>`_, `pr#28614 <https://github.com/ceph/ceph/pull/28614>`_, Milind Changire)
+* tests: cephfs: TestMisc.test_evict_client fails (`issue#40220 <http://tracker.ceph.com/issues/40220>`_, `pr#28613 <https://github.com/ceph/ceph/pull/28613>`_, "Yan, Zheng")
+* tests: cleaned up supported distro for nautilus (`pr#28065 <https://github.com/ceph/ceph/pull/28065>`_, Yuri Weinstein)
+* tests: ignore legacy bluestore stats errors (`issue#40374 <http://tracker.ceph.com/issues/40374>`_, `pr#28563 <https://github.com/ceph/ceph/pull/28563>`_, Patrick Donnelly)
+* tests: librbd: drop 'ceph_test_librbd_api' target (`issue#39423 <http://tracker.ceph.com/issues/39423>`_, `issue#39072 <http://tracker.ceph.com/issues/39072>`_, `pr#28091 <https://github.com/ceph/ceph/pull/28091>`_, Jason Dillaman')
+* tests: mgr: tox failures when running make check (`issue#39323 <http://tracker.ceph.com/issues/39323>`_, `issue#39530 <http://tracker.ceph.com/issues/39530>`_, `pr#27884 <https://github.com/ceph/ceph/pull/27884>`_, Nathan Cutler)
+* tests: pass --ssh-config to pytest to resolve hosts when connecting (`pr#28923 <https://github.com/ceph/ceph/pull/28923>`_, Alfredo Deza)
+* tests: rbd: qemu-iotests tests fail under latest Ubuntu kernel (`issue#39541 <http://tracker.ceph.com/issues/39541>`_, `issue#24668 <http://tracker.ceph.com/issues/24668>`_, `pr#27988 <https://github.com/ceph/ceph/pull/27988>`_, Jason Dillaman)
+* tests: removed `1node` and `systemd` tests as ceph-deploy is not a\xe2\x80\xa6 (`pr#28458 <https://github.com/ceph/ceph/pull/28458>`_, Yuri Weinstein)
+* tests: rgw: fix race in test_rgw_reshard_wait and test_rgw_reshard_wait uses same clock for timing (`issue#39479 <http://tracker.ceph.com/issues/39479>`_, `pr#27779 <https://github.com/ceph/ceph/pull/27779>`_, Casey Bodley)
+* tests: rgw: fix swift warning message (`issue#40304 <http://tracker.ceph.com/issues/40304>`_, `pr#28698 <https://github.com/ceph/ceph/pull/28698>`_, Casey Bodley)
+* tests: rgw: more fixes for swift task (`issue#40304 <http://tracker.ceph.com/issues/40304>`_, `pr#28922 <https://github.com/ceph/ceph/pull/28922>`_, Casey Bodley)
+* tests: rgw: skip swift tests on rhel 7.6+ (`issue#40402 <http://tracker.ceph.com/issues/40402>`_, `issue#40304 <http://tracker.ceph.com/issues/40304>`_, `pr#28604 <https://github.com/ceph/ceph/pull/28604>`_, Casey Bodley)
+* tests: stop testing simple messenger in fs qa (`issue#40373 <http://tracker.ceph.com/issues/40373>`_, `pr#28562 <https://github.com/ceph/ceph/pull/28562>`_, Patrick Donnelly)
+* tests: tasks/rbd_fio: fixed missing delimiter between 'cd' and 'configure (`issue#39590 <http://tracker.ceph.com/issues/39590>`_, `pr#27989 <https://github.com/ceph/ceph/pull/27989>`_, Jason Dillaman')
+* tests: test_sessionmap assumes simple messenger (`issue#39430 <http://tracker.ceph.com/issues/39430>`_, `pr#27772 <https://github.com/ceph/ceph/pull/27772>`_, Patrick Donnelly)
+* tests: use curl in wait_for_radosgw() in util/rgw.py (`issue#40346 <http://tracker.ceph.com/issues/40346>`_, `pr#28598 <https://github.com/ceph/ceph/pull/28598>`_, Ali Maredia)
+* tests: workunits/rbd: use https protocol for devstack git operations (`issue#39656 <http://tracker.ceph.com/issues/39656>`_, `issue#39729 <http://tracker.ceph.com/issues/39729>`_, `pr#28128 <https://github.com/ceph/ceph/pull/28128>`_, Jason Dillaman)
+* tests: workunits/rbd: wait for rbd-nbd unmap to complete (`issue#39675 <http://tracker.ceph.com/issues/39675>`_, `issue#39598 <http://tracker.ceph.com/issues/39598>`_, `pr#28273 <https://github.com/ceph/ceph/pull/28273>`_, Jason Dillaman)
+
+
+v14.2.1 Nautilus
+================
+
+This is the first bug fix release of Ceph Nautilus release series. We recommend
+all nautilus users upgrade to this release. For upgrading from older releases of
+ceph, general guidelines for upgrade to nautilus must be followed
+:ref:`nautilus-old-upgrade`.
+
+Notable Changes
+---------------
 
 * Ceph now packages python bindings for python3.6 instead of
   python3.4, because EPEL7 recently switched from python3.4 to
@@ -2732,7 +2981,7 @@ Detailed Changelog
 * rgw: rgw/pubsub: add pubsub tests (`pr#26299 <https://github.com/ceph/ceph/pull/26299>`_, Yuval Lifshitz)
 * rgw: RGWRadosGetOmapKeysCR takes result by shared_ptr (`issue#21154 <http://tracker.ceph.com/issues/21154>`_, `pr#23634 <https://github.com/ceph/ceph/pull/23634>`_, Casey Bodley)
 * rgw: RGWRadosGetOmapKeysCR uses 'more' flag from omap_get_keys2() (`pr#23401 <https://github.com/ceph/ceph/pull/23401>`_, Casey Bodley, Sage Weil)
-* rgw: RGW: remove duplicate include header files in rgw_rados.cc (`pr#18578 <https://github.com/ceph/ceph/pull/18578>`_, Sibei Gao)
+* rgw: remove duplicate include header files in rgw_rados.cc (`pr#18578 <https://github.com/ceph/ceph/pull/18578>`_, Sibei Gao)
 * rgw: rgw_sync: drop ENOENT error logs from mdlog (`pr#26971 <https://github.com/ceph/ceph/pull/26971>`_, Abhishek Lekshmanan)
 * rgw: Robustly notify (`issue#24963 <http://tracker.ceph.com/issues/24963>`_, `pr#23100 <https://github.com/ceph/ceph/pull/23100>`_, Adam C. Emerson)
 * rgw: s3: awsv4 drop special handling for x-amz-credential (`issue#26965 <http://tracker.ceph.com/issues/26965>`_, `pr#23652 <https://github.com/ceph/ceph/pull/23652>`_, Abhishek Lekshmanan)

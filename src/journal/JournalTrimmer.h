@@ -8,7 +8,6 @@
 #include "include/rados/librados.hpp"
 #include "include/Context.h"
 #include "common/AsyncOpTracker.h"
-#include "common/Mutex.h"
 #include "journal/JournalMetadata.h"
 #include "cls/journal/cls_journal_types.h"
 #include <functional>
@@ -70,7 +69,7 @@ private:
 
   AsyncOpTracker m_async_op_tracker;
 
-  Mutex m_lock;
+  ceph::mutex m_lock = ceph::make_mutex("JournalTrimmer::m_lock");
 
   bool m_remove_set_pending;
   uint64_t m_remove_set;

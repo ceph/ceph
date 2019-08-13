@@ -113,6 +113,7 @@ struct CapSnap {
 #define I_DIR_ORDERED	2
 #define I_CAP_DROPPED	4
 #define I_SNAPDIR_OPEN	8
+#define I_KICK_FLUSH	16
 
 struct Inode {
   Client *client;
@@ -221,15 +222,15 @@ struct Inode {
   uint64_t     reported_size, wanted_max_size, requested_max_size;
 
   int       _ref;      // ref count. 1 for each dentry, fh that links to me.
-  int       ll_ref;   // separate ref count for ll client
+  uint64_t  ll_ref;   // separate ref count for ll client
   xlist<Dentry *> dentries; // if i'm linked to a dentry.
   string    symlink;  // symlink content, if it's a symlink
   map<string,bufferptr> xattrs;
   map<frag_t,int> fragmap;  // known frag -> mds mappings
 
-  list<Cond*>       waitfor_caps;
-  list<Cond*>       waitfor_commit;
-  list<Cond*>	    waitfor_deleg;
+  std::list<ceph::condition_variable*> waitfor_caps;
+  std::list<ceph::condition_variable*> waitfor_commit;
+  std::list<ceph::condition_variable*> waitfor_deleg;
 
   Dentry *get_first_parent() {
     ceph_assert(!dentries.empty());
@@ -249,7 +250,7 @@ struct Inode {
   void ll_get() {
     ll_ref++;
   }
-  void ll_put(int n=1) {
+  void ll_put(uint64_t n=1) {
     ceph_assert(ll_ref >= n);
     ll_ref -= n;
   }

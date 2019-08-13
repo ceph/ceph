@@ -106,7 +106,7 @@ class PurgeQueue
 protected:
   CephContext *cct;
   const mds_rank_t rank;
-  Mutex lock;
+  ceph::mutex lock = ceph::make_mutex("PurgeQueue");
   bool readonly = false;
 
   int64_t metadata_pool;
@@ -211,9 +211,7 @@ public:
 
   void update_op_limit(const MDSMap &mds_map);
 
-  void handle_conf_change(const ConfigProxy& conf,
-                          const std::set <std::string> &changed,
-                          const MDSMap &mds_map);
+  void handle_conf_change(const std::set<std::string>& changed, const MDSMap& mds_map);
 
   PurgeQueue(
       CephContext *cct_,

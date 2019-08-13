@@ -27,12 +27,14 @@ namespace {
 namespace ceph::osd {
 
 ShardServices::ShardServices(
+  OSDMapService &osdmap_service,
   ceph::net::Messenger &cluster_msgr,
   ceph::net::Messenger &public_msgr,
   ceph::mon::Client &monc,
   ceph::mgr::Client &mgrc,
   ceph::os::FuturizedStore &store)
-    : cluster_msgr(cluster_msgr),
+    : osdmap_service(osdmap_service),
+      cluster_msgr(cluster_msgr),
       public_msgr(public_msgr),
       monc(monc),
       mgrc(mgrc),
@@ -47,7 +49,12 @@ ShardServices::ShardServices(
 
 seastar::future<> ShardServices::send_to_osd(
   int peer, Ref<Message> m, epoch_t from_epoch) {
-  if (osdmap->is_down(peer) || osdmap->get_info(peer).up_from > from_epoch) {
+  if (osdmap->is_down(peer)) {
+    logger().info("{}: osd.{} is_down", __func__, peer);
+    return seastar::now();
+  } else if (osdmap->get_info(peer).up_from > from_epoch) {
+    logger().info("{}: osd.{} {} > {}", __func__, peer,
+		    osdmap->get_info(peer).up_from, from_epoch);
     return seastar::now();
   } else {
     return cluster_msgr.connect(osdmap->get_cluster_addrs(peer).front(),
@@ -243,6 +250,12 @@ seastar::future<> ShardServices::osdmap_subscribe(version_t epoch, bool force_re
   } else {
     return seastar::now();
   }
+}
+
+HeartbeatStampsRef ShardServices::get_hb_stamps(int peer)
+{
+#warning writeme
+  return HeartbeatStampsRef();
 }
 
 };

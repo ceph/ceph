@@ -32,10 +32,10 @@ static int get_concurrency() {
 namespace librados {
 
 static void finish_aio_completion(AioCompletionImpl *c, int r) {
-  c->lock.Lock();
+  c->lock.lock();
   c->complete = true;
   c->rval = r;
-  c->lock.Unlock();
+  c->lock.unlock();
 
   rados_callback_t cb_complete = c->callback_complete;
   void *cb_complete_arg = c->callback_complete_arg;
@@ -49,10 +49,10 @@ static void finish_aio_completion(AioCompletionImpl *c, int r) {
     cb_safe(c, cb_safe_arg);
   }
 
-  c->lock.Lock();
+  c->lock.lock();
   c->callback_complete = NULL;
   c->callback_safe = NULL;
-  c->cond.Signal();
+  c->cond.notify_all();
   c->put_unlock();
 }
 

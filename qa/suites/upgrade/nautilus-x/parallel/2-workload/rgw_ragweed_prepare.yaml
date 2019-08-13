@@ -4,8 +4,6 @@ meta:
 workload:
   full_sequential:
   - sequential:
-    - rgw:
-      - client.1
     - ragweed:
         client.1:
           default-branch: ceph-master

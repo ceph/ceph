@@ -191,12 +191,9 @@ PG::PG(OSDService *o, OSDMapRef curmap,
   scrub_queued(false),
   recovery_queued(false),
   recovery_ops_active(0),
-  heartbeat_peer_lock("PG::heartbeat_peer_lock"),
   backfill_reserving(false),
-  pg_stats_publish_lock("PG::pg_stats_publish_lock"),
   pg_stats_publish_valid(false),
   finish_sync_event(NULL),
-  backoff_lock("PG::backoff_lock"),
   scrub_after_recovery(false),
   active_pushes(0),
   recovery_state(
@@ -229,17 +226,41 @@ PG::~PG()
 
 void PG::lock(bool no_lockdep) const
 {
-  _lock.Lock(no_lockdep);
+#ifdef CEPH_DEBUG_MUTEX
+  _lock.lock(no_lockdep);
+#else
+  _lock.lock();
+  locked_by = std::this_thread::get_id();
+#endif
   // if we have unrecorded dirty state with the lock dropped, there is a bug
   ceph_assert(!recovery_state.debug_has_dirty_state());
 
   dout(30) << "lock" << dendl;
 }
 
+bool PG::is_locked() const
+{
+  return ceph_mutex_is_locked(_lock);
+}
+
+void PG::unlock() const
+{
+  //generic_dout(0) << this << " " << info.pgid << " unlock" << dendl;
+  ceph_assert(!recovery_state.debug_has_dirty_state());
+#ifndef CEPH_DEBUG_MUTEX
+  locked_by = {};
+#endif
+  _lock.unlock();
+}
+
 std::ostream& PG::gen_prefix(std::ostream& out) const
 {
   OSDMapRef mapref = recovery_state.get_osdmap();
+#ifdef CEPH_DEBUG_MUTEX
   if (_lock.is_locked_by_me()) {
+#else
+  if (locked_by == std::this_thread::get_id()) {
+#endif
     out << "osd." << osd->whoami
 	<< " pg_epoch: " << (mapref ? mapref->get_epoch():0)
 	<< " " << *this << " ";
@@ -392,7 +413,7 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
 
 bool PG::requeue_scrub(bool high_priority)
 {
-  ceph_assert(is_locked());
+  ceph_assert(ceph_mutex_is_locked(_lock));
   if (scrub_queued) {
     dout(10) << __func__ << ": already queued" << dendl;
     return false;
@@ -420,7 +441,7 @@ void PG::queue_recovery()
 
 bool PG::queue_scrub()
 {
-  ceph_assert(is_locked());
+  ceph_assert(ceph_mutex_is_locked(_lock));
   if (is_scrubbing()) {
     return false;
   }
@@ -472,11 +493,10 @@ Context *PG::finish_recovery()
 
 void PG::_finish_recovery(Context *c)
 {
-  lock();
+  std::scoped_lock locker{*this};
   // When recovery is initiated by a repair, that flag is left on
   state_clear(PG_STATE_REPAIR);
   if (recovery_state.is_deleting()) {
-    unlock();
     return;
   }
   if (c == finish_sync_event) {
@@ -496,7 +516,6 @@ void PG::_finish_recovery(Context *c)
   } else {
     dout(10) << "_finish_recovery -- stale" << dendl;
   }
-  unlock();
 }
 
 void PG::start_recovery_op(const hobject_t& soid)
@@ -707,7 +726,7 @@ void PG::rm_backoff(BackoffRef b)
 {
   dout(10) << __func__ << " " << *b << dendl;
   std::lock_guard l(backoff_lock);
-  ceph_assert(b->lock.is_locked_by_me());
+  ceph_assert(ceph_mutex_is_locked_by_me(b->lock));
   ceph_assert(b->pg == this);
   auto p = backoffs.find(b->begin);
   // may race with release_backoffs()
@@ -783,7 +802,7 @@ void PG::clear_probe_targets()
 void PG::update_heartbeat_peers(set<int> new_peers)
 {
   bool need_update = false;
-  heartbeat_peer_lock.Lock();
+  heartbeat_peer_lock.lock();
   if (new_peers == heartbeat_peers) {
     dout(10) << "update_heartbeat_peers " << heartbeat_peers << " unchanged" << dendl;
   } else {
@@ -791,7 +810,7 @@ void PG::update_heartbeat_peers(set<int> new_peers)
     heartbeat_peers.swap(new_peers);
     need_update = true;
   }
-  heartbeat_peer_lock.Unlock();
+  heartbeat_peer_lock.unlock();
 
   if (need_update)
     osd->need_heartbeat_peer_update();
@@ -815,8 +834,7 @@ void PG::publish_stats_to_osd()
   if (!is_primary())
     return;
 
-  pg_stats_publish_lock.Lock();
-
+  std::lock_guard l{pg_stats_publish_lock};
   auto stats = recovery_state.prepare_stats_for_publish(
     pg_stats_publish_valid,
     pg_stats_publish,
@@ -825,16 +843,13 @@ void PG::publish_stats_to_osd()
     pg_stats_publish = stats.value();
     pg_stats_publish_valid = true;
   }
-
-  pg_stats_publish_lock.Unlock();
 }
 
 void PG::clear_publish_stats()
 {
   dout(15) << "clear_stats" << dendl;
-  pg_stats_publish_lock.Lock();
+  std::lock_guard l{pg_stats_publish_lock};
   pg_stats_publish_valid = false;
-  pg_stats_publish_lock.Unlock();
 }
 
 /**
@@ -868,10 +883,9 @@ void PG::init(
 void PG::shutdown()
 {
   ch->flush();
-  lock();
+  std::scoped_lock l{*this};
   recovery_state.shutdown();
   on_shutdown();
-  unlock();
 }
 
 #pragma GCC diagnostic ignored "-Wpragmas"
@@ -1142,6 +1156,9 @@ void PG::read_state(ObjectStore *store)
       recovery_state.set_role(-1);
   }
 
+  // init pool options
+  store->set_collection_opts(ch, pool.info.opts);
+
   PeeringCtx rctx;
   handle_initialize(rctx);
   // note: we don't activate here because we know the OSD will advance maps
@@ -1327,7 +1344,7 @@ void PG::requeue_map_waiters()
 // returns true if a scrub has been newly kicked off
 bool PG::sched_scrub()
 {
-  ceph_assert(is_locked());
+  ceph_assert(ceph_mutex_is_locked(_lock));
   ceph_assert(!is_scrubbing());
   if (!(is_primary() && is_active() && is_clean())) {
     return false;
@@ -1421,7 +1438,10 @@ bool PG::sched_scrub()
     scrubber.need_auto = false;
 
     ceph_assert(scrubber.reserved_peers.empty());
-    if ((cct->_conf->osd_scrub_during_recovery || !osd->is_recovery_active()) &&
+    bool allow_scrubing = cct->_conf->osd_scrub_during_recovery ||
+                          (cct->_conf->osd_repair_during_recovery && scrubber.must_repair) ||
+                          !osd->is_recovery_active();
+    if (allow_scrubing &&
          osd->inc_scrubs_pending()) {
       dout(20) << __func__ << ": reserved locally, reserving replicas" << dendl;
       scrubber.reserved = true;
@@ -1777,6 +1797,16 @@ void PG::send_pg_created(pg_t pgid)
   osd->send_pg_created(pgid);
 }
 
+ceph::signedspan PG::get_mnow()
+{
+  return osd->get_mnow();
+}
+
+HeartbeatStampsRef PG::get_hb_stamps(int peer)
+{
+  return osd->get_hb_stamps(peer);
+}
+
 void PG::rebuild_missing_set_with_deletes(PGLog &pglog)
 {
   pglog.rebuild_missing_set_with_deletes(
@@ -1985,7 +2015,7 @@ bool PG::try_reserve_recovery_space(
 
   // This lock protects not only the stats OSDService but also setting the
   // pg primary_bytes.  That's why we don't immediately unlock
-  Mutex::Locker l(osd->stat_lock);
+  std::lock_guard l{osd->stat_lock};
   osd_stat_t cur_stat = osd->osd_stat;
   if (cct->_conf->osd_debug_reject_backfill_probability > 0 &&
       (rand()%1000 < (cct->_conf->osd_debug_reject_backfill_probability*1000.0))) {
@@ -2174,21 +2204,19 @@ void PG::_scan_snaps(ScrubMap &smap)
 
 	// wait for repair to apply to avoid confusing other bits of the system.
 	{
-	  Cond my_cond;
-	  Mutex my_lock("PG::_scan_snaps my_lock");
+	  ceph::condition_variable my_cond;
+	  ceph::mutex my_lock = ceph::make_mutex("PG::_scan_snaps my_lock");
 	  int r = 0;
 	  bool done;
 	  t.register_on_applied_sync(
-	    new C_SafeCond(&my_lock, &my_cond, &done, &r));
+	    new C_SafeCond(my_lock, my_cond, &done, &r));
 	  r = osd->store->queue_transaction(ch, std::move(t));
 	  if (r != 0) {
 	    derr << __func__ << ": queue_transaction got " << cpp_strerror(r)
 		 << dendl;
 	  } else {
-	    my_lock.Lock();
-	    while (!done)
-	      my_cond.Wait(my_lock);
-	    my_lock.Unlock();
+	    std::unique_lock l{my_lock};
+	    my_cond.wait(l, [&done] { return done;});
 	  }
 	}
       }
@@ -2413,7 +2441,9 @@ void PG::replica_scrub(
  */
 void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
 {
-  if (cct->_conf->osd_scrub_sleep > 0 &&
+  OSDService *osds = osd;
+  double scrub_sleep = osds->osd->scrub_sleep_time(scrubber.must_scrub);
+  if (scrub_sleep > 0 &&
       (scrubber.state == PG::Scrubber::NEW_CHUNK ||
        scrubber.state == PG::Scrubber::INACTIVE) &&
        scrubber.needs_sleep) {
@@ -2421,7 +2451,6 @@ void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
     dout(20) << __func__ << " state is INACTIVE|NEW_CHUNK, sleeping" << dendl;
 
     // Do an async sleep so we don't block the op queue
-    OSDService *osds = osd;
     spg_t pgid = get_pgid();
     int state = scrubber.state;
     auto scrub_requeue_callback =
@@ -2446,7 +2475,7 @@ void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
           pg->unlock();
         });
     std::lock_guard l(osd->sleep_lock);
-    osd->sleep_timer.add_event_after(cct->_conf->osd_scrub_sleep,
+    osd->sleep_timer.add_event_after(scrub_sleep,
                                            scrub_requeue_callback);
     scrubber.sleeping = true;
     scrubber.sleep_start = ceph_clock_now();
@@ -3287,11 +3316,10 @@ struct FlushState {
   epoch_t epoch;
   FlushState(PG *pg, epoch_t epoch) : pg(pg), epoch(epoch) {}
   ~FlushState() {
-    pg->lock();
+    std::scoped_lock l{*pg};
     if (!pg->pg_has_reset_since(epoch)) {
       pg->recovery_state.complete_flush();
     }
-    pg->unlock();
   }
 };
 typedef std::shared_ptr<FlushState> FlushStateRef;
@@ -3681,12 +3709,17 @@ void PG::handle_query_state(Formatter *f)
   }
 }
 
-void PG::on_pool_change()
+void PG::init_collection_pool_opts()
 {
   auto r = osd->store->set_collection_opts(ch, pool.info.opts);
-  if(r < 0 && r != -EOPNOTSUPP) {
+  if (r < 0 && r != -EOPNOTSUPP) {
     derr << __func__ << " set_collection_opts returns error:" << r << dendl;
   }
+}
+
+void PG::on_pool_change()
+{
+  init_collection_pool_opts();
   plpg_on_pool_change();
 }
 
@@ -3713,19 +3746,18 @@ void PG::do_delete_work(ObjectStore::Transaction &t)
         dout(20) << __func__ << " wake up at "
                  << ceph_clock_now()
 	         << ", re-queuing delete" << dendl;
-        lock();
+        std::scoped_lock locker{*this};
         delete_needs_sleep = false;
         if (!pg_has_reset_since(e)) {
           osd->queue_for_pg_delete(get_pgid(), e);
         }
-        unlock();
       });
 
-      utime_t delete_schedule_time = ceph_clock_now();
-      delete_schedule_time += osd_delete_sleep;
-      Mutex::Locker l(osd->sleep_lock);
+      auto delete_schedule_time = ceph::real_clock::now();
+      delete_schedule_time += ceph::make_timespan(osd_delete_sleep);
+      std::lock_guard l{osd->sleep_lock};
       osd->sleep_timer.add_event_at(delete_schedule_time,
-	                                        delete_requeue_callback);
+				    delete_requeue_callback);
       dout(20) << __func__ << " Delete scheduled at " << delete_schedule_time << dendl;
       return;
     }
@@ -3845,9 +3877,8 @@ ostream& operator<<(ostream& out, const PG::BackfillInterval& bi)
 
 void PG::dump_pgstate_history(Formatter *f)
 {
-  lock();
+  std::scoped_lock l{*this};
   recovery_state.dump_history(f);
-  unlock();
 }
 
 void PG::dump_missing(Formatter *f)
@@ -3872,23 +3903,21 @@ void PG::dump_missing(Formatter *f)
 
 void PG::get_pg_stats(std::function<void(const pg_stat_t&, epoch_t lec)> f)
 {
-  pg_stats_publish_lock.Lock();
+  std::lock_guard l{pg_stats_publish_lock};
   if (pg_stats_publish_valid) {
     f(pg_stats_publish, pg_stats_publish.get_effective_last_epoch_clean());
   }
-  pg_stats_publish_lock.Unlock();
 }
 
 void PG::with_heartbeat_peers(std::function<void(int)> f)
 {
-  heartbeat_peer_lock.Lock();
+  std::lock_guard l{heartbeat_peer_lock};
   for (auto p : heartbeat_peers) {
     f(p);
   }
   for (auto p : probe_targets) {
     f(p);
   }
-  heartbeat_peer_lock.Unlock();
 }
 
 uint64_t PG::get_min_alloc_size() const {

@@ -398,6 +398,7 @@ void osd_stat_t::dump(Formatter *f) const
   f->dump_unsigned("num_pgs", num_pgs);
   f->dump_unsigned("num_osds", num_osds);
   f->dump_unsigned("num_per_pool_osds", num_per_pool_osds);
+  f->dump_unsigned("num_per_pool_omap_osds", num_per_pool_omap_osds);
 
   /// dump legacy stats fields to ensure backward compatibility.
   f->dump_unsigned("kb", statfs.kb());
@@ -431,7 +432,7 @@ void osd_stat_t::dump(Formatter *f) const
 
 void osd_stat_t::encode(ceph::buffer::list &bl, uint64_t features) const
 {
-  ENCODE_START(12, 2, bl);
+  ENCODE_START(13, 2, bl);
 
   //////// for compatibility ////////
   int64_t kb = statfs.kb();
@@ -465,6 +466,7 @@ void osd_stat_t::encode(ceph::buffer::list &bl, uint64_t features) const
   encode(num_shards_repaired, bl);
   encode(num_osds, bl);
   encode(num_per_pool_osds, bl);
+  encode(num_per_pool_omap_osds, bl);
   ENCODE_FINISH(bl);
 }
 
@@ -472,7 +474,7 @@ void osd_stat_t::decode(ceph::buffer::list::const_iterator &bl)
 {
   int64_t kb, kb_used,kb_avail;
   int64_t kb_used_data, kb_used_omap, kb_used_meta;
-  DECODE_START_LEGACY_COMPAT_LEN(12, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(13, 2, 2, bl);
   decode(kb, bl);
   decode(kb_used, bl);
   decode(kb_avail, bl);
@@ -538,6 +540,11 @@ void osd_stat_t::decode(ceph::buffer::list::const_iterator &bl)
   } else {
     num_osds = 0;
     num_per_pool_osds = 0;
+  }
+  if (struct_v >= 13) {
+    decode(num_per_pool_omap_osds, bl);
+  } else {
+    num_per_pool_omap_osds = 0;
   }
   DECODE_FINISH(bl);
 }
@@ -3344,23 +3351,27 @@ void pg_info_t::generate_test_instances(list<pg_info_t*>& o)
 // -- pg_notify_t --
 void pg_notify_t::encode(ceph::buffer::list &bl) const
 {
-  ENCODE_START(2, 2, bl);
+  ENCODE_START(3, 2, bl);
   encode(query_epoch, bl);
   encode(epoch_sent, bl);
   encode(info, bl);
   encode(to, bl);
   encode(from, bl);
+  encode(past_intervals, bl);
   ENCODE_FINISH(bl);
 }
 
 void pg_notify_t::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START(2, bl);
+  DECODE_START(3, bl);
   decode(query_epoch, bl);
   decode(epoch_sent, bl);
   decode(info, bl);
   decode(to, bl);
   decode(from, bl);
+  if (struct_v >= 3) {
+    decode(past_intervals, bl);
+  }
   DECODE_FINISH(bl);
 }
 
@@ -3375,12 +3386,15 @@ void pg_notify_t::dump(Formatter *f) const
     info.dump(f);
     f->close_section();
   }
+  f->dump_object("past_intervals", past_intervals);
 }
 
 void pg_notify_t::generate_test_instances(list<pg_notify_t*>& o)
 {
-  o.push_back(new pg_notify_t(shard_id_t(3), shard_id_t::NO_SHARD, 1, 1, pg_info_t()));
-  o.push_back(new pg_notify_t(shard_id_t(0), shard_id_t(0), 3, 10, pg_info_t()));
+  o.push_back(new pg_notify_t(shard_id_t(3), shard_id_t::NO_SHARD, 1, 1,
+			      pg_info_t(), PastIntervals()));
+  o.push_back(new pg_notify_t(shard_id_t(0), shard_id_t(0), 3, 10,
+			      pg_info_t(), PastIntervals()));
 }
 
 ostream &operator<<(ostream &lhs, const pg_notify_t &notify)
@@ -3392,6 +3406,7 @@ ostream &operator<<(ostream &lhs, const pg_notify_t &notify)
       notify.to != shard_id_t::NO_SHARD)
     lhs << " " << (unsigned)notify.from
 	<< "->" << (unsigned)notify.to;
+  lhs << " " << notify.past_intervals;
   return lhs << ")";
 }
 

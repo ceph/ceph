@@ -4,6 +4,7 @@
     user create                create a new user
     user modify                modify user
     user info                  get user info
+    user rename                rename user
     user rm                    remove user
     user suspend               suspend a user
     user enable                re-enable user after suspension
@@ -25,6 +26,7 @@
     bucket stats               returns bucket statistics
     bucket rm                  remove bucket
     bucket check               check bucket index
+    bucket chown               link bucket to specified user and update its object ACLs
     bucket reshard             reshard bucket
     bucket rewrite             rewrite all objects in the specified bucket
     bucket sync disable        disable bucket sync
@@ -162,6 +164,7 @@
   options:
      --tenant=<tenant>         tenant name
      --uid=<id>                user id
+     --new-uid=<id>            new user id
      --subuser=<name>          subuser name
      --access-key=<key>        S3 access key
      --email=<email>           user's email address
@@ -185,6 +188,8 @@
      --start-date=<date>       start date in the format yyyy-mm-dd
      --end-date=<date>         end date in the format yyyy-mm-dd
      --bucket-id=<bucket-id>   bucket id
+     --bucket-new-name=<bucket>
+                               for bucket link: optional new name
      --shard-id=<shard-id>     optional for: 
                                  mdlog list
                                  data sync status

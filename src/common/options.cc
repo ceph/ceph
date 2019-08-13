@@ -341,6 +341,9 @@ constexpr unsigned long long operator"" _M (unsigned long long n) {
 constexpr unsigned long long operator"" _G (unsigned long long n) {
   return n << 30;
 }
+constexpr unsigned long long operator"" _T (unsigned long long n) {
+  return n << 40;
+}
 
 std::vector<Option> get_global_options() {
   return std::vector<Option>({
@@ -1066,6 +1069,26 @@ std::vector<Option> get_global_options() {
     .set_default(0)
     .set_description("Inject various internal delays to induce races (seconds)"),
 
+    Option("ms_blackhole_osd", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description(""),
+
+    Option("ms_blackhole_mon", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description(""),
+
+    Option("ms_blackhole_mds", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description(""),
+
+    Option("ms_blackhole_mgr", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description(""),
+
+    Option("ms_blackhole_client", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description(""),
+
     Option("ms_dump_on_send", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
     .set_description("Hexdump message to debug log on message send"),
@@ -1309,6 +1332,23 @@ std::vector<Option> get_global_options() {
     .set_default(500)
     .add_service("mon")
     .set_description("maximum number of OSDMaps to cache in memory"),
+
+    Option("mon_osd_cache_size_min", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_default(128_M)
+    .add_service("mon")
+    .set_description("The minimum amount of bytes to be kept mapped in memory for osd monitor caches."),
+
+    Option("mon_memory_target", Option::TYPE_SIZE, Option::LEVEL_BASIC)
+    .set_default(2_G)
+    .set_flag(Option::FLAG_RUNTIME)
+    .add_service("mon")
+    .set_description("The amount of bytes pertaining to osd monitor caches and kv cache to be kept mapped in memory with cache auto-tuning enabled"),
+
+    Option("mon_memory_autotune", Option::TYPE_BOOL, Option::LEVEL_BASIC)
+    .set_default(true)
+    .set_flag(Option::FLAG_RUNTIME)
+    .add_service("mon")
+    .set_description("Autotune the cache memory being used for osd monitors and kv database"),
 
     Option("mon_cpu_threads", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(4)
@@ -3250,7 +3290,19 @@ std::vector<Option> get_global_options() {
 
     Option("osd_snap_trim_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("Time in seconds to sleep before next snap trim (overrides values below)"),
+
+    Option("osd_snap_trim_sleep_hdd", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(5)
+    .set_description("Time in seconds to sleep before next snap trim for HDDs"),
+
+    Option("osd_snap_trim_sleep_ssd", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("Time in seconds to sleep before next snap trim for SSDs"),
+
+    Option("osd_snap_trim_sleep_hybrid", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(2)
+    .set_description("Time in seconds to sleep before next snap trim when data is on HDD and journal is on SSD"),
 
     Option("osd_scrub_invalid_stats", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
@@ -3406,6 +3458,10 @@ std::vector<Option> get_global_options() {
     .set_default(false)
     .set_description("Allow scrubbing when PGs on the OSD are undergoing recovery"),
 
+    Option("osd_repair_during_recovery", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Allow requested repairing when PGs on the OSD are undergoing recovery"),
+
     Option("osd_scrub_begin_hour", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("Restrict scrubbing to this hour of the day or later")
@@ -3466,6 +3522,14 @@ std::vector<Option> get_global_options() {
     Option("osd_scrub_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("Duration to inject a delay during scrubbing"),
+
+    Option("osd_scrub_extended_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("Duration to inject a delay during scrubbing out of scrubbing hours")
+    .add_see_also("osd_scrub_begin_hour")
+    .add_see_also("osd_scrub_end_hour")
+    .add_see_also("osd_scrub_begin_week_day")
+    .add_see_also("osd_scrub_end_week_day"),
 
     Option("osd_scrub_auto_repair", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(false)
@@ -3723,6 +3787,10 @@ std::vector<Option> get_global_options() {
     Option("osd_debug_no_purge_strays", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false),
 
+    Option("osd_debug_pretend_recovery_active", Option::TYPE_BOOL, Option::LEVEL_DEV)
+    .set_default(false)
+    .set_description(""),
+
     Option("osd_enable_op_tracker", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
     .set_description(""),
@@ -3873,6 +3941,7 @@ std::vector<Option> get_global_options() {
 
     Option("rocksdb_cache_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
     .set_default(512_M)
+    .set_flag(Option::FLAG_RUNTIME)
     .set_description(""),
 
     Option("rocksdb_cache_row_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -3908,7 +3977,7 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("rocksdb_enable_rmrange", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
+    .set_default(true)
     .set_description("Refer to github.com/facebook/rocksdb/wiki/DeleteRange-Implementation"),
 
     Option("rocksdb_max_items_rmrange", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
@@ -4331,7 +4400,7 @@ std::vector<Option> get_global_options() {
     .set_description("Path to block device/file"),
 
     Option("bluestore_block_size", Option::TYPE_SIZE, Option::LEVEL_DEV)
-    .set_default(10_G)
+    .set_default(1_T)
     .set_flag(Option::FLAG_CREATE)
     .set_description("Size of file to create for backing bluestore"),
 
@@ -4628,7 +4697,7 @@ std::vector<Option> get_global_options() {
     .set_description("Max transactions with deferred writes that can accumulate before we force flush deferred writes"),
 
     Option("bluestore_rocksdb_options", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("compression=kNoCompression,max_write_buffer_number=4,min_write_buffer_number_to_merge=1,recycle_log_file_num=4,write_buffer_size=268435456,writable_file_max_buffer_size=0,compaction_readahead_size=2097152")
+    .set_default("compression=kNoCompression,max_write_buffer_number=4,min_write_buffer_number_to_merge=1,recycle_log_file_num=4,write_buffer_size=268435456,writable_file_max_buffer_size=0,compaction_readahead_size=2097152,max_background_compactions=2")
     .set_description("Rocksdb options"),
 
     Option("bluestore_rocksdb_cf", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -4644,16 +4713,16 @@ std::vector<Option> get_global_options() {
     .set_description("Run fsck at mount"),
 
     Option("bluestore_fsck_on_mount_deep", Option::TYPE_BOOL, Option::LEVEL_DEV)
-    .set_default(true)
-    .set_description("Run deep fsck at mount"),
+    .set_default(false)
+    .set_description("Run deep fsck at mount when bluestore_fsck_on_mount is set to true"),
 
     Option("bluestore_fsck_on_umount", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description("Run fsck at umount"),
 
     Option("bluestore_fsck_on_umount_deep", Option::TYPE_BOOL, Option::LEVEL_DEV)
-    .set_default(true)
-    .set_description("Run deep fsck at umount"),
+    .set_default(false)
+    .set_description("Run deep fsck at umount when bluestore_fsck_on_umount is set to true"),
 
     Option("bluestore_fsck_on_mkfs", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
@@ -4821,13 +4890,25 @@ std::vector<Option> get_global_options() {
     .set_default(true)
     .set_description("Enable health indication on lack of per-pool statfs reporting from bluestore"),
 
+    Option("bluestore_fsck_error_on_no_per_pool_omap", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(false)
+    .set_description("Make fsck error (instead of warn) when objects without per-pool omap are found"),
+
+    Option("bluestore_warn_on_no_per_pool_omap", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("Enable health indication on lack of per-pool omap"),
+
     Option("bluestore_log_op_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(5)
     .set_description("log operation if it's slower than this age (seconds)"),
 
     Option("bluestore_log_omap_iterator_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(1)
+    .set_default(5)
     .set_description("log omap iteration operation if it's slower than this age (seconds)"),
+
+    Option("bluestore_log_collection_list_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(60)
+    .set_description("log collection list operation if it's slower than this age (seconds)"),
 
     Option("bluestore_debug_enforce_settings", Option::TYPE_STR, Option::LEVEL_DEV)
     .set_default("default")
@@ -5854,12 +5935,13 @@ std::vector<Option> get_rgw_options() {
     .set_default(true)
     .set_description("Should RGW verify the Keystone server SSL certificate."),
 
-    Option("rgw_keystone_implicit_tenants", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
+    Option("rgw_keystone_implicit_tenants", Option::TYPE_STR, Option::LEVEL_ADVANCED)
+    .set_default("false")
+    .set_enum_allowed( { "false", "true", "swift", "s3", "both", "0", "1", "none" } )
     .set_description("RGW Keystone implicit tenants creation")
     .set_long_description(
         "Implicitly create new users in their own tenant with the same name when "
-        "authenticating via Keystone."),
+        "authenticating via Keystone.  Can be limited to s3 or swift only."),
 
     Option("rgw_cross_domain_policy", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("<allow-access-from domain=\"*\" secure=\"false\" />")
@@ -6067,6 +6149,11 @@ std::vector<Option> get_rgw_options() {
     .set_default(8)
     .set_min_max(1, 1024)
     .set_description("pg_num_min value for RGW metadata (omap-heavy) pools"),
+
+    Option("rgw_rados_pool_recovery_priority", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(5)
+    .set_min_max(-10, 10)
+    .set_description("recovery_priority value for RGW metadata (omap-heavy) pools"),
 
     Option("rgw_zone", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")

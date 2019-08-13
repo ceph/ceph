@@ -90,7 +90,12 @@ export class TaskListService implements OnDestroy {
     if (tasks.length === 0) {
       return;
     }
-    return tasks.map((task) => this.taskMessageService.getRunningText(task)).join(', ');
+    return tasks
+      .map((task) => {
+        const progress = task.progress ? ` ${task.progress}%` : '';
+        return this.taskMessageService.getRunningText(task) + '...' + progress;
+      })
+      .join(', ');
   }
 
   ngOnDestroy() {

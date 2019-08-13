@@ -17,7 +17,7 @@
 
 #include "include/utime.h"
 #include "common/AsyncOpTracker.h"
-#include "common/Mutex.h"
+#include "common/ceph_mutex.h"
 #include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/image_deleter/Types.h"
 #include <atomic>
@@ -81,6 +81,7 @@ public:
   }
 
 private:
+  using clock_t = ceph::real_clock;
   struct TrashListener : public image_deleter::TrashListener {
     ImageDeleter *image_deleter;
 
@@ -88,7 +89,7 @@ private:
     }
 
     void handle_trash_image(const std::string& image_id,
-                            const utime_t& deferment_end_time) override {
+      const ceph::real_clock::time_point& deferment_end_time) override {
       image_deleter->handle_trash_image(image_id, deferment_end_time);
     }
   };
@@ -98,7 +99,7 @@ private:
 
     image_deleter::ErrorResult error_result = {};
     int error_code = 0;
-    utime_t retry_time = {};
+    clock_t::time_point retry_time;
     int retries = 0;
 
     DeleteInfo(const std::string& image_id)
@@ -134,7 +135,7 @@ private:
 
   AsyncOpTracker m_async_op_tracker;
 
-  Mutex m_lock;
+  ceph::mutex m_lock;
   DeleteQueue m_delete_queue;
   DeleteQueue m_retry_delete_queue;
   DeleteQueue m_in_flight_delete_queue;
@@ -162,7 +163,7 @@ private:
   void handle_retry_timer();
 
   void handle_trash_image(const std::string& image_id,
-                          const utime_t& deferment_end_time);
+                          const clock_t::time_point& deferment_end_time);
 
   void shut_down_trash_watcher(Context* on_finish);
   void wait_for_ops(Context* on_finish);

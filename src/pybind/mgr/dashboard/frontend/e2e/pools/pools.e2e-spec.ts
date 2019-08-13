@@ -1,11 +1,12 @@
 import { Helper } from '../helper.po';
-import { PoolPageHelper } from './pools.po';
 
 describe('Pools page', () => {
-  let page: PoolPageHelper;
+  let pools: Helper['pools'];
+  const poolName = 'pool_e2e_pool_test';
 
   beforeAll(() => {
-    page = new PoolPageHelper();
+    pools = new Helper().pools;
+    pools.navigateTo();
   });
 
   afterEach(() => {
@@ -13,24 +14,38 @@ describe('Pools page', () => {
   });
 
   describe('breadcrumb and tab tests', () => {
-    beforeAll(() => {
-      page.navigateTo();
-    });
-
     it('should open and show breadcrumb', () => {
-      expect(PoolPageHelper.getBreadcrumbText()).toEqual('Pools');
+      expect(pools.getBreadcrumbText()).toEqual('Pools');
     });
 
     it('should show two tabs', () => {
-      expect(PoolPageHelper.getTabsCount()).toEqual(2);
+      expect(pools.getTabsCount()).toEqual(2);
     });
 
     it('should show pools list tab at first', () => {
-      expect(PoolPageHelper.getTabText(0)).toEqual('Pools List');
+      expect(pools.getTabText(0)).toEqual('Pools List');
     });
 
     it('should show overall performance as a second tab', () => {
-      expect(PoolPageHelper.getTabText(1)).toEqual('Overall Performance');
+      expect(pools.getTabText(1)).toEqual('Overall Performance');
+    });
+  });
+
+  it('should create a pool', () => {
+    pools.exist(poolName, false).then(() => {
+      pools.navigateTo('create');
+      pools.create(poolName, 8).then(() => {
+        pools.navigateTo();
+        pools.exist(poolName, true);
+      });
+    });
+  });
+
+  it('should delete a pool', () => {
+    pools.exist(poolName);
+    pools.delete(poolName).then(() => {
+      pools.navigateTo();
+      pools.exist(poolName, false);
     });
   });
 });

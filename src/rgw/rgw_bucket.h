@@ -200,14 +200,26 @@ extern int rgw_read_user_buckets(RGWRados *store,
 				 bool* is_truncated,
                                  uint64_t default_amount = 1000);
 
+struct rgw_ep_info {
+    RGWBucketEntryPoint &ep;
+    map<string, bufferlist>& attrs;
+    rgw_ep_info(RGWBucketEntryPoint &ep, map<string, bufferlist>& attrs)
+	: ep(ep), attrs(attrs) { }
+};
+
 extern int rgw_link_bucket(RGWRados* store,
                            const rgw_user& user_id,
                            rgw_bucket& bucket,
                            ceph::real_time creation_time,
-                           bool update_entrypoint = true);
+                           bool update_entrypoint = true,
+                           rgw_ep_info *pinfo = nullptr);
 extern int rgw_unlink_bucket(RGWRados *store, const rgw_user& user_id,
                              const string& tenant_name, const string& bucket_name, bool update_entrypoint = true);
-
+extern int rgw_bucket_chown(RGWRados* const store, RGWBucketInfo& bucket_info,
+                            const rgw_user& uid, const std::string& display_name,
+                            const string& marker);
+extern int rgw_set_bucket_acl(RGWRados* store, ACLOwner& owner, rgw_bucket& bucket,
+                              RGWBucketInfo& bucket_info, bufferlist& bl);
 extern int rgw_remove_object(RGWRados *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key);
 extern int rgw_remove_bucket(RGWRados *store, rgw_bucket& bucket, bool delete_children, optional_yield y);
 extern int rgw_remove_bucket_bypass_gc(RGWRados *store, rgw_bucket& bucket, int concurrent_max, optional_yield y);
@@ -227,6 +239,7 @@ struct RGWBucketAdminOpState {
   std::string bucket_name;
   std::string bucket_id;
   std::string object_name;
+  std::string new_bucket_name;
 
   bool list_buckets;
   bool stat_buckets;
@@ -256,6 +269,9 @@ struct RGWBucketAdminOpState {
   }
   void set_object(std::string& object_str) {
     object_name = object_str;
+  }
+  void set_new_bucket_name(std::string& new_bucket_str) {
+    new_bucket_name = new_bucket_str;
   }
   void set_quota(RGWQuotaInfo& value) {
     quota = value;
@@ -312,7 +328,8 @@ class RGWBucket
 
 public:
   RGWBucket() : store(NULL), handle(NULL), failure(false) {}
-  int init(RGWRados *storage, RGWBucketAdminOpState& op_state);
+  int init(RGWRados *storage, RGWBucketAdminOpState& op_state,
+              std::string *err_msg = NULL, map<string, bufferlist> *pattrs = NULL);
 
   int check_bad_index_multipart(RGWBucketAdminOpState& op_state,
               RGWFormatterFlusher& flusher, std::string *err_msg = NULL);
@@ -328,7 +345,9 @@ public:
           std::string *err_msg = NULL);
 
   int remove(RGWBucketAdminOpState& op_state, optional_yield y, bool bypass_gc = false, bool keep_index_consistent = true, std::string *err_msg = NULL);
-  int link(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
+  int link(RGWBucketAdminOpState& op_state, map<string, bufferlist>& attrs,
+	std::string *err_msg = NULL);
+  int chown(RGWBucketAdminOpState& op_state, const string& marker, std::string *err_msg = NULL);
   int unlink(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
   int set_quota(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
 
@@ -353,6 +372,7 @@ public:
 
   static int unlink(RGWRados *store, RGWBucketAdminOpState& op_state);
   static int link(RGWRados *store, RGWBucketAdminOpState& op_state, string *err_msg = NULL);
+  static int chown(RGWRados *store, RGWBucketAdminOpState& op_state, const string& marker, string *err_msg = NULL);
 
   static int check_index(RGWRados *store, RGWBucketAdminOpState& op_state,
                   RGWFormatterFlusher& flusher, optional_yield y);
@@ -458,8 +478,9 @@ class RGWDataChangesLog {
   int num_shards;
   string *oids;
 
-  Mutex lock;
-  RWLock modified_lock;
+  ceph::mutex lock = ceph::make_mutex("RGWDataChangesLog::lock");
+  ceph::shared_mutex modified_lock =
+    ceph::make_shared_mutex("RGWDataChangesLog::modified_lock");
   map<int, set<string> > modified_shards;
 
   std::atomic<bool> down_flag = { false };
@@ -467,17 +488,13 @@ class RGWDataChangesLog {
   struct ChangeStatus {
     real_time cur_expiration;
     real_time cur_sent;
-    bool pending;
-    RefCountedCond *cond;
-    Mutex *lock;
+    bool pending = false;
+    RefCountedCond *cond = nullptr;
+    ceph::mutex lock =
+      ceph::make_mutex("RGWDataChangesLog::ChangeStatus");
 
-    ChangeStatus() : pending(false), cond(NULL) {
-      lock = new Mutex("RGWDataChangesLog::ChangeStatus");
-    }
-
-    ~ChangeStatus() {
-      delete lock;
-    }
+    ChangeStatus() = default;
+    ~ChangeStatus() = default;
   };
 
   typedef std::shared_ptr<ChangeStatus> ChangeStatusPtr;
@@ -493,11 +510,11 @@ class RGWDataChangesLog {
   class ChangesRenewThread : public Thread {
     CephContext *cct;
     RGWDataChangesLog *log;
-    Mutex lock;
-    Cond cond;
+    ceph::mutex lock = ceph::make_mutex("ChangesRenewThread::lock");
+    ceph::condition_variable cond;
 
   public:
-    ChangesRenewThread(CephContext *_cct, RGWDataChangesLog *_log) : cct(_cct), log(_log), lock("ChangesRenewThread::lock") {}
+    ChangesRenewThread(CephContext *_cct, RGWDataChangesLog *_log) : cct(_cct), log(_log) {}
     void *entry() override;
     void stop();
   };
@@ -507,7 +524,6 @@ class RGWDataChangesLog {
 public:
 
   RGWDataChangesLog(CephContext *_cct, RGWRados *_store) : cct(_cct), store(_store),
-                                                           lock("RGWDataChangesLog::lock"), modified_lock("RGWDataChangesLog::modified_lock"),
                                                            changes(cct->_conf->rgw_data_log_changes_size) {
     num_shards = cct->_conf->rgw_data_log_num_shards;
 

@@ -198,9 +198,7 @@ MDCache::~MDCache()
   }
 }
 
-void MDCache::handle_conf_change(const ConfigProxy& conf,
-                                 const std::set <std::string> &changed,
-                                 const MDSMap &mdsmap)
+void MDCache::handle_conf_change(const std::set<std::string>& changed, const MDSMap& mdsmap)
 {
   if (changed.count("mds_cache_size"))
     cache_inode_limit = g_conf().get_val<int64_t>("mds_cache_size");
@@ -216,8 +214,8 @@ void MDCache::handle_conf_change(const ConfigProxy& conf,
     trim_counter = DecayCounter(g_conf().get_val<double>("mds_cache_trim_decay_rate"));
   }
 
-  migrator->handle_conf_change(conf, changed, mdsmap);
-  mds->balancer->handle_conf_change(conf, changed, mdsmap);
+  migrator->handle_conf_change(changed, mdsmap);
+  mds->balancer->handle_conf_change(changed, mdsmap);
 }
 
 void MDCache::log_stat()
@@ -304,6 +302,9 @@ void MDCache::remove_inode(CInode *o)
 
   if (o->state_test(CInode::STATE_QUEUEDEXPORTPIN))
     export_pin_queue.erase(o);
+
+  if (o->state_test(CInode::STATE_DELAYEDEXPORTPIN))
+    export_pin_delayed_queue.erase(o);
 
   // remove from inode map
   if (o->last == CEPH_NOSNAP) {
@@ -7278,6 +7279,13 @@ void MDCache::standby_trim_segment(LogSegment *ls)
     in->dirfragtreelock.remove_dirty();
     try_trim_inode(in);
   }
+  while (!ls->truncating_inodes.empty()) {
+    auto it = ls->truncating_inodes.begin();
+    CInode *in = *it;
+    ls->truncating_inodes.erase(it);
+    in->put(CInode::PIN_TRUNCATING);
+    try_trim_inode(in);
+  }
 }
 
 void MDCache::handle_cache_expire(const cref_t<MCacheExpire> &m)
@@ -12938,3 +12946,23 @@ bool MDCache::dump_inode(Formatter *f, uint64_t number) {
   f->close_section();
   return true;
 }
+
+void MDCache::handle_mdsmap(const MDSMap &mdsmap) {
+  // process export_pin_delayed_queue whenever a new MDSMap received
+  auto &q = export_pin_delayed_queue;
+  for (auto it = q.begin(); it != q.end(); ) {
+    auto *in = *it;
+    mds_rank_t export_pin = in->get_export_pin(false);
+    dout(10) << " delayed export_pin=" << export_pin << " on " << *in 
+      << " max_mds=" << mdsmap.get_max_mds() << dendl;
+    if (export_pin >= mdsmap.get_max_mds()) {
+      it++;
+      continue;
+    }
+
+    in->state_clear(CInode::STATE_DELAYEDEXPORTPIN);
+    it = q.erase(it);
+    in->maybe_export_pin();
+  }
+}
+

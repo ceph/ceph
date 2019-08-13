@@ -13,8 +13,7 @@
 #include "os/ObjectMap.h"
 #include "kv/KeyValueDB.h"
 #include "osd/osd_types.h"
-#include "common/Mutex.h"
-#include "common/Cond.h"
+#include "common/ceph_mutex.h"
 #include "common/simple_cache.hpp"
 #include <boost/optional/optional_io.hpp>
 
@@ -62,9 +61,9 @@ public:
   /**
    * Serializes access to next_seq as well as the in_use set
    */
-  Mutex header_lock;
-  Cond header_cond;
-  Cond map_header_cond;
+  ceph::mutex header_lock = ceph::make_mutex("DBOBjectMap");
+  ceph::condition_variable header_cond;
+  ceph::condition_variable map_header_cond;
 
   /**
    * Set of headers currently in use
@@ -85,9 +84,10 @@ public:
   public:
     explicit MapHeaderLock(DBObjectMap *db) : db(db) {}
     MapHeaderLock(DBObjectMap *db, const ghobject_t &oid) : db(db), locked(oid) {
-      Mutex::Locker l(db->header_lock);
-      while (db->map_header_in_use.count(*locked))
-	db->map_header_cond.Wait(db->header_lock);
+      std::unique_lock l{db->header_lock};
+      db->map_header_cond.wait(l, [db, this] {
+        return !db->map_header_in_use.count(*locked);
+      });
       db->map_header_in_use.insert(*locked);
     }
 
@@ -107,17 +107,16 @@ public:
 
     ~MapHeaderLock() {
       if (locked) {
-	Mutex::Locker l(db->header_lock);
+	std::lock_guard l{db->header_lock};
 	ceph_assert(db->map_header_in_use.count(*locked));
-	db->map_header_cond.Signal();
+	db->map_header_cond.notify_all();
 	db->map_header_in_use.erase(*locked);
       }
     }
   };
 
   DBObjectMap(CephContext* cct, KeyValueDB *db)
-    : ObjectMap(cct, db), header_lock("DBOBjectMap"),
-      cache_lock("DBObjectMap::CacheLock"),
+    : ObjectMap(cct, db),
       caches(cct->_conf->filestore_omap_header_cache_size)
     {}
 
@@ -355,6 +354,10 @@ public:
       o.back()->seq = 30;
     }
 
+    size_t length() {
+      return sizeof(_Header);
+    }
+
     _Header() : seq(0), parent(0), num_children(1) {}
   };
 
@@ -366,7 +369,7 @@ public:
 private:
   /// Implicit lock on Header->seq
   typedef std::shared_ptr<_Header> Header;
-  Mutex cache_lock;
+  ceph::mutex cache_lock = ceph::make_mutex("DBObjectMap::CacheLock");
   SimpleLRU<ghobject_t, _Header> caches;
 
   string map_header_key(const ghobject_t &oid);
@@ -500,7 +503,7 @@ private:
    */
   Header _generate_new_header(const ghobject_t &oid, Header parent);
   Header generate_new_header(const ghobject_t &oid, Header parent) {
-    Mutex::Locker l(header_lock);
+    std::lock_guard l{header_lock};
     return _generate_new_header(oid, parent);
   }
 
@@ -511,7 +514,7 @@ private:
   Header lookup_map_header(
     const MapHeaderLock &l2,
     const ghobject_t &oid) {
-    Mutex::Locker l(header_lock);
+    std::lock_guard l{header_lock};
     return _lookup_map_header(l2, oid);
   }
 
@@ -564,10 +567,10 @@ private:
     explicit RemoveOnDelete(DBObjectMap *db) :
       db(db) {}
     void operator() (_Header *header) {
-      Mutex::Locker l(db->header_lock);
+      std::lock_guard l{db->header_lock};
       ceph_assert(db->in_use.count(header->seq));
       db->in_use.erase(header->seq);
-      db->header_cond.Signal();
+      db->header_cond.notify_all();
       delete header;
     }
   };

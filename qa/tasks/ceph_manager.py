@@ -104,7 +104,7 @@ class Thrasher:
     """
     Object used to thrash Ceph
     """
-    def __init__(self, manager, config, logger=None):
+    def __init__(self, manager, config, logger):
         self.ceph_manager = manager
         self.cluster = manager.cluster
         self.ceph_manager.wait_for_clean()
@@ -136,15 +136,6 @@ class Thrasher:
         num_osds = self.in_osds + self.out_osds
         self.max_pgs = self.config.get("max_pgs_per_pool_osd", 1200) * len(num_osds)
         self.min_pgs = self.config.get("min_pgs_per_pool_osd", 1) * len(num_osds)
-        if self.logger is not None:
-            self.log = lambda x: self.logger.info(x)
-        else:
-            def tmp(x):
-                """
-                Implement log behavior
-                """
-                print x
-            self.log = tmp
         if self.config is None:
             self.config = dict()
         # prevent monitor from auto-marking things out while thrasher runs
@@ -186,6 +177,9 @@ class Thrasher:
             self.dump_ops_thread = gevent.spawn(self.do_dump_ops)
         if self.noscrub_toggle_delay:
             self.noscrub_toggle_thread = gevent.spawn(self.do_noscrub_toggle)
+
+    def log(self, msg, *args, **kwargs):
+        self.logger.info(msg, *args, **kwargs)
 
     def cmd_exists_on_osds(self, cmd):
         allremotes = self.ceph_manager.ctx.cluster.only(\
@@ -495,6 +489,8 @@ class Thrasher:
         try:
             if random.random() >= .3:
                 pgs = self.ceph_manager.get_pg_stats()
+                if not pgs:
+                    return
                 pg = random.choice(pgs)
                 pgid = str(pg['pgid'])
                 poolid = int(pgid.split('.')[0])
@@ -535,6 +531,8 @@ class Thrasher:
         try:
             if random.random() >= .3:
                 pgs = self.ceph_manager.get_pg_stats()
+                if not pgs:
+                    return
                 pg = random.choice(pgs)
                 pgid = str(pg['pgid'])
                 poolid = int(pgid.split('.')[0])
@@ -697,6 +695,7 @@ class Thrasher:
         minlive = int(self.config.get("min_live", 2))
         mindead = int(self.config.get("min_dead", 1))
         self.log("doing min_size thrashing")
+        self.ceph_manager.wait_for_clean(timeout=60)
         assert self.ceph_manager.is_clean(), \
             'not clean before minsize thrashing starts'
         while not self.stopping:
@@ -1613,7 +1612,7 @@ class CephManager:
         """
         Get status from cluster
         """
-        status = self.raw_cluster_cmd('status', '--format=json-pretty')
+        status = self.raw_cluster_cmd('status', '--format=json')
         return json.loads(status)
 
     def raw_osd_status(self):
@@ -2191,6 +2190,9 @@ class CephManager:
         Find the number of active pgs.
         """
         pgs = self.get_pg_stats()
+        return self._get_num_active(pgs)
+
+    def _get_num_active(self, pgs):
         num = 0
         for pg in pgs:
             if pg['state'].count('active') and not pg['state'].count('stale'):
@@ -2235,9 +2237,12 @@ class CephManager:
         Find the number of PGs that are peered
         """
         pgs = self.get_pg_stats()
+        return self._get_num_peered(pgs)
+
+    def _get_num_peered(self, pgs):
         num = 0
         for pg in pgs:
-            if (pg['state'].count('peered')):
+            if pg['state'].count('peered') and not pg['state'].count('stale'):
                  num += 1
         return num
 
@@ -2450,7 +2455,8 @@ class CephManager:
         """
         Wrapper to check if all PGs are active or peered
         """
-        return (self.get_num_active() + self.get_num_peered()) == self.get_num_pgs()
+        pgs = self.get_pg_stats()
+        return self._get_num_active(pgs) + self._get_num_peered(pgs) == len(pgs)
 
     def wait_till_active(self, timeout=None):
         """

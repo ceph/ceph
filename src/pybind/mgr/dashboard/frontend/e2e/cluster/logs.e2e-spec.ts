@@ -1,11 +1,10 @@
 import { Helper } from '../helper.po';
-import { LogsPage } from './logs.po';
 
 describe('Logs page', () => {
-  let page: LogsPage;
+  let logs: Helper['logs'];
 
   beforeAll(() => {
-    page = new LogsPage();
+    logs = new Helper().logs;
   });
 
   afterEach(() => {
@@ -14,23 +13,23 @@ describe('Logs page', () => {
 
   describe('breadcrumb and tab tests', () => {
     beforeAll(() => {
-      page.navigateTo();
+      logs.navigateTo();
     });
 
     it('should open and show breadcrumb', () => {
-      expect(LogsPage.getBreadcrumbText()).toEqual('Logs');
+      expect(logs.getBreadcrumbText()).toEqual('Logs');
     });
 
     it('should show two tabs', () => {
-      expect(LogsPage.getTabsCount()).toEqual(2);
+      expect(logs.getTabsCount()).toEqual(2);
     });
 
     it('should show cluster logs tab at first', () => {
-      expect(LogsPage.getTabText(0)).toEqual('Cluster Logs');
+      expect(logs.getTabText(0)).toEqual('Cluster Logs');
     });
 
     it('should show audit logs as a second tab', () => {
-      expect(LogsPage.getTabText(1)).toEqual('Audit Logs');
+      expect(logs.getTabText(1)).toEqual('Audit Logs');
     });
   });
 });

@@ -132,6 +132,11 @@ OPTION(ms_inject_delay_msg_type, OPT_STR)      // the type of message to delay).
 OPTION(ms_inject_delay_max, OPT_DOUBLE)         // seconds
 OPTION(ms_inject_delay_probability, OPT_DOUBLE) // range [0, 1]
 OPTION(ms_inject_internal_delays, OPT_DOUBLE)   // seconds
+OPTION(ms_blackhole_osd, OPT_BOOL)
+OPTION(ms_blackhole_mon, OPT_BOOL)
+OPTION(ms_blackhole_mds, OPT_BOOL)
+OPTION(ms_blackhole_mgr, OPT_BOOL)
+OPTION(ms_blackhole_client, OPT_BOOL)
 OPTION(ms_dump_on_send, OPT_BOOL)           // hexdump msg to log on send
 OPTION(ms_dump_corrupt_message_level, OPT_INT)  // debug level to hexdump undecodeable messages at
 OPTION(ms_async_op_threads, OPT_U64)            // number of worker processing threads for async messenger created on init
@@ -185,6 +190,9 @@ OPTION(mon_compact_on_bootstrap, OPT_BOOL)  // trigger leveldb compaction on boo
 OPTION(mon_compact_on_trim, OPT_BOOL)       // compact (a prefix) when we trim old states
 OPTION(mon_osd_cache_size, OPT_INT)  // the size of osdmaps cache, not to rely on underlying store's cache
 
+OPTION(mon_osd_cache_size_min, OPT_U64) // minimum amount of memory to cache osdmaps
+OPTION(mon_memory_target, OPT_U64) // amount of mapped memory for osdmaps
+OPTION(mon_memory_autotune, OPT_BOOL) // autotune cache memory for osdmap
 OPTION(mon_cpu_threads, OPT_INT)
 OPTION(mon_osd_mapping_pgs_per_chunk, OPT_INT)
 OPTION(mon_clean_pg_upmaps_per_chunk, OPT_U64)
@@ -699,6 +707,7 @@ OPTION(osd_max_push_cost, OPT_U64)  // max size of push message
 OPTION(osd_max_push_objects, OPT_U64)  // max objects in single push op
 OPTION(osd_max_scrubs, OPT_INT)
 OPTION(osd_scrub_during_recovery, OPT_BOOL) // Allow new scrubs to start while recovery is active on the OSD
+OPTION(osd_repair_during_recovery, OPT_BOOL) // Allow new requested repairs to start while recovery is active on the OSD
 OPTION(osd_scrub_begin_hour, OPT_INT)
 OPTION(osd_scrub_end_hour, OPT_INT)
 OPTION(osd_scrub_begin_week_day, OPT_INT)
@@ -711,6 +720,7 @@ OPTION(osd_scrub_backoff_ratio, OPT_DOUBLE)   // the probability to back off the
 OPTION(osd_scrub_chunk_min, OPT_INT)
 OPTION(osd_scrub_chunk_max, OPT_INT)
 OPTION(osd_scrub_sleep, OPT_FLOAT)   // sleep between [deep]scrub ops
+OPTION(osd_scrub_extended_sleep, OPT_FLOAT)   // more sleep between [deep]scrub ops
 OPTION(osd_scrub_auto_repair, OPT_BOOL)   // whether auto-repair inconsistencies upon deep-scrubbing
 OPTION(osd_scrub_auto_repair_num_errors, OPT_U32)   // only auto-repair when number of errors is below this threshold
 OPTION(osd_deep_scrub_interval, OPT_FLOAT) // once a week
@@ -767,6 +777,7 @@ OPTION(osd_debug_random_push_read_error, OPT_DOUBLE)
 OPTION(osd_debug_verify_cached_snaps, OPT_BOOL)
 OPTION(osd_debug_deep_scrub_sleep, OPT_FLOAT)
 OPTION(osd_debug_no_acting_change, OPT_BOOL)
+OPTION(osd_debug_pretend_recovery_active, OPT_BOOL)
 OPTION(osd_enable_op_tracker, OPT_BOOL) // enable/disable OSD op tracking
 OPTION(osd_num_op_tracker_shard, OPT_U32) // The number of shards for holding the ops
 OPTION(osd_op_history_size, OPT_U32)    // Max number of completed ops to track
@@ -1064,8 +1075,11 @@ OPTION(bluestore_debug_inject_csum_err_probability, OPT_FLOAT)
 OPTION(bluestore_no_per_pool_stats_tolerance, OPT_STR)
 OPTION(bluestore_warn_on_bluefs_spillover, OPT_BOOL)
 OPTION(bluestore_warn_on_legacy_statfs, OPT_BOOL)
+OPTION(bluestore_fsck_error_on_no_per_pool_omap, OPT_BOOL)
+OPTION(bluestore_warn_on_no_per_pool_omap, OPT_BOOL)
 OPTION(bluestore_log_op_age, OPT_DOUBLE)
 OPTION(bluestore_log_omap_iterator_age, OPT_DOUBLE)
+OPTION(bluestore_log_collection_list_age, OPT_DOUBLE)
 OPTION(bluestore_debug_enforce_settings, OPT_STR)
 
 OPTION(kstore_max_ops, OPT_U64)
@@ -1324,7 +1338,6 @@ OPTION(rgw_keystone_accepted_roles, OPT_STR)  // roles required to serve request
 OPTION(rgw_keystone_accepted_admin_roles, OPT_STR) // list of roles allowing an user to gain admin privileges
 OPTION(rgw_keystone_token_cache_size, OPT_INT)  // max number of entries in keystone token cache
 OPTION(rgw_keystone_verify_ssl, OPT_BOOL) // should we try to verify keystone's ssl
-OPTION(rgw_keystone_implicit_tenants, OPT_BOOL)  // create new users in their own tenants of the same name
 OPTION(rgw_cross_domain_policy, OPT_STR)
 OPTION(rgw_healthcheck_disabling_path, OPT_STR) // path that existence causes the healthcheck to respond 503
 OPTION(rgw_s3_auth_use_rados, OPT_BOOL)  // should we try to use the internal credentials for s3?

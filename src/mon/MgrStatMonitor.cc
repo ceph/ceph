@@ -34,6 +34,7 @@ void MgrStatMonitor::create_initial()
   dout(10) << __func__ << dendl;
   version = 0;
   service_map.epoch = 1;
+  service_map.modified = ceph_clock_now();
   pending_service_map_bl.clear();
   encode(service_map, pending_service_map_bl, CEPH_FEATURES_ALL);
 }

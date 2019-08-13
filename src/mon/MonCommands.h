@@ -494,6 +494,10 @@ COMMAND("osd stat", "print summary of OSD map", "osd", "r")
 COMMAND("osd dump " \
 	"name=epoch,type=CephInt,range=0,req=false",
 	"print summary of OSD map", "osd", "r")
+COMMAND("osd info " \
+	"name=id,type=CephOsdName,req=false",
+	"print osd's {id} information (instead of all osds from map)",
+	"osd", "r")
 COMMAND("osd tree " \
 	"name=epoch,type=CephInt,range=0,req=false " \
 	"name=states,type=CephChoices,strings=up|down|in|out|destroyed,n=N,req=false", \
@@ -813,7 +817,8 @@ COMMAND("osd require-osd-release "\
 	"set the minimum allowed OSD release to participate in the cluster",
 	"osd", "rw")
 COMMAND("osd down " \
-	"type=CephString,name=ids,n=N", \
+	"name=ids,type=CephString,n=N "
+	"name=definitely_dead,type=CephBool,req=false",	\
 	"set osd(s) <id> [<id>...] down, " \
         "or use <any|all> to set all osds down", \
         "osd", "rw")

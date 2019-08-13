@@ -108,7 +108,8 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
         self._last_failure_msg = None
         self._all_completions = dict()
         self._completion_lock = Lock()
-
+        self.inventory_cache = orchestrator.OutdatableDict()
+        self.service_cache = orchestrator.OutdatableDict()
 
     def available(self):
         if not self._config_valid():
@@ -119,7 +120,6 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return True, ""
 
-
     def get_inventory(self, node_filter=None, refresh=False):
         """
         Note that this will raise an exception (e.g. if the salt-api is down,
@@ -128,14 +128,33 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
         cli, for example, just prints the traceback in the console, so the
         user at least sees the error.
         """
+        self.inventory_cache.remove_outdated()
+        if not self.inventory_cache.any_outdated() and not refresh:
+            if node_filter is None:
+                return orchestrator.TrivialReadCompletion(
+                    orchestrator.InventoryNode.from_nested_items(self.inventory_cache.items()))
+            elif node_filter.labels is None:
+                try:
+                    return orchestrator.TrivialReadCompletion(
+                        orchestrator.InventoryNode.from_nested_items(
+                            self.inventory_cache.items_filtered(node_filter.nodes)))
+                except KeyError:
+                    # items_filtered() will raise KeyError if passed a node name that doesn't exist
+                    return orchestrator.TrivialReadCompletion([])
 
         def process_result(event_data):
             result = []
             if event_data['success']:
                 for node_name, node_devs in event_data["return"].items():
-                    devs = list(map(lambda di:
-                        orchestrator.InventoryDevice.from_ceph_volume_inventory(di),
-                        node_devs))
+                    if node_filter is None:
+                        # The cache will only be populated when this function is invoked
+                        # without a node filter, i.e. if you run it once for the whole
+                        # cluster, you can then call it for individual nodes and return
+                        # cached data.  However, if you only *ever* call it for individual
+                        # nodes, the cache will never be populated, and you'll always have
+                        # the full round trip to DeepSea.
+                        self.inventory_cache[node_name] = orchestrator.OutdatableData(node_devs)
+                    devs = orchestrator.InventoryDevice.from_ceph_volume_inventory_list(node_devs)
                     result.append(orchestrator.InventoryNode(node_name, devs))
             else:
                 self.log.error(event_data['return'])
@@ -163,8 +182,7 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             return c
 
-
-    def describe_service(self, service_type, service_id, node_name):
+    def describe_service(self, service_type=None, service_id=None, node_name=None, refresh=False):
 
         # Note: describe_service() does *not* support OSDs.  This is because
         # DeepSea doesn't really record what OSDs are deployed where; Ceph is
@@ -172,18 +190,71 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
         # function query OSD information from DeepSea doesn't make a lot of
         # sense (DeepSea would have to call back into Ceph).
 
-        assert service_type in ("mon", "mgr", "mds", "rgw", None), service_type + " unsupported"
+        assert service_type in ("mon", "mgr", "mds", "rgw", "nfs", "iscsi", None), service_type + " unsupported"
+
+        def _deepsea_to_ceph(service):
+            if service == "ganesha":
+                return "nfs"
+            elif service == "igw":
+                return "iscsi"
+            else:
+                return service
+
+        # presently unused
+        def _ceph_to_deepsea(service):
+            if service == "nfs":
+                return "ganesha"
+            elif service == "iscsi":
+                return "igw"
+            else:
+                return service
+
+        self.service_cache.remove_outdated()
+        if not self.service_cache.any_outdated() and not refresh:
+            # Let's hope the services are complete.
+            try:
+                node_filter = [node_name] if node_name else None
+                services_by_node = [d[1].data for d in self.service_cache.items_filtered(node_filter)]
+                services = [orchestrator.ServiceDescription.from_json(s) for services in services_by_node for s in services]
+                services = [s for s in services if
+                            (True if service_type is None else s.service_type == service_type) and
+                            (True if service_id is None else s.service_instance == service_id)]
+                return orchestrator.TrivialReadCompletion(services)
+            except KeyError:
+                # items_filtered() will raise KeyError if passed a node name that doesn't exist
+                return orchestrator.TrivialReadCompletion([])
 
         def process_result(event_data):
             result = []
             if event_data['success']:
-                for node_name, service_info in event_data["return"].items():
-                    for service_type, service_instance in service_info.items():
-                        desc = orchestrator.ServiceDescription()
-                        desc.nodename = node_name
-                        desc.service_instance = service_instance
-                        desc.service_type = service_type
-                        result.append(desc)
+                for service_node, service_info in event_data["return"].items():
+                    node_service_cache = []
+                    for this_service_type, service_dict in service_info.items():
+                        if isinstance(service_dict, str):
+                            # map old form where deepsea only returned service IDs
+                            # to new form where it retuns a dict
+                            service_dict = { 'service_instance': service_dict }
+                        desc = orchestrator.ServiceDescription(nodename=service_node,
+                                                               service_instance=service_dict['service_instance'],
+                                                               service_type=_deepsea_to_ceph(this_service_type),
+                                                               # the following may or may not be present
+                                                               container_id=service_dict.get('container_id', None),
+                                                               service=service_dict.get('service', None),
+                                                               version=service_dict.get('version', None),
+                                                               rados_config_location=service_dict.get('rados_config_location', None),
+                                                               service_url = service_dict.get('service_url', None),
+                                                               status=service_dict.get('status', None),
+                                                               status_desc=service_dict.get('status_desc', None)
+                                                               )
+                        # Always add every service to the cache...
+                        node_service_cache.append(desc.to_json())
+                        # ...but only return the ones the caller asked for
+                        if ((service_type is None or desc.service_type == service_type) and
+                            (service_id is None or desc.service_instance == service_id) and
+                            (node_name is None or desc.nodename == node_name)):
+                            result.append(desc)
+
+                    self.service_cache[service_node] = orchestrator.OutdatableData(node_service_cache)
             else:
                 self.log.error(event_data['return'])
             return result
@@ -191,17 +262,14 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
         with self._completion_lock:
             c = DeepSeaReadCompletion(process_result)
 
+            # Always request all services, so we always have all services cached.
             resp = self._do_request_with_login("POST", data = {
                 "client": "runner_async",
-                "fun": "mgr_orch.describe_service",
-                "role": service_type,
-                "service_id": service_id,
-                "node": node_name
+                "fun": "mgr_orch.describe_service"
             })
             self._all_completions["{}/ret".format(resp.json()['return'][0]['tag'])] = c
 
             return c
-
 
     def wait(self, completions):
         incomplete = False
@@ -238,7 +306,7 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
                         "Unknown configuration option '{0}'".format(cmd['key']))
 
             self.set_module_option(cmd['key'], cmd['value'])
-            self._event.set();
+            self._event.set()
             return 0, "Configuration option '{0}' updated".format(cmd['key']), ''
 
         return (-errno.EINVAL, '',
