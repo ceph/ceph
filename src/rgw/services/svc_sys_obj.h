@@ -3,10 +3,13 @@
 
 #pragma once
 
+#include "common/static_ptr.h"
+
 #include "rgw/rgw_service.h"
 
 #include "svc_rados.h"
-#include "svc_sys_obj_core.h"
+#include "svc_sys_obj_types.h"
+#include "svc_sys_obj_core_types.h"
 
 
 class RGWSI_Zone;
@@ -47,7 +50,7 @@ public:
     struct ROp {
       Obj& source;
 
-      RGWSI_SysObj_Core::GetObjState state;
+      ceph::static_ptr<RGWSI_SysObj_Obj_GetObjState, sizeof(RGWSI_SysObj_Core_GetObjState)> state;
       
       RGWObjVersionTracker *objv_tracker{nullptr};
       map<string, bufferlist> *attrs{nullptr};
@@ -92,7 +95,7 @@ public:
         return *this;
       }
 
-      ROp(Obj& _source) : source(_source) {}
+      ROp(Obj& _source);
 
       int stat(optional_yield y);
       int read(int64_t ofs, int64_t end, bufferlist *pbl, optional_yield y);
@@ -200,16 +203,21 @@ public:
 
   class Pool {
     friend class Op;
+    friend class RGWSI_SysObj_Core;
 
-    RGWSI_RADOS *rados_svc;
     RGWSI_SysObj_Core *core_svc;
     rgw_pool pool;
 
+  protected:
+    using ListImplInfo = RGWSI_SysObj_Pool_ListInfo;
+
+    struct ListCtx {
+      ceph::static_ptr<ListImplInfo, sizeof(RGWSI_SysObj_Core_PoolListImplInfo)> impl; /* update this if creating new backend types */
+    };
+
   public:
-    Pool(RGWSI_RADOS *_rados_svc,
-	 RGWSI_SysObj_Core *_core_svc,
-         const rgw_pool& _pool) : rados_svc(_rados_svc),
-                                  core_svc(_core_svc),
+    Pool(RGWSI_SysObj_Core *_core_svc,
+         const rgw_pool& _pool) : core_svc(_core_svc),
                                   pool(_pool) {}
 
     rgw_pool& get_pool() {
@@ -218,11 +226,24 @@ public:
 
     struct Op {
       Pool& source;
+      ListCtx ctx;
 
       Op(Pool& _source) : source(_source) {}
 
-      int list_prefixed_objs(const std::string& prefix, std::list<std::string> *result);
+      int init(const std::string& marker, const std::string& prefix);
+      int get_next(int max, std::vector<string> *oids, bool *is_truncated);
+      int get_marker(string *marker);
     };
+
+    int list_prefixed_objs(const std::string& prefix, std::function<void(const string&)> cb);
+
+    template <typename Container>
+    int list_prefixed_objs(const string& prefix,
+                           Container *result) {
+      return list_prefixed_objs(prefix, [&](const string& val) {
+        result->push_back(val);
+      });
+    }
 
     Op op() {
       return Op(*this);
@@ -252,7 +273,7 @@ public:
   Obj get_obj(RGWSysObjectCtx& obj_ctx, const rgw_raw_obj& obj);
 
   Pool get_pool(const rgw_pool& pool) {
-    return Pool(rados_svc, core_svc, pool);
+    return Pool(core_svc, pool);
   }
 
   RGWSI_Zone *get_zone_svc();

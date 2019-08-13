@@ -350,7 +350,6 @@ WRITE_CLASS_ENCODER(RGWZonePlacementInfo)
 
 struct RGWZoneParams : RGWSystemMetaObj {
   rgw_pool domain_root;
-  rgw_pool metadata_heap;
   rgw_pool control_pool;
   rgw_pool gc_pool;
   rgw_pool lc_pool;
@@ -412,7 +411,8 @@ struct RGWZoneParams : RGWSystemMetaObj {
     RGWSystemMetaObj::encode(bl);
     encode(system_key, bl);
     encode(placement_pools, bl);
-    encode(metadata_heap, bl);
+    rgw_pool unused_metadata_heap;
+    encode(unused_metadata_heap, bl);
     encode(realm_id, bl);
     encode(lc_pool, bl);
     map<std::string, std::string, ltstr_nocase> old_tier_config;
@@ -446,8 +446,10 @@ struct RGWZoneParams : RGWSystemMetaObj {
       decode(system_key, bl);
     if (struct_v >= 4)
       decode(placement_pools, bl);
-    if (struct_v >= 5)
-      decode(metadata_heap, bl);
+    if (struct_v >= 5) {
+      rgw_pool unused_metadata_heap;
+      decode(unused_metadata_heap, bl);
+    }
     if (struct_v >= 6) {
       decode(realm_id, bl);
     }
@@ -1031,7 +1033,7 @@ class RGWPeriod
 public:
   RGWPeriod() {}
 
-  RGWPeriod(const std::string& period_id, epoch_t _epoch = 0)
+  explicit RGWPeriod(const std::string& period_id, epoch_t _epoch = 0)
     : id(period_id), epoch(_epoch) {}
 
   const std::string& get_id() const { return id; }

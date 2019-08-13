@@ -6,13 +6,19 @@
 
 #include "rgw_period_history.h"
 
-class RGWRados;
+class CephContext;
 class RGWPeriod;
 
 class RGWPeriodPuller : public RGWPeriodHistory::Puller {
-  RGWRados *const store;
+  CephContext *cct;
+
+  struct {
+    RGWSI_Zone *zone;
+    RGWSI_SysObj *sysobj;
+  } svc;
+
  public:
-  explicit RGWPeriodPuller(RGWRados* store) : store(store) {}
+  explicit RGWPeriodPuller(RGWSI_Zone *zone_svc, RGWSI_SysObj *sysobj_svc);
 
   int pull(const std::string& period_id, RGWPeriod& period) override;
 };

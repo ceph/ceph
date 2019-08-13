@@ -19,7 +19,9 @@
 #include <string>
 #include "common/config.h"
 
-#include "rgw_rados.h"
+#include <boost/intrusive_ptr.hpp>
+
+class RGWRados;
 
 namespace rgw {
 
@@ -35,7 +37,7 @@ namespace rgw {
     }
 
     int init();
-    int init(vector<const char *>& args);
+    int init(std::vector<const char *>& args);
     int stop();
   };
 }

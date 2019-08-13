@@ -28,6 +28,7 @@
 
 #include "services/svc_zone.h"
 #include "services/svc_sync_modules.h"
+#include "services/svc_datalog_rados.h"
 
 #include "include/random.h"
 
@@ -572,6 +573,16 @@ public:
   }
 };
 
+RGWRemoteDataLog::RGWRemoteDataLog(const DoutPrefixProvider *dpp, RGWRados *_store,
+                                   RGWAsyncRadosProcessor *async_rados)
+  : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
+      dpp(dpp), store(_store), async_rados(async_rados),
+      http_manager(store->ctx(), completion_mgr),
+      data_sync_cr(NULL),
+      initialized(false)
+{
+}
+
 int RGWRemoteDataLog::read_log_info(rgw_datalog_info *log_info)
 {
   rgw_http_param_pair pairs[] = { { "type", "data" },
@@ -818,10 +829,10 @@ public:
               char buf[16];
               snprintf(buf, sizeof(buf), ":%d", i);
               s = key + buf;
-              yield entries_index->append(s, store->data_log->get_log_shard_id(meta_info.data.get_bucket_info().bucket, i));
+              yield entries_index->append(s, store->svc.datalog_rados->get_log_shard_id(meta_info.data.get_bucket_info().bucket, i));
             }
           } else {
-            yield entries_index->append(key, store->data_log->get_log_shard_id(meta_info.data.get_bucket_info().bucket, -1));
+            yield entries_index->append(key, store->svc.datalog_rados->get_log_shard_id(meta_info.data.get_bucket_info().bucket, -1));
           }
         }
         truncated = result.truncated;
@@ -1885,6 +1896,11 @@ int RGWRemoteDataLog::run_sync(int num_shards)
   return 0;
 }
 
+CephContext *RGWDataSyncStatusManager::get_cct() const
+{
+  return store->ctx();
+}
+
 int RGWDataSyncStatusManager::init()
 {
   RGWZone *zone_def;
@@ -1968,6 +1984,16 @@ string RGWDataSyncStatusManager::shard_obj_name(const string& source_zone, int s
   snprintf(buf, sizeof(buf), "%s.%s.%d", datalog_sync_status_shard_prefix.c_str(), source_zone.c_str(), shard_id);
 
   return string(buf);
+}
+
+RGWRemoteBucketLog::RGWRemoteBucketLog(const DoutPrefixProvider *_dpp, RGWRados *_store,
+                                       RGWBucketSyncStatusManager *_sm,
+                                       RGWAsyncRadosProcessor *_async_rados,
+                                       RGWHTTPManager *_http_manager)
+    : RGWCoroutinesManager(_store->ctx(), _store->get_cr_registry()),
+      dpp(_dpp), store(_store), status_manager(_sm),
+      async_rados(_async_rados), http_manager(_http_manager)
+{
 }
 
 int RGWRemoteBucketLog::init(const string& _source_zone, RGWRESTConn *_conn,
@@ -2353,13 +2379,29 @@ RGWCoroutine *RGWRemoteBucketLog::read_sync_status_cr(rgw_bucket_shard_sync_info
   return new RGWReadBucketSyncStatusCoroutine(&sync_env, bs, sync_status);
 }
 
-RGWBucketSyncStatusManager::~RGWBucketSyncStatusManager() {
+RGWBucketSyncStatusManager::RGWBucketSyncStatusManager(RGWRados *_store, const string& _source_zone,
+                                                       const rgw_bucket& bucket) : store(_store),
+                                                                                     cr_mgr(_store->ctx(), _store->get_cr_registry()),
+                                                                                     http_manager(store->ctx(), cr_mgr.get_completion_mgr()),
+                                                                                     source_zone(_source_zone),
+                                                                                     conn(NULL), error_logger(NULL),
+                                                                                     bucket(bucket),
+                                                                                     num_shards(0)
+{
+}
+
+RGWBucketSyncStatusManager::~RGWBucketSyncStatusManager()
+{
   for (map<int, RGWRemoteBucketLog *>::iterator iter = source_logs.begin(); iter != source_logs.end(); ++iter) {
     delete iter->second;
   }
   delete error_logger;
 }
 
+CephContext *RGWBucketSyncStatusManager::get_cct() const
+{
+  return store->ctx();
+}
 
 void rgw_bucket_entry_owner::decode_json(JSONObj *obj)
 {
@@ -3389,7 +3431,7 @@ int RGWBucketSyncStatusManager::init()
 
   int effective_num_shards = (num_shards ? num_shards : 1);
 
-  auto async_rados = store->get_async_rados();
+  auto async_rados = store->svc.rados->get_async_processor();
 
   for (int i = 0; i < effective_num_shards; i++) {
     RGWRemoteBucketLog *l = new RGWRemoteBucketLog(this, store, this, async_rados, &http_manager);
@@ -3529,7 +3571,7 @@ int rgw_bucket_sync_status(const DoutPrefixProvider *dpp, RGWRados *store, const
 
   RGWDataSyncEnv env;
   RGWSyncModuleInstanceRef module; // null sync module
-  env.init(dpp, store->ctx(), store, nullptr, store->get_async_rados(),
+  env.init(dpp, store->ctx(), store, nullptr, store->svc.rados->get_async_processor(),
            nullptr, nullptr, nullptr, source_zone, module, nullptr);
 
   RGWCoroutinesManager crs(store->ctx(), store->get_cr_registry());

@@ -7,6 +7,8 @@
 #include "rgw_acl_s3.h"
 #include "rgw_zone.h"
 
+#include "services/svc_zone.h"
+
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rgw
 
@@ -87,7 +89,7 @@ int RGWUserCreateCR::Request::_send_request()
 template<>
 int RGWGetUserInfoCR::Request::_send_request()
 {
-  return rgw_get_user_info_by_uid(store, params.user, *result);
+  return store->ctl.user->get_info_by_uid(params.user, result.get(), null_yield);
 }
 
 template<>
@@ -135,7 +137,7 @@ int RGWBucketCreateLocalCR::Request::_send_request()
   bucket_owner.set_id(user);
   bucket_owner.set_name(user_info->display_name);
   if (bucket_exists) {
-    ret = rgw_op_get_bucket_policy_from_attr(cct, store, bucket_info,
+    ret = rgw_op_get_bucket_policy_from_attr(cct, store->ctl.user, bucket_info,
                                              bucket_attrs, &old_policy);
     if (ret >= 0)  {
       if (old_policy.get_owner().get_id().compare(user) != 0) {
@@ -207,11 +209,10 @@ int RGWBucketCreateLocalCR::Request::_send_request()
     bucket = info.bucket;
   }
 
-  ret = rgw_link_bucket(store, user, bucket,
-                        info.creation_time, false);
+  ret = store->ctl.bucket->link_bucket(user, bucket, info.creation_time, null_yield, false);
   if (ret && !existed && ret != -EEXIST) {
     /* if it exists (or previously existed), don't remove it! */
-    int r = rgw_unlink_bucket(store, user, bucket.tenant, bucket.name);
+    int r = store->ctl.bucket->unlink_bucket(user, bucket, null_yield);
     if (r < 0) {
       ldout(cct, 0) << "WARNING: failed to unlink bucket: ret=" << r << dendl;
     }

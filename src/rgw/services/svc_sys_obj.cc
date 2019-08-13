@@ -25,12 +25,16 @@ void RGWSI_SysObj::Obj::invalidate()
   ctx.invalidate(obj);
 }
 
+RGWSI_SysObj::Obj::ROp::ROp(Obj& _source) : source(_source) {
+  state.emplace<RGWSI_SysObj_Core::GetObjState>();
+}
+
 int RGWSI_SysObj::Obj::ROp::stat(optional_yield y)
 {
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.obj;
 
-  return svc->stat(source.get_ctx(), state, obj,
+  return svc->stat(source.get_ctx(), *state, obj,
 		   attrs, raw_attrs,
                    lastmod, obj_size,
                    objv_tracker, y);
@@ -42,7 +46,7 @@ int RGWSI_SysObj::Obj::ROp::read(int64_t ofs, int64_t end, bufferlist *bl,
   RGWSI_SysObj_Core *svc = source.core_svc;
   rgw_raw_obj& obj = source.get_obj();
 
-  return svc->read(source.get_ctx(), state,
+  return svc->read(source.get_ctx(), *state,
                    objv_tracker,
                    obj, bl, ofs, end,
                    attrs,
@@ -107,36 +111,24 @@ int RGWSI_SysObj::Obj::WOp::write_attr(const char *name, bufferlist& bl,
   return svc->set_attrs(obj, m, nullptr, objv_tracker, y);
 }
 
-int RGWSI_SysObj::Pool::Op::list_prefixed_objs(const string& prefix, list<string> *result)
+int RGWSI_SysObj::Pool::list_prefixed_objs(const string& prefix, std::function<void(const string&)> cb)
 {
-  bool is_truncated;
+  return core_svc->pool_list_prefixed_objs(pool, prefix, cb);
+}
 
-  auto rados_pool = source.rados_svc->pool(source.pool);
+int RGWSI_SysObj::Pool::Op::init(const string& marker, const string& prefix)
+{
+  return source.core_svc->pool_list_objects_init(source.pool, marker, prefix, &ctx);
+}
 
-  auto op = rados_pool.op();
+int RGWSI_SysObj::Pool::Op::get_next(int max, vector<string> *oids, bool *is_truncated)
+{
+  return source.core_svc->pool_list_objects_next(ctx, max, oids, is_truncated);
+}
 
-  RGWAccessListFilterPrefix filter(prefix);
-
-  int r = op.init(string(), &filter);
-  if (r < 0) {
-    return r;
-  }
-
-  do {
-    list<string> oids;
-#define MAX_OBJS_DEFAULT 1000
-    int r = op.get_next(MAX_OBJS_DEFAULT, &oids, &is_truncated);
-    if (r < 0) {
-      return r;
-    }
-    for (auto& val : oids) {
-      if (val.size() > prefix.size()) {
-        result->push_back(val.substr(prefix.size()));
-      }
-    }
-  } while (is_truncated);
-
-  return 0;
+int RGWSI_SysObj::Pool::Op::get_marker(string *marker)
+{
+  return source.core_svc->pool_list_objects_get_marker(ctx, marker);
 }
 
 int RGWSI_SysObj::Obj::OmapOp::get_all(std::map<string, bufferlist> *m,

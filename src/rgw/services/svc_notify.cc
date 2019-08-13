@@ -2,6 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "include/random.h"
+#include "include/Context.h"
 #include "common/errno.h"
 
 #include "svc_notify.h"

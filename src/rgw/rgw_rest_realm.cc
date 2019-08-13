@@ -8,6 +8,7 @@
 #include "rgw_zone.h"
 
 #include "services/svc_zone.h"
+#include "services/svc_mdlog.h"
 
 #include "include/ceph_assert.h"
 
@@ -169,6 +170,8 @@ void RGWOp_Period_Post::execute()
     return;
   }
 
+  auto period_history = store->svc.mdlog->get_period_history();
+
   // decide whether we can set_current_period() or set_latest_epoch()
   if (period.get_id() != current_period.get_id()) {
     auto current_epoch = current_period.get_realm_epoch();
@@ -189,7 +192,7 @@ void RGWOp_Period_Post::execute()
       return;
     }
     // attach a copy of the period into the period history
-    auto cursor = store->period_history->attach(RGWPeriod{period});
+    auto cursor = period_history->attach(RGWPeriod{period});
     if (!cursor) {
       // we're missing some history between the new period and current_period
       http_ret = cursor.get_error();
@@ -230,7 +233,7 @@ void RGWOp_Period_Post::execute()
       << ", updating period's latest epoch and notifying zone" << dendl;
   realm.notify_new_period(period);
   // update the period history
-  store->period_history->insert(RGWPeriod{period});
+  period_history->insert(RGWPeriod{period});
 }
 
 class RGWHandler_Period : public RGWHandler_Auth_S3 {

@@ -20,6 +20,7 @@
 #include "rgw_rest_s3.h"
 #include "rgw_rest_metadata.h"
 #include "rgw_client_io.h"
+#include "rgw_mdlog_types.h"
 #include "common/errno.h"
 #include "common/strtol.h"
 #include "rgw/rgw_b64.h"
@@ -52,8 +53,10 @@ void RGWOp_Metadata_Get::execute() {
 
   frame_metadata_key(s, metadata_key);
 
+  auto meta_mgr = store->ctl.meta.mgr;
+
   /* Get keys */
-  http_ret = store->meta_mgr->get(metadata_key, s->formatter);
+  http_ret = meta_mgr->get(metadata_key, s->formatter, s->yield);
   if (http_ret < 0) {
     dout(5) << "ERROR: can't get key: " << cpp_strerror(http_ret) << dendl;
     return;
@@ -119,7 +122,7 @@ void RGWOp_Metadata_List::execute() {
      marker = "3:bf885d8f:root::sorry_janefonda_665:head";
   */
 
-  http_ret = store->meta_mgr->list_keys_init(metadata_key, marker, &handle);
+  http_ret = store->ctl.meta.mgr->list_keys_init(metadata_key, marker, &handle);
   if (http_ret < 0) {
     dout(5) << "ERROR: can't get key: " << cpp_strerror(http_ret) << dendl;
     return;
@@ -134,11 +137,13 @@ void RGWOp_Metadata_List::execute() {
 
   s->formatter->open_array_section("keys");
 
+  auto meta_mgr = store->ctl.meta.mgr;
+
   uint64_t left;
   do {
     list<string> keys;
     left = (max_entries_specified ? max_entries - count : max);
-    http_ret = store->meta_mgr->list_keys_next(handle, left, keys, &truncated);
+    http_ret = meta_mgr->list_keys_next(handle, left, keys, &truncated);
     if (http_ret < 0) {
       dout(5) << "ERROR: lists_keys_next(): " << cpp_strerror(http_ret)
 	      << dendl;
@@ -160,12 +165,12 @@ void RGWOp_Metadata_List::execute() {
     encode_json("count", count, s->formatter);
     if (truncated) {
       string esc_marker =
-	rgw::to_base64(store->meta_mgr->get_marker(handle));
+	rgw::to_base64(meta_mgr->get_marker(handle));
       encode_json("marker", esc_marker, s->formatter);
     }
     s->formatter->close_section();
   }
-  store->meta_mgr->list_keys_complete(handle);
+  meta_mgr->list_keys_complete(handle);
 
   http_ret = 0;
 }
@@ -215,6 +220,19 @@ int RGWOp_Metadata_Put::get_data(bufferlist& bl) {
   return 0;
 }
 
+static bool string_to_sync_type(const string& sync_string,
+                                RGWMDLogSyncType& type) {
+  if (sync_string.compare("update-by-version") == 0)
+    type = APPLY_UPDATES;
+  else if (sync_string.compare("update-by-timestamp") == 0)
+    type = APPLY_NEWER;
+  else if (sync_string.compare("always") == 0)
+    type = APPLY_ALWAYS;
+  else
+    return false;
+  return true;
+}
+
 void RGWOp_Metadata_Put::execute() {
   bufferlist bl;
   string metadata_key;
@@ -231,20 +249,20 @@ void RGWOp_Metadata_Put::execute() {
   
   frame_metadata_key(s, metadata_key);
 
-  RGWMetadataHandler::sync_type_t sync_type = RGWMetadataHandler::APPLY_ALWAYS;
+  RGWMDLogSyncType sync_type = RGWMDLogSyncType::APPLY_ALWAYS;
 
   bool mode_exists = false;
   string mode_string = s->info.args.get("update-type", &mode_exists);
   if (mode_exists) {
-    bool parsed = RGWMetadataHandler::string_to_sync_type(mode_string,
-							  sync_type);
+    bool parsed = string_to_sync_type(mode_string,
+                                      sync_type);
     if (!parsed) {
       http_ret = -EINVAL;
       return;
     }
   }
 
-  http_ret = store->meta_mgr->put(metadata_key, bl, sync_type,
+  http_ret = store->ctl.meta.mgr->put(metadata_key, bl, s->yield, sync_type,
 				  &ondisk_version);
   if (http_ret < 0) {
     dout(5) << "ERROR: can't put key: " << cpp_strerror(http_ret) << dendl;
@@ -275,65 +293,12 @@ void RGWOp_Metadata_Delete::execute() {
   string metadata_key;
 
   frame_metadata_key(s, metadata_key);
-  http_ret = store->meta_mgr->remove(metadata_key);
+  http_ret = store->ctl.meta.mgr->remove(metadata_key, s->yield);
   if (http_ret < 0) {
     dout(5) << "ERROR: can't remove key: " << cpp_strerror(http_ret) << dendl;
     return;
   }
   http_ret = 0;
-}
-
-void RGWOp_Metadata_Lock::execute() {
-  string duration_str, lock_id;
-  string metadata_key;
-
-  frame_metadata_key(s, metadata_key);
-
-  http_ret = 0;
-
-  duration_str = s->info.args.get("length");
-  lock_id      = s->info.args.get("lock_id");
-
-  if ((!s->info.args.exists("key")) ||
-      (duration_str.empty()) ||
-      lock_id.empty()) {
-    dout(5) << "Error invalid parameter list" << dendl;
-    http_ret = -EINVAL;
-    return;
-  }
-
-  int dur;
-  string err;
-
-  dur = strict_strtol(duration_str.c_str(), 10, &err);
-  if (!err.empty() || dur <= 0) {
-    dout(5) << "invalid length param " << duration_str << dendl;
-    http_ret = -EINVAL;
-    return;
-  }
-  http_ret = store->meta_mgr->lock_exclusive(metadata_key, make_timespan(dur), lock_id);
-  if (http_ret == -EBUSY)
-    http_ret = -ERR_LOCKED;
-}
-
-void RGWOp_Metadata_Unlock::execute() {
-  string lock_id;
-  string metadata_key;
-
-  frame_metadata_key(s, metadata_key);
-
-  http_ret = 0;
-
-  lock_id = s->info.args.get("lock_id");
-
-  if ((!s->info.args.exists("key")) ||
-      lock_id.empty()) {
-    dout(5) << "Error invalid parameter list" << dendl;
-    http_ret = -EINVAL;
-    return;
-  }
-
-  http_ret = store->meta_mgr->unlock(metadata_key, lock_id);
 }
 
 RGWOp *RGWHandler_Metadata::op_get() {
@@ -353,11 +318,3 @@ RGWOp *RGWHandler_Metadata::op_delete() {
   return new RGWOp_Metadata_Delete;
 }
 
-RGWOp *RGWHandler_Metadata::op_post() {
-  if (s->info.args.exists("lock"))
-    return new RGWOp_Metadata_Lock;
-  else if (s->info.args.exists("unlock"))
-    return new RGWOp_Metadata_Unlock;
-
-  return NULL;
-}

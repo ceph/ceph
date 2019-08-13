@@ -510,8 +510,8 @@ void rgw::auth::RemoteApplier::create_account(const DoutPrefixProvider* dpp,
   rgw_apply_default_bucket_quota(user_info.bucket_quota, cct->_conf);
   rgw_apply_default_user_quota(user_info.user_quota, cct->_conf);
 
-  int ret = rgw_store_user_info(store, user_info, nullptr, nullptr,
-                                real_time(), true);
+  int ret = ctl->user->store_info(user_info, null_yield,
+                                  RGWUserCtl::PutParams().set_exclusive(true));
   if (ret < 0) {
     ldpp_dout(dpp, 0) << "ERROR: failed to store new user info: user="
                   << user_info.user_id << " ret=" << ret << dendl;
@@ -552,7 +552,7 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
   else if (acct_user.tenant.empty()) {
     const rgw_user tenanted_uid(acct_user.id, acct_user.id);
 
-    if (rgw_get_user_info_by_uid(store, tenanted_uid, user_info) >= 0) {
+    if (ctl->user->get_info_by_uid(tenanted_uid, &user_info, null_yield) >= 0) {
       /* Succeeded. */
       return;
     }
@@ -560,12 +560,12 @@ void rgw::auth::RemoteApplier::load_acct_info(const DoutPrefixProvider* dpp, RGW
 
   if (split_mode && implicit_tenant)
 	;	/* suppress lookup for id used by "other" protocol */
-  else if (rgw_get_user_info_by_uid(store, acct_user, user_info) >= 0) {
+  else if (ctl->user->get_info_by_uid(acct_user, &user_info, null_yield) >= 0) {
       /* Succeeded. */
       return;
   }
 
-  ldout(cct, 0) << "NOTICE: couldn't map swift user " << acct_user << dendl;
+  ldpp_dout(dpp, 0) << "NOTICE: couldn't map swift user " << acct_user << dendl;
   create_account(dpp, acct_user, implicit_tenant, user_info);
 
   /* Succeeded if we are here (create_account() hasn't throwed). */
