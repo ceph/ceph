@@ -3,6 +3,7 @@
 #include <stdlib.h>
 #include <errno.h>
 #include <sys/mount.h>
+#include <stdbool.h>
 
 #include "common/module.h"
 #include "common/secret.h"
@@ -15,8 +16,8 @@
 #define MAX_SECRET_LEN 1000
 #define MAX_SECRET_OPTION_LEN (MAX_SECRET_LEN + 7)
 
-int verboseflag = 0;
-int skip_mtab_flag = 0;
+bool verboseflag = false;
+bool skip_mtab_flag = false;
 static const char * const EMPTY_STRING = "";
 
 /* TODO duplicates logic from kernel */
@@ -101,6 +102,8 @@ static char *parse_options(const char *data, int *filesys_flags)
 
 	do {
 		char * value = NULL;
+		bool skip = true;
+
 		/*  check if ends with trailing comma */
 		if(*data == 0)
 			break;
@@ -116,7 +119,6 @@ static char *parse_options(const char *data, int *filesys_flags)
 			value++;
 		}
 
-		int skip = 1;
 
 		if (strncmp(data, "ro", 2) == 0) {
 			*filesys_flags |= MS_RDONLY;
@@ -151,11 +153,11 @@ static char *parse_options(const char *data, int *filesys_flags)
 			*filesys_flags |= MS_RELATIME;
 
 		} else if (strncmp(data, "noauto", 6) == 0) {
-			skip = 1;  /* ignore */
+			skip = true;  /* ignore */
 		} else if (strncmp(data, "_netdev", 7) == 0) {
-			skip = 1;  /* ignore */
+			skip = true;  /* ignore */
 		} else if (strncmp(data, "nofail", 6) == 0) {
-			skip = 1;  /* ignore */
+			skip = true;  /* ignore */
 
 		} else if (strncmp(data, "secretfile", 10) == 0) {
 			if (!value || !*value) {
@@ -171,7 +173,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 
 			/* see comment for "secret" */
 			saw_secret = secret;
-			skip = 1;
+			skip = true;
 		} else if (strncmp(data, "secret", 6) == 0) {
 			if (!value || !*value) {
 				printf("mount option secret requires a value.\n");
@@ -188,7 +190,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 			strncpy(secret, value, len-1);
 			secret[len-1] = '\0';
 			saw_secret = secret;
-			skip = 1;
+			skip = true;
 		} else if (strncmp(data, "name", 4) == 0) {
 			if (!value || !*value) {
 				printf("mount option name requires a value.\n");
@@ -203,9 +205,9 @@ static char *parse_options(const char *data, int *filesys_flags)
 				printf("out of memory.\n");
 				return NULL;
 			}
-			skip = 0;
+			skip = false;
 		} else {
-			skip = 0;
+			skip = false;
 			if (verboseflag) {
 			  fprintf(stderr, "mount.ceph: unrecognized mount option \"%s\", "
 			                  "passing to kernel.\n", data);
@@ -283,9 +285,9 @@ static int parse_arguments(int argc, char *const *const argv,
 		if (!strcmp("-h", argv[i]))
 			return 1;
 		else if (!strcmp("-n", argv[i]))
-			skip_mtab_flag = 1;
+			skip_mtab_flag = true;
 		else if (!strcmp("-v", argv[i]))
-			verboseflag = 1;
+			verboseflag = true;
 		else if (!strcmp("-o", argv[i])) {
 			++i;
 			if (i >= argc) {
