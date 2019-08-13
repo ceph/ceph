@@ -2006,7 +2006,8 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
     }
     out_op->data.claim_append(bit);
   }
-  if (progress.first && out_op->data_included.begin().get_start() == 0 &&
+  if (progress.first && !out_op->data_included.empty() &&
+      out_op->data_included.begin().get_start() == 0 &&
       out_op->data.length() == oi.size && oi.is_data_digest()) {
     uint32_t crc = out_op->data.crc32c(-1);
     if (oi.data_digest != crc) {
