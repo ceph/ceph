@@ -176,7 +176,15 @@ ostream& operator<<(ostream& out, const CInode& in)
   const CInode::mempool_inode *pi = in.get_projected_inode();
   if (pi->is_truncating())
     out << " truncating(" << pi->truncate_from << " to " << pi->truncate_size << ")";
-
+  
+  out << " rstat_dirty_from=" << in.inode.rstat_dirty_from;
+  if (g_conf()->mds_debug_scatterstat && in.is_projected()) {
+    const CInode::mempool_inode *pi = in.get_projected_inode();
+    out << "->" << pi->rstat_dirty_from;
+  }
+  out << " dirs_rstat_dirty_from=" << in.dirs_rstat_dirty_from;
+  out << " rstat_dirty_dirs=" << in.dir_rstat_dirty_map.size();
+  out << " rstat_dirty_inode_item:" << (in.rstat_dirty_inode_item.is_on_list()?"onlist":"offlist");
   if (in.inode.is_dir()) {
     out << " " << in.inode.dirstat;
     if (g_conf()->mds_debug_scatterstat && in.is_projected()) {
@@ -309,7 +317,8 @@ CInode::CInode(MDCache *c, bool auth, snapid_t f, snapid_t l)
     snaplock(this, &snaplock_type),
     nestlock(this, &nestlock_type),
     flocklock(this, &flocklock_type),
-    policylock(this, &policylock_type)
+    policylock(this, &policylock_type),
+    rstat_dirty_inode_item(this)
 {
   if (auth) state_set(STATE_AUTH);
 }
@@ -388,13 +397,14 @@ pair<bool,bool> CInode::split_need_snapflush(CInode *cowin, CInode *in)
 
 void CInode::mark_dirty_rstat()
 {
+  CDentry *pdn = get_projected_parent_dn();
+  CDir *pdir = pdn->dir;
+
   if (!state_test(STATE_DIRTYRSTAT)) {
     dout(10) << __func__ << " " << *this << dendl;
     state_set(STATE_DIRTYRSTAT);
     get(PIN_DIRTYRSTAT);
-    CDentry *pdn = get_projected_parent_dn();
     if (pdn->is_auth()) {
-      CDir *pdir = pdn->dir;
       pdir->dirty_rstat_inodes.push_back(&dirty_rstat_item);
       mdcache->mds->locker->mark_updated_scatterlock(&pdir->inode->nestlock);
       pdir->get_inode()->nestlock.new_dirty_childrstat();
@@ -404,19 +414,40 @@ void CInode::mark_dirty_rstat()
       ceph_assert(state_test(STATE_AMBIGUOUSAUTH));
     }
   }
+
+  pdir->adjust_rstat_dirty_inode(this);
 }
+
+utime_t CInode::get_dirfrags_rstat_dirty_from()
+{
+  CDir* pdir = NULL;
+  for (const auto& pi : dirfrags) {
+    utime_t pi_rstat_dirty_from = pi.second->get_rstat_dirty_from();
+    if (pdir == NULL ||
+        (!pi_rstat_dirty_from.is_zero() &&
+         pi_rstat_dirty_from < pdir->get_rstat_dirty_from()))
+      pdir = pi.second;
+  }
+  if (pdir)
+    return pdir->get_rstat_dirty_from();
+  return get_projected_inode()->rstat_dirty_from;
+}
+
 void CInode::clear_dirty_rstat()
 {
+  CDentry *pdn = get_projected_parent_dn();
+  CDir *pdir = pdn->dir;
+
   if (state_test(STATE_DIRTYRSTAT)) {
     dout(10) << __func__ << " " << *this << dendl;
     state_clear(STATE_DIRTYRSTAT);
     put(PIN_DIRTYRSTAT);
     dirty_rstat_item.remove_myself();
 
-    CDentry *pdn = get_projected_parent_dn();
-    CDir *pdir = pdn->dir;
     pdir->get_inode()->nestlock.dirty_childrstat_cleaned();
   }
+
+  pdir->clean_rstat_dirty_inode(this);
 }
 
 CInode::projected_inode &CInode::project_inode(bool xattr, bool snap)
@@ -1857,7 +1888,7 @@ void CInode::decode_lock_ifile(bufferlist::const_iterator& p)
 
 void CInode::encode_lock_inest(bufferlist& bl)
 {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   if (is_auth()) {
     encode(inode.version, bl);
   } else {
@@ -1887,13 +1918,22 @@ void CInode::encode_lock_inest(bufferlist& bl)
     }
   }
   encode(n, bl);
+  for (const auto &p : dirfrags) {
+    CDir* dir = p.second;
+    fnode_t* pf = dir->get_projected_fnode();
+    if (!is_auth()) {
+      if (dir->is_auth()) {
+	encode(pf->rstat_dirty_from, tmp);
+      }
+    }
+  }
   bl.claim_append(tmp);
   ENCODE_FINISH(bl);
 }
 
 void CInode::decode_lock_inest(bufferlist::const_iterator& p)
 {
-  DECODE_START(1, p);
+  DECODE_START(2, p);
   if (is_auth()) {
     bool replica_dirty;
     decode(replica_dirty, p);
@@ -1912,6 +1952,7 @@ void CInode::decode_lock_inest(bufferlist::const_iterator& p)
   }
   __u32 n;
   decode(n, p);
+  vector<frag_t> fg_vec;
   while (n--) {
     frag_t fg;
     snapid_t fgfirst;
@@ -1919,6 +1960,8 @@ void CInode::decode_lock_inest(bufferlist::const_iterator& p)
     nest_info_t accounted_rstat;
     decltype(CDir::dirty_old_rstat) dirty_old_rstat;
     decode(fg, p);
+    if (struct_v >= 2)
+      fg_vec.push_back(fg);
     decode(fgfirst, p);
     decode(rstat, p);
     decode(accounted_rstat, p);
@@ -1949,6 +1992,21 @@ void CInode::decode_lock_inest(bufferlist::const_iterator& p)
         finish_scatter_update(&nestlock, dir,
                               inode.rstat.version, pf->accounted_rstat.version);
       }
+    }
+  }
+
+  if (struct_v >= 2 && is_auth()) {
+    utime_t rstat_dirty_from;
+    for (auto& f : fg_vec) {
+      decode(rstat_dirty_from, p);
+      CDir* dir = get_dirfrag(f);
+      if (!rstat_dirty_from.is_zero()
+	  && (dir->fnode.rstat_dirty_from.is_zero()
+	    || dir->fnode.rstat_dirty_from > rstat_dirty_from)) {
+	dir->fnode.rstat_dirty_from = rstat_dirty_from;
+      }
+      if (!dir->fnode.rstat_dirty_from.is_zero())
+	dir->get_inode()->adjust_rstat_dirty_dir(dir);
     }
   }
   DECODE_FINISH(p);
@@ -2278,6 +2336,11 @@ void CInode::finish_scatter_update(ScatterLock *lock, CDir *dir,
       case CEPH_LOCK_INEST:
 	pf->rstat.version = pi->rstat.version;
 	pf->accounted_rstat = pf->rstat;
+	pf->rstat_dirty_from = utime_t();
+	if (!dir->items_rstat_dirty_from.is_zero())
+	  static_cast<CInode*>(lock->get_parent())->adjust_rstat_dirty_dir(dir);
+	else
+	  static_cast<CInode*>(lock->get_parent())->clean_rstat_dirty_dir(dir);
 	ename = "lock inest accounted scatter stat update";
 
 	if (!is_auth() && lock->get_state() == LOCK_MIX) {
@@ -2513,10 +2576,9 @@ void CInode::finish_scatter_gather_update(int type)
 	  dout(20) << fg << "           rstat " << pf->rstat << dendl;
 	  dout(20) << fg << " accounted_rstat " << pf->accounted_rstat << dendl;
 	  dout(20) << fg << " dirty_old_rstat " << dir->dirty_old_rstat << dendl;
-	  mdcache->project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat,
-					       dir->first, CEPH_NOSNAP, this, true);
+	  mdcache->project_rstat_frag_to_inode(dir, this, true);
 	  for (auto &p : dir->dirty_old_rstat) {
-	    mdcache->project_rstat_frag_to_inode(p.second.rstat, p.second.accounted_rstat,
+	    mdcache->project_rstat_to_inode(p.second.rstat, p.second.accounted_rstat,
 						 p.second.first, p.first, this, true);
           }
 	  if (update)  // dir contents not valid if frozen or non-auth
@@ -5243,6 +5305,63 @@ void CInode::get_subtree_dirfrags(std::vector<CDir*>& v) const
     if (dir->is_subtree_root())
       v.push_back(dir);
   }
+}
+
+void CInode::adjust_rstat_dirty_dir(CDir* dir) {
+  ceph_assert(this == dir->inode);
+  utime_t new_rstat_dirty_from;
+  auto pf = dir->get_projected_fnode();
+
+  dout(20) << __func__ << " " << *dir << dendl;
+  if (pf->rstat_dirty_from.is_zero())
+    new_rstat_dirty_from = dir->items_rstat_dirty_from;
+  else if (dir->items_rstat_dirty_from.is_zero())
+    new_rstat_dirty_from = pf->rstat_dirty_from;
+  else
+    new_rstat_dirty_from = std::min(pf->rstat_dirty_from, dir->items_rstat_dirty_from);
+
+  ceph_assert(!new_rstat_dirty_from.is_zero());
+  
+  std::map<CDir*, utime_t>::iterator iter = dir_rstat_dirty_map.find(dir);
+  utime_t old_rstat_dirty_from;
+  if (iter != dir_rstat_dirty_map.end()) {
+    old_rstat_dirty_from = iter->second;
+    if (old_rstat_dirty_from == new_rstat_dirty_from) {
+      dout(20) << __func__ << " rstat_dirty_from not changed, " << *dir << dendl;
+      return;
+    }
+  }
+
+  dir_rstat_dirty_map[dir] = new_rstat_dirty_from;
+  rstat_dirty_dirs[new_rstat_dirty_from].push_back(&dir->rstat_dirty_dir_item);
+
+  if (!old_rstat_dirty_from.is_zero()
+      && !rstat_dirty_dirs[old_rstat_dirty_from].size()) {
+    rstat_dirty_dirs.erase(old_rstat_dirty_from);
+  }
+
+  dirs_rstat_dirty_from = rstat_dirty_dirs.begin()->first; // oldest dir rstat_dirty_from
+}
+
+void CInode::clean_rstat_dirty_dir(CDir* dir) {
+  std::map<CDir*, utime_t>::iterator iter = dir_rstat_dirty_map.find(dir);
+
+  dout(20) << __func__ << " " << *dir << dendl;
+  if (iter == dir_rstat_dirty_map.end()) {
+    dout(20) << __func__ << " not dirty before, " << *dir << dendl;
+    return;
+  }
+
+  utime_t rstat_dirty_from = iter->second;
+  dir->rstat_dirty_dir_item.remove_myself();
+  dir_rstat_dirty_map.erase(iter);
+  if (!rstat_dirty_dirs[rstat_dirty_from].size())
+    rstat_dirty_dirs.erase(rstat_dirty_from);
+  
+  if (rstat_dirty_dirs.size())
+    dirs_rstat_dirty_from = rstat_dirty_dirs.begin()->first;
+  else
+    dirs_rstat_dirty_from = utime_t();
 }
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(CInode, co_inode, mds_co);

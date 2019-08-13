@@ -601,6 +601,20 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
 
   mempool_inode& get_inode() { return inode; }
   const mempool_inode& get_inode() const { return inode; }
+
+  // The following fields are used to calculate the earliest rstat_dirty_from
+  // within the current inode's dirs and immediate child inodes
+  utime_t dirs_rstat_dirty_from;
+  std::map<utime_t, xlist<CDir*>> rstat_dirty_dirs;
+  std::map<CDir*, utime_t> dir_rstat_dirty_map;
+  xlist<CInode*>::item rstat_dirty_inode_item;
+
+  void adjust_rstat_dirty_dir(CDir* dir);
+
+  void clean_rstat_dirty_dir(CDir* dir);
+
+  utime_t get_rstat_dirty_from() { return get_projected_inode()->rstat_dirty_from; }
+  utime_t get_dirfrags_rstat_dirty_from();
   CDentry* get_parent_dn() { return parent; }
   const CDentry* get_parent_dn() const { return parent; }
   CDentry* get_projected_parent_dn() { return !projected_parent.empty() ? projected_parent.back() : parent; }

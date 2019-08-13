@@ -108,6 +108,7 @@ enum {
 #define LOCK_AC_MIX         -2
 #define LOCK_AC_LOCK        -3
 #define LOCK_AC_LOCKFLUSHED -4
+#define LOCK_AC_RSTATDELIVERED -5
 
 // for auth
 #define LOCK_AC_SYNCACK      1

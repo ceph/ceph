@@ -252,6 +252,17 @@ public:
   }
   fnode_t *project_fnode();
 
+  utime_t items_rstat_dirty_from;
+  std::map<utime_t, xlist<CInode*>> rstat_dirty_inodes;
+  std::map<CInode*, utime_t> inode_rstat_dirty_map;
+  xlist<CDir*>::item rstat_dirty_dir_item;
+
+  void adjust_rstat_dirty_inode(CInode* in);
+
+  void clean_rstat_dirty_inode(CInode* in);
+
+  utime_t get_rstat_dirty_from();
+
   void pop_and_dirty_projected_fnode(LogSegment *ls);
   bool is_projected() const { return !projected_fnode.empty(); }
   version_t pre_dirty(version_t min=0);

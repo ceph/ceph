@@ -507,6 +507,7 @@ struct inode_t {
   frag_info_t dirstat;         // protected by my filelock
   nest_info_t rstat;           // protected by my nestlock
   nest_info_t accounted_rstat; // protected by parent's nestlock
+  utime_t rstat_dirty_from;
 
   quota_info_t quota;
 
@@ -632,7 +633,7 @@ private:
 template<template<typename> class Allocator>
 void inode_t<Allocator>::encode(bufferlist &bl, uint64_t features) const
 {
-  ENCODE_START(15, 6, bl);
+  ENCODE_START(16, 6, bl);
 
   encode(ino, bl);
   encode(rdev, bl);
@@ -683,6 +684,7 @@ void inode_t<Allocator>::encode(bufferlist &bl, uint64_t features) const
   encode(change_attr, bl);
 
   encode(export_pin, bl);
+  encode(rstat_dirty_from, bl);
 
   ENCODE_FINISH(bl);
 }
@@ -690,7 +692,7 @@ void inode_t<Allocator>::encode(bufferlist &bl, uint64_t features) const
 template<template<typename> class Allocator>
 void inode_t<Allocator>::decode(bufferlist::const_iterator &p)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(15, 6, 6, p);
+  DECODE_START_LEGACY_COMPAT_LEN(16, 6, 6, p);
 
   decode(ino, p);
   decode(rdev, p);
@@ -781,6 +783,9 @@ void inode_t<Allocator>::decode(bufferlist::const_iterator &p)
     export_pin = MDS_RANK_NONE;
   }
 
+  if (struct_v >= 16)
+    decode(rstat_dirty_from, p);
+
   DECODE_FINISH(p);
 }
 
@@ -836,6 +841,7 @@ void inode_t<Allocator>::dump(Formatter *f) const
   rstat.dump(f);
   f->close_section();
 
+  f->dump_stream("rstat_dirty_from") << rstat_dirty_from;
   f->open_object_section("accounted_rstat");
   accounted_rstat.dump(f);
   f->close_section();
@@ -1033,6 +1039,8 @@ struct fnode_t {
   snapid_t snap_purged_thru;   // the max_last_destroy snapid we've been purged thru
   frag_info_t fragstat, accounted_fragstat;
   nest_info_t rstat, accounted_rstat;
+  utime_t rstat_dirty_from;
+
   damage_flags_t damage_flags = 0;
 
   // we know we and all our descendants have been scrubbed since this version

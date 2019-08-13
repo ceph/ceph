@@ -1700,6 +1700,9 @@ void Migrator::finish_export_inode(CInode *in, mds_rank_t peer,
 {
   dout(12) << "finish_export_inode " << *in << dendl;
 
+  CDir* pdir = in->get_projected_parent_dn()->get_dir();
+  pdir->clean_rstat_dirty_inode(in);
+
   // clean
   if (in->is_dirty())
     in->mark_clean();
@@ -1873,6 +1876,9 @@ void Migrator::finish_export_dir(CDir *dir, mds_rank_t peer,
     cache->touch_dentry_bottom(dn); // move dentry to tail of LRU
     ++(*num_dentries);
   }
+
+  CInode* pin = dir->get_inode();
+  pin->clean_rstat_dirty_dir(dir);
 
   // subdirs
   for (const auto& dir : subdirs) {

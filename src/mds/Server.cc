@@ -5003,6 +5003,10 @@ void Server::handle_client_setattr(MDRequestRef& mdr)
   pi.inode.ctime = mdr->get_op_stamp();
   if (mdr->get_op_stamp() > pi.inode.rstat.rctime)
     pi.inode.rstat.rctime = mdr->get_op_stamp();
+  if (pi.inode.rstat_dirty_from.is_zero() ||
+      pi.inode.rstat_dirty_from > mdr->get_op_stamp())
+    pi.inode.rstat_dirty_from = mdr->get_op_stamp();
+
   pi.inode.change_attr++;
 
   // log + wait

@@ -248,7 +248,7 @@ void inline_data_t::decode(bufferlist::const_iterator &p)
  */
 void fnode_t::encode(bufferlist &bl) const
 {
-  ENCODE_START(4, 3, bl);
+  ENCODE_START(5, 3, bl);
   encode(version, bl);
   encode(snap_purged_thru, bl);
   encode(fragstat, bl);
@@ -260,12 +260,13 @@ void fnode_t::encode(bufferlist &bl) const
   encode(recursive_scrub_stamp, bl);
   encode(localized_scrub_version, bl);
   encode(localized_scrub_stamp, bl);
+  encode(rstat_dirty_from, bl);
   ENCODE_FINISH(bl);
 }
 
 void fnode_t::decode(bufferlist::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(3, 2, 2, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(5, 2, 2, bl);
   decode(version, bl);
   decode(snap_purged_thru, bl);
   decode(fragstat, bl);
@@ -281,6 +282,8 @@ void fnode_t::decode(bufferlist::const_iterator &bl)
     decode(localized_scrub_version, bl);
     decode(localized_scrub_stamp, bl);
   }
+  if (struct_v >= 5)
+    decode(rstat_dirty_from, bl);
   DECODE_FINISH(bl);
 }
 
@@ -300,6 +303,8 @@ void fnode_t::dump(Formatter *f) const
   f->open_object_section("rstat");
   rstat.dump(f);
   f->close_section();
+
+  f->dump_stream("rstat_dirty_from") << rstat_dirty_from;
 
   f->open_object_section("accounted_rstat");
   accounted_rstat.dump(f);

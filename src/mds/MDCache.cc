@@ -1904,19 +1904,46 @@ void MDCache::_project_rstat_inode_to_frag(CInode::mempool_inode& inode, snapid_
     dout(20) << "  project to [" << first << "," << last << "] " << *prstat << dendl;
     ceph_assert(last >= first);
     prstat->add(delta);
-    if (update_inode)
-      inode.accounted_rstat = inode.rstat;
+    if (prstat == &pf->rstat) {
+      if (!inode.rstat_dirty_from.is_zero() &&
+          (pf->rstat_dirty_from.is_zero() ||
+           pf->rstat_dirty_from > inode.rstat_dirty_from)) {
+        pf->rstat_dirty_from = inode.rstat_dirty_from;
+      }
+      if (!pf->rstat_dirty_from.is_zero())
+	parent->get_inode()->adjust_rstat_dirty_dir(parent);
+    }
     dout(20) << "      result [" << first << "," << last << "] " << *prstat << " " << *parent << dendl;
 
     last = first-1;
-  }
+    if (update_inode) {
+      inode.accounted_rstat = inode.rstat;
+      inode.rstat_dirty_from = utime_t();
+    }
+ }
 }
+void MDCache::project_rstat_frag_to_inode(CDir* parent, CInode* pin, bool cow_head)
+{
+  fnode_t* pf = parent->get_projected_fnode();
+  CInode::mempool_inode* pi = pin->get_projected_inode();
+  project_rstat_to_inode(pf->rstat, pf->accounted_rstat, parent->first, CEPH_NOSNAP, pin, cow_head);
 
-void MDCache::project_rstat_frag_to_inode(nest_info_t& rstat, nest_info_t& accounted_rstat,
+  if (!pf->rstat_dirty_from.is_zero() &&
+      (pi->rstat_dirty_from.is_zero() ||
+       pi->rstat_dirty_from > pf->rstat_dirty_from))
+    pi->rstat_dirty_from = pf->rstat_dirty_from;
+
+  pf->rstat_dirty_from = utime_t();
+  if (!parent->items_rstat_dirty_from.is_zero())
+    pin->adjust_rstat_dirty_dir(parent);
+  else
+    pin->clean_rstat_dirty_dir(parent);
+}
+void MDCache::project_rstat_to_inode(nest_info_t& rstat, nest_info_t& accounted_rstat,
 					  snapid_t ofirst, snapid_t last, 
 					  CInode *pin, bool cow_head)
 {
-  dout(10) << "project_rstat_frag_to_inode [" << ofirst << "," << last << "]" << dendl;
+  dout(10) << __func__ << " [" << ofirst << "," << last << "]" << dendl;
   dout(20) << "  frag           rstat " << rstat << dendl;
   dout(20) << "  frag accounted_rstat " << accounted_rstat << dendl;
   nest_info_t delta = rstat;
@@ -2148,6 +2175,11 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 	if (pf->fragstat.mtime > pf->rstat.rctime) {
 	  dout(10) << "predirty_journal_parents updating mtime on " << *parent << dendl;
 	  pf->rstat.rctime = pf->fragstat.mtime;
+
+          if (pf->rstat_dirty_from.is_zero() ||
+              pf->rstat_dirty_from > pf->fragstat.mtime)
+            pf->rstat_dirty_from = pf->fragstat.mtime;
+
 	} else {
 	  dout(10) << "predirty_journal_parents updating mtime UNDERWATER on " << *parent << dendl;
 	}
@@ -2314,12 +2346,12 @@ void MDCache::predirty_journal_parents(MutationRef mut, EMetaBlob *blob,
 
     if (g_conf()->mds_snap_rstat) {
       for (auto &p : parent->dirty_old_rstat) {
-	project_rstat_frag_to_inode(p.second.rstat, p.second.accounted_rstat, p.second.first,
+	project_rstat_to_inode(p.second.rstat, p.second.accounted_rstat, p.second.first,
 				    p.first, pin, true);
       }
     }
     parent->dirty_old_rstat.clear();
-    project_rstat_frag_to_inode(pf->rstat, pf->accounted_rstat, parent->first, CEPH_NOSNAP, pin, true);//false);
+    project_rstat_frag_to_inode(parent, pin, true);//false);
 
     pf->accounted_rstat = pf->rstat;
 
