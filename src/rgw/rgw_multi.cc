@@ -236,6 +236,7 @@ int abort_multipart_upload(RGWRados *store, CephContext *cct,
   bool truncated;
   int marker = 0;
   int ret;
+  uint64_t parts_accounted_size = 0;
 
   do {
     ret = list_multipart_parts(store, bucket_info, cct,
@@ -272,6 +273,7 @@ int abort_multipart_upload(RGWRados *store, CephContext *cct,
           remove_objs.push_back(key);
         }
       }
+      parts_accounted_size += obj_part.size;
     }
   } while (truncated);
 
@@ -289,6 +291,9 @@ int abort_multipart_upload(RGWRados *store, CephContext *cct,
   if (!remove_objs.empty()) {
     del_op.params.remove_objs = &remove_objs;
   }
+  
+  del_op.params.abortmp = true;
+  del_op.params.parts_accounted_size = parts_accounted_size;
 
   // and also remove the metadata obj
   ret = del_op.delete_obj(null_yield);
