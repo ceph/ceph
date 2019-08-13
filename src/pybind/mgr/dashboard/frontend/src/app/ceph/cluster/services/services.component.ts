@@ -15,7 +15,7 @@ import { Service } from './services.model';
   styleUrls: ['./services.component.scss']
 })
 export class ServicesComponent implements OnChanges, OnInit {
-  @ViewChild(TableComponent)
+  @ViewChild(TableComponent, { static: false })
   table: TableComponent;
 
   @Input() hostname = '';
@@ -25,7 +25,7 @@ export class ServicesComponent implements OnChanges, OnInit {
   docsUrl: string;
 
   columns: Array<CdTableColumn> = [];
-  services: Array<object> = [];
+  services: Array<Service> = [];
   isLoadingServices = false;
 
   constructor(
@@ -129,9 +129,7 @@ export class ServicesComponent implements OnChanges, OnInit {
       (data: Service[]) => {
         const services: Service[] = [];
         data.forEach((service: Service) => {
-          service.uid = `${service.nodename}-${service.service_type}-${service.service}-${
-            service.service_instance
-          }`;
+          service.uid = `${service.nodename}-${service.service_type}-${service.service}-${service.service_instance}`;
           services.push(service);
         });
         this.services = services;
