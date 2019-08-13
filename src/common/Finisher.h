@@ -69,7 +69,7 @@ class Finisher {
     std::unique_lock ul(finisher_lock);
     bool was_empty = finisher_queue.empty();
     finisher_queue.push_back(std::make_pair(c, r));
-    if (was_empty) {
+    if (was_empty && !finisher_running) {
       finisher_cond.notify_one();
     }
     if (logger)
@@ -79,7 +79,7 @@ class Finisher {
   void queue(std::list<Context*>& ls) {
     {
       std::unique_lock ul(finisher_lock);
-      if (finisher_queue.empty()) {
+      if (finisher_queue.empty() && !finisher_running) {
 	finisher_cond.notify_all();
       }
       for (auto i : ls) {
@@ -93,7 +93,7 @@ class Finisher {
   void queue(std::deque<Context*>& ls) {
     {
       std::unique_lock ul(finisher_lock);
-      if (finisher_queue.empty()) {
+      if (finisher_queue.empty() && !finisher_running) {
 	finisher_cond.notify_all();
       }
       for (auto i : ls) {
@@ -107,7 +107,7 @@ class Finisher {
   void queue(std::vector<Context*>& ls) {
     {
       std::unique_lock ul(finisher_lock);
-      if (finisher_queue.empty()) {
+      if (finisher_queue.empty() && !finisher_running) {
 	finisher_cond.notify_all();
       }
       for (auto i : ls) {

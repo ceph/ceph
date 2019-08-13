@@ -74,8 +74,8 @@ void *Finisher::finisher_thread_entry()
       }
 
       ul.lock();
-      finisher_running = false;
     }
+    finisher_running = false;
     ldout(cct, 10) << "finisher_thread empty" << dendl;
     if (unlikely(finisher_empty_wait))
       finisher_empty_cond.notify_all();
