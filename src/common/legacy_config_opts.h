@@ -720,6 +720,7 @@ OPTION(osd_scrub_backoff_ratio, OPT_DOUBLE)   // the probability to back off the
 OPTION(osd_scrub_chunk_min, OPT_INT)
 OPTION(osd_scrub_chunk_max, OPT_INT)
 OPTION(osd_scrub_sleep, OPT_FLOAT)   // sleep between [deep]scrub ops
+OPTION(osd_scrub_extended_sleep, OPT_FLOAT)   // more sleep between [deep]scrub ops
 OPTION(osd_scrub_auto_repair, OPT_BOOL)   // whether auto-repair inconsistencies upon deep-scrubbing
 OPTION(osd_scrub_auto_repair_num_errors, OPT_U32)   // only auto-repair when number of errors is below this threshold
 OPTION(osd_deep_scrub_interval, OPT_FLOAT) // once a week

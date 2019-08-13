@@ -1890,6 +1890,8 @@ protected:
     return service.get_tid();
   }
 
+  double scrub_sleep_time(bool must_scrub);
+
   // -- generic pg peering --
   PeeringCtx create_context();
   void dispatch_context(PeeringCtx &ctx, PG *pg, OSDMapRef curmap,
