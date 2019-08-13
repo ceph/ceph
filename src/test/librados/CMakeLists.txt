@@ -190,10 +190,13 @@ target_link_libraries(unittest_librados_config
   librados
   ${BLKID_LIBRARIES} ${GSSAPI_LIBRARIES} ${OPENLDAP_LIBRARIES})
 
-add_executable(ceph_test_rados_completion_speed
-  completion_speed.cc)
-target_link_libraries(ceph_test_rados_completion_speed
-  librados ${UNITTEST_LIBS} radostest-cxx)
+# Removing this test. We can't shove it into Finisher as it's not a
+# Context any more, and wrapping it to adapt it would be less fair.
+
+#add_executable(ceph_test_rados_completion_speed
+#  completion_speed.cc)
+#target_link_libraries(ceph_test_rados_completion_speed
+#  librados ${UNITTEST_LIBS} radostest-cxx)
 
 add_executable(ceph_test_rados_op_speed
   op_speed.cc)
