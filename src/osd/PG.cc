@@ -2441,7 +2441,9 @@ void PG::replica_scrub(
  */
 void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
 {
-  if (cct->_conf->osd_scrub_sleep > 0 &&
+  OSDService *osds = osd;
+  double scrub_sleep = osds->osd->scrub_sleep_time(scrubber.must_scrub);
+  if (scrub_sleep > 0 &&
       (scrubber.state == PG::Scrubber::NEW_CHUNK ||
        scrubber.state == PG::Scrubber::INACTIVE) &&
        scrubber.needs_sleep) {
@@ -2449,7 +2451,6 @@ void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
     dout(20) << __func__ << " state is INACTIVE|NEW_CHUNK, sleeping" << dendl;
 
     // Do an async sleep so we don't block the op queue
-    OSDService *osds = osd;
     spg_t pgid = get_pgid();
     int state = scrubber.state;
     auto scrub_requeue_callback =
@@ -2474,7 +2475,7 @@ void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
           pg->unlock();
         });
     std::lock_guard l(osd->sleep_lock);
-    osd->sleep_timer.add_event_after(cct->_conf->osd_scrub_sleep,
+    osd->sleep_timer.add_event_after(scrub_sleep,
                                            scrub_requeue_callback);
     scrubber.sleeping = true;
     scrubber.sleep_start = ceph_clock_now();

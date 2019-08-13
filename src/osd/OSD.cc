@@ -7246,6 +7246,20 @@ bool OSDService::ScrubJob::ScrubJob::operator<(const OSDService::ScrubJob& rhs) 
   return pgid < rhs.pgid;
 }
 
+double OSD::scrub_sleep_time(bool must_scrub)
+{
+  if (must_scrub) {
+    return cct->_conf->osd_scrub_sleep;
+  }
+  utime_t now = ceph_clock_now();
+  if (scrub_time_permit(now)) {
+    return cct->_conf->osd_scrub_sleep;
+  }
+  double normal_sleep = cct->_conf->osd_scrub_sleep;
+  double extended_sleep = cct->_conf->osd_scrub_extended_sleep;
+  return std::max(extended_sleep, normal_sleep);
+}
+
 bool OSD::scrub_time_permit(utime_t now)
 {
   struct tm bdt;
