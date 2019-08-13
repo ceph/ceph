@@ -16,54 +16,13 @@
 #define CEPH_REFCOUNTEDOBJ_H
  
 #include "common/ceph_mutex.h"
-#include "common/ceph_context.h"
-#include "common/valgrind.h"
-#include "common/debug.h"
+#include "common/ref.h"
 
-#include <boost/smart_ptr/intrusive_ptr.hpp>
-
-// re-include our assert to clobber the system one; fix dout:
-#include "include/ceph_assert.h"
+#include <atomic>
 
 struct RefCountedObject {
 public:
-  RefCountedObject(CephContext *c = NULL, int n=1) : nref(n), cct(c) {}
-  virtual ~RefCountedObject() {
-    ceph_assert(nref == 0);
-  }
-  
-  const RefCountedObject *get() const {
-    int v = ++nref;
-    if (cct)
-      lsubdout(cct, refs, 1) << "RefCountedObject::get " << this << " "
-			     << (v - 1) << " -> " << v
-			     << dendl;
-    return this;
-  }
-  RefCountedObject *get() {
-    int v = ++nref;
-    if (cct)
-      lsubdout(cct, refs, 1) << "RefCountedObject::get " << this << " "
-			     << (v - 1) << " -> " << v
-			     << dendl;
-    return this;
-  }
-  void put() const {
-    CephContext *local_cct = cct;
-    auto v = --nref;
-    if (local_cct)
-      lsubdout(local_cct, refs, 1) << "RefCountedObject::put " << this << " "
-				   << (v + 1) << " -> " << v
-				   << dendl;
-    if (v == 0) {
-      ANNOTATE_HAPPENS_AFTER(&nref);
-      ANNOTATE_HAPPENS_BEFORE_FORGET_ALL(&nref);
-      delete this;
-    } else {
-      ANNOTATE_HAPPENS_BEFORE(&nref);
-    }
-  }
-  void set_cct(CephContext *c) {
+  void set_cct(class CephContext *c) {
     cct = c;
   }
 
@@ -71,14 +30,36 @@ public:
     return nref;
   }
 
+  const RefCountedObject *get() const {
+    _get();
+    return this;
+  }
+  RefCountedObject *get() {
+    _get();
+    return this;
+  }
+  void put() const;
+
+protected:
+  RefCountedObject() = default;
+  RefCountedObject(const RefCountedObject& o) : cct(o.cct) {}
+  RefCountedObject& operator=(const RefCountedObject& o) = delete;
+  RefCountedObject(RefCountedObject&&) = delete;
+  RefCountedObject& operator=(RefCountedObject&&) = delete;
+  RefCountedObject(class CephContext* c = nullptr, int n = 1) : cct(c), nref(n) {}
+
+  virtual ~RefCountedObject();
+
 private:
+  void _get() const;
+
 #ifndef WITH_SEASTAR
-  mutable std::atomic<uint64_t> nref;
+  mutable std::atomic<uint64_t> nref{1};
 #else
   // crimson is single threaded at the moment
-  mutable uint64_t nref;
+  mutable uint64_t nref{1};
 #endif
-  CephContext *cct;
+  class CephContext *cct{nullptr};
 };
 
 #ifndef WITH_SEASTAR
@@ -88,14 +69,9 @@ private:
  *
  *  a refcounted condition, will be removed when all references are dropped
  */
-
 struct RefCountedCond : public RefCountedObject {
-  bool complete;
-  ceph::mutex lock = ceph::make_mutex("RefCountedCond::lock");
-  ceph::condition_variable cond;
-  int rval;
-
-  RefCountedCond() : complete(false), rval(0) {}
+  RefCountedCond() = default;
+  ~RefCountedCond() = default;
 
   int wait() {
     std::unique_lock l(lock);
@@ -115,6 +91,12 @@ struct RefCountedCond : public RefCountedObject {
   void done() {
     done(0);
   }
+
+private:
+  bool complete = false;
+  ceph::mutex lock = ceph::make_mutex("RefCountedCond::lock");
+  ceph::condition_variable cond;
+  int rval = 0;
 };
 
 /**
@@ -180,6 +162,6 @@ static inline void intrusive_ptr_release(const RefCountedObject *p) {
   p->put();
 }
 
-using RefCountedPtr = boost::intrusive_ptr<RefCountedObject>;
+using RefCountedPtr = ceph::ref_t<RefCountedObject>;
 
 #endif
