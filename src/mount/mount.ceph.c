@@ -35,6 +35,17 @@ static void block_signals (int how)
      sigprocmask (how, &sigs, (sigset_t *) 0);
 }
 
+void mount_ceph_debug(const char *fmt, ...)
+{
+	if (verboseflag) {
+		va_list args;
+
+		va_start(args, fmt);
+		vprintf(fmt, args);
+		va_end(args);
+	}
+}
+
 static char *mount_resolve_src(const char *orig_str)
 {
 	int len, pos;
@@ -48,12 +59,12 @@ static char *mount_resolve_src(const char *orig_str)
 
 	mount_path = strstr(buf, ":/");
 	if (!mount_path) {
-		printf("source mount path was not specified\n");
+		fprintf(stderr, "source mount path was not specified\n");
 		free(buf);
 		return NULL;
 	}
 	if (mount_path == buf) {
-		printf("server address expected\n");
+		fprintf(stderr, "server address expected\n");
 		free(buf);
 		return NULL;
 	}
@@ -62,7 +73,7 @@ static char *mount_resolve_src(const char *orig_str)
 	mount_path++;
 
 	if (!*mount_path) {
-		printf("incorrect source mount path\n");
+		fprintf(stderr, "incorrect source mount path\n");
 		free(buf);
 		return NULL;
 	}
@@ -97,8 +108,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 	char *saw_name = NULL;
 	char *saw_secret = NULL;
 
-	if(verboseflag)
-		printf("parsing options: %s\n", data);
+	mount_ceph_debug("parsing options: %s\n", data);
 
 	do {
 		char * value = NULL;
@@ -162,13 +172,13 @@ static char *parse_options(const char *data, int *filesys_flags)
 
 		} else if (strncmp(data, "secretfile", 10) == 0) {
 			if (!value || !*value) {
-				printf("keyword secretfile found, but no secret file specified\n");
+				fprintf(stderr, "keyword secretfile found, but no secret file specified\n");
 				free(saw_name);
 				return NULL;
 			}
 
 			if (read_secret_from_file(value, secret, sizeof(secret)) < 0) {
-				printf("error reading secret file\n");
+				fprintf(stderr, "error reading secret file\n");
 				return NULL;
 			}
 
@@ -177,7 +187,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 			skip = true;
 		} else if (strncmp(data, "secret", 6) == 0) {
 			if (!value || !*value) {
-				printf("mount option secret requires a value.\n");
+				fprintf(stderr, "mount option secret requires a value.\n");
 				free(saw_name);
 				return NULL;
 			}
@@ -194,7 +204,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 			skip = true;
 		} else if (strncmp(data, "name", 4) == 0) {
 			if (!value || !*value) {
-				printf("mount option name requires a value.\n");
+				fprintf(stderr, "mount option name requires a value.\n");
 				return NULL;
 			}
 
@@ -203,16 +213,14 @@ static char *parse_options(const char *data, int *filesys_flags)
 			free(saw_name);
 			saw_name = strdup(value);
 			if (!saw_name) {
-				printf("out of memory.\n");
+				fprintf(stderr, "out of memory.\n");
 				return NULL;
 			}
 			skip = false;
 		} else {
 			skip = false;
-			if (verboseflag) {
-			  fprintf(stderr, "mount.ceph: unrecognized mount option \"%s\", "
-			                  "passing to kernel.\n", data);
-            }
+			mount_ceph_debug("mount.ceph: unrecognized mount option \"%s\", passing to kernel.\n",
+					data);
 		}
 
 		/* Copy (possibly modified) option to out */
@@ -292,13 +300,13 @@ static int parse_arguments(int argc, char *const *const argv,
 		else if (!strcmp("-o", argv[i])) {
 			++i;
 			if (i >= argc) {
-				printf("Option -o requires an argument.\n\n");
+				fprintf(stderr, "Option -o requires an argument.\n\n");
 				return -EINVAL;
 			}
 			*opts = argv[i];
 		}
 		else {
-			printf("Can't understand option: '%s'\n\n", argv[i]);
+			fprintf(stderr, "Can't understand option: '%s'\n\n", argv[i]);
 			return -EINVAL;
 		}
 	}
@@ -345,7 +353,7 @@ int main(int argc, char *argv[])
 
 	rsrc = mount_resolve_src(src);
 	if (!rsrc) {
-		printf("failed to resolve source\n");
+		printf(stderr, "failed to resolve source\n");
 		retval = EX_USAGE;
 		goto out;
 	}
@@ -355,7 +363,7 @@ int main(int argc, char *argv[])
 
 	popts = parse_options(opts, &flags);
 	if (!popts) {
-		printf("failed to parse ceph_options\n");
+		fprintf(stderr, "failed to parse ceph_options\n");
 		retval = EX_USAGE;
 		goto out;
 	}
@@ -366,10 +374,10 @@ int main(int argc, char *argv[])
 		retval = EX_FAIL;
 		switch (errno) {
 		case ENODEV:
-			printf("mount error: ceph filesystem not supported by the system\n");
+			fprintf(stderr, "mount error: ceph filesystem not supported by the system\n");
 			break;
 		default:
-			printf("mount error %d = %s\n",errno,strerror(errno));
+			fprintf(stderr, "mount error %d = %s\n",errno,strerror(errno));
 		}
 	} else {
 		if (!skip_mtab_flag) {
