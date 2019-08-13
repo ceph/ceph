@@ -161,7 +161,7 @@ static inline std::unique_ptr<const PGLSFilter> get_pgls_filter(
 
 static seastar::future<bool, hobject_t> pgls_filter(
   const PGLSFilter& filter,
-  PGBackend& backend,
+  const PGBackend& backend,
   const hobject_t& sobj)
 {
   if (const auto xattr = filter.get_xattr(); !xattr.empty()) {
@@ -190,7 +190,7 @@ static seastar::future<bool, hobject_t> pgls_filter(
 static seastar::future<ceph::bufferlist> do_pgnls_common(
   const hobject_t& pg_start,
   const hobject_t& pg_end,
-  PGBackend& backend,
+  const PGBackend& backend,
   const hobject_t& lower_bound,
   const std::string& nspace,
   const uint64_t limit,
@@ -268,7 +268,10 @@ static seastar::future<ceph::bufferlist> do_pgnls_common(
   });
 }
 
-seastar::future<> OpsExecuter::do_pgnls(OSDOp& osd_op)
+static seastar::future<> do_pgnls(
+  const PG& pg,
+  const std::string& nspace,
+  OSDOp& osd_op)
 {
   hobject_t lower_bound;
   try {
@@ -279,14 +282,23 @@ seastar::future<> OpsExecuter::do_pgnls(OSDOp& osd_op)
   const auto pg_start = pg.get_pgid().pgid.get_hobj_start();
   const auto pg_end = \
     pg.get_pgid().pgid.get_hobj_end(pg.get_pool().info.get_pg_num());
-  return do_pgnls_common(pg_start, pg_end, backend, lower_bound, os->oi.soid.get_namespace(), osd_op.op.pgls.count, nullptr /* no filter */)
+  return do_pgnls_common(pg_start,
+                         pg_end,
+                         pg.get_backend(),
+                         lower_bound,
+                         nspace,
+                         osd_op.op.pgls.count,
+                         nullptr /* no filter */)
     .then([&osd_op](bufferlist bl) {
       osd_op.outdata = std::move(bl);
       return seastar::now();
   });
 }
 
-seastar::future<> OpsExecuter::do_pgnls_filtered(OSDOp& osd_op)
+static seastar::future<> do_pgnls_filtered(
+  const PG& pg,
+  const std::string& nspace,
+  OSDOp& osd_op)
 {
   std::string cname, mname, type;
   auto bp = osd_op.indata.cbegin();
@@ -311,12 +323,16 @@ seastar::future<> OpsExecuter::do_pgnls_filtered(OSDOp& osd_op)
                  __func__, cname, mname, type, lower_bound,
                  static_cast<const void*>(filter.get()));
   return seastar::do_with(std::move(filter),
-    [this, &osd_op, lower_bound=std::move(lower_bound)](auto&& filter) {
+    [&, lower_bound=std::move(lower_bound)](auto&& filter) {
       const auto pg_start = pg.get_pgid().pgid.get_hobj_start();
-      const auto pg_end = \
-        pg.get_pgid().pgid.get_hobj_end(pg.get_pool().info.get_pg_num());
-      return do_pgnls_common(pg_start, pg_end, backend, lower_bound, os->oi.soid.get_namespace(),
-                             osd_op.op.pgls.count, filter.get())
+      const auto pg_end = pg.get_pgid().pgid.get_hobj_end(pg.get_pool().info.get_pg_num());
+      return do_pgnls_common(pg_start,
+                             pg_end,
+                             pg.get_backend(),
+                             lower_bound,
+                             nspace,
+                             osd_op.op.pgls.count,
+                             filter.get())
         .then([&osd_op](bufferlist bl) {
           osd_op.outdata = std::move(bl);
           return seastar::now();
@@ -367,9 +383,13 @@ OpsExecuter::do_osd_op(OSDOp& osd_op)
       return backend.setxattr(os, osd_op, txn);
     });
   case CEPH_OSD_OP_PGNLS_FILTER:
-     return do_pgnls_filtered(osd_op);
+    return do_pg_op([&osd_op] (const auto& pg, const auto& nspace) {
+      return do_pgnls_filtered(pg, nspace, osd_op);
+    });
   case CEPH_OSD_OP_PGNLS:
-    return do_pgnls(osd_op);
+    return do_pg_op([&osd_op] (const auto& pg, const auto& nspace) {
+      return do_pgnls(pg, nspace, osd_op);
+    });
   case CEPH_OSD_OP_DELETE:
     return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.remove(os, txn);
