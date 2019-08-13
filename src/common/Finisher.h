@@ -69,52 +69,57 @@ class Finisher {
     std::unique_lock ul(finisher_lock);
     bool was_empty = finisher_queue.empty();
     finisher_queue.push_back(std::make_pair(c, r));
+    if (logger)
+      logger->inc(l_finisher_queue_len);
     if (was_empty) {
       finisher_cond.notify_one();
     }
-    if (logger)
-      logger->inc(l_finisher_queue_len);
+
   }
 
   void queue(std::list<Context*>& ls) {
     {
       std::unique_lock ul(finisher_lock);
-      if (finisher_queue.empty()) {
-	finisher_cond.notify_all();
-      }
+      bool was_empty = finisher_queue.empty();
       for (auto i : ls) {
 	finisher_queue.push_back(std::make_pair(i, 0));
       }
       if (logger)
 	logger->inc(l_finisher_queue_len, ls.size());
+      if (finisher_queue.empty()) {
+	finisher_cond.notify_all();
+      }
     }
     ls.clear();
   }
   void queue(std::deque<Context*>& ls) {
     {
       std::unique_lock ul(finisher_lock);
-      if (finisher_queue.empty()) {
-	finisher_cond.notify_all();
-      }
+      bool was_empty = finisher_queue.empty();
       for (auto i : ls) {
 	finisher_queue.push_back(std::make_pair(i, 0));
       }
       if (logger)
 	logger->inc(l_finisher_queue_len, ls.size());
+      if (finisher_queue.empty()) {
+	finisher_cond.notify_all();
+      }
+
     }
     ls.clear();
   }
   void queue(std::vector<Context*>& ls) {
     {
       std::unique_lock ul(finisher_lock);
-      if (finisher_queue.empty()) {
-	finisher_cond.notify_all();
-      }
+      bool was_empty = finisher_queue.empty();
       for (auto i : ls) {
 	finisher_queue.push_back(std::make_pair(i, 0));
       }
       if (logger)
 	logger->inc(l_finisher_queue_len, ls.size());
+      if (empty) {
+	finisher_cond.notify_all();
+      }
     }
     ls.clear();
   }
