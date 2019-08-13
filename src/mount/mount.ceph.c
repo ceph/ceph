@@ -4,10 +4,14 @@
 #include <errno.h>
 #include <sys/mount.h>
 #include <stdbool.h>
+#include <sys/mman.h>
+#include <wait.h>
+#include <cap-ng.h>
 
 #include "common/module.h"
 #include "common/secret.h"
 #include "include/addr_parsing.h"
+#include "mount.ceph.h"
 
 #ifndef MS_RELATIME
 # define MS_RELATIME (1<<21)
@@ -27,6 +31,7 @@ struct ceph_mount_info {
 	char		*cmi_name;
 	char		*cmi_path;
 	char		*cmi_mons;
+	char		*cmi_conf;
 	char		*cmi_opts;
 	int		cmi_opts_len;
 	char 		cmi_secret[SECRET_BUFSIZE];
@@ -63,15 +68,13 @@ static int parse_src(const char *orig_str, struct ceph_mount_info *cmi)
 		fprintf(stderr, "source mount path was not specified\n");
 		return -EINVAL;
 	}
-	len = mount_path - orig_str;
-	if (len == 0) {
-		fprintf(stderr, "server address expected\n");
-		return -EINVAL;
-	}
 
-	cmi->cmi_mons = strndup(orig_str, len);
-	if (!cmi->cmi_mons)
-		return -ENOMEM;
+	len = mount_path - orig_str;
+	if (len != 0) {
+		cmi->cmi_mons = strndup(orig_str, len);
+		if (!cmi->cmi_mons)
+			return -ENOMEM;
+	}
 
 	mount_path++;
 	cmi->cmi_path = strdup(mount_path);
@@ -94,6 +97,104 @@ static char *finalize_src(struct ceph_mount_info *cmi)
 	safe_cat(&src, &len, pos, cmi->cmi_path);
 
 	return src;
+}
+
+static int
+drop_capabilities()
+{
+	capng_setpid(getpid());
+	capng_clear(CAPNG_SELECT_BOTH);
+	if (capng_update(CAPNG_ADD, CAPNG_PERMITTED, CAP_DAC_READ_SEARCH)) {
+		fprintf(stderr, "Unable to update permitted capability set.\n");
+		return EX_SYSERR;
+	}
+	if (capng_update(CAPNG_ADD, CAPNG_EFFECTIVE, CAP_DAC_READ_SEARCH)) {
+		fprintf(stderr, "Unable to update effective capability set.\n");
+		return EX_SYSERR;
+	}
+	if (capng_apply(CAPNG_SELECT_BOTH)) {
+		fprintf(stderr, "Unable to apply new capability set.\n");
+		return EX_SYSERR;
+	}
+	return 0;
+}
+
+/*
+ * Attempt to fetch info from the local config file, if one is present. Since
+ * this involves activity that may be dangerous for a privileged task, we
+ * fork(), have the child drop privileges and do the processing and then hand
+ * back the results via memory shared with the parent.
+ */
+static int fetch_config_info(struct ceph_mount_info *cmi)
+{
+	int ret = 0;
+	pid_t pid;
+	struct ceph_config_info *cci;
+
+	/* Don't do anything if we already have requisite info */
+	if (cmi->cmi_secret[0] && cmi->cmi_mons)
+		return 0;
+
+	cci = mmap((void *)0, sizeof(*cci), PROT_READ | PROT_WRITE,
+		   MAP_ANONYMOUS | MAP_SHARED, -1, 0);
+	if (cci == MAP_FAILED) {
+		mount_ceph_debug("Unable to allocate memory: %s\n",
+				 strerror(errno));
+		return EX_SYSERR;
+	}
+
+	pid = fork();
+	if (pid < 0) {
+		mount_ceph_debug("fork() failure: %s\n", strerror(errno));
+		ret = EX_SYSERR;
+		goto out;
+	}
+
+	if (pid == 0) {
+		/* child */
+		ret = drop_capabilities();
+		if (ret)
+			exit(1);
+		mount_ceph_get_config_info(cmi->cmi_conf, cmi->cmi_name, cci);
+		exit(0);
+	} else {
+		/* parent */
+		pid = wait(&ret);
+		if (!WIFEXITED(ret)) {
+			mount_ceph_debug("Child process terminated abnormally.\n");
+			ret = EX_SYSERR;
+			goto out;
+		}
+		ret = WEXITSTATUS(ret);
+		if (ret) {
+			mount_ceph_debug("Child exited with status %d\n", ret);
+			ret = EX_SYSERR;
+			goto out;
+		}
+
+		/*
+		 * Copy values from MAP_SHARED buffer to cmi if we didn't
+		 * already find anything and we got something from the child.
+		 */
+		size_t len;
+		if (!cmi->cmi_secret[0] && cci->cci_secret[0]) {
+
+			len = strnlen(cci->cci_secret, SECRET_BUFSIZE);
+			if (len < SECRET_BUFSIZE) {
+				memcpy(cmi->cmi_secret, cci->cci_secret, len + 1);
+			} else {
+				mount_ceph_debug("secret is too long (len=%zu max=%zu)!\n", len, SECRET_BUFSIZE);
+			}
+		}
+		if (!cmi->cmi_mons && cci->cci_mons[0]) {
+			len = strnlen(cci->cci_mons, MON_LIST_BUFSIZE);
+			if (len < MON_LIST_BUFSIZE)
+				cmi->cmi_mons = strndup(cci->cci_mons, len + 1);
+		}
+	}
+out:
+	munmap(cci, sizeof(*cci));
+	return ret;
 }
 
 /*
@@ -190,6 +291,15 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 			len = strnlen(value, sizeof(cmi->cmi_secret)) + 1;
 			if (len <= sizeof(cmi->cmi_secret))
 				memcpy(cmi->cmi_secret, value, len);
+		} else if (strncmp(data, "conf", 4) == 0) {
+			if (!value || !*value) {
+				fprintf(stderr, "mount option conf requires a value.\n");
+				return -EINVAL;
+			}
+			/* keep pointer to value */
+			cmi->cmi_conf = strdup(value);
+			if (!cmi->cmi_conf)
+				return -ENOMEM;
 		} else if (strncmp(data, "name", 4) == 0) {
 			if (!value || !*value) {
 				fprintf(stderr, "mount option name requires a value.\n");
@@ -312,6 +422,7 @@ static void ceph_mount_info_free(struct ceph_mount_info *cmi)
 	free(cmi->cmi_name);
 	free(cmi->cmi_path);
 	free(cmi->cmi_mons);
+	free(cmi->cmi_conf);
 }
 
 static int finalize_options(struct ceph_mount_info *cmi)
@@ -363,8 +474,14 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	/* Ensure the ceph key_type is available */
-	modprobe();
+	/* We don't care if this errors out, since this is best-effort */
+	fetch_config_info(&cmi);
+
+	if (!cmi.cmi_mons) {
+		fprintf(stderr, "unable to determine mon addresses\n");
+		retval = EX_USAGE;
+		goto out;
+	}
 
 	rsrc = finalize_src(&cmi);
 	if (!rsrc) {
@@ -372,6 +489,9 @@ int main(int argc, char *argv[])
 		retval = EX_USAGE;
 		goto out;
 	}
+
+	/* Ensure the ceph key_type is available */
+	modprobe();
 
 	retval = finalize_options(&cmi);
 	if (retval) {
