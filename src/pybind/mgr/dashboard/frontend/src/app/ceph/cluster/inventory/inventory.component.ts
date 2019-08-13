@@ -16,7 +16,7 @@ import { Device, InventoryNode } from './inventory.model';
   styleUrls: ['./inventory.component.scss']
 })
 export class InventoryComponent implements OnChanges, OnInit {
-  @ViewChild(TableComponent)
+  @ViewChild(TableComponent, { static: false })
   table: TableComponent;
 
   @Input() hostname = '';

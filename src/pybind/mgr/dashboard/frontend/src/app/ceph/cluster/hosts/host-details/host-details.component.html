@@ -1,22 +1,22 @@
 <tabset *ngIf="selection.hasSingleSelection">
   <tab i18n-heading
        heading="Inventory"
-       *ngIf="hostsPermission.read">
+       *ngIf="permissions.hosts.read">
     <cd-inventory
-      [hostname]="host['hostname']">
+      [hostname]="selection.first()['hostname']">
     </cd-inventory>
   </tab>
   <tab i18n-heading
        heading="Services"
-       *ngIf="hostsPermission.read">
+       *ngIf="permissions.hosts.read">
     <cd-services
-      [hostname]="host['hostname']">
+      [hostname]="selection.first()['hostname']">
     </cd-services>
   </tab>
   <tab i18n-heading
        heading="Performance Details"
-       *ngIf="grafanaPermission.read">
-    <cd-grafana [grafanaPath]="'host-details?var-ceph_hosts=' + host['hostname']"
+       *ngIf="permissions.grafana.read">
+    <cd-grafana [grafanaPath]="'host-details?var-ceph_hosts=' + selection.first()['hostname']"
                 uid="rtOg0AiWz"
                 grafanaStyle="three">
     </cd-grafana>
