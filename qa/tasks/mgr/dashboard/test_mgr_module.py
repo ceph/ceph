@@ -12,11 +12,6 @@ logger = logging.getLogger(__name__)
 class MgrModuleTestCase(DashboardTestCase):
     MGRS_REQUIRED = 1
 
-    @classmethod
-    def tearDownClass(cls):
-        cls._ceph_cmd(['mgr', 'module', 'disable', 'telemetry'])
-        super(MgrModuleTestCase, cls).tearDownClass()
-
     def wait_until_rest_api_accessible(self):
         """
         Wait until the REST API is accessible.
@@ -37,7 +32,7 @@ class MgrModuleTestCase(DashboardTestCase):
 
 class MgrModuleTest(MgrModuleTestCase):
     def test_list_disabled_module(self):
-        self._ceph_cmd(['mgr', 'module', 'disable', 'telemetry'])
+        self._ceph_cmd(['mgr', 'module', 'disable', 'iostat'])
         self.wait_until_rest_api_accessible()
         data = self._get('/api/mgr/module')
         self.assertStatus(200)
@@ -65,12 +60,12 @@ class MgrModuleTest(MgrModuleTestCase):
                             'tags': JList(str)
                         }))
                 })))
-        module_info = self.find_object_in_list('name', 'telemetry', data)
+        module_info = self.find_object_in_list('name', 'iostat', data)
         self.assertIsNotNone(module_info)
         self.assertFalse(module_info['enabled'])
 
     def test_list_enabled_module(self):
-        self._ceph_cmd(['mgr', 'module', 'enable', 'telemetry'])
+        self._ceph_cmd(['mgr', 'module', 'enable', 'iostat'])
         self.wait_until_rest_api_accessible()
         data = self._get('/api/mgr/module')
         self.assertStatus(200)
@@ -98,7 +93,7 @@ class MgrModuleTest(MgrModuleTestCase):
                             'tags': JList(str)
                         }))
                 })))
-        module_info = self.find_object_in_list('name', 'telemetry', data)
+        module_info = self.find_object_in_list('name', 'iostat', data)
         self.assertIsNotNone(module_info)
         self.assertTrue(module_info['enabled'])
 
@@ -110,6 +105,7 @@ class MgrModuleTelemetryTest(MgrModuleTestCase):
         self.assertSchema(
             data,
             JObj(
+                allow_unknown=True,
                 sub_elems={
                     'channel_basic': bool,
                     'channel_ident': bool,
@@ -119,6 +115,7 @@ class MgrModuleTelemetryTest(MgrModuleTestCase):
                     'description': str,
                     'enabled': bool,
                     'interval': int,
+                    'last_opt_revision': int,
                     'leaderboard': bool,
                     'organization': str,
                     'proxy': str,
