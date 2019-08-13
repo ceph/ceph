@@ -114,6 +114,62 @@ TEST(LibCephFS, OpenReadWrite) {
   ceph_shutdown(cmount);
 }
 
+TEST(LibCephFS, RstatFlush) {
+  struct ceph_mount_info *cmount;
+  ASSERT_EQ(0, ceph_create(&cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_read_file(cmount, NULL));
+  ASSERT_EQ(0, ceph_conf_parse_env(cmount, NULL));
+  ASSERT_EQ(0, ceph_mount(cmount, "/"));
+
+  char c_path[1024];
+  sprintf(c_path, "/test_%d/a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q", getpid());
+  ASSERT_EQ(ceph_mkdirs(cmount, c_path, 0766), 0);
+  sprintf(c_path, "/test_%d/a/b/c/d/e/f/g/h/i/j/k/l/m/n/o/p/q/test.f", getpid());
+  int fd = ceph_open(cmount, c_path, O_WRONLY|O_CREAT, 0666);
+  ASSERT_LT(0, fd);
+
+  char* pin = "0";
+  char pin_path[1024];
+  sprintf(pin_path, "/test_%d/a/b", getpid());
+  ASSERT_EQ(0, ceph_setxattr(cmount, pin_path, "ceph.dir.pin", pin, 1, 0));
+  pin = "1";
+  sprintf(pin_path, "/test_%d/a/b/c/d/e/f/g", getpid());
+  ASSERT_EQ(0, ceph_setxattr(cmount, pin_path, "ceph.dir.pin", pin, 1, 0));
+  pin = "2";
+  sprintf(pin_path, "/test_%d/a/b/c/d/e/f/g/h/i/j/k", getpid());
+  ASSERT_EQ(0, ceph_setxattr(cmount, pin_path, "ceph.dir.pin", pin, 1, 0));
+
+  sleep(20);
+
+  ASSERT_EQ(0, ceph_ftruncate(cmount, fd, 10));
+  ASSERT_EQ(0, ceph_fsync(cmount, fd, false));
+  std::cout << "ceph_fsync succeeded!" << std::endl;
+  ASSERT_EQ(0, ceph_ftruncate(cmount, fd, 20));
+  ASSERT_EQ(0, ceph_fsync(cmount, fd, false));
+  std::cout << "ceph_fsync succeeded!" << std::endl;
+
+  char dir_path[1024];
+  sprintf(dir_path, "/test_%d", getpid());
+  struct ceph_statx stx;
+  char val[1024];
+  int a = 1;
+  ASSERT_EQ(0, ceph_rstatflush(cmount));
+  int r = ceph_getxattr(cmount, dir_path, "ceph.dir.rctime", &val[0], 1024);
+  ASSERT_LE(0, r);
+  val[r + 1] = '\0';
+  ASSERT_LE(0, ceph_statx(cmount, c_path, &stx, CEPH_STATX_ALL_STATS, 0));
+
+//  std::stringstream ss;
+//  ss << stx.stx_ctime.tv_sec << "." << stx.stx_ctime.tv_nsec;
+  char mtime[1024];
+  snprintf(mtime, 1024, "%ld.%09ld", (long)stx.stx_ctime.tv_sec, (long)stx.stx_ctime.tv_nsec);
+  std::cout<< "dir_rctime: " << val << ", f_mtime: " << mtime << std::endl;
+  ASSERT_EQ(std::string(val), std::string(mtime));
+//  ASSERT_EQ(dir_rctime.tv.tv_nsec, stx.stx_mtime.tv_nsec);
+  ASSERT_EQ(0, ceph_close(cmount, fd));
+  ceph_shutdown(cmount);
+}
+
 TEST(LibCephFS, MountNonExist) {
 
   struct ceph_mount_info *cmount;
