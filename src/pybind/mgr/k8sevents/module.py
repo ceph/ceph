@@ -234,7 +234,7 @@ class NamespaceWatcher(RookCeph, BaseThread):
         self.events.clear()
         try:
             resp = self.api.list_namespaced_event(self.namespace)
-        # TODO - test for auth problem to be more specific in the except clause
+        # TODO - Perhaps test for auth problem to be more specific in the except clause?
         except:
             self.active = False
             self.health = "[WRN] Unable to access events API (list_namespaced_event call failed)"
@@ -242,9 +242,6 @@ class NamespaceWatcher(RookCeph, BaseThread):
         else:
             self.active = True
             self.resource_version = resp.metadata.resource_version
-
-            # TODO this fetches the events, but storing them like this is not preserving the 
-            # creation timestamp of the event itself - it's just using arrival order
             
             for item in resp.items:
                 self.events[item.metadata.name] = item
@@ -879,12 +876,17 @@ class CephConfigWatcher(BaseThread):
                 self.server_map = server_map
                 self.service_map = service_map
 
-                checks_duration = time.time() - start_time
+                checks_duration = int(time.time() - start_time)
+                
+                # check that the time it took to run the checks fits within the 
+                # interval, and if not extend the interval and emit a log message
+                # to show that the runtime for the checks exceeded the desired 
+                # interval
                 if checks_duration > self.config_check_secs:
                     new_interval = self.config_check_secs * 2
                     log.warning("[WRN] k8sevents check interval warning. "
-                                "Current checks {}s, interval is {}. "
-                                "Increasing interval to {}".format(int(checks_duration),
+                                "Current checks took {}s, interval was {}s. "
+                                "Increasing interval to {}s".format(int(checks_duration),
                                                                    self.config_check_secs,
                                                                    new_interval))
                     self.config_check_secs = new_interval
