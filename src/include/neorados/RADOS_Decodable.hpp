@@ -13,8 +13,8 @@
  *
  */
 
-#ifndef RADOS_DECODABLE_HPP
-#define RADOS_DECODABLE_HPP
+#ifndef NEORADOS_RADOS_DECODABLE_HPP
+#define NEORADOS_RADOS_DECODABLE_HPP
 
 #include <cstdint>
 #include <cstdlib>
@@ -24,7 +24,7 @@
 #include <utility>
 #include <vector>
 
-namespace RADOS {
+namespace neorados {
 struct Entry {
   std::string nspace;
   std::string oid;
@@ -96,8 +96,8 @@ struct ObjWatcher {
 
 namespace std {
 template<>
-struct hash<::RADOS::Entry> {
-  std::size_t operator ()(::RADOS::Entry e) const {
+struct hash<::neorados::Entry> {
+  std::size_t operator ()(::neorados::Entry e) const {
     hash<std::string> h;
     return (h(e.nspace) << 2) ^ (h(e.oid) << 1) ^ h(e.locator);
   }

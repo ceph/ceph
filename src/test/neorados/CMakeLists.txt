@@ -1,0 +1,2 @@
+add_executable(ceph_test_neorados_start_stop start_stop.cc)
+target_link_libraries(ceph_test_neorados_start_stop global libneorados ${unittest_libs})

@@ -39,7 +39,7 @@
 #include "include/types.h"
 #include "include/rados/rados_types.hpp"
 #include "include/function2.hpp"
-#include "include/RADOS/RADOS_Decodable.hpp"
+#include "include/neorados/RADOS_Decodable.hpp"
 
 #include "common/admin_socket.h"
 #include "common/async/completion.h"
@@ -733,10 +733,10 @@ struct ObjectOperation {
   };
 
   struct CB_ObjectOperation_decodewatchersneo {
-    std::vector<RADOS::ObjWatcher>* pwatchers;
+    std::vector<neorados::ObjWatcher>* pwatchers;
     int* prval;
     boost::system::error_code* pec;
-    CB_ObjectOperation_decodewatchersneo(std::vector<RADOS::ObjWatcher>* pw,
+    CB_ObjectOperation_decodewatchersneo(std::vector<neorados::ObjWatcher>* pw,
 					 int* pr,
 					 boost::system::error_code* pec)
       : pwatchers(pw), prval(pr), pec(pec) {}
@@ -749,7 +749,7 @@ struct ObjectOperation {
 	  decode(resp, p);
 	  if (pwatchers) {
 	    for (const auto& watch_item : resp.entries) {
-	      RADOS::ObjWatcher ow;
+	      neorados::ObjWatcher ow;
 	      ow.addr = watch_item.addr.get_legacy_str();
 	      ow.watcher_id = watch_item.name.num();
 	      ow.cookie = watch_item.cookie;
@@ -770,11 +770,11 @@ struct ObjectOperation {
 
   struct CB_ObjectOperation_decodesnaps {
     librados::snap_set_t *psnaps;
-    RADOS::SnapSet *neosnaps;
+    neorados::SnapSet *neosnaps;
     int *prval;
     boost::system::error_code* pec;
     CB_ObjectOperation_decodesnaps(librados::snap_set_t* ps,
-				   RADOS::SnapSet* ns, int* pr,
+				   neorados::SnapSet* ns, int* pr,
 				   boost::system::error_code* pec)
       : psnaps(ps), neosnaps(ns), prval(pr), pec(pec) {}
     void operator()(boost::system::error_code ec, int r, const ceph::buffer::list& bl) {
@@ -806,7 +806,7 @@ struct ObjectOperation {
 	  if (neosnaps) {
 	    neosnaps->clones.clear();
 	    for (auto&& c : resp.clones) {
-	      RADOS::CloneInfo clone;
+	      neorados::CloneInfo clone;
 
 	      clone.cloneid = std::move(c.cloneid);
 	      clone.snaps.reserve(c.snaps.size());
@@ -1405,7 +1405,7 @@ struct ObjectOperation {
       out_rval.back() = prval;
     }
   }
-  void list_watchers(vector<RADOS::ObjWatcher>* out,
+  void list_watchers(vector<neorados::ObjWatcher>* out,
 		     boost::system::error_code* ec) {
     add_op(CEPH_OSD_OP_LIST_WATCHERS);
     set_handler(CB_ObjectOperation_decodewatchersneo(out, nullptr, ec));
@@ -1422,7 +1422,7 @@ struct ObjectOperation {
     }
   }
 
-  void list_snaps(RADOS::SnapSet *out, int *prval,
+  void list_snaps(neorados::SnapSet *out, int *prval,
 		  boost::system::error_code* ec = nullptr) {
     add_op(CEPH_OSD_OP_LIST_SNAPS);
     if (prval || out || ec) {
