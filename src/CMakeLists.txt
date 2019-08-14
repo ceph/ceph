@@ -490,6 +490,7 @@ option(WITH_LIBRADOSSTRIPER "build with libradosstriper support" ON)
 
 add_subdirectory(include)
 add_subdirectory(librados)
+add_subdirectory(neorados)
 
 if(WITH_LIBRADOSSTRIPER)
   add_subdirectory(libradosstriper)

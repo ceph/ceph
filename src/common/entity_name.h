@@ -15,6 +15,8 @@
 #ifndef CEPH_COMMON_ENTITY_NAME_H
 #define CEPH_COMMON_ENTITY_NAME_H
 
+#include <string_view>
+
 #include <ifaddrs.h>
 
 #include "msg/msg_types.h"
@@ -42,15 +44,15 @@ struct EntityName
 
   const std::string& to_str() const;
   const char *to_cstr() const;
-  bool from_str(const std::string& s);
-  void set(uint32_t type_, const std::string &id_);
-  int set(const std::string &type_, const std::string &id_);
+  bool from_str(std::string_view s);
+  void set(uint32_t type_, std::string_view id_);
+  int set(std::string_view type_, std::string_view id_);
   void set_type(uint32_t type_);
-  int set_type(const char *type);
-  void set_id(const std::string &id_);
+  int set_type(std::string_view type);
+  void set_id(std::string_view id_);
   void set_name(entity_name_t n);
 
-  const char* get_type_str() const;
+  std::string_view get_type_str() const;
 
   uint32_t get_type() const { return type; }
   bool is_osd() const { return get_type() == CEPH_ENTITY_TYPE_OSD; }
@@ -59,7 +61,7 @@ struct EntityName
   bool is_client() const { return get_type() == CEPH_ENTITY_TYPE_CLIENT; }
   bool is_mon() const { return get_type() == CEPH_ENTITY_TYPE_MON; }
 
-  const char * get_type_name() const;
+  std::string_view get_type_name() const;
   const std::string &get_id() const;
   bool has_default_id() const;
 
