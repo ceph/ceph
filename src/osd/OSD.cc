@@ -5858,7 +5858,7 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
     // this thread might be required for splitting and merging PGs to
     // make progress.
     boot_finisher.queue(
-      new FunctionContext(
+      new LambdaContext(
 	[this](int r) {
 	  std::unique_lock l(osd_lock);
 	  if (is_preboot()) {
@@ -9628,7 +9628,7 @@ void OSD::do_recovery(
     std::lock_guard l(service.sleep_lock);
     if (recovery_sleep > 0 && service.recovery_needs_sleep) {
       PGRef pgref(pg);
-      auto recovery_requeue_callback = new FunctionContext([this, pgref, queued, reserved_pushes](int r) {
+      auto recovery_requeue_callback = new LambdaContext([this, pgref, queued, reserved_pushes](int r) {
         dout(20) << "do_recovery wake up at "
                  << ceph_clock_now()
 	         << ", re-queuing recovery" << dendl;

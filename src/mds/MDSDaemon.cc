@@ -459,7 +459,7 @@ void MDSDaemon::reset_tick()
   // schedule
   tick_event = timer.add_event_after(
     g_conf()->mds_tick_interval,
-    new FunctionContext([this](int) {
+    new LambdaContext([this](int) {
 	ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
 	tick();
       }));
@@ -872,8 +872,8 @@ void MDSDaemon::handle_mds_map(const cref_t<MMDSMap> &m)
     if (mds_rank == NULL) {
       mds_rank = new MDSRankDispatcher(whoami, mds_lock, clog,
           timer, beacon, mdsmap, messenger, monc, &mgrc,
-          new FunctionContext([this](int r){respawn();}),
-          new FunctionContext([this](int r){suicide();}));
+          new LambdaContext([this](int r){respawn();}),
+          new LambdaContext([this](int r){suicide();}));
       dout(10) <<  __func__ << ": initializing MDS rank "
                << mds_rank->get_nodeid() << dendl;
       mds_rank->init();

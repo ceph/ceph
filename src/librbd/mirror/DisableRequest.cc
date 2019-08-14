@@ -313,7 +313,7 @@ void DisableRequest<I>::send_remove_snap(const std::string &client_id,
   Context *ctx = create_context_callback(
     &DisableRequest<I>::handle_remove_snap, client_id);
 
-  ctx = new FunctionContext([this, snap_namespace, snap_name, ctx](int r) {
+  ctx = new LambdaContext([this, snap_namespace, snap_name, ctx](int r) {
       m_image_ctx->operations->snap_remove(snap_namespace,
                                            snap_name.c_str(),
                                            ctx);
@@ -477,7 +477,7 @@ Context *DisableRequest<I>::create_context_callback(
   Context*(DisableRequest<I>::*handle)(int*, const std::string &client_id),
   const std::string &client_id) {
 
-  return new FunctionContext([this, handle, client_id](int r) {
+  return new LambdaContext([this, handle, client_id](int r) {
       Context *on_finish = (this->*handle)(&r, client_id);
       if (on_finish != nullptr) {
         on_finish->complete(r);

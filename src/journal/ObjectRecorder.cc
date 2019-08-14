@@ -112,7 +112,7 @@ void ObjectRecorder::flush(Context *on_safe) {
 
   if (future.is_valid()) {
     // cannot be invoked while the same lock context
-    m_op_work_queue->queue(new FunctionContext(
+    m_op_work_queue->queue(new LambdaContext(
       [future, on_safe] (int r) mutable {
         future.flush(on_safe);
       }));

@@ -226,7 +226,7 @@ void DeepCopyRequest<I>::send_copy_object_map() {
   }
 
   // rollback the object map (copy snapshot object map to HEAD)
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
       handle_copy_object_map(r);
       finish_op_ctx->complete(0);
     });
@@ -269,7 +269,7 @@ void DeepCopyRequest<I>::send_refresh_object_map() {
 
   ldout(m_cct, 20) << dendl;
 
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
       handle_refresh_object_map(r);
       finish_op_ctx->complete(0);
     });

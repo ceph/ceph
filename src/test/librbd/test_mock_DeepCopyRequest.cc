@@ -170,8 +170,7 @@ public:
   }
 
   void expect_start_op(librbd::MockExclusiveLock &mock_exclusive_lock) {
-    EXPECT_CALL(mock_exclusive_lock, start_op(_)).WillOnce(
-      ReturnNew<FunctionContext>([](int) {}));
+    EXPECT_CALL(mock_exclusive_lock, start_op(_)).WillOnce(Return(new LambdaContext([](int){})));
   }
 
   void expect_rollback_object_map(librbd::MockObjectMap &mock_object_map, int r) {

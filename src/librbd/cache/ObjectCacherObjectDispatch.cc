@@ -162,7 +162,7 @@ void ObjectCacherObjectDispatch<I>::shut_down(Context* on_finish) {
   // chain shut down in reverse order
 
   // shut down the cache
-  on_finish = new FunctionContext([this, on_finish](int r) {
+  on_finish = new LambdaContext([this, on_finish](int r) {
       m_object_cacher->stop();
       on_finish->complete(r);
     });
@@ -235,7 +235,7 @@ bool ObjectCacherObjectDispatch<I>::discard(
   // discard the cache state after changes are committed to disk (and to
   // prevent races w/ readahead)
   auto ctx = *on_finish;
-  *on_finish = new FunctionContext(
+  *on_finish = new LambdaContext(
     [this, object_extents, ctx](int r) {
       m_cache_lock.lock();
       m_object_cacher->discard_set(m_object_set, object_extents);

@@ -88,7 +88,7 @@ void ImageWatcher<I>::unregister_watch(Context *on_finish) {
 
   cancel_async_requests();
 
-  FunctionContext *ctx = new FunctionContext([this, on_finish](int r) {
+  auto ctx = new LambdaContext([this, on_finish](int r) {
     m_task_finisher->cancel_all(on_finish);
   });
   Watcher::unregister_watch(ctx);
@@ -99,7 +99,7 @@ void ImageWatcher<I>::block_notifies(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << this << " "  << __func__ << dendl;
 
-  on_finish = new FunctionContext([this, on_finish](int r) {
+  on_finish = new LambdaContext([this, on_finish](int r) {
       cancel_async_requests();
       on_finish->complete(r);
     });
@@ -109,7 +109,7 @@ void ImageWatcher<I>::block_notifies(Context *on_finish) {
 template <typename I>
 void ImageWatcher<I>::schedule_async_progress(const AsyncRequestId &request,
 					      uint64_t offset, uint64_t total) {
-  FunctionContext *ctx = new FunctionContext(
+  auto ctx = new LambdaContext(
     boost::bind(&ImageWatcher<I>::notify_async_progress, this, request, offset,
                 total));
   m_task_finisher->queue(Task(TASK_CODE_ASYNC_PROGRESS, request), ctx);
@@ -129,7 +129,7 @@ int ImageWatcher<I>::notify_async_progress(const AsyncRequestId &request,
 template <typename I>
 void ImageWatcher<I>::schedule_async_complete(const AsyncRequestId &request,
                                               int r) {
-  FunctionContext *ctx = new FunctionContext(
+  auto ctx = new LambdaContext(
     boost::bind(&ImageWatcher<I>::notify_async_complete, this, request, r));
   m_task_finisher->queue(ctx);
 }
@@ -141,7 +141,7 @@ void ImageWatcher<I>::notify_async_complete(const AsyncRequestId &request,
 			     << request << " = " << r << dendl;
 
   send_notify(AsyncCompletePayload(request, r),
-    new FunctionContext(boost::bind(&ImageWatcher<I>::handle_async_complete,
+    new LambdaContext(boost::bind(&ImageWatcher<I>::handle_async_complete,
                         this, request, r, _1)));
 }
 
@@ -331,7 +331,7 @@ void ImageWatcher<I>::notify_header_update(librados::IoCtx &io_ctx,
 
 template <typename I>
 void ImageWatcher<I>::schedule_cancel_async_requests() {
-  FunctionContext *ctx = new FunctionContext(
+  auto ctx = new LambdaContext(
     boost::bind(&ImageWatcher<I>::cancel_async_requests, this));
   m_task_finisher->queue(TASK_CODE_CANCEL_ASYNC_REQUESTS, ctx);
 }
@@ -401,7 +401,7 @@ void ImageWatcher<I>::schedule_request_lock(bool use_timer, int timer_delay) {
   if (this->is_registered(this->m_watch_lock)) {
     ldout(m_image_ctx.cct, 15) << this << " requesting exclusive lock" << dendl;
 
-    FunctionContext *ctx = new FunctionContext(
+    auto ctx = new LambdaContext(
       boost::bind(&ImageWatcher<I>::notify_request_lock, this));
     if (use_timer) {
       if (timer_delay < 0) {
@@ -499,7 +499,7 @@ void ImageWatcher<I>::schedule_async_request_timed_out(const AsyncRequestId &id)
   ldout(m_image_ctx.cct, 20) << "scheduling async request time out: " << id
                              << dendl;
 
-  Context *ctx = new FunctionContext(boost::bind(
+  Context *ctx = new LambdaContext(boost::bind(
     &ImageWatcher<I>::async_request_timed_out, this, id));
 
   Task task(TASK_CODE_ASYNC_REQUEST, id);
@@ -530,7 +530,7 @@ void ImageWatcher<I>::notify_async_request(const AsyncRequestId &async_request_i
   ldout(m_image_ctx.cct, 10) << this << " async request: " << async_request_id
                              << dendl;
 
-  Context *on_notify = new FunctionContext([this, async_request_id](int r) {
+  Context *on_notify = new LambdaContext([this, async_request_id](int r) {
     if (r < 0) {
       // notification failed -- don't expect updates
       Context *on_complete = remove_async_request(async_request_id);
@@ -540,7 +540,7 @@ void ImageWatcher<I>::notify_async_request(const AsyncRequestId &async_request_i
     }
   });
 
-  Context *on_complete = new FunctionContext(
+  Context *on_complete = new LambdaContext(
     [this, async_request_id, on_finish](int r) {
       m_task_finisher->cancel(Task(TASK_CODE_ASYNC_REQUEST, async_request_id));
       on_finish->complete(r);

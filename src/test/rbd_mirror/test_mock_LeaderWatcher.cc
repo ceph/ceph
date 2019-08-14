@@ -82,7 +82,7 @@ struct ManagedLock<MockTestImageCtx> {
 
   void shut_down(Context *on_shutdown) {
     if (MockManagedLock::get_instance().m_release_lock_on_shutdown) {
-      on_shutdown = new FunctionContext(
+      on_shutdown = new LambdaContext(
         [this, on_shutdown](int r) {
           MockManagedLock::get_instance().m_release_lock_on_shutdown = false;
           shut_down(on_shutdown);
@@ -96,7 +96,7 @@ struct ManagedLock<MockTestImageCtx> {
 
   void try_acquire_lock(Context *on_acquired) {
     Context *post_acquire_ctx = create_async_context_callback(
-      m_work_queue, new FunctionContext(
+      m_work_queue, new LambdaContext(
         [this, on_acquired](int r) {
           post_acquire_lock_handler(r, on_acquired);
         }));
@@ -107,7 +107,7 @@ struct ManagedLock<MockTestImageCtx> {
     ceph_assert(MockManagedLock::get_instance().m_on_released == nullptr);
     MockManagedLock::get_instance().m_on_released = on_released;
 
-    Context *post_release_ctx = new FunctionContext(
+    Context *post_release_ctx = new LambdaContext(
       [this](int r) {
         ceph_assert(MockManagedLock::get_instance().m_on_released != nullptr);
         post_release_lock_handler(false, r,
@@ -115,7 +115,7 @@ struct ManagedLock<MockTestImageCtx> {
         MockManagedLock::get_instance().m_on_released = nullptr;
       });
 
-    Context *release_ctx = new FunctionContext(
+    Context *release_ctx = new LambdaContext(
       [post_release_ctx](int r) {
         if (r < 0) {
           MockManagedLock::get_instance().m_on_released->complete(r);
@@ -124,7 +124,7 @@ struct ManagedLock<MockTestImageCtx> {
         }
       });
 
-    Context *pre_release_ctx = new FunctionContext(
+    Context *pre_release_ctx = new LambdaContext(
       [this, release_ctx](int r) {
         bool shutting_down =
           MockManagedLock::get_instance().m_release_lock_on_shutdown;
@@ -316,7 +316,7 @@ public:
                          if (on_finish != nullptr) {
                            auto on_released = mock_managed_lock.m_on_released;
                            ceph_assert(on_released != nullptr);
-                           mock_managed_lock.m_on_released = new FunctionContext(
+                           mock_managed_lock.m_on_released = new LambdaContext(
                              [on_released, on_finish](int r) {
                                on_released->complete(r);
                                on_finish->complete(r);

@@ -11275,7 +11275,7 @@ int PrimaryLogPG::recover_missing(
     ceph_assert(!recovering.count(soid));
     recovering.insert(make_pair(soid, ObjectContextRef()));
     epoch_t cur_epoch = get_osdmap_epoch();
-    remove_missing_object(soid, v, new FunctionContext(
+    remove_missing_object(soid, v, new LambdaContext(
      [=](int) {
        std::scoped_lock locker{*this};
        if (!pg_has_reset_since(cur_epoch)) {
@@ -11358,7 +11358,7 @@ void PrimaryLogPG::remove_missing_object(const hobject_t &soid,
   recovery_info.version = v;
 
   epoch_t cur_epoch = get_osdmap_epoch();
-  t.register_on_complete(new FunctionContext(
+  t.register_on_complete(new LambdaContext(
      [=](int) {
        std::unique_lock locker{*this};
        if (!pg_has_reset_since(cur_epoch)) {
@@ -11529,7 +11529,7 @@ void PrimaryLogPG::do_update_log_missing(OpRequestRef &op)
     m->entries, t, op_trim_to, op_roll_forward_to);
   eversion_t new_lcod = info.last_complete;
 
-  Context *complete = new FunctionContext(
+  Context *complete = new LambdaContext(
     [=](int) {
       const MOSDPGUpdateLogMissing *msg = static_cast<const MOSDPGUpdateLogMissing*>(
 	op->get_req());

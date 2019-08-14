@@ -200,7 +200,7 @@ void ObjectReadRequest<I>::read_object() {
     std::shared_lock image_locker{image_ctx->image_lock};
     if (image_ctx->object_map != nullptr &&
         !image_ctx->object_map->object_may_exist(this->m_object_no)) {
-      image_ctx->op_work_queue->queue(new FunctionContext([this](int r) {
+      image_ctx->op_work_queue->queue(new LambdaContext([this](int r) {
           read_parent();
         }), 0);
       return;

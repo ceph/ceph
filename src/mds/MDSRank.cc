@@ -81,7 +81,7 @@ private:
     // previous segments for expiry
     mdlog->start_new_segment();
 
-    Context *ctx = new FunctionContext([this](int r) {
+    Context *ctx = new LambdaContext([this](int r) {
         handle_flush_mdlog(r);
       });
 
@@ -106,7 +106,7 @@ private:
   void clear_mdlog() {
     dout(20) << __func__ << dendl;
 
-    Context *ctx = new FunctionContext([this](int r) {
+    Context *ctx = new LambdaContext([this](int r) {
         handle_clear_mdlog(r);
       });
 
@@ -163,7 +163,7 @@ private:
       return;
     }
 
-    Context *ctx = new FunctionContext([this](int r) {
+    Context *ctx = new LambdaContext([this](int r) {
         handle_expire_segments(r);
       });
     expiry_gather->set_finisher(new MDSInternalContextWrapper(mds, ctx));
@@ -181,7 +181,7 @@ private:
   void trim_segments() {
     dout(20) << __func__ << dendl;
 
-    Context *ctx = new C_OnFinisher(new FunctionContext([this](int _) {
+    Context *ctx = new C_OnFinisher(new LambdaContext([this](int) {
           std::lock_guard locker(mds->mds_lock);
           trim_expired_segments();
         }), mds->finisher);
@@ -206,7 +206,7 @@ private:
   void write_journal_head() {
     dout(20) << __func__ << dendl;
 
-    Context *ctx = new FunctionContext([this](int r) {
+    Context *ctx = new LambdaContext([this](int r) {
         std::lock_guard locker(mds->mds_lock);
         handle_write_head(r);
       });
@@ -283,7 +283,7 @@ private:
         return;
       }
 
-      timer_task = new FunctionContext([this](int _) {
+      timer_task = new LambdaContext([this](int) {
           timer_task = nullptr;
           complete(-ETIMEDOUT);
         });
@@ -337,7 +337,7 @@ private:
     caps_recalled += count;
     if ((throttled || count > 0) && (recall_timeout == 0 || duration < recall_timeout)) {
       C_ContextTimeout *ctx = new C_ContextTimeout(
-        mds, 1, new FunctionContext([this](int r) {
+        mds, 1, new LambdaContext([this](int r) {
           recall_client_state();
       }));
       ctx->start_timer();
@@ -356,7 +356,7 @@ private:
       } else {
         uint64_t remaining = (recall_timeout == 0 ? 0 : recall_timeout-duration);
         C_ContextTimeout *ctx = new C_ContextTimeout(
-          mds, remaining, new FunctionContext([this](int r) {
+          mds, remaining, new LambdaContext([this](int r) {
               handle_recall_client_state(r);
             }));
 
@@ -384,7 +384,7 @@ private:
   void flush_journal() {
     dout(20) << __func__ << dendl;
 
-    Context *ctx = new FunctionContext([this](int r) {
+    Context *ctx = new LambdaContext([this](int r) {
         handle_flush_journal(r);
       });
 
@@ -415,7 +415,7 @@ private:
 
     auto [throttled, count] = do_trim();
     if (throttled && count > 0) {
-      auto timer = new FunctionContext([this](int _) {
+      auto timer = new LambdaContext([this](int) {
         trim_cache();
       });
       mds->timer.add_event_after(1.0, timer);
@@ -501,7 +501,7 @@ MDSRank::MDSRank(
     cluster_degraded(false), stopping(false),
     purge_queue(g_ceph_context, whoami_,
       mdsmap_->get_metadata_pool(), objecter,
-      new FunctionContext([this](int r) {
+      new LambdaContext([this](int r) {
 	  std::lock_guard l(mds_lock);
 	  handle_write_error(r);
 	}
@@ -3414,10 +3414,10 @@ bool MDSRank::evict_client(int64_t session_id,
   auto apply_blacklist = [this, cmd](std::function<void ()> fn){
     ceph_assert(ceph_mutex_is_locked_by_me(mds_lock));
 
-    Context *on_blacklist_done = new FunctionContext([this, fn](int r) {
+    Context *on_blacklist_done = new LambdaContext([this, fn](int r) {
       objecter->wait_for_latest_osdmap(
        new C_OnFinisher(
-         new FunctionContext([this, fn](int r) {
+         new LambdaContext([this, fn](int r) {
               std::lock_guard l(mds_lock);
               auto epoch = objecter->with_osdmap([](const OSDMap &o){
                   return o.get_epoch();
@@ -3478,7 +3478,7 @@ void MDSRank::bcast_mds_map()
 }
 
 Context *MDSRank::create_async_exec_context(C_ExecAndReply *ctx) {
-  return new C_OnFinisher(new FunctionContext([ctx](int _) {
+  return new C_OnFinisher(new LambdaContext([ctx](int) {
         ctx->exec();
       }), finisher);
 }
@@ -3702,7 +3702,7 @@ void MDSRankDispatcher::handle_conf_change(const ConfigProxy& conf, const std::s
     update_log_config();
   }
 
-  finisher->queue(new FunctionContext([this, changed](int r) {
+  finisher->queue(new LambdaContext([this, changed](int) {
     std::scoped_lock lock(mds_lock);
 
     if (changed.count("mds_log_pause") && !g_conf()->mds_log_pause) {
@@ -3727,7 +3727,7 @@ void MDSRank::schedule_update_timer_task() {
   dout(20) << __func__ << dendl;
 
   timer.add_event_after(g_conf().get_val<double>("mds_task_status_update_interval"),
-                        new FunctionContext([this](int _) {
+                        new LambdaContext([this](int) {
                             send_task_status();
                           }));
 }

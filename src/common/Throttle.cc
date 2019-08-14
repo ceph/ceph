@@ -829,7 +829,7 @@ void TokenBucketThrottle::add_tokens() {
 }
 
 void TokenBucketThrottle::schedule_timer() {
-  m_token_ctx = new FunctionContext(
+  m_token_ctx = new LambdaContext(
       [this](int r) {
         schedule_timer();
       });

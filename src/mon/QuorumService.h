@@ -59,11 +59,11 @@ protected:
     if (tick_period <= 0)
       return;
 
-    tick_event = new C_MonContext(mon, [this](int r) {
+    tick_event = new C_MonContext{mon, [this](int r) {
 	if (r < 0)
 	  return;
 	tick();
-      });
+      }};
     mon->timer.add_event_after(tick_period, tick_event);
   }
 

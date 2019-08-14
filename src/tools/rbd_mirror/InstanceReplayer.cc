@@ -62,7 +62,7 @@ template <typename I>
 void InstanceReplayer<I>::init(Context *on_finish) {
   dout(10) << dendl;
 
-  Context *ctx = new FunctionContext(
+  Context *ctx = new LambdaContext(
     [this, on_finish] (int r) {
       {
         std::lock_guard timer_locker{m_threads->timer_lock};
@@ -91,7 +91,7 @@ void InstanceReplayer<I>::shut_down(Context *on_finish) {
   ceph_assert(m_on_shut_down == nullptr);
   m_on_shut_down = on_finish;
 
-  Context *ctx = new FunctionContext(
+  Context *ctx = new LambdaContext(
     [this] (int r) {
       cancel_image_state_check_task();
       wait_for_ops();
@@ -121,7 +121,7 @@ void InstanceReplayer<I>::release_all(Context *on_finish) {
        it = m_image_replayers.erase(it)) {
     auto image_replayer = it->second;
     auto ctx = gather_ctx->new_sub();
-    ctx = new FunctionContext(
+    ctx = new LambdaContext(
       [image_replayer, ctx] (int r) {
         image_replayer->destroy();
         ctx->complete(0);
@@ -188,7 +188,7 @@ void InstanceReplayer<I>::release_image(const std::string &global_image_id,
   auto image_replayer = it->second;
   m_image_replayers.erase(it);
 
-  on_finish = new FunctionContext(
+  on_finish = new LambdaContext(
     [image_replayer, on_finish] (int r) {
       image_replayer->destroy();
       on_finish->complete(0);
@@ -407,7 +407,7 @@ void InstanceReplayer<I>::stop_image_replayer(ImageReplayer<I> *image_replayer,
 
   m_async_op_tracker.start_op();
   Context *ctx = create_async_context_callback(
-    m_threads->work_queue, new FunctionContext(
+    m_threads->work_queue, new LambdaContext(
       [this, image_replayer, on_finish] (int r) {
         stop_image_replayer(image_replayer, on_finish);
         m_async_op_tracker.finish_op();
@@ -419,7 +419,7 @@ void InstanceReplayer<I>::stop_image_replayer(ImageReplayer<I> *image_replayer,
     int after = 1;
     dout(10) << "scheduling image replayer " << image_replayer << " stop after "
              << after << " sec (task " << ctx << ")" << dendl;
-    ctx = new FunctionContext(
+    ctx = new LambdaContext(
       [this, after, ctx] (int r) {
         std::lock_guard timer_locker{m_threads->timer_lock};
         m_threads->timer->add_event_after(after, ctx);
@@ -506,7 +506,7 @@ void InstanceReplayer<I>::schedule_image_state_check_task() {
   ceph_assert(ceph_mutex_is_locked(m_threads->timer_lock));
   ceph_assert(m_image_state_check_task == nullptr);
 
-  m_image_state_check_task = new FunctionContext(
+  m_image_state_check_task = new LambdaContext(
     [this](int r) {
       ceph_assert(ceph_mutex_is_locked(m_threads->timer_lock));
       m_image_state_check_task = nullptr;
