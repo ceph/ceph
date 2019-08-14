@@ -245,14 +245,15 @@ class RgwBucketTest(RgwTestCase):
             })
         self.assertStatus(200)
         data = self._get('/api/rgw/bucket/{}'.format(
-            urllib.quote_plus('testx/teuth-test-bucket')))
+            urllib.quote_plus('teuth-test-bucket')))
         self.assertStatus(200)
         self.assertIn('owner', data)
         self.assertEqual(data['owner'], 'admin')
+        self.assertEqual(data['tenant'], '')
 
         # Delete the bucket.
         self._delete('/api/rgw/bucket/{}'.format(
-            urllib.quote_plus('testx/teuth-test-bucket')))
+            urllib.quote_plus('teuth-test-bucket')))
         self.assertStatus(204)
         data = self._get('/api/rgw/bucket')
         self.assertStatus(200)
