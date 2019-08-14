@@ -79,14 +79,38 @@ export abstract class PageHelper {
    * Used for instances where a modal container would receive the click rather
    * than the desired element.
    *
-   * https://stackoverflow.com/questions/26211751/protractor-chrome-driver-element-is-not-clickable-at-point
+   * Our <input type="checkbox"> tag is not visible. Instead of the real
+   * checkbox, a replacement is shown which is supposed to have an adapted
+   * style. The replacement checkbox shown is part of the label and is rendered
+   * in the "::before" pseudo element of the label, hence the label is always
+   * clicked when the user clicks the replacement checkbox.
+   *
+   * This method finds corresponding label to the given checkbox and clicks it
+   * instead of the (fake) checkbox, like it is the case with real users.
+   *
+   * Alternatively, the checkbox' label can be passed.
+   *
+   * @param elem The checkbox or corresponding label
    */
-  moveClick(object) {
-    return browser
-      .actions()
-      .mouseMove(object)
-      .click()
-      .perform();
+  async clickCheckbox(elem: ElementFinder): Promise<void> {
+    const tagName = await elem.getTagName();
+    let label: ElementFinder = null; // Both types are clickable
+
+    if (tagName === 'input') {
+      if ((await elem.getAttribute('type')) === 'checkbox') {
+        label = elem.element(by.xpath('..')).$(`label[for="${await elem.getAttribute('id')}"]`);
+      } else {
+        return Promise.reject('element <input> must be of type checkbox');
+      }
+    } else if (tagName === 'label') {
+      label = elem;
+    } else {
+      return Promise.reject(
+        `element <${tagName}> is not of the correct type. You need to pass a checkbox or label`
+      );
+    }
+
+    return label.click();
   }
 
   /**
