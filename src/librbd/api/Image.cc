@@ -470,7 +470,11 @@ int Image<I>::list_descendants(
         child_io_ctx.get_namespace() != image.pool_namespace) {
       r = util::create_ioctx(ictx->md_ctx, "child image", image.pool_id,
                              image.pool_namespace, &child_io_ctx);
-      if (r < 0) {
+      if (r == -ENOENT) {
+        image.pool_name = "";
+        image.image_name = "";
+        continue;
+      } else if (r < 0) {
         return r;
       }
       child_pool_id = image.pool_id;
