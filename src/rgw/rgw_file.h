@@ -499,17 +499,17 @@ namespace rgw {
 	reserve += (1 + tfh->object_name().length());
 	tfh = tfh->parent;
       }
-      bool first = true;
+      int pos = 1;
       path.reserve(reserve);
       for (auto& s : boost::adaptors::reverse(segments)) {
-	if (! first)
+	if (pos > 1) {
 	  path += "/";
-	else {
+	} else {
 	  if (!omit_bucket && (path.front() != '/')) // pretty-print
 	    path += "/";
-	  first = false;
 	}
 	path += *s;
+	++pos;
       }
       return path;
     }
@@ -1453,8 +1453,9 @@ public:
       const char* mk = get<const char*>(offset);
       if (mk) {
 	std::string tmark{rgw_fh->relative_object_name()};
-	tmark += "/";
-	tmark += mk;	
+	if (tmark.length() > 0)
+	  tmark += "/";
+	tmark += mk;
 	marker = rgw_obj_key{std::move(tmark), "", ""};
       }
     }
