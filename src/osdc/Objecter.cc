@@ -5067,7 +5067,7 @@ void Objecter::enumerate_objects<librados::ListObjectImpl>(
 			    hobject_t) &&> on_finish);
 
 template
-void Objecter::enumerate_objects<RADOS::Entry>(
+void Objecter::enumerate_objects<neorados::Entry>(
   int64_t pool_id,
   std::string_view ns,
   hobject_t start,
@@ -5075,7 +5075,7 @@ void Objecter::enumerate_objects<RADOS::Entry>(
   const uint32_t max,
   const cb::list& filter_bl,
   fu2::unique_function<void(bs::error_code,
-			    std::vector<RADOS::Entry>,
+			    std::vector<neorados::Entry>,
 			    hobject_t) &&> on_finish);
 
 
@@ -5108,8 +5108,8 @@ void Objecter::_issue_enumerate<librados::ListObjectImpl>(
   hobject_t start,
   std::unique_ptr<EnumerationContext<librados::ListObjectImpl>> ctx);
 template
-void Objecter::_issue_enumerate<RADOS::Entry>(
-  hobject_t start, std::unique_ptr<EnumerationContext<RADOS::Entry>> ctx);
+void Objecter::_issue_enumerate<neorados::Entry>(
+  hobject_t start, std::unique_ptr<EnumerationContext<neorados::Entry>> ctx);
 
 template<typename T>
 void Objecter::_enumerate_reply(
@@ -5210,10 +5210,10 @@ void Objecter::_enumerate_reply<librados::ListObjectImpl>(
   std::unique_ptr<EnumerationContext<librados::ListObjectImpl>>&& ctx);
 
 template
-void Objecter::_enumerate_reply<RADOS::Entry>(
+void Objecter::_enumerate_reply<neorados::Entry>(
   cb::list&& bl,
   bs::error_code ec,
-  std::unique_ptr<EnumerationContext<RADOS::Entry>>&& ctx);
+  std::unique_ptr<EnumerationContext<neorados::Entry>>&& ctx);
 
 namespace {
   using namespace librados;
