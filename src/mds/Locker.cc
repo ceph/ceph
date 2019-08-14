@@ -193,7 +193,7 @@ struct MarkEventOnDestruct {
 bool Locker::acquire_locks(MDRequestRef& mdr,
 			   MutationImpl::LockOpVec& lov,
 			   CInode *auth_pin_freeze,
-			   bool auth_pin_nonblock)
+			   bool auth_pin_nonblocking)
 {
   if (mdr->done_locking &&
       !mdr->is_slave()) {  // not on slaves!  master requests locks piecemeal.
@@ -207,9 +207,11 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
   client_t client = mdr->get_client();
 
   set<MDSCacheObject*> mustpin;  // items to authpin
+  if (auth_pin_freeze)
+    mustpin.insert(auth_pin_freeze);
 
   // xlocks
-  for (int i = 0, size = lov.size(); i < size; ++i) {
+  for (size_t i = 0; i < lov.size(); ++i) {
     auto& p = lov[i];
     SimpleLock *lock = p.lock;
     MDSCacheObject *object = lock->get_parent();
@@ -224,7 +226,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	// get processed in proper order.
 	bool wait = false;
 	if (object->is_auth()) {
-	  if (!mdr->locks.count(lock)) {
+	  if (!mdr->is_xlocked(lock)) {
 	    set<mds_rank_t> ls;
 	    object->list_replicas(ls);
 	    for (auto m : ls) {
@@ -237,7 +239,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	} else {
 	  // if the lock is the latest locked one, it's possible that slave mds got the lock
 	  // while there are recovering mds.
-	  if (!mdr->locks.count(lock) || lock == mdr->locks.rbegin()->lock)
+	  if (!mdr->is_xlocked(lock) || mdr->is_last_locked(lock))
 	    wait = true;
 	}
 	if (wait) {
@@ -261,11 +263,11 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	  continue;
 	if (mdr->is_master()) {
 	  // master.  wrlock versionlock so we can pipeline dentry updates to journal.
-	  lov.add_wrlock(&dn->versionlock);
+	  lov.add_wrlock(&dn->versionlock, i + 1);
 	} else {
 	  // slave.  exclusively lock the dentry version (i.e. block other journal updates).
 	  // this makes rollback safe.
-	  lov.add_xlock(&dn->versionlock);
+	  lov.add_xlock(&dn->versionlock, i + 1);
 	}
       }
       if (lock->get_type() > CEPH_LOCK_IVERSION) {
@@ -275,11 +277,11 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	  continue;
 	if (mdr->is_master()) {
 	  // master.  wrlock versionlock so we can pipeline inode updates to journal.
-	  lov.add_wrlock(&in->versionlock);
+	  lov.add_wrlock(&in->versionlock, i + 1);
 	} else {
 	  // slave.  exclusively lock the inode version (i.e. block other journal updates).
 	  // this makes rollback safe.
-	  lov.add_xlock(&in->versionlock);
+	  lov.add_xlock(&in->versionlock, i + 1);
 	}
       }
     } else if (p.is_wrlock()) {
@@ -338,14 +340,13 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
     }
     
     if (!object->is_auth()) {
-      if (!mdr->locks.empty())
-	drop_locks(mdr.get());
       if (object->is_ambiguous_auth()) {
 	// wait
-	marker.message = "waiting for single auth, object is being migrated";
 	dout(10) << " ambiguous auth, waiting to authpin " << *object << dendl;
-	object->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
+	drop_locks(mdr.get());
 	mdr->drop_local_auth_pins();
+	marker.message = "waiting for single auth, object is being migrated";
+	object->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(mdcache, mdr));
 	return false;
       }
       mustpin_remote[object->authority().first].insert(object);
@@ -356,7 +357,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       // wait
       drop_locks(mdr.get());
       mdr->drop_local_auth_pins();
-      if (auth_pin_nonblock) {
+      if (auth_pin_nonblocking) {
 	dout(10) << " can't auth_pin (freezing?) " << *object << ", nonblocking" << dendl;
 	mdr->aborted = true;
 	return false;
@@ -395,47 +396,45 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
     for (const auto& p : mdr->object_states) {
       if (p.second.remote_auth_pinned == MDS_RANK_NONE)
 	continue;
-      if (mustpin.count(p.first)) {
-	ceph_assert(p.second.remote_auth_pinned == p.first->authority().first);
-	auto q = mustpin_remote.find(p.second.remote_auth_pinned);
-	if (q != mustpin_remote.end())
-	  q->second.insert(p.first);
-      }
+      ceph_assert(p.second.remote_auth_pinned == p.first->authority().first);
+      auto q = mustpin_remote.find(p.second.remote_auth_pinned);
+      if (q != mustpin_remote.end())
+	q->second.insert(p.first);
     }
-    for (map<mds_rank_t, set<MDSCacheObject*> >::iterator p = mustpin_remote.begin();
-	 p != mustpin_remote.end();
-	 ++p) {
-      dout(10) << "requesting remote auth_pins from mds." << p->first << dendl;
+
+    for (auto& p : mustpin_remote) {
+      dout(10) << "requesting remote auth_pins from mds." << p.first << dendl;
 
       // wait for active auth
       if (mds->is_cluster_degraded() &&
-	  !mds->mdsmap->is_clientreplay_or_active_or_stopping(p->first)) {
-	dout(10) << " mds." << p->first << " is not active" << dendl;
+	  !mds->mdsmap->is_clientreplay_or_active_or_stopping(p.first)) {
+	dout(10) << " mds." << p.first << " is not active" << dendl;
 	if (mdr->more()->waiting_on_slave.empty())
-	  mds->wait_for_active_peer(p->first, new C_MDS_RetryRequest(mdcache, mdr));
+	  mds->wait_for_active_peer(p.first, new C_MDS_RetryRequest(mdcache, mdr));
 	return false;
       }
       
       auto req = make_message<MMDSSlaveRequest>(mdr->reqid, mdr->attempt,
 						MMDSSlaveRequest::OP_AUTHPIN);
-      for (set<MDSCacheObject*>::iterator q = p->second.begin();
-	   q != p->second.end();
-	   ++q) {
-	dout(10) << " req remote auth_pin of " << **q << dendl;
+      for (auto& o : p.second) {
+	dout(10) << " req remote auth_pin of " << *o << dendl;
 	MDSCacheObjectInfo info;
-	(*q)->set_object_info(info);
+	o->set_object_info(info);
 	req->get_authpins().push_back(info);
-	if (*q == auth_pin_freeze)
-	  (*q)->set_object_info(req->get_authpin_freeze());
-	mdr->pin(*q);
+	if (o == auth_pin_freeze)
+	  o->set_object_info(req->get_authpin_freeze());
+	mdr->pin(o);
       }
-      if (auth_pin_nonblock)
-	req->mark_nonblock();
-      mds->send_message_mds(req, p->first);
+      if (auth_pin_nonblocking)
+	req->mark_nonblocking();
+      else if (!mdr->locks.empty())
+	req->mark_notify_blocking();
+
+      mds->send_message_mds(req, p.first);
 
       // put in waiting list
-      ceph_assert(mdr->more()->waiting_on_slave.count(p->first) == 0);
-      mdr->more()->waiting_on_slave.insert(p->first);
+      auto ret = mdr->more()->waiting_on_slave.insert(p.first);
+      ceph_assert(ret.second);
     }
     return false;
   }
@@ -446,116 +445,62 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 
   // acquire locks.
   // make sure they match currently acquired locks.
-  auto existing = mdr->locks.begin();
   for (const auto& p : lov) {
     auto lock = p.lock;
-
-    bool need_wrlock = p.is_wrlock();
-    bool need_remote_wrlock = p.is_remote_wrlock();
-
-    // already locked?
-    if (existing != mdr->locks.end() && existing->lock == lock) {
-      // right kind?
-      auto it = existing++;
-      auto have = *it; // don't reference
-
-      if (have.is_xlock() && p.is_xlock()) {
+    if (p.is_xlock()) {
+      if (mdr->is_xlocked(lock)) {
 	dout(10) << " already xlocked " << *lock << " " << *lock->get_parent() << dendl;
 	continue;
       }
-
-      if (have.is_remote_wrlock() &&
-	  (!need_remote_wrlock || have.wrlock_target != p.wrlock_target)) {
-	dout(10) << " unlocking remote_wrlock on wrong mds." << have.wrlock_target
-		 << " " << *lock << " " << *lock->get_parent() << dendl;
-	remote_wrlock_finish(it, mdr.get());
-	have.clear_remote_wrlock();
-      }
-
-      if (need_wrlock || need_remote_wrlock) {
-	if (need_wrlock == have.is_wrlock() &&
-	    need_remote_wrlock == have.is_remote_wrlock()) {
-	  if (need_wrlock)
-	    dout(10) << " already wrlocked " << *lock << " " << *lock->get_parent() << dendl;
-	  if (need_remote_wrlock)
-	    dout(10) << " already remote_wrlocked " << *lock << " " << *lock->get_parent() << dendl;
-	  continue;
-	}
-
-	if (have.is_wrlock()) {
-	  if (!need_wrlock)
-	    dout(10) << " unlocking extra " << *lock << " " << *lock->get_parent() << dendl;
-	  else if (need_remote_wrlock) // acquire remote_wrlock first
-	    dout(10) << " unlocking out-of-order " << *lock << " " << *lock->get_parent() << dendl;
-	  bool need_issue = false;
-	  wrlock_finish(it, mdr.get(), &need_issue);
-	  if (need_issue)
-	    issue_set.insert(static_cast<CInode*>(lock->get_parent()));
-	}
-      } else if (have.is_rdlock() && p.is_rdlock()) {
-	dout(10) << " already rdlocked " << *lock << " " << *lock->get_parent() << dendl;
-	continue;
-      }
-    }
-    
-    // hose any stray locks
-    while (existing != mdr->locks.end()) {
-      auto it = existing++;
-      auto stray = *it; // don't reference
-      dout(10) << " unlocking out-of-order " << *stray.lock << " " << *stray.lock->get_parent() << dendl;
-      bool need_issue = false;
-      if (stray.is_xlock()) {
-	xlock_finish(it, mdr.get(), &need_issue);
-      } else if (stray.is_rdlock()) {
-	rdlock_finish(it, mdr.get(), &need_issue);
-      } else {
-	// may have acquired both wrlock and remore wrlock
-	if (stray.is_wrlock())
-	  wrlock_finish(it, mdr.get(), &need_issue);
-	if (stray.is_remote_wrlock())
-	  remote_wrlock_finish(it, mdr.get());
-      }
-      if (need_issue)
-	issue_set.insert(static_cast<CInode*>(stray.lock->get_parent()));
-    }
-
-    // lock
-    if (mdr->locking && lock != mdr->locking) {
-      cancel_locking(mdr.get(), &issue_set);
-    }
-    if (p.is_xlock()) {
+      if (mdr->locking && lock != mdr->locking)
+	cancel_locking(mdr.get(), &issue_set);
       if (!xlock_start(lock, mdr)) {
 	marker.message = "failed to xlock, waiting";
 	goto out;
       }
       dout(10) << " got xlock on " << *lock << " " << *lock->get_parent() << dendl;
-    } else if (need_wrlock || need_remote_wrlock) {
-      if (need_remote_wrlock && !mdr->is_remote_wrlocked(lock)) {
-        marker.message = "waiting for remote wrlocks";
-	remote_wrlock_start(lock, p.wrlock_target, mdr);
-	goto out;
+    } else if (p.is_wrlock() || p.is_remote_wrlock()) {
+      auto it = mdr->locks.find(lock);
+      if (p.is_remote_wrlock()) {
+	if (it != mdr->locks.end() && it->is_remote_wrlock()) {
+	  dout(10) << " already remote_wrlocked " << *lock << " " << *lock->get_parent() << dendl;
+	} else {
+	  if (mdr->locking && lock != mdr->locking)
+	    cancel_locking(mdr.get(), &issue_set);
+	  marker.message = "waiting for remote wrlocks";
+	  remote_wrlock_start(lock, p.wrlock_target, mdr);
+	  goto out;
+	}
       }
-      if (need_wrlock) {
+      if (p.is_wrlock()) {
+	if (it != mdr->locks.end() && it->is_wrlock()) {
+	  dout(10) << " already wrlocked " << *lock << " " << *lock->get_parent() << dendl;
+	  continue;
+	}
 	client_t _client = p.is_state_pin() ? lock->get_excl_client() : client;
-	if (need_remote_wrlock && !lock->can_wrlock(_client)) {
+	if (p.is_remote_wrlock() && !lock->can_wrlock(_client)) {
 	  marker.message = "failed to wrlock, dropping remote wrlock and waiting";
 	  // can't take the wrlock because the scatter lock is gathering. need to
 	  // release the remote wrlock, so that the gathering process can finish.
-	  auto it =  mdr->locks.end();
-	  ++it;
+	  ceph_assert(it != mdr->locks.end());
 	  remote_wrlock_finish(it, mdr.get());
 	  remote_wrlock_start(lock, p.wrlock_target, mdr);
 	  goto out;
 	}
 	// nowait if we have already gotten remote wrlock
 	if (!wrlock_start(lock, mdr)) {
-	  ceph_assert(!need_remote_wrlock);
+	  ceph_assert(!p.is_remote_wrlock());
 	  marker.message = "failed to wrlock, waiting";
 	  goto out;
 	}
 	dout(10) << " got wrlock on " << *lock << " " << *lock->get_parent() << dendl;
       }
     } else {
+      if (mdr->is_rdlocked(lock)) {
+	dout(10) << " already rdlocked " << *lock << " " << *lock->get_parent() << dendl;
+	continue;
+      }
+
       ceph_assert(mdr->is_master());
       if (lock->needs_recover()) {
 	if (mds->is_cluster_degraded()) {
@@ -580,27 +525,6 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
       }
       dout(10) << " got rdlock on " << *lock << " " << *lock->get_parent() << dendl;
     }
-  }
-    
-  // any extra unneeded locks?
-  while (existing != mdr->locks.end()) {
-    auto it = existing++;
-    auto stray = *it;
-    dout(10) << " unlocking extra " << *stray.lock << " " << *stray.lock->get_parent() << dendl;
-    bool need_issue = false;
-    if (stray.is_xlock()) {
-      xlock_finish(it, mdr.get(), &need_issue);
-    } else if (stray.is_rdlock()) {
-      rdlock_finish(it, mdr.get(), &need_issue);
-    } else {
-      // may have acquired both wrlock and remore wrlock
-      if (stray.is_wrlock())
-	wrlock_finish(it, mdr.get(), &need_issue);
-      if (stray.is_remote_wrlock())
-	remote_wrlock_finish(it, mdr.get());
-    }
-    if (need_issue)
-      issue_set.insert(static_cast<CInode*>(stray.lock->get_parent()));
   }
 
   mdr->done_locking = true;
@@ -1336,7 +1260,7 @@ bool Locker::rdlock_start(SimpleLock *lock, MDRequestRef& mut, bool as_anon)
     // can read?  grab ref.
     if (lock->can_rdlock(client)) {
       lock->get_rdlock();
-      mut->locks.emplace_hint(mut->locks.end(), lock, MutationImpl::LockOp::RDLOCK);
+      mut->emplace_lock(lock, MutationImpl::LockOp::RDLOCK);
       return true;
     }
 
@@ -1423,7 +1347,7 @@ void Locker::rdlock_take_set(MutationImpl::LockOpVec& lov, MutationRef& mut)
   for (const auto& p : lov) {
     ceph_assert(p.is_rdlock());
     p.lock->get_rdlock();
-    mut->locks.emplace(p.lock, MutationImpl::LockOp::RDLOCK);
+    mut->emplace_lock(p.lock, MutationImpl::LockOp::RDLOCK);
   }
 }
 
@@ -1439,7 +1363,7 @@ void Locker::wrlock_force(SimpleLock *lock, MutationRef& mut)
   dout(7) << "wrlock_force  on " << *lock
 	  << " on " << *lock->get_parent() << dendl;  
   lock->get_wrlock(true);
-  mut->locks.emplace(lock, MutationImpl::LockOp::WRLOCK);
+  mut->emplace_lock(lock, MutationImpl::LockOp::WRLOCK);
 }
 
 bool Locker::wrlock_try(SimpleLock *lock, MutationRef& mut)
@@ -1449,7 +1373,7 @@ bool Locker::wrlock_try(SimpleLock *lock, MutationRef& mut)
   while (1) {
     if (lock->can_wrlock(mut->get_client())) {
       lock->get_wrlock();
-      mut->locks.emplace(lock, MutationImpl::LockOp::WRLOCK);
+      mut->emplace_lock(lock, MutationImpl::LockOp::WRLOCK);
       return true;
     }
     if (!lock->is_stable())
@@ -1491,7 +1415,7 @@ bool Locker::wrlock_start(const MutationImpl::LockOp &op, MDRequestRef& mut)
     if (lock->can_wrlock(client) &&
 	(!want_scatter || lock->get_state() == LOCK_MIX)) {
       lock->get_wrlock();
-      auto it = mut->locks.emplace_hint(mut->locks.end(), lock, MutationImpl::LockOp::WRLOCK);
+      auto it = mut->emplace_lock(lock, MutationImpl::LockOp::WRLOCK);
       it->flags |= MutationImpl::LockOp::WRLOCK; // may already remote_wrlocked
       return true;
     }
@@ -1631,7 +1555,7 @@ bool Locker::xlock_start(SimpleLock *lock, MDRequestRef& mut)
 	    in && in->issued_caps_need_gather(lock))) { // xlocker does not hold shared cap
 	lock->set_state(LOCK_XLOCK);
 	lock->get_xlock(mut, client);
-	mut->locks.emplace_hint(mut->locks.end(), lock, MutationImpl::LockOp::XLOCK);
+	mut->emplace_lock(lock, MutationImpl::LockOp::XLOCK);
 	mut->finish_locking(lock);
 	return true;
       }
@@ -4510,7 +4434,7 @@ void Locker::scatter_writebehind(ScatterLock *lock)
 
   // forcefully take a wrlock
   lock->get_wrlock(true);
-  mut->locks.emplace(lock, MutationImpl::LockOp::WRLOCK);
+  mut->emplace_lock(lock, MutationImpl::LockOp::WRLOCK);
 
   in->pre_cow_old_inode();  // avoid cow mayhem
 
@@ -4850,8 +4774,8 @@ void Locker::local_wrlock_grab(LocalLock *lock, MutationRef& mut)
   ceph_assert(lock->can_wrlock());
   lock->get_wrlock(mut->get_client());
 
-  auto ret = mut->locks.emplace(lock, MutationImpl::LockOp::WRLOCK);
-  ceph_assert(ret.second);
+  auto it = mut->emplace_lock(lock, MutationImpl::LockOp::WRLOCK);
+  ceph_assert(it->is_wrlock());
 }
 
 bool Locker::local_wrlock_start(LocalLock *lock, MDRequestRef& mut)
@@ -4862,7 +4786,7 @@ bool Locker::local_wrlock_start(LocalLock *lock, MDRequestRef& mut)
   ceph_assert(lock->get_parent()->is_auth());
   if (lock->can_wrlock()) {
     lock->get_wrlock(mut->get_client());
-    auto it = mut->locks.emplace_hint(mut->locks.end(), lock, MutationImpl::LockOp::WRLOCK);
+    auto it = mut->emplace_lock(lock, MutationImpl::LockOp::WRLOCK);
     ceph_assert(it->is_wrlock());
     return true;
   } else {
@@ -4898,7 +4822,7 @@ bool Locker::local_xlock_start(LocalLock *lock, MDRequestRef& mut)
   }
 
   lock->get_xlock(mut, mut->get_client());
-  mut->locks.emplace_hint(mut->locks.end(), lock, MutationImpl::LockOp::XLOCK);
+  mut->emplace_lock(lock, MutationImpl::LockOp::XLOCK);
   return true;
 }
 

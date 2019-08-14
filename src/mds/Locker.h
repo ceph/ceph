@@ -58,7 +58,7 @@ public:
   bool acquire_locks(MDRequestRef& mdr,
 		     MutationImpl::LockOpVec& lov,
 		     CInode *auth_pin_freeze=NULL,
-		     bool auth_pin_nonblock=false);
+		     bool auth_pin_nonblocking=false);
 
   void notify_freeze_waiter(MDSCacheObject *o);
   void cancel_locking(MutationImpl *mut, std::set<CInode*> *pneed_issue);

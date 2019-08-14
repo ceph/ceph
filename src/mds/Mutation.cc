@@ -94,7 +94,21 @@ void MutationImpl::LockOpVec::erase_rdlock(SimpleLock* lock)
 }
 void MutationImpl::LockOpVec::sort_and_merge()
 {
-  std::sort(begin(), end());
+  // sort locks on the same object
+  auto cmp = [](const LockOp &l, const LockOp &r) {
+    ceph_assert(l.lock->get_parent() == r.lock->get_parent());
+    return l.lock->type->type < r.lock->type->type;
+  };
+  for (auto i = begin(), j = i; ; ++i) {
+    if (i == end()) {
+      std::sort(j, i, cmp);
+      break;
+    }
+    if (j->lock->get_parent() != i->lock->get_parent()) {
+      std::sort(j, i, cmp);
+      j = i;
+    }
+  }
   // merge ops on the same lock
   for (auto i = end() - 1; i > begin(); ) {
     auto j = i;
@@ -118,7 +132,7 @@ void MutationImpl::LockOpVec::sort_and_merge()
     if (j->is_xlock()) {
       // xlock overwrites other types
       ceph_assert(!j->is_remote_wrlock());
-      j->flags = MutationImpl::LockOp::XLOCK;
+      j->flags = LockOp::XLOCK;
     }
     erase(j + 1, i + 1);
     i = j - 1;

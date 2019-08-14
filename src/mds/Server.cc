@@ -2410,17 +2410,11 @@ void Server::dispatch_client_request(MDRequestRef& mdr)
 
   dout(7) << "dispatch_client_request " << *req << dendl;
 
-  if (req->may_write()) {
-    if (mdcache->is_readonly()) {
-      dout(10) << " read-only FS" << dendl;
-      respond_to_request(mdr, -EROFS);
-      return;
-    }
-    if (mdr->has_more() && mdr->more()->slave_error) {
-      dout(10) << " got error from slaves" << dendl;
-      respond_to_request(mdr, mdr->more()->slave_error);
-      return;
-    }
+  if (mdcache->is_readonly() ||
+      (mdr->has_more() && mdr->more()->slave_error == -EROFS)) {
+    dout(10) << " read-only FS" << dendl;
+    respond_to_request(mdr, -EROFS);
+    return;
   }
   
   if (is_full) {
@@ -2581,6 +2575,12 @@ void Server::handle_slave_request(const cref_t<MMDSSlaveRequest> &m)
     m->straybl.clear();
   }
 
+  if (!mds->is_clientreplay() && !mds->is_active() && !mds->is_stopping()) {
+    dout(3) << "not clientreplay|active yet, waiting" << dendl;
+    mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
+    return;
+  }
+
   // am i a new slave?
   MDRequestRef mdr;
   if (mdcache->have_request(m->get_reqid())) {
@@ -2594,7 +2594,6 @@ void Server::handle_slave_request(const cref_t<MMDSSlaveRequest> &m)
       return;
     }
 
-
     if (mdr->attempt < m->get_attempt()) {
       // mine is old, close it out
       dout(10) << "local request " << *mdr << " attempt " << mdr->attempt << " < " << m->get_attempt()
@@ -2606,12 +2605,24 @@ void Server::handle_slave_request(const cref_t<MMDSSlaveRequest> &m)
       return;
     }
 
-    if (m->get_op() == MMDSSlaveRequest::OP_FINISH && m->is_abort()) {
-      mdr->aborted = true;
-      if (mdr->slave_request) {
-	// only abort on-going xlock, wrlock and auth pin
-	ceph_assert(!mdr->slave_did_prepare());
+    // may get these requests while mdr->slave_request is non-null
+    if (m->get_op() == MMDSSlaveRequest::OP_DROPLOCKS) {
+      mds->locker->drop_locks(mdr.get());
+      return;
+    }
+    if (m->get_op() == MMDSSlaveRequest::OP_FINISH) {
+      if (m->is_abort()) {
+	mdr->aborted = true;
+	if (mdr->slave_request) {
+	  // only abort on-going xlock, wrlock and auth pin
+	  ceph_assert(!mdr->slave_did_prepare());
+	} else {
+	  mdcache->request_finish(mdr);
+	}
       } else {
+	if (m->inode_export.length() > 0)
+	  mdr->more()->inode_import = m->inode_export;
+	// finish off request.
 	mdcache->request_finish(mdr);
       }
       return;
@@ -2634,12 +2645,8 @@ void Server::handle_slave_request(const cref_t<MMDSSlaveRequest> &m)
     mdr->straydn = straydn;
   }
 
-  if (!mds->is_clientreplay() && !mds->is_active() && !mds->is_stopping()) {
-    dout(3) << "not clientreplay|active yet, waiting" << dendl;
-    mds->wait_for_replay(new C_MDS_RetryMessage(mds, m));
-    return;
-  } else if (mds->is_clientreplay() && !mds->mdsmap->is_clientreplay(from) &&
-	     mdr->locks.empty()) {
+  if (mds->is_clientreplay() && !mds->mdsmap->is_clientreplay(from) &&
+      mdr->locks.empty()) {
     dout(3) << "not active yet, waiting" << dendl;
     mds->wait_for_active(new C_MDS_RetryMessage(mds, m));
     return;
@@ -2688,7 +2695,7 @@ void Server::handle_slave_request_reply(const cref_t<MMDSSlaveRequest> &m)
       mdr->more()->slaves.insert(from);
       lock->decode_locked_state(m->get_lock_data());
       dout(10) << "got remote xlock on " << *lock << " on " << *lock->get_parent() << dendl;
-      mdr->locks.emplace_hint(mdr->locks.end(), lock, MutationImpl::LockOp::XLOCK);
+      mdr->emplace_lock(lock, MutationImpl::LockOp::XLOCK);
       mdr->finish_locking(lock);
       lock->get_xlock(mdr, mdr->get_client());
 
@@ -2706,8 +2713,7 @@ void Server::handle_slave_request_reply(const cref_t<MMDSSlaveRequest> &m)
 					       m->get_object_info());
       mdr->more()->slaves.insert(from);
       dout(10) << "got remote wrlock on " << *lock << " on " << *lock->get_parent() << dendl;
-      auto it = mdr->locks.emplace_hint(mdr->locks.end(),
-					lock, MutationImpl::LockOp::REMOTE_WRLOCK, from);
+      auto it = mdr->emplace_lock(lock, MutationImpl::LockOp::REMOTE_WRLOCK, from);
       ceph_assert(it->is_remote_wrlock());
       ceph_assert(it->wrlock_target == from);
 
@@ -2837,11 +2843,6 @@ void Server::dispatch_slave_request(MDRequestRef& mdr)
     }
     break;
 
-  case MMDSSlaveRequest::OP_DROPLOCKS:
-    mds->locker->drop_locks(mdr.get());
-    mdr->reset_slave_request();
-    break;
-
   case MMDSSlaveRequest::OP_AUTHPIN:
     handle_slave_auth_pin(mdr);
     break;
@@ -2859,14 +2860,6 @@ void Server::dispatch_slave_request(MDRequestRef& mdr)
     handle_slave_rename_prep(mdr);
     break;
 
-  case MMDSSlaveRequest::OP_FINISH:
-    // information about rename imported caps
-    if (mdr->slave_request->inode_export.length() > 0)
-      mdr->more()->inode_import = mdr->slave_request->inode_export;
-    // finish off request.
-    mdcache->request_finish(mdr);
-    break;
-
   default: 
     ceph_abort();
   }
@@ -2879,7 +2872,9 @@ void Server::handle_slave_auth_pin(MDRequestRef& mdr)
   // build list of objects
   list<MDSCacheObject*> objects;
   CInode *auth_pin_freeze = NULL;
+  bool nonblocking = mdr->slave_request->is_nonblocking();
   bool fail = false, wouldblock = false, readonly = false;
+  ref_t<MMDSSlaveRequest> reply;
 
   if (mdcache->is_readonly()) {
     dout(10) << " read-only FS" << dendl;
@@ -2913,7 +2908,7 @@ void Server::handle_slave_auth_pin(MDRequestRef& mdr)
       if (mdr->is_auth_pinned(obj))
 	continue;
       if (!mdr->can_auth_pin(obj)) {
-	if (mdr->slave_request->is_nonblock()) {
+	if (nonblocking) {
 	  dout(10) << " can't auth_pin (freezing?) " << *obj << " nonblocking" << dendl;
 	  fail = true;
 	  wouldblock = true;
@@ -2925,15 +2920,12 @@ void Server::handle_slave_auth_pin(MDRequestRef& mdr)
 	mdr->drop_local_auth_pins();
 
 	mds->locker->notify_freeze_waiter(obj);
-	return;
+	goto blocked;
       }
     }
   }
 
-  // auth pin!
-  if (fail) {
-    mdr->drop_local_auth_pins();  // just in case
-  } else {
+  if (!fail) {
     /* freeze authpin wrong inode */
     if (mdr->has_more() && mdr->more()->is_freeze_authpin &&
 	mdr->more()->rename_inode != auth_pin_freeze)
@@ -2952,38 +2944,50 @@ void Server::handle_slave_auth_pin(MDRequestRef& mdr)
       if (!mdr->freeze_auth_pin(auth_pin_freeze)) {
 	auth_pin_freeze->add_waiter(CInode::WAIT_FROZEN, new C_MDS_RetryRequest(mdcache, mdr));
 	mds->mdlog->flush();
-	return;
+	goto blocked;
       }
     }
+  }
+
+  reply = make_message<MMDSSlaveRequest>(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_AUTHPINACK);
+
+  if (fail) {
+    mdr->drop_local_auth_pins();  // just in case
+    if (readonly)
+      reply->mark_error_rofs();
+    if (wouldblock)
+      reply->mark_error_wouldblock();
+  } else {
+    // auth pin!
     for (const auto& obj : objects) {
       dout(10) << "auth_pinning " << *obj << dendl;
       mdr->auth_pin(obj);
     }
+    // return list of my auth_pins (if any)
+    for (const auto &p : mdr->object_states) {
+      if (!p.second.auth_pinned)
+	continue;
+      MDSCacheObjectInfo info;
+      p.first->set_object_info(info);
+      reply->get_authpins().push_back(info);
+      if (p.first == (MDSCacheObject*)auth_pin_freeze)
+	auth_pin_freeze->set_object_info(reply->get_authpin_freeze());
+    }
   }
-
-  // ack!
-  auto reply = make_message<MMDSSlaveRequest>(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_AUTHPINACK);
-  
-  // return list of my auth_pins (if any)
-  for (const auto &p : mdr->object_states) {
-    if (!p.second.auth_pinned)
-      continue;
-    MDSCacheObjectInfo info;
-    p.first->set_object_info(info);
-    reply->get_authpins().push_back(info);
-    if (p.first == (MDSCacheObject*)auth_pin_freeze)
-      auth_pin_freeze->set_object_info(reply->get_authpin_freeze());
-  }
-
-  if (wouldblock)
-    reply->mark_error_wouldblock();
-  if (readonly)
-    reply->mark_error_rofs();
 
   mds->send_message_mds(reply, mdr->slave_to_mds);
   
   // clean up this request
   mdr->reset_slave_request();
+  return;
+
+blocked:
+  if (mdr->slave_request->should_notify_blocking()) {
+    reply = make_message<MMDSSlaveRequest>(mdr->reqid, mdr->attempt, MMDSSlaveRequest::OP_AUTHPINACK);
+    reply->mark_req_blocked();
+    mds->send_message_mds(reply, mdr->slave_to_mds);
+    mdr->slave_request->clear_notify_blocking();
+  }
   return;
 }
 
@@ -2991,6 +2995,12 @@ void Server::handle_slave_auth_pin_ack(MDRequestRef& mdr, const cref_t<MMDSSlave
 {
   dout(10) << "handle_slave_auth_pin_ack on " << *mdr << " " << *ack << dendl;
   mds_rank_t from = mds_rank_t(ack->get_source().num());
+
+  if (ack->is_req_blocked()) {
+    // slave auth pin is blocked, drop locks to avoid deadlock
+    mds->locker->drop_locks(mdr.get(), nullptr);
+    return;
+  }
 
   // added auth pins?
   set<MDSCacheObject*> pinned;
@@ -3025,20 +3035,18 @@ void Server::handle_slave_auth_pin_ack(MDRequestRef& mdr, const cref_t<MMDSSlave
     }
   }
 
-  if (ack->is_error_rofs()) {
-    mdr->more()->slave_error = -EROFS;
-    mdr->aborted = true;
-  } else if (ack->is_error_wouldblock()) {
-    mdr->more()->slave_error = -EWOULDBLOCK;
-    mdr->aborted = true;
-  }
-  
   // note slave
   mdr->more()->slaves.insert(from);
 
   // clear from waiting list
-  ceph_assert(mdr->more()->waiting_on_slave.count(from));
-  mdr->more()->waiting_on_slave.erase(from);
+  auto ret = mdr->more()->waiting_on_slave.erase(from);
+  ceph_assert(ret);
+
+  if (ack->is_error_rofs()) {
+    mdr->more()->slave_error = -EROFS;
+  } else if (ack->is_error_wouldblock()) {
+    mdr->more()->slave_error = -EWOULDBLOCK;
+  }
 
   // go again?
   if (mdr->more()->waiting_on_slave.empty())
@@ -7619,7 +7627,7 @@ void Server::handle_client_rename(MDRequestRef& mdr)
 	lov.add_rdlock(&oldin->filelock);   // to verify it's empty
   }
 
-  CInode *auth_pin_freeze = !srcdn->is_auth() && srcdnl->is_primary() ? srci : NULL;
+  CInode *auth_pin_freeze = !srcdn->is_auth() && srcdnl->is_primary() ? srci : nullptr;
   if (!mds->locker->acquire_locks(mdr, lov, auth_pin_freeze))
     return;
 
