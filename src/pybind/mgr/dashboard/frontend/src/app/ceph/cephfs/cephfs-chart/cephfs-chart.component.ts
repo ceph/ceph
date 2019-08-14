@@ -151,6 +151,7 @@ export class CephfsChartComponent implements OnChanges, OnInit {
     _.merge(this.chart, {
       datasets: chartDataSets
     });
+    this.chart.datasets = [...this.chart.datasets]; // Force angular to update
   }
 
   /**

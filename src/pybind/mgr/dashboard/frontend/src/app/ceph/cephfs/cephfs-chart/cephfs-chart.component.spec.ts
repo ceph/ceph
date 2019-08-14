@@ -70,4 +70,11 @@ describe('CephfsChartComponent', () => {
       }
     ]);
   });
+
+  it('should force angular to update the chart datasets array in order to update the graph', () => {
+    const oldDatasets = component.chart.datasets;
+    component.ngOnChanges();
+    expect(oldDatasets).toEqual(component.chart.datasets);
+    expect(oldDatasets).not.toBe(component.chart.datasets);
+  });
 });
