@@ -290,6 +290,7 @@ if(NOT fmt_FOUND)
   message(STATUS "Could not find fmt, will build it")
   add_subdirectory(fmt)
 endif()
+include_directories(SYSTEM "${CMAKE_SOURCE_DIR}/src/fmt/include")
 
 if(WITH_SEASTAR)
   find_package(c-ares 1.13.0 QUIET)
@@ -472,6 +473,7 @@ option(WITH_LIBRADOSSTRIPER "build with libradosstriper support" ON)
 
 add_subdirectory(include)
 add_subdirectory(librados)
+add_subdirectory(RADOS)
 
 if(WITH_LIBRADOSSTRIPER)
   add_subdirectory(libradosstriper)
