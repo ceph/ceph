@@ -1319,7 +1319,7 @@ void md_config_t::_get_my_sections(const ConfigValues& values,
 {
   sections.push_back(values.name.to_str());
 
-  sections.push_back(values.name.get_type_name());
+  sections.push_back(values.name.get_type_name().data());
 
   sections.push_back("global");
 }

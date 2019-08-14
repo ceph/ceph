@@ -144,7 +144,7 @@ ConfigMap::generate_entity_map(
   vector<pair<string,Section*>> sections = { make_pair("global", &global) };
   auto p = by_type.find(name.get_type_name());
   if (p != by_type.end()) {
-    sections.push_back(make_pair(name.get_type_name(), &p->second));
+    sections.emplace_back(name.get_type_name(), &p->second);
   }
   vector<std::string> name_bits;
   boost::split(name_bits, name.to_str(), [](char c){ return c == '.'; });
