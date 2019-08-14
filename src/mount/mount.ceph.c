@@ -344,6 +344,7 @@ int main(int argc, char *argv[])
 		exit(1);
 	}
 
+	/* Ensure the ceph key_type is available */
 	modprobe();
 
 	popts = parse_options(opts, &flags);
