@@ -140,7 +140,7 @@ void Device::binding_port(CephContext *cct, int port_num) {
     Port *port = new Port(cct, ctxt, port_id);
     if (port_id == port_num && port->get_port_attr()->state == IBV_PORT_ACTIVE) {
       active_port = port;
-      ldout(cct, 1) << __func__ << " found active port " << port_id << dendl;
+      ldout(cct, 1) << __func__ << " found active port " << static_cast<int>(port_id) << dendl;
       break;
     } else {
       ldout(cct, 10) << __func__ << " port " << port_id << " is not what we want. state: " << port->get_port_attr()->state << ")"<< dendl;
