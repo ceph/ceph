@@ -3,6 +3,7 @@
 
 #include "librbd/Journal.h"
 #include "include/rados/librados.hpp"
+#include "common/AsyncOpTracker.h"
 #include "common/errno.h"
 #include "common/Timer.h"
 #include "common/WorkQueue.h"
@@ -1127,7 +1128,8 @@ void Journal<I>::destroy_journaler(int r) {
       std::lock_guard locker{m_lock};
       m_journaler->shut_down(ctx);
     });
-  m_async_journal_op_tracker.wait(m_image_ctx, ctx);
+  ctx = create_async_context_callback(m_image_ctx, ctx);
+  m_async_journal_op_tracker.wait_for_ops(ctx);
 }
 
 template <typename I>
@@ -1640,7 +1642,7 @@ int Journal<I>::check_resync_requested(bool *do_resync) {
 }
 
 struct C_RefreshTags : public Context {
-  util::AsyncOpTracker &async_op_tracker;
+  AsyncOpTracker &async_op_tracker;
   Context *on_finish = nullptr;
 
   ceph::mutex lock =
@@ -1648,7 +1650,7 @@ struct C_RefreshTags : public Context {
   uint64_t tag_tid = 0;
   journal::TagData tag_data;
 
-  explicit C_RefreshTags(util::AsyncOpTracker &async_op_tracker)
+  explicit C_RefreshTags(AsyncOpTracker &async_op_tracker)
     : async_op_tracker(async_op_tracker) {
     async_op_tracker.start_op();
   }
