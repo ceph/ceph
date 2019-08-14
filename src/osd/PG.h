@@ -2014,8 +2014,7 @@ protected:
 
       typedef boost::mpl::list <
 	boost::statechart::custom_reaction< ActMap >,
-	boost::statechart::custom_reaction< MNotifyRec >,
-	boost::statechart::transition< NeedActingChange, WaitActingChange >
+	boost::statechart::custom_reaction< MNotifyRec >
 	> reactions;
       boost::statechart::result react(const ActMap&);
       boost::statechart::result react(const MNotifyRec&);
@@ -2399,6 +2398,7 @@ protected:
 	boost::statechart::custom_reaction< MLogRec >,
 	boost::statechart::custom_reaction< GotLog >,
 	boost::statechart::custom_reaction< AdvMap >,
+	boost::statechart::transition< NeedActingChange, WaitActingChange >,
 	boost::statechart::transition< IsIncomplete, Incomplete >
 	> reactions;
       boost::statechart::result react(const AdvMap&);
