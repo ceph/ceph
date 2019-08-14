@@ -180,7 +180,7 @@ public:
     EXPECT_CALL(*mock_threads.timer, add_event_after(_, _))
       .WillOnce(DoAll(WithArg<1>(Invoke([this](Context *ctx) {
                         auto wrapped_ctx =
-			  new FunctionContext([this, ctx](int r) {
+			  new LambdaContext([this, ctx](int r) {
 			      std::lock_guard timer_locker{m_threads->timer_lock};
 			      ctx->complete(r);
 			    });

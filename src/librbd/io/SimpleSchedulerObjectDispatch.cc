@@ -145,7 +145,7 @@ void SimpleSchedulerObjectDispatch<I>::ObjectRequests::dispatch_delayed_requests
     auto offset = it.first;
     auto &merged_requests = it.second;
 
-    auto ctx = new FunctionContext(
+    auto ctx = new LambdaContext(
         [requests=std::move(merged_requests.requests), latency_stats,
          latency_stats_lock, start_time=ceph_clock_now()](int r) {
           if (latency_stats) {
@@ -404,7 +404,7 @@ void SimpleSchedulerObjectDispatch<I>::register_in_flight_request(
 
   auto dispatch_seq = ++m_dispatch_seq;
   it->second->set_dispatch_seq(dispatch_seq);
-  *on_finish = new FunctionContext(
+  *on_finish = new LambdaContext(
     [this, object_no, dispatch_seq, start_time, ctx=*on_finish](int r) {
       ctx->complete(r);
 
@@ -498,7 +498,7 @@ void SimpleSchedulerObjectDispatch<I>::schedule_dispatch_delayed_requests() {
     object_requests = m_dispatch_queue.front().get();
   }
 
-  m_timer_task = new FunctionContext(
+  m_timer_task = new LambdaContext(
     [this, object_no=object_requests->get_object_no()](int r) {
       ceph_assert(ceph_mutex_is_locked(*m_timer_lock));
       auto cct = m_image_ctx->cct;
@@ -506,7 +506,7 @@ void SimpleSchedulerObjectDispatch<I>::schedule_dispatch_delayed_requests() {
 
       m_timer_task = nullptr;
       m_image_ctx->op_work_queue->queue(
-          new FunctionContext(
+          new LambdaContext(
             [this, object_no](int r) {
 	      std::lock_guard locker{m_lock};
               dispatch_delayed_requests(object_no);

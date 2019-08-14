@@ -2459,7 +2459,7 @@ void PG::scrub(epoch_t queued, ThreadPool::TPHandle &handle)
     spg_t pgid = get_pgid();
     int state = scrubber.state;
     auto scrub_requeue_callback =
-        new FunctionContext([osds, pgid, state](int r) {
+        new LambdaContext([osds, pgid, state](int r) {
           PGRef pg = osds->osd->lookup_lock_pg(pgid);
           if (pg == nullptr) {
             lgeneric_dout(osds->osd->cct, 20)
@@ -3743,7 +3743,7 @@ void PG::do_delete_work(ObjectStore::Transaction &t)
     if (osd_delete_sleep > 0 && delete_needs_sleep) {
       epoch_t e = get_osdmap()->get_epoch();
       PGRef pgref(this);
-      auto delete_requeue_callback = new FunctionContext([this, pgref, e](int r) {
+      auto delete_requeue_callback = new LambdaContext([this, pgref, e](int r) {
         dout(20) << __func__ << " wake up at "
                  << ceph_clock_now()
 	         << ", re-queuing delete" << dendl;

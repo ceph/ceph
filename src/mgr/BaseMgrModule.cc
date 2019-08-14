@@ -152,9 +152,9 @@ ceph_send_command(BaseMgrModule *self, PyObject *args)
     // TODO: enhance MCommand interface so that it returns
     // latest cluster map versions on completion, and callers
     // can wait for those.
-    auto c = new FunctionContext([command_c, self](int command_r){
+    auto c = new LambdaContext([command_c, self](int command_r){
       self->py_modules->get_objecter().wait_for_latest_osdmap(
-          new FunctionContext([command_c, command_r](int wait_r){
+          new LambdaContext([command_c, command_r](int wait_r){
             command_c->complete(command_r);
           })
       );

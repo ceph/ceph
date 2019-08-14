@@ -117,7 +117,7 @@ void ImageCopyRequest<I>::send_next_object_copy() {
 
   ++m_current_ops;
 
-  Context *ctx = new FunctionContext(
+  Context *ctx = new LambdaContext(
     [this, ono](int r) {
       handle_object_copy(ono, r);
     });

@@ -492,7 +492,7 @@ void ManagedLock<I>::send_acquire_lock() {
   m_state = STATE_ACQUIRING;
   m_cookie = encode_lock_cookie(watch_handle);
 
-  m_work_queue->queue(new FunctionContext([this](int r) {
+  m_work_queue->queue(new LambdaContext([this](int r) {
     pre_acquire_lock_handler(create_context_callback<
         ManagedLock<I>, &ManagedLock<I>::handle_pre_acquire_lock>(this));
   }));
@@ -531,7 +531,7 @@ void ManagedLock<I>::handle_acquire_lock(int r) {
 
   m_post_next_state = (r < 0 ? STATE_UNLOCKED : STATE_LOCKED);
 
-  m_work_queue->queue(new FunctionContext([this, r](int ret) {
+  m_work_queue->queue(new LambdaContext([this, r](int ret) {
     post_acquire_lock_handler(r, create_context_callback<
         ManagedLock<I>, &ManagedLock<I>::handle_post_acquire_lock>(this));
   }));
@@ -559,7 +559,7 @@ void ManagedLock<I>::revert_to_unlock_state(int r) {
   using managed_lock::ReleaseRequest;
   ReleaseRequest<I>* req = ReleaseRequest<I>::create(m_ioctx, m_watcher,
       m_work_queue, m_oid, m_cookie,
-      new FunctionContext([this, r](int ret) {
+      new LambdaContext([this, r](int ret) {
         std::lock_guard locker{m_lock};
         ceph_assert(ret == 0);
         complete_active_action(STATE_UNLOCKED, r);
@@ -604,7 +604,7 @@ void ManagedLock<I>::send_reacquire_lock() {
 
   auto ctx = create_context_callback<
     ManagedLock, &ManagedLock<I>::handle_reacquire_lock>(this);
-  ctx = new FunctionContext([this, ctx](int r) {
+  ctx = new LambdaContext([this, ctx](int r) {
       post_reacquire_lock_handler(r, ctx);
     });
 
@@ -681,7 +681,7 @@ void ManagedLock<I>::send_release_lock() {
   ldout(m_cct, 10) << dendl;
   m_state = STATE_PRE_RELEASING;
 
-  m_work_queue->queue(new FunctionContext([this](int r) {
+  m_work_queue->queue(new LambdaContext([this](int r) {
     pre_release_lock_handler(false, create_context_callback<
         ManagedLock<I>, &ManagedLock<I>::handle_pre_release_lock>(this));
   }));
@@ -724,7 +724,7 @@ void ManagedLock<I>::handle_release_lock(int r) {
     m_post_next_state = STATE_LOCKED;
   }
 
-  m_work_queue->queue(new FunctionContext([this, r](int ret) {
+  m_work_queue->queue(new LambdaContext([this, r](int ret) {
     post_release_lock_handler(false, r, create_context_callback<
         ManagedLock<I>, &ManagedLock<I>::handle_post_release_lock>(this));
   }));
@@ -744,7 +744,7 @@ void ManagedLock<I>::send_shutdown() {
   ceph_assert(ceph_mutex_is_locked(m_lock));
   if (m_state == STATE_UNLOCKED) {
     m_state = STATE_SHUTTING_DOWN;
-    m_work_queue->queue(new FunctionContext([this](int r) {
+    m_work_queue->queue(new LambdaContext([this](int r) {
       shutdown_handler(r, create_context_callback<
           ManagedLock<I>, &ManagedLock<I>::handle_shutdown>(this));
     }));
@@ -772,7 +772,7 @@ void ManagedLock<I>::send_shutdown_release() {
 
   std::lock_guard locker{m_lock};
 
-  m_work_queue->queue(new FunctionContext([this](int r) {
+  m_work_queue->queue(new LambdaContext([this](int r) {
     pre_release_lock_handler(true, create_context_callback<
         ManagedLock<I>, &ManagedLock<I>::handle_shutdown_pre_release>(this));
   }));
@@ -794,7 +794,7 @@ void ManagedLock<I>::handle_shutdown_pre_release(int r) {
   using managed_lock::ReleaseRequest;
   ReleaseRequest<I>* req = ReleaseRequest<I>::create(m_ioctx, m_watcher,
       m_work_queue, m_oid, cookie,
-      new FunctionContext([this, r](int l) {
+      new LambdaContext([this, r](int l) {
         int rst = r < 0 ? r : l;
         post_release_lock_handler(true, rst, create_context_callback<
             ManagedLock<I>, &ManagedLock<I>::handle_shutdown_post_release>(this));
@@ -814,7 +814,7 @@ template <typename I>
 void ManagedLock<I>::wait_for_tracked_ops(int r) {
   ldout(m_cct, 10) << "r=" << r << dendl;
 
-  Context *ctx = new FunctionContext([this, r](int ret) {
+  Context *ctx = new LambdaContext([this, r](int ret) {
       complete_shutdown(r);
     });
 

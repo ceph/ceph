@@ -310,7 +310,7 @@ private:
     MetadataListener(Journal<ImageCtxT> *journal) : journal(journal) { }
 
     void handle_update(::journal::JournalMetadata *) override {
-      FunctionContext *ctx = new FunctionContext([this](int r) {
+      auto ctx = new LambdaContext([this](int r) {
         journal->handle_metadata_updated();
       });
       journal->m_work_queue->queue(ctx, 0);

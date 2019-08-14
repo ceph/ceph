@@ -76,7 +76,7 @@ void SnapshotCreateRequest<I>::send_create_snap() {
     return;
   }
 
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
       handle_create_snap(r);
       finish_op_ctx->complete(0);
     });
@@ -140,7 +140,7 @@ void SnapshotCreateRequest<I>::send_create_object_map() {
     return;
   }
 
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
       handle_create_object_map(r);
       finish_op_ctx->complete(0);
     });
@@ -168,7 +168,7 @@ template <typename I>
 Context *SnapshotCreateRequest<I>::start_lock_op(int* r) {
   std::shared_lock owner_locker{m_dst_image_ctx->owner_lock};
   if (m_dst_image_ctx->exclusive_lock == nullptr) {
-    return new FunctionContext([](int r) {});
+    return new LambdaContext([](int r) {});
   }
   return m_dst_image_ctx->exclusive_lock->start_op(r);
 }

@@ -151,12 +151,12 @@ TEST_F(TestMockParentImageCache, test_initialization_success) {
 
   expect_cache_run(*mock_parent_image_cache, 0);
   C_SaferCond cond;
-  Context* handle_connect = new FunctionContext([&cond](int ret) {
+  Context* handle_connect = new LambdaContext([&cond](int ret) {
     ASSERT_EQ(ret, 0);
     cond.complete(0);
   });
   expect_cache_async_connect(*mock_parent_image_cache, 0, handle_connect);
-  Context* ctx = new FunctionContext([](bool reg) {
+  Context* ctx = new LambdaContext([](bool reg) {
     ASSERT_EQ(reg, true);
   });
   expect_cache_register(*mock_parent_image_cache, ctx, 0);
@@ -189,7 +189,7 @@ TEST_F(TestMockParentImageCache, test_initialization_fail_at_connect) {
 
   expect_cache_run(*mock_parent_image_cache, 0);
   C_SaferCond cond;
-  Context* handle_connect = new FunctionContext([&cond](int ret) {
+  Context* handle_connect = new LambdaContext([&cond](int ret) {
     ASSERT_EQ(ret, -1);
     cond.complete(0);
   });
@@ -223,12 +223,12 @@ TEST_F(TestMockParentImageCache, test_initialization_fail_at_register) {
 
   expect_cache_run(*mock_parent_image_cache, 0);
   C_SaferCond cond;
-  Context* handle_connect = new FunctionContext([&cond](int ret) {
+  Context* handle_connect = new LambdaContext([&cond](int ret) {
     ASSERT_EQ(ret, 0);
     cond.complete(0);
   });
   expect_cache_async_connect(*mock_parent_image_cache, 0, handle_connect);
-  Context* ctx = new FunctionContext([](bool reg) {
+  Context* ctx = new LambdaContext([](bool reg) {
     ASSERT_EQ(reg, false);
   });
   expect_cache_register(*mock_parent_image_cache, ctx, -1);
@@ -300,12 +300,12 @@ TEST_F(TestMockParentImageCache, test_read) {
 
   expect_cache_run(*mock_parent_image_cache, 0);
   C_SaferCond conn_cond;
-  Context* handle_connect = new FunctionContext([&conn_cond](int ret) {
+  Context* handle_connect = new LambdaContext([&conn_cond](int ret) {
     ASSERT_EQ(ret, 0);
     conn_cond.complete(0);
   });
   expect_cache_async_connect(*mock_parent_image_cache, 0, handle_connect);
-  Context* ctx = new FunctionContext([](bool reg) {
+  Context* ctx = new LambdaContext([](bool reg) {
     ASSERT_EQ(reg, true);
   });
   expect_cache_register(*mock_parent_image_cache, ctx, 0);

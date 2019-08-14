@@ -6195,7 +6195,7 @@ void Client::tick()
   ldout(cct, 21) << "tick" << dendl;
   tick_event = timer.add_event_after(
     cct->_conf->client_tick_interval,
-    new FunctionContext([this](int) {
+    new LambdaContext([this](int) {
 	// Called back via Timer, which takes client_lock for us
 	ceph_assert(ceph_mutex_is_locked_by_me(client_lock));
 	tick();

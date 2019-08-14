@@ -34,7 +34,7 @@ struct TestMockWatcherRewatchRequest : public TestMockFixture {
       .WillOnce(DoAll(WithArgs<1, 2>(Invoke([&mock_image_ctx, &mock_io_ctx, r](librados::AioCompletionImpl *c, uint64_t *cookie) {
                                    *cookie = 234;
                                    c->get();
-                                   mock_image_ctx.image_ctx->op_work_queue->queue(new FunctionContext([&mock_io_ctx, c](int r) {
+                                   mock_image_ctx.image_ctx->op_work_queue->queue(new LambdaContext([&mock_io_ctx, c](int r) {
                                        mock_io_ctx.get_mock_rados_client()->finish_aio_completion(c, r);
                                      }), r);
                                    })),
@@ -49,7 +49,7 @@ struct TestMockWatcherRewatchRequest : public TestMockFixture {
       .WillOnce(DoAll(Invoke([&mock_image_ctx, &mock_io_ctx, r](uint64_t handle,
                                                                 librados::AioCompletionImpl *c) {
                         c->get();
-                        mock_image_ctx.image_ctx->op_work_queue->queue(new FunctionContext([&mock_io_ctx, c](int r) {
+                        mock_image_ctx.image_ctx->op_work_queue->queue(new LambdaContext([&mock_io_ctx, c](int r) {
                             mock_io_ctx.get_mock_rados_client()->finish_aio_completion(c, r);
                           }), r);
                         }),

@@ -122,13 +122,16 @@ struct RunOnDelete {
 typedef std::shared_ptr<RunOnDelete> RunOnDeleteRef;
 
 template <typename T>
-struct LambdaContext : public Context {
-  T t;
+class LambdaContext : public Context {
+public:
   LambdaContext(T &&t) : t(std::forward<T>(t)) {}
-  void finish(int) override {
-    t();
+  void finish(int r) override {
+    t(r);
   }
+private:
+  T t;
 };
+
 template <typename T>
 LambdaContext<T> *make_lambda_context(T &&t) {
   return new LambdaContext<T>(std::move(t));
@@ -472,20 +475,6 @@ private:
 
 typedef C_GatherBase<Context, Context> C_Gather;
 typedef C_GatherBuilderBase<Context, C_Gather > C_GatherBuilder;
-
-class FunctionContext : public Context {
-public:
-  FunctionContext(boost::function<void(int)> &&callback)
-    : m_callback(std::move(callback))
-  {
-  }
-
-  void finish(int r) override {
-    m_callback(r);
-  }
-private:
-  boost::function<void(int)> m_callback;
-};
 
 template <class ContextType>
 class ContextFactory {

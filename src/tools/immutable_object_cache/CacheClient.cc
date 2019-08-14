@@ -77,7 +77,7 @@ namespace immutable_obj_cache {
   int CacheClient::connect() {
     int ret = -1;
     C_SaferCond cond;
-    Context* on_finish = new FunctionContext([&cond, &ret](int err) {
+    Context* on_finish = new LambdaContext([&cond, &ret](int err) {
       ret = err;
       cond.complete(err);
     });
@@ -280,7 +280,7 @@ namespace immutable_obj_cache {
     }
 
     ceph_assert(current_request != nullptr);
-    auto process_reply = new FunctionContext([current_request, reply]
+    auto process_reply = new LambdaContext([current_request, reply]
       (bool dedicated) {
        if (dedicated) {
          // dedicated thrad to execute this context.

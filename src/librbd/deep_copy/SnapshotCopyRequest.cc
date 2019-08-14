@@ -182,7 +182,7 @@ void SnapshotCopyRequest<I>::send_snap_unprotect() {
     return;
   }
 
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
       handle_snap_unprotect(r);
       finish_op_ctx->complete(0);
     });
@@ -279,7 +279,7 @@ void SnapshotCopyRequest<I>::send_snap_remove() {
     return;
   }
 
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
       handle_snap_remove(r);
       finish_op_ctx->complete(0);
     });
@@ -380,7 +380,7 @@ void SnapshotCopyRequest<I>::send_snap_create() {
     return;
   }
 
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
       handle_snap_create(r);
       finish_op_ctx->complete(0);
     });
@@ -488,7 +488,7 @@ void SnapshotCopyRequest<I>::send_snap_protect() {
     return;
   }
 
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
       handle_snap_protect(r);
       finish_op_ctx->complete(0);
     });
@@ -577,7 +577,7 @@ void SnapshotCopyRequest<I>::send_resize_object_map() {
 
       auto finish_op_ctx = start_lock_op(m_dst_image_ctx->owner_lock, &r);
       if (finish_op_ctx != nullptr) {
-        auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+        auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
             handle_resize_object_map(r);
             finish_op_ctx->complete(0);
           });
@@ -625,7 +625,7 @@ template <typename I>
 void SnapshotCopyRequest<I>::error(int r) {
   ldout(m_cct, 20) << "r=" << r << dendl;
 
-  m_work_queue->queue(new FunctionContext([this, r](int r1) { finish(r); }));
+  m_work_queue->queue(new LambdaContext([this, r](int r1) { finish(r); }));
 }
 
 template <typename I>
@@ -662,7 +662,7 @@ template <typename I>
 Context *SnapshotCopyRequest<I>::start_lock_op(ceph::shared_mutex &owner_lock, int* r) {
   ceph_assert(ceph_mutex_is_locked(m_dst_image_ctx->owner_lock));
   if (m_dst_image_ctx->exclusive_lock == nullptr) {
-    return new FunctionContext([](int r) {});
+    return new LambdaContext([](int r) {});
   }
   return m_dst_image_ctx->exclusive_lock->start_op(r);
 }

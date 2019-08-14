@@ -188,7 +188,7 @@ public:
   void expect_add_event(MockThreads &mock_threads) {
     EXPECT_CALL(*mock_threads.timer, add_event_after(_,_))
       .WillOnce(DoAll(WithArg<1>(Invoke([this](Context *ctx) {
-             auto wrapped_ctx = new FunctionContext([this, ctx](int r) {
+             auto wrapped_ctx = new LambdaContext([this, ctx](int r) {
                     std::lock_guard timer_locker{m_threads->timer_lock};
                     ctx->complete(r);
                   });
@@ -203,7 +203,7 @@ public:
                 CephContext *cct = reinterpret_cast<CephContext *>(m_local_io_ctx.cct());
                 cct->_conf.set_val("rbd_mirror_image_policy_rebalance_timeout", "0");
 
-                auto wrapped_ctx = new FunctionContext([this, ctx](int r) {
+                auto wrapped_ctx = new LambdaContext([this, ctx](int r) {
                     std::lock_guard timer_locker{m_threads->timer_lock};
                     ctx->complete(r);
                   });

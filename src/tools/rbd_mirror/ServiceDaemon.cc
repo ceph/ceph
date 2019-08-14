@@ -197,7 +197,7 @@ void ServiceDaemon<I>::schedule_update_status() {
     return;
   }
 
-  m_timer_ctx = new FunctionContext([this](int) {
+  m_timer_ctx = new LambdaContext([this](int) {
       m_timer_ctx = nullptr;
       update_status();
     });

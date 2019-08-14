@@ -158,7 +158,7 @@ void Mgr::background_init(Context *completion)
 
   finisher.start();
 
-  finisher.queue(new FunctionContext([this, completion](int r){
+  finisher.queue(new LambdaContext([this, completion](int r){
     init();
     completion->complete(0);
   }));
@@ -400,7 +400,7 @@ void Mgr::load_all_metadata()
 
 void Mgr::shutdown()
 {
-  finisher.queue(new FunctionContext([&](int) {
+  finisher.queue(new LambdaContext([&](int) {
     {
       std::lock_guard l(lock);
       // First stop the server so that we're not taking any more incoming

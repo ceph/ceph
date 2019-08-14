@@ -203,11 +203,11 @@ void Paxos::collect(version_t oldpn)
   collect_timeout_event = mon->timer.add_event_after(
     g_conf()->mon_accept_timeout_factor *
     g_conf()->mon_lease,
-    new C_MonContext(mon, [this](int r) {
+    new C_MonContext{mon, [this](int r) {
 	if (r == -ECANCELED)
 	  return;
 	collect_timeout();
-    }));
+    }});
 }
 
 
@@ -694,11 +694,11 @@ void Paxos::begin(bufferlist& v)
   // set timeout event
   accept_timeout_event = mon->timer.add_event_after(
     g_conf()->mon_accept_timeout_factor * g_conf()->mon_lease,
-    new C_MonContext(mon, [this](int r) {
+    new C_MonContext{mon, [this](int r) {
 	if (r == -ECANCELED)
 	  return;
 	accept_timeout();
-      }));
+      }});
 }
 
 // peon
@@ -995,11 +995,11 @@ void Paxos::extend_lease()
   if (!lease_ack_timeout_event) {
     lease_ack_timeout_event = mon->timer.add_event_after(
       g_conf()->mon_lease_ack_timeout_factor * g_conf()->mon_lease,
-      new C_MonContext(mon, [this](int r) {
+      new C_MonContext{mon, [this](int r) {
 	  if (r == -ECANCELED)
 	    return;
 	  lease_ack_timeout();
-	}));
+	}});
   }
 
   // set renew event
@@ -1008,11 +1008,11 @@ void Paxos::extend_lease()
   at += ceph::make_timespan(g_conf()->mon_lease_renew_interval_factor *
 			    g_conf()->mon_lease);
   lease_renew_event = mon->timer.add_event_at(
-    at, new C_MonContext(mon, [this](int r) {
+    at, new C_MonContext{mon, [this](int r) {
 	if (r == -ECANCELED)
 	  return;
 	lease_renew_timeout();
-    }));
+    }});
 }
 
 void Paxos::warn_on_future_time(utime_t t, entity_name_t from)
@@ -1198,11 +1198,11 @@ void Paxos::reset_lease_timeout()
     mon->timer.cancel_event(lease_timeout_event);
   lease_timeout_event = mon->timer.add_event_after(
     g_conf()->mon_lease_ack_timeout_factor * g_conf()->mon_lease,
-    new C_MonContext(mon, [this](int r) {
+    new C_MonContext{mon, [this](int r) {
 	if (r == -ECANCELED)
 	  return;
 	lease_timeout();
-      }));
+      }});
 }
 
 void Paxos::lease_timeout()

@@ -70,7 +70,7 @@ void TrashWatcher<I>::shut_down(Context *on_finish) {
     }
   }
 
-  auto ctx = new FunctionContext([this, on_finish](int r) {
+  auto ctx = new LambdaContext([this, on_finish](int r) {
       unregister_watcher(on_finish);
     });
   m_async_op_tracker.wait_for_ops(ctx);
@@ -222,7 +222,7 @@ void TrashWatcher<I>::unregister_watcher(Context* on_finish) {
   dout(5) << dendl;
 
   m_async_op_tracker.start_op();
-  Context *ctx = new FunctionContext([this, on_finish](int r) {
+  Context *ctx = new LambdaContext([this, on_finish](int r) {
       handle_unregister_watcher(r, on_finish);
     });
   this->unregister_watch(ctx);
@@ -327,7 +327,7 @@ void TrashWatcher<I>::schedule_trash_list(double interval) {
   dout(5) << dendl;
   m_timer_ctx = m_threads->timer->add_event_after(
     interval,
-    new FunctionContext([this](int r) {
+    new LambdaContext([this](int r) {
 	process_trash_list();
       }));
 }
@@ -348,7 +348,7 @@ void TrashWatcher<I>::process_trash_list() {
 
   // execute outside of the timer's lock
   m_async_op_tracker.start_op();
-  Context *ctx = new FunctionContext([this](int r) {
+  Context *ctx = new LambdaContext([this](int r) {
       create_trash();
       m_async_op_tracker.finish_op();
     });
@@ -368,7 +368,7 @@ void TrashWatcher<I>::add_image(const std::string& image_id,
            << "deferment_end_time=" << deferment_end_time << dendl;
 
   m_async_op_tracker.start_op();
-  auto ctx = new FunctionContext([this, image_id, deferment_end_time](int r) {
+  auto ctx = new LambdaContext([this, image_id, deferment_end_time](int r) {
       m_trash_listener.handle_trash_image(image_id,
 					  deferment_end_time.to_real_time());
       m_async_op_tracker.finish_op();

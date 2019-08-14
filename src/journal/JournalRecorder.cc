@@ -88,14 +88,14 @@ JournalRecorder::~JournalRecorder() {
 }
 
 void JournalRecorder::shut_down(Context *on_safe) {
-  on_safe = new FunctionContext(
+  on_safe = new LambdaContext(
     [this, on_safe](int r) {
       Context *ctx = nullptr;
       {
 	std::lock_guard locker{m_lock};
         if (m_in_flight_advance_sets != 0) {
           ceph_assert(m_on_object_set_advanced == nullptr);
-          m_on_object_set_advanced = new FunctionContext(
+          m_on_object_set_advanced = new LambdaContext(
             [on_safe, r](int) {
               on_safe->complete(r);
             });

@@ -151,9 +151,9 @@ void Elector::reset_timer(double plus)
    */
   expire_event = mon->timer.add_event_after(
     g_conf()->mon_election_timeout + plus,
-    new C_MonContext(mon, [this](int) {
+    new C_MonContext{mon, [this](int) {
 	logic.end_election_period();
-      }));
+      }});
 }
 
 

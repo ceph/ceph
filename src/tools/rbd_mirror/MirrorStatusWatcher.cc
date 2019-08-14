@@ -32,7 +32,7 @@ template <typename I>
 void MirrorStatusWatcher<I>::init(Context *on_finish) {
   dout(20) << dendl;
 
-  on_finish = new FunctionContext(
+  on_finish = new LambdaContext(
     [this, on_finish] (int r) {
       if (r < 0) {
         derr << "error removing down statuses: " << cpp_strerror(r) << dendl;

@@ -620,7 +620,7 @@ void MDCache::open_mydir_frag(MDSContext *c)
 {
   open_mydir_inode(
       new MDSInternalContextWrapper(mds,
-	new FunctionContext([this, c](int r) {
+	new LambdaContext([this, c](int r) {
 	    if (r < 0) {
 	      c->complete(r);
 	      return;
@@ -2671,7 +2671,7 @@ void MDCache::send_resolves()
     // I'm survivor: refresh snap cache
     mds->snapclient->sync(
 	new MDSInternalContextWrapper(mds,
-	  new FunctionContext([this](int r) {
+	  new LambdaContext([this](int r) {
 	    maybe_finish_slave_resolve();
 	    })
 	  )
@@ -5327,7 +5327,7 @@ bool MDCache::process_imported_caps()
       open_file_table.prefetch_inodes()) {
     open_file_table.wait_for_prefetch(
 	new MDSInternalContextWrapper(mds,
-	  new FunctionContext([this](int r) {
+	  new LambdaContext([this](int r) {
 	    ceph_assert(rejoin_gather.count(mds->get_nodeid()));
 	    process_imported_caps();
 	    })
@@ -5928,7 +5928,7 @@ bool MDCache::open_undef_inodes_dirfrags()
 
   MDSGatherBuilder gather(g_ceph_context,
       new MDSInternalContextWrapper(mds,
-	new FunctionContext([this](int r) {
+	new LambdaContext([this](int r) {
 	    if (rejoin_gather.empty())
 	      rejoin_gather_finish();
 	  })
@@ -7904,7 +7904,7 @@ again:
 	MDSContext *fin = nullptr;
 	if (shutdown_exporting_strays.empty()) {
 	  fin = new MDSInternalContextWrapper(mds,
-		  new FunctionContext([this](int r) {
+		  new LambdaContext([this](int r) {
 		    shutdown_export_strays();
 		  })
 		);
@@ -12573,7 +12573,7 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
   if (header->get_recursive()) {
     header->get_origin()->get(CInode::PIN_SCRUBQUEUE);
     fin = new MDSInternalContextWrapper(mds,
-	    new FunctionContext([this, header](int r) {
+	    new LambdaContext([this, header](int r) {
 	      recursive_scrub_finish(header);
 	      header->get_origin()->put(CInode::PIN_SCRUBQUEUE);
 	    })
@@ -12585,14 +12585,14 @@ void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
   // If the scrub did some repair, then flush the journal at the end of
   // the scrub.  Otherwise in the case of e.g. rewriting a backtrace
   // the on disk state will still look damaged.
-  auto scrub_finish = new FunctionContext([this, header, fin](int r){
+  auto scrub_finish = new LambdaContext([this, header, fin](int r){
     if (!header->get_repaired()) {
       if (fin)
         fin->complete(r);
       return;
     }
 
-    auto flush_finish = new FunctionContext([this, fin](int r){
+    auto flush_finish = new LambdaContext([this, fin](int r){
       dout(4) << "Expiring log segments because scrub did some repairs" << dendl;
       mds->mdlog->trim_all();
 
