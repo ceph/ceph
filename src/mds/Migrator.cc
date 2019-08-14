@@ -1038,8 +1038,13 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
   }
   ceph_assert(it->second.state == EXPORT_LOCKING);
 
-  mds_rank_t dest = it->second.peer;
+  if (mdr->more()->slave_error || dir->is_frozen() || dir->is_freezing()) {
+    dout(7) << "wouldblock|freezing|frozen, canceling export" << dendl;
+    export_try_cancel(dir);
+    return;
+  }
 
+  mds_rank_t dest = it->second.peer;
   if (!mds->is_export_target(dest)) {
     dout(7) << "dest is not yet an export target" << dendl;
     if (count > 3) {
@@ -1058,12 +1063,6 @@ void Migrator::dispatch_export_dir(MDRequestRef& mdr, int count)
   if (!dir->inode->get_parent_dn()) {
     dout(7) << "waiting for dir to become stable before export: " << *dir << dendl;
     dir->add_waiter(CDir::WAIT_CREATED, new C_M_ExportDirWait(this, mdr, 1));
-    return;
-  }
-
-  if (mdr->aborted || dir->is_frozen() || dir->is_freezing()) {
-    dout(7) << "wouldblock|freezing|frozen, canceling export" << dendl;
-    export_try_cancel(dir);
     return;
   }
 

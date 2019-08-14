@@ -98,19 +98,8 @@ public:
       wrlock_target = MDS_RANK_NONE;
     }
     bool is_state_pin() const { return !!(flags & STATE_PIN); }
-
     bool operator<(const LockOp& r) const {
-      if ((lock->type->type <= CEPH_LOCK_DN) && (r.lock->type->type > CEPH_LOCK_DN))
-	return true;
-      if ((lock->type->type > CEPH_LOCK_DN) == (r.lock->type->type > CEPH_LOCK_DN)) {
-	auto lp = lock->get_parent();
-	auto rp = r.lock->get_parent();
-	// then sort by object
-	if (lp == rp)
-	  return (lock->type->type < r.lock->type->type);
-	return lp->is_lt(rp);
-      }
-      return false;
+      return lock < r.lock;
     }
   };
 
@@ -119,11 +108,17 @@ public:
       emplace_back(lock, LockOp::RDLOCK);
     }
     void erase_rdlock(SimpleLock *lock);
-    void add_xlock(SimpleLock *lock) {
-      emplace_back(lock, LockOp::XLOCK);
+    void add_xlock(SimpleLock *lock, int idx=-1) {
+      if (idx >= 0)
+	emplace(cbegin() + idx, lock, LockOp::XLOCK);
+      else
+	emplace_back(lock, LockOp::XLOCK);
     }
-    void add_wrlock(SimpleLock *lock) {
-      emplace_back(lock, LockOp::WRLOCK);
+    void add_wrlock(SimpleLock *lock, int idx=-1) {
+      if (idx >= 0)
+	emplace(cbegin() + idx, lock, LockOp::WRLOCK);
+      else
+	emplace_back(lock, LockOp::WRLOCK);
     }
     void add_remote_wrlock(SimpleLock *lock, mds_rank_t rank) {
       ceph_assert(rank != MDS_RANK_NONE);
@@ -138,9 +133,14 @@ public:
       reserve(32);
     }
   };
-  typedef set<LockOp> lock_set;
-  typedef lock_set::iterator lock_iterator;
+  using lock_set = set<LockOp>;
+  using lock_iterator = lock_set::iterator;
   lock_set locks;  // full ordering
+
+  lock_iterator emplace_lock(SimpleLock *l, unsigned f=0, mds_rank_t t=MDS_RANK_NONE) {
+    last_locked = l;
+    return locks.emplace(l, f, t).first;
+  }
 
   bool is_rdlocked(SimpleLock *lock) const {
     auto it = locks.find(lock);
@@ -158,7 +158,11 @@ public:
     auto it = locks.find(lock);
     return it != locks.end() && it->is_remote_wrlock();
   }
+  bool is_last_locked(SimpleLock *lock) const {
+    return lock == last_locked;
+  }
 
+  SimpleLock *last_locked = nullptr;
   // lock we are currently trying to acquire.  if we give up for some reason,
   // be sure to eval() this.
   SimpleLock *locking = nullptr;

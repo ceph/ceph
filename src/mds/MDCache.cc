@@ -4769,13 +4769,13 @@ void MDCache::handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &strong)
 	    if (!mdr->is_xlocked(&dn->versionlock)) {
 	      ceph_assert(dn->versionlock.can_xlock_local());
 	      dn->versionlock.get_xlock(mdr, mdr->get_client());
-	      mdr->locks.emplace(&dn->versionlock, MutationImpl::LockOp::XLOCK);
+	      mdr->emplace_lock(&dn->versionlock, MutationImpl::LockOp::XLOCK);
 	    }
 	    if (dn->lock.is_stable())
 	      dn->auth_pin(&dn->lock);
 	    dn->lock.set_state(LOCK_XLOCK);
 	    dn->lock.get_xlock(mdr, mdr->get_client());
-	    mdr->locks.emplace(&dn->lock, MutationImpl::LockOp::XLOCK);
+	    mdr->emplace_lock(&dn->lock, MutationImpl::LockOp::XLOCK);
           }
         }
 
@@ -4867,7 +4867,7 @@ void MDCache::handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &strong)
 	if (!mdr->is_xlocked(&in->versionlock)) {
 	  ceph_assert(in->versionlock.can_xlock_local());
 	  in->versionlock.get_xlock(mdr, mdr->get_client());
-	  mdr->locks.emplace(&in->versionlock, MutationImpl::LockOp::XLOCK);
+	  mdr->emplace_lock(&in->versionlock, MutationImpl::LockOp::XLOCK);
 	}
 	if (lock->is_stable())
 	  in->auth_pin(lock);
@@ -4875,7 +4875,7 @@ void MDCache::handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &strong)
 	if (lock == &in->filelock)
 	  in->loner_cap = -1;
 	lock->get_xlock(mdr, mdr->get_client());
-	mdr->locks.emplace(lock, MutationImpl::LockOp::XLOCK);
+	mdr->emplace_lock(lock, MutationImpl::LockOp::XLOCK);
       }
     }
   }
@@ -4893,7 +4893,7 @@ void MDCache::handle_cache_rejoin_strong(const cref_t<MMDSCacheRejoin> &strong)
 	if (lock == &in->filelock)
 	  in->loner_cap = -1;
 	lock->get_wrlock(true);
-	mdr->locks.emplace(lock, MutationImpl::LockOp::WRLOCK);
+	mdr->emplace_lock(lock, MutationImpl::LockOp::WRLOCK);
       }
     }
   }
@@ -11613,15 +11613,20 @@ void MDCache::dispatch_fragment_dir(MDRequestRef& mdr)
 
   dout(10) << "dispatch_fragment_dir " << basedirfrag << " bits " << info.bits
 	   << " on " << *diri << dendl;
+
+  if (mdr->more()->slave_error)
+    mdr->aborted = true;
+
   if (!mdr->aborted) {
     MutationImpl::LockOpVec lov;
     lov.add_wrlock(&diri->dirfragtreelock);
     // prevent a racing gather on any other scatterlocks too
     lov.lock_scatter_gather(&diri->nestlock);
     lov.lock_scatter_gather(&diri->filelock);
-    if (!mds->locker->acquire_locks(mdr, lov, NULL, true))
+    if (!mds->locker->acquire_locks(mdr, lov, NULL, true)) {
       if (!mdr->aborted)
 	return;
+    }
   }
 
   if (mdr->aborted) {
