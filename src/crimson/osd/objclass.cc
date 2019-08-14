@@ -68,8 +68,7 @@ int cls_cxx_remove(cls_method_context_t hctx)
 
 int cls_cxx_stat(cls_method_context_t hctx, uint64_t *size, time_t *mtime)
 {
-  OSDOp op;//{CEPH_OSD_OP_STAT};
-  op.op.op = CEPH_OSD_OP_STAT;
+  OSDOp op{CEPH_OSD_OP_STAT};
 
   // we're blocking here which presumes execution in Seastar's thread.
   try {
@@ -109,8 +108,7 @@ int cls_cxx_read2(cls_method_context_t hctx,
                   bufferlist *outbl,
                   uint32_t op_flags)
 {
-  OSDOp op;
-  op.op.op = CEPH_OSD_OP_SYNC_READ;
+  OSDOp op{CEPH_OSD_OP_SYNC_READ};
   op.op.extent.offset = ofs;
   op.op.extent.length = len;
   op.op.flags = op_flags;
@@ -134,8 +132,7 @@ int cls_cxx_write2(cls_method_context_t hctx,
 
 int cls_cxx_write_full(cls_method_context_t hctx, bufferlist * const inbl)
 {
-  OSDOp op;
-  op.op.op = CEPH_OSD_OP_WRITEFULL;
+  OSDOp op{CEPH_OSD_OP_WRITEFULL};
   op.op.extent.offset = 0;
   op.op.extent.length = inbl->length();
   op.indata = *inbl;
@@ -164,8 +161,7 @@ int cls_cxx_getxattr(cls_method_context_t hctx,
                      const char *name,
                      bufferlist *outbl)
 {
-  OSDOp op;
-  op.op.op = CEPH_OSD_OP_GETXATTR;
+  OSDOp op{CEPH_OSD_OP_GETXATTR};
   op.op.xattr.name_len = strlen(name);
   op.indata.append(name, op.op.xattr.name_len);
   try {
@@ -187,8 +183,7 @@ int cls_cxx_setxattr(cls_method_context_t hctx,
                      const char *name,
                      bufferlist *inbl)
 {
-  OSDOp op;
-  op.op.op = CEPH_OSD_OP_SETXATTR;
+  OSDOp op{CEPH_OSD_OP_SETXATTR};
   op.op.xattr.name_len = std::strlen(name);
   op.op.xattr.value_len = inbl->length();
   op.indata.append(name, op.op.xattr.name_len);
