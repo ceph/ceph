@@ -174,7 +174,7 @@ When developing E2E tests, it is not necessary to compile the frontend code
 on each change of the test files. When your development environment is
 running (``npm start``), you can point Protractor to just use this
 environment. To attach `Protractor <http://www.protractortest.org/>`__ to
-this process, run ``npm run e2e:dev``.
+this process, run ``npm run e2e:ci``.
 
 Note::
 
