@@ -652,11 +652,44 @@ test_status_in_pool_dir()
     local state_pattern=$4
     local description_pattern=$5
 
-    local status_log=${TEMPDIR}/${cluster}-${image}.mirror_status
+    local status_log=${TEMPDIR}/${cluster}-${pool}-${image}.mirror_status
     rbd --cluster ${cluster} -p ${pool} mirror image status ${image} |
 	tee ${status_log} >&2
     grep "state: .*${state_pattern}" ${status_log} || return 1
     grep "description: .*${description_pattern}" ${status_log} || return 1
+
+    # recheck using `mirror pool status` command to stress test it.
+
+    local last_update="$(sed -nEe 's/^ *last_update: *(.*) *$/\1/p' ${status_log})"
+    test_mirror_pool_status_verbose \
+        ${cluster} ${pool} ${image} "${state_pattern}" "${last_update}" &&
+    return 0
+
+    echo "'mirror pool status' test failed" >&2
+    exit 1
+}
+
+test_mirror_pool_status_verbose()
+{
+    local cluster=$1
+    local pool=$2
+    local image=$3
+    local state_pattern="$4"
+    local prev_last_update="$5"
+
+    local status_log=${TEMPDIR}/${cluster}-${pool}.mirror_status
+
+    rbd --cluster ${cluster} mirror pool status ${pool} --verbose --format xml \
+        > ${status_log}
+
+    local last_update state
+    last_update=$($XMLSTARLET sel -t -v \
+        "//images/image[name='${image}']/last_update" < ${status_log})
+    state=$($XMLSTARLET sel -t -v \
+        "//images/image[name='${image}']/state" < ${status_log})
+
+    echo "${state}" | grep "${state_pattern}" ||
+    test "${last_update}" '>' "${prev_last_update}"
 }
 
 wait_for_status_in_pool_dir()
