@@ -1,8 +1,11 @@
 """
 Utilities to control systemd units
 """
+import logging
+
 from ceph_volume import process
 
+logger = logging.getLogger(__name__)
 
 def start(unit):
     process.run(['systemctl', 'start', unit])
@@ -34,6 +37,26 @@ def is_active(unit):
     )
     return rc == 0
 
+def get_running_osd_ids():
+    out, err, rc = process.call([
+        'systemctl',
+        'show',
+        '--no-pager',
+        '--property=Id',
+        '--state=running',
+        'ceph-osd@*',
+    ])
+    osd_ids = []
+    if rc == 0:
+        for line in out:
+            if line:
+                # example line looks like: Id=ceph-osd@1.service
+                try:
+                    osd_id = line.split("@")[1].split(".service")[0]
+                    osd_ids.append(osd_id)
+                except (IndexError, TypeError):
+                    logger.warning("Failed to parse output from systemctl: %s", line)
+    return osd_ids
 
 def start_osd(id_):
     return start(osd_unit % id_)
