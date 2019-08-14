@@ -97,8 +97,8 @@ struct Section {
 
 struct ConfigMap {
   Section global;
-  std::map<std::string,Section> by_type;
-  std::map<std::string,Section> by_id;
+  std::map<std::string,Section, std::less<>> by_type;
+  std::map<std::string,Section, std::less<>> by_id;
 
   Section *find_section(const std::string& name) {
     if (name == "global") {

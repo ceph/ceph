@@ -2554,6 +2554,27 @@ private:
   void handle_osd_map(class MOSDMap *m);
   void wait_for_osd_map(epoch_t e=0);
 
+  template<typename CompletionToken>
+  auto wait_for_osd_map(CompletionToken&& token) {
+    boost::asio::async_completion<CompletionToken, void()> init(token);
+    unique_lock l(rwlock);
+    if (osdmap->get_epoch()) {
+      l.unlock();
+      boost::asio::dispatch(std::move(init.completion_handler));
+    } else {
+      waiting_for_map[0].emplace_back(
+	OpCompletion::create(
+	  service.get_executor(),
+	  [c = std::move(init.completion_handler)]
+	  (boost::system::error_code) mutable {
+	    std::move(c)();
+	  }), boost::system::error_code{});
+      l.unlock();
+    }
+    return init.result.get();
+  }
+
+
   /**
    * Get std::list of entities blacklisted since this was last called,
    * and reset the std::list.
