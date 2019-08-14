@@ -640,7 +640,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
        * know which FS it was part of. Nor does this matter. Sending an empty
        * MDSMap is sufficient for getting the MDS to respawn.
        */
-      wait_for_finished_proposal(op, new FunctionContext([op, this](int r){
+      wait_for_finished_proposal(op, new LambdaContext([op, this](int r){
         if (r >= 0) {
           const auto& fsmap = get_fsmap();
           MDSMap null_map;
@@ -778,7 +778,7 @@ bool MDSMonitor::prepare_beacon(MonOpRequestRef op)
   dout(5) << "prepare_beacon pending map now:" << dendl;
   print_map(pending);
   
-  wait_for_finished_proposal(op, new FunctionContext([op, this](int r){
+  wait_for_finished_proposal(op, new LambdaContext([op, this](int r){
     if (r >= 0)
       _updated(op);   // success
     else if (r == -ECANCELED) {

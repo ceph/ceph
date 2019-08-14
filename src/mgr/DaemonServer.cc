@@ -331,7 +331,7 @@ void DaemonServer::schedule_tick_locked(double delay_sec)
     return;
 
   tick_event = timer.add_event_after(delay_sec,
-    new FunctionContext([this](int r) {
+    new LambdaContext([this](int r) {
       tick();
   }));
 }
@@ -348,7 +348,7 @@ void DaemonServer::handle_osd_perf_metric_query_updated()
 
   // Send a fresh MMgrConfigure to all clients, so that they can follow
   // the new policy for transmitting stats
-  finisher.queue(new FunctionContext([this](int r) {
+  finisher.queue(new LambdaContext([this](int r) {
         std::lock_guard l(lock);
         for (auto &c : daemon_connections) {
           if (c->peer_is_osd()) {
@@ -2245,7 +2245,7 @@ bool DaemonServer::_handle_command(
   }
 
   dout(10) << "passing through " << cmdctx->cmdmap.size() << dendl;
-  finisher.queue(new FunctionContext([this, cmdctx, handler_name, prefix](int r_) {
+  finisher.queue(new LambdaContext([this, cmdctx, handler_name, prefix](int r_) {
     std::stringstream ss;
 
     // Validate that the module is enabled
@@ -2810,7 +2810,7 @@ void DaemonServer::handle_conf_change(const ConfigProxy& conf,
             << daemon_connections.size() << " clients" << dendl;
     // Send a fresh MMgrConfigure to all clients, so that they can follow
     // the new policy for transmitting stats
-    finisher.queue(new FunctionContext([this](int r) {
+    finisher.queue(new LambdaContext([this](int r) {
       std::lock_guard l(lock);
       for (auto &c : daemon_connections) {
         _send_configure(c);

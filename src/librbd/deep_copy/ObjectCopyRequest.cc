@@ -391,7 +391,7 @@ void ObjectCopyRequest<I>::send_write_object() {
     return;
   }
 
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
       handle_write_object(r);
       finish_op_ctx->complete(0);
     });
@@ -468,7 +468,7 @@ void ObjectCopyRequest<I>::send_update_object_map() {
     return;
   }
 
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
       handle_update_object_map(r);
       finish_op_ctx->complete(0);
     });
@@ -509,7 +509,7 @@ Context *ObjectCopyRequest<I>::start_lock_op(ceph::shared_mutex &owner_lock,
 					     int* r) {
   ceph_assert(ceph_mutex_is_locked(m_dst_image_ctx->owner_lock));
   if (m_dst_image_ctx->exclusive_lock == nullptr) {
-    return new FunctionContext([](int r) {});
+    return new LambdaContext([](int r) {});
   }
   return m_dst_image_ctx->exclusive_lock->start_op(r);
 }

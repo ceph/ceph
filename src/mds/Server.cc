@@ -420,7 +420,7 @@ void Server::finish_reclaim_session(Session *session, const ref_t<MClientReclaim
     Context *send_reply;
     if (reply) {
       int64_t session_id = session->get_client().v;
-      send_reply = new FunctionContext([this, session_id, reply](int r) {
+      send_reply = new LambdaContext([this, session_id, reply](int r) {
 	    assert(ceph_mutex_is_locked_by_me(mds->mds_lock));
 	    Session *session = mds->sessionmap.get_session(entity_name_t::CLIENT(session_id));
 	    if (!session) {
@@ -632,7 +632,7 @@ void Server::handle_client_session(const cref_t<MClientSession> &m)
       pv = mds->sessionmap.mark_projected(session);
       sseq = mds->sessionmap.set_state(session, Session::STATE_OPENING);
       mds->sessionmap.touch_session(session);
-      auto fin = new FunctionContext([log_session_status = std::move(log_session_status)](int r){
+      auto fin = new LambdaContext([log_session_status = std::move(log_session_status)](int r){
         ceph_assert(r == 0);
         log_session_status("ACCEPTED", "");
       });
@@ -1577,7 +1577,7 @@ void Server::reconnect_tick()
 
   if (gather.has_subs()) {
     dout(1) << "reconnect will complete once clients are evicted" << dendl;
-    gather.set_finisher(new MDSInternalContextWrapper(mds, new FunctionContext(
+    gather.set_finisher(new MDSInternalContextWrapper(mds, new LambdaContext(
 	    [this](int r){reconnect_gather_finish();})));
     gather.activate();
     reconnect_evicting = true;

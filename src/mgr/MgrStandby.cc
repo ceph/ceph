@@ -253,7 +253,7 @@ void MgrStandby::tick()
 
   timer.add_event_after(
       g_conf().get_val<std::chrono::seconds>("mgr_tick_period").count(),
-      new FunctionContext([this](int r){
+      new LambdaContext([this](int r){
           tick();
       }
   )); 
@@ -269,7 +269,7 @@ void MgrStandby::handle_signal(int signum)
 
 void MgrStandby::shutdown()
 {
-  finisher.queue(new FunctionContext([&](int) {
+  finisher.queue(new LambdaContext([&](int) {
     std::lock_guard l(lock);
 
     dout(4) << "Shutting down" << dendl;
@@ -395,7 +395,7 @@ void MgrStandby::handle_mgr_map(ref_t<MMgrMap> mmap)
       active_mgr.reset(new Mgr(&monc, map, &py_module_registry,
                                client_messenger.get(), &objecter,
 			       &client, clog, audit_clog));
-      active_mgr->background_init(new FunctionContext(
+      active_mgr->background_init(new LambdaContext(
             [this](int r){
               // Advertise our active-ness ASAP instead of waiting for
               // next tick.

@@ -180,7 +180,7 @@ void Journaler::shut_down(Context *on_finish) {
   std::swap(metadata, m_metadata);
   ceph_assert(metadata != nullptr);
 
-  on_finish = new FunctionContext([metadata, on_finish](int r) {
+  on_finish = new LambdaContext([metadata, on_finish](int r) {
       metadata->put();
       on_finish->complete(0);
     });
@@ -192,7 +192,7 @@ void Journaler::shut_down(Context *on_finish) {
     return;
   }
 
-  on_finish = new FunctionContext([trimmer, metadata, on_finish](int r) {
+  on_finish = new LambdaContext([trimmer, metadata, on_finish](int r) {
       delete trimmer;
       metadata->shut_down(on_finish);
     });
@@ -241,7 +241,7 @@ void Journaler::create(uint8_t order, uint8_t splay_width,
 
 void Journaler::remove(bool force, Context *on_finish) {
   // chain journal removal (reverse order)
-  on_finish = new FunctionContext([this, on_finish](int r) {
+  on_finish = new LambdaContext([this, on_finish](int r) {
       librados::AioCompletion *comp = librados::Rados::aio_create_completion(
         on_finish, nullptr, utils::rados_ctx_callback);
       r = m_header_ioctx.aio_remove(m_header_oid, comp);
@@ -249,7 +249,7 @@ void Journaler::remove(bool force, Context *on_finish) {
       comp->release();
     });
 
-  on_finish = new FunctionContext([this, force, on_finish](int r) {
+  on_finish = new LambdaContext([this, force, on_finish](int r) {
       m_trimmer->remove_objects(force, on_finish);
     });
 
@@ -376,10 +376,11 @@ void Journaler::stop_replay(Context *on_finish) {
   std::swap(player, m_player);
   ceph_assert(player != nullptr);
 
-  on_finish = new FunctionContext([player, on_finish](int r) {
+  auto f = [player, on_finish](int r) {
       delete player;
       on_finish->complete(r);
-    });
+    };
+  on_finish = new LambdaContext(std::move(f));
   player->shut_down(on_finish);
 }
 
@@ -414,7 +415,7 @@ void Journaler::stop_append(Context *on_safe) {
   std::swap(recorder, m_recorder);
   ceph_assert(recorder != nullptr);
 
-  on_safe = new FunctionContext([recorder, on_safe](int r) {
+  on_safe = new LambdaContext([recorder, on_safe](int r) {
       delete recorder;
       on_safe->complete(r);
     });

@@ -150,7 +150,7 @@ void MgrClient::reconnect()
       if (!connect_retry_callback) {
 	connect_retry_callback = timer.add_event_at(
 	  when,
-	  new FunctionContext([this](int r){
+	  new LambdaContext([this](int r){
 	      connect_retry_callback = nullptr;
 	      reconnect();
 	    }));
@@ -258,7 +258,7 @@ void MgrClient::_send_stats()
   if (stats_period != 0) {
     report_callback = timer.add_event_after(
       stats_period,
-      new FunctionContext([this](int) {
+      new LambdaContext([this](int) {
 	  _send_stats();
 	}));
   }

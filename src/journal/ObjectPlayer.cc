@@ -283,7 +283,7 @@ void ObjectPlayer::schedule_watch() {
   ceph_assert(m_watch_task == nullptr);
   m_watch_task = m_timer.add_event_after(
     m_watch_interval,
-    new FunctionContext([this](int) {
+    new LambdaContext([this](int) {
 	handle_watch_task();
       }));
 }

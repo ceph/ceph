@@ -492,7 +492,7 @@ public:
       mock_image_ctx.image_ctx->op_work_queue->queue(ctx, r);
     }
 
-    on_flush = new FunctionContext([on_flush](int r) {
+    on_flush = new LambdaContext([on_flush](int r) {
         derr << "FLUSH START" << dendl;
         on_flush->complete(r);
         derr << "FLUSH FINISH" << dendl;

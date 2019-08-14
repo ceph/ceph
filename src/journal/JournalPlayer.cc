@@ -716,7 +716,7 @@ void JournalPlayer::schedule_watch(bool immediate) {
                      << *m_active_tag_tid << dendl;
 
     m_async_op_tracker.start_op();
-    FunctionContext *ctx = new FunctionContext([this](int r) {
+    auto ctx = new LambdaContext([this](int r) {
         handle_watch_assert_active(r);
       });
     m_journal_metadata->assert_active_tag(*m_active_tag_tid, ctx);
@@ -856,7 +856,7 @@ void JournalPlayer::handle_cache_rebalanced(uint64_t new_cache_bytes) {
     m_state = STATE_INIT;
     if (m_max_fetch_bytes >= min_bytes) {
       m_async_op_tracker.start_op();
-      auto ctx = new FunctionContext(
+      auto ctx = new LambdaContext(
         [this](int r) {
           prefetch();
           m_async_op_tracker.finish_op();

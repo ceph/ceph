@@ -161,7 +161,7 @@ void PurgeQueue::activate()
 
   if (in_flight.empty()) {
     dout(4) << "start work (by drain)" << dendl;
-    finisher.queue(new FunctionContext([this](int r) {
+    finisher.queue(new LambdaContext([this](int r) {
 	  std::lock_guard l(lock);
 	  _consume();
 	  }));
@@ -186,7 +186,7 @@ void PurgeQueue::open(Context *completion)
   if (completion)
     waiting_for_recovery.push_back(completion);
 
-  journaler.recover(new FunctionContext([this](int r){
+  journaler.recover(new LambdaContext([this](int r){
     if (r == -ENOENT) {
       dout(1) << "Purge Queue not found, assuming this is an upgrade and "
                  "creating it." << dendl;
@@ -237,7 +237,7 @@ void PurgeQueue::_recover()
     if (!journaler.is_readable() &&
 	!journaler.get_error() &&
 	journaler.get_read_pos() < journaler.get_write_pos()) {
-      journaler.wait_for_readable(new FunctionContext([this](int r) {
+      journaler.wait_for_readable(new LambdaContext([this](int r) {
         std::lock_guard l(lock);
 	_recover();
       }));
@@ -279,7 +279,7 @@ void PurgeQueue::create(Context *fin)
   layout.pool_id = metadata_pool;
   journaler.set_writeable();
   journaler.create(&layout, JOURNAL_FORMAT_RESILIENT);
-  journaler.write_head(new FunctionContext([this](int r) {
+  journaler.write_head(new LambdaContext([this](int r) {
     std::lock_guard l(lock);
     if (r) {
       _go_readonly(r);
@@ -322,7 +322,7 @@ void PurgeQueue::push(const PurgeItem &pi, Context *completion)
     // we should flush in order to allow MDCache to drop its strays rather
     // than having them wait for purgequeue to progress.
     if (!delayed_flush) {
-      delayed_flush = new FunctionContext([this](int r){
+      delayed_flush = new LambdaContext([this](int r){
             delayed_flush = nullptr;
             journaler.flush();
           });
@@ -435,7 +435,7 @@ bool PurgeQueue::_consume()
       // Because we are the writer and the reader of the journal
       // via the same Journaler instance, we never need to reread_head
       if (!journaler.have_waiter()) {
-        journaler.wait_for_readable(new FunctionContext([this](int r) {
+        journaler.wait_for_readable(new LambdaContext([this](int r) {
           std::lock_guard l(lock);
           if (r == 0) {
             _consume();
@@ -558,7 +558,7 @@ void PurgeQueue::_execute_item(
   ceph_assert(gather.has_subs());
 
   gather.set_finisher(new C_OnFinisher(
-                      new FunctionContext([this, expire_to](int r){
+                      new LambdaContext([this, expire_to](int r){
     std::lock_guard l(lock);
     _execute_item_complete(expire_to);
 
@@ -685,7 +685,7 @@ void PurgeQueue::handle_conf_change(const std::set<std::string>& changed, const 
       // might need to kick off consume.
       dout(4) << "maybe start work again (max_purge_files="
               << g_conf()->mds_max_purge_files << dendl;
-      finisher.queue(new FunctionContext([this](int r){
+      finisher.queue(new LambdaContext([this](int r){
         std::lock_guard l(lock);
         _consume();
       }));

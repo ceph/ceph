@@ -141,11 +141,12 @@ public:
   void expect_start_op(librbd::MockTestImageCtx &mock_image_ctx, bool success) {
     EXPECT_CALL(*mock_image_ctx.exclusive_lock, start_op(_))
       .WillOnce(Invoke([success](int* r) {
+                  auto f = [](int r) {};
                   if (!success) {
                     *r = -EROFS;
-                    return static_cast<FunctionContext*>(nullptr);
+                    return static_cast<LambdaContext<decltype(f)>*>(nullptr);
                   }
-                  return new FunctionContext([](int r) {});
+                  return new LambdaContext(std::move(f));
                 }));
   }
 

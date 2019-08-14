@@ -433,7 +433,7 @@ void JournalMetadata::init(Context *on_finish) {
   on_finish = utils::create_async_context_callback(
     this, on_finish);
   on_finish = new C_ImmutableMetadata(this, on_finish);
-  on_finish = new FunctionContext([this, on_finish](int r) {
+  on_finish = new LambdaContext([this, on_finish](int r) {
       if (r < 0) {
         lderr(m_cct) << __func__ << ": failed to watch journal"
                      << cpp_strerror(r) << dendl;
@@ -467,11 +467,11 @@ void JournalMetadata::shut_down(Context *on_finish) {
   // chain the shut down sequence (reverse order)
   on_finish = utils::create_async_context_callback(
     this, on_finish);
-  on_finish = new FunctionContext([this, on_finish](int r) {
+  on_finish = new LambdaContext([this, on_finish](int r) {
       ldout(m_cct, 20) << "shut_down: waiting for ops" << dendl;
       m_async_op_tracker.wait_for_ops(on_finish);
     });
-  on_finish = new FunctionContext([this, on_finish](int r) {
+  on_finish = new LambdaContext([this, on_finish](int r) {
       ldout(m_cct, 20) << "shut_down: flushing watch" << dendl;
       librados::Rados rados(m_ioctx);
       librados::AioCompletion *comp = librados::Rados::aio_create_completion(
@@ -480,7 +480,7 @@ void JournalMetadata::shut_down(Context *on_finish) {
       ceph_assert(r == 0);
       comp->release();
     });
-  on_finish = new FunctionContext([this, on_finish](int r) {
+  on_finish = new LambdaContext([this, on_finish](int r) {
       flush_commit_position(on_finish);
     });
   if (watch_handle != 0) {
@@ -835,7 +835,7 @@ void JournalMetadata::handle_commit_position_task() {
   m_async_op_tracker.start_op();
   ++m_flush_commits_in_progress;
 
-  Context* ctx = new FunctionContext([this, commit_position_ctx](int r) {
+  Context* ctx = new LambdaContext([this, commit_position_ctx](int r) {
       Contexts flush_commit_position_ctxs;
       m_lock.lock();
       ceph_assert(m_flush_commits_in_progress > 0);
@@ -852,7 +852,7 @@ void JournalMetadata::handle_commit_position_task() {
       m_async_op_tracker.finish_op();
     });
   ctx = new C_NotifyUpdate(this, ctx);
-  ctx = new FunctionContext([this, ctx](int r) {
+  ctx = new LambdaContext([this, ctx](int r) {
       // manually kick of a refresh in case the notification is missed
       // and ignore the next notification that we are about to send
       m_lock.lock();
@@ -861,7 +861,7 @@ void JournalMetadata::handle_commit_position_task() {
 
       refresh(ctx);
     });
-  ctx = new FunctionContext([this, ctx](int r) {
+  ctx = new LambdaContext([this, ctx](int r) {
       schedule_laggy_clients_disconnect(ctx);
     });
 
@@ -1118,7 +1118,7 @@ void JournalMetadata::schedule_laggy_clients_disconnect(Context *on_finish) {
         ldout(m_cct, 1) << __func__ << ": " << client_id
                         << ": scheduling disconnect" << dendl;
 
-        ctx = new FunctionContext([this, client_id, ctx](int r1) {
+        ctx = new LambdaContext([this, client_id, ctx](int r1) {
             ldout(m_cct, 10) << __func__ << ": " << client_id
                              << ": flagging disconnected" << dendl;
 
