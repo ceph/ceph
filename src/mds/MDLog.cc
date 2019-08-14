@@ -625,8 +625,8 @@ void MDLog::trim(int m)
 
   unsigned new_expiring_segments = 0;
 
-  unsigned max_expiring_segments = 0;
-  if (pre_segments_size > 0){
+  unsigned max_expiring_segments = g_conf().get_val<uint64_t>("mds_log_max_expiring");
+  if (max_expiring_segments == 0 && pre_segments_size > 0){
     max_expiring_segments = max_segments/2;
     assert(segments.size() >= pre_segments_size);
     max_expiring_segments = std::max<unsigned>(max_expiring_segments,segments.size() - pre_segments_size);
