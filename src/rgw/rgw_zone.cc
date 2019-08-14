@@ -77,6 +77,7 @@ int RGWZoneGroup::create_default(bool old_format)
   placement_target.name = "default-placement";
   placement_targets[placement_target.name] = placement_target;
   default_placement.name = "default-placement";
+  default_placement.storage_class = "STANDARD";
 
   RGWZoneParams zone_params(default_zone_name);
 
