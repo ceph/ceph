@@ -63,7 +63,15 @@ int cls_cxx_create(cls_method_context_t hctx, bool exclusive)
 
 int cls_cxx_remove(cls_method_context_t hctx)
 {
-  return 0;
+  OSDOp op{CEPH_OSD_OP_DELETE};
+
+  // we're blocking here which presumes execution in Seastar's thread.
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    return 0;
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
 }
 
 int cls_cxx_stat(cls_method_context_t hctx, uint64_t *size, time_t *mtime)
@@ -149,12 +157,44 @@ int cls_cxx_replace(cls_method_context_t hctx,
                     int len,
                     bufferlist *inbl)
 {
-  return 0;
+  {
+    OSDOp top{CEPH_OSD_OP_TRUNCATE};
+    top.op.extent.offset = 0;
+    top.op.extent.length = 0;
+    try {
+      reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(top).get();
+      return 0;
+    } catch (ceph::osd::error& e) {
+      return -e.code().value();
+    }
+  }
+
+  {
+    OSDOp wop{CEPH_OSD_OP_WRITE};
+    wop.op.extent.offset = ofs;
+    wop.op.extent.length = len;
+    wop.indata = *inbl;
+
+    try {
+      reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(wop).get();
+      return 0;
+    } catch (ceph::osd::error& e) {
+      return -e.code().value();
+    }
+  }
 }
 
 int cls_cxx_truncate(cls_method_context_t hctx, int ofs)
 {
-  return 0;
+  OSDOp op{CEPH_OSD_OP_TRUNCATE};
+  op.op.extent.offset = ofs;
+  op.op.extent.length = 0;
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    return 0;
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
 }
 
 int cls_cxx_getxattr(cls_method_context_t hctx,
@@ -198,7 +238,14 @@ int cls_cxx_setxattr(cls_method_context_t hctx,
 
 int cls_cxx_snap_revert(cls_method_context_t hctx, snapid_t snapid)
 {
-  return 0;
+  OSDOp op{op = CEPH_OSD_OP_ROLLBACK};
+  op.op.snap.snapid = snapid;
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    return 0;
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
 }
 
 int cls_cxx_map_get_all_vals(cls_method_context_t hctx,
