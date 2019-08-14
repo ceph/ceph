@@ -846,7 +846,14 @@ EOF
 EOF
         fi
         echo start osd.$osd
-        run 'osd' $osd $SUDO $CEPH_BIN/$ceph_osd $extra_osd_args -i $osd $ARGS $COSD_ARGS
+        local extra_seastar_args
+        if [ "$ceph_osd" == "crimson-osd" ]; then
+            # designate a single CPU node $osd for osd.$osd
+            extra_seastar_args="--smp 1 --cpuset $osd"
+        fi
+        run 'osd' $osd $SUDO $CEPH_BIN/$ceph_osd \
+            $extra_seastar_args $extra_osd_args \
+            -i $osd $ARGS $COSD_ARGS
     done
 }
 
