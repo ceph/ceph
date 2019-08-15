@@ -893,6 +893,26 @@ Keystone Settings
 :Type: Boolean
 :Default: ``true``
 
+
+Server-side encryption Settings
+===============================
+
+``rgw crypt s3 kms backend``
+:Description: Where the SSE-KMS encryption keys are stored. Supported KMS
+              systems are OpenStack Barbican (`barbican`) and HashiCorp Vault
+              (`vault`). Use ``local`` if keys are stored in `ceph.conf` (see
+              ``rgw crypt s3 kms encryption keys``).
+:Type: String
+:Default: ``local``
+
+``rgw crypt s3 kms encryption keys``
+:Description: KMS encryption keys if ``rgw crypt s3 kms backend`` is set to
+              ``local``. Format is a space-separated list of key name/value
+              pairs, e.g. ``key-1=... key-2=...```.
+:Type: String
+:Default: None
+
+
 Barbican Settings
 =================
 
@@ -936,6 +956,39 @@ Barbican Settings
 :Type: String
 :Default: None
 
+
+HashiCorp Vault Settings
+========================
+
+``rgw crypt s3 kms vault namespace``
+:Description: Namespace in Vault where SSE-KMS keys are stored.
+:Type: String
+:Default: None
+
+``rgw crypt s3 kms vault auth```
+:Description: Type of authentication method to be used. Supported methods are
+              ``token`` and ``agent``.
+:Type: String
+:Default: ``token``
+
+```rgw crypt s3 kms vault token file```
+:Description: If authentication method is ``token``, provide a path to the token
+              file readable only by Rados Gateway.
+:Type: String
+:Default: None
+
+```rgw crypt s3 kms vault url```
+:Description: If authentication method is ``token``, provide a URL to the Vault
+              server endpoint.
+:Type: String
+:Default: None
+
+```rgw crypt s3 kms vault agent```
+:Description: If authentication method is ``agent``, provide a path to a Unix
+              socket (``unix://path/to/socket_file``) or URL to Vault agent
+              (``http://127.0.0.1:8100``).
+:Type: String
+:Default: None
 
 QoS settings
 ------------
