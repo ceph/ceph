@@ -562,25 +562,22 @@ Alternatively, you can use Python's native package installation method::
   $ pip install tox
   $ pip install coverage
 
-To run the tests, run ``run-tox.sh`` in the dashboard directory (where
-``tox.ini`` is located)::
+You can run tox with different environments::
 
-  ## Run Python 2+3 tests+lint commands:
-  $ ./run-tox.sh
-
-  ## Run Python 3 tests+lint commands:
-  $ WITH_PYTHON2=OFF ./run-tox.sh
-
-  ## Run Python 3 arbitrary command (e.g. 1 single test):
-  $ WITH_PYTHON2=OFF ./run-tox.sh pytest tests/test_rgw_client.py::RgwClientTest::test_ssl_verify
-
-You can also run tox instead of ``run-tox.sh``::
+  ## Run all tests
+  $ CEPH_BUILD_DIR=.tox tox -e py2-cov,py2-lint,py2-check,py3-cov,py3-lint,py3-check
 
   ## Run Python 3 tests command:
   $ CEPH_BUILD_DIR=.tox tox -e py3-cov
 
   ## Run Python 3 arbitrary command (e.g. 1 single test):
   $ CEPH_BUILD_DIR=.tox tox -e py3-run pytest tests/test_rgw_client.py::RgwClientTest::test_ssl_verify
+
+You can also invoke project-wide ``run_tox.sh`` script::
+
+  ## Run all tests
+  $ cd <CEPH_ROOT>/src/pybind/mgr/dashboard 
+  $ ../../../script/run_tox.sh --tox-envs py2-cov,py2-lint,py2-check,py3-cov,py3-lint,py3-check
 
 We also collect coverage information from the backend code when you run tests. You can check the
 coverage information provided by the tox output, or by running the following
@@ -1730,7 +1727,7 @@ The available interfaces are the following:
 - ``CanLog``: provides the plug-in with access to the Ceph Dashboard logger under ``self.log``.
 - ``Setupable``: requires overriding ``setup()`` hook. This method is run in the Ceph Dashboard ``serve()`` method, right after CherryPy has been configured, but before it is started. It's a placeholder for the plug-in initialization logic.
 - ``HasOptions``: requires overriding ``get_options()`` hook by returning a list of ``Options()``. The options returned here are added to the ``MODULE_OPTIONS``.
-- ``HasCommands``: requires overriding ``register_commands()`` hook by defining the commands the plug-in can handle and decorating them with ``@CLICommand`. The commands can be optionally returned, so that they can be invoked externally (which makes unit testing easier).
+- ``HasCommands``: requires overriding ``register_commands()`` hook by defining the commands the plug-in can handle and decorating them with ``@CLICommand``. The commands can be optionally returned, so that they can be invoked externally (which makes unit testing easier).
 - ``HasControllers``: requires overriding ``get_controllers()`` hook by defining and returning the controllers as usual.
 - ``FilterRequest.BeforeHandler``: requires overriding ``filter_request_before_handler()`` hook. This method receives a ``cherrypy.request`` object for processing. A usual implementation of this method will allow some requests to pass or will raise a ``cherrypy.HTTPError` based on the ``request`` metadata and other conditions.
 
