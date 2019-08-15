@@ -45,6 +45,10 @@
         <source>Alerts</source>
         <target>アラート</target>
       </trans-unit>
+      <trans-unit id="aa0c44aa1e5727061baa91e954f77e2f5f9a37c9" datatype="html">
+        <source>Silences</source>
+        <target>Silences</target>
+      </trans-unit>
       <trans-unit id="92899fa68e8ca108912163ff58edc8540e453787" datatype="html">
         <source>Pools</source>
         <target>プール</target>
@@ -106,14 +110,14 @@
       <trans-unit id="5a870dc77b9f6f33ee671ea2d856021276933339" datatype="html">
         <source>Displaying previously cached data
           <x id="START_TAG_SPAN_1" ctype="x-span" equiv-text="<span>"/>
-  for
+  for 
           <x id="START_TAG_SPAN" ctype="x-span" equiv-text="<span>"/>
           <x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="</span>"/>
           <x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="</span>"/>.
         </source>
         <target>Displaying previously cached data
           <x id="START_TAG_SPAN_1" ctype="x-span" equiv-text="<span>"/>
-  for
+  for 
           <x id="START_TAG_SPAN" ctype="x-span" equiv-text="<span>"/>
           <x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="</span>"/>
           <x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="</span>"/>.
@@ -153,11 +157,10 @@
           <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> on how to
   configure and enable the monitoring functionality.
         </source>
-        <target>監視機能を設定および有効化
-する方法に関する
-          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>ドキュメント
-          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>を
-参照してください。
+        <target>Please consult the
+          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>documentation
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> on how to
+  configure and enable the monitoring functionality.
         </target>
       </trans-unit>
       <trans-unit id="160a9e80dc089792df42e2400b1e81b9e7025aa7" datatype="html">
@@ -166,10 +169,10 @@
           <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> on how to
   add dashboards to Grafana.
         </source>
-        <target>Grafanaダッシュボードが存在していません。
-Grafanaにダッシュボードを追加する方法に関する
-          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>ドキュメント
-          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>を参照してください。
+        <target>Grafana Dashboard doesn't exist. Please refer to
+          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>documentation
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> on how to
+  add dashboards to Grafana.
         </target>
       </trans-unit>
       <trans-unit id="4e11830040bd64804a0555de76f291d5832772d4" datatype="html">
@@ -179,6 +182,30 @@ Grafanaにダッシュボードを追加する方法に関する
       <trans-unit id="238c1ba845dd7330e8088165275919a1debf1ca3" datatype="html">
         <source>Reset Settings</source>
         <target>設定のリセット</target>
+      </trans-unit>
+      <trans-unit id="c8d1785038d461ec66b5799db21864182b35900a" datatype="html">
+        <source>Refresh</source>
+        <target>Refresh</target>
+      </trans-unit>
+      <trans-unit id="6c947210e2d162b6225083d18820ab602f58cd2d" datatype="html">
+        <source>Remove the custom configuration value. The default configuration will be inherited and used instead.</source>
+        <target>Remove the custom configuration value. The default configuration will be inherited and used instead.</target>
+      </trans-unit>
+      <trans-unit id="454ee9cb60b00446a8fb147fd2cc5eb836320586" datatype="html">
+        <source>The entered value is too high! It must not be greater than 
+          <x id="INTERPOLATION" equiv-text="{{ option.maxValue }}"/>.
+        </source>
+        <target>The entered value is too high! It must not be greater than 
+          <x id="INTERPOLATION" equiv-text="{{ option.maxValue }}"/>.
+        </target>
+      </trans-unit>
+      <trans-unit id="7fc8a22825131e028336f60ef909ccbd96059703" datatype="html">
+        <source>The entered value is too low! It must not be lower than 
+          <x id="INTERPOLATION" equiv-text="{{ option.minValue }}"/>.
+        </source>
+        <target>The entered value is too low! It must not be lower than 
+          <x id="INTERPOLATION" equiv-text="{{ option.minValue }}"/>.
+        </target>
       </trans-unit>
       <trans-unit id="012741ee52b3c050e4a977c37cc2334f7974f141" datatype="html">
         <source>Failed to load data.</source>
@@ -199,307 +226,9 @@ Grafanaにダッシュボードを追加する方法に関する
         <target>合計</target>
         <note>X total</note>
       </trans-unit>
-      <trans-unit id="121cc5391cd2a5115bc2b3160379ee5b36cd7716" datatype="html">
-        <source>Settings</source>
-        <target>設定</target>
-      </trans-unit>
-      <trans-unit id="9e515f954730279c31d5301f02479666d6264e8b" datatype="html">
-        <source>Changing these parameters from their default values is usually not necessary.</source>
-        <target>通常はこれらのパラメータをデフォルト値から変更する必要はありません。</target>
-      </trans-unit>
-      <trans-unit id="69a47cbabcc51ca942606e1d8da0ec11f98a2690" datatype="html">
-        <source>Backstore</source>
-        <target>バックストア</target>
-      </trans-unit>
-      <trans-unit id="68e710782ccb5398b3acb8844caf0b199da2c3da" datatype="html">
-        <source>Confirm</source>
-        <target>確認</target>
-      </trans-unit>
-      <trans-unit id="d7b35c384aecd25a516200d6921836374613dfe7" datatype="html">
-        <source>Cancel</source>
-        <target>キャンセル</target>
-      </trans-unit>
-      <trans-unit id="339878da255ab55447c43afef8d9b2f9753bf5f6" datatype="html">
-        <source>Advanced Settings</source>
-        <target>詳細設定</target>
-      </trans-unit>
-      <trans-unit id="1406c2fb12a20c1528b19bcc5e24a6a2386167f3" datatype="html">
-        <source>Target IQN</source>
-        <target>ターゲットIQN</target>
-      </trans-unit>
-      <trans-unit id="7cbdabcece469fab89cfa687ab152bca18b97498" datatype="html">
-        <source>This field is required.</source>
-        <target>このフィールドは必須です。</target>
-      </trans-unit>
-      <trans-unit id="5fe42339be910372fa689f559155631862d218e8" datatype="html">
-        <source>IQN has wrong pattern.</source>
-        <target>IQNのパターンが正しくありません。</target>
-      </trans-unit>
-      <trans-unit id="47d1bfe4f5b3f292e1202dfe691195b10cb99500" datatype="html">
-        <source>An IQN has the following notation 'iqn.$year-$month.$reversedAddress:$definedName'</source>
-        <target>IQNは「iqn.$year-$month.$reversedAddress:$definedName」という形式で表記されます。</target>
-      </trans-unit>
-      <trans-unit id="c8ada4b53396d8366db00a435acc61d53d857047" datatype="html">
-        <source>For example: iqn.2016-06.org.dashboard:storage:disk.sn-a8675309</source>
-        <target>例: iqn.2016-06.org.dashboard:storage:disk.sn-a8675309</target>
-      </trans-unit>
-      <trans-unit id="e60c11e1b1dfbbeda577364b8de39ded2d796c5e" datatype="html">
-        <source>More information</source>
-        <target>詳細情報</target>
-      </trans-unit>
-      <trans-unit id="9b1aa85dfc6849196e64060db02c5410de69b7a1" datatype="html">
-        <source>This target has modified advanced settings.</source>
-        <target>このターゲットの詳細設定は変更されています。</target>
-      </trans-unit>
-      <trans-unit id="6990ad8d6182662e864495ac31c3758cda1c7a28" datatype="html">
-        <source>Portals</source>
-        <target>ポータル</target>
-      </trans-unit>
-      <trans-unit id="c3638c01b6c34066438909713ec96087c813fc7e" datatype="html">
-        <source>At least
-          <x id="INTERPOLATION" equiv-text="{{ minimum_gateways }}"/> gateways are required.
-        </source>
-        <target>少なくとも
-          <x id="INTERPOLATION" equiv-text="{{ minimum_gateways }}"/>台のゲートウェイが必要です。
-        </target>
-      </trans-unit>
-      <trans-unit id="6a3ac2b4137d723fd9878cd357c2012ff6c07973" datatype="html">
-        <source>Add portal</source>
-        <target>ポータルの追加</target>
-      </trans-unit>
-      <trans-unit id="e3484cae8b118c576ca2815bf9c9406c2eb2cae3" datatype="html">
-        <source>This image has modified settings.</source>
-        <target>このイメージの設定は変更されています。</target>
-      </trans-unit>
-      <trans-unit id="107c84e820909b44fe258673938a68ced1bbff72" datatype="html">
-        <source>At least 1 image is required.</source>
-        <target>少なくとも1つのイメージが必要です。</target>
-      </trans-unit>
-      <trans-unit id="808038f912fdc7f0e03f82d4afd3bf9178527fc8" datatype="html">
-        <source>Add image</source>
-        <target>イメージの追加</target>
-      </trans-unit>
-      <trans-unit id="66c5fb27f52e75b70ca4b670b9b15a2a51cf9543" datatype="html">
-        <source>ACL authentication</source>
-        <target>ACL認証</target>
-      </trans-unit>
-      <trans-unit id="f494bd31f095f6dcc656ce87ec2dcf07a2e9b30c" datatype="html">
-        <source>Initiators</source>
-        <target>イニシエータ</target>
-      </trans-unit>
-      <trans-unit id="e98239d8a6be1100119ff4b5630c822b82786740" datatype="html">
-        <source>Initiator</source>
-        <target>イニシエータ</target>
-      </trans-unit>
-      <trans-unit id="f2c5059d8cda15d8d03e2cce30f2d139623d9a91" datatype="html">
-        <source>Client IQN</source>
-        <target>クライアントIQN</target>
-      </trans-unit>
-      <trans-unit id="107d5aabce23d900f0a80e6ddc1c10e29aa0bed8" datatype="html">
-        <source>Initiator IQN needs to be unique.</source>
-        <target>イニシエータIQNは一意である必要があります。</target>
-      </trans-unit>
-      <trans-unit id="e08a77594f3d89311cdf6da5090044270909c194" datatype="html">
-        <source>User</source>
-        <target>ユーザ</target>
-      </trans-unit>
-      <trans-unit id="bbf0b34a3fcc80800fcb44b9e1e86931a530dfe3" datatype="html">
-        <source>Usernames must have a length of 8 to 64 characters and
-                        can only contain letters, '.', '@', '-', '_' or ':'.</source>
-        <target>ユーザ名は8～64文字の長さである必要があり、
-英字、「.」、「@」、「-」、「_」、または「:」のみで構成される必要があります。</target>
-      </trans-unit>
-      <trans-unit id="c32ef07f8803a223a83ed17024b38e8d82292407" datatype="html">
-        <source>Password</source>
-        <target>パスワード</target>
-      </trans-unit>
-      <trans-unit id="ff40391de7a1944ea95091e4045cc34c4979b736" datatype="html">
-        <source>Mutual User</source>
-        <target>相互ユーザ</target>
-      </trans-unit>
-      <trans-unit id="0cf73dbebe99b737c4d288788182fc356e3c93d3" datatype="html">
-        <source>Mutual Password</source>
-        <target>相互パスワード</target>
-      </trans-unit>
-      <trans-unit id="5d1878d5fc761cbe9614bfd87047a740c82a6951" datatype="html">
-        <source>Initiator belongs to a group. Images will be configure in the group.</source>
-        <target>イニシエータはいずれかのグループに属します。イメージはそのグループ内で設定されます。</target>
-      </trans-unit>
-      <trans-unit id="c0de67b9d97fafbf200f9451e8388ee8128a56ac" datatype="html">
-        <source>No items added.</source>
-        <target>アイテムが追加されていません。</target>
-      </trans-unit>
-      <trans-unit id="d565e47726158e428ecdc952fc9233b9b7d7f049" datatype="html">
-        <source>Add initiator</source>
-        <target>イニシエータの追加</target>
-      </trans-unit>
-      <trans-unit id="c22ba03540aa3217da059f45e7eab138b51a96e2" datatype="html">
-        <source>Groups</source>
-        <target>グループ</target>
-      </trans-unit>
-      <trans-unit id="4c90059afafb7e160384d9f512797c95bb95c6dc" datatype="html">
-        <source>Group</source>
-        <target>グループ</target>
-      </trans-unit>
       <trans-unit id="cff1428d10d59d14e45edec3c735a27b5482db59" datatype="html">
         <source>Name</source>
         <target>名前</target>
-      </trans-unit>
-      <trans-unit id="3084948274cff4f56d0f431af47240e9cf02fcc7" datatype="html">
-        <source>Add group</source>
-        <target>グループの追加</target>
-      </trans-unit>
-      <trans-unit id="71c77bb8cecdf11ec3eead24dd1ba506573fa9cd" datatype="html">
-        <source>Submit</source>
-        <target>送信</target>
-      </trans-unit>
-      <trans-unit id="54839ebc827b73c9dc4e1df731c6d36a85036af7" datatype="html">
-        <source>Are you sure that you want to
-          <x id="INTERPOLATION" equiv-text="{{ actionDescription | lowercase }}"/> the selected
-          <x id="INTERPOLATION_1" equiv-text="{{ itemDescription }}"/>?
-        </source>
-        <target>選択された
-          <x id="INTERPOLATION_1" equiv-text="{{ itemDescription }}"/>を
-          <x id="INTERPOLATION" equiv-text="{{ actionDescription | lowercase }}"/>してもよろしいですか?
-        </target>
-      </trans-unit>
-      <trans-unit id="2be8b7f04f0104d3fad90d079d8202b74f758b9a" datatype="html">
-        <source>Yes, I am sure.</source>
-        <target>はい。</target>
-      </trans-unit>
-      <trans-unit id="6803e31b7395d94934e091a49a9524026b59b018" datatype="html">
-        <source>Discovery Authentication</source>
-        <target>検出認証</target>
-      </trans-unit>
-      <trans-unit id="0214f773f8e394f50f953f39962e352d7863e959" datatype="html">
-        <source>Usernames must have a length of 8 to 64 characters and
-              can only contain letters, '.', '@', '-', '_' or ':'.</source>
-        <target>ユーザ名は8～64文字の長さである必要があり、
-英字、「.」、「@」、「-」、「_」、または「:」のみで構成される必要があります。</target>
-      </trans-unit>
-      <trans-unit id="53a583cd5f15059cc958b7d547f72cc78f68e123" datatype="html">
-        <source>Please consult the
-          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>documentation
-          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>
-    on how to configure and enable the iSCSI Targets management functionality.
-        </source>
-        <target>iSCSIターゲットの管理機能を設定および有効化
-する方法に関する
-          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>ドキュメント
-          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>を参照してください。
-        </target>
-      </trans-unit>
-      <trans-unit id="3b301d0044f62c92af0da53d7aaca52a436a547d" datatype="html">
-        <source>Available information:</source>
-        <target>取得可能な情報:</target>
-      </trans-unit>
-      <trans-unit id="332227f088a4877b3c11f5fb3ae8bc812c470fae" datatype="html">
-        <source>iSCSI Targets not available</source>
-        <target>使用可能なiSCSIターゲットがありません</target>
-      </trans-unit>
-      <trans-unit id="0e9ecf29a4fa5b057bd8052e0d801b3fde6a30bf" datatype="html">
-        <source>'/' and '@' are not allowed.</source>
-        <target>「/」と「@」は使用できません。</target>
-      </trans-unit>
-      <trans-unit id="94516fa213706c67ce5a5b5765681d7fb032033a" datatype="html">
-        <source>Loading...</source>
-        <target>読み込んでいます...</target>
-      </trans-unit>
-      <trans-unit id="b99417c4dd46286ffd37c8d2e987c8b512ec7052" datatype="html">
-        <source>-- No rbd pools available --</source>
-        <target>-- 使用可能なrbdプールがありません --</target>
-      </trans-unit>
-      <trans-unit id="ef83ec9c304a89d45650e580dcdc2978c37b3a83" datatype="html">
-        <source>-- Select a pool --</source>
-        <target>-- プールを選択してください --</target>
-      </trans-unit>
-      <trans-unit id="49449943d8cbf59d8c401c8bd2e76f92e207cc5f" datatype="html">
-        <source>Use a dedicated data pool</source>
-        <target>専用のデータプールを使用してください</target>
-      </trans-unit>
-      <trans-unit id="870aee0dd31a9643bf62007beb8f1ae1deb34d42" datatype="html">
-        <source>Data pool</source>
-        <target>データプール</target>
-      </trans-unit>
-      <trans-unit id="3792ca829d9b9f687e1f5d7733d30e9bb0bfec47" datatype="html">
-        <source>Dedicated pool that stores the object-data of the RBD.</source>
-        <target>RBDのオブジェクトデータを保管するための専用プール</target>
-      </trans-unit>
-      <trans-unit id="151c80ea931037cd92e854442927f8a0f6ae7795" datatype="html">
-        <source>-- No data pools available --</source>
-        <target>-- 使用可能なデータプールがありません --</target>
-      </trans-unit>
-      <trans-unit id="7faaaa08f56427999f3be41df1093ce4089bbd75" datatype="html">
-        <source>Size</source>
-        <target>サイズ</target>
-      </trans-unit>
-      <trans-unit id="f0016bd458baa88284a658ce9eeda42d8ad88d2c" datatype="html">
-        <source>e.g., 10GiB</source>
-        <target>例: 10GiB</target>
-      </trans-unit>
-      <trans-unit id="0a88bbee20570aaf9615332fb27020627044874d" datatype="html">
-        <source>You have to increase the size.</source>
-        <target>サイズを大きくする必要があります。</target>
-      </trans-unit>
-      <trans-unit id="6cdb1fea93d77c07950c0c76c6e0ad79ebbef084" datatype="html">
-        <source>Features</source>
-        <target>機能</target>
-      </trans-unit>
-      <trans-unit id="1cfe07dac5b4ee1c464eb24225ddeb4f1d24076a" datatype="html">
-        <source>Advanced...</source>
-        <target>詳細...</target>
-      </trans-unit>
-      <trans-unit id="bc2e854e111ecf2bd7db170da5e3c2ed08181d88" datatype="html">
-        <source>Advanced</source>
-        <target>詳細</target>
-      </trans-unit>
-      <trans-unit id="3562a3778695a5f9c0445660e35301f0a39aaf73" datatype="html">
-        <source>Striping</source>
-        <target>ストライピング</target>
-      </trans-unit>
-      <trans-unit id="ceac8e132384322ec778ba760875a6c6897d3e42" datatype="html">
-        <source>Object size</source>
-        <target>オブジェクトサイズ</target>
-      </trans-unit>
-      <trans-unit id="ef3c3f3b5f562a5cdbe0ee2874287db1534b5958" datatype="html">
-        <source>Stripe unit</source>
-        <target>ストライプ単位</target>
-      </trans-unit>
-      <trans-unit id="84471be1049006edecbcaef1a32ae0893c229c50" datatype="html">
-        <source>-- Select stripe unit --</source>
-        <target>-- ストライプ単位を選択してください --</target>
-      </trans-unit>
-      <trans-unit id="8d32c5c54c8581c774a7f467fbd4e329b15a74fa" datatype="html">
-        <source>This field is required because stripe count is defined!</source>
-        <target>ストライプ数が定義されているため、このフィールドは必須です。</target>
-      </trans-unit>
-      <trans-unit id="6bbf9040be7c5491d4a03f2185708f43a6582a3b" datatype="html">
-        <source>Stripe unit is greater than object size.</source>
-        <target>ストライプ単位がオブジェクトサイズより大きいです。</target>
-      </trans-unit>
-      <trans-unit id="a682f49f9b761591661276d7c6f550e641a130a4" datatype="html">
-        <source>Stripe count</source>
-        <target>ストライプ数</target>
-      </trans-unit>
-      <trans-unit id="baa74031990c5370008ba622d0a250f0929097f4" datatype="html">
-        <source>This field is required because stripe unit is defined!</source>
-        <target>ストライプ単位が定義されているため、このフィールドは必須です。</target>
-      </trans-unit>
-      <trans-unit id="cd2ada6d5ecbd5cbf89eae0a1f5326efedac0dbc" datatype="html">
-        <source>Stripe count must be greater than 0.</source>
-        <target>ストライプ数は0より大きい必要があります。</target>
-      </trans-unit>
-      <trans-unit id="aba82bfd8e177d35b76cad7cd43941f8e5e5acac" datatype="html">
-        <source>Trash</source>
-        <target>ごみ箱</target>
-      </trans-unit>
-      <trans-unit id="5e7f4b1ca49e8d217bd0e12c6f7d6b6a2ade2c18" datatype="html">
-        <source>Overall Performance</source>
-        <target>全体的なパフォーマンス</target>
-      </trans-unit>
-      <trans-unit id="28f86ffd419b869711aa13f5e5ff54be6d70731c" datatype="html">
-        <source>Edit</source>
-        <target>編集</target>
       </trans-unit>
       <trans-unit id="eec715de352a6b114713b30b640d319fa78207a0" datatype="html">
         <source>Description</source>
@@ -526,19 +255,19 @@ Grafanaにダッシュボードを追加する方法に関する
         <target>値</target>
       </trans-unit>
       <trans-unit id="82029b6db704c56a2aa3e82ac555b8655356b077" datatype="html">
-        <source>The entered value is too high! It must not be greater than
+        <source>The entered value is too high! It must not be greater than 
           <x id="INTERPOLATION" equiv-text="{{ maxValue }}"/>.
         </source>
-        <target>入力された値は大きすぎます。
-          <x id="INTERPOLATION" equiv-text="{{ maxValue }}"/>より大きい値を入力することはできません。
+        <target>The entered value is too high! It must not be greater than 
+          <x id="INTERPOLATION" equiv-text="{{ maxValue }}"/>.
         </target>
       </trans-unit>
       <trans-unit id="8ed8b3967a7326b81b191c9f490006e6a6777a9a" datatype="html">
-        <source>The entered value is too low! It must not be lower than
+        <source>The entered value is too low! It must not be lower than 
           <x id="INTERPOLATION" equiv-text="{{ minValue }}"/>.
         </source>
-        <target>入力された値は小さすぎます。
-          <x id="INTERPOLATION" equiv-text="{{ minValue }}"/>より小さい値を入力することはできません。
+        <target>The entered value is too low! It must not be lower than 
+          <x id="INTERPOLATION" equiv-text="{{ minValue }}"/>.
         </target>
       </trans-unit>
       <trans-unit id="52c9a103b812f258bcddc3d90a6e3f46871d25fe" datatype="html">
@@ -553,6 +282,10 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>Hosts List</source>
         <target>ホストリスト</target>
       </trans-unit>
+      <trans-unit id="5e7f4b1ca49e8d217bd0e12c6f7d6b6a2ade2c18" datatype="html">
+        <source>Overall Performance</source>
+        <target>全体的なパフォーマンス</target>
+      </trans-unit>
       <trans-unit id="e6d57f36aa2bad303c8a8ee944b9bd7fae3c8c26" datatype="html">
         <source>No entries found</source>
         <target>エントリが見つかりません</target>
@@ -564,6 +297,26 @@ Grafanaにダッシュボードを追加する方法に関する
       <trans-unit id="5f966baffd188be0e8adc2d7067b86e55fc9b9de" datatype="html">
         <source>Audit Logs</source>
         <target>監査ログ</target>
+      </trans-unit>
+      <trans-unit id="4193c9eb868aeec119b78a14795241e0aa5e8b60" datatype="html">
+        <source>Priority:</source>
+        <target>Priority:</target>
+      </trans-unit>
+      <trans-unit id="1d78ca51eab260ce3fd917d39190d64df5229b6e" datatype="html">
+        <source>Keyword:</source>
+        <target>Keyword:</target>
+      </trans-unit>
+      <trans-unit id="05fa0bded36de6e73a1fa44838b627349dace044" datatype="html">
+        <source>Date:</source>
+        <target>Date:</target>
+      </trans-unit>
+      <trans-unit id="31dadb362bf7f7c2afa10e5f96474ccd3977f91f" datatype="html">
+        <source>Datepicker</source>
+        <target>Datepicker</target>
+      </trans-unit>
+      <trans-unit id="85a400388de1899b1917138cf7e5286376f72847" datatype="html">
+        <source>Time range:</source>
+        <target>Time range:</target>
       </trans-unit>
       <trans-unit id="2447796ddbda942f4e2c46619cb84d69f066e568" datatype="html">
         <source>Loading configuration...</source>
@@ -585,20 +338,24 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>The entered value needs to be a valid IP address.</source>
         <target>有効なIPアドレスを入力する必要があります。</target>
       </trans-unit>
+      <trans-unit id="7cbdabcece469fab89cfa687ab152bca18b97498" datatype="html">
+        <source>This field is required.</source>
+        <target>このフィールドは必須です。</target>
+      </trans-unit>
       <trans-unit id="f19106149f4b07a0d721f9d317afed393cb7bd93" datatype="html">
-        <source>The entered value is too high! It must be lower or equal to
+        <source>The entered value is too high! It must be lower or equal to 
           <x id="INTERPOLATION" equiv-text="{{ moduleOption.value.max }}"/>.
         </source>
-        <target>入力された値は大きすぎます。
-          <x id="INTERPOLATION" equiv-text="{{ moduleOption.value.max }}"/>以下の値を入力する必要があります。
+        <target>The entered value is too high! It must be lower or equal to 
+          <x id="INTERPOLATION" equiv-text="{{ moduleOption.value.max }}"/>.
         </target>
       </trans-unit>
       <trans-unit id="6d33c40ef9a6c3bf0888df831b25e41e65f9d15b" datatype="html">
-        <source>The entered value is too low! It must be greater or equal to
+        <source>The entered value is too low! It must be greater or equal to 
           <x id="INTERPOLATION" equiv-text="{{ moduleOption.value.min }}"/>.
         </source>
-        <target>入力された値は小さすぎます。
-          <x id="INTERPOLATION" equiv-text="{{ moduleOption.value.min }}"/>以上の値を入力する必要があります。
+        <target>The entered value is too low! It must be greater or equal to 
+          <x id="INTERPOLATION" equiv-text="{{ moduleOption.value.min }}"/>.
         </target>
       </trans-unit>
       <trans-unit id="eae7086660cf1e38c7194a2c49ff52cc656f90f5" datatype="html">
@@ -653,9 +410,61 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>Not In Quorum</source>
         <target>非定数内</target>
       </trans-unit>
+      <trans-unit id="d7b35c384aecd25a516200d6921836374613dfe7" datatype="html">
+        <source>Cancel</source>
+        <target>キャンセル</target>
+      </trans-unit>
+      <trans-unit id="0c5121c531718a269a1e5bb54959fdb43a890483" datatype="html">
+        <source>Are you sure that you want to
+          <x id="INTERPOLATION" equiv-text="{{ actionDescription | lowercase }}"/> the selected 
+          <x id="INTERPOLATION_1" equiv-text="{{ itemDescription }}"/>?
+        </source>
+        <target>Are you sure that you want to
+          <x id="INTERPOLATION" equiv-text="{{ actionDescription | lowercase }}"/> the selected 
+          <x id="INTERPOLATION_1" equiv-text="{{ itemDescription }}"/>?
+        </target>
+      </trans-unit>
+      <trans-unit id="2be8b7f04f0104d3fad90d079d8202b74f758b9a" datatype="html">
+        <source>Yes, I am sure.</source>
+        <target>はい。</target>
+      </trans-unit>
       <trans-unit id="5ef50ba2514414f799d4c8fc36067a251904ba81" datatype="html">
         <source>Cluster-wide OSD Flags</source>
         <target>クラスタ全体のOSDフラグ</target>
+      </trans-unit>
+      <trans-unit id="71c77bb8cecdf11ec3eead24dd1ba506573fa9cd" datatype="html">
+        <source>Submit</source>
+        <target>送信</target>
+      </trans-unit>
+      <trans-unit id="formTitle" datatype="html">
+        <source>
+          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/>
+        </source>
+        <target>
+          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/>
+        </target>
+        <note>form title</note>
+      </trans-unit>
+      <trans-unit id="1cfe07dac5b4ee1c464eb24225ddeb4f1d24076a" datatype="html">
+        <source>Advanced...</source>
+        <target>詳細...</target>
+      </trans-unit>
+      <trans-unit id="b1ef1c12ddcee305353623919ef02778569f5454" datatype="html">
+        <source>Advanced configuration options</source>
+        <target>Advanced configuration options</target>
+      </trans-unit>
+      <trans-unit id="formActionButton" datatype="html">
+        <source>
+          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/>
+        </source>
+        <target>
+          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ resource | upperFirst }}"/>
+        </target>
+        <note>form action button</note>
       </trans-unit>
       <trans-unit id="c35f9c5f268a514b970cc55e9a5dc4bed0988e7f" datatype="html">
         <source>OSD Recovery Priority</source>
@@ -678,19 +487,19 @@ Grafanaにダッシュボードを追加する方法に関する
         <target>[object Object]</target>
       </trans-unit>
       <trans-unit id="98fe13e7ad6c2b80375d204b47858ded83f80e15" datatype="html">
-        <source>The entered value is too high! It must not be greater than
+        <source>The entered value is too high! It must not be greater than 
           <x id="INTERPOLATION" equiv-text="{{ attr.value.maxValue }}"/>.
         </source>
-        <target>入力された値は大きすぎます。
-          <x id="INTERPOLATION" equiv-text="{{ attr.value.maxValue }}"/>より大きい値を入力することはできません。
+        <target>The entered value is too high! It must not be greater than 
+          <x id="INTERPOLATION" equiv-text="{{ attr.value.maxValue }}"/>.
         </target>
       </trans-unit>
       <trans-unit id="5423a3c111be47fc5a1bfe46ceb58c81c84db691" datatype="html">
-        <source>The entered value is too low! It must not be lower than
+        <source>The entered value is too low! It must not be lower than 
           <x id="INTERPOLATION" equiv-text="{{ attr.value.minValue }}"/>.
         </source>
-        <target>入力された値は小さすぎます。
-          <x id="INTERPOLATION" equiv-text="{{ attr.value.minValue }}"/>より小さい値を入力することはできません。
+        <target>The entered value is too low! It must not be lower than 
+          <x id="INTERPOLATION" equiv-text="{{ attr.value.minValue }}"/>.
         </target>
       </trans-unit>
       <trans-unit id="272696ff8acdbed0af6dc13f09729e70be435b82" datatype="html">
@@ -706,11 +515,11 @@ Grafanaにダッシュボードを追加する方法に関する
         <target>再重みづけ</target>
       </trans-unit>
       <trans-unit id="d5ca5daf742023fc4f0919fb3c1c6a51991cda4f" datatype="html">
-        <source>OSDs
+        <source>OSDs 
           <x id="ICU" equiv-text="{deep, select, 1 {...}}"/>Scrub
         </source>
-        <target>OSD
-          <x id="ICU" equiv-text="{deep, select, 1 {...}}"/>スクラブ
+        <target>OSDs 
+          <x id="ICU" equiv-text="{deep, select, 1 {...}}"/>Scrub
         </target>
       </trans-unit>
       <trans-unit id="4c17d67c7c5799eb920030e9a399961e90f55dd8" datatype="html">
@@ -718,80 +527,150 @@ Grafanaにダッシュボードを追加する方法に関する
         <target>{VAR_SELECT, select, 1 {Deep } }</target>
       </trans-unit>
       <trans-unit id="6a92b12d76f3cb0ea9d4f6c3cdc57cb1e1235977" datatype="html">
-        <source>You are about to apply a
+        <source>You are about to apply a 
           <x id="ICU" equiv-text="{deep, select, 1 {...}}"/>scrub to
-            the OSD
+            the OSD 
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
           <x id="INTERPOLATION" equiv-text="{{ selected[0].id }}"/>
           <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>.
         </source>
-        <target>
-          <x id="ICU" equiv-text="{deep, select, 1 {...}}"/>スクラブをOSD
+        <target>You are about to apply a 
+          <x id="ICU" equiv-text="{deep, select, 1 {...}}"/>scrub to
+            the OSD 
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
           <x id="INTERPOLATION" equiv-text="{{ selected[0].id }}"/>
-          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>に
-適用しようとしています。
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>.
         </target>
       </trans-unit>
       <trans-unit id="dc6705f342a036b332c3fd3443201c3613e5524d" datatype="html">
         <source>{VAR_SELECT, select, 1 {deep } }</source>
         <target>{VAR_SELECT, select, 1 {deep } }</target>
       </trans-unit>
-      <trans-unit id="4beacb61e2236200b5627677b5c0054d2b482ed4" datatype="html">
-        <source>Set Cluster-wide Flags</source>
-        <target>クラスタ全体フラグの設定</target>
-      </trans-unit>
-      <trans-unit id="9617df8e0504d997d0ff45b6c206a12becd13c37" datatype="html">
-        <source>Set Cluster-wide Recovery Priority</source>
-        <target>クラスタ全体の回復優先度の設定</target>
-      </trans-unit>
       <trans-unit id="b49d7877d24112d4bdfce9256edf61a007fae888" datatype="html">
         <source>OSDs List</source>
         <target>OSDリスト</target>
       </trans-unit>
-      <trans-unit id="f777d9b30d757508cec8e0348e8696e1c64eab8a" datatype="html">
+      <trans-unit id="5fefe1505caccc8be70c808c1ea9451af0a84a45" datatype="html">
         <source>
-          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>OSD
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>OSD 
           <x id="INTERPOLATION" equiv-text="{{ selection.first().id }}"/>
           <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> will be marked
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
           <x id="INTERPOLATION_1" equiv-text="{{ markActionDescription }}"/>
           <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> if you proceed.
         </source>
-        <target>続行した場合は、
-          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>OSD
+        <target>
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>OSD 
           <x id="INTERPOLATION" equiv-text="{{ selection.first().id }}"/>
-          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>は
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> will be marked
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
           <x id="INTERPOLATION_1" equiv-text="{{ markActionDescription }}"/>
-          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>とマークされます。
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> if you proceed.
         </target>
       </trans-unit>
       <trans-unit id="2d3a73f6440a7d896d74356fe0a725d731e71cbb" datatype="html">
         <source>The OSD is not safe to destroy!</source>
         <target>このOSDを安全に破棄することはできません。</target>
       </trans-unit>
-      <trans-unit id="9d08116242443953ebbfe10bc2092e0a694b4adf" datatype="html">
+      <trans-unit id="e38d09f45e55ff926cc9d1c262b033201477278d" datatype="html">
         <source>
-          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>OSD
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>OSD 
           <x id="INTERPOLATION" equiv-text="{{ selection.first().id }}"/>
           <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> will be
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
           <x id="INTERPOLATION_1" equiv-text="{{ actionDescription }}"/>
           <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> if you proceed.
         </source>
-        <target>続行した場合は、
-          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>OSD
+        <target>
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>OSD 
           <x id="INTERPOLATION" equiv-text="{{ selection.first().id }}"/>
-          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>は
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> will be
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
           <x id="INTERPOLATION_1" equiv-text="{{ actionDescription }}"/>
-          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>されます。
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> if you proceed.
         </target>
       </trans-unit>
       <trans-unit id="4f8b2bb476981727ab34ed40fde1218361f92c45" datatype="html">
         <source>Details</source>
         <target>詳細</target>
+      </trans-unit>
+      <trans-unit id="8501055865d7031b5521a0c5467532648009a61d" datatype="html">
+        <source>Matcher</source>
+        <target>Matcher</target>
+      </trans-unit>
+      <trans-unit id="9c25e04f554875dc2625a78ba0fc56c6010cd0d3" datatype="html">
+        <source>-- Select an attribute to match against --</source>
+        <target>-- Select an attribute to match against --</target>
+      </trans-unit>
+      <trans-unit id="5049e204c14c648691ac775a64fb504467aeb549" datatype="html">
+        <source>Value</source>
+        <target>値</target>
+      </trans-unit>
+      <trans-unit id="77fc5c63497fc031ddc97645484e3d94ad27766c" datatype="html">
+        <source>Use regular expression</source>
+        <target>Use regular expression</target>
+      </trans-unit>
+      <trans-unit id="7bbec1a797283712c0adf9e71d77fb5a8cd720db" datatype="html">
+        <source>{VAR_SELECT, select, 1 {Update} other {Add} }</source>
+        <target>{VAR_SELECT, select, 1 {Update} other {Add} }</target>
+      </trans-unit>
+      <trans-unit id="f4e529ae5ffd73001d1ff4bbdeeb0a72e342e5c8" datatype="html">
+        <source>Close</source>
+        <target>閉じる</target>
+      </trans-unit>
+      <trans-unit id="28f86ffd419b869711aa13f5e5ff54be6d70731c" datatype="html">
+        <source>Edit</source>
+        <target>編集</target>
+      </trans-unit>
+      <trans-unit id="826b25211922a1b46436589233cb6f1a163d89b7" datatype="html">
+        <source>Delete</source>
+        <target>削除</target>
+      </trans-unit>
+      <trans-unit id="a3ba06aba047605af8ea1718ec1ba153b7db12a2" datatype="html">
+        <source>Editing a silence will expire the old silence and recreate it as a new silence</source>
+        <target>Editing a silence will expire the old silence and recreate it as a new silence</target>
+      </trans-unit>
+      <trans-unit id="a20424156b8816671f61879f0574a4f27d7b16b9" datatype="html">
+        <source>Creator</source>
+        <target>Creator</target>
+      </trans-unit>
+      <trans-unit id="5a5d7ee2acbfa9c91ab7f41d26bda9ff0cafe42f" datatype="html">
+        <source>Comment</source>
+        <target>Comment</target>
+      </trans-unit>
+      <trans-unit id="4c11aad490b2d53fdae30b3807beabf79306752c" datatype="html">
+        <source>Start time</source>
+        <target>Start time</target>
+      </trans-unit>
+      <trans-unit id="32856b1e8e339b747b21e313e2fe65a51fd450bb" datatype="html">
+        <source>If the start time lies in the past the creation time will be used</source>
+        <target>If the start time lies in the past the creation time will be used</target>
+      </trans-unit>
+      <trans-unit id="a02ea1d4e7424ca989929da5e598f379940fdbf2" datatype="html">
+        <source>Duration</source>
+        <target>Duration</target>
+      </trans-unit>
+      <trans-unit id="2f4e35e36f4d3c62e2c17df41730b6dee4afc4b9" datatype="html">
+        <source>End time</source>
+        <target>End time</target>
+      </trans-unit>
+      <trans-unit id="dbe739ec8c99a0132e326067ffec9c0ee06b2655" datatype="html">
+        <source>Matchers
+          <x id="START_TAG_SPAN" ctype="x-span" equiv-text="<span>"/>*
+          <x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="</span>"/>
+        </source>
+        <target>Matchers
+          <x id="START_TAG_SPAN" ctype="x-span" equiv-text="<span>"/>*
+          <x id="CLOSE_TAG_SPAN" ctype="x-span" equiv-text="</span>"/>
+        </target>
+      </trans-unit>
+      <trans-unit id="3e023166c55833d5a13f4143e3dbe372befe1b4e" datatype="html">
+        <source>A silence requires at least one matcher</source>
+        <target>A silence requires at least one matcher</target>
+      </trans-unit>
+      <trans-unit id="ef765bd80c4806c51c891908c07a24bc76f019eb" datatype="html">
+        <source>Add matcher</source>
+        <target>Add matcher</target>
       </trans-unit>
       <trans-unit id="d2bcd3296d2850de762fb943060b7e086a893181" datatype="html">
         <source>Health</source>
@@ -802,15 +681,15 @@ Grafanaにダッシュボードを追加する方法に関する
         <target>統計情報</target>
       </trans-unit>
       <trans-unit id="f8f74e5f683012b9c0702b1446011c6b9158bc67" datatype="html">
-        <source>Please consult the
+        <source>Please consult the 
           <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>documentation
           <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>
   on how to configure and enable the NFS Ganesha management functionality.
         </source>
-        <target>NFS Ganeshaの管理機能を設定および有効化
-する方法に関する
-          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>ドキュメント
-          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>を参照してください。
+        <target>Please consult the 
+          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>documentation
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>
+  on how to configure and enable the NFS Ganesha management functionality.
         </target>
       </trans-unit>
       <trans-unit id="7ffe39df9d88c972792bd8688b215392deb8313d" datatype="html">
@@ -849,13 +728,9 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>Add clients</source>
         <target>クライアントの追加</target>
       </trans-unit>
-      <trans-unit id="6ecb266eacdb295d503d754e8a4a4c631efa841b" datatype="html">
-        <source>NFS export
-          <x id="INTERPOLATION" equiv-text="{{ export_id ? cluster_id + ':' + export_id : '' }}"/>
-        </source>
-        <target>NFSエクスポート
-          <x id="INTERPOLATION" equiv-text="{{ export_id ? cluster_id + ':' + export_id : '' }}"/>
-        </target>
+      <trans-unit id="94516fa213706c67ce5a5b5765681d7fb032033a" datatype="html">
+        <source>Loading...</source>
+        <target>読み込んでいます...</target>
       </trans-unit>
       <trans-unit id="135b91a2d908d5814b782695470a6a786c99d9d2" datatype="html">
         <source>-- No cluster available --</source>
@@ -872,6 +747,10 @@ Grafanaにダッシュボードを追加する方法に関する
       <trans-unit id="b3f6ba7fe84d6508705cdfe234f0fcc8ff85c9cf" datatype="html">
         <source>Storage Backend</source>
         <target>ストレージバックエンド</target>
+      </trans-unit>
+      <trans-unit id="151c80ea931037cd92e854442927f8a0f6ae7795" datatype="html">
+        <source>-- No data pools available --</source>
+        <target>-- 使用可能なデータプールがありません --</target>
       </trans-unit>
       <trans-unit id="b6fee356d1db954255a56d8169405a89595246b9" datatype="html">
         <source>-- Select the storage backend --</source>
@@ -904,6 +783,14 @@ Grafanaにダッシュボードを追加する方法に関する
       <trans-unit id="fd3419e8957d928d7f7ba19c93356a0dbff02871" datatype="html">
         <source>CephFS Name</source>
         <target>CephFS名</target>
+      </trans-unit>
+      <trans-unit id="ee3ba0ab5f0ccd597b3e44021c71e9aaad14df0a" datatype="html">
+        <source>-- No CephFS filesystem available --</source>
+        <target>-- No CephFS filesystem available --</target>
+      </trans-unit>
+      <trans-unit id="764c57812558b1ae66c5eec95d7efd2b1bf761e3" datatype="html">
+        <source>-- Select the CephFS filesystem --</source>
+        <target>-- Select the CephFS filesystem --</target>
       </trans-unit>
       <trans-unit id="957512d0321f73e9f115bce1bd823fa635170c41" datatype="html">
         <source>Security Label</source>
@@ -954,13 +841,13 @@ Grafanaにダッシュボードを追加する方法に関する
         <target>NFSタグ</target>
       </trans-unit>
       <trans-unit id="aae93362720aea94623682996dd3fcd0f906f056" datatype="html">
-        <source>Alternative access for
+        <source>Alternative access for 
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>NFS v3
           <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> mounts (it must not have a leading /).
         </source>
-        <target>
+        <target>Alternative access for 
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>NFS v3
-          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>マウントの代替アクセス(先頭に「/」があってはいけません)。
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> mounts (it must not have a leading /).
         </target>
       </trans-unit>
       <trans-unit id="45d6db77dcf1a3eeb921033abc7882e517a541cc" datatype="html">
@@ -976,28 +863,28 @@ Grafanaにダッシュボードを追加する方法に関する
         <target>疑似</target>
       </trans-unit>
       <trans-unit id="1f8be2ae25947bec0b84c2338201580ea053f34e" datatype="html">
-        <source>The position that this
+        <source>The position that this 
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>NFS v4
           <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> export occupies
-                in the
+                in the 
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>Pseudo FS
           <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> (it must be unique).
         </source>
-        <target>この
+        <target>The position that this 
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>NFS v4
-          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>エクスポートが
-          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>疑似FS
-          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>内で
-占有する位置(この位置は一意である必要があります)。
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> export occupies
+                in the 
+          <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>Pseudo FS
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> (it must be unique).
         </target>
       </trans-unit>
       <trans-unit id="f3af55f7fd5b1d9e5a53e030c80116dc635bfb9f" datatype="html">
         <source>By using different Pseudo options, the same Path may be exported multiple times.</source>
         <target>異なる［疑似］オプションを使用することで、同じパスを複数回エクスポートできます。</target>
       </trans-unit>
-      <trans-unit id="a90eaec5c5d9b248bcc5a9765c21d80a5d210765" datatype="html">
-        <source>Wrong format</source>
-        <target>フォーマットが正しくありません</target>
+      <trans-unit id="ddf98fcdeeb17643db020d54f42b5e56b5f9a52a" datatype="html">
+        <source>Pseudo needs to start with a '/' and can't contain any of the following: &gt;, &lt;, |, &amp;, ( or ).</source>
+        <target>Pseudo needs to start with a '/' and can't contain any of the following: &gt;, &lt;, |, &amp;, ( or ).</target>
       </trans-unit>
       <trans-unit id="27eb35c4b4ac08781a7253a2ab40f8f7d957ba51" datatype="html">
         <source>-- No access type available --</source>
@@ -1031,495 +918,6 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>CephFS</source>
         <target>CephFS</target>
       </trans-unit>
-      <trans-unit id="490e15ecc922965b6d8194754c87c5583aa071f3" datatype="html">
-        <source>The name can only consist of alphanumeric characters, dashes and underscores.</source>
-        <target>名前は英数字、ダッシュ、および下線のみで構成される必要があります。</target>
-      </trans-unit>
-      <trans-unit id="9edc2b494e660618af3e5225f68d40b7ca67629c" datatype="html">
-        <source>The chosen erasure code profile name is already in use.</source>
-        <target>選択されたイレイジャコードプロファイル名はすでに使用されています。</target>
-      </trans-unit>
-      <trans-unit id="ef9ff0e6227947b48dfab4ac39ade04af758913b" datatype="html">
-        <source>Plugin</source>
-        <target>プラグイン</target>
-      </trans-unit>
-      <trans-unit id="dd69b31bce8f630eac1d4762b0bbcf72ce19d193" datatype="html">
-        <source>Data chunks (k)</source>
-        <target>データチャンク(k)</target>
-      </trans-unit>
-      <trans-unit id="b0d26a6172d32cb81218fe2103c54a818cbc1189" datatype="html">
-        <source>Must be equal to or greater than 2.</source>
-        <target>2以上である必要があります。</target>
-      </trans-unit>
-      <trans-unit id="dab3a299ead121169b8e08ed618c3b6a2f66691b" datatype="html">
-        <source>Coding chunks (m)</source>
-        <target>コーディングチャンク(m)</target>
-      </trans-unit>
-      <trans-unit id="1e2773e5bd4948193f18f2361d663ecc3988c656" datatype="html">
-        <source>Must be equal to or greater than 1.</source>
-        <target>1以上である必要があります。</target>
-      </trans-unit>
-      <trans-unit id="6cde4c945a49a260c0a47bcc7cd956846930a5f7" datatype="html">
-        <source>Durability estimator (c)</source>
-        <target>耐久性推定子(c)</target>
-      </trans-unit>
-      <trans-unit id="af668c2a095a979ea2b4e43cd82c2120ab56c21c" datatype="html">
-        <source>Locality (l)</source>
-        <target>地域(l)</target>
-      </trans-unit>
-      <trans-unit id="d455a110bf6d2235e314e295ce1dfeee93d3dff2" datatype="html">
-        <source>Crush failure domain</source>
-        <target>Crush障害ドメイン</target>
-      </trans-unit>
-      <trans-unit id="b74a495f041f7dd102eee5c0bbc9e03083b538ae" datatype="html">
-        <source>Crush Locality</source>
-        <target>Crush地域</target>
-      </trans-unit>
-      <trans-unit id="a2f14a73f7a6e94479f67423cc51102da8d6f524" datatype="html">
-        <source>None</source>
-        <target>なし</target>
-      </trans-unit>
-      <trans-unit id="2981733b912b693a9dd9d915d6d34f4692cc874a" datatype="html">
-        <source>Technique</source>
-        <target>技法</target>
-      </trans-unit>
-      <trans-unit id="e0098b6e47b04ec817361f384ce81d454ba5c0bb" datatype="html">
-        <source>Packetsize</source>
-        <target>パケットサイズ</target>
-      </trans-unit>
-      <trans-unit id="c0252cd81ca54d0a2f69ec9ccf4248e73df5aa4a" datatype="html">
-        <source>Crush root</source>
-        <target>Crushルート</target>
-      </trans-unit>
-      <trans-unit id="1548d5c76f0406ddd1ba3c557e1e6db22e95b340" datatype="html">
-        <source>Crush device class</source>
-        <target>Crushデバイスクラス</target>
-      </trans-unit>
-      <trans-unit id="5e85feb6f9f0334366e46ee09ca6b8df52397432" datatype="html">
-        <source>any</source>
-        <target>任意</target>
-      </trans-unit>
-      <trans-unit id="03d84645f6e019c5a43909bbf2ea1696ee88332c" datatype="html">
-        <source>Directory</source>
-        <target>ディレクトリ</target>
-      </trans-unit>
-      <trans-unit id="f6755cff4957d5c3c89bafce5651f1b6fa2b1fd9" datatype="html">
-        <source>Add</source>
-        <target>追加</target>
-      </trans-unit>
-      <trans-unit id="f4e529ae5ffd73001d1ff4bbdeeb0a72e342e5c8" datatype="html">
-        <source>Close</source>
-        <target>閉じる</target>
-      </trans-unit>
-      <trans-unit id="2fecea01ce1d44114ee45144eff6d47a5016a74f" datatype="html">
-        <source>Name...</source>
-        <target>名前...</target>
-      </trans-unit>
-      <trans-unit id="16e113230b6b0d3165e076300880542bac7c8138" datatype="html">
-        <source>The chosen Ceph pool name is already in use.</source>
-        <target>選択されたCephプール名はすでに使用されています。</target>
-      </trans-unit>
-      <trans-unit id="b85c657469e5ec8231c3de99b22f437bc01ffde5" datatype="html">
-        <source>Pool type</source>
-        <target>プールタイプ</target>
-      </trans-unit>
-      <trans-unit id="526c5443254c3b126eedb264840ffe827727bfd3" datatype="html">
-        <source>-- Select a pool type --</source>
-        <target>-- プールタイプを選択してください --</target>
-      </trans-unit>
-      <trans-unit id="0aa21053410a94aa61d16985a4e95fd65523430d" datatype="html">
-        <source>Placement groups</source>
-        <target>配置グループ</target>
-      </trans-unit>
-      <trans-unit id="6301f1391d726f8f450bb358058534db19541ca9" datatype="html">
-        <source>At least one placement group is needed!</source>
-        <target>少なくとも1つの配置グループが必要です。</target>
-      </trans-unit>
-      <trans-unit id="ba9469a1ce6ed36e039c1f67247c8c81a5c71449" datatype="html">
-        <source>Your cluster can't handle this many PGs. Please recalculate the PG amount needed.</source>
-        <target>ご使用のクラスタはこれだけ多数の配置グループを処理できません。必要な配置グループの数を再計算してください。</target>
-      </trans-unit>
-      <trans-unit id="62148abc31999dcfa38220cb09c33c8148b4b53a" datatype="html">
-        <source>You can only increase the number of PGs of an existing pool.
-                Currently your pool has
-          <x id="INTERPOLATION" equiv-text="{{ data.pool.pg_num }}"/> PGs.
-        </source>
-        <target>既存プールの配置グループの数のみを増やすことができます。
-現在プールには
-          <x id="INTERPOLATION" equiv-text="{{ data.pool.pg_num }}"/>個の配置グループがあります。
-        </target>
-      </trans-unit>
-      <trans-unit id="80ac68cd883369dac20688bc32b4cb33291b5e50" datatype="html">
-        <source>Calculation help</source>
-        <target>計算のヘルプ</target>
-      </trans-unit>
-      <trans-unit id="37dd747f97e873d4280500da71b0076805f530a1" datatype="html">
-        <source>The current PGs settings were calculated for you, you
-                    should make sure the values suit your needs before submit.</source>
-        <target>現在の配置グループ設定は自動的に計算されたため、
-送信前に、これらの値がニーズに合っていることを確認してください。</target>
-      </trans-unit>
-      <trans-unit id="33150f22ce5348aa6c499bd092c3f4f3695d62cc" datatype="html">
-        <source>Crush ruleset</source>
-        <target>Crushルールセット</target>
-      </trans-unit>
-      <trans-unit id="73a6b31116b3cc322af951daa0bafdc169e6c42e" datatype="html">
-        <source>-- Select a crush rule --</source>
-        <target>-- Crushルールを選択してください --</target>
-      </trans-unit>
-      <trans-unit id="92da80699921e89fb19372e25b8d0f3b9fa427fc" datatype="html">
-        <source>Crush rule</source>
-        <target>Crushルール</target>
-      </trans-unit>
-      <trans-unit id="5489e9f96835f469f6f728a00d8efa88ea5bc940" datatype="html">
-        <source>Crush steps</source>
-        <target>Crushステップ</target>
-      </trans-unit>
-      <trans-unit id="54a53b1b402aafff5b992ee9b64e409fbfe9074f" datatype="html">
-        <source>The rule can't be used in the current cluster as it has
-                to few OSDs to meet the minimum required OSD by this rule.</source>
-        <target>現在のクラスタ内のOSD数はこのルールで要求される最小OSD数を下回っているため、
-このルールを現在のクラスタで使用することはできません。</target>
-      </trans-unit>
-      <trans-unit id="a43b2695131b48b76cebba676aba98a2bee17515" datatype="html">
-        <source>Replicated size</source>
-        <target>複製されたサイズ</target>
-      </trans-unit>
-      <trans-unit id="7bff144a4c4dc63b0e18fff2617d61a7ebdf2b6c" datatype="html">
-        <source>Minimum:
-          <x id="INTERPOLATION" equiv-text="{{ getMinSize() }}"/>
-        </source>
-        <target>最小:
-          <x id="INTERPOLATION" equiv-text="{{ getMinSize() }}"/>
-        </target>
-      </trans-unit>
-      <trans-unit id="1a9c54b41f6d58a74e5d0aa3429ed0c87a482551" datatype="html">
-        <source>Maximum:
-          <x id="INTERPOLATION" equiv-text="{{ getMaxSize() }}"/>
-        </source>
-        <target>最大:
-          <x id="INTERPOLATION" equiv-text="{{ getMaxSize() }}"/>
-        </target>
-      </trans-unit>
-      <trans-unit id="43c6dd9233d6a8242cec2b025d25c273244d8d61" datatype="html">
-        <source>The size specified is out of range. A value from
-          <x id="INTERPOLATION" equiv-text="{{ getMinSize() }}"/> to
-          <x id="INTERPOLATION_1" equiv-text="{{ getMaxSize() }}"/> is valid.
-        </source>
-        <target>指定されたサイズは範囲外です。
-有効な値の範囲は
-          <x id="INTERPOLATION" equiv-text="{{ getMinSize() }}"/>～
-          <x id="INTERPOLATION_1" equiv-text="{{ getMaxSize() }}"/>です。
-        </target>
-      </trans-unit>
-      <trans-unit id="9de7dde00e2139cc4bd03b1837afbe72ad15a1ff" datatype="html">
-        <source>Erasure code profile</source>
-        <target>イレイジャコードプロファイル</target>
-      </trans-unit>
-      <trans-unit id="39b4620e6bd444e0a57a0a5c03fa8c96d7fe5235" datatype="html">
-        <source>-- No erasure code profile available --</source>
-        <target>-- 使用可能なイレイジャコードプロファイルがありません --</target>
-      </trans-unit>
-      <trans-unit id="498561757390d5528b263ce450d5f38efb00266d" datatype="html">
-        <source>-- Select an erasure code profile --</source>
-        <target>-- イレイジャコードプロファイルを選択してください --</target>
-      </trans-unit>
-      <trans-unit id="920617c6a1a4805e53bcb5af6a9c76f8387e89c6" datatype="html">
-        <source>Flags</source>
-        <target>フラグ</target>
-      </trans-unit>
-      <trans-unit id="1c870fb00256b8a5b9cb9cd1a124e6390b9bc639" datatype="html">
-        <source>EC Overwrites</source>
-        <target>ECの上書き</target>
-      </trans-unit>
-      <trans-unit id="f1abafaeb40ce52355ddcc24686e3cd17b64e08a" datatype="html">
-        <source>Applications</source>
-        <target>アプリケーション</target>
-      </trans-unit>
-      <trans-unit id="2208d63d5940ce656006a220102b1eb2b5e553da" datatype="html">
-        <source>Compression</source>
-        <target>圧縮</target>
-      </trans-unit>
-      <trans-unit id="37e10df2d9c0c25ef04ac112c9c9a7723e8efae0" datatype="html">
-        <source>Mode</source>
-        <target>モード</target>
-      </trans-unit>
-      <trans-unit id="6c6f25c47da62ec597c6057a36ddfc3209811ec5" datatype="html">
-        <source>Algorithm</source>
-        <target>アルゴリズム</target>
-      </trans-unit>
-      <trans-unit id="4903231d42089325a28892c0fde1aed46b733ae6" datatype="html">
-        <source>-- No erasure compression algorithm available --</source>
-        <target>-- 使用可能なイレイジャ圧縮アルゴリズムがありません --</target>
-      </trans-unit>
-      <trans-unit id="5d68ddb254275f8f44221e9ad6d8ceeb59ca46a6" datatype="html">
-        <source>Minimum blob size</source>
-        <target>最小blobサイズ</target>
-      </trans-unit>
-      <trans-unit id="fb2f176df80647137cbb02bbeb29e5dec707a400" datatype="html">
-        <source>e.g., 128KiB</source>
-        <target>例: 128KiB</target>
-      </trans-unit>
-      <trans-unit id="1b7f6e53a4521c6eb3ced4c007fdd4cf80bb7707" datatype="html">
-        <source>Value should be greater than 0</source>
-        <target>値は0より大きい必要があります</target>
-      </trans-unit>
-      <trans-unit id="54be22af9625a595ee5d70917ee1fb116be7c4be" datatype="html">
-        <source>Value should be greater than the maximum blob size</source>
-        <target>値は最大blobサイズより大きい必要があります</target>
-      </trans-unit>
-      <trans-unit id="151efb127a9a4dd25259a0b2055442318a141f5b" datatype="html">
-        <source>Maximum blob size</source>
-        <target>最大blobサイズ</target>
-      </trans-unit>
-      <trans-unit id="0c656f0e346bbadf46eb1a5d20d0307a3bd20ba8" datatype="html">
-        <source>e.g., 512KiB</source>
-        <target>例: 512KiB</target>
-      </trans-unit>
-      <trans-unit id="0a65a24eee8a026f3b1113fe9e157e9a0dd69486" datatype="html">
-        <source>Value should be greater than the minimum blob size</source>
-        <target>値は最小blobサイズより大きい必要があります</target>
-      </trans-unit>
-      <trans-unit id="261ba09c4a59de83f48f52a23fd328da37e61ff4" datatype="html">
-        <source>Ratio</source>
-        <target>率</target>
-      </trans-unit>
-      <trans-unit id="c1430457a9c3c66366e51d76bf10396014c576be" datatype="html">
-        <source>Compression ratio</source>
-        <target>圧縮率</target>
-      </trans-unit>
-      <trans-unit id="ae5ce6de352cde949998fb10754459c3a4eb183b" datatype="html">
-        <source>Value should be between 0.0 and 1.0</source>
-        <target>値は0.0～1.0の間である必要があります</target>
-      </trans-unit>
-      <trans-unit id="4b673e771a3f6b056837b22ef19a825386046095" datatype="html">
-        <source>It's not possible to create an RBD pool with '/' in the name.</source>
-        <target>名前に「/」が含まれたRBDプールを作成することはできません。</target>
-      </trans-unit>
-      <trans-unit id="a9c02674c6e4936562d1146e1ecf0c4240dfcf96" datatype="html">
-        <source>Please change the name or remove 'rbd' from the applications list.</source>
-        <target>名前を変更するか、アプリケーションリストから「rbd」を削除してください。</target>
-      </trans-unit>
-      <trans-unit id="1d8a7c8aea58294a3c57c23af0468ddf0ba0c9c7" datatype="html">
-        <source>Pools List</source>
-        <target>プールリスト</target>
-      </trans-unit>
-      <trans-unit id="9424badb7e0c6ac792d020d7830645b529a80aad" datatype="html">
-        <source>Please consult the
-          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>documentation
-          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>
-  on how to configure and enable the Object Gateway management functionality.
-        </source>
-        <target>オブジェクトゲートウェイの管理機能を設定および有効化
-する方法に関する
-          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>ドキュメント
-          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>を参照してください。
-        </target>
-      </trans-unit>
-      <trans-unit id="5f67f2247b9c6bbaf24a0f2d37f4ac0537c6fa53" datatype="html">
-        <source>Loading bucket data...</source>
-        <target>バケットデータを読み込んでいます...</target>
-      </trans-unit>
-      <trans-unit id="8508c0ab851ad91fd0410da1266c02b0ef9d3ff9" datatype="html">
-        <source>The bucket data could not be loaded.</source>
-        <target>バケットデータを読み込めませんでした。</target>
-      </trans-unit>
-      <trans-unit id="2798cc1e152b1ec07fd8daf94a2a073d1ba1ebcc" datatype="html">
-        <source>Id</source>
-        <target>Id</target>
-      </trans-unit>
-      <trans-unit id="db4e1a734518691b128ef40b939cc673f01d03a6" datatype="html">
-        <source>The value is not valid.</source>
-        <target>この値は無効です。</target>
-      </trans-unit>
-      <trans-unit id="eabb4db920d9f9b2480cf438468b86e1bea02a9b" datatype="html">
-        <source>The chosen name is already in use.</source>
-        <target>選択された名前はすでに使用されています。</target>
-      </trans-unit>
-      <trans-unit id="0ee5132a8da30e0b7f9f5c70dbc91928d17dd909" datatype="html">
-        <source>Owner</source>
-        <target>所有者</target>
-      </trans-unit>
-      <trans-unit id="8e4c918357c7445fbf19a203e5f0f0ece1960b3b" datatype="html">
-        <source>-- Select a user --</source>
-        <target>-- ユーザを選択してください --</target>
-      </trans-unit>
-      <trans-unit id="479488ab6e91ecb375484edc78bee3d13467f33f" datatype="html">
-        <source>Daemons List</source>
-        <target>デーモンリスト</target>
-      </trans-unit>
-      <trans-unit id="f61c6867295f3b53d23557021f2f4e0aa1d0b8fc" datatype="html">
-        <source>Type</source>
-        <target>タイプ</target>
-      </trans-unit>
-      <trans-unit id="1221ca97d19eaa9a7bc0c5243d5fc5befe1d2314" datatype="html">
-        <source>-- Select a type --</source>
-        <target>-- タイプを選択してください --</target>
-      </trans-unit>
-      <trans-unit id="d1b8990332af18f1c5159a6061ca889bcbb28432" datatype="html">
-        <source>Permission</source>
-        <target>許可</target>
-      </trans-unit>
-      <trans-unit id="a08c589f82f69d892307288da14190ae1dd583d5" datatype="html">
-        <source>-- Select a permission --</source>
-        <target>-- 許可を選択してください --</target>
-      </trans-unit>
-      <trans-unit id="583a219c524155c2314eb06ee29162bb315272a3" datatype="html">
-        <source>S3 key</source>
-        <target>S3キー</target>
-      </trans-unit>
-      <trans-unit id="08c74dc9762957593b91f6eb5d65efdfc975bf48" datatype="html">
-        <source>Username</source>
-        <target>ユーザ名</target>
-      </trans-unit>
-      <trans-unit id="49c614babd1950adb2be75df4e2c9747286d6adc" datatype="html">
-        <source>-- Select a username --</source>
-        <target>-- ユーザ名を選択してください --</target>
-      </trans-unit>
-      <trans-unit id="c217ee914725a37e9dd2336c721c8e63e9666bdc" datatype="html">
-        <source>Auto-generate key</source>
-        <target>キーの自動生成</target>
-      </trans-unit>
-      <trans-unit id="2f1c1c0f2bce4c9f92d1a2061e8161cb0006c31a" datatype="html">
-        <source>Access key</source>
-        <target>アクセスキー</target>
-      </trans-unit>
-      <trans-unit id="b864acb67296a9819c1db0069c4c47d8b5ce8f44" datatype="html">
-        <source>Secret key</source>
-        <target>秘密キー</target>
-      </trans-unit>
-      <trans-unit id="b2841767821d6b66238c34d07e413b0af67aee92" datatype="html">
-        <source>Subuser</source>
-        <target>サブユーザ</target>
-      </trans-unit>
-      <trans-unit id="bd59fc25a7bd98cff3e75117c09697c8a007a514" datatype="html">
-        <source>The chosen subuser ID is already in use.</source>
-        <target>選択されたサブユーザIDはすでに使用されています。</target>
-      </trans-unit>
-      <trans-unit id="3d386c357ebcbc04ed05c4babd5a03626f9b1674" datatype="html">
-        <source>read, write</source>
-        <target>読み取り、書き込み</target>
-      </trans-unit>
-      <trans-unit id="84e3e3f9a4f31a039b648c97debf95fcb20f4c4a" datatype="html">
-        <source>full</source>
-        <target>フル</target>
-      </trans-unit>
-      <trans-unit id="b6bf81d032a2316464f9df2f0d2f3d753f89f0d3" datatype="html">
-        <source>Swift key</source>
-        <target>スウィフトキー</target>
-      </trans-unit>
-      <trans-unit id="1e0c12685d50d47448ceed9423977ef39775c037" datatype="html">
-        <source>Auto-generate secret</source>
-        <target>秘密の自動生成</target>
-      </trans-unit>
-      <trans-unit id="3d1c7a6004bd5d86a7fa096ae24209e8aa7a53e3" datatype="html">
-        <source>Loading user data...</source>
-        <target>ユーザデータを読み込んでいます...</target>
-      </trans-unit>
-      <trans-unit id="faa5d834ab28571423d794d32b57998920efb65f" datatype="html">
-        <source>The user data could not be loaded.</source>
-        <target>ユーザデータを読み込めませんでした。</target>
-      </trans-unit>
-      <trans-unit id="6aaf5d2a304167272ac73e3b1d1c162e16c77858" datatype="html">
-        <source>The chosen user ID is already in use.</source>
-        <target>選択されたユーザIDはすでに使用されています。</target>
-      </trans-unit>
-      <trans-unit id="b760f123248930122fc7e7b6b6bf94e376e959c8" datatype="html">
-        <source>Full name</source>
-        <target>氏名</target>
-      </trans-unit>
-      <trans-unit id="69b6ac577a19acc39fc0c22342092f327fff2529" datatype="html">
-        <source>Email address</source>
-        <target>電子メールアドレス</target>
-      </trans-unit>
-      <trans-unit id="df441e80db2157f9d272b75de724ba4a82b96b57" datatype="html">
-        <source>This is not a valid email address.</source>
-        <target>これは有効な電子メールアドレスではありません。</target>
-      </trans-unit>
-      <trans-unit id="ca271adf154956b8fcb28f4f50a37acb3057ff7c" datatype="html">
-        <source>The chosen email address is already in use.</source>
-        <target>選択された電子メールアドレスはすでに使用されています。</target>
-      </trans-unit>
-      <trans-unit id="030197cebe938edf35422e92fe14183d06eb670b" datatype="html">
-        <source>Max. buckets</source>
-        <target>最大バケット数</target>
-      </trans-unit>
-      <trans-unit id="623ac50f37a26caec6fd7cd519b653e3315cba25" datatype="html">
-        <source>The entered value must be &gt;= 0.</source>
-        <target>0以上の値を入力する必要があります。</target>
-      </trans-unit>
-      <trans-unit id="92f3f203270a29b3001871153f02c063484a1574" datatype="html">
-        <source>Suspended</source>
-        <target>中断済み</target>
-      </trans-unit>
-      <trans-unit id="2c4c62e8ba24601be5cfe7dc5d32c24bbbd4b53c" datatype="html">
-        <source>Subusers</source>
-        <target>サブユーザ</target>
-      </trans-unit>
-      <trans-unit id="128d6efb51d9ddc7c0cc695a2deeca5b9523f6e4" datatype="html">
-        <source>There are no subusers.</source>
-        <target>サブユーザがいません。</target>
-      </trans-unit>
-      <trans-unit id="826b25211922a1b46436589233cb6f1a163d89b7" datatype="html">
-        <source>Delete</source>
-        <target>削除</target>
-      </trans-unit>
-      <trans-unit id="0bcd5ef19af0f1b814141ca8c57df623d8270088" datatype="html">
-        <source>Keys</source>
-        <target>キー</target>
-      </trans-unit>
-      <trans-unit id="67c746c1ba9dab4351fedc4c7cba4e6d6b0dbc47" datatype="html">
-        <source>S3</source>
-        <target>S3</target>
-      </trans-unit>
-      <trans-unit id="d6819038d608623503918fb2553f53d68231ec3a" datatype="html">
-        <source>There are no keys.</source>
-        <target>キーがありません。</target>
-      </trans-unit>
-      <trans-unit id="2aba1e87039819aca3b70faa9aa848c12bf139ca" datatype="html">
-        <source>Show</source>
-        <target>表示</target>
-      </trans-unit>
-      <trans-unit id="6ddb5e991a3ecd2659fb520bc5acc81b67e08ddd" datatype="html">
-        <source>Swift</source>
-        <target>スウィフト</target>
-      </trans-unit>
-      <trans-unit id="17bb3082e6fe5003203ef992a3714172334631a1" datatype="html">
-        <source>Capabilities</source>
-        <target>機能</target>
-      </trans-unit>
-      <trans-unit id="1d01eccdda47fc907c5be35bcb16d2dcd02b0270" datatype="html">
-        <source>There are no capabilities.</source>
-        <target>機能がありません。</target>
-      </trans-unit>
-      <trans-unit id="36ad38f9c1a1485e09b67778a28af84553290ffb" datatype="html">
-        <source>User quota</source>
-        <target>ユーザクォータ</target>
-      </trans-unit>
-      <trans-unit id="f50a33d3c339f8f4a465141f8caa5d2d8c005251" datatype="html">
-        <source>Enabled</source>
-        <target>有効化済み</target>
-      </trans-unit>
-      <trans-unit id="6146e13ceca5fa5cc17b771b282fe5955f3d19fa" datatype="html">
-        <source>Unlimited size</source>
-        <target>無制限のサイズ</target>
-      </trans-unit>
-      <trans-unit id="f6db8aa7c99fdce18edb33dde57729acede2b308" datatype="html">
-        <source>Max. size</source>
-        <target>最大サイズ</target>
-      </trans-unit>
-      <trans-unit id="fc630b2093e880fffa19df99d5cd8b87605037f8" datatype="html">
-        <source>Unlimited objects</source>
-        <target>無制限のオブジェクト数</target>
-      </trans-unit>
-      <trans-unit id="6cda5a993d06f0bb10048be9d3aba6555aa9f356" datatype="html">
-        <source>Max. objects</source>
-        <target>最大オブジェクト数</target>
-      </trans-unit>
-      <trans-unit id="649a410bd0ace333d067d8fa22f12bdbdb43533b" datatype="html">
-        <source>Bucket quota</source>
-        <target>バケットクォータ</target>
-      </trans-unit>
       <trans-unit id="449dca3d3a93ead418b0541ea81b0dda7e6483c2" datatype="html">
         <source>Welcome to Ceph!</source>
         <target>Cephにようこそ!</target>
@@ -1537,59 +935,39 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>Login</source>
         <target>ログイン</target>
       </trans-unit>
-      <trans-unit id="1ea5c4d8942c00752dcc72e72949c5d9832f6399" datatype="html">
-        <source>Description...</source>
-        <target>説明...</target>
-      </trans-unit>
-      <trans-unit id="70f45880fce6ac5d8e468e25e82aefbba8098cfe" datatype="html">
-        <source>Permissions</source>
-        <target>許可</target>
-      </trans-unit>
       <trans-unit id="58fc1b5c79a75370eb52644fd83fb2e7096b6649" datatype="html">
         <source>Sorry, the user does not exist in Ceph.</source>
         <target>このユーザはCephに存在しません。</target>
       </trans-unit>
       <trans-unit id="d9deb94f78e7c41b35c6622b874f06657d7604c1" datatype="html">
-        <source>Return to
+        <source>Return to 
           <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>Login Page
           <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>. You'll be logged out from the Identity Provider when you retry logging in.
         </source>
-        <target>
-          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>［ログイン］ページ
-          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>に戻ります。ログインを再試行すると、Identity Providerからログアウトされます。
+        <target>Return to 
+          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>Login Page
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>. You'll be logged out from the Identity Provider when you retry logging in.
         </target>
       </trans-unit>
-      <trans-unit id="7f3bdcce4b2e8c37cd7f0f6c92ef8cff34b039b8" datatype="html">
-        <source>Confirm password</source>
-        <target>パスワードの確認入力</target>
+      <trans-unit id="0eb15f32b2b92d7f3103ef3ff032621888a8dc32" datatype="html">
+        <source>Old password</source>
+        <target>Old password</target>
       </trans-unit>
-      <trans-unit id="cbb979e63ba50e0ca3adfa09cbdcaefd0853fca1" datatype="html">
-        <source>Password confirmation doesn't match the password.</source>
-        <target>確認入力されたパスワードがパスワードと一致しません。</target>
+      <trans-unit id="e70e209561583f360b1e9cefd2cbb1fe434b6229" datatype="html">
+        <source>New password</source>
+        <target>New password</target>
       </trans-unit>
-      <trans-unit id="244aae9346da82b0922506c2d2581373a15641cc" datatype="html">
-        <source>Email</source>
-        <target>電子メール</target>
+      <trans-unit id="1cf42e491adc166a337a960eb84d03c0c3f677c8" datatype="html">
+        <source>The old and new passwords must be different.</source>
+        <target>The old and new passwords must be different.</target>
       </trans-unit>
-      <trans-unit id="d0ec081dd61eb4f43aea269077bbe38eae87b7f9" datatype="html">
-        <source>Invalid email.</source>
-        <target>無効な電子メールです。</target>
+      <trans-unit id="ede41f01c781b168a783cfcefc6fb67d48780d9b" datatype="html">
+        <source>Confirm new password</source>
+        <target>Confirm new password</target>
       </trans-unit>
-      <trans-unit id="9610487cbeb5796d34d8601b5ac0c0a65f9e1d19" datatype="html">
-        <source>Roles</source>
-        <target>役割</target>
-      </trans-unit>
-      <trans-unit id="0051a3479d3ba79135c16dc8cc017950a2cce821" datatype="html">
-        <source>You are about to remove "user read / update" permissions from your own user.</source>
-        <target>自身のユーザから「user read / update」という許可を削除しようとしています。</target>
-      </trans-unit>
-      <trans-unit id="af4bf9fcb256853f14cf947eb1deb8d7f176d3f9" datatype="html">
-        <source>If you continue, you will no longer be able to add or remove roles from any user.</source>
-        <target>続行した場合は、どのユーザの役割も追加および削除できなくなります。</target>
-      </trans-unit>
-      <trans-unit id="7d1dcf2a9146caac0581329acf94806ec69a89a5" datatype="html">
-        <source>Are you sure you want to continue?</source>
-        <target>続行してもよろしいですか?</target>
+      <trans-unit id="90163a3d3746819aef42e829f4446331232f3b66" datatype="html">
+        <source>Password confirmation doesn't match the new password.</source>
+        <target>Password confirmation doesn't match the new password.</target>
       </trans-unit>
       <trans-unit id="471e78026c258073ba687478dc54c35d9041ea42" datatype="html">
         <source>Forbidden</source>
@@ -1606,6 +984,10 @@ Grafanaにダッシュボードを追加する方法に関する
       <trans-unit id="16568619015cfb2352e3b2596ba04fc1c82e44ef" datatype="html">
         <source>Remove all</source>
         <target>すべて削除</target>
+      </trans-unit>
+      <trans-unit id="0d4b37c6675c5b436a54c43d6716eec835e1aa7f" datatype="html">
+        <source>There are no notifications.</source>
+        <target>There are no notifications.</target>
       </trans-unit>
       <trans-unit id="1d65cc22d5842c06d33b244fc67de9db4003537e" datatype="html">
         <source>Recent Notifications</source>
@@ -1653,112 +1035,83 @@ Grafanaにダッシュボードを追加する方法に関する
           <x id="INTERPOLATION" equiv-text="{{ username }}"/>
           <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>
         </source>
-        <target>
+        <target>Signed in as
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>
           <x id="INTERPOLATION" equiv-text="{{ username }}"/>
           <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>
-としてサインイン済み
         </target>
+      </trans-unit>
+      <trans-unit id="739516c2ca75843d5aec9cf0e6b3e4335c4227b9" datatype="html">
+        <source>Change password</source>
+        <target>Change password</target>
       </trans-unit>
       <trans-unit id="5d22c795daf43877a5f708dca2bccd549eb0471d" datatype="html">
         <source>Sign out</source>
         <target>サインアウト</target>
       </trans-unit>
-      <trans-unit id="eeba399c4dae8d4890c27b7a2cd2dc28fcf8b5f9" datatype="html">
-        <source>Performance Counters</source>
-        <target>パフォーマンスカウンタ</target>
+      <trans-unit id="2fecea01ce1d44114ee45144eff6d47a5016a74f" datatype="html">
+        <source>Name...</source>
+        <target>名前...</target>
       </trans-unit>
-      <trans-unit id="fbbaf5cb02ed419e79a27072478f716a4666a99d" datatype="html">
-        <source>Performance Details</source>
-        <target>パフォーマンスの詳細</target>
+      <trans-unit id="eabb4db920d9f9b2480cf438468b86e1bea02a9b" datatype="html">
+        <source>The chosen name is already in use.</source>
+        <target>選択された名前はすでに使用されています。</target>
       </trans-unit>
-      <trans-unit id="45cc8ca94b5a50842a9a8ef804a5ab089a38ae5c" datatype="html">
-        <source>ID</source>
-        <target>ID</target>
+      <trans-unit id="1ea5c4d8942c00752dcc72e72949c5d9832f6399" datatype="html">
+        <source>Description...</source>
+        <target>説明...</target>
       </trans-unit>
-      <trans-unit id="e5c51963a9c553b29427ef783bbb69fa6634fa8c" datatype="html">
-        <source>Index type</source>
-        <target>インデックスタイプ</target>
+      <trans-unit id="70f45880fce6ac5d8e468e25e82aefbba8098cfe" datatype="html">
+        <source>Permissions</source>
+        <target>許可</target>
       </trans-unit>
-      <trans-unit id="8e6f950a32eaea32ec7e192f9ca3d3dfe469d4ba" datatype="html">
-        <source>Placement rule</source>
-        <target>配置ルール</target>
+      <trans-unit id="9610487cbeb5796d34d8601b5ac0c0a65f9e1d19" datatype="html">
+        <source>Roles</source>
+        <target>役割</target>
       </trans-unit>
-      <trans-unit id="6972d213e31c4ea4f887e60db99d9881bc8fcd3e" datatype="html">
-        <source>Marker</source>
-        <target>マーカー</target>
+      <trans-unit id="08c74dc9762957593b91f6eb5d65efdfc975bf48" datatype="html">
+        <source>Username</source>
+        <target>ユーザ名</target>
       </trans-unit>
-      <trans-unit id="47b02acd2d3254d1ace1926f840523f154ebef71" datatype="html">
-        <source>Maximum marker</source>
-        <target>最大マーカー</target>
+      <trans-unit id="c32ef07f8803a223a83ed17024b38e8d82292407" datatype="html">
+        <source>Password</source>
+        <target>パスワード</target>
       </trans-unit>
-      <trans-unit id="8fe73a4787b8068b2ba61f54ab7e0f9af2ea1fc9" datatype="html">
-        <source>Version</source>
-        <target>バージョン</target>
+      <trans-unit id="7f3bdcce4b2e8c37cd7f0f6c92ef8cff34b039b8" datatype="html">
+        <source>Confirm password</source>
+        <target>パスワードの確認入力</target>
       </trans-unit>
-      <trans-unit id="092fa3a7df9168b14d3f83a77a4035e92b92ce15" datatype="html">
-        <source>Master version</source>
-        <target>マスタバージョン</target>
+      <trans-unit id="cbb979e63ba50e0ca3adfa09cbdcaefd0853fca1" datatype="html">
+        <source>Password confirmation doesn't match the password.</source>
+        <target>確認入力されたパスワードがパスワードと一致しません。</target>
       </trans-unit>
-      <trans-unit id="97434cc5001d407f90c7447a12d9e8e6848a2aa3" datatype="html">
-        <source>Modification time</source>
-        <target>変更時間</target>
+      <trans-unit id="b760f123248930122fc7e7b6b6bf94e376e959c8" datatype="html">
+        <source>Full name</source>
+        <target>氏名</target>
       </trans-unit>
-      <trans-unit id="90fe2e41e7fde38453ce4e619efeea9bc6adea9c" datatype="html">
-        <source>Zonegroup</source>
-        <target>ゾーングループ</target>
+      <trans-unit id="244aae9346da82b0922506c2d2581373a15641cc" datatype="html">
+        <source>Email</source>
+        <target>電子メール</target>
       </trans-unit>
-      <trans-unit id="cef1595d040e77cbb4466e60382028d4c2040cac" datatype="html">
-        <source>Maximum size</source>
-        <target>最大サイズ</target>
+      <trans-unit id="d0ec081dd61eb4f43aea269077bbe38eae87b7f9" datatype="html">
+        <source>Invalid email.</source>
+        <target>無効な電子メールです。</target>
       </trans-unit>
-      <trans-unit id="aa6fb95c355f172bda303de1ce2f38c251a149cf" datatype="html">
-        <source>Unlimited</source>
-        <target>無制限</target>
+      <trans-unit id="0051a3479d3ba79135c16dc8cc017950a2cce821" datatype="html">
+        <source>You are about to remove "user read / update" permissions from your own user.</source>
+        <target>自身のユーザから「user read / update」という許可を削除しようとしています。</target>
       </trans-unit>
-      <trans-unit id="ee862a800364b4d11f9b8cb9955a28a60f840a45" datatype="html">
-        <source>Maximum objects</source>
-        <target>最大オブジェクト数</target>
+      <trans-unit id="af4bf9fcb256853f14cf947eb1deb8d7f176d3f9" datatype="html">
+        <source>If you continue, you will no longer be able to add or remove roles from any user.</source>
+        <target>続行した場合は、どのユーザの役割も追加および削除できなくなります。</target>
       </trans-unit>
-      <trans-unit id="8011e20c5bbe51602d459a860fbf29b599b55edd" datatype="html">
-        <source>System</source>
-        <target>システム</target>
-      </trans-unit>
-      <trans-unit id="f120423a48cf96636bc415daf5ac041ea8c6503e" datatype="html">
-        <source>{VAR_SELECT, select, 0 {No} 1 {Yes} }</source>
-        <target>{VAR_SELECT, select, 0 {No} 1 {Yes} }</target>
-      </trans-unit>
-      <trans-unit id="db18a2772988415466a7f75dc42663ce78c9c1d3" datatype="html">
-        <source>Maximum buckets</source>
-        <target>最大バケット数</target>
+      <trans-unit id="7d1dcf2a9146caac0581329acf94806ec69a89a5" datatype="html">
+        <source>Are you sure you want to continue?</source>
+        <target>続行してもよろしいですか?</target>
       </trans-unit>
       <trans-unit id="ca53d681a9892d6fdbb57ee9676582186515e961" datatype="html">
         <source>Performance counters not available</source>
         <target>パフォーマンスカウンタを使用できません</target>
-      </trans-unit>
-      <trans-unit id="5decb3917d46a9ac6e5813699801becb7c3c1455" datatype="html">
-        <source>Global</source>
-        <target>グローバル</target>
-      </trans-unit>
-      <trans-unit id="a5f9ba9bb9faa8284bcadb1cdbc6aaf969e9c4bb" datatype="html">
-        <source>Image</source>
-        <target>イメージ</target>
-      </trans-unit>
-      <trans-unit id="e70fcca5a99575cffef3ff8cbd5e69f06ffd0f1c" datatype="html">
-        <source>Pool</source>
-        <target>プール</target>
-      </trans-unit>
-      <trans-unit id="ff92fbdec9fdd5054493eeda0d7ee8b450f83e72" datatype="html">
-        <source>RBD Configuration</source>
-        <target>RBD設定</target>
-      </trans-unit>
-      <trans-unit id="b62d9efc8eb3b589904f6cb96a0406bbda55673a" datatype="html">
-        <source>Remove the local configuration value. The parent configuration value will be inherited and used instead.</source>
-        <target>ローカル設定値を削除します。親設定値が継承されて代わりに使用されます。</target>
-      </trans-unit>
-      <trans-unit id="963488a1010d46067b238c4ae917fab3907c0a3a" datatype="html">
-        <source>The mininum value is 0</source>
-        <target>最小値は0です</target>
       </trans-unit>
       <trans-unit id="91853167141c37b58868f3b0421383dd72fa8a01" datatype="html">
         <source>Attributes (OSD map)</source>
@@ -1777,10 +1130,10 @@ Grafanaにダッシュボードを追加する方法に関する
         <target>パフォーマンスカウンタ</target>
       </trans-unit>
       <trans-unit id="d1f7c81ed9c5034af4abcdf119b1c1e86cd019dd" datatype="html">
-        <source>Histogram not available:
+        <source>Histogram not available: 
           <x id="INTERPOLATION" equiv-text="{{ osd.histogram_failed }}"/>
         </source>
-        <target>ヒストグラムを使用できません:
+        <target>Histogram not available: 
           <x id="INTERPOLATION" equiv-text="{{ osd.histogram_failed }}"/>
         </target>
       </trans-unit>
@@ -1796,9 +1149,17 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>Histogram</source>
         <target>ヒストグラム</target>
       </trans-unit>
+      <trans-unit id="fbbaf5cb02ed419e79a27072478f716a4666a99d" datatype="html">
+        <source>Performance Details</source>
+        <target>パフォーマンスの詳細</target>
+      </trans-unit>
       <trans-unit id="26fb5f81b3581f06b9210defb0e71dc69a67e819" datatype="html">
         <source>Current values</source>
         <target>現行値</target>
+      </trans-unit>
+      <trans-unit id="f61c6867295f3b53d23557021f2f4e0aa1d0b8fc" datatype="html">
+        <source>Type</source>
+        <target>タイプ</target>
       </trans-unit>
       <trans-unit id="9abcd7c82643d60c22733470463f74e4a54bc069" datatype="html">
         <source>Min</source>
@@ -1807,6 +1168,10 @@ Grafanaにダッシュボードを追加する方法に関する
       <trans-unit id="c3ced4d162a0a55ee233a187ce7208ba5e922418" datatype="html">
         <source>Max</source>
         <target>最大</target>
+      </trans-unit>
+      <trans-unit id="920617c6a1a4805e53bcb5af6a9c76f8387e89c6" datatype="html">
+        <source>Flags</source>
+        <target>フラグ</target>
       </trans-unit>
       <trans-unit id="6834fa6b43d1ecbdf147c48dd9c4d72f1484571d" datatype="html">
         <source>Source</source>
@@ -1899,15 +1264,39 @@ Grafanaにダッシュボードを追加する方法に関する
       <trans-unit id="44ecac93d67c6a671198091c2270354f80322327" datatype="html">
         <source>
           <x id="START_ITALIC_TEXT" ctype="x-i" equiv-text="<i>"/>
-          <x id="CLOSE_ITALIC_TEXT" ctype="x-i" equiv-text="</i>"/> See
+          <x id="CLOSE_ITALIC_TEXT" ctype="x-i" equiv-text="</i>"/> See 
           <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>Logs
           <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> for more details.
         </source>
         <target>
           <x id="START_ITALIC_TEXT" ctype="x-i" equiv-text="<i>"/>
-          <x id="CLOSE_ITALIC_TEXT" ctype="x-i" equiv-text="</i>"/>詳細については、「
-          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>ログ
-          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>」を参照してください。
+          <x id="CLOSE_ITALIC_TEXT" ctype="x-i" equiv-text="</i>"/> See 
+          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>Logs
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/> for more details.
+        </target>
+      </trans-unit>
+      <trans-unit id="0c1e17956453ad772dbe82d6946f62748c692f3e" datatype="html">
+        <source>Ranks</source>
+        <target>ランク</target>
+      </trans-unit>
+      <trans-unit id="50df62325726db950523a5be1c78b8905fcc25d4" datatype="html">
+        <source>MDS performance counters</source>
+        <target>MDS performance counters</target>
+      </trans-unit>
+      <trans-unit id="95c96d55690c0c685deebe52a1da94dc36f5e99d" datatype="html">
+        <source>Clients: 
+          <x id="INTERPOLATION" equiv-text="{{ clientCount }}"/>
+        </source>
+        <target>Clients: 
+          <x id="INTERPOLATION" equiv-text="{{ clientCount }}"/>
+        </target>
+      </trans-unit>
+      <trans-unit id="47116253e36f4e38a97ba41b2d3122c6c15ab904" datatype="html">
+        <source>Clients (
+          <x id="INTERPOLATION" equiv-text="{{ clients.length }}"/>)
+        </source>
+        <target>Clients (
+          <x id="INTERPOLATION" equiv-text="{{ clients.length }}"/>)
         </target>
       </trans-unit>
       <trans-unit id="f0b5d789d42c0e69348e5fe0037fcbf5b5fbbdcc" datatype="html">
@@ -1915,22 +1304,23 @@ Grafanaにダッシュボードを追加する方法に関する
         <target>イメージをごみ箱に移動する</target>
       </trans-unit>
       <trans-unit id="86301cf2044b1eda218483365f6b9de8dde5040b" datatype="html">
-        <source>To move
+        <source>To move 
           <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>
           <x id="INTERPOLATION" equiv-text="{{ poolName }}"/>/
           <x id="INTERPOLATION_1" equiv-text="{{ imageName }}"/>
           <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/> to trash,
-          click
+          click 
           <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Move Image
           <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>. Optionally, you can pick an expiration date.
         </source>
-        <target>
+        <target>To move 
           <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>
           <x id="INTERPOLATION" equiv-text="{{ poolName }}"/>/
           <x id="INTERPOLATION_1" equiv-text="{{ imageName }}"/>
-          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>をごみ箱に移動するには、
-          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>［イメージの移動］
-          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>をクリックします。希望に応じて、失効日を選択できます。
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/> to trash,
+          click 
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Move Image
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>. Optionally, you can pick an expiration date.
         </target>
       </trans-unit>
       <trans-unit id="88f27d390844aad53b4240360e928156c5f0d326" datatype="html">
@@ -1953,6 +1343,10 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>Move Image</source>
         <target>イメージの移動</target>
       </trans-unit>
+      <trans-unit id="8a9910cd114c1deb9af74f6f99b4173403965bf2" datatype="html">
+        <source>Gateways</source>
+        <target>Gateways</target>
+      </trans-unit>
       <trans-unit id="e95ae009d0bdb45fcc656e8b65248cf7396080d5" datatype="html">
         <source>Overview</source>
         <target>概要</target>
@@ -1961,15 +1355,77 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>Targets</source>
         <target>ターゲット</target>
       </trans-unit>
+      <trans-unit id="6803e31b7395d94934e091a49a9524026b59b018" datatype="html">
+        <source>Discovery Authentication</source>
+        <target>検出認証</target>
+      </trans-unit>
+      <trans-unit id="e08a77594f3d89311cdf6da5090044270909c194" datatype="html">
+        <source>User</source>
+        <target>ユーザ</target>
+      </trans-unit>
+      <trans-unit id="0214f773f8e394f50f953f39962e352d7863e959" datatype="html">
+        <source>Usernames must have a length of 8 to 64 characters and
+              can only contain letters, '.', '@', '-', '_' or ':'.</source>
+        <target>ユーザ名は8～64文字の長さである必要があり、
+英字、「.」、「@」、「-」、「_」、または「:」のみで構成される必要があります。</target>
+      </trans-unit>
+      <trans-unit id="6682d1c00263bee204583a5d589b308b6be88b0f" datatype="html">
+        <source>Passwords must have a length of 12 to 16 characters
+              and can only contain letters, '@', '-', '_' or '/'.</source>
+        <target>Passwords must have a length of 12 to 16 characters
+              and can only contain letters, '@', '-', '_' or '/'.</target>
+      </trans-unit>
+      <trans-unit id="ff40391de7a1944ea95091e4045cc34c4979b736" datatype="html">
+        <source>Mutual User</source>
+        <target>相互ユーザ</target>
+      </trans-unit>
+      <trans-unit id="0cf73dbebe99b737c4d288788182fc356e3c93d3" datatype="html">
+        <source>Mutual Password</source>
+        <target>相互パスワード</target>
+      </trans-unit>
+      <trans-unit id="8800276925157c666b103c36ff7fe8ffe11980b4" datatype="html">
+        <source>Passwords must have a length of 12 to 16 characters and
+              can only contain letters, '@', '-', '_' or '/'.</source>
+        <target>Passwords must have a length of 12 to 16 characters and
+              can only contain letters, '@', '-', '_' or '/'.</target>
+      </trans-unit>
+      <trans-unit id="53a583cd5f15059cc958b7d547f72cc78f68e123" datatype="html">
+        <source>Please consult the 
+          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>documentation
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>
+    on how to configure and enable the iSCSI Targets management functionality.
+        </source>
+        <target>Please consult the 
+          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>documentation
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>
+    on how to configure and enable the iSCSI Targets management functionality.
+        </target>
+      </trans-unit>
+      <trans-unit id="3b301d0044f62c92af0da53d7aaca52a436a547d" datatype="html">
+        <source>Available information:</source>
+        <target>取得可能な情報:</target>
+      </trans-unit>
+      <trans-unit id="332227f088a4877b3c11f5fb3ae8bc812c470fae" datatype="html">
+        <source>iSCSI Targets not available</source>
+        <target>使用可能なiSCSIターゲットがありません</target>
+      </trans-unit>
+      <trans-unit id="8414a5cb9d71cc1b21b10e4a9d1f2dad558f3361" datatype="html">
+        <source>Discovery authentication</source>
+        <target>Discovery authentication</target>
+      </trans-unit>
       <trans-unit id="0f6e8f6094b180eaf1f11bc0ffe383f1cdcd059e" datatype="html">
-        <source>Only available for RBD images with
+        <source>Only available for RBD images with 
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>fast-diff
           <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> enabled
         </source>
-        <target>
+        <target>Only available for RBD images with 
           <x id="START_TAG_STRONG" ctype="x-strong" equiv-text="<strong>"/>fast-diff
-          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/>が有効になっているRBDイメージのみに使用できます
+          <x id="CLOSE_TAG_STRONG" ctype="x-strong" equiv-text="</strong>"/> enabled
         </target>
+      </trans-unit>
+      <trans-unit id="e70fcca5a99575cffef3ff8cbd5e69f06ffd0f1c" datatype="html">
+        <source>Pool</source>
+        <target>プール</target>
       </trans-unit>
       <trans-unit id="03cc5b14b0a20d075e9009ff021f4f1660ba348a" datatype="html">
         <source>Data Pool</source>
@@ -1978,6 +1434,18 @@ Grafanaにダッシュボードを追加する方法に関する
       <trans-unit id="1b051734b0ee9021991c91b3ed4e81c244322462" datatype="html">
         <source>Created</source>
         <target>作成済み</target>
+      </trans-unit>
+      <trans-unit id="7faaaa08f56427999f3be41df1093ce4089bbd75" datatype="html">
+        <source>Size</source>
+        <target>サイズ</target>
+      </trans-unit>
+      <trans-unit id="ceac8e132384322ec778ba760875a6c6897d3e42" datatype="html">
+        <source>Object size</source>
+        <target>オブジェクトサイズ</target>
+      </trans-unit>
+      <trans-unit id="6cdb1fea93d77c07950c0c76c6e0ad79ebbef084" datatype="html">
+        <source>Features</source>
+        <target>機能</target>
       </trans-unit>
       <trans-unit id="0a65771c9a73b9aa609d592fc96a64801a8f40bd" datatype="html">
         <source>Provisioned</source>
@@ -2015,20 +1483,104 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>Snapshots</source>
         <target>スナップショット</target>
       </trans-unit>
+      <trans-unit id="a5f9ba9bb9faa8284bcadb1cdbc6aaf969e9c4bb" datatype="html">
+        <source>Image</source>
+        <target>イメージ</target>
+      </trans-unit>
       <trans-unit id="58e58f1a8786da9031a05e6770c5dafce82badf5" datatype="html">
         <source>This setting overrides the global value</source>
         <target>この設定はグローバル値よりも優先されます</target>
       </trans-unit>
+      <trans-unit id="5decb3917d46a9ac6e5813699801becb7c3c1455" datatype="html">
+        <source>Global</source>
+        <target>グローバル</target>
+      </trans-unit>
       <trans-unit id="36b46714164964c6258b08ed0a25f57d8a950f92" datatype="html">
         <source>This is the global value. No value for this option has been set for this image.</source>
         <target>これはグローバル値です。このイメージについて、このオプションの値は設定されていません。</target>
+      </trans-unit>
+      <trans-unit id="6547c9c4d5f62942ac4b1fe459cf9a03d4dbf5a0" datatype="html">
+        <source>
+          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/> from
+        </source>
+        <target>
+          <x id="INTERPOLATION" equiv-text="{{ action | titlecase }}"/> from
+        </target>
+      </trans-unit>
+      <trans-unit id="0e9ecf29a4fa5b057bd8052e0d801b3fde6a30bf" datatype="html">
+        <source>'/' and '@' are not allowed.</source>
+        <target>「/」と「@」は使用できません。</target>
+      </trans-unit>
+      <trans-unit id="b99417c4dd46286ffd37c8d2e987c8b512ec7052" datatype="html">
+        <source>-- No rbd pools available --</source>
+        <target>-- 使用可能なrbdプールがありません --</target>
+      </trans-unit>
+      <trans-unit id="ef83ec9c304a89d45650e580dcdc2978c37b3a83" datatype="html">
+        <source>-- Select a pool --</source>
+        <target>-- プールを選択してください --</target>
+      </trans-unit>
+      <trans-unit id="49449943d8cbf59d8c401c8bd2e76f92e207cc5f" datatype="html">
+        <source>Use a dedicated data pool</source>
+        <target>専用のデータプールを使用してください</target>
+      </trans-unit>
+      <trans-unit id="870aee0dd31a9643bf62007beb8f1ae1deb34d42" datatype="html">
+        <source>Data pool</source>
+        <target>データプール</target>
+      </trans-unit>
+      <trans-unit id="3792ca829d9b9f687e1f5d7733d30e9bb0bfec47" datatype="html">
+        <source>Dedicated pool that stores the object-data of the RBD.</source>
+        <target>RBDのオブジェクトデータを保管するための専用プール</target>
+      </trans-unit>
+      <trans-unit id="f0016bd458baa88284a658ce9eeda42d8ad88d2c" datatype="html">
+        <source>e.g., 10GiB</source>
+        <target>例: 10GiB</target>
+      </trans-unit>
+      <trans-unit id="0a88bbee20570aaf9615332fb27020627044874d" datatype="html">
+        <source>You have to increase the size.</source>
+        <target>サイズを大きくする必要があります。</target>
+      </trans-unit>
+      <trans-unit id="bc2e854e111ecf2bd7db170da5e3c2ed08181d88" datatype="html">
+        <source>Advanced</source>
+        <target>詳細</target>
+      </trans-unit>
+      <trans-unit id="3562a3778695a5f9c0445660e35301f0a39aaf73" datatype="html">
+        <source>Striping</source>
+        <target>ストライピング</target>
+      </trans-unit>
+      <trans-unit id="ef3c3f3b5f562a5cdbe0ee2874287db1534b5958" datatype="html">
+        <source>Stripe unit</source>
+        <target>ストライプ単位</target>
+      </trans-unit>
+      <trans-unit id="84471be1049006edecbcaef1a32ae0893c229c50" datatype="html">
+        <source>-- Select stripe unit --</source>
+        <target>-- ストライプ単位を選択してください --</target>
+      </trans-unit>
+      <trans-unit id="8d32c5c54c8581c774a7f467fbd4e329b15a74fa" datatype="html">
+        <source>This field is required because stripe count is defined!</source>
+        <target>ストライプ数が定義されているため、このフィールドは必須です。</target>
+      </trans-unit>
+      <trans-unit id="6bbf9040be7c5491d4a03f2185708f43a6582a3b" datatype="html">
+        <source>Stripe unit is greater than object size.</source>
+        <target>ストライプ単位がオブジェクトサイズより大きいです。</target>
+      </trans-unit>
+      <trans-unit id="a682f49f9b761591661276d7c6f550e641a130a4" datatype="html">
+        <source>Stripe count</source>
+        <target>ストライプ数</target>
+      </trans-unit>
+      <trans-unit id="baa74031990c5370008ba622d0a250f0929097f4" datatype="html">
+        <source>This field is required because stripe unit is defined!</source>
+        <target>ストライプ単位が定義されているため、このフィールドは必須です。</target>
+      </trans-unit>
+      <trans-unit id="cd2ada6d5ecbd5cbf89eae0a1f5326efedac0dbc" datatype="html">
+        <source>Stripe count must be greater than 0.</source>
+        <target>ストライプ数は0より大きい必要があります。</target>
       </trans-unit>
       <trans-unit id="3f67f30568e9ae47507d46e28e1e82a7dca772e2" datatype="html">
         <source>
           <x id="ICU" equiv-text="{ editing, select, true {...} other {...}}"/> RBD Snapshot
         </source>
         <target>
-          <x id="ICU" equiv-text="{ editing, select, true {...} other {...}}"/> RBDスナップショット
+          <x id="ICU" equiv-text="{ editing, select, true {...} other {...}}"/> RBD Snapshot
         </target>
       </trans-unit>
       <trans-unit id="1628d19a4490817c18be2afab410ca4adfa62ea7" datatype="html">
@@ -2040,12 +1592,8 @@ Grafanaにダッシュボードを追加する方法に関する
           <x id="ICU" equiv-text="{ editing, select, true {...} other {...}}"/> Snapshot
         </source>
         <target>
-          <x id="ICU" equiv-text="{ editing, select, true {...} other {...}}"/>スナップショット
+          <x id="ICU" equiv-text="{ editing, select, true {...} other {...}}"/> Snapshot
         </target>
-      </trans-unit>
-      <trans-unit id="cb60c1cd3655234756b5b92d4d597d92d520ee30" datatype="html">
-        <source>PROTECTED</source>
-        <target>保護済み</target>
       </trans-unit>
       <trans-unit id="deffb86b8fb0541254ad5a43862d82bff6b6a6c4" datatype="html">
         <source>UNPROTECTED</source>
@@ -2100,16 +1648,212 @@ Grafanaにダッシュボードを追加する方法に関する
         <target>保護の終了日</target>
       </trans-unit>
       <trans-unit id="0ee3b2322a1d3277f7e3fdb8a5141ac42bcf350b" datatype="html">
-        <source>This image is protected until
+        <source>This image is protected until 
           <x id="INTERPOLATION" equiv-text="{{ expiresAt | cdDate }}"/>.
         </source>
-        <target>このイメージは
-          <x id="INTERPOLATION" equiv-text="{{ expiresAt | cdDate }}"/>まで保護されます。
+        <target>This image is protected until 
+          <x id="INTERPOLATION" equiv-text="{{ expiresAt | cdDate }}"/>.
         </target>
+      </trans-unit>
+      <trans-unit id="aba82bfd8e177d35b76cad7cd43941f8e5e5acac" datatype="html">
+        <source>Trash</source>
+        <target>ごみ箱</target>
       </trans-unit>
       <trans-unit id="a674ab267d1934bf395f87ca1503fd474296893f" datatype="html">
         <source>iSCSI Topology</source>
         <target>iSCSIトポロジ</target>
+      </trans-unit>
+      <trans-unit id="121cc5391cd2a5115bc2b3160379ee5b36cd7716" datatype="html">
+        <source>Settings</source>
+        <target>設定</target>
+      </trans-unit>
+      <trans-unit id="9e515f954730279c31d5301f02479666d6264e8b" datatype="html">
+        <source>Changing these parameters from their default values is usually not necessary.</source>
+        <target>通常はこれらのパラメータをデフォルト値から変更する必要はありません。</target>
+      </trans-unit>
+      <trans-unit id="69a47cbabcc51ca942606e1d8da0ec11f98a2690" datatype="html">
+        <source>Backstore</source>
+        <target>バックストア</target>
+      </trans-unit>
+      <trans-unit id="6e57f37f033d2756d72e76f0214ec2cf7471a24f" datatype="html">
+        <source>Must be greater than or equal to 
+          <x id="INTERPOLATION" equiv-text="{{ disk_controls_limits[bs][setting.key]['min'] }}"/>.
+        </source>
+        <target>Must be greater than or equal to 
+          <x id="INTERPOLATION" equiv-text="{{ disk_controls_limits[bs][setting.key]['min'] }}"/>.
+        </target>
+      </trans-unit>
+      <trans-unit id="ba70656490cbe3688eaafb9a00ed0910a4fce76d" datatype="html">
+        <source>Must be less than or equal to 
+          <x id="INTERPOLATION" equiv-text="{{ disk_controls_limits[bs][setting.key]['max'] }}"/>.
+        </source>
+        <target>Must be less than or equal to 
+          <x id="INTERPOLATION" equiv-text="{{ disk_controls_limits[bs][setting.key]['max'] }}"/>.
+        </target>
+      </trans-unit>
+      <trans-unit id="68e710782ccb5398b3acb8844caf0b199da2c3da" datatype="html">
+        <source>Confirm</source>
+        <target>確認</target>
+      </trans-unit>
+      <trans-unit id="339878da255ab55447c43afef8d9b2f9753bf5f6" datatype="html">
+        <source>Advanced Settings</source>
+        <target>詳細設定</target>
+      </trans-unit>
+      <trans-unit id="b2de1dac73071775f2a6e53da76e861e91eff690" datatype="html">
+        <source>Must be greater than or equal to 
+          <x id="INTERPOLATION" equiv-text="{{ target_controls_limits[setting.key]['min'] }}"/>.
+        </source>
+        <target>Must be greater than or equal to 
+          <x id="INTERPOLATION" equiv-text="{{ target_controls_limits[setting.key]['min'] }}"/>.
+        </target>
+      </trans-unit>
+      <trans-unit id="bd0ea96890eb025a4e649c615ca02606619f4077" datatype="html">
+        <source>Must be less than or equal to 
+          <x id="INTERPOLATION" equiv-text="{{ target_controls_limits[setting.key]['max'] }}"/>.
+        </source>
+        <target>Must be less than or equal to 
+          <x id="INTERPOLATION" equiv-text="{{ target_controls_limits[setting.key]['max'] }}"/>.
+        </target>
+      </trans-unit>
+      <trans-unit id="1406c2fb12a20c1528b19bcc5e24a6a2386167f3" datatype="html">
+        <source>Target IQN</source>
+        <target>ターゲットIQN</target>
+      </trans-unit>
+      <trans-unit id="5fe42339be910372fa689f559155631862d218e8" datatype="html">
+        <source>IQN has wrong pattern.</source>
+        <target>IQNのパターンが正しくありません。</target>
+      </trans-unit>
+      <trans-unit id="050a7ff057d1e895357540406b6be5652b4d1c71" datatype="html">
+        <source>An IQN has the following notation
+                'iqn.$year-$month.$reversedAddress:$definedName'</source>
+        <target>An IQN has the following notation
+                'iqn.$year-$month.$reversedAddress:$definedName'</target>
+      </trans-unit>
+      <trans-unit id="c8ada4b53396d8366db00a435acc61d53d857047" datatype="html">
+        <source>For example: iqn.2016-06.org.dashboard:storage:disk.sn-a8675309</source>
+        <target>例: iqn.2016-06.org.dashboard:storage:disk.sn-a8675309</target>
+      </trans-unit>
+      <trans-unit id="e60c11e1b1dfbbeda577364b8de39ded2d796c5e" datatype="html">
+        <source>More information</source>
+        <target>詳細情報</target>
+      </trans-unit>
+      <trans-unit id="9b1aa85dfc6849196e64060db02c5410de69b7a1" datatype="html">
+        <source>This target has modified advanced settings.</source>
+        <target>このターゲットの詳細設定は変更されています。</target>
+      </trans-unit>
+      <trans-unit id="6990ad8d6182662e864495ac31c3758cda1c7a28" datatype="html">
+        <source>Portals</source>
+        <target>ポータル</target>
+      </trans-unit>
+      <trans-unit id="c3638c01b6c34066438909713ec96087c813fc7e" datatype="html">
+        <source>At least 
+          <x id="INTERPOLATION" equiv-text="{{ minimum_gateways }}"/> gateways are required.
+        </source>
+        <target>At least 
+          <x id="INTERPOLATION" equiv-text="{{ minimum_gateways }}"/> gateways are required.
+        </target>
+      </trans-unit>
+      <trans-unit id="6a3ac2b4137d723fd9878cd357c2012ff6c07973" datatype="html">
+        <source>Add portal</source>
+        <target>ポータルの追加</target>
+      </trans-unit>
+      <trans-unit id="9aff25be088f0efe3eaaf62edf2bff41cc41a617" datatype="html">
+        <source>Backstore: 
+          <x id="INTERPOLATION" equiv-text="{{ imagesSettings[image].backstore | iscsiBackstore }}"/>. 
+        </source>
+        <target>Backstore: 
+          <x id="INTERPOLATION" equiv-text="{{ imagesSettings[image].backstore | iscsiBackstore }}"/>. 
+        </target>
+      </trans-unit>
+      <trans-unit id="e3484cae8b118c576ca2815bf9c9406c2eb2cae3" datatype="html">
+        <source>This image has modified settings.</source>
+        <target>このイメージの設定は変更されています。</target>
+      </trans-unit>
+      <trans-unit id="107c84e820909b44fe258673938a68ced1bbff72" datatype="html">
+        <source>At least 1 image is required.</source>
+        <target>少なくとも1つのイメージが必要です。</target>
+      </trans-unit>
+      <trans-unit id="808038f912fdc7f0e03f82d4afd3bf9178527fc8" datatype="html">
+        <source>Add image</source>
+        <target>イメージの追加</target>
+      </trans-unit>
+      <trans-unit id="66c5fb27f52e75b70ca4b670b9b15a2a51cf9543" datatype="html">
+        <source>ACL authentication</source>
+        <target>ACL認証</target>
+      </trans-unit>
+      <trans-unit id="f494bd31f095f6dcc656ce87ec2dcf07a2e9b30c" datatype="html">
+        <source>Initiators</source>
+        <target>イニシエータ</target>
+      </trans-unit>
+      <trans-unit id="e98239d8a6be1100119ff4b5630c822b82786740" datatype="html">
+        <source>Initiator</source>
+        <target>イニシエータ</target>
+      </trans-unit>
+      <trans-unit id="f2c5059d8cda15d8d03e2cce30f2d139623d9a91" datatype="html">
+        <source>Client IQN</source>
+        <target>クライアントIQN</target>
+      </trans-unit>
+      <trans-unit id="107d5aabce23d900f0a80e6ddc1c10e29aa0bed8" datatype="html">
+        <source>Initiator IQN needs to be unique.</source>
+        <target>イニシエータIQNは一意である必要があります。</target>
+      </trans-unit>
+      <trans-unit id="bbf0b34a3fcc80800fcb44b9e1e86931a530dfe3" datatype="html">
+        <source>Usernames must have a length of 8 to 64 characters and
+                        can only contain letters, '.', '@', '-', '_' or ':'.</source>
+        <target>ユーザ名は8～64文字の長さである必要があり、
+英字、「.」、「@」、「-」、「_」、または「:」のみで構成される必要があります。</target>
+      </trans-unit>
+      <trans-unit id="fdfee5d7a27e1bdd97a176097277bee078de6aaf" datatype="html">
+        <source>Passwords must have a length of 12 to 16 characters
+                        and can only contain letters, '@', '-', '_' or '/'.</source>
+        <target>Passwords must have a length of 12 to 16 characters
+                        and can only contain letters, '@', '-', '_' or '/'.</target>
+      </trans-unit>
+      <trans-unit id="8406eb7415ee40e54d9ecb209abb056f06e3d666" datatype="html">
+        <source>Passwords must have a length of 12 to 16 characters and
+                        can only contain letters, '@', '-', '_' or '/'.</source>
+        <target>Passwords must have a length of 12 to 16 characters and
+                        can only contain letters, '@', '-', '_' or '/'.</target>
+      </trans-unit>
+      <trans-unit id="5d1878d5fc761cbe9614bfd87047a740c82a6951" datatype="html">
+        <source>Initiator belongs to a group. Images will be configure in the group.</source>
+        <target>イニシエータはいずれかのグループに属します。イメージはそのグループ内で設定されます。</target>
+      </trans-unit>
+      <trans-unit id="c0de67b9d97fafbf200f9451e8388ee8128a56ac" datatype="html">
+        <source>No items added.</source>
+        <target>アイテムが追加されていません。</target>
+      </trans-unit>
+      <trans-unit id="d565e47726158e428ecdc952fc9233b9b7d7f049" datatype="html">
+        <source>Add initiator</source>
+        <target>イニシエータの追加</target>
+      </trans-unit>
+      <trans-unit id="c22ba03540aa3217da059f45e7eab138b51a96e2" datatype="html">
+        <source>Groups</source>
+        <target>グループ</target>
+      </trans-unit>
+      <trans-unit id="4c90059afafb7e160384d9f512797c95bb95c6dc" datatype="html">
+        <source>Group</source>
+        <target>グループ</target>
+      </trans-unit>
+      <trans-unit id="3084948274cff4f56d0f431af47240e9cf02fcc7" datatype="html">
+        <source>Add group</source>
+        <target>グループの追加</target>
+      </trans-unit>
+      <trans-unit id="a949d7e577902d0e5dc5d0971bb0170a21be7728" datatype="html">
+        <source>[object Object]</source>
+        <target>[object Object]</target>
+      </trans-unit>
+      <trans-unit id="ff92fbdec9fdd5054493eeda0d7ee8b450f83e72" datatype="html">
+        <source>RBD Configuration</source>
+        <target>RBD設定</target>
+      </trans-unit>
+      <trans-unit id="b62d9efc8eb3b589904f6cb96a0406bbda55673a" datatype="html">
+        <source>Remove the local configuration value. The parent configuration value will be inherited and used instead.</source>
+        <target>ローカル設定値を削除します。親設定値が継承されて代わりに使用されます。</target>
+      </trans-unit>
+      <trans-unit id="963488a1010d46067b238c4ae917fab3907c0a3a" datatype="html">
+        <source>The mininum value is 0</source>
+        <target>最小値は0です</target>
       </trans-unit>
       <trans-unit id="66db799d67958d4b0765181d072df62e2d1c16f5" datatype="html">
         <source>Issues</source>
@@ -2135,14 +1879,17 @@ Grafanaにダッシュボードを追加する方法に関する
           <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Update
           <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>.
         </source>
-        <target>プール
+        <target>To edit the mirror mode for pool 
           <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>
           <x id="INTERPOLATION" equiv-text="{{ poolName }}"/>
-          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>のミラーモードを編集するには、
-リストから新しいモードを選択して、
-          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>［更新］
-          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>をクリックします。
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>, select a new mode from the list and click 
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Update
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>.
         </target>
+      </trans-unit>
+      <trans-unit id="37e10df2d9c0c25ef04ac112c9c9a7723e8efae0" datatype="html">
+        <source>Mode</source>
+        <target>モード</target>
       </trans-unit>
       <trans-unit id="32ca348ef926b0a6a7a780b8b64c3a8239895cec" datatype="html">
         <source>Peer clusters must be removed prior to disabling mirror.</source>
@@ -2155,17 +1902,17 @@ Grafanaにダッシュボードを追加する方法に関する
         </source>
         <target>
           <x id="ICU" equiv-text="{mode, select, edit {...} other {...}}"/>
-プールのミラーピア
+  pool mirror peer
         </target>
       </trans-unit>
       <trans-unit id="4ddcb416c1c0aa1f54acf5beef1de81813e76fa6" datatype="html">
         <source>{VAR_SELECT, select, edit {Edit} other {Add} }</source>
         <target>{VAR_SELECT, select, edit {Edit} other {Add} }</target>
       </trans-unit>
-      <trans-unit id="f7a13e4807afa6a9eda3db57a0a2a110dbae8ad7" datatype="html">
+      <trans-unit id="59ca65ece457429d90104ede4674965f62edbabe" datatype="html">
         <source>
           <x id="ICU" equiv-text="{mode, select, edit {...} other {...}}"/> the pool
-          mirror peer attributes for pool
+          mirror peer attributes for pool 
           <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>
           <x id="INTERPOLATION" equiv-text="{{ poolName }}"/>
           <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/> and click
@@ -2173,13 +1920,13 @@ Grafanaにダッシュボードを追加する方法に関する
           <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>.
         </source>
         <target>
-          <x id="ICU" equiv-text="{mode, select, edit {...} other {...}}"/>プール
+          <x id="ICU" equiv-text="{mode, select, edit {...} other {...}}"/> the pool
+          mirror peer attributes for pool 
           <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>
           <x id="INTERPOLATION" equiv-text="{{ poolName }}"/>
-          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>
-のプールミラーピア属性、および
-          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>［送信］
-          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>をクリックします。
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/> and click
+          <x id="START_TAG_KBD" ctype="x-kbd" equiv-text="<kbd>"/>Submit
+          <x id="CLOSE_TAG_KBD" ctype="x-kbd" equiv-text="</kbd>"/>.
         </target>
       </trans-unit>
       <trans-unit id="d3cc964811f852a168f4a2d5daa59068abc5cf53" datatype="html">
@@ -2226,21 +1973,569 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>CephX key must be base64 encoded.</source>
         <target>CephXキーはbase64でエンコードされている必要があります。</target>
       </trans-unit>
+      <trans-unit id="1d8a7c8aea58294a3c57c23af0468ddf0ba0c9c7" datatype="html">
+        <source>Pools List</source>
+        <target>プールリスト</target>
+      </trans-unit>
+      <trans-unit id="490e15ecc922965b6d8194754c87c5583aa071f3" datatype="html">
+        <source>The name can only consist of alphanumeric characters, dashes and underscores.</source>
+        <target>名前は英数字、ダッシュ、および下線のみで構成される必要があります。</target>
+      </trans-unit>
+      <trans-unit id="9edc2b494e660618af3e5225f68d40b7ca67629c" datatype="html">
+        <source>The chosen erasure code profile name is already in use.</source>
+        <target>選択されたイレイジャコードプロファイル名はすでに使用されています。</target>
+      </trans-unit>
+      <trans-unit id="ef9ff0e6227947b48dfab4ac39ade04af758913b" datatype="html">
+        <source>Plugin</source>
+        <target>プラグイン</target>
+      </trans-unit>
+      <trans-unit id="dd69b31bce8f630eac1d4762b0bbcf72ce19d193" datatype="html">
+        <source>Data chunks (k)</source>
+        <target>データチャンク(k)</target>
+      </trans-unit>
+      <trans-unit id="b0d26a6172d32cb81218fe2103c54a818cbc1189" datatype="html">
+        <source>Must be equal to or greater than 2.</source>
+        <target>2以上である必要があります。</target>
+      </trans-unit>
+      <trans-unit id="dab3a299ead121169b8e08ed618c3b6a2f66691b" datatype="html">
+        <source>Coding chunks (m)</source>
+        <target>コーディングチャンク(m)</target>
+      </trans-unit>
+      <trans-unit id="1e2773e5bd4948193f18f2361d663ecc3988c656" datatype="html">
+        <source>Must be equal to or greater than 1.</source>
+        <target>1以上である必要があります。</target>
+      </trans-unit>
+      <trans-unit id="6cde4c945a49a260c0a47bcc7cd956846930a5f7" datatype="html">
+        <source>Durability estimator (c)</source>
+        <target>耐久性推定子(c)</target>
+      </trans-unit>
+      <trans-unit id="af668c2a095a979ea2b4e43cd82c2120ab56c21c" datatype="html">
+        <source>Locality (l)</source>
+        <target>地域(l)</target>
+      </trans-unit>
+      <trans-unit id="d455a110bf6d2235e314e295ce1dfeee93d3dff2" datatype="html">
+        <source>Crush failure domain</source>
+        <target>Crush障害ドメイン</target>
+      </trans-unit>
+      <trans-unit id="b74a495f041f7dd102eee5c0bbc9e03083b538ae" datatype="html">
+        <source>Crush Locality</source>
+        <target>Crush地域</target>
+      </trans-unit>
+      <trans-unit id="a2f14a73f7a6e94479f67423cc51102da8d6f524" datatype="html">
+        <source>None</source>
+        <target>なし</target>
+      </trans-unit>
+      <trans-unit id="2981733b912b693a9dd9d915d6d34f4692cc874a" datatype="html">
+        <source>Technique</source>
+        <target>技法</target>
+      </trans-unit>
+      <trans-unit id="e0098b6e47b04ec817361f384ce81d454ba5c0bb" datatype="html">
+        <source>Packetsize</source>
+        <target>パケットサイズ</target>
+      </trans-unit>
+      <trans-unit id="c0252cd81ca54d0a2f69ec9ccf4248e73df5aa4a" datatype="html">
+        <source>Crush root</source>
+        <target>Crushルート</target>
+      </trans-unit>
+      <trans-unit id="1548d5c76f0406ddd1ba3c557e1e6db22e95b340" datatype="html">
+        <source>Crush device class</source>
+        <target>Crushデバイスクラス</target>
+      </trans-unit>
+      <trans-unit id="5e85feb6f9f0334366e46ee09ca6b8df52397432" datatype="html">
+        <source>any</source>
+        <target>任意</target>
+      </trans-unit>
+      <trans-unit id="03d84645f6e019c5a43909bbf2ea1696ee88332c" datatype="html">
+        <source>Directory</source>
+        <target>ディレクトリ</target>
+      </trans-unit>
+      <trans-unit id="16e113230b6b0d3165e076300880542bac7c8138" datatype="html">
+        <source>The chosen Ceph pool name is already in use.</source>
+        <target>選択されたCephプール名はすでに使用されています。</target>
+      </trans-unit>
+      <trans-unit id="b85c657469e5ec8231c3de99b22f437bc01ffde5" datatype="html">
+        <source>Pool type</source>
+        <target>プールタイプ</target>
+      </trans-unit>
+      <trans-unit id="526c5443254c3b126eedb264840ffe827727bfd3" datatype="html">
+        <source>-- Select a pool type --</source>
+        <target>-- プールタイプを選択してください --</target>
+      </trans-unit>
+      <trans-unit id="0aa21053410a94aa61d16985a4e95fd65523430d" datatype="html">
+        <source>Placement groups</source>
+        <target>配置グループ</target>
+      </trans-unit>
+      <trans-unit id="6301f1391d726f8f450bb358058534db19541ca9" datatype="html">
+        <source>At least one placement group is needed!</source>
+        <target>少なくとも1つの配置グループが必要です。</target>
+      </trans-unit>
+      <trans-unit id="ba9469a1ce6ed36e039c1f67247c8c81a5c71449" datatype="html">
+        <source>Your cluster can't handle this many PGs. Please recalculate the PG amount needed.</source>
+        <target>ご使用のクラスタはこれだけ多数の配置グループを処理できません。必要な配置グループの数を再計算してください。</target>
+      </trans-unit>
+      <trans-unit id="80ac68cd883369dac20688bc32b4cb33291b5e50" datatype="html">
+        <source>Calculation help</source>
+        <target>計算のヘルプ</target>
+      </trans-unit>
+      <trans-unit id="fccbd60493df26705d957ed6c02a3c447894678f" datatype="html">
+        <source>The current PGs settings were calculated for you, you
+                should make sure the values suit your needs before submit.</source>
+        <target>The current PGs settings were calculated for you, you
+                should make sure the values suit your needs before submit.</target>
+      </trans-unit>
+      <trans-unit id="33150f22ce5348aa6c499bd092c3f4f3695d62cc" datatype="html">
+        <source>Crush ruleset</source>
+        <target>Crushルールセット</target>
+      </trans-unit>
+      <trans-unit id="73a6b31116b3cc322af951daa0bafdc169e6c42e" datatype="html">
+        <source>-- Select a crush rule --</source>
+        <target>-- Crushルールを選択してください --</target>
+      </trans-unit>
+      <trans-unit id="92da80699921e89fb19372e25b8d0f3b9fa427fc" datatype="html">
+        <source>Crush rule</source>
+        <target>Crushルール</target>
+      </trans-unit>
+      <trans-unit id="5489e9f96835f469f6f728a00d8efa88ea5bc940" datatype="html">
+        <source>Crush steps</source>
+        <target>Crushステップ</target>
+      </trans-unit>
+      <trans-unit id="54a53b1b402aafff5b992ee9b64e409fbfe9074f" datatype="html">
+        <source>The rule can't be used in the current cluster as it has
+                to few OSDs to meet the minimum required OSD by this rule.</source>
+        <target>現在のクラスタ内のOSD数はこのルールで要求される最小OSD数を下回っているため、
+このルールを現在のクラスタで使用することはできません。</target>
+      </trans-unit>
+      <trans-unit id="a43b2695131b48b76cebba676aba98a2bee17515" datatype="html">
+        <source>Replicated size</source>
+        <target>複製されたサイズ</target>
+      </trans-unit>
+      <trans-unit id="7bff144a4c4dc63b0e18fff2617d61a7ebdf2b6c" datatype="html">
+        <source>Minimum: 
+          <x id="INTERPOLATION" equiv-text="{{ getMinSize() }}"/>
+        </source>
+        <target>Minimum: 
+          <x id="INTERPOLATION" equiv-text="{{ getMinSize() }}"/>
+        </target>
+      </trans-unit>
+      <trans-unit id="1a9c54b41f6d58a74e5d0aa3429ed0c87a482551" datatype="html">
+        <source>Maximum: 
+          <x id="INTERPOLATION" equiv-text="{{ getMaxSize() }}"/>
+        </source>
+        <target>Maximum: 
+          <x id="INTERPOLATION" equiv-text="{{ getMaxSize() }}"/>
+        </target>
+      </trans-unit>
+      <trans-unit id="6ab647b95bd2347ae6f4605576de5e0269fb893a" datatype="html">
+        <source>The size specified is out of range. A value from
+          <x id="INTERPOLATION" equiv-text="{{ getMinSize() }}"/> to 
+          <x id="INTERPOLATION_1" equiv-text="{{ getMaxSize() }}"/> is valid.
+        </source>
+        <target>The size specified is out of range. A value from
+          <x id="INTERPOLATION" equiv-text="{{ getMinSize() }}"/> to 
+          <x id="INTERPOLATION_1" equiv-text="{{ getMaxSize() }}"/> is valid.
+        </target>
+      </trans-unit>
+      <trans-unit id="9de7dde00e2139cc4bd03b1837afbe72ad15a1ff" datatype="html">
+        <source>Erasure code profile</source>
+        <target>イレイジャコードプロファイル</target>
+      </trans-unit>
+      <trans-unit id="39b4620e6bd444e0a57a0a5c03fa8c96d7fe5235" datatype="html">
+        <source>-- No erasure code profile available --</source>
+        <target>-- 使用可能なイレイジャコードプロファイルがありません --</target>
+      </trans-unit>
+      <trans-unit id="498561757390d5528b263ce450d5f38efb00266d" datatype="html">
+        <source>-- Select an erasure code profile --</source>
+        <target>-- イレイジャコードプロファイルを選択してください --</target>
+      </trans-unit>
+      <trans-unit id="1c870fb00256b8a5b9cb9cd1a124e6390b9bc639" datatype="html">
+        <source>EC Overwrites</source>
+        <target>ECの上書き</target>
+      </trans-unit>
+      <trans-unit id="f1abafaeb40ce52355ddcc24686e3cd17b64e08a" datatype="html">
+        <source>Applications</source>
+        <target>アプリケーション</target>
+      </trans-unit>
+      <trans-unit id="2208d63d5940ce656006a220102b1eb2b5e553da" datatype="html">
+        <source>Compression</source>
+        <target>圧縮</target>
+      </trans-unit>
+      <trans-unit id="6c6f25c47da62ec597c6057a36ddfc3209811ec5" datatype="html">
+        <source>Algorithm</source>
+        <target>アルゴリズム</target>
+      </trans-unit>
+      <trans-unit id="4903231d42089325a28892c0fde1aed46b733ae6" datatype="html">
+        <source>-- No erasure compression algorithm available --</source>
+        <target>-- 使用可能なイレイジャ圧縮アルゴリズムがありません --</target>
+      </trans-unit>
+      <trans-unit id="5d68ddb254275f8f44221e9ad6d8ceeb59ca46a6" datatype="html">
+        <source>Minimum blob size</source>
+        <target>最小blobサイズ</target>
+      </trans-unit>
+      <trans-unit id="fb2f176df80647137cbb02bbeb29e5dec707a400" datatype="html">
+        <source>e.g., 128KiB</source>
+        <target>例: 128KiB</target>
+      </trans-unit>
+      <trans-unit id="1b7f6e53a4521c6eb3ced4c007fdd4cf80bb7707" datatype="html">
+        <source>Value should be greater than 0</source>
+        <target>値は0より大きい必要があります</target>
+      </trans-unit>
+      <trans-unit id="8db98ab14b4e207ec763dfdefbc2dae367aab1cc" datatype="html">
+        <source>Value should be less than the maximum blob size</source>
+        <target>Value should be less than the maximum blob size</target>
+      </trans-unit>
+      <trans-unit id="151efb127a9a4dd25259a0b2055442318a141f5b" datatype="html">
+        <source>Maximum blob size</source>
+        <target>最大blobサイズ</target>
+      </trans-unit>
+      <trans-unit id="0c656f0e346bbadf46eb1a5d20d0307a3bd20ba8" datatype="html">
+        <source>e.g., 512KiB</source>
+        <target>例: 512KiB</target>
+      </trans-unit>
+      <trans-unit id="0a65a24eee8a026f3b1113fe9e157e9a0dd69486" datatype="html">
+        <source>Value should be greater than the minimum blob size</source>
+        <target>値は最小blobサイズより大きい必要があります</target>
+      </trans-unit>
+      <trans-unit id="261ba09c4a59de83f48f52a23fd328da37e61ff4" datatype="html">
+        <source>Ratio</source>
+        <target>率</target>
+      </trans-unit>
+      <trans-unit id="c1430457a9c3c66366e51d76bf10396014c576be" datatype="html">
+        <source>Compression ratio</source>
+        <target>圧縮率</target>
+      </trans-unit>
+      <trans-unit id="ae5ce6de352cde949998fb10754459c3a4eb183b" datatype="html">
+        <source>Value should be between 0.0 and 1.0</source>
+        <target>値は0.0～1.0の間である必要があります</target>
+      </trans-unit>
+      <trans-unit id="8bb8293aa8161433778762ae025ffd5e7c85795e" datatype="html">
+        <source>Quotas</source>
+        <target>Quotas</target>
+      </trans-unit>
+      <trans-unit id="d99b34162c9c34f10d0ccd8dbae83d8569c2db77" datatype="html">
+        <source>Max bytes</source>
+        <target>Max bytes</target>
+      </trans-unit>
+      <trans-unit id="a1d14a18879c62f3f4ed705318b7164a1160e249" datatype="html">
+        <source>Leave it blank or specify 0 to disable this quota.</source>
+        <target>Leave it blank or specify 0 to disable this quota.</target>
+      </trans-unit>
+      <trans-unit id="7565b131562ff6c5f769fdbd239a772154abdd97" datatype="html">
+        <source>A valid quota should be greater than 0.</source>
+        <target>A valid quota should be greater than 0.</target>
+      </trans-unit>
+      <trans-unit id="b8bf35b66f09a301eef92ffc3cb2fd259df67ce9" datatype="html">
+        <source>Max objects</source>
+        <target>Max objects</target>
+      </trans-unit>
+      <trans-unit id="95f348167622d832c5ae532b6944635c8e2ae5cb" datatype="html">
+        <source>The value should be greater or equal to 0</source>
+        <target>The value should be greater or equal to 0</target>
+      </trans-unit>
+      <trans-unit id="4b673e771a3f6b056837b22ef19a825386046095" datatype="html">
+        <source>It's not possible to create an RBD pool with '/' in the name.</source>
+        <target>名前に「/」が含まれたRBDプールを作成することはできません。</target>
+      </trans-unit>
+      <trans-unit id="a9c02674c6e4936562d1146e1ecf0c4240dfcf96" datatype="html">
+        <source>Please change the name or remove 'rbd' from the applications list.</source>
+        <target>名前を変更するか、アプリケーションリストから「rbd」を削除してください。</target>
+      </trans-unit>
       <trans-unit id="3938a411d76796f8ae73b72ea4c77661207453bd" datatype="html">
         <source>Cache Tiers Details</source>
         <target>キャッシュ層の詳細</target>
       </trans-unit>
-      <trans-unit id="0c1e17956453ad772dbe82d6946f62748c692f3e" datatype="html">
-        <source>Ranks</source>
-        <target>ランク</target>
-      </trans-unit>
-      <trans-unit id="95c96d55690c0c685deebe52a1da94dc36f5e99d" datatype="html">
-        <source>Clients:
-          <x id="INTERPOLATION" equiv-text="{{ clientCount }}"/>
+      <trans-unit id="9424badb7e0c6ac792d020d7830645b529a80aad" datatype="html">
+        <source>Please consult the 
+          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>documentation
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>
+  on how to configure and enable the Object Gateway management functionality.
         </source>
-        <target>クライアント数:
-          <x id="INTERPOLATION" equiv-text="{{ clientCount }}"/>
+        <target>Please consult the 
+          <x id="START_LINK" ctype="x-a" equiv-text="<a>"/>documentation
+          <x id="CLOSE_LINK" ctype="x-a" equiv-text="</a>"/>
+  on how to configure and enable the Object Gateway management functionality.
         </target>
+      </trans-unit>
+      <trans-unit id="479488ab6e91ecb375484edc78bee3d13467f33f" datatype="html">
+        <source>Daemons List</source>
+        <target>デーモンリスト</target>
+      </trans-unit>
+      <trans-unit id="eeba399c4dae8d4890c27b7a2cd2dc28fcf8b5f9" datatype="html">
+        <source>Performance Counters</source>
+        <target>パフォーマンスカウンタ</target>
+      </trans-unit>
+      <trans-unit id="5f67f2247b9c6bbaf24a0f2d37f4ac0537c6fa53" datatype="html">
+        <source>Loading bucket data...</source>
+        <target>バケットデータを読み込んでいます...</target>
+      </trans-unit>
+      <trans-unit id="8508c0ab851ad91fd0410da1266c02b0ef9d3ff9" datatype="html">
+        <source>The bucket data could not be loaded.</source>
+        <target>バケットデータを読み込めませんでした。</target>
+      </trans-unit>
+      <trans-unit id="2798cc1e152b1ec07fd8daf94a2a073d1ba1ebcc" datatype="html">
+        <source>Id</source>
+        <target>Id</target>
+      </trans-unit>
+      <trans-unit id="db4e1a734518691b128ef40b939cc673f01d03a6" datatype="html">
+        <source>The value is not valid.</source>
+        <target>この値は無効です。</target>
+      </trans-unit>
+      <trans-unit id="0ee5132a8da30e0b7f9f5c70dbc91928d17dd909" datatype="html">
+        <source>Owner</source>
+        <target>所有者</target>
+      </trans-unit>
+      <trans-unit id="8e4c918357c7445fbf19a203e5f0f0ece1960b3b" datatype="html">
+        <source>-- Select a user --</source>
+        <target>-- ユーザを選択してください --</target>
+      </trans-unit>
+      <trans-unit id="a4aab1f837bc8ec222e4f25922465d1c5929a1fc" datatype="html">
+        <source>Placement target</source>
+        <target>Placement target</target>
+      </trans-unit>
+      <trans-unit id="6bae0a7fc2c9c1fde7d937a8a1a3c7e6825cf7d1" datatype="html">
+        <source>-- Select a placement target --</source>
+        <target>-- Select a placement target --</target>
+      </trans-unit>
+      <trans-unit id="45cc8ca94b5a50842a9a8ef804a5ab089a38ae5c" datatype="html">
+        <source>ID</source>
+        <target>ID</target>
+      </trans-unit>
+      <trans-unit id="e5c51963a9c553b29427ef783bbb69fa6634fa8c" datatype="html">
+        <source>Index type</source>
+        <target>インデックスタイプ</target>
+      </trans-unit>
+      <trans-unit id="8e6f950a32eaea32ec7e192f9ca3d3dfe469d4ba" datatype="html">
+        <source>Placement rule</source>
+        <target>配置ルール</target>
+      </trans-unit>
+      <trans-unit id="6972d213e31c4ea4f887e60db99d9881bc8fcd3e" datatype="html">
+        <source>Marker</source>
+        <target>マーカー</target>
+      </trans-unit>
+      <trans-unit id="47b02acd2d3254d1ace1926f840523f154ebef71" datatype="html">
+        <source>Maximum marker</source>
+        <target>最大マーカー</target>
+      </trans-unit>
+      <trans-unit id="8fe73a4787b8068b2ba61f54ab7e0f9af2ea1fc9" datatype="html">
+        <source>Version</source>
+        <target>バージョン</target>
+      </trans-unit>
+      <trans-unit id="092fa3a7df9168b14d3f83a77a4035e92b92ce15" datatype="html">
+        <source>Master version</source>
+        <target>マスタバージョン</target>
+      </trans-unit>
+      <trans-unit id="97434cc5001d407f90c7447a12d9e8e6848a2aa3" datatype="html">
+        <source>Modification time</source>
+        <target>変更時間</target>
+      </trans-unit>
+      <trans-unit id="90fe2e41e7fde38453ce4e619efeea9bc6adea9c" datatype="html">
+        <source>Zonegroup</source>
+        <target>ゾーングループ</target>
+      </trans-unit>
+      <trans-unit id="649a410bd0ace333d067d8fa22f12bdbdb43533b" datatype="html">
+        <source>Bucket quota</source>
+        <target>バケットクォータ</target>
+      </trans-unit>
+      <trans-unit id="f50a33d3c339f8f4a465141f8caa5d2d8c005251" datatype="html">
+        <source>Enabled</source>
+        <target>有効化済み</target>
+      </trans-unit>
+      <trans-unit id="cef1595d040e77cbb4466e60382028d4c2040cac" datatype="html">
+        <source>Maximum size</source>
+        <target>最大サイズ</target>
+      </trans-unit>
+      <trans-unit id="aa6fb95c355f172bda303de1ce2f38c251a149cf" datatype="html">
+        <source>Unlimited</source>
+        <target>無制限</target>
+      </trans-unit>
+      <trans-unit id="ee862a800364b4d11f9b8cb9955a28a60f840a45" datatype="html">
+        <source>Maximum objects</source>
+        <target>最大オブジェクト数</target>
+      </trans-unit>
+      <trans-unit id="49c614babd1950adb2be75df4e2c9747286d6adc" datatype="html">
+        <source>-- Select a username --</source>
+        <target>-- ユーザ名を選択してください --</target>
+      </trans-unit>
+      <trans-unit id="c217ee914725a37e9dd2336c721c8e63e9666bdc" datatype="html">
+        <source>Auto-generate key</source>
+        <target>キーの自動生成</target>
+      </trans-unit>
+      <trans-unit id="2f1c1c0f2bce4c9f92d1a2061e8161cb0006c31a" datatype="html">
+        <source>Access key</source>
+        <target>アクセスキー</target>
+      </trans-unit>
+      <trans-unit id="b864acb67296a9819c1db0069c4c47d8b5ce8f44" datatype="html">
+        <source>Secret key</source>
+        <target>秘密キー</target>
+      </trans-unit>
+      <trans-unit id="69b6ac577a19acc39fc0c22342092f327fff2529" datatype="html">
+        <source>Email address</source>
+        <target>電子メールアドレス</target>
+      </trans-unit>
+      <trans-unit id="92f3f203270a29b3001871153f02c063484a1574" datatype="html">
+        <source>Suspended</source>
+        <target>中断済み</target>
+      </trans-unit>
+      <trans-unit id="8011e20c5bbe51602d459a860fbf29b599b55edd" datatype="html">
+        <source>System</source>
+        <target>システム</target>
+      </trans-unit>
+      <trans-unit id="db18a2772988415466a7f75dc42663ce78c9c1d3" datatype="html">
+        <source>Maximum buckets</source>
+        <target>最大バケット数</target>
+      </trans-unit>
+      <trans-unit id="2c4c62e8ba24601be5cfe7dc5d32c24bbbd4b53c" datatype="html">
+        <source>Subusers</source>
+        <target>サブユーザ</target>
+      </trans-unit>
+      <trans-unit id="17bb3082e6fe5003203ef992a3714172334631a1" datatype="html">
+        <source>Capabilities</source>
+        <target>機能</target>
+      </trans-unit>
+      <trans-unit id="36ad38f9c1a1485e09b67778a28af84553290ffb" datatype="html">
+        <source>User quota</source>
+        <target>ユーザクォータ</target>
+      </trans-unit>
+      <trans-unit id="2aba1e87039819aca3b70faa9aa848c12bf139ca" datatype="html">
+        <source>Show</source>
+        <target>表示</target>
+      </trans-unit>
+      <trans-unit id="0bcd5ef19af0f1b814141ca8c57df623d8270088" datatype="html">
+        <source>Keys</source>
+        <target>キー</target>
+      </trans-unit>
+      <trans-unit id="1221ca97d19eaa9a7bc0c5243d5fc5befe1d2314" datatype="html">
+        <source>-- Select a type --</source>
+        <target>-- タイプを選択してください --</target>
+      </trans-unit>
+      <trans-unit id="d1b8990332af18f1c5159a6061ca889bcbb28432" datatype="html">
+        <source>Permission</source>
+        <target>許可</target>
+      </trans-unit>
+      <trans-unit id="a08c589f82f69d892307288da14190ae1dd583d5" datatype="html">
+        <source>-- Select a permission --</source>
+        <target>-- 許可を選択してください --</target>
+      </trans-unit>
+      <trans-unit id="b2841767821d6b66238c34d07e413b0af67aee92" datatype="html">
+        <source>Subuser</source>
+        <target>サブユーザ</target>
+      </trans-unit>
+      <trans-unit id="bd59fc25a7bd98cff3e75117c09697c8a007a514" datatype="html">
+        <source>The chosen subuser ID is already in use.</source>
+        <target>選択されたサブユーザIDはすでに使用されています。</target>
+      </trans-unit>
+      <trans-unit id="3d386c357ebcbc04ed05c4babd5a03626f9b1674" datatype="html">
+        <source>read, write</source>
+        <target>読み取り、書き込み</target>
+      </trans-unit>
+      <trans-unit id="84e3e3f9a4f31a039b648c97debf95fcb20f4c4a" datatype="html">
+        <source>full</source>
+        <target>フル</target>
+      </trans-unit>
+      <trans-unit id="b6bf81d032a2316464f9df2f0d2f3d753f89f0d3" datatype="html">
+        <source>Swift key</source>
+        <target>スウィフトキー</target>
+      </trans-unit>
+      <trans-unit id="1e0c12685d50d47448ceed9423977ef39775c037" datatype="html">
+        <source>Auto-generate secret</source>
+        <target>秘密の自動生成</target>
+      </trans-unit>
+      <trans-unit id="3d1c7a6004bd5d86a7fa096ae24209e8aa7a53e3" datatype="html">
+        <source>Loading user data...</source>
+        <target>ユーザデータを読み込んでいます...</target>
+      </trans-unit>
+      <trans-unit id="faa5d834ab28571423d794d32b57998920efb65f" datatype="html">
+        <source>The user data could not be loaded.</source>
+        <target>ユーザデータを読み込めませんでした。</target>
+      </trans-unit>
+      <trans-unit id="6aaf5d2a304167272ac73e3b1d1c162e16c77858" datatype="html">
+        <source>The chosen user ID is already in use.</source>
+        <target>選択されたユーザIDはすでに使用されています。</target>
+      </trans-unit>
+      <trans-unit id="df441e80db2157f9d272b75de724ba4a82b96b57" datatype="html">
+        <source>This is not a valid email address.</source>
+        <target>これは有効な電子メールアドレスではありません。</target>
+      </trans-unit>
+      <trans-unit id="ca271adf154956b8fcb28f4f50a37acb3057ff7c" datatype="html">
+        <source>The chosen email address is already in use.</source>
+        <target>選択された電子メールアドレスはすでに使用されています。</target>
+      </trans-unit>
+      <trans-unit id="030197cebe938edf35422e92fe14183d06eb670b" datatype="html">
+        <source>Max. buckets</source>
+        <target>最大バケット数</target>
+      </trans-unit>
+      <trans-unit id="623ac50f37a26caec6fd7cd519b653e3315cba25" datatype="html">
+        <source>The entered value must be &gt;= 0.</source>
+        <target>0以上の値を入力する必要があります。</target>
+      </trans-unit>
+      <trans-unit id="583a219c524155c2314eb06ee29162bb315272a3" datatype="html">
+        <source>S3 key</source>
+        <target>S3キー</target>
+      </trans-unit>
+      <trans-unit id="128d6efb51d9ddc7c0cc695a2deeca5b9523f6e4" datatype="html">
+        <source>There are no subusers.</source>
+        <target>サブユーザがいません。</target>
+      </trans-unit>
+      <trans-unit id="7fd6dfb8ecb982dbc3affb2c2d5414c4f5b6abd2" datatype="html">
+        <source>
+          <x id="INTERPOLATION" equiv-text="{{ actionLabels.CREATE | titlecase }}"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ subuserLabel | upperFirst }}"/>
+        </source>
+        <target>
+          <x id="INTERPOLATION" equiv-text="{{ actionLabels.CREATE | titlecase }}"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ subuserLabel | upperFirst }}"/>
+        </target>
+      </trans-unit>
+      <trans-unit id="67c746c1ba9dab4351fedc4c7cba4e6d6b0dbc47" datatype="html">
+        <source>S3</source>
+        <target>S3</target>
+      </trans-unit>
+      <trans-unit id="d6819038d608623503918fb2553f53d68231ec3a" datatype="html">
+        <source>There are no keys.</source>
+        <target>キーがありません。</target>
+      </trans-unit>
+      <trans-unit id="fc1c1a7140ff6b815a95b65ee2780fdbe1b2b7a1" datatype="html">
+        <source>
+          <x id="INTERPOLATION" equiv-text="{{ actionLabels.CREATE | titlecase }}"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ s3keyLabel | upperFirst }}"/>
+        </source>
+        <target>
+          <x id="INTERPOLATION" equiv-text="{{ actionLabels.CREATE | titlecase }}"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ s3keyLabel | upperFirst }}"/>
+        </target>
+      </trans-unit>
+      <trans-unit id="6ddb5e991a3ecd2659fb520bc5acc81b67e08ddd" datatype="html">
+        <source>Swift</source>
+        <target>スウィフト</target>
+      </trans-unit>
+      <trans-unit id="1d01eccdda47fc907c5be35bcb16d2dcd02b0270" datatype="html">
+        <source>There are no capabilities.</source>
+        <target>機能がありません。</target>
+      </trans-unit>
+      <trans-unit id="043e2ec0036ceadd926fd5e3f93cd6f3565f3648" datatype="html">
+        <source>
+          <x id="INTERPOLATION" equiv-text="{{ actionLabels.ADD | titlecase }}"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ capabilityLabel | upperFirst }}"/>
+        </source>
+        <target>
+          <x id="INTERPOLATION" equiv-text="{{ actionLabels.ADD | titlecase }}"/>
+          <x id="INTERPOLATION_1" equiv-text="{{ capabilityLabel | upperFirst }}"/>
+        </target>
+      </trans-unit>
+      <trans-unit id="6146e13ceca5fa5cc17b771b282fe5955f3d19fa" datatype="html">
+        <source>Unlimited size</source>
+        <target>無制限のサイズ</target>
+      </trans-unit>
+      <trans-unit id="f6db8aa7c99fdce18edb33dde57729acede2b308" datatype="html">
+        <source>Max. size</source>
+        <target>最大サイズ</target>
+      </trans-unit>
+      <trans-unit id="fc630b2093e880fffa19df99d5cd8b87605037f8" datatype="html">
+        <source>Unlimited objects</source>
+        <target>無制限のオブジェクト数</target>
+      </trans-unit>
+      <trans-unit id="6cda5a993d06f0bb10048be9d3aba6555aa9f356" datatype="html">
+        <source>Max. objects</source>
+        <target>最大オブジェクト数</target>
       </trans-unit>
       <trans-unit id="bd5a3b1c5a3c185c7bbb0e09a061d4cdc88ce5ad" datatype="html">
         <source>Current</source>
@@ -2266,13 +2561,25 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>There are no initiators available. Please make sure you add an initiator to the target.</source>
         <target>使用可能なイニシエータはありません。ターゲットにイニシエータを追加したことを確認してください。</target>
       </trans-unit>
+      <trans-unit id="cea3c6fe490385eef1584cbc4983fda7ece24bb6" datatype="html">
+        <source>target</source>
+        <target>target</target>
+      </trans-unit>
       <trans-unit id="38baeb215c17af9d9e295e371a57f4a48ab4c191" datatype="html">
         <source>Target</source>
         <target>ターゲット</target>
       </trans-unit>
-      <trans-unit id="9a541ec1a4319fffc16ad3b3ab2c2b6d251a829d" datatype="html">
-        <source>Hostname</source>
-        <target>ホスト名</target>
+      <trans-unit id="99e094878070eebc1b972bac02aaa33b2bf83b35" datatype="html">
+        <source># Sessions</source>
+        <target># Sessions</target>
+      </trans-unit>
+      <trans-unit id="873b72903b1858a9cd6c8967521030b4d7d1435b" datatype="html">
+        <source>State</source>
+        <target>状態</target>
+      </trans-unit>
+      <trans-unit id="02b75464c0dc0cf49ea0208211b6fbcad3bf728a" datatype="html">
+        <source># Targets</source>
+        <target># Targets</target>
       </trans-unit>
       <trans-unit id="13415637c325ceefee29111b31cb48701490adf7" datatype="html">
         <source>Read Bytes</source>
@@ -2298,13 +2605,13 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>Instance</source>
         <target>インスタンス</target>
       </trans-unit>
+      <trans-unit id="9a541ec1a4319fffc16ad3b3ab2c2b6d251a829d" datatype="html">
+        <source>Hostname</source>
+        <target>ホスト名</target>
+      </trans-unit>
       <trans-unit id="36fad7995cadfb3a6f0d43ef2db280146b3ca022" datatype="html">
         <source>Issue</source>
         <target>問題</target>
-      </trans-unit>
-      <trans-unit id="873b72903b1858a9cd6c8967521030b4d7d1435b" datatype="html">
-        <source>State</source>
-        <target>状態</target>
       </trans-unit>
       <trans-unit id="15793f4cbc261bedbc60f7105533dde536a3f42b" datatype="html">
         <source>Progress</source>
@@ -2350,9 +2657,9 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>Key</source>
         <target>キー</target>
       </trans-unit>
-      <trans-unit id="5049e204c14c648691ac775a64fb504467aeb549" datatype="html">
-        <source>Value</source>
-        <target>値</target>
+      <trans-unit id="e9cac80fb5d9de66f0006d0bec530fd1fc69a674" datatype="html">
+        <source>RBD</source>
+        <target>RBD</target>
       </trans-unit>
       <trans-unit id="4130b1a836f2000cfe9a11fb62493dc42d444de7" datatype="html">
         <source>Deep flatten</source>
@@ -2374,57 +2681,21 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>Journaling (requires exclusive-lock)</source>
         <target>ジャーナリング(排他ロックが必要)</target>
       </trans-unit>
-      <trans-unit id="76d0a465d5b470c2ea20e15b23c91086c90e910d" datatype="html">
-        <source>Fast diff (requires object-map)</source>
-        <target>高速微分(オブジェクトマップが必要)</target>
-      </trans-unit>
-      <trans-unit id="1979da7460819153e11d2078244645d94291b69c" datatype="html">
-        <source>Copy</source>
-        <target>コピー</target>
-      </trans-unit>
-      <trans-unit id="3747fff7faf52b436ecff5fb8555091736d92c70" datatype="html">
-        <source>Flatten</source>
-        <target>フラット化</target>
-      </trans-unit>
-      <trans-unit id="ba073985cfd2528c77a746ed596b2f2052b973c5" datatype="html">
-        <source>Move to Trash</source>
-        <target>ごみ箱に移動する</target>
-      </trans-unit>
-      <trans-unit id="70a67e04629f6d412db0a12d51820b480788d795" datatype="html">
-        <source>Create</source>
-        <target>作成</target>
-      </trans-unit>
-      <trans-unit id="e26f9cf3666aace4e524b1505c9795d76d87738d" datatype="html">
-        <source>Rename</source>
-        <target>名前の変更</target>
-      </trans-unit>
-      <trans-unit id="45480c03b0a3a37ff8f6a5600a6a034b40fbaea4" datatype="html">
-        <source>Protect</source>
-        <target>保護</target>
-      </trans-unit>
-      <trans-unit id="3ea9b96a21a499d296a7f25407da0f3df6c2d5ed" datatype="html">
-        <source>Unprotect</source>
-        <target>保護解除</target>
-      </trans-unit>
-      <trans-unit id="54a4a3132b693575728a45a5f3154ad4c9af404b" datatype="html">
-        <source>Clone</source>
-        <target>複製</target>
-      </trans-unit>
-      <trans-unit id="4be22bf20ef82614ed53bcd3b912a85590aa71c9" datatype="html">
-        <source>Rollback</source>
-        <target>ロールバック</target>
+      <trans-unit id="df4044632bfc211dd96544fc8f007dabbeeb506c" datatype="html">
+        <source>Fast diff (interlocked with object-map)</source>
+        <target>Fast diff (interlocked with object-map)</target>
       </trans-unit>
       <trans-unit id="7eb984588f4835f6d0187b33769b4b0f62821640" datatype="html">
         <source>RBD snapshot rollback</source>
         <target>RBDスナップショットのロールバック</target>
       </trans-unit>
+      <trans-unit id="4be22bf20ef82614ed53bcd3b912a85590aa71c9" datatype="html">
+        <source>Rollback</source>
+        <target>ロールバック</target>
+      </trans-unit>
       <trans-unit id="2a04c483708d261751d62082d6f03a50d4577b1e" datatype="html">
         <source>RBD snapshot</source>
         <target>RBDスナップショット</target>
-      </trans-unit>
-      <trans-unit id="d5cec7468241d72cafd86ad1af6d55b09a6e3ae5" datatype="html">
-        <source>Restore</source>
-        <target>復元</target>
       </trans-unit>
       <trans-unit id="fa96769d1ea86741297cb9b9769b0dcfde58c8b4" datatype="html">
         <source>Deleted At</source>
@@ -2453,6 +2724,14 @@ Grafanaにダッシュボードを追加する方法に関する
       <trans-unit id="fb69299354312c8954ecf324997ccafcd9f6b14b" datatype="html">
         <source>root</source>
         <target>ルート</target>
+      </trans-unit>
+      <trans-unit id="d34feb369d308075b423d5c5fc431f9766bf7a11" datatype="html">
+        <source>Evicted client "
+          <x id="INTERPOLATION" equiv-text="{{clientId}}"/>"
+        </source>
+        <target>Evicted client "
+          <x id="INTERPOLATION" equiv-text="{{clientId}}"/>"
+        </target>
       </trans-unit>
       <trans-unit id="3c3a423d91e36ac6624e909fcd2669a25685f847" datatype="html">
         <source>Rank</source>
@@ -2509,11 +2788,11 @@ Grafanaにダッシュボードを追加する方法に関する
         <target>オプションはデーモンの作成のみに適用されます。</target>
       </trans-unit>
       <trans-unit id="1cdc60cfc09c257625768f3d2082816cdef27279" datatype="html">
-        <source>Updated config option
+        <source>Updated config option 
           <x id="INTERPOLATION" equiv-text="{{name}}"/>
         </source>
-        <target>設定オプション
-          <x id="INTERPOLATION" equiv-text="{{name}}"/>を更新しました
+        <target>Updated config option 
+          <x id="INTERPOLATION" equiv-text="{{name}}"/>
         </target>
       </trans-unit>
       <trans-unit id="d473e0f684a60db45d6f31e993f693f74290e056" datatype="html">
@@ -2532,8 +2811,8 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>Updated options for module "
           <x id="INTERPOLATION" equiv-text="{{name}}"/>".
         </source>
-        <target>モジュール「
-          <x id="INTERPOLATION" equiv-text="{{name}}"/>」のオプションを更新しました。
+        <target>Updated options for module "
+          <x id="INTERPOLATION" equiv-text="{{name}}"/>".
         </target>
       </trans-unit>
       <trans-unit id="ac6c9212896d39b23811ed2dadab7d07336ec559" datatype="html">
@@ -2664,37 +2943,17 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>Updated OSD Flags</source>
         <target>OSDフラグを更新しました</target>
       </trans-unit>
-      <trans-unit id="2e5e77dbaadd6588d8bbf737139fd9806294ae28" datatype="html">
-        <source>Deep Scrub</source>
-        <target>ディープスクラブ</target>
-      </trans-unit>
-      <trans-unit id="75fb9f970ba365398c45e57bbb1019c009f6b832" datatype="html">
-        <source>Mark Out</source>
-        <target>アウトとしてマーク</target>
-      </trans-unit>
       <trans-unit id="688578fcc739d6f0c5fb6c366dbb19d21c6d9e36" datatype="html">
         <source>out</source>
         <target>アウト</target>
-      </trans-unit>
-      <trans-unit id="0cda3e824fb2f9c731e5a60b859dedc1fe03127e" datatype="html">
-        <source>Mark In</source>
-        <target>インとしてマーク</target>
       </trans-unit>
       <trans-unit id="cb0f69bdd4dea41d7d45c74b6e07f98de8a2ab26" datatype="html">
         <source>in</source>
         <target>イン</target>
       </trans-unit>
-      <trans-unit id="66fdbf32e5449cc54a3d1e19c7b8f4ea238facfb" datatype="html">
-        <source>Mark Down</source>
-        <target>ダウンとしてマーク</target>
-      </trans-unit>
       <trans-unit id="b5fbc7c7f007dd53b2318525bb7ff8b0376c9e37" datatype="html">
         <source>down</source>
         <target>ダウン</target>
-      </trans-unit>
-      <trans-unit id="f833354f43cb38c5716faa8759a9bbdd1ab8f199" datatype="html">
-        <source>Mark Lost</source>
-        <target>喪失としてマーク</target>
       </trans-unit>
       <trans-unit id="b58719bcb9184e1a7884d00d22d10899d59bf295" datatype="html">
         <source>Mark</source>
@@ -2720,10 +2979,6 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>purged</source>
         <target>消去済み</target>
       </trans-unit>
-      <trans-unit id="bf463b189696c19769ea263227e6c22aefafb918" datatype="html">
-        <source>Destroy</source>
-        <target>破棄</target>
-      </trans-unit>
       <trans-unit id="8e5d1b01eca6dce26a4751f0b19bda7a6ab8db5b" datatype="html">
         <source>destroy</source>
         <target>破棄</target>
@@ -2731,6 +2986,14 @@ Grafanaにダッシュボードを追加する方法に関する
       <trans-unit id="495a06b78bf165a7b545fa002137f0846b094a3d" datatype="html">
         <source>destroyed</source>
         <target>破棄済み</target>
+      </trans-unit>
+      <trans-unit id="107614b994f2b01abdc1ca179bf780b0cd933ec4" datatype="html">
+        <source>Recovery Priority</source>
+        <target>Recovery Priority</target>
+      </trans-unit>
+      <trans-unit id="359dad5a3a912ef9dece3194035020856805aa96" datatype="html">
+        <source>PG scrub</source>
+        <target>PG scrub</target>
       </trans-unit>
       <trans-unit id="953144c420c2e5abd02e6a687433eac60fa852bd" datatype="html">
         <source>PGs</source>
@@ -2753,20 +3016,28 @@ Grafanaにダッシュボードを追加する方法に関する
         <target>書き込み操作数</target>
       </trans-unit>
       <trans-unit id="d45455406092f58e6b089cb440b5b7934b801a01" datatype="html">
-        <source>Mark OSD
+        <source>Mark OSD 
           <x id="INTERPOLATION" equiv-text="{{markAction}}"/>
         </source>
-        <target>OSD
-          <x id="INTERPOLATION" equiv-text="{{markAction}}"/>をマーク
+        <target>Mark OSD 
+          <x id="INTERPOLATION" equiv-text="{{markAction}}"/>
         </target>
       </trans-unit>
       <trans-unit id="de0b7806e451b3b3dbd564decba59981fe781c18" datatype="html">
-        <source>Mark
+        <source>Mark 
           <x id="INTERPOLATION" equiv-text="{{markAction}}"/>
         </source>
-        <target>
-          <x id="INTERPOLATION" equiv-text="{{markAction}}"/>をマーク
+        <target>Mark 
+          <x id="INTERPOLATION" equiv-text="{{markAction}}"/>
         </target>
+      </trans-unit>
+      <trans-unit id="bba1d3bb4f8a47aa2b3068e242562196eadb1e83" datatype="html">
+        <source>PG scrub options</source>
+        <target>PG scrub options</target>
+      </trans-unit>
+      <trans-unit id="b0b7748ebc9b7a6942a8cac4a89d4b215b365878" datatype="html">
+        <source>Updated PG scrub options</source>
+        <target>Updated PG scrub options</target>
       </trans-unit>
       <trans-unit id="4edc2162af0bd6cd941eaf730d20a7e3b5a83ba7" datatype="html">
         <source>Max Backfills</source>
@@ -2792,19 +3063,23 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>Updated OSD recovery speed priority "
           <x id="INTERPOLATION" equiv-text="{{value}}"/>"
         </source>
-        <target>OSDの回復速度優先度「
-          <x id="INTERPOLATION" equiv-text="{{value}}"/>」を更新しました
+        <target>Updated OSD recovery speed priority "
+          <x id="INTERPOLATION" equiv-text="{{value}}"/>"
         </target>
       </trans-unit>
       <trans-unit id="442db228d78b94d704b22bb0ffeb712af183f19a" datatype="html">
         <source>
-          <x id="INTERPOLATION" equiv-text="{{operation}}"/> was initialized in the following OSD:
+          <x id="INTERPOLATION" equiv-text="{{operation}}"/> was initialized in the following OSD: 
           <x id="INTERPOLATION_1" equiv-text="{{id}}"/>
         </source>
         <target>
-          <x id="INTERPOLATION" equiv-text="{{operation}}"/>は次のOSDで初期化されました:
+          <x id="INTERPOLATION" equiv-text="{{operation}}"/> was initialized in the following OSD: 
           <x id="INTERPOLATION_1" equiv-text="{{id}}"/>
         </target>
+      </trans-unit>
+      <trans-unit id="1edb8e46b0fac57c5feb3d7d3585afc0122d5481" datatype="html">
+        <source>Create silence</source>
+        <target>Create silence</target>
       </trans-unit>
       <trans-unit id="78917e8031aaf913ac3fa63295325ce8879703ce" datatype="html">
         <source>Job</source>
@@ -2821,6 +3096,38 @@ Grafanaにダッシュボードを追加する方法に関する
       <trans-unit id="801b98c6f02fe3b32f6afa3ee854c99ed83474e6" datatype="html">
         <source>URL</source>
         <target>URL</target>
+      </trans-unit>
+      <trans-unit id="a5cd682a8a33bdc72e093d059429e3cc3a50ec1d" datatype="html">
+        <source>silence</source>
+        <target>silence</target>
+      </trans-unit>
+      <trans-unit id="f557e117e059e7036c6eecacd325a6ae35d866e0" datatype="html">
+        <source>Attribute name</source>
+        <target>Attribute name</target>
+      </trans-unit>
+      <trans-unit id="50f7f517ad8158667f7d4e2bd6f3256e05156e75" datatype="html">
+        <source>Regular expression</source>
+        <target>Regular expression</target>
+      </trans-unit>
+      <trans-unit id="81b1eab399c47110d50f45e3ccb4c009de7cb581" datatype="html">
+        <source>Please add your Prometheus host to the dashboard configuration and refresh the page</source>
+        <target>Please add your Prometheus host to the dashboard configuration and refresh the page</target>
+      </trans-unit>
+      <trans-unit id="29b4ae3296e239446fa0dea88a5112de15cffa54" datatype="html">
+        <source>Created by</source>
+        <target>Created by</target>
+      </trans-unit>
+      <trans-unit id="9da0107a35751e722c8b4bca7636fc7645dbdbdc" datatype="html">
+        <source>Updated</source>
+        <target>更新済み</target>
+      </trans-unit>
+      <trans-unit id="8d833cceee0ba4c5161b130365e02bc1e129b57e" datatype="html">
+        <source>Ends</source>
+        <target>Ends</target>
+      </trans-unit>
+      <trans-unit id="46a11ff4289e8c88b1b7a935f8d8ee704055f11a" datatype="html">
+        <source>Silence</source>
+        <target>Silence</target>
       </trans-unit>
       <trans-unit id="fb2e1bed329dc5b84197808c778abb9edcbdb335" datatype="html">
         <source>Used</source>
@@ -2845,6 +3152,26 @@ Grafanaにダッシュボードを追加する方法に関する
       <trans-unit id="e5d8bb389c702588877f039d72178f219453a72d" datatype="html">
         <source>Unknown</source>
         <target>不明</target>
+      </trans-unit>
+      <trans-unit id="88155be1b9b9c6140d6e8f93bac4a775cfdc6671" datatype="html">
+        <source>Healthy</source>
+        <target>Healthy</target>
+      </trans-unit>
+      <trans-unit id="8a3aec4dc1a6e2d4c612ae85e0537acbb20a0f85" datatype="html">
+        <source>Misplaced</source>
+        <target>Misplaced</target>
+      </trans-unit>
+      <trans-unit id="ee81f9bf7ceac69712e0b83e8adc268739f9673e" datatype="html">
+        <source>Degraded</source>
+        <target>Degraded</target>
+      </trans-unit>
+      <trans-unit id="14625bc4025daef1969777a67a3cca27e0cd9167" datatype="html">
+        <source>Unfound</source>
+        <target>Unfound</target>
+      </trans-unit>
+      <trans-unit id="8f23ea509d081c2f747d083d44608dbf125b2ea2" datatype="html">
+        <source>replicas</source>
+        <target>replicas</target>
       </trans-unit>
       <trans-unit id="129a2224e1f9d19eb5e11e2a07fe10a785556484" datatype="html">
         <source>up</source>
@@ -2906,9 +3233,17 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>There are no daemons available.</source>
         <target>使用可能なデーモンがありません。</target>
       </trans-unit>
+      <trans-unit id="18ae8dc1264f06df7ea251175ada2ac1b8401018" datatype="html">
+        <source>NFS export</source>
+        <target>NFS export</target>
+      </trans-unit>
       <trans-unit id="5f19586aba912ec6eb123ec5ab609a3bcc073066" datatype="html">
         <source>Export</source>
         <target>エクスポート</target>
+      </trans-unit>
+      <trans-unit id="ae128527ec18892f812a62a1fd15dc50a38060c0" datatype="html">
+        <source>EC Profile</source>
+        <target>EC Profile</target>
       </trans-unit>
       <trans-unit id="60fb10c145f9c7ede2b9ddf9b2b0b0f6191d0ebd" datatype="html">
         <source>Cache Mode</source>
@@ -2958,6 +3293,10 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>Add application</source>
         <target>アプリケーションの追加</target>
       </trans-unit>
+      <trans-unit id="db8c42f077700d8a94619fad9f4c94b7361d5f1d" datatype="html">
+        <source>pool</source>
+        <target>pool</target>
+      </trans-unit>
       <trans-unit id="65bb2be83261bc4798853bbccdedc110c43feea7" datatype="html">
         <source>erasure code profile</source>
         <target>イレイジャコードプロファイル</target>
@@ -2982,53 +3321,73 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>Write bytes</source>
         <target>書き込みバイト数</target>
       </trans-unit>
+      <trans-unit id="bcc365a084b6145b941b371bd4c2b6c3d2c79234" datatype="html">
+        <source>Pool deletion is disabled by the mon_allow_pool_delete configuration setting.</source>
+        <target>Pool deletion is disabled by the mon_allow_pool_delete configuration setting.</target>
+      </trans-unit>
+      <trans-unit id="44939fd05cedfd077db886528b755e77d5fa3885" datatype="html">
+        <source>bucket</source>
+        <target>バケット</target>
+      </trans-unit>
       <trans-unit id="364cc3f92837b6000e686aab6d03bd2ad8007b50" datatype="html">
         <source>Updated Object Gateway bucket "
           <x id="INTERPOLATION" equiv-text="{{bid}}"/>"
         </source>
-        <target>オブジェクトゲートウェイバケット「
-          <x id="INTERPOLATION" equiv-text="{{bid}}"/>」を更新しました
+        <target>Updated Object Gateway bucket "
+          <x id="INTERPOLATION" equiv-text="{{bid}}"/>"
         </target>
       </trans-unit>
       <trans-unit id="2d7a43674f0bbc131c9e555ec16ac37fa0445d76" datatype="html">
         <source>Created Object Gateway bucket "
           <x id="INTERPOLATION" equiv-text="{{bid}}"/>"
         </source>
-        <target>オブジェクトゲートウェイバケット「
-          <x id="INTERPOLATION" equiv-text="{{bid}}"/>」を作成しました
+        <target>Created Object Gateway bucket "
+          <x id="INTERPOLATION" equiv-text="{{bid}}"/>"
         </target>
-      </trans-unit>
-      <trans-unit id="44939fd05cedfd077db886528b755e77d5fa3885" datatype="html">
-        <source>bucket</source>
-        <target>バケット</target>
       </trans-unit>
       <trans-unit id="ec40d74ecfb1d6d60455af6805c9a714a3f5750a" datatype="html">
         <source>buckets</source>
         <target>バケット数</target>
       </trans-unit>
+      <trans-unit id="764585d5595bac113582ee14a6fd07006770ceb1" datatype="html">
+        <source>capability</source>
+        <target>capability</target>
+      </trans-unit>
+      <trans-unit id="0914cbe18bae204217e1851be6d2d24d86e74605" datatype="html">
+        <source>user</source>
+        <target>ユーザ</target>
+      </trans-unit>
+      <trans-unit id="d8c86dc5e48a63590d9c94e19f90b5f8325cbd49" datatype="html">
+        <source>subuser</source>
+        <target>subuser</target>
+      </trans-unit>
+      <trans-unit id="f45a3de8a8b40d161cc36a55d77548a27107ca04" datatype="html">
+        <source>S3 Key</source>
+        <target>S3 Key</target>
+      </trans-unit>
       <trans-unit id="854a763265e92f91ba3ccee1a0e8d823be584f7c" datatype="html">
         <source>Updated Object Gateway user "
           <x id="INTERPOLATION" equiv-text="{{uid}}"/>"
         </source>
-        <target>オブジェクトゲートウェイユーザ「
-          <x id="INTERPOLATION" equiv-text="{{uid}}"/>」を更新しました
+        <target>Updated Object Gateway user "
+          <x id="INTERPOLATION" equiv-text="{{uid}}"/>"
         </target>
       </trans-unit>
       <trans-unit id="84ab3fd641e65e39cffee0ec722a059ed284229e" datatype="html">
         <source>Created Object Gateway user "
           <x id="INTERPOLATION" equiv-text="{{uid}}"/>"
         </source>
-        <target>オブジェクトゲートウェイユーザ「
-          <x id="INTERPOLATION" equiv-text="{{uid}}"/>」を作成しました
+        <target>Created Object Gateway user "
+          <x id="INTERPOLATION" equiv-text="{{uid}}"/>"
         </target>
-      </trans-unit>
-      <trans-unit id="0914cbe18bae204217e1851be6d2d24d86e74605" datatype="html">
-        <source>user</source>
-        <target>ユーザ</target>
       </trans-unit>
       <trans-unit id="7c7f4be7b726e61c577e63842a58d9e435f7c597" datatype="html">
         <source>users</source>
         <target>ユーザ数</target>
+      </trans-unit>
+      <trans-unit id="9f7760223efd77806f1bbaf963e6993bb4bc6a0a" datatype="html">
+        <source>Swift Key</source>
+        <target>Swift Key</target>
       </trans-unit>
       <trans-unit id="1481b8488e10dbc437accce89d2ae35a0106e8ba" datatype="html">
         <source>Scope</source>
@@ -3038,20 +3397,28 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>Read</source>
         <target>読み取り</target>
       </trans-unit>
+      <trans-unit id="70a67e04629f6d412db0a12d51820b480788d795" datatype="html">
+        <source>Create</source>
+        <target>作成</target>
+      </trans-unit>
+      <trans-unit id="dc4fba275819619ee78e8eae14d357ea69ba7477" datatype="html">
+        <source>role</source>
+        <target>role</target>
+      </trans-unit>
       <trans-unit id="fe6ee93173884201ec62d62ba173c3de85ae177e" datatype="html">
         <source>Created role '
           <x id="INTERPOLATION" equiv-text="{{role_name}}"/>'
         </source>
-        <target>役割「
-          <x id="INTERPOLATION" equiv-text="{{role_name}}"/>」を作成しました
+        <target>Created role '
+          <x id="INTERPOLATION" equiv-text="{{role_name}}"/>'
         </target>
       </trans-unit>
       <trans-unit id="41c032df0732f4318f8213fabd0719ac347d4b6c" datatype="html">
         <source>Updated role '
           <x id="INTERPOLATION" equiv-text="{{role_name}}"/>'
         </source>
-        <target>役割「
-          <x id="INTERPOLATION" equiv-text="{{role_name}}"/>」を更新しました
+        <target>Updated role '
+          <x id="INTERPOLATION" equiv-text="{{role_name}}"/>'
         </target>
       </trans-unit>
       <trans-unit id="50e22b5289f79f1417369403345c9fa9911a4557" datatype="html">
@@ -3062,16 +3429,16 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>Deleted role '
           <x id="INTERPOLATION" equiv-text="{{role_name}}"/>'
         </source>
-        <target>役割「
-          <x id="INTERPOLATION" equiv-text="{{role_name}}"/>」を削除しました
+        <target>Deleted role '
+          <x id="INTERPOLATION" equiv-text="{{role_name}}"/>'
         </target>
       </trans-unit>
       <trans-unit id="d2362a49d2434ce137bf19dab004251b7fd9c7b3" datatype="html">
         <source>Created user "
           <x id="INTERPOLATION" equiv-text="{{username}}"/>"
         </source>
-        <target>ユーザ「
-          <x id="INTERPOLATION" equiv-text="{{username}}"/>」を作成しました
+        <target>Created user "
+          <x id="INTERPOLATION" equiv-text="{{username}}"/>"
         </target>
       </trans-unit>
       <trans-unit id="9910122dfedd2eaa544a990f1430e5b82a76d99f" datatype="html">
@@ -3090,33 +3457,41 @@ Grafanaにダッシュボードを追加する方法に関する
         <source>Updated user "
           <x id="INTERPOLATION" equiv-text="{{username}}"/>"
         </source>
-        <target>ユーザ「
-          <x id="INTERPOLATION" equiv-text="{{username}}"/>」を更新しました
+        <target>Updated user "
+          <x id="INTERPOLATION" equiv-text="{{username}}"/>"
         </target>
       </trans-unit>
       <trans-unit id="fe516c6d820018fdc971113935e22ec1e852965f" datatype="html">
         <source>Deleted user "
           <x id="INTERPOLATION" equiv-text="{{username}}"/>"
         </source>
-        <target>ユーザ「
-          <x id="INTERPOLATION" equiv-text="{{username}}"/>」を削除しました
+        <target>Deleted user "
+          <x id="INTERPOLATION" equiv-text="{{username}}"/>"
         </target>
       </trans-unit>
       <trans-unit id="01a7e11502ff80421ef3615e533ea14ef57e1d5c" datatype="html">
         <source>Failed to delete user "
           <x id="INTERPOLATION" equiv-text="{{username}}"/>"
         </source>
-        <target>ユーザ「
-          <x id="INTERPOLATION" equiv-text="{{username}}"/>」を削除できませんでした
+        <target>Failed to delete user "
+          <x id="INTERPOLATION" equiv-text="{{username}}"/>"
         </target>
       </trans-unit>
       <trans-unit id="63316a3861dbcb035147efc1b9fb6bc708242e94" datatype="html">
         <source>You are currently logged in as "
           <x id="INTERPOLATION" equiv-text="{{username}}"/>".
         </source>
-        <target>現在このユーザは「
-          <x id="INTERPOLATION" equiv-text="{{username}}"/>」としてログインしています。
+        <target>You are currently logged in as "
+          <x id="INTERPOLATION" equiv-text="{{username}}"/>".
         </target>
+      </trans-unit>
+      <trans-unit id="d8b81951d25439864e92f750f7c99d7426d6517c" datatype="html">
+        <source>password</source>
+        <target>password</target>
+      </trans-unit>
+      <trans-unit id="d361a9b5e1f7985a12c0433388f31626525a02b8" datatype="html">
+        <source>Updated user password"</source>
+        <target>Updated user password"</target>
       </trans-unit>
       <trans-unit id="1d7fbcc3d5efc946ffbcf86fed04c4e20dda20fb" datatype="html">
         <source>Each object is split in data-chunks parts, each stored on a different OSD.</source>
@@ -3417,6 +3792,190 @@ lrcは、4つのOSDごとに1つの追加パリティチャンクを作成しま
         <source>There are no items available.</source>
         <target>使用可能なアイテムはありません。</target>
       </trans-unit>
+      <trans-unit id="f6755cff4957d5c3c89bafce5651f1b6fa2b1fd9" datatype="html">
+        <source>Add</source>
+        <target>追加</target>
+      </trans-unit>
+      <trans-unit id="019d4bd6a5690f0cfa0ecf346a4e6bf7f0d8debb" datatype="html">
+        <source>Remove</source>
+        <target>Remove</target>
+      </trans-unit>
+      <trans-unit id="54a4a3132b693575728a45a5f3154ad4c9af404b" datatype="html">
+        <source>Clone</source>
+        <target>複製</target>
+      </trans-unit>
+      <trans-unit id="1979da7460819153e11d2078244645d94291b69c" datatype="html">
+        <source>Copy</source>
+        <target>コピー</target>
+      </trans-unit>
+      <trans-unit id="2e5e77dbaadd6588d8bbf737139fd9806294ae28" datatype="html">
+        <source>Deep Scrub</source>
+        <target>ディープスクラブ</target>
+      </trans-unit>
+      <trans-unit id="bf463b189696c19769ea263227e6c22aefafb918" datatype="html">
+        <source>Destroy</source>
+        <target>破棄</target>
+      </trans-unit>
+      <trans-unit id="b4e94d529ff10db4d86f3f48900fa67ede3411fd" datatype="html">
+        <source>Evict</source>
+        <target>Evict</target>
+      </trans-unit>
+      <trans-unit id="3747fff7faf52b436ecff5fb8555091736d92c70" datatype="html">
+        <source>Flatten</source>
+        <target>フラット化</target>
+      </trans-unit>
+      <trans-unit id="66fdbf32e5449cc54a3d1e19c7b8f4ea238facfb" datatype="html">
+        <source>Mark Down</source>
+        <target>ダウンとしてマーク</target>
+      </trans-unit>
+      <trans-unit id="0cda3e824fb2f9c731e5a60b859dedc1fe03127e" datatype="html">
+        <source>Mark In</source>
+        <target>インとしてマーク</target>
+      </trans-unit>
+      <trans-unit id="f833354f43cb38c5716faa8759a9bbdd1ab8f199" datatype="html">
+        <source>Mark Lost</source>
+        <target>喪失としてマーク</target>
+      </trans-unit>
+      <trans-unit id="75fb9f970ba365398c45e57bbb1019c009f6b832" datatype="html">
+        <source>Mark Out</source>
+        <target>アウトとしてマーク</target>
+      </trans-unit>
+      <trans-unit id="45480c03b0a3a37ff8f6a5600a6a034b40fbaea4" datatype="html">
+        <source>Protect</source>
+        <target>保護</target>
+      </trans-unit>
+      <trans-unit id="e26f9cf3666aace4e524b1505c9795d76d87738d" datatype="html">
+        <source>Rename</source>
+        <target>名前の変更</target>
+      </trans-unit>
+      <trans-unit id="d5cec7468241d72cafd86ad1af6d55b09a6e3ae5" datatype="html">
+        <source>Restore</source>
+        <target>復元</target>
+      </trans-unit>
+      <trans-unit id="ba073985cfd2528c77a746ed596b2f2052b973c5" datatype="html">
+        <source>Move to Trash</source>
+        <target>ごみ箱に移動する</target>
+      </trans-unit>
+      <trans-unit id="3ea9b96a21a499d296a7f25407da0f3df6c2d5ed" datatype="html">
+        <source>Unprotect</source>
+        <target>保護解除</target>
+      </trans-unit>
+      <trans-unit id="024cdb2814b0cb3f4ced148f1a0b9854447cb214" datatype="html">
+        <source>Change</source>
+        <target>Change</target>
+      </trans-unit>
+      <trans-unit id="011f3e2bfc1fd8407eb5f599352665bfeb145664" datatype="html">
+        <source>Recreate</source>
+        <target>Recreate</target>
+      </trans-unit>
+      <trans-unit id="6df2dfa48bef5510c82fb43f4e71a7f9557f3d71" datatype="html">
+        <source>Expire</source>
+        <target>Expire</target>
+      </trans-unit>
+      <trans-unit id="28df1b02fd88d2deb0212bc5d7ff34cf9492fa54" datatype="html">
+        <source>Deleted</source>
+        <target>削除済み</target>
+      </trans-unit>
+      <trans-unit id="80e3b490720757978c99a7b5af3885faf202b955" datatype="html">
+        <source>Added</source>
+        <target>Added</target>
+      </trans-unit>
+      <trans-unit id="1aa4883bc4f1352f7a0bdd94810a9bf6dc22bd02" datatype="html">
+        <source>Removed</source>
+        <target>Removed</target>
+      </trans-unit>
+      <trans-unit id="402f3ee47f98fbbc68530239b1ddcbb9e96a460c" datatype="html">
+        <source>Edited</source>
+        <target>Edited</target>
+      </trans-unit>
+      <trans-unit id="96d56ec71c6e78cb4d6204c4a9359a3d38fcdb59" datatype="html">
+        <source>Canceled</source>
+        <target>Canceled</target>
+      </trans-unit>
+      <trans-unit id="a3318a2ee2bd0064b6b9ff72a4018b679ec63125" datatype="html">
+        <source>Cloned</source>
+        <target>複製済み</target>
+      </trans-unit>
+      <trans-unit id="ef90545bc832876c0d7f9a10363c75137472bbb5" datatype="html">
+        <source>Copied</source>
+        <target>コピー済み</target>
+      </trans-unit>
+      <trans-unit id="5a13d3834133e09544ec93885662f181372dcf46" datatype="html">
+        <source>Deep Scrubbed</source>
+        <target>Deep Scrubbed</target>
+      </trans-unit>
+      <trans-unit id="7c9efb91434a5c15e9579c0b31c8e184b8c8240d" datatype="html">
+        <source>Destroyed</source>
+        <target>Destroyed</target>
+      </trans-unit>
+      <trans-unit id="647059bf3ea098fffedf92ddfad792bb3daa3c95" datatype="html">
+        <source>Flattened</source>
+        <target>フラット化済み</target>
+      </trans-unit>
+      <trans-unit id="8df71e952319eafa71c8e6ef6144b780af8813ff" datatype="html">
+        <source>Marked Down</source>
+        <target>Marked Down</target>
+      </trans-unit>
+      <trans-unit id="25658f5a080a1cab3b91e17b756b1d1dc46bb9b3" datatype="html">
+        <source>Marked In</source>
+        <target>Marked In</target>
+      </trans-unit>
+      <trans-unit id="ebcf306036a6c5579df9448f77eca98d491db245" datatype="html">
+        <source>Marked Lost</source>
+        <target>Marked Lost</target>
+      </trans-unit>
+      <trans-unit id="3a8803369ac18be3ad762384b9fda095fe2a6dcc" datatype="html">
+        <source>Marked Out</source>
+        <target>Marked Out</target>
+      </trans-unit>
+      <trans-unit id="0fe2a62ea7c609fa8326ee6d38060bc5ba8bf34f" datatype="html">
+        <source>Protected</source>
+        <target>Protected</target>
+      </trans-unit>
+      <trans-unit id="69b0446c6c2411c4fe01e411b8ceec72d4044fb4" datatype="html">
+        <source>Purged</source>
+        <target>消去済み</target>
+      </trans-unit>
+      <trans-unit id="d53de1a61bd51c815dc374c7f97e4ee69230e412" datatype="html">
+        <source>Renamed</source>
+        <target>Renamed</target>
+      </trans-unit>
+      <trans-unit id="86fc6cae82c095f14105eb8a61d7b3fa948304b7" datatype="html">
+        <source>Restored</source>
+        <target>復元済み</target>
+      </trans-unit>
+      <trans-unit id="e87dd0fd35460cb743046db918dfce2137b5977a" datatype="html">
+        <source>Reweighted</source>
+        <target>Reweighted</target>
+      </trans-unit>
+      <trans-unit id="dc21fd6547f2325c67f6deff925f29eb07a2db3e" datatype="html">
+        <source>Rolled back</source>
+        <target>ロールバック済み</target>
+      </trans-unit>
+      <trans-unit id="15dec4c2d73a516c10aef90aeeea3364fa794615" datatype="html">
+        <source>Scrubbed</source>
+        <target>Scrubbed</target>
+      </trans-unit>
+      <trans-unit id="8dc560ded67482f109a98e0638851ad1d37188b3" datatype="html">
+        <source>Showed</source>
+        <target>Showed</target>
+      </trans-unit>
+      <trans-unit id="197259b7ea76f15c6d0a64b075a673fd4112ada7" datatype="html">
+        <source>Moved to Trash</source>
+        <target>Moved to Trash</target>
+      </trans-unit>
+      <trans-unit id="8fb15cb102cd75b562680290b7e04c44d80018f2" datatype="html">
+        <source>Unprotected</source>
+        <target>Unprotected</target>
+      </trans-unit>
+      <trans-unit id="8588eafa498262a1cbb5043ad68cf0ff669c4f10" datatype="html">
+        <source>Recreated</source>
+        <target>Recreated</target>
+      </trans-unit>
+      <trans-unit id="ffde7468d7b5cad6990095ed68ddee3d67cd02f8" datatype="html">
+        <source>Expired</source>
+        <target>Expired</target>
+      </trans-unit>
       <trans-unit id="4f20f2d5a6882190892e58b85f6ccbedfa737952" datatype="html">
         <source>Yes</source>
         <target>はい</target>
@@ -3424,6 +3983,48 @@ lrcは、4つのOSDごとに1つの追加パリティチャンクを作成しま
       <trans-unit id="3d3ae7deebc5949b0c1c78b9847886a94321d9fd" datatype="html">
         <source>No</source>
         <target>いいえ</target>
+      </trans-unit>
+      <trans-unit id="99fa0b67376d40142bd4d3ace3344abf4f98b6a5" datatype="html">
+        <source>Your matcher seems to match no currently defined rule or active alert.</source>
+        <target>Your matcher seems to match no currently defined rule or active alert.</target>
+      </trans-unit>
+      <trans-unit id="7e284852732c303eb1f47de9aca2569e41aeffed" datatype="html">
+        <source>no active alerts</source>
+        <target>no active alerts</target>
+      </trans-unit>
+      <trans-unit id="b8042829e4fbe7b09fd9bac9fa0ecf5cc1802fee" datatype="html">
+        <source>1 active alert</source>
+        <target>1 active alert</target>
+      </trans-unit>
+      <trans-unit id="e24adce97669cb0fc74cc13fdc14179b6f78ea5e" datatype="html">
+        <source>
+          <x id="INTERPOLATION" equiv-text="{{n}}"/> active alerts
+        </source>
+        <target>
+          <x id="INTERPOLATION" equiv-text="{{n}}"/> active alerts
+        </target>
+      </trans-unit>
+      <trans-unit id="d8fb058ff5883731d38a132da4ca45cfe8d719a3" datatype="html">
+        <source>Matches 1 rule</source>
+        <target>Matches 1 rule</target>
+      </trans-unit>
+      <trans-unit id="90aaef24d192e67c3fbc2ec6f8bfaff211cea128" datatype="html">
+        <source>Matches 
+          <x id="INTERPOLATION" equiv-text="{{n}}"/> rules
+        </source>
+        <target>Matches 
+          <x id="INTERPOLATION" equiv-text="{{n}}"/> rules
+        </target>
+      </trans-unit>
+      <trans-unit id="f4685dc581e18244cd410f1057a8c56a9dbfe8df" datatype="html">
+        <source>
+          <x id="INTERPOLATION" equiv-text="{{rules}}"/> with 
+          <x id="INTERPOLATION_1" equiv-text="{{alerts}}"/>.
+        </source>
+        <target>
+          <x id="INTERPOLATION" equiv-text="{{rules}}"/> with 
+          <x id="INTERPOLATION_1" equiv-text="{{alerts}}"/>.
+        </target>
       </trans-unit>
       <trans-unit id="8fd98fb2a0f24ba72cde0787dd3f02cfc17de469" datatype="html">
         <source>Quality of Service</source>
@@ -3526,13 +4127,13 @@ lrcは、4つのOSDごとに1つの追加パリティチャンクを作成しま
         <target>希望する書き込み操作数のバースト上限。</target>
       </trans-unit>
       <trans-unit id="24c4d50fe8567de381a20a1745f1b6d37eacaa90" datatype="html">
-        <source>Failed to
+        <source>Failed to 
           <x id="INTERPOLATION" equiv-text="{{failure}}"/>
           <x id="INTERPOLATION_1" equiv-text="{{metadata}}"/>
         </source>
-        <target>
+        <target>Failed to 
           <x id="INTERPOLATION" equiv-text="{{failure}}"/>
-          <x id="INTERPOLATION_1" equiv-text="{{metadata}}"/>を実行できませんでした
+          <x id="INTERPOLATION_1" equiv-text="{{metadata}}"/>
         </target>
       </trans-unit>
       <trans-unit id="f54b6f09b390d5ade0e354f6c7d4743c10a315cc" datatype="html">
@@ -3567,10 +4168,6 @@ lrcは、4つのOSDごとに1つの追加パリティチャンクを作成しま
         <source>update</source>
         <target>更新</target>
       </trans-unit>
-      <trans-unit id="9da0107a35751e722c8b4bca7636fc7645dbdbdc" datatype="html">
-        <source>Updated</source>
-        <target>更新済み</target>
-      </trans-unit>
       <trans-unit id="416193bb373d59477458b00e5922d755e2e2cacd" datatype="html">
         <source>Deleting</source>
         <target>削除中</target>
@@ -3579,64 +4176,64 @@ lrcは、4つのOSDごとに1つの追加パリティチャンクを作成しま
         <source>delete</source>
         <target>削除</target>
       </trans-unit>
-      <trans-unit id="28df1b02fd88d2deb0212bc5d7ff34cf9492fa54" datatype="html">
-        <source>Deleted</source>
-        <target>削除済み</target>
-      </trans-unit>
       <trans-unit id="3f757cfc3749ebb5d4462017cb60138ca082f15f" datatype="html">
         <source>RBD '
           <x id="INTERPOLATION" equiv-text="{{id}}"/>'
         </source>
-        <target>RBD「
-          <x id="INTERPOLATION" equiv-text="{{id}}"/>」
+        <target>RBD '
+          <x id="INTERPOLATION" equiv-text="{{id}}"/>'
         </target>
       </trans-unit>
       <trans-unit id="a6c681e6130fe440ae40de99a405fcf5c7eefee1" datatype="html">
         <source>RBD snapshot '
           <x id="INTERPOLATION" equiv-text="{{id}}"/>'
         </source>
-        <target>RBDスナップショット「
-          <x id="INTERPOLATION" equiv-text="{{id}}"/>」
+        <target>RBD snapshot '
+          <x id="INTERPOLATION" equiv-text="{{id}}"/>'
         </target>
       </trans-unit>
       <trans-unit id="4fb54a0291f49583c317d4a3690239141b5a8f68" datatype="html">
         <source>mirror mode for pool '
           <x id="INTERPOLATION" equiv-text="{{id}}"/>'
         </source>
-        <target>プール「
-          <x id="INTERPOLATION" equiv-text="{{id}}"/>」のミラーモード
+        <target>mirror mode for pool '
+          <x id="INTERPOLATION" equiv-text="{{id}}"/>'
         </target>
       </trans-unit>
       <trans-unit id="6621ab6e122a149326a1e48e9051a41e7f203cf6" datatype="html">
         <source>mirror peer for pool '
           <x id="INTERPOLATION" equiv-text="{{id}}"/>'
         </source>
-        <target>プール「
-          <x id="INTERPOLATION" equiv-text="{{id}}"/>」のミラーピア
+        <target>mirror peer for pool '
+          <x id="INTERPOLATION" equiv-text="{{id}}"/>'
         </target>
       </trans-unit>
+      <trans-unit id="db15adc778317d551232fe712eb03a2c1eac4a43" datatype="html">
+        <source>all dashboards</source>
+        <target>all dashboards</target>
+      </trans-unit>
       <trans-unit id="1b559dbd9cc9664fd788c2da9a10d3abafe066cb" datatype="html">
-        <source>Name is already used by
+        <source>Name is already used by 
           <x id="INTERPOLATION" equiv-text="{{pool_name}}"/>.
         </source>
-        <target>この名前は
-          <x id="INTERPOLATION" equiv-text="{{pool_name}}"/>によってすでに使用されています。
+        <target>Name is already used by 
+          <x id="INTERPOLATION" equiv-text="{{pool_name}}"/>.
         </target>
       </trans-unit>
       <trans-unit id="8fc28e1103d9f2ef47b9fff9a4f74e8365c7cf19" datatype="html">
-        <source>Name is already used by
+        <source>Name is already used by 
           <x id="INTERPOLATION" equiv-text="{{name}}"/>.
         </source>
-        <target>この名前は
-          <x id="INTERPOLATION" equiv-text="{{name}}"/>によってすでに使用されています。
+        <target>Name is already used by 
+          <x id="INTERPOLATION" equiv-text="{{name}}"/>.
         </target>
       </trans-unit>
       <trans-unit id="1cdc7ea44fcb85d0cfcf6e7379d625d8674a8fbe" datatype="html">
-        <source>Name is already used by
+        <source>Name is already used by 
           <x id="INTERPOLATION" equiv-text="{{rbd_name}}"/>.
         </source>
-        <target>この名前は
-          <x id="INTERPOLATION" equiv-text="{{rbd_name}}"/>によってすでに使用されています。
+        <target>Name is already used by 
+          <x id="INTERPOLATION" equiv-text="{{rbd_name}}"/>.
         </target>
       </trans-unit>
       <trans-unit id="1ff7676ad1e991102224540a32dd44ad1ab88aa8" datatype="html">
@@ -3644,7 +4241,7 @@ lrcは、4つのOSDごとに1つの追加パリティチャンクを作成しま
           <x id="INTERPOLATION" equiv-text="{{rbd_name}}"/> contains snapshots.
         </source>
         <target>
-          <x id="INTERPOLATION" equiv-text="{{rbd_name}}"/>にはスナップショットが含まれています。
+          <x id="INTERPOLATION" equiv-text="{{rbd_name}}"/> contains snapshots.
         </target>
       </trans-unit>
       <trans-unit id="c3a1dcca2b2ba20fbe39e2441e7bb1cf9c20cdf3" datatype="html">
@@ -3655,16 +4252,12 @@ lrcは、4つのOSDごとに1つの追加パリティチャンクを作成しま
         <source>clone</source>
         <target>複製</target>
       </trans-unit>
-      <trans-unit id="a3318a2ee2bd0064b6b9ff72a4018b679ec63125" datatype="html">
-        <source>Cloned</source>
-        <target>複製済み</target>
-      </trans-unit>
       <trans-unit id="29b7452e8367af9aa8fa828f16ff94c3530e7a1a" datatype="html">
-        <source>Snapshot of
+        <source>Snapshot of 
           <x id="INTERPOLATION" equiv-text="{{rbd_name}}"/> must be protected.
         </source>
-        <target>
-          <x id="INTERPOLATION" equiv-text="{{rbd_name}}"/>のスナップショットは保護される必要があります。
+        <target>Snapshot of 
+          <x id="INTERPOLATION" equiv-text="{{rbd_name}}"/> must be protected.
         </target>
       </trans-unit>
       <trans-unit id="369f93b9a07a9465f7a261e9f0021b6cfa7180c5" datatype="html">
@@ -3675,10 +4268,6 @@ lrcは、4つのOSDごとに1つの追加パリティチャンクを作成しま
         <source>copy</source>
         <target>コピー</target>
       </trans-unit>
-      <trans-unit id="ef90545bc832876c0d7f9a10363c75137472bbb5" datatype="html">
-        <source>Copied</source>
-        <target>コピー済み</target>
-      </trans-unit>
       <trans-unit id="6ea9e313a04ef59222feaadfe84e97b4c69d7e9e" datatype="html">
         <source>Flattening</source>
         <target>フラット化中</target>
@@ -3687,32 +4276,28 @@ lrcは、4つのOSDごとに1つの追加パリティチャンクを作成しま
         <source>flatten</source>
         <target>フラット化</target>
       </trans-unit>
-      <trans-unit id="647059bf3ea098fffedf92ddfad792bb3daa3c95" datatype="html">
-        <source>Flattened</source>
-        <target>フラット化済み</target>
-      </trans-unit>
       <trans-unit id="d990ef9680cd23bbe652c37eb46bf038cfee80ad" datatype="html">
-        <source>Name is already used by
+        <source>Name is already used by 
           <x id="INTERPOLATION" equiv-text="{{snap_name}}"/>.
         </source>
-        <target>この名前は
-          <x id="INTERPOLATION" equiv-text="{{snap_name}}"/>によってすでに使用されています。
+        <target>Name is already used by 
+          <x id="INTERPOLATION" equiv-text="{{snap_name}}"/>.
         </target>
       </trans-unit>
       <trans-unit id="a101745d080ef65c09bd5fafc796f94ddb9f9d60" datatype="html">
-        <source>Cannot unprotect
+        <source>Cannot unprotect 
           <x id="INTERPOLATION" equiv-text="{{snap_name}}"/> because it contains child images.
         </source>
-        <target>
-          <x id="INTERPOLATION" equiv-text="{{snap_name}}"/>は子イメージを含んでいるため保護解除できません。
+        <target>Cannot unprotect 
+          <x id="INTERPOLATION" equiv-text="{{snap_name}}"/> because it contains child images.
         </target>
       </trans-unit>
       <trans-unit id="647968f4cde7786cd53ec8e6aa9802ac6824a262" datatype="html">
-        <source>Cannot delete
+        <source>Cannot delete 
           <x id="INTERPOLATION" equiv-text="{{snap_name}}"/> because it's protected.
         </source>
-        <target>
-          <x id="INTERPOLATION" equiv-text="{{snap_name}}"/>は保護されているため削除できません。
+        <target>Cannot delete 
+          <x id="INTERPOLATION" equiv-text="{{snap_name}}"/> because it's protected.
         </target>
       </trans-unit>
       <trans-unit id="57ddd3e15cf0ce974356b757451f50116a27272b" datatype="html">
@@ -3722,10 +4307,6 @@ lrcは、4つのOSDごとに1つの追加パリティチャンクを作成しま
       <trans-unit id="a8913a3a5ee61f2598b5f0432cb9b20cdd60548e" datatype="html">
         <source>rollback</source>
         <target>ロールバック</target>
-      </trans-unit>
-      <trans-unit id="dc21fd6547f2325c67f6deff925f29eb07a2db3e" datatype="html">
-        <source>Rolled back</source>
-        <target>ロールバック済み</target>
       </trans-unit>
       <trans-unit id="de8676f0017c9db6c49388cd7d63cd0a83a0c1dc" datatype="html">
         <source>Moving</source>
@@ -3743,8 +4324,8 @@ lrcは、4つのOSDごとに1つの追加パリティチャンクを作成しま
         <source>image '
           <x id="INTERPOLATION" equiv-text="{{id}}"/>' to trash
         </source>
-        <target>イメージ「
-          <x id="INTERPOLATION" equiv-text="{{id}}"/>」をごみ箱に
+        <target>image '
+          <x id="INTERPOLATION" equiv-text="{{id}}"/>' to trash
         </target>
       </trans-unit>
       <trans-unit id="b603e2dfed9808222fbcb5a7c5f4da2cc6ae2aae" datatype="html">
@@ -3759,34 +4340,30 @@ lrcは、4つのOSDごとに1つの追加パリティチャンクを作成しま
         <source>restore</source>
         <target>復元</target>
       </trans-unit>
-      <trans-unit id="86fc6cae82c095f14105eb8a61d7b3fa948304b7" datatype="html">
-        <source>Restored</source>
-        <target>復元済み</target>
-      </trans-unit>
       <trans-unit id="30b8bcf69b3f1754b7abba173fd806cfcea4cb04" datatype="html">
         <source>image '
           <x id="INTERPOLATION" equiv-text="{{id}}"/>' into '
           <x id="INTERPOLATION_1" equiv-text="{{new_id}}"/>'
         </source>
-        <target>イメージ「
-          <x id="INTERPOLATION" equiv-text="{{id}}"/>」を「
-          <x id="INTERPOLATION_1" equiv-text="{{new_id}}"/>」に
+        <target>image '
+          <x id="INTERPOLATION" equiv-text="{{id}}"/>' into '
+          <x id="INTERPOLATION_1" equiv-text="{{new_id}}"/>'
         </target>
       </trans-unit>
       <trans-unit id="13b7b241cef989fe0932ddd180e757658e1817e7" datatype="html">
         <source>Image name '
           <x id="INTERPOLATION" equiv-text="{{id}}"/>' is already in use.
         </source>
-        <target>イメージ名「
-          <x id="INTERPOLATION" equiv-text="{{id}}"/>」はすでに使用されています。
+        <target>Image name '
+          <x id="INTERPOLATION" equiv-text="{{id}}"/>' is already in use.
         </target>
       </trans-unit>
       <trans-unit id="cc1cee12c833e8fbbef28a2a7c449dc530da912d" datatype="html">
         <source>image '
           <x id="INTERPOLATION" equiv-text="{{id}}"/>'
         </source>
-        <target>イメージ「
-          <x id="INTERPOLATION" equiv-text="{{id}}"/>」
+        <target>image '
+          <x id="INTERPOLATION" equiv-text="{{id}}"/>'
         </target>
       </trans-unit>
       <trans-unit id="38e5f47f8bef505652f3e87f46efb00ead1350a3" datatype="html">
@@ -3797,20 +4374,16 @@ lrcは、4つのOSDごとに1つの追加パリティチャンクを作成しま
         <source>purge</source>
         <target>消去</target>
       </trans-unit>
-      <trans-unit id="69b0446c6c2411c4fe01e411b8ceec72d4044fb4" datatype="html">
-        <source>Purged</source>
-        <target>消去済み</target>
-      </trans-unit>
       <trans-unit id="1560d58fdf39663929653250d45f5b1dfe078fea" datatype="html">
         <source>all pools</source>
         <target>すべてのプール</target>
       </trans-unit>
       <trans-unit id="1ac3dc50c2c3d86e98bc0967ee1e696810a2d3aa" datatype="html">
-        <source>images from
+        <source>images from 
           <x id="INTERPOLATION" equiv-text="{{message}}"/>
         </source>
-        <target>
-          <x id="INTERPOLATION" equiv-text="{{message}}"/>からのイメージ
+        <target>images from 
+          <x id="INTERPOLATION" equiv-text="{{message}}"/>
         </target>
       </trans-unit>
       <trans-unit id="02278abbb044ece04ab6bd80bd2060198d31d83b" datatype="html">
@@ -3821,31 +4394,31 @@ lrcは、4つのOSDごとに1つの追加パリティチャンクを作成しま
         <source>pool '
           <x id="INTERPOLATION" equiv-text="{{pool_name}}"/>'
         </source>
-        <target>プール「
-          <x id="INTERPOLATION" equiv-text="{{pool_name}}"/>」
+        <target>pool '
+          <x id="INTERPOLATION" equiv-text="{{pool_name}}"/>'
         </target>
       </trans-unit>
       <trans-unit id="59630daf2f4786690fae0cdad55da8887236eabe" datatype="html">
         <source>erasure code profile '
           <x id="INTERPOLATION" equiv-text="{{name}}"/>'
         </source>
-        <target>イレイジャコードプロファイル「
-          <x id="INTERPOLATION" equiv-text="{{name}}"/>」
+        <target>erasure code profile '
+          <x id="INTERPOLATION" equiv-text="{{name}}"/>'
         </target>
       </trans-unit>
       <trans-unit id="369462e5e018360e0600bb570866201ad5c3c8a8" datatype="html">
         <source>target '
           <x id="INTERPOLATION" equiv-text="{{target_iqn}}"/>'
         </source>
-        <target>ターゲット「
-          <x id="INTERPOLATION" equiv-text="{{target_iqn}}"/>」
+        <target>target '
+          <x id="INTERPOLATION" equiv-text="{{target_iqn}}"/>'
         </target>
       </trans-unit>
       <trans-unit id="cf41310917cb19b335e5a950972bbff2346f7a47" datatype="html">
-        <source>NFS
+        <source>NFS 
           <x id="INTERPOLATION" equiv-text="{{nfs_id}}"/>
         </source>
-        <target>NFS
+        <target>NFS 
           <x id="INTERPOLATION" equiv-text="{{nfs_id}}"/>
         </target>
       </trans-unit>
