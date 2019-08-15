@@ -414,7 +414,7 @@ int Image<I>::list_descendants(
     for (auto& image_id : image_ids) {
       images->push_back({
         it.first, "", ictx->md_ctx.get_namespace(), image_id, "", false});
-      r = list_descendants(ictx->md_ctx, image_id, child_max_level, images);
+      r = list_descendants(ioctx, image_id, child_max_level, images);
       if (r < 0) {
         return r;
       }
