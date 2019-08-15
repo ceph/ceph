@@ -780,51 +780,6 @@ public:
                       bufferlist& outdata) override;
 };
 
-class PGLSParentFilter : public PGLSFilter {
-  inodeno_t parent_ino;
-public:
-  CephContext* cct;
-  explicit PGLSParentFilter(CephContext* cct) : cct(cct) {
-    xattr = "_parent";
-  }
-  int init(bufferlist::const_iterator &params) override
-  {
-    try {
-      decode(parent_ino, params);
-    } catch (buffer::error &e) {
-      return -EINVAL;
-    }
-    generic_dout(0) << "parent_ino=" << parent_ino << dendl;
-
-    return 0;
-  }
-  ~PGLSParentFilter() override {}
-  bool filter(const hobject_t &obj, bufferlist& xattr_data,
-                      bufferlist& outdata) override;
-};
-
-bool PGLSParentFilter::filter(const hobject_t &obj,
-                              bufferlist& xattr_data, bufferlist& outdata)
-{
-  auto iter = xattr_data.cbegin();
-  inode_backtrace_t bt;
-
-  generic_dout(0) << "PGLSParentFilter::filter" << dendl;
-
-  decode(bt, iter);
-
-  vector<inode_backpointer_t>::iterator vi;
-  for (vi = bt.ancestors.begin(); vi != bt.ancestors.end(); ++vi) {
-    generic_dout(0) << "vi->dirino=" << vi->dirino << " parent_ino=" << parent_ino << dendl;
-    if (vi->dirino == parent_ino) {
-      encode(*vi, outdata);
-      return true;
-    }
-  }
-
-  return false;
-}
-
 bool PGLSPlainFilter::filter(const hobject_t &obj,
                              bufferlist& xattr_data, bufferlist& outdata)
 {
@@ -870,9 +825,7 @@ int PrimaryLogPG::get_pgls_filter(bufferlist::const_iterator& iter, PGLSFilter *
     return -EINVAL;
   }
 
-  if (type.compare("parent") == 0) {
-    filter = new PGLSParentFilter(cct);
-  } else if (type.compare("plain") == 0) {
+  if (type.compare("plain") == 0) {
     filter = new PGLSPlainFilter();
   } else {
     std::size_t dot = type.find(".");
