@@ -13406,6 +13406,8 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
       if (r < 0 && r != -ENOENT) {
           return r;
       }
+    } else {
+        r = 0;
     }
     if (r >= 0) {
       ldout(cct, 10) << "RGWRados::cls_bucket_list_ordered: got " <<
@@ -13516,6 +13518,8 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
 	if (r < 0 && r != -ENOENT) {
 	  return r;
 	}
+      } else {
+        r = 0;
       }
 
       // at this point either r >=0 or r == -ENOENT
