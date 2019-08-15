@@ -7274,7 +7274,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
 	return -EPERM;
       }
     }
-    if (osdmap.require_osd_release < ceph_release_t::nautilus) {
+    if (osdmap.require_osd_release < CEPH_RELEASE_NAUTILUS) {
       // pre-nautilus osdmap format; increase pg_num directly
       assert(n > (int)p.get_pg_num());
       // force pre-nautilus clients to resend their ops, since they
@@ -7334,7 +7334,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "specified pgp_num " << n << " > pg_num " << p.get_pg_num_target();
       return -EINVAL;
     }
-    if (osdmap.require_osd_release < ceph_release_t::nautilus) {
+    if (osdmap.require_osd_release < CEPH_RELEASE_NAUTILUS) {
       // pre-nautilus osdmap format; increase pgp_num directly
       p.set_pgp_num(n);
     } else {
@@ -7346,7 +7346,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "specified invalid mode " << val;
       return -EINVAL;
     }
-    if (osdmap.require_osd_release < ceph_release_t::nautilus) {
+    if (osdmap.require_osd_release < CEPH_RELEASE_NAUTILUS) {
       ss << "must set require_osd_release to nautilus or later before setting pg_autoscale_mode";
       return -EINVAL;
     }
