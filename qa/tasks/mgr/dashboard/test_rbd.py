@@ -211,7 +211,7 @@ class RbdTest(DashboardTestCase):
 
         for k, v in kwargs.items():
             if isinstance(v, list):
-                self.assertSetEqual(set(img[k]), set(v))
+                self.assertTrue(set(v).issubset(set(img[k])))
             else:
                 self.assertEqual(img[k], v)
 
