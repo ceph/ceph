@@ -1925,6 +1925,7 @@ void Objecter::wait_for_osd_map()
   std::unique_lock mlock{lock};
   C_SafeCond *context = new C_SafeCond(lock, cond, &done, NULL);
   waiting_for_map[0].push_back(pair<Context*, int>(context, 0));
+  l.unlock();
   cond.wait(mlock, [&done] { return done; });
 }
 
