@@ -14,6 +14,10 @@ export class ConfigurationPageHelper extends PageHelper {
     this.navigateTo();
     const valList = ['global', 'mon', 'mgr', 'osd', 'mds', 'client']; // Editable values
 
+    // Enter config setting name into filter box
+    $('input.form-control.ng-valid').clear();
+    $('input.form-control.ng-valid').sendKeys(name);
+
     // Selects config that we want to clear
     browser.wait(Helper.EC.elementToBeClickable(this.getTableCell(name)), Helper.TIMEOUT); // waits for config to be clickable
     this.getTableCell(name).click(); // click on the config to edit
@@ -28,6 +32,10 @@ export class ConfigurationPageHelper extends PageHelper {
     element(by.cssContainingText('button', 'Save'))
       .click()
       .then(() => {
+        // Enter config setting name into filter box
+        $('input.form-control.ng-valid').clear();
+        $('input.form-control.ng-valid').sendKeys(name);
+
         browser
           .wait(Helper.EC.elementToBeClickable(this.getTableCell(name)), Helper.TIMEOUT)
           .then(() => {
@@ -64,6 +72,11 @@ export class ConfigurationPageHelper extends PageHelper {
     // with the number tehey want for that value. Ex: [global, '2'] is the global value with an input of 2
 
     this.navigateTo();
+
+    // Enter config setting name into filter box
+    $('input.form-control.ng-valid').clear();
+    $('input.form-control.ng-valid').sendKeys(name);
+
     // Selects config that we want to edit
     browser.wait(Helper.EC.elementToBeClickable(this.getTableCell(name)), Helper.TIMEOUT); // waits for config to be clickable
     this.getTableCell(name).click(); // click on the config to edit
@@ -82,6 +95,11 @@ export class ConfigurationPageHelper extends PageHelper {
       .click()
       .then(() => {
         this.navigateTo();
+
+        // Enter config setting name into filter box
+        $('input.form-control.ng-valid').clear();
+        $('input.form-control.ng-valid').sendKeys(name);
+
         browser.wait(Helper.EC.visibilityOf(this.getTableCell(name)), Helper.TIMEOUT).then(() => {
           // Checks for visibility of config in table
           this.getTableCell(name)
