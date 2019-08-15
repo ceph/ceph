@@ -737,12 +737,6 @@ public:
   void do_health_to_clog_interval();
   void do_health_to_clog(bool force = false);
 
-  health_status_t get_health_status(
-    bool want_detail,
-    Formatter *f,
-    std::string *plain,
-    const char *sep1 = " ",
-    const char *sep2 = "; ");
   void log_health(
     const health_check_map_t& updated,
     const health_check_map_t& previous,

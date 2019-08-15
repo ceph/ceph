@@ -553,6 +553,7 @@ class Module(MgrModule):
                 checks[warning] = {
                     'severity': 'warning',
                     'summary': HEALTH_MESSAGES[warning] % n,
+                    'count': len(ls),
                     'detail': ls,
                 }
         self.set_health_checks(checks)

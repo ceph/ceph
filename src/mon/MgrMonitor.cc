@@ -22,6 +22,7 @@
 #include "mgr/mgr_commands.h"
 #include "OSDMonitor.h"
 #include "ConfigMonitor.h"
+#include "HealthMonitor.h"
 
 #include "MgrMonitor.h"
 
@@ -321,7 +322,7 @@ void MgrMonitor::encode_pending(MonitorDBStore::TransactionRef t)
   if (pending_map.active_gid == 0) {
     auto level = should_warn_about_mgr_down();
     if (level != HEALTH_OK) {
-      next.add("MGR_DOWN", level, "no active mgr");
+      next.add("MGR_DOWN", level, "no active mgr", 0);
     } else {
       dout(10) << __func__ << " no health warning (never active and new cluster)"
 	       << dendl;
@@ -633,7 +634,7 @@ void MgrMonitor::send_digests()
     auto mdigest = make_message<MMgrDigest>();
 
     JSONFormatter f;
-    mon->get_health_status(true, &f, nullptr, nullptr, nullptr);
+    mon->healthmon()->get_health_status(true, &f, nullptr, nullptr, nullptr);
     f.flush(mdigest->health_json);
     f.reset();
 

@@ -2767,7 +2767,7 @@ void Monitor::do_health_to_clog(bool force)
   dout(10) << __func__ << (force ? " (force)" : "") << dendl;
 
   string summary;
-  health_status_t level = get_health_status(false, nullptr, &summary);
+  health_status_t level = healthmon()->get_health_status(false, nullptr, &summary);
   if (!force &&
       summary == health_status_cache.summary &&
       level == health_status_cache.overall)
@@ -2775,49 +2775,6 @@ void Monitor::do_health_to_clog(bool force)
   clog->health(level) << "overall " << summary;
   health_status_cache.summary = summary;
   health_status_cache.overall = level;
-}
-
-health_status_t Monitor::get_health_status(
-  bool want_detail,
-  Formatter *f,
-  std::string *plain,
-  const char *sep1,
-  const char *sep2)
-{
-  health_status_t r = HEALTH_OK;
-  if (f) {
-    f->open_object_section("health");
-    f->open_object_section("checks");
-  }
-
-  string summary;
-  string *psummary = f ? nullptr : &summary;
-  for (auto& svc : paxos_service) {
-    r = std::min(r, svc->get_health_checks().dump_summary(
-		   f, psummary, sep2, want_detail));
-  }
-
-  if (f) {
-    f->close_section();
-    f->dump_stream("status") << r;
-    f->close_section();
-  } else {
-    // one-liner: HEALTH_FOO[ thing1[; thing2 ...]]
-    *plain = stringify(r);
-    if (summary.size()) {
-      *plain += sep1;
-      *plain += summary;
-    }
-    *plain += "\n";
-  }
-
-  if (want_detail && !f) {
-    for (auto& svc : paxos_service) {
-      svc->get_health_checks().dump_detail(plain);
-    }
-  }
-
-  return r;
 }
 
 void Monitor::log_health(
@@ -2933,7 +2890,7 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
   mono_clock::time_point now = mono_clock::now();
   if (f) {
     f->dump_stream("fsid") << monmap->get_fsid();
-    get_health_status(false, f, nullptr);
+    healthmon()->get_health_status(false, f, nullptr);
     f->dump_unsigned("election_epoch", get_epoch());
     {
       f->open_array_section("quorum");
@@ -2979,8 +2936,8 @@ void Monitor::get_cluster_status(stringstream &ss, Formatter *f)
     ss << "    id:     " << monmap->get_fsid() << "\n";
 
     string health;
-    get_health_status(false, nullptr, &health,
-		      "\n            ", "\n            ");
+    healthmon()->get_health_status(false, nullptr, &health,
+				   "\n            ", "\n            ");
     ss << "    health: " << health << "\n";
 
     ss << "\n \n  services:\n";
@@ -3387,6 +3344,10 @@ void Monitor::handle_command(MonOpRequestRef op)
     monmon()->dispatch(op);
     return;
   }
+  if (module == "health" && prefix != "health") {
+    healthmon()->dispatch(op);
+    return;
+  }
   if (module == "auth" || prefix == "fs authorize") {
     authmon()->dispatch(op);
     return;
@@ -3520,7 +3481,7 @@ void Monitor::handle_command(MonOpRequestRef op)
       rdata.append(ds);
     } else if (prefix == "health") {
       string plain;
-      get_health_status(detail == "detail", f.get(), f ? nullptr : &plain);
+      healthmon()->get_health_status(detail == "detail", f.get(), f ? nullptr : &plain);
       if (f) {
 	f->flush(rdata);
       } else {
@@ -3567,7 +3528,7 @@ void Monitor::handle_command(MonOpRequestRef op)
       tagstr = tagstr.substr(0, tagstr.find_last_of(' '));
     f->dump_string("tag", tagstr);
 
-    get_health_status(true, f.get(), nullptr);
+    healthmon()->get_health_status(true, f.get(), nullptr);
 
     monmon()->dump_info(f.get());
     osdmon()->dump_info(f.get());
@@ -4655,7 +4616,7 @@ void Monitor::handle_ping(MonOpRequestRef op)
   boost::scoped_ptr<Formatter> f(new JSONFormatter(true));
   f->open_object_section("pong");
 
-  get_health_status(false, f.get(), nullptr);
+  healthmon()->get_health_status(false, f.get(), nullptr);
   {
     stringstream ss;
     get_mon_status(f.get(), ss);

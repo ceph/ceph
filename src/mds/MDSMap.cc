@@ -435,7 +435,8 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
   // MDS_DAMAGE
   if (!damaged.empty()) {
     health_check_t& check = checks->get_or_add("MDS_DAMAGE", HEALTH_ERR,
-					"%num% mds daemon%plurals% damaged");
+					       "%num% mds daemon%plurals% damaged",
+					       damaged.size());
     for (auto p : damaged) {
       std::ostringstream oss;
       oss << "fs " << fs_name << " mds." << p << " is damaged";
@@ -447,7 +448,7 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
   if (is_degraded()) {
     health_check_t& fscheck = checks->get_or_add(
       "FS_DEGRADED", HEALTH_WARN,
-      "%num% filesystem%plurals% %isorare% degraded");
+      "%num% filesystem%plurals% %isorare% degraded", 1);
     ostringstream ss;
     ss << "fs " << fs_name << " is degraded";
     fscheck.detail.push_back(ss.str());
@@ -478,7 +479,7 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
   if ((mds_rank_t)get_num_in_mds() < get_max_mds()) {
     health_check_t& check = checks->add(
       "MDS_UP_LESS_THAN_MAX", HEALTH_WARN,
-      "%num% filesystem%plurals% %isorare% online with fewer MDS than max_mds");
+      "%num% filesystem%plurals% %isorare% online with fewer MDS than max_mds", 1);
     stringstream ss;
     ss << "fs " << fs_name << " has " << get_num_in_mds()
        << " MDS online, but wants " << get_max_mds();
@@ -489,7 +490,7 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
   if ((mds_rank_t)get_num_up_mds() == 0 && get_max_mds() > 0) {
     health_check_t &check = checks->add(
       "MDS_ALL_DOWN", HEALTH_ERR,
-      "%num% filesystem%plurals% %isorare% offline");
+      "%num% filesystem%plurals% %isorare% offline", 1);
     stringstream ss;
     ss << "fs " << fs_name << " is offline because no MDS is active for it.";
     check.detail.push_back(ss.str());
@@ -499,7 +500,7 @@ void MDSMap::get_health_checks(health_check_map_t *checks) const
       was_snaps_ever_allowed() && !allows_multimds_snaps()) {
     health_check_t &check = checks->add(
       "MULTIMDS_WITH_OLDSNAPS", HEALTH_ERR,
-      "%num% filesystem%plurals% %isorare% multi-active mds with old snapshots");
+      "%num% filesystem%plurals% %isorare% multi-active mds with old snapshots", 1);
     stringstream ss;
     ss << "multi-active mds while there are snapshots possibly created by pre-mimic MDS";
     check.detail.push_back(ss.str());

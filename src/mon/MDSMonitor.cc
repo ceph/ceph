@@ -218,7 +218,8 @@ void MDSMonitor::encode_pending(MonitorDBStore::TransactionRef t)
       health_check_t *check = &new_checks.get_or_add(
 	mds_metric_name(metric.type),
 	metric.sev,
-	mds_metric_summary(metric.type));
+	mds_metric_summary(metric.type),
+	1);
       ostringstream ss;
       ss << "mds" << info.name << "(mds." << rank << "): " << metric.message;
       bool first = true;

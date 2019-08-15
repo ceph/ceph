@@ -21,6 +21,9 @@ class HealthMonitor : public PaxosService
   version_t version = 0;
   map<int,health_check_map_t> quorum_checks;  // for each quorum member
   health_check_map_t leader_checks;           // leader only
+  map<string,health_mute_t> mutes;
+
+  map<string,health_mute_t> pending_mutes;
 
 public:
   HealthMonitor(Monitor *m, Paxos *p, const string& service_name);
@@ -34,10 +37,14 @@ public:
   bool preprocess_query(MonOpRequestRef op) override;
   bool prepare_update(MonOpRequestRef op) override;
 
+  bool preprocess_command(MonOpRequestRef op);
+  bool prepare_command(MonOpRequestRef op);
+
   bool prepare_health_checks(MonOpRequestRef op);
 
   bool check_leader_health();
   bool check_member_health();
+  bool check_mutes();
 
   void create_initial() override;
   void update_from_paxos(bool *need_bootstrap) override;
@@ -48,6 +55,14 @@ public:
   void encode_full(MonitorDBStore::TransactionRef t) override { }
 
   void tick() override;
+
+  void gather_all_health_checks(health_check_map_t *all);
+  health_status_t get_health_status(
+    bool want_detail,
+    Formatter *f,
+    std::string *plain,
+    const char *sep1 = " ",
+    const char *sep2 = "; ");
 
   /**
    * @} // HealthMonitor_Inherited_h
