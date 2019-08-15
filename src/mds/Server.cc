@@ -7753,6 +7753,11 @@ void Server::handle_client_rename(MDRequestRef& mdr)
   C_MDS_rename_finish *fin = new C_MDS_rename_finish(this, mdr, srcdn, destdn, straydn);
 
   journal_and_reply(mdr, srci, destdn, le, fin);
+
+  // We hit_dir (via hit_inode) in our finish callback, but by then we might
+  // have overshot the split size (multiple rename ops in flight), so here is
+  // an early chance to split the dir if this rename op makes it oversized.
+  mds->balancer->maybe_fragment(destdn->get_dir(), false);
 }
 
 
