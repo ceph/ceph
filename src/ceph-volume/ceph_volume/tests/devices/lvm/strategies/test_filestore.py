@@ -223,12 +223,3 @@ class TestMixedType(object):
             filestore.MixedType.with_auto_devices(args, devices)
         msg = "Not enough space in fast devices (14.97 GB) to create 2 x 14.77 GB journal LV"
         assert msg in str(error.value)
-
-    def test_filter_all_data_devs(self, fakedevice, factory):
-        # in this scenario the user passed a already used device to be used for
-        # data and an unused device to be used as db device.
-        db_dev = fakedevice(used_by_ceph=False, is_lvm_member=False, rotational=False, sys_api=dict(size=6073740000))
-        data_dev = fakedevice(used_by_ceph=True, is_lvm_member=False, rotational=True, sys_api=dict(size=6073740000))
-        args = factory(filtered_devices=[data_dev], osds_per_device=1,
-                       journal_size=None, osd_ids=[])
-        filestore.MixedType(args, [], [db_dev])
