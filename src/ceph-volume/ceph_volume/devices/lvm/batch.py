@@ -254,7 +254,7 @@ class Batch(object):
         self.args = parser.parse_args(argv)
         self.parser = parser
         for dev_list in ['', 'db_', 'wal_', 'journal_']:
-            setattr(self, '{}usable'.format(dev_list), set())
+            setattr(self, '{}usable'.format(dev_list), [])
 
     def get_devices(self):
         # remove devices with partitions
@@ -361,8 +361,8 @@ class Batch(object):
             dev_list_prop = '{}devices'.format(dev_list)
             if hasattr(self.args, dev_list_prop):
                 usable_dev_list_prop = '{}usable'.format(dev_list)
-                usable = set([d for d in getattr(self.args, dev_list_prop) if
-                              d.available])
+                usable = [d for d in getattr(self.args, dev_list_prop) if
+                          d.available]
                 setattr(self, usable_dev_list_prop, usable)
                 self.filtered_devices.update({d: used_reason for d in
                                               getattr(self.args, dev_list_prop)
@@ -370,8 +370,8 @@ class Batch(object):
 
     def _ensure_disjoint_device_lists(self):
         # check that all device lists are disjoint with each other
-        if not(self.usable.isdisjoint(self.db_usable) and
-               self.usable.isdisjoint(self.wal_usable) and
-               self.usable.isdisjoint(self.journal_usable) and
-               self.db_usable.isdisjoint(self.wal_usable)):
+        if not(set(self.usable).isdisjoint(set(self.db_usable)) and
+               set(self.usable).isdisjoint(set(self.wal_usable)) and
+               set(self.usable).isdisjoint(set(self.journal_usable)) and
+               set(self.db_usable).isdisjoint(set(self.wal_usable))):
             raise Exception('Device lists are not disjoint')
