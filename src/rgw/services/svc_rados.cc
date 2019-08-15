@@ -44,7 +44,7 @@ static int init_ioctx(CephContext *cct, librados::Rados *rados, const rgw_pool& 
 
 int RGWSI_RADOS::do_start()
 {
-  auto handles = std::vector<librados::Rados>{static_cast<size_t>(cct->_conf->rgw_num_rados_handles)};
+  auto handles = std::vector<librados::Rados>{static_cast<size_t>(1)};
 
   for (auto& r : handles) {
     int ret = r.init_with_context(cct);
