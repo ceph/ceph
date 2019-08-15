@@ -52,6 +52,7 @@ you may write data with one API and retrieve it with the other.
    Export over NFS <nfs>
    OpenStack Keystone Integration <keystone>
    OpenStack Barbican Integration <barbican>
+   HashiCorp Vault Integration <vault>
    Open Policy Agent Integration <opa>
    Multi-tenancy <multitenancy>
    Compression <compression>

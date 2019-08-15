@@ -1525,6 +1525,12 @@ OPTION(rgw_swift_versioning_enabled, OPT_BOOL) // whether swift object versionin
 OPTION(rgw_trust_forwarded_https, OPT_BOOL) // trust Forwarded and X-Forwarded-Proto headers for ssl termination
 OPTION(rgw_crypt_require_ssl, OPT_BOOL) // requests including encryption key headers must be sent over ssl
 OPTION(rgw_crypt_default_encryption_key, OPT_STR) // base64 encoded key for encryption of rgw objects
+
+OPTION(rgw_crypt_s3_kms_backend, OPT_STR) // Where SSE-KMS encryption keys are stored
+OPTION(rgw_crypt_vault_auth, OPT_STR) // Type of authentication method to be used with Vault
+OPTION(rgw_crypt_vault_token_file, OPT_STR) // Path to the token file for Vault authentication
+OPTION(rgw_crypt_vault_addr, OPT_STR) // URL to Vault server endpoint
+
 OPTION(rgw_crypt_s3_kms_encryption_keys, OPT_STR) // extra keys that may be used for aws:kms
                                                       // defined as map "key1=YmluCmJvb3N0CmJvb3N0LQ== key2=b3V0CnNyYwpUZXN0aW5nCg=="
 OPTION(rgw_crypt_suppress_logs, OPT_BOOL)   // suppress logs that might print customer key
