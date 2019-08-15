@@ -4305,23 +4305,6 @@ void BlueStore::_set_blob_size()
 
 int BlueStore::_set_cache_sizes()
 {
-  // set osd_memory_target *default* based on cgroup limit?
-  // (do this before we fetch the osd_memory_target value!)
-  double cgroup_ratio = cct->_conf.get_val<double>(
-    "osd_memory_target_cgroup_limit_ratio");
-  if (cgroup_ratio > 0.0) {
-    uint64_t cgroup_limit = 0;
-    if (get_cgroup_memory_limit(&cgroup_limit) == 0 &&
-	cgroup_limit) {
-      uint64_t def = cgroup_limit * cgroup_ratio;
-      dout(10) << __func__ << " osd_memory_target_cgroup_limit_ratio "
-	       << cgroup_ratio << ", cgroup_limit " << cgroup_limit
-	       << ", defaulting osd_memory_target to " << def
-	       << dendl;
-      cct->_conf.set_val_default("osd_memory_target", stringify(def));
-    }
-  }
-
   ceph_assert(bdev);
   cache_autotune = cct->_conf.get_val<bool>("bluestore_cache_autotune");
   cache_autotune_interval =
