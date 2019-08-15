@@ -401,6 +401,7 @@ class PgAutoscaler(MgrModule):
             health_checks['POOL_TOO_FEW_PGS'] = {
                 'severity': 'warning',
                 'summary': summary,
+                'count': len(too_few),
                 'detail': too_few
             }
         if too_many:
@@ -409,6 +410,7 @@ class PgAutoscaler(MgrModule):
             health_checks['POOL_TOO_MANY_PGS'] = {
                 'severity': 'warning',
                 'summary': summary,
+                'count': len(too_many),
                 'detail': too_many
             }
 
@@ -436,6 +438,7 @@ class PgAutoscaler(MgrModule):
             health_checks['POOL_TARGET_SIZE_RATIO_OVERCOMMITTED'] = {
                 'severity': 'warning',
                 'summary': "%d subtrees have overcommitted pool target_size_ratio" % len(too_much_target_ratio),
+                'count': len(too_much_target_ratio),
                 'detail': too_much_target_ratio,
             }
 
@@ -465,6 +468,7 @@ class PgAutoscaler(MgrModule):
             health_checks['POOL_TARGET_SIZE_BYTES_OVERCOMMITTED'] = {
                 'severity': 'warning',
                 'summary': "%d subtrees have overcommitted pool target_size_bytes" % len(too_much_target_bytes),
+                'count': len(too_much_target_bytes),
                 'detail': too_much_target_bytes,
             }
 

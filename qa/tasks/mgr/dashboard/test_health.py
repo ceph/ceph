@@ -54,7 +54,8 @@ class HealthTest(DashboardTestCase):
                 'standbys': JList(JObj({})),
             }),
             'health': JObj({
-                'checks': JList(str),
+                'checks': JList(JObj({}, allow_unknown=True)),
+                'mutes': JList(JObj({}, allow_unknown=True)),
                 'status': str,
             }),
             'hosts': int,
@@ -187,7 +188,8 @@ class HealthTest(DashboardTestCase):
                 'standbys': JList(JObj({}, allow_unknown=True)),
             }),
             'health': JObj({
-                'checks': JList(str),
+                'checks': JList(JObj({}, allow_unknown=True)),
+                'mutes': JList(JObj({}, allow_unknown=True)),
                 'status': str,
             }),
             'hosts': int,
@@ -284,7 +286,8 @@ class HealthTest(DashboardTestCase):
             'client_perf': JObj({}, allow_unknown=True),
             'df': JObj({}, allow_unknown=True),
             'health': JObj({
-                'checks': JList(str),
+                'checks': JList(JObj({}, allow_unknown=True)),
+                'mutes': JList(JObj({}, allow_unknown=True)),
                 'status': str
             }),
             'pools': JList(JLeaf(dict)),

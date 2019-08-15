@@ -896,6 +896,7 @@ class MgrModule(ceph_module.BaseMgrModule):
              'CHECK_FOO': {
                'severity': 'warning',           # or 'error'
                'summary': 'summary string',
+               'count': 4,                      # quantify badness
                'detail': [ 'list', 'of', 'detail', 'strings' ],
               },
              'CHECK_BAR': {
