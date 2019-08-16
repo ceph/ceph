@@ -1292,6 +1292,10 @@ public:
       return false;
     }
 
+    int64_t pool() const {
+      return cid.pool();
+    }
+
     void split_cache(Collection *dest);
 
     bool flush_commit(Context *c) override;
