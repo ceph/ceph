@@ -81,7 +81,8 @@ protected:
 public:
   PGLSFilter();
   virtual ~PGLSFilter();
-  virtual bool filter(const hobject_t &obj, ceph::buffer::list& xattr_data) = 0;
+  virtual bool filter(const hobject_t &obj,
+                      const ceph::buffer::list& xattr_data) const = 0;
 
   /**
    * Arguments passed from the RADOS client.  Implementations must
@@ -94,13 +95,13 @@ public:
    * xattr key, or empty string.  If non-empty, this xattr will be fetched
    * and the value passed into ::filter
    */
-  virtual std::string& get_xattr() { return xattr; }
+  virtual const std::string& get_xattr() const { return xattr; }
 
   /**
    * If true, objects without the named xattr (if xattr name is not empty)
    * will be rejected without calling ::filter
    */
-  virtual bool reject_empty_xattr() { return true; }
+  virtual bool reject_empty_xattr() const { return true; }
 };
 
 // Classes expose a filter constructor that returns a subclass of PGLSFilter

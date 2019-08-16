@@ -266,15 +266,10 @@ public:
   }
 
   ~PGLSHelloFilter() override {}
-  bool filter(const hobject_t &obj, ceph::bufferlist& xattr_data) override
+  bool filter(const hobject_t& obj,
+              const bufferlist&  xattr_data) const override
   {
-    if (val.size() != xattr_data.length())
-      return false;
-
-    if (memcmp(val.c_str(), xattr_data.c_str(), val.size()))
-      return false;
-
-    return true;
+    return xattr_data.contents_equal(val.c_str(), val.size());
   }
 };
 
