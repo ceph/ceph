@@ -68,7 +68,5 @@ public:
 		   list<rgw_data_change_log_entry>& entries, RGWDataChangesLogMarker& marker, bool *ptruncated);
   int trim_entries(int shard_id, const real_time& start_time, const real_time& end_time,
                    const string& start_marker, const string& end_marker);
-  int trim_entries(const real_time& start_time, const real_time& end_time,
-                   const string& start_marker, const string& end_marker);
 };
 
