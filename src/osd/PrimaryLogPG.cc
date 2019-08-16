@@ -776,21 +776,13 @@ public:
     return 0;
   }
   ~PGLSPlainFilter() override {}
-  bool filter(const hobject_t &obj, bufferlist& xattr_data) override;
+  bool filter(const hobject_t& obj,
+              const bufferlist& xattr_data) const override {
+    return xattr_data.contents_equal(val.c_str(), val.size());
+  }
 };
 
-bool PGLSPlainFilter::filter(const hobject_t &obj, bufferlist& xattr_data)
-{
-  if (val.size() != xattr_data.length())
-    return false;
-
-  if (memcmp(val.c_str(), xattr_data.c_str(), val.size()))
-    return false;
-
-  return true;
-}
-
-bool PrimaryLogPG::pgls_filter(PGLSFilter& filter, hobject_t& sobj)
+bool PrimaryLogPG::pgls_filter(const PGLSFilter& filter, const hobject_t& sobj)
 {
   bufferlist bl;
 
@@ -811,10 +803,11 @@ bool PrimaryLogPG::pgls_filter(PGLSFilter& filter, hobject_t& sobj)
   return filter.filter(sobj, bl);
 }
 
-std::pair<int, std::unique_ptr<PGLSFilter>>
+std::pair<int, std::unique_ptr<const PGLSFilter>>
 PrimaryLogPG::get_pgls_filter(bufferlist::const_iterator& iter)
 {
   string type;
+  // storing non-const PGLSFilter for the sake of ::init()
   std::unique_ptr<PGLSFilter> filter;
 
   try {
@@ -1038,7 +1031,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
   vector<OSDOp> ops = m->ops;
 
   for (vector<OSDOp>::iterator p = ops.begin(); p != ops.end(); ++p) {
-    std::unique_ptr<PGLSFilter> filter;
+    std::unique_ptr<const PGLSFilter> filter;
     OSDOp& osd_op = *p;
     auto bp = p->indata.cbegin();
     switch (p->op.op) {
