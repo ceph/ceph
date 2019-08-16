@@ -7,6 +7,7 @@
 
 #include "services/svc_zone.h"
 
+#define dout_subsys ceph_subsys_rgw
 
 #if 0
 void RGWBucketSyncPolicyInfo::post_init()
@@ -23,6 +24,7 @@ void RGWBucketSyncPolicyInfo::post_init()
 }
 #endif
 
+
 int RGWBucketSyncPolicyHandler::init()
 {
   const auto& zone_id = zone_svc->get_zone().id;
@@ -33,32 +35,58 @@ int RGWBucketSyncPolicyHandler::init()
 
   auto& sync_policy = *bucket_info.sync_policy;
 
-  for (auto& entry : sync_policy.entries) {
-    if (!entry.bucket ||
-        !(*entry.bucket == bucket_info.bucket)) {
-      continue;
+  if (sync_policy.targets) {
+    for (auto& target : *sync_policy.targets) {
+      if (!(target.bucket || *target.bucket == bucket_info.bucket)) {
+        continue;
+      }
+
+      if (!(target.type.empty() ||
+            target.type == "rgw")) {
+        ldout(zone_svc->ctx(), 20) << "unsuppported sync target: " << target.type << dendl;
+        continue;
+      }
+
+      if (target.zones.find("*") == target.zones.end() &&
+          target.zones.find(zone_id) == target.zones.end()) {
+        continue;
+      }
+
+      /* populate trivial peers */
+      for (auto& rule : target.flow_rules) {
+        set<string> source_zones;
+        set<string> target_zones;
+        rule.get_zone_peers(zone_id, &source_zones, &target_zones);
+
+        for (auto& sz : source_zones) {
+          peer_info sinfo;
+          sinfo.bucket = bucket_info.bucket;
+          sources[sz].insert(sinfo);
+        }
+
+        for (auto& tz : target_zones) {
+          peer_info tinfo;
+          tinfo.bucket = bucket_info.bucket;
+          targets[tz].insert(tinfo);
+        }
+      }
+
+      /* non trivial sources */
+      for (auto& source : target.sources) {
+        if (!source.bucket ||
+            *source.bucket == bucket_info.bucket) {
+          if ((source.type.empty() || source.type == "rgw") &&
+              source.zone &&
+              source.bucket) {
+            peer_info sinfo;
+            sinfo.type = source.type;
+            sinfo.bucket = *source.bucket;
+            sources[*source.zone].insert(sinfo);
+          }
+        }
+      }
     }
-
-
   }
-
-  source_zones.clear();
-
-#warning FIXME
-#if 0
-  if (!sync_policy ||
-      !sync_policy->pipes) {
-    return 0;
-  }
-
-  for (auto& p : *sync_policy->pipes) {
-    auto& pipe = p.second;
-
-    if (pipe.target.zone_id == zone_id) {
-      source_zones.insert(pipe.source.zone_id());
-    }
-  }
-#endif
 
   return 0;
 }

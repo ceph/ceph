@@ -832,89 +832,80 @@ void RGWBucketInfo::decode_json(JSONObj *obj) {
   reshard_status = (cls_rgw_reshard_status)rs;
 }
 
-void rgw_sync_group_info::dump(Formatter *f) const
+void rgw_sync_flow_directional_rule::dump(Formatter *f) const
 {
-  encode_json("id", id, f);
-  encode_json("config", config, f);
+  encode_json("source_zone", source_zone, f);
+  encode_json("target_zone", target_zone, f);
 }
 
-void rgw_sync_group_info::decode_json(JSONObj *obj)
+void rgw_sync_flow_directional_rule::decode_json(JSONObj *obj)
+{
+  JSONDecoder::decode_json("source_zone", source_zone, obj);
+  JSONDecoder::decode_json("target_zone", target_zone, obj);
+}
+
+void rgw_sync_flow_rule::dump(Formatter *f) const
+{
+  encode_json("id", id, f);
+  encode_json("directional", directional, f);
+  encode_json("symmetrical", symmetrical, f);
+}
+
+void rgw_sync_flow_rule::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("id", id, obj);
-  JSONDecoder::decode_json("config", config, obj);
+  JSONDecoder::decode_json("directional", directional, obj);
+  JSONDecoder::decode_json("symmetrical", symmetrical, obj);
 }
 
-static struct rgw_flags_desc sync_group_flags_desc[] = {
- { rgw_sync_group_info::CONFIG_FLAG_DR, "mirror" },
- { rgw_sync_group_info::CONFIG_FLAG_NONE, "none" },
- { 0, NULL }
-};
-
-void rgw_sync_group_info::_config::dump(Formatter *f) const
-{
-  char buf[256];
-  mask_to_str(sync_group_flags_desc, flags, buf, sizeof(buf));
-  encode_json("flags", (const char *)buf, f);
-}
-
-static struct rgw_name_to_flag sync_group_flags_mapping[] = {
-                  {"mirror",  rgw_sync_group_info::CONFIG_FLAG_DR},
-		  {"none", 0},
-		  {NULL, 0} };
-
-
-
-void rgw_sync_group_info::_config::decode_json(JSONObj *obj)
-{
-  string s;
-  JSONDecoder::decode_json("flags", s, obj);
-  uint32_t f = 0;
-  rgw_parse_list_of_flags(sync_group_flags_mapping, s, &f);
-  flags = f;
-}
-
-void rgw_sync_instance_info::dump(Formatter *f) const
+void rgw_sync_source::dump(Formatter *f) const
 {
   encode_json("id", id, f);
-  encode_json("sync_groups", sync_groups, f);
-  encode_json("zone_id", zone_id, f);
+  encode_json("type", type, f);
+  encode_json("zone", zone, f);
   encode_json("bucket", bucket, f);
-  encode_json("obj_prefix", obj_prefix, f);
-  encode_json("sync_from", sync_from, f);
 }
 
-void rgw_sync_instance_info::decode_json(JSONObj *obj)
+void rgw_sync_source::decode_json(JSONObj *obj)
 {
   JSONDecoder::decode_json("id", id, obj);
-  JSONDecoder::decode_json("sync_groups", sync_groups, obj);
-  JSONDecoder::decode_json("zone_id", zone_id, obj);
+  JSONDecoder::decode_json("type", type, obj);
+  JSONDecoder::decode_json("zone", zone, obj);
   JSONDecoder::decode_json("bucket", bucket, obj);
-  JSONDecoder::decode_json("obj_prefix", obj_prefix, obj);
-  JSONDecoder::decode_json("sync_from", sync_from, obj);
 }
 
-void rgw_sync_instance_info::sync_pipe::dump(Formatter *f) const
+void rgw_sync_target::dump(Formatter *f) const
 {
-  encode_json("source", source, f);
-  encode_json("target_prefix", target_prefix, f);
+  encode_json("id", id, f);
+  encode_json("type", type, f);
+  encode_json("flow_rules", flow_rules, f);
+  encode_json("zones", zones, f);
+  encode_json("sources", sources, f);
+  encode_json("bucket", bucket, f);
 }
 
-void rgw_sync_instance_info::sync_pipe::decode_json(JSONObj *obj)
+void rgw_sync_target::decode_json(JSONObj *obj)
 {
-  JSONDecoder::decode_json("source", source, obj);
-  JSONDecoder::decode_json("target_prefix", target_prefix, obj);
+  JSONDecoder::decode_json("id", id, obj);
+  JSONDecoder::decode_json("type", type, obj);
+  JSONDecoder::decode_json("flow_rules", flow_rules, obj);
+  JSONDecoder::decode_json("zones", zones, obj);
+  JSONDecoder::decode_json("sources", sources, obj);
+  JSONDecoder::decode_json("bucket", bucket, obj);
 }
 
 void rgw_sync_policy_info::dump(Formatter *f) const
 {
-  encode_json("groups", groups, f);
-  encode_json("entries", entries, f);
+  encode_json("flow_rules", flow_rules, f);
+  encode_json("sources", sources, f);
+  encode_json("targets", targets, f);
 }
 
 void rgw_sync_policy_info::decode_json(JSONObj *obj)
 {
-  JSONDecoder::decode_json("groups", groups, obj);
-  JSONDecoder::decode_json("entries", entries, obj);
+  JSONDecoder::decode_json("flow_rules", flow_rules, obj);
+  JSONDecoder::decode_json("sources", sources, obj);
+  JSONDecoder::decode_json("targets", targets, obj);
 }
 
 void rgw_obj_key::dump(Formatter *f) const
