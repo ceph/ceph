@@ -1,4 +1,4 @@
-
+#include <boost/algorithm/string.hpp>
 
 #include "svc_user.h"
 #include "svc_user_rados.h"
@@ -43,7 +43,8 @@ public:
   }
 
   bool is_valid_oid(const string& oid) override {
-    return true;
+    // filter out the user.buckets objects
+    return !boost::algorithm::ends_with(oid, RGW_BUCKETS_OBJ_SUFFIX);
   }
 
   string key_to_oid(const string& key) override {
