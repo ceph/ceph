@@ -1,8 +1,8 @@
 import { HttpClient } from '@angular/common/http';
-import { Injectable } from '@angular/core';
+import { Injectable, NgZone } from '@angular/core';
 
-import { Observable, timer } from 'rxjs';
-import { flatMap, shareReplay } from 'rxjs/operators';
+import { Observable } from 'rxjs';
+import { shareReplay } from 'rxjs/operators';
 
 export type FeatureTogglesMap = Map<string, boolean>;
 export type FeatureTogglesMap$ = Observable<FeatureTogglesMap>;
@@ -15,11 +15,17 @@ export class FeatureTogglesService {
   readonly REFRESH_INTERVAL: number = 20000;
   private featureToggleMap$: FeatureTogglesMap$;
 
-  constructor(private http: HttpClient) {
-    this.featureToggleMap$ = timer(0, this.REFRESH_INTERVAL).pipe(
-      flatMap(() => this.http.get<FeatureTogglesMap>(this.API_URL)),
-      shareReplay(1)
-    );
+  constructor(private http: HttpClient, private zone: NgZone) {
+    this.featureToggleMap$ = this.http.get<FeatureTogglesMap>(this.API_URL).pipe(shareReplay(1));
+    this.zone.runOutsideAngular(() => {
+      window.setInterval(() => {
+        this.zone.run(() => {
+          this.featureToggleMap$ = this.http
+            .get<FeatureTogglesMap>(this.API_URL)
+            .pipe(shareReplay(1));
+        });
+      }, this.REFRESH_INTERVAL);
+    });
   }
 
   get(): FeatureTogglesMap$ {
