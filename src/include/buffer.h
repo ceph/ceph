@@ -1038,6 +1038,7 @@ inline namespace v14_2_0 {
     }
 
     bool contents_equal(const buffer::list& other) const;
+    bool contents_equal(const void* other, size_t length) const;
 
     bool is_provided_buffer(const char *dst) const;
     bool is_aligned(unsigned align) const;
