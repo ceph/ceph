@@ -7,6 +7,7 @@
 #include <sstream>
 
 #include "rgw_torrent.h"
+#include "rgw_sal.h"
 #include "include/str_list.h"
 #include "include/rados/librados.hpp"
 
@@ -35,7 +36,7 @@ seed::~seed()
   store = NULL;
 }
 
-void seed::init(struct req_state *p_req, RGWRados *p_store)
+void seed::init(struct req_state *p_req, rgw::sal::RGWRadosStore *p_store)
 {
   s = p_req;
   store = p_store;
@@ -245,9 +246,9 @@ int seed::save_torrent_file()
   rgw_obj obj(s->bucket, s->object.name);    
 
   rgw_raw_obj raw_obj;
-  store->obj_to_raw(s->bucket_info.placement_rule, obj, &raw_obj);
+  store->getRados()->obj_to_raw(s->bucket_info.placement_rule, obj, &raw_obj);
 
-  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   auto sysobj = obj_ctx.get_obj(raw_obj);
 
   op_ret = sysobj.omap().set(key, bl, null_yield);

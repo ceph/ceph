@@ -2,7 +2,7 @@
 // vim: ts=8 sw=2 smarttab
 
 #include "rgw_b64.h"
-#include "rgw_rados.h"
+#include "rgw_sal.h"
 #include "rgw_pubsub.h"
 #include "rgw_tools.h"
 #include "rgw_xml.h"
@@ -162,28 +162,28 @@ void rgw_pubsub_sub_config::dump(Formatter *f) const
   encode_json("s3_id", s3_id, f);
 }
 
-RGWUserPubSub::RGWUserPubSub(RGWRados *_store, const rgw_user& _user) : store(_store),
+RGWUserPubSub::RGWUserPubSub(rgw::sal::RGWRadosStore *_store, const rgw_user& _user) : store(_store),
                                                                         user(_user),
-                                                                        obj_ctx(store->svc.sysobj->init_obj_ctx())
+                                                                        obj_ctx(store->svc()->sysobj->init_obj_ctx())
 {
   get_user_meta_obj(&user_meta_obj);
 }
 
 void RGWUserPubSub::get_user_meta_obj(rgw_raw_obj *obj) const {
-  *obj = rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, user_meta_oid());
+  *obj = rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, user_meta_oid());
 }
 
 void RGWUserPubSub::get_bucket_meta_obj(const rgw_bucket& bucket, rgw_raw_obj *obj) const {
-  *obj = rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, bucket_meta_oid(bucket));
+  *obj = rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, bucket_meta_oid(bucket));
 }
 
 void RGWUserPubSub::get_sub_meta_obj(const string& name, rgw_raw_obj *obj) const {
-  *obj = rgw_raw_obj(store->svc.zone->get_zone_params().log_pool, sub_meta_oid(name));
+  *obj = rgw_raw_obj(store->svc()->zone->get_zone_params().log_pool, sub_meta_oid(name));
 }
 
 int RGWUserPubSub::remove(const rgw_raw_obj& obj, RGWObjVersionTracker *objv_tracker)
 {
-  int ret = rgw_delete_system_obj(store->svc.sysobj, obj.pool, obj.oid, objv_tracker);
+  int ret = rgw_delete_system_obj(store->svc()->sysobj, obj.pool, obj.oid, objv_tracker);
   if (ret < 0) {
     return ret;
   }
@@ -264,7 +264,7 @@ int RGWUserPubSub::get_topic(const string& name, rgw_pubsub_topic_subs *result)
 int RGWUserPubSub::Bucket::create_notification(const string& topic_name, const EventTypeList& events)
 {
   rgw_pubsub_topic_subs user_topic_info;
-  RGWRados *store = ps->store;
+  rgw::sal::RGWRadosStore *store = ps->store;
 
   int ret = ps->get_topic(topic_name, &user_topic_info);
   if (ret < 0) {
@@ -303,7 +303,7 @@ int RGWUserPubSub::Bucket::create_notification(const string& topic_name, const E
 int RGWUserPubSub::Bucket::remove_notification(const string& topic_name)
 {
   rgw_pubsub_topic_subs user_topic_info;
-  RGWRados *store = ps->store;
+  rgw::sal::RGWRadosStore *store = ps->store;
 
   int ret = ps->get_topic(topic_name, &user_topic_info);
   if (ret < 0) {
@@ -423,7 +423,7 @@ int RGWUserPubSub::Sub::subscribe(const string& topic, const rgw_pubsub_sub_dest
 {
   RGWObjVersionTracker user_objv_tracker;
   rgw_pubsub_user_topics topics;
-  RGWRados *store = ps->store;
+  rgw::sal::RGWRadosStore *store = ps->store;
 
   int ret = ps->read_user_topics(&topics, &user_objv_tracker);
   if (ret < 0) {
@@ -467,7 +467,7 @@ int RGWUserPubSub::Sub::unsubscribe(const string& _topic)
 {
   string topic = _topic;
   RGWObjVersionTracker sobjv_tracker;
-  RGWRados *store = ps->store;
+  rgw::sal::RGWRadosStore *store = ps->store;
 
   if (topic.empty()) {
     rgw_pubsub_sub_config sub_conf;
@@ -525,7 +525,7 @@ void RGWUserPubSub::SubWithEvents<EventType>::list_events_result::dump(Formatter
 template<typename EventType>
 int RGWUserPubSub::SubWithEvents<EventType>::list_events(const string& marker, int max_events)
 {
-  RGWRados *store = ps->store;
+  RGWRados *store = ps->store->getRados();
   rgw_pubsub_sub_config sub_conf;
   int ret = get_conf(&sub_conf);
   if (ret < 0) {
@@ -591,7 +591,7 @@ int RGWUserPubSub::SubWithEvents<EventType>::list_events(const string& marker, i
 template<typename EventType>
 int RGWUserPubSub::SubWithEvents<EventType>::remove_event(const string& event_id)
 {
-  RGWRados *store = ps->store;
+  rgw::sal::RGWRadosStore *store = ps->store;
   rgw_pubsub_sub_config sub_conf;
   int ret = get_conf(&sub_conf);
   if (ret < 0) {
@@ -601,8 +601,8 @@ int RGWUserPubSub::SubWithEvents<EventType>::remove_event(const string& event_id
 
   RGWBucketInfo bucket_info;
   string tenant;
-  RGWSysObjectCtx sysobj_ctx(store->svc.sysobj->init_obj_ctx());
-  ret = store->get_bucket_info(sysobj_ctx, tenant, sub_conf.dest.bucket_name, bucket_info, nullptr, null_yield, nullptr);
+  RGWSysObjectCtx sysobj_ctx(store->svc()->sysobj->init_obj_ctx());
+  ret = store->getRados()->get_bucket_info(sysobj_ctx, tenant, sub_conf.dest.bucket_name, bucket_info, nullptr, null_yield, nullptr);
   if (ret < 0) {
     ldout(store->ctx(), 1) << "ERROR: failed to read bucket info for events bucket: bucket=" << sub_conf.dest.bucket_name << " ret=" << ret << dendl;
     return ret;
@@ -615,7 +615,7 @@ int RGWUserPubSub::SubWithEvents<EventType>::remove_event(const string& event_id
 
   obj_ctx.set_atomic(obj);
 
-  RGWRados::Object del_target(store, bucket_info, obj_ctx, obj);
+  RGWRados::Object del_target(store->getRados(), bucket_info, obj_ctx, obj);
   RGWRados::Object::Delete del_op(&del_target);
 
   del_op.params.bucket_owner = bucket_info.owner;

@@ -27,8 +27,10 @@ static inline int64_t rgw_rounded_kb(int64_t bytes)
   return (bytes + 1023) / 1024;
 }
 
-class RGWRados;
 class JSONObj;
+namespace rgw { namespace sal {
+  class RGWRadosStore;
+} }
 
 struct RGWQuotaInfo {
   template<class T> friend class RGWQuotaCache;
@@ -112,7 +114,7 @@ public:
 
   virtual void update_stats(const rgw_user& bucket_owner, rgw_bucket& bucket, int obj_delta, uint64_t added_bytes, uint64_t removed_bytes) = 0;
 
-  static RGWQuotaHandler *generate_handler(RGWRados *store, bool quota_threads);
+  static RGWQuotaHandler *generate_handler(rgw::sal::RGWRadosStore *store, bool quota_threads);
   static void free_handler(RGWQuotaHandler *handler);
 };
 

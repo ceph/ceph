@@ -422,7 +422,7 @@ class RGWUserPubSub
 {
   friend class Bucket;
 
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   rgw_user user;
   RGWSysObjectCtx obj_ctx;
 
@@ -452,7 +452,7 @@ class RGWUserPubSub
   int write_user_topics(const rgw_pubsub_user_topics& topics, RGWObjVersionTracker *objv_tracker);
 
 public:
-  RGWUserPubSub(RGWRados *_store, const rgw_user& _user);
+  RGWUserPubSub(rgw::sal::RGWRadosStore *_store, const rgw_user& _user);
 
   class Bucket {
     friend class RGWUserPubSub;
@@ -616,7 +616,7 @@ int RGWUserPubSub::write(const rgw_raw_obj& obj, const T& info, RGWObjVersionTra
   bufferlist bl;
   encode(info, bl);
 
-  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
   int ret = rgw_put_system_obj(obj_ctx, obj.pool, obj.oid,
                            bl, false, objv_tracker,
                            real_time());

@@ -684,7 +684,7 @@ void RGW_SWIFT_Auth_Get::execute()
 
   user_str = user;
 
-  if ((ret = store->ctl.user->get_info_by_swift(user_str, &info, s->yield)) < 0)
+  if ((ret = store->ctl()->user->get_info_by_swift(user_str, &info, s->yield)) < 0)
   {
     ret = -EACCES;
     goto done;
@@ -738,7 +738,7 @@ done:
   end_header(s);
 }
 
-int RGWHandler_SWIFT_Auth::init(RGWRados *store, struct req_state *state,
+int RGWHandler_SWIFT_Auth::init(rgw::sal::RGWRadosStore *store, struct req_state *state,
 				rgw::io::BasicClient *cio)
 {
   state->dialect = "swift-auth";

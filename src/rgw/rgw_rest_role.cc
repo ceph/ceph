@@ -25,7 +25,7 @@ int RGWRestRole::verify_permission()
   }
 
   string role_name = s->info.args.get("RoleName");
-  RGWRole role(s->cct, store->pctl, role_name, s->user->user_id.tenant);
+  RGWRole role(s->cct, store->getRados()->pctl, role_name, s->user->user_id.tenant);
   if (op_ret = role.get(); op_ret < 0) {
     if (op_ret == -ENOENT) {
       op_ret = -ERR_NO_ROLE_FOUND;
@@ -129,7 +129,7 @@ void RGWCreateRole::execute()
   if (op_ret < 0) {
     return;
   }
-  RGWRole role(s->cct, store->pctl, role_name, role_path, trust_policy,
+  RGWRole role(s->cct, store->getRados()->pctl, role_name, role_path, trust_policy,
                 s->user->user_id.tenant, max_session_duration);
   op_ret = role.create(true);
 
@@ -228,7 +228,7 @@ void RGWGetRole::execute()
   if (op_ret < 0) {
     return;
   }
-  RGWRole role(s->cct, store->pctl, role_name, s->user->user_id.tenant);
+  RGWRole role(s->cct, store->getRados()->pctl, role_name, s->user->user_id.tenant);
   op_ret = role.get();
 
   if (op_ret == -ENOENT) {
@@ -321,7 +321,7 @@ void RGWListRoles::execute()
     return;
   }
   vector<RGWRole> result;
-  op_ret = RGWRole::get_roles_by_path_prefix(store, s->cct, path_prefix, s->user->user_id.tenant, result);
+  op_ret = RGWRole::get_roles_by_path_prefix(store->getRados(), s->cct, path_prefix, s->user->user_id.tenant, result);
 
   if (op_ret == 0) {
     s->formatter->open_array_section("ListRolesResponse");

@@ -41,7 +41,7 @@ public:
   using RGWHandler_REST_S3::RGWHandler_REST_S3;
   ~RGWHandler_REST_S3Website() override = default;
 
-  int init(RGWRados *store, req_state *s, rgw::io::BasicClient* cio) override;
+  int init(rgw::sal::RGWRadosStore *store, req_state *s, rgw::io::BasicClient* cio) override;
   int error_handler(int err_no, string *error_content) override;
 };
 

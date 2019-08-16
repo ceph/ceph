@@ -8,6 +8,7 @@
 #include "rgw_log.h"
 #include "rgw_rest.h"
 #include "rgw_user.h"
+#include "rgw_sal.h"
 
 #include "services/svc_zone.h"
 
@@ -25,7 +26,7 @@
 static constexpr bool USE_SAFE_TIMER_CALLBACKS = false;
 
 
-RGWRealmReloader::RGWRealmReloader(RGWRados*& store, std::map<std::string, std::string>& service_map_meta,
+RGWRealmReloader::RGWRealmReloader(rgw::sal::RGWRadosStore*& store, std::map<std::string, std::string>& service_map_meta,
                                    Pauser* frontends)
   : store(store),
     service_map_meta(service_map_meta),
@@ -113,7 +114,7 @@ void RGWRealmReloader::reload()
 
     ldout(cct, 1) << "Creating new store" << dendl;
 
-    RGWRados* store_cleanup = nullptr;
+    rgw::sal::RGWRadosStore* store_cleanup = nullptr;
     {
       std::unique_lock lock{mutex};
 
@@ -150,7 +151,7 @@ void RGWRealmReloader::reload()
     }
   }
 
-  int r = store->register_to_service_map("rgw", service_map_meta);
+  int r = store->getRados()->register_to_service_map("rgw", service_map_meta);
   if (r < 0) {
     lderr(cct) << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
 
@@ -160,9 +161,9 @@ void RGWRealmReloader::reload()
   ldout(cct, 1) << "Finishing initialization of new store" << dendl;
   // finish initializing the new store
   ldout(cct, 1) << " - REST subsystem init" << dendl;
-  rgw_rest_init(cct, store, store->svc.zone->get_zonegroup());
+  rgw_rest_init(cct, store->svc()->zone->get_zonegroup());
   ldout(cct, 1) << " - usage subsystem init" << dendl;
-  rgw_log_usage_init(cct, store);
+  rgw_log_usage_init(cct, store->getRados());
 
   ldout(cct, 1) << "Resuming frontends with new realm configuration." << dendl;
 

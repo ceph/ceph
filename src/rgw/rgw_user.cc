@@ -11,7 +11,7 @@
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
 #include "common/RWLock.h"
-#include "rgw_rados.h"
+#include "rgw_sal.h"
 #include "rgw_zone.h"
 #include "rgw_acl.h"
 
@@ -47,18 +47,18 @@ void rgw_get_anon_user(RGWUserInfo& info)
   info.access_keys.clear();
 }
 
-int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
+int rgw_user_sync_all_stats(rgw::sal::RGWRadosStore *store, const rgw_user& user_id)
 {
   CephContext *cct = store->ctx();
   size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
   bool is_truncated = false;
   string marker;
   int ret;
-  RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
+  RGWSysObjectCtx obj_ctx = store->svc()->sysobj->init_obj_ctx();
 
   do {
     RGWUserBuckets user_buckets;
-    ret = store->ctl.user->list_buckets(user_id,
+    ret = store->ctl()->user->list_buckets(user_id,
                                         marker, string(),
                                         max_entries,
                                         false,
@@ -81,26 +81,26 @@ int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
       bucket.tenant = user_id.tenant;
       bucket.name = bucket_ent.bucket.name;
 
-      ret = store->get_bucket_info(obj_ctx, user_id.tenant, bucket_ent.bucket.name,
+      ret = store->getRados()->get_bucket_info(obj_ctx, user_id.tenant, bucket_ent.bucket.name,
                                    bucket_info, nullptr, null_yield, nullptr);
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: could not read bucket info: bucket=" << bucket_ent.bucket << " ret=" << ret << dendl;
         continue;
       }
-      ret = store->ctl.bucket->sync_user_stats(user_id, bucket_info);
+      ret = store->ctl()->bucket->sync_user_stats(user_id, bucket_info);
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: could not sync bucket stats: ret=" << ret << dendl;
         return ret;
       }
       RGWQuotaInfo bucket_quota;
-      ret = store->check_bucket_shards(bucket_info, bucket_info.bucket, bucket_quota);
+      ret = store->getRados()->check_bucket_shards(bucket_info, bucket_info.bucket, bucket_quota);
       if (ret < 0) {
 	ldout(cct, 0) << "ERROR in check_bucket_shards: " << cpp_strerror(-ret)<< dendl;
       }
     }
   } while (is_truncated);
 
-  ret = store->ctl.user->complete_flush_stats(user_id);
+  ret = store->ctl()->user->complete_flush_stats(user_id);
   if (ret < 0) {
     cerr << "ERROR: failed to complete syncing user stats: ret=" << ret << std::endl;
     return ret;
@@ -109,7 +109,7 @@ int rgw_user_sync_all_stats(RGWRados *store, const rgw_user& user_id)
   return 0;
 }
 
-int rgw_user_get_all_buckets_stats(RGWRados *store, const rgw_user& user_id, map<string, cls_user_bucket_entry>& buckets_usage_map)
+int rgw_user_get_all_buckets_stats(rgw::sal::RGWRadosStore *store, const rgw_user& user_id, map<string, cls_user_bucket_entry>& buckets_usage_map)
 {
   CephContext *cct = store->ctx();
   size_t max_entries = cct->_conf->rgw_list_buckets_max_chunk;
@@ -132,7 +132,7 @@ int rgw_user_get_all_buckets_stats(RGWRados *store, const rgw_user& user_id, map
 
       const RGWBucketEnt& bucket_ent = i.second;
       RGWBucketEnt stats;
-      ret = store->ctl.bucket->read_bucket_stats(bucket_ent.bucket, &stats, null_yield);
+      ret = store->ctl()->bucket->read_bucket_stats(bucket_ent.bucket, &stats, null_yield);
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: could not get bucket stats: ret=" << ret << dendl;
         return ret;
@@ -1386,7 +1386,7 @@ RGWUser::RGWUser() : caps(this), keys(this), subusers(this)
   init_default();
 }
 
-int RGWUser::init(RGWRados *storage, RGWUserAdminOpState& op_state)
+int RGWUser::init(rgw::sal::RGWRadosStore *storage, RGWUserAdminOpState& op_state)
 {
   init_default();
   int ret = init_storage(storage);
@@ -1409,14 +1409,14 @@ void RGWUser::init_default()
   clear_populated();
 }
 
-int RGWUser::init_storage(RGWRados *storage)
+int RGWUser::init_storage(rgw::sal::RGWRadosStore *storage)
 {
   if (!storage) {
     return -EINVAL;
   }
 
   store = storage;
-  user_ctl = store->ctl.user;
+  user_ctl = store->ctl()->user;
 
   clear_populated();
 
@@ -1655,7 +1655,7 @@ int RGWUser::execute_rename(RGWUserAdminOpState& op_state, std::string *err_msg)
   string obj_marker;
   CephContext *cct = store->ctx();
   size_t max_buckets = cct->_conf->rgw_list_buckets_max_chunk;
-  RGWBucketCtl* bucket_ctl = store->ctl.bucket;
+  RGWBucketCtl* bucket_ctl = store->ctl()->bucket;
 
   do {
     RGWUserBuckets buckets;
@@ -2086,7 +2086,7 @@ int RGWUser::execute_modify(RGWUserAdminOpState& op_state, std::string *err_msg)
         marker = iter->first;
       }
 
-      ret = store->set_buckets_enabled(bucket_names, !suspended);
+      ret = store->getRados()->set_buckets_enabled(bucket_names, !suspended);
       if (ret < 0) {
         set_err_msg(err_msg, "failed to modify bucket");
         return ret;
@@ -2170,7 +2170,7 @@ int RGWUser::list(RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher)
     op_state.max_entries = 1000;
   }
 
-  auto meta_mgr = store->ctl.meta.mgr;
+  auto meta_mgr = store->ctl()->meta.mgr;
 
   int ret = meta_mgr->list_keys_init(metadata_key, op_state.marker, &handle);
   if (ret < 0) {
@@ -2218,7 +2218,7 @@ int RGWUser::list(RGWUserAdminOpState& op_state, RGWFormatterFlusher& flusher)
   return 0;
 }
 
-int RGWUserAdminOp_User::list(RGWRados *store, RGWUserAdminOpState& op_state,
+int RGWUserAdminOp_User::list(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
                   RGWFormatterFlusher& flusher)
 {
   RGWUser user;
@@ -2234,7 +2234,7 @@ int RGWUserAdminOp_User::list(RGWRados *store, RGWUserAdminOpState& op_state,
   return 0;
 }
 
-int RGWUserAdminOp_User::info(RGWRados *store, RGWUserAdminOpState& op_state,
+int RGWUserAdminOp_User::info(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
                   RGWFormatterFlusher& flusher)
 {
   RGWUserInfo info;
@@ -2263,7 +2263,7 @@ int RGWUserAdminOp_User::info(RGWRados *store, RGWUserAdminOpState& op_state,
   RGWStorageStats stats;
   RGWStorageStats *arg_stats = NULL;
   if (op_state.fetch_stats) {
-    int ret = store->ctl.user->read_stats(info.user_id, &stats);
+    int ret = store->ctl()->user->read_stats(info.user_id, &stats);
     if (ret < 0 && ret != -ENOENT) {
       return ret;
     }
@@ -2281,7 +2281,7 @@ int RGWUserAdminOp_User::info(RGWRados *store, RGWUserAdminOpState& op_state,
   return 0;
 }
 
-int RGWUserAdminOp_User::create(RGWRados *store, RGWUserAdminOpState& op_state,
+int RGWUserAdminOp_User::create(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
                   RGWFormatterFlusher& flusher)
 {
   RGWUserInfo info;
@@ -2313,7 +2313,7 @@ int RGWUserAdminOp_User::create(RGWRados *store, RGWUserAdminOpState& op_state,
   return 0;
 }
 
-int RGWUserAdminOp_User::modify(RGWRados *store, RGWUserAdminOpState& op_state,
+int RGWUserAdminOp_User::modify(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
                   RGWFormatterFlusher& flusher)
 {
   RGWUserInfo info;
@@ -2344,7 +2344,7 @@ int RGWUserAdminOp_User::modify(RGWRados *store, RGWUserAdminOpState& op_state,
   return 0;
 }
 
-int RGWUserAdminOp_User::remove(RGWRados *store, RGWUserAdminOpState& op_state,
+int RGWUserAdminOp_User::remove(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
                   RGWFormatterFlusher& flusher, optional_yield y)
 {
   RGWUserInfo info;
@@ -2361,7 +2361,7 @@ int RGWUserAdminOp_User::remove(RGWRados *store, RGWUserAdminOpState& op_state,
   return ret;
 }
 
-int RGWUserAdminOp_Subuser::create(RGWRados *store, RGWUserAdminOpState& op_state,
+int RGWUserAdminOp_Subuser::create(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
                   RGWFormatterFlusher& flusher)
 {
   RGWUserInfo info;
@@ -2393,7 +2393,7 @@ int RGWUserAdminOp_Subuser::create(RGWRados *store, RGWUserAdminOpState& op_stat
   return 0;
 }
 
-int RGWUserAdminOp_Subuser::modify(RGWRados *store, RGWUserAdminOpState& op_state,
+int RGWUserAdminOp_Subuser::modify(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
                   RGWFormatterFlusher& flusher)
 {
   RGWUserInfo info;
@@ -2425,7 +2425,7 @@ int RGWUserAdminOp_Subuser::modify(RGWRados *store, RGWUserAdminOpState& op_stat
   return 0;
 }
 
-int RGWUserAdminOp_Subuser::remove(RGWRados *store, RGWUserAdminOpState& op_state,
+int RGWUserAdminOp_Subuser::remove(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
                   RGWFormatterFlusher& flusher)
 {
   RGWUserInfo info;
@@ -2445,7 +2445,7 @@ int RGWUserAdminOp_Subuser::remove(RGWRados *store, RGWUserAdminOpState& op_stat
   return 0;
 }
 
-int RGWUserAdminOp_Key::create(RGWRados *store, RGWUserAdminOpState& op_state,
+int RGWUserAdminOp_Key::create(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
                   RGWFormatterFlusher& flusher)
 {
   RGWUserInfo info;
@@ -2484,7 +2484,7 @@ int RGWUserAdminOp_Key::create(RGWRados *store, RGWUserAdminOpState& op_state,
   return 0;
 }
 
-int RGWUserAdminOp_Key::remove(RGWRados *store, RGWUserAdminOpState& op_state,
+int RGWUserAdminOp_Key::remove(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
                   RGWFormatterFlusher& flusher)
 {
   RGWUserInfo info;
@@ -2504,7 +2504,7 @@ int RGWUserAdminOp_Key::remove(RGWRados *store, RGWUserAdminOpState& op_state,
   return 0;
 }
 
-int RGWUserAdminOp_Caps::add(RGWRados *store, RGWUserAdminOpState& op_state,
+int RGWUserAdminOp_Caps::add(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
                   RGWFormatterFlusher& flusher)
 {
   RGWUserInfo info;
@@ -2537,7 +2537,7 @@ int RGWUserAdminOp_Caps::add(RGWRados *store, RGWUserAdminOpState& op_state,
 }
 
 
-int RGWUserAdminOp_Caps::remove(RGWRados *store, RGWUserAdminOpState& op_state,
+int RGWUserAdminOp_Caps::remove(rgw::sal::RGWRadosStore *store, RGWUserAdminOpState& op_state,
                   RGWFormatterFlusher& flusher)
 {
   RGWUserInfo info;

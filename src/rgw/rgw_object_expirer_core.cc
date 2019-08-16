@@ -174,7 +174,7 @@ int RGWObjectExpirer::init_bucket_info(const string& tenant_name,
                                        const string& bucket_id,
                                        RGWBucketInfo& bucket_info)
 {
-  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
 
   /*
    * XXX Here's where it gets tricky. We went to all the trouble of
@@ -186,7 +186,7 @@ int RGWObjectExpirer::init_bucket_info(const string& tenant_name,
    * are ephemeral, good call encoding tenant info!
    */
 
-  return store->get_bucket_info(obj_ctx, tenant_name, bucket_name,
+  return store->getRados()->get_bucket_info(obj_ctx, tenant_name, bucket_name,
 				bucket_info, nullptr, null_yield, nullptr);
 
 }
@@ -215,8 +215,8 @@ int RGWObjectExpirer::garbage_single_object(objexp_hint_entry& hint)
   }
 
   rgw_obj obj(bucket_info.bucket, key);
-  store->set_atomic(&rctx, obj);
-  ret = store->delete_obj(rctx, bucket_info, obj,
+  store->getRados()->set_atomic(&rctx, obj);
+  ret = store->getRados()->delete_obj(rctx, bucket_info, obj,
           bucket_info.versioning_status(), 0, hint.exp_time);
 
   return ret;
@@ -235,7 +235,7 @@ void RGWObjectExpirer::garbage_chunk(list<cls_timeindex_entry>& entries,      /*
     ldout(store->ctx(), 15) << "got removal hint for: " << iter->key_ts.sec() \
         << " - " << iter->key_ext << dendl;
 
-    int ret = objexp_hint_parse(store->ctx(), *iter, &hint);
+    int ret = objexp_hint_parse(store->getRados()->ctx(), *iter, &hint);
     if (ret < 0) {
       ldout(store->ctx(), 1) << "cannot parse removal hint for " << hint.obj_key << dendl;
       continue;
@@ -298,7 +298,7 @@ bool RGWObjectExpirer::process_single_shard(const string& shard,
   utime_t time(max_secs, 0);
   l.set_duration(time);
 
-  int ret = l.lock_exclusive(&store->objexp_pool_ctx, shard);
+  int ret = l.lock_exclusive(&store->getRados()->objexp_pool_ctx, shard);
   if (ret == -EBUSY) { /* already locked by another processor */
     dout(5) << __func__ << "(): failed to acquire lock on " << shard << dendl;
     return false;
@@ -334,7 +334,7 @@ bool RGWObjectExpirer::process_single_shard(const string& shard,
     marker = out_marker;
   } while (truncated);
 
-  l.unlock(&store->objexp_pool_ctx, shard);
+  l.unlock(&store->getRados()->objexp_pool_ctx, shard);
   return done;
 }
 
