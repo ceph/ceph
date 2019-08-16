@@ -41,7 +41,6 @@
 #include "messages/MOSDPGUpdateLogMissingReply.h"
 #include "messages/MCommandReply.h"
 #include "messages/MOSDScrubReserve.h"
-#include "mds/inode_backtrace.h" // Ugh
 #include "common/EventTrace.h"
 
 #include "common/config.h"
