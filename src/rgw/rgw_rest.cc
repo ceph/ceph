@@ -229,7 +229,7 @@ void rgw_rest_init(CephContext *cct, const RGWZoneGroup& zone_group)
    */
 }
 
-static bool str_ends_with(const string& s, const string& suffix, size_t *pos)
+static bool str_ends_with_nocase(const string& s, const string& suffix, size_t *pos)
 {
   size_t len = suffix.size();
   if (len > (size_t)s.size()) {
@@ -241,7 +241,7 @@ static bool str_ends_with(const string& s, const string& suffix, size_t *pos)
     *pos = p;
   }
 
-  return s.compare(p, len, suffix) == 0;
+  return boost::algorithm::iends_with(suffix, s);
 }
 
 static bool rgw_find_host_in_domains(const string& host, string *domain, string *subdomain, set<string> valid_hostnames_set)
@@ -253,7 +253,7 @@ static bool rgw_find_host_in_domains(const string& host, string *domain, string 
    */
   for (iter = valid_hostnames_set.begin(); iter != valid_hostnames_set.end(); ++iter) {
     size_t pos;
-    if (!str_ends_with(host, *iter, &pos))
+    if (!str_ends_with_nocase(host, *iter, &pos))
       continue;
 
     if (pos == 0) {
