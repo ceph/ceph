@@ -34,7 +34,7 @@ public:
    *
    * @returns The latest epoch passed to persist_epoch()
    */
-  virtual epoch_t read_persisted_epoch() = 0;
+  virtual epoch_t read_persisted_epoch() const = 0;
   /**
    * Validate that the persistent store is working by committing
    * to it. (There is no interface for retrieving the value; this
@@ -58,7 +58,7 @@ public:
   /**
    * Retrieve this Paxos instance's rank.
    */
-  virtual int get_my_rank() = 0;
+  virtual int get_my_rank() const = 0;
   /**
    * Send a PROPOSE message to all our peers. This happens when
    * we have started a new election (which may mean attempting to
@@ -78,12 +78,12 @@ public:
    *
    * @returns true if we have participated, false otherwise
    */
-  virtual bool ever_participated() = 0;
+  virtual bool ever_participated() const = 0;
   /**
    * Ask the ElectionOwner for the size of the Paxos set. This includes
    * those monitors which may not be in the current quorum!
    */
-  virtual unsigned paxos_size() = 0;
+  virtual unsigned paxos_size() const = 0;
   /**
    * Tell the ElectionOwner we have started a new election.
    *
@@ -107,14 +107,14 @@ public:
    * @param quorum The ranks of our peers which deferred to us and
    *        must be told of our victory
    */
-  virtual void message_victory(const set<int>& quorum) = 0;
+  virtual void message_victory(const std::set<int>& quorum) = 0;
   /**
    * Query the ElectionOwner about if a given rank is in the
    * currently active quorum.
    * @param rank the Paxos rank whose status we are checking
    * @returns true if the rank is in our current quorum, false otherwise.
    */
-  virtual bool is_current_member(int rank) = 0;
+  virtual bool is_current_member(int rank) const = 0;
   virtual ~ElectionOwner() {}
 };
 
@@ -165,7 +165,7 @@ public:
    * If we are acked by ElectionOwner::paxos_size() peers, we will declare
    * victory.
    */
-  set<int> acked_me;
+  std::set<int> acked_me;
 
   ElectionLogic(ElectionOwner *e, CephContext *c) : elector(e), cct(c),
 						    leader_acked(-1),
@@ -280,8 +280,7 @@ public:
    *
    * @returns Our current epoch number
    */
-  epoch_t get_epoch() { return epoch; }
-
+  epoch_t get_epoch() const { return epoch; }
   
 private:
   /**

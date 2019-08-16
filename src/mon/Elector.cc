@@ -42,7 +42,7 @@ void Elector::persist_epoch(epoch_t e)
   mon->store->apply_transaction(t);
 }
 
-epoch_t Elector::read_persisted_epoch()
+epoch_t Elector::read_persisted_epoch() const
 {
   return mon->store->get(Monitor::MONITOR_NAME, "election_epoch");
 }
@@ -55,7 +55,7 @@ void Elector::validate_store()
   ceph_assert(r >= 0);
 }
 
-bool Elector::is_current_member(int rank)
+bool Elector::is_current_member(int rank) const
 {
   return mon->quorum.count(rank);
 }
@@ -65,7 +65,7 @@ void Elector::trigger_new_election()
   mon->start_election();
 }
 
-int Elector::get_my_rank()
+int Elector::get_my_rank() const
 {
   return mon->rank;
 }
@@ -75,12 +75,12 @@ void Elector::reset_election()
   mon->bootstrap();
 }
 
-bool Elector::ever_participated()
+bool Elector::ever_participated() const
 {
   return mon->has_ever_joined;
 }
 
-unsigned Elector::paxos_size()
+unsigned Elector::paxos_size() const
 {
   return (unsigned)mon->monmap->size();
 }
@@ -165,7 +165,7 @@ void Elector::cancel_timer()
   }
 }
 
-void Elector::message_victory(const set<int>& quorum)
+void Elector::message_victory(const std::set<int>& quorum)
 {
   uint64_t cluster_features = CEPH_FEATURES_ALL;
   mon_feature_t mon_features = ceph::features::mon::get_supported();
