@@ -259,122 +259,144 @@ struct rgw_bucket_entry_owner {
   void decode_json(JSONObj *obj);
 };
 
-struct rgw_sync_group_info {
-  static constexpr int CONFIG_FLAG_NONE = 0x0;
-  static constexpr int CONFIG_FLAG_DR   = 0x1;
-
-  std::string id;
-
-  struct _config {
-    int flags{CONFIG_FLAG_NONE};
-
-    void encode(bufferlist& bl) const {
-      ENCODE_START(1, 1, bl);
-      encode(flags, bl);
-      ENCODE_FINISH(bl);
-    }
-
-    void decode(bufferlist::const_iterator& bl) {
-      DECODE_START(1, bl);
-      decode(flags, bl);
-      DECODE_FINISH(bl);
-    }
-
-    void dump(ceph::Formatter *f) const;
-    void decode_json(JSONObj *obj);
-  } config;
-
-  void encode(bufferlist& bl) const;
-  void decode(bufferlist::const_iterator& bl);
-
-  void dump(ceph::Formatter *f) const;
-  void decode_json(JSONObj *obj);
-};
-WRITE_CLASS_ENCODER(rgw_sync_group_info::_config)
-WRITE_CLASS_ENCODER(rgw_sync_group_info)
-
-struct rgw_sync_instance_info {
-  std::string id;
-
-  std::optional<std::set<std::string> > sync_groups; /* name of groups entity belongs to */
-  std::optional<std::string> zone_id;
-  std::optional<rgw_bucket> bucket;
-  std::optional<std::string> obj_prefix;
-
-  struct sync_pipe {
-    string source;
-    string target_prefix;
-
-    bool operator<(const sync_pipe& rhs) const {
-      if (source == rhs.source) {
-        return (target_prefix < rhs.target_prefix);
-      }
-      return (source  < rhs.source);
-    }
-
-    void encode(bufferlist& bl) const {
-      ENCODE_START(1, 1, bl);
-      encode(source, bl);
-      encode(target_prefix, bl);
-      ENCODE_FINISH(bl);
-    }
-
-    void decode(bufferlist::const_iterator& bl) {
-      DECODE_START(1, bl);
-      decode(source, bl);
-      decode(target_prefix, bl);
-      DECODE_FINISH(bl);
-    }
-
-    void dump(ceph::Formatter *f) const;
-    void decode_json(JSONObj *obj);
-  };
-
-  std::optional<std::set<sync_pipe> > sync_from; /* optional group/entity ids */
+struct rgw_sync_flow_directional_rule {
+  string source_zone;
+  string target_zone;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    encode(id, bl);
-    encode(sync_groups, bl);
-    encode(zone_id, bl);
-    encode(bucket, bl);
-    encode(obj_prefix, bl);
-    encode(sync_from, bl);
+    encode(source_zone, bl);
+    encode(target_zone, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    decode(id, bl);
-    decode(sync_groups, bl);
-    decode(zone_id, bl);
-    decode(bucket, bl);
-    decode(obj_prefix, bl);
-    decode(sync_from, bl);
+    decode(source_zone, bl);
+    decode(target_zone, bl);
     DECODE_FINISH(bl);
   }
 
   void dump(ceph::Formatter *f) const;
   void decode_json(JSONObj *obj);
 };
-WRITE_CLASS_ENCODER(rgw_sync_instance_info::sync_pipe)
-WRITE_CLASS_ENCODER(rgw_sync_instance_info)
+WRITE_CLASS_ENCODER(rgw_sync_flow_directional_rule)
 
-struct rgw_sync_policy_info {
-  std::vector<rgw_sync_group_info> groups;
-  std::vector<rgw_sync_instance_info> entries;
+struct rgw_sync_flow_rule {
+  string id;
+  std::optional<rgw_sync_flow_directional_rule> directional;
+  std::optional<std::set<string> > symmetrical;
 
   void encode(bufferlist& bl) const {
     ENCODE_START(1, 1, bl);
-    encode(groups, bl);
-    encode(entries, bl);
+    encode(id, bl);
+    encode(directional, bl);
+    encode(symmetrical, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
     DECODE_START(1, bl);
-    decode(groups, bl);
-    decode(entries, bl);
+    decode(id, bl);
+    decode(directional, bl);
+    decode(symmetrical, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+
+  void get_zone_peers(const string& zone_id, std::set<string> *sources, std::set<string> *targets) const;
+};
+WRITE_CLASS_ENCODER(rgw_sync_flow_rule)
+
+struct rgw_sync_source {
+  string id;
+  string type;
+  std::optional<string> zone;
+  std::optional<rgw_bucket> bucket;
+  /* FIXME: config */
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(id, bl);
+    encode(type, bl);
+    encode(zone, bl);
+    encode(bucket, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(id, bl);
+    decode(type, bl);
+    decode(zone, bl);
+    decode(bucket, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_sync_source)
+
+struct rgw_sync_target {
+  string id;
+  string type;
+  std::vector<rgw_sync_flow_rule> flow_rules; /* flow rules for trivial sources */
+  std::set<string> zones;  /* target zones. Can be wildcard */
+  /* FIXME: add config */
+
+  std::vector<rgw_sync_source> sources; /* non-trivial sources */
+  std::optional<rgw_bucket> bucket; /* can be explicit, or not set. If not set then depending
+                                       on the context */
+  
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(id, bl);
+    encode(type, bl);
+    encode(flow_rules, bl);
+    encode(zones, bl);
+    encode(sources, bl);
+    encode(bucket, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(id, bl);
+    decode(type, bl);
+    decode(flow_rules, bl);
+    decode(zones, bl);
+    decode(sources, bl);
+    decode(bucket, bl);
+    DECODE_FINISH(bl);
+  }
+
+  void dump(ceph::Formatter *f) const;
+  void decode_json(JSONObj *obj);
+};
+WRITE_CLASS_ENCODER(rgw_sync_target)
+
+
+struct rgw_sync_policy_info {
+  std::optional<std::vector<rgw_sync_flow_rule> > flow_rules;
+  std::optional<std::vector<rgw_sync_source> > sources;
+  std::optional<std::vector<rgw_sync_target> > targets;
+
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(flow_rules, bl);
+    encode(sources, bl);
+    encode(targets, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(flow_rules, bl);
+    decode(sources, bl);
+    decode(targets, bl);
     DECODE_FINISH(bl);
   }
 
@@ -382,8 +404,8 @@ struct rgw_sync_policy_info {
   void decode_json(JSONObj *obj);
 
   bool empty() const {
-    return groups.empty() &&
-           entries.empty();
+    return (!flow_rules || flow_rules->empty()) &&
+           (!targets || targets->empty());
   }
 
 };

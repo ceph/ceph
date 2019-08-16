@@ -64,20 +64,25 @@ void rgw_datalog_shard_data::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("entries", entries, obj);
 };
 
-void rgw_sync_group_info::encode(bufferlist& bl) const
+void rgw_sync_flow_rule::get_zone_peers(const string& zone_id,
+                                        std::set<string> *sources,
+                                        std::set<string> *targets) const
 {
-  ENCODE_START(1, 1, bl);
-  encode(id, bl);
-  encode(config, bl);
-  ENCODE_FINISH(bl);
-}
+  sources->clear();
+  targets->clear();
 
-void rgw_sync_group_info::decode(bufferlist::const_iterator& bl)
-{
-  DECODE_START(1, bl);
-  decode(id, bl);
-  decode(config, bl);
-  DECODE_FINISH(bl);
+  if (directional) {
+    if (directional->target_zone == zone_id) {
+      sources->insert(directional->source_zone);
+    } else if (directional->source_zone == zone_id) {
+      targets->insert(directional->target_zone);
+    }
+  } else if (symmetrical &&
+             symmetrical->find(zone_id) != symmetrical->end()) {
+    *sources = *symmetrical;
+    sources->erase(zone_id);
+    *targets = *sources;
+  }
 }
 
 class RGWReadDataSyncStatusMarkersCR : public RGWShardCollectCR {
