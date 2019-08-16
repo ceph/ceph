@@ -563,11 +563,11 @@ struct AWSSyncConfig {
   void expand_target(RGWDataSyncEnv *sync_env, const string& sid, const string& path, string *dest) {
       apply_meta_param(path, "sid", sid, dest);
 
-      const RGWZoneGroup& zg = sync_env->store->svc.zone->get_zonegroup();
+      const RGWZoneGroup& zg = sync_env->store->svc()->zone->get_zonegroup();
       apply_meta_param(path, "zonegroup", zg.get_name(), dest);
       apply_meta_param(path, "zonegroup_id", zg.get_id(), dest);
 
-      const RGWZone& zone = sync_env->store->svc.zone->get_zone();
+      const RGWZone& zone = sync_env->store->svc()->zone->get_zone();
       apply_meta_param(path, "zone", zone.name, dest);
       apply_meta_param(path, "zone_id", zone.id, dest);
   }
@@ -642,7 +642,7 @@ struct AWSSyncConfig {
     auto& root_conf = root_profile->conn_conf;
 
     root_profile->conn.reset(new S3RESTConn(sync_env->cct,
-                                           sync_env->store->svc.zone,
+                                           sync_env->store->svc()->zone,
                                            id,
                                            { root_conf->endpoint },
                                            root_conf->key,
@@ -652,7 +652,7 @@ struct AWSSyncConfig {
       auto& c = i.second;
 
       c->conn.reset(new S3RESTConn(sync_env->cct,
-                                   sync_env->store->svc.zone,
+                                   sync_env->store->svc()->zone,
                                    id,
                                    { c->conn_conf->endpoint },
                                    c->conn_conf->key,
@@ -1426,14 +1426,14 @@ public:
                                                    obj_size(_obj_size),
                                                    src_properties(_src_properties),
                                                    rest_obj(_rest_obj),
-                                                   status_obj(sync_env->store->svc.zone->get_zone_params().log_pool,
+                                                   status_obj(sync_env->store->svc()->zone->get_zone_params().log_pool,
                                                               RGWBucketSyncStatusManager::obj_status_oid(sync_env->source_zone, src_obj)) {
   }
 
 
   int operate() override {
     reenter(this) {
-      yield call(new RGWSimpleRadosReadCR<rgw_sync_aws_multipart_upload_info>(sync_env->async_rados, sync_env->store->svc.sysobj,
+      yield call(new RGWSimpleRadosReadCR<rgw_sync_aws_multipart_upload_info>(sync_env->async_rados, sync_env->store->svc()->sysobj,
                                                                  status_obj, &status, false));
 
       if (retcode < 0 && retcode != -ENOENT) {
@@ -1496,7 +1496,7 @@ public:
           return set_cr_error(ret_err);
         }
 
-        yield call(new RGWSimpleRadosWriteCR<rgw_sync_aws_multipart_upload_info>(sync_env->async_rados, sync_env->store->svc.sysobj, status_obj, status));
+        yield call(new RGWSimpleRadosWriteCR<rgw_sync_aws_multipart_upload_info>(sync_env->async_rados, sync_env->store->svc()->sysobj, status_obj, status));
         if (retcode < 0) {
           ldout(sync_env->cct, 0) << "ERROR: failed to store multipart upload state, retcode=" << retcode << dendl;
           /* continue with upload anyway */
@@ -1604,8 +1604,7 @@ public:
                               << " zone_short_id=" << src_zone_short_id << " pg_ver=" << src_pg_ver
                               << dendl;
 
-
-      source_conn = sync_env->store->svc.zone->get_zone_conn_by_id(sync_env->source_zone);
+      source_conn = sync_env->store->svc()->zone->get_zone_conn_by_id(sync_env->source_zone);
       if (!source_conn) {
         ldout(sync_env->cct, 0) << "ERROR: cannot find http connection to zone " << sync_env->source_zone << dendl;
         return set_cr_error(-EINVAL);

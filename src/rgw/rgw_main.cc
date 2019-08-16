@@ -300,7 +300,7 @@ int main(int argc, const char **argv)
   FCGX_Init();
 #endif
 
-  RGWRados *store =
+  rgw::sal::RGWRadosStore *store =
     RGWStoreManager::get_storage(g_ceph_context,
 				 g_conf()->rgw_enable_gc_threads,
 				 g_conf()->rgw_enable_lc_threads,
@@ -323,14 +323,14 @@ int main(int argc, const char **argv)
     return -r;
   }
 
-  rgw_rest_init(g_ceph_context, store, store->svc.zone->get_zonegroup());
+  rgw_rest_init(g_ceph_context, store->svc()->zone->get_zonegroup());
 
   mutex.lock();
   init_timer.cancel_all_events();
   init_timer.shutdown();
   mutex.unlock();
 
-  rgw_log_usage_init(g_ceph_context, store);
+  rgw_log_usage_init(g_ceph_context, store->getRados());
 
   RGWREST rest;
 
@@ -357,7 +357,7 @@ int main(int argc, const char **argv)
   const bool swift_at_root = g_conf()->rgw_swift_url_prefix == "/";
   if (apis_map.count("s3") > 0 || s3website_enabled) {
     if (! swift_at_root) {
-      rest.register_default_mgr(set_logging(rest_filter(store, RGW_REST_S3,
+      rest.register_default_mgr(set_logging(rest_filter(store->getRados(), RGW_REST_S3,
                                                         new RGWRESTMgr_S3(s3website_enabled, sts_enabled, iam_enabled))));
     } else {
       derr << "Cannot have the S3 or S3 Website enabled together with "
@@ -382,10 +382,10 @@ int main(int argc, const char **argv)
 
     if (! swift_at_root) {
       rest.register_resource(g_conf()->rgw_swift_url_prefix,
-                          set_logging(rest_filter(store, RGW_REST_SWIFT,
+                          set_logging(rest_filter(store->getRados(), RGW_REST_SWIFT,
                                                   swift_resource)));
     } else {
-      if (store->svc.zone->get_zonegroup().zones.size() > 1) {
+      if (store->svc()->zone->get_zonegroup().zones.size() > 1) {
         derr << "Placing Swift API in the root of URL hierarchy while running"
              << " multi-site configuration requires another instance of RadosGW"
              << " with S3 API enabled!" << dendl;
@@ -419,7 +419,7 @@ int main(int argc, const char **argv)
   rgw::auth::ImplicitTenants implicit_tenant_context{g_conf()};
   g_conf().add_observer(&implicit_tenant_context);
   auto auth_registry = \
-    rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenant_context, store->pctl);
+    rgw::auth::StrategyRegistry::create(g_ceph_context, implicit_tenant_context, store->getRados()->pctl);
 
   /* Header custom behavior */
   rest.register_x_headers(g_conf()->rgw_log_http_headers);
@@ -529,7 +529,7 @@ int main(int argc, const char **argv)
     fes.push_back(fe);
   }
 
-  r = store->register_to_service_map("rgw", service_map_meta);
+  r = store->getRados()->register_to_service_map("rgw", service_map_meta);
   if (r < 0) {
     derr << "ERROR: failed to register to service map: " << cpp_strerror(-r) << dendl;
 
@@ -542,7 +542,7 @@ int main(int argc, const char **argv)
   RGWFrontendPauser pauser(fes, implicit_tenant_context, &pusher);
   RGWRealmReloader reloader(store, service_map_meta, &pauser);
 
-  RGWRealmWatcher realm_watcher(g_ceph_context, store->svc.zone->get_realm());
+  RGWRealmWatcher realm_watcher(g_ceph_context, store->svc()->zone->get_realm());
   realm_watcher.add_watcher(RGWRealmNotify::Reload, reloader);
   realm_watcher.add_watcher(RGWRealmNotify::ZonesNeedPeriod, pusher);
 

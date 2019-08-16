@@ -146,8 +146,8 @@ int RGWOrphanStore::list_jobs(map <string,RGWOrphanSearchState>& job_list)
 
 int RGWOrphanStore::init()
 {
-  const rgw_pool& log_pool = store->svc.zone->get_zone_params().log_pool;
-  int r = rgw_init_ioctx(store->get_rados_handle(), log_pool, ioctx);
+  const rgw_pool& log_pool = store->svc()->zone->get_zone_params().log_pool;
+  int r = rgw_init_ioctx(store->getRados()->get_rados_handle(), log_pool, ioctx);
   if (r < 0) {
     cerr << "ERROR: failed to open log pool (" << log_pool << " ret=" << r << std::endl;
     return r;
@@ -293,7 +293,7 @@ int RGWOrphanSearch::build_all_oids_index()
 {
   librados::IoCtx ioctx;
 
-  int ret = rgw_init_ioctx(store->get_rados_handle(), search_info.pool, ioctx);
+  int ret = rgw_init_ioctx(store->getRados()->get_rados_handle(), search_info.pool, ioctx);
   if (ret < 0) {
     lderr(store->ctx()) << __func__ << ": rgw_init_ioctx() returned ret=" << ret << dendl;
     return ret;
@@ -372,7 +372,7 @@ int RGWOrphanSearch::build_buckets_instance_index()
   void *handle;
   int max = 1000;
   string section = "bucket.instance";
-  int ret = store->ctl.meta.mgr->list_keys_init(section, &handle);
+  int ret = store->ctl()->meta.mgr->list_keys_init(section, &handle);
   if (ret < 0) {
     lderr(store->ctx()) << "ERROR: can't get key: " << cpp_strerror(-ret) << dendl;
     return -ret;
@@ -389,7 +389,7 @@ int RGWOrphanSearch::build_buckets_instance_index()
 
   do {
     list<string> keys;
-    ret = store->ctl.meta.mgr->list_keys_next(handle, max, keys, &truncated);
+    ret = store->ctl()->meta.mgr->list_keys_next(handle, max, keys, &truncated);
     if (ret < 0) {
       lderr(store->ctx()) << "ERROR: lists_keys_next(): " << cpp_strerror(-ret) << dendl;
       return -ret;
@@ -419,7 +419,7 @@ int RGWOrphanSearch::build_buckets_instance_index()
     lderr(store->ctx()) << __func__ << ": ERROR: log_oids() returned ret=" << ret << dendl;
     return ret;
   }
-  store->ctl.meta.mgr->list_keys_complete(handle);
+  store->ctl()->meta.mgr->list_keys_complete(handle);
 
   return 0;
 }
@@ -448,7 +448,7 @@ int RGWOrphanSearch::handle_stat_result(map<int, list<string> >& oids, RGWRados:
 
     RGWObjManifest::obj_iterator miter;
     for (miter = manifest.obj_begin(); miter != manifest.obj_end(); ++miter) {
-      const rgw_raw_obj& loc = miter.get_location().get_raw_obj(store);
+      const rgw_raw_obj& loc = miter.get_location().get_raw_obj(store->getRados());
       string s = loc.oid;
       obj_oids.insert(obj_fingerprint(s));
     }
@@ -487,7 +487,7 @@ done:
 int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_id, map<int, list<string> >& oids)
 {
   RGWObjectCtx obj_ctx(store);
-  auto sysobj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto sysobj_ctx = store->svc()->sysobj->init_obj_ctx();
 
   rgw_bucket orphan_bucket;
   int shard_id;
@@ -500,7 +500,7 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
   }
 
   RGWBucketInfo cur_bucket_info;
-  ret = store->get_bucket_info(sysobj_ctx, orphan_bucket.tenant,
+  ret = store->getRados()->get_bucket_info(sysobj_ctx, orphan_bucket.tenant,
 			       orphan_bucket.name, cur_bucket_info, nullptr, null_yield);
   if (ret < 0) {
     if (ret == -ENOENT) {
@@ -526,7 +526,7 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
   }
 
   RGWBucketInfo bucket_info;
-  ret = store->get_bucket_instance_info(sysobj_ctx, bucket_instance_id, bucket_info, nullptr, nullptr, null_yield);
+  ret = store->getRados()->get_bucket_instance_info(sysobj_ctx, bucket_instance_id, bucket_info, nullptr, nullptr, null_yield);
   if (ret < 0) {
     if (ret == -ENOENT) {
       /* probably raced with bucket removal */
@@ -537,7 +537,7 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
   }
 
   ldout(store->ctx(), 10) << "building linked oids for bucket instance: " << bucket_instance_id << dendl;
-  RGWRados::Bucket target(store, bucket_info);
+  RGWRados::Bucket target(store->getRados(), bucket_info);
   RGWRados::Bucket::List list_op(&target);
 
   string marker;
@@ -578,7 +578,7 @@ int RGWOrphanSearch::build_linked_oids_for_bucket(const string& bucket_instance_
 
       rgw_obj obj(bucket_info.bucket, entry.key);
 
-      RGWRados::Object op_target(store, bucket_info, obj_ctx, obj);
+      RGWRados::Object op_target(store->getRados(), bucket_info, obj_ctx, obj);
 
       stat_ops.push_back(RGWRados::Object::Stat(&op_target));
       RGWRados::Object::Stat& op = stat_ops.back();
@@ -737,7 +737,7 @@ int RGWOrphanSearch::compare_oid_indexes()
 
   librados::IoCtx data_ioctx;
 
-  int ret = rgw_init_ioctx(store->get_rados_handle(), search_info.pool, data_ioctx);
+  int ret = rgw_init_ioctx(store->getRados()->get_rados_handle(), search_info.pool, data_ioctx);
   if (ret < 0) {
     lderr(store->ctx()) << __func__ << ": rgw_init_ioctx() returned ret=" << ret << dendl;
     return ret;

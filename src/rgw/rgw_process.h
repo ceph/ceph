@@ -33,7 +33,7 @@ namespace rgw::dmclock {
 }
 
 struct RGWProcessEnv {
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   RGWREST *rest;
   OpsLogSocket *olog;
   int port;
@@ -47,7 +47,7 @@ class RGWProcess {
   deque<RGWRequest*> m_req_queue;
 protected:
   CephContext *cct;
-  RGWRados* store;
+  rgw::sal::RGWRadosStore* store;
   rgw_auth_registry_ptr_t auth_registry;
   OpsLogSocket* olog;
   ThreadPool m_tp;
@@ -114,7 +114,7 @@ public:
     m_tp.pause();
   }
 
-  void unpause_with_new_config(RGWRados* const store,
+  void unpause_with_new_config(rgw::sal::RGWRadosStore* const store,
                                rgw_auth_registry_ptr_t auth_registry) {
     this->store = store;
     this->auth_registry = std::move(auth_registry);
@@ -173,7 +173,7 @@ public:
   void set_access_key(RGWAccessKey& key) { access_key = key; }
 };
 /* process stream request */
-extern int process_request(RGWRados* store,
+extern int process_request(rgw::sal::RGWRadosStore* store,
                            RGWREST* rest,
                            RGWRequest* req,
                            const std::string& frontend_prefix,

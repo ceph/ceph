@@ -273,7 +273,7 @@ public:
   RGWFormPost() = default;
   ~RGWFormPost() = default;
 
-  void init(RGWRados* store,
+  void init(rgw::sal::RGWRadosStore* store,
             req_state* s,
             RGWHandler* dialect_handler) override;
 
@@ -344,7 +344,7 @@ public:
 
 
 class RGWSwiftWebsiteHandler {
-  RGWRados* const store;
+  rgw::sal::RGWRadosStore* const store;
   req_state* const s;
   RGWHandler_REST* const handler;
 
@@ -359,7 +359,7 @@ class RGWSwiftWebsiteHandler {
   RGWOp* get_ws_index_op();
   RGWOp* get_ws_listing_op();
 public:
-  RGWSwiftWebsiteHandler(RGWRados* const store,
+  RGWSwiftWebsiteHandler(rgw::sal::RGWRadosStore* const store,
                          req_state* const s,
                          RGWHandler_REST* const handler)
     : store(store),
@@ -394,7 +394,7 @@ public:
 
   int validate_bucket_name(const string& bucket);
 
-  int init(RGWRados *store, struct req_state *s, rgw::io::BasicClient *cio) override;
+  int init(rgw::sal::RGWRadosStore *store, struct req_state *s, rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider *dpp) override;
   int postauth_init() override;
 
@@ -442,7 +442,7 @@ public:
     return website_handler->retarget_bucket(op, new_op);
   }
 
-  int init(RGWRados* const store,
+  int init(rgw::sal::RGWRadosStore* const store,
            struct req_state* const s,
            rgw::io::BasicClient* const cio) override {
     website_handler = boost::in_place<RGWSwiftWebsiteHandler>(store, s, this);
@@ -480,7 +480,7 @@ public:
     return website_handler->retarget_object(op, new_op);
   }
 
-  int init(RGWRados* const store,
+  int init(rgw::sal::RGWRadosStore* const store,
            struct req_state* const s,
            rgw::io::BasicClient* const cio) override {
     website_handler = boost::in_place<RGWSwiftWebsiteHandler>(store, s, this);
@@ -533,7 +533,7 @@ public:
     return new RGWGetCrossDomainPolicy_ObjStore_SWIFT();
   }
 
-  int init(RGWRados* const store,
+  int init(rgw::sal::RGWRadosStore* const store,
            struct req_state* const state,
            rgw::io::BasicClient* const cio) override {
     state->dialect = "swift";
@@ -589,7 +589,7 @@ public:
     return new RGWGetHealthCheck_ObjStore_SWIFT();
   }
 
-  int init(RGWRados* const store,
+  int init(rgw::sal::RGWRadosStore* const store,
            struct req_state* const state,
            rgw::io::BasicClient* const cio) override {
     state->dialect = "swift";
@@ -645,7 +645,7 @@ public:
     return new RGWInfo_ObjStore_SWIFT();
   }
 
-  int init(RGWRados* const store,
+  int init(rgw::sal::RGWRadosStore* const store,
            struct req_state* const state,
            rgw::io::BasicClient* const cio) override {
     state->dialect = "swift";

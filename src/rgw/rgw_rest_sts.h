@@ -158,7 +158,7 @@ public:
 class RGW_Auth_STS {
 public:
   static int authorize(const DoutPrefixProvider *dpp,
-                       RGWRados *store,
+                       rgw::sal::RGWRadosStore *store,
                        const rgw::auth::StrategyRegistry& auth_registry,
                        struct req_state *s);
 };
@@ -178,7 +178,7 @@ public:
       post_body(post_body) {}
   ~RGWHandler_REST_STS() override = default;
 
-  int init(RGWRados *store,
+  int init(rgw::sal::RGWRadosStore *store,
            struct req_state *s,
            rgw::io::BasicClient *cio) override;
   int authorize(const DoutPrefixProvider* dpp) override;

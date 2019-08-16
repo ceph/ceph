@@ -79,7 +79,7 @@ using RawObjSet = std::set<rgw_raw_obj>;
 // a data sink that writes to rados objects and deletes them on cancelation
 class RadosWriter : public DataProcessor {
   Aio *const aio;
-  RGWRados *const store;
+  rgw::sal::RGWRadosStore *const store;
   const RGWBucketInfo& bucket_info;
   RGWObjectCtx& obj_ctx;
   const rgw_obj head_obj;
@@ -89,7 +89,8 @@ class RadosWriter : public DataProcessor {
   optional_yield y;
 
  public:
-  RadosWriter(Aio *aio, RGWRados *store, const RGWBucketInfo& bucket_info,
+  RadosWriter(Aio *aio, rgw::sal::RGWRadosStore *store,
+	      const RGWBucketInfo& bucket_info,
               RGWObjectCtx& obj_ctx, const rgw_obj& head_obj,
               const DoutPrefixProvider *dpp, optional_yield y)
     : aio(aio), store(store), bucket_info(bucket_info),
@@ -118,7 +119,7 @@ class RadosWriter : public DataProcessor {
 class ManifestObjectProcessor : public HeadObjectProcessor,
                                 public StripeGenerator {
  protected:
-  RGWRados *const store;
+  rgw::sal::RGWRadosStore *const store;
   const RGWBucketInfo& bucket_info;
   rgw_placement_rule tail_placement_rule;
   const rgw_user& owner;
@@ -136,7 +137,7 @@ class ManifestObjectProcessor : public HeadObjectProcessor,
   int next(uint64_t offset, uint64_t *stripe_size) override;
 
  public:
-  ManifestObjectProcessor(Aio *aio, RGWRados *store,
+  ManifestObjectProcessor(Aio *aio, rgw::sal::RGWRadosStore *store,
                           const RGWBucketInfo& bucket_info,
                           const rgw_placement_rule *ptail_placement_rule,
                           const rgw_user& owner, RGWObjectCtx& obj_ctx,
@@ -169,7 +170,7 @@ class AtomicObjectProcessor : public ManifestObjectProcessor {
 
   int process_first_chunk(bufferlist&& data, DataProcessor **processor) override;
  public:
-  AtomicObjectProcessor(Aio *aio, RGWRados *store,
+  AtomicObjectProcessor(Aio *aio, rgw::sal::RGWRadosStore *store,
                         const RGWBucketInfo& bucket_info,
                         const rgw_placement_rule *ptail_placement_rule,
                         const rgw_user& owner,
@@ -213,7 +214,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
   // prepare the head stripe and manifest
   int prepare_head();
  public:
-  MultipartObjectProcessor(Aio *aio, RGWRados *store,
+  MultipartObjectProcessor(Aio *aio, rgw::sal::RGWRadosStore *store,
                            const RGWBucketInfo& bucket_info,
                            const rgw_placement_rule *ptail_placement_rule,
                            const rgw_user& owner, RGWObjectCtx& obj_ctx,
@@ -256,7 +257,7 @@ class MultipartObjectProcessor : public ManifestObjectProcessor {
     int process_first_chunk(bufferlist&& data, DataProcessor **processor) override;
 
   public:
-    AppendObjectProcessor(Aio *aio, RGWRados *store, const RGWBucketInfo& bucket_info,
+    AppendObjectProcessor(Aio *aio, rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info,
                           const rgw_placement_rule *ptail_placement_rule,
                           const rgw_user& owner, RGWObjectCtx& obj_ctx,const rgw_obj& head_obj,
                           const std::string& unique_tag, uint64_t position,

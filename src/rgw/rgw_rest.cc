@@ -176,7 +176,7 @@ string uppercase_underscore_http_attr(const string& orig)
 static set<string> hostnames_set;
 static set<string> hostnames_s3website_set;
 
-void rgw_rest_init(CephContext *cct, RGWRados *store, const RGWZoneGroup& zone_group)
+void rgw_rest_init(CephContext *cct, const RGWZoneGroup& zone_group)
 {
   for (const auto& rgw2http : base_rgw_to_http_attrs)  {
     rgw_to_http_attrs[rgw2http.rgw_attr] = rgw2http.http_attr;
@@ -1638,7 +1638,7 @@ int RGWRESTOp::verify_permission()
   return check_caps(s->user->caps);
 }
 
-RGWOp* RGWHandler_REST::get_op(RGWRados* store)
+RGWOp* RGWHandler_REST::get_op(rgw::sal::RGWRadosStore* store)
 {
   RGWOp *op;
   switch (s->op) {
@@ -1838,7 +1838,7 @@ int RGWHandler_REST::init_permissions(RGWOp* op)
     if (! s->user->user_id.empty() && s->auth.identity->get_identity_type() != TYPE_ROLE) {
       try {
         map<string, bufferlist> uattrs;
-        if (auto ret = store->ctl.user->get_attrs_by_uid(s->user->user_id, &uattrs, null_yield); ! ret) {
+        if (auto ret = store->ctl()->user->get_attrs_by_uid(s->user->user_id, &uattrs, null_yield); ! ret) {
           if (s->iam_user_policies.empty()) {
             s->iam_user_policies = get_iam_user_policy_from_attr(s->cct, store, uattrs, s->user->user_id.tenant);
           } else {
@@ -2253,7 +2253,7 @@ int RGWREST::preprocess(struct req_state *s, rgw::io::BasicClient* cio)
 }
 
 RGWHandler_REST* RGWREST::get_handler(
-  RGWRados * const store,
+  rgw::sal::RGWRadosStore * const store,
   struct req_state* const s,
   const rgw::auth::StrategyRegistry& auth_registry,
   const std::string& frontend_prefix,

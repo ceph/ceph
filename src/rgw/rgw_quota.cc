@@ -21,7 +21,7 @@
 #include "common/ceph_mutex.h"
 
 #include "rgw_common.h"
-#include "rgw_rados.h"
+#include "rgw_sal.h"
 #include "rgw_quota.h"
 #include "rgw_bucket.h"
 #include "rgw_user.h"
@@ -44,7 +44,7 @@ struct RGWQuotaCacheStats {
 template<class T>
 class RGWQuotaCache {
 protected:
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   lru_map<T, RGWQuotaCacheStats> stats_map;
   RefCountedWaitObject *async_refcount;
 
@@ -73,7 +73,7 @@ protected:
 
   virtual void data_modified(const rgw_user& user, rgw_bucket& bucket) {}
 public:
-  RGWQuotaCache(RGWRados *_store, int size) : store(_store), stats_map(size) {
+  RGWQuotaCache(rgw::sal::RGWRadosStore *_store, int size) : store(_store), stats_map(size) {
     async_refcount = new RefCountedWaitObject;
   }
   virtual ~RGWQuotaCache() {
@@ -92,10 +92,10 @@ public:
 
   class AsyncRefreshHandler {
   protected:
-    RGWRados *store;
+    rgw::sal::RGWRadosStore *store;
     RGWQuotaCache<T> *cache;
   public:
-    AsyncRefreshHandler(RGWRados *_store, RGWQuotaCache<T> *_cache) : store(_store), cache(_cache) {}
+    AsyncRefreshHandler(rgw::sal::RGWRadosStore *_store, RGWQuotaCache<T> *_cache) : store(_store), cache(_cache) {}
     virtual ~AsyncRefreshHandler() {}
 
     virtual int init_fetch() = 0;
@@ -280,7 +280,7 @@ class BucketAsyncRefreshHandler : public RGWQuotaCache<rgw_bucket>::AsyncRefresh
                                   public RGWGetBucketStats_CB {
   rgw_user user;
 public:
-  BucketAsyncRefreshHandler(RGWRados *_store, RGWQuotaCache<rgw_bucket> *_cache,
+  BucketAsyncRefreshHandler(rgw::sal::RGWRadosStore *_store, RGWQuotaCache<rgw_bucket> *_cache,
                             const rgw_user& _user, const rgw_bucket& _bucket) :
                                       RGWQuotaCache<rgw_bucket>::AsyncRefreshHandler(_store, _cache),
                                       RGWGetBucketStats_CB(_bucket), user(_user) {}
@@ -294,9 +294,9 @@ int BucketAsyncRefreshHandler::init_fetch()
 {
   RGWBucketInfo bucket_info;
 
-  auto obj_ctx = store->svc.sysobj->init_obj_ctx();
+  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
 
-  int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL, null_yield);
+  int r = store->getRados()->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL, null_yield);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket << " r=" << r << dendl;
     return r;
@@ -304,7 +304,7 @@ int BucketAsyncRefreshHandler::init_fetch()
 
   ldout(store->ctx(), 20) << "initiating async quota refresh for bucket=" << bucket << dendl;
 
-  r = store->get_bucket_stats_async(bucket_info, RGW_NO_SHARD, this);
+  r = store->getRados()->get_bucket_stats_async(bucket_info, RGW_NO_SHARD, this);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket.name << dendl;
 
@@ -353,7 +353,7 @@ protected:
   int fetch_stats_from_storage(const rgw_user& user, const rgw_bucket& bucket, RGWStorageStats& stats) override;
 
 public:
-  explicit RGWBucketStatsCache(RGWRados *_store) : RGWQuotaCache<rgw_bucket>(_store, _store->ctx()->_conf->rgw_bucket_quota_cache_size) {
+  explicit RGWBucketStatsCache(rgw::sal::RGWRadosStore *_store) : RGWQuotaCache<rgw_bucket>(_store, _store->ctx()->_conf->rgw_bucket_quota_cache_size) {
   }
 
   AsyncRefreshHandler *allocate_refresh_handler(const rgw_user& user, const rgw_bucket& bucket) override {
@@ -365,9 +365,9 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& user, const rg
 {
   RGWBucketInfo bucket_info;
 
-  RGWSysObjectCtx obj_ctx = store->svc.sysobj->init_obj_ctx();
+  RGWSysObjectCtx obj_ctx = store->svc()->sysobj->init_obj_ctx();
 
-  int r = store->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL, null_yield);
+  int r = store->getRados()->get_bucket_instance_info(obj_ctx, bucket, bucket_info, NULL, NULL, null_yield);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket << " r=" << r << dendl;
     return r;
@@ -377,7 +377,7 @@ int RGWBucketStatsCache::fetch_stats_from_storage(const rgw_user& user, const rg
   string master_ver;
 
   map<RGWObjCategory, RGWStorageStats> bucket_stats;
-  r = store->get_bucket_stats(bucket_info, RGW_NO_SHARD, &bucket_ver,
+  r = store->getRados()->get_bucket_stats(bucket_info, RGW_NO_SHARD, &bucket_ver,
                                   &master_ver, bucket_stats, nullptr);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket stats for bucket="
@@ -402,7 +402,7 @@ class UserAsyncRefreshHandler : public RGWQuotaCache<rgw_user>::AsyncRefreshHand
                                 public RGWGetUserStats_CB {
   rgw_bucket bucket;
 public:
-  UserAsyncRefreshHandler(RGWRados *_store, RGWQuotaCache<rgw_user> *_cache,
+  UserAsyncRefreshHandler(rgw::sal::RGWRadosStore *_store, RGWQuotaCache<rgw_user> *_cache,
                           const rgw_user& _user, const rgw_bucket& _bucket) :
                           RGWQuotaCache<rgw_user>::AsyncRefreshHandler(_store, _cache),
                           RGWGetUserStats_CB(_user),
@@ -416,7 +416,7 @@ public:
 int UserAsyncRefreshHandler::init_fetch()
 {
   ldout(store->ctx(), 20) << "initiating async quota refresh for user=" << user << dendl;
-  int r = store->ctl.user->read_stats_async(user, this);
+  int r = store->ctl()->user->read_stats_async(user, this);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket info for user=" << user << dendl;
 
@@ -573,7 +573,7 @@ protected:
   }
 
 public:
-  RGWUserStatsCache(RGWRados *_store, bool quota_threads) : RGWQuotaCache<rgw_user>(_store, _store->ctx()->_conf->rgw_bucket_quota_cache_size),
+  RGWUserStatsCache(rgw::sal::RGWRadosStore *_store, bool quota_threads) : RGWQuotaCache<rgw_user>(_store, _store->ctx()->_conf->rgw_bucket_quota_cache_size),
                                         rwlock("RGWUserStatsCache::rwlock") {
     if (quota_threads) {
       buckets_sync_thread = new BucketsSyncThread(store->ctx(), this);
@@ -615,7 +615,7 @@ public:
 
 int RGWUserStatsCache::fetch_stats_from_storage(const rgw_user& user, const rgw_bucket& bucket, RGWStorageStats& stats)
 {
-  int r = store->ctl.user->read_stats(user, &stats);
+  int r = store->ctl()->user->read_stats(user, &stats);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get user stats for user=" << user << dendl;
     return r;
@@ -628,13 +628,13 @@ int RGWUserStatsCache::sync_bucket(const rgw_user& user, rgw_bucket& bucket)
 {
   RGWBucketInfo bucket_info;
 
-  int r = store->ctl.bucket->read_bucket_instance_info(bucket, &bucket_info, null_yield);
+  int r = store->ctl()->bucket->read_bucket_instance_info(bucket, &bucket_info, null_yield);
   if (r < 0) {
     ldout(store->ctx(), 0) << "could not get bucket info for bucket=" << bucket << " r=" << r << dendl;
     return r;
   }
 
-  r = store->ctl.bucket->sync_user_stats(user, bucket_info);
+  r = store->ctl()->bucket->sync_user_stats(user, bucket_info);
   if (r < 0) {
     ldout(store->ctx(), 0) << "ERROR: sync_user_stats() for user=" << user << ", bucket=" << bucket << " returned " << r << dendl;
     return r;
@@ -650,7 +650,7 @@ int RGWUserStatsCache::sync_user(const rgw_user& user)
   ceph::real_time last_stats_sync;
   ceph::real_time last_stats_update;
 
-  int ret = store->ctl.user->read_stats(user_str, &stats, &last_stats_sync, &last_stats_update);
+  int ret = store->ctl()->user->read_stats(user_str, &stats, &last_stats_sync, &last_stats_update);
   if (ret < 0) {
     ldout(store->ctx(), 5) << "ERROR: can't read user header: ret=" << ret << dendl;
     return ret;
@@ -682,7 +682,7 @@ int RGWUserStatsCache::sync_all_users()
   string key = "user";
   void *handle;
 
-  int ret = store->ctl.meta.mgr->list_keys_init(key, &handle);
+  int ret = store->ctl()->meta.mgr->list_keys_init(key, &handle);
   if (ret < 0) {
     ldout(store->ctx(), 10) << "ERROR: can't get key: ret=" << ret << dendl;
     return ret;
@@ -693,7 +693,7 @@ int RGWUserStatsCache::sync_all_users()
 
   do {
     list<string> keys;
-    ret = store->ctl.meta.mgr->list_keys_next(handle, max, keys, &truncated);
+    ret = store->ctl()->meta.mgr->list_keys_next(handle, max, keys, &truncated);
     if (ret < 0) {
       ldout(store->ctx(), 0) << "ERROR: lists_keys_next(): ret=" << ret << dendl;
       goto done;
@@ -715,7 +715,7 @@ int RGWUserStatsCache::sync_all_users()
 
   ret = 0;
 done:
-  store->ctl.meta.mgr->list_keys_complete(handle);
+  store->ctl()->meta.mgr->list_keys_complete(handle);
   return ret;
 }
 
@@ -883,7 +883,7 @@ const RGWQuotaInfoApplier& RGWQuotaInfoApplier::get_instance(
 
 
 class RGWQuotaHandlerImpl : public RGWQuotaHandler {
-  RGWRados *store;
+  rgw::sal::RGWRadosStore *store;
   RGWBucketStatsCache bucket_stats_cache;
   RGWUserStatsCache user_stats_cache;
 
@@ -917,7 +917,7 @@ class RGWQuotaHandlerImpl : public RGWQuotaHandler {
     return 0;
   }
 public:
-  RGWQuotaHandlerImpl(RGWRados *_store, bool quota_threads) : store(_store),
+  RGWQuotaHandlerImpl(rgw::sal::RGWRadosStore *_store, bool quota_threads) : store(_store),
                                     bucket_stats_cache(_store),
                                     user_stats_cache(_store, quota_threads) {}
 
@@ -999,7 +999,7 @@ public:
 };
 
 
-RGWQuotaHandler *RGWQuotaHandler::generate_handler(RGWRados *store, bool quota_threads)
+RGWQuotaHandler *RGWQuotaHandler::generate_handler(rgw::sal::RGWRadosStore *store, bool quota_threads)
 {
   return new RGWQuotaHandlerImpl(store, quota_threads);
 }

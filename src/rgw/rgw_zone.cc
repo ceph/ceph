@@ -1340,10 +1340,10 @@ void RGWPeriod::fork()
   realm_epoch++;
 }
 
-static int read_sync_status(RGWRados *store, rgw_meta_sync_status *sync_status)
+static int read_sync_status(rgw::sal::RGWRadosStore *store, rgw_meta_sync_status *sync_status)
 {
   // initialize a sync status manager to read the status
-  RGWMetaSyncStatusManager mgr(store, store->svc.rados->get_async_processor());
+  RGWMetaSyncStatusManager mgr(store, store->svc()->rados->get_async_processor());
   int r = mgr.init();
   if (r < 0) {
     return r;
@@ -1353,7 +1353,7 @@ static int read_sync_status(RGWRados *store, rgw_meta_sync_status *sync_status)
   return r;
 }
 
-int RGWPeriod::update_sync_status(RGWRados *store, /* for now */
+int RGWPeriod::update_sync_status(rgw::sal::RGWRadosStore *store, /* for now */
 				  const RGWPeriod &current_period,
                                   std::ostream& error_stream,
                                   bool force_if_stale)
@@ -1403,7 +1403,7 @@ int RGWPeriod::update_sync_status(RGWRados *store, /* for now */
   return 0;
 }
 
-int RGWPeriod::commit(RGWRados *store,
+int RGWPeriod::commit(rgw::sal::RGWRadosStore *store,
 		      RGWRealm& realm, const RGWPeriod& current_period,
                       std::ostream& error_stream, bool force_if_stale)
 {
