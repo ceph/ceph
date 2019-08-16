@@ -1563,8 +1563,13 @@ public:
 int RGWCreateBucket_ObjStore_S3::get_params()
 {
   RGWAccessControlPolicy_S3 s3policy(s->cct);
+  bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
+ 
+  int r = valid_s3_bucket_name(s->bucket_name, relaxed_names);
+  if (r)
+    return r;
 
-  int r = create_s3_policy(s, store, s3policy, s->owner);
+  r = create_s3_policy(s, store, s3policy, s->owner);
   if (r < 0)
     return r;
 
@@ -3923,7 +3928,6 @@ static int verify_mfa(rgw::sal::RGWRadosStore *store, RGWUserInfo *user, const s
 int RGWHandler_REST_S3::postauth_init()
 {
   struct req_init_state *t = &s->init_state;
-  bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
 
   rgw_parse_url_bucket(t->url_bucket, s->user->user_id.tenant,
 		      s->bucket_tenant, s->bucket_name);
@@ -3936,9 +3940,6 @@ int RGWHandler_REST_S3::postauth_init()
   if (ret)
     return ret;
   if (!s->bucket_name.empty()) {
-    ret = valid_s3_bucket_name(s->bucket_name, relaxed_names);
-    if (ret)
-      return ret;
     ret = validate_object_name(s->object.name);
     if (ret)
       return ret;
@@ -3948,9 +3949,6 @@ int RGWHandler_REST_S3::postauth_init()
     rgw_parse_url_bucket(t->src_bucket, s->user->user_id.tenant,
 			s->src_tenant_name, s->src_bucket_name);
     ret = rgw_validate_tenant_name(s->src_tenant_name);
-    if (ret)
-      return ret;
-    ret = valid_s3_bucket_name(s->src_bucket_name, relaxed_names);
     if (ret)
       return ret;
   }
@@ -3973,11 +3971,7 @@ int RGWHandler_REST_S3::init(rgw::sal::RGWRadosStore *store, struct req_state *s
   ret = rgw_validate_tenant_name(s->bucket_tenant);
   if (ret)
     return ret;
-  bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
   if (!s->bucket_name.empty()) {
-    ret = valid_s3_bucket_name(s->bucket_name, relaxed_names);
-    if (ret)
-      return ret;
     ret = validate_object_name(s->object.name);
     if (ret)
       return ret;
