@@ -146,12 +146,10 @@ public:
 
   ~PGLSCephFSFilter() override {}
   bool reject_empty_xattr() override { return false; }
-  bool filter(const hobject_t &obj, bufferlist& xattr_data,
-                      bufferlist& outdata) override;
+  bool filter(const hobject_t &obj, bufferlist& xattr_data) override;
 };
 
-bool PGLSCephFSFilter::filter(const hobject_t &obj,
-                             bufferlist& xattr_data, bufferlist& outdata)
+bool PGLSCephFSFilter::filter(const hobject_t &obj, bufferlist& xattr_data)
 {
   const std::string need_ending = ".00000000";
   const std::string &obj_name = obj.oid.name;
