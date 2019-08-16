@@ -277,6 +277,7 @@ int update_osdmap(ObjectStore& fs, OSDSuperblock& sb, MonitorDBStore& ms)
           // inc.decode() verifies `inc_crc`, so it's been taken care of.
         }
       }
+      return 0;
     }();
     switch (add_inc_result) {
     case -ENOENT:
