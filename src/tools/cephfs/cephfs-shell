@@ -1159,9 +1159,6 @@ sub-directories, files')
             else:
                 dir_trav.append('.')
 
-            if args.r:
-                dir_trav = reversed(dir_trav)
-
             for i in dir_trav:
                 try:
                     i_path = os.path.normpath(i)
