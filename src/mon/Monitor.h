@@ -98,6 +98,7 @@ enum {
 
 class QuorumService;
 class PaxosService;
+class Common;
 
 class PerfCounters;
 class AdminSocketHook;
@@ -662,6 +663,8 @@ public:
   friend class MonmapMonitor;
   friend class LogMonitor;
   friend class ConfigKeyService;
+
+  friend class Common;
 
   QuorumService *config_key_service;
 
