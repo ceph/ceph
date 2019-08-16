@@ -384,6 +384,12 @@ class TestIoctx(object):
             stored_xattrs[key] = value
         eq(stored_xattrs, xattrs)
 
+    def test_get_pool_id(self):
+        eq(self.ioctx.get_pool_id(), self.rados.pool_lookup('test_pool'))
+
+    def test_get_pool_name(self):
+        eq(self.ioctx.get_pool_name(), 'test_pool')
+
     def test_create_snap(self):
         assert_raises(ObjectNotFound, self.ioctx.remove_snap, 'foo')
         self.ioctx.create_snap('foo')
