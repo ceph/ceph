@@ -461,7 +461,10 @@ The following chart illustrates basic development workflow:
 
 Below we present an explanation of this chart. The explanation is written
 with the assumption that you, the reader, are a beginning developer who
-has an idea for a bugfix, but do not know exactly how to proceed.
+has an idea for a bugfix, but do not know exactly how to proceed. Watch
+the `Getting Started with Ceph Development
+<https://www.youtube.com/watch?v=t5UIehZ1oLs>`_ video for
+a practical summary of the same.
 
 Update the tracker
 ------------------
