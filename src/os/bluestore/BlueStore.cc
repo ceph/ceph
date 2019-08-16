@@ -3289,7 +3289,7 @@ const string& BlueStore::Onode::get_omap_prefix()
 void BlueStore::Onode::get_omap_header(string *out)
 {
   if (onode.is_perpool_omap() && !onode.is_pgmeta_omap()) {
-    _key_encode_u64(oid.hobj.pool, out);
+    _key_encode_u64(c->pool(), out);
   }
   _key_encode_u64(onode.nid, out);
   out->push_back('-');
@@ -3298,7 +3298,7 @@ void BlueStore::Onode::get_omap_header(string *out)
 void BlueStore::Onode::get_omap_key(const string& key, string *out)
 {
   if (onode.is_perpool_omap() && !onode.is_pgmeta_omap()) {
-    _key_encode_u64(oid.hobj.pool, out);
+    _key_encode_u64(c->pool(), out);
   }
   _key_encode_u64(onode.nid, out);
   out->push_back('.');
@@ -3308,7 +3308,7 @@ void BlueStore::Onode::get_omap_key(const string& key, string *out)
 void BlueStore::Onode::rewrite_omap_key(const string& old, string *out)
 {
   if (onode.is_perpool_omap() && !onode.is_pgmeta_omap()) {
-    _key_encode_u64(oid.hobj.pool, out);
+    _key_encode_u64(c->pool(), out);
   }
   _key_encode_u64(onode.nid, out);
   out->append(old.c_str() + out->length(), old.size() - out->length());
@@ -3317,7 +3317,7 @@ void BlueStore::Onode::rewrite_omap_key(const string& old, string *out)
 void BlueStore::Onode::get_omap_tail(string *out)
 {
   if (onode.is_perpool_omap() && !onode.is_pgmeta_omap()) {
-    _key_encode_u64(oid.hobj.pool, out);
+    _key_encode_u64(c->pool(), out);
   }
   _key_encode_u64(onode.nid, out);
   out->push_back('~');
