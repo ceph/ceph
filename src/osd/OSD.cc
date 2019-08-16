@@ -2532,12 +2532,16 @@ will start to track new ops received afterwards.";
   } else if (admin_command == "list_devices") {
     set<string> devnames;
     store->get_devices(&devnames);
-    f->open_object_section("list_devices");
+    f->open_array_section("list_devices");
     for (auto dev : devnames) {
       if (dev.find("dm-") == 0) {
 	continue;
       }
+      string err;
+      f->open_object_section("device");
       f->dump_string("device", "/dev/" + dev);
+      f->dump_string("device_id", get_device_id(dev, &err));
+      f->close_section();
     }
     f->close_section();
   } else if (admin_command == "send_beacon") {
