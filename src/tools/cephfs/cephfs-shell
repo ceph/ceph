@@ -1135,58 +1135,47 @@ sub-directories, files')
 
     du_parser = argparse.ArgumentParser(
         description='Disk Usage of a Directory')
-    du_parser.add_argument('dirs', type=str, action=path_to_bytes,
+    du_parser.add_argument('paths', type=str, action=path_to_bytes,
                            help='Name of the directory.', nargs='*',
-                           default='')
+                           default=[b'.'])
     du_parser.add_argument('-r', action='store_true',
                            help='Recursive Disk usage of all directories.')
 
     @with_argparser(du_parser)
     def do_du(self, args):
         """
-        Disk Usage of a Directory
+        Print disk usage of a given path(s).
         """
-        dir_passed = args.dirs
-        if args.dirs == b'':
-            dir_passed = cephfs.getcwd()
-            if len(dir_passed) > 1:
-                dir_passed = dir_passed.split()
+        def print_disk_usage(files):
+            if isinstance(files, bytes):
+                files = (files, )
 
-        for dir_ in dir_passed:
-            dir_trav = sorted(set(dirwalk(dir_)))
-            if args.dirs and not dir_trav:
-                dir_trav.append(dir_)
-            else:
-                dir_trav.append('.')
-
-            for i in dir_trav:
+            for f in files:
                 try:
-                    i_path = os.path.normpath(i)
-                    if (i is not '.') and (i_path[0] is '/'):
-                        i = '.' + i_path
-
-                    st = cephfs.lstat(i_path)
+                    st = cephfs.lstat(f)
 
                     if stat.S_ISDIR(st.st_mode):
-                        dusage = int(cephfs.getxattr(i_path,
-                            'ceph.dir.rbytes').decode('utf-8'))
-                    elif stat.S_ISREG(st.st_mode) or stat.S_ISLNK(st.st_mode):
+                        dusage = int(cephfs.getxattr(f,
+                                     'ceph.dir.rbytes').decode('utf-8'))
+                    else:
                         dusage = st.st_size
 
+                    # print path in local context
+                    f = os.path.normpath(f)
+                    if f[0] is ord('/'):
+                        f = b'.' + f
                     self.poutput('{:10s} {}'.format(humansize(dusage),
-                                 i.decode('utf-8')))
-                    # Assigning dusage None to avoid cases where its value
-                    # from previous iterations ends up being reused.
-                    dusage = None
+                        f.decode('utf-8')))
                 except (libcephfs.Error, OSError):
-                    self.perror('{}: no such directory exists'.format(
-                                dir_), False)
+                    self.perror('{} : no such directory exists'.format(f.\
+                        decode('utf-8')), False)
                     continue
+
+        for path in args.paths:
+            if args.r:
+                print_disk_usage(sorted(set(dirwalk(path)).union({path})))
             else:
-                dir_ = os.path.normpath(dir_)
-                self.poutput('{:10s} {}'.format(humansize(int(cephfs.getxattr(
-                    dir_, 'ceph.dir.rbytes').decode('utf-8'))), '.'
-                    + dir_.decode('utf-8')))
+                print_disk_usage(path)
 
     quota_parser = argparse.ArgumentParser(
         description='Quota management for a Directory')
