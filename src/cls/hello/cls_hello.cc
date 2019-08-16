@@ -266,8 +266,7 @@ public:
   }
 
   ~PGLSHelloFilter() override {}
-  bool filter(const hobject_t &obj, bufferlist& xattr_data,
-                      bufferlist& outdata) override
+  bool filter(const hobject_t &obj, ceph::bufferlist& xattr_data) override
   {
     if (val.size() != xattr_data.length())
       return false;

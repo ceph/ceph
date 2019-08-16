@@ -776,57 +776,10 @@ public:
     return 0;
   }
   ~PGLSPlainFilter() override {}
-  bool filter(const hobject_t &obj, bufferlist& xattr_data,
-                      bufferlist& outdata) override;
+  bool filter(const hobject_t &obj, bufferlist& xattr_data) override;
 };
 
-class PGLSParentFilter : public PGLSFilter {
-  inodeno_t parent_ino;
-public:
-  CephContext* cct;
-  explicit PGLSParentFilter(CephContext* cct) : cct(cct) {
-    xattr = "_parent";
-  }
-  int init(bufferlist::const_iterator &params) override
-  {
-    try {
-      decode(parent_ino, params);
-    } catch (buffer::error &e) {
-      return -EINVAL;
-    }
-    generic_dout(0) << "parent_ino=" << parent_ino << dendl;
-
-    return 0;
-  }
-  ~PGLSParentFilter() override {}
-  bool filter(const hobject_t &obj, bufferlist& xattr_data,
-                      bufferlist& outdata) override;
-};
-
-bool PGLSParentFilter::filter(const hobject_t &obj,
-                              bufferlist& xattr_data, bufferlist& outdata)
-{
-  auto iter = xattr_data.cbegin();
-  inode_backtrace_t bt;
-
-  generic_dout(0) << "PGLSParentFilter::filter" << dendl;
-
-  decode(bt, iter);
-
-  vector<inode_backpointer_t>::iterator vi;
-  for (vi = bt.ancestors.begin(); vi != bt.ancestors.end(); ++vi) {
-    generic_dout(0) << "vi->dirino=" << vi->dirino << " parent_ino=" << parent_ino << dendl;
-    if (vi->dirino == parent_ino) {
-      encode(*vi, outdata);
-      return true;
-    }
-  }
-
-  return false;
-}
-
-bool PGLSPlainFilter::filter(const hobject_t &obj,
-                             bufferlist& xattr_data, bufferlist& outdata)
+bool PGLSPlainFilter::filter(const hobject_t &obj, bufferlist& xattr_data)
 {
   if (val.size() != xattr_data.length())
     return false;
@@ -837,7 +790,7 @@ bool PGLSPlainFilter::filter(const hobject_t &obj,
   return true;
 }
 
-bool PrimaryLogPG::pgls_filter(PGLSFilter *filter, hobject_t& sobj, bufferlist& outdata)
+bool PrimaryLogPG::pgls_filter(PGLSFilter* filter, hobject_t& sobj)
 {
   bufferlist bl;
 
@@ -855,7 +808,7 @@ bool PrimaryLogPG::pgls_filter(PGLSFilter *filter, hobject_t& sobj, bufferlist& 
     }
   }
 
-  return filter->filter(sobj, bl, outdata);
+  return filter->filter(sobj, bl);
 }
 
 int PrimaryLogPG::get_pgls_filter(bufferlist::const_iterator& iter, PGLSFilter **pfilter)
@@ -870,9 +823,7 @@ int PrimaryLogPG::get_pgls_filter(bufferlist::const_iterator& iter, PGLSFilter *
     return -EINVAL;
   }
 
-  if (type.compare("parent") == 0) {
-    filter = new PGLSParentFilter(cct);
-  } else if (type.compare("plain") == 0) {
+  if (type.compare("plain") == 0) {
     filter = new PGLSPlainFilter();
   } else {
     std::size_t dot = type.find(".");
@@ -1083,7 +1034,6 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
   int result = 0;
   string cname, mname;
   PGLSFilter *filter = NULL;
-  bufferlist filter_out;
 
   snapid_t snapid = m->get_snapid();
 
@@ -1229,7 +1179,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
                candidate.get_namespace() != m->get_hobj().nspace)
 	    continue;
 
-	  if (filter && !pgls_filter(filter, candidate, filter_out))
+	  if (filter && !pgls_filter(filter, candidate))
 	    continue;
 
           dout(20) << "pgnls item 0x" << std::hex
@@ -1258,8 +1208,6 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
         }
         dout(10) << "pgnls handle=" << response.handle << dendl;
 	encode(response, osd_op.outdata);
-	if (filter)
-	  encode(filter_out, osd_op.outdata);
 	dout(10) << " pgnls result=" << result << " outdata.length()="
 		 << osd_op.outdata.length() << dendl;
       }
@@ -1379,7 +1327,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	  if (recovery_state.get_missing_loc().is_deleted(candidate))
 	    continue;
 
-	  if (filter && !pgls_filter(filter, candidate, filter_out))
+	  if (filter && !pgls_filter(filter, candidate))
 	    continue;
 
 	  response.entries.push_back(make_pair(candidate.oid,
@@ -1392,8 +1340,6 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	}
 	response.handle = next;
 	encode(response, osd_op.outdata);
-	if (filter)
-	  encode(filter_out, osd_op.outdata);
 	dout(10) << " pgls result=" << result << " outdata.length()="
 		 << osd_op.outdata.length() << dendl;
       }
