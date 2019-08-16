@@ -1784,15 +1784,6 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max_p,
 
   string skip_after_delim;
   while (truncated && count <= max) {
-    if (skip_after_delim > cur_marker.name) {
-      cur_marker = skip_after_delim;
-
-      ldout(cct, 20) << "setting cur_marker="
-		     << cur_marker.name
-		     << "[" << cur_marker.instance << "]"
-		     << dendl;
-    }
-
     ent_map_t ent_map;
     ent_map.reserve(read_ahead);
     int r = store->cls_bucket_list_ordered(target->get_bucket_info(),
@@ -1876,14 +1867,6 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max_p,
             next_marker = prefix_key;
             (*common_prefixes)[prefix_key] = true;
 
-            int marker_delim_pos = cur_marker.name.find(
-	      params.delim, cur_prefix.size());
-
-            skip_after_delim = cur_marker.name.substr(0, marker_delim_pos);
-            skip_after_delim.append(after_delim_s);
-
-            ldout(cct, 20) << "skip_after_delim=" << skip_after_delim << dendl;
-
             count++;
           }
 
@@ -1898,6 +1881,24 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max_p,
 
       result->emplace_back(std::move(entry));
       count++;
+    }
+
+    if (!params.delim.empty()) {
+      int marker_delim_pos = cur_marker.name.find(params.delim, cur_prefix.size());
+      if (marker_delim_pos >= 0) {
+        skip_after_delim = cur_marker.name.substr(0, marker_delim_pos);
+        skip_after_delim.append(after_delim_s);
+
+        ldout(cct, 20) << "skip_after_delim=" << skip_after_delim << dendl;
+
+        if (skip_after_delim > cur_marker.name) {
+          cur_marker = skip_after_delim;
+          ldout(cct, 20) << "setting cur_marker="
+                         << cur_marker.name
+                         << "[" << cur_marker.instance << "]"
+                         << dendl;
+        }
+      }
     }
   }
 
