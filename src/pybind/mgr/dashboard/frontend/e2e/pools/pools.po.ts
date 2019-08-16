@@ -1,4 +1,4 @@
-import { $, browser, by, element, ElementFinder, promise, protractor } from 'protractor';
+import { $, browser, by, element, protractor } from 'protractor';
 import { Helper } from '../helper.po';
 import { PageHelper } from '../page-helper.po';
 
@@ -17,39 +17,42 @@ export class PoolPageHelper extends PageHelper {
   }
 
   @PageHelper.restrictTo(pages.index)
-  exist(name: string, oughtToBePresent = true): promise.Promise<any> {
-    return this.getTableCellByContent(name).then((elem) => {
-      const waitFn = oughtToBePresent ? EC.visibilityOf(elem) : EC.invisibilityOf(elem);
-      return browser.wait(waitFn, Helper.TIMEOUT).catch(() => {
-        const visibility = oughtToBePresent ? 'invisible' : 'visible';
-        const msg = `Pool "${name}" is ${visibility}, but should not be. Waiting for a change timed out`;
-        return promise.Promise.reject(msg);
-      });
-    });
+  async exist(name: string, oughtToBePresent = true) {
+    const tableCell = await this.getTableCellByContent(name);
+    const waitFn = oughtToBePresent ? EC.visibilityOf(tableCell) : EC.invisibilityOf(tableCell);
+    try {
+      await browser.wait(waitFn, Helper.TIMEOUT);
+    } catch (e) {
+      const visibility = oughtToBePresent ? 'invisible' : 'visible';
+      const msg = `Pool "${name}" is ${visibility}, but should not be. Waiting for a change timed out`;
+      return Promise.reject(msg);
+    }
+    return Promise.resolve();
   }
 
   @PageHelper.restrictTo(pages.create)
-  create(name: string, placement_groups: number, ...apps: string[]): promise.Promise<any> {
+  async create(name: string, placement_groups: number, ...apps: string[]): Promise<any> {
     const nameInput = $('input[name=name]');
-    nameInput.clear();
+    await nameInput.clear();
     if (!this.isPowerOf2(placement_groups)) {
       return Promise.reject(`Placement groups ${placement_groups} are not a power of 2`);
     }
-    return nameInput.sendKeys(name).then(() => {
-      element(by.cssContainingText('select[name=poolType] option', 'replicated'))
-        .click()
-        .then(() => {
-          expect(element(by.css('select[name=poolType] option:checked')).getText()).toBe(
-            ' replicated '
-          );
-          $('input[name=pgNum]')
-            .sendKeys(protractor.Key.CONTROL, 'a', protractor.Key.NULL, placement_groups)
-            .then(() => {
-              this.setApplications(apps);
-              return element(by.css('cd-submit-button')).click();
-            });
-        });
-    });
+    await nameInput.sendKeys(name);
+    await element(by.cssContainingText('select[name=poolType] option', 'replicated')).click();
+
+    expect(await element(by.css('select[name=poolType] option:checked')).getText()).toBe(
+      ' replicated '
+    );
+    await $('input[name=pgNum]').sendKeys(
+      protractor.Key.CONTROL,
+      'a',
+      protractor.Key.NULL,
+      placement_groups
+    );
+    this.setApplications(apps);
+    await element(by.css('cd-submit-button')).click();
+
+    return Promise.resolve();
   }
 
   edit_pool_pg(name: string, new_pg: number): promise.Promise<any> {
@@ -103,30 +106,16 @@ export class PoolPageHelper extends PageHelper {
   }
 
   @PageHelper.restrictTo(pages.index)
-  delete(name: string): promise.Promise<any> {
-    return this.getTableCellByContent(name).then((tableCell: ElementFinder) => {
-      return tableCell.click().then(() => {
-        return $('.table-actions button.dropdown-toggle') // open submenu
-          .click()
-          .then(() => {
-            return $('li.delete a') // click on "delete" menu item
-              .click()
-              .then(() => {
-                browser
-                  .wait(Helper.EC.visibilityOf($('.custom-control-label')), Helper.TIMEOUT)
-                  .then(() => {
-                    const getConfirmationCheckbox = () => $('.custom-control-label');
-                    browser
-                      .wait(Helper.EC.visibilityOf(getConfirmationCheckbox()), Helper.TIMEOUT)
-                      .then(() => {
-                        this.moveClick(getConfirmationCheckbox()).then(() => {
-                          return element(by.cssContainingText('button', 'Delete Pool')).click(); // Click Delete item
-                        });
-                      });
-                  });
-              });
-          });
-      });
-    });
+  async delete(name: string): Promise<any> {
+    const tableCell = await this.getTableCellByContent(name);
+    await tableCell.click();
+    await $('.table-actions button.dropdown-toggle').click(); // open submenu
+    await $('li.delete a').click(); // click on "delete" menu item
+    const confirmationInput = () => $('#confirmation');
+    await browser.wait(() => EC.visibilityOf(confirmationInput()), Helper.TIMEOUT);
+    await this.clickCheckbox(confirmationInput());
+    await element(by.cssContainingText('button', 'Delete Pool')).click(); // Click Delete item
+
+    return Promise.resolve();
   }
 }
