@@ -261,6 +261,61 @@ Please refer to the official `Protractor style-guide
 to write and structure tests as well as what exactly should be covered by
 end-to-end tests.
 
+``describe()`` vs ``it()``
+""""""""""""""""""""""""""
+
+Both ``describe()`` and ``it()`` are function blocks, meaning that any executable
+code necessary for the test can be contained in either block. However, Typescript
+scoping rules still apply, therefore any variables declared in a ``describe`` are available
+to the ``it()`` blocks inside of it.
+
+``describe()`` typically are containers for tests, allowing you to break tests into
+multiple parts. Likewise, any setup that must be made before your tests are run can be
+initialized within the ``describe()`` block. Here is an example:
+
+.. code:: TypeScript
+
+  describe('create, edit & delete image test', () => {
+    const poolName = 'e2e_images_pool';
+
+    beforeAll(() => {
+      pools.navigateTo('create'); // Need pool for image testing
+      pools.create(poolName, 8, 'rbd').then(() => {
+        pools.navigateTo();
+        pools.exist(poolName, true);
+      });
+      images.navigateTo();
+    });
+
+As shown, we can initiate the variable ``poolName`` as well as run commands
+before our test suite begins (creating a pool). ``describe()`` block messages should
+include what the test suite is.
+
+``it()`` blocks typically are parts of an overarching test. They contain the functionality of
+the test suite, each performing individual roles. Here is an example:
+
+.. code:: TypeScript
+
+ describe('create, edit & delete image test', () => {
+  it('should create image', () => {
+    images.createImage(imageName, poolName, '1');
+    expect(images.getTableCell(imageName).isPresent()).toBe(true);
+  });
+  it('should edit image', () => {
+    images.editImage(imageName, poolName, newImageName, '2');
+    expect(images.getTableCell(newImageName).isPresent()).toBe(true);
+  });
+  //...
+ });
+
+As shown from the previous example, our ``describe()`` test suite is to create, edit
+and delete an image. Therefore, each ``it()`` completes one of these steps, one for creating,
+one for editing, and so on. Likewise, every ``it()`` blocks message should be in lowercase
+and written so long as "it" can be the prefix of the message. For example, ``it('edits the test image' () => ...)``
+vs. ``it('image edit test' () => ...)``. As shown, the first example makes grammatical sense with ``it()`` as the
+prefix whereas the second message does not.``it()`` should describe what the individual test is doing and
+what it expects to happen.
+
 Further Help
 ~~~~~~~~~~~~
 
