@@ -25,6 +25,7 @@ set(librgw_common_srcs
   services/svc_bilog_rados.cc
   services/svc_bucket.cc
   services/svc_bucket_sobj.cc
+  services/svc_bucket_sync_sobj.cc
   services/svc_cls.cc
   services/svc_datalog_rados.cc
   services/svc_mdlog.cc
