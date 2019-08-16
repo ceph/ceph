@@ -5650,7 +5650,7 @@ std::vector<Option> get_rgw_options() {
     .set_description(""),
 
     Option("rgw_bucket_index_max_aio", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(8)
+    .set_default(128)
     .set_description("Max number of concurrent RADOS requests when handling bucket shards."),
 
     Option("rgw_enable_quota_threads", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
