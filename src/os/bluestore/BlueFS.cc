@@ -62,6 +62,12 @@ public:
         ldout(bluefs->cct, 1) << __func__ << " cannot register SocketHook" << dendl;
         delete hook;
         hook = nullptr;
+      } else {
+        r = admin_socket->register_command("bluestore bluefs stats",
+                                           hook,
+                                           "Dump internal statistics for bluefs."
+                                           "");
+        ceph_assert(r == 0);
       }
     }
     return hook;
@@ -103,6 +109,9 @@ private:
       }
       f->dump_int("available_from_bluestore", extra_space);
       f->close_section();
+    } else if (command == "bluestore bluefs stats") {
+      bluefs->dump_block_extents(ss);
+      bluefs->dump_volume_selector(ss);
     } else {
       ss << "Invalid command" << std::endl;
       return -ENOSYS;
@@ -394,7 +403,6 @@ void BlueFS::dump_perf_counters(Formatter *f)
 
 void BlueFS::dump_block_extents(ostream& out)
 {
-  vselector->dump(cct);
   for (unsigned i = 0; i < MAX_BDEV; ++i) {
     if (!bdev[i]) {
       continue;
@@ -610,7 +618,6 @@ int BlueFS::mount()
     _stop_alloc();
     goto out;
   }
-  vselector->dump(cct);
 
   // init freelist
   for (auto& p : file_map) {
@@ -668,8 +675,6 @@ void BlueFS::umount()
   super = bluefs_super_t();
   log_t.clear();
   _shutdown_logger();
-
-  vselector->dump(cct);
 }
 
 int BlueFS::prepare_new_device(int id, const bluefs_layout_t& layout)
@@ -1258,7 +1263,6 @@ int BlueFS::_replay(bool noop, bool to_stdout)
 
           if (!noop) {
 	    FileRef f = _get_file(fnode.ino);
-<<<<<<< HEAD
             if (cct->_conf->bluefs_log_replay_check_allocations) {
               // check initial log layout
               if (first_log_check) {
@@ -1282,8 +1286,6 @@ int BlueFS::_replay(bool noop, bool to_stdout)
               }
             }
 
-	    f->fnode = fnode;
-=======
             if (fnode.ino != 1) {
               vselector->sub_usage(f->vselector_hint, f->fnode);
             }
@@ -1292,7 +1294,6 @@ int BlueFS::_replay(bool noop, bool to_stdout)
               vselector->add_usage(f->vselector_hint, f->fnode);
             }
 
->>>>>>> os/bluestore: introduce volume selector abstraction to BlueFS
 	    if (fnode.ino > ino_last) {
 	      ino_last = fnode.ino;
 	    }
@@ -3498,9 +3499,9 @@ void OriginalVolumeSelector::get_paths(const std::string& base, paths& res) cons
 #undef dout_prefix
 #define dout_prefix *_dout << "OriginalVolumeSelector: "
 
-void OriginalVolumeSelector::dump(CephContext* c) {
-  ldout(c, 1) << "wal_total:" << wal_total
+void OriginalVolumeSelector::dump(ostream& sout) {
+  sout<< "wal_total:" << wal_total
     << ", db_total:" << db_total
     << ", slow_total:" << slow_total
-    << dendl;
+    << std::endl;
 }
