@@ -183,7 +183,7 @@ class Elector : public ElectionOwner {
   /* Commit the given epoch to our MonStore */
   void persist_epoch(epoch_t e);
   /* Read the epoch out of our MonStore */
-  epoch_t read_persisted_epoch();
+  epoch_t read_persisted_epoch() const;
   /* Write a nonsense key "election_writeable_test" to our MonStore */
   void validate_store();
   /* Reset my tracking. Currently, just call Monitor::join_election() */
@@ -191,15 +191,15 @@ class Elector : public ElectionOwner {
   /* Call a new election: Invoke Monitor::start_election() */
   void trigger_new_election();
   /* Retrieve rank from the Monitor */
-  int get_my_rank();
+  int get_my_rank() const;
   /* Send MMonElection OP_PROPOSE to every monitor in the map. */
   void propose_to_peers(epoch_t e);
   /* bootstrap() the Monitor */
   void reset_election();
   /* Retrieve the Monitor::has_ever_joined member */
-  bool ever_participated();
+  bool ever_participated() const;
   /* Retrieve monmap->size() */
-  unsigned paxos_size();
+  unsigned paxos_size() const;
   /**
    * Reset the expire_event timer so we can limit the amount of time we 
    * will be electing. Clean up our peer_info.
@@ -222,9 +222,9 @@ class Elector : public ElectionOwner {
    * Our ElectionLogic told us we won an election! Identify the quorum
    * features, tell our new peons we've won, and invoke Monitor::win_election().
    */
-  void message_victory(const set<int>& quorum);
+  void message_victory(const std::set<int>& quorum);
   /* Check if rank is in mon->quorum */
-  bool is_current_member(int rank);
+  bool is_current_member(int rank) const;
   /*
    * @}
    */
