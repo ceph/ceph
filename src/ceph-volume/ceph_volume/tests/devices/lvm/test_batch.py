@@ -63,8 +63,9 @@ class TestBatch(object):
         b.args.devices = [device1, device2]
         b.args.db_devices = [device2]
         b._filter_devices()
-        with pytest.raises(Exception):
+        with pytest.raises(Exception) as disjoint_ex:
             b._ensure_disjoint_device_lists()
+        assert 'Device lists are not disjoint' in str(disjoint_ex.value)
 
 
 class TestFilterDevices(object):
