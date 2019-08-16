@@ -3686,7 +3686,7 @@ public:
     const std::string& base,
     BlueFSVolumeSelector::paths& res) const override;
 
-  void dump(CephContext* cct) override;
+  void dump(ostream& sout) override;
 };
 
 #endif
