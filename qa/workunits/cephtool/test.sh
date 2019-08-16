@@ -966,10 +966,10 @@ function test_mon_mds()
   expect_false ceph fs set cephfs max_mds 257
   expect_false ceph fs set cephfs max_mds asdf
   expect_false ceph fs set cephfs inline_data true
-  ceph fs set cephfs inline_data true --yes-i-really-mean-it
-  ceph fs set cephfs inline_data yes --yes-i-really-mean-it
-  ceph fs set cephfs inline_data 1 --yes-i-really-mean-it
-  expect_false ceph fs set cephfs inline_data --yes-i-really-mean-it
+  ceph fs set cephfs inline_data true --yes-i-really-really-mean-it
+  ceph fs set cephfs inline_data yes --yes-i-really-really-mean-it
+  ceph fs set cephfs inline_data 1 --yes-i-really-really-mean-it
+  expect_false ceph fs set cephfs inline_data --yes-i-really-really-mean-it
   ceph fs set cephfs inline_data false
   ceph fs set cephfs inline_data no
   ceph fs set cephfs inline_data 0

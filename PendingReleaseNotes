@@ -131,6 +131,12 @@
   New admin command ``ceph daemon osd.# dump_osd_network [threshold]`` will
   do the same but only including heartbeats initiated by the specified OSD.
 
+* Inline data support for CephFS has been deprecated. When setting the flag,
+  users will see a warning to that effect, and enabling it now requires the
+  ``--yes-i-really-really-mean-it`` flag. If the MDS is started on a
+  filesystem that has it enabled, a health warning is generated. Support for
+  this feature will be removed in a future release.
+
 * Following invalid settings now are not tolerated anymore
   for the command `ceph osd erasure-code-profile set xxx`.
   * invalid `m` for "reed_sol_r6_op" erasure technique
