@@ -424,7 +424,8 @@ COMMAND("fs set " \
         "|standby_count_wanted|session_timeout|session_autoclose" \
         "|allow_standby_replay|down|joinable|min_compat_client " \
 	"name=val,type=CephString "					\
-	"name=yes_i_really_mean_it,type=CephBool,req=false",			\
+	"name=yes_i_really_mean_it,type=CephBool,req=false "		\
+	"name=yes_i_really_really_mean_it,type=CephBool,req=false",	\
 	"set fs parameter <var> to <val>", "mds", "rw")
 COMMAND("fs flag set name=flag_name,type=CephChoices,strings=enable_multiple "
         "name=val,type=CephString " \
