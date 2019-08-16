@@ -62,6 +62,12 @@ public:
         ldout(bluefs->cct, 1) << __func__ << " cannot register SocketHook" << dendl;
         delete hook;
         hook = nullptr;
+      } else {
+        r = admin_socket->register_command("bluestore bluefs stats",
+                                           "bluestore bluefs stats",
+                                           hook,
+                                           "Dump internal statistics for bluefs.");
+        ceph_assert(r == 0);
       }
     }
     return hook;
@@ -69,8 +75,7 @@ public:
 
   ~SocketHook() {
     AdminSocket* admin_socket = bluefs->cct->get_admin_socket();
-    int r = admin_socket->unregister_command("bluestore bluefs available");
-    ceph_assert(r == 0);
+    admin_socket->unregister_commands(this);
   }
 private:
   SocketHook(BlueFS* bluefs) :
@@ -106,6 +111,9 @@ private:
         f->close_section();
         f->flush(ss);
         delete f;
+      } else if (command == "bluestore bluefs stats") {
+        bluefs->dump_block_extents(ss);
+        bluefs->dump_volume_selector(ss);
       } else {
         ss << "Invalid command" << std::endl;
         r = false;
@@ -398,7 +406,6 @@ void BlueFS::dump_perf_counters(Formatter *f)
 
 void BlueFS::dump_block_extents(ostream& out)
 {
-  vselector->dump(cct);
   for (unsigned i = 0; i < MAX_BDEV; ++i) {
     if (!bdev[i]) {
       continue;
@@ -613,7 +620,6 @@ int BlueFS::mount()
     _stop_alloc();
     goto out;
   }
-  vselector->dump(cct);
 
   // init freelist
   for (auto& p : file_map) {
@@ -654,8 +660,6 @@ void BlueFS::umount()
   super = bluefs_super_t();
   log_t.clear();
   _shutdown_logger();
-
-  vselector->dump(cct);
 }
 
 int BlueFS::prepare_new_device(int id)
@@ -3240,9 +3244,9 @@ void OriginalVolumeSelector::get_paths(const std::string& base, paths& res) cons
 #undef dout_prefix
 #define dout_prefix *_dout << "OriginalVolumeSelector: "
 
-void OriginalVolumeSelector::dump(CephContext* c) {
-  ldout(c, 1) << "wal_total:" << wal_total
+void OriginalVolumeSelector::dump(ostream& sout) {
+  sout<< "wal_total:" << wal_total
     << ", db_total:" << db_total
     << ", slow_total:" << slow_total
-    << dendl;
+    << std::endl;
 }

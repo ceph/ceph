@@ -87,7 +87,7 @@ public:
   virtual void sub_usage(void* file_hint, uint64_t fsize) = 0;
   virtual uint8_t select_prefer_bdev(void* hint) = 0;
   virtual void get_paths(const std::string& base, paths& res) const = 0;
-  virtual void dump(CephContext* cct) = 0;
+  virtual void dump(ostream& sout) = 0;
 };
 class BlueFS;
 
@@ -518,6 +518,9 @@ public:
   void set_volume_selector(BlueFSVolumeSelector* s) {
     vselector.reset(s);
   }
+  void dump_volume_selector(ostream& sout) {
+    vselector->dump(sout);
+  }
   void get_vselector_paths(const std::string& base,
                            BlueFSVolumeSelector::paths& res) const {
     return vselector->get_paths(base, res);
@@ -618,7 +621,7 @@ public:
 
   uint8_t select_prefer_bdev(void* hint) override;
   void get_paths(const std::string& base, paths& res) const override;
-  void dump(CephContext* cct) override;
+  void dump(ostream& sout) override;
 };
 
 #endif

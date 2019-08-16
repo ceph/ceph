@@ -5149,7 +5149,7 @@ int BlueStore::_open_bluefs(bool create)
     return r;
   }
   RocksDBBlueFSVolumeSelector* vselector = nullptr;
-  if (bluefs_layout.shared_bdev == BlueFS::BDEV_SLOW) {
+  if (bluefs_shared_bdev == BlueFS::BDEV_SLOW) {
 
     string options = cct->_conf->bluestore_rocksdb_options;
 
@@ -14705,60 +14705,53 @@ void* RocksDBBlueFSVolumeSelector::get_hint_by_dir(const string& dirname) const 
   return reinterpret_cast<void*>(res);
 }
 
-#undef dout_prefix
-#define dout_prefix *_dout << "RocksDBBlueFSVolumeSelector: "
-
-void RocksDBBlueFSVolumeSelector::dump(CephContext* c) {
-  stringstream matrix_output;
+void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
   auto max_x = per_level_per_dev_usage.get_max_x();
   auto max_y = per_level_per_dev_usage.get_max_y();
-  matrix_output << "LEVEL, WAL, DB, SLOW, ****, ****, REAL" << std::endl;
+  sout << "RocksDBBlueFSVolumeSelector: wal_total:" << l_totals[LEVEL_WAL - LEVEL_FIRST]
+    << ", db_total:" << l_totals[LEVEL_DB - LEVEL_FIRST]
+    << ", slow_total:" << l_totals[LEVEL_SLOW - LEVEL_FIRST]
+    << ", db_avail:" << db_avail4slow << std::endl
+    << " usage matrix:" << std::endl;
+  sout << "LEVEL, WAL, DB, SLOW, ****, ****, REAL" << std::endl;
   for (size_t l = 0; l < max_y; l++) {
     switch (l + LEVEL_FIRST) {
     case LEVEL_WAL:
-      matrix_output << "WAL "; break;
+      sout << "WAL "; break;
     case LEVEL_DB:
-      matrix_output << "DB "; break;
+      sout << "DB "; break;
     case LEVEL_SLOW:
-      matrix_output << "SLOW" << " "; break;
+      sout << "SLOW" << " "; break;
     case LEVEL_MAX:
-      matrix_output << "TOTALS "; break;
+      sout << "TOTALS "; break;
     }
     for (size_t d = 0; d < max_x - 1; d++) {
-      matrix_output << per_level_per_dev_usage.at(d, l) << ",";
+      sout << per_level_per_dev_usage.at(d, l) << ",";
     }
-    matrix_output << per_level_per_dev_usage.at(max_x - 1, l) << std::endl;
+    sout << per_level_per_dev_usage.at(max_x - 1, l) << std::endl;
   }
   ceph_assert(max_x == per_level_per_dev_max.get_max_x());
   ceph_assert(max_y == per_level_per_dev_max.get_max_y());
-  matrix_output << "MAXIMUMS:" << std::endl;
+  sout << "MAXIMUMS:" << std::endl;
   for (size_t l = 0; l < max_y; l++) {
     switch (l + LEVEL_FIRST) {
     case LEVEL_WAL:
-      matrix_output << "WAL "; break;
+      sout << "WAL "; break;
     case LEVEL_DB:
-      matrix_output << "DB "; break;
+      sout << "DB "; break;
     case LEVEL_SLOW:
-      matrix_output << "SLOW" << " "; break;
+      sout << "SLOW" << " "; break;
     case LEVEL_MAX:
-      matrix_output << "TOTALS "; break;
+      sout << "TOTALS "; break;
     }
     for (size_t d = 0; d < max_x - 1; d++) {
-      matrix_output << per_level_per_dev_max.at(d, l) << ",";
+      sout << per_level_per_dev_max.at(d, l) << ",";
     }
-    matrix_output << per_level_per_dev_max.at(max_x - 1, l);
+    sout << per_level_per_dev_max.at(max_x - 1, l);
     if (l < max_y - 1) {
-      matrix_output << std::endl;
+      sout << std::endl;
     }
   }
-  ldout(c, 1)
-    << "wal_total:" << l_totals[LEVEL_WAL - LEVEL_FIRST]
-    << ", db_total:" << l_totals[LEVEL_DB - LEVEL_FIRST]
-    << ", slow_total:" << l_totals[LEVEL_SLOW - LEVEL_FIRST]
-    << ", db_avail:" << db_avail4slow
-    << " usage matrix:" << std::endl
-    << matrix_output.str()
-    << dendl;
 }
 
 // =======================================================
