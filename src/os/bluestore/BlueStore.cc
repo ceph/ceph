@@ -6053,6 +6053,13 @@ int BlueStore::mkfs()
   int r;
   uuid_d old_fsid;
 
+  if (cct->_conf->osd_max_object_size > OBJECT_MAX_SIZE) {
+    derr << __func__ << " osd_max_object_size "
+	 << cct->_conf->osd_max_object_size << " > bluestore max "
+	 << OBJECT_MAX_SIZE << dendl;
+    return -EINVAL;
+  }
+
   {
     string done;
     r = read_meta("mkfs_done", &done);
@@ -6689,6 +6696,13 @@ int BlueStore::_mount(bool kv_only, bool open_db)
       derr << __func__ << " fsck found " << rc << " errors" << dendl;
       return -EIO;
     }
+  }
+
+  if (cct->_conf->osd_max_object_size > OBJECT_MAX_SIZE) {
+    derr << __func__ << " osd_max_object_size "
+	 << cct->_conf->osd_max_object_size << " > bluestore max "
+	 << OBJECT_MAX_SIZE << dendl;
+    return -EINVAL;
   }
 
   int r = _open_path();

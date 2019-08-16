@@ -91,7 +91,8 @@
                 "attr_value_mismatch",
                 "attr_name_mismatch",
                 "snapset_inconsistency",
-                "hinfo_inconsistency"
+                "hinfo_inconsistency",
+		"size_too_large"
               ]
             },
             "minItems": 0,
