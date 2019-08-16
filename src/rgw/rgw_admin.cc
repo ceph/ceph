@@ -6809,13 +6809,20 @@ next:
     }
 
     if (reset_stats) {
-      if (!bucket_name.empty()){
-	cerr << "ERROR: recalculate doesn't work on buckets" << std::endl;
+      if (!bucket_name.empty()) {
+	cerr << "ERROR: --reset-stats does not work on buckets and "
+	  "bucket specified" << std::endl;
+	return EINVAL;
+      }
+      if (sync_stats) {
+	cerr << "ERROR: sync-stats includes the reset-stats functionality, "
+	  "so at most one of the two should be specified" << std::endl;
 	return EINVAL;
       }
       ret = store->ctl()->user->reset_stats(user_id);
       if (ret < 0) {
-	cerr << "ERROR: could not clear user stats: " << cpp_strerror(-ret) << std::endl;
+	cerr << "ERROR: could not reset user stats: " << cpp_strerror(-ret) <<
+	  std::endl;
 	return -ret;
       }
     }
@@ -6830,13 +6837,15 @@ next:
         }
         ret = store->ctl()->bucket->sync_user_stats(user_id, bucket_info);
         if (ret < 0) {
-          cerr << "ERROR: could not sync bucket stats: " << cpp_strerror(-ret) << std::endl;
+          cerr << "ERROR: could not sync bucket stats: " <<
+	    cpp_strerror(-ret) << std::endl;
           return -ret;
         }
       } else {
         int ret = rgw_user_sync_all_stats(store, user_id);
         if (ret < 0) {
-          cerr << "ERROR: failed to sync user stats: " << cpp_strerror(-ret) << std::endl;
+          cerr << "ERROR: could not sync user stats: " <<
+	    cpp_strerror(-ret) << std::endl;
           return -ret;
         }
       }
