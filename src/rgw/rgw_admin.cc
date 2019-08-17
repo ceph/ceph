@@ -2285,11 +2285,12 @@ static int bucket_sync_status(rgw::sal::RGWRadosStore *store, const RGWBucketInf
   out << indented{width, "zone"} << zone.id << " (" << zone.name << ")\n";
   out << indented{width, "bucket"} << info.bucket << "\n\n";
 
-  if (!info.bucket_datasync_enabled(store->svc.zone)) {
+  if (!store->ctl()->bucket->bucket_imports_data(info.bucket, null_yield)) {
     out << "Sync is disabled for bucket " << info.bucket.name << '\n';
     return 0;
   }
 
+#warning need to use bucket sources
   auto& zone_conn_map = store->svc()->zone->get_zone_conn_map();
   if (!source_zone_id.empty()) {
     auto z = zonegroup.zones.find(source_zone_id);

@@ -20,7 +20,6 @@
 #include "rgw/rgw_service.h"
 
 #include "svc_meta_be.h"
-#include "svc_bucket_types.h"
 #include "svc_bucket_sync.h"
 
 class RGWSI_Zone;
@@ -29,8 +28,6 @@ class RGWSI_Bucket_SObj;
 
 template <class T>
 class RGWChainedCacheImpl;
-
-class RGWBucketSyncPolicyHandler;
 
 class RGWSI_Bucket_Sync_SObj : public RGWSI_Bucket_Sync
 {
@@ -60,7 +57,7 @@ public:
 
   int get_policy_handler(RGWSI_Bucket_BI_Ctx& ctx,
                          const rgw_bucket& bucket,
-                         std::shared_ptr<RGWBucketSyncPolicyHandler> *handler,
+                         RGWBucketSyncPolicyHandlerRef *handler,
                          optional_yield y) override;
 };
 

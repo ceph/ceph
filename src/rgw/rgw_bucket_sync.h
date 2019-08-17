@@ -49,8 +49,23 @@ public:
 
   int init();
 
+  const RGWBucketInfo& get_bucket_info() const {
+    return bucket_info;
+  }
+
   bool zone_is_source(const string& zone_id) const {
     return sources.find(zone_id) != sources.end();
   }
+
+  bool bucket_is_sync_source() const {
+    return !targets.empty();
+  }
+
+  bool bucket_is_sync_target() const {
+    return !sources.empty();
+  }
+
+  bool bucket_exports_data() const;
+  bool bucket_imports_data() const;
 };
 
