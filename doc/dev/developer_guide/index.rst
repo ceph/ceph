@@ -1636,6 +1636,7 @@ vstart_runner.py can take 3 options -
 --create-cluster-only       creates the cluster and quits; tests can be issued
                             later
 --interactive               drops a Python shell when a test fails
+--log-ps-output             logs ps output; might be useful while debugging
 --teardown                  tears Ceph cluster down after test(s) has finished
                             runnng
 
