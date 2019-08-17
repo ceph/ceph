@@ -987,12 +987,18 @@ class LocalContext(object):
     def __del__(self):
         shutil.rmtree(self.teuthology_config['test_path'])
 
+def _teardown_cluster():
+    log.info('\ntearing down the cluster...')
+    remote.run(args = [os.path.join(SRC_PREFIX, "stop.sh")])
+    remote.run(args = ['rm', '-rf', './dev', './out'])
+
 def exec_test():
     # Parse arguments
     interactive_on_error = False
     create_cluster = False
     create_cluster_only = False
     ignore_missing_binaries = False
+    teardown_cluster = False
 
     args = sys.argv[1:]
     flags = [a for a in args if a.startswith("-")]
@@ -1006,6 +1012,8 @@ def exec_test():
             create_cluster_only = True
         elif f == "--ignore-missing-binaries":
             ignore_missing_binaries = True
+        elif f == '--teardown':
+            teardown_cluster = True
         else:
             log.error("Unknown option '{0}'".format(f))
             sys.exit(-1)
@@ -1022,6 +1030,7 @@ def exec_test():
     max_required_mds, max_required_clients, \
             max_required_mgr, require_memstore = scan_tests(modules)
 
+    global remote
     remote = LocalRemote()
 
     # Tolerate no MDSs or clients running at start
@@ -1039,9 +1048,7 @@ def exec_test():
     if create_cluster or create_cluster_only:
         log.info("Creating cluster with {0} MDS daemons".format(
             max_required_mds))
-        remote.run([os.path.join(SRC_PREFIX, "stop.sh")], check_status=False)
-        remote.run(["rm", "-rf", "./out"])
-        remote.run(["rm", "-rf", "./dev"])
+        _teardown_cluster()
         vstart_env = os.environ.copy()
         vstart_env["FS"] = "0"
         vstart_env["MDS"] = max_required_mds.__str__()
@@ -1210,6 +1217,9 @@ def exec_test():
         resultclass=LoggingResult,
         verbosity=2,
         failfast=True).run(overall_suite)
+
+    if teardown_cluster:
+        _teardown_cluster()
 
     if not result.wasSuccessful():
         result.printErrors()  # duplicate output at end for convenience
