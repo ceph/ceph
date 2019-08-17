@@ -390,10 +390,13 @@ class LocalDaemon(object):
             if line.find("ceph-{0} -i {1}".format(self.daemon_type, self.daemon_id)) != -1:
                 log.info("Found ps line for daemon: {0}".format(line))
                 return int(line.split()[0])
-        log.info("No match for {0} {1}: {2}".format(
-            self.daemon_type, self.daemon_id, ps_txt
-            ))
-        return None
+        if log_ps_output:
+            log.info("No match for {0} {1}: {2}".format(
+                self.daemon_type, self.daemon_id, ps_txt))
+        else:
+            log.info("No match for {0} {1}".format(self.daemon_type,
+                     self.daemon_id))
+            return None
 
     def wait(self, timeout):
         waited = 0
@@ -999,6 +1002,8 @@ def exec_test():
     create_cluster_only = False
     ignore_missing_binaries = False
     teardown_cluster = False
+    global log_ps_output
+    log_ps_output = False
 
     args = sys.argv[1:]
     flags = [a for a in args if a.startswith("-")]
@@ -1014,6 +1019,8 @@ def exec_test():
             ignore_missing_binaries = True
         elif f == '--teardown':
             teardown_cluster = True
+        elif f == '--log-ps-output':
+            log_ps_output = True
         else:
             log.error("Unknown option '{0}'".format(f))
             sys.exit(-1)
