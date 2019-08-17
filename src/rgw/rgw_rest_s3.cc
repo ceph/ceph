@@ -3991,6 +3991,7 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
   const char *sc = s->info.env->get("HTTP_X_AMZ_STORAGE_CLASS", RGW_STORAGE_CLASS_STANDARD.c_str());
   if (sc) {
     s->info.storage_class = sc;
+  }
 
   return RGWHandler_REST::init(store, s, cio);
 }
