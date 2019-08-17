@@ -1475,8 +1475,6 @@ struct RGWBucketInfo {
   void set_sync_policy(rgw_sync_policy_info&& policy);
 
   bool empty_sync_policy() const;
-  bool bucket_is_sync_source(const string& zone_id) const;
-  bool bucket_datasync_enabled(const RGWSI_Zone *zone_svc) const;
 
   RGWBucketInfo();
   ~RGWBucketInfo();

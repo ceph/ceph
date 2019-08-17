@@ -31,6 +31,7 @@
 #include "services/svc_zone.h"
 #include "services/svc_sys_obj.h"
 #include "services/svc_bucket.h"
+#include "services/svc_bucket_sync.h"
 #include "services/svc_meta.h"
 #include "services/svc_meta_be_sobj.h"
 #include "services/svc_user.h"
@@ -2180,7 +2181,7 @@ int RGWDataChangesLog::get_log_shard_id(rgw_bucket& bucket, int shard_id) {
 }
 
 int RGWDataChangesLog::add_entry(const RGWBucketInfo& bucket_info, int shard_id) {
-  if (!bucket_info.bucket_datasync_enabled(svc.zone)) {
+  if (!ctl.bucket->bucket_exports_data(bucket_info.bucket, null_yield)) {
     return 0;
   }
 
@@ -3069,10 +3070,12 @@ public:
 
 RGWBucketCtl::RGWBucketCtl(RGWSI_Zone *zone_svc,
                            RGWSI_Bucket *bucket_svc,
+                           RGWSI_Bucket_Sync *bucket_sync_svc,
                            RGWSI_BucketIndex *bi_svc) : cct(zone_svc->ctx())
 {
   svc.zone = zone_svc;
   svc.bucket = bucket_svc;
+  svc.bucket_sync = bucket_sync_svc;
   svc.bi = bi_svc;
 }
 
@@ -3652,6 +3655,40 @@ int RGWBucketCtl::sync_user_stats(const rgw_user& user_id,
   }
 
   return ctl.user->flush_bucket_stats(user_id, *pent);
+}
+
+int RGWBucketCtl::bucket_exports_data(const rgw_bucket& bucket,
+                                      optional_yield y)
+{
+
+  RGWBucketSyncPolicyHandlerRef handler;
+
+  int r = call([&](RGWSI_Bucket_X_Ctx& ctx) {
+    return svc.bucket_sync->get_policy_handler(ctx.bi, bucket, &handler, y);
+  });
+  if (r < 0) {
+    ldout(cct, 20) << __func__ << "(): failed to read bucket stats (r=" << r << ")" << dendl;
+    return r;
+  }
+
+  return handler->bucket_exports_data();
+}
+
+int RGWBucketCtl::bucket_imports_data(const rgw_bucket& bucket,
+                                      optional_yield y)
+{
+
+  RGWBucketSyncPolicyHandlerRef handler;
+
+  int r = call([&](RGWSI_Bucket_X_Ctx& ctx) {
+    return svc.bucket_sync->get_policy_handler(ctx.bi, bucket, &handler, y);
+  });
+  if (r < 0) {
+    ldout(cct, 20) << __func__ << "(): failed to read bucket stats (r=" << r << ")" << dendl;
+    return r;
+  }
+
+  return handler->bucket_imports_data();
 }
 
 RGWBucketMetadataHandlerBase *RGWBucketMetaHandlerAllocator::alloc()

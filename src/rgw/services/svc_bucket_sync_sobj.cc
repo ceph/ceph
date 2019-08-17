@@ -30,7 +30,7 @@ int RGWSI_Bucket_Sync_SObj::do_start()
 
 int RGWSI_Bucket_Sync_SObj::get_policy_handler(RGWSI_Bucket_BI_Ctx& ctx,
                                                const rgw_bucket& bucket,
-                                               std::shared_ptr<RGWBucketSyncPolicyHandler> *handler,
+                                               RGWBucketSyncPolicyHandlerRef *handler,
                                                optional_yield y)
 {
   string key = RGWSI_Bucket::get_bi_meta_key(bucket);

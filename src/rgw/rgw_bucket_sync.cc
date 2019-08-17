@@ -91,18 +91,17 @@ int RGWBucketSyncPolicyHandler::init()
   return 0;
 }
 
-#if 0
-vector<rgw_bucket_sync_pipe> rgw_bucket_sync_target_info::build_pipes(const rgw_bucket& source_bs)
+bool RGWBucketSyncPolicyHandler::bucket_exports_data() const
 {
-  vector<rgw_bucket_sync_pipe> pipes;
-
-  for (auto t : targets) {
-    rgw_bucket_sync_pipe pipe;
-    pipe.source_bs = source_bs;
-    pipe.source_prefix = t.source_prefix;
-    pipe.dest_prefix = t.dest_prefix;
-    pipes.push_back(std::move(pipe));
+  if (bucket_is_sync_source()) {
+    return true;
   }
-  return pipes;
+
+  return (zone_svc->need_to_log_data() &&
+          bucket_info.datasync_flag_enabled());
 }
-#endif
+
+bool RGWBucketSyncPolicyHandler::bucket_imports_data() const
+{
+  return bucket_is_sync_target();
+}

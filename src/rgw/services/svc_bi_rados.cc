@@ -411,8 +411,9 @@ int RGWSI_BucketIndex_RADOS::get_reshard_status(const RGWBucketInfo& bucket_info
 int RGWSI_BucketIndex_RADOS::handle_overwrite(const RGWBucketInfo& info,
                                               const RGWBucketInfo& orig_info)
 {
-  bool new_sync_enabled = info.bucket_datasync_enabled(svc.zone);
-  bool old_sync_enabled = orig_info.bucket_datasync_enabled(svc.zone);
+#warning needs to be done differently
+  bool new_sync_enabled = info.datasync_flag_enabled();
+  bool old_sync_enabled = orig_info.datasync_flag_enabled();
 
   if (old_sync_enabled != new_sync_enabled) {
     int shards_num = info.num_shards? info.num_shards : 1;

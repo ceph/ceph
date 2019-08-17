@@ -2064,18 +2064,3 @@ bool RGWBucketInfo::empty_sync_policy() const
   return sync_policy->empty();
 }
 
-bool RGWBucketInfo::bucket_is_sync_source(const string& zone_id) const
-{
-  return (sync_policy &&
-          sync_policy->zone_is_source(zone_id));
-}
-
-bool RGWBucketInfo::bucket_datasync_enabled(const RGWSI_Zone *zone_svc) const
-{
-  if (bucket_is_sync_source(zone_svc->zone_id())) {
-    return true;
-  }
-
-  return (zone_svc->need_to_log_data() &&
-          datasync_flag_enabled());
-}

@@ -22,6 +22,7 @@
 #include "svc_bucket_types.h"
 
 class RGWBucketSyncPolicyHandler;
+using RGWBucketSyncPolicyHandlerRef = std::shared_ptr<RGWBucketSyncPolicyHandler>;
 
 
 class RGWSI_Bucket_Sync : public RGWServiceInstance
@@ -31,7 +32,7 @@ public:
 
   virtual int get_policy_handler(RGWSI_Bucket_BI_Ctx& ctx,
                                  const rgw_bucket& bucket,
-                                 std::shared_ptr<RGWBucketSyncPolicyHandler> *handler,
+                                 RGWBucketSyncPolicyHandlerRef *handler,
                                  optional_yield y) = 0;
 };
 
