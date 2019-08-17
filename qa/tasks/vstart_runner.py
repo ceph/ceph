@@ -989,7 +989,7 @@ class LocalContext(object):
 
 def _teardown_cluster():
     log.info('\ntearing down the cluster...')
-    remote.run(args = [os.path.join(SRC_PREFIX, "stop.sh")])
+    remote.run(args = [os.path.join(SRC_PREFIX, "stop.sh")], timeout=60)
     remote.run(args = ['rm', '-rf', './dev', './out'])
 
 def exec_test():
@@ -1060,7 +1060,9 @@ def exec_test():
         if require_memstore:
             args.append("--memstore")
 
-        remote.run(args, env=vstart_env)
+        # usually, i get vstart.sh running completely in less than 100
+        # seconds.
+        remote.run(args, env=vstart_env, timeout=(3 * 60))
 
         # Wait for OSD to come up so that subsequent injectargs etc will
         # definitely succeed
