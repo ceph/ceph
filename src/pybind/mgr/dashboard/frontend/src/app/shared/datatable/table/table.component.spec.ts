@@ -88,10 +88,18 @@ describe('TableComponent', () => {
     });
 
     it('should prevent propagation of mouseenter event', (done) => {
-      fixture.detectChanges();
+      let wasCalled = false;
       const mouseEvent = new MouseEvent('mouseenter');
-      mouseEvent.stopPropagation = () => done();
-      fixture.debugElement.nativeElement.dispatchEvent(mouseEvent);
+      mouseEvent.stopPropagation = () => {
+        wasCalled = true;
+      };
+      spyOn(window, 'addEventListener').and.callFake((eventName, fn) => {
+        fn(mouseEvent);
+        expect(eventName).toBe('mouseenter');
+        expect(wasCalled).toBe(true);
+        done();
+      });
+      component.ngOnInit();
     });
 
     it('should force an identifier', () => {
