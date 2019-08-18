@@ -4765,7 +4765,9 @@ int RGWCopyObj::verify_permission()
   if (! s->auth.identity->is_admin_of(dest_policy.get_owner().get_id())){
     if (dest_iam_policy != boost::none) {
       rgw_add_to_iam_environment(s->env, "s3:x-amz-copy-source", copy_source);
-      rgw_add_to_iam_environment(s->env, "s3:x-amz-metadata-directive", md_directive);
+      if (md_directive)
+	rgw_add_to_iam_environment(s->env, "s3:x-amz-metadata-directive",
+				   *md_directive);
 
       auto e = dest_iam_policy->eval(s->env, *s->auth.identity,
                                      rgw::IAM::s3PutObject,
