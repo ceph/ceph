@@ -463,6 +463,7 @@ BuildArch:      noarch
 Group:          System/Filesystems
 %endif
 Requires:       ceph-mgr = %{_epoch_prefix}%{version}-%{release}
+Requires:       ceph-grafana-dashboards = %{_epoch_prefix}%{version}-%{release}
 %if 0%{?fedora} || 0%{?rhel}
 Requires:       python%{_python_buildid}-cherrypy
 Requires:       python%{_python_buildid}-jwt
