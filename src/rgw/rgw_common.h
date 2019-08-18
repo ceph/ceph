@@ -247,7 +247,7 @@ struct req_state;
 
 typedef void *RGWAccessHandle;
 
- /* size should be the required string size + 1 */
+/* size should be the required string size + 1 */
 int gen_rand_base64(CephContext *cct, char *dest, int size);
 void gen_rand_alphanumeric(CephContext *cct, char *dest, int size);
 void gen_rand_alphanumeric_lower(CephContext *cct, char *dest, int size);
