@@ -45,8 +45,8 @@ class RGWBucketSyncPolicyHandler {
 
 public:
   RGWBucketSyncPolicyHandler(RGWSI_Zone *_zone_svc,
-                             RGWBucketInfo& _bucket_info);
-
+                             RGWBucketInfo& _bucket_info) : zone_svc(_zone_svc),
+                                                            bucket_info(_bucket_info) {}
   int init();
 
   const RGWBucketInfo& get_bucket_info() const {

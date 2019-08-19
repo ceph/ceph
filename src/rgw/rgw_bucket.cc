@@ -2181,9 +2181,12 @@ int RGWDataChangesLog::get_log_shard_id(rgw_bucket& bucket, int shard_id) {
 }
 
 int RGWDataChangesLog::add_entry(const RGWBucketInfo& bucket_info, int shard_id) {
+#warning FIXME
+#if 0
   if (!ctl.bucket->bucket_exports_data(bucket_info.bucket, null_yield)) {
     return 0;
   }
+#endif
 
   auto& bucket = bucket_info.bucket;
 
