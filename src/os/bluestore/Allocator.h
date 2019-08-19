@@ -52,7 +52,7 @@ public:
   virtual void init_rm_free(uint64_t offset, uint64_t length) = 0;
 
   virtual uint64_t get_free() = 0;
-  virtual double get_fragmentation(uint64_t alloc_unit)
+  virtual double get_fragmentation()
   {
     return 0.0;
   }
