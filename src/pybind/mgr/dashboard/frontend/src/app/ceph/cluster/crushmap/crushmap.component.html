@@ -16,6 +16,7 @@
                 </span>
                 <span>&nbsp;</span>
                 <span class="node-name"
+                      [ngClass]="{'type-osd': node.type === 'osd'}"
                       [innerHTML]="node.value"></span>
               </ng-template>
             </tree>
