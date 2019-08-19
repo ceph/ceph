@@ -267,6 +267,8 @@ TEST_P(AllocTest, test_alloc_fragmentation)
     alloc->release(release_set);
   }
   EXPECT_EQ(1.0, alloc->get_fragmentation(alloc_unit));
+  EXPECT_EQ(66u, uint64_t(alloc->get_fragmentation_score() * 100));
+
   for (size_t i = 1; i < allocated.size() / 2; i += 2)
   {
     interval_set<uint64_t> release_set;
@@ -280,6 +282,7 @@ TEST_P(AllocTest, test_alloc_fragmentation)
     // fragmentation approx = 257 intervals / 768 max intervals
     EXPECT_EQ(33u, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
   }
+  EXPECT_EQ(27u, uint64_t(alloc->get_fragmentation_score() * 100));
 
   for (size_t i = allocated.size() / 2 + 1; i < allocated.size(); i += 2)
   {
@@ -292,6 +295,11 @@ TEST_P(AllocTest, test_alloc_fragmentation)
   // Hence leaving just two 
   // digits after decimal point due to this.
   EXPECT_EQ(0u, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
+  if (bitmap_alloc) {
+    EXPECT_EQ(0u, uint64_t(alloc->get_fragmentation_score() * 100));
+  } else {
+    EXPECT_EQ(11u, uint64_t(alloc->get_fragmentation_score() * 100));
+  }
 }
 
 TEST_P(AllocTest, test_dump_fragmentation_score)
@@ -309,6 +317,7 @@ TEST_P(AllocTest, test_dump_fragmentation_score)
   alloc->init_add_free(0, capacity);
 
   EXPECT_EQ(0.0, alloc->get_fragmentation(alloc_unit));
+  EXPECT_EQ(0.0, alloc->get_fragmentation_score());
 
   uint64_t allocated_cnt = 0;
   for (size_t round = 0; round < rounds ; round++) {
