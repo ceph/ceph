@@ -1,5 +1,6 @@
 import { browser } from 'protractor';
 import { ImagesPageHelper } from './block/images.po';
+import { ManagerModulesPageHelper } from './cluster/mgr-modules.po';
 import { MonitorsPageHelper } from './cluster/monitors.po';
 import { OSDsPageHelper } from './cluster/osds.po';
 import { FilesystemsPageHelper } from './filesystems/filesystems.po';
@@ -27,6 +28,7 @@ export class Helper {
   filesystems: FilesystemsPageHelper;
   osds: OSDsPageHelper;
   monitors: MonitorsPageHelper;
+  mgrModules: ManagerModulesPageHelper;
 
   constructor() {
     this.pools = new PoolPageHelper();
@@ -42,6 +44,7 @@ export class Helper {
     this.filesystems = new FilesystemsPageHelper();
     this.osds = new OSDsPageHelper();
     this.monitors = new MonitorsPageHelper();
+    this.mgrModules = new ManagerModulesPageHelper();
   }
 
   /**

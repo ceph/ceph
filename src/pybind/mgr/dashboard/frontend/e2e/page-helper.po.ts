@@ -155,9 +155,9 @@ export abstract class PageHelper {
   }
 
   // used when .clear() does not work on a text box, sends a Ctrl + a, BACKSPACE
-  inputClear(elem) {
-    elem.sendKeys(protractor.Key.chord(protractor.Key.CONTROL, 'a'));
-    elem.sendKeys(protractor.Key.BACK_SPACE);
+  async inputClear(elem) {
+    await elem.sendKeys(protractor.Key.chord(protractor.Key.CONTROL, 'a'));
+    await elem.sendKeys(protractor.Key.BACK_SPACE);
   }
 
   async navigateTo(page = null) {
