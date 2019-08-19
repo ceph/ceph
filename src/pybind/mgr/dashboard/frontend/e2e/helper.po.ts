@@ -1,5 +1,6 @@
 import { browser } from 'protractor';
 import { ImagesPageHelper } from './block/images.po';
+import { OSDsPageHelper } from './cluster/osds.po';
 import { FilesystemsPageHelper } from './filesystems/filesystems.po';
 import { NfsPageHelper } from './nfs/nfs.po';
 import { PoolPageHelper } from './pools/pools.po';
@@ -23,6 +24,7 @@ export class Helper {
   users: UsersPageHelper;
   nfs: NfsPageHelper;
   filesystems: FilesystemsPageHelper;
+  osds: OSDsPageHelper;
 
   constructor() {
     this.pools = new PoolPageHelper();
@@ -36,6 +38,7 @@ export class Helper {
     this.users = new UsersPageHelper();
     this.nfs = new NfsPageHelper();
     this.filesystems = new FilesystemsPageHelper();
+    this.osds = new OSDsPageHelper();
   }
 
   /**
