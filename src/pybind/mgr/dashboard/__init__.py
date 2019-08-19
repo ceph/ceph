@@ -35,7 +35,8 @@ if 'UNITTEST' not in os.environ:
     mgr = _ModuleProxy()
     logger = _LoggerProxy()
 
-    from .module import Module, StandbyModule
+    # DO NOT REMOVE: required for ceph-mgr to load a module
+    from .module import Module, StandbyModule  # noqa: F401
 else:
     import logging
     logging.basicConfig(level=logging.DEBUG)
@@ -47,7 +48,11 @@ else:
     # Mock ceph module otherwise every module that is involved in a testcase and imports it will
     # raise an ImportError
     import sys
-    import mock
+    try:
+        import mock
+    except ImportError:
+        import unittest.mock as mock
+
     sys.modules['ceph_module'] = mock.Mock()
 
     mgr = mock.Mock()

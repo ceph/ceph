@@ -82,9 +82,16 @@ if test -d wheelhouse ; then
 fi
 
 pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX --find-links=file://$(pwd)/wheelhouse 'tox >=2.9.1'
-if test -f requirements.txt ; then
-    if ! test -f wheelhouse/md5 || ! md5sum -c wheelhouse/md5 > /dev/null; then
+
+require_files=$(ls *requirements*.txt 2>/dev/null) || true
+constraint_files=$(ls *constraints*.txt 2>/dev/null) || true
+require=$(echo -n "$require_files" | sed -e 's/^/-r /')
+constraint=$(echo -n "$constraint_files" | sed -e 's/^/-c /')
+md5=wheelhouse/md5
+if test "$require"; then
+    if ! test -f $md5 || ! md5sum -c wheelhouse/md5 > /dev/null; then
         NO_INDEX=''
     fi
-    pip $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX --find-links=file://$(pwd)/wheelhouse -r requirements.txt
+    pip --exists-action i $DISABLE_PIP_VERSION_CHECK --log $DIR/log.txt install $NO_INDEX \
+      --find-links=file://$(pwd)/wheelhouse $require $constraint 
 fi

@@ -4,7 +4,10 @@ from __future__ import absolute_import
 import uuid
 from contextlib import contextmanager
 
-from mock import patch
+try:
+    from mock import patch
+except ImportError:
+    from unittest.mock import patch
 
 from . import ControllerTestCase
 from ..controllers.osd import Osd

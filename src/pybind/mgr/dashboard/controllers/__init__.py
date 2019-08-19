@@ -10,10 +10,8 @@ import os
 import pkgutil
 import sys
 
-if sys.version_info >= (3, 0):
-    from urllib.parse import unquote  # pylint: disable=no-name-in-module,import-error
-else:
-    from urllib import unquote  # pylint: disable=no-name-in-module
+import six
+from six.moves.urllib.parse import unquote
 
 # pylint: disable=wrong-import-position
 import cherrypy
@@ -30,13 +28,13 @@ def EndpointDoc(description="", group="", parameters=None, responses=None):
     if not isinstance(description, str):
         raise Exception("%s has been called with a description that is not a string: %s"
                         % (EndpointDoc.__name__, description))
-    elif not isinstance(group, str):
+    if not isinstance(group, str):
         raise Exception("%s has been called with a groupname that is not a string: %s"
                         % (EndpointDoc.__name__, group))
-    elif parameters and not isinstance(parameters, dict):
+    if parameters and not isinstance(parameters, dict):
         raise Exception("%s has been called with parameters that is not a dict: %s"
                         % (EndpointDoc.__name__, parameters))
-    elif responses and not isinstance(responses, dict):
+    if responses and not isinstance(responses, dict):
         raise Exception("%s has been called with responses that is not a dict: %s"
                         % (EndpointDoc.__name__, responses))
 
@@ -637,9 +635,7 @@ class BaseController(object):
         @wraps(func)
         def inner(*args, **kwargs):
             for key, value in kwargs.items():
-                # pylint: disable=undefined-variable
-                if (sys.version_info < (3, 0) and isinstance(value, unicode)) \
-                        or isinstance(value, str):
+                if isinstance(value, six.text_type):
                     kwargs[key] = unquote(value)
 
             # Process method arguments.

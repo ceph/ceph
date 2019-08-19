@@ -1,7 +1,10 @@
 # -*- coding: utf-8 -*-
 # pylint: disable=protected-access
 import time
-import mock
+try:
+    import mock
+except ImportError:
+    import unittest.mock as mock
 
 from . import ControllerTestCase
 from ..controllers.pool import Pool

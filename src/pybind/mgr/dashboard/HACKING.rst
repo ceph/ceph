@@ -129,7 +129,7 @@ Run ``npm run test`` to execute the unit tests via `Jest
 <https://facebook.github.io/jest/>`_.
 
 If you get errors on all tests, it could be because `Jest
-<https://facebook.github.io/jest/>`_ or something else was updated.
+<https://facebook.github.io/jest/>`__ or something else was updated.
 There are a few ways how you can try to resolve this:
 
 - Remove all modules with ``rm -rf dist node_modules`` and run ``npm install``
@@ -314,7 +314,7 @@ This components are declared on the components module:
 `src/pybind/mgr/dashboard/frontend/src/app/shared/components`.
 
 Helper
-......
+~~~~~~
 
 This component should be used to provide additional information to the user.
 
@@ -453,9 +453,9 @@ To do that, check the settings in the i18n config file
 ``src/pybind/mgr/dashboard/frontend/i18n.config.json``:: and make sure that the
 organization is *ceph*, the project is *ceph-dashboard* and the resource is
 the one you want to pull from and push to e.g. *Master:master*. To find a list
-of avaiable resources visit ``https://www.transifex.com/ceph/ceph-dashboard/content/``::
+of avaiable resources visit `<https://www.transifex.com/ceph/ceph-dashboard/content/>`_.
 
-After you checked the config go to the directory ``src/pybind/mgr/dashboard/frontend``:: and run
+After you checked the config go to the directory ``src/pybind/mgr/dashboard/frontend`` and run::
 
   $ npm run i18n
 
@@ -467,7 +467,7 @@ The tool will ask you for an api token, unless you added it by running:
 
   $ npm run i18n:token
 
-To create a transifex api token visit ``https://www.transifex.com/user/settings/api/``::
+To create a transifex api token visit `<https://www.transifex.com/user/settings/api/>`_.
 
 After the command ran successfully, build the UI and check if everything is
 working as expected. You also might want to run the frontend tests.
@@ -477,7 +477,7 @@ Suggestions
 
 Strings need to start and end in the same line as the element:
 
-.. code-block:: xml
+.. code-block:: html
 
   <!-- avoid -->
   <span i18n>
@@ -500,7 +500,7 @@ Strings need to start and end in the same line as the element:
 
 Isolated interpolations should not be translated:
 
-.. code-block:: xml
+.. code-block:: html
 
   <!-- avoid -->
   <span i18n>{{ foo }}</span>
@@ -510,14 +510,14 @@ Isolated interpolations should not be translated:
 
 Interpolations used in a sentence should be kept in the translation:
 
-.. code-block:: xml
+.. code-block:: html
 
   <!-- recommended -->
   <span i18n>There are {{ x }} OSDs.</span>
 
 Remove elements that are outside the context of the translation:
 
-.. code-block:: xml
+.. code-block:: html
 
   <!-- avoid -->
   <label i18n>
@@ -533,7 +533,7 @@ Remove elements that are outside the context of the translation:
 
 Keep elements that affect the sentence:
 
-.. code-block:: xml
+.. code-block:: html
 
   <!-- recommended -->
   <span i18n>Profile <b>foo</b> will be removed.</span>
@@ -575,25 +575,25 @@ Alternatively, you can use Python's native package installation method::
   $ pip install tox
   $ pip install coverage
 
-To run the tests, run ``run-tox.sh`` in the dashboard directory (where
+To run the tests, run ``run_tox.sh`` in the dashboard directory (where
 ``tox.ini`` is located)::
 
   ## Run Python 2+3 tests+lint commands:
-  $ ./run-tox.sh
+  $ ../../../script/run_tox.sh --tox-env py27,py3,lint,check
 
   ## Run Python 3 tests+lint commands:
-  $ WITH_PYTHON2=OFF ./run-tox.sh
+  $ ../../../script/run_tox.sh --tox-env py3,lint,check
 
   ## Run Python 3 arbitrary command (e.g. 1 single test):
-  $ WITH_PYTHON2=OFF ./run-tox.sh pytest tests/test_rgw_client.py::RgwClientTest::test_ssl_verify
+  $ WITH_PYTHON2=OFF ../../../script/run_tox.sh --tox-env py3 "" tests/test_rgw_client.py::RgwClientTest::test_ssl_verify
 
-You can also run tox instead of ``run-tox.sh``::
+You can also run tox instead of ``run_tox.sh``::
 
   ## Run Python 3 tests command:
-  $ CEPH_BUILD_DIR=.tox tox -e py3-cov
+  $ tox -e py3
 
   ## Run Python 3 arbitrary command (e.g. 1 single test):
-  $ CEPH_BUILD_DIR=.tox tox -e py3-run pytest tests/test_rgw_client.py::RgwClientTest::test_ssl_verify
+  $ tox -e py3 tests/test_rgw_client.py::RgwClientTest::test_ssl_verify
 
 We also collect coverage information from the backend code when you run tests. You can check the
 coverage information provided by the tox output, or by running the following
@@ -779,17 +779,17 @@ endpoint:
     # URL: /ping/{key}?opt1=...&opt2=...
     @Endpoint(path="/", query_params=['opt1'])
     def index(self, key, opt1, opt2=None):
-      # ...
+      """..."""
 
     # URL: /ping/{key}?opt1=...&opt2=...
     @Endpoint(query_params=['opt1'])
     def __call__(self, key, opt1, opt2=None):
-      # ...
+      """..."""
 
     # URL: /ping/post/{key1}/{key2}
     @Endpoint('POST', path_params=['key1', 'key2'])
     def post(self, key1, key2, data1, data2=None):
-      # ...
+      """..."""
 
 
 In the above example we see how the ``path`` option can be used to override the
@@ -826,7 +826,7 @@ Consider the following example:
     # URL: /ping/{node}/stats/{date}/latency?unit=...
     @Endpoint(path="/{date}/latency")
     def latency(self, node, date, unit="ms"):
-      # ...
+      """ ..."""
 
 In this example we explicitly declare a path parameter ``{node}`` in the
 controller URL path, and a path parameter ``{date}`` in the ``latency``
@@ -864,9 +864,10 @@ Example:
 
     @Proxy()
     def proxy(self, path, **params):
-      # if requested URL is "/foo/proxy/access/service?opt=1"
-      # then path is "access/service" and params is {'opt': '1'}
-      # ...
+      """
+      if requested URL is "/foo/proxy/access/service?opt=1"
+      then path is "access/service" and params is {'opt': '1'}
+      """
 
 
 How does the RESTController work?
@@ -1587,6 +1588,7 @@ type and not as a string. Allowed values are ``str``, ``int``, ``bool``, ``float
 .. code-block:: python
 
  @EndpointDoc(parameters={'my_string': (str, 'Description of my_string')})
+ def method(my_string): pass
 
 For body parameters, more complex cases are possible. If the parameter is a
 dictionary, the type should be replaced with a ``dict`` containing its nested
@@ -1605,6 +1607,7 @@ for nested parameters).
       'item2': (str, 'Description of item2', True),  # item2 is optional
       'item3': (str, 'Description of item3', True, 'foo'),  # item3 is optional with 'foo' as default value
   }, 'Description of my_dictionary')})
+  def method(my_dictionary): pass
 
 If the parameter is a ``list`` of primitive types, the type should be
 surrounded with square brackets.
@@ -1612,6 +1615,7 @@ surrounded with square brackets.
 .. code-block:: python
 
   @EndpointDoc(parameters={'my_list': ([int], 'Description of my_list')})
+  def method(my_list): pass
 
 If the parameter is a ``list`` with nested parameters, the nested parameters
 should be placed in a dictionary and surrounded with square brackets.
@@ -1623,6 +1627,7 @@ should be placed in a dictionary and surrounded with square brackets.
       'list_item': (str, 'Description of list_item'),
       'list_item2': (str, 'Description of list_item2')
   }], 'Description of my_list')})
+  def method(my_list): pass
 
 
 ``responses``: A dict used for describing responses. Rules for describing
@@ -1633,7 +1638,8 @@ example below:
 .. code-block:: python
 
   @EndpointDoc(responses={
-    '400':{'my_response': (str, 'Description of my_response')}
+    '400':{'my_response': (str, 'Description of my_response')}})
+  def method(): pass
 
 
 Error Handling in Python
@@ -1743,7 +1749,7 @@ The available interfaces are the following:
 - ``CanLog``: provides the plug-in with access to the Ceph Dashboard logger under ``self.log``.
 - ``Setupable``: requires overriding ``setup()`` hook. This method is run in the Ceph Dashboard ``serve()`` method, right after CherryPy has been configured, but before it is started. It's a placeholder for the plug-in initialization logic.
 - ``HasOptions``: requires overriding ``get_options()`` hook by returning a list of ``Options()``. The options returned here are added to the ``MODULE_OPTIONS``.
-- ``HasCommands``: requires overriding ``register_commands()`` hook by defining the commands the plug-in can handle and decorating them with ``@CLICommand`. The commands can be optionally returned, so that they can be invoked externally (which makes unit testing easier).
+- ``HasCommands``: requires overriding ``register_commands()`` hook by defining the commands the plug-in can handle and decorating them with ``@CLICommand``. The commands can be optionally returned, so that they can be invoked externally (which makes unit testing easier).
 - ``HasControllers``: requires overriding ``get_controllers()`` hook by defining and returning the controllers as usual.
 - ``FilterRequest.BeforeHandler``: requires overriding ``filter_request_before_handler()`` hook. This method receives a ``cherrypy.request`` object for processing. A usual implementation of this method will allow some requests to pass or will raise a ``cherrypy.HTTPError` based on the ``request`` metadata and other conditions.
 

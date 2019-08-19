@@ -2,7 +2,10 @@
 from __future__ import absolute_import
 
 import unittest
-from mock import Mock, patch
+try:
+    from mock import Mock, patch
+except ImportError:
+    from unittest.mock import Mock, patch
 
 from . import KVStoreMockMixin
 from ..plugins.feature_toggles import FeatureToggles, Features

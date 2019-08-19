@@ -63,7 +63,7 @@ class Pool(RESTController):
     def _get(cls, pool_name, attrs=None, stats=False):
         # type: (str, str, bool) -> dict
         pools = cls._pool_list(attrs, stats)
-        pool = [pool for pool in pools if pool['pool_name'] == pool_name]
+        pool = [p for p in pools if p['pool_name'] == pool_name]
         if not pool:
             raise cherrypy.NotFound('No such pool')
         return pool[0]

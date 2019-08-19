@@ -4,7 +4,10 @@ from __future__ import absolute_import
 import re
 import json
 import cherrypy
-import mock
+try:
+    import mock
+except ImportError:
+    import unittest.mock as mock
 
 from . import ControllerTestCase, KVStoreMockMixin
 from ..controllers import RESTController, Controller

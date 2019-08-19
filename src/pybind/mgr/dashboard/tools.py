@@ -28,7 +28,7 @@ from .settings import Settings
 from .services.auth import JwtManager
 
 try:
-    from typing import Any, AnyStr, Dict, List  # pylint: disable=unused-import
+    from typing import Any, AnyStr, Dict, List  # noqa pylint: disable=unused-import
 except ImportError:
     pass  # For typing only
 

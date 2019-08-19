@@ -3,7 +3,10 @@ from __future__ import absolute_import
 
 import unittest
 
-from mock import MagicMock, Mock
+try:
+    from mock import MagicMock, Mock
+except ImportError:
+    from unittest.mock import MagicMock, Mock
 
 import orchestrator
 from . import KVStoreMockMixin

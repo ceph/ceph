@@ -2,7 +2,11 @@
 import unittest
 import requests.exceptions
 
-from mock import patch
+try:
+    from mock import patch
+except ImportError:
+    from unittest.mock import patch
+
 from urllib3.exceptions import MaxRetryError, ProtocolError
 from .. import mgr
 from ..rest_client import RequestException, RestClient
