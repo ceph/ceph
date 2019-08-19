@@ -7,49 +7,49 @@ describe('Iscsi Page', () => {
     iscsi = new Helper().iscsi;
   });
 
-  afterEach(() => {
-    Helper.checkConsole();
+  afterEach(async () => {
+    await Helper.checkConsole();
   });
 
   describe('breadcrumb test', () => {
-    beforeAll(() => {
-      iscsi.navigateTo();
+    beforeAll(async () => {
+      await iscsi.navigateTo();
     });
 
-    it('should open and show breadcrumb', () => {
-      expect(iscsi.getBreadcrumbText()).toEqual('Overview');
+    it('should open and show breadcrumb', async () => {
+      expect(await iscsi.getBreadcrumbText()).toEqual('Overview');
     });
   });
 
   describe('fields check', () => {
-    beforeAll(() => {
-      iscsi.navigateTo();
+    beforeAll(async () => {
+      await iscsi.navigateTo();
     });
 
-    it('should check that tables are displayed and legends are correct', () => {
+    it('should check that tables are displayed and legends are correct', async () => {
       // Check tables are displayed
       expect(
-        iscsi
-          .getTable()
+        await iscsi
+          .getDataTable()
           .get(0)
           .isDisplayed()
       );
       expect(
-        iscsi
-          .getTable()
+        await iscsi
+          .getDataTable()
           .get(1)
           .isDisplayed()
       );
 
       // Check that legends are correct
       expect(
-        iscsi
+        await iscsi
           .getLegends()
           .get(0)
           .getText()
       ).toMatch('Gateways');
       expect(
-        iscsi
+        await iscsi
           .getLegends()
           .get(1)
           .getText()
