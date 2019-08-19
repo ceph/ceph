@@ -17,6 +17,8 @@ export class Helper {
   mirroring: MirroringPageHelper;
   dashboard: DashboardPageHelper;
   usermgmt: UserMgmtPageHelper;
+  daemons: DaemonsPageHelper;
+  users: UsersPageHelper;
 
   constructor() {
     this.pools = new PoolPageHelper();
@@ -26,6 +28,8 @@ export class Helper {
     this.mirroring = new MirroringPageHelper();
     this.dashboard = new DashboardPageHelper();
     this.usermgmt = new UserMgmtPageHelper();
+    this.daemons = new DaemonsPageHelper();
+    this.users = new UsersPageHelper();
   }
 
   /**

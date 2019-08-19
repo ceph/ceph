@@ -7,25 +7,25 @@ describe('RGW daemons page', () => {
     daemons = new Helper().daemons;
   });
 
-  afterEach(() => {
-    Helper.checkConsole();
+  afterEach(async () => {
+    await Helper.checkConsole();
   });
 
   describe('breadcrumb and tab tests', () => {
-    beforeAll(() => {
-      daemons.navigateTo();
+    beforeAll(async () => {
+      await daemons.navigateTo();
     });
 
-    it('should open and show breadcrumb', () => {
-      expect(daemons.getBreadcrumbText()).toEqual('Daemons');
+    it('should open and show breadcrumb', async () => {
+      expect(await daemons.getBreadcrumbText()).toEqual('Daemons');
     });
 
-    it('should show two tabs', () => {
-      expect(daemons.getTabsCount()).toEqual(2);
+    it('should show two tabs', async () => {
+      expect(await daemons.getTabsCount()).toEqual(2);
     });
 
-    it('should show daemons list tab at first', () => {
-      expect(daemons.getTabText(0)).toEqual('Daemons List');
+    it('should show daemons list tab at first', async () => {
+      expect(await daemons.getTabText(0)).toEqual('Daemons List');
     });
 
     it('should show overall performance as a second tab', () => {
@@ -33,13 +33,13 @@ describe('RGW daemons page', () => {
     });
   });
 
-  describe('details and performance counters table tests', () => {
-    beforeAll(() => {
-      daemons.navigateTo();
+  describe('details and performance counters table tests', async () => {
+    beforeAll(async () => {
+      await daemons.navigateTo();
     });
 
-    it('should check that details/performance tables are visible when daemon is selected', () => {
-      daemons.checkTables();
+    it('should check that details/performance tables are visible when daemon is selected', async () => {
+      await daemons.checkTables();
     });
   });
 });

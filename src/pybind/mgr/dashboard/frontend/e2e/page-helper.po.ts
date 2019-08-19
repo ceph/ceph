@@ -71,9 +71,9 @@ export abstract class PageHelper {
     return $$('.nav.nav-tabs li').count();
   }
 
-  // getFirstTableCellWithText(content) {
-  //   return element.all(by.cssContainingText('.datatable-body-cell-label', content)).first();
-  // }
+  getFirstTableCellWithText(content): ElementFinder {
+    return element.all(by.cssContainingText('.datatable-body-cell-label', content)).first();
+  }
 
   /**
    * Used for instances where a modal container would receive the click rather
