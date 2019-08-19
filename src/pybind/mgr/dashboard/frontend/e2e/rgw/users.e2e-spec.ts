@@ -8,52 +8,52 @@ describe('RGW users page', () => {
     users = new Helper().users;
   });
 
-  afterEach(() => {
-    Helper.checkConsole();
+  afterEach(async () => {
+    await Helper.checkConsole();
   });
 
   describe('breadcrumb test', () => {
-    beforeAll(() => {
-      users.navigateTo();
+    beforeAll(async () => {
+      await users.navigateTo();
     });
 
-    it('should open and show breadcrumb', () => {
-      expect(users.getBreadcrumbText()).toEqual('Users');
+    it('should open and show breadcrumb', async () => {
+      expect(await users.getBreadcrumbText()).toEqual('Users');
     });
   });
 
   describe('create, edit & delete user test', () => {
-    beforeAll(() => {
-      users.navigateTo();
+    beforeAll(async () => {
+      await users.navigateTo();
     });
 
-    it('should create user', () => {
-      users.create(user_name, 'Some Name', 'original@website.com', '1200');
-      expect(users.getTableCell(user_name).isPresent()).toBe(true);
+    it('should create user', async () => {
+      await users.create(user_name, 'Some Name', 'original@website.com', '1200');
+      expect(await users.getTableCell(user_name).isPresent()).toBe(true);
     });
 
-    it('should edit users full name, email and max buckets', () => {
-      users.edit(user_name, 'Another Identity', 'changed@othersite.com', '1969');
+    it('should edit users full name, email and max buckets', async () => {
+      await users.edit(user_name, 'Another Identity', 'changed@othersite.com', '1969');
       // checks for succsessful editing are done within edit function
     });
 
-    it('should delete user', () => {
-      users.delete(user_name);
-      expect(users.getTableCell(user_name).isPresent()).toBe(false);
+    it('should delete user', async () => {
+      await users.delete(user_name);
+      expect(await users.getTableCell(user_name).isPresent()).toBe(false);
     });
   });
 
   describe('Invalid input test', () => {
-    beforeAll(() => {
-      users.navigateTo();
+    beforeAll(async () => {
+      await users.navigateTo();
     });
 
-    it('should put invalid input into user creation form and check fields are marked invalid', () => {
-      users.invalidCreate();
+    it('should put invalid input into user creation form and check fields are marked invalid', async () => {
+      await users.invalidCreate();
     });
 
-    it('should put invalid input into user edit form and check fields are marked invalid', () => {
-      users.invalidEdit();
+    it('should put invalid input into user edit form and check fields are marked invalid', async () => {
+      await users.invalidEdit();
     });
   });
 });
