@@ -5354,7 +5354,8 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
     dout(10) << __func__ << " gifting " << gift
 	     << " (" << byte_u_t(gift) << ")" << dendl;
 
-    int64_t alloc_len = alloc->allocate(gift, cct->_conf->bluefs_alloc_size,
+    int64_t alloc_len = alloc->allocate(gift,
+					cct->_conf->bluefs_shared_alloc_size,
 					0, 0, extents);
 
     if (alloc_len <= 0) {
