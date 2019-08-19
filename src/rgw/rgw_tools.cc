@@ -9,6 +9,7 @@
 #include "common/async/yield_context.h"
 
 #include "include/types.h"
+#include "include/stringify.h"
 
 #include "rgw_common.h"
 #include "rgw_rados.h"
@@ -19,6 +20,7 @@
 #include "rgw_aio_throttle.h"
 #include "rgw_compression.h"
 #include "rgw_zone.h"
+#include "osd/osd_types.h"
 
 #include "services/svc_sys_obj.h"
 #include "services/svc_zone_utils.h"
@@ -29,6 +31,69 @@
 #define READ_CHUNK_LEN (512 * 1024)
 
 static std::map<std::string, std::string>* ext_mime_map;
+
+int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool,
+                   librados::IoCtx& ioctx, bool create,
+		   bool mostly_omap)
+{
+  int r = rados->ioctx_create(pool.name.c_str(), ioctx);
+  if (r == -ENOENT && create) {
+    r = rados->pool_create(pool.name.c_str());
+    if (r == -ERANGE) {
+      dout(0)
+        << __func__
+        << " ERROR: librados::Rados::pool_create returned " << cpp_strerror(-r)
+        << " (this can be due to a pool or placement group misconfiguration, e.g."
+        << " pg_num < pgp_num or mon_max_pg_per_osd exceeded)"
+        << dendl;
+    }
+    if (r < 0 && r != -EEXIST) {
+      return r;
+    }
+
+    r = rados->ioctx_create(pool.name.c_str(), ioctx);
+    if (r < 0) {
+      return r;
+    }
+
+    r = ioctx.application_enable(pg_pool_t::APPLICATION_NAME_RGW, false);
+    if (r < 0 && r != -EOPNOTSUPP) {
+      return r;
+    }
+
+    if (mostly_omap) {
+      // set pg_autoscale_bias
+      bufferlist inbl;
+      float bias = g_conf().get_val<double>("rgw_rados_pool_autoscale_bias");
+      int r = rados->mon_command(
+	"{\"prefix\": \"osd pool set\", \"pool\": \"" +
+	pool.name + "\", \"var\": \"pg_autoscale_bias\": \"" +
+	stringify(bias) + "\"}",
+	inbl, NULL, NULL);
+      if (r < 0) {
+	dout(10) << __func__ << " warning: failed to set pg_autoscale_bias on "
+		 << pool.name << dendl;
+      }
+      // set pg_num_min
+      int min = g_conf().get_val<uint64_t>("rgw_rados_pool_pg_num_min");
+      r = rados->mon_command(
+	"{\"prefix\": \"osd pool set\", \"pool\": \"" +
+	pool.name + "\", \"var\": \"pg_num_min\": \"" +
+	stringify(min) + "\"}",
+	inbl, NULL, NULL);
+     if (r < 0) {
+       dout(10) << __func__ << " warning: failed to set pg_num_min on "
+		<< pool.name << dendl;
+      }
+    }
+  } else if (r < 0) {
+    return r;
+  }
+  if (!pool.ns.empty()) {
+    ioctx.set_namespace(pool.ns);
+  }
+  return 0;
+}
 
 int rgw_put_system_obj(RGWRados *rgwstore, const rgw_pool& pool, const string& oid, bufferlist& data, bool exclusive,
                        RGWObjVersionTracker *objv_tracker, real_time set_mtime, map<string, bufferlist> *pattrs)

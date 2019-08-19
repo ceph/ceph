@@ -119,8 +119,6 @@ static inline void get_obj_bucket_and_oid_loc(const rgw_obj& obj, string& oid, s
   }
 }
 
-int rgw_init_ioctx(librados::Rados *rados, const rgw_pool& pool, librados::IoCtx& ioctx, bool create = false);
-
 int rgw_policy_from_attrset(CephContext *cct, map<string, bufferlist>& attrset, RGWAccessControlPolicy *policy);
 
 static inline bool rgw_raw_obj_to_obj(const rgw_bucket& bucket, const rgw_raw_obj& raw_obj, rgw_obj *obj)
@@ -1189,7 +1187,8 @@ class RGWRados : public AdminSocketHook
   int open_objexp_pool_ctx();
   int open_reshard_pool_ctx();
 
-  int open_pool_ctx(const rgw_pool& pool, librados::IoCtx&  io_ctx);
+  int open_pool_ctx(const rgw_pool& pool, librados::IoCtx&  io_ctx,
+		    bool mostly_omap);
   int open_bucket_index_ctx(const RGWBucketInfo& bucket_info, librados::IoCtx& index_ctx);
   int open_bucket_index(const RGWBucketInfo& bucket_info, librados::IoCtx&  index_ctx, string& bucket_oid);
   int open_bucket_index_base(const RGWBucketInfo& bucket_info, librados::IoCtx&  index_ctx,
@@ -1270,10 +1269,7 @@ class RGWRados : public AdminSocketHook
 protected:
   CephContext *cct;
 
-  std::vector<librados::Rados> rados;
-  uint32_t next_rados_handle;
-  RWLock handle_lock;
-  std::map<pthread_t, int> rados_map;
+  librados::Rados rados;
 
   using RGWChainedCacheImpl_bucket_info_entry = RGWChainedCacheImpl<bucket_info_entry>;
   RGWChainedCacheImpl_bucket_info_entry *binfo_cache;
@@ -1307,8 +1303,6 @@ public:
                bucket_id_lock("rados_bucket_id"),
                bucket_index_max_shards(0),
                max_bucket_id(0), cct(NULL),
-               next_rados_handle(0),
-               handle_lock("rados_handle_lock"),
                binfo_cache(NULL), obj_tombstone_cache(nullptr),
                pools_initialized(false),
                quota_handler(NULL),

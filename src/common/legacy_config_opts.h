@@ -1376,7 +1376,6 @@ OPTION(rgw_op_thread_timeout, OPT_INT)
 OPTION(rgw_op_thread_suicide_timeout, OPT_INT)
 OPTION(rgw_thread_pool_size, OPT_INT)
 OPTION(rgw_num_control_oids, OPT_INT)
-OPTION(rgw_num_rados_handles, OPT_U32)
 OPTION(rgw_verify_ssl, OPT_BOOL) // should http_client try to verify ssl when sent https request
 
 /* The following are tunables for caches of RGW NFS (and other file
