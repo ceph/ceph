@@ -12576,11 +12576,6 @@ int PrimaryLogPG::prep_object_replica_pushes(
   ceph_assert(!recovering.count(soid));
   recovering.insert(make_pair(soid, obc));
 
-  /* We need this in case there is an in progress write on the object.  In fact,
-   * the only possible write is an update to the xattr due to a lost_revert --
-   * a client write would be blocked since the object is degraded.
-   * In almost all cases, therefore, this lock should be uncontended.
-   */
   int r = pgbackend->recover_object(
     soid,
     v,
@@ -13136,7 +13131,6 @@ int PrimaryLogPG::prep_backfill_object_push(
   start_recovery_op(oid);
   recovering.insert(make_pair(oid, obc));
 
-  // We need to take the read_lock here in order to flush in-progress writes
   int r = pgbackend->recover_object(
     oid,
     v,
