@@ -49,60 +49,47 @@ export class PoolPageHelper extends PageHelper {
       protractor.Key.NULL,
       placement_groups
     );
-    this.setApplications(apps);
+    await this.setApplications(apps);
     await element(by.css('cd-submit-button')).click();
 
     return Promise.resolve();
   }
 
-  edit_pool_pg(name: string, new_pg: number): promise.Promise<any> {
+  async edit_pool_pg(name: string, new_pg: number): Promise<void> {
     if (!this.isPowerOf2(new_pg)) {
       return Promise.reject(`Placement groups ${new_pg} are not a power of 2`);
     }
-    return this.getTableCellByContent(name).then((elem) => {
-      elem.click(); // select pool from the table
-      element(by.cssContainingText('button', 'Edit')).click(); // click edit button
-      expect(this.getBreadcrumbText()).toEqual('Edit'); // verify we are now on edit page
-      $('input[name=pgNum]')
-        .sendKeys(protractor.Key.CONTROL, 'a', protractor.Key.NULL, new_pg)
-        .then(() => {
-          element(by.css('cd-submit-button')).click();
-          const str = `${new_pg} active+clean`;
-          browser
-            .wait(
-              EC.visibilityOf(this.getTableRow(name)),
-              Helper.TIMEOUT,
-              'Timed out waiting for table row to load'
-            )
-            .then(() => {
-              return browser.wait(
-                EC.textToBePresentInElement(this.getTableRow(name), str),
-                Helper.TIMEOUT,
-                'Timed out waiting for placement group to be updated'
-              );
-            });
-        });
-    });
+    const elem = await this.getTableCellByContent(name);
+    await elem.click(); // select pool from the table
+    await element(by.cssContainingText('button', 'Edit')).click(); // click edit button
+    expect(await this.getBreadcrumbText()).toEqual('Edit'); // verify we are now on edit page
+    await $('input[name=pgNum]').sendKeys(protractor.Key.CONTROL, 'a', protractor.Key.NULL, new_pg);
+    await element(by.css('cd-submit-button')).click();
+    const str = `${new_pg} active+clean`;
+    await browser.wait(
+      EC.visibilityOf(this.getTableRow(name)),
+      Helper.TIMEOUT,
+      'Timed out waiting for table row to load'
+    );
+    await browser.wait(
+      EC.textToBePresentInElement(this.getTableRow(name), str),
+      Helper.TIMEOUT,
+      'Timed out waiting for placement group to be updated'
+    );
   }
 
-  private setApplications(apps: string[]) {
+  private async setApplications(apps: string[]) {
     if (!apps || apps.length === 0) {
       return;
     }
-    element(by.css('.float-left.mr-2.select-menu-edit'))
-      .click()
-      .then(() => {
-        browser
-          .wait(
-            Helper.EC.visibilityOf(element(by.css('.popover-content.popover-body'))),
-            Helper.TIMEOUT
-          )
-          .then(() =>
-            apps.forEach((app) =>
-              element(by.cssContainingText('.select-menu-item-content', app)).click()
-            )
-          );
-      });
+    await element(by.css('.float-left.mr-2.select-menu-edit')).click();
+    await browser.wait(
+      Helper.EC.visibilityOf(element(by.css('.popover-content.popover-body'))),
+      Helper.TIMEOUT
+    );
+    apps.forEach(
+      async (app) => await element(by.cssContainingText('.select-menu-item-content', app)).click()
+    );
   }
 
   @PageHelper.restrictTo(pages.index)

@@ -1,5 +1,6 @@
 import { browser } from 'protractor';
 import { ImagesPageHelper } from './block/images.po';
+import { MirroringPageHelper } from './block/mirroring.po';
 import { AlertsPageHelper } from './cluster/alerts.po';
 import { ConfigurationPageHelper } from './cluster/configuration.po';
 import { CrushMapPageHelper } from './cluster/crush-map.po';
@@ -39,6 +40,7 @@ export class Helper {
   crushMap: CrushMapPageHelper;
   configuration: ConfigurationPageHelper;
   alerts: AlertsPageHelper;
+  mirroring: MirroringPageHelper;
 
   constructor() {
     this.pools = new PoolPageHelper();
@@ -60,6 +62,7 @@ export class Helper {
     this.crushMap = new CrushMapPageHelper();
     this.configuration = new ConfigurationPageHelper();
     this.alerts = new AlertsPageHelper();
+    this.mirroring = new MirroringPageHelper();
   }
 
   /**
