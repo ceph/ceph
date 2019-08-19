@@ -2,43 +2,43 @@ import { $, browser } from 'protractor';
 import { Helper } from '../helper.po';
 
 describe('CRUSH map page', () => {
-  let crushmap: Helper['crushmap'];
+  let crushmap: Helper['crushMap'];
 
   beforeAll(() => {
-    crushmap = new Helper().crushmap;
+    crushmap = new Helper().crushMap;
   });
 
-  afterEach(() => {
-    Helper.checkConsole();
+  afterEach(async () => {
+    await Helper.checkConsole();
   });
 
   describe('breadcrumb test', () => {
-    beforeAll(() => {
-      crushmap.navigateTo();
+    beforeAll(async () => {
+      await crushmap.navigateTo();
     });
 
-    it('should open and show breadcrumb', () => {
-      expect(crushmap.getBreadcrumbText()).toEqual('CRUSH map');
+    it('should open and show breadcrumb', async () => {
+      expect(await crushmap.getBreadcrumbText()).toEqual('CRUSH map');
     });
   });
   describe('fields check', () => {
-    beforeAll(() => {
-      crushmap.navigateTo();
+    beforeAll(async () => {
+      await crushmap.navigateTo();
     });
 
-    it('should check that title & table appears', () => {
+    it('should check that title & table appears', async () => {
       // Check that title (CRUSH map viewer) appears
-      expect(crushmap.getPageTitle()).toMatch('CRUSH map viewer');
+      expect(await crushmap.getPageTitle()).toMatch('CRUSH map viewer');
 
       // Check that title appears once OSD is clicked
-      crushmap.getCrushNode(1).click();
-      const label = $('legend').getText(); // Get table label
-      expect(crushmap.getCrushNode(1).getText()).toEqual(label);
+      await crushmap.getCrushNode(1).click();
+
+      const label = await $('legend').getText(); // Get table label
+      expect(await crushmap.getCrushNode(1).getText()).toEqual(label);
 
       // Check that table appears once OSD is clicked
-      browser.wait(Helper.EC.visibilityOf($('.datatable-body'))).then(() => {
-        expect($('.datatable-body').isDisplayed()).toBe(true);
-      });
+      await browser.wait(Helper.EC.visibilityOf($('.datatable-body')));
+      expect(await $('.datatable-body').isDisplayed()).toBe(true);
     });
   });
 });

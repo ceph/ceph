@@ -1,6 +1,6 @@
 import { browser } from 'protractor';
-import { Logs } from 'selenium-webdriver';
 import { ImagesPageHelper } from './block/images.po';
+import { CrushMapPageHelper } from './cluster/crush-map.po';
 import { HostsPageHelper } from './cluster/hosts.po';
 import { LogsPageHelper } from './cluster/logs.po';
 import { ManagerModulesPageHelper } from './cluster/mgr-modules.po';
@@ -34,6 +34,7 @@ export class Helper {
   mgrModules: ManagerModulesPageHelper;
   logs: LogsPageHelper;
   hosts: HostsPageHelper;
+  crushMap: CrushMapPageHelper;
 
   constructor() {
     this.pools = new PoolPageHelper();
@@ -52,6 +53,7 @@ export class Helper {
     this.mgrModules = new ManagerModulesPageHelper();
     this.logs = new LogsPageHelper();
     this.hosts = new HostsPageHelper();
+    this.crushMap = new CrushMapPageHelper();
   }
 
   /**
