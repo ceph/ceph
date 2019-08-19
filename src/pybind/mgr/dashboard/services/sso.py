@@ -4,8 +4,11 @@ from __future__ import absolute_import
 
 import errno
 import json
-import sys
 import threading
+
+import six
+if six.PY2:
+    FileNotFoundError = IOError
 
 try:
     from onelogin.saml2.settings import OneLogin_Saml2_Settings
@@ -140,8 +143,7 @@ def handle_sso_command(cmd):
         return -errno.ENOSYS, '', ''
 
     if not python_saml_imported:
-        python_saml_name = 'python3-saml' if sys.version_info >= (3, 0) else 'python-saml'
-        return -errno.EPERM, '', 'Required library not found: `{}`'.format(python_saml_name)
+        return -errno.EPERM, '', 'Required library not found: `python3-saml`'
 
     if cmd['prefix'] == 'dashboard sso enable saml2':
         try:
@@ -179,12 +181,6 @@ def handle_sso_command(cmd):
         if not sp_x_509_cert and sp_private_key:
             return -errno.EINVAL, '', 'Missing parameter `sp_x_509_cert`.'
         has_sp_cert = sp_x_509_cert != "" and sp_private_key != ""
-        try:
-            # pylint: disable=undefined-variable
-            FileNotFoundError
-        except NameError:
-            # pylint: disable=redefined-builtin
-            FileNotFoundError = IOError
         try:
             f = open(sp_x_509_cert, 'r')
             sp_x_509_cert = f.read()

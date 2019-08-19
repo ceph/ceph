@@ -421,7 +421,6 @@ class RestClient(object):
                 logger.error(
                     "%s REST API failed %s req status: %s", self.client_name,
                     method.upper(), resp.status_code)
-                from pprint import pprint as pp
                 from pprint import pformat as pf
 
                 raise RequestException(
