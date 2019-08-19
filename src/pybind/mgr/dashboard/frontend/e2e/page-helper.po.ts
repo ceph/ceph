@@ -1,4 +1,13 @@
-import { $, $$, browser, by, element, ElementFinder, protractor } from 'protractor';
+import {
+  $,
+  $$,
+  browser,
+  by,
+  element,
+  ElementArrayFinder,
+  ElementFinder,
+  protractor
+} from 'protractor';
 
 interface Pages {
   index: string;
@@ -156,23 +165,29 @@ export abstract class PageHelper {
     const url = this.pages[page];
     return browser.get(url);
   }
-  //
-  // getDataTable() {
-  //   return $$('cd-table');
-  // }
-  //
-  // getStatusTable() {
-  //   // Grabs striped tables
-  //   return $$('.table.table-striped');
-  // }
-  //
-  // getLegends() {
-  //   // Grabs legends above tables
-  //   return $$('legend');
-  // }
-  //
-  // getDataTableHeaders() {
-  //   // Gets column headers of table
-  //   return $$('.datatable-header');
-  // }
+
+  getDataTable(): ElementArrayFinder {
+    return $$('cd-table');
+  }
+
+  /**
+   * Grabs striped tables
+   */
+  getStatusTable(): ElementArrayFinder {
+    return $$('.table.table-striped');
+  }
+
+  /**
+   * Grabs legends above tables
+   */
+  getLegends(): ElementArrayFinder {
+    return $$('legend');
+  }
+
+  /**
+   * Gets column headers of table
+   */
+  getDataTableHeaders(): ElementArrayFinder {
+    return $$('.datatable-header');
+  }
 }

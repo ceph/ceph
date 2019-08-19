@@ -7,51 +7,51 @@ describe('Monitors page', () => {
     monitors = new Helper().monitors;
   });
 
-  afterEach(() => {
-    Helper.checkConsole();
+  afterEach(async () => {
+    await Helper.checkConsole();
   });
 
   describe('breadcrumb test', () => {
-    beforeAll(() => {
-      monitors.navigateTo();
+    beforeAll(async () => {
+      await monitors.navigateTo();
     });
 
-    it('should open and show breadcrumb', () => {
-      expect(monitors.getBreadcrumbText()).toEqual('Monitors');
+    it('should open and show breadcrumb', async () => {
+      expect(await monitors.getBreadcrumbText()).toEqual('Monitors');
     });
   });
 
   describe('fields check', () => {
-    beforeAll(() => {
-      monitors.navigateTo();
+    beforeAll(async () => {
+      await monitors.navigateTo();
     });
 
-    it('should check status table is present', () => {
+    it('should check status table is present', async () => {
       // check for table header 'Status'
       expect(
-        monitors
+        await monitors
           .getLegends()
           .get(0)
           .getText()
       ).toMatch('Status');
 
       // check for fields in table
-      expect(monitors.getStatusTable().getText()).toMatch('Cluster ID');
-      expect(monitors.getStatusTable().getText()).toMatch('monmap modified');
-      expect(monitors.getStatusTable().getText()).toMatch('monmap epoch');
-      expect(monitors.getStatusTable().getText()).toMatch('quorum con');
-      expect(monitors.getStatusTable().getText()).toMatch('quorum mon');
-      expect(monitors.getStatusTable().getText()).toMatch('required con');
-      expect(monitors.getStatusTable().getText()).toMatch('required mon');
+      expect(await monitors.getStatusTable().getText()).toMatch('Cluster ID');
+      expect(await monitors.getStatusTable().getText()).toMatch('monmap modified');
+      expect(await monitors.getStatusTable().getText()).toMatch('monmap epoch');
+      expect(await monitors.getStatusTable().getText()).toMatch('quorum con');
+      expect(await monitors.getStatusTable().getText()).toMatch('quorum mon');
+      expect(await monitors.getStatusTable().getText()).toMatch('required con');
+      expect(await monitors.getStatusTable().getText()).toMatch('required mon');
     });
 
-    it('should check In Quorum and Not In Quorum tables are present', () => {
+    it('should check In Quorum and Not In Quorum tables are present', async () => {
       // check for there to be two tables
-      expect(monitors.getDataTable().count()).toEqual(2);
+      expect(await monitors.getDataTable().count()).toEqual(2);
 
       // check for table header 'In Quorum'
       expect(
-        monitors
+        await monitors
           .getLegends()
           .get(1)
           .getText()
@@ -59,7 +59,7 @@ describe('Monitors page', () => {
 
       // check for table header 'Not In Quorum'
       expect(
-        monitors
+        await monitors
           .getLegends()
           .get(2)
           .getText()
@@ -67,25 +67,25 @@ describe('Monitors page', () => {
 
       // verify correct columns on In Quorum table
       expect(
-        monitors
+        await monitors
           .getDataTableHeaders()
           .get(0)
           .getText()
       ).toMatch('Name');
       expect(
-        monitors
+        await monitors
           .getDataTableHeaders()
           .get(0)
           .getText()
       ).toMatch('Rank');
       expect(
-        monitors
+        await monitors
           .getDataTableHeaders()
           .get(0)
           .getText()
       ).toMatch('Public Address');
       expect(
-        monitors
+        await monitors
           .getDataTableHeaders()
           .get(0)
           .getText()
@@ -93,19 +93,19 @@ describe('Monitors page', () => {
 
       // verify correct columns on Not In Quorum table
       expect(
-        monitors
+        await monitors
           .getDataTableHeaders()
           .get(1)
           .getText()
       ).toMatch('Name');
       expect(
-        monitors
+        await monitors
           .getDataTableHeaders()
           .get(1)
           .getText()
       ).toMatch('Rank');
       expect(
-        monitors
+        await monitors
           .getDataTableHeaders()
           .get(1)
           .getText()
