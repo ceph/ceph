@@ -813,11 +813,15 @@ static pair<epoch_t, epoch_t> get_required_past_interval_bounds(
 
 void PeeringState::check_past_interval_bounds() const
 {
+  auto oldest_epoch = pl->oldest_stored_osdmap();
   auto rpib = get_required_past_interval_bounds(
     info,
-    pl->oldest_stored_osdmap());
+    oldest_epoch);
   if (rpib.first >= rpib.second) {
-    if (!past_intervals.empty()) {
+    // do not warn if the start bound is dictated by oldest_map; the
+    // past intervals are presumably appropriate given the pg info.
+    if (!past_intervals.empty() &&
+	rpib.first > oldest_epoch) {
       pl->get_clog_error() << info.pgid << " required past_interval bounds are"
 			     << " empty [" << rpib << ") but past_intervals is not: "
 			     << past_intervals;
