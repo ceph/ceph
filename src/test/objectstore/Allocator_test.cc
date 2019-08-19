@@ -242,7 +242,7 @@ TEST_P(AllocTest, test_alloc_fragmentation)
   alloc->init_add_free(0, capacity);
   bool bitmap_alloc = GetParam() == std::string("bitmap");
   
-  EXPECT_EQ(0.0, alloc->get_fragmentation(alloc_unit));
+  EXPECT_EQ(0.0, alloc->get_fragmentation());
 
   for (size_t i = 0; i < capacity / alloc_unit; ++i)
   {
@@ -254,7 +254,7 @@ TEST_P(AllocTest, test_alloc_fragmentation)
     // bitmap fragmentation calculation doesn't provide such constant
     // estimate
     if (!bitmap_alloc) {
-      EXPECT_EQ(0.0, alloc->get_fragmentation(alloc_unit));
+      EXPECT_EQ(0.0, alloc->get_fragmentation());
     }
   }
   EXPECT_EQ(-ENOSPC, alloc->allocate(want_size, alloc_unit, 0, 0, &tmp));
@@ -271,7 +271,7 @@ TEST_P(AllocTest, test_alloc_fragmentation)
     release_set.insert(allocated[i].offset, allocated[i].length);
     alloc->release(release_set);
   }
-  EXPECT_EQ(1.0, alloc->get_fragmentation(alloc_unit));
+  EXPECT_EQ(1.0, alloc->get_fragmentation());
   EXPECT_EQ(66u, uint64_t(alloc->get_fragmentation_score() * 100));
 
   for (size_t i = 1; i < allocated.size() / 2; i += 2)
@@ -282,10 +282,10 @@ TEST_P(AllocTest, test_alloc_fragmentation)
   }
   if (bitmap_alloc) {
     // fragmentation = one l1 slot is free + one l1 slot is partial
-    EXPECT_EQ(50U, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
+    EXPECT_EQ(50U, uint64_t(alloc->get_fragmentation() * 100));
   } else {
     // fragmentation approx = 257 intervals / 768 max intervals
-    EXPECT_EQ(33u, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
+    EXPECT_EQ(33u, uint64_t(alloc->get_fragmentation() * 100));
   }
   EXPECT_EQ(27u, uint64_t(alloc->get_fragmentation_score() * 100));
 
@@ -299,7 +299,7 @@ TEST_P(AllocTest, test_alloc_fragmentation)
   // extents that causes some minor fragmentation (minor bug or by-design behavior?).
   // Hence leaving just two 
   // digits after decimal point due to this.
-  EXPECT_EQ(0u, uint64_t(alloc->get_fragmentation(alloc_unit) * 100));
+  EXPECT_EQ(0u, uint64_t(alloc->get_fragmentation() * 100));
   if (bitmap_alloc) {
     EXPECT_EQ(0u, uint64_t(alloc->get_fragmentation_score() * 100));
   } else {
@@ -321,7 +321,7 @@ TEST_P(AllocTest, test_dump_fragmentation_score)
   init_alloc(capacity, alloc_unit);
   alloc->init_add_free(0, capacity);
 
-  EXPECT_EQ(0.0, alloc->get_fragmentation(alloc_unit));
+  EXPECT_EQ(0.0, alloc->get_fragmentation());
   EXPECT_EQ(0.0, alloc->get_fragmentation_score());
 
   uint64_t allocated_cnt = 0;

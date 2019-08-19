@@ -11259,7 +11259,7 @@ void BlueStore::_kv_finalize_thread()
       _reap_collections();
 
       logger->set(l_bluestore_fragmentation,
-	  (uint64_t)(alloc->get_fragmentation(min_alloc_size) * 1000));
+	  (uint64_t)(alloc->get_fragmentation() * 1000));
 
       log_latency("kv_final",
 	l_bluestore_kv_final_lat,

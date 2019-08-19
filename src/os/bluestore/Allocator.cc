@@ -14,7 +14,9 @@ class Allocator::SocketHook : public AdminSocketHook {
 
   std::string name;
 public:
-  explicit SocketHook(Allocator *alloc, const std::string& _name) : alloc(alloc), name(_name)
+  explicit SocketHook(Allocator *alloc,
+                      const std::string& _name) :
+    alloc(alloc), name(_name)
   {
     AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
     if (name.empty()) {
@@ -103,7 +105,7 @@ Allocator *Allocator::create(CephContext* cct, string type,
 {
   Allocator* alloc = nullptr;
   if (type == "stupid") {
-    alloc = new StupidAllocator(cct, name);
+    alloc = new StupidAllocator(cct, name, block_size);
   } else if (type == "bitmap") {
     alloc = new BitmapAllocator(cct, size, block_size, name);
   } else if (type == "avl") {
