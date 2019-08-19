@@ -22,6 +22,7 @@
 # bcond syntax!
 #################################################################################
 %bcond_with make_check
+%bcond_without ceph_test_package
 %ifarch s390 s390x
 %bcond_with tcmalloc
 %else
@@ -29,7 +30,6 @@
 %endif
 %if 0%{?fedora} || 0%{?rhel}
 %bcond_without selinux
-%bcond_without ceph_test_package
 %bcond_without cephfs_java
 %bcond_without lttng
 %bcond_without libradosstriper
@@ -39,7 +39,6 @@
 %endif
 %if 0%{?suse_version}
 %bcond_with selinux
-%bcond_with ceph_test_package
 %bcond_with cephfs_java
 %bcond_with amqp_endpoint
 #Compat macro for new _fillupdir macro introduced in Nov 2017
