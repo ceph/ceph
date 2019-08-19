@@ -35,6 +35,11 @@ public:
                                            this,
                                            "give score on allocator fragmentation (0-no fragmentation, 1-absolute fragmentation)");
         ceph_assert(r == 0);
+        r = admin_socket->register_command(("bluestore allocator fragmentation " + name).c_str(),
+          ("bluestore allocator fragmentation " + name).c_str(),
+          this,
+          "give allocator fragmentation (0-no fragmentation, 1-absolute fragmentation)");
+        ceph_assert(r == 0);
       }
     }
   }
@@ -45,6 +50,8 @@ public:
       int r = admin_socket->unregister_command(("bluestore allocator dump " + name).c_str());
       ceph_assert(r == 0);
       r = admin_socket->unregister_command(("bluestore allocator score " + name).c_str());
+      ceph_assert(r == 0);
+      r = admin_socket->unregister_command(("bluestore allocator fragmentation " + name).c_str());
       ceph_assert(r == 0);
     }
   }
@@ -76,6 +83,13 @@ public:
       Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
       f->open_object_section("fragmentation_score");
       f->dump_float("fragmentation_rating", alloc->get_fragmentation_score());
+      f->close_section();
+      f->flush(ss);
+      delete f;
+    } else if (command == "bluestore allocator fragmentation " + name) {
+      Formatter* f = Formatter::create(format, "json-pretty", "json-pretty");
+      f->open_object_section("fragmentation");
+      f->dump_float("fragmentation_rating", alloc->get_fragmentation());
       f->close_section();
       f->flush(ss);
       delete f;
