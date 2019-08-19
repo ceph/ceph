@@ -4,6 +4,7 @@
 #include "rgw_gc.h"
 
 #include "include/scope_guard.h"
+#include "rgw_tools.h"
 #include "include/rados/librados.hpp"
 #include "cls/rgw/cls_rgw_client.h"
 #include "cls/refcount/cls_refcount_client.h"
