@@ -136,44 +136,16 @@ public:
 MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   mds(m),
   filer(m->objecter, m->finisher),
-  exceeded_size_limit(false),
   recovery_queue(m),
   stray_manager(m, purge_queue_),
   trim_counter(g_conf().get_val<double>("mds_cache_trim_decay_rate")),
   open_file_table(m)
 {
   migrator.reset(new Migrator(mds, this));
-  root = NULL;
-  myin = NULL;
-  readonly = false;
-
-  stray_index = 0;
-  for (int i = 0; i < NUM_STRAY; ++i) {
-    strays[i] = NULL;
-  }
-
-  num_shadow_inodes = 0;
-  num_inodes_with_caps = 0;
 
   max_dir_commit_size = g_conf()->mds_dir_max_commit_size ?
                         (g_conf()->mds_dir_max_commit_size << 20) :
                         (0.9 *(g_conf()->osd_max_write_size << 20));
-
-  discover_last_tid = 0;
-  open_ino_last_tid = 0;
-  find_ino_peer_last_tid = 0;
-
-  last_cap_id = 0;
-
-  client_lease_durations[0] = 5.0;
-  client_lease_durations[1] = 30.0;
-  client_lease_durations[2] = 300.0;
-
-  resolves_pending = false;
-  rejoins_pending = false;
-  cap_imports_num_opening = 0;
-
-  opening_root = open = false;
 
   cache_inode_limit = g_conf().get_val<int64_t>("mds_cache_size");
   cache_memory_limit = g_conf().get_val<Option::size_t>("mds_cache_memory_limit");
@@ -185,10 +157,6 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
   bottom_lru.lru_set_midpoint(0);
 
   decayrate.set_halflife(g_conf()->mds_decay_halflife);
-
-  did_shutdown_log_cap = false;
-
-  global_snaprealm = NULL;
 }
 
 MDCache::~MDCache() 
@@ -7542,19 +7510,21 @@ void MDCache::trim_client_leases()
   
   dout(10) << "trim_client_leases" << dendl;
 
-  for (int pool=0; pool<client_lease_pools; pool++) {
-    int before = client_leases[pool].size();
-    if (client_leases[pool].empty()) 
+  std::size_t pool = 0;
+  for (const auto& list : client_leases) {
+    pool += 1;
+    if (list.empty())
       continue;
 
-    while (!client_leases[pool].empty()) {
-      ClientLease *r = client_leases[pool].front();
+    auto before = list.size();
+    while (!list.empty()) {
+      ClientLease *r = list.front();
       if (r->ttl > now) break;
       CDentry *dn = static_cast<CDentry*>(r->parent);
       dout(10) << " expiring client." << r->client << " lease of " << *dn << dendl;
       dn->remove_client_lease(r, mds->locker);
     }
-    int after = client_leases[pool].size();
+    auto after = list.size();
     dout(10) << "trim_client_leases pool " << pool << " trimmed "
 	     << (before-after) << " leases, " << after << " left" << dendl;
   }
