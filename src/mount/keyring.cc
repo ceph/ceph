@@ -20,7 +20,7 @@ extern "C" int get_keyring_secret(const char *name, char *dst, size_t len)
 
   /* Create CephContext */
   auto cct = global_init(NULL, args, CEPH_ENTITY_TYPE_CLIENT,
-			 CODE_ENVIRONMENT_UTILITY, 0);
+			 CODE_ENVIRONMENT_UTILITY, CINIT_FLAG_NO_MON_CONFIG);
   auto& conf = cct->_conf;
 
   conf.parse_env(cct->get_module_type()); // environment variables coverride
