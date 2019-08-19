@@ -136,14 +136,14 @@ static int fetch_keyring_secret(const char *name, char *dst)
 	secret = mmap((void *)0, MAX_SECRET_LEN, PROT_READ | PROT_WRITE,
 			MAP_ANONYMOUS | MAP_SHARED, -1, 0);
 	if (secret == (char *)-1) {
-		fprintf(stderr, "Unable to allocate memory: %s\n",
-				strerror(errno));
+		mount_ceph_debug("Unable to allocate memory: %s\n",
+				 strerror(errno));
 		return EX_SYSERR;
 	}
 
 	pid = fork();
 	if (pid < 0) {
-		fprintf(stderr, "fork() failure: %s\n", strerror(errno));
+		mount_ceph_debug("fork() failure: %s\n", strerror(errno));
 		ret = EX_SYSERR;
 		goto out;
 	}
@@ -159,13 +159,13 @@ static int fetch_keyring_secret(const char *name, char *dst)
 		size_t len;
 		pid = wait(&ret);
 		if (!WIFEXITED(ret)) {
-			fprintf(stderr, "Child process terminated abnormally.\n");
+			mount_ceph_debug("Child process terminated abnormally.\n");
 			ret = EX_SYSERR;
 			goto out;
 		}
 		ret = WEXITSTATUS(ret);
 		if (ret) {
-			fprintf(stderr, "Child exited with status %d\n", ret);
+			mount_ceph_debug("Child exited with status %d\n", ret);
 			ret = EX_SYSERR;
 			goto out;
 		}
