@@ -1,6 +1,7 @@
 import { browser } from 'protractor';
 import { Logs } from 'selenium-webdriver';
 import { ImagesPageHelper } from './block/images.po';
+import { HostsPageHelper } from './cluster/hosts.po';
 import { LogsPageHelper } from './cluster/logs.po';
 import { ManagerModulesPageHelper } from './cluster/mgr-modules.po';
 import { MonitorsPageHelper } from './cluster/monitors.po';
@@ -32,6 +33,7 @@ export class Helper {
   monitors: MonitorsPageHelper;
   mgrModules: ManagerModulesPageHelper;
   logs: LogsPageHelper;
+  hosts: HostsPageHelper;
 
   constructor() {
     this.pools = new PoolPageHelper();
@@ -49,6 +51,7 @@ export class Helper {
     this.monitors = new MonitorsPageHelper();
     this.mgrModules = new ManagerModulesPageHelper();
     this.logs = new LogsPageHelper();
+    this.hosts = new HostsPageHelper();
   }
 
   /**
