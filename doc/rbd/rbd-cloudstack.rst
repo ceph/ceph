@@ -68,7 +68,7 @@ See `Create a Pool`_ for details on specifying the number of placement groups
 for your pools, and `Placement Groups`_ for details on the number of placement
 groups you should set for your pools.
 
-A newly created pool must initialized prior to use. Use the ``rbd`` tool
+A newly created pool must be initialized prior to use. Use the ``rbd`` tool
 to initialize the pool::
 
         rbd pool init cloudstack
