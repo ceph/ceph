@@ -7,6 +7,7 @@
 #include "common/config.h"
 #include "auth/KeyRing.h"
 #include "mount.ceph.h"
+#include "mon/MonClient.h"
 
 #include <iostream>
 
@@ -25,6 +26,28 @@ extern "C" int get_keyring_secret(const char *name, char *dst, size_t len)
 
   conf.parse_env(cct->get_module_type()); // environment variables coverride
   conf.apply_changes(nullptr);
+
+  MonClient monc = MonClient(cct->get());
+  monc.build_initial_monmap();
+
+  bool first = true;
+  std::string monaddrs;
+  for (auto p = monc.monmap.addr_mons.begin(); p != monc.monmap.addr_mons.end(); ++p) {
+    const entity_addr_t *addr = &(p->first);
+
+    // For now, kernel client only accepts legacy addrs
+    if (addr->is_legacy()) {
+      if (first) {
+	first = false;
+      } else {
+	monaddrs += ",";
+      }
+      monaddrs += addr->ip_only_to_str();
+      monaddrs += ":";
+      monaddrs += std::to_string(addr->get_port());
+    }
+  }
+  std::cout << monaddrs << std::endl;
 
   err = keyring.from_ceph_context(cct.get());
   if (err) {
