@@ -6,9 +6,10 @@
 #include <exception>
 #include <system_error>
 
-class crimson_error : private std::system_error {
+namespace ceph::osd {
+class error : private std::system_error {
 public:
-  crimson_error(const std::errc ec)
+  error(const std::errc ec)
     : system_error(std::make_error_code(ec)) {
   }
 
@@ -16,21 +17,22 @@ public:
   using system_error::what;
 
 private:
-  crimson_error(const int ret) noexcept
+  error(const int ret) noexcept
     : system_error(ret, std::system_category()) {
   }
 };
 
 
-struct object_not_found : public crimson_error {
-  object_not_found() : crimson_error(std::errc::no_such_file_or_directory) {}
+struct object_not_found : public error {
+  object_not_found() : error(std::errc::no_such_file_or_directory) {}
 };
 
-struct object_corrupted : public crimson_error {
-  object_corrupted() : crimson_error(std::errc::illegal_byte_sequence) {}
+struct object_corrupted : public error {
+  object_corrupted() : error(std::errc::illegal_byte_sequence) {}
 };
 
-struct invalid_argument : public crimson_error {
-  invalid_argument() : crimson_error(std::errc::invalid_argument) {}
+struct invalid_argument : public error {
+  invalid_argument() : error(std::errc::invalid_argument) {}
 };
 
+} // namespace ceph::osd
