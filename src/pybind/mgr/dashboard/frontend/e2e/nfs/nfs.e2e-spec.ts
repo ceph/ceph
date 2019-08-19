@@ -7,17 +7,17 @@ describe('Nfs page', () => {
     nfs = new Helper().nfs;
   });
 
-  afterEach(() => {
-    Helper.checkConsole();
+  afterEach(async () => {
+    await Helper.checkConsole();
   });
 
   describe('breadcrumb test', () => {
-    beforeAll(() => {
-      nfs.navigateTo();
+    beforeAll(async () => {
+      await nfs.navigateTo();
     });
 
-    it('should open and show breadcrumb', () => {
-      expect(nfs.getBreadcrumbText()).toEqual('NFS');
+    it('should open and show breadcrumb', async () => {
+      expect(await nfs.getBreadcrumbText()).toEqual('NFS');
     });
   });
 });
