@@ -20,66 +20,65 @@ describe('Logs page', () => {
     configuration = new Helper().configuration;
   });
 
-  afterEach(() => {
-    Helper.checkConsole();
+  afterEach(async () => {
+    await Helper.checkConsole();
   });
 
   describe('breadcrumb and tab tests', () => {
-    beforeAll(() => {
-      logs.navigateTo();
+    beforeAll(async () => {
+      await logs.navigateTo();
     });
 
-    it('should open and show breadcrumb', () => {
-      expect(logs.getBreadcrumbText()).toEqual('Logs');
+    it('should open and show breadcrumb', async () => {
+      expect(await logs.getBreadcrumbText()).toEqual('Logs');
     });
 
-    it('should show two tabs', () => {
-      expect(logs.getTabsCount()).toEqual(2);
+    it('should show two tabs', async () => {
+      expect(await logs.getTabsCount()).toEqual(2);
     });
 
-    it('should show cluster logs tab at first', () => {
-      expect(logs.getTabText(0)).toEqual('Cluster Logs');
+    it('should show cluster logs tab at first', async () => {
+      expect(await logs.getTabText(0)).toEqual('Cluster Logs');
     });
 
-    it('should show audit logs as a second tab', () => {
-      expect(logs.getTabText(1)).toEqual('Audit Logs');
+    it('should show audit logs as a second tab', async () => {
+      expect(await logs.getTabText(1)).toEqual('Audit Logs');
     });
   });
 
   describe('audit logs respond to pool creation and deletion test', () => {
-    it('should create pool and check audit logs reacted', () => {
-      pools.navigateTo('create');
-      pools.create(poolname, 8);
+    it('should create pool and check audit logs reacted', async () => {
+      await pools.navigateTo('create');
+      await pools.create(poolname, 8);
 
-      pools.navigateTo();
-      pools.exist(poolname, true);
+      await pools.navigateTo();
+      await pools.exist(poolname, true);
 
-      logs.navigateTo();
-      logs.checkAuditForPoolFunction(poolname, 'create', hour, minute);
+      await logs.checkAuditForPoolFunction(poolname, 'create', hour, minute);
     });
 
-    it('should delete pool and check audit logs reacted', () => {
-      pools.navigateTo();
-      pools.delete(poolname);
+    it('should delete pool and check audit logs reacted', async () => {
+      await pools.navigateTo();
+      await pools.delete(poolname);
 
-      pools.navigateTo();
-      pools.exist(poolname, false);
+      await pools.navigateTo();
+      await pools.exist(poolname, false);
 
-      logs.navigateTo();
-      logs.checkAuditForPoolFunction(poolname, 'delete', hour, minute);
+      await logs.navigateTo();
+      await logs.checkAuditForPoolFunction(poolname, 'delete', hour, minute);
     });
   });
 
   describe('audit logs respond to editing configuration setting test', () => {
-    it('should change config settings and check audit logs reacted', () => {
-      configuration.navigateTo();
-      configuration.edit(configname, ['global', '5']);
+    it('should change config settings and check audit logs reacted', async () => {
+      await configuration.navigateTo();
+      await configuration.edit(configname, ['global', '5']);
 
-      logs.navigateTo();
-      logs.checkAuditForConfigChange(configname, 'global', hour, minute);
+      await logs.navigateTo();
+      await logs.checkAuditForConfigChange(configname, 'global', hour, minute);
 
-      configuration.navigateTo();
-      configuration.configClear(configname);
+      await configuration.navigateTo();
+      await configuration.configClear(configname);
     });
   });
 });
