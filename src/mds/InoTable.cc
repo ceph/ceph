@@ -226,15 +226,10 @@ bool InoTable::repair(inodeno_t id)
 
 bool InoTable::force_consume_to(inodeno_t ino)
 {
-  auto it = free.begin();
-  if (it != free.end() && it.get_start() <= ino) {
-    inodeno_t min = it.get_start();
-    derr << "erasing " << min << " to " << ino << dendl;
-    free.erase(min, ino - min + 1);
-    projected_free = free;
-    projected_version = ++version;
-    return true;
-  } else {
+  inodeno_t first = free.range_start();
+  if (first > ino)
     return false;
-  }
+
+  skip_inos(inodeno_t(ino + 1 - first));
+  return true;
 }
