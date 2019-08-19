@@ -1168,7 +1168,7 @@ sub-directories, files')
                         f.decode('utf-8')))
                 except (libcephfs.Error, OSError):
                     self.perror('{} : no such directory exists'.format(f.\
-                        decode('utf-8')), False)
+                        decode('utf-8')), apply_style=True)
                     continue
 
         for path in args.paths:
