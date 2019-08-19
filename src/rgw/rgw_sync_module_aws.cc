@@ -1427,7 +1427,7 @@ public:
                                                    src_properties(_src_properties),
                                                    rest_obj(_rest_obj),
                                                    status_obj(sync_env->store->svc()->zone->get_zone_params().log_pool,
-                                                              RGWBucketSyncStatusManager::obj_status_oid(sync_env->source_zone, src_obj)) {
+                                                              RGWBucketPipeSyncStatusManager::obj_status_oid(sync_env->source_zone, src_obj)) {
   }
 
 

@@ -1024,7 +1024,7 @@ class RGWRunBucketSyncCoroutine : public RGWCoroutine {
 public:
   RGWRunBucketSyncCoroutine(RGWDataSyncEnv *_sync_env, const rgw_bucket_shard& bs, const RGWSyncTraceNodeRef& _tn_parent)
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
-      status_oid(RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, sync_pipe)),
+      status_oid(RGWBucketPipeSyncStatusManager::status_oid(sync_env->source_zone, sync_pipe)),
       tn(sync_env->sync_tracer->add_node(_tn_parent, "bucket",
                                          SSTR(bucket_shard_str{bs}))) {
     sync_pipe.source_bs = bs;
@@ -2071,7 +2071,7 @@ public:
                                         rgw_bucket_shard_sync_info& _status)
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
       sync_pipe(_sync_pipe),
-      sync_status_oid(RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, _sync_pipe)),
+      sync_status_oid(RGWBucketPipeSyncStatusManager::status_oid(sync_env->source_zone, _sync_pipe)),
       status(_status)
   {}
 
@@ -2182,23 +2182,23 @@ void rgw_bucket_shard_inc_sync_marker::encode_attr(map<string, bufferlist>& attr
   encode(*this, attrs[BUCKET_SYNC_ATTR_PREFIX "inc_marker"]);
 }
 
-class RGWReadBucketSyncStatusCoroutine : public RGWCoroutine {
+class RGWReadBucketPipeSyncStatusCoroutine : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
   string oid;
   rgw_bucket_shard_sync_info *status;
 
   map<string, bufferlist> attrs;
 public:
-  RGWReadBucketSyncStatusCoroutine(RGWDataSyncEnv *_sync_env,
+  RGWReadBucketPipeSyncStatusCoroutine(RGWDataSyncEnv *_sync_env,
                                    const rgw_bucket_sync_pipe& sync_pipe,
                                    rgw_bucket_shard_sync_info *_status)
     : RGWCoroutine(_sync_env->cct), sync_env(_sync_env),
-      oid(RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, sync_pipe)),
+      oid(RGWBucketPipeSyncStatusManager::status_oid(sync_env->source_zone, sync_pipe)),
       status(_status) {}
   int operate() override;
 };
 
-int RGWReadBucketSyncStatusCoroutine::operate()
+int RGWReadBucketPipeSyncStatusCoroutine::operate()
 {
   reenter(this) {
     yield call(new RGWSimpleRadosReadAttrsCR(sync_env->async_rados, sync_env->store->svc()->sysobj,
@@ -2393,11 +2393,11 @@ RGWCoroutine *RGWRemoteBucketLog::read_sync_status_cr(rgw_bucket_shard_sync_info
 #warning FIXME
   rgw_bucket_sync_pipe sync_pipe;
   sync_pipe.source_bs = bs;
-  return new RGWReadBucketSyncStatusCoroutine(&sync_env, sync_pipe, sync_status);
+  return new RGWReadBucketPipeSyncStatusCoroutine(&sync_env, sync_pipe, sync_status);
 }
 
-RGWBucketSyncStatusManager::RGWBucketSyncStatusManager(rgw::sal::RGWRadosStore *_store, const string& _source_zone,
-						       const rgw_bucket& bucket) : store(_store),
+RGWBucketPipeSyncStatusManager::RGWBucketPipeSyncStatusManager(rgw::sal::RGWRadosStore *_store, const string& _source_zone,
+                                                               const rgw_bucket& _dest_bucket) : store(_store),
                                                                                    cr_mgr(_store->ctx(), _store->getRados()->get_cr_registry()),
                                                                                    http_manager(store->ctx(), cr_mgr.get_completion_mgr()),
                                                                                    source_zone(_source_zone),
@@ -2407,7 +2407,7 @@ RGWBucketSyncStatusManager::RGWBucketSyncStatusManager(rgw::sal::RGWRadosStore *
 {
 }
 
-RGWBucketSyncStatusManager::~RGWBucketSyncStatusManager()
+RGWBucketPipeSyncStatusManager::~RGWBucketPipeSyncStatusManager()
 {
   for (map<int, RGWRemoteBucketLog *>::iterator iter = source_logs.begin(); iter != source_logs.end(); ++iter) {
     delete iter->second;
@@ -2415,7 +2415,7 @@ RGWBucketSyncStatusManager::~RGWBucketSyncStatusManager()
   delete error_logger;
 }
 
-CephContext *RGWBucketSyncStatusManager::get_cct() const
+CephContext *RGWBucketPipeSyncStatusManager::get_cct() const
 {
   return store->ctx();
 }
@@ -3285,10 +3285,11 @@ int RGWBucketShardIncrementalSyncCR::operate()
   return 0;
 }
 
+
 class RGWRunBucketSourcesSyncCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
-  rgw_bucket_shard bs;
-  rgw_bucket_source_sync_info info;
+  rgw_bucket bucket;
+  rgw_sync_source source;
   RGWMetaSyncEnv meta_sync_env;
 
   const std::string status_oid;
@@ -3299,13 +3300,13 @@ class RGWRunBucketSourcesSyncCR : public RGWCoroutine {
   RGWSyncTraceNodeRef tn;
 
 public:
-  RGWRunBucketSourcesSyncCR(RGWDataSyncEnv *_sync_env, const rgw_bucket_shard& _bs, const RGWSyncTraceNodeRef& _tn_parent)
-    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), bs(_bs),
-      status_oid(RGWBucketSyncStatusManager::status_oid(sync_env->source_zone, bs)),
+  RGWRunBucketSourcesSyncCR(RGWDataSyncEnv *_sync_env, const rgw_bucket& bucket, const RGWSyncTraceNodeRef& _tn_parent)
+    : RGWCoroutine(_sync_env->cct), sync_env(_sync_env), bucket(_bucket),
+      status_oid(RGWBucketPipeSyncStatusManager::status_oid(sync_env->source_zone, bucket)),
       tn(sync_env->sync_tracer->add_node(_tn_parent, "bucket_source",
                                          SSTR(bucket_shard_str{bs}))) {
   }
-  ~RGWRunBucketSyncCoroutine() override {
+  ~RGWRunBucketSourcesSyncCR() override {
     if (lease_cr) {
       lease_cr->abort();
     }
@@ -3391,7 +3392,7 @@ int RGWRunBucketSyncCoroutine::operate()
     }
 
     tn->log(10, "took lease");
-    yield call(new RGWReadBucketSyncStatusCoroutine(sync_env, sync_pipe, &sync_status));
+    yield call(new RGWReadBucketPipeSyncStatusCoroutine(sync_env, sync_pipe, &sync_status));
     if (retcode < 0 && retcode != -ENOENT) {
       tn->log(0, "ERROR: failed to read sync status for bucket");
       lease_cr->go_down();
@@ -3491,7 +3492,7 @@ RGWCoroutine *RGWRemoteBucketLog::run_sync_cr()
   return new RGWRunBucketSyncCoroutine(&sync_env, bs, sync_env.sync_tracer->root_node);
 }
 
-int RGWBucketSyncStatusManager::init()
+int RGWBucketPipeSyncStatusManager::init()
 {
   conn = store->svc()->zone->get_zone_conn_by_id(source_zone);
   if (!conn) {
@@ -3544,7 +3545,7 @@ int RGWBucketSyncStatusManager::init()
   return 0;
 }
 
-int RGWBucketSyncStatusManager::init_sync_status()
+int RGWBucketPipeSyncStatusManager::init_sync_status()
 {
   list<RGWCoroutinesStack *> stacks;
 
@@ -3559,7 +3560,7 @@ int RGWBucketSyncStatusManager::init_sync_status()
   return cr_mgr.run(stacks);
 }
 
-int RGWBucketSyncStatusManager::read_sync_status()
+int RGWBucketPipeSyncStatusManager::read_sync_status()
 {
   list<RGWCoroutinesStack *> stacks;
 
@@ -3581,7 +3582,7 @@ int RGWBucketSyncStatusManager::read_sync_status()
   return 0;
 }
 
-int RGWBucketSyncStatusManager::run()
+int RGWBucketPipeSyncStatusManager::run()
 {
   list<RGWCoroutinesStack *> stacks;
 
@@ -3603,25 +3604,25 @@ int RGWBucketSyncStatusManager::run()
   return 0;
 }
 
-unsigned RGWBucketSyncStatusManager::get_subsys() const
+unsigned RGWBucketPipeSyncStatusManager::get_subsys() const
 {
   return dout_subsys;
 }
 
-std::ostream& RGWBucketSyncStatusManager::gen_prefix(std::ostream& out) const
+std::ostream& RGWBucketPipeSyncStatusManager::gen_prefix(std::ostream& out) const
 {
   auto zone = std::string_view{source_zone};
   return out << "bucket sync zone:" << zone.substr(0, 8)
       << " bucket:" << bucket.name << ' ';
 }
 
-string RGWBucketSyncStatusManager::status_oid(const string& source_zone,
+string RGWBucketPipeSyncStatusManager::status_oid(const string& source_zone,
                                               const rgw_bucket_sync_pipe& sync_pipe)
 {
   return bucket_status_oid_prefix + "." + source_zone + ":" + sync_pipe.source_bs.get_key();
 }
 
-string RGWBucketSyncStatusManager::obj_status_oid(const string& source_zone,
+string RGWBucketPipeSyncStatusManager::obj_status_oid(const string& source_zone,
                                                   const rgw_obj& obj)
 {
 #warning FIXME
@@ -3656,7 +3657,7 @@ class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
       return false;
     }
     sync_pipe.source_bs = bs;
-    spawn(new RGWReadBucketSyncStatusCoroutine(env, sync_pipe, &*i), false);
+    spawn(new RGWReadBucketPipeSyncStatusCoroutine(env, sync_pipe, &*i), false);
     ++i;
     ++bs.shard_id;
     return true;
