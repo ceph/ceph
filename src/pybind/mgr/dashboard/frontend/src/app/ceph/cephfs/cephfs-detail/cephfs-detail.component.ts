@@ -37,7 +37,6 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
   grafanaPermission: Permission;
 
   objectValues = Object.values;
-  clientsSelect = false;
 
   constructor(
     private authStorageService: AuthStorageService,
