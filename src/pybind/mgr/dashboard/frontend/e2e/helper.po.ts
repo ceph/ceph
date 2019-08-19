@@ -1,5 +1,6 @@
 import { browser } from 'protractor';
 import { ImagesPageHelper } from './block/images.po';
+import { IscsiPageHelper } from './block/iscsi.po';
 import { MirroringPageHelper } from './block/mirroring.po';
 import { AlertsPageHelper } from './cluster/alerts.po';
 import { ConfigurationPageHelper } from './cluster/configuration.po';
@@ -41,6 +42,7 @@ export class Helper {
   configuration: ConfigurationPageHelper;
   alerts: AlertsPageHelper;
   mirroring: MirroringPageHelper;
+  iscsi: IscsiPageHelper;
 
   constructor() {
     this.pools = new PoolPageHelper();
@@ -63,6 +65,7 @@ export class Helper {
     this.configuration = new ConfigurationPageHelper();
     this.alerts = new AlertsPageHelper();
     this.mirroring = new MirroringPageHelper();
+    this.iscsi = new IscsiPageHelper();
   }
 
   /**
