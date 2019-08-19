@@ -73,7 +73,7 @@ PGBackend::get_object_state(const hobject_t& oid)
                                       oid.snap);
         if (clone == end(ss->clones)) {
           return seastar::make_exception_future<PGBackend::cached_os_t>(
-            object_not_found{});
+            ceph::osd::object_not_found{});
         }
         // clone
         auto soid = oid;
@@ -84,7 +84,7 @@ PGBackend::get_object_state(const hobject_t& oid)
           if (clone_snap->second.empty()) {
             logger().trace("find_object: {}@[] -- DNE", soid);
             return seastar::make_exception_future<PGBackend::cached_os_t>(
-              object_not_found{});
+              ceph::osd::object_not_found{});
           }
           auto first = clone_snap->second.back();
           auto last = clone_snap->second.front();
@@ -92,7 +92,7 @@ PGBackend::get_object_state(const hobject_t& oid)
             logger().trace("find_object: {}@[{},{}] -- DNE",
                            soid, first, last);
             return seastar::make_exception_future<PGBackend::cached_os_t>(
-              object_not_found{});
+              ceph::osd::object_not_found{});
           }
           logger().trace("find_object: {}@[{},{}] -- HIT",
                          soid, first, last);
@@ -237,7 +237,7 @@ seastar::future<bufferlist> PGBackend::read(const object_info_t& oi,
           logger().error("full-object read crc {} != expected {} on {}",
             crc, *maybe_crc, soid);
           // todo: mark soid missing, perform recovery, and retry
-          throw object_corrupted{};
+          throw ceph::osd::object_corrupted{};
         }
       }
       return seastar::make_ready_future<bufferlist>(std::move(bl));
@@ -316,7 +316,7 @@ seastar::future<> PGBackend::writefull(
 {
   const ceph_osd_op& op = osd_op.op;
   if (op.extent.length != osd_op.indata.length()) {
-    throw ::invalid_argument();
+    throw ceph::osd::invalid_argument();
   }
 
   const bool existing = maybe_create_new_object(os, txn);
