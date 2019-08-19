@@ -76,7 +76,7 @@ function TEST_mute() {
     ceph -s
     ceph health detail | grep OSD_DOWN || return 1
     ceph health mute OSD_DOWN
-    kill daemons $dir TERM osd.0
+    kill_daemons $dir TERM osd.0
     ceph osd unset noup
     ceph -s
     ceph health detail | grep OSD_DOWN || return 1
