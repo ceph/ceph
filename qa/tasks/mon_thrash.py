@@ -12,6 +12,9 @@ import math
 from teuthology import misc as teuthology
 from tasks.cephfs.filesystem import MDSCluster
 from tasks.thrasher import Thrasher
+from gevent import sleep
+from gevent.greenlet import Greenlet
+from gevent.event import Event
 
 log = logging.getLogger(__name__)
 
@@ -22,7 +25,7 @@ def _get_mons(ctx):
     mons = [f[len('mon.'):] for f in teuthology.get_mon_names(ctx)]
     return mons
 
-class MonitorThrasher(Thrasher):
+class MonitorThrasher(Greenlet, Thrasher):
     """
     How it works::
 
@@ -91,7 +94,7 @@ class MonitorThrasher(Thrasher):
         self.manager = manager
         self.manager.wait_for_clean()
 
-        self.stopping = False
+        self.stopping = Event()
         self.logger = logger
         self.config = config
 
@@ -138,20 +141,14 @@ class MonitorThrasher(Thrasher):
         if self.mds_failover:
             self.mds_cluster = MDSCluster(ctx)
 
-        self.thread = gevent.spawn(self.do_thrash)
-
     def log(self, x):
         """
         locally log info messages
         """
         self.logger.info(x)
 
-    def do_join(self):
-        """
-        Break out of this processes thrashing loop.
-        """
-        self.stopping = True
-        self.thread.get()
+    def stop(self):
+        self.stopping.set()
 
     def should_thrash_store(self):
         """
@@ -221,10 +218,7 @@ class MonitorThrasher(Thrasher):
         else:
             return m
 
-    def do_thrash(self):
-        """
-        _do_thrash() wrapper.
-        """
+    def _run(self):
         try:
             self._do_thrash()
         except Exception as e:
@@ -253,7 +247,7 @@ class MonitorThrasher(Thrasher):
                 fp=self.freeze_mon_probability,fd=self.freeze_mon_duration,
                 ))
 
-        while not self.stopping:
+        while not self.stopping.is_set():
             mons = _get_mons(self.ctx)
             self.manager.wait_for_mon_quorum_size(len(mons))
             self.log('making sure all monitors are in the quorum')
@@ -288,7 +282,7 @@ class MonitorThrasher(Thrasher):
                     self.freeze_mon(mon)
                 self.log('waiting for {delay} secs to unfreeze mons'.format(
                     delay=self.freeze_mon_duration))
-                time.sleep(self.freeze_mon_duration)
+                sleep(self.freeze_mon_duration)
                 for mon in mons_to_freeze:
                     self.unfreeze_mon(mon)
 
@@ -303,7 +297,7 @@ class MonitorThrasher(Thrasher):
 
             self.log('waiting for {delay} secs before reviving monitors'.format(
                 delay=self.revive_delay))
-            time.sleep(self.revive_delay)
+            sleep(self.revive_delay)
 
             for mon in mons_to_kill:
                 self.revive_mon(mon)
@@ -313,7 +307,7 @@ class MonitorThrasher(Thrasher):
                     self.freeze_mon(mon)
                 self.log('waiting for {delay} secs to unfreeze mons'.format(
                     delay=self.freeze_mon_duration))
-                time.sleep(self.freeze_mon_duration)
+                sleep(self.freeze_mon_duration)
                 for mon in mons_to_freeze:
                     self.unfreeze_mon(mon)
 
@@ -333,7 +327,7 @@ class MonitorThrasher(Thrasher):
             if self.thrash_delay > 0.0:
                 self.log('waiting for {delay} secs before continuing thrashing'.format(
                     delay=self.thrash_delay))
-                time.sleep(self.thrash_delay)
+                sleep(self.thrash_delay)
 
         #status after thrashing
         if self.mds_failover:
@@ -369,15 +363,20 @@ def task(ctx, config):
         ctx=ctx,
         logger=log.getChild('ceph_manager'),
         )
-    thrash_proc = MonitorThrasher(ctx,
+    thrasher = MonitorThrasher(ctx,
         manager, config,
         logger=log.getChild('mon_thrasher'))
-    ctx.ceph[config['cluster']].thrashers.append(thrash_proc)
+    thrasher.start()
+    ctx.ceph[config['cluster']].thrashers.append(thrasher)
     try:
         log.debug('Yielding')
         yield
     finally:
         log.info('joining mon_thrasher')
-        thrash_proc.do_join()
+        thrasher.stop()
+        if thrasher.exception is not None:
+            raise RuntimeError('error during thrashing')
+        thrasher.join()
+        log.info('done joining')
         mons = _get_mons(ctx)
         manager.wait_for_mon_quorum_size(len(mons))
