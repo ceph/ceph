@@ -7,17 +7,17 @@ describe('Filesystems page', () => {
     filesystems = new Helper().filesystems;
   });
 
-  afterEach(() => {
-    Helper.checkConsole();
+  afterEach(async () => {
+    await Helper.checkConsole();
   });
 
   describe('breadcrumb test', () => {
-    beforeAll(() => {
-      filesystems.navigateTo();
+    beforeAll(async () => {
+      await filesystems.navigateTo();
     });
 
-    it('should open and show breadcrumb', () => {
-      expect(filesystems.getBreadcrumbText()).toEqual('Filesystems');
+    it('should open and show breadcrumb', async () => {
+      expect(await filesystems.getBreadcrumbText()).toEqual('Filesystems');
     });
   });
 });

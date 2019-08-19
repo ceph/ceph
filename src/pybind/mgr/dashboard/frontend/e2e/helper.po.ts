@@ -1,5 +1,6 @@
 import { browser } from 'protractor';
 import { ImagesPageHelper } from './block/images.po';
+import { FilesystemsPageHelper } from './filesystems/filesystems.po';
 import { NfsPageHelper } from './nfs/nfs.po';
 import { PoolPageHelper } from './pools/pools.po';
 import { BucketsPageHelper } from './rgw/buckets.po';
@@ -21,6 +22,7 @@ export class Helper {
   daemons: DaemonsPageHelper;
   users: UsersPageHelper;
   nfs: NfsPageHelper;
+  filesystems: FilesystemsPageHelper;
 
   constructor() {
     this.pools = new PoolPageHelper();
@@ -33,6 +35,7 @@ export class Helper {
     this.daemons = new DaemonsPageHelper();
     this.users = new UsersPageHelper();
     this.nfs = new NfsPageHelper();
+    this.filesystems = new FilesystemsPageHelper();
   }
 
   /**
