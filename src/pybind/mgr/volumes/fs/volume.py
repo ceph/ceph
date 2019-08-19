@@ -175,6 +175,14 @@ class VolumeClient(object):
         for fs in fs_map['filesystems']:
             self.purge_queue.queue_purge_job(fs['mdsmap']['fs_name'])
 
+    def cluster_log(self, msg, lvl=None):
+        """
+        log to cluster log with default log level as WARN.
+        """
+        if not lvl:
+            lvl = self.mgr.CLUSTER_LOG_PRIO_WARN
+        self.mgr.cluster_log("cluster", lvl, msg)
+
     def gen_pool_names(self, volname):
         """
         return metadata and data pool name (from a filesystem/volume name) as a tuple

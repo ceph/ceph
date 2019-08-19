@@ -19,7 +19,8 @@ class PurgeQueueBase(object):
     MAX_RETRIES_ON_EXCEPTION = 10
 
     class PurgeThread(threading.Thread):
-        def __init__(self, name, purge_fn):
+        def __init__(self, volume_client, name, purge_fn):
+            self.vc = volume_client
             self.purge_fn = purge_fn
             # event object to cancel ongoing purge
             self.cancel_event = threading.Event()
@@ -42,6 +43,7 @@ class PurgeQueueBase(object):
                         traceback.format_exception(exc_type, exc_value, exc_traceback))))
                     time.sleep(1)
             log.error("purge thread [{0}] reached exception limit, bailing out...".format(thread_name))
+            self.vc.cluster_log("purge thread {0} bailing out due to exception".format(thread_name))
 
         def cancel_job(self):
             self.cancel_event.set()
@@ -154,7 +156,7 @@ class ThreadPoolPurgeQueueMixin(PurgeQueueBase):
         self.threads = []
         for i in range(tp_size):
             self.threads.append(
-                PurgeQueueBase.PurgeThread(name="purgejob.{}".format(i), purge_fn=self.run))
+                PurgeQueueBase.PurgeThread(volume_client, name="purgejob.{}".format(i), purge_fn=self.run))
             self.threads[-1].start()
 
     def pick_purge_dir_from_volume(self):
