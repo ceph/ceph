@@ -86,7 +86,7 @@ See `Create a Pool`_ for detail on specifying the number of placement groups for
 your pools, and `Placement Groups`_ for details on the number of placement
 groups you should set for your pools.
 
-Newly created pools must initialized prior to use. Use the ``rbd`` tool
+Newly created pools must be initialized prior to use. Use the ``rbd`` tool
 to initialize the pools::
 
         rbd pool init volumes
