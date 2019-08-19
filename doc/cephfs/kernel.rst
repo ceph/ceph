@@ -9,8 +9,9 @@ monitor host name(s) into IP address(es) for you. For example::
 	sudo mkdir /mnt/mycephfs
 	sudo mount -t ceph 192.168.0.1:6789:/ /mnt/mycephfs
 
-To mount the Ceph file system with ``cephx`` authentication enabled, you must
-specify a user name and a secret. ::
+To mount the Ceph file system with ``cephx`` authentication enabled, the kernel
+must authenticate with the cluster. The default ``name=`` option is ``guest``.
+The secret can be specified with the secret= option. ::
 
 	sudo mount -t ceph 192.168.0.1:6789:/ /mnt/mycephfs -o name=admin,secret=AQATSKdNGBnwLhAAnNDKnH65FmVKpXZJVasUeQ==
 
@@ -18,7 +19,10 @@ The foregoing usage leaves the secret in the Bash history. A more secure
 approach reads the secret from a file. For example::
 
 	sudo mount -t ceph 192.168.0.1:6789:/ /mnt/mycephfs -o name=admin,secretfile=/etc/ceph/admin.secret
-	
+
+If a secret is not specified in the options, then the mount helper will attempt
+to find it in a ceph keyring file.
+
 If you have more than one filesystem, specify which one to mount using
 the ``mds_namespace`` option, e.g. ``-o mds_namespace=myfs``.
     
