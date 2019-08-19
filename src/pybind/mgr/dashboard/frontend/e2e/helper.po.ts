@@ -1,5 +1,7 @@
 import { browser } from 'protractor';
 import { ImagesPageHelper } from './block/images.po';
+import { AlertsPageHelper } from './cluster/alerts.po';
+import { ConfigurationPageHelper } from './cluster/configuration.po';
 import { CrushMapPageHelper } from './cluster/crush-map.po';
 import { HostsPageHelper } from './cluster/hosts.po';
 import { LogsPageHelper } from './cluster/logs.po';
@@ -35,6 +37,8 @@ export class Helper {
   logs: LogsPageHelper;
   hosts: HostsPageHelper;
   crushMap: CrushMapPageHelper;
+  configuration: ConfigurationPageHelper;
+  alerts: AlertsPageHelper;
 
   constructor() {
     this.pools = new PoolPageHelper();
@@ -54,6 +58,8 @@ export class Helper {
     this.logs = new LogsPageHelper();
     this.hosts = new HostsPageHelper();
     this.crushMap = new CrushMapPageHelper();
+    this.configuration = new ConfigurationPageHelper();
+    this.alerts = new AlertsPageHelper();
   }
 
   /**

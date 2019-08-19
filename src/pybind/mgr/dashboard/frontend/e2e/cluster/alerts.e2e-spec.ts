@@ -7,17 +7,17 @@ describe('Alerts page', () => {
     alerts = new Helper().alerts;
   });
 
-  afterEach(() => {
-    Helper.checkConsole();
+  afterEach(async () => {
+    await Helper.checkConsole();
   });
 
   describe('breadcrumb test', () => {
-    beforeAll(() => {
-      alerts.navigateTo();
+    beforeAll(async () => {
+      await alerts.navigateTo();
     });
 
-    it('should open and show breadcrumb', () => {
-      expect(alerts.getBreadcrumbText()).toEqual('Alerts');
+    it('should open and show breadcrumb', async () => {
+      expect(await alerts.getBreadcrumbText()).toEqual('Alerts');
     });
   });
 });
