@@ -714,6 +714,26 @@ void Journal<I>::flush_commit_position(Context *on_finish) {
 }
 
 template <typename I>
+void Journal<I>::user_flushed() {
+  if (m_state == STATE_READY && !m_user_flushed.exchange(true) &&
+      m_image_ctx.config.template get_val<bool>("rbd_journal_object_writethrough_until_flush")) {
+    Mutex::Locker locker(m_lock);
+    if (m_state == STATE_READY) {
+      CephContext *cct = m_image_ctx.cct;
+      ldout(cct, 5) << this << " " << __func__ << dendl;
+
+      ceph_assert(m_journaler != nullptr);
+      m_journaler->set_append_batch_options(
+        m_image_ctx.config.template get_val<uint64_t>("rbd_journal_object_flush_interval"),
+        m_image_ctx.config.template get_val<Option::size_t>("rbd_journal_object_flush_bytes"),
+        m_image_ctx.config.template get_val<double>("rbd_journal_object_flush_age"));
+    } else {
+      m_user_flushed = false;
+    }
+  }
+}
+
+template <typename I>
 uint64_t Journal<I>::append_write_event(uint64_t offset, size_t length,
                                         const bufferlist &bl,
                                         bool flush_entry) {
@@ -1168,11 +1188,16 @@ void Journal<I>::complete_event(typename Events::iterator it, int r) {
 template <typename I>
 void Journal<I>::start_append() {
   ceph_assert(m_lock.is_locked());
+
   m_journaler->start_append(
-    m_image_ctx.config.template get_val<uint64_t>("rbd_journal_object_flush_interval"),
-    m_image_ctx.config.template get_val<Option::size_t>("rbd_journal_object_flush_bytes"),
-    m_image_ctx.config.template get_val<double>("rbd_journal_object_flush_age"),
     m_image_ctx.config.template get_val<uint64_t>("rbd_journal_object_max_in_flight_appends"));
+  if (!m_image_ctx.config.template get_val<bool>("rbd_journal_object_writethrough_until_flush")) {
+    m_journaler->set_append_batch_options(
+      m_image_ctx.config.template get_val<uint64_t>("rbd_journal_object_flush_interval"),
+      m_image_ctx.config.template get_val<Option::size_t>("rbd_journal_object_flush_bytes"),
+      m_image_ctx.config.template get_val<double>("rbd_journal_object_flush_age"));
+  }
+
   transition_state(STATE_READY, 0);
 }
 

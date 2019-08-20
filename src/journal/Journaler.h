@@ -106,8 +106,9 @@ public:
   void stop_replay(Context *on_finish);
 
   uint64_t get_max_append_size() const;
-  void start_append(int flush_interval, uint64_t flush_bytes, double flush_age,
-                    uint64_t max_in_flight_appends);
+  void start_append(uint64_t max_in_flight_appends);
+  void set_append_batch_options(int flush_interval, uint64_t flush_bytes,
+                                double flush_age);
   Future append(uint64_t tag_tid, const bufferlist &bl);
   void flush_append(Context *on_safe);
   void stop_append(Context *on_safe);
