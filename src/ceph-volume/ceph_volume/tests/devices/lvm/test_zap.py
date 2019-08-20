@@ -91,6 +91,22 @@ class TestEnsureAssociatedLVs(object):
         result = zap.ensure_associated_lvs(volumes)
         assert result == ['/dev/VolGroup/block']
 
+    def test_success_message_for_fsid(self, factory, is_root, capsys):
+        cli_zap = zap.Zap([])
+        args = factory(devices=[], osd_id=None, osd_fsid='asdf-lkjh')
+        cli_zap.args = args
+        cli_zap.zap()
+        out, err = capsys.readouterr()
+        assert "Zapping successful for OSD: asdf-lkjh" in err
+
+    def test_success_message_for_id(self, factory, is_root, capsys):
+        cli_zap = zap.Zap([])
+        args = factory(devices=[], osd_id='1', osd_fsid=None)
+        cli_zap.args = args
+        cli_zap.zap()
+        out, err = capsys.readouterr()
+        assert "Zapping successful for OSD: 1" in err
+
     def test_block_and_partition_are_found(self, volumes, monkeypatch):
         monkeypatch.setattr(zap.disk, 'get_device_from_partuuid', lambda x: '/dev/sdb1')
         tags = 'ceph.osd_id=0,ceph.osd_fsid=asdf-lkjh,ceph.journal_uuid=x,ceph.type=block'
