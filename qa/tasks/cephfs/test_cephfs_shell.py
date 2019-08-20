@@ -523,6 +523,22 @@ class TestDU(TestCephFSShell):
                        "expected_output -\n{}\ndu_output -\n{}\n".format(
                        expected_output, du_output)
 
+    def test_du_with_path_in_args(self):
+        expected_patterns_in_output, path_to_files = self._setup_files(True,
+            path_prefix='')
+
+        args = ['du', '/']
+        for path in path_to_files:
+            args.append(path)
+        du_output = self.get_cephfs_shell_cmd_output(args)
+
+        for expected_output in expected_patterns_in_output:
+            if sys_version_info.major >= 3:
+                self.assertRegex(expected_output, du_output)
+            elif sys_version_info.major < 3:
+                assert re_search(expected_output, du_output) != None, "\n" +\
+                       "expected_output -\n{}\ndu_output -\n{}\n".format(
+                       expected_output, du_output)
 
 #    def test_ls(self):
 #        """
