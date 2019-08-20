@@ -655,7 +655,6 @@ EOF
         log file = $CEPH_OUT_DIR/\$name.\$pid.log
         admin socket = $CEPH_ASOK_DIR/\$name.\$pid.asok
 
-[client.rgw]
         ; needed for s3tests
         rgw crypt s3 kms encryption keys = testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo=
         rgw crypt require ssl = false
