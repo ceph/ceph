@@ -38,10 +38,12 @@ public:
   C_UpdateObjectMap(AsyncObjectThrottle<I> &throttle, I *image_ctx,
                     uint64_t object_no, uint8_t head_object_map_state,
                     const std::vector<uint64_t> *snap_ids,
-                    const ZTracer::Trace &trace, size_t snap_id_idx)
+                    bool first_snap_is_clean, const ZTracer::Trace &trace,
+                    size_t snap_id_idx)
     : C_AsyncObjectThrottle<I>(throttle, *image_ctx), m_object_no(object_no),
       m_head_object_map_state(head_object_map_state), m_snap_ids(*snap_ids),
-      m_trace(trace), m_snap_id_idx(snap_id_idx)
+      m_first_snap_is_clean(first_snap_is_clean), m_trace(trace),
+      m_snap_id_idx(snap_id_idx)
   {
   }
 
@@ -79,7 +81,7 @@ public:
     auto& image_ctx = this->m_image_ctx;
     uint8_t state = OBJECT_EXISTS;
     if (image_ctx.test_features(RBD_FEATURE_FAST_DIFF, image_ctx.snap_lock) &&
-        m_snap_id_idx > 0) {
+        (m_snap_id_idx > 0 || m_first_snap_is_clean)) {
       // first snapshot should be exists+dirty since it contains
       // the copyup data -- later snapshots inherit the data.
       state = OBJECT_EXISTS_CLEAN;
@@ -96,6 +98,7 @@ private:
   uint64_t m_object_no;
   uint8_t m_head_object_map_state;
   const std::vector<uint64_t> &m_snap_ids;
+  bool m_first_snap_is_clean;
   const ZTracer::Trace &m_trace;
   size_t m_snap_id_idx;
 };
@@ -159,7 +162,6 @@ void CopyupRequest<I>::read_from_parent() {
     return;
   }
 
-  m_deep_copy = false;
   auto comp = AioCompletion::create_and_start<
     CopyupRequest<I>,
     &CopyupRequest<I>::handle_read_from_parent>(
@@ -179,12 +181,15 @@ void CopyupRequest<I>::handle_read_from_parent(int r) {
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "oid=" << m_oid << ", r=" << r << dendl;
 
+  m_image_ctx->snap_lock.get_read();
   m_lock.Lock();
+  m_copyup_is_zero = m_copyup_data.is_zero();
   m_copyup_required = is_copyup_required();
   disable_append_requests();
 
   if (r < 0 && r != -ENOENT) {
     m_lock.Unlock();
+    m_image_ctx->snap_lock.put_read();
 
     lderr(cct) << "error reading from parent: " << cpp_strerror(r) << dendl;
     finish(r);
@@ -193,12 +198,22 @@ void CopyupRequest<I>::handle_read_from_parent(int r) {
 
   if (!m_copyup_required) {
     m_lock.Unlock();
+    m_image_ctx->snap_lock.put_read();
 
     ldout(cct, 20) << "no-op, skipping" << dendl;
     finish(0);
     return;
   }
+
+  // copyup() will affect snapshots only if parent data is not all
+  // zeros.
+  if (!m_copyup_is_zero) {
+    m_snap_ids.insert(m_snap_ids.end(), m_image_ctx->snaps.rbegin(),
+                      m_image_ctx->snaps.rend());
+  }
+
   m_lock.Unlock();
+  m_image_ctx->snap_lock.put_read();
 
   update_object_maps();
 }
@@ -216,7 +231,6 @@ void CopyupRequest<I>::deep_copy() {
 
   ldout(cct, 20) << "oid=" << m_oid << ", flatten=" << m_flatten << dendl;
 
-  m_deep_copy = true;
   auto ctx = util::create_context_callback<
     CopyupRequest<I>, &CopyupRequest<I>::handle_deep_copy>(this);
   auto req = deep_copy::ObjectCopyRequest<I>::create(
@@ -268,6 +282,14 @@ void CopyupRequest<I>::handle_deep_copy(int r) {
     return;
   }
 
+  // For deep-copy, copyup() will never affect snapshots.  However,
+  // this state machine is responsible for updating object maps for
+  // snapshots that have been created on destination image after
+  // migration started.
+  if (r != -ENOENT) {
+    compute_deep_copy_snap_ids();
+  }
+
   m_lock.Unlock();
   m_image_ctx->snap_lock.put_read();
 
@@ -288,15 +310,6 @@ void CopyupRequest<I>::update_object_maps() {
 
   auto cct = m_image_ctx->cct;
   ldout(cct, 20) << "oid=" << m_oid << dendl;
-
-  if (!m_image_ctx->snaps.empty()) {
-    if (m_deep_copy) {
-      compute_deep_copy_snap_ids();
-    } else {
-      m_snap_ids.insert(m_snap_ids.end(), m_image_ctx->snaps.rbegin(),
-                        m_image_ctx->snaps.rend());
-    }
-  }
 
   bool copy_on_read = m_pending_requests.empty();
   uint8_t head_object_map_state = OBJECT_EXISTS;
@@ -325,7 +338,7 @@ void CopyupRequest<I>::update_object_maps() {
   typename AsyncObjectThrottle<I>::ContextFactory context_factory(
     boost::lambda::bind(boost::lambda::new_ptr<C_UpdateObjectMap<I>>(),
     boost::lambda::_1, m_image_ctx, m_object_no, head_object_map_state,
-    &m_snap_ids, m_trace, boost::lambda::_2));
+    &m_snap_ids, m_first_snap_is_clean, m_trace, boost::lambda::_2));
   auto ctx = util::create_context_callback<
     CopyupRequest<I>, &CopyupRequest<I>::handle_update_object_maps>(this);
   auto throttle = new AsyncObjectThrottle<I>(
@@ -369,8 +382,8 @@ void CopyupRequest<I>::copyup() {
   ldout(cct, 20) << "oid=" << m_oid << dendl;
 
   bool copy_on_read = m_pending_requests.empty();
-  bool deep_copyup = !snapc.snaps.empty() && !m_copyup_data.is_zero();
-  if (m_copyup_data.is_zero()) {
+  bool deep_copyup = !snapc.snaps.empty() && !m_copyup_is_zero;
+  if (m_copyup_is_zero) {
     m_copyup_data.clear();
   }
 
@@ -522,7 +535,7 @@ bool CopyupRequest<I>::is_copyup_required() {
     return true;
   }
 
-  if (!m_copyup_data.is_zero()) {
+  if (!m_copyup_is_zero) {
     return true;
   }
 
@@ -581,6 +594,7 @@ void CopyupRequest<I>::compute_deep_copy_snap_ids() {
                std::back_inserter(m_snap_ids),
                [this, cct=m_image_ctx->cct, &deep_copied](uint64_t snap_id) {
       if (deep_copied.count(snap_id)) {
+        m_first_snap_is_clean = true;
         return false;
       }
 
