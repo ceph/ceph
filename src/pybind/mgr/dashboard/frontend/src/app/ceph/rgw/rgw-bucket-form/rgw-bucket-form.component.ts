@@ -50,7 +50,7 @@ export class RgwBucketFormComponent implements OnInit {
   createForm() {
     this.bucketForm = this.formBuilder.group({
       id: [null],
-      bid: [null, [Validators.required], [this.bucketNameValidator()]],
+      bid: [null, [Validators.required], this.editing ? [] : [this.bucketNameValidator()]],
       owner: [null, [Validators.required]],
       'placement-target': [null, this.editing ? [] : [Validators.required]]
     });
