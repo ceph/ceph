@@ -4605,7 +4605,7 @@ void OSD::handle_osd_ping(MOSDPing *m)
 	}
       }
 
-      ceph::signedspan sender_delta_ub;
+      ceph::signedspan sender_delta_ub{};
       s->stamps->got_ping(
 	m->up_from,
 	mnow,
