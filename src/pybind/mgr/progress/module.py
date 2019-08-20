@@ -45,6 +45,14 @@ class Event(object):
     def progress(self):
         raise NotImplementedError()
 
+    @property
+    def failed(self):
+        return False
+
+    @property
+    def failure_message(self):
+        return None
+
     def summary(self):
         return "{0} {1}".format(self.progress, self.message)
 
@@ -83,13 +91,39 @@ class GhostEvent(Event):
     after the event is complete.
     """
 
-    def __init__(self, my_id, message, refs):
+    def __init__(self, my_id, message, refs,
+                 failed=False, failure_message=None):
         super(GhostEvent, self).__init__(message, refs)
         self.id = my_id
+
+        if failed:
+            self._failed = True
+            self._failure_message = failure_message
+        else:
+            self._failed = False
 
     @property
     def progress(self):
         return 1.0
+
+    @property
+    def failed(self):
+        return self._failed
+
+    @property
+    def failure_message(self):
+        return self._failure_message if self._failed else None
+
+    def to_json(self):
+        d = {
+            "id": self.id,
+            "message": self.message,
+            "refs": self._refs
+        }
+        if self._failed:
+            d["failed"] = True
+            d["failure_message"] = self._failure_message
+        return d
 
 
 class RemoteEvent(Event):
@@ -103,15 +137,30 @@ class RemoteEvent(Event):
         super(RemoteEvent, self).__init__(message, refs)
         self.id = my_id
         self._progress = 0.0
+        self._failed = False
         self._refresh()
 
     def set_progress(self, progress):
         self._progress = progress
         self._refresh()
 
+    def set_failed(self, message):
+        self._progress = 1.0
+        self._failed = True
+        self._failure_message = message
+        self._refresh()
+
     @property
     def progress(self):
         return self._progress
+
+    @property
+    def failed(self):
+        return self._failed
+
+    @property
+    def failure_message(self):
+        return self._failure_message if self._failed else None
 
 
 class PgRecoveryEvent(Event):
@@ -440,7 +489,10 @@ class Module(MgrModule):
                                decoded['compat_version']))
 
         for ev in decoded['events']:
-            self._completed_events.append(GhostEvent(ev['id'], ev['message'], ev['refs']))
+            self._completed_events.append(GhostEvent(ev['id'], ev['message'],
+                                                     ev['refs'],
+                                                     ev.get('failed', False),
+                                                     ev.get('failure_message')))
 
         self._prune_completed_events()
 
@@ -505,7 +557,8 @@ class Module(MgrModule):
         self.complete_progress_event(ev.id)
 
         self._completed_events.append(
-            GhostEvent(ev.id, ev.message, ev.refs))
+            GhostEvent(ev.id, ev.message, ev.refs,
+                       failed=ev.failed, failure_message=ev.failure_message))
         del self._events[ev.id]
         self._prune_completed_events()
         self._dirty = True
@@ -524,6 +577,21 @@ class Module(MgrModule):
             self.log.warn("complete: ev {0} does not exist".format(ev_id))
             pass
 
+    def fail(self, ev_id, message):
+        """
+        For calling from other mgr modules to mark an event as failed (and
+        complete)
+        """
+        try:
+            ev = self._events[ev_id]
+            ev.set_failed(message)
+            self.log.info("fail: finished ev {0} ({1}): {2}".format(ev_id,
+                                                                    ev.message,
+                                                                    message))
+            self._complete(ev)
+        except KeyError:
+            self.log.warn("fail: ev {0} does not exist".format(ev_id))
+
     def _handle_ls(self):
         if len(self._events) or len(self._completed_events):
             out = ""
@@ -537,7 +605,8 @@ class Module(MgrModule):
                 # TODO: limit number of completed events to show
                 out += "\n"
                 for ev in self._completed_events:
-                    out += "[Complete]: {0}\n".format(ev.twoline_progress())
+                    out += "[{0}]: {1}\n".format("Complete" if not ev.failed else "Failed",
+                                                 ev.twoline_progress())
 
             return 0, out, ""
         else:
