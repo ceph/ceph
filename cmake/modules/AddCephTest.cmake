@@ -72,9 +72,10 @@ function(add_tox_test name)
     list(APPEND tox_envs ${TOXTEST_TOX_ENVS})
   endif()
   string(REPLACE ";" "," tox_envs "${tox_envs}")
+  find_package(Python REQUIRED)
   add_custom_command(
     OUTPUT ${venv_path}/bin/activate
-    COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh ${venv_path}
+    COMMAND ${CMAKE_SOURCE_DIR}/src/tools/setup-virtualenv.sh --python="${Python_EXECUTABLE}" ${venv_path}
     WORKING_DIRECTORY ${tox_path}
     COMMENT "preparing venv for ${name}")
   add_custom_target(${name}-venv
