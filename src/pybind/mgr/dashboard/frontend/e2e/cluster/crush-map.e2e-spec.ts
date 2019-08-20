@@ -1,4 +1,4 @@
-import { $, browser } from 'protractor';
+import { $ } from 'protractor';
 import { Helper } from '../helper.po';
 import { CrushMapPageHelper } from './crush-map.po';
 
@@ -38,7 +38,7 @@ describe('CRUSH map page', () => {
       await expect(crushmap.getCrushNode(1).getText()).toEqual(label);
 
       // Check that table appears once OSD is clicked
-      await browser.wait(Helper.EC.visibilityOf($('.datatable-body')));
+      await crushmap.waitVisibility($('.datatable-body'));
       await expect($('.datatable-body').isDisplayed()).toBe(true);
     });
   });
