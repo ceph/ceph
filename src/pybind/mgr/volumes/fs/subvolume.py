@@ -79,7 +79,11 @@ class SubVolume(object):
             self.fs.setxattr(subvolpath, 'ceph.quota.max_bytes', str(size).encode('utf-8'), 0)
 
         if pool:
-            self.fs.setxattr(subvolpath, 'ceph.dir.layout.pool', pool.encode('utf-8'), 0)
+            try:
+                self.fs.setxattr(subvolpath, 'ceph.dir.layout.pool', pool.encode('utf-8'), 0)
+            except cephfs.InvalidValue:
+                raise VolumeException(-errno.EINVAL,
+                                      "Invalid pool layout '{0}'. It must be a valid data pool".format(pool))
 
         xattr_key = xattr_val = None
         if namespace_isolated:
@@ -179,7 +183,11 @@ class SubVolume(object):
         self.fs.mkdirs(path, mode)
         if not pool:
             pool = self._get_ancestor_xattr(path, "ceph.dir.layout.pool")
-        self.fs.setxattr(path, 'ceph.dir.layout.pool', pool.encode('utf-8'), 0)
+        try:
+            self.fs.setxattr(path, 'ceph.dir.layout.pool', pool.encode('utf-8'), 0)
+        except cephfs.InvalidValue:
+            raise VolumeException(-errno.EINVAL,
+                                  "Invalid pool layout '{0}'. It must be a valid data pool".format(pool))
 
     def remove_group(self, spec, force):
         path = spec.group_path
