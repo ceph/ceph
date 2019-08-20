@@ -418,6 +418,7 @@ struct RGWDataSyncEnv {
   const DoutPrefixProvider *dpp{nullptr};
   CephContext *cct{nullptr};
   rgw::sal::RGWRadosStore *store{nullptr};
+  RGWServices *svc{nullptr};
   RGWRESTConn *conn{nullptr};
   RGWAsyncRadosProcessor *async_rados{nullptr};
   RGWHTTPManager *http_manager{nullptr};
@@ -429,7 +430,8 @@ struct RGWDataSyncEnv {
 
   RGWDataSyncEnv() {}
 
-  void init(const DoutPrefixProvider *_dpp, CephContext *_cct, rgw::sal::RGWRadosStore *_store, RGWRESTConn *_conn,
+  void init(const DoutPrefixProvider *_dpp, CephContext *_cct, rgw::sal::RGWRadosStore *_store,
+            RGWRESTConn *_conn, RGWServices *_svc,
             RGWAsyncRadosProcessor *_async_rados, RGWHTTPManager *_http_manager,
             RGWSyncErrorLogger *_error_logger, RGWSyncTraceManager *_sync_tracer,
             const string& _source_zone, RGWSyncModuleInstanceRef& _sync_module,
@@ -437,6 +439,7 @@ struct RGWDataSyncEnv {
     dpp = _dpp;
     cct = _cct;
     store = _store;
+    svc = _svc;
     conn = _conn;
     async_rados = _async_rados;
     http_manager = _http_manager;
@@ -456,7 +459,7 @@ class RGWDataChangesLogInfo;
 
 class RGWRemoteDataLog : public RGWCoroutinesManager {
   const DoutPrefixProvider *dpp;
-  rgw::sal::RGWRadosStore *store;
+  CephContext *cct;
   RGWAsyncRadosProcessor *async_rados;
   RGWHTTPManager http_manager;
 
@@ -470,7 +473,9 @@ class RGWRemoteDataLog : public RGWCoroutinesManager {
   bool initialized;
 
 public:
-  RGWRemoteDataLog(const DoutPrefixProvider *dpp, rgw::sal::RGWRadosStore *_store,
+  RGWRemoteDataLog(const DoutPrefixProvider *dpp,
+                   CephContext *_cct,
+                   RGWCoroutinesManagerRegistry *_cr_registry,
                    RGWAsyncRadosProcessor *async_rados);
   int init(const string& _source_zone, RGWRESTConn *_conn, RGWSyncErrorLogger *_error_logger,
            RGWSyncTraceManager *_sync_tracer, RGWSyncModuleInstanceRef& module,
