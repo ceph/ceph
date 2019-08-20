@@ -9394,6 +9394,7 @@ void PrimaryLogPG::finish_copyfrom(CopyFromCallback *cb)
   if (cb->results->has_omap) {
     dout(10) << __func__ << " setting omap flag on " << obs.oi.soid << dendl;
     obs.oi.set_flag(object_info_t::FLAG_OMAP);
+    ctx->clean_regions.mark_omap_dirty();
   } else {
     dout(10) << __func__ << " clearing omap flag on " << obs.oi.soid << dendl;
     obs.oi.clear_flag(object_info_t::FLAG_OMAP);
