@@ -72,13 +72,15 @@ namespace beast = boost::beast;
 namespace ssl = boost::asio::ssl;
 #endif
 
+using parse_buffer = boost::beast::flat_static_buffer<65536>;
+
 template <typename Stream>
 class StreamIO : public rgw::asio::ClientIO {
   Stream& stream;
-  beast::flat_buffer& buffer;
+  parse_buffer& buffer;
  public:
   StreamIO(Stream& stream, rgw::asio::parser_type& parser,
-           beast::flat_buffer& buffer, bool is_ssl,
+           parse_buffer& buffer, bool is_ssl,
            const tcp::endpoint& local_endpoint,
            const tcp::endpoint& remote_endpoint)
       : ClientIO(parser, is_ssl, local_endpoint, remote_endpoint),
@@ -119,7 +121,7 @@ class StreamIO : public rgw::asio::ClientIO {
 
 template <typename Stream>
 void handle_connection(RGWProcessEnv& env, Stream& stream,
-                       beast::flat_buffer& buffer, bool is_ssl,
+                       parse_buffer& buffer, bool is_ssl,
                        boost::system::error_code& ec,
                        boost::asio::yield_context yield)
 {
@@ -192,6 +194,9 @@ void handle_connection(RGWProcessEnv& env, Stream& stream,
       body.data = discard_buffer.data();
 
       beast::http::async_read_some(stream, buffer, parser, yield[ec]);
+      if (ec == beast::http::error::need_buffer) {
+        continue;
+      }
       if (ec == boost::asio::error::connection_reset) {
         return;
       }
@@ -502,17 +507,17 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
       [this, s=std::move(socket)] (boost::asio::yield_context yield) mutable {
         // wrap the socket in an ssl stream
         ssl::stream<tcp::socket&> stream{s, *ssl_context};
-        beast::flat_buffer buffer;
+        auto buffer = std::make_unique<parse_buffer>();
         // do ssl handshake
         boost::system::error_code ec;
         auto bytes = stream.async_handshake(ssl::stream_base::server,
-                                            buffer.data(), yield[ec]);
+                                            buffer->data(), yield[ec]);
         if (ec) {
           ldout(ctx(), 1) << "ssl handshake failed: " << ec.message() << dendl;
           return;
         }
-        buffer.consume(bytes);
-        handle_connection(env, stream, buffer, true, ec, yield);
+        buffer->consume(bytes);
+        handle_connection(env, stream, *buffer, true, ec, yield);
         if (!ec) {
           // ssl shutdown (ignoring errors)
           stream.async_shutdown(yield[ec]);
@@ -525,9 +530,9 @@ void AsioFrontend::accept(Listener& l, boost::system::error_code ec)
 #endif // WITH_RADOSGW_BEAST_OPENSSL
     boost::asio::spawn(service,
       [this, s=std::move(socket)] (boost::asio::yield_context yield) mutable {
-        beast::flat_buffer buffer;
+        auto buffer = std::make_unique<parse_buffer>();
         boost::system::error_code ec;
-        handle_connection(env, s, buffer, false, ec, yield);
+        handle_connection(env, s, *buffer, false, ec, yield);
         s.shutdown(tcp::socket::shutdown_both, ec);
       });
   }
