@@ -13,9 +13,6 @@
 # define MS_RELATIME (1<<21)
 #endif
 
-#define MAX_SECRET_LEN 1000
-#define MAX_SECRET_OPTION_LEN (MAX_SECRET_LEN + 7)
-
 bool verboseflag = false;
 bool skip_mtab_flag = false;
 static const char * const EMPTY_STRING = "";
@@ -27,8 +24,10 @@ static const char * const EMPTY_STRING = "";
 
 struct ceph_mount_info {
 	unsigned long	cmi_flags;
+	char		*cmi_name;
 	char		*cmi_opts;
 	int		cmi_opts_len;
+	char 		cmi_secret[SECRET_BUFSIZE];
 };
 
 static void block_signals (int how)
@@ -108,9 +107,6 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 	char *name = NULL;
 	int name_len = 0;
 	int name_pos = 0;
-	char secret[MAX_SECRET_LEN];
-	char *saw_name = NULL;
-	char *saw_secret = NULL;
 
 	mount_ceph_debug("parsing options: %s\n", data);
 
@@ -172,53 +168,36 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 			/* ignore */
 		} else if (strncmp(data, "nofail", 6) == 0) {
 			/* ignore */
-
 		} else if (strncmp(data, "secretfile", 10) == 0) {
+			int ret;
+
 			if (!value || !*value) {
 				fprintf(stderr, "keyword secretfile found, but no secret file specified\n");
-				free(saw_name);
 				return -EINVAL;
 			}
-
-			if (read_secret_from_file(value, secret, sizeof(secret)) < 0) {
-				fprintf(stderr, "error reading secret file\n");
-				return -EIO;
+			ret = read_secret_from_file(value, cmi->cmi_secret, sizeof(cmi->cmi_secret));
+			if (ret < 0) {
+				fprintf(stderr, "error reading secret file: %d\n", ret);
+				return ret;
 			}
-
-			/* see comment for "secret" */
-			saw_secret = secret;
-			skip = true;
 		} else if (strncmp(data, "secret", 6) == 0) {
+			size_t len;
+
 			if (!value || !*value) {
 				fprintf(stderr, "mount option secret requires a value.\n");
-				free(saw_name);
 				return -EINVAL;
 			}
 
-			/* secret is only added to kernel options as
-			   backwards compatibility, if add_key doesn't
-			   recognize our keytype; hence, it is skipped
-			   here and appended to options on add_key
-			   failure */
-			size_t len = sizeof(secret);
-			strncpy(secret, value, len-1);
-			secret[len-1] = '\0';
-			saw_secret = secret;
-			skip = true;
+			len = strnlen(value, sizeof(cmi->cmi_secret)) + 1;
+			if (len <= sizeof(cmi->cmi_secret))
+				memcpy(cmi->cmi_secret, value, len);
 		} else if (strncmp(data, "name", 4) == 0) {
 			if (!value || !*value) {
 				fprintf(stderr, "mount option name requires a value.\n");
 				return -EINVAL;
 			}
-
-			/* take a copy of the name, to be used for
-			   naming the keys that we add to kernel; */
-			free(saw_name);
-			saw_name = strdup(value);
-			if (!saw_name) {
-				fprintf(stderr, "out of memory.\n");
-				return -ENOMEM;
-			}
+			/* keep pointer to value */
+			name = value;
 			skip = false;
 		} else {
 			skip = false;
@@ -243,25 +222,10 @@ static int parse_options(const char *data, struct ceph_mount_info *cmi)
 		data = next_keyword;
 	} while (data);
 
-	name_pos = safe_cat(&name, &name_len, name_pos, "client.");
-	name_pos = safe_cat(&name, &name_len, name_pos,
-			    saw_name ? saw_name : CEPH_AUTH_NAME_DEFAULT);
-	if (saw_secret || is_kernel_secret(name)) {
-		int ret;
-		char secret_option[MAX_SECRET_OPTION_LEN];
-		ret = get_secret_option(saw_secret, name, secret_option, sizeof(secret_option));
-		if (ret < 0) {
-			free(saw_name);
-			return ret;
-		} else {
-			if (pos) {
-				pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, ",");
-			}
-			pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, secret_option);
-		}
-	}
+	name_pos = safe_cat(&cmi->cmi_name, &name_len, name_pos, "client.");
+	name_pos = safe_cat(&cmi->cmi_name, &name_len, name_pos,
+			    name ? name : CEPH_AUTH_NAME_DEFAULT);
 
-	free(saw_name);
 	if (!cmi->cmi_opts) {
 		cmi->cmi_opts = strdup(EMPTY_STRING);
 		if (!cmi->cmi_opts)
@@ -346,6 +310,28 @@ static void usage(const char *prog_name)
 static void ceph_mount_info_free(struct ceph_mount_info *cmi)
 {
 	free(cmi->cmi_opts);
+	free(cmi->cmi_name);
+}
+
+static int finalize_options(struct ceph_mount_info *cmi)
+{
+	int pos;
+
+	if (cmi->cmi_secret[0] || is_kernel_secret(cmi->cmi_name)) {
+		int ret;
+		char secret_option[SECRET_OPTION_BUFSIZE];
+
+		ret = get_secret_option(cmi->cmi_secret, cmi->cmi_name,
+					secret_option, sizeof(secret_option));
+		if (ret < 0)
+			return ret;
+
+		pos = strlen(cmi->cmi_opts);
+		if (pos)
+			pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, ",");
+		pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, secret_option);
+	}
+	return 0;
 }
 
 int main(int argc, char *argv[])
@@ -369,12 +355,19 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	/* Ensure the ceph key_type is available */
-	modprobe();
-
 	retval = parse_options(opts, &cmi);
 	if (retval) {
 		fprintf(stderr, "failed to parse ceph_options: %d\n", retval);
+		retval = EX_USAGE;
+		goto out;
+	}
+
+	/* Ensure the ceph key_type is available */
+	modprobe();
+
+	retval = finalize_options(&cmi);
+	if (retval) {
+		fprintf(stderr, "couldn't finalize options: %d\n", retval);
 		retval = EX_USAGE;
 		goto out;
 	}
