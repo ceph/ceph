@@ -19,7 +19,7 @@ using ceph::net::Socket;
 using ceph::net::SocketFRef;
 using ceph::net::stop_t;
 
-static seastar::logger logger{"test"};
+static seastar::logger logger{"crimsontest"};
 
 template <typename ConcreteService>
 class SocketFactoryBase
