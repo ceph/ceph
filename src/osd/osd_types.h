@@ -742,6 +742,9 @@ public:
     }
     return false;
   }
+  int64_t pool() const {
+    return pgid.pool();
+  }
 
   void encode(ceph::buffer::list& bl) const;
   void decode(ceph::buffer::list::const_iterator& bl);
