@@ -414,10 +414,7 @@ class CephFSShell(Cmd):
 
     class path_to_bytes(argparse.Action):
         def __call__(self, parser, namespace, values, option_string=None):
-            if isinstance(values, str):
-                values = to_bytes(values)
-            if isinstance(values, list):
-                values = list(map(to_bytes, values))
+            values = to_bytes(values)
             setattr(namespace, self.dest, values)
 
     def complete_mkdir(self, text, line, begidx, endidx):
