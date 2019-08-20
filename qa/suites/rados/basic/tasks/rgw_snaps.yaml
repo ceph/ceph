@@ -18,7 +18,7 @@ tasks:
         - default.rgw.control
         - default.rgw.meta
         - default.rgw.log
-- thrash_pool_snaps:
+- pool_snaps_thrash:
     pools:
     - default.rgw.buckets.data
     - default.rgw.buckets.index
