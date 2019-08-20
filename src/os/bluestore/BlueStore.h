@@ -2526,7 +2526,7 @@ public:
   int quick_fix() override {
     return _fsck(FSCK_SHALLOW, true);
   }
-
+  int reshard(const std::string& new_sharding);
   void set_cache_shards(unsigned num) override;
   void dump_cache_stats(Formatter *f) override {
     int onode_count = 0, buffers_bytes = 0;

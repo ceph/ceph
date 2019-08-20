@@ -8866,6 +8866,236 @@ out_scan:
   return errors - (int)repaired;
 }
 
+int BlueStore::reshard(const std::string& new_sharding)
+{
+  KeyValueDB* source_db = nullptr;
+  int r = _mount(true, false);
+  if (r < 0)
+    return r;
+
+  stringstream err;
+  r = db->open(err);
+  if (r < 0) {
+    derr << __func__ << " erroring opening db: " << err.str() << dendl;
+    _close_db();
+    return -EIO;
+  }
+
+  BlueStore_DB_Hash* hdb = dynamic_cast<BlueStore_DB_Hash*>(db);
+  //column families to iterate over
+  std::vector<std::string> columns_to_iterate;
+  if (hdb == nullptr) {
+    /* not sharded DB, yet */
+    source_db = db;
+    columns_to_iterate.push_back("default");
+  } else {
+    //list columns that have to be iterated over
+    hdb->column_family_list(columns_to_iterate);
+    source_db = hdb->db;
+  }
+  dout(10) << "Columns to iterate over: " << columns_to_iterate << dendl;
+
+  std::vector<KeyValueDB::ColumnFamily> new_cfs;
+  BlueStore_DB_Hash::ShardingSchema new_shards;
+  r = parse_sharding(new_sharding, new_cfs, new_shards);
+
+  if (r != 0) {
+    derr << "Sharding schema '" << new_sharding << "' invalid" << dendl;
+    return r;
+  }
+  RocksDBStore* r_source_db = dynamic_cast<RocksDBStore*>(source_db);
+  ceph_assert(r_source_db && "BlueStore not based on RocksDB");
+
+  //target_db is a somewhat clone of source_db, but it is lacking knowledge of MergeOperators
+  //new columns needed for target_db must be created by source_db handle before we open
+  for (auto new_column: new_cfs) {
+    bool has_column = false;
+    for (auto c: columns_to_iterate) {
+      if (new_column.name == c) {
+        has_column = true;
+        break;
+      }
+    }
+    if (!has_column) {
+      dout(5) << "Create required column family '" << new_column.name <<
+          "' with options '" << new_column.option << "'" << dendl;
+      r = source_db->column_family_create(new_column.name, new_column.option);
+      assert(r == 0);
+    }
+  }
+
+  //list column families that can contain ALLOC_BITMAP entries
+  std::vector<std::string> target_alloc_bitmap_cfs;
+  auto it = new_shards.find(PREFIX_ALLOC_BITMAP);
+  ceph_assert(it != new_shards.end());
+  if (it->second.shards > 0) {
+    for(size_t i = 0; i < it->second.shards; i++) {
+      target_alloc_bitmap_cfs.push_back(it->first + "-" + to_string(i));
+    }
+  } else {
+    target_alloc_bitmap_cfs.push_back("default");
+  }
+
+  //all columns created, now opening of targer_hash_db should succeed
+  BlueStore_DB_Hash target_hash_db(r_source_db, new_shards);
+
+
+
+  auto do_move = [&](
+      KeyValueDB::IteratorBase data_source,
+      std::string source_cf_name,
+      bool skip_bitmap_entries) {
+    KeyValueDB::ColumnFamilyHandle source_cf_handle = source_db->column_family_handle(source_cf_name);
+    ceph_assert(source_cf_handle);
+
+    KeyValueDB::Transaction transaction = source_db->get_transaction();
+    size_t data_in_transaction = 0;
+    size_t ops_in_transaction = 0;
+
+    while (data_source->valid()) {
+      std::pair<std::string, std::string> raw_key = data_source->raw_key();
+      ceph::bufferlist data = data_source->value();
+      dout(20) << "Processing key '" << url_escape(raw_key.first) << " " << url_escape(raw_key.second) << "'" << dendl;
+
+      std::string target_cf_name;
+      target_hash_db.locate_column_name(raw_key, target_cf_name);
+      dout(20) << "prev name=" << source_cf_name << " new name=" << target_cf_name << dendl;
+      if (target_cf_name == source_cf_name) {
+        dout(20) << "Skipped" << dendl;
+      } else {
+        KeyValueDB::ColumnFamilyHandle target_cf_handle = source_db->column_family_handle(target_cf_name);
+        ceph_assert(target_cf_handle);
+        if (raw_key.first != PREFIX_ALLOC_BITMAP) {
+          transaction->select(source_cf_handle);
+          transaction->rm_single_key(raw_key.first, raw_key.second);
+          transaction->select(target_cf_handle);
+          transaction->set(raw_key.first, raw_key.second, data);
+          ops_in_transaction++;
+          data_in_transaction += data.length();
+        } else {
+          //there is special handling of prefix PREFIX_ALLOC_BITMAP as it is used internally by bluefs
+          //do not delete those entries, only move them
+          ceph::bufferlist tmp;
+          if (source_db->get(target_cf_handle, raw_key.first, raw_key.second, &tmp) != 0) {
+            if (!(tmp == data)) {
+              transaction->select(target_cf_handle);
+              transaction->set(raw_key.first, raw_key.second, data);
+              ops_in_transaction++;
+              data_in_transaction += data.length();
+            }
+          }
+        }
+      }
+      if (ops_in_transaction == 1000 || data_in_transaction > 100000 || !data_source->valid()) {
+        dout(10) << "Submitting #" << ops_in_transaction << " ops" << dendl;
+        r = source_db->submit_transaction_sync(transaction);
+        ceph_assert(r == 0);
+        ops_in_transaction = 0;
+        data_in_transaction = 0;
+        transaction = source_db->get_transaction();
+      }
+      data_source->next();
+    }
+
+    if (ops_in_transaction > 0) {
+      dout(10) << "Submitting #" << ops_in_transaction << " ops" << dendl;
+      r = source_db->submit_transaction_sync(transaction);
+      ceph_assert(r == 0);
+    }
+  };
+
+  //walk columns and move data, except PREFIX_ALLOC_BITMAP
+  for (std::string source_cf_name: columns_to_iterate) {
+    dout(10) << "Starting processing column family '" << source_cf_name << "'" << dendl;
+    KeyValueDB::ColumnFamilyHandle source_cf_handle = source_db->column_family_handle(source_cf_name);
+    ceph_assert(source_cf_handle);
+    KeyValueDB::WholeSpaceIterator data_source = source_db->get_wholespace_iterator_cf(source_cf_handle);
+    data_source->seek_to_first();
+    do_move(data_source, source_cf_name, true);
+    dout(10) << "Finished processing column family '" << source_cf_name << "'" << dendl;
+  }
+
+  //processing ALLOC_BITMAP
+  //column families where ALLOC_BITMAP are expected to be located
+  //will scan those locations to check if these values didn't change
+
+  bool moved_allocation = false;
+  do {
+    for (std::string source_cf_name: columns_to_iterate) {
+      dout(10) << "Starting processing column family '" << source_cf_name <<
+          "' for ALLOC_BITMAP" << dendl;
+      KeyValueDB::ColumnFamilyHandle source_cf_handle = source_db->column_family_handle(source_cf_name);
+      ceph_assert(source_cf_handle);
+      KeyValueDB::Iterator data_source = source_db->get_iterator_cf(source_cf_handle, PREFIX_ALLOC_BITMAP);
+      data_source->seek_to_first();
+      do_move(data_source, source_cf_name, true);
+      dout(10) << "Finished processing column family '" << source_cf_name << "'" << dendl;
+    }
+
+    //deleting stale values
+    KeyValueDB::Transaction transaction = source_db->get_transaction();
+    size_t ops_in_transaction = 0;
+    for (auto& target_cf : target_alloc_bitmap_cfs) {
+      KeyValueDB::ColumnFamilyHandle cfh = source_db->column_family_handle(target_cf);
+      ceph_assert(cfh);
+      KeyValueDB::Iterator data_source = source_db->get_iterator_cf(cfh, PREFIX_ALLOC_BITMAP);
+
+      data_source->seek_to_first();
+      while (data_source->valid()) {
+        std::pair<std::string, std::string> raw_key = data_source->raw_key();
+        ceph::bufferlist data = data_source->value();
+        ceph::bufferlist tmp;
+        if (source_db->get(raw_key.first, raw_key.second, &tmp) != 0) {
+          moved_allocation = true;
+          transaction->select(cfh);
+          transaction->rm_single_key(raw_key.first, raw_key.second);
+        }
+        ops_in_transaction++;
+        if (ops_in_transaction == 1000) {
+          dout(10) << "Submitting #" << ops_in_transaction << " ops" << dendl;
+          r = source_db->submit_transaction_sync(transaction);
+          ceph_assert(r == 0);
+          ops_in_transaction = 0;
+          transaction = source_db->get_transaction();
+        }
+        data_source->next();
+      }
+      if (ops_in_transaction > 0) {
+        dout(10) << "Submitting #" << ops_in_transaction << " ops" << dendl;
+        r = source_db->submit_transaction_sync(transaction);
+        ceph_assert(r == 0);
+        ops_in_transaction = 0;
+      }
+    }
+  } while (moved_allocation);
+  dout(10) << "Finished moving BITMAP_ALLOC data" << dendl;
+
+  //some columns may now not be necessary, delete
+  for (auto c: columns_to_iterate) {
+    if (c == "default") continue;
+    bool needed = false;
+    for (auto n: new_cfs) {
+      if (c == n.name) {
+        needed = true;
+        break;
+      }
+    }
+    if (!needed) {
+      dout(5) << "Delete column family '" << c << dendl;
+      r = source_db->column_family_delete(c);
+      ceph_assert(r == 0);
+    }
+  }
+
+  umount();
+  write_meta("sharding", new_sharding);
+  dout(5) << "Resharding finished." << dendl;
+  target_hash_db.unlink_db();
+  return 0;
+}
+
+
+
 /// methods to inject various errors fsck can repair
 void BlueStore::inject_broken_shared_blob_key(const string& key,
 				  const bufferlist& bl)

@@ -222,6 +222,7 @@ int main(int argc, char **argv)
   vector<string> devs_source;
   string dev_target;
   string path;
+  string new_sharding;
   string action;
   string log_file;
   string key, value;
@@ -232,6 +233,7 @@ int main(int argc, char **argv)
   po_options.add_options()
     ("help,h", "produce help message")
     ("path", po::value<string>(&path), "bluestore path")
+    ("new-sharding", po::value<string>(&new_sharding), "new split for sharding, same logic as bluestore_rocksdb_cf option")
     ("out-dir", po::value<string>(&out_dir), "output directory")
     ("log-file,l", po::value<string>(&log_file), "log file")
     ("log-level", po::value<int>(&log_level), "log level (30=most, 20=lots, 10=some, 1=little)")
@@ -294,7 +296,7 @@ int main(int argc, char **argv)
     exit(EXIT_FAILURE);
   }
 
-  if (action == "fsck" || action == "repair" || action == "quick-fix") {
+  if (action == "fsck" || action == "repair" || action == "quick-fix" || action == "reshard") {
     if (path.empty()) {
       cerr << "must specify bluestore path" << std::endl;
       exit(EXIT_FAILURE);
@@ -394,6 +396,13 @@ int main(int argc, char **argv)
     if (allocs_name.empty())
       allocs_name = vector<string>{"block", "bluefs-db", "bluefs-wal", "bluefs-slow"};
   }
+  if (action == "reshard") {
+    if (new_sharding.size() == 0) {
+      cerr << "must specify new split for prefixes in bluestore with --new-sharding" << std::endl;
+      exit(EXIT_FAILURE);
+    }
+  }
+
   vector<const char*> args;
   if (log_file.size()) {
     args.push_back("--log-file");
@@ -858,6 +867,18 @@ int main(int argc, char **argv)
     }
 
     bluestore.cold_close();
+  } else if (action == "reshard") {
+    validate_path(cct.get(), path, false);
+    BlueStore bluestore(cct.get(), path);
+    int r;
+    r = bluestore.reshard(new_sharding);
+    if (r < 0) {
+      cerr << "error from reshard: " << cpp_strerror(r) << std::endl;
+      exit(EXIT_FAILURE);
+    } else {
+      cout << action << " success" << std::endl;
+    }
+    return r;
   } else {
     cerr << "unrecognized action " << action << std::endl;
     return 1;
