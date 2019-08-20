@@ -717,21 +717,21 @@ class CephConfigWatcher(BaseThread):
     def _check_hosts(self, server_map):
         log.debug("[DBG] k8sevents checking host membership")
         changes = list()
-        if ListDiff(self.server_map.keys(), server_map.keys()).is_equal:
-            # no hosts changes
+        servers = ListDiff(self.server_map.keys(), server_map.keys())
+        if servers.is_equal:
+            # no hosts have been added or removed
             pass
         else:
             # host changes detected, find out what
-            diff = ListDiff(self.server_map.keys(), server_map.keys())
             host_msg = "Host '{}' has been {} the cluster"
-            for new in diff.added:
+            for new_server in servers.added:
                 changes.append(self._generate_config_logentry(
-                                    msg=host_msg.format(new, 'added to'))
+                                    msg=host_msg.format(new_server, 'added to'))
                 )
 
-            for removed in diff.removed:
+            for removed_server in servers.removed:
                 changes.append(self._generate_config_logentry(
-                                    msg=host_msg.format(removed, 'removed from'))
+                                    msg=host_msg.format(removed_server, 'removed from'))
                 )
 
         return changes
@@ -754,25 +754,25 @@ class CephConfigWatcher(BaseThread):
             # osd changes detected
             osd_msg = "Ceph OSD '{}' ({} @ {}B) has been {} host {}"
 
-            diff = ListDiff(before_osds, after_osds)
-            for new in diff.added:
+            osds = ListDiff(before_osds, after_osds)
+            for new_osd in osds.added:
                 changes.append(self._generate_config_logentry(
                                     msg=osd_msg.format(
-                                            new, 
-                                            osd_map[new]['deviceclass'],
-                                            MgrModule.to_pretty_iec(osd_map[new]['capacity']),
+                                            new_osd, 
+                                            osd_map[new_osd]['deviceclass'],
+                                            MgrModule.to_pretty_iec(osd_map[new_osd]['capacity']),
                                             'added to',
-                                            osd_map[new]['hostname']))
+                                            osd_map[new_osd]['hostname']))
                 )
 
-            for removed in diff.removed:
+            for removed_osd in osds.removed:
                 changes.append(self._generate_config_logentry(
                                     msg=osd_msg.format(
-                                        removed,
-                                        osd_map[removed]['deviceclass'],
-                                        MgrModule.to_pretty_iec(osd_map[removed]['capacity']),
+                                        removed_osd,
+                                        osd_map[removed_osd]['deviceclass'],
+                                        MgrModule.to_pretty_iec(osd_map[removed_osd]['capacity']),
                                         'removed from',
-                                        osd_map[removed]['hostname']))
+                                        osd_map[removed_osd]['hostname']))
                 )
 
         return changes
@@ -785,16 +785,16 @@ class CephConfigWatcher(BaseThread):
             pass
         else:
             # Pool changes
-            diff = ListDiff(self.pool_map.keys(), pool_map.keys())
+            pools = ListDiff(self.pool_map.keys(), pool_map.keys())
             pool_msg = "Pool '{}' has been {} the cluster"
-            for new in diff.added:
+            for new_pool in pools.added:
                 changes.append(self._generate_config_logentry(
-                                    msg=pool_msg.format(new, 'added to'))
+                                    msg=pool_msg.format(new_pool, 'added to'))
                 )
 
-            for removed in diff.removed:
+            for removed_pool in pools.removed:
                 changes.append(self._generate_config_logentry(
-                                    msg=pool_msg.format(removed, 'removed from'))
+                                    msg=pool_msg.format(removed_pool, 'removed from'))
                 )
 
         # check pool configuration changes
