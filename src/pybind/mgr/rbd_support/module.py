@@ -1082,7 +1082,7 @@ class TaskHandler:
         except (rbd.InvalidArgument, rbd.ImageNotFound):
             return None
 
-    def validate_image_migrating(self, migration_status):
+    def validate_image_migrating(self, image_spec, migration_status):
         if not migration_status:
             raise rbd.InvalidArgument("Image {} is not migrating".format(
                 self.format_image_spec(image_spec)), errno=errno.EINVAL)
@@ -1112,7 +1112,7 @@ class TaskHandler:
             if task:
                 return 0, task.to_json(), ''
 
-            self.validate_image_migrating(status)
+            self.validate_image_migrating(image_spec, status)
             if status['state'] not in [rbd.RBD_IMAGE_MIGRATION_STATE_PREPARED,
                                        rbd.RBD_IMAGE_MIGRATION_STATE_EXECUTING]:
                 raise rbd.InvalidArgument("Image {} is not in ready state".format(
@@ -1148,7 +1148,7 @@ class TaskHandler:
             if task:
                 return 0, task.to_json(), ''
 
-            self.validate_image_migrating(status)
+            self.validate_image_migrating(image_spec, status)
             if status['state'] != rbd.RBD_IMAGE_MIGRATION_STATE_EXECUTED:
                 raise rbd.InvalidArgument("Image {} has not completed migration".format(
                     self.format_image_spec(image_spec)), errno=errno.EINVAL)
@@ -1176,7 +1176,7 @@ class TaskHandler:
             if task:
                 return 0, task.to_json(), ''
 
-            self.validate_image_migrating(status)
+            self.validate_image_migrating(image_spec, status)
             return 0, self.add_task(ioctx,
                                     "Aborting image migration for {}".format(
                                         self.format_image_spec(image_spec)),
