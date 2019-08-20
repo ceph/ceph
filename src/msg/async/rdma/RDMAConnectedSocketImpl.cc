@@ -576,11 +576,11 @@ void RDMAConnectedSocketImpl::set_accept_fd(int sd)
 
 void RDMAConnectedSocketImpl::post_chunks_to_rq(int num)
 {
-  post_backlog += num - ib->post_chunks_to_rq(num, qp->get_qp());
+  post_backlog += num - ib->post_chunks_to_rq(num, qp);
 }
 
 void RDMAConnectedSocketImpl::update_post_backlog()
 {
   if (post_backlog)
-    post_backlog -= post_backlog - dispatcher->post_chunks_to_rq(post_backlog, qp->get_qp());
+    post_backlog -= post_backlog - dispatcher->post_chunks_to_rq(post_backlog, qp);
 }

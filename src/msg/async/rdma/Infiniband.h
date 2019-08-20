@@ -523,7 +523,7 @@ class Infiniband {
       ibv_qp_type type, struct rdma_cm_id *cm_id);
   ibv_srq* create_shared_receive_queue(uint32_t max_wr, uint32_t max_sge);
   // post rx buffers to srq, return number of buffers actually posted
-  int post_chunks_to_rq(int num, ibv_qp *qp=NULL);
+  int post_chunks_to_rq(int num, QueuePair *qp = nullptr);
   void post_chunk_to_pool(Chunk* chunk) {
     get_memory_manager()->release_rx_buffer(chunk);
   }
