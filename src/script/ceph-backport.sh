@@ -24,7 +24,7 @@
 #
 # redmine_key     # "My account" -> "API access key" -> "Show"
 # redmine_user_id # "Logged in as foobar", click on foobar link, Redmine User ID
-                  # is in the URL, i.e. http://tracker.ceph.com/users/[redmine_user_id]
+                  # is in the URL, i.e. https://tracker.ceph.com/users/[redmine_user_id]
 # github_token    # https://github.com/settings/tokens -> Generate new token ->
                   # ensure it has "Full control of private repositories" scope
 # github_user     # Your github username
@@ -57,7 +57,7 @@
 # script in the local clone!
 #
 # With this script, backporting workflow for backport issue
-# http://tracker.ceph.com/issues/19206 (a jewel backport)
+# https://tracker.ceph.com/issues/19206 (a jewel backport)
 # becomes something like this:
 #
 # For simple backports you can just run:
@@ -78,7 +78,7 @@
 #
 # COMPONENT=dashboard ceph-backport.sh 19206 jewel
 #
-# See http://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO_backport_commits
+# See https://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO_backport_commits
 # for more info on cherry-picking.
 #
 # Happy backporting!
@@ -99,6 +99,7 @@ test "$github_token"    || failed_required_variable_check github_token
 test "$github_user"     || failed_required_variable_check github_user
 : "${github_repo:=origin}"
 : "${ceph_repo:=upstream}"
+redmine_endpoint="https://tracker.ceph.com"
 
 function usage () {
     echo "Usage:"
@@ -140,28 +141,28 @@ else
 fi
 echo "Milestone is $milestone and milestone number is $milestone_number"
 
-if [ $(curl --silent https://tracker.ceph.com/issues/$issue.json | jq -r .issue.tracker.name) != "Backport" ]
+if [ $(curl --silent ${redmine_endpoint}/issues/${issue}.json | jq -r .issue.tracker.name) != "Backport" ]
 then
-    echo "https://tracker.ceph.com/issues/$issue is not a backport (edit and change tracker?)"
+    echo "${redmine_endpoint}/issues/${issue} is not a backport (edit and change tracker?)"
     exit 1
 fi
 
-title=$(curl --silent 'https://tracker.ceph.com/issues/'$issue.json?key=$redmine_key | jq .issue.subject | tr -d '\\"')
+title=$(curl --silent ${redmine_endpoint}/issues/${issue}.json?key=$redmine_key | jq .issue.subject | tr -d '\\"')
 echo "Issue title: $title"
 
 function prepare () {
-    related_issue=$(curl --silent https://tracker.ceph.com/issues/$issue.json?include=relations |
+    related_issue=$(curl --silent ${redmine_endpoint}/issues/${issue}.json?include=relations |
                     jq '.issue.relations[] | select(.relation_type | contains("copied_to")) | .issue_id')
     [ -z "$related_issue" ] && echo "Could not find original issue." && return 1
     echo "Original issue: $related_issue"
 
-    pr=$(curl --silent https://tracker.ceph.com/issues/$related_issue.json |
+    pr=$(curl --silent ${redmine_endpoint}/issues/${related_issue}.json |
          jq '.issue.custom_fields[] | select(.id | contains(21)) | .value' |
          tr -d '\\"')
     [ -z "$pr" ] && echo "Could not find PR." && return 1
     echo "Original PR: $pr"
 
-    number=$(curl --silent 'https://api.github.com/repos/ceph/ceph/pulls/'$pr'?access_token='$github_token | jq .commits)
+    number=$(curl --silent https://api.github.com/repos/ceph/ceph/pulls/${pr}?access_token=${github_token} | jq .commits)
     [ -z "$number" ] && echo "Could not determine the number of commits." && return 1
     echo "Found $number commit(s)"
 
@@ -186,13 +187,13 @@ fi
 
 git push -u $github_repo wip-$issue-$milestone
 
-number=$(curl --silent --data-binary '{"title":"'"$title"'","head":"'$github_user':wip-'$issue-$milestone'","base":"'$target_branch'","body":"https://tracker.ceph.com/issues/'$issue'"}' 'https://api.github.com/repos/ceph/ceph/pulls?access_token='$github_token | jq .number)
+number=$(curl --silent --data-binary '{"title":"'"$title"'","head":"'$github_user':wip-'$issue-$milestone'","base":"'$target_branch'","body":"'$redmine_endpoint'/issues/'$issue'"}' 'https://api.github.com/repos/ceph/ceph/pulls?access_token='$github_token | jq .number)
 echo "Opened pull request $number"
 
 component=${COMPONENT:-core}; curl --silent --data-binary '{"milestone":'$milestone_number',"assignee":"'$github_user'","labels":["bug fix","'$component'"]}' 'https://api.github.com/repos/ceph/ceph/issues/'$number'?access_token='$github_token
 firefox https://github.com/ceph/ceph/pull/$number
 redmine_status=2 # In Progress
-curl --verbose -X PUT --header 'Content-type: application/json' --data-binary '{"issue":{"description":"https://github.com/ceph/ceph/pull/'$number'","status_id":'$redmine_status',"assigned_to_id":'$redmine_user_id'}}' 'https://tracker.ceph.com/issues/'$issue.json?key=$redmine_key
-echo "Staged https://tracker.ceph.com/issues/$issue"
+curl --verbose -X PUT --header 'Content-type: application/json' --data-binary '{"issue":{"description":"https://github.com/ceph/ceph/pull/'$number'","status_id":'$redmine_status',"assigned_to_id":'$redmine_user_id'}}' $redmine_endpoint'/issues/'$issue.json?key=$redmine_key
+echo "Staged ${redmine_endpoint}/${issue}"
 
-firefox https://tracker.ceph.com/issues/$issue
+firefox ${redmine_endpoint}/issues/${issue}
