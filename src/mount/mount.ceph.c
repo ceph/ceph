@@ -25,6 +25,8 @@ static const char * const EMPTY_STRING = "";
 struct ceph_mount_info {
 	unsigned long	cmi_flags;
 	char		*cmi_name;
+	char		*cmi_path;
+	char		*cmi_mons;
 	char		*cmi_opts;
 	int		cmi_opts_len;
 	char 		cmi_secret[SECRET_BUFSIZE];
@@ -51,45 +53,46 @@ void mount_ceph_debug(const char *fmt, ...)
 	}
 }
 
-static char *mount_resolve_src(const char *orig_str)
+static int parse_src(const char *orig_str, struct ceph_mount_info *cmi)
 {
-	int len, pos;
+	size_t len;
 	char *mount_path;
-	char *src;
-	char *buf = strdup(orig_str);
 
-	mount_path = strstr(buf, ":/");
+	mount_path = strstr(orig_str, ":/");
 	if (!mount_path) {
 		fprintf(stderr, "source mount path was not specified\n");
-		free(buf);
-		return NULL;
+		return -EINVAL;
 	}
-	if (mount_path == buf) {
+	len = mount_path - orig_str;
+	if (len == 0) {
 		fprintf(stderr, "server address expected\n");
-		free(buf);
-		return NULL;
+		return -EINVAL;
 	}
 
-	*mount_path = '\0';
+	cmi->cmi_mons = strndup(orig_str, len);
+	if (!cmi->cmi_mons)
+		return -ENOMEM;
+
 	mount_path++;
+	cmi->cmi_path = strdup(mount_path);
+	if (!cmi->cmi_path)
+		return -ENOMEM;
+	return 0;
+}
 
-	if (!*mount_path) {
-		fprintf(stderr, "incorrect source mount path\n");
-		free(buf);
-		return NULL;
-	}
+static char *finalize_src(struct ceph_mount_info *cmi)
+{
+	int pos, len;
+	char *src;
 
-	src = resolve_addrs(buf);
-	if (!src) {
-		free(buf);
+	src = resolve_addrs(cmi->cmi_mons);
+	if (!src)
 		return NULL;
-	}
 
 	len = strlen(src);
 	pos = safe_cat(&src, &len, len, ":");
-	safe_cat(&src, &len, pos, mount_path);
+	safe_cat(&src, &len, pos, cmi->cmi_path);
 
-	free(buf);
 	return src;
 }
 
@@ -307,6 +310,8 @@ static void ceph_mount_info_free(struct ceph_mount_info *cmi)
 {
 	free(cmi->cmi_opts);
 	free(cmi->cmi_name);
+	free(cmi->cmi_path);
+	free(cmi->cmi_mons);
 }
 
 static int finalize_options(struct ceph_mount_info *cmi)
@@ -344,13 +349,6 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
-	rsrc = mount_resolve_src(src);
-	if (!rsrc) {
-		printf(stderr, "failed to resolve source\n");
-		retval = EX_USAGE;
-		goto out;
-	}
-
 	retval = parse_options(opts, &cmi);
 	if (retval) {
 		fprintf(stderr, "failed to parse ceph_options: %d\n", retval);
@@ -358,8 +356,22 @@ int main(int argc, char *argv[])
 		goto out;
 	}
 
+	retval = parse_src(src, &cmi);
+	if (retval) {
+		fprintf(stderr, "unable to parse mount source: %d\n", retval);
+		retval = EX_USAGE;
+		goto out;
+	}
+
 	/* Ensure the ceph key_type is available */
 	modprobe();
+
+	rsrc = finalize_src(&cmi);
+	if (!rsrc) {
+		fprintf(stderr, "failed to resolve source\n");
+		retval = EX_USAGE;
+		goto out;
+	}
 
 	retval = finalize_options(&cmi);
 	if (retval) {
