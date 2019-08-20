@@ -239,7 +239,7 @@ void RDMADispatcher::post_chunk_to_pool(Chunk* chunk)
   perf_logger->dec(l_msgr_rdma_rx_bufs_in_use);
 }
 
-int RDMADispatcher::post_chunks_to_rq(int num, ibv_qp *qp)
+int RDMADispatcher::post_chunks_to_rq(int num, QueuePair *qp)
 {
   std::lock_guard l{lock};
   return ib->post_chunks_to_rq(num, qp);

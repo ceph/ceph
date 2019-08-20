@@ -163,7 +163,7 @@ int RDMAIWARPConnectedSocketImpl::alloc_resource() {
     return -1;
   }
   if (!cct->_conf->ms_async_rdma_support_srq)
-    dispatcher->post_chunks_to_rq(ib->get_rx_queue_len(), qp->get_qp());
+    dispatcher->post_chunks_to_rq(ib->get_rx_queue_len(), qp);
   dispatcher->register_qp(qp, this);
   dispatcher->perf_logger->inc(l_msgr_rdma_created_queue_pair);
   dispatcher->perf_logger->inc(l_msgr_rdma_active_queue_pair);

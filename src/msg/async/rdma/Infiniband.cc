@@ -1148,7 +1148,7 @@ Infiniband::QueuePair* Infiniband::create_queue_pair(CephContext *cct, Completio
   return qp;
 }
 
-int Infiniband::post_chunks_to_rq(int rq_wr_num, ibv_qp *qp)
+int Infiniband::post_chunks_to_rq(int rq_wr_num, QueuePair *qp)
 {
   int ret = 0;
   Chunk *chunk = nullptr;
@@ -1192,7 +1192,7 @@ int Infiniband::post_chunks_to_rq(int rq_wr_num, ibv_qp *qp)
     ret = ibv_post_srq_recv(srq, rx_work_request, &badworkrequest);
   } else {
     ceph_assert(qp);
-    ret = ibv_post_recv(qp, rx_work_request, &badworkrequest);
+    ret = ibv_post_recv(qp->get_qp(), rx_work_request, &badworkrequest);
   }
 
   ::free(rx_work_request);
