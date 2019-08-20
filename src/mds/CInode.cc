@@ -1939,7 +1939,7 @@ void CInode::decode_lock_inest(bufferlist::const_iterator& p)
     decode(replica_dirty, p);
     if (replica_dirty) {
       dout(10) << __func__ << " setting nestlock dirty flag" << dendl;
-      nestlock.mark_dirty();  // ok bc we're auth and caller will handle
+      mdcache->mds->locker->mark_updated_scatterlock(&nestlock);  // ok bc we're auth and caller will handle
     }
   } else {
     decode(inode.version, p);
@@ -1981,7 +1981,7 @@ void CInode::decode_lock_inest(bufferlist::const_iterator& p)
       dir->dirty_old_rstat.swap(dirty_old_rstat);
       if (!(rstat == accounted_rstat) || !dir->dirty_old_rstat.empty()) {
         dout(10) << fg << " setting nestlock updated flag" << dendl;
-        nestlock.mark_dirty();  // ok bc we're auth and caller will handle
+        mdcache->mds->locker->mark_updated_scatterlock(&nestlock); // ok bc we're auth and caller will handle
       }
     } else {
       if (dir && dir->is_auth()) {

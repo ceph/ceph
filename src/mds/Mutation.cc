@@ -15,6 +15,9 @@
 #include "Mutation.h"
 #include "ScatterLock.h"
 #include "CDir.h"
+#include "MDCache.h"
+#include "MDSRank.h"
+#include "Locker.h"
 
 // MutationImpl
 
@@ -272,7 +275,12 @@ void MutationImpl::apply()
   }
   
   for (const auto& lock : updated_locks) {
-    lock->mark_dirty();
+    //FIXME there should be some more elegant way to do this.
+    if (lock->get_type() == CEPH_LOCK_INEST) {
+      CInode* ino = static_cast<CInode*>(lock->get_parent());
+      ino->mdcache->mds->locker->mark_updated_scatterlock(lock);
+    } else
+      lock->mark_dirty();
   }
 }
 

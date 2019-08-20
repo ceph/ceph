@@ -4994,7 +4994,7 @@ void Locker::scatter_nudge(ScatterLock *lock, MDSContext *c, bool forcelockchang
     dout(10) << "scatter_nudge waiting for unfreeze on " << *p << dendl;
     if (c) 
       p->add_waiter(MDSCacheObject::WAIT_UNFREEZE, c);
-    else if (lock->is_dirty())
+    if (lock->is_dirty())
       // just requeue.  not ideal.. starvation prone..
       updated_scatterlocks.push_back(lock->get_updated_item());
     return;
@@ -5004,7 +5004,7 @@ void Locker::scatter_nudge(ScatterLock *lock, MDSContext *c, bool forcelockchang
     dout(10) << "scatter_nudge waiting for single auth on " << *p << dendl;
     if (c) 
       p->add_waiter(MDSCacheObject::WAIT_SINGLEAUTH, c);
-    else if (lock->is_dirty())
+    if (lock->is_dirty())
       // just requeue.  not ideal.. starvation prone..
       updated_scatterlocks.push_back(lock->get_updated_item());
     return;
@@ -5077,6 +5077,9 @@ void Locker::scatter_nudge(ScatterLock *lock, MDSContext *c, bool forcelockchang
 	dout(10) << "scatter_nudge auth, waiting for stable " << *lock << " on " << *p << dendl;
 	if (c)
 	  lock->add_waiter(SimpleLock::WAIT_STABLE, c);
+
+	if (lock->dirty())
+	  updated_scatterlocks.push_back(lock->get_updated_item());
 	return;
       }
     }
