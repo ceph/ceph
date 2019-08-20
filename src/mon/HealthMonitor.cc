@@ -170,17 +170,9 @@ bool HealthMonitor::preprocess_query(MonOpRequestRef op)
   PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
-    try {
-      return preprocess_command(op);
-    } catch (const bad_cmd_get& e) {
-      bufferlist bl;
-      mon->reply_command(op, -EINVAL, e.what(), bl, get_last_committed());
-      return true;
-    }
-
+    return preprocess_command(op);
   case MSG_MON_HEALTH_CHECKS:
     return false;
-
   default:
     mon->no_reply(op);
     derr << "Unhandled message type " << m->get_type() << dendl;
@@ -222,25 +214,17 @@ bool HealthMonitor::preprocess_command(MonOpRequestRef op)
 		       get_last_committed());
     return true;
   }
-
-  string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format);
-  boost::scoped_ptr<Formatter> f(Formatter::create(format, "json-pretty",
-						   "json-pretty"));
-
-  string prefix;
-  cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
-  int r = 0;
-
-//} else {
-    return false;
-//}
-
-reply:
-  string rs;
-  getline(ss, rs);
-  mon->reply_command(op, r, rs, rdata, get_last_committed());
-  return true;
+  // more sanity checks
+  try {
+    string format;
+    cmd_getval(g_ceph_context, cmdmap, "format", format);
+    string prefix;
+    cmd_getval(g_ceph_context, cmdmap, "prefix", prefix);
+  } catch (const bad_cmd_get& e) {
+    mon->reply_command(op, -EINVAL, e.what(), rdata, get_last_committed());
+    return true;
+  }
+  return false;
 }
 
 bool HealthMonitor::prepare_command(MonOpRequestRef op)
