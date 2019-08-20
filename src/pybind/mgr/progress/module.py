@@ -434,7 +434,7 @@ class Module(MgrModule):
         # previous recovery event for that osd
         if marked == "in":
             for ev_id in list(self._events):
-                ev = self.events[ev_id]
+                ev = self._events[ev_id]
                 if isinstance(ev, PgRecoveryEvent) and osd_id in ev.which_osds:
                     self.log.info("osd.{0} came back in, cancelling event".format(
                         osd_id
