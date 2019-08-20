@@ -6346,10 +6346,10 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         } else {
 	  obs.oi.clear_data_digest();
 	}
-
+        ctx->clean_regions.mark_data_region_dirty(0,
+          std::max((uint64_t)op.extent.length, oi.size));
 	write_update_size_and_usage(ctx->delta_stats, oi, ctx->modified_ranges,
 	    0, op.extent.length, true);
-	ctx->clean_regions.mark_data_region_dirty(0, op.extent.length);
       }
       break;
 
