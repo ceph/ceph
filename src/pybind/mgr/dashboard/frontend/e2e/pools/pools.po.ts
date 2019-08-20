@@ -52,6 +52,36 @@ export class PoolPageHelper extends PageHelper {
     });
   }
 
+  edit_pool_pg(name: string, new_pg: number): promise.Promise<any> {
+    if (!this.isPowerOf2(new_pg)) {
+      return Promise.reject(`Placement groups ${new_pg} are not a power of 2`);
+    }
+    return this.getTableCellByContent(name).then((elem) => {
+      elem.click(); // select pool from the table
+      element(by.cssContainingText('button', 'Edit')).click(); // click edit button
+      expect(this.getBreadcrumbText()).toEqual('Edit'); // verify we are now on edit page
+      $('input[name=pgNum]')
+        .sendKeys(protractor.Key.CONTROL, 'a', protractor.Key.NULL, new_pg)
+        .then(() => {
+          element(by.css('cd-submit-button')).click();
+          const str = `${new_pg} active+clean`;
+          browser
+            .wait(
+              EC.visibilityOf(this.getTableRow(name)),
+              Helper.TIMEOUT,
+              'Timed out waiting for table row to load'
+            )
+            .then(() => {
+              return browser.wait(
+                EC.textToBePresentInElement(this.getTableRow(name), str),
+                Helper.TIMEOUT,
+                'Timed out waiting for placement group to be updated'
+              );
+            });
+        });
+    });
+  }
+
   private setApplications(apps: string[]) {
     if (!apps || apps.length === 0) {
       return;
