@@ -540,6 +540,22 @@ class TestDU(TestCephFSShell):
                        "expected_output -\n{}\ndu_output -\n{}\n".format(
                        expected_output, du_output)
 
+    def test_du_with_no_args(self):
+        expected_patterns_in_output = self._setup_files()
+
+        du_output = self.get_cephfs_shell_cmd_output('du')
+
+        for expected_output in expected_patterns_in_output:
+            # Since CWD is CephFS root and being non-recursive expect only
+            # CWD in DU report.
+            if expected_output.find('/') == len(expected_output) - 1:
+                if sys_version_info.major >= 3:
+                    self.assertRegex(expected_output, du_output)
+                elif sys_version_info.major < 3:
+                    assert re_search(expected_output, du_output) != None, "\n" + \
+                        "expected_output -\n{}\ndu_output -\n{}\n".format(
+                        expected_output, du_output)
+
 #    def test_ls(self):
 #        """
 #        Test that ls passes
