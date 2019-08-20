@@ -31,36 +31,26 @@ using namespace rgw::sal;
 
 const std::string RGWMetadataLogHistory::oid = "meta.history";
 
-void LogStatusDump::dump(Formatter *f) const {
-  string s;
+std::string_view mdlog_status_string(RGWMDLogStatus status) {
   switch (status) {
-    case MDLOG_STATUS_WRITE:
-      s = "write";
-      break;
-    case MDLOG_STATUS_SETATTRS:
-      s = "set_attrs";
-      break;
-    case MDLOG_STATUS_REMOVE:
-      s = "remove";
-      break;
-    case MDLOG_STATUS_COMPLETE:
-      s = "complete";
-      break;
-    case MDLOG_STATUS_ABORT:
-      s = "abort";
-      break;
-    default:
-      s = "unknown";
-      break;
+    case RGWMDLogStatus::Write: return "write";
+    case RGWMDLogStatus::SetAttrs: return "set_attrs";
+    case RGWMDLogStatus::Remove: return "remove";
+    case RGWMDLogStatus::Complete: return "complete";
+    case RGWMDLogStatus::Abort: return "abort";
+    default: return "unknown";
   }
-  encode_json("status", s, f);
+}
+
+void LogStatusDump::dump(Formatter *f) const {
+  encode_json("status", mdlog_status_string(status), f);
 }
 
 void RGWMetadataLogData::encode(bufferlist& bl) const {
   ENCODE_START(1, 1, bl);
   encode(read_version, bl);
   encode(write_version, bl);
-  uint32_t s = (uint32_t)status;
+  uint32_t s = static_cast<uint32_t>(status);
   encode(s, bl);
   ENCODE_FINISH(bl);
 }
@@ -71,7 +61,7 @@ void RGWMetadataLogData::decode(bufferlist::const_iterator& bl) {
    decode(write_version, bl);
    uint32_t s;
    decode(s, bl);
-   status = (RGWMDLogStatus)s;
+   status = static_cast<RGWMDLogStatus>(s);
    DECODE_FINISH(bl);
 }
 
@@ -85,17 +75,17 @@ void decode_json_obj(RGWMDLogStatus& status, JSONObj *obj) {
   string s;
   JSONDecoder::decode_json("status", s, obj);
   if (s == "complete") {
-    status = MDLOG_STATUS_COMPLETE;
+    status = RGWMDLogStatus::Complete;
   } else if (s == "write") {
-    status = MDLOG_STATUS_WRITE;
+    status = RGWMDLogStatus::Write;
   } else if (s == "remove") {
-    status = MDLOG_STATUS_REMOVE;
+    status = RGWMDLogStatus::Remove;
   } else if (s == "set_attrs") {
-    status = MDLOG_STATUS_SETATTRS;
+    status = RGWMDLogStatus::SetAttrs;
   } else if (s == "abort") {
-    status = MDLOG_STATUS_ABORT;
+    status = RGWMDLogStatus::Abort;
   } else {
-    status = MDLOG_STATUS_UNKNOWN;
+    status = RGWMDLogStatus::Unknown;
   }
 }
 

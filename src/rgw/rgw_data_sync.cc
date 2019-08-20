@@ -3314,7 +3314,7 @@ int RGWRunBucketSyncCoroutine::operate()
 
         call(new RGWMetaSyncSingleEntryCR(&meta_sync_env, raw_key,
                                           string() /* no marker */,
-                                          MDLOG_STATUS_COMPLETE,
+                                          RGWMDLogStatus::Complete,
                                           NULL /* no marker tracker */,
                                           tn));
       }

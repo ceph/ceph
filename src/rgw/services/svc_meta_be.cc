@@ -125,7 +125,7 @@ int RGWSI_MetaBackend::put(Context *ctx,
   };
 
   return do_mutate(ctx, key, params.mtime, objv_tracker,
-                MDLOG_STATUS_WRITE,
+                RGWMDLogStatus::Write,
                 y,
                 f,
                 false);
@@ -142,7 +142,7 @@ int RGWSI_MetaBackend::remove(Context *ctx,
   };
 
   return do_mutate(ctx, key, params.mtime, objv_tracker,
-                MDLOG_STATUS_REMOVE,
+                RGWMDLogStatus::Remove,
                 y,
                 f,
                 false);

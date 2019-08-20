@@ -71,9 +71,9 @@ int RGWSI_MetaBackend_SObj::post_modify(RGWSI_MetaBackend::Context *_ctx,
 {
   auto ctx = static_cast<Context_SObj *>(_ctx);
   if (ret >= 0)
-    log_data.status = MDLOG_STATUS_COMPLETE;
+    log_data.status = RGWMDLogStatus::Complete;
   else 
-    log_data.status = MDLOG_STATUS_ABORT;
+    log_data.status = RGWMDLogStatus::Abort;
 
   bufferlist logbl;
   encode(log_data, logbl);

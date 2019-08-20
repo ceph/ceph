@@ -24,12 +24,11 @@ enum RGWMDLogSyncType {
   APPLY_EXCLUSIVE
 };
 
-enum RGWMDLogStatus {
-  MDLOG_STATUS_UNKNOWN,
-  MDLOG_STATUS_WRITE,
-  MDLOG_STATUS_SETATTRS,
-  MDLOG_STATUS_REMOVE,
-  MDLOG_STATUS_COMPLETE,
-  MDLOG_STATUS_ABORT,
+enum class RGWMDLogStatus : uint32_t {
+  Unknown,
+  Write,
+  SetAttrs,
+  Remove,
+  Complete,
+  Abort,
 };
-
