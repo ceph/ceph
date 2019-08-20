@@ -35,15 +35,12 @@ private:
    * @verbatim
    *
    *       <start>
-   *          |
-   *          v
-   *   CHECK EXCLUSIVE LOCK
-   *          |
-   *          v (skip if not needed)
-   *  ACQUIRE EXCLUSIVE LOCK
-   *          |
-   *          v
-   *   CHECK IMAGE WATCHERS
+   *          |   (skip if
+   *          v    not needed)   (error)
+   *  ACQUIRE EXCLUSIVE LOCK  * * * * * * > SHUT DOWN EXCLUSIVE LOCK
+   *          |                                |
+   *          v                                |
+   *   CHECK IMAGE WATCHERS <------------------/
    *          |
    *          v
    *     CHECK GROUP
@@ -72,7 +69,9 @@ private:
 
   void acquire_exclusive_lock();
   void handle_exclusive_lock(int r);
-  void handle_exclusive_lock_force(int r);
+
+  void shut_down_exclusive_lock();
+  void handle_shut_down_exclusive_lock(int r);
 
   void validate_image_removal();
   void check_image_snaps();
