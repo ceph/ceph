@@ -246,7 +246,7 @@ class MDSThrasher(Greenlet):
             # allow successful completion so gevent doesn't see an exception...
 
     def log(self, x):
-        """Write data to logger assigned to this MDThrasher"""
+        """Write data to the logger assigned to MDSThrasher"""
         self.logger.info(x)
 
     def stop(self):
