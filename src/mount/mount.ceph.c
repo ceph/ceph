@@ -25,6 +25,12 @@ static const char * const EMPTY_STRING = "";
 
 #include "mtab.c"
 
+struct ceph_mount_info {
+	unsigned long	cmi_flags;
+	char		*cmi_opts;
+	int		cmi_opts_len;
+};
+
 static void block_signals (int how)
 {
      sigset_t sigs;
@@ -91,11 +97,9 @@ static char *mount_resolve_src(const char *orig_str)
 /*
  * this one is partially based on parse_options() from cifs.mount.c
  */
-static char *parse_options(const char *data, int *filesys_flags)
+static int parse_options(const char *data, struct ceph_mount_info *cmi)
 {
 	char * next_keyword = NULL;
-	char * out = NULL;
-	int out_len = 0;
 	int pos = 0;
 	char *name = NULL;
 	int name_len = 0;
@@ -125,57 +129,56 @@ static char *parse_options(const char *data, int *filesys_flags)
 			value++;
 		}
 
-
 		if (strncmp(data, "ro", 2) == 0) {
-			*filesys_flags |= MS_RDONLY;
+			cmi->cmi_flags |= MS_RDONLY;
 		} else if (strncmp(data, "rw", 2) == 0) {
-			*filesys_flags &= ~MS_RDONLY;
+			cmi->cmi_flags &= ~MS_RDONLY;
 		} else if (strncmp(data, "nosuid", 6) == 0) {
-			*filesys_flags |= MS_NOSUID;
+			cmi->cmi_flags |= MS_NOSUID;
 		} else if (strncmp(data, "suid", 4) == 0) {
-			*filesys_flags &= ~MS_NOSUID;
+			cmi->cmi_flags &= ~MS_NOSUID;
 		} else if (strncmp(data, "dev", 3) == 0) {
-			*filesys_flags &= ~MS_NODEV;
+			cmi->cmi_flags &= ~MS_NODEV;
 		} else if (strncmp(data, "nodev", 5) == 0) {
-			*filesys_flags |= MS_NODEV;
+			cmi->cmi_flags |= MS_NODEV;
 		} else if (strncmp(data, "noexec", 6) == 0) {
-			*filesys_flags |= MS_NOEXEC;
+			cmi->cmi_flags |= MS_NOEXEC;
 		} else if (strncmp(data, "exec", 4) == 0) {
-			*filesys_flags &= ~MS_NOEXEC;
+			cmi->cmi_flags &= ~MS_NOEXEC;
                 } else if (strncmp(data, "sync", 4) == 0) {
-                        *filesys_flags |= MS_SYNCHRONOUS;
+                        cmi->cmi_flags |= MS_SYNCHRONOUS;
                 } else if (strncmp(data, "remount", 7) == 0) {
-                        *filesys_flags |= MS_REMOUNT;
+                        cmi->cmi_flags |= MS_REMOUNT;
                 } else if (strncmp(data, "mandlock", 8) == 0) {
-                        *filesys_flags |= MS_MANDLOCK;
+                        cmi->cmi_flags |= MS_MANDLOCK;
 		} else if ((strncmp(data, "nobrl", 5) == 0) || 
 			   (strncmp(data, "nolock", 6) == 0)) {
-			*filesys_flags &= ~MS_MANDLOCK;
+			cmi->cmi_flags &= ~MS_MANDLOCK;
 		} else if (strncmp(data, "noatime", 7) == 0) {
-			*filesys_flags |= MS_NOATIME;
+			cmi->cmi_flags |= MS_NOATIME;
 		} else if (strncmp(data, "nodiratime", 10) == 0) {
-			*filesys_flags |= MS_NODIRATIME;
+			cmi->cmi_flags |= MS_NODIRATIME;
 		} else if (strncmp(data, "relatime", 8) == 0) {
-			*filesys_flags |= MS_RELATIME;
+			cmi->cmi_flags |= MS_RELATIME;
 		} else if (strncmp(data, "strictatime", 11) == 0) {
-			*filesys_flags |= MS_STRICTATIME;
+			cmi->cmi_flags |= MS_STRICTATIME;
 		} else if (strncmp(data, "noauto", 6) == 0) {
-			skip = true;  /* ignore */
+			/* ignore */
 		} else if (strncmp(data, "_netdev", 7) == 0) {
-			skip = true;  /* ignore */
+			/* ignore */
 		} else if (strncmp(data, "nofail", 6) == 0) {
-			skip = true;  /* ignore */
+			/* ignore */
 
 		} else if (strncmp(data, "secretfile", 10) == 0) {
 			if (!value || !*value) {
 				fprintf(stderr, "keyword secretfile found, but no secret file specified\n");
 				free(saw_name);
-				return NULL;
+				return -EINVAL;
 			}
 
 			if (read_secret_from_file(value, secret, sizeof(secret)) < 0) {
 				fprintf(stderr, "error reading secret file\n");
-				return NULL;
+				return -EIO;
 			}
 
 			/* see comment for "secret" */
@@ -185,7 +188,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 			if (!value || !*value) {
 				fprintf(stderr, "mount option secret requires a value.\n");
 				free(saw_name);
-				return NULL;
+				return -EINVAL;
 			}
 
 			/* secret is only added to kernel options as
@@ -201,7 +204,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 		} else if (strncmp(data, "name", 4) == 0) {
 			if (!value || !*value) {
 				fprintf(stderr, "mount option name requires a value.\n");
-				return NULL;
+				return -EINVAL;
 			}
 
 			/* take a copy of the name, to be used for
@@ -210,7 +213,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 			saw_name = strdup(value);
 			if (!saw_name) {
 				fprintf(stderr, "out of memory.\n");
-				return NULL;
+				return -ENOMEM;
 			}
 			skip = false;
 		} else {
@@ -222,14 +225,14 @@ static char *parse_options(const char *data, int *filesys_flags)
 		/* Copy (possibly modified) option to out */
 		if (!skip) {
 			if (pos)
-				pos = safe_cat(&out, &out_len, pos, ",");
+				pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, ",");
 
 			if (value) {
-				pos = safe_cat(&out, &out_len, pos, data);
-				pos = safe_cat(&out, &out_len, pos, "=");
-				pos = safe_cat(&out, &out_len, pos, value);
+				pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, data);
+				pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, "=");
+				pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, value);
 			} else {
-				pos = safe_cat(&out, &out_len, pos, data);
+				pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, data);
 			}
 			
 		}
@@ -237,30 +240,30 @@ static char *parse_options(const char *data, int *filesys_flags)
 	} while (data);
 
 	name_pos = safe_cat(&name, &name_len, name_pos, "client.");
-	if (!saw_name) {
-		name_pos = safe_cat(&name, &name_len, name_pos, CEPH_AUTH_NAME_DEFAULT);
-	} else {
-		name_pos = safe_cat(&name, &name_len, name_pos, saw_name);
-	}
+	name_pos = safe_cat(&name, &name_len, name_pos,
+			    saw_name ? saw_name : CEPH_AUTH_NAME_DEFAULT);
 	if (saw_secret || is_kernel_secret(name)) {
 		int ret;
 		char secret_option[MAX_SECRET_OPTION_LEN];
 		ret = get_secret_option(saw_secret, name, secret_option, sizeof(secret_option));
 		if (ret < 0) {
 			free(saw_name);
-			return NULL;
+			return ret;
 		} else {
 			if (pos) {
-				pos = safe_cat(&out, &out_len, pos, ",");
+				pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, ",");
 			}
-			pos = safe_cat(&out, &out_len, pos, secret_option);
+			pos = safe_cat(&cmi->cmi_opts, &cmi->cmi_opts_len, pos, secret_option);
 		}
 	}
 
 	free(saw_name);
-	if (!out)
-		return strdup(EMPTY_STRING);
-	return out;
+	if (!cmi->cmi_opts) {
+		cmi->cmi_opts = strdup(EMPTY_STRING);
+		if (!cmi->cmi_opts)
+			return -ENOMEM;
+	}
+	return 0;
 }
 
 
@@ -332,13 +335,21 @@ static void usage(const char *prog_name)
 	printf("\n");
 }
 
+/*
+ * The structure itself lives on the stack, so don't free it. Just the
+ * pointers inside.
+ */
+static void ceph_mount_info_free(struct ceph_mount_info *cmi)
+{
+	free(cmi->cmi_opts);
+}
+
 int main(int argc, char *argv[])
 {
 	const char *src, *node, *opts;
 	char *rsrc = NULL;
-	char *popts = NULL;
-	int flags = 0;
-	int retval = 0;
+	int retval;
+	struct ceph_mount_info cmi = { 0 };
 
 	retval = parse_arguments(argc, argv, &src, &node, &opts);
 	if (retval) {
@@ -357,16 +368,16 @@ int main(int argc, char *argv[])
 	/* Ensure the ceph key_type is available */
 	modprobe();
 
-	popts = parse_options(opts, &flags);
-	if (!popts) {
-		fprintf(stderr, "failed to parse ceph_options\n");
+	retval = parse_options(opts, &cmi);
+	if (retval) {
+		fprintf(stderr, "failed to parse ceph_options: %d\n", retval);
 		retval = EX_USAGE;
 		goto out;
 	}
 
 	block_signals(SIG_BLOCK);
 
-	if (mount(rsrc, node, "ceph", flags, popts)) {
+	if (mount(rsrc, node, "ceph", cmi.cmi_flags, cmi.cmi_opts)) {
 		retval = EX_FAIL;
 		switch (errno) {
 		case ENODEV:
@@ -377,13 +388,13 @@ int main(int argc, char *argv[])
 		}
 	} else {
 		if (!skip_mtab_flag) {
-			update_mtab_entry(rsrc, node, "ceph", popts, flags, 0, 0);
+			update_mtab_entry(rsrc, node, "ceph", cmi.cmi_opts, cmi.cmi_flags, 0, 0);
 		}
 	}
 
 	block_signals(SIG_UNBLOCK);
 out:
-	free(popts);
+	ceph_mount_info_free(&cmi);
 	free(rsrc);
 	return retval;
 }
