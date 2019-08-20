@@ -1,5 +1,4 @@
 import { $, $$, browser, by, element } from 'protractor';
-import { Helper } from '../helper.po';
 import { PageHelper } from '../page-helper.po';
 
 export class ImagesPageHelper extends PageHelper {
@@ -30,7 +29,7 @@ export class ImagesPageHelper extends PageHelper {
 
     // Click the create button and wait for image to be made
     await element(by.cssContainingText('button', 'Create RBD')).click();
-    await browser.wait(Helper.EC.presenceOf(this.getTableCell(name)), Helper.TIMEOUT);
+    await this.waitPresence(this.getTableCell(name));
   }
 
   async editImage(name, pool, newName, newSize) {
@@ -50,7 +49,7 @@ export class ImagesPageHelper extends PageHelper {
 
     await element(by.cssContainingText('button', 'Edit RBD')).click();
     await this.navigateTo();
-    await browser.wait(Helper.EC.elementToBeClickable(this.getTableCell(newName)), Helper.TIMEOUT);
+    await this.waitClickable(this.getTableCell(newName));
     // click edit button and wait to make sure new owner is present in table
     await this.getTableCell(newName).click();
     await expect(
@@ -65,16 +64,16 @@ export class ImagesPageHelper extends PageHelper {
     await this.navigateTo();
 
     // wait for table to load
-    await browser.wait(Helper.EC.elementToBeClickable(this.getTableCell(name)), Helper.TIMEOUT);
+    await this.waitClickable(this.getTableCell(name));
     await this.getTableCell(name).click(); // click on the image you want to delete in the table
     await $$('.table-actions button.dropdown-toggle')
       .first()
       .click(); // click toggle menu
     await $('li.delete.ng-star-inserted').click(); // click delete
     // wait for pop-up to be visible (checks for title of pop-up)
-    await browser.wait(Helper.EC.visibilityOf($('.modal-body')), Helper.TIMEOUT);
+    await this.waitVisibility($('.modal-body'));
     await this.clickCheckbox($('.custom-control-label'));
     await element(by.cssContainingText('button', 'Delete RBD')).click();
-    await browser.wait(Helper.EC.stalenessOf(this.getTableCell(name)), Helper.TIMEOUT);
+    await this.waitStaleness(this.getTableCell(name));
   }
 }

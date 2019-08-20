@@ -1,5 +1,4 @@
-import { $, browser, by, element, protractor } from 'protractor';
-import { Helper } from '../helper.po';
+import { $, by, element, protractor } from 'protractor';
 import { PageHelper } from '../page-helper.po';
 
 export class ConfigurationPageHelper extends PageHelper {
@@ -19,7 +18,7 @@ export class ConfigurationPageHelper extends PageHelper {
     await $('input.form-control.ng-valid').sendKeys(name);
 
     // Selects config that we want to clear
-    await browser.wait(Helper.EC.elementToBeClickable(this.getTableCell(name)), Helper.TIMEOUT); // waits for config to be clickable
+    await this.waitClickable(this.getTableCell(name)); // waits for config to be clickable
     await this.getTableCell(name).click(); // click on the config to edit
     await element(by.cssContainingText('button', 'Edit')).click(); // clicks button to edit
 
@@ -35,22 +34,16 @@ export class ConfigurationPageHelper extends PageHelper {
     await $('input.form-control.ng-valid').clear();
     await $('input.form-control.ng-valid').sendKeys(name);
 
-    await browser.wait(Helper.EC.elementToBeClickable(this.getTableCell(name)), Helper.TIMEOUT);
+    await this.waitClickable(this.getTableCell(name));
     await this.getTableCell(name).click();
     // Clicks desired config
-    await browser.wait(
-      Helper.EC.visibilityOf($('.table.table-striped.table-bordered')), // Checks for visibility of details tab
-      Helper.TIMEOUT,
+    await this.waitVisibility(
+      $('.table.table-striped.table-bordered'), // Checks for visibility of details tab
       'config details did not appear'
     );
     for (const i of valList) {
       // Waits until values are not present in the details table
-      await browser.wait(
-        Helper.EC.not(
-          Helper.EC.textToBePresentInElement($('.table.table-striped.table-bordered'), i + ':')
-        ),
-        Helper.TIMEOUT
-      );
+      await this.waitTextNotPresent($('.table.table-striped.table-bordered'), i + ':');
     }
   }
 
@@ -66,7 +59,7 @@ export class ConfigurationPageHelper extends PageHelper {
     await $('input.form-control.ng-valid').sendKeys(name);
 
     // Selects config that we want to edit
-    await browser.wait(Helper.EC.elementToBeClickable(this.getTableCell(name)), Helper.TIMEOUT); // waits for config to be clickable
+    await this.waitClickable(this.getTableCell(name)); // waits for config to be clickable
     await this.getTableCell(name).click(); // click on the config to edit
     await element(by.cssContainingText('button', 'Edit')).click(); // clicks button to edit
 
@@ -86,19 +79,16 @@ export class ConfigurationPageHelper extends PageHelper {
     await $('input.form-control.ng-valid').clear();
     await $('input.form-control.ng-valid').sendKeys(name);
 
-    await browser.wait(Helper.EC.visibilityOf(this.getTableCell(name)), Helper.TIMEOUT);
+    await this.waitVisibility(this.getTableCell(name));
     // Checks for visibility of config in table
     await this.getTableCell(name).click();
     // Clicks config
     for (let i = 0, valtuple; (valtuple = values[i]); i++) {
       // iterates through list of values and
-      await browser.wait(
+      await this.waitTextToBePresent(
         // checks if the value appears in details with the correct number attatched
-        Helper.EC.textToBePresentInElement(
-          $('.table.table-striped.table-bordered'),
-          valtuple[0] + ': ' + valtuple[1]
-        ),
-        Helper.TIMEOUT
+        $('.table.table-striped.table-bordered'),
+        valtuple[0] + ': ' + valtuple[1]
       );
     }
   }

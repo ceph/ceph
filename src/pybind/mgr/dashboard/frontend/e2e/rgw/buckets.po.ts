@@ -1,5 +1,4 @@
-import { $, browser, by, element } from 'protractor';
-import { Helper } from '../helper.po';
+import { $, by, element } from 'protractor';
 import { PageHelper } from '../page-helper.po';
 
 const pages = {
@@ -35,11 +34,7 @@ export class BucketsPageHelper extends PageHelper {
     const createButton = element(by.cssContainingText('button', 'Create Bucket'));
     await createButton.click();
 
-    return browser.wait(
-      Helper.EC.presenceOf(this.getTableCell(name)),
-      Helper.TIMEOUT,
-      'Timed out waiting for bucket creation'
-    );
+    return this.waitPresence(this.getTableCell(name), 'Timed out waiting for bucket creation');
   }
 
   @PageHelper.restrictTo(pages.index)
@@ -55,9 +50,8 @@ export class BucketsPageHelper extends PageHelper {
     await element(by.cssContainingText('button', 'Edit Bucket')).click();
 
     // wait to be back on buckets page with table visible
-    await browser.wait(
-      Helper.EC.elementToBeClickable(this.getTableCell(name)),
-      10000,
+    await this.waitClickable(
+      this.getTableCell(name),
       'Could not return to buckets page and load table after editing bucket'
     );
 
@@ -73,21 +67,18 @@ export class BucketsPageHelper extends PageHelper {
   @PageHelper.restrictTo(pages.index)
   async delete(name) {
     // wait for table to load
-    await browser.wait(Helper.EC.elementToBeClickable(this.getTableCell(name)), Helper.TIMEOUT);
+    await this.waitClickable(this.getTableCell(name));
 
     await this.getTableCell(name).click(); // click on the bucket you want to delete in the table
     await $('.table-actions button.dropdown-toggle').click(); // click toggle menu
     await $('li.delete a').click(); // click delete
     // wait for pop-up to be visible (checks for title of pop-up)
-    await browser.wait(Helper.EC.visibilityOf($('.modal-title.float-left')), Helper.TIMEOUT);
-    await browser.wait(Helper.EC.visibilityOf($('.custom-control-label')), Helper.TIMEOUT);
+    await this.waitVisibility($('.modal-title.float-left'));
+    await this.waitVisibility($('.custom-control-label'));
     await $('.custom-control-label').click();
     await element(by.cssContainingText('button', 'Delete bucket')).click();
     await this.navigateTo();
-    return browser.wait(
-      Helper.EC.not(Helper.EC.presenceOf(this.getTableCell(name))),
-      Helper.TIMEOUT
-    );
+    return this.waitStaleness(this.getTableCell(name));
   }
 
   async testInvalidCreate() {
@@ -100,15 +91,11 @@ export class BucketsPageHelper extends PageHelper {
 
     await ownerDropDown.click(); // To trigger a validation
 
-    await browser.wait(
-      async () => {
-        // Waiting for website to decide if name is valid or not
-        const klass = await nameInputField.getAttribute('class');
-        return !klass.includes('ng-pending');
-      },
-      5000,
-      'Timed out waiting for dashboard to decide bucket name validity'
-    );
+    await this.waitFn(async () => {
+      // Waiting for website to decide if name is valid or not
+      const klass = await nameInputField.getAttribute('class');
+      return !klass.includes('ng-pending');
+    }, 'Timed out waiting for dashboard to decide bucket name validity');
 
     // Check that name input field was marked invalid in the css
     await expect(nameInputField.getAttribute('class')).toContain('ng-invalid');
@@ -166,9 +153,8 @@ export class BucketsPageHelper extends PageHelper {
   async testInvalidEdit(name) {
     await this.navigateTo();
 
-    await browser.wait(
-      Helper.EC.elementToBeClickable(this.getTableCell(name)),
-      10000,
+    await this.waitClickable(
+      this.getTableCell(name),
       'Failed waiting for bucket to be present in table'
     ); // wait for table to load
     await this.getTableCell(name).click(); // click on the bucket you want to edit in the table
@@ -179,7 +165,7 @@ export class BucketsPageHelper extends PageHelper {
     // Chooses 'Select a user' rather than a valid owner on Edit Bucket page
     // and checks if it's an invalid input
     const ownerDropDown = element(by.id('owner'));
-    await browser.wait(Helper.EC.elementToBeClickable(ownerDropDown), Helper.TIMEOUT);
+    await this.waitClickable(ownerDropDown);
     await ownerDropDown.click(); // Clicks the Owner drop down on the Create Bucket page
 
     // select the first option, which is invalid because it is a placeholder

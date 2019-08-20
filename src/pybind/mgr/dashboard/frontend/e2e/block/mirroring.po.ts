@@ -1,5 +1,4 @@
-import { $, browser, by, element } from 'protractor';
-import { Helper } from '../helper.po';
+import { $, by, element } from 'protractor';
 import { PageHelper } from '../page-helper.po';
 
 const pages = { index: '/#/block/mirroring' };
@@ -14,30 +13,24 @@ export class MirroringPageHelper extends PageHelper {
   @PageHelper.restrictTo(pages.index)
   async editMirror(name, option) {
     // Clicks the pool in the table
-    await browser.wait(
-      Helper.EC.elementToBeClickable(this.getFirstTableCellWithText(name)),
-      Helper.TIMEOUT
-    );
+    await this.waitClickable(this.getFirstTableCellWithText(name));
     await this.getFirstTableCellWithText(name).click();
 
     // Clicks the Edit Mode button
     const editModeButton = element(by.cssContainingText('button', 'Edit Mode'));
-    await browser.wait(Helper.EC.elementToBeClickable(editModeButton), Helper.TIMEOUT);
+    await this.waitClickable(editModeButton);
     await editModeButton.click();
     // Clicks the drop down in the edit pop-up, then clicks the Update button
-    await browser.wait(Helper.EC.visibilityOf($('.modal-content')), Helper.TIMEOUT);
+    await this.waitVisibility($('.modal-content'));
     await element(by.id('mirrorMode')).click(); // Mode select box
     await element(by.cssContainingText('select[name=mirrorMode] option', option)).click();
 
     // Clicks update button and checks if the mode has been changed
     await element(by.cssContainingText('button', 'Update')).click();
-    await browser.wait(
-      Helper.EC.stalenessOf(
-        element(by.cssContainingText('.modal-dialog', 'Edit pool mirror mode'))
-      ),
-      Helper.TIMEOUT
+    await this.waitStaleness(
+      element(by.cssContainingText('.modal-dialog', 'Edit pool mirror mode'))
     );
     const val = option.toLowerCase(); // used since entries in table are lower case
-    await browser.wait(Helper.EC.visibilityOf(this.getFirstTableCellWithText(val)), Helper.TIMEOUT);
+    await this.waitVisibility(this.getFirstTableCellWithText(val));
   }
 }
