@@ -24,16 +24,18 @@ CMAKE_C_FLAGS_DEBUG="$C_FLAGS_DEBUG $COMPILE_FLAGS"
 #   dashboard, because versions fetched are not working on FreeBSD.
  
 
+[ -z "$BUILD_DIR" ] && BUILD_DIR=build
+
 echo Keeping the old build
-if [ -d build.old ]; then
-    sudo mv build.old build.del
-    sudo rm -rf build.del &
+if [ -d ${BUILD_DIR}.old ]; then
+    sudo mv ${BUILD_DIR}.old ${BUILD_DIR}.del
+    sudo rm -rf ${BUILD_DIR}.del &
 fi
-if [ -d build ]; then
-    sudo mv build build.old
+if [ -d ${BUILD_DIR} ]; then
+    sudo mv ${BUILD_DIR} ${BUILD_DIR}.old
 fi
 
-mkdir build
+mkdir ${BUILD_DIR}
 ./do_cmake.sh "$*" \
 	-D WITH_CCACHE=ON \
 	-D CMAKE_BUILD_TYPE=Debug \
@@ -61,7 +63,7 @@ mkdir build
 echo -n "start building: "; date
 printenv
 
-cd build
+cd ${BUILD_DIR}
   gmake -j$CPUS V=1 VERBOSE=1 
   gmake tests 
   echo -n "start testing: "; date ;
