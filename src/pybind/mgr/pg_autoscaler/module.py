@@ -254,6 +254,9 @@ class PgAutoscaler(MgrModule):
         # iterate over all pools to determine how they should be sized
         for pool_name, p in iteritems(pools):
             pool_id = p['pool']
+            if pool_id not in pool_stats:
+                # race with pool deletion; skip
+                continue
 
             # FIXME: we assume there is only one take per pool, but that
             # may not be true.
