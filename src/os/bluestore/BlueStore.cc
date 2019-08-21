@@ -56,6 +56,8 @@
 #endif
 
 KeyValueDB* make_BlueStore_DB_Hash(KeyValueDB*, const std::map<std::string, size_t>& = {});
+#include "BlueStore_DB_Hash.h"
+#include "common/url_escape.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
