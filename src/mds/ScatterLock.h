@@ -88,6 +88,34 @@ public:
     return state_flags & UNSCATTER_WANTED;
   }
 
+  // 1. current lock's state is LOCK_LOCK;
+  // 2. auth send LOCK_AC_MIX, and the current lock do finish_scatter_update, which
+  //    wrlock_force the current lock;
+  // 3. auth send LOCK_AC_LOCK, and would be forced to wait, since the current lock
+  //    is wrlocked;
+  // 4. the child inode want to pop rstat up to the current lock's parent, which would
+  //    also be forced to wait since the current lock state is LOCK_MIX_LOCK; the current
+  //    lock would be marked dirty, and the child inode would be attached to the corresponding
+  //    dir's dirty_rstat_inodes;
+  // 5. the previous finish_scatter_update finishes, the codes reaches here and "start_flush"
+  //    the current lock, which would clear the dirty flag of the current lock.
+  // As the CInode::encode_lock_state method doesn't pop dirty_rstat_inodes' rstat to the corresponding
+  // dir, step 5 actually lead to the lost of the dirty state marked by step 4.
+  //
+  // So we check whether there exists children with dirty rstat, if so, ScatterLock::clear_dirty() just
+  // do nothing.
+  void new_dirty_childrstat() {
+    dirtied_childrstats++;
+  }
+  bool exists_dirty_childrstat() const {
+    ceph_assert(dirtied_childrstats >= 0);
+    return dirtied_childrstats > 0;
+  }
+  void dirty_childrstat_cleaned() {
+    ceph_assert(dirtied_childrstats >= 0);
+    if (dirtied_childrstats)
+      dirtied_childrstats--;
+  }
   bool is_dirty() const override {
     return state_flags & DIRTY;
   }
@@ -128,6 +156,7 @@ public:
     state_flags &= ~FLUSHED;
   }
   void remove_dirty() {
+    clear_dirty_childrstats();
     start_flush();
     finish_flush();
     clear_flushed();
@@ -201,6 +230,8 @@ public:
       out << " flushed";
     if (get_scatter_wanted())
       out << " scatter_wanted";
+    if (exists_dirty_childrstat())
+      out << " dirtied_childrstats:" << dirtied_childrstats;
     out << ")";
   }
 
@@ -228,6 +259,11 @@ private:
     FLUSHED          = 1 << 12,
   };
 
+  int64_t dirtied_childrstats = 0;
+  void clear_dirty_childrstats() {
+    dirtied_childrstats = 0;
+  }
+
   void set_flushing() {
     state_flags |= FLUSHING;
   }
@@ -240,11 +276,13 @@ private:
   void set_dirty() {
     state_flags |= DIRTY;
   }
-  void clear_dirty() {
-    state_flags &= ~DIRTY;
-    if (_more) {
-      _more->item_updated.remove_myself();
-      _more.reset();
+  void clear_dirty(bool force_clear = false) {
+    if (!exists_dirty_childrstat()) {
+      state_flags &= ~DIRTY;
+      if (_more) {
+	_more->item_updated.remove_myself();
+	_more.reset();
+      }
     }
   }
 
