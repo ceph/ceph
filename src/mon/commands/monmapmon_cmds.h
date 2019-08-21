@@ -149,4 +149,205 @@ struct MonMonFeatureLs : public MonMonReadCommand
       const MonMap &monmap);
 };
 
+// prepare commands (RW)
+
+
+  /* Please note:
+   *
+   * Adding or removing monitors may lead to loss of quorum.
+   *
+   * Because quorum may be lost, it's important to reply something
+   * to the user, lest she end up waiting forever for a reply. And
+   * no reply will ever be sent until quorum is formed again.
+   *
+   * On the other hand, this means we're leaking uncommitted state
+   * to the user. As such, please be mindful of the reply message.
+   *
+   * e.g., 'adding monitor mon.foo' is okay ('adding' is an on-going
+   * operation and conveys its not-yet-permanent nature); whereas
+   * 'added monitor mon.foo' presumes the action has successfully
+   * completed and state has been committed, which may not be true.
+   *
+   */
+
+struct MonMonAdd : public MonMonWriteCommand
+{
+  explicit MonMonAdd(
+      Monitor *_mon,
+      MonmapMonitor *_monmon,
+      CephContext *_cct) :
+    MonMonWriteCommand(_mon, _monmon, _cct)
+  { }
+
+  virtual ~MonMonAdd() { }
+
+  bool handles_command(const string &prefix) { return prefix == "mon add"; }
+
+  bool do_prepare(
+      MonOpRequestRef op,
+      const string &prefix,
+      const cmdmap_t &cmdmap,
+      stringstream &ss,
+      bufferlist rdata,
+      FormatterRef f,
+      MonMap &pending,
+      MonMap &stable);
+};
+
+struct MonMonRemove : public MonMonWriteCommand
+{
+  explicit MonMonRemove(
+      Monitor *_mon,
+      MonmapMonitor *_monmon,
+      CephContext *_cct) :
+    MonMonWriteCommand(_mon, _monmon, _cct)
+  { }
+
+  virtual ~MonMonRemove() { }
+
+  bool handles_command(const string &prefix) {
+    return (prefix == "mon rm" || prefix == "mon remove");
+  }
+
+  bool do_prepare(
+      MonOpRequestRef op,
+      const string &prefix,
+      const cmdmap_t &cmdmap,
+      stringstream &ss,
+      bufferlist rdata,
+      FormatterRef f,
+      MonMap &pending,
+      MonMap &stable);
+};
+
+struct MonMonFeatureSet : public MonMonWriteCommand
+{
+  explicit MonMonFeatureSet(
+      Monitor *_mon,
+      MonmapMonitor *_monmon,
+      CephContext *_cct) :
+    MonMonWriteCommand(_mon, _monmon, _cct)
+  { }
+
+  virtual ~MonMonFeatureSet() { }
+
+  bool handles_command(const string &prefix) {
+    return (prefix == "mon feature set");
+  }
+
+  bool do_prepare(
+      MonOpRequestRef op,
+      const string &prefix,
+      const cmdmap_t &cmdmap,
+      stringstream &ss,
+      bufferlist rdata,
+      FormatterRef f,
+      MonMap &pending,
+      MonMap &stable);
+};
+
+struct MonMonSetRank : public MonMonWriteCommand
+{
+  explicit MonMonSetRank(
+      Monitor *_mon,
+      MonmapMonitor *_monmon,
+      CephContext *_cct) :
+    MonMonWriteCommand(_mon, _monmon, _cct)
+  { }
+
+  virtual ~MonMonSetRank() { }
+
+  bool handles_command(const string &prefix) {
+    return (prefix == "mon set-rank");
+  }
+
+  bool do_prepare(
+      MonOpRequestRef op,
+      const string &prefix,
+      const cmdmap_t &cmdmap,
+      stringstream &ss,
+      bufferlist rdata,
+      FormatterRef f,
+      MonMap &pending,
+      MonMap &stable);
+};
+
+struct MonMonSetAddrs : public MonMonWriteCommand
+{
+  explicit MonMonSetAddrs(
+      Monitor *_mon,
+      MonmapMonitor *_monmon,
+      CephContext *_cct) :
+    MonMonWriteCommand(_mon, _monmon, _cct)
+  { }
+
+  virtual ~MonMonSetAddrs() { }
+
+  virtual bool handles_command(const string &prefix) override {
+    return (prefix == "mon set-addrs");
+  }
+
+  virtual bool do_prepare(
+      MonOpRequestRef op,
+      const string &prefix,
+      const cmdmap_t &cmdmap,
+      stringstream &ss,
+      bufferlist rdata,
+      FormatterRef f,
+      MonMap &pending,
+      MonMap &stable) final;
+};
+
+struct MonMonSetWeight : public MonMonWriteCommand
+{
+  explicit MonMonSetWeight(
+      Monitor *_mon,
+      MonmapMonitor *_monmon,
+      CephContext *_cct) :
+    MonMonWriteCommand(_mon, _monmon, _cct)
+  { }
+
+  virtual ~MonMonSetWeight() { }
+
+  virtual bool handles_command(const string &prefix) override {
+    return (prefix == "mon set-weight");
+  }
+
+  virtual bool do_prepare(
+      MonOpRequestRef op,
+      const string &prefix,
+      const cmdmap_t &cmdmap,
+      stringstream &ss,
+      bufferlist rdata,
+      FormatterRef f,
+      MonMap &pending,
+      MonMap &stable) final;
+};
+
+struct MonMonEnableMsgr2 : public MonMonWriteCommand
+{
+  explicit MonMonEnableMsgr2(
+      Monitor *_mon,
+      MonmapMonitor *_monmon,
+      CephContext *_cct) :
+    MonMonWriteCommand(_mon, _monmon, _cct)
+  { }
+
+  virtual ~MonMonEnableMsgr2() { }
+
+  virtual bool handles_command(const string &prefix) override {
+    return (prefix == "mon enable-msgr2");
+  }
+
+  virtual bool do_prepare(
+      MonOpRequestRef op,
+      const string &prefix,
+      const cmdmap_t &cmdmap,
+      stringstream &ss,
+      bufferlist rdata,
+      FormatterRef f,
+      MonMap &pending,
+      MonMap &stable) final;
+};
+
 #endif // CEPH_MONMAPMONITOR_CMDS_H
