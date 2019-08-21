@@ -48,26 +48,15 @@ protected:
                      RGWObjVersionTracker *objv_tracker,
                      optional_yield y);
 
-  virtual int do_mutate(Context *ctx,
-                     const std::string& key,
-                     const ceph::real_time& mtime, RGWObjVersionTracker *objv_tracker,
-                     RGWMDLogOp op,
-                     optional_yield y,
-                     std::function<int()> f,
-                     bool generic_prepare);
+  int do_mutate(Context *ctx, const std::string& key,
+                const ceph::real_time& mtime, RGWObjVersionTracker *objv_tracker,
+                RGWMDLogOp op, optional_yield y,
+                std::function<int()> f, bool generic_prepare);
 
-  virtual int pre_modify(Context *ctx,
-                         const std::string& key,
-                         RGWMetadataLogData& log_data,
-                         RGWObjVersionTracker *objv_tracker,
-                         RGWMDLogOp op, RGWMDLogStatus status,
-                         optional_yield y);
   virtual int post_modify(Context *ctx,
                           const std::string& key,
-                          RGWMetadataLogData& log_data,
                           RGWObjVersionTracker *objv_tracker,
-                          RGWMDLogOp op, int ret,
-                          optional_yield y);
+                          RGWMDLogOp op, optional_yield y) = 0;
 public:
   class Module {
     /*

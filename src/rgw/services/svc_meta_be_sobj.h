@@ -132,18 +132,10 @@ public:
 
   int call_with_get_params(ceph::real_time *pmtime, std::function<int(RGWSI_MetaBackend::GetParams&)> cb) override;
 
-  int pre_modify(RGWSI_MetaBackend::Context *ctx,
-                 const string& key,
-                 RGWMetadataLogData& log_data,
-                 RGWObjVersionTracker *objv_tracker,
-                 RGWMDLogOp op, RGWMDLogStatus status,
-                 optional_yield y);
   int post_modify(RGWSI_MetaBackend::Context *ctx,
                   const string& key,
-                  RGWMetadataLogData& log_data,
                   RGWObjVersionTracker *objv_tracker,
-                  RGWMDLogOp op, int ret,
-                  optional_yield y);
+                  RGWMDLogOp op, optional_yield y);
 
   int get_entry(RGWSI_MetaBackend::Context *ctx,
                 const string& key,

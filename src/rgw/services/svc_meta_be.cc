@@ -9,35 +9,6 @@
 #define dout_subsys ceph_subsys_rgw
 
 
-int RGWSI_MetaBackend::pre_modify(RGWSI_MetaBackend::Context *ctx,
-                                  const string& key,
-                                  RGWMetadataLogData& log_data,
-                                  RGWObjVersionTracker *objv_tracker,
-                                  RGWMDLogOp op, RGWMDLogStatus status,
-                                  optional_yield y)
-{
-  /* if write version has not been set, and there's a read version, set it so that we can
-   * log it
-   */
-  if (objv_tracker &&
-      objv_tracker->read_version.ver && !objv_tracker->write_version.ver) {
-    objv_tracker->write_version = objv_tracker->read_version;
-    objv_tracker->write_version.ver++;
-  }
-
-  return 0;
-}
-
-int RGWSI_MetaBackend::post_modify(RGWSI_MetaBackend::Context *ctx,
-                                   const string& key,
-                                   RGWMetadataLogData& log_data,
-                                   RGWObjVersionTracker *objv_tracker,
-                                   RGWMDLogOp op, int ret,
-                                   optional_yield y)
-{
-  return ret;
-}
-
 int RGWSI_MetaBackend::prepare_mutate(RGWSI_MetaBackend::Context *ctx,
                                       const string& key,
                                       const real_time& mtime,
@@ -83,22 +54,11 @@ int RGWSI_MetaBackend::do_mutate(RGWSI_MetaBackend::Context *ctx,
     }
   }
 
-  RGWMetadataLogData log_data;
-  ret = pre_modify(ctx, key, log_data, objv_tracker,
-                   op, RGWMDLogStatus::Write, y);
-  if (ret < 0) {
-    return ret;
-  }
-
   ret = f();
-
-  /* cascading ret into post_modify() */
-
-  ret = post_modify(ctx, key, log_data, objv_tracker, op, ret, y);
   if (ret < 0)
     return ret;
 
-  return 0;
+  return post_modify(ctx, key, objv_tracker, op, y);
 }
 
 int RGWSI_MetaBackend::get(Context *ctx,

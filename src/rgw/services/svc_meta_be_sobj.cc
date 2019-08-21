@@ -28,66 +28,20 @@ RGWSI_MetaBackend::Context *RGWSI_MetaBackend_SObj::alloc_ctx()
   return new Context_SObj(sysobj_svc);
 }
 
-int RGWSI_MetaBackend_SObj::pre_modify(RGWSI_MetaBackend::Context *_ctx,
-                                       const string& key,
-                                       RGWMetadataLogData& log_data,
-                                       RGWObjVersionTracker *objv_tracker,
-                                       RGWMDLogOp op, RGWMDLogStatus status,
-                                       optional_yield y)
-{
-  auto ctx = static_cast<Context_SObj *>(_ctx);
-  int ret = RGWSI_MetaBackend::pre_modify(ctx, key, log_data,
-                                          objv_tracker, op, status,
-                                          y);
-  if (ret < 0) {
-    return ret;
-  }
-
-  /* if write version has not been set, and there's a read version, set it so that we can
-   * log it
-   */
-  if (objv_tracker) {
-    log_data.read_version = objv_tracker->read_version;
-    log_data.write_version = objv_tracker->write_version;
-  }
-
-  log_data.op = op;
-  log_data.status = status;
-
-  bufferlist logbl;
-  encode(log_data, logbl);
-
-  ret = mdlog_svc->add_entry(ctx->module->get_hash_key(key), ctx->module->get_section(), key, logbl);
-  if (ret < 0)
-    return ret;
-
-  return 0;
-}
-
 int RGWSI_MetaBackend_SObj::post_modify(RGWSI_MetaBackend::Context *_ctx,
                                         const string& key,
-                                        RGWMetadataLogData& log_data,
                                         RGWObjVersionTracker *objv_tracker,
-                                        RGWMDLogOp op, int ret,
-                                        optional_yield y)
+                                        RGWMDLogOp op, optional_yield y)
 {
   auto ctx = static_cast<Context_SObj *>(_ctx);
-  if (ret >= 0)
-    log_data.status = RGWMDLogStatus::Complete;
-  else 
-    log_data.status = RGWMDLogStatus::Abort;
+  RGWMetadataLogData log_data;
+  log_data.op = op;
+  log_data.status = RGWMDLogStatus::Complete;
 
   bufferlist logbl;
   encode(log_data, logbl);
 
-  int r = mdlog_svc->add_entry(ctx->module->get_hash_key(key), ctx->module->get_section(), key, logbl);
-  if (ret < 0)
-    return ret;
-
-  if (r < 0)
-    return r;
-
-  return RGWSI_MetaBackend::post_modify(ctx, key, log_data, objv_tracker, op, ret, y);
+  return mdlog_svc->add_entry(ctx->module->get_hash_key(key), ctx->module->get_section(), key, logbl);
 }
 
 int RGWSI_MetaBackend_SObj::get_shard_id(RGWSI_MetaBackend::Context *_ctx,
