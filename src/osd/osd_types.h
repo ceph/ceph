@@ -4514,6 +4514,14 @@ public:
     }
   }
 
+  void mark_fully_dirty(const hobject_t& oid) {
+    auto p = missing.find(oid);
+    if (p != missing.end()) {
+      tracker.changed(oid);
+      (p->second).clean_regions.mark_fully_dirty();
+    }
+  }
+
   void add(const hobject_t& oid, eversion_t need, eversion_t have,
 	   bool is_delete, bool make_dirty = true) {
     //if have== eversion_t() means that the object does not exist, we transfer new_object = true
