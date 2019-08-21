@@ -73,7 +73,7 @@ public:
      * Backend specialization module
      */
   public:
-    virtual ~Module() = 0;
+    virtual ~Module() {}
   };
 
   using ModuleRef = std::shared_ptr<Module>;
@@ -83,7 +83,7 @@ public:
                     * backend and operation itself; operation might span multiple backend
                     * calls.
                     */
-    virtual ~Context() = 0;
+    virtual ~Context() {}
 
     virtual void init(RGWSI_MetaBackend_Handler *h) = 0;
   };
@@ -95,20 +95,16 @@ public:
 
     PutParams() {}
     PutParams(const ceph::real_time& _mtime) : mtime(_mtime) {}
-    virtual ~PutParams() = 0;
   };
 
   struct GetParams {
     GetParams() {}
     GetParams(ceph::real_time *_pmtime) : pmtime(_pmtime) {}
-    virtual ~GetParams();
 
     ceph::real_time *pmtime{nullptr};
   };
 
   struct RemoveParams {
-    virtual ~RemoveParams() = 0;
-
     ceph::real_time mtime;
   };
 
@@ -119,7 +115,6 @@ public:
     MutateParams() {}
     MutateParams(const ceph::real_time& _mtime,
 		 RGWMDLogStatus _op_type) : mtime(_mtime), op_type(_op_type) {}
-    virtual ~MutateParams() {}
   };
 
   enum Type {

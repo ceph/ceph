@@ -9,12 +9,6 @@
 #define dout_subsys ceph_subsys_rgw
 
 
-RGWSI_MetaBackend::Context::~Context() {} // needed, even though destructor is pure virtual
-RGWSI_MetaBackend::Module::~Module() {} // ditto
-RGWSI_MetaBackend::PutParams::~PutParams() {} // ...
-RGWSI_MetaBackend::GetParams::~GetParams() {} // ...
-RGWSI_MetaBackend::RemoveParams::~RemoveParams() {} // ...
-
 int RGWSI_MetaBackend::pre_modify(RGWSI_MetaBackend::Context *ctx,
                                   const string& key,
                                   RGWMetadataLogData& log_data,
