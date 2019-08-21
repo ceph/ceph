@@ -88,11 +88,11 @@ export abstract class PageHelper {
       .get(idx)
       .getText();
   }
-  //
-  // getTableCount() {
-  //   return $('.datatable-footer-inner.selected-count');
-  // }
-  //
+
+  getTableCount() {
+    return $('.datatable-footer-inner.selected-count');
+  }
+
   // getTitleText() {
   //   let title;
   //   return browser

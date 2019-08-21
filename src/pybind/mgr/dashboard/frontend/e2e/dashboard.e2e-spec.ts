@@ -20,203 +20,175 @@ describe('Dashboard Main Page', () => {
     iscsi = new Helper().iscsi;
   });
 
-  afterEach(() => {
-    Helper.checkConsole();
+  afterEach(async () => {
+    await Helper.checkConsole();
   });
 
   describe('Check that all hyperlinks on cells lead to the correct page and fields exist', () => {
-    beforeAll(() => {
-      dashboard.navigateTo();
+    beforeEach(async () => {
+      await dashboard.navigateTo();
     });
 
-    it('should check all linked cells lead to correct page', () => {
+    it('should check all linked cells lead to correct page', async () => {
       // Grabs cell and then clicks the hyperlink, some cells require different
       // methods as stated below
 
       // Monitors Cell
-      expect(browser.getCurrentUrl()).toContain('/#/dashboard');
-      dashboard.cellLink('Monitors');
-      expect(dashboard.getBreadcrumbText()).toEqual('Monitors');
+      expect(await browser.getCurrentUrl()).toContain('/#/dashboard');
+      await dashboard.cellLink('Monitors');
+      expect(await dashboard.getBreadcrumbText()).toEqual('Monitors');
 
       // OSDs Cell
-      browser.navigate().back();
-      expect(browser.getCurrentUrl()).toContain('/#/dashboard');
-      dashboard.cellLink('OSDs');
-      expect(dashboard.getBreadcrumbText()).toEqual('OSDs');
+      // await browser.navigate().back();
+      await dashboard.navigateBack();
+      expect(await browser.getCurrentUrl()).toContain('/#/dashboard');
+      await dashboard.cellLink('OSDs');
+      expect(await dashboard.getBreadcrumbText()).toEqual('OSDs');
 
       // Hosts Cell
-      browser.navigate().back();
-      expect(browser.getCurrentUrl()).toContain('/#/dashboard');
-      dashboard.cellLink('Hosts');
-      expect(dashboard.getBreadcrumbText()).toEqual('Hosts');
+      // await browser.navigate().back();
+      await dashboard.navigateBack();
+      expect(await browser.getCurrentUrl()).toContain('/#/dashboard');
+      await dashboard.cellLink('Hosts');
+      expect(await dashboard.getBreadcrumbText()).toEqual('Hosts');
 
       // Object Gateways Cell
-      browser.navigate().back();
-      expect(browser.getCurrentUrl()).toContain('/#/dashboard');
-      element
+      // await browser.navigate().back();
+      await dashboard.navigateBack();
+      expect(await browser.getCurrentUrl()).toContain('/#/dashboard');
+      await element
         .all(by.partialLinkText('Object'))
         .last()
         .click(); // Since there is a space and there are 2 occurances of
-      expect(dashboard.getBreadcrumbText()).toEqual('Daemons'); // 'Object Gateways', this method was used to grab the link
+      expect(await dashboard.getBreadcrumbText()).toEqual('Daemons'); // 'Object Gateways', this method was used to grab the link
 
       // iSCSI Gateways Cell
-      browser.navigate().back();
-      expect(browser.getCurrentUrl()).toContain('/#/dashboard');
-      dashboard.partialCellLink('iSCSI'); // Since there is a space between iSCSI and Gateways this method was
-      expect(dashboard.getBreadcrumbText()).toEqual('Overview'); // used to grab and click the link
+      // await browser.navigate().back();
+      await dashboard.navigateBack();
+      expect(await browser.getCurrentUrl()).toContain('/#/dashboard');
+      await dashboard.partialCellLink('iSCSI'); // Since there is a space between iSCSI and Gateways this method was
+      expect(await dashboard.getBreadcrumbText()).toEqual('Overview'); // used to grab and click the link
 
       // Pools Cell
-      browser.navigate().back();
-      expect(browser.getCurrentUrl()).toContain('/#/dashboard');
-      dashboard.cellLink('Pools');
-      expect(dashboard.getBreadcrumbText()).toEqual('Pools');
+      // await browser.navigate().back();
+      await dashboard.navigateBack();
+      expect(await browser.getCurrentUrl()).toContain('/#/dashboard');
+      await dashboard.cellLink('Pools');
+      expect(await dashboard.getBreadcrumbText()).toEqual('Pools');
     });
 
-    it('should verify that cells exist on dashboard in proper order', () => {
+    it('should verify that cells exist on dashboard in proper order', async () => {
       // Ensures that info cards are all displayed on the dashboard tab while being
       // in the proper order, checks for card title and position via indexing into
       // a list of all info cards
-      dashboard.navigateTo();
-      expect(browser.getCurrentUrl()).toContain('/#/dashboard');
-      expect(dashboard.dashContain(0, 'Cluster Status'));
-      expect(dashboard.dashContain(1, 'Monitors'));
-      expect(dashboard.dashContain(2, 'OSDs'));
-      expect(dashboard.dashContain(3, 'Manager Daemons'));
-      expect(dashboard.dashContain(4, 'Hosts'));
-      expect(dashboard.dashContain(5, 'Object Gateways'));
-      expect(dashboard.dashContain(6, 'Metadata Servers'));
-      expect(dashboard.dashContain(7, 'iSCSI Gateways'));
-      expect(dashboard.dashContain(8, 'Client IOPS'));
-      expect(dashboard.dashContain(9, 'Client Throughput'));
-      expect(dashboard.dashContain(10, 'Clinet Read/Write'));
-      expect(dashboard.dashContain(11, 'Recovery Throughput'));
-      expect(dashboard.dashContain(12, 'Scrub'));
-      expect(dashboard.dashContain(13, 'Pools'));
-      expect(dashboard.dashContain(14, 'Raw Capacity'));
-      expect(dashboard.dashContain(15, 'Objects'));
-      expect(dashboard.dashContain(16, 'PGs per OSD'));
-      expect(dashboard.dashContain(17, 'PG Status'));
+      await dashboard.navigateTo();
+      expect(await browser.getCurrentUrl()).toContain('/#/dashboard');
+      expect(await dashboard.infoCardText(0)).toContain('Cluster Status');
+      expect(await dashboard.infoCardText(1)).toContain('Monitors');
+      expect(await dashboard.infoCardText(2)).toContain('OSDs');
+      expect(await dashboard.infoCardText(3)).toContain('Manager Daemons');
+      expect(await dashboard.infoCardText(4)).toContain('Hosts');
+      expect(await dashboard.infoCardText(5)).toContain('Object Gateways');
+      expect(await dashboard.infoCardText(6)).toContain('Metadata Servers');
+      expect(await dashboard.infoCardText(7)).toContain('iSCSI Gateways');
+      expect(await dashboard.infoCardText(8)).toContain('Client IOPS');
+      expect(await dashboard.infoCardText(9)).toContain('Client Throughput');
+      expect(await dashboard.infoCardText(10)).toContain('Client Read/Write');
+      expect(await dashboard.infoCardText(11)).toContain('Recovery Throughput');
+      expect(await dashboard.infoCardText(12)).toContain('Scrub');
+      expect(await dashboard.infoCardText(13)).toContain('Pools');
+      expect(await dashboard.infoCardText(14)).toContain('Raw Capacity');
+      expect(await dashboard.infoCardText(15)).toContain('Objects');
+      expect(await dashboard.infoCardText(16)).toContain('PGs per OSD');
+      expect(await dashboard.infoCardText(17)).toContain('PG Status');
     });
 
-    it('should verify that info card group titles are present and in the right order', () => {
+    it('should verify that info card group titles are present and in the right order', async () => {
       // Checks that the group titles on the dashboard are correct and in the right order
-      dashboard.navigateTo();
-      expect(browser.getCurrentUrl()).toContain('/#/dashboard');
-      expect(dashboard.checkGroupTitles(0, 'Status'));
-      expect(dashboard.checkGroupTitles(1, 'Peformance'));
-      expect(dashboard.checkGroupTitles(2, 'Capacity'));
+      await dashboard.navigateTo();
+      expect(await browser.getCurrentUrl()).toContain('/#/dashboard');
+      expect(await dashboard.checkGroupTitles(0, 'Status'));
+      expect(await dashboard.checkGroupTitles(1, 'Performance'));
+      expect(await dashboard.checkGroupTitles(2, 'Capacity'));
     });
   });
 
   describe('Should check that dashboard cells have correct information', () => {
-    beforeAll(() => {
-      dashboard.navigateTo();
+    beforeAll(async () => {
+      await dashboard.navigateTo();
     });
 
-    it('should verify that proper number of object gateway daemons on dashboard', () => {
+    it('should verify that proper number of object gateway daemons on dashboard', async () => {
       // Checks that dashboard id card for Object Gateway has the correct number of Daemons
       // by checking the Daemons page and taking the count found at the bottom of the table
-      dashboard.navigateTo();
-      let dashCount = '';
-      dashboard.cardNumb(5).then((num) => {
-        dashCount = num; // Grabs number of daemons from dashboard Object Gateway card
-      });
-      daemons.navigateTo();
-      daemons
-        .getTableCount()
-        .getText()
-        .then((tableCount) => {
-          tableCount = tableCount.slice(13); // Grabs number of daemons from table footer
-          expect(dashCount).toContain(tableCount);
-        });
+      await dashboard.navigateTo();
+      const dashCount = await dashboard.cardNumb(5); // Grabs number of daemons from dashboard Object Gateway card
+      await daemons.navigateTo();
+      // Grabs number of daemons from table footer
+      const tableCount = (await daemons.getTableCount().getText()).slice(13);
+      expect(dashCount).toContain(tableCount);
     });
 
-    it('should verify that proper number of monitors on dashboard', () => {
+    it('should verify that proper number of monitors on dashboard', async () => {
       // Checks that dashboard id card for Monitors has the correct number of Monitors
       // by checking the Monitors page and taking the count found at the bottom of the table
-      dashboard.navigateTo();
-      let dashCount = '';
-      dashboard.cardNumb(1).then((num) => {
-        dashCount = num; // Grabs number of monitors from dashboard Monitor card
-      });
-      monitors.navigateTo();
-      $$('.datatable-footer-inner')
+      await dashboard.navigateTo();
+      // Grabs number of monitors from dashboard Monitor card
+      const dashCount = await dashboard.cardNumb(1);
+      await monitors.navigateTo();
+      // Grabs number of monitors from table footer
+      const tableCount = (await $$('.datatable-footer-inner')
         .first()
-        .getText()
-        .then((tableCount) => {
-          tableCount = tableCount.slice(0, -6); // Grabs number of monitors from table footer
-          expect(dashCount).toContain(tableCount);
-        });
+        .getText()).slice(0, -6);
+      expect(dashCount).toContain(tableCount);
     });
 
-    it('should verify that proper number of hosts on dashboard', () => {
+    it('should verify that proper number of hosts on dashboard', async () => {
       // Checks that dashboard id card for Hosts has the correct number of hosts
       // by checking the Hosts page and taking the count found at the bottom of the table
-      dashboard.navigateTo();
-      let dashCount = '';
-      dashboard.cardNumb(4).then((num) => {
-        dashCount = num; // Grabs number of hosts from dashboard Hosts card
-      });
-      hosts.navigateTo();
-      hosts
-        .getTableCount()
-        .getText()
-        .then((tableCount) => {
-          tableCount = tableCount.slice(13, -6); // Grabs number of hosts from table footer
-          expect(dashCount).toContain(tableCount);
-        });
+      await dashboard.navigateTo();
+      // Grabs number of hosts from dashboard Hosts card
+      const dashCount = await dashboard.cardNumb(4);
+      await hosts.navigateTo();
+      // Grabs number of hosts from table footer
+      const tableCount = (await hosts.getTableCount().getText()).slice(13, -6);
+      expect(dashCount).toContain(tableCount);
     });
 
-    it('should verify that proper number of osds on dashboard', () => {
+    it('should verify that proper number of osds on dashboard', async () => {
       // Checks that dashboard id card for Hosts has the correct number of hosts
       // by checking the Hosts page and taking the count found at the bottom of the table
-      dashboard.navigateTo();
-      let dashCount = '';
-      dashboard.cardNumb(2).then((num) => {
-        dashCount = num.slice(0, -17); // Grabs number of hosts from dashboard Hosts card
-      });
-      osds.navigateTo();
-      osds
-        .getTableCount()
-        .getText()
-        .then((tableCount) => {
-          tableCount = tableCount.slice(13, -6); // Grabs number of hosts from table footer
-          expect(dashCount).toContain(tableCount);
-        });
+      await dashboard.navigateTo();
+      // Grabs number of hosts from dashboard Hosts card
+      const dashCount = (await dashboard.cardNumb(2)).slice(0, -17);
+      await osds.navigateTo();
+      // Grabs number of hosts from table footer
+      const tableCount = (await osds.getTableCount().getText()).slice(13, -6);
+      expect(dashCount).toContain(tableCount);
     });
 
-    it('should verify that proper number of pools on dashboard', () => {
-      dashboard.navigateTo();
-      let dashCount = '';
-      dashboard.cardNumb(13).then((num) => {
-        dashCount = num.slice(4); // Grabs number of hosts from dashboard Pools card
-        pools.navigateTo();
-        pools
-          .getTableCount()
-          .getText()
-          .then((tableCount) => {
-            tableCount = tableCount.slice(13, -6); // Grabs number of pools from table footer
-            expect(dashCount).toContain(tableCount);
-          });
-      });
+    it('should verify that proper number of pools on dashboard', async () => {
+      await dashboard.navigateTo();
+      // Grabs number of hosts from dashboard Pools card
+      const dashCount = (await dashboard.cardNumb(13)).slice(4);
+      await pools.navigateTo();
+      // Grabs number of pools from table footer
+      const tableCount = (await pools.getTableCount().getText()).slice(13, -6);
+      expect(dashCount).toContain(tableCount);
     });
 
-    it('should verify that proper number of iscsi gateways on dashboard', () => {
+    it('should verify that proper number of iscsi gateways on dashboard', async () => {
       // Checks that dashboard id card for iSCSI has the correct number of gateways
       // by checking the iSCSI page and taking the count found at the bottom of the table (first)
-      dashboard.navigateTo();
-      let dashCount = '';
-      dashboard.cardNumb(7).then((num) => {
-        dashCount = num; // Grabs number of gateways from dashboard iSCSI card
-      });
-      iscsi.navigateTo();
-      $$('.datatable-footer-inner')
+      await dashboard.navigateTo();
+      // Grabs number of gateways from dashboard iSCSI card
+      const dashCount = await dashboard.cardNumb(7);
+      await iscsi.navigateTo();
+      // Grabs number of monitors from table footer
+      const tableCount = (await $$('.datatable-footer-inner')
         .first()
-        .getText()
-        .then((tableCount) => {
-          tableCount = tableCount.slice(0, -6); // Grabs number of monitors from table footer
-          expect(dashCount).toContain(tableCount);
-        });
+        .getText()).slice(0, -6);
+      expect(dashCount).toContain(tableCount);
     });
   });
 });

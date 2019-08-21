@@ -10,6 +10,7 @@ import { LogsPageHelper } from './cluster/logs.po';
 import { ManagerModulesPageHelper } from './cluster/mgr-modules.po';
 import { MonitorsPageHelper } from './cluster/monitors.po';
 import { OSDsPageHelper } from './cluster/osds.po';
+import { DashboardPageHelper } from './dashboard.po';
 import { FilesystemsPageHelper } from './filesystems/filesystems.po';
 import { NfsPageHelper } from './nfs/nfs.po';
 import { PoolPageHelper } from './pools/pools.po';
@@ -43,6 +44,7 @@ export class Helper {
   alerts: AlertsPageHelper;
   mirroring: MirroringPageHelper;
   iscsi: IscsiPageHelper;
+  dashboard: DashboardPageHelper;
 
   constructor() {
     this.pools = new PoolPageHelper();
@@ -66,6 +68,7 @@ export class Helper {
     this.alerts = new AlertsPageHelper();
     this.mirroring = new MirroringPageHelper();
     this.iscsi = new IscsiPageHelper();
+    this.dashboard = new DashboardPageHelper();
   }
 
   /**
