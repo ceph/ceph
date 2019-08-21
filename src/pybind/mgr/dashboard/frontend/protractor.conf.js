@@ -3,9 +3,10 @@
 
 const { SpecReporter } = require('jasmine-spec-reporter');
 
-exports.config = {
+const config = {
   SELENIUM_PROMISE_MANAGER: false,
   allScriptsTimeout: 11000,
+  implicitWaitTimeout: 360000,
   specs: [
     './e2e/**/*.e2e-spec.ts'
   ],
@@ -40,9 +41,10 @@ exports.config = {
       imageToAscii: 'none',
       clearFoldersBeforeTest: true
     }],
+};
 
-  async onPrepare() {
-    browser.manage().timeouts().implicitlyWait(360000);
+config.onPrepare = async () => {
+    browser.manage().timeouts().implicitlyWait(exports.config.implicitWaitTimeout);
 
     require('ts-node').register({
       project: 'e2e/tsconfig.e2e.json'
@@ -69,4 +71,5 @@ exports.config = {
       });
     });
   }
-};
+
+exports.config = config;
