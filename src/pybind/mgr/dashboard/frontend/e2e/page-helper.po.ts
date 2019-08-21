@@ -1,4 +1,4 @@
-import { $, $$, browser, by, element, ElementFinder, promise, protractor } from 'protractor';
+import { $, $$, browser, by, element, ElementFinder, protractor } from 'protractor';
 
 interface Pages {
   index: string;
@@ -22,7 +22,7 @@ export abstract class PageHelper {
           .then((url) =>
             url.endsWith(page)
               ? fn.apply(this, args)
-              : promise.Promise.reject(
+              : Promise.reject(
                   `Method ${target.constructor.name}::${propertyKey} is supposed to be ` +
                     `run on path "${page}", but was run on URL "${url}"`
                 )
@@ -31,31 +31,31 @@ export abstract class PageHelper {
     };
   }
 
-  getBreadcrumbText() {
+  async getBreadcrumbText(): Promise<string> {
     return $('.breadcrumb-item.active').getText();
   }
 
-  getTabText(idx) {
+  async getTabText(idx): Promise<string> {
     return $$('.nav.nav-tabs li')
       .get(idx)
       .getText();
   }
-
-  getTableCount() {
-    return $('.datatable-footer-inner.selected-count');
-  }
-
-  getTitleText() {
-    let title;
-    return browser
-      .wait(() => {
-        title = $('.panel-title');
-        return title.isPresent();
-      })
-      .then(() => title.getText());
-  }
-
-  getTableCell(content) {
+  //
+  // getTableCount() {
+  //   return $('.datatable-footer-inner.selected-count');
+  // }
+  //
+  // getTitleText() {
+  //   let title;
+  //   return browser
+  //     .wait(() => {
+  //       title = $('.panel-title');
+  //       return title.isPresent();
+  //     })
+  //     .then(() => title.getText());
+  // }
+  //
+  getTableCell(content: string): ElementFinder {
     return element(by.cssContainingText('.datatable-body-cell-label', content));
   }
 
@@ -63,20 +63,21 @@ export abstract class PageHelper {
     return element(by.cssContainingText('.datatable-body-row', content));
   }
 
-  getTable() {
-    return element.all(by.css('.datatable-body'));
+  getTable(): ElementFinder {
+    return $('.datatable-body');
   }
 
-  getTabsCount() {
+  async getTabsCount(): Promise<number> {
     return $$('.nav.nav-tabs li').count();
   }
 
-  getFirstTableCellWithText(content) {
-    return element.all(by.cssContainingText('.datatable-body-cell-label', content)).first();
-  }
+  // getFirstTableCellWithText(content) {
+  //   return element.all(by.cssContainingText('.datatable-body-cell-label', content)).first();
+  // }
 
   /**
-   * Used for instances where a modal container received the click rather than the desired element.
+   * Used for instances where a modal container would receive the click rather
+   * than the desired element.
    *
    * https://stackoverflow.com/questions/26211751/protractor-chrome-driver-element-is-not-clickable-at-point
    */
@@ -91,33 +92,33 @@ export abstract class PageHelper {
   /**
    * Returns the cell with the content given in `content`. Will not return a
    * rejected Promise if the table cell hasn't been found. It behaves this way
-   * to enable to wait for visiblity/invisiblity/precense of the returned
+   * to enable to wait for visiblity/invisiblity/presence of the returned
    * element.
    *
    * It will return a rejected Promise if the result is ambigous, though. That
-   * means if after the search for content has been completed, but more than a
-   * single row is shown in the data table.
+   * means if the search for content has been completed, but more than a single
+   * row is shown in the data table.
    */
-  getTableCellByContent(content: string): promise.Promise<ElementFinder> {
+  async getTableCellByContent(content: string): Promise<ElementFinder> {
     const searchInput = $('#pool-list > div .search input');
     const rowAmountInput = $('#pool-list > div > div > .dataTables_paginate input');
     const footer = $('#pool-list > div datatable-footer');
 
-    rowAmountInput.clear();
-    rowAmountInput.sendKeys('10');
-    searchInput.clear();
-    searchInput.sendKeys(content);
+    await rowAmountInput.clear();
+    await rowAmountInput.sendKeys('10');
+    await searchInput.clear();
+    await searchInput.sendKeys(content);
 
-    return footer.getAttribute('ng-reflect-row-count').then((rowCount: string) => {
-      const count = Number(rowCount);
-      if (count !== 0 && count > 1) {
-        return Promise.reject('getTableCellByContent: Result is ambigous');
-      } else {
-        return element(
+    const count = Number(await footer.getAttribute('ng-reflect-row-count'));
+    if (count !== 0 && count > 1) {
+      return Promise.reject('getTableCellByContent: Result is ambigous');
+    } else {
+      return Promise.resolve(
+        element(
           by.cssContainingText('.datatable-body-cell-label', new RegExp(`^\\s${content}\\s$`))
-        );
-      }
-    });
+        )
+      );
+    }
   }
 
   // used when .clear() does not work on a text box, sends a Ctrl + a, BACKSPACE
@@ -126,28 +127,28 @@ export abstract class PageHelper {
     elem.sendKeys(protractor.Key.BACK_SPACE);
   }
 
-  navigateTo(page = null) {
+  async navigateTo(page = null) {
     page = page || 'index';
     const url = this.pages[page];
     return browser.get(url);
   }
-
-  getDataTable() {
-    return $$('cd-table');
-  }
-
-  getStatusTable() {
-    // Grabs striped tables
-    return $$('.table.table-striped');
-  }
-
-  getLegends() {
-    // Grabs legends above tables
-    return $$('legend');
-  }
-
-  getDataTableHeaders() {
-    // Gets column headers of table
-    return $$('.datatable-header');
-  }
+  //
+  // getDataTable() {
+  //   return $$('cd-table');
+  // }
+  //
+  // getStatusTable() {
+  //   // Grabs striped tables
+  //   return $$('.table.table-striped');
+  // }
+  //
+  // getLegends() {
+  //   // Grabs legends above tables
+  //   return $$('legend');
+  // }
+  //
+  // getDataTableHeaders() {
+  //   // Gets column headers of table
+  //   return $$('.datatable-header');
+  // }
 }
