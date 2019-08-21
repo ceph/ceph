@@ -586,11 +586,13 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         return playbook_operation
 
-    def remove_osds(self, osd_ids):
+    def remove_osds(self, osd_ids, destroy=False):
         """Remove osd's.
 
         :param osd_ids: List of osd's to be removed (List[int])
+        :param destroy: unsupported.
         """
+        assert not destroy
 
         extravars = {'osd_to_kill': ",".join([str(osd_id) for osd_id in osd_ids]),
                      'ireallymeanit':'yes'}
