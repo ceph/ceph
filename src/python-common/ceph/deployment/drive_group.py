@@ -1,6 +1,6 @@
 import fnmatch
 try:
-    from typing import Optional, List
+    from typing import Optional, List, Dict
 except ImportError:
     pass
 
@@ -63,10 +63,21 @@ class DriveGroupSpec(object):
     Describe a drive group in the same form that ceph-volume
     understands.
     """
-    def __init__(self, host_pattern, data_devices=None, db_devices=None, wal_devices=None, journal_devices=None,
-                 data_directories=None, osds_per_device=None, objectstore='bluestore', encrypted=False,
-                 db_slots=None, wal_slots=None):
-        # type: (str, Optional[DeviceSelection], Optional[DeviceSelection], Optional[DeviceSelection], Optional[DeviceSelection], Optional[List[str]], int, str, bool, int, int) -> None
+
+    def __init__(self,
+                 host_pattern,  # type: str
+                 data_devices=None,  # type: Optional[DeviceSelection]
+                 db_devices=None,  # type: Optional[DeviceSelection]
+                 wal_devices=None,  # type: Optional[DeviceSelection]
+                 journal_devices=None,  # type: Optional[DeviceSelection]
+                 data_directories=None,  # type: Optional[List[str]]
+                 osds_per_device=None,  # type: Optional[int]
+                 objectstore='bluestore',  # type: str
+                 encrypted=False,  # type: bool
+                 db_slots=None,  # type: Optional[int]
+                 wal_slots=None,  # type: Optional[int]
+                 osd_id_claims=None,  # type: Optional[Dict[str, DeviceSelection]]
+                 ):
 
         # concept of applying a drive group to a (set) of hosts is tightly
         # linked to the drive group itself
@@ -105,11 +116,10 @@ class DriveGroupSpec(object):
         #: How many OSDs per WAL device
         self.wal_slots = wal_slots
 
-        # FIXME: needs ceph-volume support
-        #: Optional: mapping of drive to OSD ID, used when the
+        #: Optional: mapping of OSD id to DeviceSelection, used when the
         #: created OSDs are meant to replace previous OSDs on
-        #: the same node.
-        self.osd_id_claims = {}
+        #: the same node. See :ref:`orchestrator-osd-replace`
+        self.osd_id_claims = osd_id_claims
 
     @classmethod
     def from_json(self, json_drive_group):
