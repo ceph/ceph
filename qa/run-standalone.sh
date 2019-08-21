@@ -20,7 +20,8 @@ function get_python_path() {
             py_ver=3
         fi
     fi
-    echo $(realpath ../src/pybind):$(pwd)/lib/cython_modules/lib.$py_ver
+    python_common=$(realpath ../src/python-common)
+    echo $(realpath ../src/pybind):$(pwd)/lib/cython_modules/lib.$py_ver:$python_common
 }
 
 if [ `uname` = FreeBSD ]; then
