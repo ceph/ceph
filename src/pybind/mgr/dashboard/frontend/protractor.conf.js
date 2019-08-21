@@ -7,11 +7,9 @@ const config = {
   SELENIUM_PROMISE_MANAGER: false,
   allScriptsTimeout: 11000,
   implicitWaitTimeout: 360000,
-  specs: [
-    './e2e/**/*.e2e-spec.ts'
-  ],
+  specs: ['./e2e/**/*.e2e-spec.ts'],
   capabilities: {
-    'browserName': 'chrome',
+    browserName: 'chrome',
     chromeOptions: {
       args: ['--no-sandbox', '--headless', '--window-size=1920x1080']
     }
@@ -31,7 +29,8 @@ const config = {
     }
   },
 
-  plugins: [{
+  plugins: [
+    {
       package: 'protractor-screenshoter-plugin',
       screenshotPath: '.protractor-report',
       screenshotOnExpect: 'failure',
@@ -40,36 +39,37 @@ const config = {
       writeReportFreq: 'asap',
       imageToAscii: 'none',
       clearFoldersBeforeTest: true
-    }],
+    }
+  ]
 };
 
 config.onPrepare = async () => {
-    browser.manage().timeouts().implicitlyWait(exports.config.implicitWaitTimeout);
+  browser.manage().timeouts().implicitlyWait(config.implicitWaitTimeout)
 
-    require('ts-node').register({
-      project: 'e2e/tsconfig.e2e.json'
-    });
-    jasmine.getEnv().addReporter(new SpecReporter({ spec: { displayStacktrace: true } }));
+  require('ts-node').register({
+    project: 'e2e/tsconfig.e2e.json'
+  });
+  jasmine.getEnv().addReporter(new SpecReporter({ spec: { displayStacktrace: true } }));
 
-    await browser.get('/#/login');
+  await browser.get('/#/login');
 
-    await browser.driver.findElement(by.name('username')).clear();
-    await browser.driver.findElement(by.name('username')).sendKeys(browser.params.login.user);
-    await browser.driver.findElement(by.name('password')).clear();
-    await browser.driver.findElement(by.name('password')).sendKeys(browser.params.login.password);
+  await browser.driver.findElement(by.name('username')).clear();
+  await browser.driver.findElement(by.name('username')).sendKeys(browser.params.login.user);
+  await browser.driver.findElement(by.name('password')).clear();
+  await browser.driver.findElement(by.name('password')).sendKeys(browser.params.login.password);
 
-    await browser.driver.findElement(by.css('input[type="submit"]')).click();
+  await browser.driver.findElement(by.css('input[type="submit"]')).click();
 
-    global.browser.getProcessedConfig().then(async (config) => {
-      // Login takes some time, so wait until it's done.
-      // For the test app's login, we know it's done when it redirects to
-      // dashboard.
-      return await browser.driver.wait(async () => {
-        return await browser.driver.getCurrentUrl().then((url) => {
-          return /dashboard/.test(url);
-        });
+  global.browser.getProcessedConfig().then(async (config) => {
+    // Login takes some time, so wait until it's done.
+    // For the test app's login, we know it's done when it redirects to
+    // dashboard.
+    return await browser.driver.wait(async () => {
+      return await browser.driver.getCurrentUrl().then((url) => {
+        return /dashboard/.test(url);
       });
     });
-  }
+  });
+};
 
 exports.config = config;
