@@ -13,7 +13,7 @@ int RGWSI_MetaBackend::pre_modify(RGWSI_MetaBackend::Context *ctx,
                                   const string& key,
                                   RGWMetadataLogData& log_data,
                                   RGWObjVersionTracker *objv_tracker,
-                                  RGWMDLogStatus op_type,
+                                  RGWMDLogOp op, RGWMDLogStatus status,
                                   optional_yield y)
 {
   /* if write version has not been set, and there's a read version, set it so that we can
@@ -31,7 +31,8 @@ int RGWSI_MetaBackend::pre_modify(RGWSI_MetaBackend::Context *ctx,
 int RGWSI_MetaBackend::post_modify(RGWSI_MetaBackend::Context *ctx,
                                    const string& key,
                                    RGWMetadataLogData& log_data,
-                                   RGWObjVersionTracker *objv_tracker, int ret,
+                                   RGWObjVersionTracker *objv_tracker,
+                                   RGWMDLogOp op, int ret,
                                    optional_yield y)
 {
   return ret;
@@ -67,7 +68,7 @@ int RGWSI_MetaBackend::do_mutate(RGWSI_MetaBackend::Context *ctx,
 				 const string& key,
 				 const ceph::real_time& mtime,
 				 RGWObjVersionTracker *objv_tracker,
-				 RGWMDLogStatus op_type,
+				 RGWMDLogOp op,
                                  optional_yield y,
 				 std::function<int()> f,
 				 bool generic_prepare)
@@ -83,7 +84,8 @@ int RGWSI_MetaBackend::do_mutate(RGWSI_MetaBackend::Context *ctx,
   }
 
   RGWMetadataLogData log_data;
-  ret = pre_modify(ctx, key, log_data, objv_tracker, op_type, y);
+  ret = pre_modify(ctx, key, log_data, objv_tracker,
+                   op, RGWMDLogStatus::Write, y);
   if (ret < 0) {
     return ret;
   }
@@ -92,7 +94,7 @@ int RGWSI_MetaBackend::do_mutate(RGWSI_MetaBackend::Context *ctx,
 
   /* cascading ret into post_modify() */
 
-  ret = post_modify(ctx, key, log_data, objv_tracker, ret, y);
+  ret = post_modify(ctx, key, log_data, objv_tracker, op, ret, y);
   if (ret < 0)
     return ret;
 
@@ -119,7 +121,7 @@ int RGWSI_MetaBackend::put(Context *ctx,
   };
 
   return do_mutate(ctx, key, params.mtime, objv_tracker,
-                RGWMDLogStatus::Write,
+                RGWMDLogOp::Write,
                 y,
                 f,
                 false);
@@ -136,7 +138,7 @@ int RGWSI_MetaBackend::remove(Context *ctx,
   };
 
   return do_mutate(ctx, key, params.mtime, objv_tracker,
-                RGWMDLogStatus::Remove,
+                RGWMDLogOp::Remove,
                 y,
                 f,
                 false);
@@ -150,7 +152,7 @@ int RGWSI_MetaBackend::mutate(Context *ctx,
 			      std::function<int()> f)
 {
   return do_mutate(ctx, key, params.mtime, objv_tracker,
-		   params.op_type, y,
+		   params.op, y,
 		   f,
 		   false);
 }

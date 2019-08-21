@@ -46,22 +46,37 @@ void LogStatusDump::dump(Formatter *f) const {
   encode_json("status", mdlog_status_string(status), f);
 }
 
+std::string_view mdlog_op_string(RGWMDLogOp op) {
+  switch (op) {
+    case RGWMDLogOp::Write: return "write";
+    case RGWMDLogOp::Remove: return "remove";
+    default: return "unknown";
+  }
+}
+
 void RGWMetadataLogData::encode(bufferlist& bl) const {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode(read_version, bl);
   encode(write_version, bl);
   uint32_t s = static_cast<uint32_t>(status);
   encode(s, bl);
+  auto o = static_cast<std::underlying_type<RGWMDLogOp>::type>(op);
+  encode(o, bl);
   ENCODE_FINISH(bl);
 }
 
 void RGWMetadataLogData::decode(bufferlist::const_iterator& bl) {
-   DECODE_START(1, bl);
+   DECODE_START(2, bl);
    decode(read_version, bl);
    decode(write_version, bl);
    uint32_t s;
    decode(s, bl);
    status = static_cast<RGWMDLogStatus>(s);
+   if (struct_v >= 2) {
+     std::underlying_type<RGWMDLogOp>::type o;
+     decode(o, bl);
+     op = static_cast<RGWMDLogOp>(o);
+   }
    DECODE_FINISH(bl);
 }
 
@@ -69,6 +84,7 @@ void RGWMetadataLogData::dump(Formatter *f) const {
   encode_json("read_version", read_version, f);
   encode_json("write_version", write_version, f);
   encode_json("status", LogStatusDump(status), f);
+  encode_json("op", mdlog_op_string(op), f);
 }
 
 void decode_json_obj(RGWMDLogStatus& status, JSONObj *obj) {
@@ -93,6 +109,15 @@ void RGWMetadataLogData::decode_json(JSONObj *obj) {
   JSONDecoder::decode_json("read_version", read_version, obj);
   JSONDecoder::decode_json("write_version", write_version, obj);
   JSONDecoder::decode_json("status", status, obj);
+  string o;
+  JSONDecoder::decode_json("op", o, obj);
+  if (o == "write") {
+    op = RGWMDLogOp::Write;
+  } else if (o == "remove") {
+    op = RGWMDLogOp::Remove;
+  } else {
+    op = RGWMDLogOp::Unknown;
+  }
 }
 
 
@@ -315,7 +340,7 @@ public:
              const ceph::real_time& mtime,
              RGWObjVersionTracker *objv_tracker,
              optional_yield y,
-             RGWMDLogStatus op_type,
+             RGWMDLogOp op,
              std::function<int()> f) {
     return -ENOTSUP;
   }
@@ -492,11 +517,11 @@ int RGWMetadataHandler_GenericMetaBE::mutate(const string& entry,
                                              const ceph::real_time& mtime,
                                              RGWObjVersionTracker *objv_tracker,
                                              optional_yield y,
-                                             RGWMDLogStatus op_type,
+                                             RGWMDLogOp log_op,
                                              std::function<int()> f)
 {
   return be_handler->call([&](RGWSI_MetaBackend_Handler::Op *op) {
-    RGWSI_MetaBackend::MutateParams params(mtime, op_type);
+    RGWSI_MetaBackend::MutateParams params(mtime, log_op);
     return op->mutate(entry,
                       params,
                       objv_tracker,
@@ -726,7 +751,7 @@ int RGWMetadataManager::mutate(const string& metadata_key,
                                const ceph::real_time& mtime,
                                RGWObjVersionTracker *objv_tracker,
 			       optional_yield y,
-                               RGWMDLogStatus op_type,
+                               RGWMDLogOp op,
                                std::function<int()> f)
 {
   RGWMetadataHandler *handler;
@@ -737,7 +762,7 @@ int RGWMetadataManager::mutate(const string& metadata_key,
     return ret;
   }
 
-  return handler->mutate(entry, mtime, objv_tracker, y, op_type, f);
+  return handler->mutate(entry, mtime, objv_tracker, y, op, f);
 }
 
 int RGWMetadataManager::get_shard_id(const string& section, const string& entry, int *shard_id)

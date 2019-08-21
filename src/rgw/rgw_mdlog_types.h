@@ -32,3 +32,9 @@ enum class RGWMDLogStatus : uint32_t {
   Complete,
   Abort,
 };
+
+enum class RGWMDLogOp : uint8_t {
+  Unknown,
+  Write,
+  Remove,
+};

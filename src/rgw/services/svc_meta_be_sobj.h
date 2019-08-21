@@ -136,12 +136,13 @@ public:
                  const string& key,
                  RGWMetadataLogData& log_data,
                  RGWObjVersionTracker *objv_tracker,
-                 RGWMDLogStatus op_type,
+                 RGWMDLogOp op, RGWMDLogStatus status,
                  optional_yield y);
   int post_modify(RGWSI_MetaBackend::Context *ctx,
                   const string& key,
                   RGWMetadataLogData& log_data,
-                  RGWObjVersionTracker *objv_tracker, int ret,
+                  RGWObjVersionTracker *objv_tracker,
+                  RGWMDLogOp op, int ret,
                   optional_yield y);
 
   int get_entry(RGWSI_MetaBackend::Context *ctx,

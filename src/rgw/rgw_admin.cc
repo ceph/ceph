@@ -7831,7 +7831,7 @@ next:
     int ret = store->ctl()->meta.mgr->mutate(RGWSI_MetaBackend_OTP::get_meta_key(user_id),
 					     mtime, &objv_tracker,
 					     null_yield,
-					     RGWMDLogStatus::Write,
+					     RGWMDLogOp::Write,
 					     [&] {
       return store->svc()->cls->mfa.create_mfa(user_id, config, &objv_tracker, mtime, null_yield);
     });
@@ -7867,7 +7867,7 @@ next:
     int ret = store->ctl()->meta.mgr->mutate(RGWSI_MetaBackend_OTP::get_meta_key(user_id),
 					     mtime, &objv_tracker,
 					     null_yield,
-					     RGWMDLogStatus::Write,
+					     RGWMDLogOp::Write,
 					     [&] {
       return store->svc()->cls->mfa.remove_mfa(user_id, totp_serial, &objv_tracker, mtime, null_yield);
     });
@@ -8011,7 +8011,7 @@ next:
     ret = store->ctl()->meta.mgr->mutate(RGWSI_MetaBackend_OTP::get_meta_key(user_id),
 				         mtime, &objv_tracker,
 				         null_yield,
-				         RGWMDLogStatus::Write,
+				         RGWMDLogOp::Write,
 				         [&] {
       return store->svc()->cls->mfa.create_mfa(user_id, config, &objv_tracker, mtime, null_yield);
     });

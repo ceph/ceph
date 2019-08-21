@@ -147,6 +147,7 @@ struct RGWMetadataLogData {
   obj_version read_version;
   obj_version write_version;
   RGWMDLogStatus status = RGWMDLogStatus::Unknown;
+  RGWMDLogOp op = RGWMDLogOp::Unknown;
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& bl);

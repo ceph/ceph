@@ -51,7 +51,7 @@ protected:
   virtual int do_mutate(Context *ctx,
                      const std::string& key,
                      const ceph::real_time& mtime, RGWObjVersionTracker *objv_tracker,
-                     RGWMDLogStatus op_type,
+                     RGWMDLogOp op,
                      optional_yield y,
                      std::function<int()> f,
                      bool generic_prepare);
@@ -60,12 +60,13 @@ protected:
                          const std::string& key,
                          RGWMetadataLogData& log_data,
                          RGWObjVersionTracker *objv_tracker,
-                         RGWMDLogStatus op_type,
+                         RGWMDLogOp op, RGWMDLogStatus status,
                          optional_yield y);
   virtual int post_modify(Context *ctx,
                           const std::string& key,
                           RGWMetadataLogData& log_data,
-                          RGWObjVersionTracker *objv_tracker, int ret,
+                          RGWObjVersionTracker *objv_tracker,
+                          RGWMDLogOp op, int ret,
                           optional_yield y);
 public:
   class Module {
@@ -110,11 +111,11 @@ public:
 
   struct MutateParams {
     ceph::real_time mtime;
-    RGWMDLogStatus op_type;
+    RGWMDLogOp op;
 
     MutateParams() {}
     MutateParams(const ceph::real_time& _mtime,
-		 RGWMDLogStatus _op_type) : mtime(_mtime), op_type(_op_type) {}
+		 RGWMDLogOp _op) : mtime(_mtime), op(_op) {}
   };
 
   enum Type {

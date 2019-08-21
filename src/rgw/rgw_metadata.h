@@ -77,7 +77,7 @@ public:
 		     const ceph::real_time& mtime,
 		     RGWObjVersionTracker *objv_tracker,
                      optional_yield y,
-		     RGWMDLogStatus op_type,
+		     RGWMDLogOp op,
 		     std::function<int()> f) = 0;
 
   virtual int list_keys_init(const string& marker, void **phandle) = 0;
@@ -166,7 +166,7 @@ public:
 	     const ceph::real_time& mtime,
 	     RGWObjVersionTracker *objv_tracker,
              optional_yield y,
-	     RGWMDLogStatus op_type,
+	     RGWMDLogOp op,
 	     std::function<int()> f) override;
 
   int get_shard_id(const string& entry, int *shard_id) override;
@@ -237,7 +237,7 @@ public:
 	     const ceph::real_time& mtime,
 	     RGWObjVersionTracker *objv_tracker,
              optional_yield y,
-	     RGWMDLogStatus op_type,
+	     RGWMDLogOp op,
 	     std::function<int()> f);
 
   int list_keys_init(const string& section, void **phandle);
