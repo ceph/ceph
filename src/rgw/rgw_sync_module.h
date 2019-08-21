@@ -9,6 +9,7 @@
 
 class RGWBucketInfo;
 class RGWRemoteDataLog;
+struct RGWDataSyncCtx;
 struct RGWDataSyncEnv;
 struct rgw_bucket_entry_owner;
 struct rgw_obj_key;
@@ -20,19 +21,19 @@ public:
   RGWDataSyncModule() {}
   virtual ~RGWDataSyncModule() {}
 
-  virtual void init(RGWDataSyncEnv *sync_env, uint64_t instance_id) {}
+  virtual void init(RGWDataSyncCtx *sync_env, uint64_t instance_id) {}
 
-  virtual RGWCoroutine *init_sync(RGWDataSyncEnv *sync_env) {
+  virtual RGWCoroutine *init_sync(RGWDataSyncCtx *sc) {
     return nullptr;
   }
 
-  virtual RGWCoroutine *start_sync(RGWDataSyncEnv *sync_env) {
+  virtual RGWCoroutine *start_sync(RGWDataSyncCtx *sc) {
     return nullptr;
   }
-  virtual RGWCoroutine *sync_object(RGWDataSyncEnv *sync_env, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) = 0;
-  virtual RGWCoroutine *remove_object(RGWDataSyncEnv *sync_env, rgw_bucket_sync_pipe& bucket_info, rgw_obj_key& key, real_time& mtime,
+  virtual RGWCoroutine *sync_object(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) = 0;
+  virtual RGWCoroutine *remove_object(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& bucket_info, rgw_obj_key& key, real_time& mtime,
                                       bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) = 0;
-  virtual RGWCoroutine *create_delete_marker(RGWDataSyncEnv *sync_env, rgw_bucket_sync_pipe& bucket_info, rgw_obj_key& key, real_time& mtime,
+  virtual RGWCoroutine *create_delete_marker(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& bucket_info, rgw_obj_key& key, real_time& mtime,
                                              rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) = 0;
 };
 
@@ -139,6 +140,7 @@ public:
 
 class RGWStatRemoteObjCBCR : public RGWCoroutine {
 protected:
+  RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
 
   rgw_bucket src_bucket;
@@ -150,7 +152,7 @@ protected:
   map<string, bufferlist> attrs;
   map<string, string> headers;
 public:
-  RGWStatRemoteObjCBCR(RGWDataSyncEnv *_sync_env,
+  RGWStatRemoteObjCBCR(RGWDataSyncCtx *_sc,
                        rgw_bucket& _src_bucket, rgw_obj_key& _key);
   ~RGWStatRemoteObjCBCR() override {}
 
@@ -175,13 +177,14 @@ class RGWCallStatRemoteObjCR : public RGWCoroutine {
   map<string, string> headers;
 
 protected:
+  RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
 
   rgw_bucket src_bucket;
   rgw_obj_key key;
 
 public:
-  RGWCallStatRemoteObjCR(RGWDataSyncEnv *_sync_env,
+  RGWCallStatRemoteObjCR(RGWDataSyncCtx *_sc,
                      rgw_bucket& _src_bucket, rgw_obj_key& _key);
 
   ~RGWCallStatRemoteObjCR() override {}
