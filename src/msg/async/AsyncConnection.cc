@@ -2154,6 +2154,7 @@ void AsyncConnection::fault()
 
   write_lock.unlock();
   if (!(state >= STATE_CONNECTING && state < STATE_CONNECTING_READY) &&
+      !(state >= STATE_ACCEPTING && state < STATE_ACCEPTING_READY) &&
       state != STATE_WAIT) { // STATE_WAIT is coming from STATE_CONNECTING_*
     // policy maybe empty when state is in accept
     if (policy.server) {
