@@ -26,6 +26,8 @@
 #include "include/ceph_assert.h"
 #include "include/stringify.h"
 
+#include "mon/commands/monmapmon_cmds.h"
+
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon)
@@ -252,7 +254,6 @@ void MonmapMonitor::dump_info(Formatter *f)
 bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
 {
   auto m = op->get_req<MMonCommand>();
-  int r = -1;
   bufferlist rdata;
   stringstream ss;
 
@@ -272,155 +273,22 @@ bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
     return true;
   }
 
-  string format;
-  cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
-  boost::scoped_ptr<Formatter> f(Formatter::create(format));
+  list<MonMonReadCommandRef> read_cmds = {
+    MonMonReadCommandRef(new MonMonGetMap(mon, this, g_ceph_context)),
+    MonMonReadCommandRef(new MonMonStatCommand(mon, this, g_ceph_context)),
+    MonMonReadCommandRef(new MonMonFeatureLs(mon, this, g_ceph_context))
+  };
 
-  if (prefix == "mon stat") {
-    mon->monmap->print_summary(ss);
-    ss << ", election epoch " << mon->get_epoch() << ", leader "
-       << mon->get_leader() << " " << mon->get_leader_name()
-       << ", quorum " << mon->get_quorum() << " " << mon->get_quorum_names();
-    rdata.append(ss);
-    ss.str("");
-    r = 0;
-
-  } else if (prefix == "mon getmap" ||
-             prefix == "mon dump") {
-
-    epoch_t epoch;
-    int64_t epochnum;
-    cmd_getval(g_ceph_context, cmdmap, "epoch", epochnum, (int64_t)0);
-    epoch = epochnum;
-
-    MonMap *p = mon->monmap;
-    if (epoch) {
-      bufferlist bl;
-      r = get_version(epoch, bl);
-      if (r == -ENOENT) {
-        ss << "there is no map for epoch " << epoch;
-        goto reply;
-      }
-      ceph_assert(r == 0);
-      ceph_assert(bl.length() > 0);
-      p = new MonMap;
-      p->decode(bl);
+  for (auto& cmd: read_cmds) {
+    if (cmd->handles_command(prefix)) {
+      dout(10) << __func__ << " handling prefix '" << prefix << "'" << dendl;
+      bool ret = cmd->preprocess(op, cmdmap, *(mon->monmap));
+      ceph_assert(ret == true);
+      return true;
     }
-
-    ceph_assert(p);
-
-    if (prefix == "mon getmap") {
-      p->encode(rdata, m->get_connection()->get_features());
-      r = 0;
-      ss << "got monmap epoch " << p->get_epoch();
-    } else if (prefix == "mon dump") {
-      stringstream ds;
-      if (f) {
-        f->open_object_section("monmap");
-        p->dump(f.get());
-        f->open_array_section("quorum");
-        for (set<int>::iterator q = mon->get_quorum().begin();
-            q != mon->get_quorum().end(); ++q) {
-          f->dump_int("mon", *q);
-        }
-        f->close_section();
-        f->close_section();
-        f->flush(ds);
-        r = 0;
-      } else {
-        p->print(ds);
-        r = 0;
-      }
-      rdata.append(ds);
-      ss << "dumped monmap epoch " << p->get_epoch();
-    }
-    if (p != mon->monmap) {
-       delete p;
-       p = nullptr;
-    }
-
-  } else if (prefix == "mon feature ls") {
-   
-    bool list_with_value = false;
-    string with_value;
-    if (cmd_getval(g_ceph_context, cmdmap, "with_value", with_value) &&
-        with_value == "--with-value") {
-      list_with_value = true;
-    }
-
-    MonMap *p = mon->monmap;
-
-    // list features
-    mon_feature_t supported = ceph::features::mon::get_supported();
-    mon_feature_t persistent = ceph::features::mon::get_persistent();
-    mon_feature_t required = p->get_required_features();
-
-    stringstream ds;
-    auto print_feature = [&](mon_feature_t& m_features, const char* m_str) {
-      if (f) {
-        if (list_with_value)
-          m_features.dump_with_value(f.get(), m_str);
-        else
-          m_features.dump(f.get(), m_str);
-      } else {
-        if (list_with_value)
-          m_features.print_with_value(ds);
-        else
-          m_features.print(ds);
-      }
-    };
-
-    if (f) {
-      f->open_object_section("features");
-
-      f->open_object_section("all");
-      print_feature(supported, "supported");
-      print_feature(persistent, "persistent");
-      f->close_section(); // all
-
-      f->open_object_section("monmap");
-      print_feature(p->persistent_features, "persistent");
-      print_feature(p->optional_features, "optional");
-      print_feature(required, "required");
-      f->close_section(); // monmap 
-
-      f->close_section(); // features
-      f->flush(ds);
-
-    } else {
-      ds << "all features" << std::endl
-        << "\tsupported: ";
-      print_feature(supported, nullptr);
-      ds << std::endl
-        << "\tpersistent: ";
-      print_feature(persistent, nullptr);
-      ds << std::endl
-        << std::endl;
-
-      ds << "on current monmap (epoch "
-         << p->get_epoch() << ")" << std::endl
-         << "\tpersistent: ";
-      print_feature(p->persistent_features, nullptr);
-      ds << std::endl
-        // omit optional features in plain-text
-        // makes it easier to read, and they're, currently, empty.
-	 << "\trequired: ";
-      print_feature(required, nullptr);
-      ds << std::endl;
-    }
-    rdata.append(ds);
-    r = 0;
   }
 
-reply:
-  if (r != -1) {
-    string rs;
-    getline(ss, rs);
-
-    mon->reply_command(op, r, rs, rdata, get_last_committed());
-    return true;
-  } else
-    return false;
+  return false;
 }
 
 
