@@ -338,6 +338,7 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
     return true;
   }
 
+
   /* We should follow the following rules:
    *
    * - 'monmap' is the current, consistent version of the monmap
@@ -366,343 +367,30 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
    * state, thus we are not bound by it.
    */
 
-  ceph_assert(mon->monmap);
-  MonMap &monmap = *mon->monmap;
+  list<MonMonWriteCommandRef> write_cmds = {
+    MonMonWriteCommandRef(new MonMonAdd(mon, this, g_ceph_context)),
+    MonMonWriteCommandRef(new MonMonRemove(mon, this, g_ceph_context)),
+    MonMonWriteCommandRef(new MonMonFeatureSet(mon, this, g_ceph_context)),
+    MonMonWriteCommandRef(new MonMonSetRank(mon, this, g_ceph_context)),
+    MonMonWriteCommandRef(new MonMonSetAddrs(mon, this, g_ceph_context)),
+    MonMonWriteCommandRef(new MonMonSetWeight(mon, this, g_ceph_context)),
+    MonMonWriteCommandRef(new MonMonEnableMsgr2(mon, this, g_ceph_context))
+  };
 
-
-  /* Please note:
-   *
-   * Adding or removing monitors may lead to loss of quorum.
-   *
-   * Because quorum may be lost, it's important to reply something
-   * to the user, lest she end up waiting forever for a reply. And
-   * no reply will ever be sent until quorum is formed again.
-   *
-   * On the other hand, this means we're leaking uncommitted state
-   * to the user. As such, please be mindful of the reply message.
-   *
-   * e.g., 'adding monitor mon.foo' is okay ('adding' is an on-going
-   * operation and conveys its not-yet-permanent nature); whereas
-   * 'added monitor mon.foo' presumes the action has successfully
-   * completed and state has been committed, which may not be true.
-   */
-
-
-  bool propose = false;
-  if (prefix == "mon add") {
-    string name;
-    cmd_getval(g_ceph_context, cmdmap, "name", name);
-    string addrstr;
-    cmd_getval(g_ceph_context, cmdmap, "addr", addrstr);
-    entity_addr_t addr;
-    bufferlist rdata;
-
-    if (!addr.parse(addrstr.c_str())) {
-      err = -EINVAL;
-      ss << "addr " << addrstr << "does not parse";
-      goto reply;
+  for (auto& cmd: write_cmds) {
+    if (!cmd->handles_command(prefix)) {
+      continue;
     }
-
-    entity_addrvec_t addrs;
-    if (monmap.persistent_features.contains_all(
-	  ceph::features::mon::FEATURE_NAUTILUS)) {
-      if (addr.get_port() == CEPH_MON_PORT_IANA) {
-	addr.set_type(entity_addr_t::TYPE_MSGR2);
-      }
-      if (addr.get_port() == CEPH_MON_PORT_LEGACY) {
-	// if they specified the *old* default they probably don't care
-	addr.set_port(0);
-      }
-      if (addr.get_port()) {
-	addrs.v.push_back(addr);
-      } else {
-	addr.set_type(entity_addr_t::TYPE_MSGR2);
-	addr.set_port(CEPH_MON_PORT_IANA);
-	addrs.v.push_back(addr);
-	addr.set_type(entity_addr_t::TYPE_LEGACY);
-	addr.set_port(CEPH_MON_PORT_LEGACY);
-	addrs.v.push_back(addr);
-      }
-    } else {
-      if (addr.get_port() == 0) {
-	addr.set_port(CEPH_MON_PORT_LEGACY);
-      }
-      addr.set_type(entity_addr_t::TYPE_LEGACY);
-      addrs.v.push_back(addr);
-    }
-    dout(20) << __func__ << " addr " << addr << " -> addrs " << addrs << dendl;
-
-    /**
-     * If we have a monitor with the same name and different addr, then EEXIST
-     * If we have a monitor with the same addr and different name, then EEXIST
-     * If we have a monitor with the same addr and same name, then wait for
-     * the proposal to finish and return success.
-     * If we don't have the monitor, add it.
-     */
-
-    err = 0;
-    if (!ss.str().empty())
-      ss << "; ";
-
-    do {
-      if (monmap.contains(name)) {
-        if (monmap.get_addrs(name) == addrs) {
-          // stable map contains monitor with the same name at the same address.
-          // serialize before current pending map.
-          err = 0; // for clarity; this has already been set above.
-          ss << "mon." << name << " at " << addrs << " already exists";
-          goto reply;
-        } else {
-          ss << "mon." << name
-             << " already exists at address " << monmap.get_addrs(name);
-        }
-      } else if (monmap.contains(addrs)) {
-        // we established on the previous branch that name is different
-        ss << "mon." << monmap.get_name(addrs)
-           << " already exists at address " << addr;
-      } else {
-        // go ahead and add
-        break;
-      }
-      err = -EEXIST;
-      goto reply;
-    } while (false);
-
-    /* Given there's no delay between proposals on the MonmapMonitor (see
-     * MonmapMonitor::should_propose()), there is no point in checking for
-     * a mismatch between name and addr on pending_map.
-     *
-     * Once we established the monitor does not exist in the committed state,
-     * we can simply go ahead and add the monitor.
-     */
-
-    pending_map.add(name, addrs);
-    pending_map.last_changed = ceph_clock_now();
-    ss << "adding mon." << name << " at " << addrs;
-    propose = true;
-    dout(0) << __func__ << " proposing new mon." << name << dendl;
-
-  } else if (prefix == "mon remove" ||
-             prefix == "mon rm") {
-    string name;
-    cmd_getval(g_ceph_context, cmdmap, "name", name);
-    if (!monmap.contains(name)) {
-      err = 0;
-      ss << "mon." << name << " does not exist or has already been removed";
-      goto reply;
-    }
-
-    if (monmap.size() == 1) {
-      err = -EINVAL;
-      ss << "error: refusing removal of last monitor " << name;
-      goto reply;
-    }
-
-    /* At the time of writing, there is no risk of races when multiple clients
-     * attempt to use the same name. The reason is simple but may not be
-     * obvious.
-     *
-     * In a nutshell, we do not collate proposals on the MonmapMonitor. As
-     * soon as we return 'true' below, PaxosService::dispatch() will check if
-     * the service should propose, and - if so - the service will be marked as
-     * 'proposing' and a proposal will be triggered. The PaxosService class
-     * guarantees that once a service is marked 'proposing' no further writes
-     * will be handled.
-     *
-     * The decision on whether the service should propose or not is, in this
-     * case, made by MonmapMonitor::should_propose(), which always considers
-     * the proposal delay being 0.0 seconds. This is key for PaxosService to
-     * trigger the proposal immediately.
-     * 0.0 seconds of delay.
-     *
-     * From the above, there's no point in performing further checks on the
-     * pending_map, as we don't ever have multiple proposals in-flight in
-     * this service. As we've established the committed state contains the
-     * monitor, we can simply go ahead and remove it.
-     *
-     * Please note that the code hinges on all of the above to be true. It
-     * has been true since time immemorial and we don't see a good reason
-     * to make it sturdier at this time - mainly because we don't think it's
-     * going to change any time soon, lest for any bug that may be unwillingly
-     * introduced.
-     */
-
-    entity_addrvec_t addrs = pending_map.get_addrs(name);
-    pending_map.remove(name);
-    pending_map.last_changed = ceph_clock_now();
-    ss << "removing mon." << name << " at " << addrs
-       << ", there will be " << pending_map.size() << " monitors" ;
-    propose = true;
-    err = 0;
-
-  } else if (prefix == "mon feature set") {
-
-    /* PLEASE NOTE:
-     *
-     * We currently only support setting/unsetting persistent features.
-     * This is by design, given at the moment we still don't have optional
-     * features, and, as such, there is no point introducing an interface
-     * to manipulate them. This allows us to provide a cleaner, more
-     * intuitive interface to the user, modifying solely persistent
-     * features.
-     *
-     * In the future we should consider adding another interface to handle
-     * optional features/flags; e.g., 'mon feature flag set/unset', or
-     * 'mon flag set/unset'.
-     */
-    string feature_name;
-    if (!cmd_getval(g_ceph_context, cmdmap, "feature_name", feature_name)) {
-      ss << "missing required feature name";
-      err = -EINVAL;
-      goto reply;
-    }
-
-    mon_feature_t feature;
-    feature = ceph::features::mon::get_feature_by_name(feature_name);
-    if (feature == ceph::features::mon::FEATURE_NONE) {
-      ss << "unknown feature '" << feature_name << "'";
-      err = -ENOENT;
-      goto reply;
-    }
-
-    bool sure = false;
-    cmd_getval(g_ceph_context, cmdmap, "yes_i_really_mean_it", sure);
-    if (!sure) {
-      ss << "please specify '--yes-i-really-mean-it' if you "
-         << "really, **really** want to set feature '"
-         << feature << "' in the monmap.";
-      err = -EPERM;
-      goto reply;
-    }
-
-    if (!mon->get_quorum_mon_features().contains_all(feature)) {
-      ss << "current quorum does not support feature '" << feature
-         << "'; supported features: "
-         << mon->get_quorum_mon_features();
-      err = -EINVAL;
-      goto reply;
-    }
-
-    ss << "setting feature '" << feature << "'";
-
-    err = 0;
-    if (monmap.persistent_features.contains_all(feature)) {
-      dout(10) << __func__ << " feature '" << feature
-               << "' already set on monmap; no-op." << dendl;
-      goto reply;
-    }
-
-    pending_map.persistent_features.set_feature(feature);
-    pending_map.last_changed = ceph_clock_now();
-    propose = true;
-
-    dout(1) << __func__ << " " << ss.str() << "; new features will be: "
-            << "persistent = " << pending_map.persistent_features
-            // output optional nevertheless, for auditing purposes.
-            << ", optional = " << pending_map.optional_features << dendl;
-
-  } else if (prefix == "mon set-rank") {
-    string name;
-    int64_t rank;
-    if (!cmd_getval(g_ceph_context, cmdmap, "name", name) ||
-	!cmd_getval(g_ceph_context, cmdmap, "rank", rank)) {
-      err = -EINVAL;
-      goto reply;
-    }
-    int oldrank = pending_map.get_rank(name);
-    if (oldrank < 0) {
-      ss << "mon." << name << " does not exist in monmap";
-      err = -ENOENT;
-      goto reply;
-    }
-    err = 0;
-    pending_map.set_rank(name, rank);
-    pending_map.last_changed = ceph_clock_now();
-    propose = true;
-  } else if (prefix == "mon set-addrs") {
-    string name;
-    string addrs;
-    if (!cmd_getval(g_ceph_context, cmdmap, "name", name) ||
-	!cmd_getval(g_ceph_context, cmdmap, "addrs", addrs)) {
-      err = -EINVAL;
-      goto reply;
-    }
-    if (!pending_map.contains(name)) {
-      ss << "mon." << name << " does not exist";
-      err = -ENOENT;
-      goto reply;
-    }
-    entity_addrvec_t av;
-    if (!av.parse(addrs.c_str(), nullptr)) {
-      ss << "failed to parse addrs '" << addrs << "'";
-      err = -EINVAL;
-      goto reply;
-    }
-    for (auto& a : av.v) {
-      a.set_nonce(0);
-      if (!a.get_port()) {
-	ss << "monitor must bind to a non-zero port, not " << a;
-	err = -EINVAL;
-	goto reply;
-      }
-    }
-    err = 0;
-    pending_map.set_addrvec(name, av);
-    pending_map.last_changed = ceph_clock_now();
-    propose = true;
-  } else if (prefix == "mon set-weight") {
-    string name;
-    int64_t weight;
-    if (!cmd_getval(g_ceph_context, cmdmap, "name", name) ||
-        !cmd_getval(g_ceph_context, cmdmap, "weight", weight)) {
-      err = -EINVAL;
-      goto reply;
-    }
-    if (!pending_map.contains(name)) {
-      ss << "mon." << name << " does not exist";
-      err = -ENOENT;
-      goto reply;
-    }
-    err = 0;
-    pending_map.set_weight(name, weight);
-    pending_map.last_changed = ceph_clock_now();
-    propose = true;
-  } else if (prefix == "mon enable-msgr2") {
-    if (!monmap.get_required_features().contains_all(
-	  ceph::features::mon::FEATURE_NAUTILUS)) {
-      err = -EACCES;
-      ss << "all monitors must be running nautilus to enable v2";
-      goto reply;
-    }
-    for (auto& i : pending_map.mon_info) {
-      if (i.second.public_addrs.v.size() == 1 &&
-	  i.second.public_addrs.front().is_legacy() &&
-	  i.second.public_addrs.front().get_port() == CEPH_MON_PORT_LEGACY) {
-	entity_addrvec_t av;
-	entity_addr_t a = i.second.public_addrs.front();
-	a.set_type(entity_addr_t::TYPE_MSGR2);
-	a.set_port(CEPH_MON_PORT_IANA);
-	av.v.push_back(a);
-	av.v.push_back(i.second.public_addrs.front());
-	dout(10) << " setting mon." << i.first
-		 << " addrs " << i.second.public_addrs
-		 << " -> " << av << dendl;
-	pending_map.set_addrvec(i.first, av);
-	propose = true;
-	pending_map.last_changed = ceph_clock_now();
-      }
-    }
-    err = 0;
-  } else {
-    ss << "unknown command " << prefix;
-    err = -EINVAL;
+    dout(10) << __func__ << " handling prefix '" << prefix << "'" << dendl;
+    bool ret = cmd->prepare(op, cmdmap, pending_map, *(mon->monmap));
+    return ret;
   }
 
-reply:
+  dout(10) << __func__ << " unknown command '" << prefix << "'" << dendl;
+  ss << "unknown command '" << prefix << "'";
   getline(ss, rs);
-  mon->reply_command(op, err, rs, get_last_committed());
-  // we are returning to the user; do not propose.
-  return propose;
+  mon->reply_command(op, -EINVAL, rs, get_last_committed());
+  return false;
 }
 
 bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
@@ -831,3 +519,4 @@ void MonmapMonitor::tick()
     propose_pending();
   }
 }
+
