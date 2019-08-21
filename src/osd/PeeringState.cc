@@ -1192,6 +1192,18 @@ void PeeringState::reject_reservation()
     get_osdmap_epoch());
 }
 
+void PeeringState::reject_toofull_reservation()
+{
+  pl->unreserve_recovery_space();
+  pl->send_cluster_message(
+    primary.osd,
+    new MBackfillReserve(
+      MBackfillReserve::REJECT_TOOFULL,
+      spg_t(info.pgid.pgid, primary.shard),
+      get_osdmap_epoch()),
+    get_osdmap_epoch());
+}
+
 /**
  * find_best_info
  *
@@ -4553,7 +4565,6 @@ void PeeringState::WaitRemoteBackfillReserved::retry()
   }
 
   ps->state_clear(PG_STATE_BACKFILL_WAIT);
-  ps->state_set(PG_STATE_BACKFILL_TOOFULL);
   pl->publish_stats_to_osd();
 
   pl->schedule_event_after(
@@ -4562,6 +4573,15 @@ void PeeringState::WaitRemoteBackfillReserved::retry()
       ps->get_osdmap_epoch(),
       RequestBackfill()),
     ps->cct->_conf->osd_backfill_retry_interval);
+}
+
+boost::statechart::result
+PeeringState::WaitRemoteBackfillReserved::react(const RemoteReservationRejectedTooFull &evt)
+{
+  DECLARE_LOCALS
+  ps->state_set(PG_STATE_BACKFILL_TOOFULL);
+  retry();
+  return transit<NotBackfilling>();
 }
 
 boost::statechart::result
@@ -4631,6 +4651,12 @@ PeeringState::NotBackfilling::react(const RemoteReservationRejected &evt)
   return discard_event();
 }
 
+boost::statechart::result
+PeeringState::NotBackfilling::react(const RemoteReservationRejectedTooFull &evt)
+{
+  return discard_event();
+}
+
 void PeeringState::NotBackfilling::exit()
 {
   context< PeeringMachine >().log_exit(state_name, enter_time);
@@ -4674,6 +4700,16 @@ PeeringState::RepNotRecovering::react(const RejectRemoteReservation &evt)
 {
   DECLARE_LOCALS;
   ps->reject_reservation();
+  post_event(RemoteReservationRejected());
+  return discard_event();
+}
+
+// XXX: Does this only happen if this reject races with primary release?
+boost::statechart::result
+PeeringState::RepNotRecovering::react(const RejectTooFullRemoteReservation &evt)
+{
+  DECLARE_LOCALS
+  ps->reject_toofull_reservation();
   post_event(RemoteReservationRejected());
   return discard_event();
 }
@@ -4743,7 +4779,7 @@ PeeringState::RepNotRecovering::react(const RequestBackfillPrio &evt)
 
   if (!pl->try_reserve_recovery_space(
 	evt.primary_num_bytes, evt.local_num_bytes)) {
-    post_event(RejectRemoteReservation());
+    post_event(RejectTooFullRemoteReservation());
   } else {
     PGPeeringEventRef preempt;
     if (HAVE_FEATURE(ps->upacting_features, RECOVERY_RESERVATION_2)) {
@@ -4822,6 +4858,16 @@ PeeringState::RepWaitBackfillReserved::react(
 {
   DECLARE_LOCALS;
   ps->reject_reservation();
+  post_event(RemoteReservationRejected());
+  return discard_event();
+}
+
+boost::statechart::result
+PeeringState::RepWaitBackfillReserved::react(
+  const RejectTooFullRemoteReservation &evt)
+{
+  DECLARE_LOCALS
+  ps->reject_toofull_reservation();
   post_event(RemoteReservationRejected());
   return discard_event();
 }

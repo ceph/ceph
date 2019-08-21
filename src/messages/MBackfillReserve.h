@@ -21,7 +21,7 @@
 
 class MBackfillReserve : public MOSDPeeringOp {
 private:
-  static constexpr int HEAD_VERSION = 5;
+  static constexpr int HEAD_VERSION = 6;
   static constexpr int COMPAT_VERSION = 4;
 public:
   spg_t pgid;
@@ -33,6 +33,7 @@ public:
     RELEASE = 3,   // primary->replcia: release the slot i reserved before
     REVOKE_TOOFULL = 4,   // replica->primary: too full, stop backfilling
     REVOKE = 5,    // replica->primary: i'm taking back the slot i gave you
+    REJECT_TOOFULL = 6,    // replica->primary: too full, sorry, try again later
     // (*) NOTE: prior to luminous, REJECT was overloaded to also mean release
   };
   uint32_t type;
@@ -87,6 +88,11 @@ public:
 	query_epoch,
 	query_epoch,
 	RemoteReservationRevoked());
+    case REJECT_TOOFULL:
+      return new PGPeeringEvent(
+	query_epoch,
+	query_epoch,
+	RemoteReservationRejectedTooFull());
     default:
       ceph_abort();
     }
@@ -130,6 +136,9 @@ public:
     case REVOKE:
       out << "REVOKE";
       break;
+    case REJECT_TOOFULL:
+      out << "REJECT_TOOFULL";
+      break;
     }
     if (type == REQUEST) out << " prio: " << priority;
     return;
@@ -158,8 +167,18 @@ public:
       header.compat_version = 3;
       encode(pgid.pgid, payload);
       encode(query_epoch, payload);
-      encode((type == RELEASE || type == REVOKE_TOOFULL || type == REVOKE) ?
-	       REJECT : type, payload);
+      encode((type == RELEASE || type == REVOKE_TOOFULL || type == REVOKE
+	     || type == REJECT_TOOFULL) ?  REJECT : type, payload);
+      encode(priority, payload);
+      encode(pgid.shard, payload);
+      return;
+    }
+    if (!HAVE_FEATURE(features, BACKFILL_RESERVATION_2)) {
+      header.version = 5;
+      header.compat_version = 4; // Is this right?
+      encode(pgid.pgid, payload);
+      encode(query_epoch, payload);
+      encode((type == REJECT_TOOFULL) ?  REJECT : type, payload);
       encode(priority, payload);
       encode(pgid.shard, payload);
       return;
