@@ -87,6 +87,42 @@ public:
   virtual ~C_Locker_RstatFlush() {}
 };
 
+class C_Locker_RespondToRequest: public LockerContext {
+  MDRequestRef mdr;
+public:
+  C_Locker_RespondToRequest(Locker* l, const MDRequestRef& m)
+    : LockerContext(l), mdr(m) {}
+  
+  void finish(int r) override {
+    if (mdr->in[0]->state_test(CInode::STATE_RSTATFLUSH)) {
+      mdr->in[0]->put(CInode::PIN_RSTATFLUSH);
+      mdr->in[0]->state_clear(CInode::STATE_RSTATFLUSH);
+    }
+    
+    auto replica_map = mdr->in[0]->get_replicas();
+    for (auto& p : replica_map) {
+      auto req = make_message<MMDSRstatFlush>(mdr->reqid,
+	  MMDSRstatFlush::OP_RSTATFLUSH_FINISH,
+	  mdr->get_op_stamp(),
+	  filepath(mdr->in[0]->ino()));
+      get_mds()->send_message_mds(req, p.first);
+    }
+
+    auto dirfrags = locker->mdcache->rstatflush_finished_dirs[mdr->reqid];
+    for (auto df : dirfrags) {
+      CInode* in = locker->mdcache->get_inode(df.ino);
+      if (in)
+	in->rstatflushed_dirs.erase(mdr->reqid);
+    }
+    locker->mdcache->rstatflush_finished_dirs.erase(mdr->reqid);
+    locker->mdcache->local_rstatflushes[mdr->in[0]].erase(mdr->reqid);
+    if (!locker->mdcache->local_rstatflushes[mdr->in[0]].size())
+      locker->mdcache->local_rstatflushes.erase(mdr->in[0]);
+    
+    get_mds()->server->respond_to_request(mdr, r);
+  }
+};
+
 Locker::Locker(MDSRank *m, MDCache *c) :
   need_snapflush_inodes(member_offset(CInode, item_caps)), mds(m), mdcache(c) {}
 
@@ -5128,7 +5164,7 @@ void Locker::scatter_tick()
 
 // This method may be called by scatter_tick or a client/slave request.
 // When called by a client/slave request, mdr wouldn't be empty.
-bool Locker::nudge_updated_scatterlocks(const MDRequestRef& mdr)
+bool Locker::nudge_updated_scatterlocks(const MDRequestRef& mdr, bool final_run)
 {
   dout(10) << __func__ << " rstat flush: " 
     << (mdr ? mdr->reqid : metareqid_t()) << dendl;
@@ -5196,7 +5232,21 @@ bool Locker::nudge_updated_scatterlocks(const MDRequestRef& mdr)
   if (mdr && !nudged) {
     dout(20) << __func__ << " " << mdr->reqid
       << " rstat flush finished!" << dendl;
-    return true;
+
+    // If the inode is projected and we reply clients a success ack,
+    // there exists chances that later getattrs, who comes before
+    // the projected inode poped and retrieves the non-projected
+    // inode attrs, get an out-dated rstat.
+    //
+    // So we wait until the current projected_inode is poped to ack
+    // the clients.
+    if (final_run && mdr->client_request
+	&& mdr->in[0]->is_projected() && !mdr->already_replied) {
+      mds->mdlog->flush();
+      mds->mdlog->wait_for_safe(new C_Locker_RespondToRequest(this, mdr));
+      mdr->already_replied = true;
+    } else
+      return true;
   }
   return false;
 }

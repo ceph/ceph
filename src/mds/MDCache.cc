@@ -10935,6 +10935,7 @@ void MDCache::decode_replica_inode(CInode *&in, bufferlist::const_iterator& p, C
       mdr->in[0] = in;
     
       if (!in->state_test(CInode::STATE_RSTATFLUSH)) {
+	in->get(CInode::PIN_RSTATFLUSH);
 	in->state_set(CInode::STATE_RSTATFLUSH);
 	local_rstatflushes[in].insert(mdr->reqid);
       }
@@ -13446,7 +13447,7 @@ void MDCache::propagate_rstats(MDRequestRef& mdr) {
   if (should_wait < 0)
     return;
 
-  if (mds->locker->nudge_updated_scatterlocks(mdr)) {
+  if (mds->locker->nudge_updated_scatterlocks(mdr, !should_wait)) {
     map<mds_rank_t, map<inodeno_t, pair<filepath, vector<frag_t>>>> completed;
     calc_rstat_flushed_auth_subtrees(mdr, std::move(need_to_nudge), completed);
     for (auto& p : completed) {
@@ -13693,6 +13694,7 @@ void MDCache::handle_subtree_rstat_flush(const cref_t<MMDSRstatFlush> mrf)
 	return;
       }
       if (!mdr->in[0]->state_test(CInode::STATE_RSTATFLUSH)) {
+	mdr->in[0]->get(CInode::PIN_RSTATFLUSH);
 	mdr->in[0]->state_set(CInode::STATE_RSTATFLUSH);
 	local_rstatflushes[mdr->in[0]].insert(mdr->reqid);
       }

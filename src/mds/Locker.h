@@ -126,7 +126,7 @@ public:
 
   void scatter_tick();
   void scatter_nudge(ScatterLock *lock, MDSContext *c, bool forcelockchange=false);
-  bool nudge_updated_scatterlocks(const MDRequestRef& mdr = {});
+  bool nudge_updated_scatterlocks(const MDRequestRef& mdr = {}, bool final_run = false);
 
   void mark_updated_scatterlock(ScatterLock *lock);
 
@@ -260,6 +260,7 @@ private:
   friend class LockerLogContext;
   friend class C_Locker_Nudge;
   friend class C_Locker_RstatFlush;
+  friend class C_Locker_RespondToRequest;
 
   bool any_late_revoking_caps(xlist<Capability*> const &revoking, double timeout) const;
   uint64_t calc_new_max_size(CInode::mempool_inode *pi, uint64_t size);

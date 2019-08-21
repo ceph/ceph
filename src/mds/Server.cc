@@ -3879,6 +3879,7 @@ void Server::handle_client_rstatflush(MDRequestRef& mdr)
 
   if (!ref->state_test(CInode::STATE_RSTATFLUSH)) {
     ref->state_set(CInode::STATE_RSTATFLUSH);
+    ref->get(CInode::PIN_RSTATFLUSH);
     mdcache->local_rstatflushes[ref].insert(mdr->reqid);
 
     auto replica_map = ref->get_replicas();
