@@ -1400,6 +1400,7 @@ public:
 	  pg_missing_item item;
 	  decode(oid, bp);
 	  decode(item, bp);
+          ldpp_dout(dpp, 20) << "read_log_and_missing " << item << dendl;
 	  if (item.is_delete()) {
 	    ceph_assert(missing.may_include_deletes);
 	  }
