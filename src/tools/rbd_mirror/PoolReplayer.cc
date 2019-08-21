@@ -433,10 +433,9 @@ int PoolReplayer<I>::init_rados(const std::string &cluster_name,
   // librados::Rados::conf_read_file
   int r = cct->_conf.parse_config_files(nullptr, nullptr, 0);
   if (r < 0 && r != -ENOENT) {
+    // do not treat this as fatal, it might still be able to connect
     derr << "could not read ceph conf for " << description << ": "
 	 << cpp_strerror(r) << dendl;
-    cct->put();
-    return r;
   }
 
   // preserve cluster-specific config settings before applying environment/cli
