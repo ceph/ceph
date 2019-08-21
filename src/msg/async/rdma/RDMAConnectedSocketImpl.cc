@@ -471,10 +471,6 @@ int RDMAConnectedSocketImpl::post_work_request(std::vector<Chunk*> &tx_buffers)
     iswr[current_swr].num_sge = 1;
     iswr[current_swr].opcode = IBV_WR_SEND;
     iswr[current_swr].send_flags = IBV_SEND_SIGNALED;
-    /*if (isge[current_sge].length < infiniband->max_inline_data) {
-      iswr[current_swr].send_flags = IBV_SEND_INLINE;
-      ldout(cct, 20) << __func__ << " send_inline." << dendl;
-      }*/
 
     num++;
     worker->perf_logger->inc(l_msgr_rdma_tx_bytes, isge[current_sge].length);
