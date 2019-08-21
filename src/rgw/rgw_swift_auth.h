@@ -186,9 +186,14 @@ class DefaultStrategy : public rgw::auth::Strategy,
 
   /* The method implements TokenExtractor for X-Auth-Token present in req_state. */
   std::string get_token(const req_state* const s) const override {
-    /* Returning a reference here would end in GCC complaining about a reference
-     * to temporary. */
-    return s->info.env->get("HTTP_X_AUTH_TOKEN", "");
+    string auth_token = s->info.env->get("HTTP_X_AUTH_TOKEN", "");
+    auth_token.erase(
+      std::remove_if(
+        std::begin(auth_token),
+        std::end(auth_token),
+        [](char c) {return c == '\x0d' || c == '\x0a';}),
+      std::end(auth_token));
+    return auth_token;
   }
 
   aplptr_t create_apl_remote(CephContext* const cct,
