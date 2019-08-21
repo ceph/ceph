@@ -18,10 +18,12 @@ vstart_path=`dirname $0`
 root_path=`dirname $0`
 root_path=`(cd $root_path; pwd)`
 
+[ -z "$BUILD_DIR" ] && BUILD_DIR=build
+
 if [ -e CMakeCache.txt ]; then
     root_path=$PWD
-elif [ -e $root_path/../build/CMakeCache.txt ]; then
-    cd $root_path/../build
+elif [ -e $root_path/../${BUILD_DIR}/CMakeCache.txt ]; then
+    cd $root_path/../${BUILD_DIR}
     root_path=$PWD
 fi
 RUN_ROOT_PATH=${root_path}/run

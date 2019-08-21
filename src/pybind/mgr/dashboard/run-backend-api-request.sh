@@ -1,7 +1,8 @@
 #!/bin/bash
 
 CURR_DIR=`pwd`
-cd ../../../../build
+[ -z "$BUILD_DIR" ] && BUILD_DIR=build
+cd ../../../../${BUILD_DIR}
 API_URL=`./bin/ceph mgr services 2>/dev/null | jq .dashboard | sed -e 's/"//g' -e 's!/$!!g'`
 if [ "$API_URL" = "null" ]; then
 	echo "Couldn't retrieve API URL, exiting..." >&2
