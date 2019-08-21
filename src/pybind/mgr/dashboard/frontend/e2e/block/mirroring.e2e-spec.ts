@@ -1,8 +1,10 @@
 import { Helper } from '../helper.po';
+import { PoolPageHelper } from '../pools/pools.po';
+import { MirroringPageHelper } from './mirroring.po';
 
 describe('Mirroring page', () => {
-  let mirroring: Helper['mirroring'];
-  let pools: Helper['pools'];
+  let pools: PoolPageHelper;
+  let mirroring: MirroringPageHelper;
 
   beforeAll(() => {
     mirroring = new Helper().mirroring;

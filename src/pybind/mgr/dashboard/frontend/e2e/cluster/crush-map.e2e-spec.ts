@@ -1,8 +1,9 @@
 import { $, browser } from 'protractor';
 import { Helper } from '../helper.po';
+import { CrushMapPageHelper } from './crush-map.po';
 
 describe('CRUSH map page', () => {
-  let crushmap: Helper['crushMap'];
+  let crushmap: CrushMapPageHelper;
 
   beforeAll(() => {
     crushmap = new Helper().crushMap;

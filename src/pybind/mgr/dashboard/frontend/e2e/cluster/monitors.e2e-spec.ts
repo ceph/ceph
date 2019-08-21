@@ -1,7 +1,8 @@
 import { Helper } from '../helper.po';
+import { MonitorsPageHelper } from './monitors.po';
 
 describe('Monitors page', () => {
-  let monitors: Helper['monitors'];
+  let monitors: MonitorsPageHelper;
 
   beforeAll(() => {
     monitors = new Helper().monitors;

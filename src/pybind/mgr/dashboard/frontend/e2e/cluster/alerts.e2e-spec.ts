@@ -1,7 +1,8 @@
 import { Helper } from '../helper.po';
+import { AlertsPageHelper } from './alerts.po';
 
 describe('Alerts page', () => {
-  let alerts: Helper['alerts'];
+  let alerts: AlertsPageHelper;
 
   beforeAll(() => {
     alerts = new Helper().alerts;

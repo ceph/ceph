@@ -1,8 +1,9 @@
 import { $ } from 'protractor';
 import { Helper } from '../helper.po';
+import { BucketsPageHelper } from './buckets.po';
 
 describe('RGW buckets page', () => {
-  let buckets: Helper['buckets'];
+  let buckets: BucketsPageHelper;
 
   beforeAll(async () => {
     const helper = new Helper();

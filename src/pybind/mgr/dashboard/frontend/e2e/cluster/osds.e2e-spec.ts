@@ -1,7 +1,8 @@
 import { Helper } from '../helper.po';
+import { OSDsPageHelper } from './osds.po';
 
 describe('OSDs page', () => {
-  let osds: Helper['osds'];
+  let osds: OSDsPageHelper;
 
   beforeAll(() => {
     osds = new Helper().osds;

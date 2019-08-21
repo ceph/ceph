@@ -1,7 +1,8 @@
 import { Helper } from '../helper.po';
+import { UsersPageHelper } from './users.po';
 
 describe('RGW users page', () => {
-  let users: Helper['users'];
+  let users: UsersPageHelper;
   const user_name = '000user_create_edit_delete';
 
   beforeAll(() => {

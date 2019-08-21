@@ -1,7 +1,8 @@
 import { Helper } from '../helper.po';
+import { NfsPageHelper } from './nfs.po';
 
 describe('Nfs page', () => {
-  let nfs: Helper['nfs'];
+  let nfs: NfsPageHelper;
 
   beforeAll(() => {
     nfs = new Helper().nfs;
