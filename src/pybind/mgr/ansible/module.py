@@ -722,9 +722,9 @@ class Module(MgrModule, orchestrator.Orchestrator):
             spec.rgw_frontend_port = spec.rgw_frontend_port \
                 if spec.rgw_frontend_port is not None else 8080
 
-            spec.rgw_zonegroup = spec.rgw_zonegroup if spec.rgw_zonegroup is not None else "Main"
+            spec.rgw_zonegroup = spec.rgw_zonegroup if spec.rgw_zonegroup is not None else "default"
             spec.rgw_zone_user = spec.rgw_zone_user if spec.rgw_zone_user is not None else "zone.user"
-            spec.rgw_realm = spec.rgw_realm if spec.rgw_realm is not None else "RGW_Realm"
+            spec.rgw_realm = spec.rgw_realm if spec.rgw_realm is not None else "default"
 
             spec.system_access_key = spec.system_access_key \
                 if spec.system_access_key is not None else spec.genkey(20)
