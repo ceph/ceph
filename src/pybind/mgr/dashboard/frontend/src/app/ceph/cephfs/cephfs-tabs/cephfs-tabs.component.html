@@ -1,0 +1,25 @@
+<tabset *ngIf="selectedItem">
+  <tab i18n-heading
+       (selectTab)="softRefresh()"
+       heading="Details">
+    <cd-cephfs-detail [data]="details">
+    </cd-cephfs-detail>
+  </tab>
+  <tab i18n-heading
+       (selectTab)="softRefresh()"
+       heading="Clients: {{ clients.data.length }}">
+    <cd-cephfs-clients [id]="id"
+                       [clients]="clients"
+                       (triggerApiUpdate)="refresh()">
+    </cd-cephfs-clients>
+  </tab>
+  <tab i18n-heading
+       *ngIf="grafanaPermission.read && grafanaId"
+       heading="Performance Details">
+    <cd-grafana [grafanaPath]="'mds-performance?var-mds_servers=mds.' + grafanaId"
+                uid="tbO9LAiZz"
+                grafanaStyle="one">
+    </cd-grafana>
+  </tab>
+</tabset>
+
