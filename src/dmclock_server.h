@@ -104,17 +104,18 @@ namespace crimson {
       double limit_inv;
 
       // order parameters -- min, "normal", max
-      ClientInfo(double _reservation, double _weight, double _limit) :
-	reservation(_reservation),
-	weight(_weight),
-	limit(_limit),
-	reservation_inv(0.0 == reservation ? 0.0 : 1.0 / reservation),
-	weight_inv(     0.0 == weight      ? 0.0 : 1.0 / weight),
-	limit_inv(      0.0 == limit       ? 0.0 : 1.0 / limit)
-      {
-	// empty
+      ClientInfo(double _reservation, double _weight, double _limit) {
+	update(_reservation, _weight, _limit);
       }
-
+ 
+      inline void update(double _reservation, double _weight, double _limit) {
+       reservation = _reservation;
+       weight = _weight;
+       limit = _limit;
+       reservation_inv = (0.0 == reservation) ? 0.0 : 1.0 / reservation;
+       weight_inv = (0.0 == weight) ? 0.0 : 1.0 / weight;
+       limit_inv = (0.0 == limit) ? 0.0 : 1.0 / limit;
+      }
 
       friend std::ostream& operator<<(std::ostream& out,
 				      const ClientInfo& client) {
