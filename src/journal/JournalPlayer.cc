@@ -120,6 +120,10 @@ void JournalPlayer::prefetch() {
   std::lock_guard locker{m_lock};
   ceph_assert(m_state == STATE_INIT);
 
+  if (m_shut_down) {
+    return;
+  }
+
   if (m_cache_manager_handler != nullptr && m_max_fetch_bytes == 0) {
     m_state = STATE_WAITCACHE;
     return;
@@ -851,9 +855,11 @@ void JournalPlayer::handle_cache_rebalanced(uint64_t new_cache_bytes) {
   if (m_state == STATE_WAITCACHE) {
     m_state = STATE_INIT;
     if (m_max_fetch_bytes >= min_bytes) {
+      m_async_op_tracker.start_op();
       auto ctx = new FunctionContext(
         [this](int r) {
           prefetch();
+          m_async_op_tracker.finish_op();
         });
       m_journal_metadata->queue(ctx, 0);
       return;
