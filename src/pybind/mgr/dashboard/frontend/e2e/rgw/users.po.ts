@@ -12,8 +12,6 @@ export class UsersPageHelper extends PageHelper {
   async create(username, fullname, email, maxbuckets) {
     await this.navigateTo('create');
 
-    expect(await this.getBreadcrumbText()).toBe('Create');
-
     // Enter in  username
     await element(by.id('uid')).sendKeys(username);
 
