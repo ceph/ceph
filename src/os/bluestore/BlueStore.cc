@@ -5750,50 +5750,26 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
 
   if (kv_backend == "rocksdb") {
     options = cct->_conf->bluestore_rocksdb_options;
-
-    if (cct->_conf.get_val<bool>("bluestore_rocksdb_cf")) {
-      /* enable sharding of rocksdb */
-      map<string,string> cf_map;
-      cct->_conf.with_val<string>("bluestore_rocksdb_cfs",
-                                  get_str_map,
-                                  &cf_map,
-                                  " \t");
-      std::map<std::string, size_t> shards {
-        {PREFIX_SUPER, 0},
-        {PREFIX_STAT, 0},
-        {PREFIX_COLL, 0},
-        {PREFIX_OBJ, 0},
-        {PREFIX_OMAP, 0},
-        {PREFIX_PGMETA_OMAP, 0},
-        {PREFIX_DEFERRED, 0},
-        {PREFIX_ALLOC, 0},
-        {PREFIX_ALLOC_BITMAP, 0},
-        {PREFIX_SHARED_BLOB, 0}
-      };
-
-      for (auto& i : cf_map) {
-        std::string prefix = i.first.substr(0, 1);
-        std::string prefix_count_str = i.first.substr(1);
-        int prefix_count = 1;
-        if (prefix_count_str.size() > 0) {
-          prefix_count = std::stoi(prefix_count_str);
-        }
-        auto sh = shards.find(prefix);
-        if (sh == shards.end()) {
-          derr << __func__ << " db prefix '" << prefix << "' illegal " << dendl;
-          return -EINVAL;
-        }
-        sh->second = prefix_count;
-        dout(10) << "prefix '" << prefix << "' split into " << prefix_count << "column families" << dendl;
-
-        for(int k = 0; k < prefix_count; k++) {
-          std::string cf_name = prefix + "-" + to_string(k);
-          dout(10) << "column family name=" << cf_name << ", options=" << i.second << dendl;
-          cfs.push_back(KeyValueDB::ColumnFamily(cf_name, i.second));
-        }
+    if (create) {
+      if (cct->_conf.get_val<bool>("bluestore_rocksdb_cf")) {
+        std::string sharding_schema = cct->_conf.get_val<string>("bluestore_rocksdb_cfs");
+        r = write_meta("sharding", sharding_schema);
+        if (r < 0)
+          return r;
       }
+    }
+    std::string sharding_schema;
+    r = read_meta("sharding", &sharding_schema);
 
-      db = make_BlueStore_DB_Hash(db, shards);
+    if (r == 0 && sharding_schema.size() > 0) {
+      /* enable sharding of rocksdb */
+      std::map<std::string, size_t> shards;
+      r = get_sharding(sharding_schema, cfs, shards);
+      if (r < 0)
+        return r;
+      RocksDBStore* rdb = dynamic_cast<RocksDBStore*>(db);
+      ceph_assert(rdb != nullptr);
+      db = new BlueStore_DB_Hash(rdb, shards);
     }
   }
   FreelistManager::setup_merge_operators(db);
@@ -5811,6 +5787,22 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
     r = read_only ?
       db->open_read_only(err, cfs) :
       db->open(err, cfs);
+    // check if current sharding is exactly as it should be
+    std::vector<std::string> cf_names;
+    db->column_family_list(cf_names);
+
+    if (cf_names.size() != 1 + cfs.size()) {
+      //cf_names always has "default" listed
+      derr << "Existing column families: " << cf_names << dendl;
+      std::string cfs_str = "[default";
+      for (auto &i: cfs) {
+        cfs_str += ", " + i.name;
+      }
+      cfs_str += "]";
+      derr << "Column families from sharding: " << cfs_str << dendl;
+      derr << "Use ceph-bluestore-tool to reshard" << dendl;
+      return -EIO;
+    }
   }
   if (r) {
     derr << __func__ << " erroring opening db: " << err.str() << dendl;
@@ -5831,6 +5823,55 @@ void BlueStore::_close_db()
     _close_bluefs();
   }
 }
+
+int BlueStore::get_sharding(const std::string& sharding_schema,
+                            std::vector<KeyValueDB::ColumnFamily>& cfs,
+                            std::map<std::string, size_t>& shards)
+{
+  cfs.clear();
+  map<string,string> cf_map;
+
+  get_str_map(sharding_schema,
+              &cf_map,
+              " \t");
+
+  shards = std::map<std::string, size_t> {
+    {PREFIX_SUPER, 0},
+    {PREFIX_STAT, 0},
+    {PREFIX_COLL, 0},
+    {PREFIX_OBJ, 0},
+    {PREFIX_OMAP, 0},
+    {PREFIX_PGMETA_OMAP, 0},
+    {PREFIX_DEFERRED, 0},
+    {PREFIX_ALLOC, 0},
+    {PREFIX_ALLOC_BITMAP, 0},
+    {PREFIX_SHARED_BLOB, 0}
+  };
+
+  for (auto& i : cf_map) {
+    std::string prefix = i.first.substr(0, 1);
+    std::string prefix_count_str = i.first.substr(1);
+    int prefix_count = 1;
+    if (prefix_count_str.size() > 0) {
+      prefix_count = std::stoi(prefix_count_str);
+    }
+    auto sh = shards.find(prefix);
+    if (sh == shards.end()) {
+      derr << __func__ << " db prefix '" << prefix << "' illegal " << dendl;
+      return -EINVAL;
+    }
+    sh->second = prefix_count;
+    dout(10) << "prefix '" << prefix << "' split into " << prefix_count << "column families" << dendl;
+
+    for(int k = 0; k < prefix_count; k++) {
+      std::string cf_name = prefix + "-" + to_string(k);
+      dout(10) << "column family name=" << cf_name << ", options=" << i.second << dendl;
+      cfs.push_back(KeyValueDB::ColumnFamily(cf_name, i.second));
+    }
+  }
+  return 0;
+}
+
 
 void BlueStore::_dump_alloc_on_failure()
 {

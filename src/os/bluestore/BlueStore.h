@@ -2274,6 +2274,12 @@ private:
   int _open_db(bool create,
 	       bool to_repair_db=false,
 	       bool read_only = false);
+  /*
+   * splits string of sharding definition into ColumnFamily definition
+   */
+  int get_sharding(const std::string& sharding_schema,
+                   std::vector<KeyValueDB::ColumnFamily>& cfs,
+                   std::map<std::string, size_t>& shards);
   void _close_db();
   int _open_fm(KeyValueDB::Transaction t);
   void _close_fm();
