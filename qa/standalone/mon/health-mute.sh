@@ -75,20 +75,33 @@ function TEST_mute() {
     ceph osd down 0 1
     ceph -s
     ceph health detail | grep OSD_DOWN || return 1
+
     ceph health mute OSD_DOWN
-    kill daemons $dir TERM osd.0
+    kill_daemons $dir TERM osd.0
     ceph osd unset noup
+    sleep 10
     ceph -s
     ceph health detail | grep OSD_DOWN || return 1
+    ceph health detail | grep '1 osds down' || return 1
     ceph health | grep HEALTH_OK || return 1
-    sleep 10
+
+    sleep 10 # give time for mon tick to rachet the mute
     ceph osd set noup
     ceph health mute OSDMAP_FLAGS
     ceph -s
+    ceph health detail
     ceph health | grep HEALTH_OK || return 1
+
     ceph osd down 1
     ceph -s
+    ceph health detail
+    ceph health detail | grep '2 osds down' || return 1
+
+    sleep 10 # give time for mute to clear
+    ceph -s
+    ceph health detail
     ceph health | grep HEALTH_WARN || return 1
+    ceph health detail | grep '2 osds down' || return 1
 
     teardown $dir || return 1
 }
