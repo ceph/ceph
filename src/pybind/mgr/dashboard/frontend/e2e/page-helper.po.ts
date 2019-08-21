@@ -8,6 +8,9 @@ import {
   ElementFinder,
   protractor
 } from 'protractor';
+import { Helper } from './helper.po';
+
+const EC = browser.ExpectedConditions;
 
 interface Pages {
   index: string;
@@ -22,7 +25,7 @@ export abstract class PageHelper {
    * mistakes.  It also reduces boilerplate code and by thus, increases
    * readability.
    */
-  static restrictTo(page): any {
+  static restrictTo(page): Function {
     return (target: any, propertyKey: string, descriptor: PropertyDescriptor) => {
       const fn: Function = descriptor.value;
       descriptor.value = function(...args) {
@@ -36,6 +39,42 @@ export abstract class PageHelper {
                     `run on path "${page}", but was run on URL "${url}"`
                 )
           );
+      };
+    };
+  }
+
+  /**
+   * This is a decorator to be used on methods which change the current page once, like `navigateTo`
+   * and `navigateBack` in this class do. It ensures that, if the new page contains a table, its
+   * data has been fully loaded. If no table is detected, it will return instantly.
+   */
+  static waitForTableData(): Function {
+    return (_target: any, _propertyKey: string, descriptor: PropertyDescriptor) => {
+      const fn: Function = descriptor.value;
+      descriptor.value = async function(...args) {
+        const result = fn.apply(this, args);
+
+        // If a table is on the new page, wait until it has gotten its data.
+        const implicitWaitTimeout = (await browser.getProcessedConfig()).implicitWaitTimeout;
+        await browser
+          .manage()
+          .timeouts()
+          .implicitlyWait(1000);
+
+        const tableCount = await element.all(by.css('cd-table')).count();
+        if (tableCount > 0) {
+          const progressBars = element.all(by.css('cd-table datatable-progress'));
+          await progressBars.each(async (progressBar) => {
+            await browser.wait(EC.not(EC.presenceOf(progressBar)), Helper.TIMEOUT);
+          });
+        }
+
+        await browser
+          .manage()
+          .timeouts()
+          .implicitlyWait(implicitWaitTimeout);
+
+        return result;
       };
     };
   }
@@ -160,10 +199,16 @@ export abstract class PageHelper {
     await elem.sendKeys(protractor.Key.BACK_SPACE);
   }
 
+  @PageHelper.waitForTableData()
   async navigateTo(page = null) {
     page = page || 'index';
     const url = this.pages[page];
-    return browser.get(url);
+    await browser.get(url);
+  }
+
+  @PageHelper.waitForTableData()
+  async navigateBack() {
+    await browser.navigate().back();
   }
 
   getDataTable(): ElementArrayFinder {
