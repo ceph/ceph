@@ -1,9 +1,12 @@
 import { Helper } from '../helper.po';
+import { PoolPageHelper } from '../pools/pools.po';
+import { ConfigurationPageHelper } from './configuration.po';
+import { LogsPageHelper } from './logs.po';
 
 describe('Logs page', () => {
-  let logs: Helper['logs'];
-  let pools: Helper['pools'];
-  let configuration: Helper['configuration'];
+  let logs: LogsPageHelper;
+  let pools: PoolPageHelper;
+  let configuration: ConfigurationPageHelper;
 
   const poolname = 'logs_e2e_test_pool';
   const configname = 'log_graylog_port';

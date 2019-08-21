@@ -1,14 +1,21 @@
 import { $$, browser, by, element } from 'protractor';
+import { IscsiPageHelper } from './block/iscsi.po';
+import { HostsPageHelper } from './cluster/hosts.po';
+import { MonitorsPageHelper } from './cluster/monitors.po';
+import { OSDsPageHelper } from './cluster/osds.po';
+import { DashboardPageHelper } from './dashboard.po';
 import { Helper } from './helper.po';
+import { PoolPageHelper } from './pools/pools.po';
+import { DaemonsPageHelper } from './rgw/daemons.po';
 
 describe('Dashboard Main Page', () => {
-  let dashboard: Helper['dashboard'];
-  let daemons: Helper['daemons'];
-  let hosts: Helper['hosts'];
-  let osds: Helper['osds'];
-  let pools: Helper['pools'];
-  let monitors: Helper['monitors'];
-  let iscsi: Helper['iscsi'];
+  let dashboard: DashboardPageHelper;
+  let daemons: DaemonsPageHelper;
+  let hosts: HostsPageHelper;
+  let osds: OSDsPageHelper;
+  let pools: PoolPageHelper;
+  let monitors: MonitorsPageHelper;
+  let iscsi: IscsiPageHelper;
 
   beforeAll(() => {
     dashboard = new Helper().dashboard;

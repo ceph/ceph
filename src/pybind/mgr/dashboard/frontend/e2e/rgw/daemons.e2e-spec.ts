@@ -1,7 +1,8 @@
 import { Helper } from '../helper.po';
+import { DaemonsPageHelper } from './daemons.po';
 
 describe('RGW daemons page', () => {
-  let daemons: Helper['daemons'];
+  let daemons: DaemonsPageHelper;
 
   beforeAll(() => {
     daemons = new Helper().daemons;
