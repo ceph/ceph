@@ -4,6 +4,7 @@
 const { SpecReporter } = require('jasmine-spec-reporter');
 
 exports.config = {
+  SELENIUM_PROMISE_MANAGER: false,
   allScriptsTimeout: 11000,
   specs: [
     './e2e/**/*.e2e-spec.ts'
@@ -40,7 +41,7 @@ exports.config = {
       clearFoldersBeforeTest: true
     }],
 
-  onPrepare() {
+  async onPrepare() {
     browser.manage().timeouts().implicitlyWait(360000);
 
     require('ts-node').register({
@@ -48,21 +49,21 @@ exports.config = {
     });
     jasmine.getEnv().addReporter(new SpecReporter({ spec: { displayStacktrace: true } }));
 
-    browser.get('/#/login');
+    await browser.get('/#/login');
 
-    browser.driver.findElement(by.name('username')).clear();
-    browser.driver.findElement(by.name('username')).sendKeys(browser.params.login.user);
-    browser.driver.findElement(by.name('password')).clear();
-    browser.driver.findElement(by.name('password')).sendKeys(browser.params.login.password);
+    await browser.driver.findElement(by.name('username')).clear();
+    await browser.driver.findElement(by.name('username')).sendKeys(browser.params.login.user);
+    await browser.driver.findElement(by.name('password')).clear();
+    await browser.driver.findElement(by.name('password')).sendKeys(browser.params.login.password);
 
-    browser.driver.findElement(by.css('input[type="submit"]')).click();
+    await browser.driver.findElement(by.css('input[type="submit"]')).click();
 
-    return global.browser.getProcessedConfig().then(function(config) {
+    global.browser.getProcessedConfig().then(async (config) => {
       // Login takes some time, so wait until it's done.
       // For the test app's login, we know it's done when it redirects to
       // dashboard.
-      return browser.driver.wait(function() {
-        return browser.driver.getCurrentUrl().then(function(url) {
+      return await browser.driver.wait(async () => {
+        return await browser.driver.getCurrentUrl().then((url) => {
           return /dashboard/.test(url);
         });
       });
