@@ -416,7 +416,8 @@ void Watch::discard_state()
   unregister_cb();
   discarded = true;
   if (conn) {
-    if (auto priv = conn->get_priv(); priv) {
+    auto priv = conn->get_priv();
+    if (priv) {
       auto session = static_cast<Session*>(priv.get());
       session->wstate.removeWatch(self.lock());
     }

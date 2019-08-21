@@ -6114,7 +6114,8 @@ void OSD::_send_boot()
     cluster_messenger->set_addr_unknowns(cluster_addr);
     dout(10) << " assuming cluster_addr ip matches client_addr" << dendl;
   } else {
-    if (auto session = local_connection->get_priv(); !session) {
+    auto session = local_connection->get_priv();
+    if (!session) {
       cluster_messenger->ms_deliver_handle_fast_connect(local_connection);
     }
   }
@@ -6128,7 +6129,8 @@ void OSD::_send_boot()
     hb_back_server_messenger->set_addr_unknowns(hb_back_addr);
     dout(10) << " assuming hb_back_addr ip matches cluster_addr" << dendl;
   } else {
-    if (auto session = local_connection->get_priv(); !session) {
+    auto session = local_connection->get_priv();
+    if (!session) {
       hb_back_server_messenger->ms_deliver_handle_fast_connect(local_connection);
     }
   }
@@ -6142,7 +6144,8 @@ void OSD::_send_boot()
     hb_front_server_messenger->set_addr_unknowns(hb_front_addr);
     dout(10) << " assuming hb_front_addr ip matches client_addr" << dendl;
   } else {
-    if (auto session = local_connection->get_priv(); !session) {
+    auto session = local_connection->get_priv();
+    if (!session) {
       hb_front_server_messenger->ms_deliver_handle_fast_connect(local_connection);
     }
   }
@@ -7254,7 +7257,8 @@ void OSD::ms_fast_dispatch(Message *m)
     // message that didn't have an explicit spg_t); we need to map
     // them to an spg_t while preserving delivery order.
     auto priv = m->get_connection()->get_priv();
-    if (auto session = static_cast<Session*>(priv.get()); session) {
+    auto session = static_cast<Session*>(priv.get());
+    if (session) {
       Mutex::Locker l{session->session_dispatch_lock};
       op->get();
       session->waiting_on_map.push_back(*op);
@@ -7272,7 +7276,8 @@ void OSD::ms_fast_preprocess(Message *m)
     if (m->get_type() == CEPH_MSG_OSD_MAP) {
       MOSDMap *mm = static_cast<MOSDMap*>(m);
       auto priv = m->get_connection()->get_priv();
-      if (auto s = static_cast<Session*>(priv.get()); s) {
+      auto s = static_cast<Session*>(priv.get());
+      if (s) {
 	s->received_map_lock.lock();
 	s->received_map_epoch = mm->get_last();
 	s->received_map_lock.unlock();
@@ -7891,8 +7896,8 @@ void OSD::handle_osd_map(MOSDMap *m)
   }
 
   auto priv = m->get_connection()->get_priv();
-  if (auto session = static_cast<Session *>(priv.get());
-      session && !(session->entity_name.is_mon() ||
+  auto session = static_cast<Session *>(priv.get());
+  if (session && !(session->entity_name.is_mon() ||
 		   session->entity_name.is_osd())) {
     //not enough perms!
     dout(10) << "got osd map from Session " << session
@@ -8680,7 +8685,8 @@ bool OSD::require_same_peer_instance(const Message *m, OSDMapRef& map,
     ConnectionRef con = m->get_connection();
     con->mark_down();
     auto priv = con->get_priv();
-    if (auto s = static_cast<Session*>(priv.get()); s) {
+    auto s = static_cast<Session*>(priv.get());
+    if (s) {
       if (!is_fast_dispatch)
 	s->session_dispatch_lock.Lock();
       clear_session_waiting_on_map(s);
@@ -9860,7 +9866,8 @@ void OSD::dequeue_op(
   logger->tinc(l_osd_op_before_dequeue_op_lat, latency);
 
   auto priv = op->get_req()->get_connection()->get_priv();
-  if (auto session = static_cast<Session *>(priv.get()); session) {
+  auto session = static_cast<Session *>(priv.get());
+  if (session) {
     maybe_share_map(session, op, pg->get_osdmap());
   }
 
@@ -10606,8 +10613,9 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
       // share map with client?
       if (boost::optional<OpRequestRef> _op = qi->maybe_get_op()) {
 	auto priv = (*_op)->get_req()->get_connection()->get_priv();
-	if (auto session = static_cast<Session *>(priv.get()); session) {
-	  osd->maybe_share_map(session, *_op, sdata->shard_osdmap);
+	auto session = static_cast<Session *>(priv.get());
+	if (session) {
+	  osd->maybe_share_map(session, *_op, sdata->waiting_for_pg_osdmap);
 	}
       }
       unsigned pushes_to_free = qi->get_reserved_pushes();

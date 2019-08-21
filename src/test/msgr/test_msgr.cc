@@ -154,7 +154,8 @@ class FakeDispatcher : public Dispatcher {
     Mutex::Locker l(lock);
     lderr(g_ceph_context) << __func__ << " " << con << dendl;
     auto priv = con->get_priv();
-    if (auto s = static_cast<Session*>(priv.get()); s) {
+    auto s = static_cast<Session*>(priv.get());
+    if (s) {
       s->con.reset();  // break con <-> session ref cycle
       con->set_priv(nullptr);   // break ref <-> session cycle, if any
     }
@@ -164,7 +165,8 @@ class FakeDispatcher : public Dispatcher {
     Mutex::Locker l(lock);
     lderr(g_ceph_context) << __func__ << " " << con << dendl;
     auto priv = con->get_priv();
-    if (auto s = static_cast<Session*>(priv.get()); s) {
+    auto s = static_cast<Session*>(priv.get());
+    if (s) {
       s->con.reset();  // break con <-> session ref cycle
       con->set_priv(nullptr);   // break ref <-> session cycle, if any
     }

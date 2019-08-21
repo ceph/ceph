@@ -1257,7 +1257,8 @@ bool MDSDaemon::ms_handle_reset(Connection *con)
     return false;
 
   auto priv = con->get_priv();
-  if (auto session = static_cast<Session *>(priv.get()); session) {
+  auto session = static_cast<Session *>(priv.get());
+  if (session) {
     if (session->is_closed()) {
       dout(3) << "ms_handle_reset closing connection for session " << session->info.inst << dendl;
       con->mark_down();
@@ -1285,7 +1286,8 @@ void MDSDaemon::ms_handle_remote_reset(Connection *con)
     return;
 
   auto priv = con->get_priv();
-  if (auto session = static_cast<Session *>(priv.get()); session) {
+  auto session = static_cast<Session *>(priv.get());
+  if (session) {
     if (session->is_closed()) {
       dout(3) << "ms_handle_remote_reset closing connection for session " << session->info.inst << dendl;
       con->mark_down();
