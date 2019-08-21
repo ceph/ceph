@@ -957,15 +957,15 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
         vector<int> new_up;
         int new_up_primary;
         osdmap.pg_to_raw_up(pgid, &new_up, &new_up_primary);
-        ASSERT_TRUE(up.size() == new_up.size());
-        ASSERT_TRUE(new_up[0] == new_pg_upmap[0]);
-        ASSERT_TRUE(new_up[1] == new_pg_upmap[1]);
+        ASSERT_EQ(new_up.size(), up.size());
+        ASSERT_EQ(new_up[0], new_pg_upmap[0]);
+        ASSERT_EQ(new_up[1], new_pg_upmap[1]);
         // and we shall have two OSDs from a same host now..
         int parent_0 = osdmap.crush->get_parent_of_type(new_up[0],
           osdmap.crush->get_type_id("host"));
         int parent_1 = osdmap.crush->get_parent_of_type(new_up[1],
           osdmap.crush->get_type_id("host"));
-        ASSERT_TRUE(parent_0 == parent_1);
+        ASSERT_EQ(parent_0, parent_1);
       }
     }
     {
@@ -978,8 +978,8 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
         vector<int> new_up;
         int new_up_primary;
         osdmap.pg_to_raw_up(pgid, &new_up, &new_up_primary);
-        ASSERT_TRUE(new_up == up);
-        ASSERT_TRUE(new_up_primary = up_primary);
+        ASSERT_EQ(new_up, up);
+        ASSERT_EQ(new_up_primary, up_primary);
       }
     }
   }
@@ -1026,12 +1026,12 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
         }
       }
       ASSERT_LT(-1, will_choose); // it is an OSD!
-      ASSERT_TRUE(candidate_parent != 0);
+      ASSERT_NE(candidate_parent, 0);
       osdmap.crush->get_leaves(osdmap.crush->get_item_name(candidate_parent),
         &candidate_children);
       ASSERT_TRUE(candidate_children.count(will_choose));
       candidate_children.erase(will_choose);
-      ASSERT_TRUE(!candidate_children.empty());
+      ASSERT_FALSE(candidate_children.empty());
       up_after_out = new_up; // needed for verification..
     }
     {
@@ -1069,7 +1069,7 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
         vector<int> new_up;
         int new_up_primary;
         osdmap.pg_to_raw_up(pgid, &new_up, &new_up_primary);
-        ASSERT_TRUE(up.size() == new_up.size());
+        ASSERT_EQ(new_up.size(), up.size());
         ASSERT_TRUE(std::find(new_up.begin(), new_up.end(), replaced_by) !=
           new_up.end());
         // and up[1] too
@@ -1094,12 +1094,12 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
         vector<int> new_up;
         int new_up_primary;
         osdmap.pg_to_raw_up(pgid, &new_up, &new_up_primary);
-        ASSERT_TRUE(up.size() == new_up.size());
+        ASSERT_EQ(up.size(), new_up.size());
         int parent_0 = osdmap.crush->get_parent_of_type(new_up[0],
           osdmap.crush->get_type_id("host"));
         int parent_1 = osdmap.crush->get_parent_of_type(new_up[1],
           osdmap.crush->get_type_id("host"));
-        ASSERT_TRUE(parent_0 == parent_1);
+        ASSERT_EQ(parent_0, parent_1);
       } 
     }
     {
@@ -1112,7 +1112,7 @@ TEST_F(OSDMapTest, CleanPGUpmaps) {
         vector<int> new_up;
         int new_up_primary;
         osdmap.pg_to_raw_up(pgid, &new_up, &new_up_primary);
-        ASSERT_TRUE(new_up == up_after_out);
+        ASSERT_EQ(new_up, up_after_out);
       }
     }
   }
