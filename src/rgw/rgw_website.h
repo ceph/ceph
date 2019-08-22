@@ -102,7 +102,9 @@ struct RGWBWRoutingRuleCondition
   void decode_json(JSONObj *obj);
   void decode_xml(XMLObj *obj);
 
+  bool has_key_condition();
   bool check_key_condition(const std::string& key);
+  bool has_error_code_condition();
   bool check_error_code_condition(const int error_code) {
     return (uint16_t)error_code == http_error_code_returned_equals;
   }
@@ -132,6 +134,12 @@ struct RGWBWRoutingRule
   void decode_json(JSONObj *obj);
   void decode_xml(XMLObj *obj);
 
+  bool has_key_condition() {
+    return condition.has_key_condition();
+  }
+  bool has_error_code_condition() {
+    return condition.has_error_code_condition();
+  }
   bool check_key_condition(const std::string& key) {
     return condition.check_key_condition(key);
   }

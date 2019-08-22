@@ -27,6 +27,24 @@
 
 
 
+bool RGWBWRoutingRuleCondition::has_key_condition() {
+  /*
+  if (key_prefix_equals.empty()) {
+    return false;
+  }
+  */
+
+  return true;
+}
+
+bool RGWBWRoutingRuleCondition::has_error_code_condition() {
+  if (http_error_code_returned_equals == 0) {
+    return false;
+  }
+
+  return true;
+}
+
 bool RGWBWRoutingRuleCondition::check_key_condition(const string& key) {
   return (key.size() >= key_prefix_equals.size() &&
           key.compare(0, key_prefix_equals.size(), key_prefix_equals) == 0);
@@ -52,6 +70,7 @@ void RGWBWRoutingRule::apply_rule(const string& default_protocol, const string& 
     *new_url += key;
   }
 
+  *redirect_code = 301;
   if(redirect.http_redirect_code > 0) 
 	  *redirect_code = redirect.http_redirect_code;
 }
@@ -59,10 +78,22 @@ void RGWBWRoutingRule::apply_rule(const string& default_protocol, const string& 
 bool RGWBWRoutingRules::check_key_and_error_code_condition(const string &key, int error_code, RGWBWRoutingRule **rule)
 {
   for (list<RGWBWRoutingRule>::iterator iter = rules.begin(); iter != rules.end(); ++iter) {
-    if (iter->check_key_condition(key) && iter->check_error_code_condition(error_code)) {
-      *rule = &(*iter);
-      return true;
+    if ((!iter->has_key_condition()) && (!iter->has_error_code_condition()))
+    {
+      continue;
     }
+
+    if (iter->has_key_condition() && !iter->check_key_condition(key)) {
+      continue;
+    }
+
+    if (iter->has_error_code_condition() && !iter->check_error_code_condition(error_code))
+    {
+      continue;
+    }
+
+    *rule = &(*iter);
+    return true;
   }
   return false;
 }
