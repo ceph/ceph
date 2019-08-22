@@ -109,7 +109,7 @@ if os.path.exists("./CMakeCache.txt") and os.path.exists("./bin"):
                 python_paths.append(g_exp)
 
     ld_path = os.path.join(os.getcwd(), "lib/")
-    print "Using guessed paths {0} {1}".format(ld_path, python_paths)
+    print("Using guessed paths {0} {1}".format(ld_path, python_paths))
     respawn_in_path(ld_path, python_paths)
 
 
@@ -884,6 +884,7 @@ def exec_test():
     interactive_on_error = False
     create_cluster = False
     create_cluster_only = False
+    ignore_missing_binaries = False
 
     args = sys.argv[1:]
     flags = [a for a in args if a.startswith("-")]
@@ -895,6 +896,8 @@ def exec_test():
             create_cluster = True
         elif f == "--create-cluster-only":
             create_cluster_only = True
+        elif f == "--ignore-missing-binaries":
+            ignore_missing_binaries = True
         else:
             log.error("Unknown option '{0}'".format(f))
             sys.exit(-1)
@@ -904,7 +907,7 @@ def exec_test():
     require_binaries = ["ceph-dencoder", "cephfs-journal-tool", "cephfs-data-scan",
                         "cephfs-table-tool", "ceph-fuse", "rados"]
     missing_binaries = [b for b in require_binaries if not os.path.exists(os.path.join(BIN_PREFIX, b))]
-    if missing_binaries:
+    if missing_binaries and not ignore_missing_binaries:
         log.error("Some ceph binaries missing, please build them: {0}".format(" ".join(missing_binaries)))
         sys.exit(-1)
 

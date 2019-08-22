@@ -30,8 +30,23 @@ This was just a quick overview.  More information for contributors is available 
 https://raw.githubusercontent.com/ceph/ceph/master/SubmittingPatches.rst
 
 -->
-
+## Checklist
 - [ ] References tracker ticket
 - [ ] Updates documentation if necessary
 - [ ] Includes tests for new functionality or reproducer for bug
 
+---
+
+<details>
+<summary>Show available Jenkins commands</summary>
+
+- `jenkins retest this please`
+- `jenkins test make check`
+- `jenkins test make check arm64`
+- `jenkins test submodules`
+- `jenkins test dashboard`
+- `jenkins test dashboard backend`
+- `jenkins test docs`
+- `jenkins render docs`
+
+</details>
