@@ -118,7 +118,7 @@ public:
    * sequence.  Transactions queued under different collections may run
    * in parallel.
    *
-   * ObjectStore users my get collection handles with open_collection() (or,
+   * ObjectStore users may get collection handles with open_collection() (or,
    * for bootstrapping a new collection, create_new_collection()).
    */
   struct CollectionImpl : public RefCountedObject {
