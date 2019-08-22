@@ -79,6 +79,11 @@ struct BufferedRecoveryMessages {
       ovec.swap(ls);
     }
   }
+
+  void send_osd_message(int target, Message *m) {
+    message_map[target].push_back(m);
+  }
+  void send_notify(int to, const pg_notify_t &n);
 };
 
 struct HeartbeatStamps : public RefCountedObject {
@@ -197,32 +202,34 @@ struct PeeringCtx : BufferedRecoveryMessages {
  */
 struct PeeringCtxWrapper {
   utime_t start_time;
+  BufferedRecoveryMessages &msgs;
   map<int, map<spg_t, pg_query_t> > &query_map;
   map<int, vector<pg_notify_t>> &info_map;
-  map<int, vector<MessageRef>> &message_map;
   ObjectStore::Transaction &transaction;
   HBHandle * const handle = nullptr;
 
   PeeringCtxWrapper(PeeringCtx &wrapped) :
+    msgs(wrapped),
     query_map(wrapped.query_map),
     info_map(wrapped.info_map),
-    message_map(wrapped.message_map),
     transaction(wrapped.transaction),
     handle(wrapped.handle) {}
 
   PeeringCtxWrapper(BufferedRecoveryMessages &buf, PeeringCtx &wrapped)
-    : query_map(buf.query_map),
+    : msgs(buf),
+      query_map(buf.query_map),
       info_map(buf.info_map),
-      message_map(buf.message_map),
       transaction(wrapped.transaction),
       handle(wrapped.handle) {}
 
   PeeringCtxWrapper(PeeringCtxWrapper &&ctx) = default;
 
   void send_osd_message(int target, Message *m) {
-    message_map[target].push_back(m);
+    msgs.send_osd_message(target, m);
   }
-  void send_notify(int to, const pg_notify_t &n);
+  void send_notify(int to, const pg_notify_t &n) {
+    msgs.send_notify(to, n);
+  }
 };
 
   /* Encapsulates PG recovery process */
