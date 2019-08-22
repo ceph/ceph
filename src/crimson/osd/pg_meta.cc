@@ -2,7 +2,7 @@
 
 #include <string_view>
 
-#include "crimson/os/cyan_collection.h"
+#include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
 
 // prefix pgmeta_oid keys with _ so that PGLog::read_log_and_missing() can

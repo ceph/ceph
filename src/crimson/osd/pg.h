@@ -19,6 +19,7 @@
 #include "osd/PeeringState.h"
 
 #include "crimson/common/type_helpers.h"
+#include "crimson/os/futurized_collection.h"
 #include "crimson/osd/osd_operations/client_request.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 #include "crimson/osd/osd_operations/replicated_request.h"

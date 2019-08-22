@@ -1,6 +1,5 @@
 #include "ec_backend.h"
 
-#include "crimson/os/cyan_collection.h"
 #include "crimson/osd/shard_services.h"
 
 ECBackend::ECBackend(shard_id_t shard,

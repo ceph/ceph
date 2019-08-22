@@ -52,7 +52,7 @@ seastar::future<> CyanStore::mount()
     if (int r = cbl.read_file(fn.c_str(), &err); r < 0) {
       throw std::runtime_error("read_file");
     }
-    CollectionRef c{new Collection{coll}};
+    boost::intrusive_ptr<Collection> c{new Collection{coll}};
     auto p = cbl.cbegin();
     c->decode(p);
     coll_map[coll] = c;
@@ -125,11 +125,12 @@ store_statfs_t CyanStore::stat() const
 }
 
 seastar::future<std::vector<ghobject_t>, ghobject_t>
-CyanStore::list_objects(CollectionRef c,
+CyanStore::list_objects(CollectionRef ch,
                         const ghobject_t& start,
                         const ghobject_t& end,
                         uint64_t limit) const
 {
+  auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {} {} {}",
                  __func__, c->get_cid(), start, end, limit);
   std::vector<ghobject_t> objects;
@@ -170,12 +171,13 @@ seastar::future<std::vector<coll_t>> CyanStore::list_collections()
   return seastar::make_ready_future<std::vector<coll_t>>(std::move(collections));
 }
 
-seastar::future<ceph::bufferlist> CyanStore::read(CollectionRef c,
+seastar::future<ceph::bufferlist> CyanStore::read(CollectionRef ch,
                                             const ghobject_t& oid,
                                             uint64_t offset,
                                             size_t len,
                                             uint32_t op_flags)
 {
+  auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {} {}~{}",
                 __func__, c->get_cid(), oid, offset, len);
   if (!c->exists) {
@@ -200,10 +202,11 @@ seastar::future<ceph::bufferlist> CyanStore::read(CollectionRef c,
   return seastar::make_ready_future<ceph::bufferlist>(std::move(bl));
 }
 
-seastar::future<ceph::bufferptr> CyanStore::get_attr(CollectionRef c,
+seastar::future<ceph::bufferptr> CyanStore::get_attr(CollectionRef ch,
                                                      const ghobject_t& oid,
                                                      std::string_view name) const
 {
+  auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {}",
                 __func__, c->get_cid(), oid);
   auto o = c->get_object(oid);
@@ -219,9 +222,10 @@ seastar::future<ceph::bufferptr> CyanStore::get_attr(CollectionRef c,
   }
 }
 
-seastar::future<CyanStore::attrs_t> CyanStore::get_attrs(CollectionRef c,
+seastar::future<CyanStore::attrs_t> CyanStore::get_attrs(CollectionRef ch,
                                                          const ghobject_t& oid)
 {
+  auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {}",
                 __func__, c->get_cid(), oid);
   auto o = c->get_object(oid);
@@ -232,10 +236,11 @@ seastar::future<CyanStore::attrs_t> CyanStore::get_attrs(CollectionRef c,
 }
 
 seastar::future<CyanStore::omap_values_t>
-CyanStore::omap_get_values(CollectionRef c,
+CyanStore::omap_get_values(CollectionRef ch,
                            const ghobject_t& oid,
                            const omap_keys_t& keys)
 {
+  auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {}",
                 __func__, c->get_cid(), oid);
   auto o = c->get_object(oid);
@@ -253,10 +258,11 @@ CyanStore::omap_get_values(CollectionRef c,
 
 seastar::future<bool, CyanStore::omap_values_t>
 CyanStore::omap_get_values(
-    CollectionRef c,
+    CollectionRef ch,
     const ghobject_t &oid,
     const std::optional<string> &start
   ) {
+  auto c = static_cast<Collection*>(ch.get());
   logger().debug(
     "{} {} {}",
     __func__, c->get_cid(), oid);
@@ -599,7 +605,7 @@ int CyanStore::_create_collection(const coll_t& cid, int bits)
   return 0;
 }
 
-CollectionRef CyanStore::_get_collection(const coll_t& cid)
+boost::intrusive_ptr<Collection> CyanStore::_get_collection(const coll_t& cid)
 {
   auto cp = coll_map.find(cid);
   if (cp == coll_map.end())
