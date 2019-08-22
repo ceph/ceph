@@ -440,7 +440,7 @@ void UserAsyncRefreshHandler::handle_response(int r)
 
 class RGWUserStatsCache : public RGWQuotaCache<rgw_user> {
   std::atomic<bool> down_flag = { false };
-  RWLock rwlock;
+  ceph::shared_mutex mutex = ceph::make_shared_mutex("RGWUserStatsCache");
   map<rgw_bucket, rgw_user> modified_buckets;
 
   /* thread, sync recent modified buckets info */
@@ -555,9 +555,8 @@ protected:
   void data_modified(const rgw_user& user, rgw_bucket& bucket) override;
 
   void swap_modified_buckets(map<rgw_bucket, rgw_user>& out) {
-    rwlock.get_write();
+    std::unique_lock lock{mutex};
     modified_buckets.swap(out);
-    rwlock.unlock();
   }
 
   template<class T> /* easier doing it as a template, Thread doesn't have ->stop() */
@@ -573,8 +572,9 @@ protected:
   }
 
 public:
-  RGWUserStatsCache(rgw::sal::RGWRadosStore *_store, bool quota_threads) : RGWQuotaCache<rgw_user>(_store, _store->ctx()->_conf->rgw_bucket_quota_cache_size),
-                                        rwlock("RGWUserStatsCache::rwlock") {
+  RGWUserStatsCache(rgw::sal::RGWRadosStore *_store, bool quota_threads)
+    : RGWQuotaCache<rgw_user>(_store, _store->ctx()->_conf->rgw_bucket_quota_cache_size)
+  {
     if (quota_threads) {
       buckets_sync_thread = new BucketsSyncThread(store->ctx(), this);
       buckets_sync_thread->create("rgw_buck_st_syn");
@@ -606,9 +606,10 @@ public:
 
   void stop() {
     down_flag = true;
-    rwlock.get_write();
-    stop_thread(&buckets_sync_thread);
-    rwlock.unlock();
+    {
+      std::unique_lock lock{mutex};
+      stop_thread(&buckets_sync_thread);
+    }
     stop_thread(&user_sync_thread);
   }
 };
@@ -722,14 +723,13 @@ done:
 void RGWUserStatsCache::data_modified(const rgw_user& user, rgw_bucket& bucket)
 {
   /* racy, but it's ok */
-  rwlock.get_read();
+  mutex.lock_shared();
   bool need_update = modified_buckets.find(bucket) == modified_buckets.end();
-  rwlock.unlock();
+  mutex.unlock_shared();
 
   if (need_update) {
-    rwlock.get_write();
+    std::unique_lock lock{mutex};
     modified_buckets[bucket] = user;
-    rwlock.unlock();
   }
 }
 
