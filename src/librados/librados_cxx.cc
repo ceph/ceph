@@ -1056,6 +1056,10 @@ librados::IoCtx::~IoCtx()
   close();
 }
 
+bool librados::IoCtx::is_valid() const {
+  return io_ctx_impl != nullptr;
+}
+
 void librados::IoCtx::close()
 {
   if (io_ctx_impl)
