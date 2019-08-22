@@ -2,6 +2,8 @@
 
 #include "common/debug.h"
 #include "include/ceph_hash.h"
+#include "include/str_map.h"
+#include "kv/RocksDBStore.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_bluestore
@@ -40,7 +42,7 @@ struct KeyLess {
   }
 };
 
-class BlueStore_DB_Hash::HashSharded_TransactionImpl : public RocksDBStore::RocksDBTransactionImpl //KeyValueDB::TransactionImpl
+class BlueStore_DB_Hash::HashSharded_TransactionImpl : public RocksDBStore::RocksDBTransactionImpl
 {
 private:
   typedef RocksDBStore::RocksDBTransactionImpl base;
@@ -238,7 +240,7 @@ private:
   ShardedIteratorBase iter;
 
   void open_shards(std::vector<KeyValueDB::Iterator>& shards) {
-    for (auto& it: shards_it->second) {
+    for (auto& it: shards_it->second.shards_cf_handle) {
       Iterator wsi = db_hash.db->get_iterator_cf(it, shards_it->first);
       wsi->seek_to_first();
       if (wsi->valid())
@@ -259,7 +261,7 @@ public:
   int seek_to_first_existing() {
     while (shards_it != db_hash.shards.end()) {
       std::vector<KeyValueDB::Iterator> shards;
-      if (shards_it->second.size() == 0) {
+      if (shards_it->second.shards_cf_handle.size() == 0) {
         /* no separate shard, is part of default column family */
         open_shards(shards, shards_it->first);
       } else {
@@ -378,7 +380,7 @@ private:
       const string& prefix) {
     auto shards_it = db_hash.shards.find(prefix);
     if (shards_it != db_hash.shards.end()) {
-      for (auto& it: shards_it->second) {
+      for (auto& it: shards_it->second.shards_cf_handle) {
         Iterator wsi = db_hash.db->get_iterator_cf(it, shards_it->first);
         wsi->seek_to_first();
         if (wsi->valid())
@@ -517,16 +519,18 @@ void BlueStore_DB_Hash::unlink_db() {
 
 int BlueStore_DB_Hash::open_shards() {
   for (auto& s_it: sharding_schema) {
-    if (s_it.second == 0) {
+    if (s_it.second.shards == 0) {
       auto cf_handle = db->column_family_handle("default");
-      shards[s_it.first].push_back(cf_handle);
+      shards[s_it.first].shards_cf_handle.push_back(cf_handle);
       dout(5) << "Column family '" << s_it.first << "' handle: " << (void*)cf_handle.priv << " " << dendl;
     } else {
-      for (size_t i = 0; i < s_it.second; i++) {
+      if (s_it.second.cutoff != 0)
+        shards[s_it.first].cutoff = s_it.second.cutoff;
+      for (size_t i = 0; i < s_it.second.shards; i++) {
         std::string name = s_it.first + "-" + to_string(i);
         auto cf_handle = db->column_family_handle(name);
         dout(5) << "Column family '" << name << "' handle: " << (void*)cf_handle.priv << " " << dendl;
-        shards[s_it.first].push_back(cf_handle);
+        shards[s_it.first].shards_cf_handle.push_back(cf_handle);
       }
     }
   }
@@ -535,13 +539,13 @@ int BlueStore_DB_Hash::open_shards() {
 KeyValueDB::ColumnFamilyHandle BlueStore_DB_Hash::get_db_shard(const std::string &prefix, const char *k, size_t keylen) {
   auto it = shards.find(prefix);
   ceph_assert(it != shards.end());
-  unsigned hash = ceph_str_hash_linux(k, keylen);
-  return it->second[hash % it->second.size()];
+  unsigned hash = ceph_str_hash_linux(k, std::min(it->second.cutoff, keylen));
+  return it->second.shards_cf_handle[hash % it->second.shards_cf_handle.size()];
 }
 std::vector<KeyValueDB::ColumnFamilyHandle>& BlueStore_DB_Hash::get_shards(const std::string &prefix) {
   auto it = shards.find(prefix);
   ceph_assert(it != shards.end());
-  return it->second;
+  return it->second.shards_cf_handle;
 }
 
 int BlueStore_DB_Hash::init(string option_str) {
@@ -556,7 +560,7 @@ int BlueStore_DB_Hash::create_and_open(std::ostream &out, const std::vector<Colu
   if (r != 0)
     return r;
   for (auto& s_it: sharding_schema) {
-    for (size_t i = 0; i < s_it.second; i++) {
+    for (size_t i = 0; i < s_it.second.shards; i++) {
       std::string name = s_it.first + "-" + to_string(i);
       if (db->column_family_handle(name) == ColumnFamilyHandle()) {
         r = db->column_family_create(name, "");
@@ -582,7 +586,7 @@ int BlueStore_DB_Hash::_do_open(std::ostream &out, bool read_only, const std::ve
   vector<std::string> cf_names;
   db->column_family_list(cf_names);
   for (auto& s_it: sharding_schema) {
-    for (size_t i = 0; i < s_it.second; i++) {
+    for (size_t i = 0; i < s_it.second.shards; i++) {
       std::string name = s_it.first + "-" + to_string(i);
       auto n_it = std::find(std::begin(cf_names), std::end(cf_names), name);
       if (n_it == cf_names.end()) {
@@ -722,7 +726,7 @@ void BlueStore_DB_Hash::compact_async() {
 void BlueStore_DB_Hash::compact_prefix(const std::string& prefix) {
   auto it = sharding_schema.find(prefix);
   if (it != sharding_schema.end()) {
-    for (size_t i = 0; i < it->second; i++) {
+    for (size_t i = 0; i < it->second.shards; i++) {
       std::string cf_name = prefix + "-" + to_string(i);
       db->column_family_compact(cf_name, prefix, "", "");
     }
@@ -731,7 +735,7 @@ void BlueStore_DB_Hash::compact_prefix(const std::string& prefix) {
 void BlueStore_DB_Hash::compact_prefix_async(const std::string& prefix) {
   auto it = sharding_schema.find(prefix);
   if (it != sharding_schema.end()) {
-    for (size_t i = 0; i < it->second; i++) {
+    for (size_t i = 0; i < it->second.shards; i++) {
       std::string cf_name = prefix + "-" + to_string(i);
       db->column_family_compact_async(cf_name, prefix, "", "");
     }
@@ -741,7 +745,7 @@ void BlueStore_DB_Hash::compact_range(const std::string& prefix,
                                       const std::string& start, const std::string& end) {
   auto it = sharding_schema.find(prefix);
   if (it != sharding_schema.end()) {
-    for (size_t i = 0; i < it->second; i++) {
+    for (size_t i = 0; i < it->second.shards; i++) {
       std::string cf_name = prefix + "-" + to_string(i);
       db->column_family_compact(cf_name, prefix, start, end);
     }
@@ -751,7 +755,7 @@ void BlueStore_DB_Hash::compact_range_async(const std::string& prefix,
                                             const std::string& start, const std::string& end) {
   auto it = sharding_schema.find(prefix);
   if (it != sharding_schema.end()) {
-    for (size_t i = 0; i < it->second; i++) {
+    for (size_t i = 0; i < it->second.shards; i++) {
       std::string cf_name = prefix + "-" + to_string(i);
       db->column_family_compact_async(cf_name, prefix, start, end);
     }
@@ -762,10 +766,10 @@ int BlueStore_DB_Hash::set_merge_operator(const std::string& prefix,
                                           std::shared_ptr<MergeOperator> mop) {
   auto it = sharding_schema.find(prefix);
   if (it != sharding_schema.end()) {
-    if (it->second == 0) {
+    if (it->second.shards == 0) {
       db->set_merge_operator(prefix, mop);
     } else {
-      for (size_t i = 0; i < it->second; i++) {
+      for (size_t i = 0; i < it->second.shards; i++) {
         std::string cf_name = prefix + "-" + to_string(i);
         db->set_merge_operator(cf_name, mop);
       }
@@ -783,9 +787,9 @@ int BlueStore_DB_Hash::locate_column_name(const std::pair<std::string, std::stri
                                           std::string& column_name) {
 
   auto it = sharding_schema.find(raw_key.first);
-  if (it != sharding_schema.end() && it->second != 0) {
+  if (it != sharding_schema.end() && it->second.shards != 0) {
     unsigned hash = ceph_str_hash_linux(raw_key.second.c_str(), raw_key.second.size());
-    hash = hash % it->second;
+    hash = hash % it->second.shards;
     column_name = it->first + "-" + to_string(hash);
   } else {
     column_name = "default";
@@ -796,5 +800,15 @@ int BlueStore_DB_Hash::locate_column_name(const std::pair<std::string, std::stri
 KeyValueDB* make_BlueStore_DB_Hash(KeyValueDB* db, const BlueStore_DB_Hash::ShardingSchema& schema) {
   RocksDBStore* rdb = dynamic_cast<RocksDBStore*>(db);
   ceph_assert(rdb != nullptr);
+  return new BlueStore_DB_Hash(rdb, schema);
+}
+
+KeyValueDB* make_BlueStore_DB_Hash(KeyValueDB* db, const std::map<std::string, size_t>& simple_schema) {
+  RocksDBStore* rdb = dynamic_cast<RocksDBStore*>(db);
+  ceph_assert(rdb != nullptr);
+  BlueStore_DB_Hash::ShardingSchema schema;
+  for (auto& it : simple_schema) {
+    schema.emplace(it.first, BlueStore_DB_Hash::ShardingDef{it.second, 0});
+  }
   return new BlueStore_DB_Hash(rdb, schema);
 }

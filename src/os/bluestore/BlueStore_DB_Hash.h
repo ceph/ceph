@@ -2,12 +2,21 @@
 #define BLUESTORE_DB_HASH_H
 
 
-#include "kv/RocksDBStore.h"
-
+#include "kv/KeyValueDB.h"
+#include <limits>
+class RocksDBStore;
+namespace rocksdb {
+  class Comparator;
+}
 class BlueStore_DB_Hash : public KeyValueDB {
   friend class BlueStore;
 public:
-  typedef std::map<std::string, size_t> ShardingSchema;
+
+  struct ShardingDef {
+    size_t shards; //count of shards per single DB prefix
+    size_t cutoff; //count of chars in key to use for hash calculation, 0 - all chars
+  };
+  typedef std::map<std::string, ShardingDef> ShardingSchema;
   class HashSharded_TransactionImpl;
   class WholeSpaceIteratorMerged_Impl;
   class SinglePrefixIteratorMerged_Impl;
@@ -17,7 +26,11 @@ private:
   CephContext* cct;
   const rocksdb::Comparator* comparator;
   ShardingSchema sharding_schema;
-  typedef std::map<std::string, std::vector<KeyValueDB::ColumnFamilyHandle> > ActiveShards;
+  struct ActiveShardsDef {
+    size_t cutoff = std::numeric_limits<size_t>::max();
+    std::vector<KeyValueDB::ColumnFamilyHandle> shards_cf_handle;
+  };
+  typedef std::map<std::string, ActiveShardsDef > ActiveShards;
   ActiveShards shards;
 
 public:
