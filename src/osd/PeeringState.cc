@@ -28,7 +28,7 @@ BufferedRecoveryMessages::BufferedRecoveryMessages(PeeringCtx &ctx)
   ctx.message_map.clear();
 }
 
-void PeeringCtxWrapper::send_notify(int to, const pg_notify_t &n)
+void BufferedRecoveryMessages::send_notify(int to, const pg_notify_t &n)
 {
   vector<pg_notify_t> notifies;
   notifies.push_back(n);
