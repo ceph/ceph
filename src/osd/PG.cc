@@ -3617,7 +3617,7 @@ void PG::find_unfound(epoch_t queued, PeeringCtx &rctx)
     * It may be that our initial locations were bad and we errored
     * out while trying to pull.
     */
-  if (!recovery_state.discover_all_missing(rctx.query_map)) {
+  if (!recovery_state.discover_all_missing(rctx)) {
     string action;
     if (state_test(PG_STATE_BACKFILLING)) {
       auto evt = PGPeeringEventRef(

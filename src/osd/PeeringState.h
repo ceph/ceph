@@ -84,6 +84,7 @@ struct BufferedRecoveryMessages {
     message_map[target].push_back(m);
   }
   void send_notify(int to, const pg_notify_t &n);
+  void send_query(int to, spg_t spgid, const pg_query_t &q);
 };
 
 struct HeartbeatStamps : public RefCountedObject {
@@ -229,6 +230,9 @@ struct PeeringCtxWrapper {
   }
   void send_notify(int to, const pg_notify_t &n) {
     msgs.send_notify(to, n);
+  }
+  void send_query(int to, spg_t spgid, const pg_query_t &q) {
+    msgs.send_query(to, spgid, q);
   }
 };
 
@@ -571,7 +575,6 @@ public:
       return state->rctx->transaction;
     }
 
-    void send_query(pg_shard_t to, const pg_query_t &query);
 
     map<int, map<spg_t, pg_query_t> > &get_query_map() {
       ceph_assert(state->rctx);
@@ -591,6 +594,12 @@ public:
     void send_notify(int to, const pg_notify_t &n) {
       ceph_assert(state->rctx);
       state->rctx->send_notify(to, n);
+    }
+    void send_query(int to, const pg_query_t &query) {
+      state->rctx->send_query(
+	to,
+	spg_t(spgid.pgid, query.to),
+	query);
     }
   };
   friend class PeeringMachine;
@@ -1777,7 +1786,7 @@ public:
 
   /// Pull missing sets from all candidate peers
   bool discover_all_missing(
-    map<int, map<spg_t,pg_query_t> > &query_map);
+    BufferedRecoveryMessages &rctx);
 
   /// Notify that hoid has been fully recocovered
   void object_recovered(
