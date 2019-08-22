@@ -2,15 +2,20 @@
 S3 Bucket Notifications Compatibility
 =====================================
 
-Ceph's `PubSub module`_ follows `AWS S3 Bucket Notifications API`_. However, some differences exist, as listed below.
+Ceph's `Bucket Notifications`_ and `PubSub Module`_ APIs follow `AWS S3 Bucket Notifications API`_. However, some differences exist, as listed below.
+
+
+.. note:: 
+
+    Compatibility is different depending on which of the above mechanism is used
 
 Supported Destination
-----------------------
+---------------------
 
 AWS supports: **SNS**, **SQS** and **Lambda** as possible destinations (AWS internal destinations). 
 Currently, we support: **HTTP/S** and **AMQP**. And also support pulling and acking of events stored in Ceph (as an intenal destination).
 
-We are using the SNS ARNs to represent these destinations.
+We are using the **SNS** ARNs to represent the **HTTP/S** and **AMQP** destinations.
 
 Notification Configuration XML
 ------------------------------
@@ -27,66 +32,85 @@ Following tags (and the tags inside them) are not supported:
 | ``<Filter>``                      | object filtering not supported               |
 +-----------------------------------+----------------------------------------------+
 
-REST API Extension
+REST API Extension 
 ------------------
 
-Ceph's bucket notification API follows has the following extensions:
+Ceph's bucket notification API has the following extensions:
 
 - Deletion of a specific notification, or all notifications on a bucket, using the ``DELETE`` verb
 
  - In S3, all notifications are deleted when the bucket is deleted, or when an empty notification is set on the bucket
 
-- Getting the information on a specific notification (when some exists on a bucket)  
+- Getting the information on a specific notification (when more than one exists on a bucket)
+
+  - In S3, it is only possible to fetch all notifications on a bucket
 
 Unsupported Fields in the Event Record
 --------------------------------------
 
 The records sent for bucket notification follow format described in: `Event Message Structure`_.
-However, the following fields are sent empty:
+However, the following fields may be sent empty, under the different deployment options (Notification/PubSub):
 
-+----------------------------------------+-------------------------------------------------------------+
-| Field                                  | Description                                                 |
-+========================================+=============================================================+
-| ``userIdentity.principalId``           | The identity of the user that triggered the event           |
-+----------------------------------------+-------------------------------------------------------------+
-| ``requestParameters.sourceIPAddress``  | The IP address of the client that triggered the event       |
-+----------------------------------------+-------------------------------------------------------------+
-| ``requestParameters.x-amz-request-id`` | The request id that triggered the event                     |
-+----------------------------------------+-------------------------------------------------------------+
-| ``requestParameters.x-amz-id-2``       | The IP address of the RGW on which the event was triggered  |
-+----------------------------------------+-------------------------------------------------------------+
-| ``s3.object.size``                     | The size of the object                                      |
-+----------------------------------------+-------------------------------------------------------------+
++----------------------------------------+--------------+---------------+------------------------------------------------------------+
+| Field                                  | Notification | PubSub        | Description                                                |
++========================================+==============+===============+============================================================+
+| ``userIdentity.principalId``           | Supported    | Not Supported | The identity of the user that triggered the event          |
++----------------------------------------+--------------+---------------+------------------------------------------------------------+
+| ``requestParameters.sourceIPAddress``  |         Not Supported        | The IP address of the client that triggered the event      |
++----------------------------------------+--------------+---------------+------------------------------------------------------------+
+| ``requestParameters.x-amz-request-id`` | Supported    | Not Supported | The request id that triggered the event                    |
++----------------------------------------+--------------+---------------+------------------------------------------------------------+
+| ``requestParameters.x-amz-id-2``       | Supported    | Not Supported | The IP address of the RGW on which the event was triggered |
++----------------------------------------+--------------+---------------+------------------------------------------------------------+
+| ``s3.object.size``                     | Supported    | Not Supported | The size of the object                                     |
++----------------------------------------+--------------+---------------+------------------------------------------------------------+
 
 Event Types
 -----------
 
 +----------------------------------------------+-----------------+-------------------------------------------+
-| Event                                        | Status          | Remarks                                   |
+| Event                                        | Notification    | PubSub                                    |
 +==============================================+=================+===========================================+
-| ``s3:ObjectCreated:*``                       | Supported       |                                           |
+| ``s3:ObjectCreated:*``                       | Supported                                                   |
 +----------------------------------------------+-----------------+-------------------------------------------+
-| ``s3:ObjectCreated:Put``                     | Supported       | supported at ``s3:ObjectCreated:*`` level |
+| ``s3:ObjectCreated:Put``                     | Supported       | Supported at ``s3:ObjectCreated:*`` level |
 +----------------------------------------------+-----------------+-------------------------------------------+
-| ``s3:ObjectCreated:Post``                    | Not Supported   | start of multi-part upload not supported  |
+| ``s3:ObjectCreated:Post``                    | Supported       | Not Supported                             |
 +----------------------------------------------+-----------------+-------------------------------------------+
-| ``s3:ObjectCreated:Copy``                    | Supported       | supported at ``s3:ObjectCreated:*`` level |
+| ``s3:ObjectCreated:Copy``                    | Supported       | Supported at ``s3:ObjectCreated:*`` level |
 +----------------------------------------------+-----------------+-------------------------------------------+
-| ``s3:ObjectCreated:CompleteMultipartUpload`` | Supported       | supported at ``s3:ObjectCreated:*`` level |
+| ``s3:ObjectCreated:CompleteMultipartUpload`` | Not Supported   | Supported at ``s3:ObjectCreated:*`` level |
+| (an extension to AWS)                        |                 |                                           |
 +----------------------------------------------+-----------------+-------------------------------------------+
-| ``s3:ObjectRemoved:*``                       | Supported       |                                           |
+| ``s3:ObjectRemoved:*``                       | Supported                                                   |
 +----------------------------------------------+-----------------+-------------------------------------------+
 | ``s3:ObjectRemoved:Delete``                  | Supported       | supported at ``s3:ObjectRemoved:*`` level |
 +----------------------------------------------+-----------------+-------------------------------------------+
-| ``s3:ObjectRemoved:DeleteMarkerCreated``     | Supported       | supported at ``s3:ObjectRemoved:*`` level |
+| ``s3:ObjectRemoved:DeleteMarkerCreated``     | Supported at ``s3:ObjectRemoved:*`` level                   |
 +----------------------------------------------+-----------------+-------------------------------------------+
-| ``s3:ObjectRestore:Post``                    | Not Supported   | not applicable to Ceph                    |
+| ``s3:ObjectRestore:Post``                    | Not applicable to Ceph                                      |
 +----------------------------------------------+-----------------+-------------------------------------------+
-| ``s3:ObjectRestore:Complete``                | Not Supported   | not applicable to Ceph                    |
+| ``s3:ObjectRestore:Complete``                | Not applicable to Ceph                                      |
 +----------------------------------------------+-----------------+-------------------------------------------+
-| ``s3:ReducedRedundancyLostObject``           | Not Supported   | not applicable to Ceph                    |
+| ``s3:ReducedRedundancyLostObject``           | Not applicable to Ceph                                      |
 +----------------------------------------------+-----------------+-------------------------------------------+
 
+Topic Configuration
+-------------------
+In the case of bucket notifications, the topics management API will be derived from `AWS Simple Notification Service API`_. 
+Note that most of the API is not applicable to Ceph, and only the following actions are implemented:
+
+ - ``CreateTopic``
+ - ``DeleteTopic``
+ - ``ListTopics``
+
+We also extend it by: 
+
+ - ``GetTopic`` - allowing for fetching a specific topic, instead of all user topics
+ - In ``CreateTopic`` we allow setting endpoint attributes
+
+.. _AWS Simple Notification Service API: https://docs.aws.amazon.com/sns/latest/api/API_Operations.html
 .. _AWS S3 Bucket Notifications API: https://docs.aws.amazon.com/AmazonS3/latest/dev/NotificationHowTo.html
 .. _Event Message Structure: https://docs.aws.amazon.com/AmazonS3/latest/dev/notification-content-structure.html
-.. _`PubSub module`: ../pubsub-module
+.. _`PubSub Module`: ../pubsub-module
+.. _`Bucket Notifications`: ../notifications
