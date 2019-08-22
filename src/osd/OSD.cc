@@ -9265,6 +9265,25 @@ void OSD::dispatch_context(PeeringCtx &ctx, PG *pg, OSDMapRef curmap,
     do_notifies(ctx.notify_list, curmap);
     do_queries(ctx.query_map, curmap);
     do_infos(ctx.info_map, curmap);
+
+    for (auto& [osd, ls] : ctx.message_map) {
+      if (!curmap->is_up(osd)) {
+	dout(20) << __func__ << " skipping down osd." << osd << dendl;
+	continue;
+      }
+      ConnectionRef con = service.get_con_osd_cluster(
+	osd, curmap->get_epoch());
+      if (!con) {
+	dout(20) << __func__ << " skipping osd." << osd << " (NULL con)"
+		 << dendl;
+	continue;
+      }
+      service.maybe_share_map(con.get(), curmap);
+      for (auto m : ls) {
+	con->send_message2(m);
+      }
+      ls.clear();
+    }
   }
   if ((!ctx.transaction.empty() || ctx.transaction.has_contexts()) && pg) {
     int tr = store->queue_transaction(

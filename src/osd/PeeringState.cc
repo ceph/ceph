@@ -20,11 +20,13 @@
 BufferedRecoveryMessages::BufferedRecoveryMessages(PeeringCtx &ctx)
   : query_map(std::move(ctx.query_map)),
     info_map(std::move(ctx.info_map)),
-    notify_list(std::move(ctx.notify_list))
+    notify_list(std::move(ctx.notify_list)),
+    message_map(std::move(ctx.message_map))
 {
   ctx.query_map.clear();
   ctx.info_map.clear();
   ctx.notify_list.clear();
+  ctx.message_map.clear();
 }
 
 void PGPool::update(CephContext *cct, OSDMapRef map)

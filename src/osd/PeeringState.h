@@ -54,6 +54,7 @@ struct BufferedRecoveryMessages {
   map<int, map<spg_t, pg_query_t> > query_map;
   map<int, vector<pg_notify_t>> info_map;
   map<int, vector<pg_notify_t>> notify_list;
+  map<int, vector<MessageRef>> message_map;
 
   BufferedRecoveryMessages() = default;
   BufferedRecoveryMessages(PeeringCtx &);
@@ -74,6 +75,14 @@ struct BufferedRecoveryMessages {
       auto &ovec = notify_list[target];
       ovec.reserve(ovec.size() + nlist.size());
       ovec.insert(ovec.end(), nlist.begin(), nlist.end());
+    }
+    for (auto &[target, ls] : m.message_map) {
+      auto &ovec = message_map[target];
+      // put buffered messages in front
+      ls.reserve(ls.size() + ovec.size());
+      ls.insert(ls.end(), ovec.begin(), ovec.end());
+      ovec.clear();
+      ovec.swap(ls);
     }
   }
 };
@@ -373,6 +382,7 @@ private:
     map<int, map<spg_t, pg_query_t> > &query_map;
     map<int, vector<pg_notify_t>> &info_map;
     map<int, vector<pg_notify_t>> &notify_list;
+    map<int, vector<MessageRef>> &message_map;
     ObjectStore::Transaction &transaction;
     HBHandle * const handle = nullptr;
 
@@ -380,6 +390,7 @@ private:
       query_map(wrapped.query_map),
       info_map(wrapped.info_map),
       notify_list(wrapped.notify_list),
+      message_map(wrapped.message_map),
       transaction(wrapped.transaction),
       handle(wrapped.handle) {}
 
@@ -387,11 +398,15 @@ private:
       : query_map(buf.query_map),
 	info_map(buf.info_map),
 	notify_list(buf.notify_list),
+	message_map(buf.message_map),
 	transaction(wrapped.transaction),
         handle(wrapped.handle) {}
 
     PeeringCtxWrapper(PeeringCtxWrapper &&ctx) = default;
 
+    void send_osd_message(int target, Message *m) {
+      message_map[target].push_back(m);
+    }
     void send_notify(pg_shard_t to, const pg_notify_t &n) {
       notify_list[to.osd].emplace_back(n);
     }
