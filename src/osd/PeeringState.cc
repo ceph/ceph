@@ -19,10 +19,12 @@
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
 
-BufferedRecoveryMessages::BufferedRecoveryMessages(PeeringCtx &ctx)
-  : message_map(std::move(ctx.message_map))
-{
-  ctx.message_map.clear();
+BufferedRecoveryMessages::BufferedRecoveryMessages(
+  ceph_release_t r,
+  PeeringCtx &ctx)
+  : require_osd_release(r) {
+  // steal messages from ctx
+  message_map.swap(ctx.message_map);
 }
 
 void BufferedRecoveryMessages::send_notify(int to, const pg_notify_t &n)
@@ -134,7 +136,8 @@ void PeeringState::begin_block_outgoing() {
   ceph_assert(!messages_pending_flush);
   ceph_assert(orig_ctx);
   ceph_assert(rctx);
-  messages_pending_flush = BufferedRecoveryMessages();
+  messages_pending_flush = BufferedRecoveryMessages(
+    orig_ctx->require_osd_release);
   rctx.emplace(*messages_pending_flush, *orig_ctx);
 }
 
