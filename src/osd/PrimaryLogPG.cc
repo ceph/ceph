@@ -13929,8 +13929,11 @@ bool PrimaryLogPG::agent_maybe_flush(ObjectContextRef& obc)
   }
   bool evict_mode_full =
     (agent_state->evict_mode == TierAgentState::EVICT_MODE_FULL);
+  // system clock may had jump forward and jump back, and this will cause
+  // ob_local_mtime may greater than now, thus we should ignore it's age
   if (!evict_mode_full &&
       obc->obs.oi.soid.snap == CEPH_NOSNAP &&  // snaps immutable; don't delay
+      (ob_local_mtime < now) &&
       (ob_local_mtime + utime_t(pool.info.cache_min_flush_age, 0) > now)) {
     dout(20) << __func__ << " skip (too young) " << obc->obs.oi << dendl;
     osd->logger->inc(l_osd_agent_skip);
@@ -14012,7 +14015,10 @@ bool PrimaryLogPG::agent_maybe_evict(ObjectContextRef& obc, bool after_flush)
     } else {
       ob_local_mtime = obc->obs.oi.mtime;
     }
-    if (ob_local_mtime + utime_t(pool.info.cache_min_evict_age, 0) > now) {
+    // system clock may had jump forward and jump back, and this will cause
+    // ob_local_mtime may greater than now, thus we should ignore it's age
+    if ((ob_local_mtime < now) &&
+        (ob_local_mtime + utime_t(pool.info.cache_min_evict_age, 0) > now)) {
       dout(20) << __func__ << " skip (too young) " << obc->obs.oi << dendl;
       osd->logger->inc(l_osd_agent_skip);
       return false;
