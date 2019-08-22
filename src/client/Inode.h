@@ -287,7 +287,6 @@ struct Inode {
       _ref(0), ll_ref(0), dir_pin(MDS_RANK_NONE)
   {
     memset(&dir_layout, 0, sizeof(dir_layout));
-    memset(&worm, 0, sizeof(worm));
   }
   ~Inode();
 

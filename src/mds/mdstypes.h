@@ -78,8 +78,6 @@
 #define WORM_RETAIN  4     // the worm file is in retained state
 #define WORM_EXPIRE  8     // the worm file is in expired state
 #define WORM_RETEN_PERIOD_UNLIMIT 16  //the worm file retention period is unlimit
-#define MAX_MIN_RETEN_PERIOD 946080000 // 30 years
-#define MIN_MAX_RETEN_PERIOD 2207520000 // 70 years
 
 typedef int32_t mds_rank_t;
 constexpr mds_rank_t MDS_RANK_NONE = -1;

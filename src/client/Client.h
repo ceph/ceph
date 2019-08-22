@@ -739,8 +739,8 @@ public:
   bool use_faked_inos() { return _use_faked_inos; }
   vinodeno_t map_faked_ino(ino_t ino);
 
-  int ll_set_flags(Fh *fh, const UserPerm& perms);
-  int ll_set_flags(Inode *in, const UserPerm& perms);
+  int ll_set_flags(Fh *fh, int worm_flag, const UserPerm& perms);
+  int ll_set_flags(Inode *in, int worm_flag, const UserPerm& perms);
 
   int ll_get_flags(Fh *fh, const UserPerm& perms);
   int ll_get_flags(Inode *in, const UserPerm& perms);
@@ -1099,7 +1099,7 @@ private:
 		const UserPerm& perms);
   int _listxattr(Inode *in, char *names, size_t len, const UserPerm& perms);
   int _do_setxattr(Inode *in, const char *name, const void *value, size_t len,
-		   int flags, const UserPerm& perms);
+		   int flags, int worm_flags, const UserPerm& perms);
   int _setxattr(Inode *in, const char *name, const void *value, size_t len,
 		int flags, const UserPerm& perms);
   int _setxattr(InodeRef &in, const char *name, const void *value, size_t len,

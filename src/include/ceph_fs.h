@@ -433,6 +433,8 @@ int ceph_flags_sys2wire(int flags);
 #define CEPH_XATTR_REPLACE (1 << 1)
 #define CEPH_XATTR_REMOVE  (1 << 31)
 
+#define CEPH_XATTR_WANT_SET_WORM_CAPS 1
+
 /*
  * readdir request flags;
  */
@@ -487,6 +489,7 @@ union ceph_mds_request_args_legacy {
 	struct {
 		__le32 flags;
 		__le32 osdmap_epoch; 	    /* use for set file/dir layout */
+		__le32 set_worm_attr;       /* use for set worm attr */
 	} __attribute__ ((packed)) setxattr;
 	struct {
 		struct ceph_file_layout layout;
@@ -563,6 +566,7 @@ union ceph_mds_request_args {
 	struct {
 		__le32 flags;
 		__le32 osdmap_epoch; 	    /* use for set file/dir layout */
+		__le32 set_worm_attr;       /* use for set worm attr */
 	} __attribute__ ((packed)) setxattr;
 	struct {
 		struct ceph_file_layout layout;

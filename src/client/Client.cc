@@ -11463,7 +11463,7 @@ int Client::ll_listxattr(Inode *in, char *names, size_t size,
 }
 
 int Client::_do_setxattr(Inode *in, const char *name, const void *value,
-			 size_t size, int flags, const UserPerm& perms)
+			 size_t size, int flags, int worm_flags, const UserPerm& perms)
 {
 
   int xattr_flags = 0;
@@ -11481,6 +11481,7 @@ int Client::_do_setxattr(Inode *in, const char *name, const void *value,
   req->set_string2(name);
   req->set_inode(in);
   req->head.args.setxattr.flags = xattr_flags;
+  req->head.args.setxattr.set_worm_attr = worm_flags;
 
   bufferlist bl;
   assert (value || size == 0);
@@ -11564,7 +11565,7 @@ int Client::_setxattr(Inode *in, const char *name, const void *value,
     }
   }
 
-  int ret = _do_setxattr(in, name, value, size, flags, perms);
+  int ret = _do_setxattr(in, name, value, size, flags, 0, perms);
   if (ret >= 0 && check_realm) {
     // check if snaprealm was created for quota inode
     if (in->quota.is_enable() &&
@@ -11769,7 +11770,7 @@ int Client::set_worm_exptime(Inode *in, const char *name, const void *value,
    char buf[64];
    snprintf(buf, sizeof(buf), "%u_%u", exp_time.tv.tv_sec, exp_time.tv.tv_nsec);
  
-   res = _do_setxattr(in, "ceph.worm.exp_time", &buf, std::strlen(buf), flags, perms);
+   res = _do_setxattr(in, "ceph.worm.exp_time", &buf, std::strlen(buf), flags, 0, perms);
 
    return res;
 } 
@@ -11800,7 +11801,7 @@ int Client::worm_state_transition(Inode *in, const UserPerm& perms, int op)
     uint32_t worm_state = in->worm.worm_state | WORM_RETAIN;
     utime_t exp_time;
     if (in->worm.is_reten_period_ulimit()) {
-      exp_time.tv.tv_sec = 4294967295;
+      exp_time.tv.tv_sec = UINT32_MAX;
       exp_time.tv.tv_nsec = 0;
     } else {
       exp_time.tv.tv_sec = in->mtime.sec() + in->worm.retention_period + in->worm.auto_commit_period;
@@ -11809,7 +11810,7 @@ int Client::worm_state_transition(Inode *in, const UserPerm& perms, int op)
 
     char buf[64];
     snprintf(buf, sizeof(buf), "state=%u exp_time=%u_%u", worm_state, exp_time.tv.tv_sec, exp_time.tv.tv_nsec);
-    res = _do_setxattr(in, "ceph.worm", &buf, std::strlen(buf), 0, perms);
+    res = _do_setxattr(in, "ceph.worm", &buf, std::strlen(buf), 0, 0, perms);
     if (res) {
       ldout(cct, 3) << "set worm info return:" << res << dendl;
       return res;
@@ -11829,7 +11830,7 @@ int Client::worm_state_transition(Inode *in, const UserPerm& perms, int op)
       uint32_t worm_state = (in->worm.worm_state | WORM_EXPIRE) & (~WORM_RETAIN);
       char buf[12];
       snprintf(buf, sizeof(buf), "%u", worm_state);
-      res = _do_setxattr(in, "ceph.worm.state", &buf, std::strlen(buf), 0, perms);
+      res = _do_setxattr(in, "ceph.worm.state", &buf, std::strlen(buf), 0, 0,perms);
       if (res){
         ldout(cct, 3) << "set worm state (" << worm_state << ") return:"<< res << dendl;
         return res;
@@ -12056,7 +12057,6 @@ size_t Client::_vxattrcb_snap_btime(Inode *in, char *val, size_t size)
   name: CEPH_XATTR_NAME(_type, _name),			        \
   getxattr_cb: &Client::_vxattrcb_ ## _type ## _ ## _name,	\
   readonly: false,						\
-  hidden: true,							\
   exists_cb: &Client::_vxattrcb_worm_exists,			\
   flags: 0,                                                     \
 }
@@ -12109,7 +12109,6 @@ const Client::VXattr Client::_dir_vxattrs[] = {
     name: "ceph.worm",
     getxattr_cb: &Client::_vxattrcb_worm,
     readonly: false,
-    hidden: true,
     exists_cb: &Client::_vxattrcb_worm_exists,
     flags: 0,
   },
@@ -12146,7 +12145,6 @@ const Client::VXattr Client::_file_vxattrs[] = {
     name: "ceph.worm",
     getxattr_cb: &Client::_vxattrcb_worm,
     readonly: false,
-    hidden: true,
     exists_cb: &Client::_vxattrcb_worm_exists,
     flags: 0,
   },
@@ -13148,24 +13146,26 @@ int Client::ll_file_layout(Fh *fh, file_layout_t *layout)
   return ll_file_layout(fh->inode.get(), layout);
 }
 
-int Client::ll_set_flags(Inode *in, const UserPerm& perms)
+int Client::ll_set_flags(Inode *in, int worm_flag, const UserPerm& perms)
 { 
    std::lock_guard lock(client_lock);
    int res = 0;
    
-   if(!in->worm.is_enable()) {
+   if (!in->worm.is_enable()) {
      return -EOPNOTSUPP;
    }
    
    if (in->worm.is_retain()) {
      return res;
    }
+
    
-   if (in->worm.is_enable() && !in->worm.is_retain()) {
+   // set immutuble flag
+   if (worm_flag != 0 && !in->worm.is_retain()) {
      uint32_t worm_state = (in->worm.worm_state | WORM_RETAIN) & (~WORM_EXPIRE);
      utime_t exp_time;  
      if (in->worm.is_reten_period_ulimit()) {
-        exp_time.tv.tv_sec = 4294967295;
+        exp_time.tv.tv_sec = UINT32_MAX;
         exp_time.tv.tv_nsec = 0;
      } else {  
        exp_time.tv.tv_sec = in->mtime.sec() + in->worm.retention_period;
@@ -13173,18 +13173,31 @@ int Client::ll_set_flags(Inode *in, const UserPerm& perms)
      } 
      char buf[64];
      snprintf(buf, sizeof(buf), "state=%u exp_time=%u_%u", worm_state, exp_time.tv.tv_sec, exp_time.tv.tv_nsec);
-     res = _do_setxattr(in, "ceph.worm", &buf, std::strlen(buf), 0, perms);
+     res = _do_setxattr(in, "ceph.worm", &buf, std::strlen(buf), 0, 0, perms);
      if (res) {
        ldout(cct, 3) << "set worm info return:" << res << dendl;
      }
+     return res;
+   }
+
+   // clear immutuble flag
+   if (worm_flag == 0 && in->worm.is_retain()) {
+     uint32_t worm_state = (in->worm.worm_state | WORM_EXPIRE) & (~WORM_RETAIN);
+     char buf[12];
+     snprintf(buf, sizeof(buf), "%u", worm_state);
+     res = _do_setxattr(in, "ceph.worm.state", &buf, std::strlen(buf), 0, CEPH_XATTR_WANT_SET_WORM_CAPS, perms);
+     if (res){
+       ldout(cct, 3) << "set worm state (" << worm_state << ") return:"<< res << dendl;
+     }
+     return res;
    }
 
    return res;
 }
 
-int Client::ll_set_flags(Fh *fh, const UserPerm& perms)
+int Client::ll_set_flags(Fh *fh, int worm_flag, const UserPerm& perms)
 { 
-  return ll_set_flags(fh->inode.get(), perms);
+  return ll_set_flags(fh->inode.get(), worm_flag, perms);
 }
 
 int Client::ll_get_flags(Inode *in, const UserPerm& perms)
@@ -14555,7 +14568,7 @@ int Client::_posix_acl_chmod(Inode *in, mode_t mode, const UserPerm& perms)
       r = posix_acl_access_chmod(acl, mode);
       if (r < 0)
 	goto out;
-      r = _do_setxattr(in, ACL_EA_ACCESS, acl.c_str(), acl.length(), 0, perms);
+      r = _do_setxattr(in, ACL_EA_ACCESS, acl.c_str(), acl.length(), 0, 0, perms);
     } else {
       r = 0;
     }

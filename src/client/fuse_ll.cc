@@ -673,18 +673,18 @@ static void fuse_ll_ioctl(fuse_req_t req, fuse_ino_t ino, int cmd, void *arg, st
         fuse_reply_err(req, EOPNOTSUPP);
         return;
       }
-
-      if (*flags & FS_IMMUTABLE_FL) {
-        Fh *fh = (Fh*)fi->fh;
-        const struct fuse_ctx *ctx = fuse_req_ctx(req);
-        UserPerm perms(ctx->uid, ctx->gid);
-        get_fuse_groups(perms, req);
-        int ret = cfuse->client->ll_set_flags(fh, perms);
-        if (ret) {
-          fuse_reply_err(req, -ret);
-          return;
-        }
+   
+      int worm_flag = *flags & FS_IMMUTABLE_FL;
+      Fh *fh = (Fh*)fi->fh;
+      const struct fuse_ctx *ctx = fuse_req_ctx(req);
+      UserPerm perms(ctx->uid, ctx->gid);
+      get_fuse_groups(perms, req);
+      int ret = cfuse->client->ll_set_flags(fh, worm_flag, perms);
+      if (ret) {
+        fuse_reply_err(req, -ret);
+        return;
       }
+      
       fuse_reply_ioctl(req, 0, NULL, 0);
     }
     break;

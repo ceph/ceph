@@ -33,6 +33,7 @@ enum {
   MAY_CHGRP	= (1 << 5),
   MAY_SET_VXATTR = (1 << 6),
   MAY_SNAPSHOT	= (1 << 7),
+  MAY_SET_WORM  = (1 << 8),
 };
 
 class CephContext;
@@ -46,16 +47,20 @@ struct MDSCapSpec {
   static const unsigned SET_VXATTR	= (1 << 3);
   // if the capability permits mksnap/rmsnap
   static const unsigned SNAPSHOT	= (1 << 4);
+  // if the capability permits setting worm attr
+  static const unsigned SET_WORM        = (1 << 5);
 
   static const unsigned RW		= (READ|WRITE);
   static const unsigned RWP		= (READ|WRITE|SET_VXATTR);
   static const unsigned RWS		= (READ|WRITE|SNAPSHOT);
   static const unsigned RWPS		= (READ|WRITE|SET_VXATTR|SNAPSHOT);
+  static const unsigned RWPI           = (READ|WRITE|SET_VXATTR|SET_WORM);
+  static const unsigned RWPSI          = (READ|WRITE|SET_VXATTR|SNAPSHOT|SET_WORM);
 
   MDSCapSpec() = default;
   MDSCapSpec(unsigned _caps) : caps(_caps) {
     if (caps & ALL)
-      caps |= RWPS;
+      caps |= RWPSI;
   }
 
   bool allow_all() const {
@@ -83,6 +88,9 @@ struct MDSCapSpec {
   }
   bool allow_set_vxattr() const {
     return (caps & SET_VXATTR);
+  }
+  bool allow_set_worm() const {
+    return (caps & SET_WORM);
   }
 private:
   unsigned caps = 0;

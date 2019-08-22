@@ -86,6 +86,10 @@ struct MDSCapParser : qi::grammar<Iterator, MDSAuthCaps()>
         (lit("rw"))[_val = MDSCapSpec(MDSCapSpec::RW)]
         |
         (lit("r"))[_val = MDSCapSpec(MDSCapSpec::READ)]
+        |
+        (lit("rwpi"))[_val = MDSCapSpec(MDSCapSpec::RWPI)]
+        |
+        (lit("rwpsi"))[_val = MDSCapSpec(MDSCapSpec::RWPSI)]
         );
 
     grant = lit("allow") >> (capspec >> match >>
@@ -246,6 +250,12 @@ bool MDSAuthCaps::is_capable(std::string_view inode_path,
         }
       }
 
+      if (mask & MAY_SET_WORM) {
+        if (!grant.spec.allow_set_worm()) {
+          continue;
+        }
+      }
+
       if (mask & MAY_SNAPSHOT) {
         if (!grant.spec.allow_snapshot()) {
           continue;
@@ -395,6 +405,9 @@ ostream &operator<<(ostream &out, const MDSCapSpec &spec)
     }
     if (spec.allow_snapshot()) {
       out << "s";
+    }
+    if (spec.allow_set_worm()) {
+       out << "i";
     }
   }
 

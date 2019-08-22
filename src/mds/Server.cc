@@ -5244,13 +5244,13 @@ int Server::parse_worm_vxattr(MDRequestRef& mdr, CInode *cur, string name, strin
          parse_worm_vxattr(mdr, cur, "worm.enable", "1", worm);
       }
 
-      if (q == 0xffffffff) {                    // retetion period ulimit
+      if (q == UINT32_MAX) {                    // retetion period ulimit
          worm->worm_state |= WORM_RETEN_PERIOD_UNLIMIT;
       }
       worm->retention_period = q;
     } else if (name == "worm.min_retention_period") {
       uint32_t q = boost::lexical_cast<uint32_t>(value);
-      if ((worm->is_enable() && !worm->is_root())|| (q > MAX_MIN_RETEN_PERIOD && q != 0xffffffff)){
+      if (worm->is_enable() && !worm->is_root()){
         return -EINVAL;
       }
       
@@ -5261,7 +5261,7 @@ int Server::parse_worm_vxattr(MDRequestRef& mdr, CInode *cur, string name, strin
       worm->min_retention_period = q;
     } else if (name == "worm.max_retention_period") {
       uint32_t q = boost::lexical_cast<uint32_t>(value);
-      if ((worm->is_enable() && !worm->is_root())|| (q > MIN_MAX_RETEN_PERIOD && q != 0xffffffff)){
+      if (worm->is_enable() && !worm->is_root()){
         return -EINVAL;
       }
 
@@ -5500,8 +5500,13 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     cur->set_export_pin(rank);
     pip = &pi.inode;
   } else if (name.compare(0, 9, "ceph.worm") == 0) { 
+    int flags = req->head.args.setxattr.set_worm_attr;
+    if (flags == CEPH_XATTR_WANT_SET_WORM_CAPS){
+      if (!check_access(mdr, cur, MAY_SET_WORM)) {
+        return;
+      };
+    }
     worm_info_t worm = cur->get_projected_inode()->worm;
-
     rest = name.substr(name.find("worm"));
     int r = parse_worm_vxattr(mdr, cur, rest, value, &worm);
     if (r >= 0 && !worm.is_valid()) {
