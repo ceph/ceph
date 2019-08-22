@@ -9262,8 +9262,6 @@ void OSD::dispatch_context(PeeringCtx &ctx, PG *pg, OSDMapRef curmap,
   } else if (!is_active()) {
     dout(20) << __func__ << " not active" << dendl;
   } else {
-    do_infos(ctx.info_map, curmap);
-
     for (auto& [osd, ls] : ctx.message_map) {
       if (!curmap->is_up(osd)) {
 	dout(20) << __func__ << " skipping down osd." << osd << dendl;
@@ -9290,32 +9288,6 @@ void OSD::dispatch_context(PeeringCtx &ctx, PG *pg, OSDMapRef curmap,
       handle);
     ceph_assert(tr == 0);
   }
-}
-
-void OSD::do_infos(map<int,vector<pg_notify_t>>& info_map,
-		   OSDMapRef curmap)
-{
-  for (auto& [osd, notifies] : info_map) {
-    if (!curmap->is_up(osd)) {
-      dout(20) << __func__ << " skipping down osd." << osd << dendl;
-      continue;
-    }
-    for (auto& i : notifies) {
-      dout(20) << __func__ << " sending info " << i.info
-	       << " to osd " << osd << dendl;
-    }
-    ConnectionRef con = service.get_con_osd_cluster(
-      osd, curmap->get_epoch());
-    if (!con) {
-      dout(20) << __func__ << " skipping osd." << osd << " (NULL con)" << dendl;
-      continue;
-    }
-    service.maybe_share_map(con.get(), curmap);
-    MOSDPGInfo *m = new MOSDPGInfo(curmap->get_epoch());
-    m->pg_list = std::move(notifies);
-    con->send_message(m);
-  }
-  info_map.clear();
 }
 
 void OSD::handle_fast_pg_create(MOSDPGCreate2 *m)
