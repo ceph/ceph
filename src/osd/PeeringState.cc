@@ -20,10 +20,8 @@
 #define dout_subsys ceph_subsys_osd
 
 BufferedRecoveryMessages::BufferedRecoveryMessages(PeeringCtx &ctx)
-  : info_map(std::move(ctx.info_map)),
-    message_map(std::move(ctx.message_map))
+  : message_map(std::move(ctx.message_map))
 {
-  ctx.info_map.clear();
   ctx.message_map.clear();
 }
 

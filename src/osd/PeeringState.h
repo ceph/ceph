@@ -51,18 +51,12 @@ class PeeringCtx;
 
 // [primary only] content recovery state
 struct BufferedRecoveryMessages {
-  map<int, vector<pg_notify_t>> info_map;
   map<int, vector<MessageRef>> message_map;
 
   BufferedRecoveryMessages() = default;
   BufferedRecoveryMessages(PeeringCtx &);
 
   void accept_buffered_messages(BufferedRecoveryMessages &m) {
-    for (auto &[target, ivec] : m.info_map) {
-      auto &ovec = info_map[target];
-      ovec.reserve(ovec.size() + ivec.size());
-      ovec.insert(ovec.end(), ivec.begin(), ivec.end());
-    }
     for (auto &[target, ls] : m.message_map) {
       auto &ovec = message_map[target];
       // put buffered messages in front
@@ -200,19 +194,16 @@ struct PeeringCtx : BufferedRecoveryMessages {
 struct PeeringCtxWrapper {
   utime_t start_time;
   BufferedRecoveryMessages &msgs;
-  map<int, vector<pg_notify_t>> &info_map;
   ObjectStore::Transaction &transaction;
   HBHandle * const handle = nullptr;
 
   PeeringCtxWrapper(PeeringCtx &wrapped) :
     msgs(wrapped),
-    info_map(wrapped.info_map),
     transaction(wrapped.transaction),
     handle(wrapped.handle) {}
 
   PeeringCtxWrapper(BufferedRecoveryMessages &buf, PeeringCtx &wrapped)
     : msgs(buf),
-      info_map(buf.info_map),
       transaction(wrapped.transaction),
       handle(wrapped.handle) {}
 
@@ -571,11 +562,6 @@ public:
     ObjectStore::Transaction& get_cur_transaction() {
       ceph_assert(state->rctx);
       return state->rctx->transaction;
-    }
-
-    map<int, vector<pg_notify_t>> &get_info_map() {
-      ceph_assert(state->rctx);
-      return state->rctx->info_map;
     }
 
     PeeringCtxWrapper &get_recovery_ctx() {
