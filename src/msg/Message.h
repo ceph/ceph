@@ -83,10 +83,13 @@
 #define MSG_OSD_BEACON       79
 
 #define MSG_OSD_PG_NOTIFY      80
+#define MSG_OSD_PG_NOTIFY2    130
 #define MSG_OSD_PG_QUERY       81
+#define MSG_OSD_PG_QUERY2     131
 #define MSG_OSD_PG_LOG         83
 #define MSG_OSD_PG_REMOVE      84
 #define MSG_OSD_PG_INFO        85
+#define MSG_OSD_PG_INFO2      132
 #define MSG_OSD_PG_TRIM        86
 
 #define MSG_PGSTATS            87
