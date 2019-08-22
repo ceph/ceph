@@ -1204,6 +1204,7 @@ public:
   ObjectDesc old_value;
   int snap;
   bool balance_reads;
+  bool localize_reads;
 
   std::shared_ptr<int> in_use;
 
@@ -1230,12 +1231,14 @@ public:
 	 RadosTestContext *context,
 	 const string &oid,
 	 bool balance_reads,
+	 bool localize_reads,
 	 TestOpStat *stat = 0)
     : TestOp(n, context, stat),
       completions(3),
       oid(oid),
       snap(0),
       balance_reads(balance_reads),
+      localize_reads(localize_reads),
       results(3),
       retvals(3),
       extent_results(3),
@@ -1339,6 +1342,8 @@ public:
     unsigned flags = 0;
     if (balance_reads)
       flags |= librados::OPERATION_BALANCE_READS;
+    if (localize_reads)
+      flags |= librados::OPERATION_LOCALIZE_READS;
 
     ceph_assert(!context->io_ctx.aio_operate(context->prefix+oid, completions[0], &op,
 					flags, NULL));
@@ -1985,6 +1990,7 @@ public:
   ObjectDesc tgt_value;
   int snap;
   bool balance_reads;
+  bool localize_reads;
 
   std::shared_ptr<int> in_use;
 
@@ -2006,12 +2012,14 @@ public:
 	 const string &oid,
 	 const string &tgt_pool_name,
 	 bool balance_reads,
+	 bool localize_reads,
 	 TestOpStat *stat = 0)
     : TestOp(n, context, stat),
       completions(2),
       oid(oid),
       snap(0),
       balance_reads(balance_reads),
+      localize_reads(localize_reads),
       results(2),
       retvals(2),
       waiting_on(0),
@@ -2106,6 +2114,8 @@ public:
     unsigned flags = 0;
     if (balance_reads)
       flags |= librados::OPERATION_BALANCE_READS;
+    if (localize_reads)
+      flags |= librados::OPERATION_LOCALIZE_READS;
 
     ceph_assert(!context->io_ctx.aio_operate(context->prefix+oid, completions[0], &op,
 					flags, NULL));
