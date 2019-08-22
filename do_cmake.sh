@@ -1,8 +1,12 @@
 #!/usr/bin/env bash
 set -x
+
+if [ -z "$DIR" ]; then DIR=build ; fi
+echo $DIR
+
 git submodule update --init --recursive
-if test -e build; then
-    echo 'build dir already exists; rm -rf build and re-run'
+if test -e $DIR; then
+    echo '$DIR dir already exists; rm -rf $DIR and re-run'
     exit 1
 fi
 
@@ -46,8 +50,8 @@ if [ -n "$WITH_RADOSGW_AMQP_ENDPOINT" ] ; then
     ARGS="$ARGS -DWITH_RADOSGW_AMQP_ENDPOINT=$WITH_RADOSGW_AMQP_ENDPOINT"
 fi
 
-mkdir build
-cd build
+mkdir $DIR
+cd $DIR
 if type cmake3 > /dev/null 2>&1 ; then
     CMAKE=cmake3
 else
