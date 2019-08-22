@@ -343,6 +343,10 @@ class Orchestrator(object):
     internet downloads.  For that reason, all are asynchronous, and return
     ``Completion`` objects.
 
+    Methods should only return the completion and not directly execute
+    anything, like network calls. Otherwise the purpose of
+    those completions is defeated.
+
     Implementations are not required to start work on an operation until
     the caller waits on the relevant Completion objects.  Callers making
     multiple updates should not wait on Completions until they're done
@@ -392,19 +396,18 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     @_hide_in_features
-    def wait(self, completions):
+    def process(self, completions):
+        # type: (List[_Completion]) -> None
         """
-        Given a list of Completion instances, progress any which are
-        incomplete.  Return a true if everything is done.
+        Given a list of Completion instances, process any which are
+        incomplete.
 
         Callers should inspect the detail of each completion to identify
         partial completion/progress information, and present that information
         to the user.
 
-        For fast operations (e.g. reading from a database), implementations
-        may choose to do blocking IO in this call.
-
-        :rtype: bool
+        This method should not block, as this would make it slow to query
+        a status, while other long running operations are in progress.
         """
         raise NotImplementedError()
 
@@ -1069,6 +1072,12 @@ class OrchestratorClientMixin(Orchestrator):
 
         self.__mgr = mgr  # Make sure we're not overwriting any other `mgr` properties
 
+    def __get_mgr(self):
+        try:
+            return self.__mgr
+        except AttributeError:
+            return self
+
     def _oremote(self, meth, args, kwargs):
         """
         Helper for invoking `remote` on whichever orchestrator is enabled
@@ -1077,10 +1086,8 @@ class OrchestratorClientMixin(Orchestrator):
         :raises OrchestratorError: orchestrator failed to perform
         :raises ImportError: no `orchestrator_cli` module or backend not found.
         """
-        try:
-            mgr = self.__mgr
-        except AttributeError:
-            mgr = self
+        mgr = self.__get_mgr()
+
         try:
             o = mgr._select_orchestrator()
         except AttributeError:
@@ -1119,11 +1126,15 @@ class OrchestratorClientMixin(Orchestrator):
 
         :param completions: List of Completions
         :raises NoOrchestrator:
+        :raises RuntimeError: something went wrong while calling the process method.
         :raises ImportError: no `orchestrator_cli` module or backend not found.
         """
         for c in completions:
             self._update_completion_progress(c)
-        while not self.wait(completions):
+        while any(not c.is_complete for c in completions):
+            self.wait(completions)
+            self.__get_mgr().log.info("Operations pending: %s",
+                                      sum(1 for c in completions if not c.is_complete))
             if any(c.should_wait for c in completions):
                 time.sleep(1)
             else:

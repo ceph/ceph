@@ -34,10 +34,29 @@ import orchestrator
 from .rook_cluster import RookCluster
 
 
-all_completions = []
+class RookCompletionMixin(object):
+    # hacky global
+    all_completions = []
+
+    def __init__(self, message):
+        super(RookCompletionMixin, self).__init__()
+        self.message = message
+
+        # Result of k8s API call, this is set if executed==True
+        self._result = None
+
+        all_completions.append(self)
 
 
-class RookReadCompletion(orchestrator.ReadCompletion):
+    @property
+    def result(self):
+        return self._result
+
+    def __str__(self):
+        return self.message
+
+
+class RookReadCompletion(RookCompletionMixin, orchestrator.ReadCompletion):
     """
     All reads are simply API calls: avoid spawning
     huge numbers of threads by just running them
@@ -45,31 +64,24 @@ class RookReadCompletion(orchestrator.ReadCompletion):
     """
 
     def __init__(self, cb):
-        super(RookReadCompletion, self).__init__()
+        super(RookReadCompletion, self).__init__("<read op>")
         self.cb = cb
-        self._result = None
         self._complete = False
 
-        self.message = "<read op>"
-
-        # XXX hacky global
-        global all_completions
-        all_completions.append(self)
-
     @property
-    def result(self):
-        return self._result
-
-    @property
-    def is_complete(self):
+    def has_result(self):
         return self._complete
 
     def execute(self):
-        self._result = self.cb()
-        self._complete = True
+        try:
+            self._result = self.cb()
+        except Exception as e:
+            self.exception = e
+        finally:
+            self._complete = True
 
 
-class RookWriteCompletion(orchestrator.WriteCompletion):
+class RookWriteCompletion(RookCompletionMixin, orchestrator.WriteCompletion):
     """
     Writes are a two-phase thing, firstly sending
     the write to the k8s API (fast) and then waiting
@@ -80,7 +92,7 @@ class RookWriteCompletion(orchestrator.WriteCompletion):
     # a completion= param that uses threads.  Maybe just
     # use that?
     def __init__(self, execute_cb, complete_cb, message):
-        super(RookWriteCompletion, self).__init__()
+        super(RookWriteCompletion, self).__init__(message)
         self.execute_cb = execute_cb
         self.complete_cb = complete_cb
 
@@ -88,47 +100,31 @@ class RookWriteCompletion(orchestrator.WriteCompletion):
         # not have succeeded
         self.executed = False
 
-        # Result of k8s API call, this is set if executed==True
-        self._result = None
-
+        # Effective means, Rook finished applying the changes
         self.effective = False
 
         self.id = str(uuid.uuid4())
 
-        self.message = message
-
-        self.exception = None
-
-        # XXX hacky global
-        global all_completions
-        all_completions.append(self)
-
-    def __str__(self):
-        return self.message
-
     @property
-    def result(self):
-        return self._result
-
-    @property
-    def is_persistent(self):
-        return (not self.is_errored) and self.executed
 
     @property
     def is_effective(self):
         return self.effective
 
     def execute(self):
-        if not self.executed:
-            self._result = self.execute_cb()
-            self.executed = True
+        try:
+            if not self.executed:
+                self._result = self.execute_cb()
+                self.executed = True
 
-        if not self.effective:
-            # TODO: check self.result for API errors
-            if self.complete_cb is None:
-                self.effective = True
-            else:
-                self.effective = self.complete_cb()
+            if not self.effective:
+                # TODO: check self.result for API errors
+                if self.complete_cb is None:
+                    self.effective = True
+                else:
+                    self.effective = self.complete_cb()
+        except Exception as e:
+            self.exception = e
 
 
 def deferred_read(f):
@@ -168,14 +164,11 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         # TODO: configure k8s API addr instead of assuming local
     ]
 
-    def wait(self, completions):
+    def process(self, completions):
         if completions:
             self.log.info("wait: completions={0}".format(completions))
 
-        incomplete = False
-
-        # Our `wait` implementation is very simple because everything's
-        # just an API call.
+        # Synchronously call the K8s API
         for c in completions:
             if not isinstance(c, RookReadCompletion) and \
                     not isinstance(c, RookWriteCompletion):
@@ -187,20 +180,15 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             if c.is_complete:
                 continue
 
-            try:
-                c.execute()
-            except Exception as e:
-                if not isinstance(e, orchestrator.OrchestratorError):
-                    self.log.exception("Completion {0} threw an exception:".format(
-                        c.message
-                    ))
+            c.execute()
+            if c.exception and not isinstance(c.exception, orchestrator.OrchestratorError):
+                self.log.exception("Completion {0} threw an exception:".format(
+                    c.message
+                ))
                 c.exception = e
                 c._complete = True
 
-            if not c.is_complete:
-                incomplete = True
 
-        return not incomplete
 
     @staticmethod
     def can_run():
@@ -288,14 +276,11 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             # in case we had a caller that wait()'ed on them long enough
             # to get persistence but not long enough to get completion
 
-            global all_completions
-            self.wait(all_completions)
-            all_completions = [c for c in all_completions if not c.is_complete]
+            self.wait(RookCompletionMixin.all_completions)
+            RookCompletionMixin.all_completions = [c for c in RookCompletionMixin.all_completions if
+                                                   not c.is_finished]
 
             self._shutdown.wait(5)
-
-        # TODO: watch Rook for config changes to complain/update if
-        # things look a bit out of sync?
 
     @deferred_read
     def get_inventory(self, node_filter=None, refresh=False):
