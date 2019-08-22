@@ -7585,7 +7585,7 @@ PG::RecoveryState::RepRecovering::react(const BackfillTooFull &)
   pg->osd->send_message_osd_cluster(
     pg->primary.osd,
     new MBackfillReserve(
-      MBackfillReserve::TOOFULL,
+      MBackfillReserve::REVOKE_TOOFULL,
       spg_t(pg->info.pgid.pgid, pg->primary.shard),
       pg->get_osdmap()->get_epoch()),
     pg->get_osdmap()->get_epoch());
