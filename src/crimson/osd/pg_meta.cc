@@ -31,8 +31,8 @@ namespace {
 }
 seastar::future<epoch_t> PGMeta::get_epoch()
 {
-  auto ch = store->open_collection(coll_t{pgid});
-  return store->omap_get_values(ch,
+  return store->open_collection(coll_t{pgid}).then([this](auto ch) {
+    return store->omap_get_values(ch,
                                 pgid.make_pgmeta_oid(),
                                 {string{infover_key},
                                  string{epoch_key}}).then(
@@ -51,12 +51,13 @@ seastar::future<epoch_t> PGMeta::get_epoch()
         return seastar::make_ready_future<epoch_t>(*epoch);
       }
     });
+  });
 }
 
 seastar::future<pg_info_t, PastIntervals> PGMeta::load()
 {
-  auto ch = store->open_collection(coll_t{pgid});
-  return store->omap_get_values(ch,
+  return store->open_collection(coll_t{pgid}).then([this](auto ch) {
+    return store->omap_get_values(ch,
                                 pgid.make_pgmeta_oid(),
                                 {string{infover_key},
                                  string{info_key},
@@ -95,4 +96,5 @@ seastar::future<pg_info_t, PastIntervals> PGMeta::load()
         std::move(info),
         std::move(past_intervals));
     });
+  });
 }

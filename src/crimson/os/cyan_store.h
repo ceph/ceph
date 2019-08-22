@@ -73,16 +73,16 @@ public:
     const std::optional<std::string> &start ///< [in] start, empty for begin
     ) final; ///< @return <done, values> values.empty() iff done
 
-  CollectionRef create_new_collection(const coll_t& cid) final;
-  CollectionRef open_collection(const coll_t& cid) final;
-  std::vector<coll_t> list_collections() final;
+  seastar::future<CollectionRef> create_new_collection(const coll_t& cid) final;
+  seastar::future<CollectionRef> open_collection(const coll_t& cid) final;
+  seastar::future<std::vector<coll_t>> list_collections() final;
 
   seastar::future<> do_transaction(CollectionRef ch,
 				   Transaction&& txn) final;
 
-  void write_meta(const std::string& key,
+  seastar::future<> write_meta(const std::string& key,
 		  const std::string& value) final;
-  int read_meta(const std::string& key, std::string* value) final;
+  seastar::future<int, std::string> read_meta(const std::string& key) final;
   uuid_d get_fsid() const final;
   unsigned get_max_attr_name_length() const final;
 
@@ -113,6 +113,7 @@ private:
   int _setattrs(const coll_t& cid, const ghobject_t& oid,
                 std::map<std::string,bufferptr>& aset);
   int _create_collection(const coll_t& cid, int bits);
+  CollectionRef _get_collection(const coll_t& cid);
 };
 
 }
