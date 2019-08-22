@@ -51,7 +51,6 @@ class PeeringCtx;
 
 // [primary only] content recovery state
 struct BufferedRecoveryMessages {
-  map<int, map<spg_t, pg_query_t> > query_map;
   map<int, vector<pg_notify_t>> info_map;
   map<int, vector<MessageRef>> message_map;
 
@@ -59,12 +58,6 @@ struct BufferedRecoveryMessages {
   BufferedRecoveryMessages(PeeringCtx &);
 
   void accept_buffered_messages(BufferedRecoveryMessages &m) {
-    for (auto &[target, qmap] : m.query_map) {
-      auto &omap = query_map[target];
-      for (auto &[pg, query] : qmap) {
-	omap[pg] = query;
-      }
-    }
     for (auto &[target, ivec] : m.info_map) {
       auto &ovec = info_map[target];
       ovec.reserve(ovec.size() + ivec.size());
@@ -204,21 +197,18 @@ struct PeeringCtx : BufferedRecoveryMessages {
 struct PeeringCtxWrapper {
   utime_t start_time;
   BufferedRecoveryMessages &msgs;
-  map<int, map<spg_t, pg_query_t> > &query_map;
   map<int, vector<pg_notify_t>> &info_map;
   ObjectStore::Transaction &transaction;
   HBHandle * const handle = nullptr;
 
   PeeringCtxWrapper(PeeringCtx &wrapped) :
     msgs(wrapped),
-    query_map(wrapped.query_map),
     info_map(wrapped.info_map),
     transaction(wrapped.transaction),
     handle(wrapped.handle) {}
 
   PeeringCtxWrapper(BufferedRecoveryMessages &buf, PeeringCtx &wrapped)
     : msgs(buf),
-      query_map(buf.query_map),
       info_map(buf.info_map),
       transaction(wrapped.transaction),
       handle(wrapped.handle) {}
@@ -573,12 +563,6 @@ public:
     ObjectStore::Transaction& get_cur_transaction() {
       ceph_assert(state->rctx);
       return state->rctx->transaction;
-    }
-
-
-    map<int, map<spg_t, pg_query_t> > &get_query_map() {
-      ceph_assert(state->rctx);
-      return state->rctx->query_map;
     }
 
     map<int, vector<pg_notify_t>> &get_info_map() {
@@ -1527,7 +1511,6 @@ public:
   void activate(
     ObjectStore::Transaction& t,
     epoch_t activation_epoch,
-    map<int, map<spg_t,pg_query_t> >& query_map,
     map<int, vector<pg_notify_t>> *activator_map,
     PeeringCtxWrapper &ctx);
 
