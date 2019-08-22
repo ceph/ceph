@@ -69,6 +69,7 @@ public:
 PG::PG(
   spg_t pgid,
   pg_shard_t pg_shard,
+  ceph::os::CollectionRef coll_ref,
   pg_pool_t&& pool,
   std::string&& name,
   cached_map_t osdmap,
@@ -76,7 +77,7 @@ PG::PG(
   ec_profile_t profile)
   : pgid{pgid},
     pg_whoami{pg_shard},
-    coll_ref(shard_services.get_store().open_collection(coll)),
+    coll_ref{coll_ref},
     pgmeta_oid{pgid.make_pgmeta_oid()},
     osdmap_gate("PG::osdmap_gate", std::nullopt),
     shard_services{shard_services},
@@ -211,10 +212,11 @@ void PG::init(
 
 seastar::future<> PG::read_state(ceph::os::FuturizedStore* store)
 {
-  coll_ref = store->open_collection(coll_t(pgid));
-  return PGMeta{store, pgid}.load().then(
-    [this, store](pg_info_t pg_info, PastIntervals past_intervals) {
-      return peering_state.init_from_disk_state(
+  return store->open_collection(coll_t(pgid)).then([this, store](auto ch) {
+    coll_ref = ch;
+    return PGMeta{store, pgid}.load();
+  }).then([this, store](pg_info_t pg_info, PastIntervals past_intervals) {
+    return peering_state.init_from_disk_state(
 	std::move(pg_info),
 	std::move(past_intervals),
 	[this, store, &pg_info] (PGLog &pglog) {
@@ -223,25 +225,25 @@ seastar::future<> PG::read_state(ceph::os::FuturizedStore* store)
 	    coll_ref,
 	    peering_state.get_info(),
 	    pgmeta_oid);
-	});
-    }).then([this, store]() {
-      int primary, up_primary;
-      vector<int> acting, up;
-      peering_state.get_osdmap()->pg_to_up_acting_osds(
+      });
+  }).then([this, store]() {
+    int primary, up_primary;
+    vector<int> acting, up;
+    peering_state.get_osdmap()->pg_to_up_acting_osds(
 	pgid.pgid, &up, &up_primary, &acting, &primary);
-      peering_state.init_primary_up_acting(
+    peering_state.init_primary_up_acting(
 	up,
 	acting,
 	up_primary,
 	primary);
-      int rr = OSDMap::calc_pg_role(pg_whoami.osd, acting);
-      if (peering_state.get_pool().info.is_replicated() || rr == pg_whoami.shard)
+    int rr = OSDMap::calc_pg_role(pg_whoami.osd, acting);
+    if (peering_state.get_pool().info.is_replicated() || rr == pg_whoami.shard)
 	peering_state.set_role(rr);
-      else
+    else
 	peering_state.set_role(-1);
 
-      epoch_t epoch = get_osdmap_epoch();
-      shard_services.start_operation<LocalPeeringEvent>(
+    epoch_t epoch = get_osdmap_epoch();
+    shard_services.start_operation<LocalPeeringEvent>(
 	this,
 	shard_services,
 	pg_whoami,
@@ -250,8 +252,8 @@ seastar::future<> PG::read_state(ceph::os::FuturizedStore* store)
 	epoch,
 	PeeringState::Initialize());
 
-      return seastar::now();
-    });
+    return seastar::now();
+  });
 }
 
 void PG::do_peering_event(

@@ -65,6 +65,7 @@ class PG : public boost::intrusive_ref_counter<
 public:
   PG(spg_t pgid,
      pg_shard_t pg_shard,
+     ceph::os::CollectionRef coll_ref,
      pg_pool_t&& pool,
      std::string&& name,
      cached_map_t osdmap,
