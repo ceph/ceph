@@ -541,7 +541,7 @@ void BlueFS::_init_alloc()
     else
       name += to_string(uintptr_t(this));
     ceph_assert(alloc_size[id]);
-    dout(20) << __func__ << " id " << id
+    dout(1) << __func__ << " id " << id
 	     << " alloc_size 0x" << std::hex << alloc_size[id]
 	     << " size 0x" << bdev[id]->get_size() << std::dec << dendl;
     alloc[id] = Allocator::create(cct, cct->_conf->bluefs_allocator,
