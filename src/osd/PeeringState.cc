@@ -4883,7 +4883,7 @@ PeeringState::RepRecovering::react(const BackfillTooFull &)
   pl->send_cluster_message(
     ps->primary.osd,
     new MBackfillReserve(
-      MBackfillReserve::TOOFULL,
+      MBackfillReserve::REVOKE_TOOFULL,
       spg_t(ps->info.pgid.pgid, ps->primary.shard),
       ps->get_osdmap_epoch()),
     ps->get_osdmap_epoch());
