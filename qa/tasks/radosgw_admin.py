@@ -618,6 +618,40 @@ def task(ctx, config):
     (err, out) = rgwadmin(ctx, client, ['user', 'rm', '--uid', user2],
         check_status=True)
 
+    #TESTCASE 'bucket link', 'bucket', 'tenanted user', 'succeeds'
+    tenant_name = "testx"
+    # create a tenanted user to link the bucket to
+    (err, out) = rgwadmin(ctx, client, [
+            'user', 'create',
+            '--tenant', tenant_name,
+            '--uid', 'tenanteduser',
+            '--display-name', 'tenanted-user',
+            '--access-key', access_key2,
+            '--secret', secret_key2,
+            '--max-buckets', '1',
+            ],
+            check_status=True)
+
+    # link the bucket to a tenanted user
+    (err, out) = rgwadmin(ctx, client, ['bucket', 'link', '--bucket', '/' + bucket_name, '--tenant', tenant_name, '--uid', 'tenanteduser'],
+        check_status=True)
+    
+    # check if the bucket name has tenant/ prefix
+    (err, out) = rgwadmin(ctx, client, ['metadata', 'get', 'bucket:{n}'.format(n= tenant_name + '/' + bucket_name)],
+        check_status=True)
+
+    bucket_data = out['data']
+    assert bucket_data['bucket']['name'] == bucket_name
+    assert bucket_data['bucket']['tenant'] == tenant_name
+
+    # relink the bucket to the first user and delete the tenanted user
+    (err, out) = rgwadmin(ctx, client,
+        ['bucket', 'link', '--bucket', tenant_name + '/' + bucket_name, '--uid', user1],
+        check_status=True)
+
+    (err, out) = rgwadmin(ctx, client, ['user', 'rm', '--tenant', tenant_name, '--uid', 'tenanteduser'],
+        check_status=True)
+
     # TESTCASE 'object-rm', 'object', 'rm', 'remove object', 'succeeds, object is removed'
 
     # upload an object
