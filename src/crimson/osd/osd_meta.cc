@@ -2,7 +2,7 @@
 
 #include <fmt/format.h>
 
-#include "crimson/os/cyan_collection.h"
+#include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
 #include "os/Transaction.h"
 

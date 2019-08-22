@@ -12,7 +12,6 @@
 #include <optional>
 #include <seastar/core/future.hh>
 
-#include "crimson/os/cyan_collection.h"
 #include "osd/osd_types.h"
 #include "include/uuid.h"
 
@@ -28,8 +27,8 @@ class CyanStore final : public FuturizedStore {
   constexpr static unsigned MAX_KEYS_PER_OMAP_GET_CALL = 32;
 
   const std::string path;
-  std::unordered_map<coll_t, CollectionRef> coll_map;
-  std::map<coll_t,CollectionRef> new_coll_map;
+  std::unordered_map<coll_t, boost::intrusive_ptr<Collection>> coll_map;
+  std::map<coll_t, boost::intrusive_ptr<Collection>> new_coll_map;
   uint64_t used_bytes = 0;
   uuid_d osd_fsid;
 
@@ -113,7 +112,7 @@ private:
   int _setattrs(const coll_t& cid, const ghobject_t& oid,
                 std::map<std::string,bufferptr>& aset);
   int _create_collection(const coll_t& cid, int bits);
-  CollectionRef _get_collection(const coll_t& cid);
+  boost::intrusive_ptr<Collection> _get_collection(const coll_t& cid);
 };
 
 }

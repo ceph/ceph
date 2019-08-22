@@ -8,7 +8,7 @@
 
 #include "osd_operation.h"
 #include "msg/MessageRef.h"
-#include "crimson/os/cyan_collection.h"
+#include "crimson/os/futurized_collection.h"
 #include "osd/PeeringState.h"
 #include "crimson/osd/osdmap_service.h"
 

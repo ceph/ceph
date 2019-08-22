@@ -9,7 +9,7 @@
 #include <boost/smart_ptr/local_shared_ptr.hpp>
 
 #include "crimson/os/futurized_store.h"
-#include "crimson/os/cyan_collection.h"
+#include "crimson/os/futurized_collection.h"
 #include "crimson/osd/acked_peers.h"
 #include "crimson/common/shared_lru.h"
 #include "os/Transaction.h"
@@ -26,7 +26,7 @@ namespace ceph::osd {
 class PGBackend
 {
 protected:
-  using CollectionRef = boost::intrusive_ptr<ceph::os::Collection>;
+  using CollectionRef = ceph::os::CollectionRef;
   using ec_profile_t = std::map<std::string, std::string>;
 
 public:
