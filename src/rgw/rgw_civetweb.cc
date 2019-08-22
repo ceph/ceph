@@ -101,7 +101,13 @@ int RGWCivetWeb::init_env(CephContext *cct)
     }
 
     const boost::string_ref name(header->name);
-    const auto& value = header->value;
+    string value = header->value;
+    value.erase(
+      std::remove_if(
+        std::begin(value),
+        std::end(value),
+        [](char c) {return c == '\x0d' || c == '\x0a';}),
+      std::end(value));
 
     if (boost::algorithm::iequals(name, "content-length")) {
       env.set("CONTENT_LENGTH", value);
