@@ -653,6 +653,8 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, optional_yield y,
     return -EINVAL;
   }
   rgw_bucket old_bucket = bucket;
+  rgw_user user_id = op_state.get_user_id();
+  bucket.tenant = user_id.tenant;
   if (!op_state.new_bucket_name.empty()) {
     auto pos = op_state.new_bucket_name.find('/');
     if (pos != string::npos) {
