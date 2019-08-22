@@ -20,11 +20,9 @@
 #define dout_subsys ceph_subsys_osd
 
 BufferedRecoveryMessages::BufferedRecoveryMessages(PeeringCtx &ctx)
-  : query_map(std::move(ctx.query_map)),
-    info_map(std::move(ctx.info_map)),
+  : info_map(std::move(ctx.info_map)),
     message_map(std::move(ctx.message_map))
 {
-  ctx.query_map.clear();
   ctx.info_map.clear();
   ctx.message_map.clear();
 }
@@ -2083,7 +2081,6 @@ void PeeringState::build_might_have_unfound()
 void PeeringState::activate(
   ObjectStore::Transaction& t,
   epoch_t activation_epoch,
-  map<int, map<spg_t,pg_query_t> >& query_map,
   map<int,vector<pg_notify_t>> *activator_map,
   PeeringCtxWrapper &ctx)
 {
@@ -5267,7 +5264,6 @@ PeeringState::Active::Active(my_context ctx)
   ps->start_flush(context< PeeringMachine >().get_cur_transaction());
   ps->activate(context< PeeringMachine >().get_cur_transaction(),
 	       ps->get_osdmap_epoch(),
-	       context< PeeringMachine >().get_query_map(),
 	       &context< PeeringMachine >().get_info_map(),
 	       context< PeeringMachine >().get_recovery_ctx());
 
@@ -5634,11 +5630,9 @@ boost::statechart::result PeeringState::ReplicaActive::react(
   const Activate& actevt) {
   DECLARE_LOCALS;
   psdout(10) << "In ReplicaActive, about to call activate" << dendl;
-  map<int, map<spg_t, pg_query_t> > query_map;
   ps->activate(
     context< PeeringMachine >().get_cur_transaction(),
     actevt.activation_epoch,
-    query_map,
     NULL,
     context< PeeringMachine >().get_recovery_ctx());
   psdout(10) << "Activate Finished" << dendl;

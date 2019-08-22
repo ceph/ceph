@@ -9262,7 +9262,6 @@ void OSD::dispatch_context(PeeringCtx &ctx, PG *pg, OSDMapRef curmap,
   } else if (!is_active()) {
     dout(20) << __func__ << " not active" << dendl;
   } else {
-    do_queries(ctx.query_map, curmap);
     do_infos(ctx.info_map, curmap);
 
     for (auto& [osd, ls] : ctx.message_map) {
@@ -9292,36 +9291,6 @@ void OSD::dispatch_context(PeeringCtx &ctx, PG *pg, OSDMapRef curmap,
     ceph_assert(tr == 0);
   }
 }
-
-/** do_queries
- * send out pending queries for info | summaries
- */
-void OSD::do_queries(map<int, map<spg_t,pg_query_t> >& query_map,
-		     OSDMapRef curmap)
-{
-  for (map<int, map<spg_t,pg_query_t> >::iterator pit = query_map.begin();
-       pit != query_map.end();
-       ++pit) {
-    if (!curmap->is_up(pit->first)) {
-      dout(20) << __func__ << " skipping down osd." << pit->first << dendl;
-      continue;
-    }
-    int who = pit->first;
-    ConnectionRef con = service.get_con_osd_cluster(who, curmap->get_epoch());
-    if (!con) {
-      dout(20) << __func__ << " skipping osd." << who
-	       << " (NULL con)" << dendl;
-      continue;
-    }
-    service.maybe_share_map(con.get(), curmap);
-    dout(7) << __func__ << " querying osd." << who
-	    << " on " << pit->second.size() << " PGs" << dendl;
-    MOSDPGQuery *m = new MOSDPGQuery(curmap->get_epoch(),
-				     std::move(pit->second));
-    con->send_message(m);
-  }
-}
-
 
 void OSD::do_infos(map<int,vector<pg_notify_t>>& info_map,
 		   OSDMapRef curmap)
