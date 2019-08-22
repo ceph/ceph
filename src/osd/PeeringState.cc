@@ -5654,31 +5654,27 @@ boost::statechart::result PeeringState::ReplicaActive::react(
   const ActivateCommitted &evt)
 {
   DECLARE_LOCALS;
-  psdout(10) << "_activate_committed " << evt.epoch
-	   << " telling primary" << dendl;
-  MOSDPGInfo *m = new MOSDPGInfo(evt.epoch);
-  pg_notify_t i = pg_notify_t(
-    ps->get_primary().shard, ps->pg_whoami.shard,
-    ps->get_osdmap_epoch(),
-    ps->get_osdmap_epoch(),
-    ps->info,
-    PastIntervals());
+  psdout(10) << __func__ << " " << evt.epoch << " telling primary" << dendl;
 
-  i.info.history.last_epoch_started = evt.activation_epoch;
-  i.info.history.last_interval_started = i.info.history.same_interval_since;
+  auto &rctx = context<PeeringMachine>().get_recovery_ctx();
+  auto epoch = ps->get_osdmap_epoch();
+  pg_info_t i = ps->info;
+  i.history.last_epoch_started = evt.activation_epoch;
+  i.history.last_interval_started = i.history.same_interval_since;
+  rctx.send_info(
+    ps->get_primary().osd,
+    spg_t(ps->info.pgid.pgid, ps->get_primary().shard),
+    epoch,
+    epoch,
+    i);
+
   if (ps->acting.size() >= ps->pool.info.min_size) {
     ps->state_set(PG_STATE_ACTIVE);
   } else {
     ps->state_set(PG_STATE_PEERED);
   }
-
-  m->pg_list.emplace_back(i);
-  pl->send_cluster_message(
-    ps->get_primary().osd,
-    m,
-    ps->get_osdmap_epoch());
-
   pl->on_activate_committed();
+
   return discard_event();
 }
 
