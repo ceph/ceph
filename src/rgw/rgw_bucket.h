@@ -21,6 +21,7 @@
 #include "rgw_formats.h"
 
 #include "services/svc_bucket_types.h"
+#include "services/svc_bucket_sync.h"
 
 
 static constexpr size_t listing_max_entries = 1000;
@@ -869,6 +870,9 @@ public:
                       RGWBucketEnt* pent = nullptr);
 
   /* bucket sync */
+  int get_sync_policy_handler(const rgw_bucket& bucket,
+			      RGWBucketSyncPolicyHandlerRef *phandler,
+			      optional_yield y);
   int bucket_exports_data(const rgw_bucket& bucket,
                           optional_yield y);
   int bucket_imports_data(const rgw_bucket& bucket,
