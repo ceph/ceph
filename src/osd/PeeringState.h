@@ -53,7 +53,6 @@ class PeeringCtx;
 struct BufferedRecoveryMessages {
   map<int, map<spg_t, pg_query_t> > query_map;
   map<int, vector<pg_notify_t>> info_map;
-  map<int, vector<pg_notify_t>> notify_list;
   map<int, vector<MessageRef>> message_map;
 
   BufferedRecoveryMessages() = default;
@@ -70,11 +69,6 @@ struct BufferedRecoveryMessages {
       auto &ovec = info_map[target];
       ovec.reserve(ovec.size() + ivec.size());
       ovec.insert(ovec.end(), ivec.begin(), ivec.end());
-    }
-    for (auto &[target, nlist] : m.notify_list) {
-      auto &ovec = notify_list[target];
-      ovec.reserve(ovec.size() + nlist.size());
-      ovec.insert(ovec.end(), nlist.begin(), nlist.end());
     }
     for (auto &[target, ls] : m.message_map) {
       auto &ovec = message_map[target];
@@ -195,6 +189,40 @@ struct PeeringCtx : BufferedRecoveryMessages {
   void reset_transaction() {
     transaction = ObjectStore::Transaction();
   }
+};
+
+/**
+ * Wraps PeeringCtx to hide the difference between buffering messages to
+ * be sent after flush or immediately.
+ */
+struct PeeringCtxWrapper {
+  utime_t start_time;
+  map<int, map<spg_t, pg_query_t> > &query_map;
+  map<int, vector<pg_notify_t>> &info_map;
+  map<int, vector<MessageRef>> &message_map;
+  ObjectStore::Transaction &transaction;
+  HBHandle * const handle = nullptr;
+
+  PeeringCtxWrapper(PeeringCtx &wrapped) :
+    query_map(wrapped.query_map),
+    info_map(wrapped.info_map),
+    message_map(wrapped.message_map),
+    transaction(wrapped.transaction),
+    handle(wrapped.handle) {}
+
+  PeeringCtxWrapper(BufferedRecoveryMessages &buf, PeeringCtx &wrapped)
+    : query_map(buf.query_map),
+      info_map(buf.info_map),
+      message_map(buf.message_map),
+      transaction(wrapped.transaction),
+      handle(wrapped.handle) {}
+
+  PeeringCtxWrapper(PeeringCtxWrapper &&ctx) = default;
+
+  void send_osd_message(int target, Message *m) {
+    message_map[target].push_back(m);
+  }
+  void send_notify(int to, const pg_notify_t &n);
 };
 
   /* Encapsulates PG recovery process */
@@ -371,47 +399,6 @@ public:
 
     virtual ~PeeringListener() {}
   };
-
-private:
-  /**
-   * Wraps PeeringCtx to hide the difference between buffering messages to
-   * be sent after flush or immediately.
-   */
-  struct PeeringCtxWrapper {
-    utime_t start_time;
-    map<int, map<spg_t, pg_query_t> > &query_map;
-    map<int, vector<pg_notify_t>> &info_map;
-    map<int, vector<pg_notify_t>> &notify_list;
-    map<int, vector<MessageRef>> &message_map;
-    ObjectStore::Transaction &transaction;
-    HBHandle * const handle = nullptr;
-
-    PeeringCtxWrapper(PeeringCtx &wrapped) :
-      query_map(wrapped.query_map),
-      info_map(wrapped.info_map),
-      notify_list(wrapped.notify_list),
-      message_map(wrapped.message_map),
-      transaction(wrapped.transaction),
-      handle(wrapped.handle) {}
-
-    PeeringCtxWrapper(BufferedRecoveryMessages &buf, PeeringCtx &wrapped)
-      : query_map(buf.query_map),
-	info_map(buf.info_map),
-	notify_list(buf.notify_list),
-	message_map(buf.message_map),
-	transaction(wrapped.transaction),
-        handle(wrapped.handle) {}
-
-    PeeringCtxWrapper(PeeringCtxWrapper &&ctx) = default;
-
-    void send_osd_message(int target, Message *m) {
-      message_map[target].push_back(m);
-    }
-    void send_notify(pg_shard_t to, const pg_notify_t &n) {
-      notify_list[to.osd].emplace_back(n);
-    }
-  };
-public:
 
   struct QueryState : boost::statechart::event< QueryState > {
     Formatter *f;
@@ -594,7 +581,7 @@ public:
       return *(state->rctx);
     }
 
-    void send_notify(pg_shard_t to, const pg_notify_t &n) {
+    void send_notify(int to, const pg_notify_t &n) {
       ceph_assert(state->rctx);
       state->rctx->send_notify(to, n);
     }

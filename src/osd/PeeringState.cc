@@ -13,6 +13,7 @@
 #include "messages/MOSDPGInfo.h"
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGLog.h"
+#include "messages/MOSDPGNotify.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
@@ -20,13 +21,20 @@
 BufferedRecoveryMessages::BufferedRecoveryMessages(PeeringCtx &ctx)
   : query_map(std::move(ctx.query_map)),
     info_map(std::move(ctx.info_map)),
-    notify_list(std::move(ctx.notify_list)),
     message_map(std::move(ctx.message_map))
 {
   ctx.query_map.clear();
   ctx.info_map.clear();
-  ctx.notify_list.clear();
   ctx.message_map.clear();
+}
+
+void PeeringCtxWrapper::send_notify(int to, const pg_notify_t &n)
+{
+  vector<pg_notify_t> notifies;
+  notifies.push_back(n);
+  message_map[to].push_back(
+    new MOSDPGNotify(n.epoch_sent, std::move(notifies))
+    );
 }
 
 void PGPool::update(CephContext *cct, OSDMapRef map)
@@ -2566,7 +2574,7 @@ void PeeringState::fulfill_query(const MQuery& query, PeeringCtxWrapper &rctx)
     update_history(query.query.history);
     fulfill_info(query.from, query.query, notify_info);
     rctx.send_notify(
-      notify_info.first,
+      notify_info.first.osd,
       pg_notify_t(
 	notify_info.first.shard, pg_whoami.shard,
 	query.query_epoch,
@@ -4104,7 +4112,7 @@ boost::statechart::result PeeringState::Reset::react(const ActMap&)
   DECLARE_LOCALS;
   if (ps->should_send_notify() && ps->get_primary().osd >= 0) {
     context< PeeringMachine >().send_notify(
-      ps->get_primary(),
+      ps->get_primary().osd,
       pg_notify_t(
 	ps->get_primary().shard, ps->pg_whoami.shard,
 	ps->get_osdmap_epoch(),
@@ -5690,7 +5698,7 @@ boost::statechart::result PeeringState::ReplicaActive::react(const ActMap&)
   DECLARE_LOCALS;
   if (ps->should_send_notify() && ps->get_primary().osd >= 0) {
     context< PeeringMachine >().send_notify(
-      ps->get_primary(),
+      ps->get_primary().osd,
       pg_notify_t(
 	ps->get_primary().shard, ps->pg_whoami.shard,
 	ps->get_osdmap_epoch(),
@@ -5810,7 +5818,7 @@ boost::statechart::result PeeringState::Stray::react(const ActMap&)
   DECLARE_LOCALS;
   if (ps->should_send_notify() && ps->get_primary().osd >= 0) {
     context< PeeringMachine >().send_notify(
-      ps->get_primary(),
+      ps->get_primary().osd,
       pg_notify_t(
 	ps->get_primary().shard, ps->pg_whoami.shard,
 	ps->get_osdmap_epoch(),
