@@ -1776,7 +1776,8 @@ public:
     const hobject_t soid);
 
   /// Pull missing sets from all candidate peers
-  void discover_all_missing(std::map<int, map<spg_t,pg_query_t> > &query_map);
+  bool discover_all_missing(
+    map<int, map<spg_t,pg_query_t> > &query_map);
 
   /// Notify that hoid has been fully recocovered
   void object_recovered(
