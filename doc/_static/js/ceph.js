@@ -1,5 +1,5 @@
 $(function() {
-  var releases_url = "http://docs.ceph.com/docs/master/releases.json";
+  var releases_url = "https://docs.ceph.com/docs/master/releases.json";
 
   function show_edit(branch, data) {
     if (branch) {
