@@ -11,10 +11,13 @@
 #include "messages/MRecoveryReserve.h"
 #include "messages/MOSDScrubReserve.h"
 #include "messages/MOSDPGInfo.h"
+#include "messages/MOSDPGInfo2.h"
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGNotify.h"
+#include "messages/MOSDPGNotify2.h"
 #include "messages/MOSDPGQuery.h"
+#include "messages/MOSDPGQuery2.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
@@ -29,11 +32,19 @@ BufferedRecoveryMessages::BufferedRecoveryMessages(
 
 void BufferedRecoveryMessages::send_notify(int to, const pg_notify_t &n)
 {
-  vector<pg_notify_t> notifies;
-  notifies.push_back(n);
-  message_map[to].push_back(
-    new MOSDPGNotify(n.epoch_sent, std::move(notifies))
-    );
+  if (require_osd_release >= ceph_release_t::octopus) {
+    spg_t pgid(n.info.pgid.pgid, n.to);
+    message_map[to].push_back(
+      make_message<MOSDPGNotify2>(
+	pgid,
+	n));
+  } else {
+    vector<pg_notify_t> notifies;
+    notifies.push_back(n);
+    message_map[to].push_back(
+      make_message<MOSDPGNotify>(n.epoch_sent, std::move(notifies))
+      );
+  }
 }
 
 void BufferedRecoveryMessages::send_query(
@@ -41,11 +52,17 @@ void BufferedRecoveryMessages::send_query(
   spg_t to_spgid,
   const pg_query_t &q)
 {
-  map<spg_t,pg_query_t> queries;
-  queries[to_spgid] = q;
-  message_map[to].push_back(
-    new MOSDPGQuery(q.epoch_sent, std::move(queries))
-    );
+  if (require_osd_release >= ceph_release_t::octopus) {
+    message_map[to].push_back(
+      make_message<MOSDPGQuery2>(to_spgid, q)
+      );
+  } else {
+    map<spg_t,pg_query_t> queries;
+    queries[to_spgid] = q;
+    message_map[to].push_back(
+      make_message<MOSDPGQuery>(q.epoch_sent, std::move(queries))
+      );
+  }
 }
 
 void BufferedRecoveryMessages::send_info(
@@ -55,14 +72,24 @@ void BufferedRecoveryMessages::send_info(
   epoch_t cur_epoch,
   const pg_info_t &info)
 {
-  MOSDPGInfo *m = new MOSDPGInfo(cur_epoch);
-  m->pg_list.push_back(
-    pg_notify_t(
-      to_spgid.shard,
-      info.pgid.shard,
-      min_epoch, cur_epoch,
-      info, PastIntervals()));
-  message_map[to].push_back(m);
+  if (require_osd_release >= ceph_release_t::octopus) {
+    message_map[to].push_back(
+      make_message<MOSDPGInfo2>(
+	to_spgid,
+	info,
+	cur_epoch,
+	min_epoch)
+      );
+  } else {
+    auto m = make_message<MOSDPGInfo>(cur_epoch);
+    m->pg_list.push_back(
+      pg_notify_t(
+	to_spgid.shard,
+	info.pgid.shard,
+	min_epoch, cur_epoch,
+	info, PastIntervals()));
+    message_map[to].push_back(m);
+  }
 }
 
 void PGPool::update(CephContext *cct, OSDMapRef map)
