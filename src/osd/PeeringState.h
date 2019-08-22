@@ -78,6 +78,9 @@ struct BufferedRecoveryMessages {
   }
   void send_notify(int to, const pg_notify_t &n);
   void send_query(int to, spg_t spgid, const pg_query_t &q);
+  void send_info(int to, spg_t to_spgid,
+		 epoch_t min_epoch, epoch_t cur_epoch,
+		 const pg_info_t &info);
 };
 
 struct HeartbeatStamps : public RefCountedObject {
@@ -223,6 +226,11 @@ struct PeeringCtxWrapper {
   }
   void send_query(int to, spg_t spgid, const pg_query_t &q) {
     msgs.send_query(to, spgid, q);
+  }
+  void send_info(int to, spg_t to_spgid,
+		 epoch_t min_epoch, epoch_t cur_epoch,
+		 const pg_info_t &info) {
+    msgs.send_info(to, to_spgid, min_epoch, cur_epoch, info);
   }
 };
 
@@ -1511,7 +1519,6 @@ public:
   void activate(
     ObjectStore::Transaction& t,
     epoch_t activation_epoch,
-    map<int, vector<pg_notify_t>> *activator_map,
     PeeringCtxWrapper &ctx);
 
   void rewind_divergent_log(ObjectStore::Transaction& t, eversion_t newhead);
