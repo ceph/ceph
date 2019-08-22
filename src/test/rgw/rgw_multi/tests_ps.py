@@ -28,7 +28,7 @@ from nose.tools import assert_not_equal, assert_equal
 # configure logging for the tests module
 log = logging.getLogger(__name__)
 
-skip_push_tests = False
+skip_push_tests = True
 
 ####################################
 # utility functions for pubsub tests

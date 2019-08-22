@@ -9,16 +9,19 @@ PubSub Sync Module
 This sync module provides a publish and subscribe mechanism for the object store modification
 events. Events are published into predefined topics. Topics can be subscribed to, and events
 can be pulled from them. Events need to be acked. Also, events will expire and disappear
-after a period of time. A push notification mechanism exists too, currently supporting HTTP and
-AMQP0.9.1 endpoints.
+after a period of time. 
+
+A push notification mechanism exists too, currently supporting HTTP and
+AMQP0.9.1 endpoints, on top of storing the events in Ceph. If events should only be pushed to an endpoint
+and do not need to be stored in Ceph, the `Bucket Notification`_ mechanism should be used instead of pubsub sync module. 
 
 A user can create different topics. A topic entity is defined by its user and its name. A
 user can only manage its own topics, and can only subscribe to events published by buckets
 it owns.
 
-In order to publish events for specific bucket a notification needs to be created. A
-notification can be created only on subset of event types, or for all event types (default).
-There can be multiple notifications for any specific topic.
+In order to publish events for specific bucket a notification entity needs to be created. A
+notification can be created on a subset of event types, or for all event types (default).
+There can be multiple notifications for any specific topic, and the same topic could be used for multiple notifications.
 
 A subscription to a topic can also be defined. There can be multiple subscriptions for any
 specific topic.
@@ -26,6 +29,7 @@ specific topic.
 REST API has been defined to provide configuration and control interfaces for the pubsub
 mechanisms. This API has two flavors, one is S3-compatible and one is not. The two flavors can be used
 together, although it is recommended to use the S3-compatible one. 
+The S3-compatible API is similar to the one used in the bucket notification mechanism.
 
 Events are stored as RGW objects in a special bucket, under a special user. Events cannot
 be accessed directly, but need to be pulled and acked using the new REST API.
@@ -110,13 +114,15 @@ A configuration field can be removed by using ``--tier-config-rm={key}``.
 
 PubSub Performance Stats
 -------------------------
-- ``pubsub_event_triggered``: running counter of events with at lease one pubsub topic associated with them
-- ``pubsub_event_lost``: running counter of events that had pubsub topics and subscriptions associated with them but that were not stored or pushed to any of the subscriptions
-- ``pubsub_store_ok``: running counter, for all subscriptions, of stored pubsub events 
-- ``pubsub_store_fail``: running counter, for all subscriptions, of pubsub events that needed to be stored but failed
-- ``pubsub_push_ok``: running counter, for all subscriptions, of pubsub events successfully pushed to their endpoint
-- ``pubsub_push_fail``: running counter, for all subscriptions, of pubsub events failed to be pushed to their endpoint
-- ``pubsub_push_pending``: gauge value of pubsub events pushed to a endpoint but not acked or nacked yet
+Same counters are shared between the pubsub sync module and the notification mechanism.
+
+- ``pubsub_event_triggered``: running counter of events with at lease one topic associated with them
+- ``pubsub_event_lost``: running counter of events that had topics and subscriptions associated with them but that were not stored or pushed to any of the subscriptions
+- ``pubsub_store_ok``: running counter, for all subscriptions, of stored events 
+- ``pubsub_store_fail``: running counter, for all subscriptions, of events failed to be stored
+- ``pubsub_push_ok``: running counter, for all subscriptions, of events successfully pushed to their endpoint
+- ``pubsub_push_fail``: running counter, for all subscriptions, of events failed to be pushed to their endpoint
+- ``pubsub_push_pending``: gauge value of events pushed to an endpoint but not acked or nacked yet
 
 .. note:: 
 
@@ -130,7 +136,7 @@ PubSub REST API
 
 Topics
 ~~~~~~
-
+ 
 Create a Topic
 ``````````````
 
@@ -222,7 +228,7 @@ List all topics that user defined.
 ::
 
    GET /topics
-
+ 
 S3-Compliant Notifications
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
@@ -325,7 +331,7 @@ Request parameters:
 
 - topic-name: name of topic
 - event: event type (string), one of: OBJECT_CREATE, OBJECT_DELETE 
-
+ 
 Delete Notification Information
 ```````````````````````````````
 
@@ -369,7 +375,7 @@ Response will have the following format (JSON):
          },
          "events":[]
       }
-   ]}            
+    ]}            
 
 Subscriptions
 ~~~~~~~~~~~~~
@@ -494,14 +500,16 @@ the events will have an S3-compatible record format (JSON):
                    "ownerIdentity":{
                        "principalId":""
                    },
-                   "arn":""
+                   "arn":"",
+                   "id":""
                },
                "object":{
                    "key":"",
-                   "size": ,
+                   "size":"0",
                    "eTag":"",
                    "versionId":"",
-                   "sequencer": ""
+                   "sequencer":"",
+                   "metadata":""
                }
            },
            "eventId":"",
@@ -519,11 +527,14 @@ the events will have an S3-compatible record format (JSON):
 - s3.bucket.name: name of the bucket
 - s3.bucket.ownerIdentity.principalId: owner of the bucket
 - s3.bucket.arn: ARN of the bucket
+- s3.bucket.id: Id of the bucket (an extension to the S3 notification API)
 - s3.object.key: object key
 - s3.object.size: not supported
 - s3.object.eTag: object etag
 - s3.object.version: object version in case of versioned bucket
 - s3.object.sequencer: monotonically increasing identifier of the change per object (hexadecimal format)
+- s3.object.metadata: not supported (an extension to the S3 notification API)
+- s3.eventId: unique ID of the event, that could be used for acking (an extension to the S3 notification API)
 
 In case that the subscription was not created via a non S3-compatible notification, 
 the events will have the following event format (JSON):
@@ -576,3 +587,4 @@ Request parameters:
 - event-id: id of event to be acked
 
 .. _Multisite : ../multisite
+.. _Bucket Notification : ../notifications
