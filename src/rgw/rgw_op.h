@@ -786,7 +786,6 @@ protected:
   rgw_obj_key next_marker; 
   rgw_obj_key end_marker;
   string max_keys;
-  string startAfter;
   string delimiter;
   string encoding_type;
   bool list_versions;
