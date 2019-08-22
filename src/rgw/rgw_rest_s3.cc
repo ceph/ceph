@@ -842,10 +842,12 @@ if (ret < 0) {
   return ret;
 }
 s->info.args.get_bool("fetch-owner", &fetchOwner, false);
-startAfter = s->info.args.get("start-after");
-marker = s->info.args.get("continuation-token");
-if(marker.empty()) {
+startAfter = s->info.args.get("start-after", &start_after_exist);
+continuation_token = s->info.args.get("continuation-token", &continuation_token_exist);
+if(!continuation_token_exist) {
   marker = startAfter;
+} else {
+  marker = continuation_token;
 }
 return 0;
 }
@@ -1127,7 +1129,9 @@ void RGWListBucket_ObjStore_S3v2::send_versioned_response()
       s->formatter->open_array_section("CommonPrefixes");
       s->formatter->dump_string("Prefix", pref_iter->first);
       s->formatter->dump_int("KeyCount",objs.size());
-      s->formatter->dump_string("StartAfter", startAfter);
+      if (start_after_exist) {
+        s->formatter->dump_string("StartAfter", startAfter);
+      }
       s->formatter->close_section();
       }
     }
@@ -1165,18 +1169,18 @@ void RGWListBucket_ObjStore_S3v2::send_response()
     s->formatter->dump_string("EncodingType", "url");
     encode_key = true;
   }
-    if (op_ret >= 0) {
-      vector<rgw_bucket_dir_entry>::iterator iter;
-      for (iter = objs.begin(); iter != objs.end(); ++iter) {
-        rgw_obj_key key(iter->key);
-        s->formatter->open_array_section("Contents");
-        if (encode_key) {
-          string key_name;
-          url_encode(key.name, key_name);
-          s->formatter->dump_string("Key", key_name);
-      } 
-        else {
-          s->formatter->dump_string("Key", key.name);
+  if (op_ret >= 0) {
+    vector<rgw_bucket_dir_entry>::iterator iter;
+    for (iter = objs.begin(); iter != objs.end(); ++iter) {
+      rgw_obj_key key(iter->key);
+      s->formatter->open_array_section("Contents");
+      if (encode_key) {
+        string key_name;
+        url_encode(key.name, key_name);
+        s->formatter->dump_string("Key", key_name);
+      }
+      else {
+        s->formatter->dump_string("Key", key.name);
       }
       dump_time(s, "LastModified", &iter->meta.mtime);
       s->formatter->dump_format("ETag", "\"%s\"", iter->meta.etag.c_str());
@@ -1197,13 +1201,16 @@ void RGWListBucket_ObjStore_S3v2::send_response()
       s->formatter->close_section();
     }
   }
-  s->formatter->dump_string("ContinuationToken", marker.name);
-  ldpp_dout(this, 0) << "ContinuationToken: " <<marker.name<<dendl;
+  if (continuation_token_exist) {
+    s->formatter->dump_string("ContinuationToken", continuation_token);
+  }
   if (is_truncated && !next_marker.empty()) {
     s->formatter->dump_string("NextContinuationToken", next_marker.name);
   }
   s->formatter->dump_int("KeyCount",objs.size());
-  s->formatter->dump_string("StartAfter", startAfter);
+  if (start_after_exist) {
+    s->formatter->dump_string("StartAfter", startAfter);
+  }
   s->formatter->close_section();
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
