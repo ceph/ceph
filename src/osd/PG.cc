@@ -2877,7 +2877,7 @@ void PG::merge_from(map<spg_t,PGRef>& sources, RecoveryCtx *rctx,
 
   // make sure we have a meaningful last_epoch_started/clean (if we were a
   // placeholder)
-  if (info.last_epoch_started == 0) {
+  if (info.history.epoch_created == 0) {
     // start with (a) source's history, since these PGs *should* have been
     // remapped in concert with each other...
     info.history = sources.begin()->second->info.history;
