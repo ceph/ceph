@@ -330,21 +330,10 @@ class SSHOrchestrator(MgrModule, orchestrator.OrchestratorClientMixin):
         """
         return self.can_run()
 
-    def wait(self, completions):
-        self.log.info("wait: completions={}".format(completions))
-
-        complete = True
-        for c in completions:
-            if c.is_complete:
-                continue
-
-            if not isinstance(c, SSHReadCompletion) and \
-                    not isinstance(c, SSHWriteCompletion):
-                raise TypeError("unexpected completion: {}".format(c.__class__))
-
-            complete = False
-
-        return complete
+    def process(self, completions):
+        """
+        Does nothing, as completions are processed in another thread.
+        """
 
     def _require_hosts(self, hosts):
         """

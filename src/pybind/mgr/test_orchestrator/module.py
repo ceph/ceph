@@ -41,9 +41,13 @@ class TestCompletionMixin(object):
         return self._complete
 
     def execute(self):
-        self._result = self.cb()
-        self.executed = True
-        self._complete = True
+        try:
+            self._result = self.cb()
+            self.executed = True
+        except Exception as e:
+            self.exception = e
+        finally:
+            self._complete = True
 
     def __str__(self):
         return "{}(result={} message={}, exception={})".format(self.__class__.__name__, self.result,
@@ -101,11 +105,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
     The implementation is similar to the Rook orchestrator, but simpler.
     """
 
-    def wait(self, completions):
-        self.log.info("wait: completions={0}".format(completions))
-
-        # Our `wait` implementation is very simple because everything's
-        # just an API call.
+    def process(self, completions):
         for c in completions:
             if not isinstance(c, TestReadCompletion) and \
                     not isinstance(c, TestWriteCompletion):
@@ -114,19 +114,8 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
                         c.__class__
                     ))
 
-            if c.is_complete:
-                continue
-
-            try:
+            if not c.has_result:
                 c.execute()
-            except Exception as e:
-                self.log.exception("Completion {0} threw an exception:".format(
-                    c.message
-                ))
-                c.exception = e
-                c._complete = True
-
-        return all(c.is_complete for c in completions)
 
     @CLICommand('test_orchestrator load_data', '', 'load dummy data into test orchestrator', 'w')
     def _load_data(self, inbuf):

@@ -475,7 +475,7 @@ class Module(MgrModule, orchestrator.Orchestrator):
 
         return (available, msg)
 
-    def wait(self, completions):
+    def process(self, completions):
         """Given a list of Completion instances, progress any which are
            incomplete.
 
@@ -487,13 +487,6 @@ class Module(MgrModule, orchestrator.Orchestrator):
         # Access completion.status property do the trick
         for operation in completions:
             self.log.info("<%s> status:%s", operation, operation.status)
-
-        completions = filter(lambda x: not x.is_complete, completions)
-
-        ops_pending = len(completions)
-        self.log.info("Operations pending: %s", ops_pending)
-
-        return ops_pending == 0
 
     def serve(self):
         """ Mandatory for standby modules

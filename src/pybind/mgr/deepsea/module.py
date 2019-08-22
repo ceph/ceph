@@ -272,29 +272,24 @@ class DeepSeaOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             return c
 
-    def wait(self, completions):
-        incomplete = False
+    def process(self, completions):
+        """
+        Does nothing, as completions are processed in another thread.
+        """
 
-        with self._completion_lock:
-            for c in completions:
-                if c.is_complete:
-                    continue
-                if not c.is_complete:
-                    # TODO: the job is in the bus, it should reach us eventually
-                    # unless something has gone wrong (e.g. salt-api died, etc.),
-                    # in which case it's possible the job finished but we never
-                    # noticed the salt/run/$id/ret event.  Need to add the job ID
-                    # (or possibly the full event tag) to the completion object.
-                    # That way, if we want to double check on a job that hasn't
-                    # been completed yet, we can make a synchronous request to
-                    # salt-api to invoke jobs.lookup_jid, and if it's complete we
-                    # should be able to pass its return value to _process_result()
-                    # Question: do we do this automatically after some timeout?
-                    # Or do we add a function so the admin can check and "unstick"
-                    # a stuck completion?
-                    incomplete = True
-
-        return not incomplete
+        # If the job is still incomplete:
+        # TODO: the job is in the bus, it should reach us eventually
+        # unless something has gone wrong (e.g. salt-api died, etc.),
+        # in which case it's possible the job finished but we never
+        # noticed the salt/run/$id/ret event.  Need to add the job ID
+        # (or possibly the full event tag) to the completion object.
+        # That way, if we want to double check on a job that hasn't
+        # been completed yet, we can make a synchronous request to
+        # salt-api to invoke jobs.lookup_jid, and if it's complete we
+        # should be able to pass its return value to _process_result()
+        # Question: do we do this automatically after some timeout?
+        # Or do we add a function so the admin can check and "unstick"
+        # a stuck completion?
 
 
     def handle_command(self, inbuf, cmd):
