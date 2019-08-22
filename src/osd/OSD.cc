@@ -9262,7 +9262,6 @@ void OSD::dispatch_context(PeeringCtx &ctx, PG *pg, OSDMapRef curmap,
   } else if (!is_active()) {
     dout(20) << __func__ << " not active" << dendl;
   } else {
-    do_notifies(ctx.notify_list, curmap);
     do_queries(ctx.query_map, curmap);
     do_infos(ctx.info_map, curmap);
 
@@ -9293,36 +9292,6 @@ void OSD::dispatch_context(PeeringCtx &ctx, PG *pg, OSDMapRef curmap,
     ceph_assert(tr == 0);
   }
 }
-
-/** do_notifies
- * Send an MOSDPGNotify to a primary, with a list of PGs that I have
- * content for, and they are primary for.
- */
-
-void OSD::do_notifies(
-  map<int,vector<pg_notify_t>>& notify_list,
-  OSDMapRef curmap)
-{
-  for (auto& [osd, notifies] : notify_list) {
-    if (!curmap->is_up(osd)) {
-      dout(20) << __func__ << " skipping down osd." << osd << dendl;
-      continue;
-    }
-    ConnectionRef con = service.get_con_osd_cluster(
-      osd, curmap->get_epoch());
-    if (!con) {
-      dout(20) << __func__ << " skipping osd." << osd << " (NULL con)" << dendl;
-      continue;
-    }
-    service.maybe_share_map(con.get(), curmap);
-    dout(7) << __func__ << " osd." << osd
-	    << " on " << notifies.size() << " PGs" << dendl;
-    MOSDPGNotify *m = new MOSDPGNotify(curmap->get_epoch(),
-				       std::move(notifies));
-    con->send_message(m);
-  }
-}
-
 
 /** do_queries
  * send out pending queries for info | summaries
