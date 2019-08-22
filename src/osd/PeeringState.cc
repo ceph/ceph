@@ -14,6 +14,7 @@
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGNotify.h"
+#include "messages/MOSDPGQuery.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
@@ -37,6 +38,18 @@ void BufferedRecoveryMessages::send_notify(int to, const pg_notify_t &n)
     );
 }
 
+void BufferedRecoveryMessages::send_query(
+  int to,
+  spg_t to_spgid,
+  const pg_query_t &q)
+{
+  map<spg_t,pg_query_t> queries;
+  queries[to_spgid] = q;
+  message_map[to].push_back(
+    new MOSDPGQuery(q.epoch_sent, std::move(queries))
+    );
+}
+
 void PGPool::update(CephContext *cct, OSDMapRef map)
 {
   const pg_pool_t *pi = map->get_pg_pool(id);
@@ -57,13 +70,6 @@ void PGPool::update(CephContext *cct, OSDMapRef map)
     snapc = pi->get_snap_context();
   }
   cached_epoch = map->get_epoch();
-}
-
-void PeeringState::PeeringMachine::send_query(
-  pg_shard_t to, const pg_query_t &query) {
-  ceph_assert(state->rctx);
-  state->rctx->query_map[to.osd][
-    spg_t(context< PeeringMachine >().spgid.pgid, to.shard)] = query;
 }
 
 /*-------------Peering State Helpers----------------*/
@@ -1981,7 +1987,7 @@ bool PeeringState::search_for_missing(
 }
 
 bool PeeringState::discover_all_missing(
-  map<int, map<spg_t,pg_query_t> > &query_map)
+  BufferedRecoveryMessages &rctx)
 {
   auto &missing = pg_log.get_missing();
   uint64_t unfound = get_num_unfound();
@@ -2032,11 +2038,13 @@ bool PeeringState::discover_all_missing(
     psdout(10) << __func__ << ": osd." << peer << ": requesting pg_missing_t"
 	       << dendl;
     peer_missing_requested.insert(peer);
-    query_map[peer.osd][spg_t(info.pgid.pgid, peer.shard)] =
+    rctx.send_query(
+      peer.osd,
+      spg_t(info.pgid.pgid, peer.shard),
       pg_query_t(
 	pg_query_t::FULLLOG,
 	peer.shard, pg_whoami.shard,
-	info.history, get_osdmap_epoch());
+	info.history, get_osdmap_epoch()));
     any = true;
   }
   return any;
@@ -2372,7 +2380,7 @@ void PeeringState::activate(
       build_might_have_unfound();
 
       // Always call now so update_calc_stats() will be accurate
-      discover_all_missing(query_map);
+      discover_all_missing(ctx.msgs);
 
     }
 
@@ -5347,7 +5355,7 @@ boost::statechart::result PeeringState::Active::react(const ActMap&)
 
   if (ps->have_unfound()) {
     // object may have become unfound
-    ps->discover_all_missing(context< PeeringMachine >().get_query_map());
+    ps->discover_all_missing(context<PeeringMachine>().get_recovery_ctx().msgs);
   }
 
   uint64_t unfound = ps->missing_loc.num_unfound();
@@ -5386,7 +5394,8 @@ boost::statechart::result PeeringState::Active::react(const MNotifyRec& notevt)
     ps->proc_replica_info(
       notevt.from, notevt.notify.info, notevt.notify.epoch_sent);
     if (ps->have_unfound() || (ps->is_degraded() && ps->might_have_unfound.count(notevt.from))) {
-      ps->discover_all_missing(context< PeeringMachine >().get_query_map());
+      ps->discover_all_missing(
+	context<PeeringMachine>().get_recovery_ctx().msgs);
     }
   }
   return discard_event();
@@ -5990,10 +5999,11 @@ void PeeringState::GetInfo::get_infos()
     } else {
       psdout(10) << " querying info from osd." << peer << dendl;
       context< PeeringMachine >().send_query(
-	peer, pg_query_t(pg_query_t::INFO,
-			 it->shard, ps->pg_whoami.shard,
-			 ps->info.history,
-			 ps->get_osdmap_epoch()));
+	peer.osd,
+	pg_query_t(pg_query_t::INFO,
+		   it->shard, ps->pg_whoami.shard,
+		   ps->info.history,
+		   ps->get_osdmap_epoch()));
       peer_info_requested.insert(peer);
       ps->blocked_by.insert(peer.osd);
     }
@@ -6141,7 +6151,7 @@ PeeringState::GetLog::GetLog(my_context ctx)
   // how much?
   psdout(10) << " requesting log from osd." << auth_log_shard << dendl;
   context<PeeringMachine>().send_query(
-    auth_log_shard,
+    auth_log_shard.osd,
     pg_query_t(
       pg_query_t::LOG,
       auth_log_shard.shard, ps->pg_whoami.shard,
@@ -6463,7 +6473,7 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
     if (pi.log_tail <= since) {
       psdout(10) << " requesting log+missing since " << since << " from osd." << *i << dendl;
       context< PeeringMachine >().send_query(
-	*i,
+	i->osd,
 	pg_query_t(
 	  pg_query_t::LOG,
 	  i->shard, ps->pg_whoami.shard,
@@ -6474,7 +6484,7 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
 			 << " (want since " << since << " < log.tail "
 			 << pi.log_tail << ")" << dendl;
       context< PeeringMachine >().send_query(
-	*i, pg_query_t(
+	i->osd, pg_query_t(
 	  pg_query_t::FULLLOG,
 	  i->shard, ps->pg_whoami.shard,
 	  ps->info.history, ps->get_osdmap_epoch()));
