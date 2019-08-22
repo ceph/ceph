@@ -121,7 +121,7 @@ class MDSThrasher(Greenlet, Thrasher):
 
     def _run(self):
         try:
-            self.do_thrash()
+            self._do_thrash()
         except Exception as e:
             # Log exceptions here so we get the full backtrace (gevent loses them).
             # Also allow successful completion as gevent exception handling is a broken mess:
@@ -217,7 +217,7 @@ class MDSThrasher(Greenlet, Thrasher):
                 self.log('no change')
             sleep(2)
 
-    def do_thrash(self):
+    def _do_thrash(self):
         """
         Perform the random thrashing action
         """

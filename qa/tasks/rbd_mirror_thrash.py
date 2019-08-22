@@ -83,7 +83,7 @@ class RBDMirrorThrasher(Greenlet, Thrasher):
 
     def _run(self):
         try:
-            self.do_thrash()
+            self._do_thrash()
         except Exception as e:
             # See _run exception comment for MDSThrasher
             self.exception = e
@@ -98,7 +98,7 @@ class RBDMirrorThrasher(Greenlet, Thrasher):
     def stop(self):
         self.stopping.set()
 
-    def do_thrash(self):
+    def _do_thrash(self):
         """
         Perform the random thrashing action
         """
