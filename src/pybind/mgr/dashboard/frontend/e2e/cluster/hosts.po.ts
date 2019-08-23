@@ -7,8 +7,7 @@ export class HostsPageHelper extends PageHelper {
   async check_for_host() {
     await this.navigateTo();
 
-    const hostcount = await this.getTableCount().getText();
-    expect(await hostcount.includes('0 total')).toBe(false);
+    expect(await this.getTableTotalCount()).not.toBe(0);
   }
 
   // function that checks all services links work for first

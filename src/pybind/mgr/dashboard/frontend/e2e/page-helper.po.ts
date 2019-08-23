@@ -89,8 +89,13 @@ export abstract class PageHelper {
       .getText();
   }
 
-  getTableCount() {
-    return $('.datatable-footer-inner.selected-count');
+  async getTableTotalCount(): Promise<number> {
+    return Number(
+      (await $$('.datatable-footer-inner .page-count span')
+        .filter(async (e) => (await e.getText()).includes('total'))
+        .first()
+        .getText()).match(/.*(\d+\s+)total.*/)[1]
+    );
   }
 
   // getTitleText() {
