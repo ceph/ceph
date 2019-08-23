@@ -152,6 +152,10 @@ public:
   void _set_compression();
   void _set_throttle_params();
   int _set_cache_sizes();
+  void _set_max_defer_interval() {
+    max_defer_interval =
+	cct->_conf.get_val<double>("bluestore_max_defer_interval");
+  }
 
   class TransContext;
 
@@ -1812,6 +1816,7 @@ private:
   int deferred_queue_size = 0;         ///< num txc's queued across all osrs
   atomic_int deferred_aggressive = {0}; ///< aggressive wakeup of kv thread
   Finisher deferred_finisher, finisher;
+  utime_t  deferred_last_submitted = utime_t();
 
   KVSyncThread kv_sync_thread;
   ceph::mutex kv_lock = ceph::make_mutex("BlueStore::kv_lock");
@@ -1893,6 +1898,7 @@ private:
   double osd_memory_expected_fragmentation = 0; ///< expected memory fragmentation
   uint64_t osd_memory_cache_min = 0; ///< Min memory to assign when autotuning cache
   double osd_memory_cache_resize_interval = 0; ///< Time to wait between cache resizing 
+  double max_defer_interval = 0; ///< Time to wait between last deferred submit
 
   typedef map<uint64_t, volatile_statfs> osd_pools_map;
 
@@ -2105,6 +2111,11 @@ private:
 				   bool create);
 
 public:
+  utime_t get_deferred_last_submitted() {
+    std::lock_guard l(deferred_lock);
+    return deferred_last_submitted;
+  }
+
   static int _write_bdev_label(CephContext* cct,
 			       string path, bluestore_bdev_label_t label);
   static int _read_bdev_label(CephContext* cct, string path,
