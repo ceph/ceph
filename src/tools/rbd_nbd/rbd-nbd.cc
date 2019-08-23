@@ -227,7 +227,7 @@ private:
   {
     ceph_assert(!reader_thread.is_started());
     std::unique_lock l{lock};
-    cond.wait(l, [this] { return io_finished.empty(); });
+    cond.wait(l, [this] { return io_pending.empty(); });
 
     while(!io_finished.empty()) {
       std::unique_ptr<IOContext> free_ctx(io_finished.front());
