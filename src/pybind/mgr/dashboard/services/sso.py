@@ -203,7 +203,7 @@ def handle_sso_command(cmd):
                 f = open(idp_metadata, 'r')
                 idp_metadata = f.read()
                 f.close()
-            except FileNotFoundError:
+            except (FileNotFoundError, OSError):
                 pass
             try:
                 idp_settings = OneLogin_Saml2_IdPMetadataParser.parse(idp_metadata,
