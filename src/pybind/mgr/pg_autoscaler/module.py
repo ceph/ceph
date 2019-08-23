@@ -214,7 +214,7 @@ class PgAutoscaler(MgrModule):
         all_stats = self.get('osd_stats')
         for s in roots:
             s.osd_count = len(s.osds)
-            s.pg_target = s.osd_count * int(self.mon_target_pg_per_osd)
+            s.pg_target = s.osd_count * self.mon_target_pg_per_osd
 
             capacity = 0.0
             for osd_stats in all_stats['osd_stats']:

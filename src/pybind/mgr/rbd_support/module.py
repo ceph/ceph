@@ -161,7 +161,7 @@ class PerfHandler:
                     self.process_raw_osd_perf_counters()
                     self.refresh_condition.notify()
 
-                    stats_period = int(self.module.get_ceph_option("mgr_stats_period"))
+                    stats_period = self.module.get_ceph_option("mgr_stats_period")
                     self.query_condition.wait(stats_period)
 
                 self.log.debug("PerfHandler: tick")
