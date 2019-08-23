@@ -844,7 +844,8 @@ public:
                         optional_yield y);
 
   /* quota related */
-  int sync_user_stats(const rgw_user& user_id, const RGWBucketInfo& bucket_info);
+  int sync_user_stats(const rgw_user& user_id, const RGWBucketInfo& bucket_info,
+                      RGWBucketEnt* pent = nullptr);
 
 private:
   int convert_old_bucket_info(RGWSI_Bucket_X_Ctx& ctx,

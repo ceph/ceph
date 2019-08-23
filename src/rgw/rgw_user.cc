@@ -87,13 +87,13 @@ int rgw_user_sync_all_stats(rgw::sal::RGWRadosStore *store, const rgw_user& user
         ldout(cct, 0) << "ERROR: could not read bucket info: bucket=" << bucket_ent.bucket << " ret=" << ret << dendl;
         continue;
       }
-      ret = store->ctl()->bucket->sync_user_stats(user_id, bucket_info);
+      RGWBucketEnt ent;
+      ret = store->ctl()->bucket->sync_user_stats(user_id, bucket_info, &ent);
       if (ret < 0) {
         ldout(cct, 0) << "ERROR: could not sync bucket stats: ret=" << ret << dendl;
         return ret;
       }
-      RGWQuotaInfo bucket_quota;
-      ret = store->getRados()->check_bucket_shards(bucket_info, bucket_info.bucket, bucket_quota);
+      ret = store->getRados()->check_bucket_shards(bucket_info, bucket_info.bucket, ent.count);
       if (ret < 0) {
 	ldout(cct, 0) << "ERROR in check_bucket_shards: " << cpp_strerror(-ret)<< dendl;
       }
