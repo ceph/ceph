@@ -261,7 +261,7 @@ class User(object):
     def from_dict(cls, u_dict, roles):
         return User(u_dict['username'], u_dict['password'], u_dict['name'],
                     u_dict['email'], {roles[r] for r in u_dict['roles']},
-                    u_dict['lastUpdate'])
+                    u_dict['lastUpdate'], u_dict['enabled'])
 
 
 class AccessControlDB(object):

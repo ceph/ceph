@@ -271,11 +271,12 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         self.assertEqual(str(ctx.exception),
                          "Cannot update system role 'read-only'")
 
-    def test_create_user(self, username='admin', rolename=None):
+    def test_create_user(self, username='admin', rolename=None, enabled=True):
         user = self.exec_cmd('ac-user-create', username=username,
                              rolename=rolename, password='admin',
                              name='{} User'.format(username),
-                             email='{}@user.com'.format(username))
+                             email='{}@user.com'.format(username),
+                             enabled=enabled)
 
         pass_hash = password_hash('admin', user['password'])
         self.assertDictEqual(user, {
@@ -285,13 +286,16 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             'name': '{} User'.format(username),
             'email': '{}@user.com'.format(username),
             'roles': [rolename] if rolename else [],
-            'enabled': True
+            'enabled': enabled
         })
         self.validate_persistent_user(username, [rolename] if rolename else [],
                                       pass_hash, '{} User'.format(username),
                                       '{}@user.com'.format(username),
-                                      user['lastUpdate'], True)
+                                      user['lastUpdate'], enabled)
         return user
+
+    def test_create_disabled_user(self):
+        self.test_create_user(enabled=False)
 
     def test_create_user_with_role(self):
         self.test_add_role_scope_perms()
