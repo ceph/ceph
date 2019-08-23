@@ -177,7 +177,8 @@ function teardown() {
       pattern=""
     fi
     # Local we start with core and teuthology ends with core
-    if ls $(dirname "$pattern") | grep -q '^core\|core$' ; then
+    # unittest cores can be lying around during parallel ctest, and are safe to ignore
+    if ls $(dirname "$pattern") | grep -v unittest | grep -q '^core\|core$' ; then
         cores="yes"
         if [ -n "$LOCALRUN" ]; then
 	    mkdir /tmp/cores.$$ 2> /dev/null || true
