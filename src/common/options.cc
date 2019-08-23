@@ -7135,6 +7135,10 @@ std::vector<Option> get_rgw_options() {
     .add_see_also("rgw_dmclock_metadata_res")
     .add_see_also("rgw_dmclock_metadata_wgt"),
 
+    Option("rgw_inline_limit_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("store data in xattr if its size is less than this limit"),
+
   });
 }
 

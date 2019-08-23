@@ -2911,7 +2911,19 @@ int RGWRados::Object::Write::_do_write_meta(uint64_t size, uint64_t accounted_si
   if (meta.data) {
     /* if we want to overwrite the data, we also want to overwrite the
        xattrs, so just remove the object */
-    op.write_full(*meta.data);
+    uint64_t len = meta.data->length();
+    if (len && (len <= store->ctx()->_conf->rgw_inline_limit_bytes)) {
+      ldout(store->ctx(), 15) << obj
+                              << ": store in xattr, data size " << len
+                              << dendl;
+
+      op.setxattr(RGW_ATTR_INLINE_DATA, *meta.data);
+
+      bufferlist empty;
+      op.write_full(empty);
+    } else {
+      op.write_full(*meta.data);
+    }
   }
 
   string etag;
@@ -6054,6 +6066,19 @@ int RGWRados::get_obj_iterate_cb(const rgw_raw_obj& read_obj, off_t obj_ofs,
     int r = append_atomic_test(astate, op);
     if (r < 0)
       return r;
+
+    /* inlined? */
+    map<string, bufferlist>::iterator iter = astate->attrset.find(
+                                               RGW_ATTR_INLINE_DATA);
+    if (iter != astate->attrset.end()) {
+      unsigned chunk_len = std::min((uint64_t)iter->second.length() - obj_ofs,
+                                    (uint64_t)len);
+      r = d->client_cb->handle_data(iter->second, obj_ofs, chunk_len);
+      if (r < 0)
+        return r;
+
+      return 0;
+    }
 
     if (astate &&
         obj_ofs < astate->data.length()) {
