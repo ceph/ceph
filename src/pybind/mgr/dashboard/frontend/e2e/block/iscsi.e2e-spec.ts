@@ -29,32 +29,14 @@ describe('Iscsi Page', () => {
 
     it('should check that tables are displayed and legends are correct', async () => {
       // Check tables are displayed
-      expect(
-        await iscsi
-          .getDataTable()
-          .get(0)
-          .isDisplayed()
-      );
-      expect(
-        await iscsi
-          .getDataTable()
-          .get(1)
-          .isDisplayed()
-      );
+      const dataTables = iscsi.getDataTables();
+      expect(await dataTables.get(0).isDisplayed());
+      expect(await dataTables.get(1).isDisplayed());
 
       // Check that legends are correct
-      expect(
-        await iscsi
-          .getLegends()
-          .get(0)
-          .getText()
-      ).toMatch('Gateways');
-      expect(
-        await iscsi
-          .getLegends()
-          .get(1)
-          .getText()
-      ).toMatch('Images');
+      const legends = iscsi.getLegends();
+      expect(await legends.get(0).getText()).toMatch('Gateways');
+      expect(await legends.get(1).getText()).toMatch('Images');
     });
   });
 });

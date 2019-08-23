@@ -216,7 +216,7 @@ export abstract class PageHelper {
     await browser.navigate().back();
   }
 
-  getDataTable(): ElementArrayFinder {
+  getDataTables(): ElementArrayFinder {
     return $$('cd-table');
   }
 
