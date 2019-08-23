@@ -417,6 +417,20 @@ class CephFSShell(Cmd):
             values = to_bytes(values)
             setattr(namespace, self.dest, values)
 
+    # TODO: move the necessary contents from here to `class path_to_bytes`.
+    class get_list_of_bytes_path(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string=None):
+            values = to_bytes(values)
+
+            if values == b'.':
+                values = cephfs.getcwd()
+            else:
+                for i in values:
+                    if i == b'.':
+                        values[values.index(i)] = cephfs.getcwd()
+
+            setattr(namespace, self.dest, values)
+
     def complete_mkdir(self, text, line, begidx, endidx):
         """
         auto complete of file name.
@@ -1132,7 +1146,7 @@ sub-directories, files')
 
     du_parser = argparse.ArgumentParser(
         description='Disk Usage of a Directory')
-    du_parser.add_argument('paths', type=str, action=path_to_bytes,
+    du_parser.add_argument('paths', type=str, action=get_list_of_bytes_path,
                            help='Name of the directory.', nargs='*',
                            default=[b'.'])
     du_parser.add_argument('-r', action='store_true',
