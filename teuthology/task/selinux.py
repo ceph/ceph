@@ -121,6 +121,7 @@ class SELinux(Task):
             'scontext=system_u:system_r:syslogd_t:s0',
             'tcontext=system_u:system_r:nrpe_t:s0',
             'comm="updatedb"',
+            'comm="smartd"',
         ]
         se_whitelist = self.config.get('whitelist', [])
         if se_whitelist:
