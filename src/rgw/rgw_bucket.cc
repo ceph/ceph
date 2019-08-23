@@ -154,7 +154,6 @@ int rgw_read_user_buckets(rgw::sal::RGWRadosStore * store,
                           bool need_stats)
 {
   rgw::sal::RGWRadosUser user(store, user_id);
-
   return user.list_buckets(marker, end_marker, max, need_stats, buckets);
 }
 
@@ -737,7 +736,7 @@ int RGWBucket::link(RGWBucketAdminOpState& op_state, optional_yield y,
     // like RGWRados::delete_bucket -- excepting no bucket_index work.
     r = bucket_ctl->remove_bucket_entrypoint_info(old_bucket, y,
                                                   RGWBucketCtl::Bucket::RemoveParams()
-                                                  .set_objv_tracker(&ep_objv));
+                                                  .set_objv_tracker(&ep_data.ep_objv));
     if (r < 0) {
       set_err_msg(err_msg, "failed to unlink old bucket endpoint " + old_bucket.tenant + "/" + old_bucket.name);
       return r;
@@ -3401,9 +3400,8 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
 
   RGWBucketEntryPoint ep;
   RGWObjVersionTracker ot;
-
+  RGWObjVersionTracker& rot = (pinfo) ? pinfo->ep_objv : ot;
   map<string, bufferlist> attrs, *pattrs = nullptr;
-
   string meta_key;
 
   if (update_entrypoint) {
@@ -3414,7 +3412,7 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
     } else {
       ret = svc.bucket->read_bucket_entrypoint_info(ctx,
                                                     meta_key,
-                                                    &ep, &ot,
+                                                    &ep, &rot,
                                                     nullptr, &attrs,
                                                     y);
       if (ret < 0 && ret != -ENOENT) {
@@ -3427,8 +3425,11 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
 
   ret = ctl.user->add_bucket(user_id, bucket, creation_time);
   if (ret < 0) {
-    ldout(cct, 0) << "ERROR: error adding bucket to user directory: user=" << user_id
-                  << " bucket=" << bucket << " err=" << cpp_strerror(-ret) << dendl;
+    ldout(cct, 0) << "ERROR: error adding bucket to user directory:"
+		  << " user=" << user_id
+                  << " bucket=" << bucket
+		  << " err=" << cpp_strerror(-ret)
+		  << dendl;
     goto done_err;
   }
 
@@ -3438,12 +3439,13 @@ int RGWBucketCtl::do_link_bucket(RGWSI_Bucket_EP_Ctx& ctx,
   ep.linked = true;
   ep.owner = user_id;
   ep.bucket = bucket;
-  ret = svc.bucket->store_bucket_entrypoint_info(ctx, meta_key, ep, false,
-                                                 real_time(), pattrs, &ot, y);
+  ret = svc.bucket->store_bucket_entrypoint_info(
+    ctx, meta_key, ep, false, real_time(), pattrs, &rot, y);
   if (ret < 0)
     goto done_err;
 
   return 0;
+
 done_err:
   int r = do_unlink_bucket(ctx, user_id, bucket, y, true);
   if (r < 0) {

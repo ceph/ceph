@@ -567,10 +567,11 @@ public:
 };
 
 struct rgw_ep_info {
-    RGWBucketEntryPoint &ep;
-    map<string, bufferlist>& attrs;
-    rgw_ep_info(RGWBucketEntryPoint &ep, map<string, bufferlist>& attrs)
-	: ep(ep), attrs(attrs) { }
+  RGWBucketEntryPoint &ep;
+  map<std::string, buffer::list>& attrs;
+  RGWObjVersionTracker ep_objv;
+  rgw_ep_info(RGWBucketEntryPoint &ep, map<string, bufferlist>& attrs)
+    : ep(ep), attrs(attrs) {}
 };
 
 class RGWBucketCtl
