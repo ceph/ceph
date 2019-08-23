@@ -40,6 +40,7 @@ class Monitor;
 class PGMap;
 class MonSession;
 class MOSDMap;
+struct OSDMonSetCrushmap;
 
 #include "erasure-code/ErasureCodeInterface.h"
 #include "mon/MonOpRequest.h"
@@ -335,6 +336,7 @@ private:
   friend struct OSDMemCache;
   friend struct IncCache;
   friend struct FullCache;
+  friend struct OSDMonSetCrushmap;
 
   /**
    * we haven't delegated full version stashing to paxosservice for some time
