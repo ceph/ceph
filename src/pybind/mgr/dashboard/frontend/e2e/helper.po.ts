@@ -17,6 +17,7 @@ import { PoolPageHelper } from './pools/pools.po';
 import { BucketsPageHelper } from './rgw/buckets.po';
 import { DaemonsPageHelper } from './rgw/daemons.po';
 import { UsersPageHelper } from './rgw/users.po';
+import { UserMgmtPageHelper } from './user-mgmt.po';
 
 export class Helper {
   static EC = browser.ExpectedConditions;
@@ -40,6 +41,7 @@ export class Helper {
   iscsi: IscsiPageHelper;
   mirroring: MirroringPageHelper;
   dashboard: DashboardPageHelper;
+  usermgmt: UserMgmtPageHelper;
 
   constructor() {
     this.buckets = new BucketsPageHelper();
@@ -60,6 +62,7 @@ export class Helper {
     this.iscsi = new IscsiPageHelper();
     this.mirroring = new MirroringPageHelper();
     this.dashboard = new DashboardPageHelper();
+    this.usermgmt = new UserMgmtPageHelper();
   }
 
   /**
