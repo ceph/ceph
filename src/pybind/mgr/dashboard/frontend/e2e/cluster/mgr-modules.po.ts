@@ -23,7 +23,7 @@ export class ManagerModulesPageHelper extends PageHelper {
 
     for (const entry of tuple) {
       // Clears fields and adds edits
-      await this.inputClear(element(by.id(entry[1])));
+      await this.clearInput(element(by.id(entry[1])));
       await element(by.id(entry[1])).sendKeys(entry[0]);
     }
 
@@ -47,7 +47,7 @@ export class ManagerModulesPageHelper extends PageHelper {
 
     // Clears the editable fields
     for (const entry of tuple) {
-      await this.inputClear(element(by.id(entry[1])));
+      await this.clearInput(element(by.id(entry[1])));
     }
 
     // Checks that clearing represents in details tab of module
@@ -95,7 +95,7 @@ export class ManagerModulesPageHelper extends PageHelper {
     for (let i = 0, devHealthTuple; (devHealthTuple = devHealthArray[i]); i++) {
       if (devHealthTuple[0] !== undefined) {
         // Clears and inputs edits
-        await this.inputClear(element(by.id(devHealthTuple[1])));
+        await this.clearInput(element(by.id(devHealthTuple[1])));
         await element(by.id(devHealthTuple[1])).sendKeys(devHealthTuple[0]);
       }
     }
@@ -129,22 +129,22 @@ export class ManagerModulesPageHelper extends PageHelper {
     ); // checks ansible
     await this.getTableCell('devicehealth').click();
     await element(by.cssContainingText('button', 'Edit')).click();
-    await this.inputClear(element(by.id('mark_out_threshold')));
+    await this.clearInput(element(by.id('mark_out_threshold')));
     await element(by.id('mark_out_threshold')).sendKeys('2419200');
 
-    await this.inputClear(element(by.id('pool_name')));
+    await this.clearInput(element(by.id('pool_name')));
     await element(by.id('pool_name')).sendKeys('device_health_metrics');
 
-    await this.inputClear(element(by.id('retention_period')));
+    await this.clearInput(element(by.id('retention_period')));
     await element(by.id('retention_period')).sendKeys('15552000');
 
-    await this.inputClear(element(by.id('scrape_frequency')));
+    await this.clearInput(element(by.id('scrape_frequency')));
     await element(by.id('scrape_frequency')).sendKeys('86400');
 
-    await this.inputClear(element(by.id('sleep_interval')));
+    await this.clearInput(element(by.id('sleep_interval')));
     await element(by.id('sleep_interval')).sendKeys('600');
 
-    await this.inputClear(element(by.id('warn_threshold')));
+    await this.clearInput(element(by.id('warn_threshold')));
     await element(by.id('warn_threshold')).sendKeys('7257600');
 
     // Checks that clearing represents in details tab of ansible

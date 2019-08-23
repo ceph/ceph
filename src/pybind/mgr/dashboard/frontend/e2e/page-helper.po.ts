@@ -20,10 +20,9 @@ export abstract class PageHelper {
   pages: Pages;
 
   /**
-   * Decorator to be used on Helper methods to restrict access to one
-   * particular URL.  This shall help developers to prevent and highlight
-   * mistakes.  It also reduces boilerplate code and by thus, increases
-   * readability.
+   * Decorator to be used on Helper methods to restrict access to one particular URL.  This shall
+   * help developers to prevent and highlight mistakes.  It also reduces boilerplate code and by
+   * thus, increases readability.
    */
   static restrictTo(page): Function {
     return (target: any, propertyKey: string, descriptor: PropertyDescriptor) => {
@@ -83,9 +82,9 @@ export abstract class PageHelper {
     return $('.breadcrumb-item.active').getText();
   }
 
-  async getTabText(idx): Promise<string> {
+  async getTabText(index): Promise<string> {
     return $$('.nav.nav-tabs li')
-      .get(idx)
+      .get(index)
       .getText();
   }
 
@@ -98,16 +97,6 @@ export abstract class PageHelper {
     );
   }
 
-  // getTitleText() {
-  //   let title;
-  //   return browser
-  //     .wait(() => {
-  //       title = $('.panel-title');
-  //       return title.isPresent();
-  //     })
-  //     .then(() => title.getText());
-  // }
-  //
   getTableCell(content: string): ElementFinder {
     return element(by.cssContainingText('.datatable-body-cell-label', content));
   }
@@ -129,17 +118,13 @@ export abstract class PageHelper {
   }
 
   /**
-   * Used for instances where a modal container would receive the click rather
-   * than the desired element.
+   * Ceph Dashboards' <input type="checkbox"> tag is not visible. Instead of the real checkbox, a
+   * replacement is shown which is supposed to have an adapted style. The replacement checkbox shown
+   * is part of the label and is rendered in the "::before" pseudo element of the label, hence the
+   * label is always clicked when the user clicks the replacement checkbox.
    *
-   * Our <input type="checkbox"> tag is not visible. Instead of the real
-   * checkbox, a replacement is shown which is supposed to have an adapted
-   * style. The replacement checkbox shown is part of the label and is rendered
-   * in the "::before" pseudo element of the label, hence the label is always
-   * clicked when the user clicks the replacement checkbox.
-   *
-   * This method finds corresponding label to the given checkbox and clicks it
-   * instead of the (fake) checkbox, like it is the case with real users.
+   * This method finds corresponding label to the given checkbox and clicks it instead of the (fake)
+   * checkbox, like it is the case with real users.
    *
    * Alternatively, the checkbox' label can be passed.
    *
@@ -167,14 +152,12 @@ export abstract class PageHelper {
   }
 
   /**
-   * Returns the cell with the content given in `content`. Will not return a
-   * rejected Promise if the table cell hasn't been found. It behaves this way
-   * to enable to wait for visiblity/invisiblity/presence of the returned
-   * element.
+   * Returns the cell with the content given in `content`. Will not return a rejected Promise if the
+   * table cell hasn't been found. It behaves this way to enable to wait for
+   * visibility/invisibility/presence of the returned element.
    *
-   * It will return a rejected Promise if the result is ambigous, though. That
-   * means if the search for content has been completed, but more than a single
-   * row is shown in the data table.
+   * It will return a rejected Promise if the result is ambiguous, though. That means if the search
+   * for content has been completed, but more than a single row is shown in the data table.
    */
   async getTableCellByContent(content: string): Promise<ElementFinder> {
     const searchInput = $('#pool-list > div .search input');
@@ -188,7 +171,7 @@ export abstract class PageHelper {
 
     const count = Number(await footer.getAttribute('ng-reflect-row-count'));
     if (count !== 0 && count > 1) {
-      return Promise.reject('getTableCellByContent: Result is ambigous');
+      return Promise.reject('getTableCellByContent: Result is ambiguous');
     } else {
       return Promise.resolve(
         element(
@@ -198,10 +181,19 @@ export abstract class PageHelper {
     }
   }
 
-  // used when .clear() does not work on a text box, sends a Ctrl + a, BACKSPACE
-  async inputClear(elem) {
-    await elem.sendKeys(protractor.Key.chord(protractor.Key.CONTROL, 'a'));
-    await elem.sendKeys(protractor.Key.BACK_SPACE);
+  /**
+   * Used when .clear() does not work on a text box, sends a Ctrl + a, BACKSPACE
+   */
+  async clearInput(elem: ElementFinder) {
+    const types = ['text', 'number'];
+    if ((await elem.getTagName()) === 'input' && types.includes(await elem.getAttribute('type'))) {
+      await elem.sendKeys(
+        protractor.Key.chord(protractor.Key.CONTROL, 'a'),
+        protractor.Key.BACK_SPACE
+      );
+    } else {
+      return Promise.reject(`Element ${elem} does not match the expected criteria.`);
+    }
   }
 
   @PageHelper.waitForTableData()
@@ -221,9 +213,16 @@ export abstract class PageHelper {
   }
 
   /**
+   * Gets column headers of table
+   */
+  getDataTableHeaders(): ElementArrayFinder {
+    return $$('.datatable-header');
+  }
+
+  /**
    * Grabs striped tables
    */
-  getStatusTable(): ElementArrayFinder {
+  getStatusTables(): ElementArrayFinder {
     return $$('.table.table-striped');
   }
 
@@ -232,12 +231,5 @@ export abstract class PageHelper {
    */
   getLegends(): ElementArrayFinder {
     return $$('legend');
-  }
-
-  /**
-   * Gets column headers of table
-   */
-  getDataTableHeaders(): ElementArrayFinder {
-    return $$('.datatable-header');
   }
 }
