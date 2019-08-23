@@ -48,7 +48,7 @@ describe('Monitors page', () => {
 
     it('should check In Quorum and Not In Quorum tables are present', async () => {
       // check for there to be two tables
-      expect(await monitors.getDataTable().count()).toEqual(2);
+      expect(await monitors.getDataTables().count()).toEqual(2);
 
       // check for table header 'In Quorum'
       expect(
