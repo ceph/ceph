@@ -3759,12 +3759,14 @@ void *BlueStore::MempoolThread::entry()
 
   utime_t next_balance = ceph_clock_now();
   utime_t next_resize = ceph_clock_now();
+  utime_t next_deferred_force_submit = ceph_clock_now();
 
   bool interval_stats_trim = false;
   while (!stop) {
     // Before we trim, check and see if it's time to rebalance/resize.
     double autotune_interval = store->cache_autotune_interval;
     double resize_interval = store->osd_memory_cache_resize_interval;
+    double max_defer_interval = store->max_defer_interval;
 
     if (autotune_interval > 0 && next_balance < ceph_clock_now()) {
       _adjust_cache_settings();
@@ -3785,6 +3787,16 @@ void *BlueStore::MempoolThread::entry()
       }
       next_resize = ceph_clock_now();
       next_resize += resize_interval;
+    }
+
+    if (max_defer_interval > 0 &&
+	next_deferred_force_submit < ceph_clock_now()) {
+      if (store->get_deferred_last_submitted() + max_defer_interval <
+	  ceph_clock_now()) {
+	store->deferred_try_submit();
+      }
+      next_deferred_force_submit = ceph_clock_now();
+      next_deferred_force_submit += max_defer_interval/3;
     }
 
     // Now Resize the shards 
@@ -4136,6 +4148,7 @@ const char **BlueStore::get_tracked_conf_keys() const
     "bluestore_no_per_pool_stats_tolerance",
     "bluestore_warn_on_legacy_statfs",
     "bluestore_warn_on_no_per_pool_omap",
+    "bluestore_max_defer_interval",
     NULL
   };
   return KEYS;
@@ -4198,6 +4211,11 @@ void BlueStore::handle_conf_change(const ConfigProxy& conf,
   if (changed.count("bluestore_throttle_deferred_bytes")) {
     throttle_deferred_bytes.reset_max(
       conf->bluestore_throttle_bytes + conf->bluestore_throttle_deferred_bytes);
+  }
+  if (changed.count("bluestore_max_defer_interval")) {
+    if (bdev) {
+      _set_max_defer_interval();
+    }
   }
 }
 
@@ -4774,6 +4792,7 @@ int BlueStore::_open_bdev(bool create)
   block_mask = ~(block_size - 1);
   block_size_order = ctz(block_size);
   ceph_assert(block_size == 1u << block_size_order);
+  _set_max_defer_interval();
   // and set cache_size based on device type
   r = _set_cache_sizes();
   if (r < 0) {
@@ -11195,6 +11214,8 @@ void BlueStore::deferred_try_submit()
       dout(20) << __func__ << "  osr " << osr << " has no pending" << dendl;
     }
   }
+
+  deferred_last_submitted = ceph_clock_now();
 }
 
 void BlueStore::_deferred_submit_unlock(OpSequencer *osr)
