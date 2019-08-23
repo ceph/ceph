@@ -108,12 +108,7 @@ struct Common
     return true;
   }
 
-  bool wait_retry(MonOpRequestRef op,
-	     stringstream &ss,
-	     version_t version) {
-    string retstr;
-    getline(ss, retstr);
-
+  bool wait_retry(MonOpRequestRef op) {
     wait_for_finished_proposal(op,
 	new Monitor::C_RetryMessage(mon, op));
     return true;
