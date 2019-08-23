@@ -45,9 +45,8 @@ typedef mempool::bluestore_alloc::vector<slot_t> slot_vector_t;
 #endif
 
 // fitting into cache line on x86_64
-static const size_t slotset_width = 8; // 8 slots per set
-static const size_t slots_per_slotset = 8;
-static const size_t slotset_bytes = sizeof(slot_t) * slotset_width;
+static const size_t slots_per_slotset = 8; // 8 slots per set
+static const size_t slotset_bytes = sizeof(slot_t) * slots_per_slotset;
 static const size_t bits_per_slot = sizeof(slot_t) * 8;
 static const size_t bits_per_slotset = slotset_bytes * 8;
 static const slot_t all_slot_set = 0xffffffffffffffff;
@@ -141,13 +140,12 @@ class AllocatorLevel01Loose : public AllocatorLevel01
     L1_ENTRY_PARTIAL = 0x01,
     L1_ENTRY_NOT_USED = 0x02,
     L1_ENTRY_FREE = 0x03,
-    CHILD_PER_SLOT = bits_per_slot / L1_ENTRY_WIDTH, // 32
     L1_ENTRIES_PER_SLOT = bits_per_slot / L1_ENTRY_WIDTH, //32
-    CHILD_PER_SLOT_L0 = bits_per_slot, // 64
+    L0_ENTRIES_PER_SLOT = bits_per_slot, // 64
   };
   uint64_t _children_per_slot() const override
   {
-    return CHILD_PER_SLOT;
+    return L1_ENTRIES_PER_SLOT;
   }
 
   interval_t _get_longest_from_l0(uint64_t pos0, uint64_t pos1,
@@ -193,14 +191,14 @@ class AllocatorLevel01Loose : public AllocatorLevel01
     uint64_t* allocated,
     interval_vector_t* res)
   {
-    uint64_t d0 = CHILD_PER_SLOT_L0;
+    uint64_t d0 = L0_ENTRIES_PER_SLOT;
 
     ++l0_dives;
 
     ceph_assert(l0_pos0 < l0_pos1);
     ceph_assert(length > *allocated);
-    ceph_assert(0 == (l0_pos0 % (slotset_width * d0)));
-    ceph_assert(0 == (l0_pos1 % (slotset_width * d0)));
+    ceph_assert(0 == (l0_pos0 % (slots_per_slotset * d0)));
+    ceph_assert(0 == (l0_pos1 % (slots_per_slotset * d0)));
     ceph_assert(((length - *allocated) % l0_granularity) == 0);
 
     uint64_t need_entries = (length - *allocated) / l0_granularity;
@@ -276,7 +274,7 @@ protected:
     // capacity to have slot alignment at l1
     auto aligned_capacity =
       p2roundup((int64_t)capacity,
-        int64_t(l1_granularity * slotset_width * _children_per_slot()));
+        int64_t(l1_granularity * slots_per_slotset * _children_per_slot()));
     size_t slot_count =
       aligned_capacity / l1_granularity / _children_per_slot();
     // we use set bit(s) as a marker for (partially) free entry
@@ -335,7 +333,7 @@ protected:
 
   void _mark_free_l0(int64_t l0_pos_start, int64_t l0_pos_end)
   {
-    auto d0 = CHILD_PER_SLOT_L0;
+    auto d0 = L0_ENTRIES_PER_SLOT;
 
     auto pos = l0_pos_start;
     slot_t bits = (slot_t)1 << (l0_pos_start % d0);
@@ -372,12 +370,12 @@ protected:
   bool _is_empty_l0(uint64_t l0_pos, uint64_t l0_pos_end)
   {
     bool no_free = true;
-    uint64_t d = slotset_width * CHILD_PER_SLOT_L0;
+    uint64_t d = slots_per_slotset * L0_ENTRIES_PER_SLOT;
     ceph_assert(0 == (l0_pos % d));
     ceph_assert(0 == (l0_pos_end % d));
 
-    auto idx = l0_pos / CHILD_PER_SLOT_L0;
-    auto idx_end = l0_pos_end / CHILD_PER_SLOT_L0;
+    auto idx = l0_pos / L0_ENTRIES_PER_SLOT;
+    auto idx_end = l0_pos_end / L0_ENTRIES_PER_SLOT;
     while (idx < idx_end && no_free) {
       no_free = l0[idx] == all_slot_clear;
       ++idx;
@@ -387,12 +385,12 @@ protected:
   bool _is_empty_l1(uint64_t l1_pos, uint64_t l1_pos_end)
   {
     bool no_free = true;
-    uint64_t d = slotset_width * _children_per_slot();
+    uint64_t d = slots_per_slotset * _children_per_slot();
     ceph_assert(0 == (l1_pos % d));
     ceph_assert(0 == (l1_pos_end % d));
 
-    auto idx = l1_pos / CHILD_PER_SLOT;
-    auto idx_end = l1_pos_end / CHILD_PER_SLOT;
+    auto idx = l1_pos / L1_ENTRIES_PER_SLOT;
+    auto idx_end = l1_pos_end / L1_ENTRIES_PER_SLOT;
     while (idx < idx_end && no_free) {
       no_free = _is_slot_fully_allocated(idx);
       ++idx;
@@ -430,7 +428,7 @@ public:
   uint64_t debug_get_allocated(uint64_t pos0 = 0, uint64_t pos1 = 0)
   {
     if (pos1 == 0) {
-      pos1 = l1.size() * CHILD_PER_SLOT;
+      pos1 = l1.size() * L1_ENTRIES_PER_SLOT;
     }
     auto avail = debug_get_free(pos0, pos1);
     return (pos1 - pos0) * l1_granularity - avail;
@@ -438,11 +436,11 @@ public:
 
   uint64_t debug_get_free(uint64_t l1_pos0 = 0, uint64_t l1_pos1 = 0)
   {
-    ceph_assert(0 == (l1_pos0 % CHILD_PER_SLOT));
-    ceph_assert(0 == (l1_pos1 % CHILD_PER_SLOT));
+    ceph_assert(0 == (l1_pos0 % L1_ENTRIES_PER_SLOT));
+    ceph_assert(0 == (l1_pos1 % L1_ENTRIES_PER_SLOT));
 
-    auto idx0 = l1_pos0 * slotset_width;
-    auto idx1 = l1_pos1 * slotset_width;
+    auto idx0 = l1_pos0 * slots_per_slotset;
+    auto idx1 = l1_pos1 * slots_per_slotset;
 
     if (idx1 == 0) {
       idx1 = l0.size();
@@ -452,7 +450,7 @@ public:
     for (uint64_t i = idx0; i < idx1; ++i) {
       auto v = l0[i];
       if (v == all_slot_set) {
-        res += CHILD_PER_SLOT_L0;
+        res += L0_ENTRIES_PER_SLOT;
       } else if (v != all_slot_clear) {
         size_t cnt = 0;
 #ifdef __GNUC__
@@ -534,12 +532,12 @@ protected:
   uint64_t last_pos = 0;
 
   enum {
-    CHILD_PER_SLOT = bits_per_slot, // 64
+    L1_ENTRIES_PER_SLOT = bits_per_slot, // 64
   };
 
   uint64_t _children_per_slot() const override
   {
-    return CHILD_PER_SLOT;
+    return L1_ENTRIES_PER_SLOT;
   }
   uint64_t _level_granularity() const override
   {
@@ -552,12 +550,12 @@ protected:
     l1._init(capacity, _alloc_unit, mark_as_free);
 
     l2_granularity =
-      l1._level_granularity() * l1._children_per_slot() * slotset_width;
+      l1._level_granularity() * l1._children_per_slot() * slots_per_slotset;
 
     // capacity to have slot alignment at l2
     auto aligned_capacity =
-      p2roundup((int64_t)capacity, (int64_t)l2_granularity * CHILD_PER_SLOT);
-    size_t elem_count = aligned_capacity / l2_granularity / CHILD_PER_SLOT;
+      p2roundup((int64_t)capacity, (int64_t)l2_granularity * L1_ENTRIES_PER_SLOT);
+    size_t elem_count = aligned_capacity / l2_granularity / L1_ENTRIES_PER_SLOT;
     // we use set bit(s) as a marker for (partially) free entry
     l2.resize(elem_count, mark_as_free ? all_slot_set : all_slot_clear);
 
@@ -574,7 +572,7 @@ protected:
 
   void _mark_l2_allocated(int64_t l2_pos, int64_t l2_pos_end)
   {
-    auto d = CHILD_PER_SLOT;
+    auto d = L1_ENTRIES_PER_SLOT;
     ceph_assert(0 <= l2_pos_end);
     ceph_assert((int64_t)l2.size() >= (l2_pos_end / d));
 
@@ -586,7 +584,7 @@ protected:
 
   void _mark_l2_free(int64_t l2_pos, int64_t l2_pos_end)
   {
-    auto d = CHILD_PER_SLOT;
+    auto d = L1_ENTRIES_PER_SLOT;
     ceph_assert(0 <= l2_pos_end);
     ceph_assert((int64_t)l2.size() >= (l2_pos_end / d));
 
@@ -598,22 +596,22 @@ protected:
 
   void _mark_l2_on_l1(int64_t l2_pos, int64_t l2_pos_end)
   {
-    auto d = CHILD_PER_SLOT;
+    auto d = L1_ENTRIES_PER_SLOT;
     ceph_assert(0 <= l2_pos_end);
     ceph_assert((int64_t)l2.size() >= (l2_pos_end / d));
 
-    auto idx = l2_pos * slotset_width;
-    auto idx_end = l2_pos_end * slotset_width;
+    auto idx = l2_pos * slots_per_slotset;
+    auto idx_end = l2_pos_end * slots_per_slotset;
     bool all_allocated = true;
     while (idx < idx_end) {
       if (!l1._is_slot_fully_allocated(idx)) {
         all_allocated = false;
-        idx = p2roundup(int64_t(++idx), int64_t(slotset_width));
+        idx = p2roundup(int64_t(++idx), int64_t(slots_per_slotset));
       }
       else {
         ++idx;
       }
-      if ((idx % slotset_width) == 0) {
+      if ((idx % slots_per_slotset) == 0) {
         if (all_allocated) {
           l2[l2_pos / d] &= ~(slot_t(1) << (l2_pos % d));
         }
@@ -635,7 +633,7 @@ protected:
     interval_vector_t* res)
   {
     uint64_t prev_allocated = *allocated;
-    uint64_t d = CHILD_PER_SLOT;
+    uint64_t d = L1_ENTRIES_PER_SLOT;
     ceph_assert(isp2(min_length));
     ceph_assert(min_length <= l2_granularity);
     ceph_assert(max_length == 0 || max_length >= min_length);
@@ -648,7 +646,7 @@ protected:
       max_length = cap;
     }
 
-    uint64_t l1_w = slotset_width * l1._children_per_slot();
+    uint64_t l1_w = slots_per_slotset * l1._children_per_slot();
 
     std::lock_guard l(lock);
 
