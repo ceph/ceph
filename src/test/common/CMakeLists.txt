@@ -348,6 +348,7 @@ add_executable(unittest_cdc test_cdc.cc
 target_link_libraries(unittest_cdc global ceph-common)
 add_ceph_unittest(unittest_cdc)
 
+
 add_executable(unittest_ceph_timer test_ceph_timer.cc)
 add_ceph_unittest(unittest_ceph_timer)
 
@@ -356,5 +357,11 @@ add_executable(unittest_blocked_completion test_blocked_completion.cc)
 add_ceph_unittest(unittest_blocked_completion)
 target_link_libraries(unittest_blocked_completion Boost::system GTest::GTest)
 
+
 add_executable(unittest_allocate_unique test_allocate_unique.cc)
 add_ceph_unittest(unittest_allocate_unique)
+
+add_executable(unittest_gather_completion test_gather_completion.cc)
+add_ceph_unittest(unittest_gather_completion)
+target_link_libraries(unittest_gather_completion global Boost::system
+  Boost::coroutine)
