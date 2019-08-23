@@ -1647,12 +1647,6 @@ namespace rgw {
       goto done;
     }
 
-    op_ret = get_store()->getRados()->check_bucket_shards(s->bucket_info, s->bucket,
-					      bucket_quota);
-    if (op_ret < 0) {
-      goto done;
-    }
-
     hash.Final(m);
 
     if (compressor && compressor->is_compressed()) {
