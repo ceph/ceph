@@ -1675,12 +1675,18 @@ def stop(ctx, config):
         config = {'daemons': config}
 
     daemons = ctx.daemons.resolve_role_list(config.get('daemons', None), CEPH_ROLE_TYPES, True)
+    clusters = set()
+
     for role in daemons:
         cluster, type_, id_ = teuthology.split_role(role)
         ctx.daemons.get_daemon(type_, id_, cluster).stop()
+        clusters.add(cluster)
 
-    ctx.ceph[config['cluster']].watchdog.stop()
-    ctx.ceph[config['cluster']].watchdog.join()
+
+    for cluster in clusters:
+        ctx.ceph[cluster].watchdog.stop()
+        ctx.ceph[cluster].watchdog.join()
+
     yield
 
 
