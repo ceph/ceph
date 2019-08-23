@@ -1186,7 +1186,7 @@ void PeeringState::reject_reservation()
   pl->send_cluster_message(
     primary.osd,
     new MBackfillReserve(
-      MBackfillReserve::REJECT,
+      MBackfillReserve::REJECT_TOOFULL,
       spg_t(info.pgid.pgid, primary.shard),
       get_osdmap_epoch()),
     get_osdmap_epoch());
@@ -4564,7 +4564,7 @@ void PeeringState::WaitRemoteBackfillReserved::retry()
 }
 
 boost::statechart::result
-PeeringState::WaitRemoteBackfillReserved::react(const RemoteReservationRejected &evt)
+PeeringState::WaitRemoteBackfillReserved::react(const RemoteReservationRejectedTooFull &evt)
 {
   DECLARE_LOCALS;
   ps->state_set(PG_STATE_BACKFILL_TOOFULL);
@@ -4627,7 +4627,7 @@ PeeringState::NotBackfilling::react(const RemoteBackfillReserved &evt)
 }
 
 boost::statechart::result
-PeeringState::NotBackfilling::react(const RemoteReservationRejected &evt)
+PeeringState::NotBackfilling::react(const RemoteReservationRejectedTooFull &evt)
 {
   return discard_event();
 }
@@ -4671,11 +4671,11 @@ PeeringState::RepNotRecovering::RepNotRecovering(my_context ctx)
 }
 
 boost::statechart::result
-PeeringState::RepNotRecovering::react(const RejectRemoteReservation &evt)
+PeeringState::RepNotRecovering::react(const RejectTooFullRemoteReservation &evt)
 {
   DECLARE_LOCALS;
   ps->reject_reservation();
-  post_event(RemoteReservationRejected());
+  post_event(RemoteReservationRejectedTooFull());
   return discard_event();
 }
 
@@ -4744,7 +4744,7 @@ PeeringState::RepNotRecovering::react(const RequestBackfillPrio &evt)
 
   if (!pl->try_reserve_recovery_space(
 	evt.primary_num_bytes, evt.local_num_bytes)) {
-    post_event(RejectRemoteReservation());
+    post_event(RejectTooFullRemoteReservation());
   } else {
     PGPeeringEventRef preempt;
     if (HAVE_FEATURE(ps->upacting_features, RECOVERY_RESERVATION_2)) {
@@ -4819,17 +4819,17 @@ PeeringState::RepWaitBackfillReserved::react(const RemoteBackfillReserved &evt)
 
 boost::statechart::result
 PeeringState::RepWaitBackfillReserved::react(
-  const RejectRemoteReservation &evt)
+  const RejectTooFullRemoteReservation &evt)
 {
   DECLARE_LOCALS;
   ps->reject_reservation();
-  post_event(RemoteReservationRejected());
+  post_event(RemoteReservationRejectedTooFull());
   return discard_event();
 }
 
 boost::statechart::result
 PeeringState::RepWaitBackfillReserved::react(
-  const RemoteReservationRejected &evt)
+  const RemoteReservationRejectedTooFull &evt)
 {
   DECLARE_LOCALS;
   pl->unreserve_recovery_space();
