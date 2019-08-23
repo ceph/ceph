@@ -601,7 +601,7 @@ public:
   void start_election();
   void win_standalone_election();
   // end election (called by Elector)
-  void win_election(epoch_t epoch, set<int>& q,
+  void win_election(epoch_t epoch, const set<int>& q,
 		    uint64_t features,
                     const mon_feature_t& mon_features,
 		    ceph_release_t min_mon_release,
