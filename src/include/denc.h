@@ -939,7 +939,16 @@ namespace _denc {
     static void bound_encode(const container& s, size_t& p, uint64_t f = 0) {
       p += sizeof(uint32_t);
       if constexpr (traits::bounded) {
+#if _GLIBCXX_USE_CXX11_ABI
+        // intensionally not calling container's empty() method to not prohibit
+        // compiler from optimizing the check if it and the ::size() operate on
+        // different memory (observed when std::list::empty() works on pointers,
+        // not the size field).
+        if (const auto elem_num = s.size(); elem_num > 0) {
+#else
         if (!s.empty()) {
+	  const auto elem_num = s.size();
+#endif
           // STL containers use weird element types like std::pair<const K, V>;
           // cast to something we have denc_traits for.
           size_t elem_size = 0;
@@ -948,7 +957,7 @@ namespace _denc {
           } else {
             denc(static_cast<const T&>(*s.begin()), elem_size);
           }
-          p += sizeof(uint32_t) + elem_size * s.size();
+          p += elem_size * elem_num;
         }
       } else {
         for (const T& e : s) {
