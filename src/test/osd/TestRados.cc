@@ -541,9 +541,9 @@ int main(int argc, char **argv)
       no_omap = true;
     else if (strcmp(argv[i], "--no-sparse") == 0)
       no_sparse = true;
-    else if (strcmp(argv[i], "--balance_reads") == 0)
+    else if (strcmp(argv[i], "--balance-reads") == 0)
       balance_reads = true;
-    else if (strcmp(argv[i], "--localize_reads") == 0)
+    else if (strcmp(argv[i], "--localize-reads") == 0)
       localize_reads = true;
     else if (strcmp(argv[i], "--pool-snaps") == 0)
       pool_snaps = true;
