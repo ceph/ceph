@@ -3576,16 +3576,21 @@ int RGWBucketCtl::read_buckets_stats(map<string, RGWBucketEnt>& m,
   });
 }
 
-int RGWBucketCtl::sync_user_stats(const rgw_user& user_id, const RGWBucketInfo& bucket_info)
+int RGWBucketCtl::sync_user_stats(const rgw_user& user_id,
+                                  const RGWBucketInfo& bucket_info,
+                                  RGWBucketEnt* pent)
 {
   RGWBucketEnt ent;
-  int r = svc.bi->read_stats(bucket_info, &ent, null_yield);
+  if (!pent) {
+    pent = &ent;
+  }
+  int r = svc.bi->read_stats(bucket_info, pent, null_yield);
   if (r < 0) {
     ldout(cct, 20) << __func__ << "(): failed to read bucket stats (r=" << r << ")" << dendl;
     return r;
   }
 
-  return ctl.user->flush_bucket_stats(user_id, ent);
+  return ctl.user->flush_bucket_stats(user_id, *pent);
 }
 
 RGWBucketMetadataHandlerBase *RGWBucketMetaHandlerAllocator::alloc()
