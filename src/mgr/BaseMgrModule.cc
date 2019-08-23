@@ -26,6 +26,7 @@
 #include "common/errno.h"
 #include "common/version.h"
 
+#include "PyUtil.h"
 #include "BaseMgrModule.h"
 #include "Gil.h"
 
@@ -393,11 +394,13 @@ ceph_option_get(BaseMgrModule *self, PyObject *args)
     return nullptr;
   }
 
-  std::string value;
-  int r = g_conf().get_val(string(what), &value);
-  if (r >= 0) {
+  const Option *opt = g_conf().find_option(string(what));
+  if (opt) {
+    std::string value;
+    int r = g_conf().get_val(string(what), &value);
+    assert(r >= 0);
     dout(10) << "ceph_option_get " << what << " found: " << value << dendl;
-    return PyString_FromString(value.c_str());
+    return get_python_typed_option_value(opt->type, value);
   } else {
     dout(4) << "ceph_option_get " << what << " not found " << dendl;
     Py_RETURN_NONE;
