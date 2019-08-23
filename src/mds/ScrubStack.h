@@ -21,6 +21,7 @@
 #include "MDSContext.h"
 #include "ScrubHeader.h"
 
+#include "common/LogClient.h"
 #include "include/elist.h"
 
 class MDCache;
@@ -28,6 +29,9 @@ class Finisher;
 
 class ScrubStack {
 protected:
+  // reference to global cluster log client
+  LogChannelRef &clog;
+
   /// A finisher needed so that we don't re-enter kick_off_scrubs
   Finisher *finisher;
 
@@ -57,7 +61,8 @@ protected:
 
 public:
   MDCache *mdcache;
-  ScrubStack(MDCache *mdc, Finisher *finisher_) :
+  ScrubStack(MDCache *mdc, LogChannelRef &clog, Finisher *finisher_) :
+    clog(clog),
     finisher(finisher_),
     inode_stack(member_offset(CInode, item_scrub)),
     scrubs_in_progress(0),
@@ -81,6 +86,7 @@ public:
 			 MDSContext *on_finish) {
     enqueue_inode(in, header, on_finish, true);
     scrub_origins.emplace(in);
+    clog_scrub_summary(in);
   }
   /** Like enqueue_inode_top, but we wait for all pending scrubs before
    * starting this one.
@@ -89,6 +95,7 @@ public:
 			    MDSContext *on_finish) {
     enqueue_inode(in, header, on_finish, false);
     scrub_origins.emplace(in);
+    clog_scrub_summary(in);
   }
 
   /**
@@ -125,6 +132,12 @@ public:
    * information is returned such as number of inodes pending abort/pause.
    */
   void scrub_status(Formatter *f);
+
+  /**
+   * Get a high level scrub status summary such as current scrub state
+   * and scrub paths.
+   */
+  std::string_view scrub_summary();
 
 private:
   // scrub abort is _not_ a state, rather it's an operation that's
@@ -269,6 +282,23 @@ private:
    * Completion context is complete with -ECANCELED.
    */
   void abort_pending_scrubs();
+
+  /**
+   * Return path for a given inode.
+   * @param in inode to make path entry.
+   */
+  std::string scrub_inode_path(CInode *in) {
+    std::string path;
+    in->make_path_string(path, true);
+    return (path.empty() ? "/" : path.c_str());
+  }
+
+  /**
+   * Send scrub information (queued/finished scrub path and summary)
+   * to cluster log.
+   * @param in inode for which scrub has been queued or finished.
+   */
+  void clog_scrub_summary(CInode *in=nullptr);
 };
 
 #endif /* SCRUBSTACK_H_ */
