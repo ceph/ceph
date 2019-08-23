@@ -5,7 +5,7 @@ describe('RGW daemons page', () => {
   let daemons: DaemonsPageHelper;
 
   beforeAll(() => {
-    daemons = new Helper().daemons;
+    daemons = new DaemonsPageHelper();
   });
 
   afterEach(async () => {

@@ -5,7 +5,7 @@ describe('Monitors page', () => {
   let monitors: MonitorsPageHelper;
 
   beforeAll(() => {
-    monitors = new Helper().monitors;
+    monitors = new MonitorsPageHelper();
   });
 
   afterEach(async () => {

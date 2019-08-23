@@ -19,14 +19,13 @@ describe('Dashboard Main Page', () => {
   let iscsi: IscsiPageHelper;
 
   beforeAll(() => {
-    const h = new Helper();
-    dashboard = h.dashboard;
-    daemons = h.daemons;
-    hosts = h.hosts;
-    osds = h.osds;
-    pools = h.pools;
-    monitors = h.monitors;
-    iscsi = h.iscsi;
+    dashboard = new DashboardPageHelper();
+    daemons = new DaemonsPageHelper();
+    hosts = new HostsPageHelper();
+    osds = new OSDsPageHelper();
+    pools = new PoolPageHelper();
+    monitors = new MonitorsPageHelper();
+    iscsi = new IscsiPageHelper();
   });
 
   afterEach(async () => {

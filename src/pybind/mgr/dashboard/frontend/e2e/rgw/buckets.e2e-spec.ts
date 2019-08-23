@@ -6,8 +6,7 @@ describe('RGW buckets page', () => {
   let buckets: BucketsPageHelper;
 
   beforeAll(async () => {
-    const helper = new Helper();
-    buckets = helper.buckets;
+    buckets = new BucketsPageHelper();
   });
 
   afterEach(async () => {

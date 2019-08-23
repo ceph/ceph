@@ -5,7 +5,7 @@ describe('Manager modules page', () => {
   let mgrmodules: ManagerModulesPageHelper;
 
   beforeAll(() => {
-    mgrmodules = new Helper().mgrModules;
+    mgrmodules = new ManagerModulesPageHelper();
   });
 
   afterEach(async () => {

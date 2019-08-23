@@ -5,7 +5,7 @@ describe('Nfs page', () => {
   let nfs: NfsPageHelper;
 
   beforeAll(() => {
-    nfs = new Helper().nfs;
+    nfs = new NfsPageHelper();
   });
 
   afterEach(async () => {

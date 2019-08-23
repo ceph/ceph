@@ -5,7 +5,7 @@ describe('Alerts page', () => {
   let alerts: AlertsPageHelper;
 
   beforeAll(() => {
-    alerts = new Helper().alerts;
+    alerts = new AlertsPageHelper();
   });
 
   afterEach(async () => {

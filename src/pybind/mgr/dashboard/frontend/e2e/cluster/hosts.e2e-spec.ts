@@ -5,7 +5,7 @@ describe('Hosts page', () => {
   let hosts: HostsPageHelper;
 
   beforeAll(() => {
-    hosts = new Helper().hosts;
+    hosts = new HostsPageHelper();
   });
 
   afterEach(async () => {
