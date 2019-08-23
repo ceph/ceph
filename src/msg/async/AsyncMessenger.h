@@ -403,7 +403,8 @@ public:
    */
   void unregister_conn(const AsyncConnectionRef& conn) {
     std::lock_guard l{deleted_lock};
-    conn->get_perf_counter()->dec(l_msgr_active_connections);
+    if (!accepting_conns.count(conn))
+      conn->get_perf_counter()->dec(l_msgr_active_connections);
     deleted_conns.emplace(std::move(conn));
 
     if (deleted_conns.size() >= ReapDeadConnectionThreshold) {
