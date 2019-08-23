@@ -324,4 +324,7 @@ add_executable(unittest_rabin_chunk test_rabin_chunk.cc
 target_link_libraries(unittest_rabin_chunk global ceph-common)
 add_ceph_unittest(unittest_rabin_chunk)
 
-
+add_executable(unittest_gather_completion test_gather_completion.cc)
+add_ceph_unittest(unittest_gather_completion)
+target_link_libraries(unittest_gather_completion global Boost::system
+  Boost::coroutine)
