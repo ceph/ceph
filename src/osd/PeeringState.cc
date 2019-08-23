@@ -4553,7 +4553,6 @@ void PeeringState::WaitRemoteBackfillReserved::retry()
   }
 
   ps->state_clear(PG_STATE_BACKFILL_WAIT);
-  ps->state_set(PG_STATE_BACKFILL_TOOFULL);
   pl->publish_stats_to_osd();
 
   pl->schedule_event_after(
@@ -4567,6 +4566,8 @@ void PeeringState::WaitRemoteBackfillReserved::retry()
 boost::statechart::result
 PeeringState::WaitRemoteBackfillReserved::react(const RemoteReservationRejected &evt)
 {
+  DECLARE_LOCALS;
+  ps->state_set(PG_STATE_BACKFILL_TOOFULL);
   retry();
   return transit<NotBackfilling>();
 }
