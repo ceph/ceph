@@ -20,6 +20,9 @@ inline PyObject* PyString_FromString(const char *v) {
 inline const char* PyString_AsString(PyObject *string) {
   return PyUnicode_AsUTF8(string);
 }
+inline int PyInt_Check(PyObject *o) {
+  return PyLong_Check(o);
+}
 inline long PyInt_AsLong(PyObject *io) {
   return PyLong_AsLong(io);
 }
