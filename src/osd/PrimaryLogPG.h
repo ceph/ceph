@@ -1410,8 +1410,10 @@ protected:
   int do_sparse_read(OpContext *ctx, OSDOp& osd_op);
   int do_writesame(OpContext *ctx, OSDOp& osd_op);
 
-  bool pgls_filter(PGLSFilter *filter, hobject_t& sobj);
-  int get_pgls_filter(bufferlist::const_iterator& iter, PGLSFilter **pfilter);
+  bool pgls_filter(const PGLSFilter& filter, const hobject_t& sobj);
+
+  std::pair<int, std::unique_ptr<const PGLSFilter>> get_pgls_filter(
+    bufferlist::const_iterator& iter);
 
   map<hobject_t, list<OpRequestRef>> in_progress_proxy_ops;
   void kick_proxy_ops_blocked(hobject_t& soid);

@@ -775,59 +775,53 @@ public:
     return 0;
   }
   ~PGLSPlainFilter() override {}
-  bool filter(const hobject_t &obj, bufferlist& xattr_data) override;
+  bool filter(const hobject_t& obj,
+              const bufferlist& xattr_data) const override {
+    return xattr_data.contents_equal(val.c_str(), val.size());
+  }
 };
 
-bool PGLSPlainFilter::filter(const hobject_t &obj, bufferlist& xattr_data)
-{
-  if (val.size() != xattr_data.length())
-    return false;
-
-  if (memcmp(val.c_str(), xattr_data.c_str(), val.size()))
-    return false;
-
-  return true;
-}
-
-bool PrimaryLogPG::pgls_filter(PGLSFilter* filter, hobject_t& sobj)
+bool PrimaryLogPG::pgls_filter(const PGLSFilter& filter, const hobject_t& sobj)
 {
   bufferlist bl;
 
   // If filter has expressed an interest in an xattr, load it.
-  if (!filter->get_xattr().empty()) {
+  if (!filter.get_xattr().empty()) {
     int ret = pgbackend->objects_get_attr(
       sobj,
-      filter->get_xattr(),
+      filter.get_xattr(),
       &bl);
-    dout(0) << "getattr (sobj=" << sobj << ", attr=" << filter->get_xattr() << ") returned " << ret << dendl;
+    dout(0) << "getattr (sobj=" << sobj << ", attr=" << filter.get_xattr() << ") returned " << ret << dendl;
     if (ret < 0) {
-      if (ret != -ENODATA || filter->reject_empty_xattr()) {
+      if (ret != -ENODATA || filter.reject_empty_xattr()) {
         return false;
       }
     }
   }
 
-  return filter->filter(sobj, bl);
+  return filter.filter(sobj, bl);
 }
 
-int PrimaryLogPG::get_pgls_filter(bufferlist::const_iterator& iter, PGLSFilter **pfilter)
+std::pair<int, std::unique_ptr<const PGLSFilter>>
+PrimaryLogPG::get_pgls_filter(bufferlist::const_iterator& iter)
 {
   string type;
-  PGLSFilter *filter;
+  // storing non-const PGLSFilter for the sake of ::init()
+  std::unique_ptr<PGLSFilter> filter;
 
   try {
     decode(type, iter);
   }
   catch (buffer::error& e) {
-    return -EINVAL;
+    return { -EINVAL, nullptr };
   }
 
   if (type.compare("plain") == 0) {
-    filter = new PGLSPlainFilter();
+    filter = std::make_unique<PGLSPlainFilter>();
   } else {
     std::size_t dot = type.find(".");
     if (dot == std::string::npos || dot == 0 || dot == type.size() - 1) {
-      return -EINVAL;
+      return { -EINVAL, nullptr };
     }
 
     const std::string class_name = type.substr(0, dot);
@@ -839,7 +833,7 @@ int PrimaryLogPG::get_pgls_filter(bufferlist::const_iterator& iter, PGLSFilter *
            << cpp_strerror(r) << dendl;
       if (r != -EPERM) // propogate permission error
         r = -EINVAL;
-      return r;
+      return { r, nullptr };
     } else {
       ceph_assert(cls);
     }
@@ -848,15 +842,15 @@ int PrimaryLogPG::get_pgls_filter(bufferlist::const_iterator& iter, PGLSFilter *
     if (class_filter == NULL) {
       derr << "Error finding filter '" << filter_name << "' in class "
            << class_name << dendl;
-      return -EINVAL;
+      return { -EINVAL, nullptr };
     }
-    filter = class_filter->fn();
+    filter.reset(class_filter->fn());
     if (!filter) {
       // Object classes are obliged to return us something, but let's
       // give an error rather than asserting out.
       derr << "Buggy class " << class_name << " failed to construct "
               "filter " << filter_name << dendl;
-      return -EINVAL;
+      return { -EINVAL, nullptr };
     }
   }
 
@@ -865,12 +859,10 @@ int PrimaryLogPG::get_pgls_filter(bufferlist::const_iterator& iter, PGLSFilter *
   if (r < 0) {
     derr << "Error initializing filter " << type << ": "
          << cpp_strerror(r) << dendl;
-    delete filter;
-    return -EINVAL;
+    return { -EINVAL, nullptr };
   } else {
     // Successfully constructed and initialized, return it.
-    *pfilter = filter;
-    return 0;
+    return std::make_pair(0, std::move(filter));
   }
 }
 
@@ -1032,13 +1024,13 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 
   int result = 0;
   string cname, mname;
-  PGLSFilter *filter = NULL;
 
   snapid_t snapid = m->get_snapid();
 
   vector<OSDOp> ops = m->ops;
 
   for (vector<OSDOp>::iterator p = ops.begin(); p != ops.end(); ++p) {
+    std::unique_ptr<const PGLSFilter> filter;
     OSDOp& osd_op = *p;
     auto bp = p->indata.cbegin();
     switch (p->op.op) {
@@ -1052,11 +1044,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	result = -EINVAL;
 	break;
       }
-      if (filter) {
-	delete filter;
-	filter = NULL;
-      }
-      result = get_pgls_filter(bp, &filter);
+      std::tie(result, filter) = get_pgls_filter(bp);
       if (result < 0)
         break;
 
@@ -1178,7 +1166,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
                candidate.get_namespace() != m->get_hobj().nspace)
 	    continue;
 
-	  if (filter && !pgls_filter(filter, candidate))
+	  if (filter && !pgls_filter(*filter, candidate))
 	    continue;
 
           dout(20) << "pgnls item 0x" << std::hex
@@ -1222,11 +1210,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	result = -EINVAL;
 	break;
       }
-      if (filter) {
-	delete filter;
-	filter = NULL;
-      }
-      result = get_pgls_filter(bp, &filter);
+      std::tie(result, filter) = get_pgls_filter(bp);
       if (result < 0)
         break;
 
@@ -1326,7 +1310,7 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	  if (recovery_state.get_missing_loc().is_deleted(candidate))
 	    continue;
 
-	  if (filter && !pgls_filter(filter, candidate))
+	  if (filter && !pgls_filter(*filter, candidate))
 	    continue;
 
 	  response.entries.push_back(make_pair(candidate.oid,
@@ -1391,7 +1375,6 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
 	  }
 	  if (is_unreadable_object(oid)) {
 	    wait_for_unreadable_object(oid, op);
-            delete filter;
 	    return;
 	  }
 	  result = osd->store->read(ch, ghobject_t(oid), 0, 0, osd_op.outdata);
@@ -1420,7 +1403,6 @@ void PrimaryLogPG::do_pg_op(OpRequestRef op)
   reply->set_result(result);
   reply->set_reply_versions(info.last_update, info.last_user_version);
   osd->send_message_osd_client(reply, m->get_connection());
-  delete filter;
 }
 
 int PrimaryLogPG::do_scrub_ls(MOSDOp *m, OSDOp *osd_op)
