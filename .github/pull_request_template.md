@@ -45,6 +45,7 @@ https://raw.githubusercontent.com/ceph/ceph/master/SubmittingPatches.rst
 - `jenkins test make check arm64`
 - `jenkins test submodules`
 - `jenkins test dashboard`
+- `jenkins test dashboard backend`
 - `jenkins test docs`
 - `jenkins render docs`
 
