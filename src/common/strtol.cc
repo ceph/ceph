@@ -27,7 +27,7 @@ long long strict_strtoll(std::string_view str, int base, std::string *err)
   char *endptr;
   errno = 0; /* To distinguish success/failure after call (see man page) */
   long long ret = strtoll(str.data(), &endptr, base);
-  if (endptr == str.data() || endptr != str.data() + str.size()) {
+  if (endptr == str.data() || endptr != str.data() + str.size()) {//完全没有合法字符或有部分非法字符
     *err = (std::string{"Expected option value to be integer, got '"} +
 	    std::string{str} + "'");
     return 0;
@@ -51,7 +51,7 @@ int strict_strtol(std::string_view str, int base, std::string *err)
   long long ret = strict_strtoll(str, base, err);
   if (!err->empty())
     return 0;
-  if ((ret < INT_MIN) || (ret > INT_MAX)) {
+  if ((ret < INT_MIN) || (ret > INT_MAX)) {//确保ret处于int范围内
     ostringstream errStr;
     errStr << "The option value '" << str << "' seems to be invalid";
     *err = errStr.str();
@@ -60,7 +60,7 @@ int strict_strtol(std::string_view str, int base, std::string *err)
   return static_cast<int>(ret);
 }
 
-int strict_strtol(const char *str, int base, std::string *err)
+int strict_strtol(const char *str, int base, std::string *err)//与上一个函数名相同是为了兼容C
 {
   return strict_strtol(std::string_view(str), base, err);
 }
@@ -141,12 +141,12 @@ T strict_iec_cast(std::string_view str, std::string *err)
   // get a view of the unit and of the value
   std::string_view unit;
   std::string_view n = str;
-  size_t u = str.find_first_not_of("0123456789-+");
+  size_t u = str.find_first_not_of("0123456789-+");//在str中寻找第一个不在“0123456789-+”中的字符
   int m = 0;
   // deal with unit prefix is there is one
   if (u != std::string_view::npos) {
-    n = str.substr(0, u);
-    unit = str.substr(u, str.length() - u);
+    n = str.substr(0, u);//n为数字字符串
+    unit = str.substr(u, str.length() - u);//第一个字符为非数字字符串
     // we accept both old si prefixes as well as the proper iec prefixes
     // i.e. K, M, ... and Ki, Mi, ...
     if (unit.back() == 'i') {

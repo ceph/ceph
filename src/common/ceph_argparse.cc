@@ -141,7 +141,7 @@ void env_to_vec(std::vector<const char*>& args, const char *name)
 void argv_to_vec(int argc, const char **argv,
                  std::vector<const char*>& args)
 {
-  args.insert(args.end(), argv + 1, argv + argc);
+  args.insert(args.end(), argv + 1, argv + argc);//将argv到argv+argc的环境变量insert到verctor
 }
 
 void vec_to_argv(const char *argv0, std::vector<const char*>& args,

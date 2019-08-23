@@ -89,7 +89,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
                               const bool skip_retarget)
 {
   ldpp_dout(op, 2) << "init permissions" << dendl;
-  int ret = handler->init_permissions(op);
+  int ret = handler->init_permissions(op);//rgw_rest.cc:1835
   if (ret < 0) {
     return ret;
   }
@@ -100,7 +100,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
    */
   if (! skip_retarget) {
     ldpp_dout(op, 2) << "recalculating target" << dendl;
-    ret = handler->retarget(op, &op);
+    ret = handler->retarget(op, &op);//将前者赋值给后者，这里该函数没任何作用
     if (ret < 0) {
       return ret;
     }
@@ -111,7 +111,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
 
   /* If necessary extract object ACL and put them into req_state. */
   ldpp_dout(op, 2) << "reading permissions" << dendl;
-  ret = handler->read_permissions(op);
+  ret = handler->read_permissions(op);//>>rgw_rest.cc:1864//暂时可忽略
   if (ret < 0) {
     return ret;
   }
@@ -123,7 +123,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   }
 
   ldpp_dout(op, 2) << "verifying op mask" << dendl;
-  ret = op->verify_op_mask();
+  ret = op->verify_op_mask();//确认用户是否有写权限，默认掩码为2,用户权限为7
   if (ret < 0) {
     return ret;
   }
@@ -137,7 +137,7 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   }
 
   ldpp_dout(op, 2) << "verifying op permissions" << dendl;
-  ret = op->verify_permission();
+  ret = op->verify_permission()//>>rgw_op:3441 与本地copy有关
   if (ret < 0) {
     if (s->system_request) {
       dout(2) << "overriding permissions due to system operation" << dendl;
@@ -149,13 +149,13 @@ int rgw_process_authenticated(RGWHandler_REST * const handler,
   }
 
   ldpp_dout(op, 2) << "verifying op params" << dendl;
-  ret = op->verify_params();
+  ret = op->verify_params();//确认文件大小不超过限定值:5368709120Byte>>rgw_rest.cc:1002
   if (ret < 0) {
     return ret;
   }
 
   ldpp_dout(op, 2) << "pre-executing" << dendl;
-  op->pre_exec();
+  op->pre_exec();//fenghl:There are no action in put
 
   ldpp_dout(op, 2) << "executing" << dendl;
   op->execute();
@@ -213,7 +213,7 @@ int process_request(RGWRados* const store,
   int init_error = 0;
   bool should_log = false;
   RGWRESTMgr *mgr;
-  RGWHandler_REST *handler = rest->get_handler(store, s,
+  RGWHandler_REST *handler = rest->get_handler(store, s,//获取该句柄，用于230行的操作
                                                auth_registry,
                                                frontend_prefix,
                                                client_io, &mgr, &init_error);
@@ -224,15 +224,15 @@ int process_request(RGWRados* const store,
   }
   dout(10) << "handler=" << typeid(*handler).name() << dendl;
 
-  should_log = mgr->get_logging();
+  should_log = mgr->get_logging();//用于日志打印，但是是什么日志呢？
 
   ldpp_dout(s, 2) << "getting op " << s->op << dendl;
-  op = handler->get_op(store);
+  op = handler->get_op(store);//用于获取相应操作的对象，例如：put操作获得RGWPutObj_ObjStore_S3的对象
   if (!op) {
     abort_early(s, NULL, -ERR_METHOD_NOT_ALLOWED, handler);
     goto done;
   }
-  std::tie(ret,c) = schedule_request(scheduler, s, op);
+  std::tie(ret,c) = schedule_request(scheduler, s, op);//>>>>rgw_process:44
   if (ret < 0) {
     if (ret == -EAGAIN) {
       ret = -ERR_RATE_LIMITED;
@@ -241,14 +241,14 @@ int process_request(RGWRados* const store,
     abort_early(s, op, ret, handler);
     goto done;
   }
-  req->op = op;
+  req->op = op;//?????
   dout(10) << "op=" << typeid(*op).name() << dendl;
 
-  s->op_type = op->get_type();
+  s->op_type = op->get_type();//获取动作的类型>>>>rgw_op.h:1172 
 
   try {
     ldpp_dout(op, 2) << "verifying requester" << dendl;
-    ret = op->verify_requester(auth_registry);
+    ret = op->verify_requester(auth_registry);//>>>>rgw_op.h:185
     if (ret < 0) {
       dout(10) << "failed to authorize request" << dendl;
       abort_early(s, op, ret, handler);
@@ -262,7 +262,7 @@ int process_request(RGWRados* const store,
     }
 
     ldpp_dout(op, 2) << "normalizing buckets and tenants" << dendl;
-    ret = handler->postauth_init();
+    ret = handler->postauth_init();//验证bucket和object命名是否合法>>>>rgw_rest_s3.cc:3908
     if (ret < 0) {
       dout(10) << "failed to run post-auth init" << dendl;
       abort_early(s, op, ret, handler);
@@ -275,7 +275,7 @@ int process_request(RGWRados* const store,
       goto done;
     }
 
-    ret = rgw_process_authenticated(handler, op, req, s);
+    ret = rgw_process_authenticated(handler, op, req, s);//这里完成数据的put操作>>>rgw_process.cc:90
     if (ret < 0) {
       abort_early(s, op, ret, handler);
       goto done;

@@ -629,7 +629,7 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
 
     if (s->bucket_exists) {
       ret = read_bucket_policy(store, s, s->bucket_info, s->bucket_attrs,
-                               s->bucket_acl.get(), s->bucket);
+                               s->bucket_acl.get(), s->bucket);//>>rgw_op.cc:466
       acct_acl_user = {
         s->bucket_info.owner,
         s->bucket_acl->get_owner().get_display_name(),
@@ -641,7 +641,7 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
     s->bucket_owner = s->bucket_acl->get_owner();
 
     RGWZoneGroup zonegroup;
-    int r = store->svc.zone->get_zonegroup(s->bucket_info.zonegroup, zonegroup);
+    int r = store->svc.zone->get_zonegroup(s->bucket_info.zonegroup, zonegroup);//由zonegroup ID查询zonegroup信息
     if (!r) {
       if (!zonegroup.endpoints.empty()) {
 	s->zonegroup_endpoint = zonegroup.endpoints.front();
@@ -720,7 +720,7 @@ int rgw_build_bucket_policies(RGWRados* store, struct req_state* s)
       map<string, bufferlist> uattrs;
       if (ret = rgw_get_user_attrs_by_uid(store, s->user->user_id, uattrs); ! ret) {
         if (s->iam_user_policies.empty()) {
-          s->iam_user_policies = get_iam_user_policy_from_attr(s->cct, store, uattrs, s->user->user_id.tenant);
+          s->iam_user_policies = get_iam_user_policy_from_attr(s->cct, store, uattrs, s->user->user_id.tenant);//rgw_op.cc:390啥都没干，返回为空
         } else {
           // This scenario can happen when a STS token has a policy, then we need to append other user policies
           // to the existing ones. (e.g. token returned by GetSessionToken)
@@ -3493,7 +3493,7 @@ int RGWPutObj::verify_permission()
     }
   }
 
-  auto op_ret = get_params();
+  auto op_ret = get_params();//fenghl:put start here
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "get_params() returned ret=" << op_ret << dendl;
     return op_ret;
@@ -3678,7 +3678,7 @@ static CompressorRef get_compressor_plugin(const req_state *s,
 
 void RGWPutObj::execute()
 {
-  char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];
+  char supplied_md5_bin[CEPH_CRYPTO_MD5_DIGESTSIZE + 1];// 用于存储用户提供的md5、计算的md5 相关的数组>>>>3684
   char supplied_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   char calc_md5[CEPH_CRYPTO_MD5_DIGESTSIZE * 2 + 1];
   unsigned char m[CEPH_CRYPTO_MD5_DIGESTSIZE];
@@ -3686,7 +3686,7 @@ void RGWPutObj::execute()
   bufferlist bl, aclbl, bs;
   int len;
   
-  off_t fst;
+  off_t fst;// copy source range 相关>>
   off_t lst;
 
   bool need_calc_md5 = (dlo_manifest == NULL) && (slo_info == NULL);
@@ -3696,8 +3696,8 @@ void RGWPutObj::execute()
       perfcounter->tinc(l_rgw_put_lat, s->time_elapsed());
     });
 
-  op_ret = -EINVAL;
-  if (s->object.empty()) {
+  op_ret = -EINVAL;//解析并检查请求参数是否完整、正确>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>>
+  if (s->object.empty()) {// 判断用户请求object name、bucket name等是否正确>>>3707
     return;
   }
 
@@ -3706,14 +3706,14 @@ void RGWPutObj::execute()
     return;
   }
 
-
-  op_ret = get_system_versioning_params(s, &olh_epoch, &version_id);
+// 解析并判断http请求的相关参数，包括copy obj的情况、包含tagging的情况、包含version的情况，以及基本的objname和bucketname解析
+  op_ret = get_system_versioning_params(s, &olh_epoch, &version_id);//fenghl:no action in put1
   if (op_ret < 0) {
     ldpp_dout(this, 20) << "get_system_versioning_params() returned ret="
 		      << op_ret << dendl;
     return;
   }
-
+// fenghl:no action in put1 判断并处理请求是否提供了md5来校验请求完整
   if (supplied_md5_b64) {
     need_calc_md5 = true;
 
@@ -3729,33 +3729,33 @@ void RGWPutObj::execute()
     buf_to_hex((const unsigned char *)supplied_md5_bin, CEPH_CRYPTO_MD5_DIGESTSIZE, supplied_md5);
     ldpp_dout(this, 15) << "supplied_md5=" << supplied_md5 << dendl;
   }
-
+// 判断http传输是否使用了chunk传输的方式，如果没有，可以直接根据content length来判断quota，否则需要等到所有chunk接收完成
   if (!chunked_upload) { /* with chunked upload we don't know how big is the upload.
                             we also check sizes at the end anyway */
-    op_ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,
-				user_quota, bucket_quota, s->content_length);
+    op_ret = store->check_quota(s->bucket_owner.get_id(), s->bucket,// 判断是否满足user和bucket的quota约束
+				user_quota, bucket_quota, s->content_length);//fenghl:There no enable quota
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "check_quota() returned ret=" << op_ret << dendl;
       return;
     }
-    op_ret = store->check_bucket_shards(s->bucket_info, s->bucket, bucket_quota);
+    op_ret = store->check_bucket_shards(s->bucket_info, s->bucket, bucket_quota);// 判断是否满足bucket index的shard的约束
     if (op_ret < 0) {
       ldpp_dout(this, 20) << "check_bucket_shards() returned ret=" << op_ret << dendl;
       return;
     }
   }
-
-  if (supplied_etag) {
+// 当启用Multipart上传时，用户每次上传新part需要带上之前上传response中返回的etag
+  if (supplied_etag) {// 判断用户是否提供了etag
     strncpy(supplied_md5, supplied_etag, sizeof(supplied_md5) - 1);
     supplied_md5[sizeof(supplied_md5) - 1] = '\0';
   }
 
-  const bool multipart = !multipart_upload_id.empty();
+  const bool multipart = !multipart_upload_id.empty();// 判断用户是否使用multipart方式的obj，
   auto& obj_ctx = *static_cast<RGWObjectCtx*>(s->obj_ctx);
   rgw_obj obj{s->bucket, s->object};
 
   /* Handle object versioning of Swift API. */
-  if (! multipart) {
+  if (! multipart) {//fenghl:ignore swift for using s3
     op_ret = store->swift_versioning_copy(obj_ctx,
                                           s->bucket_owner.get_id(),
                                           s->bucket_info,
@@ -3830,7 +3830,7 @@ void RGWPutObj::execute()
     return;
   }
 
-  if ((! copy_source.empty()) && !copy_source_range) {
+  if ((! copy_source.empty()) && !copy_source_range) {//已有对象的copy
     rgw_obj_key obj_key(copy_source_object_name, copy_source_version_id);
     rgw_obj obj(copy_source_bucket_info.bucket, obj_key.name);
 
@@ -3882,7 +3882,7 @@ void RGWPutObj::execute()
     if (fst > lst)
       break;
     if (copy_source.empty()) {
-      len = get_data(data);
+      len = get_data(data);//此处获取数据
     } else {
       uint64_t cur_lst = min(fst + s->cct->_conf->rgw_max_chunk_size - 1, lst);
       op_ret = get_data(fst, cur_lst, data);
@@ -7389,7 +7389,7 @@ int RGWHandler::init(RGWRados *_store,
 
 int RGWHandler::do_init_permissions()
 {
-  int ret = rgw_build_bucket_policies(store, s);
+  int ret = rgw_build_bucket_policies(store, s);//rgw_op.cc:556
   if (ret < 0) {
     ldpp_dout(s, 10) << "init_permissions on " << s->bucket
         << " failed, ret=" << ret << dendl;

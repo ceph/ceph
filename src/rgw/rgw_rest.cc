@@ -1646,7 +1646,7 @@ RGWOp* RGWHandler_REST::get_op(RGWRados* store)
      op = op_get();
      break;
    case OP_PUT:
-     op = op_put();
+     op = op_put();//rgw_rest_s3.cc:3769
      break;
    case OP_DELETE:
      op = op_delete();
@@ -1668,7 +1668,7 @@ RGWOp* RGWHandler_REST::get_op(RGWRados* store)
   }
 
   if (op) {
-    op->init(store, s, this);
+    op->init(store, s, this);//>>>>rgw_op.h:1140
   }
   return op;
 } /* get_op */
@@ -1856,7 +1856,7 @@ int RGWHandler_REST::init_permissions(RGWOp* op)
     return 0;
   }
 
-  return do_init_permissions();
+  return do_init_permissions();//rgw_op.cc:7391
 }
 
 int RGWHandler_REST::read_permissions(RGWOp* op_obj)

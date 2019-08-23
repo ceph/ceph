@@ -47,7 +47,7 @@ int RGWFrontendConfig::parse_config(const string& config,
 
 bool RGWFrontendConfig::get_val(const string& key, const string& def_val,
 				string *out)
-{
+{//寻找键key,若没有找到key,返回false,out赋值为def_val,否则返回true,out赋值为该键对应的值
  auto iter = config_map.find(key);
  if (iter == config_map.end()) {
    *out = def_val;

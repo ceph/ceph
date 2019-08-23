@@ -182,7 +182,7 @@ public:
    * of special cases. */
   virtual int verify_requester(const rgw::auth::StrategyRegistry& auth_registry) {
     /* TODO(rzarzynski): rename RGWHandler::authorize to generic_authenticate. */
-    return dialect_handler->authorize(this);
+    return dialect_handler->authorize(this);//>>>>>rgw_rest_s3.cc:3999
   }
   virtual int verify_permission() = 0;
   virtual int verify_op_mask();
@@ -1138,7 +1138,7 @@ public:
 
   void init(RGWRados *store, struct req_state *s, RGWHandler *h) override {
     RGWOp::init(store, s, h);
-    policy.set_ctx(s->cct);
+    policy.set_ctx(s->cct);//rgw_acl.h:413
   }
 
   void emplace_attr(std::string&& key, buffer::list&& bl) {

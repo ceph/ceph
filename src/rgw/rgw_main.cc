@@ -191,7 +191,7 @@ int main(int argc, const char **argv)
     cerr << argv[0] << ": -h or --help for usage" << std::endl;
     exit(1);
   }
-  if (ceph_argparse_need_usage(args)) {
+  if (ceph_argparse_need_usage(args)) {//判断是否使用help
     usage();
     exit(0);
   }
@@ -203,7 +203,7 @@ int main(int argc, const char **argv)
     flags);
 
   list<string> frontends;
-  g_conf().early_expand_meta(g_conf()->rgw_frontends, &cerr);
+  g_conf().early_expand_meta(g_conf()->rgw_frontends, &cerr);//与proxy有关
   get_str_list(g_conf()->rgw_frontends, ",", frontends);
   multimap<string, RGWFrontendConfig *> fe_map;
   list<RGWFrontendConfig *> configs;
@@ -213,7 +213,7 @@ int main(int argc, const char **argv)
   for (list<string>::iterator iter = frontends.begin(); iter != frontends.end(); ++iter) {
     string& f = *iter;
 
-    if (f.find("civetweb") != string::npos || f.find("beast") != string::npos) {
+    if (f.find("civetweb") != string::npos || f.find("beast") != string::npos) {//如果有这两个字符串
       // If civetweb or beast is configured as a frontend, prevent global_init() from
       // dropping permissions by setting the appropriate flag.
       flags |= CINIT_FLAG_DEFER_DROP_PRIVILEGES;

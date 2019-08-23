@@ -44,17 +44,17 @@ class librados::RadosClient : public Dispatcher
 
 public:
   using Dispatcher::cct;
-  const ConfigProxy& conf;
+  const ConfigProxy& conf;//配置文件
 private:
   enum {
     DISCONNECTED,
     CONNECTING,
     CONNECTED,
-  } state;
+  } state;//和Monitor的网络状态有关
 
-  MonClient monclient;
+  MonClient monclient;//Monitor客户端
   MgrClient mgrclient;
-  Messenger *messenger;
+  Messenger *messenger;//网络消息接口
 
   uint64_t instance_id;
 

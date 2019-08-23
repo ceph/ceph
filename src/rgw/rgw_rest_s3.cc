@@ -3777,7 +3777,7 @@ RGWOp *RGWHandler_REST_Obj_S3::op_put()
   }
 
   if (s->init_state.src_bucket.empty())
-    return new RGWPutObj_ObjStore_S3;
+    return new RGWPutObj_ObjStore_S3;//put
   else
     return new RGWCopyObj_ObjStore_S3;
 }
@@ -3910,7 +3910,7 @@ int RGWHandler_REST_S3::postauth_init()
   bool relaxed_names = s->cct->_conf->rgw_relaxed_s3_bucket_names;
 
   rgw_parse_url_bucket(t->url_bucket, s->user->user_id.tenant,
-		      s->bucket_tenant, s->bucket_name);
+		      s->bucket_tenant, s->bucket_name);//将后两个参数传给前两个参数
 
   dout(10) << "s->object=" << (!s->object.empty() ? s->object : rgw_obj_key("<NULL>"))
            << " s->bucket=" << rgw_make_bucket_entry_name(s->bucket_tenant, s->bucket_name) << dendl;
@@ -4000,7 +4000,7 @@ int RGWHandler_REST_S3::authorize(const DoutPrefixProvider *dpp)
   if (s->info.args.exists("Action") && s->info.args.get("Action") == "AssumeRoleWithWebIdentity") {
     return RGW_Auth_STS::authorize(dpp, store, auth_registry, s);
   }
-  return RGW_Auth_S3::authorize(dpp, store, auth_registry, s);
+  return RGW_Auth_S3::authorize(dpp, store, auth_registry, s);//>>>rgw_rest_s3.cc:4064
 }
 
 enum class AwsVersion {
