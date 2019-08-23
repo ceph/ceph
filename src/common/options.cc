@@ -6952,7 +6952,7 @@ std::vector<Option> get_rgw_options() {
 
     Option("rgw_reshard_thread_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(10_min)
-    .set_min(10_min)
+    .set_min(10)
     .set_description("Number of seconds between processing of reshard log entries"),
 
     Option("rgw_cache_expiry_interval", Option::TYPE_UINT,
