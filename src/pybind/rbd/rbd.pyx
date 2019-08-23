@@ -4466,9 +4466,86 @@ written." % (self.name, ret, length))
         """
         List image-level config overrides.
 
-        :returns: :class:`ConfigPoolIterator`
+        :returns: :class:`ConfigImageIterator`
         """
         return ConfigImageIterator(self)
+
+
+    def config_set(self, key, value):
+        """
+        Set an image-level configuration override.
+
+        :param key: key
+        :type key: str
+        :param value: value
+        :type value: str
+        """
+        conf_key = 'conf_' + key
+        conf_key = cstr(conf_key, 'key')
+        value = cstr(value, 'value')
+        cdef:
+            char *_key = conf_key
+            char *_value = value
+        with nogil:
+            ret = rbd_metadata_set(self.image, _key, _value)
+
+        if ret != 0:
+            raise make_ex(ret, 'error setting config %s for image %s' %
+                          (key, self.name))
+
+
+    def config_get(self, key):
+        """
+        Get an image-level configuration override.
+
+        :param key: key
+        :type key: str
+        :returns: str - value
+        """
+        conf_key = 'conf_' + key
+        conf_key = cstr(conf_key, 'key')
+        cdef:
+            char *_key = conf_key
+            size_t size = 4096
+            char *value = NULL
+            int ret
+        try:
+            while True:
+                value = <char *>realloc_chk(value, size)
+                with nogil:
+                    ret = rbd_metadata_get(self.image, _key, value, &size)
+                if ret != -errno.ERANGE:
+                    break
+            if ret == -errno.ENOENT:
+                raise KeyError('no config %s for image %s' % (key, self.name))
+            if ret != 0:
+                raise make_ex(ret, 'error getting config %s for image %s' %
+                              (key, self.name))
+            return decode_cstr(value)
+        finally:
+            free(value)
+
+
+    def config_remove(self, key):
+        """
+        Remove an image-level configuration override.
+
+        :param key: key
+        :type key: str
+        """
+        conf_key = 'conf_' + key
+        conf_key = cstr(conf_key, 'key')
+        cdef:
+            char *_key = conf_key
+        with nogil:
+            ret = rbd_metadata_remove(self.image, _key)
+
+        if ret == -errno.ENOENT:
+            raise KeyError('no config %s for image %s' % (key, self.name))
+        if ret != 0:
+            raise make_ex(ret, 'error removing config %s for image %s' %
+                          (key, self.name))
+
 
     def snap_get_namespace_type(self, snap_id):
         """
