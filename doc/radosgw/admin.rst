@@ -148,9 +148,9 @@ email addresses, display names and access levels. For example::
 
 	radosgw-admin user modify --uid=johndoe --display-name="John E. Doe"
 
-To modify subuser values, specify ``subuser modify`` and the subuser ID. For example::
+To modify subuser values, specify ``subuser modify``, user ID and the subuser ID. For example::
 
-	radosgw-admin subuser modify --subuser=johndoe:swift --access=full
+	radosgw-admin subuser modify --uid=johndoe --subuser=johndoe:swift --access=full
 
 
 User Enable/Suspend
