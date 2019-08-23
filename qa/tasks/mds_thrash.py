@@ -18,7 +18,7 @@ from tasks.thrasher import Thrasher
 
 log = logging.getLogger(__name__)
 
-class MDSThrasher(Greenlet, Thrasher, object):
+class MDSThrasher(Greenlet, Thrasher):
     """
     MDSThrasher::
 

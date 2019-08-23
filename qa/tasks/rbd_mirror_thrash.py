@@ -22,7 +22,7 @@ from tasks.thrasher import Thrasher
 log = logging.getLogger(__name__)
 
 
-class RBDMirrorThrasher(Greenlet, Thrasher, object):
+class RBDMirrorThrasher(Greenlet, Thrasher):
     """
     RBDMirrorThrasher::
 
