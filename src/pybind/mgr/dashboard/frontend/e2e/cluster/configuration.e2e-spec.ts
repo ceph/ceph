@@ -5,7 +5,7 @@ describe('Configuration page', () => {
   let configuration: ConfigurationPageHelper;
 
   beforeAll(() => {
-    configuration = new Helper().configuration;
+    configuration = new ConfigurationPageHelper();
   });
 
   afterEach(async () => {

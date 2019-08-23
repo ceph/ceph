@@ -6,7 +6,7 @@ describe('CRUSH map page', () => {
   let crushmap: CrushMapPageHelper;
 
   beforeAll(() => {
-    crushmap = new Helper().crushMap;
+    crushmap = new CrushMapPageHelper();
   });
 
   afterEach(async () => {

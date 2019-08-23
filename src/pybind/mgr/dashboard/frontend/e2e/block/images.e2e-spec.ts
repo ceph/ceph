@@ -7,8 +7,8 @@ describe('Images page', () => {
   let images: ImagesPageHelper;
 
   beforeAll(() => {
-    images = new Helper().images;
-    pools = new Helper().pools;
+    images = new ImagesPageHelper();
+    pools = new PoolPageHelper();
   });
 
   afterEach(async () => {

@@ -6,7 +6,7 @@ describe('RGW users page', () => {
   const user_name = '000user_create_edit_delete';
 
   beforeAll(() => {
-    users = new Helper().users;
+    users = new UsersPageHelper();
   });
 
   afterEach(async () => {

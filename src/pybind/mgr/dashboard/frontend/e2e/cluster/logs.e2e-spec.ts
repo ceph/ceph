@@ -18,9 +18,9 @@ describe('Logs page', () => {
   const minute = today.getMinutes();
 
   beforeAll(() => {
-    logs = new Helper().logs;
-    pools = new Helper().pools;
-    configuration = new Helper().configuration;
+    logs = new LogsPageHelper();
+    pools = new PoolPageHelper();
+    configuration = new ConfigurationPageHelper();
   });
 
   afterEach(async () => {

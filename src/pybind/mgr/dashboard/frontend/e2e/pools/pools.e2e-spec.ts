@@ -6,7 +6,7 @@ describe('Pools page', () => {
   const poolName = 'pool_e2e_pool_test';
 
   beforeAll(async () => {
-    pools = new Helper().pools;
+    pools = new PoolPageHelper();
     await pools.navigateTo();
   });
 

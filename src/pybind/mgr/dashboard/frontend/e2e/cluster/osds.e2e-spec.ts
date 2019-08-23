@@ -5,7 +5,7 @@ describe('OSDs page', () => {
   let osds: OSDsPageHelper;
 
   beforeAll(() => {
-    osds = new Helper().osds;
+    osds = new OSDsPageHelper();
   });
 
   afterEach(async () => {

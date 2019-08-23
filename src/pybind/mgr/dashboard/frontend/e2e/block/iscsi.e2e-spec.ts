@@ -5,7 +5,7 @@ describe('Iscsi Page', () => {
   let iscsi: IscsiPageHelper;
 
   beforeAll(() => {
-    iscsi = new Helper().iscsi;
+    iscsi = new IscsiPageHelper();
   });
 
   afterEach(async () => {

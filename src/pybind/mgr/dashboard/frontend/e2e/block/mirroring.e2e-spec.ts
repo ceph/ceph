@@ -7,8 +7,8 @@ describe('Mirroring page', () => {
   let mirroring: MirroringPageHelper;
 
   beforeAll(() => {
-    mirroring = new Helper().mirroring;
-    pools = new Helper().pools;
+    mirroring = new MirroringPageHelper();
+    pools = new PoolPageHelper();
   });
 
   afterEach(async () => {

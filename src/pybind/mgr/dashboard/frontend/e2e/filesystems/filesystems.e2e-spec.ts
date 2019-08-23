@@ -5,7 +5,7 @@ describe('Filesystems page', () => {
   let filesystems: FilesystemsPageHelper;
 
   beforeAll(() => {
-    filesystems = new Helper().filesystems;
+    filesystems = new FilesystemsPageHelper();
   });
 
   afterEach(async () => {

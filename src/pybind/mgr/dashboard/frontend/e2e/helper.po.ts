@@ -26,7 +26,6 @@ export class Helper {
   pools: PoolPageHelper;
   buckets: BucketsPageHelper;
   images: ImagesPageHelper;
-  iscsi: IscsiPageHelper;
   mirroring: MirroringPageHelper;
   dashboard: DashboardPageHelper;
   usermgmt: UserMgmtPageHelper;
@@ -42,9 +41,7 @@ export class Helper {
   crushMap: CrushMapPageHelper;
   configuration: ConfigurationPageHelper;
   alerts: AlertsPageHelper;
-  mirroring: MirroringPageHelper;
   iscsi: IscsiPageHelper;
-  dashboard: DashboardPageHelper;
 
   constructor() {
     this.pools = new PoolPageHelper();
