@@ -35,7 +35,7 @@ class Activate(object):
         try:
             objectstore = json_config['type']
         except KeyError:
-            if {'data', 'journal'}.issubset(set(devices)):
+            if {'data', self.journal_key}.issubset(set(devices)):
                 logger.warning(
                     '"type" key not found, assuming "filestore" since journal key is present'
                 )
@@ -50,11 +50,12 @@ class Activate(object):
         # raise an error describing what was expected and what was found
         # otherwise.
         if objectstore == 'filestore':
-            if {'data', 'journal'}.issubset(set(devices)):
+            if {'data', self.journal_key}.issubset(set(devices)):
                 return True
             else:
-                found = [i for i in devices if i in ['data', 'journal']]
-                mlogger.error("Required devices (data, and journal) not present for filestore")
+                found = [i for i in devices if i in ['data', self.journal_key]]
+                mlogger.error("Required devices (data, and %s) not present for
+                        filestore", self.journal_key)
                 mlogger.error('filestore devices found: %s', found)
                 raise RuntimeError('Unable to activate filestore OSD due to missing devices')
         else:
@@ -135,6 +136,13 @@ class Activate(object):
         with open(args.json_config, 'r') as fp:
             osd_metadata = json.load(fp)
 
+        self.is_encrypted = osd_metadata.get('encrypted', False)
+        if self.is_encrypted:
+            self.journal_key = 'journal_dmcrypt'
+        else:
+            self.journal_key = 'journal'
+
+
         # Make sure that required devices are configured
         self.validate_devices(osd_metadata)
 
@@ -146,9 +154,7 @@ class Activate(object):
             raise RuntimeError(
                 'Unable to activate OSD %s - no "uuid" key found for data' % args.osd_id
             )
-
-        # Encryption detection, and capturing of the keys to decrypt
-        self.is_encrypted = osd_metadata.get('encrypted', False)
+        # Capturing of the keys to decrypt
         self.encryption_type = osd_metadata.get('encryption_type')
         if self.is_encrypted:
             lockbox_secret = osd_metadata.get('lockbox.keyring')
@@ -169,7 +175,7 @@ class Activate(object):
 
         # XXX there is no support for LVM here
         data_device = self.get_device(data_uuid)
-        journal_device = self.get_device(osd_metadata.get('journal', {}).get('uuid'))
+        journal_device = self.get_device(osd_metadata.get(self.journal_key))
         block_device = self.get_device(osd_metadata.get('block', {}).get('uuid'))
         block_db_device = self.get_device(osd_metadata.get('block.db', {}).get('uuid'))
         block_wal_device = self.get_device(osd_metadata.get('block.wal', {}).get('uuid'))
