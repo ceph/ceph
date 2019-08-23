@@ -430,6 +430,9 @@ class Filesystem(MDSCluster):
         if not hasattr(self._ctx, "filesystem"):
             self._ctx.filesystem = self
 
+    def get_task_status(self, status_key):
+        return self.mon_manager.get_service_task_status("mds", status_key)
+
     def getinfo(self, refresh = False):
         status = self.status()
         if self.id is not None:
