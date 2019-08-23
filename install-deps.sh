@@ -316,7 +316,6 @@ else
 	$SUDO env DEBIAN_FRONTEND=noninteractive apt-get -y remove ceph-build-deps
 	install_seastar_deps
 	if [ "$control" != "debian/control" ] ; then rm $control; fi
-	$SUDO apt-get install -y libxmlsec1 libxmlsec1-nss libxmlsec1-openssl libxmlsec1-dev
         ;;
     centos|fedora|rhel|ol|virtuozzo)
         yumdnf="dnf"
@@ -379,8 +378,6 @@ else
             ensure_decent_gcc_on_rh $dts_ver
 	fi
         ! grep -q -i error: $DIR/yum-builddep.out || exit 1
-        # for building python-saml and its dependencies
-        $SUDO $yumdnf install -y xmlsec1 xmlsec1-nss xmlsec1-openssl xmlsec1-devel xmlsec1-openssl-devel libtool-ltdl-devel
         ;;
     opensuse*|suse|sles)
         echo "Using zypper to install dependencies"
@@ -392,7 +389,6 @@ else
         fi
         munge_ceph_spec_in $for_make_check $DIR/ceph.spec
         $SUDO $zypp_install $(rpmspec -q --buildrequires $DIR/ceph.spec) || exit 1
-        $SUDO $zypp_install libxmlsec1-1 libxmlsec1-nss1 libxmlsec1-openssl1 xmlsec1-devel xmlsec1-openssl-devel
         ;;
     alpine)
         # for now we need the testing repo for leveldb

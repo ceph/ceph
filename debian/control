@@ -51,6 +51,10 @@ Build-Depends: cmake (>= 3.5),
                libxml2-dev,
                librabbitmq-dev,
                librdkafka-dev,
+# Make-Check   libxmlsec1
+# Make-Check   libxmlsec1-nss
+# Make-Check   libxmlsec1-openssl
+# Make-Check   libxmlsec1-dev
                lsb-release,
                parted,
                patch,
