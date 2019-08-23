@@ -18,6 +18,7 @@ class StupidAllocator : public Allocator {
   ceph::mutex lock = ceph::make_mutex("StupidAllocator::lock");
 
   int64_t num_free;     ///< total bytes in freelist
+  int64_t block_size;
 
   typedef mempool::bluestore_alloc::pool_allocator<
     pair<const uint64_t,uint64_t>> allocator_t;
@@ -35,7 +36,7 @@ class StupidAllocator : public Allocator {
     uint64_t alloc_unit);
 
 public:
-  StupidAllocator(CephContext* cct, const std::string& name = "");
+  StupidAllocator(CephContext* cct, const std::string& name, int64_t block_size);
   ~StupidAllocator() override;
 
   int64_t allocate(
@@ -50,7 +51,7 @@ public:
     const interval_set<uint64_t>& release_set) override;
 
   uint64_t get_free() override;
-  double get_fragmentation(uint64_t alloc_unit) override;
+  double get_fragmentation() override;
 
   void dump() override;
   void dump(std::function<void(uint64_t offset, uint64_t length)> notify) override;
