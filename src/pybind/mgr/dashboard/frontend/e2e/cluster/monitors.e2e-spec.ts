@@ -37,13 +37,13 @@ describe('Monitors page', () => {
       ).toMatch('Status');
 
       // check for fields in table
-      expect(await monitors.getStatusTable().getText()).toMatch('Cluster ID');
-      expect(await monitors.getStatusTable().getText()).toMatch('monmap modified');
-      expect(await monitors.getStatusTable().getText()).toMatch('monmap epoch');
-      expect(await monitors.getStatusTable().getText()).toMatch('quorum con');
-      expect(await monitors.getStatusTable().getText()).toMatch('quorum mon');
-      expect(await monitors.getStatusTable().getText()).toMatch('required con');
-      expect(await monitors.getStatusTable().getText()).toMatch('required mon');
+      expect(await monitors.getStatusTables().getText()).toMatch('Cluster ID');
+      expect(await monitors.getStatusTables().getText()).toMatch('monmap modified');
+      expect(await monitors.getStatusTables().getText()).toMatch('monmap epoch');
+      expect(await monitors.getStatusTables().getText()).toMatch('quorum con');
+      expect(await monitors.getStatusTables().getText()).toMatch('quorum mon');
+      expect(await monitors.getStatusTables().getText()).toMatch('required con');
+      expect(await monitors.getStatusTables().getText()).toMatch('required mon');
     });
 
     it('should check In Quorum and Not In Quorum tables are present', async () => {
