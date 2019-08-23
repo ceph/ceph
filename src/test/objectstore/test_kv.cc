@@ -464,6 +464,72 @@ TEST_P(KVTest, RocksDBCFMerge) {
   fini();
 }
 
+TEST_P(KVTest, RocksDB_estimate_size) {
+  if(string(GetParam()) != "rocksdb")
+    GTEST_SKIP();
+
+  std::vector<KeyValueDB::ColumnFamily> cfs;
+  cfs.push_back(KeyValueDB::ColumnFamily("cf1", ""));
+  ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
+  cout << "creating one column family and opening it" << std::endl;
+  ASSERT_EQ(0, db->create_and_open(cout));
+
+  for(int test = 0; test < 20; test++)
+  {
+    KeyValueDB::Transaction t = db->get_transaction();
+    bufferlist v1;
+    v1.append(string(1000, '1'));
+    for (int i = 0; i < 100; i++)
+      t->set("A", to_string(rand()%100000), v1);
+    db->submit_transaction_sync(t);
+    db->compact();
+
+    int64_t size_a = db->estimate_prefix_size("A","");
+    ASSERT_GT(size_a, (test + 1) * 1000 * 100 * 0.5);
+    ASSERT_LT(size_a, (test + 1) * 1000 * 100 * 1.5);
+    int64_t size_a1 = db->estimate_prefix_size("A","1");
+    ASSERT_GT(size_a1, (test + 1) * 1000 * 100 * 0.1 * 0.5);
+    ASSERT_LT(size_a1, (test + 1) * 1000 * 100 * 0.1 * 1.5);
+    int64_t size_b = db->estimate_prefix_size("B","");
+    ASSERT_EQ(size_b, 0);
+  }
+
+  fini();
+}
+
+TEST_P(KVTest, RocksDB_estimate_size_column_family) {
+  if(string(GetParam()) != "rocksdb")
+    GTEST_SKIP();
+
+  std::vector<KeyValueDB::ColumnFamily> cfs;
+  cfs.push_back(KeyValueDB::ColumnFamily("cf1", ""));
+  ASSERT_EQ(0, db->init(g_conf()->bluestore_rocksdb_options));
+  cout << "creating one column family and opening it" << std::endl;
+  ASSERT_EQ(0, db->create_and_open(cout, cfs));
+
+  for(int test = 0; test < 20; test++)
+  {
+    KeyValueDB::Transaction t = db->get_transaction();
+    bufferlist v1;
+    v1.append(string(1000, '1'));
+    for (int i = 0; i < 100; i++)
+      t->set("cf1", to_string(rand()%100000), v1);
+    db->submit_transaction_sync(t);
+    db->compact();
+
+    int64_t size_a = db->estimate_prefix_size("cf1","");
+    ASSERT_GT(size_a, (test + 1) * 1000 * 100 * 0.5);
+    ASSERT_LT(size_a, (test + 1) * 1000 * 100 * 1.5);
+    int64_t size_a1 = db->estimate_prefix_size("cf1","1");
+    ASSERT_GT(size_a1, (test + 1) * 1000 * 100 * 0.1 * 0.5);
+    ASSERT_LT(size_a1, (test + 1) * 1000 * 100 * 0.1 * 1.5);
+    int64_t size_b = db->estimate_prefix_size("B","");
+    ASSERT_EQ(size_b, 0);
+  }
+
+  fini();
+}
+
 INSTANTIATE_TEST_SUITE_P(
   KeyValueDB,
   KVTest,
