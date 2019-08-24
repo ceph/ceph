@@ -204,8 +204,8 @@ public:
 
   void set_explicit(uint64_t _size, map<uint64_t, RGWObjManifestPart>& _objs) {
     explicit_objs = true;
-    obj_size = _size;
     objs.swap(_objs);
+    set_obj_size(_size);
   }
 
   void get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe, uint64_t ofs, string *override_prefix, rgw_obj_select *location);

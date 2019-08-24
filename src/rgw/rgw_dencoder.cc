@@ -146,6 +146,8 @@ void RGWObjManifest::obj_iterator::update_explicit_pos()
 void RGWObjManifest::generate_test_instances(std::list<RGWObjManifest*>& o)
 {
   RGWObjManifest *m = new RGWObjManifest;
+  map<uint64_t, RGWObjManifestPart> objs;
+  uint64_t total_size = 0;
   for (int i = 0; i<10; i++) {
     RGWObjManifestPart p;
     rgw_bucket b;
@@ -153,12 +155,11 @@ void RGWObjManifest::generate_test_instances(std::list<RGWObjManifest*>& o)
     p.loc = rgw_obj(b, "object");
     p.loc_ofs = 0;
     p.size = 512 * 1024;
-    m->objs[(uint64_t)i * 512 * 1024] = p;
+    total_size += p.size;
+    objs[total_size] = p;
   }
-  m->obj_size = 5 * 1024 * 1024;
-
+  m->set_explicit(total_size, objs);
   o.push_back(m);
-
   o.push_back(new RGWObjManifest);
 }
 
