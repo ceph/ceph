@@ -4289,6 +4289,7 @@ struct pg_missing_item {
       uint8_t f;
       decode(f, bl);
       flags = static_cast<missing_flags_t>(f); 
+      clean_regions.mark_fully_dirty();
     }
   }
 
@@ -4514,6 +4515,14 @@ public:
     if (p != missing.end()) {
       tracker.changed(oid);
       (p->second).have = have;
+    }
+  }
+
+  void mark_fully_dirty(const hobject_t& oid) {
+    auto p = missing.find(oid);
+    if (p != missing.end()) {
+      tracker.changed(oid);
+      (p->second).clean_regions.mark_fully_dirty();
     }
   }
 
