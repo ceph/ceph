@@ -7,9 +7,10 @@
 #define TIMEOUT_MS 3000
 #define RETRY_COUNT 7
 
-RDMAIWARPConnectedSocketImpl::RDMAIWARPConnectedSocketImpl(CephContext *cct, Infiniband* ib, RDMADispatcher* s,
-						 RDMAWorker *w, RDMACMInfo *info)
-  : RDMAConnectedSocketImpl(cct, ib, s, w), cm_con_handler(new C_handle_cm_connection(this))
+RDMAIWARPConnectedSocketImpl::RDMAIWARPConnectedSocketImpl(CephContext *cct, shared_ptr<Infiniband>& ib,
+                                                           shared_ptr<RDMADispatcher>& rdma_dispatcher,
+                                                           RDMAWorker *w, RDMACMInfo *info)
+  : RDMAConnectedSocketImpl(cct, ib, rdma_dispatcher, w), cm_con_handler(new C_handle_cm_connection(this))
 {
   status = IDLE;
   notify_fd = eventfd(0, EFD_CLOEXEC|EFD_NONBLOCK);
@@ -156,13 +157,13 @@ void RDMAIWARPConnectedSocketImpl::activate() {
 
 int RDMAIWARPConnectedSocketImpl::alloc_resource() {
   ldout(cct, 30) << __func__ << dendl;
-  qp = infiniband->create_queue_pair(cct, dispatcher->get_tx_cq(),
+  qp = ib->create_queue_pair(cct, dispatcher->get_tx_cq(),
       dispatcher->get_rx_cq(), IBV_QPT_RC, cm_id);
   if (!qp) {
     return -1;
   }
   if (!cct->_conf->ms_async_rdma_support_srq)
-    dispatcher->post_chunks_to_rq(infiniband->get_rx_queue_len(), qp->get_qp());
+    dispatcher->post_chunks_to_rq(ib->get_rx_queue_len(), qp->get_qp());
   dispatcher->register_qp(qp, this);
   dispatcher->perf_logger->inc(l_msgr_rdma_created_queue_pair);
   dispatcher->perf_logger->inc(l_msgr_rdma_active_queue_pair);

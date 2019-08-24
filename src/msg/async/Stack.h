@@ -33,7 +33,6 @@ class ConnectedSocketImpl {
   virtual void shutdown() = 0;
   virtual void close() = 0;
   virtual int fd() const = 0;
-  virtual int socket_fd() const = 0;
 };
 
 class ConnectedSocket;
@@ -129,9 +128,6 @@ class ConnectedSocket {
   /// Get file descriptor
   int fd() const {
     return _csi->fd();
-  }
-  int socket_fd() const {
-    return _csi->socket_fd();
   }
 
   explicit operator bool() const {
@@ -235,8 +231,8 @@ class Worker {
   Worker(const Worker&) = delete;
   Worker& operator=(const Worker&) = delete;
 
-  Worker(CephContext *c, unsigned i)
-    : cct(c), perf_logger(NULL), id(i), references(0), center(c) {
+  Worker(CephContext *c, unsigned worker_id)
+    : cct(c), perf_logger(NULL), id(worker_id), references(0), center(c) {
     char name[128];
     sprintf(name, "AsyncMessenger::Worker-%u", id);
     // initialize perf_logger
@@ -343,8 +339,8 @@ class NetworkStack {
   void start();
   void stop();
   virtual Worker *get_worker();
-  Worker *get_worker(unsigned i) {
-    return workers[i];
+  Worker *get_worker(unsigned worker_id) {
+    return workers[worker_id];
   }
   void drain();
   unsigned get_num_worker() const {
