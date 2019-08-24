@@ -27,6 +27,7 @@ class RGWBucketSyncPolicyHandler {
 
   std::set<string> source_zones;
 
+public:
   struct peer_info {
     std::string type;
     rgw_bucket bucket;
@@ -38,16 +39,25 @@ class RGWBucketSyncPolicyHandler {
       }
       return (type < si.type);
     }
+
+    bool is_rgw() const {
+      return (type.empty() || type == "rgw");
+    }
   };
 
-  std::map<string, std::set<peer_info> > sources;
-  std::map<string, std::set<peer_info> > targets;
+private:
+  std::map<string, std::set<peer_info> > sources; /* peers by zone */
+  std::map<string, std::set<peer_info> > targets; /* peers by zone */
 
 public:
   RGWBucketSyncPolicyHandler(RGWSI_Zone *_zone_svc,
                              RGWBucketInfo& _bucket_info) : zone_svc(_zone_svc),
                                                             bucket_info(_bucket_info) {}
   int init();
+
+  std::map<string, std::set<peer_info> >& get_sources() {
+    return sources;
+  }
 
   const RGWBucketInfo& get_bucket_info() const {
     return bucket_info;
