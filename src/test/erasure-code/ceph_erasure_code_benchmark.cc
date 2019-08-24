@@ -91,6 +91,13 @@ int ErasureCodeBench::setup(int argc, char** argv) {
 
   if (vm.count("help")) {
     cout << desc << std::endl;
+    cout <<"Example: ceph_erasure_code_benchmark "
+	<<"-p jerasure "
+	<<"-i 1 -w encode "
+	<<"-P technique=reed_sol_van "
+	<<"-P directory=libs "
+	<<"-P k=2 "
+	<<"-P m=2" << endl;
     return 1;
   }
 
@@ -121,9 +128,19 @@ int ErasureCodeBench::setup(int argc, char** argv) {
     exhaustive_erasures = false;
   if (vm.count("erased") > 0)
     erased = vm["erased"].as<vector<int> >();
-
-  k = stoi(profile["k"]);
-  m = stoi(profile["m"]);
+	
+  try {
+    k = stoi(profile["k"]);
+    m = stoi(profile["m"]);
+  } 
+  catch (const std::invalid_argument& e) {
+    cout << "Invalid k or m, k: " << profile["k"] << " m: " << profile["m"] << endl;
+    return -EINVAL;	
+  }
+  catch (const std::out_of_range& e) {
+    cout << "Out-of-range k or m, k: " << profile["k"] << " m: " << profile["m"] << endl;
+    return -EINVAL;
+  }
   
   if (k <= 0) {
     cout << "parameter k is " << k << ". But k needs to be > 0." << endl;
