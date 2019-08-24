@@ -4241,13 +4241,11 @@ struct pg_missing_item {
   } flags;
   pg_missing_item() : flags(FLAG_NONE) {}
   explicit pg_missing_item(eversion_t n) : need(n), flags(FLAG_NONE) {}  // have no old version
-  pg_missing_item(eversion_t n, eversion_t h, bool is_delete=false, bool old_style = false,bool new_object = false) :
+  pg_missing_item(eversion_t n, eversion_t h, bool is_delete=false, bool old_style = false) :
     need(n), have(h) {
+    set_delete(is_delete);
     if (old_style)
       clean_regions.mark_fully_dirty();
-    if (new_object)
-      clean_regions.mark_object_new();
-    set_delete(is_delete);
   }
 
   void encode(ceph::buffer::list& bl, uint64_t features) const {
