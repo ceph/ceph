@@ -18,15 +18,21 @@
 
 class JSONObj;
 
-struct rgw_bucket_sync_pipe {
+struct rgw_bucket_sync_pair_info {
   rgw_bucket_shard source_bs;
-  RGWBucketInfo dest_bucket_info;
+  rgw_bucket_shard dest_bs;
   string source_prefix;
   string dest_prefix;
 };
 
-inline ostream& operator<<(ostream& out, const rgw_bucket_sync_pipe& p) {
-  if (p.source_bs.bucket == p.dest_bucket_info.bucket &&
+struct rgw_bucket_sync_pipe {
+  rgw_bucket_sync_pair_info info;
+  RGWBucketInfo source_bucket_info;
+  RGWBucketInfo dest_bucket_info;
+};
+
+inline ostream& operator<<(ostream& out, const rgw_bucket_sync_pair_info& p) {
+  if (p.source_bs.bucket == p.dest_bs.bucket &&
       p.source_prefix == p.dest_prefix) {
     return out << p.source_bs;
   }
@@ -37,7 +43,7 @@ inline ostream& operator<<(ostream& out, const rgw_bucket_sync_pipe& p) {
     out << "/" << p.source_prefix;
   }
 
-  out << " -> " << p.dest_bucket_info.bucket;
+  out << " -> " << p.dest_bs.bucket;
 
   if (!p.dest_prefix.empty()) {
     out << "/" << p.dest_prefix;
@@ -766,7 +772,7 @@ public:
   map<int, rgw_bucket_shard_sync_info>& get_sync_status() { return sync_status; }
   int init_sync_status();
 
-  static string status_oid(const string& source_zone, const rgw_bucket_sync_pipe& bs);
+  static string status_oid(const string& source_zone, const rgw_bucket_sync_pair_info& bs);
   static string obj_status_oid(const string& source_zone, const rgw_obj& obj); /* can be used by sync modules */
 
   // implements DoutPrefixProvider
