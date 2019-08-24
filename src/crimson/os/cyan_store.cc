@@ -131,7 +131,7 @@ CyanStore::list_objects(CollectionRef c,
                         uint64_t limit) const
 {
   logger().debug("{} {} {} {} {}",
-                 __func__, c->cid, start, end, limit);
+                 __func__, c->get_cid(), start, end, limit);
   std::vector<ghobject_t> objects;
   objects.reserve(limit);
   ghobject_t next = ghobject_t::get_max();
@@ -177,9 +177,10 @@ seastar::future<ceph::bufferlist> CyanStore::read(CollectionRef c,
                                             uint32_t op_flags)
 {
   logger().debug("{} {} {} {}~{}",
-                __func__, c->cid, oid, offset, len);
+                __func__, c->get_cid(), oid, offset, len);
   if (!c->exists) {
-    throw std::runtime_error(fmt::format("collection does not exist: {}", c->cid));
+    throw std::runtime_error(fmt::format("collection does not exist: {}",
+					 c->get_cid()));
   }
   ObjectRef o = c->get_object(oid);
   if (!o) {
@@ -204,7 +205,7 @@ seastar::future<ceph::bufferptr> CyanStore::get_attr(CollectionRef c,
                                                      std::string_view name) const
 {
   logger().debug("{} {} {}",
-                __func__, c->cid, oid);
+                __func__, c->get_cid(), oid);
   auto o = c->get_object(oid);
   if (!o) {
     return seastar::make_exception_future<ceph::bufferptr>(
@@ -222,7 +223,7 @@ seastar::future<CyanStore::attrs_t> CyanStore::get_attrs(CollectionRef c,
                                                          const ghobject_t& oid)
 {
   logger().debug("{} {} {}",
-                __func__, c->cid, oid);
+                __func__, c->get_cid(), oid);
   auto o = c->get_object(oid);
   if (!o) {
     throw std::runtime_error(fmt::format("object does not exist: {}", oid));
@@ -236,7 +237,7 @@ CyanStore::omap_get_values(CollectionRef c,
                            const omap_keys_t& keys)
 {
   logger().debug("{} {} {}",
-                __func__, c->cid, oid);
+                __func__, c->get_cid(), oid);
   auto o = c->get_object(oid);
   if (!o) {
     throw std::runtime_error(fmt::format("object does not exist: {}", oid));
@@ -258,7 +259,7 @@ CyanStore::omap_get_values(
   ) {
   logger().debug(
     "{} {} {}",
-    __func__, c->cid, oid);
+    __func__, c->get_cid(), oid);
   auto o = c->get_object(oid);
   if (!o) {
     throw std::runtime_error(fmt::format("object does not exist: {}", oid));
