@@ -54,7 +54,7 @@ while read type; do
 	    echo "**** $type test $n dump_json check failed ****"
 	    echo "   ceph-dencoder type $type select_test $n dump_json > $tmp1"
 	    echo "   ceph-dencoder type $type select_test $n encode decode dump_json > $tmp2"
-	    echo "   diff $tmp1 $tmp2"
+	    diff $tmp1 $tmp2
 	    failed=$(($failed + 1))
 	fi
 
@@ -62,7 +62,7 @@ while read type; do
 	    echo "**** $type test $n copy dump_json check failed ****"
 	    echo "   ceph-dencoder type $type select_test $n dump_json > $tmp1"
 	    echo "   ceph-dencoder type $type select_test $n copy dump_json > $tmp2"
-	    echo "   diff $tmp1 $tmp2"
+	    diff $tmp1 $tmp2
 	    failed=$(($failed + 1))
 	fi
 
@@ -70,7 +70,7 @@ while read type; do
 	    echo "**** $type test $n copy_ctor dump_json check failed ****"
 	    echo "   ceph-dencoder type $type select_test $n dump_json > $tmp1"
 	    echo "   ceph-dencoder type $type select_test $n copy_ctor dump_json > $tmp2"
-	    echo "   diff $tmp1 $tmp2"
+	    diff $tmp1 $tmp2
 	    failed=$(($failed + 1))
 	fi
 
