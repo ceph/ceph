@@ -451,9 +451,7 @@ public:
       : obj_iterator(_m, 0)
     {}
     obj_iterator(RGWObjManifest *_m, uint64_t _ofs) : manifest(_m) {
-      if (!manifest->empty()) {
-        seek(_ofs);
-      }
+      seek(_ofs);
     }
     void seek(uint64_t ofs);
 
