@@ -22,7 +22,6 @@ namespace ceph::os {
 class Collection;
 class Transaction;
 
-// a just-enough store for reading/writing the superblock
 class CyanStore final : public FuturizedStore {
   constexpr static unsigned MAX_KEYS_PER_OMAP_GET_CALL = 32;
 
