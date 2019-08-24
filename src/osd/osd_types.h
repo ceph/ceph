@@ -4527,9 +4527,9 @@ public:
   }
 
   void add(const hobject_t& oid, eversion_t need, eversion_t have,
-	   bool is_delete, bool make_dirty = true) {
+	   bool is_delete) {
     //if have== eversion_t() means that the object does not exist, we transfer new_object = true
-    missing[oid] = item(need, have, is_delete, make_dirty, have == eversion_t());
+    missing[oid] = item(need, have, is_delete, true, have == eversion_t());
     rmissing[need.version] = oid;
     tracker.changed(oid);
   }
