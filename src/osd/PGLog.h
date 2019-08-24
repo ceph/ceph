@@ -1701,7 +1701,7 @@ public:
     const DoutPrefixProvider *dpp = nullptr
     ) {
     ldpp_dout(dpp, 20) << "read_log_and_missing coll "
-		       << ch->cid
+		       << ch->get_cid()
 		       << " " << pgmeta_oid << dendl;
     return (new FuturizedStoreLogReader<missing_type>{
       store, ch, info, log, missing, pgmeta_oid, dpp})->start();

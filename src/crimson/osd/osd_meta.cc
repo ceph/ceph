@@ -8,13 +8,13 @@
 
 void OSDMeta::create(ceph::os::Transaction& t)
 {
-  t.create_collection(coll->cid, 0);
+  t.create_collection(coll->get_cid(), 0);
 }
 
 void OSDMeta::store_map(ceph::os::Transaction& t,
                         epoch_t e, const bufferlist& m)
 {
-  t.write(coll->cid, osdmap_oid(e), 0, m.length(), m);
+  t.write(coll->get_cid(), osdmap_oid(e), 0, m.length(), m);
 }
 
 seastar::future<bufferlist> OSDMeta::load_map(epoch_t e)
@@ -29,7 +29,7 @@ void OSDMeta::store_superblock(ceph::os::Transaction& t,
 {
   bufferlist bl;
   encode(superblock, bl);
-  t.write(coll->cid, superblock_oid(), 0, bl.length(), bl);
+  t.write(coll->get_cid(), superblock_oid(), 0, bl.length(), bl);
 }
 
 seastar::future<OSDSuperblock> OSDMeta::load_superblock()

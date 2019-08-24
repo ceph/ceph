@@ -29,7 +29,6 @@ struct Collection : public boost::intrusive_ref_counter<
   boost::thread_unsafe_counter>
 {
   using ObjectRef = boost::intrusive_ptr<Object>;
-  const coll_t cid;
   int bits = 0;
   // always use bufferlist object for testing
   bool use_page_set = false;
@@ -52,6 +51,8 @@ struct Collection : public boost::intrusive_ref_counter<
 
   void encode(bufferlist& bl) const;
   void decode(bufferlist::const_iterator& p);
+private:
+  const coll_t cid;
 };
 
 using CollectionRef = boost::intrusive_ptr<Collection>;
