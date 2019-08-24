@@ -8,9 +8,10 @@
 #define dout_prefix *_dout << " RDMAIWARPServerSocketImpl "
 
 RDMAIWARPServerSocketImpl::RDMAIWARPServerSocketImpl(
-  CephContext *cct, Infiniband* i,
-  RDMADispatcher *s, RDMAWorker *w, entity_addr_t& a, unsigned addr_slot)
-  : RDMAServerSocketImpl(cct, i, s, w, a, addr_slot)
+  CephContext *cct, shared_ptr<Infiniband>& ib,
+  shared_ptr<RDMADispatcher>& rdma_dispatcher, RDMAWorker *w,
+  entity_addr_t& a, unsigned addr_slot)
+  : RDMAServerSocketImpl(cct, ib, rdma_dispatcher, w, a, addr_slot)
 {
 }
 
@@ -76,7 +77,7 @@ int RDMAIWARPServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions
 
   RDMACMInfo info(new_cm_id, event_channel, remote_conn_param->qp_num);
   RDMAIWARPConnectedSocketImpl* server =
-    new RDMAIWARPConnectedSocketImpl(cct, infiniband, dispatcher, dynamic_cast<RDMAWorker*>(w), &info);
+    new RDMAIWARPConnectedSocketImpl(cct, ib, dispatcher, dynamic_cast<RDMAWorker*>(w), &info);
 
   memset(&local_conn_param, 0, sizeof(local_conn_param));
   local_conn_param.qp_num = server->get_local_qpn();

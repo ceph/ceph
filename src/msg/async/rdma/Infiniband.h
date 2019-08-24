@@ -37,9 +37,12 @@
 #include "msg/msg_types.h"
 #include "msg/async/net_handler.h"
 
-#define HUGE_PAGE_SIZE (2 * 1024 * 1024)
-#define ALIGN_TO_PAGE_SIZE(x) \
-  (((x) + HUGE_PAGE_SIZE -1) / HUGE_PAGE_SIZE * HUGE_PAGE_SIZE)
+#define HUGE_PAGE_SIZE_2MB (2 * 1024 * 1024)
+#define ALIGN_TO_PAGE_2MB(x) \
+    (((x) + (HUGE_PAGE_SIZE_2MB - 1)) & ~(HUGE_PAGE_SIZE_2MB - 1))
+
+#define PSN_LEN 24
+#define PSN_MSK ((1 << PSN_LEN) - 1)
 
 struct IBSYNMsg {
   uint16_t lid;
@@ -55,7 +58,7 @@ class CephContext;
 class Port {
   struct ibv_context* ctxt;
   int port_num;
-  struct ibv_port_attr* port_attr;
+  struct ibv_port_attr port_attr;
   uint16_t lid;
   int gid_idx = 0;
   union ibv_gid gid;
@@ -65,7 +68,7 @@ class Port {
   uint16_t get_lid() { return lid; }
   ibv_gid  get_gid() { return gid; }
   int get_port_num() { return port_num; }
-  ibv_port_attr* get_port_attr() { return port_attr; }
+  ibv_port_attr* get_port_attr() { return &port_attr; }
   int get_gid_idx() { return gid_idx; }
 };
 
@@ -75,7 +78,8 @@ class Device {
   const char* name;
   uint8_t  port_cnt = 0;
  public:
-  explicit Device(CephContext *c, ibv_device* d, struct ibv_context *dc);
+  explicit Device(CephContext *c, ibv_device* ib_dev);
+  explicit Device(CephContext *c, ibv_context *ib_ctx);
   ~Device() {
     if (active_port) {
       delete active_port;
@@ -99,16 +103,23 @@ class DeviceList {
   int num;
   Device** devices;
  public:
-  explicit DeviceList(CephContext *cct): device_list(ibv_get_device_list(&num)),
-                                device_context_list(rdma_get_devices(&num)) {
-    if (device_list == NULL || num == 0) {
-      lderr(cct) << __func__ << " failed to get rdma device list.  " << cpp_strerror(errno) << dendl;
-      ceph_abort();
+  explicit DeviceList(CephContext *cct): device_list(nullptr), device_context_list(nullptr),
+                                         num(0), devices(nullptr) {
+    device_list = ibv_get_device_list(&num);
+    ceph_assert(device_list);
+    ceph_assert(num);
+    if (cct->_conf->ms_async_rdma_cm) {
+        device_context_list = rdma_get_devices(NULL);
+        ceph_assert(device_context_list);
     }
     devices = new Device*[num];
 
     for (int i = 0;i < num; ++i) {
-      devices[i] = new Device(cct, device_list[i], device_context_list[i]);
+      if (cct->_conf->ms_async_rdma_cm) {
+         devices[i] = new Device(cct, device_context_list[i]);
+      } else {
+         devices[i] = new Device(cct, device_list[i]);
+      }
     }
   }
   ~DeviceList() {
@@ -192,26 +203,25 @@ class Infiniband {
    public:
     class Chunk {
      public:
-      Chunk(ibv_mr* m, uint32_t len, char* b);
+      Chunk(ibv_mr* m, uint32_t bytes, char* buffer, uint32_t offset = 0, uint32_t bound = 0, uint32_t lkey = 0);
       ~Chunk();
 
-      void set_offset(uint32_t o);
       uint32_t get_offset();
-      void set_bound(uint32_t b);
+      uint32_t get_size() const;
       void prepare_read(uint32_t b);
       uint32_t get_bound();
       uint32_t read(char* buf, uint32_t len);
       uint32_t write(char* buf, uint32_t len);
       bool full();
-      bool over();
-      void clear();
+      void reset_read_chunk();
+      void reset_write_chunk();
 
      public:
       ibv_mr* mr;
-      uint32_t lkey = 0;
+      uint32_t lkey;
       uint32_t bytes;
-      uint32_t bound = 0;
       uint32_t offset;
+      uint32_t bound;
       char* buffer; // TODO: remove buffer/refactor TX
       char  data[0];
     };
@@ -464,10 +474,6 @@ class Infiniband {
      * Get the state of a QueuePair.
      */
     int get_state() const;
-    /**
-     * Return true if the queue pair is in an error state, false otherwise.
-     */
-    bool is_error() const;
     void add_tx_wr(uint32_t amt) { tx_wr_inflight += amt; }
     void dec_tx_wr(uint32_t amt) { tx_wr_inflight -= amt; }
     uint32_t get_tx_wr() const { return tx_wr_inflight; }

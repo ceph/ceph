@@ -161,9 +161,6 @@ class PosixConnectedSocketImpl final : public ConnectedSocketImpl {
   int fd() const override {
     return _fd;
   }
-  int socket_fd() const override {
-    return _fd;
-  }
   friend class PosixServerSocketImpl;
   friend class PosixNetworkStack;
 };

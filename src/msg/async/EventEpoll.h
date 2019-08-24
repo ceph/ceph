@@ -26,10 +26,10 @@ class EpollDriver : public EventDriver {
   int epfd;
   struct epoll_event *events;
   CephContext *cct;
-  int size;
+  int nevent;
 
  public:
-  explicit EpollDriver(CephContext *c): epfd(-1), events(NULL), cct(c), size(0) {}
+  explicit EpollDriver(CephContext *c): epfd(-1), events(NULL), cct(c), nevent(0) {}
   ~EpollDriver() override {
     if (epfd != -1)
       close(epfd);
