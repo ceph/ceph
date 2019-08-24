@@ -48,11 +48,11 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
     if (explicit_iter != manifest->objs.begin()) {
       --explicit_iter;
     }
-    if (ofs >= manifest->obj_size) {
+    if (ofs < manifest->obj_size) {
+      update_explicit_pos();
+    } else {
       ofs = manifest->obj_size;
-      return;
     }
-    update_explicit_pos();
     update_location();
     return;
   }
@@ -116,7 +116,11 @@ void RGWObjManifest::obj_iterator::seek(uint64_t o)
 void RGWObjManifest::obj_iterator::update_location()
 {
   if (manifest->explicit_objs) {
-    location = explicit_iter->second.loc;
+    if (manifest->empty()) {
+      location = rgw_obj_select{};
+    } else {
+      location = explicit_iter->second.loc;
+    }
     return;
   }
 
