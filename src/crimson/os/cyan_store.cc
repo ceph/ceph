@@ -588,7 +588,7 @@ int CyanStore::_setattrs(const coll_t& cid, const ghobject_t& oid,
 
 int CyanStore::_create_collection(const coll_t& cid, int bits)
 {
-  auto result = coll_map.insert(std::make_pair(cid, CollectionRef()));
+  auto result = coll_map.try_emplace(cid);
   if (!result.second)
     return -EEXIST;
   auto p = new_coll_map.find(cid);
