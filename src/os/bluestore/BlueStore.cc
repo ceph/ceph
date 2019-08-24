@@ -5377,7 +5377,7 @@ int BlueStore::_balance_bluefs_freespace(PExtentVector *extents)
 	cct->_conf->bluefs_shared_alloc_size,
 	0, 0, extents);
     }
-    if (alloc_len <= 0 || alloc_len < gift) {
+    if (alloc_len <= 0) {
       dout(0) << __func__ << " no allocate on 0x" << std::hex << gift << std::dec
 	      << dendl;
       _dump_alloc_on_rebalance_failure();
