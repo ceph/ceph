@@ -15,7 +15,7 @@ failed=0
 numtests=0
 echo "checking ceph-dencoder generated test instances..."
 echo "numgen type"
-ceph-dencoder list_types | while read type; do
+while read type; do
     num=`ceph-dencoder type $type count_tests`
     echo "$num $type"
     for n in `seq 1 1 $num 2>/dev/null`; do
@@ -90,7 +90,7 @@ ceph-dencoder list_types | while read type; do
 
 	numtests=$(($numtests + 3))
     done
-done
+done < <(ceph-dencoder list_types)
 
 rm -f $tmp1 $tmp2 $tmp3 $tmp4
 
