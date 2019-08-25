@@ -1323,30 +1323,31 @@ struct pg_pool_t {
     }
   }
 
-  enum {
-    PG_AUTOSCALE_MODE_OFF = 0,
-    PG_AUTOSCALE_MODE_WARN = 1,
-    PG_AUTOSCALE_MODE_ON = 2,
+  enum class pg_autoscale_mode_t : uint8_t {
+    OFF = 0,
+    WARN = 1,
+    ON = 2,
+    UNKNOWN = UINT8_MAX,
   };
-  static const char *get_pg_autoscale_mode_name(int m) {
+  static const char *get_pg_autoscale_mode_name(pg_autoscale_mode_t m) {
     switch (m) {
-    case PG_AUTOSCALE_MODE_OFF: return "off";
-    case PG_AUTOSCALE_MODE_ON: return "on";
-    case PG_AUTOSCALE_MODE_WARN: return "warn";
+    case pg_autoscale_mode_t::OFF: return "off";
+    case pg_autoscale_mode_t::ON: return "on";
+    case pg_autoscale_mode_t::WARN: return "warn";
     default: return "???";
     }
   }
-  static int get_pg_autoscale_mode_by_name(const std::string& m) {
+  static pg_autoscale_mode_t get_pg_autoscale_mode_by_name(const std::string& m) {
     if (m == "off") {
-      return PG_AUTOSCALE_MODE_OFF;
+      return pg_autoscale_mode_t::OFF;
     }
     if (m == "warn") {
-      return PG_AUTOSCALE_MODE_WARN;
+      return pg_autoscale_mode_t::WARN;
     }
     if (m == "on") {
-      return PG_AUTOSCALE_MODE_ON;
+      return pg_autoscale_mode_t::ON;
     }
-    return -1;
+    return pg_autoscale_mode_t::UNKNOWN;
   }
 
   utime_t create_time;
@@ -1355,7 +1356,8 @@ struct pg_pool_t {
   __u8 size = 0, min_size = 0;  ///< number of osds in each pg
   __u8 crush_rule = 0;          ///< crush placement rule
   __u8 object_hash = 0;         ///< hash mapping object name to ps
-  __u8 pg_autoscale_mode;   ///< PG_AUTOSCALE_MODE_
+  pg_autoscale_mode_t pg_autoscale_mode;
+
 private:
   __u32 pg_num = 0, pgp_num = 0;  ///< number of pgs
   __u32 pg_num_pending = 0;       ///< pg_num we are about to merge down to
