@@ -29,7 +29,7 @@ struct rgw_log_entry {
   uint64_t bytes_sent;
   uint64_t bytes_received;
   uint64_t obj_size;
-  Clock::duration total_time;
+  Clock::duration total_time{};
   string user_agent;
   string referrer;
   string bucket_id;
