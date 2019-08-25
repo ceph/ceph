@@ -20,6 +20,7 @@
 #include "messages/MPGStats.h"
 
 #include "os/Transaction.h"
+#include "osd/ClassHandler.h"
 #include "osd/PGPeeringEvent.h"
 #include "osd/PeeringState.h"
 
@@ -77,6 +78,14 @@ OSD::OSD(int id, uint32_t nonce,
                     std::ref(hb_front_msgr), std::ref(hb_back_msgr)}) {
     msgr.get().set_auth_server(monc.get());
     msgr.get().set_auth_client(monc.get());
+  }
+
+  if (local_conf()->osd_open_classes_on_start) {
+    const int r = ClassHandler::get_instance().open_all_classes();
+    if (r) {
+      logger().warn("{} warning: got an error loading one or more classes: {}",
+                    __func__, cpp_strerror(r));
+    }
   }
 }
 

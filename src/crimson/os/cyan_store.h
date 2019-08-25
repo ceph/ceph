@@ -51,7 +51,7 @@ public:
 				   uint32_t op_flags = 0) final;
   seastar::future<ceph::bufferptr> get_attr(CollectionRef c,
 					    const ghobject_t& oid,
-					    std::string_view name) final;
+					    std::string_view name) const final;
   seastar::future<attrs_t> get_attrs(CollectionRef c,
                                      const ghobject_t& oid) final;
 
@@ -64,7 +64,7 @@ public:
     CollectionRef c,
     const ghobject_t& start,
     const ghobject_t& end,
-    uint64_t limit) final;
+    uint64_t limit) const final;
 
   /// Retrieves paged set of values > start (if present)
   seastar::future<bool, omap_values_t> omap_get_values(
@@ -84,6 +84,7 @@ public:
 		  const std::string& value) final;
   int read_meta(const std::string& key, std::string* value) final;
   uuid_d get_fsid() const final;
+  unsigned get_max_attr_name_length() const final;
 
 private:
   int _remove(const coll_t& cid, const ghobject_t& oid);

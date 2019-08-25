@@ -72,7 +72,7 @@ public:
 				   uint32_t op_flags = 0) = 0;
   virtual seastar::future<ceph::bufferptr> get_attr(CollectionRef c,
 					    const ghobject_t& oid,
-					    std::string_view name) = 0;
+					    std::string_view name) const = 0;
 
   using attrs_t = std::map<std::string, ceph::bufferptr, std::less<>>;
   virtual seastar::future<attrs_t> get_attrs(CollectionRef c,
@@ -87,7 +87,7 @@ public:
                                          CollectionRef c,
                                          const ghobject_t& start,
                                          const ghobject_t& end,
-                                         uint64_t limit) = 0;
+                                         uint64_t limit) const = 0;
   virtual seastar::future<bool, omap_values_t> omap_get_values(
     CollectionRef c,           ///< [in] collection
     const ghobject_t &oid,     ///< [in] oid
@@ -105,6 +105,7 @@ public:
 		  const std::string& value) = 0;
   virtual int read_meta(const std::string& key, std::string* value) = 0;
   virtual uuid_d get_fsid() const  = 0;
+  virtual unsigned get_max_attr_name_length() const = 0;
 };
 
 }
