@@ -126,7 +126,7 @@ seastar::future<std::vector<ghobject_t>, ghobject_t>
 CyanStore::list_objects(CollectionRef c,
                         const ghobject_t& start,
                         const ghobject_t& end,
-                        uint64_t limit)
+                        uint64_t limit) const
 {
   logger().debug("{} {} {} {} {}",
                  __func__, c->cid, start, end, limit);
@@ -201,7 +201,7 @@ seastar::future<ceph::bufferlist> CyanStore::read(CollectionRef c,
 
 seastar::future<ceph::bufferptr> CyanStore::get_attr(CollectionRef c,
                                                      const ghobject_t& oid,
-                                                     std::string_view name)
+                                                     std::string_view name) const
 {
   logger().debug("{} {} {}",
                 __func__, c->cid, oid);
@@ -630,5 +630,11 @@ int CyanStore::read_meta(const std::string& key,
 uuid_d CyanStore::get_fsid() const
 {
   return osd_fsid;
+}
+
+unsigned CyanStore::get_max_attr_name_length() const
+{
+  // arbitrary limitation exactly like in the case of MemStore.
+  return 256;
 }
 }

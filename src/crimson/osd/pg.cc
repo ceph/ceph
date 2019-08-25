@@ -37,6 +37,7 @@
 #include "crimson/osd/exceptions.h"
 #include "crimson/osd/pg_meta.h"
 #include "crimson/osd/pg_backend.h"
+#include "crimson/osd/ops_executer.h"
 #include "crimson/osd/osd_operations/peering_event.h"
 
 namespace {
@@ -329,92 +330,6 @@ seastar::future<> PG::wait_for_active()
   }
 }
 
-// TODO: split the method accordingly to os' constness needs
-seastar::future<>
-PG::do_osd_op(ObjectState& os, OSDOp& osd_op, ceph::os::Transaction& txn)
-{
-  // TODO: dispatch via call table?
-  // TODO: we might want to find a way to unify both input and output
-  // of each op.
-  switch (const ceph_osd_op& op = osd_op.op; op.op) {
-  case CEPH_OSD_OP_SYNC_READ:
-    [[fallthrough]];
-  case CEPH_OSD_OP_READ:
-    return backend->read(os.oi,
-                         op.extent.offset,
-                         op.extent.length,
-                         op.extent.truncate_size,
-                         op.extent.truncate_seq,
-                         op.flags).then([&osd_op](bufferlist bl) {
-      osd_op.rval = bl.length();
-      osd_op.outdata = std::move(bl);
-      return seastar::now();
-    });
-  case CEPH_OSD_OP_WRITE:
-    return backend->write(os, osd_op, txn);
-  case CEPH_OSD_OP_WRITEFULL:
-    // XXX: os = backend->write(std::move(os), ...) instead?
-    return backend->writefull(os, osd_op, txn);
-  case CEPH_OSD_OP_SETALLOCHINT:
-    return seastar::now();
-  case CEPH_OSD_OP_PGNLS:
-    return do_pgnls(osd_op.indata, os.oi.soid.get_namespace(), op.pgls.count)
-      .then([&osd_op](bufferlist bl) {
-        osd_op.outdata = std::move(bl);
-	return seastar::now();
-    });
-  case CEPH_OSD_OP_DELETE:
-    return backend->remove(os, txn);
-  default:
-    throw std::runtime_error(
-      fmt::format("op '{}' not supported", ceph_osd_op_name(op.op)));
-  }
-}
-
-seastar::future<bufferlist> PG::do_pgnls(bufferlist& indata,
-                                         const std::string& nspace,
-                                         uint64_t limit)
-{
-  hobject_t lower_bound;
-  try {
-    ceph::decode(lower_bound, indata);
-  } catch (const buffer::error& e) {
-    throw std::invalid_argument("unable to decode PGNLS handle");
-  }
-  const auto pg_start = pgid.pgid.get_hobj_start();
-  const auto pg_end = pgid.pgid.get_hobj_end(peering_state.get_pool().info.get_pg_num());
-  if (!(lower_bound.is_min() ||
-        lower_bound.is_max() ||
-        (lower_bound >= pg_start && lower_bound < pg_end))) {
-    // this should only happen with a buggy client.
-    throw std::invalid_argument("outside of PG bounds");
-  }
-  return backend->list_objects(lower_bound, limit).then(
-    [lower_bound, pg_end, nspace](auto objects, auto next) {
-      auto in_my_namespace = [&nspace](const hobject_t& o) {
-        if (o.get_namespace() == local_conf()->osd_hit_set_namespace) {
-          return false;
-        } else if (nspace == librados::all_nspaces) {
-          return true;
-        } else {
-          return o.get_namespace() == nspace;
-        }
-      };
-      pg_nls_response_t response;
-      boost::copy(objects |
-        boost::adaptors::filtered(in_my_namespace) |
-        boost::adaptors::transformed([](const hobject_t& o) {
-          return librados::ListObjectImpl{o.get_namespace(),
-                                          o.oid.name,
-                                          o.get_key()}; }),
-        std::back_inserter(response.entries));
-      response.handle = next.is_max() ? pg_end : next;
-      bufferlist bl;
-      encode(response, bl);
-      return seastar::make_ready_future<bufferlist>(std::move(bl));
-  });
-}
-
 seastar::future<> PG::submit_transaction(boost::local_shared_ptr<ObjectState>&& os,
 					 ceph::os::Transaction&& txn,
 					 const MOSDOp& req)
@@ -438,39 +353,42 @@ seastar::future<> PG::submit_transaction(boost::local_shared_ptr<ObjectState>&& 
 
 seastar::future<Ref<MOSDOpReply>> PG::do_osd_ops(Ref<MOSDOp> m)
 {
-  return seastar::do_with(std::move(m), ceph::os::Transaction{},
-                          [this](auto& m, auto& txn) {
-    const auto oid = m->get_snapid() == CEPH_SNAPDIR ? m->get_hobj().get_head()
-                                                     : m->get_hobj();
-    return backend->get_object_state(oid).then([m,&txn,this](auto os) {
-      // TODO: issue requests in parallel if they don't write,
-      // with writes being basically a synchronization barrier
-      return seastar::do_for_each(std::begin(m->ops), std::end(m->ops),
-                                  [m,&txn,this,pos=os.get()](OSDOp& osd_op) {
-        return do_osd_op(*pos, osd_op, txn);
-      }).then([&txn,m,this,os=std::move(os)]() mutable {
-        // XXX: the entire lambda could be scheduled conditionally. ::if_then()?
-	if (txn.empty()) {
-	  return seastar::now();
-	} else {
-	  return submit_transaction(std::move(os), std::move(txn), *m);
-	}
+  const auto oid = m->get_snapid() == CEPH_SNAPDIR ? m->get_hobj().get_head()
+                                                   : m->get_hobj();
+  return backend->get_object_state(oid).then([this, m](auto os) mutable {
+    return seastar::do_with(OpsExecuter{std::move(os), *this/* as const& */},
+                            [this, m=std::move(m)] (auto& ox) {
+      return seastar::do_for_each(m->ops, [this, &ox](OSDOp& osd_op) {
+        logger().debug("will be handling op {}", ceph_osd_op_name(osd_op.op.op));
+        return ox.do_osd_op(osd_op);
+      }).then([this, m, &ox] {
+        logger().debug("all operations have been executed successfully");
+        return std::move(ox).submit_changes([this, m] (auto&& txn, auto&& os) {
+          // XXX: the entire lambda could be scheduled conditionally. ::if_then()?
+	  if (txn.empty()) {
+            logger().debug("txn is empty, bypassing mutate");
+	    return seastar::now();
+	  } else {
+	    return submit_transaction(std::move(os), std::move(txn), *m);
+	  }
+        });
       });
-    }).then([m,this] {
-      auto reply = make_message<MOSDOpReply>(m.get(), 0, get_osdmap_epoch(),
-                                             0, false);
-      reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
-      return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
-    }).handle_exception_type([=](const object_not_found& dne) {
-      logger().debug("got object_not_found for {}", oid);
-
-      backend->evict_object_state(oid);
-      auto reply = make_message<MOSDOpReply>(m.get(), -ENOENT, get_osdmap_epoch(),
-                                             0, false);
-      reply->set_enoent_reply_versions(peering_state.get_info().last_update,
-                                       peering_state.get_info().last_user_version);
-      return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
     });
+  }).then([m,this] {
+    auto reply = make_message<MOSDOpReply>(m.get(), 0, get_osdmap_epoch(),
+                                           0, false);
+    reply->add_flags(CEPH_OSD_FLAG_ACK | CEPH_OSD_FLAG_ONDISK);
+    return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
+  }).handle_exception_type([=,&oid](const ceph::osd::error& e) {
+    logger().debug("got ceph::osd::error while handling object {}: {} ({})",
+                   oid, e.code(), e.what());
+
+    backend->evict_object_state(oid);
+    auto reply = make_message<MOSDOpReply>(
+      m.get(), -e.code().value(), get_osdmap_epoch(), 0, false);
+    reply->set_enoent_reply_versions(peering_state.get_info().last_update,
+                                       peering_state.get_info().last_user_version);
+    return seastar::make_ready_future<Ref<MOSDOpReply>>(std::move(reply));
   });
 }
 

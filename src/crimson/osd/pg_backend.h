@@ -47,6 +47,9 @@ public:
 				   size_t truncate_size,
 				   uint32_t truncate_seq,
 				   uint32_t flags);
+  seastar::future<> stat(
+    const ObjectState& os,
+    OSDOp& osd_op);
   seastar::future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn);
@@ -68,7 +71,17 @@ public:
     eversion_t ver);
   seastar::future<std::vector<hobject_t>, hobject_t> list_objects(
     const hobject_t& start,
-    uint64_t limit);
+    uint64_t limit) const;
+  seastar::future<> setxattr(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& trans);
+  seastar::future<> getxattr(
+    const ObjectState& os,
+    OSDOp& osd_op) const;
+  seastar::future<ceph::bufferptr> getxattr(
+    const hobject_t& soid,
+    std::string_view key) const;
 
   virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
 

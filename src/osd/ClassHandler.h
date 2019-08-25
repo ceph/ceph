@@ -43,12 +43,9 @@ public:
   struct ClassFilter {
     ClassData *cls = nullptr;
     std::string name;
-    cls_cxx_filter_factory_t fn;
+    cls_cxx_filter_factory_t fn = nullptr;
 
     void unregister();
-
-    ClassFilter() : fn(0)
-    {}
   };
 
   struct ClassData {
@@ -58,11 +55,11 @@ public:
       CLASS_MISSING_DEPS,    // missing dependencies
       CLASS_INITIALIZING,    // calling init() right now
       CLASS_OPEN,            // initialized, usable
-    } status;
+    } status = CLASS_UNKNOWN;
 
     std::string name;
-    ClassHandler *handler;
-    void *handle;
+    ClassHandler *handler = nullptr;
+    void *handle = nullptr;
 
     bool whitelisted = false;
 
@@ -72,34 +69,30 @@ public:
     std::set<ClassData *> dependencies;         /* our dependencies */
     std::set<ClassData *> missing_dependencies; /* only missing dependencies */
 
-    ClassMethod *_get_method(const char *mname);
+    ClassMethod *_get_method(const std::string& mname);
 
-    ClassData() : status(CLASS_UNKNOWN), 
-		  handler(NULL),
-		  handle(NULL) {}
-    ~ClassData() { }
-
-    ClassMethod *register_method(const char *mname, int flags, cls_method_call_t func);
-    ClassMethod *register_cxx_method(const char *mname, int flags, cls_method_cxx_call_t func);
+    ClassMethod *register_method(const char *mname,
+                                 int flags,
+                                 cls_method_call_t func);
+    ClassMethod *register_cxx_method(const char *mname,
+                                     int flags,
+                                     cls_method_cxx_call_t func);
     void unregister_method(ClassMethod *method);
 
-    ClassFilter *register_cxx_filter(
-        const std::string &filter_name,
-        cls_cxx_filter_factory_t fn);
+    ClassFilter *register_cxx_filter(const std::string &filter_name,
+                                     cls_cxx_filter_factory_t fn);
     void unregister_filter(ClassFilter *method);
 
-    ClassMethod *get_method(const char *mname) {
+    ClassMethod *get_method(const std::string& mname) {
       std::lock_guard l(handler->mutex);
       return _get_method(mname);
     }
-    int get_method_flags(const char *mname);
+    int get_method_flags(const std::string& mname);
 
-    ClassFilter *get_filter(const std::string &filter_name)
-    {
+    ClassFilter *get_filter(const std::string &filter_name) {
       std::lock_guard l(handler->mutex);
-      std::map<std::string, ClassFilter>::iterator i = filters_map.find(filter_name);
-      if (i == filters_map.end()) {
-        return NULL;
+      if (auto i = filters_map.find(filter_name); i == filters_map.end()) {
+        return nullptr;
       } else {
         return &(i->second);
       }
@@ -118,7 +111,7 @@ private:
   ceph::mutex mutex = ceph::make_mutex("ClassHandler");
 
 public:
-  explicit ClassHandler(CephContext *cct_) : cct(cct_) {}
+  explicit ClassHandler(CephContext *cct) : cct(cct) {}
 
   int open_all_classes();
   int open_class(const std::string& cname, ClassData **pcls);

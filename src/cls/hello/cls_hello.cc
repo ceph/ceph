@@ -35,6 +35,7 @@
 #include <cerrno>
 
 #include "objclass/objclass.h"
+#include "osd/osd_types.h"
 
 using ceph::bufferlist;
 using std::string;

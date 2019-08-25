@@ -14,6 +14,7 @@
 #include "include/rados/objclass.h"
 
 struct obj_list_watch_response_t;
+class PGLSFilter;
 
 extern "C" {
 #endif
@@ -74,36 +75,6 @@ extern void class_fini(void);
 
 #ifdef __cplusplus
 }
-class PGLSFilter {
-  CephContext* cct;
-protected:
-  std::string xattr;
-public:
-  PGLSFilter();
-  virtual ~PGLSFilter();
-  virtual bool filter(const hobject_t &obj,
-                      const ceph::buffer::list& xattr_data) const = 0;
-
-  /**
-   * Arguments passed from the RADOS client.  Implementations must
-   * handle any encoding errors, and return an appropriate error code,
-   * or 0 on valid input.
-   */
-  virtual int init(ceph::buffer::list::const_iterator &params) = 0;
-
-  /**
-   * xattr key, or empty string.  If non-empty, this xattr will be fetched
-   * and the value passed into ::filter
-   */
-  virtual const std::string& get_xattr() const { return xattr; }
-
-  /**
-   * If true, objects without the named xattr (if xattr name is not empty)
-   * will be rejected without calling ::filter
-   */
-  virtual bool reject_empty_xattr() const { return true; }
-};
-
 // Classes expose a filter constructor that returns a subclass of PGLSFilter
 typedef PGLSFilter* (*cls_cxx_filter_factory_t)();
 

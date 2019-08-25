@@ -6692,3 +6692,28 @@ void init_pg_ondisk(
   encode(struct_v, values[string(infover_key)]);
   t.omap_setkeys(coll, pgmeta_oid, values);
 }
+
+PGLSFilter::PGLSFilter() : cct(nullptr)
+{
+}
+
+PGLSFilter::~PGLSFilter()
+{
+}
+
+int PGLSPlainFilter::init(ceph::bufferlist::const_iterator &params)
+{
+  try {
+    decode(xattr, params);
+    decode(val, params);
+  } catch (buffer::error &e) {
+    return -EINVAL;
+  }
+  return 0;
+}
+
+bool PGLSPlainFilter::filter(const hobject_t& obj,
+                             const ceph::bufferlist& xattr_data) const
+{
+  return xattr_data.contents_equal(val.c_str(), val.size());
+}

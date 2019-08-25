@@ -76,14 +76,6 @@ static ostream& _prefix(std::ostream *_dout, T *pg) {
 
 MEMPOOL_DEFINE_OBJECT_FACTORY(PrimaryLogPG, replicatedpg, osd);
 
-PGLSFilter::PGLSFilter() : cct(nullptr)
-{
-}
-
-PGLSFilter::~PGLSFilter()
-{
-}
-
 /**
  * The CopyCallback class defines an interface for completions to the
  * copy_start code. Users of the copy infrastructure must implement
@@ -759,27 +751,6 @@ void PrimaryLogPG::maybe_force_recovery()
   if (soid != hobject_t())
     maybe_kick_recovery(soid);
 }
-
-class PGLSPlainFilter : public PGLSFilter {
-  string val;
-public:
-  int init(bufferlist::const_iterator &params) override
-  {
-    try {
-      decode(xattr, params);
-      decode(val, params);
-    } catch (buffer::error &e) {
-      return -EINVAL;
-    }
-
-    return 0;
-  }
-  ~PGLSPlainFilter() override {}
-  bool filter(const hobject_t& obj,
-              const bufferlist& xattr_data) const override {
-    return xattr_data.contents_equal(val.c_str(), val.size());
-  }
-};
 
 bool PrimaryLogPG::pgls_filter(const PGLSFilter& filter, const hobject_t& sobj)
 {
@@ -5685,7 +5656,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	result = ClassHandler::get_instance().open_class(cname, &cls);
 	ceph_assert(result == 0);   // init_op_flags() already verified this works.
 
-	ClassHandler::ClassMethod *method = cls->get_method(mname.c_str());
+	ClassHandler::ClassMethod *method = cls->get_method(mname);
 	if (!method) {
 	  dout(10) << "call method " << cname << "." << mname << " does not exist" << dendl;
 	  result = -EOPNOTSUPP;

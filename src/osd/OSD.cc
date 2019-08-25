@@ -9961,7 +9961,7 @@ int OSD::init_op_flags(OpRequestRef& op)
 	    r = -EIO;
 	  return r;
 	}
-	int flags = cls->get_method_flags(mname.c_str());
+	int flags = cls->get_method_flags(mname);
 	if (flags < 0) {
 	  if (flags == -ENOENT)
 	    r = -EOPNOTSUPP;

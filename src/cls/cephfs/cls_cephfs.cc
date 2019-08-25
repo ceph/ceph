@@ -17,6 +17,7 @@
 #include <errno.h>
 
 #include "objclass/objclass.h"
+#include "osd/osd_types.h"
 
 #include "cls_cephfs.h"
 
