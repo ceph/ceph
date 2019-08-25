@@ -26,7 +26,7 @@ class StupidAllocator : public Allocator {
   typedef interval_set<uint64_t,interval_set_map_t> interval_set_t;
   std::vector<interval_set_t> free;  ///< leading-edge copy
 
-  uint64_t last_alloc;
+  uint64_t last_alloc = 0;
 
   unsigned _choose_bin(uint64_t len);
   void _insert_free(uint64_t offset, uint64_t len);
