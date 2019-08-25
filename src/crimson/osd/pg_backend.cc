@@ -115,24 +115,27 @@ PGBackend::_load_os(const hobject_t& oid)
   }
   return store->get_attr(coll,
                          ghobject_t{oid, ghobject_t::NO_GEN, shard},
-                         OI_ATTR).then_wrapped([oid, this](auto fut) {
-    if (fut.failed()) {
-      auto ep = std::move(fut).get_exception();
-      if (!crimson::os::FuturizedStore::EnoentException::is_class_of(ep)) {
-        std::rethrow_exception(ep);
-      }
-      return seastar::make_ready_future<cached_os_t>(
-        os_cache.insert(oid,
-          std::make_unique<ObjectState>(object_info_t{oid}, false)));
-    } else {
+                         OI_ATTR)
+  .safe_then(
+    [oid, this] (ceph::bufferptr bp) {
       // decode existing OI_ATTR's value
       ceph::bufferlist bl;
-      bl.push_back(std::move(fut).get0());
+      bl.push_back(std::move(bp));
       return seastar::make_ready_future<cached_os_t>(
         os_cache.insert(oid,
           std::make_unique<ObjectState>(object_info_t{bl}, true /* exists */)));
-    }
-  });
+    },
+    [oid, this] (const auto& e) {
+      using T = std::decay_t<decltype(e)>;
+      if constexpr (std::is_same_v<T, crimson::ct_error::enoent> ||
+                    std::is_same_v<T, crimson::ct_error::enodata>) {
+        return seastar::make_ready_future<cached_os_t>(
+          os_cache.insert(oid,
+            std::make_unique<ObjectState>(object_info_t{oid}, false)));
+      } else {
+        static_assert(always_false<T>::value, "non-exhaustive visitor!");
+      }
+    });
 }
 
 seastar::future<PGBackend::cached_ss_t>
@@ -143,24 +146,25 @@ PGBackend::_load_ss(const hobject_t& oid)
   }
   return store->get_attr(coll,
                          ghobject_t{oid, ghobject_t::NO_GEN, shard},
-                         SS_ATTR).then_wrapped([oid, this](auto fut) {
-    std::unique_ptr<SnapSet> snapset;
-    if (fut.failed()) {
-      auto ep = std::move(fut).get_exception();
-      if (!crimson::os::FuturizedStore::EnoentException::is_class_of(ep)) {
-        std::rethrow_exception(ep);
-      } else {
-        snapset = std::make_unique<SnapSet>();
-      }
-    } else {
+                         SS_ATTR)
+  .safe_then(
+    [oid, this] (ceph::bufferptr bp) {
       // decode existing SS_ATTR's value
       ceph::bufferlist bl;
-      bl.push_back(std::move(fut).get0());
-      snapset = std::make_unique<SnapSet>(bl);
-    }
-    return seastar::make_ready_future<cached_ss_t>(
-      ss_cache.insert(oid, std::move(snapset)));
-  });
+      bl.push_back(std::move(bp));
+      return seastar::make_ready_future<cached_ss_t>(
+        ss_cache.insert(oid, std::make_unique<SnapSet>(bl)));
+    },
+    [oid, this] (const auto& e) {
+      using T = std::decay_t<decltype(e)>;
+      if constexpr (std::is_same_v<T, crimson::ct_error::enoent> ||
+                    std::is_same_v<T, crimson::ct_error::enodata>) {
+        return seastar::make_ready_future<cached_ss_t>(
+          ss_cache.insert(oid, std::make_unique<SnapSet>()));
+      } else {
+        static_assert(always_false<T>::value, "non-exhaustive visitor!");
+      }
+    });
 }
 
 seastar::future<crimson::osd::acked_peers_t>
@@ -475,22 +479,28 @@ seastar::future<> PGBackend::getxattr(
     name = "_" + aname;
   }
   logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
-  return getxattr(os.oi.soid, name).then([&osd_op] (ceph::bufferptr val) {
+  return getxattr(os.oi.soid, name).safe_then([&osd_op] (ceph::bufferptr val) {
     osd_op.outdata.clear();
     osd_op.outdata.push_back(std::move(val));
     osd_op.op.xattr.value_len = osd_op.outdata.length();
+    return seastar::now();
     //ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
-  }).handle_exception_type(
-    [] (crimson::os::FuturizedStore::EnoentException&) {
+  }, [] (const auto& e) {
+    using T = std::decay_t<decltype(e)>;
+    if constexpr (std::is_same_v<T, crimson::ct_error::enoent>) {
       return seastar::make_exception_future<>(crimson::osd::object_not_found{});
-  }).handle_exception_type(
-    [] (crimson::os::FuturizedStore::EnodataException&) {
+    } else if constexpr (std::is_same_v<T, crimson::ct_error::enodata>) {
       return seastar::make_exception_future<>(crimson::osd::no_message_available{});
+    } else {
+      static_assert(always_false<T>::value, "non-exhaustive visitor!");
+    }
   });
   //ctx->delta_stats.num_rd++;
 }
 
-seastar::future<ceph::bufferptr> PGBackend::getxattr(
+crimson::errorator<crimson::ct_error::enoent,
+                   crimson::ct_error::enodata>::future<ceph::bufferptr>
+PGBackend::getxattr(
   const hobject_t& soid,
   std::string_view key) const
 {

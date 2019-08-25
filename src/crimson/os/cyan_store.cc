@@ -198,23 +198,25 @@ seastar::future<ceph::bufferlist> CyanStore::read(CollectionRef ch,
   return seastar::make_ready_future<ceph::bufferlist>(o->read(offset, l));
 }
 
-seastar::future<ceph::bufferptr> CyanStore::get_attr(CollectionRef ch,
-                                                     const ghobject_t& oid,
-                                                     std::string_view name) const
+crimson::errorator<crimson::ct_error::enoent,
+                   crimson::ct_error::enodata>::future<ceph::bufferptr>
+CyanStore::get_attr(CollectionRef ch,
+                    const ghobject_t& oid,
+                    std::string_view name) const
 {
   auto c = static_cast<Collection*>(ch.get());
   logger().debug("{} {} {}",
                 __func__, c->get_cid(), oid);
   auto o = c->get_object(oid);
   if (!o) {
-    return seastar::make_exception_future<ceph::bufferptr>(
-      EnoentException(fmt::format("object does not exist: {}", oid)));
+    return crimson::make_error<crimson::ct_error::enoent>();
   }
   if (auto found = o->xattr.find(name); found != o->xattr.end()) {
-    return seastar::make_ready_future<ceph::bufferptr>(found->second);
+    return crimson::errorator<crimson::ct_error::enoent,
+                              crimson::ct_error::enodata>::its_error_free(
+      seastar::make_ready_future<ceph::bufferptr>(found->second));
   } else {
-    return seastar::make_exception_future<ceph::bufferptr>(
-      EnodataException(fmt::format("attr does not exist: {}/{}", oid, name)));
+    return crimson::make_error<crimson::ct_error::enodata>();
   }
 }
 
