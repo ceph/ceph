@@ -469,9 +469,9 @@ bool DaemonServer::handle_open(MMgrOpen *m)
       daemon->service_status = m->daemon_status;
 
       utime_t now = ceph_clock_now();
-      auto d = pending_service_map.get_daemon(m->service_name,
-					      m->daemon_name);
-      if (!d->gid || d->gid != (uint64_t)m->get_source().num()) {
+      auto [d, added] = pending_service_map.get_daemon(m->service_name,
+						       m->daemon_name);
+      if (added || d->gid != (uint64_t)m->get_source().num()) {
 	dout(10) << "registering " << key << " in pending_service_map" << dendl;
 	d->gid = m->get_source().num();
 	d->addr = m->get_source_addr();
@@ -645,12 +645,13 @@ bool DaemonServer::handle_report(MMgrReport *m)
           daemon->service_status = *m->daemon_status;
         }
         if (m->task_status && !map_compare(daemon->task_status, *m->task_status)) {
-          auto d = pending_service_map.get_daemon(m->service_name, m->daemon_name);
-          if (d->gid) {
+          auto [d, added] = pending_service_map.get_daemon(m->service_name,
+							   m->daemon_name);
+	  if (!added) {
             daemon->task_status = *m->task_status;
             d->task_status = *m->task_status;
             pending_service_map_dirty = pending_service_map.epoch;
-          }
+	  }
         }
         daemon->last_service_beacon = now;
       } else if (m->daemon_status) {

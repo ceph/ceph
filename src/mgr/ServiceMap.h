@@ -12,15 +12,13 @@
 #include "include/buffer.h"
 #include "msg/msg_types.h"
 
-#include <boost/optional.hpp>
-
 namespace ceph {
   class Formatter;
 }
 
 struct ServiceMap {
   struct Daemon {
-    boost::optional<uint64_t> gid;
+    uint64_t gid = 0;
     entity_addr_t addr;
     epoch_t start_epoch = 0;   ///< epoch first registered
     utime_t start_stamp;       ///< timestamp daemon started/registered
@@ -117,9 +115,11 @@ struct ServiceMap {
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<ServiceMap*>& ls);
 
-  Daemon* get_daemon(const std::string& service,
-		     const std::string& daemon) {
-    return &services[service].daemons[daemon];
+  std::pair<Daemon*,bool> get_daemon(const std::string& service,
+				     const std::string& daemon) {
+    auto& s = services[service];
+    auto [d, added] = s.daemons.try_emplace(daemon);
+    return {&d->second, added};
   }
 
   bool rm_daemon(const std::string& service,
