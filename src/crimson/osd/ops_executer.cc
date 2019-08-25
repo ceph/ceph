@@ -167,19 +167,29 @@ static seastar::future<hobject_t> pgls_filter(
   if (const auto xattr = filter.get_xattr(); !xattr.empty()) {
     logger().debug("pgls_filter: filter is interested in xattr={} for obj={}",
                    xattr, sobj);
-    return backend.getxattr(sobj, xattr).then_wrapped(
-      [&filter, sobj] (auto futval) {
+    return backend.getxattr(sobj, xattr).safe_then(
+      [&filter, sobj] (ceph::bufferptr bp) {
         logger().debug("pgls_filter: got xvalue for obj={}", sobj);
 
         ceph::bufferlist val;
-        if (!futval.failed()) {
-          val.push_back(std::move(futval).get0());
-        } else if (filter.reject_empty_xattr()) {
-          return seastar::make_ready_future<hobject_t>(hobject_t{});
-        }
+        val.push_back(std::move(bp));
         const bool filtered = filter.filter(sobj, val);
         return seastar::make_ready_future<hobject_t>(filtered ? sobj : hobject_t{});
-    });
+      }, [&filter, sobj] (const auto& e) {
+        // TODO: sugar-coat error handling. Compile-time visitors require
+        // too much of fragile boilerplate.
+        using T = std::decay_t<decltype(e)>;
+        static_assert(std::is_same_v<T, crimson::ct_error::enoent> ||
+                      std::is_same_v<T, crimson::ct_error::enodata>);
+        logger().debug("pgls_filter: got enoent for obj={}", sobj);
+
+        if (filter.reject_empty_xattr()) {
+          return seastar::make_ready_future<hobject_t>(hobject_t{});
+        }
+        ceph::bufferlist val;
+        const bool filtered = filter.filter(sobj, val);
+        return seastar::make_ready_future<hobject_t>(filtered ? sobj : hobject_t{});
+      });
   } else {
     ceph::bufferlist empty_lvalue_bl;
     const bool filtered = filter.filter(sobj, empty_lvalue_bl);
