@@ -1350,11 +1350,11 @@ struct pg_pool_t {
   }
 
   utime_t create_time;
-  uint64_t flags;           ///< FLAG_*
-  __u8 type;                ///< TYPE_*
-  __u8 size, min_size;      ///< number of osds in each pg
-  __u8 crush_rule;          ///< crush placement rule
-  __u8 object_hash;         ///< hash mapping object name to ps
+  uint64_t flags = 0;           ///< FLAG_*
+  __u8 type = 0;                ///< TYPE_*
+  __u8 size = 0, min_size = 0;  ///< number of osds in each pg
+  __u8 crush_rule = 0;          ///< crush placement rule
+  __u8 object_hash = 0;         ///< hash mapping object name to ps
   __u8 pg_autoscale_mode;   ///< PG_AUTOSCALE_MODE_
 private:
   __u32 pg_num = 0, pgp_num = 0;  ///< number of pgs
@@ -1365,7 +1365,7 @@ private:
 public:
   std::map<std::string, std::string> properties;  ///< OBSOLETE
   std::string erasure_code_profile; ///< name of the erasure code profile in OSDMap
-  epoch_t last_change;      ///< most recent epoch changed, exclusing snapshot changes
+  epoch_t last_change = 0;      ///< most recent epoch changed, exclusing snapshot changes
 
   /// last epoch that forced clients to resend
   epoch_t last_force_op_resend = 0;
@@ -1377,12 +1377,12 @@ public:
   /// metadata for the most recent PG merge
   pg_merge_meta_t last_pg_merge_meta;
   
-  snapid_t snap_seq;        ///< seq for per-pool snapshot
-  epoch_t snap_epoch;       ///< osdmap epoch of last snap
-  uint64_t auid;            ///< who owns the pg
+  snapid_t snap_seq = 0;        ///< seq for per-pool snapshot
+  epoch_t snap_epoch = 0;       ///< osdmap epoch of last snap
+  uint64_t auid = 0;            ///< who owns the pg
 
-  uint64_t quota_max_bytes; ///< maximum number of bytes for this pool
-  uint64_t quota_max_objects; ///< maximum number of objects for this pool
+  uint64_t quota_max_bytes = 0; ///< maximum number of bytes for this pool
+  uint64_t quota_max_objects = 0; ///< maximum number of objects for this pool
 
   /*
    * Pool snaps (global to this pool).  These define a SnapContext for
@@ -1398,14 +1398,14 @@ public:
    */
   interval_set<snapid_t> removed_snaps;
 
-  unsigned pg_num_mask, pgp_num_mask;
+  unsigned pg_num_mask = 0, pgp_num_mask = 0;
 
   std::set<uint64_t> tiers;      ///< pools that are tiers of us
-  int64_t tier_of;         ///< pool for which we are a tier
+  int64_t tier_of = -1;         ///< pool for which we are a tier
   // Note that write wins for read+write ops
-  int64_t read_tier;       ///< pool/tier for objecter to direct reads to
-  int64_t write_tier;      ///< pool/tier for objecter to direct writes to
-  cache_mode_t cache_mode;  ///< cache pool mode
+  int64_t read_tier = -1;       ///< pool/tier for objecter to direct reads to
+  int64_t write_tier = -1;      ///< pool/tier for objecter to direct writes to
+  cache_mode_t cache_mode = CACHEMODE_NONE;  ///< cache pool mode
 
   bool is_tier() const { return tier_of >= 0; }
   bool has_tiers() const { return !tiers.empty(); }
@@ -1437,32 +1437,32 @@ public:
     grade_table.resize(0);
   }
 
-  uint64_t target_max_bytes;   ///< tiering: target max pool size
-  uint64_t target_max_objects; ///< tiering: target max pool size
+  uint64_t target_max_bytes = 0;   ///< tiering: target max pool size
+  uint64_t target_max_objects = 0; ///< tiering: target max pool size
 
-  uint32_t cache_target_dirty_ratio_micro; ///< cache: fraction of target to leave dirty
-  uint32_t cache_target_dirty_high_ratio_micro; ///< cache: fraction of  target to flush with high speed
-  uint32_t cache_target_full_ratio_micro;  ///< cache: fraction of target to fill before we evict in earnest
+  uint32_t cache_target_dirty_ratio_micro = 0; ///< cache: fraction of target to leave dirty
+  uint32_t cache_target_dirty_high_ratio_micro = 0; ///< cache: fraction of  target to flush with high speed
+  uint32_t cache_target_full_ratio_micro = 0;  ///< cache: fraction of target to fill before we evict in earnest
 
-  uint32_t cache_min_flush_age;  ///< minimum age (seconds) before we can flush
-  uint32_t cache_min_evict_age;  ///< minimum age (seconds) before we can evict
+  uint32_t cache_min_flush_age = 0;  ///< minimum age (seconds) before we can flush
+  uint32_t cache_min_evict_age = 0;  ///< minimum age (seconds) before we can evict
 
   HitSet::Params hit_set_params; ///< The HitSet params to use on this pool
-  uint32_t hit_set_period;      ///< periodicity of HitSet segments (seconds)
-  uint32_t hit_set_count;       ///< number of periods to retain
-  bool use_gmt_hitset;	        ///< use gmt to name the hitset archive object
-  uint32_t min_read_recency_for_promote;   ///< minimum number of HitSet to check before promote on read
-  uint32_t min_write_recency_for_promote;  ///< minimum number of HitSet to check before promote on write
-  uint32_t hit_set_grade_decay_rate;   ///< current hit_set has highest priority on objects
-                                       ///< temperature count,the follow hit_set's priority decay 
-                                       ///< by this params than pre hit_set
-  uint32_t hit_set_search_last_n;   ///< accumulate atmost N hit_sets for temperature
+  uint32_t hit_set_period = 0;   ///< periodicity of HitSet segments (seconds)
+  uint32_t hit_set_count = 0;    ///< number of periods to retain
+  bool use_gmt_hitset = true;	 ///< use gmt to name the hitset archive object
+  uint32_t min_read_recency_for_promote = 0;   ///< minimum number of HitSet to check before promote on read
+  uint32_t min_write_recency_for_promote = 0;  ///< minimum number of HitSet to check before promote on write
+  uint32_t hit_set_grade_decay_rate = 0; ///< current hit_set has highest priority on objects
+                                         ///< temperature count,the follow hit_set's priority decay
+                                         ///< by this params than pre hit_set
+  uint32_t hit_set_search_last_n = 0;    ///< accumulate atmost N hit_sets for temperature
 
-  uint32_t stripe_width;        ///< erasure coded stripe size in bytes
+  uint32_t stripe_width = 0;        ///< erasure coded stripe size in bytes
 
-  uint64_t expected_num_objects; ///< expected number of objects on this pool, a value of 0 indicates
-                                 ///< user does not specify any expected value
-  bool fast_read;            ///< whether turn on fast read on the pool or not
+  uint64_t expected_num_objects = 0; ///< expected number of objects on this pool, a value of 0 indicates
+                                     ///< user does not specify any expected value
+  bool fast_read = false;            ///< whether turn on fast read on the pool or not
 
   pool_opts_t opts; ///< options
 
@@ -1526,35 +1526,7 @@ public:
     }
   }
 
-  pg_pool_t()
-    : flags(0), type(0), size(0), min_size(0),
-      crush_rule(0), object_hash(0),
-      last_change(0),
-      snap_seq(0), snap_epoch(0),
-      auid(0),
-      quota_max_bytes(0), quota_max_objects(0),
-      pg_num_mask(0), pgp_num_mask(0),
-      tier_of(-1), read_tier(-1), write_tier(-1),
-      cache_mode(CACHEMODE_NONE),
-      target_max_bytes(0), target_max_objects(0),
-      cache_target_dirty_ratio_micro(0),
-      cache_target_dirty_high_ratio_micro(0),
-      cache_target_full_ratio_micro(0),
-      cache_min_flush_age(0),
-      cache_min_evict_age(0),
-      hit_set_params(),
-      hit_set_period(0),
-      hit_set_count(0),
-      use_gmt_hitset(true),
-      min_read_recency_for_promote(0),
-      min_write_recency_for_promote(0),
-      hit_set_grade_decay_rate(0),
-      hit_set_search_last_n(0),
-      stripe_width(0),
-      expected_num_objects(0),
-      fast_read(false),
-      opts()
-  { }
+  pg_pool_t() = default;
 
   void dump(ceph::Formatter *f) const;
 
