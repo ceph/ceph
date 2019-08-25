@@ -26,6 +26,9 @@ class TestOrchestratorCli(MgrTestCase):
         """
         return self.mgr_cluster.mon_manager.raw_cluster_cmd_result("orchestrator", *args, **kwargs)
 
+    def _test_orchestrator_cmd_result(self, *args, **kwargs):
+        return self.mgr_cluster.mon_manager.raw_cluster_cmd_result("test_orchestrator", *args, **kwargs)
+
     def setUp(self):
         super(TestOrchestratorCli, self).setUp()
 
@@ -153,3 +156,79 @@ class TestOrchestratorCli(MgrTestCase):
         evs = json.loads(self._progress_cmd('json'))['completed']
         self.assertEqual(len(evs), 1)
         self.assertIn('update_mgrs', evs[0]['message'])
+
+    def test_load_data(self):
+        data = {
+            'inventory': [
+                {
+                    'name': 'host0',
+                    'devices': [
+                        {
+                            'type': 'hdd',
+                            'id': '/dev/sda',
+                            'size': 1024**4 * 4,
+                            'rotates': True
+                        }
+                    ]
+                },
+                {
+                    'name': 'host1',
+                    'devices': [
+                        {
+                            'type': 'hdd',
+                            'id': '/dev/sda',
+                            'size': 1024**4 * 4,
+                            'rotates': True
+                        }
+                    ]
+                }
+            ],
+            'services': [
+                {
+                    'nodename': 'host0',
+                    'service_type': 'mon',
+                    'service_instance': 'a'
+                },
+                {
+                    'nodename': 'host1',
+                    'service_type': 'osd',
+                    'service_instance': '1'
+                }
+            ]
+        }
+
+        ret = self._test_orchestrator_cmd_result('load_data', '-i', '-', stdin=json.dumps(data))
+        self.assertEqual(ret, 0)
+        out = self._orch_cmd('device', 'ls', '--format=json')
+        inventory = data['inventory']
+        inventory_result = json.loads(out)
+        self.assertEqual(len(inventory), len(inventory_result))
+
+        out = self._orch_cmd('device', 'ls', 'host0', '--format=json')
+        inventory_result = json.loads(out)
+        self.assertEqual(len(inventory_result), 1)
+        self.assertEqual(inventory_result[0]['name'], 'host0')
+
+        out = self._orch_cmd('service', 'ls', '--format=json')
+        services = data['services']
+        services_result = json.loads(out)
+        self.assertEqual(len(services), len(services_result))
+
+        out = self._orch_cmd('service', 'ls', 'host0', '--format=json')
+        services_result = json.loads(out)
+        self.assertEqual(len(services_result), 1)
+        self.assertEqual(services_result[0]['nodename'], 'host0')
+
+        # test invalid input file: invalid json
+        json_str = '{ "inventory: '
+        ret = self._test_orchestrator_cmd_result('load_data', '-i', '-', stdin=json_str)
+        self.assertEqual(ret, errno.EINVAL)
+
+        # test invalid input file: missing key
+        json_str = '{ "inventory": [{"devices": []}] }'
+        ret = self._test_orchestrator_cmd_result('load_data', '-i', '-', stdin=json_str)
+        self.assertEqual(ret, errno.EINVAL)
+
+        # load empty data for other tests
+        ret = self._test_orchestrator_cmd_result('load_data', '-i', '-', stdin='{}')
+        self.assertEqual(ret, 0)

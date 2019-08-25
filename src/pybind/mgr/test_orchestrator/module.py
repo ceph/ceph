@@ -1,3 +1,4 @@
+import errno
 import json
 import re
 import os
@@ -6,6 +7,9 @@ import functools
 import uuid
 from subprocess import check_output, CalledProcessError
 
+import six
+
+from mgr_module import CLICommand, HandleCommandResult
 from mgr_module import MgrModule, PersistentStoreDict
 
 import orchestrator
@@ -123,6 +127,18 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         return all(c.is_complete for c in completions)
 
+    @CLICommand('test_orchestrator load_data', '', 'load dummy data into test orchestrator', 'w')
+    def _load_data(self, inbuf):
+        try:
+            data = json.loads(inbuf)
+            self._init_data(data)
+            return HandleCommandResult()
+        except json.decoder.JSONDecodeError as e:
+            msg = 'Invalid JSON file: {}'.format(e)
+            return HandleCommandResult(retval=-errno.EINVAL, stderr=msg)
+        except orchestrator.OrchestratorValidationError as e:
+            return HandleCommandResult(retval=-errno.EINVAL, stderr=str(e))
+
     def available(self):
         return True, ""
 
@@ -131,6 +147,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
         self._initialized = threading.Event()
         self._shutdown = threading.Event()
+        self._init_data({})
 
     def shutdown(self):
         self._shutdown.set()
@@ -150,6 +167,12 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             self._shutdown.wait(5)
 
+    def _init_data(self, data=None):
+        self._inventory = [orchestrator.InventoryNode.from_json(inventory_node)
+                           for inventory_node in data.get('inventory', [])]
+        self._services = [orchestrator.ServiceDescription.from_json(service)
+                          for service in data.get('services', [])]
+
     @deferred_read
     def get_inventory(self, node_filter=None, refresh=False):
         """
@@ -157,6 +180,13 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         """
         if node_filter and node_filter.nodes is not None:
             assert isinstance(node_filter.nodes, list)
+
+        if self._inventory:
+            if node_filter:
+                return list(filter(lambda node: node.name in node_filter.nodes,
+                                   self._inventory))
+            return self._inventory
+
         try:
             c_v_out = check_output(['ceph-volume', 'inventory', '--format', 'json'])
         except OSError:
@@ -186,7 +216,13 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
         it returns the mgr we're running in.
         """
         if service_type:
-            assert service_type in ("mds", "osd", "mon", "rgw", "mgr"), service_type + " unsupported"
+            support_services = ("mds", "osd", "mon", "rgw", "mgr", "iscsi")
+            assert service_type in support_services, service_type + " unsupported"
+
+        if self._services:
+            if node_name:
+                return list(filter(lambda svc: svc.nodename == node_name, self._services))
+            return self._services
 
         out = map(str, check_output(['ps', 'aux']).splitlines())
         types = [service_type] if service_type else ("mds", "osd", "mon", "rgw", "mgr")
@@ -245,6 +281,8 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
     @deferred_read
     def get_hosts(self):
+        if self._inventory:
+            return self._inventory
         return [orchestrator.InventoryNode('localhost', [])]
 
     @deferred_write("add_host")
@@ -259,11 +297,11 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
             raise orchestrator.NoOrchestrator()
         if host == 'raise_import_error':
             raise ImportError("test_orchestrator not enabled")
-        assert isinstance(host, str)
+        assert isinstance(host, six.string_types)
 
     @deferred_write("remove_host")
     def remove_host(self, host):
-        assert isinstance(host, str)
+        assert isinstance(host, six.string_types)
 
     @deferred_write("update_mgrs")
     def update_mgrs(self, num, hosts):
