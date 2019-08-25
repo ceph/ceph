@@ -422,8 +422,8 @@ by setting it in the ``[mon]`` section of the configuration file.
               log (a non-positive number disables it). If current health summary
               is empty or identical to the last time, monitor will not send it
               to cluster log.
-:Type: Integer
-:Default: 3600
+:Type: Float
+:Default: 60.000000
 
 
 ``mon health to clog interval``
@@ -433,7 +433,7 @@ by setting it in the ``[mon]`` section of the configuration file.
               send the summary to cluster log no matter if the summary changes
               or not.
 :Type: Integer
-:Default: 60
+:Default: 3600
 
 
 
