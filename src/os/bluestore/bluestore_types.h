@@ -257,6 +257,8 @@ struct bluestore_blob_use_tracker_t {
   bluestore_blob_use_tracker_t()
     : au_size(0), num_au(0), bytes_per_au(nullptr) {
   }
+  bluestore_blob_use_tracker_t(const bluestore_blob_use_tracker_t& tracker);
+  bluestore_blob_use_tracker_t& operator=(const bluestore_blob_use_tracker_t& rhs);
   ~bluestore_blob_use_tracker_t() {
     clear();
   }
