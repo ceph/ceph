@@ -1356,7 +1356,7 @@ struct pg_pool_t {
   __u8 size = 0, min_size = 0;  ///< number of osds in each pg
   __u8 crush_rule = 0;          ///< crush placement rule
   __u8 object_hash = 0;         ///< hash mapping object name to ps
-  pg_autoscale_mode_t pg_autoscale_mode;
+  pg_autoscale_mode_t pg_autoscale_mode = pg_autoscale_mode_t::UNKNOWN;
 
 private:
   __u32 pg_num = 0, pgp_num = 0;  ///< number of pgs
