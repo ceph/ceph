@@ -115,11 +115,10 @@ void MetricCollector<Query, Limit, Key, Report>::remove_all_queries() {
 }
 
 template <typename Query, typename Limit, typename Key, typename Report>
-int MetricCollector<Query, Limit, Key, Report>::get_counters(
+int MetricCollector<Query, Limit, Key, Report>::get_counters_generic(
     MetricQueryID query_id, std::map<Key, PerformanceCounters> *c) {
   dout(20) << dendl;
-
-  std::lock_guard locker(lock);
+  ceph_assert(ceph_mutex_is_locked(lock));
 
   auto it = counters.find(query_id);
   if (it == counters.end()) {

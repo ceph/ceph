@@ -16,4 +16,11 @@ struct MetricListener {
   virtual void handle_query_updated() = 0;
 };
 
+struct PerfCollector {
+  MetricQueryID query_id;
+  PerfCollector(MetricQueryID query_id)
+    : query_id(query_id) {
+  }
+};
+
 #endif // CEPH_MGR_TYPES_H
