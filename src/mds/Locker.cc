@@ -1905,30 +1905,15 @@ void Locker::file_update_finish(CInode *in, MutationRef& mut, unsigned flags,
   } else if ((flags & UPDATE_SNAPFLUSH) && !in->client_snap_caps.empty()) {
     dout(10) << " client_snap_caps " << in->client_snap_caps << dendl;
     // check for snap writeback completion
-    bool gather = false;
-    auto p = in->client_snap_caps.begin();
-    while (p != in->client_snap_caps.end()) {
-      auto q = p->second.find(client);
-      if (q != p->second.end()) {
-	SimpleLock *lock = in->get_lock(p->first);
-	assert(lock);
-	dout(10) << " completing client_snap_caps for " << ccap_string(p->first)
-		 << " lock " << *lock << " on " << *in << dendl;
+    in->client_snap_caps.erase(client);
+    if (in->client_snap_caps.empty()) {
+      for (int i = 0; i < num_cinode_locks; i++) {
+	SimpleLock *lock = in->get_lock(cinode_lock_info[i].lock);
+	ceph_assert(lock);
 	lock->put_wrlock();
-
-	p->second.erase(q);
-	if (p->second.empty()) {
-	  gather = true;
-	  in->client_snap_caps.erase(p++);
-	} else
-	  ++p;
       }
-    }
-    if (gather) {
-      if (in->client_snap_caps.empty()) {
-	in->item_open_file.remove_myself();
-	in->item_caps.remove_myself();
-      }
+      in->item_open_file.remove_myself();
+      in->item_caps.remove_myself();
       eval_cap_gather(in, &need_issue);
     }
   }
