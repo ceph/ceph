@@ -7,3 +7,6 @@ flake8-colors
 #flake8-typing-imports; python_version >= '3'
 #pep8-naming
 rstcheck
+# see https://github.com/pypa/pip/issues/6222
+# pylint => astroid => lazy-object-proxy => setuptools_scm
+setuptools_scm
