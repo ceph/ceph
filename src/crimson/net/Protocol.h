@@ -24,6 +24,8 @@ class Protocol {
 
   bool is_connected() const;
 
+  bool is_closed() const { return closed; }
+
   // Reentrant closing
   seastar::future<> close();
 

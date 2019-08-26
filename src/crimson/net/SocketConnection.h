@@ -81,6 +81,10 @@ class SocketConnection : public Connection {
 
   bool is_connected() const override;
 
+#ifdef UNIT_TESTS_BUILT
+  bool is_closed() const override;
+#endif
+
   seastar::future<> send(MessageRef msg) override;
 
   seastar::future<> keepalive() override;

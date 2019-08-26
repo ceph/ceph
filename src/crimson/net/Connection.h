@@ -59,6 +59,10 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   /// true if the handshake has completed and no errors have been encountered
   virtual bool is_connected() const = 0;
 
+#ifdef UNIT_TESTS_BUILT
+  virtual bool is_closed() const = 0;
+#endif
+
   /// send a message over a connection that has completed its handshake
   virtual seastar::future<> send(MessageRef msg) = 0;
 
