@@ -113,7 +113,10 @@ export abstract class PageHelper {
     return $$('.nav.nav-tabs li').count();
   }
 
-  getFirstTableCellWithText(content): ElementFinder {
+  /**
+   * Searches multiple tables and returns the first cell of any table that matches the criteria.
+   */
+  getFirstTableCellWithText(content: string): ElementFinder {
     return element.all(by.cssContainingText('.datatable-body-cell-label', content)).first();
   }
 
