@@ -52,9 +52,55 @@ WRITE_CLASS_ENCODER(Anchor)
 
 class RecoveredAnchor : public Anchor {
 public:
+  typedef enum {
+    STATE_UNFETCHED,
+    STATE_FETCHED,
+    STATE_RECOVERED,
+    STATE_NOENT,
+  } RecoveredAnchorState;
+protected:
+  RecoveredAnchorState state = STATE_UNFETCHED;
+  bool touched = false;
+public:
   RecoveredAnchor() {}
 
   mds_rank_t auth = MDS_RANK_NONE; // auth hint
+
+  void touch() {
+    touched = true;
+  }
+
+  bool is_touched() {
+    return touched;
+  }
+
+  bool is_fetched() {
+    return state == STATE_FETCHED;
+  }
+
+  void set_fetched() {
+    state = STATE_FETCHED;
+  }
+
+  bool is_recovered() {
+    return state == STATE_RECOVERED;
+  }
+
+  void set_recovered() {
+    state = STATE_RECOVERED;
+  }
+
+  bool is_noent() {
+    return state == STATE_NOENT;
+  }
+
+  void set_noent() {
+    state = STATE_NOENT;
+  }
+
+  RecoveredAnchorState get_state() {
+    return state;
+  }
 };
 
 class OpenedAnchor : public Anchor {

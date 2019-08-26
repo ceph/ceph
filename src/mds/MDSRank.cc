@@ -724,6 +724,7 @@ void MDSRankDispatcher::tick()
   sessionmap.update_average_session_age();
 
   if (is_active() || is_stopping()) {
+    mdcache->open_file_table.fetch_files();
     mdlog->trim();  // NOT during recovery!
   }
 

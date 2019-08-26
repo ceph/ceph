@@ -7970,6 +7970,10 @@ std::vector<Option> get_mds_options() {
     .set_default(false)
     .set_description(""),
 
+    Option("mds_oft_fetch_batch", Option::TYPE_INT, Option::LEVEL_BASIC)
+    .set_default(1000)
+    .set_description("number of files to be fetched in one run"),
+
     Option("mds_kill_mdstable_at", Option::TYPE_INT, Option::LEVEL_DEV)
     .set_default(0)
     .set_description(""),

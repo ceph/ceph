@@ -228,6 +228,11 @@ void RecoveryQueue::_recovered(CInode *in, int r, uint64_t size, utime_t mtime)
     mds->locker->check_inode_max_size(in, true, 0,  size, mtime);
     mds->locker->eval(in, CEPH_LOCK_IFILE);
     in->auth_unpin(this);
+
+    mds->mdcache->open_file_table.set_recovered_anchor_recovered(in->ino());
+    MDSContext::vec finished;
+    in->take_waiting(CInode::WAIT_ONLOADRECOVERED, finished);
+    mds->queue_waiters(finished);
   }
 
   advance();

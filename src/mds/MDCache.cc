@@ -6289,20 +6289,7 @@ void MDCache::identify_files_to_recover()
       continue;
     }
     
-    bool recover = false;
-    for (map<client_t,client_writeable_range_t>::iterator p = in->inode.client_ranges.begin();
-	 p != in->inode.client_ranges.end();
-	 ++p) {
-      Capability *cap = in->get_client_cap(p->first);
-      if (cap) {
-	cap->mark_clientwriteable();
-      } else {
-	dout(10) << " client." << p->first << " has range " << p->second << " but no cap on " << *in << dendl;
-	recover = true;
-	break;
-      }
-    }
-
+    bool recover = in->needs_recover();
     if (recover) {
       if (in->filelock.is_stable()) {
 	in->auth_pin(&in->filelock);
@@ -8373,6 +8360,12 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
         }
       }
 
+      if (open_file_table.is_loaded_anchor(in->ino())
+	  && !open_file_table.is_recovered(in->ino())) {
+        in->add_waiter(CInode::WAIT_ONLOADRECOVERED, cf.build());
+        return 1;
+      }
+
       cur = in;
       // make sure snaprealm are open...
       if (mdr && cur->snaprealm && !cur->snaprealm->have_past_parents_open() &&
@@ -8680,6 +8673,7 @@ void MDCache::_open_remote_dentry_finish(CDentry *dn, inodeno_t ino, MDSContext 
     } else {
       r = 0;
     }
+  } else {
   }
   fin->complete(r < 0 ? r : 0);
 }
@@ -8982,6 +8976,15 @@ void MDCache::open_ino_finish(inodeno_t ino, open_ino_info_t& info, int ret)
 {
   dout(10) << "open_ino_finish ino " << ino << " ret " << ret << dendl;
 
+  CInode* in = get_inode(ino);
+  if (in) {
+    if (in->needs_recover()) {
+      queue_file_recover(in);
+      open_file_table.set_recovered_anchor_fetched(ino);
+    } else
+      open_file_table.set_recovered_anchor_recovered(ino);
+  }
+
   MDSContext::vec waiters;
   waiters.swap(info.waiters);
   opening_inodes.erase(ino);
@@ -9212,8 +9215,7 @@ void MDCache::open_ino(inodeno_t ino, int64_t pool, MDSContext* fin,
     info.tid = ++open_ino_last_tid;
     info.pool = pool >= 0 ? pool : default_file_layout.pool_id;
     info.waiters.push_back(fin);
-    if (mds->is_rejoin() &&
-	open_file_table.get_ancestors(ino, info.ancestors, info.auth_hint)) {
+    if (open_file_table.get_ancestors(ino, info.ancestors, info.auth_hint)) {
       info.fetch_backtrace = false;
       info.checking = mds->get_nodeid();
       _open_ino_traverse_dir(ino, info, 0);

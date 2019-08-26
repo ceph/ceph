@@ -38,6 +38,11 @@ public:
   void notify_unlink(CInode *in);
   bool is_any_dirty() const { return !dirty_items.empty(); }
 
+  void _fetch_file_finish(inodeno_t ino, int r);
+  void _open_ino_finish(inodeno_t ino, int r);
+  void _prefetch_inodes();
+  void _prefetch_dirfrags();
+
   void commit(MDSContext *c, uint64_t log_seq, int op_prio);
   uint64_t get_committed_log_seq() const { return committed_log_seq; }
   uint64_t get_committing_log_seq() const { return committing_log_seq; }
@@ -60,10 +65,42 @@ public:
     waiting_for_prefetch.push_back(c);
   }
 
+  void fetch_files();
+
   bool should_log_open(CInode *in);
 
   void note_destroyed_inos(uint64_t seq, const vector<inodeno_t>& inos);
   void trim_destroyed_inos(uint64_t seq);
+
+  bool is_loaded_anchor(const inodeno_t& ino) {
+    return loaded_anchor_map.count(ino);
+  }
+
+  void set_recovered_anchor_noent(const inodeno_t& ino) {
+    if (is_loaded_anchor(ino)) {
+      RecoveredAnchor& anchor = loaded_anchor_map[ino];
+      anchor.set_noent();
+    }
+  }
+
+  void set_recovered_anchor_fetched(const inodeno_t& ino) {
+    if (is_loaded_anchor(ino)) {
+      RecoveredAnchor& anchor = loaded_anchor_map[ino];
+      anchor.set_fetched();
+    }
+  }
+
+  void set_recovered_anchor_recovered(const inodeno_t& ino) {
+    if (is_loaded_anchor(ino)) {
+      RecoveredAnchor& anchor = loaded_anchor_map[ino];
+      anchor.set_recovered();
+    }
+  }
+
+  bool is_recovered(const inodeno_t& ino) {
+    ceph_assert(is_loaded_anchor(ino));
+    return loaded_anchor_map[ino].is_recovered();
+  }
 
 protected:
   friend class C_IO_OFT_Recover;
@@ -71,6 +108,7 @@ protected:
   friend class C_IO_OFT_Save;
   friend class C_IO_OFT_Journal;
   friend class C_OFT_OpenInoFinish;
+  friend class C_OFT_FetchFileFinish;
 
   uint64_t MAX_ITEMS_PER_OBJ = g_conf().get_val<uint64_t>("osd_deep_scrub_large_omap_object_key_threshold");
   static const unsigned MAX_OBJECTS = 1024; // (1024 * osd_deep_scrub_large_omap_object_key_threshold) items at most
@@ -113,6 +151,8 @@ protected:
 
   unsigned omap_num_objs = 0;
   std::vector<unsigned> omap_num_items;
+
+  map<inodeno_t, RecoveredAnchor>::iterator loaded_anchor_iter;
 
   map<inodeno_t, OpenedAnchor> anchor_map;
   set<dirfrag_t> dirfrags;

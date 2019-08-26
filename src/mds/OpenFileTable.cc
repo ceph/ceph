@@ -53,6 +53,7 @@ OpenFileTable::OpenFileTable(MDSRank *m) : mds(m) {
   logger->set(l_oft_omap_total_kv_pairs, 0);
   logger->set(l_oft_omap_total_updates, 0);
   logger->set(l_oft_omap_total_removes, 0);
+  loaded_anchor_iter = loaded_anchor_map.begin();
 }
 
 OpenFileTable::~OpenFileTable() {
@@ -440,7 +441,7 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
     gather.activate();
   };
 
-  bool first_commit = !loaded_anchor_map.empty();
+  bool check_loaded_anchor_map = !loaded_anchor_map.empty();
 
   unsigned first_free_idx = 0;
   unsigned old_num_objs = omap_num_objs;
@@ -461,7 +462,7 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
 	frags.push_back(q->frag);
     }
 
-    if (first_commit) {
+    if (check_loaded_anchor_map) {
       auto q = loaded_anchor_map.find(it.first);
       if (q != loaded_anchor_map.end()) {
 	ceph_assert(p != anchor_map.end());
@@ -479,7 +480,8 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
 	  if (same && r != loaded_dirfrags.end() && r->ino == it.first)
 	    same = false;
 	}
-	loaded_anchor_map.erase(q);
+	//loaded_anchor_map.erase(q);
+	q->second.touch();
 	if (same)
 	  continue;
       }
@@ -543,23 +545,27 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
 
   dirty_items.clear();
 
-  if (first_commit) {
+  if (loaded_anchor_iter == loaded_anchor_map.end()
+      && num_opening_inodes == 0) {
     for (auto& it : loaded_anchor_map) {
-      char key[32];
-      int len = snprintf(key, sizeof(key), "%llx", (unsigned long long)it.first.val);
+      if (!it.second.is_touched()) {
+	char key[32];
+	int len = snprintf(key, sizeof(key), "%llx", (unsigned long long)it.first.val);
 
-      int omap_idx = it.second.omap_idx;
-      unsigned& count = omap_num_items.at(omap_idx);
-      ceph_assert(count > 0);
-      --count;
 
-      auto& ctl = omap_updates.at(omap_idx);
-      ctl.write_size += len + sizeof(__u32);
-      ctl.to_remove.emplace(key);
+	int omap_idx = it.second.omap_idx;
+	unsigned& count = omap_num_items.at(omap_idx);
+	ceph_assert(count > 0);
+	--count;
 
-      if (ctl.write_size >= max_write_size) {
-	journal_func(omap_idx);
-	ctl.write_size = 0;
+	auto& ctl = omap_updates.at(omap_idx);
+	ctl.write_size += len + sizeof(__u32);
+	ctl.to_remove.emplace(key);
+	
+	if (ctl.write_size >= max_write_size) {
+	  journal_func(omap_idx);
+	  ctl.write_size = 0;
+	}
       }
     }
     loaded_anchor_map.clear();
@@ -581,7 +587,8 @@ void OpenFileTable::commit(MDSContext *c, uint64_t log_seq, int op_prio)
       if (omap_num_items[i] > 0)
 	used_objs = i + 1;
     }
-    ceph_assert(total_items == anchor_map.size());
+    if (!loaded_anchor_map.size())
+      ceph_assert(total_items == anchor_map.size());
     // adjust omap object count
     if (used_objs < omap_num_objs) {
       omap_num_objs = used_objs;
@@ -726,6 +733,7 @@ void OpenFileTable::_recover_finish(int r)
 
   journal_state = JOURNAL_NONE;
   load_done = true;
+  loaded_anchor_iter = loaded_anchor_map.begin();
   finish_contexts(g_ceph_context, waiting_for_load);
   waiting_for_load.clear();
 }
@@ -954,13 +962,15 @@ void OpenFileTable::_load_finish(int op_r, int header_r, int values_r,
 
   journal_state = JOURNAL_NONE;
   err = 0;
-  dout(10) << __func__ << ": load complete" << dendl;
+  dout(10) << __func__ << ": load complete, total loaded anchors: "
+   << loaded_anchor_map.size() << dendl;
 out:
 
   if (err < 0)
     _reset_states();
 
   load_done = true;
+  loaded_anchor_iter = loaded_anchor_map.begin();
   finish_contexts(g_ceph_context, waiting_for_load);
   waiting_for_load.clear();
 }
@@ -988,6 +998,8 @@ void OpenFileTable::load(MDSContext *onload)
 bool OpenFileTable::get_ancestors(inodeno_t ino, vector<inode_backpointer_t>& ancestors,
 				  mds_rank_t& auth_hint)
 {
+  if (loaded_anchor_map.empty())
+    return false;
   auto p = loaded_anchor_map.find(ino);
   if (p == loaded_anchor_map.end())
     return false;
@@ -1027,6 +1039,36 @@ public:
     oft->_open_ino_finish(ino, r);
   }
 };
+
+class C_OFT_FetchFileFinish: public MDSContext {
+  OpenFileTable *oft;
+  inodeno_t ino;
+  MDSRank *get_mds() override { return oft->mds; }
+public:
+  C_OFT_FetchFileFinish(OpenFileTable *t, inodeno_t i) : oft(t), ino(i) {}
+  void finish(int r) override {
+    oft->_fetch_file_finish(ino, r);
+  }
+};
+
+void OpenFileTable::_fetch_file_finish(inodeno_t ino, int r)
+{
+  num_opening_inodes--;
+  dout(20) << __func__ << " remaining opening inodes: "
+    << num_opening_inodes << dendl;
+  if (r < 0) {
+    set_recovered_anchor_noent(ino);
+    return;
+  }
+
+  CInode* in = mds->mdcache->get_inode(ino);
+
+  if (!in)
+    return;
+
+  if (in->needs_recover())
+    mds->mdcache->queue_file_recover(in);
+}
 
 void OpenFileTable::_open_ino_finish(inodeno_t ino, int r)
 {
@@ -1120,6 +1162,37 @@ void OpenFileTable::_prefetch_dirfrags()
   } else {
     finish_func(0);
   }
+}
+
+void OpenFileTable::fetch_files()
+{
+  dout(20) << __func__ << " loaded_anchor_map: " << loaded_anchor_map.size()
+    << " entries, opening inodes: " << num_opening_inodes << dendl;
+
+  int amount = g_conf().get_val<int64_t>("mds_oft_fetch_batch");
+  int i = 0;
+  int64_t pool = mds->mdsmap->get_first_data_pool();
+
+  if (destroyed_inos_set.empty()) {
+    for (auto& it : logseg_destroyed_inos)
+      destroyed_inos_set.insert(it.second.begin(), it.second.end());
+  }
+
+  for (;loaded_anchor_iter != loaded_anchor_map.end(); loaded_anchor_iter++) {
+    //if (loaded_anchor_iter->second.d_type == DT_DIR)
+    //  continue;
+
+    if (loaded_anchor_iter->second.get_state() >= RecoveredAnchor::STATE_FETCHED)
+      continue;
+
+    num_opening_inodes++;
+    mds->mdcache->open_ino(loaded_anchor_iter->first, pool,
+	new C_OFT_FetchFileFinish(this, loaded_anchor_iter->first), false);
+    if (++i >= amount)
+      break;
+  }
+  dout(20) << __func__ << " opening inodes: " << num_opening_inodes
+    << ", fetched this round: " << i << dendl;
 }
 
 void OpenFileTable::_prefetch_inodes()

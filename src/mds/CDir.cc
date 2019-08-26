@@ -2002,8 +2002,17 @@ void CDir::_omap_fetched(bufferlist& hdrbl, map<string, bufferlist>& omap,
       continue;
 
     CDentry::linkage_t *dnl = dn->get_linkage();
-    if (dnl->is_primary() && dnl->get_inode()->state_test(CInode::STATE_REJOINUNDEF))
-      undef_inodes.push_back(dnl->get_inode());
+    if (dnl->is_primary()) {
+      if (dnl->get_inode()->state_test(CInode::STATE_REJOINUNDEF))
+        undef_inodes.push_back(dnl->get_inode());
+
+      if (dnl->get_inode()->needs_recover()) {
+        cache->queue_file_recover(dnl->get_inode());
+	cache->open_file_table.set_recovered_anchor_fetched(dnl->get_inode()->ino());
+      } else {
+        cache->open_file_table.set_recovered_anchor_recovered(dnl->get_inode()->ino());
+      }
+    }
 
     if (wanted_items.count(mempool::mds_co::string(dname)) > 0 || !complete) {
       dout(10) << " touching wanted dn " << *dn << dendl;

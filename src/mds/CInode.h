@@ -333,6 +333,7 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   static const uint64_t WAIT_FROZEN      = (1<<1);
   static const uint64_t WAIT_TRUNC       = (1<<2);
   static const uint64_t WAIT_FLOCK       = (1<<3);
+  static const uint64_t WAIT_ONLOADRECOVERED   = (1<<4);
   
   static const uint64_t WAIT_ANY_MASK	= (uint64_t)(-1);
 
@@ -669,6 +670,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
   void decode_snap_blob(const ceph::buffer::list &bl);
   void encode_store(ceph::buffer::list& bl, uint64_t features);
   void decode_store(ceph::buffer::list::const_iterator& bl);
+
+  bool needs_recover();
 
   void add_dir_waiter(frag_t fg, MDSContext *c);
   void take_dir_waiting(frag_t fg, MDSContext::vec& ls);

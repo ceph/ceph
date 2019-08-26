@@ -5279,4 +5279,21 @@ void CInode::get_subtree_dirfrags(std::vector<CDir*>& v) const
   }
 }
 
+bool CInode::needs_recover() {
+  if (is_file()) {
+    for (map<client_t,client_writeable_range_t>::iterator p = inode.client_ranges.begin();
+        p != inode.client_ranges.end();
+        ++p) {
+      Capability *cap = get_client_cap(p->first);
+      if (cap) {
+        cap->mark_clientwriteable();
+      } else {
+        dout(10) << " client." << p->first << " has range " << p->second << " but no cap on " << *this << dendl;
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
 MEMPOOL_DEFINE_OBJECT_FACTORY(CInode, co_inode, mds_co);
