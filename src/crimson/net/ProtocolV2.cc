@@ -1118,11 +1118,6 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
                  existing_proto->client_cookie,
                  existing_proto->server_cookie);
 
-  if (existing_proto->state == state_t::CLOSING) {
-    logger().warn("{} existing connection {} already closed.", conn, *existing_conn);
-    return send_server_ident();
-  }
-
   if (existing_proto->state == state_t::REPLACING) {
     logger().warn("{} racing replace happened while replacing existing connection {}",
                   conn, *existing_conn);
