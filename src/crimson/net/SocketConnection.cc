@@ -47,6 +47,14 @@ bool SocketConnection::is_connected() const
   return protocol->is_connected();
 }
 
+#ifdef UNIT_TESTS_BUILT
+bool SocketConnection::is_closed() const
+{
+  ceph_assert(seastar::engine().cpu_id() == shard_id());
+  return protocol->is_closed();
+}
+#endif
+
 seastar::future<> SocketConnection::send(MessageRef msg)
 {
   // Cannot send msg from another core now, its ref counter can be contaminated!
