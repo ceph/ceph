@@ -98,6 +98,8 @@ enum {
 
 class QuorumService;
 class PaxosService;
+
+template<typename Service>
 class Common;
 
 class PerfCounters;
@@ -664,6 +666,7 @@ public:
   friend class LogMonitor;
   friend class ConfigKeyService;
 
+  template<typename Service>
   friend class Common;
 
   QuorumService *config_key_service;
