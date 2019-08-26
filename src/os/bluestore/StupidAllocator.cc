@@ -14,9 +14,8 @@ StupidAllocator::StupidAllocator(CephContext* cct,
                                  const std::string& name,
                                  int64_t _block_size)
   : Allocator(name), cct(cct), num_free(0),
-    free(10),
-    last_alloc(0),
-    block_size(_block_size)
+    block_size(_block_size),
+    free(10)
 {
 }
 
