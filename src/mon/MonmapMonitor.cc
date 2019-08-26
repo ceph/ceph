@@ -320,7 +320,6 @@ bool MonmapMonitor::prepare_command(MonOpRequestRef op)
   auto m = op->get_req<MMonCommand>();
   stringstream ss;
   string rs;
-  int err = -EINVAL;
 
   cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
