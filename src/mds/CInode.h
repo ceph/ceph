@@ -627,7 +627,7 @@ protected:
   int num_caps_wanted = 0;
 
 public:
-  mempool::mds_co::compact_map<int, mempool::mds_co::set<client_t> > client_snap_caps;     // [auth] [snap] dirty metadata we still need from the head
+  mempool::mds_co::set<client_t> client_snap_caps;
   mempool::mds_co::compact_map<snapid_t, mempool::mds_co::set<client_t> > client_need_snapflush;
 
   void add_need_snapflush(CInode *snapin, snapid_t snapid, client_t client);
