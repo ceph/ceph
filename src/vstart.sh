@@ -131,6 +131,7 @@ overwrite_conf=1
 cephx=1 #turn cephx on by default
 gssapi_authx=0
 cache=""
+rgw_mallopt=0
 if [ `uname` = FreeBSD ]; then
     objectstore="filestore"
 else
@@ -207,6 +208,7 @@ usage=$usage"\t--msgr21: use msgr2 and msgr1\n"
 usage=$usage"\t--crimson: use crimson-osd instead of ceph-osd\n"
 usage=$usage"\t--osd-args: specify any extra osd specific options\n"
 usage=$usage"\t--bluestore-devs: comma-separated list of blockdevs to use for bluestore\n"
+usage=$usage"\t--rgw_mallopt: setting malloc optimization , reduce number of arena (impact on memory growth)\n"
 
 usage_exit() {
     printf "$usage"
@@ -402,6 +404,9 @@ case $1 in
         done
         shift
         ;;
+     --rgw_mallopt )
+	rgw_mallopt=1
+	;;
     * )
         usage_exit
 esac
@@ -485,10 +490,18 @@ run() {
     eval "valg=\$valgrind_$type"
     [ -z "$valg" ] && valg="$valgrind"
 
+    env_cmd=""
+    unset_env_cmd=""
+	
+    if [ "$rgw_mallopt" -eq 1 -a "$type" == "rgw" ]; then
+	env_cmd="export MALLOC_ARENA_MAX=$(( $(nproc) / 2 )) MALLOC_MMAP_THRESHOLD_=4096"
+	unset_env_cmd="unset MALLOC_ARENA_MAX MALLOC_MMAP_THRESHOLD_"
+    fi
     if [ -n "$valg" ]; then
         prunb valgrind --tool="$valg" $valgrind_args "$@" -f
         sleep 1
     else
+	eval ${env_cmd}
         if [ "$nodaemon" -eq 0 ]; then
             prun "$@"
         elif [ "$redirect" -eq 0 ]; then
@@ -496,6 +509,7 @@ run() {
         else
             ( prunb ${CEPH_ROOT}/src/ceph-run "$@" -f ) >$CEPH_OUT_DIR/$type.$num.stdout 2>&1
         fi
+	eval ${unset_env_cmd}
     fi
 }
 
