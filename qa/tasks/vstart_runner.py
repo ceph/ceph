@@ -53,15 +53,25 @@ from teuthology.config import config as teuth_config
 
 import logging
 
-log = logging.getLogger(__name__)
+def init_log():
+    global log
+    if log is not None:
+        del log
+    log = logging.getLogger(__name__)
 
-handler = logging.FileHandler("./vstart_runner.log")
-formatter = logging.Formatter(
-    fmt=u'%(asctime)s.%(msecs)03d %(levelname)s:%(name)s:%(message)s',
-    datefmt='%Y-%m-%dT%H:%M:%S')
-handler.setFormatter(formatter)
-log.addHandler(handler)
-log.setLevel(logging.INFO)
+    global logpath
+    logpath = './vstart_runner.log'
+
+    handler = logging.FileHandler(logpath)
+    formatter = logging.Formatter(
+        fmt=u'%(asctime)s.%(msecs)03d %(levelname)s:%(name)s:%(message)s',
+        datefmt='%Y-%m-%dT%H:%M:%S')
+    handler.setFormatter(formatter)
+    log.addHandler(handler)
+    log.setLevel(logging.INFO)
+
+log = None
+init_log()
 
 
 def respawn_in_path(lib_path, python_paths):
