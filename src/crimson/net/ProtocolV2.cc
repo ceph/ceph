@@ -425,11 +425,10 @@ void ProtocolV2::dispatch_reset()
 {
   seastar::with_gate(pending_dispatch, [this] {
     return dispatcher.ms_handle_reset(
-        seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
-    .handle_exception([this] (std::exception_ptr eptr) {
-      logger().error("{} ms_handle_reset caught exception: {}", conn, eptr);
-      ceph_abort("unexpected exception from ms_handle_reset()");
-    });
+        seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+  }).handle_exception([this] (std::exception_ptr eptr) {
+    logger().error("{} ms_handle_reset caught exception: {}", conn, eptr);
+    ceph_abort("unexpected exception from ms_handle_reset()");
   });
 }
 
@@ -444,11 +443,10 @@ void ProtocolV2::reset_session(bool full)
     reset_write();
     seastar::with_gate(pending_dispatch, [this] {
       return dispatcher.ms_handle_remote_reset(
-          seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
-      .handle_exception([this] (std::exception_ptr eptr) {
-        logger().error("{} ms_handle_remote_reset caught exception: {}", conn, eptr);
-        ceph_abort("unexpected exception from ms_handle_remote_reset()");
-      });
+          seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+    }).handle_exception([this] (std::exception_ptr eptr) {
+      logger().error("{} ms_handle_remote_reset caught exception: {}", conn, eptr);
+      ceph_abort("unexpected exception from ms_handle_remote_reset()");
     });
   }
 }
@@ -767,9 +765,10 @@ ProtocolV2::client_connect()
             server_cookie = 0;
           }
 
-          return dispatcher.ms_handle_connect(
-              seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
-          .handle_exception([this] (std::exception_ptr eptr) {
+          return seastar::futurize_apply([this] {
+            return dispatcher.ms_handle_connect(
+                seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+          }).handle_exception([this] (std::exception_ptr eptr) {
             logger().error("{} ms_handle_connect caught exception: {}", conn, eptr);
             ceph_abort("unexpected exception from ms_handle_connect()");
           });
@@ -842,10 +841,10 @@ ProtocolV2::client_reconnect()
           logger().debug("{} GOT ReconnectOkFrame: msg_seq={}",
                          conn, reconnect_ok.msg_seq());
           requeue_up_to(reconnect_ok.msg_seq());
-          return dispatcher.ms_handle_connect(
-              seastar::static_pointer_cast<SocketConnection>(
-                conn.shared_from_this()))
-          .handle_exception([this] (std::exception_ptr eptr) {
+          return seastar::futurize_apply([this] {
+            return dispatcher.ms_handle_connect(
+                seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+          }).handle_exception([this] (std::exception_ptr eptr) {
             logger().error("{} ms_handle_connect caught exception: {}", conn, eptr);
             ceph_abort("unexpected exception from ms_handle_connect()");
           });
@@ -1475,12 +1474,13 @@ void ProtocolV2::execute_accepting()
 {
   trigger_state(state_t::ACCEPTING, write_state_t::none, false);
   seastar::with_gate(pending_dispatch, [this] {
-      auth_meta = seastar::make_lw_shared<AuthConnectionMeta>();
-      session_stream_handlers = { nullptr, nullptr };
-      enable_recording();
-      return banner_exchange()
-        .then([this] (entity_type_t _peer_type,
-                      entity_addr_t _my_addr_from_peer) {
+      return seastar::futurize_apply([this] {
+          auth_meta = seastar::make_lw_shared<AuthConnectionMeta>();
+          session_stream_handlers = { nullptr, nullptr };
+          enable_recording();
+          return banner_exchange();
+        }).then([this] (entity_type_t _peer_type,
+                        entity_addr_t _my_addr_from_peer) {
           ceph_assert(conn.get_peer_type() == 0);
           conn.set_peer_type(_peer_type);
 
@@ -1626,11 +1626,10 @@ ProtocolV2::send_server_ident()
     // notify
     seastar::with_gate(pending_dispatch, [this] {
       return dispatcher.ms_handle_accept(
-          seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
-      .handle_exception([this] (std::exception_ptr eptr) {
-        logger().error("{} ms_handle_accept caught exception: {}", conn, eptr);
-        ceph_abort("unexpected exception from ms_handle_accept()");
-      });
+          seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+    }).handle_exception([this] (std::exception_ptr eptr) {
+      logger().error("{} ms_handle_accept caught exception: {}", conn, eptr);
+      ceph_abort("unexpected exception from ms_handle_accept()");
     });
 
     return write_frame(server_ident);
@@ -1869,11 +1868,10 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
     // TODO: change MessageRef with seastar::shared_ptr
     auto msg_ref = MessageRef{message, false};
     seastar::with_gate(pending_dispatch, [this, msg = std::move(msg_ref)] {
-      return dispatcher.ms_dispatch(&conn, std::move(msg))
-	.handle_exception([this] (std::exception_ptr eptr) {
-        logger().error("{} ms_dispatch caught exception: {}", conn, eptr);
-        ceph_abort("unexpected exception from ms_dispatch()");
-      });
+      return dispatcher.ms_dispatch(&conn, std::move(msg));
+    }).handle_exception([this] (std::exception_ptr eptr) {
+      logger().error("{} ms_dispatch caught exception: {}", conn, eptr);
+      ceph_abort("unexpected exception from ms_dispatch()");
     });
   });
 }
