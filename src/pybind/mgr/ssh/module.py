@@ -79,14 +79,14 @@ class SSHCompletionmMixin(object):
 
 class SSHReadCompletion(SSHCompletionmMixin, orchestrator.ReadCompletion):
     @property
-    def is_complete(self):
+    def has_result(self):
         return all(map(lambda r: r.ready(), self._result))
 
 
 class SSHWriteCompletion(SSHCompletionmMixin, orchestrator.WriteCompletion):
 
     @property
-    def is_persistent(self):
+    def has_result(self):
         return all(map(lambda r: r.ready(), self._result))
 
     @property
@@ -113,7 +113,7 @@ class SSHWriteCompletionReady(SSHWriteCompletion):
         return self._result
 
     @property
-    def is_persistent(self):
+    def has_result(self):
         return True
 
     @property

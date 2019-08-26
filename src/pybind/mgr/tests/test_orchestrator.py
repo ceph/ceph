@@ -1,10 +1,11 @@
 from __future__ import absolute_import
 import json
+from unittest.mock import MagicMock
 
 import pytest
 
 from ceph.deployment import inventory
-from orchestrator import ReadCompletion, raise_if_exception, RGWSpec
+from orchestrator import raise_if_exception, RGWSpec, Completion, ProgressReference
 from orchestrator import InventoryNode, ServiceDescription
 from orchestrator import OrchestratorValidationError
 from orchestrator import parse_host_specs
@@ -87,8 +88,8 @@ def test_service_description():
 
 
 def test_raise():
-    c = ReadCompletion()
-    c.exception = ZeroDivisionError()
+    c = Completion()
+    c._exception = ZeroDivisionError()
     with pytest.raises(ZeroDivisionError):
         raise_if_exception(c)
 
@@ -107,3 +108,121 @@ def test_rgwspec():
     example = json.loads(test_rgwspec.__doc__.strip())
     spec = RGWSpec.from_json(example)
     assert spec.validate_add() is None
+
+
+def test_promise():
+    p = Completion(value=3)
+    p.finalize()
+    assert p.result == 3
+
+
+def test_promise_then():
+    p = Completion(value=3).then(lambda three: three + 1)
+    p._first_promise.finalize()
+    assert p.result == 4
+
+
+def test_promise_mondatic_then():
+    p = Completion(value=3)
+    p.then(lambda three: Completion(value=three + 1))
+    p._first_promise.finalize()
+    assert p.result == 4
+
+
+def some_complex_completion():
+    c = Completion(value=3).then(
+        lambda three: Completion(value=three + 1).then(
+            lambda four: four + 1))
+    return c._first_promise
+
+def test_promise_mondatic_then_combined():
+    p = some_complex_completion()
+    p._first_promise.finalize()
+    assert p.result == 5
+
+
+def test_promise_flat():
+    p = Completion()
+    p.then(lambda r1: Completion(value=r1 + ' there').then(
+        lambda r11: r11 + '!'))
+    p.finalize('hello')
+    assert p.result == 'hello there!'
+
+
+def test_side_effect():
+    foo = {'x': 1}
+
+    def run(x):
+        foo['x'] = x
+
+    foo['x'] = 1
+    Completion(value=3).then(run)._first_promise.finalize()
+    assert foo['x'] == 3
+
+
+def test_progress():
+    c = some_complex_completion()
+    mgr = MagicMock()
+    mgr.process = lambda cs: [c.finalize(None) for c in cs]
+
+    progress_val = 0.75
+    c._last_promise().then(
+        on_complete=ProgressReference(message='hello world',
+                                      mgr=mgr,
+                                      completion=lambda: Completion(
+                                          on_complete=lambda _: progress_val))
+    )
+    mgr.remote.assert_called_with('progress', 'update', c.progress_reference.progress_id, 'hello world', 0.0, ['orchestrator'])
+
+    c.finalize()
+    mgr.remote.assert_called_with('progress', 'update', c.progress_reference.progress_id, 'hello world', 0.5, ['orchestrator'])
+
+    c.progress_reference.update()
+    mgr.remote.assert_called_with('progress', 'update', c.progress_reference.progress_id, 'hello world', progress_val, ['orchestrator'])
+    assert not c.progress_reference.effective
+
+    progress_val = 1
+    c.progress_reference.update()
+    assert c.progress_reference.effective
+    mgr.remote.assert_called_with('progress', 'complete', c.progress_reference.progress_id)
+
+
+def test_with_progress():
+    mgr = MagicMock()
+    mgr.process = lambda cs: [c.finalize(None) for c in cs]
+
+    def execute(y):
+        return str(y)
+
+    def run(x):
+        def two(_):
+            return execute(x * 2)
+
+        return Completion.with_progress(
+            message='message',
+            on_complete=two,
+            mgr=mgr
+
+        )
+    c = Completion(on_complete=lambda x: x * 10).then(run)._first_promise
+    c.finalize(2)
+    assert c.result == '40'
+    c.progress_reference.update()
+    assert c.progress_reference.effective
+
+
+def test_exception():
+
+    def run(x):
+        raise KeyError(x)
+
+    c = Completion(value=3).then(run)._first_promise
+    c.finalize()
+
+    assert isinstance(c.exception, KeyError)
+
+
+def test_fail():
+    c = Completion().then(lambda _: 3)
+    c._first_promise.fail(KeyError())
+    assert isinstance(c.exception, KeyError)

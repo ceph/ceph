@@ -19,7 +19,7 @@ import orchestrator
 
 
 class TestCompletionMixin(object):
-    all_completions = []  # Hacky global
+    all_completions = []  # type: orchestrator.Completion
 
     def __init__(self, cb, message, *args, **kwargs):
         super(TestCompletionMixin, self).__init__(*args, **kwargs)
@@ -37,7 +37,7 @@ class TestCompletionMixin(object):
         return self._result
 
     @property
-    def is_complete(self):
+    def has_result(self):
         return self._complete
 
     def execute(self):
@@ -64,7 +64,7 @@ class TestWriteCompletion(TestCompletionMixin, orchestrator.WriteCompletion):
         super(TestWriteCompletion, self).__init__(cb, message)
 
     @property
-    def is_persistent(self):
+    def has_result(self):
         return (not self.is_errored) and self.executed
 
     @property
@@ -114,7 +114,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
                         c.__class__
                     ))
 
-            if not c.has_result:
+            if c.needs_result:
                 c.execute()
 
     @CLICommand('test_orchestrator load_data', '', 'load dummy data into test orchestrator', 'w')
@@ -153,7 +153,7 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             self.wait(TestCompletionMixin.all_completions)
             TestCompletionMixin.all_completions = [c for c in TestCompletionMixin.all_completions if
-                                                   not c.is_complete]
+                                                   c.is_finished]
 
             self._shutdown.wait(5)
 

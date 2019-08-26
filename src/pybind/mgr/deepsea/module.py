@@ -40,7 +40,7 @@ class DeepSeaReadCompletion(orchestrator.ReadCompletion):
         return self._result
 
     @property
-    def is_complete(self):
+    def has_result(self):
         return self._complete
 
 
