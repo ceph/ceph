@@ -1005,6 +1005,22 @@ def _teardown_cluster():
     remote.run(args = [os.path.join(SRC_PREFIX, "stop.sh")], timeout=60)
     remote.run(args = ['rm', '-rf', './dev', './out'])
 
+def _clear_old_log():
+    from os import stat
+
+    try:
+        stat(logpath)
+    # would need an update when making this py3 compatible. Use FileNotFound
+    # instead.
+    except OSError:
+        return
+    else:
+        os.remove(logpath)
+        with open(logpath, 'w') as logfile:
+            logfile.write('')
+        init_log()
+        log.info('logging in a fresh file now...')
+
 def exec_test():
     # Parse arguments
     interactive_on_error = False
@@ -1014,6 +1030,7 @@ def exec_test():
     teardown_cluster = False
     global log_ps_output
     log_ps_output = False
+    clear_old_log = False
 
     args = sys.argv[1:]
     flags = [a for a in args if a.startswith("-")]
@@ -1031,6 +1048,9 @@ def exec_test():
             teardown_cluster = True
         elif f == '--log-ps-output':
             log_ps_output = True
+        elif f == '--clear-old-log':
+            clear_old_log = True
+            _clear_old_log()
         else:
             log.error("Unknown option '{0}'".format(f))
             sys.exit(-1)
