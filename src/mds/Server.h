@@ -174,6 +174,7 @@ public:
     STEADY = (1<<0),
     ENFORCE_MAX = (1<<1),
     TRIM = (1<<2),
+    ENFORCE_LIVENESS = (1<<3),
   };
   std::pair<bool, uint64_t> recall_client_state(MDSGatherBuilder* gather, RecallFlags=RecallFlags::NONE);
   void force_clients_readonly();

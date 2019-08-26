@@ -128,6 +128,9 @@ private:
   // New limit in SESSION_RECALL
   uint32_t recall_limit = 0;
 
+  // session caps liveness
+  DecayCounter session_cache_liveness;
+
   // session start time -- used to track average session time
   // note that this is initialized in the constructor rather
   // than at the time of adding a session to the sessionmap
@@ -203,6 +206,9 @@ public:
   }
   auto get_release_caps() const {
     return release_caps.get();
+  }
+  auto get_session_cache_liveness() const {
+    return session_cache_liveness.get();
   }
 
   inodeno_t next_ino() const {
@@ -306,14 +312,17 @@ public:
   }
 
   void touch_cap(Capability *cap) {
+    session_cache_liveness.hit(1.0);
     caps.push_front(&cap->item_session_caps);
   }
 
   void touch_cap_bottom(Capability *cap) {
+    session_cache_liveness.hit(1.0);
     caps.push_back(&cap->item_session_caps);
   }
 
   void touch_lease(ClientLease *r) {
+    session_cache_liveness.hit(1.0);
     leases.push_back(&r->item_session_lease);
   }
 
@@ -412,6 +421,7 @@ public:
     release_caps(g_conf().get_val<double>("mds_recall_warning_decay_rate")),
     recall_caps_throttle(g_conf().get_val<double>("mds_recall_max_decay_rate")),
     recall_caps_throttle2o(0.5),
+    session_cache_liveness(g_conf().get_val<double>("mds_session_cache_liveness_decay_rate")),
     birth_time(clock::now()),
     auth_caps(g_ceph_context),
     item_session_list(this),
