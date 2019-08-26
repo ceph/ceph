@@ -1658,7 +1658,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
         reset_session(true);
       }
       protocol_timer.cancel();
-      return std::move(execution_done);
+      return execution_done.get_future();
     }).then([this,
              reconnect,
              new_socket = std::move(new_socket),
