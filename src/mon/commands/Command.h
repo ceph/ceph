@@ -39,7 +39,7 @@ using namespace std;
  *
  * Define members and functions common to commands.
  */
-template<typename Service = PaxosService>
+template<typename Service>
 struct Common
 {
 
@@ -134,16 +134,21 @@ struct Common
 
 typedef std::shared_ptr<Formatter> FormatterRef;
 
-template<typename T, typename Stable, typename Pending>
-struct Command : public Common
+template<typename Service, typename Stable, typename Pending>
+struct Command : public Common<Service>
 {
+
+  CephContext *cct;
 
   explicit Command(
       Monitor *_mon,
-      PaxosService *_service,
+      Service *_service,
       CephContext *_cct) :
-    Common(_mon, _service, _cct)
-  { }
+    Common<Service>(_mon, _service, _cct)
+  { 
+    cct = this->cct;
+  }
+
   
   virtual ~Command() { };
 
@@ -228,7 +233,7 @@ struct ReadCommand : public Command<T, Stable, Pending>
 
   explicit ReadCommand(
       Monitor *_mon,
-      PaxosService *_svc,
+      T *_svc,
       CephContext *_cct) :
     Command<T, Stable, Pending>(_mon, _svc, _cct)
   { };
@@ -279,7 +284,7 @@ struct WriteCommand : public Command<T, Stable, Pending>
 
   explicit WriteCommand(
       Monitor *_mon,
-      PaxosService *_svc,
+      T *_svc,
       CephContext *_cct) :
     Command<T, Stable, Pending>(_mon, _svc, _cct)
   { }
@@ -315,7 +320,7 @@ struct ReadWriteCommand : public Command<T, Stable, Pending>
 {
   explicit ReadWriteCommand<T, Stable, Pending>(
       Monitor *_mon,
-      PaxosService *_svc,
+      T *_svc,
       CephContext *_cct) :
     Command<T, Stable, Pending>(_mon, _svc, _cct)
   { }
