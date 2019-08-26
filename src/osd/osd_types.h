@@ -4466,7 +4466,7 @@ public:
     if (e.prior_version == eversion_t() || e.is_clone()) {
       // new object.
       if (is_missing_divergent_item) {  // use iterator
-        rmissing.erase((missing_it->second).need.version);
+        rmissing.erase(missing_it->second.need.version);
         // .have = nil
         missing_it->second = item(e.version, eversion_t(), e.is_delete());
         missing_it->second.clean_regions.mark_fully_dirty();
@@ -4479,14 +4479,20 @@ public:
     } else if (is_missing_divergent_item) {
       // already missing (prior).
       rmissing.erase((missing_it->second).need.version);
-      (missing_it->second).need = e.version;  // leave .have unchanged.
-      (missing_it->second).set_delete(e.is_delete());
-      (missing_it->second).clean_regions.merge(e.clean_regions);
+      missing_it->second.need = e.version;  // leave .have unchanged.
+      missing_it->second.set_delete(e.is_delete());
+      if (e.is_lost_revert())
+        missing_it->second.clean_regions.mark_fully_dirty();
+      else
+        missing_it->second.clean_regions.merge(e.clean_regions);
     } else {
       // not missing, we must have prior_version (if any)
       ceph_assert(!is_missing_divergent_item);
       missing[e.soid] = item(e.version, e.prior_version, e.is_delete());
-      missing[e.soid].clean_regions = e.clean_regions;
+      if (e.is_lost_revert())
+        missing[e.soid].clean_regions.mark_fully_dirty();
+      else
+        missing[e.soid].clean_regions = e.clean_regions;
     }
     rmissing[e.version.version] = e.soid;
     tracker.changed(e.soid);
@@ -4496,9 +4502,9 @@ public:
     auto p = missing.find(oid);
     if (p != missing.end()) {
       rmissing.erase((p->second).need.version);
-      (p->second).need = need;          // no not adjust .have
-      (p->second).set_delete(is_delete);
-      (p->second).clean_regions.mark_fully_dirty();
+      p->second.need = need;          // do not adjust .have
+      p->second.set_delete(is_delete);
+      p->second.clean_regions.mark_fully_dirty();
     } else {
       missing[oid] = item(need, eversion_t(), is_delete);
       missing[oid].clean_regions.mark_fully_dirty();
