@@ -57,7 +57,7 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   bool peer_is_client() const { return peer_name.is_client(); }
 
   /// true if the handshake has completed and no errors have been encountered
-  virtual seastar::future<bool> is_connected() = 0;
+  virtual bool is_connected() const = 0;
 
   /// send a message over a connection that has completed its handshake
   virtual seastar::future<> send(MessageRef msg) = 0;
