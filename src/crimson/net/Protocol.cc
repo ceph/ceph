@@ -283,6 +283,7 @@ void Protocol::write_event()
     return;
    case write_state_t::drop:
     write_dispatching = false;
+    return;
    default:
     ceph_assert(false);
   }
