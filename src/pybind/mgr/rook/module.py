@@ -6,7 +6,7 @@ import uuid
 from ceph.deployment import inventory
 
 try:
-    from typing import List, Dict
+    from typing import List, Dict, Optional, Callable
     from ceph.deployment.drive_group import DriveGroupSpec
 except ImportError:
     pass  # just for type checking
@@ -34,108 +34,34 @@ import orchestrator
 from .rook_cluster import RookCluster
 
 
-class RookCompletionMixin(object):
-    # hacky global
-    all_completions = []
-
-    def __init__(self, message):
-        super(RookCompletionMixin, self).__init__()
-        self.message = message
-
-        # Result of k8s API call, this is set if executed==True
-        self._result = None
-
-        all_completions.append(self)
-
-
-    @property
-    def result(self):
-        return self._result
-
-    def __str__(self):
-        return self.message
-
-
-class RookReadCompletion(RookCompletionMixin, orchestrator.ReadCompletion):
-    """
-    All reads are simply API calls: avoid spawning
-    huge numbers of threads by just running them
-    inline when someone calls wait()
-    """
-
-    def __init__(self, cb):
-        super(RookReadCompletion, self).__init__("<read op>")
-        self.cb = cb
-        self._complete = False
-
-    @property
-    def has_result(self):
-        return self._complete
-
-    def execute(self):
-        try:
-            self._result = self.cb()
-        except Exception as e:
-            self.exception = e
-        finally:
-            self._complete = True
-
-
-class RookWriteCompletion(RookCompletionMixin, orchestrator.WriteCompletion):
+class RookWriteCompletion(orchestrator.Completion):
     """
     Writes are a two-phase thing, firstly sending
     the write to the k8s API (fast) and then waiting
     for the corresponding change to appear in the
     Ceph cluster (slow)
     """
-    # XXX kubernetes bindings call_api already usefully has
-    # a completion= param that uses threads.  Maybe just
-    # use that?
-    def __init__(self, execute_cb, complete_cb, message):
-        super(RookWriteCompletion, self).__init__(message)
-        self.execute_cb = execute_cb
-        self.complete_cb = complete_cb
-
-        # Executed means I executed my k8s API call, it may or may
-        # not have succeeded
-        self.executed = False
-
-        # Effective means, Rook finished applying the changes
-        self.effective = False
-
-        self.id = str(uuid.uuid4())
-
-    @property
-
-    @property
-    def is_effective(self):
-        return self.effective
-
-    def execute(self):
-        try:
-            if not self.executed:
-                self._result = self.execute_cb()
-                self.executed = True
-
-            if not self.effective:
-                # TODO: check self.result for API errors
-                if self.complete_cb is None:
-                    self.effective = True
-                else:
-                    self.effective = self.complete_cb()
-        except Exception as e:
-            self.exception = e
+    def __init__(self, message):
+        self.progress_reference = orchestrator.ProgressReference(
+            message=message
+        )
+        super(RookWriteCompletion, self).__init__()
 
 
 def deferred_read(f):
+    # type: (Callable) -> Callable[..., orchestrator.Completion]
     """
     Decorator to make RookOrchestrator methods return
     a completion object that executes themselves.
     """
 
     @functools.wraps(f)
-    def wrapper(*args, **kwargs):
-        return RookReadCompletion(lambda: f(*args, **kwargs))
+    def wrapper(self, *args, **kwargs):
+        c = orchestrator.Completion()
+        c.then(
+            lambda: f(*args, **kwargs)
+        )
+        return c
 
     return wrapper
 
@@ -165,27 +91,31 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
     ]
 
     def process(self, completions):
-        if completions:
-            self.log.info("wait: completions={0}".format(completions))
+        pass
+
+    def process_promises(self, promises):
+        # type: (List[RookPromise]) -> None
+
+
+        if promises:
+            self.log.info("wait: promises={0}".format(promises))
 
         # Synchronously call the K8s API
-        for c in completions:
-            if not isinstance(c, RookReadCompletion) and \
-                    not isinstance(c, RookWriteCompletion):
+        for p in promises:
+            if not isinstance(p, RookPromise):
                 raise TypeError(
                     "wait() requires list of completions, not {0}".format(
-                        c.__class__
+                        p.__class__
                     ))
 
-            if c.is_complete:
+            if not p.needs_result:
                 continue
 
-            c.execute()
+            new_promise = p.execute()
             if c.exception and not isinstance(c.exception, orchestrator.OrchestratorError):
                 self.log.exception("Completion {0} threw an exception:".format(
                     c.message
                 ))
-                c.exception = e
                 c._complete = True
 
 
@@ -220,6 +150,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
         self._rook_env = RookEnv()
 
         self._shutdown = threading.Event()
+
+        self.all_promises = list()  # type: List[RookPromise]
 
     def shutdown(self):
         self._shutdown.set()
@@ -276,9 +208,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             # in case we had a caller that wait()'ed on them long enough
             # to get persistence but not long enough to get completion
 
-            self.wait(RookCompletionMixin.all_completions)
-            RookCompletionMixin.all_completions = [c for c in RookCompletionMixin.all_completions if
-                                                   not c.is_finished]
+            self.process(self.all_promises)
+            self.all_promises = [p for p in self.all_promises if not p.completion.is_finished]
 
             self._shutdown.wait(5)
 
@@ -418,30 +349,39 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
             lambda: self.rook_cluster.update_nfs_count(spec.name, num), None,
                 "Updating NFS server count in {0} to {1}".format(spec.name, num))
 
-    def create_osds(self, drive_group, all_hosts):
+    def create_osds(self, drive_group, _):
         # type: (DriveGroupSpec, List[str]) -> RookWriteCompletion
 
-        assert len(drive_group.hosts(all_hosts)) == 1
         targets = []
         if drive_group.data_devices:
             targets += drive_group.data_devices.paths
         if drive_group.data_directories:
             targets += drive_group.data_directories
 
-        if not self.rook_cluster.node_exists(drive_group.hosts(all_hosts)[0]):
-            raise RuntimeError("Node '{0}' is not in the Kubernetes "
-                               "cluster".format(drive_group.hosts(all_hosts)))
+        p = orchestrator.ProgressReference(
+            "Creating OSD on {0}:{1}".format(drive_group.hosts(drive_group.host_pattern),
+                                             targets))
 
-        # Validate whether cluster CRD can accept individual OSD
-        # creations (i.e. not useAllDevices)
-        if not self.rook_cluster.can_create_osd():
-            raise RuntimeError("Rook cluster configuration does not "
-                               "support OSD creation.")
+        def execute(all_hosts):
+            p.effective_when(
+                lambda hosts: has_osds
+            )
 
-        def execute():
+            assert len(drive_group.hosts(all_hosts)) == 1
+
+            if not self.rook_cluster.node_exists(drive_group.hosts(all_hosts)[0]):
+                raise RuntimeError("Node '{0}' is not in the Kubernetes "
+                                   "cluster".format(drive_group.hosts(all_hosts)))
+
+            # Validate whether cluster CRD can accept individual OSD
+            # creations (i.e. not useAllDevices)
+            if not self.rook_cluster.can_create_osd():
+                raise RuntimeError("Rook cluster configuration does not "
+                                   "support OSD creation.")
             return self.rook_cluster.add_osds(drive_group, all_hosts)
 
-        def is_complete():
+        @deferred_read
+        def has_osds(all_hosts):
             # Find OSD pods on this host
             pod_osd_ids = set()
             pods = self._k8s.list_namespaced_pod(self._rook_env.namespace,
@@ -471,7 +411,8 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             return found is not None
 
-        return RookWriteCompletion(execute, is_complete,
-                                   "Creating OSD on {0}:{1}".format(
-                                       drive_group.hosts(all_hosts)[0], targets
-                                   ))
+
+        c = self.get_hosts().then(execute)
+        c.progress_reference = p
+        return c
+

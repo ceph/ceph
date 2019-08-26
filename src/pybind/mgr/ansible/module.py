@@ -91,7 +91,7 @@ class AnsibleReadOperation(orchestrator.ReadCompletion):
         return "Playbook {playbook_name}".format(playbook_name=self.playbook)
 
     @property
-    def is_complete(self):
+    def has_result(self):
         return self._is_complete
 
     @property
@@ -306,7 +306,7 @@ class AnsibleChangeOperation(orchestrator.WriteCompletion):
         raise NotImplementedError()
 
     @property
-    def is_persistent(self):
+    def has_result(self):
         """
         Has the operation updated the orchestrator's configuration
         persistently?  Typically this would indicate that an update

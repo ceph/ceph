@@ -339,19 +339,7 @@ Usage:
         else:
             return HandleCommandResult(-errno.EINVAL, stderr=usage)
 
-        # TODO: Remove this and make the orchestrator composable
-        #   Like a future or so.
-        host_completion = self.get_hosts()
-        self._orchestrator_wait([host_completion])
-        orchestrator.raise_if_exception(host_completion)
-        all_hosts = [h.name for h in host_completion.result]
-
-        try:
-            drive_group.validate(all_hosts)
-        except DriveGroupValidationError as e:
-            return HandleCommandResult(-errno.EINVAL, stderr=str(e))
-
-        completion = self.create_osds(drive_group, all_hosts)
+        completion = self.create_osds(drive_group)
         self._orchestrator_wait([completion])
         orchestrator.raise_if_exception(completion)
         self.log.warning(str(completion.result))
