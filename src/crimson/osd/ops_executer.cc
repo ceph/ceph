@@ -401,6 +401,11 @@ OpsExecuter::do_osd_op(OSDOp& osd_op)
     return do_const_op([&osd_op] (/* const */auto& backend, const auto& os) {
       return backend.stat(os, osd_op);
     });
+  case CEPH_OSD_OP_TMAPUP:
+    // TODO: there was an effort to kill TMAP in ceph-osd. According to
+    // @dzafman this isn't possible yet. Maybe it could be accomplished
+    // before crimson's readiness and we'd luckily don't need to carry.
+    return dont_do_legacy_op();
   default:
     logger().warn("unknown op {}", ceph_osd_op_name(op.op));
     throw std::runtime_error(

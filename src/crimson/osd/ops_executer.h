@@ -27,6 +27,7 @@
 
 #include "crimson/osd/pg.h"
 #include "crimson/osd/pg_backend.h"
+#include "crimson/osd/exceptions.h"
 
 class PGLSFilter;
 class OSDOp;
@@ -86,6 +87,10 @@ class OpsExecuter {
   auto do_pg_op(Func&& f) {
     return std::forward<Func>(f)(std::as_const(pg),
                                  std::as_const(os->oi.soid.get_namespace()));
+  }
+
+  seastar::future<> dont_do_legacy_op() {
+    throw ceph::osd::operation_not_supported();
   }
 
 public:
