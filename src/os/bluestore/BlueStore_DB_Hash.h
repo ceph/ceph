@@ -88,6 +88,7 @@ public:
   int64_t get_cache_usage() const override;
   /// estimate space utilization for a prefix (in bytes)
   int64_t estimate_prefix_size(const string& prefix,
+                               const std::string& key_prefix,
                                ColumnFamilyHandle cfh = ColumnFamilyHandle()) override;
   void compact() override;
   void compact_async() override;

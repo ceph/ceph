@@ -713,7 +713,15 @@ int64_t BlueStore_DB_Hash::get_cache_usage() const {
 
 /// estimate space utilization for a prefix (in bytes)
 int64_t BlueStore_DB_Hash::estimate_prefix_size(const string& prefix,
+                                                const std::string& key_prefix,
                                                 ColumnFamilyHandle cfh) {
+  int64_t sum;
+  auto it = shards.find(prefix);
+  if (it != shards.end()) {
+    for (auto& cf : it->second.shards_cf_handle) {
+      sum += db->estimate_prefix_size(prefix, key_prefix, cf);
+    }
+  }
   return 0;
 }
 
