@@ -1632,6 +1632,7 @@ it would execute a single test.
 
 vstart_runner.py can take 3 options -
 
+--clear-old-log             deletes old log file before running the test
 --create                    create Ceph cluster before running a test
 --create-cluster-only       creates the cluster and quits; tests can be issued
                             later
