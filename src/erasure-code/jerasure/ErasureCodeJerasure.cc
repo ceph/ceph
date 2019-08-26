@@ -239,8 +239,11 @@ int ErasureCodeJerasureReedSolomonRAID6::parse(ErasureCodeProfile &profile,
 					       ostream *ss)
 {
   int err = ErasureCodeJerasure::parse(profile, ss);
-  profile.erase("m");
-  m = 2;
+  if (m != stoi(DEFAULT_M)) {
+    *ss << "ReedSolomonRAID6: m=" << m
+        << " must be 2 for RAID6: revert to 2" << std::endl;
+    err = -EINVAL;
+  }
   if (w != 8 && w != 16 && w != 32) {
     *ss << "ReedSolomonRAID6: w=" << w
 	<< " must be one of {8, 16, 32} : revert to 8 " << std::endl;
