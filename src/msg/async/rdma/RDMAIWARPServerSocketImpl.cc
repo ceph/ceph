@@ -37,6 +37,10 @@ int RDMAIWARPServerSocketImpl::listen(entity_addr_t &sa,
     goto err;
   }
   server_setup_socket = cm_channel->fd;
+  rc = net.set_nonblock(server_setup_socket);
+  if (rc < 0) {
+    goto err;
+  }
   ldout(cct, 20) << __func__ << " fd of cm_channel is " << server_setup_socket << dendl;
   return 0;
 
@@ -68,6 +72,13 @@ int RDMAIWARPServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions
 
   struct rdma_cm_id *event_cm_id = cm_event->id;
   struct rdma_event_channel *event_channel = rdma_create_event_channel();
+
+  if (net.set_nonblock(event_channel->fd) < 0) {
+      lderr(cct) << __func__ << " failed to switch event channel to non-block, close event channel " << dendl;
+      rdma_destroy_event_channel(event_channel);
+      rdma_ack_cm_event(cm_event);
+      return -errno;
+  }
 
   rdma_migrate_id(event_cm_id, event_channel);
 
