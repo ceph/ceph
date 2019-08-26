@@ -2,11 +2,16 @@ import { $, browser, by, element } from 'protractor';
 import { Helper } from '../helper.po';
 import { PageHelper } from '../page-helper.po';
 
-export class MirroringPageHelper extends PageHelper {
-  pages = { index: '/#/block/mirroring' };
+const pages = { index: '/#/block/mirroring' };
 
-  // Goes to the mirroring page and edits a pool in the Pool table. Clicks on the
-  // pool and chooses a option (either pool, image, or disabled)
+export class MirroringPageHelper extends PageHelper {
+  pages = pages;
+
+  /**
+   * Goes to the mirroring page and edits a pool in the Pool table. Clicks on the
+   * pool and chooses an option (either pool, image, or disabled)
+   */
+  @PageHelper.restrictTo(pages.index)
   async editMirror(name, option) {
     // Clicks the pool in the table
     await browser.wait(

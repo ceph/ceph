@@ -36,30 +36,28 @@ describe('Mirroring page', () => {
   });
 
   describe('checks that edit mode functionality shows in the pools table', async () => {
-    const poolName = 'mirrorpoolrq';
+    const poolName = 'mirroring_test';
 
     beforeAll(async () => {
       await pools.navigateTo('create'); // Need pool for mirroring testing
       await pools.create(poolName, 8, 'rbd');
-      // console.log(`before second navigateTo()`);
       await pools.navigateTo();
-      // console.log(`before pools.exist(${poolName})`);
       await pools.exist(poolName, true);
-      // console.log(`beforeAll done`);
     });
 
     it('tests editing mode for pools', async () => {
       await mirroring.navigateTo();
-      expect(await mirroring.editMirror(poolName, 'Pool'));
+
+      await mirroring.editMirror(poolName, 'Pool');
       expect(await mirroring.getFirstTableCellWithText('pool').isPresent()).toBe(true);
-      expect(await mirroring.editMirror(poolName, 'Image'));
+      await mirroring.editMirror(poolName, 'Image');
       expect(await mirroring.getFirstTableCellWithText('image').isPresent()).toBe(true);
-      expect(await mirroring.editMirror(poolName, 'Disabled'));
+      await mirroring.editMirror(poolName, 'Disabled');
       expect(await mirroring.getFirstTableCellWithText('disabled').isPresent()).toBe(true);
     });
 
     afterAll(async () => {
-      await pools.navigateTo(); // Deletes mirroring test pool
+      await pools.navigateTo();
       await pools.delete(poolName);
       await pools.navigateTo();
       await pools.exist(poolName, false);
