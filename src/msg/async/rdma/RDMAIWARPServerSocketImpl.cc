@@ -82,18 +82,17 @@ int RDMAIWARPServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions
 
   rdma_migrate_id(event_cm_id, event_channel);
 
-  struct rdma_cm_id *new_cm_id = event_cm_id;
   struct rdma_conn_param *remote_conn_param = &cm_event->param.conn;
   struct rdma_conn_param local_conn_param;
 
-  RDMACMInfo info(new_cm_id, event_channel, remote_conn_param->qp_num);
+  RDMACMInfo info(event_cm_id, event_channel, remote_conn_param->qp_num);
   RDMAIWARPConnectedSocketImpl* server =
     new RDMAIWARPConnectedSocketImpl(cct, ib, dispatcher, dynamic_cast<RDMAWorker*>(w), &info);
 
   memset(&local_conn_param, 0, sizeof(local_conn_param));
   local_conn_param.qp_num = server->get_local_qpn();
 
-  if (rdma_accept(new_cm_id, &local_conn_param)) {
+  if (rdma_accept(event_cm_id, &local_conn_param)) {
     return -EAGAIN;
   }
   server->activate();
@@ -103,7 +102,7 @@ int RDMAIWARPServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions
 
   std::unique_ptr<RDMAConnectedSocketImpl> csi(server);
   *sock = ConnectedSocket(std::move(csi));
-  struct sockaddr *addr = &new_cm_id->route.addr.dst_addr;
+  struct sockaddr *addr = &event_cm_id->route.addr.dst_addr;
   out->set_sockaddr(addr);
 
   return 0;
