@@ -410,7 +410,9 @@ void ProtocolV2::fault(bool backoff)
   if (conn.policy.lossy) {
     dispatch_reset();
     close();
-  } else if (conn.policy.server || (conn.policy.standby && !is_queued())) {
+  } else if (conn.policy.server ||
+             (conn.policy.standby &&
+              (!is_queued() && conn.sent.empty()))) {
     execute_standby();
   } else if (backoff) {
     execute_wait(false);
@@ -966,7 +968,9 @@ void ProtocolV2::execute_connecting()
             return;
           }
 
-          if (conn.policy.server || (conn.policy.standby && !is_queued())) {
+          if (conn.policy.server ||
+              (conn.policy.standby &&
+               (!is_queued() && conn.sent.empty()))) {
             execute_standby();
           } else {
             execute_wait(false);
