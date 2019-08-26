@@ -1270,6 +1270,8 @@ ProtocolV2::server_connect()
       }
     }
 
+    // TODO: atomically register & unaccept the connecton with lookup_conn()
+
     // if everything is OK reply with server identification
     return send_server_ident();
   });
@@ -1463,7 +1465,8 @@ ProtocolV2::server_reconnect()
 
 void ProtocolV2::execute_accepting()
 {
-  trigger_state(state_t::ACCEPTING, write_state_t::none, false);
+  // TODO: change to write_state_t::none
+  trigger_state(state_t::ACCEPTING, write_state_t::delay, false);
   seastar::with_gate(pending_dispatch, [this] {
       return seastar::futurize_apply([this] {
           auth_meta = seastar::make_lw_shared<AuthConnectionMeta>();
