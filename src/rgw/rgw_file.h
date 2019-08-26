@@ -111,16 +111,20 @@ namespace rgw {
       fh_hk.object = ok;
     }
 
-    fh_key(const uint64_t bk, const char *_o)
+    fh_key(const uint64_t bk, const char *_o, const std::string& _t)
       : version(0) {
       fh_hk.bucket = bk;
-      fh_hk.object = XXH64(_o, ::strlen(_o), seed);
+      std::string to = _t + ":" + _o;
+      fh_hk.object = XXH64(to.c_str(), to.length(), seed);
     }
-    
-    fh_key(const std::string& _b, const std::string& _o)
+
+    fh_key(const std::string& _b, const std::string& _o,
+	   const std::string& _t /* tenant */)
       : version(0) {
-      fh_hk.bucket = XXH64(_b.c_str(), _o.length(), seed);
-      fh_hk.object = XXH64(_o.c_str(), _o.length(), seed);
+      std::string tb = _t + ":" + _b;
+      std::string to = _t + ":" + _o;
+      fh_hk.bucket = XXH64(tb.c_str(), tb.length(), seed);
+      fh_hk.object = XXH64(to.c_str(), to.length(), seed);
     }
 
     void encode(buffer::list& bl) const {
@@ -140,6 +144,9 @@ namespace rgw {
       }
       DECODE_FINISH(bl);
     }
+
+    friend std::ostream& operator<<(std::ostream &os, fh_key const &fhk);
+
   }; /* fh_key */
 
   WRITE_CLASS_ENCODER(fh_key);
@@ -231,6 +238,7 @@ namespace rgw {
     };
 
     void clear_state();
+    void advance_mtime(uint32_t flags = FLAG_NONE);
 
     boost::variant<file, directory> variant_type;
 
@@ -342,6 +350,8 @@ namespace rgw {
       switch (fh.fh_type) {
       case RGW_FS_TYPE_DIRECTORY:
 	state.unix_mode = RGW_RWXMODE|S_IFDIR;
+	/* virtual directories are always invalid */
+	advance_mtime();
 	break;
       case RGW_FS_TYPE_FILE:
 	state.unix_mode = RGW_RWMODE|S_IFREG;
@@ -413,13 +423,17 @@ namespace rgw {
 
       if (mask & RGW_SETATTR_ATIME)
 	state.atime = st->st_atim;
-      if (mask & RGW_SETATTR_MTIME)
-	state.mtime = st->st_mtim;
+
+      if (mask & RGW_SETATTR_MTIME) {
+	if (fh.fh_type != RGW_FS_TYPE_DIRECTORY)
+	  state.mtime = st->st_mtim;
+      }
+
       if (mask & RGW_SETATTR_CTIME)
 	state.ctime = st->st_ctim;
     }
 
-    int stat(struct stat* st) {
+    int stat(struct stat* st, uint32_t flags = FLAG_NONE) {
       /* partial Unix attrs */
       memset(st, 0, sizeof(struct stat));
       st->st_dev = state.dev;
@@ -430,18 +444,10 @@ namespace rgw {
 
       st->st_mode = state.unix_mode;
 
-#ifdef HAVE_STAT_ST_MTIMESPEC_TV_NSEC
-      st->st_atimespec = state.atime;
-      st->st_mtimespec = state.mtime;
-      st->st_ctimespec = state.ctime;
-#else
-      st->st_atim = state.atime;
-      st->st_mtim = state.mtime;
-      st->st_ctim = state.ctime;
-#endif
-
       switch (fh.fh_type) {
       case RGW_FS_TYPE_DIRECTORY:
+	/* virtual directories are always invalid */
+	advance_mtime(flags);
 	st->st_nlink = state.nlink;
 	break;
       case RGW_FS_TYPE_FILE:
@@ -459,6 +465,16 @@ namespace rgw {
       default:
 	break;
       }
+
+#ifdef HAVE_STAT_ST_MTIMESPEC_TV_NSEC
+      st->st_atimespec = state.atime;
+      st->st_mtimespec = state.mtime;
+      st->st_ctimespec = state.ctime;
+#else
+      st->st_atim = state.atime;
+      st->st_mtim = state.mtime;
+      st->st_ctim = state.ctime;
+#endif
 
       return 0;
     }
@@ -522,14 +538,7 @@ namespace rgw {
       return key_name;
     }
 
-    fh_key make_fhk(const std::string& name) const {
-      if (depth <= 1)
-	return fh_key(fhk.fh_hk.object, name.c_str());
-      else {
-	std::string key_name = make_key_name(name.c_str());
-	return fh_key(fhk.fh_hk.bucket, key_name.c_str());
-      }
-    }
+    fh_key make_fhk(const std::string& name);
 
     void add_marker(uint64_t off, const rgw_obj_key& marker,
 		    uint8_t obj_type) {
@@ -1058,14 +1067,14 @@ namespace rgw {
 
       std::string obj_name{name};
       std::string key_name{parent->make_key_name(name)};
+      fh_key fhk = parent->make_fhk(obj_name);
 
       lsubdout(get_context(), rgw, 10)
-	<< __func__ << " lookup called on "
+	<< __func__ << " called on "
 	<< parent->object_name() << " for " << key_name
 	<< " (" << obj_name << ")"
+	<< " -> " << fhk
 	<< dendl;
-
-      fh_key fhk = parent->make_fhk(obj_name);
 
     retry:
       RGWFileHandle* fh =
@@ -1205,10 +1214,13 @@ namespace rgw {
 			    RGWFileHandle::FHCache::FLAG_LOCK);
       /* LATCHED */
       if (! fh) {
+	if (unlikely(fhk == root_fh.fh.fh_hk)) {
+	  /* lookup for root of this fs */
+	  fh = &root_fh;
+	  goto out;
+	}
 	lsubdout(get_context(), rgw, 0)
-	  << __func__ << " handle lookup failed <"
-	  << fhk.fh_hk.bucket << "," << fhk.fh_hk.object << ">"
-	  << "(need persistent handles)"
+	  << __func__ << " handle lookup failed " << fhk
 	  << dendl;
 	goto out;
       }
@@ -1286,12 +1298,14 @@ public:
   uint64_t* ioff;
   size_t ix;
   uint32_t d_count;
+  bool rcb_eof; // caller forced early stop in readdir cycle
 
   RGWListBucketsRequest(CephContext* _cct, RGWUserInfo *_user,
 			RGWFileHandle* _rgw_fh, rgw_readdir_cb _rcb,
 			void* _cb_arg, RGWFileHandle::readdir_offset& _offset)
     : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), offset(_offset),
-      cb_arg(_cb_arg), rcb(_rcb), ioff(nullptr), ix(0), d_count(0) {
+      cb_arg(_cb_arg), rcb(_rcb), ioff(nullptr), ix(0), d_count(0),
+      rcb_eof(false) {
 
     using boost::get;
 
@@ -1364,6 +1378,7 @@ public:
 			      << " dirent=" << ent.bucket.name
 			      << " call count=" << ix
 			      << dendl;
+	rcb_eof = true;
 	return;
       }
       ++ix;
@@ -1397,7 +1412,7 @@ public:
 			     << " is_truncated: " << is_truncated
 			     << dendl;
     }
-    return !is_truncated;
+    return !is_truncated && !rcb_eof;
   }
 
 }; /* RGWListBucketsRequest */
@@ -1417,12 +1432,14 @@ public:
   uint64_t* ioff;
   size_t ix;
   uint32_t d_count;
+  bool rcb_eof; // caller forced early stop in readdir cycle
 
   RGWReaddirRequest(CephContext* _cct, RGWUserInfo *_user,
 		    RGWFileHandle* _rgw_fh, rgw_readdir_cb _rcb,
 		    void* _cb_arg, RGWFileHandle::readdir_offset& _offset)
     : RGWLibRequest(_cct, _user), rgw_fh(_rgw_fh), offset(_offset),
-      cb_arg(_cb_arg), rcb(_rcb), ioff(nullptr), ix(0), d_count(0) {
+      cb_arg(_cb_arg), rcb(_rcb), ioff(nullptr), ix(0), d_count(0),
+      rcb_eof(false) {
 
     using boost::get;
 
@@ -1533,12 +1550,13 @@ public:
 			     << " (" << sref << ")" << ""
 			     << dendl;
 
-      if(! this->operator()(sref, next_marker, RGW_FS_TYPE_FILE)) {
+      if (! this->operator()(sref, next_marker, RGW_FS_TYPE_FILE)) {
 	/* caller cannot accept more */
 	lsubdout(cct, rgw, 5) << "readdir rcb failed"
 			      << " dirent=" << sref.data()
 			      << " call count=" << ix
 			      << dendl;
+	rcb_eof = true;
 	return;
       }
       ++ix;
@@ -1579,7 +1597,15 @@ public:
 	return;
       }
 
-      this->operator()(sref, next_marker, RGW_FS_TYPE_DIRECTORY);
+      if (! this->operator()(sref, next_marker, RGW_FS_TYPE_DIRECTORY)) {
+	/* caller cannot accept more */
+	lsubdout(cct, rgw, 5) << "readdir rcb failed"
+			      << " dirent=" << sref.data()
+			      << " call count=" << ix
+			      << dendl;
+	rcb_eof = true;
+	return;
+      }
       ++ix;
     }
   }
@@ -1599,7 +1625,7 @@ public:
 			     << " is_truncated: " << is_truncated
 			     << dendl;
     }
-    return !is_truncated;
+    return !is_truncated && !rcb_eof;
   }
 
 }; /* RGWReaddirRequest */
@@ -2365,7 +2391,8 @@ public:
 
   RGWWriteRequest(CephContext* _cct, RGWUserInfo *_user, RGWFileHandle* _fh,
 		  const std::string& _bname, const std::string& _oname)
-    : RGWLibContinuedReq(_cct, _user), bucket_name(_bname), obj_name(_oname),
+    : RGWLibContinuedReq(_cct, _user),
+      bucket_name(_bname), obj_name(_oname),
       rgw_fh(_fh), filter(nullptr), real_ofs(0),
       bytes_written(0), eio(false) {
 

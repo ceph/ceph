@@ -23,6 +23,13 @@ export class CdTableAction {
   disable?: (_: CdTableSelection) => boolean;
 
   /**
+   * In some cases you might want to give the user a hint why a button is
+   * disabled. The specified message will be shown to the user as a button
+   * tooltip.
+   */
+  disableDesc?: Function;
+
+  /**
    * Defines if the button can become 'primary' (displayed as button and not
    * 'hidden' in the menu). Only one button can be primary at a time. By
    * default all 'create' actions can be the action button if no or multiple

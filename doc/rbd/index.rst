@@ -45,6 +45,7 @@ to operate the :ref:`Ceph RADOS Gateway <object-gateway>`, the
 	Kernel Modules <rbd-ko>
 	Snapshots<rbd-snapshot>
 	Mirroring <rbd-mirroring>
+        Live-Migration <rbd-live-migration>
 	LIO iSCSI Gateway <iscsi-overview>
 	QEMU <qemu-rbd>
 	libvirt <libvirt>

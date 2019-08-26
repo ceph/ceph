@@ -502,7 +502,7 @@ public:
   int ll_lookupx(Inode *parent, const char *name, Inode **out,
 			struct ceph_statx *stx, unsigned want, unsigned flags,
 			const UserPerm& perms);
-  bool ll_forget(Inode *in, int count);
+  bool ll_forget(Inode *in, uint64_t count);
   bool ll_put(Inode *in);
   int ll_get_snap_ref(snapid_t snap);
 
@@ -1037,7 +1037,7 @@ private:
   void _fragmap_remove_stopped_mds(Inode *in, mds_rank_t mds);
 
   void _ll_get(Inode *in);
-  int _ll_put(Inode *in, int num);
+  int _ll_put(Inode *in, uint64_t num);
   void _ll_drop_pins();
 
   Fh *_create_fh(Inode *in, int flags, int cmode, const UserPerm& perms);
@@ -1188,7 +1188,7 @@ private:
   int _lookup_parent(Inode *in, const UserPerm& perms, Inode **parent=NULL);
   int _lookup_name(Inode *in, Inode *parent, const UserPerm& perms);
   int _lookup_ino(inodeno_t ino, const UserPerm& perms, Inode **inode=NULL);
-  bool _ll_forget(Inode *in, int count);
+  bool _ll_forget(Inode *in, uint64_t count);
 
 
   uint32_t deleg_timeout = 0;

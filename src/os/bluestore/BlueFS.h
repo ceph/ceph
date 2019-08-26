@@ -39,6 +39,17 @@ enum {
   l_bluefs_max_bytes_wal,
   l_bluefs_max_bytes_db,
   l_bluefs_max_bytes_slow,
+  l_bluefs_read_random_count,
+  l_bluefs_read_random_bytes,
+  l_bluefs_read_random_disk_count,
+  l_bluefs_read_random_disk_bytes,
+  l_bluefs_read_random_buffer_count,
+  l_bluefs_read_random_buffer_bytes,
+  l_bluefs_read_count,
+  l_bluefs_read_bytes,
+  l_bluefs_read_prefetch_count,
+  l_bluefs_read_prefetch_bytes,
+
   l_bluefs_last,
 };
 
@@ -219,6 +230,11 @@ public:
     FileReaderBuffer buf;
     bool random;
     bool ignore_eof;        ///< used when reading our log file
+
+    ceph::shared_mutex lock {
+     ceph::make_shared_mutex(std::string(), false, false, false)
+    };
+
 
     FileReader(FileRef f, uint64_t mpf, bool rand, bool ie)
       : file(f),

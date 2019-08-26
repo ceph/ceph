@@ -418,8 +418,14 @@ public:
   void finish_split_stats(const object_stat_sum_t& stats, ObjectStore::Transaction *t);
 
   void scrub(epoch_t queued, ThreadPool::TPHandle &handle);
+
+  bool is_scrub_registered();
   void reg_next_scrub();
   void unreg_next_scrub();
+
+  void on_info_history_change();
+
+  void scrub_requested(bool deep, bool repair, bool need_auto = false);
 
   bool is_forced_recovery_or_backfill() const {
     return get_state() & (PG_STATE_FORCED_RECOVERY | PG_STATE_FORCED_BACKFILL);
@@ -1699,6 +1705,8 @@ public:
     OpRequestRef active_rep_scrub;
     utime_t scrub_reg_stamp;  // stamp we registered for
 
+    static utime_t scrub_must_stamp() { return utime_t(0,1); }
+
     omap_stat_t omap_stats  = (const struct omap_stat_t){ 0 };
 
     // For async sleep
@@ -1707,11 +1715,12 @@ public:
     utime_t sleep_start;
 
     // flags to indicate explicitly requested scrubs (by admin)
-    bool must_scrub, must_deep_scrub, must_repair;
+    bool must_scrub, must_deep_scrub, must_repair, need_auto;
 
     // Priority to use for scrub scheduling
     unsigned priority = 0;
 
+    bool time_for_deep;
     // this flag indicates whether we would like to do auto-repair of the PG or not
     bool auto_repair;
     // this flag indicates that we are scrubbing post repair to verify everything is fixed
@@ -1830,6 +1839,8 @@ public:
       must_scrub = false;
       must_deep_scrub = false;
       must_repair = false;
+      need_auto = false;
+      time_for_deep = false;
       auto_repair = false;
       check_repair = false;
       deep_scrub_on_error = false;

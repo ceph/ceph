@@ -203,6 +203,7 @@ OPTION(mon_osd_cache_size, OPT_INT)  // the size of osdmaps cache, not to rely o
 
 OPTION(mon_cpu_threads, OPT_INT)
 OPTION(mon_osd_mapping_pgs_per_chunk, OPT_INT)
+OPTION(mon_clean_pg_upmaps_per_chunk, OPT_INT)
 OPTION(mon_osd_max_creating_pgs, OPT_INT)
 OPTION(mon_tick_interval, OPT_INT)
 OPTION(mon_session_timeout, OPT_INT)    // must send keepalive or subscribe
@@ -1076,6 +1077,7 @@ OPTION(bluestore_warn_on_bluefs_spillover, OPT_BOOL)
 OPTION(bluestore_warn_on_legacy_statfs, OPT_BOOL)
 OPTION(bluestore_log_op_age, OPT_DOUBLE)
 OPTION(bluestore_log_omap_iterator_age, OPT_DOUBLE)
+OPTION(bluestore_log_collection_list_age, OPT_DOUBLE)
 
 OPTION(kstore_max_ops, OPT_U64)
 OPTION(kstore_max_bytes, OPT_U64)
@@ -1374,7 +1376,6 @@ OPTION(rgw_op_thread_timeout, OPT_INT)
 OPTION(rgw_op_thread_suicide_timeout, OPT_INT)
 OPTION(rgw_thread_pool_size, OPT_INT)
 OPTION(rgw_num_control_oids, OPT_INT)
-OPTION(rgw_num_rados_handles, OPT_U32)
 OPTION(rgw_verify_ssl, OPT_BOOL) // should http_client try to verify ssl when sent https request
 
 /* The following are tunables for caches of RGW NFS (and other file

@@ -57,7 +57,8 @@ class CephFS(RESTController):
             "mds.imported_inodes",
             "mds.inodes",
             "mds.caps",
-            "mds.subtrees"
+            "mds.subtrees",
+            "mds_mem.ino"
         ]
 
         fs_id = self.fs_id_to_int(fs_id)
@@ -126,7 +127,7 @@ class CephFS(RESTController):
             if up:
                 gid = mdsmap['up']["mds_{0}".format(rank)]
                 info = mdsmap['info']['gid_{0}'.format(gid)]
-                dns = mgr.get_latest("mds", info['name'], "mds.inodes")
+                dns = mgr.get_latest("mds", info['name'], "mds_mem.dn")
                 inos = mgr.get_latest("mds", info['name'], "mds_mem.ino")
 
                 if rank == 0:
@@ -187,7 +188,7 @@ class CephFS(RESTController):
                 continue
 
             inos = mgr.get_latest("mds", daemon_info['name'], "mds_mem.ino")
-            dns = mgr.get_latest("mds", daemon_info['name'], "mds.inodes")
+            dns = mgr.get_latest("mds", daemon_info['name'], "mds_mem.dn")
 
             activity = CephService.get_rate(
                 "mds", daemon_info['name'], "mds_log.replay")

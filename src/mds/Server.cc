@@ -732,7 +732,7 @@ void Server::_session_logged(Session *session, uint64_t state_seq, bool open, ve
       Capability *cap = session->caps.front();
       CInode *in = cap->get_inode();
       dout(20) << " killing capability " << ccap_string(cap->issued()) << " on " << *in << dendl;
-      mds->locker->remove_client_cap(in, cap);
+      mds->locker->remove_client_cap(in, cap, true);
     }
     while (!session->leases.empty()) {
       ClientLease *r = session->leases.front();
@@ -933,8 +933,16 @@ void Server::find_idle_sessions()
   double queue_max_age = mds->get_dispatch_queue_max_age(ceph_clock_now());
   double cutoff = queue_max_age + mds->mdsmap->get_session_timeout();
 
+  // don't kick clients if we've been laggy
+  if (last_cleared_laggy < cutoff) {
+    dout(10) << " last cleared laggy " << last_cleared_laggy << "s ago (< cutoff " << cutoff
+	     << "), not marking any client stale" << dendl;
+    return;
+  }
+
   std::vector<Session*> to_evict;
 
+  bool defer_session_stale = g_conf().get_val<bool>("mds_defer_session_stale");
   const auto sessions_p1 = mds->sessionmap.by_state.find(Session::STATE_OPEN);
   if (sessions_p1 != mds->sessionmap.by_state.end() && !sessions_p1->second->empty()) {
     std::vector<Session*> new_stale;
@@ -954,6 +962,22 @@ void Server::find_idle_sessions()
 		   << " and renewed caps recently (" << last_cap_renew_span << "s ago)" << dendl;
 	  continue;
 	}
+      }
+
+      if (last_cap_renew_span >= mds->mdsmap->get_session_autoclose()) {
+	dout(20) << "evicting session " << session->info.inst << " since autoclose "
+		    "has arrived" << dendl;
+	// evict session without marking it stale
+	to_evict.push_back(session);
+	continue;
+      }
+
+      if (defer_session_stale &&
+	  !session->is_any_flush_waiter() &&
+	  !mds->locker->is_revoking_any_caps_from(session->get_client())) {
+	dout(20) << "deferring marking session " << session->info.inst << " stale "
+		    "since it holds no caps" << dendl;
+	continue;
       }
 
       auto it = session->info.client_metadata.find("timeout");
@@ -983,27 +1007,19 @@ void Server::find_idle_sessions()
 
     for (auto session : new_stale) {
       mds->sessionmap.set_state(session, Session::STATE_STALE);
-      mds->locker->revoke_stale_caps(session);
-      mds->locker->remove_stale_leases(session);
-      mds->send_message_client(MClientSession::create(CEPH_SESSION_STALE, session->get_push_seq()), session);
-      finish_flush_session(session, session->get_push_seq());
+      if (mds->locker->revoke_stale_caps(session)) {
+	mds->locker->remove_stale_leases(session);
+	finish_flush_session(session, session->get_push_seq());
+	auto m = MClientSession::create(CEPH_SESSION_STALE, session->get_push_seq());
+	mds->send_message_client(m, session);
+      } else {
+	to_evict.push_back(session);
+      }
     }
   }
 
   // autoclose
   cutoff = queue_max_age + mds->mdsmap->get_session_autoclose();
-
-  // don't kick clients if we've been laggy
-  if (last_cleared_laggy < cutoff) {
-    dout(10) << " last cleared laggy " << last_cleared_laggy << "s ago (< cutoff " << cutoff
-	     << "), not kicking any clients to be safe" << dendl;
-    return;
-  }
-
-  if (mds->sessionmap.get_sessions().size() == 1 && mds->mdsmap->get_num_in_mds() == 1) {
-    dout(20) << "skipping client eviction because there is only one" << dendl;
-    return;
-  }
 
   // Collect a list of sessions exceeding the autoclose threshold
   const auto sessions_p2 = mds->sessionmap.by_state.find(Session::STATE_STALE);

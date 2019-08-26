@@ -20,6 +20,11 @@ export class URLBuilderService {
   getCreate(absolute = true): string {
     return this.getURL(URLVerbs.CREATE, absolute);
   }
+
+  getCreateFrom(item: string, absolute = true): string {
+    return this.getURL(URLVerbs.CREATE, absolute, item);
+  }
+
   getDelete(absolute = true): string {
     return this.getURL(URLVerbs.DELETE, absolute);
   }
@@ -36,5 +41,10 @@ export class URLBuilderService {
   }
   getRemove(absolute = true): string {
     return this.getURL(URLVerbs.REMOVE, absolute);
+  }
+
+  // Prometheus wording
+  getRecreate(item: string, absolute = true): string {
+    return this.getURL(URLVerbs.RECREATE, absolute, item);
   }
 }

@@ -5,6 +5,7 @@
 #define RBD_MIRROR_IMAGE_SYNC_THROTTLER_H
 
 #include <list>
+#include <map>
 #include <set>
 #include <sstream>
 #include <string>
@@ -47,7 +48,8 @@ private:
   CephContext *m_cct;
   Mutex m_lock;
   uint32_t m_max_concurrent_syncs;
-  std::list<std::pair<std::string, Context *>> m_queue;
+  std::list<std::string> m_queue;
+  std::map<std::string, Context *> m_queued_ops;
   std::set<std::string> m_inflight_ops;
 
   const char **get_tracked_conf_keys() const override;

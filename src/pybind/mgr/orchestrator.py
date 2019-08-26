@@ -8,14 +8,16 @@ import sys
 import time
 import fnmatch
 import uuid
+import datetime
 
 import six
 
-from mgr_module import MgrModule
+from mgr_module import MgrModule, PersistentStoreDict
 from mgr_util import format_bytes
 
 try:
-    from typing import TypeVar, Generic, List, Optional, Union, Tuple
+    from typing import TypeVar, Generic, List, Optional, Union, Tuple, Iterator
+
     T = TypeVar('T')
     G = Generic[T]
 except ImportError:
@@ -142,6 +144,23 @@ class ReadCompletion(_Completion):
         We must wait for a read operation only if it is not complete.
         """
         return not self.is_complete
+
+
+class TrivialReadCompletion(ReadCompletion):
+    """
+    This is the trivial completion simply wrapping a result.
+    """
+    def __init__(self, result):
+        super(TrivialReadCompletion, self).__init__()
+        self._result = result
+
+    @property
+    def result(self):
+        return self._result
+
+    @property
+    def is_complete(self):
+        return True
 
 
 class WriteCompletion(_Completion):
@@ -308,8 +327,8 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def describe_service(self, service_type=None, service_id=None, node_name=None):
-        # type: (Optional[str], Optional[str], Optional[str]) -> ReadCompletion[List[ServiceDescription]]
+    def describe_service(self, service_type=None, service_id=None, node_name=None, refresh=False):
+        # type: (Optional[str], Optional[str], Optional[str], bool) -> ReadCompletion[List[ServiceDescription]]
         """
         Describe a service (of any kind) that is already configured in
         the orchestrator.  For example, when viewing an OSD in the dashboard
@@ -489,13 +508,16 @@ class ServiceDescription(object):
     is literally up this second, it's a description of where the orchestrator
     has decided the service should run.
     """
-    def __init__(self):
+
+    def __init__(self, nodename=None, container_id=None, service=None, service_instance=None,
+                 service_type=None, version=None, rados_config_location=None,
+                 service_url=None, status=None, status_desc=None):
         # Node is at the same granularity as InventoryNode
-        self.nodename = None
+        self.nodename = nodename
 
         # Not everyone runs in containers, but enough people do to
         # justify having this field here.
-        self.container_id = None
+        self.container_id = container_id
 
         # Some services can be deployed in groups. For example, mds's can
         # have an active and standby daemons, and nfs-ganesha can run daemons
@@ -506,33 +528,33 @@ class ServiceDescription(object):
         # Filesystem name in the FSMap).
         #
         # Single-instance services should leave this set to None
-        self.service = None
+        self.service = service
 
         # The orchestrator will have picked some names for daemons,
         # typically either based on hostnames or on pod names.
         # This is the <foo> in mds.<foo>, the ID that will appear
         # in the FSMap/ServiceMap.
-        self.service_instance = None
+        self.service_instance = service_instance
 
         # The type of service (osd, mon, mgr, etc.)
-        self.service_type = None
+        self.service_type = service_type
 
         # Service version that was deployed
-        self.version = None
+        self.version = version
 
         # Location of the service configuration when stored in rados
         # object. Format: "rados://<pool>/[<namespace/>]<object>"
-        self.rados_config_location = None
+        self.rados_config_location = rados_config_location
 
         # If the service exposes REST-like API, this attribute should hold
         # the URL.
-        self.service_url = None
+        self.service_url = service_url
 
         # Service status: -1 error, 0 stopped, 1 running
-        self.status = None
+        self.status = status
 
         # Service status description when status == -1.
-        self.status_desc = None
+        self.status_desc = status_desc
 
     def to_json(self):
         out = {
@@ -548,6 +570,10 @@ class ServiceDescription(object):
             'status_desc': self.status_desc,
         }
         return {k: v for (k, v) in out.items() if v is not None}
+
+    @classmethod
+    def from_json(cls, data):
+        return cls(**data)
 
 
 class DeviceSelection(object):
@@ -808,6 +834,10 @@ class InventoryDevice(object):
         dev.extended = data
         return dev
 
+    @classmethod
+    def from_ceph_volume_inventory_list(cls, datas):
+        return [cls.from_ceph_volume_inventory(d) for d in datas]
+
     def pretty_print(self, only_header=False):
         """Print a human friendly line with the information of the device
 
@@ -844,6 +874,11 @@ class InventoryNode(object):
 
     def to_json(self):
         return {'name': self.name, 'devices': [d.to_json() for d in self.devices]}
+
+    @classmethod
+    def from_nested_items(cls, hosts):
+        devs = InventoryDevice.from_ceph_volume_inventory_list
+        return [cls(item[0], devs(item[1].data)) for item in hosts]
 
 
 def _mk_orch_methods(cls):
@@ -948,3 +983,103 @@ class OrchestratorClientMixin(Orchestrator):
                 break
         for c in completions:
             self._update_completion_progress(c)
+
+
+class OutdatableData(object):
+    DATEFMT = '%Y-%m-%d %H:%M:%S.%f'
+
+    def __init__(self, data=None, last_refresh=None):
+        # type: (Optional[dict], Optional[datetime.datetime]) -> None
+        self._data = data
+        if data is not None and last_refresh is None:
+            self.last_refresh = datetime.datetime.utcnow()
+        else:
+            self.last_refresh = last_refresh
+
+    def json(self):
+        if self.last_refresh is not None:
+            timestr = self.last_refresh.strftime(self.DATEFMT)
+        else:
+            timestr = None
+
+        return {
+            "data": self._data,
+            "last_refresh": timestr,
+        }
+
+    @property
+    def data(self):
+        return self._data
+
+    # @data.setter
+    # No setter, as it doesn't work as expected: It's not saved in store automatically
+
+    @classmethod
+    def time_from_string(cls, timestr):
+        if timestr is None:
+            return None
+        # drop the 'Z' timezone indication, it's always UTC
+        timestr = timestr.rstrip('Z')
+        return datetime.datetime.strptime(timestr, cls.DATEFMT)
+
+
+    @classmethod
+    def from_json(cls, data):
+        return cls(data['data'], cls.time_from_string(data['last_refresh']))
+
+    def outdated(self, timeout_min=None):
+        if timeout_min is None:
+            timeout_min = 10
+        if self.last_refresh is None:
+            return True
+        cutoff = datetime.datetime.utcnow() - datetime.timedelta(
+            minutes=timeout_min)
+        return self.last_refresh < cutoff
+
+    def __repr__(self):
+        return 'OutdatableData(data={}, last_refresh={})'.format(self._data, self.last_refresh)
+
+
+class OutdatableDictMixin(object):
+    """
+    Toolbox for implementing a cache. As every orchestrator has
+    different needs, we cannot implement any logic here.
+    """
+
+    def __getitem__(self, item):
+        # type: (str) -> OutdatableData
+        return OutdatableData.from_json(super(OutdatableDictMixin, self).__getitem__(item))
+
+    def __setitem__(self, key, value):
+        # type: (str, OutdatableData) -> None
+        val = None if value is None else value.json()
+        super(OutdatableDictMixin, self).__setitem__(key, val)
+
+    def items(self):
+        # type: () -> Iterator[Tuple[str, OutdatableData]]
+        for item in super(OutdatableDictMixin, self).items():
+            k, v = item
+            yield k, OutdatableData.from_json(v)
+
+    def items_filtered(self, keys=None):
+        if keys:
+            return [(host, self[host]) for host in keys]
+        else:
+            return list(self.items())
+
+    def any_outdated(self, timeout=None):
+        items = self.items()
+        if not list(items):
+            return True
+        return any([i[1].outdated(timeout) for i in items])
+
+    def remove_outdated(self):
+        outdated = [item[0] for item in self.items() if item[1].outdated()]
+        for o in outdated:
+            del self[o]
+
+class OutdatablePersistentDict(OutdatableDictMixin, PersistentStoreDict):
+    pass
+
+class OutdatableDict(OutdatableDictMixin, dict):
+    pass

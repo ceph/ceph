@@ -691,8 +691,14 @@ int main(int argc, char **argv)
     for (auto& s :  devs_source) {
       auto i = cur_devs_map.find(s);
       if (i != cur_devs_map.end()) {
-	src_devs.emplace(*i);
-	src_dev_ids.emplace(i->second);
+        if (s == dev_target) {
+	  cerr << "Device " << dev_target
+	       << " is present in both source and target lists, omitted."
+	       << std::endl;
+        } else {
+	  src_devs.emplace(*i);
+	  src_dev_ids.emplace(i->second);
+	}
       } else {
 	cerr << "can't migrate " << s << ", not a valid bluefs volume "
 	      << std::endl;
@@ -713,8 +719,6 @@ int main(int argc, char **argv)
 	exit(EXIT_FAILURE);
       }
 
-      bool need_db = dev_target_id == BlueFS::BDEV_NEWDB;
-
       BlueStore bluestore(cct.get(), path);
       int r = bluestore.migrate_to_existing_bluefs_device(
 	src_dev_ids,
@@ -727,13 +731,14 @@ int main(int argc, char **argv)
 	  }
 	}
       } else {
+        bool need_db = dev_target_id == BlueFS::BDEV_DB;
 	cerr << "failed to migrate to existing BlueFS device: "
-	     << (need_db ? BlueFS::BDEV_DB : BlueFS::BDEV_DB)
+	     << (need_db ? BlueFS::BDEV_DB : BlueFS::BDEV_WAL)
 	     << " " << dev_target
 	     << cpp_strerror(r)
 	     << std::endl;
       }
-      ceph_assert(r == 0);
+      return r;
     } else {
       // Migrate to a new BlueFS volume
       // via creating either DB or WAL volume

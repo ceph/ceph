@@ -196,6 +196,7 @@ class RgwClient(RestClient):
     _port = None
     _ssl = None
     _user_instances = {}
+    _rgw_settings_snapshot = None
 
     @staticmethod
     def _load_settings():
@@ -231,7 +232,23 @@ class RgwClient(RestClient):
         RgwClient._user_instances[RgwClient._SYSTEM_USERID] = instance
 
     @staticmethod
+    def _rgw_settings():
+        return (Settings.RGW_API_HOST,
+                Settings.RGW_API_PORT,
+                Settings.RGW_API_ACCESS_KEY,
+                Settings.RGW_API_SECRET_KEY,
+                Settings.RGW_API_ADMIN_RESOURCE,
+                Settings.RGW_API_SCHEME,
+                Settings.RGW_API_USER_ID,
+                Settings.RGW_API_SSL_VERIFY)
+
+    @staticmethod
     def instance(userid):
+        # Discard all cached instances if any rgw setting has changed
+        if RgwClient._rgw_settings_snapshot != RgwClient._rgw_settings():
+            RgwClient._rgw_settings_snapshot = RgwClient._rgw_settings()
+            RgwClient._user_instances.clear()
+
         if not RgwClient._user_instances:
             RgwClient._load_settings()
 

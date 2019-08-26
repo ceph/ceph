@@ -143,7 +143,7 @@ template <typename I>
 void ImageRequest<I>::send() {
   I &image_ctx = this->m_image_ctx;
   ceph_assert(m_aio_comp->is_initialized(get_aio_type()));
-  ceph_assert(m_aio_comp->is_started() ^ (get_aio_type() == AIO_TYPE_FLUSH));
+  ceph_assert(m_aio_comp->is_started());
 
   CephContext *cct = image_ctx.cct;
   AioCompletion *aio_comp = this->m_aio_comp;
@@ -618,6 +618,7 @@ void ImageFlushRequest<I>::send_request() {
     // in-flight ops are flushed prior to closing the journal
     uint64_t journal_tid = image_ctx.journal->append_io_event(
       journal::EventEntry(journal::AioFlushEvent()), 0, 0, false, 0);
+    image_ctx.journal->user_flushed();
 
     ctx = new FunctionContext(
       [&image_ctx, journal_tid, ctx](int r) {
@@ -639,8 +640,7 @@ void ImageFlushRequest<I>::send_request() {
   }
 
   // ensure all in-flight IOs are settled if non-user flush request
-  image_ctx.flush_async_operations(ctx);
-  aio_comp->start_op(true);
+  aio_comp->async_op.flush(ctx);
   aio_comp->put();
 
   // might be flushing during image shutdown

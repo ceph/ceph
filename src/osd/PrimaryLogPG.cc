@@ -2053,6 +2053,11 @@ void PrimaryLogPG::do_op(OpRequestRef& op)
     osd->reply_op_error(op, -ENAMETOOLONG);
     return;
   }
+  if (m->get_hobj().oid.name.empty()) {
+    dout(4) << "do_op empty oid name is not allowed" << dendl;
+    osd->reply_op_error(op, -EINVAL);
+    return;
+  }
 
   if (int r = osd->store->validate_hobject_key(head)) {
     dout(4) << "do_op object " << head << " invalid for backing store: "
@@ -11388,7 +11393,11 @@ void PrimaryLogPG::kick_object_context_blocked(ObjectContextRef obc)
 
   if (obc->requeue_scrub_on_unblock) {
     obc->requeue_scrub_on_unblock = false;
-    requeue_scrub();
+    // only requeue if we are still active: we may be unblocking
+    // because we are resetting for a new peering interval
+    if (is_active()) {
+      requeue_scrub();
+    }
   }
 }
 

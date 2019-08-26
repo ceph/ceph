@@ -782,8 +782,8 @@ int KernelDevice::_sync_write(uint64_t off, bufferlist &bl, bool buffered, int w
   }
 #ifdef HAVE_SYNC_FILE_RANGE
   if (buffered) {
-    // initiate IO (but do not wait)
-    r = ::sync_file_range(fd_buffereds[WRITE_LIFE_NOT_SET], off, len, SYNC_FILE_RANGE_WRITE);
+    // initiate IO and wait till it completes
+    r = ::sync_file_range(fd_buffereds[WRITE_LIFE_NOT_SET], off, len, SYNC_FILE_RANGE_WRITE|SYNC_FILE_RANGE_WAIT_AFTER|SYNC_FILE_RANGE_WAIT_BEFORE);
     if (r < 0) {
       r = -errno;
       derr << __func__ << " sync_file_range error: " << cpp_strerror(r) << dendl;
@@ -845,9 +845,6 @@ int KernelDevice::aio_write(
 
 #ifdef HAVE_LIBAIO
   if (aio && dio && !buffered) {
-    ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
-    ++ioc->num_pending;
-    aio_t& aio = ioc->pending_aios.back();
     if (cct->_conf->bdev_inject_crash &&
 	rand() % cct->_conf->bdev_inject_crash == 0) {
       derr << __func__ << " bdev_inject_crash: dropping io 0x" << std::hex
@@ -855,16 +852,48 @@ int KernelDevice::aio_write(
 	   << dendl;
       // generate a real io so that aio_wait behaves properly, but make it
       // a read instead of write, and toss the result.
+      ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+      ++ioc->num_pending;
+      auto& aio = ioc->pending_aios.back();
       aio.pread(off, len);
       ++injecting_crash;
     } else {
-      bl.prepare_iov(&aio.iov);
-      dout(30) << aio << dendl;
-      aio.bl.claim_append(bl);
-      aio.pwritev(off, len);
+      if (bl.length() <= RW_IO_MAX) {
+	// fast path (non-huge write)
+	ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+	++ioc->num_pending;
+	auto& aio = ioc->pending_aios.back();
+	bl.prepare_iov(&aio.iov);
+	aio.bl.claim_append(bl);
+	aio.pwritev(off, len);
+	dout(30) << aio << dendl;
+	dout(5) << __func__ << " 0x" << std::hex << off << "~" << len
+		<< std::dec << " aio " << &aio << dendl;
+      } else {
+	// write in RW_IO_MAX-sized chunks
+	uint64_t prev_len = 0;
+	while (prev_len < bl.length()) {
+	  bufferlist tmp;
+	  if (prev_len + RW_IO_MAX < bl.length()) {
+	    tmp.substr_of(bl, prev_len, RW_IO_MAX);
+	  } else {
+	    tmp.substr_of(bl, prev_len, bl.length() - prev_len);
+	  }
+	  auto len = tmp.length();
+	  ioc->pending_aios.push_back(aio_t(ioc, choose_fd(false, write_hint)));
+	  ++ioc->num_pending;
+	  auto& aio = ioc->pending_aios.back();
+	  tmp.prepare_iov(&aio.iov);
+	  aio.bl.claim_append(tmp);
+	  aio.pwritev(off + prev_len, len);
+	  dout(30) << aio << dendl;
+	  dout(5) << __func__ << " 0x" << std::hex << off + prev_len
+		  << "~" << len
+		  << std::dec << " aio " << &aio << " (piece)" << dendl;
+	  prev_len += len;
+	}
+      }
     }
-    dout(5) << __func__ << " 0x" << std::hex << off << "~" << len
-	    << std::dec << " aio " << &aio << dendl;
   } else
 #endif
   {
@@ -1007,6 +1036,7 @@ int KernelDevice::read_random(uint64_t off, uint64_t len, char *buf,
                        bool buffered)
 {
   dout(5) << __func__ << " 0x" << std::hex << off << "~" << len << std::dec
+          << "buffered " << buffered
 	  << dendl;
   ceph_assert(len > 0);
   ceph_assert(off < size);

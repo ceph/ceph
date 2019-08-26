@@ -2213,11 +2213,11 @@ int RGWCopyObj_ObjStore_S3::get_params()
   }
 
   copy_source = s->info.env->get("HTTP_X_AMZ_COPY_SOURCE");
-  md_directive = s->info.env->get("HTTP_X_AMZ_METADATA_DIRECTIVE");
-  if (md_directive) {
-    if (strcasecmp(md_directive, "COPY") == 0) {
+  auto tmp_md_d = s->info.env->get("HTTP_X_AMZ_METADATA_DIRECTIVE");
+  if (tmp_md_d) {
+    if (strcasecmp(tmp_md_d, "COPY") == 0) {
       attrs_mod = RGWRados::ATTRSMOD_NONE;
-    } else if (strcasecmp(md_directive, "REPLACE") == 0) {
+    } else if (strcasecmp(tmp_md_d, "REPLACE") == 0) {
       attrs_mod = RGWRados::ATTRSMOD_REPLACE;
     } else if (!source_zone.empty()) {
       attrs_mod = RGWRados::ATTRSMOD_NONE; // default for intra-zone_group copy
@@ -2226,6 +2226,7 @@ int RGWCopyObj_ObjStore_S3::get_params()
       ldout(s->cct, 0) << s->err.message << dendl;
       return -EINVAL;
     }
+    md_directive = tmp_md_d;
   }
 
   if (source_zone.empty() &&
@@ -2591,12 +2592,12 @@ int RGWSetRequestPayment_ObjStore_S3::get_params()
   const auto max_size = s->cct->_conf->rgw_max_put_param_size;
 
   int r = 0;
-  bufferlist data;
-  std::tie(r, data) = rgw_rest_read_all_input(s, max_size, false);
+  std::tie(r, in_data) = rgw_rest_read_all_input(s, max_size, false);
 
   if (r < 0) {
     return r;
   }
+
 
   RGWSetRequestPaymentParser parser;
 
@@ -2605,8 +2606,8 @@ int RGWSetRequestPayment_ObjStore_S3::get_params()
     return -EIO;
   }
 
-  char* buf = data.c_str();
-  if (!parser.parse(buf, data.length(), 1)) {
+  char* buf = in_data.c_str();
+  if (!parser.parse(buf, in_data.length(), 1)) {
     ldout(s->cct, 10) << "failed to parse data: " << buf << dendl;
     return -EINVAL;
   }
@@ -2897,7 +2898,7 @@ void RGWDeleteMultiObj_ObjStore_S3::send_partial_response(rgw_obj_key& key,
 
       s->formatter->dump_string("Key", key.name);
       s->formatter->dump_string("VersionId", key.instance);
-      s->formatter->dump_int("Code", r.http_ret);
+      s->formatter->dump_string("Code", r.s3_code);
       s->formatter->dump_string("Message", r.s3_code);
       s->formatter->close_section();
     }
@@ -3480,7 +3481,7 @@ int RGWHandler_REST_S3::init(RGWRados *store, struct req_state *s,
       (! s->info.env->get("HTTP_X_AMZ_COPY_SOURCE_RANGE")) &&
       (! s->info.args.exists("uploadId"))) {
 
-    ret = RGWCopyObj::parse_copy_location(url_decode(copy_source),
+    ret = RGWCopyObj::parse_copy_location(copy_source,
                                           s->init_state.src_bucket,
                                           s->src_object);
     if (!ret) {
@@ -4504,9 +4505,14 @@ rgw::auth::s3::STSEngine::get_session_token(const boost::string_view& session_to
     ldout(cct, 0) << "ERROR: Decryption failed: " << error << dendl;
     return -EPERM;
   } else {
-    dec_output.append('\0');
-    auto iter = dec_output.cbegin();
-    decode(token, iter);
+    try {
+      dec_output.append('\0');
+      auto iter = dec_output.cbegin();
+      decode(token, iter);
+    } catch (const buffer::error& e) {
+      ldout(cct, 0) << "ERROR: decode SessionToken failed: " << error << dendl;
+      return -EINVAL;
+    }
   }
   return 0;
 }

@@ -391,15 +391,20 @@ void Journaler::committed(const Future &future) {
   m_trimmer->committed(future_impl->get_commit_tid());
 }
 
-void Journaler::start_append(int flush_interval, uint64_t flush_bytes,
-			     double flush_age, uint64_t max_in_flight_appends) {
+void Journaler::start_append(uint64_t max_in_flight_appends) {
   ceph_assert(m_recorder == nullptr);
 
   // TODO verify active object set >= current replay object set
 
   m_recorder = new JournalRecorder(m_data_ioctx, m_object_oid_prefix,
-				   m_metadata, flush_interval, flush_bytes,
-				   flush_age, max_in_flight_appends);
+				   m_metadata, max_in_flight_appends);
+}
+
+void Journaler::set_append_batch_options(int flush_interval,
+                                         uint64_t flush_bytes,
+                                         double flush_age) {
+  ceph_assert(m_recorder != nullptr);
+  m_recorder->set_append_batch_options(flush_interval, flush_bytes, flush_age);
 }
 
 void Journaler::stop_append(Context *on_safe) {
@@ -412,7 +417,7 @@ void Journaler::stop_append(Context *on_safe) {
       delete recorder;
       on_safe->complete(r);
     });
-  recorder->flush(on_safe);
+  recorder->shut_down(on_safe);
 }
 
 uint64_t Journaler::get_max_append_size() const {

@@ -3,12 +3,12 @@ import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastModule } from 'ng2-toastr';
 import { AlertModule } from 'ngx-bootstrap/alert';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { ModalModule } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
 import { TooltipModule } from 'ngx-bootstrap/tooltip';
+import { ToastrModule } from 'ngx-toastr';
 import { BehaviorSubject, of } from 'rxjs';
 
 import {
@@ -47,7 +47,7 @@ describe('RbdListComponent', () => {
       TabsModule.forRoot(),
       ModalModule.forRoot(),
       TooltipModule.forRoot(),
-      ToastModule.forRoot(),
+      ToastrModule.forRoot(),
       AlertModule.forRoot(),
       RouterTestingModule,
       HttpClientTestingModule

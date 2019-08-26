@@ -613,8 +613,8 @@ struct RGWZone {
 
   bool is_read_only() const { return read_only; }
 
-  bool syncs_from(const std::string& zone_id) const {
-    return (sync_from_all || sync_from.find(zone_id) != sync_from.end());
+  bool syncs_from(const std::string& zone_name) const {
+    return (sync_from_all || sync_from.find(zone_name) != sync_from.end());
   }
 };
 WRITE_CLASS_ENCODER(RGWZone)

@@ -503,7 +503,7 @@ public:
       f->dump_stream("pgid") << i.pgid;
       f->dump_stream("sched_time") << i.sched_time;
       f->dump_stream("deadline") << i.deadline;
-      f->dump_bool("forced", i.sched_time == i.deadline);
+      f->dump_bool("forced", i.sched_time == PG::Scrubber::scrub_must_stamp());
       f->close_section();
     }
     f->close_section();
@@ -1563,6 +1563,14 @@ private:
     /// send time -> deadline -> remaining replies
     map<utime_t, pair<utime_t, int>> ping_history;
 
+    bool is_stale(utime_t stale) {
+      if (ping_history.empty()) {
+        return false;
+      }
+      utime_t oldest_deadline = ping_history.begin()->second.first;
+      return oldest_deadline <= stale;
+    }
+
     bool is_unhealthy(utime_t now) {
       if (ping_history.empty()) {
         /// we haven't sent a ping yet or we have got all replies,
@@ -1606,7 +1614,7 @@ private:
   void _remove_heartbeat_peer(int p);
   bool heartbeat_reset(Connection *con);
   void maybe_update_heartbeat_peers();
-  void reset_heartbeat_peers();
+  void reset_heartbeat_peers(bool all);
   bool heartbeat_peers_need_update() {
     return heartbeat_need_update.load();
   }
@@ -2148,6 +2156,7 @@ protected:
 
   // -- scrubbing --
   void sched_scrub();
+  void resched_all_scrubs();
   bool scrub_random_backoff();
   bool scrub_load_below_threshold();
   bool scrub_time_permit(utime_t now);
@@ -2295,6 +2304,7 @@ private:
 
   float get_osd_recovery_sleep();
   float get_osd_delete_sleep();
+  float get_osd_snap_trim_sleep();
 
   void probe_smart(const string& devid, ostream& ss);
 

@@ -372,8 +372,10 @@ struct transition_action
   transition_action() : days(0) {}
 };
 
+/* XXX why not LCRule? */
 struct lc_op
 {
+  string id;
   bool status{false};
   bool dm_expiration{false};
   int expiration{0};
@@ -383,7 +385,13 @@ struct lc_op
   boost::optional<RGWObjTags> obj_tags;
   map<string, transition_action> transitions;
   map<string, transition_action> noncur_transitions;
-  
+
+  /* ctors are nice */
+  lc_op() = delete;
+
+  lc_op(const std::string id) : id(id)
+    {}
+
   void dump(Formatter *f) const;
 };
 
@@ -391,7 +399,7 @@ class RGWLifecycleConfiguration
 {
 protected:
   CephContext *cct;
-  map<string, lc_op> prefix_map;
+  multimap<string, lc_op> prefix_map;
   multimap<string, LCRule> rule_map;
   bool _add_rule(const LCRule& rule);
   bool has_same_action(const lc_op& first, const lc_op& second);
@@ -432,7 +440,7 @@ public:
   bool valid();
 
   multimap<string, LCRule>& get_rule_map() { return rule_map; }
-  map<string, lc_op>& get_prefix_map() { return prefix_map; }
+  multimap<string, lc_op>& get_prefix_map() { return prefix_map; }
 /*
   void create_default(string id, string name) {
     ACLGrant grant;
@@ -499,7 +507,8 @@ class RGWLC : public DoutPrefixProvider {
 
   private:
 
-  int handle_multipart_expiration(RGWRados::Bucket *target, const map<string, lc_op>& prefix_map);
+  int handle_multipart_expiration(RGWRados::Bucket *target,
+				  const multimap<string, lc_op>& prefix_map);
 };
 
 namespace rgw::lc {

@@ -1310,8 +1310,10 @@ protected:
   const char *if_unmod;
   const char *if_match;
   const char *if_nomatch;
-  const char *copy_source = nullptr;
-  const char *md_directive = nullptr;
+  // Required or it is not a copy operation
+  std::string_view copy_source;
+  // Not actually required
+  std::optional<std::string_view> md_directive;
 
   off_t ofs;
   off_t len;
@@ -1596,6 +1598,7 @@ public:
 class RGWSetRequestPayment : public RGWOp {
 protected:
   bool requester_pays;
+  bufferlist in_data;
 public:
  RGWSetRequestPayment() : requester_pays(false) {}
 

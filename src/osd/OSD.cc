@@ -2845,6 +2845,18 @@ float OSD::get_osd_delete_sleep()
   return cct->_conf.get_val<double>("osd_delete_sleep_hdd");
 }
 
+float OSD::get_osd_snap_trim_sleep()
+{
+  float osd_snap_trim_sleep = cct->_conf.get_val<double>("osd_snap_trim_sleep");
+  if (osd_snap_trim_sleep > 0)
+    return osd_snap_trim_sleep;
+  if (!store_is_rotational && !journal_is_rotational)
+    return cct->_conf.get_val<double>("osd_snap_trim_sleep_ssd");
+  if (store_is_rotational && !journal_is_rotational)
+    return cct->_conf.get_val<double>("osd_snap_trim_sleep_hybrid");
+  return cct->_conf.get_val<double>("osd_snap_trim_sleep_hdd");
+}
+
 int OSD::init()
 {
   CompatSet initial, diff;
@@ -3884,7 +3896,7 @@ int OSD::shutdown()
   osd_lock.Lock();
 
   boot_finisher.stop();
-  reset_heartbeat_peers();
+  reset_heartbeat_peers(true);
 
   tick_timer.shutdown();
 
@@ -4857,9 +4869,9 @@ void OSD::maybe_update_heartbeat_peers()
 	dout(10) << "maybe_update_heartbeat_peers forcing update after " << dur << " seconds" << dendl;
 	heartbeat_set_peers_need_update();
 	last_heartbeat_resample = now;
-        if (is_waiting_for_healthy()) {
-	  reset_heartbeat_peers();   // we want *new* peers!
-        }
+	// automatically clean up any stale heartbeat peers
+	// if we are unhealthy, then clean all
+	reset_heartbeat_peers(is_waiting_for_healthy());
       }
     }
   }
@@ -4949,20 +4961,27 @@ void OSD::maybe_update_heartbeat_peers()
   dout(10) << "maybe_update_heartbeat_peers " << heartbeat_peers.size() << " peers, extras " << extras << dendl;
 }
 
-void OSD::reset_heartbeat_peers()
+void OSD::reset_heartbeat_peers(bool all)
 {
   ceph_assert(osd_lock.is_locked());
   dout(10) << "reset_heartbeat_peers" << dendl;
+  utime_t stale = ceph_clock_now();
+  stale -= cct->_conf.get_val<int64_t>("osd_heartbeat_stale");
   std::lock_guard l(heartbeat_lock);
-  while (!heartbeat_peers.empty()) {
-    HeartbeatInfo& hi = heartbeat_peers.begin()->second;
-    hi.con_back->mark_down();
-    if (hi.con_front) {
-      hi.con_front->mark_down();
+  for (auto it = heartbeat_peers.begin(); it != heartbeat_peers.end();) {
+    HeartbeatInfo& hi = it->second;
+    if (all || hi.is_stale(stale)) {
+      hi.con_back->mark_down();
+      if (hi.con_front) {
+        hi.con_front->mark_down();
+      }
+      // stop sending failure_report to mon too
+      failure_queue.erase(it->first);
+      heartbeat_peers.erase(it++);
+    } else {
+      it++;
     }
-    heartbeat_peers.erase(heartbeat_peers.begin());
   }
-  failure_queue.clear();
 }
 
 void OSD::handle_osd_ping(MOSDPing *m)
@@ -5356,15 +5375,15 @@ void OSD::tick()
 
   if (is_waiting_for_healthy()) {
     start_boot();
-    if (is_waiting_for_healthy()) {
-      // failed to boot
-      std::lock_guard l(heartbeat_lock);
-      utime_t now = ceph_clock_now();
-      if (now - last_mon_heartbeat > cct->_conf->osd_mon_heartbeat_interval) {
-        last_mon_heartbeat = now;
-        dout(1) << __func__ << " checking mon for new map" << dendl;
-        osdmap_subscribe(osdmap->get_epoch() + 1, false);
-      }
+  }
+
+  if (is_waiting_for_healthy() || is_booting()) {
+    std::lock_guard l(heartbeat_lock);
+    utime_t now = ceph_clock_now();
+    if (now - last_mon_heartbeat > cct->_conf->osd_mon_heartbeat_interval) {
+      last_mon_heartbeat = now;
+      dout(1) << __func__ << " checking mon for new map" << dendl;
+      osdmap_subscribe(osdmap->get_epoch() + 1, false);
     }
   }
 
@@ -6298,7 +6317,7 @@ void OSD::send_beacon(const ceph::coarse_mono_clock::time_point& now)
     {
       std::lock_guard l{min_last_epoch_clean_lock};
       beacon = new MOSDBeacon(osdmap->get_epoch(), min_last_epoch_clean);
-      std::swap(beacon->pgs, min_last_epoch_clean_pgs);
+      beacon->pgs = min_last_epoch_clean_pgs;
       last_sent_beacon = now;
     }
     monc->send_mon_message(beacon);
@@ -7626,6 +7645,18 @@ void OSD::sched_scrub()
       PGRef pg = _lookup_lock_pg(scrub.pgid);
       if (!pg)
 	continue;
+      // This has already started, so go on to the next scrub job
+      if (pg->scrubber.active) {
+	pg->unlock();
+	dout(30) << __func__ << ": already in progress pgid " << scrub.pgid << dendl;
+	continue;
+      }
+      // If it is reserving, let it resolve before going to the next scrub job
+      if (pg->scrubber.reserved) {
+	pg->unlock();
+	dout(30) << __func__ << ": reserve in progress pgid " << scrub.pgid << dendl;
+	break;
+      }
       dout(10) << "sched_scrub scrubbing " << scrub.pgid << " at " << scrub.sched_time
 	       << (pg->get_must_scrub() ? ", explicitly requested" :
 		   (load_is_low ? ", load_is_low" : " deadline < now"))
@@ -7638,6 +7669,27 @@ void OSD::sched_scrub()
     } while (service.next_scrub_stamp(scrub, &scrub));
   }
   dout(20) << "sched_scrub done" << dendl;
+}
+
+void OSD::resched_all_scrubs()
+{
+  dout(10) << __func__ << ": start" << dendl;
+  OSDService::ScrubJob scrub;
+  if (service.first_scrub_stamp(&scrub)) {
+    do {
+      dout(20) << __func__ << ": examine " << scrub.pgid << dendl;
+
+      PGRef pg = _lookup_lock_pg(scrub.pgid);
+      if (!pg)
+	continue;
+      if (!pg->scrubber.must_scrub && !pg->scrubber.need_auto) {
+        dout(20) << __func__ << ": reschedule " << scrub.pgid << dendl;
+        pg->on_info_history_change();
+      }
+      pg->unlock();
+    } while (service.next_scrub_stamp(scrub, &scrub));
+  }
+  dout(10) << __func__ << ": done" << dendl;
 }
 
 MPGStats* OSD::collect_pg_stats()
@@ -8018,6 +8070,7 @@ void OSD::handle_osd_map(MOSDMap *m)
       OSDMap::Incremental inc;
       auto p = bl.cbegin();
       inc.decode(p);
+
       if (o->apply_incremental(inc) < 0) {
 	derr << "ERROR: bad fsid?  i have " << osdmap->get_fsid() << " and inc has " << inc.fsid << dendl;
 	ceph_abort_msg("bad fsid");
@@ -8369,7 +8422,7 @@ void OSD::_committed_osd_maps(epoch_t first, epoch_t last, MOSDMap *m)
 	hb_front_client_messenger->mark_down_all();
 	hb_back_client_messenger->mark_down_all();
 
-	reset_heartbeat_peers();
+	reset_heartbeat_peers(true);
       }
     }
   }
@@ -8667,6 +8720,31 @@ bool OSD::advance_pg(
     pg->handle_advance_map(
       nextmap, lastmap, newup, up_primary,
       newacting, acting_primary, rctx);
+
+    auto oldpool = lastmap->get_pools().find(pg->pg_id.pool());
+    auto newpool = nextmap->get_pools().find(pg->pg_id.pool());
+    if (oldpool != lastmap->get_pools().end()
+        && newpool != nextmap->get_pools().end()) {
+      dout(20) << __func__
+	       << " new pool opts " << newpool->second.opts
+	       << " old pool opts " << oldpool->second.opts
+	       << dendl;
+
+      double old_min_interval = 0, new_min_interval = 0;
+      oldpool->second.opts.get(pool_opts_t::SCRUB_MIN_INTERVAL, &old_min_interval);
+      newpool->second.opts.get(pool_opts_t::SCRUB_MIN_INTERVAL, &new_min_interval);
+
+      double old_max_interval = 0, new_max_interval = 0;
+      oldpool->second.opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &old_max_interval);
+      newpool->second.opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &new_max_interval);
+
+      // Assume if an interval is change from set to unset or vice versa the actual config
+      // is different.  Keep it simple even if it is possible to call resched_all_scrub()
+      // unnecessarily.
+      if (old_min_interval != new_min_interval || old_max_interval != new_max_interval) {
+	pg->on_info_history_change();
+      }
+    }
 
     if (new_pg_num && old_pg_num != new_pg_num) {
       // check for split
@@ -9874,6 +9952,8 @@ const char** OSD::get_tracked_conf_keys() const
     "osd_client_message_cap",
     "osd_heartbeat_min_size",
     "osd_heartbeat_interval",
+    "osd_scrub_min_interval",
+    "osd_scrub_max_interval",
     NULL
   };
   return KEYS;
@@ -9961,6 +10041,11 @@ void OSD::handle_conf_change(const ConfigProxy& conf,
     }
   }
 
+  if (changed.count("osd_scrub_min_interval") ||
+      changed.count("osd_scrub_max_interval")) {
+    resched_all_scrubs();
+    dout(0) << __func__ << ": scrub interval change" << dendl;
+  }
   check_config();
 }
 

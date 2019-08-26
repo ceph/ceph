@@ -132,6 +132,7 @@ void ProtocolV2::discard_out_queue() {
     }
   }
   out_queue.clear();
+  write_in_progress = false;
 }
 
 void ProtocolV2::reset_session() {
@@ -181,6 +182,7 @@ void ProtocolV2::stop() {
 void ProtocolV2::fault() { _fault(); }
 
 void ProtocolV2::requeue_sent() {
+  write_in_progress = false;
   if (sent.empty()) {
     return;
   }
@@ -220,14 +222,11 @@ uint64_t ProtocolV2::discard_requeued_up_to(uint64_t out_seq, uint64_t seq) {
 }
 
 void ProtocolV2::reset_recv_state() {
-  if ((state >= AUTH_CONNECTING && state <= SESSION_RECONNECTING) ||
-      state == READY) {
-    auth_meta.reset(new AuthConnectionMeta);
-    session_stream_handlers.tx.reset(nullptr);
-    session_stream_handlers.rx.reset(nullptr);
-    pre_auth.txbuf.clear();
-    pre_auth.rxbuf.clear();
-  }
+  auth_meta.reset(new AuthConnectionMeta);
+  session_stream_handlers.tx.reset(nullptr);
+  session_stream_handlers.rx.reset(nullptr);
+  pre_auth.txbuf.clear();
+  pre_auth.rxbuf.clear();
 
   // clean read and write callbacks
   connection->pendingReadLen.reset();
@@ -428,7 +427,8 @@ void ProtocolV2::send_message(Message *m) {
       out_queue_entry_t{is_prepared, m});
     ldout(cct, 15) << __func__ << " inline write is denied, reschedule m=" << m
                    << dendl;
-    if ((!replacing && can_write) || state == STANDBY) {
+    if (((!replacing && can_write) || state == STANDBY) && !write_in_progress) {
+      write_in_progress = true;
       connection->center->dispatch_event_external(connection->write_handler);
     }
   }
@@ -622,6 +622,7 @@ void ProtocolV2::write_event() {
       } else if (r > 0)
         break;
     } while (can_write);
+    write_in_progress = false;
 
     // if r > 0 mean data still lefted, so no need _try_send.
     if (r == 0) {
@@ -652,6 +653,7 @@ void ProtocolV2::write_event() {
       return;
     }
   } else {
+    write_in_progress = false;
     connection->write_lock.unlock();
     connection->lock.lock();
     connection->write_lock.lock();
@@ -1442,8 +1444,6 @@ CtPtr ProtocolV2::handle_message() {
       ceph_assert(0 == "skipped incoming seq");
     }
   }
-
-  message->set_connection(connection);
 
 #if defined(WITH_LTTNG) && defined(WITH_EVENTTRACE)
   if (message->get_type() == CEPH_MSG_OSD_OP ||
@@ -2663,6 +2663,10 @@ CtPtr ProtocolV2::reuse_connection(AsyncConnectionRef existing,
 
   ldout(messenger->cct, 5) << __func__ << " stop myself to swap existing"
                            << dendl;
+
+  std::swap(exproto->session_stream_handlers, session_stream_handlers);
+  exproto->auth_meta = auth_meta;
+
   // avoid _stop shutdown replacing socket
   // queue a reset on the new connection, which we're dumping for the old
   stop();
@@ -2670,10 +2674,9 @@ CtPtr ProtocolV2::reuse_connection(AsyncConnectionRef existing,
   connection->dispatch_queue->queue_reset(connection);
 
   exproto->can_write = false;
+  exproto->write_in_progress = false;
   exproto->reconnecting = reconnecting;
   exproto->replacing = true;
-  std::swap(exproto->session_stream_handlers, session_stream_handlers);
-  exproto->auth_meta = auth_meta;
   existing->state_offset = 0;
   // avoid previous thread modify event
   exproto->state = NONE;

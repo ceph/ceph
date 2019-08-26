@@ -186,7 +186,6 @@ struct MockImageCtx {
 			     librados::snap_t id));
 
   MOCK_METHOD0(user_flushed, void());
-  MOCK_METHOD1(flush_async_operations, void(Context *));
   MOCK_METHOD1(flush_copyup, void(Context *));
 
   MOCK_CONST_METHOD1(test_features, bool(uint64_t test_features));

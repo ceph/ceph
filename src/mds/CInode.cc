@@ -335,23 +335,28 @@ void CInode::remove_need_snapflush(CInode *snapin, snapid_t snapid, client_t cli
   }
 }
 
-bool CInode::split_need_snapflush(CInode *cowin, CInode *in)
+pair<bool,bool> CInode::split_need_snapflush(CInode *cowin, CInode *in)
 {
   dout(10) << __func__ << " [" << cowin->first << "," << cowin->last << "] for " << *cowin << dendl;
-  bool need_flush = false;
-  for (auto it = client_need_snapflush.lower_bound(cowin->first);
-       it != client_need_snapflush.end() && it->first < in->first; ) {
+  bool cowin_need_flush = false;
+  bool orig_need_flush = false;
+  auto it = client_need_snapflush.lower_bound(cowin->first);
+  while (it != client_need_snapflush.end() && it->first < in->first) {
     ceph_assert(!it->second.empty());
     if (cowin->last >= it->first) {
       cowin->auth_pin(this);
-      need_flush = true;
+      cowin_need_flush = true;
       ++it;
     } else {
       it = client_need_snapflush.erase(it);
     }
     in->auth_unpin(this);
   }
-  return need_flush;
+
+  if (it != client_need_snapflush.end() && it->first <= in->last)
+    orig_need_flush = true;
+
+  return make_pair(cowin_need_flush, orig_need_flush);
 }
 
 void CInode::mark_dirty_rstat()
@@ -3499,24 +3504,24 @@ int CInode::encode_inodestat(bufferlist& bl, Session *session,
       int likes = get_caps_liked();
       int allowed = get_caps_allowed_for_client(session, cap, file_i);
       issue = (cap->wanted() | likes) & allowed;
-      cap->issue_norevoke(issue);
+      cap->issue_norevoke(issue, true);
       issue = cap->pending();
       dout(10) << "encode_inodestat issuing " << ccap_string(issue)
 	       << " seq " << cap->get_last_seq() << dendl;
     } else if (cap && cap->is_new() && !dir_realm) {
       // alway issue new caps to client, otherwise the caps get lost
       ceph_assert(cap->is_stale());
-      issue = cap->pending() | CEPH_CAP_PIN;
-      cap->issue_norevoke(issue);
+      ceph_assert(!cap->pending());
+      issue = CEPH_CAP_PIN;
+      cap->issue_norevoke(issue, true);
       dout(10) << "encode_inodestat issuing " << ccap_string(issue)
 	       << " seq " << cap->get_last_seq()
-	       << "(stale|new caps)" << dendl;
+	       << "(stale&new caps)" << dendl;
     }
 
     if (issue) {
       cap->set_last_issue();
       cap->set_last_issue_stamp(ceph_clock_now());
-      cap->clear_new();
       ecap.caps = issue;
       ecap.wanted = cap->wanted();
       ecap.cap_id = cap->get_cap_id();

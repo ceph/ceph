@@ -84,15 +84,16 @@ private:
   Extents m_image_extents;
   ZTracer::Trace m_trace;
 
-  bool m_deep_copy = false;
   bool m_flatten = false;
   bool m_copyup_required = true;
+  bool m_copyup_is_zero = true;
 
   ceph::bufferlist m_copyup_data;
 
   AsyncOperation m_async_op;
 
   std::vector<uint64_t> m_snap_ids;
+  bool m_first_snap_is_clean = false;
 
   Mutex m_lock;
   WriteRequests m_pending_requests;

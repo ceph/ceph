@@ -21,8 +21,8 @@
               "src/favicon.ico"
             ],
             "styles": [
+              "node_modules/ngx-toastr/toastr.css",
               "node_modules/bootstrap/dist/css/bootstrap.css",
-              "node_modules/ng2-toastr/bundles/ng2-toastr.min.css",
               "node_modules/fork-awesome/css/fork-awesome.css",
               "node_modules/awesome-bootstrap-checkbox/awesome-bootstrap-checkbox.css",
               "node_modules/ngx-bootstrap/datepicker/bs-datepicker.css",

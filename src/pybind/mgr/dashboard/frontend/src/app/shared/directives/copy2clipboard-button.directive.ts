@@ -1,6 +1,6 @@
 import { Directive, ElementRef, HostListener, Input, OnInit, Renderer2 } from '@angular/core';
 
-import { ToastsManager } from 'ng2-toastr';
+import { ToastrService } from 'ngx-toastr';
 
 @Directive({
   selector: '[cdCopy2ClipboardButton]'
@@ -12,7 +12,7 @@ export class Copy2ClipboardButtonDirective implements OnInit {
   constructor(
     private elementRef: ElementRef,
     private renderer: Renderer2,
-    private toastr: ToastsManager
+    private toastr: ToastrService
   ) {}
 
   ngOnInit() {

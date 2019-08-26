@@ -1776,73 +1776,99 @@ void OSDMap::clean_temps(CephContext *cct,
   }
 }
 
-void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
-                                    const OSDMap& oldmap,
-				    const OSDMap& nextmap,
-                                    Incremental *pending_inc)
+void OSDMap::get_upmap_pgs(vector<pg_t> *upmap_pgs) const
 {
-  ldout(cct, 10) << __func__ << dendl;
-  set<pg_t> to_check;
-  set<pg_t> to_cancel;
-  map<int, map<int, float>> rule_weight_map;
+  upmap_pgs->reserve(pg_upmap.size() + pg_upmap_items.size());
+  for (auto& p : pg_upmap)
+    upmap_pgs->push_back(p.first);
+  for (auto& p : pg_upmap_items)
+    upmap_pgs->push_back(p.first);
+}
 
-  for (auto& p : nextmap.pg_upmap) {
-    to_check.insert(p.first);
-  }
-  for (auto& p : nextmap.pg_upmap_items) {
-    to_check.insert(p.first);
-  }
-  for (auto& p : pending_inc->new_pg_upmap) {
-    to_check.insert(p.first);
-  }
-  for (auto& p : pending_inc->new_pg_upmap_items) {
-    to_check.insert(p.first);
-  }
+bool OSDMap::check_pg_upmaps(
+  CephContext *cct,
+  const vector<pg_t>& to_check,
+  vector<pg_t> *to_cancel,
+  map<pg_t, mempool::osdmap::vector<pair<int,int>>> *to_remap) const
+{
+  bool any_change = false;
+  map<int, map<int, float>> rule_weight_map;
   for (auto& pg : to_check) {
-    const pg_pool_t *pi = nextmap.get_pg_pool(pg.pool());
+    const pg_pool_t *pi = get_pg_pool(pg.pool());
     if (!pi || pg.ps() >= pi->get_pg_num_pending()) {
       ldout(cct, 0) << __func__ << " pg " << pg << " is gone or merge source"
 		    << dendl;
-      to_cancel.insert(pg);
+      to_cancel->push_back(pg);
       continue;
     }
     if (pi->is_pending_merge(pg, nullptr)) {
       ldout(cct, 0) << __func__ << " pg " << pg << " is pending merge"
 		    << dendl;
-      to_cancel.insert(pg);
+      to_cancel->push_back(pg);
       continue;
     }
-    vector<int> raw_up;
-    int primary;
-    nextmap.pg_to_raw_up(pg, &raw_up, &primary);
-    vector<int> up;
-    up.reserve(raw_up.size());
-    for (auto osd : raw_up) {
-      // skip non-existent/down osd for erasure-coded PGs
-      if (osd == CRUSH_ITEM_NONE)
-        continue;
-      up.push_back(osd);
+    vector<int> raw, up;
+    pg_to_raw_upmap(pg, &raw, &up);
+    auto i = pg_upmap.find(pg);
+    if (i != pg_upmap.end() && raw == i->second) {
+      ldout(cct, 10) << " removing redundant pg_upmap "
+                     << i->first << " " << i->second
+                     << dendl;
+      to_cancel->push_back(pg);
+      continue;
     }
-    auto crush_rule = nextmap.get_pg_pool_crush_rule(pg);
-    auto r = nextmap.crush->verify_upmap(cct,
-                                         crush_rule,
-                                         nextmap.get_pg_pool_size(pg),
-                                         up);
+    auto j = pg_upmap_items.find(pg);
+    if (j != pg_upmap_items.end()) {
+      mempool::osdmap::vector<pair<int,int>> newmap;
+      for (auto& p : j->second) {
+        if (std::find(raw.begin(), raw.end(), p.first) == raw.end()) {
+          // cancel mapping if source osd does not exist anymore
+          continue;
+        }
+        if (p.second != CRUSH_ITEM_NONE && p.second < max_osd &&
+            p.second >= 0 && osd_weight[p.second] == 0) {
+          // cancel mapping if target osd is out
+          continue;
+        }
+        newmap.push_back(p);
+      }
+      if (newmap.empty()) {
+        ldout(cct, 10) << " removing no-op pg_upmap_items "
+                       << j->first << " " << j->second
+                       << dendl;
+        to_cancel->push_back(pg);
+        continue;
+      } else if (newmap != j->second) {
+        ldout(cct, 10) << " simplifying partially no-op pg_upmap_items "
+                       << j->first << " " << j->second
+                       << " -> " << newmap
+                       << dendl;
+        to_remap->insert({pg, newmap});
+        any_change = true;
+        continue;
+      }
+    }
+    auto crush_rule = get_pg_pool_crush_rule(pg);
+    auto r = crush->verify_upmap(cct,
+                                 crush_rule,
+                                 get_pg_pool_size(pg),
+                                 up);
     if (r < 0) {
       ldout(cct, 0) << __func__ << " verify_upmap of pg " << pg
                     << " returning " << r
                     << dendl;
-      to_cancel.insert(pg);
+      to_cancel->push_back(pg);
       continue;
     }
     // below we check against crush-topology changing..
     map<int, float> weight_map;
     auto it = rule_weight_map.find(crush_rule);
     if (it == rule_weight_map.end()) {
-      auto r = nextmap.crush->get_rule_weight_osd_map(crush_rule, &weight_map);
+      auto r = crush->get_rule_weight_osd_map(crush_rule, &weight_map);
       if (r < 0) {
         lderr(cct) << __func__ << " unable to get crush weight_map for "
-                   << "crush_rule " << crush_rule << dendl;
+                   << "crush_rule " << crush_rule
+                   << dendl;
         continue;
       }
       rule_weight_map[crush_rule] = weight_map;
@@ -1856,55 +1882,77 @@ void OSDMap::maybe_remove_pg_upmaps(CephContext *cct,
       auto it = weight_map.find(osd);
       if (it == weight_map.end()) {
         // osd is gone or has been moved out of the specific crush-tree
-        to_cancel.insert(pg);
+        to_cancel->push_back(pg);
         break;
       }
-      auto adjusted_weight = nextmap.get_weightf(it->first) * it->second;
+      auto adjusted_weight = get_weightf(it->first) * it->second;
       if (adjusted_weight == 0) {
         // osd is out/crush-out
-        to_cancel.insert(pg);
+        to_cancel->push_back(pg);
         break;
       }
     }
   }
+  any_change = any_change || !to_cancel->empty();
+  return any_change;
+}
+
+void OSDMap::clean_pg_upmaps(
+  CephContext *cct,
+  Incremental *pending_inc,
+  const vector<pg_t>& to_cancel,
+  const map<pg_t, mempool::osdmap::vector<pair<int,int>>>& to_remap) const
+{
   for (auto &pg: to_cancel) {
-    { // pg_upmap
-      auto it = pending_inc->new_pg_upmap.find(pg);
-      if (it != pending_inc->new_pg_upmap.end()) {
-        ldout(cct, 10) << __func__ << " cancel invalid pending "
-                       << "pg_upmap entry "
-                       << it->first << "->" << it->second
-                       << dendl;
-        pending_inc->new_pg_upmap.erase(it);
-      }
-      if (oldmap.pg_upmap.count(pg)) {
-        ldout(cct, 10) << __func__ << " cancel invalid pg_upmap entry "
-                       << oldmap.pg_upmap.find(pg)->first << "->"
-                       << oldmap.pg_upmap.find(pg)->second
-                       << dendl;
-        pending_inc->old_pg_upmap.insert(pg);
-      }
+    auto i = pending_inc->new_pg_upmap.find(pg);
+    if (i != pending_inc->new_pg_upmap.end()) {
+      ldout(cct, 10) << __func__ << " cancel invalid pending "
+                     << "pg_upmap entry "
+                     << i->first << "->" << i->second
+                     << dendl;
+      pending_inc->new_pg_upmap.erase(i);
     }
-    { // pg_upmap_items
-      auto it = pending_inc->new_pg_upmap_items.find(pg);
-      if (it != pending_inc->new_pg_upmap_items.end()) {
-        ldout(cct, 10) << __func__ << " cancel invalid pending "
-                       << "pg_upmap_items entry "
-                       << it->first << "->" << it->second
-                       << dendl;
-        pending_inc->new_pg_upmap_items.erase(it);
-      }
-      if (oldmap.pg_upmap_items.count(pg)) {
-        ldout(cct, 10) << __func__ << " cancel invalid "
-                       << "pg_upmap_items entry "
-                       << oldmap.pg_upmap_items.find(pg)->first << "->"
-                       << oldmap.pg_upmap_items.find(pg)->second
-                       << dendl;
-        pending_inc->old_pg_upmap_items.insert(pg);
-      }
+    auto j = pg_upmap.find(pg);
+    if (j != pg_upmap.end()) {
+      ldout(cct, 10) << __func__ << " cancel invalid pg_upmap entry "
+                     << j->first << "->" << j->second
+                     << dendl;
+      pending_inc->old_pg_upmap.insert(pg);
+    }
+    auto p = pending_inc->new_pg_upmap_items.find(pg);
+    if (p != pending_inc->new_pg_upmap_items.end()) {
+      ldout(cct, 10) << __func__ << " cancel invalid pending "
+                     << "pg_upmap_items entry "
+                     << p->first << "->" << p->second
+                     << dendl;
+      pending_inc->new_pg_upmap_items.erase(p);
+    }
+    auto q = pg_upmap_items.find(pg);
+    if (q != pg_upmap_items.end()) {
+      ldout(cct, 10) << __func__ << " cancel invalid "
+                     << "pg_upmap_items entry "
+                     << q->first << "->" << q->second
+                     << dendl;
+      pending_inc->old_pg_upmap_items.insert(pg);
     }
   }
-  nextmap.clean_pg_upmaps(cct, pending_inc);
+  for (auto& i : to_remap)
+    pending_inc->new_pg_upmap_items[i.first] = i.second;
+}
+
+bool OSDMap::clean_pg_upmaps(
+  CephContext *cct,
+  Incremental *pending_inc) const
+{
+  ldout(cct, 10) << __func__ << dendl;
+  vector<pg_t> to_check;
+  vector<pg_t> to_cancel;
+  map<pg_t, mempool::osdmap::vector<pair<int,int>>> to_remap;
+
+  get_upmap_pgs(&to_check);
+  auto any_change = check_pg_upmaps(cct, to_check, &to_cancel, &to_remap);
+  clean_pg_upmaps(cct, pending_inc, to_cancel, to_remap);
+  return any_change;
 }
 
 int OSDMap::apply_incremental(const Incremental &inc)
@@ -2474,14 +2522,16 @@ void OSDMap::pg_to_raw_osds(pg_t pg, vector<int> *raw, int *primary) const
   *primary = _pick_primary(*raw);
 }
 
-void OSDMap::pg_to_raw_upmap(pg_t pg, vector<int> *raw_upmap) const
+void OSDMap::pg_to_raw_upmap(pg_t pg, vector<int>*raw,
+                             vector<int> *raw_upmap) const
 {
   auto pool = get_pg_pool(pg.pool());
   if (!pool) {
     raw_upmap->clear();
     return;
   }
-  _pg_to_raw_osds(*pool, pg, raw_upmap, NULL);
+  _pg_to_raw_osds(*pool, pg, raw, NULL);
+  *raw_upmap = *raw;
   _apply_upmap(*pool, pg, raw_upmap);
 }
 
@@ -4347,56 +4397,6 @@ int OSDMap::summarize_mapping_stats(
   return 0;
 }
 
-
-int OSDMap::clean_pg_upmaps(
-  CephContext *cct,
-  Incremental *pending_inc) const
-{
-  ldout(cct, 10) << __func__ << dendl;
-  int changed = 0;
-  for (auto& p : pg_upmap) {
-    vector<int> raw;
-    int primary;
-    pg_to_raw_osds(p.first, &raw, &primary);
-    if (raw == p.second) {
-      ldout(cct, 10) << " removing redundant pg_upmap " << p.first << " "
-		     << p.second << dendl;
-      pending_inc->old_pg_upmap.insert(p.first);
-      ++changed;
-    }
-  }
-  for (auto& p : pg_upmap_items) {
-    vector<int> raw;
-    int primary;
-    pg_to_raw_osds(p.first, &raw, &primary);
-    mempool::osdmap::vector<pair<int,int>> newmap;
-    for (auto& q : p.second) {
-      if (std::find(raw.begin(), raw.end(), q.first) == raw.end()) {
-        // cancel mapping if source osd does not exist anymore
-        continue;
-      }
-      if (q.second != CRUSH_ITEM_NONE && q.second < max_osd &&
-          q.second >= 0 && osd_weight[q.second] == 0) {
-        // cancel mapping if target osd is out
-        continue;
-      }
-      newmap.push_back(q);
-    }
-    if (newmap.empty()) {
-      ldout(cct, 10) << " removing no-op pg_upmap_items " << p.first << " "
-		     << p.second << dendl;
-      pending_inc->old_pg_upmap_items.insert(p.first);
-      ++changed;
-    } else if (newmap != p.second) {
-      ldout(cct, 10) << " simplifying partially no-op pg_upmap_items "
-		     << p.first << " " << p.second << " -> " << newmap << dendl;
-      pending_inc->new_pg_upmap_items[p.first] = newmap;
-      ++changed;
-    }
-  }
-  return changed;
-}
-
 bool OSDMap::try_pg_upmap(
   CephContext *cct,
   pg_t pg,                       ///< pg to potentially remap
@@ -4709,8 +4709,8 @@ int OSDMap::calc_pg_upmaps(
           // to see if we can append more remapping pairs
         }
 	ldout(cct, 10) << " trying " << pg << dendl;
-	vector<int> orig, out;
-        tmp.pg_to_raw_upmap(pg, &orig); // including existing upmaps too
+        vector<int> raw, orig, out;
+        tmp.pg_to_raw_upmap(pg, &raw, &orig); // including existing upmaps too
 	if (!try_pg_upmap(cct, pg, overfull, underfull, &orig, &out)) {
 	  continue;
 	}

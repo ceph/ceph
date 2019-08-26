@@ -905,7 +905,7 @@ std::vector<Option> get_global_options() {
     .add_see_also("ms_type"),
 
     Option("ms_mon_cluster_mode", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("crc")
+    .set_default("secure crc")
     .set_flag(Option::FLAG_STARTUP)
     .set_description("Connection modes (crc, secure) for intra-mon connections in order of preference")
     .add_see_also("ms_mon_service_mode")
@@ -915,7 +915,7 @@ std::vector<Option> get_global_options() {
     .add_see_also("ms_client_mode"),
 
     Option("ms_mon_service_mode", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("crc")
+    .set_default("secure crc")
     .set_flag(Option::FLAG_STARTUP)
     .set_description("Allowed connection modes (crc, secure) for connections to mons")
     .add_see_also("ms_service_mode")
@@ -925,7 +925,7 @@ std::vector<Option> get_global_options() {
     .add_see_also("ms_client_mode"),
 
     Option("ms_mon_client_mode", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("crc")
+    .set_default("secure crc")
     .set_flag(Option::FLAG_STARTUP)
     .set_description("Connection modes (crc, secure) for connections from clients to monitors in order of preference")
     .add_see_also("ms_mon_service_mode")
@@ -935,21 +935,21 @@ std::vector<Option> get_global_options() {
     .add_see_also("ms_client_mode"),
 
     Option("ms_cluster_mode", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("crc")
+    .set_default("crc secure")
     .set_flag(Option::FLAG_STARTUP)
     .set_description("Connection modes (crc, secure) for intra-cluster connections in order of preference")
     .add_see_also("ms_service_mode")
     .add_see_also("ms_client_mode"),
 
     Option("ms_service_mode", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("crc")
+    .set_default("crc secure")
     .set_flag(Option::FLAG_STARTUP)
     .set_description("Allowed connection modes (crc, secure) for connections to daemons")
     .add_see_also("ms_cluster_mode")
     .add_see_also("ms_client_mode"),
 
     Option("ms_client_mode", Option::TYPE_STR, Option::LEVEL_BASIC)
-    .set_default("crc")
+    .set_default("crc secure")
     .set_flag(Option::FLAG_STARTUP)
     .set_description("Connection modes (crc, secure) for connections from clients in order of preference")
     .add_see_also("ms_cluster_mode")
@@ -1379,6 +1379,11 @@ std::vector<Option> get_global_options() {
     .set_default(4096)
     .add_service("mon")
     .set_description("granularity of PG placement calculation background work"),
+
+    Option("mon_clean_pg_upmaps_per_chunk", Option::TYPE_INT, Option::LEVEL_DEV)
+    .set_default(256)
+    .add_service("mon")
+    .set_description("granularity of PG upmap validation background work"),
 
     Option("mon_osd_max_creating_pgs", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(1024)
@@ -3300,7 +3305,19 @@ std::vector<Option> get_global_options() {
 
     Option("osd_snap_trim_sleep", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
-    .set_description(""),
+    .set_description("Time in seconds to sleep before next snap trim (overrides values below)"),
+
+    Option("osd_snap_trim_sleep_hdd", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(5)
+    .set_description("Time in seconds to sleep before next snap trim for HDDs"),
+
+    Option("osd_snap_trim_sleep_ssd", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("Time in seconds to sleep before next snap trim for SSDs"),
+
+    Option("osd_snap_trim_sleep_hybrid", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(2)
+    .set_description("Time in seconds to sleep before next snap trim when data is on HDD and journal is on SSD"),
 
     Option("osd_scrub_invalid_stats", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
     .set_default(true)
@@ -3322,6 +3339,13 @@ std::vector<Option> get_global_options() {
     Option("osd_heartbeat_grace", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(20)
     .set_description(""),
+
+    Option("osd_heartbeat_stale", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+    .set_default(600)
+    .set_description("Interval (in seconds) we mark an unresponsive heartbeat peer as stale.")
+    .set_long_description("Automatically mark unresponsive heartbeat sessions as stale and tear them down. "
+		          "The primary benefit is that OSD doesn't need to keep a flood of "
+			  "blocked heartbeat messages around in memory."),
 
     Option("osd_heartbeat_min_peers", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(10)
@@ -3531,7 +3555,7 @@ std::vector<Option> get_global_options() {
     .set_description("Update overall object digest only if object was last modified longer ago than this"),
 
     Option("osd_deep_scrub_large_omap_object_key_threshold", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(2000000)
+    .set_default(200000)
     .set_description("Warn when we encounter an object with more omap keys than this")
     .add_service("osd")
     .add_see_also("osd_deep_scrub_large_omap_object_value_sum_threshold"),
@@ -3929,8 +3953,13 @@ std::vector<Option> get_global_options() {
     .set_description(""),
 
     Option("rocksdb_enable_rmrange", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
-    .set_default(false)
-    .set_description(""),
+    .set_default(true)
+    .set_description("Refer to github.com/facebook/rocksdb/wiki/DeleteRange-Implementation"),
+
+    Option("rocksdb_max_items_rmrange", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(1024)
+    .set_description("Delete Range will be called if number of keys exceeded, must enable rocksdb_enable_rmrange first")
+    .add_see_also("rocksdb_enable_rmrange"),
 
     Option("rocksdb_bloom_bits_per_key", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(20)
@@ -4633,7 +4662,7 @@ std::vector<Option> get_global_options() {
     .set_description("Max transactions with deferred writes that can accumulate before we force flush deferred writes"),
 
     Option("bluestore_rocksdb_options", Option::TYPE_STR, Option::LEVEL_ADVANCED)
-    .set_default("compression=kNoCompression,max_write_buffer_number=4,min_write_buffer_number_to_merge=1,recycle_log_file_num=4,write_buffer_size=268435456,writable_file_max_buffer_size=0,compaction_readahead_size=2097152")
+    .set_default("compression=kNoCompression,max_write_buffer_number=4,min_write_buffer_number_to_merge=1,recycle_log_file_num=4,write_buffer_size=268435456,writable_file_max_buffer_size=0,compaction_readahead_size=2097152,max_background_compactions=2")
     .set_description("Rocksdb options"),
 
     Option("bluestore_rocksdb_cf", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
@@ -4649,16 +4678,16 @@ std::vector<Option> get_global_options() {
     .set_description("Run fsck at mount"),
 
     Option("bluestore_fsck_on_mount_deep", Option::TYPE_BOOL, Option::LEVEL_DEV)
-    .set_default(true)
-    .set_description("Run deep fsck at mount"),
+    .set_default(false)
+    .set_description("Run deep fsck at mount when bluestore_fsck_on_mount is set to true"),
 
     Option("bluestore_fsck_on_umount", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(false)
     .set_description("Run fsck at umount"),
 
     Option("bluestore_fsck_on_umount_deep", Option::TYPE_BOOL, Option::LEVEL_DEV)
-    .set_default(true)
-    .set_description("Run deep fsck at umount"),
+    .set_default(false)
+    .set_description("Run deep fsck at umount when bluestore_fsck_on_umount is set to true"),
 
     Option("bluestore_fsck_on_mkfs", Option::TYPE_BOOL, Option::LEVEL_DEV)
     .set_default(true)
@@ -4827,8 +4856,12 @@ std::vector<Option> get_global_options() {
     .set_description("log operation if it's slower than this age (seconds)"),
 
     Option("bluestore_log_omap_iterator_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
-    .set_default(1)
+    .set_default(5)
     .set_description("log omap iteration operation if it's slower than this age (seconds)"),
+
+    Option("bluestore_log_collection_list_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(60)
+    .set_description("log collection list operation if it's slower than this age (seconds)"),
 
     // -----------------------------------------
     // kstore
@@ -6058,6 +6091,16 @@ std::vector<Option> get_rgw_options() {
     .set_default(10)
     .set_description(""),
 
+    Option("rgw_rados_pool_autoscale_bias", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
+    .set_default(4.0)
+    .set_min_max(0.01, 100000.0)
+    .set_description("pg_autoscale_bias value for RGW metadata (omap-heavy) pools"),
+
+    Option("rgw_rados_pool_pg_num_min", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(8)
+    .set_min_max(1, 1024)
+    .set_description("pg_num_min value for RGW metadata (omap-heavy) pools"),
+
     Option("rgw_zone", Option::TYPE_STR, Option::LEVEL_ADVANCED)
     .set_default("")
     .set_description("Zone name")
@@ -6595,6 +6638,14 @@ std::vector<Option> get_rgw_options() {
         "This configurable controls whether RGW handles the website control APIs. RGW can "
         "server static websites if s3website hostnames are configured, and unrelated to "
         "this configurable."),
+
+     Option("rgw_user_unique_email", Option::TYPE_BOOL, Option::LEVEL_BASIC)
+    .set_default(true)
+    .set_description("Require local RGW users to have unique email addresses")
+    .set_long_description(
+        "Enforce builtin user accounts to have unique email addresses.  This "
+	"setting is historical.  In future, non-enforcement of email address "
+        "uniqueness is likely to become the default."),
 
     Option("rgw_log_http_headers", Option::TYPE_STR, Option::LEVEL_BASIC)
     .set_default("")
@@ -7299,12 +7350,18 @@ static std::vector<Option> get_rbd_options() {
     .set_default(5)
     .set_description("commit time interval, seconds"),
 
+    Option("rbd_journal_object_writethrough_until_flush", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
+    .set_default(true)
+    .set_description("when enabled, the rbd_journal_object_flush* configuration "
+                     "options are ignored until the first flush so that batched "
+                     "journal IO is known to be safe for consistency"),
+
     Option("rbd_journal_object_flush_interval", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .set_description("maximum number of pending commits per journal object"),
 
     Option("rbd_journal_object_flush_bytes", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
-    .set_default(0)
+    .set_default(1_M)
     .set_description("maximum number of pending bytes per journal object"),
 
     Option("rbd_journal_object_flush_age", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
@@ -7956,6 +8013,9 @@ std::vector<Option> get_mds_options() {
     Option("mds_hack_allow_loading_invalid_metadata", Option::TYPE_BOOL, Option::LEVEL_ADVANCED)
      .set_default(0)
      .set_description("INTENTIONALLY CAUSE DATA LOSS by bypasing checks for invalid metadata on disk. Allows testing repair tools."),
+
+    Option("mds_defer_session_stale", Option::TYPE_BOOL, Option::LEVEL_DEV)
+     .set_default(true),
 
     Option("mds_inject_migrator_session_race", Option::TYPE_BOOL, Option::LEVEL_DEV)
      .set_default(false),

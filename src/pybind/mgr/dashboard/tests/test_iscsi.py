@@ -164,7 +164,12 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
                     "password": "myiscsipassword5",
                     "user": "myiscsiusername5",
                     "mutual_password": "myiscsipassword6",
-                    "mutual_user": "myiscsiusername6"}
+                    "mutual_user": "myiscsiusername6"},
+                "info": {
+                    "alias": "",
+                    "ip_address": [],
+                    "state": {}
+                }
             })
         self._update_iscsi_target(create_request, update_request, response)
 
@@ -302,7 +307,12 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
                     "password": None,
                     "user": None,
                     "mutual_password": None,
-                    "mutual_user": None}
+                    "mutual_user": None},
+                "info": {
+                    "alias": "",
+                    "ip_address": [],
+                    "state": {}
+                }
             })
         response['groups'][0]['members'].append('iqn.1994-05.com.redhat:rh7-client3')
         self._update_iscsi_target(create_request, update_request, response)
@@ -425,6 +435,11 @@ iscsi_target_response = {
                 'password': 'myiscsipassword1',
                 'mutual_password': 'myiscsipassword2',
                 'mutual_user': 'myiscsiusername2'
+            },
+            'info': {
+                'alias': '',
+                'ip_address': [],
+                'state': {}
             }
         },
         {
@@ -435,6 +450,11 @@ iscsi_target_response = {
                 'password': 'myiscsipassword3',
                 'mutual_password': 'myiscsipassword4',
                 'mutual_user': 'myiscsiusername4'
+            },
+            'info': {
+                'alias': '',
+                'ip_address': [],
+                'state': {}
             }
         }
     ],
@@ -475,7 +495,7 @@ class IscsiClientMock(object):
             "gateways": {},
             "targets": {},
             "updated": "",
-            "version": 5
+            "version": 9
         }
 
     @classmethod
@@ -544,14 +564,21 @@ class IscsiClientMock(object):
             "portals": {}
         }
 
-    def create_gateway(self, target_iqn, gateway_name, ip_address):
+    def create_gateway(self, target_iqn, gateway_name, ip_addresses):
         target_config = self.config['targets'][target_iqn]
         if 'ip_list' not in target_config:
             target_config['ip_list'] = []
-        target_config['ip_list'] += ip_address
+        target_config['ip_list'] += ip_addresses
         target_config['portals'][gateway_name] = {
-            "portal_ip_address": ip_address[0]
+            "portal_ip_addresses": ip_addresses
         }
+
+    def delete_gateway(self, target_iqn, gateway_name):
+        target_config = self.config['targets'][target_iqn]
+        portal_config = target_config['portals'][gateway_name]
+        for ip in portal_config['portal_ip_addresses']:
+            target_config['ip_list'].remove(ip)
+        target_config['portals'].pop(gateway_name)
 
     def create_disk(self, pool, image, backstore):
         image_id = '{}/{}'.format(pool, image)
@@ -654,7 +681,16 @@ class IscsiClientMock(object):
     def update_targetauth(self, target_iqn, action):
         self.config['targets'][target_iqn]['acl_enabled'] = (action == 'enable_acl')
 
-    def get_targetinfo(self, _):
+    def get_targetinfo(self, target_iqn):
+        # pylint: disable=unused-argument
         return {
             'num_sessions': 0
+        }
+
+    def get_clientinfo(self, target_iqn, client_iqn):
+        # pylint: disable=unused-argument
+        return {
+            'alias': '',
+            'ip_address': [],
+            'state': {}
         }

@@ -6,7 +6,7 @@ import functools
 import uuid
 from subprocess import check_output, CalledProcessError
 
-from mgr_module import MgrModule
+from mgr_module import MgrModule, PersistentStoreDict
 
 import orchestrator
 
@@ -170,18 +170,17 @@ class TestOrchestrator(MgrModule, orchestrator.Orchestrator):
                 c_v_out = check_output(cmd.format(tmpdir='.'),shell=True)
 
         for out in c_v_out.splitlines():
-            if not out.startswith(b'-->') and not out.startswith(b' stderr'):
-                self.log.error(out)
-                devs = []
-                for device in json.loads(out):
-                    dev = orchestrator.InventoryDevice.from_ceph_volume_inventory(device)
-                    devs.append(dev)
-                return [orchestrator.InventoryNode('localhost', devs)]
+            self.log.error(out)
+            devs = []
+            for device in json.loads(out):
+                dev = orchestrator.InventoryDevice.from_ceph_volume_inventory(device)
+                devs.append(dev)
+            return [orchestrator.InventoryNode('localhost', devs)]
         self.log.error('c-v failed: ' + str(c_v_out))
         raise Exception('c-v failed')
 
     @deferred_read
-    def describe_service(self, service_type=None, service_id=None, node_name=None):
+    def describe_service(self, service_type=None, service_id=None, node_name=None, refresh=False):
         """
         There is no guarantee which daemons are returned by describe_service, except that
         it returns the mgr we're running in.

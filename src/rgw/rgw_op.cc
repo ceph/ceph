@@ -2543,6 +2543,16 @@ void RGWDeleteBucketWebsite::pre_exec()
 
 void RGWDeleteBucketWebsite::execute()
 {
+
+  if (!store->svc.zone->is_meta_master()) {
+    bufferlist in_data;
+    op_ret = forward_request_to_master(s, nullptr, store, in_data, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "NOTICE: forward_to_master failed on bucket=" << s->bucket.name 
+	                 << "returned err=" << op_ret << dendl;
+      return;
+    }
+  }
   op_ret = retry_raced_bucket_write(store, s, [this] {
       s->bucket_info.has_website = false;
       s->bucket_info.website_conf = RGWBucketWebsiteConf();
@@ -4609,6 +4619,7 @@ bool RGWCopyObj::parse_copy_location(const boost::string_view& url_src,
   boost::string_view name_str;
   boost::string_view params_str;
 
+  // search for ? before url-decoding so we don't accidentally match %3F
   size_t pos = url_src.find('?');
   if (pos == string::npos) {
     name_str = url_src;
@@ -4622,14 +4633,11 @@ bool RGWCopyObj::parse_copy_location(const boost::string_view& url_src,
     dec_src.remove_prefix(1);
 
   pos = dec_src.find('/');
-  if (pos ==string::npos)
+  if (pos == string::npos)
     return false;
 
-  boost::string_view bn_view{dec_src.substr(0, pos)};
-  bucket_name = std::string{bn_view.data(), bn_view.size()};
-
-  boost::string_view kn_view{dec_src.substr(pos + 1)};
-  key.name = std::string{kn_view.data(), kn_view.size()};
+  bucket_name = url_decode(dec_src.substr(0, pos));
+  key.name = url_decode(dec_src.substr(pos + 1));
 
   if (key.name.empty()) {
     return false;
@@ -4757,7 +4765,9 @@ int RGWCopyObj::verify_permission()
   if (! s->auth.identity->is_admin_of(dest_policy.get_owner().get_id())){
     if (dest_iam_policy != boost::none) {
       rgw_add_to_iam_environment(s->env, "s3:x-amz-copy-source", copy_source);
-      rgw_add_to_iam_environment(s->env, "s3:x-amz-metadata-directive", md_directive);
+      if (md_directive)
+	rgw_add_to_iam_environment(s->env, "s3:x-amz-metadata-directive",
+				   *md_directive);
 
       auto e = dest_iam_policy->eval(s->env, *s->auth.identity,
                                      rgw::IAM::s3PutObject,
@@ -5232,6 +5242,14 @@ void RGWPutLC::execute()
     ldpp_dout(this, 15) << "New LifecycleConfiguration:" << ss.str() << dendl;
   }
 
+  if (!store->svc.zone->is_meta_master()) {
+    op_ret = forward_request_to_master(s, nullptr, store, data, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
+
   op_ret = store->get_lc()->set_bucket_config(s->bucket_info, s->bucket_attrs, &new_config);
   if (op_ret < 0) {
     return;
@@ -5241,6 +5259,14 @@ void RGWPutLC::execute()
 
 void RGWDeleteLC::execute()
 {
+  if (!store->svc.zone->is_meta_master()) {
+    bufferlist data;
+    op_ret = forward_request_to_master(s, nullptr, store, data, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
   map<string, bufferlist> attrs = s->bucket_attrs;
   attrs.erase(RGW_ATTR_LC);
   op_ret = rgw_bucket_set_attrs(store, s->bucket_info, attrs,
@@ -5312,6 +5338,15 @@ int RGWDeleteCORS::verify_permission()
 
 void RGWDeleteCORS::execute()
 {
+  if (!store->svc.zone->is_meta_master()) {
+    bufferlist data;
+    op_ret = forward_request_to_master(s, nullptr, store, data, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
+
   op_ret = retry_raced_bucket_write(store, s, [this] {
       op_ret = read_bucket_cors();
       if (op_ret < 0)
@@ -5416,6 +5451,15 @@ void RGWSetRequestPayment::pre_exec()
 
 void RGWSetRequestPayment::execute()
 {
+
+  if (!store->svc.zone->is_meta_master()) {
+    op_ret = forward_request_to_master(s, nullptr, store, in_data, nullptr);
+    if (op_ret < 0) {
+      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      return;
+    }
+  }
+
   op_ret = get_params();
 
   if (op_ret < 0)
@@ -5659,7 +5703,7 @@ void RGWCompleteMultipart::execute()
   store->obj_to_raw((s->bucket_info).placement_rule, meta_obj, &raw_obj);
   store->get_obj_data_pool((s->bucket_info).placement_rule,
 			   meta_obj,&meta_pool);
-  store->open_pool_ctx(meta_pool, serializer.ioctx);
+  store->open_pool_ctx(meta_pool, serializer.ioctx, true);
 
   op_ret = serializer.try_lock(raw_obj.oid, dur);
   if (op_ret < 0) {

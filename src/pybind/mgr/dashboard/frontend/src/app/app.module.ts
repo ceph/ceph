@@ -7,10 +7,10 @@ import { BrowserAnimationsModule } from '@angular/platform-browser/animations';
 import { JwtModule } from '@auth0/angular-jwt';
 import { I18n } from '@ngx-translate/i18n-polyfill';
 import { BlockUIModule } from 'ng-block-ui';
-import { ToastModule, ToastOptions } from 'ng2-toastr/ng2-toastr';
 import { AccordionModule } from 'ngx-bootstrap/accordion';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 import { TabsModule } from 'ngx-bootstrap/tabs';
+import { ToastrModule } from 'ngx-toastr';
 
 import { AppRoutingModule } from './app-routing.module';
 import { AppComponent } from './app.component';
@@ -20,13 +20,6 @@ import { i18nProviders, LocaleHelper } from './locale.helper';
 import { ApiInterceptorService } from './shared/services/api-interceptor.service';
 import { JsErrorHandler } from './shared/services/js-error-handler.service';
 import { SharedModule } from './shared/shared.module';
-
-export class CustomOption extends ToastOptions {
-  animate = 'flyRight';
-  newestOnTop = true;
-  showCloseButton = true;
-  enableHTML = true;
-}
 
 export function jwtTokenGetter() {
   return localStorage.getItem('access_token');
@@ -41,7 +34,11 @@ registerLocaleData(LocaleHelper.getLocaleData(), LocaleHelper.getLocale());
     BlockUIModule.forRoot(),
     BrowserModule,
     BrowserAnimationsModule,
-    ToastModule.forRoot(),
+    ToastrModule.forRoot({
+      positionClass: 'toast-top-right',
+      preventDuplicates: true,
+      enableHtml: true
+    }),
     AppRoutingModule,
     CoreModule,
     SharedModule,
@@ -65,10 +62,6 @@ registerLocaleData(LocaleHelper.getLocaleData(), LocaleHelper.getLocale());
       provide: HTTP_INTERCEPTORS,
       useClass: ApiInterceptorService,
       multi: true
-    },
-    {
-      provide: ToastOptions,
-      useClass: CustomOption
     },
     i18nProviders,
     I18n

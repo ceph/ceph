@@ -95,7 +95,8 @@ void usage()
   cout << "  subuser rm                 remove subuser\n";
   cout << "  key create                 create access key\n";
   cout << "  key rm                     remove access key\n";
-  cout << "  bucket list                list buckets\n";
+  cout << "  bucket list                list buckets (specify --allow-unordered for\n";
+  cout << "                             faster, unsorted listing)\n";
   cout << "  bucket limit check         show bucket sharding stats\n";
   cout << "  bucket link                link bucket to specified user\n";
   cout << "  bucket unlink              unlink bucket from specified user\n";
@@ -2409,7 +2410,7 @@ static int bucket_source_sync_status(RGWRados *store, const RGWZone& zone,
   out << indented{width, "source zone"} << source.id << " (" << source.name << ")\n";
 
   // syncing from this zone?
-  if (!zone.syncs_from(source.id)) {
+  if (!zone.syncs_from(source.name)) {
     out << indented{width} << "not in sync_from\n";
     return 0;
   }
@@ -2829,6 +2830,7 @@ int main(int argc, const char **argv)
   bool have_max_objects = false;
   bool have_max_size = false;
   int include_all = false;
+  int allow_unordered = false;
 
   int sync_stats = false;
   int reset_stats = false;
@@ -3072,6 +3074,8 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_binary_flag(args, i, &reset_stats, NULL, "--reset-stats", (char*)NULL)) {
       // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &include_all, NULL, "--include-all", (char*)NULL)) {
+     // do nothing
+    } else if (ceph_argparse_binary_flag(args, i, &allow_unordered, NULL, "--allow-unordered", (char*)NULL)) {
      // do nothing
     } else if (ceph_argparse_binary_flag(args, i, &extra_info, NULL, "--extra-info", (char*)NULL)) {
      // do nothing
@@ -4884,6 +4888,28 @@ int main(int argc, const char **argv)
     return 0;
   }
 
+  bool non_master_cmd = (!store->svc.zone->is_meta_master() && !yes_i_really_mean_it);
+  std::set<int> non_master_ops_list = {OPT_USER_CREATE, OPT_USER_RM, 
+                                        OPT_USER_MODIFY, OPT_USER_ENABLE,
+                                        OPT_USER_SUSPEND, OPT_SUBUSER_CREATE,
+                                        OPT_SUBUSER_MODIFY, OPT_SUBUSER_RM,
+                                        OPT_BUCKET_LINK, OPT_BUCKET_UNLINK,
+                                        OPT_BUCKET_RESHARD, OPT_BUCKET_RM,
+                                        OPT_METADATA_PUT, OPT_METADATA_RM,
+                                        OPT_RESHARD_CANCEL, OPT_RESHARD_ADD,
+                                        OPT_MFA_CREATE, OPT_MFA_REMOVE,
+                                        OPT_MFA_RESYNC, OPT_CAPS_ADD,
+                                        OPT_CAPS_RM};
+
+  bool print_warning_message = (non_master_ops_list.find(opt_cmd) != non_master_ops_list.end() &&
+                                non_master_cmd);
+
+  if (print_warning_message) {
+      cerr << "Please run the command on master zone. Performing this operation on non-master zone leads to inconsistent metadata between zones" << std::endl;
+      cerr << "Are you sure you want to go ahead? (requires --yes-i-really-mean-it)" << std::endl;
+      return EINVAL;
+  }
+
   if (!user_id.empty()) {
     user_op.set_user_id(user_id);
     bucket_op.set_user_id(user_id);
@@ -5465,6 +5491,7 @@ int main(int argc, const char **argv)
       list_op.params.ns = ns;
       list_op.params.enforce_ns = false;
       list_op.params.list_versions = true;
+      list_op.params.allow_unordered = bool(allow_unordered);
 
       do {
         ret = list_op.list_objects(max_entries - count, &result, &common_prefixes, &truncated);

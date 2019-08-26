@@ -1,5 +1,0 @@
-## Name: Ceph MON
-## Description: Open port for Ceph Monitor
-
-# space separated list of allowed TCP ports
-TCP="6789"

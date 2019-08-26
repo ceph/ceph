@@ -56,7 +56,7 @@ TEST(CephContext, do_command)
     bufferlist out;
     cct->do_command("config diff get", cmdmap, "xml", &out);
     string s(out.c_str(), out.length());
-    EXPECT_EQ("<config_diff_get><diff><key><default></default><override>" + value + "</override><final>value</final></key></diff></config_diff_get>", s);
+    EXPECT_EQ("<config_diff_get><diff><key><default></default><override>" + value + "</override><final>value</final></key><rbd_default_features><default>61</default><final>61</final></rbd_default_features></diff></config_diff_get>", s);
   }
   cct->put();
 }

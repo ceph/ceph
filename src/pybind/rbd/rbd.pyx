@@ -49,9 +49,16 @@ cdef extern from "time.h":
         time_t tv_sec
         long tv_nsec
 
+cdef extern from "<errno.h>" nogil:
+    enum:
+        _ECANCELED "ECANCELED"
+
 cdef extern from "rados/librados.h":
     enum:
         _LIBRADOS_SNAP_HEAD "LIBRADOS_SNAP_HEAD"
+
+cdef extern from "rbd/librbd.h":
+    ctypedef int (*librbd_progress_fn_t)(uint64_t offset, uint64_t total, void* ptr)
 
 cdef extern from "rbd/librbd.h" nogil:
     enum:
@@ -261,7 +268,6 @@ cdef extern from "rbd/librbd.h" nogil:
         _RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS "RBD_POOL_STAT_OPTION_TRASH_SNAPSHOTS"
 
     ctypedef void (*rbd_callback_t)(rbd_completion_t cb, void *arg)
-    ctypedef int (*librbd_progress_fn_t)(uint64_t offset, uint64_t total, void* ptr)
 
     void rbd_version(int *major, int *minor, int *extra)
 
@@ -295,7 +301,8 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_clone3(rados_ioctx_t p_ioctx, const char *p_name,
                    const char *p_snapname, rados_ioctx_t c_ioctx,
                    const char *c_name, rbd_image_options_t c_opts)
-    int rbd_remove(rados_ioctx_t io, const char *name)
+    int rbd_remove_with_progress(rados_ioctx_t io, const char *name,
+                                 librbd_progress_fn_t cb, void *cbdata)
     int rbd_rename(rados_ioctx_t src_io_ctx, const char *srcname,
                    const char *destname)
 
@@ -308,15 +315,26 @@ cdef extern from "rbd/librbd.h" nogil:
     void rbd_trash_list_cleanup(rbd_trash_image_info_t *trash_entries,
                                 size_t num_entries)
     int rbd_trash_purge(rados_ioctx_t io, time_t expire_ts, float threshold)
-    int rbd_trash_remove(rados_ioctx_t io, const char *id, int force)
+    int rbd_trash_remove_with_progress(rados_ioctx_t io, const char *id,
+                                       int force, librbd_progress_fn_t cb,
+                                       void *cbdata)
     int rbd_trash_restore(rados_ioctx_t io, const char *id, const char *name)
 
     int rbd_migration_prepare(rados_ioctx_t io_ctx, const char *image_name,
-                              rados_ioctx_t dest_io_ctx, const char *dest_image_name,
+                              rados_ioctx_t dest_io_ctx,
+                              const char *dest_image_name,
                               rbd_image_options_t opts)
-    int rbd_migration_execute(rados_ioctx_t io_ctx, const char *image_name)
-    int rbd_migration_commit(rados_ioctx_t io_ctx, const char *image_name)
-    int rbd_migration_abort(rados_ioctx_t io_ctx, const char *image_name)
+    int rbd_migration_execute_with_progress(rados_ioctx_t io_ctx,
+                                            const char *image_name,
+                                            librbd_progress_fn_t cb,
+                                            void *cbdata)
+    int rbd_migration_commit_with_progress(rados_ioctx_t io_ctx,
+                                           const char *image_name,
+                                           librbd_progress_fn_t cb,
+                                           void *cbdata)
+    int rbd_migration_abort_with_progress(rados_ioctx_t io_ctx,
+                                          const char *image_name,
+                                          librbd_progress_fn_t cb, void *cbdata)
     int rbd_migration_status(rados_ioctx_t io_ctx, const char *image_name,
                              rbd_image_migration_status_t *status,
                              size_t status_size)
@@ -452,7 +470,8 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_snap_get_trash_namespace(rbd_image_t image, uint64_t snap_id,
                                      char *original_name, size_t max_length)
 
-    int rbd_flatten(rbd_image_t image)
+    int rbd_flatten_with_progress(rbd_image_t image, librbd_progress_fn_t cb,
+                                  void *cbdata)
     int rbd_sparsify(rbd_image_t image, size_t sparse_size)
     int rbd_rebuild_object_map(rbd_image_t image, librbd_progress_fn_t cb,
                                void *cbdata)
@@ -597,6 +616,8 @@ cdef extern from "rbd/librbd.h" nogil:
     int rbd_pool_stats_option_add_uint64(rbd_pool_stats_t stats,
                                          int stat_option, uint64_t* stat_val)
     int rbd_pool_stats_get(rados_ioctx_t io, rbd_pool_stats_t stats)
+
+ECANCELED = _ECANCELED
 
 RBD_FEATURE_LAYERING = _RBD_FEATURE_LAYERING
 RBD_FEATURE_STRIPINGV2 = _RBD_FEATURE_STRIPINGV2
@@ -766,6 +787,10 @@ class Timeout(OSError):
 class DiskQuotaExceeded(OSError):
     pass
 
+class OperationCanceled(OSError):
+    def __init__(self, message, errno=None):
+        super(OperationCanceled, self).__init__(
+                "RBD operation canceled (%s)" % message, errno)
 
 cdef errno_to_exception = {
     errno.EPERM     : PermissionError,
@@ -782,6 +807,7 @@ cdef errno_to_exception = {
     errno.ESHUTDOWN : ConnectionShutdown,
     errno.ETIMEDOUT : Timeout,
     errno.EDQUOT    : DiskQuotaExceeded,
+    ECANCELED       : OperationCanceled,
 }
 
 cdef group_errno_to_exception = {
@@ -799,6 +825,7 @@ cdef group_errno_to_exception = {
     errno.ESHUTDOWN : ConnectionShutdown,
     errno.ETIMEDOUT : Timeout,
     errno.EDQUOT    : DiskQuotaExceeded,
+    ECANCELED       : OperationCanceled,
 }
 
 cdef make_ex(ret, msg, exception_map=errno_to_exception):
@@ -821,7 +848,10 @@ cdef make_ex(ret, msg, exception_map=errno_to_exception):
 cdef rados_ioctx_t convert_ioctx(rados.Ioctx ioctx) except? NULL:
     return <rados_ioctx_t>ioctx.io
 
-cdef int no_op_progress_callback(uint64_t offset, uint64_t total, void* ptr) nogil:
+cdef int progress_callback(uint64_t offset, uint64_t total, void* ptr) with gil:
+    return (<object>ptr)(offset, total)
+
+cdef int no_op_progress_callback(uint64_t offset, uint64_t total, void* ptr):
     return 0
 
 def cstr(val, name, encoding="utf-8", opt=False):
@@ -1183,7 +1213,7 @@ class RBD(object):
         """
         return ImageIterator(ioctx)
 
-    def remove(self, ioctx, name):
+    def remove(self, ioctx, name, on_progress=None):
         """
         Delete an RBD image. This may take a long time, since it does
         not return until every object that comprises the image has
@@ -1197,6 +1227,8 @@ class RBD(object):
         :type ioctx: :class:`rados.Ioctx`
         :param name: the name of the image to remove
         :type name: str
+        :param on_progress: optional progress callback function
+        :type on_progress: callback function
         :raises: :class:`ImageNotFound`, :class:`ImageBusy`,
                  :class:`ImageHasSnapshots`
         """
@@ -1204,8 +1236,13 @@ class RBD(object):
         cdef:
             rados_ioctx_t _ioctx = convert_ioctx(ioctx)
             char *_name = name
+            librbd_progress_fn_t _prog_cb = &no_op_progress_callback
+            void *_prog_arg = NULL
+        if on_progress:
+            _prog_cb = &progress_callback
+            _prog_arg = <void *>on_progress
         with nogil:
-            ret = rbd_remove(_ioctx, _name)
+            ret = rbd_remove_with_progress(_ioctx, _name, _prog_cb, _prog_arg)
         if ret != 0:
             raise make_ex(ret, 'error removing image')
 
@@ -1287,7 +1324,7 @@ class RBD(object):
         if ret != 0:
             raise make_ex(ret, 'error purging images from trash')
 
-    def trash_remove(self, ioctx, image_id, force=False):
+    def trash_remove(self, ioctx, image_id, force=False, on_progress=None):
         """
         Delete an RBD image from trash. If image deferment time has not
         expired :class:`PermissionError` is raised.
@@ -1298,6 +1335,8 @@ class RBD(object):
         :type image_id: str
         :param force: force remove even if deferment time has not expired
         :type force: bool
+        :param on_progress: optional progress callback function
+        :type on_progress: callback function
         :raises: :class:`ImageNotFound`, :class:`PermissionError`
         """
         image_id = cstr(image_id, 'image_id')
@@ -1305,8 +1344,14 @@ class RBD(object):
             rados_ioctx_t _ioctx = convert_ioctx(ioctx)
             char *_image_id = image_id
             int _force = force
+            librbd_progress_fn_t _prog_cb = &no_op_progress_callback
+            void *_prog_arg = NULL
+        if on_progress:
+            _prog_cb = &progress_callback
+            _prog_arg = <void *>on_progress
         with nogil:
-            ret = rbd_trash_remove(_ioctx, _image_id, _force)
+            ret = rbd_trash_remove_with_progress(_ioctx, _image_id, _force,
+                                                 _prog_cb, _prog_arg)
         if ret != 0:
             raise make_ex(ret, 'error deleting image from trash')
 
@@ -1451,7 +1496,7 @@ class RBD(object):
         if ret < 0:
             raise make_ex(ret, 'error migrating image %s' % (image_name))
 
-    def migration_execute(self, ioctx, image_name):
+    def migration_execute(self, ioctx, image_name, on_progress=None):
         """
         Execute a prepared RBD image migration.
 
@@ -1459,18 +1504,26 @@ class RBD(object):
         :type ioctx: :class:`rados.Ioctx`
         :param image_name: the name of the image
         :type image_name: str
+        :param on_progress: optional progress callback function
+        :type on_progress: callback function
         :raises: :class:`ImageNotFound`
         """
         image_name = cstr(image_name, 'image_name')
         cdef:
             rados_ioctx_t _ioctx = convert_ioctx(ioctx)
             char *_image_name = image_name
+            librbd_progress_fn_t _prog_cb = &no_op_progress_callback
+            void *_prog_arg = NULL
+        if on_progress:
+            _prog_cb = &progress_callback
+            _prog_arg = <void *>on_progress
         with nogil:
-            ret = rbd_migration_execute(_ioctx, _image_name)
+            ret = rbd_migration_execute_with_progress(_ioctx, _image_name,
+                                                      _prog_cb, _prog_arg)
         if ret != 0:
             raise make_ex(ret, 'error aborting migration')
 
-    def migration_commit(self, ioctx, image_name):
+    def migration_commit(self, ioctx, image_name, on_progress=None):
         """
         Commit an executed RBD image migration.
 
@@ -1478,18 +1531,26 @@ class RBD(object):
         :type ioctx: :class:`rados.Ioctx`
         :param image_name: the name of the image
         :type image_name: str
+        :param on_progress: optional progress callback function
+        :type on_progress: callback function
         :raises: :class:`ImageNotFound`
         """
         image_name = cstr(image_name, 'image_name')
         cdef:
             rados_ioctx_t _ioctx = convert_ioctx(ioctx)
             char *_image_name = image_name
+            librbd_progress_fn_t _prog_cb = &no_op_progress_callback
+            void *_prog_arg = NULL
+        if on_progress:
+            _prog_cb = &progress_callback
+            _prog_arg = <void *>on_progress
         with nogil:
-            ret = rbd_migration_commit(_ioctx, _image_name)
+            ret = rbd_migration_commit_with_progress(_ioctx, _image_name,
+                                                     _prog_cb, _prog_arg)
         if ret != 0:
             raise make_ex(ret, 'error aborting migration')
 
-    def migration_abort(self, ioctx, image_name):
+    def migration_abort(self, ioctx, image_name, on_progress=None):
         """
         Cancel a previously started but interrupted migration.
 
@@ -1497,14 +1558,22 @@ class RBD(object):
         :type ioctx: :class:`rados.Ioctx`
         :param image_name: the name of the image
         :type image_name: str
+        :param on_progress: optional progress callback function
+        :type on_progress: callback function
         :raises: :class:`ImageNotFound`
         """
         image_name = cstr(image_name, 'image_name')
         cdef:
             rados_ioctx_t _ioctx = convert_ioctx(ioctx)
             char *_image_name = image_name
+            librbd_progress_fn_t _prog_cb = &no_op_progress_callback
+            void *_prog_arg = NULL
+        if on_progress:
+            _prog_cb = &progress_callback
+            _prog_arg = <void *>on_progress
         with nogil:
-            ret = rbd_migration_abort(_ioctx, _image_name)
+            ret = rbd_migration_abort_with_progress(_ioctx, _image_name,
+                                                    _prog_cb, _prog_arg)
         if ret != 0:
             raise make_ex(ret, 'error aborting migration')
 
@@ -3725,12 +3794,20 @@ written." % (self.name, ret, length))
             raise make_ex(ret, 'error getting modify timestamp for image: %s' % (self.name))
         return datetime.fromtimestamp(timestamp.tv_sec)
 
-    def flatten(self):
+    def flatten(self, on_progress=None):
         """
         Flatten clone image (copy all blocks from parent to child)
+        :param on_progress: optional progress callback function
+        :type on_progress: callback function
         """
+        cdef:
+            librbd_progress_fn_t _prog_cb = &no_op_progress_callback
+            void *_prog_arg = NULL
+        if on_progress:
+            _prog_cb = &progress_callback
+            _prog_arg = <void *>on_progress
         with nogil:
-            ret = rbd_flatten(self.image)
+            ret = rbd_flatten_with_progress(self.image, _prog_cb, _prog_arg)
         if ret < 0:
             raise make_ex(ret, "error flattening %s" % self.name)
 

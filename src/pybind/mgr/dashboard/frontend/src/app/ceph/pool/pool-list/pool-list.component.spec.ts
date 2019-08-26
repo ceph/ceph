@@ -2,12 +2,14 @@ import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastModule } from 'ng2-toastr';
+import * as _ from 'lodash';
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { TabsModule } from 'ngx-bootstrap/tabs';
+import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
+import { ConfigurationService } from '../../../shared/api/configuration.service';
 import { PoolService } from '../../../shared/api/pool.service';
 import { CriticalConfirmationModalComponent } from '../../../shared/components/critical-confirmation-modal/critical-confirmation-modal.component';
 import { ExecutingTask } from '../../../shared/models/executing-task';
@@ -43,7 +45,7 @@ describe('PoolListComponent', () => {
     declarations: [PoolListComponent, PoolDetailsComponent, RbdConfigurationListComponent],
     imports: [
       SharedModule,
-      ToastModule.forRoot(),
+      ToastrModule.forRoot(),
       RouterTestingModule,
       TabsModule.forRoot(),
       HttpClientTestingModule
@@ -65,6 +67,56 @@ describe('PoolListComponent', () => {
 
   it('should have columns that are sortable', () => {
     expect(component.columns.every((column) => Boolean(column.prop))).toBeTruthy();
+  });
+
+  describe('monAllowPoolDelete', () => {
+    let configurationService: ConfigurationService;
+
+    beforeEach(() => {
+      configurationService = TestBed.get(ConfigurationService);
+    });
+
+    it('should set value correctly if mon_allow_pool_delete flag is set to true', () => {
+      const configOption = {
+        name: 'mon_allow_pool_delete',
+        value: [
+          {
+            section: 'mon',
+            value: 'true'
+          }
+        ]
+      };
+      spyOn(configurationService, 'get').and.returnValue(of(configOption));
+      fixture = TestBed.createComponent(PoolListComponent);
+      component = fixture.componentInstance;
+      expect(component.monAllowPoolDelete).toBe(true);
+    });
+
+    it('should set value correctly if mon_allow_pool_delete flag is set to false', () => {
+      const configOption = {
+        name: 'mon_allow_pool_delete',
+        value: [
+          {
+            section: 'mon',
+            value: 'false'
+          }
+        ]
+      };
+      spyOn(configurationService, 'get').and.returnValue(of(configOption));
+      fixture = TestBed.createComponent(PoolListComponent);
+      component = fixture.componentInstance;
+      expect(component.monAllowPoolDelete).toBe(false);
+    });
+
+    it('should set value correctly if mon_allow_pool_delete flag is not set', () => {
+      const configOption = {
+        name: 'mon_allow_pool_delete'
+      };
+      spyOn(configurationService, 'get').and.returnValue(of(configOption));
+      fixture = TestBed.createComponent(PoolListComponent);
+      component = fixture.componentInstance;
+      expect(component.monAllowPoolDelete).toBe(false);
+    });
   });
 
   describe('pool deletion', () => {
@@ -206,14 +258,34 @@ describe('PoolListComponent', () => {
     });
   });
 
+  describe('custom row comparators', () => {
+    const expectCorrectComparator = (statsAttribute: string) => {
+      const mockPool = (v) => ({ stats: { [statsAttribute]: { latest: v } } });
+      const columnDefinition = _.find(
+        component.columns,
+        (column) => column.prop === `stats.${statsAttribute}.rates`
+      );
+      expect(columnDefinition.comparator(undefined, undefined, mockPool(2), mockPool(1))).toBe(1);
+      expect(columnDefinition.comparator(undefined, undefined, mockPool(1), mockPool(2))).toBe(-1);
+    };
+
+    it('compares read bytes correctly', () => {
+      expectCorrectComparator('rd_bytes');
+    });
+
+    it('compares write bytes correctly', () => {
+      expectCorrectComparator('wr_bytes');
+    });
+  });
+
   describe('transformPoolsData', () => {
     it('transforms pools data correctly', () => {
       const pools = [
         {
           stats: {
-            bytes_used: { latest: 5, rate: 0, series: [] },
-            max_avail: { latest: 15, rate: 0, series: [] },
-            rd_bytes: { latest: 6, rate: 4, series: [[0, 2], [1, 6]] }
+            bytes_used: { latest: 5, rate: 0, rates: [] },
+            max_avail: { latest: 15, rate: 0, rates: [] },
+            rd_bytes: { latest: 6, rate: 4, rates: [[0, 2], [1, 6]] }
           },
           pg_status: { 'active+clean': 8, down: 2 }
         }
@@ -223,12 +295,12 @@ describe('PoolListComponent', () => {
           cdIsBinary: true,
           pg_status: '8 active+clean, 2 down',
           stats: {
-            bytes_used: { latest: 5, rate: 0, series: [] },
-            max_avail: { latest: 15, rate: 0, series: [] },
-            rd: { latest: 0, rate: 0, series: [] },
-            rd_bytes: { latest: 6, rate: 4, series: [2, 6] },
-            wr: { latest: 0, rate: 0, series: [] },
-            wr_bytes: { latest: 0, rate: 0, series: [] }
+            bytes_used: { latest: 5, rate: 0, rates: [] },
+            max_avail: { latest: 15, rate: 0, rates: [] },
+            rd: { latest: 0, rate: 0, rates: [] },
+            rd_bytes: { latest: 6, rate: 4, rates: [2, 6] },
+            wr: { latest: 0, rate: 0, rates: [] },
+            wr_bytes: { latest: 0, rate: 0, rates: [] }
           },
           usage: 0.25
         }
@@ -243,12 +315,12 @@ describe('PoolListComponent', () => {
           cdIsBinary: true,
           pg_status: '',
           stats: {
-            bytes_used: { latest: 0, rate: 0, series: [] },
-            max_avail: { latest: 0, rate: 0, series: [] },
-            rd: { latest: 0, rate: 0, series: [] },
-            rd_bytes: { latest: 0, rate: 0, series: [] },
-            wr: { latest: 0, rate: 0, series: [] },
-            wr_bytes: { latest: 0, rate: 0, series: [] }
+            bytes_used: { latest: 0, rate: 0, rates: [] },
+            max_avail: { latest: 0, rate: 0, rates: [] },
+            rd: { latest: 0, rate: 0, rates: [] },
+            rd_bytes: { latest: 0, rate: 0, rates: [] },
+            wr: { latest: 0, rate: 0, rates: [] },
+            wr_bytes: { latest: 0, rate: 0, rates: [] }
           },
           usage: 0
         }
@@ -346,6 +418,20 @@ describe('PoolListComponent', () => {
       expect(component.selectionCacheTiers).toEqual([{ pg_num: 256, pool: 0, pool_name: 'a' }]);
       setSelectionTiers([]);
       expect(component.selectionCacheTiers).toEqual([]);
+    });
+  });
+
+  describe('getDisableDesc', () => {
+    it('should return message if mon_allow_pool_delete flag is set to false', () => {
+      component.monAllowPoolDelete = false;
+      expect(component.getDisableDesc()).toBe(
+        'Pool deletion is disabled by the mon_allow_pool_delete configuration setting.'
+      );
+    });
+
+    it('should return undefined if mon_allow_pool_delete flag is set to true', () => {
+      component.monAllowPoolDelete = true;
+      expect(component.getDisableDesc()).toBeUndefined();
     });
   });
 });

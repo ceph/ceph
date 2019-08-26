@@ -5,6 +5,7 @@ from functools import total_ordering
 from ceph_volume import sys_info
 from ceph_volume.api import lvm
 from ceph_volume.util import disk
+from ceph_volume.util.constants import ceph_disk_guids
 
 report_template = """
 {dev:<25} {size:<12} {rot!s:<7} {available!s:<9} {model}"""
@@ -417,10 +418,22 @@ class CephDiskDevice(object):
         return self.device.blkid_api.get('PARTLABEL', '')
 
     @property
+    def parttype(self):
+        """
+        Seems like older version do not detect PARTTYPE correctly (assuming the
+        info in util/disk.py#lsblk is still valid).
+        SImply resolve to using blkid since lsblk will throw an error if asked
+        for an unknown columns
+        """
+        return self.device.blkid_api.get('PARTTYPE', '')
+
+    @property
     def is_member(self):
         if self._is_ceph_disk_member is None:
             if 'ceph' in self.partlabel:
                 self._is_ceph_disk_member = True
+                return True
+            elif self.parttype in ceph_disk_guids.keys():
                 return True
             return False
         return self._is_ceph_disk_member
@@ -436,4 +449,5 @@ class CephDiskDevice(object):
         for t in types:
             if t in self.partlabel:
                 return t
-        return 'unknown'
+        label = ceph_disk_guids.get(self.parttype, {})
+        return label.get('type', 'unknown').split('.')[-1]

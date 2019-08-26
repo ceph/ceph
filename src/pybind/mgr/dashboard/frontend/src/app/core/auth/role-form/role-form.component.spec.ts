@@ -5,7 +5,7 @@ import { ReactiveFormsModule } from '@angular/forms';
 import { Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
-import { ToastModule } from 'ng2-toastr';
+import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
@@ -37,7 +37,7 @@ describe('RoleFormComponent', () => {
         RouterTestingModule.withRoutes(routes),
         HttpClientTestingModule,
         ReactiveFormsModule,
-        ToastModule.forRoot(),
+        ToastrModule.forRoot(),
         SharedModule
       ],
       declarations: [RoleFormComponent, FakeComponent],

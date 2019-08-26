@@ -4,8 +4,8 @@ import { By } from '@angular/platform-browser';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
-import { ToastModule } from 'ng2-toastr';
 import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
+import { ToastrModule } from 'ngx-toastr';
 import { Subject, throwError as observableThrowError } from 'rxjs';
 
 import {
@@ -47,7 +47,7 @@ describe('RbdSnapshotListComponent', () => {
     imports: [
       DataTableModule,
       ComponentsModule,
-      ToastModule.forRoot(),
+      ToastrModule.forRoot(),
       ApiModule,
       HttpClientTestingModule,
       RouterTestingModule,

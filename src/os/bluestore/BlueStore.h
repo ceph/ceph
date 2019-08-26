@@ -127,6 +127,7 @@ enum {
   l_bluestore_omap_upper_bound_lat,
   l_bluestore_omap_lower_bound_lat,
   l_bluestore_omap_next_lat,
+  l_bluestore_clist_lat,
   l_bluestore_last
 };
 
@@ -2669,9 +2670,17 @@ public:
     uint64_t size,
     PExtentVector* extents);
 
-  void log_latency_fn(int idx,
-		      const ceph::timespan& lat,
-		      std::function<string (const ceph::timespan& lat)> fn);
+  inline void log_latency(const char* name,
+    int idx,
+    const ceph::timespan& lat,
+    double lat_threshold,
+    const char* info = "") const;
+
+  inline void log_latency_fn(const char* name,
+    int idx,
+    const ceph::timespan& lat,
+    double lat_threshold,
+    std::function<string (const ceph::timespan& lat)> fn) const;
 
 private:
   bool _debug_data_eio(const ghobject_t& o) {

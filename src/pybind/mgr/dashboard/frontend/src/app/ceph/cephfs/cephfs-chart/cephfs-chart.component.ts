@@ -19,7 +19,7 @@ export class CephfsChartComponent implements OnChanges, OnInit {
   @Input()
   mdsCounter: any;
 
-  lhsCounter = 'mds.inodes';
+  lhsCounter = 'mds_mem.ino';
   rhsCounter = 'mds_server.handle_client_request';
 
   chart: any;
@@ -71,6 +71,10 @@ export class CephfsChartComponent implements OnChanges, OnInit {
         }
       ],
       options: {
+        title: {
+          text: this.mdsCounter.name,
+          display: true
+        },
         responsive: true,
         maintainAspectRatio: false,
         legend: {

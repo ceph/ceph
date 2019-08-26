@@ -551,7 +551,7 @@ namespace rgw {
       /* save attrs */
       rgw_fh->encode_attrs(ux_key, ux_attrs);
       if (st)
-        rgw_fh->stat(st);
+        rgw_fh->stat(st, RGWFileHandle::FLAG_LOCKED);
       get<0>(mkr) = rgw_fh;
     } else {
       get<1>(mkr) = -EIO;
@@ -681,7 +681,7 @@ namespace rgw {
 	  parent->set_ctime(real_clock::to_timespec(t));
 	}
         if (st)
-          (void) rgw_fh->stat(st);
+	  (void) rgw_fh->stat(st, RGWFileHandle::FLAG_LOCKED);
 
         rgw_fh->set_etag(*(req.get_attr(RGW_ATTR_ETAG)));
         rgw_fh->set_acls(*(req.get_attr(RGW_ATTR_ACL))); 
@@ -810,7 +810,7 @@ namespace rgw {
     default:
       break;
     };
-
+    /* if rgw_fh is a directory, mtime will be advanced */
     return rgw_fh->stat(st);
   } /* RGWLibFS::getattr */
 
@@ -942,6 +942,15 @@ namespace rgw {
     rele();
   } /* RGWLibFS::close */
 
+  inline std::ostream& operator<<(std::ostream &os, fh_key const &fhk) {
+    os << "<fh_key: bucket=";
+    os << fhk.fh_hk.bucket;
+    os << "; object=";
+    os << fhk.fh_hk.object;
+    os << ">";
+    return os;
+  }
+
   inline std::ostream& operator<<(std::ostream &os, struct timespec const &ts) {
       os << "<timespec: tv_sec=";
       os << ts.tv_sec;
@@ -993,7 +1002,12 @@ namespace rgw {
 	<< dendl;
       {
 	lock_guard guard(state.mtx); /* LOCKED */
-	/* just return if no events */
+	lsubdout(get_context(), rgw, 15)
+	  << "GC: processing"
+	  << " count=" << events.size()
+	  << " events"
+	  << dendl;
+        /* just return if no events */
 	if (events.empty()) {
 	  return;
 	}
@@ -1107,6 +1121,18 @@ namespace rgw {
     }
   }
 
+  fh_key RGWFileHandle::make_fhk(const std::string& name)
+  {
+    std::string tenant = get_fs()->get_user()->user_id.to_str();
+    if (depth == 0) {
+      /* S3 bucket -- assert mount-at-bucket case reaches here */
+      return fh_key(name, name, tenant);
+    } else {
+      std::string key_name = make_key_name(name.c_str());
+      return fh_key(fhk.fh_hk.bucket, key_name.c_str(), tenant);
+    }
+  }
+
   void RGWFileHandle::encode_attrs(ceph::buffer::list& ux_key1,
 				   ceph::buffer::list& ux_attrs1)
   {
@@ -1124,11 +1150,7 @@ namespace rgw {
     fh_key fhk;
     auto bl_iter_key1 = ux_key1->cbegin();
     decode(fhk, bl_iter_key1);
-    if (fhk.version >= 2) {
-      ceph_assert(this->fh.fh_hk == fhk.fh_hk);
-    } else {
-      get<0>(dar) = true;
-    }
+    get<0>(dar) = true;
 
     auto bl_iter_unix1 = ux_attrs1->cbegin();
     decode(*this, bl_iter_unix1);
@@ -1189,6 +1211,11 @@ namespace rgw {
     struct timespec now;
     CephContext* cct = fs->get_context();
 
+    lsubdout(cct, rgw, 10)
+      << __func__ << " readdir called on "
+      << object_name()
+      << dendl;
+
     directory* d = get<directory>(&variant_type);
     if (d) {
       (void) clock_gettime(CLOCK_MONOTONIC_COARSE, &now); /* !LOCKED */
@@ -1197,8 +1224,11 @@ namespace rgw {
     }
 
     bool initial_off;
+    char* mk{nullptr};
+
     if (likely(!! get<const char*>(&offset))) {
-      initial_off = ! get<const char*>(offset);
+      mk = const_cast<char*>(get<const char*>(offset));
+      initial_off = !mk;
     } else {
       initial_off = (*get<uint64_t*>(offset) == 0);
     }
@@ -1215,9 +1245,6 @@ namespace rgw {
 	  set_nlink(2);
 	inc_nlink(req.d_count);
 	*eof = req.eof();
-	event ev(event::type::READDIR, get_key(), state.atime);
-	lock_guard sguard(fs->state.mtx);
-	fs->state.push_event(ev);
       }
     } else {
       RGWReaddirRequest req(cct, fs->get_user(), this, rcb, cb_arg, offset);
@@ -1230,11 +1257,12 @@ namespace rgw {
 	  set_nlink(2);
 	inc_nlink(req.d_count);
 	*eof = req.eof();
-	event ev(event::type::READDIR, get_key(), state.atime);
-	lock_guard sguard(fs->state.mtx);
-	fs->state.push_event(ev);
       }
     }
+
+    event ev(event::type::READDIR, get_key(), state.atime);
+    lock_guard sguard(fs->state.mtx);
+    fs->state.push_event(ev);
 
     lsubdout(fs->get_context(), rgw, 15)
       << __func__
@@ -1410,6 +1438,27 @@ namespace rgw {
     if (d) {
       state.nlink = 2;
       d->last_marker = rgw_obj_key{};
+    }
+  }
+
+  void RGWFileHandle::advance_mtime(uint32_t flags) {
+    /* intended for use on directories, fast-forward mtime so as to
+     * ensure a new, higher value for the change attribute */
+    unique_lock uniq(mtx, std::defer_lock);
+    if (likely(! (flags & RGWFileHandle::FLAG_LOCKED))) {
+      uniq.lock();
+    }
+
+    /* advance mtime only if stored mtime is older than the
+     * configured namespace expiration */
+    auto now = real_clock::now();
+    auto cmptime = state.mtime;
+    cmptime.tv_sec +=
+      fs->get_context()->_conf->rgw_nfs_namespace_expire_secs;
+    if (cmptime < real_clock::to_timespec(now)) {
+      /* sets ctime as well as mtime, to avoid masking updates should
+       * ctime inexplicably hold a higher value */
+      set_times(now);
     }
   }
 

@@ -3,9 +3,7 @@ meta:
    Run ceph on two nodes, using one of them as a client,
    with a separate client-only node. 
    Use xfs beneath the osds.
-   install ceph/nautilus v14.2.0 point version
-   run workload and upgrade-sequence in parallel
-   install ceph/nautilus v14.2.1? point version
+   install ceph/nautilus v14.2.2 point version
    run workload and upgrade-sequence in parallel
    (every point reslease should be tested)
    run workload and upgrade-sequence in parallel
@@ -34,7 +32,7 @@ overrides:
     - filesystem is degraded
     - OBJECT_MISPLACED
     ### ref: https://tracker.ceph.com/issues/40251 
-    - failed to encode map 
+    #removed see ^ - failed to encode map 
 
     fs: xfs
 
@@ -69,32 +67,24 @@ openstack:
     count: 3
     size: 30 # GB
 tasks:
-- print: "****  done nautilus v14.2.0 about to install"
+# v14.2.0 removed per http://tracker.ceph.com/issues/40251
+- print: "****  done nautilus v14.2.2 about to install"
 - install:
-    tag: v14.2.0
+    tag: v14.2.2
     # line below can be removed its from jewel test
     #exclude_packages: ['ceph-mgr','libcephfs2','libcephfs-devel','libcephfs-dev', 'librgw2']
-- print: "**** done v14.2.0 install"
+- print: "**** done v14.2.2 install"
 - ceph:
    fs: xfs
    add_osds_to_crush: true
 - print: "**** done ceph xfs"
 - sequential:
    - workload
-- print: "**** done workload v14.2.0"
+- print: "**** done workload v14.2.2"
 
 
-# v14.2.1
-- install.upgrade:
-    mon.a:
-      tag: v14.2.1
-    mon.b:
-      tag: v14.2.1
-- print: "**** done v14.2.1 install"
-- parallel:
-   - workload_nautilus
-   - upgrade-sequence_nautilus
-- print: "**** done workload_nautilus v14.2.1"
+# v14.2.1 removed per http://tracker.ceph.com/issues/40251
+# v14.2.2
 
 #######  upgrade to v14.2.?? PLACEHOLDER
 #- install.upgrade:
@@ -128,7 +118,8 @@ workload:
 workload_nautilus:
    full_sequential:
    - workunit:
-       tag: v14.2.0
+       branch: nautilus
+       #tag: v14.2.0
        clients:
          client.1:
          - rados/test.sh
@@ -145,6 +136,10 @@ workload_nautilus:
            rgw_server: client.0
            scan_for_encryption_keys: false
      - print: "**** done s3tests workload_nautilus"
+     - rbd_fsx:
+         clients: [client.0]
+         size: 134217728
+     - print: "**** done rbd_fsx workload_nautilus"
 
 upgrade-sequence_nautilus:
    sequential:
