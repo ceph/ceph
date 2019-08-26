@@ -305,8 +305,10 @@ ceph_set_health_checks(BaseMgrModule *self, PyObject *args)
       } else if (ks == "count") {
 	if (PyLong_Check(v)) {
 	  count = PyLong_AsLong(v);
+#if PY_MAJOR_VERSION < 3
 	} else if (PyInt_Check(v)) {
 	  count = PyInt_AsLong(v);
+#endif
 	} else {
 	  derr << __func__ << " check " << check_name
 	       << " count value not long or int" << dendl;
@@ -348,7 +350,7 @@ ceph_set_health_checks(BaseMgrModule *self, PyObject *args)
   self->py_modules->set_health_checks(self->this_module->get_name(),
                                       std::move(out_checks));
   PyEval_RestoreThread(tstate);
-  
+
   Py_RETURN_NONE;
 }
 
