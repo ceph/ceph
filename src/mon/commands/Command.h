@@ -39,12 +39,13 @@ using namespace std;
  *
  * Define members and functions common to commands.
  */
+template<typename Service = PaxosService>
 struct Common
 {
 
   explicit Common(
       Monitor *_mon,
-      PaxosService *_svc,
+      Service *_svc,
       CephContext *_cct) :
     mon(_mon),
     service(_svc),
@@ -61,7 +62,7 @@ struct Common
 
  protected:
   Monitor *mon;
-  PaxosService *service;
+  Service *service;
   CephContext *cct;
 
   version_t get_last_committed() {
