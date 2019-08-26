@@ -161,10 +161,12 @@ void ProtocolV2::start_connect(const entity_addr_t& _peer_addr,
   conn.target_addr = _peer_addr;
   conn.set_peer_type(_peer_type);
   conn.policy = messenger.get_policy(_peer_type);
-  logger().info("{} ProtocolV2::start_connect(): peer_addr={}, peer_type={},"
+  client_cookie = generate_client_cookie();
+  logger().info("{} ProtocolV2::start_connect(): peer_addr={}, peer_type={}, cc={}"
                 " policy(lossy={}, server={}, standby={}, resetcheck={})",
-                conn, _peer_addr, ceph_entity_type_name(_peer_type), conn.policy.lossy,
-                conn.policy.server, conn.policy.standby, conn.policy.resetcheck);
+                conn, _peer_addr, ceph_entity_type_name(_peer_type), client_cookie,
+                conn.policy.lossy, conn.policy.server,
+                conn.policy.standby, conn.policy.resetcheck);
   messenger.register_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   execute_connecting();
@@ -867,17 +869,15 @@ void ProtocolV2::execute_connecting()
       conn.set_ephemeral_port(0, SocketConnection::side_t::none);
       return messenger.get_global_seq().then([this] (auto gs) {
           global_seq = gs;
+          assert(client_cookie != 0);
           if (!conn.policy.lossy && server_cookie != 0) {
-            assert(client_cookie != 0);
             ++connect_seq;
             logger().debug("{} UPDATE: gs={}, cs={} for reconnect",
                            conn, global_seq, connect_seq);
-          } else {
+          } else { // conn.policy.lossy || server_cookie == 0
             assert(connect_seq == 0);
             assert(server_cookie == 0);
-            client_cookie = generate_client_cookie();
-            logger().debug("{} UPDATE: gs={}, cc={} for connect",
-                           conn, global_seq, client_cookie);
+            logger().debug("{} UPDATE: gs={} for connect", conn, global_seq);
           }
 
           return wait_write_exit();
@@ -1866,6 +1866,7 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
 
 void ProtocolV2::execute_ready()
 {
+  assert(conn.policy.lossy || (client_cookie != 0 && server_cookie != 0));
   trigger_state(state_t::READY, write_state_t::open, false);
   execution_done = seastar::with_gate(pending_dispatch, [this] {
     protocol_timer.cancel();
