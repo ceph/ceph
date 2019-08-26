@@ -122,6 +122,7 @@ void Protocol::requeue_sent()
                     std::make_move_iterator(conn.sent.begin()),
                     std::make_move_iterator(conn.sent.end()));
   conn.sent.clear();
+  write_event();
 }
 
 void Protocol::requeue_up_to(seq_num_t seq)
