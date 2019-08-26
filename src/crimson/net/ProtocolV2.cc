@@ -1344,10 +1344,20 @@ ProtocolV2::server_reconnect()
 
     // can peer_addrs be changed on-the-fly?
     // TODO: change peer_addr to entity_addrvec_t
-    if (conn.peer_addr != reconnect.addrs().front()) {
+    entity_addr_t paddr = reconnect.addrs().front();
+    if (paddr.is_msgr2() || paddr.is_any()) {
+      // good
+    } else {
+      logger().warn("{} peer's address {} is not v2", conn, paddr);
+      throw std::system_error(
+          make_error_code(ceph::net::error::bad_peer_address));
+    }
+    if (conn.peer_addr == entity_addr_t()) {
+      conn.peer_addr = paddr;
+    } else if (conn.peer_addr != paddr) {
       logger().error("{} peer identifies as {}, while conn.peer_addr={},"
                      " reconnect failed",
-                     conn, reconnect.addrs().front(), conn.peer_addr);
+                     conn, paddr, conn.peer_addr);
       throw std::system_error(
           make_error_code(ceph::net::error::bad_peer_address));
     }
@@ -1358,8 +1368,8 @@ ProtocolV2::server_reconnect()
     if (!existing_conn) {
       // there is no existing connection therefore cannot reconnect to previous
       // session
-      logger().warn("{} server_reconnect: no existing connection,"
-                    " reseting client", conn);
+      logger().warn("{} server_reconnect: no existing connection from address {},"
+                    " reseting client", conn, conn.peer_addr);
       return send_reset(true);
     }
 
