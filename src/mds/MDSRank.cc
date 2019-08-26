@@ -3671,6 +3671,7 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_recall_max_decay_rate",
     "mds_recall_warning_decay_rate",
     "mds_request_load_average_decay_rate",
+    "mds_session_cache_liveness_decay_rate",
     NULL
   };
   return KEYS;
