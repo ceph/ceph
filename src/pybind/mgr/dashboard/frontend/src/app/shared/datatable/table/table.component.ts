@@ -474,7 +474,6 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     const sortProp = this.userConfig.sorts[0].prop;
     if (!_.find(this.tableColumns, (c: CdTableColumn) => c.prop === sortProp)) {
       this.userConfig.sorts = this.createSortingDefinition(this.tableColumns[0].prop);
-      this.table.onColumnSort({ sorts: this.userConfig.sorts });
     }
     this.table.recalculate();
     this.cdRef.detectChanges();
