@@ -41,6 +41,13 @@ describe('Pools page', () => {
     });
   });
 
+  it('should edit a pools placement group', () => {
+    pools.exist(poolName, true).then(() => {
+      pools.navigateTo();
+      pools.edit_pool_pg(poolName, 32);
+    });
+  });
+
   it('should delete a pool', () => {
     pools.exist(poolName);
     pools.delete(poolName).then(() => {

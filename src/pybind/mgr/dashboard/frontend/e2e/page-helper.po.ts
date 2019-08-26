@@ -59,6 +59,10 @@ export abstract class PageHelper {
     return element(by.cssContainingText('.datatable-body-cell-label', content));
   }
 
+  getTableRow(content) {
+    return element(by.cssContainingText('.datatable-body-row', content));
+  }
+
   getTable() {
     return element.all(by.css('.datatable-body'));
   }
