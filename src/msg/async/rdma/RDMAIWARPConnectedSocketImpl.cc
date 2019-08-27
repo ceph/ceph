@@ -29,7 +29,6 @@ RDMAIWARPConnectedSocketImpl::RDMAIWARPConnectedSocketImpl(CephContext *cct, sha
       status = CHANNEL_FD_CREATED;
     }, false);
     status = RESOURCE_ALLOCATED;
-    local_qpn = qp->get_local_qp_number();
     qp->get_local_cm_meta().peer_qpn = peer_qpn;
     qp->get_peer_cm_meta().local_qpn = peer_qpn;
   } else {
@@ -98,8 +97,6 @@ void RDMAIWARPConnectedSocketImpl::handle_cm_connection() {
         notify();
         break;
       }
-      local_qpn = qp->get_local_qp_number();
-      qp->get_local_cm_meta().local_qpn = local_qpn;
 
       memset(&cm_params, 0, sizeof(cm_params));
       cm_params.retry_count = RETRY_COUNT;
@@ -165,6 +162,7 @@ int RDMAIWARPConnectedSocketImpl::alloc_resource() {
   if (!qp) {
     return -1;
   }
+  local_qpn = qp->get_local_qp_number();
   dispatcher->register_qp(qp, this);
   dispatcher->perf_logger->inc(l_msgr_rdma_created_queue_pair);
   dispatcher->perf_logger->inc(l_msgr_rdma_active_queue_pair);
