@@ -171,7 +171,8 @@ Infiniband::QueuePair::QueuePair(
   txcq(txcq),
   rxcq(rxcq),
   initial_psn(lrand48() & PSN_MSK),
-  max_send_wr(tx_queue_len),
+  // One extra WR for beacon
+  max_send_wr(tx_queue_len + 1),
   max_recv_wr(rx_queue_len),
   q_key(q_key),
   dead(false)
@@ -447,14 +448,9 @@ retry:
 }
 
 /**
- * Change RC QueuePair into the ERROR state. This is necessary modify
- * the Queue Pair into the Error state and poll all of the relevant
- * Work Completions prior to destroying a Queue Pair.
- * Since destroying a Queue Pair does not guarantee that its Work
- * Completions are removed from the CQ upon destruction. Even if the
- * Work Completions are already in the CQ, it might not be possible to
- * retrieve them. If the Queue Pair is associated with an SRQ, it is
- * recommended wait for the affiliated event IBV_EVENT_QP_LAST_WQE_REACHED
+ * Switch QP to ERROR state and then post a beacon to be able to drain all
+ * WCEs and then safely destroy QP. See RDMADispatcher::handle_tx_event()
+ * for details.
  *
  * \return
  *      -errno if the QueuePair can't switch to ERROR
@@ -464,19 +460,26 @@ int Infiniband::QueuePair::to_dead()
 {
   if (dead)
     return 0;
-  ibv_qp_attr qpa;
-  memset(&qpa, 0, sizeof(qpa));
-  qpa.qp_state = IBV_QPS_ERR;
 
-  int mask = IBV_QP_STATE;
-  int ret = ibv_modify_qp(qp, &qpa, mask);
-  if (ret) {
-    lderr(cct) << __func__ << " failed to transition to ERROR state: "
-               << cpp_strerror(errno) << dendl;
+  if (modify_qp_to_error()) {
+    return -1;
+  }
+  ldout(cct, 20) << __func__ << " force trigger error state Queue Pair, qp number: " << local_cm_meta.local_qpn
+                 << " bound remote QueuePair, qp number: " << local_cm_meta.peer_qpn << dendl;
+
+  struct ibv_send_wr *bad_wr = nullptr, beacon;
+  memset(&beacon, 0, sizeof(beacon));
+  beacon.wr_id = BEACON_WRID;
+  beacon.opcode = IBV_WR_SEND;
+  beacon.send_flags = IBV_SEND_SIGNALED;
+  if (ibv_post_send(qp, &beacon, &bad_wr)) {
+    lderr(cct) << __func__ << " failed to send a beacon: " << cpp_strerror(errno) << dendl;
     return -errno;
   }
+  ldout(cct, 20) << __func__ << " trigger error state Queue Pair, qp number: " << local_cm_meta.local_qpn << " Beacon sent " << dendl;
   dead = true;
-  return ret;
+
+  return 0;
 }
 
 int Infiniband::QueuePair::get_remote_qp_number(uint32_t *rqp) const
@@ -1064,7 +1067,8 @@ void Infiniband::init()
     ceph_abort();
   }
 
-  tx_queue_len = device->device_attr.max_qp_wr;
+  // Keep extra one WR for a beacon to indicate all WCEs were consumed
+  tx_queue_len = device->device_attr.max_qp_wr - 1;
   if (tx_queue_len > cct->_conf->ms_async_rdma_send_buffers) {
     tx_queue_len = cct->_conf->ms_async_rdma_send_buffers;
     ldout(cct, 1) << __func__ << " assigning: " << tx_queue_len << " send buffers"  << dendl;
