@@ -440,7 +440,6 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n)
 
   for (int i = 0; i < n; ++i) {
     ibv_wc* response = &cqe[i];
-    Chunk* chunk = reinterpret_cast<Chunk *>(response->wr_id);
 
     // If it's beacon WR, enqueue the QP to be destroyed later
     if (response->wr_id == BEACON_WRID) {
@@ -448,38 +447,79 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n)
       continue;
     }
 
-    ldout(cct, 25) << __func__ << " QP: " << response->qp_num
-                   << " len: " << response->byte_len << " , addr:" << chunk
-                   << " " << ib->wc_status_to_string(response->status) << dendl;
+    ldout(cct, 20) << __func__ << " QP number: " << response->qp_num << " len: " << response->byte_len
+                   << " status: " << ib->wc_status_to_string(response->status) << dendl;
 
     if (response->status != IBV_WC_SUCCESS) {
-      perf_logger->inc(l_msgr_rdma_tx_total_wc_errors);
-      if (response->status == IBV_WC_RETRY_EXC_ERR) {
-        ldout(cct, 1) << __func__ << " connection between server and client not working. Disconnect this now" << dendl;
-        perf_logger->inc(l_msgr_rdma_tx_wc_retry_errors);
-      } else if (response->status == IBV_WC_WR_FLUSH_ERR) {
-        ldout(cct, 1) << __func__ << " Work Request Flushed Error: this connection's qp="
-                      << response->qp_num << " should be down while this WR=" << response->wr_id
-                      << " still in flight." << dendl;
-        perf_logger->inc(l_msgr_rdma_tx_wc_wr_flush_errors);
-      } else {
-        ldout(cct, 1) << __func__ << " send work request returned error for buffer("
-                      << response->wr_id << ") status(" << response->status << "): "
-                      << ib->wc_status_to_string(response->status) << dendl;
-	std::lock_guard l{lock};//make sure connected socket alive when pass wc
-        RDMAConnectedSocketImpl *conn = get_conn_lockless(response->qp_num);
+      switch(response->status) {
+        case IBV_WC_RETRY_EXC_ERR:
+          {
+            perf_logger->inc(l_msgr_rdma_tx_wc_retry_errors);
 
-        if (conn && conn->is_connected()) {
-          ldout(cct, 25) << __func__ << " qp state is : " << conn->get_qp_state() << dendl;
-          conn->fault();
-        } else {
-          ldout(cct, 1) << __func__ << " missing qp_num=" << response->qp_num << " discard event" << dendl;
-        }
+            ldout(cct, 1) << __func__ << " Responder ACK timeout, possible disconnect, or Remote QP in bad state "
+                          << " WCE status(" << response->status << "): " << ib->wc_status_to_string(response->status)
+                          << " WCE QP number " << response->qp_num << " Opcode " << response->opcode
+                          << " wr_id: 0x" << std::hex << response->wr_id << std::dec << dendl;
+
+            std::lock_guard l{lock};
+            RDMAConnectedSocketImpl *conn = get_conn_lockless(response->qp_num);
+            if (conn) {
+              ldout(cct, 1) << __func__ << " SQ WR return error, remote Queue Pair, qp number: "
+                            << conn->get_peer_qpn() << dendl;
+            }
+          }
+          break;
+        case IBV_WC_WR_FLUSH_ERR:
+          {
+            perf_logger->inc(l_msgr_rdma_tx_wc_wr_flush_errors);
+
+            std::lock_guard l{lock};
+            QueuePair *qp = get_qp_lockless(response->qp_num);
+            if (qp) {
+              ldout(cct, 20) << __func__ << " qp state is " << Infiniband::qp_state_string(qp->get_state()) << dendl;
+            }
+            if (qp && qp->is_dead()) {
+              ldout(cct, 20) << __func__ << " outstanding SQ WR is flushed into CQ since QueuePair is dead " << dendl;
+            } else {
+              lderr(cct) << __func__ << " Invalid/Unsupported request to consume outstanding SQ WR,"
+                         << " WCE status(" << response->status << "): " << ib->wc_status_to_string(response->status)
+                         << " WCE QP number " << response->qp_num << " Opcode " << response->opcode
+                         << " wr_id: 0x" << std::hex << response->wr_id << std::dec << dendl;
+
+              RDMAConnectedSocketImpl *conn = get_conn_lockless(response->qp_num);
+              if (conn) {
+                ldout(cct, 1) << __func__ << " SQ WR return error, remote Queue Pair, qp number: "
+                              << conn->get_peer_qpn() << dendl;
+              }
+            }
+          }
+          break;
+
+        default:
+          {
+            lderr(cct) << __func__ << " SQ WR return error,"
+                       << " WCE status(" << response->status << "): " << ib->wc_status_to_string(response->status)
+                       << " WCE QP number " << response->qp_num << " Opcode " << response->opcode
+                       << " wr_id: 0x" << std::hex << response->wr_id << std::dec << dendl;
+
+            std::lock_guard l{lock};
+            RDMAConnectedSocketImpl *conn = get_conn_lockless(response->qp_num);
+            if (conn && conn->is_connected()) {
+              ldout(cct, 20) << __func__ << " SQ WR return error Queue Pair error state is : " << conn->get_qp_state()
+                             << " remote Queue Pair, qp number: " << conn->get_peer_qpn() << dendl;
+              conn->fault();
+            } else {
+              ldout(cct, 1) << __func__ << " Disconnected, qp_num = " << response->qp_num << " discard event" << dendl;
+            }
+          }
+          break;
       }
     }
 
-    //TX completion may come either from regular send message or from 'fin' message.
-    //In the case of 'fin' wr_id points to the QueuePair.
+    auto chunk = reinterpret_cast<Chunk *>(response->wr_id);
+    //TX completion may come either from
+    // 1) regular send message, WCE wr_id points to chunk
+    // 2) 'fin' message, wr_id points to the QP
     if (ib->get_memory_manager()->is_tx_buffer(chunk->buffer)) {
       tx_chunks.push_back(chunk);
     } else if (reinterpret_cast<QueuePair*>(response->wr_id)->get_local_qp_number() == response->qp_num ) {
