@@ -204,8 +204,8 @@ public:
 
   void set_explicit(uint64_t _size, map<uint64_t, RGWObjManifestPart>& _objs) {
     explicit_objs = true;
-    obj_size = _size;
     objs.swap(_objs);
+    set_obj_size(_size);
   }
 
   void get_implicit_location(uint64_t cur_part_id, uint64_t cur_stripe, uint64_t ofs, string *override_prefix, rgw_obj_select *location);
@@ -419,14 +419,14 @@ public:
   }
 
   class obj_iterator {
-    RGWObjManifest *manifest;
-    uint64_t part_ofs; /* where current part starts */
-    uint64_t stripe_ofs; /* where current stripe starts */
-    uint64_t ofs;       /* current position within the object */
-    uint64_t stripe_size;      /* current part size */
+    RGWObjManifest *manifest = nullptr;
+    uint64_t part_ofs = 0;   /* where current part starts */
+    uint64_t stripe_ofs = 0; /* where current stripe starts */
+    uint64_t ofs = 0;        /* current position within the object */
+    uint64_t stripe_size = 0;      /* current part size */
 
-    int cur_part_id;
-    int cur_stripe;
+    int cur_part_id = 0;
+    int cur_stripe = 0;
     string cur_override_prefix;
 
     rgw_obj_select location;
@@ -435,15 +435,6 @@ public:
     map<uint64_t, RGWObjManifestRule>::iterator next_rule_iter;
 
     map<uint64_t, RGWObjManifestPart>::iterator explicit_iter;
-
-    void init() {
-      part_ofs = 0;
-      stripe_ofs = 0;
-      ofs = 0;
-      stripe_size = 0;
-      cur_part_id = 0;
-      cur_stripe = 0;
-    }
 
     void update_explicit_pos();
 
@@ -455,20 +446,12 @@ public:
     }
 
   public:
-    obj_iterator() : manifest(NULL) {
-      init();
-    }
-    explicit obj_iterator(RGWObjManifest *_m) : manifest(_m) {
-      init();
-      if (!manifest->empty()) {
-        seek(0);
-      }
-    }
+    obj_iterator() = default;
+    explicit obj_iterator(RGWObjManifest *_m)
+      : obj_iterator(_m, 0)
+    {}
     obj_iterator(RGWObjManifest *_m, uint64_t _ofs) : manifest(_m) {
-      init();
-      if (!manifest->empty()) {
-        seek(_ofs);
-      }
+      seek(_ofs);
     }
     void seek(uint64_t ofs);
 

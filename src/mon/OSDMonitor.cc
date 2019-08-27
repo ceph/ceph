@@ -7780,10 +7780,12 @@ int OSDMonitor::prepare_new_pool(string& name,
   pi->expected_num_objects = expected_num_objects;
   pi->object_hash = CEPH_STR_HASH_RJENKINS;
 
-  {
-    auto m = pg_pool_t::get_pg_autoscale_mode_by_name(
-      g_conf().get_val<string>("osd_pool_default_pg_autoscale_mode"));
-    pi->pg_autoscale_mode = m >= 0 ? m : 0;
+  if (auto m = pg_pool_t::get_pg_autoscale_mode_by_name(
+        g_conf().get_val<string>("osd_pool_default_pg_autoscale_mode"));
+      m != pg_pool_t::pg_autoscale_mode_t::UNKNOWN) {
+    pi->pg_autoscale_mode = m;
+  } else {
+    pi->pg_autoscale_mode = pg_pool_t::pg_autoscale_mode_t::OFF;
   }
   auto max = g_conf().get_val<int64_t>("mon_osd_max_initial_pgs");
   pi->set_pg_num(
@@ -8112,8 +8114,8 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       p.set_pgp_num_target(n);
     }
   } else if (var == "pg_autoscale_mode") {
-    n = pg_pool_t::get_pg_autoscale_mode_by_name(val);
-    if (n < 0) {
+    auto m = pg_pool_t::get_pg_autoscale_mode_by_name(val);
+    if (m == pg_pool_t::pg_autoscale_mode_t::UNKNOWN) {
       ss << "specified invalid mode " << val;
       return -EINVAL;
     }
@@ -8121,7 +8123,7 @@ int OSDMonitor::prepare_command_pool_set(const cmdmap_t& cmdmap,
       ss << "must set require_osd_release to nautilus or later before setting pg_autoscale_mode";
       return -EINVAL;
     }
-    p.pg_autoscale_mode = n;
+    p.pg_autoscale_mode = m;
   } else if (var == "crush_rule") {
     int id = osdmap.crush->get_rule_id(val);
     if (id == -ENOENT) {

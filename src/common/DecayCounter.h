@@ -43,7 +43,7 @@ public:
 
   void set_halflife(double hl) {
     k = log(.5) / hl;
-  }    
+  }
 
 private:
   double k = 0;             // k = ln(.5)/half_life

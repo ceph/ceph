@@ -58,7 +58,6 @@ void DecayCounter::generate_test_instances(std::list<DecayCounter*>& ls)
 {
   DecayCounter *counter = new DecayCounter();
   counter->val = 3.0;
-  counter->rate = DecayRate(2.0);
   ls.push_back(counter);
   counter = new DecayCounter();
   ls.push_back(counter);
