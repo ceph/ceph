@@ -290,7 +290,29 @@ int cls_cxx_map_get_val(cls_method_context_t hctx,
                         const string &key,
                         bufferlist *outbl)
 {
-  return 0;
+  OSDOp op{ CEPH_OSD_OP_OMAPGETVALSBYKEYS };
+  {
+    std::set<std::string> k{key};
+    encode(k, op.indata);
+  }
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
+  std::map<std::string, ceph::bufferlist> m;
+  try {
+    auto iter = op.outdata.cbegin();
+    decode(m, iter);
+  } catch (buffer::error&) {
+    return -EIO;
+  }
+  if (auto iter = std::begin(m); iter != std::end(m)) {
+    *outbl = std::move(iter->second);
+    return 0;
+  } else {
+    return -ENOENT;
+  }
 }
 
 int cls_cxx_map_set_val(cls_method_context_t hctx,

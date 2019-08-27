@@ -410,6 +410,12 @@ OpsExecuter::do_osd_op(OSDOp& osd_op)
     // @dzafman this isn't possible yet. Maybe it could be accomplished
     // before crimson's readiness and we'd luckily don't need to carry.
     return dont_do_legacy_op();
+
+  // OMAP
+  case CEPH_OSD_OP_OMAPGETVALSBYKEYS:
+    return do_read_op([&osd_op] (auto& backend, const auto& os) {
+      return backend.omap_get_vals_by_keys(os, osd_op);
+    });
   default:
     logger().warn("unknown op {}", ceph_osd_op_name(op.op));
     throw std::runtime_error(
