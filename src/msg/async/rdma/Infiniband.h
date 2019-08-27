@@ -446,6 +446,7 @@ class Infiniband {
               uint32_t tx_queue_len, uint32_t max_recv_wr, struct rdma_cm_id *cid, uint32_t q_key = 0);
     ~QueuePair();
 
+    int modify_qp_to_init();
     int init();
 
     /**
