@@ -10,7 +10,7 @@ Synopsis
 ========
 
 | **monmaptool** *mapfilename* [ --clobber ] [ --print ] [ --create ]
-  [ --add *ip*:*port* *...* ] [ --rm *ip*:*port* *...* ]
+  [ --add *ip*:*port* *...* ] [ --addv [*protocol*:*ip*:*port*[,*...*] ] *...* ] [ --rm *ip*:*port* *...* ]
 
 
 Description
@@ -65,6 +65,10 @@ Options
 .. option:: --add name ip:port
 
    will add a monitor with the specified ip:port to the map.
+
+.. option:: --addv name [protocol:ip:port[,...]]
+
+   will add a monitor with the specified version:ip:port to the map.
 
 .. option:: --rm name
 
