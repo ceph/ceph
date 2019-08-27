@@ -167,6 +167,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 
 			if (read_secret_from_file(value, secret, sizeof(secret)) < 0) {
 				printf("error reading secret file\n");
+				free(saw_name);
 				return NULL;
 			}
 
@@ -193,6 +194,7 @@ static char *parse_options(const char *data, int *filesys_flags)
 		} else if (strncmp(data, "name", 4) == 0) {
 			if (!value || !*value) {
 				printf("mount option name requires a value.\n");
+				free(saw_name);
 				return NULL;
 			}
 
