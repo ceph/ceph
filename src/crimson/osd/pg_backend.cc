@@ -505,6 +505,62 @@ maybe_get_omap_vals_by_keys(
   }
 }
 
+static seastar::future<bool, ceph::os::FuturizedStore::omap_values_t>
+maybe_get_omap_vals(
+  auto& store,
+  const auto& coll,
+  const auto& oi,
+  const auto& start_after)
+{
+  if (oi.is_omap()) {
+    return store->omap_get_values(coll, ghobject_t{oi.soid}, start_after);
+  } else {
+    return seastar::make_ready_future<bool, ceph::os::FuturizedStore::omap_values_t>(
+      true, ceph::os::FuturizedStore::omap_values_t{});
+  }
+}
+
+seastar::future<> PGBackend::omap_get_keys(
+  const ObjectState& os,
+  OSDOp& osd_op) const
+{
+  std::string start_after;
+  uint64_t max_return;
+  try {
+    auto p = osd_op.indata.cbegin();
+    decode(start_after, p);
+    decode(max_return, p);
+  } catch (buffer::error&) {
+    throw ceph::osd::invalid_argument{};
+  }
+  max_return =
+    std::min(max_return, local_conf()->osd_max_omap_entries_per_request);
+
+  // TODO: truly chunk the reading
+  return maybe_get_omap_vals(store, coll, os.oi, start_after).then(
+    [=, &osd_op] (bool, ceph::os::FuturizedStore::omap_values_t vals) {
+      ceph::bufferlist result;
+      bool truncated = false;
+      uint32_t num = 0;
+      for (auto& [key, val] : vals) {
+        if (num++ >= max_return ||
+            result.length() >= local_conf()->osd_max_omap_bytes_per_request) {
+          truncated = true;
+          break;
+        }
+        encode(key, result);
+      }
+      encode(num, osd_op.outdata);
+      osd_op.outdata.claim_append(result);
+      encode(truncated, osd_op.outdata);
+      return seastar::now();
+    });
+
+  // TODO:
+  //ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
+  //ctx->delta_stats.num_rd++;
+}
+
 seastar::future<> PGBackend::omap_get_vals_by_keys(
   const ObjectState& os,
   OSDOp& osd_op) const
