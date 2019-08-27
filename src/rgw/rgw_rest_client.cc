@@ -563,12 +563,9 @@ void RGWRESTStreamS3PutObj::send_init(rgw_obj& obj)
   string resource;
   string new_url = url;
 
-  if (host_style == VirtualStyle) {
-    resource_str = obj.get_oid();
-    new_url = obj.bucket.name + "."  + new_url;
-  } else {
-    resource_str = obj.bucket.name + "/" + obj.get_oid();
-  }
+  resource_str = obj.bucket.name + "/" + obj.get_oid();
+  if (host_style == VirtualStyle)
+     new_url = obj.bucket.name + "."  + new_url;
 
   //do not encode slash in object key name
   url_encode(resource_str, resource, false);
