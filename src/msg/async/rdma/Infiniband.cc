@@ -167,7 +167,7 @@ Infiniband::QueuePair::QueuePair(
   pd(infiniband.pd->pd),
   srq(srq),
   qp(NULL),
-  cm_id(cid),
+  cm_id(cid), peer_cm_meta{0}, local_cm_meta{0},
   txcq(txcq),
   rxcq(rxcq),
   initial_psn(lrand48() & PSN_MSK),
@@ -263,6 +263,11 @@ int Infiniband::QueuePair::init()
   }
   ldout(cct, 20) << __func__ << " successfully create queue pair: "
                  << "qp=" << qp << dendl;
+  local_cm_meta.local_qpn = get_local_qp_number();
+  local_cm_meta.psn = get_initial_psn();
+  local_cm_meta.lid = infiniband.get_lid();
+  local_cm_meta.peer_qpn = 0;
+  local_cm_meta.gid = infiniband.get_gid();
   return 0;
 }
 

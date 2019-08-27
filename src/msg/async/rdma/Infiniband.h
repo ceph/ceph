@@ -499,6 +499,8 @@ class Infiniband {
     ibv_srq*     srq;            // shared receive queue
     ibv_qp*      qp;             // infiniband verbs QP handle
     struct rdma_cm_id *cm_id;
+    ib_cm_meta_t peer_cm_meta;
+    ib_cm_meta_t local_cm_meta;
     Infiniband::CompletionQueue* txcq;
     Infiniband::CompletionQueue* rxcq;
     uint32_t     initial_psn;    // initial packet sequence number
