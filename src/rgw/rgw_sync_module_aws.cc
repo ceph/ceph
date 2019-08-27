@@ -1498,7 +1498,7 @@ public:
         status.obj_size = obj_size;
         status.src_properties = src_properties;
 #define MULTIPART_MAX_PARTS 10000
-        uint64_t min_part_size = obj_size / MULTIPART_MAX_PARTS;
+        uint64_t min_part_size = (obj_size / MULTIPART_MAX_PARTS) + 1;
         status.part_size = std::max(conf.s3.multipart_min_part_size, min_part_size);
         status.num_parts = (obj_size + status.part_size - 1) / status.part_size;
         status.cur_part = 1;
@@ -1508,12 +1508,10 @@ public:
         yield {
           rgw_sync_aws_multipart_part_info& cur_part_info = status.parts[status.cur_part];
           cur_part_info.part_num = status.cur_part;
-          cur_part_info.ofs = status.cur_ofs;
-          cur_part_info.size = std::min((uint64_t)status.part_size, status.obj_size - status.cur_ofs);
+          cur_part_info.ofs = status.part_size * (status.cur_part - 1);
+          cur_part_info.size = std::min((uint64_t)status.part_size, status.obj_size - cur_part_info.ofs);
 
           pcur_part_info = &cur_part_info;
-
-          status.cur_ofs += status.part_size;
 
           call(new RGWAWSStreamObjToCloudMultipartPartCR(sync_env,
                                                              source_conn, src_obj,

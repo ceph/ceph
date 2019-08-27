@@ -81,7 +81,6 @@ struct rgw_sync_aws_multipart_upload_info {
     encode(part_size, bl);
     encode(num_parts, bl);
     encode(cur_part, bl);
-    encode(cur_ofs, bl);
     encode(parts, bl);
     ENCODE_FINISH(bl);
   }
@@ -94,7 +93,6 @@ struct rgw_sync_aws_multipart_upload_info {
     decode(part_size, bl);
     decode(num_parts, bl);
     decode(cur_part, bl);
-    decode(cur_ofs, bl);
     decode(parts, bl);
     DECODE_FINISH(bl);
   }
