@@ -109,6 +109,7 @@ class RDMADispatcher {
     ++num_pending_workers;
   }
   RDMAConnectedSocketImpl* get_conn_lockless(uint32_t qp);
+  QueuePair* get_qp_lockless(uint32_t qp);
   QueuePair* get_qp(uint32_t qp);
   void erase_qpn_lockless(uint32_t qpn);
   void erase_qpn(uint32_t qpn);
