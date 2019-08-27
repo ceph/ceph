@@ -182,6 +182,42 @@ Infiniband::QueuePair::QueuePair(
   }
 }
 
+int Infiniband::QueuePair::modify_qp_to_init(void)
+{
+  // move from RESET to INIT state
+  ibv_qp_attr qpa;
+  memset(&qpa, 0, sizeof(qpa));
+  qpa.qp_state   = IBV_QPS_INIT;
+  qpa.pkey_index = 0;
+  qpa.port_num   = (uint8_t)(ib_physical_port);
+  qpa.qp_access_flags = IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE;
+  qpa.qkey       = q_key;
+
+  int mask = IBV_QP_STATE | IBV_QP_PORT;
+  switch (type) {
+    case IBV_QPT_RC:
+      mask |= IBV_QP_ACCESS_FLAGS;
+      mask |= IBV_QP_PKEY_INDEX;
+      break;
+    case IBV_QPT_UD:
+      mask |= IBV_QP_QKEY;
+      mask |= IBV_QP_PKEY_INDEX;
+      break;
+    case IBV_QPT_RAW_PACKET:
+      break;
+    default:
+      ceph_abort();
+  }
+
+  if (ibv_modify_qp(qp, &qpa, mask)) {
+    lderr(cct) << __func__ << " failed to switch to INIT state Queue Pair, qp number: " << qp->qp_num
+               << " Error: " << cpp_strerror(errno) << dendl;
+    return -1;
+  }
+  ldout(cct, 20) << __func__ << " successfully switch to INIT state Queue Pair, qp number: " << qp->qp_num << dendl;
+  return 0;
+}
+
 int Infiniband::QueuePair::init()
 {
   ldout(cct, 20) << __func__ << " started." << dendl;
@@ -212,6 +248,10 @@ int Infiniband::QueuePair::init()
       }
       return -1;
     }
+    if (modify_qp_to_init() != 0) {
+      ibv_destroy_qp(qp);
+      return -1;
+    }
   } else {
     ceph_assert(cm_id->verbs == pd->context);
     if (rdma_create_qp(cm_id, pd, &qpia)) {
@@ -223,44 +263,6 @@ int Infiniband::QueuePair::init()
   }
   ldout(cct, 20) << __func__ << " successfully create queue pair: "
                  << "qp=" << qp << dendl;
-
-  if (cct->_conf->ms_async_rdma_cm)
-    return 0;
-
-  // move from RESET to INIT state
-  ibv_qp_attr qpa;
-  memset(&qpa, 0, sizeof(qpa));
-  qpa.qp_state   = IBV_QPS_INIT;
-  qpa.pkey_index = 0;
-  qpa.port_num   = (uint8_t)(ib_physical_port);
-  qpa.qp_access_flags = IBV_ACCESS_REMOTE_WRITE | IBV_ACCESS_LOCAL_WRITE;
-  qpa.qkey       = q_key;
-
-  int mask = IBV_QP_STATE | IBV_QP_PORT;
-  switch (type) {
-    case IBV_QPT_RC:
-      mask |= IBV_QP_ACCESS_FLAGS;
-      mask |= IBV_QP_PKEY_INDEX;
-      break;
-    case IBV_QPT_UD:
-      mask |= IBV_QP_QKEY;
-      mask |= IBV_QP_PKEY_INDEX;
-      break;
-    case IBV_QPT_RAW_PACKET:
-      break;
-    default:
-      ceph_abort();
-  }
-
-  int ret = ibv_modify_qp(qp, &qpa, mask);
-  if (ret) {
-    ibv_destroy_qp(qp);
-    lderr(cct) << __func__ << " failed to transition to INIT state: "
-               << cpp_strerror(errno) << dendl;
-    return -1;
-  }
-  ldout(cct, 20) << __func__ << " successfully change queue pair to INIT:"
-                 << " qp=" << qp << dendl;
   return 0;
 }
 
