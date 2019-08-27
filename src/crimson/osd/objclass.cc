@@ -273,12 +273,27 @@ int cls_cxx_map_get_all_vals(cls_method_context_t hctx,
 }
 
 int cls_cxx_map_get_keys(cls_method_context_t hctx,
-                         const string &start_obj,
-			 uint64_t max_to_get,
-                         set<string> *keys,
-                         bool *more)
+                         const std::string& start_obj,
+                         const uint64_t max_to_get,
+                         std::set<std::string>* const keys,
+                         bool* const more)
 {
-  return 0;
+  OSDOp op{ CEPH_OSD_OP_OMAPGETKEYS };
+  encode(start_obj, op.indata);
+  encode(max_to_get, op.indata);
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
+  try {
+    auto iter = op.outdata.cbegin();
+    decode(*keys, iter);
+    decode(*more, iter);
+  } catch (buffer::error&) {
+    return -EIO;
+  }
+  return keys->size();
 }
 
 int cls_cxx_map_get_vals(cls_method_context_t hctx,

@@ -412,6 +412,10 @@ OpsExecuter::do_osd_op(OSDOp& osd_op)
     return dont_do_legacy_op();
 
   // OMAP
+  case CEPH_OSD_OP_OMAPGETKEYS:
+    return do_read_op([&osd_op] (auto& backend, const auto& os) {
+      return backend.omap_get_keys(os, osd_op);
+    });
   case CEPH_OSD_OP_OMAPGETVALSBYKEYS:
     return do_read_op([&osd_op] (auto& backend, const auto& os) {
       return backend.omap_get_vals_by_keys(os, osd_op);
