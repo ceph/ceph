@@ -6,7 +6,7 @@ const { SpecReporter } = require('jasmine-spec-reporter');
 const config = {
   SELENIUM_PROMISE_MANAGER: false,
   allScriptsTimeout: 11000,
-  implicitWaitTimeout: 360000,
+  implicitWaitTimeout: 9000,
   specs: ['./e2e/**/*.e2e-spec.ts'],
   capabilities: {
     browserName: 'chrome',
