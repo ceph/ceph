@@ -200,12 +200,12 @@ class Infiniband {
     ibv_pd* const pd;
   };
 
-
+  class QueuePair;
   class MemoryManager {
    public:
     class Chunk {
      public:
-      Chunk(ibv_mr* m, uint32_t bytes, char* buffer, uint32_t offset = 0, uint32_t bound = 0, uint32_t lkey = 0);
+      Chunk(ibv_mr* m, uint32_t bytes, char* buffer, uint32_t offset = 0, uint32_t bound = 0, uint32_t lkey = 0, QueuePair* qp = nullptr);
       ~Chunk();
 
       uint32_t get_offset();
@@ -217,9 +217,13 @@ class Infiniband {
       bool full();
       void reset_read_chunk();
       void reset_write_chunk();
+      void set_qp(QueuePair *qp) { this->qp = qp; }
+      void clear_qp() { set_qp(nullptr); }
+      QueuePair* get_qp() { return qp; }
 
      public:
       ibv_mr* mr;
+      QueuePair *qp;
       uint32_t lkey;
       uint32_t bytes;
       uint32_t offset;
@@ -305,6 +309,7 @@ class Infiniband {
       void *slow_malloc();
 
      public:
+      ceph::mutex lock = ceph::make_mutex("mem_pool_lock");
       explicit mem_pool(MemPoolContext *ctx, const size_type nrequested_size,
           const size_type nnext_size = 32,
           const size_type nmax_size = 0) :
@@ -338,10 +343,13 @@ class Infiniband {
     }
 
     Chunk *get_rx_buffer() {
+       std::lock_guard l{rxbuf_pool.lock};
        return reinterpret_cast<Chunk *>(rxbuf_pool.malloc());
     }
 
     void release_rx_buffer(Chunk *chunk) {
+      std::lock_guard l{rxbuf_pool.lock};
+      chunk->clear_qp();
       rxbuf_pool.free(chunk);
     }
 
@@ -439,6 +447,7 @@ class Infiniband {
   // must call plumb() to bring the queue pair to the RTS state.
   class QueuePair {
    public:
+    typedef MemoryManager::Chunk Chunk;
     QueuePair(CephContext *c, Infiniband& infiniband, ibv_qp_type type,
               int ib_physical_port,  ibv_srq *srq,
               Infiniband::CompletionQueue* txcq,
@@ -492,6 +501,23 @@ class Infiniband {
     bool is_dead() const { return dead; }
     ib_cm_meta_t& get_peer_cm_meta() { return peer_cm_meta; }
     ib_cm_meta_t& get_local_cm_meta() { return local_cm_meta; }
+    void add_rq_wr(Chunk* chunk)
+    {
+      if (srq) return;
+
+      std::lock_guard l{lock};
+      recv_queue.push_back(chunk);
+    }
+
+    void remove_rq_wr(Chunk* chunk) {
+      if (srq) return;
+
+      std::lock_guard l{lock};
+      auto it = std::find(recv_queue.begin(), recv_queue.end(), chunk);
+      ceph_assert(it != recv_queue.end());
+      recv_queue.erase(it);
+    }
+    ibv_srq* get_srq() const { return srq; }
 
    private:
     CephContext  *cct;
@@ -512,6 +538,8 @@ class Infiniband {
     uint32_t     max_recv_wr;
     uint32_t     q_key;
     bool dead;
+    vector<Chunk*> recv_queue;
+    ceph::mutex lock = ceph::make_mutex("queue_pair_lock");
   };
 
  public:
@@ -523,6 +551,10 @@ class Infiniband {
   // post rx buffers to srq, return number of buffers actually posted
   int post_chunks_to_rq(int num, QueuePair *qp = nullptr);
   void post_chunk_to_pool(Chunk* chunk) {
+    QueuePair *qp = chunk->get_qp();
+    if (qp != nullptr) {
+      qp->remove_rq_wr(chunk);
+    }
     get_memory_manager()->release_rx_buffer(chunk);
   }
   int get_tx_buffers(std::vector<Chunk*> &c, size_t bytes);

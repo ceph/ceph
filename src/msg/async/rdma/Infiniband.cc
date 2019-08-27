@@ -352,6 +352,16 @@ int Infiniband::QueuePair::init()
   local_cm_meta.lid = infiniband.get_lid();
   local_cm_meta.peer_qpn = 0;
   local_cm_meta.gid = infiniband.get_gid();
+  if (!srq) {
+    int rq_wrs = infiniband.post_chunks_to_rq(max_recv_wr, this);
+    if (rq_wrs  == 0) {
+      lderr(cct) << __func__ << " intialize no SRQ Queue Pair, qp number: " << qp->qp_num
+                 << " fatal error: can't post SQ WR " << dendl;
+      return -1;
+    }
+    ldout(cct, 20) << __func__ << " initialize no SRQ Queue Pair, qp number: "
+                   << qp->qp_num << " post SQ WR " << rq_wrs << dendl;
+  }
   return 0;
 }
 
@@ -667,8 +677,8 @@ Infiniband::ProtectionDomain::~ProtectionDomain()
 
 
 Infiniband::MemoryManager::Chunk::Chunk(ibv_mr* m, uint32_t bytes, char* buffer,
-    uint32_t offset, uint32_t bound, uint32_t lkey)
-  : mr(m), lkey(lkey), bytes(bytes), offset(offset), bound(bound), buffer(buffer)
+    uint32_t offset, uint32_t bound, uint32_t lkey, QueuePair* qp)
+  : mr(m), qp(qp), lkey(lkey), bytes(bytes), offset(offset), bound(bound), buffer(buffer)
 {
 }
 
@@ -1188,6 +1198,10 @@ int Infiniband::post_chunks_to_rq(int rq_wr_num, QueuePair *qp)
     rx_work_request[i].sg_list = &isge[i];
     rx_work_request[i].num_sge = 1;
 
+    if (qp && !qp->get_srq()) {
+       chunk->set_qp(qp);
+       qp->add_rq_wr(chunk);
+    }
     i++;
   }
 
@@ -1229,10 +1243,16 @@ Infiniband::CompletionQueue* Infiniband::create_comp_queue(
 
 Infiniband::QueuePair::~QueuePair()
 {
+  ldout(cct, 20) << __func__ << " destroy Queue Pair, qp number: " << qp->qp_num << " left SQ WR " << recv_queue.size() << dendl;
   if (qp) {
     ldout(cct, 20) << __func__ << " destroy qp=" << qp << dendl;
     ceph_assert(!ibv_destroy_qp(qp));
   }
+
+  for (auto& chunk: recv_queue) {
+    infiniband.get_memory_manager()->release_rx_buffer(chunk);
+  }
+  recv_queue.clear();
 }
 
 /**
