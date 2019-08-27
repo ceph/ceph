@@ -373,8 +373,6 @@ class Infiniband {
   Device *device = NULL;
   ProtectionDomain *pd = NULL;
   DeviceList *device_list = nullptr;
-  void wire_gid_to_gid(const char *wgid, ib_cm_meta_t* im);
-  void gid_to_wire_gid(const ib_cm_meta_t& im, char wgid[]);
   CephContext *cct;
   ceph::mutex lock = ceph::make_mutex("IB lock");
   bool initialized = false;
@@ -475,6 +473,13 @@ class Infiniband {
      * Get the state of a QueuePair.
      */
     int get_state() const;
+    /*
+     * send/receive connection management meta data
+     */
+    int send_cm_meta(CephContext *cct, int socket_fd, ib_cm_meta_t& cm_meta_data);
+    int recv_cm_meta(CephContext *cct, int socket_fd, ib_cm_meta_t& cm_meta_data);
+    void wire_gid_to_gid(const char *wgid, ib_cm_meta_t* cm_meta_data);
+    void gid_to_wire_gid(const ib_cm_meta_t& cm_meta_data, char wgid[]);
     void add_tx_wr(uint32_t amt) { tx_wr_inflight += amt; }
     void dec_tx_wr(uint32_t amt) { tx_wr_inflight -= amt; }
     uint32_t get_tx_wr() const { return tx_wr_inflight; }
@@ -519,8 +524,6 @@ class Infiniband {
   CompletionChannel *create_comp_channel(CephContext *c);
   CompletionQueue *create_comp_queue(CephContext *c, CompletionChannel *cc=NULL);
   uint8_t get_ib_physical_port() { return ib_physical_port; }
-  int send_msg(CephContext *cct, int sd, ib_cm_meta_t& msg);
-  int recv_msg(CephContext *cct, int sd, ib_cm_meta_t& msg);
   uint16_t get_lid() { return device->get_lid(); }
   ibv_gid get_gid() { return device->get_gid(); }
   MemoryManager* get_memory_manager() { return memory_manager; }
