@@ -269,7 +269,6 @@ class RDMAIWARPConnectedSocketImpl : public RDMAConnectedSocketImpl {
     virtual void close() override;
     virtual void shutdown() override;
     virtual void handle_cm_connection();
-    uint32_t get_local_qpn() const { return local_qpn; }
     void activate();
     int alloc_resource();
     void close_notify();
@@ -277,10 +276,7 @@ class RDMAIWARPConnectedSocketImpl : public RDMAConnectedSocketImpl {
   private:
     rdma_cm_id *cm_id;
     rdma_event_channel *cm_channel;
-    uint32_t local_qpn;
-    uint32_t remote_qpn;
     EventCallbackRef cm_con_handler;
-    bool is_server;
     std::mutex close_mtx;
     std::condition_variable close_condition;
     bool closed;
