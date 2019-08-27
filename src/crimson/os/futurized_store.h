@@ -23,6 +23,7 @@ class Transaction;
 class FuturizedStore {
 
 public:
+  // TODO: replace with the ceph::errorator concept
   template <class ConcreteExceptionT>
   class Exception : public std::logic_error {
   public:
@@ -48,6 +49,9 @@ public:
 
   struct EnoentException : public Exception<EnoentException> {
     using Exception<EnoentException>::Exception;
+  };
+  struct EnodataException : public Exception<EnodataException> {
+    using Exception<EnodataException>::Exception;
   };
   static std::unique_ptr<FuturizedStore> create(const std::string& type,
                                                 const std::string& data);
