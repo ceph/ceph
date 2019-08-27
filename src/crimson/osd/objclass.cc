@@ -56,9 +56,16 @@ int cls_get_request_origin(cls_method_context_t hctx, entity_inst_t *origin)
   return 0;
 }
 
-int cls_cxx_create(cls_method_context_t hctx, bool exclusive)
+int cls_cxx_create(cls_method_context_t hctx, const bool exclusive)
 {
-  return 0;
+  OSDOp op{CEPH_OSD_OP_CREATE};
+  op.op.flags = (exclusive ? CEPH_OSD_OP_FLAG_EXCL : 0);
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    return 0;
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
 }
 
 int cls_cxx_remove(cls_method_context_t hctx)

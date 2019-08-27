@@ -50,6 +50,11 @@ public:
   seastar::future<> stat(
     const ObjectState& os,
     OSDOp& osd_op);
+
+  seastar::future<> create(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& trans);
   seastar::future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn);
