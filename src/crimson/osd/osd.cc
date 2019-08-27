@@ -27,7 +27,7 @@
 #include "crimson/mon/MonClient.h"
 #include "crimson/net/Connection.h"
 #include "crimson/net/Messenger.h"
-#include "crimson/os/cyan_collection.h"
+#include "crimson/os/futurized_collection.h"
 #include "crimson/os/cyan_object.h"
 #include "crimson/os/futurized_store.h"
 #include "crimson/osd/heartbeat.h"
@@ -135,16 +135,18 @@ seastar::future<> OSD::mkfs(uuid_d osd_uuid, uuid_d cluster_fsid)
       __func__,
       cluster_fsid,
       superblock.osd_fsid);
-
-    meta_coll = make_unique<OSDMeta>(
-      store->create_new_collection(coll_t::meta()), store.get());
+    return store->create_new_collection(coll_t::meta());
+  }).then([this] (auto ch) {
+    meta_coll = make_unique<OSDMeta>(ch , store.get());
     ceph::os::Transaction t;
     meta_coll->create(t);
     meta_coll->store_superblock(t, superblock);
     return store->do_transaction(meta_coll->collection(), std::move(t));
   }).then([cluster_fsid, this] {
-    store->write_meta("ceph_fsid", cluster_fsid.to_string());
-    store->write_meta("whoami", std::to_string(whoami));
+    return when_all_succeed(
+      store->write_meta("ceph_fsid", cluster_fsid.to_string()),
+      store->write_meta("whoami", std::to_string(whoami)));
+  }).then([cluster_fsid, this] {
     fmt::print("created object store {} for osd.{} fsid {}\n",
                local_conf().get_val<std::string>("osd_data"),
                whoami, cluster_fsid);
@@ -200,8 +202,9 @@ seastar::future<> OSD::start()
   startup_time = ceph::mono_clock::now();
 
   return store->mount().then([this] {
-    meta_coll = make_unique<OSDMeta>(store->open_collection(coll_t::meta()),
-                                     store.get());
+    return store->open_collection(coll_t::meta());
+  }).then([this](auto ch) {
+    meta_coll = make_unique<OSDMeta>(ch, store.get());
     return meta_coll->load_superblock();
   }).then([this](OSDSuperblock&& sb) {
     superblock = std::move(sb);
@@ -399,8 +402,8 @@ seastar::future<> OSD::stop()
 
 seastar::future<> OSD::load_pgs()
 {
-  return seastar::parallel_for_each(store->list_collections(),
-    [this](auto coll) {
+  return store->list_collections().then([this](auto colls) {
+    return seastar::parallel_for_each(colls, [this](auto coll) {
       spg_t pgid;
       if (coll.is_pg(&pgid)) {
         return load_pg(pgid).then([pgid, this](auto&& pg) {
@@ -416,6 +419,7 @@ seastar::future<> OSD::load_pgs()
         return seastar::now();
       }
     });
+  });
 }
 
 seastar::future<Ref<PG>> OSD::make_pg(cached_map_t create_map, spg_t pgid)
@@ -440,13 +444,18 @@ seastar::future<Ref<PG>> OSD::make_pg(cached_map_t create_map, spg_t pgid)
   })().then([pgid, this, create_map](pg_pool_t&& pool,
                        string&& name,
                        ec_profile_t&& ec_profile) {
-    return seastar::make_ready_future<Ref<PG>>(Ref<PG>{new PG{pgid,
+    return shard_services.get_store().open_collection(coll_t::meta()).then(
+      [this, pgid, create_map, pool=std::move(pool), name, ec_profile]
+      (auto coll_ref) mutable {
+      return seastar::make_ready_future<Ref<PG>>(new PG{pgid,
 	    pg_shard_t{whoami, pgid.shard},
+	    coll_ref,
 	    std::move(pool),
 	    std::move(name),
 	    create_map,
 	    shard_services,
-	    ec_profile}});
+	    ec_profile});
+    });
   });
 }
 
@@ -681,6 +690,7 @@ seastar::future<Ref<PG>> OSD::handle_pg_create_info(
 	[this, &info](auto pg, auto startmap) -> seastar::future<Ref<PG>> {
 	  if (!pg)
 	    return seastar::make_ready_future<Ref<PG>>(Ref<PG>());
+        return store->create_new_collection(coll_t(info->pgid)).then([this, &info, startmap, pg] (auto coll) {
 	  PeeringCtx rctx;
 	  const pg_pool_t* pp = startmap->get_pg_pool(info->pgid.pool());
 
@@ -695,7 +705,6 @@ seastar::future<Ref<PG>> OSD::handle_pg_create_info(
 	  }
 
 
-	  auto coll = store->create_new_collection(coll_t(info->pgid));
 	  create_pg_collection(
 	    rctx.transaction,
 	    info->pgid,
@@ -721,9 +730,10 @@ seastar::future<Ref<PG>> OSD::handle_pg_create_info(
 	    *this, pg, pg->get_osdmap_epoch(),
 	    osdmap->get_epoch(), std::move(rctx), true).second.then([pg] {
 	      return seastar::make_ready_future<Ref<PG>>(pg);
-	    });
+	  });
 	});
     });
+  });
 }
 
 seastar::future<> OSD::handle_osd_map(ceph::net::Connection* conn,

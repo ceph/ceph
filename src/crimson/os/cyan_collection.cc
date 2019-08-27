@@ -6,7 +6,7 @@ namespace ceph::os
 {
 
 Collection::Collection(const coll_t& c)
-  : cid{c}
+  : FuturizedCollection{c}
 {}
 
 Collection::~Collection() = default;
