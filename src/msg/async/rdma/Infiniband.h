@@ -444,6 +444,9 @@ class Infiniband {
               uint32_t tx_queue_len, uint32_t max_recv_wr, struct rdma_cm_id *cid, uint32_t q_key = 0);
     ~QueuePair();
 
+    int modify_qp_to_error();
+    int modify_qp_to_rts();
+    int modify_qp_to_rtr();
     int modify_qp_to_init();
     int init();
 
@@ -476,8 +479,8 @@ class Infiniband {
     /*
      * send/receive connection management meta data
      */
-    int send_cm_meta(CephContext *cct, int socket_fd, ib_cm_meta_t& cm_meta_data);
-    int recv_cm_meta(CephContext *cct, int socket_fd, ib_cm_meta_t& cm_meta_data);
+    int send_cm_meta(CephContext *cct, int socket_fd);
+    int recv_cm_meta(CephContext *cct, int socket_fd);
     void wire_gid_to_gid(const char *wgid, ib_cm_meta_t* cm_meta_data);
     void gid_to_wire_gid(const ib_cm_meta_t& cm_meta_data, char wgid[]);
     void add_tx_wr(uint32_t amt) { tx_wr_inflight += amt; }
@@ -488,6 +491,8 @@ class Infiniband {
     Infiniband::CompletionQueue* get_rx_cq() const { return rxcq; }
     int to_dead();
     bool is_dead() const { return dead; }
+    ib_cm_meta_t& get_peer_cm_meta() { return peer_cm_meta; }
+    ib_cm_meta_t& get_local_cm_meta() { return local_cm_meta; }
 
    private:
     CephContext  *cct;
