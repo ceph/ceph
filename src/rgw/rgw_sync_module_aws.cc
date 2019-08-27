@@ -546,11 +546,6 @@ struct AWSSyncConfig {
   int init(CephContext *cct, const JSONFormattable& config) {
     auto& default_conf = config["default"];
 
-    if (config.exists("default")) {
-      default_profile.init(default_conf);
-      init_profile(cct, default_conf, default_profile, false);
-    }
-
     for (auto& conn : config["connections"].array()) {
       auto new_conn = conn;
 
@@ -561,6 +556,14 @@ struct AWSSyncConfig {
     }
 
     acl_profiles.init(config["acl_profiles"]);
+
+    if (config.exists("default")) {
+      default_profile.init(default_conf);
+      int r = init_profile(cct, default_conf, default_profile, false);
+      if (r < 0) {
+        return r;
+      }
+    }
 
     int r = s3.init(cct, config["s3"]);
     if (r < 0) {
@@ -622,6 +625,7 @@ struct AWSSyncConfig {
     jf.close_section();
 
     acl_profiles.dump_conf(cct, jf);
+    s3.dump_conf(cct, jf);
 
     { // targets
       Formatter::ArraySection as(jf, "profiles");
