@@ -73,7 +73,7 @@ export class ImagesPageHelper extends PageHelper {
     await $('li.delete.ng-star-inserted').click(); // click delete
     // wait for pop-up to be visible (checks for title of pop-up)
     await browser.wait(Helper.EC.visibilityOf($('.modal-body')), Helper.TIMEOUT);
-    await $('.custom-control-label').click(); // click confirmation checkbox
+    await this.clickCheckbox($('.custom-control-label'));
     await element(by.cssContainingText('button', 'Delete RBD')).click();
     await browser.wait(Helper.EC.stalenessOf(this.getTableCell(name)), Helper.TIMEOUT);
   }
