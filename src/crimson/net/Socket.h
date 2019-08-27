@@ -62,8 +62,8 @@ class Socket
 
   static seastar::future<SocketFRef, entity_addr_t>
   accept(seastar::server_socket& listener) {
-    return listener.accept().then([] (seastar::connected_socket socket,
-				      seastar::socket_address paddr) {
+    return listener.accept().then([] (seastar::accept_result accept_result) {
+        auto [socket, paddr] = std::move(accept_result);
         entity_addr_t peer_addr;
         peer_addr.set_sockaddr(&paddr.as_posix_sockaddr());
         peer_addr.set_type(entity_addr_t::TYPE_ANY);
