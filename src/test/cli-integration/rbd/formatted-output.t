@@ -704,49 +704,60 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   [
       {
           "format": 1, 
+          "id": "", 
           "image": "foo", 
           "size": 1073741824
       }, 
       {
           "format": 1, 
+          "id": "", 
           "image": "foo", 
           "protected": "false", 
           "size": 1073741824, 
-          "snapshot": "snap"
+          "snapshot": "snap", 
+          "snapshot_id": * (glob)
       }, 
       {
           "format": 1, 
+          "id": "", 
           "image": "quux", 
           "lock_type": "exclusive", 
           "size": 1048576
       }, 
       {
           "format": 2, 
+          "id": "*",  (glob)
           "image": "bar", 
           "size": 1073741824
       }, 
       {
           "format": 2, 
+          "id": "*",  (glob)
           "image": "bar", 
           "protected": "true", 
           "size": 536870912, 
-          "snapshot": "snap"
+          "snapshot": "snap", 
+          "snapshot_id": * (glob)
       }, 
       {
           "format": 2, 
+          "id": "*",  (glob)
           "image": "bar", 
           "protected": "false", 
           "size": 1073741824, 
-          "snapshot": "snap2"
+          "snapshot": "snap2", 
+          "snapshot_id": * (glob)
       }, 
       {
           "format": 2, 
+          "id": "*",  (glob)
           "image": "baz", 
           "lock_type": "shared", 
           "size": 2147483648
       }, 
       {
           "format": 2, 
+          "id": "*",  (glob)
           "image": "quuy", 
           "size": 2147483648
       }
@@ -755,49 +766,60 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   <images>
     <image>
       <image>foo</image>
+      <id></id>
       <size>1073741824</size>
       <format>1</format>
     </image>
     <snapshot>
       <image>foo</image>
+      <id></id>
       <snapshot>snap</snapshot>
+      <snapshot_id>*</snapshot_id> (glob)
       <size>1073741824</size>
       <format>1</format>
       <protected>false</protected>
     </snapshot>
     <image>
       <image>quux</image>
+      <id></id>
       <size>1048576</size>
       <format>1</format>
       <lock_type>exclusive</lock_type>
     </image>
     <image>
       <image>bar</image>
+      <id>*</id> (glob)
       <size>1073741824</size>
       <format>2</format>
     </image>
     <snapshot>
       <image>bar</image>
+      <id>*</id> (glob)
       <snapshot>snap</snapshot>
+      <snapshot_id>*</snapshot_id> (glob)
       <size>536870912</size>
       <format>2</format>
       <protected>true</protected>
     </snapshot>
     <snapshot>
       <image>bar</image>
+      <id>*</id> (glob)
       <snapshot>snap2</snapshot>
+      <snapshot_id>*</snapshot_id> (glob)
       <size>1073741824</size>
       <format>2</format>
       <protected>false</protected>
     </snapshot>
     <image>
       <image>baz</image>
+      <id>*</id> (glob)
       <size>2147483648</size>
       <format>2</format>
       <lock_type>shared</lock_type>
     </image>
     <image>
       <image>quuy</image>
+      <id>*</id> (glob)
       <size>2147483648</size>
       <format>2</format>
     </image>
@@ -825,11 +847,13 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   [
       {
           "format": 2, 
+          "id": "*",  (glob)
           "image": "child", 
           "size": 536870912
       }, 
       {
           "format": 2, 
+          "id": "*",  (glob)
           "image": "child", 
           "parent": {
               "image": "bar", 
@@ -839,31 +863,38 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
           }, 
           "protected": "false", 
           "size": 536870912, 
-          "snapshot": "snap"
+          "snapshot": "snap", 
+          "snapshot_id": * (glob)
       }, 
       {
           "format": 2, 
+          "id": "*",  (glob)
           "image": "deep-flatten-child", 
           "size": 536870912
       }, 
       {
           "format": 2, 
+          "id": "*",  (glob)
           "image": "deep-flatten-child", 
           "protected": "false", 
           "size": 536870912, 
-          "snapshot": "snap"
+          "snapshot": "snap", 
+          "snapshot_id": * (glob)
       }
   ]
   $ rbd list rbd_other -l --format xml | xml_pp 2>&1 | grep -v '^new version at /usr/bin/xml_pp'
   <images>
     <image>
       <image>child</image>
+      <id>*</id> (glob)
       <size>536870912</size>
       <format>2</format>
     </image>
     <snapshot>
       <image>child</image>
+      <id>*</id> (glob)
       <snapshot>snap</snapshot>
+      <snapshot_id>*</snapshot_id> (glob)
       <size>536870912</size>
       <parent>
         <pool>rbd</pool>
@@ -876,12 +907,15 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     </snapshot>
     <image>
       <image>deep-flatten-child</image>
+      <id>*</id> (glob)
       <size>536870912</size>
       <format>2</format>
     </image>
     <snapshot>
       <image>deep-flatten-child</image>
+      <id>*</id> (glob)
       <snapshot>snap</snapshot>
+      <snapshot_id>*</snapshot_id> (glob)
       <size>536870912</size>
       <format>2</format>
       <protected>false</protected>
@@ -1055,23 +1089,29 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
   {
       "images": [
           {
+              "id": "*",  (glob)
               "name": "child", 
               "provisioned_size": 536870912, 
               "snapshot": "snap", 
+              "snapshot_id": *,  (glob)
               "used_size": 0
           }, 
           {
+              "id": "*",  (glob)
               "name": "child", 
               "provisioned_size": 536870912, 
               "used_size": 4194304
           }, 
           {
+              "id": "*",  (glob)
               "name": "deep-flatten-child", 
               "provisioned_size": 536870912, 
               "snapshot": "snap", 
+              "snapshot_id": *,  (glob)
               "used_size": 0
           }, 
           {
+              "id": "*",  (glob)
               "name": "deep-flatten-child", 
               "provisioned_size": 536870912, 
               "used_size": 0
@@ -1085,23 +1125,29 @@ whenever it is run. grep -v to ignore it, but still work on other distros.
     <images>
       <image>
         <name>child</name>
+        <id>*</id> (glob)
         <snapshot>snap</snapshot>
+        <snapshot_id>*</snapshot_id> (glob)
         <provisioned_size>536870912</provisioned_size>
         <used_size>0</used_size>
       </image>
       <image>
         <name>child</name>
+        <id>*</id> (glob)
         <provisioned_size>536870912</provisioned_size>
         <used_size>4194304</used_size>
       </image>
       <image>
         <name>deep-flatten-child</name>
+        <id>*</id> (glob)
         <snapshot>snap</snapshot>
+        <snapshot_id>*</snapshot_id> (glob)
         <provisioned_size>536870912</provisioned_size>
         <used_size>0</used_size>
       </image>
       <image>
         <name>deep-flatten-child</name>
+        <id>*</id> (glob)
         <provisioned_size>536870912</provisioned_size>
         <used_size>0</used_size>
       </image>
