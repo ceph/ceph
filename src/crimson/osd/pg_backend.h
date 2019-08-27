@@ -88,6 +88,11 @@ public:
     const hobject_t& soid,
     std::string_view key) const;
 
+  // OMAP
+  seastar::future<> omap_get_vals_by_keys(
+    const ObjectState& os,
+    OSDOp& osd_op) const;
+
   virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
 
 protected:
