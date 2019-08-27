@@ -185,8 +185,8 @@ class RDMAConnectedSocketImpl : public ConnectedSocketImpl {
  protected:
   CephContext *cct;
   Infiniband::QueuePair *qp;
-  IBSYNMsg peer_msg;
-  IBSYNMsg my_msg;
+  ib_cm_meta_t peer_cm_meta;
+  ib_cm_meta_t local_cm_meta;
   int connected;
   int error;
   shared_ptr<Infiniband> ib;

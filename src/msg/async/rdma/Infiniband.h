@@ -44,9 +44,9 @@
 #define PSN_LEN 24
 #define PSN_MSK ((1 << PSN_LEN) - 1)
 
-struct IBSYNMsg {
+struct ib_cm_meta_t {
   uint16_t lid;
-  uint32_t qpn;
+  uint32_t local_qpn;
   uint32_t psn;
   uint32_t peer_qpn;
   union ibv_gid gid;
@@ -373,8 +373,8 @@ class Infiniband {
   Device *device = NULL;
   ProtectionDomain *pd = NULL;
   DeviceList *device_list = nullptr;
-  void wire_gid_to_gid(const char *wgid, IBSYNMsg* im);
-  void gid_to_wire_gid(const IBSYNMsg& im, char wgid[]);
+  void wire_gid_to_gid(const char *wgid, ib_cm_meta_t* im);
+  void gid_to_wire_gid(const ib_cm_meta_t& im, char wgid[]);
   CephContext *cct;
   ceph::mutex lock = ceph::make_mutex("IB lock");
   bool initialized = false;
@@ -518,8 +518,8 @@ class Infiniband {
   CompletionChannel *create_comp_channel(CephContext *c);
   CompletionQueue *create_comp_queue(CephContext *c, CompletionChannel *cc=NULL);
   uint8_t get_ib_physical_port() { return ib_physical_port; }
-  int send_msg(CephContext *cct, int sd, IBSYNMsg& msg);
-  int recv_msg(CephContext *cct, int sd, IBSYNMsg& msg);
+  int send_msg(CephContext *cct, int sd, ib_cm_meta_t& msg);
+  int recv_msg(CephContext *cct, int sd, ib_cm_meta_t& msg);
   uint16_t get_lid() { return device->get_lid(); }
   ibv_gid get_gid() { return device->get_gid(); }
   MemoryManager* get_memory_manager() { return memory_manager; }

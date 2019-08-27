@@ -1043,7 +1043,7 @@ Infiniband::CompletionQueue* Infiniband::create_comp_queue(
 
 // 1 means no valid buffer read, 0 means got enough buffer
 // else return < 0 means error
-int Infiniband::recv_msg(CephContext *cct, int sd, IBSYNMsg& im)
+int Infiniband::recv_msg(CephContext *cct, int sd, ib_cm_meta_t& im)
 {
   char msg[TCP_MSG_LEN];
   char gid[33];
@@ -1065,14 +1065,14 @@ int Infiniband::recv_msg(CephContext *cct, int sd, IBSYNMsg& im)
     ldout(cct, 1) << __func__ << " got bad length (" << r << ") " << dendl;
     r = -EINVAL;
   } else { // valid message
-    sscanf(msg, "%hx:%x:%x:%x:%s", &(im.lid), &(im.qpn), &(im.psn), &(im.peer_qpn),gid);
+    sscanf(msg, "%hx:%x:%x:%x:%s", &(im.lid), &(im.local_qpn), &(im.psn), &(im.peer_qpn),gid);
     wire_gid_to_gid(gid, &im);
-    ldout(cct, 5) << __func__ << " recevd: " << im.lid << ", " << im.qpn << ", " << im.psn << ", " << im.peer_qpn << ", " << gid  << dendl;
+    ldout(cct, 5) << __func__ << " recevd: " << im.lid << ", " << im.local_qpn << ", " << im.psn << ", " << im.peer_qpn << ", " << gid  << dendl;
   }
   return r;
 }
 
-int Infiniband::send_msg(CephContext *cct, int sd, IBSYNMsg& im)
+int Infiniband::send_msg(CephContext *cct, int sd, ib_cm_meta_t& im)
 {
   int retry = 0;
   ssize_t r;
@@ -1081,8 +1081,8 @@ int Infiniband::send_msg(CephContext *cct, int sd, IBSYNMsg& im)
   char gid[33];
 retry:
   gid_to_wire_gid(im, gid);
-  sprintf(msg, "%04x:%08x:%08x:%08x:%s", im.lid, im.qpn, im.psn, im.peer_qpn, gid);
-  ldout(cct, 10) << __func__ << " sending: " << im.lid << ", " << im.qpn << ", " << im.psn
+  sprintf(msg, "%04x:%08x:%08x:%08x:%s", im.lid, im.local_qpn, im.psn, im.peer_qpn, gid);
+  ldout(cct, 10) << __func__ << " sending: " << im.lid << ", " << im.local_qpn << ", " << im.psn
                  << ", " << im.peer_qpn << ", "  << gid  << dendl;
   r = ::write(sd, msg, sizeof(msg));
   // Drop incoming qpt
@@ -1109,7 +1109,7 @@ retry:
   return 0;
 }
 
-void Infiniband::wire_gid_to_gid(const char *wgid, IBSYNMsg* im)
+void Infiniband::wire_gid_to_gid(const char *wgid, ib_cm_meta_t* im)
 {
   char tmp[9];
   uint32_t v32;
@@ -1122,7 +1122,7 @@ void Infiniband::wire_gid_to_gid(const char *wgid, IBSYNMsg* im)
   }
 }
 
-void Infiniband::gid_to_wire_gid(const IBSYNMsg& im, char wgid[])
+void Infiniband::gid_to_wire_gid(const ib_cm_meta_t& im, char wgid[])
 {
   for (int i = 0; i < 4; ++i)
     sprintf(&wgid[i * 8], "%08x", htonl(*(uint32_t *)(im.gid.raw + i * 4)));
