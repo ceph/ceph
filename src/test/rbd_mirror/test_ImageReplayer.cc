@@ -35,9 +35,9 @@
 #include "librbd/io/ImageRequestWQ.h"
 #include "librbd/io/ReadResult.h"
 #include "tools/rbd_mirror/ImageReplayer.h"
-#include "tools/rbd_mirror/ImageSyncThrottler.h"
 #include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/Threads.h"
+#include "tools/rbd_mirror/Throttler.h"
 #include "tools/rbd_mirror/Types.h"
 
 #include "test/librados/test_cxx.h"
@@ -120,7 +120,8 @@ public:
     auto cct = reinterpret_cast<CephContext*>(m_local_ioctx.cct());
     m_threads.reset(new rbd::mirror::Threads<>(cct));
 
-    m_image_sync_throttler.reset(new rbd::mirror::ImageSyncThrottler<>(cct));
+    m_image_sync_throttler.reset(new rbd::mirror::Throttler<>(
+        cct, "rbd_mirror_concurrent_image_syncs"));
 
     m_instance_watcher = rbd::mirror::InstanceWatcher<>::create(
         m_local_ioctx, m_threads->work_queue, nullptr,
@@ -377,7 +378,7 @@ public:
 
   std::shared_ptr<librados::Rados> m_local_cluster;
   std::unique_ptr<rbd::mirror::Threads<>> m_threads;
-  std::unique_ptr<rbd::mirror::ImageSyncThrottler<>> m_image_sync_throttler;
+  std::unique_ptr<rbd::mirror::Throttler<>> m_image_sync_throttler;
   librados::Rados m_remote_cluster;
   rbd::mirror::InstanceWatcher<> *m_instance_watcher;
   std::string m_local_mirror_uuid = "local mirror uuid";

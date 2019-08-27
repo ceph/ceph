@@ -10,9 +10,9 @@
 #include "include/rados/librados.hpp"
 #include "librbd/Utils.h"
 
-#include "tools/rbd_mirror/ImageSyncThrottler.h"
 #include "tools/rbd_mirror/LeaderWatcher.h"
 #include "tools/rbd_mirror/NamespaceReplayer.h"
+#include "tools/rbd_mirror/Throttler.h"
 #include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/leader_watcher/Types.h"
 #include "tools/rbd_mirror/service_daemon/Types.h"
@@ -259,7 +259,7 @@ private:
   } m_leader_listener;
 
   std::unique_ptr<LeaderWatcher<ImageCtxT>> m_leader_watcher;
-  std::unique_ptr<ImageSyncThrottler<ImageCtxT>> m_image_sync_throttler;
+  std::unique_ptr<Throttler<ImageCtxT>> m_image_sync_throttler;
 };
 
 } // namespace mirror

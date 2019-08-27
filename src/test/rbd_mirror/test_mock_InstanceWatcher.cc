@@ -83,15 +83,15 @@ struct InstanceReplayer<librbd::MockTestImageCtx> {
 };
 
 template <>
-struct ImageSyncThrottler<librbd::MockTestImageCtx> {
-  static ImageSyncThrottler* s_instance;
+struct Throttler<librbd::MockTestImageCtx> {
+  static Throttler* s_instance;
 
-  ImageSyncThrottler() {
+  Throttler() {
     ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
 
-  virtual ~ImageSyncThrottler() {
+  virtual ~Throttler() {
     ceph_assert(s_instance == this);
     s_instance = nullptr;
   }
@@ -102,7 +102,7 @@ struct ImageSyncThrottler<librbd::MockTestImageCtx> {
   MOCK_METHOD2(drain, void(const std::string &, int));
 };
 
-ImageSyncThrottler<librbd::MockTestImageCtx>* ImageSyncThrottler<librbd::MockTestImageCtx>::s_instance = nullptr;
+Throttler<librbd::MockTestImageCtx>* Throttler<librbd::MockTestImageCtx>::s_instance = nullptr;
 
 } // namespace mirror
 } // namespace rbd
@@ -658,10 +658,10 @@ TEST_F(TestMockInstanceWatcher, PeerImageRemovedCancel) {
 
 class TestMockInstanceWatcher_NotifySync : public TestMockInstanceWatcher {
 public:
-  typedef ImageSyncThrottler<librbd::MockTestImageCtx> MockImageSyncThrottler;
+  typedef Throttler<librbd::MockTestImageCtx> MockThrottler;
 
   MockManagedLock mock_managed_lock;
-  MockImageSyncThrottler mock_image_sync_throttler;
+  MockThrottler mock_image_sync_throttler;
   std::string instance_id1;
   std::string instance_id2;
 
@@ -765,7 +765,7 @@ public:
 
   void expect_throttler_drain() {
     EXPECT_CALL(mock_image_sync_throttler, drain("", -ESTALE));
-  }  
+  }
 };
 
 TEST_F(TestMockInstanceWatcher_NotifySync, StartStopOnLeader) {

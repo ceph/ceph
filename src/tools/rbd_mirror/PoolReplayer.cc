@@ -312,7 +312,8 @@ void PoolReplayer<I>::init() {
 
   dout(10) << "connected to " << m_peer << dendl;
 
-  m_image_sync_throttler.reset(ImageSyncThrottler<I>::create(cct));
+  m_image_sync_throttler.reset(
+      Throttler<I>::create(cct, "rbd_mirror_concurrent_image_syncs"));
 
   m_default_namespace_replayer.reset(NamespaceReplayer<I>::create(
       "", m_local_io_ctx, m_remote_io_ctx, m_local_mirror_uuid, m_peer.uuid,

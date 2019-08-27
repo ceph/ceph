@@ -130,7 +130,7 @@ struct InstanceWatcher<librbd::MockTestImageCtx> {
   static InstanceWatcher* create(
       librados::IoCtx &ioctx, ContextWQ* work_queue,
       InstanceReplayer<librbd::MockTestImageCtx>* instance_replayer,
-      ImageSyncThrottler<librbd::MockTestImageCtx> *image_sync_throttler) {
+      Throttler<librbd::MockTestImageCtx> *image_sync_throttler) {
     ceph_assert(s_instance != nullptr);
     return s_instance;
   }

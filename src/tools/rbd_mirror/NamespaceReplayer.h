@@ -32,8 +32,8 @@ namespace librbd { class ImageCtx; }
 namespace rbd {
 namespace mirror {
 
-template <typename> class ImageSyncThrottler;
 template <typename> class ServiceDaemon;
+template <typename> class Throttler;
 template <typename> struct Threads;
 
 /**
@@ -49,7 +49,7 @@ public:
       const std::string &local_mirror_uuid,
       const std::string &remote_mirror_uuid,
       Threads<ImageCtxT> *threads,
-      ImageSyncThrottler<ImageCtxT> *image_sync_throttler,
+      Throttler<ImageCtxT> *image_sync_throttler,
       ServiceDaemon<ImageCtxT> *service_daemon,
       journal::CacheManagerHandler *cache_manager_handler) {
     return new NamespaceReplayer(name, local_ioctx, remote_ioctx,
@@ -64,7 +64,7 @@ public:
                     const std::string &local_mirror_uuid,
                     const std::string &remote_mirror_uuid,
                     Threads<ImageCtxT> *threads,
-                    ImageSyncThrottler<ImageCtxT> *image_sync_throttler,
+                    Throttler<ImageCtxT> *image_sync_throttler,
                     ServiceDaemon<ImageCtxT> *service_daemon,
                     journal::CacheManagerHandler *cache_manager_handler);
   NamespaceReplayer(const NamespaceReplayer&) = delete;
@@ -251,7 +251,7 @@ private:
   std::string m_local_mirror_uuid;
   std::string m_remote_mirror_uuid;
   Threads<ImageCtxT> *m_threads;
-  ImageSyncThrottler<ImageCtxT> *m_image_sync_throttler;
+  Throttler<ImageCtxT> *m_image_sync_throttler;
   ServiceDaemon<ImageCtxT> *m_service_daemon;
   journal::CacheManagerHandler *m_cache_manager_handler;
 

@@ -1,8 +1,8 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#ifndef RBD_MIRROR_IMAGE_SYNC_THROTTLER_H
-#define RBD_MIRROR_IMAGE_SYNC_THROTTLER_H
+#ifndef RBD_MIRROR_THROTTLER_H
+#define RBD_MIRROR_THROTTLER_H
 
 #include <list>
 #include <map>
@@ -24,19 +24,22 @@ namespace rbd {
 namespace mirror {
 
 template <typename ImageCtxT = librbd::ImageCtx>
-class ImageSyncThrottler : public md_config_obs_t {
+class Throttler : public md_config_obs_t {
 public:
-  static ImageSyncThrottler *create(CephContext *cct) {
-    return new ImageSyncThrottler(cct);
+  static Throttler *create(
+      CephContext *cct,
+      const std::string &config_key) {
+    return new Throttler(cct, config_key);
   }
   void destroy() {
     delete this;
   }
 
-  ImageSyncThrottler(CephContext *cct);
-  ~ImageSyncThrottler() override;
+  Throttler(CephContext *cct,
+            const std::string &config_key);
+  ~Throttler() override;
 
-  void set_max_concurrent_syncs(uint32_t max);
+  void set_max_concurrent_ops(uint32_t max);
   void start_op(const std::string &ns, const std::string &id,
                 Context *on_start);
   bool cancel_op(const std::string &ns, const std::string &id);
@@ -47,10 +50,13 @@ public:
 
 private:
   typedef std::pair<std::string, std::string> Id;
-  
+
   CephContext *m_cct;
+  const std::string m_config_key;
+  mutable const char* m_config_keys[2];
+
   ceph::mutex m_lock;
-  uint32_t m_max_concurrent_syncs;
+  uint32_t m_max_concurrent_ops;
   std::list<Id> m_queue;
   std::map<Id, Context *> m_queued_ops;
   std::set<Id> m_inflight_ops;
@@ -63,6 +69,6 @@ private:
 } // namespace mirror
 } // namespace rbd
 
-extern template class rbd::mirror::ImageSyncThrottler<librbd::ImageCtx>;
+extern template class rbd::mirror::Throttler<librbd::ImageCtx>;
 
-#endif // RBD_MIRROR_IMAGE_SYNC_THROTTLER_H
+#endif // RBD_MIRROR_THROTTLER_H

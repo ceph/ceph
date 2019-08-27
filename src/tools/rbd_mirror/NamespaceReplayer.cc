@@ -40,7 +40,7 @@ NamespaceReplayer<I>::NamespaceReplayer(
     const std::string &name,
     librados::IoCtx &local_io_ctx, librados::IoCtx &remote_io_ctx,
     const std::string &local_mirror_uuid, const std::string &remote_mirror_uuid,
-    Threads<I> *threads, ImageSyncThrottler<I> *image_sync_throttler,
+    Threads<I> *threads, Throttler<I> *image_sync_throttler,
     ServiceDaemon<I> *service_daemon,
     journal::CacheManagerHandler *cache_manager_handler) :
   m_local_mirror_uuid(local_mirror_uuid),
