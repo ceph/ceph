@@ -604,6 +604,7 @@ def test_removeall(CFSD_PREFIX, db, OBJREPPGS, REP_POOL, CEPH_BIN, OSDDIR, REP_N
     errors=0
     print("Test removeall")
     kill_daemons()
+    test_force_remove = 0
     for nspace in db.keys():
         for basename in db[nspace].keys():
             JSON = db[nspace][basename]['json']
@@ -619,6 +620,25 @@ def test_removeall(CFSD_PREFIX, db, OBJREPPGS, REP_POOL, CEPH_BIN, OSDDIR, REP_N
                     if int(basename.split(REP_NAME)[1]) <= int(NUM_CLONED_REP_OBJECTS):
                         cmd = (CFSD_PREFIX + "'{json}' remove").format(osd=osd, json=JSON)
                         errors += test_failure(cmd, "Snapshots are present, use removeall to delete everything")
+                        if not test_force_remove:
+
+                            cmd = (CFSD_PREFIX + " '{json}' set-attr snapset /dev/null").format(osd=osd, json=JSON)
+                            logging.debug(cmd)
+                            ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+                            if ret != 0:
+                                logging.error("Test set-up to corrupt snapset failed for {json}".format(json=JSON))
+                                errors += 1
+                                # Do the removeall since this test failed to set-up
+                            else:
+                                test_force_remove = 1
+
+                                cmd = (CFSD_PREFIX + " '{json}' --force remove").format(osd=osd, json=JSON)
+                                logging.debug(cmd)
+                                ret = call(cmd, shell=True, stdout=nullfd, stderr=nullfd)
+                                if ret != 0:
+                                    logging.error("forced remove with corrupt snapset failed for {json}".format(json=JSON))
+                                    errors += 1
+                                continue
 
                     cmd = (CFSD_PREFIX + " --force --dry-run '{json}' remove").format(osd=osd, json=JSON)
                     logging.debug(cmd)
