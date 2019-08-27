@@ -1,0 +1,21 @@
+---
+#if: type = pull_request
+git:
+  submodules: false
+  depth: 1
+  quiet: true
+env:
+  NPM_DIR=src/pybind/mgr/dashboard/frontend
+  NPM_OPTS="--prefix $NPM_DIR"
+language: node_js
+node_js: 10.16.0
+cache:
+  directories:
+    - $NPM_DIR/node_modules/
+install:
+- npm install $NPM_OPTS
+before_script:
+- npm run build $NPM_OPTS
+script:
+- npm run lint $NPM_OPTS
+- npm run test:ci $NPM_OPTS
