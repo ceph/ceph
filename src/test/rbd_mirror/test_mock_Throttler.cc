@@ -30,28 +30,28 @@ struct MockTestImageCtx : public librbd::MockImageCtx {
 } // namespace librbd
 
 // template definitions
-#include "tools/rbd_mirror/ImageSyncThrottler.cc"
+#include "tools/rbd_mirror/Throttler.cc"
 
 namespace rbd {
 namespace mirror {
 
-class TestMockImageSyncThrottler : public TestMockFixture {
+class TestMockThrottler : public TestMockFixture {
 public:
-  typedef ImageSyncThrottler<librbd::MockTestImageCtx> MockImageSyncThrottler;
+  typedef Throttler<librbd::MockTestImageCtx> MockThrottler;
 
 };
 
-TEST_F(TestMockImageSyncThrottler, Single_Sync) {
-  MockImageSyncThrottler throttler(g_ceph_context);
+TEST_F(TestMockThrottler, Single_Sync) {
+  MockThrottler throttler(g_ceph_context, "rbd_mirror_concurrent_image_syncs");
   C_SaferCond on_start;
   throttler.start_op("ns", "id", &on_start);
   ASSERT_EQ(0, on_start.wait());
   throttler.finish_op("ns", "id");
 }
 
-TEST_F(TestMockImageSyncThrottler, Multiple_Syncs) {
-  MockImageSyncThrottler throttler(g_ceph_context);
-  throttler.set_max_concurrent_syncs(2);
+TEST_F(TestMockThrottler, Multiple_Syncs) {
+  MockThrottler throttler(g_ceph_context, "rbd_mirror_concurrent_image_syncs");
+  throttler.set_max_concurrent_ops(2);
 
   C_SaferCond on_start1;
   throttler.start_op("ns", "id1", &on_start1);
@@ -72,8 +72,8 @@ TEST_F(TestMockImageSyncThrottler, Multiple_Syncs) {
   throttler.finish_op("ns", "id4");
 }
 
-TEST_F(TestMockImageSyncThrottler, Cancel_Running_Sync) {
-  MockImageSyncThrottler throttler(g_ceph_context);
+TEST_F(TestMockThrottler, Cancel_Running_Sync) {
+  MockThrottler throttler(g_ceph_context, "rbd_mirror_concurrent_image_syncs");
   C_SaferCond on_start;
   throttler.start_op("ns", "id", &on_start);
   ASSERT_EQ(0, on_start.wait());
@@ -81,9 +81,9 @@ TEST_F(TestMockImageSyncThrottler, Cancel_Running_Sync) {
   throttler.finish_op("ns", "id");
 }
 
-TEST_F(TestMockImageSyncThrottler, Cancel_Waiting_Sync) {
-  MockImageSyncThrottler throttler(g_ceph_context);
-  throttler.set_max_concurrent_syncs(1);
+TEST_F(TestMockThrottler, Cancel_Waiting_Sync) {
+  MockThrottler throttler(g_ceph_context, "rbd_mirror_concurrent_image_syncs");
+  throttler.set_max_concurrent_ops(1);
 
   C_SaferCond on_start1;
   throttler.start_op("ns", "id1", &on_start1);
@@ -96,9 +96,9 @@ TEST_F(TestMockImageSyncThrottler, Cancel_Waiting_Sync) {
   throttler.finish_op("ns", "id1");
 }
 
-TEST_F(TestMockImageSyncThrottler, Cancel_Running_Sync_Start_Waiting) {
-  MockImageSyncThrottler throttler(g_ceph_context);
-  throttler.set_max_concurrent_syncs(1);
+TEST_F(TestMockThrottler, Cancel_Running_Sync_Start_Waiting) {
+  MockThrottler throttler(g_ceph_context, "rbd_mirror_concurrent_image_syncs");
+  throttler.set_max_concurrent_ops(1);
 
   C_SaferCond on_start1;
   throttler.start_op("ns", "id1", &on_start1);
@@ -112,9 +112,9 @@ TEST_F(TestMockImageSyncThrottler, Cancel_Running_Sync_Start_Waiting) {
   throttler.finish_op("ns", "id2");
 }
 
-TEST_F(TestMockImageSyncThrottler, Duplicate) {
-  MockImageSyncThrottler throttler(g_ceph_context);
-  throttler.set_max_concurrent_syncs(1);
+TEST_F(TestMockThrottler, Duplicate) {
+  MockThrottler throttler(g_ceph_context, "rbd_mirror_concurrent_image_syncs");
+  throttler.set_max_concurrent_ops(1);
 
   C_SaferCond on_start1;
   throttler.start_op("ns", "id1", &on_start1);
@@ -135,9 +135,9 @@ TEST_F(TestMockImageSyncThrottler, Duplicate) {
   throttler.finish_op("ns", "id2");
 }
 
-TEST_F(TestMockImageSyncThrottler, Duplicate2) {
-  MockImageSyncThrottler throttler(g_ceph_context);
-  throttler.set_max_concurrent_syncs(2);
+TEST_F(TestMockThrottler, Duplicate2) {
+  MockThrottler throttler(g_ceph_context, "rbd_mirror_concurrent_image_syncs");
+  throttler.set_max_concurrent_ops(2);
 
   C_SaferCond on_start1;
   throttler.start_op("ns", "id1", &on_start1);
@@ -171,9 +171,9 @@ TEST_F(TestMockImageSyncThrottler, Duplicate2) {
   throttler.finish_op("ns", "id5");
 }
 
-TEST_F(TestMockImageSyncThrottler, Increase_Max_Concurrent_Syncs) {
-  MockImageSyncThrottler throttler(g_ceph_context);
-  throttler.set_max_concurrent_syncs(2);
+TEST_F(TestMockThrottler, Increase_Max_Concurrent_Syncs) {
+  MockThrottler throttler(g_ceph_context, "rbd_mirror_concurrent_image_syncs");
+  throttler.set_max_concurrent_ops(2);
 
   C_SaferCond on_start1;
   throttler.start_op("ns", "id1", &on_start1);
@@ -189,7 +189,7 @@ TEST_F(TestMockImageSyncThrottler, Increase_Max_Concurrent_Syncs) {
   ASSERT_EQ(0, on_start1.wait());
   ASSERT_EQ(0, on_start2.wait());
 
-  throttler.set_max_concurrent_syncs(4);
+  throttler.set_max_concurrent_ops(4);
 
   ASSERT_EQ(0, on_start3.wait());
   ASSERT_EQ(0, on_start4.wait());
@@ -203,9 +203,9 @@ TEST_F(TestMockImageSyncThrottler, Increase_Max_Concurrent_Syncs) {
   throttler.finish_op("ns", "id5");
 }
 
-TEST_F(TestMockImageSyncThrottler, Decrease_Max_Concurrent_Syncs) {
-  MockImageSyncThrottler throttler(g_ceph_context);
-  throttler.set_max_concurrent_syncs(4);
+TEST_F(TestMockThrottler, Decrease_Max_Concurrent_Syncs) {
+  MockThrottler throttler(g_ceph_context, "rbd_mirror_concurrent_image_syncs");
+  throttler.set_max_concurrent_ops(4);
 
   C_SaferCond on_start1;
   throttler.start_op("ns", "id1", &on_start1);
@@ -223,7 +223,7 @@ TEST_F(TestMockImageSyncThrottler, Decrease_Max_Concurrent_Syncs) {
   ASSERT_EQ(0, on_start3.wait());
   ASSERT_EQ(0, on_start4.wait());
 
-  throttler.set_max_concurrent_syncs(2);
+  throttler.set_max_concurrent_ops(2);
 
   throttler.finish_op("ns", "id1");
   throttler.finish_op("ns", "id2");
@@ -235,9 +235,9 @@ TEST_F(TestMockImageSyncThrottler, Decrease_Max_Concurrent_Syncs) {
   throttler.finish_op("ns", "id5");
 }
 
-TEST_F(TestMockImageSyncThrottler, Drain) {
-  MockImageSyncThrottler throttler(g_ceph_context);
-  throttler.set_max_concurrent_syncs(1);
+TEST_F(TestMockThrottler, Drain) {
+  MockThrottler throttler(g_ceph_context, "rbd_mirror_concurrent_image_syncs");
+  throttler.set_max_concurrent_ops(1);
 
   C_SaferCond on_start1;
   throttler.start_op("ns", "id1", &on_start1);

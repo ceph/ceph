@@ -10,7 +10,7 @@
 #include "test/rbd_mirror/test_mock_fixture.h"
 #include "test/rbd_mirror/mock/MockContextWQ.h"
 #include "test/rbd_mirror/mock/MockSafeTimer.h"
-#include "tools/rbd_mirror/ImageSyncThrottler.h"
+#include "tools/rbd_mirror/Throttler.h"
 #include "tools/rbd_mirror/LeaderWatcher.h"
 #include "tools/rbd_mirror/NamespaceReplayer.h"
 #include "tools/rbd_mirror/PoolReplayer.h"
@@ -97,19 +97,21 @@ namespace rbd {
 namespace mirror {
 
 template <>
-struct ImageSyncThrottler<librbd::MockTestImageCtx> {
-  static ImageSyncThrottler* s_instance;
+struct Throttler<librbd::MockTestImageCtx> {
+  static Throttler* s_instance;
 
-  static ImageSyncThrottler *create(CephContext *cct) {
+  static Throttler *create(
+      CephContext *cct,
+      const std::string &max_concurrent_ops_config_param_name) {
     return s_instance;
   }
 
-  ImageSyncThrottler() {
+  Throttler() {
     ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
 
-  virtual ~ImageSyncThrottler() {
+  virtual ~Throttler() {
     ceph_assert(s_instance == this);
     s_instance = nullptr;
   }
@@ -117,7 +119,7 @@ struct ImageSyncThrottler<librbd::MockTestImageCtx> {
   MOCK_METHOD2(print_status, void(Formatter*, std::stringstream*));
 };
 
-ImageSyncThrottler<librbd::MockTestImageCtx>* ImageSyncThrottler<librbd::MockTestImageCtx>::s_instance = nullptr;
+Throttler<librbd::MockTestImageCtx>* Throttler<librbd::MockTestImageCtx>::s_instance = nullptr;
 
 template <>
 struct NamespaceReplayer<librbd::MockTestImageCtx> {
@@ -130,7 +132,7 @@ struct NamespaceReplayer<librbd::MockTestImageCtx> {
       const std::string &local_mirror_uuid,
       const std::string &remote_mirror_uuid,
       Threads<librbd::MockTestImageCtx> *threads,
-      ImageSyncThrottler<librbd::MockTestImageCtx> *image_sync_throttler,
+      Throttler<librbd::MockTestImageCtx> *image_sync_throttler,
       ServiceDaemon<librbd::MockTestImageCtx> *service_daemon,
       journal::CacheManagerHandler *cache_manager_handler) {
     ceph_assert(s_instances.count(name));
@@ -250,7 +252,7 @@ class TestMockPoolReplayer : public TestMockFixture {
 public:
   typedef librbd::api::Namespace<librbd::MockTestImageCtx> MockNamespace;
   typedef PoolReplayer<librbd::MockTestImageCtx> MockPoolReplayer;
-  typedef ImageSyncThrottler<librbd::MockTestImageCtx> MockImageSyncThrottler;
+  typedef Throttler<librbd::MockTestImageCtx> MockThrottler;
   typedef NamespaceReplayer<librbd::MockTestImageCtx> MockNamespaceReplayer;
   typedef LeaderWatcher<librbd::MockTestImageCtx> MockLeaderWatcher;
   typedef ServiceDaemon<librbd::MockTestImageCtx> MockServiceDaemon;

@@ -9,7 +9,7 @@
 #include "librbd/ManagedLock.h"
 #include "librbd/Utils.h"
 #include "InstanceReplayer.h"
-#include "ImageSyncThrottler.h"
+#include "Throttler.h"
 #include "common/Cond.h"
 
 #define dout_context g_ceph_context
@@ -313,7 +313,7 @@ template <typename I>
 InstanceWatcher<I> *InstanceWatcher<I>::create(
     librados::IoCtx &io_ctx, ContextWQ *work_queue,
     InstanceReplayer<I> *instance_replayer,
-    ImageSyncThrottler<I> *image_sync_throttler) {
+    Throttler<I> *image_sync_throttler) {
   return new InstanceWatcher<I>(io_ctx, work_queue, instance_replayer,
                                 image_sync_throttler,
                                 stringify(io_ctx.get_instance_id()));
@@ -323,7 +323,7 @@ template <typename I>
 InstanceWatcher<I>::InstanceWatcher(librados::IoCtx &io_ctx,
                                     ContextWQ *work_queue,
                                     InstanceReplayer<I> *instance_replayer,
-                                    ImageSyncThrottler<I> *image_sync_throttler,
+                                    Throttler<I> *image_sync_throttler,
                                     const std::string &instance_id)
   : Watcher(io_ctx, work_queue, RBD_MIRROR_INSTANCE_PREFIX + instance_id),
     m_instance_replayer(instance_replayer),

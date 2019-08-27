@@ -9,7 +9,6 @@ set(rbd_mirror_internal
   ImageMap.cc
   ImageReplayer.cc
   ImageSync.cc
-  ImageSyncThrottler.cc
   InstanceReplayer.cc
   InstanceWatcher.cc
   Instances.cc
@@ -21,6 +20,7 @@ set(rbd_mirror_internal
   PoolWatcher.cc
   ServiceDaemon.cc
   Threads.cc
+  Throttler.cc
   Types.cc
   image_deleter/RemoveRequest.cc
   image_deleter/SnapshotPurgeRequest.cc
