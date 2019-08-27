@@ -133,7 +133,7 @@ describe('Dashboard Main Page', () => {
       const tableCount = await spec.pageObject.getTableTotalCount();
       await expect(dashCount).toBe(
         tableCount,
-        `Text of card ${spec.cardName} and regex ${spec.regexMatcher} resulted in ${dashCount} ` +
+        `Text of card "${spec.cardName}" and regex "${spec.regexMatcher}" resulted in ${dashCount} ` +
           `but did not match table count ${tableCount}`
       );
     }
