@@ -2064,7 +2064,7 @@ void pg_pool_t::decode(ceph::buffer::list::const_iterator& bl)
     pgp_num_target = pgp_num;
     pg_num_pending = pg_num;
     last_force_op_resend = last_force_op_resend_prenautilus;
-    pg_autoscale_mode = PG_AUTOSCALE_MODE_WARN;    // default to warn on upgrade
+    pg_autoscale_mode = pg_autoscale_mode_t::WARN;    // default to warn on upgrade
   }
   DECODE_FINISH(bl);
   calc_pg_masks();
@@ -2147,7 +2147,7 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
   if (p.get_type_name() == "erasure") {
     out << " profile " << p.erasure_code_profile;
   }
-  out  << " size " << p.get_size()
+  out << " size " << p.get_size()
       << " min_size " << p.get_min_size()
       << " crush_rule " << p.get_crush_rule()
       << " object_hash " << p.get_object_hash_name()
@@ -2162,7 +2162,7 @@ ostream& operator<<(ostream& out, const pg_pool_t& p)
   if (p.get_pg_num_pending() != p.get_pg_num()) {
     out << " pg_num_pending " << p.get_pg_num_pending();
   }
-  if (p.pg_autoscale_mode) {
+  if (p.pg_autoscale_mode != pg_pool_t::pg_autoscale_mode_t::UNKNOWN) {
     out << " autoscale_mode " << p.get_pg_autoscale_mode_name(p.pg_autoscale_mode);
   }
   out << " last_change " << p.get_last_change();

@@ -15,7 +15,7 @@ failed=0
 numtests=0
 echo "checking ceph-dencoder generated test instances..."
 echo "numgen type"
-ceph-dencoder list_types | while read type; do
+while read type; do
     num=`ceph-dencoder type $type count_tests`
     echo "$num $type"
     for n in `seq 1 1 $num 2>/dev/null`; do
@@ -54,7 +54,7 @@ ceph-dencoder list_types | while read type; do
 	    echo "**** $type test $n dump_json check failed ****"
 	    echo "   ceph-dencoder type $type select_test $n dump_json > $tmp1"
 	    echo "   ceph-dencoder type $type select_test $n encode decode dump_json > $tmp2"
-	    echo "   diff $tmp1 $tmp2"
+	    diff $tmp1 $tmp2
 	    failed=$(($failed + 1))
 	fi
 
@@ -62,7 +62,7 @@ ceph-dencoder list_types | while read type; do
 	    echo "**** $type test $n copy dump_json check failed ****"
 	    echo "   ceph-dencoder type $type select_test $n dump_json > $tmp1"
 	    echo "   ceph-dencoder type $type select_test $n copy dump_json > $tmp2"
-	    echo "   diff $tmp1 $tmp2"
+	    diff $tmp1 $tmp2
 	    failed=$(($failed + 1))
 	fi
 
@@ -70,7 +70,7 @@ ceph-dencoder list_types | while read type; do
 	    echo "**** $type test $n copy_ctor dump_json check failed ****"
 	    echo "   ceph-dencoder type $type select_test $n dump_json > $tmp1"
 	    echo "   ceph-dencoder type $type select_test $n copy_ctor dump_json > $tmp2"
-	    echo "   diff $tmp1 $tmp2"
+	    diff $tmp1 $tmp2
 	    failed=$(($failed + 1))
 	fi
 
@@ -90,7 +90,7 @@ ceph-dencoder list_types | while read type; do
 
 	numtests=$(($numtests + 3))
     done
-done
+done < <(ceph-dencoder list_types)
 
 rm -f $tmp1 $tmp2 $tmp3 $tmp4
 
