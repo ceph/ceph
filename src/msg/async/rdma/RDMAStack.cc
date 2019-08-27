@@ -538,6 +538,12 @@ void RDMADispatcher::handle_rx_event(ibv_wc *cqe, int rx_number)
       } else {
         conn->post_chunks_to_rq(1);
         polled[conn].push_back(*response);
+
+        QueuePair *qp = get_qp_lockless(response->qp_num);
+        if (qp != nullptr) {
+          qp->remove_rq_wr(chunk);
+          chunk->clear_qp();
+        }
       }
     } else {
       perf_logger->inc(l_msgr_rdma_rx_total_wc_errors);
