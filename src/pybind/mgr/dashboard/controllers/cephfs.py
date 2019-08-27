@@ -176,6 +176,11 @@ class CephFS(RESTController):
                     activity = 0.0
 
                 metadata = mgr.get_metadata('mds', info['name'])
+                if metadata is None:
+                    raise DashboardException(
+                        "Failed to fetch metadata for service mds.{}".format(info['name']),
+                        http_status_code=500,
+                        component='cephfs')
                 mds_versions[metadata.get('ceph_version', 'unknown')].append(
                     info['name'])
                 rank_table.append(
@@ -245,9 +250,13 @@ class CephFS(RESTController):
         standby_table = []
         for standby in fsmap['standbys']:
             metadata = mgr.get_metadata('mds', standby['name'])
+            if metadata is None:
+                raise DashboardException(
+                    "Failed to fetch metadata for service mds.{}".format(info['name']),
+                    http_status_code=500,
+                    component='cephfs')
             mds_versions[metadata.get('ceph_version', 'unknown')].append(
                 standby['name'])
-
             standby_table.append({
                 'name': standby['name']
             })

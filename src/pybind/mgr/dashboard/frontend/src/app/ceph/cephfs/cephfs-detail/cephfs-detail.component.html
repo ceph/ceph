@@ -7,7 +7,7 @@
 
         <cd-table [data]="ranks.data"
                   [columns]="ranks.columns"
-                  (fetchData)="refresh()"
+                  (fetchData)="refresh($event)"
                   [toolHeader]="false">
         </cd-table>
 

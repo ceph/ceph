@@ -4,6 +4,7 @@ import { I18n } from '@ngx-translate/i18n-polyfill';
 import * as _ from 'lodash';
 
 import { CephfsService } from '../../../shared/api/cephfs.service';
+import { CdTableFetchDataContext } from '../../../shared/models/cd-table-fetch-data-context';
 import { CdTableSelection } from '../../../shared/models/cd-table-selection';
 import { Permission } from '../../../shared/models/permissions';
 import { DimlessBinaryPipe } from '../../../shared/pipes/dimless-binary.pipe';
@@ -63,10 +64,6 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
         this.mdsCounters = {};
         this.clientCount = 0;
       }
-
-      // Immediately refresh the displayed data, don't wait until the
-      // table refreshes the data itself.
-      this.refresh();
     }
   }
 
@@ -111,35 +108,45 @@ export class CephfsDetailComponent implements OnChanges, OnInit {
     };
   }
 
-  refresh() {
-    this.cephfsService.getCephfs(this.id).subscribe((data: any) => {
-      this.ranks.data = data.cephfs.ranks;
-      this.pools.data = data.cephfs.pools;
-      this.pools.data.forEach((pool) => {
-        pool.size = pool.used + pool.avail;
-      });
-      this.standbys = [
-        {
-          key: this.i18n('Standby daemons'),
-          value: data.standbys.map((value) => value.name).join(', ')
-        }
-      ];
-      this.name = data.cephfs.name;
-      this.clientCount = data.cephfs.client_count;
-    });
+  refresh(context: CdTableFetchDataContext) {
+    this.cephfsService.getCephfs(this.id).subscribe(
+      (data: any) => {
+        this.ranks.data = data.cephfs.ranks;
+        this.pools.data = data.cephfs.pools;
+        this.pools.data.forEach((pool) => {
+          pool.size = pool.used + pool.avail;
+        });
+        this.standbys = [
+          {
+            key: this.i18n('Standby daemons'),
+            value: data.standbys.map((value) => value.name).join(', ')
+          }
+        ];
+        this.name = data.cephfs.name;
+        this.clientCount = data.cephfs.client_count;
+      },
+      () => {
+        context.error();
+      }
+    );
 
-    this.cephfsService.getMdsCounters(this.id).subscribe((data) => {
-      _.each(this.mdsCounters, (_value, key) => {
-        if (data[key] === undefined) {
-          delete this.mdsCounters[key];
-        }
-      });
+    this.cephfsService.getMdsCounters(this.id).subscribe(
+      (data) => {
+        _.each(this.mdsCounters, (_value, key) => {
+          if (data[key] === undefined) {
+            delete this.mdsCounters[key];
+          }
+        });
 
-      _.each(data, (mdsData: any, mdsName) => {
-        mdsData.name = mdsName;
-        this.mdsCounters[mdsName] = mdsData;
-      });
-    });
+        _.each(data, (mdsData: any, mdsName) => {
+          mdsData.name = mdsName;
+          this.mdsCounters[mdsName] = mdsData;
+        });
+      },
+      () => {
+        context.error();
+      }
+    );
   }
 
   trackByFn(_index, item) {
