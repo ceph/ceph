@@ -27,6 +27,7 @@ overrides:
             pg_num: "64"
           - name: "cephfs_metadata"
             pg_num: "64"
+        dashboard_enabled: false
 tasks:
 - ssh-keys:
 - ceph_ansible:
