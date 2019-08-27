@@ -121,6 +121,12 @@ class CephFS(RESTController):
 
         return names
 
+    def _append_mds_metadata(self, mds_versions, metadata_key):
+        metadata = mgr.get_metadata('mds', metadata_key)
+        if metadata is None:
+            return
+        mds_versions[metadata.get('ceph_version', 'unknown')].append(metadata_key)
+
     # pylint: disable=too-many-statements,too-many-branches
     def fs_status(self, fs_id):
         mds_versions = defaultdict(list)
@@ -175,9 +181,7 @@ class CephFS(RESTController):
                 else:
                     activity = 0.0
 
-                metadata = mgr.get_metadata('mds', info['name'])
-                mds_versions[metadata.get('ceph_version', 'unknown')].append(
-                    info['name'])
+                self._append_mds_metadata(mds_versions, info['name'])
                 rank_table.append(
                     {
                         "rank": rank,
@@ -244,10 +248,7 @@ class CephFS(RESTController):
 
         standby_table = []
         for standby in fsmap['standbys']:
-            metadata = mgr.get_metadata('mds', standby['name'])
-            mds_versions[metadata.get('ceph_version', 'unknown')].append(
-                standby['name'])
-
+            self._append_mds_metadata(mds_versions, standby['name'])
             standby_table.append({
                 'name': standby['name']
             })
@@ -324,7 +325,7 @@ class CephFSClients(object):
 
 @UiApiController('/cephfs', Scope.CEPHFS)
 class CephFsUi(CephFS):
-    RESOURCE_ID='fs_id'
+    RESOURCE_ID = 'fs_id'
 
     @RESTController.Resource('GET')
     def tabs(self, fs_id):
@@ -348,5 +349,3 @@ class CephFsUi(CephFS):
         data['clients'] = self._clients(fs_id)
 
         return data
-
-
