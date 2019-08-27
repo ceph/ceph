@@ -308,6 +308,8 @@ struct AWSSyncConfig_S3 {
 
 struct AWSSyncConfig_Profile {
   string source_bucket;
+  string source_owner;
+  string source_tenant;
   bool prefix{false};
   string target_path;
   string connection_id;
@@ -327,6 +329,8 @@ struct AWSSyncConfig_Profile {
       source_bucket = source_bucket.substr(0, source_bucket.size() - 1);
     }
 
+    source_owner = config["source_owner"];
+    source_tenant = config["source_tenant"];
     target_path = config["target_path"];
     connection_id = config["connection_id"];
     acls_id = config["acls_id"];
@@ -349,6 +353,8 @@ struct AWSSyncConfig_Profile {
       sb.append("*");
     }
     encode_json("source_bucket", sb, &jf);
+    encode_json("source_owner", source_owner, &jf);
+    encode_json("source_tenant", source_tenant, &jf);
     encode_json("target_path", target_path, &jf);
     encode_json("connection_id", connection_id, &jf);
     encode_json("acls_id", acls_id, &jf);
@@ -465,38 +471,63 @@ struct AWSSyncConfig {
       return ret;
     }
 
-    auto& sb = profile->source_bucket;
+    string source;
+    if (!profile->source_bucket.empty()) {
+      source = "bucket:" + profile->source_bucket;
+    } else if (!profile->source_owner.empty()) {
+      source = "owner:" + profile->source_owner;
+    } else if (!profile->source_tenant.empty()) {
+      source = "tenant:" + profile->source_tenant;
+    }
 
-    if (explicit_profiles.find(sb) != explicit_profiles.end()) {
+    if (explicit_profiles.find(source) != explicit_profiles.end()) {
       ldout(cct, 0) << "WARNING: duplicate target configuration in sync module" << dendl;
     }
 
-    explicit_profiles[sb] = profile;
+    explicit_profiles[source] = profile;
     if (ptarget) {
       *ptarget = profile;
     }
     return 0;
   }
 
-  bool do_find_profile(const rgw_bucket bucket, std::shared_ptr<AWSSyncConfig_Profile> *result) {
-    const string& name = bucket.name;
-    auto iter = explicit_profiles.upper_bound(name);
+  bool do_find_profile(const RGWBucketInfo& bucket_info, std::shared_ptr<AWSSyncConfig_Profile> *result) {
+    string tenant_str;
+    string owner_str;
+    string name_str;
+
+    if (!bucket_info.owner.tenant.empty()) {
+      tenant_str = "tenant:" + bucket_info.owner.tenant;
+      if (explicit_profiles.find(tenant_str) != explicit_profiles.end()) {
+        *result = explicit_profiles[tenant_str];
+        return true;
+      }
+    }
+
+    owner_str = "owner:" + bucket_info.owner.id;
+    if (explicit_profiles.find(owner_str) != explicit_profiles.end()) {
+      *result = explicit_profiles[owner_str];
+      return true;
+    }
+
+    name_str = "bucket:" + bucket_info.bucket.name;
+    auto iter = explicit_profiles.upper_bound(name_str);
     if (iter == explicit_profiles.begin()) {
       return false;
     }
 
     --iter;
-    if (iter->first.size() > name.size()) {
+    if (iter->first.size() > name_str.size()) {
       return false;
     }
-    if (name.compare(0, iter->first.size(), iter->first) != 0) {
+    if (name_str.compare(0, iter->first.size(), iter->first) != 0) {
       return false;
     }
 
     std::shared_ptr<AWSSyncConfig_Profile>& target = iter->second;
 
     if (!target->prefix &&
-        name.size() != iter->first.size()) {
+        name_str.size() != iter->first.size()) {
       return false;
     }
 
@@ -504,8 +535,8 @@ struct AWSSyncConfig {
     return true;
   }
 
-  void find_profile(const rgw_bucket bucket, std::shared_ptr<AWSSyncConfig_Profile> *result) {
-    if (!do_find_profile(bucket, result)) {
+  void find_profile(const RGWBucketInfo& bucket_info, std::shared_ptr<AWSSyncConfig_Profile> *result) {
+    if (!do_find_profile(bucket_info, result)) {
       *result = root_profile;
     }
   }
@@ -676,8 +707,8 @@ struct AWSSyncInstanceEnv {
     conf.init_conns(sync_env, id);
   }
 
-  void get_profile(const rgw_bucket& bucket, std::shared_ptr<AWSSyncConfig_Profile> *ptarget) {
-    conf.find_profile(bucket, ptarget);
+  void get_profile(const RGWBucketInfo& bucket_info, std::shared_ptr<AWSSyncConfig_Profile> *ptarget) {
+    conf.find_profile(bucket_info, ptarget);
     ceph_assert(ptarget);
   }
 };
@@ -1610,7 +1641,7 @@ public:
         return set_cr_error(-EINVAL);
       }
 
-      instance.get_profile(bucket_info.bucket, &target);
+      instance.get_profile(bucket_info, &target);
       instance.conf.get_target(target, bucket_info, key, &target_bucket_name, &target_obj_name);
 
       if (bucket_created.find(target_bucket_name) == bucket_created.end()){
@@ -1730,7 +1761,7 @@ public:
       ldout(sync_env->cct, 0) << ": remove remote obj: z=" << sync_env->source_zone
                               << " b=" << bucket_info.bucket << " k=" << key << " mtime=" << mtime << dendl;
       yield {
-        instance.get_profile(bucket_info.bucket, &target);
+        instance.get_profile(bucket_info, &target);
         string path =  instance.conf.get_path(target, bucket_info, key);
         ldout(sync_env->cct, 0) << "AWS: removing aws object at" << path << dendl;
 
