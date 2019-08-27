@@ -700,6 +700,7 @@ struct AWSSyncConfig {
 struct AWSSyncInstanceEnv {
   AWSSyncConfig conf;
   string id;
+  unordered_set<string> bucket_created;
 
   explicit AWSSyncInstanceEnv(AWSSyncConfig& _conf) : conf(_conf) {}
 
@@ -1590,7 +1591,6 @@ class RGWAWSHandleRemoteObjCBCR: public RGWStatRemoteObjCBCR {
   RGWRESTConn *source_conn{nullptr};
   std::shared_ptr<AWSSyncConfig_Profile> target;
   bufferlist res;
-  unordered_map <string, bool> bucket_created;
   string target_bucket_name;
   string target_obj_name;
   rgw_rest_obj rest_obj;
@@ -1648,7 +1648,7 @@ public:
       instance.get_profile(bucket_info, &target);
       instance.conf.get_target(target, bucket_info, key, &target_bucket_name, &target_obj_name);
 
-      if (bucket_created.find(target_bucket_name) == bucket_created.end()){
+      if (instance.bucket_created.find(target_bucket_name) == instance.bucket_created.end()){
         yield {
           ldout(sync_env->cct,0) << "AWS: creating bucket " << target_bucket_name << dendl;
           bufferlist bl;
@@ -1659,7 +1659,7 @@ public:
         if (retcode < 0 ) {
           RGWXMLDecoder::XMLParser parser;
           if (!parser.init()) {
-            ldout(sync_env->cct, 0) << "ERROR: failed to initialize xml parser for parsing multipart init response from server" << dendl;
+            ldout(sync_env->cct, 0) << "ERROR: failed to initialize xml parser for parsing bucket create response from server" << dendl;
             return set_cr_error(retcode);
           }
 
@@ -1682,7 +1682,7 @@ public:
           }
         }
 
-        bucket_created[target_bucket_name] = true;
+        instance.bucket_created.insert(target_bucket_name);
       }
 
       yield {
