@@ -44,7 +44,7 @@ const config = {
 };
 
 config.onPrepare = async () => {
-  browser.manage().timeouts().implicitlyWait(config.implicitWaitTimeout)
+  await browser.manage().timeouts().implicitlyWait(config.implicitWaitTimeout);
 
   require('ts-node').register({
     project: 'e2e/tsconfig.e2e.json'
@@ -60,15 +60,12 @@ config.onPrepare = async () => {
 
   await browser.driver.findElement(by.css('input[type="submit"]')).click();
 
-  global.browser.getProcessedConfig().then(async (config) => {
-    // Login takes some time, so wait until it's done.
-    // For the test app's login, we know it's done when it redirects to
-    // dashboard.
-    return await browser.driver.wait(async () => {
-      return await browser.driver.getCurrentUrl().then((url) => {
-        return /dashboard/.test(url);
-      });
-    });
+  // Login takes some time, so wait until it's done.
+  // For the test app's login, we know it's done when it redirects to
+  // dashboard.
+  await browser.driver.wait(async () => {
+    const url = await browser.driver.getCurrentUrl();
+    return /dashboard/.test(url);
   });
 };
 
