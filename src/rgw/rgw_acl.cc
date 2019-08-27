@@ -77,7 +77,7 @@ uint32_t RGWAccessControlList::get_perm(const DoutPrefixProvider* dpp,
 }
 
 uint32_t RGWAccessControlList::get_group_perm(ACLGroupTypeEnum group,
-                                              const uint32_t perm_mask)
+                                              const uint32_t perm_mask) const
 {
   ldout(cct, 5) << "Searching permissions for group=" << (int)group
                 << " mask=" << perm_mask << dendl;
