@@ -231,6 +231,16 @@ EOF
     fi
 }
 
+for_make_check=false
+if tty -s; then
+    # interactive
+    for_make_check=true
+elif [ $FOR_MAKE_CHECK ]; then
+    for_make_check=true
+else
+    for_make_check=false
+fi
+
 if [ x$(uname)x = xFreeBSDx ]; then
     $SUDO pkg install -yq \
         devel/babeltrace \
@@ -289,15 +299,6 @@ if [ x$(uname)x = xFreeBSDx ]; then
 
     exit
 else
-    for_make_check=false
-    if tty -s; then
-        # interactive
-        for_make_check=true
-    elif [ $FOR_MAKE_CHECK ]; then
-        for_make_check=true
-    else
-        for_make_check=false
-    fi
     [ $WITH_SEASTAR ] && with_seastar=true || with_seastar=false
     source /etc/os-release
     case $ID in
@@ -469,44 +470,51 @@ function activate_virtualenv() {
     . $env_dir/bin/activate
 }
 
+function preload_wheels_for_tox() {
+    local ini=$1
+    shift
+    pushd .
+    cd $(dirname $ini)
+    local require_files=$(ls *requirements*.txt 2>/dev/null) || true
+    local constraint_files=$(ls *constraints*.txt 2>/dev/null) || true
+    local require=$(echo -n "$require_files" | sed -e 's/^/-r /')
+    local constraint=$(echo -n "$constraint_files" | sed -e 's/^/-c /')
+    local md5=wheelhouse/md5
+    if test "$require"; then
+        if ! test -f $md5 || ! md5sum -c $md5 > /dev/null; then
+            rm -rf wheelhouse
+        fi
+    fi
+    if test "$require" && ! test -d wheelhouse ; then
+        for interpreter in python2.7 python3 ; do
+            type $interpreter > /dev/null 2>&1 || continue
+            activate_virtualenv $top_srcdir $interpreter || exit 1
+            populate_wheelhouse "wheel -w $wip_wheelhouse" $require $constraint || exit 1
+        done
+        mv $wip_wheelhouse wheelhouse
+        md5sum $require_files $constraint_files > $md5
+    fi
+    popd
+}
+
 # use pip cache if possible but do not store it outside of the source
 # tree
 # see https://pip.pypa.io/en/stable/reference/pip_install.html#caching
-mkdir -p install-deps-cache
-top_srcdir=$(pwd)
-export XDG_CACHE_HOME=$top_srcdir/install-deps-cache
-wip_wheelhouse=wheelhouse-wip
+if $for_make_check; then
+    mkdir -p install-deps-cache
+    top_srcdir=$(pwd)
+    export XDG_CACHE_HOME=$top_srcdir/install-deps-cache
+    wip_wheelhouse=wheelhouse-wip
+    #
+    # preload python modules so that tox can run without network access
+    #
+    find . -name tox.ini | while read ini ; do
+        preload_wheels_for_tox $ini
+    done
+    for interpreter in python2.7 python3 ; do
+        rm -rf $top_srcdir/install-deps-$interpreter
+    done
+    rm -rf $XDG_CACHE_HOME
+    git --version || (echo "Dashboard uses git to pull dependencies." ; false)
+fi
 
-#
-# preload python modules so that tox can run without network access
-#
-find . -name tox.ini | while read ini ; do
-    (
-        cd $(dirname $ini)
-        require_files=$(ls *requirements*.txt 2>/dev/null) || true
-        constraint_files=$(ls *constraints*.txt 2>/dev/null) || true
-        require=$(echo -n "$require_files" | sed -e 's/^/-r /')
-        constraint=$(echo -n "$constraint_files" | sed -e 's/^/-c /')
-        md5=wheelhouse/md5
-        if test "$require"; then
-            if ! test -f $md5 || ! md5sum -c $md5 > /dev/null; then
-                rm -rf wheelhouse
-            fi
-        fi
-        if test "$require" && ! test -d wheelhouse ; then
-            for interpreter in python2.7 python3 ; do
-                type $interpreter > /dev/null 2>&1 || continue
-                activate_virtualenv $top_srcdir $interpreter || exit 1
-                populate_wheelhouse "wheel -w $wip_wheelhouse" $require $constraint || exit 1
-            done
-            mv $wip_wheelhouse wheelhouse
-            md5sum $require_files $constraint_files > $md5
-        fi
-    )
-done
-
-for interpreter in python2.7 python3 ; do
-    rm -rf $top_srcdir/install-deps-$interpreter
-done
-rm -rf $XDG_CACHE_HOME
-git --version || (echo "Dashboard uses git to pull dependencies." ; false)
