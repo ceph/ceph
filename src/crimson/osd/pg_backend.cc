@@ -453,6 +453,7 @@ seastar::future<> PGBackend::setxattr(
     name = "_" + aname;
     bp.copy(osd_op.op.xattr.value_len, val);
   }
+  logger().debug("setxattr on obj={} for attr={}", os.oi.soid, name);
 
   txn.setattr(coll->get_cid(), ghobject_t{os.oi.soid}, name, val);
   return seastar::now();
@@ -471,14 +472,18 @@ seastar::future<> PGBackend::getxattr(
     bp.copy(osd_op.op.xattr.name_len, aname);
     name = "_" + aname;
   }
+  logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
   return getxattr(os.oi.soid, name).then([&osd_op] (ceph::bufferptr val) {
     osd_op.outdata.clear();
     osd_op.outdata.push_back(std::move(val));
     osd_op.op.xattr.value_len = osd_op.outdata.length();
     //ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
   }).handle_exception_type(
-    [] (ceph::os::FuturizedStore::EnoentException& e) {
+    [] (ceph::os::FuturizedStore::EnoentException&) {
       return seastar::make_exception_future<>(ceph::osd::object_not_found{});
+  }).handle_exception_type(
+    [] (ceph::os::FuturizedStore::EnodataException&) {
+      return seastar::make_exception_future<>(ceph::osd::no_message_available{});
   });
   //ctx->delta_stats.num_rd++;
 }

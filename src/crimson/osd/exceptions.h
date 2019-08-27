@@ -40,6 +40,10 @@ struct invalid_argument : public error {
   invalid_argument() : error(std::errc::invalid_argument) {}
 };
 
+struct no_message_available : public error {
+  no_message_available() : error(std::errc::no_message_available) {}
+};
+
 // FIXME: error handling
 struct operation_not_supported : public error {
   operation_not_supported()
