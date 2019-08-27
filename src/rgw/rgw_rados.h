@@ -369,7 +369,7 @@ using tombstone_cache_t = lru_map<rgw_obj, tombstone_entry>;
 
 class RGWIndexCompletionManager;
 
-class RGWRados
+class RGWRados : public md_config_obs_t
 {
   friend class RGWGC;
   friend class RGWMetaNotifier;
@@ -492,6 +492,9 @@ public:
                pctl(&ctl),
                reshard(NULL) {}
 
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed) override;
+                       
   RGWRados& set_use_cache(bool status) {
     use_cache = status;
     return *this;
@@ -600,6 +603,7 @@ public:
   int init_complete();
   int initialize();
   void finalize();
+  void set_max_shards();
 
   int register_to_service_map(const string& daemon_type, const map<string, string>& meta);
   int update_service_map(std::map<std::string, std::string>&& status);
