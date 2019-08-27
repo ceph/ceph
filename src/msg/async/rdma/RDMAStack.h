@@ -44,7 +44,6 @@ class RDMADispatcher {
   Infiniband::CompletionQueue* tx_cq = nullptr;
   Infiniband::CompletionQueue* rx_cq = nullptr;
   Infiniband::CompletionChannel *tx_cc = nullptr, *rx_cc = nullptr;
-  EventCallbackRef async_handler;
   bool done = false;
   std::atomic<uint64_t> num_qp_conn = {0};
   // protect `qp_conns`, `dead_queue_pairs`
@@ -78,16 +77,6 @@ class RDMADispatcher {
   // fixme: lockfree
   std::list<RDMAWorker*> pending_workers;
   void enqueue_dead_qp(uint32_t qp);
-
-  class C_handle_cq_async : public EventCallback {
-    RDMADispatcher *dispatcher;
-   public:
-    explicit C_handle_cq_async(RDMADispatcher *w): dispatcher(w) {}
-    void do_request(uint64_t fd) {
-      // worker->handle_tx_event();
-      dispatcher->handle_async_event();
-    }
-  };
 
  public:
   PerfCounters *perf_logger;

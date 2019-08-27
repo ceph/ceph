@@ -38,12 +38,10 @@ RDMADispatcher::~RDMADispatcher()
   ceph_assert(qp_conns.empty());
   ceph_assert(num_qp_conn == 0);
   ceph_assert(dead_queue_pairs.empty());
-
-  delete async_handler;
 }
 
 RDMADispatcher::RDMADispatcher(CephContext* c, shared_ptr<Infiniband>& ib)
-  : cct(c), ib(ib), async_handler(new C_handle_cq_async(this))
+  : cct(c), ib(ib)
 {
   PerfCountersBuilder plb(cct, "AsyncMessenger::RDMADispatcher", l_msgr_rdma_dispatcher_first, l_msgr_rdma_dispatcher_last);
 

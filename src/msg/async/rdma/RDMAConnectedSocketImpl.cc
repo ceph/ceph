@@ -554,10 +554,6 @@ void RDMAConnectedSocketImpl::close()
 void RDMAConnectedSocketImpl::fault()
 {
   ldout(cct, 1) << __func__ << " tcp fd " << tcp_fd << dendl;
-  /*if (qp) {
-    qp->to_dead();
-    qp = NULL;
-    }*/
   error = ECONNRESET;
   connected = 1;
   notify();
