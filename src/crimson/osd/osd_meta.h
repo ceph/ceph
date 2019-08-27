@@ -9,8 +9,8 @@
 #include "osd/osd_types.h"
 
 namespace ceph::os {
+  class FuturizedCollection;
   class FuturizedStore;
-  class Collection;
   class Transaction;
 }
 
@@ -20,10 +20,10 @@ class OSDMeta {
   template<typename T> using Ref = boost::intrusive_ptr<T>;
 
   ceph::os::FuturizedStore* store;
-  Ref<ceph::os::Collection> coll;
+  Ref<ceph::os::FuturizedCollection> coll;
 
 public:
-  OSDMeta(Ref<ceph::os::Collection> coll,
+  OSDMeta(Ref<ceph::os::FuturizedCollection> coll,
           ceph::os::FuturizedStore* store)
     : store{store}, coll{coll}
   {}

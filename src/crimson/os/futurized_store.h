@@ -17,7 +17,7 @@
 
 namespace ceph::os {
 
-class Collection;
+class FuturizedCollection;
 class Transaction;
 
 class FuturizedStore {
@@ -64,7 +64,7 @@ public:
   virtual seastar::future<> mkfs(uuid_d new_osd_fsid) = 0;
   virtual store_statfs_t stat() const = 0;
 
-  using CollectionRef = boost::intrusive_ptr<Collection>;
+  using CollectionRef = boost::intrusive_ptr<FuturizedCollection>;
   virtual seastar::future<ceph::bufferlist> read(CollectionRef c,
 				   const ghobject_t& oid,
 				   uint64_t offset,
@@ -94,16 +94,16 @@ public:
     const std::optional<std::string> &start ///< [in] start, empty for begin
     ) = 0; ///< @return <done, values> values.empty() iff done
 
-  virtual CollectionRef create_new_collection(const coll_t& cid) = 0;
-  virtual CollectionRef open_collection(const coll_t& cid) = 0;
-  virtual std::vector<coll_t> list_collections() = 0;
+  virtual seastar::future<CollectionRef> create_new_collection(const coll_t& cid) = 0;
+  virtual seastar::future<CollectionRef> open_collection(const coll_t& cid) = 0;
+  virtual seastar::future<std::vector<coll_t>> list_collections() = 0;
 
   virtual seastar::future<> do_transaction(CollectionRef ch,
 				   Transaction&& txn) = 0;
 
-  virtual void write_meta(const std::string& key,
-		  const std::string& value) = 0;
-  virtual int read_meta(const std::string& key, std::string* value) = 0;
+  virtual seastar::future<> write_meta(const std::string& key,
+				       const std::string& value) = 0;
+  virtual seastar::future<int, std::string> read_meta(const std::string& key) = 0;
   virtual uuid_d get_fsid() const  = 0;
   virtual unsigned get_max_attr_name_length() const = 0;
 };

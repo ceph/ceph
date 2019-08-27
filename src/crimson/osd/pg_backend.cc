@@ -12,7 +12,7 @@
 
 #include "messages/MOSDOp.h"
 
-#include "crimson/os/cyan_collection.h"
+#include "crimson/os/futurized_collection.h"
 #include "crimson/os/cyan_object.h"
 #include "crimson/os/futurized_store.h"
 #include "replicated_backend.h"
@@ -187,7 +187,7 @@ PGBackend::mutate_object(
       ceph::bufferlist osv;
       encode(os->oi, osv, 0);
       // TODO: get_osdmap()->get_features(CEPH_ENTITY_TYPE_OSD, nullptr));
-      txn.setattr(coll->cid, ghobject_t{os->oi.soid}, OI_ATTR, osv);
+      txn.setattr(coll->get_cid(), ghobject_t{os->oi.soid}, OI_ATTR, osv);
     }
   } else {
     // reset cached ObjectState without enforcing eviction
@@ -271,7 +271,7 @@ bool PGBackend::maybe_create_new_object(
     os.exists = true;
     os.oi.new_object();
 
-    txn.touch(coll->cid, ghobject_t{os.oi.soid});
+    txn.touch(coll->get_cid(), ghobject_t{os.oi.soid});
     // TODO: delta_stats.num_objects++
     return false;
   } else if (os.oi.is_whiteout()) {
@@ -308,7 +308,8 @@ seastar::future<> PGBackend::write(
   } else if (op.extent.truncate_seq > seq) {
     // write arrives before trimtrunc
     if (os.exists && !os.oi.is_whiteout()) {
-      txn.truncate(coll->cid, ghobject_t{os.oi.soid}, op.extent.truncate_size);
+      txn.truncate(coll->get_cid(),
+		   ghobject_t{os.oi.soid}, op.extent.truncate_size);
     }
     os.oi.truncate_seq = op.extent.truncate_seq;
     os.oi.truncate_size = op.extent.truncate_size;
@@ -316,12 +317,12 @@ seastar::future<> PGBackend::write(
   maybe_create_new_object(os, txn);
   if (length == 0) {
     if (offset > os.oi.size) {
-      txn.truncate(coll->cid, ghobject_t{os.oi.soid}, op.extent.offset);
+      txn.truncate(coll->get_cid(), ghobject_t{os.oi.soid}, op.extent.offset);
     } else {
       txn.nop();
     }
   } else {
-    txn.write(coll->cid, ghobject_t{os.oi.soid},
+    txn.write(coll->get_cid(), ghobject_t{os.oi.soid},
 	      offset, length, std::move(buf), op.flags);
   }
   return seastar::now();
@@ -339,10 +340,10 @@ seastar::future<> PGBackend::writefull(
 
   const bool existing = maybe_create_new_object(os, txn);
   if (existing && op.extent.length < os.oi.size) {
-    txn.truncate(coll->cid, ghobject_t{os.oi.soid}, op.extent.length);
+    txn.truncate(coll->get_cid(), ghobject_t{os.oi.soid}, op.extent.length);
   }
   if (op.extent.length) {
-    txn.write(coll->cid, ghobject_t{os.oi.soid}, 0, op.extent.length,
+    txn.write(coll->get_cid(), ghobject_t{os.oi.soid}, 0, op.extent.length,
               osd_op.indata, op.flags);
     os.oi.size = op.extent.length;
   }
@@ -353,7 +354,8 @@ seastar::future<> PGBackend::remove(ObjectState& os,
                                     ceph::os::Transaction& txn)
 {
   // todo: snapset
-  txn.remove(coll->cid, ghobject_t{os.oi.soid, ghobject_t::NO_GEN, shard});
+  txn.remove(coll->get_cid(),
+	     ghobject_t{os.oi.soid, ghobject_t::NO_GEN, shard});
   os.oi.size = 0;
   os.oi.new_object();
   os.exists = false;
@@ -421,7 +423,7 @@ seastar::future<> PGBackend::setxattr(
     bp.copy(osd_op.op.xattr.value_len, val);
   }
 
-  txn.setattr(coll->cid, ghobject_t{os.oi.soid}, name, val);
+  txn.setattr(coll->get_cid(), ghobject_t{os.oi.soid}, name, val);
   return seastar::now();
   //ctx->delta_stats.num_wr++;
 }

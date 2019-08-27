@@ -50,7 +50,6 @@ namespace ceph::net {
 
 namespace ceph::os {
   class FuturizedStore;
-  struct Collection;
   class Transaction;
 }
 
