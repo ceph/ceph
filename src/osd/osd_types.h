@@ -4241,13 +4241,11 @@ struct pg_missing_item {
   } flags;
   pg_missing_item() : flags(FLAG_NONE) {}
   explicit pg_missing_item(eversion_t n) : need(n), flags(FLAG_NONE) {}  // have no old version
-  pg_missing_item(eversion_t n, eversion_t h, bool is_delete=false, bool old_style = false,bool new_object = false) :
+  pg_missing_item(eversion_t n, eversion_t h, bool is_delete=false, bool old_style = false) :
     need(n), have(h) {
+    set_delete(is_delete);
     if (old_style)
       clean_regions.mark_fully_dirty();
-    if (new_object)
-      clean_regions.mark_object_new();
-    set_delete(is_delete);
   }
 
   void encode(ceph::buffer::list& bl, uint64_t features) const {
@@ -4468,7 +4466,7 @@ public:
     if (e.prior_version == eversion_t() || e.is_clone()) {
       // new object.
       if (is_missing_divergent_item) {  // use iterator
-        rmissing.erase((missing_it->second).need.version);
+        rmissing.erase(missing_it->second.need.version);
         // .have = nil
         missing_it->second = item(e.version, eversion_t(), e.is_delete());
         missing_it->second.clean_regions.mark_fully_dirty();
@@ -4481,14 +4479,20 @@ public:
     } else if (is_missing_divergent_item) {
       // already missing (prior).
       rmissing.erase((missing_it->second).need.version);
-      (missing_it->second).need = e.version;  // leave .have unchanged.
-      (missing_it->second).set_delete(e.is_delete());
-      (missing_it->second).clean_regions.merge(e.clean_regions);
+      missing_it->second.need = e.version;  // leave .have unchanged.
+      missing_it->second.set_delete(e.is_delete());
+      if (e.is_lost_revert())
+        missing_it->second.clean_regions.mark_fully_dirty();
+      else
+        missing_it->second.clean_regions.merge(e.clean_regions);
     } else {
       // not missing, we must have prior_version (if any)
       ceph_assert(!is_missing_divergent_item);
       missing[e.soid] = item(e.version, e.prior_version, e.is_delete());
-      missing[e.soid].clean_regions = e.clean_regions;
+      if (e.is_lost_revert())
+        missing[e.soid].clean_regions.mark_fully_dirty();
+      else
+        missing[e.soid].clean_regions = e.clean_regions;
     }
     rmissing[e.version.version] = e.soid;
     tracker.changed(e.soid);
@@ -4498,9 +4502,9 @@ public:
     auto p = missing.find(oid);
     if (p != missing.end()) {
       rmissing.erase((p->second).need.version);
-      (p->second).need = need;          // no not adjust .have
-      (p->second).set_delete(is_delete);
-      (p->second).clean_regions.mark_fully_dirty();
+      p->second.need = need;          // do not adjust .have
+      p->second.set_delete(is_delete);
+      p->second.clean_regions.mark_fully_dirty();
     } else {
       missing[oid] = item(need, eversion_t(), is_delete);
       missing[oid].clean_regions.mark_fully_dirty();
@@ -4527,9 +4531,8 @@ public:
   }
 
   void add(const hobject_t& oid, eversion_t need, eversion_t have,
-	   bool is_delete, bool make_dirty = true) {
-    //if have== eversion_t() means that the object does not exist, we transfer new_object = true
-    missing[oid] = item(need, have, is_delete, make_dirty, have == eversion_t());
+	   bool is_delete) {
+    missing[oid] = item(need, have, is_delete, true);
     rmissing[need.version] = oid;
     tracker.changed(oid);
   }
