@@ -38,7 +38,7 @@ export class UserFormComponent implements OnInit {
   userFormMode = UserFormMode;
   mode: UserFormMode;
   allRoles: Array<UserFormRoleModel>;
-  messages = new SelectMessages({ empty: 'There are no roles.' }, this.i18n);
+  messages = new SelectMessages({ empty: this.i18n('There are no roles.') }, this.i18n);
   action: string;
   resource: string;
 
@@ -56,7 +56,7 @@ export class UserFormComponent implements OnInit {
   ) {
     this.resource = this.i18n('user');
     this.createForm();
-    this.messages = new SelectMessages({ empty: 'There are no roles.' }, this.i18n);
+    this.messages = new SelectMessages({ empty: this.i18n('There are no roles.') }, this.i18n);
   }
 
   createForm() {
