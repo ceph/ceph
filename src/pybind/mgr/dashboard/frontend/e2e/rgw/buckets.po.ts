@@ -22,14 +22,14 @@ export class BucketsPageHelper extends PageHelper {
     // Select bucket owner
     await element(by.id('owner')).click();
     await element(by.cssContainingText('select[name=owner] option', owner)).click();
-    expect(element(by.id('owner')).getAttribute('class')).toContain('ng-valid');
+    await expect(element(by.id('owner')).getAttribute('class')).toContain('ng-valid');
 
     // Select bucket placement target:
     await element(by.id('owner')).click();
     await element(
       by.cssContainingText('select[name=placement-target] option', placementTarget)
     ).click();
-    expect(element(by.id('placement-target')).getAttribute('class')).toContain('ng-valid');
+    await expect(element(by.id('placement-target')).getAttribute('class')).toContain('ng-valid');
 
     // Click the create button and wait for bucket to be made
     const createButton = element(by.cssContainingText('button', 'Create Bucket'));
@@ -46,8 +46,8 @@ export class BucketsPageHelper extends PageHelper {
   async edit(name: string, new_owner: string) {
     await this.getTableCell(name).click(); // click on the bucket you want to edit in the table
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
-    expect(await this.getBreadcrumbText()).toEqual('Edit');
-    expect(element(by.css('input[name=placement-target]')).getAttribute('value')).toBe(
+    await expect(this.getBreadcrumbText()).toEqual('Edit');
+    await expect(element(by.css('input[name=placement-target]')).getAttribute('value')).toBe(
       'default-placement'
     );
     await element(by.id('owner')).click(); // click owner dropdown menu
@@ -66,7 +66,7 @@ export class BucketsPageHelper extends PageHelper {
     const element_details_table = element
       .all(by.css('.table.table-striped.table-bordered'))
       .first();
-    expect(element_details_table.getText()).toMatch(new_owner);
+    await expect(element_details_table.getText()).toMatch(new_owner);
     return promise;
   }
 
@@ -111,10 +111,10 @@ export class BucketsPageHelper extends PageHelper {
     );
 
     // Check that name input field was marked invalid in the css
-    expect(await nameInputField.getAttribute('class')).toContain('ng-invalid');
+    await expect(nameInputField.getAttribute('class')).toContain('ng-invalid');
 
     // Check that error message was printed under name input field
-    expect(await element(by.css('#bid + .invalid-feedback')).getText()).toMatch(
+    await expect(element(by.css('#bid + .invalid-feedback')).getText()).toMatch(
       'The value is not valid.'
     );
 
@@ -131,10 +131,10 @@ export class BucketsPageHelper extends PageHelper {
     await nameInputField.click();
 
     // Check that owner drop down field was marked invalid in the css
-    expect(await element(by.id('owner')).getAttribute('class')).toContain('ng-invalid');
+    await expect(element(by.id('owner')).getAttribute('class')).toContain('ng-invalid');
 
     // Check that error message was printed under owner drop down field
-    expect(await element(by.css('#owner + .invalid-feedback')).getText()).toMatch(
+    await expect(element(by.css('#owner + .invalid-feedback')).getText()).toMatch(
       'This field is required.'
     );
 
@@ -149,15 +149,15 @@ export class BucketsPageHelper extends PageHelper {
       by.cssContainingText('select[name=placement-target] option', 'Select a placement target')
     ).click();
     await nameInputField.click(); // Trigger validation
-    expect(await element(by.id('placement-target')).getAttribute('class')).toContain('ng-invalid');
-    expect(await element(by.css('#placement-target + .invalid-feedback')).getText()).toMatch(
+    await expect(element(by.id('placement-target')).getAttribute('class')).toContain('ng-invalid');
+    await expect(element(by.css('#placement-target + .invalid-feedback')).getText()).toMatch(
       'This field is required.'
     );
 
     // Clicks the Create Bucket button but the page doesn't move. Done by testing
     // for the breadcrumb
     await element(by.cssContainingText('button', 'Create Bucket')).click(); // Clicks Create Bucket button
-    expect(await this.getBreadcrumbText()).toEqual('Create');
+    await expect(this.getBreadcrumbText()).toEqual('Create');
     // content in fields seems to subsist through tests if not cleared, so it is cleared
     await nameInputField.clear();
     return element(by.cssContainingText('button', 'Cancel')).click();
@@ -174,7 +174,7 @@ export class BucketsPageHelper extends PageHelper {
     await this.getTableCell(name).click(); // click on the bucket you want to edit in the table
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
-    expect(await this.getBreadcrumbText()).toEqual('Edit');
+    await expect(this.getBreadcrumbText()).toEqual('Edit');
 
     // Chooses 'Select a user' rather than a valid owner on Edit Bucket page
     // and checks if it's an invalid input
@@ -190,13 +190,13 @@ export class BucketsPageHelper extends PageHelper {
     await element(by.cssContainingText('button', 'Edit Bucket')).click();
 
     // Check that owner drop down field was marked invalid in the css
-    expect(await element(by.id('owner')).getAttribute('class')).toContain('ng-invalid');
+    await expect(element(by.id('owner')).getAttribute('class')).toContain('ng-invalid');
 
     // Check that error message was printed under owner drop down field
-    expect(await element(by.css('#owner + .invalid-feedback')).getText()).toMatch(
+    await expect(element(by.css('#owner + .invalid-feedback')).getText()).toMatch(
       'This field is required.'
     );
 
-    expect(await this.getBreadcrumbText()).toEqual('Edit');
+    await expect(this.getBreadcrumbText()).toEqual('Edit');
   }
 }

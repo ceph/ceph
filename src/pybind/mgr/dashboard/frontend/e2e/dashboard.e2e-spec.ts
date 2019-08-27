@@ -48,9 +48,9 @@ describe('Dashboard Main Page', () => {
       };
 
       for (const [linkText, breadcrumbText] of Object.entries(expectationMap)) {
-        expect(await browser.getCurrentUrl()).toContain('/#/dashboard');
+        await expect(browser.getCurrentUrl()).toContain('/#/dashboard');
         await dashboard.clickInfoCardLink(linkText);
-        expect(await dashboard.getBreadcrumbText()).toEqual(breadcrumbText);
+        await expect(dashboard.getBreadcrumbText()).toEqual(breadcrumbText);
         await dashboard.navigateBack();
       }
     });
@@ -80,7 +80,7 @@ describe('Dashboard Main Page', () => {
       ];
 
       for (let i = 0; i < order.length; i++) {
-        expect((await dashboard.infoCard(i)).getText()).toContain(
+        await expect((await dashboard.infoCard(i)).getText()).toContain(
           order[i],
           `Order of ${order[i]} seems to be wrong`
         );
@@ -88,10 +88,10 @@ describe('Dashboard Main Page', () => {
     });
 
     it('should verify that info card group titles are present and in the right order', async () => {
-      expect(await browser.getCurrentUrl()).toContain('/#/dashboard');
-      expect(await dashboard.infoGroupTitle(0)).toBe('Status');
-      expect(await dashboard.infoGroupTitle(1)).toBe('Performance');
-      expect(await dashboard.infoGroupTitle(2)).toBe('Capacity');
+      await expect(browser.getCurrentUrl()).toContain('/#/dashboard');
+      await expect(dashboard.infoGroupTitle(0)).toBe('Status');
+      await expect(dashboard.infoGroupTitle(1)).toBe('Performance');
+      await expect(dashboard.infoGroupTitle(2)).toBe('Capacity');
     });
   });
 
@@ -131,7 +131,7 @@ describe('Dashboard Main Page', () => {
       }
       await spec.pageObject.navigateTo();
       const tableCount = await spec.pageObject.getTableTotalCount();
-      expect(dashCount).toBe(
+      await expect(dashCount).toBe(
         tableCount,
         `Text of card ${spec.cardName} and regex ${spec.regexMatcher} resulted in ${dashCount} ` +
           `but did not match table count ${tableCount}`

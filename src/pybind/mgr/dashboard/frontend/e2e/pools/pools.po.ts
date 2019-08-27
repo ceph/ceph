@@ -40,7 +40,7 @@ export class PoolPageHelper extends PageHelper {
     await nameInput.sendKeys(name);
     await element(by.cssContainingText('select[name=poolType] option', 'replicated')).click();
 
-    expect(await element(by.css('select[name=poolType] option:checked')).getText()).toBe(
+    await expect(element(by.css('select[name=poolType] option:checked')).getText()).toBe(
       ' replicated '
     );
     await $('input[name=pgNum]').sendKeys(
@@ -62,7 +62,7 @@ export class PoolPageHelper extends PageHelper {
     const elem = await this.getTableCellByContent(name);
     await elem.click(); // select pool from the table
     await element(by.cssContainingText('button', 'Edit')).click(); // click edit button
-    expect(await this.getBreadcrumbText()).toEqual('Edit'); // verify we are now on edit page
+    await expect(this.getBreadcrumbText()).toEqual('Edit'); // verify we are now on edit page
     await $('input[name=pgNum]').sendKeys(protractor.Key.CONTROL, 'a', protractor.Key.NULL, new_pg);
     await element(by.css('cd-submit-button')).click();
     const str = `${new_pg} active+clean`;

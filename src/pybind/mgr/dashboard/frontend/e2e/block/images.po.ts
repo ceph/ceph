@@ -22,7 +22,7 @@ export class ImagesPageHelper extends PageHelper {
     await element(by.id('pool')).click();
     await element(by.cssContainingText('select[name=pool] option', pool)).click();
     await $(getPoolName).click();
-    expect(await element(by.id('pool')).getAttribute('class')).toContain('ng-valid'); // check if selected
+    await expect(element(by.id('pool')).getAttribute('class')).toContain('ng-valid'); // check if selected
 
     // Enter in the size of the image
     await element(by.id('size')).click();
@@ -53,8 +53,8 @@ export class ImagesPageHelper extends PageHelper {
     await browser.wait(Helper.EC.elementToBeClickable(this.getTableCell(newName)), Helper.TIMEOUT);
     // click edit button and wait to make sure new owner is present in table
     await this.getTableCell(newName).click();
-    expect(
-      await element
+    await expect(
+      element
         .all(by.css('.table.table-striped.table-bordered'))
         .first()
         .getText()

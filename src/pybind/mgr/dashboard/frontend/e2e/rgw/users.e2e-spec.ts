@@ -19,7 +19,7 @@ describe('RGW users page', () => {
     });
 
     it('should open and show breadcrumb', async () => {
-      expect(await users.getBreadcrumbText()).toEqual('Users');
+      await expect(users.getBreadcrumbText()).toEqual('Users');
     });
   });
 
@@ -30,7 +30,7 @@ describe('RGW users page', () => {
 
     it('should create user', async () => {
       await users.create(user_name, 'Some Name', 'original@website.com', '1200');
-      expect(await users.getTableCell(user_name).isPresent()).toBe(true);
+      await expect(users.getTableCell(user_name).isPresent()).toBe(true);
     });
 
     it('should edit users full name, email and max buckets', async () => {
@@ -40,7 +40,7 @@ describe('RGW users page', () => {
 
     it('should delete user', async () => {
       await users.delete(user_name);
-      expect(await users.getTableCell(user_name).isPresent()).toBe(false);
+      await expect(users.getTableCell(user_name).isPresent()).toBe(false);
     });
   });
 

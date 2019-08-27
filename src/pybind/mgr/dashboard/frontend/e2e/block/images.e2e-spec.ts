@@ -21,17 +21,17 @@ describe('Images page', () => {
     });
 
     it('should open and show breadcrumb', async () => {
-      expect(await images.getBreadcrumbText()).toEqual('Images');
+      await expect(images.getBreadcrumbText()).toEqual('Images');
     });
 
     it('should show three tabs', async () => {
-      expect(await images.getTabsCount()).toEqual(3);
+      await expect(images.getTabsCount()).toEqual(3);
     });
 
     it('should show text for all tabs', async () => {
-      expect(await images.getTabText(0)).toEqual('Images');
-      expect(await images.getTabText(1)).toEqual('Trash');
-      expect(await images.getTabText(2)).toEqual('Overall Performance');
+      await expect(images.getTabText(0)).toEqual('Images');
+      await expect(images.getTabText(1)).toEqual('Trash');
+      await expect(images.getTabText(2)).toEqual('Overall Performance');
     });
   });
 
@@ -50,17 +50,17 @@ describe('Images page', () => {
 
     it('should create image', async () => {
       await images.createImage(imageName, poolName, '1');
-      expect(await images.getTableCell(imageName).isPresent()).toBe(true);
+      await expect(images.getTableCell(imageName).isPresent()).toBe(true);
     });
 
     it('should edit image', async () => {
       await images.editImage(imageName, poolName, newImageName, '2');
-      expect(await images.getTableCell(newImageName).isPresent()).toBe(true);
+      await expect(images.getTableCell(newImageName).isPresent()).toBe(true);
     });
 
     it('should delete image', async () => {
       await images.deleteImage(newImageName);
-      expect(await images.getTableCell(newImageName).isPresent()).toBe(false);
+      await expect(images.getTableCell(newImageName).isPresent()).toBe(false);
     });
 
     afterAll(async () => {

@@ -18,7 +18,7 @@ describe('Iscsi Page', () => {
     });
 
     it('should open and show breadcrumb', async () => {
-      expect(await iscsi.getBreadcrumbText()).toEqual('Overview');
+      await expect(iscsi.getBreadcrumbText()).toEqual('Overview');
     });
   });
 
@@ -30,13 +30,13 @@ describe('Iscsi Page', () => {
     it('should check that tables are displayed and legends are correct', async () => {
       // Check tables are displayed
       const dataTables = iscsi.getDataTables();
-      expect(await dataTables.get(0).isDisplayed());
-      expect(await dataTables.get(1).isDisplayed());
+      await expect(dataTables.get(0).isDisplayed());
+      await expect(dataTables.get(1).isDisplayed());
 
       // Check that legends are correct
       const legends = iscsi.getLegends();
-      expect(await legends.get(0).getText()).toMatch('Gateways');
-      expect(await legends.get(1).getText()).toMatch('Images');
+      await expect(legends.get(0).getText()).toMatch('Gateways');
+      await expect(legends.get(1).getText()).toMatch('Images');
     });
   });
 });

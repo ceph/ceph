@@ -86,6 +86,6 @@ export class Helper {
       console.log('\n log: ' + require('util').inspect(browserLog));
     }
 
-    expect(browserLog.length).toEqual(0);
+    await expect(browserLog.length).toEqual(0);
   }
 }
