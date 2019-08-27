@@ -182,6 +182,89 @@ Infiniband::QueuePair::QueuePair(
   }
 }
 
+int Infiniband::QueuePair::modify_qp_to_error(void)
+{
+    ibv_qp_attr qpa;
+    memset(&qpa, 0, sizeof(qpa));
+    qpa.qp_state = IBV_QPS_ERR;
+    if (ibv_modify_qp(qp, &qpa, IBV_QP_STATE)) {
+      lderr(cct) << __func__ << " failed to transition to ERROR state: " << cpp_strerror(errno) << dendl;
+      return -1;
+    }
+    ldout(cct, 20) << __func__ << " transition to ERROR state successfully." << dendl;
+    return 0;
+}
+
+int Infiniband::QueuePair::modify_qp_to_rts(void)
+{
+  // move from RTR state RTS
+  ibv_qp_attr qpa;
+  memset(&qpa, 0, sizeof(qpa));
+  qpa.qp_state = IBV_QPS_RTS;
+  /*
+   * How long to wait before retrying if packet lost or server dead.
+   * Supposedly the timeout is 4.096us*2^timeout.  However, the actual
+   * timeout appears to be 4.096us*2^(timeout+1), so the setting
+   * below creates a 135ms timeout.
+   */
+  qpa.timeout = 0x12;
+  // How many times to retry after timeouts before giving up.
+  qpa.retry_cnt = 7;
+  /*
+   * How many times to retry after RNR (receiver not ready) condition
+   * before giving up. Occurs when the remote side has not yet posted
+   * a receive request.
+   */
+  qpa.rnr_retry = 7; // 7 is infinite retry.
+  qpa.sq_psn = local_cm_meta.psn;
+  qpa.max_rd_atomic = 1;
+
+  int attr_mask = IBV_QP_STATE | IBV_QP_TIMEOUT | IBV_QP_RETRY_CNT | IBV_QP_RNR_RETRY | IBV_QP_SQ_PSN | IBV_QP_MAX_QP_RD_ATOMIC;
+  int r = ibv_modify_qp(qp, &qpa, attr_mask);
+  if (r) {
+    lderr(cct) << __func__ << " failed to transition to RTS state: " << cpp_strerror(errno) << dendl;
+    return -1;
+  }
+  ldout(cct, 20) << __func__ << " transition to RTS state successfully." << dendl;
+  return 0;
+}
+
+int Infiniband::QueuePair::modify_qp_to_rtr(void)
+{
+  // move from INIT to RTR state
+  ibv_qp_attr qpa;
+  memset(&qpa, 0, sizeof(qpa));
+  qpa.qp_state = IBV_QPS_RTR;
+  qpa.path_mtu = IBV_MTU_1024;
+  qpa.dest_qp_num = peer_cm_meta.local_qpn;
+  qpa.rq_psn = peer_cm_meta.psn;
+  qpa.max_dest_rd_atomic = 1;
+  qpa.min_rnr_timer = 0x12;
+  qpa.ah_attr.is_global = 1;
+  qpa.ah_attr.grh.hop_limit = 6;
+  qpa.ah_attr.grh.dgid = peer_cm_meta.gid;
+  qpa.ah_attr.grh.sgid_index = infiniband.get_device()->get_gid_idx();
+  qpa.ah_attr.grh.traffic_class = cct->_conf->ms_async_rdma_dscp;
+  //qpa.ah_attr.grh.flow_label = 0;
+
+  qpa.ah_attr.dlid = peer_cm_meta.lid;
+  qpa.ah_attr.sl = cct->_conf->ms_async_rdma_sl;
+  qpa.ah_attr.src_path_bits = 0;
+  qpa.ah_attr.port_num = (uint8_t)(ib_physical_port);
+
+  ldout(cct, 20) << __func__ << " Choosing gid_index " << (int)qpa.ah_attr.grh.sgid_index << ", sl " << (int)qpa.ah_attr.sl << dendl;
+
+  int attr_mask = IBV_QP_STATE | IBV_QP_AV | IBV_QP_PATH_MTU | IBV_QP_DEST_QPN | IBV_QP_RQ_PSN | IBV_QP_MIN_RNR_TIMER | IBV_QP_MAX_DEST_RD_ATOMIC;
+
+  int r = ibv_modify_qp(qp, &qpa, attr_mask);
+  if (r) {
+    lderr(cct) << __func__ << " failed to transition to RTR state: " << cpp_strerror(errno) << dendl;
+    return -1;
+  }
+  ldout(cct, 20) << __func__ << " transition to RTR state successfully." << dendl;
+  return 0;
+}
+
 int Infiniband::QueuePair::modify_qp_to_init(void)
 {
   // move from RESET to INIT state
@@ -296,7 +379,7 @@ void Infiniband::QueuePair::gid_to_wire_gid(const ib_cm_meta_t& cm_meta_data, ch
  *   0: means got enough buffer
  * < 0: means error
  */
-int Infiniband::QueuePair::recv_cm_meta(CephContext *cct, int socket_fd, ib_cm_meta_t& cm_meta_data)
+int Infiniband::QueuePair::recv_cm_meta(CephContext *cct, int socket_fd)
 {
   char msg[TCP_MSG_LEN];
   char gid[33];
@@ -318,15 +401,15 @@ int Infiniband::QueuePair::recv_cm_meta(CephContext *cct, int socket_fd, ib_cm_m
     ldout(cct, 1) << __func__ << " got bad length (" << r << ") " << dendl;
     r = -EINVAL;
   } else { // valid message
-    sscanf(msg, "%hx:%x:%x:%x:%s", &(cm_meta_data.lid), &(cm_meta_data.local_qpn), &(cm_meta_data.psn), &(cm_meta_data.peer_qpn), gid);
-    wire_gid_to_gid(gid, &cm_meta_data);
-    ldout(cct, 5) << __func__ << " recevd: " << cm_meta_data.lid << ", " << cm_meta_data.local_qpn
-                  << ", " << cm_meta_data.psn << ", " << cm_meta_data.peer_qpn << ", " << gid << dendl;
+    sscanf(msg, "%hx:%x:%x:%x:%s", &(peer_cm_meta.lid), &(peer_cm_meta.local_qpn), &(peer_cm_meta.psn), &(peer_cm_meta.peer_qpn), gid);
+    wire_gid_to_gid(gid, &peer_cm_meta);
+    ldout(cct, 5) << __func__ << " recevd: " << peer_cm_meta.lid << ", " << peer_cm_meta.local_qpn
+                  << ", " << peer_cm_meta.psn << ", " << peer_cm_meta.peer_qpn << ", " << gid << dendl;
   }
   return r;
 }
 
-int Infiniband::QueuePair::send_cm_meta(CephContext *cct, int socket_fd, ib_cm_meta_t& cm_meta_data)
+int Infiniband::QueuePair::send_cm_meta(CephContext *cct, int socket_fd)
 {
   int retry = 0;
   ssize_t r;
@@ -334,10 +417,10 @@ int Infiniband::QueuePair::send_cm_meta(CephContext *cct, int socket_fd, ib_cm_m
   char msg[TCP_MSG_LEN];
   char gid[33];
 retry:
-  gid_to_wire_gid(cm_meta_data, gid);
-  sprintf(msg, "%04x:%08x:%08x:%08x:%s", cm_meta_data.lid, cm_meta_data.local_qpn, cm_meta_data.psn, cm_meta_data.peer_qpn, gid);
-  ldout(cct, 10) << __func__ << " sending: " << cm_meta_data.lid << ", " << cm_meta_data.local_qpn
-                 << ", " << cm_meta_data.psn << ", " << cm_meta_data.peer_qpn << ", "  << gid  << dendl;
+  gid_to_wire_gid(local_cm_meta, gid);
+  sprintf(msg, "%04x:%08x:%08x:%08x:%s", local_cm_meta.lid, local_cm_meta.local_qpn, local_cm_meta.psn, local_cm_meta.peer_qpn, gid);
+  ldout(cct, 10) << __func__ << " sending: " << local_cm_meta.lid << ", " << local_cm_meta.local_qpn
+                 << ", " << local_cm_meta.psn << ", " << local_cm_meta.peer_qpn << ", "  << gid  << dendl;
   r = ::write(socket_fd, msg, sizeof(msg));
   // Drop incoming qpt
   if (cct->_conf->ms_inject_socket_failures && socket_fd >= 0) {
