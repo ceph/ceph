@@ -33,19 +33,19 @@ describe('Logs page', () => {
     });
 
     it('should open and show breadcrumb', async () => {
-      expect(await logs.getBreadcrumbText()).toEqual('Logs');
+      await expect(logs.getBreadcrumbText()).toEqual('Logs');
     });
 
     it('should show two tabs', async () => {
-      expect(await logs.getTabsCount()).toEqual(2);
+      await expect(logs.getTabsCount()).toEqual(2);
     });
 
     it('should show cluster logs tab at first', async () => {
-      expect(await logs.getTabText(0)).toEqual('Cluster Logs');
+      await expect(logs.getTabText(0)).toEqual('Cluster Logs');
     });
 
     it('should show audit logs as a second tab', async () => {
-      expect(await logs.getTabText(1)).toEqual('Audit Logs');
+      await expect(logs.getTabText(1)).toEqual('Audit Logs');
     });
   });
 

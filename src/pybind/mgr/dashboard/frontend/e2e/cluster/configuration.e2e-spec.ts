@@ -18,7 +18,7 @@ describe('Configuration page', () => {
     });
 
     it('should open and show breadcrumb', async () => {
-      expect(await configuration.getBreadcrumbText()).toEqual('Configuration');
+      await expect(configuration.getBreadcrumbText()).toEqual('Configuration');
     });
   });
   describe('edit configuration test', () => {

@@ -16,19 +16,19 @@ describe('Pools page', () => {
 
   describe('breadcrumb and tab tests', () => {
     it('should open and show breadcrumb', async () => {
-      expect(await pools.getBreadcrumbText()).toEqual('Pools');
+      await expect(pools.getBreadcrumbText()).toEqual('Pools');
     });
 
     it('should show two tabs', async () => {
-      expect(await pools.getTabsCount()).toEqual(2);
+      await expect(pools.getTabsCount()).toEqual(2);
     });
 
     it('should show pools list tab at first', async () => {
-      expect(await pools.getTabText(0)).toEqual('Pools List');
+      await expect(pools.getTabText(0)).toEqual('Pools List');
     });
 
     it('should show overall performance as a second tab', async () => {
-      expect(await pools.getTabText(1)).toEqual('Overall Performance');
+      await expect(pools.getTabText(1)).toEqual('Overall Performance');
     });
   });
 

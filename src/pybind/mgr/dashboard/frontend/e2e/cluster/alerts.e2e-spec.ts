@@ -18,7 +18,7 @@ describe('Alerts page', () => {
     });
 
     it('should open and show breadcrumb', async () => {
-      expect(await alerts.getBreadcrumbText()).toEqual('Alerts');
+      await expect(alerts.getBreadcrumbText()).toEqual('Alerts');
     });
   });
 });

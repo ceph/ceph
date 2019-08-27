@@ -40,7 +40,7 @@ export class UsersPageHelper extends PageHelper {
     await this.getTableCell(name).click(); // click on the bucket you want to edit in the table
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
-    expect(await this.getBreadcrumbText()).toEqual('Edit');
+    await expect(this.getBreadcrumbText()).toEqual('Edit');
 
     // Change the full name field
     await element(by.id('display_name')).click();
@@ -62,9 +62,9 @@ export class UsersPageHelper extends PageHelper {
     await browser.wait(Helper.EC.elementToBeClickable(this.getTableCell(name)), 10000);
     // Click the user and check its details table for updated content
     await this.getTableCell(name).click();
-    expect(await $('.active.tab-pane').getText()).toMatch(new_fullname); // check full name was changed
-    expect(await $('.active.tab-pane').getText()).toMatch(new_email); // check email was changed
-    expect(await $('.active.tab-pane').getText()).toMatch(new_maxbuckets); // check max buckets was changed
+    await expect($('.active.tab-pane').getText()).toMatch(new_fullname); // check full name was changed
+    await expect($('.active.tab-pane').getText()).toMatch(new_email); // check email was changed
+    await expect($('.active.tab-pane').getText()).toMatch(new_maxbuckets); // check max buckets was changed
   }
 
   async delete(name) {
@@ -99,7 +99,7 @@ export class UsersPageHelper extends PageHelper {
     const username_field = element(by.id('uid'));
 
     // No username had been entered. Field should be invalid
-    expect(await username_field.getAttribute('class')).toContain('ng-invalid');
+    await expect(username_field.getAttribute('class')).toContain('ng-invalid');
 
     // Try to give user already taken name. Should make field invalid.
     await username_field.clear();
@@ -108,9 +108,9 @@ export class UsersPageHelper extends PageHelper {
       async () => !(await username_field.getAttribute('class')).includes('ng-pending'),
       6000
     );
-    expect(await username_field.getAttribute('class')).toContain('ng-invalid');
+    await expect(username_field.getAttribute('class')).toContain('ng-invalid');
     await element(by.id('display_name')).click(); // trigger validation check
-    expect(await element(by.css('#uid + .invalid-feedback')).getText()).toMatch(
+    await expect(element(by.css('#uid + .invalid-feedback')).getText()).toMatch(
       'The chosen user ID is already in use.'
     );
 
@@ -118,31 +118,31 @@ export class UsersPageHelper extends PageHelper {
     for (let i = 0; i < uname.length; i++) {
       await username_field.sendKeys(protractor.Key.BACK_SPACE);
     }
-    expect(await username_field.getAttribute('class')).toContain('ng-invalid');
+    await expect(username_field.getAttribute('class')).toContain('ng-invalid');
     await element(by.id('display_name')).click(); // trigger validation check
-    expect(await element(by.css('#uid + .invalid-feedback')).getText()).toMatch(
+    await expect(element(by.css('#uid + .invalid-feedback')).getText()).toMatch(
       'This field is required.'
     );
 
     // No display name has been given so field should be invalid
-    expect(await element(by.id('display_name')).getAttribute('class')).toContain('ng-invalid');
+    await expect(element(by.id('display_name')).getAttribute('class')).toContain('ng-invalid');
 
     // display name field should also be marked invalid if given input then emptied
     await element(by.id('display_name')).click();
     await element(by.id('display_name')).sendKeys('a');
     await element(by.id('display_name')).sendKeys(protractor.Key.BACK_SPACE);
-    expect(await element(by.id('display_name')).getAttribute('class')).toContain('ng-invalid');
+    await expect(element(by.id('display_name')).getAttribute('class')).toContain('ng-invalid');
     await username_field.click(); // trigger validation check
-    expect(await element(by.css('#display_name + .invalid-feedback')).getText()).toMatch(
+    await expect(element(by.css('#display_name + .invalid-feedback')).getText()).toMatch(
       'This field is required.'
     );
 
     // put invalid email to make field invalid
     await element(by.id('email')).click();
     await element(by.id('email')).sendKeys('a');
-    expect(await element(by.id('email')).getAttribute('class')).toContain('ng-invalid');
+    await expect(element(by.id('email')).getAttribute('class')).toContain('ng-invalid');
     await username_field.click(); // trigger validation check
-    expect(await element(by.css('#email + .invalid-feedback')).getText()).toMatch(
+    await expect(element(by.css('#email + .invalid-feedback')).getText()).toMatch(
       'This is not a valid email address.'
     );
 
@@ -150,9 +150,9 @@ export class UsersPageHelper extends PageHelper {
     await element(by.id('max_buckets')).click();
     await element(by.id('max_buckets')).clear();
     await element(by.id('max_buckets')).sendKeys('-5');
-    expect(await element(by.id('max_buckets')).getAttribute('class')).toContain('ng-invalid');
+    await expect(element(by.id('max_buckets')).getAttribute('class')).toContain('ng-invalid');
     await username_field.click(); // trigger validation check
-    expect(await element(by.css('#max_buckets + .invalid-feedback')).getText()).toMatch(
+    await expect(element(by.css('#max_buckets + .invalid-feedback')).getText()).toMatch(
       'The entered value must be >= 0.'
     );
 
@@ -170,7 +170,7 @@ export class UsersPageHelper extends PageHelper {
     await this.getTableCell(uname).click(); // click on the bucket you want to edit in the table
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
-    expect(await this.getBreadcrumbText()).toEqual('Edit');
+    await expect(this.getBreadcrumbText()).toEqual('Edit');
 
     // put invalid email to make field invalid
     await element(by.id('email')).click();
@@ -180,9 +180,9 @@ export class UsersPageHelper extends PageHelper {
       async () => !(await element(by.id('email')).getAttribute('class')).includes('ng-pending'),
       6000
     );
-    expect(await element(by.id('email')).getAttribute('class')).toContain('ng-invalid');
+    await expect(element(by.id('email')).getAttribute('class')).toContain('ng-invalid');
     await element(by.id('display_name')).click(); // trigger validation check
-    expect(await element(by.css('#email + .invalid-feedback')).getText()).toMatch(
+    await expect(element(by.css('#email + .invalid-feedback')).getText()).toMatch(
       'This is not a valid email address.'
     );
 
@@ -191,9 +191,9 @@ export class UsersPageHelper extends PageHelper {
     for (let i = 0; i < 3; i++) {
       await element(by.id('display_name')).sendKeys(protractor.Key.BACK_SPACE);
     }
-    expect(await element(by.id('display_name')).getAttribute('class')).toContain('ng-invalid');
+    await expect(element(by.id('display_name')).getAttribute('class')).toContain('ng-invalid');
     await element(by.id('email')).click(); // trigger validation check
-    expect(await element(by.css('#display_name + .invalid-feedback')).getText()).toMatch(
+    await expect(element(by.css('#display_name + .invalid-feedback')).getText()).toMatch(
       'This field is required.'
     );
 
@@ -201,9 +201,9 @@ export class UsersPageHelper extends PageHelper {
     await element(by.id('max_buckets')).click();
     await element(by.id('max_buckets')).clear();
     await element(by.id('max_buckets')).sendKeys('-5');
-    expect(await element(by.id('max_buckets')).getAttribute('class')).toContain('ng-invalid');
+    await expect(element(by.id('max_buckets')).getAttribute('class')).toContain('ng-invalid');
     await element(by.id('email')).click(); // trigger validation check
-    expect(await element(by.css('#max_buckets + .invalid-feedback')).getText()).toMatch(
+    await expect(element(by.css('#max_buckets + .invalid-feedback')).getText()).toMatch(
       'The entered value must be >= 0.'
     );
 

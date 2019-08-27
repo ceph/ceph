@@ -19,7 +19,7 @@ describe('CRUSH map page', () => {
     });
 
     it('should open and show breadcrumb', async () => {
-      expect(await crushmap.getBreadcrumbText()).toEqual('CRUSH map');
+      await expect(crushmap.getBreadcrumbText()).toEqual('CRUSH map');
     });
   });
   describe('fields check', () => {
@@ -29,17 +29,17 @@ describe('CRUSH map page', () => {
 
     it('should check that title & table appears', async () => {
       // Check that title (CRUSH map viewer) appears
-      expect(await crushmap.getPageTitle()).toMatch('CRUSH map viewer');
+      await expect(crushmap.getPageTitle()).toMatch('CRUSH map viewer');
 
       // Check that title appears once OSD is clicked
       await crushmap.getCrushNode(1).click();
 
       const label = await $('legend').getText(); // Get table label
-      expect(await crushmap.getCrushNode(1).getText()).toEqual(label);
+      await expect(crushmap.getCrushNode(1).getText()).toEqual(label);
 
       // Check that table appears once OSD is clicked
       await browser.wait(Helper.EC.visibilityOf($('.datatable-body')));
-      expect(await $('.datatable-body').isDisplayed()).toBe(true);
+      await expect($('.datatable-body').isDisplayed()).toBe(true);
     });
   });
 });

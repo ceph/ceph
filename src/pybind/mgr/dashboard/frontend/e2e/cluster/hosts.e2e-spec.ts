@@ -18,19 +18,19 @@ describe('Hosts page', () => {
     });
 
     it('should open and show breadcrumb', async () => {
-      expect(await hosts.getBreadcrumbText()).toEqual('Hosts');
+      await expect(hosts.getBreadcrumbText()).toEqual('Hosts');
     });
 
     it('should show two tabs', async () => {
-      expect(await hosts.getTabsCount()).toEqual(2);
+      await expect(hosts.getTabsCount()).toEqual(2);
     });
 
     it('should show hosts list tab at first', async () => {
-      expect(await hosts.getTabText(0)).toEqual('Hosts List');
+      await expect(hosts.getTabText(0)).toEqual('Hosts List');
     });
 
     it('should show overall performance as a second tab', async () => {
-      expect(await hosts.getTabText(1)).toEqual('Overall Performance');
+      await expect(hosts.getTabText(1)).toEqual('Overall Performance');
     });
   });
 

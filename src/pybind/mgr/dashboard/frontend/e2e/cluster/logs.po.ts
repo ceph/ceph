@@ -66,8 +66,8 @@ export class LogsPageHelper extends PageHelper {
     const audit_logs_body = audit_logs_tab.element(by.css('.card-body'));
     const logs = audit_logs_body.all(by.cssContainingText('.ng-star-inserted', poolname));
 
-    expect(await logs.getText()).toMatch(poolname);
-    expect(await logs.getText()).toMatch(`pool ${poolfunction}`);
+    await expect(logs.getText()).toMatch(poolname);
+    await expect(logs.getText()).toMatch(`pool ${poolfunction}`);
   }
 
   async checkAuditForConfigChange(configname, setting, hour, minute) {
@@ -124,7 +124,7 @@ export class LogsPageHelper extends PageHelper {
 
     await browser.wait(Helper.EC.presenceOf(logs.first()), Helper.TIMEOUT);
 
-    expect(await logs.getText()).toMatch(configname);
-    expect(await logs.getText()).toMatch(setting);
+    await expect(logs.getText()).toMatch(configname);
+    await expect(logs.getText()).toMatch(setting);
   }
 }

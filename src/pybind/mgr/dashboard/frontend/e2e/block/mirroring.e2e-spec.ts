@@ -21,17 +21,17 @@ describe('Mirroring page', () => {
     });
 
     it('should open and show breadcrumb', async () => {
-      expect(await mirroring.getBreadcrumbText()).toEqual('Mirroring');
+      await expect(mirroring.getBreadcrumbText()).toEqual('Mirroring');
     });
 
     it('should show three tabs', async () => {
-      expect(await mirroring.getTabsCount()).toEqual(3);
+      await expect(mirroring.getTabsCount()).toEqual(3);
     });
 
     it('should show text for all tabs', async () => {
-      expect(await mirroring.getTabText(0)).toEqual('Issues');
-      expect(await mirroring.getTabText(1)).toEqual('Syncing');
-      expect(await mirroring.getTabText(2)).toEqual('Ready');
+      await expect(mirroring.getTabText(0)).toEqual('Issues');
+      await expect(mirroring.getTabText(1)).toEqual('Syncing');
+      await expect(mirroring.getTabText(2)).toEqual('Ready');
     });
   });
 
@@ -49,11 +49,11 @@ describe('Mirroring page', () => {
       await mirroring.navigateTo();
 
       await mirroring.editMirror(poolName, 'Pool');
-      expect(await mirroring.getFirstTableCellWithText('pool').isPresent()).toBe(true);
+      await expect(mirroring.getFirstTableCellWithText('pool').isPresent()).toBe(true);
       await mirroring.editMirror(poolName, 'Image');
-      expect(await mirroring.getFirstTableCellWithText('image').isPresent()).toBe(true);
+      await expect(mirroring.getFirstTableCellWithText('image').isPresent()).toBe(true);
       await mirroring.editMirror(poolName, 'Disabled');
-      expect(await mirroring.getFirstTableCellWithText('disabled').isPresent()).toBe(true);
+      await expect(mirroring.getFirstTableCellWithText('disabled').isPresent()).toBe(true);
     });
 
     afterAll(async () => {

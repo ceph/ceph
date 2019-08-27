@@ -15,7 +15,7 @@ describe('RGW buckets page', () => {
 
   it('should open and show breadcrumb', async () => {
     await buckets.navigateTo();
-    expect(await $('.breadcrumb-item.active').getText()).toBe('Buckets');
+    await expect($('.breadcrumb-item.active').getText()).toBe('Buckets');
   });
 
   it('should create bucket', async () => {
@@ -25,19 +25,19 @@ describe('RGW buckets page', () => {
       '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
       'default-placement'
     );
-    expect(await buckets.getTableCell('000test').isPresent()).toBe(true);
+    await expect(buckets.getTableCell('000test').isPresent()).toBe(true);
   });
 
   it('should edit bucket', async () => {
     await buckets.navigateTo();
     await buckets.edit('000test', 'dev');
-    expect(await buckets.getTable().getText()).toMatch('dev');
+    await expect(buckets.getTable().getText()).toMatch('dev');
   });
 
   it('should delete bucket', async () => {
     await buckets.navigateTo();
     await buckets.delete('000test');
-    expect(buckets.getTableCell('000test').isPresent()).toBe(false);
+    await expect(buckets.getTableCell('000test').isPresent()).toBe(false);
   });
 
   describe('Invalid Input in Create and Edit tests', () => {

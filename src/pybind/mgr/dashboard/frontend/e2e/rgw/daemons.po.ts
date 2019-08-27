@@ -17,25 +17,25 @@ export class DaemonsPageHelper extends PageHelper {
     const performance_counters_table = tab_container.all(by.css('cd-table')).get(1);
 
     // check details table is visible
-    expect(await details_table.isDisplayed()).toBe(true);
+    await expect(details_table.isDisplayed()).toBe(true);
     // check at least one field is present
-    expect(await details_table.getText()).toMatch('ceph_version');
+    await expect(details_table.getText()).toMatch('ceph_version');
     // check performance counters table is not currently visible
-    expect(await performance_counters_table.isDisplayed()).toBe(false);
+    await expect(performance_counters_table.isDisplayed()).toBe(false);
 
     // click on performance counters tab and check table is loaded
     await element(by.cssContainingText('.nav-link', 'Performance Counters')).click();
-    expect(await performance_counters_table.isDisplayed()).toBe(true);
+    await expect(performance_counters_table.isDisplayed()).toBe(true);
     // check at least one field is present
-    expect(await performance_counters_table.getText()).toMatch('objecter.op_r');
+    await expect(performance_counters_table.getText()).toMatch('objecter.op_r');
     // check details table is not currently visible
-    expect(await details_table.isDisplayed()).toBe(false);
+    await expect(details_table.isDisplayed()).toBe(false);
 
     // click on performance details tab
     await element(by.cssContainingText('.nav-link', 'Performance Details')).click();
     // checks the other tabs' content isn't visible
-    expect(await details_table.isDisplayed()).toBe(false);
-    expect(await performance_counters_table.isDisplayed()).toBe(false);
+    await expect(details_table.isDisplayed()).toBe(false);
+    await expect(performance_counters_table.isDisplayed()).toBe(false);
     // TODO: Expect Grafana iFrame
   }
 }

@@ -18,19 +18,19 @@ describe('RGW daemons page', () => {
     });
 
     it('should open and show breadcrumb', async () => {
-      expect(await daemons.getBreadcrumbText()).toEqual('Daemons');
+      await expect(daemons.getBreadcrumbText()).toEqual('Daemons');
     });
 
     it('should show two tabs', async () => {
-      expect(await daemons.getTabsCount()).toEqual(2);
+      await expect(daemons.getTabsCount()).toEqual(2);
     });
 
     it('should show daemons list tab at first', async () => {
-      expect(await daemons.getTabText(0)).toEqual('Daemons List');
+      await expect(daemons.getTabText(0)).toEqual('Daemons List');
     });
 
-    it('should show overall performance as a second tab', () => {
-      expect(daemons.getTabText(1)).toEqual('Overall Performance');
+    it('should show overall performance as a second tab', async () => {
+      await expect(daemons.getTabText(1)).toEqual('Overall Performance');
     });
   });
 
