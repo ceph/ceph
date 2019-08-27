@@ -190,7 +190,7 @@ int RDMAConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, const S
   ldout(cct, 20) << __func__ << " tcp_fd: " << tcp_fd << dendl;
   net.set_priority(tcp_fd, opts.priority, peer_addr.get_family());
   local_cm_meta.peer_qpn = 0;
-  r = ib->send_msg(cct, tcp_fd, local_cm_meta);
+  r = qp->send_cm_meta(cct, tcp_fd, local_cm_meta);
   if (r < 0)
     return r;
 
@@ -200,7 +200,7 @@ int RDMAConnectedSocketImpl::try_connect(const entity_addr_t& peer_addr, const S
 
 void RDMAConnectedSocketImpl::handle_connection() {
   ldout(cct, 20) << __func__ << " QP: " << local_cm_meta.local_qpn << " tcp_fd: " << tcp_fd << " notify_fd: " << notify_fd << dendl;
-  int r = ib->recv_msg(cct, tcp_fd, peer_cm_meta);
+  int r = qp->recv_cm_meta(cct, tcp_fd, peer_cm_meta);
   if (r <= 0) {
     if (r != -EAGAIN) {
       dispatcher->perf_logger->inc(l_msgr_rdma_handshake_errors);
@@ -225,7 +225,7 @@ void RDMAConnectedSocketImpl::handle_connection() {
       ceph_assert(!r);
     }
     notify();
-    r = ib->send_msg(cct, tcp_fd, local_cm_meta);
+    r = qp->send_cm_meta(cct, tcp_fd, local_cm_meta);
     if (r < 0) {
       ldout(cct, 1) << __func__ << " send client ack failed." << dendl;
       dispatcher->perf_logger->inc(l_msgr_rdma_handshake_errors);
@@ -239,7 +239,7 @@ void RDMAConnectedSocketImpl::handle_connection() {
       }
       r = activate();
       ceph_assert(!r);
-      r = ib->send_msg(cct, tcp_fd, local_cm_meta);
+      r = qp->send_cm_meta(cct, tcp_fd, local_cm_meta);
       if (r < 0) {
         ldout(cct, 1) << __func__ << " server ack failed." << dendl;
         dispatcher->perf_logger->inc(l_msgr_rdma_handshake_errors);
