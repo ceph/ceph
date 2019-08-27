@@ -14,7 +14,7 @@
 
 void RGWEnv::init(CephContext *cct)
 {
-  conf.init(cct);
+  conf.update(cct->_conf);
 }
 
 void RGWEnv::set(std::string name, std::string val)
@@ -127,15 +127,36 @@ void RGWEnv::remove(const char *name)
     env_map.erase(iter);
 }
 
-void RGWConf::init(CephContext *cct)
+const char** RGWEnv::get_tracked_conf_keys() const
 {
-  enable_ops_log = cct->_conf->rgw_enable_ops_log;
-  enable_usage_log = cct->_conf->rgw_enable_usage_log;
+  static const char* keys[] = {
+    "rgw_enable_ops_log",
+    "rgw_enble_usage_log",
+    "rgw_defer_to_buckets_acls",
+    "rgw_max_attr_name_len",
+    "rgw_max_attr_size",
+    "rgw_max_attrs_num_in_req"
+  };
+  return keys;
+}
 
+void RGWEnv::handle_conf_change(const ConfigProxy& c,
+                                const std::set<std::string>& changed)
+{
+  conf.update(c);
+}
+
+void RGWConf::update(const ConfigProxy& c)
+{
+  enable_ops_log = c->rgw_enable_ops_log;
+  enable_usage_log = c->rgw_enable_usage_log;
+  max_attr_name_len = c.get_val<Option::size_t>("rgw_max_attr_name_len");
+  max_attr_size = c.get_val<Option::size_t>("rgw_max_attr_size");
+  max_attrs_num_in_req = c.get_val<uint64_t>("rgw_max_attrs_num_in_req");
   defer_to_bucket_acls = 0;  // default
-  if (cct->_conf->rgw_defer_to_bucket_acls == "recurse") {
+  if (c->rgw_defer_to_bucket_acls == "recurse") {
     defer_to_bucket_acls = RGW_DEFER_TO_BUCKET_ACLS_RECURSE;
-  } else if (cct->_conf->rgw_defer_to_bucket_acls == "full_control") {
+  } else if (c->rgw_defer_to_bucket_acls == "full_control") {
     defer_to_bucket_acls = RGW_DEFER_TO_BUCKET_ACLS_FULL_CONTROL;
   }
 }

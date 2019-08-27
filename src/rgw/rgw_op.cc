@@ -1258,6 +1258,78 @@ int RGWOp::do_aws4_auth_completion()
   return 0;
 }
 
+/**
+ * Get the HTTP request metadata out of the req_state as a
+ * map(<attr_name, attr_contents>, where attr_name is RGW_ATTR_PREFIX.HTTP_NAME)
+ * s: The request state
+ * attrs: will be filled up with attrs mapped as <attr_name, attr_contents>
+ * On success returns 0.
+ * On failure returns a negative error code.
+ *
+ */
+int RGWOp::get_request_metadata(std::map<std::string, ceph::bufferlist>& attrs,
+                                const bool allow_empty_attrs)
+{
+  const std::set<std::string> blacklisted_headers = {
+      "x-amz-server-side-encryption-customer-algorithm",
+      "x-amz-server-side-encryption-customer-key",
+      "x-amz-server-side-encryption-customer-key-md5",
+      "x-amz-storage-class"
+  };
+
+  auto info = s->info;
+  auto max_attr_name_len = info.env->get_max_attr_name_len();
+  auto max_attr_size = info.env->get_max_attr_size();
+  auto max_attrs_num_in_req = info.env->get_max_attrs_num_in_req();
+
+  uint64_t valid_meta_count = 0;
+  for (auto& kv : info.x_meta_map) {
+    const std::string& name = kv.first;
+    std::string& xattr = kv.second;
+
+    if (blacklisted_headers.count(name) == 1) {
+      ldpp_dout(this, 10) << "skipping x>> " << name << dendl;
+      continue;
+    } else if (allow_empty_attrs || !xattr.empty()) {
+      ldpp_dout(this, 10) << "x>> " << name << ":" << xattr << dendl;
+      format_xattr(xattr);
+
+      std::string attr_name(RGW_ATTR_PREFIX);
+      attr_name.append(name);
+
+      /* Check roughly whether we aren't going behind the limit on attribute
+       * name. Passing here doesn't guarantee that an OSD will accept that
+       * as ObjectStore::get_max_attr_name_length() can set the limit even
+       * lower than the "osd_max_attr_name_len" configurable.  */
+      if (max_attr_name_len && attr_name.length() > max_attr_name_len) {
+        return -ENAMETOOLONG;
+      }
+
+      /* Similar remarks apply to the check for value size. We're veryfing
+       * it early at the RGW's side as it's being claimed in /info. */
+      if (max_attr_size && xattr.length() > max_attr_size) {
+        return -EFBIG;
+      }
+
+      /* Swift allows administrators to limit the number of metadats items
+       * send _in a single request_. */
+      if (max_attrs_num_in_req &&
+          ++valid_meta_count > max_attrs_num_in_req) {
+        return -E2BIG;
+      }
+
+      auto rval = attrs.emplace(std::move(attr_name), ceph::bufferlist());
+      /* At the moment the value of the freshly created attribute key-value
+       * pair is an empty bufferlist. */
+
+      ceph::bufferlist& bl = rval.first->second;
+      bl.append(xattr.c_str(), xattr.size() + 1);
+    }
+  }
+
+  return 0;
+}
+
 int RGWOp::init_quota()
 {
   /* no quota enforcement for system requests */
@@ -3207,7 +3279,7 @@ void RGWCreateBucket::execute()
   if (need_metadata_upload()) {
     /* It's supposed that following functions WILL NOT change any special
      * attributes (like RGW_ATTR_ACL) if they are already present in attrs. */
-    op_ret = rgw_get_request_metadata(s->cct, s->info, attrs, false);
+    op_ret = get_request_metadata(attrs, false);
     if (op_ret < 0) {
       return;
     }
@@ -3305,7 +3377,7 @@ void RGWCreateBucket::execute()
 
       attrs.clear();
 
-      op_ret = rgw_get_request_metadata(s->cct, s->info, attrs, false);
+      op_ret = get_request_metadata(attrs, false);
       if (op_ret < 0) {
         return;
       }
@@ -4012,7 +4084,7 @@ void RGWPutObj::execute()
   emplace_attr(RGW_ATTR_ETAG, std::move(bl));
 
   populate_with_generic_attrs(s, attrs);
-  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
+  op_ret = get_request_metadata(attrs);
   if (op_ret < 0) {
     return;
   }
@@ -4348,7 +4420,7 @@ int RGWPutMetadataAccount::init_processing()
     attrs.emplace(RGW_ATTR_ACL, std::move(acl_bl));
   }
 
-  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs, false);
+  op_ret = get_request_metadata(attrs, false);
   if (op_ret < 0) {
     return op_ret;
   }
@@ -4447,7 +4519,7 @@ void RGWPutMetadataBucket::execute()
     return;
   }
 
-  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs, false);
+  op_ret = get_request_metadata(attrs, false);
   if (op_ret < 0) {
     return;
   }
@@ -4545,7 +4617,7 @@ void RGWPutMetadataObject::execute()
     return;
   }
 
-  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
+  op_ret = get_request_metadata(attrs);
   if (op_ret < 0) {
     return;
   }
@@ -5039,7 +5111,7 @@ int RGWCopyObj::init_common()
   dest_policy.encode(aclbl);
   emplace_attr(RGW_ATTR_ACL, std::move(aclbl));
 
-  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
+  op_ret = get_request_metadata(attrs);
   if (op_ret < 0) {
     return op_ret;
   }
@@ -5765,7 +5837,7 @@ void RGWInitMultipart::execute()
   if (op_ret != 0)
     return;
 
-  op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
+  op_ret = get_request_metadata(attrs);
   if (op_ret < 0) {
     return;
   }

@@ -381,17 +381,23 @@ class RGWConf {
   friend class RGWEnv;
   int enable_ops_log;
   int enable_usage_log;
+  size_t max_attr_name_len;
+  size_t max_attr_size;
+  uint64_t max_attrs_num_in_req;
   uint8_t defer_to_bucket_acls;
-  void init(CephContext *cct);
+  void update(const ConfigProxy& conf);
 public:
   RGWConf()
     : enable_ops_log(1),
       enable_usage_log(1),
+      max_attr_name_len(0),
+      max_attr_size(0),
+      max_attrs_num_in_req(0),
       defer_to_bucket_acls(0) {
   }
 };
 
-class RGWEnv {
+class RGWEnv : public md_config_obs_t {
   std::map<string, string, ltstr_nocase> env_map;
   RGWConf conf;
 public:
@@ -417,6 +423,22 @@ public:
   int get_defer_to_bucket_acls() const {
     return conf.defer_to_bucket_acls;
   }
+
+  size_t get_max_attr_name_len() const {
+    return conf.max_attr_name_len;
+  }
+
+  size_t get_max_attr_size() const {
+    return conf.max_attr_size;
+  }
+
+  uint64_t get_max_attrs_num_in_req() const {
+    return conf.max_attrs_num_in_req;
+  }
+
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const ConfigProxy& c,
+                          const std::set<std::string>& changed) override;
 };
 
 // return true if the connection is secure. this either means that the

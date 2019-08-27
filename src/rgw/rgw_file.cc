@@ -1694,7 +1694,7 @@ namespace rgw {
       attrbl.append(val.c_str(), val.size() + 1);
     }
 
-    op_ret = rgw_get_request_metadata(s->cct, s->info, attrs);
+    op_ret = get_request_metadata(attrs);
     if (op_ret < 0) {
       goto done;
     }

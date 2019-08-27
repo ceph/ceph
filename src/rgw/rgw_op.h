@@ -133,6 +133,8 @@ protected:
   RGWQuotaInfo user_quota;
   int op_ret;
   int do_aws4_auth_completion();
+  int get_request_metadata(std::map<std::string, ceph::bufferlist>& attrs, 
+                           const bool allow_empty_attrs = true);
 
   virtual int init_quota();
 
@@ -1973,81 +1975,6 @@ static inline void format_xattr(std::string &xattr)
     delete [] mime;
   }
 } /* format_xattr */
-
-/**
- * Get the HTTP request metadata out of the req_state as a
- * map(<attr_name, attr_contents>, where attr_name is RGW_ATTR_PREFIX.HTTP_NAME)
- * s: The request state
- * attrs: will be filled up with attrs mapped as <attr_name, attr_contents>
- * On success returns 0.
- * On failure returns a negative error code.
- *
- */
-static inline int rgw_get_request_metadata(CephContext* const cct,
-                                           struct req_info& info,
-                                           std::map<std::string, ceph::bufferlist>& attrs,
-                                           const bool allow_empty_attrs = true)
-{
-  static const std::set<std::string> blacklisted_headers = {
-      "x-amz-server-side-encryption-customer-algorithm",
-      "x-amz-server-side-encryption-customer-key",
-      "x-amz-server-side-encryption-customer-key-md5",
-      "x-amz-storage-class"
-  };
-
-  size_t valid_meta_count = 0;
-  for (auto& kv : info.x_meta_map) {
-    const std::string& name = kv.first;
-    std::string& xattr = kv.second;
-
-    if (blacklisted_headers.count(name) == 1) {
-      lsubdout(cct, rgw, 10) << "skipping x>> " << name << dendl;
-      continue;
-    } else if (allow_empty_attrs || !xattr.empty()) {
-      lsubdout(cct, rgw, 10) << "x>> " << name << ":" << xattr << dendl;
-      format_xattr(xattr);
-
-      std::string attr_name(RGW_ATTR_PREFIX);
-      attr_name.append(name);
-
-      /* Check roughly whether we aren't going behind the limit on attribute
-       * name. Passing here doesn't guarantee that an OSD will accept that
-       * as ObjectStore::get_max_attr_name_length() can set the limit even
-       * lower than the "osd_max_attr_name_len" configurable.  */
-      const size_t max_attr_name_len = \
-        cct->_conf.get_val<Option::size_t>("rgw_max_attr_name_len");
-      if (max_attr_name_len && attr_name.length() > max_attr_name_len) {
-        return -ENAMETOOLONG;
-      }
-
-      /* Similar remarks apply to the check for value size. We're veryfing
-       * it early at the RGW's side as it's being claimed in /info. */
-      const size_t max_attr_size = \
-        cct->_conf.get_val<Option::size_t>("rgw_max_attr_size");
-      if (max_attr_size && xattr.length() > max_attr_size) {
-        return -EFBIG;
-      }
-
-      /* Swift allows administrators to limit the number of metadats items
-       * send _in a single request_. */
-      const auto rgw_max_attrs_num_in_req = \
-        cct->_conf.get_val<uint64_t>("rgw_max_attrs_num_in_req");
-      if (rgw_max_attrs_num_in_req &&
-          ++valid_meta_count > rgw_max_attrs_num_in_req) {
-        return -E2BIG;
-      }
-
-      auto rval = attrs.emplace(std::move(attr_name), ceph::bufferlist());
-      /* At the moment the value of the freshly created attribute key-value
-       * pair is an empty bufferlist. */
-
-      ceph::bufferlist& bl = rval.first->second;
-      bl.append(xattr.c_str(), xattr.size() + 1);
-    }
-  }
-
-  return 0;
-} /* rgw_get_request_metadata */
 
 static inline void encode_delete_at_attr(boost::optional<ceph::real_time> delete_at,
 					map<string, bufferlist>& attrs)
