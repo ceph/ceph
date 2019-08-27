@@ -4399,7 +4399,7 @@ ostream& operator<<(ostream& out, const ObjectCleanRegions& ocr)
 {
   return out << "clean_offsets: " << ocr.clean_offsets
              << ", clean_omap: " << ocr.clean_omap
-             << ", object_new: " << ocr.new_object;
+             << ", new_object: " << ocr.new_object;
 }
 
 // -- pg_log_entry_t --
