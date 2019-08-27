@@ -416,6 +416,14 @@ OpsExecuter::do_osd_op(OSDOp& osd_op)
     return do_read_op([&osd_op] (auto& backend, const auto& os) {
       return backend.omap_get_vals_by_keys(os, osd_op);
     });
+  case CEPH_OSD_OP_OMAPSETVALS:
+    if (!pg.get_pool().info.supports_omap()) {
+      throw ceph::osd::operation_not_supported{};
+    }
+    return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
+      return backend.omap_set_vals(os, osd_op, txn);
+    });
+
   default:
     logger().warn("unknown op {}", ceph_osd_op_name(op.op));
     throw std::runtime_error(

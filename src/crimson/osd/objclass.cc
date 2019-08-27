@@ -323,10 +323,17 @@ int cls_cxx_map_set_val(cls_method_context_t hctx,
 }
 
 int cls_cxx_map_set_vals(cls_method_context_t hctx,
-                         const std::map<string,
-                         bufferlist> *map)
+                         const std::map<string, ceph::bufferlist> *map)
 {
-  return 0;
+  OSDOp op{ CEPH_OSD_OP_OMAPSETVALS };
+  encode(*map, op.indata);
+
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    return 0;
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
 }
 
 int cls_cxx_map_clear(cls_method_context_t hctx)

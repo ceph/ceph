@@ -522,3 +522,31 @@ seastar::future<> PGBackend::omap_get_vals_by_keys(
   //ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
   //ctx->delta_stats.num_rd++;
 }
+
+seastar::future<> PGBackend::omap_set_vals(
+  ObjectState& os,
+  const OSDOp& osd_op,
+  ceph::os::Transaction& txn)
+{
+  maybe_create_new_object(os, txn);
+
+  ceph::bufferlist to_set_bl;
+  try {
+    auto p = osd_op.indata.cbegin();
+    decode_str_str_map_to_bl(p, &to_set_bl);
+  } catch (buffer::error&) {
+    throw ceph::osd::invalid_argument{};
+  }
+
+  txn.omap_setkeys(coll->get_cid(), ghobject_t{os.oi.soid}, to_set_bl);
+
+  // TODO:
+  //ctx->clean_regions.mark_omap_dirty();
+
+  // TODO:
+  //ctx->delta_stats.num_wr++;
+  //ctx->delta_stats.num_wr_kb += shift_round_up(to_set_bl.length(), 10);
+  os.oi.set_flag(object_info_t::FLAG_OMAP);
+  os.oi.clear_omap_digest();
+  return seastar::now();
+}
