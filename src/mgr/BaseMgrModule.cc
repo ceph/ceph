@@ -303,13 +303,11 @@ ceph_set_health_checks(BaseMgrModule *self, PyObject *args)
 	  summary = std::move(vs);
 	}
       } else if (ks == "count") {
-	if (PyLong_Check(v)) {
-	  count = PyLong_AsLong(v);
-	} else if (PyInt_Check(v)) {
+	if (PyInt_Check(v)) {
 	  count = PyInt_AsLong(v);
 	} else {
 	  derr << __func__ << " check " << check_name
-	       << " count value not long or int" << dendl;
+	       << " count value not int" << dendl;
 	  continue;
 	}
       } else if (ks == "detail") {
@@ -946,16 +944,12 @@ ceph_add_osd_perf_query(BaseMgrModule *self, PyObject *args)
           }
           limit->order_by = it->second;
         } else if (limit_param_name == NAME_LIMIT_MAX_COUNT) {
-#if PY_MAJOR_VERSION <= 2
-          if (!PyInt_Check(limit_param_val) && !PyLong_Check(limit_param_val)) {
-#else
-          if (!PyLong_Check(limit_param_val)) {
-#endif
+          if (!PyInt_Check(limit_param_val)) {
             derr << __func__ << " " << limit_param_name << " not an int"
                  << dendl;
             Py_RETURN_NONE;
           }
-          limit->max_count = PyLong_AsLong(limit_param_val);
+          limit->max_count = PyInt_AsLong(limit_param_val);
         } else {
           derr << __func__ << " unknown limit param: " << limit_param_name
                << dendl;
