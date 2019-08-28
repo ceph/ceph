@@ -1,0 +1,36 @@
+tasks:
+        - deepsea.orch:
+                stage: 4
+        - deepsea.create_pools:
+                foo:
+        - exec:
+                client.salt_master:
+                        - 'rados bench -p foo 5 write -b 4096 --no-cleanup'
+        - exec:
+                client.salt_master:
+                        - 'ceph -s'
+        - deepsea.validation:
+                osd_count_check:
+        - exec:
+                client.salt_master:
+                        - 'sudo salt-run disengage.safety'
+        - exec:
+                client.salt_master:
+                        - 'sudo salt-run state.orch ceph.purge'
+        - exec:
+                client.salt_master:
+                        - 'test -f /srv/pillar/ceph/proposals/policy.cfg'
+        - deepsea.orch:
+                stage: 2
+        - deepsea.orch:
+                stage: 3
+        - exec:
+                client.salt_master:
+                        - 'ceph -s'
+        - deepsea.orch:
+                stage: 4
+        - deepsea.validation:
+                osd_count_check:
+        - exec:
+                client.salt_master:
+                        - 'ceph -s'
