@@ -19,6 +19,7 @@
 #include "tools/rbd_mirror/ImageDeleter.h"
 #include "tools/rbd_mirror/ServiceDaemon.h"
 #include "tools/rbd_mirror/Threads.h"
+#include "tools/rbd_mirror/Throttler.h"
 #include "tools/rbd_mirror/Types.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/ImageState.h"
@@ -56,13 +57,18 @@ public:
   void SetUp() override {
     TestFixture::SetUp();
 
+    m_image_deletion_throttler.reset(
+        new rbd::mirror::Throttler<>(g_ceph_context,
+                                     "rbd_mirror_concurrent_image_deletions"));
+
     m_service_daemon.reset(new rbd::mirror::ServiceDaemon<>(g_ceph_context,
                                                             _rados, m_threads));
 
     librbd::api::Mirror<>::mode_set(m_local_io_ctx, RBD_MIRROR_MODE_IMAGE);
 
-    m_deleter = new rbd::mirror::ImageDeleter<>(m_local_io_ctx, m_threads,
-                                                m_service_daemon.get());
+    m_deleter = new rbd::mirror::ImageDeleter<>(
+        m_local_io_ctx, m_threads, m_image_deletion_throttler.get(),
+        m_service_daemon.get());
 
     m_local_image_id = librbd::util::generate_image_id(m_local_io_ctx);
     librbd::ImageOptions image_opts;
@@ -225,6 +231,7 @@ public:
 
   librbd::RBD rbd;
   std::string m_local_image_id;
+  std::unique_ptr<rbd::mirror::Throttler<>> m_image_deletion_throttler;
   std::unique_ptr<rbd::mirror::ServiceDaemon<>> m_service_daemon;
   rbd::mirror::ImageDeleter<> *m_deleter;
 };

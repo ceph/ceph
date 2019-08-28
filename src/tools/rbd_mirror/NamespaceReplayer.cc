@@ -41,11 +41,12 @@ NamespaceReplayer<I>::NamespaceReplayer(
     librados::IoCtx &local_io_ctx, librados::IoCtx &remote_io_ctx,
     const std::string &local_mirror_uuid, const std::string &remote_mirror_uuid,
     Threads<I> *threads, Throttler<I> *image_sync_throttler,
-    ServiceDaemon<I> *service_daemon,
+    Throttler<I> *image_deletion_throttler, ServiceDaemon<I> *service_daemon,
     journal::CacheManagerHandler *cache_manager_handler) :
   m_local_mirror_uuid(local_mirror_uuid),
   m_remote_mirror_uuid(remote_mirror_uuid),
   m_threads(threads), m_image_sync_throttler(image_sync_throttler),
+  m_image_deletion_throttler(image_deletion_throttler),
   m_service_daemon(service_daemon),
   m_cache_manager_handler(cache_manager_handler),
   m_lock(ceph::make_mutex(librbd::util::unique_lock_name(
@@ -611,6 +612,7 @@ void NamespaceReplayer<I>::init_image_deleter(Context *on_finish) {
       handle_init_image_deleter(r, on_finish);
     });
   m_image_deleter.reset(ImageDeleter<I>::create(m_local_io_ctx, m_threads,
+                                                m_image_deletion_throttler,
                                                 m_service_daemon));
   m_image_deleter->init(create_async_context_callback(
     m_threads->work_queue, on_finish));

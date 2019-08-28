@@ -31,6 +31,7 @@
 #include "librbd/Utils.h"
 #include "ImageDeleter.h"
 #include "tools/rbd_mirror/Threads.h"
+#include "tools/rbd_mirror/Throttler.h"
 #include "tools/rbd_mirror/image_deleter/RemoveRequest.h"
 #include "tools/rbd_mirror/image_deleter/TrashMoveRequest.h"
 #include "tools/rbd_mirror/image_deleter/TrashWatcher.h"
@@ -51,6 +52,8 @@ using namespace librbd;
 
 namespace rbd {
 namespace mirror {
+
+using librbd::util::create_async_context_callback;
 
 namespace {
 
@@ -123,10 +126,12 @@ private:
 };
 
 template <typename I>
-ImageDeleter<I>::ImageDeleter(librados::IoCtx& local_io_ctx,
-                              Threads<librbd::ImageCtx>* threads,
-                              ServiceDaemon<librbd::ImageCtx>* service_daemon)
+ImageDeleter<I>::ImageDeleter(
+    librados::IoCtx& local_io_ctx, Threads<librbd::ImageCtx>* threads,
+    Throttler<librbd::ImageCtx>* image_deletion_throttler,
+    ServiceDaemon<librbd::ImageCtx>* service_daemon)
   : m_local_io_ctx(local_io_ctx), m_threads(threads),
+    m_image_deletion_throttler(image_deletion_throttler),
     m_service_daemon(service_daemon), m_trash_listener(this),
     m_lock(ceph::make_mutex(
       librbd::util::unique_lock_name("rbd::mirror::ImageDeleter::m_lock",
@@ -174,6 +179,9 @@ void ImageDeleter<I>::shut_down(Context* on_finish) {
   delete m_asok_hook;
   m_asok_hook = nullptr;
 
+  m_image_deletion_throttler->drain(m_local_io_ctx.get_namespace(),
+                                    -ESTALE);
+
   shut_down_trash_watcher(on_finish);
 }
 
@@ -206,6 +214,8 @@ void ImageDeleter<I>::wait_for_ops(Context* on_finish) {
 
 template <typename I>
 void ImageDeleter<I>::cancel_all_deletions(Context* on_finish) {
+  m_image_deletion_throttler->drain(m_local_io_ctx.get_namespace(),
+                                    -ECANCELED);
   {
     std::lock_guard locker{m_lock};
     // wake up any external state machines waiting on deletions
@@ -355,29 +365,34 @@ template <typename I>
 void ImageDeleter<I>::remove_images() {
   dout(10) << dendl;
 
-  auto cct = reinterpret_cast<CephContext *>(m_local_io_ctx.cct());
-  uint64_t max_concurrent_deletions = cct->_conf.get_val<uint64_t>(
-    "rbd_mirror_concurrent_image_deletions");
-
   std::lock_guard locker{m_lock};
-  while (true) {
-    if (!m_running || m_delete_queue.empty() ||
-        m_in_flight_delete_queue.size() >= max_concurrent_deletions) {
-      return;
-    }
+  while (m_running && !m_delete_queue.empty()) {
 
     DeleteInfoRef delete_info = m_delete_queue.front();
     m_delete_queue.pop_front();
 
     ceph_assert(delete_info);
-    remove_image(delete_info);
+
+    auto on_start = create_async_context_callback(
+        m_threads->work_queue, new FunctionContext(
+            [this, delete_info](int r) {
+              if (r < 0) {
+                notify_on_delete(delete_info->image_id, r);
+                return;
+              }
+              remove_image(delete_info);
+            }));
+
+    m_image_deletion_throttler->start_op(m_local_io_ctx.get_namespace(),
+                                         delete_info->image_id, on_start);
   }
 }
 
 template <typename I>
 void ImageDeleter<I>::remove_image(DeleteInfoRef delete_info) {
   dout(10) << "info=" << *delete_info << dendl;
-  ceph_assert(ceph_mutex_is_locked(m_lock));
+
+  std::lock_guard locker{m_lock};
 
   m_in_flight_delete_queue.push_back(delete_info);
   m_async_op_tracker.start_op();
@@ -398,6 +413,8 @@ void ImageDeleter<I>::handle_remove_image(DeleteInfoRef delete_info,
                                           int r) {
   dout(10) << "info=" << *delete_info << ", r=" << r << dendl;
 
+  m_image_deletion_throttler->finish_op(m_local_io_ctx.get_namespace(),
+                                        delete_info->image_id);
   {
     std::lock_guard locker{m_lock};
     ceph_assert(ceph_mutex_is_locked(m_lock));

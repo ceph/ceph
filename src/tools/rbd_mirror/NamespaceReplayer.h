@@ -50,12 +50,13 @@ public:
       const std::string &remote_mirror_uuid,
       Threads<ImageCtxT> *threads,
       Throttler<ImageCtxT> *image_sync_throttler,
+      Throttler<ImageCtxT> *image_deletion_throttler,
       ServiceDaemon<ImageCtxT> *service_daemon,
       journal::CacheManagerHandler *cache_manager_handler) {
     return new NamespaceReplayer(name, local_ioctx, remote_ioctx,
                                  local_mirror_uuid, remote_mirror_uuid, threads,
-                                 image_sync_throttler, service_daemon,
-                                 cache_manager_handler);
+                                 image_sync_throttler, image_deletion_throttler,
+                                 service_daemon, cache_manager_handler);
   }
 
   NamespaceReplayer(const std::string &name,
@@ -65,6 +66,7 @@ public:
                     const std::string &remote_mirror_uuid,
                     Threads<ImageCtxT> *threads,
                     Throttler<ImageCtxT> *image_sync_throttler,
+                    Throttler<ImageCtxT> *image_deletion_throttler,
                     ServiceDaemon<ImageCtxT> *service_daemon,
                     journal::CacheManagerHandler *cache_manager_handler);
   NamespaceReplayer(const NamespaceReplayer&) = delete;
@@ -252,6 +254,7 @@ private:
   std::string m_remote_mirror_uuid;
   Threads<ImageCtxT> *m_threads;
   Throttler<ImageCtxT> *m_image_sync_throttler;
+  Throttler<ImageCtxT> *m_image_deletion_throttler;
   ServiceDaemon<ImageCtxT> *m_service_daemon;
   journal::CacheManagerHandler *m_cache_manager_handler;
 
