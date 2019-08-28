@@ -1,4 +1,4 @@
-import { $, by, element } from 'protractor';
+import { $, $$, by, ElementFinder } from 'protractor';
 import { PageHelper } from './page-helper.po';
 
 export class DashboardPageHelper extends PageHelper {
@@ -6,54 +6,48 @@ export class DashboardPageHelper extends PageHelper {
     index: '/#/dashboard'
   };
 
-  checkGroupTitles(index, name) {
-    // Checks that the titles of all the groups on the dashboard are correct
-    const titles = element.all(by.className('info-group-title'));
-    titles
+  async infoGroupTitle(index: number): Promise<string> {
+    return $$('.info-group-title')
       .get(index)
-      .getText()
-      .then((txt) => {
-        expect(txt === name);
-      });
+      .getText();
   }
 
-  cellFromGroup(cardName) {
-    // Grabs cell from dashboard page based off the title. Then returns the card
-    // element
-    return $(`cd-info-card[cardtitle=${cardName}]`);
-  }
-
-  cellLink(cardName) {
-    // Grabs the link from the correct card using the cellFromGroup function,
-    // then clicks the hyperlinked title
-    this.navigateTo();
-    this.cellFromGroup(cardName)
+  async clickInfoCardLink(cardName: string): Promise<void> {
+    await $(`cd-info-card[cardtitle="${cardName}"]`)
       .element(by.linkText(cardName))
       .click();
   }
 
-  partialCellLink(partName) {
-    // Used for cases in which there was a space inbetween two words in the hyperlink,
-    // has the same functionality as cellLink
-    element(by.partialLinkText(partName)).click();
+  async infoCard(indexOrTitle: number | string): Promise<ElementFinder> {
+    let infoCards = $$('cd-info-card');
+    if (typeof indexOrTitle === 'number') {
+      if ((await infoCards.count()) <= indexOrTitle) {
+        return Promise.reject(
+          `No element found for index ${indexOrTitle}. Elements array has ` +
+            `only ${await infoCards.count()} elements.`
+        );
+      }
+      return infoCards.get(indexOrTitle);
+    } else if (typeof indexOrTitle === 'string') {
+      infoCards = infoCards.filter(
+        async (e) => (await e.$('.card-title').getText()) === indexOrTitle
+      );
+      if ((await infoCards.count()) === 0) {
+        return Promise.reject(`No element found for title "${indexOrTitle}"`);
+      }
+      return infoCards.first();
+    }
   }
 
-  dashContain(index, name) {
-    // Grabs a list of all info cards, then checks by index that the title text
-    // is equal to the desired title, thus checking the presence of the card
-    const cardList = element.all(by.tagName('cd-info-card'));
-    cardList
-      .get(index)
-      .getText()
-      .then((txt) => {
-        expect(txt === name);
-      });
-  }
-
-  cardNumb(index) {
-    // Grabs a list of all info cards and returns the text on the card via
-    // the index of the card in the list
-    const cardList = element.all(by.tagName('cd-info-card'));
-    return cardList.get(index).getText();
+  async infoCardBodyText(
+    infoCard: ElementFinder | Promise<ElementFinder> | string
+  ): Promise<string> {
+    let _infoCard: ElementFinder;
+    if (typeof infoCard === 'string') {
+      _infoCard = await this.infoCard(infoCard);
+    } else {
+      _infoCard = typeof infoCard.then === 'function' ? await infoCard : infoCard;
+    }
+    return _infoCard.$('.card-text').getText();
   }
 }

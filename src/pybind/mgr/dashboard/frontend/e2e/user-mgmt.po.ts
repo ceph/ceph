@@ -11,111 +11,102 @@ export class UserMgmtPageHelper extends PageHelper {
     roleCreate: '/#/user-management/roles/create'
   };
 
-  userCreate(username, password, name, email) {
-    this.navigateTo('userCreate');
+  async userCreate(username, password, name, email): Promise<void> {
+    await this.navigateTo('userCreate');
 
     // fill in fields
-    element(by.id('username')).sendKeys(username);
-    element(by.id('password')).sendKeys(password);
-    element(by.id('confirmpassword')).sendKeys(password);
-    element(by.id('name')).sendKeys(name);
-    element(by.id('email')).sendKeys(email);
+    await element(by.id('username')).sendKeys(username);
+    await element(by.id('password')).sendKeys(password);
+    await element(by.id('confirmpassword')).sendKeys(password);
+    await element(by.id('name')).sendKeys(name);
+    await element(by.id('email')).sendKeys(email);
 
     // Click the create button and wait for user to be made
     const createButton = element(by.cssContainingText('button', 'Create User'));
-    this.moveClick(createButton).then(() => {
-      browser.wait(Helper.EC.presenceOf(this.getTableCell(username)), Helper.TIMEOUT);
-    });
+    await createButton.click();
+    await browser.wait(Helper.EC.presenceOf(this.getTableCell(username)), Helper.TIMEOUT);
   }
 
-  userEdit(username, password, name, email) {
-    this.navigateTo('users');
+  async userEdit(username, password, name, email): Promise<void> {
+    await this.navigateTo('users');
 
-    this.getTableCell(username).click(); // select user from table
-    element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
+    await this.getTableCell(username).click(); // select user from table
+    await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
     // fill in fields with new values
-    element(by.id('password')).clear();
-    element(by.id('password')).sendKeys(password);
-    element(by.id('confirmpassword')).clear();
-    element(by.id('confirmpassword')).sendKeys(password);
-    element(by.id('name')).clear();
-    element(by.id('name')).sendKeys(name);
-    element(by.id('email')).clear();
-    element(by.id('email')).sendKeys(email);
+    await element(by.id('password')).clear();
+    await element(by.id('password')).sendKeys(password);
+    await element(by.id('confirmpassword')).clear();
+    await element(by.id('confirmpassword')).sendKeys(password);
+    await element(by.id('name')).clear();
+    await element(by.id('name')).sendKeys(name);
+    await element(by.id('email')).clear();
+    await element(by.id('email')).sendKeys(email);
 
     // Click the edit button and check new values are present in table
     const editButton = element(by.cssContainingText('button', 'Edit User'));
-    this.moveClick(editButton).then(() => {
-      browser.wait(Helper.EC.presenceOf(this.getTableCell(email)), Helper.TIMEOUT);
-      browser.wait(Helper.EC.presenceOf(this.getTableCell(name)), Helper.TIMEOUT);
-    });
+    await editButton.click();
+    await browser.wait(Helper.EC.presenceOf(this.getTableCell(email)), Helper.TIMEOUT);
+    await browser.wait(Helper.EC.presenceOf(this.getTableCell(name)), Helper.TIMEOUT);
   }
 
-  userDelete(username) {
-    this.navigateTo('users');
+  async userDelete(username): Promise<void> {
+    await this.navigateTo('users');
 
-    this.getTableCell(username).click(); // select user from table
-    $('.table-actions button.dropdown-toggle').click(); // click toggle menu
-    $('li.delete a').click(); // click delete
+    await this.getTableCell(username).click(); // select user from table
+    await $('.table-actions button.dropdown-toggle').click(); // click toggle menu
+    await $('li.delete a').click(); // click delete
 
-    browser.wait(Helper.EC.visibilityOf($('.custom-control-label')), Helper.TIMEOUT);
-    $('.custom-control-label').click(); // click confirmation checkbox
-    element(by.cssContainingText('button', 'Delete User')) // click delete user button
-      .click()
-      .then(() => {
-        browser.wait(
-          Helper.EC.stalenessOf(this.getFirstTableCellWithText(username)),
-          Helper.TIMEOUT
-        );
-      });
+    await browser.wait(Helper.EC.visibilityOf($('.custom-control-label')), Helper.TIMEOUT);
+    await $('.custom-control-label').click(); // click confirmation checkbox
+    await element(by.cssContainingText('button', 'Delete User')).click();
+    await browser.wait(
+      Helper.EC.stalenessOf(this.getFirstTableCellWithText(username)),
+      Helper.TIMEOUT
+    );
   }
 
-  roleCreate(name, description) {
-    this.navigateTo('roleCreate');
+  async roleCreate(name, description): Promise<void> {
+    await this.navigateTo('roleCreate');
 
     // fill in fields
-    element(by.id('name')).sendKeys(name);
-    element(by.id('description')).sendKeys(description);
+    await element(by.id('name')).sendKeys(name);
+    await element(by.id('description')).sendKeys(description);
 
     // Click the create button and wait for user to be made
     const createButton = element(by.cssContainingText('button', 'Create Role'));
-    this.moveClick(createButton).then(() => {
-      browser.wait(Helper.EC.presenceOf(this.getTableCell(name)), Helper.TIMEOUT);
-    });
+    await createButton.click();
+    await browser.wait(Helper.EC.presenceOf(this.getTableCell(name)), Helper.TIMEOUT);
   }
 
-  roleEdit(name, description) {
-    this.navigateTo('roles');
+  async roleEdit(name, description): Promise<void> {
+    await this.navigateTo('roles');
 
-    this.getTableCell(name).click(); // select role from table
-    element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
+    await this.getTableCell(name).click(); // select role from table
+    await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
     // fill in fields with new values
-    element(by.id('description')).clear();
-    element(by.id('description')).sendKeys(description);
+    await element(by.id('description')).clear();
+    await element(by.id('description')).sendKeys(description);
 
     // Click the edit button and check new values are present in table
     const editButton = element(by.cssContainingText('button', 'Edit Role'));
-    this.moveClick(editButton).then(() => {
-      browser.wait(Helper.EC.presenceOf(this.getTableCell(name)), Helper.TIMEOUT);
-      browser.wait(Helper.EC.presenceOf(this.getTableCell(description)), Helper.TIMEOUT);
-    });
+    await editButton.click();
+
+    await browser.wait(Helper.EC.presenceOf(this.getTableCell(name)), Helper.TIMEOUT);
+    await browser.wait(Helper.EC.presenceOf(this.getTableCell(description)), Helper.TIMEOUT);
   }
 
-  roleDelete(name) {
-    this.navigateTo('roles');
+  async roleDelete(name) {
+    await this.navigateTo('roles');
 
-    this.getTableCell(name).click(); // select role from table
-    $('.table-actions button.dropdown-toggle').click(); // click toggle menu
-    $('li.delete a').click(); // click delete
+    await this.getTableCell(name).click(); // select role from table
+    await $('.table-actions button.dropdown-toggle').click(); // click toggle menu
+    await $('li.delete a').click(); // click delete
 
-    browser.wait(Helper.EC.visibilityOf($('.custom-control-label')), Helper.TIMEOUT);
-    $('.custom-control-label').click(); // click confirmation checkbox
-    element(by.cssContainingText('button', 'Delete Role')) // click delete user button
-      .click()
-      .then(() => {
-        browser.wait(Helper.EC.stalenessOf(this.getFirstTableCellWithText(name)), Helper.TIMEOUT);
-      });
+    await browser.wait(Helper.EC.visibilityOf($('.custom-control-label')), Helper.TIMEOUT);
+    await $('.custom-control-label').click(); // click confirmation checkbox
+    await element(by.cssContainingText('button', 'Delete Role')).click();
+    await browser.wait(Helper.EC.stalenessOf(this.getFirstTableCellWithText(name)), Helper.TIMEOUT);
   }
 }

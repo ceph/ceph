@@ -23,46 +23,49 @@ export class Helper {
   static EC = browser.ExpectedConditions;
   static TIMEOUT = 10000;
 
-  buckets: BucketsPageHelper;
-  daemons: DaemonsPageHelper;
-  users: UsersPageHelper;
   pools: PoolPageHelper;
-  nfs: NfsPageHelper;
-  filesystems: FilesystemsPageHelper;
-  alerts: AlertsPageHelper;
-  configuration: ConfigurationPageHelper;
-  crushmap: CrushMapPageHelper;
-  hosts: HostsPageHelper;
-  logs: LogsPageHelper;
-  mgrmodules: ManagerModulesPageHelper;
-  monitors: MonitorsPageHelper;
-  osds: OSDsPageHelper;
+  buckets: BucketsPageHelper;
   images: ImagesPageHelper;
-  iscsi: IscsiPageHelper;
   mirroring: MirroringPageHelper;
   dashboard: DashboardPageHelper;
   usermgmt: UserMgmtPageHelper;
+  daemons: DaemonsPageHelper;
+  users: UsersPageHelper;
+  nfs: NfsPageHelper;
+  filesystems: FilesystemsPageHelper;
+  osds: OSDsPageHelper;
+  monitors: MonitorsPageHelper;
+  mgrModules: ManagerModulesPageHelper;
+  logs: LogsPageHelper;
+  hosts: HostsPageHelper;
+  crushMap: CrushMapPageHelper;
+  configuration: ConfigurationPageHelper;
+  alerts: AlertsPageHelper;
+  iscsi: IscsiPageHelper;
 
   constructor() {
-    this.buckets = new BucketsPageHelper();
-    this.daemons = new DaemonsPageHelper();
-    this.users = new UsersPageHelper();
     this.pools = new PoolPageHelper();
-    this.nfs = new NfsPageHelper();
-    this.filesystems = new FilesystemsPageHelper();
-    this.alerts = new AlertsPageHelper();
-    this.configuration = new ConfigurationPageHelper();
-    this.crushmap = new CrushMapPageHelper();
-    this.hosts = new HostsPageHelper();
-    this.logs = new LogsPageHelper();
-    this.mgrmodules = new ManagerModulesPageHelper();
-    this.monitors = new MonitorsPageHelper();
-    this.osds = new OSDsPageHelper();
+    this.buckets = new BucketsPageHelper();
     this.images = new ImagesPageHelper();
     this.iscsi = new IscsiPageHelper();
     this.mirroring = new MirroringPageHelper();
     this.dashboard = new DashboardPageHelper();
     this.usermgmt = new UserMgmtPageHelper();
+    this.daemons = new DaemonsPageHelper();
+    this.users = new UsersPageHelper();
+    this.nfs = new NfsPageHelper();
+    this.filesystems = new FilesystemsPageHelper();
+    this.osds = new OSDsPageHelper();
+    this.monitors = new MonitorsPageHelper();
+    this.mgrModules = new ManagerModulesPageHelper();
+    this.logs = new LogsPageHelper();
+    this.hosts = new HostsPageHelper();
+    this.crushMap = new CrushMapPageHelper();
+    this.configuration = new ConfigurationPageHelper();
+    this.alerts = new AlertsPageHelper();
+    this.mirroring = new MirroringPageHelper();
+    this.iscsi = new IscsiPageHelper();
+    this.dashboard = new DashboardPageHelper();
   }
 
   /**
@@ -71,21 +74,18 @@ export class Helper {
    * @static
    * @memberof Helper
    */
-  static checkConsole() {
-    browser
+  static async checkConsole() {
+    let browserLog = await browser
       .manage()
       .logs()
-      .get('browser')
-      .then(function(browserLog) {
-        browserLog = browserLog.filter((log) => {
-          return log.level.value > 900; // SEVERE level
-        });
+      .get('browser');
 
-        if (browserLog.length > 0) {
-          console.log('\n log: ' + require('util').inspect(browserLog));
-        }
+    browserLog = browserLog.filter((log) => log.level.value > 900);
 
-        expect(browserLog.length).toEqual(0);
-      });
+    if (browserLog.length > 0) {
+      console.log('\n log: ' + require('util').inspect(browserLog));
+    }
+
+    await expect(browserLog.length).toEqual(0);
   }
 }

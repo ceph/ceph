@@ -136,8 +136,8 @@ There are a few ways how you can try to resolve this:
   again in order to reinstall them
 - Clear the cache of jest by running ``npx jest --clearCache``
 
-Running End-to-End Tests
-~~~~~~~~~~~~~~~~~~~~~~~~
+Running End-to-End (E2E) Tests
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
 We use `Protractor <http://www.protractortest.org/>`__ to run our frontend E2E
 tests.
@@ -184,13 +184,29 @@ Note::
 Writing End-to-End Tests
 ~~~~~~~~~~~~~~~~~~~~~~~~
 
+To be used methods
+..................
+
+For clicking checkboxes, the ``clickCheckbox`` method is supposed to be used.
+Due an adaption of the ``<input type="checkbox">`` tag, the original checkbox
+is hidden and unclickable. Instead, a fancier replacement is shown. When the
+developer tries to use `ElementFinder::click()` on such a checkbox, it will
+raise an error. The ``clickCheckbox`` method prevents that by clicking the
+label of the checkbox, like a regular user would do.
+
 The PagerHelper class
 .....................
 
 The ``PageHelper`` class is supposed to be used for general purpose code that
-can be used on various pages or suites. Examples are
-``getTableCellByContent()``, ``getTabsCount()`` or ``checkCheckbox()``. Every
-method that could be useful on several pages belongs there. Also, methods
+can be used on various pages or suites.
+
+Examples are
+
+- ``getTableCellByContent()`` - returns a table cell by its content
+- ``getTabsCount()`` - returns the amount of tabs
+- ``clickCheckbox()`` - clicks a checkbox
+
+Every method that could be useful on several pages belongs there. Also, methods
 which enhance the derived classes of the PageHelper belong there. A good
 example for such a case is the ``restrictTo()`` decorator. It ensures that a
 method implemented in a subclass of PageHelper is called on the correct page.

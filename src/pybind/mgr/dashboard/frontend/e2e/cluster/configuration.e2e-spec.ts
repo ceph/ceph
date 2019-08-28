@@ -1,34 +1,35 @@
 import { Helper } from '../helper.po';
+import { ConfigurationPageHelper } from './configuration.po';
 
 describe('Configuration page', () => {
-  let configuration: Helper['configuration'];
+  let configuration: ConfigurationPageHelper;
 
   beforeAll(() => {
-    configuration = new Helper().configuration;
+    configuration = new ConfigurationPageHelper();
   });
 
-  afterEach(() => {
-    Helper.checkConsole();
+  afterEach(async () => {
+    await Helper.checkConsole();
   });
 
   describe('breadcrumb test', () => {
-    beforeAll(() => {
-      configuration.navigateTo();
+    beforeAll(async () => {
+      await configuration.navigateTo();
     });
 
-    it('should open and show breadcrumb', () => {
-      expect(configuration.getBreadcrumbText()).toEqual('Configuration');
+    it('should open and show breadcrumb', async () => {
+      await expect(configuration.getBreadcrumbText()).toEqual('Configuration');
     });
   });
   describe('edit configuration test', () => {
-    beforeAll(() => {
-      configuration.navigateTo();
+    beforeAll(async () => {
+      await configuration.navigateTo();
     });
 
-    it('should click and edit a configuration and results should appear in the table', () => {
+    it('should click and edit a configuration and results should appear in the table', async () => {
       const configName = 'client_cache_size';
 
-      configuration.edit(
+      await configuration.edit(
         configName,
         ['global', '1'],
         ['mon', '2'],
@@ -37,7 +38,7 @@ describe('Configuration page', () => {
         ['mds', '5'],
         ['client', '6']
       );
-      configuration.configClear(configName);
+      await configuration.configClear(configName);
     });
   });
 });

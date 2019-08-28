@@ -9,6 +9,6 @@ export class CrushMapPageHelper extends PageHelper {
   }
 
   getCrushNode(idx) {
-    return $$('.node-name.ng-star-inserted').get(idx);
+    return $$('.node-name.type-osd').get(idx);
   }
 }
