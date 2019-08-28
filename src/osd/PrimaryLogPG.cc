@@ -3182,6 +3182,8 @@ public:
     : ctx(ctx), osd_op(osd_op) {}
   void finish(int r) override {
     // NB: caller must already have pg->lock held
+    ctx->obc->stop_block();
+    ctx->pg->kick_object_context_blocked(ctx->obc);
     if (r >= 0) {
       osd_op.rval = 0;
       ctx->pg->execute_ctx(ctx);
@@ -3287,6 +3289,7 @@ void PrimaryLogPG::refcount_manifest(ObjectContextRef obc, object_locator_t oloc
     flags, c);
   if (cb) {
     manifest_ops[obc->obs.oi.soid] = std::make_shared<ManifestOp>(cb, tid);
+    obc->start_block();
   }
 }  
 
