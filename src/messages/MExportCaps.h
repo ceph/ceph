@@ -23,7 +23,8 @@ class MExportCaps : public Message {
 private:
   static constexpr int HEAD_VERSION = 2;
   static constexpr int COMPAT_VERSION = 1;
-public:
+
+public:  
   inodeno_t ino;
   bufferlist cap_bl;
   map<client_t,entity_inst_t> client_map;

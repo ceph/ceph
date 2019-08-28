@@ -172,6 +172,9 @@ protected:
   void export_logged_finish(CDir *dir);
   void handle_export_notify_ack(const cref_t<MExportDirNotifyAck> &m);
   void export_finish(CDir *dir);
+  void encode_export_prep_trace(bufferlist& bl, CDir *bound, CDir *dir, export_state_t &es, 
+                               set<inodeno_t> &inodes_added, set<dirfrag_t> &dirfrags_added);
+  void decode_export_prep_trace(bufferlist::const_iterator& blp, mds_rank_t oldauth, MDSContext::vec &finished);
 
   void handle_gather_caps(const cref_t<MGatherCaps> &m);
 
@@ -332,10 +335,11 @@ public:
 			        std::map<client_t,Capability::Import>& peer_imported);
 
 
-  uint64_t encode_export_dir(bufferlist& exportbl,
+  void encode_export_dir(bufferlist& exportbl,
 			CDir *dir,
 			std::map<client_t,entity_inst_t>& exported_client_map,
-			std::map<client_t,client_metadata_t>& exported_client_metadata_map);
+			std::map<client_t,client_metadata_t>& exported_client_metadata_map,
+                        uint64_t &num_exported);
   void finish_export_dir(CDir *dir, mds_rank_t target,
 			 std::map<inodeno_t,std::map<client_t,Capability::Import> >& peer_imported,
 			 MDSContext::vec& finished, int *num_dentries);
@@ -354,13 +358,13 @@ public:
 				const std::map<client_t,pair<Session*,uint64_t> >& smap,
 				const std::map<client_t,Capability::Export> &export_map,
 				std::map<client_t,Capability::Import> &import_map);
-  int decode_import_dir(bufferlist::const_iterator& blp,
+  void decode_import_dir(bufferlist::const_iterator& blp,
 			mds_rank_t oldauth,
 			CDir *import_root,
 			EImportStart *le, 
 			LogSegment *ls,
 			std::map<CInode*, std::map<client_t,Capability::Export> >& cap_imports,
-			std::list<ScatterLock*>& updated_scatterlocks);
+			std::list<ScatterLock*>& updated_scatterlocks, int &num_imported);
 
   void import_reverse(CDir *dir);
 
