@@ -91,14 +91,6 @@ int ErasureCodeBench::setup(int argc, char** argv) {
 
   if (vm.count("help")) {
     cout << desc << std::endl;
-    cout <<"Example: ceph_erasure_code_benchmark "
-	<<"-p jerasure "
-	<<"-i 1 -w encode "
-	<<"-P technique=reed_sol_van "
-	<<"-P directory=libs "
-	<<"-P k=2 "
-	<<"-P m=2" << endl;
-    return 1;
   }
 
   if (vm.count("parameter")) {
