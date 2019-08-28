@@ -165,6 +165,9 @@ upgrade-sequence_nautilus:
    - ceph.restart: [osd.5]
    - sleep:
        duration: 60
+   - ceph.restart: [mgr.x]
+   - sleep:
+       duration: 60
    - ceph.restart: [mon.a]
    - sleep:
        duration: 60
