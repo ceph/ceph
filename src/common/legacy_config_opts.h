@@ -1265,6 +1265,10 @@ OPTION(rados_osd_op_timeout, OPT_DOUBLE) // how many seconds to wait for a respo
 OPTION(rados_tracing, OPT_BOOL) // true if LTTng-UST tracepoints should be enabled
 
 
+OPTION(rgw_max_attr_name_len, OPT_SIZE)
+OPTION(rgw_max_attr_size, OPT_SIZE)
+OPTION(rgw_max_attrs_num_in_req, OPT_U64)
+
 OPTION(rgw_max_chunk_size, OPT_INT)
 OPTION(rgw_put_obj_min_window_size, OPT_INT)
 OPTION(rgw_put_obj_max_window_size, OPT_INT)
