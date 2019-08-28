@@ -297,13 +297,29 @@ int cls_cxx_map_get_keys(cls_method_context_t hctx,
 }
 
 int cls_cxx_map_get_vals(cls_method_context_t hctx,
-                         const string &start_obj,
-                         const string &filter_prefix,
-                         uint64_t max_to_get,
-                         map<string, bufferlist> *vals,
-                         bool *more)
+                         const std::string& start_obj,
+                         const std::string& filter_prefix,
+                         const uint64_t max_to_get,
+                         std::map<std::string, ceph::bufferlist> *vals,
+                         bool* const more)
 {
-  return 0;
+  OSDOp op{ CEPH_OSD_OP_OMAPGETVALS };
+  encode(start_obj, op.indata);
+  encode(max_to_get, op.indata);
+  encode(filter_prefix, op.indata);
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
+  try {
+    auto iter = op.outdata.cbegin();
+    decode(*vals, iter);
+    decode(*more, iter);
+  } catch (buffer::error&) {
+    return -EIO;
+  }
+  return vals->size();
 }
 
 int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl)

@@ -92,6 +92,9 @@ public:
   seastar::future<> omap_get_keys(
     const ObjectState& os,
     OSDOp& osd_op) const;
+  seastar::future<> omap_get_vals(
+    const ObjectState& os,
+    OSDOp& osd_op) const;
   seastar::future<> omap_get_vals_by_keys(
     const ObjectState& os,
     OSDOp& osd_op) const;
