@@ -1250,6 +1250,10 @@ OPTION(rados_tracing, OPT_BOOL) // true if LTTng-UST tracepoints should be enabl
 OPTION(nss_db_path, OPT_STR) // path to nss db
 
 
+OPTION(rgw_max_attr_name_len, OPT_INT)
+OPTION(rgw_max_attr_size, OPT_INT)
+OPTION(rgw_max_attrs_num_in_req, OPT_U64)
+
 OPTION(rgw_max_chunk_size, OPT_INT)
 OPTION(rgw_put_obj_min_window_size, OPT_INT)
 OPTION(rgw_put_obj_max_window_size, OPT_INT)
