@@ -41,6 +41,12 @@
 #include <xmmintrin.h>
 #endif
 
+#if defined(__aarch64__)
+#include <arm_acle.h>
+#include <arm_neon.h>
+#include "arch/arm.h"
+#endif
+
 #include "include/buffer.h"
 #include "include/encoding.h"
 #include "include/ceph_hash.h"
