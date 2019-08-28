@@ -33,7 +33,7 @@ namespace ceph {
 /// label for block device
 struct bluestore_bdev_label_t {
   uuid_d osd_uuid;     ///< osd uuid
-  uint64_t size;       ///< device size
+  uint64_t size = 0;   ///< device size
   utime_t btime;       ///< birth time
   string description;  ///< device description
 
