@@ -29,6 +29,8 @@
 #include "crimson/osd/pg_backend.h"
 #include "crimson/osd/exceptions.h"
 
+#include "messages/MOSDOp.h"
+
 class PGLSFilter;
 class OSDOp;
 
@@ -48,6 +50,7 @@ class OpsExecuter {
   PGBackend::cached_os_t os;
   PG& pg;
   PGBackend& backend;
+  Ref<MOSDOp> msg;
   ceph::os::Transaction txn;
 
   size_t num_read = 0;    ///< count read ops
@@ -94,14 +97,21 @@ class OpsExecuter {
   }
 
 public:
-  OpsExecuter(PGBackend::cached_os_t os, PG& pg)
-    : os(std::move(os)), pg(pg), backend(pg.get_backend()) {
+  OpsExecuter(PGBackend::cached_os_t os, PG& pg, Ref<MOSDOp> msg)
+    : os(std::move(os)),
+      pg(pg),
+      backend(pg.get_backend()),
+      msg(std::move(msg)) {
   }
 
   seastar::future<> do_osd_op(class OSDOp& osd_op);
 
   template <typename Func>
   seastar::future<> submit_changes(Func&& f) &&;
+
+  auto get_orig_source_inst() const {
+    return msg->get_orig_source_inst();
+  }
 };
 
 template <class Context, class MainFunc, class EffectFunc>
