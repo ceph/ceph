@@ -296,7 +296,11 @@ class Backport:
         #
         # GitHub PR ID from merge commit string
         p = re.compile('\\d+')
-        self.github_pr_id = p.search(merge_commit_description).group()
+        try:
+            self.github_pr_id = p.search(merge_commit_description).group()
+        except AttributeError:
+            assert False, \
+                "Failed to extract GitHub PR ID from merge commit string ->{}<-".format(merge_commit_string)
         logging.debug("GitHub PR ID from merge commit string: {}".format(self.github_pr_id))
         self.populate_github_url()
         #
@@ -318,38 +322,24 @@ class Backport:
         if not no_browser:
             if browser_running():
                 os.system("{} {}".format(browser_cmd, self.github_url))
-        print('''================================================================
+        pr_title_trunc = self.github_pr_title
+        if len(pr_title_trunc) > 60:
+            pr_title_trunc = pr_title_trunc[0:50] + "|TRUNCATED"
+        print('''\n\n=================================================================
+GitHub PR URL:    {}
+GitHub PR title:  {}
+Merge commit:     {} ({})
+Merged:           {}
+Ceph version:     base {}, target {}'''.format(self.github_url, pr_title_trunc, self.merge_commit_sha1, self.merge_commit_gd, self.github_pr_merged, self.base_version, self.target_version))
+        if no_browser or not browser_running():
+            print('''----------------------- PR DESCRIPTION --------------------------
 {}
-merge commit {} ({})
-{}
-```
-{}
-```
-Merged: {}
-Ceph version: base {}, target {}
-================================================================'''.format(self.github_url, self.merge_commit_sha1, self.merge_commit_gd, self.github_pr_title, self.github_pr_desc, self.github_pr_merged, self.base_version, self.target_version))
+-----------------------------------------------------------------'''.format(self.github_pr_desc)) 
         assert self.github_pr_merged, "GitHub PR {} has not been merged!".format(self.github_pr_id)
         #
-        # extract tracker URL from description
-        p = re.compile('http.*://tracker.ceph.com/issues/\\d+')
-        try:
-            tracker_url = p.search(self.github_pr_desc).group()
-        except AttributeError:
-            assert False, \
-                "GitHub PR description does not contain a Tracker URL!"
-        p = re.compile('\\d+')
-        self.tracker_id = p.search(tracker_url).group()
-        assert self.tracker_id, \
-            "Failed to extract tracker ID from tracker URL {}".format(tracker_url)
-        self.populate_tracker_url()
-        logging.info("PR {} links to tracker {}"
-                     .format(self.github_url, self.tracker_url))
-        #
-        # we have a Tracker URL, but is it really a backport tracker?
-        backport_tracker_id = tracker2tracker_id['Backport']
-        self.redmine_issue = redmine.issue.get(self.tracker_id)
-        assert self.redmine_issue.tracker.id == backport_tracker_id, \
-            "Tracker {} is a {} (expected ->Backport<-)".format(self.tracker_url, self.redmine_issue.tracker)
+        # obtain backport tracker from GitHub PR description
+        self.extract_backport_tracker_from_github_pr_desc()
+        print('''Backport tracker: {}'''.format(self.tracker_url))
         #
         # does the Backport Tracker description link back to the GitHub PR?
         p = re.compile('http.*://github.com/ceph/ceph/pull/\\d+')
@@ -367,6 +357,8 @@ Ceph version: base {}, target {}
                           .format(self.github_url_from_tracker, github_id_from_tracker))
             assert github_id_from_tracker == self.github_pr_id, \
                 "GitHub PR ID {} does not match GitHub ID from tracker {}".format(self.github_pr_id, github_id_from_tracker)
+        print("=================================================================")
+        if self.github_url_from_tracker:
             logging.info("Tracker {} links to PR {}".format(self.tracker_url, self.github_url))
         else:
             logging.info("Tracker {} does not link to PR {} - will update".
@@ -440,6 +432,48 @@ Ceph version: base {}, target {}
                 return field['value']
         return None
     
+    def print_end_of_divider(self):
+        print("=================================================================")
+
+    def extract_backport_tracker_from_github_pr_desc(self):
+        global redmine_endpoint
+        p = re.compile('http.*://tracker.ceph.com/issues/\\d+')
+        matching_strings = p.findall(self.github_pr_desc)
+        if not matching_strings: 
+            self.print_end_of_divider()
+            assert False, \
+                "GitHub PR description does not contain a Tracker URL"
+        self.tracker_id = None
+        self.tracker_url = None
+        backport_trackers_found = 0
+        for tracker_url in matching_strings:
+            p = re.compile('\\d+')
+            tracker_id = p.search(tracker_url).group()
+            if not tracker_id:
+                self.print_end_of_divider()
+                assert tracker_id, \
+                    "Failed to extract tracker ID from tracker URL {}".format(tracker_url)
+            tracker_url = "{}/issues/{}".format(redmine_endpoint, tracker_id)
+            #
+            # we have a Tracker URL, but is it really a backport tracker?
+            backport_tracker_id = tracker2tracker_id['Backport']
+            redmine_issue = redmine.issue.get(tracker_id)
+            if redmine_issue.tracker.id == backport_tracker_id:
+                backport_trackers_found += 1
+                if backport_trackers_found == 1:
+                    self.redmine_issue = redmine_issue
+                    self.tracker_id = tracker_id
+                    self.tracker_url = tracker_url
+        if not self.tracker_id:
+            self.print_end_of_divider()
+            assert False, \
+                "No backport tracker found in PR description at {}".format(self.github_url)
+        if backport_trackers_found > 1:
+            logging.warning("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+            logging.warning("PR description contains multiple ({}) backport tracker URLs - using only the first one"
+                            .format(backport_trackers_found))
+            logging.warning("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+
     def get_tracker_target_version(self):
         if self.redmine_issue.fixed_version:
             logging.debug("Target version: ID {}, name {}"
@@ -537,10 +571,8 @@ if __name__ == '__main__':
     #
     # loop over the merge commits
     for merge in merges_raw_list:
-        print("\nMerges remaining to process: {}".format(merges_remaining))
         backport = None
         sha1 = merge.split(' ')[0]
-        print("Merge {}".format(merge))
         possible_to_resolve = True
         try:
             backport = Backport(repo, merge_commit_string=merge)
@@ -559,8 +591,11 @@ if __name__ == '__main__':
                 prompt = "[a] Abort, [i] Ignore, [u] Update tracker (default 'u') --> "
                 default_input_val = "u"
             else:
-                prompt = "[a] Abort, [i] Ignore --> "
-                default_input_val = "i"
+                if merges_remaining > 1:
+                    prompt = "[a] Abort, [i] Ignore --> "
+                    default_input_val = "i"
+                else:
+                    break
         input_val = input(prompt)
         if input_val == '':
             input_val = default_input_val
@@ -581,3 +616,4 @@ if __name__ == '__main__':
             else:
                 tag_sha1(repo, sha1)
         merges_remaining -= 1
+        print("Merges remaining to process: {}".format(merges_remaining))
