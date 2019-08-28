@@ -432,6 +432,13 @@ OpsExecuter::do_osd_op(OSDOp& osd_op)
       return backend.omap_set_vals(os, osd_op, txn);
     });
 
+  // watch/notify
+  case CEPH_OSD_OP_WATCH:
+    return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
+      logger().warn("CEPH_OSD_OP_WATCH is not implemented yet; ignoring");
+      return seastar::now();
+    });
+
   default:
     logger().warn("unknown op {}", ceph_osd_op_name(op.op));
     throw std::runtime_error(
