@@ -322,7 +322,13 @@ void MgrStandby::respawn()
    * unlinked.
    */
   char exe_path[PATH_MAX] = "";
-  if (readlink(PROCPREFIX "/proc/self/exe", exe_path, PATH_MAX-1) == -1) {
+  struct stat statbuf;
+  if (stat(orig_argv[0], &statbuf) == 0) {
+    /* if original path still exists, use that since it may be
+       necessary to use an updated binary with updated libraries like
+       libceph-common */
+    strncpy(exe_path, orig_argv[0], PATH_MAX-1);
+  } else if (readlink(PROCPREFIX "/proc/self/exe", exe_path, PATH_MAX-1) == -1) {
     /* Print CWD for the user's interest */
     char buf[PATH_MAX];
     char *cwd = getcwd(buf, sizeof(buf));
