@@ -51,8 +51,6 @@ setup(
     install_requires=['pip-tools',
                       'tox',
                       'gevent',
-                      # For teuthology-coverage
-                      'mysqlclient == 1.4.2',
                       'PyYAML',
                       'argparse >= 1.2.1',
                       'beanstalkc >= 0.2.0',
@@ -94,6 +92,9 @@ setup(
                       'xmltodict',
                       'boto3',
                       ],
+    extras_require = {
+        'coverage': [ 'mysqlclient == 1.4.2'],
+    },
 
 
     # to find the code associated with entry point
