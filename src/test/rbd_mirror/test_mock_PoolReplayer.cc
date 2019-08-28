@@ -133,6 +133,7 @@ struct NamespaceReplayer<librbd::MockTestImageCtx> {
       const std::string &remote_mirror_uuid,
       Threads<librbd::MockTestImageCtx> *threads,
       Throttler<librbd::MockTestImageCtx> *image_sync_throttler,
+      Throttler<librbd::MockTestImageCtx> *image_deletion_throttler,
       ServiceDaemon<librbd::MockTestImageCtx> *service_daemon,
       journal::CacheManagerHandler *cache_manager_handler) {
     ceph_assert(s_instances.count(name));

@@ -315,10 +315,13 @@ void PoolReplayer<I>::init() {
   m_image_sync_throttler.reset(
       Throttler<I>::create(cct, "rbd_mirror_concurrent_image_syncs"));
 
+  m_image_deletion_throttler.reset(
+      Throttler<I>::create(cct, "rbd_mirror_concurrent_image_deletions"));
+
   m_default_namespace_replayer.reset(NamespaceReplayer<I>::create(
       "", m_local_io_ctx, m_remote_io_ctx, m_local_mirror_uuid, m_peer.uuid,
-      m_threads, m_image_sync_throttler.get(), m_service_daemon,
-      m_cache_manager_handler));
+      m_threads, m_image_sync_throttler.get(), m_image_deletion_throttler.get(),
+      m_service_daemon, m_cache_manager_handler));
 
   C_SaferCond on_init;
   m_default_namespace_replayer->init(&on_init);
@@ -377,6 +380,7 @@ void PoolReplayer<I>::shut_down() {
   m_default_namespace_replayer.reset();
 
   m_image_sync_throttler.reset();
+  m_image_deletion_throttler.reset();
 
   m_local_rados.reset();
   m_remote_rados.reset();
@@ -594,7 +598,8 @@ void PoolReplayer<I>::update_namespace_replayers() {
   for (auto &name : mirroring_namespaces) {
     auto namespace_replayer = NamespaceReplayer<I>::create(
         name, m_local_io_ctx, m_remote_io_ctx, m_local_mirror_uuid, m_peer.uuid,
-        m_threads, m_image_sync_throttler.get(), m_service_daemon,
+        m_threads, m_image_sync_throttler.get(),
+        m_image_deletion_throttler.get(), m_service_daemon,
         m_cache_manager_handler);
     auto on_init = new FunctionContext(
         [this, namespace_replayer, name, &mirroring_namespaces,
@@ -771,6 +776,12 @@ void PoolReplayer<I>::print_status(Formatter *f, stringstream *ss) {
     f->open_object_section("sync_throttler");
     m_image_sync_throttler->print_status(f, ss);
     f->close_section(); // sync_throttler
+  }
+
+  if (m_image_deletion_throttler) {
+    f->open_object_section("deletion_throttler");
+    m_image_deletion_throttler->print_status(f, ss);
+    f->close_section(); // deletion_throttler
   }
 
   m_default_namespace_replayer->print_status(f, ss);

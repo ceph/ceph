@@ -260,6 +260,7 @@ private:
 
   std::unique_ptr<LeaderWatcher<ImageCtxT>> m_leader_watcher;
   std::unique_ptr<Throttler<ImageCtxT>> m_image_sync_throttler;
+  std::unique_ptr<Throttler<ImageCtxT>> m_image_deletion_throttler;
 };
 
 } // namespace mirror
