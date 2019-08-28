@@ -1799,8 +1799,10 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max_p,
     if (r < 0)
       return r;
 
-    for (auto eiter = ent_map.begin(); eiter != ent_map.end(); ++eiter) {
-      rgw_bucket_dir_entry& entry = eiter->second;
+    for (auto biter = ent_map.begin(); biter != ent_map.end(); ++biter) {
+      auto eiter = biter->second.cbegin();
+      rgw_bucket_dir_entry entry;
+      entry.decode(eiter);
       rgw_obj_index_key index_key = entry.key;
 
       rgw_obj_key obj(index_key);
@@ -7962,7 +7964,10 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
     // Select the next one
     int pos = candidates.begin()->second;
     const string& name = vcurrents[pos]->first;
-    struct rgw_bucket_dir_entry& dirent = vcurrents[pos]->second;
+    auto bl = vcurrents[pos]->second;
+    auto eiter = bl.cbegin();
+    rgw_bucket_dir_entry dirent;
+    dirent.decode(eiter);
 
     bool force_check = force_check_filter &&
         force_check_filter(dirent.key.name);
@@ -7982,7 +7987,7 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
     if (r >= 0) {
       ldout(cct, 10) << "RGWRados::cls_bucket_list_ordered: got " <<
 	dirent.key.name << "[" << dirent.key.instance << "]" << dendl;
-      m[name] = std::move(dirent);
+      m[name] = std::move(bl);
       ++count;
     }
 
@@ -8107,7 +8112,9 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
       return r;
 
     for (auto& entry : result.dir.m) {
-      rgw_bucket_dir_entry& dirent = entry.second;
+      auto eiter = entry.second.cbegin();
+      rgw_bucket_dir_entry dirent;
+      dirent.decode(eiter);
 
       bool force_check = force_check_filter &&
 	force_check_filter(dirent.key.name);

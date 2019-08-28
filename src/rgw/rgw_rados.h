@@ -1342,7 +1342,7 @@ public:
   int cls_obj_set_bucket_tag_timeout(RGWBucketInfo& bucket_info, uint64_t timeout);
 
   using ent_map_t =
-    boost::container::flat_map<std::string, rgw_bucket_dir_entry>;
+    boost::container::flat_map<std::string, bufferlist>;
 
   int cls_bucket_list_ordered(RGWBucketInfo& bucket_info, int shard_id,
 			      const rgw_obj_index_key& start,

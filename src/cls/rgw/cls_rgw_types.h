@@ -771,7 +771,7 @@ WRITE_CLASS_ENCODER(rgw_bucket_dir_header)
 
 struct rgw_bucket_dir {
   rgw_bucket_dir_header header;
-  boost::container::flat_map<string, rgw_bucket_dir_entry> m;
+  boost::container::flat_map<string, bufferlist> m;
 
   void encode(bufferlist &bl) const {
     ENCODE_START(2, 2, bl);

@@ -477,7 +477,7 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
         continue;
       }
       if (m.size() < op.num_entries) {
-        m[kiter->first] = entry;
+        m[kiter->first] = entrybl;
       }
       left_to_read--;
 

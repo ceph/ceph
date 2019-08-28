@@ -559,7 +559,9 @@ void rgw_bucket_dir::generate_test_instances(list<rgw_bucket_dir*>& o)
     list<rgw_bucket_dir_entry *>::iterator eiter;
     for (eiter = el.begin(); eiter != el.end(); ++eiter) {
       rgw_bucket_dir_entry *e = *eiter;
-      d->m[e->key.name] = *e;
+      bufferlist new_bl;
+      e->encode(new_bl);
+      d->m[e->key.name] = new_bl;
 
       delete e;
     }
@@ -582,7 +584,10 @@ void rgw_bucket_dir::dump(Formatter *f) const
   for (; iter != m.cend(); ++iter) {
     f->dump_string("key", iter->first);
     f->open_object_section("dir_entry");
-    iter->second.dump(f);
+    rgw_bucket_dir_entry entry;
+    auto eiter = iter->second.cbegin();
+    entry.decode(eiter);
+    entry.dump(f);
     f->close_section();
   }
   f->close_section();

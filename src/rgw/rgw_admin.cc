@@ -6254,8 +6254,10 @@ next:
         break;
 
       for (auto iter = result.begin(); iter != result.end(); ++iter) {
-        rgw_obj_key key = iter->second.key;
-        rgw_bucket_dir_entry& entry = iter->second;
+        auto eiter = iter->second.cbegin();
+        rgw_bucket_dir_entry entry;
+        entry.decode(eiter);
+        auto key = entry.key;
 
         formatter->open_object_section("object");
         formatter->dump_string("name", key.name);
