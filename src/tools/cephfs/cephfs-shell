@@ -1379,6 +1379,42 @@ Access: {}\nModify: {}\nChange: {}".format(path.decode('utf-8'), stat.st_size,
             except libcephfs.Error as e:
                 perror(e)
 
+def get_bool_vals_for_boolopts(val):
+    if val.lower() in ['true', 'yes']:
+        return True
+    elif val.lower() in ['false', 'no']:
+        return False
+    else:
+        return val
+
+def read_ceph_conf(shell, config_file):
+    try:
+        shell.debug = get_bool_vals_for_boolopts(cephfs.\
+            conf_get('debug_shell').strip('\n'))
+        shell.allow_ansi = get_bool_vals_for_boolopts(cephfs.\
+            conf_get('allow_ansi').strip('\n'))
+        shell.echo = get_bool_vals_for_boolopts(cephfs.\
+            conf_get('echo').strip('\n'))
+        shell.continuation_prompt = get_bool_vals_for_boolopts(cephfs.\
+            conf_get('continuation_prompt').strip('\n'))
+        shell.colors = get_bool_vals_for_boolopts(cephfs.\
+            conf_get('colors').strip('\n'))
+        shell.editor = get_bool_vals_for_boolopts(cephfs.\
+            conf_get('editor').strip('\n'))
+        shell.feedback_to_output = get_bool_vals_for_boolopts(cephfs.\
+            conf_get('feedback_to_output').strip('\n'))
+        shell.max_completion_items = get_bool_vals_for_boolopts(cephfs.\
+            conf_get('max_completion_items').strip('\n'))
+        shell.prompt = get_bool_vals_for_boolopts(cephfs.\
+            conf_get('prompt').strip('\n'))
+        shell.quiet = get_bool_vals_for_boolopts(cephfs.\
+            conf_get('quiet').strip('\n'))
+        shell.timing = get_bool_vals_for_boolopts(cephfs.\
+            conf_get('timing').strip('\n'))
+    except OSError as e:
+        perror(e)
+    except cephfs.Error as e:
+        perror(e)
 
 if __name__ == '__main__':
     config_file = ''
@@ -1406,6 +1442,8 @@ if __name__ == '__main__':
     sys.argv.clear()
     sys.argv.append(exe)
     sys.argv.extend([i.strip() for i in ' '.join(args.commands).split(',')])
+
     setup_cephfs(config_file)
     shell = CephFSShell()
+    read_ceph_conf(shell, config_file)
     sys.exit(shell.cmdloop())
