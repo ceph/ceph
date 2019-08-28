@@ -363,7 +363,19 @@ int cls_cxx_map_set_val(cls_method_context_t hctx,
                         const string &key,
                         bufferlist *inbl)
 {
-  return 0;
+  OSDOp op{ CEPH_OSD_OP_OMAPSETVALS };
+  {
+    std::map<std::string, ceph::bufferlist> m;
+    m[key] = *inbl;
+    encode(m, op.indata);
+  }
+
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    return 0;
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
 }
 
 int cls_cxx_map_set_vals(cls_method_context_t hctx,
