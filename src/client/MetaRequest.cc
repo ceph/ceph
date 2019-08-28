@@ -10,6 +10,8 @@
 
 void MetaRequest::dump(Formatter *f) const
 {
+  auto age = std::chrono::duration<double>(ceph_clock_now() - op_stamp);
+
   f->dump_unsigned("tid", tid);
   f->dump_string("op", ceph_mds_op_name(head.op));
   f->dump_stream("path") << path;
@@ -29,6 +31,7 @@ void MetaRequest::dump(Formatter *f) const
   f->dump_stream("hint_ino") << inodeno_t(head.ino);
 
   f->dump_stream("sent_stamp") << sent_stamp;
+  f->dump_float("age", age.count());
   f->dump_int("mds", mds);
   f->dump_int("resend_mds", resend_mds);
   f->dump_int("send_to_auth", send_to_auth);
