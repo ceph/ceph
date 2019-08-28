@@ -5,7 +5,7 @@
 
 #include <seastar/core/lowres_clock.hh>
 #include <fmt/format.h>
-#if __has_include(<fmt/chrono.h>)
+#if FMT_VERSION >= 60000
 #include <fmt/chrono.h>
 #else
 #include <fmt/time.h>
@@ -95,9 +95,8 @@ inline uint64_t generate_client_cookie() {
 
 } // namespace anonymous
 
-namespace fmt {
 template <>
-struct formatter<seastar::lowres_system_clock::time_point> {
+struct fmt::formatter<seastar::lowres_system_clock::time_point> {
   // ignore the format string
   template <typename ParseContext>
   constexpr auto parse(ParseContext &ctx) { return ctx.begin(); }
@@ -105,17 +104,14 @@ struct formatter<seastar::lowres_system_clock::time_point> {
   template <typename FormatContext>
   auto format(const seastar::lowres_system_clock::time_point& t,
 	      FormatContext& ctx) {
-    struct tm bdt;
-    time_t tt = std::chrono::duration_cast<std::chrono::seconds>(
+    std::time_t tt = std::chrono::duration_cast<std::chrono::seconds>(
       t.time_since_epoch()).count();
-    localtime_r(&tt, &bdt);
     auto milliseconds = (t.time_since_epoch() %
 			 std::chrono::seconds(1)).count();
-    return format_to(ctx.out(), "{:%Y-%m-%d %H:%M:%S} {:03d}",
-		     bdt, milliseconds);
+    return fmt::format_to(ctx.out(), "{:%Y-%m-%d %H:%M:%S} {:03d}",
+			  fmt::localtime(tt), milliseconds);
   }
 };
-}
 
 namespace std {
 inline ostream& operator<<(
