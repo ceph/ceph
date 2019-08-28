@@ -82,6 +82,7 @@ describe('CrushmapComponent', () => {
                       static: true
                     },
                     status: 'up',
+                    type: 'osd',
                     value: 'osd.0-2 (osd)'
                   }
                 ],
@@ -90,6 +91,7 @@ describe('CrushmapComponent', () => {
                   static: true
                 },
                 status: undefined,
+                type: 'host',
                 value: 'my-host-2 (host)'
               }
             ],
@@ -98,6 +100,7 @@ describe('CrushmapComponent', () => {
               static: true
             },
             status: undefined,
+            type: 'root',
             value: 'default-2 (root)'
           },
           {
@@ -110,6 +113,7 @@ describe('CrushmapComponent', () => {
                       static: true
                     },
                     status: 'up',
+                    type: 'osd',
                     value: 'osd.0 (osd)'
                   },
                   {
@@ -118,6 +122,7 @@ describe('CrushmapComponent', () => {
                       static: true
                     },
                     status: 'down',
+                    type: 'osd',
                     value: 'osd.1 (osd)'
                   },
                   {
@@ -126,6 +131,7 @@ describe('CrushmapComponent', () => {
                       static: true
                     },
                     status: 'up',
+                    type: 'osd',
                     value: 'osd.2 (osd)'
                   }
                 ],
@@ -134,6 +140,7 @@ describe('CrushmapComponent', () => {
                   static: true
                 },
                 status: undefined,
+                type: 'host',
                 value: 'my-host (host)'
               }
             ],
@@ -142,6 +149,7 @@ describe('CrushmapComponent', () => {
               static: true
             },
             status: undefined,
+            type: 'root',
             value: 'default (root)'
           }
         ]);
