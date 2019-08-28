@@ -9,11 +9,13 @@
 # backport PR with the tracker issue.
 #
 # However, before you start, some setup is required. Please be patient and
-# read carefully, all the way through to the end of this comment block, without
-# skimming or skipping :-)
+# read the "Setup instructions" and "Instructions for use" sections, below,
+# carefully. If you still have issues, you could read the "Troubleshooting
+# notes" section as well.
 #
-# Instructions for setup
-# ----------------------
+#
+# Setup instructions
+# ------------------
 #
 # It is strongly suggested to copy the latest version of the script (from
 # the "master" branch) into your PATH. In particular, do not use any version
@@ -50,6 +52,7 @@
 # filesystem, etc.). Without correct values for these four variables, this
 # script will not work!
 #
+#
 # Instructions for use
 # --------------------
 #
@@ -76,7 +79,30 @@
 # optionally, you can set the component label that will be added to the PR with
 # an environment variable:
 #
-# COMPONENT=dashboard ceph-backport.sh 19206 jewel
+# COMPONENT=dashboard ceph-backport.sh 40056 nautilus
+#
+#
+# Troubleshooting notes
+# ---------------------
+#
+# If the script inexplicably fails with:
+#
+#     error: a cherry-pick or revert is already in progress
+#     hint: try "git cherry-pick (--continue | --quit | --abort)"
+#     fatal: cherry-pick failed
+#
+# This is because HEAD is not where git expects it to be:
+#
+#     $ git cherry-pick --abort
+#     warning: You seem to have moved HEAD. Not rewinding, check your HEAD!
+#
+# This can be fixed by issuing the command:
+#
+#     $ git cherry-pick --quit
+#
+#
+# Other backporting resources
+# ---------------------------
 #
 # See https://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO_backport_commits
 # for more info on cherry-picking.
