@@ -147,6 +147,7 @@ export abstract class PageHelper {
     const tagName = await elem.getTagName();
     let label: ElementFinder = null; // Both types are clickable
 
+    await this.waitPresence(elem);
     if (tagName === 'input') {
       if ((await elem.getAttribute('type')) === 'checkbox') {
         label = elem.element(by.xpath('..')).$(`label[for="${await elem.getAttribute('id')}"]`);
@@ -161,6 +162,7 @@ export abstract class PageHelper {
       );
     }
 
+    await this.waitClickable(label);
     return label.click();
   }
 

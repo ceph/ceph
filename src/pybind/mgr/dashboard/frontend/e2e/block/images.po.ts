@@ -71,8 +71,6 @@ export class ImagesPageHelper extends PageHelper {
       .first()
       .click(); // click toggle menu
     await $('li.delete.ng-star-inserted').click(); // click delete
-    // wait for pop-up to be visible (checks for title of pop-up)
-    await this.waitVisibility($('.modal-body'));
     await this.clickCheckbox($('.custom-control-label'));
     await element(by.cssContainingText('button', 'Delete RBD')).click();
     await this.waitStaleness(this.getTableCell(name));
