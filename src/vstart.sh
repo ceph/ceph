@@ -1027,17 +1027,17 @@ fi
 [ -z "$INIT_CEPH" ] && INIT_CEPH=$CEPH_BIN/init-ceph
 
 # sudo if btrfs
-test -d $CEPH_DEV_DIR/osd0/. && test -e $CEPH_DEV_DIR/sudo && SUDO="sudo"
+[ -d $CEPH_DEV_DIR/osd0/. ] && [ -e $CEPH_DEV_DIR/sudo ] && SUDO="sudo"
 
 prun $SUDO rm -f core*
 
-test -d $CEPH_ASOK_DIR || mkdir $CEPH_ASOK_DIR
-test -d $CEPH_OUT_DIR || mkdir $CEPH_OUT_DIR
-test -d $CEPH_DEV_DIR || mkdir $CEPH_DEV_DIR
+[ -d $CEPH_ASOK_DIR ] || mkdir -p $CEPH_ASOK_DIR
+[ -d $CEPH_OUT_DIR  ] || mkdir -p $CEPH_OUT_DIR
+[ -d $CEPH_DEV_DIR  ] || mkdir -p $CEPH_DEV_DIR
 $SUDO rm -rf $CEPH_OUT_DIR/*
-test -d gmon && $SUDO rm -rf gmon/*
+[ -d gmon ] && $SUDO rm -rf gmon/*
 
-[ "$cephx" -eq 1 ] && [ "$new" -eq 1 ] && test -e $keyring_fn && rm $keyring_fn
+[ "$cephx" -eq 1 ] && [ "$new" -eq 1 ] && [ -e $keyring_fn ] && rm $keyring_fn
 
 
 # figure machine's ip
