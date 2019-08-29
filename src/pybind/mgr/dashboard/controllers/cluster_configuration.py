@@ -59,9 +59,9 @@ class ClusterConfiguration(RESTController):
         self._updateable_at_runtime([name])
 
         # Update config option
-        availSections = ['global', 'mon', 'mgr', 'osd', 'mds', 'client']
+        avail_sections = ['global', 'mon', 'mgr', 'osd', 'mds', 'client']
 
-        for section in availSections:
+        for section in avail_sections:
             for entry in value:
                 if not entry['value']:
                     break

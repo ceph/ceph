@@ -108,7 +108,7 @@ class SettingsControllerTest(ControllerTestCase, KVStoreMockMixin):
 
     def test_settings_list(self):
         self._get('/api/settings')
-        data = self.jsonBody()
+        data = self.json_body()
         self.assertTrue(len(data) > 0)
         self.assertStatus(200)
         self.assertIn('default', data[0].keys())
@@ -136,7 +136,7 @@ class SettingsControllerTest(ControllerTestCase, KVStoreMockMixin):
         self.assertInJsonBody('type')
         self.assertInJsonBody('name')
         self.assertInJsonBody('value')
-        self.assertEqual(self.jsonBody()['value'], 'foo')
+        self.assertEqual(self.json_body()['value'], 'foo')
 
     def test_bulk_set(self):
         self._put('/api/settings', {
@@ -147,13 +147,13 @@ class SettingsControllerTest(ControllerTestCase, KVStoreMockMixin):
 
         self._get('/api/settings/grafana-api-username')
         self.assertStatus(200)
-        body = self.jsonBody()
+        body = self.json_body()
         self.assertEqual(body['value'], 'foo')
 
         self._get('/api/settings/grafana-api-username')
         self.assertStatus(200)
-        self.assertEqual(self.jsonBody()['value'], 'foo')
+        self.assertEqual(self.json_body()['value'], 'foo')
 
         self._get('/api/settings/grafana-api-host')
         self.assertStatus(200)
-        self.assertEqual(self.jsonBody()['value'], 'somehost')
+        self.assertEqual(self.json_body()['value'], 'somehost')

@@ -75,7 +75,7 @@ CREATE_EXPORT_SCHEMA = {
 
 
 # pylint: disable=not-callable
-def NfsTask(name, metadata, wait_for):
+def NfsTask(name, metadata, wait_for):  # noqa: N802
     def composed_decorator(func):
         return Task("nfs/{}".format(name), metadata, wait_for,
                     partial(serialize_dashboard_exception,
