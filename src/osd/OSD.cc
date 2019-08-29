@@ -353,9 +353,11 @@ void OSDService::identify_splits_and_merges(
 	   << " pg_nums " << p->second << dendl;
   deque<spg_t> queue;
   queue.push_back(pgid);
+  set<spg_t> did;
   while (!queue.empty()) {
     auto cur = queue.front();
     queue.pop_front();
+    did.insert(cur);
     unsigned pgnum = old_pgnum;
     for (auto q = p->second.lower_bound(old_map->get_epoch());
 	 q != p->second.end() &&
@@ -371,7 +373,8 @@ void OSDService::identify_splits_and_merges(
 		     << " children " << children << dendl;
 	    for (auto i : children) {
 	      split_children->insert(make_pair(i, q->first));
-	      queue.push_back(i);
+              if (!did.count(i))
+	        queue.push_back(i);
 	    }
 	  }
 	} else if (cur.ps() < q->second) {
@@ -401,8 +404,15 @@ void OSDService::identify_splits_and_merges(
 		       << " is merge source, target " << parent
 		       << ", source(s) " << children << dendl;
 	      merge_pgs->insert(make_pair(parent, q->first));
+              if (!did.count(parent)) {
+                // queue (and re-scan) parent in case it might not exist yet
+                // and there are some future splits pending on it
+                queue.push_back(parent);
+              }
 	      for (auto c : children) {
 		merge_pgs->insert(make_pair(c, q->first));
+                if (!did.count(c))
+                  queue.push_back(c);
 	      }
 	    }
 	  } else {
@@ -418,6 +428,8 @@ void OSDService::identify_splits_and_merges(
 		     << " is merge target, source " << children << dendl;
 	    for (auto c : children) {
 	      merge_pgs->insert(make_pair(c, q->first));
+              if (!did.count(c))
+                queue.push_back(c);
 	    }
 	    merge_pgs->insert(make_pair(cur, q->first));
 	  }
