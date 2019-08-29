@@ -1,5 +1,5 @@
 import { $, $$, by, ElementFinder } from 'protractor';
-import { PageHelper } from './page-helper.po';
+import { PageHelper } from '../page-helper.po';
 
 export class DashboardPageHelper extends PageHelper {
   pages = {

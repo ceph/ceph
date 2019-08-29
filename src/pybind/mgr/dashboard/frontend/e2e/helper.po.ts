@@ -10,14 +10,14 @@ import { LogsPageHelper } from './cluster/logs.po';
 import { ManagerModulesPageHelper } from './cluster/mgr-modules.po';
 import { MonitorsPageHelper } from './cluster/monitors.po';
 import { OSDsPageHelper } from './cluster/osds.po';
-import { DashboardPageHelper } from './dashboard.po';
 import { FilesystemsPageHelper } from './filesystems/filesystems.po';
 import { NfsPageHelper } from './nfs/nfs.po';
 import { PoolPageHelper } from './pools/pools.po';
 import { BucketsPageHelper } from './rgw/buckets.po';
 import { DaemonsPageHelper } from './rgw/daemons.po';
 import { UsersPageHelper } from './rgw/users.po';
-import { UserMgmtPageHelper } from './user-mgmt.po';
+import { DashboardPageHelper } from './ui/dashboard.po';
+import { UserMgmtPageHelper } from './ui/user-mgmt.po';
 
 export class Helper {
   pools: PoolPageHelper;
