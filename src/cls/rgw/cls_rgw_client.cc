@@ -423,7 +423,7 @@ void cls_rgw_bucket_unlink_instance(librados::ObjectWriteOperation& op,
   op.exec(RGW_CLASS, RGW_BUCKET_UNLINK_INSTANCE, in);
 }
 
-void cls_rgw_get_olh_log(librados::ObjectReadOperation& op, const cls_rgw_obj_key& olh, uint64_t ver_marker, const string& olh_tag, rgw_cls_read_olh_log_ret *ret, int* op_ret)
+void cls_rgw_get_olh_log(librados::ObjectReadOperation& op, const cls_rgw_obj_key& olh, uint64_t ver_marker, const string& olh_tag, rgw_cls_read_olh_log_ret& log_ret, int& op_ret)
 {
   bufferlist in;
   rgw_cls_read_olh_log_op call;
@@ -431,21 +431,22 @@ void cls_rgw_get_olh_log(librados::ObjectReadOperation& op, const cls_rgw_obj_ke
   call.ver_marker = ver_marker;
   call.olh_tag = olh_tag;
   encode(call, in);
-  op.exec(RGW_CLASS, RGW_BUCKET_READ_OLH_LOG, in, new ClsBucketIndexOpCtx<rgw_cls_read_olh_log_ret>(ret, op_ret));
+  op.exec(RGW_CLASS, RGW_BUCKET_READ_OLH_LOG, in, new ClsBucketIndexOpCtx<rgw_cls_read_olh_log_ret>(&log_ret, &op_ret));
 }
 
-int cls_rgw_get_olh_log(IoCtx& io_ctx, string& oid, librados::ObjectReadOperation& op, const cls_rgw_obj_key& olh, uint64_t ver_marker,
+int cls_rgw_get_olh_log(IoCtx& io_ctx, string& oid, const cls_rgw_obj_key& olh, uint64_t ver_marker,
                         const string& olh_tag,
-                        rgw_cls_read_olh_log_ret *ret)
+                        rgw_cls_read_olh_log_ret& log_ret)
 {
-  int *op_ret;
-  cls_rgw_get_olh_log(op, olh, ver_marker, olh_tag, ret, op_ret);
+  int op_ret = 0;
+  librados::ObjectReadOperation op;
+  cls_rgw_get_olh_log(op, olh, ver_marker, olh_tag, log_ret, op_ret);
   int r = io_ctx.operate(oid, &op, NULL);
   if (r < 0) {
     return r;
   }
   if (op_ret < 0) {
-    return *op_ret;
+    return op_ret;
   }
 
  return r;

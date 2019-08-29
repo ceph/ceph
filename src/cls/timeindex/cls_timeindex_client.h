@@ -83,6 +83,7 @@ void cls_timeindex_trim(
   const std::string& from_marker = std::string(),
   const std::string& to_marker = std::string());
 
+#ifndef CLS_CLIENT_HIDE_IOCTX
 int cls_timeindex_trim(
   librados::IoCtx& io_ctx,
   const std::string& oid,
@@ -90,4 +91,6 @@ int cls_timeindex_trim(
   const utime_t& to_time,
   const std::string& from_marker = std::string(),
   const std::string& to_marker = std::string());
+#endif
+
 #endif
