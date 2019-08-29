@@ -112,6 +112,7 @@ BLOCK_MGR_ROLE = Role('block-manager', 'Block Manager', {
     Scope.POOL: [_P.READ],
     Scope.ISCSI: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.RBD_MIRRORING: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+    Scope.GRAFANA: [_P.READ],
 })
 
 
@@ -119,6 +120,7 @@ BLOCK_MGR_ROLE = Role('block-manager', 'Block Manager', {
 RGW_MGR_ROLE = Role('rgw-manager', 'RGW Manager', {
     Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.CONFIG_OPT: [_P.READ],
+    Scope.GRAFANA: [_P.READ],
 })
 
 
@@ -131,6 +133,7 @@ CLUSTER_MGR_ROLE = Role('cluster-manager', 'Cluster Manager', {
     Scope.MANAGER: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.CONFIG_OPT: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.LOG: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
+    Scope.GRAFANA: [_P.READ],
 })
 
 
@@ -138,12 +141,14 @@ CLUSTER_MGR_ROLE = Role('cluster-manager', 'Cluster Manager', {
 POOL_MGR_ROLE = Role('pool-manager', 'Pool Manager', {
     Scope.POOL: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.CONFIG_OPT: [_P.READ],
+    Scope.GRAFANA: [_P.READ],
 })
 
 # Pool manager role provides all permissions for CephFS related scopes
 CEPHFS_MGR_ROLE = Role('cephfs-manager', 'CephFS Manager', {
     Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.CONFIG_OPT: [_P.READ],
+    Scope.GRAFANA: [_P.READ],
 })
 
 GANESHA_MGR_ROLE = Role('ganesha-manager', 'NFS Ganesha Manager', {
@@ -151,6 +156,7 @@ GANESHA_MGR_ROLE = Role('ganesha-manager', 'NFS Ganesha Manager', {
     Scope.CEPHFS: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.RGW: [_P.READ, _P.CREATE, _P.UPDATE, _P.DELETE],
     Scope.CONFIG_OPT: [_P.READ],
+    Scope.GRAFANA: [_P.READ],
 })
 
 
