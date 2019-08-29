@@ -10987,6 +10987,9 @@ void BlueStore::_kv_sync_thread()
       int r = cct->_conf->bluestore_debug_omit_kv_commit ? 0 : db->submit_transaction_sync(synct);
       ceph_assert(r == 0);
 
+      int committing_size = kv_committing.size();
+      int deferred_size = deferred_stable.size();
+
       {
 	std::unique_lock m{kv_finalize_lock};
 	if (kv_committing_to_finalize.empty()) {
@@ -11027,8 +11030,8 @@ void BlueStore::_kv_sync_thread()
 	ceph::timespan dur_flush = after_flush - start;
 	ceph::timespan dur_kv = finish - after_flush;
 	ceph::timespan dur = finish - start;
-	dout(20) << __func__ << " committed " << kv_committing.size()
-	  << " cleaned " << deferred_stable.size()
+	dout(20) << __func__ << " committed " << committing_size
+	  << " cleaned " << deferred_size
 	  << " in " << dur
 	  << " (" << dur_flush << " flush + " << dur_kv << " kv commit)"
 	  << dendl;
