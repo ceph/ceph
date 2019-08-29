@@ -8789,52 +8789,264 @@ int BlueStore::read(
   return r;
 }
 
-// --------------------------------------------------------
-// intermediate data structures used while reading
-struct region_t {
-  uint64_t logical_offset;
-  uint64_t blob_xoffset;   //region offset within the blob
-  uint64_t length;
+void BlueStore::_read_cache(
+  OnodeRef o,
+  uint64_t offset,
+  size_t length,
+  int read_cache_policy,
+  ready_regions_t& ready_regions,
+  blobs2read_t& blobs2read)
+{
+  // build blob-wise list to of stuff read (that isn't cached)
+  unsigned left = length;
+  uint64_t pos = offset;
+  auto lp = o->extent_map.seek_lextent(offset);
+  while (left > 0 && lp != o->extent_map.extent_map.end()) {
+    if (pos < lp->logical_offset) {
+      unsigned hole = lp->logical_offset - pos;
+      if (hole >= left) {
+        break;
+      }
+      dout(30) << __func__ << "  hole 0x" << std::hex << pos << "~" << hole
+               << std::dec << dendl;
+      pos += hole;
+      left -= hole;
+    }
+    BlobRef& bptr = lp->blob;
+    unsigned l_off = pos - lp->logical_offset;
+    unsigned b_off = l_off + lp->blob_offset;
+    unsigned b_len = std::min(left, lp->length - l_off);
 
-  // used later in read process
-  uint64_t front = 0;
+    ready_regions_t cache_res;
+    interval_set<uint32_t> cache_interval;
+    bptr->shared_blob->bc.read(
+      bptr->shared_blob->get_cache(), b_off, b_len, cache_res, cache_interval,
+      read_cache_policy);
+    dout(20) << __func__ << "  blob " << *bptr << std::hex
+             << " need 0x" << b_off << "~" << b_len
+             << " cache has 0x" << cache_interval
+             << std::dec << dendl;
 
-  region_t(uint64_t offset, uint64_t b_offs, uint64_t len, uint64_t front = 0)
-    : logical_offset(offset),
-    blob_xoffset(b_offs),
-    length(len),
-    front(front){}
-  region_t(const region_t& from)
-    : logical_offset(from.logical_offset),
-    blob_xoffset(from.blob_xoffset),
-    length(from.length),
-    front(from.front){}
-
-  friend ostream& operator<<(ostream& out, const region_t& r) {
-    return out << "0x" << std::hex << r.logical_offset << ":"
-      << r.blob_xoffset << "~" << r.length << std::dec;
+    auto pc = cache_res.begin();
+    uint64_t chunk_size = bptr->get_blob().get_chunk_size(block_size);
+    while (b_len > 0) {
+      unsigned l;
+      if (pc != cache_res.end() &&
+          pc->first == b_off) {
+        l = pc->second.length();
+        ready_regions[pos].claim(pc->second);
+        dout(30) << __func__ << "    use cache 0x" << std::hex << pos << ": 0x"
+                 << b_off << "~" << l << std::dec << dendl;
+        ++pc;
+      } else {
+        l = b_len;
+        if (pc != cache_res.end()) {
+          ceph_assert(pc->first > b_off);
+          l = pc->first - b_off;
+        }
+        dout(30) << __func__ << "    will read 0x" << std::hex << pos << ": 0x"
+                 << b_off << "~" << l << std::dec << dendl;
+        // merge regions
+        {
+          uint64_t r_off = b_off;
+          uint64_t r_len = l;
+          uint64_t front = r_off % chunk_size;
+          if (front) {
+            r_off -= front;
+            r_len += front;
+          }
+          unsigned tail = r_len % chunk_size;
+          if (tail) {
+            r_len += chunk_size - tail;
+          }
+          bool merged = false;
+          regions2read_t& r2r = blobs2read[bptr];
+          if (r2r.size()) {
+            read_req_t& pre = r2r.back();
+            if (r_off <= (pre.r_off + pre.r_len)) {
+              front += (r_off - pre.r_off);
+              pre.r_len += (r_off + r_len - pre.r_off - pre.r_len);
+              pre.regs.emplace_back(region_t(pos, b_off, l, front));
+              merged = true;
+            }
+          }
+          if (!merged) {
+            read_req_t req(r_off, r_len);
+            req.regs.emplace_back(region_t(pos, b_off, l, front));
+            r2r.emplace_back(std::move(req));
+          }
+        }
+      }
+      pos += l;
+      b_off += l;
+      left -= l;
+      b_len -= l;
+    }
+    ++lp;
   }
-};
+}
 
-// merged blob read request
-struct read_req_t {
-  uint64_t r_off = 0;
-  uint64_t r_len = 0;
-  bufferlist bl;
-  std::list<region_t> regs; // original read regions
+int BlueStore::_prepare_read_ioc(
+  blobs2read_t& blobs2read,
+  vector<bufferlist>* compressed_blob_bls,
+  IOContext* ioc)
+{
+  for (auto& p : blobs2read) {
+    const BlobRef& bptr = p.first;
+    regions2read_t& r2r = p.second;
+    dout(20) << __func__ << "  blob " << *bptr << std::hex
+             << " need " << r2r << std::dec << dendl;
+    if (bptr->get_blob().is_compressed()) {
+      // read the whole thing
+      if (compressed_blob_bls->empty()) {
+        // ensure we avoid any reallocation on subsequent blobs
+        compressed_blob_bls->reserve(blobs2read.size());
+      }
+      compressed_blob_bls->push_back(bufferlist());
+      bufferlist& bl = compressed_blob_bls->back();
+      auto r = bptr->get_blob().map(
+        0, bptr->get_blob().get_ondisk_length(),
+        [&](uint64_t offset, uint64_t length) {
+          int r = bdev->aio_read(offset, length, &bl, ioc);
+          if (r < 0)
+            return r;
+          return 0;
+        });
+      if (r < 0) {
+        derr << __func__ << " bdev-read failed: " << cpp_strerror(r) << dendl;
+        if (r == -EIO) {
+          // propagate EIO to caller
+          return r;
+        }
+        ceph_assert(r == 0);
+      }
+    } else {
+      // read the pieces
+      for (auto& req : r2r) {
+        dout(20) << __func__ << "    region 0x" << std::hex
+                 << req.regs.front().logical_offset
+                 << ": 0x" << req.regs.front().blob_xoffset
+                 << " reading 0x" << req.r_off
+                 << "~" << req.r_len << std::dec
+                 << dendl;
 
-  read_req_t(uint64_t off, uint64_t len) : r_off(off), r_len(len) {}
-
-  friend ostream& operator<<(ostream& out, const read_req_t& r) {
-    out << "{<0x" << std::hex << r.r_off << ", 0x" << r.r_len << "> : [";
-    for (const auto& reg : r.regs)
-      out << reg;
-    return out << "]}" << std::dec;
+        // read it
+        auto r = bptr->get_blob().map(
+          req.r_off, req.r_len,
+          [&](uint64_t offset, uint64_t length) {
+            int r = bdev->aio_read(offset, length, &req.bl, ioc);
+            if (r < 0)
+              return r;
+            return 0;
+          });
+        if (r < 0) {
+          derr << __func__ << " bdev-read failed: " << cpp_strerror(r)
+               << dendl;
+          if (r == -EIO) {
+            // propagate EIO to caller
+            return r;
+          }
+          ceph_assert(r == 0);
+        }
+        ceph_assert(req.bl.length() == req.r_len);
+      }
+    }
   }
-};
+  return 0;
+}
 
-typedef list<read_req_t> regions2read_t;
-typedef map<BlueStore::BlobRef, regions2read_t> blobs2read_t;
+int BlueStore::_generate_read_result_bl(
+  OnodeRef o,
+  uint64_t offset,
+  size_t length,
+  ready_regions_t& ready_regions,
+  vector<bufferlist>& compressed_blob_bls,
+  blobs2read_t& blobs2read,
+  bool buffered,
+  bool* csum_error,
+  bufferlist& bl)
+{
+ // enumerate and decompress desired blobs
+  auto p = compressed_blob_bls.begin();
+  blobs2read_t::iterator b2r_it = blobs2read.begin();
+  while (b2r_it != blobs2read.end()) {
+    const BlobRef& bptr = b2r_it->first;
+    regions2read_t& r2r = b2r_it->second;
+    dout(20) << __func__ << "  blob " << *bptr << std::hex
+             << " need 0x" << r2r << std::dec << dendl;
+    if (bptr->get_blob().is_compressed()) {
+      ceph_assert(p != compressed_blob_bls.end());
+      bufferlist& compressed_bl = *p++;
+      if (_verify_csum(o, &bptr->get_blob(), 0, compressed_bl,
+                       r2r.front().regs.front().logical_offset) < 0) {
+        *csum_error = true;
+        return -EIO;
+      }
+      bufferlist raw_bl;
+      auto r = _decompress(compressed_bl, &raw_bl);
+      if (r < 0)
+        return r;
+      if (buffered) {
+        bptr->shared_blob->bc.did_read(bptr->shared_blob->get_cache(), 0,
+                                       raw_bl);
+      }
+      for (auto& req : r2r) {
+        for (auto& r : req.regs) {
+          ready_regions[r.logical_offset].substr_of(
+            raw_bl, r.blob_xoffset, r.length);
+        }
+      }
+    } else {
+      for (auto& req : r2r) {
+        if (_verify_csum(o, &bptr->get_blob(), req.r_off, req.bl,
+                         req.regs.front().logical_offset) < 0) {
+          *csum_error = true;
+          return -EIO;
+        }
+        if (buffered) {
+          bptr->shared_blob->bc.did_read(bptr->shared_blob->get_cache(),
+                                         req.r_off, req.bl);
+        }
+
+        // prune and keep result
+        for (const auto& r : req.regs) {
+          ready_regions[r.logical_offset].substr_of(req.bl, r.front, r.length);
+        }
+      }
+    }
+    ++b2r_it;
+  }
+
+  // generate a resulting buffer
+  auto pr = ready_regions.begin();
+  auto pr_end = ready_regions.end();
+  uint64_t pos = 0;
+  while (pos < length) {
+    if (pr != pr_end && pr->first == pos + offset) {
+      dout(30) << __func__ << " assemble 0x" << std::hex << pos
+               << ": data from 0x" << pr->first << "~" << pr->second.length()
+               << std::dec << dendl;
+      pos += pr->second.length();
+      bl.claim_append(pr->second);
+      ++pr;
+    } else {
+      uint64_t l = length - pos;
+      if (pr != pr_end) {
+        ceph_assert(pr->first > pos + offset);
+        l = pr->first - (pos + offset);
+      }
+      dout(30) << __func__ << " assemble 0x" << std::hex << pos
+               << ": zeros for 0x" << (pos + offset) << "~" << l
+               << std::dec << dendl;
+      bl.append_zero(l);
+      pos += l;
+    }
+  }
+  ceph_assert(bl.length() == length);
+  ceph_assert(pos == length);
+  ceph_assert(pr == pr_end);
+  return 0;
+}
 
 int BlueStore::_do_read(
   Collection *c,
@@ -8883,8 +9095,6 @@ int BlueStore::_do_read(
     cct->_conf->bluestore_log_op_age);
   _dump_onode<30>(cct, *o);
 
-  ready_regions_t ready_regions;
-
   // for deep-scrub, we only read dirty cache and bypass clean cache in
   // order to read underlying block device in case there are silent disk errors.
   if (op_flags & CEPH_OSD_OP_FLAG_BYPASS_CLEAN_CACHE) {
@@ -8893,175 +9103,21 @@ int BlueStore::_do_read(
   }
 
   // build blob-wise list to of stuff read (that isn't cached)
+  ready_regions_t ready_regions;
   blobs2read_t blobs2read;
-  unsigned left = length;
-  uint64_t pos = offset;
-  unsigned num_regions = 0;
-  auto lp = o->extent_map.seek_lextent(offset);
-  while (left > 0 && lp != o->extent_map.extent_map.end()) {
-    if (pos < lp->logical_offset) {
-      unsigned hole = lp->logical_offset - pos;
-      if (hole >= left) {
-	break;
-      }
-      dout(30) << __func__ << "  hole 0x" << std::hex << pos << "~" << hole
-	       << std::dec << dendl;
-      pos += hole;
-      left -= hole;
-    }
-    BlobRef& bptr = lp->blob;
-    unsigned l_off = pos - lp->logical_offset;
-    unsigned b_off = l_off + lp->blob_offset;
-    unsigned b_len = std::min(left, lp->length - l_off);
+  _read_cache(o, offset, length, read_cache_policy, ready_regions, blobs2read);
 
-    ready_regions_t cache_res;
-    interval_set<uint32_t> cache_interval;
-    bptr->shared_blob->bc.read(
-      bptr->shared_blob->get_cache(), b_off, b_len, cache_res, cache_interval,
-      read_cache_policy);
-    dout(20) << __func__ << "  blob " << *bptr << std::hex
-	     << " need 0x" << b_off << "~" << b_len
-	     << " cache has 0x" << cache_interval
-	     << std::dec << dendl;
 
-    auto pc = cache_res.begin();
-    uint64_t chunk_size = bptr->get_blob().get_chunk_size(block_size);
-    while (b_len > 0) {
-      unsigned l;
-      if (pc != cache_res.end() &&
-	  pc->first == b_off) {
-	l = pc->second.length();
-	ready_regions[pos].claim(pc->second);
-	dout(30) << __func__ << "    use cache 0x" << std::hex << pos << ": 0x"
-		 << b_off << "~" << l << std::dec << dendl;
-	++pc;
-      } else {
-	l = b_len;
-	if (pc != cache_res.end()) {
-	  ceph_assert(pc->first > b_off);
-	  l = pc->first - b_off;
-	}
-	dout(30) << __func__ << "    will read 0x" << std::hex << pos << ": 0x"
-		 << b_off << "~" << l << std::dec << dendl;
-	// merge regions
-	{
-	  uint64_t r_off = b_off;
-	  uint64_t r_len = l;
-	  uint64_t front = r_off % chunk_size;
-	  if (front) {
-	    r_off -= front;
-	    r_len += front;
-	  }
-	  unsigned tail = r_len % chunk_size;
-	  if (tail) {
-	    r_len += chunk_size - tail;
-	  }
-	  bool merged = false;
-	  regions2read_t& r2r = blobs2read[bptr];
-	  if (r2r.size()) {
-	    read_req_t& pre = r2r.back();
-	    if (r_off <= (pre.r_off + pre.r_len)) {
-	      front += (r_off - pre.r_off);
-	      pre.r_len += (r_off + r_len - pre.r_off - pre.r_len);
-	      pre.regs.emplace_back(region_t(pos, b_off, l, front));
-	      merged = true;
-	    }
-	  } 
-	  if (!merged) {
-	    read_req_t req(r_off, r_len);
-	    req.regs.emplace_back(region_t(pos, b_off, l, front));
-	    r2r.emplace_back(std::move(req));
-	  }
-	}
-	++num_regions;
-      }
-      pos += l;
-      b_off += l;
-      left -= l;
-      b_len -= l;
-    }
-    ++lp;
-  }
-
-  // read raw blob data.  use aio if we have >1 blobs to read.
+  // read raw blob data.
   start = mono_clock::now(); // for the sake of simplicity
                              // measure the whole block below.
                              // The error isn't that much...
   vector<bufferlist> compressed_blob_bls;
   IOContext ioc(cct, NULL, true); // allow EIO
-  for (auto& p : blobs2read) {
-    const BlobRef& bptr = p.first;
-    regions2read_t& r2r = p.second;
-    dout(20) << __func__ << "  blob " << *bptr << std::hex
-	     << " need " << r2r << std::dec << dendl;
-    if (bptr->get_blob().is_compressed()) {
-      // read the whole thing
-      if (compressed_blob_bls.empty()) {
-	// ensure we avoid any reallocation on subsequent blobs
-	compressed_blob_bls.reserve(blobs2read.size());
-      }
-      compressed_blob_bls.push_back(bufferlist());
-      bufferlist& bl = compressed_blob_bls.back();
-      r = bptr->get_blob().map(
-	0, bptr->get_blob().get_ondisk_length(),
-	[&](uint64_t offset, uint64_t length) {
-	  int r;
-	  // use aio if there are more regions to read than those in this blob
-	  if (num_regions > r2r.size()) {
-	    r = bdev->aio_read(offset, length, &bl, &ioc);
-	  } else {
-	    r = bdev->read(offset, length, &bl, &ioc, false);
-	  }
-	  if (r < 0)
-            return r;
-          return 0;
-	});
-      if (r < 0) {
-        derr << __func__ << " bdev-read failed: " << cpp_strerror(r) << dendl;
-        if (r == -EIO) {
-          // propagate EIO to caller
-          return r;
-        }
-        ceph_assert(r == 0);
-      }
-    } else {
-      // read the pieces
-      for (auto& req : r2r) {
-	dout(20) << __func__ << "    region 0x" << std::hex
-		 << req.regs.front().logical_offset
-		 << ": 0x" << req.regs.front().blob_xoffset
-		 << " reading 0x" << req.r_off
-		 << "~" << req.r_len << std::dec
-		 << dendl;
-
-	// read it
-	r = bptr->get_blob().map(
-	  req.r_off, req.r_len,
-	  [&](uint64_t offset, uint64_t length) {
-	    int r;
-	    // use aio if there is more than one region to read
-	    if (num_regions > 1) {
-	      r = bdev->aio_read(offset, length, &req.bl, &ioc);
-	    } else {
-	      r = bdev->read(offset, length, &req.bl, &ioc, false);
-	    }
-	    if (r < 0)
-              return r;
-            return 0;
-	  });
-        if (r < 0) {
-          derr << __func__ << " bdev-read failed: " << cpp_strerror(r)
-               << dendl;
-          if (r == -EIO) {
-            // propagate EIO to caller
-            return r;
-          }
-          ceph_assert(r == 0);
-        }
-	ceph_assert(req.bl.length() == req.r_len);
-      }
-    }
-  }
+  r = _prepare_read_ioc(blobs2read, &compressed_blob_bls, &ioc);
+  // we always issue aio for reading, so errors other than EIO are not allowed
+  if (r < 0)
+    return r;
 
   int64_t num_ios = length;
   if (ioc.has_pending_aios()) {
@@ -9082,99 +9138,21 @@ int BlueStore::_do_read(
     [&](auto lat) { return ", num_ios = " + stringify(num_ios); }
   );
 
-  // enumerate and decompress desired blobs
-  auto p = compressed_blob_bls.begin();
-  blobs2read_t::iterator b2r_it = blobs2read.begin();
-  while (b2r_it != blobs2read.end()) {
-    const BlobRef& bptr = b2r_it->first;
-    regions2read_t& r2r = b2r_it->second;
-    dout(20) << __func__ << "  blob " << *bptr << std::hex
-	     << " need 0x" << r2r << std::dec << dendl;
-    if (bptr->get_blob().is_compressed()) {
-      ceph_assert(p != compressed_blob_bls.end());
-      bufferlist& compressed_bl = *p++;
-      if (_verify_csum(o, &bptr->get_blob(), 0, compressed_bl,
-        	       r2r.front().regs.front().logical_offset) < 0) {
-        // Handles spurious read errors caused by a kernel bug.
-        // We sometimes get all-zero pages as a result of the read under
-        // high memory pressure. Retrying the failing read succeeds in most 
-        // cases.
-        // See also: http://tracker.ceph.com/issues/22464
-        if (retry_count >= cct->_conf->bluestore_retry_disk_reads) {
-          return -EIO;
-        }
-        return _do_read(c, o, offset, length, bl, op_flags, retry_count + 1);
-      }
-      bufferlist raw_bl;
-      r = _decompress(compressed_bl, &raw_bl);
-      if (r < 0)
-	return r;
-      if (buffered) {
-	bptr->shared_blob->bc.did_read(bptr->shared_blob->get_cache(), 0,
-				       raw_bl);
-      }
-      for (auto& req : r2r) {
-        for (auto& r : req.regs) {
-          ready_regions[r.logical_offset].substr_of(
-            raw_bl, r.blob_xoffset, r.length);
-        }
-      }
-    } else {
-      for (auto& req : r2r) {
-	if (_verify_csum(o, &bptr->get_blob(), req.r_off, req.bl,
-			 req.regs.front().logical_offset) < 0) {
-          // Handles spurious read errors caused by a kernel bug.
-          // We sometimes get all-zero pages as a result of the read under
-          // high memory pressure. Retrying the failing read succeeds in most
-          // cases.
-          // See also: http://tracker.ceph.com/issues/22464
-          if (retry_count >= cct->_conf->bluestore_retry_disk_reads) {
-            return -EIO;
-          }
-          return _do_read(c, o, offset, length, bl, op_flags, retry_count + 1);
-	}
-	if (buffered) {
-	  bptr->shared_blob->bc.did_read(bptr->shared_blob->get_cache(),
-					 req.r_off, req.bl);
-	}
-
-	// prune and keep result
-	for (const auto& r : req.regs) {
-	  ready_regions[r.logical_offset].substr_of(req.bl, r.front, r.length);
-        }
-      }
+  bool csum_error = false;
+  r = _generate_read_result_bl(o, offset, length, ready_regions,
+                              compressed_blob_bls, blobs2read,
+                              buffered, &csum_error, bl);
+  if (csum_error) {
+    // Handles spurious read errors caused by a kernel bug.
+    // We sometimes get all-zero pages as a result of the read under
+    // high memory pressure. Retrying the failing read succeeds in most 
+    // cases.
+    // See also: http://tracker.ceph.com/issues/22464
+    if (retry_count >= cct->_conf->bluestore_retry_disk_reads) {
+      return -EIO;
     }
-    ++b2r_it;
+    return _do_read(c, o, offset, length, bl, op_flags, retry_count + 1);
   }
-
-  // generate a resulting buffer
-  auto pr = ready_regions.begin();
-  auto pr_end = ready_regions.end();
-  pos = 0;
-  while (pos < length) {
-    if (pr != pr_end && pr->first == pos + offset) {
-      dout(30) << __func__ << " assemble 0x" << std::hex << pos
-	       << ": data from 0x" << pr->first << "~" << pr->second.length()
-	       << std::dec << dendl;
-      pos += pr->second.length();
-      bl.claim_append(pr->second);
-      ++pr;
-    } else {
-      uint64_t l = length - pos;
-      if (pr != pr_end) {
-        ceph_assert(pr->first > pos + offset);
-	l = pr->first - (pos + offset);
-      }
-      dout(30) << __func__ << " assemble 0x" << std::hex << pos
-	       << ": zeros for 0x" << (pos + offset) << "~" << l
-	       << std::dec << dendl;
-      bl.append_zero(l);
-      pos += l;
-    }
-  }
-  ceph_assert(bl.length() == length);
-  ceph_assert(pos == length);
-  ceph_assert(pr == pr_end);
   r = bl.length();
   if (retry_count) {
     logger->inc(l_bluestore_reads_with_retries);
