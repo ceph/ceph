@@ -35,6 +35,10 @@
 #include "msg/MessageRef.h"
 #include "msg_types.h"
 
+#ifdef WITH_SEASTAR
+#  include "crimson/net/SocketConnection.h"
+#endif // WITH_SEASTAR
+
 // monitor internal
 #define MSG_MON_SCRUB              64
 #define MSG_MON_ELECTION           65
@@ -221,6 +225,13 @@
 // abstract Message class
 
 class Message : public RefCountedObject {
+public:
+#ifdef WITH_SEASTAR
+  using ConnectionRef = ceph::net::SocketConnectionRef;
+#else
+  using ConnectionRef = ::ConnectionRef;
+#endif // WITH_SEASTAR
+
 protected:
   ceph_msg_header  header;      // headerelope
   ceph_msg_footer  footer;
@@ -317,8 +328,8 @@ protected:
   }
 public:
   const ConnectionRef& get_connection() const { return connection; }
-  void set_connection(const ConnectionRef& c) {
-    connection = c;
+  void set_connection(ConnectionRef c) {
+    connection = std::move(c);
   }
   CompletionHook* get_completion_hook() { return completion_hook; }
   void set_completion_hook(CompletionHook *hook) { completion_hook = hook; }
@@ -492,11 +503,14 @@ public:
   void encode(uint64_t features, int crcflags, bool skip_header_crc = false);
 };
 
-extern Message *decode_message(CephContext *cct, int crcflags,
-			       ceph_msg_header &header,
-			       ceph_msg_footer& footer, ceph::buffer::list& front,
-			       ceph::buffer::list& middle, ceph::buffer::list& data,
-			       Connection* conn);
+extern Message *decode_message(CephContext *cct,
+                               int crcflags,
+                               ceph_msg_header& header,
+                               ceph_msg_footer& footer,
+                               ceph::buffer::list& front,
+                               ceph::buffer::list& middle,
+                               ceph::buffer::list& data,
+                               Message::ConnectionRef conn);
 inline std::ostream& operator<<(std::ostream& out, const Message& m) {
   m.print(out);
   if (m.get_header().version)

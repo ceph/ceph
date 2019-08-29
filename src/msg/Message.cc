@@ -288,11 +288,14 @@ void Message::dump(Formatter *f) const
   f->dump_string("summary", ss.str());
 }
 
-Message *decode_message(CephContext *cct, int crcflags,
-			ceph_msg_header& header,
-			ceph_msg_footer& footer,
-			bufferlist& front, bufferlist& middle,
-			bufferlist& data, Connection* conn)
+Message *decode_message(CephContext *cct,
+                        int crcflags,
+                        ceph_msg_header& header,
+                        ceph_msg_footer& footer,
+                        ceph::bufferlist& front,
+                        ceph::bufferlist& middle,
+                        ceph::bufferlist& data,
+                        Message::ConnectionRef conn)
 {
   // verify crc
   if (crcflags & MSG_CRC_HEADER) {
@@ -886,7 +889,7 @@ Message *decode_message(CephContext *cct, int crcflags,
     return 0;
   }
 
-  m->set_connection(conn);
+  m->set_connection(std::move(conn));
   m->set_header(header);
   m->set_footer(footer);
   m->set_payload(front);
