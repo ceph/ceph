@@ -8591,9 +8591,10 @@ done_ret:
     vector<rgw_raw_obj>::iterator riter;
 
     /* rollback reference */
+    string ref_tag = tag + '\0';
     for (riter = ref_objs.begin(); riter != ref_objs.end(); ++riter) {
       ObjectWriteOperation op;
-      cls_refcount_put(op, tag, true);
+      cls_refcount_put(op, ref_tag, true);
 
       ref.ioctx.locator_set_key(riter->loc);
 
