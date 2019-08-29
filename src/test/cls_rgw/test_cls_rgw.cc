@@ -94,9 +94,8 @@ void index_complete(librados::IoCtx& ioctx, string& oid, RGWModifyOp index_op,
   if (!key.instance.empty()) {
     bufferlist olh_tag;
     olh_tag.append(tag);
-    ObjectWriteOperation op2;
     rgw_zone_set zone_set;
-    ASSERT_EQ(0, cls_rgw_bucket_link_olh(ioctx, op2, oid, key, olh_tag,
+    ASSERT_EQ(0, cls_rgw_bucket_link_olh(ioctx, oid, key, olh_tag,
                                          false, tag, &meta, epoch,
                                          ceph::real_time{}, true, true, zone_set));
   }

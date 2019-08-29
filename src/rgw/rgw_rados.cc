@@ -36,10 +36,6 @@
 #include "cls/rgw/cls_rgw_const.h"
 #include "cls/refcount/cls_refcount_client.h"
 #include "cls/version/cls_version_client.h"
-#include "cls/log/cls_log_client.h"
-#include "cls/lock/cls_lock_client.h"
-#include "cls/user/cls_user_client.h"
-#include "cls/otp/cls_otp_client.h"
 #include "osd/osd_types.h"
 
 #include "rgw_tools.h"
@@ -4101,6 +4097,8 @@ int RGWRados::copy_obj(RGWObjectCtx& obj_ctx,
       const rgw_raw_obj& loc = miter.get_location().get_raw_obj(this);
 
       auto& ioctx = ref.pool.ioctx();
+      ioctx.locator_set_key(loc.loc);
+
       ret = rgw_rados_operate(ioctx, loc.oid, &op, null_yield);
       if (ret < 0) {
         goto done_ret;
@@ -6579,18 +6577,20 @@ int RGWRados::bucket_index_read_olh_log(const RGWBucketInfo& bucket_info, RGWObj
 			ObjectReadOperation op;
 			cls_rgw_guard_bucket_resharding(op, -ERR_BUSY_RESHARDING);
 
-                        rgw_cls_read_olh_log_ret *ret;
-                        int *op_ret;
-			cls_rgw_get_olh_log(op, key, ver_marker, olh_tag, ret, op_ret); 
+                        rgw_cls_read_olh_log_ret log_ret;
+                        int op_ret = 0;
+			cls_rgw_get_olh_log(op, key, ver_marker, olh_tag, log_ret, op_ret); 
                         bufferlist outbl;
                         int r =  rgw_rados_operate(ref.pool.ioctx(), ref.obj.oid, &op, &outbl, null_yield);
                         if (r < 0) {
                           return r;
                         }
                         if (op_ret < 0) {
-                          return *op_ret;
+                          return op_ret;
                         }
 
+                        *log = std::move(log_ret.log);
+                        *is_truncated = log_ret.is_truncated;
                         return r;
 		      });
   if (ret < 0) {
@@ -8236,7 +8236,7 @@ int RGWRados::cls_obj_usage_log_read(const string& oid, const string& user, cons
   return r;
 }
 
-int RGWRados::cls_rgw_usage_log_trim_repeat(rgw_rados_ref ref, const string& user, const string& bucket, uint64_t start_epoch, uint64_t end_epoch)
+static int cls_rgw_usage_log_trim_repeat(rgw_rados_ref ref, const string& user, const string& bucket, uint64_t start_epoch, uint64_t end_epoch)
 {
   bool done = false;
   do {
