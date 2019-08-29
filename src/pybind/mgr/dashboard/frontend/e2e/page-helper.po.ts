@@ -8,9 +8,9 @@ import {
   ElementFinder,
   protractor
 } from 'protractor';
-import { Helper } from './helper.po';
 
 const EC = browser.ExpectedConditions;
+const TIMEOUT = 20000;
 
 interface Pages {
   index: string;
@@ -64,7 +64,7 @@ export abstract class PageHelper {
         if (tableCount > 0) {
           const progressBars = element.all(by.css('cd-table datatable-progress'));
           await progressBars.each(async (progressBar) => {
-            await browser.wait(EC.not(EC.presenceOf(progressBar)), Helper.TIMEOUT);
+            await browser.wait(EC.stalenessOf(progressBar), TIMEOUT);
           });
         }
 
@@ -233,5 +233,37 @@ export abstract class PageHelper {
    */
   getLegends(): ElementArrayFinder {
     return $$('legend');
+  }
+
+  async waitPresence(elem: ElementFinder, message?: string) {
+    return browser.wait(EC.presenceOf(elem), TIMEOUT, message);
+  }
+
+  async waitStaleness(elem: ElementFinder, message?: string) {
+    return browser.wait(EC.stalenessOf(elem), TIMEOUT, message);
+  }
+
+  async waitClickable(elem: ElementFinder, message?: string) {
+    return browser.wait(EC.elementToBeClickable(elem), TIMEOUT, message);
+  }
+
+  async waitVisibility(elem: ElementFinder, message?: string) {
+    return browser.wait(EC.visibilityOf(elem), TIMEOUT, message);
+  }
+
+  async waitInvisibility(elem: ElementFinder, message?: string) {
+    return browser.wait(EC.invisibilityOf(elem), TIMEOUT, message);
+  }
+
+  async waitTextToBePresent(elem: ElementFinder, text: string, message?: string) {
+    return browser.wait(EC.textToBePresentInElement(elem, text), TIMEOUT, message);
+  }
+
+  async waitTextNotPresent(elem: ElementFinder, text: string, message?: string) {
+    return browser.wait(EC.not(EC.textToBePresentInElement(elem, text)), TIMEOUT, message);
+  }
+
+  async waitFn(func: Function, message?: string) {
+    return browser.wait(func, TIMEOUT, message);
   }
 }

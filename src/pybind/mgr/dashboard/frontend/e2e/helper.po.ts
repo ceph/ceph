@@ -20,9 +20,6 @@ import { UsersPageHelper } from './rgw/users.po';
 import { UserMgmtPageHelper } from './user-mgmt.po';
 
 export class Helper {
-  static EC = browser.ExpectedConditions;
-  static TIMEOUT = 10000;
-
   pools: PoolPageHelper;
   buckets: BucketsPageHelper;
   images: ImagesPageHelper;

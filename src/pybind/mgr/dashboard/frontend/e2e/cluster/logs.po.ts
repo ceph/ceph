@@ -1,5 +1,4 @@
 import { $, $$, browser, by, element, protractor } from 'protractor';
-import { Helper } from '../helper.po';
 import { PageHelper } from '../page-helper.po';
 
 browser.ignoreSynchronization = true;
@@ -12,10 +11,7 @@ export class LogsPageHelper extends PageHelper {
 
     // sometimes the modal from deleting pool is still present at this point.
     // This wait makes sure it isn't
-    await browser.wait(
-      Helper.EC.stalenessOf(element(by.cssContainingText('.modal-dialog', 'Delete Pool'))),
-      Helper.TIMEOUT
-    );
+    await this.waitStaleness(element(by.cssContainingText('.modal-dialog', 'Delete Pool')));
 
     // go to audit logs tab
     await element(by.cssContainingText('.nav-link', 'Audit Logs')).click();
@@ -122,7 +118,7 @@ export class LogsPageHelper extends PageHelper {
     const audit_logs_body = audit_logs_tab.element(by.css('.card-body'));
     const logs = audit_logs_body.all(by.cssContainingText('.ng-star-inserted', configname));
 
-    await browser.wait(Helper.EC.presenceOf(logs.first()), Helper.TIMEOUT);
+    await this.waitPresence(logs.first());
 
     await expect(logs.getText()).toMatch(configname);
     await expect(logs.getText()).toMatch(setting);

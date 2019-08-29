@@ -1,5 +1,4 @@
-import { $, browser, by, element } from 'protractor';
-import { Helper } from './helper.po';
+import { $, by, element } from 'protractor';
 import { PageHelper } from './page-helper.po';
 
 export class UserMgmtPageHelper extends PageHelper {
@@ -24,7 +23,7 @@ export class UserMgmtPageHelper extends PageHelper {
     // Click the create button and wait for user to be made
     const createButton = element(by.cssContainingText('button', 'Create User'));
     await createButton.click();
-    await browser.wait(Helper.EC.presenceOf(this.getTableCell(username)), Helper.TIMEOUT);
+    await this.waitPresence(this.getTableCell(username));
   }
 
   async userEdit(username, password, name, email): Promise<void> {
@@ -46,8 +45,8 @@ export class UserMgmtPageHelper extends PageHelper {
     // Click the edit button and check new values are present in table
     const editButton = element(by.cssContainingText('button', 'Edit User'));
     await editButton.click();
-    await browser.wait(Helper.EC.presenceOf(this.getTableCell(email)), Helper.TIMEOUT);
-    await browser.wait(Helper.EC.presenceOf(this.getTableCell(name)), Helper.TIMEOUT);
+    await this.waitPresence(this.getTableCell(email));
+    await this.waitPresence(this.getTableCell(name));
   }
 
   async userDelete(username): Promise<void> {
@@ -57,13 +56,10 @@ export class UserMgmtPageHelper extends PageHelper {
     await $('.table-actions button.dropdown-toggle').click(); // click toggle menu
     await $('li.delete a').click(); // click delete
 
-    await browser.wait(Helper.EC.visibilityOf($('.custom-control-label')), Helper.TIMEOUT);
+    await this.waitVisibility($('.custom-control-label'));
     await $('.custom-control-label').click(); // click confirmation checkbox
     await element(by.cssContainingText('button', 'Delete User')).click();
-    await browser.wait(
-      Helper.EC.stalenessOf(this.getFirstTableCellWithText(username)),
-      Helper.TIMEOUT
-    );
+    await this.waitStaleness(this.getFirstTableCellWithText(username));
   }
 
   async roleCreate(name, description): Promise<void> {
@@ -76,7 +72,7 @@ export class UserMgmtPageHelper extends PageHelper {
     // Click the create button and wait for user to be made
     const createButton = element(by.cssContainingText('button', 'Create Role'));
     await createButton.click();
-    await browser.wait(Helper.EC.presenceOf(this.getTableCell(name)), Helper.TIMEOUT);
+    await this.waitPresence(this.getTableCell(name));
   }
 
   async roleEdit(name, description): Promise<void> {
@@ -93,8 +89,8 @@ export class UserMgmtPageHelper extends PageHelper {
     const editButton = element(by.cssContainingText('button', 'Edit Role'));
     await editButton.click();
 
-    await browser.wait(Helper.EC.presenceOf(this.getTableCell(name)), Helper.TIMEOUT);
-    await browser.wait(Helper.EC.presenceOf(this.getTableCell(description)), Helper.TIMEOUT);
+    await this.waitPresence(this.getTableCell(name));
+    await this.waitPresence(this.getTableCell(description));
   }
 
   async roleDelete(name) {
@@ -104,9 +100,9 @@ export class UserMgmtPageHelper extends PageHelper {
     await $('.table-actions button.dropdown-toggle').click(); // click toggle menu
     await $('li.delete a').click(); // click delete
 
-    await browser.wait(Helper.EC.visibilityOf($('.custom-control-label')), Helper.TIMEOUT);
+    await this.waitVisibility($('.custom-control-label'));
     await $('.custom-control-label').click(); // click confirmation checkbox
     await element(by.cssContainingText('button', 'Delete Role')).click();
-    await browser.wait(Helper.EC.stalenessOf(this.getFirstTableCellWithText(name)), Helper.TIMEOUT);
+    await this.waitStaleness(this.getFirstTableCellWithText(name));
   }
 }
