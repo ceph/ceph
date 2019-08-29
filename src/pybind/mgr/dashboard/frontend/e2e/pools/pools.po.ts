@@ -89,8 +89,6 @@ export class PoolPageHelper extends PageHelper {
     await this.getTableCell(name).click();
     await $('.table-actions button.dropdown-toggle').click(); // open submenu
     await $('li.delete a').click(); // click on "delete" menu item
-    // wait for pop-up to be visible (checks for title of pop-up)
-    await this.waitVisibility($('.modal-body'));
     await this.clickCheckbox($('.custom-control-label'));
     await element(by.cssContainingText('button', 'Delete Pool')).click();
     return this.waitStaleness(this.getTableCell(name));
