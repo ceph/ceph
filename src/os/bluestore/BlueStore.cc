@@ -14712,42 +14712,70 @@ void RocksDBBlueFSVolumeSelector::dump(ostream& sout) {
     << ", db_total:" << l_totals[LEVEL_DB - LEVEL_FIRST]
     << ", slow_total:" << l_totals[LEVEL_SLOW - LEVEL_FIRST]
     << ", db_avail:" << db_avail4slow << std::endl
-    << " usage matrix:" << std::endl;
-  sout << "LEVEL, WAL, DB, SLOW, ****, ****, REAL" << std::endl;
+    << "Usage matrix:" << std::endl;
+  constexpr std::array<const char*, 7> names{ {
+    "DEV/LEV",
+    "WAL",
+    "DB",
+    "SLOW",
+    "*",
+    "*",
+    "REAL"
+  } };
+  const size_t width = 12;
+  for (size_t i = 0; i < names.size(); ++i) {
+    sout.setf(std::ios::left, std::ios::adjustfield);
+    sout.width(width);
+    sout << names[i];
+  }
+  sout << std::endl;
   for (size_t l = 0; l < max_y; l++) {
+    sout.setf(std::ios::left, std::ios::adjustfield);
+    sout.width(width);
     switch (l + LEVEL_FIRST) {
     case LEVEL_WAL:
-      sout << "WAL "; break;
+      sout << "WAL"; break;
     case LEVEL_DB:
-      sout << "DB "; break;
+      sout << "DB"; break;
     case LEVEL_SLOW:
-      sout << "SLOW" << " "; break;
+      sout << "SLOW"; break;
     case LEVEL_MAX:
-      sout << "TOTALS "; break;
+      sout << "TOTALS"; break;
     }
     for (size_t d = 0; d < max_x - 1; d++) {
-      sout << per_level_per_dev_usage.at(d, l) << ",";
+      sout.setf(std::ios::left, std::ios::adjustfield);
+      sout.width(width);
+      sout << stringify(byte_u_t(per_level_per_dev_usage.at(d, l)));
     }
-    sout << per_level_per_dev_usage.at(max_x - 1, l) << std::endl;
+    sout.setf(std::ios::left, std::ios::adjustfield);
+    sout.width(width);
+    sout << stringify(byte_u_t(per_level_per_dev_usage.at(max_x - 1, l)))
+         << std::endl;
   }
   ceph_assert(max_x == per_level_per_dev_max.get_max_x());
   ceph_assert(max_y == per_level_per_dev_max.get_max_y());
   sout << "MAXIMUMS:" << std::endl;
   for (size_t l = 0; l < max_y; l++) {
+    sout.setf(std::ios::left, std::ios::adjustfield);
+    sout.width(width);
     switch (l + LEVEL_FIRST) {
     case LEVEL_WAL:
-      sout << "WAL "; break;
+      sout << "WAL"; break;
     case LEVEL_DB:
-      sout << "DB "; break;
+      sout << "DB"; break;
     case LEVEL_SLOW:
-      sout << "SLOW" << " "; break;
+      sout << "SLOW"; break;
     case LEVEL_MAX:
-      sout << "TOTALS "; break;
+      sout << "TOTALS"; break;
     }
     for (size_t d = 0; d < max_x - 1; d++) {
-      sout << per_level_per_dev_max.at(d, l) << ",";
+      sout.setf(std::ios::left, std::ios::adjustfield);
+      sout.width(width);
+      sout << stringify(byte_u_t(per_level_per_dev_max.at(d, l)));
     }
-    sout << per_level_per_dev_max.at(max_x - 1, l);
+    sout.setf(std::ios::left, std::ios::adjustfield);
+    sout.width(width);
+    sout << stringify(byte_u_t(per_level_per_dev_max.at(max_x - 1, l)));
     if (l < max_y - 1) {
       sout << std::endl;
     }
