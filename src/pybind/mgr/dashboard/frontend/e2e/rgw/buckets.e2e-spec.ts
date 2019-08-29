@@ -1,5 +1,4 @@
 import { $ } from 'protractor';
-import { Helper } from '../helper.po';
 import { BucketsPageHelper } from './buckets.po';
 
 describe('RGW buckets page', () => {
@@ -10,7 +9,7 @@ describe('RGW buckets page', () => {
   });
 
   afterEach(async () => {
-    await Helper.checkConsole();
+    await BucketsPageHelper.checkConsole();
   });
 
   it('should open and show breadcrumb', async () => {

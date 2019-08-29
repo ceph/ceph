@@ -1,4 +1,3 @@
-import { Helper } from '../helper.po';
 import { PoolPageHelper } from '../pools/pools.po';
 import { ConfigurationPageHelper } from './configuration.po';
 import { LogsPageHelper } from './logs.po';
@@ -24,7 +23,7 @@ describe('Logs page', () => {
   });
 
   afterEach(async () => {
-    await Helper.checkConsole();
+    await LogsPageHelper.checkConsole();
   });
 
   describe('breadcrumb and tab tests', () => {

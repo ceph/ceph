@@ -20,6 +20,27 @@ export abstract class PageHelper {
   pages: Pages;
 
   /**
+   * Checks if there are any errors on the browser
+   *
+   * @static
+   * @memberof Helper
+   */
+  static async checkConsole() {
+    let browserLog = await browser
+      .manage()
+      .logs()
+      .get('browser');
+
+    browserLog = browserLog.filter((log) => log.level.value > 900);
+
+    if (browserLog.length > 0) {
+      console.log('\n log: ' + require('util').inspect(browserLog));
+    }
+
+    await expect(browserLog.length).toEqual(0);
+  }
+
+  /**
    * Decorator to be used on Helper methods to restrict access to one particular URL.  This shall
    * help developers to prevent and highlight mistakes.  It also reduces boilerplate code and by
    * thus, increases readability.

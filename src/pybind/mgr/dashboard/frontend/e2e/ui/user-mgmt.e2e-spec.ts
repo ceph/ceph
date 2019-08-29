@@ -1,4 +1,3 @@
-import { Helper } from '../helper.po';
 import { UserMgmtPageHelper } from './user-mgmt.po';
 
 describe('User Management page', () => {
@@ -10,7 +9,7 @@ describe('User Management page', () => {
   });
 
   afterEach(async () => {
-    await Helper.checkConsole();
+    await UserMgmtPageHelper.checkConsole();
   });
 
   describe('breadcrumb tests', () => {

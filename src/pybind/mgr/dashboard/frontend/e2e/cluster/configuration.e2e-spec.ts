@@ -1,5 +1,4 @@
 import { $ } from 'protractor';
-import { Helper } from '../helper.po';
 import { ConfigurationPageHelper } from './configuration.po';
 
 describe('Configuration page', () => {
@@ -10,7 +9,7 @@ describe('Configuration page', () => {
   });
 
   afterEach(async () => {
-    await Helper.checkConsole();
+    await ConfigurationPageHelper.checkConsole();
   });
 
   describe('breadcrumb test', () => {
