@@ -1,6 +1,5 @@
-import { $, browser, by, element } from 'protractor';
+import { $, by, element } from 'protractor';
 import { protractor } from 'protractor/built/ptor';
-import { Helper } from '../helper.po';
 import { PageHelper } from '../page-helper.po';
 
 export class UsersPageHelper extends PageHelper {
@@ -30,13 +29,13 @@ export class UsersPageHelper extends PageHelper {
 
     // Click the create button and wait for user to be made
     await element(by.cssContainingText('button', 'Create User')).click();
-    await browser.wait(Helper.EC.presenceOf(this.getTableCell(username)), 10000);
+    await this.waitPresence(this.getTableCell(username));
   }
 
   async edit(name, new_fullname, new_email, new_maxbuckets) {
     await this.navigateTo();
 
-    await browser.wait(Helper.EC.elementToBeClickable(this.getTableCell(name)), 10000); // wait for table to load
+    await this.waitClickable(this.getTableCell(name)); // wait for table to load
     await this.getTableCell(name).click(); // click on the bucket you want to edit in the table
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
@@ -59,7 +58,7 @@ export class UsersPageHelper extends PageHelper {
 
     const editbutton = element(by.cssContainingText('button', 'Edit User'));
     await editbutton.click();
-    await browser.wait(Helper.EC.elementToBeClickable(this.getTableCell(name)), 10000);
+    await this.waitClickable(this.getTableCell(name));
     // Click the user and check its details table for updated content
     await this.getTableCell(name).click();
     await expect($('.active.tab-pane').getText()).toMatch(new_fullname); // check full name was changed
@@ -72,21 +71,18 @@ export class UsersPageHelper extends PageHelper {
 
     // wait for table to load
     const my_user = this.getFirstTableCellWithText(name);
-    await browser.wait(Helper.EC.elementToBeClickable(my_user), 10000);
+    await this.waitClickable(my_user);
 
     await my_user.click(); // click on the user you want to delete in the table
     await $('.table-actions button.dropdown-toggle').click(); // click toggle menu
     await $('li.delete a').click(); // click delete
 
     // wait for pop-up to be visible (checks for title of pop-up)
-    await browser.wait(Helper.EC.visibilityOf($('.modal-title.float-left')), 10000);
-    await browser.wait(Helper.EC.visibilityOf($('.custom-control-label')), 5000);
+    await this.waitVisibility($('.modal-title.float-left'));
+    await this.waitVisibility($('.custom-control-label'));
     await $('.custom-control-label').click(); // click confirmation checkbox
     await element(by.cssContainingText('button', 'Delete user')).click();
-    await browser.wait(
-      Helper.EC.not(Helper.EC.presenceOf(this.getFirstTableCellWithText(name))),
-      10000
-    );
+    await this.waitStaleness(this.getFirstTableCellWithText(name));
   }
 
   async invalidCreate() {
@@ -104,9 +100,8 @@ export class UsersPageHelper extends PageHelper {
     // Try to give user already taken name. Should make field invalid.
     await username_field.clear();
     await username_field.sendKeys(uname);
-    await browser.wait(
-      async () => !(await username_field.getAttribute('class')).includes('ng-pending'),
-      6000
+    await this.waitFn(
+      async () => !(await username_field.getAttribute('class')).includes('ng-pending')
     );
     await expect(username_field.getAttribute('class')).toContain('ng-invalid');
     await element(by.id('display_name')).click(); // trigger validation check
@@ -166,7 +161,7 @@ export class UsersPageHelper extends PageHelper {
 
     await this.navigateTo();
 
-    await browser.wait(Helper.EC.elementToBeClickable(this.getTableCell(uname)), 10000); // wait for table to load
+    await this.waitClickable(this.getTableCell(uname)); // wait for table to load
     await this.getTableCell(uname).click(); // click on the bucket you want to edit in the table
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
@@ -176,9 +171,8 @@ export class UsersPageHelper extends PageHelper {
     await element(by.id('email')).click();
     await element(by.id('email')).clear();
     await element(by.id('email')).sendKeys('a');
-    await browser.wait(
-      async () => !(await element(by.id('email')).getAttribute('class')).includes('ng-pending'),
-      6000
+    await this.waitFn(
+      async () => !(await element(by.id('email')).getAttribute('class')).includes('ng-pending')
     );
     await expect(element(by.id('email')).getAttribute('class')).toContain('ng-invalid');
     await element(by.id('display_name')).click(); // trigger validation check

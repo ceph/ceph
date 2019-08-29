@@ -1,5 +1,4 @@
-import { $$, browser, by, element } from 'protractor';
-import { Helper } from '../helper.po';
+import { $$, by, element } from 'protractor';
 import { PageHelper } from '../page-helper.po';
 
 export class ManagerModulesPageHelper extends PageHelper {
@@ -17,7 +16,7 @@ export class ManagerModulesPageHelper extends PageHelper {
     // Doesn't check/uncheck boxes because it is not reflected in the details table.
     // DOES NOT WORK FOR ALL MGR MODULES, for example, Device health
     await this.navigateTo();
-    await browser.wait(Helper.EC.elementToBeClickable(this.getTableCell(name)), Helper.TIMEOUT);
+    await this.waitClickable(this.getTableCell(name));
     await this.getTableCell(name).click();
     await element(by.cssContainingText('button', 'Edit')).click();
 
@@ -30,18 +29,15 @@ export class ManagerModulesPageHelper extends PageHelper {
     await element(by.cssContainingText('button', 'Update')).click();
     // Checks if edits appear
     await this.navigateTo();
-    await browser.wait(Helper.EC.visibilityOf(this.getTableCell(name)), Helper.TIMEOUT);
+    await this.waitVisibility(this.getTableCell(name));
     await this.getTableCell(name).click();
     for (const entry of tuple) {
-      await browser.wait(
-        Helper.EC.textToBePresentInElement($$('.datatable-body').last(), entry[0]),
-        Helper.TIMEOUT
-      );
+      await this.waitTextToBePresent($$('.datatable-body').last(), entry[0]);
     }
 
     // Clear mgr module of all edits made to it
     await this.navigateTo();
-    await browser.wait(Helper.EC.elementToBeClickable(this.getTableCell(name)), Helper.TIMEOUT);
+    await this.waitClickable(this.getTableCell(name));
     await this.getTableCell(name).click();
     await element(by.cssContainingText('button', 'Edit')).click();
 
@@ -53,13 +49,10 @@ export class ManagerModulesPageHelper extends PageHelper {
     // Checks that clearing represents in details tab of module
     await element(by.cssContainingText('button', 'Update')).click();
     await this.navigateTo();
-    await browser.wait(Helper.EC.visibilityOf(this.getTableCell(name)), Helper.TIMEOUT);
+    await this.waitVisibility(this.getTableCell(name));
     await this.getTableCell(name).click();
     for (const entry of tuple) {
-      await browser.wait(
-        Helper.EC.not(Helper.EC.textToBePresentInElement($$('.datatable-body').last(), entry[0])),
-        Helper.TIMEOUT
-      );
+      await this.waitTextNotPresent($$('.datatable-body').last(), entry[0]);
     }
   }
 
@@ -86,10 +79,7 @@ export class ManagerModulesPageHelper extends PageHelper {
       [warn, 'warn_threshold']
     ];
 
-    await browser.wait(
-      Helper.EC.elementToBeClickable(this.getTableCell('devicehealth')),
-      Helper.TIMEOUT
-    );
+    await this.waitClickable(this.getTableCell('devicehealth'));
     await this.getTableCell('devicehealth').click();
     await element(by.cssContainingText('button', 'Edit')).click();
     for (let i = 0, devHealthTuple; (devHealthTuple = devHealthArray[i]); i++) {
@@ -102,19 +92,16 @@ export class ManagerModulesPageHelper extends PageHelper {
 
     await element(by.cssContainingText('button', 'Update')).click();
     await this.navigateTo();
-    await browser.wait(Helper.EC.visibilityOf(this.getTableCell('devicehealth')), Helper.TIMEOUT);
+    await this.waitVisibility(this.getTableCell('devicehealth'));
     // Checks for visibility of devicehealth in table
     await this.getTableCell('devicehealth').click();
     for (let i = 0, devHealthTuple; (devHealthTuple = devHealthArray[i]); i++) {
       if (devHealthTuple[0] !== undefined) {
-        await browser.wait(async function() {
+        await this.waitFn(async () => {
           // Repeatedly reclicks the module to check if edits has been done
           await element(by.cssContainingText('.datatable-body-cell-label', 'devicehealth')).click();
-          return Helper.EC.textToBePresentInElement(
-            $$('.datatable-body').last(),
-            devHealthTuple[0]
-          );
-        }, Helper.TIMEOUT);
+          return this.waitTextToBePresent($$('.datatable-body').last(), devHealthTuple[0]);
+        });
       }
     }
 
@@ -123,10 +110,7 @@ export class ManagerModulesPageHelper extends PageHelper {
     // (on my local run of ceph-dev, this is subject to change i would assume). I'd imagine there is a
     // better way of doing this.
     await this.navigateTo();
-    await browser.wait(
-      Helper.EC.elementToBeClickable(this.getTableCell('devicehealth')),
-      Helper.TIMEOUT
-    ); // checks ansible
+    await this.waitClickable(this.getTableCell('devicehealth')); // checks ansible
     await this.getTableCell('devicehealth').click();
     await element(by.cssContainingText('button', 'Edit')).click();
     await this.clearInput(element(by.id('mark_out_threshold')));
@@ -148,22 +132,18 @@ export class ManagerModulesPageHelper extends PageHelper {
     await element(by.id('warn_threshold')).sendKeys('7257600');
 
     // Checks that clearing represents in details tab of ansible
-    await browser.wait(
-      Helper.EC.elementToBeClickable(element(by.cssContainingText('button', 'Update')))
-    );
+    await this.waitClickable(element(by.cssContainingText('button', 'Update')));
     await element(by.cssContainingText('button', 'Update')).click();
     await this.navigateTo();
-    await browser.wait(Helper.EC.visibilityOf(this.getTableCell('devicehealth')), Helper.TIMEOUT);
+    await this.waitVisibility(this.getTableCell('devicehealth'));
     await this.getTableCell('devicehealth').click();
     for (let i = 0, devHealthTuple; (devHealthTuple = devHealthArray[i]); i++) {
       if (devHealthTuple[0] !== undefined) {
-        await browser.wait(async function() {
+        await this.waitFn(async () => {
           // Repeatedly reclicks the module to check if clearing has been done
           await element(by.cssContainingText('.datatable-body-cell-label', 'devicehealth')).click();
-          return Helper.EC.not(
-            Helper.EC.textToBePresentInElement($$('.datatable-body').last(), devHealthTuple[0])
-          );
-        }, Helper.TIMEOUT);
+          return this.waitTextNotPresent($$('.datatable-body').last(), devHealthTuple[0]);
+        });
       }
     }
   }
