@@ -7,7 +7,15 @@ const config = {
   SELENIUM_PROMISE_MANAGER: false,
   allScriptsTimeout: 11000,
   implicitWaitTimeout: 9000,
-  specs: ['./e2e/**/*.e2e-spec.ts'],
+  suites: {
+    block: './e2e/block/*.e2e-spec.ts',
+    cluster: './e2e/cluster/*.e2e-spec.ts',
+    filesystems: './e2e/filesystems/*.e2e-spec.ts',
+    nfs: './e2e/nfs/*.e2e-spec.ts',
+    pools: './e2e/pools/*.e2e-spec.ts',
+    rgw: './e2e/rgw/*.e2e-spec.ts',
+    ui: './e2e/ui/*.e2e-spec.ts'
+  },
   capabilities: {
     browserName: 'chrome',
     chromeOptions: {
