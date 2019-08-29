@@ -268,7 +268,7 @@ class PgAutoscaler(MgrModule):
 
             raw_used_rate = osdmap.pool_raw_used_rate(pool_id)
 
-            pool_logical_used = pool_stats[pool_id]['bytes_used']
+            pool_logical_used = pool_stats[pool_id]['stored']
             bias = p['options'].get('pg_autoscale_bias', 1.0)
             target_bytes = p['options'].get('target_size_bytes', 0)
 
