@@ -108,7 +108,7 @@ export abstract class PageHelper {
   }
 
   getTableCell(content: string): ElementFinder {
-    return element(by.cssContainingText('.datatable-body-cell-label', content));
+    return element.all(by.cssContainingText('.datatable-body-cell-label', content)).first();
   }
 
   getTableRow(content) {
