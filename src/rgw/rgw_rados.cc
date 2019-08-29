@@ -10190,8 +10190,14 @@ int RGWRados::set_attrs(void *ctx, const RGWBucketInfo& bucket_info, rgw_obj& sr
         state->attrset.erase(iter->first);
       }
     }
+
     for (iter = attrs.begin(); iter != attrs.end(); ++iter) {
       state->attrset[iter->first] = iter->second;
+    }
+
+    auto iter = state->attrset.find(RGW_ATTR_ID_TAG);
+    if (iter != state->attrset.end()) {
+      iter->second = state->obj_tag;
     }
   }
 
