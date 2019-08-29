@@ -37,7 +37,6 @@ describe('RGW buckets page', () => {
   it('should delete bucket', async () => {
     await buckets.navigateTo();
     await buckets.delete('000test');
-    await expect(buckets.getTableCell('000test').isPresent()).toBe(false);
   });
 
   describe('Invalid Input in Create and Edit tests', () => {

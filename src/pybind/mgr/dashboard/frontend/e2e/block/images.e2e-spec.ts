@@ -59,15 +59,13 @@ describe('Images page', () => {
     });
 
     it('should delete image', async () => {
-      await images.deleteImage(newImageName);
-      await expect(images.getTableCell(newImageName).isPresent()).toBe(false);
+      await images.navigateTo();
+      await images.delete(newImageName);
     });
 
     afterAll(async () => {
-      await pools.navigateTo(); // Deletes images test pool
-      await pools.delete(poolName);
       await pools.navigateTo();
-      await pools.exist(poolName, false);
+      await pools.delete(poolName);
     });
   });
 

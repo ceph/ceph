@@ -1,4 +1,4 @@
-import { $, by, element } from 'protractor';
+import { by, element } from 'protractor';
 import { PageHelper } from '../page-helper.po';
 
 export class RoleMgmtPageHelper extends PageHelper {
@@ -37,18 +37,5 @@ export class RoleMgmtPageHelper extends PageHelper {
 
     await this.waitPresence(this.getTableCell(name));
     await this.waitPresence(this.getTableCell(description));
-  }
-
-  async delete(name) {
-    await this.navigateTo();
-
-    await this.getTableCell(name).click(); // select role from table
-    await $('.table-actions button.dropdown-toggle').click(); // click toggle menu
-    await $('li.delete a').click(); // click delete
-
-    await this.waitVisibility($('.custom-control-label'));
-    await $('.custom-control-label').click(); // click confirmation checkbox
-    await element(by.cssContainingText('button', 'Delete Role')).click();
-    await this.waitStaleness(this.getFirstTableCellWithText(name));
   }
 }

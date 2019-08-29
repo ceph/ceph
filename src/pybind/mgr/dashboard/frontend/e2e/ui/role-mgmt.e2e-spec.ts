@@ -35,6 +35,7 @@ describe('Role Management page', () => {
     });
 
     it('should delete a role', async () => {
+      await roleMgmt.navigateTo();
       await roleMgmt.delete(role_name);
     });
   });

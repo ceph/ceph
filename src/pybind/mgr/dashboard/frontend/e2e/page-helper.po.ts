@@ -283,4 +283,28 @@ export abstract class PageHelper {
   getFirstCell(): ElementFinder {
     return $$('.datatable-body-cell-label').first();
   }
+
+  /**
+   * This is a generic method to delete table rows.
+   * It will select the first row that contains the provided name and delete it.
+   * After that it will wait until the row is no longer displayed.
+   */
+  async delete(name: string): Promise<any> {
+    // Selects row
+    await this.waitClickable(this.getTableCell(name));
+    await this.getTableCell(name).click();
+
+    // Clicks on table Delete button
+    await $$('.table-actions button.dropdown-toggle')
+      .first()
+      .click(); // open submenu
+    await $('li.delete a').click(); // click on "delete" menu item
+
+    // Confirms deletion
+    await this.clickCheckbox($('.custom-control-label'));
+    await element(by.cssContainingText('button', 'Delete')).click();
+
+    // Waits for item to be removed from table
+    return this.waitStaleness(this.getTableCell(name));
+  }
 }
