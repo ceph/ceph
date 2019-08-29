@@ -1,5 +1,5 @@
 import { $, by, element } from 'protractor';
-import { PageHelper } from './page-helper.po';
+import { PageHelper } from '../page-helper.po';
 
 export class UserMgmtPageHelper extends PageHelper {
   pages = {

@@ -1,13 +1,13 @@
 import { browser } from 'protractor';
-import { IscsiPageHelper } from './block/iscsi.po';
-import { HostsPageHelper } from './cluster/hosts.po';
-import { MonitorsPageHelper } from './cluster/monitors.po';
-import { OSDsPageHelper } from './cluster/osds.po';
+import { IscsiPageHelper } from '../block/iscsi.po';
+import { HostsPageHelper } from '../cluster/hosts.po';
+import { MonitorsPageHelper } from '../cluster/monitors.po';
+import { OSDsPageHelper } from '../cluster/osds.po';
+import { Helper } from '../helper.po';
+import { PageHelper } from '../page-helper.po';
+import { PoolPageHelper } from '../pools/pools.po';
+import { DaemonsPageHelper } from '../rgw/daemons.po';
 import { DashboardPageHelper } from './dashboard.po';
-import { Helper } from './helper.po';
-import { PageHelper } from './page-helper.po';
-import { PoolPageHelper } from './pools/pools.po';
-import { DaemonsPageHelper } from './rgw/daemons.po';
 
 describe('Dashboard Main Page', () => {
   let dashboard: DashboardPageHelper;

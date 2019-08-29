@@ -1,4 +1,4 @@
-import { Helper } from './helper.po';
+import { Helper } from '../helper.po';
 import { UserMgmtPageHelper } from './user-mgmt.po';
 
 describe('User Management page', () => {
