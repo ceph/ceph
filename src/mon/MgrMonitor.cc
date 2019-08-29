@@ -664,18 +664,21 @@ void MgrMonitor::cancel_timer()
 
 void MgrMonitor::on_active()
 {
-  if (mon->is_leader()) {
-    mon->clog->debug() << "mgrmap e" << map.epoch << ": " << map;
-
-    if (HAVE_FEATURE(mon->get_quorum_con_features(), SERVER_NAUTILUS) &&
-	pending_map.always_on_modules != always_on_modules) {
-      pending_map.always_on_modules = always_on_modules;
-      dout(4) << "always on modules changed, pending "
-	      << pending_map.get_always_on_modules()
-	      << " != wanted " << always_on_modules << dendl;
-      propose_pending();
-    }
+  if (!mon->is_leader()) {
+    return;
   }
+  mon->clog->debug() << "mgrmap e" << map.epoch << ": " << map;
+  if (!HAVE_FEATURE(mon->get_quorum_con_features(), SERVER_NAUTILUS)) {
+    return;
+  }
+  if (pending_map.always_on_modules == always_on_modules) {
+    return;
+  }
+  dout(4) << "always on modules changed, pending "
+          << pending_map.always_on_modules << " != wanted "
+          << always_on_modules << dendl;
+  pending_map.always_on_modules = always_on_modules;
+  propose_pending();
 }
 
 void MgrMonitor::tick()
