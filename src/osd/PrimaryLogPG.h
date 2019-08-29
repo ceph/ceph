@@ -1506,11 +1506,6 @@ public:
   void snap_trimmer_scrub_complete() override;
   int do_osd_ops(OpContext *ctx, vector<OSDOp>& ops);
 
-  int _get_tmap(OpContext *ctx, bufferlist *header, bufferlist *vals);
-  int do_tmap2omap(OpContext *ctx, unsigned flags);
-  int do_tmapup(OpContext *ctx, bufferlist::const_iterator& bp, OSDOp& osd_op);
-  int do_tmapup_slow(OpContext *ctx, bufferlist::const_iterator& bp, OSDOp& osd_op, bufferlist& bl);
-
   void do_osd_op_effects(OpContext *ctx, const ConnectionRef& conn);
 private:
   int do_scrub_ls(MOSDOp *op, OSDOp *osd_op);
