@@ -18,6 +18,7 @@
 
 #include "Fwd.h"
 #include "crimson/thread/Throttle.h"
+#include "msg/Message.h"
 #include "msg/Policy.h"
 
 class AuthAuthorizer;

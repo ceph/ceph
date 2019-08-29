@@ -17,12 +17,13 @@
 #include <seastar/core/sharded.hh>
 
 #include "msg/Policy.h"
-#include "Connection.h"
-#include "Socket.h"
+#include "crimson/net/Connection.h"
+#include "crimson/net/Socket.h"
 #include "crimson/thread/Throttle.h"
 
 namespace ceph::net {
 
+class Dispatcher;
 class Protocol;
 class SocketMessenger;
 class SocketConnection;
@@ -91,7 +92,6 @@ class SocketConnection : public Connection {
 
   void print(ostream& out) const override;
 
- public:
   /// start a handshake from the client's perspective,
   /// only call when SocketConnection first construct
   void start_connect(const entity_addr_t& peer_addr,
@@ -107,6 +107,17 @@ class SocketConnection : public Connection {
 
   bool is_lossy() const {
     return policy.lossy;
+  }
+
+  const auto& get_peer_socket_addr() const {
+    return target_addr;
+  }
+
+  auto get_features() const {
+    return features;
+  }
+  bool has_feature(uint64_t f) const {
+    return features & f;
   }
 
   friend class Protocol;

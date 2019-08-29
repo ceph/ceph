@@ -6,9 +6,10 @@
 #include "auth/Auth.h"
 
 #include "crimson/common/log.h"
-#include "Errors.h"
-#include "Socket.h"
-#include "SocketConnection.h"
+#include "crimson/net/Errors.h"
+#include "crimson/net/Socket.h"
+#include "crimson/net/SocketConnection.h"
+#include "msg/Message.h"
 
 namespace {
   seastar::logger& logger() {

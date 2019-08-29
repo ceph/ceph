@@ -1808,8 +1808,11 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
                            0};
     ceph_msg_footer footer{0, 0, 0, 0, current_header.flags};
 
+    auto pconn = seastar::static_pointer_cast<SocketConnection>(
+        conn.shared_from_this());
     Message *message = decode_message(nullptr, 0, header, footer,
-        msg_frame.front(), msg_frame.middle(), msg_frame.data(), nullptr);
+        msg_frame.front(), msg_frame.middle(), msg_frame.data(),
+        std::move(pconn));
     if (!message) {
       logger().warn("{} decode message failed", conn);
       abort_in_fault();
