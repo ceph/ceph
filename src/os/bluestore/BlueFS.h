@@ -415,8 +415,9 @@ public:
   ~BlueFS();
 
   // the super is always stored on bdev 0
-  int mkfs(uuid_d osd_uuid);
+  int mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout);
   int mount();
+  int maybe_verify_layout(const bluefs_layout_t& layout) const;
   void umount();
   int prepare_new_device(int id);
   

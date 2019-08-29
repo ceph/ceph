@@ -5304,12 +5304,13 @@ int BlueStore::_open_bluefs(bool create)
     return r;
   }
   if (create) {
-    bluefs->mkfs(fsid);
+    bluefs->mkfs(fsid, bluefs_layout);
   }
   r = bluefs->mount();
   if (r < 0) {
     derr << __func__ << " failed bluefs mount: " << cpp_strerror(r) << dendl;
   }
+  ceph_assert_always(bluefs->maybe_verify_layout(bluefs_layout) == 0);
   return r;
 }
 
