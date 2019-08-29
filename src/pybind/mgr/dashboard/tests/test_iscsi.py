@@ -407,6 +407,11 @@ iscsi_target_request = {
         }
     ],
     "acl_enabled": True,
+    "auth": {
+        "password": "",
+        "user": "",
+        "mutual_password": "",
+        "mutual_user": ""},
     "target_controls": {},
     "groups": [
         {
@@ -463,6 +468,11 @@ iscsi_target_response = {
         }
     ],
     "acl_enabled": True,
+    "auth": {
+        "password": "",
+        "user": "",
+        "mutual_password": "",
+        "mutual_user": ""},
     'groups': [
         {
             'group_id': 'mygroup',
@@ -499,7 +509,7 @@ class IscsiClientMock(object):
             "gateways": {},
             "targets": {},
             "updated": "",
-            "version": 9
+            "version": 11
         }
 
     @classmethod
@@ -561,6 +571,14 @@ class IscsiClientMock(object):
         self.config['targets'][target_iqn] = {
             "clients": {},
             "acl_enabled": True,
+            "auth": {
+                "username": "",
+                "password": "",
+                "password_encryption_enabled": False,
+                "mutual_username": "",
+                "mutual_password": "",
+                "mutual_password_encryption_enabled": False
+            },
             "controls": target_controls,
             "created": "2019/01/17 09:22:34",
             "disks": [],
@@ -689,8 +707,15 @@ class IscsiClientMock(object):
         self.config['discovery_auth']['mutual_username'] = mutual_user
         self.config['discovery_auth']['mutual_password'] = mutual_password
 
-    def update_targetauth(self, target_iqn, action):
+    def update_targetacl(self, target_iqn, action):
         self.config['targets'][target_iqn]['acl_enabled'] = (action == 'enable_acl')
+
+    def update_targetauth(self, target_iqn, user, password, mutual_user, mutual_password):
+        target_config = self.config['targets'][target_iqn]
+        target_config['auth']['username'] = user
+        target_config['auth']['password'] = password
+        target_config['auth']['mutual_username'] = mutual_user
+        target_config['auth']['mutual_password'] = mutual_password
 
     def get_targetinfo(self, target_iqn):
         # pylint: disable=unused-argument
