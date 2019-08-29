@@ -4,30 +4,39 @@
  Ceph File System
 =================
 
-The Ceph File System (CephFS) is a POSIX-compliant file system that uses
-a Ceph Storage Cluster to store its data. The Ceph file system uses the same Ceph
-Storage Cluster system as Ceph Block Devices, Ceph Object Storage with its S3
-and Swift APIs, or native bindings (librados).
+The Ceph File System, or **CephFS**, is a POSIX-compliant file system built on
+top of Ceph's distributed object store, **RADOS**. CephFS endeavors to provide
+a state-of-the-art, multi-use, highly available, and performant file store for
+a variety of applications, including traditional use-cases like shared home
+directories, HPC scratch space, and distributed workflow shared storage.
+
+CephFS achieves these goals through the use of some novel architectural
+choices.  Notably, file metadata is stored in a separate RADOS pool from file
+data and served via a resizable cluster of *Metadata Servers*, or **MDS**,
+which may scale to support higher throughput metadata workloads.  Clients of
+the file system have direct access to RADOS for reading and writing file data
+blocks. For this reason, workloads may linearly scale with the size of the
+underlying RADOS object store; that is, there is no gateway or broker mediating
+data I/O for clients.
+
+Access to data is coordinated through the cluster of MDS which serve as
+authorities for the state of the distributed metadata cache cooperatively
+maintained by clients and MDS. Mutations to metadata are aggregated by each MDS
+into a series of efficient writes to a journal on RADOS; no metadata state is
+stored locally by the MDS. This model allows for coherent and rapid
+collaboration between clients within the context of a POSIX file system.
+
+.. image:: cephfs-architecture.svg
+
+CephFS is the subject of numerous academic papers for its novel designs and
+contributions to file system research. It is the oldest storage interface in
+Ceph and was once the primary use-case for RADOS.  Now it is joined by two
+other storage interfaces to form a modern unified storage system: RBD (Ceph
+Block Devices) and RGW (Ceph Object Storage Gateway).
 
 .. note:: If you are evaluating CephFS for the first time, please review
           the best practices for deployment: :doc:`/cephfs/best-practices`
 
-.. ditaa::
-            +-----------------------+  +------------------------+
-            |                       |  |      CephFS FUSE       |
-            |                       |  +------------------------+
-            |                       |
-            |                       |  +------------------------+
-            |  CephFS Kernel Object |  |     CephFS Library     |
-            |                       |  +------------------------+
-            |                       |
-            |                       |  +------------------------+
-            |                       |  |        librados        |
-            +-----------------------+  +------------------------+
-
-            +---------------+ +---------------+ +---------------+
-            |      OSDs     | |      MDSs     | |    Monitors   |
-            +---------------+ +---------------+ +---------------+
 
 
 Using CephFS
