@@ -20,6 +20,8 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
   selection: CdTableSelection;
   @Input()
   settings: any;
+  @Input()
+  cephIscsiConfigVersion: number;
 
   @ViewChild('highlightTpl', { static: true })
   highlightTpl: TemplateRef<any>;
@@ -75,7 +77,12 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
   }
 
   private generateTree() {
-    this.metadata = { root: this.selectedItem.target_controls };
+    const target_meta = _.cloneDeep(this.selectedItem.target_controls);
+    // Target level authentication was introduced in ceph-iscsi config v11
+    if (this.cephIscsiConfigVersion > 10) {
+      _.extend(target_meta, _.cloneDeep(this.selectedItem.auth));
+    }
+    this.metadata = { root: target_meta };
     const cssClasses = {
       target: {
         expanded: _.join(
@@ -256,6 +263,16 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
             current: tempData[key] || value
           };
         });
+        // Target level authentication was introduced in ceph-iscsi config v11
+        if (this.cephIscsiConfigVersion > 10) {
+          ['user', 'password', 'mutual_user', 'mutual_password'].forEach((key) => {
+            this.data.push({
+              displayName: key,
+              default: null,
+              current: tempData[key]
+            });
+          });
+        }
       } else if (e.node.id.toString().startsWith('disk_')) {
         this.columns[2].isHidden = false;
         this.data = _.map(this.settings.disk_default_controls[tempData.backstore], (value, key) => {
