@@ -130,6 +130,10 @@ WRITE_CLASS_DENC(bluefs_fnode_t)
 
 ostream& operator<<(ostream& out, const bluefs_fnode_t& file);
 
+struct bluefs_layout_t {
+  unsigned shared_bdev = 0;      ///< which bluefs bdev we are sharing
+  bool single_shared_device = true;
+};
 
 struct bluefs_super_t {
   uuid_d uuid;      ///< unique to this bluefs instance
