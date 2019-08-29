@@ -40,7 +40,6 @@ describe('RGW users page', () => {
 
     it('should delete user', async () => {
       await users.delete(user_name);
-      await expect(users.getTableCell(user_name).isPresent()).toBe(false);
     });
   });
 

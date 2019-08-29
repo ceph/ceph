@@ -64,9 +64,6 @@ describe('Logs page', () => {
       await pools.navigateTo();
       await pools.delete(poolname);
 
-      await pools.navigateTo();
-      await pools.exist(poolname, false);
-
       await logs.navigateTo();
       await logs.checkAuditForPoolFunction(poolname, 'delete', hour, minute);
     });

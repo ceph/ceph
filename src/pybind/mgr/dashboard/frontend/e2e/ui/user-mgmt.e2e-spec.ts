@@ -35,7 +35,8 @@ describe('User Management page', () => {
     });
 
     it('should delete a user', async () => {
-      await userMgmt.userDelete(user_name);
+      await userMgmt.navigateTo();
+      await userMgmt.delete(user_name);
     });
   });
 });

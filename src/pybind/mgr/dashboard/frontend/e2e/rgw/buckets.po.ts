@@ -1,4 +1,4 @@
-import { $, by, element } from 'protractor';
+import { by, element } from 'protractor';
 import { PageHelper } from '../page-helper.po';
 
 const pages = {
@@ -62,23 +62,6 @@ export class BucketsPageHelper extends PageHelper {
       .first();
     await expect(element_details_table.getText()).toMatch(new_owner);
     return promise;
-  }
-
-  @PageHelper.restrictTo(pages.index)
-  async delete(name) {
-    // wait for table to load
-    await this.waitClickable(this.getTableCell(name));
-
-    await this.getTableCell(name).click(); // click on the bucket you want to delete in the table
-    await $('.table-actions button.dropdown-toggle').click(); // click toggle menu
-    await $('li.delete a').click(); // click delete
-    // wait for pop-up to be visible (checks for title of pop-up)
-    await this.waitVisibility($('.modal-title.float-left'));
-    await this.waitVisibility($('.custom-control-label'));
-    await $('.custom-control-label').click();
-    await element(by.cssContainingText('button', 'Delete bucket')).click();
-    await this.navigateTo();
-    return this.waitStaleness(this.getTableCell(name));
   }
 
   async testInvalidCreate() {

@@ -1,4 +1,4 @@
-import { $, by, element } from 'protractor';
+import { by, element } from 'protractor';
 import { PageHelper } from '../page-helper.po';
 
 export class UserMgmtPageHelper extends PageHelper {
@@ -44,18 +44,5 @@ export class UserMgmtPageHelper extends PageHelper {
     await editButton.click();
     await this.waitPresence(this.getTableCell(email));
     await this.waitPresence(this.getTableCell(name));
-  }
-
-  async userDelete(username): Promise<void> {
-    await this.navigateTo();
-
-    await this.getTableCell(username).click(); // select user from table
-    await $('.table-actions button.dropdown-toggle').click(); // click toggle menu
-    await $('li.delete a').click(); // click delete
-
-    await this.waitVisibility($('.custom-control-label'));
-    await $('.custom-control-label').click(); // click confirmation checkbox
-    await element(by.cssContainingText('button', 'Delete User')).click();
-    await this.waitStaleness(this.getFirstTableCellWithText(username));
   }
 }

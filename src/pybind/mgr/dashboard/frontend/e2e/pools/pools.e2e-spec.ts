@@ -47,9 +47,7 @@ describe('Pools page', () => {
   });
 
   it('should delete a pool', async () => {
-    await pools.exist(poolName);
-    await pools.delete(poolName);
     await pools.navigateTo();
-    await pools.exist(poolName, false);
+    await pools.delete(poolName);
   });
 });

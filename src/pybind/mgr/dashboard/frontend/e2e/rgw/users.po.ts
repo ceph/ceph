@@ -66,25 +66,6 @@ export class UsersPageHelper extends PageHelper {
     await expect($('.active.tab-pane').getText()).toMatch(new_maxbuckets); // check max buckets was changed
   }
 
-  async delete(name) {
-    await this.navigateTo();
-
-    // wait for table to load
-    const my_user = this.getFirstTableCellWithText(name);
-    await this.waitClickable(my_user);
-
-    await my_user.click(); // click on the user you want to delete in the table
-    await $('.table-actions button.dropdown-toggle').click(); // click toggle menu
-    await $('li.delete a').click(); // click delete
-
-    // wait for pop-up to be visible (checks for title of pop-up)
-    await this.waitVisibility($('.modal-title.float-left'));
-    await this.waitVisibility($('.custom-control-label'));
-    await $('.custom-control-label').click(); // click confirmation checkbox
-    await element(by.cssContainingText('button', 'Delete user')).click();
-    await this.waitStaleness(this.getFirstTableCellWithText(name));
-  }
-
   async invalidCreate() {
     const uname = '000invalid_create_user';
     // creating this user in order to check that you can't give two users the same name
@@ -151,6 +132,7 @@ export class UsersPageHelper extends PageHelper {
       'The entered value must be >= 0.'
     );
 
+    await this.navigateTo();
     await this.delete(uname);
   }
 
@@ -201,6 +183,7 @@ export class UsersPageHelper extends PageHelper {
       'The entered value must be >= 0.'
     );
 
+    await this.navigateTo();
     await this.delete(uname);
   }
 }

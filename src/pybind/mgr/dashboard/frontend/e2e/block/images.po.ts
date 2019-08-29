@@ -60,22 +60,6 @@ export class ImagesPageHelper extends PageHelper {
     ).toMatch(newSize);
   }
 
-  // Deletes RBD image from table and checks that it is not present
-  async deleteImage(name) {
-    await this.navigateTo();
-
-    // wait for table to load
-    await this.waitClickable(this.getTableCell(name));
-    await this.getTableCell(name).click(); // click on the image you want to delete in the table
-    await $$('.table-actions button.dropdown-toggle')
-      .first()
-      .click(); // click toggle menu
-    await $('li.delete.ng-star-inserted').click(); // click delete
-    await this.clickCheckbox($('.custom-control-label'));
-    await element(by.cssContainingText('button', 'Delete RBD')).click();
-    await this.waitStaleness(this.getTableCell(name));
-  }
-
   // Selects RBD image and moves it to the trash, checks that it is present in the
   // trash table
   async moveToTrash(name) {

@@ -59,8 +59,6 @@ describe('Mirroring page', () => {
     afterAll(async () => {
       await pools.navigateTo();
       await pools.delete(poolName);
-      await pools.navigateTo();
-      await pools.exist(poolName, false);
     });
   });
 });
