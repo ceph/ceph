@@ -3,6 +3,8 @@
 #ifndef CEPH_OS_BLUESTORE_BLUEFS_TYPES_H
 #define CEPH_OS_BLUESTORE_BLUEFS_TYPES_H
 
+#include <optional>
+
 #include "bluestore_types.h"
 #include "include/utime.h"
 #include "include/encoding.h"
@@ -138,7 +140,18 @@ struct bluefs_layout_t {
   bool single_shared_device() const {
     return !dedicated_db && !dedicated_wal;
   }
+
+  bool operator==(const bluefs_layout_t& other) const {
+    return shared_bdev == other.shared_bdev &&
+           dedicated_db == other.dedicated_db &&
+           dedicated_wal == other.dedicated_wal;
+  }
+
+  void encode(ceph::bufferlist& bl) const;
+  void decode(ceph::bufferlist::const_iterator& p);
+  void dump(Formatter *f) const;
 };
+WRITE_CLASS_ENCODER(bluefs_layout_t)
 
 struct bluefs_super_t {
   uuid_d uuid;      ///< unique to this bluefs instance
@@ -147,6 +160,8 @@ struct bluefs_super_t {
   uint32_t block_size;
 
   bluefs_fnode_t log_fnode;
+
+  std::optional<bluefs_layout_t> memorized_layout;
 
   bluefs_super_t()
     : version(0),
