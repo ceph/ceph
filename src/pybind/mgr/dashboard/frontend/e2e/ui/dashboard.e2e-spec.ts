@@ -3,7 +3,6 @@ import { IscsiPageHelper } from '../block/iscsi.po';
 import { HostsPageHelper } from '../cluster/hosts.po';
 import { MonitorsPageHelper } from '../cluster/monitors.po';
 import { OSDsPageHelper } from '../cluster/osds.po';
-import { Helper } from '../helper.po';
 import { PageHelper } from '../page-helper.po';
 import { PoolPageHelper } from '../pools/pools.po';
 import { DaemonsPageHelper } from '../rgw/daemons.po';
@@ -29,7 +28,7 @@ describe('Dashboard Main Page', () => {
   });
 
   afterEach(async () => {
-    await Helper.checkConsole();
+    await DashboardPageHelper.checkConsole();
   });
 
   describe('Check that all hyperlinks on info cards lead to the correct page and fields exist', () => {

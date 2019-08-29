@@ -1,4 +1,3 @@
-import { Helper } from '../helper.po';
 import { UsersPageHelper } from './users.po';
 
 describe('RGW users page', () => {
@@ -10,7 +9,7 @@ describe('RGW users page', () => {
   });
 
   afterEach(async () => {
-    await Helper.checkConsole();
+    await UsersPageHelper.checkConsole();
   });
 
   describe('breadcrumb test', () => {

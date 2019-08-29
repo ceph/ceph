@@ -1,4 +1,3 @@
-import { Helper } from '../helper.po';
 import { PoolPageHelper } from '../pools/pools.po';
 import { MirroringPageHelper } from './mirroring.po';
 
@@ -12,7 +11,7 @@ describe('Mirroring page', () => {
   });
 
   afterEach(async () => {
-    await Helper.checkConsole();
+    await MirroringPageHelper.checkConsole();
   });
 
   describe('breadcrumb and tab tests', () => {

@@ -1,4 +1,3 @@
-import { Helper } from '../helper.po';
 import { PoolPageHelper } from './pools.po';
 
 describe('Pools page', () => {
@@ -11,7 +10,7 @@ describe('Pools page', () => {
   });
 
   afterEach(async () => {
-    await Helper.checkConsole();
+    await PoolPageHelper.checkConsole();
   });
 
   describe('breadcrumb and tab tests', () => {

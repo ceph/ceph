@@ -1,4 +1,3 @@
-import { Helper } from '../helper.po';
 import { DaemonsPageHelper } from './daemons.po';
 
 describe('RGW daemons page', () => {
@@ -9,7 +8,7 @@ describe('RGW daemons page', () => {
   });
 
   afterEach(async () => {
-    await Helper.checkConsole();
+    await DaemonsPageHelper.checkConsole();
   });
 
   describe('breadcrumb and tab tests', () => {

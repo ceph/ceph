@@ -1,4 +1,3 @@
-import { Helper } from '../helper.po';
 import { RoleMgmtPageHelper } from './role-mgmt.po';
 
 describe('Role Management page', () => {
@@ -10,7 +9,7 @@ describe('Role Management page', () => {
   });
 
   afterEach(async () => {
-    await Helper.checkConsole();
+    await RoleMgmtPageHelper.checkConsole();
   });
 
   describe('breadcrumb tests', () => {
