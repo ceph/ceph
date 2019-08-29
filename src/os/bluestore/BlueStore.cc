@@ -4059,7 +4059,6 @@ BlueStore::BlueStore(CephContext *cct, const string& path)
     throttle_deferred_bytes(cct, "bluestore_throttle_deferred_bytes",
 		       cct->_conf->bluestore_throttle_bytes +
 		       cct->_conf->bluestore_throttle_deferred_bytes),
-    deferred_finisher(cct, "defered_finisher", "dfin"),
     finisher(cct, "commit_finisher", "cfin"),
     kv_sync_thread(this),
     kv_finalize_thread(this),
@@ -4079,7 +4078,6 @@ BlueStore::BlueStore(CephContext *cct,
     throttle_deferred_bytes(cct, "bluestore_throttle_deferred_bytes",
 		       cct->_conf->bluestore_throttle_bytes +
 		       cct->_conf->bluestore_throttle_deferred_bytes),
-    deferred_finisher(cct, "defered_finisher", "dfin"),
     finisher(cct, "commit_finisher", "cfin"),
     kv_sync_thread(this),
     kv_finalize_thread(this),
@@ -10782,7 +10780,6 @@ void BlueStore::_kv_start()
 {
   dout(10) << __func__ << dendl;
 
-  deferred_finisher.start();
   finisher.start();
   kv_sync_thread.create("bstore_kv_sync");
   kv_finalize_thread.create("bstore_kv_final");
@@ -10819,8 +10816,6 @@ void BlueStore::_kv_stop()
     kv_finalize_stop = false;
   }
   dout(10) << __func__ << " stopping finishers" << dendl;
-  deferred_finisher.wait_for_empty();
-  deferred_finisher.stop();
   finisher.wait_for_empty();
   finisher.stop();
   dout(10) << __func__ << " stopped" << dendl;
@@ -11302,7 +11297,7 @@ void BlueStore::_deferred_aio_finish(OpSequencer *osr)
       deferred_lock.unlock();
       if (deferred_aggressive) {
 	dout(20) << __func__ << " queuing async deferred_try_submit" << dendl;
-	deferred_finisher.queue(new C_DeferredTrySubmit(this));
+	finisher.queue(new C_DeferredTrySubmit(this));
       } else {
 	dout(20) << __func__ << " leaving queued, more pending" << dendl;
       }
