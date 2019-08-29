@@ -4947,7 +4947,8 @@ int BlueStore::_open_alloc()
 
   if (bluefs) {
     bluefs_extents.clear();
-    auto r = bluefs->get_block_extents(bluefs_shared_bdev, &bluefs_extents);
+    auto r = bluefs->get_block_extents(bluefs_layout.shared_bdev,
+                                       &bluefs_extents);
     if (r < 0) {
       lderr(cct) << __func__ << " failed to retrieve bluefs_extents: "
 		 << cpp_strerror(r) << dendl;
@@ -5198,13 +5199,13 @@ int BlueStore::_minimal_open_bluefs(bool create)
 	SUPER_RESERVED,
 	bluefs->get_block_device_size(BlueFS::BDEV_DB) - SUPER_RESERVED);
     }
-    bluefs_shared_bdev = BlueFS::BDEV_SLOW;
-    bluefs_single_shared_device = false;
+    bluefs_layout.shared_bdev = BlueFS::BDEV_SLOW;
+    bluefs_layout.single_shared_device = false;
   } else {
     r = -errno;
     if (::lstat(bfn.c_str(), &st) == -1) {
       r = 0;
-      bluefs_shared_bdev = BlueFS::BDEV_DB;
+      bluefs_layout.shared_bdev = BlueFS::BDEV_DB;
     } else {
       derr << __func__ << " " << bfn << " symlink exists but target unusable: "
 	    << cpp_strerror(r) << dendl;
@@ -5215,7 +5216,7 @@ int BlueStore::_minimal_open_bluefs(bool create)
   // shared device
   bfn = path + "/block";
   // never trim here
-  r = bluefs->add_block_device(bluefs_shared_bdev, bfn, false,
+  r = bluefs->add_block_device(bluefs_layout.shared_bdev, bfn, false,
 			       true /* shared with bluestore */);
   if (r < 0) {
     derr << __func__ << " add block device(" << bfn << ") returned: "
@@ -5244,7 +5245,7 @@ int BlueStore::_minimal_open_bluefs(bool create)
     start = std::max(alloc_size, start);
     ceph_assert(start >=_get_ondisk_reserved());
 
-    bluefs->add_block_extent(bluefs_shared_bdev, start, initial);
+    bluefs->add_block_extent(bluefs_layout.shared_bdev, start, initial);
     bluefs_extents.insert(start, initial);
     ++out_of_sync_fm;
   }
@@ -5277,7 +5278,7 @@ int BlueStore::_minimal_open_bluefs(bool create)
 	  bluefs->get_block_device_size(BlueFS::BDEV_WAL) -
 	  BDEV_LABEL_BLOCK_SIZE);
     }
-    bluefs_single_shared_device = false;
+    bluefs_layout.single_shared_device = false;
   } else {
     r = 0;
     if (::lstat(bfn.c_str(), &st) != -1) {
@@ -5536,7 +5537,7 @@ int BlueStore::_open_db(bool create, bool to_repair_db, bool read_only)
       fn = "db";
     }
 
-    if (bluefs_shared_bdev == BlueFS::BDEV_SLOW) {
+    if (bluefs_layout.shared_bdev == BlueFS::BDEV_SLOW) {
       // we have both block.db and block; tell rocksdb!
       // note: the second (last) size value doesn't really matter
       ostringstream db_paths;
@@ -5687,7 +5688,7 @@ int BlueStore::allocate_bluefs_freespace(
   ceph_assert(min_size <= size);
   if (size) {
     // round up to alloc size
-    uint64_t alloc_size = bluefs->get_alloc_size(bluefs_shared_bdev);
+    uint64_t alloc_size = bluefs->get_alloc_size(bluefs_layout.shared_bdev);
     min_size = p2roundup(min_size, alloc_size);
     size = p2roundup(size, alloc_size);
 
@@ -5733,7 +5734,7 @@ int BlueStore::allocate_bluefs_freespace(
       ++out_of_sync_fm;
       // apply to bluefs if not requested from outside
       if (!extents_out) {
-        bluefs->add_block_extent(bluefs_shared_bdev, e.offset, e.length);
+        bluefs->add_block_extent(bluefs_layout.shared_bdev, e.offset, e.length);
       }
     }
   }
@@ -5830,11 +5831,11 @@ int BlueStore::_balance_bluefs_freespace()
 
   vector<pair<uint64_t,uint64_t>> bluefs_usage;  // <free, total> ...
   bluefs->get_usage(&bluefs_usage);
-  ceph_assert(bluefs_usage.size() > bluefs_shared_bdev);
+  ceph_assert(bluefs_usage.size() > bluefs_layout.shared_bdev);
 
   bool clear_alert = true;
-  if (bluefs_shared_bdev == BlueFS::BDEV_SLOW) {
-    auto& p = bluefs_usage[bluefs_shared_bdev];
+  if (bluefs_layout.shared_bdev == BlueFS::BDEV_SLOW) {
+    auto& p = bluefs_usage[bluefs_layout.shared_bdev];
     if (p.first != p.second) {
       auto& db = bluefs_usage[BlueFS::BDEV_DB];
       ostringstream ss;
@@ -5851,13 +5852,13 @@ int BlueStore::_balance_bluefs_freespace()
 
   // fixme: look at primary bdev only for now
   int64_t delta = _get_bluefs_size_delta(
-    bluefs_usage[bluefs_shared_bdev].first,
-    bluefs_usage[bluefs_shared_bdev].second);
+    bluefs_usage[bluefs_layout.shared_bdev].first,
+    bluefs_usage[bluefs_layout.shared_bdev].second);
 
   // reclaim from bluefs?
   if (delta < 0) {
     // round up to alloc size
-    uint64_t alloc_size = bluefs->get_alloc_size(bluefs_shared_bdev);
+    uint64_t alloc_size = bluefs->get_alloc_size(bluefs_layout.shared_bdev);
     auto reclaim = p2roundup(uint64_t(-delta), alloc_size);
 
     // hard cap to fit into 32 bits
@@ -5868,7 +5869,7 @@ int BlueStore::_balance_bluefs_freespace()
     while (reclaim > 0) {
       // NOTE: this will block and do IO.
       PExtentVector extents;
-      int r = bluefs->reclaim_blocks(bluefs_shared_bdev, reclaim,
+      int r = bluefs->reclaim_blocks(bluefs_layout.shared_bdev, reclaim,
 				     &extents);
       if (r < 0) {
 	derr << __func__ << " failed to reclaim space from bluefs"
@@ -6475,7 +6476,7 @@ int BlueStore::migrate_to_new_bluefs_device(const set<int>& devs_source,
   string link_db;
   string link_wal;
   if (devs_source.count(BlueFS::BDEV_DB) &&
-      bluefs_shared_bdev != BlueFS::BDEV_DB) {
+      bluefs_layout.shared_bdev != BlueFS::BDEV_DB) {
     link_db = path + "/block.db";
   }
   if (devs_source.count(BlueFS::BDEV_WAL)) {
@@ -6563,7 +6564,7 @@ string BlueStore::get_device_path(unsigned id)
       res = path + "/block.wal";
       break;
     case BlueFS::BDEV_DB:
-      if (id == bluefs_shared_bdev) {
+      if (id == bluefs_layout.shared_bdev) {
 	res = path + "/block";
       } else {
 	res = path + "/block.db";
@@ -6584,7 +6585,7 @@ int BlueStore::expand_devices(ostream& out)
   bluefs->dump_block_extents(out);
   out << "Expanding..." << std::endl;
   for (auto devid : { BlueFS::BDEV_WAL, BlueFS::BDEV_DB}) {
-    if (devid == bluefs_shared_bdev ) {
+    if (devid == bluefs_layout.shared_bdev ) {
       continue;
     }
     uint64_t size = bluefs->get_block_device_size(devid);
@@ -6631,7 +6632,7 @@ int BlueStore::expand_devices(ostream& out)
   uint64_t size0 = fm->get_size();
   uint64_t size = bdev->get_size();
   if (size0 < size) {
-    out << bluefs_shared_bdev
+    out << bluefs_layout.shared_bdev
 	<<" : expanding " << " from 0x" << std::hex
 	<< size0 << " to 0x" << size << std::dec << std::endl;
     KeyValueDB::Transaction txn;
@@ -6656,7 +6657,7 @@ int BlueStore::expand_devices(ostream& out)
 	derr << "unable to write label for " << path << ": "
 	      << cpp_strerror(r) << dendl;
       } else {
-	out << bluefs_shared_bdev
+	out << bluefs_layout.shared_bdev
 	      <<" : size label updated to " << size
 	      << std::endl;
       }
@@ -8320,8 +8321,9 @@ void BlueStore::collect_metadata(map<string,string> *pm)
   bdev->collect_metadata("bluestore_bdev_", pm);
   if (bluefs) {
     (*pm)["bluefs"] = "1";
-    (*pm)["bluefs_single_shared_device"] = stringify((int)bluefs_single_shared_device);
-    bluefs->collect_metadata(pm, bluefs_shared_bdev);
+    (*pm)["bluefs_single_shared_device"] = \
+      stringify((int)bluefs_layout.single_shared_device);
+    bluefs->collect_metadata(pm, bluefs_layout.shared_bdev);
   } else {
     (*pm)["bluefs"] = "0";
   }
@@ -8440,8 +8442,8 @@ void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
   uint64_t bfree = alloc->get_free();
 
   if (bluefs) {
-    int64_t bluefs_total = bluefs->get_total(bluefs_shared_bdev);
-    int64_t bluefs_free = bluefs->get_free(bluefs_shared_bdev);
+    int64_t bluefs_total = bluefs->get_total(bluefs_layout.shared_bdev);
+    int64_t bluefs_free = bluefs->get_free(bluefs_layout.shared_bdev);
     // part of our shared device is "free" according to BlueFS, but we
     // can't touch bluestore_bluefs_min of it.
     int64_t shared_available = std::min(
@@ -8452,7 +8454,7 @@ void BlueStore::_get_statfs_overall(struct store_statfs_t *buf)
       bfree += shared_available;
     }
     // include dedicated db, too, if that isn't the shared device.
-    if (bluefs_shared_bdev != BlueFS::BDEV_DB) {
+    if (bluefs_layout.shared_bdev != BlueFS::BDEV_DB) {
       buf->total += bluefs->get_total(BlueFS::BDEV_DB);
     }
     // call any non-omap bluefs space "internal metadata"
@@ -10877,7 +10879,7 @@ void BlueStore::_kv_sync_thread()
       // can rely on the bluefs commit to flush the device and make
       // deferred aios stable.  that means that if we do have done deferred
       // txcs AND we are not on a single device, we need to force a flush.
-      if (bluefs_single_shared_device && bluefs) {
+      if (bluefs_layout.single_shared_device && bluefs) {
 	if (aios) {
 	  force_flush = true;
 	} else if (kv_committing.empty() && deferred_stable.empty()) {
