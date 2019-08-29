@@ -31,7 +31,7 @@ def handle_rbd_mirror_error():
 
 
 # pylint: disable=not-callable
-def RbdMirroringTask(name, metadata, wait_for):
+def RbdMirroringTask(name, metadata, wait_for):  # noqa: N802
     def composed_decorator(func):
         func = handle_rbd_mirror_error()(func)
         return Task("rbd/mirroring/{}".format(name), metadata, wait_for,

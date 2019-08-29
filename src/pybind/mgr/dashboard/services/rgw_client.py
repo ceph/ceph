@@ -4,7 +4,7 @@ from __future__ import absolute_import
 import re
 import ipaddress
 from distutils.util import strtobool
-import xml.etree.ElementTree as ET
+import xml.etree.ElementTree as ET  # noqa: N814
 import six
 from ..awsauth import S3Auth
 from ..settings import Settings, Options

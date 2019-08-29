@@ -123,7 +123,7 @@ class TaskTest(unittest.TestCase):
         TaskManager.FINISHED_TASK_SIZE = 10
         TaskManager.FINISHED_TASK_TTL = 60.0
 
-    def assertTaskResult(self, result):
+    def assertTaskResult(self, result):  # noqa: N802
         self.assertEqual(result,
                          {'args': ['dummy arg'], 'kwargs': {'dummy': 'arg'}})
 

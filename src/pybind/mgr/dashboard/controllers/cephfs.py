@@ -73,7 +73,7 @@ class CephFS(RESTController):
         result = {}
         mds_names = self._get_mds_names(fs_id)
 
-        def __to_second(point):
+        def _to_second(point):
             return (point[0] // 1000000000, point[1])
 
         for mds_name in mds_names:
@@ -82,7 +82,7 @@ class CephFS(RESTController):
                 data = mgr.get_counter("mds", mds_name, counter)
                 if data is not None:
                     result[mds_name][counter] = list(
-                        map(__to_second, data[counter]))
+                        map(_to_second, data[counter]))
                 else:
                     result[mds_name][counter] = []
 

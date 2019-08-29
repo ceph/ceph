@@ -69,7 +69,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         self.assertNotIn(rolename, db['roles'])
 
     def validate_persistent_user(self, username, roles, password=None,
-                                 name=None, email=None, lastUpdate=None,
+                                 name=None, email=None, last_update=None,
                                  enabled=True):
         db = self.load_persistent_db()
         self.assertIn('users', db)
@@ -82,8 +82,8 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
             self.assertEqual(db['users'][username]['name'], name)
         if email:
             self.assertEqual(db['users'][username]['email'], email)
-        if lastUpdate:
-            self.assertEqual(db['users'][username]['lastUpdate'], lastUpdate)
+        if last_update:
+            self.assertEqual(db['users'][username]['lastUpdate'], last_update)
         self.assertEqual(db['users'][username]['enabled'], enabled)
 
     def validate_persistent_no_user(self, username):

@@ -86,10 +86,10 @@ class JwtManager(object):
             dtoken = JwtManager.decode_token(token)
             if not JwtManager.is_blacklisted(dtoken['jti']):
                 user = AuthManager.get_user(dtoken['username'])
-                if user.lastUpdate <= dtoken['iat']:
+                if user.last_update <= dtoken['iat']:
                     return user
-                logger.debug("AMT: user info changed after token was issued, iat=%s lastUpdate=%s",
-                             dtoken['iat'], user.lastUpdate)
+                logger.debug("AMT: user info changed after token was issued, iat=%s last_update=%s",
+                             dtoken['iat'], user.last_update)
             else:
                 logger.debug('AMT: Token is black-listed')
         except jwt.exceptions.ExpiredSignatureError:
