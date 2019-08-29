@@ -53,10 +53,16 @@ int cls_read(cls_method_context_t hctx,
 
 int cls_get_request_origin(cls_method_context_t hctx, entity_inst_t *origin)
 {
-  assert(origin)
-  *origin =
-    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->get_orig_source_inst();
-  return 0;
+  assert(origin);
+
+  try {
+    const auto& message = \
+      reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->get_message();
+    *origin = message.get_orig_source_inst();
+    return 0;
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
 }
 
 int cls_cxx_create(cls_method_context_t hctx, const bool exclusive)

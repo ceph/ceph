@@ -109,8 +109,8 @@ public:
   template <typename Func>
   seastar::future<> submit_changes(Func&& f) &&;
 
-  auto get_orig_source_inst() const {
-    return msg->get_orig_source_inst();
+  const auto& get_message() const {
+    return *msg;
   }
 };
 
