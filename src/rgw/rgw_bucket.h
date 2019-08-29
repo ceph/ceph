@@ -359,7 +359,7 @@ public:
   int remove_object(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
   int policy_bl_to_stream(bufferlist& bl, ostream& o);
   int get_policy(RGWBucketAdminOpState& op_state, RGWAccessControlPolicy& policy, optional_yield y);
-  int sync(RGWBucketAdminOpState& op_state, std::string *err_msg = NULL);
+  int sync(RGWBucketAdminOpState& op_state, map<string, bufferlist> *attrs, std::string *err_msg = NULL);
 
   void clear_failure() { failure = false; }
 

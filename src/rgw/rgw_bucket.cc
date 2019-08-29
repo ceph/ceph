@@ -34,6 +34,8 @@
 #include "services/svc_meta_be_sobj.h"
 #include "services/svc_user.h"
 #include "services/svc_cls.h"
+#include "services/svc_bilog_rados.h"
+#include "services/svc_datalog_rados.h"
 
 #include "include/rados/librados.hpp"
 // until everything is moved from rgw_common
@@ -1068,9 +1070,9 @@ int RGWBucket::check_index(RGWBucketAdminOpState& op_state,
   return 0;
 }
 
-int RGWBucket::sync(RGWBucketAdminOpState& op_state, std::string *err_msg)
+int RGWBucket::sync(RGWBucketAdminOpState& op_state, map<string, bufferlist> *attrs, std::string *err_msg)
 {
-  if (!store->getRados()->svc.zone->is_meta_master()) {
+  if (!store->svc()->zone->is_meta_master()) {
     set_err_msg(err_msg, "ERROR: failed to update bucket sync: only allowed on meta master zone");
     return EINVAL;
   }
@@ -1081,7 +1083,7 @@ int RGWBucket::sync(RGWBucketAdminOpState& op_state, std::string *err_msg)
     bucket_info.flags |= BUCKET_DATASYNC_DISABLED;
   }
 
-  int r = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), &attrs);
+  int r = store->getRados()->put_bucket_instance_info(bucket_info, false, real_time(), attrs);
   if (r < 0) {
     set_err_msg(err_msg, "ERROR: failed writing bucket instance info:" + cpp_strerror(-r));
     return r;
@@ -1091,13 +1093,13 @@ int RGWBucket::sync(RGWBucketAdminOpState& op_state, std::string *err_msg)
   int shard_id = bucket_info.num_shards? 0 : -1;
 
   if (!sync) {
-    r = store->getRados()->stop_bi_log_entries(bucket_info, -1);
+    r = store->svc()->bilog_rados->log_stop(bucket_info, -1);
     if (r < 0) {
       set_err_msg(err_msg, "ERROR: failed writing stop bilog:" + cpp_strerror(-r));
       return r;
     }
   } else {
-    r = store->getRados()->resync_bi_log_entries(bucket_info, -1);
+    r = store->svc()->bilog_rados->log_start(bucket_info, -1);
     if (r < 0) {
       set_err_msg(err_msg, "ERROR: failed writing resync bilog:" + cpp_strerror(-r));
       return r;
@@ -1105,7 +1107,7 @@ int RGWBucket::sync(RGWBucketAdminOpState& op_state, std::string *err_msg)
   }
 
   for (int i = 0; i < shards_num; ++i, ++shard_id) {
-    r = store->getRados()->data_log->add_entry(bucket_info.bucket, shard_id);
+    r = store->svc()->datalog_rados->add_entry(bucket_info.bucket, shard_id);
     if (r < 0) {
       set_err_msg(err_msg, "ERROR: failed writing data log:" + cpp_strerror(-r));
       return r;
@@ -1343,12 +1345,13 @@ int RGWBucketAdminOp::remove_object(RGWRadosStore *store, RGWBucketAdminOpState&
 int RGWBucketAdminOp::sync_bucket(RGWRadosStore *store, RGWBucketAdminOpState& op_state, string *err_msg)
 {
   RGWBucket bucket;
-  int ret = bucket.init(store, op_state, null_yield);
+  map<string, bufferlist> attrs;
+  int ret = bucket.init(store, op_state, null_yield, err_msg, &attrs);
   if (ret < 0)
   {
     return ret;
   }
-  return bucket.sync(op_state, err_msg);
+  return bucket.sync(op_state, &attrs, err_msg);
 }
 
 static int bucket_stats(RGWRadosStore *store, const std::string& tenant_name, std::string&  bucket_name, Formatter *formatter)
