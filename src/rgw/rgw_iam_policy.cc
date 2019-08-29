@@ -1431,5 +1431,36 @@ ostream& operator <<(ostream& m, const Policy& p) {
   return m << " }";
 }
 
+static const Environment iam_all_env = {
+					{"aws:SourceIp","1.1.1.1"},
+					{"aws:UserId","anonymous"},
+					{"s3:x-amz-server-side-encryption-aws-kms-key-id","secret"}
+};
+
+struct IsPublicStatement
+{
+  bool operator() (const Statement &s) const {
+    if (s.effect == Effect::Allow) {
+      for (const auto& p : s.princ) {
+	if (p.is_wildcard()) {
+	  if (s.eval_conditions(iam_all_env) == Effect::Allow)
+	    return true;
+	}
+      }
+      // no princ should not contain fixed values
+      return std::all_of(s.noprinc.begin(), s.noprinc.end(), [](const rgw::auth::Principal& p) {
+								return !p.is_wildcard();
+							     });
+    }
+    return false;
+  }
+};
+
+
+bool IsPublic(const Policy& p)
+{
+  return std::any_of(p.statements.begin(), p.statements.end(), IsPublicStatement());
 }
-}
+
+} // namespace IAM
+} // namespace rgw
