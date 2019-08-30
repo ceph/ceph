@@ -894,7 +894,7 @@ class Orchestrator(object):
         raise NotImplementedError()
 
     def update_rgw(self, spec):
-        # type: (StatelessServiceSpec) -> Completion
+        # type: (RGWSpec) -> Completion
         """
         Update / redeploy existing RGW zone
         Like for example changing the number of service instances.
