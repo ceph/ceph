@@ -585,6 +585,10 @@ public:
     return _truncate(h, offset);
   }
 
+  /// test purpose methods
+  const PerfCounters* get_perf_counters() const {
+    return logger;
+  }
 };
 
 class OriginalVolumeSelector : public BlueFSVolumeSelector {

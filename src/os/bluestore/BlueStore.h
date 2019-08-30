@@ -2671,6 +2671,9 @@ public:
   const PerfCounters* get_perf_counters() const override {
     return logger;
   }
+  const PerfCounters* get_bluefs_perf_counters() const {
+    return bluefs->get_perf_counters();
+  }
 
   int queue_transactions(
     CollectionHandle& ch,
