@@ -131,7 +131,8 @@ class AuthTest(DashboardTestCase):
         self._get("/api/host")
         self.assertStatus(200)
         time.sleep(1)
-        self._ceph_cmd(['dashboard', 'ac-user-set-password', 'user', 'user2'])
+        self._ceph_cmd(['dashboard', 'ac-user-set-password', '--force-password',
+                        'user', 'user2'])
         time.sleep(1)
         self._get("/api/host")
         self.assertStatus(401)
