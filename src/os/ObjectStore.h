@@ -487,6 +487,58 @@ public:
 		      uint64_t offset, size_t len, std::map<uint64_t, uint64_t>& destmap) = 0;
 
   /**
+   * readv -- read specfic intervals from an object;
+   * caller must call fiemap to fill in the extent-map first.
+   *
+   * Note: if reading from an offset past the end of the object, we
+   * return 0 (not, say, -EINVAL). Also the default version of readv
+   * reads each extent separately synchronously, which can become horribly
+   * inefficient if the physical layout of the pushing object get massively
+   * fragmented and hence should be overridden by any real os that
+   * cares about the performance..
+   *
+   * @param cid collection for object
+   * @param oid oid of object
+   * @param m intervals to be read
+   * @param bl output ceph::buffer::list
+   * @param op_flags is CEPH_OSD_OP_FLAG_*
+   * @returns number of bytes read on success, or negative error code on failure.
+   */
+   virtual int readv(
+     CollectionHandle &c,
+     const ghobject_t& oid,
+     interval_set<uint64_t>& m,
+     ceph::buffer::list& bl,
+     uint32_t op_flags = 0) {
+     int total = 0;
+     for (auto p = m.begin(); p != m.end(); p++) {
+       bufferlist t;
+       int r = read(c, oid, p.get_start(), p.get_len(), t, op_flags);
+       if (r < 0)
+         return r;
+       total += r;
+       // prune fiemap, if necessary
+       if (p.get_len() != t.length()) {
+          auto save = p++;
+          if (t.length() == 0) {
+            m.erase(save); // Remove this empty interval
+          } else {
+            save.set_len(t.length()); // fix interval length
+            bl.claim_append(t);
+          }
+          // Remove any other follow-up intervals present too
+          while (p != m.end()) {
+            save = p++;
+            m.erase(save);
+          }
+          break;
+       }
+       bl.claim_append(t);
+     }
+     return total;
+   }
+
+  /**
    * dump_onode -- dumps onode metadata in human readable form,
      intended primiarily for debugging
    *

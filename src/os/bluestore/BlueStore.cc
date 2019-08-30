@@ -9350,6 +9350,177 @@ int BlueStore::fiemap(
   return r;
 }
 
+int BlueStore::readv(
+  CollectionHandle &c_,
+  const ghobject_t& oid,
+  interval_set<uint64_t>& m,
+  bufferlist& bl,
+  uint32_t op_flags)
+{
+  auto start = mono_clock::now();
+  Collection *c = static_cast<Collection *>(c_.get());
+  const coll_t &cid = c->get_cid();
+  dout(15) << __func__ << " " << cid << " " << oid
+           << " fiemap " << m
+           << dendl;
+  if (!c->exists)
+    return -ENOENT;
+
+  bl.clear();
+  int r;
+  {
+    std::shared_lock l(c->lock);
+    auto start1 = mono_clock::now();
+    OnodeRef o = c->get_onode(oid, false);
+    log_latency("get_onode@read",
+      l_bluestore_read_onode_meta_lat,
+      mono_clock::now() - start1,
+      cct->_conf->bluestore_log_op_age);
+    if (!o || !o->exists) {
+      r = -ENOENT;
+      goto out;
+    }
+
+    if (m.empty()) {
+      r = 0;
+      goto out;
+    }
+
+    r = _do_readv(c, o, m, bl, op_flags);
+    if (r == -EIO) {
+      logger->inc(l_bluestore_read_eio);
+    }
+  }
+
+ out:
+  if (r >= 0 && _debug_data_eio(oid)) {
+    r = -EIO;
+    derr << __func__ << " " << c->cid << " " << oid << " INJECT EIO" << dendl;
+  } else if (oid.hobj.pool > 0 &&  /* FIXME, see #23029 */
+             cct->_conf->bluestore_debug_random_read_err &&
+             (rand() % (int)(cct->_conf->bluestore_debug_random_read_err *
+                             100.0)) == 0) {
+    dout(0) << __func__ << ": inject random EIO" << dendl;
+    r = -EIO;
+  }
+  dout(10) << __func__ << " " << cid << " " << oid
+           << " fiemap " << m << std::dec
+           << " = " << r << dendl;
+  log_latency(__func__,
+    l_bluestore_read_lat,
+    mono_clock::now() - start,
+    cct->_conf->bluestore_log_op_age);
+  return r;
+}
+
+int BlueStore::_do_readv(
+  Collection *c,
+  OnodeRef o,
+  const interval_set<uint64_t>& m,
+  bufferlist& bl,
+  uint32_t op_flags,
+  uint64_t retry_count)
+{
+  FUNCTRACE(cct);
+  int r = 0;
+  int read_cache_policy = 0; // do not bypass clean or dirty cache
+
+  dout(20) << __func__ << " fiemap " << m << std::hex
+           << " size 0x" << o->onode.size << " (" << std::dec
+           << o->onode.size << ")" << dendl;
+
+  // generally, don't buffer anything, unless the client explicitly requests
+  // it.
+  bool buffered = false;
+  if (op_flags & CEPH_OSD_OP_FLAG_FADVISE_WILLNEED) {
+    dout(20) << __func__ << " will do buffered read" << dendl;
+    buffered = true;
+  } else if (cct->_conf->bluestore_default_buffered_read &&
+             (op_flags & (CEPH_OSD_OP_FLAG_FADVISE_DONTNEED |
+                          CEPH_OSD_OP_FLAG_FADVISE_NOCACHE)) == 0) {
+    dout(20) << __func__ << " defaulting to buffered read" << dendl;
+    buffered = true;
+  }
+  // this method must be idempotent since we may call it several times
+  // before we finally read the expected result.
+  bl.clear();
+
+  // call fiemap first!
+  ceph_assert(m.range_start() <= o->onode.size);
+  ceph_assert(m.range_end() <= o->onode.size);
+  auto start = mono_clock::now();
+  o->extent_map.fault_range(db, m.range_start(), m.range_end() - m.range_start());
+  log_latency(__func__,
+    l_bluestore_read_onode_meta_lat,
+    mono_clock::now() - start,
+    cct->_conf->bluestore_log_op_age);
+  _dump_onode<30>(cct, *o);
+
+  IOContext ioc(cct, NULL, true); // allow EIO
+  vector<std::tuple<ready_regions_t, vector<bufferlist>, blobs2read_t>> raw_results;
+  raw_results.reserve(m.num_intervals());
+  int i = 0;
+  for (auto p = m.begin(); p != m.end(); p++, i++) {
+    raw_results.push_back({});
+    _read_cache(o, p.get_start(), p.get_len(), read_cache_policy,
+                std::get<0>(raw_results[i]), std::get<2>(raw_results[i]));
+    r = _prepare_read_ioc(std::get<2>(raw_results[i]), &std::get<1>(raw_results[i]), &ioc);
+    // we always issue aio for reading, so errors other than EIO are not allowed
+    if (r < 0)
+      return r;
+  }
+
+  auto num_ios = m.size();
+  if (ioc.has_pending_aios()) {
+    num_ios = ioc.get_num_ios();
+    bdev->aio_submit(&ioc);
+    dout(20) << __func__ << " waiting for aio" << dendl;
+    ioc.aio_wait();
+    r = ioc.get_return_value();
+    if (r < 0) {
+      ceph_assert(r == -EIO); // no other errors allowed
+      return -EIO;
+    }
+  }
+  log_latency_fn(__func__,
+    l_bluestore_read_wait_aio_lat,
+    mono_clock::now() - start,
+    cct->_conf->bluestore_log_op_age,
+    [&](auto lat) { return ", num_ios = " + stringify(num_ios); }
+  );
+
+  ceph_assert(raw_results.size() == (size_t)m.num_intervals());
+  i = 0;
+  for (auto p = m.begin(); p != m.end(); p++, i++) {
+    bool csum_error = false;
+    bufferlist t;
+    r = _generate_read_result_bl(o, p.get_start(), p.get_len(),
+                                 std::get<0>(raw_results[i]),
+                                 std::get<1>(raw_results[i]),
+                                 std::get<2>(raw_results[i]),
+                                 buffered, &csum_error, t);
+    if (csum_error) {
+      // Handles spurious read errors caused by a kernel bug.
+      // We sometimes get all-zero pages as a result of the read under
+      // high memory pressure. Retrying the failing read succeeds in most
+      // cases.
+      // See also: http://tracker.ceph.com/issues/22464
+      if (retry_count >= cct->_conf->bluestore_retry_disk_reads) {
+        return -EIO;
+      }
+      return _do_readv(c, o, m, bl, op_flags, retry_count + 1);
+    }
+    bl.claim_append(t);
+  }
+  if (retry_count) {
+    logger->inc(l_bluestore_reads_with_retries);
+    dout(5) << __func__ << " read fiemap " << m
+            << " failed " << retry_count << " times before succeeding"
+            << dendl;
+  }
+  return bl.length();
+}
+
 int BlueStore::dump_onode(CollectionHandle &c_,
   const ghobject_t& oid,
   const string& section_name,
