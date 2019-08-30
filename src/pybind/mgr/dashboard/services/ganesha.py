@@ -486,8 +486,7 @@ class CephFSFSal(FSal):
 
     def create_path(self, path):
         cfs = CephFS(self.fs_name)
-        if not cfs.dir_exists(path):
-            cfs.mkdirs(path)
+        cfs.mk_dirs(path)
 
     @classmethod
     def from_fsal_block(cls, fsal_block):

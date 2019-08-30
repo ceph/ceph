@@ -375,26 +375,26 @@ class DashboardTestCase(MgrTestCase):
         return self._ceph_cmd(['config-key', 'get', key])
 
     @classmethod
+    def _cmd(cls, args):
+        return cls.mgr_cluster.admin_remote.run(args=args)
+
+    @classmethod
     def _rbd_cmd(cls, cmd):
-        args = [
-            'rbd'
-        ]
+        args = ['rbd']
         args.extend(cmd)
-        cls.mgr_cluster.admin_remote.run(args=args)
+        cls._cmd(args)
 
     @classmethod
     def _radosgw_admin_cmd(cls, cmd):
-        args = [
-            'radosgw-admin'
-        ]
+        args = ['radosgw-admin']
         args.extend(cmd)
-        cls.mgr_cluster.admin_remote.run(args=args)
+        cls._cmd(args)
 
     @classmethod
     def _rados_cmd(cls, cmd):
         args = ['rados']
         args.extend(cmd)
-        cls.mgr_cluster.admin_remote.run(args=args)
+        cls._cmd(args)
 
     @classmethod
     def mons(cls):

@@ -3,7 +3,7 @@ from __future__ import absolute_import
 
 import six
 
-from .helper import DashboardTestCase
+from .helper import DashboardTestCase, JObj, JList, JLeaf
 
 
 class CephfsTest(DashboardTestCase):
@@ -114,3 +114,89 @@ class CephfsTest(DashboardTestCase):
         self.assertIsInstance(clients['data'], list)
         self.assertToHave(clients, 'status')
         self.assertIsInstance(clients['status'], int)
+
+    def test_ls_mk_rm_dir(self):
+        fs_id = self.fs.get_namespace_id()
+        data = self._get("/api/cephfs/{}/ls_dir".format(fs_id),
+                         params={'path': '/'})
+        self.assertStatus(200)
+        self.assertIsInstance(data, list)
+        self.assertEqual(len(data), 0)
+
+        self._post("/api/cephfs/{}/mk_dirs".format(fs_id),
+                   params={'path': '/pictures/birds'})
+        self.assertStatus(200)
+
+        data = self._get("/api/cephfs/{}/ls_dir".format(fs_id),
+                         params={'path': '/pictures'})
+        self.assertStatus(200)
+        self.assertIsInstance(data, list)
+        self.assertEqual(len(data), 1)
+
+        self._post("/api/cephfs/{}/rm_dir".format(fs_id),
+                   params={'path': '/pictures'})
+        self.assertStatus(500)
+        self._post("/api/cephfs/{}/rm_dir".format(fs_id),
+                   params={'path': '/pictures/birds'})
+        self.assertStatus(200)
+        self._post("/api/cephfs/{}/rm_dir".format(fs_id),
+                   params={'path': '/pictures'})
+        self.assertStatus(200)
+
+        data = self._get("/api/cephfs/{}/ls_dir".format(fs_id),
+                         params={'path': '/'})
+        self.assertStatus(200)
+        self.assertIsInstance(data, list)
+        self.assertEqual(len(data), 0)
+
+    def test_snapshots(self):
+        fs_id = self.fs.get_namespace_id()
+        self._post("/api/cephfs/{}/mk_dirs".format(fs_id),
+                   params={'path': '/movies/dune'})
+        self.assertStatus(200)
+
+        self._post("/api/cephfs/{}/mk_snapshot".format(fs_id),
+                   params={'path': '/movies/dune', 'name': 'test'})
+        self.assertStatus(200)
+
+        data = self._get("/api/cephfs/{}/ls_dir".format(fs_id),
+                         params={'path': '/movies'})
+        self.assertStatus(200)
+        self.assertIsInstance(data, list)
+        self.assertEqual(len(data), 1)
+        self.assertSchema(data[0], JObj(sub_elems={
+            'name': JLeaf(str),
+            'path': JLeaf(str),
+            'snapshots': JList(JObj(sub_elems={
+                'name': JLeaf(str),
+                'path': JLeaf(str),
+                'created': JLeaf(str)
+            })),
+            'quotas': JObj(sub_elems={
+                'max_bytes': JLeaf(int),
+                'max_files': JLeaf(int)
+            })
+        }))
+        snapshots = data[0]['snapshots']
+        self.assertEqual(len(snapshots), 1)
+        snapshot = snapshots[0]
+        self.assertEqual(snapshot['name'], "test")
+        self.assertEqual(snapshot['path'], "/movies/dune/.snap/test")
+
+        self._post("/api/cephfs/{}/rm_snapshot".format(fs_id),
+                   params={'path': '/movies/dune', 'name': 'test'})
+        self.assertStatus(200)
+
+        data = self._get("/api/cephfs/{}/ls_dir".format(fs_id),
+                         params={'path': '/movies'})
+        self.assertStatus(200)
+        self.assertEqual(len(data[0]['snapshots']), 0)
+
+        # Cleanup. Note, the CephFS Python extension (and therefor the Dashoard
+        # REST API) does not support recursive deletion of a directory.
+        self._post("/api/cephfs/{}/rm_dir".format(fs_id),
+                   params={'path': '/movies/dune'})
+        self.assertStatus(200)
+        self._post("/api/cephfs/{}/rm_dir".format(fs_id),
+                   params={'path': '/movies'})
+        self.assertStatus(200)

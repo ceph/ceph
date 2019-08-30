@@ -3,12 +3,16 @@ from __future__ import absolute_import
 
 from collections import defaultdict
 
+import os
+
 import cherrypy
+import cephfs
 
 from . import ApiController, RESTController, UiApiController
 from .. import mgr
 from ..exceptions import DashboardException
 from ..security import Scope
+from ..services.cephfs import CephFS as CephFS_
 from ..services.ceph_service import CephService
 from ..tools import ViewCache
 
@@ -311,6 +315,118 @@ class CephFS(RESTController):
                                                                                       fs_id))
         CephService.send_command('mds', 'client evict',
                                  srv_spec='{0}:0'.format(fs_id), id=client_id)
+
+    @staticmethod
+    def _cephfs_instance(fs_id):
+        """
+        :param fs_id: The filesystem identifier.
+        :type fs_id: int | str
+        :return: A instance of the CephFS class.
+        """
+        fs_name = CephFS_.fs_name_from_id(fs_id)
+        if fs_name is None:
+            raise cherrypy.HTTPError(404, "CephFS id {} not found".format(fs_id))
+        return CephFS_(fs_name)
+
+    @RESTController.Resource('GET')
+    def ls_dir(self, fs_id, path=None):
+        """
+        List directories of specified path.
+        :param fs_id: The filesystem identifier.
+        :param path: The path where to start listing the directory content.
+          Defaults to '/' if not set.
+        :return: The names of the directories below the specified path.
+        :rtype: list
+        """
+        if path is None:
+            path = os.sep
+        else:
+            path = os.path.normpath(path)
+        try:
+            cfs = self._cephfs_instance(fs_id)
+            paths = cfs.ls_dir(path, 1)
+            # Convert (bytes => string), prettify paths (strip slashes)
+            # and append additional information.
+            paths = [{
+                'name': os.path.basename(p.decode()),
+                'path': p.decode(),
+                'snapshots': cfs.ls_snapshots(p.decode()),
+                'quotas': cfs.get_quotas(p.decode())
+            } for p in paths if p != path.encode()]
+        except (cephfs.PermissionError, cephfs.ObjectNotFound):
+            paths = []
+        return paths
+
+    @RESTController.Resource('POST')
+    def mk_dirs(self, fs_id, path):
+        """
+        Create a directory.
+        :param fs_id: The filesystem identifier.
+        :param path: The path of the directory.
+        """
+        cfs = self._cephfs_instance(fs_id)
+        cfs.mk_dirs(path)
+
+    @RESTController.Resource('POST')
+    def rm_dir(self, fs_id, path):
+        """
+        Remove a directory.
+        :param fs_id: The filesystem identifier.
+        :param path: The path of the directory.
+        """
+        cfs = self._cephfs_instance(fs_id)
+        cfs.rm_dir(path)
+
+    @RESTController.Resource('POST')
+    def mk_snapshot(self, fs_id, path, name=None):
+        """
+        Create a snapshot.
+        :param fs_id: The filesystem identifier.
+        :param path: The path of the directory.
+        :param name: The name of the snapshot. If not specified,
+            a name using the current time in RFC3339 UTC format
+            will be generated.
+        :return: The name of the snapshot.
+        :rtype: str
+        """
+        cfs = self._cephfs_instance(fs_id)
+        return cfs.mk_snapshot(path, name)
+
+    @RESTController.Resource('POST')
+    def rm_snapshot(self, fs_id, path, name):
+        """
+        Remove a snapshot.
+        :param fs_id: The filesystem identifier.
+        :param path: The path of the directory.
+        :param name: The name of the snapshot.
+        """
+        cfs = self._cephfs_instance(fs_id)
+        cfs.rm_snapshot(path, name)
+
+    @RESTController.Resource('GET')
+    def get_quotas(self, fs_id, path):
+        """
+        Get the quotas of the specified path.
+        :param fs_id: The filesystem identifier.
+        :param path: The path of the directory/file.
+        :return: Returns a dictionary containing 'max_bytes'
+            and 'max_files'.
+        :rtype: dict
+        """
+        cfs = self._cephfs_instance(fs_id)
+        return cfs.get_quotas(path)
+
+    @RESTController.Resource('POST')
+    def set_quotas(self, fs_id, path, max_bytes, max_files):
+        """
+        Set the quotas of the specified path.
+        :param fs_id: The filesystem identifier.
+        :param path: The path of the directory/file.
+        :param max_bytes: The byte limit.
+        :param max_files: The file limit.
+        """
+        cfs = self._cephfs_instance(fs_id)
+        return cfs.set_quotas(path, max_bytes, max_files)
 
 
 class CephFSClients(object):
