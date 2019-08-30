@@ -485,9 +485,6 @@ class Infiniband {
     int recv_cm_meta(CephContext *cct, int socket_fd);
     void wire_gid_to_gid(const char *wgid, ib_cm_meta_t* cm_meta_data);
     void gid_to_wire_gid(const ib_cm_meta_t& cm_meta_data, char wgid[]);
-    void add_tx_wr(uint32_t amt) { tx_wr_inflight += amt; }
-    void dec_tx_wr(uint32_t amt) { tx_wr_inflight -= amt; }
-    uint32_t get_tx_wr() const { return tx_wr_inflight; }
     ibv_qp* get_qp() const { return qp; }
     Infiniband::CompletionQueue* get_tx_cq() const { return txcq; }
     Infiniband::CompletionQueue* get_rx_cq() const { return rxcq; }
@@ -515,7 +512,6 @@ class Infiniband {
     uint32_t     max_recv_wr;
     uint32_t     q_key;
     bool dead;
-    std::atomic<uint32_t> tx_wr_inflight = {0}; // counter for inflight Tx WQEs
   };
 
  public:
