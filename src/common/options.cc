@@ -7029,7 +7029,7 @@ std::vector<Option> get_rgw_options() {
     .set_long_description("This caps the maximum permitted value for listing-like operations in RGW S3. "
 			  "Affects ListBucket(max-keys), "
 			  "ListBucketVersions(max-keys), "
-			  "ListBucketMultiPartUploads(max-uploads), "
+			  "ListBucketMultipartUploads(max-uploads), "
 			  "ListMultipartUploadParts(max-parts)"),
 
     Option("rgw_sts_token_introspection_url", Option::TYPE_STR, Option::LEVEL_ADVANCED)
