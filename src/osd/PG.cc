@@ -374,8 +374,7 @@ bool PG::op_has_sufficient_caps(OpRequestRef& op)
   if (op->get_req()->get_type() != CEPH_MSG_OSD_OP)
     return true;
 
-  const MOSDOp *req = static_cast<const MOSDOp*>(op->get_req());
-
+  auto req = op->get_req<MOSDOp>();
   auto priv = req->get_connection()->get_priv();
   auto session = static_cast<Session*>(priv.get());
   if (!session) {
@@ -1833,7 +1832,7 @@ void PG::on_activate_committed()
 
 void PG::do_replica_scrub_map(OpRequestRef op)
 {
-  const MOSDRepScrubMap *m = static_cast<const MOSDRepScrubMap*>(op->get_req());
+  auto m = op->get_req<MOSDRepScrubMap>();
   dout(7) << __func__ << " " << *m << dendl;
   if (m->map_epoch < info.history.same_interval_since) {
     dout(10) << __func__ << " discarding old from "
@@ -1907,8 +1906,7 @@ void PG::handle_scrub_reserve_request(OpRequestRef op)
     dout(20) << __func__ << ": failed to reserve remotely" << dendl;
     scrubber.reserved = false;
   }
-  const MOSDScrubReserve *m =
-    static_cast<const MOSDScrubReserve*>(op->get_req());
+  auto m = op->get_req<MOSDScrubReserve>();
   Message *reply = new MOSDScrubReserve(
     spg_t(info.pgid.pgid, get_primary().shard),
     m->map_epoch,
@@ -2395,7 +2393,7 @@ void PG::replica_scrub(
   OpRequestRef op,
   ThreadPool::TPHandle &handle)
 {
-  const MOSDRepScrub *msg = static_cast<const MOSDRepScrub *>(op->get_req());
+  auto msg = op->get_req<MOSDRepScrub>();
   ceph_assert(!scrubber.active_rep_scrub);
   dout(7) << "replica_scrub" << dendl;
 
@@ -3413,7 +3411,7 @@ ostream& operator<<(ostream& out, const PG& pg)
 
 bool PG::can_discard_op(OpRequestRef& op)
 {
-  const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
+  auto m = op->get_req<MOSDOp>();
   if (cct->_conf->osd_discard_disconnected_ops && OSD::op_is_discardable(m)) {
     dout(20) << " discard " << *m << dendl;
     return true;
@@ -3465,7 +3463,7 @@ bool PG::can_discard_op(OpRequestRef& op)
 template<typename T, int MSGTYPE>
 bool PG::can_discard_replica_op(OpRequestRef& op)
 {
-  const T *m = static_cast<const T *>(op->get_req());
+  auto m = op->get_req<T>();
   ceph_assert(m->get_type() == MSGTYPE);
 
   int from = m->get_source().num();
@@ -3500,7 +3498,7 @@ bool PG::can_discard_replica_op(OpRequestRef& op)
 
 bool PG::can_discard_scan(OpRequestRef op)
 {
-  const MOSDPGScan *m = static_cast<const MOSDPGScan *>(op->get_req());
+  auto m = op->get_req<MOSDPGScan>();
   ceph_assert(m->get_type() == MSG_OSD_PG_SCAN);
 
   if (old_peering_msg(m->map_epoch, m->query_epoch)) {
@@ -3512,7 +3510,7 @@ bool PG::can_discard_scan(OpRequestRef op)
 
 bool PG::can_discard_backfill(OpRequestRef op)
 {
-  const MOSDPGBackfill *m = static_cast<const MOSDPGBackfill *>(op->get_req());
+  auto m = op->get_req<MOSDPGBackfill>();
   ceph_assert(m->get_type() == MSG_OSD_PG_BACKFILL);
 
   if (old_peering_msg(m->map_epoch, m->query_epoch)) {
