@@ -66,7 +66,7 @@ Currently, we support only the following actions:
 - s3:GetObjectVersionTorrent
 - s3:GetReplicationConfiguration
 - s3:ListAllMyBuckets
-- s3:ListBucketMultiPartUploads
+- s3:ListBucketMultipartUploads
 - s3:ListBucket
 - s3:ListBucketVersions
 - s3:ListMultipartUploadParts
