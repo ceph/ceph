@@ -615,7 +615,7 @@ We provide a set of CLI commands to manage user accounts:
 
 - *Create User*::
 
-  $ ceph dashboard ac-user-create <username> [<password>] [<rolename>] [<name>] [<email>] [<enabled>]
+  $ ceph dashboard ac-user-create [--force-password] <username> [<password>] [<rolename>] [<name>] [<email>] [--enabled]
 
 - *Delete User*::
 
@@ -623,7 +623,7 @@ We provide a set of CLI commands to manage user accounts:
 
 - *Change Password*::
 
-  $ ceph dashboard ac-user-set-password <username> <password>
+  $ ceph dashboard ac-user-set-password [--force-password] <username> <password>
 
 - *Change Password Hash*::
 

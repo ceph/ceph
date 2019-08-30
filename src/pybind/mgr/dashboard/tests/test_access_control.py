@@ -276,7 +276,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
                              rolename=rolename, password='admin',
                              name='{} User'.format(username),
                              email='{}@user.com'.format(username),
-                             enabled=enabled)
+                             enabled=enabled, force_password=True)
 
         pass_hash = password_hash('admin', user['password'])
         self.assertDictEqual(user, {
@@ -316,7 +316,8 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         self.test_create_user()
 
         with self.assertRaises(CmdException) as ctx:
-            self.exec_cmd('ac-user-create', username='admin', password='admin')
+            self.exec_cmd('ac-user-create', username='admin', password='admin',
+                          force_password=True)
 
         self.assertEqual(ctx.exception.retcode, -errno.EEXIST)
         self.assertEqual(str(ctx.exception), "User 'admin' already exists")
@@ -329,7 +330,8 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         try:
             self.exec_cmd('ac-user-create', username='foo',
                           rolename='dne_role', password='foopass',
-                          name='foo User', email='foo@user.com')
+                          name='foo User', email='foo@user.com',
+                          force_password=True)
         except CmdException as e:
             self.assertEqual(e.retcode, -errno.ENOENT)
 
@@ -349,7 +351,8 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
         self.test_create_role()
         self.exec_cmd('ac-user-create', username='bar',
                       rolename='test_role', password='barpass',
-                      name='bar User', email='bar@user.com')
+                      name='bar User', email='bar@user.com',
+                      force_password=True)
 
         # validate db:
         #   user 'foo' should not exist
@@ -549,7 +552,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
     def test_set_user_password(self):
         user_orig = self.test_create_user()
         user = self.exec_cmd('ac-user-set-password', username='admin',
-                             password='newpass')
+                             password='newpass', force_password=True)
         pass_hash = password_hash('newpass', user['password'])
         self.assertDictEqual(user, {
             'username': 'admin',
@@ -567,7 +570,7 @@ class AccessControlTest(unittest.TestCase, CLICommandTestMixin):
     def test_set_user_password_nonexistent_user(self):
         with self.assertRaises(CmdException) as ctx:
             self.exec_cmd('ac-user-set-password', username='admin',
-                          password='newpass')
+                          password='newpass', force_password=True)
 
         self.assertEqual(ctx.exception.retcode, -errno.ENOENT)
         self.assertEqual(str(ctx.exception), "User 'admin' does not exist")

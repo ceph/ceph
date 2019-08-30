@@ -946,7 +946,7 @@ EOF
                 debug echo 'waiting for mgr dashboard module to start'
                 sleep 1
             done
-            ceph_adm dashboard ac-user-create admin admin administrator
+            ceph_adm dashboard ac-user-create --force-password admin admin administrator
             if [ "$ssl" != "0" ]; then
                 if ! ceph_adm dashboard create-self-signed-cert;  then
                     debug echo dashboard module not working correctly!
