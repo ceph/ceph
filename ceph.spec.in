@@ -85,6 +85,7 @@
 %{!?_udevrulesdir: %global _udevrulesdir /lib/udev/rules.d}
 %{!?tmpfiles_create: %global tmpfiles_create systemd-tmpfiles --create}
 %{!?python3_pkgversion: %global python3_pkgversion 3}
+%{!?python3_version_nodots: %global python3_version_nodots 3}
 %{!?python3_version: %global python3_version 3}
 # define _python_buildid macro which will expand to the empty string when
 # building with python2
@@ -263,7 +264,7 @@ BuildRequires:	python2-Cython
 %endif
 BuildRequires:	python%{python3_pkgversion}-devel
 BuildRequires:	python%{python3_pkgversion}-setuptools
-BuildRequires:	python%{python3_pkgversion}-Cython
+BuildRequires:	python%{python3_version_nodots}-Cython
 BuildRequires:	python%{_python_buildid}-prettytable
 BuildRequires:	python%{_python_buildid}-sphinx
 BuildRequires:	lz4-devel >= 1.7
