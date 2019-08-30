@@ -646,7 +646,7 @@ Alternatively, you can use Python's native package installation method::
   $ pip install tox
   $ pip install coverage
 
-To run the tests, run ``run_tox.sh`` in the dashboard directory (where
+To run the tests, run ``src/script/run_tox.sh`` in the dashboard directory (where
 ``tox.ini`` is located)::
 
   ## Run Python 2+3 tests+lint commands:
@@ -665,6 +665,9 @@ You can also run tox instead of ``run_tox.sh``::
 
   ## Run Python 3 arbitrary command (e.g. 1 single test):
   $ tox -e py3 tests/test_rgw_client.py::RgwClientTest::test_ssl_verify
+
+Python files can be automatically fixed and formatted according to PEP8
+standards by using ``run_tox.sh --tox-env fix`` or ``tox -e fix``.
 
 We also collect coverage information from the backend code when you run tests. You can check the
 coverage information provided by the tox output, or by running the following
