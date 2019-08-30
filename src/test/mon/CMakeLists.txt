@@ -51,17 +51,23 @@ target_link_libraries(unittest_mon_montypes mon global)
 add_executable(ceph_test_mon_memory_target
   test_mon_memory_target.cc)
 target_link_libraries(ceph_test_mon_memory_target Boost::system Threads::Threads)
+set_target_properties(ceph_test_mon_memory_target PROPERTIES
+  SKIP_RPATH TRUE)
 install(TARGETS ceph_test_mon_memory_target
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # ceph_test_mon_log_rss_usage
 add_executable(ceph_test_log_rss_usage
   test_log_rss_usage.cc)
+set_target_properties(ceph_test_log_rss_usage PROPERTIES
+  SKIP_RPATH TRUE)
 install(TARGETS ceph_test_log_rss_usage
   DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # ceph_test_mon_rss_usage
 add_executable(ceph_test_mon_rss_usage
   test_mon_rss_usage.cc)
+set_target_properties(ceph_test_mon_rss_usage PROPERTIES
+  SKIP_RPATH TRUE)
 install(TARGETS ceph_test_mon_rss_usage
   DESTINATION ${CMAKE_INSTALL_BINDIR})
