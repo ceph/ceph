@@ -167,7 +167,7 @@ version_t HealthMonitor::get_trim_to() const
 
 bool HealthMonitor::preprocess_query(MonOpRequestRef op)
 {
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  auto m = op->get_req<PaxosServiceMessage>();
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
     return preprocess_command(op);
@@ -197,7 +197,7 @@ bool HealthMonitor::prepare_update(MonOpRequestRef op)
 
 bool HealthMonitor::preprocess_command(MonOpRequestRef op)
 {
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  auto m = op->get_req<MMonCommand>();
   std::stringstream ss;
   bufferlist rdata;
 
@@ -229,7 +229,7 @@ bool HealthMonitor::preprocess_command(MonOpRequestRef op)
 
 bool HealthMonitor::prepare_command(MonOpRequestRef op)
 {
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  auto m = op->get_req<MMonCommand>();
 
   std::stringstream ss;
   bufferlist rdata;
@@ -330,7 +330,7 @@ out:
 
 bool HealthMonitor::prepare_health_checks(MonOpRequestRef op)
 {
-  MMonHealthChecks *m = static_cast<MMonHealthChecks*>(op->get_req());
+  auto m = op->get_req<MMonHealthChecks>();
   // no need to check if it's changed, the peon has done so
   quorum_checks[m->get_source().num()] = std::move(m->health_checks);
   return true;

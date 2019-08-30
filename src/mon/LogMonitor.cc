@@ -256,7 +256,7 @@ version_t LogMonitor::get_trim_to() const
 bool LogMonitor::preprocess_query(MonOpRequestRef op)
 {
   op->mark_logmon_event("preprocess_query");
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  auto m = op->get_req<PaxosServiceMessage>();
   dout(10) << "preprocess_query " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
@@ -280,7 +280,7 @@ bool LogMonitor::preprocess_query(MonOpRequestRef op)
 bool LogMonitor::prepare_update(MonOpRequestRef op)
 {
   op->mark_logmon_event("prepare_update");
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  auto m = op->get_req<PaxosServiceMessage>();
   dout(10) << "prepare_update " << *m << " from " << m->get_orig_source_inst() << dendl;
   switch (m->get_type()) {
   case MSG_MON_COMMAND:
@@ -302,7 +302,7 @@ bool LogMonitor::prepare_update(MonOpRequestRef op)
 bool LogMonitor::preprocess_log(MonOpRequestRef op)
 {
   op->mark_logmon_event("preprocess_log");
-  MLog *m = static_cast<MLog*>(op->get_req());
+  auto m = op->get_req<MLog>();
   dout(10) << "preprocess_log " << *m << " from " << m->get_orig_source() << dendl;
   int num_new = 0;
 
@@ -348,7 +348,7 @@ struct LogMonitor::C_Log : public C_MonOp {
 bool LogMonitor::prepare_log(MonOpRequestRef op) 
 {
   op->mark_logmon_event("prepare_log");
-  MLog *m = static_cast<MLog*>(op->get_req());
+  auto m = op->get_req<MLog>();
   dout(10) << "prepare_log " << *m << " from " << m->get_orig_source() << dendl;
 
   if (m->fsid != mon->monmap->fsid) {
@@ -373,7 +373,7 @@ bool LogMonitor::prepare_log(MonOpRequestRef op)
 
 void LogMonitor::_updated_log(MonOpRequestRef op)
 {
-  MLog *m = static_cast<MLog*>(op->get_req());
+  auto m = op->get_req<MLog>();
   dout(7) << "_updated_log for " << m->get_orig_source_inst() << dendl;
   mon->send_reply(op, new MLogAck(m->fsid, m->entries.rbegin()->seq));
 }
@@ -393,7 +393,7 @@ bool LogMonitor::should_propose(double& delay)
 bool LogMonitor::preprocess_command(MonOpRequestRef op)
 {
   op->mark_logmon_event("preprocess_command");
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  auto m = op->get_req<MMonCommand>();
   int r = -EINVAL;
   bufferlist rdata;
   stringstream ss;
@@ -546,7 +546,7 @@ bool LogMonitor::preprocess_command(MonOpRequestRef op)
 bool LogMonitor::prepare_command(MonOpRequestRef op)
 {
   op->mark_logmon_event("prepare_command");
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  auto m = op->get_req<MMonCommand>();
   stringstream ss;
   string rs;
   int err = -EINVAL;
