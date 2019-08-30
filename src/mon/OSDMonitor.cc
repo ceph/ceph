@@ -2731,7 +2731,7 @@ bool OSDMonitor::should_propose(double& delay)
 bool OSDMonitor::preprocess_get_osdmap(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  MMonGetOSDMap *m = static_cast<MMonGetOSDMap*>(op->get_req());
+  auto m = op->get_req<MMonGetOSDMap>();
 
   uint64_t features = mon->get_quorum_con_features();
   if (op->get_session() && op->get_session()->con_features)
@@ -2793,7 +2793,7 @@ bool OSDMonitor::check_source(MonOpRequestRef op, uuid_d fsid) {
 bool OSDMonitor::preprocess_failure(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  MOSDFailure *m = static_cast<MOSDFailure*>(op->get_req());
+  auto m = op->get_req<MOSDFailure>();
   // who is target_osd
   int badboy = m->get_target_osd();
 
@@ -2872,7 +2872,7 @@ public:
 
   void _finish(int r) override {
     if (r == 0) {
-      MOSDMarkMeDown *m = static_cast<MOSDMarkMeDown*>(op->get_req());
+      auto m = op->get_req<MOSDMarkMeDown>();
       osdmon->mon->send_reply(
         op,
         new MOSDMarkMeDown(
@@ -2894,7 +2894,7 @@ public:
 bool OSDMonitor::preprocess_mark_me_down(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  MOSDMarkMeDown *m = static_cast<MOSDMarkMeDown*>(op->get_req());
+  auto m = op->get_req<MOSDMarkMeDown>();
   int from = m->target_osd;
 
   // check permissions
@@ -2933,7 +2933,7 @@ bool OSDMonitor::preprocess_mark_me_down(MonOpRequestRef op)
 bool OSDMonitor::prepare_mark_me_down(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  MOSDMarkMeDown *m = static_cast<MOSDMarkMeDown*>(op->get_req());
+  auto m = op->get_req<MOSDMarkMeDown>();
   int target_osd = m->target_osd;
 
   ceph_assert(osdmap.is_up(target_osd));
@@ -2949,7 +2949,7 @@ bool OSDMonitor::prepare_mark_me_down(MonOpRequestRef op)
 bool OSDMonitor::preprocess_mark_me_dead(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  MOSDMarkMeDead *m = static_cast<MOSDMarkMeDead*>(op->get_req());
+  auto m = op->get_req<MOSDMarkMeDead>();
   int from = m->target_osd;
 
   // check permissions
@@ -2979,7 +2979,7 @@ bool OSDMonitor::preprocess_mark_me_dead(MonOpRequestRef op)
 bool OSDMonitor::prepare_mark_me_dead(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  MOSDMarkMeDead *m = static_cast<MOSDMarkMeDead*>(op->get_req());
+  auto m = op->get_req<MOSDMarkMeDead>();
   int target_osd = m->target_osd;
 
   ceph_assert(osdmap.is_down(target_osd));
@@ -3208,7 +3208,7 @@ void OSDMonitor::force_failure(int target_osd, int by)
 bool OSDMonitor::prepare_failure(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  MOSDFailure *m = static_cast<MOSDFailure*>(op->get_req());
+  auto m = op->get_req<MOSDFailure>();
   dout(1) << "prepare_failure osd." << m->get_target_osd()
 	  << " " << m->get_target_addrs()
 	  << " from " << m->get_orig_source()
@@ -3316,7 +3316,7 @@ void OSDMonitor::take_all_failures(list<MonOpRequestRef>& ls)
 bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  MOSDBoot *m = static_cast<MOSDBoot*>(op->get_req());
+  auto m = op->get_req<MOSDBoot>();
   int from = m->get_orig_source_inst().name.num();
 
   // check permissions, ignore if failed (no response expected)
@@ -3439,7 +3439,7 @@ bool OSDMonitor::preprocess_boot(MonOpRequestRef op)
 bool OSDMonitor::prepare_boot(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  MOSDBoot *m = static_cast<MOSDBoot*>(op->get_req());
+  auto m = op->get_req<MOSDBoot>();
   dout(7) << __func__ << " from " << m->get_source()
 	  << " sb " << m->sb
 	  << " client_addrs" << m->get_connection()->get_peer_addrs()
@@ -3594,7 +3594,7 @@ bool OSDMonitor::prepare_boot(MonOpRequestRef op)
 void OSDMonitor::_booted(MonOpRequestRef op, bool logit)
 {
   op->mark_osdmon_event(__func__);
-  MOSDBoot *m = static_cast<MOSDBoot*>(op->get_req());
+  auto m = op->get_req<MOSDBoot>();
   dout(7) << "_booted " << m->get_orig_source_inst() 
 	  << " w " << m->sb.weight << " from " << m->sb.current_epoch << dendl;
 
@@ -3613,7 +3613,7 @@ void OSDMonitor::_booted(MonOpRequestRef op, bool logit)
 bool OSDMonitor::preprocess_full(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  MOSDFull *m = static_cast<MOSDFull*>(op->get_req());
+  auto m = op->get_req<MOSDFull>();
   int from = m->get_orig_source().num();
   set<string> state;
   unsigned mask = CEPH_OSD_NEARFULL | CEPH_OSD_BACKFILLFULL | CEPH_OSD_FULL;
@@ -3664,7 +3664,7 @@ bool OSDMonitor::preprocess_full(MonOpRequestRef op)
 bool OSDMonitor::prepare_full(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  const MOSDFull *m = static_cast<MOSDFull*>(op->get_req());
+  auto m = op->get_req<MOSDFull>();
   const int from = m->get_orig_source().num();
 
   const unsigned mask = CEPH_OSD_NEARFULL | CEPH_OSD_BACKFILLFULL | CEPH_OSD_FULL;
@@ -3705,7 +3705,7 @@ bool OSDMonitor::prepare_full(MonOpRequestRef op)
 bool OSDMonitor::preprocess_alive(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  MOSDAlive *m = static_cast<MOSDAlive*>(op->get_req());
+  auto m = op->get_req<MOSDAlive>();
   int from = m->get_orig_source().num();
 
   // check permissions, ignore if failed
@@ -3744,7 +3744,7 @@ bool OSDMonitor::preprocess_alive(MonOpRequestRef op)
 bool OSDMonitor::prepare_alive(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  MOSDAlive *m = static_cast<MOSDAlive*>(op->get_req());
+  auto m = op->get_req<MOSDAlive>();
   int from = m->get_orig_source().num();
 
   if (0) {  // we probably don't care much about these
@@ -3772,7 +3772,7 @@ void OSDMonitor::_reply_map(MonOpRequestRef op, epoch_t e)
 bool OSDMonitor::preprocess_pg_created(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  auto m = static_cast<MOSDPGCreated*>(op->get_req());
+  auto m  = op->get_req<MOSDPGCreated>();
   dout(10) << __func__ << " " << *m << dendl;
   auto session = op->get_session();
   mon->no_reply(op);
@@ -3792,7 +3792,7 @@ bool OSDMonitor::preprocess_pg_created(MonOpRequestRef op)
 bool OSDMonitor::prepare_pg_created(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  auto m = static_cast<MOSDPGCreated*>(op->get_req());
+  auto m = op->get_req<MOSDPGCreated>();
   dout(10) << __func__ << " " << *m << dendl;
   auto src = m->get_orig_source();
   auto from = src.num();
@@ -3810,7 +3810,7 @@ bool OSDMonitor::prepare_pg_created(MonOpRequestRef op)
 bool OSDMonitor::preprocess_pg_ready_to_merge(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  auto m = static_cast<MOSDPGReadyToMerge*>(op->get_req());
+  auto m = op->get_req<MOSDPGReadyToMerge>();
   dout(10) << __func__ << " " << *m << dendl;
   const pg_pool_t *pi;
   auto session = op->get_session();
@@ -3850,7 +3850,7 @@ bool OSDMonitor::preprocess_pg_ready_to_merge(MonOpRequestRef op)
 bool OSDMonitor::prepare_pg_ready_to_merge(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  auto m = static_cast<MOSDPGReadyToMerge*>(op->get_req());
+  auto m  = op->get_req<MOSDPGReadyToMerge>();
   dout(10) << __func__ << " " << *m << dendl;
   pg_pool_t p;
   if (pending_inc.new_pools.count(m->pgid.pool()))
@@ -3911,7 +3911,7 @@ bool OSDMonitor::prepare_pg_ready_to_merge(MonOpRequestRef op)
 
 bool OSDMonitor::preprocess_pgtemp(MonOpRequestRef op)
 {
-  MOSDPGTemp *m = static_cast<MOSDPGTemp*>(op->get_req());
+  auto m = op->get_req<MOSDPGTemp>();
   dout(10) << "preprocess_pgtemp " << *m << dendl;
   mempool::osdmap::vector<int> empty;
   int from = m->get_orig_source().num();
@@ -4018,7 +4018,7 @@ void OSDMonitor::update_up_thru(int from, epoch_t up_thru)
 bool OSDMonitor::prepare_pgtemp(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  MOSDPGTemp *m = static_cast<MOSDPGTemp*>(op->get_req());
+  auto m = op->get_req<MOSDPGTemp>();
   int from = m->get_orig_source().num();
   dout(7) << "prepare_pgtemp e" << m->map_epoch << " from " << m->get_orig_source_inst() << dendl;
   for (map<pg_t,vector<int32_t> >::iterator p = m->pg_temp.begin(); p != m->pg_temp.end(); ++p) {
@@ -4057,7 +4057,7 @@ bool OSDMonitor::prepare_pgtemp(MonOpRequestRef op)
 bool OSDMonitor::preprocess_remove_snaps(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  MRemoveSnaps *m = static_cast<MRemoveSnaps*>(op->get_req());
+  auto m = op->get_req<MRemoveSnaps>();
   dout(7) << "preprocess_remove_snaps " << *m << dendl;
 
   // check privilege, ignore if failed
@@ -4108,7 +4108,7 @@ bool OSDMonitor::preprocess_remove_snaps(MonOpRequestRef op)
 bool OSDMonitor::prepare_remove_snaps(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  MRemoveSnaps *m = static_cast<MRemoveSnaps*>(op->get_req());
+  auto m = op->get_req<MRemoveSnaps>();
   dout(7) << "prepare_remove_snaps " << *m << dendl;
 
   for (auto& [pool, snaps] : m->snaps) {
@@ -4157,7 +4157,7 @@ bool OSDMonitor::prepare_remove_snaps(MonOpRequestRef op)
 bool OSDMonitor::preprocess_get_purged_snaps(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  const MMonGetPurgedSnaps *m = static_cast<MMonGetPurgedSnaps*>(op->get_req());
+  auto m = op->get_req<MMonGetPurgedSnaps>();
   dout(7) << __func__ << " " << *m << dendl;
 
   map<epoch_t,mempool::osdmap::map<int64_t,snap_interval_set_t>> r;
@@ -4229,7 +4229,7 @@ bool OSDMonitor::preprocess_beacon(MonOpRequestRef op)
 bool OSDMonitor::prepare_beacon(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  const auto beacon = static_cast<MOSDBeacon*>(op->get_req());
+  const auto beacon = op->get_req<MOSDBeacon>();
   const auto src = beacon->get_orig_source();
   dout(10) << __func__ << " " << *beacon
 	   << " from " << src << dendl;
@@ -5238,7 +5238,7 @@ namespace {
 bool OSDMonitor::preprocess_command(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  auto m = op->get_req<MMonCommand>();
   int r = 0;
   bufferlist rdata;
   stringstream ss, ds;
@@ -7106,7 +7106,7 @@ bool OSDMonitor::update_pools_status()
 int OSDMonitor::prepare_new_pool(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  MPoolOp *m = static_cast<MPoolOp*>(op->get_req());
+  auto m = op->get_req<MPoolOp>();
   dout(10) << "prepare_new_pool from " << m->get_connection() << dendl;
   MonSession *session = op->get_session();
   if (!session)
@@ -9206,7 +9206,7 @@ int OSDMonitor::prepare_command_osd_new(
 bool OSDMonitor::prepare_command(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  auto m = op->get_req<MMonCommand>();
   stringstream ss;
   cmdmap_t cmdmap;
   if (!cmdmap_from_json(m->cmd, &cmdmap, ss)) {
@@ -9406,7 +9406,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 				      const cmdmap_t& cmdmap)
 {
   op->mark_osdmon_event(__func__);
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  auto m = op->get_req<MMonCommand>();
   bool ret = false;
   stringstream ss;
   string rs;
@@ -13251,7 +13251,7 @@ bool OSDMonitor::enforce_pool_op_caps(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
 
-  MPoolOp *m = static_cast<MPoolOp*>(op->get_req());
+  auto m = op->get_req<MPoolOp>();
   MonSession *session = op->get_session();
   if (!session) {
     _pool_op_reply(op, -EPERM, osdmap.get_epoch());
@@ -13297,7 +13297,7 @@ bool OSDMonitor::enforce_pool_op_caps(MonOpRequestRef op)
 bool OSDMonitor::preprocess_pool_op(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  MPoolOp *m = static_cast<MPoolOp*>(op->get_req());
+  auto m = op->get_req<MPoolOp>();
 
   if (enforce_pool_op_caps(op)) {
     return true;
@@ -13422,7 +13422,7 @@ bool OSDMonitor::_is_pending_removed_snap(int64_t pool, snapid_t snap)
 bool OSDMonitor::preprocess_pool_op_create(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  MPoolOp *m = static_cast<MPoolOp*>(op->get_req());
+  auto m = op->get_req<MPoolOp>();
   int64_t pool = osdmap.lookup_pg_pool_name(m->name.c_str());
   if (pool >= 0) {
     _pool_op_reply(op, 0, osdmap.get_epoch());
@@ -13435,7 +13435,7 @@ bool OSDMonitor::preprocess_pool_op_create(MonOpRequestRef op)
 bool OSDMonitor::prepare_pool_op(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  MPoolOp *m = static_cast<MPoolOp*>(op->get_req());
+  auto m = op->get_req<MPoolOp>();
   dout(10) << "prepare_pool_op " << *m << dendl;
   if (m->op == POOL_OP_CREATE) {
     return prepare_pool_op_create(op);
@@ -13874,7 +13874,7 @@ int OSDMonitor::_prepare_rename_pool(int64_t pool, string newname)
 bool OSDMonitor::prepare_pool_op_delete(MonOpRequestRef op)
 {
   op->mark_osdmon_event(__func__);
-  MPoolOp *m = static_cast<MPoolOp*>(op->get_req());
+  auto m = op->get_req<MPoolOp>();
   ostringstream ss;
   int ret = _prepare_remove_pool(m->pool, &ss, false);
   if (ret == -EAGAIN) {
@@ -13892,7 +13892,7 @@ void OSDMonitor::_pool_op_reply(MonOpRequestRef op,
                                 int ret, epoch_t epoch, bufferlist *blp)
 {
   op->mark_osdmon_event(__func__);
-  MPoolOp *m = static_cast<MPoolOp*>(op->get_req());
+  auto m = op->get_req<MPoolOp>();
   dout(20) << "_pool_op_reply " << ret << dendl;
   MPoolOpReply *reply = new MPoolOpReply(m->fsid, m->get_tid(),
 					 ret, epoch, get_last_committed(), blp);
