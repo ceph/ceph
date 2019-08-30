@@ -3434,6 +3434,7 @@ public:
     uint64_t _level_base,
     uint64_t _level_multiplier,
     double reserved_factor,
+    uint64_t reserved,
     bool new_pol)
   {
     l_totals[LEVEL_WAL - LEVEL_FIRST] = _wal_total;
@@ -3445,23 +3446,29 @@ public:
     }
 
     // Calculating how much extra space is available at DB volume.
-    // Which is equal to
-    // DB size - sum_max_level_size(0, L-1) - max_level_size(L) * reserved_factor
-    uint64_t prev_levels = _level0_size;
-    uint64_t cur_level = _level_base;
-    uint64_t cur_threshold = 0;
-    do {
-      uint64_t next_level = cur_level * _level_multiplier;
-      uint64_t next_threshold = prev_levels + cur_level + next_level * reserved_factor;
-      if (_db_total <= next_threshold) {
-        db_avail4slow = cur_threshold ? _db_total - cur_threshold : 0;
-        break;
-      } else {
-        prev_levels += cur_level;
-        cur_level = next_level;
-        cur_threshold = next_threshold;
-      }
-    } while (true);
+    // Depending on the presence of explicit reserved size specification it might be either
+    // * DB volume size - reserved
+    // or
+    // * DB volume size - sum_max_level_size(0, L-1) - max_level_size(L) * reserved_factor
+    if (!reserved) {
+      uint64_t prev_levels = _level0_size;
+      uint64_t cur_level = _level_base;
+      uint64_t cur_threshold = 0;
+      do {
+        uint64_t next_level = cur_level * _level_multiplier;
+        uint64_t next_threshold = prev_levels + cur_level + next_level * reserved_factor;
+        if (_db_total <= next_threshold) {
+          db_avail4slow = cur_threshold ? _db_total - cur_threshold : 0;
+          break;
+        } else {
+          prev_levels += cur_level;
+          cur_level = next_level;
+          cur_threshold = next_threshold;
+        }
+      } while (true);
+    } else {
+      db_avail4slow = _db_total - reserved;
+    }
   }
 
   void* get_hint_by_device(uint8_t dev) const override {

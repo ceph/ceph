@@ -4946,6 +4946,11 @@ std::vector<Option> get_global_options() {
       .set_default(2.0)
       .set_description("DB level size multiplier. Determines amount of space at DB device to bar from the usage when 'use some extra' policy is in action. Reserved size is determined as sum(L_max_size[0], L_max_size[L-1]) + L_max_size[L] * this_factor"),
 
+    Option("bluestore_volume_selection_reserved", Option::TYPE_INT, Option::LEVEL_ADVANCED)
+      .set_flag(Option::FLAG_STARTUP)
+      .set_default(0)
+      .set_description("Space reserved at DB device and not allowed for 'use some extra' policy usage. Overrides 'bluestore_volume_selection_reserved_factor' setting and introduces straightforward limit."),
+
     // -----------------------------------------
     // kstore
 

@@ -1091,6 +1091,7 @@ OPTION(bluestore_log_omap_iterator_age, OPT_DOUBLE)
 OPTION(bluestore_log_collection_list_age, OPT_DOUBLE)
 OPTION(bluestore_volume_selection_policy, OPT_STR)
 OPTION(bluestore_volume_selection_reserved_factor, OPT_DOUBLE)
+OPTION(bluestore_volume_selection_reserved, OPT_INT)
 
 OPTION(kstore_max_ops, OPT_U64)
 OPTION(kstore_max_bytes, OPT_U64)

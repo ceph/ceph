@@ -5173,6 +5173,7 @@ int BlueStore::_open_bluefs(bool create)
         rocks_opts.max_bytes_for_level_base,
         rocks_opts.max_bytes_for_level_multiplier,
         reserved_factor,
+        cct->_conf->bluestore_volume_selection_reserved,
         cct->_conf->bluestore_volume_selection_policy != "rocksdb_original");
   }
   if (create) {
