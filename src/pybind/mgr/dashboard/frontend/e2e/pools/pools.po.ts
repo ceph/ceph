@@ -85,15 +85,14 @@ export class PoolPageHelper extends PageHelper {
 
   @PageHelper.restrictTo(pages.index)
   async delete(name: string): Promise<any> {
-    const tableCell = await this.getTableCellByContent(name);
-    await tableCell.click();
+    await this.waitClickable(this.getTableCell(name));
+    await this.getTableCell(name).click();
     await $('.table-actions button.dropdown-toggle').click(); // open submenu
     await $('li.delete a').click(); // click on "delete" menu item
-    const confirmationInput = () => $('#confirmation');
-    await this.waitPresence(confirmationInput());
-    await this.clickCheckbox(confirmationInput());
-    await element(by.cssContainingText('button', 'Delete Pool')).click(); // Click Delete item
-
-    return Promise.resolve();
+    // wait for pop-up to be visible (checks for title of pop-up)
+    await this.waitVisibility($('.modal-body'));
+    await this.clickCheckbox($('.custom-control-label'));
+    await element(by.cssContainingText('button', 'Delete Pool')).click();
+    return this.waitStaleness(this.getTableCell(name));
   }
 }
