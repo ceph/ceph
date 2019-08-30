@@ -125,7 +125,8 @@ class Device(object):
                     break
 
         # start with lvm since it can use an absolute or relative path
-        lv = lvm.get_lv_from_argument(self.path)
+        lvs = lvm.Volumes()
+        lv = lvm.get_lv_from_argument(self.path, lvs)
         if lv:
             self.lv_api = lv
             self.lvs = [lv]

@@ -1232,14 +1232,14 @@ def get_lv(lv_name=None, vg_name=None, lv_path=None, lv_uuid=None, lv_tags=None,
     )
 
 
-def get_lv_from_argument(argument):
+def get_lv_from_argument(argument, lvs=None):
     """
     Helper proxy function that consumes a possible logical volume passed in from the CLI
     in the form of `vg/lv`, but with some validation so that an argument that is a full
     path to a device can be ignored
     """
     if argument.startswith('/'):
-        lv = get_lv(lv_path=argument)
+        lv = get_lv(lv_path=argument, lvs=lvs)
         return lv
     try:
         vg_name, lv_name = argument.split('/')
