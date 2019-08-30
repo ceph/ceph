@@ -2085,41 +2085,26 @@ int ReplicatedBackend::build_push_op(const ObjectRecoveryInfo &recovery_info,
     out_op->data_included.clear();
   }
 
-  for (interval_set<uint64_t>::iterator p = out_op->data_included.begin();
-       p != out_op->data_included.end();
-       ++p) {
-    bufferlist bit;
-    int r = store->read(ch, ghobject_t(recovery_info.soid),
-		p.get_start(), p.get_len(), bit,
-                cache_dont_need ? CEPH_OSD_OP_FLAG_FADVISE_DONTNEED: 0);
-    if (cct->_conf->osd_debug_random_push_read_error &&
+  auto origin_size = out_op->data_included.size();
+  bufferlist bit;
+  int r = store->readv(ch, ghobject_t(recovery_info.soid),
+		       out_op->data_included, bit,
+                       cache_dont_need ? CEPH_OSD_OP_FLAG_FADVISE_DONTNEED: 0);
+  if (cct->_conf->osd_debug_random_push_read_error &&
         (rand() % (int)(cct->_conf->osd_debug_random_push_read_error * 100.0)) == 0) {
-      dout(0) << __func__ << ": inject EIO " << recovery_info.soid << dendl;
-      r = -EIO;
-    }
-    if (r < 0) {
-      return r;
-    }
-    if (p.get_len() != bit.length()) {
-      dout(10) << " extent " << p.get_start() << "~" << p.get_len()
-	       << " is actually " << p.get_start() << "~" << bit.length()
-	       << dendl;
-      interval_set<uint64_t>::iterator save = p++;
-      if (bit.length() == 0)
-        out_op->data_included.erase(save);     //Remove this empty interval
-      else
-        save.set_len(bit.length());
-      // Remove any other intervals present
-      while (p != out_op->data_included.end()) {
-        interval_set<uint64_t>::iterator save = p++;
-        out_op->data_included.erase(save);
-      }
-      new_progress.data_complete = true;
-      out_op->data.claim_append(bit);
-      break;
-    }
-    out_op->data.claim_append(bit);
+    dout(0) << __func__ << ": inject EIO " << recovery_info.soid << dendl;
+    r = -EIO;
   }
+  if (r < 0) {
+    return r;
+  }
+  if (out_op->data_included.size() != origin_size) {
+    dout(10) << __func__ << " some extents get pruned "
+             << out_op->data_included.size() << "/" << origin_size
+             << dendl;
+    new_progress.data_complete = true;
+  }
+  out_op->data.claim_append(bit);
   if (progress.first && !out_op->data_included.empty() &&
       out_op->data_included.begin().get_start() == 0 &&
       out_op->data.length() == oi.size && oi.is_data_digest()) {
