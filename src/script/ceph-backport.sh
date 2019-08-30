@@ -368,7 +368,7 @@ number=$(curl --silent --data-binary '{"title":"'"$title"'","head":"'$github_use
 component=${COMPONENT:-core}
 info "Opened backport PR ${github_endpoint}/pull/$number"
 debug "Setting ${component} label"
-curl --silent --data-binary '{"milestone":'$milestone_number',"assignee":"'$github_user'","labels":["'$component'"]}' 'https://api.github.com/repos/ceph/ceph/issues/'$number'?access_token='$github_token >/dev/null
+curl --silent --data-binary '{"milestone":'$milestone_number',"labels":["'$component'"]}' 'https://api.github.com/repos/ceph/ceph/issues/'$number'?access_token='$github_token >/dev/null
 info "Set ${component} label in PR"
 pgrep firefox >/dev/null && firefox ${github_endpoint}/pull/$number
 
