@@ -3062,7 +3062,7 @@ int main(int argc, const char **argv)
     } else if (ceph_argparse_witharg(args, i, &val, "--bucket-id", (char*)NULL)) {
       bucket_id = val;
       if (bucket_id.empty()) {
-        cerr << "bad bucket-id" << std::endl;
+        cerr << "no value for bucket-id" << std::endl;
         exit(1);
       }
     } else if (ceph_argparse_witharg(args, i, &val, "--format", (char*)NULL)) {
@@ -5594,6 +5594,15 @@ int main(int argc, const char **argv)
   } /* OPT_BUCKETS_LIST */
 
   if (opt_cmd == OPT_BUCKET_STATS) {
+    if (bucket_name.empty() && !bucket_id.empty()) {
+      rgw_bucket bucket;
+      if (!rgw_find_bucket_by_id(store->ctx(), store->meta_mgr, marker, bucket_id, &bucket)) {
+        cerr << "failure: no such bucket id" << std::endl;
+        return -ENOENT;
+      }
+      bucket_op.set_tenant(bucket.tenant);
+      bucket_op.set_bucket_name(bucket.name);
+    }
     bucket_op.set_fetch_stats(true);
 
     int r = RGWBucketAdminOp::info(store, bucket_op, f);

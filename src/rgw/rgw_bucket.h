@@ -251,6 +251,9 @@ struct RGWBucketAdminOpState {
     if (!user_id.empty())
       uid = user_id;
   }
+  void set_tenant(const std::string& tenant_str) {
+    uid.tenant = tenant_str;
+  }
   void set_bucket_name(const std::string& bucket_str) {
     bucket_name = bucket_str; 
   }
@@ -266,6 +269,7 @@ struct RGWBucketAdminOpState {
   std::string& get_user_display_name() { return display_name; }
   std::string& get_bucket_name() { return bucket_name; }
   std::string& get_object_name() { return object_name; }
+  std::string& get_tenant() { return uid.tenant; }
 
   rgw_bucket& get_bucket() { return bucket; }
   void set_bucket(rgw_bucket& _bucket) {
@@ -564,5 +568,7 @@ public:
   bool going_down();
 };
 
+bool rgw_find_bucket_by_id(CephContext *cct, RGWMetadataManager *mgr, const string& marker,
+                           const string& bucket_id, rgw_bucket* bucket_out);
 
 #endif
