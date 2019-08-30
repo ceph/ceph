@@ -2494,6 +2494,14 @@ private:
     uint32_t op_flags = 0,
     uint64_t retry_count = 0);
 
+  int _do_readv(
+    Collection *c,
+    OnodeRef o,
+    const interval_set<uint64_t>& m,
+    bufferlist& bl,
+    uint32_t op_flags = 0,
+    uint64_t retry_count = 0);
+
   int _fiemap(CollectionHandle &c_, const ghobject_t& oid,
  	     uint64_t offset, size_t len, interval_set<uint64_t>& destset);
 public:
@@ -2501,6 +2509,13 @@ public:
 	     uint64_t offset, size_t len, bufferlist& bl) override;
   int fiemap(CollectionHandle &c, const ghobject_t& oid,
 	     uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) override;
+
+  int readv(
+    CollectionHandle &c_,
+    const ghobject_t& oid,
+    interval_set<uint64_t>& m,
+    bufferlist& bl,
+    uint32_t op_flags) override;
 
   int dump_onode(CollectionHandle &c, const ghobject_t& oid,
     const string& section_name, Formatter *f) override;
