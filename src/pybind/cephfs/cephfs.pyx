@@ -607,6 +607,8 @@ cdef class LibCephFS(object):
         # Configure which filesystem to mount if one was specified
         if filesystem_name is None:
             filesystem_name = b""
+        else:
+            filesystem_name = cstr(filesystem_name, 'filesystem_name')
         cdef:
             char *_filesystem_name = filesystem_name
         if filesystem_name:
