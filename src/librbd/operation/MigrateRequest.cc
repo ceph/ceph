@@ -54,7 +54,6 @@ public:
   }
 
 private:
-  uint64_t m_object_size;
   ::SnapContext m_snapc;
   uint64_t m_object_no;
 
