@@ -10335,8 +10335,7 @@ void OSDShard::identify_splits_and_merges(
 	  split_pgs, nullptr);
       } else {
 	dout(20) << __func__ << " slot " << pgid
-		 << " has no pg and waiting_for_split "
-		 << slot->waiting_for_split << dendl;
+		 << " has no pg and waiting_for_split " << dendl;
       }
     }
   }
