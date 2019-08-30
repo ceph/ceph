@@ -131,6 +131,8 @@ void PreReleaseRequest<I>::handle_block_writes(int r) {
     // allow clean shut down if blacklisted
     lderr(cct) << "failed to block writes because client is blacklisted"
                << dendl;
+  } else if (r == -EDQUOT || r == -ENOSPC) {
+    lderr(cct) << "failed to block writes: " << cpp_strerror(r) << dendl;
   } else if (r < 0) {
     lderr(cct) << "failed to block writes: " << cpp_strerror(r) << dendl;
     m_image_ctx.io_work_queue->unblock_writes();
@@ -176,8 +178,11 @@ template <typename I>
 void PreReleaseRequest<I>::handle_invalidate_cache(int r) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 10) << "r=" << r << dendl;
-
-  if (r < 0 && r != -EBLACKLISTED && r != -EBUSY) {
+  
+  if (r == -EDQUOT || r == -ENOSPC) {
+    lderr(cct) << "failed to invalidate cache: " << cpp_strerror(r)
+               << dendl;
+  } else if (r < 0 && r != -EBLACKLISTED && r != -EBUSY) {
     lderr(cct) << "failed to invalidate cache: " << cpp_strerror(r)
                << dendl;
     m_image_ctx.io_work_queue->unblock_writes();
