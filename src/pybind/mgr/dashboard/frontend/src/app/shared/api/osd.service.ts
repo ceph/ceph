@@ -106,11 +106,11 @@ export class OsdService {
     return this.http.post(`${this.path}/${id}/destroy`, null);
   }
 
-  safeToDestroy(id: number) {
+  safeToDestroy(ids: string) {
     interface SafeToDestroyResponse {
       'safe-to-destroy': boolean;
       message?: string;
     }
-    return this.http.get<SafeToDestroyResponse>(`${this.path}/${id}/safe_to_destroy`);
+    return this.http.get<SafeToDestroyResponse>(`${this.path}/${ids}/safe_to_destroy`);
   }
 }
