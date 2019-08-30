@@ -116,7 +116,7 @@ bool PGBackend::handle_message(OpRequestRef op)
 
 void PGBackend::handle_recovery_delete(OpRequestRef op)
 {
-  const MOSDPGRecoveryDelete *m = static_cast<const MOSDPGRecoveryDelete *>(op->get_req());
+  auto m = op->get_req<MOSDPGRecoveryDelete>();
   ceph_assert(m->get_type() == MSG_OSD_PG_RECOVERY_DELETE);
   dout(20) << __func__ << " " << op << dendl;
 
@@ -149,7 +149,7 @@ void PGBackend::handle_recovery_delete(OpRequestRef op)
 
 void PGBackend::handle_recovery_delete_reply(OpRequestRef op)
 {
-  const MOSDPGRecoveryDeleteReply *m = static_cast<const MOSDPGRecoveryDeleteReply *>(op->get_req());
+  auto m = op->get_req<MOSDPGRecoveryDeleteReply>();
   ceph_assert(m->get_type() == MSG_OSD_PG_RECOVERY_DELETE_REPLY);
   dout(20) << __func__ << " " << op << dendl;
 
