@@ -454,10 +454,6 @@ void RDMADispatcher::handle_tx_event(ibv_wc *cqe, int n)
                    << " len: " << response->byte_len << " , addr:" << chunk
                    << " " << ib->wc_status_to_string(response->status) << dendl;
 
-    QueuePair *qp = get_qp(response->qp_num);
-    if (qp)
-      qp->dec_tx_wr(1);
-
     if (response->status != IBV_WC_SUCCESS) {
       perf_logger->inc(l_msgr_rdma_tx_total_wc_errors);
       if (response->status == IBV_WC_RETRY_EXC_ERR) {
