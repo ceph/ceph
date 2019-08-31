@@ -494,11 +494,12 @@ Context *PG::finish_recovery()
 void PG::_finish_recovery(Context *c)
 {
   std::scoped_lock locker{*this};
-  // When recovery is initiated by a repair, that flag is left on
-  state_clear(PG_STATE_REPAIR);
-  if (recovery_state.is_deleting()) {
+  if (recovery_state.is_deleting() || !is_clean()) {
+    dout(10) << __func__ << " raced with delete or repair" << dendl;
     return;
   }
+  // When recovery is initiated by a repair, that flag is left on
+  state_clear(PG_STATE_REPAIR);
   if (c == finish_sync_event) {
     dout(10) << "_finish_recovery" << dendl;
     finish_sync_event = 0;
