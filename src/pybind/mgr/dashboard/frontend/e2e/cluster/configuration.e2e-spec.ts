@@ -1,3 +1,4 @@
+import { $ } from 'protractor';
 import { Helper } from '../helper.po';
 import { ConfigurationPageHelper } from './configuration.po';
 
@@ -21,6 +22,26 @@ describe('Configuration page', () => {
       await expect(configuration.getBreadcrumbText()).toEqual('Configuration');
     });
   });
+
+  describe('fields check', () => {
+    beforeAll(() => {
+      configuration.navigateTo();
+    });
+
+    it('should verify that selected footer increases when an entry is clicked', async () => {
+      await configuration.getFirstCell().click();
+      const selectedCount = await configuration.getTableSelectedCount();
+      await expect(selectedCount).toBe(1);
+    });
+
+    it('should check that details table opens and tab is correct', async () => {
+      await configuration.getFirstCell().click();
+      await expect($('.table.table-striped.table-bordered').isDisplayed());
+      await expect(configuration.getTabsCount()).toEqual(1);
+      await expect(configuration.getTabText(0)).toEqual('Details');
+    });
+  });
+
   describe('edit configuration test', () => {
     beforeAll(async () => {
       await configuration.navigateTo();

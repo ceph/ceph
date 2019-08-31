@@ -96,6 +96,14 @@ export abstract class PageHelper {
     return Number(text.match(/(\d+)\s+total/)[1]);
   }
 
+  async getTableSelectedCount(): Promise<number> {
+    const text = await $$('.datatable-footer-inner .page-count span')
+      .filter(async (e) => (await e.getText()).includes('selected'))
+      .first()
+      .getText();
+    return Number(text.match(/(\d+)\s+selected/)[1]);
+  }
+
   getTableCell(content: string): ElementFinder {
     return element(by.cssContainingText('.datatable-body-cell-label', content));
   }
@@ -265,5 +273,9 @@ export abstract class PageHelper {
 
   async waitFn(func: Function, message?: string) {
     return browser.wait(func, TIMEOUT, message);
+  }
+
+  getFirstCell(): ElementFinder {
+    return $$('.datatable-body-cell-label').first();
   }
 }
