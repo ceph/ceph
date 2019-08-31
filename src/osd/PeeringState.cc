@@ -212,6 +212,7 @@ void PeeringState::purge_strays()
     }
     peer_missing.erase(*p);
     peer_info.erase(*p);
+    missing_loc.remove_stray_recovery_sources(*p);
     peer_purged.insert(*p);
     removed = true;
   }
