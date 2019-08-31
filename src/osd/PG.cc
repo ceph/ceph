@@ -2321,7 +2321,8 @@ void PG::finish_recovery(list<Context*>& tfin)
 void PG::_finish_recovery(Context *c)
 {
   lock();
-  if (deleting) {
+  if (deleting || !is_clean()) {
+    dout(10) << __func__ << " raced with delete or repair" << dendl;
     unlock();
     return;
   }
