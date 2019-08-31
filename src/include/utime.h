@@ -122,6 +122,12 @@ public:
     encode_timeval(&ts);
     return ceph::real_clock::from_ceph_timespec(ts);
   }
+  ceph::timespan to_timespan() const {
+    using namespace std::chrono;
+    ceph_timespec ts;
+    encode_timeval(&ts);
+    return seconds(ts.tv_sec) + nanoseconds(ts.tv_nsec);
+  }
 
   // accessors
   time_t        sec()  const { return tv.tv_sec; }
