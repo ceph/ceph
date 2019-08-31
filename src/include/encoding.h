@@ -1476,7 +1476,6 @@ decode(std::array<T, N>& v, bufferlist::const_iterator& p)
   }
 
 namespace ceph {
-
 /*
  * Encoders/decoders to read from current offset in a file handle and
  * encode/decode the data according to argument types.
@@ -1504,6 +1503,34 @@ inline ssize_t decode_file(int fd, bufferptr &bp)
   decode(bp, bli);
   return bl.length();
 }
+
+namespace _codable {
+template<typename = void, typename ...T>
+struct encodable : std::false_type {};
+
+template<typename... Args>
+struct encodable<std::void_t<decltype(
+  encode(std::declval<Args>()...))>, Args...>
+    : std::true_type {};
+
+template<typename = void, typename ...T>
+struct decodable : std::false_type {};
+
+template<typename... Args>
+struct decodable<std::void_t<decltype(
+  decode(std::declval<Args>()...))>, Args...>
+    : std::true_type {};
 }
+
+template<typename T>
+inline constexpr bool encodable_v =
+  _codable::encodable<void, const std::decay_t<T>&, bufferlist&>::value;
+
+template<typename T>
+inline constexpr bool decodable_v =
+  _codable::decodable<void, std::decay_t<T>&, bufferlist::iterator&>::value;
+
+}
+
 
 #endif
