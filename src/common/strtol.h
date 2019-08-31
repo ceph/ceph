@@ -16,19 +16,20 @@
 #define CEPH_COMMON_STRTOL_H
 
 #include <string>
-extern "C" {
-#include <stdint.h>
-}
+#include <cstdint>
+#include <string_view>
 
 long long strict_strtoll(const char *str, int base, std::string *err);
-
 int strict_strtol(const char *str, int base, std::string *err);
-
 double strict_strtod(const char *str, std::string *err);
-
 float strict_strtof(const char *str, std::string *err);
-
 uint64_t strict_iecstrtoll(const char *str, std::string *err);
+
+long long strict_strtoll(std::string_view str, int base, std::string *err);
+int strict_strtol(std::string_view, int base, std::string *err);
+double strict_strtod(std::string_view str, std::string *err);
+float strict_strtof(std::string_view str, std::string *err);
+uint64_t strict_iecstrtoll(std::string_view str, std::string *err);
 
 template<typename T>
 T strict_iec_cast(const char *str, std::string *err);
