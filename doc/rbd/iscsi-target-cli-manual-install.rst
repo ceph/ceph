@@ -42,6 +42,10 @@ on each machine that will be a iSCSI gateway:
 -  python flask
 -  pyOpenSSL
 
+1a. Install Common Packages for Debian 10
+==========================
+apt-get update && apt-get install libnl-3-dev libnl-genl-3-dev python2.7-flask python-netifaces
+
 
 2. Install Git
 ==============
