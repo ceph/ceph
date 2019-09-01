@@ -77,8 +77,10 @@ class SubVolume(object):
 
         try:
             if size is not None:
-                self.fs.setxattr(subvolpath, 'ceph.quota.max_bytes', str(size).encode('utf-8'), 0)
-
+                try:
+                    self.fs.setxattr(subvolpath, 'ceph.quota.max_bytes', str(size).encode('utf-8'), 0)
+                except cephfs.InvalidValue as e:
+                    raise VolumeException(-errno.EINVAL, "Invalid size: '{0}'".format(size))
             if pool:
                 try:
                     self.fs.setxattr(subvolpath, 'ceph.dir.layout.pool', pool.encode('utf-8'), 0)
