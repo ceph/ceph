@@ -1584,7 +1584,7 @@ public:
                             rgw_bucket_sync_pipe& _sync_pipe,
                             rgw_obj_key& _key,
                             AWSSyncInstanceEnv& _instance,
-                            uint64_t _versioned_epoch) : RGWStatRemoteObjCBCR(_sc, _sync_pipe.source_bs.bucket, _key),
+                            uint64_t _versioned_epoch) : RGWStatRemoteObjCBCR(_sc, _sync_pipe.info.source_bs.bucket, _key),
                                                          sync_pipe(_sync_pipe),
                                                          instance(_instance), versioned_epoch(_versioned_epoch)
   {}
@@ -1616,7 +1616,7 @@ public:
         return set_cr_error(-EINVAL);
       }
 
-      instance.get_profile(sync_pipe.source_bs.bucket, &target);
+      instance.get_profile(sync_pipe.info.source_bs.bucket, &target);
       instance.conf.get_target(target, sync_pipe.dest_bucket_info, key, &target_bucket_name, &target_obj_name);
 
       if (bucket_created.find(target_bucket_name) == bucket_created.end()){
@@ -1707,7 +1707,7 @@ class RGWAWSHandleRemoteObjCR : public RGWCallStatRemoteObjCR {
 public:
   RGWAWSHandleRemoteObjCR(RGWDataSyncCtx *_sc,
                               rgw_bucket_sync_pipe& _sync_pipe, rgw_obj_key& _key,
-                              AWSSyncInstanceEnv& _instance, uint64_t _versioned_epoch) : RGWCallStatRemoteObjCR(_sc, _sync_pipe.source_bs.bucket, _key),
+                              AWSSyncInstanceEnv& _instance, uint64_t _versioned_epoch) : RGWCallStatRemoteObjCR(_sc, _sync_pipe.info.source_bs.bucket, _key),
                                                           sync_pipe(_sync_pipe),
                                                           instance(_instance), versioned_epoch(_versioned_epoch) {
   }
@@ -1736,9 +1736,9 @@ public:
   int operate() override {
     reenter(this) {
       ldout(sc->cct, 0) << ": remove remote obj: z=" << sc->source_zone
-                              << " b=" <<sync_pipe.source_bs.bucket << " k=" << key << " mtime=" << mtime << dendl;
+                              << " b=" <<sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime << dendl;
       yield {
-        instance.get_profile(sync_pipe.source_bs.bucket, &target);
+        instance.get_profile(sync_pipe.info.source_bs.bucket, &target);
         string path =  instance.conf.get_path(target, sync_pipe.dest_bucket_info, key);
         ldout(sc->cct, 0) << "AWS: removing aws object at" << path << dendl;
 
@@ -1775,18 +1775,18 @@ public:
   RGWCoroutine *sync_object(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key,
                             std::optional<uint64_t> versioned_epoch,
                             rgw_zone_set *zones_trace) override {
-    ldout(sc->cct, 0) << instance.id << ": sync_object: b=" << sync_pipe.source_bs.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
+    ldout(sc->cct, 0) << instance.id << ": sync_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
     return new RGWAWSHandleRemoteObjCR(sc, sync_pipe, key, instance, versioned_epoch.value_or(0));
   }
   RGWCoroutine *remove_object(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch,
                               rgw_zone_set *zones_trace) override {
-    ldout(sc->cct, 0) <<"rm_object: b=" << sync_pipe.source_bs.bucket << " k=" << key << " mtime=" << mtime << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
+    ldout(sc->cct, 0) <<"rm_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
     return new RGWAWSRemoveRemoteObjCBCR(sc, sync_pipe, key, mtime, instance);
   }
   RGWCoroutine *create_delete_marker(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
                                      rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch,
                                      rgw_zone_set *zones_trace) override {
-    ldout(sc->cct, 0) <<"AWS Not implemented: create_delete_marker: b=" << sync_pipe.source_bs.bucket << " k=" << key << " mtime=" << mtime
+    ldout(sc->cct, 0) <<"AWS Not implemented: create_delete_marker: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime
                             << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
     return NULL;
   }

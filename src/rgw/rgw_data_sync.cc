@@ -2051,15 +2051,20 @@ RGWRemoteBucketLog::RGWRemoteBucketLog(const DoutPrefixProvider *_dpp,
 }
 
 int RGWRemoteBucketLog::init(const string& _source_zone, RGWRESTConn *_conn,
-                             const rgw_bucket& bucket, int shard_id,
+                             const rgw_bucket& source_bucket, int shard_id,
+                             const rgw_bucket& dest_bucket,
                              RGWSyncErrorLogger *_error_logger,
                              RGWSyncTraceManager *_sync_tracer,
                              RGWSyncModuleInstanceRef& _sync_module)
 {
   conn = _conn;
   source_zone = _source_zone;
-  bs.bucket = bucket;
-  bs.shard_id = shard_id;
+  sync_pair.source_bs.bucket = source_bucket;
+  sync_pair.source_bs.shard_id = shard_id;
+  sync_pair.dest_bs.bucket = dest_bucket;
+  if (dest_bucket == source_bucket) {
+    sync_pair.dest_bs.shard_id = shard_id;
+  }
 
   sync_env.init(dpp, store->ctx(), store, store->svc(), async_rados, http_manager,
                 _error_logger, _sync_tracer, _sync_module, nullptr);
@@ -2106,7 +2111,7 @@ class RGWInitBucketShardSyncStatusCoroutine : public RGWCoroutine {
   RGWDataSyncCtx *sc;
   RGWDataSyncEnv *sync_env;
 
-  const rgw_bucket_sync_pipe& sync_pipe;
+  const rgw_bucket_sync_pair_info& sync_pair;
   const string sync_status_oid;
 
   rgw_bucket_shard_sync_info& status;
@@ -2114,18 +2119,18 @@ class RGWInitBucketShardSyncStatusCoroutine : public RGWCoroutine {
   rgw_bucket_index_marker_info info;
 public:
   RGWInitBucketShardSyncStatusCoroutine(RGWDataSyncCtx *_sc,
-                                        const rgw_bucket_sync_pipe& _sync_pipe,
+                                        const rgw_bucket_sync_pair_info& _sync_pair,
                                         rgw_bucket_shard_sync_info& _status)
     : RGWCoroutine(_sc->cct), sc(_sc), sync_env(_sc->env),
-      sync_pipe(_sync_pipe),
-      sync_status_oid(RGWBucketPipeSyncStatusManager::status_oid(sc->source_zone, _sync_pipe.info)),
+      sync_pair(_sync_pair),
+      sync_status_oid(RGWBucketPipeSyncStatusManager::status_oid(sc->source_zone, _sync_pair)),
       status(_status)
   {}
 
   int operate() override {
     reenter(this) {
       /* fetch current position in logs */
-      yield call(new RGWReadRemoteBucketIndexLogInfoCR(sc, sync_pipe.info.source_bs, &info));
+      yield call(new RGWReadRemoteBucketIndexLogInfoCR(sc, sync_pair.source_bs, &info));
       if (retcode < 0 && retcode != -ENOENT) {
         ldout(cct, 0) << "ERROR: failed to fetch bucket index status" << dendl;
         return set_cr_error(retcode);
@@ -2164,11 +2169,7 @@ public:
 
 RGWCoroutine *RGWRemoteBucketLog::init_sync_status_cr()
 {
-#warning FIXME
-  rgw_bucket_sync_pipe sync_pipe;
-  sync_pipe.source_bs = bs;
-  sync_pipe.dest_bs = bs;
-  return new RGWInitBucketShardSyncStatusCoroutine(&sc, sync_pipe, init_status);
+  return new RGWInitBucketShardSyncStatusCoroutine(&sc, sync_pair, init_status);
 }
 
 #define BUCKET_SYNC_ATTR_PREFIX RGW_ATTR_PREFIX "bucket-sync."
@@ -2443,10 +2444,6 @@ int RGWRemoteDataLog::read_shard_status(int shard_id, set<string>& pending_bucke
 
 RGWCoroutine *RGWRemoteBucketLog::read_sync_status_cr(rgw_bucket_shard_sync_info *sync_status)
 {
-  rgw_bucket_sync_pair_info sync_pair;
-  sync_pair.source_bs = bs;
-#warning FIXME
-  sync_pair.dest_bs = bs;
   return new RGWReadBucketPipeSyncStatusCoroutine(&sc, sync_pair, sync_status);
 }
 
@@ -2456,7 +2453,7 @@ RGWBucketPipeSyncStatusManager::RGWBucketPipeSyncStatusManager(rgw::sal::RGWRado
                                                                                    http_manager(store->ctx(), cr_mgr.get_completion_mgr()),
                                                                                    source_zone(_source_zone),
                                                                                    conn(NULL), error_logger(NULL),
-                                                                                   bucket(bucket),
+                                                                                   dest_bucket(_dest_bucket),
                                                                                    num_shards(0)
 {
 }
@@ -3573,7 +3570,7 @@ int RGWRunBucketSourcesSyncCR::operate()
         sync_pair.source_bs.bucket = piter->bucket;
         sync_pair.dest_bs.bucket = bucket_info.bucket;
 
-        yield spawn(new RGWRunBucketSyncCoroutine(cur_sc, sync_pair, tn));
+        yield spawn(new RGWRunBucketSyncCoroutine(cur_sc, sync_pair, tn), false);
         while (num_spawned() > BUCKET_SYNC_SPAWN_WINDOW) {
           set_status() << "num_spawned() > spawn_window";
           yield wait_for_child();
@@ -3646,7 +3643,7 @@ int RGWSyncGetBucketInfoCR::operate()
         return set_cr_error(retcode);
       }
 
-      yield call(new RGWGetBucketInstanceInfoCR(sync_env->async_rados, sync_env->store, bucket, &pbucket_info));
+      yield call(new RGWGetBucketInstanceInfoCR(sync_env->async_rados, sync_env->store, bucket, pbucket_info));
     }
     if (retcode < 0) {
       tn->log(0, SSTR("ERROR: failed to retrieve bucket info for bucket=" << bucket_str{bucket}));
@@ -3655,6 +3652,8 @@ int RGWSyncGetBucketInfoCR::operate()
 
     return set_cr_done();
   }
+
+  return 0;
 }
 
 int RGWRunBucketSyncCoroutine::operate()
@@ -3694,7 +3693,7 @@ int RGWRunBucketSyncCoroutine::operate()
 
     yield call(new RGWSyncGetBucketInfoCR(sync_env, sync_pair.source_bs.bucket, &sync_pipe.source_bucket_info, tn));
     if (retcode < 0) {
-      tn->log(0, SSTR("ERROR: failed to retrieve bucket info for bucket=" << bucket_str{sync_pipe.info.source_bs.bucket}));
+      tn->log(0, SSTR("ERROR: failed to retrieve bucket info for bucket=" << bucket_str{sync_pair.source_bs.bucket}));
       lease_cr->go_down();
       drain_all();
       return set_cr_error(retcode);
@@ -3702,7 +3701,7 @@ int RGWRunBucketSyncCoroutine::operate()
 
     yield call(new RGWSyncGetBucketInfoCR(sync_env, sync_pair.dest_bs.bucket, &sync_pipe.dest_bucket_info, tn));
     if (retcode < 0) {
-      tn->log(0, SSTR("ERROR: failed to retrieve bucket info for bucket=" << bucket_str{sync_pipe.source_bs.bucket}));
+      tn->log(0, SSTR("ERROR: failed to retrieve bucket info for bucket=" << bucket_str{sync_pair.source_bs.bucket}));
       lease_cr->go_down();
       drain_all();
       return set_cr_error(retcode);
@@ -3712,7 +3711,7 @@ int RGWRunBucketSyncCoroutine::operate()
 
     do {
       if (sync_status.state == rgw_bucket_shard_sync_info::StateInit) {
-        yield call(new RGWInitBucketShardSyncStatusCoroutine(sc, sync_pipe, sync_status));
+        yield call(new RGWInitBucketShardSyncStatusCoroutine(sc, sync_pair, sync_status));
         if (retcode == -ENOENT) {
           tn->log(0, "bucket sync disabled");
           lease_cr->abort(); // deleted lease object, abort/wakeup instead of unlock
@@ -3765,7 +3764,7 @@ int RGWRunBucketSyncCoroutine::operate()
 
 RGWCoroutine *RGWRemoteBucketLog::run_sync_cr()
 {
-  return new RGWRunBucketSyncCoroutine(&sc, bs, sync_env.sync_tracer->root_node);
+  return new RGWRunBucketSyncCoroutine(&sc, sync_pair, sync_env.sync_tracer->root_node);
 }
 
 int RGWBucketPipeSyncStatusManager::init()
@@ -3783,8 +3782,9 @@ int RGWBucketPipeSyncStatusManager::init()
   }
 
 #warning read specific bucket sources
+  rgw_bucket source_bucket = dest_bucket;
 
-  const string key = bucket.get_key();
+  const string key = source_bucket.get_key();
 
   rgw_http_param_pair pairs[] = { { "key", key.c_str() },
                                   { NULL, NULL } };
@@ -3807,11 +3807,11 @@ int RGWBucketPipeSyncStatusManager::init()
 
   int effective_num_shards = (num_shards ? num_shards : 1);
 
-  auto async_rados = store->svc.rados->get_async_processor();
+  auto async_rados = store->svc()->rados->get_async_processor();
 
   for (int i = 0; i < effective_num_shards; i++) {
     RGWRemoteBucketLog *l = new RGWRemoteBucketLog(this, store, async_rados, &http_manager);
-    ret = l->init(source_zone, conn, bucket, (num_shards ? i : -1), error_logger, store->getRados()->get_sync_tracer(), sync_module);
+    ret = l->init(source_zone, conn, source_bucket, (num_shards ? i : -1), dest_bucket, error_logger, store->getRados()->get_sync_tracer(), sync_module);
     if (ret < 0) {
       ldpp_dout(this, 0) << "ERROR: failed to initialize RGWRemoteBucketLog object" << dendl;
       return ret;
@@ -3852,7 +3852,7 @@ int RGWBucketPipeSyncStatusManager::read_sync_status()
   int ret = cr_mgr.run(stacks);
   if (ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to read sync status for "
-        << bucket_str{bucket} << dendl;
+        << bucket_str{dest_bucket} << dendl;
     return ret;
   }
 
@@ -3874,7 +3874,7 @@ int RGWBucketPipeSyncStatusManager::run()
   int ret = cr_mgr.run(stacks);
   if (ret < 0) {
     ldpp_dout(this, 0) << "ERROR: failed to read sync status for "
-        << bucket_str{bucket} << dendl;
+        << bucket_str{dest_bucket} << dendl;
     return ret;
   }
 
@@ -3890,7 +3890,7 @@ std::ostream& RGWBucketPipeSyncStatusManager::gen_prefix(std::ostream& out) cons
 {
   auto zone = std::string_view{source_zone};
   return out << "bucket sync zone:" << zone.substr(0, 8)
-      << " bucket:" << bucket.name << ' ';
+      << " bucket:" << dest_bucket << ' ';
 }
 
 string RGWBucketPipeSyncStatusManager::status_oid(const string& source_zone,
@@ -3919,7 +3919,7 @@ class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
   const int num_shards;
   rgw_bucket_shard bs;
 #warning change this
-  rgw_bucket_sync_pipe sync_pipe;
+  rgw_bucket_sync_pair_info sync_pair;
 
   using Vector = std::vector<rgw_bucket_shard_sync_info>;
   Vector::iterator i, end;
@@ -3938,8 +3938,8 @@ class RGWCollectBucketSyncStatusCR : public RGWShardCollectCR {
     if (i == end) {
       return false;
     }
-    sync_pipe.source_bs = bs;
-    spawn(new RGWReadBucketPipeSyncStatusCoroutine(sc, sync_pipe, &*i), false);
+    sync_pair.source_bs = bs;
+    spawn(new RGWReadBucketPipeSyncStatusCoroutine(sc, sync_pair, &*i), false);
     ++i;
     ++bs.shard_id;
     return true;
