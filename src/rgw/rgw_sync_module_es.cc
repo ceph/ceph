@@ -779,13 +779,13 @@ class RGWElasticHandleRemoteObjCBCR : public RGWStatRemoteObjCBCR {
 public:
   RGWElasticHandleRemoteObjCBCR(RGWDataSyncCtx *_sc,
                           rgw_bucket_sync_pipe& _sync_pipe, rgw_obj_key& _key,
-                          ElasticConfigRef _conf, uint64_t _versioned_epoch) : RGWStatRemoteObjCBCR(_sc, _sync_pipe.source_bs.bucket, _key),
+                          ElasticConfigRef _conf, uint64_t _versioned_epoch) : RGWStatRemoteObjCBCR(_sc, _sync_pipe.info.source_bs.bucket, _key),
                                                                                sync_pipe(_sync_pipe), conf(_conf),
                                                                                versioned_epoch(_versioned_epoch) {}
   int operate() override {
     reenter(this) {
       ldout(sync_env->cct, 10) << ": stat of remote obj: z=" << sc->source_zone
-                               << " b=" << sync_pipe.source_bs.bucket << " k=" << key
+                               << " b=" << sync_pipe.info.source_bs.bucket << " k=" << key
                                << " size=" << size << " mtime=" << mtime << dendl;
 
       yield {
@@ -815,7 +815,7 @@ class RGWElasticHandleRemoteObjCR : public RGWCallStatRemoteObjCR {
 public:
   RGWElasticHandleRemoteObjCR(RGWDataSyncCtx *_sc,
                         rgw_bucket_sync_pipe& _sync_pipe, rgw_obj_key& _key,
-                        ElasticConfigRef _conf, uint64_t _versioned_epoch) : RGWCallStatRemoteObjCR(_sc, _sync_pipe.source_bs.bucket, _key),
+                        ElasticConfigRef _conf, uint64_t _versioned_epoch) : RGWCallStatRemoteObjCR(_sc, _sync_pipe.info.source_bs.bucket, _key),
                                                            sync_pipe(_sync_pipe),
                                                            conf(_conf), versioned_epoch(_versioned_epoch) {
   }
@@ -843,7 +843,7 @@ public:
   int operate() override {
     reenter(this) {
       ldout(sync_env->cct, 10) << ": remove remote obj: z=" << sc->source_zone
-                               << " b=" << sync_pipe.source_bs.bucket << " k=" << key << " mtime=" << mtime << dendl;
+                               << " b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime << dendl;
       yield {
         string path = conf->get_obj_path(sync_pipe.dest_bucket_info, key);
 
@@ -885,7 +885,7 @@ public:
   }
 
   RGWCoroutine *sync_object(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, std::optional<uint64_t> versioned_epoch, rgw_zone_set *zones_trace) override {
-    ldout(sc->cct, 10) << conf->id << ": sync_object: b=" << sync_pipe.source_bs.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
+    ldout(sc->cct, 10) << conf->id << ": sync_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " versioned_epoch=" << versioned_epoch.value_or(0) << dendl;
     if (!conf->should_handle_operation(sync_pipe.dest_bucket_info)) {
       ldout(sc->cct, 10) << conf->id << ": skipping operation (bucket not approved)" << dendl;
       return nullptr;
@@ -894,7 +894,7 @@ public:
   }
   RGWCoroutine *remove_object(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override {
     /* versioned and versioned epoch params are useless in the elasticsearch backend case */
-    ldout(sc->cct, 10) << conf->id << ": rm_object: b=" << sync_pipe.source_bs.bucket << " k=" << key << " mtime=" << mtime << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
+    ldout(sc->cct, 10) << conf->id << ": rm_object: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
     if (!conf->should_handle_operation(sync_pipe.dest_bucket_info)) {
       ldout(sc->cct, 10) << conf->id << ": skipping operation (bucket not approved)" << dendl;
       return nullptr;
@@ -903,7 +903,7 @@ public:
   }
   RGWCoroutine *create_delete_marker(RGWDataSyncCtx *sc, rgw_bucket_sync_pipe& sync_pipe, rgw_obj_key& key, real_time& mtime,
                                      rgw_bucket_entry_owner& owner, bool versioned, uint64_t versioned_epoch, rgw_zone_set *zones_trace) override {
-    ldout(sc->cct, 10) << conf->id << ": create_delete_marker: b=" << sync_pipe.source_bs.bucket << " k=" << key << " mtime=" << mtime
+    ldout(sc->cct, 10) << conf->id << ": create_delete_marker: b=" << sync_pipe.info.source_bs.bucket << " k=" << key << " mtime=" << mtime
                             << " versioned=" << versioned << " versioned_epoch=" << versioned_epoch << dendl;
     ldout(sc->cct, 10) << conf->id << ": skipping operation (not handled)" << dendl;
     return NULL;
