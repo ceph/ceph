@@ -908,6 +908,12 @@ void rgw_sync_policy_info::decode_json(JSONObj *obj)
   JSONDecoder::decode_json("targets", targets, obj);
 }
 
+void RGWBucketSyncPolicyHandler::peer_info::dump(Formatter *f) const
+{
+  encode_json("type", get_type(), f);
+  encode_json("bucket", bucket, f);
+}
+
 void rgw_obj_key::dump(Formatter *f) const
 {
   encode_json("name", name, f);

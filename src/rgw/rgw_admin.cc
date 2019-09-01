@@ -57,6 +57,7 @@ extern "C" {
 #include "rgw_zone.h"
 #include "rgw_pubsub.h"
 #include "rgw_sync_module_pubsub.h"
+#include "rgw_bucket_sync.h"
 
 #include "services/svc_sync_modules.h"
 #include "services/svc_cls.h"
@@ -556,6 +557,7 @@ enum class OPT {
   BUCKET_UNLINK,
   BUCKET_STATS,
   BUCKET_CHECK,
+  BUCKET_SYNC_INFO,
   BUCKET_SYNC_STATUS,
   BUCKET_SYNC_MARKERS,
   BUCKET_SYNC_INIT,
@@ -743,6 +745,7 @@ static SimpleCmd::Commands all_cmds = {
   { "bucket unlink", OPT::BUCKET_UNLINK },
   { "bucket stats", OPT::BUCKET_STATS },
   { "bucket check", OPT::BUCKET_CHECK },
+  { "bucket sync info", OPT::BUCKET_SYNC_INFO },
   { "bucket sync status", OPT::BUCKET_SYNC_STATUS },
   { "bucket sync markers", OPT::BUCKET_SYNC_MARKERS },
   { "bucket sync init", OPT::BUCKET_SYNC_INIT },
@@ -2271,6 +2274,76 @@ static int bucket_source_sync_status(rgw::sal::RGWRadosStore *store, const RGWZo
   return 0;
 }
 
+static int bucket_sync_info(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& info,
+                              std::ostream& out)
+{
+  const RGWRealm& realm = store->svc()->zone->get_realm();
+  const RGWZoneGroup& zonegroup = store->svc()->zone->get_zonegroup();
+  const RGWZone& zone = store->svc()->zone->get_zone();
+  constexpr int width = 15;
+
+  out << indented{width, "realm"} << realm.get_id() << " (" << realm.get_name() << ")\n";
+  out << indented{width, "zonegroup"} << zonegroup.get_id() << " (" << zonegroup.get_name() << ")\n";
+  out << indented{width, "zone"} << zone.id << " (" << zone.name << ")\n";
+  out << indented{width, "bucket"} << info.bucket << "\n\n";
+
+  if (!store->ctl()->bucket->bucket_imports_data(info.bucket, null_yield)) {
+    out << "Sync is disabled for bucket " << info.bucket.name << '\n';
+    return 0;
+  }
+
+#if 0
+#warning need to use bucket sources
+  auto& zone_conn_map = store->svc()->zone->get_zone_conn_map();
+  if (!source_zone_id.empty()) {
+    auto z = zonegroup.zones.find(source_zone_id);
+    if (z == zonegroup.zones.end()) {
+      lderr(store->ctx()) << "Source zone not found in zonegroup "
+          << zonegroup.get_name() << dendl;
+      return -EINVAL;
+    }
+    auto c = zone_conn_map.find(source_zone_id);
+    if (c == zone_conn_map.end()) {
+      lderr(store->ctx()) << "No connection to zone " << z->second.name << dendl;
+      return -EINVAL;
+    }
+    return bucket_source_sync_status(store, zone, z->second, c->second,
+                                     info, width, out);
+  }
+
+  for (const auto& z : zonegroup.zones) {
+    auto c = zone_conn_map.find(z.second.id);
+    if (c != zone_conn_map.end()) {
+      bucket_source_sync_status(store, zone, z.second, c->second,
+                                info, width, out);
+    }
+  }
+#endif
+  RGWBucketSyncPolicyHandlerRef handler;
+
+  int r = store->ctl()->bucket->get_sync_policy_handler(info.bucket, &handler, null_yield);
+  if (r < 0) {
+    lderr(store->ctx()) << "ERROR: failed to get policy handler for bucket (" << info.bucket << "): r=" << r << ": " << cpp_strerror(-r) << dendl;
+    return r;
+  }
+
+  auto& sources = handler->get_sources();
+
+  for (auto& m : sources) {
+    auto& zone = m.first;
+    out << indented{width, "source zone"} << zone << std::endl;
+    for (auto& s : m.second) {
+      out << indented{width, "bucket"} << s << std::endl;
+    }
+  }
+
+  JSONFormatter f;
+  encode_json("sources", sources, &f);
+  f.flush(out);
+
+  return 0;
+}
+
 static int bucket_sync_status(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& info,
                               const std::string& source_zone_id,
                               std::ostream& out)
@@ -3175,6 +3248,7 @@ int main(int argc, const char **argv)
 			 OPT::BUCKETS_LIST,
 			 OPT::BUCKET_LIMIT_CHECK,
 			 OPT::BUCKET_STATS,
+			 OPT::BUCKET_SYNC_INFO,
 			 OPT::BUCKET_SYNC_STATUS,
 			 OPT::BUCKET_SYNC_MARKERS,
 			 OPT::LOG_LIST,
@@ -7214,6 +7288,20 @@ next:
       cerr << err_msg << std::endl;
       return -ret;
     }
+  }
+
+  if (opt_cmd == OPT::BUCKET_SYNC_INFO) {
+    if (bucket_name.empty()) {
+      cerr << "ERROR: bucket not specified" << std::endl;
+      return EINVAL;
+    }
+    RGWBucketInfo bucket_info;
+    rgw_bucket bucket;
+    int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket);
+    if (ret < 0) {
+      return -ret;
+    }
+    bucket_sync_info(store, bucket_info, std::cout);
   }
 
   if (opt_cmd == OPT::BUCKET_SYNC_STATUS) {

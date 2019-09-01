@@ -43,6 +43,15 @@ public:
     bool is_rgw() const {
       return (type.empty() || type == "rgw");
     }
+
+    string get_type() const {
+      if (!type.empty()) {
+        return type;
+      }
+      return "rgw";
+    }
+
+    void dump(Formatter *f) const;
   };
 
 private:
@@ -79,3 +88,6 @@ public:
   bool bucket_imports_data() const;
 };
 
+inline ostream& operator<<(ostream& out, const RGWBucketSyncPolicyHandler::peer_info& pi) {
+  return out << pi.bucket << " (" << pi.get_type() << ")";
+}
