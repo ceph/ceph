@@ -571,6 +571,7 @@ void _dump_onode(CephContext *cct, const BlueStore::Onode& o)
 		  << " (" << std::dec << o.onode.size << ")"
 		  << " expected_object_size " << o.onode.expected_object_size
 		  << " expected_write_size " << o.onode.expected_write_size
+		  << " inline_valid " << o.onode.inline_valid
 		  << " in " << o.onode.extent_map_shards.size() << " shards"
 		  << ", " << o.extent_map.spanning_blob_map.size()
 		  << " spanning blobs"
@@ -3631,6 +3632,9 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
     auto p = v.front().begin_deep();
     on->onode.decode(p);
     for (auto& i : on->onode.attrs) {
+      if (i.first == INLINE_DATA_ATTR) {
+        on->onode.inline_valid = true;
+      }
       i.second.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
     }
 
@@ -8839,6 +8843,16 @@ int BlueStore::_do_read(
     return r;
   }
 
+  if (offset + length > o->onode.size) {
+    length = o->onode.size - offset;
+  }
+
+  if (o->onode.inline_valid) {
+    bl.append(o->onode.attrs[INLINE_DATA_ATTR], offset, length);
+    dout(20) << __func__ << " read inlined data: " << bl << dendl;
+    return length;
+  }
+
   // generally, don't buffer anything, unless the client explicitly requests
   // it.
   bool buffered = false;
@@ -8850,10 +8864,6 @@ int BlueStore::_do_read(
 			  CEPH_OSD_OP_FLAG_FADVISE_NOCACHE)) == 0) {
     dout(20) << __func__ << " defaulting to buffered read" << dendl;
     buffered = true;
-  }
-
-  if (offset + length > o->onode.size) {
-    length = o->onode.size - offset;
   }
 
   auto start = mono_clock::now();
@@ -13043,18 +13053,57 @@ int BlueStore::_write(TransContext *txc,
 {
   dout(15) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
+	   << " inline_valid " << o->onode.inline_valid
 	   << dendl;
   int r = 0;
   if (offset + length >= OBJECT_MAX_SIZE) {
     r = -E2BIG;
   } else {
     _assign_nid(txc, o);
-    r = _do_write(txc, c, o, offset, length, bl, fadvise_flags);
+
+    bool should_inline = (o->onode.alloc_hint_flags &
+      CEPH_OSD_ALLOC_HINT_FLAG_IMMUTABLE) &&
+      (length <= cct->_conf->bluestore_data_inline_limit_bytes);
+    bool inline_valid = o->onode.inline_valid;
+
+    if (o->onode.size && (inline_valid != should_inline)) {
+      dout(15) << __func__ << " truncate to 0 before transfer between inline"
+                              " and normal object"
+               << dendl;
+
+      // this should be a writefull op
+      assert(!offset);
+      r = _truncate(txc, c, o, 0);
+      if (r) {
+        derr << __func__ << " truncate before write failed: r = " << r
+             << dendl;
+        return r;
+      }
+    }
+
+    // inline small write with immutable flag
+    if (should_inline) {
+      if (offset) {
+        derr << __func__ << " can't modify part of inlined object" << dendl;
+        return -ENOTSUP;
+      }
+
+      bufferptr bp(bl.c_str(), bl.length());
+      _setattr(txc, c, o, INLINE_DATA_ATTR, bp);
+      o->onode.size = length;
+      o->onode.inline_valid = true;
+    } else {
+      o->onode.inline_valid = false;
+      r = _do_write(txc, c, o, offset, length, bl, fadvise_flags);
+    }
+
     txc->write_onode(o);
   }
   dout(10) << __func__ << " " << c->cid << " " << o->oid
 	   << " 0x" << std::hex << offset << "~" << length << std::dec
-	   << " = " << r << dendl;
+	   << " = " << r
+	   << " inline_valid " << o->onode.inline_valid
+	   << dendl;
   return r;
 }
 
@@ -13122,22 +13171,34 @@ void BlueStore::_do_truncate(
   if (offset == o->onode.size)
     return;
 
-  if (offset < o->onode.size) {
-    WriteContext wctx;
-    uint64_t length = o->onode.size - offset;
-    o->extent_map.fault_range(db, offset, length);
-    o->extent_map.punch_hole(c, offset, length, &wctx.old_extents);
-    o->extent_map.dirty_range(offset, length);
-    _wctx_finish(txc, c, o, &wctx, maybe_unshared_blobs);
+  if (o->onode.inline_valid) {
+    // inlined object can only be truncated to 0
+    assert(!offset);
 
-    // if we have shards past EOF, ask for a reshard
-    if (!o->onode.extent_map_shards.empty() &&
-	o->onode.extent_map_shards.back().offset >= offset) {
-      dout(10) << __func__ << "  request reshard past EOF" << dendl;
-      if (offset) {
-	o->extent_map.request_reshard(offset - 1, offset + length);
-      } else {
-	o->extent_map.request_reshard(0, length);
+    dout(15) << __func__ << o->oid << "(inlined object) truncate to 0"
+             << dendl;
+
+    o->onode.attrs[INLINE_DATA_ATTR] = bufferptr();
+    o->onode.attrs.erase(INLINE_DATA_ATTR);
+    o->onode.inline_valid = false;
+  } else {
+    if (offset < o->onode.size) {
+      WriteContext wctx;
+      uint64_t length = o->onode.size - offset;
+      o->extent_map.fault_range(db, offset, length);
+      o->extent_map.punch_hole(c, offset, length, &wctx.old_extents);
+      o->extent_map.dirty_range(offset, length);
+      _wctx_finish(txc, c, o, &wctx, maybe_unshared_blobs);
+
+      // if we have shards past EOF, ask for a reshard
+      if (!o->onode.extent_map_shards.empty() &&
+          o->onode.extent_map_shards.back().offset >= offset) {
+        dout(10) << __func__ << "  request reshard past EOF" << dendl;
+        if (offset) {
+          o->extent_map.request_reshard(offset - 1, offset + length);
+        } else {
+          o->extent_map.request_reshard(0, length);
+        }
       }
     }
   }
@@ -13685,6 +13746,13 @@ int BlueStore::_clone_range(TransContext *txc,
 	   << newo->oid << " from 0x" << std::hex << srcoff << "~" << length
 	   << " to offset 0x" << dstoff << std::dec << dendl;
   int r = 0;
+
+  if (oldo->onode.inline_valid || newo->onode.inline_valid) {
+    derr << __func__ << " inlined object not support clone_range yet" << dendl;
+
+    r = -ENOTSUP;
+    goto out;
+  }
 
   if (srcoff + length >= OBJECT_MAX_SIZE ||
       dstoff + length >= OBJECT_MAX_SIZE) {

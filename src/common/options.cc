@@ -4921,6 +4921,10 @@ std::vector<Option> get_global_options() {
     .set_long_description("'hdd' enforces settings intended for BlueStore above a rotational drive. 'ssd' enforces settings intended for BlueStore above a solid drive. 'default' - using settings for the actual hardware."),
 
 
+    Option("bluestore_data_inline_limit_bytes", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    .set_default(0)
+    .set_description("Object whose data is less than this will be inlined, set 0 to disable this"),
+
     // -----------------------------------------
     // kstore
 

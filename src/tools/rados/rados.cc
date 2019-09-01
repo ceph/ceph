@@ -85,7 +85,7 @@ void usage(ostream& out)
 "\n"
 "OBJECT COMMANDS\n"
 "   get <obj-name> <outfile>         fetch object\n"
-"   put <obj-name> <infile> [--offset offset]\n"
+"   put <obj-name> <infile> [--offset offset] [--inline]\n"
 "                                    write object with start offset (default:0)\n"
 "   append <obj-name> <infile>       append object\n"
 "   truncate <obj-name> length       truncate object\n"
@@ -550,7 +550,8 @@ static int do_copy_pool(Rados& rados, const char *src_pool, const char *target_p
 static int do_put(IoCtx& io_ctx, 
             const char *objname, const char *infile, int op_size,
             uint64_t obj_offset,
-            const bool use_striper)
+            const bool use_striper,
+            const bool inline_small)
 {
   string oid(objname);
   bool stdio = (strcmp(infile, "-") == 0);
@@ -592,11 +593,20 @@ static int do_put(IoCtx& io_ctx,
      continue;
     }
 
-    if (0 == offset)
-      ret = detail::write_full(io_ctx, oid, indata, use_striper);
-    else
-      ret = detail::write(io_ctx, oid, indata, count, offset, use_striper);
+    if (inline_small) {
+      assert(offset == 0); // inline object only support write_full op
+      ret = io_ctx.set_alloc_hint2(oid, indata.length(), indata.length(),
+                                   ALLOC_HINT_FLAG_IMMUTABLE);
+      if (ret < 0)
+        goto out;
 
+      ret = io_ctx.write_full(oid, indata);
+    } else {
+      if (0 == offset)
+        ret = detail::write_full(io_ctx, oid, indata, use_striper);
+      else
+        ret = detail::write(io_ctx, oid, indata, count, offset, use_striper);
+    }
     if (ret < 0) {
       goto out;
     }
@@ -1847,6 +1857,7 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   int bench_write_dest = 0;
   bool cleanup = true;
   bool hints = true; // for rados bench
+  bool inline_small = false; // for rados bench, inline small write
   bool reuse_bench = false;
   bool no_verify = false;
   bool use_striper = false;
@@ -2038,6 +2049,10 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
   i = opts.find("reuse-bench");
   if (i != opts.end()) {
     reuse_bench = true;
+  }
+  i = opts.find("inline");
+  if (i != opts.end()) {
+    inline_small = true;
   }
   i = opts.find("pretty-format");
   if (i != opts.end()) {
@@ -2559,7 +2574,8 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
       usage(cerr);
       return 1;
     }
-    ret = do_put(io_ctx, nargs[1], nargs[2], op_size, obj_offset, use_striper);
+    ret = do_put(io_ctx, nargs[1], nargs[2], op_size, obj_offset, use_striper,
+                 inline_small);
     if (ret < 0) {
       cerr << "error putting " << pool_name << "/" << nargs[1] << ": " << cpp_strerror(ret) << std::endl;
       return 1;
@@ -3940,6 +3956,8 @@ int main(int argc, const char **argv)
       opts["no-cleanup"] = "true";
     } else if (ceph_argparse_flag(args, i, "--no-hints", (char*)NULL)) {
       opts["no-hints"] = "true";
+    } else if (ceph_argparse_flag(args, i, "--inline", (char*)NULL)) {
+      opts["inline"] = "true";
     } else if (ceph_argparse_flag(args, i, "--reuse-bench", (char*)NULL)) {
       opts["reuse-bench"] = "true";
     } else if (ceph_argparse_flag(args, i, "--no-verify", (char*)NULL)) {

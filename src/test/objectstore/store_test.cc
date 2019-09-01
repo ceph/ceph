@@ -7868,6 +7868,292 @@ TEST_P(StoreTestSpecificAUSize, ReproNoBlobMultiTest) {
   }
 }
 
+// inline small write
+TEST_P(StoreTest, BluestoreInlineWriteReadDelete) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  g_ceph_context->_conf.set_val_or_die("bluestore_data_inline_limit_bytes",
+                                       "20");
+  SetVal(g_conf(), "bluestore_fsck_on_mount", "true");
+  SetVal(g_conf(), "bluestore_fsck_on_umount", "true");
+
+  g_ceph_context->_conf.apply_changes(nullptr);
+  int r = 0;
+  coll_t cid;
+  ghobject_t hoid(hobject_t("test_inline_wrd", "", CEPH_NOSNAP, 0, 0, ""));
+  auto ch = store->create_new_collection(cid);
+  {
+    cerr << "create collection" << std::endl;
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    t.set_alloc_hint(cid, hoid, 19, 19, CEPH_OSD_ALLOC_HINT_FLAG_IMMUTABLE);
+    cerr << "Touch and set alloc hint" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    bufferlist bl;
+    bl.append("0123456789abcdefghi");
+    t.write(cid, hoid, 0, bl.length(), bl);
+    cerr << "Write inline object" << std::endl;
+
+    bufferlist readback;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    r = store->read(ch, hoid, 1, 10, readback);
+    ASSERT_EQ(r, 10);
+    {
+      bufferlist expected;
+      expected.substr_of(bl, 1, 10);
+      cerr << "Expect " << expected
+           << "readback " << readback
+           << std::endl;
+      ASSERT_TRUE(bl_eq(expected, readback));
+    }
+  }
+  {
+    ghobject_t hoid2(hobject_t("test_should_not_inline", "",
+                              CEPH_NOSNAP, 0, 0, ""));
+    bufferlist large;
+    large.append("0123456789abcdefghi");
+    large.append("0123456789abcdefghi");
+    {
+      ObjectStore::Transaction t;
+      t.touch(cid, hoid2);
+      t.set_alloc_hint(cid, hoid2, large.length(), large.length(),
+                       CEPH_OSD_ALLOC_HINT_FLAG_IMMUTABLE);
+      t.write(cid, hoid2, 0, large.length(), large);
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+    {
+      ObjectStore::Transaction t;
+      t.truncate(cid, hoid2, 1024*1024);
+      EXPECT_NO_THROW(r = queue_transaction(store, ch, std::move(t)));
+      ASSERT_EQ(r, 0);
+    }
+    {
+      ObjectStore::Transaction t;
+      t.remove(cid, hoid);
+      t.remove(cid, hoid2);
+      cerr << "Cleaning" << std::endl;
+      r = queue_transaction(store, ch, std::move(t));
+      ASSERT_EQ(r, 0);
+    }
+  }
+}
+
+TEST_P(StoreTest, BluestoreInlineCloneRangeTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_fsck_on_mount", "true");
+  SetVal(g_conf(), "bluestore_fsck_on_umount", "true");
+  g_ceph_context->_conf.set_val_or_die("bluestore_data_inline_limit_bytes",
+                                       "20");
+  g_ceph_context->_conf.apply_changes(nullptr);
+
+  int r;
+  coll_t cid;
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ghobject_t hoid(hobject_t("test_inline_clone", "", CEPH_NOSNAP, 0, 0, ""));
+  bufferlist small, newdata;
+  small.append("small");
+  {
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    t.set_alloc_hint(cid, hoid, small.length(), small.length(),
+                     CEPH_OSD_ALLOC_HINT_FLAG_IMMUTABLE);
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.write(cid, hoid, 0, 5, small);
+    cerr << "Creating inlined object and write bl " << hoid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    small.append("small");
+    t.write(cid, hoid, 0, 10, small);
+    cerr << "write full" << hoid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    bufferlist in;
+    r = store->read(ch, hoid, 0, 0x4000, in);
+    ASSERT_EQ(10, r);
+    ASSERT_TRUE(bl_eq(small, in));
+  }
+  ghobject_t hoid2(hobject_t(sobject_t("Object 2", CEPH_NOSNAP)));
+  hoid2.hobj.pool = -1;
+
+  {
+    ObjectStore::Transaction t;
+    t.truncate(cid, hoid, 0);
+    cerr << "Truncate object to empty" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove(cid, hoid2);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
+TEST_P(StoreTest, BluestoreInlineWritefullTest) {
+  if (string(GetParam()) != "bluestore")
+    return;
+
+  SetVal(g_conf(), "bluestore_fsck_on_mount", "true");
+  SetVal(g_conf(), "bluestore_fsck_on_umount", "true");
+  g_ceph_context->_conf.set_val_or_die("bluestore_data_inline_limit_bytes",
+                                       "10");
+  g_ceph_context->_conf.apply_changes(nullptr);
+
+  int r;
+  coll_t cid;
+  auto ch = store->create_new_collection(cid);
+  {
+    ObjectStore::Transaction t;
+    t.create_collection(cid, 0);
+    cerr << "Creating collection " << cid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+  ghobject_t hoid(hobject_t("test_writefull", "", CEPH_NOSNAP, 0, 0, ""));
+  bufferlist small;
+  small.append("small");
+  {
+    ObjectStore::Transaction t;
+    t.touch(cid, hoid);
+    t.set_alloc_hint(cid, hoid, 5, 5, CEPH_OSD_ALLOC_HINT_FLAG_IMMUTABLE);
+    t.write(cid, hoid, 0, 5, small);
+    cerr << "write full" << hoid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    bufferlist in;
+    r = store->read(ch, hoid, 0, 0x4000, in);
+    ASSERT_EQ(5, r);
+    ASSERT_TRUE(bl_eq(small, in));
+    cerr << " read back: " << in << std::endl;
+
+    bufferptr bp;
+    r = store->getattr(ch, hoid, "idt", bp);
+    cerr << " getattr idt: " << bp.c_str() << std::endl;
+    ASSERT_EQ(0, r);
+    bufferlist val;
+    val.append(bp);
+    ASSERT_TRUE(bl_eq(small, val));
+  }
+  bufferlist large;
+  large.append("0123456789abcdefghi");
+  { // inline -> inline_small
+    ObjectStore::Transaction t;
+    bufferlist smaller;
+    smaller.append("12");
+    t.write(cid, hoid, 0, 2, smaller);
+    cerr << "inline -> inline_small" << hoid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+
+    bufferlist in;
+    r = store->read(ch, hoid, 0, 0x4000, in);
+    ASSERT_EQ(2, r);
+    ASSERT_TRUE(bl_eq(smaller, in));
+
+    bufferptr bp;
+    r = store->getattr(ch, hoid, "idt", bp);
+    cerr << " getattr idt: " << bp.c_str() << std::endl;
+    ASSERT_EQ(0, r);
+    bufferlist val;
+    val.append(bp);
+    ASSERT_TRUE(bl_eq(smaller, val));
+
+    // inline -> small normal
+    bufferlist tiny;
+    tiny.append("#");
+    t.set_alloc_hint(cid, hoid, 1, 1, 0);
+    t.write(cid, hoid, 0, 1, tiny);
+    cerr << "inline -> small normal" << hoid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    r = store->read(ch, hoid, 0, 0x4000, in);
+    ASSERT_EQ(1, r);
+    ASSERT_TRUE(bl_eq(tiny, in));
+    r = store->getattr(ch, hoid, "idt", bp);
+    ASSERT_EQ(-ENODATA, r);
+
+    // normal append
+    t.write(cid, hoid, 1, large.length(), large);
+    cerr << "normal append" << hoid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    r = store->read(ch, hoid, 0, 0x4000, in);
+    ASSERT_EQ(large.length() + 1, r);
+    bufferlist mix = tiny;
+    mix.append(large);
+    ASSERT_TRUE(bl_eq(mix, in));
+
+    // large normal -> small inline
+    t.set_alloc_hint(cid, hoid, 2, 2, CEPH_OSD_ALLOC_HINT_FLAG_IMMUTABLE);
+    t.write(cid, hoid, 0, 2, smaller);
+    cerr << "large normal -> small inline" << hoid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    r = store->read(ch, hoid, 0, 0x4000, in);
+    ASSERT_EQ(2, r);
+    ASSERT_TRUE(bl_eq(smaller, in));
+    r = store->getattr(ch, hoid, "idt", bp);
+    cerr << " getattr idt: " << bp.c_str() << std::endl;
+    ASSERT_EQ(0, r);
+    val.clear();
+    val.append(bp);
+    ASSERT_TRUE(bl_eq(smaller, val));
+
+    // inline -> large normal
+    t.set_alloc_hint(cid, hoid, large.length(), large.length(), 0);
+    t.write(cid, hoid, 0, large.length(), large);
+    cerr << "inline -> large normal" << hoid << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+    r = store->read(ch, hoid, 0, 0x4000, in);
+    ASSERT_EQ(large.length(), r);
+    ASSERT_TRUE(bl_eq(large, in));
+    r = store->getattr(ch, hoid, "idt", bp);
+    ASSERT_EQ(-ENODATA, r);
+  }
+  {
+    ObjectStore::Transaction t;
+    t.remove(cid, hoid);
+    t.remove_collection(cid);
+    cerr << "Cleaning" << std::endl;
+    r = queue_transaction(store, ch, std::move(t));
+    ASSERT_EQ(r, 0);
+  }
+}
+
 #endif  // WITH_BLUESTORE
 
 int main(int argc, char **argv) {

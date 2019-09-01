@@ -910,6 +910,8 @@ struct bluestore_onode_t {
 
   uint8_t flags = 0;
 
+  bool inline_valid = false; // in memory member
+
   enum {
     FLAG_OMAP = 1,       ///< object may have omap data
     FLAG_PGMETA_OMAP = 2,  ///< omap data is in meta omap prefix

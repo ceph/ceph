@@ -53,7 +53,8 @@ class BlueStoreRepairer;
 //#define DEBUG_CACHE
 //#define DEBUG_DEFERRED
 
-
+// inlined data's key
+#define INLINE_DATA_ATTR "idt"
 
 // constants for Buffer::optimize()
 #define MAX_BUFFER_SLOP_RATIO_DEN  8  // so actually 1/N
