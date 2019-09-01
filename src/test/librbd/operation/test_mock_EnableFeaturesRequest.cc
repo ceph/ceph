@@ -6,9 +6,11 @@
 #include "test/librbd/mock/MockImageCtx.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/Operations.h"
+#include "librbd/api/Mirror.h"
 #include "librbd/internal.h"
 #include "librbd/image/SetFlagsRequest.h"
 #include "librbd/io/AioCompletion.h"
+#include "librbd/mirror/DisableRequest.h"
 #include "librbd/mirror/EnableRequest.h"
 #include "librbd/journal/CreateRequest.h"
 #include "librbd/journal/Types.h"
@@ -169,20 +171,21 @@ public:
   typedef librbd::object_map::CreateRequest<MockOperationImageCtx> MockCreateObjectMapRequest;
   typedef EnableFeaturesRequest<MockOperationImageCtx> MockEnableFeaturesRequest;
 
-  class PoolMirrorModeEnabler {
+  class MirrorModeEnabler {
   public:
-    PoolMirrorModeEnabler(librados::IoCtx &ioctx) : m_ioctx(ioctx) {
+    MirrorModeEnabler(librados::IoCtx &ioctx, cls::rbd::MirrorMode mirror_mode)
+      : m_ioctx(ioctx), m_mirror_mode(mirror_mode) {
       EXPECT_EQ(0, librbd::cls_client::mirror_uuid_set(&m_ioctx, "test-uuid"));
-      EXPECT_EQ(0, librbd::cls_client::mirror_mode_set(
-                  &m_ioctx, cls::rbd::MIRROR_MODE_POOL));
+      EXPECT_EQ(0, librbd::cls_client::mirror_mode_set(&m_ioctx, m_mirror_mode));
     }
 
-    ~PoolMirrorModeEnabler() {
+    ~MirrorModeEnabler() {
       EXPECT_EQ(0, librbd::cls_client::mirror_mode_set(
                 &m_ioctx, cls::rbd::MIRROR_MODE_DISABLED));
     }
   private:
     librados::IoCtx &m_ioctx;
+    cls::rbd::MirrorMode m_mirror_mode;
   };
 
   void ensure_features_disabled(librbd::ImageCtx *ictx,
@@ -482,8 +485,10 @@ TEST_F(TestMockOperationEnableFeaturesRequest, SetFlagsError) {
   ASSERT_EQ(-EINVAL, cond_ctx.wait());
 }
 
-TEST_F(TestMockOperationEnableFeaturesRequest, Mirroring) {
+TEST_F(TestMockOperationEnableFeaturesRequest, PoolMirroring) {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  MirrorModeEnabler mirror_mode_enabler(m_ioctx, cls::rbd::MIRROR_MODE_POOL);
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
@@ -492,8 +497,6 @@ TEST_F(TestMockOperationEnableFeaturesRequest, Mirroring) {
   ASSERT_EQ(0, librbd::get_features(ictx, &features));
 
   ensure_features_disabled(ictx, RBD_FEATURE_JOURNALING);
-
-  PoolMirrorModeEnabler enabler(m_ioctx);
 
   MockOperationImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock mock_exclusive_lock;
@@ -530,18 +533,19 @@ TEST_F(TestMockOperationEnableFeaturesRequest, Mirroring) {
   ASSERT_EQ(0, cond_ctx.wait());
 }
 
-TEST_F(TestMockOperationEnableFeaturesRequest, JournalingError) {
+TEST_F(TestMockOperationEnableFeaturesRequest, ImageMirroring) {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
+  ensure_features_disabled(ictx, RBD_FEATURE_JOURNALING);
+
+  MirrorModeEnabler mirror_mode_enabler(m_ioctx, cls::rbd::MIRROR_MODE_IMAGE);
+
+  ASSERT_EQ(0, librbd::api::Mirror<>::image_enable(ictx, false)); // snapshot mode
 
   uint64_t features;
   ASSERT_EQ(0, librbd::get_features(ictx, &features));
-
-  ensure_features_disabled(ictx, RBD_FEATURE_JOURNALING);
-
-  PoolMirrorModeEnabler enabler(m_ioctx);
 
   MockOperationImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock mock_exclusive_lock;
@@ -554,6 +558,46 @@ TEST_F(TestMockOperationEnableFeaturesRequest, JournalingError) {
 
   MockCreateJournalRequest mock_create_journal_request;
   MockEnableMirrorRequest mock_enable_mirror_request;
+
+  ::testing::InSequence seq;
+  expect_prepare_lock(mock_image_ctx);
+  expect_block_writes(mock_image_ctx);
+  expect_unblock_writes(mock_image_ctx);
+  expect_handle_prepare_lock_complete(mock_image_ctx);
+
+  C_SaferCond cond_ctx;
+  MockEnableFeaturesRequest *req = new MockEnableFeaturesRequest(
+    mock_image_ctx, &cond_ctx, 0, RBD_FEATURE_JOURNALING);
+  {
+    std::shared_lock owner_locker{mock_image_ctx.owner_lock};
+    req->send();
+  }
+  ASSERT_EQ(-EINVAL, cond_ctx.wait());
+}
+
+TEST_F(TestMockOperationEnableFeaturesRequest, JournalingError) {
+  REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
+
+  MirrorModeEnabler mirror_mode_enabler(m_ioctx, cls::rbd::MIRROR_MODE_POOL);
+
+  librbd::ImageCtx *ictx;
+  ASSERT_EQ(0, open_image(m_image_name, &ictx));
+
+  uint64_t features;
+  ASSERT_EQ(0, librbd::get_features(ictx, &features));
+
+  ensure_features_disabled(ictx, RBD_FEATURE_JOURNALING);
+
+  MockOperationImageCtx mock_image_ctx(*ictx);
+  MockExclusiveLock mock_exclusive_lock;
+  MockJournal mock_journal;
+  MockObjectMap mock_object_map;
+  initialize_features(ictx, mock_image_ctx, mock_exclusive_lock, mock_journal,
+                      mock_object_map);
+
+  expect_verify_lock_ownership(mock_image_ctx);
+
+  MockCreateJournalRequest mock_create_journal_request;
 
   ::testing::InSequence seq;
   expect_prepare_lock(mock_image_ctx);
@@ -578,6 +622,8 @@ TEST_F(TestMockOperationEnableFeaturesRequest, JournalingError) {
 TEST_F(TestMockOperationEnableFeaturesRequest, MirroringError) {
   REQUIRE_FEATURE(RBD_FEATURE_JOURNALING);
 
+  MirrorModeEnabler mirror_mode_enabler(m_ioctx, cls::rbd::MIRROR_MODE_POOL);
+
   librbd::ImageCtx *ictx;
   ASSERT_EQ(0, open_image(m_image_name, &ictx));
 
@@ -585,8 +631,6 @@ TEST_F(TestMockOperationEnableFeaturesRequest, MirroringError) {
   ASSERT_EQ(0, librbd::get_features(ictx, &features));
 
   ensure_features_disabled(ictx, RBD_FEATURE_JOURNALING);
-
-  PoolMirrorModeEnabler enabler(m_ioctx);
 
   MockOperationImageCtx mock_image_ctx(*ictx);
   MockExclusiveLock mock_exclusive_lock;

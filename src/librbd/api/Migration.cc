@@ -1417,10 +1417,6 @@ template <typename I>
 int Migration<I>::disable_mirroring(I *image_ctx, bool *was_enabled) {
   *was_enabled = false;
 
-  if (!image_ctx->test_features(RBD_FEATURE_JOURNALING)) {
-    return 0;
-  }
-
   cls::rbd::MirrorImage mirror_image;
   int r = cls_client::mirror_image_get(&image_ctx->md_ctx, image_ctx->id,
                                        &mirror_image);
@@ -1458,11 +1454,6 @@ int Migration<I>::disable_mirroring(I *image_ctx, bool *was_enabled) {
 
 template <typename I>
 int Migration<I>::enable_mirroring(I *image_ctx, bool was_enabled) {
-
-  if (!image_ctx->test_features(RBD_FEATURE_JOURNALING)) {
-    return 0;
-  }
-
   cls::rbd::MirrorMode mirror_mode;
   int r = cls_client::mirror_mode_get(&image_ctx->md_ctx, &mirror_mode);
   if (r < 0 && r != -ENOENT) {

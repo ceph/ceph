@@ -281,7 +281,7 @@ struct C_ImageGetInfo : public Context {
   }
 
   void finish(int r) override {
-    if (r < 0) {
+    if (r < 0 && r != -ENOENT) {
       on_finish->complete(r);
       return;
     }
@@ -311,7 +311,7 @@ struct C_ImageGetGlobalStatus : public C_ImageGetInfo {
   }
 
   void finish(int r) override {
-    if (r < 0) {
+    if (r < 0 && r != -ENOENT) {
       on_finish->complete(r);
       return;
     }
@@ -363,13 +363,8 @@ int Mirror<I>::image_enable(I *ictx, bool relax_same_pool_parent_check) {
     std::shared_lock image_locker{ictx->image_lock};
     ImageCtx *parent = ictx->parent;
     if (parent) {
-      if (relax_same_pool_parent_check &&
-          parent->md_ctx.get_id() == ictx->md_ctx.get_id()) {
-        if (!parent->test_features(RBD_FEATURE_JOURNALING)) {
-          lderr(cct) << "journaling is not enabled for the parent" << dendl;
-          return -EINVAL;
-        }
-      } else {
+      if (parent->md_ctx.get_id() != ictx->md_ctx.get_id() ||
+          !relax_same_pool_parent_check) {
         cls::rbd::MirrorImage mirror_image_internal;
         r = cls_client::mirror_image_get(&(parent->md_ctx), parent->id,
                                          &mirror_image_internal);
@@ -378,18 +373,6 @@ int Mirror<I>::image_enable(I *ictx, bool relax_same_pool_parent_check) {
           return -EINVAL;
         }
       }
-    }
-  }
-
-  if (!ictx->test_features(RBD_FEATURE_JOURNALING)) {
-    uint64_t features = RBD_FEATURE_JOURNALING;
-    if (!ictx->test_features(RBD_FEATURE_EXCLUSIVE_LOCK)) {
-      features |= RBD_FEATURE_EXCLUSIVE_LOCK;
-    }
-    r = ictx->operations->update_features(features, true);
-    if (r < 0) {
-      lderr(cct) << "cannot enable journaling: " << cpp_strerror(r) << dendl;
-      return r;
     }
   }
 
@@ -529,12 +512,6 @@ int Mirror<I>::image_disable(I *ictx, bool force) {
       lderr(cct) << "cannot disable mirroring: " << cpp_strerror(r) << dendl;
       rollback = true;
       return r;
-    }
-
-    r = ictx->operations->update_features(RBD_FEATURE_JOURNALING, false);
-    if (r < 0) {
-      lderr(cct) << "cannot disable journaling: " << cpp_strerror(r) << dendl;
-      // not fatal
     }
   }
 
@@ -873,6 +850,8 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
                    << ": " << cpp_strerror(r) << dendl;
         return r;
       }
+
+      // Enable only journal based mirroring
 
       if ((features & RBD_FEATURE_JOURNALING) != 0) {
         I *img_ctx = I::create("", img_pair.second, nullptr, io_ctx, false);
