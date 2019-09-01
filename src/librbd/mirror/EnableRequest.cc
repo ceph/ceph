@@ -79,7 +79,6 @@ Context *EnableRequest<I>::handle_get_mirror_image(int *result) {
   }
 
   *result = 0;
-  m_mirror_image.state = cls::rbd::MIRROR_IMAGE_STATE_ENABLED;
   if (m_non_primary_global_image_id.empty()) {
     uuid_d uuid_gen;
     uuid_gen.generate_random();
@@ -88,13 +87,58 @@ Context *EnableRequest<I>::handle_get_mirror_image(int *result) {
     m_mirror_image.global_image_id = m_non_primary_global_image_id;
   }
 
+  send_get_features();
+  return nullptr;
+}
+
+template <typename I>
+void EnableRequest<I>::send_get_features() {
+  ldout(m_cct, 10) << this << " " << __func__ << dendl;
+
+  librados::ObjectReadOperation op;
+  cls_client::get_features_start(&op, true);
+
+  using klass = EnableRequest<I>;
+  librados::AioCompletion *comp =
+    create_rados_callback<klass, &klass::handle_get_features>(this);
+  m_out_bl.clear();
+  int r = m_io_ctx.aio_operate(util::header_name(m_image_id), comp, &op,
+                               &m_out_bl);
+  ceph_assert(r == 0);
+  comp->release();
+}
+
+template <typename I>
+Context *EnableRequest<I>::handle_get_features(int *result) {
+  ldout(m_cct, 10) << this << " " << __func__ << ": r=" << *result << dendl;
+
+  uint64_t features, incompatible_features;
+  if (*result == 0) {
+    auto iter = m_out_bl.cbegin();
+    *result = cls_client::get_features_finish(&iter, &features,
+                                              &incompatible_features);
+  }
+
+  if (*result != 0) {
+    lderr(m_cct) << "failed to retrieve image features: "
+                 << cpp_strerror(*result) << dendl;
+    return m_on_finish;
+  }
+
+  // TODO: be explicit about the image mirror mode
+
+  m_mirror_image.mode = (features & RBD_FEATURE_JOURNALING) != 0 ?
+    cls::rbd::MIRROR_IMAGE_MODE_JOURNAL : cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT;
+  m_mirror_image.state = cls::rbd::MIRROR_IMAGE_STATE_ENABLED;
+
   send_get_tag_owner();
   return nullptr;
 }
 
 template <typename I>
 void EnableRequest<I>::send_get_tag_owner() {
-  if (!m_non_primary_global_image_id.empty()) {
+  if (m_mirror_image.mode == cls::rbd::MIRROR_IMAGE_MODE_SNAPSHOT ||
+      !m_non_primary_global_image_id.empty()) {
     send_set_mirror_image();
     return;
   }

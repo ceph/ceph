@@ -5,7 +5,9 @@
 #define RBD_MIRROR_IMAGE_REPLAYER_OPEN_LOCAL_IMAGE_REQUEST_H
 
 #include "include/int_types.h"
+#include "cls/rbd/cls_rbd_types.h"
 #include "librbd/ImageCtx.h"
+#include "librbd/mirror/Types.h"
 #include <string>
 
 class Context;
@@ -46,7 +48,7 @@ private:
    * OPEN_IMAGE * * * * * * * *
    *    |                     *
    *    v                     *
-   * IS_PRIMARY * * * * * * * *
+   * GET_MIRROR_INFO  * * * * *
    *    |                     *
    *    v (skip if primary)   v
    * LOCK_IMAGE * * * > CLOSE_IMAGE
@@ -62,14 +64,16 @@ private:
   ContextWQ *m_work_queue;
   Context *m_on_finish;
 
-  bool m_primary = false;
+  cls::rbd::MirrorImage m_mirror_image;
+  librbd::mirror::PromotionState m_promotion_state =
+    librbd::mirror::PROMOTION_STATE_NON_PRIMARY;
   int m_ret_val = 0;
 
   void send_open_image();
   void handle_open_image(int r);
 
-  void send_is_primary();
-  void handle_is_primary(int r);
+  void send_get_mirror_info();
+  void handle_get_mirror_info(int r);
 
   void send_lock_image();
   void handle_lock_image(int r);

@@ -5,7 +5,6 @@
 #include "BootstrapRequest.h"
 #include "CloseImageRequest.h"
 #include "CreateImageRequest.h"
-#include "IsPrimaryRequest.h"
 #include "OpenImageRequest.h"
 #include "OpenLocalImageRequest.h"
 #include "common/debug.h"
@@ -20,6 +19,7 @@
 #include "librbd/Journal.h"
 #include "librbd/Utils.h"
 #include "librbd/journal/Types.h"
+#include "librbd/mirror/GetInfoRequest.h"
 #include "tools/rbd_mirror/ProgressContext.h"
 #include "tools/rbd_mirror/ImageSync.h"
 #include "tools/rbd_mirror/Threads.h"
@@ -173,25 +173,25 @@ void BootstrapRequest<I>::handle_open_remote_image(int r) {
     return;
   }
 
-  is_primary();
+  get_remote_mirror_info();
 }
 
 template <typename I>
-void BootstrapRequest<I>::is_primary() {
+void BootstrapRequest<I>::get_remote_mirror_info() {
   dout(15) << dendl;
 
-  update_progress("OPEN_REMOTE_IMAGE");
+  update_progress("GET_REMOTE_MIRROR_INFO");
 
   Context *ctx = create_context_callback<
-    BootstrapRequest<I>, &BootstrapRequest<I>::handle_is_primary>(
+    BootstrapRequest<I>, &BootstrapRequest<I>::handle_get_remote_mirror_info>(
       this);
-  IsPrimaryRequest<I> *request = IsPrimaryRequest<I>::create(m_remote_image_ctx,
-                                                             &m_primary, ctx);
+  auto request = librbd::mirror::GetInfoRequest<I>::create(
+    *m_remote_image_ctx, &m_mirror_image, &m_promotion_state, ctx);
   request->send();
 }
 
 template <typename I>
-void BootstrapRequest<I>::handle_is_primary(int r) {
+void BootstrapRequest<I>::handle_get_remote_mirror_info(int r) {
   dout(15) << "r=" << r << dendl;
 
   if (r == -ENOENT) {
@@ -207,7 +207,22 @@ void BootstrapRequest<I>::handle_is_primary(int r) {
     return;
   }
 
-  if (!m_primary) {
+  if (m_mirror_image.state == cls::rbd::MIRROR_IMAGE_STATE_DISABLING) {
+    dout(5) << "remote image mirroring is being disabled" << dendl;
+    m_ret_val = -EREMOTEIO;
+    close_remote_image();
+    return;
+  }
+
+  if (m_mirror_image.mode != cls::rbd::MIRROR_IMAGE_MODE_JOURNAL) {
+    dout(5) << ": remote image is in unsupported mode: " << m_mirror_image.mode
+            << dendl;
+    m_ret_val = -EOPNOTSUPP;
+    close_remote_image();
+    return;
+  }
+
+  if (m_promotion_state != librbd::mirror::PROMOTION_STATE_PRIMARY) {
     if (m_local_image_id.empty()) {
       // no local image and remote isn't primary -- don't sync it
       dout(5) << "remote image is not primary -- not syncing"
@@ -338,7 +353,8 @@ void BootstrapRequest<I>::handle_open_local_image(int r) {
     local_image_ctx->image_lock.unlock_shared();
   }
 
-  if (m_local_tag_data.mirror_uuid != m_remote_mirror_uuid && !m_primary) {
+  if (m_local_tag_data.mirror_uuid != m_remote_mirror_uuid &&
+      m_promotion_state != librbd::mirror::PROMOTION_STATE_PRIMARY) {
     // if the local mirror is not linked to the (now) non-primary image,
     // stop the replay. Otherwise, we ignore that the remote is non-primary
     // so that we can replay the demotion
@@ -428,7 +444,7 @@ void BootstrapRequest<I>::handle_register_client(int r) {
   *m_client_meta = librbd::journal::MirrorPeerClientMeta();
   m_client_meta->state = librbd::journal::MIRROR_PEER_STATE_REPLAYING;
 
-  is_primary();
+  get_remote_mirror_info();
 }
 
 template <typename I>
