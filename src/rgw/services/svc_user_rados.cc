@@ -315,7 +315,7 @@ public:
       }
     }
 
-    for (const auto& [name, access_key] : old_info.access_keys) {
+    for ([[maybe_unused]] const auto& [name, access_key] : old_info.access_keys) {
       if (!new_info.access_keys.count(access_key.id)) {
         ret = svc.user->remove_key_index(ctx, access_key, y);
         if (ret < 0 && ret != -ENOENT) {
