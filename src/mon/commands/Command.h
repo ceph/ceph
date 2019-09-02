@@ -174,7 +174,7 @@ struct Command : public Common<Service>
       MonOpRequestRef op,
       const cmdmap_t &cmdmap,
       Pending &pending_map,
-      Stable &stable_map) {
+      const Stable &stable_map) {
 
     op->mark_osdmon_event(__func__);
     stringstream ss;
@@ -208,7 +208,7 @@ struct Command : public Common<Service>
       bufferlist rdata,
       FormatterRef f,
       Pending &pending_map,
-      Stable &stable_map) = 0;
+      const Stable &stable_map) = 0;
 
   virtual bool handles_command(const string &prefix) = 0;
 
@@ -244,7 +244,7 @@ struct ReadCommand : public Command<T, Stable, Pending>
       MonOpRequestRef op,
       const cmdmap_t &cmdmap,
       Pending &pending_map,
-      Stable &stable_map) final {
+      const Stable &stable_map) final {
     ceph_assert(0 == "read-only commands do not perform prepare phase");
     return false;
   }
@@ -257,7 +257,7 @@ struct ReadCommand : public Command<T, Stable, Pending>
       bufferlist rdata,
       FormatterRef f,
       Pending &pending_map,
-      Stable &stable_map) final {
+      const Stable &stable_map) final {
     ceph_assert(0 == "read-only commands do not perform prepare phase");
     return false;
   }
@@ -294,7 +294,7 @@ struct WriteCommand : public Command<T, Stable, Pending>
   virtual bool preprocess(
       MonOpRequestRef op,
       const cmdmap_t &cmdmap,
-      Stable &stable_map) final {
+      const Stable &stable_map) final {
     ceph_assert(0 == "write commands do not perform preprocess phase");
     return false;
   }

@@ -191,7 +191,7 @@ struct MonMonAdd : public MonMonWriteCommand
       bufferlist rdata,
       FormatterRef f,
       MonMap &pending,
-      MonMap &stable);
+      const MonMap &stable);
 };
 
 struct MonMonRemove : public MonMonWriteCommand
@@ -217,7 +217,7 @@ struct MonMonRemove : public MonMonWriteCommand
       bufferlist rdata,
       FormatterRef f,
       MonMap &pending,
-      MonMap &stable);
+      const MonMap &stable);
 };
 
 struct MonMonFeatureSet : public MonMonWriteCommand
@@ -243,7 +243,7 @@ struct MonMonFeatureSet : public MonMonWriteCommand
       bufferlist rdata,
       FormatterRef f,
       MonMap &pending,
-      MonMap &stable);
+      const MonMap &stable);
 };
 
 struct MonMonSetRank : public MonMonWriteCommand
@@ -269,7 +269,7 @@ struct MonMonSetRank : public MonMonWriteCommand
       bufferlist rdata,
       FormatterRef f,
       MonMap &pending,
-      MonMap &stable);
+      const MonMap &stable);
 };
 
 struct MonMonSetAddrs : public MonMonWriteCommand
@@ -295,7 +295,7 @@ struct MonMonSetAddrs : public MonMonWriteCommand
       bufferlist rdata,
       FormatterRef f,
       MonMap &pending,
-      MonMap &stable) final;
+      const MonMap &stable) final;
 };
 
 struct MonMonSetWeight : public MonMonWriteCommand
@@ -321,7 +321,7 @@ struct MonMonSetWeight : public MonMonWriteCommand
       bufferlist rdata,
       FormatterRef f,
       MonMap &pending,
-      MonMap &stable) final;
+      const MonMap &stable) final;
 };
 
 struct MonMonEnableMsgr2 : public MonMonWriteCommand
@@ -347,7 +347,7 @@ struct MonMonEnableMsgr2 : public MonMonWriteCommand
       bufferlist rdata,
       FormatterRef f,
       MonMap &pending,
-      MonMap &stable) final;
+      const MonMap &stable) final;
 };
 
 #endif // CEPH_MONMAPMONITOR_CMDS_H

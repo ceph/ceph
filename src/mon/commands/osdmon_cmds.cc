@@ -38,7 +38,7 @@ bool OSDMonSetCrushmap::do_prepare(
     bufferlist rdata,
     FormatterRef f,
     OSDMap::Incremental &pending_inc,
-    OSDMap &osdmap)
+    const OSDMap &osdmap)
 {
   ceph_assert(handles_command(prefix));
 
@@ -152,7 +152,7 @@ bool OSDMonCrushSetStrawBuckets::do_prepare(
     bufferlist rdata,
     FormatterRef f,
     OSDMap::Incremental &pending_inc,
-    OSDMap &osdmap)
+    const OSDMap &osdmap)
 {
   ceph_assert(handles_command(prefix));
 
@@ -185,7 +185,7 @@ bool OSDMonCrushSetDeviceClass::do_prepare(
     bufferlist rdata,
     FormatterRef f,
     OSDMap::Incremental &pending_inc,
-    OSDMap &osdmap)
+    const OSDMap &osdmap)
 {
   ceph_assert(handles_command(prefix));
 
@@ -284,7 +284,7 @@ bool OSDMonCrushRemoveDeviceClass::do_prepare(
     bufferlist rdata,
     FormatterRef f,
     OSDMap::Incremental &pending_inc,
-    OSDMap &osdmap)
+    const OSDMap &osdmap)
 {
   ceph_assert(handles_command(prefix));
 
@@ -359,7 +359,7 @@ bool OSDMonCrushClassCreate::do_prepare(
     bufferlist rdata,
     FormatterRef f,
     OSDMap::Incremental &pending_inc,
-    OSDMap &osdmap)
+    const OSDMap &osdmap)
 {
   ceph_assert(handles_command(prefix));
 
@@ -405,7 +405,7 @@ bool OSDMonCrushClassRemove::do_prepare(
     bufferlist rdata,
     FormatterRef f,
     OSDMap::Incremental &pending_inc,
-    OSDMap &osdmap)
+    const OSDMap &osdmap)
 {
   ceph_assert(handles_command(prefix));
 
@@ -509,7 +509,7 @@ bool OSDMonCrushClassRename::do_prepare(
     bufferlist rdata,
     FormatterRef f,
     OSDMap::Incremental &pending_inc,
-    OSDMap &osdmap)
+    const OSDMap &osdmap)
 {
   ceph_assert(handles_command(prefix));
 

@@ -213,7 +213,7 @@ bool MonMonAdd::do_prepare(
     bufferlist rdata,
     FormatterRef f,
     MonMap &pending_map,
-    MonMap &stable)
+    const MonMap &stable)
 {
   ceph_assert(handles_command(prefix));
 
@@ -320,7 +320,7 @@ bool MonMonRemove::do_prepare(
     bufferlist rdata,
     FormatterRef f,
     MonMap &pending_map,
-    MonMap &stable)
+    const MonMap &stable)
 {
   ceph_assert(handles_command(prefix));
 
@@ -384,7 +384,7 @@ bool MonMonFeatureSet::do_prepare(
     bufferlist rdata,
     FormatterRef f,
     MonMap &pending_map,
-    MonMap &stable)
+    const MonMap &stable)
 {
   ceph_assert(handles_command(prefix));
 
@@ -463,7 +463,7 @@ bool MonMonSetRank::do_prepare(
     bufferlist rdata,
     FormatterRef f,
     MonMap &pending_map,
-    MonMap &stable)
+    const MonMap &stable)
 {
   ceph_assert(handles_command(prefix));
 
@@ -497,7 +497,7 @@ bool MonMonSetAddrs::do_prepare(
     bufferlist rdata,
     FormatterRef f,
     MonMap &pending_map,
-    MonMap &stable)
+    const MonMap &stable)
 {
   ceph_assert(handles_command(prefix));
 
@@ -541,7 +541,7 @@ bool MonMonSetWeight::do_prepare(
     bufferlist rdata,
     FormatterRef f,
     MonMap &pending_map,
-    MonMap &stable)
+    const MonMap &stable)
 {
   ceph_assert(handles_command(prefix));
 
@@ -571,7 +571,7 @@ bool MonMonEnableMsgr2::do_prepare(
     bufferlist rdata,
     FormatterRef f,
     MonMap &pending_map,
-    MonMap &stable)
+    const MonMap &stable)
 {
   ceph_assert(handles_command(prefix));
 

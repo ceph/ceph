@@ -75,7 +75,7 @@ struct OSDMonSetCrushmap : public OSDMonWriteCommand
       bufferlist rdata,
       FormatterRef f,
       OSDMap::Incremental &pending_inc,
-      OSDMap &osdmap) final;
+      const OSDMap &osdmap) final;
 };
 
 struct OSDMonCrushSetStrawBuckets : public OSDMonWriteCommand
@@ -101,7 +101,7 @@ struct OSDMonCrushSetStrawBuckets : public OSDMonWriteCommand
       bufferlist rdata,
       FormatterRef f,
       OSDMap::Incremental &pending_inc,
-      OSDMap &osdmap) final;
+      const OSDMap &osdmap) final;
 };
 
 struct OSDMonCrushSetDeviceClass : public OSDMonWriteCommand
@@ -127,7 +127,7 @@ struct OSDMonCrushSetDeviceClass : public OSDMonWriteCommand
       bufferlist rdata,
       FormatterRef f,
       OSDMap::Incremental &pending_inc,
-      OSDMap &osdmap) final; 
+      const OSDMap &osdmap) final; 
 };
 
 
@@ -153,7 +153,7 @@ struct OSDMonCrushRemoveDeviceClass : public OSDMonWriteCommand
       bufferlist rdata,
       FormatterRef f,
       OSDMap::Incremental &pending_inc,
-      OSDMap &osdmap) final;
+      const OSDMap &osdmap) final;
 };
 
 struct OSDMonCrushClassCreate : public OSDMonWriteCommand
@@ -178,7 +178,7 @@ struct OSDMonCrushClassCreate : public OSDMonWriteCommand
       bufferlist rdata,
       FormatterRef f,
       OSDMap::Incremental &pending_inc,
-      OSDMap &osdmap) final;
+      const OSDMap &osdmap) final;
 };
 
 
@@ -204,7 +204,7 @@ struct OSDMonCrushClassRemove : public OSDMonWriteCommand
       bufferlist rdata,
       FormatterRef f,
       OSDMap::Incremental &pending_inc,
-      OSDMap &osdmap) final;
+      const OSDMap &osdmap) final;
 };
 
 
@@ -230,7 +230,7 @@ struct OSDMonCrushClassRename : public OSDMonWriteCommand
       bufferlist rdata,
       FormatterRef f,
       OSDMap::Incremental &pending_inc,
-      OSDMap &osdmap) final;
+      const OSDMap &osdmap) final;
 };
 
 
