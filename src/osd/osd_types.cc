@@ -4399,7 +4399,7 @@ ostream& operator<<(ostream& out, const ObjectCleanRegions& ocr)
 {
   return out << "clean_offsets: " << ocr.clean_offsets
              << ", clean_omap: " << ocr.clean_omap
-             << ", object_new: " << ocr.new_object;
+             << ", new_object: " << ocr.new_object;
 }
 
 // -- pg_log_entry_t --
@@ -4469,7 +4469,7 @@ void pg_log_entry_t::encode(ceph::buffer::list &bl) const
 
 void pg_log_entry_t::decode(ceph::buffer::list::const_iterator &bl)
 {
-  DECODE_START_LEGACY_COMPAT_LEN(12, 4, 4, bl);
+  DECODE_START_LEGACY_COMPAT_LEN(13, 4, 4, bl);
   decode(op, bl);
   if (struct_v < 2) {
     sobject_t old_soid;
@@ -4526,7 +4526,7 @@ void pg_log_entry_t::decode(ceph::buffer::list::const_iterator &bl)
   if (struct_v >= 12 && !extra_reqids.empty())
     decode(extra_reqid_return_codes, bl);
   if (struct_v >= 13)
-    ::decode(clean_regions, bl);
+    decode(clean_regions, bl);
   else
     clean_regions.mark_fully_dirty();
   DECODE_FINISH(bl);
@@ -4957,7 +4957,7 @@ void object_copy_data_t::encode(ceph::buffer::list& bl, uint64_t features) const
 
 void object_copy_data_t::decode(ceph::buffer::list::const_iterator& bl)
 {
-  DECODE_START(7, bl);
+  DECODE_START(8, bl);
   if (struct_v < 5) {
     // old
     decode(size, bl);
