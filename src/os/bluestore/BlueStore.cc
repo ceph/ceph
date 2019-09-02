@@ -639,9 +639,9 @@ struct Int64ArrayMergeOperator : public KeyValueDB::MergeOperator {
     ceph_assert(llen == rlen);
     ceph_assert((rlen % 8) == 0);
     new_value->resize(rlen);
-    const __le64* lv = (const __le64*)ldata;
-    const __le64* rv = (const __le64*)rdata;
-    __le64* nv = &(__le64&)new_value->at(0);
+    const ceph_le64* lv = (const ceph_le64*)ldata;
+    const ceph_le64* rv = (const ceph_le64*)rdata;
+    ceph_le64* nv = &(ceph_le64&)new_value->at(0);
     for (size_t i = 0; i < rlen >> 3; ++i) {
       nv[i] = lv[i] + rv[i];
     }
