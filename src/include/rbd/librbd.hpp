@@ -74,6 +74,18 @@ namespace librbd {
   } snap_group_namespace_t;
 
   typedef struct {
+    bool demoted;
+    std::set<std::string> mirror_peers;
+  } snap_mirror_primary_namespace_t;
+
+  typedef struct {
+    std::string primary_mirror_uuid;
+    uint64_t primary_snap_id;
+    bool copied;
+    uint64_t copy_progress;
+  } snap_mirror_non_primary_namespace_t;
+
+  typedef struct {
     std::string client;
     std::string cookie;
     std::string address;
@@ -602,6 +614,12 @@ public:
                                snap_group_namespace_t *group_namespace,
                                size_t snap_group_namespace_size);
   int snap_get_trash_namespace(uint64_t snap_id, std::string* original_name);
+  int snap_get_mirror_primary_namespace(
+      uint64_t snap_id, snap_mirror_primary_namespace_t *mirror_namespace,
+      size_t snap_mirror_namespace_size);
+  int snap_get_mirror_non_primary_namespace(
+      uint64_t snap_id, snap_mirror_non_primary_namespace_t *mirror_namespace,
+      size_t snap_mirror_namespace_size);
 
   /* I/O */
   ssize_t read(uint64_t ofs, size_t len, ceph::bufferlist& bl);

@@ -75,9 +75,11 @@ typedef int (*librbd_progress_fn_t)(uint64_t offset, uint64_t total, void *ptr);
 typedef void (*rbd_update_callback_t)(void *arg);
 
 typedef enum {
-  RBD_SNAP_NAMESPACE_TYPE_USER  = 0,
-  RBD_SNAP_NAMESPACE_TYPE_GROUP = 1,
-  RBD_SNAP_NAMESPACE_TYPE_TRASH = 2
+  RBD_SNAP_NAMESPACE_TYPE_USER               = 0,
+  RBD_SNAP_NAMESPACE_TYPE_GROUP              = 1,
+  RBD_SNAP_NAMESPACE_TYPE_TRASH              = 2,
+  RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY     = 3,
+  RBD_SNAP_NAMESPACE_TYPE_MIRROR_NON_PRIMARY = 4,
 } rbd_snap_namespace_type_t;
 
 typedef struct {
@@ -246,6 +248,19 @@ typedef struct {
   char *group_name;
   char *group_snap_name;
 } rbd_snap_group_namespace_t;
+
+typedef struct {
+  bool demoted;
+  size_t mirror_peers_count;
+  char *mirror_peers;
+} rbd_snap_mirror_primary_namespace_t;
+
+typedef struct {
+  char *primary_mirror_uuid;
+  uint64_t primary_snap_id;
+  bool copied;
+  uint64_t copy_progress;
+} rbd_snap_mirror_non_primary_namespace_t;
 
 typedef enum {
   RBD_LOCK_MODE_EXCLUSIVE = 0,
@@ -825,6 +840,18 @@ CEPH_RBD_API int rbd_snap_get_trash_namespace(rbd_image_t image,
                                               uint64_t snap_id,
                                               char* original_name,
                                               size_t max_length);
+CEPH_RBD_API int rbd_snap_get_mirror_primary_namespace(
+    rbd_image_t image, uint64_t snap_id,
+    rbd_snap_mirror_primary_namespace_t *mirror_snap, size_t mirror_snap_size);
+CEPH_RBD_API int rbd_snap_mirror_primary_namespace_cleanup(
+    rbd_snap_mirror_primary_namespace_t *mirror_snap, size_t mirror_snap_size);
+CEPH_RBD_API int rbd_snap_get_mirror_non_primary_namespace(
+    rbd_image_t image, uint64_t snap_id,
+    rbd_snap_mirror_non_primary_namespace_t *mirror_snap,
+    size_t mirror_snap_size);
+CEPH_RBD_API int rbd_snap_mirror_non_primary_namespace_cleanup(
+    rbd_snap_mirror_non_primary_namespace_t *mirror_snap,
+    size_t mirror_snap_size);
 
 CEPH_RBD_API int rbd_flatten(rbd_image_t image);
 

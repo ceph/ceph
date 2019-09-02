@@ -127,6 +127,17 @@ cdef extern from "rbd/librbd.h" nogil:
         char *group_name
         char *group_snap_name
 
+    ctypedef struct rbd_snap_mirror_primary_namespace_t:
+        bint demoted
+        size_t mirror_peers_count
+        char *mirror_peers
+
+    ctypedef struct rbd_snap_mirror_non_primary_namespace_t:
+        char *primary_mirror_uuid
+        uint64_t primary_snap_id
+        bint copied
+        uint64_t copy_progress
+
     ctypedef struct rbd_group_info_t:
         char *name
         int64_t pool
@@ -147,6 +158,8 @@ cdef extern from "rbd/librbd.h" nogil:
         _RBD_SNAP_NAMESPACE_TYPE_USER "RBD_SNAP_NAMESPACE_TYPE_USER"
         _RBD_SNAP_NAMESPACE_TYPE_GROUP "RBD_SNAP_NAMESPACE_TYPE_GROUP"
         _RBD_SNAP_NAMESPACE_TYPE_TRASH "RBD_SNAP_NAMESPACE_TYPE_TRASH"
+        _RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY "RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY"
+        _RBD_SNAP_NAMESPACE_TYPE_MIRROR_NON_PRIMARY "RBD_SNAP_NAMESPACE_TYPE_MIRROR_NON_PRIMARY"
 
     ctypedef struct rbd_snap_spec_t:
         uint64_t id
@@ -504,6 +517,20 @@ cdef extern from "rbd/librbd.h" nogil:
                                           size_t snap_group_namespace_size)
     int rbd_snap_get_trash_namespace(rbd_image_t image, uint64_t snap_id,
                                      char *original_name, size_t max_length)
+    int rbd_snap_get_mirror_primary_namespace(
+        rbd_image_t image, uint64_t snap_id,
+        rbd_snap_mirror_primary_namespace_t *mirror_ns,
+        size_t snap_mirror_primary_namespace_size)
+    void rbd_snap_mirror_primary_namespace_cleanup(
+        rbd_snap_mirror_primary_namespace_t *mirror_ns,
+        size_t snap_mirror_primary_namespace_size)
+    int rbd_snap_get_mirror_non_primary_namespace(
+        rbd_image_t image, uint64_t snap_id,
+        rbd_snap_mirror_non_primary_namespace_t *mirror_ns,
+        size_t snap_mirror_non_primary_namespace_size)
+    void rbd_snap_mirror_non_primary_namespace_cleanup(
+        rbd_snap_mirror_non_primary_namespace_t *mirror_ns,
+        size_t snap_mirror_non_primary_namespace_size)
 
     int rbd_flatten_with_progress(rbd_image_t image, librbd_progress_fn_t cb,
                                   void *cbdata)
@@ -715,6 +742,8 @@ RBD_IMAGE_OPTION_DATA_POOL = _RBD_IMAGE_OPTION_DATA_POOL
 RBD_SNAP_NAMESPACE_TYPE_USER = _RBD_SNAP_NAMESPACE_TYPE_USER
 RBD_SNAP_NAMESPACE_TYPE_GROUP = _RBD_SNAP_NAMESPACE_TYPE_GROUP
 RBD_SNAP_NAMESPACE_TYPE_TRASH = _RBD_SNAP_NAMESPACE_TYPE_TRASH
+RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY = _RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY
+RBD_SNAP_NAMESPACE_TYPE_MIRROR_NON_PRIMARY = _RBD_SNAP_NAMESPACE_TYPE_MIRROR_NON_PRIMARY
 
 RBD_GROUP_IMAGE_STATE_ATTACHED = _RBD_GROUP_IMAGE_STATE_ATTACHED
 RBD_GROUP_IMAGE_STATE_INCOMPLETE = _RBD_GROUP_IMAGE_STATE_INCOMPLETE
@@ -5041,6 +5070,78 @@ written." % (self.name, ret, length))
         finally:
             free(_name)
 
+    def snap_get_mirror_primary_namespace(self, snap_id):
+        """
+        get the mirror primary namespace details.
+        :param snap_id: the snapshot id of the mirror snapshot
+        :type key: int
+        :returns: dict - contains the following keys:
+
+            * ``demoted`` (bool) - True if snapshot is in demoted state
+
+            * ``mirror_peers`` (list) - mirror peer uuids
+        """
+        cdef:
+            rbd_snap_mirror_primary_namespace_t sn
+            uint64_t _snap_id = snap_id
+        with nogil:
+            ret = rbd_snap_get_mirror_primary_namespace(
+                self.image, _snap_id, &sn,
+                sizeof(rbd_snap_mirror_primary_namespace_t))
+        if ret != 0:
+            raise make_ex(ret, 'error getting snapshot mirror primary '
+                               'namespace for image: %s, snap_id: %d' %
+                               (self.name, snap_id))
+        peers = []
+        p = sn.mirror_peers
+        for i in range(sn.mirror_peers_count):
+            peer = decode_cstr(p)
+            peers.append(peer)
+            p += len(peer) + 1
+        info = {
+                'demoted' : sn.demoted,
+                'mirror_peers' : peers,
+            }
+        rbd_snap_mirror_primary_namespace_cleanup(
+            &sn, sizeof(rbd_snap_mirror_primary_namespace_t))
+        return info
+
+    def snap_get_mirror_non_primary_namespace(self, snap_id):
+        """
+        get the mirror non-primary namespace details.
+        :param snap_id: the snapshot id of the mirror snapshot
+        :type key: int
+        :returns: dict - contains the following keys:
+
+            * ``primary_mirror_uuid`` (str) - primary mirror uuid
+
+            * ``primary_snap_id`` (int) - primary snapshot Id
+
+            * ``copied`` (bool) - True if snapsho is copied
+
+           *  ``copy_progress`` (int) - copy progress
+        """
+        cdef:
+            rbd_snap_mirror_non_primary_namespace_t sn
+            uint64_t _snap_id = snap_id
+        with nogil:
+            ret = rbd_snap_get_mirror_non_primary_namespace(
+                self.image, _snap_id, &sn,
+                sizeof(rbd_snap_mirror_non_primary_namespace_t))
+        if ret != 0:
+            raise make_ex(ret, 'error getting snapshot mirror non-primary '
+                               'namespace for image: %s, snap_id: %d' %
+                               (self.name, snap_id))
+        info = {
+                'primary_mirror_uuid' : decode_cstr(sn.primary_mirror_uuid),
+                'primary_snap_id' : sn.primary_snap_id,
+                'copied' : sn.copied,
+                'copy_progress' : sn.copy_progress,
+            }
+        rbd_snap_mirror_non_primary_namespace_cleanup(
+            &sn, sizeof(rbd_snap_mirror_non_primary_namespace_t))
+        return info
+
 
 cdef class ImageIterator(object):
     """
@@ -5222,6 +5323,10 @@ cdef class SnapIterator(object):
     * ``group`` (dict) - optional for group namespace snapshots
 
     * ``trash`` (dict) - optional for trash namespace snapshots
+
+    * ``mirror_primary`` (dict) - optional for mirror primary namespace snapshots
+
+    * ``mirror_non_primary`` (dict) - optional for mirror non-primary namespace snapshots
     """
 
     cdef rbd_snap_info_t *snaps
@@ -5264,6 +5369,20 @@ cdef class SnapIterator(object):
                 except:
                     trash = None
                 s['trash'] = trash
+            elif s['namespace'] == RBD_SNAP_NAMESPACE_TYPE_MIRROR_PRIMARY:
+                try:
+                    mirror = self.image.snap_get_mirror_primary_namespace(
+                        self.snaps[i].id)
+                except:
+                    mirror = None
+                s['mirror_primary'] = mirror
+            elif s['namespace'] == RBD_SNAP_NAMESPACE_TYPE_MIRROR_NON_PRIMARY:
+                try:
+                    mirror = self.image.snap_get_mirror_non_primary_namespace(
+                        self.snaps[i].id)
+                except:
+                    mirror = None
+                    s['mirror_non_primary'] = mirror
             yield s
 
     def __dealloc__(self):
