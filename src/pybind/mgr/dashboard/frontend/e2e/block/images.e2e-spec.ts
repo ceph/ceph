@@ -49,12 +49,12 @@ describe('Images page', () => {
 
     it('should create image', async () => {
       await images.createImage(imageName, poolName, '1');
-      await expect(images.getTableCell(imageName).isPresent()).toBe(true);
+      await expect(images.getFirstTableCellWithText(imageName).isPresent()).toBe(true);
     });
 
     it('should edit image', async () => {
       await images.editImage(imageName, poolName, newImageName, '2');
-      await expect(images.getTableCell(newImageName).isPresent()).toBe(true);
+      await expect(images.getFirstTableCellWithText(newImageName).isPresent()).toBe(true);
     });
 
     it('should delete image', async () => {
@@ -81,28 +81,28 @@ describe('Images page', () => {
 
       await images.navigateTo(); // Need image for trash testing
       await images.createImage(imageName, poolName, '1');
-      await expect(images.getTableCell(imageName).isPresent()).toBe(true);
+      await expect(images.getFirstTableCellWithText(imageName).isPresent()).toBe(true);
     });
 
     it('should move the image to the trash', async () => {
       await images.moveToTrash(imageName);
-      await expect(images.getTableCell(imageName).isPresent()).toBe(true);
+      await expect(images.getFirstTableCellWithText(imageName).isPresent()).toBe(true);
     });
 
     it('should restore image to images table', async () => {
       await images.restoreImage(imageName, newImageName);
-      await expect(images.getTableCell(newImageName).isPresent()).toBe(true);
+      await expect(images.getFirstTableCellWithText(newImageName).isPresent()).toBe(true);
     });
 
     it('should purge trash in images trash tab', async () => {
       await images.navigateTo();
       // Have had issues with image not restoring fast enough, thus these tests/waits are here
       await images.waitPresence(
-        images.getTableCell(newImageName),
+        images.getFirstTableCellWithText(newImageName),
         'Timed out waiting for image to restore'
       );
       await images.waitClickable(
-        images.getTableCell(newImageName),
+        images.getFirstTableCellWithText(newImageName),
         'Timed out waiting for image to be clickable'
       );
       await images.moveToTrash(newImageName);

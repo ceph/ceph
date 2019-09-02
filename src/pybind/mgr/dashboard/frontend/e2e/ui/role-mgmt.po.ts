@@ -18,13 +18,13 @@ export class RoleMgmtPageHelper extends PageHelper {
     const createButton = element(by.cssContainingText('button', 'Create Role'));
     await createButton.click();
 
-    await this.waitPresence(this.getTableCell(name));
+    await this.waitPresence(this.getFirstTableCellWithText(name));
   }
 
   async edit(name, description): Promise<void> {
     await this.navigateTo();
 
-    await this.getTableCell(name).click(); // select role from table
+    await this.getFirstTableCellWithText(name).click(); // select role from table
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
     // fill in fields with new values
@@ -35,7 +35,7 @@ export class RoleMgmtPageHelper extends PageHelper {
     const editButton = element(by.cssContainingText('button', 'Edit Role'));
     await editButton.click();
 
-    await this.waitPresence(this.getTableCell(name));
-    await this.waitPresence(this.getTableCell(description));
+    await this.waitPresence(this.getFirstTableCellWithText(name));
+    await this.waitPresence(this.getFirstTableCellWithText(description));
   }
 }
