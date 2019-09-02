@@ -62,8 +62,8 @@ struct segment_t {
 
   static constexpr __le16 DEFAULT_ALIGNMENT = sizeof(void *);
 
-  __le32 length;
-  __le16 alignment;
+  ceph_le32 length;
+  ceph_le16 alignment;
 } __attribute__((packed));
 
 struct SegmentIndex {
@@ -102,7 +102,7 @@ struct preamble_block_t {
   __u8 _reserved[2];
 
   // CRC32 for this single preamble block.
-  __le32 crc;
+  ceph_le32 crc;
 } __attribute__((packed));
 static_assert(sizeof(preamble_block_t) % CRYPTO_BLOCK_SIZE == 0);
 static_assert(std::is_standard_layout<preamble_block_t>::value);
@@ -128,7 +128,7 @@ static_assert(std::is_standard_layout<preamble_block_t>::value);
 // frame abortion facility.
 struct epilogue_plain_block_t {
   __u8 late_flags;
-  std::array<__le32, MAX_NUM_SEGMENTS> crc_values;
+  std::array<ceph_le32, MAX_NUM_SEGMENTS> crc_values;
 } __attribute__((packed));
 static_assert(std::is_standard_layout<epilogue_plain_block_t>::value);
 
