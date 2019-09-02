@@ -41,11 +41,12 @@ export function cdEncodeNot(target: Object, propertyKey: string, index: number) 
 }
 
 function encodeClass(target: Function) {
-  for (const propertyName of Object.keys(target.prototype)) {
+  for (const propertyName of Object.getOwnPropertyNames(target.prototype)) {
     const descriptor = Object.getOwnPropertyDescriptor(target.prototype, propertyName);
 
     const isMethod = descriptor.value instanceof Function;
-    if (!isMethod) {
+    const isConstructor = propertyName === 'constructor';
+    if (!isMethod || isConstructor) {
       continue;
     }
 
