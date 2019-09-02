@@ -12,7 +12,6 @@
  *
  */
 #include <iostream>
-#include "global/global_init.h"
 #include "common/ceph_json.h"
 #include "common/Formatter.h"
 #include "rgw/rgw_common.h"
