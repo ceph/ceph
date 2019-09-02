@@ -79,14 +79,13 @@ Event Types
 +----------------------------------------------+-----------------+-------------------------------------------+
 | ``s3:ObjectCreated:Copy``                    | Supported       | Supported at ``s3:ObjectCreated:*`` level |
 +----------------------------------------------+-----------------+-------------------------------------------+
-| ``s3:ObjectCreated:CompleteMultipartUpload`` | Not Supported   | Supported at ``s3:ObjectCreated:*`` level |
-| (an extension to AWS)                        |                 |                                           |
+| ``s3:ObjectCreated:CompleteMultipartUpload`` | Supported       | Supported at ``s3:ObjectCreated:*`` level |
 +----------------------------------------------+-----------------+-------------------------------------------+
-| ``s3:ObjectRemoved:*``                       | Supported                                                   |
+| ``s3:ObjectRemoved:*``                       | Supported       | Supported only the specific events below  |
 +----------------------------------------------+-----------------+-------------------------------------------+
-| ``s3:ObjectRemoved:Delete``                  | Supported       | supported at ``s3:ObjectRemoved:*`` level |
+| ``s3:ObjectRemoved:Delete``                  | Supported                                                   |
 +----------------------------------------------+-----------------+-------------------------------------------+
-| ``s3:ObjectRemoved:DeleteMarkerCreated``     | Supported at ``s3:ObjectRemoved:*`` level                   |
+| ``s3:ObjectRemoved:DeleteMarkerCreated``     | Supported                                                   |
 +----------------------------------------------+-----------------+-------------------------------------------+
 | ``s3:ObjectRestore:Post``                    | Not applicable to Ceph                                      |
 +----------------------------------------------+-----------------+-------------------------------------------+

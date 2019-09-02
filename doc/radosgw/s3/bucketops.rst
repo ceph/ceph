@@ -477,3 +477,162 @@ Response Entities
 | ``Years``                   | Integer     | The number of years specified for the default retention period.                        |   No     |
 +-----------------------------+-------------+----------------------------------------------------------------------------------------+----------+
 
+Create Notification
+-------------------
+
+Create a publisher for a specific bucket into a topic.
+
+Syntax
+~~~~~~
+
+::
+
+    PUT /<bucket name>?notification HTTP/1.1
+
+
+Request Entities
+~~~~~~~~~~~~~~~~
+
+Parameters are XML encoded in the body of the request, in the following format:
+
+::
+
+   <NotificationConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+       <TopicConfiguration>
+           <Id></Id>
+           <Topic></Topic>
+           <Event></Event>
+       </TopicConfiguration>
+   </NotificationConfiguration>
+
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| Name                          | Type      | Description                                                                          | Required |
++===============================+===========+======================================================================================+==========+
+| ``NotificationConfiguration`` | Container | Holding list of ``TopicConfiguration`` entities                                      | Yes      |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``TopicConfiguration``        | Container | Holding ``Id``, ``Topic`` and list of ``Event`` entities                             | Yes      |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``Id``                        | String    | Name of the notification                                                             | Yes      |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``Topic``                     | String    | Topic ARN. Topic must be created beforehand                                          | Yes      |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``Event``                     | String    | List of supported events see: `S3 Notification Compatibility`_.  Multiple ``Event``  | No       |
+|                               |           | entities can be used. If omitted, all events are handled                             |          |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+
+HTTP Response
+~~~~~~~~~~~~~
+
++---------------+-----------------------+----------------------------------------------------------+
+| HTTP Status   | Status Code           | Description                                              |
++===============+=======================+==========================================================+
+| ``400``       | MalformedXML          | The XML is not well-formed                               |
++---------------+-----------------------+----------------------------------------------------------+
+| ``400``       | InvalidArgument       | Missing Id; Missing/Invalid Topic ARN; Invalid Event     |
++---------------+-----------------------+----------------------------------------------------------+
+| ``404``       | NoSuchBucket          | The bucket does not exist                                |
++---------------+-----------------------+----------------------------------------------------------+
+| ``404``       | NoSuchKey             | The topic does not exist                                 |
++---------------+-----------------------+----------------------------------------------------------+
+
+
+Delete Notification
+-------------------
+
+Delete a specific, or all, notifications from a bucket.
+
+.. note:: 
+
+    - Notification deletion is an extension to the S3 notification API
+    - When the bucket is deleted, any notification defined on it is also deleted 
+    - Deleting an unkown notification (e.g. double delete) is not considered an error
+
+Syntax
+~~~~~~
+
+::
+
+    DELETE /bucket?notification[=<notification-id>] HTTP/1.1
+
+
+Parameters
+~~~~~~~~~~
+
++------------------------+-----------+----------------------------------------------------------------------------------------+
+| Name                   | Type      | Description                                                                            |
++========================+===========+========================================================================================+
+| ``notification-id``    | String    | Name of the notification. If not provided, all notifications on the bucket are deleted |
++------------------------+-----------+----------------------------------------------------------------------------------------+
+
+HTTP Response
+~~~~~~~~~~~~~
+
++---------------+-----------------------+----------------------------------------------------------+
+| HTTP Status   | Status Code           | Description                                              |
++===============+=======================+==========================================================+
+| ``404``       | NoSuchBucket          | The bucket does not exist                                |
++---------------+-----------------------+----------------------------------------------------------+
+
+Get/List Notification
+---------------------
+
+Get a specific notification, or list all notifications configured on a bucket.
+
+Syntax
+~~~~~~
+
+::
+
+    GET /bucket?notification[=<notification-id>] HTTP/1.1 
+
+
+Parameters
+~~~~~~~~~~
+
++------------------------+-----------+----------------------------------------------------------------------------------------+
+| Name                   | Type      | Description                                                                            |
++========================+===========+========================================================================================+
+| ``notification-id``    | String    | Name of the notification. If not provided, all notifications on the bucket are listed  |
++------------------------+-----------+----------------------------------------------------------------------------------------+
+
+Response Entities
+~~~~~~~~~~~~~~~~~
+
+Response is XML encoded in the body of the request, in the following format:
+
+::
+
+   <NotificationConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
+       <TopicConfiguration>
+           <Id></Id>
+           <Topic></Topic>
+           <Event></Event>
+       </TopicConfiguration>
+   </NotificationConfiguration>
+
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| Name                          | Type      | Description                                                                          | Required |
++===============================+===========+======================================================================================+==========+
+| ``NotificationConfiguration`` | Container | Holding list of ``TopicConfiguration`` entities                                      | Yes      |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``TopicConfiguration``        | Container | Holding ``Id``, ``Topic`` and list of ``Event`` entities                             | Yes      |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``Id``                        | String    | Name of the notification                                                             | Yes      |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``Topic``                     | String    | Topic ARN                                                                            | Yes      |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``Event``                     | String    | Handled event. Multiple ``Event`` entities may exist                                 | Yes      |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+
+HTTP Response
+~~~~~~~~~~~~~
+
++---------------+-----------------------+----------------------------------------------------------+
+| HTTP Status   | Status Code           | Description                                              |
++===============+=======================+==========================================================+
+| ``404``       | NoSuchBucket          | The bucket does not exist                                |
++---------------+-----------------------+----------------------------------------------------------+
+| ``404``       | NoSuchKey             | The notification does not exist (if provided)            |
++---------------+-----------------------+----------------------------------------------------------+
+
+.. _S3 Notification Compatibility: ../s3-notification-compatibility

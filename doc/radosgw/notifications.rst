@@ -205,83 +205,13 @@ Response will have the following format:
 Notifications
 ~~~~~~~~~~~~~
 
-Create a Notification
-`````````````````````
-
-This will create a publisher for a specific bucket into a topic.
-
-::
-
-   PUT /<bucket name>?notification
-
-Request parameters are encoded in XML in the body of the request, with the following format:
-
-::
-
-   <NotificationConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
-       <TopicConfiguration>
-           <Id></Id>
-           <Topic></Topic>
-           <Event></Event>
-       </TopicConfiguration>
-   </NotificationConfiguration>
-
-- Id: name of the notification
-- Topic: topic ARN
-- Event: either ``s3:ObjectCreated:*``, or ``s3:ObjectRemoved:*`` (multiple ``Event`` tags may be used)
-
-Delete Notification
-```````````````````
-
-Delete a specific, or all, notifications from a bucket.
-
-::
-
-   DELETE /bucket?notification[=<notification-id>]
-
-Request parameters:
-
-- notification-id: name of the notification (if not provided, all notifications on the bucket are deleted)
+Detailed under: `Bucket Operations`_.
 
 .. note:: 
 
-    - Notification deletion is an extension to the S3 notification API
-    - When the bucket is deleted, any notification defined on it is also deleted 
-
-Get/List Notifications
-``````````````````````
-
-Get a specific notification, or list all notifications defined on a bucket.
-
-::
-
-   GET /bucket?notification[=<notification-id>]
-
-Request parameters:
-
-- notification-id: name of the notification (if not provided, all notifications on the bucket are listed)
-
-Response is XML formatted:
-
-::
-
-   <NotificationConfiguration>
-       <TopicConfiguration>
-           <Id></Id>
-           <Topic></Topic>
-           <Event></Event>
-       </TopicConfiguration>
-   </NotificationConfiguration>
-
-- Id: name of the notification
-- Topic: topic ARN
-- Event: for list of supported events see: `S3 Notification Compatibility`_ (to support multiple types, any combination of wildcard events and ``Event`` tags may be used)
-
-
-.. note::
-
-    - Getting information on a specific notification is an extension to the S3 notification API
-    - When multiple notifications are fetched from the bucket, multiple ``NotificationConfiguration`` tags will be used
+    - "Abort Multipart Upload" request does not emit a notification
+    - "Delete Multiple Objects" request does not emit a notification
+    - Both "Initiate Multipart Upload" and "POST Object" requests will emit an ``s3:ObjectCreated:Post`` notification
 
 
 Events
@@ -356,3 +286,4 @@ pushed or pulled using the pubsub sync module.
 .. _PubSub Module : ../pubsub-module
 .. _S3 Notification Compatibility: ../s3-notification-compatibility
 .. _AWS Create Topic: https://docs.aws.amazon.com/sns/latest/api/API_CreateTopic.html
+.. _Bucket Operations: ../s3/bucketops

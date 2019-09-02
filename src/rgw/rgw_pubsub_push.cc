@@ -160,6 +160,7 @@ private:
   CephContext* const cct;
   const std::string endpoint;
   const std::string topic;
+  const std::string exchange;
   amqp::connection_ptr_t conn;
   ack_level_t ack_level;
   std::string str_ack_level;
@@ -271,8 +272,9 @@ public:
       CephContext* _cct) : 
         cct(_cct),
         endpoint(_endpoint), 
-        topic(_topic), 
-        conn(amqp::connect(endpoint, get_exchange(args))) {
+        topic(_topic),
+        exchange(get_exchange(args)),
+        conn(amqp::connect(endpoint, exchange)) {
     if (!conn) { 
       throw configuration_error("AMQP: failed to create connection to: " + endpoint);
     }
@@ -393,6 +395,7 @@ public:
     std::string str("AMQP(0.9.1) Endpoint");
     str += "\nURI: " + endpoint;
     str += "\nTopic: " + topic;
+    str += "\nExchange: " + exchange;
     str += "\nAck Level: " + str_ack_level;
     return str;
   }

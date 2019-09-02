@@ -509,7 +509,7 @@ void RGWPSCreateNotif_ObjStore_S3::execute() {
       ups->remove_topic(unique_topic_name);
       return;
     }
-    ldout(s->cct, 20) << "successfully auto-generated notification for unique topic'" << unique_topic_name << "'" << dendl;
+    ldout(s->cct, 20) << "successfully auto-generated notification for unique topic '" << unique_topic_name << "'" << dendl;
   
     if (!push_only) {
       // generate the subscription with destination information from the original topic

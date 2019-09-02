@@ -7,14 +7,15 @@
 
 namespace rgw::notify {
   enum EventType {
-    ObjectCreated       = 0xF,
-    ObjectCreatedPut    = 0x1,
-    ObjectCreatedPost   = 0x2,
-    ObjectCreatedCopy   = 0x4,
-    ObjectRemoved       = 0xF0,
-    ObjectRemovedDelete = 0x10,
-    ObjectRemovedDeleteMarkerCreated = 0x20,
-    UnknownEvent = 0x100
+    ObjectCreated                        = 0xF,
+    ObjectCreatedPut                     = 0x1,
+    ObjectCreatedPost                    = 0x2,
+    ObjectCreatedCopy                    = 0x4,
+    ObjectCreatedCompleteMultipartUpload = 0x8,
+    ObjectRemoved                        = 0xF0,
+    ObjectRemovedDelete                  = 0x10,
+    ObjectRemovedDeleteMarkerCreated     = 0x20,
+    UnknownEvent                         = 0x100
   };
 
   using EventTypeList = std::vector<EventType>;
