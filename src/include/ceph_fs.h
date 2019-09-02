@@ -16,6 +16,27 @@
 #include "rados.h"
 
 /*
+ * The data structures defined here are shared between Linux kernel and
+ * user space.  Also, those data structures are maintained always in
+ * little-endian byte order, even on big-endian systems.  This is handled
+ * differently in kernel vs. user space.  For use as kernel headers, the
+ * little-endian fields need to use the __le16/__le32/__le64 types.  These
+ * are markers that indicate endian conversion routines must be used
+ * whenever such fields are accessed, which can be verified by checker
+ * tools like "sparse".  For use as user-space headers, the little-endian
+ * fields instead use types ceph_le16/ceph_le32/ceph_le64, which are C++
+ * classes that implement automatic endian conversion on every access.
+ * To still allow for header sharing, this file uses the __le types, but
+ * redefines those to the ceph_ types when compiled in user space.
+ */
+#ifndef __KERNEL__
+#include "byteorder.h"
+#define __le16 ceph_le16
+#define __le32 ceph_le32
+#define __le64 ceph_le64
+#endif
+
+/*
  * subprotocol versions.  when specific messages types or high-level
  * protocols change, bump the affected components.  we keep rev
  * internal cluster protocols separately from the public,
@@ -710,6 +731,7 @@ int ceph_flags_to_mode(int flags);
 #define CEPH_CAP_PIN         1  /* no specific capabilities beyond the pin */
 
 /* generic cap bits */
+/* note: these definitions are duplicated in mds/locks.c */
 #define CEPH_CAP_GSHARED     1  /* client can reads */
 #define CEPH_CAP_GEXCL       2  /* client can read and update */
 #define CEPH_CAP_GCACHE      4  /* (file) client can cache reads */
@@ -950,5 +972,11 @@ struct ceph_mds_snap_realm {
 	__le32 num_prior_parent_snaps;
 } __attribute__ ((packed));
 /* followed by my snap list, then prior parent snap list */
+
+#ifndef __KERNEL__
+#undef __le16
+#undef __le32
+#undef __le64
+#endif
 
 #endif

@@ -119,12 +119,12 @@
 #define RBD_MIRROR_PEER_CONFIG_KEY_PREFIX "rbd/mirror/peer/"
 
 struct rbd_info {
-	__le64 max_id;
+	ceph_le64 max_id;
 } __attribute__ ((packed));
 
 struct rbd_obj_snap_ondisk {
-	__le64 id;
-	__le64 image_size;
+	ceph_le64 id;
+	ceph_le64 image_size;
 } __attribute__((packed));
 
 struct rbd_obj_header_ondisk {
@@ -138,11 +138,11 @@ struct rbd_obj_header_ondisk {
 		__u8 comp_type;
 		__u8 unused;
 	} __attribute__((packed)) options;
-	__le64 image_size;
-	__le64 snap_seq;
-	__le32 snap_count;
-	__le32 reserved;
-	__le64 snap_names_len;
+	ceph_le64 image_size;
+	ceph_le64 snap_seq;
+	ceph_le32 snap_count;
+	ceph_le32 reserved;
+	ceph_le64 snap_names_len;
 	struct rbd_obj_snap_ondisk snaps[0];
 } __attribute__((packed));
 
