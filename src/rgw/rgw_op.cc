@@ -4278,8 +4278,8 @@ void RGWPostObj::execute()
       return;
     }
   } while (is_next_file_to_upload());
-  // send request to notification manager
-  const auto ret = rgw::notify::publish(s, real_time(), etag, rgw::notify::ObjectCreatedPost, store);
+
+  const auto ret = rgw::notify::publish(s, ceph::real_clock::now(), etag, rgw::notify::ObjectCreatedPost, store);
   if (ret < 0) {
     ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
 	// TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
@@ -4705,9 +4705,10 @@ void RGWDeleteObj::execute()
   bool check_obj_lock = obj.key.have_instance() && s->bucket_info.obj_lock_enabled();
 
   if (!s->object.empty()) {
+    op_ret = get_obj_attrs(store, s, obj, attrs);
+
     if (need_object_expiration() || multipart_delete) {
       /* check if obj exists, read orig attrs */
-      op_ret = get_obj_attrs(store, s, obj, attrs);
       if (op_ret < 0) {
         return;
       }
@@ -4715,7 +4716,6 @@ void RGWDeleteObj::execute()
 
     if (check_obj_lock) {
       /* check if obj exists, read orig attrs */
-      op_ret = get_obj_attrs(store, s, obj, attrs);
       if (op_ret < 0) {
         if (op_ret == -ENOENT) {
           /* object maybe delete_marker, skip check_obj_lock*/
@@ -4725,6 +4725,9 @@ void RGWDeleteObj::execute()
         }
       }
     }
+
+    // ignore return value from get_obj_attrs in all other cases
+    op_ret = 0;
 
     if (check_obj_lock) {
       auto aiter = attrs.find(RGW_ATTR_OBJECT_RETENTION);
@@ -4828,9 +4831,10 @@ void RGWDeleteObj::execute()
   } else {
     op_ret = -EINVAL;
   }
-  // TODO: add etag calculation
-  std::string etag;
-  const auto ret = rgw::notify::publish(s, real_time(), etag, rgw::notify::ObjectRemovedDelete, store);
+
+  const auto ret = rgw::notify::publish(s, ceph::real_clock::now(), attrs[RGW_ATTR_ETAG].to_str(),
+          delete_marker && s->object.instance.empty() ? rgw::notify::ObjectRemovedDeleteMarkerCreated : rgw::notify::ObjectRemovedDelete,
+          store);
   if (ret < 0) {
     ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
 	// TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
@@ -5142,7 +5146,6 @@ void RGWCopyObj::execute()
                            this,
                            s->yield);
   
-  // TODO: use s3:ObjectCreated:Copy
   const auto ret = rgw::notify::publish(s, mtime, etag, rgw::notify::ObjectCreatedCopy, store);
   if (ret < 0) {
     ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
@@ -5820,6 +5823,14 @@ void RGWInitMultipart::execute()
 
     op_ret = obj_op.write_meta(bl.length(), 0, attrs, s->yield);
   } while (op_ret == -EEXIST);
+  
+  const auto ret = rgw::notify::publish(s, ceph::real_clock::now(), attrs[RGW_ATTR_ETAG].to_str(), rgw::notify::ObjectCreatedPost, store);
+  if (ret < 0) {
+    ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
+	// TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
+	// this should be global conf (probably returnign a different handler)
+    // so we don't need to read the configured values before we perform it
+  }
 }
 
 int RGWCompleteMultipart::verify_permission()
@@ -6125,6 +6136,14 @@ void RGWCompleteMultipart::execute()
     serializer.clear_locked();
   } else {
     ldpp_dout(this, 0) << "WARNING: failed to remove object " << meta_obj << dendl;
+  }
+  
+  const auto ret = rgw::notify::publish(s, ceph::real_clock::now(), etag, rgw::notify::ObjectCreatedCompleteMultipartUpload, store);
+  if (ret < 0) {
+    ldpp_dout(this, 5) << "WARNING: publishing notification failed, with error: " << ret << dendl;
+	// TODO: we should have conf to make send a blocking coroutine and reply with error in case sending failed
+	// this should be global conf (probably returnign a different handler)
+    // so we don't need to read the configured values before we perform it
   }
 }
 

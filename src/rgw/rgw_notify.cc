@@ -84,6 +84,12 @@ int publish(const req_state* s,
             continue;
         }
         event_should_be_handled = true;
+        record.configurationId = topic_filter.s3_id;
+        ldout(s->cct, 20) << "notification: '" << topic_filter.s3_id << 
+            "' on topic: '" << topic_cfg.dest.arn_topic << 
+            "' and bucket: '" << s->bucket.name << 
+            "' (unique topic: '" << topic_cfg.name <<
+            "') apply to event of type: '" << to_string(event_type) << "'" << dendl;
         try {
             // TODO add endpoint LRU cache
             const auto push_endpoint = RGWPubSubEndpoint::create(topic_cfg.dest.push_endpoint, 

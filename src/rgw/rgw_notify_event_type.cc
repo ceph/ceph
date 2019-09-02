@@ -16,6 +16,8 @@ namespace rgw::notify {
         return "s3:ObjectCreated:Post";
       case ObjectCreatedCopy:
         return "s3:ObjectCreated:Copy";
+      case ObjectCreatedCompleteMultipartUpload:
+        return "s3:ObjectCreated:CompleteMultipartUpload";
       case ObjectRemoved:
         return "s3:ObjectRemoved:*";
       case ObjectRemovedDelete:
@@ -34,12 +36,13 @@ namespace rgw::notify {
       case ObjectCreatedPut:
       case ObjectCreatedPost:
       case ObjectCreatedCopy:
+      case ObjectCreatedCompleteMultipartUpload:
         return "OBJECT_CREATE";
-      case ObjectRemoved:
       case ObjectRemovedDelete:
         return "OBJECT_DELETE";
       case ObjectRemovedDeleteMarkerCreated:
         return "DELETE_MARKER_CREATE";
+      case ObjectRemoved:
       case UnknownEvent:
         return "UNKNOWN_EVENT";
     }
@@ -55,9 +58,11 @@ namespace rgw::notify {
         return ObjectCreatedPost;
     if (s == "s3:ObjectCreated:Copy")
         return ObjectCreatedCopy;
-    if (s == "s3:ObjectRemoved:*" || s == "OBJECT_DELETE")
+    if (s == "s3:ObjectCreated:CompleteMultipartUpload")
+        return ObjectCreatedCompleteMultipartUpload;
+    if (s == "s3:ObjectRemoved:*")
         return ObjectRemoved;
-    if (s == "s3:ObjectRemoved:Delete")
+    if (s == "s3:ObjectRemoved:Delete" || s == "OBJECT_DELETE")
         return ObjectRemovedDelete;
     if (s == "s3:ObjectRemoved:DeleteMarkerCreated" || s == "DELETE_MARKER_CREATE")
         return ObjectRemovedDeleteMarkerCreated;

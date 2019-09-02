@@ -346,16 +346,14 @@ private:
     }
 
     std::string events_str = s->info.args.get("events", &exists);
-    if (exists) {
-        rgw::notify::from_string_list(events_str, events);
-        if (std::find(events.begin(), events.end(), rgw::notify::UnknownEvent) != events.end()) {
-            ldout(s->cct, 1) << "invalid event type in list: " << events_str << dendl;
-            return -EINVAL;
-        }
-    } else {
-        // if no events are provided, we assume all events
-        events.push_back(rgw::notify::ObjectCreated);
-        events.push_back(rgw::notify::ObjectRemoved);
+    if (!exists) {
+      // if no events are provided, we notify on all of them
+      events_str = "OBJECT_CREATE,OBJECT_DELETE,DELETE_MARKER_CREATE";
+    }
+    rgw::notify::from_string_list(events_str, events);
+    if (std::find(events.begin(), events.end(), rgw::notify::UnknownEvent) != events.end()) {
+      ldout(s->cct, 1) << "invalid event type in list: " << events_str << dendl;
+      return -EINVAL;
     }
     return notif_bucket_path(s->object.name, bucket_name);
   }

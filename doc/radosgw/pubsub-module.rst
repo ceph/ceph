@@ -232,88 +232,17 @@ List all topics that user defined.
 S3-Compliant Notifications
 ~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Create a Notification
-`````````````````````
-
-This will create a publisher for a specific bucket into a topic, and a subscription
-for pushing/pulling events.
-The subscription's name will have the same as the notification Id, and could be used later to fetch
-and ack events with the subscription API.
-
-::
-
-   PUT /<bucket name>?notification
-
-Request parameters are encoded in XML in the body of the request, with the following format:
-
-::
-
-   <NotificationConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
-       <TopicConfiguration>
-           <Id></Id>
-           <Topic></Topic>
-           <Event></Event>
-       </TopicConfiguration>
-   </NotificationConfiguration>
-
-- Id: name of the notification
-- Topic: topic ARN
-- Event: either ``s3:ObjectCreated:*``, or ``s3:ObjectRemoved:*`` (multiple ``Event`` tags may be used)
-
-Delete Notification
-```````````````````
-
-Delete a specific, or all, S3-compliant notifications from a bucket. Associated subscription will also be deleted.
-
-::
-
-   DELETE /bucket?notification[=<notification-id>]
-
-Request parameters:
-
-- notification-id: name of the notification (if not provided, all S3-compliant notifications on the bucket are deleted)
+Detailed under: `Bucket Operations`_.
 
 .. note:: 
 
-    - Notification deletion is an extension to the S3 notification API
-    - When the bucket is deleted, any notification defined on it is also deleted. 
-      In this case, the associated subscription will not be deleted automatically (any events of the deleted bucket could still be access), 
+    - Notification creation will also create a subscription for pushing/pulling events
+    - The generated subscription's name will have the same as the notification Id, and could be used later to fetch and ack events with the subscription API.
+    - Notification deletion will deletes all generated subscriptions
+    - In case that bucket deletion implicitly deletes the notification, 
+      the associated subscription will not be deleted automatically (any events of the deleted bucket could still be access),
       and will have to be deleted explicitly with the subscription deletion API
 
-Get/List Notifications
-``````````````````````
-
-Get a specific S3-compliant notification, or list all S3-compliant notifications defined on a bucket.
-
-::
-
-   GET /bucket?notification[=<notification-id>]
-
-Request parameters:
-
-- notification-id: name of the notification (if not provided, all S3-compliant notifications on the bucket are listed)
-
-Response is XML formatted:
-
-::
-
-   <NotificationConfiguration>
-       <TopicConfiguration>
-           <Id></Id>
-           <Topic></Topic>
-           <Event></Event>
-       </TopicConfiguration>
-   </NotificationConfiguration>
-
-- Id: name of the notification
-- Topic: topic ARN
-- Event: either ``s3:ObjectCreated:*``, or ``s3:ObjectRemoved:*`` (multiple ``Event`` tags may be used)
-
-
-.. note::
-
-    - Getting information on a specific notification is an extension to the S3 notification API
-    - When multiple notifications are fetched from the bucket, multiple ``NotificationConfiguration`` tags will be used
 
 Non S3-Compliant Notifications
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
@@ -330,7 +259,7 @@ This will create a publisher for a specific bucket into a topic.
 Request parameters:
 
 - topic-name: name of topic
-- event: event type (string), one of: OBJECT_CREATE, OBJECT_DELETE 
+- event: event type (string), one of: ``OBJECT_CREATE``, ``OBJECT_DELETE``, ``DELETE_MARKER_CREATE``
  
 Delete Notification Information
 ```````````````````````````````
@@ -564,7 +493,7 @@ the events will have the following event format (JSON):
    ]}
 
 - id: unique ID of the event, that could be used for acking
-- event: either ``OBJECT_CREATE``, or ``OBJECT_DELETE``
+- event: one of: ``OBJECT_CREATE``, ``OBJECT_DELETE``, ``DELETE_MARKER_CREATE``
 - timestamp: timestamp indicating when the event was sent
 - info.attrs.mtime: timestamp indicating when the event was triggered
 - info.bucket.bucket_id: id of the bucket
@@ -588,3 +517,4 @@ Request parameters:
 
 .. _Multisite : ../multisite
 .. _Bucket Notification : ../notifications
+.. _Bucket Operations: ../s3/bucketops

@@ -130,6 +130,23 @@ class PSTopic:
         return self.send_request('GET', get_list=True)
 
 
+def delete_all_s3_topics(conn, region):
+    try:
+        client = boto3.client('sns',
+                              endpoint_url='http://'+conn.host+':'+str(conn.port),
+                              aws_access_key_id=conn.aws_access_key_id,
+                              aws_secret_access_key=conn.aws_secret_access_key,
+                              region_name=region,
+                              config=Config(signature_version='s3'))
+
+        topics = client.list_topics()['Topics']
+        for topic in topics:
+            print 'topic cleanup, deleting: ' + topic['TopicArn']
+            assert client.delete_topic(TopicArn=topic['TopicArn'])['ResponseMetadata']['HTTPStatusCode'] == 200
+    except:
+        print 'failed to do topic cleanup. if there are topics they may need to be manually deleted'
+    
+
 class PSTopicS3:
     """class to set/list/get/delete a topic
     POST ?Action=CreateTopic&Name=<topic name>&push-endpoint=<endpoint>&[<arg1>=<value1>...]]
