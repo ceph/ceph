@@ -128,7 +128,8 @@ function main() {
 
     # tox.ini will take care of this.
     export CEPH_BUILD_DIR=$build_dir
-
+    # use the wheelhouse prepared by install-deps.sh
+    export PIP_FIND_LINKS="$tox_path/wheelhouse"
     tox -c $tox_path/tox.ini -e "$tox_envs" "$@"
 }
 
