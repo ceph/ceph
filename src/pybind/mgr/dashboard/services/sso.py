@@ -197,7 +197,7 @@ def handle_sso_command(cmd):
             sp_private_key = ''
 
         if os.path.isfile(idp_metadata):
-            warnings.warn_explicit(
+            warnings.warn(
                 "Please prepend 'file://' to indicate a local SAML2 IdP file", DeprecationWarning)
             with open(idp_metadata, 'r') as f:
                 idp_settings = Saml2Parser.parse(f.read(), entity_id=idp_entity_id)
