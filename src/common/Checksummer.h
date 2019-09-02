@@ -5,6 +5,7 @@
 #define CEPH_OS_BLUESTORE_CHECKSUMMER
 
 #include "xxHash/xxhash.h"
+#include "include/byteorder.h"
 
 class Checksummer {
 public:
@@ -69,7 +70,7 @@ public:
 
   struct crc32c {
     typedef uint32_t init_value_t;
-    typedef __le32 value_t;
+    typedef ceph_le32 value_t;
 
     // we have no execution context/state.
     typedef int state_t;
@@ -78,7 +79,7 @@ public:
     static void fini(state_t *state) {
     }
 
-    static value_t calc(
+    static init_value_t calc(
       state_t state,
       init_value_t init_value,
       size_t len,
@@ -90,7 +91,7 @@ public:
 
   struct crc32c_16 {
     typedef uint32_t init_value_t;
-    typedef __le16 value_t;
+    typedef ceph_le16 value_t;
 
     // we have no execution context/state.
     typedef int state_t;
@@ -99,7 +100,7 @@ public:
     static void fini(state_t *state) {
     }
 
-    static value_t calc(
+    static init_value_t calc(
       state_t state,
       init_value_t init_value,
       size_t len,
@@ -120,7 +121,7 @@ public:
     static void fini(state_t *state) {
     }
 
-    static value_t calc(
+    static init_value_t calc(
       state_t state,
       init_value_t init_value,
       size_t len,
@@ -132,7 +133,7 @@ public:
 
   struct xxhash32 {
     typedef uint32_t init_value_t;
-    typedef __le32 value_t;
+    typedef ceph_le32 value_t;
 
     typedef XXH32_state_t *state_t;
     static void init(state_t *s) {
@@ -142,7 +143,7 @@ public:
       XXH32_freeState(*s);
     }
 
-    static value_t calc(
+    static init_value_t calc(
       state_t state,
       init_value_t init_value,
       size_t len,
@@ -161,7 +162,7 @@ public:
 
   struct xxhash64 {
     typedef uint64_t init_value_t;
-    typedef __le64 value_t;
+    typedef ceph_le64 value_t;
 
     typedef XXH64_state_t *state_t;
     static void init(state_t *s) {
@@ -171,7 +172,7 @@ public:
       XXH64_freeState(*s);
     }
 
-    static value_t calc(
+    static init_value_t calc(
       state_t state,
       init_value_t init_value,
       size_t len,
@@ -250,7 +251,7 @@ public:
     pv += offset / csum_block_size;
     size_t pos = offset;
     while (length > 0) {
-      typename Alg::value_t v = Alg::calc(state, -1, csum_block_size, p);
+      typename Alg::init_value_t v = Alg::calc(state, -1, csum_block_size, p);
       if (*pv != v) {
 	if (bad_csum) {
 	  *bad_csum = v;
