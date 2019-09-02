@@ -30,6 +30,7 @@
 #include "mon/ConfigKeyService.h"
 
 #include "mon/commands/Command.h"
+#include "mon/commands/osdmon_cmds.h"
 
 #include "mon/MonitorDBStore.h"
 #include "mon/Session.h"
@@ -9404,138 +9405,6 @@ int OSDMonitor::prepare_command_osd_purge(
   return 0;
 }
 
-
-struct OSDMonSetCrushmap :
-  public WriteCommand<OSDMonitor, OSDMap, OSDMap::Incremental>
-{
-  explicit OSDMonSetCrushmap(
-      Monitor *_mon,
-      OSDMonitor *_osdmon,
-      CephContext *_cct) :
-    WriteCommand<OSDMonitor, OSDMap, OSDMap::Incremental>(_mon, _osdmon, _cct)
-  { }
-
-  virtual ~OSDMonSetCrushmap() { }
-
-  virtual bool handles_command(const string &prefix) final {
-    return (prefix == "osd setcrushmap" || prefix == "osd crush set");
-  }
-
-  virtual bool do_prepare(
-      MonOpRequestRef op,
-      const string &prefix,
-      const cmdmap_t &cmdmap,
-      stringstream &ss,
-      bufferlist rdata,
-      FormatterRef f,
-      OSDMap::Incremental &pending_inc,
-      OSDMap &osdmap)
-  {
-    ceph_assert(handles_command(prefix));
-
-    MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
-
-    int64_t osdid;
-    bool osdid_present = cmd_getval(cct, cmdmap, "id", osdid);
-
-    string osd_name;
-    if (osdid_present) {
-      ostringstream oss;
-      oss << "osd." << osdid;
-      osd_name = oss.str();
-    }
-
-    if (pending_inc.crush.length()) {
-      dout(10) << __func__ << " waiting for pending crush update " << dendl;
-      wait_retry(op);
-      return true;
-    }
-    dout(10) << "prepare_command setting new crush map" << dendl;
-    bufferlist data(m->get_data());
-    CrushWrapper crush;
-    try {
-      auto bl = data.cbegin();
-      crush.decode(bl);
-    }
-    catch (const std::exception &e) {
-      ss << "Failed to parse crushmap: " << e.what();
-      reply(op, -EINVAL, ss, get_last_committed()); 
-      return false;
-    }
-
-    int64_t prior_version = 0;
-    if (cmd_getval(cct, cmdmap, "prior_version", prior_version)) {
-      if (prior_version == osdmap.get_crush_version() - 1) {
-	// see if we are a resend of the last update.  this is imperfect
-	// (multiple racing updaters may not both get reliable success)
-	// but we expect crush updaters (via this interface) to be rare-ish.
-	bufferlist current, proposed;
-	osdmap.crush->encode(current, mon->get_quorum_con_features());
-	crush.encode(proposed, mon->get_quorum_con_features());
-	if (current.contents_equal(proposed)) {
-	  dout(10) << __func__
-		   << " proposed matches current and version equals previous"
-		   << dendl;
-	  ss << osdmap.get_crush_version();
-	  reply(op, 0, ss, get_last_committed());
-	  return false;
-	}
-      }
-      if (prior_version != osdmap.get_crush_version()) {
-	ss << "prior_version " << prior_version << " != crush version "
-	   << osdmap.get_crush_version();
-	reply(op, -EPERM, ss, get_last_committed());
-	return false;
-      }
-    }
-
-    if (crush.has_legacy_rule_ids()) {
-      ss << "crush maps with ruleset != ruleid are no longer allowed";
-      reply(op, -EINVAL, ss, get_last_committed());
-      return false;
-    }
-    OSDMonitor *osdmon = static_cast<OSDMonitor*>(service);
-    if (!osdmon->validate_crush_against_features(&crush, ss)) {
-      reply(op, -EINVAL, ss, get_last_committed());
-      return false;
-    }
-
-    int err = osdmap.validate_crush_rules(&crush, &ss);
-    if (err < 0) {
-      reply(op, err, ss, get_last_committed());
-      return false;
-    }
-
-    if (g_conf()->mon_osd_crush_smoke_test) {
-      // sanity check: test some inputs to make sure this map isn't
-      // totally broken
-      dout(10) << " testing map" << dendl;
-      stringstream ess;
-      CrushTester tester(crush, ess);
-      tester.set_min_x(0);
-      tester.set_max_x(50);
-      auto start = ceph::coarse_mono_clock::now();
-      int r = tester.test_with_fork(g_conf()->mon_lease);
-      auto duration = ceph::coarse_mono_clock::now() - start;
-      if (r < 0) {
-	dout(10) << " tester.test_with_fork returns " << r
-		 << ": " << ess.str() << dendl;
-	ss << "crush smoke test failed with " << r << ": " << ess.str();
-	reply(op, r, ss, get_last_committed());
-	return false;
-      }
-      dout(10) << __func__ << " crush somke test duration: "
-               << duration << ", result: " << ess.str() << dendl;
-    }
-
-    pending_inc.crush = data;
-    ss << osdmap.get_crush_version() + 1;
-    update(op, ss, get_last_committed() + 1);
-    return true;
-  }
-
-};
-
 bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
 				      const cmdmap_t& cmdmap)
 {
@@ -9568,10 +9437,15 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     osd_name = oss.str();
   }
 
-  using WriteCommandRef =
-    std::shared_ptr< WriteCommand<OSDMonitor, OSDMap, OSDMap::Incremental> >;
-  list<WriteCommandRef> write_cmds = {
-    WriteCommandRef(new OSDMonSetCrushmap(mon, this, cct))
+  using OSDMonWriteCommandRef = std::shared_ptr<OSDMonWriteCommand>;
+  list<OSDMonWriteCommandRef> write_cmds = {
+    OSDMonWriteCommandRef(new OSDMonSetCrushmap(mon, this, cct)),
+    OSDMonWriteCommandRef(new OSDMonCrushSetStrawBuckets(mon, this, cct)),
+    OSDMonWriteCommandRef(new OSDMonCrushSetDeviceClass(mon, this, cct)),
+    OSDMonWriteCommandRef(new OSDMonCrushRemoveDeviceClass(mon, this, cct)),
+    OSDMonWriteCommandRef(new OSDMonCrushClassCreate(mon, this, cct)),
+    OSDMonWriteCommandRef(new OSDMonCrushClassRemove(mon, this, cct)),
+    OSDMonWriteCommandRef(new OSDMonCrushClassRename(mon, this, cct))
   };
 
   for (auto &cmd : write_cmds) {
@@ -9701,7 +9575,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     ss << osdmap.get_crush_version() + 1;
     goto update;
 
-  } else*/ if (prefix == "osd crush set-all-straw-buckets-to-straw2") {
+  } else if (prefix == "osd crush set-all-straw-buckets-to-straw2") {
     CrushWrapper newcrush;
     _get_pending_crush(newcrush);
     for (int b = 0; b < newcrush.get_max_buckets(); ++b) {
@@ -10007,7 +9881,7 @@ bool OSDMonitor::prepare_command_impl(MonOpRequestRef op,
     newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
     ss << "rename class '" << srcname << "' to '" << dstname << "'";
     goto update;
-  } else if (prefix == "osd crush add-bucket") {
+  } else */if (prefix == "osd crush add-bucket") {
     // os crush add-bucket <name> <type>
     string name, typestr;
     vector<string> argvec;

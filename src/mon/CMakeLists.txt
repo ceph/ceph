@@ -13,6 +13,7 @@ set(lib_mon_srcs
   MgrStatMonitor.cc
   Monitor.cc
   commands/monmapmon_cmds.cc
+  commands/osdmon_cmds.cc
   MonmapMonitor.cc
   LogMonitor.cc
   AuthMonitor.cc
