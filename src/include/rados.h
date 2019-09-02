@@ -9,6 +9,14 @@
 #include <string.h>
 #include "msgr.h"
 
+/* See comment in ceph_fs.h.  */
+#ifndef __KERNEL__
+#include "byteorder.h"
+#define __le16 ceph_le16
+#define __le32 ceph_le32
+#define __le64 ceph_le64
+#endif
+
 /*
  * fs id
  */
@@ -663,5 +671,10 @@ struct ceph_osd_reply_head {
 	struct ceph_osd_op ops[0];  /* ops[], object */
 } __attribute__ ((packed));
 
+#ifndef __KERNEL__
+#undef __le16
+#undef __le32
+#undef __le64
+#endif
 
 #endif
