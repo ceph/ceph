@@ -501,7 +501,6 @@ bool OSDMonCrushClassRemove::do_prepare(
   return true;
 }
 
-
 bool OSDMonCrushClassRename::do_prepare(
     MonOpRequestRef op,
     const string &prefix,
@@ -546,5 +545,345 @@ bool OSDMonCrushClassRename::do_prepare(
   newcrush.encode(pending_inc.crush, mon->get_quorum_con_features());
   ss << "rename class '" << srcname << "' to '" << dstname << "'";
   update(op, ss, get_last_committed() + 1);
+  return true;
+}
+
+bool OSDMonStat::do_preprocess(
+    MonOpRequestRef op,
+    const string &prefix,
+    const cmdmap_t &cmdmap,
+    stringstream &ss,
+    bufferlist rdata,
+    FormatterRef f,
+    const OSDMap &osdmap)
+{
+  stringstream ds;
+  osdmap.print_summary(f.get(), ds, "", true);
+  if (f)
+    f->flush(rdata);
+  else
+    rdata.append(ds);
+
+  reply_with_data(op, 0, ss, rdata, get_last_committed());
+  return true;
+}
+
+bool OSDMonDumpAndFriends::do_preprocess(
+    MonOpRequestRef op,
+    const string &prefix,
+    const cmdmap_t &cmdmap,
+    stringstream &ss,
+    bufferlist rdata,
+    FormatterRef f,
+    const OSDMap &osdmap)
+{
+  string val;
+
+  epoch_t epoch = 0;
+  int64_t epochnum;
+  cmd_getval(cct, cmdmap, "epoch", epochnum, (int64_t)osdmap.get_epoch());
+  epoch = epochnum;
+
+  bufferlist osdmap_bl;
+  int err = service->get_version_full(epoch, osdmap_bl);
+  if (err == -ENOENT) {
+    ss << "there is no map for epoch " << epoch;
+    reply(op, -ENOENT, ss, get_last_committed());
+    return true;
+  }
+  ceph_assert(err == 0);
+  ceph_assert(osdmap_bl.length());
+
+  const OSDMap *p;
+  if (epoch == osdmap.get_epoch()) {
+    p = &osdmap;
+  } else {
+    OSDMap *osdm = new OSDMap;
+    osdm->decode(osdmap_bl);
+    p = osdm;
+  }
+
+  auto sg = make_scope_guard([&] {
+      if (p != &osdmap) {
+	delete p;
+      }
+  });
+
+  stringstream ds;
+  if (prefix == "osd dump") {
+    if (f) {
+      f->open_object_section("osdmap");
+      p->dump(f.get());
+      f->close_section();
+      f->flush(ds);
+    } else {
+      p->print(ds);
+    }
+    rdata.append(ds);
+    if (!f)
+      ds << " ";
+  } else if (prefix == "osd ls") {
+    if (f) {
+      f->open_array_section("osds");
+      for (int i = 0; i < osdmap.get_max_osd(); i++) {
+	if (osdmap.exists(i)) {
+	  f->dump_int("osd", i);
+	}
+      }
+      f->close_section();
+      f->flush(ds);
+    } else {
+      bool first = true;
+      for (int i = 0; i < osdmap.get_max_osd(); i++) {
+	if (osdmap.exists(i)) {
+	  if (!first)
+	    ds << "\n";
+	  first = false;
+	  ds << i;
+	}
+      }
+    }
+    rdata.append(ds);
+  } else if (prefix == "osd info") {
+    int64_t osd_id;
+    bool do_single_osd = true;
+    if (!cmd_getval(cct, cmdmap, "id", osd_id)) {
+      do_single_osd = false;
+    }
+
+    if (do_single_osd && !osdmap.exists(osd_id)) {
+      ss << "osd." << osd_id << " does not exist";
+      reply(op, -EINVAL, ss, get_last_committed());
+      return true;
+    }
+
+    if (f) {
+      if (do_single_osd) {
+	osdmap.dump_osd(osd_id, f.get());
+      } else {
+	osdmap.dump_osds(f.get());
+      }
+      f->flush(ds);
+    } else {
+      if (do_single_osd) {
+	osdmap.print_osd(osd_id, ds);
+      } else {
+	osdmap.print_osds(ds);
+      }
+    }
+    rdata.append(ds);
+  } else if (prefix == "osd tree" || prefix == "osd tree-from") {
+    string bucket;
+    if (prefix == "osd tree-from") {
+      cmd_getval(cct, cmdmap, "bucket", bucket);
+      if (!osdmap.crush->name_exists(bucket)) {
+	ss << "bucket '" << bucket << "' does not exist";
+	reply(op, -ENOENT, ss, get_last_committed());
+	return true;
+      }
+      int id = osdmap.crush->get_item_id(bucket);
+      if (id >= 0) {
+	ss << "\"" << bucket << "\" is not a bucket";
+	reply(op, -EINVAL, ss, get_last_committed());
+	return true;
+      }
+    }
+
+    vector<string> states;
+    cmd_getval(cct, cmdmap, "states", states);
+    unsigned filter = 0;
+    for (auto& s : states) {
+      if (s == "up") {
+	filter |= OSDMap::DUMP_UP;
+      } else if (s == "down") {
+	filter |= OSDMap::DUMP_DOWN;
+      } else if (s == "in") {
+	filter |= OSDMap::DUMP_IN;
+      } else if (s == "out") {
+	filter |= OSDMap::DUMP_OUT;
+      } else if (s == "destroyed") {
+	filter |= OSDMap::DUMP_DESTROYED;
+      } else {
+	ss << "unrecognized state '" << s << "'";
+	reply(op, -EINVAL, ss, get_last_committed());
+	return true;
+      }
+    }
+    if ((filter & (OSDMap::DUMP_IN|OSDMap::DUMP_OUT)) ==
+	(OSDMap::DUMP_IN|OSDMap::DUMP_OUT)) {
+      ss << "cannot specify both 'in' and 'out'";
+      reply(op, -EINVAL, ss, get_last_committed());
+      return true;
+    }
+    if (((filter & (OSDMap::DUMP_UP|OSDMap::DUMP_DOWN)) ==
+	  (OSDMap::DUMP_UP|OSDMap::DUMP_DOWN)) ||
+	((filter & (OSDMap::DUMP_UP|OSDMap::DUMP_DESTROYED)) ==
+	 (OSDMap::DUMP_UP|OSDMap::DUMP_DESTROYED)) ||
+	((filter & (OSDMap::DUMP_DOWN|OSDMap::DUMP_DESTROYED)) ==
+	 (OSDMap::DUMP_DOWN|OSDMap::DUMP_DESTROYED))) {
+      ss << "can specify only one of 'up', 'down' and 'destroyed'";
+      reply(op, -EINVAL, ss, get_last_committed());
+      return true;
+    }
+    if (f) {
+      f->open_object_section("tree");
+      p->print_tree(f.get(), NULL, filter, bucket);
+      f->close_section();
+      f->flush(ds);
+    } else {
+      p->print_tree(NULL, &ds, filter, bucket);
+    }
+    rdata.append(ds);
+  } else if (prefix == "osd getmap") {
+    rdata.append(osdmap_bl);
+    ss << "got osdmap epoch " << p->get_epoch();
+  } else if (prefix == "osd getcrushmap") {
+    p->crush->encode(rdata, mon->get_quorum_con_features());
+    ss << p->get_crush_version();
+  } else if (prefix == "osd ls-tree") {
+    string bucket_name;
+    cmd_getval(cct, cmdmap, "name", bucket_name);
+    set<int> osds;
+    int r = p->get_osds_by_bucket_name(bucket_name, &osds);
+    if (r == -ENOENT) {
+      ss << "\"" << bucket_name << "\" does not exist";
+      reply(op, -ENOENT, ss, get_last_committed());
+      return true;
+    } else if (r < 0) {
+      ss << "can not parse bucket name:\"" << bucket_name << "\"";
+      reply(op, r, ss, get_last_committed());
+      return true;
+    }
+
+    if (f) {
+      f->open_array_section("osds");
+      for (auto &i : osds) {
+	if (osdmap.exists(i)) {
+	  f->dump_int("osd", i);
+	}
+      }
+      f->close_section();
+      f->flush(ds);
+    } else {
+      bool first = true;
+      for (auto &i : osds) {
+	if (osdmap.exists(i)) {
+	  if (!first)
+	    ds << "\n";
+	  first = false;
+	  ds << i;
+	}
+      }
+    }
+
+    rdata.append(ds);
+  }
+  reply_with_data(op, 0, ss, rdata, get_last_committed());
+  return true;
+}
+
+bool OSDMonGetMaxOSD::do_preprocess(
+    MonOpRequestRef op,
+    const string &prefix,
+    const cmdmap_t &cmdmap,
+    stringstream &ss,
+    bufferlist rdata,
+    FormatterRef f,
+    const OSDMap &osdmap)
+{
+  if (f) {
+    f->open_object_section("getmaxosd");
+    f->dump_unsigned("epoch", osdmap.get_epoch());
+    f->dump_int("max_osd", osdmap.get_max_osd());
+    f->close_section();
+    f->flush(rdata);
+  } else {
+    stringstream ds;
+    ds << "max_osd = " << osdmap.get_max_osd()
+       << " in epoch " << osdmap.get_epoch();
+    rdata.append(ds);
+  }
+  reply_with_data(op, 0, ss, rdata, get_last_committed());
+  return true;
+}
+
+bool OSDMonGetOSDUtilization::do_preprocess(
+    MonOpRequestRef op,
+    const string &prefix,
+    const cmdmap_t &cmdmap,
+    stringstream &ss,
+    bufferlist rdata,
+    FormatterRef f,
+    const OSDMap &osdmap)
+{
+  string out;
+  osdmap.summarize_mapping_stats(NULL, NULL, &out, f.get());
+  if (f)
+    f->flush(rdata);
+  else
+    rdata.append(out);
+  reply_with_data(op, 0, ss, rdata, get_last_committed());
+  return true;
+}
+
+bool OSDMonFind::do_preprocess(
+    MonOpRequestRef op,
+    const string &prefix,
+    const cmdmap_t &cmdmap,
+    stringstream &ss,
+    bufferlist rdata,
+    FormatterRef f,
+    const OSDMap &osdmap)
+{
+  int64_t osd;
+  if (!cmd_getval(cct, cmdmap, "id", osd)) {
+    auto p = cmdmap.find("id");
+    if (p == std::cend(cmdmap)) {
+      reply(op, -EINVAL, ss, get_last_committed());
+      return true;
+    }
+    ss << "unable to parse osd id value '"
+       << cmd_vartype_stringify(p->second) << "'";
+    reply(op, -EINVAL, ss, get_last_committed());
+    return true;
+  }
+  if (!osdmap.exists(osd)) {
+    ss << "osd." << osd << " does not exist";
+    reply(op, -ENOENT, ss, get_last_committed());
+    return true;
+  }
+  string format;
+  cmd_getval(cct, cmdmap, "format", format);
+  f.reset(Formatter::create(format, "json-pretty", "json-pretty"));
+  f->open_object_section("osd_location");
+  f->dump_int("osd", osd);
+  f->dump_object("addrs", osdmap.get_addrs(osd));
+  f->dump_stream("osd_fsid") << osdmap.get_uuid(osd);
+
+  // try to identify host, pod/container name, etc.
+  map<string,string> m;
+  service->load_metadata(osd, m, nullptr);
+  if (auto p = m.find("hostname"); p != m.end()) {
+    f->dump_string("host", p->second);
+  }
+  for (auto& k : {
+      "pod_name", "pod_namespace", // set by rook
+      "container_name"             // set by ceph-ansible
+      }) {
+    if (auto p = m.find(k); p != m.end()) {
+      f->dump_string(k, p->second);
+    }
+  }
+
+  // crush is helpful too
+  f->open_object_section("crush_location");
+  map<string,string> loc = osdmap.crush->get_full_location(osd);
+  for (map<string,string>::iterator p = loc.begin(); p != loc.end(); ++p)
+    f->dump_string(p->first.c_str(), p->second);
+  f->close_section();
+  f->close_section();
+  f->flush(rdata);
+
+  reply_with_data(op, 0, ss, rdata, get_last_committed());
   return true;
 }

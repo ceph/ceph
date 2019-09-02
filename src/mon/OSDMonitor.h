@@ -651,7 +651,9 @@ private:
 
   bool preprocess_get_purged_snaps(MonOpRequestRef op);
 
+ public:
   int load_metadata(int osd, map<string, string>& m, ostream *err);
+ private:
   void count_metadata(const string& field, Formatter *f);
 
   void reencode_incremental_map(bufferlist& bl, uint64_t features);

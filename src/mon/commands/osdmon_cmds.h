@@ -234,8 +234,149 @@ struct OSDMonCrushClassRename : public OSDMonWriteCommand
 };
 
 
+// preprocess / read commands
+//
+
+struct OSDMonReadCommand :
+  public ReadCommand<OSDMonitor, OSDMap, OSDMap::Incremental>
+{
+  explicit OSDMonReadCommand(
+      Monitor *_mon,
+      OSDMonitor *_osdmon,
+      CephContext *_cct) :
+    ReadCommand<OSDMonitor, OSDMap, OSDMap::Incremental>(_mon, _osdmon, _cct)
+  { }
+
+  virtual ~OSDMonReadCommand() { }
+};
 
 
+struct OSDMonStat : public OSDMonReadCommand
+{
+  explicit OSDMonStat(
+      Monitor *_mon,
+      OSDMonitor *_osdmon,
+      CephContext *_cct) :
+    OSDMonReadCommand(_mon, _osdmon, _cct)
+  { }
+  virtual ~OSDMonStat() { }
+
+  virtual bool handles_command(const string &prefix) final {
+    return (prefix == "osd stat");
+  }
+
+  virtual bool do_preprocess(
+      MonOpRequestRef op,
+      const string &prefix,
+      const cmdmap_t &cmdmap,
+      stringstream &ss,
+      bufferlist rdata,
+      FormatterRef f,
+      const OSDMap &stable_map) final;
+};
+
+struct OSDMonDumpAndFriends : public OSDMonReadCommand
+{
+  explicit OSDMonDumpAndFriends(
+      Monitor *_mon,
+      OSDMonitor *_osdmon,
+      CephContext *_cct) :
+    OSDMonReadCommand(_mon, _osdmon, _cct)
+  { }
+  virtual ~OSDMonDumpAndFriends() { }
+
+  virtual bool handles_command(const string &prefix) final {
+    return (prefix == "osd dump" ||
+	    prefix == "osd tree" ||
+	    prefix == "osd tree-from" ||
+	    prefix == "osd ls" ||
+	    prefix == "osd getmap" ||
+	    prefix == "osd getcrushmap" ||
+	    prefix == "osd ls-tree" ||
+	    prefix == "osd info");
+  }
+
+  virtual bool do_preprocess(
+      MonOpRequestRef op,
+      const string &prefix,
+      const cmdmap_t &cmdmap,
+      stringstream &ss,
+      bufferlist rdata,
+      FormatterRef f,
+      const OSDMap &stable_map) final;
+};
+
+struct OSDMonGetMaxOSD : public OSDMonReadCommand
+{
+  explicit OSDMonGetMaxOSD(
+      Monitor *_mon,
+      OSDMonitor *_osdmon,
+      CephContext *_cct) :
+    OSDMonReadCommand(_mon, _osdmon, _cct)
+  { }
+  virtual ~OSDMonGetMaxOSD() { }
+
+  virtual bool handles_command(const string &prefix) final {
+    return (prefix == "osd getmaxosd");
+  }
+
+  virtual bool do_preprocess(
+      MonOpRequestRef op,
+      const string &prefix,
+      const cmdmap_t &cmdmap,
+      stringstream &ss,
+      bufferlist rdata,
+      FormatterRef f,
+      const OSDMap &stable_map) final;
+};
+
+struct OSDMonGetOSDUtilization : public OSDMonReadCommand
+{
+  explicit OSDMonGetOSDUtilization(
+      Monitor *_mon,
+      OSDMonitor *_osdmon,
+      CephContext *_cct) :
+    OSDMonReadCommand(_mon, _osdmon, _cct)
+  { }
+  virtual ~OSDMonGetOSDUtilization() { }
+
+  virtual bool handles_command(const string &prefix) final {
+    return (prefix == "osd utilization");
+  }
+
+  virtual bool do_preprocess(
+      MonOpRequestRef op,
+      const string &prefix,
+      const cmdmap_t &cmdmap,
+      stringstream &ss,
+      bufferlist rdata,
+      FormatterRef f,
+      const OSDMap &stable_map) final;
+};
+
+struct OSDMonFind : public OSDMonReadCommand
+{
+  explicit OSDMonFind(
+      Monitor *_mon,
+      OSDMonitor *_osdmon,
+      CephContext *_cct) :
+    OSDMonReadCommand(_mon, _osdmon, _cct)
+  { }
+  virtual ~OSDMonFind() { }
+
+  virtual bool handles_command(const string &prefix) final {
+    return (prefix == "osd find");
+  }
+
+  virtual bool do_preprocess(
+      MonOpRequestRef op,
+      const string &prefix,
+      const cmdmap_t &cmdmap,
+      stringstream &ss,
+      bufferlist rdata,
+      FormatterRef f,
+      const OSDMap &stable_map) final;
+};
 
 #endif // CEPH_OSDMONITOR_CMDS_H
 
