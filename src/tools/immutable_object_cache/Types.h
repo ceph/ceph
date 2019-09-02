@@ -15,7 +15,7 @@ namespace {
 struct HeaderHelper {
   uint8_t v;
   uint8_t c_v;
-  uint32_t len;
+  ceph_le32 len;
 }__attribute__((packed));
 
 inline uint8_t get_header_size() {
