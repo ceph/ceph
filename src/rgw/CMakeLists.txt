@@ -109,6 +109,7 @@ set(librgw_common_srcs
   rgw_op.cc
   rgw_otp.cc
   rgw_policy_s3.cc
+  rgw_public_access.cc
   rgw_putobj.cc
   rgw_putobj_processor.cc
   rgw_quota.cc
