@@ -34,12 +34,15 @@ export class BucketsPageHelper extends PageHelper {
     const createButton = element(by.cssContainingText('button', 'Create Bucket'));
     await createButton.click();
 
-    return this.waitPresence(this.getTableCell(name), 'Timed out waiting for bucket creation');
+    return this.waitPresence(
+      this.getFirstTableCellWithText(name),
+      'Timed out waiting for bucket creation'
+    );
   }
 
   @PageHelper.restrictTo(pages.index)
   async edit(name: string, new_owner: string) {
-    await this.getTableCell(name).click(); // click on the bucket you want to edit in the table
+    await this.getFirstTableCellWithText(name).click(); // click on the bucket you want to edit in the table
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
     await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit');
     await expect(element(by.css('input[name=placement-target]')).getAttribute('value')).toBe(
@@ -51,12 +54,12 @@ export class BucketsPageHelper extends PageHelper {
 
     // wait to be back on buckets page with table visible
     await this.waitClickable(
-      this.getTableCell(name),
+      this.getFirstTableCellWithText(name),
       'Could not return to buckets page and load table after editing bucket'
     );
 
     // click on edited bucket and check its details table for edited owner field
-    const promise = await this.getTableCell(name).click();
+    const promise = await this.getFirstTableCellWithText(name).click();
     const element_details_table = element
       .all(by.css('.table.table-striped.table-bordered'))
       .first();
@@ -137,10 +140,10 @@ export class BucketsPageHelper extends PageHelper {
     await this.navigateTo();
 
     await this.waitClickable(
-      this.getTableCell(name),
+      this.getFirstTableCellWithText(name),
       'Failed waiting for bucket to be present in table'
     ); // wait for table to load
-    await this.getTableCell(name).click(); // click on the bucket you want to edit in the table
+    await this.getFirstTableCellWithText(name).click(); // click on the bucket you want to edit in the table
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
     await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit');

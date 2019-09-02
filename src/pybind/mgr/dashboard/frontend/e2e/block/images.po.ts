@@ -29,7 +29,7 @@ export class ImagesPageHelper extends PageHelper {
 
     // Click the create button and wait for image to be made
     await element(by.cssContainingText('button', 'Create RBD')).click();
-    await this.waitPresence(this.getTableCell(name));
+    await this.waitPresence(this.getFirstTableCellWithText(name));
   }
 
   async editImage(name, pool, newName, newSize) {
@@ -49,9 +49,9 @@ export class ImagesPageHelper extends PageHelper {
 
     await element(by.cssContainingText('button', 'Edit RBD')).click();
     await this.navigateTo();
-    await this.waitClickable(this.getTableCell(newName));
+    await this.waitClickable(this.getFirstTableCellWithText(newName));
     // click edit button and wait to make sure new owner is present in table
-    await this.getTableCell(newName).click();
+    await this.getFirstTableCellWithText(newName).click();
     await expect(
       element
         .all(by.css('.table.table-striped.table-bordered'))
@@ -66,8 +66,8 @@ export class ImagesPageHelper extends PageHelper {
     await this.navigateTo();
     // wait for image to be created
     await this.waitTextNotPresent($$('.datatable-body').first(), '(Creating...)');
-    await this.waitClickable(this.getTableCell(name));
-    await this.getTableCell(name).click();
+    await this.waitClickable(this.getFirstTableCellWithText(name));
+    await this.getFirstTableCellWithText(name).click();
     // click on the drop down and selects the move to trash option
     await $$('.table-actions button.dropdown-toggle')
       .first()
@@ -79,7 +79,7 @@ export class ImagesPageHelper extends PageHelper {
     // Clicks trash tab
     await this.waitClickable(element(by.cssContainingText('.nav-link', 'Trash')));
     await element(by.cssContainingText('.nav-link', 'Trash')).click();
-    await this.waitPresence(this.getTableCell(name));
+    await this.waitPresence(this.getFirstTableCellWithText(name));
   }
 
   // Checks trash tab table for image and then restores it to the RBD Images table
@@ -89,8 +89,8 @@ export class ImagesPageHelper extends PageHelper {
     // clicks on trash tab
     await element(by.cssContainingText('.nav-link', 'Trash')).click();
     // wait for table to load
-    await this.waitClickable(this.getTableCell(name));
-    await this.getTableCell(name).click();
+    await this.waitClickable(this.getFirstTableCellWithText(name));
+    await this.getFirstTableCellWithText(name).click();
     await element(by.cssContainingText('button', 'Restore')).click();
     // wait for pop-up to be visible (checks for title of pop-up)
     await this.waitVisibility(element(by.id('name')));
@@ -105,7 +105,7 @@ export class ImagesPageHelper extends PageHelper {
     // clicks images tab
     await element(by.cssContainingText('.nav-link', 'Images')).click();
     await this.navigateTo();
-    await this.waitPresence(this.getTableCell(newName));
+    await this.waitPresence(this.getFirstTableCellWithText(newName));
   }
 
   // Enters trash tab and purges trash, thus emptying the trash table. Checks if
@@ -128,7 +128,10 @@ export class ImagesPageHelper extends PageHelper {
     await this.waitClickable(element(by.id('purgeFormButton')));
     await element(by.id('purgeFormButton')).click();
     // Wait for image to delete and check it is not present
-    await this.waitStaleness(this.getTableCell(name), 'Timed out waiting for image to be purged');
-    await expect(this.getTableCell(name).isPresent()).toBe(false);
+    await this.waitStaleness(
+      this.getFirstTableCellWithText(name),
+      'Timed out waiting for image to be purged'
+    );
+    await expect(this.getFirstTableCellWithText(name).isPresent()).toBe(false);
   }
 }

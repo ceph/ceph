@@ -20,13 +20,13 @@ export class UserMgmtPageHelper extends PageHelper {
     // Click the create button and wait for user to be made
     const createButton = element(by.cssContainingText('button', 'Create User'));
     await createButton.click();
-    await this.waitPresence(this.getTableCell(username));
+    await this.waitPresence(this.getFirstTableCellWithText(username));
   }
 
   async edit(username, password, name, email): Promise<void> {
     await this.navigateTo();
 
-    await this.getTableCell(username).click(); // select user from table
+    await this.getFirstTableCellWithText(username).click(); // select user from table
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
     // fill in fields with new values
@@ -42,7 +42,7 @@ export class UserMgmtPageHelper extends PageHelper {
     // Click the edit button and check new values are present in table
     const editButton = element(by.cssContainingText('button', 'Edit User'));
     await editButton.click();
-    await this.waitPresence(this.getTableCell(email));
-    await this.waitPresence(this.getTableCell(name));
+    await this.waitPresence(this.getFirstTableCellWithText(email));
+    await this.waitPresence(this.getFirstTableCellWithText(name));
   }
 }

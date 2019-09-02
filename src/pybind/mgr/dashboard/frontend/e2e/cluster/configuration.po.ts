@@ -18,8 +18,8 @@ export class ConfigurationPageHelper extends PageHelper {
     await $('input.form-control.ng-valid').sendKeys(name);
 
     // Selects config that we want to clear
-    await this.waitClickable(this.getTableCell(name)); // waits for config to be clickable
-    await this.getTableCell(name).click(); // click on the config to edit
+    await this.waitClickable(this.getFirstTableCellWithText(name)); // waits for config to be clickable
+    await this.getFirstTableCellWithText(name).click(); // click on the config to edit
     await element(by.cssContainingText('button', 'Edit')).click(); // clicks button to edit
 
     for (const i of valList) {
@@ -34,8 +34,8 @@ export class ConfigurationPageHelper extends PageHelper {
     await $('input.form-control.ng-valid').clear();
     await $('input.form-control.ng-valid').sendKeys(name);
 
-    await this.waitClickable(this.getTableCell(name));
-    await this.getTableCell(name).click();
+    await this.waitClickable(this.getFirstTableCellWithText(name));
+    await this.getFirstTableCellWithText(name).click();
     // Clicks desired config
     await this.waitVisibility(
       $('.table.table-striped.table-bordered'), // Checks for visibility of details tab
@@ -59,8 +59,8 @@ export class ConfigurationPageHelper extends PageHelper {
     await $('input.form-control.ng-valid').sendKeys(name);
 
     // Selects config that we want to edit
-    await this.waitClickable(this.getTableCell(name)); // waits for config to be clickable
-    await this.getTableCell(name).click(); // click on the config to edit
+    await this.waitClickable(this.getFirstTableCellWithText(name)); // waits for config to be clickable
+    await this.getFirstTableCellWithText(name).click(); // click on the config to edit
     await element(by.cssContainingText('button', 'Edit')).click(); // clicks button to edit
 
     await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit');
@@ -79,9 +79,9 @@ export class ConfigurationPageHelper extends PageHelper {
     await $('input.form-control.ng-valid').clear();
     await $('input.form-control.ng-valid').sendKeys(name);
 
-    await this.waitVisibility(this.getTableCell(name));
+    await this.waitVisibility(this.getFirstTableCellWithText(name));
     // Checks for visibility of config in table
-    await this.getTableCell(name).click();
+    await this.getFirstTableCellWithText(name).click();
     // Clicks config
     for (let i = 0, valtuple; (valtuple = values[i]); i++) {
       // iterates through list of values and

@@ -29,7 +29,7 @@ describe('RGW users page', () => {
 
     it('should create user', async () => {
       await users.create(user_name, 'Some Name', 'original@website.com', '1200');
-      await expect(users.getTableCell(user_name).isPresent()).toBe(true);
+      await expect(users.getFirstTableCellWithText(user_name).isPresent()).toBe(true);
     });
 
     it('should edit users full name, email and max buckets', async () => {

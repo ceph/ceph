@@ -128,7 +128,7 @@ export abstract class PageHelper {
     return Number(text.match(/(\d+)\s+selected/)[1]);
   }
 
-  getTableCell(content: string): ElementFinder {
+  getFirstTableCellWithText(content: string): ElementFinder {
     return element.all(by.cssContainingText('.datatable-body-cell-label', content)).first();
   }
 
@@ -142,13 +142,6 @@ export abstract class PageHelper {
 
   async getTabsCount(): Promise<number> {
     return $$('.nav.nav-tabs li').count();
-  }
-
-  /**
-   * Searches multiple tables and returns the first cell of any table that matches the criteria.
-   */
-  getFirstTableCellWithText(content: string): ElementFinder {
-    return element.all(by.cssContainingText('.datatable-body-cell-label', content)).first();
   }
 
   /**
@@ -312,8 +305,8 @@ export abstract class PageHelper {
    */
   async delete(name: string): Promise<any> {
     // Selects row
-    await this.waitClickable(this.getTableCell(name));
-    await this.getTableCell(name).click();
+    await this.waitClickable(this.getFirstTableCellWithText(name));
+    await this.getFirstTableCellWithText(name).click();
 
     // Clicks on table Delete button
     await $$('.table-actions button.dropdown-toggle')
@@ -326,6 +319,6 @@ export abstract class PageHelper {
     await element(by.cssContainingText('button', 'Delete')).click();
 
     // Waits for item to be removed from table
-    return this.waitStaleness(this.getTableCell(name));
+    return this.waitStaleness(this.getFirstTableCellWithText(name));
   }
 }
