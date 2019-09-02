@@ -106,7 +106,7 @@ void DPDKWorker::initialize()
     sdev->set_local_queue(i, std::move(qp));
     std::lock_guard l{lock};
     ++queue_init_done;
-    cond.Signal();
+    cond.notify_all();
   } else {
     // auto master = qid % sdev->hw_queues_count();
     // sdev->set_local_queue(create_proxy_net_device(master, sdev.get()));
