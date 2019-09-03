@@ -191,8 +191,6 @@ int ErasureCodeJerasureReedSolomonVandermonde::parse(ErasureCodeProfile &profile
   if (w != 8 && w != 16 && w != 32) {
     *ss << "ReedSolomonVandermonde: w=" << w
 	<< " must be one of {8, 16, 32} : revert to " << DEFAULT_W << std::endl;
-    profile["w"] = "8";
-    err |= to_int("w", profile, &w, DEFAULT_W, ss);
     err = -EINVAL;
   }
   err |= to_bool("jerasure-per-chunk-alignment", profile,
@@ -247,8 +245,6 @@ int ErasureCodeJerasureReedSolomonRAID6::parse(ErasureCodeProfile &profile,
   if (w != 8 && w != 16 && w != 32) {
     *ss << "ReedSolomonRAID6: w=" << w
 	<< " must be one of {8, 16, 32} : revert to 8 " << std::endl;
-    profile["w"] = "8";
-    err |= to_int("w", profile, &w, DEFAULT_W, ss);
     err = -EINVAL;
   }
   return err;
@@ -488,10 +484,16 @@ int ErasureCodeJerasureLiber8tion::parse(ErasureCodeProfile &profile,
 					 ostream *ss)
 {
   int err = ErasureCodeJerasure::parse(profile, ss);
-  profile.erase("m");
-  err |= to_int("m", profile, &m, DEFAULT_M, ss);
-  profile.erase("w");
-  err |= to_int("w", profile, &w, DEFAULT_W, ss);
+  if (m != stoi(DEFAULT_M)) {
+    *ss << "liber8tion: m=" << m << " must be " << DEFAULT_M
+        << " for liber8tion: revert to " << DEFAULT_M << std::endl;
+    err = -EINVAL;
+  }
+  if (w != stoi(DEFAULT_W)) {
+    *ss << "liber8tion: w=" << w << " must be " << DEFAULT_W
+        << " for liber8tion: revert to " << DEFAULT_W << std::endl;
+    err = -EINVAL;
+  }
   err |= to_int("packetsize", profile, &packetsize, DEFAULT_PACKETSIZE, ss);
 
   bool error = false;
