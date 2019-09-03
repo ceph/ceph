@@ -32,15 +32,15 @@ struct T : public Thread {
 
 void usage(const char* program_name) {
   cout << program_name << " <threads> <lines>" << std::endl;
-  cout << "\t threads: the number of thtreads for this test." << std::endl;
-  cout << "\t lines: the number of the lines per thread." << std::endl;
+  cout << "\t threads: the number of threads for this test." << std::endl;
+  cout << "\t lines: the number of log entries per thread." << std::endl;
 }
 
 int main(int argc, const char **argv)
 {
   if (argc < 3) {
     usage(argv[0]);
-    return 0;
+    return EXIT_FAILURE;
   }
 
   int threads = atoi(argv[1]);
