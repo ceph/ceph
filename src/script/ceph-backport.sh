@@ -273,15 +273,31 @@ function prepare {
     debug "Fetching latest commits from ${original_pr_url}"
     git fetch $ceph_repo pull/$original_pr/head:pr-$original_pr
 
-    debug "Cherry picking $number commits from ${original_pr_url} into local branch $local_branch"
-    debug "If this operation does not succeed, you will need to resolve the conflicts manually"
+    info "Attempting to cherry pick $number commits from ${original_pr_url} into local branch $local_branch"
     let offset=$number-1 || true # don't fail on set -e when result is 0
-    for ((i=$offset; i>=0; i--))
-    do
-        debug "Cherry-picking commit $(git log --oneline --max-count=1 --no-decorate)"
-        git cherry-pick -x "pr-$original_pr~$i"
+    for ((i=$offset; i>=0; i--)) ; do
+        debug "Cherry-picking commit $(git log --oneline --max-count=1 --no-decorate pr-$original_pr~$i)"
+        if git cherry-pick -x "pr-$original_pr~$i" ; then
+            true
+        else
+            if [ "$verbose" ] ; then
+                git status
+            fi
+            error "Cherry pick failed"
+            info "Next, manually fix conflicts and complete the current cherry-pick"
+            if [ "$i" -gt "0" ] ; then
+                info "Then, cherry-pick the remaining commits from ${original_pr_url}, i.e.:"
+                for ((j=$i-1; j>=0; j--)) ; do
+                    info "-> missing commit: $(git log --oneline --max-count=1 --no-decorate pr-$original_pr~$j)"
+                done
+                info "Finally, re-run the script without --prepare"
+            else
+                info "Then re-run the script without --prepare"
+            fi
+            exit 1
+        fi
     done
-    info "Cherry picked $number commits from ${original_pr_url} into local branch $local_branch"
+    info "Cherry picking completed without conflicts"
 }
 
 if git show-ref HEAD >/dev/null 2>&1 ; then
