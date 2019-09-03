@@ -137,7 +137,7 @@ EOM
 
     $DRY_RUN ./do_cmake.sh $CMAKE_BUILD_OPTS $@ || return 1
     $DRY_RUN cd build
-    $DRY_RUN make $BUILD_MAKEOPTS tests || return 1
+    $DRY_RUN make VERBOSE=1 $BUILD_MAKEOPTS tests || return 1
 
     $DRY_RUN ccache -s # print the ccache statistics to evaluate the efficiency
 
