@@ -1,27 +1,18 @@
 """
 Deploy and configure Barbican for Teuthology
 """
-from cStringIO import StringIO
-from configobj import ConfigObj
-import base64
 import argparse
 import contextlib
 import logging
-import os
-import random
 import string
-import sys
 import httplib
 from urlparse import urlparse
 import json
-import shutil
 
 from teuthology import misc as teuthology
 from teuthology import contextutil
 from teuthology import safepath
-from teuthology.config import config as teuth_config
 from teuthology.orchestra import run
-from teuthology.orchestra.connection import split_user
 from teuthology.exceptions import ConfigError
 
 log = logging.getLogger(__name__)
