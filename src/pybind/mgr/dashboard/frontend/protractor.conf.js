@@ -53,6 +53,7 @@ const config = {
 
 config.onPrepare = async () => {
   await browser.manage().timeouts().implicitlyWait(config.implicitWaitTimeout);
+  await browser.waitForAngularEnabled(false);
 
   require('ts-node').register({
     project: 'e2e/tsconfig.e2e.json'
