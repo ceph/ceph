@@ -81,7 +81,7 @@ which are as follows:
     database--use this only as a last resort!
 
 :command:`stats`
-    Prints statistics from of underlying key-value database. This is only for informative purposes.
+    Prints statistics from underlying key-value database. This is only for informative purposes.
     Format and information content may vary between releases. For RocksDB information includes
     compactions stats, performance counters, memory usage and internal RocksDB stats. 
 
