@@ -141,3 +141,10 @@
 
 * New OSD daemon command dump_scrub_reservations which reveals the
   scrub reservations that are held for local (primary) and remote (replica) PGs.
+
+* The ``pg_autoscale_mode`` is now set to ``on`` by default for newly
+  created pools, which means that Ceph will automatically manage the
+  number of PGs.  To change this behavior, or to learn more about PG
+  autoscaling, see :ref:`pg-autoscaler`.  Note that existing pools in
+  upgraded clusters will still be set to ``warn`` by default.
+
