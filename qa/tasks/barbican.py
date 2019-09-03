@@ -30,21 +30,9 @@ def download(ctx, config):
     assert isinstance(config, dict)
     log.info('Downloading barbican...')
     testdir = teuthology.get_testdir(ctx)
-    s3_branches = ['giant', 'firefly', 'firefly-original', 'hammer']
     for (client, cconf) in config.items():
-        branch = cconf.get('force-branch', None)
-        if not branch:
-            ceph_branch = ctx.config.get('branch')
-            suite_branch = ctx.config.get('suite_branch', ceph_branch)
-            if suite_branch in s3_branches:
-                branch = cconf.get('branch', suite_branch)
-            else:
-                branch = cconf.get('branch', 'ceph-' + suite_branch)
-        if not branch:
-            raise ValueError(
-                "Could not determine what branch to use for barbican!")
-        else:
-            log.info("Using branch '%s' for barbican", branch)
+        branch = cconf.get('force-branch', 'master')
+        log.info("Using branch '%s' for barbican", branch)
 
         sha1 = cconf.get('sha1')
         log.info('sha1=%s', sha1)
