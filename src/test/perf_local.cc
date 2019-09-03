@@ -364,7 +364,7 @@ double cond_ping_pong()
 // probably pick worse values.
 double div32()
 {
-#if defined (__i386__) || defined(__86_64__) || defined(__aarch64__) // || defined(__arm__)
+#if defined(__i386__) || defined(__86_64__) || defined(__aarch64__) // || defined(__arm__)
   int count = 1000000;
   uint32_t numeratorLo = 0x55aa55aaU;
   uint32_t divisor = 0xaa55aa55U;
@@ -378,7 +378,7 @@ double div32()
   // NB: Expect an x86 processor exception is there's overflow.
   for (int i = 0; i < count; i++) {
     __asm__ __volatile__("div %4" :
-                         "=a"(quotient), "=d"(remainder) :s
+                         "=a"(quotient), "=d"(remainder) :
                          "a"(numeratorLo), "d"(numeratorHi), "r"(divisor) :
                          "cc");
   }
