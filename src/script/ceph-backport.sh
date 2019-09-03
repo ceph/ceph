@@ -273,8 +273,6 @@ function prepare {
         git cherry-pick -x "pr-$original_pr~$i"
     done
     info "Cherry picked $number commits from ${github_endpoint}/pull/${original_pr} into local branch $local_branch"
-
-    exit 0
 }
 
 if git show-ref HEAD >/dev/null 2>&1 ; then
@@ -346,7 +344,7 @@ fi
 
 if [[ $* == *--prepare* ]]; then
     debug "'--prepare' found, will only prepare the backport"
-    prepare  # does not return
+    prepare
 fi
 
 debug "Pushing local branch $local_branch to remote $github_repo"
