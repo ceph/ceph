@@ -220,22 +220,27 @@ class RgwBucketTest(RgwTestCase):
         self.assertEqual(len(data), 1)
         self.assertIn('testx/teuth-test-bucket', data)
 
-        # Get the bucket.
-        data = self._get('/api/rgw/bucket/{}'.format(
-            urllib.quote_plus('testx/teuth-test-bucket')))
-        self.assertStatus(200)
-        self.assertSchema(data, JObj(sub_elems={
-            'owner': JLeaf(str),
-            'bucket': JLeaf(str),
-            'tenant': JLeaf(str),
-            'bid': JLeaf(str)
-        }, allow_unknown=True))
-        self.assertEqual(data['owner'], 'testx$teuth-test-user')
-        self.assertEqual(data['bucket'], 'teuth-test-bucket')
-        self.assertEqual(data['tenant'], 'testx')
-        self.assertEqual(data['bid'], 'testx/teuth-test-bucket')
+        def _verify_tenant_bucket(bucket, tenant, uid):
+            full_bucket_name = '{}/{}'.format(tenant, bucket)
+            _data = self._get('/api/rgw/bucket/{}'.format(
+                urllib.quote_plus(full_bucket_name)))
+            self.assertStatus(200)
+            self.assertSchema(_data, JObj(sub_elems={
+                'owner': JLeaf(str),
+                'bucket': JLeaf(str),
+                'tenant': JLeaf(str),
+                'bid': JLeaf(str)
+            }, allow_unknown=True))
+            self.assertEqual(_data['owner'], '{}${}'.format(tenant, uid))
+            self.assertEqual(_data['bucket'], bucket)
+            self.assertEqual(_data['tenant'], tenant)
+            self.assertEqual(_data['bid'], full_bucket_name)
+            return _data
 
-        # Update the bucket.
+        # Get the bucket.
+        data = _verify_tenant_bucket('teuth-test-bucket', 'testx', 'teuth-test-user')
+
+        # Change owner to a non-tenanted user
         self._put(
             '/api/rgw/bucket/{}'.format(
                 urllib.quote_plus('testx/teuth-test-bucket')),
@@ -250,10 +255,22 @@ class RgwBucketTest(RgwTestCase):
         self.assertIn('owner', data)
         self.assertEqual(data['owner'], 'admin')
         self.assertEqual(data['tenant'], '')
+        self.assertEqual(data['bucket'], 'teuth-test-bucket')
+        self.assertEqual(data['bid'], 'teuth-test-bucket')
+
+        # Change owner back to tenanted user
+        self._put(
+            '/api/rgw/bucket/teuth-test-bucket',
+            params={
+                'bucket_id': data['id'],
+                'uid': 'testx$teuth-test-user'
+            })
+        self.assertStatus(200)
+        data = _verify_tenant_bucket('teuth-test-bucket', 'testx', 'teuth-test-user')
 
         # Delete the bucket.
         self._delete('/api/rgw/bucket/{}'.format(
-            urllib.quote_plus('teuth-test-bucket')))
+            urllib.quote_plus('testx/teuth-test-bucket')))
         self.assertStatus(204)
         data = self._get('/api/rgw/bucket')
         self.assertStatus(200)
