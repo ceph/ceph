@@ -6351,12 +6351,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	maybe_create_new_object(ctx);
 
 	if (op.extent.length == 0) {
-	  if (op.extent.offset > oi.size) {
-	    t->truncate(
-	      soid, op.extent.offset);
-	  } else {
-	    t->nop(soid);
-	  }
+    t->nop(soid);
 	} else {
 	  t->write(
 	    soid, op.extent.offset, op.extent.length, osd_op.indata, op.flags);
