@@ -448,14 +448,14 @@ int rgw_bucket_list(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
 
   map<string, bufferlist> keys;
   std::map<string, bufferlist>::iterator kiter;
-  string start_key;
+  string start_after_key;
   encode_list_index_key(hctx, op.start_obj, &start_key);
   bool done = false;
   uint32_t left_to_read = op.num_entries;
   bool more;
 
   do {
-    rc = get_obj_vals(hctx, start_key, op.filter_prefix, left_to_read, &keys, &more);
+    rc = get_obj_vals(hctx, start_after_key, op.filter_prefix, left_to_read, &keys, &more);
     if (rc < 0)
       return rc;
 
@@ -2323,18 +2323,23 @@ static int rgw_bi_put_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
   return 0;
 }
 
-static int list_plain_entries(cls_method_context_t hctx, const string& name, const string& marker, uint32_t max,
-                              list<rgw_cls_bi_entry> *entries, bool *pmore)
+static int list_plain_entries(cls_method_context_t hctx,
+			      const string& name,
+			      const string& marker,
+			      uint32_t max,
+                              list<rgw_cls_bi_entry> *entries,
+			      bool *pmore)
 {
   string filter = name;
-  string start_key = marker;
+  string start_after_key = marker;
 
   string end_key; // stop listing at bi_log_prefix
   bi_log_prefix(end_key);
 
   int count = 0;
   map<string, bufferlist> keys;
-  int ret = cls_cxx_map_get_vals(hctx, start_key, filter, max, &keys, pmore);
+  int ret = cls_cxx_map_get_vals(hctx, start_after_key, filter, max,
+				 &keys, pmore);
   if (ret < 0) {
     return ret;
   }
@@ -2379,34 +2384,38 @@ static int list_plain_entries(cls_method_context_t hctx, const string& name, con
     if (count >= (int)max) {
       return count;
     }
-    start_key = entry.idx;
+    start_after_key = entry.idx;
   }
 
   return count;
 }
 
-static int list_instance_entries(cls_method_context_t hctx, const string& name, const string& marker, uint32_t max,
-                                 list<rgw_cls_bi_entry> *entries, bool *pmore)
+static int list_instance_entries(cls_method_context_t hctx,
+				 const string& name,
+				 const string& marker,
+				 uint32_t max,
+                                 list<rgw_cls_bi_entry> *entries,
+				 bool *pmore)
 {
   cls_rgw_obj_key key(name);
   string first_instance_idx;
   encode_obj_versioned_data_key(key, &first_instance_idx);
-  string start_key;
+  string start_after_key;
 
   if (!name.empty()) {
-    start_key = first_instance_idx;
+    start_after_key = first_instance_idx;
   } else {
-    start_key = BI_PREFIX_CHAR;
-    start_key.append(bucket_index_prefixes[BI_BUCKET_OBJ_INSTANCE_INDEX]);
+    start_after_key = BI_PREFIX_CHAR;
+    start_after_key.append(bucket_index_prefixes[BI_BUCKET_OBJ_INSTANCE_INDEX]);
   }
-  string filter = start_key;
-  if (bi_entry_gt(marker, start_key)) {
-    start_key = marker;
+  string filter = start_after_key;
+  if (bi_entry_gt(marker, start_after_key)) {
+    start_after_key = marker;
   }
   int count = 0;
   map<string, bufferlist> keys;
   bufferlist k;
-  int ret = cls_cxx_map_get_val(hctx, start_key, &k);
+  int ret = cls_cxx_map_get_val(hctx, start_after_key, &k);
   if (ret < 0 && ret != -ENOENT) {
     return ret;
   }
@@ -2415,14 +2424,17 @@ static int list_instance_entries(cls_method_context_t hctx, const string& name, 
     --max;
   }
   if (max > 0) {
-    ret = cls_cxx_map_get_vals(hctx, start_key, string(), max, &keys, pmore);
-    CLS_LOG(20, "%s(): start_key=%s first_instance_idx=%s keys.size()=%d", __func__, escape_str(start_key).c_str(), escape_str(first_instance_idx).c_str(), (int)keys.size());
+    ret = cls_cxx_map_get_vals(hctx, start_after_key, string(), max,
+			       &keys, pmore);
+    CLS_LOG(20, "%s(): start_after_key=%s first_instance_idx=%s keys.size()=%d",
+	    __func__, escape_str(start_after_key).c_str(),
+	    escape_str(first_instance_idx).c_str(), (int)keys.size());
     if (ret < 0) {
       return ret;
     }
   }
   if (found_first) {
-    keys[start_key].claim(k);
+    keys[start_after_key].claim(k);
   }
 
   map<string, bufferlist>::iterator iter;
@@ -2462,35 +2474,39 @@ static int list_instance_entries(cls_method_context_t hctx, const string& name, 
 
     entries->push_back(entry);
     count++;
-    start_key = entry.idx;
+    start_after_key = entry.idx;
   }
 
   return count;
 }
 
-static int list_olh_entries(cls_method_context_t hctx, const string& name, const string& marker, uint32_t max,
-                            list<rgw_cls_bi_entry> *entries, bool *pmore)
+static int list_olh_entries(cls_method_context_t hctx,
+			    const string& name,
+			    const string& marker,
+			    uint32_t max,
+                            list<rgw_cls_bi_entry> *entries,
+			    bool *pmore)
 {
   cls_rgw_obj_key key(name);
   string first_instance_idx;
   encode_olh_data_key(key, &first_instance_idx);
-  string start_key;
+  string start_after_key;
 
   if (!name.empty()) {
-    start_key = first_instance_idx;
+    start_after_key = first_instance_idx;
   } else {
-    start_key = BI_PREFIX_CHAR;
-    start_key.append(bucket_index_prefixes[BI_BUCKET_OLH_DATA_INDEX]);
+    start_after_key = BI_PREFIX_CHAR;
+    start_after_key.append(bucket_index_prefixes[BI_BUCKET_OLH_DATA_INDEX]);
   }
-  string filter = start_key;
-  if (bi_entry_gt(marker, start_key)) {
-    start_key = marker;
+  string filter = start_after_key;
+  if (bi_entry_gt(marker, start_after_key)) {
+    start_after_key = marker;
   }
   int count = 0;
   map<string, bufferlist> keys;
   int ret;
   bufferlist k;
-  ret = cls_cxx_map_get_val(hctx, start_key, &k);
+  ret = cls_cxx_map_get_val(hctx, start_after_key, &k);
   if (ret < 0 && ret != -ENOENT) {
     return ret;
   }
@@ -2499,15 +2515,18 @@ static int list_olh_entries(cls_method_context_t hctx, const string& name, const
     --max;
   }
   if (max > 0) {
-    ret = cls_cxx_map_get_vals(hctx, start_key, string(), max, &keys, pmore);
-    CLS_LOG(20, "%s(): start_key=%s first_instance_idx=%s keys.size()=%d", __func__, escape_str(start_key).c_str(), escape_str(first_instance_idx).c_str(), (int)keys.size());
+    ret = cls_cxx_map_get_vals(hctx, start_after_key, string(), max,
+			       &keys, pmore);
+    CLS_LOG(20, "%s(): start_after_key=%s first_instance_idx=%s keys.size()=%d",
+	    __func__, escape_str(start_after_key).c_str(),
+	    escape_str(first_instance_idx).c_str(), (int)keys.size());
     if (ret < 0) {
       return ret;
     }
   }
 
   if (found_first) {
-    keys[start_key].claim(k);
+    keys[start_after_key].claim(k);
   }
 
   map<string, bufferlist>::iterator iter;
@@ -2547,13 +2566,15 @@ static int list_olh_entries(cls_method_context_t hctx, const string& name, const
 
     entries->push_back(entry);
     count++;
-    start_key = entry.idx;
+    start_after_key = entry.idx;
   }
 
   return count;
 }
 
-static int rgw_bi_list_op(cls_method_context_t hctx, bufferlist *in, bufferlist *out)
+static int rgw_bi_list_op(cls_method_context_t hctx,
+			  bufferlist *in,
+			  bufferlist *out)
 {
   // decode request
   rgw_cls_bi_list_op op;
@@ -2570,9 +2591,9 @@ static int rgw_bi_list_op(cls_method_context_t hctx, bufferlist *in, bufferlist 
   string filter = op.name;
 #define MAX_BI_LIST_ENTRIES 1000
   int32_t max = (op.max < MAX_BI_LIST_ENTRIES ? op.max : MAX_BI_LIST_ENTRIES);
-  string start_key = op.marker;
   bool more;
-  int ret = list_plain_entries(hctx, op.name, op.marker, max, &op_ret.entries, &more);
+  int ret = list_plain_entries(hctx, op.name, op.marker, max,
+			       &op_ret.entries, &more);
   if (ret < 0) {
     CLS_LOG(0, "ERROR: %s(): list_plain_entries returned ret=%d", __func__, ret);
     return ret;
@@ -2624,10 +2645,14 @@ int bi_log_record_decode(bufferlist& bl, rgw_bi_log_entry& e)
   return 0;
 }
 
-static int bi_log_iterate_entries(cls_method_context_t hctx, const string& marker, const string& end_marker,
-                              string& key_iter, uint32_t max_entries, bool *truncated,
-                              int (*cb)(cls_method_context_t, const string&, rgw_bi_log_entry&, void *),
-                              void *param)
+static int bi_log_iterate_entries(cls_method_context_t hctx,
+				  const string& marker,
+				  const string& end_marker,
+				  string& key_iter,
+				  uint32_t max_entries,
+				  bool *truncated,
+				  int (*cb)(cls_method_context_t, const string&, rgw_bi_log_entry&, void *),
+				  void *param)
 {
   CLS_LOG(10, "bi_log_iterate_range");
 
@@ -2639,15 +2664,15 @@ static int bi_log_iterate_entries(cls_method_context_t hctx, const string& marke
   if (truncated)
     *truncated = false;
 
-  string start_key;
+  string start_after_key;
   if (key_iter.empty()) {
     key = BI_PREFIX_CHAR;
     key.append(bucket_index_prefixes[BI_BUCKET_LOG_INDEX]);
     key.append(marker);
 
-    start_key = key;
+    start_after_key = key;
   } else {
-    start_key = key_iter;
+    start_after_key = key_iter;
   }
 
   if (end_marker.empty()) {
@@ -2659,11 +2684,13 @@ static int bi_log_iterate_entries(cls_method_context_t hctx, const string& marke
     end_key.append(end_marker);
   }
 
-  CLS_LOG(10, "bi_log_iterate_entries start_key=%s end_key=%s\n", start_key.c_str(), end_key.c_str());
+  CLS_LOG(10, "bi_log_iterate_entries start_after_key=%s end_key=%s\n",
+	  start_after_key.c_str(), end_key.c_str());
 
   string filter;
 
-  int ret = cls_cxx_map_get_vals(hctx, start_key, filter, max_entries, &keys, truncated);
+  int ret = cls_cxx_map_get_vals(hctx, start_after_key, filter, max_entries,
+				 &keys, truncated);
   if (ret < 0)
     return ret;
 

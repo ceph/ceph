@@ -8016,7 +8016,7 @@ uint32_t RGWRados::calc_ordered_bucket_list_per_shard(uint32_t num_entries,
 
 int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
 				      int shard_id,
-				      const rgw_obj_index_key& start,
+				      const rgw_obj_index_key& start_after,
 				      const string& prefix,
 				      uint32_t num_entries,
 				      bool list_versions,
@@ -8024,11 +8024,11 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
 				      bool *is_truncated,
 				      rgw_obj_index_key *last_entry,
                                       optional_yield y,
-				      bool (*force_check_filter)(const string& name))
+				      check_filter_t force_check_filter)
 {
   ldout(cct, 10) << "cls_bucket_list_ordered " << bucket_info.bucket <<
-    " start " << start.name << "[" << start.instance << "] num_entries " <<
-    num_entries << dendl;
+    " start_after " << start_after.name << "[" << start_after.instance <<
+    "] num_entries " << num_entries << dendl;
 
   RGWSI_RADOS::Pool index_pool;
   // key   - oid (for different shards if there is any)
@@ -8051,8 +8051,8 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
 
   auto& ioctx = index_pool.ioctx();
   map<int, struct rgw_cls_list_ret> list_results;
-  cls_rgw_obj_key start_key(start.name, start.instance);
-  r = CLSRGWIssueBucketList(ioctx, start_key, prefix, num_entries_per_shard,
+  cls_rgw_obj_key start_after_key(start_after.name, start_after.instance);
+  r = CLSRGWIssueBucketList(ioctx, start_key_after, prefix, num_entries_per_shard,
 			    list_versions, oids, list_results,
 			    cct->_conf->rgw_bucket_index_max_aio)();
   if (r < 0) {
@@ -8167,7 +8167,7 @@ int RGWRados::cls_bucket_list_ordered(RGWBucketInfo& bucket_info,
 
 int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
 					int shard_id,
-					const rgw_obj_index_key& start,
+					const rgw_obj_index_key& start_after,
 					const string& prefix,
 					uint32_t num_entries,
 					bool list_versions,
@@ -8175,9 +8175,9 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
 					bool *is_truncated,
 					rgw_obj_index_key *last_entry,
                                         optional_yield y,
-					bool (*force_check_filter)(const string& name)) {
+					check_filter_t force_check_filter) {
   ldout(cct, 10) << "cls_bucket_list_unordered " << bucket_info.bucket <<
-    " start " << start.name << "[" << start.instance <<
+    " start_after " << start_after.name << "[" << start_after.instance <<
     "] num_entries " << num_entries << dendl;
 
   static MultipartMetaFilter multipart_meta_filter;
@@ -8194,23 +8194,23 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
 
   const uint32_t num_shards = oids.size();
 
-  rgw_obj_index_key marker = start;
+  rgw_obj_index_key marker = start_after;
   uint32_t current_shard;
   if (shard_id >= 0) {
     current_shard = shard_id;
-  } else if (start.empty()) {
+  } else if (start_after.empty()) {
     current_shard = 0u;
   } else {
-    // at this point we have a marker (start) that has something in
-    // it, so we need to get to the bucket shard index, so we can
+    // at this point we have a marker (start_after) that has something
+    // in it, so we need to get to the bucket shard index, so we can
     // start reading from there
 
     std::string key;
     // test whether object name is a multipart meta name
-    if(! multipart_meta_filter.filter(start.name, key)) {
+    if(! multipart_meta_filter.filter(start_after.name, key)) {
       // if multipart_meta_filter fails, must be "regular" (i.e.,
       // unadorned) and the name is the key
-      key = start.name;
+      key = start_after.name;
     }
 
     // now convert the key (oid) to an rgw_obj_key since that will
@@ -8220,7 +8220,7 @@ int RGWRados::cls_bucket_list_unordered(RGWBucketInfo& bucket_info,
     if (!parsed) {
       ldout(cct, 0) <<
 	"ERROR: RGWRados::cls_bucket_list_unordered received an invalid "
-	"start marker: '" << start << "'" << dendl;
+	"start marker: '" << start_after << "'" << dendl;
       return -EINVAL;
     } else if (obj_key.name.empty()) {
       // if the name is empty that means the object name came in with

@@ -1451,13 +1451,6 @@ int set_user_quota(int opt_cmd, RGWUser& user, RGWUserAdminOpState& op_state, in
   return 0;
 }
 
-static bool bucket_object_check_filter(const string& name)
-{
-  rgw_obj_key k;
-  string ns; /* empty namespace */
-  return rgw_obj_key::oid_to_key_in_ns(name, &k, ns);
-}
-
 int check_min_obj_stripe_size(rgw::sal::RGWRadosStore *store, RGWBucketInfo& bucket_info, rgw_obj& obj, uint64_t min_stripe_size, bool *need_rewrite)
 {
   map<string, bufferlist> attrs;
@@ -6266,8 +6259,7 @@ next:
 				       prefix, 1000, true,
 				       result, &is_truncated, &marker,
                                        null_yield,
-				       bucket_object_check_filter);
-
+				       rgw_bucket_object_check_filter);
       if (r < 0 && r != -ENOENT) {
         cerr << "ERROR: failed operation r=" << r << std::endl;
       }
