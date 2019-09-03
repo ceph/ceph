@@ -274,7 +274,9 @@ def is_lv(dev, lvs=None):
     splitname = dmsetup_splitname(dev)
     # Allowing to optionally pass `lvs` can help reduce repetitive checks for
     # multiple devices at once.
-    lvs = lvs if lvs is not None else Volumes()
+    if lvs is None or len(lvs) == 0:
+        lvs = Volumes()
+
     if splitname.get('LV_NAME'):
         lvs.filter(lv_name=splitname['LV_NAME'], vg_name=splitname['VG_NAME'])
         return len(lvs) > 0
