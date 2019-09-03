@@ -82,6 +82,7 @@ ObjectCacherObjectDispatch<I>::ObjectCacherObjectDispatch(
     m_writethrough_until_flush(writethrough_until_flush),
     m_cache_lock(ceph::make_mutex(util::unique_lock_name(
       "librbd::cache::ObjectCacherObjectDispatch::cache_lock", this))) {
+  ceph_assert(m_image_ctx->data_ctx.is_valid());
 }
 
 template <typename I>

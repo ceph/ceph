@@ -736,6 +736,8 @@ inline namespace v14_2_0 {
 
     ~IoCtx();
 
+    bool is_valid() const;
+
     // Close our pool handle
     void close();
 
