@@ -1,3 +1,5 @@
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// vim: ts=8 sw=2 smarttab ft=cpp
 
 #include "svc_meta_be_sobj.h"
 #include "svc_meta_be_params.h"
