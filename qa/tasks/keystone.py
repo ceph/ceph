@@ -11,6 +11,7 @@ from teuthology.orchestra import run
 from teuthology.orchestra.connection import split_user
 from teuthology.packaging import install_package
 from teuthology.packaging import remove_package
+from teuthology.exceptions import ConfigError
 
 log = logging.getLogger(__name__)
 
