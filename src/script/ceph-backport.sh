@@ -159,7 +159,7 @@ function log {
             ;;
     esac
     if [ "$verbose_only" -a ! "$verbose" ] ; then
-        :
+        true
     else
         msg="${prefix}${msg}"
         echo "$msg" >&2
@@ -194,8 +194,8 @@ test "$redmine_key"     || failed_required_variable_check redmine_key
 test "$redmine_user_id" || failed_required_variable_check redmine_user_id
 test "$github_token"    || failed_required_variable_check github_token
 test "$github_user"     || failed_required_variable_check github_user
-: "${github_repo:=origin}"
-: "${ceph_repo:=upstream}"
+true "${github_repo:=origin}"
+true "${ceph_repo:=upstream}"
 redmine_endpoint="https://tracker.ceph.com"
 github_endpoint="https://github.com/ceph/ceph"
 original_issue=
