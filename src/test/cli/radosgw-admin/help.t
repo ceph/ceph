@@ -184,6 +184,7 @@
      --bucket=<bucket>         Specify the bucket name. Also used by the quota command.
      --pool=<pool>             Specify the pool name. Also used to scan for leaked rados objects.
      --object=<object>         object name
+     --object-version=<version>         object version
      --date=<date>             date in the format yyyy-mm-dd
      --start-date=<date>       start date in the format yyyy-mm-dd
      --end-date=<date>         end date in the format yyyy-mm-dd
