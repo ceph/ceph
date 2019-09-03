@@ -303,7 +303,8 @@ void check_bad_user_bucket_mapping(rgw::sal::RGWRadosStore *store, const rgw_use
   } while (user_buckets.is_truncated());
 }
 
-static bool bucket_object_check_filter(const string& oid)
+// note: function type conforms to RGWRados::check_filter_t
+bool rgw_bucket_object_check_filter(const string& oid)
 {
   rgw_obj_key key;
   string ns;
