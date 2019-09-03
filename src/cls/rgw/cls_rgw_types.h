@@ -62,6 +62,19 @@ static inline uint64_t cls_rgw_get_rounded_size(uint64_t size)
   return (size + ROUND_BLOCK_SIZE - 1) & ~(ROUND_BLOCK_SIZE - 1);
 }
 
+/*
+ * This takes a string that either wholly contains a delimiter or is a
+ * path that ends with a delimiter and appends a new character to the
+ * end such that when a we request bucket-index entries *after* this,
+ * we'll get the next object after the "subdirectory". This works
+ * because we append a '\xFF' charater, and no valid UTF-8 character
+ * can contain that byte, so no valid entries can be skipped.
+ */
+static inline std::string cls_rgw_after_delim(const std::string& path) {
+  // assert: ! path.empty()
+  return path + '\xFF';
+}
+
 struct rgw_bucket_pending_info {
   RGWPendingState state;
   ceph::real_time timestamp;

@@ -1707,15 +1707,6 @@ int RGWRados::Bucket::update_bucket_id(const string& new_bucket_id)
 }
 
 
-static inline std::string after_delim(std::string_view delim)
-{
-  // assert: ! delim.empty()
-  std::string result{delim.data(), delim.length()};
-  result += char(255);
-  return result;
-}
-
-
 /**
  * Get ordered listing of the objects in a bucket.
  *
@@ -1767,7 +1758,7 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max_p,
   string after_delim_s; /* needed in !params.delim.empty() AND later */
 
   if (!params.delim.empty()) {
-    after_delim_s = after_delim(params.delim);
+    after_delim_s = cls_rgw_after_delim(params.delim);
     /* if marker points at a common prefix, fast forward it into its
      * upper bound string */
     int delim_pos = cur_marker.name.find(params.delim, cur_prefix.size());
