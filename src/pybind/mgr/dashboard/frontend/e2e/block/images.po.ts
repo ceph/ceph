@@ -29,7 +29,7 @@ export class ImagesPageHelper extends PageHelper {
 
     // Click the create button and wait for image to be made
     await element(by.cssContainingText('button', 'Create RBD')).click();
-    await this.waitPresence(this.getFirstTableCellWithText(name));
+    return this.waitPresence(this.getFirstTableCellWithText(name));
   }
 
   async editImage(name, pool, newName, newSize) {
