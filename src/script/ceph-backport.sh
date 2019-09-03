@@ -232,6 +232,7 @@ function populate_original_pr {
 }
 
 function prepare {
+    local offset=0
     populate_original_issue
     if [ -z "$original_issue" ] ; then
         error "Could not find original issue"
@@ -265,7 +266,12 @@ function prepare {
 
     debug "Cherry picking $number commits from ${github_endpoint}/pull/${original_pr} into local branch $local_branch"
     debug "If this operation does not succeed, you will need to resolve the conflicts manually"
-    git cherry-pick -x pr-$original_pr~$number..pr-$original_pr
+    let offset=$number-1 || true # don't fail on set -e when result is 0
+    for ((i=$offset; i>=0; i--))
+    do
+        debug "Cherry-picking commit $(git log --oneline --max-count=1 --no-decorate)"
+        git cherry-pick -x "pr-$original_pr~$i"
+    done
     info "Cherry picked $number commits from ${github_endpoint}/pull/${original_pr} into local branch $local_branch"
 
     exit 0
