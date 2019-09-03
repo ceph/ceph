@@ -200,6 +200,7 @@ redmine_endpoint="https://tracker.ceph.com"
 github_endpoint="https://github.com/ceph/ceph"
 original_issue=
 original_pr=
+original_pr_url=
 
 function usage {
     log bare
@@ -227,6 +228,7 @@ function populate_original_pr {
         if [ -z "$original_pr" ] ; then
             original_pr=$(curl --silent ${redmine_endpoint}/issues/${original_issue}.json |
                           jq -r '.issue.custom_fields[] | select(.id | contains(21)) | .value')
+            original_pr_url="${github_endpoint}/pull/${original_pr}"
         fi
     fi
 }
@@ -247,15 +249,15 @@ function prepare {
         info "Is the \"Pull request ID\" field of ${redmine_endpoint}/issues/${original_issue} populated?"
         exit 1
     fi
-    info "Parent issue ostensibly fixed by: ${github_endpoint}/pull/${original_pr}"
+    info "Parent issue ostensibly fixed by: ${original_pr_url}"
 
-    debug "Counting commits in ${github_endpoint}/pull/${original_pr}"
+    debug "Counting commits in ${original_pr_url}"
     number=$(curl --silent https://api.github.com/repos/ceph/ceph/pulls/${original_pr}?access_token=${github_token} | jq .commits)
     if [ -z "$number" ] ; then
-        error "Could not determine the number of commits in ${github_endpoint}/pull/${original_pr}"
+        error "Could not determine the number of commits in ${original_pr_url}"
         return 1
     fi
-    info "Found $number commits in ${github_endpoint}/pull/${original_pr}"
+    info "Found $number commits in ${original_pr_url}"
 
     git fetch $ceph_repo
     debug "Fetched latest commits from upstream"
@@ -264,7 +266,7 @@ function prepare {
 
     git fetch $ceph_repo pull/$original_pr/head:pr-$original_pr
 
-    debug "Cherry picking $number commits from ${github_endpoint}/pull/${original_pr} into local branch $local_branch"
+    debug "Cherry picking $number commits from ${original_pr_url} into local branch $local_branch"
     debug "If this operation does not succeed, you will need to resolve the conflicts manually"
     let offset=$number-1 || true # don't fail on set -e when result is 0
     for ((i=$offset; i>=0; i--))
@@ -272,7 +274,7 @@ function prepare {
         debug "Cherry-picking commit $(git log --oneline --max-count=1 --no-decorate)"
         git cherry-pick -x "pr-$original_pr~$i"
     done
-    info "Cherry picked $number commits from ${github_endpoint}/pull/${original_pr} into local branch $local_branch"
+    info "Cherry picked $number commits from ${original_pr_url} into local branch $local_branch"
 }
 
 if git show-ref HEAD >/dev/null 2>&1 ; then
