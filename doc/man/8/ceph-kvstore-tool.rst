@@ -80,6 +80,11 @@ which are as follows:
     Note that in the case of rocksdb this may corrupt an otherwise uncorrupted
     database--use this only as a last resort!
 
+:command:`stats`
+    Prints statistics from underlying key-value database. This is only for informative purposes.
+    Format and information content may vary between releases. For RocksDB information includes
+    compactions stats, performance counters, memory usage and internal RocksDB stats. 
+
 Availability
 ============
 
