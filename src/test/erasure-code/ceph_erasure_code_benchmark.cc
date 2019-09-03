@@ -121,10 +121,15 @@ int ErasureCodeBench::setup(int argc, char** argv) {
     exhaustive_erasures = false;
   if (vm.count("erased") > 0)
     erased = vm["erased"].as<vector<int> >();
-
-  k = stoi(profile["k"]);
-  m = stoi(profile["m"]);
   
+  try {
+    k = stoi(profile["k"]);
+    m = stoi(profile["m"]);
+  } catch (const std::logic_error& e) {
+    cout << "Invalid k and/or m: k=" << profile["k"] << ", m=" << profile["m"] 
+         << " (" << e.what() << ")" << endl;
+    return -EINVAL;
+  }
   if (k <= 0) {
     cout << "parameter k is " << k << ". But k needs to be > 0." << endl;
     return -EINVAL;
