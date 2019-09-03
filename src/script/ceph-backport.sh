@@ -286,9 +286,19 @@ if [ $verbose ] ; then
     debug "Redmine user: ${redmine_user_id}"
     debug "GitHub user:  ${github_user}"
     debug "Fork remote:  ${github_repo}"
-    git remote -v | egrep ^${github_repo}\\s+
+    if git remote -v | egrep ^${github_repo}\\s+ ; then
+        true  # remote exists; good
+    else
+        error "github_repo is set to ->$github_repo<- but this remote does not exist"
+        exit 1
+    fi
     debug "Ceph remote:  ${ceph_repo}"
-    git remote -v | egrep ^${ceph_repo}\\s+
+    if git remote -v | egrep ^${ceph_repo}\\s+ ; then
+        true  # remote exists; good
+    else
+        error "ceph_repo is set to ->$ceph_repo<- but this remote does not exist"
+        exit 1
+    fi
 fi
 
 if [[ $1 =~ ^[0-9]+$ ]] ; then
