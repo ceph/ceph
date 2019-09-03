@@ -1710,7 +1710,7 @@ int RGWRados::Bucket::update_bucket_id(const string& new_bucket_id)
 /**
  * Get ordered listing of the objects in a bucket.
  *
- * max: maximum number of results to return
+ * max_p: maximum number of results to return
  * bucket: bucket to list contents of
  * prefix: only return results that match this prefix
  * delim: do not include results that match this string.
