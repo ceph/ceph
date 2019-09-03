@@ -152,15 +152,22 @@ static int log_index_operation(cls_method_context_t hctx, cls_rgw_obj_key& obj_k
  * UTF-8 object names can *both* preceed and follow the "ugly
  * namespace".
  */
-static int get_obj_vals(cls_method_context_t hctx, const string& start, const string& filter_prefix,
-                        int num_entries, map<string, bufferlist> *pkeys, bool *pmore)
+static int get_obj_vals(cls_method_context_t hctx,
+			const string& start,
+			const string& filter_prefix,
+                        int num_entries,
+			map<string, bufferlist> *pkeys,
+			bool *pmore)
 {
-  int ret = cls_cxx_map_get_vals(hctx, start, filter_prefix, num_entries, pkeys, pmore);
-  if (ret < 0)
+  int ret = cls_cxx_map_get_vals(hctx, start, filter_prefix,
+				 num_entries, pkeys, pmore);
+  if (ret < 0) {
     return ret;
+  }
 
-  if (pkeys->empty())
+  if (pkeys->empty()) {
     return 0;
+  }
 
   auto last_element = pkeys->rbegin();
   if ((unsigned char)last_element->first[0] < BI_PREFIX_CHAR) {
@@ -195,8 +202,9 @@ static int get_obj_vals(cls_method_context_t hctx, const string& start, const st
   auto upper = std::lower_bound(lower, pkeys->end(), new_start, comp);
   pkeys->erase(lower, upper);
 
-  if (num_entries == (int)pkeys->size() || !(*pmore))
+  if (num_entries == (int)pkeys->size() || !(*pmore)) {
     return 0;
+  }
 
   if (pkeys->size() && new_start < pkeys->rbegin()->first) {
     new_start = pkeys->rbegin()->first;
@@ -205,12 +213,15 @@ static int get_obj_vals(cls_method_context_t hctx, const string& start, const st
   map<string, bufferlist> new_keys;
 
   /* now get some more keys */
-  ret = cls_cxx_map_get_vals(hctx, new_start, filter_prefix, num_entries - pkeys->size(), &new_keys, pmore);
-  if (ret < 0)
+  ret = cls_cxx_map_get_vals(hctx, new_start, filter_prefix,
+			     num_entries - pkeys->size(), &new_keys, pmore);
+  if (ret < 0) {
     return ret;
+  }
 
   pkeys->insert(std::make_move_iterator(new_keys.begin()),
                 std::make_move_iterator(new_keys.end()));
+
   return 0;
 }
 
@@ -1339,11 +1350,15 @@ static int write_version_marker(cls_method_context_t hctx, cls_rgw_obj_key& key)
 }
 
 /*
- * plain entries are the ones who were created when bucket was not versioned,
- * if we override these objects, we need to convert these to versioned entries -- ones that have
- * both data entry, and listing key. Their version is going to be empty though
+ * plain entries are the ones who were created when bucket was not
+ * versioned, if we override these objects, we need to convert these
+ * to versioned entries -- ones that have both data entry, and listing
+ * key. Their version is going to be empty though
  */
-static int convert_plain_entry_to_versioned(cls_method_context_t hctx, cls_rgw_obj_key& key, bool demote_current, bool instance_only)
+static int convert_plain_entry_to_versioned(cls_method_context_t hctx,
+					    cls_rgw_obj_key& key,
+					    bool demote_current,
+					    bool instance_only)
 {
   if (!key.instance.empty()) {
     return -EINVAL;
@@ -1375,7 +1390,8 @@ static int convert_plain_entry_to_versioned(cls_method_context_t hctx, cls_rgw_o
       ret = write_obj_entries(hctx, entry, new_idx);
     }
     if (ret < 0) {
-      CLS_LOG(0, "ERROR: write_obj_entries new_idx=%s returned %d", new_idx.c_str(), ret);
+      CLS_LOG(0, "ERROR: write_obj_entries new_idx=%s returned %d",
+	      new_idx.c_str(), ret);
       return ret;
     }
   }

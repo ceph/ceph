@@ -1724,11 +1724,12 @@ int RGWRados::Bucket::update_bucket_id(const string& new_bucket_id)
  * is_truncated: if number of objects in the bucket is bigger than
  * max, then truncated.
  */
-int RGWRados::Bucket::List::list_objects_ordered(int64_t max_p,
-						 vector<rgw_bucket_dir_entry> *result,
-						 map<string, bool> *common_prefixes,
-						 bool *is_truncated,
-						 optional_yield y)
+int RGWRados::Bucket::List::list_objects_ordered(
+  int64_t max_p,
+  vector<rgw_bucket_dir_entry> *result,
+  map<string, bool> *common_prefixes,
+  bool *is_truncated,
+  optional_yield y)
 {
   RGWRados *store = target->get_store();
   CephContext *cct = store->ctx();
