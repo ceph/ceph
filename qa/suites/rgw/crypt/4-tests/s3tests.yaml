@@ -1,0 +1,5 @@
+tasks:
+- s3tests:
+    client.0:
+      force-branch: ceph-master
+      kms_key: my-key-1
