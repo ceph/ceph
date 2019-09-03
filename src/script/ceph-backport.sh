@@ -134,6 +134,12 @@ if [[ $* == *--verbose* ]]; then
     verbose="1"
 fi
 
+remote_api_output=$(mktemp /tmp/${this_script}.remote_api_output.XXXXX)
+function rm_tmp_files {
+    rm -f "$remote_api_output"
+}
+trap rm_tmp_files EXIT
+
 function log {
     local level="$1"
     shift
@@ -336,7 +342,8 @@ fi
 redmine_url="${redmine_endpoint}/issues/${issue}"
 debug "Considering Redmine issue: $redmine_url - is it in the Backport tracker?"
 
-tracker=$(curl --silent "${redmine_url}.json" | jq -r '.issue.tracker.name')
+curl --silent "${redmine_url}.json" > $remote_api_output
+tracker=$(cat $remote_api_output | jq -r '.issue.tracker.name')
 if [ "$tracker" = "Backport" ]; then
     debug "Yes, $redmine_url is a Backport issue"
 else
@@ -346,13 +353,16 @@ else
 fi
 
 debug "Looking up release/milestone of $redmine_url"
-milestone=$(curl --silent "${redmine_url}.json" | jq -r '.issue.custom_fields[0].value')
+milestone=$(cat $remote_api_output | jq -r '.issue.custom_fields[0].value')
 if [ "$milestone" ] ; then
     debug "Release/milestone: $milestone"
 else
     error "could not obtain release/milestone from ${redmine_url}"
     exit 1
 fi
+
+tracker_title=$(cat $remote_api_output | jq -r '.issue.subject')
+debug "Title of $redmine_url is ->$tracker_title<-"
 
 # milestone numbers can be obtained manually with:
 #   curl --verbose -X GET https://api.github.com/repos/ceph/ceph/milestones
@@ -397,7 +407,15 @@ fi
 desc="${desc}\n\nthis backport was staged using ${github_endpoint}/blob/master/src/script/ceph-backport.sh"
 
 debug "Generating backport PR title"
-title="${milestone}: $(curl --silent https://api.github.com/repos/ceph/ceph/pulls/${original_pr} | jq -r '.title')"
+if [ "$original_pr" ] ; then
+    title="${milestone}: $(curl --silent https://api.github.com/repos/ceph/ceph/pulls/${original_pr} | jq -r '.title')"
+else
+    if [[ $tracker_title =~ ^${milestone}: ]] ; then
+        title="${tracker_title}"
+    else
+        title="${milestone}: ${tracker_title}"
+    fi
+fi
 if [[ $title =~ \" ]] ; then
     title=$(echo $title | sed -e 's/"/\\"/g')
 fi
