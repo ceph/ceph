@@ -10,8 +10,12 @@ endif()
 
 find_package(Threads)
 
-set(CMAKE_CXX_STANDARD 11)
-set(CMAKE_CXX_STANDARD_REQUIRED ON)
+if(CMAKE_CXX_STANDARD OR CMAKE_CXX_FLAGS MATCHES "-std=(c|gnu)\\+\\+")
+  # use existing settings if available
+else()
+  set(CMAKE_CXX_STANDARD 11)
+  set(CMAKE_CXX_STANDARD_REQUIRED ON)
+endif()
 
 add_subdirectory(src)
 
