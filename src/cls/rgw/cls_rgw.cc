@@ -19,6 +19,10 @@ CLS_VER(1,0)
 CLS_NAME(rgw)
 
 
+// No UTF-8 character can begin with 0x80, so this is a safe indicator
+// of a special bucket-index entry for the first byte. Note: although
+// it has no impact, the 2nd, 3rd, or 4th byte of a UTF-8 character
+// may be 0x80.
 #define BI_PREFIX_CHAR 0x80
 
 #define BI_BUCKET_OBJS_INDEX          0
@@ -143,7 +147,10 @@ static int log_index_operation(cls_method_context_t hctx, cls_rgw_obj_key& obj_k
 }
 
 /*
- * read list of objects, skips objects in the ugly namespace
+ * Read list of objects, skipping objects in the "ugly namespace". The
+ * "ugly namespace" entries begin with BI_PREFIX_CHAR (0x80). Valid
+ * UTF-8 object names can *both* preceed and follow the "ugly
+ * namespace".
  */
 static int get_obj_vals(cls_method_context_t hctx, const string& start, const string& filter_prefix,
                         int num_entries, map<string, bufferlist> *pkeys, bool *pmore)
@@ -157,17 +164,31 @@ static int get_obj_vals(cls_method_context_t hctx, const string& start, const st
 
   auto last_element = pkeys->rbegin();
   if ((unsigned char)last_element->first[0] < BI_PREFIX_CHAR) {
-    /* nothing to see here, move along */
+    /* if the first character of the last entry is less than the
+     * prefix then all entries must preceed the "ugly namespace" and
+     * we're done
+     */
     return 0;
   }
 
   auto first_element = pkeys->begin();
   if ((unsigned char)first_element->first[0] > BI_PREFIX_CHAR) {
+    /* the first character of the last entry is in or after the "ugly
+     * namespace", so if the first character of the first entry
+     * follows the "ugly namespace" then all entries do and we're done
+     */
     return 0;
   }
 
-  /* let's rebuild the list, only keep entries we're interested in */
-  auto comp = [](const pair<string, bufferlist>& l, const string &r) { return l.first < r; };
+  /* at this point we know we have entries that could precede the
+   * "ugly namespace", be in the "ugly namespace", and follow the
+   * "ugly namespace", so let's rebuild the list, only keeping entries
+   * outside the "ugly namespace"
+   */
+
+  auto comp = [](const pair<string, bufferlist>& l, const string &r) {
+		return l.first < r;
+	      };
   string new_start = {static_cast<char>(BI_PREFIX_CHAR + 1)};
 
   auto lower = pkeys->lower_bound(string{static_cast<char>(BI_PREFIX_CHAR)});
