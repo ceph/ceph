@@ -134,18 +134,6 @@ public:
   explicit MDCacheLogContext(MDCache *mdc_) : mdcache(mdc_) {}
 };
 
-class C_MDC_RstatFlush: public MDCacheContext {
-  MDRequestRef mdr;
-public:
-  C_MDC_RstatFlush(MDCache* mdc, const MDRequestRef& m) : MDCacheContext(mdc), mdr(m) {}
-
-  void finish(int r) override {
-    mdcache->propagate_rstats(mdr);
-  }
-
-  virtual ~C_MDC_RstatFlush() {}
-};
-
 class MDCacheRstatFlush : public MDCacheContext {
   std::vector<metareqid_t> mdrs;
 public:
@@ -13600,14 +13588,14 @@ int MDCache::should_wait_for_subtree_rstats(MDRequestRef& mdr,
     dout(20) << __func__ << " subtree root: " << *dir << dendl;
 
     if (dir->is_freezing() || dir->is_frozen()) {
-      dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDC_RstatFlush(this, mdr));
+      dir->add_waiter(CDir::WAIT_UNFREEZE, new C_MDS_RetryRequest(this, mdr));
       dout(20) << __func__ << " wait for unfreeze: " << *dir << dendl;
       went_wait = -1;
       continue;
     }
 
     if (dir->is_ambiguous_auth()) {
-      dir->add_waiter(CDir::WAIT_SINGLEAUTH, new C_MDC_RstatFlush(this, mdr));
+      dir->add_waiter(CDir::WAIT_SINGLEAUTH, new C_MDS_RetryRequest(this, mdr));
       dout(20) << __func__ << " wait for singleauth: " << *dir << dendl;
       went_wait = -1;
       continue;

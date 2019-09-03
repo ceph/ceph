@@ -70,18 +70,21 @@ public:
 
 class C_Locker_RstatFlush: public LockerContext {
   MDRequestRef mdr;
-  ScatterLock* lock;
+  std::vector<ScatterLock*> locks;
 public:
-  C_Locker_RstatFlush(Locker* l, const MDRequestRef& m, ScatterLock* lo)
-    : LockerContext(l), mdr(m), lock(lo) {}
+  C_Locker_RstatFlush(Locker* l, const MDRequestRef& m, const std::vector<ScatterLock*>& lo)
+    : LockerContext(l), mdr(m), locks(lo) {}
 
   void finish(int r) override {
-    if (lock->is_dirty())
-      ceph_assert(lock->get_updated_item()->is_on_list());
+    for (auto lock : locks) {
+      if (lock->is_dirty())
+	ceph_assert(lock->get_updated_item()->is_on_list());
 
-    ceph_assert(lock->is_nudged_by(mdr->reqid));
-    lock->remove_nudged_by(mdr->reqid);
-    locker->mdcache->propagate_rstats(mdr);
+      ceph_assert(lock->is_nudged_by(mdr->reqid));
+      lock->remove_nudged_by(mdr->reqid);
+    }
+
+    locker->mdcache->dispatch_request(mdr);
   }
 
   virtual ~C_Locker_RstatFlush() {}
@@ -5173,6 +5176,8 @@ bool Locker::nudge_updated_scatterlocks(const MDRequestRef& mdr, bool final_run)
   // updated
   utime_t now = ceph_clock_now();
   int n = updated_scatterlocks.size();
+  MDSGatherBuilder gBuilder(g_ceph_context);
+  std::vector<ScatterLock*> nudged_locks;
   while (!updated_scatterlocks.empty()) {
     ScatterLock *lock = updated_scatterlocks.front();
 
@@ -5214,7 +5219,8 @@ bool Locker::nudge_updated_scatterlocks(const MDRequestRef& mdr, bool final_run)
         dout(20) << __func__ << " " << (mdr ? mdr->reqid : metareqid_t())
           << " need to nudge scatterlock: " << *lock << " of " << *lock->get_parent() << dendl;
 
-        scatter_nudge(lock, new C_Locker_RstatFlush(this, mdr, lock));
+        scatter_nudge(lock, gBuilder.new_sub());
+	nudged_locks.push_back(lock);
 	lock->add_nudged_by(mdr->reqid);
 	nudged++;
       } else
@@ -5222,6 +5228,11 @@ bool Locker::nudge_updated_scatterlocks(const MDRequestRef& mdr, bool final_run)
     } else {
       scatter_nudge(lock, 0);
     }
+  }
+
+  if (gBuilder.has_subs()) {
+    gBuilder.set_finisher(new C_Locker_RstatFlush(this, mdr, std::move(nudged_locks)));
+    gBuilder.activate();
   }
 
   mds->mdlog->flush();
