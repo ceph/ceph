@@ -269,6 +269,7 @@ void usage()
   cout << "   --bucket=<bucket>         Specify the bucket name. Also used by the quota command.\n";
   cout << "   --pool=<pool>             Specify the pool name. Also used to scan for leaked rados objects.\n";
   cout << "   --object=<object>         object name\n";
+  cout << "   --object-version=<version>         object version\n";
   cout << "   --date=<date>             date in the format yyyy-mm-dd\n";
   cout << "   --start-date=<date>       start date in the format yyyy-mm-dd\n";
   cout << "   --end-date=<date>         end date in the format yyyy-mm-dd\n";
