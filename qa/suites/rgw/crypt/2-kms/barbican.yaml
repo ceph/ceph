@@ -5,6 +5,7 @@ overrides:
       use-barbican-role: client.0
 
 tasks:
+- tox: [ client.0 ]
 - keystone:
     client.0:
       sha1: 12.0.0.0b2
