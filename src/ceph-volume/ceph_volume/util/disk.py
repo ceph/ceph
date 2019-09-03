@@ -761,7 +761,7 @@ def is_locked_raw_device(disk_path):
     return 0
 
 
-def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/dev/mapper'):
+def get_devices(_sys_block_path='/sys/block', _dev_path='/dev', _mapper_path='/dev/mapper', lvs=None):
     """
     Captures all available devices from /sys/block/, including its partitions,
     along with interesting metadata like sectors, size, vendor,

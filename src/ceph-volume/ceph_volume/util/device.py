@@ -20,6 +20,8 @@ def encryption_status(abspath):
     from ceph_volume.util import encryption
     return encryption.status(abspath)
 
+# TODO: create global list of LVs (and PVs and VGs) and then get rid of this.
+global_lvs = lvm.Volumes()
 
 class Devices(object):
     """
@@ -27,10 +29,13 @@ class Devices(object):
     """
 
     def __init__(self, devices=None):
+        lvs = lvm.Volumes()
         if not sys_info.devices:
-            sys_info.devices = disk.get_devices()
-        self.devices = [Device(k) for k in
-                            sys_info.devices.keys()]
+            sys_info.devices = disk.get_devices(lvs=lvs)
+
+        self.devices = []
+        for k in sys_info.devices.keys():
+            self.devices.append(Device(k, lvs))
 
     def pretty_report(self, all=True):
         output = [
@@ -75,12 +80,13 @@ class Device(object):
         'vendor',
     ]
 
-    def __init__(self, path):
+    def __init__(self, path, lvs=None):
+        global global_lvs
         self.path = path
+        self.lvs = lvs or global_lvs
         # LVs can have a vg/lv path, while disks will have /dev/sda
         self.abspath = path
         self.lv_api = None
-        self.lvs = []
         self.vg_name = None
         self.lv_name = None
         self.pvs_api = []
@@ -125,8 +131,7 @@ class Device(object):
                     break
 
         # start with lvm since it can use an absolute or relative path
-        lvs = lvm.Volumes()
-        lv = lvm.get_lv_from_argument(self.path, lvs)
+        lv = lvm.get_lv_from_argument(self.path, self.lvs)
         if lv:
             self.lv_api = lv
             self.lvs = [lv]
@@ -244,8 +249,8 @@ class Device(object):
                     self.pvs_api = pvs
                     for pv in pvs:
                         if pv.vg_name and pv.lv_uuid:
-                            lv = lvm.get_lv(vg_name=pv.vg_name, lv_uuid=pv.lv_uuid)
-                            if lv:
+                            lv = lvm.get_lv(vg_name=pv.vg_name, lv_uuid=pv.lv_uuid, lvs=self.lvs)
+                            if lv and lv not in self.lvs:
                                 self.lvs.append(lv)
                 else:
                     self.vgs = []
@@ -312,7 +317,7 @@ class Device(object):
         is_member = self.ceph_disk.is_member
         if self.sys_api.get("partitions"):
             for part in self.sys_api.get("partitions").keys():
-                part = Device("/dev/%s" % part)
+                part = Device("/dev/%s" % part, lvs=self.lvs)
                 if part.is_ceph_disk_member:
                     is_member = True
                     break
