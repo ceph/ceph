@@ -259,11 +259,18 @@ function prepare {
     fi
     info "Found $number commits in ${original_pr_url}"
 
+    debug "Fetching latest commits from $ceph_repo"
     git fetch $ceph_repo
-    debug "Fetched latest commits from upstream"
 
-    git checkout $ceph_repo/$milestone -b $local_branch
+    debug "Initializing local branch $local_branch to $milestone"
+    if git show-ref --verify --quiet refs/heads/$local_branch ; then
+        error "Cannot initialize $local_branch - local branch already exists"
+        exit 1
+    else
+        git checkout $ceph_repo/$milestone -b $local_branch
+    fi
 
+    debug "Fetching latest commits from ${original_pr_url}"
     git fetch $ceph_repo pull/$original_pr/head:pr-$original_pr
 
     debug "Cherry picking $number commits from ${original_pr_url} into local branch $local_branch"
