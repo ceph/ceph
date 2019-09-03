@@ -50,6 +50,8 @@ ObjectCopyRequest<I>::ObjectCopyRequest(I *src_image_ctx,
     m_dst_image_ctx(dst_image_ctx), m_cct(dst_image_ctx->cct),
     m_snap_map(snap_map), m_dst_object_number(dst_object_number),
     m_flatten(flatten), m_on_finish(on_finish) {
+  ceph_assert(src_image_ctx->data_ctx.is_valid());
+  ceph_assert(dst_image_ctx->data_ctx.is_valid());
   ceph_assert(!m_snap_map.empty());
 
   m_src_async_op = new io::AsyncOperation();

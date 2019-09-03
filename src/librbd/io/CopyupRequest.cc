@@ -117,6 +117,7 @@ CopyupRequest<I>::CopyupRequest(I *ictx, uint64_t objectno,
   : m_image_ctx(ictx), m_object_no(objectno), m_image_extents(image_extents),
     m_trace(util::create_trace(*m_image_ctx, "copy-up", parent_trace))
 {
+  ceph_assert(m_image_ctx->data_ctx.is_valid());
   m_async_op.start_op(*util::get_image_ctx(m_image_ctx));
 }
 

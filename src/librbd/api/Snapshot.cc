@@ -111,7 +111,7 @@ int Snapshot<I>::get_group_namespace(I *ictx, uint64_t snap_id,
     return -ENOENT;
   }
 
-  GetGroupVisitor ggv = GetGroupVisitor(ictx->cct, &ictx->data_ctx, group_snap);
+  GetGroupVisitor ggv = GetGroupVisitor(ictx->cct, &ictx->md_ctx, group_snap);
   r = boost::apply_visitor(ggv, snap_info->snap_namespace);
   if (r < 0) {
     return r;
