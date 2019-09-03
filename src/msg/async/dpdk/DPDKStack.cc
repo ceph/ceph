@@ -231,7 +231,7 @@ int DPDKWorker::listen(entity_addr_t &sa,
   // _inet.set_gw_address(ipv4_address(std::get<1>(tuples[idx])));
   // _inet.set_netmask_address(ipv4_address(std::get<2>(tuples[idx])));
   return tcpv4_listen(_impl->_inet.get_tcp(), sa.get_port(), opt, sa.get_type(),
-		      sock);
+		      addr_slot, sock);
 }
 
 int DPDKWorker::connect(const entity_addr_t &addr, const SocketOptions &opts, ConnectedSocket *socket)
