@@ -600,7 +600,14 @@ class IscsiClientMock(object):
 
     def reconfigure_disk(self, pool, image, controls):
         image_id = '{}/{}'.format(pool, image)
-        self.config['disks'][image_id]['controls'] = controls
+        settings = self.get_settings()
+        backstore = self.config['disks'][image_id]['backstore']
+        disk_default_controls = settings['disk_default_controls'][backstore]
+        new_controls = {}
+        for control_k, control_v in controls.items():
+            if control_v != disk_default_controls[control_k]:
+                new_controls[control_k] = control_v
+        self.config['disks'][image_id]['controls'] = new_controls
 
     def create_client(self, target_iqn, client_iqn):
         target_config = self.config['targets'][target_iqn]
