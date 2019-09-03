@@ -57,8 +57,7 @@ enum RGWCheckMTimeType {
 
 #define ROUND_BLOCK_SIZE 4096
 
-static inline uint64_t cls_rgw_get_rounded_size(uint64_t size)
-{
+static inline uint64_t cls_rgw_get_rounded_size(uint64_t size) {
   return (size + ROUND_BLOCK_SIZE - 1) & ~(ROUND_BLOCK_SIZE - 1);
 }
 
