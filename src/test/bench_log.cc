@@ -31,9 +31,10 @@ struct T : public Thread {
 };
 
 void usage(const char* program_name) {
-  cout << program_name << " <threads> <lines>" << std::endl;
-  cout << "\t threads: the number of threads for this test." << std::endl;
-  cout << "\t lines: the number of log entries per thread." << std::endl;
+  cout << program_name << " <threads> <lines>"
+       << "\t threads: the number of threads for this test."
+  	   << "\t lines: the number of log entries per thread." 
+       << std::endl;
 }
 
 int main(int argc, const char **argv)
