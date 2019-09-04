@@ -76,7 +76,7 @@ class ProtocolV2 final : public Protocol {
   uint64_t peer_global_seq = 0;
   uint64_t connect_seq = 0;
 
-  seastar::future<> execution_done = seastar::now();
+  seastar::shared_future<> execution_done = seastar::now();
 
   class Timer {
     double last_dur_ = 0.0;

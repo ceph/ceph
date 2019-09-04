@@ -79,7 +79,11 @@ class SocketConnection : public Connection {
 
   Messenger* get_messenger() const override;
 
-  seastar::future<bool> is_connected() override;
+  bool is_connected() const override;
+
+#ifdef UNIT_TESTS_BUILT
+  bool is_closed() const override;
+#endif
 
   seastar::future<> send(MessageRef msg) override;
 

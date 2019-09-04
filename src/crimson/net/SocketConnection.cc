@@ -41,12 +41,19 @@ SocketConnection::get_messenger() const {
   return &messenger;
 }
 
-seastar::future<bool> SocketConnection::is_connected()
+bool SocketConnection::is_connected() const
 {
-  return seastar::smp::submit_to(shard_id(), [this] {
-      return protocol->is_connected();
-    });
+  ceph_assert(seastar::engine().cpu_id() == shard_id());
+  return protocol->is_connected();
 }
+
+#ifdef UNIT_TESTS_BUILT
+bool SocketConnection::is_closed() const
+{
+  ceph_assert(seastar::engine().cpu_id() == shard_id());
+  return protocol->is_closed();
+}
+#endif
 
 seastar::future<> SocketConnection::send(MessageRef msg)
 {
