@@ -403,15 +403,17 @@ debug "Milestone number is $milestone_number"
 
 local_branch=wip-${issue}-${target_branch}
 
-if [ $(curl --silent ${redmine_url}.json | jq -r .issue.tracker.name) != "Backport" ]
-then
-    error "${redmine_endpoint}/issues/${issue} is not in the Backport tracker"
-    exit 1
-fi
-
 if [ "$PREPARE" ]; then
     debug "'--prepare' found, will only prepare the backport"
     prepare
+fi
+
+current_branch=$(git rev-parse --abbrev-ref HEAD)
+if [ "$current_branch" = "$local_branch" ] ; then
+    true  # all is well
+else
+    error "local branch is $current_branch, but I needed $local_branch"
+    exit 1
 fi
 
 debug "Pushing local branch $local_branch to remote $github_repo"
