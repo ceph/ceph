@@ -208,7 +208,7 @@ def disable_kernel_queries(monkeypatch):
     '''
     This speeds up calls to Device and Disk
     '''
-    monkeypatch.setattr("ceph_volume.util.device.disk.get_devices", lambda: {})
+    monkeypatch.setattr("ceph_volume.util.device.disk.get_devices", lambda lvs=None: {})
     monkeypatch.setattr("ceph_volume.util.disk.udevadm_property", lambda *a, **kw: {})
 
 
@@ -217,8 +217,8 @@ def disable_lvm_queries(monkeypatch):
     '''
     This speeds up calls to Device and Disk
     '''
-    monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path: None)
-    monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv", lambda vg_name, lv_uuid: None)
+    monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path, lvs=None: None)
+    monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv", lambda vg_name, lv_uuid, lvs=None: None)
 
 
 @pytest.fixture(params=[
@@ -273,12 +273,12 @@ def device_info(monkeypatch):
         udevadm = udevadm if udevadm else {}
         lv = Factory(**lv) if lv else None
         monkeypatch.setattr("ceph_volume.sys_info.devices", {})
-        monkeypatch.setattr("ceph_volume.util.device.disk.get_devices", lambda: devices)
+        monkeypatch.setattr("ceph_volume.util.device.disk.get_devices", lambda lvs=None: devices)
         if not devices:
-            monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path: lv)
+            monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path, lvs=None: lv)
         else:
-            monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path: None)
-        monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv", lambda vg_name, lv_uuid: lv)
+            monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv_from_argument", lambda path, lvs=None: None)
+        monkeypatch.setattr("ceph_volume.util.device.lvm.get_lv", lambda vg_name, lv_uuid, lvs=None: lv)
         monkeypatch.setattr("ceph_volume.util.device.disk.lsblk", lambda path: lsblk)
         monkeypatch.setattr("ceph_volume.util.device.disk.blkid", lambda path: blkid)
         monkeypatch.setattr("ceph_volume.util.disk.udevadm_property", lambda *a, **kw: udevadm)
