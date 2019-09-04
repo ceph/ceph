@@ -5200,7 +5200,7 @@ int BlueStore::_minimal_open_bluefs(bool create)
 	bluefs->get_block_device_size(BlueFS::BDEV_DB) - SUPER_RESERVED);
     }
     bluefs_layout.shared_bdev = BlueFS::BDEV_SLOW;
-    bluefs_layout.single_shared_device = false;
+    bluefs_layout.dedicated_db = true;
   } else {
     r = -errno;
     if (::lstat(bfn.c_str(), &st) == -1) {
@@ -5278,7 +5278,7 @@ int BlueStore::_minimal_open_bluefs(bool create)
 	  bluefs->get_block_device_size(BlueFS::BDEV_WAL) -
 	  BDEV_LABEL_BLOCK_SIZE);
     }
-    bluefs_layout.single_shared_device = false;
+    bluefs_layout.dedicated_wal = true;
   } else {
     r = 0;
     if (::lstat(bfn.c_str(), &st) != -1) {
@@ -8321,8 +8321,13 @@ void BlueStore::collect_metadata(map<string,string> *pm)
   bdev->collect_metadata("bluestore_bdev_", pm);
   if (bluefs) {
     (*pm)["bluefs"] = "1";
+    // this value is for backward compatibility only
     (*pm)["bluefs_single_shared_device"] = \
-      stringify((int)bluefs_layout.single_shared_device);
+      stringify((int)bluefs_layout.single_shared_device());
+    (*pm)["bluefs_dedicated_db"] = \
+       stringify((int)bluefs_layout.dedicated_db);
+    (*pm)["bluefs_dedicated_wal"] = \
+       stringify((int)bluefs_layout.dedicated_wal);
     bluefs->collect_metadata(pm, bluefs_layout.shared_bdev);
   } else {
     (*pm)["bluefs"] = "0";
@@ -10879,7 +10884,7 @@ void BlueStore::_kv_sync_thread()
       // can rely on the bluefs commit to flush the device and make
       // deferred aios stable.  that means that if we do have done deferred
       // txcs AND we are not on a single device, we need to force a flush.
-      if (bluefs_layout.single_shared_device && bluefs) {
+      if (bluefs && bluefs_layout.single_shared_device()) {
 	if (aios) {
 	  force_flush = true;
 	} else if (kv_committing.empty() && deferred_stable.empty()) {
