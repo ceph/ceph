@@ -43,11 +43,11 @@ function TEST_network_ping_test1() {
 
     CEPH_ARGS='' ceph daemon $(get_asok_path osd.0) dump_osd_network | tee $dir/json
     test "$(cat $dir/json | jq '.entries | length')" = "0" || return 1
-    test "$(cat $dir/json | jq '.threshold')" = "1000000" || return 1
+    test "$(cat $dir/json | jq '.threshold')" = "1000" || return 1
 
     CEPH_ARGS='' ceph daemon $(get_asok_path mgr.x) dump_osd_network | tee $dir/json
     test "$(cat $dir/json | jq '.entries | length')" = "0" || return 1
-    test "$(cat $dir/json | jq '.threshold')" = "1000000" || return 1
+    test "$(cat $dir/json | jq '.threshold')" = "1000" || return 1
 
     CEPH_ARGS='' ceph daemon $(get_asok_path osd.0) dump_osd_network 0 | tee $dir/json
     test "$(cat $dir/json | jq '.entries | length')" = "4" || return 1
@@ -62,11 +62,11 @@ function TEST_network_ping_test1() {
     flush_pg_stats
     CEPH_ARGS='' ceph daemon $(get_asok_path osd.0) dump_osd_network | tee $dir/json
     test "$(cat $dir/json | jq '.entries | length')" = "0" || return 1
-    test "$(cat $dir/json | jq '.threshold')" = "1000000" || return 1
+    test "$(cat $dir/json | jq '.threshold')" = "1000" || return 1
 
     CEPH_ARGS='' ceph daemon $(get_asok_path mgr.x) dump_osd_network | tee $dir/json
     test "$(cat $dir/json | jq '.entries | length')" = "0" || return 1
-    test "$(cat $dir/json | jq '.threshold')" = "1000000" || return 1
+    test "$(cat $dir/json | jq '.threshold')" = "1000" || return 1
 
     CEPH_ARGS='' ceph daemon $(get_asok_path osd.0) dump_osd_network 0 | tee $dir/json
     test "$(cat $dir/json | jq '.entries | length')" = "4" || return 1
@@ -82,11 +82,11 @@ function TEST_network_ping_test1() {
     flush_pg_stats
     CEPH_ARGS='' ceph daemon $(get_asok_path osd.0) dump_osd_network | tee $dir/json
     test "$(cat $dir/json | jq '.entries | length')" = "0" || return 1
-    test "$(cat $dir/json | jq '.threshold')" = "1000000" || return 1
+    test "$(cat $dir/json | jq '.threshold')" = "1000" || return 1
 
     CEPH_ARGS='' ceph daemon $(get_asok_path mgr.x) dump_osd_network | tee $dir/json
     test "$(cat $dir/json | jq '.entries | length')" = "0" || return 1
-    test "$(cat $dir/json | jq '.threshold')" = "1000000" || return 1
+    test "$(cat $dir/json | jq '.threshold')" = "1000" || return 1
 
     CEPH_ARGS='' ceph daemon $(get_asok_path osd.0) dump_osd_network 0 | tee $dir/json
     test "$(cat $dir/json | jq '.entries | length')" = "4" || return 1
@@ -95,6 +95,12 @@ function TEST_network_ping_test1() {
     CEPH_ARGS='' ceph daemon $(get_asok_path mgr.x) dump_osd_network 0 | tee $dir/json
     test "$(cat $dir/json | jq '.entries | length')" = "12" || return 1
     test "$(cat $dir/json | jq '.threshold')" = "0" || return 1
+
+    # Just check the threshold output matches the input
+    CEPH_ARGS='' ceph daemon $(get_asok_path mgr.x) dump_osd_network 99 | tee $dir/json
+    test "$(cat $dir/json | jq '.threshold')" = "99" || return 1
+    CEPH_ARGS='' ceph daemon $(get_asok_path osd.0) dump_osd_network 98 | tee $dir/json
+    test "$(cat $dir/json | jq '.threshold')" = "98" || return 1
 
     rm -f $dir/json
 }
