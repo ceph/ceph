@@ -227,7 +227,7 @@
 class Message : public RefCountedObject {
 public:
 #ifdef WITH_SEASTAR
-  using ConnectionRef = ceph::net::SocketConnectionRef;
+  using ConnectionRef = ceph::net::ConnectionRef;
 #else
   using ConnectionRef = ::ConnectionRef;
 #endif // WITH_SEASTAR
