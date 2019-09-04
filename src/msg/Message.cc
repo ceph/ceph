@@ -182,6 +182,8 @@
 #include "messages/MMgrClose.h"
 #include "messages/MMgrConfigure.h"
 #include "messages/MMonMgrReport.h"
+#include "messages/MMgrCommand.h"
+#include "messages/MMgrCommandReply.h"
 #include "messages/MServiceMap.h"
 
 #include "messages/MLock.h"
@@ -820,6 +822,14 @@ Message *decode_message(CephContext *cct, int crcflags,
 
   case MSG_MGR_DIGEST:
     m = make_message<MMgrDigest>();
+    break;
+
+  case MSG_MGR_COMMAND:
+    m = make_message<MMgrCommand>();
+    break;
+
+  case MSG_MGR_COMMAND_REPLY:
+    m = make_message<MMgrCommandReply>();
     break;
 
   case MSG_MGR_OPEN:
