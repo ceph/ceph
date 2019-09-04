@@ -123,16 +123,6 @@
 #
 source $HOME/bin/backport_common.sh
 this_script=$(basename "$0")
-verbose=
-
-if [[ $* == *--debug* ]]; then
-    set -x
-    verbose="1"
-fi
-
-if [[ $* == *--verbose* ]]; then
-    verbose="1"
-fi
 
 remote_api_output=$(mktemp /tmp/${this_script}.remote_api_output.XXXXX)
 function rm_tmp_files {
@@ -188,26 +178,6 @@ function debug {
     log debug $@
 }
 
-function failed_required_variable_check {
-    local varname="$1"
-    error "$varname not defined. Did you create $HOME/bin/backport_common.sh?"
-    info "(For detailed instructions, see comment block at the beginning of the script)"
-    exit 1
-}
-
-debug Checking mandatory variables
-test "$redmine_key"     || failed_required_variable_check redmine_key
-test "$redmine_user_id" || failed_required_variable_check redmine_user_id
-test "$github_token"    || failed_required_variable_check github_token
-test "$github_user"     || failed_required_variable_check github_user
-true "${github_repo:=origin}"
-true "${ceph_repo:=upstream}"
-redmine_endpoint="https://tracker.ceph.com"
-github_endpoint="https://github.com/ceph/ceph"
-original_issue=
-original_pr=
-original_pr_url=
-
 function usage {
     log bare
     log bare "Usage:"
@@ -219,6 +189,13 @@ function usage {
     log bare "The script must be run from inside a local git clone."
     log bare
     log bare "Documentation can be found in the comment block at the top of the script itself."
+    exit 1
+}
+
+function failed_required_variable_check {
+    local varname="$1"
+    error "$varname not defined. Did you create $HOME/bin/backport_common.sh?"
+    info "(For detailed instructions, see comment block at the beginning of the script)"
     exit 1
 }
 
@@ -286,7 +263,7 @@ function prepare {
         if git cherry-pick -x "pr-$original_pr~$i" ; then
             true
         else
-            if [ "$verbose" ] ; then
+            if [ "$VERBOSE" ] ; then
                 git status
             fi
             error "Cherry pick failed"
@@ -306,6 +283,58 @@ function prepare {
     info "Cherry picking completed without conflicts"
 }
 
+munged_options=$(getopt -o dhpv --long "debug,help,prepare,verbose" -n "$this_script" -- "$@")
+eval set -- "$munged_options"
+
+DEBUG=""
+HELP=""
+ISSUE=""
+PREPARE=""
+VERBOSE=""
+while true ; do
+    case "$1" in
+        --debug|-d) DEBUG="$1" ; shift ;;
+        --help|-h) HELP="$1" ; shift ;;
+        --prepare|-p) PREPARE="$1" ; shift ;;
+        --verbose|-v) VERBOSE="$1" ; shift ;;
+        --) shift ; ISSUE="$1" ; break ;;
+        *) echo "Internal error" ; false ;;
+    esac
+done
+
+if [[ $ISSUE =~ ^[0-9]+$ ]] ; then
+    issue=$ISSUE
+else
+    error "Invalid or missing argument"
+    usage  # does not return
+fi
+
+if [ "$DEBUG" ]; then
+    set -x
+    VERBOSE="--verbose"
+fi
+
+if [ "$HELP" ]; then
+    usage  # does not return
+fi
+
+if [ "$VERBOSE" ]; then
+    VERBOSE="--verbose"
+fi
+
+debug Checking mandatory variables
+test "$redmine_key"     || failed_required_variable_check redmine_key
+test "$redmine_user_id" || failed_required_variable_check redmine_user_id
+test "$github_token"    || failed_required_variable_check github_token
+test "$github_user"     || failed_required_variable_check github_user
+true "${github_repo:=origin}"
+true "${ceph_repo:=upstream}"
+redmine_endpoint="https://tracker.ceph.com"
+github_endpoint="https://github.com/ceph/ceph"
+original_issue=
+original_pr=
+original_pr_url=
+
 if git show-ref HEAD >/dev/null 2>&1 ; then
     debug "In a local git clone. Good."
 else
@@ -313,7 +342,7 @@ else
     exit 1
 fi
 
-if [ $verbose ] ; then
+if [ $VERBOSE ] ; then
     debug "Redmine user: ${redmine_user_id}"
     debug "GitHub user:  ${github_user}"
     debug "Fork remote:  ${github_repo}"
@@ -330,13 +359,6 @@ if [ $verbose ] ; then
         error "ceph_repo is set to ->$ceph_repo<- but this remote does not exist"
         exit 1
     fi
-fi
-
-if [[ $1 =~ ^[0-9]+$ ]] ; then
-    issue=$1
-else
-    error "Invalid or missing argument"
-    usage  # does not return
 fi
 
 redmine_url="${redmine_endpoint}/issues/${issue}"
@@ -387,7 +409,7 @@ then
     exit 1
 fi
 
-if [[ $* == *--prepare* ]]; then
+if [ "$PREPARE" ]; then
     debug "'--prepare' found, will only prepare the backport"
     prepare
 fi
