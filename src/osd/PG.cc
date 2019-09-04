@@ -3836,7 +3836,7 @@ void PG::do_delete_work(ObjectStore::Transaction &t)
     max,
     &olist,
     &next,
-    0);
+    CEPH_OSD_OP_FLAG_FADVISE_WILLNEED | CEPH_OSD_OP_FLAG_FADVISE_SEQUENTIAL);
   dout(20) << __func__ << " " << olist << dendl;
 
   OSDriver::OSTransaction _t(osdriver.get_transaction(&t));
