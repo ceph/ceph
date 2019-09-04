@@ -5645,7 +5645,7 @@ int RGWRados::Bucket::List::list_objects_ordered(int64_t max_p,
 
   int count = 0;
   bool truncated = true;
-  const int64_t max = // protect against memory issues and non-positive vals
+  const int64_t max = // protect against memory issues and negative vals
     std::min(bucket_list_objects_absolute_max, std::max(int64_t(0), max_p));
   int read_ahead = std::max(cct->_conf->rgw_list_bucket_min_readahead, max);
 
@@ -5836,8 +5836,8 @@ int RGWRados::Bucket::List::list_objects_unordered(int64_t max_p,
   int count = 0;
   bool truncated = true;
 
-  const int64_t max = // protect against memory issues and non-positive vals
-    std::min(bucket_list_objects_absolute_max, std::max(int64_t(1), max_p));
+  const int64_t max = // protect against memory issues and negative vals
+    std::min(bucket_list_objects_absolute_max, std::max(int64_t(0), max_p));
 
   // read a few extra in each call to cls_bucket_list_unordered in
   // case some are filtered out due to namespace matching, versioning,
