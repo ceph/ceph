@@ -191,16 +191,16 @@ void ProtocolV2::enable_recording()
   record_io = true;
 }
 
-seastar::future<Socket::tmp_buf> ProtocolV2::read_exactly(size_t bytes)
+seastar::future<Socket::tmp_buf> ProtocolV2::read_exactly(size_t bytes, __le16 alignment)
 {
   if (unlikely(record_io)) {
-    return socket->read_exactly(bytes)
+    return socket->read_exactly(bytes, alignment)
     .then([this] (auto bl) {
       rxbuf.append(buffer::create(bl.share()));
       return bl;
     });
   } else {
-    return socket->read_exactly(bytes);
+    return socket->read_exactly(bytes, alignment);
   };
 }
 
@@ -311,13 +311,19 @@ seastar::future<> ProtocolV2::read_frame_payload()
     [this] {
       // description of current segment to read
       const auto& cur_rx_desc = rx_segments_desc.at(rx_segments_data.size());
-      // TODO: create aligned and contiguous buffer from socket
+      __le16 alignment = alignof(char);
       if (cur_rx_desc.alignment != segment_t::DEFAULT_ALIGNMENT) {
-        logger().trace("{} cannot allocate {} aligned buffer at segment desc index {}",
-                       conn, cur_rx_desc.alignment, rx_segments_data.size());
+        ceph_assert(cur_rx_desc.alignment == segment_t::PAGE_SIZE_ALIGNMENT);
+        alignment = cur_rx_desc.alignment;
       }
-      // TODO: create aligned and contiguous buffer from socket
-      return read_exactly(cur_rx_desc.length)
+      // XXX: read_exactly implements a "requirement" to enforce the alignment and
+      //      continuity, but it is better to be a "hint" here, because with
+      //      DPDK stack, we can accept it as not-alignment and not-continous memory
+      //      for better performance.
+      //      Or, if messenger can understand it is using POSIX sockets, or seastar
+      //      doesn't accept read interface with hinted buffer factory, it can be
+      //      handled by the messenger.
+      return read_exactly(cur_rx_desc.length, alignment)
       .then([this] (auto tmp_bl) {
         logger().trace("{} RECV({}) frame segment[{}]",
                        conn, tmp_bl.size(), rx_segments_data.size());
@@ -1803,6 +1809,11 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
                            current_header.reserved,
                            0};
     ceph_msg_footer footer{0, 0, 0, 0, current_header.flags};
+
+    ceph_assert(msg_frame.data().get_num_buffers() <= 1);
+    if (msg_frame.data().length() >= segment_t::PAGE_SIZE_ALIGNMENT) {
+      ceph_assert(msg_frame.data().is_aligned(segment_t::PAGE_SIZE_ALIGNMENT));
+    }
 
     Message *message = decode_message(nullptr, 0, header, footer,
         msg_frame.front(), msg_frame.middle(), msg_frame.data(), nullptr);
