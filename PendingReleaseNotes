@@ -32,7 +32,7 @@
   option ``mon_warn_on_slow_ping_ratio`` specifies a percentage of
   ``osd_heartbeat_grace`` to determine the threshold.  A value of zero
   disables the warning.  New configuration option
- ``mon_warn_on_slow_ping_time`` specified in microseconds over-rides the
+ ``mon_warn_on_slow_ping_time`` specified in milliseconds over-rides the
   computed value, causes a warning
   when OSD heartbeat pings take longer than the specified amount.
   New admin command ``ceph daemon mgr.# dump_osd_network [threshold]`` command will
