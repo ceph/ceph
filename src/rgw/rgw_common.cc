@@ -29,6 +29,7 @@
 #include "include/str_list.h"
 #include "rgw_crypt_sanitize.h"
 #include "rgw_bucket_sync.h"
+#include "rgw_sync_policy.h"
 
 #include "services/svc_zone.h"
 

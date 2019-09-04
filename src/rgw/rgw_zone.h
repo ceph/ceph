@@ -5,6 +5,7 @@
 #define CEPH_RGW_ZONE_H
 
 #include "rgw_common.h"
+#include "rgw_sync_policy.h"
 
 namespace rgw_zone_defaults {
 
@@ -720,6 +721,8 @@ struct RGWZoneGroup : public RGWSystemMetaObj {
   map<std::string, list<std::string> > api_endpoints_map;
 
   std::string realm_id;
+
+  rgw_sync_policy_info sync_policy;
 
   RGWZoneGroup(): is_master(false){}
   RGWZoneGroup(const std::string &id, const std::string &name):RGWSystemMetaObj(id, name) {}
