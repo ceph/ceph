@@ -9,6 +9,10 @@ ceph, general guidelines for upgrade to nautilus must be followed
 Notable Changes
 ---------------
 
+* `CVE-2019-10222` - Fixed a denial of service vulnerability where an
+  unauthenticated client of Ceph Object Gateway could trigger a crash from an
+  uncaught exception
+
 * Nautilus-based librbd clients can now open images on Jewel clusters.
 
 * The RGW `num_rados_handles` has been removed. If you were using a value of
@@ -133,6 +137,7 @@ Changelog
 * osd/OSD: keep synchronizing with mon if stuck at booting (`pr#28639 <https://github.com/ceph/ceph/pull/28639>`_, xie xingguo)
 * osd/PG: do not queue scrub if PG is not active when unblock (`issue#40451 <http://tracker.ceph.com/issues/40451>`_, `pr#29372 <https://github.com/ceph/ceph/pull/29372>`_, Sage Weil)
 * osd/PG: fix cleanup of pgmeta-like objects on PG deletion (`pr#29115 <https://github.com/ceph/ceph/pull/29115>`_, Sage Weil)
+* pybind/mgr/rbd_support: ignore missing support for RBD namespaces (`issue#41475 <https://tracker.ceph.com/issues/41475>`_, `pr#29945 <https://github.com/ceph/ceph/pull/29945>`_, Mykola Golub)
 * rbd/action: fix error getting positional argument (`issue#40095 <http://tracker.ceph.com/issues/40095>`_, `pr#28870 <https://github.com/ceph/ceph/pull/28870>`_, songweibin)
 * rbd: [cli] 'export' should handle concurrent IO completions (`issue#40435 <http://tracker.ceph.com/issues/40435>`_, `pr#29329 <https://github.com/ceph/ceph/pull/29329>`_, Jason Dillaman)
 * rbd: librbd: do not unblock IO prior to growing object map during resize (`issue#39952 <http://tracker.ceph.com/issues/39952>`_, `pr#29246 <https://github.com/ceph/ceph/pull/29246>`_, Jason Dillaman)
