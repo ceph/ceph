@@ -743,6 +743,7 @@ static void dump_user_info(Formatter *f, RGWUserInfo &info,
   op_type_to_str(info.op_mask, buf, sizeof(buf));
   encode_json("op_mask", (const char *)buf, f);
   encode_json("system", (bool)info.system, f);
+  encode_json("admin", (bool)info.admin, f);
   encode_json("default_placement", info.default_placement.name, f);
   encode_json("default_storage_class", info.default_placement.storage_class, f);
   encode_json("placement_tags", info.placement_tags, f);
