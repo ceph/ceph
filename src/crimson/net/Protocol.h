@@ -24,6 +24,8 @@ class Protocol {
 
   bool is_connected() const;
 
+  bool is_closed() const { return closed; }
+
   // Reentrant closing
   seastar::future<> close();
 
@@ -138,7 +140,7 @@ class Protocol {
   // stopped or failed.
   std::optional<seastar::shared_promise<>> exit_open;
 
-  seastar::future<stop_t> do_write_dispatch_sweep();
+  seastar::future<> do_write_dispatch_sweep();
   void write_event();
 };
 
