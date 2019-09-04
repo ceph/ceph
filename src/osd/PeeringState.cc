@@ -2477,7 +2477,7 @@ void PeeringState::proc_master_log(
   }
   update_history(oinfo.history);
   ceph_assert(cct->_conf->osd_find_best_info_ignore_history_les ||
-	 info.last_epoch_started >= info.history.last_epoch_started);
+	      oinfo.last_epoch_started >= info.history.last_epoch_started);
 
   peer_missing[from].claim(omissing);
 }
