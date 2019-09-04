@@ -417,6 +417,16 @@ class Module(MgrModule):
     def get_fs(self):
         fs_map = self.get('fs_map')
         servers = self.get_service_list()
+        self.log.debug('standbys: {}'.format(fs_map['standbys']))
+        # export standby mds metadata, default standby fs_id is '-1'
+        for standby in fs_map['standbys']:
+            id_ = standby['name']
+            host_version = servers.get((id_, 'mds'), ('', ''))
+            self.metrics['mds_metadata'].set(1, (
+                'mds.{}'.format(id_), '-1',
+                host_version[0], standby['addr'],
+                standby['rank'], host_version[1]
+            ))
         for fs in fs_map['filesystems']:
             # collect fs metadata
             data_pools = ",".join([str(pool)
