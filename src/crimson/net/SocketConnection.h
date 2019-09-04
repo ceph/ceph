@@ -48,10 +48,6 @@ class SocketConnection : public Connection {
   }
 
   ceph::net::Policy<ceph::thread::Throttle> policy;
-  uint64_t features;
-  void set_features(uint64_t new_features) {
-    features = new_features;
-  }
 
   /// the seq num of the last transmitted message
   seq_num_t out_seq = 0;
@@ -67,10 +63,6 @@ class SocketConnection : public Connection {
   std::deque<MessageRef> pending_q;
   // messages sent, but not yet acked by peer
   std::deque<MessageRef> sent;
-
-  // which of the peer_addrs we're connecting to (as client)
-  // or should reconnect to (as peer)
-  entity_addr_t target_addr;
 
  public:
   SocketConnection(SocketMessenger& messenger,
@@ -107,17 +99,6 @@ class SocketConnection : public Connection {
 
   bool is_lossy() const {
     return policy.lossy;
-  }
-
-  const auto& get_peer_socket_addr() const {
-    return target_addr;
-  }
-
-  auto get_features() const {
-    return features;
-  }
-  bool has_feature(uint64_t f) const {
-    return features & f;
   }
 
   friend class Protocol;

@@ -29,6 +29,11 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
 
  protected:
   entity_addr_t peer_addr;
+
+  // which of the peer_addrs we're connecting to (as client)
+  // or should reconnect to (as peer)
+  entity_addr_t target_addr;
+
   using clock_t = seastar::lowres_system_clock;
   clock_t::time_point last_keepalive;
   clock_t::time_point last_keepalive_ack;
@@ -40,6 +45,20 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
  public:
   uint64_t peer_global_id = 0;
 
+ protected:
+  uint64_t features;
+
+ public:
+  void set_features(uint64_t new_features) {
+    features = new_features;
+  }
+  auto get_features() const {
+    return features;
+  }
+  bool has_feature(uint64_t f) const {
+    return features & f;
+  }
+
  public:
   Connection() {}
   virtual ~Connection() {}
@@ -48,6 +67,9 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   const entity_addr_t& get_peer_addr() const { return peer_addr; }
   const entity_addrvec_t get_peer_addrs() const {
     return entity_addrvec_t(peer_addr);
+  }
+  const auto& get_peer_socket_addr() const {
+    return target_addr;
   }
   const entity_name_t& get_peer_name() const { return peer_name; }
   entity_type_t get_peer_type() const { return peer_name.type(); }
