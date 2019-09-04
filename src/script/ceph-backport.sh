@@ -4,25 +4,30 @@
 #
 # Credits: This script is based on work done by Loic Dachary
 #
-# With proper setup, this script takes care of opening the backport PR,
-# updating the corresponding backport tracker issue, and cross-linking the
-# backport PR with the tracker issue.
+# With proper setup, this script automates the entire process of creating a
+# backport -- all it needs is the number of the Backport tracker issue.
+# Working in a local clone, the script creates a properly named wip branch for
+# the backport, fetches the commits from GitHub, and cherry-picks them. If all
+# the commits cherry-pick cleanly, the script goes on to open the backport PR,
+# update the Backport tracker issue, and cross-linking the backport PR with the
+# tracker issue.
 #
-# However, before you start, some setup is required. Please be patient and
-# read the "Setup instructions" and "Instructions for use" sections, below,
-# carefully. If you still have issues, you could read the "Troubleshooting
-# notes" section as well.
+# Some setup is required for the script to work -- this is described
+# in the "Setup instructions" and "Instructions for use" sections, below.
+# If issues persist even after reading and following those instructions
+# carefully, the "Troubleshooting notes" and "Reporting bugs" sections might
+# come in handy, as well.
 #
 #
 # Setup instructions
 # ------------------
 #
 # It is strongly suggested to copy the latest version of the script (from
-# the "master" branch) into your PATH. In particular, do not use any version
+# the "master" branch) into the PATH. In particular, do not use any version
 # of the script from a stable (named) branch such as "nautilus", as these
 # versions are not maintained. Only the version in master is maintained.
 #
-# You will need to find the right values for the following:
+# The script needs correct values for the following:
 #
 # redmine_key     # "My account" -> "API access key" -> "Show"
 # redmine_user_id # "Logged in as foobar", click on foobar link, Redmine User ID
@@ -31,56 +36,89 @@
                   # ensure it has "Full control of private repositories" scope
 # github_user     # Your github username
 #
-# Once you have the actual values for the above variables, create a file
-# $HOME/bin/backport_common.sh with the following contents
+# If one or more of these variables are not found in the environment, the
+# script will attempt to source a file $HOME/bin/backport_common.sh.
+# (Obviously, since that file might contain secrets, it should be protected from
+# exposure using all available means - restricted file privileges, encrypted
+# filesystem, etc.)
 #
-# redmine_key=[your_redmine_key]
-# redmine_user_id=[your_redmine_user_id]
-# github_token=[your_github_personal_access_token]
-# github_user=[your_github_username]
+# The above variables must be set explicitly, as the script has no way of
+# determining reasonable defaults. In addition, the following two variables
+# should at least be checked against the output of "git remote -v" in your clone:
 #
-# You can also optionally add yours and ceph remote repo's name in this file,
-# like
+# github_repo     # The "git remote" name of your Ceph fork on GitHub;
+#                 # defaults to "origin" if not set
+# ceph_repo       # The "git remote" name of the Ceph repo on GitHub;
+#                 # defaults to "upstream" if not set
 #
-# github_repo=[your_github_repo_name]
-# ceph_repo=[ceph_github_repo_name]
-#
-# If you don't add it, it will default to "origin" and "upstream", respectively.
-#
-# Obviously, since this file contains secrets, you should protect it from
-# exposure using all available means (restricted file privileges, encrypted
-# filesystem, etc.). Without correct values for these four variables, this
-# script will not work!
+# Without correct values for all of the above variables, this script will not
+# work!
 #
 #
 # Instructions for use
 # --------------------
 #
-# Assumes you have forked ceph/ceph.git, cloned your fork, and are running the
-# script in the local clone!
+# First, ensure that the latest version of this script (from
+# src/script/ceph-backport.sh in the "master" branch of ceph/ceph.git) has been
+# copied somewhere in your PATH.
 #
-# With this script, backporting workflow for backport issue
-# https://tracker.ceph.com/issues/19206 (a jewel backport)
-# becomes something like this:
+# Second, change the working directory ("cd") to the top-level directory of the
+# local clone.
 #
-# For simple backports you can just run:
+# Third, choose a Backport tracker issue you would like to stage a backport for.
+# Let's assume the Backport tracker issue you chose has the number 31459.
 #
-# ceph-backport.sh 19206 --prepare
-# ceph-backport.sh 19206
+# Then run:
 #
-# Alternatively, instead of running the script with --prepare you can prepare
-# the backport manually:
+#     ceph-backport.sh 31459 --prepare
+#
+# Assuming 31459 is a properly-linked Backport issue and the "Pull request ID"
+# field of the parent issue has been correctly populated, the script will
+# automatically:
+#
+# 1. determine which stable branch the backport is targeting
+# 2. create a local wip branch based on the tip of that stable branch
+# 3. cherry-pick the commits from the master PR
+#
+# If there were no cherry-pick conflicts, the script will continue (see steps
+# 4-6, below).
+#
+# If any commit fails to cherry-pick cleanly, the script will abort, giving
+# the user an opportunity to resolve the conflicts manually and re-run the
+# script (without --prepare the second time) -- in that case the script will
+# assume the current branch is the backport branch with cherry-picking
+# completed, and start from step 4:
+#
+# 4. push the wip branch to the user's fork
+# 5. open the backport PR on GitHub with the correct Milestone setting
+# 6. properly cross-link the PR with the Backport tracker issue
+#
+# Finally, if a process called "firefox" is running, the script will open the
+# PR and the updated tracker issue in that web browser to facilitate visual
+# confirmation.
+#
+# Alternatively, instead of running the script with --prepare the user can
+# prepare the backport manually. For a a luminous backport whose Backport
+# tracker ID is 31459, the process would be:
 #
 # git remote add ceph http://github.com/ceph/ceph.git
 # git fetch ceph
-# git checkout -b wip-19206-jewel ceph/jewel
+# git checkout -b wip-31459-luminous ceph/jewel
 # git cherry-pick -x ...
-# ceph-backport.sh 19206
+# (resolve conflicts if necessary)
 #
-# Optionally, you can set the component label that will be added to the PR with
+# CAVEAT: the local branch name must be "wip-31459-luminous", where 31459 is
+# the number of a Redmine issue in the Backport tracker, with Release set to
+# luminous. The script will not work, otherwise.
+#
+# Finally, run the script:
+#
+#     ceph-backport.sh 31459
+#
+# Optionally, the component label that will be added to the PR can be set with
 # an environment variable:
 #
-# COMPONENT=dashboard ceph-backport.sh 40056
+#     COMPONENT=dashboard ceph-backport.sh 31459
 #
 #
 # Troubleshooting notes
@@ -106,6 +144,7 @@
 # --------------
 #
 # Please report any bugs in this script to https://tracker.ceph.com/projects/ceph/issues/new
+# Be sure to mention the exact version of git you are using.
 #
 # (Ideally, the bug report would include a typescript obtained while
 # reproducing the bug with the --debug option. To understand what is meant by
