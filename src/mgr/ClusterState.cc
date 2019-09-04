@@ -223,12 +223,16 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
     int64_t value = 0;
     // Default to health warning level if nothing specified
     if (!(cmd_getval(g_ceph_context, cmdmap, "value", value))) {
-      value = static_cast<int64_t>(g_ceph_context->_conf.get_val<uint64_t>("mon_warn_on_slow_ping_time"));
+      // Convert milliseconds to microseconds
+      value = static_cast<int64_t>(g_ceph_context->_conf.get_val<uint64_t>("mon_warn_on_slow_ping_time")) * 1000;
       if (value == 0) {
         double ratio = g_conf().get_val<double>("mon_warn_on_slow_ping_ratio");
 	value = g_conf().get_val<int64_t>("osd_heartbeat_grace");
 	value *= 1000000 * ratio; // Seconds of grace to microseconds at ratio
       }
+    } else {
+      // Convert user input to microseconds
+      value *= 1000;
     }
     if (value < 0)
       value = 0;
@@ -321,7 +325,7 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
 
     // Network ping times (1min 5min 15min)
     f->open_object_section("network_ping_times");
-    f->dump_int("threshold", value);
+    f->dump_int("threshold", value / 1000);
     f->open_array_section("entries");
     for (auto &sitem : boost::adaptors::reverse(sorted)) {
       ceph_assert(!value || sitem.pingtime >= value);
