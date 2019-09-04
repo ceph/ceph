@@ -224,7 +224,8 @@ void MgrStandby::send_beacon()
                                  addrs,
                                  available,
 				 std::move(module_info),
-				 std::move(metadata));
+				 std::move(metadata),
+				 CEPH_FEATURES_ALL);
 
   if (available) {
     if (!available_in_map) {
