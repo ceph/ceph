@@ -34,6 +34,10 @@
             <span class="invalid-feedback"
                   *ngIf="form.showError('name', formDir, 'uniqueName')"
                   i18n>The chosen Ceph pool name is already in use.</span>
+            <span *ngIf="form.showError('name', formDir, 'rbdPool')"
+                  class="invalid-feedback"
+                  i18n>It's not possible to create an RBD pool with '/' in the name.
+              Please change the name or remove 'rbd' from the applications list.</span>
           </div>
         </div>
 
@@ -470,17 +474,6 @@
                                      [initializeData]="initializeConfigData"
                                      (changes)="currentConfigurationValues = $event()">
           </cd-rbd-configuration-form>
-        </div>
-
-        <div class="form-group">
-          <div class="offset-sm-3 col-sm-9"
-               *ngIf="form.hasError('rbdPool')">
-            <br>
-            <span class="invalid-feedback"
-                  i18n>It's not possible to create an RBD pool with '/' in the name.</span>
-            <span class="invalid-feedback"
-                  i18n>Please change the name or remove 'rbd' from the applications list.</span>
-          </div>
         </div>
       </div>
       <div class="card-footer">
