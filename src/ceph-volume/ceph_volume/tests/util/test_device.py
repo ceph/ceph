@@ -460,3 +460,24 @@ class TestCephDiskDevice(object):
         disk = device.CephDiskDevice(device.Device("/dev/sda"))
 
         assert disk.type in self.ceph_types
+
+class TestDevices(object):
+    def test_lvs_list_is_created_just_once(self, monkeypatch, factory, device_info):
+        api.volumes_obj_create_count = 0
+
+        def monkey_populate(self):
+            api.volumes_obj_create_count += 1
+            for lv_item in api.get_api_lvs():
+                self.append(api.Volume(**lv_item))
+        monkeypatch.setattr(api.Volumes, '_populate', monkey_populate)
+
+        # create a fake device.
+        #  args = factory(format='pretty', device='/dev/sda1')
+        data = {"/dev/sda": {"foo": "bar"}}
+        lv_attrs = {'name': 'fakename', 'lv_name':'fakelv', 'lv_path':
+                    '/dev/sda1', 'vg_name': 'fakevg'}
+        device_info(devices=data, lv=lv_attrs)
+        dev = device.Device("/dev/sda")
+
+        device.Devices(dev)
+        assert api.volumes_obj_create_count == 1
