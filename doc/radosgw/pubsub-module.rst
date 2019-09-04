@@ -43,8 +43,7 @@ PubSub Zone Configuration
 -------------------------
 
 The pubsub sync module requires the creation of a new zone in a `Multisite`_ environment.
-First, a master zone must exist (see: :ref:`master-zone-label`), 
-then a secondary zone should be created (see :ref:`secondary-zone-label`).
+First, a master zone must exist, then a secondary zone should be created.
 In the creation of the secondary zone, its tier type must be set to ``pubsub``:
 
 ::
