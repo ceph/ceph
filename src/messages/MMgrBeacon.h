@@ -24,7 +24,7 @@
 
 class MMgrBeacon : public PaxosServiceMessage {
 private:
-  static constexpr int HEAD_VERSION = 8;
+  static constexpr int HEAD_VERSION = 9;
   static constexpr int COMPAT_VERSION = 8;
 
 protected:
@@ -45,6 +45,8 @@ protected:
 
   map<string,string> metadata; ///< misc metadata about this osd
 
+  uint64_t mgr_features = 0;   ///< reporting mgr's features
+
 public:
   MMgrBeacon()
     : PaxosServiceMessage{MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION},
@@ -54,10 +56,12 @@ public:
   MMgrBeacon(const uuid_d& fsid_, uint64_t gid_, const std::string &name_,
              entity_addrvec_t server_addrs_, bool available_,
 	     std::vector<MgrMap::ModuleInfo>&& modules_,
-	     map<string,string>&& metadata_)
+	     map<string,string>&& metadata_,
+	     uint64_t feat)
     : PaxosServiceMessage{MSG_MGR_BEACON, 0, HEAD_VERSION, COMPAT_VERSION},
       gid(gid_), server_addrs(server_addrs_), available(available_), name(name_),
-      fsid(fsid_), modules(std::move(modules_)), metadata(std::move(metadata_))
+      fsid(fsid_), modules(std::move(modules_)), metadata(std::move(metadata_)),
+      mgr_features(feat)
   {
   }
 
@@ -69,10 +73,10 @@ public:
   const std::map<std::string,std::string>& get_metadata() const {
     return metadata;
   }
-
   const std::map<std::string,std::string>& get_services() const {
     return services;
   }
+  uint64_t get_mgr_features() const { return mgr_features; }
 
   void set_services(const std::map<std::string, std::string> &svcs)
   {
@@ -138,6 +142,7 @@ public:
     encode(services, payload);
 
     encode(modules, payload);
+    encode(mgr_features, payload);
   }
   void decode_payload() override {
     auto p = payload.cbegin();
@@ -173,6 +178,9 @@ public:
     }
     if (header.version >= 7) {
       decode(modules, p);
+    }
+    if (header.version >= 9) {
+      decode(mgr_features, p);
     }
   }
 private:
