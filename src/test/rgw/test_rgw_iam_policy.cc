@@ -1202,3 +1202,20 @@ TEST(MatchPolicy, String)
   EXPECT_TRUE(match_policy("a:*:e", "a:bcd:e", flag));
   EXPECT_TRUE(match_policy("a:*", "a:b:c", flag)); // can span segments
 }
+
+static const Action_t s3AllValuet("1111111111111111111111111111111111111111111111111111111111111");
+static const Action_t iamAllValuet("111111111111100000000000000000000000000000000000000000000000000000000000000");
+static const Action_t stsAllValuet("1110000000000000000000000000000000000000000000000000000000000000000000000000000");
+static const Action_t allValuet("11111111111111111111111111111111111111111111111111111111111111111111111111111111");
+
+using rgw::IAM::s3AllValue;
+using rgw::IAM::stsAllValue;
+using rgw::IAM::allValue;
+using rgw::IAM::iamAllValue;
+TEST(set_cont_bits, iamconsts)
+{
+  EXPECT_EQ(s3AllValue, s3AllValuet);
+  EXPECT_EQ(iamAllValue, iamAllValuet);
+  EXPECT_EQ(stsAllValue, stsAllValuet);
+  EXPECT_EQ(allValue , allValuet);
+}

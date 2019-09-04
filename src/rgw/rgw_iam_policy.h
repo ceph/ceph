@@ -129,12 +129,24 @@ static constexpr std::uint64_t allCount = stsAll + 1;
 using Action_t = bitset<allCount>;
 using NotAction_t = Action_t;
 
+template <size_t N>
+constexpr std::bitset<N> make_bitmask(size_t s) {
+  // unfortunately none of the shift/logic operators of std::bitset have a constexpr variation
+  return s < 64 ? std::bitset<N> ((1ULL << s) - 1) :
+    std::bitset<N>((1ULL << 63) - 1) | make_bitmask<N> (s - 63) << 63;
+}
+
+template <size_t N>
+constexpr std::bitset<N> set_cont_bits(size_t start, size_t end)
+{
+  return (make_bitmask<N>(end - start)) << start;
+}
+
 static const Action_t None(0);
-static const Action_t s3AllValue("1111111111111111111111111111111111111111111111111111111111111");
-static const Action_t iamAllValue("111111111111100000000000000000000000000000000000000000000000000000000000000");
-static const Action_t stsAllValue("1110000000000000000000000000000000000000000000000000000000000000000000000000000");
-//Modify allValue if more Actions are added
-static const Action_t allValue("11111111111111111111111111111111111111111111111111111111111111111111111111111111");
+static const Action_t s3AllValue = set_cont_bits<allCount>(0,s3All);
+static const Action_t iamAllValue = set_cont_bits<allCount>(s3All+1,iamAll);
+static const Action_t stsAllValue = set_cont_bits<allCount>(iamAll+1,stsAll);
+static const Action_t allValue = set_cont_bits<allCount>(0,allCount);
 
 namespace {
 // Please update the table in doc/radosgw/s3/authentication.rst if you
