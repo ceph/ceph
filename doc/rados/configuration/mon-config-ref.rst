@@ -407,7 +407,7 @@ by setting it in the ``[mon]`` section of the configuration file.
 :Description: Override ``mon warn on slow ping ratio`` with a specific value.
               Issue a ``HEALTH_WARN`` in cluster log if any heartbeat
               between OSDs exceeds ``mon warn on slow ping time``
-              microseconds.  The default is 0 (disabled).
+              milliseconds.  The default is 0 (disabled).
 :Type: Integer
 :Default: ``0``
 
