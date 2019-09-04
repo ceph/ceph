@@ -9,6 +9,8 @@ describe('CephfsChartComponent', () => {
   let component: CephfsChartComponent;
   let fixture: ComponentFixture<CephfsChartComponent>;
 
+  const counter = [[0, 15], [5, 15], [10, 25], [15, 50]];
+
   configureTestBed({
     imports: [ChartsModule],
     declarations: [CephfsChartComponent]
@@ -17,10 +19,62 @@ describe('CephfsChartComponent', () => {
   beforeEach(() => {
     fixture = TestBed.createComponent(CephfsChartComponent);
     component = fixture.componentInstance;
+    component.mdsCounter = {
+      'mds_server.handle_client_request': counter,
+      'mds_mem.ino': counter,
+      name: 'a'
+    };
     fixture.detectChanges();
   });
 
   it('should create', () => {
     expect(component).toBeTruthy();
+  });
+
+  it('completed the chart', () => {
+    const lhs = component.chart.datasets[0].data;
+    expect(lhs.length).toBe(4);
+    expect(lhs).toEqual([
+      {
+        x: 0,
+        y: 15
+      },
+      {
+        x: 5000,
+        y: 15
+      },
+      {
+        x: 10000,
+        y: 25
+      },
+      {
+        x: 15000,
+        y: 50
+      }
+    ]);
+
+    const rhs = component.chart.datasets[1].data;
+    expect(rhs.length).toBe(3);
+    expect(rhs).toEqual([
+      {
+        x: 5000,
+        y: 0
+      },
+      {
+        x: 10000,
+        y: 2
+      },
+      {
+        x: 15000,
+        y: 5
+      }
+    ]);
+  });
+
+  it('should force angular to update the chart datasets array in order to update the graph', () => {
+    const oldDatasets = component.chart.datasets;
+    component.ngOnChanges();
+    expect(oldDatasets).toEqual(component.chart.datasets);
+    expect(oldDatasets).not.toBe(component.chart.datasets);
   });
 });
