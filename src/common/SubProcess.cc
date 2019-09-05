@@ -146,9 +146,9 @@ int SubProcess::spawn() {
 
   int ret = 0;
 
-  if ((stdin_op == PIPE  && pipe_cloexec(ipipe) == -1) ||
-      (stdout_op == PIPE && pipe_cloexec(opipe) == -1) ||
-      (stderr_op == PIPE && pipe_cloexec(epipe) == -1)) {
+  if ((stdin_op == PIPE  && pipe_cloexec(ipipe, 0) == -1) ||
+      (stdout_op == PIPE && pipe_cloexec(opipe, 0) == -1) ||
+      (stderr_op == PIPE && pipe_cloexec(epipe, 0) == -1)) {
     ret = -errno;
     errstr << "pipe failed: " << cpp_strerror(errno);
     goto fail;

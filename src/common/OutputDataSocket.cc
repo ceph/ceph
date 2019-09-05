@@ -119,7 +119,7 @@ OutputDataSocket::~OutputDataSocket()
 std::string OutputDataSocket::create_shutdown_pipe(int *pipe_rd, int *pipe_wr)
 {
   int pipefd[2];
-  if (pipe_cloexec(pipefd) < 0) {
+  if (pipe_cloexec(pipefd, 0) < 0) {
     int e = errno;
     ostringstream oss;
     oss << "OutputDataSocket::create_shutdown_pipe error: " << cpp_strerror(e);

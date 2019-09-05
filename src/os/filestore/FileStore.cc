@@ -3953,7 +3953,7 @@ int FileStore::_do_copy_range(int from, int to, uint64_t srcoff, uint64_t len, u
 #ifdef CEPH_HAVE_SPLICE
   if (backend->has_splice()) {
     int pipefd[2];
-    if (pipe_cloexec(pipefd) < 0) {
+    if (pipe_cloexec(pipefd, 0) < 0) {
       int e = errno;
       derr << " pipe " << " got " << cpp_strerror(e) << dendl;
       return -e;
