@@ -25,6 +25,32 @@
 // -----------------------
 namespace ceph {
 
+std::string
+fixed_u_to_string(uint64_t num, int scale)
+{
+	std::ostringstream t;
+
+	t.fill('0');
+	t.width(scale + 1);
+	t << num;
+	int len = t.str().size();
+	return t.str().substr(0,len - scale) + "." + t.str().substr(len - scale);
+}
+
+std::string
+fixed_to_string(int64_t num, int scale)
+{
+	std::ostringstream t;
+	bool neg = num < 0;
+	if (neg) num = -num;
+
+	t.fill('0');
+	t.width(scale + 1);
+	t << num;
+	int len = t.str().size();
+	return (neg ? "-" : "") + t.str().substr(0,len - scale) + "." + t.str().substr(len - scale);
+}
+
 /*
  * FormatterAttrs(const char *attr, ...)
  *
