@@ -177,31 +177,31 @@ def configure(ctx, config):
     log.info('Configuring s3-tests...')
     testdir = teuthology.get_testdir(ctx)
     for client, properties in config['clients'].iteritems():
+        properties = properties or {}
         s3tests_conf = config['s3tests_conf'][client]
-        if properties is not None and 'rgw_server' in properties:
-            host = None
-            for target, roles in zip(ctx.config['targets'].iterkeys(), ctx.config['roles']):
-                log.info('roles: ' + str(roles))
-                log.info('target: ' + str(target))
-                if properties['rgw_server'] in roles:
-                    _, host = split_user(target)
-            assert host is not None, "Invalid client specified as the rgw_server"
-            s3tests_conf['DEFAULT']['host'] = host
-        else:
-            s3tests_conf['DEFAULT']['host'] = 'localhost'
 
-        if properties is not None and 'kms_key' in properties:
+        # use rgw_server if given, or default to local client
+        role = properties.get('rgw_server', client)
+
+        endpoint = ctx.rgw.role_endpoints.get(role)
+        assert endpoint, 's3tests: no rgw endpoint for {}'.format(role)
+
+        s3tests_conf['DEFAULT']['host'] = endpoint.dns_name
+
+        kms_key = properties.get('kms_key')
+        if kms_key:
             host = None
             if not hasattr(ctx, 'barbican'):
                 raise ConfigError('s3tests must run after the barbican task')
-            if not ( properties['kms_key'] in ctx.barbican.keys ):
-                raise ConfigError('Key '+properties['kms_key']+' not defined')
+            if not ( kms_key in ctx.barbican.keys ):
+                raise ConfigError('Key '+kms_key+' not defined')
 
-            key = ctx.barbican.keys[properties['kms_key']]
+            key = ctx.barbican.keys[kms_key]
             s3tests_conf['DEFAULT']['kms_keyid'] = key['id']
 
-        if properties is not None and 'slow_backend' in properties:
-	    s3tests_conf['fixtures']['slow backend'] = properties['slow_backend']
+        slow_backend = properties.get('slow_backend')
+        if slow_backend:
+	    s3tests_conf['fixtures']['slow backend'] = slow_backend
 
         (remote,) = ctx.cluster.only(client).remotes.keys()
         remote.run(
