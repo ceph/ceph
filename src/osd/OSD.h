@@ -751,6 +751,12 @@ public:
     std::lock_guard l(stat_lock);
     return osd_stat.seq;
   }
+  void get_hb_pingtime(map<int, osd_stat_t::Interfaces> *pp)
+  {
+    std::lock_guard l(stat_lock);
+    *pp = osd_stat.hb_pingtime;
+    return;
+  }
 
   // -- OSD Full Status --
 private:
@@ -1408,6 +1414,24 @@ private:
     /// send time -> deadline -> remaining replies
     map<utime_t, pair<utime_t, int>> ping_history;
 
+    utime_t hb_interval_start;
+    uint32_t hb_average_count = 0;
+    uint32_t hb_index = 0;
+
+    uint32_t hb_total_back = 0;
+    uint32_t hb_min_back = UINT_MAX;
+    uint32_t hb_max_back = 0;
+    vector<uint32_t> hb_back_pingtime;
+    vector<uint32_t> hb_back_min;
+    vector<uint32_t> hb_back_max;
+
+    uint32_t hb_total_front = 0;
+    uint32_t hb_min_front = UINT_MAX;
+    uint32_t hb_max_front = 0;
+    vector<uint32_t> hb_front_pingtime;
+    vector<uint32_t> hb_front_min;
+    vector<uint32_t> hb_front_max;
+
     bool is_stale(utime_t stale) {
       if (ping_history.empty()) {
         return false;
@@ -1464,6 +1488,10 @@ private:
   utime_t last_heartbeat_resample;   ///< last time we chose random peers in waiting-for-healthy state
   double daily_loadavg;
   ceph::mono_time startup_time;
+
+  // Track ping repsonse times using vector as a circular buffer
+  // MUST BE A POWER OF 2
+  const uint32_t hb_vector_size = 16;
 
   void _add_heartbeat_peer(int p);
   void _remove_heartbeat_peer(int p);
