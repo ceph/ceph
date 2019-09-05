@@ -325,6 +325,7 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     if (this.table && this.table.element.clientWidth !== this.currentWidth) {
       this.currentWidth = this.table.element.clientWidth;
       this.table.recalculate();
+      window.dispatchEvent(new Event('resize'));
     }
   }
 
