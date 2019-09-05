@@ -1195,14 +1195,12 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
     // Looks like a connection race: server and client are both connecting to
     // each other at the same time.
     if (existing_proto->client_cookie != client_cookie) {
-      if (conn.peer_addr < messenger.get_myaddr() || existing_conn->policy.server) {
-        // this connection wins
+      if (existing_conn->peer_wins()) {
         logger().warn("{} server_connect: connection race detected (cs={}, e_cs={}, ss=0)"
                       " and win, reusing existing {}",
                       conn, client_cookie, existing_proto->client_cookie, *existing_conn);
         return reuse_connection(existing_proto);
       } else {
-        // the existing connection wins
         logger().warn("{} server_connect: connection race detected (cs={}, e_cs={}, ss=0)"
                       " and lose to existing {}, ask client to wait",
                       conn, client_cookie, existing_proto->client_cookie, *existing_conn);
@@ -1468,21 +1466,18 @@ ProtocolV2::server_reconnect()
       return send_retry(existing_proto->connect_seq);
     } else if (existing_proto->connect_seq == reconnect.connect_seq()) {
       // reconnect race: both peers are sending reconnect messages
-      if (existing_conn->peer_addr > messenger.get_myaddrs().msgr2_addr() &&
-          !existing_conn->policy.server) {
-        // the existing connection wins
-        logger().warn("{} server_reconnect: reconnect race detected (cs={})"
-                      " and lose to existing {}, ask client to wait",
-                      conn, reconnect.connect_seq(), *existing_conn);
-        return send_wait();
-      } else {
-        // this connection wins
+      if (existing_conn->peer_wins()) {
         logger().warn("{} server_reconnect: reconnect race detected (cs={})"
                       " and win, reusing existing {}",
                       conn, reconnect.connect_seq(), *existing_conn);
         return reuse_connection(
             existing_proto, false,
             true, reconnect.connect_seq(), reconnect.msg_seq());
+      } else {
+        logger().warn("{} server_reconnect: reconnect race detected (cs={})"
+                      " and lose to existing {}, ask client to wait",
+                      conn, reconnect.connect_seq(), *existing_conn);
+        return send_wait();
       }
     } else { // existing_proto->connect_seq < reconnect.connect_seq()
       logger().warn("{} server_reconnect: stale exsiting connect_seq exist_cs({}) < peer_cs({}),"
