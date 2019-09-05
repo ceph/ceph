@@ -22,12 +22,12 @@
 # Setup instructions
 # ------------------
 #
-# It is strongly suggested to copy the latest version of the script (from
-# the "master" branch) into the PATH. In particular, do not use any version
-# of the script from a stable (named) branch such as "nautilus", as these
-# versions are not maintained. Only the version in master is maintained.
+# First, copy the latest version of the script (from the "master" branch) into
+# the PATH. In particular, do not use any version of the script from a stable
+# (named) branch such as "nautilus", as these versions are not maintained. Only
+# the version in master is maintained.
 #
-# The script needs correct values for the following:
+# Second, obtain the correct values for the following:
 #
 # redmine_key     # "My account" -> "API access key" -> "Show"
 # redmine_user_id # "Logged in as foobar", click on foobar link, Redmine User ID
@@ -36,11 +36,12 @@
                   # ensure it has "Full control of private repositories" scope
 # github_user     # Your github username
 #
-# If one or more of these variables are not found in the environment, the
-# script will attempt to source a file $HOME/bin/backport_common.sh.
-# (Obviously, since that file might contain secrets, it should be protected from
-# exposure using all available means - restricted file privileges, encrypted
-# filesystem, etc.)
+# The script supports two ways of setting these variables - via the environment
+# or by sourcing a file. If one or more of these variables are not found in the
+# environment, the script will attempt to source a file
+# $HOME/bin/backport_common.sh.
+#
+# Care should be taken to keep the values of redmine_key and github_token secret.
 #
 # The above variables must be set explicitly, as the script has no way of
 # determining reasonable defaults. In addition, the following two variables
@@ -58,18 +59,17 @@
 # Instructions for use
 # --------------------
 #
-# First, ensure that the latest version of this script (from
-# src/script/ceph-backport.sh in the "master" branch of ceph/ceph.git) has been
-# copied somewhere in your PATH.
+# After having completed the setup steps described in the previous section,
+# the script can be used to automate backporting.
 #
-# Second, change the working directory ("cd") to the top-level directory of the
+# First, change the working directory ("cd") to the top-level directory of the
 # local clone.
 #
-# Third, choose a Backport tracker issue you would like to stage a backport for.
+# Then, choose a Backport tracker issue you would like to stage a backport for.
 # Let's assume the Backport tracker issue you chose has the number 31459 and 
 # the backport targets luminous.
 #
-# Then run:
+# Run:
 #
 #     ceph-backport.sh 31459
 #
@@ -88,40 +88,47 @@
 #
 # If any commit fails to cherry-pick cleanly, the script will abort, giving
 # the user an opportunity to resolve the conflicts manually and re-run the
-# script. When the script sees that the local backport branch (wip-31459-luminous)
-# already exists, it assumes that cherry-picking has been completed, and starts
-# from step 4:
+# script (using the same exact command as the first time). When the script sees
+# that the local backport branch (wip-31459-luminous) already exists, it
+# will assume that cherry-picking has been completed, and start from step 4:
 #
 # 4. push the wip branch to the user's fork
-# 5. open the backport PR on GitHub with the correct Milestone setting
-# 6. properly cross-link the PR with the Backport tracker issue
+# 5. open the backport PR on GitHub
+# 6. cross-link the PR with the Backport tracker issue
 #
 # Finally, if a process called "firefox" is running, the script will open the
 # PR and the updated tracker issue in that web browser to facilitate visual
 # confirmation.
 #
-# Alternatively, instead of running the script with --prepare the user can
-# prepare the backport manually. For a a luminous backport whose Backport
+# It is also possible to prepare the wip branch and do the cherry-picking
+# manually before running the script. For a a luminous backport whose Backport
 # tracker ID is 31459, the process would be:
 #
 # git remote add ceph http://github.com/ceph/ceph.git
 # git fetch ceph
-# git checkout -b wip-31459-luminous ceph/jewel
+# git checkout -b wip-31459-luminous ceph/luminous
 # git cherry-pick -x ...
 # (resolve conflicts if necessary)
+# ceph-backport.sh 31459
 #
 # CAVEAT: the local branch name must be "wip-31459-luminous", where 31459 is
 # the number of a Redmine issue in the Backport tracker, with Release set to
 # luminous. The script will not work, otherwise.
 #
-# Finally, run the script:
+# Optionally, if you have sufficient GitHub privileges on the upstream Ceph
+# repo, the script can automate setting of the label and milestone in the
+# backport PR. This behavior is triggered by passing --set-milestone on the
+# command line, or via the environment variable CEPH_BACKPORT_SET_MILESTONE
+# (set it to any value other than the empty string to activate the behavior).
 #
-#     ceph-backport.sh 31459
-#
-# Optionally, the component label that will be added to the PR can be set with
-# an environment variable:
+# The component label that will be added to the PR defaults to "core", but a
+# different value can be set with an environment variable:
 #
 #     COMPONENT=dashboard ceph-backport.sh 31459
+#
+# or by passing the component as an argument:
+#
+#     ceph-backport.sh --component dashboard 31459
 #
 #
 # Troubleshooting notes
@@ -391,10 +398,16 @@ function try_known_milestones {
 function usage {
     log bare
     log bare "Usage:"
-    log bare "   ${this_script} BACKPORT_TRACKER_ISSUE_NUMBER [--debug] [--prepare] [--verbose]"
+    log bare "   ${this_script} [OPTIONS] BACKPORT_TRACKER_ISSUE_NUMBER"
+    log bare
+    log bare "Available options:"
+    log bare "    -c/--component"
+    log bare "    -d/--debug"
+    log bare "    -m/--set-milestone (requires elevated GitHub privs)"
+    log bare "    -v/--verbose"
     log bare
     log bare "Example:"
-    log bare "   ${this_script} 19206 --prepare"
+    log bare "   ${this_script} -c dashboard -e 31459"
     log bare
     log bare "The script must be run from inside a local git clone."
     log bare
@@ -419,19 +432,23 @@ fi
 # process command-line arguments
 #
 
-munged_options=$(getopt -o dhpv --long "debug,help,prepare,verbose" -n "$this_script" -- "$@")
+munged_options=$(getopt -o c:dhmpv --long "component:,debug,help,prepare,set-milestone,verbose" -n "$this_script" -- "$@")
 eval set -- "$munged_options"
 
 DEBUG=""
+SET_MILESTONE=""
+EXPLICIT_COMPONENT=""
+EXPLICIT_PREPARE=""
 HELP=""
 ISSUE=""
-EXPLICIT_PREPARE=""
 VERBOSE=""
 while true ; do
     case "$1" in
+        --component|-c) shift ; EXPLICIT_COMPONENT="$1" ; shift ;;
         --debug|-d) DEBUG="$1" ; shift ;;
         --help|-h) HELP="$1" ; shift ;;
         --prepare|-p) EXPLICIT_PREPARE="$1" ; shift ;;
+        --set-milestone|-m) SET_MILESTONE="$1" ; shift ;;
         --verbose|-v) VERBOSE="$1" ; shift ;;
         --) shift ; ISSUE="$1" ; break ;;
         *) echo "Internal error" ; false ;;
@@ -508,7 +525,7 @@ debug "Milestone number is $milestone_number"
 
 
 #
-# --prepare phase
+# cherry-pick phase
 #
 
 local_branch=wip-${issue}-${target_branch}
@@ -573,11 +590,21 @@ if [ "$number" = "null" ] ; then
     log bare "$remote_api_output"
     exit 1
 fi
-component=${COMPONENT:-core}
-info "Opened backport PR ${github_endpoint}/pull/$number"
-debug "Setting ${component} label and ${milestone} milestone"
-curl --silent --data-binary '{"milestone":'$milestone_number',"labels":["'$component'"]}' 'https://api.github.com/repos/ceph/ceph/issues/'$number'?access_token='$github_token >/dev/null 2>&1
-info "Set ${component} label in PR"
+
+if [ "$SET_MILESTONE" -o "$CEPH_BACKPORT_SET_MILESTONE" ] ; then
+    if [ "$EXPLICIT_COMPONENT" ] ; then
+        component="$EXPLICIT_COMPONENT"
+    else
+        component=${COMPONENT:-core}
+    fi
+    info "Opened backport PR ${github_endpoint}/pull/$number"
+    debug "Setting ${component} label and ${milestone} milestone"
+    curl --silent --data-binary '{"milestone":'$milestone_number',"labels":["'$component'"]}' 'https://api.github.com/repos/ceph/ceph/issues/'$number'?access_token='$github_token >/dev/null 2>&1
+    info "Set component label and milestone in PR"
+else
+    debug "Not setting component and milestone in PR (--set-milestone was not given and CEPH_BACKPORT_SET_MILESTONE not set)"
+fi
+
 pgrep firefox >/dev/null && firefox ${github_endpoint}/pull/$number
 
 debug "Updating backport tracker issue in Redmine"
