@@ -170,6 +170,12 @@ function debug {
     log debug $@
 }
 
+function eol {
+    log mtt=$1
+    error "$mtt is EOL"
+    exit 1
+}
+
 function error {
     log error $@
 }
@@ -255,6 +261,27 @@ function log {
     fi
 }
 
+function milestone_number_from_remote_api {
+    local mtt=$1  # milestone to try
+    local mn=""   # milestone number
+    warning "Milestone ->$mtt<- unknown to script - falling back to GitHub API"
+    remote_api_output=$(curl -s -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token)
+    mn=$(echo $remote_api_output | jq --arg milestone $mtt '.[] | select(.title==$milestone) | .number')
+    if [ "$mn" -gt "0" ] >/dev/null 2>&1 ; then
+        echo "$mn"
+    else
+        error "Could not determine milestone number of ->$milestone<-"
+        if [ "$VERBOSE" ] ; then
+            info "GitHub API said:"
+            log bare "$remote_api_output"
+        fi
+        info "Valid values are $(curl -s -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token | jq '.[].title')"
+        info "(This probably means the Release field of ${redmine_url} is populated with"
+        info "an unexpected value - i.e. it does not match any of the GitHub milestones.)"
+        exit 1
+    fi
+}
+
 function populate_original_issue {
     if [ -z "$original_issue" ] ; then
         original_issue=$(curl --silent ${redmine_url}.json?include=relations |
@@ -324,7 +351,7 @@ function prepare {
             fi
             error "Cherry pick failed"
             info "Next, manually fix conflicts and complete the current cherry-pick"
-            if [ "$i" -gt "0" ] ; then
+            if [ "$i" -gt "0" ] >/dev/null 2>&1 ; then
                 info "Then, cherry-pick the remaining commits from ${original_pr_url}, i.e.:"
                 for ((j=$i-1; j>=0; j--)) ; do
                     info "-> missing commit: $(git log --oneline --max-count=1 --no-decorate pr-$original_pr~$j)"
@@ -337,6 +364,28 @@ function prepare {
         fi
     done
     info "Cherry picking completed without conflicts"
+}
+
+# to update known milestones, consult:
+#   curl --verbose -X GET https://api.github.com/repos/ceph/ceph/milestones
+function try_known_milestones {
+    local mtt=$1  # milestone to try
+    local mn=""   # milestone number
+    case $mtt in
+        cuttlefish) eol "$mtt" ;;
+        dumpling) eol "$mtt" ;;
+        emperor) eol "$mtt" ;;
+        firefly) eol "$mtt" ;;
+        giant) eol "$mtt" ;;
+        hammer) eol "$mtt" ;;
+        infernalis) eol "$mtt" ;;
+        jewel) mn="8" ;;
+        kraken) eol "$mtt" ;;
+        luminous) mn="10" ;;
+        mimic) mn="11" ;;
+        nautilus) mn="12" ;;
+    esac
+    echo "$mn"
 }
 
 function usage {
@@ -448,17 +497,11 @@ fi
 tracker_title=$(echo $remote_api_output | jq -r '.issue.subject')
 debug "Title of $redmine_url is ->$tracker_title<-"
 
-# milestone numbers can be obtained manually with:
-#   curl --verbose -X GET https://api.github.com/repos/ceph/ceph/milestones
-milestone_number=$(curl -s -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token | jq --arg milestone $milestone '.[] | select(.title==$milestone) | .number')
-if test -n "$milestone_number" ; then
+milestone_number=$(try_known_milestones "$milestone")
+if [ "$milestone_number" -gt "0" ] >/dev/null 2>&1 ; then
     target_branch="$milestone"
 else
-    error "Unsupported milestone"
-    info "Valid values are $(curl -s -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token | jq '.[].title')"
-    info "(This probably means the Release field of ${redmine_url} is populated with"
-    info "an unexpected value - i.e. it does not match any of the GitHub milestones.)"
-    exit 1
+    milestone_number=$(milestone_number_from_remote_api "$milestone")
 fi
 info "Milestone/release is $milestone"
 debug "Milestone number is $milestone_number"
@@ -527,13 +570,13 @@ remote_api_output=$(curl --silent --data-binary '{"title":"'"$title"'","head":"'
 number=$(echo "$remote_api_output" | jq -r .number)
 if [ "$number" = "null" ] ; then
     error "Remote API call failed"
-    echo "$remote_api_output"
+    log bare "$remote_api_output"
     exit 1
 fi
 component=${COMPONENT:-core}
 info "Opened backport PR ${github_endpoint}/pull/$number"
-debug "Setting ${component} label"
-curl --silent --data-binary '{"milestone":'$milestone_number',"labels":["'$component'"]}' 'https://api.github.com/repos/ceph/ceph/issues/'$number'?access_token='$github_token >/dev/null
+debug "Setting ${component} label and ${milestone} milestone"
+curl --silent --data-binary '{"milestone":'$milestone_number',"labels":["'$component'"]}' 'https://api.github.com/repos/ceph/ceph/issues/'$number'?access_token='$github_token >/dev/null 2>&1
 info "Set ${component} label in PR"
 pgrep firefox >/dev/null && firefox ${github_endpoint}/pull/$number
 
