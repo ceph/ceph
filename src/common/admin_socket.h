@@ -70,8 +70,7 @@ public:
    *
    * @return 0 for success, -EEXIST if command already registered.
    */
-  int register_command(std::string_view command,
-		       std::string_view cmddesc,
+  int register_command(std::string_view cmddesc,
 		       AdminSocketHook *hook,
 		       std::string_view help);
 

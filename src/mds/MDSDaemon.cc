@@ -191,146 +191,123 @@ void MDSDaemon::set_up_admin_socket()
   AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
   ceph_assert(asok_hook == nullptr);
   asok_hook = new MDSSocketHook(this);
-  r = admin_socket->register_command("status", "status", asok_hook,
+  r = admin_socket->register_command("status", asok_hook,
 				     "high-level status of MDS");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_ops_in_flight",
-				     "dump_ops_in_flight", asok_hook,
+  r = admin_socket->register_command("dump_ops_in_flight", asok_hook,
 				     "show the ops currently in flight");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("ops",
-				     "ops", asok_hook,
+  r = admin_socket->register_command("ops", asok_hook,
 				     "show the ops currently in flight");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_blocked_ops", "dump_blocked_ops",
+  r = admin_socket->register_command("dump_blocked_ops",
       asok_hook,
       "show the blocked ops currently in flight");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_historic_ops", "dump_historic_ops",
+  r = admin_socket->register_command("dump_historic_ops",
 				     asok_hook,
 				     "show recent ops");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_historic_ops_by_duration", "dump_historic_ops_by_duration",
+  r = admin_socket->register_command("dump_historic_ops_by_duration",
 				     asok_hook,
 				     "show recent ops, sorted by op duration");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("scrub_path",
-				     "scrub_path name=path,type=CephString "
+  r = admin_socket->register_command("scrub_path name=path,type=CephString "
 				     "name=scrubops,type=CephChoices,"
 				     "strings=force|recursive|repair,n=N,req=false",
                                      asok_hook,
                                      "scrub an inode and output results");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("tag path",
-                                     "tag path name=path,type=CephString"
+  r = admin_socket->register_command("tag path name=path,type=CephString"
                                      " name=tag,type=CephString",
                                      asok_hook,
                                      "Apply scrub tag recursively");
    ceph_assert(r == 0);
-  r = admin_socket->register_command("flush_path",
-                                     "flush_path name=path,type=CephString",
+  r = admin_socket->register_command("flush_path name=path,type=CephString",
                                      asok_hook,
                                      "flush an inode (and its dirfrags)");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("export dir",
-                                     "export dir "
+  r = admin_socket->register_command("export dir "
                                      "name=path,type=CephString "
                                      "name=rank,type=CephInt",
                                      asok_hook,
                                      "migrate a subtree to named MDS");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump cache",
-                                     "dump cache name=path,type=CephString,req=false",
+  r = admin_socket->register_command("dump cache name=path,type=CephString,req=false",
                                      asok_hook,
                                      "dump metadata cache (optionally to a file)");
   ceph_assert(r == 0);
   r = admin_socket->register_command("cache status",
-                                     "cache status",
                                      asok_hook,
                                      "show cache status");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump tree",
-				     "dump tree "
+  r = admin_socket->register_command("dump tree "
 				     "name=root,type=CephString,req=true "
 				     "name=depth,type=CephInt,req=false ",
 				     asok_hook,
 				     "dump metadata cache for subtree");
   ceph_assert(r == 0);
   r = admin_socket->register_command("dump loads",
-                                     "dump loads",
                                      asok_hook,
                                      "dump metadata loads");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump snaps",
-                                     "dump snaps name=server,type=CephChoices,strings=--server,req=false",
+  r = admin_socket->register_command("dump snaps name=server,type=CephChoices,strings=--server,req=false",
                                      asok_hook,
                                      "dump snapshots");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("session evict",
-				     "session evict name=client_id,type=CephString",
+  r = admin_socket->register_command("session evict name=client_id,type=CephString",
 				     asok_hook,
 				     "Evict a CephFS client");
   ceph_assert(r == 0);
   r = admin_socket->register_command("session ls",
-				     "session ls",
 				     asok_hook,
 				     "Enumerate connected CephFS clients");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("session config",
-				     "session config name=client_id,type=CephInt,req=true "
+  r = admin_socket->register_command("session config name=client_id,type=CephInt,req=true "
 				     "name=option,type=CephString,req=true "
 				     "name=value,type=CephString,req=false ",
 				     asok_hook,
 				     "Config a CephFS client session");
   assert(r == 0);
-  r = admin_socket->register_command("osdmap barrier",
-				     "osdmap barrier name=target_epoch,type=CephInt",
+  r = admin_socket->register_command("osdmap barrier name=target_epoch,type=CephInt",
 				     asok_hook,
 				     "Wait until the MDS has this OSD map epoch");
   ceph_assert(r == 0);
   r = admin_socket->register_command("flush journal",
-				     "flush journal",
 				     asok_hook,
 				     "Flush the journal to the backing store");
   ceph_assert(r == 0);
   r = admin_socket->register_command("force_readonly",
-				     "force_readonly",
 				     asok_hook,
 				     "Force MDS to read-only mode");
   ceph_assert(r == 0);
   r = admin_socket->register_command("get subtrees",
-				     "get subtrees",
 				     asok_hook,
 				     "Return the subtree map");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dirfrag split",
-				     "dirfrag split "
+  r = admin_socket->register_command("dirfrag split "
                                      "name=path,type=CephString,req=true "
                                      "name=frag,type=CephString,req=true "
                                      "name=bits,type=CephInt,req=true ",
 				     asok_hook,
 				     "Fragment directory by path");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dirfrag merge",
-				     "dirfrag merge "
+  r = admin_socket->register_command("dirfrag merge "
                                      "name=path,type=CephString,req=true "
                                      "name=frag,type=CephString,req=true",
 				     asok_hook,
 				     "De-fragment directory by path");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dirfrag ls",
-				     "dirfrag ls "
+  r = admin_socket->register_command("dirfrag ls "
                                      "name=path,type=CephString,req=true",
 				     asok_hook,
 				     "List fragments in directory");
   ceph_assert(r == 0);
   r = admin_socket->register_command("openfiles ls",
-                                     "openfiles ls",
                                      asok_hook,
                                      "List the opening files and their caps");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump inode",
-				     "dump inode " 
+  r = admin_socket->register_command("dump inode "
                                      "name=number,type=CephInt,req=true",
 				     asok_hook,
 				     "dump inode by inode number");

@@ -463,8 +463,7 @@ bool AdminSocket::validate(const std::string& prefix,
   }
 }
 
-int AdminSocket::register_command(std::string_view command,
-				  std::string_view cmddesc,
+int AdminSocket::register_command(std::string_view cmddesc,
 				  AdminSocketHook *hook,
 				  std::string_view help)
 {
@@ -638,15 +637,15 @@ bool AdminSocket::init(const std::string& path)
   m_path = path;
 
   version_hook = std::make_unique<VersionHook>();
-  register_command("0", "0", version_hook.get(), "");
-  register_command("version", "version", version_hook.get(), "get ceph version");
-  register_command("git_version", "git_version", version_hook.get(),
+  register_command("0", version_hook.get(), "");
+  register_command("version", version_hook.get(), "get ceph version");
+  register_command("git_version", version_hook.get(),
 		   "get git sha1");
   help_hook = std::make_unique<HelpHook>(this);
-  register_command("help", "help", help_hook.get(),
+  register_command("help", help_hook.get(),
 		   "list available commands");
   getdescs_hook = std::make_unique<GetdescsHook>(this);
-  register_command("get_command_descriptions", "get_command_descriptions",
+  register_command("get_command_descriptions",
 		   getdescs_hook.get(), "list available commands");
 
   th = make_named_thread("admin_socket", &AdminSocket::entry, this);
