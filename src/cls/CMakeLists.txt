@@ -271,6 +271,7 @@ set_target_properties(cls_cas PROPERTIES
 install(TARGETS cls_cas DESTINATION ${cls_dir})
 
 
+
 #cls_queue
 set(cls_queue_srcs
   queue/cls_queue.cc
@@ -307,6 +308,7 @@ if (WITH_RADOSGW)
   add_library(cls_rgw_gc_client STATIC ${cls_rgw_gc_client_srcs})
 endif (WITH_RADOSGW)
 
+
 #cls_2pc_queue
 set(cls_2pc_queue_srcs
   2pc_queue/cls_2pc_queue.cc
@@ -319,9 +321,25 @@ set_target_properties(cls_2pc_queue PROPERTIES
   INSTALL_RPATH ""
   CXX_VISIBILITY_PRESET hidden)
 install(TARGETS cls_2pc_queue DESTINATION ${cls_dir})
-
 set(cls_2pc_queue_client_srcs
   2pc_queue/cls_2pc_queue_client.cc)
 add_library(cls_2pc_queue_client STATIC ${cls_2pc_queue_client_srcs})
 
+
 add_subdirectory(cmpomap)
+
+# cls_fifo
+set(cls_fifo_srcs fifo/cls_fifo.cc fifo/cls_fifo_types.cc)
+add_library(cls_fifo SHARED ${cls_fifo_srcs})
+set_target_properties(cls_fifo PROPERTIES
+  VERSION "1.0.0"
+  SOVERSION "1"
+  INSTALL_RPATH ""
+  CXX_VISIBILITY_PRESET hidden)
+install(TARGETS cls_fifo DESTINATION ${cls_dir})
+
+set(cls_fifo_client_srcs
+  fifo/cls_fifo_client.cc
+  fifo/cls_fifo_types.cc
+  fifo/cls_fifo_ops.cc)
+add_library(cls_fifo_client STATIC ${cls_fifo_client_srcs})
