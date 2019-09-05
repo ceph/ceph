@@ -248,7 +248,7 @@ class VolumeClient(object):
 
     ### volume operations -- create, rm, ls
 
-    def create_volume(self, volname, size=None):
+    def create_volume(self, volname):
         """
         create volume  (pool, filesystem and mds)
         """
