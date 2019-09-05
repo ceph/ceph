@@ -345,7 +345,8 @@ bool AdminSocket::do_accept()
 
   bool rval;
   bufferlist out;
-  rval = execute_command(c, out);
+  std::vector<std::string> cmdvec = { c };
+  rval = execute_command(cmdvec, out);
   if (rval) {
     uint32_t len = htonl(out.length());
     int ret = safe_write(connection_fd, &len, sizeof(len));
@@ -363,13 +364,13 @@ bool AdminSocket::do_accept()
   return rval;
 }
 
-int AdminSocket::execute_command(const std::string& cmd, ceph::bufferlist& out)
+int AdminSocket::execute_command(const std::vector<std::string>& cmdvec,
+				 ceph::bufferlist& out)
 {
   cmdmap_t cmdmap;
   string format;
-  vector<string> cmdvec;
   stringstream errss;
-  cmdvec.push_back(cmd);
+  ldout(m_cct,10) << __func__ << " cmdvec='" << cmdvec << "'" << dendl;
   if (!cmdmap_from_json(cmdvec, &cmdmap, errss)) {
     ldout(m_cct, 0) << "AdminSocket: " << errss.str() << dendl;
     return false;
@@ -403,7 +404,8 @@ int AdminSocket::execute_command(const std::string& cmd, ceph::bufferlist& out)
   }
 
   if (p == hooks.cend()) {
-    lderr(m_cct) << "AdminSocket: request '" << cmd << "' not defined" << dendl;
+    lderr(m_cct) << "AdminSocket: request '" << cmdvec
+		 << "' not defined" << dendl;
     return false;
   }
 
