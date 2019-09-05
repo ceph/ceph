@@ -3694,9 +3694,11 @@ void PrimaryLogPG::execute_ctx(OpContext *ctx)
   // check (e.g., CMPXATTR), and then a write.  Then we either succeed
   // with the write, or return a CMPXATTR and the read value.
   if (successful_write) {
-    // write.  normalize the result code.
-    dout(20) << " zeroing write result code " << result << dendl;
-    result = 0;
+    // WIP: we will soon support a >=0 result code here.
+    if (result) {
+      derr << " non-zero write result code " << result << dendl;
+      ceph_assert(result == 0);
+    }
   }
   ctx->reply->set_result(result);
 
