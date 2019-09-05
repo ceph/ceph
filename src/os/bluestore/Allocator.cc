@@ -46,12 +46,7 @@ public:
   {
     AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
     if (admin_socket && alloc) {
-      int r = admin_socket->unregister_command(("bluestore allocator dump " + name).c_str());
-      ceph_assert(r == 0);
-      r = admin_socket->unregister_command(("bluestore allocator score " + name).c_str());
-      ceph_assert(r == 0);
-      r = admin_socket->unregister_command(("bluestore allocator fragmentation " + name).c_str());
-      ceph_assert(r == 0);
+      admin_socket->unregister_commands(this);
     }
   }
 

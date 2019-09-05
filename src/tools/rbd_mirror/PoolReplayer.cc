@@ -179,8 +179,8 @@ public:
   }
 
   ~PoolReplayerAdminSocketHook() override {
+    (void)admin_socket->unregister_commands(this);
     for (auto i = commands.begin(); i != commands.end(); ++i) {
-      (void)admin_socket->unregister_command(i->first);
       delete i->second;
     }
   }

@@ -98,9 +98,9 @@ public:
   }
 
   ~ImageDeleterAdminSocketHook() override {
+    (void)admin_socket->unregister_commands(this);
     for (Commands::const_iterator i = commands.begin(); i != commands.end();
 	 ++i) {
-      (void)admin_socket->unregister_command(i->first);
       delete i->second;
     }
   }

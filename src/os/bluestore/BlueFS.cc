@@ -68,8 +68,7 @@ public:
 
   ~SocketHook() {
     AdminSocket* admin_socket = bluefs->cct->get_admin_socket();
-    int r = admin_socket->unregister_command("bluestore bluefs available");
-    ceph_assert(r == 0);
+    admin_socket->unregister_commands(this);
   }
 private:
   SocketHook(BlueFS* bluefs) :
