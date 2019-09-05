@@ -22,6 +22,10 @@
 
 namespace ceph::net {
 
+#ifdef UNIT_TESTS_BUILT
+class Interceptor;
+#endif
+
 using seq_num_t = uint64_t;
 
 class Connection : public seastar::enable_shared_from_this<Connection> {
@@ -43,6 +47,10 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
  public:
   Connection() {}
   virtual ~Connection() {}
+
+#ifdef UNIT_TESTS_BUILT
+  Interceptor *interceptor = nullptr;
+#endif
 
   virtual Messenger* get_messenger() const = 0;
   const entity_addr_t& get_peer_addr() const { return peer_addr; }
