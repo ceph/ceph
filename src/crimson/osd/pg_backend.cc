@@ -210,6 +210,22 @@ PGBackend::evict_object_state(const hobject_t& oid)
   return seastar::now();
 }
 
+static inline bool _read_verify_data(
+  const object_info_t& oi,
+  const ceph::bufferlist& data)
+{
+  if (oi.is_data_digest() && oi.size == data.length()) {
+    // whole object?  can we verify the checksum?
+    if (auto crc = data.crc32c(-1); crc != oi.data_digest) {
+      logger().error("full-object read crc {} != expected {} on {}",
+                     crc, oi.data_digest, oi.soid);
+      // todo: mark soid missing, perform recovery, and retry
+      return false;
+    }
+  }
+  return true;
+}
+
 seastar::future<bufferlist> PGBackend::read(const object_info_t& oi,
                                             size_t offset,
                                             size_t length,
@@ -233,22 +249,13 @@ seastar::future<bufferlist> PGBackend::read(const object_info_t& oi,
     // read size was trimmed to zero and it is expected to do nothing,
     return seastar::make_ready_future<bufferlist>();
   }
-  std::optional<uint32_t> maybe_crc;
-  if (oi.is_data_digest() && offset == 0 && length >= oi.size) {
-    maybe_crc = oi.data_digest;
-  }
   return _read(oi.soid, offset, length, flags).then(
-    [maybe_crc, soid=oi.soid, size=oi.size](auto bl) {
-      // whole object?  can we verify the checksum?
-      if (maybe_crc && bl.length() == size) {
-        if (auto crc = bl.crc32c(-1); crc != *maybe_crc) {
-          logger().error("full-object read crc {} != expected {} on {}",
-            crc, *maybe_crc, soid);
-          // todo: mark soid missing, perform recovery, and retry
-          throw crimson::osd::object_corrupted{};
-        }
+    [&oi](auto&& bl) {
+      if (const bool is_fine = _read_verify_data(oi, bl); is_fine) {
+        return seastar::make_ready_future<bufferlist>(std::move(bl));
+      } else {
+        throw crimson::osd::object_corrupted{};
       }
-      return seastar::make_ready_future<bufferlist>(std::move(bl));
     });
 }
 
