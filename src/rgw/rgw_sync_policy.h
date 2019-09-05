@@ -102,7 +102,8 @@ WRITE_CLASS_ENCODER(rgw_sync_source)
 struct rgw_sync_target {
   string id;
   string type;
-  std::vector<rgw_sync_flow_rule> flow_rules; /* flow rules for trivial sources */
+  std::optional<std::vector<rgw_sync_flow_rule> > flow_rules; /* flow rules for trivial sources,
+                                                                if set then needs to be a subset of higher level rules */
   std::set<string> zones;  /* target zones. Can be wildcard */
   /* FIXME: add config */
 

@@ -28,6 +28,7 @@ void RGWBucketSyncPolicyInfo::post_init()
 int RGWBucketSyncPolicyHandler::init()
 {
   const auto& zone_id = zone_svc->get_zone().id;
+  auto& zg = svc.zone->get_zonegroup();
 
   if (!bucket_info.sync_policy) {
     return 0;
