@@ -86,7 +86,7 @@ public:
 };
 
 Locker::Locker(MDSRank *m, MDCache *c) :
-  mds(m), mdcache(c), need_snapflush_inodes(member_offset(CInode, item_caps)) {}
+  need_snapflush_inodes(member_offset(CInode, item_caps)), mds(m), mdcache(c) {}
 
 
 void Locker::dispatch(const cref_t<Message> &m)
