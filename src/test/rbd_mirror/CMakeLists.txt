@@ -24,6 +24,7 @@ add_executable(unittest_rbd_mirror
   test_mock_InstanceReplayer.cc
   test_mock_InstanceWatcher.cc
   test_mock_LeaderWatcher.cc
+  test_mock_MirrorStatusUpdater.cc
   test_mock_NamespaceReplayer.cc
   test_mock_PoolReplayer.cc
   test_mock_PoolWatcher.cc
