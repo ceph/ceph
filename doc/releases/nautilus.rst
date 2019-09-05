@@ -26,6 +26,8 @@ Notable Changes
 * "osd_deep_scrub_large_omap_object_key_threshold" has been lowered to detect an
   object with large number of omap keys more easily.
 
+* The Ceph Dashboard now supports silencing Prometheus alert notifications.
+
 Changelog
 ---------
 
