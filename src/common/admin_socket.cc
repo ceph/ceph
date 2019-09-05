@@ -487,30 +487,6 @@ int AdminSocket::register_command(std::string_view cmddesc,
   return ret;
 }
 
-int AdminSocket::unregister_command(std::string_view command)
-{
-  int ret;
-  std::unique_lock l(lock);
-  auto i = hooks.find(command);
-  if (i != hooks.cend()) {
-    ldout(m_cct, 5) << "unregister_command " << command << dendl;
-
-    // If we are currently processing a command, wait for it to
-    // complete in case it referenced the hook that we are
-    // unregistering.
-    in_hook_cond.wait(l, [this]() { return !in_hook; });
-
-    hooks.erase(i);
-
-
-    ret = 0;
-  } else {
-    ldout(m_cct, 5) << "unregister_command " << command << " ENOENT" << dendl;
-    ret = -ENOENT;
-  }
-  return ret;
-}
-
 void AdminSocket::unregister_commands(const AdminSocketHook *hook)
 {
   std::unique_lock l(lock);
@@ -674,10 +650,10 @@ void AdminSocket::shutdown()
   unregister_commands(version_hook.get());
   version_hook.reset();
 
-  unregister_command("help");
+  unregister_commands(help_hook.get());
   help_hook.reset();
 
-  unregister_command("get_command_descriptions");
+  unregister_commands(getdescs_hook.get());
   getdescs_hook.reset();
 
   remove_cleanup_file(m_path);

@@ -832,7 +832,7 @@ RGWCoroutinesManagerRegistry::~RGWCoroutinesManagerRegistry()
 {
   AdminSocket *admin_socket = cct->get_admin_socket();
   if (!admin_command.empty()) {
-    admin_socket->unregister_command(admin_command);
+    admin_socket->unregister_commands(this);
   }
 }
 
@@ -840,7 +840,7 @@ int RGWCoroutinesManagerRegistry::hook_to_admin_command(const string& command)
 {
   AdminSocket *admin_socket = cct->get_admin_socket();
   if (!admin_command.empty()) {
-    admin_socket->unregister_command(admin_command);
+    admin_socket->unregister_commands(this);
   }
   admin_command = command;
   int r = admin_socket->register_command(admin_command, this,

@@ -145,7 +145,7 @@ public:
   }
   ~MempoolObs() override {
     cct->_conf.remove_observer(this);
-    cct->get_admin_socket()->unregister_command("dump_mempools");
+    cct->get_admin_socket()->unregister_commands(this);
   }
 
   // md_config_obs_t
