@@ -23,7 +23,9 @@
                  i18n-placeholder
                  formControlName="poolName"
                  *ngIf="!poolPermission.read">
-          <select class="form-control custom-select"
+          <select id="poolName"
+                  name="poolName"
+                  class="form-control custom-select"
                   formControlName="poolName"
                   *ngIf="poolPermission.read">
             <option value=""
@@ -36,7 +38,8 @@
 
       <div class="modal-footer">
         <div class="button-group text-right">
-          <cd-submit-button [form]="purgeForm"
+          <cd-submit-button id="purgeFormButton"
+                            [form]="purgeForm"
                             (submitAction)="purge()"
                             i18n>Purge Trash</cd-submit-button>
           <cd-back-button [back]="modalRef.hide"
