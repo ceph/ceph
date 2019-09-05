@@ -232,6 +232,7 @@ void rgw_log_entry::generate_test_instances(list<rgw_log_entry*>& o)
   e->user_agent = "user_agent";
   e->referrer = "referrer";
   e->bucket_id = "10";
+  e->trans_id = "trans_id";
   o.push_back(e);
   o.push_back(new rgw_log_entry);
 }
