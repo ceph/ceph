@@ -2328,6 +2328,12 @@ public:
 			  mempool::bluestore_fsck::pool_allocator<uint64_t>>;
 
 private:
+  enum FSCKDepth {
+    FSCK_REGULAR,
+    FSCK_DEEP,
+    FSCK_SHALLOW
+  };
+
   int _fsck_check_extents(
     const coll_t& cid,
     const ghobject_t& oid,
@@ -2336,7 +2342,8 @@ private:
     mempool_dynamic_bitset &used_blocks,
     uint64_t granularity,
     BlueStoreRepairer* repairer,
-    store_statfs_t& expected_statfs);
+    store_statfs_t& expected_statfs,
+    FSCKDepth depth);
 
   using  per_pool_statfs =
     mempool::bluestore_fsck::map<uint64_t, store_statfs_t>;
@@ -2345,6 +2352,9 @@ private:
     bool need_per_pool_stats,
     int& errors,
     BlueStoreRepairer* repairer);
+
+  int _fsck(FSCKDepth depth, bool repair);
+
 
   void _buffer_cache_write(
     TransContext *txc,
@@ -2453,12 +2463,14 @@ public:
   int cold_close();
 
   int fsck(bool deep) override {
-    return _fsck(deep, false);
+    return _fsck(deep ? FSCK_DEEP : FSCK_REGULAR, false);
   }
   int repair(bool deep) override {
-    return _fsck(deep, true);
+    return _fsck(deep ? FSCK_DEEP : FSCK_REGULAR, true);
   }
-  int _fsck(bool deep, bool repair);
+  int quick_fix() override {
+    return _fsck(FSCK_SHALLOW, true);
+  }
 
   void set_cache_shards(unsigned num) override;
   void dump_cache_stats(Formatter *f) override {

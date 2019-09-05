@@ -6661,7 +6661,8 @@ int BlueStore::_fsck_check_extents(
   mempool_dynamic_bitset &used_blocks,
   uint64_t granularity,
   BlueStoreRepairer* repairer,
-  store_statfs_t& expected_statfs)
+  store_statfs_t& expected_statfs,
+  FSCKDepth depth)
 {
   dout(30) << __func__ << " oid " << oid << " extents " << extents << dendl;
   int errors = 0;
@@ -6672,34 +6673,36 @@ int BlueStore::_fsck_check_extents(
     if (compressed) {
       expected_statfs.data_compressed_allocated += e.length;
     }
-    bool already = false;
-    apply(
-      e.offset, e.length, granularity, used_blocks,
-      [&](uint64_t pos, mempool_dynamic_bitset &bs) {
-	ceph_assert(pos < bs.size());
-	if (bs.test(pos)) {
-	  if (repairer) {
-	    repairer->note_misreference(
-	      pos * min_alloc_size, min_alloc_size, !already);
+    if (depth != FSCK_SHALLOW) {
+      bool already = false;
+      apply(
+        e.offset, e.length, granularity, used_blocks,
+        [&](uint64_t pos, mempool_dynamic_bitset &bs) {
+	  ceph_assert(pos < bs.size());
+	  if (bs.test(pos)) {
+	    if (repairer) {
+	      repairer->note_misreference(
+	        pos * min_alloc_size, min_alloc_size, !already);
+	    }
+            if (!already) {
+              derr << "fsck error: " << oid << " extent " << e
+		   << " or a subset is already allocated (misreferenced)" << dendl;
+	      ++errors;
+	      already = true;
+	    }
 	  }
-          if (!already) {
-            derr << "fsck error: " << oid << " extent " << e
-		 << " or a subset is already allocated (misreferenced)" << dendl;
-	    ++errors;
-	    already = true;
-	  }
-	}
-	else
-	  bs.set(pos);
-      });
-      if (repairer) {
-	repairer->get_space_usage_tracker().set_used( e.offset, e.length, cid, oid);
-      }
+	  else
+	    bs.set(pos);
+        });
+        if (repairer) {
+	  repairer->get_space_usage_tracker().set_used( e.offset, e.length, cid, oid);
+        }
 
-    if (e.end() > bdev->get_size()) {
-      derr << "fsck error:  " << oid << " extent " << e
-	   << " past end of block device" << dendl;
-      ++errors;
+      if (e.end() > bdev->get_size()) {
+        derr << "fsck error:  " << oid << " extent " << e
+	     << " past end of block device" << dendl;
+        ++errors;
+      }
     }
   }
   return errors;
@@ -6858,13 +6861,15 @@ Detection stage (in processing order):
     (can be merged with the step above if misreferences were dectected)
   - Apply StatFS update
 */
-int BlueStore::_fsck(bool deep, bool repair)
+int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
 {
   dout(1) << __func__
 	  << " <<<START>>>"
 	  << (repair ? " repair" : " check")
-	  << (deep ? " (deep)" : " (shallow)") << " start" << dendl;
-  int errors = 0;
+	  << (depth == FSCK_DEEP ? " (deep)" :
+                depth == FSCK_SHALLOW ? " (shallow)" : " (regular)")
+          << " start" << dendl;
+  int64_t errors = 0;
   unsigned repaired = 0;
 
   typedef btree::btree_set<
@@ -6902,7 +6907,7 @@ int BlueStore::_fsck(bool deep, bool repair)
   BlueStoreRepairer repairer;
   store_statfs_t* expected_statfs = nullptr;
   // in deep mode we need R/W write access to be able to replay deferred ops
-  bool read_only = !(repair || deep);
+  bool read_only = !(repair || depth == FSCK_DEEP);
 
   utime_t start = ceph_clock_now();
   const auto& no_pps_mode = cct->_conf->bluestore_no_per_pool_stats_tolerance;
@@ -7042,6 +7047,9 @@ int BlueStore::_fsck(bool deep, bool repair)
       dout(30) << __func__ << " key "
                << pretty_binary_string(it->key()) << dendl;
       if (is_extent_shard_key(it->key())) {
+        if (depth == FSCK_SHALLOW) {
+          continue;
+        }
 	while (!expecting_shards.empty() &&
 	       expecting_shards.front() < it->key()) {
 	  derr << "fsck error: missing shard key "
@@ -7118,7 +7126,8 @@ int BlueStore::_fsck(bool deep, bool repair)
 		 << dendl;
       }
 
-      if (!expecting_shards.empty()) {
+      if (depth != FSCK_SHALLOW &&
+          !expecting_shards.empty()) {
 	for (auto &k : expecting_shards) {
 	  derr << "fsck error: missing shard key "
 	       << pretty_binary_string(k) << dendl;
@@ -7131,7 +7140,7 @@ int BlueStore::_fsck(bool deep, bool repair)
       store_statfs_t onode_statfs;
       OnodeRef o;
       o.reset(Onode::decode(c, oid, it->key(), it->value()));
-      if (o->onode.nid) {
+      if (depth != FSCK_SHALLOW && o->onode.nid) {
 	if (o->onode.nid > nid_max) {
 	  derr << "fsck error: " << oid << " nid " << o->onode.nid
 	       << " > nid_max " << nid_max << dendl;
@@ -7153,19 +7162,22 @@ int BlueStore::_fsck(bool deep, bool repair)
       if (!o->extent_map.shards.empty()) {
 	++num_sharded_objects;
 	num_object_shards += o->extent_map.shards.size();
+        if (depth != FSCK_SHALLOW) {
+          for (auto& s : o->extent_map.shards) {
+            dout(20) << __func__ << "    shard " << *s.shard_info << dendl;
+            expecting_shards.push_back(string());
+            get_extent_shard_key(o->key, s.shard_info->offset,
+              &expecting_shards.back());
+            if (s.shard_info->offset >= o->onode.size) {
+              derr << "fsck error: " << oid << " shard 0x" << std::hex
+                << s.shard_info->offset << " past EOF at 0x" << o->onode.size
+                << std::dec << dendl;
+              ++errors;
+            }
+          }
+        }
       }
-      for (auto& s : o->extent_map.shards) {
-	dout(20) << __func__ << "    shard " << *s.shard_info << dendl;
-	expecting_shards.push_back(string());
-	get_extent_shard_key(o->key, s.shard_info->offset,
-			     &expecting_shards.back());
-	if (s.shard_info->offset >= o->onode.size) {
-	  derr << "fsck error: " << oid << " shard 0x" << std::hex
-	       << s.shard_info->offset << " past EOF at 0x" << o->onode.size
-	       << std::dec << dendl;
-	  ++errors;
-	}
-      }
+
       // lextents
       map<BlobRef,bluestore_blob_t::unused_t> referenced;
       uint64_t pos = 0;
@@ -7180,7 +7192,8 @@ int BlueStore::_fsck(bool deep, bool repair)
 	       << std::dec << dendl;
 	  ++errors;
 	}
-	if (o->extent_map.spans_shard(l.logical_offset, l.length)) {
+	if (depth != FSCK_SHALLOW &&
+            o->extent_map.spans_shard(l.logical_offset, l.length)) {
 	  derr << "fsck error: " << oid << " lextent at 0x"
 	       << std::hex << l.logical_offset << "~" << l.length
 	       << " spans a shard boundary"
@@ -7202,7 +7215,8 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  l.blob_offset, 
 	  l.length);
 	++num_extents;
-	if (blob.has_unused()) {
+	if (depth != FSCK_SHALLOW &&
+            blob.has_unused()) {
 	  auto p = referenced.find(l.blob);
 	  bluestore_blob_t::unused_t *pu;
 	  if (p == referenced.end()) {
@@ -7222,50 +7236,54 @@ int BlueStore::_fsck(bool deep, bool repair)
 	  }
 	}
       }
-      for (auto &i : referenced) {
-	dout(20) << __func__ << "  referenced 0x" << std::hex << i.second
-		 << std::dec << " for " << *i.first << dendl;
-	const bluestore_blob_t& blob = i.first->get_blob();
-	if (i.second & blob.unused) {
-	  derr << "fsck error: " << oid << " blob claims unused 0x"
-	       << std::hex << blob.unused
-	       << " but extents reference 0x" << i.second << std::dec
-	       << " on blob " << *i.first << dendl;
-	  ++errors;
-	}
-	if (blob.has_csum()) {
-	  uint64_t blob_len = blob.get_logical_length();
-	  uint64_t unused_chunk_size = blob_len / (sizeof(blob.unused)*8);
-	  unsigned csum_count = blob.get_csum_count();
-	  unsigned csum_chunk_size = blob.get_csum_chunk_size();
-	  for (unsigned p = 0; p < csum_count; ++p) {
-	    unsigned pos = p * csum_chunk_size;
-	    unsigned firstbit = pos / unused_chunk_size;    // [firstbit,lastbit]
-	    unsigned lastbit = (pos + csum_chunk_size - 1) / unused_chunk_size;
-	    unsigned mask = 1u << firstbit;
-	    for (unsigned b = firstbit + 1; b <= lastbit; ++b) {
-	      mask |= 1u << b;
-	    }
-	    if ((blob.unused & mask) == mask) {
-	      // this csum chunk region is marked unused
-	      if (blob.get_csum_item(p) != 0) {
-		derr << "fsck error: " << oid
-		     << " blob claims csum chunk 0x" << std::hex << pos
-		     << "~" << csum_chunk_size
-		     << " is unused (mask 0x" << mask << " of unused 0x"
-		     << blob.unused << ") but csum is non-zero 0x"
-		     << blob.get_csum_item(p) << std::dec << " on blob "
-		     << *i.first << dendl;
-		++errors;
+      if (depth != FSCK_SHALLOW) {
+        for (auto &i : referenced) {
+	  dout(20) << __func__ << "  referenced 0x" << std::hex << i.second
+		   << std::dec << " for " << *i.first << dendl;
+	  const bluestore_blob_t& blob = i.first->get_blob();
+	  if (i.second & blob.unused) {
+	    derr << "fsck error: " << oid << " blob claims unused 0x"
+	         << std::hex << blob.unused
+	         << " but extents reference 0x" << i.second << std::dec
+	         << " on blob " << *i.first << dendl;
+	    ++errors;
+	  }
+	  if (blob.has_csum()) {
+	    uint64_t blob_len = blob.get_logical_length();
+	    uint64_t unused_chunk_size = blob_len / (sizeof(blob.unused)*8);
+	    unsigned csum_count = blob.get_csum_count();
+	    unsigned csum_chunk_size = blob.get_csum_chunk_size();
+	    for (unsigned p = 0; p < csum_count; ++p) {
+	      unsigned pos = p * csum_chunk_size;
+	      unsigned firstbit = pos / unused_chunk_size;    // [firstbit,lastbit]
+	      unsigned lastbit = (pos + csum_chunk_size - 1) / unused_chunk_size;
+	      unsigned mask = 1u << firstbit;
+	      for (unsigned b = firstbit + 1; b <= lastbit; ++b) {
+	        mask |= 1u << b;
+	      }
+	      if ((blob.unused & mask) == mask) {
+	        // this csum chunk region is marked unused
+	        if (blob.get_csum_item(p) != 0) {
+		  derr << "fsck error: " << oid
+		       << " blob claims csum chunk 0x" << std::hex << pos
+		       << "~" << csum_chunk_size
+		       << " is unused (mask 0x" << mask << " of unused 0x"
+		       << blob.unused << ") but csum is non-zero 0x"
+		       << blob.get_csum_item(p) << std::dec << " on blob "
+		       << *i.first << dendl;
+		  ++errors;
+	        }
 	      }
 	    }
 	  }
-	}
+        }
       }
       for (auto &i : ref_map) {
 	++num_blobs;
 	const bluestore_blob_t& blob = i.first->get_blob();
-	bool equal = i.first->get_blob_use_tracker().equal(i.second);
+	bool equal = 
+          depth == FSCK_SHALLOW ? true :
+            i.first->get_blob_use_tracker().equal(i.second);
 	if (!equal) {
 	  derr << "fsck error: " << oid << " blob " << *i.first
 	       << " doesn't match expected ref_map " << i.second << dendl;
@@ -7308,10 +7326,11 @@ int BlueStore::_fsck(bool deep, bool repair)
 					used_blocks,
 					fm->get_alloc_size(),
 					repair ? &repairer : nullptr,
-					onode_statfs);
+					onode_statfs,
+                                        depth);
         }
       }
-      if (deep) {
+      if (depth == FSCK_DEEP) {
 	bufferlist bl;
 	uint64_t max_read_block = cct->_conf->bluestore_fsck_read_bytes_cap;
 	uint64_t offset = 0;
@@ -7332,7 +7351,7 @@ int BlueStore::_fsck(bool deep, bool repair)
 	} while (offset < o->onode.size);
       }
       // omap
-      if (o->onode.has_omap()) {
+      if (depth != FSCK_SHALLOW && o->onode.has_omap()) {
 	auto& m =
 	  o->onode.is_pgmeta_omap() ? used_pgmeta_omap_head : used_omap_head;
 	if (m.count(o->onode.nid)) {
@@ -7350,6 +7369,7 @@ int BlueStore::_fsck(bool deep, bool repair)
   dout(1) << __func__ << " checking shared_blobs" << dendl;
   it = db->get_iterator(PREFIX_SHARED_BLOB);
   if (it) {
+    //FIXME minor: perhaps simplify for shallow mode?
     //fill global if not overriden below
     expected_statfs = &expected_store_statfs;
 
@@ -7418,7 +7438,8 @@ int BlueStore::_fsck(bool deep, bool repair)
 				      used_blocks,
 				      fm->get_alloc_size(),
 				      repair ? &repairer : nullptr,
-				      *expected_statfs);
+				      *expected_statfs,
+                                      depth);
 	sbi.passed = true;
       }
     }
@@ -7620,27 +7641,29 @@ int BlueStore::_fsck(bool deep, bool repair)
     } // if (it) {
   } //if (repair && repairer.preprocess_misreference()) {
 
-  for (auto &p : sb_info) {
-    sb_info_t& sbi = p.second;
-    if (!sbi.passed) {
-      derr << "fsck error: missing " << *sbi.sb << dendl;
-      ++errors;
-    }
-    if (repair && (!sbi.passed || sbi.updated)) {
-      auto sbid = p.first;
-      if (sbi.ref_map.empty()) {
-	ceph_assert(sbi.passed);
-	dout(20) << __func__ << " " << *sbi.sb
-		 << " is empty, removing" << dendl;
-	repairer.fix_shared_blob(db, sbid, nullptr);
-      } else {
-	bufferlist bl;
-	bluestore_shared_blob_t persistent(sbid, std::move(sbi.ref_map));
-	encode(persistent, bl);
-	dout(20) << __func__ << " " << *sbi.sb
-		 << " is " << bl.length() << " bytes, updating" << dendl;
+  if (depth != FSCK_SHALLOW) {
+    for (auto &p : sb_info) {
+      sb_info_t& sbi = p.second;
+      if (!sbi.passed) {
+        derr << "fsck error: missing " << *sbi.sb << dendl;
+        ++errors;
+      }
+      if (repair && (!sbi.passed || sbi.updated)) {
+        auto sbid = p.first;
+        if (sbi.ref_map.empty()) {
+	  ceph_assert(sbi.passed);
+	  dout(20) << __func__ << " " << *sbi.sb
+		   << " is empty, removing" << dendl;
+	  repairer.fix_shared_blob(db, sbid, nullptr);
+        } else {
+	  bufferlist bl;
+	  bluestore_shared_blob_t persistent(sbid, std::move(sbi.ref_map));
+	  encode(persistent, bl);
+	  dout(20) << __func__ << " " << *sbi.sb
+		   << " is " << bl.length() << " bytes, updating" << dendl;
 
-	repairer.fix_shared_blob(db, sbid, &bl);
+	  repairer.fix_shared_blob(db, sbid, &bl);
+        }
       }
     }
   }
@@ -7664,148 +7687,149 @@ int BlueStore::_fsck(bool deep, bool repair)
       errors, repair ? &repairer : nullptr);
   }
 
-  dout(1) << __func__ << " checking for stray omap data" << dendl;
-  it = db->get_iterator(PREFIX_OMAP);
-  if (it) {
-    for (it->lower_bound(string()); it->valid(); it->next()) {
-      uint64_t omap_head;
-      _key_decode_u64(it->key().c_str(), &omap_head);
-      if (used_omap_head.count(omap_head) == 0) {
-	derr << "fsck error: found stray omap data on omap_head "
-	     << omap_head << dendl;
-	++errors;
+  if (depth != FSCK_SHALLOW) {
+    dout(1) << __func__ << " checking for stray omap data" << dendl;
+    it = db->get_iterator(PREFIX_OMAP);
+    if (it) {
+      for (it->lower_bound(string()); it->valid(); it->next()) {
+        uint64_t omap_head;
+        _key_decode_u64(it->key().c_str(), &omap_head);
+        if (used_omap_head.count(omap_head) == 0) {
+	  derr << "fsck error: found stray omap data on omap_head "
+	       << omap_head << dendl;
+	  ++errors;
+        }
       }
     }
-  }
-  it = db->get_iterator(PREFIX_PGMETA_OMAP);
-  if (it) {
-    for (it->lower_bound(string()); it->valid(); it->next()) {
-      uint64_t omap_head;
-      _key_decode_u64(it->key().c_str(), &omap_head);
-      if (used_pgmeta_omap_head.count(omap_head) == 0) {
-	derr << "fsck error: found stray omap data on omap_head "
-	     << omap_head << dendl;
-	++errors;
+    it = db->get_iterator(PREFIX_PGMETA_OMAP);
+    if (it) {
+      for (it->lower_bound(string()); it->valid(); it->next()) {
+        uint64_t omap_head;
+        _key_decode_u64(it->key().c_str(), &omap_head);
+        if (used_pgmeta_omap_head.count(omap_head) == 0) {
+	  derr << "fsck error: found stray (pgmeta) omap data on omap_head "
+	       << omap_head << dendl;
+	  ++errors;
+        }
       }
     }
-  }
+    dout(1) << __func__ << " checking deferred events" << dendl;
+    it = db->get_iterator(PREFIX_DEFERRED);
+    if (it) {
+      for (it->lower_bound(string()); it->valid(); it->next()) {
+        bufferlist bl = it->value();
+        auto p = bl.cbegin();
+        bluestore_deferred_transaction_t wt;
+        try {
+	  decode(wt, p);
+        } catch (buffer::error& e) {
+	  derr << "fsck error: failed to decode deferred txn "
+	       << pretty_binary_string(it->key()) << dendl;
+	  if (repair) {
+            dout(20) << __func__ << " undecodable deferred TXN record, key: '"
+		     << pretty_binary_string(it->key())
+		     << "', removing" << dendl;
+	    repairer.remove_key(db, PREFIX_DEFERRED, it->key());
+	  }
+	  continue;
+        }
+        dout(20) << __func__ << "  deferred " << wt.seq
+	         << " ops " << wt.ops.size()
+	         << " released 0x" << std::hex << wt.released << std::dec << dendl;
+        for (auto e = wt.released.begin(); e != wt.released.end(); ++e) {
+          apply(
+            e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
+            [&](uint64_t pos, mempool_dynamic_bitset &bs) {
+	  ceph_assert(pos < bs.size());
+              bs.set(pos);
+            }
+          );
+        }
+      }
+    }
 
-  dout(1) << __func__ << " checking deferred events" << dendl;
-  it = db->get_iterator(PREFIX_DEFERRED);
-  if (it) {
-    for (it->lower_bound(string()); it->valid(); it->next()) {
-      bufferlist bl = it->value();
-      auto p = bl.cbegin();
-      bluestore_deferred_transaction_t wt;
-      try {
-	decode(wt, p);
-      } catch (buffer::error& e) {
-	derr << "fsck error: failed to decode deferred txn "
-	     << pretty_binary_string(it->key()) << dendl;
-	if (repair) {
-          dout(20) << __func__ << " undecodable deferred TXN record, key: '"
-		   << pretty_binary_string(it->key())
-		   << "', removing" << dendl;	
-	  repairer.remove_key(db, PREFIX_DEFERRED, it->key());
-	}
-	continue;
-      }
-      dout(20) << __func__ << "  deferred " << wt.seq
-	       << " ops " << wt.ops.size()
-	       << " released 0x" << std::hex << wt.released << std::dec << dendl;
-      for (auto e = wt.released.begin(); e != wt.released.end(); ++e) {
+    dout(1) << __func__ << " checking freelist vs allocated" << dendl;
+    {
+      // remove bluefs_extents from used set since the freelist doesn't
+      // know they are allocated.
+      for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
         apply(
           e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
           [&](uint64_t pos, mempool_dynamic_bitset &bs) {
-	ceph_assert(pos < bs.size());
-            bs.set(pos);
+	    ceph_assert(pos < bs.size());
+	    bs.reset(pos);
           }
         );
       }
-    }
-  }
-
-  dout(1) << __func__ << " checking freelist vs allocated" << dendl;
-  {
-    // remove bluefs_extents from used set since the freelist doesn't
-    // know they are allocated.
-    for (auto e = bluefs_extents.begin(); e != bluefs_extents.end(); ++e) {
-      apply(
-        e.get_start(), e.get_len(), fm->get_alloc_size(), used_blocks,
-        [&](uint64_t pos, mempool_dynamic_bitset &bs) {
-	  ceph_assert(pos < bs.size());
-	  bs.reset(pos);
-        }
-      );
-    }
-    fm->enumerate_reset();
-    uint64_t offset, length;
-    while (fm->enumerate_next(db, &offset, &length)) {
-      bool intersects = false;
-      apply(
-        offset, length, fm->get_alloc_size(), used_blocks,
-        [&](uint64_t pos, mempool_dynamic_bitset &bs) {
-	  ceph_assert(pos < bs.size());
-          if (bs.test(pos)) {
-	    if (offset == SUPER_RESERVED &&
-	        length == min_alloc_size - SUPER_RESERVED) {
-	      // this is due to the change just after luminous to min_alloc_size
-	      // granularity allocations, and our baked in assumption at the top
-	      // of _fsck that 0~round_up_to(SUPER_RESERVED,min_alloc_size) is used
-	      // (vs luminous's round_up_to(SUPER_RESERVED,block_size)).  harmless,
-	      // since we will never allocate this region below min_alloc_size.
-	      dout(10) << __func__ << " ignoring free extent between SUPER_RESERVED"
-		       << " and min_alloc_size, 0x" << std::hex << offset << "~"
-		       << length << std::dec << dendl;
-	    } else {
-              intersects = true;
-	      if (repair) {
-		repairer.fix_false_free(db, fm,
-					pos * min_alloc_size,
-					min_alloc_size);
+      fm->enumerate_reset();
+      uint64_t offset, length;
+      while (fm->enumerate_next(db, &offset, &length)) {
+        bool intersects = false;
+        apply(
+          offset, length, fm->get_alloc_size(), used_blocks,
+          [&](uint64_t pos, mempool_dynamic_bitset &bs) {
+	    ceph_assert(pos < bs.size());
+            if (bs.test(pos)) {
+	      if (offset == SUPER_RESERVED &&
+	          length == min_alloc_size - SUPER_RESERVED) {
+	        // this is due to the change just after luminous to min_alloc_size
+	        // granularity allocations, and our baked in assumption at the top
+	        // of _fsck that 0~round_up_to(SUPER_RESERVED,min_alloc_size) is used
+	        // (vs luminous's round_up_to(SUPER_RESERVED,block_size)).  harmless,
+	        // since we will never allocate this region below min_alloc_size.
+	        dout(10) << __func__ << " ignoring free extent between SUPER_RESERVED"
+		         << " and min_alloc_size, 0x" << std::hex << offset << "~"
+		         << length << std::dec << dendl;
+	      } else {
+                intersects = true;
+	        if (repair) {
+		  repairer.fix_false_free(db, fm,
+					  pos * min_alloc_size,
+					  min_alloc_size);
+	        }
 	      }
-	    }
-          } else {
-	    bs.set(pos);
+            } else {
+	      bs.set(pos);
+            }
           }
+        );
+        if (intersects) {
+	  derr << "fsck error: free extent 0x" << std::hex << offset
+	        << "~" << length << std::dec
+	        << " intersects allocated blocks" << dendl;
+	  ++errors;
         }
-      );
-      if (intersects) {
-	derr << "fsck error: free extent 0x" << std::hex << offset
-	      << "~" << length << std::dec
-	      << " intersects allocated blocks" << dendl;
-	++errors;
       }
-    }
-    fm->enumerate_reset();
-    size_t count = used_blocks.count();
-    if (used_blocks.size() != count) {
-      ceph_assert(used_blocks.size() > count);
-      used_blocks.flip();
-      size_t start = used_blocks.find_first();
-      while (start != decltype(used_blocks)::npos) {
-	size_t cur = start;
-	while (true) {
-	  size_t next = used_blocks.find_next(cur);
-	  if (next != cur + 1) {
-	    ++errors;
-	    derr << "fsck error: leaked extent 0x" << std::hex
-		 << ((uint64_t)start * fm->get_alloc_size()) << "~"
-		 << ((cur + 1 - start) * fm->get_alloc_size()) << std::dec
-		 << dendl;
-	    if (repair) {
-	      repairer.fix_leaked(db,
-				  fm,
-				  start * min_alloc_size,
-				  (cur + 1 - start) * min_alloc_size);
+      fm->enumerate_reset();
+      size_t count = used_blocks.count();
+      if (used_blocks.size() != count) {
+        ceph_assert(used_blocks.size() > count);
+        used_blocks.flip();
+        size_t start = used_blocks.find_first();
+        while (start != decltype(used_blocks)::npos) {
+	  size_t cur = start;
+	  while (true) {
+	    size_t next = used_blocks.find_next(cur);
+	    if (next != cur + 1) {
+	      ++errors;
+	      derr << "fsck error: leaked extent 0x" << std::hex
+		   << ((uint64_t)start * fm->get_alloc_size()) << "~"
+		   << ((cur + 1 - start) * fm->get_alloc_size()) << std::dec
+		   << dendl;
+	      if (repair) {
+	        repairer.fix_leaked(db,
+				    fm,
+				    start * min_alloc_size,
+				    (cur + 1 - start) * min_alloc_size);
+	      }
+	      start = next;
+	      break;
 	    }
-	    start = next;
-	    break;
+	    cur = next;
 	  }
-	  cur = next;
-	}
+        }
+        used_blocks.flip();
       }
-      used_blocks.flip();
     }
   }
   if (repair) {
