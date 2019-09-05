@@ -1,9 +1,10 @@
-import { LOCALE_ID, TRANSLATIONS, TRANSLATIONS_FORMAT } from '@angular/core';
+import { LOCALE_ID, TRANSLATIONS, TRANSLATIONS_FORMAT, Type } from '@angular/core';
 import { async, ComponentFixture, TestBed } from '@angular/core/testing';
 import { AbstractControl } from '@angular/forms';
 import { By } from '@angular/platform-browser';
 
 import { I18n } from '@ngx-translate/i18n-polyfill';
+import { BsModalRef } from 'ngx-bootstrap/modal';
 
 import { TableActionsComponent } from '../app/shared/datatable/table-actions/table-actions.component';
 import { Icons } from '../app/shared/enum/icons.enum';
@@ -184,10 +185,34 @@ export class FormHelper {
   }
 }
 
+/**
+ * Use this to mock 'ModalService.show' to make the embedded component with it's fixture usable
+ * in tests. The function gives back all needed parts including the modal reference.
+ *
+ * Please make sure to call this function *inside* your mock and return the reference at the end.
+ */
+export function modalServiceShow(componentClass: Type<any>, modalConfig) {
+  const ref = new BsModalRef();
+  const fixture = TestBed.createComponent(componentClass);
+  let component = fixture.componentInstance;
+  if (modalConfig.initialState) {
+    component = Object.assign(component, modalConfig.initialState);
+  }
+  fixture.detectChanges();
+  ref.content = component;
+  return { ref, fixture, component };
+}
+
 export class FixtureHelper {
   fixture: ComponentFixture<any>;
 
-  constructor(fixture: ComponentFixture<any>) {
+  constructor(fixture?: ComponentFixture<any>) {
+    if (fixture) {
+      this.updateFixture(fixture);
+    }
+  }
+
+  updateFixture(fixture: ComponentFixture<any>) {
     this.fixture = fixture;
   }
 
@@ -204,7 +229,7 @@ export class FixtureHelper {
    * Expect a specific element to be visible or not.
    */
   expectElementVisible(css: string, visibility: boolean) {
-    expect(Boolean(this.getElementByCss(css))).toBe(visibility);
+    expect(visibility).toBe(Boolean(this.getElementByCss(css)));
   }
 
   expectFormFieldToBe(css: string, value: string) {
