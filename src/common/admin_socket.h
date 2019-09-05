@@ -22,10 +22,12 @@
 #include <thread>
 
 #include "include/buffer.h"
+#include "common/ref.h"
 #include "common/cmdparse.h"
 
 class AdminSocket;
 class CephContext;
+class MCommand;
 
 using namespace std::literals;
 
@@ -97,9 +99,12 @@ public:
   int execute_command(const std::vector<std::string>& cmd,
 		      ceph::bufferlist& out);
 
+  void queue_tell_command(ref_t<MCommand> m);
+
 private:
 
   void shutdown();
+  void wakeup();
 
   std::string create_wakeup_pipe(int *pipe_rd, int *pipe_wr);
   std::string destroy_wakeup_pipe();
@@ -108,6 +113,7 @@ private:
   std::thread th;
   void entry() noexcept;
   bool do_accept();
+  void do_tell_queue();
   bool validate(const std::string& command,
 		const cmdmap_t& cmdmap,
 		ceph::buffer::list& out) const;
@@ -125,6 +131,9 @@ private:
   std::unique_ptr<AdminSocketHook> version_hook;
   std::unique_ptr<AdminSocketHook> help_hook;
   std::unique_ptr<AdminSocketHook> getdescs_hook;
+
+  std::mutex tell_lock;
+  std::list<ref_t<MCommand>> tell_queue;
 
   struct hook_info {
     AdminSocketHook* hook;
