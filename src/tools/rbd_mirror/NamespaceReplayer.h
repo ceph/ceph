@@ -13,7 +13,7 @@
 #include "tools/rbd_mirror/ImageMap.h"
 #include "tools/rbd_mirror/InstanceReplayer.h"
 #include "tools/rbd_mirror/InstanceWatcher.h"
-#include "tools/rbd_mirror/MirrorStatusWatcher.h"
+#include "tools/rbd_mirror/MirrorStatusUpdater.h"
 #include "tools/rbd_mirror/PoolWatcher.h"
 #include "tools/rbd_mirror/Types.h"
 #include "tools/rbd_mirror/image_map/Types.h"
@@ -93,22 +93,22 @@ private:
   /**
    * @verbatim
    *
-   * <uninitialized> <----------------------\
-   *    | (init)           ^ (error)        |
-   *    v                  *                |
-   * INIT_STATUS_WATCHER * *   * * * * > SHUT_DOWN_STATUS_WATCHER
-   *    |                      * (error)    ^
-   *    v                      *            |
-   * INIT_INSTANCE_REPLAYER  * *   * * > SHUT_DOWN_INSTANCE_REPLAYER
-   *    |                          *        ^
-   *    v                          *        |
-   * INIT_INSTANCE_WATCHER * * * * *     SHUT_DOWN_INSTANCE_WATCHER
-   *    |                       (error)     ^
-   *    |                                   |
-   *    v                                STOP_INSTANCE_REPLAYER
-   *    |                                   ^
-   *    |    (shut down)                    |
-   *    |  /--------------------------------/
+   * <uninitialized> <--------------------------------\
+   *    | (init)                 ^ (error)            |
+   *    v                        *                    |
+   * INIT_LOCAL_STATUS_UPDATER * *   * * * * > SHUT_DOWN_LOCAL_STATUS_UPDATER
+   *    |                            * (error)        ^
+   *    v                            *                |
+   * INIT_INSTANCE_REPLAYER  * * * * *   * * > SHUT_DOWN_INSTANCE_REPLAYER
+   *    |                                *            ^
+   *    v                                *            |
+   * INIT_INSTANCE_WATCHER * * * * * * * *     SHUT_DOWN_INSTANCE_WATCHER
+   *    |                       (error)               ^
+   *    |                                             |
+   *    v                                      STOP_INSTANCE_REPLAYER
+   *    |                                             ^
+   *    |    (shut down)                              |
+   *    |  /------------------------------------------/
    *    v  |
    * <follower> <---------------------------\
    *    .                                   |
@@ -195,8 +195,8 @@ private:
                  const std::string &description, RadosRef *rados_ref,
                  bool strip_cluster_overrides);
 
-  void init_status_watcher();
-  void handle_init_status_watcher(int r);
+  void init_local_status_updater();
+  void handle_init_local_status_updater(int r);
 
   void init_instance_replayer();
   void handle_init_instance_replayer(int r);
@@ -213,8 +213,8 @@ private:
   void shut_down_instance_replayer();
   void handle_shut_down_instance_replayer(int r);
 
-  void shut_down_status_watcher();
-  void handle_shut_down_status_watcher(int r);
+  void shut_down_local_status_updater();
+  void handle_shut_down_local_status_updater(int r);
 
   void init_image_map(Context *on_finish);
   void handle_init_image_map(int r, Context *on_finish);
@@ -263,7 +263,7 @@ private:
   int m_ret_val = 0;
   Context *m_on_finish = nullptr;
 
-  std::unique_ptr<MirrorStatusWatcher<ImageCtxT>> m_status_watcher;
+  std::unique_ptr<MirrorStatusUpdater<ImageCtxT>> m_local_status_updater;
 
   PoolWatcherListener m_local_pool_watcher_listener;
   std::unique_ptr<PoolWatcher<ImageCtxT>> m_local_pool_watcher;

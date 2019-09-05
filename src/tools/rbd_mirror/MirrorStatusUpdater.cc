@@ -10,6 +10,7 @@
 #include "common/WorkQueue.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Utils.h"
+#include "tools/rbd_mirror/MirrorStatusWatcher.h"
 #include "tools/rbd_mirror/Threads.h"
 
 #define dout_context g_ceph_context
@@ -39,6 +40,7 @@ MirrorStatusUpdater<I>::MirrorStatusUpdater(
 template <typename I>
 MirrorStatusUpdater<I>::~MirrorStatusUpdater() {
   ceph_assert(!m_initialized);
+  delete m_mirror_status_watcher;
 }
 
 template <typename I>
@@ -51,6 +53,40 @@ void MirrorStatusUpdater<I>::init(Context* on_finish) {
   {
     std::lock_guard timer_locker{m_threads->timer_lock};
     schedule_timer_task();
+  }
+
+  init_mirror_status_watcher(on_finish);
+}
+
+template <typename I>
+void MirrorStatusUpdater<I>::init_mirror_status_watcher(Context* on_finish) {
+  dout(10) << dendl;
+
+  auto ctx = new LambdaContext([this, on_finish](int r) {
+      handle_init_mirror_status_watcher(r, on_finish);
+    });
+  m_mirror_status_watcher = MirrorStatusWatcher<I>::create(
+    m_io_ctx, m_threads->work_queue);
+  m_mirror_status_watcher->init(ctx);
+}
+
+template <typename I>
+void MirrorStatusUpdater<I>::handle_init_mirror_status_watcher(
+    int r, Context* on_finish) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    derr << "failed to init mirror status watcher: " << cpp_strerror(r)
+         << dendl;
+
+    delete m_mirror_status_watcher;
+    m_mirror_status_watcher = nullptr;
+
+    on_finish = new LambdaContext([r, on_finish](int) {
+        on_finish->complete(r);
+      });
+    shut_down(on_finish);
+    return;
   }
 
   m_threads->work_queue->queue(on_finish, 0);
@@ -70,14 +106,59 @@ void MirrorStatusUpdater<I>::shut_down(Context* on_finish) {
     std::unique_lock locker(m_lock);
     ceph_assert(m_initialized);
     m_initialized = false;
+  }
 
+  shut_down_mirror_status_watcher(on_finish);
+}
+
+template <typename I>
+void MirrorStatusUpdater<I>::shut_down_mirror_status_watcher(
+    Context* on_finish) {
+  if (m_mirror_status_watcher == nullptr) {
+    finalize_shutdown(0, on_finish);
+    return;
+  }
+
+  dout(10) << dendl;
+
+  auto ctx = new LambdaContext([this, on_finish](int r) {
+      handle_shut_down_mirror_status_watcher(r, on_finish);
+    });
+  m_mirror_status_watcher->shut_down(ctx);
+}
+
+template <typename I>
+void MirrorStatusUpdater<I>::handle_shut_down_mirror_status_watcher(
+    int r, Context* on_finish) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    derr << "failed to shut down mirror status watcher: " << cpp_strerror(r)
+         << dendl;
+  }
+
+  finalize_shutdown(r, on_finish);
+}
+
+template <typename I>
+void MirrorStatusUpdater<I>::finalize_shutdown(int r, Context* on_finish) {
+  dout(10) << dendl;
+
+  {
+    std::unique_lock locker(m_lock);
     if (m_update_in_progress) {
+      if (r < 0) {
+        on_finish = new LambdaContext([r, on_finish](int) {
+            on_finish->complete(r);
+          });
+      }
+
       m_update_on_finish_ctxs.push_back(on_finish);
       return;
     }
   }
 
-  m_threads->work_queue->queue(on_finish, 0);
+  m_threads->work_queue->queue(on_finish, r);
 }
 
 template <typename I>
