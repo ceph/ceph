@@ -397,10 +397,10 @@ int AdminSocket::execute_command(const std::vector<std::string>& cmdvec,
     ldout(m_cct, 0) << "AdminSocket: " << errss.str() << dendl;
     return false;
   }
-  string match;
+  string prefix;
   try {
     cmd_getval(m_cct, cmdmap, "format", format);
-    cmd_getval(m_cct, cmdmap, "prefix", match);
+    cmd_getval(m_cct, cmdmap, "prefix", prefix);
   } catch (const bad_cmd_get& e) {
     return false;
   }
@@ -410,21 +410,7 @@ int AdminSocket::execute_command(const std::vector<std::string>& cmdvec,
 
   std::unique_lock l(lock);
   decltype(hooks)::iterator p;
-  while (match.size()) {
-    p = hooks.find(match);
-    if (p != hooks.cend())
-      break;
-
-    // drop right-most word
-    size_t pos = match.rfind(' ');
-    if (pos == std::string::npos) {
-      match.clear();  // we fail
-      break;
-    } else {
-      match.resize(pos);
-    }
-  }
-
+  p = hooks.find(prefix);
   if (p == hooks.cend()) {
     lderr(m_cct) << "AdminSocket: request '" << cmdvec
 		 << "' not defined" << dendl;
@@ -436,20 +422,20 @@ int AdminSocket::execute_command(const std::vector<std::string>& cmdvec,
   // and set in_hook to allow unregister to wait for us before
   // removing this hook.
   in_hook = true;
-  auto match_hook = p->second.hook;
+  auto hook = p->second.hook;
   l.unlock();
-  bool success = (validate(match, cmdmap, out) &&
-      match_hook->call(match, cmdmap, format, out));
+  bool success = (validate(prefix, cmdmap, out) &&
+      hook->call(prefix, cmdmap, format, out));
   l.lock();
   in_hook = false;
   in_hook_cond.notify_all();
   if (!success) {
-    ldout(m_cct, 0) << "AdminSocket: request '" << match
-		    << "' to " << match_hook << " failed" << dendl;
+    ldout(m_cct, 0) << "AdminSocket: request '" << prefix
+		    << "' to " << hook << " failed" << dendl;
     out.append("failed");
   } else {
-    ldout(m_cct, 5) << "AdminSocket: request '" << match
-        << "' to " << match_hook
+    ldout(m_cct, 5) << "AdminSocket: request '" << prefix
+        << "' to " << hook
         << " returned " << out.length() << " bytes" << dendl;
   }
   return true;
@@ -464,12 +450,12 @@ void AdminSocket::queue_tell_command(ref_t<MCommand> m)
 }
 
 
-bool AdminSocket::validate(const std::string& command,
+bool AdminSocket::validate(const std::string& prefix,
 			   const cmdmap_t& cmdmap,
 			   bufferlist& out) const
 {
   stringstream os;
-  if (validate_cmd(m_cct, hooks.at(command).desc, cmdmap, os)) {
+  if (validate_cmd(m_cct, hooks.at(prefix).desc, cmdmap, os)) {
     return true;
   } else {
     out.append(os);
@@ -484,17 +470,18 @@ int AdminSocket::register_command(std::string_view command,
 {
   int ret;
   std::unique_lock l(lock);
-  auto i = hooks.find(command);
+  string prefix = cmddesc_get_prefix(cmddesc);
+  auto i = hooks.find(prefix);
   if (i != hooks.cend()) {
-    ldout(m_cct, 5) << "register_command " << command << " hook " << hook
+    ldout(m_cct, 5) << "register_command " << prefix << " hook " << hook
 		    << " EEXIST" << dendl;
     ret = -EEXIST;
   } else {
-    ldout(m_cct, 5) << "register_command " << command << " hook " << hook
+    ldout(m_cct, 5) << "register_command " << prefix << " hook " << hook
 		    << dendl;
     hooks.emplace_hint(i,
 		       std::piecewise_construct,
-		       std::forward_as_tuple(command),
+		       std::forward_as_tuple(prefix),
 		       std::forward_as_tuple(hook, cmddesc, help));
     ret = 0;
   }

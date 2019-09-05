@@ -22,9 +22,10 @@
  * Given a cmddesc like "foo baz name=bar,type=CephString",
  * return the prefix "foo baz".
  */
-std::string cmddesc_get_prefix(const std::string &cmddesc)
+std::string cmddesc_get_prefix(const std::string_view &cmddesc)
 {
-  stringstream ss(cmddesc);
+  string tmp(cmddesc); // FIXME: stringstream ctor can't take string_view :(
+  stringstream ss(tmp);
   std::string word;
   std::ostringstream result;
   bool first = true;
