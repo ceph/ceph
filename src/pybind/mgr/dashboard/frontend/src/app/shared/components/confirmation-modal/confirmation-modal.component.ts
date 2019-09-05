@@ -1,40 +1,62 @@
-import { Component, OnInit, TemplateRef } from '@angular/core';
+import { Component, OnDestroy, OnInit, TemplateRef } from '@angular/core';
 import { FormGroup } from '@angular/forms';
 
-import { BsModalRef } from 'ngx-bootstrap/modal';
+import { BsModalRef, BsModalService } from 'ngx-bootstrap/modal';
+import { Subscription } from 'rxjs';
 
 @Component({
   selector: 'cd-confirmation-modal',
   templateUrl: './confirmation-modal.component.html',
   styleUrls: ['./confirmation-modal.component.scss']
 })
-export class ConfirmationModalComponent implements OnInit {
-  bodyData: object;
+export class ConfirmationModalComponent implements OnInit, OnDestroy {
+  // Needed
   bodyTpl: TemplateRef<any>;
   buttonText: string;
-  onSubmit: Function;
-  onCancel: Function;
   titleText: string;
+  onSubmit: Function;
 
-  bodyContext: object;
-  confirmationForm: FormGroup;
+  // Optional
+  bodyData?: object;
+  onCancel?: Function;
+  bodyContext?: object;
 
+  // Component only
   boundCancel = this.cancel.bind(this);
+  confirmationForm: FormGroup;
+  private onHide: Subscription;
+  private canceled = false;
 
-  constructor(public modalRef: BsModalRef) {
+  constructor(public modalRef: BsModalRef, private modalService: BsModalService) {
     this.confirmationForm = new FormGroup({});
+    this.onHide = this.modalService.onHide.subscribe((e) => {
+      if (this.onCancel && (e || this.canceled)) {
+        this.onCancel();
+      }
+    });
   }
 
   ngOnInit() {
     this.bodyContext = this.bodyContext || {};
     this.bodyContext['$implicit'] = this.bodyData;
+    if (!this.onSubmit) {
+      throw new Error('No submit action defined');
+    } else if (!this.buttonText) {
+      throw new Error('No action name defined');
+    } else if (!this.titleText) {
+      throw new Error('No title defined');
+    } else if (!this.bodyTpl) {
+      throw new Error('No description defined');
+    }
+  }
+
+  ngOnDestroy() {
+    this.onHide.unsubscribe();
   }
 
   cancel() {
+    this.canceled = true;
     this.modalRef.hide();
-    if (this.onCancel) {
-      this.onCancel();
-    }
   }
 
   stopLoadingSpinner() {
