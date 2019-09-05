@@ -3133,6 +3133,34 @@ BlueStore::BlobRef BlueStore::ExtentMap::split_blob(
 #undef dout_prefix
 #define dout_prefix *_dout << "bluestore.onode(" << this << ")." << __func__ << " "
 
+BlueStore::Onode* BlueStore::Onode::decode(
+  CollectionRef c,
+  const ghobject_t& oid,
+  const string& key,
+  const bufferlist& v)
+{
+  Onode* on = new Onode(c.get(), oid, key);
+  on->exists = true;
+  auto p = v.front().begin_deep();
+  on->onode.decode(p);
+  for (auto& i : on->onode.attrs) {
+    i.second.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
+  }
+
+  // initialize extent_map
+  on->extent_map.decode_spanning_blobs(p);
+  if (on->onode.extent_map_shards.empty()) {
+    denc(on->extent_map.inline_bl, p);
+    on->extent_map.decode_some(on->extent_map.inline_bl);
+    on->extent_map.inline_bl.reassign_to_mempool(
+      mempool::mempool_bluestore_cache_other);
+  }
+  else {
+    on->extent_map.init_shards(false, false);
+  }
+  return on;
+}
+
 void BlueStore::Onode::flush()
 {
   if (flushing_count.load()) {
@@ -3414,7 +3442,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   if (o)
     return o;
 
-  mempool::bluestore_cache_other::string key;
+  string key;
   get_object_key(store->cct, oid, &key);
 
   ldout(store->cct, 20) << __func__ << " oid " << oid << " key "
@@ -3435,24 +3463,7 @@ BlueStore::OnodeRef BlueStore::Collection::get_onode(
   } else {
     // loaded
     ceph_assert(r >= 0);
-    on = new Onode(this, oid, key);
-    on->exists = true;
-    auto p = v.front().begin_deep();
-    on->onode.decode(p);
-    for (auto& i : on->onode.attrs) {
-      i.second.reassign_to_mempool(mempool::mempool_bluestore_cache_other);
-    }
-
-    // initialize extent_map
-    on->extent_map.decode_spanning_blobs(p);
-    if (on->onode.extent_map_shards.empty()) {
-      denc(on->extent_map.inline_bl, p);
-      on->extent_map.decode_some(on->extent_map.inline_bl);
-      on->extent_map.inline_bl.reassign_to_mempool(
-	mempool::mempool_bluestore_cache_other);
-    } else {
-      on->extent_map.init_shards(false, false);
-    }
+    on = Onode::decode(this, oid, key, v);
   }
   o.reset(on);
   return onode_map.add(oid, o);
@@ -7118,8 +7129,8 @@ int BlueStore::_fsck(bool deep, bool repair)
 
       dout(10) << __func__ << "  " << oid << dendl;
       store_statfs_t onode_statfs;
-      RWLock::RLocker l(c->lock);
-      OnodeRef o = c->get_onode(oid, false);
+      OnodeRef o;
+      o.reset(Onode::decode(c, oid, it->key(), it->value()));
       if (o->onode.nid) {
 	if (o->onode.nid > nid_max) {
 	  derr << "fsck error: " << oid << " nid " << o->onode.nid
@@ -7468,8 +7479,8 @@ int BlueStore::_fsck(bool deep, bool repair)
 	dout(20) << __func__ << " check misreference for col:" << c->cid
 		  << " obj:" << oid << dendl;
 
-	RWLock::RLocker l(c->lock);
-	OnodeRef o = c->get_onode(oid, false);
+        OnodeRef o;
+        o.reset(Onode::decode(c, oid, it->key(), it->value()));
 	o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
 	mempool::bluestore_fsck::set<BlobRef> blobs;
 
