@@ -81,6 +81,7 @@ export class MgrModuleListComponent {
         permission: 'update',
         click: () => this.updateModuleState(),
         disable: () => this.isTableActionDisabled('disabled'),
+        disableDesc: () => this.getTableActionDisabledDesc(),
         icon: 'fa-stop'
       }
     ];
@@ -111,17 +112,31 @@ export class MgrModuleListComponent {
     if (!this.selection.hasSelection) {
       return true;
     }
+    const selected = this.selection.first();
     // Make sure the user can't modify the run state of the 'Dashboard' module.
     // This check is only done in the UI because the REST API should still be
     // able to do so.
-    if (this.selection.first().name === 'dashboard') {
+    if (selected.name === 'dashboard') {
+      return true;
+    }
+    // Always-on modules can't be disabled.
+    if (selected.always_on) {
       return true;
     }
     switch (state) {
       case 'enabled':
-        return this.selection.first().enabled;
+        return selected.enabled;
       case 'disabled':
-        return !this.selection.first().enabled;
+        return !selected.enabled;
+    }
+  }
+
+  getTableActionDisabledDesc(): string | undefined {
+    if (this.selection.hasSelection) {
+      const selected = this.selection.first();
+      if (selected.always_on) {
+        return this.i18n('This Manager module is always on.');
+      }
     }
   }
 
