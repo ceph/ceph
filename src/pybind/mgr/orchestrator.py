@@ -1018,7 +1018,7 @@ class OrchestratorClientMixin(Orchestrator):
                 self.remote("progress", "complete", completion.progress_id)
             else:
                 self.remote("progress", "update", completion.progress_id, str(completion), progress,
-                            ["orchestrator"])
+                            [("origin", "orchestrator")])
         except AttributeError:
             # No WriteCompletion. Ignore.
             pass
