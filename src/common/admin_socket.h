@@ -100,8 +100,8 @@ private:
 
   void shutdown();
 
-  std::string create_shutdown_pipe(int *pipe_rd, int *pipe_wr);
-  std::string destroy_shutdown_pipe();
+  std::string create_wakeup_pipe(int *pipe_rd, int *pipe_wr);
+  std::string destroy_wakeup_pipe();
   std::string bind_and_listen(const std::string &sock_path, int *fd);
 
   std::thread th;
@@ -114,8 +114,9 @@ private:
   CephContext *m_cct;
   std::string m_path;
   int m_sock_fd = -1;
-  int m_shutdown_rd_fd = -1;
-  int m_shutdown_wr_fd = -1;
+  int m_wakeup_rd_fd = -1;
+  int m_wakeup_wr_fd = -1;
+  bool m_shutdown = false;
 
   bool in_hook = false;
   std::condition_variable in_hook_cond;
