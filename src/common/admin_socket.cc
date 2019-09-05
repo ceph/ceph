@@ -399,10 +399,6 @@ int AdminSocket::execute_command(const std::string& cmd, ceph::bufferlist& out)
     lderr(m_cct) << "AdminSocket: request '" << cmd << "' not defined" << dendl;
     return false;
   }
-  string args;
-  if (match != cmd) {
-    args = cmd.substr(match.length() + 1);
-  }
 
   // Drop lock to avoid cycles in cases where the hook takes
   // the same lock that was held during calls to register/unregister,
@@ -417,11 +413,11 @@ int AdminSocket::execute_command(const std::string& cmd, ceph::bufferlist& out)
   in_hook = false;
   in_hook_cond.notify_all();
   if (!success) {
-    ldout(m_cct, 0) << "AdminSocket: request '" << match << "' args '" << args
-        << "' to " << match_hook << " failed" << dendl;
+    ldout(m_cct, 0) << "AdminSocket: request '" << match
+		    << "' to " << match_hook << " failed" << dendl;
     out.append("failed");
   } else {
-    ldout(m_cct, 5) << "AdminSocket: request '" << match << "' '" << args
+    ldout(m_cct, 5) << "AdminSocket: request '" << match
         << "' to " << match_hook
         << " returned " << out.length() << " bytes" << dendl;
   }
