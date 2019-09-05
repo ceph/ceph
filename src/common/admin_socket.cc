@@ -22,6 +22,8 @@
 #include "common/Thread.h"
 #include "common/version.h"
 
+#include "messages/MCommand.h"
+#include "messages/MCommandReply.h"
 
 // re-include our assert to clobber the system one; fix dout:
 #include "include/ceph_assert.h"
@@ -246,6 +248,7 @@ void AdminSocket::entry() noexcept
       // read off one byte
       char buf;
       ::read(m_wakeup_rd_fd, &buf, 1);
+      do_tell_queue();
     }
     if (m_shutdown) {
       // Parent wants us to shut down
@@ -364,6 +367,25 @@ bool AdminSocket::do_accept()
   return rval;
 }
 
+void AdminSocket::do_tell_queue()
+{
+  ldout(m_cct,10) << __func__ << dendl;
+  std::list<ref_t<MCommand>> q;
+  {
+    std::lock_guard l(tell_lock);
+    q.swap(tell_queue);
+  }
+  for (auto& m : q) {
+    bufferlist outbl;
+    bool success = execute_command(m->cmd, outbl);
+    int r = success ? 0 : -1;  // FIXME!
+    auto reply = new MCommandReply(r, "");
+    reply->set_tid(m->get_tid());
+    reply->set_data(outbl);
+    m->get_connection()->send_message(reply);
+  }
+}
+
 int AdminSocket::execute_command(const std::vector<std::string>& cmdvec,
 				 ceph::bufferlist& out)
 {
@@ -433,6 +455,13 @@ int AdminSocket::execute_command(const std::vector<std::string>& cmdvec,
   return true;
 }
 
+void AdminSocket::queue_tell_command(ref_t<MCommand> m)
+{
+  ldout(m_cct,10) << __func__ << " " << *m << dendl;
+  std::lock_guard l(tell_lock);
+  tell_queue.push_back(std::move(m));
+  wakeup();
+}
 
 
 bool AdminSocket::validate(const std::string& command,
@@ -667,4 +696,12 @@ void AdminSocket::shutdown()
 
   remove_cleanup_file(m_path);
   m_path.clear();
+}
+
+void AdminSocket::wakeup()
+{
+  // Send a byte to the wakeup pipe that the thread is listening to
+  char buf[1] = { 0x0 };
+  int r = safe_write(m_wakeup_wr_fd, buf, sizeof(buf));
+  (void)r;
 }
