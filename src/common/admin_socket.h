@@ -74,18 +74,6 @@ public:
 		       AdminSocketHook *hook,
 		       std::string_view help);
 
-  /**
-   * unregister an admin socket command.
-   *
-   * If a command is currently in progress, this will block until it
-   * is done.  For that reason, you must not hold any locks required
-   * by your hook while you call this.
-   *
-   * @param command command string
-   * @return 0 on succest, -ENOENT if command dne.
-   */
-  int unregister_command(std::string_view command);
-
   /*
    * unregister all commands belong to hook.
    */

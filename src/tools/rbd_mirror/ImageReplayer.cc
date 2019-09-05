@@ -188,10 +188,8 @@ public:
   }
 
   ~ImageReplayerAdminSocketHook() override {
+    admin_socket->unregister_commands(this);
     for (auto &it : commands) {
-      if (it.second->registered) {
-        admin_socket->unregister_command(it.first);
-      }
       delete it.second;
     }
     commands.clear();
