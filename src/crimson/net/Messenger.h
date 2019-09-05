@@ -29,6 +29,10 @@ class AuthServer;
 
 namespace ceph::net {
 
+#ifdef UNIT_TESTS_BUILT
+class Interceptor;
+#endif
+
 using Throttle = ceph::thread::Throttle;
 using SocketPolicy = ceph::net::Policy<Throttle>;
 
@@ -45,6 +49,10 @@ public:
     : my_name(name)
   {}
   virtual ~Messenger() {}
+
+#ifdef UNIT_TESTS_BUILT
+  Interceptor *interceptor = nullptr;
+#endif
 
   entity_type_t get_mytype() const { return my_name.type(); }
   const entity_name_t& get_myname() const { return my_name; }

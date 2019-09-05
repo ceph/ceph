@@ -19,6 +19,10 @@
 #include "ProtocolV2.h"
 #include "SocketMessenger.h"
 
+#ifdef UNIT_TESTS_BUILT
+#include "Interceptor.h"
+#endif
+
 using namespace ceph::net;
 
 SocketConnection::SocketConnection(SocketMessenger& messenger,
@@ -32,6 +36,12 @@ SocketConnection::SocketConnection(SocketMessenger& messenger,
   } else {
     protocol = std::make_unique<ProtocolV1>(dispatcher, *this, messenger);
   }
+#ifdef UNIT_TESTS_BUILT
+  if (messenger.interceptor) {
+    interceptor = messenger.interceptor;
+    interceptor->register_conn(*this);
+  }
+#endif
 }
 
 SocketConnection::~SocketConnection() {}
