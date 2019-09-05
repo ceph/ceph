@@ -438,7 +438,7 @@ struct SignalHandler : public Thread {
 
   SignalHandler() {
     // create signal pipe
-    int r = pipe_cloexec(pipefd);
+    int r = pipe_cloexec(pipefd, 0);
     ceph_assert(r == 0);
     r = fcntl(pipefd[0], F_SETFL, O_NONBLOCK);
     ceph_assert(r == 0);
@@ -575,7 +575,7 @@ void SignalHandler::register_handler(int signum, signal_handler_t handler, bool 
 
   safe_handler *h = new safe_handler;
 
-  r = pipe_cloexec(h->pipefd);
+  r = pipe_cloexec(h->pipefd, 0);
   ceph_assert(r == 0);
   r = fcntl(h->pipefd[0], F_SETFL, O_NONBLOCK);
   ceph_assert(r == 0);

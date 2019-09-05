@@ -204,7 +204,7 @@ int GenericFileStoreBackend::detect_features()
     int pipefd[2];
     loff_t off_in = 0;
     int r;
-    if (pipe_cloexec(pipefd) < 0) {
+    if (pipe_cloexec(pipefd, 0) < 0) {
       int e = errno;
       dout(0) << "detect_features: splice pipe met error " << cpp_strerror(e) << dendl;
     } else {
