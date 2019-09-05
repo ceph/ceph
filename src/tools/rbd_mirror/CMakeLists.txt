@@ -14,6 +14,7 @@ set(rbd_mirror_internal
   Instances.cc
   LeaderWatcher.cc
   Mirror.cc
+  MirrorStatusUpdater.cc
   MirrorStatusWatcher.cc
   NamespaceReplayer.cc
   PoolReplayer.cc
