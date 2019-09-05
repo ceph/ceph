@@ -181,23 +181,24 @@ export class TableKeyValueComponent implements OnInit, OnChanges {
 
   _convertValue(v: Item): Item {
     if (_.isArray(v.value)) {
+      if (_.isEmpty(v.value) && this.hideEmpty) {
+        return;
+      }
       v.value = v.value.map((item) => (_.isObject(item) ? JSON.stringify(item) : item)).join(', ');
+    } else if (_.isObject(v.value)) {
+      if ((this.hideEmpty && _.isEmpty(v.value)) || !this.renderObjects) {
+        return;
+      }
+    } else if (_.isString(v.value)) {
+      if (v.value === '' && this.hideEmpty) {
+        return;
+      }
+      if (this.isDate(v.value)) {
+        v.value = this.datePipe.transform(v.value) || v.value;
+      }
     }
-    const isEmpty = _.isEmpty(v.value) && !_.isNumber(v.value);
-    if ((this.hideEmpty && isEmpty) || (_.isObject(v.value) && !this.renderObjects)) {
-      return;
-    } else if (isEmpty && !this.hideEmpty && v.value !== '') {
-      v.value = '';
-    }
-    if (!isEmpty && _.isString(v.value)) {
-      v.value = this.convertString(v.value);
-    }
-    return v;
-  }
 
-  private convertString(s: string) {
-    const date = this.isDate(s) && this.datePipe.transform(s);
-    return date || s;
+    return v;
   }
 
   private isDate(s) {
