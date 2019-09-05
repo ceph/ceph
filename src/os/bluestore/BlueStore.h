@@ -1079,6 +1079,30 @@ public:
 	exists(false),
 	extent_map(this) {
     }
+    Onode(Collection* c, const ghobject_t& o,
+      const string& k)
+      : nref(0),
+      c(c),
+      oid(o),
+      key(k),
+      exists(false),
+      extent_map(this) {
+    }
+    Onode(Collection* c, const ghobject_t& o,
+      const char* k)
+      : nref(0),
+      c(c),
+      oid(o),
+      key(k),
+      exists(false),
+      extent_map(this) {
+    }
+
+    static Onode* decode(
+      CollectionRef c,
+      const ghobject_t& oid,
+      const string& key,
+      const bufferlist& v);
 
     void dump(Formatter* f) const;
 
