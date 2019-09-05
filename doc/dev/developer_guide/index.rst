@@ -828,6 +828,17 @@ Here some examples from ceph dashboard on how to specify different environments 
   $ ../../../script/run_tox.sh --tox-env py27,py3,lint,check
   $ ../../../script/run_tox.sh --tox-env py3,lint,check
 
+Manager core unit tests
+"""""""""""""""""""""""
+
+Currently only doctests_ inside
+``mgr_util.py`` are run.
+
+To add more files that should be tested inside the core of the manager add them at the end
+of the line that includes ``mgr_util.py`` inside ``tox.ini``.
+
+.. _doctests: https://docs.python.org/3/library/doctest.html
+
 Unit test caveats
 -----------------
 
