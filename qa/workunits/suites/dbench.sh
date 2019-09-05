@@ -14,3 +14,8 @@ cp loadfiles/client.txt /usr/local/share/
 echo "running dbench"
 dbench 1
 dbench 10
+
+echo "deleting dbench file"
+cd .. 
+rm -rf dbench
+rm -f /usr/local/share/client.txt 
