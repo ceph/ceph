@@ -139,7 +139,6 @@ public:
     cct->_conf.add_observer(this);
     int r = cct->get_admin_socket()->register_command(
       "dump_mempools",
-      "dump_mempools",
       this,
       "get mempool stats");
     ceph_assert(r == 0);
@@ -654,31 +653,31 @@ CephContext::CephContext(uint32_t module_type_,
   _plugin_registry = new PluginRegistry(this);
 
   _admin_hook = new CephContextHook(this);
-  _admin_socket->register_command("assert", "assert", _admin_hook, "");
-  _admin_socket->register_command("abort", "abort", _admin_hook, "");
-  _admin_socket->register_command("perfcounters_dump", "perfcounters_dump", _admin_hook, "");
-  _admin_socket->register_command("1", "1", _admin_hook, "");
-  _admin_socket->register_command("perf dump", "perf dump name=logger,type=CephString,req=false name=counter,type=CephString,req=false", _admin_hook, "dump perfcounters value");
-  _admin_socket->register_command("perfcounters_schema", "perfcounters_schema", _admin_hook, "");
-  _admin_socket->register_command("perf histogram dump", "perf histogram dump name=logger,type=CephString,req=false name=counter,type=CephString,req=false", _admin_hook, "dump perf histogram values");
-  _admin_socket->register_command("2", "2", _admin_hook, "");
-  _admin_socket->register_command("perf schema", "perf schema", _admin_hook, "dump perfcounters schema");
-  _admin_socket->register_command("perf histogram schema", "perf histogram schema", _admin_hook, "dump perf histogram schema");
-  _admin_socket->register_command("perf reset", "perf reset name=var,type=CephString", _admin_hook, "perf reset <name>: perf reset all or one perfcounter name");
-  _admin_socket->register_command("config show", "config show", _admin_hook, "dump current config settings");
-  _admin_socket->register_command("config help", "config help name=var,type=CephString,req=false", _admin_hook, "get config setting schema and descriptions");
-  _admin_socket->register_command("config set", "config set name=var,type=CephString name=val,type=CephString,n=N",  _admin_hook, "config set <field> <val> [<val> ...]: set a config variable");
-  _admin_socket->register_command("config unset", "config unset name=var,type=CephString",  _admin_hook, "config unset <field>: unset a config variable");
-  _admin_socket->register_command("config get", "config get name=var,type=CephString", _admin_hook, "config get <field>: get the config value");
-  _admin_socket->register_command("config diff",
+  _admin_socket->register_command("assert", _admin_hook, "");
+  _admin_socket->register_command("abort", _admin_hook, "");
+  _admin_socket->register_command("perfcounters_dump", _admin_hook, "");
+  _admin_socket->register_command("1", _admin_hook, "");
+  _admin_socket->register_command("perf dump name=logger,type=CephString,req=false name=counter,type=CephString,req=false", _admin_hook, "dump perfcounters value");
+  _admin_socket->register_command("perfcounters_schema", _admin_hook, "");
+  _admin_socket->register_command("perf histogram dump name=logger,type=CephString,req=false name=counter,type=CephString,req=false", _admin_hook, "dump perf histogram values");
+  _admin_socket->register_command("2", _admin_hook, "");
+  _admin_socket->register_command("perf schema", _admin_hook, "dump perfcounters schema");
+  _admin_socket->register_command("perf histogram schema", _admin_hook, "dump perf histogram schema");
+  _admin_socket->register_command("perf reset name=var,type=CephString", _admin_hook, "perf reset <name>: perf reset all or one perfcounter name");
+  _admin_socket->register_command("config show", _admin_hook, "dump current config settings");
+  _admin_socket->register_command("config help name=var,type=CephString,req=false", _admin_hook, "get config setting schema and descriptions");
+  _admin_socket->register_command("config set name=var,type=CephString name=val,type=CephString,n=N",  _admin_hook, "config set <field> <val> [<val> ...]: set a config variable");
+  _admin_socket->register_command("config unset name=var,type=CephString",  _admin_hook, "config unset <field>: unset a config variable");
+  _admin_socket->register_command("config get name=var,type=CephString", _admin_hook, "config get <field>: get the config value");
+  _admin_socket->register_command(
       "config diff", _admin_hook,
       "dump diff of current config and default config");
-  _admin_socket->register_command("config diff get",
+  _admin_socket->register_command(
       "config diff get name=var,type=CephString", _admin_hook,
       "dump diff get <field>: dump diff of current and default config setting <field>");
-  _admin_socket->register_command("log flush", "log flush", _admin_hook, "flush log entries to log file");
-  _admin_socket->register_command("log dump", "log dump", _admin_hook, "dump recent log entries to log file");
-  _admin_socket->register_command("log reopen", "log reopen", _admin_hook, "reopen log file");
+  _admin_socket->register_command("log flush", _admin_hook, "flush log entries to log file");
+  _admin_socket->register_command("log dump", _admin_hook, "dump recent log entries to log file");
+  _admin_socket->register_command("log reopen", _admin_hook, "reopen log file");
 
   _crypto_none = CryptoHandler::create(CEPH_CRYPTO_NONE);
   _crypto_aes = CryptoHandler::create(CEPH_CRYPTO_AES);

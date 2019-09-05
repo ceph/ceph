@@ -64,7 +64,7 @@ LibrbdAdminSocketHook::LibrbdAdminSocketHook(ImageCtx *ictx) :
   imagename = ictx->md_ctx.get_pool_name() + "/" + ictx->name;
   command = "rbd cache flush " + imagename;
 
-  r = admin_socket->register_command(command, command, this,
+  r = admin_socket->register_command(command, this,
 				     "flush rbd image " + imagename +
 				     " cache");
   if (r == 0) {
@@ -72,7 +72,7 @@ LibrbdAdminSocketHook::LibrbdAdminSocketHook(ImageCtx *ictx) :
   }
 
   command = "rbd cache invalidate " + imagename;
-  r = admin_socket->register_command(command, command, this,
+  r = admin_socket->register_command(command, this,
 				     "invalidate rbd image " + imagename + 
 				     " cache");
   if (r == 0) {

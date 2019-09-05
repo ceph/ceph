@@ -52,8 +52,7 @@ public:
     AdminSocket* admin_socket = bluefs->cct->get_admin_socket();
     if (admin_socket) {
       hook = new BlueFS::SocketHook(bluefs);
-      int r = admin_socket->register_command("bluestore bluefs available",
-                                             "bluestore bluefs available "
+      int r = admin_socket->register_command("bluestore bluefs available "
                                              "name=alloc_size,type=CephInt,req=false",
                                              hook,
                                              "Report available space for bluefs. "

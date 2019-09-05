@@ -787,60 +787,55 @@ int Monitor::preinit()
   // unlock while registering to avoid mon_lock -> admin socket lock dependency.
   l.unlock();
 
-  r = admin_socket->register_command("mon_status", "mon_status", admin_hook,
+  r = admin_socket->register_command("mon_status", admin_hook,
 				     "show current monitor status");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("quorum_status", "quorum_status",
+  r = admin_socket->register_command("quorum_status",
 				     admin_hook, "show current quorum status");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("sync_force",
-				     "sync_force name=validate,"
+  r = admin_socket->register_command("sync_force name=validate,"
 				     "type=CephChoices,"
 			             "strings=--yes-i-really-mean-it",
 				     admin_hook,
 				     "force sync of and clear monitor store");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("add_bootstrap_peer_hint",
-				     "add_bootstrap_peer_hint name=addr,"
+  r = admin_socket->register_command("add_bootstrap_peer_hint name=addr,"
 				     "type=CephIPAddr",
 				     admin_hook,
 				     "add peer address as potential bootstrap"
 				     " peer for cluster bringup");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("add_bootstrap_peer_hintv",
-				     "add_bootstrap_peer_hintv name=addrv,"
+  r = admin_socket->register_command("add_bootstrap_peer_hintv name=addrv,"
 				     "type=CephString",
 				     admin_hook,
 				     "add peer address vector as potential bootstrap"
 				     " peer for cluster bringup");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("quorum enter", "quorum enter",
+  r = admin_socket->register_command("quorum enter",
                                      admin_hook,
                                      "force monitor back into quorum");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("quorum exit", "quorum exit",
+  r = admin_socket->register_command("quorum exit",
                                      admin_hook,
                                      "force monitor out of the quorum");
   ceph_assert(r == 0);
   r = admin_socket->register_command("ops",
-                                     "ops",
                                      admin_hook,
                                      "show the ops currently in flight");
   ceph_assert(r == 0);
   r = admin_socket->register_command("sessions",
-                                     "sessions",
                                      admin_hook,
                                      "list existing sessions");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_historic_ops", "dump_historic_ops",
+  r = admin_socket->register_command("dump_historic_ops",
                                      admin_hook,
                                     "show recent ops");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_historic_ops_by_duration", "dump_historic_ops_by_duration",
+  r = admin_socket->register_command("dump_historic_ops_by_duration",
                                      admin_hook,
                                     "show recent ops, sorted by duration");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_historic_slow_ops", "dump_historic_slow_ops",
+  r = admin_socket->register_command("dump_historic_slow_ops",
                                      admin_hook,
                                     "show recent slow ops");
   ceph_assert(r == 0);

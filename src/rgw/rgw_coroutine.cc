@@ -843,7 +843,7 @@ int RGWCoroutinesManagerRegistry::hook_to_admin_command(const string& command)
     admin_socket->unregister_command(admin_command);
   }
   admin_command = command;
-  int r = admin_socket->register_command(admin_command, admin_command, this,
+  int r = admin_socket->register_command(admin_command, this,
 				     "dump current coroutines stack state");
   if (r < 0) {
     lderr(cct) << "ERROR: fail to register admin socket command (r=" << r << ")" << dendl;

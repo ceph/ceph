@@ -200,9 +200,9 @@ void ClusterState::final_init()
 {
   AdminSocket *admin_socket = g_ceph_context->get_admin_socket();
   asok_hook = new ClusterSocketHook(this);
-  int r = admin_socket->register_command("dump_osd_network",
-		      "dump_osd_network name=value,type=CephInt,req=false", asok_hook,
-		      "Dump osd heartbeat network ping times");
+  int r = admin_socket->register_command(
+    "dump_osd_network name=value,type=CephInt,req=false", asok_hook,
+    "Dump osd heartbeat network ping times");
   ceph_assert(r == 0);
 }
 
