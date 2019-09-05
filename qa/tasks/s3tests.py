@@ -188,6 +188,15 @@ def configure(ctx, config):
 
         s3tests_conf['DEFAULT']['host'] = endpoint.dns_name
 
+        website_role = properties.get('rgw_website_server')
+        if website_role:
+            website_endpoint = ctx.rgw.role_endpoints.get(website_role)
+            assert website_endpoint, \
+                    's3tests: no rgw endpoint for rgw_website_server {}'.format(website_role)
+            assert website_endpoint.website_dns_name, \
+                    's3tests: no dns-s3website-name for rgw_website_server {}'.format(website_role)
+            s3tests_conf['DEFAULT']['s3website_domain'] = website_endpoint.website_dns_name
+
         kms_key = properties.get('kms_key')
         if kms_key:
             host = None
