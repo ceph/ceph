@@ -443,7 +443,7 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
 
       seastar::future<> ms_dispatch(ceph::net::Connection* c,
                                     MessageRef m) override {
-        return c->send(MessageRef{new MPing, false});
+        return c->send(make_message<MPing>());
       }
 
      public:
@@ -515,7 +515,7 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
           seastar::do_until(
             [this] { return stop_send; },
             [this, conn = &**conn] {
-              return conn->send(MessageRef{new MPing, false}).then([] {
+              return conn->send(make_message<MPing>()).then([] {
                 return seastar::sleep(0ms);
               });
             }
