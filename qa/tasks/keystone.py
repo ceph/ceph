@@ -25,6 +25,15 @@ def run_in_keystone_dir(ctx, client, args, **kwargs):
         **kwargs
     )
 
+def get_toxvenv_dir(ctx):
+    return ctx.tox.venv_path
+
+def run_in_tox_venv(ctx, remote, args, **kwargs):
+    return remote.run(
+        args=[ 'source', '{}/bin/activate'.format(get_toxvenv_dir(ctx)), run.Raw('&&') ] + args,
+        **kwargs
+    )
+
 def run_in_keystone_venv(ctx, client, args):
     run_in_keystone_dir(ctx, client,
                         [   'source',
@@ -35,9 +44,6 @@ def run_in_keystone_venv(ctx, client, args):
 def get_keystone_venved_cmd(ctx, cmd, args):
     kbindir = get_keystone_dir(ctx) + '/.tox/venv/bin/'
     return [ kbindir + 'python', kbindir + cmd ] + args
-
-def get_toxvenv_dir(ctx):
-    return ctx.tox.venv_path
 
 @contextlib.contextmanager
 def download(ctx, config):
@@ -99,10 +105,14 @@ def install_packages(ctx, config):
 
     packages = {}
     for (client, _) in config.items():
-        # use bindep to read which dependencies we need from keystone/bindep.txt
-        r = run_in_keystone_dir(ctx, client, ['bindep', '-c'], stdout=StringIO())
-        packages[client] = r.stdout.getvalue().splitlines()
         (remote,) = ctx.cluster.only(client).remotes.iterkeys()
+        # use bindep to read which dependencies we need from keystone/bindep.txt
+        run_in_tox_venv(ctx, remote, ['pip', 'install', 'bindep'])
+        r = run_in_tox_venv(ctx, remote,
+                ['bindep', '--brief', '--file', '{}/bindep.txt'.format(get_keystone_dir(ctx))],
+                stdout=StringIO(),
+                check_status=False) # returns 1 on success?
+        packages[client] = r.stdout.getvalue().splitlines()
         for dep in packages[client]:
             install_package(dep, remote)
     try:
