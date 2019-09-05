@@ -80,7 +80,7 @@ void NamespaceReplayer<I>::init(Context *on_finish) {
   ceph_assert(m_on_finish == nullptr);
   m_on_finish = on_finish;
 
-  init_status_watcher();
+  init_local_status_updater();
 }
 
 
@@ -256,29 +256,30 @@ void NamespaceReplayer<I>::handle_instances_removed(
 }
 
 template <typename I>
-void NamespaceReplayer<I>::init_status_watcher() {
+void NamespaceReplayer<I>::init_local_status_updater() {
   dout(10) << dendl;
 
   ceph_assert(ceph_mutex_is_locked(m_lock));
-  ceph_assert(!m_status_watcher);
+  ceph_assert(!m_local_status_updater);
 
-  m_status_watcher.reset(MirrorStatusWatcher<I>::create(
-      m_local_io_ctx, m_threads->work_queue));
-  auto ctx = create_context_callback<NamespaceReplayer<I>,
-      &NamespaceReplayer<I>::handle_init_status_watcher>(this);
+  m_local_status_updater.reset(MirrorStatusUpdater<I>::create(
+    m_local_io_ctx, m_threads));
+  auto ctx = create_context_callback<
+    NamespaceReplayer<I>,
+    &NamespaceReplayer<I>::handle_init_local_status_updater>(this);
 
-  m_status_watcher->init(ctx);
+  m_local_status_updater->init(ctx);
 }
 
 template <typename I>
-void NamespaceReplayer<I>::handle_init_status_watcher(int r) {
+void NamespaceReplayer<I>::handle_init_local_status_updater(int r) {
   dout(10) << "r=" << r << dendl;
 
   std::lock_guard locker{m_lock};
 
   if (r < 0) {
-    derr << "error initializing mirror status watcher: " << cpp_strerror(r)
-         << dendl;
+    derr << "error initializing local mirror status updater: "
+         << cpp_strerror(r) << dendl;
 
     ceph_assert(m_on_finish != nullptr);
     m_threads->work_queue->queue(m_on_finish, r);
@@ -317,7 +318,7 @@ void NamespaceReplayer<I>::handle_init_instance_replayer(int r) {
 
     m_instance_replayer.reset();
     m_ret_val = r;
-    shut_down_status_watcher();
+    shut_down_local_status_updater();
     return;
   }
 
@@ -453,25 +454,26 @@ void NamespaceReplayer<I>::handle_shut_down_instance_replayer(int r) {
 
   m_instance_replayer.reset();
 
-  shut_down_status_watcher();
+  shut_down_local_status_updater();
 }
 
 template <typename I>
-void NamespaceReplayer<I>::shut_down_status_watcher() {
+void NamespaceReplayer<I>::shut_down_local_status_updater() {
   dout(10) << dendl;
 
   ceph_assert(ceph_mutex_is_locked(m_lock));
-  ceph_assert(m_status_watcher);
+  ceph_assert(m_local_status_updater);
 
-  Context *ctx = create_async_context_callback(
-    m_threads->work_queue, create_context_callback<NamespaceReplayer<I>,
-      &NamespaceReplayer<I>::handle_shut_down_status_watcher>(this));
+  auto ctx = create_async_context_callback(
+    m_threads->work_queue, create_context_callback<
+      NamespaceReplayer<I>,
+      &NamespaceReplayer<I>::handle_shut_down_local_status_updater>(this));
 
-  m_status_watcher->shut_down(ctx);
+  m_local_status_updater->shut_down(ctx);
 }
 
 template <typename I>
-void NamespaceReplayer<I>::handle_shut_down_status_watcher(int r) {
+void NamespaceReplayer<I>::handle_shut_down_local_status_updater(int r) {
   dout(10) << "r=" << r << dendl;
 
   if (r < 0) {
@@ -481,7 +483,7 @@ void NamespaceReplayer<I>::handle_shut_down_status_watcher(int r) {
 
   std::lock_guard locker{m_lock};
 
-  m_status_watcher.reset();
+  m_local_status_updater.reset();
 
   ceph_assert(!m_image_map);
   ceph_assert(!m_image_deleter);

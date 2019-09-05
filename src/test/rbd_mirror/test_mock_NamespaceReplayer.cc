@@ -11,6 +11,7 @@
 #include "tools/rbd_mirror/ImageMap.h"
 #include "tools/rbd_mirror/InstanceWatcher.h"
 #include "tools/rbd_mirror/InstanceReplayer.h"
+#include "tools/rbd_mirror/MirrorStatusUpdater.h"
 #include "tools/rbd_mirror/PoolWatcher.h"
 #include "tools/rbd_mirror/ServiceDaemon.h"
 #include "tools/rbd_mirror/Threads.h"
@@ -168,21 +169,21 @@ struct InstanceWatcher<librbd::MockTestImageCtx> {
 InstanceWatcher<librbd::MockTestImageCtx>* InstanceWatcher<librbd::MockTestImageCtx>::s_instance = nullptr;
 
 template <>
-struct MirrorStatusWatcher<librbd::MockTestImageCtx> {
-  static MirrorStatusWatcher* s_instance;
+struct MirrorStatusUpdater<librbd::MockTestImageCtx> {
+  static MirrorStatusUpdater* s_instance;
 
-  static MirrorStatusWatcher *create(librados::IoCtx &io_ctx,
-                                     ContextWQ *work_queue) {
+  static MirrorStatusUpdater *create(librados::IoCtx &io_ctx,
+                                     Threads<librbd::MockTestImageCtx> *threads) {
     ceph_assert(s_instance != nullptr);
     return s_instance;
   }
 
-  MirrorStatusWatcher() {
+  MirrorStatusUpdater() {
     ceph_assert(s_instance == nullptr);
     s_instance = this;
   }
 
-  ~MirrorStatusWatcher() {
+  ~MirrorStatusUpdater() {
     ceph_assert(s_instance == this);
     s_instance = nullptr;
   }
@@ -191,7 +192,7 @@ struct MirrorStatusWatcher<librbd::MockTestImageCtx> {
   MOCK_METHOD1(shut_down, void(Context *));
 };
 
-MirrorStatusWatcher<librbd::MockTestImageCtx> *MirrorStatusWatcher<librbd::MockTestImageCtx>::s_instance = nullptr;
+MirrorStatusUpdater<librbd::MockTestImageCtx> *MirrorStatusUpdater<librbd::MockTestImageCtx>::s_instance = nullptr;
 
 template<>
 struct PoolWatcher<librbd::MockTestImageCtx> {
@@ -270,7 +271,7 @@ public:
   typedef ImageMap<librbd::MockTestImageCtx> MockImageMap;
   typedef InstanceReplayer<librbd::MockTestImageCtx> MockInstanceReplayer;
   typedef InstanceWatcher<librbd::MockTestImageCtx> MockInstanceWatcher;
-  typedef MirrorStatusWatcher<librbd::MockTestImageCtx> MockMirrorStatusWatcher;
+  typedef MirrorStatusUpdater<librbd::MockTestImageCtx> MockMirrorStatusUpdater;
   typedef PoolWatcher<librbd::MockTestImageCtx> MockPoolWatcher;
   typedef ServiceDaemon<librbd::MockTestImageCtx> MockServiceDaemon;
   typedef Threads<librbd::MockTestImageCtx> MockThreads;
@@ -286,13 +287,13 @@ public:
   }
 
   void expect_mirror_status_watcher_init(
-      MockMirrorStatusWatcher &mock_mirror_status_watcher, int r) {
+      MockMirrorStatusUpdater &mock_mirror_status_watcher, int r) {
     EXPECT_CALL(mock_mirror_status_watcher, init(_))
       .WillOnce(CompleteContext(m_mock_threads->work_queue, r));
   }
 
   void expect_mirror_status_watcher_shut_down(
-      MockMirrorStatusWatcher &mock_mirror_status_watcher) {
+      MockMirrorStatusUpdater &mock_mirror_status_watcher) {
     EXPECT_CALL(mock_mirror_status_watcher, shut_down(_))
       .WillOnce(CompleteContext(m_mock_threads->work_queue, 0));
   }
@@ -404,10 +405,10 @@ public:
   MockThreads *m_mock_threads;
 };
 
-TEST_F(TestMockNamespaceReplayer, Init_MirrorStatusWatcherError) {
+TEST_F(TestMockNamespaceReplayer, Init_MirrorStatusUpdaterError) {
   InSequence seq;
 
-  auto mock_mirror_status_watcher = new MockMirrorStatusWatcher;
+  auto mock_mirror_status_watcher = new MockMirrorStatusUpdater;
   expect_mirror_status_watcher_init(*mock_mirror_status_watcher, -EINVAL);
 
   MockNamespaceReplayer namespace_replayer(
@@ -422,7 +423,7 @@ TEST_F(TestMockNamespaceReplayer, Init_MirrorStatusWatcherError) {
 TEST_F(TestMockNamespaceReplayer, Init_InstanceReplayerError) {
   InSequence seq;
 
-  auto mock_mirror_status_watcher = new MockMirrorStatusWatcher;
+  auto mock_mirror_status_watcher = new MockMirrorStatusUpdater;
   expect_mirror_status_watcher_init(*mock_mirror_status_watcher, 0);
 
   auto mock_instance_replayer = new MockInstanceReplayer();
@@ -442,7 +443,7 @@ TEST_F(TestMockNamespaceReplayer, Init_InstanceReplayerError) {
 TEST_F(TestMockNamespaceReplayer, Init_InstanceWatcherError) {
   InSequence seq;
 
-  auto mock_mirror_status_watcher = new MockMirrorStatusWatcher;
+  auto mock_mirror_status_watcher = new MockMirrorStatusUpdater;
   expect_mirror_status_watcher_init(*mock_mirror_status_watcher, 0);
 
   auto mock_instance_replayer = new MockInstanceReplayer();
@@ -468,7 +469,7 @@ TEST_F(TestMockNamespaceReplayer, Init_InstanceWatcherError) {
 TEST_F(TestMockNamespaceReplayer, Init) {
   InSequence seq;
 
-  auto mock_mirror_status_watcher = new MockMirrorStatusWatcher;
+  auto mock_mirror_status_watcher = new MockMirrorStatusUpdater;
   expect_mirror_status_watcher_init(*mock_mirror_status_watcher, 0);
 
   auto mock_instance_replayer = new MockInstanceReplayer();
@@ -507,7 +508,7 @@ TEST_F(TestMockNamespaceReplayer, AcuqireLeader) {
 
   // init
 
-  auto mock_mirror_status_watcher = new MockMirrorStatusWatcher;
+  auto mock_mirror_status_watcher = new MockMirrorStatusUpdater;
   expect_mirror_status_watcher_init(*mock_mirror_status_watcher, 0);
 
   auto mock_instance_replayer = new MockInstanceReplayer();

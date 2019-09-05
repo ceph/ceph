@@ -18,6 +18,7 @@ namespace librbd { class ImageCtx; }
 namespace rbd {
 namespace mirror {
 
+template <typename> struct MirrorStatusWatcher;
 template <typename> struct Threads;
 
 template <typename ImageCtxT = librbd::ImageCtx>
@@ -44,6 +45,22 @@ public:
                                   Context* on_finish);
 
 private:
+  /**
+   * @verbatim
+   *
+   * <uninitialized> <----------------------\
+   *    | (init)                 ^ (error)  |
+   *    v                        *          |
+   * INIT_STATUS_WATCHER * * * * *          |
+   *    |                                   |
+   *    |                           SHUT_DOWN_STATUS_WATCHER
+   *    |                                   ^
+   *    |                                   |
+   *    |           (shutdown)              |
+   * <initialized> -------------------------/
+   *
+   * @endverbatim
+   */
   typedef std::list<Context*> Contexts;
   typedef std::set<std::string> GlobalImageIds;
   typedef std::map<std::string, cls::rbd::MirrorImageSiteStatus>
@@ -58,6 +75,8 @@ private:
 
   bool m_initialized = false;
 
+  MirrorStatusWatcher<ImageCtxT>* m_mirror_status_watcher = nullptr;
+
   GlobalImageIds m_update_global_image_ids;
   GlobalImageStatus m_global_image_status;
 
@@ -69,6 +88,13 @@ private:
 
   bool try_remove_mirror_image_status(const std::string& global_image_id,
                                       Context* on_finish);
+
+  void init_mirror_status_watcher(Context* on_finish);
+  void handle_init_mirror_status_watcher(int r, Context* on_finish);
+
+  void shut_down_mirror_status_watcher(Context* on_finish);
+  void handle_shut_down_mirror_status_watcher(int r, Context* on_finish);
+  void finalize_shutdown(int r, Context* on_finish);
 
   void schedule_timer_task();
   void handle_timer_task(int r);
