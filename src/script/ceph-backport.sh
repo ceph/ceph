@@ -487,6 +487,9 @@ fi
 # at this point, local branch exists and is assumed to contain cherry-pick(s)
 #
 
+current_branch=$(git rev-parse --abbrev-ref HEAD)
+[ "$current_branch" = "$local_branch" ] || git checkout $local_branch
+
 debug "Pushing local branch $local_branch to remote $fork_remote"
 git push -u $fork_remote $local_branch
 
