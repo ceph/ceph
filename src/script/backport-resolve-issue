@@ -404,9 +404,10 @@ Ceph version:     base {}, target {}'''.format(self.github_url, pr_title_trunc, 
         assert ver_to_release()[maybe_stable], \
             "SHA1 {} is not based on any known stable release ({})".format(sha1, maybe_stable)
         tv = "v{}.{}.{}".format(x, y, int(z) + 1)
-        assert version2version_id[tv], \
-            "Target version {} is not in Redmine".format(tv)
-        self.target_version = tv
+        if tv in version2version_id:
+            self.target_version = tv
+        else:
+            raise Exception("Version {} not found in Redmine".format(tv))
 
     def mogrify_github_pr_desc(self):
         if not self.github_pr_desc:
