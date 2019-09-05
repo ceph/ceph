@@ -89,7 +89,7 @@ public:
     int r;
 
     command = "rbd mirror deletion status " + pool_name;
-    r = admin_socket->register_command(command, command, this,
+    r = admin_socket->register_command(command, this,
 				       "get status for image deleter");
     if (r == 0) {
       commands[command] = new StatusCommand<I>(image_del);

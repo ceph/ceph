@@ -177,7 +177,7 @@ public:
 
   int register_commands() {
     for (auto &it : commands) {
-      int r = admin_socket->register_command(it.first, it.first, this,
+      int r = admin_socket->register_command(it.first, this,
                                              it.second->desc);
       if (r < 0) {
         return r;

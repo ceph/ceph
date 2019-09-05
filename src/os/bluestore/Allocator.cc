@@ -22,19 +22,19 @@ public:
       name = to_string((uintptr_t)this);
     }
     if (admin_socket) {
-      int r = admin_socket->register_command(("bluestore allocator dump " + name).c_str(),
-                                           ("bluestore allocator dump " + name).c_str(),
-                                           this,
-                                           "dump allocator free regions");
+      int r = admin_socket->register_command(
+	("bluestore allocator dump " + name).c_str(),
+	this,
+	"dump allocator free regions");
       if (r != 0)
         alloc = nullptr; //some collision, disable
       if (alloc) {
-        r = admin_socket->register_command(("bluestore allocator score " + name).c_str(),
-                                           ("bluestore allocator score " + name).c_str(),
-                                           this,
-                                           "give score on allocator fragmentation (0-no fragmentation, 1-absolute fragmentation)");
+        r = admin_socket->register_command(
+	  ("bluestore allocator score " + name).c_str(),
+	  this,
+	  "give score on allocator fragmentation (0-no fragmentation, 1-absolute fragmentation)");
         ceph_assert(r == 0);
-        r = admin_socket->register_command(("bluestore allocator fragmentation " + name).c_str(),
+        r = admin_socket->register_command(
           ("bluestore allocator fragmentation " + name).c_str(),
           this,
           "give allocator fragmentation (0-no fragmentation, 1-absolute fragmentation)");

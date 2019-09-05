@@ -3289,78 +3289,71 @@ void OSD::final_init()
 {
   AdminSocket *admin_socket = cct->get_admin_socket();
   asok_hook = new OSDSocketHook(this);
-  int r = admin_socket->register_command("status", "status", asok_hook,
+  int r = admin_socket->register_command("status", asok_hook,
 					 "high-level status of OSD");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("flush_journal", "flush_journal",
+  r = admin_socket->register_command("flush_journal",
                                      asok_hook,
                                      "flush the journal to permanent store");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_ops_in_flight",
-				     "dump_ops_in_flight " \
+  r = admin_socket->register_command("dump_ops_in_flight " \
 				     "name=filterstr,type=CephString,n=N,req=false",
 				     asok_hook,
 				     "show the ops currently in flight");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("ops",
-				     "ops " \
+  r = admin_socket->register_command("ops " \
 				     "name=filterstr,type=CephString,n=N,req=false",
 				     asok_hook,
 				     "show the ops currently in flight");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_blocked_ops",
-				     "dump_blocked_ops " \
+  r = admin_socket->register_command("dump_blocked_ops " \
 				     "name=filterstr,type=CephString,n=N,req=false",
 				     asok_hook,
 				     "show the blocked ops currently in flight");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_historic_ops",
-                                     "dump_historic_ops " \
+  r = admin_socket->register_command("dump_historic_ops " \
                                      "name=filterstr,type=CephString,n=N,req=false",
 				     asok_hook,
 				     "show recent ops");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_historic_slow_ops",
-                                     "dump_historic_slow_ops " \
+  r = admin_socket->register_command("dump_historic_slow_ops " \
                                      "name=filterstr,type=CephString,n=N,req=false",
 				     asok_hook,
 				     "show slowest recent ops");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_historic_ops_by_duration",
-                                     "dump_historic_ops_by_duration " \
+  r = admin_socket->register_command("dump_historic_ops_by_duration " \
                                      "name=filterstr,type=CephString,n=N,req=false",
 				     asok_hook,
 				     "show slowest recent ops, sorted by duration");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_op_pq_state", "dump_op_pq_state",
+  r = admin_socket->register_command("dump_op_pq_state",
 				     asok_hook,
 				     "dump op priority queue state");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_blacklist", "dump_blacklist",
+  r = admin_socket->register_command("dump_blacklist",
 				     asok_hook,
 				     "dump blacklisted clients and times");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_watchers", "dump_watchers",
+  r = admin_socket->register_command("dump_watchers",
 				     asok_hook,
 				     "show clients which have active watches,"
 				     " and on which objects");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_recovery_reservations", "dump_recovery_reservations",
+  r = admin_socket->register_command("dump_recovery_reservations",
 				     asok_hook,
 				     "show recovery reservations");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_scrub_reservations", "dump_scrub_reservations",
+  r = admin_socket->register_command("dump_scrub_reservations",
 				     asok_hook,
-				     "show scrub reservations");
+				     "show recovery reservations");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("get_latest_osdmap", "get_latest_osdmap",
+  r = admin_socket->register_command("get_latest_osdmap",
 				     asok_hook,
 				     "force osd to update the latest map from "
 				     "the mon");
   ceph_assert(r == 0);
 
-  r = admin_socket->register_command( "heap",
-                                      "heap " \
+  r = admin_socket->register_command( "heap " \
                                       "name=heapcmd,type=CephString " \
                                       "name=value,type=CephString,req=false",
                                       asok_hook,
@@ -3368,83 +3361,77 @@ void OSD::final_init()
                                       "compiled with tcmalloc)");
   ceph_assert(r == 0);
 
-  r = admin_socket->register_command("set_heap_property",
-				     "set_heap_property " \
+  r = admin_socket->register_command("set_heap_property " \
 				     "name=property,type=CephString " \
 				     "name=value,type=CephInt",
 				     asok_hook,
 				     "update malloc extension heap property");
   ceph_assert(r == 0);
 
-  r = admin_socket->register_command("get_heap_property",
-				     "get_heap_property " \
+  r = admin_socket->register_command("get_heap_property " \
 				     "name=property,type=CephString",
 				     asok_hook,
 				     "get malloc extension heap property");
   ceph_assert(r == 0);
 
   r = admin_socket->register_command("dump_objectstore_kv_stats",
-				     "dump_objectstore_kv_stats",
 				     asok_hook,
 				     "print statistics of kvdb which used by bluestore");
   ceph_assert(r == 0);
 
   r = admin_socket->register_command("dump_scrubs",
-				     "dump_scrubs",
 				     asok_hook,
 				     "print scheduled scrubs");
   ceph_assert(r == 0);
 
   r = admin_socket->register_command("calc_objectstore_db_histogram",
-                                     "calc_objectstore_db_histogram",
                                      asok_hook,
                                      "Generate key value histogram of kvdb(rocksdb) which used by bluestore");
   ceph_assert(r == 0);
 
   r = admin_socket->register_command("flush_store_cache",
-                                     "flush_store_cache",
                                      asok_hook,
                                      "Flush bluestore internal cache");
   ceph_assert(r == 0);
-  r = admin_socket->register_command("dump_pgstate_history", "dump_pgstate_history",
+  r = admin_socket->register_command("dump_pgstate_history",
 				     asok_hook,
 				     "show recent state history");
   ceph_assert(r == 0);
 
-  r = admin_socket->register_command("compact", "compact",
+  r = admin_socket->register_command("compact",
 				     asok_hook,
 				     "Commpact object store's omap."
                                      " WARNING: Compaction probably slows your requests");
   ceph_assert(r == 0);
 
-  r = admin_socket->register_command("get_mapped_pools", "get_mapped_pools",
+  r = admin_socket->register_command("get_mapped_pools",
                                      asok_hook,
                                      "dump pools whose PG(s) are mapped to this OSD.");
 
   ceph_assert(r == 0);
 
-  r = admin_socket->register_command("smart", "smart name=devid,type=CephString,req=False",
+  r = admin_socket->register_command("smart name=devid,type=CephString,req=False",
                                      asok_hook,
                                      "probe OSD devices for SMART data.");
 
   ceph_assert(r == 0);
 
-  r = admin_socket->register_command("list_devices", "list_devices",
+  r = admin_socket->register_command("list_devices",
                                      asok_hook,
                                      "list OSD devices.");
-  r = admin_socket->register_command("send_beacon", "send_beacon",
+  r = admin_socket->register_command("send_beacon",
                                      asok_hook,
                                      "send OSD beacon to mon immediately");
 
-  r = admin_socket->register_command("dump_osd_network", "dump_osd_network name=value,type=CephInt,req=false", asok_hook,
-					 "Dump osd heartbeat network ping times");
+  r = admin_socket->register_command(
+    "dump_osd_network name=value,type=CephInt,req=false", asok_hook,
+    "Dump osd heartbeat network ping times");
   ceph_assert(r == 0);
 
   test_ops_hook = new TestOpsSocketHook(&(this->service), this->store);
   // Note: pools are CephString instead of CephPoolname because
   // these commands traditionally support both pool names and numbers
   r = admin_socket->register_command(
-   "setomapval",
    "setomapval " \
    "name=pool,type=CephString " \
    "name=objname,type=CephObjectname " \
@@ -3454,7 +3441,6 @@ void OSD::final_init()
    "set omap key");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
-    "rmomapkey",
     "rmomapkey " \
     "name=pool,type=CephString " \
     "name=objname,type=CephObjectname " \
@@ -3463,7 +3449,6 @@ void OSD::final_init()
     "remove omap key");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
-    "setomapheader",
     "setomapheader " \
     "name=pool,type=CephString " \
     "name=objname,type=CephObjectname " \
@@ -3473,7 +3458,6 @@ void OSD::final_init()
   ceph_assert(r == 0);
 
   r = admin_socket->register_command(
-    "getomap",
     "getomap " \
     "name=pool,type=CephString " \
     "name=objname,type=CephObjectname",
@@ -3482,7 +3466,6 @@ void OSD::final_init()
   ceph_assert(r == 0);
 
   r = admin_socket->register_command(
-    "truncobj",
     "truncobj " \
     "name=pool,type=CephString " \
     "name=objname,type=CephObjectname " \
@@ -3492,7 +3475,6 @@ void OSD::final_init()
   ceph_assert(r == 0);
 
   r = admin_socket->register_command(
-    "injectdataerr",
     "injectdataerr " \
     "name=pool,type=CephString " \
     "name=objname,type=CephObjectname " \
@@ -3502,7 +3484,6 @@ void OSD::final_init()
   ceph_assert(r == 0);
 
   r = admin_socket->register_command(
-    "injectmdataerr",
     "injectmdataerr " \
     "name=pool,type=CephString " \
     "name=objname,type=CephObjectname " \
@@ -3511,14 +3492,12 @@ void OSD::final_init()
     "inject metadata error to an object");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
-    "set_recovery_delay",
     "set_recovery_delay " \
     "name=utime,type=CephInt,req=false",
     test_ops_hook,
      "Delay osd recovery by specified seconds");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
-   "trigger_scrub",
    "trigger_scrub " \
    "name=pgid,type=CephString " \
    "name=time,type=CephInt,req=false",
@@ -3526,7 +3505,6 @@ void OSD::final_init()
    "Trigger a scheduled scrub ");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
-   "trigger_deep_scrub",
    "trigger_deep_scrub " \
    "name=pgid,type=CephString " \
    "name=time,type=CephInt,req=false",
@@ -3534,7 +3512,6 @@ void OSD::final_init()
    "Trigger a scheduled deep scrub ");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
-   "injectfull",
    "injectfull " \
    "name=type,type=CephString,req=false " \
    "name=count,type=CephInt,req=false ",

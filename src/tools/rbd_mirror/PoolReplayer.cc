@@ -136,42 +136,42 @@ public:
     int r;
 
     command = "rbd mirror status " + name;
-    r = admin_socket->register_command(command, command, this,
+    r = admin_socket->register_command(command, this,
 				       "get status for rbd mirror " + name);
     if (r == 0) {
       commands[command] = new StatusCommand<I>(pool_replayer);
     }
 
     command = "rbd mirror start " + name;
-    r = admin_socket->register_command(command, command, this,
+    r = admin_socket->register_command(command, this,
 				       "start rbd mirror " + name);
     if (r == 0) {
       commands[command] = new StartCommand<I>(pool_replayer);
     }
 
     command = "rbd mirror stop " + name;
-    r = admin_socket->register_command(command, command, this,
+    r = admin_socket->register_command(command, this,
 				       "stop rbd mirror " + name);
     if (r == 0) {
       commands[command] = new StopCommand<I>(pool_replayer);
     }
 
     command = "rbd mirror restart " + name;
-    r = admin_socket->register_command(command, command, this,
+    r = admin_socket->register_command(command, this,
 				       "restart rbd mirror " + name);
     if (r == 0) {
       commands[command] = new RestartCommand<I>(pool_replayer);
     }
 
     command = "rbd mirror flush " + name;
-    r = admin_socket->register_command(command, command, this,
+    r = admin_socket->register_command(command, this,
 				       "flush rbd mirror " + name);
     if (r == 0) {
       commands[command] = new FlushCommand<I>(pool_replayer);
     }
 
     command = "rbd mirror leader release " + name;
-    r = admin_socket->register_command(command, command, this,
+    r = admin_socket->register_command(command, this,
                                        "release rbd mirror leader " + name);
     if (r == 0) {
       commands[command] = new LeaderReleaseCommand<I>(pool_replayer);

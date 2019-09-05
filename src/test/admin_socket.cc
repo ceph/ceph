@@ -140,7 +140,7 @@ TEST(AdminSocket, RegisterCommand) {
   ASSERT_EQ(true, asoct.shutdown());
   ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
   AdminSocketClient client(get_rand_socket_path());
-  ASSERT_EQ(0, asoct.m_asokc->register_command("test", "test", my_test_asok.get(), ""));
+  ASSERT_EQ(0, asoct.m_asokc->register_command("test", my_test_asok.get(), ""));
   string result;
   ASSERT_EQ("", client.do_request("{\"prefix\":\"test\"}", &result));
   ASSERT_EQ("test|", result);
@@ -174,8 +174,8 @@ TEST(AdminSocket, RegisterCommandPrefixes) {
   ASSERT_EQ(true, asoct.shutdown());
   ASSERT_EQ(true, asoct.init(get_rand_socket_path()));
   AdminSocketClient client(get_rand_socket_path());
-  ASSERT_EQ(0, asoct.m_asokc->register_command("test", "test name=args,type=CephString,n=N", my_test_asok.get(), ""));
-  ASSERT_EQ(0, asoct.m_asokc->register_command("test command", "test command name=args,type=CephString,n=N", my_test2_asok.get(), ""));
+  ASSERT_EQ(0, asoct.m_asokc->register_command("test name=args,type=CephString,n=N", my_test_asok.get(), ""));
+  ASSERT_EQ(0, asoct.m_asokc->register_command("test command name=args,type=CephString,n=N", my_test2_asok.get(), ""));
   string result;
   ASSERT_EQ("", client.do_request("{\"prefix\":\"test\"}", &result));
   ASSERT_EQ("test|", result);
@@ -248,7 +248,7 @@ TEST(AdminSocketClient, Ping) {
   {
     AdminSocketTest asoct(asokc.get());
     BlockingHook *blocking = new BlockingHook();
-    ASSERT_EQ(0, asoct.m_asokc->register_command("0", "0", blocking, ""));
+    ASSERT_EQ(0, asoct.m_asokc->register_command("0", blocking, ""));
     ASSERT_TRUE(asoct.init(path));
     bool ok;
     std::string result = client.ping(&ok);
