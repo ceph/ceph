@@ -445,7 +445,13 @@ if [[ $title =~ \" ]] ; then
 fi
 
 debug "Opening backport PR"
-number=$(curl --silent --data-binary '{"title":"'"$title"'","head":"'$github_user':'$local_branch'","base":"'$target_branch'","body":"'"${desc}"'"}' 'https://api.github.com/repos/ceph/ceph/pulls?access_token='$github_token | jq -r .number)
+remote_api_output=$(curl --silent --data-binary '{"title":"'"$title"'","head":"'$github_user':'$local_branch'","base":"'$target_branch'","body":"'"${desc}"'"}' 'https://api.github.com/repos/ceph/ceph/pulls?access_token='$github_token)
+number=$(echo "$remote_api_output" | jq -r .number)
+if [ "$number" = "null" ] ; then
+    error "Remote API call failed"
+    echo "$remote_api_output"
+    exit 1
+fi
 component=${COMPONENT:-core}
 info "Opened backport PR ${github_endpoint}/pull/$number"
 debug "Setting ${component} label"
