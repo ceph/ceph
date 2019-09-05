@@ -301,6 +301,8 @@ describe('TableKeyValueComponent', () => {
   describe('hide empty items', () => {
     beforeEach(() => {
       component.data = {
+        booleanFalse: false,
+        booleanTrue: true,
         string: '',
         array: [],
         object: {},
@@ -326,6 +328,8 @@ describe('TableKeyValueComponent', () => {
       component.ngOnInit();
       expect(component.tableData).toEqual([
         { key: 'array', value: '' },
+        { key: 'booleanFalse', value: false },
+        { key: 'booleanTrue', value: true },
         { key: 'emptyObject array', value: '' },
         { key: 'emptyObject object', value: '' },
         { key: 'emptyObject string', value: '' },
@@ -344,6 +348,8 @@ describe('TableKeyValueComponent', () => {
       component.hideEmpty = true;
       component.ngOnInit();
       expect(component.tableData).toEqual([
+        { key: 'booleanFalse', value: false },
+        { key: 'booleanTrue', value: true },
         { key: 'someArray', value: '0, 1' },
         { key: 'someDifferentNumber', value: 1 },
         { key: 'someNumber', value: 0 },
