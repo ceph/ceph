@@ -46,7 +46,7 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   uint64_t peer_global_id = 0;
 
  protected:
-  uint64_t features;
+  uint64_t features = 0;
 
  public:
   void set_features(uint64_t new_features) {
