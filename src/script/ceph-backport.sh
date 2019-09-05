@@ -66,28 +66,31 @@
 # local clone.
 #
 # Third, choose a Backport tracker issue you would like to stage a backport for.
-# Let's assume the Backport tracker issue you chose has the number 31459.
+# Let's assume the Backport tracker issue you chose has the number 31459 and 
+# the backport targets luminous.
 #
 # Then run:
 #
-#     ceph-backport.sh 31459 --prepare
+#     ceph-backport.sh 31459
 #
 # Assuming 31459 is a properly-linked Backport issue and the "Pull request ID"
 # field of the parent issue has been correctly populated, the script will
 # automatically:
 #
-# 1. determine which stable branch the backport is targeting
-# 2. create a local wip branch based on the tip of that stable branch
-# 3. cherry-pick the commits from the master PR
+# 1. determine which stable branch the backport is targeting (luminous)
+# 2. create a local backport branch, wip-31459-luminous, based on the tip of
+#    luminous
+# 3. determine parent issue and master PR and cherry-pick the commits from the
+#    master PR
 #
 # If there were no cherry-pick conflicts, the script will continue (see steps
 # 4-6, below).
 #
 # If any commit fails to cherry-pick cleanly, the script will abort, giving
 # the user an opportunity to resolve the conflicts manually and re-run the
-# script (without --prepare the second time) -- in that case the script will
-# assume the current branch is the backport branch with cherry-picking
-# completed, and start from step 4:
+# script. When the script sees that the local backport branch (wip-31459-luminous)
+# already exists, it assumes that cherry-picking has been completed, and starts
+# from step 4:
 #
 # 4. push the wip branch to the user's fork
 # 5. open the backport PR on GitHub with the correct Milestone setting
@@ -160,14 +163,55 @@
 # Happy backporting!
 # Nathan
 #
-source $HOME/bin/backport_common.sh
+
 this_script=$(basename "$0")
 
-remote_api_output=$(mktemp /tmp/${this_script}.remote_api_output.XXXXX)
-function rm_tmp_files {
-    rm -f "$remote_api_output"
+function debug {
+    log debug $@
 }
-trap rm_tmp_files EXIT
+
+function error {
+    log error $@
+}
+
+function failed_required_variable_check {
+    local varname="$1"
+    error "$varname not defined. Did you create $HOME/bin/backport_common.sh?"
+    info "(For detailed instructions, see comment block at the beginning of the script)"
+    exit 1
+}
+
+function info {
+    log info $@
+}
+
+function init_mandatory_vars {
+    debug Initializing mandatory variables
+    test "$redmine_key"     || failed_required_variable_check redmine_key
+    test "$redmine_user_id" || failed_required_variable_check redmine_user_id
+    test "$github_token"    || failed_required_variable_check github_token
+    test "$github_user"     || failed_required_variable_check github_user
+    true "${github_repo:=origin}"
+    true "${ceph_repo:=upstream}"
+    true "${redmine_endpoint:="https://tracker.ceph.com"}"
+    true "${github_endpoint:="https://github.com/ceph/ceph"}"
+    debug "Redmine user: ${redmine_user_id}"
+    debug "GitHub user:  ${github_user}"
+    debug "Fork remote:  ${github_repo}"
+    if git remote -v | egrep ^${github_repo}\\s+ ; then
+        true  # remote exists; good
+    else
+        error "github_repo is set to ->$github_repo<- but this remote does not exist"
+        exit 1
+    fi
+    debug "Ceph remote:  ${ceph_repo}"
+    if git remote -v | egrep ^${ceph_repo}\\s+ ; then
+        true  # remote exists; good
+    else
+        error "ceph_repo is set to ->$ceph_repo<- but this remote does not exist"
+        exit 1
+    fi
+}
 
 function log {
     local level="$1"
@@ -199,43 +243,6 @@ function log {
         msg="${prefix}${msg}"
         echo "$msg" >&2
     fi
-}
-
-function error {
-    log error $@
-}
-
-function warning {
-    log warning $@
-}
-
-function info {
-    log info $@
-}
-
-function debug {
-    log debug $@
-}
-
-function usage {
-    log bare
-    log bare "Usage:"
-    log bare "   ${this_script} BACKPORT_TRACKER_ISSUE_NUMBER [--debug] [--prepare] [--verbose]"
-    log bare
-    log bare "Example:"
-    log bare "   ${this_script} 19206 --prepare"
-    log bare
-    log bare "The script must be run from inside a local git clone."
-    log bare
-    log bare "Documentation can be found in the comment block at the top of the script itself."
-    exit 1
-}
-
-function failed_required_variable_check {
-    local varname="$1"
-    error "$varname not defined. Did you create $HOME/bin/backport_common.sh?"
-    info "(For detailed instructions, see comment block at the beginning of the script)"
-    exit 1
 }
 
 function populate_original_issue {
@@ -312,9 +319,9 @@ function prepare {
                 for ((j=$i-1; j>=0; j--)) ; do
                     info "-> missing commit: $(git log --oneline --max-count=1 --no-decorate pr-$original_pr~$j)"
                 done
-                info "Finally, re-run the script without --prepare"
+                info "Finally, re-run the script"
             else
-                info "Then re-run the script without --prepare"
+                info "Then re-run the script"
             fi
             exit 1
         fi
@@ -322,19 +329,50 @@ function prepare {
     info "Cherry picking completed without conflicts"
 }
 
+function usage {
+    log bare
+    log bare "Usage:"
+    log bare "   ${this_script} BACKPORT_TRACKER_ISSUE_NUMBER [--debug] [--prepare] [--verbose]"
+    log bare
+    log bare "Example:"
+    log bare "   ${this_script} 19206 --prepare"
+    log bare
+    log bare "The script must be run from inside a local git clone."
+    log bare
+    log bare "Documentation can be found in the comment block at the top of the script itself."
+    exit 1
+}
+
+function warning {
+    log warning $@
+}
+
+
+if git show-ref HEAD >/dev/null 2>&1 ; then
+    debug "In a local git clone. Good."
+else
+    error "This script must be run from inside a local git clone"
+    exit 1
+fi
+
+
+#
+# process command-line arguments
+#
+
 munged_options=$(getopt -o dhpv --long "debug,help,prepare,verbose" -n "$this_script" -- "$@")
 eval set -- "$munged_options"
 
 DEBUG=""
 HELP=""
 ISSUE=""
-PREPARE=""
+EXPLICIT_PREPARE=""
 VERBOSE=""
 while true ; do
     case "$1" in
         --debug|-d) DEBUG="$1" ; shift ;;
         --help|-h) HELP="$1" ; shift ;;
-        --prepare|-p) PREPARE="$1" ; shift ;;
+        --prepare|-p) EXPLICIT_PREPARE="$1" ; shift ;;
         --verbose|-v) VERBOSE="$1" ; shift ;;
         --) shift ; ISSUE="$1" ; break ;;
         *) echo "Internal error" ; false ;;
@@ -361,50 +399,25 @@ if [ "$VERBOSE" ]; then
     VERBOSE="--verbose"
 fi
 
-debug Checking mandatory variables
-test "$redmine_key"     || failed_required_variable_check redmine_key
-test "$redmine_user_id" || failed_required_variable_check redmine_user_id
-test "$github_token"    || failed_required_variable_check github_token
-test "$github_user"     || failed_required_variable_check github_user
-true "${github_repo:=origin}"
-true "${ceph_repo:=upstream}"
-redmine_endpoint="https://tracker.ceph.com"
-github_endpoint="https://github.com/ceph/ceph"
-original_issue=
-original_pr=
-original_pr_url=
 
-if git show-ref HEAD >/dev/null 2>&1 ; then
-    debug "In a local git clone. Good."
-else
-    error "This script must be run from inside a local git clone"
-    exit 1
-fi
+#
+# initialize mandatory variables and check values for sanity
+#
 
-if [ $VERBOSE ] ; then
-    debug "Redmine user: ${redmine_user_id}"
-    debug "GitHub user:  ${github_user}"
-    debug "Fork remote:  ${github_repo}"
-    if git remote -v | egrep ^${github_repo}\\s+ ; then
-        true  # remote exists; good
-    else
-        error "github_repo is set to ->$github_repo<- but this remote does not exist"
-        exit 1
-    fi
-    debug "Ceph remote:  ${ceph_repo}"
-    if git remote -v | egrep ^${ceph_repo}\\s+ ; then
-        true  # remote exists; good
-    else
-        error "ceph_repo is set to ->$ceph_repo<- but this remote does not exist"
-        exit 1
-    fi
-fi
+BACKPORT_COMMON=$HOME/bin/backport_common.sh
+[ -f "$BACKPORT_COMMON" ] && source $HOME/bin/backport_common.sh
+init_mandatory_vars
+
+
+#
+# query remote Redmine API for information about the Backport tracker issue
+#
 
 redmine_url="${redmine_endpoint}/issues/${issue}"
 debug "Considering Redmine issue: $redmine_url - is it in the Backport tracker?"
 
-curl --silent "${redmine_url}.json" > $remote_api_output
-tracker=$(cat $remote_api_output | jq -r '.issue.tracker.name')
+remote_api_output=$(curl --silent "${redmine_url}.json")
+tracker=$(echo $remote_api_output | jq -r '.issue.tracker.name')
 if [ "$tracker" = "Backport" ]; then
     debug "Yes, $redmine_url is a Backport issue"
 else
@@ -414,7 +427,7 @@ else
 fi
 
 debug "Looking up release/milestone of $redmine_url"
-milestone=$(cat $remote_api_output | jq -r '.issue.custom_fields[0].value')
+milestone=$(echo $remote_api_output | jq -r '.issue.custom_fields[0].value')
 if [ "$milestone" ] ; then
     debug "Release/milestone: $milestone"
 else
@@ -422,7 +435,7 @@ else
     exit 1
 fi
 
-tracker_title=$(cat $remote_api_output | jq -r '.issue.subject')
+tracker_title=$(echo $remote_api_output | jq -r '.issue.subject')
 debug "Title of $redmine_url is ->$tracker_title<-"
 
 # milestone numbers can be obtained manually with:
@@ -440,23 +453,36 @@ fi
 info "Milestone/release is $milestone"
 debug "Milestone number is $milestone_number"
 
+
+#
+# --prepare phase
+#
+
 local_branch=wip-${issue}-${target_branch}
-
-if [ "$PREPARE" ]; then
-    debug "'--prepare' found, will only prepare the backport"
-    prepare
-fi
-
-current_branch=$(git rev-parse --abbrev-ref HEAD)
-if [ "$current_branch" = "$local_branch" ] ; then
-    true  # all is well
+if git show-ref --verify --quiet refs/heads/$local_branch ; then
+    if [ "$EXPLICIT_PREPARE" ] ; then
+        error "local branch $local_branch already exists -- cannot --prepare"
+        exit 1
+    fi
+    warning "local branch $local_branch already exists: skipping cherry-pick phase!"
+    PREPARE=""
 else
-    error "local branch is $current_branch, but I needed $local_branch"
-    exit 1
+    info "$local_branch does not exist: will create it and attempt automated cherry-pick"
+    PREPARE="--prepare"
 fi
+[ "$PREPARE" ] && prepare
+
+
+#
+# at this point, local branch exists and is assumed to contain cherry-pick(s)
+#
 
 debug "Pushing local branch $local_branch to remote $github_repo"
 git push -u $github_repo $local_branch
+
+original_issue=""
+original_pr=""
+original_pr_url=""
 
 debug "Generating backport PR description"
 populate_original_issue
