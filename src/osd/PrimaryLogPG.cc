@@ -5724,6 +5724,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_UNDIRTY:
       ++ctx->num_write;
+      result = 0;
       {
 	tracepoint(osd, do_osd_op_pre_undirty, soid.oid.name.c_str(), soid.snap.val);
 	if (oi.is_dirty()) {
@@ -5731,12 +5732,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  ctx->modify = true;
 	  ctx->delta_stats.num_wr++;
 	}
-	result = 0;
       }
       break;
 
     case CEPH_OSD_OP_CACHE_TRY_FLUSH:
       ++ctx->num_write;
+      result = 0;
       {
 	tracepoint(osd, do_osd_op_pre_try_flush, soid.oid.name.c_str(), soid.snap.val);
 	if (ctx->lock_type != ObjectContext::RWState::RWNONE) {
@@ -5769,6 +5770,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_CACHE_FLUSH:
       ++ctx->num_write;
+      result = 0;
       {
 	tracepoint(osd, do_osd_op_pre_cache_flush, soid.oid.name.c_str(), soid.snap.val);
 	if (ctx->lock_type == ObjectContext::RWState::RWNONE) {
@@ -5810,6 +5812,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_CACHE_EVICT:
       ++ctx->num_write;
+      result = 0;
       {
 	tracepoint(osd, do_osd_op_pre_cache_evict, soid.oid.name.c_str(), soid.snap.val);
 	if (pool.info.cache_mode == pg_pool_t::CACHEMODE_NONE) {
@@ -6143,6 +6146,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_SETALLOCHINT:
       ++ctx->num_write;
+      result = 0;
       {
 	tracepoint(osd, do_osd_op_pre_setallochint, soid.oid.name.c_str(), soid.snap.val, op.alloc_hint.expected_object_size, op.alloc_hint.expected_write_size);
 	maybe_create_new_object(ctx);
@@ -6152,7 +6156,6 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         t->set_alloc_hint(soid, op.alloc_hint.expected_object_size,
                           op.alloc_hint.expected_write_size,
 			  op.alloc_hint.flags);
-        result = 0;
       }
       break;
 
@@ -6163,6 +6166,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_WRITE:
       ++ctx->num_write;
+      result = 0;
       { // write
         __u32 seq = oi.truncate_seq;
 	tracepoint(osd, do_osd_op_pre_write, soid.oid.name.c_str(), soid.snap.val, oi.size, seq, op.extent.offset, op.extent.length, op.extent.truncate_size, op.extent.truncate_seq);
@@ -6269,6 +6273,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       
     case CEPH_OSD_OP_WRITEFULL:
       ++ctx->num_write;
+      result = 0;
       { // write full object
 	tracepoint(osd, do_osd_op_pre_writefull, soid.oid.name.c_str(), soid.snap.val, oi.size, 0, op.extent.length);
 
@@ -6348,6 +6353,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
     case CEPH_OSD_OP_CREATE:
       ++ctx->num_write;
+      result = 0;
       {
 	tracepoint(osd, do_osd_op_pre_create, soid.oid.name.c_str(), soid.snap.val);
         int flags = le32_to_cpu(op.flags);
@@ -6367,10 +6373,8 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	    }
 	    // category is no longer implemented.
 	  }
-          if (result >= 0) {
-	    maybe_create_new_object(ctx);
-	    t->nop(soid);
-          }
+	  maybe_create_new_object(ctx);
+	  t->nop(soid);
 	}
       }
       break;
@@ -6386,6 +6390,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	break;
       }
       ++ctx->num_write;
+      result = 0;
       {
 	// truncate
 	if (!obs.exists || oi.is_whiteout()) {
@@ -6436,6 +6441,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
     
     case CEPH_OSD_OP_DELETE:
       ++ctx->num_write;
+      result = 0;
       tracepoint(osd, do_osd_op_pre_delete, soid.oid.name.c_str(), soid.snap.val);
       {
 	if (oi.has_manifest()) {
@@ -6465,6 +6471,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_WATCH:
       ++ctx->num_write;
+      result = 0;
       {
 	tracepoint(osd, do_osd_op_pre_watch, soid.oid.name.c_str(), soid.snap.val,
 		   op.watch.cookie, op.watch.op);
@@ -6472,6 +6479,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  result = -ENOENT;
 	  break;
 	}
+	result = 0;
         uint64_t cookie = op.watch.cookie;
         entity_name_t entity = ctx->reqid.name;
 	ObjectContextRef obc = ctx->obc;
@@ -6553,6 +6561,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         break;
       }
       ++ctx->num_write;
+      result = 0;
       {
 	if (!obs.exists || oi.is_whiteout()) {
 	  result = -ENOENT;
@@ -6565,7 +6574,6 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  ctx->delta_stats.num_objects_pinned++;
 	  ctx->delta_stats.num_wr++;
 	}
-	result = 0;
       }
       break;
 
@@ -6578,6 +6586,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
         break;
       }
       ++ctx->num_write;
+      result = 0;
       {
 	if (!obs.exists || oi.is_whiteout()) {
 	  result = -ENOENT;
@@ -6590,12 +6599,12 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	  ctx->delta_stats.num_objects_pinned--;
 	  ctx->delta_stats.num_wr++;
 	}
-	result = 0;
       }
       break;
 
     case CEPH_OSD_OP_SET_REDIRECT:
       ++ctx->num_write;
+      result = 0;
       {
 	if (pool.info.is_tier()) {
 	  result = -EINVAL;
@@ -6703,6 +6712,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_SET_CHUNK:
       ++ctx->num_write;
+      result = 0;
       {
 	if (pool.info.is_tier()) {
 	  result = -EINVAL;
@@ -6810,6 +6820,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_TIER_PROMOTE:
       ++ctx->num_write;
+      result = 0;
       {
 	if (pool.info.is_tier()) {
 	  result = -EINVAL;
@@ -6868,6 +6879,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_TIER_FLUSH:
       ++ctx->num_write;
+      result = 0;
       {
 	if (pool.info.is_tier()) {
 	  result = -EINVAL;
@@ -6908,6 +6920,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_UNSET_MANIFEST:
       ++ctx->num_write;
+      result = 0;
       {
 	if (pool.info.is_tier()) {
 	  result = -EINVAL;
@@ -6963,6 +6976,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       
     case CEPH_OSD_OP_SETXATTR:
       ++ctx->num_write;
+      result = 0;
       {
 	if (cct->_conf->osd_max_attr_size > 0 &&
 	    op.xattr.value_len > cct->_conf->osd_max_attr_size) {
@@ -6991,6 +7005,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_RMXATTR:
       ++ctx->num_write;
+      result = 0;
       {
 	string aname;
 	bp.copy(op.xattr.name_len, aname);
@@ -7025,6 +7040,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
       break;
 
     case CEPH_OSD_OP_STARTSYNC:
+      result = 0;
       t->nop(soid);
       break;
 
@@ -7343,6 +7359,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	break;
       }
       ++ctx->num_write;
+      result = 0;
       {
 	maybe_create_new_object(ctx);
 	bufferlist to_set_bl;
@@ -7382,6 +7399,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	break;
       }
       ++ctx->num_write;
+      result = 0;
       {
 	maybe_create_new_object(ctx);
 	t->omap_setheader(soid, osd_op.indata);
@@ -7399,6 +7417,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	break;
       }
       ++ctx->num_write;
+      result = 0;
       {
 	if (!obs.exists || oi.is_whiteout()) {
 	  result = -ENOENT;
@@ -7421,6 +7440,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	break;
       }
       ++ctx->num_write;
+      result = 0;
       {
 	if (!obs.exists || oi.is_whiteout()) {
 	  result = -ENOENT;
@@ -7451,6 +7471,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 	break;
       }
       ++ctx->num_write;
+      result = 0;
       {
 	if (!obs.exists || oi.is_whiteout()) {
 	  result = -ENOENT;
@@ -7483,6 +7504,7 @@ int PrimaryLogPG::do_osd_ops(OpContext *ctx, vector<OSDOp>& ops)
 
     case CEPH_OSD_OP_COPY_FROM:
       ++ctx->num_write;
+      result = 0;
       {
 	object_t src_name;
 	object_locator_t src_oloc;
