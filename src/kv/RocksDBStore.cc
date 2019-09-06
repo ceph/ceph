@@ -705,8 +705,8 @@ int64_t RocksDBStore::estimate_prefix_size(const string& prefix,
     rocksdb::Range r(start, limit);
     db->GetApproximateSizes(cf, &r, 1, &size, flags);
   } else {
-    string start = prefix + key_prefix;
-    string limit = prefix + key_prefix + "\xff\xff\xff\xff";
+    string start = combine_strings(prefix , key_prefix);
+    string limit = combine_strings(prefix , key_prefix + "\xff\xff\xff\xff");
     rocksdb::Range r(start, limit);
     db->GetApproximateSizes(default_cf, &r, 1, &size, flags);
   }
