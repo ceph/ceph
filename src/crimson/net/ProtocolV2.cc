@@ -151,7 +151,7 @@ seastar::future<> ProtocolV2::Timer::backoff(double seconds)
       std::chrono::duration<double>(seconds));
   return seastar::sleep_abortable(dur, *as
   ).handle_exception_type([this] (const seastar::sleep_aborted& e) {
-    logger().warn("{} wait aborted", conn);
+    logger().debug("{} wait aborted", conn);
     abort_protocol();
   });
 }
@@ -421,18 +421,26 @@ void ProtocolV2::trigger_state(state_t _state, write_state_t _write_state, bool 
   set_write_state(_write_state);
 }
 
-void ProtocolV2::fault(bool backoff)
+void ProtocolV2::fault(bool backoff, const char* func_name, std::exception_ptr eptr)
 {
   if (conn.policy.lossy) {
+    logger().info("{} {}: fault at {} on lossy channel, going to CLOSING -- {}",
+                  conn, func_name, get_state_name(state), eptr);
     dispatch_reset();
     close();
   } else if (conn.policy.server ||
              (conn.policy.standby &&
               (!is_queued() && conn.sent.empty()))) {
+    logger().info("{} {}: fault at {} with nothing to send, going to STANDBY -- {}",
+                  conn, func_name, get_state_name(state), eptr);
     execute_standby();
   } else if (backoff) {
+    logger().info("{} {}: fault at {}, going to WAIT -- {}",
+                  conn, func_name, get_state_name(state), eptr);
     execute_wait(false);
   } else {
+    logger().info("{} {}: fault at {}, going to CONNECTING -- {}",
+                  conn, func_name, get_state_name(state), eptr);
     execute_connecting();
   }
 }
@@ -684,7 +692,7 @@ ProtocolV2::process_wait()
 {
   return read_frame_payload().then([this] {
     // handle_wait() logic
-    logger().warn("{} GOT WaitFrame", conn);
+    logger().debug("{} GOT WaitFrame", conn);
     WaitFrame::Decode(rx_segments_data.back());
     return next_step_t::wait;
   });
@@ -966,6 +974,7 @@ void ProtocolV2::execute_connecting()
             break;
            }
            case next_step_t::wait: {
+            logger().info("{} execute_connecting(): going to WAIT", conn);
             execute_wait(true);
             break;
            }
@@ -974,20 +983,24 @@ void ProtocolV2::execute_connecting()
            }
           }
         }).handle_exception([this] (std::exception_ptr eptr) {
-          logger().debug("{} execute_connecting(): got exception {} at state {}",
-                         conn, eptr, get_state_name(state));
           if (state != state_t::CONNECTING) {
+            logger().info("{} execute_connecting(): protocol aborted at {} -- {}",
+                          conn, get_state_name(state), eptr);
             assert(state == state_t::CLOSING ||
                    state == state_t::REPLACING);
-            logger().debug("{} execute_connecting() protocol aborted", conn);
             return;
           }
 
           if (conn.policy.server ||
               (conn.policy.standby &&
                (!is_queued() && conn.sent.empty()))) {
+            logger().info("{} execute_connecting(): fault at {} with nothing to send,"
+                          " going to STANDBY -- {}",
+                          conn, get_state_name(state), eptr);
             execute_standby();
           } else {
+            logger().info("{} execute_connecting(): fault at {}, going to WAIT -- {}",
+                          conn, get_state_name(state), eptr);
             execute_wait(false);
           }
         });
@@ -1096,7 +1109,7 @@ seastar::future<ProtocolV2::next_step_t>
 ProtocolV2::send_wait()
 {
   auto wait = WaitFrame::Encode();
-  logger().warn("{} WRITE WaitFrame", conn);
+  logger().debug("{} WRITE WaitFrame", conn);
   return write_frame(wait).then([this] {
     return next_step_t::wait;
   });
@@ -1570,6 +1583,7 @@ void ProtocolV2::execute_accepting()
             break;
            }
            case next_step_t::wait: {
+            logger().info("{} execute_accepting(): going to SERVER_WAIT", conn);
             execute_server_wait();
             break;
            }
@@ -1578,8 +1592,8 @@ void ProtocolV2::execute_accepting()
            }
           }
         }).handle_exception([this] (std::exception_ptr eptr) {
-          logger().warn("{} execute_accepting(): got exception {} at state {}",
-                        conn, eptr, get_state_name(state));
+          logger().info("{} execute_accepting(): fault at {}, going to CLOSING -- {}",
+                        conn, get_state_name(state), eptr);
           close();
         });
     });
@@ -1755,14 +1769,13 @@ void ProtocolV2::trigger_replacing(bool reconnect,
                     client_cookie, server_cookie, conn.in_seq, conn.out_seq);
       execute_ready();
     }).handle_exception([this] (std::exception_ptr eptr) {
-      logger().debug("{} trigger_replacing(): got exception {} at state {}",
-                     conn, eptr);
       if (state != state_t::REPLACING) {
+        logger().info("{} trigger_replacing(): protocol aborted at {} -- {}",
+                      conn, get_state_name(state), eptr);
         assert(state == state_t::CLOSING);
-        logger().debug("{} execute_replacing() protocol aborted", conn);
         return;
       }
-      fault(true);
+      fault(true, "trigger_replacing()", eptr);
     });
   });
 }
@@ -1993,15 +2006,14 @@ void ProtocolV2::execute_ready()
         }
       });
     }).handle_exception([this] (std::exception_ptr eptr) {
-      logger().debug("{} execute_ready(): got exception {} at state {}",
-                     conn, eptr, get_state_name(state));
       if (state != state_t::READY) {
+        logger().info("{} execute_ready(): protocol aborted at {} -- {}",
+                      conn, get_state_name(state), eptr);
         assert(state == state_t::REPLACING ||
                state == state_t::CLOSING);
-        logger().debug("{} execute_ready() protocol aborted", conn);
         return;
       }
-      fault(false);
+      fault(false, "execute_ready()", eptr);
     });
   });
 }
@@ -2019,6 +2031,8 @@ void ProtocolV2::execute_standby()
 void ProtocolV2::notify_write()
 {
   if (unlikely(state == state_t::STANDBY && !conn.policy.server)) {
+    logger().info("{} notify_write(): at {}, going to CONNECTING",
+                  conn, get_state_name(state));
     execute_connecting();
   }
 }
@@ -2047,10 +2061,11 @@ void ProtocolV2::execute_wait(bool max_backoff)
                        conn, get_state_name(state));
         abort_protocol();
       }
+      logger().info("{} execute_wait(): going to CONNECTING", conn);
       execute_connecting();
     }).handle_exception([this] (std::exception_ptr eptr) {
-      logger().debug("{} execute_wait(): got exception {} at state {}, abort",
-                     conn, eptr, get_state_name(state));
+      logger().info("{} execute_wait(): protocol aborted at {} -- {}",
+                    conn, get_state_name(state), eptr);
       assert(state == state_t::REPLACING ||
              state == state_t::CLOSING);
     });
@@ -2067,8 +2082,8 @@ void ProtocolV2::execute_server_wait()
       logger().warn("{} SERVER_WAIT got read, abort", conn);
       abort_in_fault();
     }).handle_exception([this] (std::exception_ptr eptr) {
-      logger().debug("{} execute_server_wait(): got exception {} at state {}",
-                     conn, eptr, get_state_name(state));
+      logger().info("{} execute_server_wait(): fault at {}, going to CLOSING -- {}",
+                    conn, get_state_name(state), eptr);
       close();
     });
   });
