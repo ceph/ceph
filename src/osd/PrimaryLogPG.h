@@ -34,6 +34,7 @@
 
 class CopyFromCallback;
 class PromoteCallback;
+struct RefCountCallback;
 
 class PrimaryLogPG;
 class PGLSFilter;
@@ -256,6 +257,17 @@ public:
     ~FlushOp() { ceph_assert(!on_flush); }
   };
   typedef std::shared_ptr<FlushOp> FlushOpRef;
+
+  friend struct RefCountCallback;
+  struct ManifestOp {
+    RefCountCallback *cb;
+    ceph_tid_t objecter_tid;
+
+    ManifestOp(RefCountCallback* cb, ceph_tid_t tid)
+      : cb(cb), objecter_tid(tid) {}
+  };
+  typedef std::shared_ptr<ManifestOp> ManifestOpRef;
+  map<hobject_t, ManifestOpRef> manifest_ops;
 
   boost::scoped_ptr<PGBackend> pgbackend;
   PGBackend *get_pgbackend() override {
@@ -1456,8 +1468,9 @@ protected:
 			     uint64_t last_offset);
   void handle_manifest_flush(hobject_t oid, ceph_tid_t tid, int r,
 			     uint64_t offset, uint64_t last_offset, epoch_t lpr);
+  void cancel_manifest_ops(bool requeue, vector<ceph_tid_t> *tids);
   void refcount_manifest(ObjectContextRef obc, object_locator_t oloc, hobject_t soid,
-                         SnapContext snapc, bool get, Context *cb, uint64_t offset);
+                         SnapContext snapc, bool get, RefCountCallback *cb, uint64_t offset);
 
   friend struct C_ProxyChunkRead;
   friend class PromoteManifestCallback;
