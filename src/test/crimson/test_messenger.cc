@@ -814,11 +814,10 @@ struct TestInterceptor : public Interceptor {
 
     auto result = find_result(conn.shared_from_this());
     if (result == nullptr) {
-      logger().error("Untracked intercepted connection: {}, at breakpoint {}",
-                     conn, bp);
+      logger().error("Untracked intercepted connection: {}, at breakpoint {}({})",
+                     conn, bp, breakpoints_counter[bp].counter);
       ceph_abort();
     }
-    logger().info("[{}] {} intercepted {}", result->index, conn, bp);
 
     if (bp == custom_bp_t::SOCKET_CONNECTING) {
       ++result->connect_attempts;
@@ -838,9 +837,14 @@ struct TestInterceptor : public Interceptor {
     if (it_bp != breakpoints.end()) {
       auto it_cnt = it_bp->second.find(breakpoints_counter[bp].counter);
       if (it_cnt != it_bp->second.end()) {
+        logger().info("[{}] {} intercepted {}({}) => {}",
+                      result->index, conn, bp,
+                      breakpoints_counter[bp].counter, it_cnt->second);
         return true;
       }
     }
+    logger().info("[{}] {} intercepted {}({})",
+                  result->index, conn, bp, breakpoints_counter[bp].counter);
     return false;
   }
 };
