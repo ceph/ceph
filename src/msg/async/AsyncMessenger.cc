@@ -861,6 +861,12 @@ int AsyncMessenger::get_proto_version(int peer_type, bool connect) const
 int AsyncMessenger::accept_conn(const AsyncConnectionRef& conn)
 {
   std::lock_guard l{lock};
+  if (conn->policy.server &&
+      conn->policy.lossy) {
+    anon_conns.insert(conn);
+    conn->get_perf_counter()->inc(l_msgr_active_connections);
+    return 0;
+  }
   auto it = conns.find(*conn->peer_addrs);
   if (it != conns.end()) {
     auto& existing = it->second;

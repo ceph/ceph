@@ -2357,34 +2357,40 @@ CtPtr ProtocolV2::handle_client_ident(ceph::bufferlist &payload)
 
   peer_global_seq = client_ident.global_seq();
 
-  // Looks good so far, let's check if there is already an existing connection
-  // to this peer.
+  if (connection->policy.server &&
+      connection->policy.lossy) {
+    // incoming lossy client, no need to register this connection
+  } else {
+    // Looks good so far, let's check if there is already an existing connection
+    // to this peer.
+    connection->lock.unlock();
+    AsyncConnectionRef existing = messenger->lookup_conn(
+      *connection->peer_addrs);
 
-  connection->lock.unlock();
-  AsyncConnectionRef existing = messenger->lookup_conn(*connection->peer_addrs);
+    if (existing &&
+	existing->protocol->proto_type != 2) {
+      ldout(cct,1) << __func__ << " existing " << existing << " proto "
+		   << existing->protocol.get() << " version is "
+		   << existing->protocol->proto_type << ", marking down"
+		   << dendl;
+      existing->mark_down();
+      existing = nullptr;
+    }
 
-  if (existing &&
-      existing->protocol->proto_type != 2) {
-    ldout(cct,1) << __func__ << " existing " << existing << " proto "
-		 << existing->protocol.get() << " version is "
-		 << existing->protocol->proto_type << ", marking down" << dendl;
-    existing->mark_down();
-    existing = nullptr;
-  }
+    connection->inject_delay();
 
-  connection->inject_delay();
+    connection->lock.lock();
+    if (state != SESSION_ACCEPTING) {
+      ldout(cct, 1) << __func__
+		    << " state changed while accept, it must be mark_down"
+		    << dendl;
+      ceph_assert(state == CLOSED);
+      return _fault();
+    }
 
-  connection->lock.lock();
-  if (state != SESSION_ACCEPTING) {
-    ldout(cct, 1) << __func__
-                  << " state changed while accept, it must be mark_down"
-                  << dendl;
-    ceph_assert(state == CLOSED);
-    return _fault();
-  }
-
-  if (existing) {
-    return handle_existing_connection(existing);
+    if (existing) {
+      return handle_existing_connection(existing);
+    }
   }
 
   // if everything is OK reply with server identification

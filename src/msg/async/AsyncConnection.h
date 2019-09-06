@@ -165,7 +165,9 @@ class AsyncConnection : public Connection {
   int state;
   ConnectedSocket cs;
   int port;
+public:
   Messenger::Policy policy;
+private:
 
   DispatchQueue *dispatch_queue;
 
