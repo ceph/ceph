@@ -1241,6 +1241,84 @@ TEST_P(MessengerTest, StatelessTest) {
   client_msgr->wait();
 }
 
+TEST_P(MessengerTest, AnonTest) {
+  Message *m;
+  FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
+  entity_addr_t bind_addr;
+  bind_addr.parse("v2:127.0.0.1");
+  Messenger::Policy p = Messenger::Policy::stateless_server(0);
+  server_msgr->set_policy(entity_name_t::TYPE_CLIENT, p);
+  p = Messenger::Policy::lossy_client(0);
+  client_msgr->set_policy(entity_name_t::TYPE_OSD, p);
+
+  server_msgr->bind(bind_addr);
+  server_msgr->add_dispatcher_head(&srv_dispatcher);
+  server_msgr->start();
+  client_msgr->add_dispatcher_head(&cli_dispatcher);
+  client_msgr->start();
+
+  ConnectionRef server_con_a, server_con_b;
+
+  // a
+  srv_dispatcher.last_accept_con_ptr = &server_con_a;
+  ConnectionRef con_a = client_msgr->connect_to(server_msgr->get_mytype(),
+					    server_msgr->get_myaddrs(),
+					    true);
+  {
+    m = new MPing();
+    ASSERT_EQ(con_a->send_message(m), 0);
+    std::unique_lock l{cli_dispatcher.lock};
+    cli_dispatcher.cond.wait(l, [&] { return cli_dispatcher.got_new; });
+    cli_dispatcher.got_new = false;
+  }
+  ASSERT_EQ(1U, static_cast<Session*>(con_a->get_priv().get())->get_count());
+
+  // b
+  srv_dispatcher.last_accept_con_ptr = &server_con_b;
+  ConnectionRef con_b = client_msgr->connect_to(server_msgr->get_mytype(),
+					    server_msgr->get_myaddrs(),
+					    true);
+  {
+    m = new MPing();
+    ASSERT_EQ(con_b->send_message(m), 0);
+    std::unique_lock l{cli_dispatcher.lock};
+    cli_dispatcher.cond.wait(l, [&] { return cli_dispatcher.got_new; });
+    cli_dispatcher.got_new = false;
+  }
+  ASSERT_EQ(1U, static_cast<Session*>(con_b->get_priv().get())->get_count());
+
+  // these should be distinct
+  ASSERT_NE(con_a, con_b);
+  ASSERT_NE(server_con_a, server_con_b);
+
+  // and both connected
+  {
+    m = new MPing();
+    ASSERT_EQ(con_a->send_message(m), 0);
+    std::unique_lock l{cli_dispatcher.lock};
+    cli_dispatcher.cond.wait(l, [&] { return cli_dispatcher.got_new; });
+    cli_dispatcher.got_new = false;
+  }
+  {
+    m = new MPing();
+    ASSERT_EQ(con_b->send_message(m), 0);
+    std::unique_lock l{cli_dispatcher.lock};
+    cli_dispatcher.cond.wait(l, [&] { return cli_dispatcher.got_new; });
+    cli_dispatcher.got_new = false;
+  }
+
+  // clean up
+  con_a->mark_down();
+  ASSERT_FALSE(con_a->is_connected());
+  con_b->mark_down();
+  ASSERT_FALSE(con_b->is_connected());
+
+  server_msgr->shutdown();
+  client_msgr->shutdown();
+  server_msgr->wait();
+  client_msgr->wait();
+}
+
 TEST_P(MessengerTest, ClientStandbyTest) {
   Message *m;
   FakeDispatcher cli_dispatcher(false), srv_dispatcher(true);
