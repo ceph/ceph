@@ -29,6 +29,8 @@
 #include <boost/functional/hash.hpp>
 #include <boost/dynamic_bitset.hpp>
 
+#include "include/cpp-btree/btree_set.h"
+
 #include "include/ceph_assert.h"
 #include "include/unordered_map.h"
 #include "include/mempool.h"
@@ -160,6 +162,7 @@ public:
   class TransContext;
 
   typedef map<uint64_t, bufferlist> ready_regions_t;
+
 
   struct BufferSpace;
   struct Collection;
@@ -2216,6 +2219,8 @@ public:
   using mempool_dynamic_bitset =
     boost::dynamic_bitset<uint64_t,
 			  mempool::bluestore_fsck::pool_allocator<uint64_t>>;
+  using  per_pool_statfs =
+    mempool::bluestore_fsck::map<uint64_t, store_statfs_t>;
 
 private:
   enum FSCKDepth {
@@ -2235,8 +2240,6 @@ private:
     store_statfs_t& expected_statfs,
     FSCKDepth depth);
 
-  using  per_pool_statfs =
-    mempool::bluestore_fsck::map<uint64_t, store_statfs_t>;
   void _fsck_check_pool_statfs(
     per_pool_statfs& expected_pool_statfs,
     bool need_per_pool_stats,
@@ -3058,6 +3061,78 @@ private:
   };
   size_t available_freespace(uint64_t alloc_size) override;
   inline bool _use_rotational_settings();
+
+  struct sb_info_t {
+    coll_t cid;
+    int64_t pool_id = INT64_MIN;
+    list<ghobject_t> oids;
+    BlueStore::SharedBlobRef sb;
+    bluestore_extent_ref_map_t ref_map;
+    bool compressed = false;
+    bool passed = false;
+    bool updated = false;
+  };
+  typedef btree::btree_set<
+    uint64_t, std::less<uint64_t>,
+    mempool::bluestore_fsck::pool_allocator<uint64_t>> uint64_t_btree_t;
+
+  typedef mempool::bluestore_fsck::map<uint64_t, sb_info_t> sb_info_map_t;
+
+  struct FSCK_ObjectCtx {
+    int64_t& errors;
+    int64_t& warnings;
+    uint64_t& num_objects;
+    uint64_t& num_extents;
+    uint64_t& num_blobs;
+    uint64_t& num_sharded_objects;
+    uint64_t& num_spanning_blobs;
+
+    mempool_dynamic_bitset& used_blocks;
+    uint64_t_btree_t& used_omap_head;
+    uint64_t_btree_t& used_per_pool_omap_head;
+    uint64_t_btree_t& used_pgmeta_omap_head;
+    sb_info_map_t& sb_info;
+
+    store_statfs_t& expected_store_statfs;
+    per_pool_statfs& expected_pool_statfs;
+    BlueStoreRepairer* repairer;
+
+    FSCK_ObjectCtx(
+      int64_t& e,
+      int64_t& w,
+      uint64_t& _num_objects,
+      uint64_t& _num_extents,
+      uint64_t& _num_blobs,
+      uint64_t& _num_sharded_objects,
+      uint64_t& _num_spanning_blobs,
+      mempool_dynamic_bitset& _ub,
+      uint64_t_btree_t& _used_omap_head,
+      uint64_t_btree_t& _used_per_pool_omap_head,
+      uint64_t_btree_t& _used_pgmeta_omap_head,
+      sb_info_map_t& _sb_info,
+      store_statfs_t& _store_statfs,
+      per_pool_statfs& _pool_statfs,
+      BlueStoreRepairer* _repairer) :
+      errors(e),
+      warnings(w),
+      num_objects(_num_objects),
+      num_extents(_num_extents),
+      num_blobs(_num_blobs),
+      num_sharded_objects(_num_sharded_objects),
+      num_spanning_blobs(_num_spanning_blobs),
+      used_blocks(_ub),
+      used_omap_head(_used_omap_head),
+      used_per_pool_omap_head(_used_per_pool_omap_head),
+      used_pgmeta_omap_head(_used_pgmeta_omap_head),
+      sb_info(_sb_info),
+      expected_store_statfs(_store_statfs),
+      expected_pool_statfs(_pool_statfs),
+      repairer(_repairer) {
+    }
+  };
+  void _fsck_check_objects(FSCKDepth depth,
+    bool need_per_pool_stats,
+    const FSCK_ObjectCtx& ctx);
 };
 
 inline ostream& operator<<(ostream& out, const BlueStore::volatile_statfs& s) {
