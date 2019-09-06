@@ -299,7 +299,7 @@ void NamespaceReplayer<I>::init_instance_replayer() {
 
   m_instance_replayer.reset(InstanceReplayer<I>::create(
       m_local_io_ctx, m_local_mirror_uuid, m_threads, m_service_daemon,
-      m_cache_manager_handler));
+      m_local_status_updater.get(), m_cache_manager_handler));
   auto ctx = create_context_callback<NamespaceReplayer<I>,
       &NamespaceReplayer<I>::handle_init_instance_replayer>(this);
 

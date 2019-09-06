@@ -51,6 +51,7 @@ namespace rbd {
 namespace mirror {
 
 template <typename> struct InstanceWatcher;
+template <typename> struct MirrorStatusUpdater;
 template <typename> struct Threads;
 
 namespace image_replayer { template <typename> class BootstrapRequest; }
@@ -67,9 +68,11 @@ public:
       librados::IoCtx &local_io_ctx, const std::string &local_mirror_uuid,
       const std::string &global_image_id, Threads<ImageCtxT> *threads,
       InstanceWatcher<ImageCtxT> *instance_watcher,
+      MirrorStatusUpdater<ImageCtxT>* local_status_updater,
       journal::CacheManagerHandler *cache_manager_handler) {
     return new ImageReplayer(local_io_ctx, local_mirror_uuid, global_image_id,
-                             threads, instance_watcher, cache_manager_handler);
+                             threads, instance_watcher, local_status_updater,
+                             cache_manager_handler);
   }
   void destroy() {
     delete this;
@@ -80,6 +83,7 @@ public:
                 const std::string &global_image_id,
                 Threads<ImageCtxT> *threads,
                 InstanceWatcher<ImageCtxT> *instance_watcher,
+                MirrorStatusUpdater<ImageCtxT>* local_status_updater,
                 journal::CacheManagerHandler *cache_manager_handler);
   virtual ~ImageReplayer();
   ImageReplayer(const ImageReplayer&) = delete;
@@ -275,6 +279,7 @@ private:
   std::string m_global_image_id;
   Threads<ImageCtxT> *m_threads;
   InstanceWatcher<ImageCtxT> *m_instance_watcher;
+  MirrorStatusUpdater<ImageCtxT>* m_local_status_updater;
   journal::CacheManagerHandler *m_cache_manager_handler;
 
   Peers m_peers;
@@ -312,9 +317,6 @@ private:
 
   Context *m_on_start_finish = nullptr;
   Context *m_on_stop_finish = nullptr;
-  Context *m_update_status_task = nullptr;
-  int m_update_status_interval = 0;
-  librados::AioCompletion *m_update_status_comp = nullptr;
   bool m_stop_requested = false;
   bool m_manual_stop = false;
 
@@ -322,10 +324,6 @@ private:
   PerfCounters *m_perf_counters = nullptr;
 
   image_replayer::BootstrapRequest<ImageCtxT> *m_bootstrap_request = nullptr;
-
-  uint32_t m_in_flight_status_updates = 0;
-  bool m_update_status_requested = false;
-  Context *m_on_update_status_finish = nullptr;
 
   cls::journal::ClientState m_client_state =
     cls::journal::CLIENT_STATE_DISCONNECTED;
@@ -340,6 +338,7 @@ private:
   librbd::journal::EventEntry m_event_entry;
   AsyncOpTracker m_event_replay_tracker;
   Context *m_delayed_preprocess_task = nullptr;
+  Context* m_periodic_flush_task = nullptr;
 
   AsyncOpTracker m_in_flight_op_tracker;
   Context *m_flush_local_replay_task = nullptr;
@@ -391,13 +390,8 @@ private:
   void flush_commit_position(Context* on_flush);
   void handle_flush_commit_position(Context* on_flush, int r);
 
-  bool update_mirror_image_status(bool force, const OptionalState &state);
-  bool start_mirror_image_status_update(bool force, bool restarting);
-  void finish_mirror_image_status_update();
-  void queue_mirror_image_status_update(const OptionalState &state);
-  void send_mirror_status_update(const OptionalState &state);
-  void handle_mirror_status_update(int r);
-  void reschedule_update_status_task(int new_interval);
+  void update_mirror_image_status(bool force, const OptionalState &state);
+  void set_mirror_image_status_update(bool force, const OptionalState &state);
 
   void shut_down(int r);
   void handle_shut_down(int r);

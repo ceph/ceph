@@ -98,6 +98,7 @@ struct InstanceReplayer<librbd::MockTestImageCtx> {
       librados::IoCtx &local_io_ctx, const std::string &local_mirror_uuid,
       Threads<librbd::MockTestImageCtx> *threads,
       ServiceDaemon<librbd::MockTestImageCtx> *service_daemon,
+      MirrorStatusUpdater<librbd::MockTestImageCtx>* local_status_updater,
       journal::CacheManagerHandler *cache_manager_handler) {
     ceph_assert(s_instance != nullptr);
     return s_instance;
