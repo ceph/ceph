@@ -365,7 +365,7 @@ bool MgrMonitor::check_caps(MonOpRequestRef op, const uuid_d& fsid)
 
 bool MgrMonitor::preprocess_query(MonOpRequestRef op)
 {
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  auto m = op->get_req<PaxosServiceMessage>();
   switch (m->get_type()) {
     case MSG_MGR_BEACON:
       return preprocess_beacon(op);
@@ -387,7 +387,7 @@ bool MgrMonitor::preprocess_query(MonOpRequestRef op)
 
 bool MgrMonitor::prepare_update(MonOpRequestRef op)
 {
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  auto m = op->get_req<PaxosServiceMessage>();
   switch (m->get_type()) {
     case MSG_MGR_BEACON:
       return prepare_beacon(op);
@@ -429,7 +429,7 @@ public:
 
 bool MgrMonitor::preprocess_beacon(MonOpRequestRef op)
 {
-  MMgrBeacon *m = static_cast<MMgrBeacon*>(op->get_req());
+  auto m = op->get_req<MMgrBeacon>();
   mon->no_reply(op); // we never reply to beacons
   dout(4) << "beacon from " << m->get_gid() << dendl;
 
@@ -444,7 +444,7 @@ bool MgrMonitor::preprocess_beacon(MonOpRequestRef op)
 
 bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
 {
-  MMgrBeacon *m = static_cast<MMgrBeacon*>(op->get_req());
+  auto m = op->get_req<MMgrBeacon>();
   dout(4) << "beacon from " << m->get_gid() << dendl;
 
   // See if we are seeing same name, new GID for the active daemon
@@ -843,7 +843,7 @@ void MgrMonitor::drop_standby(uint64_t gid, bool drop_meta)
 
 bool MgrMonitor::preprocess_command(MonOpRequestRef op)
 {
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  auto m = op->get_req<MMonCommand>();
   std::stringstream ss;
   bufferlist rdata;
 
@@ -982,7 +982,7 @@ reply:
 
 bool MgrMonitor::prepare_command(MonOpRequestRef op)
 {
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  auto m = op->get_req<MMonCommand>();
 
   std::stringstream ss;
   bufferlist rdata;

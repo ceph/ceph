@@ -217,7 +217,7 @@ void Paxos::handle_collect(MonOpRequestRef op)
   
   op->mark_paxos_event("handle_collect");
 
-  MMonPaxos *collect = static_cast<MMonPaxos*>(op->get_req());
+  auto collect = op->get_req<MMonPaxos>();
   dout(10) << "handle_collect " << *collect << dendl;
 
   ceph_assert(mon->is_peon()); // mon epoch filter should catch strays
@@ -461,7 +461,7 @@ void Paxos::_sanity_check_store()
 void Paxos::handle_last(MonOpRequestRef op)
 {
   op->mark_paxos_event("handle_last");
-  MMonPaxos *last = static_cast<MMonPaxos*>(op->get_req());
+  auto last = op->get_req<MMonPaxos>();
   bool need_refresh = false;
   int from = last->get_source().num();
 
@@ -705,7 +705,7 @@ void Paxos::begin(bufferlist& v)
 void Paxos::handle_begin(MonOpRequestRef op)
 {
   op->mark_paxos_event("handle_begin");
-  MMonPaxos *begin = static_cast<MMonPaxos*>(op->get_req());
+  auto begin = op->get_req<MMonPaxos>();
   dout(10) << "handle_begin " << *begin << dendl;
 
   // can we accept this?
@@ -765,7 +765,7 @@ void Paxos::handle_begin(MonOpRequestRef op)
 void Paxos::handle_accept(MonOpRequestRef op)
 {
   op->mark_paxos_event("handle_accept");
-  MMonPaxos *accept = static_cast<MMonPaxos*>(op->get_req());
+  auto accept = op->get_req<MMonPaxos>();
   dout(10) << "handle_accept " << *accept << dendl;
   int from = accept->get_source().num();
 
@@ -947,7 +947,7 @@ void Paxos::commit_finish()
 void Paxos::handle_commit(MonOpRequestRef op)
 {
   op->mark_paxos_event("handle_commit");
-  MMonPaxos *commit = static_cast<MMonPaxos*>(op->get_req());
+  auto commit = op->get_req<MMonPaxos>();
   dout(10) << "handle_commit on " << commit->last_committed << dendl;
 
   logger->inc(l_paxos_commit);
@@ -1095,7 +1095,7 @@ void Paxos::finish_round()
 void Paxos::handle_lease(MonOpRequestRef op)
 {
   op->mark_paxos_event("handle_lease");
-  MMonPaxos *lease = static_cast<MMonPaxos*>(op->get_req());
+  auto lease = op->get_req<MMonPaxos>();
   // sanity
   if (!mon->is_peon() ||
       last_committed != lease->last_committed) {
@@ -1145,7 +1145,7 @@ void Paxos::handle_lease(MonOpRequestRef op)
 void Paxos::handle_lease_ack(MonOpRequestRef op)
 {
   op->mark_paxos_event("handle_lease_ack");
-  MMonPaxos *ack = static_cast<MMonPaxos*>(op->get_req());
+  auto ack = op->get_req<MMonPaxos>();
   int from = ack->get_source().num();
 
   if (!lease_ack_timeout_event) {
