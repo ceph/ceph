@@ -103,7 +103,7 @@ The balancer operation is broken into a few distinct phases:
 #. evaluating the quality of the data distribution, either for the current PG distribution, or the PG distribution that would result after executing a *plan*
 #. executing the *plan*
 
-To evautate and score the current distribution,::
+To evaluate and score the current distribution::
 
   ceph balancer eval
 
