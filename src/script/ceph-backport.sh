@@ -514,6 +514,18 @@ fi
 tracker_title=$(echo $remote_api_output | jq -r '.issue.subject')
 debug "Title of $redmine_url is ->$tracker_title<-"
 
+tracker_assignee_id=$(echo $remote_api_output | jq -r '.issue.assigned_to.id')
+tracker_assignee_name=$(echo $remote_api_output | jq -r '.issue.assigned_to.name')
+debug "$redmine_url is assigned to $tracker_assignee_name (ID $tracker_assignee_id)"
+
+if [ "$tracker_assignee_id" = "null" -o "$tracker_assignee_id" = "$redmine_user_id" ] ; then
+    true
+else
+    error "$redmine_url is assigned to $tracker_assignee_name (ID $tracker_assignee_id)"
+    info "Cowardly refusing to work on an issue that is assigned to someone else"
+    false
+fi
+
 milestone_number=$(try_known_milestones "$milestone")
 if [ "$milestone_number" -gt "0" ] >/dev/null 2>&1 ; then
     target_branch="$milestone"
@@ -609,6 +621,6 @@ pgrep firefox >/dev/null && firefox ${github_endpoint}/pull/$number
 
 debug "Updating backport tracker issue in Redmine"
 redmine_status=2 # In Progress
-curl -X PUT --header 'Content-type: application/json' --data-binary '{"issue":{"description":"https://github.com/ceph/ceph/pull/'$number'","status_id":'$redmine_status',"assigned_to_id":'$redmine_user_id'}}' ${redmine_url}'.json?key='$redmine_key
+curl -X PUT --header 'Content-type: application/json' --data-binary '{"issue":{"description":"https://github.com/ceph/ceph/pull/'$number'","status_id":'$redmine_status',"assigned_to_id":'$redmine_user_id'},"notes":"Updated automatically by ceph-backport.sh"}' ${redmine_url}'.json?key='$redmine_key
 info "${redmine_url} updated"
 pgrep firefox >/dev/null && firefox ${redmine_url}
