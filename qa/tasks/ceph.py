@@ -1631,14 +1631,12 @@ def restart(ctx, config):
     with tweaked_option(ctx, config):
         for role in daemons:
             cluster, type_, id_ = teuthology.split_role(role)
+            ctx.daemons.get_daemon(type_, id_, cluster).stop()
+            if type_ == 'osd':
+                ctx.managers[cluster].mark_down_osd(id_)
             ctx.daemons.get_daemon(type_, id_, cluster).restart()
             clusters.add(cluster)
     
-    for role in daemons:
-        cluster, type_, id_ = teuthology.split_role(role)
-        if type_ == 'osd':
-            ctx.managers[cluster].mark_down_osd(id_)
-
     if config.get('wait-for-healthy', True):
         for cluster in clusters:
             healthy(ctx=ctx, config=dict(cluster=cluster))
