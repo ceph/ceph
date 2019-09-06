@@ -210,6 +210,7 @@ Recommends: ceph-mgr-dashboard,
             ceph-mgr-diskprediction-local,
             ceph-mgr-diskprediction-cloud,
             ceph-mgr-rook,
+            ceph-mgr-k8sevents,
             ceph-mgr-ssh
 Suggests: python-influxdb
 Replaces: ceph (<< 0.93-417),
@@ -293,6 +294,21 @@ Description: rook plugin for ceph-mgr
  This package contains the rook plugin for ceph-mgr's orchestration
  functionality, to allow ceph-mgr to install and configure ceph using
  Rook.
+
+Package: ceph-mgr-k8sevents
+Architecture: all
+Depends: ceph-mgr (= ${binary:Version}),
+         python-kubernetes,
+         ${misc:Depends},
+         ${python:Depends},
+Description: kubernetes events plugin for ceph-mgr
+ Ceph is a massively scalable, open-source, distributed
+ storage system that runs on commodity hardware and delivers object,
+ block and file system storage.
+ .
+ This package contains the k8sevents plugin, to allow ceph-mgr to send
+ ceph related events to the kubernetes events API, and track all events
+ that occur within the rook-ceph namespace.
 
 Package: ceph-mgr-ssh
 Architecture: all
