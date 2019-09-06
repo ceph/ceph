@@ -2333,15 +2333,15 @@ class OSDSocketHook : public AdminSocketHook {
   OSD *osd;
 public:
   explicit OSDSocketHook(OSD *o) : osd(o) {}
-  bool call(std::string_view admin_command, const cmdmap_t& cmdmap,
-	    std::string_view format, bufferlist& out) override {
+  int call(std::string_view admin_command, const cmdmap_t& cmdmap,
+	   std::string_view format, bufferlist& out) override {
     stringstream ss;
-    bool r = true;
+    int r;
     try {
       r = osd->asok_command(admin_command, cmdmap, format, ss);
     } catch (const bad_cmd_get& e) {
       ss << e.what();
-      r = true;
+      r = -EINVAL;
     }
     out.append(ss);
     return r;
@@ -2743,16 +2743,18 @@ class TestOpsSocketHook : public AdminSocketHook {
   ObjectStore *store;
 public:
   TestOpsSocketHook(OSDService *s, ObjectStore *st) : service(s), store(st) {}
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-	    std::string_view format, bufferlist& out) override {
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   std::string_view format, bufferlist& out) override {
     stringstream ss;
+    int r = 0;
     try {
       test_ops(service, store, command, cmdmap, ss);
     } catch (const bad_cmd_get& e) {
       ss << e.what();
+      r = -EINVAL;
     }
     out.append(ss);
-    return true;
+    return r;
   }
   void test_ops(OSDService *service, ObjectStore *store,
 		std::string_view command, const cmdmap_t& cmdmap, ostream &ss);
