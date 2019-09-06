@@ -1712,7 +1712,7 @@ std::vector<Option> get_global_options() {
     .add_service("mgr")
     .set_description("Issue a health warning if there are fewer OSDs than osd_pool_default_size"),
 
-    Option("mon_warn_on_slow_ping_time", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
+    Option("mon_warn_on_slow_ping_time", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(0)
     .add_service("mgr")
     .set_description("Override mon_warn_on_slow_ping_ratio with specified threshold in milliseconds")
