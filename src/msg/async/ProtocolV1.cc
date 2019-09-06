@@ -2050,7 +2050,14 @@ CtPtr ProtocolV1::handle_connect_message_2() {
   // session security structure.  PLR
   ldout(cct, 10) << __func__ << " accept setting up session_security." << dendl;
 
-  // existing?
+  if (connection->policy.server &&
+      connection->policy.lossy) {
+    // incoming lossy client, no need to register this connection
+    // new session
+    ldout(cct, 10) << __func__ << " accept new session" << dendl;
+    return open(reply, authorizer_reply);
+  }
+
   AsyncConnectionRef existing = messenger->lookup_conn(*connection->peer_addrs);
 
   connection->inject_delay();
