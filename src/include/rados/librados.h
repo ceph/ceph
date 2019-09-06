@@ -3809,6 +3809,38 @@ CEPH_RADOS_API int rados_mgr_command(rados_t cluster, const char **cmd,
                                      size_t *outslen);
 
 /**
+ * Send ceph-mgr tell command.
+ *
+ * @note Takes command string in carefully-formatted JSON; must match
+ * defined commands, types, etc.
+ *
+ * The result buffers are allocated on the heap; the caller is
+ * expected to release that memory with rados_buffer_free().  The
+ * buffer and length pointers can all be NULL, in which case they are
+ * not filled in.
+ *
+ * @param cluster cluster handle
+ * @param name mgr name to target
+ * @param cmd an array of char *'s representing the command
+ * @param cmdlen count of valid entries in cmd
+ * @param inbuf any bulk input data (crush map, etc.)
+ * @param inbuflen input buffer length
+ * @param outbuf double pointer to output buffer
+ * @param outbuflen pointer to output buffer length
+ * @param outs double pointer to status string
+ * @param outslen pointer to status string length
+ * @returns 0 on success, negative error code on failure
+ */
+CEPH_RADOS_API int rados_mgr_command_target(
+  rados_t cluster,
+  const char *name,
+  const char **cmd,
+  size_t cmdlen, const char *inbuf,
+  size_t inbuflen, char **outbuf,
+  size_t *outbuflen, char **outs,
+  size_t *outslen);
+
+/**
  * Send monitor command to a specific monitor.
  *
  * @note Takes command string in carefully-formatted JSON; must match
