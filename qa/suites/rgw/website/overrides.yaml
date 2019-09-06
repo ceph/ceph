@@ -23,3 +23,5 @@ overrides:
         valgrind: [--tool=memcheck, --max-threads=1024] # http://tracker.ceph.com/issues/25214
       client.1:
         valgrind: [--tool=memcheck, --max-threads=1024] # http://tracker.ceph.com/issues/25214
+  s3tests:
+    calling-format: subdomain
