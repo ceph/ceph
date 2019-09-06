@@ -130,6 +130,11 @@ int _action_on_all_objects_in_pg(ObjectStore *store, coll_t coll, action_on_obje
 
 int action_on_all_objects_in_pg(ObjectStore *store, string pgidstr, action_on_object_t &action, bool debug)
 {
+  if (pgidstr.compare("meta") == 0) {
+    int r = _action_on_all_objects_in_pg(store, coll_t(), action, debug);
+    return r; 
+  }
+
   spg_t pgid;
   // Scan collections in case this is an ec pool but no shard specified
   unsigned scanned = 0;
@@ -3486,7 +3491,9 @@ int main(int argc, char **argv)
     return 1;
   }
 
-  if (pgidstr.length() && !pgid.parse(pgidstr.c_str())) {
+  if (pgidstr.length() &&
+      pgidstr.compare("meta") &&
+      !pgid.parse(pgidstr.c_str())) {
     cerr << "Invalid pgid '" << pgidstr << "' specified" << std::endl;
     return 1;
   }
