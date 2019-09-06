@@ -35,8 +35,8 @@ inline constexpr auto CEPH_ADMIN_SOCK_VERSION = "2"sv;
 
 class AdminSocketHook {
 public:
-  virtual bool call(std::string_view command, const cmdmap_t& cmdmap,
-		    std::string_view format, ceph::buffer::list& out) = 0;
+  virtual int call(std::string_view command, const cmdmap_t& cmdmap,
+		   std::string_view format, ceph::buffer::list& out) = 0;
   virtual ~AdminSocketHook() {}
 };
 

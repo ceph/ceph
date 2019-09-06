@@ -166,17 +166,17 @@ public:
   }
 
   // AdminSocketHook
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-	    std::string_view format, bufferlist& out) override {
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   std::string_view format, bufferlist& out) override {
     if (command == "dump_mempools") {
       std::unique_ptr<Formatter> f(Formatter::create(format));
       f->open_object_section("mempools");
       mempool::dump(f.get());
       f->close_section();
       f->flush(out);
-      return true;
+      return 0;
     }
-    return false;
+    return -ENOSYS;
   }
 };
 
@@ -437,14 +437,14 @@ class CephContextHook : public AdminSocketHook {
 public:
   explicit CephContextHook(CephContext *cct) : m_cct(cct) {}
 
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-	    std::string_view format, bufferlist& out) override {
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   std::string_view format, bufferlist& out) override {
     try {
       m_cct->do_command(command, cmdmap, format, &out);
     } catch (const bad_cmd_get& e) {
-      return false;
+      return -EINVAL;
     }
-    return true;
+    return 0;
   }
 };
 
