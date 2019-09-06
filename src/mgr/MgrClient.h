@@ -46,6 +46,7 @@ class MgrSessionState
 class MgrCommand : public CommandOp
 {
   public:
+  std::string name;
 
   explicit MgrCommand(ceph_tid_t t) : CommandOp(t) {}
   MgrCommand() : CommandOp() {}
@@ -144,9 +145,15 @@ public:
     pgstats_cb = std::move(cb_);
   }
 
-  int start_command(const std::vector<std::string>& cmd, const ceph::buffer::list& inbl,
-		    ceph::buffer::list *outbl, std::string *outs,
-		    Context *onfinish);
+  int start_command(
+    const std::vector<std::string>& cmd, const ceph::buffer::list& inbl,
+    ceph::buffer::list *outbl, std::string *outs,
+    Context *onfinish);
+  int start_tell_command(
+    const string& name,
+    const std::vector<std::string>& cmd, const ceph::buffer::list& inbl,
+    ceph::buffer::list *outbl, std::string *outs,
+    Context *onfinish);
 
   int service_daemon_register(
     const std::string& service,
