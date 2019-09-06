@@ -776,12 +776,18 @@ public:
 bool DaemonServer::handle_command(const ref_t<MCommand>& m)
 {
   std::lock_guard l(lock);
-  auto cmdctx = std::make_shared<CommandContext>(m);
-  try {
-    return _handle_command(cmdctx);
-  } catch (const bad_cmd_get& e) {
-    cmdctx->reply(-EINVAL, e.what());
+  if (HAVE_FEATURE(m->get_connection()->get_features(), SERVER_OCTOPUS)) {
+    cct->get_admin_socket()->queue_tell_command(m);
     return true;
+  } else {
+    // legacy client; send to CLI processing
+    auto cmdctx = std::make_shared<CommandContext>(m);
+    try {
+      return _handle_command(cmdctx);
+    } catch (const bad_cmd_get& e) {
+      cmdctx->reply(-EINVAL, e.what());
+      return true;
+    }
   }
 }
 
