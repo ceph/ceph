@@ -1495,7 +1495,7 @@ void Monitor::sync_finish(version_t last_committed)
 
 void Monitor::handle_sync(MonOpRequestRef op)
 {
-  MMonSync *m = static_cast<MMonSync*>(op->get_req());
+  auto m = op->get_req<MMonSync>();
   dout(10) << __func__ << " " << *m << dendl;
   switch (m->op) {
 
@@ -1533,14 +1533,14 @@ void Monitor::handle_sync(MonOpRequestRef op)
 
 void Monitor::_sync_reply_no_cookie(MonOpRequestRef op)
 {
-  MMonSync *m = static_cast<MMonSync*>(op->get_req());
+  auto m = op->get_req<MMonSync>();
   MMonSync *reply = new MMonSync(MMonSync::OP_NO_COOKIE, m->cookie);
   m->get_connection()->send_message(reply);
 }
 
 void Monitor::handle_sync_get_cookie(MonOpRequestRef op)
 {
-  MMonSync *m = static_cast<MMonSync*>(op->get_req());
+  auto m = op->get_req<MMonSync>();
   if (is_synchronizing()) {
     _sync_reply_no_cookie(op);
     return;
@@ -1593,7 +1593,7 @@ void Monitor::handle_sync_get_cookie(MonOpRequestRef op)
 
 void Monitor::handle_sync_get_chunk(MonOpRequestRef op)
 {
-  MMonSync *m = static_cast<MMonSync*>(op->get_req());
+  auto m = op->get_req<MMonSync>();
   dout(10) << __func__ << " " << *m << dendl;
 
   if (sync_providers.count(m->cookie) == 0) {
@@ -1664,7 +1664,7 @@ void Monitor::handle_sync_get_chunk(MonOpRequestRef op)
 
 void Monitor::handle_sync_cookie(MonOpRequestRef op)
 {
-  MMonSync *m = static_cast<MMonSync*>(op->get_req());
+  auto m = op->get_req<MMonSync>();
   dout(10) << __func__ << " " << *m << dendl;
   if (sync_cookie) {
     dout(10) << __func__ << " already have a cookie, ignoring" << dendl;
@@ -1698,7 +1698,7 @@ void Monitor::sync_get_next_chunk()
 
 void Monitor::handle_sync_chunk(MonOpRequestRef op)
 {
-  MMonSync *m = static_cast<MMonSync*>(op->get_req());
+  auto m = op->get_req<MMonSync>();
   dout(10) << __func__ << " " << *m << dendl;
 
   if (m->cookie != sync_cookie) {
@@ -1814,7 +1814,7 @@ void Monitor::probe_timeout(int r)
 
 void Monitor::handle_probe(MonOpRequestRef op)
 {
-  MMonProbe *m = static_cast<MMonProbe*>(op->get_req());
+  auto m = op->get_req<MMonProbe>();
   dout(10) << "handle_probe " << *m << dendl;
 
   if (m->fsid != monmap->fsid) {
@@ -1844,7 +1844,7 @@ void Monitor::handle_probe(MonOpRequestRef op)
 
 void Monitor::handle_probe_probe(MonOpRequestRef op)
 {
-  MMonProbe *m = static_cast<MMonProbe*>(op->get_req());
+  auto m = op->get_req<MMonProbe>();
 
   dout(10) << "handle_probe_probe " << m->get_source_inst() << *m
 	   << " features " << m->get_connection()->get_features() << dendl;
@@ -1902,7 +1902,7 @@ void Monitor::handle_probe_probe(MonOpRequestRef op)
 
 void Monitor::handle_probe_reply(MonOpRequestRef op)
 {
-  MMonProbe *m = static_cast<MMonProbe*>(op->get_req());
+  auto m = op->get_req<MMonProbe>();
   dout(10) << "handle_probe_reply " << m->get_source_inst()
 	   << " " << *m << dendl;
   dout(10) << " monmap is " << *monmap << dendl;
@@ -3124,7 +3124,7 @@ struct C_MgrProxyCommand : public Context {
 void Monitor::handle_command(MonOpRequestRef op)
 {
   ceph_assert(op->is_type_command());
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  auto m = op->get_req<MMonCommand>();
   if (m->fsid != monmap->fsid) {
     dout(0) << "handle_command on fsid " << m->fsid << " != " << monmap->fsid << dendl;
     reply_command(op, -EPERM, "wrong fsid", 0);
@@ -3923,7 +3923,7 @@ void Monitor::reply_command(MonOpRequestRef op, int rc, const string &rs, versio
 void Monitor::reply_command(MonOpRequestRef op, int rc, const string &rs,
                             bufferlist& rdata, version_t version)
 {
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  auto m = op->get_req<MMonCommand>();
   ceph_assert(m->get_type() == MSG_MON_COMMAND);
   MMonCommandAck *reply = new MMonCommandAck(m->cmd, rc, rs, version);
   reply->set_tid(m->get_tid());
@@ -4013,7 +4013,7 @@ struct AnonConnection : public Connection {
 //extract the original message and put it into the regular dispatch function
 void Monitor::handle_forward(MonOpRequestRef op)
 {
-  MForward *m = static_cast<MForward*>(op->get_req());
+  auto m = op->get_req<MForward>();
   dout(10) << "received forwarded message from "
 	   << ceph_entity_type_name(m->client_type)
 	   << " " << m->client_addrs
@@ -4130,7 +4130,7 @@ void Monitor::no_reply(MonOpRequestRef op)
 
 void Monitor::handle_route(MonOpRequestRef op)
 {
-  MRoute *m = static_cast<MRoute*>(op->get_req());
+  auto m = op->get_req<MRoute>();
   MonSession *session = op->get_session();
   //check privileges
   if (!session->is_capable("mon", MON_CAP_X)) {
@@ -4562,7 +4562,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
     case MSG_MON_PAXOS:
       {
         op->set_type_paxos();
-        MMonPaxos *pm = static_cast<MMonPaxos*>(op->get_req());
+        auto pm = op->get_req<MMonPaxos>();
         if (!op->get_session()->is_capable("mon", MON_CAP_X)) {
           //can't send these!
           return;
@@ -4629,7 +4629,7 @@ void Monitor::dispatch_op(MonOpRequestRef op)
 
 void Monitor::handle_ping(MonOpRequestRef op)
 {
-  MPing *m = static_cast<MPing*>(op->get_req());
+  auto m = op->get_req<MPing>();
   dout(10) << __func__ << " " << *m << dendl;
   MPing *reply = new MPing;
   bufferlist payload;
@@ -4904,7 +4904,7 @@ health_status_t Monitor::timecheck_status(ostringstream &ss,
 
 void Monitor::handle_timecheck_leader(MonOpRequestRef op)
 {
-  MTimeCheck2 *m = static_cast<MTimeCheck2*>(op->get_req());
+  auto m = op->get_req<MTimeCheck2>();
   dout(10) << __func__ << " " << *m << dendl;
   /* handles PONG's */
   ceph_assert(m->op == MTimeCheck2::OP_PONG);
@@ -5022,7 +5022,7 @@ void Monitor::handle_timecheck_leader(MonOpRequestRef op)
 
 void Monitor::handle_timecheck_peon(MonOpRequestRef op)
 {
-  MTimeCheck2 *m = static_cast<MTimeCheck2*>(op->get_req());
+  auto m = op->get_req<MTimeCheck2>();
   dout(10) << __func__ << " " << *m << dendl;
 
   ceph_assert(is_peon());
@@ -5064,7 +5064,7 @@ void Monitor::handle_timecheck_peon(MonOpRequestRef op)
 
 void Monitor::handle_timecheck(MonOpRequestRef op)
 {
-  MTimeCheck2 *m = static_cast<MTimeCheck2*>(op->get_req());
+  auto m = op->get_req<MTimeCheck2>();
   dout(10) << __func__ << " " << *m << dendl;
 
   if (is_leader()) {
@@ -5086,7 +5086,7 @@ void Monitor::handle_timecheck(MonOpRequestRef op)
 
 void Monitor::handle_subscribe(MonOpRequestRef op)
 {
-  MMonSubscribe *m = static_cast<MMonSubscribe*>(op->get_req());
+  auto m = op->get_req<MMonSubscribe>();
   dout(10) << "handle_subscribe " << *m << dendl;
   
   bool reply = false;
@@ -5179,7 +5179,7 @@ void Monitor::handle_subscribe(MonOpRequestRef op)
 
 void Monitor::handle_get_version(MonOpRequestRef op)
 {
-  MMonGetVersion *m = static_cast<MMonGetVersion*>(op->get_req());
+  auto m = op->get_req<MMonGetVersion>();
   dout(10) << "handle_get_version " << *m << dendl;
   PaxosService *svc = NULL;
 
@@ -5269,14 +5269,14 @@ void Monitor::send_latest_monmap(Connection *con)
 
 void Monitor::handle_mon_get_map(MonOpRequestRef op)
 {
-  MMonGetMap *m = static_cast<MMonGetMap*>(op->get_req());
+  auto m = op->get_req<MMonGetMap>();
   dout(10) << "handle_mon_get_map" << dendl;
   send_latest_monmap(m->get_connection().get());
 }
 
 void Monitor::handle_mon_metadata(MonOpRequestRef op)
 {
-  MMonMetadata *m = static_cast<MMonMetadata*>(op->get_req());
+  auto m = op->get_req<MMonMetadata>();
   if (is_leader()) {
     dout(10) << __func__ << dendl;
     update_mon_metadata(m->get_source().num(), std::move(m->data));
@@ -5431,7 +5431,7 @@ int Monitor::scrub()
 
 void Monitor::handle_scrub(MonOpRequestRef op)
 {
-  MMonScrub *m = static_cast<MMonScrub*>(op->get_req());
+  auto m = op->get_req<MMonScrub>();
   dout(10) << __func__ << " " << *m << dendl;
   switch (m->op) {
   case MMonScrub::OP_SCRUB:

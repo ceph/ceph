@@ -216,7 +216,7 @@ void MonmapMonitor::on_active()
 
 bool MonmapMonitor::preprocess_query(MonOpRequestRef op)
 {
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  auto m = op->get_req<PaxosServiceMessage>();
   switch (m->get_type()) {
     // READs
   case MSG_MON_COMMAND:
@@ -251,7 +251,7 @@ void MonmapMonitor::dump_info(Formatter *f)
 
 bool MonmapMonitor::preprocess_command(MonOpRequestRef op)
 {
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  auto m = op->get_req<MMonCommand>();
   int r = -1;
   bufferlist rdata;
   stringstream ss;
@@ -426,7 +426,7 @@ reply:
 
 bool MonmapMonitor::prepare_update(MonOpRequestRef op)
 {
-  PaxosServiceMessage *m = static_cast<PaxosServiceMessage*>(op->get_req());
+  auto m = op->get_req<PaxosServiceMessage>();
   dout(7) << __func__ << " " << *m << " from " << m->get_orig_source_inst() << dendl;
   
   switch (m->get_type()) {
@@ -449,7 +449,7 @@ bool MonmapMonitor::prepare_update(MonOpRequestRef op)
 
 bool MonmapMonitor::prepare_command(MonOpRequestRef op)
 {
-  MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+  auto m = op->get_req<MMonCommand>();
   stringstream ss;
   string rs;
   int err = -EINVAL;
@@ -839,7 +839,7 @@ reply:
 
 bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
 {
-  MMonJoin *join = static_cast<MMonJoin*>(op->get_req());
+  auto join = op->get_req<MMonJoin>();
   dout(10) << __func__ << " " << join->name << " at " << join->addrs << dendl;
 
   MonSession *session = op->get_session();
@@ -863,7 +863,7 @@ bool MonmapMonitor::preprocess_join(MonOpRequestRef op)
 }
 bool MonmapMonitor::prepare_join(MonOpRequestRef op)
 {
-  MMonJoin *join = static_cast<MMonJoin*>(op->get_req());
+  auto join = op->get_req<MMonJoin>();
   dout(0) << "adding/updating " << join->name
 	  << " at " << join->addrs << " to monitor cluster" << dendl;
   if (pending_map.contains(join->name))

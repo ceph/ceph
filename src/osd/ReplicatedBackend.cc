@@ -543,7 +543,7 @@ void ReplicatedBackend::op_commit(
 void ReplicatedBackend::do_repop_reply(OpRequestRef op)
 {
   static_cast<MOSDRepOpReply*>(op->get_nonconst_req())->finish_decode();
-  const MOSDRepOpReply *r = static_cast<const MOSDRepOpReply *>(op->get_req());
+  auto r = op->get_req<MOSDRepOpReply>();
   ceph_assert(r->get_header().type == MSG_OSD_REPOPREPLY);
 
   op->mark_started();
@@ -555,9 +555,9 @@ void ReplicatedBackend::do_repop_reply(OpRequestRef op)
   auto iter = in_progress_ops.find(rep_tid);
   if (iter != in_progress_ops.end()) {
     InProgressOp &ip_op = *iter->second;
-    const MOSDOp *m = NULL;
+    const MOSDOp *m = nullptr;
     if (ip_op.op)
-      m = static_cast<const MOSDOp *>(ip_op.op->get_req());
+      m = ip_op.op->get_req<MOSDOp>();
 
     if (m)
       dout(7) << __func__ << ": tid " << ip_op.tid << " op " //<< *m
@@ -744,7 +744,7 @@ int ReplicatedBackend::be_deep_scrub(
 
 void ReplicatedBackend::_do_push(OpRequestRef op)
 {
-  const MOSDPGPush *m = static_cast<const MOSDPGPush *>(op->get_req());
+  auto m = op->get_req<MOSDPGPush>();
   ceph_assert(m->get_type() == MSG_OSD_PG_PUSH);
   pg_shard_t from = m->from;
 
@@ -811,7 +811,7 @@ struct C_ReplicatedBackend_OnPullComplete : GenContext<ThreadPool::TPHandle&> {
 
 void ReplicatedBackend::_do_pull_response(OpRequestRef op)
 {
-  const MOSDPGPush *m = static_cast<const MOSDPGPush *>(op->get_req());
+  auto m = op->get_req<MOSDPGPush>();
   ceph_assert(m->get_type() == MSG_OSD_PG_PUSH);
   pg_shard_t from = m->from;
 
@@ -881,7 +881,7 @@ void ReplicatedBackend::do_pull(OpRequestRef op)
 
 void ReplicatedBackend::do_push_reply(OpRequestRef op)
 {
-  const MOSDPGPushReply *m = static_cast<const MOSDPGPushReply *>(op->get_req());
+  auto m = op->get_req<MOSDPGPushReply>();
   ceph_assert(m->get_type() == MSG_OSD_PG_PUSH_REPLY);
   pg_shard_t from = m->from;
 
@@ -1009,7 +1009,7 @@ void ReplicatedBackend::issue_op(
 void ReplicatedBackend::do_repop(OpRequestRef op)
 {
   static_cast<MOSDRepOp*>(op->get_nonconst_req())->finish_decode();
-  const MOSDRepOp *m = static_cast<const MOSDRepOp *>(op->get_req());
+  auto m = op->get_req<MOSDRepOp>();
   int msg_type = m->get_type();
   ceph_assert(MSG_OSD_REPOP == msg_type);
 
@@ -1113,7 +1113,7 @@ void ReplicatedBackend::repop_commit(RepModifyRef rm)
   rm->committed = true;
 
   // send commit.
-  const MOSDRepOp *m = static_cast<const MOSDRepOp*>(rm->op->get_req());
+  auto m = rm->op->get_req<MOSDRepOp>();
   ceph_assert(m->get_type() == MSG_OSD_REPOP);
   dout(10) << __func__ << " on op " << *m
 	   << ", sending commit to osd." << rm->ackerosd

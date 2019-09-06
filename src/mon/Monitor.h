@@ -827,7 +827,7 @@ public:
       C_MonOp(_op), mon(_mm), rc(r), rs(s), rdata(rd), version(v){}
 
     void _finish(int r) override {
-      MMonCommand *m = static_cast<MMonCommand*>(op->get_req());
+      auto m = op->get_req<MMonCommand>();
       if (r >= 0) {
         ostringstream ss;
         if (!op->get_req()->get_connection()) {

@@ -1585,7 +1585,7 @@ void OSDService::reply_op_error(OpRequestRef op, int err)
 void OSDService::reply_op_error(OpRequestRef op, int err, eversion_t v,
                                 version_t uv)
 {
-  const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
+  auto m = op->get_req<MOSDOp>();
   ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
   int flags;
   flags = m->get_flags() & (CEPH_OSD_FLAG_ACK|CEPH_OSD_FLAG_ONDISK);
@@ -1601,7 +1601,7 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
     return;
   }
 
-  const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
+  auto m = op->get_req<MOSDOp>();
   ceph_assert(m->get_type() == CEPH_MSG_OSD_OP);
 
   ceph_assert(m->get_map_epoch() >= pg->get_history().same_primary_since);
@@ -7183,8 +7183,7 @@ void OSD::dispatch_session_waiting(SessionRef session, OSDMapRef osdmap)
   while (i != session->waiting_on_map.end()) {
     OpRequestRef op = &(*i);
     ceph_assert(ms_can_fast_dispatch(op->get_req()));
-    const MOSDFastDispatchOp *m = static_cast<const MOSDFastDispatchOp*>(
-      op->get_req());
+    auto m = op->get_req<MOSDFastDispatchOp>();
     if (m->get_min_epoch() > osdmap->get_epoch()) {
       break;
     }
@@ -9158,7 +9157,7 @@ void OSD::handle_pg_create(OpRequestRef op)
   // NOTE: this can be removed in P release (mimic is the last version to
   // send MOSDPGCreate messages).
 
-  const MOSDPGCreate *m = static_cast<const MOSDPGCreate*>(op->get_req());
+  auto m = op->get_req<MOSDPGCreate>();
   ceph_assert(m->get_type() == MSG_OSD_PG_CREATE);
 
   dout(10) << "handle_pg_create " << *m << dendl;
@@ -10160,7 +10159,7 @@ void OSD::get_latest_osdmap()
 
 int OSD::init_op_flags(OpRequestRef& op)
 {
-  const MOSDOp *m = static_cast<const MOSDOp*>(op->get_req());
+  auto m = op->get_req<MOSDOp>();
   vector<OSDOp>::const_iterator iter;
 
   // client flags have no bearing on whether an op is a read, write, etc.
