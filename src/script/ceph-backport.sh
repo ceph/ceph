@@ -4,315 +4,33 @@
 #
 # Credits: This script is based on work done by Loic Dachary
 #
-# With proper setup, this script automates the entire process of creating a
-# backport -- all it needs is the number of the Backport tracker issue.
-# Working in a local clone, the script creates a properly named wip branch for
-# the backport, fetches the commits from GitHub, and cherry-picks them. If all
-# the commits cherry-pick cleanly, the script goes on to open the backport PR,
-# update the Backport tracker issue, and cross-linking the backport PR with the
-# tracker issue.
 #
-# Some setup is required for the script to work -- this is described
-# in the "Setup instructions" and "Instructions for use" sections, below.
-# If issues persist even after reading and following those instructions
-# carefully, the "Troubleshooting notes" and "Reporting bugs" sections might
-# come in handy, as well.
+# This script automates the process of staging a backport starting from a
+# Backport tracker issue.
 #
+# Setup, usage and troubleshooting:
 #
-# Setup instructions
-# ------------------
+#     ceph-backport.sh --help
+#     ceph-backport.sh --setup-advice
+#     ceph-backport.sh --usage-advice
+#     ceph-backport.sh --troubleshooting-advice
 #
-# First, copy the latest version of the script (from the "master" branch) into
-# the PATH. In particular, do not use any version of the script from a stable
-# (named) branch such as "nautilus", as these versions are not maintained. Only
-# the version in master is maintained.
-#
-# Second, obtain the correct values for the following:
-#
-# redmine_key     # "My account" -> "API access key" -> "Show"
-# redmine_user_id # "Logged in as foobar", click on foobar link, Redmine User ID
-                  # is in the URL, i.e. https://tracker.ceph.com/users/[redmine_user_id]
-# github_token    # https://github.com/settings/tokens -> Generate new token ->
-                  # ensure it has "Full control of private repositories" scope
-# github_user     # Your github username
-#
-# The script supports two ways of setting these variables - via the environment
-# or by sourcing a file. If one or more of these variables are not found in the
-# environment, the script will attempt to source a file
-# $HOME/bin/backport_common.sh.
-#
-# Care should be taken to keep the values of redmine_key and github_token secret.
-#
-# The above variables must be set explicitly, as the script has no way of
-# determining reasonable defaults. In addition, the following two variables
-# should at least be checked against the output of "git remote -v" in your clone:
-#
-# fork_remote     # The "git remote" name of your Ceph fork on GitHub;
-#                 # defaults to "origin" if not set
-# upstream_remote # The "git remote" name of the upstream Ceph repo on GitHub;
-#                 # defaults to "upstream" if not set
-#
-# Without correct values for all of the above variables, this script will not
-# work!
-#
-#
-# Instructions for use
-# --------------------
-#
-# After having completed the setup steps described in the previous section,
-# the script can be used to automate backporting.
-#
-# First, change the working directory ("cd") to the top-level directory of the
-# local clone.
-#
-# Then, choose a Backport tracker issue you would like to stage a backport for.
-# Let's assume the Backport tracker issue you chose has the number 31459 and 
-# the backport targets luminous.
-#
-# Run:
-#
-#     ceph-backport.sh 31459
-#
-# Assuming 31459 is a properly-linked Backport issue and the "Pull request ID"
-# field of the parent issue has been correctly populated, the script will
-# automatically:
-#
-# 1. determine which stable branch the backport is targeting (luminous)
-# 2. create a local backport branch, wip-31459-luminous, based on the tip of
-#    luminous
-# 3. determine parent issue and master PR and cherry-pick the commits from the
-#    master PR
-#
-# If there were no cherry-pick conflicts, the script will continue (see steps
-# 4-6, below).
-#
-# If any commit fails to cherry-pick cleanly, the script will abort, giving
-# the user an opportunity to resolve the conflicts manually and re-run the
-# script (using the same exact command as the first time). When the script sees
-# that the local backport branch (wip-31459-luminous) already exists, it
-# will assume that cherry-picking has been completed, and start from step 4:
-#
-# 4. push the wip branch to the user's fork
-# 5. open the backport PR on GitHub
-# 6. cross-link the PR with the Backport tracker issue
-#
-# Finally, if a process called "firefox" is running, the script will open the
-# PR and the updated tracker issue in that web browser to facilitate visual
-# confirmation.
-#
-# It is also possible to prepare the wip branch and do the cherry-picking
-# manually before running the script. For a a luminous backport whose Backport
-# tracker ID is 31459, the process would be:
-#
-# git remote add ceph http://github.com/ceph/ceph.git
-# git fetch ceph
-# git checkout -b wip-31459-luminous ceph/luminous
-# git cherry-pick -x ...
-# (resolve conflicts if necessary)
-# ceph-backport.sh 31459
-#
-# CAVEAT: the local branch name must be "wip-31459-luminous", where 31459 is
-# the number of a Redmine issue in the Backport tracker, with Release set to
-# luminous. The script will not work, otherwise.
-#
-# Optionally, if you have sufficient GitHub privileges on the upstream Ceph
-# repo, the script can automate setting of the label and milestone in the
-# backport PR. This behavior is triggered by passing --set-milestone on the
-# command line, or via the environment variable CEPH_BACKPORT_SET_MILESTONE
-# (set it to any value other than the empty string to activate the behavior).
-#
-# The component label that will be added to the PR defaults to "core", but a
-# different value can be set with an environment variable:
-#
-#     COMPONENT=dashboard ceph-backport.sh 31459
-#
-# or by passing the component as an argument:
-#
-#     ceph-backport.sh --component dashboard 31459
-#
-#
-# Troubleshooting notes
-# ---------------------
-#
-# If the script inexplicably fails with:
-#
-#     error: a cherry-pick or revert is already in progress
-#     hint: try "git cherry-pick (--continue | --quit | --abort)"
-#     fatal: cherry-pick failed
-#
-# This is because HEAD is not where git expects it to be:
-#
-#     $ git cherry-pick --abort
-#     warning: You seem to have moved HEAD. Not rewinding, check your HEAD!
-#
-# This can be fixed by issuing the command:
-#
-#     $ git cherry-pick --quit
-#
-#
-# Reporting bugs
-# --------------
-#
-# Please report any bugs in this script to https://tracker.ceph.com/projects/ceph/issues/new
-# Be sure to mention the exact version of git you are using.
-#
-# (Ideally, the bug report would include a typescript obtained while
-# reproducing the bug with the --debug option. To understand what is meant by
-# "typescript", see "man script".)
-#
-#
-# Other backporting resources
-# ---------------------------
-#
-# See https://tracker.ceph.com/projects/ceph-releases/wiki/HOWTO_backport_commits
-# for more info on cherry-picking.
-#
-# Happy backporting!
-# Nathan
 #
 
 this_script=$(basename "$0")
+how_to_get_setup_advice="For setup advice, run:  ${this_script} --setup-advice"
 
-function debug {
-    log debug $@
-}
+if [[ $* == *--debug* ]]; then
+    set -x
+fi
 
-function eol {
-    log mtt=$1
-    error "$mtt is EOL"
-    exit 1
-}
-
-function error {
-    log error $@
-}
-
-function failed_required_variable_check {
-    local varname="$1"
-    error "$varname not defined. Did you create $HOME/bin/backport_common.sh?"
-    info "(For detailed instructions, see comment block at the beginning of the script)"
-    exit 1
-}
-
-function info {
-    log info $@
-}
-
-function init_mandatory_vars {
-    debug Initializing mandatory variables
-    test "$redmine_key"     || failed_required_variable_check redmine_key
-    test "$redmine_user_id" || failed_required_variable_check redmine_user_id
-    test "$github_token"    || failed_required_variable_check github_token
-    test "$github_user"     || failed_required_variable_check github_user
-    if [ -z "$fork_remote" -a -n "$github_repo" ] ; then
-        fork_remote="$github_repo"
-    fi
-    true "${fork_remote:=origin}"
-    if [ -z "$upstream_remote" -a -n "$ceph_repo" ] ; then
-        upstream_remote="$ceph_repo"
-    fi
-    true "${upstream_remote:=upstream}"
-    true "${redmine_endpoint:="https://tracker.ceph.com"}"
-    true "${github_endpoint:="https://github.com/ceph/ceph"}"
-    debug "Redmine user: ${redmine_user_id}"
-    debug "GitHub user: ${github_user}"
-    debug "Checking fork remote ->${fork_remote}<-"
-    local fork_remote_exists=$(git remote -v | egrep ^${fork_remote}\\s+)
-    if [ "$fork_remote_exists" ] ; then
-        true  # remote exists; good
-    else
-        error "git remote ->$fork_remote<- not found"
-        info "(Hint: are you setting fork_remote as described in the documentation?)"
-        exit 1
-    fi
-    debug "Checking upstream remote ->${upstream_remote}<-"
-    local upstream_remote_exists=$(git remote -v | egrep ^${upstream_remote}\\s+)
-    if [ "$upstream_remote_exists" ]; then
-        true  # remote exists; good
-    else
-        error "git remote ->$upstream_remote<- not found"
-        info "(Hint: are you setting upstream_remote as described in the documentation?)"
-        exit 1
-    fi
-}
-
-function log {
-    local level="$1"
-    shift
-    local msg="$@"
-    prefix="${this_script}: "
-    verbose_only=
-    case $level in
-        err*)
-            prefix="${prefix}ERROR: "
-            ;;
-        info)
-            :
-            ;;
-        bare)
-            prefix=
-            ;;
-        warn|warning)
-            prefix="${prefix}WARNING: "
-            ;;
-        debug|verbose)
-            prefix="${prefix}DEBUG: "
-            verbose_only="1"
-            ;;
-    esac
-    if [ "$verbose_only" -a ! "$verbose" ] ; then
-        true
-    else
-        msg="${prefix}${msg}"
-        echo "$msg" >&2
-    fi
-}
-
-function milestone_number_from_remote_api {
-    local mtt=$1  # milestone to try
-    local mn=""   # milestone number
-    warning "Milestone ->$mtt<- unknown to script - falling back to GitHub API"
-    remote_api_output=$(curl -s -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token)
-    mn=$(echo $remote_api_output | jq --arg milestone $mtt '.[] | select(.title==$milestone) | .number')
-    if [ "$mn" -gt "0" ] >/dev/null 2>&1 ; then
-        echo "$mn"
-    else
-        error "Could not determine milestone number of ->$milestone<-"
-        if [ "$VERBOSE" ] ; then
-            info "GitHub API said:"
-            log bare "$remote_api_output"
-        fi
-        info "Valid values are $(curl -s -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token | jq '.[].title')"
-        info "(This probably means the Release field of ${redmine_url} is populated with"
-        info "an unexpected value - i.e. it does not match any of the GitHub milestones.)"
-        exit 1
-    fi
-}
-
-function populate_original_issue {
-    if [ -z "$original_issue" ] ; then
-        original_issue=$(curl --silent ${redmine_url}.json?include=relations |
-            jq '.issue.relations[] | select(.relation_type | contains("copied_to")) | .issue_id')
-    fi
-}
-
-function populate_original_pr {
-    if [ "$original_issue" ] ; then
-        if [ -z "$original_pr" ] ; then
-            original_pr=$(curl --silent ${redmine_endpoint}/issues/${original_issue}.json |
-                          jq -r '.issue.custom_fields[] | select(.id | contains(21)) | .value')
-            original_pr_url="${github_endpoint}/pull/${original_pr}"
-        fi
-    fi
-}
-
-function prepare {
+function cherry_pick_phase {
     local offset=0
     populate_original_issue
     if [ -z "$original_issue" ] ; then
         error "Could not find original issue"
         info "Does ${redmine_url} have a \"Copied from\" relation?"
-        exit 1
+        false
     fi
     info "Parent issue: ${redmine_endpoint}/issues/${original_issue}"
 
@@ -320,7 +38,7 @@ function prepare {
     if [ -z "$original_pr" ]; then
         error "Could not find original PR"
         info "Is the \"Pull request ID\" field of ${redmine_endpoint}/issues/${original_issue} populated?"
-        exit 1
+        false
     fi
     info "Parent issue ostensibly fixed by: ${original_pr_url}"
 
@@ -338,7 +56,7 @@ function prepare {
     debug "Initializing local branch $local_branch to $milestone"
     if git show-ref --verify --quiet refs/heads/$local_branch ; then
         error "Cannot initialize $local_branch - local branch already exists"
-        exit 1
+        false
     else
         git checkout $upstream_remote/$milestone -b $local_branch
     fi
@@ -367,10 +85,270 @@ function prepare {
             else
                 info "Then re-run the script"
             fi
-            exit 1
+            false
         fi
     done
     info "Cherry picking completed without conflicts"
+}
+
+function debug {
+    log debug "$@"
+}
+
+function deduce_remote {
+    local remote_type="$1"
+    local remote=""
+    local url_component=""
+    if [ "$remote_type" = "upstream" ] ; then
+        url_component="ceph"
+    elif [ "$remote_type" = "fork" ] ; then
+        url_component="$github_user"
+    else
+        error "Internal error in deduce_remote"
+        exit 1
+    fi
+    remote=$(git remote -v | egrep --ignore-case '(://|@)github.com(/|:)'$url_component'/ceph(\s|\.|\/)' | head -n1 | cut -f 1)
+    if [ "$remote" ] ; then
+        true
+    else
+        error "Cannot auto-determine ${remote_type}_remote"
+        info "Please set this variable explicitly and also file a bug report at ${redmine_endpoint}"
+        exit 1
+    fi
+    echo "$remote"
+}
+
+function eol {
+    log mtt=$1
+    error "$mtt is EOL"
+    false
+}
+
+function error {
+    log error "$@"
+}
+
+function failed_mandatory_var_check {
+    local varname="$1"
+    error "$varname not defined"
+    setup_ok=""
+}
+
+function info {
+    log info "$@"
+}
+
+function init_github_user {
+    debug "Initializing mandatory variables - GitHub user"
+    if [ "$github_user" ] ; then
+        true
+    else
+        warning "github_user variable not set, falling back to \$USER"
+        github_user="$USER"
+        if [ "$github_user" ] ; then
+            true
+        else
+            failed_mandatory_var_check github_user
+            info "$how_to_get_setup_advice"
+            exit 1
+        fi
+    fi
+}
+
+function init_mandatory_vars {
+    debug "Initializing mandatory variables - endpoints"
+    redmine_endpoint="${redmine_endpoint:-"https://tracker.ceph.com"}"
+    github_endpoint="${github_endpoint:-"https://github.com/ceph/ceph"}"
+    debug "Initializing mandatory variables - GitHub remotes"
+    upstream_remote="${upstream_remote:-$(deduce_remote upstream)}"
+    fork_remote="${fork_remote:-$(deduce_remote fork)}"
+}
+
+function setup_summary {
+    local not_set="!!! NOT SET !!!"
+    local redmine_user_id_display="$not_set"
+    local redmine_key_display="$not_set"
+    local github_user_display="$not_set"
+    local github_token_display="$not_set"
+    local upstream_remote_display="$not_set"
+    local fork_remote_display="$not_set"
+    [ "$redmine_user_id" ] && redmine_user_id_display="$redmine_user_id"
+    [ "$redmine_key" ] && redmine_key_display="(OK, not shown)"
+    [ "$github_user" ] && github_user_display="$github_user"
+    [ "$github_token" ] && github_token_display="(OK, not shown)"
+    [ "$upstream_remote" ] && upstream_remote_display="$upstream_remote"
+    [ "$fork_remote" ] && fork_remote_display="$fork_remote"
+    debug Re-checking mandatory variables
+    test "$redmine_key"      || failed_mandatory_var_check redmine_key
+    test "$redmine_user_id"  || failed_mandatory_var_check redmine_user_id
+    test "$github_user"      || failed_mandatory_var_check github_user
+    test "$github_token"     || failed_mandatory_var_check github_token
+    test "$upstream_remote"  || failed_mandatory_var_check upstream_remote
+    test "$fork_remote"      || failed_mandatory_var_check fork_remote
+    test "$redmine_endpoint" || failed_mandatory_var_check redmine_endpoint
+    test "$github_endpoint"  || failed_mandatory_var_check github_endpoint
+    if [ "$SETUP_ONLY" ] ; then
+        read -r -d '' setup_summary <<EOM || true > /dev/null 2>&1
+redmine_user_id  $redmine_user_id_display
+redmine_key      $redmine_key_display
+github_user      $github_user_display
+github_token     $github_token_display
+upstream_remote  $upstream_remote_display
+fork_remote      $fork_remote_display
+EOM
+        log bare "================================"
+        log bare "Setup summary"
+        log bare "--------------------------------"
+        log bare "variable name    value"
+        log bare "--------------------------------"
+        log bare "$setup_summary"
+        log bare "================================"
+    elif [ "$VERBOSE" ] ; then
+        debug "redmine_user_id  $redmine_user_id_display"
+        debug "redmine_key      $redmine_key_display"
+        debug "github_user      $github_user_display"
+        debug "github_token     $github_token_display"
+        debug "upstream_remote  $upstream_remote_display"
+        debug "fork_remote      $fork_remote_display"
+    fi
+}
+
+function log {
+    local level="$1"
+    shift
+    local msg="$@"
+    prefix="${this_script}: "
+    verbose_only=
+    case $level in
+        err*)
+            prefix="${prefix}ERROR: "
+            ;;
+        info)
+            :
+            ;;
+        bare)
+            prefix=
+            ;;
+        warn|warning)
+            prefix="${prefix}WARNING: "
+            ;;
+        debug|verbose)
+            prefix="${prefix}DEBUG: "
+            verbose_only="1"
+            ;;
+    esac
+    if [ "$verbose_only" -a -z "$VERBOSE" ] ; then
+        true
+    else
+        msg="${prefix}${msg}"
+        echo "$msg" >&2
+    fi
+}
+
+function milestone_number_from_remote_api {
+    local mtt=$1  # milestone to try
+    local mn=""   # milestone number
+    warning "Milestone ->$mtt<- unknown to script - falling back to GitHub API"
+    remote_api_output=$(curl -s -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token)
+    mn=$(echo $remote_api_output | jq --arg milestone $mtt '.[] | select(.title==$milestone) | .number')
+    if [ "$mn" -gt "0" ] >/dev/null 2>&1 ; then
+        echo "$mn"
+    else
+        error "Could not determine milestone number of ->$milestone<-"
+        if [ "$VERBOSE" ] ; then
+            info "GitHub API said:"
+            log bare "$remote_api_output"
+        fi
+        info "Valid values are $(curl -s -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token | jq '.[].title')"
+        info "(This probably means the Release field of ${redmine_url} is populated with"
+        info "an unexpected value - i.e. it does not match any of the GitHub milestones.)"
+        false
+    fi
+}
+
+function populate_original_issue {
+    if [ -z "$original_issue" ] ; then
+        original_issue=$(curl --silent ${redmine_url}.json?include=relations |
+            jq '.issue.relations[] | select(.relation_type | contains("copied_to")) | .issue_id')
+    fi
+}
+
+function populate_original_pr {
+    if [ "$original_issue" ] ; then
+        if [ -z "$original_pr" ] ; then
+            original_pr=$(curl --silent ${redmine_endpoint}/issues/${original_issue}.json |
+                          jq -r '.issue.custom_fields[] | select(.id | contains(21)) | .value')
+            original_pr_url="${github_endpoint}/pull/${original_pr}"
+        fi
+    fi
+}
+
+function setup_advice {
+    cat <<EOM
+Setup advice
+------------
+
+${this_script} expects to be run inside a local clone of the Ceph git repo.
+Some initial setup is required for the script to become fully functional.
+
+First, obtain the correct values for the following variables:
+
+redmine_key     # "My account" -> "API access key" -> "Show"
+redmine_user_id # "Logged in as foobar", click on foobar link, Redmine User ID
+                # is in the URL, i.e. https://tracker.ceph.com/users/[redmine_user_id]
+github_token    # https://github.com/settings/tokens -> Generate new token ->
+                # ensure it has "Full control of private repositories" scope
+github_user     # Your github username
+
+The above variables must be set explicitly, as the script has no way of
+determining reasonable defaults. If you prefer, you can ensure the variables
+are set in the environment before running the script. Alternatively, you can
+create a file, \$HOME/bin/backport_common.sh (this exact path), with the
+variable assignments in it. The script will detect that the file exists and
+"source" it.
+
+In any case, care should be taken to keep the values of redmine_key and
+github_token secret.
+
+The script expects to run in a local clone of a Ceph repo with
+at least two remotes defined - pointing to:
+
+    https://github.com/ceph/ceph.git
+    https://github.com/\$github_user/ceph.git
+
+In other words, the upstream GitHub repo and the user's fork thereof. It makes
+no difference what these remotes are called - the script will determine the
+right remote names automatically.
+
+To find out whether you have any obvious problems with your setup before
+actually using the script to stage a backport, run:
+
+    ${this_script} --setup
+
+EOM
+}
+
+function troubleshooting_advice {
+    cat <<EOM
+Troubleshooting notes
+---------------------
+
+If the script inexplicably fails with:
+
+    error: a cherry-pick or revert is already in progress
+    hint: try "git cherry-pick (--continue | --quit | --abort)"
+    fatal: cherry-pick failed
+
+This is because HEAD is not where git expects it to be:
+
+    $ git cherry-pick --abort
+    warning: You seem to have moved HEAD. Not rewinding, check your HEAD!
+
+This can be fixed by issuing the command:
+
+    $ git cherry-pick --quit
+
+EOM
 }
 
 # to update known milestones, consult:
@@ -396,35 +374,102 @@ function try_known_milestones {
 }
 
 function usage {
-    log bare
-    log bare "Usage:"
-    log bare "   ${this_script} [OPTIONS] BACKPORT_TRACKER_ISSUE_NUMBER"
-    log bare
-    log bare "Available options:"
-    log bare "    -c/--component"
-    log bare "    -d/--debug"
-    log bare "    -m/--set-milestone (requires elevated GitHub privs)"
-    log bare "    -v/--verbose"
-    log bare
-    log bare "Example:"
-    log bare "   ${this_script} -c dashboard -e 31459"
-    log bare
-    log bare "The script must be run from inside a local git clone."
-    log bare
-    log bare "Documentation can be found in the comment block at the top of the script itself."
-    exit 1
+    cat <<EOM >&2
+Documentation:
+
+   ${this_script} --setup-advice | less
+   ${this_script} --usage-advice | less
+   ${this_script} --troubleshooting-advice | less
+
+Usage:
+   ${this_script} [OPTIONS] BACKPORT_TRACKER_ISSUE_NUMBER
+
+Options:
+    -c/--component COMPONENT (for use with --set-milestone)
+    --debug            (turns on "set -x")
+    -m/--set-milestone (requires elevated GitHub privs)
+    -s/--setup         (just check the setup)
+    -v/--verbose
+
+Example:
+   ${this_script} -c dashboard -m 31459
+   (if cherry-pick conflicts are present, finish cherry-picking phase manually
+   and run the script again with the same arguments)
+
+CAVEAT: The script must be run from inside a local git clone.
+EOM
+}
+
+function usage_advice {
+    cat <<EOM
+Usage advice
+------------
+
+Once you have completed setup (see --setup-advice), you can run the script
+with the ID of a Backport tracker issue. For example, to stage the backport
+https://tracker.ceph.com/issues/41502, run:
+
+    ${this_script} 41502
+
+If the commits in the corresponding master PR cherry-pick cleanly, the script
+will automatically perform all steps required to stage the backport:
+
+Cherry-pick phase:
+
+1. fetching the latest commits from the upstream remote
+2. creating a wip branch for the backport
+3. figuring out which upstream PR contains the commits to cherry-pick
+4. cherry-picking the commits
+
+PR phase:
+
+5. pushing the wip branch to your fork
+6. opening the backport PR with compliant title and description describing
+   the backport
+7. (optionally) setting the milestone and label in the PR
+8. updating the Backport tracker issue
+
+If any of the commits do not cherry-pick cleanly, the script will abort in
+step 4. In this case, you can either finish the cherry-picking manually
+or abort the cherry-pick. In any case, when and if the local wip branch is
+ready (all commits cherry-picked), if you run the script again, like so:
+
+    ${this_script} 41502
+
+the script will detect that the wip branch already exists and skip over
+steps 1-4, starting from step 5 ("PR phase"). In other words, if the wip branch
+already exists for any reason, the script will assume that the cherry-pick
+phase (steps 1-4) is complete.
+
+As this implies, you can do steps 1-4 manually. Provided the wip branch name
+is in the format wip-\$TRACKER_ID-\$STABLE_RELEASE (e.g. "wip-41502-mimic"),
+the script will detect the wip branch and start from step 5.
+
+For details on all the options the script takes, run:
+
+    ${this_script} --help
+
+For more information on Ceph backporting, see:
+
+    https://github.com/ceph/ceph/tree/master/SubmittingPatches-backports.rst
+
+EOM
 }
 
 function warning {
-    log warning $@
+    log warning "$@"
 }
 
+
+#
+# are we in a local git clone?
+#
 
 if git show-ref HEAD >/dev/null 2>&1 ; then
     debug "In a local git clone. Good."
 else
     error "This script must be run from inside a local git clone"
-    exit 1
+    false
 fi
 
 
@@ -432,34 +477,53 @@ fi
 # process command-line arguments
 #
 
-munged_options=$(getopt -o c:dhmpv --long "component:,debug,help,prepare,set-milestone,verbose" -n "$this_script" -- "$@")
+munged_options=$(getopt -o c:dhmpsv --long "component:,debug,help,prepare,set-milestone,setup,setup-advice,troubleshooting-advice,usage-advice,verbose" -n "$this_script" -- "$@")
 eval set -- "$munged_options"
 
+ADVICE=""
 DEBUG=""
 SET_MILESTONE=""
 EXPLICIT_COMPONENT=""
 EXPLICIT_PREPARE=""
 HELP=""
 ISSUE=""
+SETUP_ADVICE=""
+SETUP_ONLY=""
+TROUBLESHOOTING_ADVICE=""
+USAGE_ADVICE=""
 VERBOSE=""
 while true ; do
     case "$1" in
         --component|-c) shift ; EXPLICIT_COMPONENT="$1" ; shift ;;
         --debug|-d) DEBUG="$1" ; shift ;;
-        --help|-h) HELP="$1" ; shift ;;
+        --help|-h) ADVICE="1" ; HELP="$1" ; shift ;;
         --prepare|-p) EXPLICIT_PREPARE="$1" ; shift ;;
         --set-milestone|-m) SET_MILESTONE="$1" ; shift ;;
+        --setup|-s) SETUP_ONLY="$1" ; shift ;;
+        --setup-advice) ADVICE="1" ; SETUP_ADVICE="$1" ; shift ;;
+        --troubleshooting-advice) ADVICE="$1" ; TROUBLESHOOTING_ADVICE="$1" ; shift ;;
+        --usage-advice) ADVICE="$1" ; USAGE_ADVICE="$1" ; shift ;;
         --verbose|-v) VERBOSE="$1" ; shift ;;
         --) shift ; ISSUE="$1" ; break ;;
         *) echo "Internal error" ; false ;;
     esac
 done
 
+if [ "$ADVICE" ] ; then
+    [ "$HELP" ] && usage
+    [ "$SETUP_ADVICE" ] && setup_advice
+    [ "$USAGE_ADVICE" ] && usage_advice
+    [ "$TROUBLESHOOTING_ADVICE" ] && troubleshooting_advice
+    exit 0
+fi
+
+[ "$SETUP_ONLY" ] && ISSUE="0"
 if [[ $ISSUE =~ ^[0-9]+$ ]] ; then
     issue=$ISSUE
 else
     error "Invalid or missing argument"
-    usage  # does not return
+    usage
+    false
 fi
 
 if [ "$DEBUG" ]; then
@@ -467,11 +531,8 @@ if [ "$DEBUG" ]; then
     VERBOSE="--verbose"
 fi
 
-if [ "$HELP" ]; then
-    usage  # does not return
-fi
-
 if [ "$VERBOSE" ]; then
+    info "Verbose mode ON"
     VERBOSE="--verbose"
 fi
 
@@ -482,7 +543,29 @@ fi
 
 BACKPORT_COMMON=$HOME/bin/backport_common.sh
 [ -f "$BACKPORT_COMMON" ] && source $HOME/bin/backport_common.sh
+setup_ok="1"
+init_github_user
 init_mandatory_vars
+setup_summary
+if [ "$setup_ok" ] ; then
+    if [ "$SETUP_ONLY" ] ; then
+        log bare "Overall setup is OK"
+        exit 0
+    elif [ "$VERBOSE" ] ; then
+        debug "Overall setup is OK"
+    fi
+else
+    if [ "$SETUP_ONLY" ] ; then
+        log bare "Setup is NOT OK"
+        log bare "$how_to_get_setup_advice"
+        false
+    else
+        error "Problem detected in your setup"
+        info "Run the script with --setup for a full report"
+        info "$how_to_get_setup_advice"
+        false
+    fi
+fi
 
 
 #
@@ -499,7 +582,7 @@ if [ "$tracker" = "Backport" ]; then
 else
     error "Issue $redmine_url is not a Backport"
     info "(This script only works with Backport tracker issues.)"
-    exit 1
+    false
 fi
 
 debug "Looking up release/milestone of $redmine_url"
@@ -508,7 +591,7 @@ if [ "$milestone" ] ; then
     debug "Release/milestone: $milestone"
 else
     error "could not obtain release/milestone from ${redmine_url}"
-    exit 1
+    false
 fi
 
 tracker_title=$(echo $remote_api_output | jq -r '.issue.subject')
@@ -544,19 +627,17 @@ local_branch=wip-${issue}-${target_branch}
 if git show-ref --verify --quiet refs/heads/$local_branch ; then
     if [ "$EXPLICIT_PREPARE" ] ; then
         error "local branch $local_branch already exists -- cannot --prepare"
-        exit 1
+        false
     fi
-    warning "local branch $local_branch already exists: skipping cherry-pick phase!"
-    PREPARE=""
+    info "local branch $local_branch already exists: skipping cherry-pick phase"
 else
     info "$local_branch does not exist: will create it and attempt automated cherry-pick"
-    PREPARE="--prepare"
+    cherry_pick_phase
 fi
-[ "$PREPARE" ] && prepare
 
 
 #
-# at this point, local branch exists and is assumed to contain cherry-pick(s)
+# PR phase
 #
 
 current_branch=$(git rev-parse --abbrev-ref HEAD)
@@ -600,7 +681,7 @@ number=$(echo "$remote_api_output" | jq -r .number)
 if [ "$number" = "null" ] ; then
     error "Remote API call failed"
     log bare "$remote_api_output"
-    exit 1
+    false
 fi
 
 if [ "$SET_MILESTONE" -o "$CEPH_BACKPORT_SET_MILESTONE" ] ; then
