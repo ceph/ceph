@@ -56,6 +56,9 @@
 #include "messages/MMonSubscribe.h"
 #include "messages/MMonSubscribeAck.h"
 
+#include "messages/MCommand.h"
+#include "messages/MCommandReply.h"
+
 #include "messages/MAuthReply.h"
 
 #include "messages/MTimeCheck2.h"
@@ -3099,12 +3102,34 @@ struct C_MgrProxyCommand : public Context {
   }
 };
 
+void Monitor::handle_tell_command(MonOpRequestRef op)
+{
+  ceph_assert(op->is_type_command());
+  MCommand *m = static_cast<MCommand*>(op->get_req());
+  if (m->fsid != monmap->fsid) {
+    dout(0) << "handle_command on fsid " << m->fsid << " != " << monmap->fsid << dendl;
+    reply_command(op, -EPERM, "wrong fsid", 0);
+    return;
+  }
+  MonSession *session = op->get_session();
+  if (!session) {
+    dout(5) << __func__ << " dropping stray message " << *m << dendl;
+    return;
+  }
+  if (!session->caps.is_allow_all()) {
+    reply_tell_command(op, -EPERM, "insufficient caps");
+  }
+  // pass it to asok
+  cct->get_admin_socket()->queue_tell_command(m);
+}
+
 void Monitor::handle_command(MonOpRequestRef op)
 {
   ceph_assert(op->is_type_command());
   auto m = op->get_req<MMonCommand>();
   if (m->fsid != monmap->fsid) {
-    dout(0) << "handle_command on fsid " << m->fsid << " != " << monmap->fsid << dendl;
+    dout(0) << "handle_command on fsid " << m->fsid << " != " << monmap->fsid
+	    << dendl;
     reply_command(op, -EPERM, "wrong fsid", 0);
     return;
   }
@@ -3116,8 +3141,7 @@ void Monitor::handle_command(MonOpRequestRef op)
   }
 
   if (m->cmd.empty()) {
-    string rs = "No command supplied";
-    reply_command(op, -EINVAL, rs, 0);
+    reply_command(op, -EINVAL, "no command specified", 0);
     return;
   }
 
@@ -3909,6 +3933,16 @@ void Monitor::reply_command(MonOpRequestRef op, int rc, const string &rs,
   send_reply(op, reply);
 }
 
+void Monitor::reply_tell_command(
+  MonOpRequestRef op, int rc, const string &rs)
+{
+  MCommand *m = static_cast<MCommand*>(op->get_req());
+  ceph_assert(m->get_type() == MSG_COMMAND);
+  MCommandReply *reply = new MCommandReply(rc, rs);
+  reply->set_tid(m->get_tid());
+  m->get_connection()->send_message(reply);
+}
+
 
 // ------------------------
 // request/reply routing
@@ -4399,6 +4433,10 @@ void Monitor::dispatch_op(MonOpRequestRef op)
 
     case CEPH_MSG_PING:
       handle_ping(op);
+      return;
+    case MSG_COMMAND:
+      op->set_type_command();
+      handle_tell_command(op);
       return;
   }
 
