@@ -113,34 +113,35 @@ class MDSSocketHook : public AdminSocketHook {
   MDSDaemon *mds;
 public:
   explicit MDSSocketHook(MDSDaemon *m) : mds(m) {}
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
+  int call(std::string_view command, const cmdmap_t& cmdmap,
 	    std::string_view format, bufferlist& out) override {
     stringstream ss;
-    bool r = mds->asok_command(command, cmdmap, format, ss);
+    int r = mds->asok_command(command, cmdmap, format, ss);
     out.append(ss);
     return r;
   }
 };
 
-bool MDSDaemon::asok_command(std::string_view command, const cmdmap_t& cmdmap,
-			     std::string_view format, std::ostream& ss)
+int MDSDaemon::asok_command(std::string_view command, const cmdmap_t& cmdmap,
+			    std::string_view format, std::ostream& ss)
 {
   dout(1) << "asok_command: " << command << " (starting...)" << dendl;
 
   Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
-  bool handled = false;
+  int r = -ENOSYS;
   if (command == "status") {
     dump_status(f);
-    handled = true;
+    r = 0;
   } else {
     if (mds_rank == NULL) {
       dout(1) << "Can't run that command on an inactive MDS!" << dendl;
       f->dump_string("error", "mds_not_active");
     } else {
       try {
-	handled = mds_rank->handle_asok_command(command, cmdmap, f, ss);
+	r = mds_rank->handle_asok_command(command, cmdmap, f, ss);
       } catch (const bad_cmd_get& e) {
 	ss << e.what();
+	r = -EINVAL;
       }
     }
   }
@@ -149,7 +150,7 @@ bool MDSDaemon::asok_command(std::string_view command, const cmdmap_t& cmdmap,
 
   dout(1) << "asok_command: " << command << " (complete)" << dendl;
 
-  return handled;
+  return r;
 }
 
 void MDSDaemon::dump_status(Formatter *f)

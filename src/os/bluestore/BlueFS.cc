@@ -73,10 +73,10 @@ public:
 private:
   SocketHook(BlueFS* bluefs) :
     bluefs(bluefs) {}
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-              std::string_view format, bufferlist& out) override {
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   std::string_view format, bufferlist& out) override {
       stringstream ss;
-      bool r = true;
+      bool r = 0;
       if (command == "bluestore bluefs available") {
         int64_t alloc_size = 0;
         cmd_getval(bluefs->cct, cmdmap, "alloc_size", alloc_size);
@@ -106,7 +106,7 @@ private:
         delete f;
       } else {
         ss << "Invalid command" << std::endl;
-        r = false;
+        r = -ENOSYS;
       }
       out.append(ss);
       return r;

@@ -50,10 +50,10 @@ public:
     }
   }
 
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-            std::string_view format, bufferlist& out) override {
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   std::string_view format, bufferlist& out) override {
     stringstream ss;
-    bool r = true;
+    bool r = 0;
     if (command == "bluestore allocator dump " + name) {
       Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
       f->open_array_section("free_regions");
@@ -89,7 +89,7 @@ public:
       delete f;
     } else {
       ss << "Invalid command" << std::endl;
-      r = false;
+      r = -ENOSYS;
     }
     out.append(ss);
     return r;

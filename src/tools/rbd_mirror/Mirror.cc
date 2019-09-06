@@ -321,13 +321,13 @@ public:
     }
   }
 
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-	    std::string_view format, bufferlist& out) override {
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   std::string_view format, bufferlist& out) override {
     Commands::const_iterator i = commands.find(command);
     ceph_assert(i != commands.end());
     Formatter *f = Formatter::create(format);
     stringstream ss;
-    bool r = i->second->call(f, &ss);
+    int r = i->second->call(f, &ss);
     delete f;
     out.append(ss);
     return r;

@@ -346,25 +346,33 @@ bool AdminSocket::do_accept()
     }
   }
 
-  bool rval;
   bufferlist out;
   std::vector<std::string> cmdvec = { c };
-  rval = execute_command(cmdvec, out);
-  if (rval) {
+  int rval = execute_command(cmdvec, out);
+  // Unfortunately, the asok wire protocol does not let us pass an error code,
+  // and many asok command implementations return helpful error strings.  So,
+  // let's interpret all but -ENOSYS as a "success" so that the user can still
+  // see those messages.  This provides the same behavior as what users saw
+  // pre-octopus; the only drawback is that net new 'tell-style' commands that
+  // return error codes will also be seen as "success" via asok unless/until
+  // we extend the socket protocol.
+  if (rval != -ENOSYS) {
+    rval = 0; // sigh.. fixme someday!
     uint32_t len = htonl(out.length());
     int ret = safe_write(connection_fd, &len, sizeof(len));
     if (ret < 0) {
       lderr(m_cct) << "AdminSocket: error writing response length "
           << cpp_strerror(ret) << dendl;
-      rval = false;
+      rval = -EIO;
     } else {
-      if (out.write_fd(connection_fd) >= 0)
-        rval = true;
+      if (out.write_fd(connection_fd) < 0) {
+	rval = -EIO;
+      }
     }
   }
 
   retry_sys_call(::close, connection_fd);
-  return rval;
+  return rval >= 0;
 }
 
 void AdminSocket::do_tell_queue()
@@ -377,8 +385,7 @@ void AdminSocket::do_tell_queue()
   }
   for (auto& m : q) {
     bufferlist outbl;
-    bool success = execute_command(m->cmd, outbl);
-    int r = success ? 0 : -1;  // FIXME!
+    int r = execute_command(m->cmd, outbl);
     auto reply = new MCommandReply(r, "");
     reply->set_tid(m->get_tid());
     reply->set_data(outbl);
@@ -395,14 +402,14 @@ int AdminSocket::execute_command(const std::vector<std::string>& cmdvec,
   ldout(m_cct,10) << __func__ << " cmdvec='" << cmdvec << "'" << dendl;
   if (!cmdmap_from_json(cmdvec, &cmdmap, errss)) {
     ldout(m_cct, 0) << "AdminSocket: " << errss.str() << dendl;
-    return false;
+    return -EINVAL;
   }
   string prefix;
   try {
     cmd_getval(m_cct, cmdmap, "format", format);
     cmd_getval(m_cct, cmdmap, "prefix", prefix);
   } catch (const bad_cmd_get& e) {
-    return false;
+    return -EINVAL;
   }
   if (format != "json" && format != "json-pretty" &&
       format != "xml" && format != "xml-pretty")
@@ -414,7 +421,7 @@ int AdminSocket::execute_command(const std::vector<std::string>& cmdvec,
   if (p == hooks.cend()) {
     lderr(m_cct) << "AdminSocket: request '" << cmdvec
 		 << "' not defined" << dendl;
-    return false;
+    return -ENOSYS;
   }
 
   // Drop lock to avoid cycles in cases where the hook takes
@@ -424,21 +431,27 @@ int AdminSocket::execute_command(const std::vector<std::string>& cmdvec,
   in_hook = true;
   auto hook = p->second.hook;
   l.unlock();
-  bool success = (validate(prefix, cmdmap, out) &&
-      hook->call(prefix, cmdmap, format, out));
+  int r;
+  if (!validate(prefix, cmdmap, out)) {
+    r = -EINVAL;
+  } else {
+    r = hook->call(prefix, cmdmap, format, out);
+  }
   l.lock();
   in_hook = false;
   in_hook_cond.notify_all();
-  if (!success) {
+  if (r < 0) {
     ldout(m_cct, 0) << "AdminSocket: request '" << prefix
-		    << "' to " << hook << " failed" << dendl;
+		    << "' to " << hook << " failed, " << cpp_strerror(r)
+		    << dendl;
     out.append("failed");
   } else {
     ldout(m_cct, 5) << "AdminSocket: request '" << prefix
-        << "' to " << hook
-        << " returned " << out.length() << " bytes" << dendl;
+		    << "' to " << hook
+		    << " returned " << r << " and " << out.length() << " bytes"
+		    << dendl;
   }
-  return true;
+  return r;
 }
 
 void AdminSocket::queue_tell_command(ref_t<MCommand> m)
@@ -508,8 +521,8 @@ void AdminSocket::unregister_commands(const AdminSocketHook *hook)
 
 class VersionHook : public AdminSocketHook {
 public:
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-	    std::string_view format, bufferlist& out) override {
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   std::string_view format, bufferlist& out) override {
     if (command == "0"sv) {
       out.append(CEPH_ADMIN_SOCK_VERSION);
     } else {
@@ -528,7 +541,7 @@ public:
       jf.flush(ss);
       out.append(ss.str());
     }
-    return true;
+    return 0;
   }
 };
 
@@ -536,9 +549,9 @@ class HelpHook : public AdminSocketHook {
   AdminSocket *m_as;
 public:
   explicit HelpHook(AdminSocket *as) : m_as(as) {}
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-	    std::string_view format,
-	    bufferlist& out) override {
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   std::string_view format,
+	   bufferlist& out) override {
     std::unique_ptr<Formatter> f(Formatter::create(format, "json-pretty"sv,
 						   "json-pretty"sv));
     f->open_object_section("help");
@@ -550,7 +563,7 @@ public:
     ostringstream ss;
     f->flush(ss);
     out.append(ss.str());
-    return true;
+    return 0;
   }
 };
 
@@ -558,8 +571,8 @@ class GetdescsHook : public AdminSocketHook {
   AdminSocket *m_as;
 public:
   explicit GetdescsHook(AdminSocket *as) : m_as(as) {}
-  bool call(std::string_view command, const cmdmap_t& cmdmap,
-	    std::string_view format, bufferlist& out) override {
+  int call(std::string_view command, const cmdmap_t& cmdmap,
+	   std::string_view format, bufferlist& out) override {
     int cmdnum = 0;
     JSONFormatter jf;
     jf.open_object_section("command_descriptions");
@@ -581,7 +594,7 @@ public:
     ostringstream ss;
     jf.flush(ss);
     out.append(ss.str());
-    return true;
+    return 0;
   }
 };
 

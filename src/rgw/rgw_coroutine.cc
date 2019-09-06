@@ -852,7 +852,7 @@ int RGWCoroutinesManagerRegistry::hook_to_admin_command(const string& command)
   return 0;
 }
 
-bool RGWCoroutinesManagerRegistry::call(std::string_view command,
+int RGWCoroutinesManagerRegistry::call(std::string_view command,
                                         const cmdmap_t& cmdmap,
                                         std::string_view format,
                                         bufferlist& out) {
@@ -862,7 +862,7 @@ bool RGWCoroutinesManagerRegistry::call(std::string_view command,
   ::encode_json("cr_managers", *this, &f);
   f.flush(ss);
   out.append(ss);
-  return true;
+  return 0;
 }
 
 void RGWCoroutinesManagerRegistry::dump(Formatter *f) const {

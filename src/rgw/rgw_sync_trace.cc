@@ -195,8 +195,8 @@ string RGWSyncTraceManager::get_active_names()
   return ss.str();
 }
 
-bool RGWSyncTraceManager::call(std::string_view command, const cmdmap_t& cmdmap,
-                               std::string_view format, bufferlist& out) {
+int RGWSyncTraceManager::call(std::string_view command, const cmdmap_t& cmdmap,
+			      std::string_view format, bufferlist& out) {
 
   bool show_history = (command == "sync trace history");
   bool show_short = (command == "sync trace active_short");
@@ -254,7 +254,7 @@ bool RGWSyncTraceManager::call(std::string_view command, const cmdmap_t& cmdmap,
   f.flush(ss);
   out.append(ss);
 
-  return true;
+  return 0;
 }
 
 void RGWSyncTraceManager::finish_node(RGWSyncTraceNode *node)
