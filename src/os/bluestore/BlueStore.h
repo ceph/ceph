@@ -3131,6 +3131,16 @@ private:
       repairer(_repairer) {
     }
   };
+  OnodeRef _fsck_check_objects_shallow(
+    FSCKDepth depth,
+    CollectionRef c,
+    const ghobject_t& oid,
+    KeyValueDB::Iterator it,
+    mempool::bluestore_fsck::list<string>& expecting_shards,
+    store_statfs_t* expected_statfs,
+    map<BlobRef, bluestore_blob_t::unused_t>* referenced,
+    const BlueStore::FSCK_ObjectCtx& ctx);
+
   void _fsck_check_objects(FSCKDepth depth,
     bool need_per_pool_stats,
     const FSCK_ObjectCtx& ctx);
