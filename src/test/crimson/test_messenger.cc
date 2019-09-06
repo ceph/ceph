@@ -581,6 +581,7 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
 }
 
 using ceph::msgr::v2::Tag;
+using ceph::net::bp_type_t;
 using ceph::net::Breakpoint;
 using ceph::net::Connection;
 using ceph::net::ConnectionRef;
@@ -821,15 +822,15 @@ struct TestInterceptor : public Interceptor {
 
     if (bp == custom_bp_t::SOCKET_CONNECTING) {
       ++result->connect_attempts;
-    } else if (bp == tag_bp_t{Tag::CLIENT_IDENT, true}) {
+    } else if (bp == tag_bp_t{Tag::CLIENT_IDENT, bp_type_t::WRITE}) {
       ++result->client_connect_attempts;
-    } else if (bp == tag_bp_t{Tag::SESSION_RECONNECT, true}) {
+    } else if (bp == tag_bp_t{Tag::SESSION_RECONNECT, bp_type_t::WRITE}) {
       ++result->client_reconnect_attempts;
     } else if (bp == custom_bp_t::SOCKET_ACCEPTED) {
       ++result->accept_attempts;
-    } else if (bp == tag_bp_t{Tag::CLIENT_IDENT, false}) {
+    } else if (bp == tag_bp_t{Tag::CLIENT_IDENT, bp_type_t::READ}) {
       ++result->server_connect_attempts;
-    } else if (bp == tag_bp_t{Tag::SESSION_RECONNECT, false}) {
+    } else if (bp == tag_bp_t{Tag::SESSION_RECONNECT, bp_type_t::READ}) {
       ++result->server_reconnect_attempts;
     }
 
@@ -1577,12 +1578,12 @@ test_v2_lossy_early_connect_fault(FailoverTest& test) {
       {custom_bp_t::BANNER_READ},
       {custom_bp_t::BANNER_PAYLOAD_READ},
       {custom_bp_t::SOCKET_CONNECTING},
-      {Tag::HELLO, true},
-      {Tag::HELLO, false},
-      {Tag::AUTH_REQUEST, true},
-      {Tag::AUTH_DONE, false},
-      {Tag::AUTH_SIGNATURE, true},
-      {Tag::AUTH_SIGNATURE, false},
+      {Tag::HELLO, bp_type_t::WRITE},
+      {Tag::HELLO, bp_type_t::READ},
+      {Tag::AUTH_REQUEST, bp_type_t::WRITE},
+      {Tag::AUTH_DONE, bp_type_t::READ},
+      {Tag::AUTH_SIGNATURE, bp_type_t::WRITE},
+      {Tag::AUTH_SIGNATURE, bp_type_t::READ},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp) {
       TestInterceptor interceptor;
@@ -1613,8 +1614,8 @@ test_v2_lossy_early_connect_fault(FailoverTest& test) {
 seastar::future<>
 test_v2_lossy_connect_fault(FailoverTest& test) {
   return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::CLIENT_IDENT, true},
-      {Tag::SERVER_IDENT, false},
+      {Tag::CLIENT_IDENT, bp_type_t::WRITE},
+      {Tag::SERVER_IDENT, bp_type_t::READ},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp) {
       TestInterceptor interceptor;
@@ -1645,8 +1646,8 @@ test_v2_lossy_connect_fault(FailoverTest& test) {
 seastar::future<>
 test_v2_lossy_connected_fault(FailoverTest& test) {
   return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::MESSAGE, true},
-      {Tag::MESSAGE, false},
+      {Tag::MESSAGE, bp_type_t::WRITE},
+      {Tag::MESSAGE, bp_type_t::READ},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp) {
       TestInterceptor interceptor;
@@ -1680,12 +1681,12 @@ test_v2_lossy_early_accept_fault(FailoverTest& test) {
       {custom_bp_t::BANNER_WRITE},
       {custom_bp_t::BANNER_READ},
       {custom_bp_t::BANNER_PAYLOAD_READ},
-      {Tag::HELLO, true},
-      {Tag::HELLO, false},
-      {Tag::AUTH_REQUEST, false},
-      {Tag::AUTH_DONE, true},
-      {Tag::AUTH_SIGNATURE, true},
-      {Tag::AUTH_SIGNATURE, false},
+      {Tag::HELLO, bp_type_t::WRITE},
+      {Tag::HELLO, bp_type_t::READ},
+      {Tag::AUTH_REQUEST, bp_type_t::READ},
+      {Tag::AUTH_DONE, bp_type_t::WRITE},
+      {Tag::AUTH_SIGNATURE, bp_type_t::WRITE},
+      {Tag::AUTH_SIGNATURE, bp_type_t::READ},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp) {
       TestInterceptor interceptor;
@@ -1720,8 +1721,8 @@ test_v2_lossy_early_accept_fault(FailoverTest& test) {
 seastar::future<>
 test_v2_lossy_accept_fault(FailoverTest& test) {
   return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::CLIENT_IDENT, false},
-      {Tag::SERVER_IDENT, true},
+      {Tag::CLIENT_IDENT, bp_type_t::READ},
+      {Tag::SERVER_IDENT, bp_type_t::WRITE},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp) {
       TestInterceptor interceptor;
@@ -1756,8 +1757,8 @@ test_v2_lossy_accept_fault(FailoverTest& test) {
 seastar::future<>
 test_v2_lossy_accepted_fault(FailoverTest& test) {
   return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::MESSAGE, true},
-      {Tag::MESSAGE, false},
+      {Tag::MESSAGE, bp_type_t::WRITE},
+      {Tag::MESSAGE, bp_type_t::READ},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp) {
       TestInterceptor interceptor;
@@ -1788,8 +1789,8 @@ test_v2_lossy_accepted_fault(FailoverTest& test) {
 seastar::future<>
 test_v2_lossless_connect_fault(FailoverTest& test) {
   return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::CLIENT_IDENT, true},
-      {Tag::SERVER_IDENT, false},
+      {Tag::CLIENT_IDENT, bp_type_t::WRITE},
+      {Tag::SERVER_IDENT, bp_type_t::READ},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp) {
       TestInterceptor interceptor;
@@ -1820,8 +1821,8 @@ test_v2_lossless_connect_fault(FailoverTest& test) {
 seastar::future<>
 test_v2_lossless_connected_fault(FailoverTest& test) {
   return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::MESSAGE, true},
-      {Tag::MESSAGE, false},
+      {Tag::MESSAGE, bp_type_t::WRITE},
+      {Tag::MESSAGE, bp_type_t::READ},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp) {
       TestInterceptor interceptor;
@@ -1852,8 +1853,10 @@ test_v2_lossless_connected_fault(FailoverTest& test) {
 seastar::future<>
 test_v2_lossless_reconnect_fault(FailoverTest& test) {
   return seastar::do_with(std::vector<std::pair<Breakpoint, Breakpoint>>{
-      {{Tag::MESSAGE, true}, {Tag::SESSION_RECONNECT, true}},
-      {{Tag::MESSAGE, true}, {Tag::SESSION_RECONNECT_OK, false}},
+      {{Tag::MESSAGE, bp_type_t::WRITE},
+       {Tag::SESSION_RECONNECT, bp_type_t::WRITE}},
+      {{Tag::MESSAGE, bp_type_t::WRITE},
+       {Tag::SESSION_RECONNECT_OK, bp_type_t::READ}},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp_pair) {
       TestInterceptor interceptor;
@@ -1886,8 +1889,8 @@ test_v2_lossless_reconnect_fault(FailoverTest& test) {
 seastar::future<>
 test_v2_lossless_accept_fault(FailoverTest& test) {
   return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::CLIENT_IDENT, false},
-      {Tag::SERVER_IDENT, true},
+      {Tag::CLIENT_IDENT, bp_type_t::READ},
+      {Tag::SERVER_IDENT, bp_type_t::WRITE},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp) {
       TestInterceptor interceptor;
@@ -1922,8 +1925,8 @@ test_v2_lossless_accept_fault(FailoverTest& test) {
 seastar::future<>
 test_v2_lossless_accepted_fault(FailoverTest& test) {
   return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::MESSAGE, true},
-      {Tag::MESSAGE, false},
+      {Tag::MESSAGE, bp_type_t::WRITE},
+      {Tag::MESSAGE, bp_type_t::READ},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp) {
       TestInterceptor interceptor;
@@ -1958,8 +1961,10 @@ test_v2_lossless_accepted_fault(FailoverTest& test) {
 seastar::future<>
 test_v2_lossless_reaccept_fault(FailoverTest& test) {
   return seastar::do_with(std::vector<std::pair<Breakpoint, Breakpoint>>{
-      {{Tag::MESSAGE, false}, {Tag::SESSION_RECONNECT, false}},
-      {{Tag::MESSAGE, false}, {Tag::SESSION_RECONNECT_OK, true}},
+      {{Tag::MESSAGE, bp_type_t::READ},
+       {Tag::SESSION_RECONNECT, bp_type_t::READ}},
+      {{Tag::MESSAGE, bp_type_t::READ},
+       {Tag::SESSION_RECONNECT_OK, bp_type_t::WRITE}},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp_pair) {
       TestInterceptor interceptor;
@@ -1983,7 +1988,7 @@ test_v2_lossless_reaccept_fault(FailoverTest& test) {
           results[0].assert_connect(0, 0, 0, 0);
           results[0].assert_accept(1, 1, 0, 1);
           results[0].assert_reset(0, 0);
-          if (bp == Breakpoint{Tag::SESSION_RECONNECT, false}) {
+          if (bp == Breakpoint{Tag::SESSION_RECONNECT, bp_type_t::READ}) {
             results[1].assert_state_at(conn_state_t::closed);
           } else {
             results[1].assert_state_at(conn_state_t::replaced);
@@ -2004,8 +2009,8 @@ test_v2_lossless_reaccept_fault(FailoverTest& test) {
 seastar::future<>
 test_v2_peer_connect_fault(FailoverTest& test) {
   return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::CLIENT_IDENT, true},
-      {Tag::SERVER_IDENT, false},
+      {Tag::CLIENT_IDENT, bp_type_t::WRITE},
+      {Tag::SERVER_IDENT, bp_type_t::READ},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp) {
       TestInterceptor interceptor;
@@ -2036,8 +2041,8 @@ test_v2_peer_connect_fault(FailoverTest& test) {
 seastar::future<>
 test_v2_peer_accept_fault(FailoverTest& test) {
   return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::CLIENT_IDENT, false},
-      {Tag::SERVER_IDENT, true},
+      {Tag::CLIENT_IDENT, bp_type_t::READ},
+      {Tag::SERVER_IDENT, bp_type_t::WRITE},
   }, [&test] (auto& failure_cases) {
     return seastar::do_for_each(failure_cases, [&test] (auto bp) {
       TestInterceptor interceptor;
@@ -2071,7 +2076,7 @@ test_v2_peer_accept_fault(FailoverTest& test) {
 
 seastar::future<>
 test_v2_peer_connected_fault_reconnect(FailoverTest& test) {
-  auto bp = Breakpoint{Tag::MESSAGE, true};
+  auto bp = Breakpoint{Tag::MESSAGE, bp_type_t::WRITE};
   TestInterceptor interceptor;
   interceptor.make_fault(bp);
   return test.run_suite(
@@ -2097,7 +2102,7 @@ test_v2_peer_connected_fault_reconnect(FailoverTest& test) {
 
 seastar::future<>
 test_v2_peer_connected_fault_reaccept(FailoverTest& test) {
-  auto bp = Breakpoint{Tag::MESSAGE, false};
+  auto bp = Breakpoint{Tag::MESSAGE, bp_type_t::READ};
   TestInterceptor interceptor;
   interceptor.make_fault(bp);
   return test.run_suite(

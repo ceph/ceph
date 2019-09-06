@@ -317,7 +317,7 @@ seastar::future<Tag> ProtocolV2::read_main_preamble()
         rx_segments_desc.emplace_back(main_preamble.segments[idx]);
       }
 
-      INTERCEPT(static_cast<Tag>(main_preamble.tag), false);
+      INTERCEPT(static_cast<Tag>(main_preamble.tag), bp_type_t::READ);
       return static_cast<Tag>(main_preamble.tag);
     });
 }
@@ -400,7 +400,7 @@ seastar::future<> ProtocolV2::write_frame(F &frame, bool flush)
   logger().trace("{} SEND({}) frame: tag={}, num_segments={}, crc={}",
                  conn, bl.length(), (int)main_preamble->tag,
                  (int)main_preamble->num_segments, main_preamble->crc);
-  INTERCEPT(static_cast<Tag>(main_preamble->tag), true);
+  INTERCEPT(static_cast<Tag>(main_preamble->tag), bp_type_t::WRITE);
   if (flush) {
     return write_flush(std::move(bl));
   } else {
@@ -1766,19 +1766,19 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
   if (unlikely(require_keepalive)) {
     auto keepalive_frame = KeepAliveFrame::Encode();
     bl.append(keepalive_frame.get_buffer(session_stream_handlers));
-    INTERCEPT(ceph::msgr::v2::Tag::KEEPALIVE2, true);
+    INTERCEPT(ceph::msgr::v2::Tag::KEEPALIVE2, bp_type_t::WRITE);
   }
 
   if (unlikely(_keepalive_ack.has_value())) {
     auto keepalive_ack_frame = KeepAliveFrameAck::Encode(*_keepalive_ack);
     bl.append(keepalive_ack_frame.get_buffer(session_stream_handlers));
-    INTERCEPT(ceph::msgr::v2::Tag::KEEPALIVE2_ACK, true);
+    INTERCEPT(ceph::msgr::v2::Tag::KEEPALIVE2_ACK, bp_type_t::WRITE);
   }
 
   if (require_ack && !num_msgs) {
     auto ack_frame = AckFrame::Encode(conn.in_seq);
     bl.append(ack_frame.get_buffer(session_stream_handlers));
-    INTERCEPT(ceph::msgr::v2::Tag::ACK, true);
+    INTERCEPT(ceph::msgr::v2::Tag::ACK, bp_type_t::WRITE);
   }
 
   std::for_each(msgs.begin(), msgs.begin()+num_msgs, [this, &bl](const MessageRef& msg) {
@@ -1807,7 +1807,7 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
     logger().debug("{} --> #{} === {} ({})",
 		   conn, msg->get_seq(), *msg, msg->get_type());
     bl.append(message.get_buffer(session_stream_handlers));
-    INTERCEPT(ceph::msgr::v2::Tag::MESSAGE, true);
+    INTERCEPT(ceph::msgr::v2::Tag::MESSAGE, bp_type_t::WRITE);
   });
 
   return bl;
