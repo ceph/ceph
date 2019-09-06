@@ -150,6 +150,10 @@ public:
 	          bufferlist *outbl, string *outs);
   int mgr_command(const vector<string>& cmd, const bufferlist &inbl,
 	          bufferlist *outbl, string *outs);
+  int mgr_command(
+    const string& name,
+    const vector<string>& cmd, const bufferlist &inbl,
+    bufferlist *outbl, string *outs);
   int osd_command(int osd, vector<string>& cmd, const bufferlist& inbl,
                   bufferlist *poutbl, string *prs);
   int pg_command(pg_t pgid, vector<string>& cmd, const bufferlist& inbl,

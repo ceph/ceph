@@ -884,6 +884,40 @@ extern "C" int _rados_mgr_command(rados_t cluster, const char **cmd,
 }
 LIBRADOS_C_API_BASE_DEFAULT(rados_mgr_command);
 
+extern "C" int _rados_mgr_command_target(
+  rados_t cluster,
+  const char *name,
+  const char **cmd,
+  size_t cmdlen,
+  const char *inbuf, size_t inbuflen,
+  char **outbuf, size_t *outbuflen,
+  char **outs, size_t *outslen)
+{
+  tracepoint(librados, rados_mgr_command_target_enter, cluster, name, cmdlen,
+	     inbuf, inbuflen);
+
+  librados::RadosClient *client = (librados::RadosClient *)cluster;
+  bufferlist inbl;
+  bufferlist outbl;
+  string outstring;
+  vector<string> cmdvec;
+
+  for (size_t i = 0; i < cmdlen; i++) {
+    tracepoint(librados, rados_mgr_command_target_cmd, cmd[i]);
+    cmdvec.push_back(cmd[i]);
+  }
+
+  inbl.append(inbuf, inbuflen);
+  int ret = client->mgr_command(name, cmdvec, inbl, &outbl, &outstring);
+
+  do_out_buffer(outbl, outbuf, outbuflen);
+  do_out_buffer(outstring, outs, outslen);
+  tracepoint(librados, rados_mgr_command_target_exit, ret, outbuf, outbuflen,
+	     outs, outslen);
+  return ret;
+}
+LIBRADOS_C_API_BASE_DEFAULT(rados_mgr_command_target);
+
 extern "C" int _rados_pg_command(rados_t cluster, const char *pgstr,
 				 const char **cmd, size_t cmdlen,
 				 const char *inbuf, size_t inbuflen,
