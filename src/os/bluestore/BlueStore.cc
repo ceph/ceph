@@ -6653,6 +6653,22 @@ static void apply(uint64_t off,
   }
 }
 
+int _fsck_sum_extents(
+  const PExtentVector& extents,
+  bool compressed,
+  store_statfs_t& expected_statfs)
+{
+  for (auto e : extents) {
+    if (!e.is_valid())
+      continue;
+    expected_statfs.allocated += e.length;
+    if (compressed) {
+      expected_statfs.data_compressed_allocated += e.length;
+    }
+  }
+  return 0;
+}
+
 int BlueStore::_fsck_check_extents(
   const coll_t& cid,
   const ghobject_t& oid,
@@ -6948,20 +6964,7 @@ void BlueStore::_fsck_check_objects(FSCKDepth depth,
       store_statfs_t onode_statfs;
       OnodeRef o;
       o.reset(Onode::decode(c, oid, it->key(), it->value()));
-      if (depth != FSCK_SHALLOW && o->onode.nid) {
-        if (o->onode.nid > nid_max) {
-          derr << "fsck error: " << oid << " nid " << o->onode.nid
-            << " > nid_max " << nid_max << dendl;
-          ++errors;
-        }
-        if (used_nids.count(o->onode.nid)) {
-          derr << "fsck error: " << oid << " nid " << o->onode.nid
-            << " already in use" << dendl;
-          ++errors;
-          continue; // go for next object
-        }
-        used_nids.insert(o->onode.nid);
-      }
+
       ++num_objects;
       num_spanning_blobs += o->extent_map.spanning_blob_map.size();
 
@@ -7044,49 +7047,8 @@ void BlueStore::_fsck_check_objects(FSCKDepth depth,
             (*pu) |= (1u << i);
           }
         }
-      }
-      if (depth != FSCK_SHALLOW) {
-        for (auto& i : referenced) {
-          dout(20) << __func__ << "  referenced 0x" << std::hex << i.second
-            << std::dec << " for " << *i.first << dendl;
-          const bluestore_blob_t& blob = i.first->get_blob();
-          if (i.second & blob.unused) {
-            derr << "fsck error: " << oid << " blob claims unused 0x"
-              << std::hex << blob.unused
-              << " but extents reference 0x" << i.second << std::dec
-              << " on blob " << *i.first << dendl;
-            ++errors;
-          }
-          if (blob.has_csum()) {
-            uint64_t blob_len = blob.get_logical_length();
-            uint64_t unused_chunk_size = blob_len / (sizeof(blob.unused) * 8);
-            unsigned csum_count = blob.get_csum_count();
-            unsigned csum_chunk_size = blob.get_csum_chunk_size();
-            for (unsigned p = 0; p < csum_count; ++p) {
-              unsigned pos = p * csum_chunk_size;
-              unsigned firstbit = pos / unused_chunk_size;    // [firstbit,lastbit]
-              unsigned lastbit = (pos + csum_chunk_size - 1) / unused_chunk_size;
-              unsigned mask = 1u << firstbit;
-              for (unsigned b = firstbit + 1; b <= lastbit; ++b) {
-                mask |= 1u << b;
-              }
-              if ((blob.unused & mask) == mask) {
-                // this csum chunk region is marked unused
-                if (blob.get_csum_item(p) != 0) {
-                  derr << "fsck error: " << oid
-                    << " blob claims csum chunk 0x" << std::hex << pos
-                    << "~" << csum_chunk_size
-                    << " is unused (mask 0x" << mask << " of unused 0x"
-                    << blob.unused << ") but csum is non-zero 0x"
-                    << blob.get_csum_item(p) << std::dec << " on blob "
-                    << *i.first << dendl;
-                  ++errors;
-                }
-              }
-            }
-          }
-        }
-      }
+      } //for (auto& l : o->extent_map.extent_map)
+
       for (auto& i : ref_map) {
         ++num_blobs;
         const bluestore_blob_t& blob = i.first->get_blob();
@@ -7130,7 +7092,7 @@ void BlueStore::_fsck_check_objects(FSCKDepth depth,
               sbi.ref_map.get(e.offset, e.length);
             }
           }
-        } else {
+        } else if( depth != FSCK_SHALLOW) {
           errors += _fsck_check_extents(c->cid, oid, blob.get_extents(),
             blob.is_compressed(),
             used_blocks,
@@ -7138,42 +7100,103 @@ void BlueStore::_fsck_check_objects(FSCKDepth depth,
             repairer,
             onode_statfs,
             depth);
+        } else {
+          errors += _fsck_sum_extents(
+            blob.get_extents(),
+            blob.is_compressed(),
+            onode_statfs);
         }
-      }
-      if (depth == FSCK_DEEP) {
-        bufferlist bl;
-        uint64_t max_read_block = cct->_conf->bluestore_fsck_read_bytes_cap;
-        uint64_t offset = 0;
-        do {
-          uint64_t l = std::min(uint64_t(o->onode.size - offset), max_read_block);
-          int r = _do_read(c.get(), o, offset, l, bl,
-            CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
-          if (r < 0) {
-            ++errors;
-            derr << "fsck error: " << oid << std::hex
-              << " error during read: "
-              << " " << offset << "~" << l
-              << " " << cpp_strerror(r) << std::dec
-              << dendl;
-            break;
-          }
-          offset += l;
-        } while (offset < o->onode.size);
-      } // deep
-      // omap
-      if (depth != FSCK_SHALLOW && o->onode.has_omap()) {
-        auto& m =
-          o->onode.is_pgmeta_omap() ? used_pgmeta_omap_head : used_omap_head;
-        if (m.count(o->onode.nid)) {
-          derr << "fsck error: " << oid << " omap_head " << o->onode.nid
-            << " already in use" << dendl;
-          ++errors;
-        }
-        else {
-          m.insert(o->onode.nid);
-        }
-      }
+      } // for (auto& i : ref_map)
       expected_statfs->add(onode_statfs);
+
+      if (depth != FSCK_SHALLOW) {
+        if (o->onode.nid) {
+          if (o->onode.nid > nid_max) {
+            derr << "fsck error: " << oid << " nid " << o->onode.nid
+              << " > nid_max " << nid_max << dendl;
+            ++errors;
+          }
+          if (used_nids.count(o->onode.nid)) {
+            derr << "fsck error: " << oid << " nid " << o->onode.nid
+              << " already in use" << dendl;
+            ++errors;
+            continue; // go for next object
+          }
+          used_nids.insert(o->onode.nid);
+        }
+        for (auto& i : referenced) {
+          dout(20) << __func__ << "  referenced 0x" << std::hex << i.second
+            << std::dec << " for " << *i.first << dendl;
+          const bluestore_blob_t& blob = i.first->get_blob();
+          if (i.second & blob.unused) {
+            derr << "fsck error: " << oid << " blob claims unused 0x"
+              << std::hex << blob.unused
+              << " but extents reference 0x" << i.second << std::dec
+              << " on blob " << *i.first << dendl;
+            ++errors;
+          }
+          if (blob.has_csum()) {
+            uint64_t blob_len = blob.get_logical_length();
+            uint64_t unused_chunk_size = blob_len / (sizeof(blob.unused) * 8);
+            unsigned csum_count = blob.get_csum_count();
+            unsigned csum_chunk_size = blob.get_csum_chunk_size();
+            for (unsigned p = 0; p < csum_count; ++p) {
+              unsigned pos = p * csum_chunk_size;
+              unsigned firstbit = pos / unused_chunk_size;    // [firstbit,lastbit]
+              unsigned lastbit = (pos + csum_chunk_size - 1) / unused_chunk_size;
+              unsigned mask = 1u << firstbit;
+              for (unsigned b = firstbit + 1; b <= lastbit; ++b) {
+                mask |= 1u << b;
+              }
+              if ((blob.unused & mask) == mask) {
+                // this csum chunk region is marked unused
+                if (blob.get_csum_item(p) != 0) {
+                  derr << "fsck error: " << oid
+                    << " blob claims csum chunk 0x" << std::hex << pos
+                    << "~" << csum_chunk_size
+                    << " is unused (mask 0x" << mask << " of unused 0x"
+                    << blob.unused << ") but csum is non-zero 0x"
+                    << blob.get_csum_item(p) << std::dec << " on blob "
+                    << *i.first << dendl;
+                  ++errors;
+                }
+              }
+            }
+          }
+        }
+        // omap
+        if (o->onode.has_omap()) {
+          auto& m =
+            o->onode.is_pgmeta_omap() ? used_pgmeta_omap_head : used_omap_head;
+          if (m.count(o->onode.nid)) {
+            derr << "fsck error: " << oid << " omap_head " << o->onode.nid
+              << " already in use" << dendl;
+            ++errors;
+          } else {
+            m.insert(o->onode.nid);
+          }
+        }
+        if (depth == FSCK_DEEP) {
+          bufferlist bl;
+          uint64_t max_read_block = cct->_conf->bluestore_fsck_read_bytes_cap;
+          uint64_t offset = 0;
+          do {
+            uint64_t l = std::min(uint64_t(o->onode.size - offset), max_read_block);
+            int r = _do_read(c.get(), o, offset, l, bl,
+              CEPH_OSD_OP_FLAG_FADVISE_NOCACHE);
+            if (r < 0) {
+              ++errors;
+              derr << "fsck error: " << oid << std::hex
+                << " error during read: "
+                << " " << offset << "~" << l
+                << " " << cpp_strerror(r) << std::dec
+                << dendl;
+              break;
+            }
+            offset += l;
+          } while (offset < o->onode.size);
+        } // deep
+      } //if (depth != FSCK_SHALLOW)
     } // for (it->lower_bound(string()); it->valid(); it->next())
   } // if (it)
 }
