@@ -938,7 +938,7 @@ class FailoverSuite : public Dispatcher {
       ceph_abort();
     }
 
-    if (tracked_conn) {
+    if (tracked_conn && tracked_conn != conn) {
       logger().error("[{}] {} got accepted, but there's already traced_conn [{}] {}",
                      result->index, *conn, tracked_index, *tracked_conn);
       ceph_abort();
@@ -1427,7 +1427,7 @@ class FailoverSuitePeer : public Dispatcher {
   }
 
   seastar::future<> ms_handle_accept(ConnectionRef conn) override {
-    ceph_assert(!tracked_conn);
+    ceph_assert(!tracked_conn || tracked_conn == conn);
     tracked_conn = conn;
     return flush_pending_send();
   }
@@ -1770,36 +1770,60 @@ test_v2_lossy_early_accept_fault(FailoverTest& test) {
 
 seastar::future<>
 test_v2_lossy_accept_fault(FailoverTest& test) {
-  return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::CLIENT_IDENT, bp_type_t::READ},
-      {Tag::SERVER_IDENT, bp_type_t::WRITE},
-  }, [&test] (auto& failure_cases) {
-    return seastar::do_for_each(failure_cases, [&test] (auto bp) {
-      TestInterceptor interceptor;
-      interceptor.make_fault(bp);
-      return test.run_suite(
-          fmt::format("test_v2_lossy_accept_fault -- {}", bp),
-          interceptor,
-          policy_t::stateless_server,
-          policy_t::lossy_client,
-          [&test] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&test] {
-          return test.peer_send_me();
-        }).then([&test] {
-          return test.peer_connect_me();
-        }).then([&suite] {
-          return suite.wait_results(2);
-        }).then([] (ConnResults& results) {
-          results[0].assert_state_at(conn_state_t::closed);
-          results[0].assert_connect(0, 0, 0, 0);
-          results[0].assert_accept(1, 1, 0, 0);
-          results[0].assert_reset(0, 0);
-          results[1].assert_state_at(conn_state_t::established);
-          results[1].assert_connect(0, 0, 0, 0);
-          results[1].assert_accept(1, 1, 0, 1);
-          results[1].assert_reset(0, 0);
-        });
-      });
+  auto bp = Breakpoint{Tag::CLIENT_IDENT, bp_type_t::READ};
+  TestInterceptor interceptor;
+  interceptor.make_fault(bp);
+  return test.run_suite(
+      fmt::format("test_v2_lossy_accept_fault -- {}", bp),
+      interceptor,
+      policy_t::stateless_server,
+      policy_t::lossy_client,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&test] {
+      return test.peer_send_me();
+    }).then([&test] {
+      return test.peer_connect_me();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 0);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::established);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 1);
+      results[1].assert_reset(0, 0);
+    });
+  });
+}
+
+seastar::future<>
+test_v2_lossy_establishing_fault(FailoverTest& test) {
+  auto bp = Breakpoint{Tag::SERVER_IDENT, bp_type_t::WRITE};
+  TestInterceptor interceptor;
+  interceptor.make_fault(bp);
+  return test.run_suite(
+      fmt::format("test_v2_lossy_establishing_fault -- {}", bp),
+      interceptor,
+      policy_t::stateless_server,
+      policy_t::lossy_client,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&test] {
+      return test.peer_send_me();
+    }).then([&test] {
+      return test.peer_connect_me();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 1);
+      results[0].assert_reset(1, 0);
+      results[1].assert_state_at(conn_state_t::established);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 1);
+      results[1].assert_reset(0, 0);
     });
   });
 }
@@ -1938,36 +1962,60 @@ test_v2_lossless_reconnect_fault(FailoverTest& test) {
 
 seastar::future<>
 test_v2_lossless_accept_fault(FailoverTest& test) {
-  return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::CLIENT_IDENT, bp_type_t::READ},
-      {Tag::SERVER_IDENT, bp_type_t::WRITE},
-  }, [&test] (auto& failure_cases) {
-    return seastar::do_for_each(failure_cases, [&test] (auto bp) {
-      TestInterceptor interceptor;
-      interceptor.make_fault(bp);
-      return test.run_suite(
-          fmt::format("test_v2_lossless_accept_fault -- {}", bp),
-          interceptor,
-          policy_t::stateful_server,
-          policy_t::lossless_client,
-          [&test] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&test] {
-          return test.send_bidirectional();
-        }).then([&test] {
-          return test.peer_connect_me();
-        }).then([&suite] {
-          return suite.wait_results(2);
-        }).then([] (ConnResults& results) {
-          results[0].assert_state_at(conn_state_t::closed);
-          results[0].assert_connect(0, 0, 0, 0);
-          results[0].assert_accept(1, 1, 0, 0);
-          results[0].assert_reset(0, 0);
-          results[1].assert_state_at(conn_state_t::established);
-          results[1].assert_connect(0, 0, 0, 0);
-          results[1].assert_accept(1, 1, 0, 1);
-          results[1].assert_reset(0, 0);
-        });
-      });
+  auto bp = Breakpoint{Tag::CLIENT_IDENT, bp_type_t::READ};
+  TestInterceptor interceptor;
+  interceptor.make_fault(bp);
+  return test.run_suite(
+      fmt::format("test_v2_lossless_accept_fault -- {}", bp),
+      interceptor,
+      policy_t::stateful_server,
+      policy_t::lossless_client,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&test] {
+      return test.send_bidirectional();
+    }).then([&test] {
+      return test.peer_connect_me();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 0);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::established);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 1);
+      results[1].assert_reset(0, 0);
+    });
+  });
+}
+
+seastar::future<>
+test_v2_lossless_establishing_fault(FailoverTest& test) {
+  auto bp = Breakpoint{Tag::SERVER_IDENT, bp_type_t::WRITE};
+  TestInterceptor interceptor;
+  interceptor.make_fault(bp);
+  return test.run_suite(
+      fmt::format("test_v2_lossless_establishing_fault -- {}", bp),
+      interceptor,
+      policy_t::stateful_server,
+      policy_t::lossless_client,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&test] {
+      return test.send_bidirectional();
+    }).then([&test] {
+      return test.peer_connect_me();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 1);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::replaced);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 0);
+      results[1].assert_reset(0, 0);
     });
   });
 }
@@ -2090,36 +2138,60 @@ test_v2_peer_connect_fault(FailoverTest& test) {
 
 seastar::future<>
 test_v2_peer_accept_fault(FailoverTest& test) {
-  return seastar::do_with(std::vector<Breakpoint>{
-      {Tag::CLIENT_IDENT, bp_type_t::READ},
-      {Tag::SERVER_IDENT, bp_type_t::WRITE},
-  }, [&test] (auto& failure_cases) {
-    return seastar::do_for_each(failure_cases, [&test] (auto bp) {
-      TestInterceptor interceptor;
-      interceptor.make_fault(bp);
-      return test.run_suite(
-          fmt::format("test_v2_peer_accept_fault -- {}", bp),
-          interceptor,
-          policy_t::lossless_peer,
-          policy_t::lossless_peer,
-          [&test] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&test] {
-          return test.peer_send_me();
-        }).then([&test] {
-          return test.peer_connect_me();
-        }).then([&suite] {
-          return suite.wait_results(2);
-        }).then([] (ConnResults& results) {
-          results[0].assert_state_at(conn_state_t::closed);
-          results[0].assert_connect(0, 0, 0, 0);
-          results[0].assert_accept(1, 1, 0, 0);
-          results[0].assert_reset(0, 0);
-          results[1].assert_state_at(conn_state_t::established);
-          results[1].assert_connect(0, 0, 0, 0);
-          results[1].assert_accept(1, 1, 0, 1);
-          results[1].assert_reset(0, 0);
-        });
-      });
+  auto bp = Breakpoint{Tag::CLIENT_IDENT, bp_type_t::READ};
+  TestInterceptor interceptor;
+  interceptor.make_fault(bp);
+  return test.run_suite(
+      fmt::format("test_v2_peer_accept_fault -- {}", bp),
+      interceptor,
+      policy_t::lossless_peer,
+      policy_t::lossless_peer,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&test] {
+      return test.peer_send_me();
+    }).then([&test] {
+      return test.peer_connect_me();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::closed);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 0);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::established);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 1);
+      results[1].assert_reset(0, 0);
+    });
+  });
+}
+
+seastar::future<>
+test_v2_peer_establishing_fault(FailoverTest& test) {
+  auto bp = Breakpoint{Tag::SERVER_IDENT, bp_type_t::WRITE};
+  TestInterceptor interceptor;
+  interceptor.make_fault(bp);
+  return test.run_suite(
+      fmt::format("test_v2_peer_establishing_fault -- {}", bp),
+      interceptor,
+      policy_t::lossless_peer,
+      policy_t::lossless_peer,
+      [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&test] {
+      return test.peer_send_me();
+    }).then([&test] {
+      return test.peer_connect_me();
+    }).then([&suite] {
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(0, 0, 0, 0);
+      results[0].assert_accept(1, 1, 0, 1);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::replaced);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 0, 0);
+      results[1].assert_reset(0, 0);
     });
   });
 }
@@ -2341,6 +2413,8 @@ test_v2_protocol(entity_addr_t test_addr = entity_addr_t(),
     }).then([test] {
       return test_v2_lossy_accept_fault(*test);
     }).then([test] {
+      return test_v2_lossy_establishing_fault(*test);
+    }).then([test] {
       return test_v2_lossy_accepted_fault(*test);
     }).then([test] {
       return test_v2_lossless_connect_fault(*test);
@@ -2351,6 +2425,8 @@ test_v2_protocol(entity_addr_t test_addr = entity_addr_t(),
     }).then([test] {
       return test_v2_lossless_accept_fault(*test);
     }).then([test] {
+      return test_v2_lossless_establishing_fault(*test);
+    }).then([test] {
       return test_v2_lossless_accepted_fault(*test);
     }).then([test] {
       return test_v2_lossless_reaccept_fault(*test);
@@ -2358,6 +2434,8 @@ test_v2_protocol(entity_addr_t test_addr = entity_addr_t(),
       return test_v2_peer_connect_fault(*test);
     }).then([test] {
       return test_v2_peer_accept_fault(*test);
+    }).then([test] {
+      return test_v2_peer_establishing_fault(*test);
     }).then([test] {
       return test_v2_peer_connected_fault_reconnect(*test);
     }).then([test] {
