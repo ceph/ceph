@@ -19,7 +19,7 @@ from ..services.iscsi_cli import IscsiGatewaysConfig
 from ..services.rbd import format_bitmask
 from ..services.tcmu_service import TcmuService
 from ..exceptions import DashboardException
-from ..tools import TaskManager
+from ..tools import str_to_bool, TaskManager
 
 
 @UiApiController('/iscsi', Scope.ISCSI)
@@ -75,7 +75,29 @@ class IscsiUi(BaseController):
     @Endpoint()
     @ReadPermission
     def settings(self):
-        return IscsiClient.instance().get_settings()
+        settings = IscsiClient.instance().get_settings()
+        if 'target_controls_limits' in settings:
+            target_default_controls = settings['target_default_controls']
+            for ctrl_k, ctrl_v in target_default_controls.items():
+                limits = settings['target_controls_limits'].get(ctrl_k, {})
+                if 'type' not in limits:
+                    # default
+                    limits['type'] = 'int'
+                    # backward compatibility
+                    if target_default_controls[ctrl_k] in ['Yes', 'No']:
+                        limits['type'] = 'bool'
+                        target_default_controls[ctrl_k] = str_to_bool(ctrl_v)
+                settings['target_controls_limits'][ctrl_k] = limits
+        if 'disk_controls_limits' in settings:
+            for backstore, disk_controls_limits in settings['disk_controls_limits'].items():
+                disk_default_controls = settings['disk_default_controls'][backstore]
+                for ctrl_k, ctrl_v in disk_default_controls.items():
+                    limits = disk_controls_limits.get(ctrl_k, {})
+                    if 'type' not in limits:
+                        # default
+                        limits['type'] = 'int'
+                    settings['disk_controls_limits'][backstore][ctrl_k] = limits
+        return settings
 
     @Endpoint()
     @ReadPermission
@@ -742,9 +764,6 @@ class IscsiTarget(RESTController):
             groups.append(group)
         groups = IscsiTarget._sorted_groups(groups)
         target_controls = target_config['controls']
-        for key, value in target_controls.items():
-            if isinstance(value, bool):
-                target_controls[key] = 'Yes' if value else 'No'
         acl_enabled = target_config['acl_enabled']
         target = {
             'target_iqn': target_iqn,
