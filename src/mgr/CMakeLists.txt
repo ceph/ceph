@@ -15,6 +15,7 @@ set(mgr_srcs
   OSDPerfMetricTypes.cc
   OSDPerfMetricCollector.cc
   PyFormatter.cc
+  PyUtil.cc
   PyModule.cc
   PyModuleRegistry.cc
   PyModuleRunner.cc
