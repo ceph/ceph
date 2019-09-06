@@ -2580,7 +2580,7 @@ will start to track new ops received afterwards.";
     int64_t value = 0;
     if (!(cmd_getval(cct, cmdmap, "value", value))) {
       // Convert milliseconds to microseconds
-      value = static_cast<int64_t>(g_conf().get_val<uint64_t>("mon_warn_on_slow_ping_time")) * 1000;
+      value = static_cast<int64_t>(g_conf().get_val<double>("mon_warn_on_slow_ping_time")) * 1000;
       if (value == 0) {
         double ratio = g_conf().get_val<double>("mon_warn_on_slow_ping_ratio");
         value = g_conf().get_val<int64_t>("osd_heartbeat_grace");

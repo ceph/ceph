@@ -224,7 +224,7 @@ bool ClusterState::asok_command(std::string_view admin_command, const cmdmap_t& 
     // Default to health warning level if nothing specified
     if (!(cmd_getval(g_ceph_context, cmdmap, "value", value))) {
       // Convert milliseconds to microseconds
-      value = static_cast<int64_t>(g_ceph_context->_conf.get_val<uint64_t>("mon_warn_on_slow_ping_time")) * 1000;
+      value = static_cast<int64_t>(g_ceph_context->_conf.get_val<double>("mon_warn_on_slow_ping_time")) * 1000;
       if (value == 0) {
         double ratio = g_conf().get_val<double>("mon_warn_on_slow_ping_ratio");
 	value = g_conf().get_val<int64_t>("osd_heartbeat_grace");

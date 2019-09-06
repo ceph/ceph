@@ -111,7 +111,7 @@ function TEST_network_ping_test2() {
     local dir=$1
 
     export CEPH_ARGS
-    export EXTRA_OPTS=" --mon_warn_on_slow_ping_time=1"
+    export EXTRA_OPTS=" --mon_warn_on_slow_ping_time=0.001"
     run_mon $dir a || return 1
     run_mgr $dir x || return 1
     run_osd $dir 0 || return 1
