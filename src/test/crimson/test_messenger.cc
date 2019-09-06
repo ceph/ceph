@@ -2382,6 +2382,114 @@ test_v2_racing_reconnect_lose(FailoverTest& test) {
 }
 
 seastar::future<>
+test_v2_racing_connect_win(FailoverTest& test) {
+  return seastar::do_with(std::vector<Breakpoint>{
+      {custom_bp_t::BANNER_WRITE},
+      {custom_bp_t::BANNER_READ},
+      {custom_bp_t::BANNER_PAYLOAD_READ},
+      {Tag::HELLO, bp_type_t::WRITE},
+      {Tag::HELLO, bp_type_t::READ},
+      {Tag::AUTH_REQUEST, bp_type_t::READ},
+      {Tag::AUTH_DONE, bp_type_t::WRITE},
+      {Tag::AUTH_SIGNATURE, bp_type_t::WRITE},
+      {Tag::AUTH_SIGNATURE, bp_type_t::READ},
+      {Tag::CLIENT_IDENT, bp_type_t::READ},
+  }, [&test] (auto& failure_cases) {
+    return seastar::do_for_each(failure_cases, [&test] (auto bp) {
+      TestInterceptor interceptor;
+      interceptor.make_block(bp);
+      return test.run_suite(
+          fmt::format("test_v2_racing_connect_win -- {}", bp),
+          interceptor,
+          policy_t::lossless_peer,
+          policy_t::lossless_peer,
+          [&test] (FailoverSuite& suite) {
+        return seastar::futurize_apply([&test] {
+          return test.peer_send_me();
+        }).then([&test] {
+          return test.peer_connect_me();
+        }).then([&suite] {
+          return suite.wait_blocked();
+        }).then([&suite] {
+          return suite.send_peer();
+        }).then([&suite] {
+          return suite.connect_peer();
+        }).then([&suite] {
+          return suite.wait_established();
+        }).then([&suite] {
+          suite.unblock();
+          return suite.wait_results(2);
+        }).then([] (ConnResults& results) {
+          results[0].assert_state_at(conn_state_t::closed);
+          results[0].assert_connect(0, 0, 0, 0);
+          ceph_assert(results[0].accept_attempts == 1);
+          ceph_assert(results[0].cnt_accept_dispatched == 0);
+          results[0].assert_reset(0, 0);
+          results[1].assert_state_at(conn_state_t::established);
+          results[1].assert_connect(1, 1, 0, 1);
+          results[1].assert_accept(0, 0, 0, 0);
+          results[1].assert_reset(0, 0);
+        });
+      });
+    });
+  });
+}
+
+seastar::future<>
+test_v2_racing_connect_lose(FailoverTest& test) {
+  return seastar::do_with(std::vector<Breakpoint>{
+      {custom_bp_t::BANNER_WRITE},
+      {custom_bp_t::BANNER_READ},
+      {custom_bp_t::BANNER_PAYLOAD_READ},
+      {Tag::HELLO, bp_type_t::WRITE},
+      {Tag::HELLO, bp_type_t::READ},
+      {Tag::AUTH_REQUEST, bp_type_t::WRITE},
+      {Tag::AUTH_DONE, bp_type_t::READ},
+      {Tag::AUTH_SIGNATURE, bp_type_t::WRITE},
+      {Tag::AUTH_SIGNATURE, bp_type_t::READ},
+      {Tag::CLIENT_IDENT, bp_type_t::WRITE},
+  }, [&test] (auto& failure_cases) {
+    return seastar::do_for_each(failure_cases, [&test] (auto bp) {
+      TestInterceptor interceptor;
+      interceptor.make_block(bp);
+      return test.run_suite(
+          fmt::format("test_v2_racing_connect_lose -- {}", bp),
+          interceptor,
+          policy_t::lossless_peer,
+          policy_t::lossless_peer,
+          [&test] (FailoverSuite& suite) {
+        return seastar::futurize_apply([&suite] {
+          return suite.send_peer();
+        }).then([&suite] {
+          return suite.connect_peer();
+        }).then([&suite] {
+          return suite.wait_blocked();
+        }).then([&test] {
+          return test.peer_send_me();
+        }).then([&test] {
+          return test.peer_connect_me();
+        }).then([&suite] {
+          return suite.wait_replaced(1);
+        }).then([&suite] {
+          suite.unblock();
+          return suite.wait_results(2);
+        }).then([] (ConnResults& results) {
+          results[0].assert_state_at(conn_state_t::established);
+          ceph_assert(results[0].connect_attempts == 1);
+          ceph_assert(results[0].cnt_connect_dispatched == 0);
+          results[0].assert_accept(0, 0, 0, 1);
+          results[0].assert_reset(0, 0);
+          results[1].assert_state_at(conn_state_t::replaced);
+          results[1].assert_connect(0, 0, 0, 0);
+          results[1].assert_accept(1, 1, 0, 0);
+          results[1].assert_reset(0, 0);
+        });
+      });
+    });
+  });
+}
+
+seastar::future<>
 test_v2_protocol(entity_addr_t test_addr = entity_addr_t(),
                  entity_addr_t cmd_peer_addr = entity_addr_t()) {
   if (test_addr == entity_addr_t() || cmd_peer_addr == entity_addr_t()) {
@@ -2444,9 +2552,17 @@ test_v2_protocol(entity_addr_t test_addr = entity_addr_t(),
       return peer_wins(*test);
     }).then([test] (bool peer_wins) {
       if (peer_wins) {
-        return test_v2_racing_reconnect_lose(*test);
+        return seastar::futurize_apply([test] {
+          return test_v2_racing_connect_lose(*test);
+        }).then([test] {
+          return test_v2_racing_reconnect_lose(*test);
+        });
       } else {
-        return test_v2_racing_reconnect_win(*test);
+        return seastar::futurize_apply([test] {
+          return test_v2_racing_connect_win(*test);
+        }).then([test] {
+          return test_v2_racing_reconnect_win(*test);
+        });
       }
     }).finally([test] {
       return test->shutdown().then([test] {});
