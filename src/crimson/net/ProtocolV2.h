@@ -121,7 +121,7 @@ class ProtocolV2 final : public Protocol {
   seastar::future<> write_frame(F &frame, bool flush=true);
 
  private:
-  void fault(bool backoff);
+  void fault(bool backoff, const char* func_name, std::exception_ptr eptr);
   void dispatch_reset();
   void reset_session(bool full);
   seastar::future<entity_type_t, entity_addr_t> banner_exchange();
