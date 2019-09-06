@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormControl, Validators } from '@angular/forms';
+import { FormControl } from '@angular/forms';
 
 import * as _ from 'lodash';
 import { BsModalRef } from 'ngx-bootstrap/modal';
@@ -18,25 +18,13 @@ export class IscsiTargetIqnSettingsModalComponent implements OnInit {
   target_controls_limits: any;
 
   settingsForm: CdFormGroup;
-  helpText: any;
 
   constructor(public modalRef: BsModalRef, public iscsiService: IscsiService) {}
 
   ngOnInit() {
     const fg = {};
-    this.helpText = this.iscsiService.targetAdvancedSettings;
-
     _.forIn(this.target_default_controls, (_value, key) => {
-      const validators = [];
-      if (this.target_controls_limits && key in this.target_controls_limits) {
-        if ('min' in this.target_controls_limits[key]) {
-          validators.push(Validators.min(this.target_controls_limits[key]['min']));
-        }
-        if ('max' in this.target_controls_limits[key]) {
-          validators.push(Validators.max(this.target_controls_limits[key]['max']));
-        }
-      }
-      fg[key] = new FormControl(this.target_controls.value[key], { validators: validators });
+      fg[key] = new FormControl(this.target_controls.value[key]);
     });
 
     this.settingsForm = new CdFormGroup(fg);
@@ -54,7 +42,7 @@ export class IscsiTargetIqnSettingsModalComponent implements OnInit {
     this.modalRef.hide();
   }
 
-  isRadio(control) {
-    return ['Yes', 'No'].indexOf(this.target_default_controls[control]) !== -1;
+  getTargetControlLimits(setting) {
+    return this.target_controls_limits[setting];
   }
 }

@@ -1,0 +1,57 @@
+<div class="form-group"
+     [formGroup]="settingsForm">
+  <label class="col-form-label"
+         for="{{ setting }}">{{ setting }}</label>
+  <select id="{{ setting }}"
+          name="{{ setting }}"
+          *ngIf="limits['type'] === 'enum'"
+          class="form-control custom-select"
+          [formControlName]="setting">
+    <option [ngValue]="null"></option>
+    <option *ngFor="let opt of limits['values']"
+            [ngValue]="opt">{{ opt }}</option>
+  </select>
+
+  <span *ngIf="limits['type'] !== 'enum'">
+    <input type="number"
+           *ngIf="limits['type'] === 'int'"
+           class="form-control"
+           [formControlName]="setting">
+
+    <input type="text"
+           *ngIf="limits['type'] === 'str'"
+           class="form-control"
+           [formControlName]="setting">
+
+    <ng-container *ngIf="limits['type'] === 'bool'">
+      <br>
+      <div class="custom-control custom-radio custom-control-inline">
+        <input type="radio"
+               [id]="setting + 'True'"
+               [value]="true"
+               [formControlName]="setting"
+               class="custom-control-input">
+        <label class="custom-control-label"
+               [for]="setting + 'True'">Yes</label>
+      </div>
+      <div class="custom-control custom-radio custom-control-inline">
+        <input type="radio"
+               [id]="setting + 'False'"
+               [value]="false"
+               class="custom-control-input"
+               [formControlName]="setting">
+        <label class="custom-control-label"
+               [for]="setting + 'False'">No</label>
+      </div>
+    </ng-container>
+  </span>
+
+  <span class="invalid-feedback"
+        *ngIf="settingsForm.showError(setting, formDir, 'min')">
+    <ng-container i18n>Must be greater than or equal to {{ limits['min'] }}.</ng-container>
+  </span>
+  <span class="invalid-feedback"
+        *ngIf="settingsForm.showError(setting, formDir, 'max')">
+    <ng-container i18n>Must be less than or equal to {{ limits['max'] }}.</ng-container>
+  </span>
+</div>

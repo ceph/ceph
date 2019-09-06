@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { FormControl, Validators } from '@angular/forms';
+import { FormControl } from '@angular/forms';
 
 import * as _ from 'lodash';
 import { BsModalRef } from 'ngx-bootstrap/modal';
@@ -20,35 +20,25 @@ export class IscsiTargetImageSettingsModalComponent implements OnInit {
   backstores: any;
 
   settingsForm: CdFormGroup;
-  helpText: any;
 
   constructor(public modalRef: BsModalRef, public iscsiService: IscsiService) {}
 
   ngOnInit() {
-    this.helpText = this.iscsiService.imageAdvancedSettings;
-
     const fg = {
       backstore: new FormControl(this.imagesSettings[this.image]['backstore'])
     };
     _.forEach(this.backstores, (backstore) => {
       const model = this.imagesSettings[this.image][backstore] || {};
       _.forIn(this.disk_default_controls[backstore], (_value, key) => {
-        const validators = [];
-        if (this.disk_controls_limits && key in this.disk_controls_limits[backstore]) {
-          if ('min' in this.disk_controls_limits[backstore][key]) {
-            validators.push(Validators.min(this.disk_controls_limits[backstore][key]['min']));
-          }
-          if ('max' in this.disk_controls_limits[backstore][key]) {
-            validators.push(Validators.max(this.disk_controls_limits[backstore][key]['max']));
-          }
-        }
-        fg[key] = new FormControl(model[key], {
-          validators: validators
-        });
+        fg[key] = new FormControl(model[key]);
       });
     });
 
     this.settingsForm = new CdFormGroup(fg);
+  }
+
+  getDiskControlLimits(backstore, setting) {
+    return this.disk_controls_limits[backstore][setting];
   }
 
   save() {
