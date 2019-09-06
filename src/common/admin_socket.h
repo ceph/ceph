@@ -37,6 +37,16 @@ class AdminSocketHook {
 public:
   virtual int call(std::string_view command, const cmdmap_t& cmdmap,
 		   std::string_view format, ceph::buffer::list& out) = 0;
+  virtual void call_async(
+    std::string_view command,
+    const cmdmap_t& cmdmap,
+    std::string_view format,
+    std::function<void(int,const std::string&,bufferlist&)> on_finish) {
+    // by default, call the synchronous handler and then finish
+    bufferlist out;
+    int r = call(command, cmdmap, format, out);
+    on_finish(r, "", out);
+  }
   virtual ~AdminSocketHook() {}
 };
 
@@ -83,8 +93,9 @@ public:
 
   void chown(uid_t uid, gid_t gid);
   void chmod(mode_t mode);
-  int execute_command(const std::vector<std::string>& cmd,
-		      ceph::bufferlist& out);
+  void execute_command(
+    const std::vector<std::string>& cmd,
+    std::function<void(int,const std::string&,bufferlist&)> on_fin);
 
   void queue_tell_command(ref_t<MCommand> m);
 
