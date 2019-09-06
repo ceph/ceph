@@ -179,6 +179,7 @@ def configure(ctx, config):
     for client, properties in config['clients'].iteritems():
         properties = properties or {}
         s3tests_conf = config['s3tests_conf'][client]
+        s3tests_conf['DEFAULT']['calling_format'] = properties.get('calling-format', 'ordinary')
 
         # use rgw_server if given, or default to local client
         role = properties.get('rgw_server', client)
@@ -267,9 +268,8 @@ def run_tests(ctx, config):
     """
     assert isinstance(config, dict)
     testdir = teuthology.get_testdir(ctx)
-    # civetweb > 1.8 && beast parsers are strict on rfc2616
-    attrs = ["!fails_on_rgw", "!lifecycle_expiration", "!fails_strict_rfc2616"]
     for client, client_config in config.iteritems():
+        client_config = client_config or {}
         (remote,) = ctx.cluster.only(client).remotes.keys()
         args = [
             'S3TEST_CONF={tdir}/archive/s3-tests.{client}.conf'.format(tdir=testdir, client=client),
@@ -282,6 +282,10 @@ def run_tests(ctx, config):
             args += ['REQUESTS_CA_BUNDLE=/etc/ssl/certs/ca-certificates.crt']
         else:
             args += ['REQUESTS_CA_BUNDLE=/etc/pki/tls/certs/ca-bundle.crt']
+        # civetweb > 1.8 && beast parsers are strict on rfc2616
+        attrs = ["!fails_on_rgw", "!lifecycle_expiration", "!fails_strict_rfc2616"]
+        if client_config.get('calling-format') != 'ordinary':
+            attrs += ['!fails_with_subdomain']
         args += [
             '{tdir}/s3-tests/virtualenv/bin/nosetests'.format(tdir=testdir),
             '-w',
@@ -289,7 +293,7 @@ def run_tests(ctx, config):
             '-v',
             '-a', ','.join(attrs),
             ]
-        if client_config is not None and 'extra_args' in client_config:
+        if 'extra_args' in client_config:
             args.append(client_config['extra_args'])
 
         remote.run(
