@@ -184,13 +184,35 @@ void MgrClient::reconnect()
   }
 
   // resend any pending commands
-  for (const auto &p : command_table.get_commands()) {
-    auto m = p.second.get_message(
-      {},
-      HAVE_FEATURE(map.active_mgr_features, SERVER_OCTOPUS));
+  auto p = command_table.get_commands().begin();
+  while (p != command_table.get_commands().end()) {
+    auto tid = p->first;
+    auto& op = p->second;
+    ldout(cct,10) << "resending " << tid << dendl;
+    MessageRef m;
+    if (op.name.size()) {
+      if (op.name != map.active_name) {
+	// FIXME someday!
+	ldout(cct, 10) << "active mgr " << map.active_name << " != target "
+		       << op.name << dendl;
+	if (op.on_finish) {
+	  op.on_finish->complete(-ENXIO);
+	}
+	++p;
+	command_table.erase(tid);
+	continue;
+      }
+      // note: will not work for pre-octopus mgrs
+      m = op.get_message({}, false);
+    } else {
+      m = op.get_message(
+	{},
+	HAVE_FEATURE(map.active_mgr_features, SERVER_OCTOPUS));
+    }
     ceph_assert(session);
     ceph_assert(session->con);
     session->con->send_message2(std::move(m));
+    ++p;
   }
 }
 
@@ -458,6 +480,42 @@ int MgrClient::start_command(const vector<string>& cmd, const bufferlist& inbl,
     session->con->send_message2(std::move(m));
   } else {
     ldout(cct, 5) << "no mgr session (no running mgr daemon?), waiting" << dendl;
+  }
+  return 0;
+}
+
+int MgrClient::start_tell_command(
+  const string& name,
+  const vector<string>& cmd, const bufferlist& inbl,
+  bufferlist *outbl, string *outs,
+  Context *onfinish)
+{
+  std::lock_guard l(lock);
+
+  ldout(cct, 20) << "target: " << name << " cmd: " << cmd << dendl;
+
+  if (map.epoch == 0 && mgr_optional) {
+    ldout(cct,20) << " no MgrMap, assuming EACCES" << dendl;
+    return -EACCES;
+  }
+
+  auto &op = command_table.start_command();
+  op.name = name;
+  op.cmd = cmd;
+  op.inbl = inbl;
+  op.outbl = outbl;
+  op.outs = outs;
+  op.on_finish = onfinish;
+
+  if (session && session->con && map.active_name == name) {
+    // Leaving fsid argument null because it isn't used.
+    // Note: this simply won't work we pre-octopus mgrs because they route
+    // MCommand to the cluster command handler.
+    auto m = op.get_message({}, false);
+    session->con->send_message2(std::move(m));
+  } else {
+    ldout(cct, 5) << "no mgr session (no running mgr daemon?), or "
+		  << name << " not active mgr, waiting" << dendl;
   }
   return 0;
 }
