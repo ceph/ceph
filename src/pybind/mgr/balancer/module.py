@@ -856,7 +856,7 @@ class Module(MgrModule):
     def optimize(self, plan):
         self.log.info('Optimize plan %s' % plan.name)
         plan.mode = self.get_module_option('mode')
-        max_misplaced = float(self.get_ceph_option('target_max_misplaced_ratio'))
+        max_misplaced = self.get_ceph_option('target_max_misplaced_ratio')
         self.log.info('Mode %s, max misplaced %f' %
                       (plan.mode, max_misplaced))
 
@@ -957,7 +957,7 @@ class Module(MgrModule):
         step = self.get_module_option('crush_compat_step')
         if step <= 0 or step >= 1.0:
             return -errno.EINVAL, '"crush_compat_step" must be in (0, 1)'
-        max_misplaced = float(self.get_ceph_option('target_max_misplaced_ratio'))
+        max_misplaced = self.get_ceph_option('target_max_misplaced_ratio')
         min_pg_per_osd = 2
 
         ms = plan.initial

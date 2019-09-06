@@ -132,7 +132,7 @@ class Hello(MgrModule):
             # Use mgr_tick_period (default: 2) here just to illustrate
             # consuming native ceph options.  Any real background work
             # would presumably have some more appropriate frequency.
-            sleep_interval = int(self.mgr_tick_period)
+            sleep_interval = self.mgr_tick_period
             self.log.debug('Sleeping for %d seconds', sleep_interval)
             ret = self.event.wait(sleep_interval)
             self.event.clear()
