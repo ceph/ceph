@@ -944,6 +944,11 @@ void ProtocolV2::execute_connecting()
             return client_reconnect();
           }
         }).then([this] (next_step_t next) {
+          if (unlikely(state != state_t::CONNECTING)) {
+            logger().debug("{} triggered {} at the end of execute_connecting()",
+                           conn, get_state_name(state));
+            abort_protocol();
+          }
           switch (next) {
            case next_step_t::ready: {
             seastar::with_gate(pending_dispatch, [this] {
@@ -1537,6 +1542,11 @@ void ProtocolV2::execute_accepting()
             }
           }
         }).then([this] (next_step_t next) {
+          if (unlikely(state != state_t::ACCEPTING)) {
+            logger().debug("{} triggered {} at the end of execute_accepting()",
+                           conn, get_state_name(state));
+            abort_protocol();
+          }
           switch (next) {
            case next_step_t::ready: {
             seastar::with_gate(pending_dispatch, [this] {
@@ -1701,7 +1711,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
              new_client_cookie, new_peer_name,
              new_conn_features, new_peer_global_seq,
              new_connect_seq, new_msg_seq] () mutable {
-      if (state != state_t::REPLACING) {
+      if (unlikely(state != state_t::REPLACING)) {
         return new_socket->close().then([sock = std::move(new_socket)] {
           abort_protocol();
         });
@@ -1734,6 +1744,11 @@ void ProtocolV2::trigger_replacing(bool reconnect,
         });
       }
     }).then([this] {
+      if (unlikely(state != state_t::REPLACING)) {
+        logger().debug("{} triggered {} at the end of trigger_replacing()",
+                       conn, get_state_name(state));
+        abort_protocol();
+      }
       logger().info("{} reconnected(replaced): gs={}, pgs={}, cs={},"
                     " client_cookie={}, server_cookie={}, in_seq={}, out_seq={}",
                     conn, global_seq, peer_global_seq, connect_seq,
@@ -2027,6 +2042,11 @@ void ProtocolV2::execute_wait(bool max_backoff)
       backoff = conf.ms_initial_backoff;
     }
     return protocol_timer.backoff(backoff).then([this] {
+      if (unlikely(state != state_t::WAIT)) {
+        logger().debug("{} triggered {} at the end of execute_wait()",
+                       conn, get_state_name(state));
+        abort_protocol();
+      }
       execute_connecting();
     }).handle_exception([this] (std::exception_ptr eptr) {
       logger().debug("{} execute_wait(): got exception {} at state {}, abort",
