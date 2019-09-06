@@ -73,6 +73,7 @@ public:
 	  const std::string& key);
   bool rm_prefix(const std::string& column_family,
 		 const std::string& prefix);
+  bool list_columns(std::vector<std::string>& columns);
   void print_summary(const uint64_t total_keys, const uint64_t total_size,
                      const uint64_t total_txs, const std::string& store_path,
                      const std::string& other_path, const int duration) const;

@@ -42,6 +42,7 @@ void usage(const char *pname)
     << "  set [column/]<prefix> <key> [ver <N>|in <file>]\n"
     << "  rm [column/]<prefix> <key>\n"
     << "  rm-prefix [column/]<prefix>\n"
+    << "  list-columns\n"
     << "  store-copy <path> [num-keys-per-tx] [leveldb|rocksdb|...]\n"
     << "  store-crc <path>\n"
     << "  compact\n"
@@ -314,6 +315,21 @@ int main(int argc, const char *argv[])
                 << url_escape(prefix) << ")"
 		<< std::endl;
       return 1;
+    }
+  } else if (cmd == "list-columns") {
+    if (argc < 4) {
+      usage(argv[0]);
+      return 1;
+    }
+    std::vector<std::string> columns;
+    bool ret = st.list_columns(columns);
+    if (!ret) {
+      std::cerr << "error listing columns"
+		<< std::endl;
+      return 1;
+    }
+    for (auto& s: columns) {
+      std::cout << s << std::endl;
     }
   } else if (cmd == "store-copy") {
     int num_keys_per_tx = 128; // magic number that just feels right.

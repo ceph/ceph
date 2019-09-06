@@ -239,6 +239,12 @@ bool StoreTool::rm_prefix(const std::string& column_family,
   return (ret == 0);
 }
 
+bool StoreTool::list_columns(std::vector<std::string>& columns)
+{
+  int ret = db->column_family_list(columns);
+  return (ret == 0);
+}
+
 void StoreTool::print_summary(const uint64_t total_keys, const uint64_t total_size,
                               const uint64_t total_txs, const string& store_path,
                               const string& other_path, const int duration) const

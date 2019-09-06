@@ -12,6 +12,7 @@
     set [column/]<prefix> <key> [ver <N>|in <file>]
     rm [column/]<prefix> <key>
     rm-prefix [column/]<prefix>
+    list-columns
     store-copy <path> [num-keys-per-tx] [leveldb|rocksdb|...]
     store-crc <path>
     compact

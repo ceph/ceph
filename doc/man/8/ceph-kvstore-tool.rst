@@ -68,6 +68,9 @@ which are as follows:
 :command:`rm-prefix [column/]<prefix>`
     Remove all KV pairs stored with the URL encoded prefix.
 
+:command:`list-columns`
+    List column families present in database.
+
 :command:`store-copy <path> [num-keys-per-tx]`
     Copy all KV pairs to another directory specified by ``path``. 
     [num-keys-per-tx] is the number of KV pairs copied for a transaction.
