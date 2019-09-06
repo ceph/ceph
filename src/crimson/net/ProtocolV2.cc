@@ -1761,15 +1761,13 @@ void ProtocolV2::trigger_replacing(bool reconnect,
   if (socket) {
     socket->shutdown();
   }
-  if (!reconnect && new_client_cookie != client_cookie) {
-    seastar::with_gate(pending_dispatch, [this] {
-      return dispatcher.ms_handle_accept(
-          seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-    }).handle_exception([this] (std::exception_ptr eptr) {
-      logger().error("{} ms_handle_accept caught exception: {}", conn, eptr);
-      ceph_abort("unexpected exception from ms_handle_accept()");
-    });
-  }
+  seastar::with_gate(pending_dispatch, [this] {
+    return dispatcher.ms_handle_accept(
+        seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
+  }).handle_exception([this] (std::exception_ptr eptr) {
+    logger().error("{} ms_handle_accept caught exception: {}", conn, eptr);
+    ceph_abort("unexpected exception from ms_handle_accept()");
+  });
   seastar::with_gate(pending_dispatch,
                      [this,
                       reconnect,

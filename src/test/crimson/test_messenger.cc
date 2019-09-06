@@ -2010,7 +2010,7 @@ test_v2_lossless_establishing_fault(FailoverTest& test) {
     }).then([] (ConnResults& results) {
       results[0].assert_state_at(conn_state_t::established);
       results[0].assert_connect(0, 0, 0, 0);
-      results[0].assert_accept(1, 1, 0, 1);
+      results[0].assert_accept(1, 1, 0, 2);
       results[0].assert_reset(0, 0);
       results[1].assert_state_at(conn_state_t::replaced);
       results[1].assert_connect(0, 0, 0, 0);
@@ -2044,7 +2044,7 @@ test_v2_lossless_accepted_fault(FailoverTest& test) {
         }).then([] (ConnResults& results) {
           results[0].assert_state_at(conn_state_t::established);
           results[0].assert_connect(0, 0, 0, 0);
-          results[0].assert_accept(1, 1, 0, 1);
+          results[0].assert_accept(1, 1, 0, 2);
           results[0].assert_reset(0, 0);
           results[1].assert_state_at(conn_state_t::replaced);
           results[1].assert_connect(0, 0, 0, 0);
@@ -2084,7 +2084,11 @@ test_v2_lossless_reaccept_fault(FailoverTest& test) {
         }).then([bp] (ConnResults& results) {
           results[0].assert_state_at(conn_state_t::established);
           results[0].assert_connect(0, 0, 0, 0);
-          results[0].assert_accept(1, 1, 0, 1);
+          if (bp == Breakpoint{Tag::SESSION_RECONNECT, bp_type_t::READ}) {
+            results[0].assert_accept(1, 1, 0, 2);
+          } else {
+            results[0].assert_accept(1, 1, 0, 3);
+          }
           results[0].assert_reset(0, 0);
           if (bp == Breakpoint{Tag::SESSION_RECONNECT, bp_type_t::READ}) {
             results[1].assert_state_at(conn_state_t::closed);
@@ -2186,7 +2190,7 @@ test_v2_peer_establishing_fault(FailoverTest& test) {
     }).then([] (ConnResults& results) {
       results[0].assert_state_at(conn_state_t::established);
       results[0].assert_connect(0, 0, 0, 0);
-      results[0].assert_accept(1, 1, 0, 1);
+      results[0].assert_accept(1, 1, 0, 2);
       results[0].assert_reset(0, 0);
       results[1].assert_state_at(conn_state_t::replaced);
       results[1].assert_connect(0, 0, 0, 0);
@@ -2242,7 +2246,7 @@ test_v2_peer_connected_fault_reaccept(FailoverTest& test) {
     }).then([] (ConnResults& results) {
       results[0].assert_state_at(conn_state_t::established);
       results[0].assert_connect(1, 1, 0, 1);
-      results[0].assert_accept(0, 0, 0, 0);
+      results[0].assert_accept(0, 0, 0, 1);
       results[0].assert_reset(0, 0);
       results[1].assert_state_at(conn_state_t::replaced);
       results[1].assert_connect(0, 0, 0, 0);
@@ -2369,7 +2373,7 @@ test_v2_racing_reconnect_lose(FailoverTest& test) {
           results[0].assert_state_at(conn_state_t::established);
           ceph_assert(results[0].connect_attempts == 2);
           ceph_assert(results[0].cnt_connect_dispatched == 1);
-          results[0].assert_accept(0, 0, 0, 0);
+          results[0].assert_accept(0, 0, 0, 1);
           results[0].assert_reset(0, 0);
           results[1].assert_state_at(conn_state_t::replaced);
           results[1].assert_connect(0, 0, 0, 0);
