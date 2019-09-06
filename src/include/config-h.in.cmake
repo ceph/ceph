@@ -325,7 +325,7 @@
 /* Define if endian type is little endian */
 #cmakedefine CEPH_LITTLE_ENDIAN
 
-#cmakedefine PYTHON_EXECUTABLE "@MGR_PYTHON_EXECUTABLE@"
+#cmakedefine MGR_PYTHON_EXECUTABLE "@MGR_PYTHON_EXECUTABLE@"
 
 /* Define to 1 if you have the `getprogname' function. */
 #cmakedefine HAVE_GETPROGNAME 1
