@@ -7086,22 +7086,187 @@ void BlueStore::_fsck_check_pool_statfs(
   }
 }
 
-void BlueStore::_fsck_check_objects(FSCKDepth depth,
-  bool need_per_pool_stats,
+BlueStore::OnodeRef BlueStore::_fsck_check_objects_shallow(
+  FSCKDepth depth,
+  BlueStore::CollectionRef c,
+  const ghobject_t& oid,
+  KeyValueDB::Iterator it,
+  mempool::bluestore_fsck::list<string>& expecting_shards,
+  store_statfs_t* expected_statfs,
+  map<BlobRef, bluestore_blob_t::unused_t>* referenced,
   const BlueStore::FSCK_ObjectCtx& ctx)
 {
   auto& errors = ctx.errors;
-  auto& warnings = ctx.warnings;
   auto& num_objects = ctx.num_objects;
   auto& num_extents = ctx.num_extents;
   auto& num_blobs = ctx.num_blobs;
   auto& num_sharded_objects = ctx.num_sharded_objects;
   auto& num_spanning_blobs = ctx.num_spanning_blobs;
   auto& used_blocks = ctx.used_blocks;
+  auto& sb_info = ctx.sb_info;
+  auto repairer = ctx.repairer;
+
+
+  dout(10) << __func__ << "  " << oid << dendl;
+  store_statfs_t onode_statfs;
+  OnodeRef o;
+  o.reset(Onode::decode(c, oid, it->key(), it->value()));
+  ++num_objects;
+
+  num_spanning_blobs += o->extent_map.spanning_blob_map.size();
+
+  o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
+  _dump_onode<30>(cct, *o);
+  // shards
+  if (!o->extent_map.shards.empty()) {
+    ++num_sharded_objects;
+    if (depth != FSCK_SHALLOW) {
+      for (auto& s : o->extent_map.shards) {
+        dout(20) << __func__ << "    shard " << *s.shard_info << dendl;
+        expecting_shards.push_back(string());
+        get_extent_shard_key(o->key, s.shard_info->offset,
+          &expecting_shards.back());
+        if (s.shard_info->offset >= o->onode.size) {
+          derr << "fsck error: " << oid << " shard 0x" << std::hex
+            << s.shard_info->offset << " past EOF at 0x" << o->onode.size
+            << std::dec << dendl;
+          ++errors;
+        }
+      }
+    }
+  }
+
+  // lextents
+  uint64_t pos = 0;
+  mempool::bluestore_fsck::map<BlobRef,
+    bluestore_blob_use_tracker_t> ref_map;
+  for (auto& l : o->extent_map.extent_map) {
+    dout(20) << __func__ << "    " << l << dendl;
+    if (l.logical_offset < pos) {
+      derr << "fsck error: " << oid << " lextent at 0x"
+        << std::hex << l.logical_offset
+        << " overlaps with the previous, which ends at 0x" << pos
+        << std::dec << dendl;
+      ++errors;
+    }
+    if (depth != FSCK_SHALLOW &&
+      o->extent_map.spans_shard(l.logical_offset, l.length)) {
+      derr << "fsck error: " << oid << " lextent at 0x"
+        << std::hex << l.logical_offset << "~" << l.length
+        << " spans a shard boundary"
+        << std::dec << dendl;
+      ++errors;
+    }
+    pos = l.logical_offset + l.length;
+    onode_statfs.data_stored += l.length;
+    ceph_assert(l.blob);
+    const bluestore_blob_t& blob = l.blob->get_blob();
+
+    auto& ref = ref_map[l.blob];
+    if (ref.is_empty()) {
+      uint32_t min_release_size = blob.get_release_size(min_alloc_size);
+      uint32_t l = blob.get_logical_length();
+      ref.init(l, min_release_size);
+    }
+    ref.get(
+      l.blob_offset,
+      l.length);
+    ++num_extents;
+    if (depth != FSCK_SHALLOW &&
+      blob.has_unused()) {
+      ceph_assert(referenced);
+      auto p = referenced->find(l.blob);
+      bluestore_blob_t::unused_t* pu;
+      if (p == referenced->end()) {
+        pu = &(*referenced)[l.blob];
+      }
+      else {
+        pu = &p->second;
+      }
+      uint64_t blob_len = blob.get_logical_length();
+      ceph_assert((blob_len % (sizeof(*pu) * 8)) == 0);
+      ceph_assert(l.blob_offset + l.length <= blob_len);
+      uint64_t chunk_size = blob_len / (sizeof(*pu) * 8);
+      uint64_t start = l.blob_offset / chunk_size;
+      uint64_t end =
+        round_up_to(l.blob_offset + l.length, chunk_size) / chunk_size;
+      for (auto i = start; i < end; ++i) {
+        (*pu) |= (1u << i);
+      }
+    }
+  } //for (auto& l : o->extent_map.extent_map)
+
+  for (auto& i : ref_map) {
+    ++num_blobs;
+    const bluestore_blob_t& blob = i.first->get_blob();
+    bool equal =
+      depth == FSCK_SHALLOW ? true :
+      i.first->get_blob_use_tracker().equal(i.second);
+    if (!equal) {
+      derr << "fsck error: " << oid << " blob " << *i.first
+        << " doesn't match expected ref_map " << i.second << dendl;
+      ++errors;
+    }
+    if (blob.is_compressed()) {
+      onode_statfs.data_compressed += blob.get_compressed_payload_length();
+      onode_statfs.data_compressed_original +=
+        i.first->get_referenced_bytes();
+    }
+    if (blob.is_shared()) {
+      if (i.first->shared_blob->get_sbid() > blobid_max) {
+        derr << "fsck error: " << oid << " blob " << blob
+          << " sbid " << i.first->shared_blob->get_sbid() << " > blobid_max "
+          << blobid_max << dendl;
+        ++errors;
+      }
+      else if (i.first->shared_blob->get_sbid() == 0) {
+        derr << "fsck error: " << oid << " blob " << blob
+          << " marked as shared but has uninitialized sbid"
+          << dendl;
+        ++errors;
+      }
+      sb_info_t& sbi = sb_info[i.first->shared_blob->get_sbid()];
+      ceph_assert(sbi.cid == coll_t() || sbi.cid == c->cid);
+      ceph_assert(sbi.pool_id == INT64_MIN ||
+        sbi.pool_id == oid.hobj.get_logical_pool());
+      sbi.cid = c->cid;
+      sbi.pool_id = oid.hobj.get_logical_pool();
+      sbi.sb = i.first->shared_blob;
+      sbi.oids.push_back(oid);
+      sbi.compressed = blob.is_compressed();
+      for (auto e : blob.get_extents()) {
+        if (e.is_valid()) {
+          sbi.ref_map.get(e.offset, e.length);
+        }
+      }
+    } else if (depth != FSCK_SHALLOW) {
+      errors += _fsck_check_extents(c->cid, oid, blob.get_extents(),
+        blob.is_compressed(),
+        used_blocks,
+        fm->get_alloc_size(),
+        repairer,
+        onode_statfs,
+        depth);
+    } else {
+      errors += _fsck_sum_extents(
+        blob.get_extents(),
+        blob.is_compressed(),
+        onode_statfs);
+    }
+  } // for (auto& i : ref_map)
+  expected_statfs->add(onode_statfs);
+  return o;
+}
+
+void BlueStore::_fsck_check_objects(FSCKDepth depth,
+  bool need_per_pool_stats,
+  const BlueStore::FSCK_ObjectCtx& ctx)
+{
+  auto& errors = ctx.errors;
+  auto& warnings = ctx.warnings;
   auto& used_omap_head = ctx.used_omap_head;
   auto& used_per_pool_omap_head = ctx.used_per_pool_omap_head;
   auto& used_pgmeta_omap_head = ctx.used_pgmeta_omap_head;
-  auto& sb_info = ctx.sb_info;
   auto repairer = ctx.repairer;
 
   uint64_t_btree_t used_nids;
@@ -7207,156 +7372,31 @@ void BlueStore::_fsck_check_objects(FSCKDepth depth,
         expecting_shards.clear();
       }
 
-      dout(10) << __func__ << "  " << oid << dendl;
-      store_statfs_t onode_statfs;
+      bool queued = false;
+      /*if (depth == FSCK_SHALLOW) {
+        queued = _fsck_queue_check_object(
+          c,
+          oid,
+          it,
+        );
+      }*/
       OnodeRef o;
-      o.reset(Onode::decode(c, oid, it->key(), it->value()));
+      map<BlobRef, bluestore_blob_t::unused_t> referenced;
 
-      ++num_objects;
-      num_spanning_blobs += o->extent_map.spanning_blob_map.size();
-
-      o->extent_map.fault_range(db, 0, OBJECT_MAX_SIZE);
-      _dump_onode<30>(cct, *o);
-      // shards
-      if (!o->extent_map.shards.empty()) {
-        ++num_sharded_objects;
-        if (depth != FSCK_SHALLOW) {
-          for (auto& s : o->extent_map.shards) {
-            dout(20) << __func__ << "    shard " << *s.shard_info << dendl;
-            expecting_shards.push_back(string());
-            get_extent_shard_key(o->key, s.shard_info->offset,
-              &expecting_shards.back());
-            if (s.shard_info->offset >= o->onode.size) {
-              derr << "fsck error: " << oid << " shard 0x" << std::hex
-                << s.shard_info->offset << " past EOF at 0x" << o->onode.size
-                << std::dec << dendl;
-              ++errors;
-            }
-          }
-        }
+      if (!queued) {
+         o = _fsck_check_objects_shallow(
+          depth,
+          c,
+          oid,
+          it,
+          expecting_shards,
+          expected_statfs,
+           &referenced,
+          ctx);
       }
 
-      // lextents
-      map<BlobRef, bluestore_blob_t::unused_t> referenced;
-      uint64_t pos = 0;
-      mempool::bluestore_fsck::map<BlobRef,
-        bluestore_blob_use_tracker_t> ref_map;
-      for (auto& l : o->extent_map.extent_map) {
-        dout(20) << __func__ << "    " << l << dendl;
-        if (l.logical_offset < pos) {
-          derr << "fsck error: " << oid << " lextent at 0x"
-            << std::hex << l.logical_offset
-            << " overlaps with the previous, which ends at 0x" << pos
-            << std::dec << dendl;
-          ++errors;
-        }
-        if (depth != FSCK_SHALLOW &&
-          o->extent_map.spans_shard(l.logical_offset, l.length)) {
-          derr << "fsck error: " << oid << " lextent at 0x"
-            << std::hex << l.logical_offset << "~" << l.length
-            << " spans a shard boundary"
-            << std::dec << dendl;
-          ++errors;
-        }
-        pos = l.logical_offset + l.length;
-        onode_statfs.data_stored += l.length;
-        ceph_assert(l.blob);
-        const bluestore_blob_t& blob = l.blob->get_blob();
-
-        auto& ref = ref_map[l.blob];
-        if (ref.is_empty()) {
-          uint32_t min_release_size = blob.get_release_size(min_alloc_size);
-          uint32_t l = blob.get_logical_length();
-          ref.init(l, min_release_size);
-        }
-        ref.get(
-          l.blob_offset,
-          l.length);
-        ++num_extents;
-        if (depth != FSCK_SHALLOW &&
-          blob.has_unused()) {
-          auto p = referenced.find(l.blob);
-          bluestore_blob_t::unused_t* pu;
-          if (p == referenced.end()) {
-            pu = &referenced[l.blob];
-          }
-          else {
-            pu = &p->second;
-          }
-          uint64_t blob_len = blob.get_logical_length();
-          ceph_assert((blob_len % (sizeof(*pu) * 8)) == 0);
-          ceph_assert(l.blob_offset + l.length <= blob_len);
-          uint64_t chunk_size = blob_len / (sizeof(*pu) * 8);
-          uint64_t start = l.blob_offset / chunk_size;
-          uint64_t end =
-            round_up_to(l.blob_offset + l.length, chunk_size) / chunk_size;
-          for (auto i = start; i < end; ++i) {
-            (*pu) |= (1u << i);
-          }
-        }
-      } //for (auto& l : o->extent_map.extent_map)
-
-      for (auto& i : ref_map) {
-        ++num_blobs;
-        const bluestore_blob_t& blob = i.first->get_blob();
-        bool equal =
-          depth == FSCK_SHALLOW ? true :
-          i.first->get_blob_use_tracker().equal(i.second);
-        if (!equal) {
-          derr << "fsck error: " << oid << " blob " << *i.first
-            << " doesn't match expected ref_map " << i.second << dendl;
-          ++errors;
-        }
-        if (blob.is_compressed()) {
-          onode_statfs.data_compressed += blob.get_compressed_payload_length();
-          onode_statfs.data_compressed_original +=
-            i.first->get_referenced_bytes();
-        }
-        if (blob.is_shared()) {
-          if (i.first->shared_blob->get_sbid() > blobid_max) {
-            derr << "fsck error: " << oid << " blob " << blob
-              << " sbid " << i.first->shared_blob->get_sbid() << " > blobid_max "
-              << blobid_max << dendl;
-            ++errors;
-          }
-          else if (i.first->shared_blob->get_sbid() == 0) {
-            derr << "fsck error: " << oid << " blob " << blob
-              << " marked as shared but has uninitialized sbid"
-              << dendl;
-            ++errors;
-          }
-          sb_info_t& sbi = sb_info[i.first->shared_blob->get_sbid()];
-          ceph_assert(sbi.cid == coll_t() || sbi.cid == c->cid);
-          ceph_assert(sbi.pool_id == INT64_MIN ||
-            sbi.pool_id == oid.hobj.get_logical_pool());
-          sbi.cid = c->cid;
-          sbi.pool_id = oid.hobj.get_logical_pool();
-          sbi.sb = i.first->shared_blob;
-          sbi.oids.push_back(oid);
-          sbi.compressed = blob.is_compressed();
-          for (auto e : blob.get_extents()) {
-            if (e.is_valid()) {
-              sbi.ref_map.get(e.offset, e.length);
-            }
-          }
-        } else if( depth != FSCK_SHALLOW) {
-          errors += _fsck_check_extents(c->cid, oid, blob.get_extents(),
-            blob.is_compressed(),
-            used_blocks,
-            fm->get_alloc_size(),
-            repairer,
-            onode_statfs,
-            depth);
-        } else {
-          errors += _fsck_sum_extents(
-            blob.get_extents(),
-            blob.is_compressed(),
-            onode_statfs);
-        }
-      } // for (auto& i : ref_map)
-      expected_statfs->add(onode_statfs);
-
       if (depth != FSCK_SHALLOW) {
+        ceph_assert(o != nullptr);
         if (o->onode.nid) {
           if (o->onode.nid > nid_max) {
             derr << "fsck error: " << oid << " nid " << o->onode.nid
@@ -7586,7 +7626,7 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
   uint64_t num_shared_blobs = 0;
   uint64_t num_sharded_objects = 0;
   BlueStoreRepairer repairer;
-  store_statfs_t* expected_statfs = nullptr;
+  //store_statfs_t* expected_statfs = nullptr;
   // in deep mode we need R/W write access to be able to replay deferred ops
   bool read_only = !(repair || depth == FSCK_DEEP);
 
@@ -7756,7 +7796,7 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
   if (it) {
     //FIXME minor: perhaps simplify for shallow mode?
     //fill global if not overriden below
-    expected_statfs = &expected_store_statfs;
+    auto expected_statfs = &expected_store_statfs;
 
     for (it->lower_bound(string()); it->valid(); it->next()) {
       string key = it->key();
@@ -7839,7 +7879,7 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
     it = db->get_iterator(PREFIX_OBJ);
     if (it) {
       //fill global if not overriden below
-      expected_statfs = &expected_store_statfs;
+      auto expected_statfs = &expected_store_statfs;
 
       CollectionRef c;
       spg_t pgid;
