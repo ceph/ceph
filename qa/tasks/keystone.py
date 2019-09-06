@@ -174,6 +174,14 @@ def configure_instance(ctx, config):
                 '-e', 's^#key_repository =.*^key_repository = {kr}^'.format(kr = keyrepo_dir),
                 '-i', 'etc/keystone.conf'
             ])
+        # log to a file that gets archived
+        log_file = '{p}/archive/keystone.{c}.log'.format(p=teuthology.get_testdir(ctx), c=client)
+        run_in_keystone_dir(ctx, client,
+            [
+                'sed',
+                '-e', 's^#log_file =.*^log_file = {}^'.format(log_file),
+                '-i', 'etc/keystone.conf'
+            ])
 
         # prepare key repository for Fetnet token authenticator
         run_in_keystone_dir(ctx, client, [ 'mkdir', '-p', keyrepo_dir ])
