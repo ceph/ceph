@@ -6857,7 +6857,7 @@ BlueStore::OnodeRef BlueStore::_fsck_check_objects_shallow(
   auto& num_blobs = ctx.num_blobs;
   auto& num_sharded_objects = ctx.num_sharded_objects;
   auto& num_spanning_blobs = ctx.num_spanning_blobs;
-  auto& used_blocks = ctx.used_blocks;
+  auto used_blocks = ctx.used_blocks;
   auto& sb_info = ctx.sb_info;
   auto repairer = ctx.repairer;
 
@@ -6995,9 +6995,10 @@ BlueStore::OnodeRef BlueStore::_fsck_check_objects_shallow(
         }
       }
     } else if (depth != FSCK_SHALLOW) {
+      ceph_assert(used_blocks);
       errors += _fsck_check_extents(c->cid, oid, blob.get_extents(),
         blob.is_compressed(),
-        used_blocks,
+        *used_blocks,
         fm->get_alloc_size(),
         repairer,
         onode_statfs,
@@ -7018,10 +7019,8 @@ void BlueStore::_fsck_check_objects(FSCKDepth depth,
   const BlueStore::FSCK_ObjectCtx& ctx)
 {
   auto& errors = ctx.errors;
-  auto& warnings = ctx.warnings;
-  auto& used_omap_head = ctx.used_omap_head;
-  auto& used_pgmeta_omap_head = ctx.used_pgmeta_omap_head;
-  auto repairer = ctx.repairer;
+  auto* used_omap_head = ctx.used_omap_head;
+  auto* used_pgmeta_omap_head = ctx.used_pgmeta_omap_head;
 
   uint64_t_btree_t used_nids;
 
@@ -7207,14 +7206,16 @@ void BlueStore::_fsck_check_objects(FSCKDepth depth,
         }
         // omap
         if (o->onode.has_omap()) {
-          auto& m =
+          ceph_assert(used_omap_head);
+          ceph_assert(used_pgmeta_omap_head);
+          auto m =
             o->onode.is_pgmeta_omap() ? used_pgmeta_omap_head : used_omap_head;
-          if (m.count(o->onode.nid)) {
+          if (m->count(o->onode.nid)) {
             derr << "fsck error: " << oid << " omap_head " << o->onode.nid
               << " already in use" << dendl;
             ++errors;
           } else {
-            m.insert(o->onode.nid);
+            m->insert(o->onode.nid);
           }
         }
         if (depth == FSCK_DEEP) {
@@ -7290,7 +7291,6 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
   unsigned repaired = 0;
 
   uint64_t_btree_t used_omap_head;
-  uint64_t_btree_t used_per_pool_omap_head; // just a placeholder to be inline with masterD
   uint64_t_btree_t used_pgmeta_omap_head;
   uint64_t_btree_t used_sbids;
 
@@ -7448,10 +7448,10 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
       num_blobs,
       num_sharded_objects,
       num_spanning_blobs,
-      used_blocks,
-      used_omap_head,
-      used_per_pool_omap_head,
-      used_pgmeta_omap_head,
+      &used_blocks,
+      &used_omap_head,
+      nullptr,
+      &used_pgmeta_omap_head,
       sb_info,
       expected_store_statfs,
       expected_pool_statfs,

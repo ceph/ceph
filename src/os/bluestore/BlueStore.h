@@ -3088,32 +3088,31 @@ private:
     uint64_t& num_sharded_objects;
     uint64_t& num_spanning_blobs;
 
-    mempool_dynamic_bitset& used_blocks;
-    uint64_t_btree_t& used_omap_head;
-    uint64_t_btree_t& used_per_pool_omap_head;
-    uint64_t_btree_t& used_pgmeta_omap_head;
+    mempool_dynamic_bitset* used_blocks;
+    uint64_t_btree_t* used_omap_head;
+    uint64_t_btree_t* used_per_pool_omap_head;
+    uint64_t_btree_t* used_pgmeta_omap_head;
     sb_info_map_t& sb_info;
 
     store_statfs_t& expected_store_statfs;
     per_pool_statfs& expected_pool_statfs;
     BlueStoreRepairer* repairer;
 
-    FSCK_ObjectCtx(
-      int64_t& e,
-      int64_t& w,
-      uint64_t& _num_objects,
-      uint64_t& _num_extents,
-      uint64_t& _num_blobs,
-      uint64_t& _num_sharded_objects,
-      uint64_t& _num_spanning_blobs,
-      mempool_dynamic_bitset& _ub,
-      uint64_t_btree_t& _used_omap_head,
-      uint64_t_btree_t& _used_per_pool_omap_head,
-      uint64_t_btree_t& _used_pgmeta_omap_head,
-      sb_info_map_t& _sb_info,
-      store_statfs_t& _store_statfs,
-      per_pool_statfs& _pool_statfs,
-      BlueStoreRepairer* _repairer) :
+    FSCK_ObjectCtx(int64_t& e,
+                   int64_t& w,
+                   uint64_t& _num_objects,
+                   uint64_t& _num_extents,
+                   uint64_t& _num_blobs,
+                   uint64_t& _num_sharded_objects,
+                   uint64_t& _num_spanning_blobs,
+                   mempool_dynamic_bitset* _ub,
+                   uint64_t_btree_t* _used_omap_head,
+                   uint64_t_btree_t* _used_per_pool_omap_head,
+                   uint64_t_btree_t* _used_pgmeta_omap_head,
+                   sb_info_map_t& _sb_info,
+                   store_statfs_t& _store_statfs,
+                   per_pool_statfs& _pool_statfs,
+                   BlueStoreRepairer* _repairer) :
       errors(e),
       warnings(w),
       num_objects(_num_objects),
