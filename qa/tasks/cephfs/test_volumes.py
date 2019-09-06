@@ -406,9 +406,7 @@ class TestVolumes(CephFSTestCase):
             if ce.exitstatus != errno.EINVAL:
                 raise
         else:
-            raise
-        # clean up
-        self._fs_cmd("subvolume", "rm", self.volname, subvolume, "--force")
+            raise RuntimeError("expected the 'fs subvolume create' command to fail")
 
     def test_subvolume_create_with_auto_cleanup_on_fail(self):
         subvolume = self._generate_random_subvolume_name()
@@ -424,7 +422,7 @@ class TestVolumes(CephFSTestCase):
             if ce.exitstatus != errno.ENOENT:
                 raise
         else:
-            raise
+            raise RuntimeError("expected the `fs subvolume getpath` command to fail")
 
     def test_subvolume_create_with_invalid_size(self):
         # create subvolume with an invalid size -1
@@ -621,9 +619,7 @@ class TestVolumes(CephFSTestCase):
             if ce.exitstatus != errno.EINVAL:
                 raise
         else:
-            raise
-        # clean up
-        self._fs_cmd("subvolumegroup", "rm", self.volname, group, "--force")
+            raise RuntimeError("expected the 'fs subvolumegroup create' command to fail")
 
     def test_subvolume_group_create_with_auto_cleanup_on_fail(self):
         group = self._generate_random_group_name()
@@ -639,7 +635,7 @@ class TestVolumes(CephFSTestCase):
             if ce.exitstatus != errno.ENOENT:
                 raise
         else:
-            raise
+            raise RuntimeError("expected the 'fs subvolumegroup getpath' command to fail")
 
     def test_subvolume_create_with_desired_data_pool_layout_in_group(self):
         subvol1 = self._generate_random_subvolume_name()
