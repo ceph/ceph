@@ -72,7 +72,9 @@ if type cmake3 > /dev/null 2>&1 ; then
 else
     CMAKE=cmake
 fi
-mkdir build && cd build && ${CMAKE} -DWITH_LIBRADOS=ON -DWITH_SNAPPY=ON -DWITH_GFLAGS=OFF -DFAIL_ON_WARNINGS=OFF ..
+
+[ -z "$BUILD_DIR" ] && BUILD_DIR=build
+mkdir ${BUILD_DIR} && cd ${BUILD_DIR} && ${CMAKE} -DWITH_LIBRADOS=ON -DWITH_SNAPPY=ON -DWITH_GFLAGS=OFF -DFAIL_ON_WARNINGS=OFF ..
 make rocksdb_env_librados_test -j8
 
 echo "Copy ceph.conf"

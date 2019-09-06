@@ -4,7 +4,7 @@ set -e
 
 stop() {
     if [ "$REMOTE" == "false" ]; then
-        cd $BUILD_DIR
+        cd ${FULL_PATH_BUILD_DIR}
         ../src/stop.sh
     fi
     exit $1
@@ -39,8 +39,10 @@ fi
 
 DASH_DIR=`pwd`
 
-cd ../../../../build
-BUILD_DIR=`pwd`
+[ -z "$BUILD_DIR" ] && BUILD_DIR=build
+
+cd ../../../../${BUILD_DIR}
+FULL_PATH_BUILD_DIR=`pwd`
 
 if [ "$BASE_URL" == "" ]; then
     MGR=2 RGW=1 ../src/vstart.sh -n -d
@@ -64,7 +66,7 @@ export BASE_URL
 cd $DASH_DIR/frontend
 jq .[].target=\"$BASE_URL\" proxy.conf.json.sample > proxy.conf.json
 
-. $BUILD_DIR/src/pybind/mgr/dashboard/node-env/bin/activate
+. ${FULL_PATH_BUILD_DIR}/src/pybind/mgr/dashboard/node-env/bin/activate
 
 if [ "$DEVICE" == "chrome" ]; then
     npm run e2e:ci || stop 1
