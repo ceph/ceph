@@ -162,6 +162,17 @@ class TestVolumes(CephFSTestCase):
         else:
             raise
 
+    def test_subvolume_create_with_invalid_size(self):
+        # create subvolume with an invalid size -1
+        subvolume = self._generate_random_subvolume_name()
+        try:
+            self._fs_cmd("subvolume", "create", self.volname, subvolume, "--size", "-1")
+        except CommandFailedError as ce:
+            if ce.exitstatus != errno.EINVAL:
+                raise
+        else:
+            raise RuntimeError("expected the 'fs subvolume create' command to fail")
+
     def test_nonexistent_subvolume_rm(self):
         # remove non-existing subvolume
         subvolume = "non_existent_subvolume"
