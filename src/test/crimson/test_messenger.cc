@@ -581,6 +581,7 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
 }
 
 using ceph::msgr::v2::Tag;
+using ceph::net::bp_action_t;
 using ceph::net::bp_type_t;
 using ceph::net::Breakpoint;
 using ceph::net::Connection;
@@ -720,7 +721,7 @@ struct ConnResult {
 using ConnResults = std::vector<ConnResult>;
 
 struct TestInterceptor : public Interceptor {
-  std::map<Breakpoint, std::set<unsigned>> breakpoints;
+  std::map<Breakpoint, std::map<unsigned, bp_action_t>> breakpoints;
   std::map<Breakpoint, counter_t> breakpoints_counter;
   std::map<ConnectionRef, unsigned> conns;
   ConnResults results;
@@ -738,7 +739,12 @@ struct TestInterceptor : public Interceptor {
 
   void make_fault(Breakpoint bp, unsigned round = 1) {
     assert(round >= 1);
-    breakpoints[bp].insert(round);
+    breakpoints[bp][round] = bp_action_t::FAULT;
+  }
+
+  void make_block(Breakpoint bp, unsigned round = 1) {
+    assert(round >= 1);
+    breakpoints[bp][round] = bp_action_t::BLOCK;
   }
 
   ConnResult* find_result(ConnectionRef conn) {
@@ -809,7 +815,7 @@ struct TestInterceptor : public Interceptor {
     logger().info("[{}] {} {}", result->index, conn, result->state);
   }
 
-  bool intercept(Connection& conn, Breakpoint bp) override {
+  bp_action_t intercept(Connection& conn, Breakpoint bp) override {
     ++breakpoints_counter[bp].counter;
 
     auto result = find_result(conn.shared_from_this());
@@ -840,12 +846,12 @@ struct TestInterceptor : public Interceptor {
         logger().info("[{}] {} intercepted {}({}) => {}",
                       result->index, conn, bp,
                       breakpoints_counter[bp].counter, it_cnt->second);
-        return true;
+        return it_cnt->second;
       }
     }
     logger().info("[{}] {} intercepted {}({})",
                   result->index, conn, bp, breakpoints_counter[bp].counter);
-    return false;
+    return bp_action_t::CONTINUE;
   }
 };
 
@@ -1146,7 +1152,7 @@ class FailoverSuite : public Dispatcher {
       if (it == interceptor.breakpoints_counter.end()) {
         throw std::runtime_error(fmt::format("{} was missed", kv.first));
       }
-      auto expected = *std::max_element(kv.second.begin(), kv.second.end());
+      auto expected = kv.second.rbegin()->first;
       if (expected > it->second.counter) {
         throw std::runtime_error(fmt::format(
               "{} only triggered {} times, not the expected {}",
@@ -1200,6 +1206,16 @@ class FailoverSuite : public Dispatcher {
       ++pending_send;
       return seastar::now();
     }
+  }
+
+  seastar::future<> wait_blocked() {
+    logger().info("Waiting for blocked...");
+    return interceptor.blocker.wait_blocked();
+  }
+
+  void unblock() {
+    logger().info("Unblock breakpoint");
+    return interceptor.blocker.unblock();
   }
 
   seastar::future<> wait_replaced(unsigned count) {

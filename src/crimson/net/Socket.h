@@ -10,6 +10,10 @@
 #include "include/buffer.h"
 #include "msg/msg_types.h"
 
+#ifdef UNIT_TESTS_BUILT
+#include "Interceptor.h"
+#endif
+
 namespace ceph::net {
 
 class Socket;
@@ -81,13 +85,25 @@ class Socket
   seastar::future<tmp_buf> read_exactly(size_t bytes);
 
   seastar::future<> write(packet&& buf) {
-    return out.write(std::move(buf));
+#ifdef UNIT_TESTS_BUILT
+    return try_trap(bp_type_t::WRITE).then([buf = std::move(buf), this] () mutable {
+#endif
+      return out.write(std::move(buf));
+#ifdef UNIT_TESTS_BUILT
+    });
+#endif
   }
   seastar::future<> flush() {
     return out.flush();
   }
   seastar::future<> write_flush(packet&& buf) {
-    return out.write(std::move(buf)).then([this] { return out.flush(); });
+#ifdef UNIT_TESTS_BUILT
+    return try_trap(bp_type_t::WRITE).then([buf = std::move(buf), this] () mutable {
+#endif
+      return out.write(std::move(buf)).then([this] { return out.flush(); });
+#ifdef UNIT_TESTS_BUILT
+    });
+#endif
   }
 
   // preemptively disable further reads or writes, can only be shutdown once.
@@ -105,6 +121,20 @@ class Socket
   void force_shutdown_out() {
     socket.shutdown_output();
   }
+
+#ifdef UNIT_TESTS_BUILT
+ private:
+  std::optional<socket_trap_t> next_trap = std::nullopt;
+  socket_blocker* blocker = nullptr;
+  seastar::future<> try_trap(bp_type_t type);
+
+ public:
+  void set_trap(socket_trap_t trap, socket_blocker* blocker_ = nullptr) {
+    ceph_assert(!next_trap);
+    next_trap = trap;
+    blocker = blocker_;
+  }
+#endif
 };
 
 } // namespace ceph::net

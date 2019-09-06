@@ -33,6 +33,58 @@ enum class bp_type_t {
   WRITE
 };
 
+enum class bp_action_t {
+  CONTINUE = 0,
+  FAULT,
+  BLOCK
+};
+
+inline std::ostream& operator<<(std::ostream& out, const bp_action_t& action) {
+  static const char *const action_names[] = {"CONTINUE",
+                                             "FAULT",
+                                             "BLOCK"};
+  assert(static_cast<size_t>(action) < std::size(action_names));
+  return out << action_names[static_cast<size_t>(action)];
+}
+
+struct socket_trap_t {
+  bp_type_t type;
+  bp_action_t action;
+};
+
+class socket_blocker {
+  std::optional<seastar::promise<>> p_blocked;
+  std::optional<seastar::promise<>> p_unblocked;
+
+ public:
+  seastar::future<> wait_blocked() {
+    ceph_assert(!p_blocked);
+    if (p_unblocked) {
+      return seastar::now();
+    } else {
+      p_blocked = seastar::promise<>();
+      return p_blocked->get_future();
+    }
+  }
+
+  seastar::future<> block() {
+    if (p_blocked) {
+      p_blocked->set_value();
+      p_blocked = std::nullopt;
+    }
+    ceph_assert(!p_unblocked);
+    p_unblocked = seastar::promise<>();
+    return p_unblocked->get_future();
+  }
+
+  void unblock() {
+    ceph_assert(!p_blocked);
+    ceph_assert(p_unblocked);
+    p_unblocked->set_value();
+    p_unblocked = std::nullopt;
+  }
+};
+
 struct tag_bp_t {
   ceph::msgr::v2::Tag tag;
   bp_type_t type;
@@ -93,12 +145,13 @@ inline std::ostream& operator<<(std::ostream& out, const Breakpoint& bp) {
 }
 
 struct Interceptor {
+  socket_blocker blocker;
   virtual ~Interceptor() {}
   virtual void register_conn(Connection& conn) = 0;
   virtual void register_conn_ready(Connection& conn) = 0;
   virtual void register_conn_closed(Connection& conn) = 0;
   virtual void register_conn_replaced(Connection& conn) = 0;
-  virtual bool intercept(Connection& conn, Breakpoint bp) = 0;
+  virtual bp_action_t intercept(Connection& conn, Breakpoint bp) = 0;
 };
 
 } // namespace ceph::net

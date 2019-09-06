@@ -128,17 +128,46 @@ inline ostream& operator<<(
 namespace ceph::net {
 
 #ifdef UNIT_TESTS_BUILT
+void intercept(Breakpoint bp, bp_type_t type,
+               SocketConnection& conn, SocketFRef& socket) {
+  if (conn.interceptor) {
+    auto action = conn.interceptor->intercept(conn, Breakpoint(bp));
+    switch (action) {
+      case bp_action_t::CONTINUE:
+       break;
+      case bp_action_t::FAULT:
+       socket->set_trap({type, action});
+       break;
+      case bp_action_t::BLOCK:
+       socket->set_trap({type, action}, &conn.interceptor->blocker);
+       logger().info("{} blocked at {}, waiting for unblock...", conn, bp);
+       break;
+      default:
+       ceph_abort("unexpected action from intercept");
+    }
+  }
+}
 
-#define INTERCEPT(...)                  \
-if (conn.interceptor) {                 \
-  if (conn.interceptor->intercept(      \
-      conn, Breakpoint(__VA_ARGS__))) { \
-    abort_in_fault();                   \
-  }                                     \
+#define INTERCEPT_CUSTOM(bp, type)       \
+intercept({bp}, type, conn, socket)
+
+#define INTERCEPT_FRAME(tag, type)       \
+intercept({static_cast<Tag>(tag), type}, \
+          type, conn, socket)
+
+#define INTERCEPT_N_RW(bp)                               \
+if (conn.interceptor) {                                  \
+  auto action = conn.interceptor->intercept(conn, {bp}); \
+  ceph_assert(action != bp_action_t::BLOCK);             \
+  if (action == bp_action_t::FAULT) {                    \
+    abort_in_fault();                                    \
+  }                                                      \
 }
 
 #else
-#define INTERCEPT(...)
+#define INTERCEPT_CUSTOM(bp, type)
+#define INTERCEPT_FRAME(tag, type)
+#define INTERCEPT_N_RW(bp)
 #endif
 
 seastar::future<> ProtocolV2::Timer::backoff(double seconds)
@@ -317,7 +346,7 @@ seastar::future<Tag> ProtocolV2::read_main_preamble()
         rx_segments_desc.emplace_back(main_preamble.segments[idx]);
       }
 
-      INTERCEPT(static_cast<Tag>(main_preamble.tag), bp_type_t::READ);
+      INTERCEPT_FRAME(main_preamble.tag, bp_type_t::READ);
       return static_cast<Tag>(main_preamble.tag);
     });
 }
@@ -400,7 +429,7 @@ seastar::future<> ProtocolV2::write_frame(F &frame, bool flush)
   logger().trace("{} SEND({}) frame: tag={}, num_segments={}, crc={}",
                  conn, bl.length(), (int)main_preamble->tag,
                  (int)main_preamble->num_segments, main_preamble->crc);
-  INTERCEPT(static_cast<Tag>(main_preamble->tag), bp_type_t::WRITE);
+  INTERCEPT_FRAME(main_preamble->tag, bp_type_t::WRITE);
   if (flush) {
     return write_flush(std::move(bl));
   } else {
@@ -492,13 +521,13 @@ seastar::future<entity_type_t, entity_addr_t> ProtocolV2::banner_exchange()
                  conn, bl.length(), len_payload,
                  CEPH_MSGR2_SUPPORTED_FEATURES, CEPH_MSGR2_REQUIRED_FEATURES,
                  CEPH_BANNER_V2_PREFIX);
-  INTERCEPT(custom_bp_t::BANNER_WRITE);
+  INTERCEPT_CUSTOM(custom_bp_t::BANNER_WRITE, bp_type_t::WRITE);
   return write_flush(std::move(bl)).then([this] {
       // 2. read peer banner
       unsigned banner_len = strlen(CEPH_BANNER_V2_PREFIX) + sizeof(__le16);
+      INTERCEPT_CUSTOM(custom_bp_t::BANNER_READ, bp_type_t::READ);
       return read_exactly(banner_len); // or read exactly?
     }).then([this] (auto bl) {
-      INTERCEPT(custom_bp_t::BANNER_READ);
       // 3. process peer banner and read banner_payload
       unsigned banner_prefix_len = strlen(CEPH_BANNER_V2_PREFIX);
       logger().debug("{} RECV({}) banner: \"{}\"",
@@ -526,9 +555,9 @@ seastar::future<entity_type_t, entity_addr_t> ProtocolV2::banner_exchange()
         abort_in_fault();
       }
       logger().debug("{} GOT banner: payload_len={}", conn, payload_len);
+      INTERCEPT_CUSTOM(custom_bp_t::BANNER_PAYLOAD_READ, bp_type_t::READ);
       return read(payload_len);
     }).then([this] (bufferlist bl) {
-      INTERCEPT(custom_bp_t::BANNER_PAYLOAD_READ);
       // 4. process peer banner_payload and send HelloFrame
       auto p = bl.cbegin();
       uint64_t peer_supported_features;
@@ -904,7 +933,7 @@ void ProtocolV2::execute_connecting()
               return sock->close().then([sock = std::move(sock)] {});
             });
           }
-          INTERCEPT(custom_bp_t::SOCKET_CONNECTING);
+          INTERCEPT_N_RW(custom_bp_t::SOCKET_CONNECTING);
           return Socket::connect(conn.peer_addr);
         }).then([this](SocketFRef sock) {
           logger().debug("{} socket connected", conn);
@@ -1515,7 +1544,7 @@ void ProtocolV2::execute_accepting()
   trigger_state(state_t::ACCEPTING, write_state_t::delay, false);
   seastar::with_gate(pending_dispatch, [this] {
       return seastar::futurize_apply([this] {
-          INTERCEPT(custom_bp_t::SOCKET_ACCEPTED);
+          INTERCEPT_N_RW(custom_bp_t::SOCKET_ACCEPTED);
           auth_meta = seastar::make_lw_shared<AuthConnectionMeta>();
           session_stream_handlers = { nullptr, nullptr };
           enable_recording();
@@ -1794,19 +1823,19 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
   if (unlikely(require_keepalive)) {
     auto keepalive_frame = KeepAliveFrame::Encode();
     bl.append(keepalive_frame.get_buffer(session_stream_handlers));
-    INTERCEPT(ceph::msgr::v2::Tag::KEEPALIVE2, bp_type_t::WRITE);
+    INTERCEPT_FRAME(ceph::msgr::v2::Tag::KEEPALIVE2, bp_type_t::WRITE);
   }
 
   if (unlikely(_keepalive_ack.has_value())) {
     auto keepalive_ack_frame = KeepAliveFrameAck::Encode(*_keepalive_ack);
     bl.append(keepalive_ack_frame.get_buffer(session_stream_handlers));
-    INTERCEPT(ceph::msgr::v2::Tag::KEEPALIVE2_ACK, bp_type_t::WRITE);
+    INTERCEPT_FRAME(ceph::msgr::v2::Tag::KEEPALIVE2_ACK, bp_type_t::WRITE);
   }
 
   if (require_ack && !num_msgs) {
     auto ack_frame = AckFrame::Encode(conn.in_seq);
     bl.append(ack_frame.get_buffer(session_stream_handlers));
-    INTERCEPT(ceph::msgr::v2::Tag::ACK, bp_type_t::WRITE);
+    INTERCEPT_FRAME(ceph::msgr::v2::Tag::ACK, bp_type_t::WRITE);
   }
 
   std::for_each(msgs.begin(), msgs.begin()+num_msgs, [this, &bl](const MessageRef& msg) {
@@ -1835,7 +1864,7 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
     logger().debug("{} --> #{} === {} ({})",
 		   conn, msg->get_seq(), *msg, msg->get_type());
     bl.append(message.get_buffer(session_stream_handlers));
-    INTERCEPT(ceph::msgr::v2::Tag::MESSAGE, bp_type_t::WRITE);
+    INTERCEPT_FRAME(ceph::msgr::v2::Tag::MESSAGE, bp_type_t::WRITE);
   });
 
   return bl;
