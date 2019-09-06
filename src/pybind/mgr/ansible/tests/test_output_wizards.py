@@ -24,8 +24,7 @@ class  OutputWizardProcessHostsList(unittest.TestCase):
                 }
                 """
     ar_client = mock.Mock()
-    logger = mock.Mock()
-    test_wizard = ProcessHostsList(ar_client, logger)
+    test_wizard = ProcessHostsList(ar_client)
 
     def test_process(self):
         """Test a normal call"""
@@ -64,9 +63,7 @@ class OutputWizardProcessPlaybookResult(unittest.TestCase):
     ar_client = mock.Mock()
     ar_client.http_get = mock.MagicMock(return_value=mocked_response)
 
-    logger = mock.Mock()
-
-    test_wizard = ProcessPlaybookResult(ar_client, logger)
+    test_wizard = ProcessPlaybookResult(ar_client)
 
     def test_process(self):
         """Test a normal call
@@ -177,9 +174,7 @@ class OutputWizardProcessInventory(unittest.TestCase):
     ar_client = mock.Mock()
     ar_client.http_get = mock.MagicMock(return_value=mocked_response)
 
-    logger = mock.Mock()
-
-    test_wizard = ProcessInventory(ar_client, logger)
+    test_wizard = ProcessInventory(ar_client)
 
     def test_process(self):
         """Test a normal call
