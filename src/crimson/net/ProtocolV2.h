@@ -43,6 +43,7 @@ class ProtocolV2 final : public Protocol {
     NONE = 0,
     ACCEPTING,
     SERVER_WAIT,
+    ESTABLISHING,
     CONNECTING,
     READY,
     STANDBY,
@@ -56,6 +57,7 @@ class ProtocolV2 final : public Protocol {
     const char *const statenames[] = {"NONE",
                                       "ACCEPTING",
                                       "SERVER_WAIT",
+                                      "ESTABLISHING",
                                       "CONNECTING",
                                       "READY",
                                       "STANDBY",
@@ -171,8 +173,11 @@ class ProtocolV2 final : public Protocol {
   // CONNECTING/ACCEPTING
   seastar::future<> finish_auth();
 
-  // ACCEPTING/REPLACING (server)
-  seastar::future<next_step_t> send_server_ident();
+  // ESTABLISHING
+  void execute_establishing();
+
+  // ESTABLISHING/REPLACING (server)
+  seastar::future<> send_server_ident();
 
   // REPLACING (server)
   void trigger_replacing(bool reconnect,
