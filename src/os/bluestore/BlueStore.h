@@ -2410,6 +2410,81 @@ public:
     size_t len,
     bufferlist& bl,
     uint32_t op_flags = 0) override;
+
+private:
+
+  // --------------------------------------------------------
+  // intermediate data structures used while reading
+  struct region_t {
+    uint64_t logical_offset;
+    uint64_t blob_xoffset;   //region offset within the blob
+    uint64_t length;
+
+    // used later in read process
+    uint64_t front = 0;
+
+    region_t(uint64_t offset, uint64_t b_offs, uint64_t len, uint64_t front = 0)
+      : logical_offset(offset),
+      blob_xoffset(b_offs),
+      length(len),
+      front(front){}
+    region_t(const region_t& from)
+      : logical_offset(from.logical_offset),
+      blob_xoffset(from.blob_xoffset),
+      length(from.length),
+      front(from.front){}
+
+    friend ostream& operator<<(ostream& out, const region_t& r) {
+      return out << "0x" << std::hex << r.logical_offset << ":"
+        << r.blob_xoffset << "~" << r.length << std::dec;
+    }
+  };
+
+  // merged blob read request
+  struct read_req_t {
+    uint64_t r_off = 0;
+    uint64_t r_len = 0;
+    bufferlist bl;
+    std::list<region_t> regs; // original read regions
+
+    read_req_t(uint64_t off, uint64_t len) : r_off(off), r_len(len) {}
+
+    friend ostream& operator<<(ostream& out, const read_req_t& r) {
+      out << "{<0x" << std::hex << r.r_off << ", 0x" << r.r_len << "> : [";
+      for (const auto& reg : r.regs)
+        out << reg;
+      return out << "]}" << std::dec;
+    }
+  };
+
+  typedef list<read_req_t> regions2read_t;
+  typedef map<BlueStore::BlobRef, regions2read_t> blobs2read_t;
+
+  void _read_cache(
+    OnodeRef o,
+    uint64_t offset,
+    size_t length,
+    int read_cache_policy,
+    ready_regions_t& ready_regions,
+    blobs2read_t& blobs2read);
+
+
+  int _prepare_read_ioc(
+    blobs2read_t& blobs2read,
+    vector<bufferlist>* compressed_blob_bls,
+    IOContext* ioc);
+
+  int _generate_read_result_bl(
+    OnodeRef o,
+    uint64_t offset,
+    size_t length,
+    ready_regions_t& ready_regions,
+    vector<bufferlist>& compressed_blob_bls,
+    blobs2read_t& blobs2read,
+    bool buffered,
+    bool* csum_error,
+    bufferlist& bl);
+
   int _do_read(
     Collection *c,
     OnodeRef o,
@@ -2419,7 +2494,14 @@ public:
     uint32_t op_flags = 0,
     uint64_t retry_count = 0);
 
-private:
+  int _do_readv(
+    Collection *c,
+    OnodeRef o,
+    const interval_set<uint64_t>& m,
+    bufferlist& bl,
+    uint32_t op_flags = 0,
+    uint64_t retry_count = 0);
+
   int _fiemap(CollectionHandle &c_, const ghobject_t& oid,
  	     uint64_t offset, size_t len, interval_set<uint64_t>& destset);
 public:
@@ -2427,6 +2509,13 @@ public:
 	     uint64_t offset, size_t len, bufferlist& bl) override;
   int fiemap(CollectionHandle &c, const ghobject_t& oid,
 	     uint64_t offset, size_t len, map<uint64_t, uint64_t>& destmap) override;
+
+  int readv(
+    CollectionHandle &c_,
+    const ghobject_t& oid,
+    interval_set<uint64_t>& m,
+    bufferlist& bl,
+    uint32_t op_flags) override;
 
   int dump_onode(CollectionHandle &c, const ghobject_t& oid,
     const string& section_name, Formatter *f) override;
