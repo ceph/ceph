@@ -28,6 +28,11 @@ def humansize(nbytes):
     f = ('%d' % nbytes).rstrip('.')
     return '%s%s' % (f, suffixes[i])
 
+def str_to_bool(val):
+    val = val.strip()
+    trueval = ['true', 'yes', 'y', '1']
+    return True if val == 1 or val.lower() in trueval else False
+
 class TestCephFSShell(CephFSTestCase):
     CLIENTS_REQUIRED = 1
 
@@ -692,3 +697,52 @@ class TestMisc(TestCephFSShell):
         """
         o = self.get_cephfs_shell_cmd_output("help all")
         log.info("output:\n{}".format(o))
+
+class TestConfReading(TestCephFSShell):
+
+    def test_reading_conf_opt(self):
+        """
+        Read conf without duplicate sections/options.
+        """
+        debugval = self.fs.mon_manager.raw_cluster_cmd('config', 'get',
+                                                       'client','debug_shell')
+        debugval = str_to_bool(debugval)
+        self.fs.mon_manager.raw_cluster_cmd('config', 'set', 'client',
+                                            'debug_shell', str(not debugval))
+        output = self.get_cephfs_shell_cmd_output('set debug')
+        new_debug_val = \
+            str_to_bool(output[output.find('debug: ') + len('debug: ') : ])
+        assert not debugval == new_debug_val
+
+    def test_reading_conf_after_setting_opt_twice(self):
+        """
+        Read conf without duplicate sections/options.
+        """
+        debugval = self.fs.mon_manager.raw_cluster_cmd('config', 'get',
+                                                       'client','debug_shell')
+        debugval = str_to_bool(debugval)
+
+        self.fs.mon_manager.raw_cluster_cmd('config', 'set', 'client',
+                                            'debug_shell', str(not debugval))
+        self.fs.mon_manager.raw_cluster_cmd('config', 'set', 'client',
+                                            'debug_shell', str(not debugval))
+        output = self.get_cephfs_shell_cmd_output('set debug')
+        new_debug_val = \
+            str_to_bool(output[output.find('debug: ') + len('debug: ') : ])
+        assert not debugval == new_debug_val
+
+    def test_reading_conf_after_resetting_opt(self):
+        debugval = self.fs.mon_manager.raw_cluster_cmd('config', 'get',
+                                                       'client','debug_shell')
+        debugval = str_to_bool(debugval)
+
+        self.fs.mon_manager.raw_cluster_cmd('config', 'set', 'client',
+                                            'debug_shell', str(not debugval))
+        self.fs.mon_manager.raw_cluster_cmd('config', 'rm', 'client',
+                                            'debug_shell')
+        self.fs.mon_manager.raw_cluster_cmd('config', 'set', 'client',
+                                            'debug_shell', str(not debugval))
+        output = self.get_cephfs_shell_cmd_output('set debug')
+        new_debug_val = \
+            str_to_bool(output[output.find('debug: ') + len('debug: ') : ])
+        assert not debugval == new_debug_val
