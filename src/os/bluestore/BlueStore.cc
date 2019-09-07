@@ -5700,7 +5700,7 @@ int BlueStore::allocate_bluefs_freespace(
     int64_t alloc_len;
     do {
       // hard cap to fit into 32 bits
-      gift = std::min<uint64_t>(size, 1ull << 31);
+      gift = std::min<uint64_t>(size, 1ull << 30);
       dout(10) << __func__ << " gifting " << gift
 	       << " (" << byte_u_t(gift) << ")" << dendl;
 
@@ -5870,7 +5870,7 @@ int BlueStore::_balance_bluefs_freespace()
     auto reclaim = p2roundup(uint64_t(-delta), alloc_size);
 
     // hard cap to fit into 32 bits
-    reclaim = std::min<uint64_t>(reclaim, 1ull << 31);
+    reclaim = std::min<uint64_t>(reclaim, 1ull << 30);
     dout(10) << __func__ << " reclaiming " << reclaim
 	     << " (" << byte_u_t(reclaim) << ")" << dendl;
 
