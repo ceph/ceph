@@ -2513,6 +2513,7 @@ void DaemonServer::adjust_pgs()
 		       << " and " << merge_target
 		       << ")" << dendl;
 	      pg_num_to_set[osdmap.get_pool_name(i.first)] = target;
+              continue;
 	    }
 	  } else if (p.get_pg_num_target() > p.get_pg_num()) {
 	    // pg_num increase (split)
