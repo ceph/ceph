@@ -24,6 +24,19 @@ namespace ceph {
   class Formatter;
 }
 
+struct BasePopGuard {
+  virtual bool is_inited() = 0;
+  virtual bool check() = 0;
+
+  virtual ~BasePopGuard() {};
+};
+
+struct BaseGuardBuilder {
+  virtual void init() = 0;
+
+  virtual ~BaseGuardBuilder() {};
+};
+
 /**
  * Abstract class for all Op Queues
  *

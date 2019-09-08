@@ -27,6 +27,7 @@ class OSDShard;
 
 class OpQueueItem {
 public:
+  typedef spg_t  orderkey_type;
   class OrderLocker {
   public:
     using Ref = unique_ptr<OrderLocker>;
