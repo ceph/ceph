@@ -79,6 +79,18 @@ TEST(ClsFIFO, TestCreate) {
   ASSERT_EQ(-EINVAL, FIFO::create(&op,
                                   FIFO::CreateParams()
                                   .id("fifo")));
+  ASSERT_EQ(-EINVAL, FIFO::create(&op,
+                     FIFO::CreateParams()
+                     .id("fifo")
+                     .pool(pool_name)
+                     .max_obj_size(0)));
+
+  ASSERT_EQ(-EINVAL, FIFO::create(&op,
+                     FIFO::CreateParams()
+                     .id("fifo")
+                     .pool(pool_name)
+                     .max_entry_size(0)));
+
   ASSERT_EQ(0, FIFO::create(&op,
                FIFO::CreateParams()
                .id("fifo")

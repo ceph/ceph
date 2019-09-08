@@ -30,6 +30,8 @@ struct cls_fifo_header {
   } pool;
   string oid_prefix;
 
+  fifo_data_params_t data_params;
+
   uint64_t tail_obj_num{0};
   uint64_t head_obj_num{0};
 
@@ -41,6 +43,7 @@ struct cls_fifo_header {
     encode(pool.name, bl);
     encode(pool.ns, bl);
     encode(oid_prefix, bl);
+    encode(data_params, bl);
     encode(tail_obj_num, bl);
     encode(head_obj_num, bl);
     encode(head_tag, bl);
@@ -52,6 +55,7 @@ struct cls_fifo_header {
     decode(pool.name, bl);
     decode(pool.ns, bl);
     decode(oid_prefix, bl);
+    decode(data_params, bl);
     decode(tail_obj_num, bl);
     decode(head_obj_num, bl);
     decode(head_tag, bl);
@@ -204,6 +208,10 @@ static int fifo_create_op(cls_method_context_t hctx,
   header.oid_prefix = new_oid_prefix(op.id, op.oid_prefix);
   header.pool.name = op.pool.name;
   header.pool.ns = op.pool.ns;
+
+  header.data_params.max_obj_size = op.max_obj_size;
+  header.data_params.max_entry_size = op.max_entry_size;
+  header.data_params.full_size_threshold = op.max_obj_size - op.max_entry_size;
 
   bufferlist bl;
   encode(header, bl);

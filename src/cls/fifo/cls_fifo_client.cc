@@ -38,7 +38,15 @@ namespace rados {
         op.pool.name = state.pool.name;
         op.pool.ns = state.pool.ns;
         op.oid_prefix = state.oid_prefix;
+        op.max_obj_size = state.max_obj_size;
+        op.max_entry_size = state.max_entry_size;
         op.exclusive = state.exclusive;
+
+        if (op.max_obj_size == 0 ||
+            op.max_entry_size == 0 ||
+            op.max_entry_size > op.max_obj_size) {
+          return -EINVAL;
+        }
 
         bufferlist in;
         encode(op, in);

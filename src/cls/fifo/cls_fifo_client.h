@@ -29,6 +29,8 @@ namespace rados {
       public:
         struct CreateParams {
           struct State {
+            static constexpr uint64_t default_max_obj_size = 4 * 1024 * 1024;
+            static constexpr uint64_t default_max_entry_size = 32 * 1024;
             std::string id;
             struct {
               std::string name;
@@ -36,6 +38,8 @@ namespace rados {
             } pool;
             std::optional<std::string> oid_prefix;
             bool exclusive{false};
+            uint64_t max_obj_size{default_max_obj_size};
+            uint64_t max_entry_size{default_max_entry_size};
           } state;
 
           CreateParams& id(const std::string& id) {
@@ -55,6 +59,14 @@ namespace rados {
           }
           CreateParams& exclusive(bool exclusive) {
             state.exclusive = exclusive;
+            return *this;
+          }
+          CreateParams& max_obj_size(uint64_t max_obj_size) {
+            state.max_obj_size = max_obj_size;
+            return *this;
+          }
+          CreateParams& max_entry_size(uint64_t max_entry_size) {
+            state.max_entry_size = max_entry_size;
             return *this;
           }
         };

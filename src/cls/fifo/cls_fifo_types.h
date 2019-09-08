@@ -27,19 +27,22 @@ namespace rados {
     namespace fifo {
 
       struct fifo_data_params_t {
+        uint64_t max_obj_size{0};
+        uint64_t max_entry_size{0};
         uint64_t full_size_threshold{0};
-        uint64_t max_size{0};
 
         void encode(bufferlist &bl) const {
           ENCODE_START(1, 1, bl);
+          encode(max_obj_size, bl);
+          encode(max_entry_size, bl);
           encode(full_size_threshold, bl);
-          encode(max_size, bl);
           ENCODE_FINISH(bl);
         }
         void decode(bufferlist::const_iterator &bl) {
           DECODE_START(1, bl);
+          decode(max_obj_size, bl);
+          decode(max_entry_size, bl);
           decode(full_size_threshold, bl);
-          decode(max_size, bl);
           DECODE_FINISH(bl);
         }
         void dump(Formatter *f) const;

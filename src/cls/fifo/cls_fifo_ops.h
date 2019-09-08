@@ -29,6 +29,9 @@ struct cls_fifo_create_op
   } pool;
   std::optional<string> oid_prefix;
 
+  uint64_t max_obj_size{0};
+  uint64_t max_entry_size{0};
+
   bool exclusive{false};
 
   void encode(bufferlist &bl) const {
@@ -37,6 +40,8 @@ struct cls_fifo_create_op
     encode(pool.name, bl);
     encode(pool.ns, bl);
     encode(oid_prefix, bl);
+    encode(max_obj_size, bl);
+    encode(max_entry_size, bl);
     encode(exclusive, bl);
     ENCODE_FINISH(bl);
   }
@@ -46,6 +51,8 @@ struct cls_fifo_create_op
     decode(pool.name, bl);
     decode(pool.ns, bl);
     decode(oid_prefix, bl);
+    decode(max_obj_size, bl);
+    decode(max_entry_size, bl);
     decode(exclusive, bl);
     DECODE_FINISH(bl);
   }
