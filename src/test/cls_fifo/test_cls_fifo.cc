@@ -62,6 +62,20 @@ void lock_info(IoCtx *ioctx, string& oid, string& name, map<locker_id_t, locker_
 }
 #endif
 
+static int fifo_create(IoCtx& ioctx,
+                       const string& oid,
+                       const FIFO::CreateParams& params)
+{
+  ObjectWriteOperation op;
+
+  int r = FIFO::create(&op, params);
+  if (r < 0) {
+    return r;
+  }
+
+  return ioctx.operate(oid, &op);
+}
+
 TEST(ClsFIFO, TestCreate) {
   Rados cluster;
   std::string pool_name = get_temp_pool_name();
@@ -69,40 +83,67 @@ TEST(ClsFIFO, TestCreate) {
   IoCtx ioctx;
   cluster.ioctx_create(pool_name.c_str(), ioctx);
 
-  ObjectWriteOperation op;
+  string fifo_id = "fifo";
+  string oid = fifo_id;
 
-  ASSERT_EQ(-EINVAL, FIFO::create(&op,
+  ASSERT_EQ(-EINVAL, fifo_create(ioctx, oid,
                                   FIFO::CreateParams()));
 
-  string fifo_id = "fifo";
-
-  ASSERT_EQ(-EINVAL, FIFO::create(&op,
+  ASSERT_EQ(-EINVAL, fifo_create(ioctx, oid,
                                   FIFO::CreateParams()
-                                  .id("fifo")));
-  ASSERT_EQ(-EINVAL, FIFO::create(&op,
+                                  .id(fifo_id)));
+
+  ASSERT_EQ(-EINVAL, fifo_create(ioctx, oid,
                      FIFO::CreateParams()
-                     .id("fifo")
+                     .id(fifo_id)
                      .pool(pool_name)
                      .max_obj_size(0)));
 
-  ASSERT_EQ(-EINVAL, FIFO::create(&op,
+  ASSERT_EQ(-EINVAL, fifo_create(ioctx, oid,
                      FIFO::CreateParams()
-                     .id("fifo")
+                     .id(fifo_id)
                      .pool(pool_name)
                      .max_entry_size(0)));
 
-  ASSERT_EQ(0, FIFO::create(&op,
+  /* first successful create */
+  ASSERT_EQ(0, fifo_create(ioctx, oid,
                FIFO::CreateParams()
-               .id("fifo")
+               .id(fifo_id)
                .pool(pool_name)));
-
-  string oid = fifo_id;
-  ASSERT_EQ(0, ioctx.operate(oid, &op));
 
   uint64_t size;
   struct timespec ts;
   ASSERT_EQ(0, ioctx.stat2(oid, &size, &ts));
   ASSERT_GT(size, 0);
+
+  /* test idempotency */
+  ASSERT_EQ(0, fifo_create(ioctx, oid,
+               FIFO::CreateParams()
+               .id(fifo_id)
+               .pool(pool_name)));
+
+  uint64_t size2;
+  struct timespec ts2;
+  ASSERT_EQ(0, ioctx.stat2(oid, &size2, &ts2));
+  ASSERT_EQ(size2, size);
+
+  ASSERT_EQ(-EEXIST, fifo_create(ioctx, oid,
+               FIFO::CreateParams()
+               .id(fifo_id)
+               .pool(pool_name)
+               .exclusive(true)));
+
+  ASSERT_EQ(-EEXIST, fifo_create(ioctx, oid,
+               FIFO::CreateParams()
+               .id(fifo_id)
+               .pool("foopool")
+               .exclusive(false)));
+
+  ASSERT_EQ(-EEXIST, fifo_create(ioctx, oid,
+               FIFO::CreateParams()
+               .id("foo")
+               .pool(pool_name)
+               .exclusive(false)));
 
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }

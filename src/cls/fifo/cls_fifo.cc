@@ -24,6 +24,7 @@ CLS_NAME(fifo)
 
 struct cls_fifo_header {
   string id;
+  fifo_objv_t objv;
   struct {
     string name;
     string ns;
@@ -40,6 +41,8 @@ struct cls_fifo_header {
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     encode(id, bl);
+    encode(objv.instance, bl);
+    encode(objv.ver, bl);
     encode(pool.name, bl);
     encode(pool.ns, bl);
     encode(oid_prefix, bl);
@@ -52,6 +55,8 @@ struct cls_fifo_header {
   void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(id, bl);
+    decode(objv.instance, bl);
+    decode(objv.ver, bl);
     decode(pool.name, bl);
     decode(pool.ns, bl);
     decode(oid_prefix, bl);
@@ -148,6 +153,23 @@ static string new_oid_prefix(string id, std::optional<string>& val)
   return s;
 }
 
+static int write_header(cls_method_context_t hctx,
+                        cls_fifo_header& header)
+{
+  if (header.objv.instance.empty()) {
+#define HEADER_INSTANCE_SIZE 16
+  char buf[HEADER_INSTANCE_SIZE + 1];
+  buf[HEADER_INSTANCE_SIZE] = 0;
+  cls_gen_rand_base64(buf, sizeof(buf) - 1);
+
+    header.objv.instance = buf;
+  }
+  ++header.objv.ver;
+  bufferlist bl;
+  encode(header, bl);
+  return cls_cxx_write_full(hctx, &bl);
+}
+
 static int fifo_create_op(cls_method_context_t hctx,
                           bufferlist *in, bufferlist *out)
 {
@@ -195,9 +217,11 @@ static int fifo_create_op(cls_method_context_t hctx,
           header.pool.name == op.pool.name &&
           header.pool.ns == op.pool.ns &&
           (!op.oid_prefix ||
-           header.oid_prefix == *op.oid_prefix))) {
+           header.oid_prefix == *op.oid_prefix) &&
+          (!op.objv ||
+           header.objv == *op.objv))) {
       CLS_LOG(10, "%s(): failed to re-create existing queue with different params", __func__);
-      return -EINVAL;
+      return -EEXIST;
     }
 
     return 0; /* already exists */
@@ -205,6 +229,9 @@ static int fifo_create_op(cls_method_context_t hctx,
   cls_fifo_header header;
   
   header.id = op.id;
+  if (op.objv) {
+    header.objv = *op.objv;
+  }
   header.oid_prefix = new_oid_prefix(op.id, op.oid_prefix);
   header.pool.name = op.pool.name;
   header.pool.ns = op.pool.ns;
@@ -213,10 +240,7 @@ static int fifo_create_op(cls_method_context_t hctx,
   header.data_params.max_entry_size = op.max_entry_size;
   header.data_params.full_size_threshold = op.max_obj_size - op.max_entry_size;
 
-  bufferlist bl;
-  encode(header, bl);
-
-  r = cls_cxx_write_full(hctx, &bl);
+  r = write_header(hctx, header);
   if (r < 0) {
     CLS_LOG(10, "%s(): failed to write header: r=%d", __func__, r);
     return r;

@@ -25,6 +25,31 @@ class JSONObj;
 namespace rados {
   namespace cls {
     namespace fifo {
+      struct fifo_objv_t {
+        string instance;
+        uint64_t ver{0};
+
+        void encode(bufferlist &bl) const {
+          ENCODE_START(1, 1, bl);
+          encode(instance, bl);
+          encode(ver, bl);
+          ENCODE_FINISH(bl);
+        }
+        void decode(bufferlist::const_iterator &bl) {
+          DECODE_START(1, bl);
+          decode(instance, bl);
+          decode(ver, bl);
+          DECODE_FINISH(bl);
+        }
+        void dump(Formatter *f) const;
+        void decode_json(JSONObj *obj);
+
+        bool operator==(const fifo_objv_t& rhs) const {
+          return (instance == rhs.instance &&
+                  ver == rhs.ver);
+        }
+      };
+      WRITE_CLASS_ENCODER(rados::cls::fifo::fifo_objv_t)
 
       struct fifo_data_params_t {
         uint64_t max_obj_size{0};

@@ -35,6 +35,7 @@ namespace rados {
         }
 
         op.id = state.id;
+        op.objv = state.objv;
         op.pool.name = state.pool.name;
         op.pool.ns = state.pool.ns;
         op.oid_prefix = state.oid_prefix;

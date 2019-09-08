@@ -32,6 +32,7 @@ namespace rados {
             static constexpr uint64_t default_max_obj_size = 4 * 1024 * 1024;
             static constexpr uint64_t default_max_entry_size = 32 * 1024;
             std::string id;
+            std::optional<fifo_objv_t> objv;
             struct {
               std::string name;
               std::string ns;
@@ -67,6 +68,10 @@ namespace rados {
           }
           CreateParams& max_entry_size(uint64_t max_entry_size) {
             state.max_entry_size = max_entry_size;
+            return *this;
+          }
+          CreateParams& objv(const std::string& instance, uint64_t ver) {
+            state.objv = fifo_objv_t{instance, ver};
             return *this;
           }
         };
