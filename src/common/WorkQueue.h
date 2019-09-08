@@ -42,6 +42,7 @@ class CephContext;
 
 /// Pool of threads that share work submitted to multiple work queues.
 class ThreadPool : public md_config_obs_t {
+protected:
   CephContext *cct;
   std::string name;
   std::string thread_name;
@@ -70,7 +71,7 @@ public:
     void reset_tp_timeout() override final;
     void suspend_tp_timeout() override final;
   };
-private:
+protected:
 
   /// Basic interface to a work queue used by the worker threads.
   struct WorkQueue_ {
@@ -451,7 +452,7 @@ public:
     std::list<T *> m_items;
     uint32_t m_processing;
   };
-private:
+protected:
   std::vector<WorkQueue_*> work_queues;
   int next_work_queue = 0;
  
@@ -473,7 +474,7 @@ private:
 
   void start_threads();
   void join_old_threads();
-  void worker(WorkThread *wt);
+  virtual void worker(WorkThread *wt);
 
 public:
   ThreadPool(CephContext *cct_, std::string nm, std::string tn, int n, const char *option = NULL);
