@@ -211,6 +211,14 @@ void KeyRing::decode(bufferlist::const_iterator& bl) {
   } catch (ceph::buffer::error& err) {
     keys.clear();
     decode_plaintext(start_pos);
+#if defined(__FreeBSD__)
+  } catch (buffer::end_of_buffer& err) {
+    keys.clear();
+    decode_plaintext(start_pos);
+  } catch (exception& e) {
+    keys.clear();
+    decode_plaintext(start_pos);
+#endif
   }
 }
 
