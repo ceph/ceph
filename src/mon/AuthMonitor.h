@@ -28,6 +28,9 @@ struct MAuth;
 class KeyRing;
 class Monitor;
 
+class AuthMonReadCommand;
+class AuthMonWriteCommand;
+
 #define MIN_GLOBAL_ID 0x1000
 
 class AuthMonitor : public PaxosService {
@@ -94,6 +97,8 @@ public:
     EntityAuth auth;
   };
 
+  friend class AuthMonReadCommand;
+  friend class AuthMonWriteCommand;
 
 private:
   vector<Incremental> pending_auth;

@@ -14,6 +14,7 @@ set(lib_mon_srcs
   Monitor.cc
   commands/monmapmon_cmds.cc
   commands/osdmon_cmds.cc
+  commands/authmon_cmds.cc
   MonmapMonitor.cc
   LogMonitor.cc
   AuthMonitor.cc

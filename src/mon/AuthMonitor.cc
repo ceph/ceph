@@ -36,6 +36,9 @@
 #include "mds/MDSAuthCaps.h"
 #include "osd/OSDCap.h"
 
+#include "mon/commands/Command.h"
+#include "mon/commands/authmon_cmds.h"
+
 #define dout_subsys ceph_subsys_mon
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, mon, get_last_committed())
@@ -755,6 +758,7 @@ done:
   return true;
 }
 
+
 bool AuthMonitor::preprocess_command(MonOpRequestRef op)
 {
   auto m = op->get_req<MMonCommand>();
@@ -803,6 +807,20 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
   cmd_getval(g_ceph_context, cmdmap, "format", format, string("plain"));
   boost::scoped_ptr<Formatter> f(Formatter::create(format));
 
+
+  list<AuthMonReadCommandRef> read_cmds = {
+    AuthMonReadCommandRef(new AuthMonAuthExport(mon, this, g_ceph_context))
+  };
+
+  for (auto &cmd : read_cmds) {
+    if (!cmd->handles_command(prefix)) {
+      continue;
+    }
+    dout(10) << __func__ << " handling prefix '" << prefix << "'" << dendl;
+    return cmd->preprocess(op, cmdmap);
+  };
+
+  /*
   if (prefix == "auth export") {
     KeyRing keyring;
     export_keyring(keyring);
@@ -845,7 +863,7 @@ bool AuthMonitor::preprocess_command(MonOpRequestRef op)
       ss << "exported keyring for " << entity_name;
       r = 0;
     }
-  } else if (prefix == "auth print-key" ||
+  } else*/ if (prefix == "auth print-key" ||
 	     prefix == "auth print_key" ||
 	     prefix == "auth get-key") {
     EntityAuth auth;
@@ -1313,6 +1331,10 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     return true;
   }
 
+  list<AuthMonWriteCommandRef> write_cmds = {
+    AuthMonWriteCommandRef(new AuthMonImport(mon, this, g_ceph_context))
+  };
+
   cmd_getval(g_ceph_context, cmdmap, "caps", caps_vec);
   if ((caps_vec.size() % 2) != 0) {
     ss << "bad capabilities request; odd number of arguments";
@@ -1327,37 +1349,15 @@ bool AuthMonitor::prepare_command(MonOpRequestRef op)
     goto done;
   }
 
-  if (prefix == "auth import") {
-    bufferlist bl = m->get_data();
-    if (bl.length() == 0) {
-      ss << "auth import: no data supplied";
-      getline(ss, rs);
-      mon->reply_command(op, -EINVAL, rs, get_last_committed());
-      return true;
+  for (auto &cmd : write_cmds) {
+    if (!cmd->handles_command(prefix)) {
+      continue;
     }
-    auto iter = bl.cbegin();
-    KeyRing keyring;
-    try {
-      decode(keyring, iter);
-    } catch (const buffer::error &ex) {
-      ss << "error decoding keyring" << " " << ex.what();
-      err = -EINVAL;
-      goto done;
-    }
-    err = import_keyring(keyring);
-    if (err < 0) {
-      ss << "auth import: no caps supplied";
-      getline(ss, rs);
-      mon->reply_command(op, -EINVAL, rs, get_last_committed());
-      return true;
-    }
-    ss << "imported keyring";
-    getline(ss, rs);
-    err = 0;
-    wait_for_finished_proposal(op, new Monitor::C_Command(mon, op, 0, rs,
-					      get_last_committed() + 1));
-    return true;
-  } else if (prefix == "auth add" && !entity_name.empty()) {
+    return cmd->prepare(op, cmdmap);
+  }
+
+
+  if (prefix == "auth add" && !entity_name.empty()) {
     /* expected behavior:
      *  - if command reproduces current state, return 0.
      *  - if command adds brand new entity, handle it.
