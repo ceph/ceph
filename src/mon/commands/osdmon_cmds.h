@@ -40,13 +40,16 @@
 // prepare / write commands
 
 struct OSDMonWriteCommand :
-  public WriteCommand<OSDMonitor, OSDMap, OSDMap::Incremental>
+  public WriteCommand<OSDMonitor, OSDMap::Incremental&, const OSDMap&>
 {
   explicit OSDMonWriteCommand(
       Monitor *_mon,
       OSDMonitor *_osdmon,
       CephContext *_cct) :
-    WriteCommand<OSDMonitor, OSDMap, OSDMap::Incremental>(_mon, _osdmon, _cct)
+    WriteCommand<
+      OSDMonitor,
+      OSDMap::Incremental&,
+      const OSDMap&>(_mon, _osdmon, _cct)
   { }
 
   virtual ~OSDMonWriteCommand() { }
@@ -238,13 +241,13 @@ struct OSDMonCrushClassRename : public OSDMonWriteCommand
 //
 
 struct OSDMonReadCommand :
-  public ReadCommand<OSDMonitor, OSDMap, OSDMap::Incremental>
+  public ReadCommand<OSDMonitor, const OSDMap&>
 {
   explicit OSDMonReadCommand(
       Monitor *_mon,
       OSDMonitor *_osdmon,
       CephContext *_cct) :
-    ReadCommand<OSDMonitor, OSDMap, OSDMap::Incremental>(_mon, _osdmon, _cct)
+    ReadCommand<OSDMonitor, const OSDMap&>(_mon, _osdmon, _cct)
   { }
 
   virtual ~OSDMonReadCommand() { }

@@ -35,13 +35,13 @@
  * command definitions for this service.
  */
 struct MonMonReadCommand :
-  public ReadCommand<MonmapMonitor, MonMap, MonMap>
+  public ReadCommand<MonmapMonitor, const MonMap&>
 {
   explicit MonMonReadCommand(
       Monitor *_mon,
       MonmapMonitor *_monmon,
       CephContext *_ctx) :
-    ReadCommand<MonmapMonitor, MonMap, MonMap>(_mon, _monmon, _ctx)
+    ReadCommand<MonmapMonitor, const MonMap&>(_mon, _monmon, _ctx)
   { }
 
   virtual ~MonMonReadCommand() { }
@@ -58,13 +58,13 @@ struct MonMonReadCommand :
  * allow for individual commands to decide what to do.
  */
 struct MonMonWriteCommand :
-  public WriteCommand<MonmapMonitor, MonMap, MonMap>
+  public WriteCommand<MonmapMonitor, MonMap&, const MonMap&>
 {
   explicit MonMonWriteCommand(
       Monitor *_mon,
       MonmapMonitor *_monmon,
       CephContext *_ctx) :
-    WriteCommand<MonmapMonitor, MonMap, MonMap>(_mon, _monmon, _ctx)
+    WriteCommand<MonmapMonitor, MonMap&, const MonMap&>(_mon, _monmon, _ctx)
   { }
 
   virtual ~MonMonWriteCommand() { }
@@ -183,7 +183,7 @@ struct MonMonAdd : public MonMonWriteCommand
 
   bool handles_command(const string &prefix) { return prefix == "mon add"; }
 
-  bool do_prepare(
+  virtual bool do_prepare(
       MonOpRequestRef op,
       const string &prefix,
       const cmdmap_t &cmdmap,
@@ -191,7 +191,7 @@ struct MonMonAdd : public MonMonWriteCommand
       bufferlist rdata,
       FormatterRef f,
       MonMap &pending,
-      const MonMap &stable);
+      const MonMap &stable) final;
 };
 
 struct MonMonRemove : public MonMonWriteCommand

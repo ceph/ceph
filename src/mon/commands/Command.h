@@ -134,7 +134,7 @@ struct Common
 
 typedef std::shared_ptr<Formatter> FormatterRef;
 
-template<typename Service, typename Stable, typename Pending>
+template<typename Service, typename ...Args>
 struct Command : public Common<Service>
 {
 
@@ -155,7 +155,7 @@ struct Command : public Common<Service>
   virtual bool preprocess(
       MonOpRequestRef op,
       const cmdmap_t &cmdmap,
-      const Stable &stable_map) {
+      Args ...args) {
 
     stringstream ss;
     bufferlist rdata;
@@ -167,14 +167,13 @@ struct Command : public Common<Service>
     string prefix;
     cmd_getval(cct, cmdmap, "prefix", prefix);
 
-    return do_preprocess(op, prefix, cmdmap, ss, rdata, f, stable_map);
+    return do_preprocess(op, prefix, cmdmap, ss, rdata, f, args...);
   }
 
   virtual bool prepare(
       MonOpRequestRef op,
       const cmdmap_t &cmdmap,
-      Pending &pending_map,
-      const Stable &stable_map) {
+      Args ...args) {
 
     op->mark_osdmon_event(__func__);
     stringstream ss;
@@ -188,7 +187,7 @@ struct Command : public Common<Service>
     cmd_getval(cct, cmdmap, "prefix", prefix);
 
     return do_prepare(op, prefix, cmdmap,
-	ss, rdata, f, pending_map, stable_map);
+	ss, rdata, f, args...);
   }
 
   virtual bool do_preprocess(
@@ -198,7 +197,7 @@ struct Command : public Common<Service>
       stringstream &ss,
       bufferlist rdata,
       FormatterRef f,
-      const Stable &stable_map) = 0;
+      Args ...args) = 0;
 
   virtual bool do_prepare(
       MonOpRequestRef op,
@@ -207,8 +206,7 @@ struct Command : public Common<Service>
       stringstream &ss,
       bufferlist rdata,
       FormatterRef f,
-      Pending &pending_map,
-      const Stable &stable_map) = 0;
+      Args ...args) = 0;
 
   virtual bool handles_command(const string &prefix) = 0;
 
@@ -227,24 +225,23 @@ struct Command : public Common<Service>
  * Preparing is still left defined as the 'Command' class has it defined,
  * which is basically returning 'false'.
  */
-template<typename T, typename Stable, typename Pending>
-struct ReadCommand : public Command<T, Stable, Pending>
+template<typename T, typename ...Args>
+struct ReadCommand : public Command<T, Args...>
 {
 
   explicit ReadCommand(
       Monitor *_mon,
       T *_svc,
       CephContext *_cct) :
-    Command<T, Stable, Pending>(_mon, _svc, _cct)
+    Command<T, Args...>(_mon, _svc, _cct)
   { };
   virtual ~ReadCommand() { }
 
-  using Command<T, Stable, Pending>::prepare;
+  using Command<T, Args...>::prepare;
   virtual bool prepare(
       MonOpRequestRef op,
       const cmdmap_t &cmdmap,
-      Pending &pending_map,
-      const Stable &stable_map) final {
+      Args ...args) final {
     ceph_assert(0 == "read-only commands do not perform prepare phase");
     return false;
   }
@@ -256,8 +253,7 @@ struct ReadCommand : public Command<T, Stable, Pending>
       stringstream &ss,
       bufferlist rdata,
       FormatterRef f,
-      Pending &pending_map,
-      const Stable &stable_map) final {
+      Args ...args) final {
     ceph_assert(0 == "read-only commands do not perform prepare phase");
     return false;
   }
@@ -278,23 +274,23 @@ struct ReadCommand : public Command<T, Stable, Pending>
  * and 'WriteCommand' classes, and implement both 'do_{preprocess,prepare}'
  * functions.
  */
-template<typename T, typename Stable, typename Pending>
-struct WriteCommand : public Command<T, Stable, Pending>
+template<typename T, typename ...Args>
+struct WriteCommand : public Command<T, Args...>
 {
 
   explicit WriteCommand(
       Monitor *_mon,
       T *_svc,
       CephContext *_cct) :
-    Command<T, Stable, Pending>(_mon, _svc, _cct)
+    Command<T, Args...>(_mon, _svc, _cct)
   { }
   virtual ~WriteCommand() { }
 
-  using Command<T, Stable, Pending>::preprocess;
+  using Command<T, Args...>::preprocess;
   virtual bool preprocess(
       MonOpRequestRef op,
       const cmdmap_t &cmdmap,
-      const Stable &stable_map) final {
+      Args ...args) final {
     ceph_assert(0 == "write commands do not perform preprocess phase");
     return false;
   }
@@ -306,7 +302,7 @@ struct WriteCommand : public Command<T, Stable, Pending>
       stringstream &ss,
       bufferlist rdata,
       FormatterRef f,
-      const Stable &stable_map) final {
+      Args ...args) final {
     ceph_assert(0 == "write commands do not perform preprocess phase");
     return false;
   }
@@ -315,14 +311,14 @@ struct WriteCommand : public Command<T, Stable, Pending>
   WriteCommand() = delete;
 };
 
-template<typename T, typename Stable, typename Pending>
-struct ReadWriteCommand : public Command<T, Stable, Pending>
+template<typename T, typename ...Args>
+struct ReadWriteCommand : public Command<T, Args...>
 {
-  explicit ReadWriteCommand<T, Stable, Pending>(
+  explicit ReadWriteCommand(
       Monitor *_mon,
       T *_svc,
       CephContext *_cct) :
-    Command<T, Stable, Pending>(_mon, _svc, _cct)
+    Command<T, Args...>(_mon, _svc, _cct)
   { }
   
   virtual ~ReadWriteCommand() { }
