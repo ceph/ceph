@@ -2332,13 +2332,13 @@ public:
   using  per_pool_statfs =
     mempool::bluestore_fsck::map<uint64_t, store_statfs_t>;
 
-private:
   enum FSCKDepth {
     FSCK_REGULAR,
     FSCK_DEEP,
     FSCK_SHALLOW
   };
 
+private:
   int _fsck_check_extents(
     const coll_t& cid,
     const ghobject_t& oid,
@@ -3063,6 +3063,7 @@ private:
   };
   size_t available_freespace(uint64_t alloc_size) override;
 
+public:
   struct sb_info_t {
     coll_t cid;
     int64_t pool_id = INT64_MIN;
@@ -3078,7 +3079,6 @@ private:
     mempool::bluestore_fsck::pool_allocator<uint64_t>> uint64_t_btree_t;
 
   typedef mempool::bluestore_fsck::map<uint64_t, sb_info_t> sb_info_map_t;
-
   struct FSCK_ObjectCtx {
     int64_t& errors;
     int64_t& warnings;
@@ -3092,6 +3092,8 @@ private:
     uint64_t_btree_t* used_omap_head;
     uint64_t_btree_t* used_per_pool_omap_head;
     uint64_t_btree_t* used_pgmeta_omap_head;
+
+    ceph::mutex* sb_info_lock;
     sb_info_map_t& sb_info;
 
     store_statfs_t& expected_store_statfs;
@@ -3109,6 +3111,7 @@ private:
                    uint64_t_btree_t* _used_omap_head,
                    uint64_t_btree_t* _used_per_pool_omap_head,
                    uint64_t_btree_t* _used_pgmeta_omap_head,
+                   ceph::mutex* _sb_info_lock,
                    sb_info_map_t& _sb_info,
                    store_statfs_t& _store_statfs,
                    per_pool_statfs& _pool_statfs,
@@ -3124,25 +3127,30 @@ private:
       used_omap_head(_used_omap_head),
       used_per_pool_omap_head(_used_per_pool_omap_head),
       used_pgmeta_omap_head(_used_pgmeta_omap_head),
+      sb_info_lock(_sb_info_lock),
       sb_info(_sb_info),
       expected_store_statfs(_store_statfs),
       expected_pool_statfs(_pool_statfs),
       repairer(_repairer) {
     }
   };
-  OnodeRef _fsck_check_objects_shallow(
+
+  OnodeRef fsck_check_objects_shallow(
     FSCKDepth depth,
+    bool need_per_pool_stats,
+    int64_t pool_id,
     CollectionRef c,
     const ghobject_t& oid,
-    KeyValueDB::Iterator it,
+    const string& key,
+    const bufferlist& value,
     mempool::bluestore_fsck::list<string>& expecting_shards,
-    store_statfs_t* expected_statfs,
     map<BlobRef, bluestore_blob_t::unused_t>* referenced,
     const BlueStore::FSCK_ObjectCtx& ctx);
 
+private:
   void _fsck_check_objects(FSCKDepth depth,
     bool need_per_pool_stats,
-    const FSCK_ObjectCtx& ctx);
+    FSCK_ObjectCtx& ctx);
 };
 
 inline ostream& operator<<(ostream& out, const BlueStore::volatile_statfs& s) {
