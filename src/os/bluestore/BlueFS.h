@@ -266,6 +266,7 @@ private:
   vector<interval_set<uint64_t> > block_all;  ///< extents in bdev we own
   vector<uint64_t> block_total;               ///< sum of block_all
   vector<Allocator*> alloc;                   ///< allocators for bdevs
+  vector<uint64_t> alloc_size;                ///< alloc size for each device
   vector<interval_set<uint64_t>> pending_release; ///< extents to release
 
   BlueFSDeviceExpander* slow_dev_expander = nullptr;
@@ -354,6 +355,9 @@ public:
   void umount();
 
   void collect_metadata(map<string,string> *pm);
+  uint64_t get_alloc_size(int id) {
+    return alloc_size[id];
+  }
   int fsck();
 
   uint64_t get_used();
