@@ -7,10 +7,11 @@ size_t Object::get_size() const {
   return data.length();
 }
 
-int Object::read(uint64_t offset, uint64_t len, bufferlist &bl)
+ceph::bufferlist Object::read(uint64_t offset, uint64_t len)
 {
-  bl.substr_of(data, offset, len);
-  return bl.length();
+  bufferlist ret;
+  ret.substr_of(data, offset, len);
+  return ret;
 }
 
 int Object::write(uint64_t offset, const bufferlist &src)
