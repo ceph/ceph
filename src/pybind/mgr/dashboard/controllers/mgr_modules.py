@@ -21,18 +21,19 @@ class MgrModules(RESTController):
         """
         result = []
         mgr_map = mgr.get('mgr_map')
+        always_on_modules = mgr_map['always_on_modules'][mgr.release_name]
         for module_config in mgr_map['available_modules']:
-            if module_config['name'] not in self.ignore_modules:
+            module_name = module_config['name']
+            if module_name not in self.ignore_modules:
+                always_on = module_name in always_on_modules
+                enabled = module_name in mgr_map['modules'] or always_on
                 result.append({
-                    'name': module_config['name'],
-                    'enabled': False,
+                    'name': module_name,
+                    'enabled': enabled,
+                    'always_on': always_on,
                     'options': self._convert_module_options(
                         module_config['module_options'])
                 })
-        for name in mgr_map['modules']:
-            if name not in self.ignore_modules:
-                obj = find_object_in_list('name', name, result)
-                obj['enabled'] = True
         return result
 
     def get(self, module_name):
