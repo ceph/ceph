@@ -1181,6 +1181,7 @@ protected:
     std::string_view prefix,
     const cmdmap_t& cmdmap,
     std::string_view format,
+    const bufferlist& inbl,
     std::function<void(int,const std::string&,bufferlist&)> on_finish);
 
 public:

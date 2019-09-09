@@ -2341,10 +2341,11 @@ public:
     std::string_view prefix,
     const cmdmap_t& cmdmap,
     std::string_view format,
+    const bufferlist& inbl,
     std::function<void(int,const std::string&,bufferlist&)> on_finish) override {
     stringstream ss;
     try {
-      osd->asok_command(prefix, cmdmap, format, on_finish);
+      osd->asok_command(prefix, cmdmap, format, inbl, on_finish);
     } catch (const bad_cmd_get& e) {
       bufferlist empty;
       on_finish(-EINVAL, e.what(), empty);
@@ -2366,6 +2367,7 @@ std::set<int64_t> OSD::get_mapped_pools()
 void OSD::asok_command(
   std::string_view prefix, const cmdmap_t& cmdmap,
   std::string_view format,
+  const bufferlist& inbl,
   std::function<void(int,const std::string&,bufferlist&)> on_finish)
 {
   int ret = 0;
