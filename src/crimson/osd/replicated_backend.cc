@@ -28,7 +28,10 @@ seastar::future<bufferlist> ReplicatedBackend::_read(const hobject_t& hoid,
                                                      uint64_t len,
                                                      uint32_t flags)
 {
-  return store->read(coll, ghobject_t{hoid}, off, len, flags);
+  using read_errorator = ceph::os::FuturizedStore::read_errorator;
+  return store->read(coll, ghobject_t{hoid}, off, len, flags).safe_then(
+    [] (auto&& bl) { return bl; },
+    read_errorator::throw_as_runtime_error{});
 }
 
 seastar::future<crimson::osd::acked_peers_t>
