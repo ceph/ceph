@@ -42,8 +42,15 @@ Block Devices) and RGW (Ceph Object Storage Gateway).
 Using CephFS
 ^^^^^^^^^^^^
 
-To run and use the Ceph File System, you must have a running Ceph Storage
-Cluster with at least one :term:`Ceph Metadata Server` running.
+Using CephFS with a running Ceph Storage Cluster requires at least one active
+:doc:`Metadata Server (MDS) daemon </cephfs/add-remove-mds>`, :doc:`creating
+the file system </cephfs/createfs>`, selecting a mount mechanism for clients
+(:doc:`FUSE </cephfs/fuse>` or :doc:`kernel driver </cephfs/kernel>`), and
+configuring :doc:`authentication credentials </cephfs/client-auth>` for
+clients.
+
+For setting up CephFS quickly, checkout the :doc:`CephFS Quick Start document
+</start/quick-cephfs>`.
 
 .. raw:: html
 
@@ -67,11 +74,6 @@ Metadata Server Setup
 	Journaler Configuration <journaler>
 	Manpage ceph-mds <../../man/8/ceph-mds>
 
-
-Once you have a healthy Ceph Storage Cluster with at least
-one Ceph Metadata Server, you may create and mount your Ceph File System.
-Ensure that your client has network connectivity and the proper
-authentication keyring.
 
 .. raw:: html
 
