@@ -2372,7 +2372,8 @@ void OSD::asok_command(
 {
   int ret = 0;
   stringstream ss;   // stderr error message stream
-  Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
+  std::unique_ptr<Formatter> f(Formatter::create(
+				 format, "json-pretty", "json-pretty"));
   bufferlist outbl;  // if empty at end, we'll dump formatter as output
 
   if (prefix == "status") {
@@ -2407,35 +2408,35 @@ will start to track new ops received afterwards.";
 
     if (prefix == "dump_ops_in_flight" ||
         prefix == "ops") {
-      if (!op_tracker.dump_ops_in_flight(f, false, filters)) {
+      if (!op_tracker.dump_ops_in_flight(f.get(), false, filters)) {
         ss << error_str;
 	ret = -EINVAL;
 	goto out;
       }
     }
     if (prefix == "dump_blocked_ops") {
-      if (!op_tracker.dump_ops_in_flight(f, true, filters)) {
+      if (!op_tracker.dump_ops_in_flight(f.get(), true, filters)) {
         ss << error_str;
 	ret = -EINVAL;
 	goto out;
       }
     }
     if (prefix == "dump_historic_ops") {
-      if (!op_tracker.dump_historic_ops(f, false, filters)) {
+      if (!op_tracker.dump_historic_ops(f.get(), false, filters)) {
         ss << error_str;
 	ret = -EINVAL;
 	goto out;
       }
     }
     if (prefix == "dump_historic_ops_by_duration") {
-      if (!op_tracker.dump_historic_ops(f, true, filters)) {
+      if (!op_tracker.dump_historic_ops(f.get(), true, filters)) {
         ss << error_str;
 	ret = -EINVAL;
 	goto out;
       }
     }
     if (prefix == "dump_historic_slow_ops") {
-      if (!op_tracker.dump_historic_slow_ops(f, filters)) {
+      if (!op_tracker.dump_historic_slow_ops(f.get(), filters)) {
         ss << error_str;
 	ret = -EINVAL;
 	goto out;
@@ -2443,7 +2444,7 @@ will start to track new ops received afterwards.";
     }
   } else if (prefix == "dump_op_pq_state") {
     f->open_object_section("pq");
-    op_shardedwq.dump(f);
+    op_shardedwq.dump(f.get());
     f->close_section();
   } else if (prefix == "dump_blacklist") {
     list<pair<entity_addr_t,utime_t> > bl;
@@ -2455,7 +2456,7 @@ will start to track new ops received afterwards.";
 	it != bl.end(); ++it) {
       f->open_object_section("entry");
       f->open_object_section("entity_addr_t");
-      it->first.dump(f);
+      it->first.dump(f.get());
       f->close_section(); //entity_addr_t
       it->second.localtime(f->dump_stream("expire_time"));
       f->close_section(); //entry
@@ -2482,14 +2483,14 @@ will start to track new ops received afterwards.";
       f->dump_string("object", it->obj.oid.name);
 
       f->open_object_section("entity_name");
-      it->wi.name.dump(f);
+      it->wi.name.dump(f.get());
       f->close_section(); //entity_name_t
 
       f->dump_unsigned("cookie", it->wi.cookie);
       f->dump_unsigned("timeout", it->wi.timeout_seconds);
 
       f->open_object_section("entity_addr_t");
-      it->wi.addr.dump(f);
+      it->wi.addr.dump(f.get());
       f->close_section(); //entity_addr_t
 
       f->close_section(); //watch
@@ -2499,10 +2500,10 @@ will start to track new ops received afterwards.";
   } else if (prefix == "dump_recovery_reservations") {
     f->open_object_section("reservations");
     f->open_object_section("local_reservations");
-    service.local_reserver.dump(f);
+    service.local_reserver.dump(f.get());
     f->close_section();
     f->open_object_section("remote_reservations");
-    service.remote_reserver.dump(f);
+    service.remote_reserver.dump(f.get());
     f->close_section();
     f->close_section();
   } else if (prefix == "dump_scrub_reservations") {
@@ -2563,11 +2564,11 @@ will start to track new ops received afterwards.";
     f->dump_int("value", value);
     f->close_section();
   } else if (prefix == "dump_objectstore_kv_stats") {
-    store->get_db_statistics(f);
+    store->get_db_statistics(f.get());
   } else if (prefix == "dump_scrubs") {
-    service.dumps_scrub(f);
+    service.dumps_scrub(f.get());
   } else if (prefix == "calc_objectstore_db_histogram") {
-    store->generate_db_histogram(f);
+    store->generate_db_histogram(f.get());
   } else if (prefix == "flush_store_cache") {
     store->flush_cache(&ss);
   } else if (prefix == "dump_pgstate_history") {
@@ -2579,7 +2580,7 @@ will start to track new ops received afterwards.";
       f->open_object_section("pg");
       f->dump_stream("pg") << pg->pg_id;
       f->dump_string("currently", pg->get_current_state());
-      pg->dump_pgstate_history(f);
+      pg->dump_pgstate_history(f.get());
       f->close_section();
     }
     f->close_section();
@@ -2760,7 +2761,6 @@ will start to track new ops received afterwards.";
   if (ret >= 0 && outbl.length() == 0) {
     f->flush(outbl);
   }
-  delete f;
   on_finish(ret, ss.str(), outbl);
 }
 
