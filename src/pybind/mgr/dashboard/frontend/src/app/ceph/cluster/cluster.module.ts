@@ -21,7 +21,9 @@ import { ConfigurationFormComponent } from './configuration/configuration-form/c
 import { ConfigurationComponent } from './configuration/configuration.component';
 import { CrushmapComponent } from './crushmap/crushmap.component';
 import { HostDetailsComponent } from './hosts/host-details/host-details.component';
+import { HostFormComponent } from './hosts/host-form/host-form.component';
 import { HostsComponent } from './hosts/hosts.component';
+import { InventoryComponent } from './inventory/inventory.component';
 import { LogsComponent } from './logs/logs.component';
 import { MgrModulesModule } from './mgr-modules/mgr-modules.module';
 import { MonitorComponent } from './monitor/monitor.component';
@@ -38,6 +40,7 @@ import { PrometheusTabsComponent } from './prometheus/prometheus-tabs/prometheus
 import { SilenceFormComponent } from './prometheus/silence-form/silence-form.component';
 import { SilenceListComponent } from './prometheus/silence-list/silence-list.component';
 import { SilenceMatcherModalComponent } from './prometheus/silence-matcher-modal/silence-matcher-modal.component';
+import { ServicesComponent } from './services/services.component';
 
 @NgModule({
   entryComponents: [
@@ -92,7 +95,10 @@ import { SilenceMatcherModalComponent } from './prometheus/silence-matcher-modal
     SilenceFormComponent,
     SilenceListComponent,
     PrometheusTabsComponent,
-    SilenceMatcherModalComponent
+    SilenceMatcherModalComponent,
+    ServicesComponent,
+    InventoryComponent,
+    HostFormComponent
   ]
 })
 export class ClusterModule {}

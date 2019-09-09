@@ -120,3 +120,12 @@ def handle_send_command_error(component):
         yield
     except SendCommandError as e:
         raise DashboardException(e, component=component)
+
+
+@contextmanager
+def handle_orchestrator_error(component):
+    try:
+        yield
+    except RuntimeError as e:
+        # how to catch remote error e.g. NotImplementedError ?
+        raise DashboardException(e, component=component)
