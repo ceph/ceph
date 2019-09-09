@@ -357,8 +357,10 @@ bool AdminSocket::do_accept()
   ceph::mutex mylock = ceph::make_mutex("admin_socket::do_accept::mylock");
   ceph::condition_variable mycond;
   C_SafeCond fin(mylock, mycond, &done, &rval);
+  bufferlist empty;
   execute_command(
     cmdvec,
+    empty /* inbl */,
     [&rs, &out, &fin](int r, const std::string& err, bufferlist& outbl) {
       rs = err;
       out.claim(outbl);
@@ -407,6 +409,7 @@ void AdminSocket::do_tell_queue()
     bufferlist outbl;
     execute_command(
       m->cmd,
+      m->get_data(),
       [m](int r, const std::string& err, bufferlist& outbl) {
 	auto reply = new MCommandReply(r, err);
 	reply->set_tid(m->get_tid());
@@ -418,6 +421,7 @@ void AdminSocket::do_tell_queue()
 
 void AdminSocket::execute_command(
   const std::vector<std::string>& cmdvec,
+  const bufferlist& inbl,
   std::function<void(int,const std::string&,bufferlist&)> on_finish)
 {
   cmdmap_t cmdmap;
@@ -460,7 +464,7 @@ void AdminSocket::execute_command(
   if (!validate(prefix, cmdmap, empty)) {
     on_finish(-EINVAL, "invalid command json", empty);
   } else {
-    hook->call_async(prefix, cmdmap, format, on_finish);
+    hook->call_async(prefix, cmdmap, format, inbl, on_finish);
   }
   l.lock();
   in_hook = false;
