@@ -18,7 +18,7 @@ describe('Images page', () => {
     });
 
     it('should open and show breadcrumb', () => {
-      expect(Helper.getBreadcrumbText()).toEqual('Images');
+      Helper.waitTextToBePresent(Helper.getBreadcrumb(), 'Images');
     });
 
     it('should show three tabs', () => {

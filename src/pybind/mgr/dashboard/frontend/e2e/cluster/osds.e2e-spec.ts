@@ -14,7 +14,7 @@ describe('OSDs page', () => {
 
   it('should open and show breadcrumb', () => {
     page.navigateTo();
-    expect(Helper.getBreadcrumbText()).toEqual('OSDs');
+    Helper.waitTextToBePresent(Helper.getBreadcrumb(), 'OSDs');
   });
 
   it('should show two tabs', () => {

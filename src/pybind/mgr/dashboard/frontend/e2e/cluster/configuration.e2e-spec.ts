@@ -14,6 +14,6 @@ describe('Configuration page', () => {
 
   it('should open and show breadcrumb', () => {
     page.navigateTo();
-    expect(Helper.getBreadcrumbText()).toEqual('Configuration');
+    Helper.waitTextToBePresent(Helper.getBreadcrumb(), 'Configuration');
   });
 });

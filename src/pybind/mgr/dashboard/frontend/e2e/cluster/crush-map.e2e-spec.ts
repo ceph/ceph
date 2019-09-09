@@ -14,6 +14,6 @@ describe('CRUSH map page', () => {
 
   it('should open and show breadcrumb', () => {
     page.navigateTo();
-    expect(Helper.getBreadcrumbText()).toEqual('CRUSH map');
+    Helper.waitTextToBePresent(Helper.getBreadcrumb(), 'CRUSH map');
   });
 });
