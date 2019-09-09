@@ -3190,13 +3190,13 @@ void PGMap::get_health_checks(
       if (asum.first == "BLUEFS_SPILLOVER") {
 	summary += " experiencing BlueFS spillover";
       } else if (asum.first == "BLUESTORE_NO_COMPRESSION") {
-	summary = " have broken BlueStore compression";
+	summary += " have broken BlueStore compression";
       } else if (asum.first == "BLUESTORE_LEGACY_STATFS") {
-	summary = " reporting legacy (not per-pool) BlueStore stats";
+	summary += " reporting legacy (not per-pool) BlueStore stats";
       } else if (asum.first == "BLUESTORE_DISK_SIZE_MISMATCH") {
-	summary = " have dangerous mismatch between BlueStore block device and free list sizes";
+	summary += " have dangerous mismatch between BlueStore block device and free list sizes";
       } else if (asum.first == "BLUESTORE_NO_PER_POOL_OMAP") {
-	summary = " reporting legacy (not per-pool) BlueStore omap usage stats";
+	summary += " reporting legacy (not per-pool) BlueStore omap usage stats";
       }
       auto& d = checks->add(asum.first, HEALTH_WARN, summary, asum.second.first);
       for (auto& s : asum.second.second) {
