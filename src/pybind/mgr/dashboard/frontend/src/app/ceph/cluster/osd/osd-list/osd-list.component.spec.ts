@@ -27,6 +27,7 @@ import { PerformanceCounterModule } from '../../../performance-counter/performan
 import { OsdDetailsComponent } from '../osd-details/osd-details.component';
 import { OsdPerformanceHistogramComponent } from '../osd-performance-histogram/osd-performance-histogram.component';
 import { OsdReweightModalComponent } from '../osd-reweight-modal/osd-reweight-modal.component';
+import { OsdSmartListComponent } from '../osd-smart-list/osd-smart-list.component';
 import { OsdListComponent } from './osd-list.component';
 
 describe('OsdListComponent', () => {
@@ -84,7 +85,12 @@ describe('OsdListComponent', () => {
       ReactiveFormsModule,
       RouterTestingModule
     ],
-    declarations: [OsdListComponent, OsdDetailsComponent, OsdPerformanceHistogramComponent],
+    declarations: [
+      OsdListComponent,
+      OsdDetailsComponent,
+      OsdPerformanceHistogramComponent,
+      OsdSmartListComponent
+    ],
     providers: [
       { provide: AuthStorageService, useValue: fakeAuthStorageService },
       TableActionsComponent,
