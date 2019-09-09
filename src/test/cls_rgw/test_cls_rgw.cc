@@ -366,6 +366,7 @@ TEST_F(cls_rgw, index_suggest)
   test_stats(ioctx, bucket_oid, RGWObjCategory::None, num_objs / 2, total_size);
 }
 
+
 /*
  * This case is used to test whether get_obj_vals will
  * return all validate utf8 objnames and filter out those
@@ -398,12 +399,14 @@ TEST_F(cls_rgw, index_list)
     string tag = str_int("tag", i);
     string loc = str_int("loc", i);
 
-    index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc, 0 /* bi_falgs */, false /* log_op */);
+    index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc,
+		  0 /* bi_flags */, false /* log_op */);
 
     rgw_bucket_dir_entry_meta meta;
     meta.category = RGWObjCategory::None;
     meta.size = obj_size;
-    index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, epoch, obj, meta, 0 /* bi_falgs */, false /* log_op */);
+    index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, epoch, obj, meta,
+		   0 /* bi_flags */, false /* log_op */);
   }
 
   map<string, bufferlist> entries;
@@ -416,7 +419,8 @@ TEST_F(cls_rgw, index_list)
   }
   ioctx.omap_set(bucket_oid, entries);
 
-  test_stats(ioctx, bucket_oid, RGWObjCategory::None, num_objs, obj_size * num_objs);
+  test_stats(ioctx, bucket_oid, RGWObjCategory::None,
+	     num_objs, obj_size * num_objs);
 
   map<int, string> oids = { {0, bucket_oid} };
   map<int, struct rgw_cls_list_ret> list_results;
@@ -434,8 +438,116 @@ TEST_F(cls_rgw, index_list)
 
   ASSERT_EQ(4u, m.size());
   int i = 0;
-  for(auto it2 = m.begin(); it2 != m.end(); it2++, i++)
+  for(auto it2 = m.cbegin(); it2 != m.cend(); it2++, i++) {
     ASSERT_EQ(it2->first.compare(keys[i]), 0);
+  }
+}
+
+
+/*
+ * This case is used to test when bucket index list that includes a
+ * delimiter can handle the first chunk ending in a delimiter.
+ */
+TEST_F(cls_rgw, index_list_delimited)
+{
+  string bucket_oid = str_int("bucket", 7);
+
+  ObjectWriteOperation op;
+  cls_rgw_bucket_init_index(op);
+  ASSERT_EQ(0, ioctx.operate(bucket_oid, &op));
+
+  uint64_t epoch = 1;
+  uint64_t obj_size = 1024;
+  const int file_num_objs = 5;
+  const int dir_num_objs = 1005;
+
+  std::vector<std::string> file_prefixes =
+    { "a", "c", "e", "g", "i", "k", "m", "o", "q", "s", "u" };
+  std::vector<std::string> dir_prefixes =
+    { "b/", "d/", "f/", "h/", "j/", "l/", "n/", "p/", "r/", "t/" };
+
+  rgw_bucket_dir_entry_meta meta;
+  meta.category = RGWObjCategory::None;
+  meta.size = obj_size;
+
+  // create top-level files
+  for (const auto& p : file_prefixes) {
+    for (int i = 0; i < file_num_objs; i++) {
+      string tag = str_int("tag", i);
+      string loc = str_int("loc", i);
+      const string obj = str_int(p, i);
+
+      index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc,
+		    0 /* bi_flags */, false /* log_op */);
+
+      index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, epoch, obj, meta,
+		     0 /* bi_flags */, false /* log_op */);
+    }
+  }
+
+  // create large directories
+  for (const auto& p : dir_prefixes) {
+    for (int i = 0; i < dir_num_objs; i++) {
+      string tag = str_int("tag", i);
+      string loc = str_int("loc", i);
+      const string obj = p + str_int("f", i);
+
+      index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc,
+		    0 /* bi_flags */, false /* log_op */);
+
+      index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, epoch, obj, meta,
+		     0 /* bi_flags */, false /* log_op */);
+    }
+  }
+
+  map<int, string> oids = { {0, bucket_oid} };
+  map<int, struct rgw_cls_list_ret> list_results;
+  cls_rgw_obj_key start_key("", "");
+  const string empty_prefix;
+  const string delimiter = "/";
+  int r = CLSRGWIssueBucketList(ioctx, start_key,
+				empty_prefix, delimiter,
+				1000, true, oids, list_results, 1)();
+  ASSERT_EQ(r, 0);
+  ASSERT_EQ(1u, list_results.size()) <<
+    "Because we only have one bucket index shard, we should "
+    "only get one list_result.";
+
+  auto it = list_results.begin();
+  auto id_entry_map = it->second.dir.m;
+  bool truncated = it->second.is_truncated;
+
+  // the cls code will make 4 tries to get 1000 entries; however
+  // because each of the subdirectories is so large, each attempt will
+  // only retrieve the first part of the subdirectory
+
+  ASSERT_EQ(48u, id_entry_map.size()) <<
+    "We should get 40 top-level entries and the tops of 8 \"subdirectories\".";
+  ASSERT_EQ(true, truncated) << "We did not get all entries.";
+
+  ASSERT_EQ("a-0", id_entry_map.cbegin()->first);
+  ASSERT_EQ("p/", id_entry_map.crbegin()->first);
+
+  // now let's get the rest of the entries
+
+  list_results.clear();
+  
+  cls_rgw_obj_key start_key2("p/", "");
+  r = CLSRGWIssueBucketList(ioctx, start_key2,
+			    empty_prefix, delimiter,
+			    1000, true, oids, list_results, 1)();
+  ASSERT_EQ(r, 0);
+
+  it = list_results.begin();
+  id_entry_map = it->second.dir.m;
+  truncated = it->second.is_truncated;
+
+  ASSERT_EQ(17u, id_entry_map.size()) <<
+    "We should get 15 top-level entries and the tops of 2 \"subdirectories\".";
+  ASSERT_EQ(false, truncated) << "We now have all entries.";
+
+  ASSERT_EQ("q-0", id_entry_map.cbegin()->first);
+  ASSERT_EQ("u-4", id_entry_map.crbegin()->first);
 }
 
 
@@ -458,8 +570,10 @@ TEST_F(cls_rgw, bi_list)
   int ret = cls_rgw_bi_list(ioctx, bucket_oid, name, marker, max, &entries,
 			    &is_truncated);
   ASSERT_EQ(ret, 0);
-  ASSERT_EQ(entries.size(), 0u);
-  ASSERT_EQ(is_truncated, false);
+  ASSERT_EQ(entries.size(), 0u) <<
+    "The listing of an empty bucket as 0 entries.";
+  ASSERT_EQ(is_truncated, false) <<
+    "The listing of an empty bucket is not truncated.";
 
   uint64_t epoch = 1;
   uint64_t obj_size = 1024;
@@ -469,12 +583,14 @@ TEST_F(cls_rgw, bi_list)
     string obj = str_int("obj", i);
     string tag = str_int("tag", i);
     string loc = str_int("loc", i);
-    index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc, RGW_BILOG_FLAG_VERSIONED_OP);
+    index_prepare(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, obj, loc,
+		  RGW_BILOG_FLAG_VERSIONED_OP);
 
     rgw_bucket_dir_entry_meta meta;
     meta.category = RGWObjCategory::None;
     meta.size = obj_size;
-    index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, epoch, obj, meta, RGW_BILOG_FLAG_VERSIONED_OP);
+    index_complete(ioctx, bucket_oid, CLS_RGW_OP_ADD, tag, epoch, obj, meta,
+		   RGW_BILOG_FLAG_VERSIONED_OP);
   }
 
   ret = cls_rgw_bi_list(ioctx, bucket_oid, name, marker, num_objs + 10, &entries,
@@ -494,7 +610,8 @@ TEST_F(cls_rgw, bi_list)
 			  &is_truncated);
     ASSERT_EQ(ret, 0);
     if (is_truncated) {
-      ASSERT_EQ(entries.size(), std::min(max, cct->_conf->osd_max_omap_entries_per_request));
+      ASSERT_EQ(entries.size(),
+		std::min(max, cct->_conf->osd_max_omap_entries_per_request));
     } else {
       ASSERT_EQ(entries.size(), num_objs - num_entries);
     }
