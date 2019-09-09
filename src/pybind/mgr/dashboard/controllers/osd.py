@@ -94,12 +94,12 @@ class Osd(RESTController):
         """
         Returns collected data about an OSD.
 
-        :return: Returns the requested data. The `histogram` key man contain a
-                 string with an error that occurred when the OSD is down.
+        :return: Returns the requested data. The `histogram` key may contain a
+                 string with an error that occurred if the OSD is down.
         """
         try:
-            histogram = CephService.send_command('osd', srv_spec=svc_id,
-                                                 prefix='perf histogram dump')
+            histogram = CephService.send_command(
+                'osd', srv_spec=svc_id, prefix='perf histogram dump')
         except SendCommandError as e:
             if 'osd down' in str(e):
                 histogram = str(e)

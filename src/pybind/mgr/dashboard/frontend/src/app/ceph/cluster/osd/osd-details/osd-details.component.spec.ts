@@ -12,6 +12,7 @@ import { CdTableSelection } from '../../../../shared/models/cd-table-selection';
 import { SharedModule } from '../../../../shared/shared.module';
 import { PerformanceCounterModule } from '../../../performance-counter/performance-counter.module';
 import { OsdPerformanceHistogramComponent } from '../osd-performance-histogram/osd-performance-histogram.component';
+import { OsdSmartListComponent } from '../osd-smart-list/osd-smart-list.component';
 import { OsdDetailsComponent } from './osd-details.component';
 
 describe('OsdDetailsComponent', () => {
@@ -28,7 +29,7 @@ describe('OsdDetailsComponent', () => {
       PerformanceCounterModule,
       SharedModule
     ],
-    declarations: [OsdDetailsComponent, OsdPerformanceHistogramComponent],
+    declarations: [OsdDetailsComponent, OsdPerformanceHistogramComponent, OsdSmartListComponent],
     providers: i18nProviders
   });
 
@@ -65,7 +66,7 @@ describe('OsdDetailsComponent', () => {
   it('should succeed creating a histogram', () => {
     const detailDataWithHistogram = {
       osd_map: {},
-      osd_metdata: {},
+      osd_metadata: {},
       histogram: {}
     };
     getDetailsSpy.and.returnValue(of(detailDataWithHistogram));
