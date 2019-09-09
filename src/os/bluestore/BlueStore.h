@@ -2246,6 +2246,7 @@ private:
     per_pool_statfs& expected_pool_statfs,
     bool need_per_pool_stats,
     int64_t& errors,
+    int64_t &warnings,
     BlueStoreRepairer* repairer);
 
   int _fsck(FSCKDepth depth, bool repair);
