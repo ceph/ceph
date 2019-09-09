@@ -132,10 +132,11 @@ should be ``wip-doc-4000`` by convention and the relevant tracker URL will be
 http://tracker.ceph.com/issues/4000.
 
 .. note:: Please do not mingle documentation contributions and source code
-   contributions in a single pull request. Editors review the documentation
-   and engineers review source code changes. When you keep documentation 
-   pull requests separate from source code pull requests, it simplifies the 
-   process and we won't have to ask you to resubmit the requests separately.
+   contributions in a single commit. When you keep documentation
+   commits separate from source code commits, it simplifies the review
+   process. We highly recommend that any pull request that adds a feature or
+   a configuration option, should also include a documentation commit,
+   describing the relevant changes/options.
 
 Before you create your branch name, ensure that it doesn't already exist in the
 local or remote repository. ::
