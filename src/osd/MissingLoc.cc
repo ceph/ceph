@@ -187,7 +187,33 @@ void MissingLoc::check_recovery_sources(const OSDMapRef& osdmap)
 
 void MissingLoc::remove_stray_recovery_sources(pg_shard_t stray)
 {
-  set<pg_shard_t> now_stray;
+  ldout(cct, 10) << __func__ << " remove osd " << stray << " from missing_loc" << dendl;
+  // filter missing_loc
+  map<hobject_t, set<pg_shard_t>>::iterator p = missing_loc.begin();
+  while (p != missing_loc.end()) {
+    set<pg_shard_t>::iterator q = p->second.begin();
+    bool changed = false;
+    while (q != p->second.end()) {
+      if (*q == stray) {
+        if (!changed) {
+          changed = true;
+          _dec_count(p->second);
+        }
+        p->second.erase(q++);
+      } else {
+        ++q;
+      }
+    }
+    if (p->second.empty()) {
+      missing_loc.erase(p++);
+    } else {
+      if (changed) {
+        _inc_count(p->second);
+      }
+      ++p;
+    }
+  }
+  // filter missing_loc_sources
   for (set<pg_shard_t>::iterator p = missing_loc_sources.begin();
        p != missing_loc_sources.end();
        ) {
@@ -195,41 +221,7 @@ void MissingLoc::remove_stray_recovery_sources(pg_shard_t stray)
       ++p;
       continue;
     }
-    ldout(cct, 10) << __func__ << " source osd." << *p << " now stray" << dendl;
-    now_stray.insert(*p);
+    ldout(cct, 10) << __func__ << " remove osd" << stray << " from missing_loc_sources" << dendl;
     missing_loc_sources.erase(p++);
-  }
-
-  if (now_stray.empty()) {
-    ldout(cct, 10) << __func__ << " no source osds (" << missing_loc_sources << ") became stray" << dendl;
-  } else {
-    ldout(cct, 10) << __func__ << " sources osds " << now_stray << " now stray, remaining sources are "
-                       << missing_loc_sources << dendl;
-
-    // filter missing_loc
-    map<hobject_t, set<pg_shard_t>>::iterator p = missing_loc.begin();
-    while (p != missing_loc.end()) {
-      set<pg_shard_t>::iterator q = p->second.begin();
-      bool changed = false;
-      while (q != p->second.end()) {
-        if (now_stray.count(*q)) {
-          if (!changed) {
-            changed = true;
-            _dec_count(p->second);
-          }
-          p->second.erase(q++);
-        } else {
-          ++q;
-        }
-      }
-      if (p->second.empty()) {
-        missing_loc.erase(p++);
-      } else {
-        if (changed) {
-          _inc_count(p->second);
-        }
-        ++p;
-      }
-    }
   }
 }
