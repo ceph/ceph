@@ -495,4 +495,4 @@ SPDK.::
   bluestore_block_wal_size = 0
 
 Otherwise, the current implementation will setup symbol file to kernel
-filesystem location and uses kernel driver to issue DB/WAL IO.
+file system location and uses kernel driver to issue DB/WAL IO.

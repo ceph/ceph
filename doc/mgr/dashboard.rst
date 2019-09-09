@@ -96,14 +96,14 @@ aspects of your Ceph cluster:
 * **RBD mirroring**: Enable and configure RBD mirroring to a remote Ceph server.
   Lists all active sync daemons and their status, pools and RBD images including
   their synchronization state.
-* **CephFS**: List all active filesystem clients and associated pools,
+* **CephFS**: List all active file system clients and associated pools,
   including their usage statistics.
 * **Object Gateway**: List all active object gateways and their performance
   counters. Display and manage (add/edit/delete) object gateway users and their
   details (e.g. quotas) as well as the users' buckets and their details (e.g.
   owner, quotas). See :ref:`dashboard-enabling-object-gateway` for configuration
   instructions.
-* **NFS**: Manage NFS exports of CephFS filesystems and RGW S3 buckets via NFS
+* **NFS**: Manage NFS exports of CephFS file systems and RGW S3 buckets via NFS
   Ganesha. See :ref:`dashboard-nfs-ganesha-management` for details on how to
   enable this functionality.
 * **Ceph Manager Modules**: Enable and disable all Ceph Manager modules, change

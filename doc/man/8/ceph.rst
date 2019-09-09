@@ -269,15 +269,15 @@ Usage::
 fs
 --
 
-Manage cephfs filesystems. It uses some additional subcommands.
+Manage cephfs file systems. It uses some additional subcommands.
 
-Subcommand ``ls`` to list filesystems
+Subcommand ``ls`` to list file systems
 
 Usage::
 
 	ceph fs ls
 
-Subcommand ``new`` to make a new filesystem using named pools <metadata> and <data>
+Subcommand ``new`` to make a new file system using named pools <metadata> and <data>
 
 Usage::
 
@@ -289,7 +289,7 @@ Usage::
 
 	ceph fs reset <fs_name> {--yes-i-really-mean-it}
 
-Subcommand ``rm`` to disable the named filesystem
+Subcommand ``rm`` to disable the named file system
 
 Usage::
 

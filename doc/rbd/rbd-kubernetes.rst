@@ -5,7 +5,7 @@
 You may use Ceph Block Device images with Kubernetes v1.13 and later through
 `ceph-csi`_, which dynamically provisions RBD images to back Kubernetes
 `volumes`_ and maps these RBD images as block devices (optionally mounting
-a filesystem contained within the image) on worker nodes running
+a file system contained within the image) on worker nodes running
 `pods`_ that reference an RBD-backed volume. Ceph stripes block device images as
 objects across the cluster, which means that large Ceph Block Device images have
 better performance than a standalone server!
@@ -203,7 +203,7 @@ Create a `PersistentVolumeClaim`
 A `PersistentVolumeClaim` is a request for abstract storage resources by a user.
 The `PersistentVolumeClaim` would then be associated to a `Pod` resource to
 provision a `PersistentVolume`, which would be backed by a Ceph block image.
-An optional `volumeMode` can be included to select between a mounted filesystem
+An optional `volumeMode` can be included to select between a mounted file system
 (default) or raw block device-based volume.
 
 Using `ceph-csi`, specifying `Filesystem` for `volumeMode` can support both
@@ -257,9 +257,9 @@ The following demonstrates and example of binding the above
         EOF
         $ kubectl apply -f raw-block-pod.yaml
 
-To create a filesystem-based `PersistentVolumeClaim` that utilizes the
+To create a file-system-based `PersistentVolumeClaim` that utilizes the
 `ceph-csi`-based `StorageClass` created above, the following YAML can be used to
-request a mounted filesystem (backed by an RBD image) from the `csi-rbd-sc`
+request a mounted file system (backed by an RBD image) from the `csi-rbd-sc`
 `StorageClass`::
 
         $ cat <<EOF > pvc.yaml
@@ -280,7 +280,7 @@ request a mounted filesystem (backed by an RBD image) from the `csi-rbd-sc`
         $ kubectl apply -f pvc.yaml
 
 The following demonstrates and example of binding the above
-`PersistentVolumeClaim` to a `Pod` resource as a mounted filesystem::
+`PersistentVolumeClaim` to a `Pod` resource as a mounted file system::
 
         $ cat <<EOF > pod.yaml
         ---

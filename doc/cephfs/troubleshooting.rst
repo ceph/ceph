@@ -134,7 +134,7 @@ disrupted for a long enough time, the client will be forcibly
 disconnected from the system. At this point, the kernel client is in
 a bind: it cannot safely write back dirty data, and many applications
 do not handle IO errors correctly on close().
-At the moment, the kernel client will remount the FS, but outstanding filesystem
+At the moment, the kernel client will remount the FS, but outstanding file system
 IO may or may not be satisfied. In these cases, you may need to reboot your
 client system.
 

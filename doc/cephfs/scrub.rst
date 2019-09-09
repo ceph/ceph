@@ -1,24 +1,24 @@
 .. _mds-scrub:
 
-=====================
-Ceph Filesystem Scrub
-=====================
+======================
+Ceph File System Scrub
+======================
 
-CephFS provides the cluster admin (operator) to check consistency of a filesystem
+CephFS provides the cluster admin (operator) to check consistency of a file system
 via a set of scrub commands. Scrub can be classified into two parts:
 
-#. Forward Scrub: In which the scrub operation starts at the root of the filesystem
+#. Forward Scrub: In which the scrub operation starts at the root of the file system
    (or a sub directory) and looks at everything that can be touched in the hierarchy
    to ensure consistency.
 
 #. Backward Scrub: In which the scrub operation looks at every RADOS object in the
-   filesystem pools and maps it back to the filesystem hierarchy.
+   file system pools and maps it back to the file system hierarchy.
 
 This document details commands to initiate and control forward scrub (referred as
 scrub thereafter).
 
-Initiate Filesystem Scrub
-=========================
+Initiate File System Scrub
+==========================
 
 To start a scrub operation for a directory tree use the following command
 
@@ -36,7 +36,7 @@ a random string that can used to monitor the progress of the scrub operation (ex
 further in this document).
 
 Custom tag can also be specified when initiating the scrub operation. Custom tags get
-persisted in the metadata object for every inode in the filesystem tree that is being
+persisted in the metadata object for every inode in the file system tree that is being
 scrubbed.
 
 ::
@@ -49,8 +49,8 @@ scrubbed.
    }
 
 
-Monitor (ongoing) Filesystem Scrubs
-===================================
+Monitor (ongoing) File System Scrubs
+====================================
 
 Status of ongoing scrubs can be monitored using in `scrub status` command. This commands
 lists out ongoing scrubs (identified by the tag) along with the path and options used to
@@ -85,8 +85,8 @@ gets displayed in `ceph status`.
 
    [...]
 
-Control (ongoing) Filesystem Scrubs
-===================================
+Control (ongoing) File System Scrubs
+====================================
 
 - Pause: Pausing ongoing scrub operations results in no new or pending inodes being
   scrubbed after in-flight RADOS ops (for the inodes that are currently being scrubbed)
