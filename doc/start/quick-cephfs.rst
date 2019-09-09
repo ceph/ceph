@@ -32,7 +32,7 @@ Create a Filesystem
 ===================
 
 You have already created an MDS (`Storage Cluster Quick Start`_) but it will not
-become active until you create some pools and a filesystem.  See :doc:`/cephfs/createfs`.
+become active until you create some pools and a file system.  See :doc:`/cephfs/createfs`.
 
 ::
 
@@ -53,7 +53,7 @@ following procedure:
 
 	cat ceph.client.admin.keyring
 
-#. Copy the key of the user who will be using the mounted CephFS filesystem.
+#. Copy the key of the user who will be using the mounted CephFS file system.
    It should look something like this:: 
 	
 	[client.admin]
@@ -87,7 +87,7 @@ example::
 	sudo mount -t ceph 192.168.0.1:6789:/ /mnt/mycephfs -o name=admin,secretfile=admin.secret
 
 
-.. note:: Mount the CephFS filesystem on the admin node,
+.. note:: Mount the CephFS file system on the admin node,
    not the server node. See `FAQ`_ for details.
 
 

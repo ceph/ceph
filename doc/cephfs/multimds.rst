@@ -5,7 +5,7 @@ Configuring multiple active MDS daemons
 
 *Also known as: multi-mds, active-active MDS*
 
-Each CephFS filesystem is configured for a single active MDS daemon
+Each CephFS file system is configured for a single active MDS daemon
 by default.  To scale metadata performance for large scale systems, you
 may enable multiple active MDS daemons, which will share the metadata
 workload with one another.
@@ -28,8 +28,8 @@ are those with many clients, perhaps working on many separate directories.
 Increasing the MDS active cluster size
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 
-Each CephFS filesystem has a *max_mds* setting, which controls how many ranks
-will be created.  The actual number of ranks in the filesystem will only be
+Each CephFS file system has a *max_mds* setting, which controls how many ranks
+will be created.  The actual number of ranks in the file system will only be
 increased if a spare daemon is available to take on the new rank. For example,
 if there is only one MDS daemon running, and max_mds is set to two, no second
 rank will be created. (Note that such a configuration is not Highly Available

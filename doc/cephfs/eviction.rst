@@ -1,14 +1,14 @@
 
-===============================
-Ceph filesystem client eviction
-===============================
+================================
+Ceph file system client eviction
+================================
 
-When a filesystem client is unresponsive or otherwise misbehaving, it
-may be necessary to forcibly terminate its access to the filesystem.  This
+When a file system client is unresponsive or otherwise misbehaving, it
+may be necessary to forcibly terminate its access to the file system.  This
 process is called *eviction*.
 
 Evicting a CephFS client prevents it from communicating further with MDS
-daemons and OSD daemons.  If a client was doing buffered IO to the filesystem,
+daemons and OSD daemons.  If a client was doing buffered IO to the file system,
 any un-flushed data will be lost.
 
 Clients may either be evicted automatically (if they fail to communicate

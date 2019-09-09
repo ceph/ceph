@@ -66,11 +66,11 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 		conjunction with ``librbd``, a hypervisor such as QEMU or Xen, and a
 		hypervisor abstraction layer such as ``libvirt``.
 
-	Ceph Filesystem
+	Ceph File System
 	CephFS
 	Ceph FS
 		The POSIX filesystem components of Ceph. Refer
-		:ref:`CephFS Architecture <arch-cephfs>` and :ref:`ceph-filesystem` for
+		:ref:`CephFS Architecture <arch-cephfs>` and :ref:`ceph-file-system` for
 		more details.
 
 	Cloud Platforms
@@ -142,7 +142,7 @@ reflect either technical terms or legacy ways of referring to Ceph systems.
 	Ceph Client
 		The collection of Ceph components which can access a Ceph Storage
 		Cluster. These include the Ceph Object Gateway, the Ceph Block Device,
-		the Ceph Filesystem, and their corresponding libraries, kernel modules,
+		the Ceph File System, and their corresponding libraries, kernel modules,
 		and FUSEs.
 
 	Ceph Kernel Modules
