@@ -16,6 +16,7 @@ from teuthology import contextutil
 from teuthology.config import config as teuth_config
 from teuthology.orchestra import run
 from teuthology.orchestra.connection import split_user
+from teuthology.exceptions import ConfigError
 
 log = logging.getLogger(__name__)
 
@@ -186,6 +187,31 @@ def configure(ctx, config):
             s3tests_conf['DEFAULT']['host'] = host
         else:
             s3tests_conf['DEFAULT']['host'] = 'localhost'
+
+        if hasattr(ctx, 'barbican'):
+            properties = properties['barbican']
+            if properties is not None and 'kms_key' in properties:
+                if not (properties['kms_key'] in ctx.barbican.keys):
+                    raise ConfigError('Key '+properties['kms_key']+' not defined')
+
+                if not (properties['kms_key2'] in ctx.barbican.keys):
+                    raise ConfigError('Key '+properties['kms_key2']+' not defined')
+
+                key = ctx.barbican.keys[properties['kms_key']]
+                s3tests_conf['DEFAULT']['kms_keyid'] = key['id']
+
+                key = ctx.barbican.keys[properties['kms_key2']]
+                s3tests_conf['DEFAULT']['kms_keyid2'] = key['id']
+
+        elif hasattr(ctx, 'vault'):
+            properties = properties['vault']
+            log.info("Vault Key")
+            s3tests_conf['DEFAULT']['kms_keyid'] = properties['key_path']
+            s3tests_conf['DEFAULT']['kms_keyid2'] = properties['key_path2']
+        else:
+            # Fallback scenario where it's the local (ceph.conf) kms being tested
+            s3tests_conf['DEFAULT']['kms_keyid'] = 'testkey-1'
+            s3tests_conf['DEFAULT']['kms_keyid2'] = 'testkey-2'
 
         if properties is not None and 'slow_backend' in properties:
             s3tests_conf['fixtures']['slow backend'] = properties['slow_backend']

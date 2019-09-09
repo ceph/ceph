@@ -109,6 +109,54 @@ def start_rgw(ctx, config, clients):
         if client_config.get('dns-s3website-name') is not None:
             rgw_cmd.extend(['--rgw-dns-s3website-name', endpoint.website_dns_name])
 
+
+        vault_role = client_config.get('use-vault-role', None)
+        testing_role = client_config.get('use-testing-role', None)
+        barbican_role = client_config.get('use-barbican-role', None)
+
+        token_path = teuthology.get_testdir(ctx) + '/vault-token'
+        if barbican_role is not None:
+            if not hasattr(ctx, 'barbican'):
+                raise ConfigError('rgw must run after the barbican task')
+
+            barbican_host, barbican_port = \
+                ctx.barbican.endpoints[barbican_role]
+            log.info("Use barbican url=%s:%s", barbican_host, barbican_port)
+
+            rgw_cmd.extend([
+                '--rgw_barbican_url',
+                'http://{bhost}:{bport}'.format(bhost=barbican_host,
+                                                bport=barbican_port),
+                ])
+
+            log.info("Barbican access data: %s",ctx.barbican.token[barbican_role])
+            access_data = ctx.barbican.token[barbican_role]
+            rgw_cmd.extend([
+                '--rgw_crypt_s3_kms_backend', 'barbican',
+                '--rgw_keystone_barbican_user', access_data['username'],
+                '--rgw_keystone_barbican_password', access_data['password'],
+                '--rgw_keystone_barbican_tenant', access_data['tenant'],
+                ])
+        elif vault_role is not None:
+            if not ctx.vault.root_token:
+                raise ConfigError('vault: no "root_token" specified')
+            # create token on file
+            ctx.cluster.only(client).run(args=['echo', '-n', ctx.vault.root_token, run.Raw('>'), token_path])
+            log.info("Token file content")
+            ctx.cluster.only(client).run(args=['cat', token_path])
+
+            rgw_cmd.extend([
+                '--rgw_crypt_s3_kms_backend', 'vault',
+                '--rgw_crypt_vault_auth', 'token',
+                '--rgw_crypt_vault_addr', "{}:{}".format(*ctx.vault.endpoints[vault_role]),
+                '--rgw_crypt_vault_token_file', token_path
+            ])
+        elif testing_role is not None:
+            rgw_cmd.extend([
+                '--rgw_crypt_s3_kms_backend', 'testing',
+                '--rgw_crypt_s3_kms_encryption_keys', 'testkey-1=YmluCmJvb3N0CmJvb3N0LWJ1aWxkCmNlcGguY29uZgo= testkey-2=aWIKTWFrZWZpbGUKbWFuCm91dApzcmMKVGVzdGluZwo='
+            ])
+
         rgw_cmd.extend([
             '--foreground',
             run.Raw('|'),
@@ -163,6 +211,7 @@ def start_rgw(ctx, config, clients):
                                                              client=client_with_cluster),
                     ],
                 )
+            ctx.cluster.only(client).run(args=['rm', '-f', token_path])
 
 def assign_endpoints(ctx, config, default_cert):
     role_endpoints = {}
