@@ -18,7 +18,7 @@ describe('Manager modules page', () => {
     });
 
     it('should open and show breadcrumb', async () => {
-      await expect(mgrmodules.getBreadcrumbText()).toEqual('Manager modules');
+      await mgrmodules.waitTextToBePresent(mgrmodules.getBreadcrumb(), 'Manager modules');
     });
   });
 

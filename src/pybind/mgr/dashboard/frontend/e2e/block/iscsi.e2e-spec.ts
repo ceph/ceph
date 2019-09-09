@@ -18,7 +18,7 @@ describe('Iscsi Page', () => {
     });
 
     it('should open and show breadcrumb', async () => {
-      await expect(iscsi.getBreadcrumbText()).toEqual('Overview');
+      await iscsi.waitTextToBePresent(iscsi.getBreadcrumb(), 'Overview');
     });
   });
 

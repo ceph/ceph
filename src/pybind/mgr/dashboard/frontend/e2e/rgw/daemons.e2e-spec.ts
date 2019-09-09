@@ -18,7 +18,7 @@ describe('RGW daemons page', () => {
     });
 
     it('should open and show breadcrumb', async () => {
-      await expect(daemons.getBreadcrumbText()).toEqual('Daemons');
+      await daemons.waitTextToBePresent(daemons.getBreadcrumb(), 'Daemons');
     });
 
     it('should show two tabs', async () => {

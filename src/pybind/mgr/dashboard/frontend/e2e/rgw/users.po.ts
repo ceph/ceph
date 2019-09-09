@@ -39,7 +39,7 @@ export class UsersPageHelper extends PageHelper {
     await this.getTableCell(name).click(); // click on the bucket you want to edit in the table
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
-    await expect(this.getBreadcrumbText()).toEqual('Edit');
+    await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit');
 
     // Change the full name field
     await element(by.id('display_name')).click();
@@ -165,7 +165,7 @@ export class UsersPageHelper extends PageHelper {
     await this.getTableCell(uname).click(); // click on the bucket you want to edit in the table
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
-    await expect(this.getBreadcrumbText()).toEqual('Edit');
+    await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit');
 
     // put invalid email to make field invalid
     await element(by.id('email')).click();
