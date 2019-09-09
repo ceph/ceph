@@ -24,19 +24,9 @@
 #include <fcntl.h>
 #include <string.h>
 
-// <macro hackery>
-// temporarily remap __le* to ceph_le* for benefit of shared kernel/userland headers
-#define __le16 ceph_le16
-#define __le32 ceph_le32
-#define __le64 ceph_le64
 #include "ceph_fs.h"
 #include "ceph_frag.h"
 #include "rbd_types.h"
-#undef __le16
-#undef __le32
-#undef __le64
-// </macro hackery>
-
 
 #ifdef __cplusplus
 #ifndef _BACKWARD_BACKWARD_WARNING_H
