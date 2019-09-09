@@ -963,8 +963,8 @@ TEST_F(cls_rgw, bi_log_trim)
   {
     cls_rgw_bi_log_list_ret bilog;
     ASSERT_EQ(0, bilog_list(ioctx, bucket_oid, &bilog));
-    // prepare/complete/olh entry for each
-    EXPECT_EQ(30u, bilog.entries.size());
+    // complete/olh entry for each
+    EXPECT_EQ(20u, bilog.entries.size());
 
     bilog1.assign(std::make_move_iterator(bilog.entries.begin()),
                   std::make_move_iterator(bilog.entries.end()));
@@ -976,19 +976,19 @@ TEST_F(cls_rgw, bi_log_trim)
     ASSERT_EQ(0, bilog_trim(ioctx, bucket_oid, from, to));
     cls_rgw_bi_log_list_ret bilog;
     ASSERT_EQ(0, bilog_list(ioctx, bucket_oid, &bilog));
-    EXPECT_EQ(29u, bilog.entries.size());
+    EXPECT_EQ(19u, bilog.entries.size());
     EXPECT_EQ(bilog1[1].id, bilog.entries.begin()->id);
     ASSERT_EQ(-ENODATA, bilog_trim(ioctx, bucket_oid, from, to));
   }
   // trim back of bilog
   {
-    const std::string from = bilog1[28].id;
+    const std::string from = bilog1[18].id;
     const std::string to = "9";
     ASSERT_EQ(0, bilog_trim(ioctx, bucket_oid, from, to));
     cls_rgw_bi_log_list_ret bilog;
     ASSERT_EQ(0, bilog_list(ioctx, bucket_oid, &bilog));
-    EXPECT_EQ(28u, bilog.entries.size());
-    EXPECT_EQ(bilog1[28].id, bilog.entries.rbegin()->id);
+    EXPECT_EQ(18u, bilog.entries.size());
+    EXPECT_EQ(bilog1[18].id, bilog.entries.rbegin()->id);
     ASSERT_EQ(-ENODATA, bilog_trim(ioctx, bucket_oid, from, to));
   }
   // trim middle of bilog
@@ -998,7 +998,7 @@ TEST_F(cls_rgw, bi_log_trim)
     ASSERT_EQ(0, bilog_trim(ioctx, bucket_oid, from, to));
     cls_rgw_bi_log_list_ret bilog;
     ASSERT_EQ(0, bilog_list(ioctx, bucket_oid, &bilog));
-    EXPECT_EQ(27u, bilog.entries.size());
+    EXPECT_EQ(17u, bilog.entries.size());
     ASSERT_EQ(-ENODATA, bilog_trim(ioctx, bucket_oid, from, to));
   }
   // trim full bilog
