@@ -1931,6 +1931,7 @@ private:
 
   RWLock coll_lock = {"BlueStore::coll_lock"};  ///< rwlock to protect coll_map
   mempool::bluestore_cache_other::unordered_map<coll_t, CollectionRef> coll_map;
+  bool collections_had_errors = false;
   map<coll_t,CollectionRef> new_coll_map;
 
   vector<Cache*> cache_shards;
@@ -2245,7 +2246,8 @@ private:
   void _close_fm();
   int _open_alloc();
   void _close_alloc();
-  int _open_collections(int64_t *errors=0);
+  int _open_collections();
+  void _fsck_collections(int64_t* errors);
   void _close_collections();
 
   int _setup_block_symlink_or_file(string name, string path, uint64_t size,
@@ -2357,7 +2359,7 @@ private:
     BlueStoreRepairer* repairer);
 
   int _fsck(FSCKDepth depth, bool repair);
-
+  int _fsck_on_open(BlueStore::FSCKDepth depth, bool repair);
 
   void _buffer_cache_write(
     TransContext *txc,
