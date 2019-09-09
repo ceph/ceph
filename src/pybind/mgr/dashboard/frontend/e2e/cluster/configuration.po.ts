@@ -18,8 +18,7 @@ export class ConfigurationPageHelper extends PageHelper {
     await $('input.form-control.ng-valid').sendKeys(name);
 
     // Selects config that we want to clear
-    await this.waitClickable(this.getFirstTableCellWithText(name)); // waits for config to be clickable
-    await this.getFirstTableCellWithText(name).click(); // click on the config to edit
+    await this.waitClickableAndClick(this.getFirstTableCellWithText(name)); // waits for config to be clickable and click
     await element(by.cssContainingText('button', 'Edit')).click(); // clicks button to edit
 
     for (const i of valList) {
@@ -34,8 +33,7 @@ export class ConfigurationPageHelper extends PageHelper {
     await $('input.form-control.ng-valid').clear();
     await $('input.form-control.ng-valid').sendKeys(name);
 
-    await this.waitClickable(this.getFirstTableCellWithText(name));
-    await this.getFirstTableCellWithText(name).click();
+    await this.waitClickableAndClick(this.getFirstTableCellWithText(name));
     // Clicks desired config
     await this.waitVisibility(
       $('.table.table-striped.table-bordered'), // Checks for visibility of details tab
@@ -59,8 +57,7 @@ export class ConfigurationPageHelper extends PageHelper {
     await $('input.form-control.ng-valid').sendKeys(name);
 
     // Selects config that we want to edit
-    await this.waitClickable(this.getFirstTableCellWithText(name)); // waits for config to be clickable
-    await this.getFirstTableCellWithText(name).click(); // click on the config to edit
+    await this.waitClickableAndClick(this.getFirstTableCellWithText(name)); // waits for config to be clickable and click
     await element(by.cssContainingText('button', 'Edit')).click(); // clicks button to edit
 
     await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit');

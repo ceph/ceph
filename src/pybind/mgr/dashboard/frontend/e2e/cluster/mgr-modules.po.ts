@@ -16,8 +16,7 @@ export class ManagerModulesPageHelper extends PageHelper {
     // Doesn't check/uncheck boxes because it is not reflected in the details table.
     // DOES NOT WORK FOR ALL MGR MODULES, for example, Device health
     await this.navigateTo();
-    await this.waitClickable(this.getFirstTableCellWithText(name));
-    await this.getFirstTableCellWithText(name).click();
+    await this.waitClickableAndClick(this.getFirstTableCellWithText(name));
     await element(by.cssContainingText('button', 'Edit')).click();
 
     for (const entry of tuple) {
@@ -37,8 +36,7 @@ export class ManagerModulesPageHelper extends PageHelper {
 
     // Clear mgr module of all edits made to it
     await this.navigateTo();
-    await this.waitClickable(this.getFirstTableCellWithText(name));
-    await this.getFirstTableCellWithText(name).click();
+    await this.waitClickableAndClick(this.getFirstTableCellWithText(name));
     await element(by.cssContainingText('button', 'Edit')).click();
 
     // Clears the editable fields
@@ -79,8 +77,7 @@ export class ManagerModulesPageHelper extends PageHelper {
       [warn, 'warn_threshold']
     ];
 
-    await this.waitClickable(this.getFirstTableCellWithText('devicehealth'));
-    await this.getFirstTableCellWithText('devicehealth').click();
+    await this.waitClickableAndClick(this.getFirstTableCellWithText('devicehealth'));
     await element(by.cssContainingText('button', 'Edit')).click();
     for (let i = 0, devHealthTuple; (devHealthTuple = devHealthArray[i]); i++) {
       if (devHealthTuple[0] !== undefined) {
@@ -110,8 +107,7 @@ export class ManagerModulesPageHelper extends PageHelper {
     // (on my local run of ceph-dev, this is subject to change i would assume). I'd imagine there is a
     // better way of doing this.
     await this.navigateTo();
-    await this.waitClickable(this.getFirstTableCellWithText('devicehealth')); // checks ansible
-    await this.getFirstTableCellWithText('devicehealth').click();
+    await this.waitClickableAndClick(this.getFirstTableCellWithText('devicehealth')); // checks ansible
     await element(by.cssContainingText('button', 'Edit')).click();
     await this.clearInput(element(by.id('mark_out_threshold')));
     await element(by.id('mark_out_threshold')).sendKeys('2419200');
@@ -132,8 +128,7 @@ export class ManagerModulesPageHelper extends PageHelper {
     await element(by.id('warn_threshold')).sendKeys('7257600');
 
     // Checks that clearing represents in details tab of ansible
-    await this.waitClickable(element(by.cssContainingText('button', 'Update')));
-    await element(by.cssContainingText('button', 'Update')).click();
+    await this.waitClickableAndClick(element(by.cssContainingText('button', 'Update')));
     await this.navigateTo();
     await this.waitVisibility(this.getFirstTableCellWithText('devicehealth'));
     await this.getFirstTableCellWithText('devicehealth').click();

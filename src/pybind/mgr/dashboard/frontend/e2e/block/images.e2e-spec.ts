@@ -101,10 +101,6 @@ describe('Images page', () => {
         images.getFirstTableCellWithText(newImageName),
         'Timed out waiting for image to restore'
       );
-      await images.waitClickable(
-        images.getFirstTableCellWithText(newImageName),
-        'Timed out waiting for image to be clickable'
-      );
       await images.moveToTrash(newImageName);
       await images.purgeTrash(newImageName, poolName);
     });
