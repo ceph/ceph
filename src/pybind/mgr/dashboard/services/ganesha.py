@@ -69,7 +69,7 @@ class Ganesha(object):
     @staticmethod
     def _get_orch_nfs_instances():
         try:
-            return OrchClient().list_service_info("nfs")
+            return OrchClient.instance().services.list("nfs")
         except (RuntimeError, OrchestratorError, ImportError):
             return []
 
@@ -129,7 +129,7 @@ class Ganesha(object):
     @classmethod
     def reload_daemons(cls, cluster_id, daemons_id):
         logger.debug("[NFS] issued reload of daemons: %s", daemons_id)
-        if not OrchClient().available():
+        if not OrchClient.instance().available():
             logger.debug("[NFS] orchestrator not available")
             return
         reload_list = []
@@ -142,7 +142,7 @@ class Ganesha(object):
                 continue
             if daemons[cluster_id][daemon_id] == 1:
                 reload_list.append((cluster_id, daemon_id))
-        OrchClient().reload_service("nfs", reload_list)
+        OrchClient.instance().reload_service("nfs", reload_list)
 
     @classmethod
     def fsals_available(cls):
