@@ -2333,18 +2333,22 @@ class OSDSocketHook : public AdminSocketHook {
   OSD *osd;
 public:
   explicit OSDSocketHook(OSD *o) : osd(o) {}
-  int call(std::string_view admin_command, const cmdmap_t& cmdmap,
+  int call(std::string_view prefix, const cmdmap_t& cmdmap,
 	   std::string_view format, bufferlist& out) override {
+    ceph_abort("should use async hook");
+  }
+  void call_async(
+    std::string_view prefix,
+    const cmdmap_t& cmdmap,
+    std::string_view format,
+    std::function<void(int,const std::string&,bufferlist&)> on_finish) override {
     stringstream ss;
-    int r;
     try {
-      r = osd->asok_command(admin_command, cmdmap, format, ss);
+      osd->asok_command(prefix, cmdmap, format, on_finish);
     } catch (const bad_cmd_get& e) {
-      ss << e.what();
-      r = -EINVAL;
+      bufferlist empty;
+      on_finish(-EINVAL, e.what(), empty);
     }
-    out.append(ss);
-    return r;
   }
 };
 
@@ -2359,11 +2363,17 @@ std::set<int64_t> OSD::get_mapped_pools()
   return pools;
 }
 
-bool OSD::asok_command(std::string_view admin_command, const cmdmap_t& cmdmap,
-		       std::string_view format, ostream& ss)
+void OSD::asok_command(
+  std::string_view prefix, const cmdmap_t& cmdmap,
+  std::string_view format,
+  std::function<void(int,const std::string&,bufferlist&)> on_finish)
 {
+  int ret = 0;
+  stringstream ss;   // stderr error message stream
   Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
-  if (admin_command == "status") {
+  bufferlist outbl;  // if empty at end, we'll dump formatter as output
+
+  if (prefix == "status") {
     f->open_object_section("status");
     f->dump_stream("cluster_fsid") << superblock.cluster_fsid;
     f->dump_stream("osd_fsid") << superblock.osd_fsid;
@@ -2373,14 +2383,14 @@ bool OSD::asok_command(std::string_view admin_command, const cmdmap_t& cmdmap,
     f->dump_unsigned("newest_map", superblock.newest_map);
     f->dump_unsigned("num_pgs", num_pgs);
     f->close_section();
-  } else if (admin_command == "flush_journal") {
+  } else if (prefix == "flush_journal") {
     store->flush_journal();
-  } else if (admin_command == "dump_ops_in_flight" ||
-             admin_command == "ops" ||
-             admin_command == "dump_blocked_ops" ||
-             admin_command == "dump_historic_ops" ||
-             admin_command == "dump_historic_ops_by_duration" ||
-             admin_command == "dump_historic_slow_ops") {
+  } else if (prefix == "dump_ops_in_flight" ||
+             prefix == "ops" ||
+             prefix == "dump_blocked_ops" ||
+             prefix == "dump_historic_ops" ||
+             prefix == "dump_historic_ops_by_duration" ||
+             prefix == "dump_historic_slow_ops") {
 
     const string error_str = "op_tracker tracking is not enabled now, so no ops are tracked currently, \
 even those get stuck. Please enable \"osd_enable_op_tracker\", and the tracker \
@@ -2393,37 +2403,47 @@ will start to track new ops received afterwards.";
            inserter(filters, filters.end()));
     }
 
-    if (admin_command == "dump_ops_in_flight" ||
-        admin_command == "ops") {
+    if (prefix == "dump_ops_in_flight" ||
+        prefix == "ops") {
       if (!op_tracker.dump_ops_in_flight(f, false, filters)) {
         ss << error_str;
+	ret = -EINVAL;
+	goto out;
       }
     }
-    if (admin_command == "dump_blocked_ops") {
+    if (prefix == "dump_blocked_ops") {
       if (!op_tracker.dump_ops_in_flight(f, true, filters)) {
         ss << error_str;
+	ret = -EINVAL;
+	goto out;
       }
     }
-    if (admin_command == "dump_historic_ops") {
+    if (prefix == "dump_historic_ops") {
       if (!op_tracker.dump_historic_ops(f, false, filters)) {
         ss << error_str;
+	ret = -EINVAL;
+	goto out;
       }
     }
-    if (admin_command == "dump_historic_ops_by_duration") {
+    if (prefix == "dump_historic_ops_by_duration") {
       if (!op_tracker.dump_historic_ops(f, true, filters)) {
         ss << error_str;
+	ret = -EINVAL;
+	goto out;
       }
     }
-    if (admin_command == "dump_historic_slow_ops") {
+    if (prefix == "dump_historic_slow_ops") {
       if (!op_tracker.dump_historic_slow_ops(f, filters)) {
         ss << error_str;
+	ret = -EINVAL;
+	goto out;
       }
     }
-  } else if (admin_command == "dump_op_pq_state") {
+  } else if (prefix == "dump_op_pq_state") {
     f->open_object_section("pq");
     op_shardedwq.dump(f);
     f->close_section();
-  } else if (admin_command == "dump_blacklist") {
+  } else if (prefix == "dump_blacklist") {
     list<pair<entity_addr_t,utime_t> > bl;
     OSDMapRef curmap = service.get_osdmap();
 
@@ -2439,7 +2459,7 @@ will start to track new ops received afterwards.";
       f->close_section(); //entry
     }
     f->close_section(); //blacklist
-  } else if (admin_command == "dump_watchers") {
+  } else if (prefix == "dump_watchers") {
     list<obj_watch_item_t> watchers;
     // scan pg's
     vector<PGRef> pgs;
@@ -2474,7 +2494,7 @@ will start to track new ops received afterwards.";
     }
 
     f->close_section(); //watchers
-  } else if (admin_command == "dump_recovery_reservations") {
+  } else if (prefix == "dump_recovery_reservations") {
     f->open_object_section("reservations");
     f->open_object_section("local_reservations");
     service.local_reserver.dump(f);
@@ -2483,13 +2503,13 @@ will start to track new ops received afterwards.";
     service.remote_reserver.dump(f);
     f->close_section();
     f->close_section();
-  } else if (admin_command == "dump_scrub_reservations") {
+  } else if (prefix == "dump_scrub_reservations") {
     f->open_object_section("scrub_reservations");
     service.dump_scrub_reservations(f);
     f->close_section();
-  } else if (admin_command == "get_latest_osdmap") {
+  } else if (prefix == "get_latest_osdmap") {
     get_latest_osdmap();
-  } else if (admin_command == "heap") {
+  } else if (prefix == "heap") {
     auto result = ceph::osd_cmds::heap(*cct, cmdmap, *f, ss);
 
     // Note: Failed heap profile commands won't necessarily trigger an error:
@@ -2497,7 +2517,7 @@ will start to track new ops received afterwards.";
     f->dump_string("error", cpp_strerror(result));
     f->dump_bool("success", result >= 0);
     f->close_section();
-  } else if (admin_command == "set_heap_property") {
+  } else if (prefix == "set_heap_property") {
     string property;
     int64_t value = 0;
     string error;
@@ -2521,7 +2541,7 @@ will start to track new ops received afterwards.";
     f->dump_string("error", error);
     f->dump_bool("success", success);
     f->close_section();
-  } else if (admin_command == "get_heap_property") {
+  } else if (prefix == "get_heap_property") {
     string property;
     size_t value = 0;
     string error;
@@ -2540,15 +2560,15 @@ will start to track new ops received afterwards.";
     f->dump_bool("success", success);
     f->dump_int("value", value);
     f->close_section();
-  } else if (admin_command == "dump_objectstore_kv_stats") {
+  } else if (prefix == "dump_objectstore_kv_stats") {
     store->get_db_statistics(f);
-  } else if (admin_command == "dump_scrubs") {
+  } else if (prefix == "dump_scrubs") {
     service.dumps_scrub(f);
-  } else if (admin_command == "calc_objectstore_db_histogram") {
+  } else if (prefix == "calc_objectstore_db_histogram") {
     store->generate_db_histogram(f);
-  } else if (admin_command == "flush_store_cache") {
+  } else if (prefix == "flush_store_cache") {
     store->flush_cache(&ss);
-  } else if (admin_command == "dump_pgstate_history") {
+  } else if (prefix == "dump_pgstate_history") {
     f->open_object_section("pgstate_history");
     f->open_array_section("pgs");
     vector<PGRef> pgs;
@@ -2562,7 +2582,7 @@ will start to track new ops received afterwards.";
     }
     f->close_section();
     f->close_section();
-  } else if (admin_command == "compact") {
+  } else if (prefix == "compact") {
     dout(1) << "triggering manual compaction" << dendl;
     auto start = ceph::coarse_mono_clock::now();
     store->compact();
@@ -2574,18 +2594,18 @@ will start to track new ops received afterwards.";
     f->open_object_section("compact_result");
     f->dump_float("elapsed_time", duration);
     f->close_section();
-  } else if (admin_command == "get_mapped_pools") {
+  } else if (prefix == "get_mapped_pools") {
     f->open_array_section("mapped_pools");
     set<int64_t> poollist = get_mapped_pools();
     for (auto pool : poollist) {
       f->dump_int("pool_id", pool);
     }
     f->close_section();
-  } else if (admin_command == "smart") {
+  } else if (prefix == "smart") {
     string devid;
     cmd_getval(cct, cmdmap, "devid", devid);
     probe_smart(devid, ss);
-  } else if (admin_command == "list_devices") {
+  } else if (prefix == "list_devices") {
     set<string> devnames;
     store->get_devices(&devnames);
     f->open_array_section("list_devices");
@@ -2600,11 +2620,11 @@ will start to track new ops received afterwards.";
       f->close_section();
     }
     f->close_section();
-  } else if (admin_command == "send_beacon") {
+  } else if (prefix == "send_beacon") {
     if (is_active()) {
       send_beacon(ceph::coarse_mono_clock::now());
     }
-  } else if (admin_command == "dump_osd_network") {
+  } else if (prefix == "dump_osd_network") {
     int64_t value = 0;
     if (!(cmd_getval(cct, cmdmap, "value", value))) {
       // Convert milliseconds to microseconds
@@ -2733,9 +2753,13 @@ will start to track new ops received afterwards.";
   } else {
     ceph_abort_msg("broken asok registration");
   }
-  f->flush(ss);
+
+ out:
+  if (ret >= 0 && outbl.length() == 0) {
+    f->flush(outbl);
+  }
   delete f;
-  return true;
+  on_finish(ret, ss.str(), outbl);
 }
 
 class TestOpsSocketHook : public AdminSocketHook {
