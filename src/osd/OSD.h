@@ -1176,8 +1176,11 @@ protected:
   // asok
   friend class OSDSocketHook;
   class OSDSocketHook *asok_hook;
-  bool asok_command(std::string_view admin_command, const cmdmap_t& cmdmap,
-		    std::string_view format, std::ostream& ss);
+  void asok_command(
+    std::string_view prefix,
+    const cmdmap_t& cmdmap,
+    std::string_view format,
+    std::function<void(int,const std::string&,bufferlist&)> on_finish);
 
 public:
   int get_nodeid() { return whoami; }
