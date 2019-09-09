@@ -96,6 +96,12 @@ struct errorator {
           // `report_failed_future()` during `operator=()`.
           std::move(result).get_exception();
           result = std::forward<ErrorVisitorT>(errfunc)(e);
+        } else {
+          constexpr bool explicitly_discarded = std::is_invocable_r<
+            struct ignore_marker_t&&, ErrorVisitorT, decltype(e)>::value;
+          if constexpr (!explicitly_discarded) {
+            result = std::forward<ErrorVisitorT>(errfunc)(e);
+          }
         }
       }
 
@@ -278,7 +284,18 @@ struct errorator {
     }
   };
 
+  struct discard_all {
+    template <_impl::ct_error ErrorV>
+    auto operator()(const unthrowable_wrapper<ErrorV>& e) {
+      static_assert((... || (e == WrappedAllowedErrorsT::instance)),
+                    "discarding disallowed ct_error");
+      return ignore_marker_t{};
+    }
+  };
+
 private:
+  struct ignore_marker_t{};
+
   template <class... Args>
   static decltype(auto) plainify(seastar::future<Args...>&& fut) {
     return std::forward<seastar::future<Args...>>(fut);
