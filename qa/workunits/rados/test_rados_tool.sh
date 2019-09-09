@@ -255,13 +255,20 @@ run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 5 write --write-xattr --write
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 5 write --write-xattr --write-omap
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 5 write --write-omap --write-object
 run_expect_succ "$RADOS_TOOL" --pool "$POOL" bench 5 write --write-xattr --write-omap --write-object
-run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-omap
-run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-object
-run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-xattr
-run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-xattr --write-object
-run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-xattr --write-omap
-run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-omap --write-object
-run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 read --write-xattr --write-omap --write-object
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 seq --write-omap
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 rand --write-omap
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 seq --write-object
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 rand--write-object
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 seq --write-xattr
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 rand --write-xattr
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 seq --write-xattr --write-object
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 rand --write-xattr --write-object
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 seq --write-xattr --write-omap
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 rand --write-xattr --write-omap
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 seq --write-omap --write-object
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 rand --write-omap --write-object
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 seq --write-xattr --write-omap --write-object
+run_expect_fail "$RADOS_TOOL" --pool "$POOL" bench 5 rand --write-xattr --write-omap --write-object
 
 for i in $("$RADOS_TOOL" --pool "$POOL" ls | grep "benchmark_data"); do
     "$RADOS_TOOL" --pool "$POOL" truncate $i 0
