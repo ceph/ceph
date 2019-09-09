@@ -1009,8 +1009,7 @@ int PG::peek_map_epoch(ObjectStore *store,
   auto ch = store->open_collection(coll);
   ceph_assert(ch);
   int r = store->omap_get_values(ch, pgmeta_oid, keys, &values);
-  if (r == 0) {
-    ceph_assert(values.size() == 2);
+  if (r == 0 && values.size() == 2) {
 
     // sanity check version
     auto bp = values[string(infover_key)].cbegin();
