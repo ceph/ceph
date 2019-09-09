@@ -6759,6 +6759,7 @@ void BlueStore::_fsck_check_pool_statfs(
   BlueStore::per_pool_statfs& expected_pool_statfs,
   bool need_per_pool_stats,
   int64_t& errors,
+  int64_t& warnings,
   BlueStoreRepairer* repairer)
 {
   auto it = db->get_iterator(PREFIX_STAT);
@@ -6773,13 +6774,17 @@ void BlueStore::_fsck_check_pool_statfs(
 	    derr << "fsck error: " << "legacy statfs record found, removing" << dendl;
 	  } else {
 	    derr << "fsck warning: " << "legacy statfs record found, bypassing" << dendl;
+            ++warnings;
 	  }
 	} else {
-	  const char* s = "fsck warning: ";
+	  const char* s;
           if (need_per_pool_stats) {
 	    ++errors;
 	    s = "fsck error: ";
-	  }
+	  } else {
+            s = "fsck warning: ";
+            ++warnings;
+          }
 	  derr << s << "legacy statfs record found, suggest to "
 	          "run store repair/quick_fix to get consistent statistic reports"
 	       << dendl;
@@ -8144,7 +8149,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   if (!enforce_no_per_pool_stats) {
     dout(1) << __func__ << " checking pool_statfs" << dendl;
     _fsck_check_pool_statfs(expected_pool_statfs, need_per_pool_stats,
-      errors, repair ? &repairer : nullptr);
+      errors, warnings, repair ? &repairer : nullptr);
   }
 
   if (depth != FSCK_SHALLOW) {
