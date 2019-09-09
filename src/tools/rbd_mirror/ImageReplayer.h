@@ -341,6 +341,9 @@ private:
   AsyncOpTracker m_event_replay_tracker;
   Context *m_delayed_preprocess_task = nullptr;
 
+  AsyncOpTracker m_in_flight_op_tracker;
+  Context *m_flush_local_replay_task = nullptr;
+
   struct RemoteJournalerListener : public ::journal::JournalMetadataListener {
     ImageReplayer *replayer;
 
@@ -377,6 +380,10 @@ private:
     return (m_state == STATE_REPLAYING ||
             m_state == STATE_REPLAY_FLUSHING);
   }
+
+  void schedule_flush_local_replay_task();
+  void cancel_flush_local_replay_task();
+  void handle_flush_local_replay_task(int r);
 
   void flush_local_replay(Context* on_flush);
   void handle_flush_local_replay(Context* on_flush, int r);
