@@ -1773,8 +1773,7 @@ public:
   // members
 private:
   BlueFS *bluefs = nullptr;
-  unsigned bluefs_shared_bdev = 0;  ///< which bluefs bdev we are sharing
-  bool bluefs_single_shared_device = true;
+  bluefs_layout_t bluefs_layout;
   mono_time bluefs_last_balance;
   utime_t next_dump_on_bluefs_alloc_failure;
 

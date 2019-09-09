@@ -61,7 +61,7 @@ TEST(BlueFS, mkfs) {
   BlueFS fs(g_ceph_context);
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
-  ASSERT_EQ(0, fs.mkfs(fsid));
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
 }
 
 TEST(BlueFS, mkfs_mount) {
@@ -71,8 +71,9 @@ TEST(BlueFS, mkfs_mount) {
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
-  ASSERT_EQ(0, fs.mkfs(fsid));
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(fs.get_total(BlueFS::BDEV_DB), size - 1048576);
   ASSERT_LT(fs.get_free(BlueFS::BDEV_DB), size - 1048576);
   fs.umount();
@@ -85,8 +86,9 @@ TEST(BlueFS, write_read) {
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
-  ASSERT_EQ(0, fs.mkfs(fsid));
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
   {
     BlueFS::FileWriter *h;
     ASSERT_EQ(0, fs.mkdir("dir"));
@@ -116,8 +118,9 @@ TEST(BlueFS, small_appends) {
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
-  ASSERT_EQ(0, fs.mkfs(fsid));
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
   {
     BlueFS::FileWriter *h;
     ASSERT_EQ(0, fs.mkdir("dir"));
@@ -152,8 +155,9 @@ TEST(BlueFS, very_large_write) {
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
-  ASSERT_EQ(0, fs.mkfs(fsid));
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
   char buf[1048571]; // this is biggish, but intentionally not evenly aligned
   for (unsigned i = 0; i < sizeof(buf); ++i) {
     buf[i] = i;
@@ -314,8 +318,9 @@ TEST(BlueFS, test_flush_1) {
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
-  ASSERT_EQ(0, fs.mkfs(fsid));
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
   {
     std::vector<std::thread> write_thread_multiple;
     uint64_t effective_size = size - (32 * 1048576); // leaving the last 32 MB for log compaction
@@ -348,8 +353,9 @@ TEST(BlueFS, test_flush_2) {
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
-  ASSERT_EQ(0, fs.mkfs(fsid));
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
   {
     uint64_t effective_size = size - (128 * 1048576); // leaving the last 32 MB for log compaction
     uint64_t per_thread_bytes = (effective_size/(NUM_WRITERS));
@@ -375,8 +381,9 @@ TEST(BlueFS, test_flush_3) {
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
-  ASSERT_EQ(0, fs.mkfs(fsid));
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
   {
     std::vector<std::thread> write_threads;
     uint64_t effective_size = size - (64 * 1048576); // leaving the last 11 MB for log compaction
@@ -408,8 +415,9 @@ TEST(BlueFS, test_simple_compaction_sync) {
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
-  ASSERT_EQ(0, fs.mkfs(fsid));
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
   {
     for (int i=0; i<10; i++) {
        string dir = "dir.";
@@ -460,8 +468,9 @@ TEST(BlueFS, test_simple_compaction_async) {
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
-  ASSERT_EQ(0, fs.mkfs(fsid));
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
   {
     for (int i=0; i<10; i++) {
        string dir = "dir.";
@@ -515,8 +524,9 @@ TEST(BlueFS, test_compaction_sync) {
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
-  ASSERT_EQ(0, fs.mkfs(fsid));
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
   {
     std::vector<std::thread> write_threads;
     uint64_t effective_size = size - (32 * 1048576); // leaving the last 32 MB for log compaction
@@ -552,8 +562,9 @@ TEST(BlueFS, test_compaction_async) {
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
-  ASSERT_EQ(0, fs.mkfs(fsid));
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
   {
     std::vector<std::thread> write_threads;
     uint64_t effective_size = size - (32 * 1048576); // leaving the last 32 MB for log compaction
@@ -589,8 +600,9 @@ TEST(BlueFS, test_replay) {
   ASSERT_EQ(0, fs.add_block_device(BlueFS::BDEV_DB, bdev.path, false));
   fs.add_block_extent(BlueFS::BDEV_DB, 1048576, size - 1048576);
   uuid_d fsid;
-  ASSERT_EQ(0, fs.mkfs(fsid));
+  ASSERT_EQ(0, fs.mkfs(fsid, { BlueFS::BDEV_DB, false, false }));
   ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
   {
     std::vector<std::thread> write_threads;
     uint64_t effective_size = size - (32 * 1048576); // leaving the last 32 MB for log compaction
@@ -612,6 +624,7 @@ TEST(BlueFS, test_replay) {
   fs.umount();
   // remount and check log can replay safe?
   ASSERT_EQ(0, fs.mount());
+  ASSERT_EQ(0, fs.maybe_verify_layout({ BlueFS::BDEV_DB, false, false }));
   fs.umount();
 }
 

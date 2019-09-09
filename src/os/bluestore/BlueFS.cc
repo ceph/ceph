@@ -446,7 +446,7 @@ int BlueFS::get_block_extents(unsigned id, interval_set<uint64_t> *extents)
   return 0;
 }
 
-int BlueFS::mkfs(uuid_d osd_uuid)
+int BlueFS::mkfs(uuid_d osd_uuid, const bluefs_layout_t& layout)
 {
   std::unique_lock l(lock);
   dout(1) << __func__
@@ -490,6 +490,7 @@ int BlueFS::mkfs(uuid_d osd_uuid)
 
   // write supers
   super.log_fnode = log_file->fnode;
+  super.memorized_layout = layout;
   _write_super(BDEV_DB);
   flush_bdev();
 
@@ -616,6 +617,23 @@ int BlueFS::mount()
   return r;
 }
 
+int BlueFS::maybe_verify_layout(const bluefs_layout_t& layout) const
+{
+  if (super.memorized_layout) {
+    if (layout == *super.memorized_layout) {
+      dout(10) << __func__ << " bluefs layout verified positively" << dendl;
+    } else {
+      derr << __func__ << " memorized layout doesn't fit current one" << dendl;
+      return -EIO;
+    }
+  } else {
+    dout(10) << __func__ << " no memorized_layout in bluefs superblock"
+             << dendl;
+  }
+
+  return 0;
+}
+
 void BlueFS::umount()
 {
   dout(1) << __func__ << dendl;
@@ -693,7 +711,7 @@ int BlueFS::_write_super(int dev)
   dout(10) << __func__ << " super block length(encoded): " << bl.length() << dendl;
   dout(10) << __func__ << " superblock " << super.version << dendl;
   dout(10) << __func__ << " log_fnode " << super.log_fnode << dendl;
-  ceph_assert(bl.length() <= get_super_length());
+  ceph_assert_always(bl.length() <= get_super_length());
   bl.append_zero(get_super_length() - bl.length());
 
   bdev[dev]->write(get_super_offset(), bl, false, WRITE_LIFE_SHORT);
