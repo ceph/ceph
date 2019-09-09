@@ -63,7 +63,7 @@ export class ConfigurationPageHelper extends PageHelper {
     await this.getTableCell(name).click(); // click on the config to edit
     await element(by.cssContainingText('button', 'Edit')).click(); // clicks button to edit
 
-    await expect(this.getBreadcrumbText()).toEqual('Edit');
+    await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit');
 
     for (let i = 0, valtuple; (valtuple = values[i]); i++) {
       // Finds desired value based off given list

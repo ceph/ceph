@@ -19,7 +19,7 @@ describe('Configuration page', () => {
     });
 
     it('should open and show breadcrumb', async () => {
-      await expect(configuration.getBreadcrumbText()).toEqual('Configuration');
+      await configuration.waitTextToBePresent(configuration.getBreadcrumb(), 'Configuration');
     });
   });
 

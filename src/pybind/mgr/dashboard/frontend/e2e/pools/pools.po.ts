@@ -60,7 +60,7 @@ export class PoolPageHelper extends PageHelper {
     const elem = await this.getTableCellByContent(name);
     await elem.click(); // select pool from the table
     await element(by.cssContainingText('button', 'Edit')).click(); // click edit button
-    await expect(this.getBreadcrumbText()).toEqual('Edit'); // verify we are now on edit page
+    await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit'); // verify we are now on edit page
     await $('input[name=pgNum]').sendKeys(protractor.Key.CONTROL, 'a', protractor.Key.NULL, new_pg);
     await element(by.css('cd-submit-button')).click();
     const str = `${new_pg} active+clean`;

@@ -50,7 +50,7 @@ describe('Dashboard Main Page', () => {
       for (const [linkText, breadcrumbText] of Object.entries(expectationMap)) {
         await expect(browser.getCurrentUrl()).toContain('/#/dashboard');
         await dashboard.clickInfoCardLink(linkText);
-        await expect(dashboard.getBreadcrumbText()).toEqual(breadcrumbText);
+        await dashboard.waitTextToBePresent(dashboard.getBreadcrumb(), breadcrumbText);
         await dashboard.navigateBack();
       }
     });

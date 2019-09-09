@@ -21,7 +21,7 @@ describe('Mirroring page', () => {
     });
 
     it('should open and show breadcrumb', async () => {
-      await expect(mirroring.getBreadcrumbText()).toEqual('Mirroring');
+      await mirroring.waitTextToBePresent(mirroring.getBreadcrumb(), 'Mirroring');
     });
 
     it('should show three tabs', async () => {

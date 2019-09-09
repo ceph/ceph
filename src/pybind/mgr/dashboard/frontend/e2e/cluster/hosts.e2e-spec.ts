@@ -18,7 +18,7 @@ describe('Hosts page', () => {
     });
 
     it('should open and show breadcrumb', async () => {
-      await expect(hosts.getBreadcrumbText()).toEqual('Hosts');
+      await hosts.waitTextToBePresent(hosts.getBreadcrumb(), 'Hosts');
     });
 
     it('should show two tabs', async () => {

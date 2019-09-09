@@ -18,7 +18,7 @@ describe('Nfs page', () => {
     });
 
     it('should open and show breadcrumb', async () => {
-      await expect(nfs.getBreadcrumbText()).toEqual('NFS');
+      await nfs.waitTextToBePresent(nfs.getBreadcrumb(), 'NFS');
     });
   });
 });

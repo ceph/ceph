@@ -17,22 +17,22 @@ describe('User Management page', () => {
   describe('breadcrumb tests', () => {
     it('should check breadcrumb on users tab of user management page', async () => {
       await userManagement.navigateTo('users');
-      await expect(userManagement.getBreadcrumbText()).toEqual('Users');
+      await userManagement.waitTextToBePresent(userManagement.getBreadcrumb(), 'Users');
     });
 
     it('should check breadcrumb on roles tab of user management page', async () => {
       await userManagement.navigateTo('roles');
-      await expect(userManagement.getBreadcrumbText()).toEqual('Roles');
+      await userManagement.waitTextToBePresent(userManagement.getBreadcrumb(), 'Roles');
     });
 
     it('should check breadcrumb on user creation page', async () => {
       await userManagement.navigateTo('userCreate');
-      await expect(userManagement.getBreadcrumbText()).toEqual('Create');
+      await userManagement.waitTextToBePresent(userManagement.getBreadcrumb(), 'Create');
     });
 
     it('should check breadcrumb on role creation page', async () => {
       await userManagement.navigateTo('roleCreate');
-      await expect(userManagement.getBreadcrumbText()).toEqual('Create');
+      await userManagement.waitTextToBePresent(userManagement.getBreadcrumb(), 'Create');
     });
   });
 
