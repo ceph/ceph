@@ -5902,9 +5902,10 @@ int BlueStore::_balance_bluefs_freespace()
   return ret;
 }
 
-int BlueStore::_open_collections(int64_t *errors)
+int BlueStore::_open_collections()
 {
   dout(10) << __func__ << dendl;
+  collections_had_errors = false;
   ceph_assert(coll_map.empty());
   KeyValueDB::Iterator it = db->get_iterator(PREFIX_COLL);
   for (it->upper_bound(string());
@@ -5934,11 +5935,29 @@ int BlueStore::_open_collections(int64_t *errors)
 
     } else {
       derr << __func__ << " unrecognized collection " << it->key() << dendl;
-      if (errors)
-	(*errors)++;
+      collections_had_errors = true;
     }
   }
   return 0;
+}
+
+void BlueStore::_fsck_collections(int64_t* errors)
+{
+  if (collections_had_errors) {
+    dout(10) << __func__ << dendl;
+    KeyValueDB::Iterator it = db->get_iterator(PREFIX_COLL);
+    for (it->upper_bound(string());
+      it->valid();
+      it->next()) {
+      coll_t cid;
+      if (!cid.parse(it->key())) {
+        derr << __func__ << " unrecognized collection " << it->key() << dendl;
+        if (errors) {
+          (*errors)++;
+        }
+      }
+    }
+  }
 }
 
 void BlueStore::_open_statfs()
@@ -6791,6 +6810,18 @@ int BlueStore::_mount(bool kv_only, bool open_db)
 
   mempool_thread.init();
 
+  if (!per_pool_stat_collection &&
+    cct->_conf->bluestore_fsck_quick_fix_on_mount == true) {
+    dout(1) << __func__ << " quick-fix on mount" << dendl;
+    _fsck_on_open(FSCK_SHALLOW, true);
+
+    //reread statfs
+    //FIXME minor: replace with actual open/close?
+    _open_statfs();
+
+    _check_legacy_statfs_alert();
+  }
+
   mounted = true;
   return 0;
 
@@ -6995,7 +7026,7 @@ void BlueStore::_fsck_check_pool_statfs(
 	    s = "fsck error: ";
 	  }
 	  derr << s << "legacy statfs record found, suggest to "
-	          "run store repair to get consistent statistic reports"
+	          "run store repair/quick_fix to get consistent statistic reports"
 	       << dendl;
 	}
 	continue;
@@ -7909,42 +7940,13 @@ Detection stage (in processing order):
 int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
 {
   dout(1) << __func__
-	  << " <<<START>>>"
-	  << (repair ? " repair" : " check")
-	  << (depth == FSCK_DEEP ? " (deep)" :
-                depth == FSCK_SHALLOW ? " (shallow)" : " (regular)")
-          << " start" << dendl;
-  int64_t errors = 0;
-  int64_t warnings = 0;
-  unsigned repaired = 0;
+    << (repair ? " repair" : " check")
+    << (depth == FSCK_DEEP ? " (deep)" :
+      depth == FSCK_SHALLOW ? " (shallow)" : " (regular)")
+    << dendl;
 
-  uint64_t_btree_t used_omap_head;
-  uint64_t_btree_t used_per_pool_omap_head;
-  uint64_t_btree_t used_pgmeta_omap_head;
-  uint64_t_btree_t used_sbids;
-
-  mempool_dynamic_bitset used_blocks;
-  KeyValueDB::Iterator it;
-  store_statfs_t expected_store_statfs, actual_statfs;
-  per_pool_statfs expected_pool_statfs;
-
-  sb_info_map_t sb_info;
-
-  uint64_t num_objects = 0;
-  uint64_t num_extents = 0;
-  uint64_t num_blobs = 0;
-  uint64_t num_spanning_blobs = 0;
-  uint64_t num_shared_blobs = 0;
-  uint64_t num_sharded_objects = 0;
-  BlueStoreRepairer repairer;
   // in deep mode we need R/W write access to be able to replay deferred ops
   bool read_only = !(repair || depth == FSCK_DEEP);
-
-  utime_t start = ceph_clock_now();
-  const auto& no_pps_mode = cct->_conf->bluestore_no_per_pool_stats_tolerance;
-  bool need_per_pool_stats = no_pps_mode == "until_fsck" ||
-    (no_pps_mode == "until_repair" && repair);
-  bool enforce_no_per_pool_stats = no_pps_mode == "enforce";
 
   int r = _open_path();
   if (r < 0)
@@ -7976,7 +7978,7 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
     }
   }
 
-  r = _open_collections(&errors);
+  r = _open_collections();
   if (r < 0)
     goto out_db;
 
@@ -7992,6 +7994,62 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
   if (r < 0)
     goto out_scan;
 
+  r = _fsck_on_open(depth, repair);
+
+out_scan:
+  mempool_thread.shutdown();
+  _flush_cache();
+out_db:
+  _close_db_and_around();
+out_bdev:
+  _close_bdev();
+out_fsid:
+  _close_fsid();
+out_path:
+  _close_path();
+
+  return r;
+}
+
+int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
+{
+  dout(1) << __func__
+	  << " <<<START>>>"
+	  << (repair ? " repair" : " check")
+	  << (depth == FSCK_DEEP ? " (deep)" :
+                depth == FSCK_SHALLOW ? " (shallow)" : " (regular)")
+          << " start" << dendl;
+  int64_t errors = 0;
+  int64_t warnings = 0;
+  unsigned repaired = 0;
+
+  uint64_t_btree_t used_omap_head;
+  uint64_t_btree_t used_per_pool_omap_head;
+  uint64_t_btree_t used_pgmeta_omap_head;
+  uint64_t_btree_t used_sbids;
+
+  mempool_dynamic_bitset used_blocks;
+  KeyValueDB::Iterator it;
+  store_statfs_t expected_store_statfs, actual_statfs;
+  per_pool_statfs expected_pool_statfs;
+
+  sb_info_map_t sb_info;
+
+  uint64_t num_objects = 0;
+  uint64_t num_extents = 0;
+  uint64_t num_blobs = 0;
+  uint64_t num_spanning_blobs = 0;
+  uint64_t num_shared_blobs = 0;
+  uint64_t num_sharded_objects = 0;
+  BlueStoreRepairer repairer;
+
+  utime_t start = ceph_clock_now();
+  const auto& no_pps_mode = cct->_conf->bluestore_no_per_pool_stats_tolerance;
+  bool need_per_pool_stats = no_pps_mode == "until_fsck" ||
+    ((no_pps_mode == "until_repair")  && repair);
+  bool enforce_no_per_pool_stats = no_pps_mode == "enforce";
+
+  _fsck_collections(&errors);
   used_blocks.resize(fm->get_alloc_units());
   apply(
     0, std::max<uint64_t>(min_alloc_size, SUPER_RESERVED), fm->get_alloc_size(), used_blocks,
@@ -8042,9 +8100,9 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
         }
 	);
     }
-    r = bluefs->fsck();
+    int r = bluefs->fsck();
     if (r < 0) {
-      goto out_scan;
+      return r;
     }
     if (r > 0)
       errors += r;
@@ -8078,6 +8136,7 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
   need_per_pool_stats = per_pool_stat_collection || need_per_pool_stats;
 
   if (g_conf()->bluestore_debug_fsck_abort) {
+    dout(1) << __func__ << " debug abort" << dendl;
     goto out_scan;
   }
   // walk PREFIX_OBJ
@@ -8602,23 +8661,8 @@ int BlueStore::_fsck(BlueStore::FSCKDepth depth, bool repair)
     repaired = repairer.apply(db);
     dout(5) << __func__ << " repair applied" << dendl;
   }
- out_scan:
-  mempool_thread.shutdown();
-  _flush_cache();
- out_db:
-  it.reset();  // before db is closed
-  _close_db_and_around();
- out_bdev:
-  _close_bdev();
- out_fsid:
-  _close_fsid();
- out_path:
-  _close_path();
 
-  // fatal errors take precedence
-  if (r < 0)
-    return r;
-
+out_scan:
   dout(2) << __func__ << " " << num_objects << " objects, "
 	  << num_sharded_objects << " of them sharded.  "
 	  << dendl;
