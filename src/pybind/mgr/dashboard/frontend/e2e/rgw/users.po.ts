@@ -35,8 +35,7 @@ export class UsersPageHelper extends PageHelper {
   async edit(name, new_fullname, new_email, new_maxbuckets) {
     await this.navigateTo();
 
-    await this.waitClickable(this.getFirstTableCellWithText(name)); // wait for table to load
-    await this.getFirstTableCellWithText(name).click(); // click on the bucket you want to edit in the table
+    await this.waitClickableAndClick(this.getFirstTableCellWithText(name)); // wait for table to load and click
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
     await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit');
@@ -58,9 +57,8 @@ export class UsersPageHelper extends PageHelper {
 
     const editbutton = element(by.cssContainingText('button', 'Edit User'));
     await editbutton.click();
-    await this.waitClickable(this.getFirstTableCellWithText(name));
     // Click the user and check its details table for updated content
-    await this.getFirstTableCellWithText(name).click();
+    await this.waitClickableAndClick(this.getFirstTableCellWithText(name));
     await expect($('.active.tab-pane').getText()).toMatch(new_fullname); // check full name was changed
     await expect($('.active.tab-pane').getText()).toMatch(new_email); // check email was changed
     await expect($('.active.tab-pane').getText()).toMatch(new_maxbuckets); // check max buckets was changed
@@ -143,8 +141,8 @@ export class UsersPageHelper extends PageHelper {
 
     await this.navigateTo();
 
-    await this.waitClickable(this.getFirstTableCellWithText(uname)); // wait for table to load
-    await this.getFirstTableCellWithText(uname).click(); // click on the bucket you want to edit in the table
+    // wait for table to load and click on the bucket you want to edit in the table
+    await this.waitClickableAndClick(this.getFirstTableCellWithText(uname));
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
     await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit');

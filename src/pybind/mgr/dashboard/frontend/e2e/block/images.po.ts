@@ -49,9 +49,7 @@ export class ImagesPageHelper extends PageHelper {
 
     await element(by.cssContainingText('button', 'Edit RBD')).click();
     await this.navigateTo();
-    await this.waitClickable(this.getFirstTableCellWithText(newName));
-    // click edit button and wait to make sure new owner is present in table
-    await this.getFirstTableCellWithText(newName).click();
+    await this.waitClickableAndClick(this.getFirstTableCellWithText(newName));
     await expect(
       element
         .all(by.css('.table.table-striped.table-bordered'))
@@ -66,8 +64,7 @@ export class ImagesPageHelper extends PageHelper {
     await this.navigateTo();
     // wait for image to be created
     await this.waitTextNotPresent($$('.datatable-body').first(), '(Creating...)');
-    await this.waitClickable(this.getFirstTableCellWithText(name));
-    await this.getFirstTableCellWithText(name).click();
+    await this.waitClickableAndClick(this.getFirstTableCellWithText(name));
     // click on the drop down and selects the move to trash option
     await $$('.table-actions button.dropdown-toggle')
       .first()
@@ -77,8 +74,7 @@ export class ImagesPageHelper extends PageHelper {
     await element(by.cssContainingText('button', 'Move Image')).click();
     await this.navigateTo();
     // Clicks trash tab
-    await this.waitClickable(element(by.cssContainingText('.nav-link', 'Trash')));
-    await element(by.cssContainingText('.nav-link', 'Trash')).click();
+    await this.waitClickableAndClick(element(by.cssContainingText('.nav-link', 'Trash')));
     await this.waitPresence(this.getFirstTableCellWithText(name));
   }
 
@@ -89,8 +85,7 @@ export class ImagesPageHelper extends PageHelper {
     // clicks on trash tab
     await element(by.cssContainingText('.nav-link', 'Trash')).click();
     // wait for table to load
-    await this.waitClickable(this.getFirstTableCellWithText(name));
-    await this.getFirstTableCellWithText(name).click();
+    await this.waitClickableAndClick(this.getFirstTableCellWithText(name));
     await element(by.cssContainingText('button', 'Restore')).click();
     // wait for pop-up to be visible (checks for title of pop-up)
     await this.waitVisibility(element(by.id('name')));
@@ -125,8 +120,7 @@ export class ImagesPageHelper extends PageHelper {
       await $(getPoolName).click();
       await expect(element(by.id('poolName')).getAttribute('class')).toContain('ng-valid'); // check if pool is selected
     }
-    await this.waitClickable(element(by.id('purgeFormButton')));
-    await element(by.id('purgeFormButton')).click();
+    await this.waitClickableAndClick(element(by.id('purgeFormButton')));
     // Wait for image to delete and check it is not present
     await this.waitStaleness(
       this.getFirstTableCellWithText(name),

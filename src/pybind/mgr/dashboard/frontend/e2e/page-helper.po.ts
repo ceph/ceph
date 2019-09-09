@@ -176,8 +176,7 @@ export abstract class PageHelper {
       );
     }
 
-    await this.waitClickable(label);
-    return label.click();
+    return this.waitClickableAndClick(label);
   }
 
   /**
@@ -270,8 +269,12 @@ export abstract class PageHelper {
     return browser.wait(EC.stalenessOf(elem), TIMEOUT, message);
   }
 
-  async waitClickable(elem: ElementFinder, message?: string) {
-    return browser.wait(EC.elementToBeClickable(elem), TIMEOUT, message);
+  /**
+   * This method will wait for the element to be clickable and then click it.
+   */
+  async waitClickableAndClick(elem: ElementFinder, message?: string) {
+    await browser.wait(EC.elementToBeClickable(elem), TIMEOUT, message);
+    return elem.click();
   }
 
   async waitVisibility(elem: ElementFinder, message?: string) {
@@ -305,8 +308,7 @@ export abstract class PageHelper {
    */
   async delete(name: string): Promise<any> {
     // Selects row
-    await this.waitClickable(this.getFirstTableCellWithText(name));
-    await this.getFirstTableCellWithText(name).click();
+    await this.waitClickableAndClick(this.getFirstTableCellWithText(name));
 
     // Clicks on table Delete button
     await $$('.table-actions button.dropdown-toggle')
