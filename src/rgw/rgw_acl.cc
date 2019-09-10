@@ -186,3 +186,16 @@ bool RGWAccessControlPolicy::verify_permission(const DoutPrefixProvider* dpp,
 }
 
 
+bool RGWAccessControlPolicy::IsPublic() const
+{
+
+  static constexpr auto public_groups = {ACL_GROUP_ALL_USERS,
+					 ACL_GROUP_AUTHENTICATED_USERS};
+  return std::any_of(public_groups.begin(), public_groups.end(),
+                         [&](ACLGroupTypeEnum g) {
+                           auto p = acl.get_group_perm(g, RGW_PERM_FULL_CONTROL);
+                           return (p != RGW_PERM_NONE) && (p != RGW_PERM_INVALID);
+                         }
+                         );
+
+}
