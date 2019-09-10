@@ -4121,6 +4121,7 @@ PeeringState::Reset::Reset(my_context ctx)
 
   ps->flushes_in_progress = 0;
   ps->set_last_peering_reset();
+  ps->log_weirdness();
 }
 
 boost::statechart::result
@@ -5990,6 +5991,7 @@ PeeringState::GetInfo::GetInfo(my_context ctx)
 
   DECLARE_LOCALS;
   ps->check_past_interval_bounds();
+  ps->log_weirdness();
   PastIntervals::PriorSet &prior_set = context< Peering >().prior_set;
 
   ceph_assert(ps->blocked_by.empty());
@@ -6139,6 +6141,8 @@ PeeringState::GetLog::GetLog(my_context ctx)
   context< PeeringMachine >().log_enter(state_name);
 
   DECLARE_LOCALS;
+
+  ps->log_weirdness();
 
   // adjust acting?
   if (!ps->choose_acting(auth_log_shard, false,
@@ -6459,6 +6463,7 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
   context< PeeringMachine >().log_enter(state_name);
 
   DECLARE_LOCALS;
+  ps->log_weirdness();
   ceph_assert(!ps->acting_recovery_backfill.empty());
   eversion_t since;
   for (set<pg_shard_t>::iterator i = ps->acting_recovery_backfill.begin();
