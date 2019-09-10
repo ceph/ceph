@@ -14,7 +14,7 @@ void cls_user_set_buckets(librados::ObjectWriteOperation& op, list<cls_user_buck
 {
   bufferlist in;
   cls_user_set_buckets_op call;
-  call.entries = entries;
+  std::move(entries.begin(), entries.end(), std::back_inserter(call.entries));
   call.add = add;
   call.time = real_clock::now();
   encode(call, in);
@@ -54,7 +54,8 @@ public:
         auto iter = outbl.cbegin();
         decode(ret, iter);
         if (entries)
-	  *entries = ret.entries;
+	  std::move(ret.entries.begin(), ret.entries.end(),
+		    std::back_inserter(*entries));
         if (truncated)
           *truncated = ret.truncated;
         if (marker)

@@ -45,3 +45,4 @@ if(WITH_BOOST_CONTEXT)
   target_include_directories(RADOS_cls_otp PRIVATE
     $<TARGET_PROPERTY:spawn,INTERFACE_INCLUDE_DIRECTORIES>)
 endif()
+add_library(RADOS_cls_user OBJECT cls/user.cc)

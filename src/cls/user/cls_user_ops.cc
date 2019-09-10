@@ -1,9 +1,10 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "cls/user/cls_user_ops.h"
 #include "common/Formatter.h"
 #include "common/ceph_json.h"
+#include "include/utime.h"
 
 void cls_user_set_buckets_op::dump(Formatter *f) const
 {
@@ -12,7 +13,7 @@ void cls_user_set_buckets_op::dump(Formatter *f) const
   encode_json("time", utime_t(time), f);
 }
 
-void cls_user_set_buckets_op::generate_test_instances(list<cls_user_set_buckets_op*>& ls)
+void cls_user_set_buckets_op::generate_test_instances(std::list<cls_user_set_buckets_op*>& ls)
 {
   ls.push_back(new cls_user_set_buckets_op);
   cls_user_set_buckets_op *op = new cls_user_set_buckets_op;

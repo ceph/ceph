@@ -1,12 +1,18 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #ifndef CEPH_CLS_USER_TYPES_H
 #define CEPH_CLS_USER_TYPES_H
 
+#include <cstdint>
+#include <cstdlib>
+#include <list>
+#include <string>
+
+#include "include/buffer.h"
 #include "include/encoding.h"
 #include "include/types.h"
-#include "include/utime.h"
+
 #include "common/ceph_time.h"
 
 /*
@@ -23,7 +29,7 @@ struct cls_user_bucket {
     std::string data_extra_pool;
   } explicit_placement;
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     /* since new version of this structure is not backward compatible,
      * we have older rgw running against newer osd if we encode it
      * in the new way. Only encode newer version if placement_id is
@@ -47,7 +53,7 @@ struct cls_user_bucket {
       ENCODE_FINISH(bl);
     }
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(8, 3, 3, bl);
     decode(name, bl);
     if (struct_v < 8) {
@@ -56,7 +62,7 @@ struct cls_user_bucket {
     if (struct_v >= 2) {
       decode(marker, bl);
       if (struct_v <= 3) {
-        uint64_t id;
+	std::uint64_t id;
         decode(id, bl);
         char buf[16];
         snprintf(buf, sizeof(buf), "%llu", (long long)id);
@@ -85,12 +91,12 @@ struct cls_user_bucket {
     DECODE_FINISH(bl);
   }
 
-  bool operator<(const cls_user_bucket& b) const {
+  bool operator <(const cls_user_bucket& b) const {
     return name.compare(b.name) < 0;
   }
 
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<cls_user_bucket*>& ls);
+  void dump(ceph::Formatter* f) const;
+  static void generate_test_instances(std::list<cls_user_bucket*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_bucket)
 
@@ -99,19 +105,19 @@ WRITE_CLASS_ENCODER(cls_user_bucket)
  */
 struct cls_user_bucket_entry {
   cls_user_bucket bucket;
-  size_t size;
-  size_t size_rounded;
+  std::size_t size = 0;
+  std::size_t size_rounded = 0;
   ceph::real_time creation_time;
-  uint64_t count;
-  bool user_stats_sync;
+  std::uint64_t count = 0;
+  bool user_stats_sync = false;
 
-  cls_user_bucket_entry() : size(0), size_rounded(0), count(0), user_stats_sync(false) {}
+  cls_user_bucket_entry() = default;
 
-  void encode(bufferlist& bl) const {
+  void encode(ceph::buffer::list& bl) const {
     ENCODE_START(9, 5, bl);
-    uint64_t s = size;
+    std::uint64_t s = size;
     __u32 mt = ceph::real_clock::to_time_t(creation_time);
-    string empty_str;  // originally had the bucket name here, but we encode bucket later
+    std::string empty_str;  // originally had the bucket name here, but we encode bucket later
     encode(empty_str, bl);
     encode(s, bl);
     encode(mt, bl);
@@ -124,11 +130,11 @@ struct cls_user_bucket_entry {
     //::encode(placement_rule, bl); removed in v9
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START_LEGACY_COMPAT_LEN(9, 5, 5, bl);
     __u32 mt;
-    uint64_t s;
-    string empty_str;  // backward compatibility
+    std::uint64_t s;
+    std::string empty_str;  // backward compatibility
     decode(empty_str, bl);
     decode(s, bl);
     decode(mt, bl);
@@ -153,29 +159,26 @@ struct cls_user_bucket_entry {
     }
     DECODE_FINISH(bl);
   }
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<cls_user_bucket_entry*>& ls);
+  void dump(ceph::Formatter* f) const;
+  static void generate_test_instances(std::list<cls_user_bucket_entry*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_bucket_entry)
 
 struct cls_user_stats {
-  uint64_t total_entries;
-  uint64_t total_bytes;
-  uint64_t total_bytes_rounded;
+  std::uint64_t total_entries = 0;
+  std::uint64_t total_bytes = 0;
+  std::uint64_t total_bytes_rounded = 0;
 
-  cls_user_stats()
-    : total_entries(0),
-      total_bytes(0),
-      total_bytes_rounded(0) {}
+  cls_user_stats() = default;
 
-  void encode(bufferlist& bl) const {
-     ENCODE_START(1, 1, bl);
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
     encode(total_entries, bl);
     encode(total_bytes, bl);
     encode(total_bytes_rounded, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(total_entries, bl);
     decode(total_bytes, bl);
@@ -183,8 +186,8 @@ struct cls_user_stats {
     DECODE_FINISH(bl);
   }
 
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<cls_user_stats*>& ls);
+  void dump(ceph::Formatter* f) const;
+  static void generate_test_instances(std::list<cls_user_stats*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_stats)
 
@@ -196,14 +199,14 @@ struct cls_user_header {
   ceph::real_time last_stats_sync;     /* last time a full stats sync completed */
   ceph::real_time last_stats_update;   /* last time a stats update was done */
 
-  void encode(bufferlist& bl) const {
-     ENCODE_START(1, 1, bl);
+  void encode(ceph::buffer::list& bl) const {
+    ENCODE_START(1, 1, bl);
     encode(stats, bl);
     encode(last_stats_sync, bl);
     encode(last_stats_update, bl);
     ENCODE_FINISH(bl);
   }
-  void decode(bufferlist::const_iterator& bl) {
+  void decode(ceph::buffer::list::const_iterator& bl) {
     DECODE_START(1, bl);
     decode(stats, bl);
     decode(last_stats_sync, bl);
@@ -211,16 +214,14 @@ struct cls_user_header {
     DECODE_FINISH(bl);
   }
 
-  void dump(Formatter *f) const;
-  static void generate_test_instances(list<cls_user_header*>& ls);
+  void dump(ceph::Formatter* f) const;
+  static void generate_test_instances(std::list<cls_user_header*>& ls);
 };
 WRITE_CLASS_ENCODER(cls_user_header)
 
-void cls_user_gen_test_bucket(cls_user_bucket *bucket, int i);
-void cls_user_gen_test_bucket_entry(cls_user_bucket_entry *entry, int i);
-void cls_user_gen_test_stats(cls_user_stats *stats);
-void cls_user_gen_test_header(cls_user_header *h);
+void cls_user_gen_test_bucket(cls_user_bucket* bucket, int i);
+void cls_user_gen_test_bucket_entry(cls_user_bucket_entry* entry, int i);
+void cls_user_gen_test_stats(cls_user_stats* stats);
+void cls_user_gen_test_header(cls_user_header* h);
 
 #endif
-
-

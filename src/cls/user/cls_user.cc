@@ -1,7 +1,9 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include <errno.h>
+#include <string>
+
+#include <cerrno>
 
 #include "include/utime.h"
 #include "objclass/objclass.h"
@@ -127,11 +129,10 @@ static int cls_user_set_buckets_info(cls_method_context_t hctx, bufferlist *in, 
     return ret;
   }
 
-  for (list<cls_user_bucket_entry>::iterator iter = op.entries.begin();
-       iter != op.entries.end(); ++iter) {
+  for (auto iter = op.entries.begin(); iter != op.entries.end(); ++iter) {
     cls_user_bucket_entry& update_entry = *iter;
 
-    string key;
+    std::string key;
 
     get_key_by_bucket_name(update_entry.bucket.name, &key);
 
@@ -313,7 +314,7 @@ static int cls_user_list_buckets(cls_method_context_t hctx, bufferlist *in, buff
           to_index.c_str(),
           match_prefix.c_str());
 
-  list<cls_user_bucket_entry>& entries = ret.entries;
+  auto& entries = ret.entries;
   map<string, bufferlist>::iterator iter = keys.begin();
 
   string marker;
