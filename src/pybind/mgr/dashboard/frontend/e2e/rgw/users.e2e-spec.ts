@@ -43,7 +43,12 @@ describe('RGW users page', () => {
   });
 
   describe('Invalid input test', () => {
+    let originalTimeout;
+
     beforeAll(async () => {
+      originalTimeout = jasmine.DEFAULT_TIMEOUT_INTERVAL;
+      jasmine.DEFAULT_TIMEOUT_INTERVAL = 200000;
+
       await users.navigateTo();
     });
 
@@ -53,6 +58,10 @@ describe('RGW users page', () => {
 
     it('should put invalid input into user edit form and check fields are marked invalid', async () => {
       await users.invalidEdit();
+    });
+
+    afterAll(function() {
+      jasmine.DEFAULT_TIMEOUT_INTERVAL = originalTimeout;
     });
   });
 });

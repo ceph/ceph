@@ -58,7 +58,6 @@ const config = {
 
 config.onPrepare = async () => {
   await browser.manage().timeouts().implicitlyWait(config.implicitWaitTimeout);
-  await browser.waitForAngularEnabled(false);
 
   require('ts-node').register({
     project: 'e2e/tsconfig.e2e.json'
@@ -73,14 +72,6 @@ config.onPrepare = async () => {
   await browser.driver.findElement(by.name('password')).sendKeys(browser.params.login.password);
 
   await browser.driver.findElement(by.css('input[type="submit"]')).click();
-
-  // Login takes some time, so wait until it's done.
-  // For the test app's login, we know it's done when it redirects to
-  // dashboard.
-  await browser.driver.wait(async () => {
-    const url = await browser.driver.getCurrentUrl();
-    return /dashboard/.test(url);
-  });
 };
 
 exports.config = config;

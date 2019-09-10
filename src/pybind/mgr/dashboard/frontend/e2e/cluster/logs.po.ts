@@ -58,7 +58,7 @@ export class LogsPageHelper extends PageHelper {
 
     const audit_logs_tab = $('.tab-pane.active');
     const audit_logs_body = audit_logs_tab.element(by.css('.card-body'));
-    const logs = audit_logs_body.all(by.cssContainingText('.ng-star-inserted', poolname));
+    const logs = audit_logs_body.all(by.cssContainingText('.message', poolname));
 
     await expect(logs.getText()).toMatch(poolname);
     await expect(logs.getText()).toMatch(`pool ${poolfunction}`);
@@ -114,7 +114,7 @@ export class LogsPageHelper extends PageHelper {
 
     const audit_logs_tab = $('.tab-pane.active');
     const audit_logs_body = audit_logs_tab.element(by.css('.card-body'));
-    const logs = audit_logs_body.all(by.cssContainingText('.ng-star-inserted', configname));
+    const logs = audit_logs_body.all(by.cssContainingText('.message', configname));
 
     await this.waitPresence(logs.first());
 
