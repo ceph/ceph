@@ -13,6 +13,7 @@
 #include "common/ceph_mutex.h"
 #include "messages/MMDSMetrics.h"
 
+#include "mgr/MetricTypes.h"
 #include "mgr/MDSPerfMetricTypes.h"
 
 #include "mdstypes.h"
@@ -80,6 +81,9 @@ private:
   void cull_metrics_for_rank(mds_rank_t rank);
 
   void ping_all_active_ranks();
+
+  void set_perf_queries(const ConfigPayload &config_payload);
+  MetricPayload get_perf_reports();
 };
 
 #endif // CEPH_MDS_METRIC_AGGREGATOR_H
