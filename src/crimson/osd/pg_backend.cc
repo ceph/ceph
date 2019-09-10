@@ -226,12 +226,13 @@ static inline bool _read_verify_data(
   return true;
 }
 
-seastar::future<bufferlist> PGBackend::read(const object_info_t& oi,
-                                            size_t offset,
-                                            size_t length,
-                                            size_t truncate_size,
-                                            uint32_t truncate_seq,
-                                            uint32_t flags)
+PGBackend::read_errorator::future<ceph::bufferlist>
+PGBackend::read(const object_info_t& oi,
+                const size_t offset,
+                size_t length,
+                const size_t truncate_size,
+                const uint32_t truncate_seq,
+                const uint32_t flags)
 {
   logger().trace("read: {} {}~{}", oi.soid, offset, length);
   // are we beyond truncate_size?
@@ -250,13 +251,13 @@ seastar::future<bufferlist> PGBackend::read(const object_info_t& oi,
     return seastar::make_ready_future<bufferlist>();
   }
   return _read(oi.soid, offset, length, flags).safe_then(
-    [&oi](auto&& bl) {
+    [&oi](auto&& bl) -> read_errorator::future<ceph::bufferlist> {
       if (const bool is_fine = _read_verify_data(oi, bl); is_fine) {
         return seastar::make_ready_future<bufferlist>(std::move(bl));
       } else {
-        throw crimson::osd::object_corrupted{};
+        return crimson::make_error<ceph::ct_error::object_corrupted>();
       }
-    }, ll_read_errorator::throw_as_runtime_error{});
+    }, ll_read_errorator::pass_further{});
 }
 
 seastar::future<> PGBackend::stat(
