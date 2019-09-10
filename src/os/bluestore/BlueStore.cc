@@ -7433,9 +7433,6 @@ void BlueStore::_fsck_check_objects(FSCKDepth depth,
         pool_id = c->cid.is_pg(&pgid) ? pgid.pool() : META_POOL_ID;
         dout(20) << __func__ << "  collection " << c->cid << " " << c->cnode
           << dendl;
-
-        dout(20) << __func__ << "  collection " << c->cid << " " << c->cnode
-          << dendl;
       }
 
       if (depth != FSCK_SHALLOW &&
