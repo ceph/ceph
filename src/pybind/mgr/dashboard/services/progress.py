@@ -43,7 +43,6 @@ def _progress_event_to_dashboard_task_common(event, task):
     })
 
 
-
 def _progress_event_to_dashboard_task(event, completed=False):
     task = {}
     _progress_event_to_dashboard_task_common(event, task)
