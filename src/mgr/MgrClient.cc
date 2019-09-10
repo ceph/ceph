@@ -190,9 +190,8 @@ void MgrClient::reconnect()
     auto& op = p->second;
     ldout(cct,10) << "resending " << tid << dendl;
     MessageRef m;
-    if (op.name.size()) {
-      if (op.name != map.active_name) {
-	// FIXME someday!
+    if (op.tell) {
+      if (op.name.size() && op.name != map.active_name) {
 	ldout(cct, 10) << "active mgr " << map.active_name << " != target "
 		       << op.name << dendl;
 	if (op.on_finish) {
@@ -500,6 +499,7 @@ int MgrClient::start_tell_command(
   }
 
   auto &op = command_table.start_command();
+  op.tell = true;
   op.name = name;
   op.cmd = cmd;
   op.inbl = inbl;
@@ -507,7 +507,7 @@ int MgrClient::start_tell_command(
   op.outs = outs;
   op.on_finish = onfinish;
 
-  if (session && session->con && map.active_name == name) {
+  if (session && session->con && (name.size() == 0 || map.active_name == name)) {
     // Leaving fsid argument null because it isn't used.
     // Note: this simply won't work we pre-octopus mgrs because they route
     // MCommand to the cluster command handler.
