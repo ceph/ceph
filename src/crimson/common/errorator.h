@@ -44,73 +44,71 @@ template <class T> [[nodiscard]] const T& make_error() {
   return T::instance;
 }
 
+// TODO: let `exception` use other type than `ct_error`.
+template <_impl::ct_error V>
+class exception {
+  exception() = default;
+public:
+  exception(const exception&) = default;
+};
+
+template <class ErrorVisitorT, class FuturatorT>
+class maybe_handle_error_t {
+  const std::type_info& type_info;
+  typename FuturatorT::type result;
+  ErrorVisitorT errfunc;
+
+public:
+  maybe_handle_error_t(ErrorVisitorT&& errfunc, std::exception_ptr ep)
+    : type_info(*ep.__cxa_exception_type()),
+      result(FuturatorT::make_exception_future(std::move(ep))),
+      errfunc(std::forward<ErrorVisitorT>(errfunc)) {
+  }
+
+  template <_impl::ct_error ErrorV>
+  void operator()(const unthrowable_wrapper<ErrorV>& e) {
+    // In C++ throwing an exception isn't the sole way to signal
+    // error with it. This approach nicely fits cold, infrequent cases
+    // but when applied to a hot one, it will likely hurt performance.
+    //
+    // Alternative approach is to create `std::exception_ptr` on our
+    // own and place it in the future via `make_exception_future()`.
+    // When it comes to handling, the pointer can be interrogated for
+    // pointee's type with `__cxa_exception_type()` instead of costly
+    // re-throwing (via `std::rethrow_exception()`) and matching with
+    // `catch`. The limitation here is lack of support for hierarchies
+    // of exceptions. The code below checks for exact match only while
+    // `catch` would allow to match against a base class as well.
+    // However, this shouldn't be a big issue for `errorator` as Error
+    // Visitors are already checked for exhaustiveness at compile-time.
+    //
+    // NOTE: `__cxa_exception_type()` is an extension of the language.
+    // It should be available both in GCC and Clang but a fallback
+    // (based on `std::rethrow_exception()` and `catch`) can be made
+    // to handle other platforms if necessary.
+    if (type_info == typeid(exception<ErrorV>)) {
+      // set `state::invalid` in internals of `seastar::future` to not
+      // call `report_failed_future()` during `operator=()`.
+      std::move(result).get_exception();
+
+      constexpr bool explicitly_discarded = std::is_invocable_r<
+        struct ignore_marker_t&&, ErrorVisitorT, decltype(e)>::value;
+      if constexpr (!explicitly_discarded) {
+        result = std::forward<ErrorVisitorT>(errfunc)(e);
+      }
+    }
+  }
+
+  auto get_result() && {
+    return std::move(result);
+  }
+};
+
 template <class... WrappedAllowedErrorsT>
 struct errorator {
   template <class... ValuesT>
   class future : private seastar::future<ValuesT...> {
     using base_t = seastar::future<ValuesT...>;
-
-    // TODO: let `exception` use other type than `ct_error`.
-    template <_impl::ct_error V>
-    class exception {
-      exception() = default;
-    public:
-      exception(const exception&) = default;
-    };
-
-    template <class ErrorVisitorT, class FuturatorT>
-    class maybe_handle_error_t {
-      const std::type_info& type_info;
-      typename FuturatorT::type result;
-      ErrorVisitorT errfunc;
-
-    public:
-      maybe_handle_error_t(ErrorVisitorT&& errfunc, std::exception_ptr ep)
-        : type_info(*ep.__cxa_exception_type()),
-          result(FuturatorT::make_exception_future(std::move(ep))),
-          errfunc(std::forward<ErrorVisitorT>(errfunc)) {
-      }
-
-      template <_impl::ct_error ErrorV>
-      void operator()(const unthrowable_wrapper<ErrorV>& e) {
-        // In C++ throwing an exception isn't the sole way to signal
-        // error with it. This approach nicely fits cold, infrequent cases
-        // but when applied to a hot one, it will likely hurt performance.
-        //
-        // Alternative approach is to create `std::exception_ptr` on our
-        // own and place it in the future via `make_exception_future()`.
-        // When it comes to handling, the pointer can be interrogated for 
-        // pointee's type with `__cxa_exception_type()` instead of costly
-        // re-throwing (via `std::rethrow_exception()`) and matching with
-        // `catch`. The limitation here is lack of support for hierarchies
-        // of exceptions. The code below checks for exact match only while
-        // `catch` would allow to match against a base class as well.
-        // However, this shouldn't be a big issue for `errorator` as Error
-        // Visitors are already checked for exhaustiveness at compile-time.
-        //
-        // NOTE: `__cxa_exception_type()` is an extension of the language.
-        // It should be available both in GCC and Clang but a fallback
-        // (based on `std::rethrow_exception()` and `catch`) can be made
-        // to handle other platforms is necessary.
-        if (type_info == typeid(exception<ErrorV>)) {
-          // set `state::invalid` in internals of `seastar::future` to not
-          // `report_failed_future()` during `operator=()`.
-          std::move(result).get_exception();
-          result = std::forward<ErrorVisitorT>(errfunc)(e);
-        } else {
-          constexpr bool explicitly_discarded = std::is_invocable_r<
-            struct ignore_marker_t&&, ErrorVisitorT, decltype(e)>::value;
-          if constexpr (!explicitly_discarded) {
-            result = std::forward<ErrorVisitorT>(errfunc)(e);
-          }
-        }
-      }
-
-      auto get_result() && {
-        return std::move(result);
-      }
-    };
-
     // we need the friendship for the sake of `get_exception() &&` when
     // `safe_then()` is going to return an errorated future as a result of
     // chaining. In contrast to `seastar::future`, errorator<T...>::future`
@@ -337,8 +335,6 @@ struct errorator {
     is_less_errorated<OtherErrorator>::value;
 
 private:
-  struct ignore_marker_t{};
-
   template <class... Args>
   static decltype(auto) plainify(seastar::future<Args...>&& fut) {
     return std::forward<seastar::future<Args...>>(fut);
