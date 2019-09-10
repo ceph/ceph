@@ -15,8 +15,10 @@ the `PubSub Module`_ should be used instead of the bucket notification mechanism
 A user can create different topics. A topic entity is defined by its user and its name. A
 user can only manage its own topics, and can only associate them with buckets it owns.
 
-In order to send notifications for events for a specific bucket, a notification ientity needs to be created. A
+In order to send notifications for events for a specific bucket, a notification entity needs to be created. A
 notification can be created on a subset of event types, or for all event types (default).
+The notification may also filter out events based on preffix/suffix and/or regular expression matching of the keys. As well as, 
+on the metadata attributes attached to the object.
 There can be multiple notifications for any specific topic, and the same topic could be used for multiple notifications.
 
 REST API has been defined to provide configuration and control interfaces for the bucket notification

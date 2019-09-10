@@ -1,4 +1,4 @@
-==================
+================== 
 PubSub Sync Module
 ==================
 
@@ -242,6 +242,7 @@ Detailed under: `Bucket Operations`_.
     - In case that bucket deletion implicitly deletes the notification, 
       the associated subscription will not be deleted automatically (any events of the deleted bucket could still be access),
       and will have to be deleted explicitly with the subscription deletion API
+    - Filtering based on metadata (which is an extension to S3) is not supported, and such rules will be ignored
 
 
 Non S3-Compliant Notifications

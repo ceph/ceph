@@ -502,6 +502,20 @@ Parameters are XML encoded in the body of the request, in the following format:
            <Id></Id>
            <Topic></Topic>
            <Event></Event>
+           <Filter>
+               <S3Key>
+                   <FilterRule>
+                       <Name></Name>
+                       <Value></Value>
+                   </FilterRule>
+        	    </S3Key>
+                <S3Metadata>
+                    <FilterRule>
+                        <Name></Name>
+                        <Value></Value>
+                    </FilterRule>
+                </s3Metadata>
+            </Filter>
        </TopicConfiguration>
    </NotificationConfiguration>
 
@@ -519,6 +533,25 @@ Parameters are XML encoded in the body of the request, in the following format:
 | ``Event``                     | String    | List of supported events see: `S3 Notification Compatibility`_.  Multiple ``Event``  | No       |
 |                               |           | entities can be used. If omitted, all events are handled                             |          |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``Filter``                    | Container | Holding ``S3Key`` and ``S3Metadata`` entities                                        | No       |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``S3Key``                     | Container | Holding a list of ``FilterRule`` entities, for filtering based on object key.        | No       |
+|                               |           | At most, 3 entities may be in the list, with ``Name`` be ``prefix``, ``suffix`` or   |          |
+|                               |           | ``regex``. All filter rules in the list must match for the filter to match.          |          |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``S3Metadata``                | Container | Holding a list of ``FilterRule`` entities, for filtering based on object metadata.   | No       |
+|                               |           | All filter rules in the list must match the ones defined on the object. The object,  |          |
+|                               |           | have other metadata entitied not listed in the filter.                               |          |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``S3Key.FilterRule``          | Container | Holding ``Name`` and ``Value`` entities. ``Name`` would  be: ``prefix``, ``suffix``  | Yes      |
+|                               |           | or ``regex``. The ``Value`` would hold the key prefix, key suffix or a regular       |          |
+|                               |           | expression for matching the key, accordingly.                                        |          |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``S3Metadata.FilterRule``     | Container | Holding ``Name`` and ``Value`` entities. ``Name`` would be the name of the metadata  | Yes      |
+|                               |           | attribute (e.g. ``x-amz-meta-xxx``). The ``Value`` would be the expected value for   |          | 
+|                               |           | this attribute                                                                       |          |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+
 
 HTTP Response
 ~~~~~~~~~~~~~
@@ -607,6 +640,20 @@ Response is XML encoded in the body of the request, in the following format:
            <Id></Id>
            <Topic></Topic>
            <Event></Event>
+           <Filter>
+               <S3Key>
+                   <FilterRule>
+                       <Name></Name>
+                       <Value></Value>
+                   </FilterRule>
+        	    </S3Key>
+                <S3Metadata>
+                    <FilterRule>
+                        <Name></Name>
+                        <Value></Value>
+                    </FilterRule>
+                </s3Metadata>
+            </Filter>
        </TopicConfiguration>
    </NotificationConfiguration>
 
@@ -622,6 +669,8 @@ Response is XML encoded in the body of the request, in the following format:
 | ``Topic``                     | String    | Topic ARN                                                                            | Yes      |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
 | ``Event``                     | String    | Handled event. Multiple ``Event`` entities may exist                                 | Yes      |
++-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
+| ``Filter``                    | Container | Holding the filters configured for this notification                                 | No       |
 +-------------------------------+-----------+--------------------------------------------------------------------------------------+----------+
 
 HTTP Response
