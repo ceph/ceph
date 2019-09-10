@@ -125,9 +125,6 @@ private:
   void entry() noexcept;
   bool do_accept();
   void do_tell_queue();
-  bool validate(const std::string& command,
-		const cmdmap_t& cmdmap,
-		ceph::buffer::list& out) const;
 
   CephContext *m_cct;
   std::string m_path;
@@ -156,7 +153,7 @@ private:
       : hook(hook), desc(desc), help(help) {}
   };
 
-  std::map<std::string, hook_info, std::less<>> hooks;
+  std::multimap<std::string, hook_info, std::less<>> hooks;
 
   friend class AdminSocketTest;
   friend class HelpHook;

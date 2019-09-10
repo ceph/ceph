@@ -462,6 +462,14 @@ void AdminSocket::execute_command(
     return on_finish(-EINVAL, "unknown command prefix "s + prefix, empty);
   }
 
+  // make sure one of the registered commands with this prefix validates.
+  while (!validate_cmd(m_cct, p->second.desc, cmdmap, errss)) {
+    ++p;
+    if (p->first != prefix) {
+      return on_finish(-EINVAL, "invalid command json", empty);
+    }
+  }
+
   // Drop lock to avoid cycles in cases where the hook takes
   // the same lock that was held during calls to register/unregister,
   // and set in_hook to allow unregister to wait for us before
@@ -469,11 +477,8 @@ void AdminSocket::execute_command(
   in_hook = true;
   auto hook = p->second.hook;
   l.unlock();
-  if (!validate(prefix, cmdmap, empty)) {
-    on_finish(-EINVAL, "invalid command json", empty);
-  } else {
-    hook->call_async(prefix, cmdmap, format, inbl, on_finish);
-  }
+  hook->call_async(prefix, cmdmap, format, inbl, on_finish);
+
   l.lock();
   in_hook = false;
   in_hook_cond.notify_all();
@@ -487,20 +492,6 @@ void AdminSocket::queue_tell_command(ref_t<MCommand> m)
   wakeup();
 }
 
-
-bool AdminSocket::validate(const std::string& prefix,
-			   const cmdmap_t& cmdmap,
-			   bufferlist& out) const
-{
-  stringstream os;
-  if (validate_cmd(m_cct, hooks.at(prefix).desc, cmdmap, os)) {
-    return true;
-  } else {
-    out.append(os);
-    return false;
-  }
-}
-
 int AdminSocket::register_command(std::string_view cmddesc,
 				  AdminSocketHook *hook,
 				  std::string_view help)
@@ -509,8 +500,10 @@ int AdminSocket::register_command(std::string_view cmddesc,
   std::unique_lock l(lock);
   string prefix = cmddesc_get_prefix(cmddesc);
   auto i = hooks.find(prefix);
-  if (i != hooks.cend()) {
-    ldout(m_cct, 5) << "register_command " << prefix << " hook " << hook
+  if (i != hooks.cend() &&
+      i->second.desc == cmddesc) {
+    ldout(m_cct, 5) << "register_command " << prefix
+		    << " cmddesc " << cmddesc << " hook " << hook
 		    << " EEXIST" << dendl;
     ret = -EEXIST;
   } else {
