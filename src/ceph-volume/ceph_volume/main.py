@@ -131,6 +131,7 @@ Ceph Conf: {ceph_path}
         if os.path.isdir(conf.log_path):
             conf.log_path = os.path.join(args.log_path, 'ceph-volume.log')
         log.setup()
+        log.setup_console()
         logger = logging.getLogger(__name__)
         logger.info("Running command: ceph-volume %s %s", " ".join(main_args), " ".join(subcommand_args))
         # set all variables from args and load everything needed according to
