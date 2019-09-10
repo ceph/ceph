@@ -221,7 +221,10 @@ class IscsiTest(ControllerTestCase, CLICommandTestMixin):
                 "image": "lun3",
                 "pool": "rbd",
                 "controls": {},
-                "backstore": "user:rbd"
+                "backstore": "user:rbd",
+                "wwn": "64af6678-9694-4367-bacc-f8eb0baa2",
+                "lun": 2
+
             })
         response['clients'][0]['luns'].append({"image": "lun3", "pool": "rbd"})
         self._update_iscsi_target(create_request, update_request, response)
@@ -427,8 +430,10 @@ iscsi_target_response = {
     ],
     'disks': [
         {'pool': 'rbd', 'image': 'lun1', 'backstore': 'user:rbd',
+         'wwn': '64af6678-9694-4367-bacc-f8eb0baa0', 'lun': 0,
          'controls': {'max_data_area_mb': 128}},
         {'pool': 'rbd', 'image': 'lun2', 'backstore': 'user:rbd',
+         'wwn': '64af6678-9694-4367-bacc-f8eb0baa1', 'lun': 1,
          'controls': {'max_data_area_mb': 128}}
     ],
     'clients': [
@@ -561,7 +566,7 @@ class IscsiClientMock(object):
         }
 
     def get_config(self):
-        return self.config
+        return copy.deepcopy(self.config)
 
     def create_target(self, target_iqn, target_controls):
         self.config['targets'][target_iqn] = {
@@ -577,7 +582,7 @@ class IscsiClientMock(object):
             },
             "controls": target_controls,
             "created": "2019/01/17 09:22:34",
-            "disks": [],
+            "disks": {},
             "groups": {},
             "portals": {}
         }
@@ -604,12 +609,15 @@ class IscsiClientMock(object):
             "pool": pool,
             "image": image,
             "backstore": backstore,
-            "controls": {}
+            "controls": {},
+            "wwn": '64af6678-9694-4367-bacc-f8eb0baa' + str(len(self.config['disks']))
         }
 
     def create_target_lun(self, target_iqn, image_id):
         target_config = self.config['targets'][target_iqn]
-        target_config['disks'].append(image_id)
+        target_config['disks'][image_id] = {
+            "lun_id": len(target_config['disks'])
+        }
         self.config['disks'][image_id]['owner'] = list(target_config['portals'].keys())[0]
 
     def reconfigure_disk(self, pool, image, controls):
@@ -669,7 +677,7 @@ class IscsiClientMock(object):
 
     def delete_target_lun(self, target_iqn, image_id):
         target_config = self.config['targets'][target_iqn]
-        target_config['disks'].remove(image_id)
+        target_config['disks'].pop(image_id)
         del self.config['disks'][image_id]['owner']
 
     def delete_disk(self, pool, image):

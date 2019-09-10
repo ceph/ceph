@@ -716,8 +716,12 @@ class IscsiTarget(RESTController):
                 'pool': disk_config['pool'],
                 'image': disk_config['image'],
                 'controls': disk_config['controls'],
-                'backstore': disk_config['backstore']
+                'backstore': disk_config['backstore'],
+                'wwn': disk_config['wwn']
             }
+            # lun_id was introduced in ceph-iscsi config v11
+            if config['version'] > 10:
+                disk['lun'] = target_config['disks'][target_disk]['lun_id']
             disks.append(disk)
         disks = IscsiTarget._sorted_disks(disks)
         clients = []
