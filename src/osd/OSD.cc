@@ -3539,11 +3539,11 @@ int OSD::init()
 
   mgrc.set_pgstats_cb([this](){ return collect_pg_stats(); });
   mgrc.set_perf_metric_query_cb(
-    [this](const std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> &queries) {
-        set_perf_queries(queries);
+    [this](const ConfigPayload &config_payload) {
+        set_perf_queries(config_payload);
       },
-      [this](std::map<OSDPerfMetricQuery, OSDPerfMetricReport> *reports) {
-        get_perf_reports(reports);
+      [this] {
+        return get_perf_reports();
       });
   mgrc.init();
 
@@ -9906,8 +9906,9 @@ void OSD::get_latest_osdmap()
 
 // --------------------------------
 
-void OSD::set_perf_queries(
-    const std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> &queries) {
+void OSD::set_perf_queries(const ConfigPayload &config_payload) {
+  const OSDConfigPayload &osd_config_payload = boost::get<OSDConfigPayload>(config_payload);
+  const std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> &queries = osd_config_payload.config;
   dout(10) << "setting " << queries.size() << " queries" << dendl;
 
   std::list<OSDPerfMetricQuery> supported_queries;
@@ -9934,8 +9935,10 @@ void OSD::set_perf_queries(
   }
 }
 
-void OSD::get_perf_reports(
-    std::map<OSDPerfMetricQuery, OSDPerfMetricReport> *reports) {
+MetricPayload OSD::get_perf_reports() {
+  OSDMetricPayload payload;
+  std::map<OSDPerfMetricQuery, OSDPerfMetricReport> &reports = payload.report;
+
   std::vector<PGRef> pgs;
   _get_pgs(&pgs);
   DynamicPerfStats dps;
@@ -9950,8 +9953,10 @@ void OSD::get_perf_reports(
     pg->unlock();
     dps.merge(pg_dps);
   }
-  dps.add_to_reports(m_perf_limits, reports);
-  dout(20) << "reports for " << reports->size() << " queries" << dendl;
+  dps.add_to_reports(m_perf_limits, &reports);
+  dout(20) << "reports for " << reports.size() << " queries" << dendl;
+
+  return payload;
 }
 
 // =============================================================
