@@ -10,6 +10,7 @@
 #include "include/encoding.h"
 #include "include/stringify.h"
 #include "include/utime.h"
+#include "msg/msg_types.h"
 #include <iosfwd>
 #include <string>
 #include <set>
@@ -184,6 +185,8 @@ inline void decode(MirrorImageStatusState &state, bufferlist::const_iterator& it
   state = static_cast<MirrorImageStatusState>(int_state);
 }
 
+std::ostream& operator<<(std::ostream& os, const MirrorImageStatusState& state);
+
 struct MirrorImageStatus {
   MirrorImageStatus() {}
   MirrorImageStatus(MirrorImageStatusState state,
@@ -207,9 +210,27 @@ struct MirrorImageStatus {
 };
 
 std::ostream& operator<<(std::ostream& os, const MirrorImageStatus& status);
-std::ostream& operator<<(std::ostream& os, const MirrorImageStatusState& state);
 
 WRITE_CLASS_ENCODER(MirrorImageStatus);
+
+struct MirrorImageStatusOnDisk : cls::rbd::MirrorImageStatus {
+  entity_inst_t origin;
+
+  MirrorImageStatusOnDisk() {
+  }
+  MirrorImageStatusOnDisk(const cls::rbd::MirrorImageStatus &status) :
+    cls::rbd::MirrorImageStatus(status) {
+  }
+
+  void encode_meta(bufferlist &bl, uint64_t features) const;
+  void decode_meta(bufferlist::const_iterator &it);
+
+  void encode(bufferlist &bl, uint64_t features) const;
+  void decode(bufferlist::const_iterator &it);
+
+  static void generate_test_instances(std::list<MirrorImageStatusOnDisk*> &o);
+};
+WRITE_CLASS_ENCODER_FEATURES(MirrorImageStatusOnDisk)
 
 struct ParentImageSpec {
   int64_t pool_id = -1;

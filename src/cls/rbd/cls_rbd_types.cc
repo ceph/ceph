@@ -177,6 +177,37 @@ std::ostream& operator<<(std::ostream& os, const MirrorImage& mirror_image) {
   return os;
 }
 
+std::ostream& operator<<(std::ostream& os,
+                         const MirrorImageStatusState& state) {
+  switch (state) {
+  case MIRROR_IMAGE_STATUS_STATE_UNKNOWN:
+    os << "unknown";
+    break;
+  case MIRROR_IMAGE_STATUS_STATE_ERROR:
+    os << "error";
+    break;
+  case MIRROR_IMAGE_STATUS_STATE_SYNCING:
+    os << "syncing";
+    break;
+  case MIRROR_IMAGE_STATUS_STATE_STARTING_REPLAY:
+    os << "starting_replay";
+    break;
+  case MIRROR_IMAGE_STATUS_STATE_REPLAYING:
+    os << "replaying";
+    break;
+  case MIRROR_IMAGE_STATUS_STATE_STOPPING_REPLAY:
+    os << "stopping_replay";
+    break;
+  case MIRROR_IMAGE_STATUS_STATE_STOPPED:
+    os << "stopped";
+    break;
+  default:
+    os << "unknown (" << static_cast<uint32_t>(state) << ")";
+    break;
+  }
+  return os;
+}
+
 void MirrorImageStatus::encode(bufferlist &bl) const {
   ENCODE_START(1, 1, bl);
   encode(state, bl);
@@ -218,42 +249,42 @@ bool MirrorImageStatus::operator==(const MirrorImageStatus &rhs) const {
   return state == rhs.state && description == rhs.description && up == rhs.up;
 }
 
-std::ostream& operator<<(std::ostream& os, const MirrorImageStatusState& state) {
-  switch (state) {
-  case MIRROR_IMAGE_STATUS_STATE_UNKNOWN:
-    os << "unknown";
-    break;
-  case MIRROR_IMAGE_STATUS_STATE_ERROR:
-    os << "error";
-    break;
-  case MIRROR_IMAGE_STATUS_STATE_SYNCING:
-    os << "syncing";
-    break;
-  case MIRROR_IMAGE_STATUS_STATE_STARTING_REPLAY:
-    os << "starting_replay";
-    break;
-  case MIRROR_IMAGE_STATUS_STATE_REPLAYING:
-    os << "replaying";
-    break;
-  case MIRROR_IMAGE_STATUS_STATE_STOPPING_REPLAY:
-    os << "stopping_replay";
-    break;
-  case MIRROR_IMAGE_STATUS_STATE_STOPPED:
-    os << "stopped";
-    break;
-  default:
-    os << "unknown (" << static_cast<uint32_t>(state) << ")";
-    break;
-  }
-  return os;
-}
-
 std::ostream& operator<<(std::ostream& os, const MirrorImageStatus& status) {
   os << "["
      << "state=" << status.state_to_string() << ", "
      << "description=" << status.description << ", "
      << "last_update=" << status.last_update << "]";
   return os;
+}
+
+void MirrorImageStatusOnDisk::encode_meta(bufferlist &bl,
+                                          uint64_t features) const {
+  ENCODE_START(1, 1, bl);
+  encode(origin, bl, features);
+  ENCODE_FINISH(bl);
+}
+
+void MirrorImageStatusOnDisk::encode(bufferlist &bl, uint64_t features) const {
+  encode_meta(bl, features);
+  cls::rbd::MirrorImageStatus::encode(bl);
+}
+
+void MirrorImageStatusOnDisk::decode_meta(bufferlist::const_iterator &it) {
+  DECODE_START(1, it);
+  decode(origin, it);
+  DECODE_FINISH(it);
+}
+
+void MirrorImageStatusOnDisk::decode(bufferlist::const_iterator &it) {
+  decode_meta(it);
+  cls::rbd::MirrorImageStatus::decode(it);
+}
+
+void MirrorImageStatusOnDisk::generate_test_instances(
+    std::list<MirrorImageStatusOnDisk*> &o) {
+  o.push_back(new MirrorImageStatusOnDisk());
+  o.push_back(new MirrorImageStatusOnDisk(
+    {MIRROR_IMAGE_STATUS_STATE_ERROR, "error"}));
 }
 
 void ParentImageSpec::encode(bufferlist& bl) const {
