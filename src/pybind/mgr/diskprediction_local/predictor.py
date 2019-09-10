@@ -38,14 +38,23 @@ class DiskFailurePredictor(object):
 
     This class implements a disk failure prediction module.
     """
+
     # json with manufacturer names as keys
     # and features used for prediction as values
     CONFIG_FILE = "config.json"
-    PREDICTION_CLASSES = {-1: "Unknown",
-                          0: "Good",
-                          1: "Warning",
-                          2: "Bad"}
+    PREDICTION_CLASSES = {-1: "Unknown", 0: "Good", 1: "Warning", 2: "Bad"}
 
+    # model name prefixes to identify vendor
+    MANUFACTURER_MODELNAME_PREFIXES = {
+        "WDC": "WDC",
+        "Toshiba": "Toshiba",  # for cases like "Toshiba xxx"
+        "TOSHIBA": "Toshiba",  # for cases like "TOSHIBA xxx"
+        "toshiba": "Toshiba",  # for cases like "toshiba xxx"
+        "S": "Seagate",        # for cases like "STxxxx" and "Seagate BarraCuda ZAxxx"
+        "ZA": "Seagate",       # for cases like "ZAxxxx"
+        "Hitachi": "Hitachi",
+        "HGST": "HGST",
+    }
 
     def __init__(self):
         """
@@ -53,7 +62,6 @@ class DiskFailurePredictor(object):
         """
         self.model_dirpath = ""
         self.model_context = {}
-
 
     def initialize(self, model_dirpath):
         """Initialize all models. Save paths of all trained model files to list
@@ -73,17 +81,16 @@ class DiskFailurePredictor(object):
                 self.model_context = json.load(f_conf)
 
         # ensure all manufacturers whose context is defined in config file
-        # have models and preprocessors saved inside model_dirpath
+        # have models and scalers saved inside model_dirpath
         for manufacturer in self.model_context:
-            preprocessor_path = os.path.join(model_dirpath, manufacturer + '_preprocessor.joblib')
-            if not os.path.isfile(preprocessor_path):
-                return "Missing preprocessor file: {}".format(preprocessor_path)
-            model_path = os.path.join(model_dirpath, manufacturer + '_predictor.joblib')
+            scaler_path = os.path.join(model_dirpath, manufacturer + "_scaler.joblib")
+            if not os.path.isfile(scaler_path):
+                return "Missing scaler file: {}".format(scaler_path)
+            model_path = os.path.join(model_dirpath, manufacturer + "_predictor.joblib")
             if not os.path.isfile(model_path):
                 return "Missing model file: {}".format(model_path)
 
         self.model_dirpath = model_dirpath
-
 
     def __format_raw_data(self, disk_days):
         """Massages the input raw data into a form that can be used by the
@@ -103,53 +110,87 @@ class DiskFailurePredictor(object):
         df = pd.DataFrame(disk_days)
 
         # change from dict type {'bytes': 123} to just float64 type 123
-        df['user_capacity'] = df['user_capacity'].apply(lambda x: x['bytes'])
+        df["user_capacity"] = df["user_capacity"].apply(lambda x: x["bytes"])
 
         # change from dict type {'table': [{}, {}, {}]}  to list type [{}, {}, {}]
-        df['ata_smart_attributes'] = df['ata_smart_attributes'].apply(lambda x: x['table'])
+        df["ata_smart_attributes"] = df["ata_smart_attributes"].apply(
+            lambda x: x["table"]
+        )
 
         # make a separate column for raw and normalized values of each smart id
         for day_idx in range(len(disk_days)):
-            for attr_dict in df.iloc[0]['ata_smart_attributes']:
-                smart_id = attr_dict['id']
-                df.at[day_idx, 'smart_{}_raw'.format(smart_id)] = int(attr_dict['raw']['value'])
-                df.at[day_idx, 'smart_{}_normalized'.format(smart_id)] = int(attr_dict['value'])
+            for attr_dict in df.iloc[0]["ata_smart_attributes"]:
+                smart_id = attr_dict["id"]
+                df.at[day_idx, "smart_{}_raw".format(smart_id)] = int(
+                    attr_dict["raw"]["value"]
+                )
+                df.at[day_idx, "smart_{}_normalized".format(smart_id)] = int(
+                    attr_dict["value"]
+                )
 
         # drop the now-redundant column
-        df = df.drop('ata_smart_attributes', axis=1)
+        df = df.drop("ata_smart_attributes", axis=1)
         return df
 
-
-    def __preprocess(self, disk_days_df):
+    def __preprocess(self, disk_days_df, manufacturer):
         """Scales and transforms input dataframe to feed it to prediction model
 
         Arguments:
             disk_days_df {pandas.DataFrame} -- df where each row holds drive
                                                 features from one day.
+            manufacturer {str} -- manufacturer of the hard drive
 
         Returns:
             numpy.ndarray -- (n, d) shaped array of n days worth of data and d
                                 features, scaled
         """
-        # preprocessing may vary across manufactueres. so get manufacturer
-        manufacturer = DiskFailurePredictor.__get_manufacturer(disk_days_df['model_name'].iloc[0]).lower()
-
-        # keep only the features used for prediction for current manufacturer
+        # get the attributes that were used to train model for current manufacturer
         try:
-            disk_days_df = disk_days_df[self.model_context[manufacturer]]
+            model_smart_attr = self.model_context[manufacturer]
         except KeyError as e:
-            # TODO: change to log.error
-            print("Either SMART attributes mismatch for hard drive and prediction model,\
-                 or 'model_name' not available in input data")
-            print(e)
+            print("No context (SMART attributes on which model has been trained) found for manufacturer: {}"\
+                .format(manufacturer)
+            )
             return None
 
-        # scale raw data
-        preprocessor_path = os.path.join(self.model_dirpath, manufacturer + '_preprocessor.joblib')
-        preprocessor = joblib.load(preprocessor_path)
-        disk_days_df = preprocessor.transform(disk_days_df)
-        return disk_days_df
+        # keep only the required features
+        try:
+            disk_days_df = disk_days_df[model_smart_attr]
+        except KeyError as e:
+            print("Mismatch in SMART attributes used to train model and SMART attributes available")
+            return None
 
+        # featurize n (6 to 12) days data - mean,std,coefficient of variation
+        # current model is trained on 6 days of data because that is what will be
+        # available at runtime
+        # NOTE: ensure unique indices so that features can be merged w/ pandas errors
+        disk_days_df = disk_days_df.reset_index(drop=True)
+        means = disk_days_df.drop("user_capacity", axis=1).rolling(6).mean()
+        stds = disk_days_df.drop("user_capacity", axis=1).rolling(6).std()
+        cvs = stds.divide(means, fill_value=0)
+
+        # rename and combine features into one df
+        means = means.rename(columns={col: "mean_" + col for col in means.columns})
+        stds = stds.rename(columns={col: "std_" + col for col in stds.columns})
+        cvs = cvs.rename(columns={col: "cv_" + col for col in cvs.columns})
+        featurized_df = means.merge(stds, left_index=True, right_index=True)
+        featurized_df = featurized_df.merge(cvs, left_index=True, right_index=True)
+
+        # drop rows where all features (mean,std,cv) are nans
+        featurized_df = featurized_df.dropna(how="all")
+
+        # fill nans created by cv calculation
+        featurized_df = featurized_df.fillna(0)
+
+        # capacity is not a feature that varies over time
+        # FIXME: will this values roll over
+        featurized_df["user_capacity"] = disk_days_df["user_capacity"]
+
+        # scale features
+        scaler_path = os.path.join(self.model_dirpath, manufacturer + "_scaler.joblib")
+        scaler = joblib.load(scaler_path)
+        featurized_df = scaler.transform(featurized_df)
+        return featurized_df
 
     @staticmethod
     def __get_manufacturer(model_name):
@@ -161,35 +202,45 @@ class DiskFailurePredictor(object):
         Returns:
             str -- manufacturer name
         """
-        if model_name.startswith("W"):
-            return "WDC"
-        elif model_name.startswith("T"):
-            return "Toshiba"
-        elif model_name.startswith("S"):
-            return "Seagate"
-        elif model_name.startswith("Hi"):
-            return "Hitachi"
-        else:
-            return "HGST"
-
+        for prefix, manufacturer in DiskFailurePredictor.MANUFACTURER_MODELNAME_PREFIXES.items():
+            if model_name.startswith(prefix):
+                return manufacturer
+        # print error message
+        print("Could not infer manufacturer from model name {}".format(model_name))
 
     def predict(self, disk_days):
         # massage data into a format that can be fed to models
         raw_df = self.__format_raw_data(disk_days)
 
-        # preprocess
-        preprocessed_data = self.__preprocess(raw_df)
+        # get manufacturer preferably as a smartctl attribute
+        # if not available then infer using model name
+        try:
+            manufacturer = raw_df["vendor"].iloc[0]
+        except KeyError as e:
+            print('"vendor" field not found in smartctl output. Will try to infer manufacturer from model name.')
+            manufacturer = DiskFailurePredictor.__get_manufacturer(raw_df["model_name"].iloc[0]).lower()
+
+        # print error message, return Unknown, and continue execution
+        if manufacturer is None:
+            print(
+                "Manufacturer could not be determiend. This may be because \
+                DiskPredictor has never encountered this manufacturer before, \
+                    or the model name is not according to the manufacturer's \
+                        naming conventions known to DiskPredictor"
+            )
+            return DiskFailurePredictor.PREDICTION_CLASSES[-1]
+
+        # preprocess for feeding to model
+        preprocessed_data = self.__preprocess(raw_df, manufacturer)
         if preprocessed_data is None:
             return DiskFailurePredictor.PREDICTION_CLASSES[-1]
 
         # get model for current manufacturer
-        manufacturer = self.__get_manufacturer(raw_df['model_name'].iloc[0]).lower()
-        model_path = os.path.join(self.model_dirpath, manufacturer + '_predictor.joblib')
+        model_path = os.path.join(
+            self.model_dirpath, manufacturer + "_predictor.joblib"
+        )
         model = joblib.load(model_path)
 
-        # predictions for each day
-        preds = model.predict(preprocessed_data)
-
-        # use majority vote to decide class. raise if a nan prediction exists
-        pred_class_id = stats.mode(preds, nan_policy='raise').mode[0]
+        # use prediction for last day
+        pred_class_id = model.predict(preprocessed_data)[-1]
         return DiskFailurePredictor.PREDICTION_CLASSES[pred_class_id]
