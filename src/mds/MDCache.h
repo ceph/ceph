@@ -163,10 +163,14 @@ private:
   uint64_t cache_memory_limit;
   double cache_reservation;
   double cache_health_threshold;
+  bool forward_all_requests_to_auth;
 
 public:
   uint64_t cache_limit_inodes(void) {
     return cache_inode_limit;
+  }
+  bool forward_all_reqs_to_auth() const { 
+    return forward_all_requests_to_auth;
   }
   uint64_t cache_limit_memory(void) {
     return cache_memory_limit;

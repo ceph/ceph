@@ -3694,6 +3694,7 @@ const char** MDSRankDispatcher::get_tracked_conf_keys() const
     "mds_log_pause",
     "mds_max_export_size",
     "mds_max_purge_files",
+    "mds_forward_all_requests_to_auth",
     "mds_max_purge_ops",
     "mds_max_purge_ops_per_pg",
     "mds_max_snaps_per_dir",
