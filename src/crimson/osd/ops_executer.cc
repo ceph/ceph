@@ -365,12 +365,12 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
                           osd_op.op.extent.length,
                           osd_op.op.extent.truncate_size,
                           osd_op.op.extent.truncate_seq,
-                          osd_op.op.flags).then(
+                          osd_op.op.flags).safe_then(
         [&osd_op](bufferlist bl) {
           osd_op.rval = bl.length();
           osd_op.outdata = std::move(bl);
           return seastar::now();
-        });
+        }, PGBackend::read_errorator::discard_all{});
     });
   case CEPH_OSD_OP_GETXATTR:
     return do_read_op([&osd_op] (auto& backend, const auto& os) {

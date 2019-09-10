@@ -12,7 +12,8 @@ namespace _impl {
     enoent,
     invarg,
     enodata,
-    input_output_error
+    input_output_error,
+    object_corrupted
   };
 }
 
@@ -418,6 +419,7 @@ namespace ct_error {
   using enodata = unthrowable_wrapper<_impl::ct_error::enodata>;
   using invarg = unthrowable_wrapper<_impl::ct_error::invarg>;
   using input_output_error = unthrowable_wrapper<_impl::ct_error::input_output_error>;
+  using object_corrupted = unthrowable_wrapper<_impl::ct_error::object_corrupted>;
 }
 
 } // namespace crimson

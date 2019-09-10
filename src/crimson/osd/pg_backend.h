@@ -47,14 +47,16 @@ public:
   seastar::future<cached_os_t> get_object_state(const hobject_t& oid);
   seastar::future<> evict_object_state(const hobject_t& oid);
 
-  using read_errorator = \
-    ll_read_errorator::extend<crimson::ct_error::input_output_error>;
-  seastar::future<bufferlist> read(const object_info_t& oi,
-				   uint64_t off,
-				   uint64_t len,
-				   size_t truncate_size,
-				   uint32_t truncate_seq,
-				   uint32_t flags);
+  using read_errorator = ll_read_errorator::extend<
+    crimson::ct_error::input_output_error,
+    crimson::ct_error::object_corrupted>;
+  read_errorator::future<ceph::bufferlist> read(
+    const object_info_t& oi,
+    uint64_t off,
+    uint64_t len,
+    size_t truncate_size,
+    uint32_t truncate_seq,
+    uint32_t flags);
   seastar::future<> stat(
     const ObjectState& os,
     OSDOp& osd_op);
