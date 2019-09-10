@@ -16,6 +16,7 @@
 #define COMMAND_TABLE_H_
 
 #include "messages/MCommand.h"
+#include "messages/MMgrCommand.h"
 
 class CommandOp
 {
@@ -29,14 +30,22 @@ class CommandOp
   ceph::buffer::list   *outbl;
   std::string  *outs;
 
-  ceph::ref_t<MCommand> get_message(const uuid_d &fsid) const
+  MessageRef get_message(const uuid_d &fsid,
+			 bool mgr=false) const
   {
-    auto m = make_message<MCommand>(fsid);
-    m->cmd = cmd;
-    m->set_data(inbl);
-    m->set_tid(tid);
-
-    return m;
+    if (mgr) {
+      auto m = make_message<MMgrCommand>(fsid);
+      m->cmd = cmd;
+      m->set_data(inbl);
+      m->set_tid(tid);
+      return m;
+    } else {
+      auto m = make_message<MCommand>(fsid);
+      m->cmd = cmd;
+      m->set_data(inbl);
+      m->set_tid(tid);
+      return m;
+    }
   }
 
   CommandOp(const ceph_tid_t t) : tid(t), on_finish(nullptr),

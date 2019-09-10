@@ -215,6 +215,8 @@
 #define MSG_SERVICE_MAP           0x707
 
 #define MSG_MGR_CLOSE             0x708
+#define MSG_MGR_COMMAND           0x709
+#define MSG_MGR_COMMAND_REPLY     0x70a
 
 // ======================================================
 

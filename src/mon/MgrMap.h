@@ -156,22 +156,23 @@ public:
   class StandbyInfo
   {
   public:
-    uint64_t gid;
+    uint64_t gid = 0;
     std::string name;
     std::vector<ModuleInfo> available_modules;
+    uint64_t mgr_features = 0;
 
     StandbyInfo(uint64_t gid_, const std::string &name_,
-                const std::vector<ModuleInfo>& am)
-      : gid(gid_), name(name_), available_modules(am)
+                const std::vector<ModuleInfo>& am,
+		uint64_t feat)
+      : gid(gid_), name(name_), available_modules(am),
+	mgr_features(feat)
     {}
 
-    StandbyInfo()
-      : gid(0)
-    {}
+    StandbyInfo() {}
 
     void encode(ceph::buffer::list& bl) const
     {
-      ENCODE_START(3, 1, bl);
+      ENCODE_START(4, 1, bl);
       encode(gid, bl);
       encode(name, bl);
       std::set<std::string> old_available_modules;
@@ -180,12 +181,13 @@ public:
       }
       encode(old_available_modules, bl);  // version 2
       encode(available_modules, bl);  // version 3
+      encode(mgr_features, bl); // v4
       ENCODE_FINISH(bl);
     }
 
     void decode(ceph::buffer::list::const_iterator& p)
     {
-      DECODE_START(3, p);
+      DECODE_START(4, p);
       decode(gid, p);
       decode(name, p);
       if (struct_v >= 2) {
@@ -201,6 +203,9 @@ public:
       }
       if (struct_v >= 3) {
         decode(available_modules, p);
+      }
+      if (struct_v >= 4) {
+	decode(mgr_features, p);
       }
       DECODE_FINISH(p);
     }
@@ -229,6 +234,8 @@ public:
   std::string active_name;
   /// when the active mgr became active, or we lost the active mgr
   utime_t active_change;
+  /// features
+  uint64_t active_mgr_features = 0;
 
   std::map<uint64_t, StandbyInfo> standbys;
 
@@ -372,7 +379,7 @@ public:
       ENCODE_FINISH(bl);
       return;
     }
-    ENCODE_START(8, 6, bl);
+    ENCODE_START(9, 6, bl);
     encode(epoch, bl);
     encode(active_addrs, bl, features);
     encode(active_gid, bl);
@@ -384,13 +391,14 @@ public:
     encode(available_modules, bl);
     encode(active_change, bl);
     encode(always_on_modules, bl);
+    encode(active_mgr_features, bl);
     ENCODE_FINISH(bl);
     return;
   }
 
   void decode(ceph::buffer::list::const_iterator& p)
   {
-    DECODE_START(7, p);
+    DECODE_START(8, p);
     decode(epoch, p);
     decode(active_addrs, p);
     decode(active_gid, p);
@@ -429,6 +437,9 @@ public:
     if (struct_v >= 8) {
       decode(always_on_modules, p);
     }
+    if (struct_v >= 9) {
+      decode(active_mgr_features, p);
+    }
     DECODE_FINISH(p);
   }
 
@@ -439,6 +450,7 @@ public:
     f->dump_object("active_addrs", active_addrs);
     f->dump_stream("active_addr") << active_addrs.get_legacy_str();
     f->dump_stream("active_change") << active_change;
+    f->dump_unsigned("active_mgr_features", active_mgr_features);
     f->dump_bool("available", available);
     f->open_array_section("standbys");
     for (const auto &i : standbys) {
@@ -449,6 +461,7 @@ public:
       for (const auto& j : i.second.available_modules) {
         j.dump(f);
       }
+      f->dump_unsigned("mgr_features", i.second.mgr_features);
       f->close_section();
       f->close_section();
     }

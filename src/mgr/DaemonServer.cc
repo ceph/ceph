@@ -30,6 +30,8 @@
 #include "messages/MMonMgrReport.h"
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
+#include "messages/MMgrCommand.h"
+#include "messages/MMgrCommandReply.h"
 #include "messages/MPGStats.h"
 #include "messages/MOSDScrub.h"
 #include "messages/MOSDScrub2.h"
@@ -256,6 +258,8 @@ bool DaemonServer::ms_dispatch2(const ref_t<Message>& m)
       return handle_close(ref_cast<MMgrClose>(m));
     case MSG_COMMAND:
       return handle_command(ref_cast<MCommand>(m));
+    case MSG_MGR_COMMAND:
+      return handle_command(ref_cast<MMgrCommand>(m));
     default:
       dout(1) << "Unhandled message type " << m->get_type() << dendl;
       return false;
@@ -716,12 +720,22 @@ bool DaemonServer::_allowed_command(
  */
 class CommandContext {
 public:
-  ceph::ref_t<MCommand> m;
+  ceph::ref_t<MCommand> m_tell;
+  ceph::ref_t<MMgrCommand> m_mgr;
+  const std::vector<std::string>& cmd;  ///< ref into m_tell or m_mgr
+  const bufferlist& data;               ///< ref into m_tell or m_mgr
   bufferlist odata;
   cmdmap_t cmdmap;
 
   explicit CommandContext(ceph::ref_t<MCommand> m)
-    : m{std::move(m)} {
+    : m_tell{std::move(m)},
+      cmd(m_tell->cmd),
+      data(m_tell->get_data()) {
+  }
+  explicit CommandContext(ceph::ref_t<MMgrCommand> m)
+    : m_mgr{std::move(m)},
+      cmd(m_mgr->cmd),
+      data(m_mgr->get_data()) {
   }
 
   void reply(int r, const std::stringstream &ss) {
@@ -730,7 +744,8 @@ public:
 
   void reply(int r, const std::string &rs) {
     // Let the connection drop as soon as we've sent our response
-    ConnectionRef con = m->get_connection();
+    ConnectionRef con = m_tell ? m_tell->get_connection()
+      : m_mgr->get_connection();
     if (con) {
       con->mark_disposable();
     }
@@ -741,10 +756,17 @@ public:
       derr << __func__ << " " << cpp_strerror(r) << " " << rs << dendl;
     }
     if (con) {
-      MCommandReply *reply = new MCommandReply(r, rs);
-      reply->set_tid(m->get_tid());
-      reply->set_data(odata);
-      con->send_message(reply);
+      if (m_tell) {
+	MCommandReply *reply = new MCommandReply(r, rs);
+	reply->set_tid(m_tell->get_tid());
+	reply->set_data(odata);
+	con->send_message(reply);
+      } else {
+	MMgrCommandReply *reply = new MMgrCommandReply(r, rs);
+	reply->set_tid(m_mgr->get_tid());
+	reply->set_data(odata);
+	con->send_message(reply);
+      }
     }
   }
 };
@@ -774,7 +796,19 @@ bool DaemonServer::handle_command(const ref_t<MCommand>& m)
   std::lock_guard l(lock);
   auto cmdctx = std::make_shared<CommandContext>(m);
   try {
-    return _handle_command(m, cmdctx);
+    return _handle_command(cmdctx);
+  } catch (const bad_cmd_get& e) {
+    cmdctx->reply(-EINVAL, e.what());
+    return true;
+  }
+}
+
+bool DaemonServer::handle_command(const ref_t<MMgrCommand>& m)
+{
+  std::lock_guard l(lock);
+  auto cmdctx = std::make_shared<CommandContext>(m);
+  try {
+    return _handle_command(cmdctx);
   } catch (const bad_cmd_get& e) {
     cmdctx->reply(-EINVAL, e.what());
     return true;
@@ -782,16 +816,22 @@ bool DaemonServer::handle_command(const ref_t<MCommand>& m)
 }
 
 bool DaemonServer::_handle_command(
-  const ref_t<MCommand>& m,
   std::shared_ptr<CommandContext>& cmdctx)
 {
+  MessageRef m;
+  if (cmdctx->m_tell) {
+    m = cmdctx->m_tell;
+  } else {
+    m = cmdctx->m_mgr;
+  }
   auto priv = m->get_connection()->get_priv();
   auto session = static_cast<MgrSession*>(priv.get());
   if (!session) {
     return true;
   }
-  if (session->inst.name == entity_name_t())
+  if (session->inst.name == entity_name_t()) {
     session->inst.name = m->get_source();
+  }
 
   std::string format;
   boost::scoped_ptr<Formatter> f;
@@ -799,7 +839,7 @@ bool DaemonServer::_handle_command(
   std::stringstream ss;
   int r = 0;
 
-  if (!cmdmap_from_json(m->cmd, &(cmdctx->cmdmap), ss)) {
+  if (!cmdmap_from_json(cmdctx->cmd, &(cmdctx->cmdmap), ss)) {
     cmdctx->reply(-EINVAL, ss);
     return true;
   }
@@ -863,7 +903,7 @@ bool DaemonServer::_handle_command(
       dout(1) << " access denied" << dendl;
       audit_clog->info() << "from='" << session->inst << "' "
                          << "entity='" << session->entity_name << "' "
-                         << "cmd=" << m->cmd << ":  access denied";
+                         << "cmd=" << cmdctx->cmd << ":  access denied";
       ss << "access denied: does your client key have mgr caps? "
             "See http://docs.ceph.com/docs/master/mgr/administrator/"
             "#client-authentication";
@@ -874,7 +914,7 @@ bool DaemonServer::_handle_command(
   audit_clog->debug()
     << "from='" << session->inst << "' "
     << "entity='" << session->entity_name << "' "
-    << "cmd=" << m->cmd << ": dispatch";
+    << "cmd=" << cmdctx->cmd << ": dispatch";
 
   // ----------------
   // service map commands
@@ -2253,7 +2293,7 @@ bool DaemonServer::_handle_command(
     }
 
     std::stringstream ds;
-    bufferlist inbl = cmdctx->m->get_data();
+    bufferlist inbl = cmdctx->data;
     int r = py_modules.handle_command(handler_name, cmdctx->cmdmap, inbl, &ds, &ss);
     cmdctx->odata.append(ds);
     cmdctx->reply(r, ss);
