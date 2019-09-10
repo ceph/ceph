@@ -60,6 +60,7 @@ int RDMAIWARPServerSocketImpl::accept(ConnectedSocket *sock, const SocketOptions
   struct pollfd pfd = {
     .fd = cm_channel->fd,
     .events = POLLIN,
+    .revents = 0,
   };
   int ret = poll(&pfd, 1, 0);
   ceph_assert(ret >= 0);
