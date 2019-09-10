@@ -211,8 +211,9 @@ def mgrids():
     d = json.loads(outbuf.decode('utf-8'))
     l = []
     l.append(d['active_name'])
-    for i in d['standbys']:
-        l.append(i['name'])
+    # we can only send tell commands to the active mgr
+    #for i in d['standbys']:
+    #    l.append(i['name'])
     return l
 
 
