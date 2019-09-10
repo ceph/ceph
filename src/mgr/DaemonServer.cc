@@ -22,6 +22,7 @@
 #include "mgr/mgr_commands.h"
 #include "mgr/DaemonHealthMetricCollector.h"
 #include "mgr/OSDPerfMetricCollector.h"
+#include "mgr/MDSPerfMetricCollector.h"
 #include "mon/MonCommand.h"
 
 #include "messages/MMgrOpen.h"
@@ -90,7 +91,9 @@ DaemonServer::DaemonServer(MonClient *monc_,
       shutting_down(false),
       tick_event(nullptr),
       osd_perf_metric_collector_listener(this),
-      osd_perf_metric_collector(osd_perf_metric_collector_listener)
+      osd_perf_metric_collector(osd_perf_metric_collector_listener),
+      mds_perf_metric_collector_listener(this),
+      mds_perf_metric_collector(mds_perf_metric_collector_listener)
 {
   g_conf().add_observer(this);
 }
@@ -358,6 +361,22 @@ void DaemonServer::handle_osd_perf_metric_query_updated()
         std::lock_guard l(lock);
         for (auto &c : daemon_connections) {
           if (c->peer_is_osd()) {
+            _send_configure(c);
+          }
+        }
+      }));
+}
+
+void DaemonServer::handle_mds_perf_metric_query_updated()
+{
+  dout(10) << dendl;
+
+  // Send a fresh MMgrConfigure to all clients, so that they can follow
+  // the new policy for transmitting stats
+  finisher.queue(new LambdaContext([this](int r) {
+        std::lock_guard l(lock);
+        for (auto &c : daemon_connections) {
+          if (c->peer_is_mds()) {
             _send_configure(c);
           }
         }
@@ -2888,6 +2907,9 @@ void DaemonServer::_send_configure(ConnectionRef c)
   if (c->peer_is_osd()) {
     configure->osd_perf_metric_queries =
         osd_perf_metric_collector.get_queries();
+  } else if (c->peer_is_mds()) {
+    configure->metric_config_message =
+      MetricConfigMessage(MDSConfigPayload(mds_perf_metric_collector.get_queries()));
   }
 
   c->send_message2(configure);

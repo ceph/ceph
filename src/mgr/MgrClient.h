@@ -1,3 +1,4 @@
+
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 /*
@@ -170,6 +171,12 @@ public:
 
 private:
   void handle_config_payload(const OSDConfigPayload &payload) {
+    if (set_perf_queries_cb) {
+      set_perf_queries_cb(payload);
+    }
+  }
+
+  void handle_config_payload(const MDSConfigPayload &payload) {
     if (set_perf_queries_cb) {
       set_perf_queries_cb(payload);
     }
