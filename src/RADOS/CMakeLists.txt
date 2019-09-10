@@ -35,3 +35,5 @@ target_link_libraries(libRADOS PRIVATE
 #   ${BLKID_LIBRARIES} ${CRYPTO_LIBS} ${EXTRALIBS})
 # target_link_libraries(libRADOS ${rados_libs})
 # install(TARGETS libRADOS DESTINATION ${CMAKE_INSTALL_LIBDIR})
+
+add_library(RADOS_cls_version OBJECT cls/version.cc)
