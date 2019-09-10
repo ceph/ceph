@@ -2,6 +2,7 @@
 // https://github.com/angular/protractor/blob/master/lib/config.ts
 
 const { SpecReporter } = require('jasmine-spec-reporter');
+let failFast = require("protractor-fail-fast");
 
 const config = {
   SELENIUM_PROMISE_MANAGER: false,
@@ -47,8 +48,12 @@ const config = {
       writeReportFreq: 'asap',
       imageToAscii: 'none',
       clearFoldersBeforeTest: true
-    }
-  ]
+    },
+    failFast.init()
+  ],
+  afterLaunch: function() {
+    failFast.clean();
+  }
 };
 
 config.onPrepare = async () => {
