@@ -208,7 +208,7 @@ export class PoolListComponent implements OnInit {
       },
       (task) => task.name.startsWith(`${BASE_URL}/`),
       (pool, task) => task.metadata['pool_name'] === pool.pool_name,
-      { default: (task: ExecutingTask) => new Pool(task.metadata['pool_name']) }
+      { default: (metadata: any) => new Pool(metadata['pool_name']) }
     );
   }
 
