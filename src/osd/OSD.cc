@@ -2373,7 +2373,9 @@ void OSD::asok_command(
   if (prefix == "pg" ||
       prefix == "query" ||
       prefix == "mark_unfound_lost" ||
-      prefix == "list_unfound"
+      prefix == "list_unfound" ||
+      prefix == "scrub" ||
+      prefix == "deep_scrub"
     ) {
     string pgidstr;
     pg_t pgid;
@@ -3842,20 +3844,6 @@ void OSD::final_init()
      "Delay osd recovery by specified seconds");
   ceph_assert(r == 0);
   r = admin_socket->register_command(
-   "trigger_scrub " \
-   "name=pgid,type=CephString " \
-   "name=time,type=CephInt,req=false",
-   test_ops_hook,
-   "Trigger a scheduled scrub ");
-  ceph_assert(r == 0);
-  r = admin_socket->register_command(
-   "trigger_deep_scrub " \
-   "name=pgid,type=CephString " \
-   "name=time,type=CephInt,req=false",
-   test_ops_hook,
-   "Trigger a scheduled deep scrub ");
-  ceph_assert(r == 0);
-  r = admin_socket->register_command(
    "injectfull " \
    "name=type,type=CephString,req=false " \
    "name=count,type=CephInt,req=false ",
@@ -3961,6 +3949,22 @@ void OSD::final_init()
     asok_hook,
     "");
   ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "pg "			   \
+    "name=pgid,type=CephPgid "	   \
+    "name=cmd,type=CephChoices,strings=scrub " \
+    "name=time,type=CephInt,req=false",
+    asok_hook,
+    "");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "pg "			   \
+    "name=pgid,type=CephPgid "	   \
+    "name=cmd,type=CephChoices,strings=deep_scrub " \
+    "name=time,type=CephInt,req=false",
+    asok_hook,
+    "");
+  ceph_assert(r == 0);
   // new form: tell <pgid> <cmd> for both cli and rest
   r = admin_socket->register_command(
     "query",
@@ -3980,6 +3984,20 @@ void OSD::final_init()
     "name=offset,type=CephString,req=false",
     asok_hook,
     "list unfound objects on this pg, perhaps starting at an offset given in JSON");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "scrub "				\
+    "name=pgid,type=CephPgid,req=false "	\
+    "name=time,type=CephInt,req=false",
+    asok_hook,
+    "Trigger a scheduled scrub ");
+  ceph_assert(r == 0);
+  r = admin_socket->register_command(
+    "deep_scrub "			\
+    "name=pgid,type=CephPgid,req=false "	\
+    "name=time,type=CephInt,req=false",
+    asok_hook,
+    "Trigger a scheduled deep scrub ");
   ceph_assert(r == 0);
 }
 
@@ -6021,60 +6039,6 @@ void TestOpsSocketHook::test_ops(OSDService *service, ObjectStore *store,
     service->cct->_conf.apply_changes(nullptr);
     ss << "set_recovery_delay: set osd_recovery_delay_start "
        << "to " << service->cct->_conf->osd_recovery_delay_start;
-    return;
-  }
-  if (command ==  "trigger_scrub" || command == "trigger_deep_scrub") {
-    spg_t pgid;
-    bool deep = (command == "trigger_deep_scrub");
-    OSDMapRef curmap = service->get_osdmap();
-
-    string pgidstr;
-
-    cmd_getval(service->cct, cmdmap, "pgid", pgidstr);
-    if (!pgid.parse(pgidstr.c_str())) {
-      ss << "Invalid pgid specified";
-      return;
-    }
-
-    int64_t time;
-    cmd_getval(service->cct, cmdmap, "time", time, (int64_t)0);
-
-    PGRef pg = service->osd->_lookup_lock_pg(pgid);
-    if (pg == nullptr) {
-      ss << "Can't find pg " << pgid;
-      return;
-    }
-
-    if (pg->is_primary()) {
-      const pg_pool_t *p = curmap->get_pg_pool(pgid.pool());
-      double pool_scrub_max_interval = 0;
-      double scrub_max_interval;
-      if (deep) {
-        p->opts.get(pool_opts_t::DEEP_SCRUB_INTERVAL, &pool_scrub_max_interval);
-        scrub_max_interval = pool_scrub_max_interval > 0 ?
-          pool_scrub_max_interval : g_conf()->osd_deep_scrub_interval;
-      } else {
-        p->opts.get(pool_opts_t::SCRUB_MAX_INTERVAL, &pool_scrub_max_interval);
-        scrub_max_interval = pool_scrub_max_interval > 0 ?
-          pool_scrub_max_interval : g_conf()->osd_scrub_max_interval;
-      }
-      // Instead of marking must_scrub force a schedule scrub
-      utime_t stamp = ceph_clock_now();
-      if (time == 0)
-        stamp -= scrub_max_interval;
-      else
-        stamp -=  (float)time;
-      stamp -= 100.0;  // push back last scrub more for good measure
-      if (deep) {
-        pg->set_last_deep_scrub_stamp(stamp);
-      } else {
-        pg->set_last_scrub_stamp(stamp);
-      }
-      ss << "ok - set" << (deep ? " deep" : "" ) << " stamp " << stamp;
-    } else {
-      ss << "Not primary";
-    }
-    pg->unlock();
     return;
   }
   if (command == "injectfull") {
