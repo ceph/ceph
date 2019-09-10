@@ -23,6 +23,10 @@
 #include "SocketConnection.h"
 #include "SocketMessenger.h"
 
+#ifdef UNIT_TESTS_BUILT
+#include "Interceptor.h"
+#endif
+
 using namespace ceph::msgr::v2;
 
 namespace {
@@ -122,6 +126,20 @@ inline ostream& operator<<(
 }
 
 namespace ceph::net {
+
+#ifdef UNIT_TESTS_BUILT
+
+#define INTERCEPT(...)                  \
+if (conn.interceptor) {                 \
+  if (conn.interceptor->intercept(      \
+      conn, Breakpoint(__VA_ARGS__))) { \
+    abort_in_fault();                   \
+  }                                     \
+}
+
+#else
+#define INTERCEPT(...)
+#endif
 
 seastar::future<> ProtocolV2::Timer::backoff(double seconds)
 {
@@ -299,6 +317,7 @@ seastar::future<Tag> ProtocolV2::read_main_preamble()
         rx_segments_desc.emplace_back(main_preamble.segments[idx]);
       }
 
+      INTERCEPT(static_cast<Tag>(main_preamble.tag), false);
       return static_cast<Tag>(main_preamble.tag);
     });
 }
@@ -381,6 +400,7 @@ seastar::future<> ProtocolV2::write_frame(F &frame, bool flush)
   logger().trace("{} SEND({}) frame: tag={}, num_segments={}, crc={}",
                  conn, bl.length(), (int)main_preamble->tag,
                  (int)main_preamble->num_segments, main_preamble->crc);
+  INTERCEPT(static_cast<Tag>(main_preamble->tag), true);
   if (flush) {
     return write_flush(std::move(bl));
   } else {
@@ -464,11 +484,13 @@ seastar::future<entity_type_t, entity_addr_t> ProtocolV2::banner_exchange()
                  conn, bl.length(), len_payload,
                  CEPH_MSGR2_SUPPORTED_FEATURES, CEPH_MSGR2_REQUIRED_FEATURES,
                  CEPH_BANNER_V2_PREFIX);
+  INTERCEPT(custom_bp_t::BANNER_WRITE);
   return write_flush(std::move(bl)).then([this] {
       // 2. read peer banner
       unsigned banner_len = strlen(CEPH_BANNER_V2_PREFIX) + sizeof(__le16);
       return read_exactly(banner_len); // or read exactly?
     }).then([this] (auto bl) {
+      INTERCEPT(custom_bp_t::BANNER_READ);
       // 3. process peer banner and read banner_payload
       unsigned banner_prefix_len = strlen(CEPH_BANNER_V2_PREFIX);
       logger().debug("{} RECV({}) banner: \"{}\"",
@@ -498,6 +520,7 @@ seastar::future<entity_type_t, entity_addr_t> ProtocolV2::banner_exchange()
       logger().debug("{} GOT banner: payload_len={}", conn, payload_len);
       return read(payload_len);
     }).then([this] (bufferlist bl) {
+      INTERCEPT(custom_bp_t::BANNER_PAYLOAD_READ);
       // 4. process peer banner_payload and send HelloFrame
       auto p = bl.cbegin();
       uint64_t peer_supported_features;
@@ -873,6 +896,7 @@ void ProtocolV2::execute_connecting()
               return sock->close().then([sock = std::move(sock)] {});
             });
           }
+          INTERCEPT(custom_bp_t::SOCKET_CONNECTING);
           return Socket::connect(conn.peer_addr);
         }).then([this](SocketFRef sock) {
           logger().debug("{} socket connected", conn);
@@ -1089,6 +1113,11 @@ ProtocolV2::reuse_connection(
                                     connection_features,
                                     conn_seq,
                                     msg_seq);
+#ifdef UNIT_TESTS_BUILT
+  if (conn.interceptor) {
+    conn.interceptor->register_conn_replaced(conn);
+  }
+#endif
   // close this connection because all the necessary information is delivered
   // to the exisiting connection, and jump to error handling code to abort the
   // current state.
@@ -1473,6 +1502,7 @@ void ProtocolV2::execute_accepting()
   trigger_state(state_t::ACCEPTING, write_state_t::delay, false);
   seastar::with_gate(pending_dispatch, [this] {
       return seastar::futurize_apply([this] {
+          INTERCEPT(custom_bp_t::SOCKET_ACCEPTED);
           auth_meta = seastar::make_lw_shared<AuthConnectionMeta>();
           session_stream_handlers = { nullptr, nullptr };
           enable_recording();
@@ -1741,16 +1771,19 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
   if (unlikely(require_keepalive)) {
     auto keepalive_frame = KeepAliveFrame::Encode();
     bl.append(keepalive_frame.get_buffer(session_stream_handlers));
+    INTERCEPT(ceph::msgr::v2::Tag::KEEPALIVE2, true);
   }
 
   if (unlikely(_keepalive_ack.has_value())) {
     auto keepalive_ack_frame = KeepAliveFrameAck::Encode(*_keepalive_ack);
     bl.append(keepalive_ack_frame.get_buffer(session_stream_handlers));
+    INTERCEPT(ceph::msgr::v2::Tag::KEEPALIVE2_ACK, true);
   }
 
   if (require_ack && !num_msgs) {
     auto ack_frame = AckFrame::Encode(conn.in_seq);
     bl.append(ack_frame.get_buffer(session_stream_handlers));
+    INTERCEPT(ceph::msgr::v2::Tag::ACK, true);
   }
 
   std::for_each(msgs.begin(), msgs.begin()+num_msgs, [this, &bl](const MessageRef& msg) {
@@ -1779,6 +1812,7 @@ ceph::bufferlist ProtocolV2::do_sweep_messages(
     logger().debug("{} --> #{} === {} ({})",
 		   conn, msg->get_seq(), *msg, msg->get_type());
     bl.append(message.get_buffer(session_stream_handlers));
+    INTERCEPT(ceph::msgr::v2::Tag::MESSAGE, true);
   });
 
   return bl;
@@ -1877,6 +1911,11 @@ void ProtocolV2::execute_ready()
 {
   assert(conn.policy.lossy || (client_cookie != 0 && server_cookie != 0));
   trigger_state(state_t::READY, write_state_t::open, false);
+#ifdef UNIT_TESTS_BUILT
+  if (conn.interceptor) {
+    conn.interceptor->register_conn_ready(conn);
+  }
+#endif
   execution_done = seastar::with_gate(pending_dispatch, [this] {
     protocol_timer.cancel();
     return seastar::keep_doing([this] {
@@ -2040,6 +2079,11 @@ void ProtocolV2::trigger_close()
   protocol_timer.cancel();
 
   trigger_state(state_t::CLOSING, write_state_t::drop, false);
+#ifdef UNIT_TESTS_BUILT
+  if (conn.interceptor) {
+    conn.interceptor->register_conn_closed(conn);
+  }
+#endif
 }
 
 } // namespace ceph::net
