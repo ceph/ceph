@@ -2080,10 +2080,8 @@ public:
   friend class OSDService;
 
 private:
-  void set_perf_queries(
-      const std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> &queries);
-  void get_perf_reports(
-      std::map<OSDPerfMetricQuery, OSDPerfMetricReport> *reports);
+  void set_perf_queries(const ConfigPayload &config_payload);
+  MetricPayload get_perf_reports();
 
   ceph::mutex m_perf_queries_lock = ceph::make_mutex("OSD::m_perf_queries_lock");
   std::list<OSDPerfMetricQuery> m_perf_queries;

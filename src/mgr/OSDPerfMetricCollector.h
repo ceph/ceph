@@ -4,52 +4,19 @@
 #ifndef OSD_PERF_METRIC_COLLECTOR_H_
 #define OSD_PERF_METRIC_COLLECTOR_H_
 
-#include "common/ceph_mutex.h"
-
+#include "mgr/MetricCollector.h"
 #include "mgr/OSDPerfMetricTypes.h"
-
-#include <map>
 
 /**
  * OSD performance query class.
  */
-class OSDPerfMetricCollector {
+class OSDPerfMetricCollector
+  : public MetricCollector<OSDPerfMetricQuery, OSDPerfMetricLimit, OSDPerfMetricKey,
+                           OSDPerfMetricReport> {
 public:
-  struct Listener {
-    virtual ~Listener() {
-    }
+  OSDPerfMetricCollector(MetricListener &listener);
 
-    virtual void handle_query_updated() = 0;
-  };
-
-  OSDPerfMetricCollector(Listener &listener);
-
-  std::map<OSDPerfMetricQuery, OSDPerfMetricLimits> get_queries() const;
-
-  OSDPerfMetricQueryID add_query(
-      const OSDPerfMetricQuery& query,
-      const std::optional<OSDPerfMetricLimit> &limit);
-  int remove_query(OSDPerfMetricQueryID query_id);
-  void remove_all_queries();
-
-  int get_counters(OSDPerfMetricQueryID query_id,
-                   std::map<OSDPerfMetricKey, PerformanceCounters> *counters);
-
-  void process_reports(
-      const std::map<OSDPerfMetricQuery, OSDPerfMetricReport> &reports);
-
-private:
-  typedef std::optional<OSDPerfMetricLimit> OptionalLimit;
-  typedef std::map<OSDPerfMetricQuery,
-                   std::map<OSDPerfMetricQueryID, OptionalLimit>> Queries;
-  typedef std::map<OSDPerfMetricQueryID,
-                   std::map<OSDPerfMetricKey, PerformanceCounters>> Counters;
-
-  Listener &listener;
-  mutable ceph::mutex lock = ceph::make_mutex("OSDPerfMetricCollector::lock");
-  OSDPerfMetricQueryID next_query_id = 0;
-  Queries queries;
-  Counters counters;
+  void process_reports(const MetricPayload &payload) override;
 };
 
 #endif // OSD_PERF_METRIC_COLLECTOR_H_

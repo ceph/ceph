@@ -1011,14 +1011,14 @@ void ActivePyModules::set_uri(const std::string& module_name,
   modules.at(module_name)->set_uri(uri);
 }
 
-OSDPerfMetricQueryID ActivePyModules::add_osd_perf_query(
+MetricQueryID ActivePyModules::add_osd_perf_query(
     const OSDPerfMetricQuery &query,
     const std::optional<OSDPerfMetricLimit> &limit)
 {
   return server.add_osd_perf_query(query, limit);
 }
 
-void ActivePyModules::remove_osd_perf_query(OSDPerfMetricQueryID query_id)
+void ActivePyModules::remove_osd_perf_query(MetricQueryID query_id)
 {
   int r = server.remove_osd_perf_query(query_id);
   if (r < 0) {
@@ -1027,7 +1027,7 @@ void ActivePyModules::remove_osd_perf_query(OSDPerfMetricQueryID query_id)
   }
 }
 
-PyObject *ActivePyModules::get_osd_perf_counters(OSDPerfMetricQueryID query_id)
+PyObject *ActivePyModules::get_osd_perf_counters(MetricQueryID query_id)
 {
   std::map<OSDPerfMetricKey, PerformanceCounters> counters;
 

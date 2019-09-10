@@ -633,6 +633,11 @@ bool DaemonServer::handle_report(const ref_t<MMgrReport>& m)
     osd_perf_metric_collector.process_reports(m->osd_perf_metric_reports);
   }
 
+  if (m->metric_report_message) {
+    const MetricReportMessage &message = *m->metric_report_message;
+    boost::apply_visitor(HandlePayloadVisitor(this), message.payload);
+  }
+
   return true;
 }
 
@@ -2848,20 +2853,20 @@ void DaemonServer::_send_configure(ConnectionRef c)
   c->send_message2(configure);
 }
 
-OSDPerfMetricQueryID DaemonServer::add_osd_perf_query(
+MetricQueryID DaemonServer::add_osd_perf_query(
     const OSDPerfMetricQuery &query,
     const std::optional<OSDPerfMetricLimit> &limit)
 {
   return osd_perf_metric_collector.add_query(query, limit);
 }
 
-int DaemonServer::remove_osd_perf_query(OSDPerfMetricQueryID query_id)
+int DaemonServer::remove_osd_perf_query(MetricQueryID query_id)
 {
   return osd_perf_metric_collector.remove_query(query_id);
 }
 
 int DaemonServer::get_osd_perf_counters(
-    OSDPerfMetricQueryID query_id,
+    MetricQueryID query_id,
     std::map<OSDPerfMetricKey, PerformanceCounters> *counters)
 {
   return osd_perf_metric_collector.get_counters(query_id, counters);
