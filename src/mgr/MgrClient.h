@@ -47,6 +47,7 @@ class MgrCommand : public CommandOp
 {
   public:
   std::string name;
+  bool tell = false;
 
   explicit MgrCommand(ceph_tid_t t) : CommandOp(t) {}
   MgrCommand() : CommandOp() {}
