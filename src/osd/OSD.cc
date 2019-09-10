@@ -118,7 +118,6 @@
 #include "messages/MOSDScrub2.h"
 #include "messages/MOSDRepScrub.h"
 
-#include "messages/MMonCommand.h"
 #include "messages/MCommand.h"
 #include "messages/MCommandReply.h"
 
@@ -6766,18 +6765,6 @@ void OSD::send_beacon(const ceph::coarse_mono_clock::time_point& now)
   } else {
     dout(20) << __func__ << " not sending" << dendl;
   }
-}
-
-void OSD::handle_command(MMonCommand *m)
-{
-  if (!require_mon_peer(m)) {
-    m->put();
-    return;
-  }
-
-  Command *c = new Command(m->cmd, m->get_tid(), m->get_data(), NULL);
-  command_wq.queue(c);
-  m->put();
 }
 
 void OSD::handle_command(MCommand *m)
