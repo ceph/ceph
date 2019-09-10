@@ -2414,7 +2414,6 @@ void OSD::asok_command(
 	ss << "not primary for pgid " << pgid;
 	// do not reply; they will get newer maps and realize they
 	// need to resend.
-#warning fixme on client side
 	pg->unlock();
 	ret = -EAGAIN;
 	goto out;
