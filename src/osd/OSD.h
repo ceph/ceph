@@ -1340,7 +1340,6 @@ public:
 private:
 
   ShardedThreadPool osd_op_tp;
-  ThreadPool command_tp;
 
   void get_latest_osdmap();
 
@@ -1963,63 +1962,7 @@ protected:
   void handle_fast_force_recovery(MOSDForceRecovery *m);
 
   // -- commands --
-  struct Command {
-    vector<string> cmd;
-    ceph_tid_t tid;
-    bufferlist indata;
-    ConnectionRef con;
-
-    Command(vector<string>& c, ceph_tid_t t, bufferlist& bl, Connection *co)
-      : cmd(c), tid(t), indata(bl), con(co) {}
-  };
-  list<Command*> command_queue;
-  struct CommandWQ : public ThreadPool::WorkQueue<Command> {
-    OSD *osd;
-    CommandWQ(OSD *o, time_t ti, time_t si, ThreadPool *tp)
-      : ThreadPool::WorkQueue<Command>("OSD::CommandWQ", ti, si, tp), osd(o) {}
-
-    bool _empty() override {
-      return osd->command_queue.empty();
-    }
-    bool _enqueue(Command *c) override {
-      osd->command_queue.push_back(c);
-      return true;
-    }
-    void _dequeue(Command *pg) override {
-      ceph_abort();
-    }
-    Command *_dequeue() override {
-      if (osd->command_queue.empty())
-	return NULL;
-      Command *c = osd->command_queue.front();
-      osd->command_queue.pop_front();
-      return c;
-    }
-    void _process(Command *c, ThreadPool::TPHandle &) override {
-      osd->osd_lock.lock();
-      if (osd->is_stopping()) {
-	osd->osd_lock.unlock();
-	delete c;
-	return;
-      }
-      osd->do_command(c->con.get(), c->tid, c->cmd, c->indata);
-      osd->osd_lock.unlock();
-      delete c;
-    }
-    void _clear() override {
-      while (!osd->command_queue.empty()) {
-	Command *c = osd->command_queue.front();
-	osd->command_queue.pop_front();
-	delete c;
-      }
-    }
-  } command_wq;
-
   void handle_command(class MCommand *m);
-  void do_command(Connection *con, ceph_tid_t tid, vector<string>& cmd, bufferlist& data);
-  int _do_command(
-    Connection *con, cmdmap_t& cmdmap, ceph_tid_t tid, bufferlist& data,
-    bufferlist& odata, stringstream& ss, stringstream& ds);
 
 
   // -- pg recovery --
