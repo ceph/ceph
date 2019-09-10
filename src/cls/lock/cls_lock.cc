@@ -264,7 +264,7 @@ static int lock_op(cls_method_context_t hctx,
   }
 
   return lock_obj(hctx,
-                  op.name, op.type, op.duration, op.description,
+                  op.name, op.type, utime_t(op.duration), op.description,
                   op.flags, op.cookie, op.tag);
 }
 

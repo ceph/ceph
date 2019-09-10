@@ -12,6 +12,8 @@
  * 
  */
 
+#include <algorithm>
+
 #include "include/types.h"
 #include "msg/msg_types.h"
 #include "include/rados/librados.hpp"
@@ -38,7 +40,7 @@ namespace rados {
         op.cookie = cookie;
         op.tag = tag;
         op.description = description;
-        op.duration = duration;
+        op.duration = duration.to_timespan();
         op.flags = flags;
         bufferlist in;
         encode(op, in);
@@ -123,7 +125,8 @@ namespace rados {
 	  return -EBADMSG;
         }
 
-        *locks = ret.locks;
+	std::move(ret.locks.begin(), ret.locks.end(),
+		  std::back_inserter(*locks));
 
         return 0;
       }
@@ -150,15 +153,16 @@ namespace rados {
         }
 
         if (lockers) {
-          *lockers = ret.lockers;
-        }
+	  std::move(ret.lockers.begin(), ret.lockers.end(),
+		    std::inserter(*lockers, lockers->end()));
+	}
 
         if (type) {
           *type = ret.lock_type;
         }
 
         if (tag) {
-          *tag = ret.tag;
+          *tag = std::move(ret.tag);
         }
 
         return 0;

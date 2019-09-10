@@ -38,13 +38,14 @@ void cls_lock_lock_op::dump(Formatter *f) const
 
 void cls_lock_lock_op::generate_test_instances(list<cls_lock_lock_op*>& o)
 {
+  using namespace std::literals;
   cls_lock_lock_op *i = new cls_lock_lock_op;
   i->name = "name";
   i->type = LOCK_SHARED;
   i->cookie = "cookie";
   i->tag = "tag";
   i->description = "description";
-  i->duration = utime_t(5, 0);
+  i->duration = 5s;
   i->flags = LOCK_FLAG_MAY_RENEW;
   o.push_back(i);
   o.push_back(new cls_lock_lock_op);
@@ -112,10 +113,7 @@ void cls_lock_get_info_reply::dump(Formatter *f) const
   f->dump_string("lock_type", cls_lock_type_str(lock_type));
   f->dump_string("tag", tag);
   f->open_array_section("lockers");
-  map<locker_id_t, locker_info_t>::const_iterator iter;
-  for (iter = lockers.begin(); iter != lockers.end(); ++iter) {
-    const locker_id_t& id = iter->first;
-    const locker_info_t& info = iter->second;
+  for (const auto& [id, info] : lockers) {
     f->open_object_section("object");
     f->dump_stream("locker") << id.locker;
     f->dump_string("description", info.description);
@@ -147,9 +145,8 @@ void cls_lock_get_info_reply::generate_test_instances(list<cls_lock_get_info_rep
 
 void cls_lock_list_locks_reply::dump(Formatter *f) const
 {
-  list<string>::const_iterator iter;
   f->open_array_section("locks");
-  for (iter = locks.begin(); iter != locks.end(); ++iter) {
+  for (auto iter = locks.begin(); iter != locks.end(); ++iter) {
     f->open_array_section("object");
     f->dump_string("lock", *iter);
     f->close_section();
