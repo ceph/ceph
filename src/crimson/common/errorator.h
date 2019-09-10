@@ -67,6 +67,8 @@ public:
 
   template <_impl::ct_error ErrorV>
   void operator()(const unthrowable_wrapper<ErrorV>& e) {
+    static_assert(std::is_invocable<ErrorVisitorT, decltype(e)>::value,
+                  "provided Error Visitor is not exhaustive");
     // In C++ throwing an exception isn't the sole way to signal
     // error with it. This approach nicely fits cold, infrequent cases
     // but when applied to a hot one, it will likely hurt performance.
@@ -229,6 +231,11 @@ struct errorator {
 
     template <class ValueFuncT, class ErrorVisitorT>
     auto safe_then(ValueFuncT&& valfunc, ErrorVisitorT&& errfunc) {
+      static_assert((... && std::is_invocable_v<
+                      ErrorVisitorT,
+                      decltype(WrappedAllowedErrorsT::instance)>),
+                    "provided Error Visitor is not exhaustive");
+
       using value_func_result_t = std::invoke_result_t<ValueFuncT, ValuesT&&...>;
       // recognize whether there can be any error coming from the Value
       // Function.
