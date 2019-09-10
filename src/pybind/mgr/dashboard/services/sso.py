@@ -9,10 +9,13 @@ import threading
 import warnings
 
 import six
-if six.PY2:
-    FileNotFoundError = IOError
-
 from six.moves.urllib import parse
+
+from .. import mgr, logger
+from ..tools import prepare_url_prefix
+
+if six.PY2:
+    FileNotFoundError = IOError  # pylint: disable=redefined-builtin
 
 try:
     from onelogin.saml2.settings import OneLogin_Saml2_Settings as Saml2Settings
@@ -22,10 +25,6 @@ try:
     python_saml_imported = True
 except ImportError:
     python_saml_imported = False
-
-
-from .. import mgr, logger
-from ..tools import prepare_url_prefix
 
 
 class Saml2(object):
