@@ -349,27 +349,9 @@ bool AdminSocket::do_accept()
   }
 
   std::vector<std::string> cmdvec = { c };
-  bufferlist out;
-  string rs;
-  int rval = 0;
-
-  bool done = false;
-  ceph::mutex mylock = ceph::make_mutex("admin_socket::do_accept::mylock");
-  ceph::condition_variable mycond;
-  C_SafeCond fin(mylock, mycond, &done, &rval);
-  bufferlist empty;
-  execute_command(
-    cmdvec,
-    empty /* inbl */,
-    [&rs, &out, &fin](int r, const std::string& err, bufferlist& outbl) {
-      rs = err;
-      out.claim(outbl);
-      fin.finish(r);
-    });
-  {
-    std::unique_lock l{mylock};
-    mycond.wait(l, [&done] { return done;});
-  }
+  bufferlist empty, out;
+  ostringstream err;
+  int rval = execute_command(cmdvec, empty /* inbl */, err, &out);
 
   // Unfortunately, the asok wire protocol does not let us pass an error code,
   // and many asok command implementations return helpful error strings.  So,
@@ -417,6 +399,32 @@ void AdminSocket::do_tell_queue()
 	m->get_connection()->send_message(reply);
       });
   }
+}
+
+int AdminSocket::execute_command(
+  const std::vector<std::string>& cmd,
+  const bufferlist& inbl,
+  std::ostream& errss,
+  bufferlist *outbl)
+{
+  bool done = false;
+  int rval = 0;
+  ceph::mutex mylock = ceph::make_mutex("admin_socket::excute_command::mylock");
+  ceph::condition_variable mycond;
+  C_SafeCond fin(mylock, mycond, &done, &rval);
+  execute_command(
+    cmd,
+    inbl,
+    [&errss, outbl, &fin](int r, const std::string& err, bufferlist& out) {
+      errss << err;
+      outbl->claim(out);
+      fin.finish(r);
+    });
+  {
+    std::unique_lock l{mylock};
+    mycond.wait(l, [&done] { return done;});
+  }
+  return rval;
 }
 
 void AdminSocket::execute_command(
