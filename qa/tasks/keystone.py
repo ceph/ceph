@@ -142,7 +142,9 @@ def setup_venv(ctx, config):
             ])
 
         run_in_keystone_venv(ctx, client,
-            [   'pip', 'install', 'python-openstackclient' ])
+            [   'pip', 'install', 'python-openstackclient<=3.19.0',
+                '-r', 'requirements.txt'
+            ])
     try:
         yield
     finally:
