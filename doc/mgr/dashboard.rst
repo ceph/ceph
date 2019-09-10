@@ -732,7 +732,7 @@ commands to manage roles are the following:
 
 - *Delete Scope Permission from Role*::
 
-  $ ceph dashboard ac-role-del-perms <rolename> <scopename>
+  $ ceph dashboard ac-role-del-scope-perms <rolename> <scopename>
 
 To associate roles to users, the following CLI commands are available:
 
