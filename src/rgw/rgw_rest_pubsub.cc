@@ -68,18 +68,16 @@ public:
       return;
     }
 
-    {
-      XMLFormatter* f = static_cast<XMLFormatter*>(s->formatter);
-      f->open_object_section_in_ns("CreateTopicResponse", "https://sns.amazonaws.com/doc/2010-03-31/");
-      f->open_object_section("CreateTopicResult");
-      encode_xml("TopicArn", topic_arn, f); 
-      f->close_section();
-      f->open_object_section("ResponseMetadata");
-      encode_xml("RequestId", s->req_id, f); 
-      f->close_section();
-      f->close_section();
-    }
-    rgw_flush_formatter_and_reset(s, s->formatter);
+    const auto f = s->formatter;
+    f->open_object_section_in_ns("CreateTopicResponse", "https://sns.amazonaws.com/doc/2010-03-31/");
+    f->open_object_section("CreateTopicResult");
+    encode_xml("TopicArn", topic_arn, f); 
+    f->close_section();
+    f->open_object_section("ResponseMetadata");
+    encode_xml("RequestId", s->req_id, f); 
+    f->close_section();
+    f->close_section();
+    rgw_flush_formatter_and_reset(s, f);
   }
 };
 
@@ -99,18 +97,16 @@ public:
       return;
     }
 
-    {
-      XMLFormatter* f = static_cast<XMLFormatter*>(s->formatter);
-      f->open_object_section_in_ns("ListTopicsResponse", "https://sns.amazonaws.com/doc/2010-03-31/");
-      f->open_object_section("ListTopicsResult");
-      encode_xml("Topics", result, f); 
-      f->close_section();
-      f->open_object_section("ResponseMetadata");
-      encode_xml("RequestId", s->req_id, f); 
-      f->close_section();
-      f->close_section();
-    }
-    rgw_flush_formatter_and_reset(s, s->formatter);
+    const auto f = s->formatter;
+    f->open_object_section_in_ns("ListTopicsResponse", "https://sns.amazonaws.com/doc/2010-03-31/");
+    f->open_object_section("ListTopicsResult");
+    encode_xml("Topics", result, f); 
+    f->close_section();
+    f->open_object_section("ResponseMetadata");
+    encode_xml("RequestId", s->req_id, f); 
+    f->close_section();
+    f->close_section();
+    rgw_flush_formatter_and_reset(s, f);
   }
 };
 
@@ -142,18 +138,16 @@ public:
       return;
     }
 
-    {
-      XMLFormatter* f = static_cast<XMLFormatter*>(s->formatter);
-      f->open_object_section("GetTopicResponse");
-      f->open_object_section("GetTopicResult");
-      encode_xml("Topic", result.topic, f); 
-      f->close_section();
-      f->open_object_section("ResponseMetadata");
-      encode_xml("RequestId", s->req_id, f); 
-      f->close_section();
-      f->close_section();
-    }
-    rgw_flush_formatter_and_reset(s, s->formatter);
+    const auto f = s->formatter;
+    f->open_object_section("GetTopicResponse");
+    f->open_object_section("GetTopicResult");
+    encode_xml("Topic", result.topic, f); 
+    f->close_section();
+    f->open_object_section("ResponseMetadata");
+    encode_xml("RequestId", s->req_id, f); 
+    f->close_section();
+    f->close_section();
+    rgw_flush_formatter_and_reset(s, f);
   }
 };
 
@@ -185,15 +179,13 @@ public:
       return;
     }
 
-    {
-      XMLFormatter* f = static_cast<XMLFormatter*>(s->formatter);
-      f->open_object_section_in_ns("DeleteTopicResponse", "https://sns.amazonaws.com/doc/2010-03-31/");
-      f->open_object_section("ResponseMetadata");
-      encode_xml("RequestId", s->req_id, f); 
-      f->close_section();
-      f->close_section();
-    }
-    rgw_flush_formatter_and_reset(s, s->formatter);
+    const auto f = s->formatter;
+    f->open_object_section_in_ns("DeleteTopicResponse", "https://sns.amazonaws.com/doc/2010-03-31/");
+    f->open_object_section("ResponseMetadata");
+    encode_xml("RequestId", s->req_id, f); 
+    f->close_section();
+    f->close_section();
+    rgw_flush_formatter_and_reset(s, f);
   }
 };
 
@@ -501,7 +493,7 @@ void RGWPSCreateNotif_ObjStore_S3::execute() {
     ldout(s->cct, 20) << "successfully auto-generated unique topic '" << unique_topic_name << "'" << dendl;
     // generate the notification
     rgw::notify::EventTypeList events;
-    op_ret = b->create_notification(unique_topic_name, c.events, notif_name);
+    op_ret = b->create_notification(unique_topic_name, c.events, std::make_optional(c.filter), notif_name);
     if (op_ret < 0) {
       ldout(s->cct, 1) << "failed to auto-generate notification for unique topic '" << unique_topic_name <<
         "', ret=" << op_ret << dendl;
@@ -653,8 +645,6 @@ private:
     return 0;
   }
 
-  void add_notification_to_list(const rgw_pubsub_topic_filter& topic_filter);
-
 public:
   void execute() override;
   void send_response() override {
@@ -673,14 +663,6 @@ public:
   const char* name() const override { return "pubsub_notifications_get_s3"; }
 };
 
-void RGWPSListNotifs_ObjStore_S3::add_notification_to_list(const rgw_pubsub_topic_filter& topic_filter) {
-    rgw_pubsub_s3_notification notification;
-    notification.id = topic_filter.s3_id;
-    notification.topic_arn = topic_filter.topic.arn;
-    notification.events = topic_filter.events;
-    notifications.list.push_back(notification);
-}
-
 void RGWPSListNotifs_ObjStore_S3::execute() {
   ups.emplace(store, s->owner.get_id());
   auto b = ups->get_bucket(bucket_info.bucket);
@@ -697,7 +679,7 @@ void RGWPSListNotifs_ObjStore_S3::execute() {
     // get info of a specific notification
     const auto unique_topic = find_unique_topic(bucket_topics, notif_name);
     if (unique_topic) {
-      add_notification_to_list(unique_topic->get());
+      notifications.list.emplace_back(unique_topic->get());
       return;
     }
     op_ret = -ENOENT;
@@ -710,7 +692,7 @@ void RGWPSListNotifs_ObjStore_S3::execute() {
         // not an s3 notification
         continue;
     }
-    add_notification_to_list(topic.second);
+    notifications.list.emplace_back(topic.second);
   }
 }
 

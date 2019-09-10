@@ -1077,6 +1077,16 @@ public:
   }
 };
 
+bool match(const rgw_pubsub_topic_filter& filter, const std::string& key_name, rgw::notify::EventType event_type) {
+  if (!match(filter.events, event_type)) {
+    return false;
+  }
+  if (!match(filter.s3_filter.key_filter, key_name)) {
+    return false;
+  }
+  return true;
+}
+
 class RGWPSFindBucketTopicsCR : public RGWCoroutine {
   RGWDataSyncEnv *sync_env;
   PSEnvRef env;
@@ -1144,9 +1154,7 @@ public:
       for (auto& titer : bucket_topics.topics) {
         auto& topic_filter = titer.second;
         auto& info = topic_filter.topic;
-        // if event list is defined but event does not match any in the list, we skip to the next one
-        if (!topic_filter.events.empty() &&
-            std::find(topic_filter.events.begin(), topic_filter.events.end(), event_type) == topic_filter.events.end()) {
+        if (!match(topic_filter, key.name, event_type)) {
           continue;
         }
         std::shared_ptr<PSTopicConfig> tc = std::make_shared<PSTopicConfig>();

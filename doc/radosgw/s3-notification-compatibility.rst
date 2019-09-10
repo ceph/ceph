@@ -29,8 +29,6 @@ Following tags (and the tags inside them) are not supported:
 +-----------------------------------+----------------------------------------------+
 | ``<CloudFunctionConfiguration>``  | not needed, we treat all destinations as SNS |
 +-----------------------------------+----------------------------------------------+
-| ``<Filter>``                      | object filtering not supported               |
-+-----------------------------------+----------------------------------------------+
 
 REST API Extension 
 ------------------
@@ -44,6 +42,15 @@ Ceph's bucket notification API has the following extensions:
 - Getting the information on a specific notification (when more than one exists on a bucket)
 
   - In S3, it is only possible to fetch all notifications on a bucket
+
+- In addition to filtering based on prefix/suffix of object keys we support:
+
+  - Filtering based on regular expression matching
+
+  - Filtering based on metadata attributes attached to the object
+
+- Filtering overlapping is allowed, so that same event could be sent as different notification
+
 
 Unsupported Fields in the Event Record
 --------------------------------------

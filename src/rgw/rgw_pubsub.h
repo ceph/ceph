@@ -13,6 +13,85 @@
 
 class XMLObj;
 
+struct rgw_s3_key_filter {
+  std::string prefix_rule;
+  std::string suffix_rule;
+  std::string regex_rule;
+
+  bool has_content() const;
+
+  bool decode_xml(XMLObj *obj);
+  void dump_xml(Formatter *f) const;
+  
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(prefix_rule, bl);
+    encode(suffix_rule, bl);
+    encode(regex_rule, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(prefix_rule, bl);
+    decode(suffix_rule, bl);
+    decode(regex_rule, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_s3_key_filter)
+
+using Metadata = std::map<std::string, std::string>;
+
+struct rgw_s3_metadata_filter {
+  Metadata metadata;
+  
+  bool has_content() const;
+  
+  bool decode_xml(XMLObj *obj);
+  void dump_xml(Formatter *f) const;
+  
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(metadata, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(metadata, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_s3_metadata_filter)
+
+struct rgw_s3_filter {
+  rgw_s3_key_filter key_filter;
+  rgw_s3_metadata_filter metadata_filter;
+
+  bool has_content() const;
+  
+  bool decode_xml(XMLObj *obj);
+  void dump_xml(Formatter *f) const;
+  
+  void encode(bufferlist& bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(key_filter, bl);
+    encode(metadata_filter, bl);
+    ENCODE_FINISH(bl);
+  }
+
+  void decode(bufferlist::const_iterator& bl) {
+    DECODE_START(1, bl);
+    decode(key_filter, bl);
+    decode(metadata_filter, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(rgw_s3_filter)
+
+using OptionalFilter = std::optional<rgw_s3_filter>;
+
+class rgw_pubsub_topic_filter;
 /* S3 notification configuration
  * based on: https://docs.aws.amazon.com/AmazonS3/latest/API/RESTBucketPUTnotification.html
 <NotificationConfiguration xmlns="http://s3.amazonaws.com/doc/2006-03-01/">
@@ -24,6 +103,12 @@ class XMLObj;
           <Value>jpg</Value>
         </FilterRule>
       </S3Key>
+      <S3Metadata>
+        <FilterRule>
+          <Name></Name>
+          <Value></Value>
+        </FilterRule>
+      </s3Metadata>
     </Filter>
     <Id>notification1</Id>
     <Topic>arn:aws:sns:<region>:<account>:<topic></Topic>
@@ -39,10 +124,23 @@ struct rgw_pubsub_s3_notification {
   rgw::notify::EventTypeList events;
   // topic ARN
   std::string topic_arn;
+  // filter rules
+  rgw_s3_filter filter;
 
   bool decode_xml(XMLObj *obj);
   void dump_xml(Formatter *f) const;
+
+  rgw_pubsub_s3_notification() = default;
+  // construct from rgw_pubsub_topic_filter (used by get/list notifications)
+  rgw_pubsub_s3_notification(const rgw_pubsub_topic_filter& topic_filter);
 };
+
+// return true if the key matches the prefix/suffix/regex rules of the key filter
+bool match(const rgw_s3_key_filter& filter, const std::string& key);
+// return true if the key matches the metadata rules of the metadata filter
+bool match(const rgw_s3_metadata_filter& filter, const Metadata& metadata);
+// return true if the event type matches (equal or contained in) one of the events in the list
+bool match(const rgw::notify::EventTypeList& events, rgw::notify::EventType event);
 
 struct rgw_pubsub_s3_notifications {
   std::list<rgw_pubsub_s3_notification> list;
@@ -372,9 +470,10 @@ struct rgw_pubsub_topic_filter {
   rgw_pubsub_topic topic;
   rgw::notify::EventTypeList events;
   std::string s3_id;
+  rgw_s3_filter s3_filter;
 
   void encode(bufferlist& bl) const {
-    ENCODE_START(2, 1, bl);
+    ENCODE_START(3, 1, bl);
     encode(topic, bl);
     // events are stored as a vector of strings
     std::vector<std::string> tmp_events;
@@ -382,11 +481,12 @@ struct rgw_pubsub_topic_filter {
     std::transform(events.begin(), events.end(), std::back_inserter(tmp_events), converter);
     encode(tmp_events, bl);
     encode(s3_id, bl);
+    encode(s3_filter, bl);
     ENCODE_FINISH(bl);
   }
 
   void decode(bufferlist::const_iterator& bl) {
-    DECODE_START(2, bl);
+    DECODE_START(3, bl);
     decode(topic, bl);
     // events are stored as a vector of strings
     events.clear();
@@ -395,6 +495,9 @@ struct rgw_pubsub_topic_filter {
     std::transform(tmp_events.begin(), tmp_events.end(), std::back_inserter(events), rgw::notify::from_string);
     if (struct_v >= 2) {
       decode(s3_id, bl);
+    }
+    if (struct_v >= 3) {
+      decode(s3_filter, bl);
     }
     DECODE_FINISH(bl);
   }
@@ -502,12 +605,14 @@ public:
     // read the list of topics associated with a bucket and populate into result
     // return 0 on success or if no topic was associated with the bucket, error code otherwise
     int get_topics(rgw_pubsub_bucket_topics *result);
-    // adds a topic + filter (event list) to a bucket
+    // adds a topic + filter (event list, and possibly name and metadata filters) to a bucket
     // assigning a notification name is optional (needed for S3 compatible notifications)
     // if the topic already exist on the bucket, the filter event list may be updated
+    // for S3 compliant notifications the version with: s3_filter and notif_name should be used
     // return -ENOENT if the topic does not exists
     // return 0 on success, error code otherwise
-    int create_notification(const string& topic_name, const rgw::notify::EventTypeList& events, const std::string& notif_name="");
+    int create_notification(const string& topic_name, const rgw::notify::EventTypeList& events);
+    int create_notification(const string& topic_name, const rgw::notify::EventTypeList& events, OptionalFilter s3_filter, const std::string& notif_name);
     // remove a topic and filter from bucket
     // if the topic does not exists on the bucket it is a no-op (considered success)
     // return -ENOENT if the topic does not exists

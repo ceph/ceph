@@ -28,7 +28,7 @@ from nose.tools import assert_not_equal, assert_equal
 # configure logging for the tests module
 log = logging.getLogger(__name__)
 
-skip_push_tests = True
+skip_push_tests = False
 
 ####################################
 # utility functions for pubsub tests
@@ -152,7 +152,17 @@ class AMQPReceiver(object):
     def __init__(self, exchange, topic):
         import pika
         hostname = get_ip()
-        connection = pika.BlockingConnection(pika.ConnectionParameters(host=hostname, port=rabbitmq_port))
+        remaining_retries = 10
+        while remaining_retries > 0:
+            try:
+                connection = pika.BlockingConnection(pika.ConnectionParameters(host=hostname, port=rabbitmq_port))
+                break
+            except Exception as error:
+                remaining_retries -= 1
+                print 'failed to connect to rabbitmq (remaining retries ' + str(remaining_retries) + '): ' + str(error)
+
+        if remaining_retries == 0:
+            raise Exception('failed to connect to rabbitmq - no retries left')
 
         self.channel = connection.channel()
         self.channel.exchange_declare(exchange=exchange, exchange_type='topic', durable=True)
@@ -721,6 +731,208 @@ def test_ps_s3_notification_on_master():
     topic_conf.del_config()
     # delete the bucket
     zones[0].delete_bucket(bucket_name)
+
+
+def ps_s3_notification_filter(on_master):
+    """ test s3 notification filter on master """
+    if skip_push_tests:
+        return SkipTest("PubSub push tests don't run in teuthology")
+    hostname = get_ip()
+    proc = init_rabbitmq()
+    if proc is  None:
+        return SkipTest('end2end amqp tests require rabbitmq-server installed')
+    if on_master:
+        zones, _  = init_env(require_ps=False)
+        ps_zone = zones[0]
+    else:
+        zones, ps_zones  = init_env(require_ps=True)
+        ps_zone = ps_zones[0]
+
+    realm = get_realm()
+    zonegroup = realm.master_zonegroup()
+    
+    # create bucket
+    bucket_name = gen_bucket_name()
+    bucket = zones[0].create_bucket(bucket_name)
+    topic_name = bucket_name + TOPIC_SUFFIX
+
+    # start amqp receivers
+    exchange = 'ex1'
+    task, receiver = create_amqp_receiver_thread(exchange, topic_name)
+    task.start()
+
+    # create s3 topic
+    endpoint_address = 'amqp://' + hostname
+    endpoint_args = 'push-endpoint='+endpoint_address+'&amqp-exchange=' + exchange +'&amqp-ack-level=broker'
+    if on_master:
+        topic_conf = PSTopicS3(ps_zone.conn, topic_name, zonegroup.name, endpoint_args=endpoint_args)
+        topic_arn = topic_conf.set_config()
+    else:
+        topic_conf = PSTopic(ps_zone.conn, topic_name, endpoint=endpoint_address, endpoint_args=endpoint_args)
+        result, _ = topic_conf.set_config()
+        parsed_result = json.loads(result)
+        topic_arn = parsed_result['arn']
+        zone_meta_checkpoint(ps_zone.zone)
+
+    # create s3 notification
+    notification_name = bucket_name + NOTIFICATION_SUFFIX
+    topic_conf_list = [{'Id': notification_name+'_1',
+                        'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectCreated:*'],
+			'Filter': {
+                    	  'Key': {
+                            'FilterRules': [{'Name': 'prefix', 'Value': 'hello'}]
+                    	  }
+                        }
+                       },
+                       {'Id': notification_name+'_2',
+                        'TopicArn': topic_arn,
+                        'Events': ['s3:ObjectCreated:*'],
+			'Filter': {
+                    	  'Key': {
+                            'FilterRules': [{'Name': 'prefix', 'Value': 'world'},
+                                            {'Name': 'suffix', 'Value': 'log'}]
+                    	  }
+                        }
+                       },
+                       {'Id': notification_name+'_3',
+                        'TopicArn': topic_arn,
+                        'Events': [],
+		        'Filter': {
+                          'Key': {
+                            'FilterRules': [{'Name': 'regex', 'Value': '([a-z]+)\\.txt'}]
+                         }
+                        }
+                       }]
+
+    s3_notification_conf = PSNotificationS3(ps_zone.conn, bucket_name, topic_conf_list)
+    result, status = s3_notification_conf.set_config()
+    assert_equal(status/100, 2)
+
+    if on_master:
+        topic_conf_list = [{'Id': notification_name+'_4',
+                            'TopicArn': topic_arn,
+                            'Events': ['s3:ObjectCreated:*', 's3:ObjectRemoved:*'],
+	    	            'Filter': {
+                    	        'Metadata': {
+                                    'FilterRules': [{'Name': 'x-amz-meta-foo', 'Value': 'bar'},
+                                                    {'Name': 'x-amz-meta-hello', 'Value': 'world'}]
+                    	        },
+                                'Key': {
+                                    'FilterRules': [{'Name': 'regex', 'Value': '([a-z]+)'}]
+                                }
+                            }
+                            }]
+
+        try:
+            s3_notification_conf4 = PSNotificationS3(ps_zone.conn, bucket_name, topic_conf_list)
+            _, status = s3_notification_conf4.set_config()
+            assert_equal(status/100, 2)
+            skip_notif4 = False
+        except Exception as error:
+            print 'note: metadata filter is not supported by boto3 - skipping test'
+            skip_notif4 = True
+    else:
+        print 'filtering by attributes only supported on master zone'
+        skip_notif4 = True
+
+
+    # get all notifications
+    result, status = s3_notification_conf.get_config()
+    assert_equal(status/100, 2)
+    for conf in result['TopicConfigurations']:
+        filter_name = conf['Filter']['Key']['FilterRules'][0]['Name']
+        assert filter_name == 'prefix' or filter_name == 'suffix' or filter_name == 'regex', filter_name
+
+    if not skip_notif4:
+        result, status = s3_notification_conf4.get_config(notification=notification_name+'_4')
+        assert_equal(status/100, 2)
+        filter_name = result['NotificationConfiguration']['TopicConfiguration']['Filter']['S3Metadata']['FilterRule'][0]['Name']
+        assert filter_name == 'x-amz-meta-foo' or filter_name == 'x-amz-meta-hello'
+
+    expected_in1 = ['hello.kaboom', 'hello.txt', 'hello123.txt', 'hello']
+    expected_in2 = ['world1.log', 'world2log', 'world3.log']
+    expected_in3 = ['hello.txt', 'hell.txt', 'worldlog.txt']
+    expected_in4 = ['foo', 'bar', 'hello', 'world']
+    filtered = ['hell.kaboom', 'world.og', 'world.logg', 'he123ll.txt', 'wo', 'log', 'h', 'txt', 'world.log.txt']
+    filtered_with_attr = ['nofoo', 'nobar', 'nohello', 'noworld']
+    # create objects in bucket
+    for key_name in expected_in1:
+        key = bucket.new_key(key_name)
+        key.set_contents_from_string('bar')
+    for key_name in expected_in2:
+        key = bucket.new_key(key_name)
+        key.set_contents_from_string('bar')
+    for key_name in expected_in3:
+        key = bucket.new_key(key_name)
+        key.set_contents_from_string('bar')
+    if not skip_notif4:
+        for key_name in expected_in4:
+            key = bucket.new_key(key_name)
+            key.set_metadata('foo', 'bar')
+            key.set_metadata('hello', 'world')
+            key.set_metadata('goodbye', 'cruel world')
+            key.set_contents_from_string('bar')
+    for key_name in filtered:
+        key = bucket.new_key(key_name)
+        key.set_contents_from_string('bar')
+    for key_name in filtered_with_attr:
+        key.set_metadata('foo', 'nobar')
+        key.set_metadata('hello', 'noworld')
+        key.set_metadata('goodbye', 'cruel world')
+        key = bucket.new_key(key_name)
+        key.set_contents_from_string('bar')
+
+    if on_master:
+        print 'wait for 5sec for the messages...'
+        time.sleep(5)
+    else:
+        zone_bucket_checkpoint(ps_zone.zone, zones[0].zone, bucket_name)
+
+    found_in1 = []
+    found_in2 = []
+    found_in3 = []
+    found_in4 = []
+
+    for event in receiver.get_and_reset_events():
+        notif_id = event['s3']['configurationId']
+        key_name = event['s3']['object']['key']
+        if notif_id == notification_name+'_1':
+            found_in1.append(key_name)
+        elif notif_id == notification_name+'_2':
+            found_in2.append(key_name)
+        elif notif_id == notification_name+'_3':
+            found_in3.append(key_name)
+        elif not skip_notif4 and notif_id == notification_name+'_4':
+            found_in4.append(key_name)
+        else:
+            assert False, 'invalid notification: ' + notif_id
+
+    assert_equal(set(found_in1), set(expected_in1))
+    assert_equal(set(found_in2), set(expected_in2))
+    assert_equal(set(found_in3), set(expected_in3))
+    if not skip_notif4:
+        assert_equal(set(found_in4), set(expected_in4))
+
+    # cleanup
+    s3_notification_conf.del_config()
+    if not skip_notif4:
+        s3_notification_conf4.del_config()
+    topic_conf.del_config()
+    # delete the bucket
+    for key in bucket.list():
+        key.delete()
+    zones[0].delete_bucket(bucket_name)
+    stop_amqp_receiver(receiver, task)
+    clean_rabbitmq(proc)
+
+
+def test_ps_s3_notification_filter_on_master():
+    ps_s3_notification_filter(on_master=True)
+
+
+def test_ps_s3_notification_filter():
+    ps_s3_notification_filter(on_master=False)
 
 
 def test_ps_s3_notification_errors_on_master():
