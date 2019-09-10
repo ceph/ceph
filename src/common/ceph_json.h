@@ -5,6 +5,7 @@
 #include <typeindex>
 #include <include/types.h>
 #include <boost/container/flat_map.hpp>
+#include <boost/container/flat_set.hpp>
 #include <include/ceph_fs.h>
 #include "common/ceph_time.h"
 
@@ -220,6 +221,21 @@ void decode_json_obj(std::set<T>& l, JSONObj *obj)
 }
 
 template<class T>
+void decode_json_obj(boost::container::flat_set<T>& l, JSONObj *obj)
+{
+  l.clear();
+
+  JSONObjIter iter = obj->find_first();
+
+  for (; !iter.end(); ++iter) {
+    T val;
+    JSONObj *o = *iter;
+    decode_json_obj(val, o);
+    l.insert(val);
+  }
+}
+
+template<class T>
 void decode_json_obj(std::vector<T>& l, JSONObj *obj)
 {
   l.clear();
@@ -236,6 +252,23 @@ void decode_json_obj(std::vector<T>& l, JSONObj *obj)
 
 template<class K, class V, class C = std::less<K> >
 void decode_json_obj(std::map<K, V, C>& m, JSONObj *obj)
+{
+  m.clear();
+
+  JSONObjIter iter = obj->find_first();
+
+  for (; !iter.end(); ++iter) {
+    K key;
+    V val;
+    JSONObj *o = *iter;
+    JSONDecoder::decode_json("key", key, o);
+    JSONDecoder::decode_json("val", val, o);
+    m[key] = val;
+  }
+}
+
+template<class K, class V, class C = std::less<K> >
+void decode_json_obj(boost::container::flat_map<K, V, C>& m, JSONObj *obj)
 {
   m.clear();
 
@@ -524,6 +557,18 @@ static void encode_json(const char *name, const std::set<T, Compare>& l, ceph::F
   f->close_section();
 }
 
+template<class T, class Compare = std::less<T> >
+static void encode_json(const char *name,
+                        const boost::container::flat_set<T, Compare>& l,
+                        ceph::Formatter *f)
+{
+  f->open_array_section(name);
+  for (auto iter = l.cbegin(); iter != l.cend(); ++iter) {
+    encode_json("obj", *iter, f);
+  }
+  f->close_section();
+}
+
 template<class T>
 static void encode_json(const char *name, const std::vector<T>& l, ceph::Formatter *f)
 {
@@ -536,6 +581,19 @@ static void encode_json(const char *name, const std::vector<T>& l, ceph::Formatt
 
 template<class K, class V, class C = std::less<K>>
 static void encode_json(const char *name, const std::map<K, V, C>& m, ceph::Formatter *f)
+{
+  f->open_array_section(name);
+  for (auto i = m.cbegin(); i != m.cend(); ++i) {
+    f->open_object_section("entry");
+    encode_json("key", i->first, f);
+    encode_json("val", i->second, f);
+    f->close_section();
+  }
+  f->close_section();
+}
+
+template<class K, class V, class C = std::less<K> >
+static void encode_json(const char *name, const boost::container::flat_map<K, V, C>& m, ceph::Formatter *f)
 {
   f->open_array_section(name);
   for (auto i = m.cbegin(); i != m.cend(); ++i) {
@@ -639,6 +697,66 @@ static void encode_json(const char *name, const std::optional<T>& o, ceph::Forma
     return;
   }
   encode_json(name, *o, f);
+}
+
+
+template<class K, class V>
+void encode_json_map(const char *name, const boost::container::flat_map<K, V>& m, ceph::Formatter *f)
+{
+  f->open_array_section(name);
+  for (auto iter = m.cbegin(); iter != m.cend(); ++iter) {
+    encode_json("obj", iter->second, f);
+  }
+  f->close_section();
+}
+
+
+template<class K, class V>
+void encode_json_map(const char *name, const char *index_name,
+                     const char *object_name, const char *value_name,
+                     void (*cb)(const char *, const V&, ceph::Formatter *, void *), void *parent,
+                     const boost::container::flat_map<K, V>& m, ceph::Formatter *f)
+{
+  f->open_array_section(name);
+  for (auto iter = m.cbegin(); iter != m.cend(); ++iter) {
+    if (index_name) {
+      f->open_object_section("key_value");
+      f->dump_string(index_name, iter->first);
+    }
+
+    if (object_name) {
+      f->open_object_section(object_name);
+    }
+
+    if (cb) {
+      cb(value_name, iter->second, f, parent);
+    } else {
+      encode_json(value_name, iter->second, f);
+    }
+
+    if (object_name) {
+      f->close_section();
+    }
+    if (index_name) {
+      f->close_section();
+    }
+  }
+  f->close_section(); 
+}
+
+template<class K, class V>
+void encode_json_map(const char *name, const char *index_name,
+                     const char *object_name, const char *value_name,
+                     const boost::container::flat_map<K, V>& m, ceph::Formatter *f)
+{
+  encode_json_map<K, V>(name, index_name, object_name, value_name, NULL, NULL, m, f);
+}
+
+template<class K, class V>
+void encode_json_map(const char *name, const char *index_name, const char *value_name,
+                     const boost::container::flat_map<K, V>& m, ceph::Formatter *f)
+{
+  encode_json_map<K, V>(name, index_name, NULL, value_name, NULL, NULL, m, f);
 }
 
 
