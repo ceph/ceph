@@ -842,6 +842,36 @@ test results URL and in the first column of the Pulpito dashboard.  The
 results are also reported on the `ceph-qa mailing list
 <https://ceph.com/irc/>`_ for analysis.
 
+Testing Priority
+----------------
+
+The ``teuthology-suite`` command includes an almost mandatory option ``-p <N>``
+which specifies the priority of the jobs submitted to the queue. The lower
+the value of ``N``, the higher the priority. The option is almost mandatory because
+the default is ``1000`` which matches the priority of the nightlies. Nightlies
+are often half-finished and cancelled due to the volume of testing done so your
+jobs may never finish. Therefore, it is common to select a priority less than
+1000.
+
+Any priority may be selected when submitting jobs. But, in order to be
+sensitive to the workings of other developers that also need to do testing,
+the following recommendations should be followed:
+
+* **Priority < 10:** Use this if the sky is falling and some group of tests must be run ASAP.
+
+* **10 <= Priority < 50:** Use this if your tests are urgent and blocking other important development.
+
+* **50 <= Priority < 75:** Use this if you are testing a particular feature/fix and running fewer than about 25 jobs.
+
+* **75 <= Priority < 100:** Tech Leads will regularly schedule integration tests with this priority to verify pull requests against master.
+
+* **100 <= Priority < 150:** This priority is to be used for release QA.
+
+* **150 <= Priority < 200:** Use this priority for 100 jobs or fewer of a particular feature/fix that you'd like results on in a day or so.
+
+* **200 <= Priority < 1000:** Use this priority for large test runs that can be done over the course of a week.
+
+
 Suites inventory
 ^^^^^^^^^^^^^^^^
 
