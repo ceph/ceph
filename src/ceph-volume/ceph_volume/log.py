@@ -31,3 +31,18 @@ def setup(name='ceph-volume.log', log_path=None):
     fh.setFormatter(logging.Formatter(FILE_FORMAT))
 
     root_logger.addHandler(fh)
+
+
+def setup_console():
+    # TODO: At some point ceph-volume should stop using the custom logger
+    # interface that exists in terminal.py and use the logging module to
+    # produce output for the terminal
+    # Console Logger
+    sh = logging.StreamHandler()
+    sh.setFormatter(logging.Formatter('[terminal] %(message)s'))
+    sh.setLevel(logging.DEBUG)
+
+    terminal_logger = logging.getLogger('terminal')
+
+    # allow all levels at root_logger, handlers control individual levels
+    terminal_logger.addHandler(sh)
