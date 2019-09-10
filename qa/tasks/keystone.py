@@ -286,6 +286,7 @@ def run_section_cmds(ctx, cclient, section_cmd, special,
 
     auth_section = [
         ( 'os-token', 'ADMIN' ),
+        ( 'os-identity-api-version', '2.0' ),
         ( 'os-url', 'http://{host}:{port}/v2.0'.format(host=admin_host,
                                                        port=admin_port) ),
     ]
