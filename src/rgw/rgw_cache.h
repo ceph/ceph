@@ -154,18 +154,19 @@ struct ObjectCacheEntry {
   ObjectCacheEntry() : lru_promotion_ts(0), gen(0) {}
 };
 
-class ObjectCache {
+class ObjectCache: public md_config_obs_t {
   std::unordered_map<string, ObjectCacheEntry> cache_map;
   std::list<string> lru;
+  unsigned long lru_max_size;
   unsigned long lru_size;
   unsigned long lru_counter;
   unsigned long lru_window;
   ceph::shared_mutex lock = ceph::make_shared_mutex("ObjectCache");
   CephContext *cct;
-
+  
   vector<RGWChainedCache *> chained_cache;
 
-  bool enabled;
+  bool enabled = false;
   ceph::timespan expiry;
 
   void touch_lru(const string& name, ObjectCacheEntry& entry,
@@ -202,10 +203,11 @@ public:
   bool remove(const std::string& name);
   void set_ctx(CephContext *_cct) {
     cct = _cct;
-    lru_window = cct->_conf->rgw_cache_lru_size / 2;
-    expiry = std::chrono::seconds(cct->_conf.get_val<uint64_t>(
-						"rgw_cache_expiry_interval"));
-  }
+    lru_max_size = cct->_conf.get_val<int64_t>("rgw_cache_lru_size");
+    lru_window = lru_max_size / 2;
+    expiry = std::chrono::seconds(cct->_conf.get_val<uint64_t>("rgw_cache_expiry_interval")); 
+    cct->_conf.add_observer(this);
+}
   bool chain_cache_entry(std::initializer_list<rgw_cache_entry_info*> cache_info_entries,
 			 RGWChainedCache::Entry *chained_entry);
 
@@ -214,6 +216,8 @@ public:
   void chain_cache(RGWChainedCache *cache);
   void unchain_cache(RGWChainedCache *cache);
   void invalidate_all();
+  const char** get_tracked_conf_keys() const override;
+  void handle_conf_change(const ConfigProxy& conf, const std::set<std::string>& changed) override;
 };
 
 #endif
