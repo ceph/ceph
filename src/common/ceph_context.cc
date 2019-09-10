@@ -23,6 +23,7 @@
 #include <boost/algorithm/string.hpp>
 
 #include "include/mempool.h"
+#include "include/stringify.h"
 #include "common/admin_socket.h"
 #include "common/code_environment.h"
 #include "common/ceph_mutex.h"
@@ -589,7 +590,18 @@ void CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
       f->open_object_section("diff");
       _conf.diff(f, setting);
       f->close_section(); // unknown
-    } else if (command == "log flush") {
+    }
+    else if (command == "injectargs") {
+      vector<string> argsvec;
+      cmd_getval(this, cmdmap, "injected_args", argsvec);
+      if (!argsvec.empty()) {
+	string args = joinify<std::string>(argsvec.begin(),
+					   argsvec.end(),
+					   " ");
+	r = _conf.injectargs(args, &ss);
+      }
+    }
+    else if (command == "log flush") {
       _log->flush();
     }
     else if (command == "log dump") {
@@ -675,6 +687,7 @@ CephContext::CephContext(uint32_t module_type_,
   _admin_socket->register_command(
       "config diff get name=var,type=CephString", _admin_hook,
       "dump diff get <field>: dump diff of current and default config setting <field>");
+  _admin_socket->register_command("injectargs name=injected_args,type=CephString,n=N", _admin_hook, "inject configuration arguments into running daemon"),
   _admin_socket->register_command("log flush", _admin_hook, "flush log entries to log file");
   _admin_socket->register_command("log dump", _admin_hook, "dump recent log entries to log file");
   _admin_socket->register_command("log reopen", _admin_hook, "reopen log file");
