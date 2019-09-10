@@ -5036,42 +5036,9 @@ int image_remove(cls_method_context_t hctx, const string &image_id) {
   return 0;
 }
 
-struct MirrorImageStatusOnDisk : cls::rbd::MirrorImageStatus {
-  entity_inst_t origin;
-
-  MirrorImageStatusOnDisk() {
-  }
-  MirrorImageStatusOnDisk(const cls::rbd::MirrorImageStatus &status) :
-    cls::rbd::MirrorImageStatus(status) {
-  }
-
-  void encode_meta(bufferlist &bl, uint64_t features) const {
-    ENCODE_START(1, 1, bl);
-    encode(origin, bl, features);
-    ENCODE_FINISH(bl);
-  }
-
-  void encode(bufferlist &bl, uint64_t features) const {
-    encode_meta(bl, features);
-    cls::rbd::MirrorImageStatus::encode(bl);
-  }
-
-  void decode_meta(bufferlist::const_iterator &it) {
-    DECODE_START(1, it);
-    decode(origin, it);
-    DECODE_FINISH(it);
-  }
-
-  void decode(bufferlist::const_iterator &it) {
-    decode_meta(it);
-    cls::rbd::MirrorImageStatus::decode(it);
-  }
-};
-WRITE_CLASS_ENCODER_FEATURES(MirrorImageStatusOnDisk)
-
 int image_status_set(cls_method_context_t hctx, const string &global_image_id,
 		     const cls::rbd::MirrorImageStatus &status) {
-  MirrorImageStatusOnDisk ondisk_status(status);
+  cls::rbd::MirrorImageStatusOnDisk ondisk_status(status);
   ondisk_status.up = false;
   ondisk_status.last_update = ceph_clock_now();
 
@@ -5117,7 +5084,7 @@ int image_status_get(cls_method_context_t hctx, const string &global_image_id,
     return r;
   }
 
-  MirrorImageStatusOnDisk ondisk_status;
+  cls::rbd::MirrorImageStatusOnDisk ondisk_status;
   try {
     auto it = bl.cbegin();
     decode(ondisk_status, it);
@@ -5279,7 +5246,7 @@ int image_status_remove_down(cls_method_context_t hctx) {
 	break;
       }
 
-      MirrorImageStatusOnDisk status;
+      cls::rbd::MirrorImageStatusOnDisk status;
       try {
 	auto it = list_it.second.cbegin();
 	status.decode_meta(it);
@@ -5323,7 +5290,7 @@ int image_instance_get(cls_method_context_t hctx,
     return r;
   }
 
-  MirrorImageStatusOnDisk ondisk_status;
+  cls::rbd::MirrorImageStatusOnDisk ondisk_status;
   try {
     auto it = bl.cbegin();
     decode(ondisk_status, it);
