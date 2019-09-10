@@ -38,7 +38,7 @@ while true; do
             build_dir=$2
             shift 2
             ;;
-        --source_dir)
+        --source-dir)
             source_dir=$2
             shift 2
             ;;
@@ -78,18 +78,22 @@ if test -z "$cbt_dir"; then
     git clone --depth 1 -b master https://github.com/ceph/cbt.git $cbt_dir
 fi
 
+# store absolute path before changing cwd
+source_dir=$(readlink -f $source_dir)
 if ! $use_existing; then
+    cd $build_dir
     MDS=0 MGR=1 OSD=3 MON=1 $source_dir/src/vstart.sh -n -X \
        --without-dashboard --memstore \
        -o "memstore_device_bytes=34359738368" \
        --crimson --nodaemon --redirect-output \
        --osd-args "--memory 4G"
+    cd -
 fi
 
 for config_file in $config_files; do
     echo "testing $config_file"
     cbt_config=$(mktemp $config_file.XXXX.yaml)
-    $source_dir/src/test/crimson/cbt//t2c.py \
+    $source_dir/src/test/crimson/cbt/t2c.py \
         --build-dir $build_dir \
         --input $config_file \
         --output $cbt_config
@@ -101,5 +105,6 @@ for config_file in $config_files; do
 done
 
 if ! $use_existing; then
+    cd $build_dir
     $source_dir/src/stop.sh --crimson
 fi
