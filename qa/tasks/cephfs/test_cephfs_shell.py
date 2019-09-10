@@ -31,14 +31,17 @@ def humansize(nbytes):
 class TestCephFSShell(CephFSTestCase):
     CLIENTS_REQUIRED = 1
 
-    def run_cephfs_shell_cmd(self, cmd, mount_x=None, opts=None, stdin=None):
+    def run_cephfs_shell_cmd(self, cmd, mount_x=None, opts=None, stdin=None, config_path=None):
         if mount_x is None:
             mount_x = self.mount_a
+        if config_path is None:
+            config_path = self.mount_a.config_path
 
         if isinstance(cmd, list):
             cmd = " ".join(cmd)
 
-        args = ["cephfs-shell", "-c", mount_x.config_path]
+        args = ["cephfs-shell", "-c", config_path]
+
         if opts is not None:
             args.extend(opts)
 
@@ -54,9 +57,10 @@ class TestCephFSShell(CephFSTestCase):
             getvalue().strip()
 
     def get_cephfs_shell_cmd_output(self, cmd, mount_x=None, opts=None,
-                                    stdin=None):
-        return self.run_cephfs_shell_cmd(cmd, mount_x, opts, stdin).stdout.\
-            getvalue().strip()
+                                    stdin=None, config_path=None):
+        return self.run_cephfs_shell_cmd(cmd, mount_x, opts, stdin,
+                                         config_path).\
+            stdout.getvalue().strip()
 
     def get_cephfs_shell_script_output(self, script, mount_x=None, stdin=None):
         return self.run_cephfs_shell_script(script, mount_x, stdin).stdout.\
