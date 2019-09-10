@@ -284,7 +284,7 @@ void AdminSocket::chmod(mode_t mode)
   }
 }
 
-bool AdminSocket::do_accept()
+void AdminSocket::do_accept()
 {
   struct sockaddr_un address;
   socklen_t address_length = sizeof(address);
@@ -295,7 +295,7 @@ bool AdminSocket::do_accept()
     int err = errno;
     lderr(m_cct) << "AdminSocket: do_accept error: '"
 			   << cpp_strerror(err) << dendl;
-    return false;
+    return;
   }
   ldout(m_cct, 30) << "AdminSocket: finished accept" << dendl;
 
@@ -310,7 +310,7 @@ bool AdminSocket::do_accept()
 		     << cpp_strerror(ret) << dendl;
       }
       retry_sys_call(::close, connection_fd);
-      return false;
+      return;
     }
     if (cmd[0] == '\0') {
       // old protocol: __be32
@@ -344,7 +344,7 @@ bool AdminSocket::do_accept()
     if (++pos >= sizeof(cmd)) {
       lderr(m_cct) << "AdminSocket: error reading request too long" << dendl;
       retry_sys_call(::close, connection_fd);
-      return false;
+      return;
     }
   }
 
@@ -355,28 +355,27 @@ bool AdminSocket::do_accept()
 
   // Unfortunately, the asok wire protocol does not let us pass an error code,
   // and many asok command implementations return helpful error strings.  So,
-  // let's interpret all but -ENOSYS as a "success" so that the user can still
-  // see those messages.  This provides the same behavior as what users saw
-  // pre-octopus; the only drawback is that net new 'tell-style' commands that
-  // return error codes will also be seen as "success" via asok unless/until
-  // we extend the socket protocol.
-  if (rval != -ENOSYS) {
-    rval = 0; // sigh.. fixme someday!
-    uint32_t len = htonl(out.length());
-    int ret = safe_write(connection_fd, &len, sizeof(len));
-    if (ret < 0) {
-      lderr(m_cct) << "AdminSocket: error writing response length "
-          << cpp_strerror(ret) << dendl;
-      rval = -EIO;
-    } else {
-      if (out.write_fd(connection_fd) < 0) {
-	rval = -EIO;
-      }
+  // let's prepend an error string to the output if there is an error code.
+  if (rval < 0) {
+    ostringstream ss;
+    ss << "ERROR: " << cpp_strerror(rval) << "\n";
+    bufferlist o;
+    o.append(ss.str());
+    o.claim_append(out);
+    out.claim_append(o);
+  }
+  uint32_t len = htonl(out.length());
+  int ret = safe_write(connection_fd, &len, sizeof(len));
+  if (ret < 0) {
+    lderr(m_cct) << "AdminSocket: error writing response length "
+		 << cpp_strerror(ret) << dendl;
+  } else {
+    if (out.write_fd(connection_fd) < 0) {
+      lderr(m_cct) << "AdminSocket: error writing response payload "
+		   << cpp_strerror(ret) << dendl;
     }
   }
-
   retry_sys_call(::close, connection_fd);
-  return rval >= 0;
 }
 
 void AdminSocket::do_tell_queue()
