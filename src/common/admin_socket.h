@@ -123,7 +123,7 @@ private:
 
   std::thread th;
   void entry() noexcept;
-  bool do_accept();
+  void do_accept();
   void do_tell_queue();
 
   CephContext *m_cct;
