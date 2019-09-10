@@ -85,7 +85,7 @@ function TEST_recover_unexpected() {
     do
 	primary=$(ceph pg dump pgs --format=json | jq ".pg_stats[] | select(.pgid == $qpg) | .acting_primary")
 	eval pg=$qpg   # strip quotes around qpg
-	CEPH_ARGS='' ceph daemon $(get_asok_path osd.$primary) trigger_scrub $pg
+	ceph tell $pg scrub
     done
 
     ceph pg dump pgs
