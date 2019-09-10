@@ -402,7 +402,8 @@
             <select class="form-control custom-select"
                     formControlName="access_type"
                     name="access_type"
-                    id="access_type">
+                    id="access_type"
+                    (change)="accessTypeChangeHandler()">
               <option *ngIf="nfsAccessType === null"
                       value=""
                       i18n>Loading...</option>
@@ -419,6 +420,13 @@
                   *ngIf="nfsForm.getValue('access_type')">
               {{ getAccessTypeHelp(nfsForm.getValue('access_type')) }}
             </span>
+            <span class="form-text text-warning"
+                  *ngIf="nfsForm.getValue('access_type') === 'RW' && nfsForm.getValue('name') === 'RGW'"
+                  i18n>The Object Gateway NFS backend has a number of
+              limitations which will seriously affect applications writing to
+              the share. Please consult the
+              <a href="{{docsUrl}}"
+                 target="_blank"> documentation</a> for details before enabling write access.</span>
             <span class="invalid-feedback"
                   *ngIf="nfsForm.showError('access_type', formDir, 'required')"
                   i18n>Required field</span>
