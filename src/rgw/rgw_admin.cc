@@ -6576,7 +6576,7 @@ next:
     formatter->open_array_section("entries");
 
     do {
-      list<cls_rgw_gc_obj_info> result;
+      std::vector<cls_rgw_gc_obj_info> result;
       int ret = store->getRados()->list_gc_objs(&index, marker, 1000, !include_all, result, &truncated);
       if (ret < 0) {
 	cerr << "ERROR: failed to list objs: " << cpp_strerror(-ret) << std::endl;
@@ -6584,16 +6584,14 @@ next:
       }
 
 
-      list<cls_rgw_gc_obj_info>::iterator iter;
-      for (iter = result.begin(); iter != result.end(); ++iter) {
+      for (auto iter = result.begin(); iter != result.end(); ++iter) {
 	cls_rgw_gc_obj_info& info = *iter;
 	formatter->open_object_section("chain_info");
 	formatter->dump_string("tag", info.tag);
 	formatter->dump_stream("time") << info.time;
 	formatter->open_array_section("objs");
-        list<cls_rgw_obj>::iterator liter;
 	cls_rgw_obj_chain& chain = info.chain;
-	for (liter = chain.objs.begin(); liter != chain.objs.end(); ++liter) {
+	for (auto liter = chain.objs.begin(); liter != chain.objs.end(); ++liter) {
 	  cls_rgw_obj& obj = *liter;
           encode_json("obj", obj, formatter);
 	}

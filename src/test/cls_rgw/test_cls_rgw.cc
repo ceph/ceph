@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "include/types.h"
@@ -578,7 +578,7 @@ TEST_F(cls_rgw, gc_set)
   }
 
   bool truncated;
-  list<cls_rgw_gc_obj_info> entries;
+  std::vector<cls_rgw_gc_obj_info> entries;
   string marker;
   string next_marker;
 
@@ -596,7 +596,7 @@ TEST_F(cls_rgw, gc_set)
   ASSERT_EQ(0, truncated);
  
   /* verify all chains are valid */
-  list<cls_rgw_gc_obj_info>::iterator iter = entries.begin();
+  auto iter = entries.begin();
   for (int i = 0; i < 10; i++, ++iter) {
     cls_rgw_gc_obj_info& entry = *iter;
 
@@ -654,8 +654,8 @@ TEST_F(cls_rgw, gc_list)
   }
 
   bool truncated;
-  list<cls_rgw_gc_obj_info> entries;
-  list<cls_rgw_gc_obj_info> entries2;
+  std::vector<cls_rgw_gc_obj_info> entries;
+  std::vector<cls_rgw_gc_obj_info> entries2;
   string marker;
   string next_marker;
 
@@ -671,10 +671,11 @@ TEST_F(cls_rgw, gc_list)
   ASSERT_EQ(2, (int)entries2.size());
   ASSERT_EQ(0, truncated);
 
-  entries.splice(entries.end(), entries2);
+  entries.insert(entries.end(), std::make_move_iterator(entries2.begin()),
+		 std::make_move_iterator(entries2.end()));
 
   /* verify all chains are valid */
-  list<cls_rgw_gc_obj_info>::iterator iter = entries.begin();
+  std::vector<cls_rgw_gc_obj_info>::iterator iter = entries.begin();
   for (int i = 0; i < 10; i++, ++iter) {
     cls_rgw_gc_obj_info& entry = *iter;
 
@@ -732,7 +733,7 @@ TEST_F(cls_rgw, gc_defer)
   ASSERT_EQ(0, ioctx.operate(oid, &op));
 
   bool truncated;
-  list<cls_rgw_gc_obj_info> entries;
+  std::vector<cls_rgw_gc_obj_info> entries;
   string marker;
   string next_marker;
 
@@ -968,6 +969,7 @@ TEST_F(cls_rgw, bi_log_trim)
 
     bilog1.assign(std::make_move_iterator(bilog.entries.begin()),
                   std::make_move_iterator(bilog.entries.end()));
+    bilog.entries.clear();
   }
   // trim front of bilog
   {

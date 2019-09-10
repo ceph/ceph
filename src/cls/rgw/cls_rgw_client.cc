@@ -199,7 +199,8 @@ void cls_rgw_bucket_complete_op(ObjectWriteOperation& o, RGWModifyOp op, string&
   call.log_op = log_op;
   call.bilog_flags = bilog_flags;
   if (remove_objs)
-    call.remove_objs = *remove_objs;
+    std::move(remove_objs->begin(), remove_objs->end(),
+	      std::back_inserter(call.remove_objs));
   if (zones_trace) {
     call.zones_trace = *zones_trace;
   }
@@ -246,7 +247,8 @@ void cls_rgw_remove_obj(librados::ObjectWriteOperation& o, list<string>& keep_at
 {
   bufferlist in;
   rgw_cls_obj_remove_op call;
-  call.keep_attr_prefixes = keep_attr_prefixes;
+  std::move(keep_attr_prefixes.begin(), keep_attr_prefixes.end(),
+	    std::back_inserter(call.keep_attr_prefixes));
   encode(call, in);
   o.exec(RGW_CLASS, RGW_OBJ_REMOVE, in);
 }
@@ -351,7 +353,8 @@ int cls_rgw_bi_list(librados::IoCtx& io_ctx, const string oid,
     return -EIO;
   }
 
-  entries->swap(op_ret.entries);
+  std::move(op_ret.entries.begin(), op_ret.entries.end(),
+	    std::back_inserter(*entries));
   *is_truncated = op_ret.is_truncated;
 
   return 0;
@@ -758,7 +761,7 @@ void cls_rgw_gc_defer_entry(ObjectWriteOperation& op, uint32_t expiration_secs, 
 }
 
 int cls_rgw_gc_list(IoCtx& io_ctx, string& oid, string& marker, uint32_t max, bool expired_only,
-                    list<cls_rgw_gc_obj_info>& entries, bool *truncated, string& next_marker)
+                    vector<cls_rgw_gc_obj_info>& entries, bool *truncated, string& next_marker)
 {
   bufferlist in, out;
   cls_rgw_gc_list_op call;
@@ -778,7 +781,8 @@ int cls_rgw_gc_list(IoCtx& io_ctx, string& oid, string& marker, uint32_t max, bo
     return -EIO;
   }
 
-  entries.swap(ret.entries);
+  std::move(ret.entries.begin(), ret.entries.end(),
+	    std::back_inserter(entries));
 
   if (truncated)
     *truncated = ret.truncated;
@@ -949,7 +953,9 @@ int cls_rgw_reshard_list(librados::IoCtx& io_ctx, const string& oid, string& mar
     return -EIO;
   }
 
-  entries.swap(op_ret.entries);
+  std::move(op_ret.entries.begin(), op_ret.entries.end(),
+	    std::back_inserter(entries));
+
   *is_truncated = op_ret.is_truncated;
 
   return 0;

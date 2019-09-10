@@ -117,7 +117,7 @@ TEST(cls_rgw_gc, gc_queue_ops1)
   }
 
   //Test list queue
-  list<cls_rgw_gc_obj_info> list_info1;
+  std::vector<cls_rgw_gc_obj_info> list_info1;
   string marker, next_marker;
   uint64_t max = 1;
   bool expired_only = false, truncated;
@@ -146,7 +146,7 @@ TEST(cls_rgw_gc, gc_queue_ops2)
   ASSERT_EQ(size, queue_size);
 
   //Test list queue, when queue is empty
-  list<cls_rgw_gc_obj_info> list_info;
+  std::vector<cls_rgw_gc_obj_info> list_info;
   string marker1, next_marker1;
   uint64_t max1 = 2;
   bool expired_only1 = false, truncated1;
@@ -175,7 +175,7 @@ TEST(cls_rgw_gc, gc_queue_ops2)
   }
 
   //Test list queue
-  list<cls_rgw_gc_obj_info> list_info1, list_info2, list_info3;
+  std::vector<cls_rgw_gc_obj_info> list_info1, list_info2, list_info3;
   string marker, next_marker;
   uint64_t max = 2;
   bool expired_only = false, truncated;
@@ -255,7 +255,7 @@ TEST(cls_rgw_gc, gc_queue_ops3)
   ASSERT_EQ(0, ioctx.operate(queue_name, &defer_op));
 
   //Test list queue
-  list<cls_rgw_gc_obj_info> list_info1, list_info2;
+  std::vector<cls_rgw_gc_obj_info> list_info1, list_info2;
   string marker, next_marker;
   uint64_t max = 2;
   bool expired_only = false, truncated;
@@ -334,7 +334,7 @@ TEST(cls_rgw_gc, gc_queue_ops4)
   ASSERT_EQ(0, ioctx.operate(queue_name, &defer_op));
 
   //Test list queue
-  list<cls_rgw_gc_obj_info> list_info1, list_info2;
+  std::vector<cls_rgw_gc_obj_info> list_info1, list_info2;
   string marker, next_marker;
   uint64_t max = 2;
   bool expired_only = false, truncated;
@@ -395,7 +395,7 @@ TEST(cls_rgw_gc, gc_queue_ops5)
     ASSERT_EQ(0, ioctx.operate(queue_name, &op));
   }
   //Test list queue for expired entries only
-  list<cls_rgw_gc_obj_info> list_info1, list_info2;
+  std::vector<cls_rgw_gc_obj_info> list_info1, list_info2;
   string marker, next_marker, marker1;
   uint64_t max = 10;
   bool expired_only = true, truncated;
@@ -479,7 +479,7 @@ TEST(cls_rgw_gc, gc_queue_ops6)
   ASSERT_EQ(0, ioctx.operate(queue_name, &enq_op));
 
   //Test list queue
-  list<cls_rgw_gc_obj_info> list_info1, list_info2, list_info3;
+  std::vector<cls_rgw_gc_obj_info> list_info1, list_info2, list_info3;
   string marker, next_marker;
   uint64_t max = 2;
   bool expired_only = false, truncated;
@@ -551,7 +551,7 @@ TEST(cls_rgw_gc, gc_queue_ops7)
   ASSERT_EQ(0, ioctx.operate(queue_name, &enq_op));
 
   //Test list queue
-  list<cls_rgw_gc_obj_info> list_info1, list_info2, list_info3;
+  std::vector<cls_rgw_gc_obj_info> list_info1, list_info2, list_info3;
   string marker, next_marker;
   uint64_t max = 2;
   bool expired_only = false, truncated;
@@ -623,7 +623,7 @@ TEST(cls_rgw_gc, gc_queue_ops8)
   ASSERT_EQ(0, ioctx.operate(queue_name, &enq_op));
 
   //Test list queue
-  list<cls_rgw_gc_obj_info> list_info1, list_info2, list_info3;
+  std::vector<cls_rgw_gc_obj_info> list_info1, list_info2, list_info3;
   string marker, next_marker;
   uint64_t max = 2;
   bool expired_only = false, truncated;

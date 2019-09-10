@@ -190,14 +190,14 @@ int RGWGC::remove(int index, int num_entries)
   return store->gc_operate(obj_names[index], &op);
 }
 
-int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std::list<cls_rgw_gc_obj_info>& result, bool *truncated)
+int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std::vector<cls_rgw_gc_obj_info>& result, bool *truncated)
 {
   result.clear();
   string next_marker;
   bool check_queue = false;
 
   for (; *index < max_objs && result.size() < max; (*index)++, marker.clear(), check_queue = false) {
-    std::list<cls_rgw_gc_obj_info> entries, queue_entries;
+    std::vector<cls_rgw_gc_obj_info> entries, queue_entries;
     int ret = 0;
 
     if (! transitioned_objects_cache[*index] && ! check_queue) {
@@ -215,7 +215,7 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
             transitioned_objects_cache[*index] = true;
             marker.clear();
           } else {
-            std::list<cls_rgw_gc_obj_info> non_expired_entries;
+            std::vector<cls_rgw_gc_obj_info> non_expired_entries;
             ret = cls_rgw_gc_list(store->gc_pool_ctx, obj_names[*index], marker, 1, false, non_expired_entries, truncated, next_marker);
             if (non_expired_entries.size() == 0) {
               transitioned_objects_cache[*index] = true;
@@ -238,7 +238,7 @@ int RGWGC::list(int *index, string& marker, uint32_t max, bool expired_only, std
     if (entries.size() == 0 && queue_entries.size() == 0)
       continue;
 
-    std::list<cls_rgw_gc_obj_info>::iterator iter;
+    std::vector<cls_rgw_gc_obj_info>::iterator iter;
     for (iter = entries.begin(); iter != entries.end(); ++iter) {
       result.push_back(*iter);
     }
@@ -509,7 +509,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
   IoCtx *ctx = new IoCtx;
   do {
     int max = 100;
-    std::list<cls_rgw_gc_obj_info> entries;
+    std::vector<cls_rgw_gc_obj_info> entries;
 
     int ret = 0;
 
@@ -522,7 +522,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
       obj_version objv;
       cls_version_read(store->gc_pool_ctx, obj_names[index], &objv);
       if ((objv.ver == 1) && entries.size() == 0) {
-        std::list<cls_rgw_gc_obj_info> non_expired_entries;
+        std::vector<cls_rgw_gc_obj_info> non_expired_entries;
         ret = cls_rgw_gc_list(store->gc_pool_ctx, obj_names[index], marker, 1, false, non_expired_entries, &truncated, next_marker);
         if (non_expired_entries.size() == 0) {
           transitioned_objects_cache[index] = true;
@@ -557,7 +557,7 @@ int RGWGC::process(int index, int max_secs, bool expired_only,
     marker = next_marker;
 
     string last_pool;
-    std::list<cls_rgw_gc_obj_info>::iterator iter;
+    std::vector<cls_rgw_gc_obj_info>::iterator iter;
     for (iter = entries.begin(); iter != entries.end(); ++iter) {
       cls_rgw_gc_obj_info& info = *iter;
 

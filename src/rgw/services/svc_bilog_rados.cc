@@ -104,8 +104,8 @@ int RGWSI_BILog_RADOS::log_list(const RGWBucketInfo& bucket_info, int shard_id, 
   if (r < 0)
     return r;
 
-  map<int, list<rgw_bi_log_entry>::iterator> vcurrents;
-  map<int, list<rgw_bi_log_entry>::iterator> vends;
+  map<int, std::vector<rgw_bi_log_entry>::iterator> vcurrents;
+  map<int, std::vector<rgw_bi_log_entry>::iterator> vends;
   if (truncated) {
     *truncated = false;
   }
@@ -121,8 +121,8 @@ int RGWSI_BILog_RADOS::log_list(const RGWBucketInfo& bucket_info, int shard_id, 
 
   size_t total = 0;
   bool has_more = true;
-  map<int, list<rgw_bi_log_entry>::iterator>::iterator viter;
-  map<int, list<rgw_bi_log_entry>::iterator>::iterator eiter;
+  map<int, std::vector<rgw_bi_log_entry>::iterator>::iterator viter;
+  map<int, std::vector<rgw_bi_log_entry>::iterator>::iterator eiter;
   while (total < max && has_more) {
     has_more = false;
 
@@ -133,9 +133,9 @@ int RGWSI_BILog_RADOS::log_list(const RGWBucketInfo& bucket_info, int shard_id, 
       assert (eiter != vends.end());
 
       int shard_id = viter->first;
-      list<rgw_bi_log_entry>::iterator& liter = viter->second;
+      auto& liter = viter->second;
 
-      if (liter == eiter->second){
+      if (liter == eiter->second) {
         continue;
       }
       rgw_bi_log_entry& entry = *(liter);

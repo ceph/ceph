@@ -310,7 +310,7 @@ static int encode_list_index_key(cls_method_context_t hctx, const cls_rgw_obj_ke
   return 0;
 }
 
-static void split_key(const string& key, list<string>& vals)
+static void split_key(const string& key, vector<string>& vals)
 {
   size_t pos = 0;
   const char *p = key.c_str();
@@ -347,7 +347,7 @@ static int decode_list_index_key(const string& index_key, cls_rgw_obj_key *key, 
     return 0;
   }
 
-  list<string> vals;
+  vector<string> vals;
   split_key(index_key, vals);
 
   if (vals.empty()) {
@@ -355,7 +355,7 @@ static int decode_list_index_key(const string& index_key, cls_rgw_obj_key *key, 
     return -EIO;
   }
 
-  list<string>::iterator iter = vals.begin();
+  auto iter = vals.begin();
   key->name = *iter;
   ++iter;
 
@@ -936,9 +936,8 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
       return rc;
   }
 
-  list<cls_rgw_obj_key>::iterator remove_iter;
   CLS_LOG(20, "rgw_bucket_complete_op(): remove_objs.size()=%d\n", (int)op.remove_objs.size());
-  for (remove_iter = op.remove_objs.begin(); remove_iter != op.remove_objs.end(); ++remove_iter) {
+  for (auto remove_iter = op.remove_objs.begin(); remove_iter != op.remove_objs.end(); ++remove_iter) {
     cls_rgw_obj_key& remove_key = *remove_iter;
     CLS_LOG(1, "rgw_bucket_complete_op(): removing entries, read_index_entry name=%s instance=%s\n",
             remove_key.name.c_str(), remove_key.instance.c_str());
@@ -2048,11 +2047,11 @@ static int rgw_obj_remove(cls_method_context_t hctx, bufferlist *in, bufferlist 
   }
 
   map<string, bufferlist> new_attrs;
-  for (list<string>::iterator iter = op.keep_attr_prefixes.begin();
+  for (auto iter = op.keep_attr_prefixes.begin();
        iter != op.keep_attr_prefixes.end(); ++iter) {
     string& check_prefix = *iter;
 
-    for (map<string, bufferlist>::iterator aiter = attrset.lower_bound(check_prefix);
+    for (auto aiter = attrset.lower_bound(check_prefix);
          aiter != attrset.end(); ++aiter) {
       const string& attr = aiter->first;
 
@@ -2298,7 +2297,7 @@ static int rgw_bi_put_op(cls_method_context_t hctx, bufferlist *in, bufferlist *
 }
 
 static int list_plain_entries(cls_method_context_t hctx, const string& name, const string& marker, uint32_t max,
-                              list<rgw_cls_bi_entry> *entries, bool *pmore)
+                              std::vector<rgw_cls_bi_entry> *entries, bool *pmore)
 {
   string filter = name;
   string start_key = marker;
@@ -2360,7 +2359,7 @@ static int list_plain_entries(cls_method_context_t hctx, const string& name, con
 }
 
 static int list_instance_entries(cls_method_context_t hctx, const string& name, const string& marker, uint32_t max,
-                                 list<rgw_cls_bi_entry> *entries, bool *pmore)
+                                 vector<rgw_cls_bi_entry> *entries, bool *pmore)
 {
   cls_rgw_obj_key key(name);
   string first_instance_idx;
@@ -2443,7 +2442,7 @@ static int list_instance_entries(cls_method_context_t hctx, const string& name, 
 }
 
 static int list_olh_entries(cls_method_context_t hctx, const string& name, const string& marker, uint32_t max,
-                            list<rgw_cls_bi_entry> *entries, bool *pmore)
+                            vector<rgw_cls_bi_entry> *entries, bool *pmore)
 {
   cls_rgw_obj_key key(name);
   string first_instance_idx;
@@ -2679,13 +2678,13 @@ static int bi_log_iterate_entries(cls_method_context_t hctx, const string& marke
 
 static int bi_log_list_cb(cls_method_context_t hctx, const string& key, rgw_bi_log_entry& info, void *param)
 {
-  list<rgw_bi_log_entry> *l = (list<rgw_bi_log_entry> *)param;
+  auto *l = (vector<rgw_bi_log_entry> *)param;
   l->push_back(info);
   return 0;
 }
 
 static int bi_log_list_entries(cls_method_context_t hctx, const string& marker,
-			   uint32_t max, list<rgw_bi_log_entry>& entries, bool *truncated)
+			   uint32_t max, vector<rgw_bi_log_entry>& entries, bool *truncated)
 {
   string key_iter;
   string end_marker;
@@ -3411,14 +3410,14 @@ static int gc_iterate_entries(cls_method_context_t hctx,
 
 static int gc_list_cb(cls_method_context_t hctx, const string& key, cls_rgw_gc_obj_info& info, void *param)
 {
-  list<cls_rgw_gc_obj_info> *l = (list<cls_rgw_gc_obj_info> *)param;
+  auto l = (vector<cls_rgw_gc_obj_info> *)param;
   l->push_back(info);
   return 0;
 }
 
 static int gc_list_entries(cls_method_context_t hctx, const string& marker,
 			   uint32_t max, bool expired_only,
-                           list<cls_rgw_gc_obj_info>& entries, bool *truncated, string& next_marker)
+                           vector<cls_rgw_gc_obj_info>& entries, bool *truncated, string& next_marker)
 {
   int ret = gc_iterate_entries(hctx, marker, expired_only,
                               next_marker, max, truncated,
