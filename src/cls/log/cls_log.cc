@@ -29,7 +29,7 @@ static int write_log_entry(cls_method_context_t hctx, string& index, cls_log_ent
   return 0;
 }
 
-static void get_index_time_prefix(utime_t& ts, string& index)
+static void get_index_time_prefix(const utime_t& ts, string& index)
 {
   char buf[32];
   snprintf(buf, sizeof(buf), "%010ld.%06ld_", (long)ts.sec(), (long)ts.usec());
@@ -72,7 +72,7 @@ static int write_header(cls_method_context_t hctx, cls_log_header& header)
   return 0;
 }
 
-static void get_index(cls_method_context_t hctx, utime_t& ts, string& index)
+static void get_index(cls_method_context_t hctx, const utime_t& ts, string& index)
 {
   get_index_time_prefix(ts, index);
 
@@ -101,20 +101,18 @@ static int cls_log_add(cls_method_context_t hctx, bufferlist *in, bufferlist *ou
   if (ret < 0)
     return ret;
 
-  for (list<cls_log_entry>::iterator iter = op.entries.begin();
-       iter != op.entries.end(); ++iter) {
-    cls_log_entry& entry = *iter;
+  for (auto& entry : op.entries) {
 
     string index;
 
-    utime_t timestamp = entry.timestamp;
+    auto timestamp = entry.timestamp;
     if (op.monotonic_inc && timestamp < header.max_time)
       timestamp = header.max_time;
     else if (timestamp > header.max_time)
       header.max_time = timestamp;
 
     if (entry.id.empty()) {
-      get_index(hctx, timestamp, index);
+      get_index(hctx, utime_t(timestamp), index);
       entry.id = index;
     } else {
       index = entry.id;
@@ -156,16 +154,17 @@ static int cls_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   string to_index;
 
   if (op.marker.empty()) {
-    get_index_time_prefix(op.from_time, from_index);
+    get_index_time_prefix(utime_t(op.from_time), from_index);
   } else {
     from_index = op.marker;
   }
-  bool use_time_boundary = (!op.from_time.is_zero() && (op.to_time >= op.from_time));
+  bool use_time_boundary = (!ceph::real_clock::is_zero(op.from_time) &&
+			    (op.to_time >= op.from_time));
 
   if (use_time_boundary)
-    get_index_time_prefix(op.to_time, to_index);
+    get_index_time_prefix(utime_t(op.to_time), to_index);
 
-#define MAX_ENTRIES 1000
+  static constexpr auto MAX_ENTRIES = 1000u;
   size_t max_entries = op.max_entries;
   if (!max_entries || max_entries > MAX_ENTRIES)
     max_entries = MAX_ENTRIES;
@@ -176,8 +175,8 @@ static int cls_log_list(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   if (rc < 0)
     return rc;
 
-  list<cls_log_entry>& entries = ret.entries;
-  map<string, bufferlist>::iterator iter = keys.begin();
+  auto& entries = ret.entries;
+  auto iter = keys.begin();
 
   string marker;
 
@@ -224,14 +223,14 @@ static int cls_log_trim(cls_method_context_t hctx, bufferlist *in, bufferlist *o
   string to_index;
 
   if (op.from_marker.empty()) {
-    get_index_time_prefix(op.from_time, from_index);
+    get_index_time_prefix(utime_t(op.from_time), from_index);
   } else {
     from_index = op.from_marker;
   }
 
   // cls_cxx_map_remove_range() expects one-past-end
   if (op.to_marker.empty()) {
-    auto t = op.to_time;
+    auto t = utime_t(op.to_time);
     t.nsec_ref() += 1000; // equivalent to usec() += 1
     t.normalize();
     get_index_time_prefix(t, to_index);

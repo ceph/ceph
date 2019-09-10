@@ -7488,7 +7488,7 @@ next:
           encode_json("id", cls_entry.id, formatter);
           encode_json("section", cls_entry.section, formatter);
           encode_json("name", cls_entry.name, formatter);
-          encode_json("timestamp", cls_entry.timestamp, formatter);
+          encode_json("timestamp", utime_t(cls_entry.timestamp), formatter);
           encode_json("info", log_entry, formatter);
           formatter->close_section();
           formatter->flush(cout);

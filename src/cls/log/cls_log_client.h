@@ -2,6 +2,7 @@
 #define CEPH_CLS_LOG_CLIENT_H
 
 #include "include/rados/librados_fwd.hpp"
+#include "include/utime.h"
 #include "cls_log_types.h"
 
 /*

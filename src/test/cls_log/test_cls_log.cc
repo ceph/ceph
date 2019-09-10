@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include "include/types.h"
@@ -90,7 +90,7 @@ void generate_log(librados::IoCtx& ioctx, string& oid, int max, utime_t& start_t
   ASSERT_EQ(0, ioctx.operate(oid, &op));
 }
 
-utime_t get_time(utime_t& start_time, int i, bool modify_time)
+utime_t get_time(const utime_t& start_time, int i, bool modify_time)
 {
   uint32_t secs = start_time.sec();
   if (modify_time)
@@ -102,11 +102,11 @@ void check_entry(cls_log_entry& entry, utime_t& start_time, int i, bool modified
 {
   string section = "global";
   string name = get_name(i);
-  utime_t ts = get_time(start_time, i, modified_time);
+  utime_t ts = get_time(utime_t(start_time), i, modified_time);
 
   ASSERT_EQ(section, entry.section);
   ASSERT_EQ(name, entry.name);
-  ASSERT_EQ(ts, entry.timestamp);
+  ASSERT_EQ(ts, utime_t(entry.timestamp));
 }
 
 static int log_list(librados::IoCtx& ioctx, const std::string& oid,

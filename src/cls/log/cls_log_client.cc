@@ -3,6 +3,7 @@
 #include "cls/log/cls_log_ops.h"
 #include "include/rados/librados.hpp"
 #include "include/compat.h"
+#include "include/utime.h"
 
 
 using namespace librados;
@@ -13,7 +14,8 @@ void cls_log_add(librados::ObjectWriteOperation& op, list<cls_log_entry>& entrie
 {
   bufferlist in;
   cls_log_add_op call;
-  call.entries = entries;
+  std::move(entries.begin(), entries.end(),
+            std::back_inserter(call.entries));
   encode(call, in);
   op.exec("log", "add", in);
 }
@@ -30,7 +32,7 @@ void cls_log_add(librados::ObjectWriteOperation& op, cls_log_entry& entry)
 void cls_log_add_prepare_entry(cls_log_entry& entry, const utime_t& timestamp,
                  const string& section, const string& name, bufferlist& bl)
 {
-  entry.timestamp = timestamp;
+  entry.timestamp = timestamp.to_real_time();
   entry.section = section;
   entry.name = name;
   entry.data = bl;
@@ -50,8 +52,8 @@ void cls_log_trim(librados::ObjectWriteOperation& op, const utime_t& from_time, 
 {
   bufferlist in;
   cls_log_trim_op call;
-  call.from_time = from_time;
-  call.to_time = to_time;
+  call.from_time = from_time.to_real_time();
+  call.to_time = to_time.to_real_time();
   call.from_marker = from_marker;
   call.to_marker = to_marker;
   encode(call, in);
@@ -94,7 +96,8 @@ public:
         auto iter = outbl.cbegin();
         decode(ret, iter);
         if (entries)
-          *entries = std::move(ret.entries);
+          std::move(ret.entries.begin(), ret.entries.end(),
+                    std::back_inserter(*entries));
         if (truncated)
           *truncated = ret.truncated;
         if (marker)
@@ -113,8 +116,8 @@ void cls_log_list(librados::ObjectReadOperation& op, utime_t& from, utime_t& to,
 {
   bufferlist inbl;
   cls_log_list_op call;
-  call.from_time = from;
-  call.to_time = to;
+  call.from_time = from.to_real_time();
+  call.to_time = to.to_real_time();
   call.marker = in_marker;
   call.max_entries = max_entries;
 

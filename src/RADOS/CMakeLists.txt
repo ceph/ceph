@@ -39,3 +39,4 @@ target_link_libraries(libRADOS PRIVATE
 add_library(RADOS_cls_version OBJECT cls/version.cc)
 add_library(RADOS_cls_rgw OBJECT cls/rgw.cc)
 add_library(RADOS_cls_lock OBJECT cls/lock.cc)
+add_library(RADOS_cls_log OBJECT cls/log.cc)

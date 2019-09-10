@@ -2297,7 +2297,7 @@ int RGWDataChangesLog::list_entries(int shard, const real_time& start_time, cons
   for (iter = log_entries.begin(); iter != log_entries.end(); ++iter) {
     rgw_data_change_log_entry log_entry;
     log_entry.log_id = iter->id;
-    real_time rt = iter->timestamp.to_real_time();
+    real_time rt = iter->timestamp;
     log_entry.log_timestamp = rt;
     auto liter = iter->data.cbegin();
     try {
@@ -2352,7 +2352,7 @@ int RGWDataChangesLog::get_info(int shard_id, RGWDataChangesLogInfo *info)
     return ret;
 
   info->marker = header.max_marker;
-  info->last_update = header.max_time.to_real_time();
+  info->last_update = header.max_time;
 
   return 0;
 }
