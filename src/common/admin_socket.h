@@ -96,10 +96,19 @@ public:
 
   void chown(uid_t uid, gid_t gid);
   void chmod(mode_t mode);
+
+  /// execute (async)
   void execute_command(
     const std::vector<std::string>& cmd,
     const bufferlist& inbl,
     std::function<void(int,const std::string&,bufferlist&)> on_fin);
+
+  /// execute (blocking)
+  int execute_command(
+    const std::vector<std::string>& cmd,
+    const bufferlist& inbl,
+    std::ostream& errss,
+    bufferlist *outbl);
 
   void queue_tell_command(ref_t<MCommand> m);
 
