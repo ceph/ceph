@@ -43,6 +43,14 @@ int MetricAggregator::init() {
       }
     });
 
+  mgrc->set_perf_metric_query_cb(
+    [this](const ConfigPayload &config_payload) {
+      set_perf_queries(config_payload);
+    },
+    [this]() {
+      return get_perf_reports();
+    });
+
   return 0;
 }
 
@@ -291,4 +299,55 @@ void MetricAggregator::notify_mdsmap(const MDSMap &mdsmap) {
   }
 
   dout(10) << ": active set=["  << active_rank_addrs << "]" << dendl;
+}
+
+void MetricAggregator::set_perf_queries(const ConfigPayload &config_payload) {
+  const MDSConfigPayload &mds_config_payload = boost::get<MDSConfigPayload>(config_payload);
+  const std::map<MDSPerfMetricQuery, MDSPerfMetricLimits> &queries = mds_config_payload.config;
+
+  dout(10) << ": setting " << queries.size() << " queries" << dendl;
+
+  std::scoped_lock locker(lock);
+  std::map<MDSPerfMetricQuery, std::map<MDSPerfMetricKey, PerformanceCounters>> new_data;
+  for (auto &p : queries) {
+    std::swap(new_data[p.first], query_metrics_map[p.first]);
+  }
+  std::swap(query_metrics_map, new_data);
+}
+
+MetricPayload MetricAggregator::get_perf_reports() {
+  MDSMetricPayload payload;
+  MDSPerfMetricReport &metric_report = payload.metric_report;
+  std::map<MDSPerfMetricQuery, MDSPerfMetrics> &reports = metric_report.reports;
+
+  std::scoped_lock locker(lock);
+
+  for (auto& [query, counters] : query_metrics_map) {
+    auto &report = reports[query];
+
+    query.get_performance_counter_descriptors(&report.performance_counter_descriptors);
+
+    auto &descriptors = report.performance_counter_descriptors;
+    ceph_assert(descriptors.size() > 0);
+
+    dout(20) << ": descriptors=" << descriptors << dendl;
+
+    for (auto &p : counters) {
+      dout(20) << ": packing perf_metric_key=" << p.first << ", perf_counter="
+               << p.second << dendl;
+      auto &bl = report.group_packed_performance_counters[p.first];
+      query.pack_counters(p.second, &bl);
+    }
+  }
+
+  // stash a copy of dealyed and failed ranks. mgr culls out metrics
+  // for failed ranks and tags metrics for delayed ranks as "stale".
+  for (auto &p : active_rank_addrs) {
+    auto rank = p.first;
+    if (mds_pinger.is_rank_lagging(rank)) {
+      metric_report.rank_metrics_delayed.insert(rank);
+    }
+  }
+
+  return payload;
 }
