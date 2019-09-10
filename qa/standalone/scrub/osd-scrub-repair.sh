@@ -360,8 +360,8 @@ function TEST_auto_repair_bluestore_basic() {
     local pgid=$(get_pg $poolname SOMETHING)
     local primary=$(get_primary $poolname SOMETHING)
     local last_scrub_stamp="$(get_last_scrub_stamp $pgid)"
-    CEPH_ARGS='' ceph daemon $(get_asok_path osd.$primary) trigger_deep_scrub $pgid
-    CEPH_ARGS='' ceph daemon $(get_asok_path osd.$primary) trigger_scrub $pgid
+    ceph tell $pgid deep_scrub
+    ceph tell $pgid scrub
 
     # Wait for auto repair
     wait_for_scrub $pgid "$last_scrub_stamp" || return 1
@@ -409,7 +409,7 @@ function TEST_auto_repair_bluestore_scrub() {
     local pgid=$(get_pg $poolname SOMETHING)
     local primary=$(get_primary $poolname SOMETHING)
     local last_scrub_stamp="$(get_last_scrub_stamp $pgid)"
-    CEPH_ARGS='' ceph daemon $(get_asok_path osd.$primary) trigger_scrub $pgid
+    ceph tell $pgid scrub
 
     # Wait for scrub -> auto repair
     wait_for_scrub $pgid "$last_scrub_stamp" || return 1
@@ -470,8 +470,8 @@ function TEST_auto_repair_bluestore_failed() {
     local pgid=$(get_pg $poolname obj1)
     local primary=$(get_primary $poolname obj1)
     local last_scrub_stamp="$(get_last_scrub_stamp $pgid)"
-    CEPH_ARGS='' ceph daemon $(get_asok_path osd.$primary) trigger_deep_scrub $pgid
-    CEPH_ARGS='' ceph daemon $(get_asok_path osd.$primary) trigger_scrub $pgid
+    ceph tell $pgid deep_scrub
+    ceph tell $pgid scrub
 
     # Wait for auto repair
     wait_for_scrub $pgid "$last_scrub_stamp" || return 1
@@ -541,8 +541,8 @@ function TEST_auto_repair_bluestore_failed_norecov() {
     local pgid=$(get_pg $poolname obj1)
     local primary=$(get_primary $poolname obj1)
     local last_scrub_stamp="$(get_last_scrub_stamp $pgid)"
-    CEPH_ARGS='' ceph daemon $(get_asok_path osd.$primary) trigger_deep_scrub $pgid
-    CEPH_ARGS='' ceph daemon $(get_asok_path osd.$primary) trigger_scrub $pgid
+    ceph tell $pgid deep_scrub
+    ceph tell $pgid scrub
 
     # Wait for auto repair
     wait_for_scrub $pgid "$last_scrub_stamp" || return 1
@@ -5745,8 +5745,7 @@ function TEST_periodic_scrub_replicated() {
     flush_pg_stats
     local last_scrub=$(get_last_scrub_stamp $pg)
     # Fake a schedule scrub
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) \
-             trigger_scrub $pg || return 1
+    ceph tell $pg scrub || return 1
     # Wait for schedule regular scrub
     wait_for_scrub $pg "$last_scrub"
 
@@ -5763,8 +5762,7 @@ function TEST_periodic_scrub_replicated() {
     sleep 5
 
     # Fake a schedule scrub
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) \
-             trigger_scrub $pg || return 1
+    ceph tell $pg scrub || return 1
     # Wait for schedule regular scrub
     # to notice scrub and skip it
     local found=false
@@ -5839,8 +5837,7 @@ function TEST_scrub_warning() {
       else
         overdue_seconds=$conf_overdue_seconds
       fi
-      CEPH_ARGS='' ceph daemon $(get_asok_path osd.${primary}) \
-             trigger_scrub ${i}.0 $(expr ${overdue_seconds} + ${i}00) || return 1
+      ceph tell ${i}.0 scrub $(expr ${overdue_seconds} + ${i}00) || return 1
     done
     # Fake schedule deep scrubs
     for i in $(seq $(expr $scrubs + 1) $(expr $scrubs + $deep_scrubs))
@@ -5851,8 +5848,7 @@ function TEST_scrub_warning() {
       else
         overdue_seconds=$conf_overdue_seconds
       fi
-      CEPH_ARGS='' ceph daemon $(get_asok_path osd.${primary}) \
-             trigger_deep_scrub ${i}.0 $(expr ${overdue_seconds} + ${i}00) || return 1
+      ceph tell ${i}.0 deep_scrub $(expr ${overdue_seconds} + ${i}00) || return 1
     done
     flush_pg_stats
 
@@ -6177,8 +6173,7 @@ function TEST_request_scrub_priority() {
         otherpgs="${otherpgs}${opg} "
         local other_last_scrub=$(get_last_scrub_stamp $pg)
         # Fake a schedule scrub
-        CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${primary}) \
-             trigger_scrub $opg || return 1
+        ceph tell $opg scrub $opg || return 1
     done
 
     sleep 15

@@ -217,7 +217,7 @@ function TEST_scrub_extented_sleep() {
     local pgid=$(get_pg $poolname SOMETHING)
     local primary=$(get_primary $poolname SOMETHING)
     local last_scrub=$(get_last_scrub_stamp $pgid)
-    CEPH_ARGS='' ceph daemon $(get_asok_path osd.$primary) trigger_scrub $pgid || return 1
+    ceph tell $pgid scrub || return 1
 
     # Due to the long delay, the scrub should not be done within 3 seconds
     for ((i=0; i < 3; i++)); do
