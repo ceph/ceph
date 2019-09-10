@@ -34,7 +34,7 @@ describe('Mirroring page', () => {
     });
   });
 
-  describe('checks that edit mode functionality shows in the pools table', async () => {
+  describe('checks that edit mode functionality shows in the pools table', () => {
     const poolName = 'mirroring_test';
 
     beforeAll(async () => {

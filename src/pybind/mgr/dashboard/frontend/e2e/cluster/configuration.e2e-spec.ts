@@ -23,8 +23,8 @@ describe('Configuration page', () => {
   });
 
   describe('fields check', () => {
-    beforeAll(() => {
-      configuration.navigateTo();
+    beforeAll(async () => {
+      await configuration.navigateTo();
     });
 
     it('should verify that selected footer increases when an entry is clicked', async () => {

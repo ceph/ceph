@@ -34,7 +34,7 @@ describe('Images page', () => {
     });
   });
 
-  describe('create, edit & delete image test', async () => {
+  describe('create, edit & delete image test', () => {
     const poolName = 'e2e_images_pool';
     const imageName = 'e2e_images_image';
     const newImageName = 'e2e_images_image_new';

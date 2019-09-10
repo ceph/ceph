@@ -69,6 +69,13 @@ describe('Logs page', () => {
   });
 
   describe('audit logs respond to editing configuration setting test', () => {
+    let originalTimeout;
+
+    beforeEach(() => {
+      originalTimeout = jasmine.DEFAULT_TIMEOUT_INTERVAL;
+      jasmine.DEFAULT_TIMEOUT_INTERVAL = 200000;
+    });
+
     it('should change config settings and check audit logs reacted', async () => {
       await configuration.navigateTo();
       await configuration.edit(configname, ['global', '5']);
@@ -78,6 +85,10 @@ describe('Logs page', () => {
 
       await configuration.navigateTo();
       await configuration.configClear(configname);
+    });
+
+    afterEach(function() {
+      jasmine.DEFAULT_TIMEOUT_INTERVAL = originalTimeout;
     });
   });
 });

@@ -79,9 +79,6 @@ export class UsersPageHelper extends PageHelper {
     // Try to give user already taken name. Should make field invalid.
     await username_field.clear();
     await username_field.sendKeys(uname);
-    await this.waitFn(
-      async () => !(await username_field.getAttribute('class')).includes('ng-pending')
-    );
     await expect(username_field.getAttribute('class')).toContain('ng-invalid');
     await element(by.id('display_name')).click(); // trigger validation check
     await expect(element(by.css('#uid + .invalid-feedback')).getText()).toMatch(

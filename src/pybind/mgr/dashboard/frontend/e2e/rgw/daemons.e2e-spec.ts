@@ -33,7 +33,7 @@ describe('RGW daemons page', () => {
     });
   });
 
-  describe('details and performance counters table tests', async () => {
+  describe('details and performance counters table tests', () => {
     beforeAll(async () => {
       await daemons.navigateTo();
     });
