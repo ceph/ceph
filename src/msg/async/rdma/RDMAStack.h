@@ -274,13 +274,13 @@ class RDMAIWARPConnectedSocketImpl : public RDMAConnectedSocketImpl {
     void close_notify();
 
   private:
-    rdma_cm_id *cm_id;
-    rdma_event_channel *cm_channel;
+    rdma_cm_id *cm_id = nullptr;
+    rdma_event_channel *cm_channel = nullptr;
     EventCallbackRef cm_con_handler;
     std::mutex close_mtx;
     std::condition_variable close_condition;
-    bool closed;
-    RDMA_CM_STATUS status;
+    bool closed = false;
+    RDMA_CM_STATUS status = IDLE;
 
 
   class C_handle_cm_connection : public EventCallback {
@@ -324,8 +324,8 @@ class RDMAIWARPServerSocketImpl : public RDMAServerSocketImpl {
     virtual int accept(ConnectedSocket *s, const SocketOptions &opts, entity_addr_t *out, Worker *w) override;
     virtual void abort_accept() override;
   private:
-    rdma_cm_id *cm_id;
-    rdma_event_channel *cm_channel;
+    rdma_cm_id *cm_id = nullptr;
+    rdma_event_channel *cm_channel = nullptr;
 };
 
 class RDMAStack : public NetworkStack {
