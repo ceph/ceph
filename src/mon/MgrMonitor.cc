@@ -530,6 +530,7 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
     pending_map.active_gid = m->get_gid();
     pending_map.active_name = m->get_name();
     pending_map.active_change = ceph_clock_now();
+    pending_map.active_mgr_features = m->get_mgr_features();
     pending_map.available_modules = m->get_available_modules();
     encode(m->get_metadata(), pending_metadata[m->get_name()]);
     pending_metadata_rm.erase(m->get_name());
@@ -556,7 +557,8 @@ bool MgrMonitor::prepare_beacon(MonOpRequestRef op)
       mon->clog->debug() << "Standby manager daemon " << m->get_name()
                          << " started";
       pending_map.standbys[m->get_gid()] = {m->get_gid(), m->get_name(),
-					    m->get_available_modules()};
+					    m->get_available_modules(),
+					    m->get_mgr_features()};
       encode(m->get_metadata(), pending_metadata[m->get_name()]);
       pending_metadata_rm.erase(m->get_name());
       updated = true;
@@ -797,6 +799,8 @@ bool MgrMonitor::promote_standby()
     auto replacement_gid = pending_map.standbys.begin()->first;
     pending_map.active_gid = replacement_gid;
     pending_map.active_name = pending_map.standbys.at(replacement_gid).name;
+    pending_map.active_mgr_features =
+      pending_map.standbys.at(replacement_gid).mgr_features;
     pending_map.available = false;
     pending_map.active_addrs = entity_addrvec_t();
     pending_map.active_change = ceph_clock_now();
@@ -820,6 +824,7 @@ void MgrMonitor::drop_active()
   pending_map.active_name = "";
   pending_map.active_gid = 0;
   pending_map.active_change = ceph_clock_now();
+  pending_map.active_mgr_features = 0;
   pending_map.available = false;
   pending_map.active_addrs = entity_addrvec_t();
   pending_map.services.clear();

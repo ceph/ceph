@@ -120,7 +120,11 @@ public:
   bool handle_mgr_map(ceph::ref_t<MMgrMap> m);
   bool handle_mgr_configure(ceph::ref_t<MMgrConfigure> m);
   bool handle_mgr_close(ceph::ref_t<MMgrClose> m);
-  bool handle_command_reply(ceph::ref_t<MCommandReply> m);
+  bool handle_command_reply(
+    uint64_t tid,
+    bufferlist& data,
+    const std::string& rs,
+    int r);
 
   void set_perf_metric_query_cb(
     std::function<void(const std::map<OSDPerfMetricQuery,
