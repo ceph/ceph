@@ -464,7 +464,7 @@ void ProtocolV2::fault(bool backoff, const char* func_name, std::exception_ptr e
 
 void ProtocolV2::dispatch_reset()
 {
-  seastar::with_gate(pending_dispatch, [this] {
+  (void) seastar::with_gate(pending_dispatch, [this] {
     return dispatcher.ms_handle_reset(
         seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   }).handle_exception([this] (std::exception_ptr eptr) {
@@ -482,7 +482,7 @@ void ProtocolV2::reset_session(bool full)
     client_cookie = generate_client_cookie();
     peer_global_seq = 0;
     reset_write();
-    seastar::with_gate(pending_dispatch, [this] {
+    (void) seastar::with_gate(pending_dispatch, [this] {
       return dispatcher.ms_handle_remote_reset(
           seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
     }).handle_exception([this] (std::exception_ptr eptr) {
@@ -917,7 +917,7 @@ void ProtocolV2::execute_connecting()
             abort_protocol();
           }
           if (socket) {
-            with_gate(pending_dispatch, [this, sock = std::move(socket)] () mutable {
+            (void) with_gate(pending_dispatch, [this, sock = std::move(socket)] () mutable {
               return sock->close().then([sock = std::move(sock)] {});
             });
           }
@@ -976,7 +976,7 @@ void ProtocolV2::execute_connecting()
           }
           switch (next) {
            case next_step_t::ready: {
-            seastar::with_gate(pending_dispatch, [this] {
+            (void) seastar::with_gate(pending_dispatch, [this] {
               return dispatcher.ms_handle_connect(
                   seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
             }).handle_exception([this] (std::exception_ptr eptr) {
@@ -1539,7 +1539,7 @@ ProtocolV2::server_reconnect()
 void ProtocolV2::execute_accepting()
 {
   trigger_state(state_t::ACCEPTING, write_state_t::none, false);
-  seastar::with_gate(pending_dispatch, [this] {
+  (void) seastar::with_gate(pending_dispatch, [this] {
       return seastar::futurize_apply([this] {
           INTERCEPT_N_RW(custom_bp_t::SOCKET_ACCEPTED);
           auth_meta = seastar::make_lw_shared<AuthConnectionMeta>();
@@ -1644,7 +1644,7 @@ seastar::future<> ProtocolV2::finish_auth()
 
 void ProtocolV2::execute_establishing() {
   trigger_state(state_t::ESTABLISHING, write_state_t::delay, false);
-  seastar::with_gate(pending_dispatch, [this] {
+  (void) seastar::with_gate(pending_dispatch, [this] {
     return dispatcher.ms_handle_accept(
         seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   }).handle_exception([this] (std::exception_ptr eptr) {
@@ -1749,23 +1749,23 @@ void ProtocolV2::trigger_replacing(bool reconnect,
   if (socket) {
     socket->shutdown();
   }
-  seastar::with_gate(pending_dispatch, [this] {
+  (void) seastar::with_gate(pending_dispatch, [this] {
     return dispatcher.ms_handle_accept(
         seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
   }).handle_exception([this] (std::exception_ptr eptr) {
     logger().error("{} ms_handle_accept caught exception: {}", conn, eptr);
     ceph_abort("unexpected exception from ms_handle_accept()");
   });
-  seastar::with_gate(pending_dispatch,
-                     [this,
-                      reconnect,
-                      do_reset,
-                      new_socket = std::move(new_socket),
-                      new_auth_meta = std::move(new_auth_meta),
-                      new_rxtx = std::move(new_rxtx),
-                      new_client_cookie, new_peer_name,
-                      new_conn_features, new_peer_global_seq,
-                      new_connect_seq, new_msg_seq] () mutable {
+  (void) seastar::with_gate(pending_dispatch,
+                            [this,
+                             reconnect,
+                             do_reset,
+                             new_socket = std::move(new_socket),
+                             new_auth_meta = std::move(new_auth_meta),
+                             new_rxtx = std::move(new_rxtx),
+                             new_client_cookie, new_peer_name,
+                             new_conn_features, new_peer_global_seq,
+                             new_connect_seq, new_msg_seq] () mutable {
     return wait_write_exit().then([this, do_reset] {
       if (do_reset) {
         reset_session(true);
@@ -1787,7 +1787,7 @@ void ProtocolV2::trigger_replacing(bool reconnect,
       }
 
       if (socket) {
-        with_gate(pending_dispatch, [this, sock = std::move(socket)] () mutable {
+        (void) with_gate(pending_dispatch, [this, sock = std::move(socket)] () mutable {
           return sock->close().then([sock = std::move(sock)] {});
         });
       }
@@ -1974,7 +1974,7 @@ seastar::future<> ProtocolV2::read_message(utime_t throttle_stamp)
 
     // TODO: change MessageRef with seastar::shared_ptr
     auto msg_ref = MessageRef{message, false};
-    seastar::with_gate(pending_dispatch, [this, msg = std::move(msg_ref)] {
+    (void) seastar::with_gate(pending_dispatch, [this, msg = std::move(msg_ref)] {
       return dispatcher.ms_dispatch(&conn, std::move(msg));
     }).handle_exception([this] (std::exception_ptr eptr) {
       logger().error("{} ms_dispatch caught exception: {}", conn, eptr);

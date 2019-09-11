@@ -272,7 +272,7 @@ void Protocol::write_event()
    case write_state_t::open:
      [[fallthrough]];
    case write_state_t::delay:
-    seastar::with_gate(pending_dispatch, [this] {
+    (void) seastar::with_gate(pending_dispatch, [this] {
       return do_write_dispatch_sweep(
       ).handle_exception([this] (std::exception_ptr eptr) {
         logger().error("{} do_write_dispatch_sweep(): unexpected exception {}",
