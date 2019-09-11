@@ -1789,6 +1789,12 @@ class TestMirroring(object):
         remove_image()
         self.rbd.mirror_mode_set(ioctx, self.initial_mirror_mode)
 
+    def test_site_name(self):
+        site_name = "us-west-1"
+        self.rbd.mirror_site_name_set(rados, site_name)
+        eq(site_name, self.rbd.mirror_site_name_get(rados))
+        self.rbd.mirror_site_name_set(rados, "")
+        eq(rados.get_fsid(), self.rbd.mirror_site_name_get(rados))
 
     def test_mirror_peer(self):
         eq([], list(self.rbd.mirror_peer_list(ioctx)))

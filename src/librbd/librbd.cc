@@ -868,6 +868,16 @@ namespace librbd {
     return librbd::api::Mirror<>::mode_get(io_ctx, mirror_mode);
   }
 
+  int RBD::mirror_site_name_get(librados::Rados& rados,
+                                std::string* site_name) {
+    return librbd::api::Mirror<>::site_name_get(rados, site_name);
+  }
+
+  int RBD::mirror_site_name_set(librados::Rados& rados,
+                                const std::string& site_name) {
+    return librbd::api::Mirror<>::site_name_set(rados, site_name);
+  }
+
   int RBD::mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode) {
     return librbd::api::Mirror<>::mode_set(io_ctx, mirror_mode);
   }
@@ -2718,6 +2728,34 @@ extern "C" int rbd_image_options_is_empty(rbd_image_options_t opts)
 }
 
 /* pool mirroring */
+extern "C" int rbd_mirror_site_name_get(rados_t cluster, char *name,
+                                        size_t *max_len) {
+  librados::Rados rados;
+  librados::Rados::from_rados_t(cluster, rados);
+
+  std::string site_name;
+  int r = librbd::api::Mirror<>::site_name_get(rados, &site_name);
+  if (r < 0) {
+    return r;
+  }
+
+  auto total_len = site_name.size() + 1;
+  if (*max_len < total_len) {
+    *max_len = total_len;
+    return -ERANGE;
+  }
+  *max_len = total_len;
+
+  strcpy(name, site_name.c_str());
+  return 0;
+}
+
+extern "C" int rbd_mirror_site_name_set(rados_t cluster, const char *name) {
+  librados::Rados rados;
+  librados::Rados::from_rados_t(cluster, rados);
+  return librbd::api::Mirror<>::site_name_set(rados, name);
+}
+
 extern "C" int rbd_mirror_mode_get(rados_ioctx_t p,
                                    rbd_mirror_mode_t *mirror_mode) {
   librados::IoCtx io_ctx;

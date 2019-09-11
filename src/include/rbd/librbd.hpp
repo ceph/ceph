@@ -263,8 +263,13 @@ public:
                        image_migration_status_t *status, size_t status_size);
 
   // RBD pool mirroring support functions
+  int mirror_site_name_get(librados::Rados& rados, std::string* site_name);
+  int mirror_site_name_set(librados::Rados& rados,
+                           const std::string& site_name);
+
   int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode);
   int mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode);
+
   int mirror_peer_add(IoCtx& io_ctx, std::string *uuid,
                       const std::string &cluster_name,
                       const std::string &client_name);
