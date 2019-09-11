@@ -230,6 +230,11 @@ class filepath {
 
     return false;
   }
+
+  bool is_last_snap() const {
+    // walk into snapdir?
+    return depth() > 0 && bits[0].length() == 0;
+  }
 };
 
 WRITE_CLASS_ENCODER(filepath)
