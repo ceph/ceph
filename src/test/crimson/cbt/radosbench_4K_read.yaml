@@ -14,6 +14,11 @@ tasks:
         read_time: 30
         read_only: true
         prefill_time: 3
+        acceptable:
+          bandwidth: '(or (greater) (near 0.05))'
+          iops_avg: '(or (greater) (near 0.05))'
+          iops_stddev: '(or (less) (near 0.05))'
+          latency_avg: '(or (less) (near 0.05))'
     monitoring_profiles:
       perf:
         nodes:
