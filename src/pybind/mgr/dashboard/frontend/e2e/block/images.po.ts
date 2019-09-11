@@ -97,6 +97,7 @@ export class ImagesPageHelper extends PageHelper {
     // Clicks trash tab
     await this.waitClickable(element(by.cssContainingText('.nav-link', 'Trash')));
     await element(by.cssContainingText('.nav-link', 'Trash')).click();
+    await this.waitPresence(this.getTableCell(name));
   }
 
   // Checks trash tab table for image and then restores it to the RBD Images table
