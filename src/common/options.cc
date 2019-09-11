@@ -4359,6 +4359,10 @@ std::vector<Option> get_global_options() {
     .set_default(1_G)
     .set_description("minimum free space allocated to BlueFS"),
 
+    Option("bluestore_bluefs_max_free", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_default(10_G)
+    .set_description("Maximum free space allocated to BlueFS"),
+
     Option("bluestore_bluefs_min_ratio", Option::TYPE_FLOAT, Option::LEVEL_ADVANCED)
     .set_default(.02)
     .set_description("Minimum fraction of free space devoted to BlueFS"),

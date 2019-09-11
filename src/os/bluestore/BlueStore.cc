@@ -5702,7 +5702,7 @@ int BlueStore::allocate_bluefs_freespace(
     int64_t alloc_len;
     do {
       // hard cap to fit into 32 bits
-      gift = std::min<uint64_t>(size, 1ull << 31);
+      gift = std::min<uint64_t>(size, 1ull << 30);
       dout(10) << __func__ << " gifting " << gift
 	       << " (" << byte_u_t(gift) << ")" << dendl;
 
@@ -5813,7 +5813,8 @@ int64_t BlueStore::_get_bluefs_size_delta(uint64_t bluefs_free, uint64_t bluefs_
       gift = g;
     reclaim = 0;
   }
-  uint64_t min_free = cct->_conf.get_val<Option::size_t>("bluestore_bluefs_min_free");
+  uint64_t min_free =
+    cct->_conf.get_val<Option::size_t>("bluestore_bluefs_min_free");
   if (bluefs_free < min_free &&
       min_free < free_cap) {
     uint64_t g = min_free - bluefs_free;
@@ -5823,6 +5824,14 @@ int64_t BlueStore::_get_bluefs_size_delta(uint64_t bluefs_free, uint64_t bluefs_
     if (g > gift)
       gift = g;
     reclaim = 0;
+  }
+  uint64_t max_free =
+    cct->_conf.get_val<Option::size_t>("bluestore_bluefs_max_free");
+  if (bluefs_free > max_free) {
+    dout(10) << __func__ << " bluefs_free " << bluefs_free
+             << " > max " << max_free
+             << ", stop gifting for now" << dendl;
+    gift = 0;
   }
   ceph_assert((int64_t)gift >= 0);
   ceph_assert((int64_t)reclaim >= 0);
@@ -5867,7 +5876,7 @@ int BlueStore::_balance_bluefs_freespace()
     auto reclaim = p2roundup(uint64_t(-delta), alloc_size);
 
     // hard cap to fit into 32 bits
-    reclaim = std::min<uint64_t>(reclaim, 1ull << 31);
+    reclaim = std::min<uint64_t>(reclaim, 1ull << 30);
     dout(10) << __func__ << " reclaiming " << reclaim
 	     << " (" << byte_u_t(reclaim) << ")" << dendl;
 
