@@ -12,14 +12,13 @@ import { TooltipModule } from 'ngx-bootstrap/tooltip';
 
 import { DirectivesModule } from '../directives/directives.module';
 import { PipesModule } from '../pipes/pipes.module';
+import { AlertPanelComponent } from './alert-panel/alert-panel.component';
 import { BackButtonComponent } from './back-button/back-button.component';
 import { ConfigOptionComponent } from './config-option/config-option.component';
 import { ConfirmationModalComponent } from './confirmation-modal/confirmation-modal.component';
 import { CriticalConfirmationModalComponent } from './critical-confirmation-modal/critical-confirmation-modal.component';
-import { ErrorPanelComponent } from './error-panel/error-panel.component';
 import { GrafanaComponent } from './grafana/grafana.component';
 import { HelperComponent } from './helper/helper.component';
-import { InfoPanelComponent } from './info-panel/info-panel.component';
 import { LanguageSelectorComponent } from './language-selector/language-selector.component';
 import { LoadingPanelComponent } from './loading-panel/loading-panel.component';
 import { ModalComponent } from './modal/modal.component';
@@ -30,7 +29,6 @@ import { SparklineComponent } from './sparkline/sparkline.component';
 import { SubmitButtonComponent } from './submit-button/submit-button.component';
 import { UsageBarComponent } from './usage-bar/usage-bar.component';
 import { ViewCacheComponent } from './view-cache/view-cache.component';
-import { WarningPanelComponent } from './warning-panel/warning-panel.component';
 
 @NgModule({
   imports: [
@@ -55,19 +53,17 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     SelectBadgesComponent,
     SubmitButtonComponent,
     UsageBarComponent,
-    ErrorPanelComponent,
     LoadingPanelComponent,
-    InfoPanelComponent,
     ModalComponent,
     CriticalConfirmationModalComponent,
     ConfirmationModalComponent,
-    WarningPanelComponent,
     LanguageSelectorComponent,
     GrafanaComponent,
     SelectComponent,
     BackButtonComponent,
     RefreshSelectorComponent,
-    ConfigOptionComponent
+    ConfigOptionComponent,
+    AlertPanelComponent
   ],
   providers: [],
   exports: [
@@ -77,17 +73,15 @@ import { WarningPanelComponent } from './warning-panel/warning-panel.component';
     SelectBadgesComponent,
     SubmitButtonComponent,
     BackButtonComponent,
-    ErrorPanelComponent,
     LoadingPanelComponent,
-    InfoPanelComponent,
     UsageBarComponent,
     ModalComponent,
-    WarningPanelComponent,
     LanguageSelectorComponent,
     GrafanaComponent,
     SelectComponent,
     RefreshSelectorComponent,
-    ConfigOptionComponent
+    ConfigOptionComponent,
+    AlertPanelComponent
   ],
   entryComponents: [ModalComponent, CriticalConfirmationModalComponent, ConfirmationModalComponent]
 })

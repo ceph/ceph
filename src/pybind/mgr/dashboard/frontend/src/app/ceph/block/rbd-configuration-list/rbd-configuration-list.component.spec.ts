@@ -8,7 +8,7 @@ import { AlertModule } from 'ngx-bootstrap/alert';
 import { BsDropdownModule } from 'ngx-bootstrap/dropdown';
 
 import { configureTestBed, i18nProviders } from '../../../../testing/unit-test-helper';
-import { ErrorPanelComponent } from '../../../shared/components/error-panel/error-panel.component';
+import { AlertPanelComponent } from '../../../shared/components/alert-panel/alert-panel.component';
 import { SparklineComponent } from '../../../shared/components/sparkline/sparkline.component';
 import { TableComponent } from '../../../shared/datatable/table/table.component';
 import { RbdConfigurationEntry } from '../../../shared/models/configuration';
@@ -34,8 +34,8 @@ describe('RbdConfigurationListComponent', () => {
     declarations: [
       RbdConfigurationListComponent,
       TableComponent,
-      ErrorPanelComponent,
-      SparklineComponent
+      SparklineComponent,
+      AlertPanelComponent
     ],
     providers: [FormatterService, RbdConfigurationService, i18nProviders]
   });

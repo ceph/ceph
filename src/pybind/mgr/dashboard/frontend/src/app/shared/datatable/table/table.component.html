@@ -1,5 +1,6 @@
-<cd-error-panel *ngIf="loadingError"
-                i18n>Failed to load data.</cd-error-panel>
+<cd-alert-panel type="error"
+                *ngIf="loadingError"
+                i18n>Failed to load data.</cd-alert-panel>
 
 <div class="dataTables_wrapper">
   <div class="dataTables_header clearfix"
