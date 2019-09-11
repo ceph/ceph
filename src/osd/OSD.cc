@@ -180,6 +180,7 @@
 #undef dout_prefix
 #define dout_prefix _prefix(_dout, whoami, get_osdmap_epoch())
 
+using namespace ceph::osd::scheduler;
 
 static ostream& _prefix(std::ostream* _dout, int whoami, epoch_t epoch) {
   return *_dout << "osd." << whoami << " " << epoch << " ";
@@ -1673,12 +1674,12 @@ void OSDService::handle_misdirected_op(PG *pg, OpRequestRef op)
 	       << " in e" << m->get_map_epoch() << "/" << osdmap->get_epoch();
 }
 
-void OSDService::enqueue_back(OpQueueItem&& qi)
+void OSDService::enqueue_back(OpSchedulerItem&& qi)
 {
   osd->op_shardedwq.queue(std::move(qi));
 }
 
-void OSDService::enqueue_front(OpQueueItem&& qi)
+void OSDService::enqueue_front(OpSchedulerItem&& qi)
 {
   osd->op_shardedwq.queue_front(std::move(qi));
 }
@@ -1689,8 +1690,8 @@ void OSDService::queue_recovery_context(
 {
   epoch_t e = get_osdmap_epoch();
   enqueue_back(
-    OpQueueItem(
-      unique_ptr<OpQueueItem::OpQueueable>(
+    OpSchedulerItem(
+      unique_ptr<OpSchedulerItem::OpQueueable>(
 	new PGRecoveryContext(pg->get_pgid(), c, e)),
       cct->_conf->osd_recovery_cost,
       cct->_conf->osd_recovery_priority,
@@ -1703,8 +1704,8 @@ void OSDService::queue_for_snap_trim(PG *pg)
 {
   dout(10) << "queueing " << *pg << " for snaptrim" << dendl;
   enqueue_back(
-    OpQueueItem(
-      unique_ptr<OpQueueItem::OpQueueable>(
+    OpSchedulerItem(
+      unique_ptr<OpSchedulerItem::OpQueueable>(
 	new PGSnapTrim(pg->get_pgid(), pg->get_osdmap_epoch())),
       cct->_conf->osd_snap_trim_cost,
       cct->_conf->osd_snap_trim_priority,
@@ -1721,8 +1722,8 @@ void OSDService::queue_for_scrub(PG *pg, bool with_high_priority)
   }
   const auto epoch = pg->get_osdmap_epoch();
   enqueue_back(
-    OpQueueItem(
-      unique_ptr<OpQueueItem::OpQueueable>(new PGScrub(pg->get_pgid(), epoch)),
+    OpSchedulerItem(
+      unique_ptr<OpSchedulerItem::OpQueueable>(new PGScrub(pg->get_pgid(), epoch)),
       cct->_conf->osd_scrub_cost,
       scrub_queue_priority,
       ceph_clock_now(),
@@ -1734,8 +1735,8 @@ void OSDService::queue_for_pg_delete(spg_t pgid, epoch_t e)
 {
   dout(10) << __func__ << " on " << pgid << " e " << e  << dendl;
   enqueue_back(
-    OpQueueItem(
-      unique_ptr<OpQueueItem::OpQueueable>(
+    OpSchedulerItem(
+      unique_ptr<OpSchedulerItem::OpQueueable>(
 	new PGDelete(pgid, e)),
       cct->_conf->osd_pg_delete_cost,
       cct->_conf->osd_pg_delete_priority,
@@ -1888,8 +1889,8 @@ void OSDService::_queue_for_recovery(
 {
   ceph_assert(ceph_mutex_is_locked_by_me(recovery_lock));
   enqueue_back(
-    OpQueueItem(
-      unique_ptr<OpQueueItem::OpQueueable>(
+    OpSchedulerItem(
+      unique_ptr<OpSchedulerItem::OpQueueable>(
 	new PGRecovery(
 	  p.second->get_pgid(), p.first, reserved_pushes)),
       cct->_conf->osd_recovery_cost,
@@ -2148,8 +2149,6 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
   op_tracker(cct, cct->_conf->osd_enable_op_tracker,
                   cct->_conf->osd_num_op_tracker_shard),
   test_ops_hook(NULL),
-  op_queue(get_io_queue()),
-  op_prio_cutoff(get_io_prio_cut()),
   op_shardedwq(
     this,
     cct->_conf->osd_op_thread_timeout,
@@ -2199,10 +2198,7 @@ OSD::OSD(CephContext *cct_, ObjectStore *store_,
     OSDShard *one_shard = new OSDShard(
       i,
       cct,
-      this,
-      cct->_conf->osd_op_pq_max_tokens_per_priority,
-      cct->_conf->osd_op_pq_min_cost,
-      op_queue);
+      this);
     shards.push_back(one_shard);
   }
 }
@@ -3453,8 +3449,6 @@ int OSD::init()
   load_pgs();
 
   dout(2) << "superblock: I am osd." << superblock.whoami << dendl;
-  dout(0) << "using " << op_queue << " op queue with priority op cut off at " <<
-    op_prio_cutoff << "." << dendl;
 
   create_logger();
 
@@ -9533,8 +9527,8 @@ void OSD::enqueue_op(spg_t pg, OpRequestRef&& op, epoch_t epoch)
   op->mark_queued_for_pg();
   logger->tinc(l_osd_op_before_queue_op_lat, latency);
   op_shardedwq.queue(
-    OpQueueItem(
-      unique_ptr<OpQueueItem::OpQueueable>(new PGOpItem(pg, std::move(op))),
+    OpSchedulerItem(
+      unique_ptr<OpSchedulerItem::OpQueueable>(new PGOpItem(pg, std::move(op))),
       cost, priority, stamp, owner, epoch));
 }
 
@@ -9542,8 +9536,8 @@ void OSD::enqueue_peering_evt(spg_t pgid, PGPeeringEventRef evt)
 {
   dout(15) << __func__ << " " << pgid << " " << evt->get_desc() << dendl;
   op_shardedwq.queue(
-    OpQueueItem(
-      unique_ptr<OpQueueItem::OpQueueable>(new PGPeeringItem(pgid, evt)),
+    OpSchedulerItem(
+      unique_ptr<OpSchedulerItem::OpQueueable>(new PGPeeringItem(pgid, evt)),
       10,
       cct->_conf->osd_peering_op_priority,
       utime_t(),
@@ -9555,8 +9549,8 @@ void OSD::enqueue_peering_evt_front(spg_t pgid, PGPeeringEventRef evt)
 {
   dout(15) << __func__ << " " << pgid << " " << evt->get_desc() << dendl;
   op_shardedwq.queue_front(
-    OpQueueItem(
-      unique_ptr<OpQueueItem::OpQueueable>(new PGPeeringItem(pgid, evt)),
+    OpSchedulerItem(
+      unique_ptr<OpSchedulerItem::OpQueueable>(new PGPeeringItem(pgid, evt)),
       10,
       cct->_conf->osd_peering_op_priority,
       utime_t(),
@@ -10272,13 +10266,13 @@ void OSDShard::_wake_pg_slot(
   for (auto i = slot->to_process.rbegin();
        i != slot->to_process.rend();
        ++i) {
-    _enqueue_front(std::move(*i), osd->op_prio_cutoff);
+    scheduler->enqueue_front(std::move(*i));
   }
   slot->to_process.clear();
   for (auto i = slot->waiting.rbegin();
        i != slot->waiting.rend();
        ++i) {
-    _enqueue_front(std::move(*i), osd->op_prio_cutoff);
+    scheduler->enqueue_front(std::move(*i));
   }
   slot->waiting.clear();
   for (auto i = slot->waiting_peering.rbegin();
@@ -10288,7 +10282,7 @@ void OSDShard::_wake_pg_slot(
     // items are waiting for maps we don't have yet.  FIXME, maybe,
     // someday, if we decide this inefficiency matters
     for (auto j = i->second.rbegin(); j != i->second.rend(); ++j) {
-      _enqueue_front(std::move(*j), osd->op_prio_cutoff);
+      scheduler->enqueue_front(std::move(*j));
     }
   }
   slot->waiting_peering.clear();
@@ -10480,6 +10474,26 @@ void OSDShard::unprime_split_children(spg_t parent, unsigned old_pg_num)
   }
 }
 
+OSDShard::OSDShard(
+  int id,
+  CephContext *cct,
+  OSD *osd)
+  : shard_id(id),
+    cct(cct),
+    osd(osd),
+    shard_name(string("OSDShard.") + stringify(id)),
+    sdata_wait_lock_name(shard_name + "::sdata_wait_lock"),
+    sdata_wait_lock{make_mutex(sdata_wait_lock_name)},
+    osdmap_lock_name(shard_name + "::osdmap_lock"),
+    osdmap_lock{make_mutex(osdmap_lock_name)},
+    shard_lock_name(shard_name + "::shard_lock"),
+    shard_lock{make_mutex(shard_lock_name)},
+    scheduler(ceph::osd::scheduler::make_scheduler(cct)),
+    context_queue(sdata_wait_lock, sdata_cond)
+{
+  dout(0) << "using op scheduler " << *scheduler << dendl;
+}
+
 
 // =============================================================
 
@@ -10491,7 +10505,7 @@ void OSDShard::unprime_split_children(spg_t parent, unsigned old_pg_num)
 void OSD::ShardedOpWQ::_add_slot_waiter(
   spg_t pgid,
   OSDShardPGSlot *slot,
-  OpQueueItem&& qi)
+  OpSchedulerItem&& qi)
 {
   if (qi.is_peering()) {
     dout(20) << __func__ << " " << pgid
@@ -10525,7 +10539,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
 
   // peek at spg_t
   sdata->shard_lock.lock();
-  if (sdata->pqueue->empty() &&
+  if (sdata->scheduler->empty() &&
       (!is_smallest_thread_index || sdata->context_queue.empty())) {
     std::unique_lock wait_lock{sdata->sdata_wait_lock};
     if (is_smallest_thread_index && !sdata->context_queue.empty()) {
@@ -10538,7 +10552,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
       sdata->sdata_cond.wait(wait_lock);
       wait_lock.unlock();
       sdata->shard_lock.lock();
-      if (sdata->pqueue->empty() &&
+      if (sdata->scheduler->empty() &&
          !(is_smallest_thread_index && !sdata->context_queue.empty())) {
 	sdata->shard_lock.unlock();
 	return;
@@ -10558,7 +10572,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     sdata->context_queue.move_to(oncommits);
   }
 
-  if (sdata->pqueue->empty()) {
+  if (sdata->scheduler->empty()) {
     if (osd->is_stopping()) {
       sdata->shard_lock.unlock();
       for (auto c : oncommits) {
@@ -10572,7 +10586,7 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
     return;
   }
 
-  OpQueueItem item = sdata->pqueue->dequeue();
+  OpSchedulerItem item = sdata->scheduler->dequeue();
   if (osd->is_stopping()) {
     sdata->shard_lock.unlock();
     for (auto c : oncommits) {
@@ -10805,25 +10819,21 @@ void OSD::ShardedOpWQ::_process(uint32_t thread_index, heartbeat_handle_d *hb)
   handle_oncommits(oncommits);
 }
 
-void OSD::ShardedOpWQ::_enqueue(OpQueueItem&& item) {
+void OSD::ShardedOpWQ::_enqueue(OpSchedulerItem&& item) {
   uint32_t shard_index =
     item.get_ordering_token().hash_to_shard(osd->shards.size());
 
+  dout(20) << __func__ << " " << item << dendl;
+
   OSDShard* sdata = osd->shards[shard_index];
   assert (NULL != sdata);
-  unsigned priority = item.get_priority();
-  unsigned cost = item.get_cost();
-  sdata->shard_lock.lock();
 
-  dout(20) << __func__ << " " << item << dendl;
-  bool empty = sdata->pqueue->empty();
-  if (priority >= osd->op_prio_cutoff)
-    sdata->pqueue->enqueue_strict(
-      item.get_owner(), priority, std::move(item));
-  else
-    sdata->pqueue->enqueue(
-      item.get_owner(), priority, cost, std::move(item));
-  sdata->shard_lock.unlock();
+  bool empty = true;
+  {
+    std::lock_guard l{sdata->shard_lock};
+    empty = sdata->scheduler->empty();
+    sdata->scheduler->enqueue(std::move(item));
+  }
 
   if (empty) {
     std::lock_guard l{sdata->sdata_wait_lock};
@@ -10831,7 +10841,7 @@ void OSD::ShardedOpWQ::_enqueue(OpQueueItem&& item) {
   }
 }
 
-void OSD::ShardedOpWQ::_enqueue_front(OpQueueItem&& item)
+void OSD::ShardedOpWQ::_enqueue_front(OpSchedulerItem&& item)
 {
   auto shard_index = item.get_ordering_token().hash_to_shard(osd->shards.size());
   auto& sdata = osd->shards[shard_index];
@@ -10841,7 +10851,7 @@ void OSD::ShardedOpWQ::_enqueue_front(OpQueueItem&& item)
   if (p != sdata->pg_slots.end() &&
       !p->second->to_process.empty()) {
     // we may be racing with _process, which has dequeued a new item
-    // from pqueue, put it on to_process, and is now busy taking the
+    // from scheduler, put it on to_process, and is now busy taking the
     // pg lock.  ensure this old requeued item is ordered before any
     // such newer item in to_process.
     p->second->to_process.push_front(std::move(item));
@@ -10853,7 +10863,7 @@ void OSD::ShardedOpWQ::_enqueue_front(OpQueueItem&& item)
   } else {
     dout(20) << __func__ << " " << item << dendl;
   }
-  sdata->_enqueue_front(std::move(item), osd->op_prio_cutoff);
+  sdata->scheduler->enqueue_front(std::move(item));
   sdata->shard_lock.unlock();
   std::lock_guard l{sdata->sdata_wait_lock};
   sdata->sdata_cond.notify_one();
@@ -10890,22 +10900,3 @@ int heap(CephContext& cct, const cmdmap_t& cmdmap, Formatter& f,
 }
  
 }} // namespace ceph::osd_cmds
-
-
-std::ostream& operator<<(std::ostream& out, const io_queue& q) {
-  switch(q) {
-  case io_queue::prioritized:
-    out << "prioritized";
-    break;
-  case io_queue::weightedpriority:
-    out << "weightedpriority";
-    break;
-  case io_queue::mclock_opclass:
-    out << "mclock_opclass";
-    break;
-  case io_queue::mclock_client:
-    out << "mclock_client";
-    break;
-  }
-  return out;
-}

@@ -63,6 +63,9 @@ public:
   // Formatted output of the queue
   virtual void dump(ceph::Formatter *f) const = 0;
 
+  // Human readable brief description of queue and relevant parameters
+  virtual void print(std::ostream &f) const = 0;
+
   // Don't leak resources on destruction
   virtual ~OpQueue() {};
 };

@@ -19,13 +19,14 @@
 
 #include "dmclock/src/dmclock_server.h"
 #include "osd/OpRequest.h"
-#include "osd/OpQueueItem.h"
+#include "osd/scheduler/OpSchedulerItem.h"
 
 
 namespace ceph {
   namespace mclock {
 
-    using op_item_type_t = OpQueueItem::OpQueueable::op_type_t;
+    using op_item_type_t =
+      ceph::osd::scheduler::OpSchedulerItem::OpQueueable::op_type_t;
     
     enum class osd_op_type_t {
       client_op, osd_rep_op, bg_snaptrim, bg_recovery, bg_scrub, bg_pg_delete,
@@ -93,7 +94,8 @@ namespace ceph {
 	}
       }
 
-      osd_op_type_t osd_op_type(const OpQueueItem&) const;
+      osd_op_type_t osd_op_type(
+	const ceph::osd::scheduler::OpSchedulerItem&) const;
 
       // used for debugging since faster implementation can be done
       // with rep_op_msg_bitmap
