@@ -1593,8 +1593,8 @@ test_v2_lossy_early_connect_fault(FailoverTest& test) {
           policy_t::lossy_client,
           policy_t::stateless_server,
           [&test] (FailoverSuite& suite) {
-        return seastar::futurize_apply([&test] {
-          return test.send_bidirectional();
+        return seastar::futurize_apply([&suite] {
+          return suite.send_peer();
         }).then([&suite] {
           return suite.connect_peer();
         }).then([&suite] {
@@ -1697,7 +1697,7 @@ test_v2_lossy_early_accept_fault(FailoverTest& test) {
           policy_t::lossy_client,
           [&test] (FailoverSuite& suite) {
         return seastar::futurize_apply([&test] {
-          return test.send_bidirectional();
+          return test.peer_send_me();
         }).then([&test] {
           return test.peer_connect_me();
         }).then([&suite] {
@@ -1733,7 +1733,7 @@ test_v2_lossy_accept_fault(FailoverTest& test) {
           policy_t::lossy_client,
           [&test] (FailoverSuite& suite) {
         return seastar::futurize_apply([&test] {
-          return test.send_bidirectional();
+          return test.peer_send_me();
         }).then([&test] {
           return test.peer_connect_me();
         }).then([&suite] {
