@@ -68,6 +68,7 @@ def fakedevice(factory):
             is_lvm_member=True,
         )
         params.update(dict(kw))
+        params['lvm_size'] = disk.Size(b=params['sys_api'].get("size", 0))
         return factory(**params)
     return apply
 
