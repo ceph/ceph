@@ -1304,6 +1304,7 @@ inline namespace v14_2_0 {
     Rados();
     explicit Rados(IoCtx& ioctx);
     ~Rados();
+    static void from_rados_t(rados_t cluster, Rados &rados);
 
     int init(const char * const id);
     int init2(const char * const name, const char * const clustername,

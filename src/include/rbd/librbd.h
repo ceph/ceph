@@ -430,10 +430,16 @@ CEPH_RBD_API void rbd_migration_status_cleanup(
     rbd_image_migration_status_t *status);
 
 /* pool mirroring */
+CEPH_RBD_API int rbd_mirror_site_name_get(rados_t cluster,
+                                          char *name, size_t *max_len);
+CEPH_RBD_API int rbd_mirror_site_name_set(rados_t cluster,
+                                          const char *name);
+
 CEPH_RBD_API int rbd_mirror_mode_get(rados_ioctx_t io_ctx,
                                      rbd_mirror_mode_t *mirror_mode);
 CEPH_RBD_API int rbd_mirror_mode_set(rados_ioctx_t io_ctx,
                                      rbd_mirror_mode_t mirror_mode);
+
 CEPH_RBD_API int rbd_mirror_peer_add(rados_ioctx_t io_ctx,
                                      char *uuid, size_t uuid_max_length,
                                      const char *cluster_name,
