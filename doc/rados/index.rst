@@ -10,7 +10,7 @@ maintains a master copy of the cluster map. A Ceph Storage Cluster may contain
 thousands of storage nodes. A minimal system will have at least one 
 Ceph Monitor and two Ceph OSD Daemons for data replication. 
 
-The Ceph Filesystem, Ceph Object Storage and Ceph Block Devices read data from
+The Ceph File System, Ceph Object Storage and Ceph Block Devices read data from
 and write data to the Ceph Storage Cluster.
 
 .. raw:: html
@@ -58,7 +58,7 @@ your cluster.
 	</td><td><h3>APIs</h3>
 
 Most Ceph deployments use `Ceph Block Devices`_, `Ceph Object Storage`_ and/or the
-`Ceph Filesystem`_. You  may also develop applications that talk directly to
+`Ceph File System`_. You  may also develop applications that talk directly to
 the Ceph Storage Cluster.
 
 .. toctree::
@@ -71,6 +71,6 @@ the Ceph Storage Cluster.
 	</td></tr></tbody></table>
 
 .. _Ceph Block Devices: ../rbd/
-.. _Ceph Filesystem: ../cephfs/
+.. _Ceph File System: ../cephfs/
 .. _Ceph Object Storage: ../radosgw/
 .. _Deployment: ../rados/deployment/

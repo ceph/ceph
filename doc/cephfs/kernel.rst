@@ -19,7 +19,7 @@ approach reads the secret from a file. For example::
 
 	sudo mount -t ceph 192.168.0.1:6789:/ /mnt/mycephfs -o name=admin,secretfile=/etc/ceph/admin.secret
 	
-If you have more than one filesystem, specify which one to mount using
+If you have more than one file system, specify which one to mount using
 the ``mds_namespace`` option, e.g. ``-o mds_namespace=myfs``.
     
 See `User Management`_ for details on cephx.

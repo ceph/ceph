@@ -33,7 +33,7 @@ Ceph's block devices deliver high performance with infinite scalability to
 cloud-based computing systems like `OpenStack`_ and `CloudStack`_ that rely on
 libvirt and QEMU to integrate with Ceph block devices. You can use the same cluster
 to operate the :ref:`Ceph RADOS Gateway <object-gateway>`, the
-:ref:`CephFS filesystem <ceph-filesystem>`, and Ceph block devices simultaneously.
+:ref:`Ceph File System <ceph-file-system>`, and Ceph block devices simultaneously.
 
 .. important:: To use Ceph Block Devices, you must have access to a running
    Ceph cluster.

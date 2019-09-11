@@ -86,7 +86,7 @@ main components.
 - **Ceph Object Storage:** The Ceph Object Storage documentation resides under
   the ``doc/radosgw`` directory.
 
-- **Ceph Filesystem:** The Ceph Filesystem documentation resides under the 
+- **Ceph File System:** The Ceph File System documentation resides under the 
   ``doc/cephfs`` directory.
   
 - **Installation (Quick):** Quick start documentation resides under the

@@ -6,7 +6,7 @@ Disaster recovery
 Metadata damage and repair
 --------------------------
 
-If a filesystem has inconsistent or missing metadata, it is considered
+If a file system has inconsistent or missing metadata, it is considered
 *damaged*.  You may find out about damage from a health message, or in some
 unfortunate cases from an assertion in a running MDS daemon.
 
@@ -14,7 +14,7 @@ Metadata damage can result either from data loss in the underlying RADOS
 layer (e.g. multiple disk failures that lose all copies of a PG), or from
 software bugs.
 
-CephFS includes some tools that may be able to recover a damaged filesystem,
+CephFS includes some tools that may be able to recover a damaged file system,
 but to use them safely requires a solid understanding of CephFS internals.
 The documentation for these potentially dangerous operations is on a
 separate page: :ref:`disaster-recovery-experts`.
@@ -22,7 +22,7 @@ separate page: :ref:`disaster-recovery-experts`.
 Data pool damage (files affected by lost data PGs)
 --------------------------------------------------
 
-If a PG is lost in a *data* pool, then the filesystem will continue
+If a PG is lost in a *data* pool, then the file system will continue
 to operate normally, but some parts of some files will simply
 be missing (reads will return zeros).
 
@@ -56,6 +56,6 @@ The output will be a list of paths to potentially damaged files, one
 per line.
 
 Note that this command acts as a normal CephFS client to find all the
-files in the filesystem and read their layouts, so the MDS must be
+files in the file system and read their layouts, so the MDS must be
 up and running.
 

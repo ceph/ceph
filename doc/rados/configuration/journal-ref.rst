@@ -8,19 +8,19 @@ Ceph OSDs use a journal for two reasons: speed and consistency.
 
 - **Speed:** The journal enables the Ceph OSD Daemon to commit small writes 
   quickly. Ceph writes small, random i/o to the journal sequentially, which 
-  tends to speed up bursty workloads by allowing the backing filesystem more 
+  tends to speed up bursty workloads by allowing the backing file system more 
   time to coalesce writes. The Ceph OSD Daemon's journal, however, can lead 
   to spiky performance with short spurts of high-speed writes followed by 
-  periods without any write progress as the filesystem catches up to the 
+  periods without any write progress as the file system catches up to the 
   journal.
 
-- **Consistency:** Ceph OSD Daemons require a filesystem interface that 
+- **Consistency:** Ceph OSD Daemons require a file system interface that 
   guarantees atomic compound operations. Ceph OSD Daemons write a description 
-  of the operation to the journal and apply the operation to the filesystem. 
+  of the operation to the journal and apply the operation to the file system. 
   This enables atomic updates to an object (for example, placement group 
   metadata). Every few seconds--between ``filestore max sync interval`` and
   ``filestore min sync interval``--the Ceph OSD Daemon stops writes and 
-  synchronizes the journal with the filesystem, allowing Ceph OSD Daemons to 
+  synchronizes the journal with the file system, allowing Ceph OSD Daemons to 
   trim operations from the journal and reuse the space. On failure, Ceph 
   OSD Daemons replay the journal starting after the last synchronization 
   operation.

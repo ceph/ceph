@@ -289,7 +289,7 @@ detail of the C++ Ceph code) of the mgr daemon.
 Always use this specially constructed librados instance instead of
 constructing one by hand.
 
-Similarly, if you are using libcephfs to access the filesystem, then
+Similarly, if you are using libcephfs to access the file system, then
 use the libcephfs ``create_with_rados`` to construct it from the
 ``MgrModule.rados`` librados instance, and thereby inherit the correct context.
 
