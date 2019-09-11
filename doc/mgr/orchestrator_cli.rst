@@ -286,7 +286,7 @@ This is an overview of the current implementation status of the orchestrators.
  Command                             Ansible   Rook   DeepSea   SSH
 =================================== ========= ====== ========= =====
  host add                            ✔️         ⚪       ⚪         ✔️
- host ls                             ✔️         ⚪       ⚪         ✔️
+ host ls                             ✔️         ✔️       ⚪         ✔️
  host rm                             ✔️         ⚪       ⚪         ✔️
  mgr update                          ⚪         ⚪       ⚪         ✔️
  mon update                          ⚪         ✔️       ⚪         ✔️
@@ -308,14 +308,14 @@ This is an overview of the current implementation status of the orchestrators.
  nfs {stop,start,reload}             ⚪         ⚪       ⚪         ⚪
  nfs add                             ⚪         ✔️       ⚪         ⚪
  nfs rm                              ⚪         ✔️       ⚪         ⚪
- nfs update                          ⚪         ⚪       ⚪         ⚪
+ nfs update                          ⚪         ✔️       ⚪         ⚪
  rbd-mirror {stop,start,reload}      ⚪         ⚪       ⚪         ⚪
  rbd-mirror add                      ⚪         ⚪       ⚪         ⚪
  rbd-mirror rm                       ⚪         ⚪       ⚪         ⚪
  rbd-mirror update                   ⚪         ⚪       ⚪         ⚪
  rgw {stop,start,reload}             ⚪         ⚪       ⚪         ⚪
- rgw add                             ⚪         ✔️       ⚪         ⚪
- rgw rm                              ⚪         ✔️       ⚪         ⚪
+ rgw add                             ✔️         ✔️       ⚪         ⚪
+ rgw rm                              ✔️         ✔️       ⚪         ⚪
  rgw update                          ⚪         ⚪       ⚪         ⚪
 =================================== ========= ====== ========= =====
 
