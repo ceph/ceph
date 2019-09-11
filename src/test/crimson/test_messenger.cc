@@ -2494,6 +2494,78 @@ test_v2_racing_connect_lose(FailoverTest& test) {
 }
 
 seastar::future<>
+test_v2_racing_connect_reconnect_lose(FailoverTest& test) {
+  TestInterceptor interceptor;
+  interceptor.make_fault({Tag::SERVER_IDENT, bp_type_t::READ});
+  interceptor.make_block({Tag::CLIENT_IDENT, bp_type_t::WRITE}, 2);
+  return test.run_suite("test_v2_racing_connect_reconnect_lose",
+                        interceptor,
+                        policy_t::lossless_peer,
+                        policy_t::lossless_peer,
+                        [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&suite] {
+      return suite.send_peer();
+    }).then([&suite] {
+      return suite.connect_peer();
+    }).then([&suite] {
+      return suite.wait_blocked();
+    }).then([&test] {
+      return test.peer_send_me();
+    }).then([&suite] {
+      return suite.wait_replaced(1);
+    }).then([&suite] {
+      suite.unblock();
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(2, 2, 0, 0);
+      results[0].assert_accept(0, 0, 0, 1);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::replaced);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 1, 1, 0);
+      results[1].assert_reset(0, 0);
+    });
+  });
+}
+
+seastar::future<>
+test_v2_racing_connect_reconnect_win(FailoverTest& test) {
+  TestInterceptor interceptor;
+  interceptor.make_fault({Tag::SERVER_IDENT, bp_type_t::READ});
+  interceptor.make_block({Tag::SESSION_RECONNECT, bp_type_t::READ});
+  return test.run_suite("test_v2_racing_connect_reconnect_win",
+                        interceptor,
+                        policy_t::lossless_peer,
+                        policy_t::lossless_peer,
+                        [&test] (FailoverSuite& suite) {
+    return seastar::futurize_apply([&test] {
+      return test.peer_send_me();
+    }).then([&suite] {
+      return suite.connect_peer();
+    }).then([&suite] {
+      return suite.wait_blocked();
+    }).then([&suite] {
+      return suite.send_peer();
+    }).then([&suite] {
+      return suite.wait_established();
+    }).then([&suite] {
+      suite.unblock();
+      return suite.wait_results(2);
+    }).then([] (ConnResults& results) {
+      results[0].assert_state_at(conn_state_t::established);
+      results[0].assert_connect(2, 2, 0, 1);
+      results[0].assert_accept(0, 0, 0, 0);
+      results[0].assert_reset(0, 0);
+      results[1].assert_state_at(conn_state_t::closed);
+      results[1].assert_connect(0, 0, 0, 0);
+      results[1].assert_accept(1, 0, 1, 0);
+      results[1].assert_reset(0, 0);
+    });
+  });
+}
+
+seastar::future<>
 test_v2_protocol(entity_addr_t test_addr = entity_addr_t(),
                  entity_addr_t cmd_peer_addr = entity_addr_t()) {
   if (test_addr == entity_addr_t() || cmd_peer_addr == entity_addr_t()) {
@@ -2568,6 +2640,10 @@ test_v2_protocol(entity_addr_t test_addr = entity_addr_t(),
           return test_v2_racing_reconnect_win(*test);
         });
       }
+    }).then([test] {
+      return test_v2_racing_connect_reconnect_win(*test);
+    }).then([test] {
+      return test_v2_racing_connect_reconnect_lose(*test);
     }).finally([test] {
       return test->shutdown().then([test] {});
     });
