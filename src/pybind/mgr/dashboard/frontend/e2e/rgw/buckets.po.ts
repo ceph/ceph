@@ -1,4 +1,4 @@
-import { $, by, element } from 'protractor';
+import { by, element } from 'protractor';
 import { PageHelper } from '../page-helper.po';
 
 const pages = {
@@ -34,12 +34,15 @@ export class BucketsPageHelper extends PageHelper {
     const createButton = element(by.cssContainingText('button', 'Create Bucket'));
     await createButton.click();
 
-    return this.waitPresence(this.getTableCell(name), 'Timed out waiting for bucket creation');
+    return this.waitPresence(
+      this.getFirstTableCellWithText(name),
+      'Timed out waiting for bucket creation'
+    );
   }
 
   @PageHelper.restrictTo(pages.index)
   async edit(name: string, new_owner: string) {
-    await this.getTableCell(name).click(); // click on the bucket you want to edit in the table
+    await this.getFirstTableCellWithText(name).click(); // click on the bucket you want to edit in the table
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
     await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit');
     await expect(element(by.css('input[name=placement-target]')).getAttribute('value')).toBe(
@@ -49,36 +52,17 @@ export class BucketsPageHelper extends PageHelper {
     await element(by.cssContainingText('select[name=owner] option', new_owner)).click(); // select the new user
     await element(by.cssContainingText('button', 'Edit Bucket')).click();
 
-    // wait to be back on buckets page with table visible
-    await this.waitClickable(
-      this.getTableCell(name),
+    // wait to be back on buckets page with table visible and click
+    await this.waitClickableAndClick(
+      this.getFirstTableCellWithText(name),
       'Could not return to buckets page and load table after editing bucket'
     );
 
-    // click on edited bucket and check its details table for edited owner field
-    const promise = await this.getTableCell(name).click();
+    // check its details table for edited owner field
     const element_details_table = element
       .all(by.css('.table.table-striped.table-bordered'))
       .first();
-    await expect(element_details_table.getText()).toMatch(new_owner);
-    return promise;
-  }
-
-  @PageHelper.restrictTo(pages.index)
-  async delete(name) {
-    // wait for table to load
-    await this.waitClickable(this.getTableCell(name));
-
-    await this.getTableCell(name).click(); // click on the bucket you want to delete in the table
-    await $('.table-actions button.dropdown-toggle').click(); // click toggle menu
-    await $('li.delete a').click(); // click delete
-    // wait for pop-up to be visible (checks for title of pop-up)
-    await this.waitVisibility($('.modal-title.float-left'));
-    await this.waitVisibility($('.custom-control-label'));
-    await $('.custom-control-label').click();
-    await element(by.cssContainingText('button', 'Delete bucket')).click();
-    await this.navigateTo();
-    return this.waitStaleness(this.getTableCell(name));
+    return expect(element_details_table.getText()).toMatch(new_owner);
   }
 
   async testInvalidCreate() {
@@ -153,11 +137,10 @@ export class BucketsPageHelper extends PageHelper {
   async testInvalidEdit(name) {
     await this.navigateTo();
 
-    await this.waitClickable(
-      this.getTableCell(name),
+    await this.waitClickableAndClick(
+      this.getFirstTableCellWithText(name),
       'Failed waiting for bucket to be present in table'
     ); // wait for table to load
-    await this.getTableCell(name).click(); // click on the bucket you want to edit in the table
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
     await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit');
@@ -165,8 +148,7 @@ export class BucketsPageHelper extends PageHelper {
     // Chooses 'Select a user' rather than a valid owner on Edit Bucket page
     // and checks if it's an invalid input
     const ownerDropDown = element(by.id('owner'));
-    await this.waitClickable(ownerDropDown);
-    await ownerDropDown.click(); // Clicks the Owner drop down on the Create Bucket page
+    await this.waitClickableAndClick(ownerDropDown);
 
     // select the first option, which is invalid because it is a placeholder
     await element(by.cssContainingText('select[name=owner] option', 'Select a user')).click();

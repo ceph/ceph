@@ -29,14 +29,13 @@ export class UsersPageHelper extends PageHelper {
 
     // Click the create button and wait for user to be made
     await element(by.cssContainingText('button', 'Create User')).click();
-    await this.waitPresence(this.getTableCell(username));
+    await this.waitPresence(this.getFirstTableCellWithText(username));
   }
 
   async edit(name, new_fullname, new_email, new_maxbuckets) {
     await this.navigateTo();
 
-    await this.waitClickable(this.getTableCell(name)); // wait for table to load
-    await this.getTableCell(name).click(); // click on the bucket you want to edit in the table
+    await this.waitClickableAndClick(this.getFirstTableCellWithText(name)); // wait for table to load and click
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
     await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit');
@@ -58,31 +57,11 @@ export class UsersPageHelper extends PageHelper {
 
     const editbutton = element(by.cssContainingText('button', 'Edit User'));
     await editbutton.click();
-    await this.waitClickable(this.getTableCell(name));
     // Click the user and check its details table for updated content
-    await this.getTableCell(name).click();
+    await this.waitClickableAndClick(this.getFirstTableCellWithText(name));
     await expect($('.active.tab-pane').getText()).toMatch(new_fullname); // check full name was changed
     await expect($('.active.tab-pane').getText()).toMatch(new_email); // check email was changed
     await expect($('.active.tab-pane').getText()).toMatch(new_maxbuckets); // check max buckets was changed
-  }
-
-  async delete(name) {
-    await this.navigateTo();
-
-    // wait for table to load
-    const my_user = this.getFirstTableCellWithText(name);
-    await this.waitClickable(my_user);
-
-    await my_user.click(); // click on the user you want to delete in the table
-    await $('.table-actions button.dropdown-toggle').click(); // click toggle menu
-    await $('li.delete a').click(); // click delete
-
-    // wait for pop-up to be visible (checks for title of pop-up)
-    await this.waitVisibility($('.modal-title.float-left'));
-    await this.waitVisibility($('.custom-control-label'));
-    await $('.custom-control-label').click(); // click confirmation checkbox
-    await element(by.cssContainingText('button', 'Delete user')).click();
-    await this.waitStaleness(this.getFirstTableCellWithText(name));
   }
 
   async invalidCreate() {
@@ -100,9 +79,6 @@ export class UsersPageHelper extends PageHelper {
     // Try to give user already taken name. Should make field invalid.
     await username_field.clear();
     await username_field.sendKeys(uname);
-    await this.waitFn(
-      async () => !(await username_field.getAttribute('class')).includes('ng-pending')
-    );
     await expect(username_field.getAttribute('class')).toContain('ng-invalid');
     await element(by.id('display_name')).click(); // trigger validation check
     await expect(element(by.css('#uid + .invalid-feedback')).getText()).toMatch(
@@ -151,6 +127,7 @@ export class UsersPageHelper extends PageHelper {
       'The entered value must be >= 0.'
     );
 
+    await this.navigateTo();
     await this.delete(uname);
   }
 
@@ -161,8 +138,8 @@ export class UsersPageHelper extends PageHelper {
 
     await this.navigateTo();
 
-    await this.waitClickable(this.getTableCell(uname)); // wait for table to load
-    await this.getTableCell(uname).click(); // click on the bucket you want to edit in the table
+    // wait for table to load and click on the bucket you want to edit in the table
+    await this.waitClickableAndClick(this.getFirstTableCellWithText(uname));
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
     await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit');
@@ -201,6 +178,7 @@ export class UsersPageHelper extends PageHelper {
       'The entered value must be >= 0.'
     );
 
+    await this.navigateTo();
     await this.delete(uname);
   }
 }

@@ -1,4 +1,3 @@
-import { Helper } from '../helper.po';
 import { IscsiPageHelper } from './iscsi.po';
 
 describe('Iscsi Page', () => {
@@ -9,7 +8,7 @@ describe('Iscsi Page', () => {
   });
 
   afterEach(async () => {
-    await Helper.checkConsole();
+    await IscsiPageHelper.checkConsole();
   });
 
   describe('breadcrumb test', () => {

@@ -1,4 +1,3 @@
-import { Helper } from '../helper.po';
 import { OSDsPageHelper } from './osds.po';
 
 describe('OSDs page', () => {
@@ -9,7 +8,7 @@ describe('OSDs page', () => {
   });
 
   afterEach(async () => {
-    await Helper.checkConsole();
+    await OSDsPageHelper.checkConsole();
   });
 
   describe('breadcrumb and tab tests', () => {

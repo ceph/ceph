@@ -1,4 +1,3 @@
-import { Helper } from '../helper.po';
 import { AlertsPageHelper } from './alerts.po';
 
 describe('Alerts page', () => {
@@ -9,7 +8,7 @@ describe('Alerts page', () => {
   });
 
   afterEach(async () => {
-    await Helper.checkConsole();
+    await AlertsPageHelper.checkConsole();
   });
 
   describe('breadcrumb test', () => {

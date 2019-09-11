@@ -1,5 +1,4 @@
 import { $ } from 'protractor';
-import { Helper } from '../helper.po';
 import { BucketsPageHelper } from './buckets.po';
 
 describe('RGW buckets page', () => {
@@ -10,7 +9,7 @@ describe('RGW buckets page', () => {
   });
 
   afterEach(async () => {
-    await Helper.checkConsole();
+    await BucketsPageHelper.checkConsole();
   });
 
   it('should open and show breadcrumb', async () => {
@@ -25,7 +24,7 @@ describe('RGW buckets page', () => {
       '0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef',
       'default-placement'
     );
-    await expect(buckets.getTableCell('000test').isPresent()).toBe(true);
+    await expect(buckets.getFirstTableCellWithText('000test').isPresent()).toBe(true);
   });
 
   it('should edit bucket', async () => {
@@ -37,7 +36,6 @@ describe('RGW buckets page', () => {
   it('should delete bucket', async () => {
     await buckets.navigateTo();
     await buckets.delete('000test');
-    await expect(buckets.getTableCell('000test').isPresent()).toBe(false);
   });
 
   describe('Invalid Input in Create and Edit tests', () => {
