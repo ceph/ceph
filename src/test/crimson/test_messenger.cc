@@ -520,7 +520,8 @@ seastar::future<> test_preemptive_shutdown(bool v2) {
       seastar::future<> send_pings(const entity_addr_t& addr) {
         return msgr->connect(addr, entity_name_t::TYPE_OSD
         ).then([this](ceph::net::ConnectionXRef conn) {
-          seastar::do_until(
+          // forwarded to stopped_send_promise
+          (void) seastar::do_until(
             [this] { return stop_send; },
             [this, conn = &**conn] {
               return conn->send(make_message<MPing>()).then([] {
@@ -1529,7 +1530,8 @@ class FailoverTestPeer : public Dispatcher {
       auto cmd = static_cast<cmd_t>(m_cmd->cmd[0][0]);
       if (cmd == cmd_t::shutdown) {
         logger().info("CmdSrv shutdown...");
-        cmd_msgr.shutdown();
+        // forwarded to FailoverTestPeer::wait()
+        (void) cmd_msgr.shutdown();
         return seastar::now();
       }
       return handle_cmd(cmd, m_cmd).then([c] {
