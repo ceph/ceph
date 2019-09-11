@@ -169,10 +169,10 @@ seastar::future<> SocketMessenger::do_start(Dispatcher *disp)
           .then([this] (SocketFRef socket,
                         entity_addr_t peer_addr) {
             auto shard = locate_shard(peer_addr);
-            // don't wait before accepting another
 #warning fixme
             // we currently do dangerous i/o from a Connection core, different from the Socket core.
-            container().invoke_on(shard, [sock = std::move(socket), peer_addr, this](auto& msgr) mutable {
+            return container().invoke_on(shard,
+              [sock = std::move(socket), peer_addr, this](auto& msgr) mutable {
                 SocketConnectionRef conn = seastar::make_shared<SocketConnection>(
                     msgr, *msgr.dispatcher, get_myaddr().is_msgr2());
                 conn->start_accept(std::move(sock), peer_addr);

@@ -1246,8 +1246,9 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
         logger().warn("{} server_connect: connection race detected (cs={}, e_cs={}, ss=0)"
                       " and lose to existing {}, ask client to wait",
                       conn, client_cookie, existing_proto->client_cookie, *existing_conn);
-        existing_conn->keepalive();
-        return send_wait();
+        return existing_conn->keepalive().then([this] {
+          return send_wait();
+        });
       }
     } else {
       logger().warn("{} server_connect: found client session with existing {}"
