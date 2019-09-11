@@ -10,7 +10,7 @@ cluster. A new Ceph cluster has:
 
 The Ceph configuration file consists of at least:
 
-- Its own filesystem ID (``fsid``)
+- Its own file system ID (``fsid``)
 - The initial monitor(s) hostname(s), and
 - The initial monitor(s) and IP address(es).
 

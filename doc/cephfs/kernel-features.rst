@@ -19,8 +19,8 @@ quota. At present, no Linux kernel client support the old format quota.
 
 See `Quotas`_ for more information.
 
-Multiple filesystems within a Ceph cluster
-------------------------------------------
+Multiple file systems within a Ceph cluster
+-------------------------------------------
 The feature was introduced by the Jewel release. Linux kernel clients >= 4.7
 can support it.
 

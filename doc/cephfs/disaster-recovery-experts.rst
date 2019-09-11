@@ -12,7 +12,7 @@ Advanced: Metadata repair tools
     The tools mentioned here can easily cause damage as well as fixing it.
 
     It is essential to understand exactly what has gone wrong with your
-    filesystem before attempting to repair it.
+    file system before attempting to repair it.
 
     If you do not have access to professional support for your cluster,
     consult the ceph-users mailing list or the #ceph IRC channel.
@@ -98,7 +98,7 @@ also need to reset the other tables then replace 'session' with 'snap' or 'inode
 MDS map reset
 -------------
 
-Once the in-RADOS state of the filesystem (i.e. contents of the metadata pool)
+Once the in-RADOS state of the file system (i.e. contents of the metadata pool)
 is somewhat recovered, it may be necessary to update the MDS map to reflect
 the contents of the metadata pool.  Use the following command to reset the MDS
 map to a single MDS:
@@ -200,8 +200,8 @@ Using an alternate metadata pool for recovery
    There has not been extensive testing of this procedure. It should be
    undertaken with great care.
 
-If an existing filesystem is damaged and inoperative, it is possible to create
-a fresh metadata pool and attempt to reconstruct the filesystem metadata
+If an existing file system is damaged and inoperative, it is possible to create
+a fresh metadata pool and attempt to reconstruct the file system metadata
 into this new pool, leaving the old metadata in place. This could be used to
 make a safer attempt at recovery since the existing metadata pool would not be
 overwritten.
@@ -232,11 +232,11 @@ results to the alternate pool:
 
 ::
 
-    cephfs-data-scan scan_extents --alternate-pool recovery --filesystem <original filesystem name> <original data pool name>
-    cephfs-data-scan scan_inodes --alternate-pool recovery --filesystem <original filesystem name> --force-corrupt --force-init <original data pool name>
+    cephfs-data-scan scan_extents --alternate-pool recovery --filesystem <original file system name> <original data pool name>
+    cephfs-data-scan scan_inodes --alternate-pool recovery --filesystem <original file system name> --force-corrupt --force-init <original data pool name>
     cephfs-data-scan scan_links --filesystem recovery-fs
 
-If the damaged filesystem contains dirty journal data, it may be recovered next
+If the damaged file system contains dirty journal data, it may be recovered next
 with:
 
 ::

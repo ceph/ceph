@@ -9,7 +9,7 @@ Cluster health checks
 =====================
 
 The Ceph monitor daemons will generate health messages in response
-to certain states of the filesystem map structure (and the enclosed MDS maps).
+to certain states of the file system map structure (and the enclosed MDS maps).
 
 Message: mds rank(s) *ranks* have failed
 Description: One or more MDS ranks are not currently assigned to

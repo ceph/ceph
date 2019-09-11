@@ -3,14 +3,14 @@
 Terminology
 -----------
 
-A Ceph cluster may have zero or more CephFS *filesystems*.  CephFS
-filesystems have a human readable name (set in ``fs new``)
-and an integer ID.  The ID is called the filesystem cluster ID,
+A Ceph cluster may have zero or more CephFS *file systems*.  CephFS
+file systems have a human readable name (set in ``fs new``)
+and an integer ID.  The ID is called the file system cluster ID,
 or *FSCID*.
 
-Each CephFS filesystem has a number of *ranks*, one by default,
+Each CephFS file system has a number of *ranks*, one by default,
 which start at zero.  A rank may be thought of as a metadata shard.
-Controlling the number of ranks in a filesystem is described
+Controlling the number of ranks in a file system is described
 in :doc:`/cephfs/multimds`
 
 Each CephFS ceph-mds process (a *daemon*) initially starts up
@@ -38,12 +38,12 @@ accept a flexible argument format that may contain a rank, a GID
 or a name.
 
 Where a rank is used, this may optionally be qualified with
-a leading filesystem name or ID.  If a daemon is a standby (i.e.
+a leading file system name or ID.  If a daemon is a standby (i.e.
 it is not currently assigned a rank), then it may only be
 referred to by GID or name.
 
 For example, if we had an MDS daemon which was called 'myhost',
-had GID 5446, and was assigned rank 0 in the filesystem 'myfs'
+had GID 5446, and was assigned rank 0 in the file system 'myfs'
 which had FSCID 3, then any of the following would be suitable
 forms of the 'fail' command:
 
@@ -53,7 +53,7 @@ forms of the 'fail' command:
     ceph mds fail myhost   # Daemon name
     ceph mds fail 0        # Unqualified rank
     ceph mds fail 3:0      # FSCID and rank
-    ceph mds fail myfs:0   # Filesystem name and rank
+    ceph mds fail myfs:0   # File System name and rank
 
 Managing failover
 -----------------

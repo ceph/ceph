@@ -161,7 +161,7 @@ The output from helm install shows us the different types of resources that will
 
 A StorageClass named ``ceph-rbd`` of type ``ceph.com/rbd`` will be created with ``ceph-rbd-provisioner`` Pods. These
 will allow a RBD to be automatically provisioned upon creation of a PVC. RBDs will also be formatted when mapped for the first
-time. All RBDs will use the ext4 filesystem. ``ceph.com/rbd`` does not support the ``fsType`` option.
+time. All RBDs will use the ext4 file system. ``ceph.com/rbd`` does not support the ``fsType`` option.
 By default, RBDs will use image format 2 and layering. You can overwrite the following storageclass' defaults in your values file::
 
   storageclass:

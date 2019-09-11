@@ -9,11 +9,11 @@ Overview
 -----------
 
 Generally, snapshots do what they sound like: they create an immutable view
-of the filesystem at the point in time they're taken. There are some headline
+of the file system at the point in time they're taken. There are some headline
 features that make CephFS snapshots different from what you might expect:
 
 * Arbitrary subtrees. Snapshots are created within any directory you choose,
-  and cover all data in the filesystem under that directory.
+  and cover all data in the file system under that directory.
 * Asynchronous. If you create a snapshot, buffered data is flushed out lazily,
   including from other clients. As a result, "creating" the snapshot is
   very fast.
@@ -30,7 +30,7 @@ Important Data Structures
   directory and contains sequence counters, timestamps, the list of associated
   snapshot IDs, and `past_parent_snaps`.
 * SnapServer: SnapServer manages snapshot ID allocation, snapshot deletion and
-  tracks list of effective snapshots in the filesystem. A filesystem only has
+  tracks list of effective snapshots in the file system. A file system only has
   one instance of snapserver.
 * SnapClient: SnapClient is used to communicate with snapserver, each MDS rank
   has its own snapclient instance. SnapClient also caches effective snapshots
@@ -38,8 +38,8 @@ Important Data Structures
 
 Creating a snapshot
 -------------------
-CephFS snapshot feature is enabled by default on new filesystem. To enable it
-on existing filesystems, use command below.
+CephFS snapshot feature is enabled by default on new file system. To enable it
+on existing file systems, use command below.
 
 .. code::
 
@@ -119,14 +119,14 @@ out again.
 Hard links
 ----------
 Inode with multiple hard links is moved to a dummy global SnapRealm. The
-dummy SnapRealm covers all snapshots in the filesystem. The inode's data
+dummy SnapRealm covers all snapshots in the file system. The inode's data
 will be preserved for any new snapshot. These preserved data will cover
 snapshots on any linkage of the inode.
 
 Multi-FS
 ---------
-Snapshots and multiple filesystems don't interact well. Specifically, each
-MDS cluster allocates `snapids` independently; if you have multiple filesystems
+Snapshots and multiple file systems don't interact well. Specifically, each
+MDS cluster allocates `snapids` independently; if you have multiple file systems
 sharing a single pool (via namespaces), their snapshots *will* collide and
 deleting one will result in missing file data for others. (This may even be
 invisible, not throwing errors to the user.) If each FS gets its own

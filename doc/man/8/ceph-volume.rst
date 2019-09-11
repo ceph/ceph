@@ -213,7 +213,7 @@ Positional arguments:
 
 **zap**
 Zaps the given logical volume or partition. If given a path to a logical
-volume it must be in the format of vg/lv. Any filesystems present
+volume it must be in the format of vg/lv. Any file systems present
 on the given lv or partition will be removed and all data will be purged.
 
 However, the lv or partition will be kept intact.

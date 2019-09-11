@@ -3,16 +3,16 @@
 CephFS Administrative commands
 ==============================
 
-Filesystems
------------
+File Systems
+------------
 
-These commands operate on the CephFS filesystems in your Ceph cluster.
-Note that by default only one filesystem is permitted: to enable
-creation of multiple filesystems use ``ceph fs flag set enable_multiple true``.
+These commands operate on the CephFS file systems in your Ceph cluster.
+Note that by default only one file system is permitted: to enable
+creation of multiple file systems use ``ceph fs flag set enable_multiple true``.
 
 ::
 
-    fs new <filesystem name> <metadata pool name> <data pool name>
+    fs new <file system name> <metadata pool name> <data pool name>
 
 This command creates a new file system. The file system name and metadata pool
 name are self-explanatory. The specified data pool is the default data pool and
@@ -37,7 +37,7 @@ standby MDS daemons.
 
 ::
 
-    fs rm <filesystem name> [--yes-i-really-mean-it]
+    fs rm <file system name> [--yes-i-really-mean-it]
 
 Destroy a CephFS file system. This wipes information about the state of the
 file system from the FSMap. The metadata pool and data pools are untouched and
@@ -45,28 +45,28 @@ must be destroyed separately.
 
 ::
 
-    fs get <filesystem name>
+    fs get <file system name>
 
 Get information about the named file system, including settings and ranks. This
 is a subset of the same information from the ``fs dump`` command.
 
 ::
 
-    fs set <filesystem name> <var> <val>
+    fs set <file system name> <var> <val>
 
 Change a setting on a file system. These settings are specific to the named
 file system and do not affect other file systems.
 
 ::
 
-    fs add_data_pool <filesystem name> <pool name/id>
+    fs add_data_pool <file system name> <pool name/id>
 
 Add a data pool to the file system. This pool can be used for file layouts
 as an alternate location to store file data.
 
 ::
 
-    fs rm_data_pool <filesystem name> <pool name/id>
+    fs rm_data_pool <file system name> <pool name/id>
 
 This command removes the specified pool from the list of data pools for the
 file system.  If any files have layouts for the removed data pool, the file
@@ -258,7 +258,7 @@ Advanced
 These commands are not required in normal operation, and exist
 for use in exceptional circumstances.  Incorrect use of these
 commands may cause serious problems, such as an inaccessible
-filesystem.
+file system.
 
 ::
 
@@ -286,7 +286,7 @@ This removes a rank from the failed set.
 
 ::
 
-    fs reset <filesystem name>
+    fs reset <file system name>
 
 This command resets the file system state to defaults, except for the name and
 pools. Non-zero ranks are saved in the stopped set.

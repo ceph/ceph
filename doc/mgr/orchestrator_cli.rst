@@ -241,7 +241,7 @@ Discover the status of a particular service::
 
 
 Query the status of a particular service instance (mon, osd, mds, rgw).  For OSDs
-the id is the numeric OSD ID, for MDS services it is the filesystem name::
+the id is the numeric OSD ID, for MDS services it is the file system name::
 
     ceph orchestrator service-instance status <type> <instance-name> [--refresh]
 
@@ -254,11 +254,11 @@ documentation for details.
 
 The ``name`` parameter is an identifier of the group of instances:
 
-* a CephFS filesystem for a group of MDS daemons,
+* a CephFS file system for a group of MDS daemons,
 * a zone name for a group of RGWs
 
 Sizing: the ``size`` parameter gives the number of daemons in the cluster
-(e.g. the number of MDS daemons for a particular CephFS filesystem).
+(e.g. the number of MDS daemons for a particular CephFS file system).
 
 Creating/growing/shrinking/removing services::
 

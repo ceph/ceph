@@ -51,7 +51,7 @@ Storing Data
 
 The Ceph Storage Cluster receives data from :term:`Ceph Clients`--whether it
 comes through a :term:`Ceph Block Device`, :term:`Ceph Object Storage`, the
-:term:`Ceph Filesystem` or a custom implementation you create using
+:term:`Ceph File System` or a custom implementation you create using
 ``librados``--and it stores the data as objects. Each object corresponds to a
 file in a filesystem, which is stored on an :term:`Object Storage Device`. Ceph
 OSD Daemons handle the read/write operations on the storage disks.
@@ -1249,13 +1249,13 @@ The RAID type most similar to Ceph's striping is `RAID 0`_, or a 'striped
 volume'. Ceph's striping offers the throughput of RAID 0 striping, the
 reliability of n-way RAID mirroring and faster recovery.
 
-Ceph provides three types of clients: Ceph Block Device, Ceph Filesystem, and
+Ceph provides three types of clients: Ceph Block Device, Ceph File System, and
 Ceph Object Storage. A Ceph Client converts its data from the representation 
 format it provides to its users (a block device image, RESTful objects, CephFS
 filesystem directories) into objects for storage in the Ceph Storage Cluster. 
 
 .. tip:: The objects Ceph stores in the Ceph Storage Cluster are not striped. 
-   Ceph Object Storage, Ceph Block Device, and the Ceph Filesystem stripe their 
+   Ceph Object Storage, Ceph Block Device, and the Ceph File System stripe their 
    data over multiple Ceph Storage Cluster objects. Ceph Clients that write 
    directly to the Ceph Storage Cluster via ``librados`` must perform the
    striping (and parallel I/O) for themselves to obtain these benefits.
@@ -1434,7 +1434,7 @@ Ceph Clients include a number of service interfaces. These include:
   provides RESTful APIs with interfaces that are compatible with Amazon S3
   and OpenStack Swift. 
   
-- **Filesystem**: The :term:`Ceph Filesystem` (CephFS) service provides 
+- **Filesystem**: The :term:`Ceph File System` (CephFS) service provides 
   a POSIX compliant filesystem usable with ``mount`` or as 
   a filesystem in user space (FUSE).
 
@@ -1513,14 +1513,14 @@ client. Other virtualization technologies such as Xen can access the Ceph Block
 Device kernel object(s). This is done with the  command-line tool ``rbd``.
 
 
-.. index:: CephFS; Ceph Filesystem; libcephfs; MDS; metadata server; ceph-mds
+.. index:: CephFS; Ceph File System; libcephfs; MDS; metadata server; ceph-mds
 
 .. _arch-cephfs:
 
-Ceph Filesystem
----------------
+Ceph File System
+----------------
 
-The Ceph Filesystem (CephFS) provides a POSIX-compliant filesystem as a
+The Ceph File System (CephFS) provides a POSIX-compliant filesystem as a
 service that is layered on top of the object-based Ceph Storage Cluster.
 CephFS files get mapped to objects that Ceph stores in the Ceph Storage
 Cluster. Ceph Clients mount a CephFS filesystem as a kernel object or as
@@ -1544,14 +1544,14 @@ a Filesystem in User Space (FUSE).
             +---------------+ +---------------+ +---------------+
 
 
-The Ceph Filesystem service includes the Ceph Metadata Server (MDS) deployed
+The Ceph File System service includes the Ceph Metadata Server (MDS) deployed
 with the Ceph Storage cluster. The purpose of the MDS is to store all the
 filesystem metadata (directories, file ownership, access modes, etc) in
 high-availability Ceph Metadata Servers where the metadata resides in memory.
 The reason for the MDS (a daemon called ``ceph-mds``) is that simple filesystem
 operations like listing a directory or changing a directory (``ls``, ``cd``)
 would tax the Ceph OSD Daemons unnecessarily. So separating the metadata from
-the data means that the Ceph Filesystem can provide high performance services
+the data means that the Ceph File System can provide high performance services
 without taxing the Ceph Storage Cluster.
 
 CephFS separates the metadata from the data, storing the metadata in the MDS,

@@ -169,7 +169,7 @@ setting defaults to ``/var/lib/ceph/osd/$cluster-$id/journal``. You can mount
 this path to an SSD or to an SSD partition so that it is not merely a file on
 the same disk as the object data.
 
-One way Ceph accelerates CephFS filesystem performance is to segregate the
+One way Ceph accelerates CephFS file system performance is to segregate the
 storage of CephFS metadata from the storage of the CephFS file contents. Ceph
 provides a default ``metadata`` pool for CephFS metadata. You will never have to
 create a pool for CephFS metadata, but you can create a CRUSH map hierarchy for

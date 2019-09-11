@@ -40,7 +40,7 @@ system**.
 
 .. raw:: html
 
-	</td><td><h3>Ceph Filesystem</h3>
+	</td><td><h3>Ceph File System</h3>
 
 - POSIX-compliant semantics
 - Separates metadata from data
@@ -68,7 +68,7 @@ See `Ceph Block Device`_ for additional details.
 
 	</td><td>
 
-See `Ceph Filesystem`_ for additional details.
+See `Ceph File System`_ for additional details.
 
 .. raw::	html
 
@@ -83,7 +83,7 @@ about Ceph, see our `Architecture`_ section.
 
 .. _Ceph Object Store: radosgw
 .. _Ceph Block Device: rbd
-.. _Ceph Filesystem: cephfs
+.. _Ceph File System: cephfs
 .. _Getting Started: start
 .. _Architecture: architecture
 

@@ -5,7 +5,7 @@
 
 This subcommand is used to zap lvs, partitions or raw devices that have been used
 by ceph OSDs so that they may be reused. If given a path to a logical
-volume it must be in the format of vg/lv. Any filesystems present
+volume it must be in the format of vg/lv. Any file systems present
 on the given lv or partition will be removed and all data will be purged.
 
 .. note:: The lv or partition will be kept intact.
