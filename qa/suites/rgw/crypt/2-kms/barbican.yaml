@@ -55,6 +55,7 @@ tasks:
           description: Swift Service
 - barbican:
     client.0:
+      sha1: 5.0.1
       force-branch: master
       use-keystone-role: client.0
       keystone_authtoken:
