@@ -18,7 +18,7 @@ describe('Monitors page', () => {
     });
 
     it('should open and show breadcrumb', async () => {
-      await expect(monitors.getBreadcrumbText()).toEqual('Monitors');
+      await monitors.waitTextToBePresent(monitors.getBreadcrumb(), 'Monitors');
     });
   });
 

@@ -78,8 +78,11 @@ export abstract class PageHelper {
     };
   }
 
-  async getBreadcrumbText(): Promise<string> {
-    return $('.breadcrumb-item.active').getText();
+  /**
+   * Get the active breadcrumb item.
+   */
+  getBreadcrumb(): ElementFinder {
+    return $('.breadcrumb-item.active');
   }
 
   async getTabText(index): Promise<string> {

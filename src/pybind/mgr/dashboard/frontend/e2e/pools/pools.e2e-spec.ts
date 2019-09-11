@@ -16,7 +16,7 @@ describe('Pools page', () => {
 
   describe('breadcrumb and tab tests', () => {
     it('should open and show breadcrumb', async () => {
-      await expect(pools.getBreadcrumbText()).toEqual('Pools');
+      await pools.waitTextToBePresent(pools.getBreadcrumb(), 'Pools');
     });
 
     it('should show two tabs', async () => {

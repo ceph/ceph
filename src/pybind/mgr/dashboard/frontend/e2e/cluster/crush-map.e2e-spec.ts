@@ -19,7 +19,7 @@ describe('CRUSH map page', () => {
     });
 
     it('should open and show breadcrumb', async () => {
-      await expect(crushmap.getBreadcrumbText()).toEqual('CRUSH map');
+      await crushmap.waitTextToBePresent(crushmap.getBreadcrumb(), 'CRUSH map');
     });
   });
   describe('fields check', () => {
