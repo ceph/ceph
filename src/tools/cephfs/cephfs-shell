@@ -832,10 +832,9 @@ sub-directories, files')
             if not is_pattern and path != os.path.normpath(b''):
                 try:
                     cephfs.rmdir(path)
-                except libcephfs.Error:
-                    self.perror('error: no such directory {} exists'.format(
-                                path.decode('utf-8')), end='\n',
-                                apply_style=True)
+                except libcephfs.Error as e:
+                    self.perror('Error in rmdir {}: {}'.format(
+                                path.decode('utf-8'), os.strerror(e.errno)))
 
     def complete_rm(self, text, line, begidx, endidx):
         """
