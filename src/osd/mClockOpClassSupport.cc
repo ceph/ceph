@@ -13,10 +13,8 @@
  */
 
 
-#include "common/dout.h"
 #include "osd/mClockOpClassSupport.h"
-#include "osd/OpQueueItem.h"
-
+#include "common/dout.h"
 #include "include/ceph_assert.h"
 
 namespace ceph {
@@ -80,7 +78,8 @@ namespace ceph {
     }
 
     osd_op_type_t
-    OpClassClientInfoMgr::osd_op_type(const OpQueueItem& op) const {
+    OpClassClientInfoMgr::osd_op_type(
+      const ceph::osd::scheduler::OpSchedulerItem& op) const {
       osd_op_type_t type = convert_op_type(op.get_op_type());
       if (osd_op_type_t::client_op != type) {
 	return type;

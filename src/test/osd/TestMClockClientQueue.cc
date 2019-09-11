@@ -8,6 +8,7 @@
 
 #include "osd/mClockClientQueue.h"
 
+using namespace ceph::osd::scheduler;
 
 int main(int argc, char **argv) {
   std::vector<const char*> args(argv, argv+argc);
@@ -36,26 +37,59 @@ public:
     client3(100000001)
   {}
 
-#if 0 // more work needed here
-  Request create_client_op(epoch_t e, uint64_t owner) {
-    return Request(spg_t(), OpQueueItem(OpRequestRef(), e));
+  struct MockDmclockItem : public PGOpQueueable {
+    ceph::qos::dmclock_request_t request;
+    MockDmclockItem(decltype(request) _request) :
+      PGOpQueueable(spg_t()), request(_request) {}
+
+public:
+    op_type_t get_op_type() const final {
+      return op_type_t::client_op;
+    }
+
+    ostream &print(ostream &rhs) const final { return rhs; }
+
+    std::optional<OpRequestRef> maybe_get_op() const final {
+      return std::nullopt;
+    }
+
+    op_scheduler_class get_scheduler_class() const final {
+      return op_scheduler_class::client;
+    }
+
+    std::optional<ceph::qos::dmclock_request_t>
+    get_dmclock_request_state() const final {
+      return request;
+    }
+
+    void run(OSD *osd, OSDShard *sdata, PGRef& pg, ThreadPool::TPHandle &handle) final {}
+  };
+
+  template <typename... Args>
+  Request create_dmclock(epoch_t e, uint64_t owner, Args... args) {
+    return Request(
+      OpSchedulerItem(
+	unique_ptr<OpSchedulerItem::OpQueueable>(
+	  new MockDmclockItem(
+	    std::forward<Args>(args)...)),
+	12, 12,
+	utime_t(), owner, e));
   }
-#endif
 
   Request create_snaptrim(epoch_t e, uint64_t owner) {
-    return Request(OpQueueItem(unique_ptr<OpQueueItem::OpQueueable>(new PGSnapTrim(spg_t(), e)),
+    return Request(OpSchedulerItem(unique_ptr<OpSchedulerItem::OpQueueable>(new PGSnapTrim(spg_t(), e)),
 			       12, 12,
 			       utime_t(), owner, e));
   }
 
   Request create_scrub(epoch_t e, uint64_t owner) {
-    return Request(OpQueueItem(unique_ptr<OpQueueItem::OpQueueable>(new PGScrub(spg_t(), e)),
+    return Request(OpSchedulerItem(unique_ptr<OpSchedulerItem::OpQueueable>(new PGScrub(spg_t(), e)),
 			       12, 12,
 			       utime_t(), owner, e));
   }
 
   Request create_recovery(epoch_t e, uint64_t owner) {
-    return Request(OpQueueItem(unique_ptr<OpQueueItem::OpQueueable>(new PGRecovery(spg_t(), e, 64)),
+    return Request(OpSchedulerItem(unique_ptr<OpSchedulerItem::OpQueueable>(new PGRecovery(spg_t(), e, 64)),
 			       12, 12,
 			       utime_t(), owner, e));
   }
@@ -128,6 +162,36 @@ TEST_F(MClockClientQueueTest, TestEnqueue) {
   r = q.dequeue();
   ASSERT_TRUE(r.get_map_epoch() == 102u ||
               r.get_map_epoch() == 104u);
+}
+
+
+TEST_F(MClockClientQueueTest, TestDistributedEnqueue) {
+  Request r1 = create_snaptrim(100, client1);
+  Request r2 = create_snaptrim(101, client2);
+  Request r3 = create_snaptrim(102, client3);
+  Request r4 = create_dmclock(103, client1, dmc::ReqParams(50,1));
+  Request r5 = create_dmclock(104, client2, dmc::ReqParams(30,1));
+  Request r6 = create_dmclock(105, client3, dmc::ReqParams(10,1));
+
+  q.enqueue(client1, 12, 0, std::move(r1));
+  q.enqueue(client2, 12, 0, std::move(r2));
+  q.enqueue(client3, 12, 0, std::move(r3));
+  q.enqueue(client1, 12, 0, std::move(r4));
+  q.enqueue(client2, 12, 0, std::move(r5));
+  q.enqueue(client3, 12, 0, std::move(r6));
+
+  Request r = q.dequeue();
+  r = q.dequeue();
+  r = q.dequeue();
+
+  r = q.dequeue();
+  ASSERT_EQ(105u, r.get_map_epoch());
+
+  r = q.dequeue();
+  ASSERT_EQ(104u, r.get_map_epoch());
+
+  r = q.dequeue();
+  ASSERT_EQ(103u, r.get_map_epoch());
 }
 
 

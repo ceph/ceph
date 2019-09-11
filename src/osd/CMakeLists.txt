@@ -32,7 +32,8 @@ set(osd_srcs
   mClockOpClassSupport.cc
   mClockOpClassQueue.cc
   mClockClientQueue.cc
-  OpQueueItem.cc
+  scheduler/OpScheduler.cc
+  scheduler/OpSchedulerItem.cc
   PeeringState.cc
   PGStateUtils.cc
   MissingLoc.cc
