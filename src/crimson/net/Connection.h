@@ -80,7 +80,9 @@ class Connection : public seastar::enable_shared_from_this<Connection> {
   /// handshake
   virtual seastar::future<> keepalive() = 0;
 
-  /// close the connection and cancel any any pending futures from read/send
+  // close the connection and cancel any any pending futures from read/send
+  // Note it's OK to discard the returned future because Messenger::shutdown()
+  // will wait for all connections closed
   virtual seastar::future<> close() = 0;
 
   /// which shard id the connection lives

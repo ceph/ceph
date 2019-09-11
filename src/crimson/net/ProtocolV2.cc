@@ -67,7 +67,7 @@ void abort_protocol() {
 }
 
 void abort_in_close(ceph::net::ProtocolV2& proto) {
-  proto.close();
+  (void) proto.close();
   abort_protocol();
 }
 
@@ -444,7 +444,7 @@ void ProtocolV2::fault(bool backoff, const char* func_name, std::exception_ptr e
     logger().info("{} {}: fault at {} on lossy channel, going to CLOSING -- {}",
                   conn, func_name, get_state_name(state), eptr);
     dispatch_reset();
-    close();
+    (void) close();
   } else if (conn.policy.server ||
              (conn.policy.standby &&
               (!is_queued() && conn.sent.empty()))) {
@@ -1201,7 +1201,7 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
                   " existing connection {} is a lossy channel. Close existing in favor of"
                   " this connection", conn, *existing_conn);
     existing_proto->dispatch_reset();
-    existing_proto->close();
+    (void) existing_proto->close();
 
     if (unlikely(state != state_t::ACCEPTING)) {
       logger().debug("{} triggered {} in execute_accepting()",
@@ -1337,7 +1337,7 @@ ProtocolV2::server_connect()
                       conn, *existing_conn,
                       static_cast<int>(existing_conn->protocol->proto_type));
         // should unregister the existing from msgr atomically
-        existing_conn->close();
+        (void) existing_conn->close();
       } else {
         return handle_existing_connection(existing_conn);
       }
@@ -1446,7 +1446,7 @@ ProtocolV2::server_reconnect()
                     "close existing and reset client.",
                     conn, *existing_conn,
                     static_cast<int>(existing_conn->protocol->proto_type));
-      existing_conn->close();
+      (void) existing_conn->close();
       return send_reset(true);
     }
 
@@ -1600,7 +1600,7 @@ void ProtocolV2::execute_accepting()
         }).handle_exception([this] (std::exception_ptr eptr) {
           logger().info("{} execute_accepting(): fault at {}, going to CLOSING -- {}",
                         conn, get_state_name(state), eptr);
-          close();
+          (void) close();
         });
     });
 }
@@ -2137,7 +2137,7 @@ void ProtocolV2::execute_server_wait()
     }).handle_exception([this] (std::exception_ptr eptr) {
       logger().info("{} execute_server_wait(): fault at {}, going to CLOSING -- {}",
                     conn, get_state_name(state), eptr);
-      close();
+      (void) close();
     });
   });
 }

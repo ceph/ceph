@@ -377,7 +377,7 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the connecting state
           logger().warn("{} connecting fault: {}", conn, eptr);
-          close();
+          (void) close();
         });
     });
 }
@@ -466,11 +466,7 @@ seastar::future<stop_t> ProtocolV1::replace_existing(
     // will all be performed using v2 protocol.
     ceph_abort("lossless policy not supported for v1");
   }
-  seastar::do_with(
-    std::move(existing),
-    [](auto existing) {
-      return existing->close();
-    });
+  (void) existing->close();
   return send_connect_reply_ready(reply_tag, std::move(authorizer_reply));
 }
 
@@ -587,7 +583,7 @@ seastar::future<stop_t> ProtocolV1::repeat_handle_connect()
           logger().warn("{} existing {} proto version is {} not 1, close existing",
                         conn, *existing,
                         static_cast<int>(existing->protocol->proto_type));
-          existing->close();
+          (void) existing->close();
         } else {
           return handle_connect_with_existing(existing, std::move(authorizer_reply));
         }
@@ -667,7 +663,7 @@ void ProtocolV1::start_accept(SocketFRef&& sock,
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the accepting state
           logger().warn("{} accepting fault: {}", conn, eptr);
-          close();
+          (void) close();
         });
     });
 }
@@ -906,13 +902,13 @@ void ProtocolV1::execute_open()
             return dispatcher.ms_handle_reset(
                 seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
               .then([this] {
-                close();
+                (void) close();
               });
           } else if (e.code() == error::read_eof) {
             return dispatcher.ms_handle_remote_reset(
                 seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()))
               .then([this] {
-                close();
+                (void) close();
               });
           } else {
             throw e;
@@ -920,7 +916,7 @@ void ProtocolV1::execute_open()
         }).handle_exception([this] (std::exception_ptr eptr) {
           // TODO: handle fault in the open state
           logger().warn("{} open fault: {}", conn, eptr);
-          close();
+          (void) close();
         });
     });
 }
