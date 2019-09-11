@@ -1174,7 +1174,8 @@ template <typename I>
 int Migration<I>::v2_relink_src_image() {
   ldout(m_cct, 10) << dendl;
 
-  int r = Trash<I>::restore(m_src_io_ctx, RBD_TRASH_IMAGE_SOURCE_MIGRATION,
+  int r = Trash<I>::restore(m_src_io_ctx,
+                            {cls::rbd::TRASH_IMAGE_SOURCE_MIGRATION},
                             m_src_image_ctx->id, m_src_image_ctx->name);
   if (r < 0) {
     lderr(m_cct) << "failed restoring image from trash: " << cpp_strerror(r)
