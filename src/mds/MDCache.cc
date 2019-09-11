@@ -8107,7 +8107,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
     // walk into snapdir?
     if (path[depth].length() == 0) {
       dout(10) << "traverse: snapdir" << dendl;
-      if (!mdr)
+      if (!mdr || depth > 0) // snapdir must be the first component
 	return -EINVAL;
       snapid = CEPH_SNAPDIR;
       mdr->snapid = snapid;
