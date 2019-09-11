@@ -62,57 +62,37 @@ struct cls_fifo_create_op
 };
 WRITE_CLASS_ENCODER(cls_fifo_create_op)
 
-struct cls_fifo_get_op
+struct cls_fifo_get_info_op
 {
-  void encode(bufferlist &bl) const {
-    ENCODE_START(1, 1, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::const_iterator &bl) {
-    DECODE_START(1, bl);
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(cls_fifo_get_op)
-
-struct cls_fifo_get_op_reply
-{
-  string id;
   std::optional<rados::cls::fifo::fifo_objv_t> objv;
-  struct {
-    string name;
-    string ns;
-  } pool;
-  string oid_prefix;
-
-  uint64_t max_obj_size{0};
-  uint64_t max_entry_size{0};
-
-  uint64_t tail_obj_num{0};
-  uint64_t head_obj_num{0};
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    encode(id, bl);
     encode(objv, bl);
-    encode(pool.name, bl);
-    encode(pool.ns, bl);
-    encode(oid_prefix, bl);
-    encode(max_obj_size, bl);
-    encode(max_entry_size, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
-    decode(id, bl);
     decode(objv, bl);
-    decode(pool.name, bl);
-    decode(pool.ns, bl);
-    decode(oid_prefix, bl);
-    decode(max_obj_size, bl);
-    decode(max_entry_size, bl);
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_fifo_get_op_reply)
+WRITE_CLASS_ENCODER(cls_fifo_get_info_op)
+
+struct cls_fifo_get_info_op_reply
+{
+  rados::cls::fifo::fifo_info_t info;
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(info, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator &bl) {
+    DECODE_START(1, bl);
+    decode(info, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_fifo_get_info_op_reply)
 

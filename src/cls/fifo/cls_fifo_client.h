@@ -78,6 +78,21 @@ namespace rados {
 
         static int create(librados::ObjectWriteOperation *op,
                           const CreateParams& params);
+        struct GetInfoParams {
+          struct State {
+            std::optional<fifo_objv_t> objv;
+          } state;
+
+          GetInfoParams& objv(const std::string& instance, uint64_t ver) {
+            state.objv = fifo_objv_t{instance, ver};
+            return *this;
+          }
+        };
+        static int get_info(librados::IoCtx& ioctx,
+                            const string& oid,
+                            const GetInfoParams& params,
+                            rados::cls::fifo::fifo_info_t *result);
+
       };
     } // namespace fifo
   }  // namespace cls

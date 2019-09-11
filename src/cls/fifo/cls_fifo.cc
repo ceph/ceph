@@ -22,53 +22,6 @@ using namespace rados::cls::fifo;
 CLS_VER(1,0)
 CLS_NAME(fifo)
 
-struct cls_fifo_header {
-  string id;
-  fifo_objv_t objv;
-  struct {
-    string name;
-    string ns;
-  } pool;
-  string oid_prefix;
-
-  fifo_data_params_t data_params;
-
-  uint64_t tail_obj_num{0};
-  uint64_t head_obj_num{0};
-
-  string head_tag;
-
-  void encode(bufferlist &bl) const {
-    ENCODE_START(1, 1, bl);
-    encode(id, bl);
-    encode(objv.instance, bl);
-    encode(objv.ver, bl);
-    encode(pool.name, bl);
-    encode(pool.ns, bl);
-    encode(oid_prefix, bl);
-    encode(data_params, bl);
-    encode(tail_obj_num, bl);
-    encode(head_obj_num, bl);
-    encode(head_tag, bl);
-    ENCODE_FINISH(bl);
-  }
-  void decode(bufferlist::const_iterator &bl) {
-    DECODE_START(1, bl);
-    decode(id, bl);
-    decode(objv.instance, bl);
-    decode(objv.ver, bl);
-    decode(pool.name, bl);
-    decode(pool.ns, bl);
-    decode(oid_prefix, bl);
-    decode(data_params, bl);
-    decode(tail_obj_num, bl);
-    decode(head_obj_num, bl);
-    decode(head_tag, bl);
-    DECODE_FINISH(bl);
-  }
-};
-WRITE_CLASS_ENCODER(cls_fifo_header)
-
 struct cls_fifo_data_obj_header {
   string tag;
 
@@ -154,7 +107,7 @@ static string new_oid_prefix(string id, std::optional<string>& val)
 }
 
 static int write_header(cls_method_context_t hctx,
-                        cls_fifo_header& header)
+                        fifo_info_t& header)
 {
   if (header.objv.instance.empty()) {
 #define HEADER_INSTANCE_SIZE 16
@@ -168,6 +121,44 @@ static int write_header(cls_method_context_t hctx,
   bufferlist bl;
   encode(header, bl);
   return cls_cxx_write_full(hctx, &bl);
+}
+
+static int read_header(cls_method_context_t hctx,
+                       std::optional<fifo_objv_t> objv,
+                       fifo_info_t *info)
+{
+  uint64_t size;
+
+  int r = cls_cxx_stat2(hctx, &size, nullptr);
+  if (r < 0) {
+    CLS_ERR("ERROR: %s(): cls_cxx_stat2() on obj returned %d", __func__, r);
+    return r;
+  }
+
+  bufferlist bl;
+  r = cls_cxx_read2(hctx, 0, size, &bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+  if (r < 0) {
+    CLS_ERR("ERROR: %s(): cls_cxx_read2() on obj returned %d", __func__, r);
+    return r;
+  }
+
+  try {
+    auto iter = bl.cbegin();
+    decode(*info, iter);
+  } catch (buffer::error& err) {
+    CLS_ERR("ERROR: %s(): failed decoding header", __func__);
+    return -EIO;
+  }
+
+  if (objv &&
+      !(info->objv == *objv)) {
+    string s1 = info->objv.to_str();
+    string s2 = objv->to_str();
+    CLS_LOG(10, "%s(): version mismatch (header=%s, req=%s), cancelled operation", __func__, s1.c_str(), s2.c_str());
+    return -ECANCELED;
+  }
+
+  return 0;
 }
 
 static int fifo_create_op(cls_method_context_t hctx,
@@ -204,7 +195,7 @@ static int fifo_create_op(cls_method_context_t hctx,
       return r;
     }
 
-    cls_fifo_header header;
+    fifo_info_t header;
     try {
       auto iter = bl.cbegin();
       decode(header, iter);
@@ -226,7 +217,7 @@ static int fifo_create_op(cls_method_context_t hctx,
 
     return 0; /* already exists */
   }
-  cls_fifo_header header;
+  fifo_info_t header;
   
   header.id = op.id;
   if (op.objv) {
@@ -249,17 +240,47 @@ static int fifo_create_op(cls_method_context_t hctx,
   return 0;
 }
 
+static int fifo_get_info_op(cls_method_context_t hctx,
+                          bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "%s", __func__);
+
+  cls_fifo_get_info_op op;
+  try {
+    auto iter = in->cbegin();
+    decode(op, iter);
+  } catch (const buffer::error &err) {
+    CLS_ERR("ERROR: %s(): failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  cls_fifo_get_info_op_reply reply;
+  int r = read_header(hctx, op.objv, &reply.info);
+  if (r < 0) {
+    return r;
+  }
+
+  encode(reply, *out);
+
+  return 0;
+}
+
 CLS_INIT(fifo)
 {
   CLS_LOG(20, "Loaded fifo class!");
 
   cls_handle_t h_class;
   cls_method_handle_t h_fifo_create_op;
+  cls_method_handle_t h_fifo_get_info_op;
 
   cls_register("fifo", &h_class);
   cls_register_cxx_method(h_class, "fifo_create",
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           fifo_create_op, &h_fifo_create_op);
+
+  cls_register_cxx_method(h_class, "fifo_get_info",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          fifo_get_info_op, &h_fifo_get_info_op);
 
   return;
 }

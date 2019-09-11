@@ -55,6 +55,46 @@ namespace rados {
 
         return 0;
       }
+
+      int FIFO::get_info(librados::IoCtx& ioctx,
+                         const string& oid,
+                         const GetInfoParams& params,
+                         fifo_info_t *result) {
+        cls_fifo_get_info_op op;
+
+        auto& state = params.state;
+
+        op.objv = state.objv;
+
+        librados::ObjectReadOperation rop;
+
+        bufferlist in;
+        bufferlist out;
+        int op_ret;
+        encode(op, in);
+        rop.exec("fifo", "fifo_get_info", in, &out, &op_ret);
+
+        int r = ioctx.operate(oid, &rop, nullptr);
+        if (r < 0) {
+          return r;
+        }
+
+        if (op_ret < 0) {
+          return op_ret;
+        }
+
+        cls_fifo_get_info_op_reply reply;
+        auto iter = out.cbegin();
+        try {
+          decode(reply, iter);
+        } catch (buffer::error& err) {
+          return -EIO;
+        }
+
+        *result = reply.info;
+
+        return 0;
+      }
     } // namespace fifo
   } // namespace cls
 } // namespace rados

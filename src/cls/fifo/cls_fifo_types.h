@@ -48,6 +48,12 @@ namespace rados {
           return (instance == rhs.instance &&
                   ver == rhs.ver);
         }
+
+        string to_str() {
+          char buf[instance.size() + 32];
+          snprintf(buf, sizeof(buf), "%s{%lld}", instance.c_str(), (long long)ver);
+          return string(buf);
+        }
       };
       WRITE_CLASS_ENCODER(rados::cls::fifo::fifo_objv_t)
 
@@ -106,6 +112,7 @@ namespace rados {
 
       struct fifo_info_t {
         string id;
+        fifo_objv_t objv;
         struct {
           string name;
           string ns;
@@ -122,6 +129,7 @@ namespace rados {
         void encode(bufferlist &bl) const {
           ENCODE_START(1, 1, bl);
           encode(id, bl);
+          encode(objv, bl);
           encode(pool.name, bl);
           encode(pool.ns, bl);
           encode(oid_prefix, bl);
@@ -135,6 +143,7 @@ namespace rados {
         void decode(bufferlist::const_iterator &bl) {
           DECODE_START(1, bl);
           decode(id, bl);
+          decode(objv, bl);
           decode(pool.name, bl);
           decode(pool.ns, bl);
           decode(oid_prefix, bl);
@@ -149,8 +158,12 @@ namespace rados {
         void decode_json(JSONObj *obj);
       };
       WRITE_CLASS_ENCODER(rados::cls::fifo::fifo_info_t)
-
     }
   }
+}
+
+static inline ostream& operator<<(ostream& os, const rados::cls::fifo::fifo_objv_t& objv)
+{
+  return os << objv.instance << "{" << objv.ver << "}";
 }
 
