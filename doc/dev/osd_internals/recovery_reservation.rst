@@ -48,6 +48,14 @@ necessary), the primary drops the local reservation and enters the
 Recovered state. Once all the PGs have reported they are clean, the
 primary enters the Clean state and marks itself active+clean.
 
+-----------------
+Dump Reservations
+-----------------
+
+An OSD daemon command dumps total local and remote reservations::
+
+  ceph daemon osd.<id> dump_recovery_reservations
+
 
 --------------
 Things to Note
