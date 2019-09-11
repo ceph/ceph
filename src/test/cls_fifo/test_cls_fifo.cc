@@ -148,3 +148,41 @@ TEST(ClsFIFO, TestCreate) {
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
 }
 
+TEST(ClsFIFO, TestGetInfo) {
+  Rados cluster;
+  std::string pool_name = get_temp_pool_name();
+  ASSERT_EQ("", create_one_pool_pp(pool_name, cluster));
+  IoCtx ioctx;
+  cluster.ioctx_create(pool_name.c_str(), ioctx);
+
+  string fifo_id = "fifo";
+  string oid = fifo_id;
+
+  fifo_info_t info;
+
+  /* first successful create */
+  ASSERT_EQ(0, fifo_create(ioctx, oid,
+               FIFO::CreateParams()
+               .id(fifo_id)
+               .pool(pool_name)));
+
+  ASSERT_EQ(0, FIFO::get_info(ioctx, oid,
+               FIFO::GetInfoParams(), &info));
+
+  ASSERT_TRUE(!info.objv.instance.empty());
+
+  ASSERT_EQ(0, FIFO::get_info(ioctx, oid,
+               FIFO::GetInfoParams()
+               .objv(info.objv),
+               &info));
+
+  fifo_objv_t objv;
+  objv.instance="foo";
+  objv.ver = 12;
+  ASSERT_EQ(-ECANCELED, FIFO::get_info(ioctx, oid,
+               FIFO::GetInfoParams()
+               .objv(objv),
+               &info));
+
+}
+

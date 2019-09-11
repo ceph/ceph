@@ -83,6 +83,10 @@ namespace rados {
             std::optional<fifo_objv_t> objv;
           } state;
 
+          GetInfoParams& objv(const fifo_objv_t& v) {
+            state.objv = v;
+            return *this;
+          }
           GetInfoParams& objv(const std::string& instance, uint64_t ver) {
             state.objv = fifo_objv_t{instance, ver};
             return *this;
