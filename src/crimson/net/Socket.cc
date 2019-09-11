@@ -59,7 +59,7 @@ struct bufferlist_consumer {
 seastar::future<bufferlist> Socket::read(size_t bytes)
 {
 #ifdef UNIT_TESTS_BUILT
-  return try_trap(bp_type_t::READ).then([bytes, this] {
+  return try_trap_pre(next_trap_read).then([bytes, this] {
 #endif
     if (bytes == 0) {
       return seastar::make_ready_future<bufferlist>();
@@ -73,6 +73,11 @@ seastar::future<bufferlist> Socket::read(size_t bytes)
       return seastar::make_ready_future<bufferlist>(std::move(r.buffer));
     });
 #ifdef UNIT_TESTS_BUILT
+  }).then([this] (auto buf) {
+    return try_trap_post(next_trap_read
+    ).then([buf = std::move(buf)] () mutable {
+      return std::move(buf);
+    });
   });
 #endif
 }
@@ -80,7 +85,7 @@ seastar::future<bufferlist> Socket::read(size_t bytes)
 seastar::future<seastar::temporary_buffer<char>>
 Socket::read_exactly(size_t bytes) {
 #ifdef UNIT_TESTS_BUILT
-  return try_trap(bp_type_t::READ).then([bytes, this] {
+  return try_trap_pre(next_trap_read).then([bytes, this] {
 #endif
     if (bytes == 0) {
       return seastar::make_ready_future<seastar::temporary_buffer<char>>();
@@ -92,6 +97,11 @@ Socket::read_exactly(size_t bytes) {
       return seastar::make_ready_future<tmp_buf>(std::move(buf));
     });
 #ifdef UNIT_TESTS_BUILT
+  }).then([this] (auto buf) {
+    return try_trap_post(next_trap_read
+    ).then([buf = std::move(buf)] () mutable {
+      return std::move(buf);
+    });
   });
 #endif
 }
@@ -127,19 +137,36 @@ seastar::future<> Socket::close() {
 }
 
 #ifdef UNIT_TESTS_BUILT
-seastar::future<> Socket::try_trap(bp_type_t type) {
-  if (next_trap && next_trap->type == type) {
-    auto action = next_trap->action;
-    next_trap = std::nullopt;
-    switch (action) {
-     case bp_action_t::FAULT:
-      throw std::system_error(make_error_code(ceph::net::error::negotiation_failure));
-     case bp_action_t::BLOCK:
-      ceph_assert(blocker != nullptr);
-      return blocker->block();
-     default:
-      ceph_abort("unexpected action from trap");
-    }
+seastar::future<> Socket::try_trap_pre(bp_action_t& trap) {
+  auto action = trap;
+  trap = bp_action_t::CONTINUE;
+  switch (action) {
+   case bp_action_t::CONTINUE:
+    break;
+   case bp_action_t::FAULT:
+    throw std::system_error(make_error_code(ceph::net::error::negotiation_failure));
+   case bp_action_t::BLOCK:
+    return blocker->block();
+   case bp_action_t::STALL:
+    trap = action;
+    break;
+   default:
+    ceph_abort("unexpected action from trap");
+  }
+  return seastar::now();
+}
+
+seastar::future<> Socket::try_trap_post(bp_action_t& trap) {
+  auto action = trap;
+  trap = bp_action_t::CONTINUE;
+  switch (action) {
+   case bp_action_t::CONTINUE:
+    break;
+   case bp_action_t::STALL:
+    shutdown();
+    return blocker->block();
+   default:
+    ceph_abort("unexpected action from trap");
   }
   return seastar::now();
 }

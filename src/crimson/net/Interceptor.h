@@ -36,21 +36,18 @@ enum class bp_type_t {
 enum class bp_action_t {
   CONTINUE = 0,
   FAULT,
-  BLOCK
+  BLOCK,
+  STALL
 };
 
 inline std::ostream& operator<<(std::ostream& out, const bp_action_t& action) {
   static const char *const action_names[] = {"CONTINUE",
                                              "FAULT",
-                                             "BLOCK"};
+                                             "BLOCK",
+                                             "STALL"};
   assert(static_cast<size_t>(action) < std::size(action_names));
   return out << action_names[static_cast<size_t>(action)];
 }
-
-struct socket_trap_t {
-  bp_type_t type;
-  bp_action_t action;
-};
 
 class socket_blocker {
   std::optional<seastar::promise<>> p_blocked;

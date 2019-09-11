@@ -132,19 +132,7 @@ void intercept(Breakpoint bp, bp_type_t type,
                SocketConnection& conn, SocketFRef& socket) {
   if (conn.interceptor) {
     auto action = conn.interceptor->intercept(conn, Breakpoint(bp));
-    switch (action) {
-      case bp_action_t::CONTINUE:
-       break;
-      case bp_action_t::FAULT:
-       socket->set_trap({type, action});
-       break;
-      case bp_action_t::BLOCK:
-       socket->set_trap({type, action}, &conn.interceptor->blocker);
-       logger().info("{} blocked at {}, waiting for unblock...", conn, bp);
-       break;
-      default:
-       ceph_abort("unexpected action from intercept");
-    }
+    socket->set_trap(type, action, &conn.interceptor->blocker);
   }
 }
 
