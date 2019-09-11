@@ -6,6 +6,8 @@
 
 #include "include/rados/librados_fwd.hpp"
 #include "include/rbd/librbd.hpp"
+#include "cls/rbd/cls_rbd_types.h"
+#include <set>
 #include <string>
 #include <vector>
 
@@ -19,6 +21,8 @@ namespace api {
 
 template <typename ImageCtxT = librbd::ImageCtx>
 struct Trash {
+  typedef std::set<cls::rbd::TrashImageSource> TrashImageSources;
+  static const TrashImageSources RESTORE_SOURCE_WHITELIST;
 
   static int move(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
                   const std::string &image_name, uint64_t delay);
@@ -34,7 +38,8 @@ struct Trash {
                    float threshold, ProgressContext& pctx);
   static int remove(librados::IoCtx &io_ctx, const std::string &image_id,
                     bool force, ProgressContext& prog_ctx);
-  static int restore(librados::IoCtx &io_ctx, rbd_trash_image_source_t source,
+  static int restore(librados::IoCtx &io_ctx,
+                     const TrashImageSources& trash_image_sources,
                      const std::string &image_id,
                      const std::string &image_new_name);
 
