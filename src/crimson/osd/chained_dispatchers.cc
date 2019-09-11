@@ -1,5 +1,6 @@
-#include "chained_dispatchers.h"
+#include "crimson/osd/chained_dispatchers.h"
 #include "crimson/net/Connection.h"
+#include "msg/Message.h"
 
 
 seastar::future<>
