@@ -8736,6 +8736,17 @@ void BlueStore::inject_statfs(const string& key, const store_statfs_t& new_statf
   repairer.apply(db);
 }
 
+void BlueStore::inject_global_statfs(const store_statfs_t& new_statfs)
+{
+  KeyValueDB::Transaction t = db->get_transaction();
+  volatile_statfs v;
+  v = new_statfs;
+  bufferlist bl;
+  v.encode(bl);
+  t->set(PREFIX_STAT, BLUESTORE_GLOBAL_STATFS_KEY, bl);
+  db->submit_transaction_sync(t);
+}
+
 void BlueStore::inject_misreference(coll_t cid1, ghobject_t oid1,
 				    coll_t cid2, ghobject_t oid2,
 				    uint64_t offset)

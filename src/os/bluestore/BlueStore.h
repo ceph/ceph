@@ -2687,6 +2687,7 @@ public:
   void inject_leaked(uint64_t len);
   void inject_false_free(coll_t cid, ghobject_t oid);
   void inject_statfs(const string& key, const store_statfs_t& new_statfs);
+  void inject_global_statfs(const store_statfs_t& new_statfs);
   void inject_misreference(coll_t cid1, ghobject_t oid1,
 			   coll_t cid2, ghobject_t oid2,
 			   uint64_t offset);
