@@ -11,8 +11,9 @@ public:
   using DaemonKey = std::pair<std::string, std::string>;
   static std::unique_ptr<DaemonHealthMetricCollector> create(daemon_metric m);
   void update(const DaemonKey& daemon, const DaemonHealthMetric& metric) {
-    if (_is_relevant(metric.get_type())) {
-      reported = _update(daemon, metric);
+    if (_is_relevant(metric.get_type()) &&
+        _update(daemon, metric)) {
+      reported = true;
     }
   }
   void summarize(health_check_map_t& cm) {
