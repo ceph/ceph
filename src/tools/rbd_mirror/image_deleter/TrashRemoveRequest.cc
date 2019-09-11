@@ -1,7 +1,7 @@
 // -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
-#include "tools/rbd_mirror/image_deleter/RemoveRequest.h"
+#include "tools/rbd_mirror/image_deleter/TrashRemoveRequest.h"
 #include "include/ceph_assert.h"
 #include "common/debug.h"
 #include "common/errno.h"
@@ -16,7 +16,7 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_rbd_mirror
 #undef dout_prefix
-#define dout_prefix *_dout << "rbd::mirror::image_deleter::RemoveRequest: " \
+#define dout_prefix *_dout << "rbd::mirror::image_deleter::TrashRemoveRequest: " \
                            << this << " " << __func__ << ": "
 
 namespace rbd {
@@ -27,14 +27,14 @@ using librbd::util::create_context_callback;
 using librbd::util::create_rados_callback;
 
 template <typename I>
-void RemoveRequest<I>::send() {
+void TrashRemoveRequest<I>::send() {
   *m_error_result = ERROR_RESULT_RETRY;
 
   get_snap_context();
 }
 
 template <typename I>
-void RemoveRequest<I>::get_snap_context() {
+void TrashRemoveRequest<I>::get_snap_context() {
   dout(10) << dendl;
 
   librados::ObjectReadOperation op;
@@ -43,7 +43,8 @@ void RemoveRequest<I>::get_snap_context() {
   std::string header_oid = librbd::util::header_name(m_image_id);
 
   auto aio_comp = create_rados_callback<
-    RemoveRequest<I>, &RemoveRequest<I>::handle_get_snap_context>(this);
+    TrashRemoveRequest<I>,
+    &TrashRemoveRequest<I>::handle_get_snap_context>(this);
   m_out_bl.clear();
   int r = m_io_ctx.aio_operate(header_oid, aio_comp, &op, &m_out_bl);
   ceph_assert(r == 0);
@@ -51,7 +52,7 @@ void RemoveRequest<I>::get_snap_context() {
 }
 
 template <typename I>
-void RemoveRequest<I>::handle_get_snap_context(int r) {
+void TrashRemoveRequest<I>::handle_get_snap_context(int r) {
   dout(10) << "r=" << r << dendl;
 
   ::SnapContext snapc;
@@ -71,7 +72,7 @@ void RemoveRequest<I>::handle_get_snap_context(int r) {
 }
 
 template <typename I>
-void RemoveRequest<I>::purge_snapshots() {
+void TrashRemoveRequest<I>::purge_snapshots() {
   if (!m_has_snapshots) {
     remove_image();
     return;
@@ -79,13 +80,14 @@ void RemoveRequest<I>::purge_snapshots() {
 
   dout(10) << dendl;
   auto ctx = create_context_callback<
-    RemoveRequest<I>, &RemoveRequest<I>::handle_purge_snapshots>(this);
+    TrashRemoveRequest<I>,
+    &TrashRemoveRequest<I>::handle_purge_snapshots>(this);
   auto req = SnapshotPurgeRequest<I>::create(m_io_ctx, m_image_id, ctx);
   req->send();
 }
 
 template <typename I>
-void RemoveRequest<I>::handle_purge_snapshots(int r) {
+void TrashRemoveRequest<I>::handle_purge_snapshots(int r) {
   dout(10) << "r=" << r << dendl;
 
   if (r == -EBUSY) {
@@ -103,11 +105,12 @@ void RemoveRequest<I>::handle_purge_snapshots(int r) {
 }
 
 template <typename I>
-void RemoveRequest<I>::remove_image() {
+void TrashRemoveRequest<I>::remove_image() {
   dout(10) << dendl;
 
   auto ctx = create_context_callback<
-    RemoveRequest<I>, &RemoveRequest<I>::handle_remove_image>(this);
+    TrashRemoveRequest<I>,
+    &TrashRemoveRequest<I>::handle_remove_image>(this);
   auto req = librbd::image::RemoveRequest<I>::create(
     m_io_ctx, "", m_image_id, true, true, m_progress_ctx, m_op_work_queue,
     ctx);
@@ -115,7 +118,7 @@ void RemoveRequest<I>::remove_image() {
 }
 
 template <typename I>
-void RemoveRequest<I>::handle_remove_image(int r) {
+void TrashRemoveRequest<I>::handle_remove_image(int r) {
   dout(10) << "r=" << r << dendl;
   if (r == -ENOTEMPTY) {
     // image must have clone v2 snapshot still associated to child
@@ -137,7 +140,7 @@ void RemoveRequest<I>::handle_remove_image(int r) {
 }
 
 template <typename I>
-void RemoveRequest<I>::finish(int r) {
+void TrashRemoveRequest<I>::finish(int r) {
   dout(10) << "r=" << r << dendl;
 
   m_on_finish->complete(r);
@@ -148,4 +151,4 @@ void RemoveRequest<I>::finish(int r) {
 } // namespace mirror
 } // namespace rbd
 
-template class rbd::mirror::image_deleter::RemoveRequest<librbd::ImageCtx>;
+template class rbd::mirror::image_deleter::TrashRemoveRequest<librbd::ImageCtx>;
