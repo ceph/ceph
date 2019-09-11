@@ -53,7 +53,9 @@ zypper --non-interactive --no-gpg-checks install \
 
 sed -i -e 's/InitiatorName=.\+/InitiatorName=iqn.1994-05.com.redhat:rh7-client/g' /etc/iscsi/initiatorname.iscsi
 
-systemctl start iscsid.service
+systemctl status iscsid.service || true
+systemctl restart iscsid.service
+
 sleep 5
 systemctl --no-pager --full status iscsid.service
 
