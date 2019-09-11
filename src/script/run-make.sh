@@ -111,9 +111,8 @@ EOM
 }
 
 function configure() {
-    CMAKE_BUILD_OPTS="$@"
-    CMAKE_BUILD_OPTS+=$(detect_ceph_dev_pkgs)
-    $DRY_RUN ./do_cmake.sh $CMAKE_BUILD_OPTS $@ || return 1
+    local cmake_build_opts=$(detect_ceph_dev_pkgs)
+    $DRY_RUN ./do_cmake.sh $cmake_build_opts $@ || return 1
 }
 
 function build() {
