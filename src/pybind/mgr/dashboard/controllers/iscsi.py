@@ -709,18 +709,35 @@ class IscsiTarget(RESTController):
         return target
 
     @staticmethod
+    def _is_executing(target_iqn):
+        executing_tasks, _ = TaskManager.list()
+        for t in executing_tasks:
+            if t.name.startswith('iscsi/target') and t.metadata.get('target_iqn') == target_iqn:
+                return True
+        return False
+
+    @staticmethod
     def _set_info(target):
         if not target['portals']:
             return
         target_iqn = target['target_iqn']
+        # During task execution, additional info is not available
+        if IscsiTarget._is_executing(target_iqn):
+            return
         gateway_name = target['portals'][0]['host']
-        target_info = IscsiClient.instance(gateway_name=gateway_name).get_targetinfo(target_iqn)
-        target['info'] = target_info
-        for client in target['clients']:
-            client_iqn = client['client_iqn']
-            client_info = IscsiClient.instance(gateway_name=gateway_name).get_clientinfo(
-                target_iqn, client_iqn)
-            client['info'] = client_info
+        try:
+            target_info = IscsiClient.instance(gateway_name=gateway_name).get_targetinfo(
+                target_iqn)
+            target['info'] = target_info
+            for client in target['clients']:
+                client_iqn = client['client_iqn']
+                client_info = IscsiClient.instance(gateway_name=gateway_name).get_clientinfo(
+                    target_iqn, client_iqn)
+                client['info'] = client_info
+        except RequestException as e:
+            # Target/Client has been removed in the meanwhile (e.g. using gwcli)
+            if e.status_code != 404:
+                raise e
 
     @staticmethod
     def _sorted_portals(portals):
