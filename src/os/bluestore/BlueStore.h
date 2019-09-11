@@ -1898,6 +1898,7 @@ private:
   uint64_t osd_memory_cache_min = 0; ///< Min memory to assign when autotuning cache
   double osd_memory_cache_resize_interval = 0; ///< Time to wait between cache resizing 
   double max_defer_interval = 0; ///< Time to wait between last deferred submit
+  std::atomic<uint32_t> config_changed = {0}; ///< Counter to determine if there is a configuration change.
 
   typedef map<uint64_t, volatile_statfs> osd_pools_map;
 
@@ -2040,6 +2041,7 @@ private:
 
   private:
     void _adjust_cache_settings();
+    void _update_cache_settings();
     void _resize_shards(bool interval_stats);
   } mempool_thread;
 
@@ -2060,6 +2062,7 @@ private:
   void _set_alloc_sizes();
   void _set_blob_size();
   void _set_finisher_num();
+  void _update_osd_memory_options();
 
   int _open_bdev(bool create);
   // Verifies if disk space is enough for reserved + min bluefs
