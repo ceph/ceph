@@ -651,7 +651,7 @@ void BlueFS::umount()
   _shutdown_logger();
 }
 
-int BlueFS::prepare_new_device(int id)
+int BlueFS::prepare_new_device(int id, const bluefs_layout_t& layout)
 {
   dout(1) << __func__ << dendl;
 
@@ -662,14 +662,20 @@ int BlueFS::prepare_new_device(int id)
       new_log_dev_cur = BDEV_NEWDB;
       new_log_dev_next = BDEV_DB;
     }
-    _rewrite_log_sync(false,
+    _rewrite_log_and_layout_sync(false,
       BDEV_NEWDB,
       new_log_dev_cur,
       new_log_dev_next,
-      RENAME_DB2SLOW);
+      RENAME_DB2SLOW,
+      layout);
     //}
   } else if(id == BDEV_NEWWAL) {
-    _rewrite_log_sync(false, BDEV_DB, BDEV_NEWWAL, BDEV_WAL, REMOVE_WAL);
+    _rewrite_log_and_layout_sync(false,
+      BDEV_DB,
+      BDEV_NEWWAL,
+      BDEV_WAL,
+      REMOVE_WAL,
+      layout);
   } else {
     assert(false);
   }
@@ -1179,7 +1185,8 @@ int BlueFS::log_dump()
 int BlueFS::device_migrate_to_existing(
   CephContext *cct,
   const set<int>& devs_source,
-  int dev_target)
+  int dev_target,
+  const bluefs_layout_t& layout)
 {
   vector<byte> buf;
   bool buffered = cct->_conf->bluefs_buffered_io;
@@ -1316,19 +1323,21 @@ int BlueFS::device_migrate_to_existing(
         new_log_dev_next;
   }
 
-  _rewrite_log_sync(
+  _rewrite_log_and_layout_sync(
     false,
     (flags & REMOVE_DB) ? BDEV_SLOW : BDEV_DB,
     new_log_dev_cur,
     new_log_dev_next,
-    flags);
+    flags,
+    layout);
   return 0;
 }
 
 int BlueFS::device_migrate_to_new(
   CephContext *cct,
   const set<int>& devs_source,
-  int dev_target)
+  int dev_target,
+  const bluefs_layout_t& layout)
 {
   vector<byte> buf;
   bool buffered = cct->_conf->bluefs_buffered_io;
@@ -1452,12 +1461,13 @@ int BlueFS::device_migrate_to_new(
         BDEV_DB :
 	BDEV_SLOW;
 
-  _rewrite_log_sync(
+  _rewrite_log_and_layout_sync(
     false,
     super_dev,
     new_log_dev_cur,
     new_log_dev_next,
-    flags);
+    flags,
+    layout);
   return 0;
 }
 
@@ -1836,19 +1846,21 @@ void BlueFS::_compact_log_dump_metadata(bluefs_transaction_t *t,
 void BlueFS::_compact_log_sync()
 {
   dout(10) << __func__ << dendl;
-  _rewrite_log_sync(true,
+  _rewrite_log_and_layout_sync(true,
     BDEV_DB,
     log_writer->file->fnode.prefer_bdev,
     log_writer->file->fnode.prefer_bdev,
-    0);
+    0,
+    super.memorized_layout);
   logger->inc(l_bluefs_log_compactions);
 }
 
-void BlueFS::_rewrite_log_sync(bool allocate_with_fallback,
-			       int super_dev,
-			       int log_dev,
-			       int log_dev_new,
-			       int flags)
+void BlueFS::_rewrite_log_and_layout_sync(bool allocate_with_fallback,
+					  int super_dev,
+					  int log_dev,
+					  int log_dev_new,
+					  int flags,
+					  std::optional<bluefs_layout_t> layout)
 {
   File *log_file = log_writer->file.get();
 
@@ -1908,6 +1920,7 @@ void BlueFS::_rewrite_log_sync(bool allocate_with_fallback,
 #endif
   flush_bdev();
 
+  super.memorized_layout = layout;
   super.log_fnode = log_file->fnode;
   // rename device if needed
   if (log_dev != log_dev_new) {
