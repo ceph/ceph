@@ -4396,7 +4396,8 @@ void Monitor::_ms_dispatch(Message *m)
   if (s->auth_handler) {
     s->entity_name = s->auth_handler->get_entity_name();
   }
-  dout(20) << " caps " << s->caps.get_str() << dendl;
+  dout(20) << " entity " << s->entity_name
+	   << " caps " << s->caps.get_str() << dendl;
 
   if ((is_synchronizing() ||
        (!s->authenticated && !exited_quorum.is_zero())) &&
