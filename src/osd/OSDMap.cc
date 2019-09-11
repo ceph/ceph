@@ -3965,10 +3965,13 @@ void OSDMap::print_summary(Formatter *f, ostream& out,
 			   const string& prefix, bool extra) const
 {
   if (f) {
+    utime_t now = ceph_clock_now();
     f->dump_int("epoch", get_epoch());
     f->dump_int("num_osds", get_num_osds());
     f->dump_int("num_up_osds", get_num_up_osds());
+    f->dump_int("osd_up_since", (now - last_up_change).to_msec() / 1000ull);
     f->dump_int("num_in_osds", get_num_in_osds());
+    f->dump_int("osd_in_since", (now - last_in_change).to_msec() / 1000ull);
     f->dump_bool("full", test_flag(CEPH_OSDMAP_FULL) ? true : false);
     f->dump_bool("nearfull", test_flag(CEPH_OSDMAP_NEARFULL) ? true : false);
     f->dump_unsigned("num_remapped_pgs", get_num_pg_temp());
