@@ -157,7 +157,7 @@ function TEST_backfill_priority() {
     ceph osd pool set $pool3 size 2
     sleep 2
 
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_reservations || return 1
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_recovery_reservations || return 1
 
     # 3. Item is in progress, adjust priority with no higher priority waiting
     for i in $(seq 1 $max_tries)
@@ -172,18 +172,18 @@ function TEST_backfill_priority() {
       sleep 2
     done
     flush_pg_stats || return 1
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_reservations || return 1
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_recovery_reservations || return 1
 
     ceph osd out osd.$chk_osd1_2
     sleep 2
     flush_pg_stats || return 1
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_reservations || return 1
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_recovery_reservations || return 1
     ceph pg dump pgs
 
     ceph osd pool set $pool2 size 2
     sleep 2
     flush_pg_stats || return 1
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_reservations > $dir/out || return 1
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_recovery_reservations > $dir/out || return 1
     cat $dir/out
     ceph pg dump pgs
 
@@ -222,7 +222,7 @@ function TEST_backfill_priority() {
       sleep 2
     done
     sleep 2
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_reservations > $dir/out || return 1
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_recovery_reservations > $dir/out || return 1
     cat $dir/out
     PRIO=$(cat $dir/out | jq "(.local_reservations.queues[].items[] | select(.item == \"${PG2}\")).prio")
     if [ "$PRIO" != "$FORCE_PRIO" ];
@@ -235,7 +235,7 @@ function TEST_backfill_priority() {
     # 4. Item is in progress, if higher priority items waiting prempt item
     ceph pg cancel-force-backfill $PG3 || return 1
     sleep 2
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_reservations > $dir/out || return 1
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_recovery_reservations > $dir/out || return 1
     cat $dir/out
     PRIO=$(cat $dir/out | jq "(.local_reservations.queues[].items[] | select(.item == \"${PG3}\")).prio")
     if [ "$PRIO" != "$degraded_prio" ];
@@ -260,14 +260,14 @@ function TEST_backfill_priority() {
 
     ceph pg cancel-force-backfill $PG2 || return 1
     sleep 5
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_reservations || return 1
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_recovery_reservations || return 1
 
     # 2. Item is queued, re-queue and preempt because new priority higher than an in progress item
     flush_pg_stats || return 1
     ceph pg force-backfill $PG3 || return 1
     sleep 2
 
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_reservations > $dir/out || return 1
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_recovery_reservations > $dir/out || return 1
     cat $dir/out
     PRIO=$(cat $dir/out | jq "(.local_reservations.queues[].items[] | select(.item == \"${PG2}\")).prio")
     if [ "$PRIO" != "$degraded_prio" ];
@@ -293,7 +293,7 @@ function TEST_backfill_priority() {
     ceph osd unset noout
     ceph osd unset nobackfill
 
-    wait_for_clean "CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_reservations" || return 1
+    wait_for_clean "CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_recovery_reservations" || return 1
 
     ceph pg dump pgs
 
@@ -321,7 +321,7 @@ function TEST_backfill_priority() {
 # pool 2 with recovery_priority 2
 #
 # Start backfill by changing the pool sizes from 1 to 2
-# Use dump_reservations to verify priorities
+# Use dump_recovery_reservations to verify priorities
 function TEST_backfill_pool_priority() {
     local dir=$1
     local pools=3 # Don't assume the first 2 pools are exact what we want
@@ -430,10 +430,10 @@ function TEST_backfill_pool_priority() {
     ceph osd pool set $pool1 size 2
     ceph osd pool set $pool2 size 2
     sleep 5
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_reservations > $dir/dump.${chk_osd1_1}.out
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_1}) dump_recovery_reservations > $dir/dump.${chk_osd1_1}.out
     echo osd.${chk_osd1_1}
     cat $dir/dump.${chk_osd1_1}.out
-    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_2}) dump_reservations > $dir/dump.${chk_osd1_2}.out
+    CEPH_ARGS='' ceph --admin-daemon $(get_asok_path osd.${chk_osd1_2}) dump_recovery_reservations > $dir/dump.${chk_osd1_2}.out
     echo osd.${chk_osd1_2}
     cat $dir/dump.${chk_osd1_2}.out
 
