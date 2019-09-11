@@ -98,6 +98,7 @@ struct ResetRequest<MockTestImageCtx> {
                               const std::string &mirror_uuid,
                               ContextWQ *op_work_queue, Context *on_finish) {
     assert(s_instance != nullptr);
+    EXPECT_EQ(librbd::Journal<>::LOCAL_MIRROR_UUID, mirror_uuid);
     s_instance->on_finish = on_finish;
     return s_instance;
   }
