@@ -7,8 +7,8 @@
 #include "librbd/Utils.h"
 #include "librbd/image/RemoveRequest.h"
 #include "tools/rbd_mirror/Threads.h"
-#include "tools/rbd_mirror/image_deleter/RemoveRequest.h"
 #include "tools/rbd_mirror/image_deleter/SnapshotPurgeRequest.h"
+#include "tools/rbd_mirror/image_deleter/TrashRemoveRequest.h"
 #include "test/librados_test_stub/MockTestMemIoCtxImpl.h"
 #include "test/librbd/mock/MockImageCtx.h"
 
@@ -93,7 +93,7 @@ SnapshotPurgeRequest<librbd::MockTestImageCtx>* SnapshotPurgeRequest<librbd::Moc
 } // namespace mirror
 } // namespace rbd
 
-#include "tools/rbd_mirror/image_deleter/RemoveRequest.cc"
+#include "tools/rbd_mirror/image_deleter/TrashRemoveRequest.cc"
 
 namespace rbd {
 namespace mirror {
@@ -107,9 +107,9 @@ using ::testing::StrEq;
 using ::testing::WithArg;
 using ::testing::WithArgs;
 
-class TestMockImageDeleterRemoveRequest : public TestMockFixture {
+class TestMockImageDeleterTrashRemoveRequest : public TestMockFixture {
 public:
-  typedef RemoveRequest<librbd::MockTestImageCtx> MockRemoveRequest;
+  typedef TrashRemoveRequest<librbd::MockTestImageCtx> MockTrashRemoveRequest;
   typedef SnapshotPurgeRequest<librbd::MockTestImageCtx> MockSnapshotPurgeRequest;
   typedef librbd::image::RemoveRequest<librbd::MockTestImageCtx> MockImageRemoveRequest;
 
@@ -132,7 +132,8 @@ public:
     EXPECT_CALL(snapshot_purge_request, construct(image_id));
     EXPECT_CALL(snapshot_purge_request, send())
       .WillOnce(Invoke([this, &snapshot_purge_request, r]() {
-                  m_threads->work_queue->queue(snapshot_purge_request.on_finish, r);
+                  m_threads->work_queue->queue(
+                    snapshot_purge_request.on_finish, r);
                 }));
   }
 
@@ -141,12 +142,13 @@ public:
     EXPECT_CALL(image_remove_request, construct(image_id));
     EXPECT_CALL(image_remove_request, send())
       .WillOnce(Invoke([this, &image_remove_request, r]() {
-                  m_threads->work_queue->queue(image_remove_request.on_finish, r);
+                  m_threads->work_queue->queue(
+                    image_remove_request.on_finish, r);
                 }));
   }
 };
 
-TEST_F(TestMockImageDeleterRemoveRequest, Success) {
+TEST_F(TestMockImageDeleterTrashRemoveRequest, Success) {
   InSequence seq;
   expect_get_snapcontext("image id", {1, {1}}, 0);
 
@@ -158,14 +160,14 @@ TEST_F(TestMockImageDeleterRemoveRequest, Success) {
 
   C_SaferCond ctx;
   ErrorResult error_result;
-  auto req = MockRemoveRequest::create(m_local_io_ctx, "image id",
-                                       &error_result, m_threads->work_queue,
-                                       &ctx);
+  auto req = MockTrashRemoveRequest::create(m_local_io_ctx, "image id",
+                                            &error_result,
+                                            m_threads->work_queue, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
 
-TEST_F(TestMockImageDeleterRemoveRequest, GetSnapContextDNE) {
+TEST_F(TestMockImageDeleterTrashRemoveRequest, GetSnapContextDNE) {
   InSequence seq;
   expect_get_snapcontext("image id", {1, {1}}, -ENOENT);
 
@@ -174,27 +176,27 @@ TEST_F(TestMockImageDeleterRemoveRequest, GetSnapContextDNE) {
 
   C_SaferCond ctx;
   ErrorResult error_result;
-  auto req = MockRemoveRequest::create(m_local_io_ctx, "image id",
-                                       &error_result, m_threads->work_queue,
-                                       &ctx);
+  auto req = MockTrashRemoveRequest::create(m_local_io_ctx, "image id",
+                                            &error_result,
+                                            m_threads->work_queue, &ctx);
   req->send();
   ASSERT_EQ(0, ctx.wait());
 }
 
-TEST_F(TestMockImageDeleterRemoveRequest, GetSnapContextError) {
+TEST_F(TestMockImageDeleterTrashRemoveRequest, GetSnapContextError) {
   InSequence seq;
   expect_get_snapcontext("image id", {1, {1}}, -EINVAL);
 
   C_SaferCond ctx;
   ErrorResult error_result;
-  auto req = MockRemoveRequest::create(m_local_io_ctx, "image id",
-                                       &error_result, m_threads->work_queue,
-                                       &ctx);
+  auto req = MockTrashRemoveRequest::create(m_local_io_ctx, "image id",
+                                            &error_result,
+                                            m_threads->work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
-TEST_F(TestMockImageDeleterRemoveRequest, PurgeSnapshotBusy) {
+TEST_F(TestMockImageDeleterTrashRemoveRequest, PurgeSnapshotBusy) {
   InSequence seq;
   expect_get_snapcontext("image id", {1, {1}}, 0);
 
@@ -203,15 +205,15 @@ TEST_F(TestMockImageDeleterRemoveRequest, PurgeSnapshotBusy) {
 
   C_SaferCond ctx;
   ErrorResult error_result;
-  auto req = MockRemoveRequest::create(m_local_io_ctx, "image id",
-                                       &error_result, m_threads->work_queue,
-                                       &ctx);
+  auto req = MockTrashRemoveRequest::create(m_local_io_ctx, "image id",
+                                            &error_result,
+                                            m_threads->work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EBUSY, ctx.wait());
   ASSERT_EQ(ERROR_RESULT_RETRY_IMMEDIATELY, error_result);
 }
 
-TEST_F(TestMockImageDeleterRemoveRequest, PurgeSnapshotError) {
+TEST_F(TestMockImageDeleterTrashRemoveRequest, PurgeSnapshotError) {
   InSequence seq;
   expect_get_snapcontext("image id", {1, {1}}, 0);
 
@@ -220,14 +222,14 @@ TEST_F(TestMockImageDeleterRemoveRequest, PurgeSnapshotError) {
 
   C_SaferCond ctx;
   ErrorResult error_result;
-  auto req = MockRemoveRequest::create(m_local_io_ctx, "image id",
-                                       &error_result, m_threads->work_queue,
-                                       &ctx);
+  auto req = MockTrashRemoveRequest::create(m_local_io_ctx, "image id",
+                                            &error_result,
+                                            m_threads->work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }
 
-TEST_F(TestMockImageDeleterRemoveRequest, RemoveError) {
+TEST_F(TestMockImageDeleterTrashRemoveRequest, RemoveError) {
   InSequence seq;
   expect_get_snapcontext("image id", {1, {1}}, 0);
 
@@ -239,9 +241,9 @@ TEST_F(TestMockImageDeleterRemoveRequest, RemoveError) {
 
   C_SaferCond ctx;
   ErrorResult error_result;
-  auto req = MockRemoveRequest::create(m_local_io_ctx, "image id",
-                                       &error_result, m_threads->work_queue,
-                                       &ctx);
+  auto req = MockTrashRemoveRequest::create(m_local_io_ctx, "image id",
+                                            &error_result,
+                                            m_threads->work_queue, &ctx);
   req->send();
   ASSERT_EQ(-EINVAL, ctx.wait());
 }

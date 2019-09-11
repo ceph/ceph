@@ -25,14 +25,13 @@
 #include "librbd/ImageState.h"
 #include "librbd/Journal.h"
 #include "librbd/Operations.h"
-#include "librbd/image/RemoveRequest.h"
 #include "cls/rbd/cls_rbd_client.h"
 #include "cls/rbd/cls_rbd_types.h"
 #include "librbd/Utils.h"
 #include "ImageDeleter.h"
 #include "tools/rbd_mirror/Threads.h"
-#include "tools/rbd_mirror/image_deleter/RemoveRequest.h"
 #include "tools/rbd_mirror/image_deleter/TrashMoveRequest.h"
+#include "tools/rbd_mirror/image_deleter/TrashRemoveRequest.h"
 #include "tools/rbd_mirror/image_deleter/TrashWatcher.h"
 #include <map>
 #include <sstream>
@@ -387,7 +386,7 @@ void ImageDeleter<I>::remove_image(DeleteInfoRef delete_info) {
       m_async_op_tracker.finish_op();
     });
 
-  auto req = image_deleter::RemoveRequest<I>::create(
+  auto req = image_deleter::TrashRemoveRequest<I>::create(
     m_local_io_ctx, delete_info->image_id, &delete_info->error_result,
     m_threads->work_queue, ctx);
   req->send();
