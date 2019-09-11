@@ -86,10 +86,12 @@ class Socket
 
   seastar::future<> write(packet&& buf) {
 #ifdef UNIT_TESTS_BUILT
-    return try_trap(bp_type_t::WRITE).then([buf = std::move(buf), this] () mutable {
+    return try_trap_pre(next_trap_write).then([buf = std::move(buf), this] () mutable {
 #endif
       return out.write(std::move(buf));
 #ifdef UNIT_TESTS_BUILT
+    }).then([this] {
+      return try_trap_post(next_trap_write);
     });
 #endif
   }
@@ -98,10 +100,12 @@ class Socket
   }
   seastar::future<> write_flush(packet&& buf) {
 #ifdef UNIT_TESTS_BUILT
-    return try_trap(bp_type_t::WRITE).then([buf = std::move(buf), this] () mutable {
+    return try_trap_pre(next_trap_write).then([buf = std::move(buf), this] () mutable {
 #endif
       return out.write(std::move(buf)).then([this] { return out.flush(); });
 #ifdef UNIT_TESTS_BUILT
+    }).then([this] {
+      return try_trap_post(next_trap_write);
     });
 #endif
   }
@@ -124,15 +128,22 @@ class Socket
 
 #ifdef UNIT_TESTS_BUILT
  private:
-  std::optional<socket_trap_t> next_trap = std::nullopt;
+  bp_action_t next_trap_read = bp_action_t::CONTINUE;
+  bp_action_t next_trap_write = bp_action_t::CONTINUE;
   socket_blocker* blocker = nullptr;
-  seastar::future<> try_trap(bp_type_t type);
+  seastar::future<> try_trap_pre(bp_action_t& trap);
+  seastar::future<> try_trap_post(bp_action_t& trap);
 
  public:
-  void set_trap(socket_trap_t trap, socket_blocker* blocker_ = nullptr) {
-    ceph_assert(!next_trap);
-    next_trap = trap;
+  void set_trap(bp_type_t type, bp_action_t action, socket_blocker* blocker_) {
     blocker = blocker_;
+    if (type == bp_type_t::READ) {
+      ceph_assert(next_trap_read == bp_action_t::CONTINUE);
+      next_trap_read = action;
+    } else {
+      ceph_assert(next_trap_write == bp_action_t::CONTINUE);
+      next_trap_write = action;
+    }
   }
 #endif
 };

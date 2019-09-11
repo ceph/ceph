@@ -747,6 +747,11 @@ struct TestInterceptor : public Interceptor {
     breakpoints[bp][round] = bp_action_t::BLOCK;
   }
 
+  void make_stall(Breakpoint bp, unsigned round = 1) {
+    assert(round >= 1);
+    breakpoints[bp][round] = bp_action_t::STALL;
+  }
+
   ConnResult* find_result(ConnectionRef conn) {
     auto it = conns.find(conn);
     if (it == conns.end()) {
