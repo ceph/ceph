@@ -249,7 +249,7 @@ function milestone_number_from_remote_api {
     local mtt=$1  # milestone to try
     local mn=""   # milestone number
     warning "Milestone ->$mtt<- unknown to script - falling back to GitHub API"
-    remote_api_output=$(curl -s -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token)
+    remote_api_output=$(curl --silent -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token)
     mn=$(echo $remote_api_output | jq --arg milestone $mtt '.[] | select(.title==$milestone) | .number')
     if [ "$mn" -gt "0" ] >/dev/null 2>&1 ; then
         echo "$mn"
@@ -259,7 +259,7 @@ function milestone_number_from_remote_api {
             info "GitHub API said:"
             log bare "$remote_api_output"
         fi
-        info "Valid values are $(curl -s -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token | jq '.[].title')"
+        info "Valid values are $(curl --silent -X GET 'https://api.github.com/repos/ceph/ceph/milestones?access_token='$github_token | jq '.[].title')"
         info "(This probably means the Release field of ${redmine_url} is populated with"
         info "an unexpected value - i.e. it does not match any of the GitHub milestones.)"
         false
@@ -702,6 +702,26 @@ pgrep firefox >/dev/null && firefox ${github_endpoint}/pull/$number
 
 debug "Updating backport tracker issue in Redmine"
 redmine_status=2 # In Progress
-curl -X PUT --header 'Content-type: application/json' --data-binary '{"issue":{"description":"https://github.com/ceph/ceph/pull/'$number'","status_id":'$redmine_status',"assigned_to_id":'$redmine_user_id'},"notes":"Updated automatically by ceph-backport.sh"}' ${redmine_url}'.json?key='$redmine_key
-info "${redmine_url} updated"
+remote_api_status_code=$(curl --write-out %{http_code} --output /dev/null --silent -X PUT --header 'Content-type: application/json' --data-binary '{"issue":{"description":"https://github.com/ceph/ceph/pull/'$backport_pr_number'","status_id":'$redmine_status',"assigned_to_id":'$redmine_user_id'},"notes":"Updated automatically by ceph-backport.sh"}' ${redmine_url}'.json?key='$redmine_key)
+if [ "${remote_api_status_code:0:1}" = "2" ] ; then
+    info "${redmine_url} updated"
+elif [ "${remote_api_status_code:0:1}" = "4" ] ; then
+    error "Remote API ${redmine_endpoint} returned status ${remote_api_status_code}"
+    info "This indicates an authentication/authorization problem: is your API access key valid?"
+else
+    error "Remote API ${redmine_endpoint} returned unexpected response code ${remote_api_status_code}"
+fi
+# check if anything actually changed on the Redmine issue
+redmine_result_ok=""
+remote_api_output=$(curl --silent "${redmine_url}.json")
+tracker_description=$(echo $remote_api_output | jq -r '.issue.description')
+if [[ "$tracker_description" =~ "$backport_pr_number" ]] ; then
+    debug "Backport tracker description is set to ->${tracker_description}<-"
+    true  # success
+else
+    info "Failed to automatically update ${redmine_url}."
+    info "Please add a comment to ${redmine_url} to let others know that you"
+    info "are working on the backport. In your comment, consider mentioning the"
+    info "${backport_pr_url} (the URL of the backport PR that was just opened)."
+fi
 pgrep firefox >/dev/null && firefox ${redmine_url}
