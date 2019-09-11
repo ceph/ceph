@@ -5753,6 +5753,10 @@ std::vector<Option> get_rgw_options() {
     .set_default(-1)
     .set_description(""),
 
+    Option("rgw_lc_transition_min_size", Option::TYPE_SIZE, Option::LEVEL_ADVANCED)
+    .set_default(128_K)
+    .set_description("Min size of object that will be processed by lifecycle transition action"),
+
     Option("rgw_mp_lock_max_time", Option::TYPE_INT, Option::LEVEL_ADVANCED)
     .set_default(600)
     .set_description("Multipart upload max completion time")

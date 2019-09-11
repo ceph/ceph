@@ -1303,6 +1303,7 @@ OPTION(rgw_lc_lock_max_time, OPT_INT)  // total run time for a single lc process
 OPTION(rgw_lc_max_objs, OPT_INT)
 OPTION(rgw_lc_max_rules, OPT_U32)  // Max rules set on one bucket
 OPTION(rgw_lc_debug_interval, OPT_INT)  // Debug run interval, in seconds
+OPTION(rgw_lc_transition_min_size, OPT_U64)  // Min size of object for storage class transition
 OPTION(rgw_script_uri, OPT_STR) // alternative value for SCRIPT_URI if not set in request
 OPTION(rgw_request_uri, OPT_STR) // alternative value for REQUEST_URI if not set in request
 OPTION(rgw_ignore_get_invalid_range, OPT_BOOL) // treat invalid (e.g., negative) range requests as full

@@ -857,6 +857,10 @@ public:
       return false;
     }
 
+    if (o.meta.accounted_size < oc.cct->_conf->rgw_lc_transition_min_size) {
+      return false;
+    }
+
     auto mtime = get_effective_mtime(oc);
     bool is_expired;
     if (transition.days <= 0) {
