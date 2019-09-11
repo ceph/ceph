@@ -33,7 +33,7 @@ describe('Logs page', () => {
     });
 
     it('should open and show breadcrumb', async () => {
-      await expect(logs.getBreadcrumbText()).toEqual('Logs');
+      await logs.waitTextToBePresent(logs.getBreadcrumb(), 'Logs');
     });
 
     it('should show two tabs', async () => {

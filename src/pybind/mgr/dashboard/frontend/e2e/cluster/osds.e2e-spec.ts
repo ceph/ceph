@@ -18,7 +18,7 @@ describe('OSDs page', () => {
     });
 
     it('should open and show breadcrumb', async () => {
-      await expect(osds.getBreadcrumbText()).toEqual('OSDs');
+      await osds.waitTextToBePresent(osds.getBreadcrumb(), 'OSDs');
     });
 
     it('should show two tabs', async () => {

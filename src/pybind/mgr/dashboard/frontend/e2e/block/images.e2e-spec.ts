@@ -21,7 +21,7 @@ describe('Images page', () => {
     });
 
     it('should open and show breadcrumb', async () => {
-      await expect(images.getBreadcrumbText()).toEqual('Images');
+      await images.waitTextToBePresent(images.getBreadcrumb(), 'Images');
     });
 
     it('should show three tabs', async () => {

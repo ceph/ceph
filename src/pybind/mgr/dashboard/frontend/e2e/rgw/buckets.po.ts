@@ -41,7 +41,7 @@ export class BucketsPageHelper extends PageHelper {
   async edit(name: string, new_owner: string) {
     await this.getTableCell(name).click(); // click on the bucket you want to edit in the table
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
-    await expect(this.getBreadcrumbText()).toEqual('Edit');
+    await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit');
     await expect(element(by.css('input[name=placement-target]')).getAttribute('value')).toBe(
       'default-placement'
     );
@@ -144,7 +144,7 @@ export class BucketsPageHelper extends PageHelper {
     // Clicks the Create Bucket button but the page doesn't move. Done by testing
     // for the breadcrumb
     await element(by.cssContainingText('button', 'Create Bucket')).click(); // Clicks Create Bucket button
-    await expect(this.getBreadcrumbText()).toEqual('Create');
+    await this.waitTextToBePresent(this.getBreadcrumb(), 'Create');
     // content in fields seems to subsist through tests if not cleared, so it is cleared
     await nameInputField.clear();
     return element(by.cssContainingText('button', 'Cancel')).click();
@@ -160,7 +160,7 @@ export class BucketsPageHelper extends PageHelper {
     await this.getTableCell(name).click(); // click on the bucket you want to edit in the table
     await element(by.cssContainingText('button', 'Edit')).click(); // click button to move to edit page
 
-    await expect(this.getBreadcrumbText()).toEqual('Edit');
+    await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit');
 
     // Chooses 'Select a user' rather than a valid owner on Edit Bucket page
     // and checks if it's an invalid input
@@ -183,6 +183,6 @@ export class BucketsPageHelper extends PageHelper {
       'This field is required.'
     );
 
-    await expect(this.getBreadcrumbText()).toEqual('Edit');
+    await this.waitTextToBePresent(this.getBreadcrumb(), 'Edit');
   }
 }

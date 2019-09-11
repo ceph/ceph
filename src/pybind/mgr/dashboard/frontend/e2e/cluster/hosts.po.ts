@@ -31,9 +31,9 @@ export class HostsPageHelper extends PageHelper {
       // click link, check it worked by looking for changed breadcrumb,
       // navigate back to hosts page, repeat until all links checked
       await links.get(i).click();
-      await expect(this.getBreadcrumbText()).toEqual('Performance Counters');
+      await this.waitTextToBePresent(this.getBreadcrumb(), 'Performance Counters');
       await this.navigateTo();
-      await expect(this.getBreadcrumbText()).toEqual('Hosts');
+      await this.waitTextToBePresent(this.getBreadcrumb(), 'Hosts');
       links_tested++;
     }
     // check if any links were actually tested

@@ -19,7 +19,7 @@ describe('RGW users page', () => {
     });
 
     it('should open and show breadcrumb', async () => {
-      await expect(users.getBreadcrumbText()).toEqual('Users');
+      await users.waitTextToBePresent(users.getBreadcrumb(), 'Users');
     });
   });
 
