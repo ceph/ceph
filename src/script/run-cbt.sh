@@ -93,11 +93,11 @@ fi
 for config_file in $config_files; do
     echo "testing $config_file"
     cbt_config=$(mktemp $config_file.XXXX.yaml)
-    $source_dir/src/test/crimson/cbt/t2c.py \
+    python3 $source_dir/src/test/crimson/cbt/t2c.py \
         --build-dir $build_dir \
         --input $config_file \
         --output $cbt_config
-    $cbt_dir/cbt.py \
+    python3 $cbt_dir/cbt.py \
         --archive $archive_dir \
         --conf $build_dir/ceph.conf \
         $cbt_config
