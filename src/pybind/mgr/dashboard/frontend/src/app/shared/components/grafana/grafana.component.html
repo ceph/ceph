@@ -2,17 +2,19 @@
 <cd-loading-panel *ngIf="loading && grafanaExist"
                   i18n>Loading panel data...</cd-loading-panel>
 
-<cd-info-panel *ngIf="!grafanaExist"
-               i18n>Please consult the
+<cd-alert-panel type="info"
+                *ngIf="!grafanaExist"
+                i18n>Please consult the
   <a href="{{ docsUrl }}"
      target="_blank">documentation</a> on how to
-  configure and enable the monitoring functionality.</cd-info-panel>
+  configure and enable the monitoring functionality.</cd-alert-panel>
 
-<cd-info-panel *ngIf="!dashboardExist"
-               i18n>Grafana Dashboard doesn't exist. Please refer to
+<cd-alert-panel type="info"
+                *ngIf="!dashboardExist"
+                i18n>Grafana Dashboard doesn't exist. Please refer to
   <a href="{{ docsUrl }}"
      target="_blank">documentation</a> on how to
-  add dashboards to Grafana.</cd-info-panel>
+  add dashboards to Grafana.</cd-alert-panel>
 
 <ng-container *ngIf="grafanaExist && dashboardExist">
   <div class="row">
