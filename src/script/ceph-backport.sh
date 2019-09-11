@@ -18,7 +18,7 @@
 #
 
 this_script=$(basename "$0")
-how_to_get_setup_advice="For setup advice, run:  ${this_script} --setup-advice"
+how_to_get_setup_advice="For additional setup advice, run:  ${this_script} --setup-advice"
 
 if [[ $* == *--debug* ]]; then
     set -x
@@ -176,55 +176,6 @@ function init_mandatory_vars {
     fork_remote="${fork_remote:-$(deduce_remote fork)}"
 }
 
-function setup_summary {
-    local not_set="!!! NOT SET !!!"
-    local redmine_user_id_display="$not_set"
-    local redmine_key_display="$not_set"
-    local github_user_display="$not_set"
-    local github_token_display="$not_set"
-    local upstream_remote_display="$not_set"
-    local fork_remote_display="$not_set"
-    [ "$redmine_user_id" ] && redmine_user_id_display="$redmine_user_id"
-    [ "$redmine_key" ] && redmine_key_display="(OK, not shown)"
-    [ "$github_user" ] && github_user_display="$github_user"
-    [ "$github_token" ] && github_token_display="(OK, not shown)"
-    [ "$upstream_remote" ] && upstream_remote_display="$upstream_remote"
-    [ "$fork_remote" ] && fork_remote_display="$fork_remote"
-    debug Re-checking mandatory variables
-    test "$redmine_key"      || failed_mandatory_var_check redmine_key
-    test "$redmine_user_id"  || failed_mandatory_var_check redmine_user_id
-    test "$github_user"      || failed_mandatory_var_check github_user
-    test "$github_token"     || failed_mandatory_var_check github_token
-    test "$upstream_remote"  || failed_mandatory_var_check upstream_remote
-    test "$fork_remote"      || failed_mandatory_var_check fork_remote
-    test "$redmine_endpoint" || failed_mandatory_var_check redmine_endpoint
-    test "$github_endpoint"  || failed_mandatory_var_check github_endpoint
-    if [ "$SETUP_ONLY" ] ; then
-        read -r -d '' setup_summary <<EOM || true > /dev/null 2>&1
-redmine_user_id  $redmine_user_id_display
-redmine_key      $redmine_key_display
-github_user      $github_user_display
-github_token     $github_token_display
-upstream_remote  $upstream_remote_display
-fork_remote      $fork_remote_display
-EOM
-        log bare "================================"
-        log bare "Setup summary"
-        log bare "--------------------------------"
-        log bare "variable name    value"
-        log bare "--------------------------------"
-        log bare "$setup_summary"
-        log bare "================================"
-    elif [ "$VERBOSE" ] ; then
-        debug "redmine_user_id  $redmine_user_id_display"
-        debug "redmine_key      $redmine_key_display"
-        debug "github_user      $github_user_display"
-        debug "github_token     $github_token_display"
-        debug "upstream_remote  $upstream_remote_display"
-        debug "fork_remote      $fork_remote_display"
-    fi
-}
-
 function log {
     local level="$1"
     shift
@@ -338,6 +289,57 @@ actually using the script to stage a backport, run:
     ${this_script} --setup
 
 EOM
+}
+
+function setup_report {
+    local not_set="!!! NOT SET !!!"
+    local redmine_endpoint_display="${redmine_endpoint:-$not_set}"
+    local redmine_user_id_display="${redmine_user_id:-$not_set}"
+    local github_endpoint_display="${github_endpoint:-$not_set}"
+    local github_user_display="${github_user:-$not_set}"
+    local upstream_remote_display="${upstream_remote:-$not_set}"
+    local fork_remote_display="${fork_remote:-$not_set}"
+    local redmine_key_display=""
+    local github_token_display=""
+    [ "$redmine_key" ] && redmine_key_display="(OK, not shown)" || redmine_key_display="$not_set"
+    [ "$github_token" ] && github_token_display="(OK, not shown)" || github_token_display="$not_set"
+    debug Re-checking mandatory variables
+    test "$redmine_key"      || failed_mandatory_var_check redmine_key
+    test "$redmine_user_id"  || failed_mandatory_var_check redmine_user_id
+    test "$github_user"      || failed_mandatory_var_check github_user
+    test "$github_token"     || failed_mandatory_var_check github_token
+    test "$upstream_remote"  || failed_mandatory_var_check upstream_remote
+    test "$fork_remote"      || failed_mandatory_var_check fork_remote
+    test "$redmine_endpoint" || failed_mandatory_var_check redmine_endpoint
+    test "$github_endpoint"  || failed_mandatory_var_check github_endpoint
+    if [ "$SETUP_ONLY" ] ; then
+        read -r -d '' setup_summary <<EOM || true > /dev/null 2>&1
+redmine_endpoint $redmine_endpoint
+redmine_user_id  $redmine_user_id_display
+redmine_key      $redmine_key_display
+github_endpoint  $github_endpoint
+github_user      $github_user_display
+github_token     $github_token_display
+upstream_remote  $upstream_remote_display
+fork_remote      $fork_remote_display
+EOM
+        log bare "================================"
+        log bare "Setup report"
+        log bare "--------------------------------"
+        log bare "variable name    value"
+        log bare "--------------------------------"
+        log bare "$setup_summary"
+        log bare "================================"
+    elif [ "$VERBOSE" ] ; then
+        debug "redmine_endpoint $redmine_endpoint_display"
+        debug "redmine_user_id  $redmine_user_id_display"
+        debug "redmine_key      $redmine_key_display"
+        debug "github_endpoint  $github_endpoint_display"
+        debug "github_user      $github_user_display"
+        debug "github_token     $github_token_display"
+        debug "upstream_remote  $upstream_remote_display"
+        debug "fork_remote      $fork_remote_display"
+    fi
 }
 
 function troubleshooting_advice {
@@ -558,7 +560,7 @@ BACKPORT_COMMON=$HOME/bin/backport_common.sh
 setup_ok="1"
 init_github_user
 init_mandatory_vars
-setup_summary
+setup_report
 if [ "$setup_ok" ] ; then
     if [ "$SETUP_ONLY" ] ; then
         log bare "Overall setup is OK"
@@ -569,6 +571,7 @@ if [ "$setup_ok" ] ; then
 else
     if [ "$SETUP_ONLY" ] ; then
         log bare "Setup is NOT OK"
+        log bare "(hint) set variables via the environment"
         log bare "$how_to_get_setup_advice"
         false
     else
