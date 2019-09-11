@@ -24,6 +24,17 @@ if [[ $* == *--debug* ]]; then
     set -x
 fi
 
+function bail_out_github_api {
+    local api_said="$1"
+    info "GitHub API said:"
+    log bare "$api_said"
+    info "For setup report, run:  ${this_script} --setup"
+    info "For setup advice, run:  ${this_script} --setup-advice"
+    info "(hint) Check the value of github_token"
+    info "(hint) Run the script with --debug"
+    false
+}
+
 function cherry_pick_phase {
     local offset=0
     populate_original_issue
@@ -43,10 +54,11 @@ function cherry_pick_phase {
     info "Parent issue ostensibly fixed by: ${original_pr_url}"
 
     debug "Counting commits in ${original_pr_url}"
-    number=$(curl --silent https://api.github.com/repos/ceph/ceph/pulls/${original_pr}?access_token=${github_token} | jq .commits)
-    if [ -z "$number" ] ; then
+    remote_api_output=$(curl --silent https://api.github.com/repos/ceph/ceph/pulls/${original_pr}?access_token=${github_token})
+    number=$(echo ${remote_api_output} | jq .commits)
+    if [ -z "$number" -o "$number" = "null" ] ; then
         error "Could not determine the number of commits in ${original_pr_url}"
-        return 1
+        bail_out_github_api "$remote_api_output"
     fi
     info "Found $number commits in ${original_pr_url}"
 
@@ -105,7 +117,7 @@ function deduce_remote {
         url_component="$github_user"
     else
         error "Internal error in deduce_remote"
-        exit 1
+        false
     fi
     remote=$(git remote -v | egrep --ignore-case '(://|@)github.com(/|:)'$url_component'/ceph(\s|\.|\/)' | head -n1 | cut -f 1)
     if [ "$remote" ] ; then
@@ -113,7 +125,7 @@ function deduce_remote {
     else
         error "Cannot auto-determine ${remote_type}_remote"
         info "Please set this variable explicitly and also file a bug report at ${redmine_endpoint}"
-        exit 1
+        false
     fi
     echo "$remote"
 }
@@ -150,7 +162,7 @@ function init_github_user {
         else
             failed_mandatory_var_check github_user
             info "$how_to_get_setup_advice"
-            exit 1
+            false
         fi
     fi
 }
@@ -678,10 +690,8 @@ fi
 debug "Opening backport PR"
 remote_api_output=$(curl --silent --data-binary '{"title":"'"$title"'","head":"'$github_user':'$local_branch'","base":"'$target_branch'","body":"'"${desc}"'"}' 'https://api.github.com/repos/ceph/ceph/pulls?access_token='$github_token)
 number=$(echo "$remote_api_output" | jq -r .number)
-if [ "$number" = "null" ] ; then
-    error "Remote API call failed"
-    log bare "$remote_api_output"
-    false
+if [ -z "$number" -o "$number" = "null" ] ; then
+    bail_out_github_api "$remote_api_output"
 fi
 
 if [ "$SET_MILESTONE" -o "$CEPH_BACKPORT_SET_MILESTONE" ] ; then
