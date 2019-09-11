@@ -1,4 +1,3 @@
-import { Helper } from '../helper.po';
 import { PoolPageHelper } from '../pools/pools.po';
 import { ConfigurationPageHelper } from './configuration.po';
 import { LogsPageHelper } from './logs.po';
@@ -24,7 +23,7 @@ describe('Logs page', () => {
   });
 
   afterEach(async () => {
-    await Helper.checkConsole();
+    await LogsPageHelper.checkConsole();
   });
 
   describe('breadcrumb and tab tests', () => {
@@ -64,15 +63,19 @@ describe('Logs page', () => {
       await pools.navigateTo();
       await pools.delete(poolname);
 
-      await pools.navigateTo();
-      await pools.exist(poolname, false);
-
       await logs.navigateTo();
       await logs.checkAuditForPoolFunction(poolname, 'delete', hour, minute);
     });
   });
 
   describe('audit logs respond to editing configuration setting test', () => {
+    let originalTimeout;
+
+    beforeEach(() => {
+      originalTimeout = jasmine.DEFAULT_TIMEOUT_INTERVAL;
+      jasmine.DEFAULT_TIMEOUT_INTERVAL = 200000;
+    });
+
     it('should change config settings and check audit logs reacted', async () => {
       await configuration.navigateTo();
       await configuration.edit(configname, ['global', '5']);
@@ -82,6 +85,10 @@ describe('Logs page', () => {
 
       await configuration.navigateTo();
       await configuration.configClear(configname);
+    });
+
+    afterEach(function() {
+      jasmine.DEFAULT_TIMEOUT_INTERVAL = originalTimeout;
     });
   });
 });

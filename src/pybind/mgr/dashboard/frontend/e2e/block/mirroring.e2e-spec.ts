@@ -1,4 +1,3 @@
-import { Helper } from '../helper.po';
 import { PoolPageHelper } from '../pools/pools.po';
 import { MirroringPageHelper } from './mirroring.po';
 
@@ -12,7 +11,7 @@ describe('Mirroring page', () => {
   });
 
   afterEach(async () => {
-    await Helper.checkConsole();
+    await MirroringPageHelper.checkConsole();
   });
 
   describe('breadcrumb and tab tests', () => {
@@ -35,7 +34,7 @@ describe('Mirroring page', () => {
     });
   });
 
-  describe('checks that edit mode functionality shows in the pools table', async () => {
+  describe('checks that edit mode functionality shows in the pools table', () => {
     const poolName = 'mirroring_test';
 
     beforeAll(async () => {
@@ -59,8 +58,6 @@ describe('Mirroring page', () => {
     afterAll(async () => {
       await pools.navigateTo();
       await pools.delete(poolName);
-      await pools.navigateTo();
-      await pools.exist(poolName, false);
     });
   });
 });

@@ -20,6 +20,27 @@ export abstract class PageHelper {
   pages: Pages;
 
   /**
+   * Checks if there are any errors on the browser
+   *
+   * @static
+   * @memberof Helper
+   */
+  static async checkConsole() {
+    let browserLog = await browser
+      .manage()
+      .logs()
+      .get('browser');
+
+    browserLog = browserLog.filter((log) => log.level.value > 900);
+
+    if (browserLog.length > 0) {
+      console.log('\n log: ' + require('util').inspect(browserLog));
+    }
+
+    await expect(browserLog.length).toEqual(0);
+  }
+
+  /**
    * Decorator to be used on Helper methods to restrict access to one particular URL.  This shall
    * help developers to prevent and highlight mistakes.  It also reduces boilerplate code and by
    * thus, increases readability.
@@ -38,42 +59,6 @@ export abstract class PageHelper {
                     `run on path "${page}", but was run on URL "${url}"`
                 )
           );
-      };
-    };
-  }
-
-  /**
-   * This is a decorator to be used on methods which change the current page once, like `navigateTo`
-   * and `navigateBack` in this class do. It ensures that, if the new page contains a table, its
-   * data has been fully loaded. If no table is detected, it will return instantly.
-   */
-  static waitForTableData(): Function {
-    return (_target: any, _propertyKey: string, descriptor: PropertyDescriptor) => {
-      const fn: Function = descriptor.value;
-      descriptor.value = async function(...args) {
-        const result = fn.apply(this, args);
-
-        // If a table is on the new page, wait until it has gotten its data.
-        const implicitWaitTimeout = (await browser.getProcessedConfig()).implicitWaitTimeout;
-        await browser
-          .manage()
-          .timeouts()
-          .implicitlyWait(1000);
-
-        const tableCount = await element.all(by.css('cd-table')).count();
-        if (tableCount > 0) {
-          const progressBars = element.all(by.css('cd-table datatable-progress'));
-          await progressBars.each(async (progressBar) => {
-            await browser.wait(EC.stalenessOf(progressBar), TIMEOUT);
-          });
-        }
-
-        await browser
-          .manage()
-          .timeouts()
-          .implicitlyWait(implicitWaitTimeout);
-
-        return result;
       };
     };
   }
@@ -107,8 +92,8 @@ export abstract class PageHelper {
     return Number(text.match(/(\d+)\s+selected/)[1]);
   }
 
-  getTableCell(content: string): ElementFinder {
-    return element(by.cssContainingText('.datatable-body-cell-label', content));
+  getFirstTableCellWithText(content: string): ElementFinder {
+    return element.all(by.cssContainingText('.datatable-body-cell-label', content)).first();
   }
 
   getTableRow(content) {
@@ -121,13 +106,6 @@ export abstract class PageHelper {
 
   async getTabsCount(): Promise<number> {
     return $$('.nav.nav-tabs li').count();
-  }
-
-  /**
-   * Searches multiple tables and returns the first cell of any table that matches the criteria.
-   */
-  getFirstTableCellWithText(content: string): ElementFinder {
-    return element.all(by.cssContainingText('.datatable-body-cell-label', content)).first();
   }
 
   /**
@@ -147,6 +125,7 @@ export abstract class PageHelper {
     const tagName = await elem.getTagName();
     let label: ElementFinder = null; // Both types are clickable
 
+    await this.waitPresence(elem);
     if (tagName === 'input') {
       if ((await elem.getAttribute('type')) === 'checkbox') {
         label = elem.element(by.xpath('..')).$(`label[for="${await elem.getAttribute('id')}"]`);
@@ -161,7 +140,7 @@ export abstract class PageHelper {
       );
     }
 
-    return label.click();
+    return this.waitClickableAndClick(label);
   }
 
   /**
@@ -209,14 +188,12 @@ export abstract class PageHelper {
     }
   }
 
-  @PageHelper.waitForTableData()
   async navigateTo(page = null) {
     page = page || 'index';
     const url = this.pages[page];
     await browser.get(url);
   }
 
-  @PageHelper.waitForTableData()
   async navigateBack() {
     await browser.navigate().back();
   }
@@ -254,8 +231,12 @@ export abstract class PageHelper {
     return browser.wait(EC.stalenessOf(elem), TIMEOUT, message);
   }
 
-  async waitClickable(elem: ElementFinder, message?: string) {
-    return browser.wait(EC.elementToBeClickable(elem), TIMEOUT, message);
+  /**
+   * This method will wait for the element to be clickable and then click it.
+   */
+  async waitClickableAndClick(elem: ElementFinder, message?: string) {
+    await browser.wait(EC.elementToBeClickable(elem), TIMEOUT, message);
+    return elem.click();
   }
 
   async waitVisibility(elem: ElementFinder, message?: string) {
@@ -280,5 +261,28 @@ export abstract class PageHelper {
 
   getFirstCell(): ElementFinder {
     return $$('.datatable-body-cell-label').first();
+  }
+
+  /**
+   * This is a generic method to delete table rows.
+   * It will select the first row that contains the provided name and delete it.
+   * After that it will wait until the row is no longer displayed.
+   */
+  async delete(name: string): Promise<any> {
+    // Selects row
+    await this.waitClickableAndClick(this.getFirstTableCellWithText(name));
+
+    // Clicks on table Delete button
+    await $$('.table-actions button.dropdown-toggle')
+      .first()
+      .click(); // open submenu
+    await $('li.delete a').click(); // click on "delete" menu item
+
+    // Confirms deletion
+    await this.clickCheckbox($('.custom-control-label'));
+    await element(by.cssContainingText('button', 'Delete')).click();
+
+    // Waits for item to be removed from table
+    return this.waitStaleness(this.getFirstTableCellWithText(name));
   }
 }

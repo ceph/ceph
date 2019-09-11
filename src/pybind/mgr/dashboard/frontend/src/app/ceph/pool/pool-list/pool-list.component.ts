@@ -282,7 +282,9 @@ export class PoolListComponent implements OnInit {
   }
 
   getSelectionTiers() {
-    const cacheTierIds = this.selection.hasSingleSelection ? this.selection.first()['tiers'] : [];
+    const cacheTierIds = this.selection.hasSingleSelection
+      ? this.selection.first()['tiers'] || []
+      : [];
     this.selectionCacheTiers = this.pools.filter((pool) => cacheTierIds.includes(pool.pool));
   }
 

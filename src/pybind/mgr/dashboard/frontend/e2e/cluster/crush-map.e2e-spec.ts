@@ -1,5 +1,4 @@
 import { $ } from 'protractor';
-import { Helper } from '../helper.po';
 import { CrushMapPageHelper } from './crush-map.po';
 
 describe('CRUSH map page', () => {
@@ -10,7 +9,7 @@ describe('CRUSH map page', () => {
   });
 
   afterEach(async () => {
-    await Helper.checkConsole();
+    await CrushMapPageHelper.checkConsole();
   });
 
   describe('breadcrumb test', () => {

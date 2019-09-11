@@ -13,13 +13,11 @@ export class MirroringPageHelper extends PageHelper {
   @PageHelper.restrictTo(pages.index)
   async editMirror(name, option) {
     // Clicks the pool in the table
-    await this.waitClickable(this.getFirstTableCellWithText(name));
-    await this.getFirstTableCellWithText(name).click();
+    await this.waitClickableAndClick(this.getFirstTableCellWithText(name));
 
     // Clicks the Edit Mode button
     const editModeButton = element(by.cssContainingText('button', 'Edit Mode'));
-    await this.waitClickable(editModeButton);
-    await editModeButton.click();
+    await this.waitClickableAndClick(editModeButton);
     // Clicks the drop down in the edit pop-up, then clicks the Update button
     await this.waitVisibility($('.modal-content'));
     await element(by.id('mirrorMode')).click(); // Mode select box

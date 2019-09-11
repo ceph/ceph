@@ -1,5 +1,5 @@
 import { DatePipe } from '@angular/common';
-import { Component, OnDestroy, OnInit } from '@angular/core';
+import { Component, NgZone, OnDestroy, OnInit } from '@angular/core';
 
 import { LogsService } from '../../../shared/api/logs.service';
 import { Icons } from '../../../shared/enum/icons.enum';
@@ -31,16 +31,24 @@ export class LogsComponent implements OnInit, OnDestroy {
   selectedDate: Date;
   startTime: Date = new Date();
   endTime: Date = new Date();
-  constructor(private logsService: LogsService, private datePipe: DatePipe) {
+  constructor(
+    private logsService: LogsService,
+    private datePipe: DatePipe,
+    private ngZone: NgZone
+  ) {
     this.startTime.setHours(0, 0);
     this.endTime.setHours(23, 59);
   }
 
   ngOnInit() {
     this.getInfo();
-    this.interval = window.setInterval(() => {
-      this.getInfo();
-    }, 5000);
+    this.ngZone.runOutsideAngular(() => {
+      this.interval = window.setInterval(() => {
+        this.ngZone.run(() => {
+          this.getInfo();
+        });
+      }, 5000);
+    });
   }
 
   ngOnDestroy() {

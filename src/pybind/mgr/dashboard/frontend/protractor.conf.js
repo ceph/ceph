@@ -2,12 +2,21 @@
 // https://github.com/angular/protractor/blob/master/lib/config.ts
 
 const { SpecReporter } = require('jasmine-spec-reporter');
+let failFast = require("protractor-fail-fast");
 
 const config = {
   SELENIUM_PROMISE_MANAGER: false,
   allScriptsTimeout: 11000,
   implicitWaitTimeout: 9000,
-  specs: ['./e2e/**/*.e2e-spec.ts'],
+  suites: {
+    block: './e2e/block/*.e2e-spec.ts',
+    cluster: './e2e/cluster/*.e2e-spec.ts',
+    filesystems: './e2e/filesystems/*.e2e-spec.ts',
+    nfs: './e2e/nfs/*.e2e-spec.ts',
+    pools: './e2e/pools/*.e2e-spec.ts',
+    rgw: './e2e/rgw/*.e2e-spec.ts',
+    ui: './e2e/ui/*.e2e-spec.ts'
+  },
   capabilities: {
     browserName: 'chrome',
     chromeOptions: {
@@ -39,8 +48,12 @@ const config = {
       writeReportFreq: 'asap',
       imageToAscii: 'none',
       clearFoldersBeforeTest: true
-    }
-  ]
+    },
+    failFast.init()
+  ],
+  afterLaunch: function() {
+    failFast.clean();
+  }
 };
 
 config.onPrepare = async () => {
@@ -59,14 +72,6 @@ config.onPrepare = async () => {
   await browser.driver.findElement(by.name('password')).sendKeys(browser.params.login.password);
 
   await browser.driver.findElement(by.css('input[type="submit"]')).click();
-
-  // Login takes some time, so wait until it's done.
-  // For the test app's login, we know it's done when it redirects to
-  // dashboard.
-  await browser.driver.wait(async () => {
-    const url = await browser.driver.getCurrentUrl();
-    return /dashboard/.test(url);
-  });
 };
 
 exports.config = config;
