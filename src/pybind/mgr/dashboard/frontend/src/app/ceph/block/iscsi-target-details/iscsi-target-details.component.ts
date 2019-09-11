@@ -78,7 +78,9 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
 
     const cssClasses = {
       target: {
-        expanded: 'fa fa-fw fa-bullseye fa-lg'
+        expanded: this.selectedItem.cdExecuting
+          ? 'fa fa-fw fa-spinner fa-spin fa-lg'
+          : 'fa fa-fw fa-bullseye fa-lg'
       },
       initiators: {
         expanded: 'fa fa-fw fa-user fa-lg',
@@ -120,11 +122,13 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
     const clients = [];
     _.forEach(this.selectedItem.clients, (client) => {
       const client_metadata = _.cloneDeep(client.auth);
-      _.extend(client_metadata, client.info);
-      delete client_metadata['state'];
-      _.forEach(Object.keys(client.info.state), (state) => {
-        client_metadata[state.toLowerCase()] = client.info.state[state];
-      });
+      if (client.info) {
+        _.extend(client_metadata, client.info);
+        delete client_metadata['state'];
+        _.forEach(Object.keys(client.info.state), (state) => {
+          client_metadata[state.toLowerCase()] = client.info.state[state];
+        });
+      }
       this.metadata['client_' + client.client_iqn] = client_metadata;
 
       const luns = [];
@@ -138,9 +142,13 @@ export class IscsiTargetDetailsComponent implements OnChanges, OnInit {
         });
       });
 
+      let status = '';
+      if (client.info) {
+        status = Object.keys(client.info.state).includes('LOGGED_IN') ? 'logged_in' : 'logged_out';
+      }
       clients.push({
         value: client.client_iqn,
-        status: Object.keys(client.info.state).includes('LOGGED_IN') ? 'logged_in' : 'logged_out',
+        status: status,
         id: 'client_' + client.client_iqn,
         children: luns
       });
