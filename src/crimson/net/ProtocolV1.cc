@@ -318,7 +318,7 @@ void ProtocolV1::start_connect(const entity_addr_t& _peer_addr,
   conn.policy = messenger.get_policy(_peer_type);
   messenger.register_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-  seastar::with_gate(pending_dispatch, [this] {
+  (void) seastar::with_gate(pending_dispatch, [this] {
       return Socket::connect(conn.peer_addr)
         .then([this](SocketFRef sock) {
           socket = std::move(sock);
@@ -621,7 +621,7 @@ void ProtocolV1::start_accept(SocketFRef&& sock,
   socket = std::move(sock);
   messenger.accept_conn(
     seastar::static_pointer_cast<SocketConnection>(conn.shared_from_this()));
-  seastar::with_gate(pending_dispatch, [this] {
+  (void) seastar::with_gate(pending_dispatch, [this] {
       // stop learning my_addr before sending it out, so it won't change
       return messenger.learned_addr(messenger.get_myaddr(), conn).then([this] {
           // encode/send server's handshake header
@@ -849,7 +849,7 @@ seastar::future<> ProtocolV1::read_message()
       }
 
       // start dispatch, ignoring exceptions from the application layer
-      seastar::with_gate(pending_dispatch, [this, msg = std::move(msg_ref)] {
+      (void) seastar::with_gate(pending_dispatch, [this, msg = std::move(msg_ref)] {
           logger().debug("{} <== #{} === {} ({})",
                          conn, msg->get_seq(), *msg, msg->get_type());
           return dispatcher.ms_dispatch(&conn, std::move(msg))
@@ -896,7 +896,7 @@ void ProtocolV1::execute_open()
   state = state_t::open;
   set_write_state(write_state_t::open);
 
-  seastar::with_gate(pending_dispatch, [this] {
+  (void) seastar::with_gate(pending_dispatch, [this] {
       // start background processing of tags
       return handle_tags()
         .handle_exception_type([this] (const std::system_error& e) {

@@ -500,7 +500,7 @@ seastar::future<> Client::load_keyring()
 
 void Client::tick()
 {
-  seastar::with_gate(tick_gate, [this] {
+  (void) seastar::with_gate(tick_gate, [this] {
     if (active_con) {
       return seastar::when_all_succeed(active_con->get_conn()->keepalive(),
                                        active_con->renew_tickets(),
