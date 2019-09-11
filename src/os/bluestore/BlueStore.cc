@@ -5785,6 +5785,8 @@ int64_t BlueStore::_get_bluefs_size_delta(uint64_t bluefs_free, uint64_t bluefs_
   uint64_t reclaim = 0;
   if (bluefs_ratio < cct->_conf->bluestore_bluefs_min_ratio) {
     gift = cct->_conf->bluestore_bluefs_gift_ratio * total_free;
+    if (gift >= my_free)
+      gift = my_free / 2;
     dout(10) << __func__ << " bluefs_ratio " << bluefs_ratio
 	     << " < min_ratio " << cct->_conf->bluestore_bluefs_min_ratio
 	     << ", should gift " << byte_u_t(gift) << dendl;
@@ -5792,6 +5794,8 @@ int64_t BlueStore::_get_bluefs_size_delta(uint64_t bluefs_free, uint64_t bluefs_
     reclaim = cct->_conf->bluestore_bluefs_reclaim_ratio * total_free;
     if (bluefs_total - reclaim < cct->_conf->bluestore_bluefs_min)
       reclaim = bluefs_total - cct->_conf->bluestore_bluefs_min;
+    if (reclaim >= bluefs_free)
+      reclaim = bluefs_free / 2;
     dout(10) << __func__ << " bluefs_ratio " << bluefs_ratio
 	     << " > max_ratio " << cct->_conf->bluestore_bluefs_max_ratio
 	     << ", should reclaim " << byte_u_t(reclaim) << dendl;
