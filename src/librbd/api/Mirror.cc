@@ -23,6 +23,7 @@
 #include "librbd/mirror/PromoteRequest.h"
 #include "librbd/mirror/Types.h"
 #include "librbd/MirroringWatcher.h"
+#include <boost/algorithm/string/trim.hpp>
 #include <boost/scope_exit.hpp>
 #include "json_spirit/json_spirit.h"
 
@@ -35,6 +36,56 @@ namespace api {
 
 namespace {
 
+int get_config_key(librados::Rados& rados, const std::string& key,
+                   std::string* value) {
+  std::string cmd =
+    "{"
+      "\"prefix\": \"config-key get\", "
+      "\"key\": \"" + key + "\""
+    "}";
+
+  bufferlist in_bl;
+  bufferlist out_bl;
+
+  int r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
+  if (r == -EINVAL) {
+    return -EOPNOTSUPP;
+  } else if (r < 0 && r != -ENOENT) {
+    return r;
+  }
+
+  *value = out_bl.to_str();
+  return 0;
+}
+
+int set_config_key(librados::Rados& rados, const std::string& key,
+                   const std::string& value) {
+  std::string cmd;
+  if (value.empty()) {
+    cmd = "{"
+            "\"prefix\": \"config-key rm\", "
+            "\"key\": \"" + key + "\""
+          "}";
+  } else {
+    cmd = "{"
+            "\"prefix\": \"config-key set\", "
+            "\"key\": \"" + key + "\", "
+            "\"val\": \"" + value + "\""
+          "}";
+  }
+  bufferlist in_bl;
+  bufferlist out_bl;
+
+  int r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
+  if (r == -EINVAL) {
+    return -EOPNOTSUPP;
+  } else if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
 std::string get_peer_config_key_name(int64_t pool_id,
                                      const std::string& peer_uuid) {
   return RBD_MIRROR_PEER_CONFIG_KEY_PREFIX + stringify(pool_id) + "/" +
@@ -44,16 +95,10 @@ std::string get_peer_config_key_name(int64_t pool_id,
 int remove_peer_config_key(librados::IoCtx& io_ctx,
                            const std::string& peer_uuid) {
   int64_t pool_id = io_ctx.get_id();
-  std::string cmd =
-    "{"
-      "\"prefix\": \"config-key rm\", "
-      "\"key\": \"" + get_peer_config_key_name(pool_id, peer_uuid) + "\""
-    "}";
+  auto key = get_peer_config_key_name(pool_id, peer_uuid);
 
-  bufferlist in_bl;
-  bufferlist out_bl;
   librados::Rados rados(io_ctx);
-  int r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
+  int r = set_config_key(rados, key, "");
   if (r < 0 && r != -ENOENT && r != -EPERM) {
     return r;
   }
@@ -541,6 +586,51 @@ int Mirror<I>::image_get_instance_id(I *ictx, std::string *instance_id) {
 }
 
 template <typename I>
+int Mirror<I>::site_name_get(librados::Rados& rados, std::string* name) {
+  CephContext *cct = reinterpret_cast<CephContext *>(rados.cct());
+  ldout(cct, 20) << dendl;
+
+  int r = get_config_key(rados, RBD_MIRROR_SITE_NAME_CONFIG_KEY, name);
+  if (r == -EOPNOTSUPP) {
+    return r;
+  } else if (r == -ENOENT || name->empty()) {
+    // default to the cluster fsid
+    r = rados.cluster_fsid(name);
+    if (r < 0) {
+      lderr(cct) << "failed to retrieve cluster fsid: " << cpp_strerror(r)
+                 << dendl;
+    }
+    return r;
+  } else if (r < 0) {
+    lderr(cct) << "failed to retrieve site name: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+template <typename I>
+int Mirror<I>::site_name_set(librados::Rados& rados, const std::string& name) {
+  CephContext *cct = reinterpret_cast<CephContext *>(rados.cct());
+
+  std::string site_name{name};
+  boost::algorithm::trim(site_name);
+  ldout(cct, 20) << "site_name=" << site_name << dendl;
+
+  int r = set_config_key(rados, RBD_MIRROR_SITE_NAME_CONFIG_KEY, name);
+  if (r == -EOPNOTSUPP) {
+    return r;
+  } else if (r < 0 && r != -ENOENT) {
+    lderr(cct) << "failed to update site name: " << cpp_strerror(r)
+               << dendl;
+    return r;
+  }
+
+  return 0;
+}
+
+template <typename I>
 int Mirror<I>::mode_get(librados::IoCtx& io_ctx,
                         rbd_mirror_mode_t *mirror_mode) {
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
@@ -887,18 +977,12 @@ int Mirror<I>::peer_get_attributes(librados::IoCtx& io_ctx,
   ldout(cct, 20) << "uuid=" << uuid << dendl;
 
   attributes->clear();
-  std::string cmd =
-    "{"
-      "\"prefix\": \"config-key get\", "
-      "\"key\": \"" + get_peer_config_key_name(io_ctx.get_id(), uuid) + "\""
-    "}";
-
-  bufferlist in_bl;
-  bufferlist out_bl;
 
   librados::Rados rados(io_ctx);
-  int r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
-  if (r == -ENOENT || out_bl.length() == 0) {
+  std::string value;
+  int r = get_config_key(rados, get_peer_config_key_name(io_ctx.get_id(), uuid),
+                         &value);
+  if (r == -ENOENT || value.empty()) {
     return -ENOENT;
   } else if (r < 0) {
     lderr(cct) << "failed to retrieve peer attributes: " << cpp_strerror(r)
@@ -908,7 +992,7 @@ int Mirror<I>::peer_get_attributes(librados::IoCtx& io_ctx,
 
   bool json_valid = false;
   json_spirit::mValue json_root;
-  if(json_spirit::read(out_bl.to_str(), json_root)) {
+  if(json_spirit::read(value, json_root)) {
     try {
       auto& json_obj = json_root.get_obj();
       for (auto& pairs : json_obj) {
@@ -959,18 +1043,10 @@ int Mirror<I>::peer_set_attributes(librados::IoCtx& io_ctx,
   }
   ss << "}";
 
-  std::string cmd =
-    "{"
-      "\"prefix\": \"config-key set\", "
-      "\"key\": \"" + get_peer_config_key_name(io_ctx.get_id(), uuid) + "\", "
-      "\"val\": \"" + ss.str() + "\""
-    "}";
-  bufferlist in_bl;
-  bufferlist out_bl;
-
   librados::Rados rados(io_ctx);
-  r = rados.mon_command(cmd, in_bl, &out_bl, nullptr);
-  if (r < 0) {
+  r = set_config_key(rados, get_peer_config_key_name(io_ctx.get_id(), uuid),
+                     ss.str());
+  if (r < 0 && r != -ENOENT) {
     lderr(cct) << "failed to update peer attributes: " << cpp_strerror(r)
                << dendl;
     return r;
