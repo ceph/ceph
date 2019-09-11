@@ -88,9 +88,8 @@ seastar::future<> SocketConnection::keepalive()
 
 seastar::future<> SocketConnection::close()
 {
-  return seastar::smp::submit_to(shard_id(), [this] {
-      return protocol->close();
-    });
+  ceph_assert(seastar::engine().cpu_id() == shard_id());
+  return protocol->close();
 }
 
 bool SocketConnection::update_rx_seq(seq_num_t seq)
