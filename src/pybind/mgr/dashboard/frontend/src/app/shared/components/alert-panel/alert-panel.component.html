@@ -1,17 +1,14 @@
-<alert type="danger">
+<alert type="{{ bootstrapClass }}">
   <table>
     <tr>
-      <td rowspan="2"
-          class="error-panel-alert-icon">
-        <i [ngClass]="[icons.destroyCircle, icons.large3x]" class="alert-danger"
+      <td rowspan="2" class="alert-panel-icon">
+        <i [ngClass]="[icons.large3x]" class="alert-{{ bootstrapClass }} {{ typeIcon }}"
            aria-hidden="true"></i>
       </td>
-      <td class="error-panel-alert-title">
-        {{ title }}
-      </td>
+      <td class="alert-panel-title">{{ title }}</td>
     </tr>
     <tr>
-      <td class="error-panel-alert-text">
+      <td class="alert-panel-text">
         <ng-content></ng-content>
       </td>
     </tr>

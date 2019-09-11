@@ -1,6 +1,6 @@
 import { Component, Input, OnInit } from '@angular/core';
 
-import { ViewCacheStatus } from '../../../shared/enum/view-cache-status.enum';
+import { ViewCacheStatus } from '../../enum/view-cache-status.enum';
 
 @Component({
   selector: 'cd-view-cache',

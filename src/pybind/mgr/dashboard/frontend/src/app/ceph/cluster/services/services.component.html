@@ -1,8 +1,9 @@
-<cd-info-panel *ngIf="!orchestratorExist && !checkingOrchestrator"
-               i18n>Please consult the
+<cd-alert-panel type="info"
+                *ngIf="!orchestratorExist && !checkingOrchestrator"
+                i18n>Please consult the
   <a href="{{ docsUrl }}"
      target="_blank">documentation</a> on how to
-  configure and enable the orchestrator functionality.</cd-info-panel>
+  configure and enable the orchestrator functionality.</cd-alert-panel>
 
 <ng-container *ngIf="orchestratorExist">
   <cd-table [data]="services"
