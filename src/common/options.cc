@@ -1565,7 +1565,7 @@ std::vector<Option> get_global_options() {
     .add_service("mgr"),
 
     Option("mon_pg_warn_min_per_osd", Option::TYPE_UINT, Option::LEVEL_ADVANCED)
-    .set_default(30)
+    .set_default(0)
     .add_service("mgr")
     .set_description("minimal number PGs per (in) osd before we warn the admin"),
 
