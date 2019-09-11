@@ -6,6 +6,7 @@
 
 #include "include/rados/librados.hpp"
 #include "include/buffer.h"
+#include "cls/rbd/cls_rbd_types.h"
 #include "librbd/internal.h"
 #include "tools/rbd_mirror/image_deleter/Types.h"
 #include <string>
@@ -47,13 +48,19 @@ private:
    * <start>
    *    |
    *    v
+   * GET_TRASH_IMAGE_SPEC
+   *    |
+   *    v
    * GET_SNAP_CONTEXT
    *    |
    *    v
    * PURGE_SNAPSHOTS
    *    |
    *    v
-   * REMOVE_IMAGE
+   * TRASH_REMOVE
+   *    |
+   *    v
+   * NOTIFY_TRASH_REMOVE
    *    |
    *    v
    * <finish>
@@ -68,8 +75,12 @@ private:
   Context *m_on_finish;
 
   ceph::bufferlist m_out_bl;
+  cls::rbd::TrashImageSpec m_trash_image_spec;
   bool m_has_snapshots = false;
   librbd::NoOpProgressContext m_progress_ctx;
+
+  void get_trash_image_spec();
+  void handle_get_trash_image_spec(int r);
 
   void get_snap_context();
   void handle_get_snap_context(int r);
@@ -79,6 +90,9 @@ private:
 
   void remove_image();
   void handle_remove_image(int r);
+
+  void notify_trash_removed();
+  void handle_notify_trash_removed(int r);
 
   void finish(int r);
 

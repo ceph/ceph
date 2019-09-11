@@ -9,8 +9,9 @@
 #include "cls/rbd/cls_rbd_client.h"
 #include "librbd/ImageCtx.h"
 #include "librbd/Journal.h"
+#include "librbd/TrashWatcher.h"
 #include "librbd/Utils.h"
-#include "librbd/image/RemoveRequest.h"
+#include "librbd/trash/RemoveRequest.h"
 #include "tools/rbd_mirror/image_deleter/SnapshotPurgeRequest.h"
 
 #define dout_context g_ceph_context
@@ -29,6 +30,46 @@ using librbd::util::create_rados_callback;
 template <typename I>
 void TrashRemoveRequest<I>::send() {
   *m_error_result = ERROR_RESULT_RETRY;
+
+  get_trash_image_spec();
+}
+
+template <typename I>
+void TrashRemoveRequest<I>::get_trash_image_spec() {
+  dout(10) << dendl;
+
+  librados::ObjectReadOperation op;
+  librbd::cls_client::trash_get_start(&op, m_image_id);
+
+  auto aio_comp = create_rados_callback<
+    TrashRemoveRequest<I>,
+    &TrashRemoveRequest<I>::handle_get_trash_image_spec>(this);
+  m_out_bl.clear();
+  int r = m_io_ctx.aio_operate(RBD_TRASH, aio_comp, &op, &m_out_bl);
+  ceph_assert(r == 0);
+  aio_comp->release();
+}
+
+template <typename I>
+void TrashRemoveRequest<I>::handle_get_trash_image_spec(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r == 0) {
+    auto bl_it = m_out_bl.begin();
+    r = librbd::cls_client::trash_get_finish(&bl_it, &m_trash_image_spec);
+  }
+
+  if (r == -ENOENT || (r >= 0 && m_trash_image_spec.source !=
+                                   cls::rbd::TRASH_IMAGE_SOURCE_MIRRORING)) {
+    dout(10) << "image id " << m_image_id << " not in mirroring trash" << dendl;
+    finish(0);
+    return;
+  } else if (r < 0) {
+    derr << "error getting image id " << m_image_id << " info from trash: "
+         << cpp_strerror(r) << dendl;
+    finish(r);
+    return;
+  }
 
   get_snap_context();
 }
@@ -111,8 +152,8 @@ void TrashRemoveRequest<I>::remove_image() {
   auto ctx = create_context_callback<
     TrashRemoveRequest<I>,
     &TrashRemoveRequest<I>::handle_remove_image>(this);
-  auto req = librbd::image::RemoveRequest<I>::create(
-    m_io_ctx, "", m_image_id, true, true, m_progress_ctx, m_op_work_queue,
+  auto req = librbd::trash::RemoveRequest<I>::create(
+    m_io_ctx, m_image_id, m_op_work_queue, true, m_progress_ctx,
     ctx);
   req->send();
 }
@@ -134,6 +175,27 @@ void TrashRemoveRequest<I>::handle_remove_image(int r) {
          << cpp_strerror(r) << dendl;
     finish(r);
     return;
+  }
+
+  notify_trash_removed();
+}
+
+template <typename I>
+void TrashRemoveRequest<I>::notify_trash_removed() {
+  dout(10) << dendl;
+
+  Context *ctx = create_context_callback<
+    TrashRemoveRequest<I>,
+    &TrashRemoveRequest<I>::handle_notify_trash_removed>(this);
+  librbd::TrashWatcher<I>::notify_image_removed(m_io_ctx, m_image_id, ctx);
+}
+
+template <typename I>
+void TrashRemoveRequest<I>::handle_notify_trash_removed(int r) {
+  dout(10) << "r=" << r << dendl;
+
+  if (r < 0) {
+    derr << "failed to notify trash watchers: " << cpp_strerror(r) << dendl;
   }
 
   finish(0);
