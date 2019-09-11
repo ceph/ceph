@@ -2244,7 +2244,6 @@ private:
 
   void _fsck_check_pool_statfs(
     per_pool_statfs& expected_pool_statfs,
-    bool need_per_pool_stats,
     int64_t& errors,
     int64_t &warnings,
     BlueStoreRepairer* repairer);
@@ -3139,7 +3138,6 @@ public:
 
   OnodeRef fsck_check_objects_shallow(
     FSCKDepth depth,
-    bool need_per_pool_stats,
     int64_t pool_id,
     CollectionRef c,
     const ghobject_t& oid,
@@ -3151,7 +3149,6 @@ public:
 
 private:
   void _fsck_check_objects(FSCKDepth depth,
-    bool need_per_pool_stats,
     FSCK_ObjectCtx& ctx);
 };
 

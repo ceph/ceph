@@ -91,6 +91,12 @@
   output should be modified to parse the structured output instead, as
   the human-readable output may change without notice.
 
+* The ``bluestore_no_per_pool_stats_tolerance`` config option has been
+  replaced with ``bluestore_fsck_error_on_no_per_pool_stats``
+  (default: false).  The overall default behavior has not changed:
+  fsck will warn but not fail on legacy stores, and repair will
+  convert to per-pool stats.
+
 * The ``osd_recovery_max_active`` option now has
   ``osd_recovery_max_active_hdd`` and ``osd_recovery_max_active_ssd``
   variants, each with different default values for HDD and SSD-backed

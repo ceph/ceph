@@ -4156,7 +4156,6 @@ const char **BlueStore::get_tracked_conf_keys() const
     "osd_memory_cache_min",
     "bluestore_cache_autotune",
     "bluestore_cache_autotune_interval",
-    "bluestore_no_per_pool_stats_tolerance",
     "bluestore_warn_on_legacy_statfs",
     "bluestore_warn_on_no_per_pool_omap",
     "bluestore_max_defer_interval",
@@ -4168,8 +4167,7 @@ const char **BlueStore::get_tracked_conf_keys() const
 void BlueStore::handle_conf_change(const ConfigProxy& conf,
 				   const std::set<std::string> &changed)
 {
-  if (changed.count("bluestore_no_per_pool_stats_tolerance") ||
-      changed.count("bluestore_warn_on_legacy_statfs")) {
+  if (changed.count("bluestore_warn_on_legacy_statfs")) {
     _check_legacy_statfs_alert();
   }
   if (changed.count("bluestore_warn_on_no_per_pool_omap")) {
@@ -5977,9 +5975,6 @@ void BlueStore::_open_statfs()
       dout(10) << __func__ << " store_statfs is corrupt, using empty" << dendl;
     }
     _check_legacy_statfs_alert();
-  } else if (cct->_conf->bluestore_no_per_pool_stats_tolerance == "enforce") {
-    per_pool_stat_collection = false;
-    dout(10) << __func__ << " store_statfs is requested but missing, using empty" << dendl;
   } else {
     per_pool_stat_collection = true;
     dout(10) << __func__ << " per-pool statfs is enabled" << dendl;
@@ -7002,7 +6997,6 @@ int BlueStore::_fsck_check_extents(
 
 void BlueStore::_fsck_check_pool_statfs(
   BlueStore::per_pool_statfs& expected_pool_statfs,
-  bool need_per_pool_stats,
   int64_t& errors,
   int64_t& warnings,
   BlueStoreRepairer* repairer)
@@ -7013,30 +7007,11 @@ void BlueStore::_fsck_check_pool_statfs(
       string key = it->key();
       if (key == BLUESTORE_GLOBAL_STATFS_KEY) {
         if (repairer) {
-	  if (need_per_pool_stats) {
-	    ++errors;
-	    repairer->remove_key(db, PREFIX_STAT, BLUESTORE_GLOBAL_STATFS_KEY);
-	    derr << "fsck error: " << "legacy statfs record found, removing" << dendl;
-	  } else {
-	    derr << "fsck warning: " << "legacy statfs record found, bypassing" << dendl;
-            ++warnings;
-	  }
-	} else {
-	  const char* s;
-          if (need_per_pool_stats) {
-	    ++errors;
-	    s = "fsck error: ";
-	  } else {
-            s = "fsck warning: ";
-            ++warnings;
-          }
-	  derr << s << "legacy statfs record found, suggest to "
-	          "run store repair/quick_fix to get consistent statistic reports"
+	  ++errors;
+	  repairer->remove_key(db, PREFIX_STAT, BLUESTORE_GLOBAL_STATFS_KEY);
+	  derr << "fsck error: " << "legacy statfs record found, removing"
 	       << dendl;
 	}
-	continue;
-      }
-      if (!need_per_pool_stats) {
 	continue;
       }
       uint64_t pool_id;
@@ -7105,26 +7080,31 @@ void BlueStore::_fsck_check_pool_statfs(
       expected_pool_statfs.erase(stat_it);
     }
   } // if (it)
-  for( auto s = expected_pool_statfs.begin(); s != expected_pool_statfs.end();
-    ++s) {
-    if (s->second.is_zero()) {
+  for (auto& s : expected_pool_statfs) {
+    if (s.second.is_zero()) {
       // we might lack empty statfs recs in DB
       continue;
     }
     derr << "fsck error: missing Pool StatFS record for pool "
-	  << std::hex << s->first << std::dec << dendl;
+	 << std::hex << s.first << std::dec << dendl;
     if (repairer) {
       string key;
-      get_pool_stat_key(s->first, &key);
-      repairer->fix_statfs(db, key, s->second);
+      get_pool_stat_key(s.first, &key);
+      repairer->fix_statfs(db, key, s.second);
     }
     ++errors;
+  }
+  if (!per_pool_stat_collection &&
+      cct->_conf->bluestore_fsck_error_on_no_per_pool_stats &&
+      repairer) {
+    // by virtue of running this method, we correct the top-level
+    // error of having global stats
+    repairer->inc_repaired();
   }
 }
 
 BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
   BlueStore::FSCKDepth depth,
-  bool need_per_pool_stats,
   int64_t pool_id,
   BlueStore::CollectionRef c,
   const ghobject_t& oid,
@@ -7145,7 +7125,7 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
   auto& sb_info = ctx.sb_info;
   auto repairer = ctx.repairer;
 
-  store_statfs_t* res_statfs = need_per_pool_stats ?
+  store_statfs_t* res_statfs = (per_pool_stat_collection || repairer) ?
     &ctx.expected_pool_statfs[pool_id] :
     &ctx.expected_store_statfs;
 
@@ -7357,7 +7337,6 @@ public:
 
     size_t batchCount;
     BlueStore* store = nullptr;
-    bool need_per_pool_stats;
 
     mempool::bluestore_fsck::list<string>* expecting_shards = nullptr;
     ceph::mutex* sb_info_lock = nullptr;
@@ -7371,7 +7350,6 @@ public:
     FSCKWorkQueue(std::string n,
                   size_t _batchCount,
                   BlueStore* _store,
-                  bool _need_per_pool_stats,
                   mempool::bluestore_fsck::list<string>& _expecting_shards,
                   ceph::mutex* _sb_info_lock,
                   BlueStore::sb_info_map_t& _sb_info,
@@ -7379,7 +7357,6 @@ public:
       WorkQueue_(n, time_t(), time_t()),
       batchCount(_batchCount),
       store(_store),
-      need_per_pool_stats(_need_per_pool_stats),
       expecting_shards(&_expecting_shards),
       sb_info_lock(_sb_info_lock),
       sb_info(&_sb_info),
@@ -7446,7 +7423,6 @@ public:
 
         store->fsck_check_objects_shallow(
           BlueStore::FSCK_SHALLOW,
-          need_per_pool_stats,
           entry.pool_id,
           entry.c,
           entry.oid,
@@ -7559,7 +7535,6 @@ public:
 };
 
 void BlueStore::_fsck_check_objects(FSCKDepth depth,
-  bool need_per_pool_stats,
   BlueStore::FSCK_ObjectCtx& ctx)
 {
   //no need for the below lock when in non-shallow mode as
@@ -7591,7 +7566,6 @@ void BlueStore::_fsck_check_objects(FSCKDepth depth,
         "FSCKWorkQueue",
         (thread_count ? : 1) * 32,
         this,
-        need_per_pool_stats,
         expecting_shards,
         sb_info_lock,
         sb_info,
@@ -7714,7 +7688,6 @@ void BlueStore::_fsck_check_objects(FSCKDepth depth,
 
          o = fsck_check_objects_shallow(
           depth,
-          need_per_pool_stats,
           pool_id,
           c,
           oid,
@@ -8046,10 +8019,6 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   BlueStoreRepairer repairer;
 
   utime_t start = ceph_clock_now();
-  const auto& no_pps_mode = cct->_conf->bluestore_no_per_pool_stats_tolerance;
-  bool need_per_pool_stats = no_pps_mode == "until_fsck" ||
-    ((no_pps_mode == "until_repair")  && repair);
-  bool enforce_no_per_pool_stats = no_pps_mode == "enforce";
 
   _fsck_collections(&errors);
   used_blocks.resize(fm->get_alloc_units());
@@ -8110,6 +8079,18 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
       errors += r;
   }
 
+  if (!per_pool_stat_collection) {
+    const char *w;
+    if (cct->_conf->bluestore_fsck_error_on_no_per_pool_stats) {
+      w = "error";
+      ++errors;
+    } else {
+      w = "warning";
+      ++warnings;
+    }
+    derr << "fsck " << w << ": store not yet converted to per-pool stats"
+	 << dendl;
+  }
   if (!per_pool_omap) {
     const char *w;
     if (cct->_conf->bluestore_fsck_error_on_no_per_pool_omap) {
@@ -8134,8 +8115,6 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   actual_statfs.available = 0;
   actual_statfs.internal_metadata = 0;
   actual_statfs.omap_allocated = 0;
-
-  need_per_pool_stats = per_pool_stat_collection || need_per_pool_stats;
 
   if (g_conf()->bluestore_debug_fsck_abort) {
     dout(1) << __func__ << " debug abort" << dendl;
@@ -8163,15 +8142,14 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
       expected_pool_statfs,
       repair ? &repairer : nullptr);
     _fsck_check_objects(depth,
-      need_per_pool_stats,
       ctx);
   }
 
   dout(1) << __func__ << " checking shared_blobs" << dendl;
   it = db->get_iterator(PREFIX_SHARED_BLOB);
   if (it) {
-    //FIXME minor: perhaps simplify for shallow mode?
-    //fill global if not overriden below
+    // FIXME minor: perhaps simplify for shallow mode?
+    // fill global if not overriden below
     auto expected_statfs = &expected_store_statfs;
 
     for (it->lower_bound(string()); it->valid(); it->next()) {
@@ -8229,7 +8207,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	for (auto &r : shared_blob.ref_map.ref_map) {
 	  extents.emplace_back(bluestore_pextent_t(r.first, r.second.length));
 	}
-	if (need_per_pool_stats) {
+	if (per_pool_stat_collection || repair) {
 	  expected_statfs = &expected_pool_statfs[sbi.pool_id];
 	}
 	errors += _fsck_check_extents(sbi.cid,
@@ -8254,7 +8232,7 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
     interval_set<uint64_t> to_release;
     it = db->get_iterator(PREFIX_OBJ);
     if (it) {
-      //fill global if not overriden below
+      // fill global if not overriden below
       auto expected_statfs = &expected_store_statfs;
 
       CollectionRef c;
@@ -8289,8 +8267,8 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
 	  if (!c) {
 	    continue;
 	  }
-	  auto pool_id = c->cid.is_pg(&pgid) ? pgid.pool() : META_POOL_ID;
-	  if (need_per_pool_stats) {
+	  if (per_pool_stat_collection || repair) {
+	    auto pool_id = c->cid.is_pg(&pgid) ? pgid.pool() : META_POOL_ID;
 	    expected_statfs = &expected_pool_statfs[pool_id];
 	  }
 	}
@@ -8470,23 +8448,22 @@ int BlueStore::_fsck_on_open(BlueStore::FSCKDepth depth, bool repair)
   }
   sb_info.clear();
 
-  // check global stats if no-pps is enforced only
-  if (!need_per_pool_stats) {
-    if (!(actual_statfs == expected_store_statfs)) {
-      derr << "fsck error: actual " << actual_statfs
-	   << " != expected " << expected_store_statfs << dendl;
-      if (repair) {
-	repairer.fix_statfs(db, BLUESTORE_GLOBAL_STATFS_KEY,
-	  expected_store_statfs);
-      }
-      ++errors;
+  // check global stats only if fscking (not repairing) w/o per-pool stats
+  if (!per_pool_stat_collection &&
+      !repair &&
+      !(actual_statfs == expected_store_statfs)) {
+    derr << "fsck error: actual " << actual_statfs
+	 << " != expected " << expected_store_statfs << dendl;
+    if (repair) {
+      repairer.fix_statfs(db, BLUESTORE_GLOBAL_STATFS_KEY,
+			  expected_store_statfs);
     }
+    ++errors;
   }
-  if (!enforce_no_per_pool_stats) {
-    dout(1) << __func__ << " checking pool_statfs" << dendl;
-    _fsck_check_pool_statfs(expected_pool_statfs, need_per_pool_stats,
-      errors, warnings, repair ? &repairer : nullptr);
-  }
+
+  dout(1) << __func__ << " checking pool_statfs" << dendl;
+  _fsck_check_pool_statfs(expected_pool_statfs,
+			  errors, warnings, repair ? &repairer : nullptr);
 
   if (depth != FSCK_SHALLOW) {
     dout(1) << __func__ << " checking for stray omap data" << dendl;
@@ -9025,8 +9002,7 @@ void BlueStore::_check_legacy_statfs_alert()
 {
   string s;
   if (!per_pool_stat_collection &&
-    cct->_conf->bluestore_no_per_pool_stats_tolerance != "enforce" &&
-    cct->_conf->bluestore_warn_on_legacy_statfs) {
+      cct->_conf->bluestore_warn_on_legacy_statfs) {
     s = "legacy statfs reporting detected, "
         "suggest to run store repair to get consistent statistic reports";
   }
