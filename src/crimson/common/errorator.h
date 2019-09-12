@@ -31,6 +31,15 @@ struct unthrowable_wrapper {
     return instance;
   }
 
+  template<class Func>
+  static auto handle(Func&& func) {
+    return [
+      func = std::forward<Func>(func)
+    ] (const unthrowable_wrapper&) mutable -> decltype(auto) {
+      return std::invoke(std::forward<Func>(func));
+    };
+  }
+
 private:
   // can be used only to initialize the `instance` member
   explicit unthrowable_wrapper() = default;
@@ -98,6 +107,34 @@ public:
     return std::move(result);
   }
 };
+
+namespace _impl {
+  template <class T> struct always_false : std::false_type {};
+};
+
+template <class FuncHead, class... FuncTail>
+static constexpr auto composer(FuncHead&& head, FuncTail&&... tail) {
+  return [
+    head = std::forward<FuncHead>(head),
+    // perfect forwarding in lambda's closure isn't availble in C++17
+    // using tuple as workaround; see: https://stackoverflow.com/a/49902823
+    tail = std::make_tuple(std::forward<FuncTail>(tail)...)
+  ] (auto&&... args) mutable -> decltype(auto) {
+    if constexpr (std::is_invocable_v<FuncHead, decltype(args)...>) {
+      return std::invoke(std::forward<FuncHead>(head),
+                         std::forward<decltype(args)>(args)...);
+    } else if constexpr (sizeof...(FuncTail) > 0) {
+      using next_composer_t = decltype(composer<FuncTail...>);
+      auto&& next = std::apply<next_composer_t>(composer<FuncTail...>,
+                                                std::move(tail));
+      return std::invoke(std::move(next),
+                         std::forward<decltype(args)>(args)...);
+    } else {
+      static_assert(
+        _impl::always_false<FuncHead>::value, "composition is not exhaustive");
+    }
+  };
+}
 
 template <class... AllowedErrors>
 struct errorator {
@@ -268,6 +305,23 @@ struct errorator {
                                                std::move(future).get()));
           }
         })};
+    }
+
+    // taking ErrorFuncOne and ErrorFuncTwo separately from ErrorFuncTail
+    // to avoid SFINAE
+    template <class ValueFunc,
+              class ErrorFuncOne,
+              class ErrorFuncTwo,
+              class... ErrorFuncTail>
+    auto safe_then(ValueFunc&& value_func,
+                   ErrorFuncOne&& error_func_one,
+                   ErrorFuncTwo&& error_func_two,
+                   ErrorFuncTail&&... error_func_tail) {
+      return safe_then(
+        std::forward<ValueFunc>(value_func),
+        composer(std::forward<ErrorFuncOne>(error_func_one),
+                 std::forward<ErrorFuncTwo>(error_func_two),
+                 std::forward<ErrorFuncTail>(error_func_tail)...));
     }
 
     template <class Func>
