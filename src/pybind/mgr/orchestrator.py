@@ -434,18 +434,11 @@ class Orchestrator(object):
         """
         raise NotImplementedError()
 
-    def replace_osds(self, drive_group):
-        # type: (DriveGroupSpec) -> WriteCompletion
-        """
-        Like create_osds, but the osd_id_claims must be fully
-        populated.
-        """
-        raise NotImplementedError()
-
-    def remove_osds(self, osd_ids):
-        # type: (List[str]) -> WriteCompletion
+    def remove_osds(self, osd_ids, destroy=False):
+        # type: (List[str], bool) -> WriteCompletion
         """
         :param osd_ids: list of OSD IDs
+        :param destroy: marks the OSD as being destroyed. See :ref:`orchestrator-osd-replace`
 
         Note that this can only remove OSDs that were successfully
         created (i.e. got an OSD ID).
