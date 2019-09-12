@@ -142,10 +142,9 @@ public:
       case CEPH_LOCK_INEST: return "inest";
       case CEPH_LOCK_IXATTR: return "ixattr";
       case CEPH_LOCK_ISNAP: return "isnap";
-      case CEPH_LOCK_INO: return "ino";
       case CEPH_LOCK_IFLOCK: return "iflock";
       case CEPH_LOCK_IPOLICY: return "ipolicy";
-      default: ceph_abort(); return std::string_view();
+      default: return "unknown";
     }
   }
 

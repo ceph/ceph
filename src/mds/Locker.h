@@ -51,14 +51,13 @@ public:
 
   void nudge_log(SimpleLock *lock);
 
-  void include_snap_rdlocks(CInode *in, MutationImpl::LockOpVec& lov);
-  void include_snap_rdlocks_wlayout(CInode *in, MutationImpl::LockOpVec& lov,
-				    file_layout_t **layout);
-
   bool acquire_locks(MDRequestRef& mdr,
 		     MutationImpl::LockOpVec& lov,
 		     CInode *auth_pin_freeze=NULL,
 		     bool auth_pin_nonblocking=false);
+
+  bool try_rdlock_snap_layout(CInode *in, MDRequestRef& mdr,
+			      int n=0, bool want_layout=false);
 
   void notify_freeze_waiter(MDSCacheObject *o);
   void cancel_locking(MutationImpl *mut, std::set<CInode*> *pneed_issue);

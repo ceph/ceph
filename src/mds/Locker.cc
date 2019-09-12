@@ -136,42 +136,62 @@ void Locker::send_lock_message(SimpleLock *lock, int msg, const bufferlist &data
   }
 }
 
-
-
-
-void Locker::include_snap_rdlocks(CInode *in, MutationImpl::LockOpVec& lov)
+bool Locker::try_rdlock_snap_layout(CInode *in, MDRequestRef& mdr,
+				    int n, bool want_layout)
 {
+  dout(10) << __func__ << " " << *mdr << " " << *in << dendl;
   // rdlock ancestor snaps
-  CInode *t = in;
-  while (t->get_projected_parent_dn()) {
-    t = t->get_projected_parent_dn()->get_dir()->get_inode();
-    lov.add_rdlock(&t->snaplock);
-  }
-  lov.add_rdlock(&in->snaplock);
-}
-
-void Locker::include_snap_rdlocks_wlayout(CInode *in, MutationImpl::LockOpVec& lov,
-					  file_layout_t **layout)
-{
-  //rdlock ancestor snaps
-  CInode *t = in;
-  lov.add_rdlock(&in->snaplock);
-  lov.add_rdlock(&in->policylock);
+  bool found_locked = false;
   bool found_layout = false;
-  while (t) {
-    lov.add_rdlock(&t->snaplock);
-    if (!found_layout) {
-      lov.add_rdlock(&t->policylock);
+
+  if (want_layout)
+    ceph_assert(n == 0);
+
+  client_t client = mdr->get_client();
+
+  CInode *t = in;
+  while (true) {
+    if (!found_locked && mdr->is_rdlocked(&t->snaplock))
+      found_locked = true;
+
+    if (!found_locked) {
+      if (!t->snaplock.can_rdlock(client)) {
+	t->snaplock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
+	goto failed;
+      }
+      t->snaplock.get_rdlock();
+      mdr->locks.emplace(&t->snaplock, MutationImpl::LockOp::RDLOCK);
+      dout(20) << " got rdlock on " << t->snaplock << " " << *t << dendl;
+    }
+    if (want_layout && !found_layout) {
+      if (!mdr->is_rdlocked(&t->policylock)) {
+	if (!t->policylock.can_rdlock(client)) {
+	  t->policylock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
+	  goto failed;
+	}
+	t->policylock.get_rdlock();
+	mdr->locks.emplace(&t->policylock, MutationImpl::LockOp::RDLOCK);
+	dout(20) << " got rdlock on " << t->policylock << " " << *t << dendl;
+      }
       if (t->get_projected_inode()->has_layout()) {
-        *layout = &t->get_projected_inode()->layout;
-        found_layout = true;
+	mdr->dir_layout = t->get_projected_inode()->layout;
+	found_layout = true;
       }
     }
-    if (t->get_projected_parent_dn() &&
-        t->get_projected_parent_dn()->get_dir())
-      t = t->get_projected_parent_dn()->get_dir()->get_inode();
-    else t = NULL;
+    CDentry* pdn = t->get_projected_parent_dn();
+    if (!pdn)
+      break;
+    t = pdn->get_dir()->get_inode();
   }
+
+  return true;
+
+failed:
+  dout(10) << __func__ << " failed" << dendl;
+
+  drop_locks(mdr.get(), nullptr);
+  mdr->drop_local_auth_pins();
+  return false;
 }
 
 struct MarkEventOnDestruct {
@@ -195,11 +215,6 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 			   CInode *auth_pin_freeze,
 			   bool auth_pin_nonblocking)
 {
-  if (mdr->done_locking &&
-      !mdr->is_slave()) {  // not on slaves!  master requests locks piecemeal.
-    dout(10) << "acquire_locks " << *mdr << " - done locking" << dendl;    
-    return true;  // at least we had better be!
-  }
   dout(10) << "acquire_locks " << *mdr << dendl;
 
   MarkEventOnDestruct marker(mdr, "failed to acquire_locks");
@@ -270,7 +285,7 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
 	  lov.add_xlock(&dn->versionlock, i + 1);
 	}
       }
-      if (lock->get_type() > CEPH_LOCK_IVERSION) {
+      if (lock->get_type() >= CEPH_LOCK_IFIRST && lock->get_type() != CEPH_LOCK_IVERSION) {
 	// inode version lock?
 	CInode *in = static_cast<CInode*>(object);
 	if (!in->is_auth())
@@ -527,7 +542,6 @@ bool Locker::acquire_locks(MDRequestRef& mdr,
     }
   }
 
-  mdr->done_locking = true;
   mdr->set_mds_stamp(ceph_clock_now());
   result = true;
   marker.message = "acquired locks";
@@ -663,7 +677,7 @@ void Locker::drop_locks(MutationImpl *mut, set<CInode*> *pneed_issue)
 
   if (pneed_issue == &my_need_issue)
     issue_caps_set(*pneed_issue);
-  mut->done_locking = false;
+  mut->locking_state = 0;
 }
 
 void Locker::drop_non_rdlocks(MutationImpl *mut, set<CInode*> *pneed_issue)
@@ -1097,6 +1111,7 @@ void Locker::try_eval(SimpleLock *lock, bool *pneed_issue)
 
   if (lock->get_type() != CEPH_LOCK_DN &&
       lock->get_type() != CEPH_LOCK_ISNAP &&
+      lock->get_type() != CEPH_LOCK_IPOLICY &&
       p->is_freezing()) {
     dout(7) << "try_eval " << *lock << " freezing, waiting on " << *p << dendl;
     p->add_waiter(MDSCacheObject::WAIT_UNFREEZE, new C_Locker_Eval(this, p, lock->get_type()));
@@ -1623,6 +1638,7 @@ void Locker::_finish_xlock(SimpleLock *lock, client_t xlocker, bool *pneed_issue
   ceph_assert(!lock->is_stable());
   if (lock->get_type() != CEPH_LOCK_DN &&
       lock->get_type() != CEPH_LOCK_ISNAP &&
+      lock->get_type() != CEPH_LOCK_IPOLICY &&
       lock->get_num_rdlocks() == 0 &&
       lock->get_num_wrlocks() == 0 &&
       !lock->is_leased() &&
@@ -4060,7 +4076,8 @@ void Locker::simple_eval(SimpleLock *lock, bool *need_issue)
   if (lock->get_parent()->is_freezing_or_frozen()) {
     // dentry/snap lock in unreadable state can block path traverse
     if ((lock->get_type() != CEPH_LOCK_DN &&
-	 lock->get_type() != CEPH_LOCK_ISNAP) ||
+	 lock->get_type() != CEPH_LOCK_ISNAP &&
+	 lock->get_type() != CEPH_LOCK_IPOLICY) ||
 	 lock->get_state() == LOCK_SYNC ||
 	 lock->get_parent()->is_frozen())
       return;

@@ -170,7 +170,14 @@ public:
 
   // if this flag is set, do not attempt to acquire further locks.
   //  (useful for wrlock, which may be a moving auth target)
-  bool done_locking = false;
+  enum {
+    SNAP_LOCKED		= 1,
+    SNAP2_LOCKED	= 2,
+    PATH_LOCKED		= 4,
+    ALL_LOCKED		= 8,
+  };
+  int locking_state = 0;
+
   bool committing = false;
   bool aborted = false;
   bool killed = false;
@@ -278,10 +285,11 @@ struct MDRequestImpl : public MutationImpl {
   // -- i am a client (master) request
   cref_t<MClientRequest> client_request; // client request (if any)
 
+  file_layout_t dir_layout;
   // store up to two sets of dn vectors, inode pointers, for request path1 and path2.
   vector<CDentry*> dn[2];
-  CDentry *straydn;
   CInode *in[2];
+  CDentry *straydn;
   snapid_t snapid;
 
   CInode *tracei;

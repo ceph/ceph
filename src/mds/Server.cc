@@ -3110,7 +3110,6 @@ CDentry* Server::prepare_stray_dentry(MDRequestRef& mdr, CInode *in)
     if (straydn->get_name() == straydname)
       return straydn;
 
-    ceph_assert(!mdr->done_locking);
     mdr->unpin(straydn);
   }
 
@@ -3306,13 +3305,13 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n,
 				    bool want_auth,
 				    bool no_want_auth, /* for readdir, who doesn't want auth _even_if_ it's
 							  a snapped dir */
-				    file_layout_t **layout,
+				    bool want_layout,
 				    bool no_lookup)    // true if we cannot return a null dentry lease
 {
   const filepath& refpath = n ? mdr->get_filepath2() : mdr->get_filepath();
   dout(10) << "rdlock_path_pin_ref " << *mdr << " " << refpath << dendl;
 
-  if (mdr->done_locking)
+  if (mdr->locking_state & MutationImpl::PATH_LOCKED)
     return mdr->in[n];
 
   if (!no_want_auth && refpath.is_last_snap())
@@ -3320,9 +3319,11 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n,
 
   // traverse
   CF_MDS_MDRContextFactory cf(mdcache, mdr);
-  int flags = 0;
+  int flags = n == 0 ? MDS_TRAVERSE_RDLOCK_SNAP : MDS_TRAVERSE_RDLOCK_SNAP2;
   if (want_auth)
     flags |= MDS_TRAVERSE_WANT_AUTH;
+  if (want_layout)
+    flags |= MDS_TRAVERSE_WANT_DIRLAYOUT;
   int r = mdcache->path_traverse(mdr, cf, refpath, flags, &mdr->dn[n], &mdr->in[n]);
   if (r > 0)
     return nullptr; // delayed
@@ -3376,10 +3377,6 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n,
 
   for (int i=0; i<(int)mdr->dn[n].size(); i++) 
     lov.add_rdlock(&mdr->dn[n][i]->lock);
-  if (layout)
-    mds->locker->include_snap_rdlocks_wlayout(ref, lov, layout);
-  else
-    mds->locker->include_snap_rdlocks(ref, lov);
 
   // set and pin ref
   mdr->pin(ref);
@@ -3396,16 +3393,22 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr, int n,
 CDentry* Server::rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
 					  MutationImpl::LockOpVec& lov,
 					  bool okexist, bool alwaysxlock,
-					  file_layout_t **layout)
+					  bool want_layout)
 {
   const filepath& refpath = n ? mdr->get_filepath2() : mdr->get_filepath();
 
   dout(10) << "rdlock_path_xlock_dentry " << *mdr << " " << refpath << dendl;
-  if (mdr->done_locking)
+  if (mdr->locking_state & MutationImpl::PATH_LOCKED)
     return mdr->dn[n].back();
 
   CF_MDS_MDRContextFactory cf(mdcache, mdr);
   int flags = MDS_TRAVERSE_WANT_DENTRY | MDS_TRAVERSE_WANT_AUTH;
+  if (n == 0)
+   flags |= MDS_TRAVERSE_RDLOCK_SNAP;
+  else
+   flags |=  MDS_TRAVERSE_RDLOCK_SNAP2;
+  if (want_layout)
+    flags |= MDS_TRAVERSE_WANT_DIRLAYOUT;
   int r = mdcache->path_traverse(mdr, cf, refpath, flags, &mdr->dn[n]);
   if (r > 0)
     return nullptr; // delayed
@@ -3466,10 +3469,6 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
     lov.add_rdlock(&dn->lock);  // existing dn, rdlock
   lov.add_wrlock(&dn->get_dir()->inode->filelock); // also, wrlock on dir mtime
   lov.add_wrlock(&dn->get_dir()->inode->nestlock); // also, wrlock on dir mtime
-  if (layout)
-    mds->locker->include_snap_rdlocks_wlayout(dn->get_dir()->inode, lov, layout);
-  else
-    mds->locker->include_snap_rdlocks(dn->get_dir()->inode, lov);
 
   return dn;
 }
@@ -3607,7 +3606,7 @@ void Server::handle_client_getattr(MDRequestRef& mdr, bool is_lookup)
 	       ref->filelock.get_num_wrlocks() > 0 ||
 	       !ref->filelock.can_read(mdr->get_client())) {
       lov.add_rdlock(&ref->filelock);
-      mdr->done_locking = false;
+      mdr->locking_state &= ~MutationImpl::ALL_LOCKED;
     }
   }
 
@@ -3865,7 +3864,7 @@ void Server::handle_client_open(MDRequestRef& mdr)
 
   if (cur->is_frozen() || cur->state_test(CInode::STATE_EXPORTINGCAPS)) {
     ceph_assert(!need_auth);
-    mdr->done_locking = false;
+    mdr->locking_state &= ~MutationImpl::PATH_LOCKED;
     CInode *cur = rdlock_path_pin_ref(mdr, 0, lov, true);
     if (!cur)
       return;
@@ -4097,9 +4096,7 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   }
 
   MutationImpl::LockOpVec lov;
-  file_layout_t *dir_layout = nullptr;
-  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, lov,
-                                         !excl, false, &dir_layout);
+  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, lov, !excl, false, true);
   if (!dn) return;
   if (mdr->snapid != CEPH_NOSNAP) {
     respond_to_request(mdr, -EROFS);
@@ -4107,8 +4104,8 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   }
   // set layout
   file_layout_t layout;
-  if (dir_layout)
-    layout = *dir_layout;
+  if (mdr->dir_layout != file_layout_t())
+    layout = mdr->dir_layout;
   else
     layout = mdcache->default_file_layout;
 
@@ -4982,8 +4979,7 @@ void Server::handle_client_setdirlayout(MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
   MutationImpl::LockOpVec lov;
-  file_layout_t *dir_layout = nullptr;
-  CInode *cur = rdlock_path_pin_ref(mdr, 0, lov, true, false, &dir_layout);
+  CInode *cur = rdlock_path_pin_ref(mdr, 0, lov, true, false, true);
   if (!cur) return;
 
   if (mdr->snapid != CEPH_NOSNAP) {
@@ -5005,8 +5001,8 @@ void Server::handle_client_setdirlayout(MDRequestRef& mdr)
   file_layout_t layout;
   if (old_pi->has_layout())
     layout = old_pi->layout;
-  else if (dir_layout)
-    layout = *dir_layout;
+  else if (mdr->dir_layout != file_layout_t())
+    layout = mdr->dir_layout;
   else
     layout = mdcache->default_file_layout;
 
@@ -5264,7 +5260,6 @@ int Server::check_layout_vxattr(MDRequestRef& mdr,
 }
 
 void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
-			       file_layout_t *dir_layout,
 			       MutationImpl::LockOpVec& lov)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
@@ -5293,8 +5288,8 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
     file_layout_t layout;
     if (cur->get_projected_inode()->has_layout())
       layout = cur->get_projected_inode()->layout;
-    else if (dir_layout)
-      layout = *dir_layout;
+    else if (mdr->dir_layout != file_layout_t())
+      layout = mdr->dir_layout;
     else
       layout = mdcache->default_file_layout;
 
@@ -5424,7 +5419,6 @@ void Server::handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
 }
 
 void Server::handle_remove_vxattr(MDRequestRef& mdr, CInode *cur,
-				  file_layout_t *dir_layout,
 				  MutationImpl::LockOpVec& lov)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
@@ -5473,7 +5467,7 @@ void Server::handle_remove_vxattr(MDRequestRef& mdr, CInode *cur,
     // null/none value (empty string, means default layout).  Is equivalent
     // to a setxattr with empty string: pass through the empty payload of
     // the rmxattr request to do this.
-    handle_set_vxattr(mdr, cur, dir_layout, lov);
+    handle_set_vxattr(mdr, cur, lov);
     return;
   }
 
@@ -5507,9 +5501,8 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
   MutationImpl::LockOpVec lov;
   CInode *cur;
 
-  file_layout_t *dir_layout = NULL;
   if (name.compare(0, 15, "ceph.dir.layout") == 0)
-    cur = rdlock_path_pin_ref(mdr, 0, lov, true, false, &dir_layout);
+    cur = rdlock_path_pin_ref(mdr, 0, lov, true, false, true);
   else
     cur = rdlock_path_pin_ref(mdr, 0, lov, true);
   if (!cur)
@@ -5524,7 +5517,7 @@ void Server::handle_client_setxattr(MDRequestRef& mdr)
 
   // magic ceph.* namespace?
   if (name.compare(0, 5, "ceph.") == 0) {
-    handle_set_vxattr(mdr, cur, dir_layout, lov);
+    handle_set_vxattr(mdr, cur, lov);
     return;
   }
 
@@ -5605,10 +5598,9 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
   std::string name(req->get_path2());
 
   MutationImpl::LockOpVec lov;
-  file_layout_t *dir_layout = nullptr;
   CInode *cur;
   if (name == "ceph.dir.layout")
-    cur = rdlock_path_pin_ref(mdr, 0, lov, true, false, &dir_layout);
+    cur = rdlock_path_pin_ref(mdr, 0, lov, true, false, true);
   else
     cur = rdlock_path_pin_ref(mdr, 0, lov, true);
   if (!cur)
@@ -5620,7 +5612,7 @@ void Server::handle_client_removexattr(MDRequestRef& mdr)
   }
 
   if (name.compare(0, 5, "ceph.") == 0) {
-    handle_remove_vxattr(mdr, cur, dir_layout, lov);
+    handle_remove_vxattr(mdr, cur, lov);
     return;
   }
 
@@ -5718,9 +5710,7 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
   const cref_t<MClientRequest> &req = mdr->client_request;
   client_t client = mdr->get_client();
   MutationImpl::LockOpVec lov;
-  file_layout_t *dir_layout = nullptr;
-  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, lov, false, false,
-					 &dir_layout);
+  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, lov, false, false, true);
   if (!dn) return;
   if (mdr->snapid != CEPH_NOSNAP) {
     respond_to_request(mdr, -EROFS);
@@ -5743,8 +5733,8 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
 
   // set layout
   file_layout_t layout;
-  if (dir_layout && S_ISREG(mode))
-    layout = *dir_layout;
+  if (S_ISREG(mode) && mdr->dir_layout != file_layout_t())
+    layout = mdr->dir_layout;
   else
     layout = mdcache->default_file_layout;
 
@@ -6709,7 +6699,8 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
     lov.add_xlock(&straydn->lock);
   }
 
-  mds->locker->include_snap_rdlocks(diri, lov);
+  // FIXME
+  // mds->locker->include_snap_rdlocks(diri, lov);
   lov.add_xlock(&in->snaplock);
   if (in->is_dir())
     lov.add_rdlock(&in->filelock);   // to verify it's empty
@@ -7583,7 +7574,8 @@ void Server::handle_client_rename(MDRequestRef& mdr)
     lov.add_wrlock(&srcdir->inode->filelock);
     lov.add_wrlock(&srcdir->inode->nestlock);
   }
-  mds->locker->include_snap_rdlocks(srcdir->inode, lov);
+  // FIXME
+  // mds->locker->include_snap_rdlocks(srcdir->inode, lov);
 
   // straydn?
   if (straydn) {
@@ -9510,9 +9502,7 @@ void Server::handle_client_lssnap(MDRequestRef& mdr)
   dout(10) << "lssnap on " << *diri << dendl;
 
   // lock snap
-  MutationImpl::LockOpVec lov;
-  mds->locker->include_snap_rdlocks(diri, lov);
-  if (!mds->locker->acquire_locks(mdr, lov))
+  if (!mds->locker->try_rdlock_snap_layout(diri, mdr))
     return;
 
   if (!check_access(mdr, diri, MAY_READ))
@@ -9651,14 +9641,18 @@ void Server::handle_client_mksnap(MDRequestRef& mdr)
   dout(10) << "mksnap " << snapname << " on " << *diri << dendl;
 
   // lock snap
-  MutationImpl::LockOpVec lov;
+  if (!(mdr->locking_state & MutationImpl::ALL_LOCKED)) {
+    MutationImpl::LockOpVec lov;
+    lov.add_xlock(&diri->snaplock);
+    if (!mds->locker->acquire_locks(mdr, lov))
+      return;
 
-  mds->locker->include_snap_rdlocks(diri, lov);
-  lov.erase_rdlock(&diri->snaplock);
-  lov.add_xlock(&diri->snaplock);
-
-  if (!mds->locker->acquire_locks(mdr, lov))
-    return;
+    if (CDentry *pdn = diri->get_projected_parent_dn(); pdn) {
+      if (!mds->locker->try_rdlock_snap_layout(pdn->get_dir()->get_inode(), mdr))
+	return;
+    }
+    mdr->locking_state |= MutationImpl::ALL_LOCKED;
+  }
 
   if (!check_access(mdr, diri, MAY_WRITE|MAY_SNAPSHOT))
     return;
@@ -9820,13 +9814,17 @@ void Server::handle_client_rmsnap(MDRequestRef& mdr)
   snapid_t snapid = diri->snaprealm->resolve_snapname(snapname, diri->ino());
   dout(10) << " snapname " << snapname << " is " << snapid << dendl;
 
-  MutationImpl::LockOpVec lov;
-  mds->locker->include_snap_rdlocks(diri, lov);
-  lov.erase_rdlock(&diri->snaplock);
-  lov.add_xlock(&diri->snaplock);
-
-  if (!mds->locker->acquire_locks(mdr, lov))
-    return;
+  if (!(mdr->locking_state & MutationImpl::ALL_LOCKED)) {
+    MutationImpl::LockOpVec lov;
+    lov.add_xlock(&diri->snaplock);
+    if (!mds->locker->acquire_locks(mdr, lov))
+      return;
+    if (CDentry *pdn = diri->get_projected_parent_dn(); pdn) {
+      if (!mds->locker->try_rdlock_snap_layout(pdn->get_dir()->get_inode(), mdr))
+	return;
+    }
+    mdr->locking_state |= MutationImpl::ALL_LOCKED;
+  }
 
   if (!check_access(mdr, diri, MAY_WRITE|MAY_SNAPSHOT))
     return;
@@ -9969,14 +9967,17 @@ void Server::handle_client_renamesnap(MDRequestRef& mdr)
   dout(10) << " snapname " << srcname << " is " << snapid << dendl;
 
   // lock snap
-  MutationImpl::LockOpVec lov;
-
-  mds->locker->include_snap_rdlocks(diri, lov);
-  lov.erase_rdlock(&diri->snaplock);
-  lov.add_xlock(&diri->snaplock);
-
-  if (!mds->locker->acquire_locks(mdr, lov))
-    return;
+  if (!(mdr->locking_state & MutationImpl::ALL_LOCKED)) {
+    MutationImpl::LockOpVec lov;
+    lov.add_xlock(&diri->snaplock);
+    if (!mds->locker->acquire_locks(mdr, lov))
+      return;
+    if (CDentry *pdn = diri->get_projected_parent_dn(); pdn) {
+      if (!mds->locker->try_rdlock_snap_layout(pdn->get_dir()->get_inode(), mdr))
+	return;
+    }
+    mdr->locking_state |= MutationImpl::ALL_LOCKED;
+  }
 
   if (!check_access(mdr, diri, MAY_WRITE|MAY_SNAPSHOT))
     return;

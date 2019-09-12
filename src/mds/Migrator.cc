@@ -3158,6 +3158,8 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
 				   map<CInode*, map<client_t,Capability::Export> >& peer_exports,
 				   list<ScatterLock*>& updated_scatterlocks)
 { 
+  CInode *in;
+  bool added = false;
   DECODE_START(1, blp); 
   dout(15) << __func__ << " on " << *dn << dendl;
 
@@ -3166,8 +3168,7 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
   decode(ino, blp);
   decode(last, blp);
 
-  bool added = false;
-  CInode *in = cache->get_inode(ino, last);
+  in = cache->get_inode(ino, last);
   if (!in) {
     in = new CInode(mds->mdcache, true, 1, last);
     added = true;
@@ -3178,6 +3179,8 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
 
   // caps
   decode_import_inode_caps(in, true, blp, peer_exports);
+
+  DECODE_FINISH(blp);
 
   // link before state  -- or not!  -sage
   if (dn->get_linkage()->get_inode() != in) {
@@ -3221,7 +3224,9 @@ void Migrator::decode_import_inode(CDentry *dn, bufferlist::const_iterator& blp,
       in->snaplock.get_state() != LOCK_SYNC)
       mds->locker->try_eval(&in->snaplock, NULL);
 
-  DECODE_FINISH(blp);
+  if (in->policylock.is_stable() &&
+      in->policylock.get_state() != LOCK_SYNC)
+      mds->locker->try_eval(&in->policylock, NULL);
 }
 
 void Migrator::decode_import_inode_caps(CInode *in, bool auth_cap,
