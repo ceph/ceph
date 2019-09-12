@@ -764,11 +764,11 @@ exists.')
                 if dirs:
                     paths.extend(dirs)
                 else:
-                    self.poutput(path.decode('utf-8'), end=':\n')
+                    poutput(path.decode('utf-8'), end=':\n')
                 items = sorted(items, key=lambda item: item.d_name)
             else:
                 if path != b'' and path != cephfs.getcwd() and len(paths) > 1:
-                    self.poutput(path.decode('utf-8'), end=':\n')
+                    poutput(path.decode('utf-8'), end=':\n')
                 items = sorted(ls(path),
                                key=lambda item: item.d_name)
             if not args.all:
@@ -807,7 +807,7 @@ exists.')
             if not args.long:
                 print_list(values, shutil.get_terminal_size().columns)
                 if path != paths[-1]:
-                    self.poutput('')
+                    poutput('')
 
     def complete_rmdir(self, text, line, begidx, endidx):
         """
@@ -940,7 +940,7 @@ sub-directories, files')
         """
         Get current working directory.
         """
-        self.poutput(cephfs.getcwd().decode('utf-8'))
+        poutput(cephfs.getcwd().decode('utf-8'))
 
     def complete_chmod(self, text, line, begidx, endidx):
         """
@@ -997,7 +997,7 @@ sub-directories, files')
         Set Umask value.
         """
         if args.mode == '':
-            self.poutput(self.umask.zfill(4))
+            poutput(self.umask.zfill(4))
         else:
             mode = int(args.mode, 8)
             self.umask = str(oct(cephfs.umask(mode))[2:])
@@ -1063,7 +1063,7 @@ sub-directories, files')
             for path in args.paths:
                 try:
                     items = os.listdir(path)
-                    self.poutput("{}:".format(path.decode('utf-8')))
+                    poutput("{}:".format(path.decode('utf-8')))
                     print_list(items)
                 except OSError as e:
                     perror("'{}': {}".format(e.filename, e.strerror))
@@ -1077,7 +1077,7 @@ sub-directories, files')
         """
         Prints the absolute path of the current local directory
         """
-        self.poutput(os.getcwd())
+        poutput(os.getcwd())
 
     def do_df(self, arglist):
         """
@@ -1085,7 +1085,7 @@ sub-directories, files')
         """
         for index, i in enumerate(ls(b".", opts='A')):
             if index == 0:
-                self.poutput('{:25s}\t{:5s}\t{:15s}{:10s}{}'.format(
+                poutput('{:25s}\t{:5s}\t{:15s}{:10s}{}'.format(
                     "1K-blocks", "Used", "Available", "Use%", "Stored on"))
             if not is_dir_exists(i.d_name):
                 statfs = cephfs.statfs(i.d_name)
@@ -1095,7 +1095,7 @@ sub-directories, files')
                 use = 0
                 if block_size > 0:
                     use = (stat.st_size * 100 // block_size)
-                self.poutput('{:25d}\t{:5d}\t{:10d}\t{:5s} {}'.format(
+                poutput('{:25d}\t{:5d}\t{:10d}\t{:5s} {}'.format(
                     statfs['f_fsid'], stat.st_size, available,
                     str(int(use)) + '%', i.d_name.decode('utf-8')))
 
@@ -1124,9 +1124,9 @@ sub-directories, files')
         else:
             locations = locate_file(args.name)
         if args.count:
-            self.poutput(len(locations))
+            poutput(len(locations))
         else:
-            self.poutput((b'\n'.join(locations)).decode('utf-8'))
+            poutput((b'\n'.join(locations)).decode('utf-8'))
 
     def complete_du(self, text, line, begidx, endidx):
         """
@@ -1165,7 +1165,7 @@ sub-directories, files')
                     f = os.path.normpath(f)
                     if f[0] is ord('/'):
                         f = b'.' + f
-                    self.poutput('{:10s} {}'.format(humansize(dusage),
+                    poutput('{:10s} {}'.format(humansize(dusage),
                         f.decode('utf-8')))
                 except (libcephfs.Error, OSError):
                     perror('{} : no such directory exists'.format(f.\
@@ -1212,7 +1212,7 @@ sub-directories, files')
                     cephfs.setxattr(args.path, 'ceph.quota.max_bytes',
                                     max_bytes, len(max_bytes),
                                     os.XATTR_CREATE)
-                    self.poutput('max_bytes set to %d' % args.max_bytes)
+                    poutput('max_bytes set to %d' % args.max_bytes)
                 except libcephfs.Error:
                     cephfs.setxattr(args.path, 'ceph.quota.max_bytes',
                                     max_bytes, len(max_bytes),
@@ -1225,7 +1225,7 @@ sub-directories, files')
                     cephfs.setxattr(args.path, 'ceph.quota.max_files',
                                     max_files, len(max_files),
                                     os.XATTR_CREATE)
-                    self.poutput('max_files set to %d' % args.max_files)
+                    poutput('max_files set to %d' % args.max_files)
                 except libcephfs.Error:
                     cephfs.setxattr(args.path, 'ceph.quota.max_files',
                                     max_files, len(max_files),
@@ -1237,7 +1237,7 @@ sub-directories, files')
             try:
                 max_bytes = cephfs.getxattr(args.path,
                                             'ceph.quota.max_bytes')
-                self.poutput('max_bytes: %s' % max_bytes)
+                poutput('max_bytes: %s' % max_bytes)
             except libcephfs.Error:
                 perror('max_bytes is not set')
                 pass
@@ -1245,7 +1245,7 @@ sub-directories, files')
             try:
                 max_files = cephfs.getxattr(args.path,
                                             'ceph.quota.max_files')
-                self.poutput('max_files: %s' % max_files)
+                poutput('max_files: %s' % max_files)
             except libcephfs.Error:
                 perror('max_files is not set')
                 pass
@@ -1259,7 +1259,7 @@ sub-directories, files')
         if line == 'all':
             for k in dir(self):
                 if k.startswith('do_'):
-                    self.poutput('-' * 80)
+                    poutput('-' * 80)
                     super().do_help(k[3:])
             return
         parser = self.create_argparser(line)
@@ -1291,7 +1291,7 @@ sub-directories, files')
                 mtime = stat.st_mtime.isoformat(' ')
                 ctime = stat.st_mtime.isoformat(' ')
 
-                self.poutput("File: {}\nSize: {:d}\nBlocks: {:d}\nIO Block: {:d}\n\
+                poutput("File: {}\nSize: {:d}\nBlocks: {:d}\nIO Block: {:d}\n\
 Device: {:d}\tInode: {:d}\tLinks: {:d}\nPermission: {:o}/{}\tUid: {:d}\tGid: {:d}\n\
 Access: {}\nModify: {}\nChange: {}".format(path.decode('utf-8'), stat.st_size,
                              stat.st_blocks, stat.st_blksize, stat.st_dev,
