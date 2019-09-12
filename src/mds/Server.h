@@ -214,9 +214,9 @@ public:
   void journal_allocated_inos(MDRequestRef& mdr, EMetaBlob *blob);
   void apply_allocated_inos(MDRequestRef& mdr, Session *session);
 
-  CInode* rdlock_path_pin_ref(MDRequestRef& mdr, int n, MutationImpl::LockOpVec& lov,
-			      bool want_auth, bool no_want_auth=false,
-			      bool want_layout=false, bool no_lookup=false);
+  CInode* rdlock_path_pin_ref(MDRequestRef& mdr, bool want_auth,
+			      bool no_want_auth=false,
+			      bool want_layout=false);
   CDentry* rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
 				    MutationImpl::LockOpVec& lov,
 				    bool okexist, bool alwaysxlock,
@@ -247,10 +247,8 @@ public:
                           string name,
                           string value,
                           file_layout_t *layout);
-  void handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
-			 MutationImpl::LockOpVec& lov);
-  void handle_remove_vxattr(MDRequestRef& mdr, CInode *cur,
-			    MutationImpl::LockOpVec& lov);
+  void handle_set_vxattr(MDRequestRef& mdr, CInode *cur);
+  void handle_remove_vxattr(MDRequestRef& mdr, CInode *cur);
   void handle_client_setxattr(MDRequestRef& mdr);
   void handle_client_removexattr(MDRequestRef& mdr);
 

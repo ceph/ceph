@@ -8070,6 +8070,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
   bool want_dentry = (flags & MDS_TRAVERSE_WANT_DENTRY);
   bool want_auth = (flags & MDS_TRAVERSE_WANT_AUTH);
   bool rdlock_snap = (flags & (MDS_TRAVERSE_RDLOCK_SNAP | MDS_TRAVERSE_RDLOCK_SNAP2));
+  bool rdlock_path = (flags & MDS_TRAVERSE_RDLOCK_PATH);
 
   if (forward)
     ceph_assert(mdr);  // forward requires a request
@@ -8221,9 +8222,19 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
     // dentry
     CDentry *dn = curdir->lookup(path[depth], snapid);
     if (dn) {
-      if (!dn->lock.can_read(client) &&
-	  !(last_xlocked && depth == path.depth() - 1) &&
-	  !(dn->lock.is_xlocked() && dn->lock.get_xlock_by() == mdr)) {
+      if (dn->state_test(CDentry::STATE_PURGING))
+	return -ENOENT;
+
+      if (rdlock_path) {
+	lov.clear();
+	lov.add_rdlock(&dn->lock);
+	if (!mds->locker->acquire_locks(mdr, lov)) {
+	  dout(10) << "traverse: failed to rdlock " << dn->lock << " " << *dn << dendl;
+	  return 1;
+	}
+      } else if (!dn->lock.can_read(client) &&
+		 !(last_xlocked && depth == path.depth() - 1) &&
+		 !(dn->lock.is_xlocked() && dn->lock.get_xlock_by() == mdr)) {
 	dout(10) << "traverse: non-readable dentry at " << *dn << dendl;
 	dn->lock.add_waiter(SimpleLock::WAIT_RD, cf.build());
 	if (mds->logger)
@@ -8324,6 +8335,15 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
 	    // create a null dentry
 	    dn = curdir->add_null_dentry(path[depth]);
 	    dout(20) << " added null " << *dn << dendl;
+
+	    if (rdlock_path) {
+	      lov.clear();
+	      lov.add_rdlock(&dn->lock);
+	      if (!mds->locker->acquire_locks(mdr, lov)) {
+		dout(10) << "traverse: failed to rdlock " << dn->lock << " " << *dn << dendl;
+		return 1;
+	      }
+	    }
 	  }
 	  if (dn) {
 	    pdnvec->push_back(dn);
@@ -8417,6 +8437,9 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
     mdr->locking_state |= MutationImpl::SNAP_LOCKED;
   else if (flags & MDS_TRAVERSE_RDLOCK_SNAP2)
     mdr->locking_state |= MutationImpl::SNAP2_LOCKED;
+
+  if (rdlock_path)
+    mdr->locking_state |= MutationImpl::PATH_LOCKED;
 
   return 0;
 }
@@ -12592,17 +12615,12 @@ void MDCache::enqueue_scrub(
 
 void MDCache::enqueue_scrub_work(MDRequestRef& mdr)
 {
-  MutationImpl::LockOpVec lov;
-  CInode *in = mds->server->rdlock_path_pin_ref(mdr, 0, lov, true);
+  CInode *in = mds->server->rdlock_path_pin_ref(mdr, true);
   if (NULL == in)
     return;
 
   // TODO: Remove this restriction
   ceph_assert(in->is_auth());
-
-  bool locked = mds->locker->acquire_locks(mdr, lov);
-  if (!locked)
-    return;
 
   C_MDS_EnqueueScrub *cs = static_cast<C_MDS_EnqueueScrub*>(mdr->internal_op_finish);
   ScrubHeaderRef header = cs->header;
@@ -12976,15 +12994,11 @@ public:
 void MDCache::flush_dentry_work(MDRequestRef& mdr)
 {
   MutationImpl::LockOpVec lov;
-  CInode *in = mds->server->rdlock_path_pin_ref(mdr, 0, lov, true);
-  if (NULL == in)
+  CInode *in = mds->server->rdlock_path_pin_ref(mdr, true);
+  if (!in)
     return;
 
-  // TODO: Is this necessary? Fix it if so
   ceph_assert(in->is_auth());
-  bool locked = mds->locker->acquire_locks(mdr, lov);
-  if (!locked)
-    return;
   in->flush(new C_FinishIOMDR(mds, mdr));
 }
 

@@ -118,6 +118,8 @@ static const int MDS_TRAVERSE_WANT_AUTH		= (1 << 3);
 static const int MDS_TRAVERSE_RDLOCK_SNAP	= (1 << 4);
 static const int MDS_TRAVERSE_RDLOCK_SNAP2	= (1 << 5);
 static const int MDS_TRAVERSE_WANT_DIRLAYOUT	= (1 << 6);
+static const int MDS_TRAVERSE_RDLOCK_PATH	= (1 << 7);
+
 
 // flags for predirty_journal_parents()
 static const int PREDIRTY_PRIMARY = 1; // primary dn, adjust nested accounting
