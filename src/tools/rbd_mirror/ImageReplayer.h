@@ -64,23 +64,23 @@ template <typename ImageCtxT = librbd::ImageCtx>
 class ImageReplayer {
 public:
   static ImageReplayer *create(
-    Threads<ImageCtxT> *threads, InstanceWatcher<ImageCtxT> *instance_watcher,
-    journal::CacheManagerHandler *cache_manager_handler, RadosRef local,
-    const std::string &local_mirror_uuid, int64_t local_pool_id,
-    const std::string &global_image_id) {
-    return new ImageReplayer(threads, instance_watcher, cache_manager_handler,
-                             local, local_mirror_uuid, local_pool_id,
-                             global_image_id);
+      librados::IoCtx &local_io_ctx, const std::string &local_mirror_uuid,
+      const std::string &global_image_id, Threads<ImageCtxT> *threads,
+      InstanceWatcher<ImageCtxT> *instance_watcher,
+      journal::CacheManagerHandler *cache_manager_handler) {
+    return new ImageReplayer(local_io_ctx, local_mirror_uuid, global_image_id,
+                             threads, instance_watcher, cache_manager_handler);
   }
   void destroy() {
     delete this;
   }
 
-  ImageReplayer(Threads<ImageCtxT> *threads,
+  ImageReplayer(librados::IoCtx &local_io_ctx,
+                const std::string &local_mirror_uuid,
+                const std::string &global_image_id,
+                Threads<ImageCtxT> *threads,
                 InstanceWatcher<ImageCtxT> *instance_watcher,
-                journal::CacheManagerHandler *cache_manager_handler,
-                RadosRef local, const std::string &local_mirror_uuid,
-                int64_t local_pool_id, const std::string &global_image_id);
+                journal::CacheManagerHandler *cache_manager_handler);
   virtual ~ImageReplayer();
   ImageReplayer(const ImageReplayer&) = delete;
   ImageReplayer& operator=(const ImageReplayer&) = delete;
@@ -112,7 +112,7 @@ public:
   void add_peer(const std::string &peer_uuid, librados::IoCtx &remote_io_ctx);
 
   inline int64_t get_local_pool_id() const {
-    return m_local_pool_id;
+    return m_local_io_ctx.get_id();
   }
   inline const std::string& get_global_image_id() const {
     return m_global_image_id;
@@ -270,6 +270,9 @@ private:
     ImageReplayer<ImageCtxT> *replayer;
   };
 
+  librados::IoCtx &m_local_io_ctx;
+  std::string m_local_mirror_uuid;
+  std::string m_global_image_id;
   Threads<ImageCtxT> *m_threads;
   InstanceWatcher<ImageCtxT> *m_instance_watcher;
   journal::CacheManagerHandler *m_cache_manager_handler;
@@ -277,11 +280,7 @@ private:
   Peers m_peers;
   RemoteImage m_remote_image;
 
-  RadosRef m_local;
-  std::string m_local_mirror_uuid;
-  int64_t m_local_pool_id;
   std::string m_local_image_id;
-  std::string m_global_image_id;
   std::string m_local_image_name;
   std::string m_name;
 
@@ -302,7 +301,6 @@ private:
   image_replayer::EventPreprocessor<ImageCtxT> *m_event_preprocessor = nullptr;
   image_replayer::ReplayStatusFormatter<ImageCtxT> *m_replay_status_formatter =
     nullptr;
-  IoCtxRef m_local_ioctx;
   ImageCtxT *m_local_image_ctx = nullptr;
   std::string m_local_image_tag_owner;
 
@@ -434,6 +432,8 @@ private:
   void register_admin_socket_hook();
   void unregister_admin_socket_hook();
   void reregister_admin_socket_hook();
+
+  std::string admin_socket_hook_name(const std::string &image_name) const;
 };
 
 } // namespace mirror

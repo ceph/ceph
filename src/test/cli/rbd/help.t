@@ -1602,54 +1602,62 @@
     --pretty-format      pretty formatting (json and xml)
   
   rbd help mirror pool demote
-  usage: rbd mirror pool demote [--pool <pool>] 
-                                <pool-name> 
+  usage: rbd mirror pool demote [--pool <pool>] [--namespace <namespace>] 
+                                <pool-spec> 
   
   Demote all primary images in the pool.
   
   Positional arguments
-    <pool-name>          pool name
+    <pool-spec>          pool specification
+                         (example: <pool-name>[/<namespace>]
   
   Optional arguments
     -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
   
   rbd help mirror pool disable
-  usage: rbd mirror pool disable [--pool <pool>] 
-                                 <pool-name> 
+  usage: rbd mirror pool disable [--pool <pool>] [--namespace <namespace>] 
+                                 <pool-spec> 
   
   Disable RBD mirroring by default within a pool.
   
   Positional arguments
-    <pool-name>          pool name
+    <pool-spec>          pool specification
+                         (example: <pool-name>[/<namespace>]
   
   Optional arguments
     -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
   
   rbd help mirror pool enable
-  usage: rbd mirror pool enable [--pool <pool>] 
-                                <pool-name> <mode> 
+  usage: rbd mirror pool enable [--pool <pool>] [--namespace <namespace>] 
+                                <pool-spec> <mode> 
   
   Enable RBD mirroring by default within a pool.
   
   Positional arguments
-    <pool-name>          pool name
+    <pool-spec>          pool specification
+                         (example: <pool-name>[/<namespace>]
     <mode>               mirror mode [image or pool]
   
   Optional arguments
     -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
   
   rbd help mirror pool info
-  usage: rbd mirror pool info [--pool <pool>] [--format <format>] 
-                              [--pretty-format] [--all] 
-                              <pool-name> 
+  usage: rbd mirror pool info [--pool <pool>] [--namespace <namespace>] 
+                              [--format <format>] [--pretty-format] [--all] 
+                              <pool-spec> 
   
   Show information about the pool mirroring configuration.
   
   Positional arguments
-    <pool-name>          pool name
+    <pool-spec>          pool specification
+                         (example: <pool-name>[/<namespace>]
   
   Optional arguments
     -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
     --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
     --all                list all attributes
@@ -1706,29 +1714,34 @@
   
   rbd help mirror pool promote
   usage: rbd mirror pool promote [--force] [--pool <pool>] 
-                                 <pool-name> 
+                                 [--namespace <namespace>] 
+                                 <pool-spec> 
   
   Promote all non-primary images in the pool.
   
   Positional arguments
-    <pool-name>          pool name
+    <pool-spec>          pool specification
+                         (example: <pool-name>[/<namespace>]
   
   Optional arguments
     --force              promote even if not cleanly demoted by remote cluster
     -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
   
   rbd help mirror pool status
-  usage: rbd mirror pool status [--pool <pool>] [--format <format>] 
-                                [--pretty-format] [--verbose] 
-                                <pool-name> 
+  usage: rbd mirror pool status [--pool <pool>] [--namespace <namespace>] 
+                                [--format <format>] [--pretty-format] [--verbose] 
+                                <pool-spec> 
   
   Show status for all mirrored images in the pool.
   
   Positional arguments
-    <pool-name>          pool name
+    <pool-spec>          pool specification
+                         (example: <pool-name>[/<namespace>]
   
   Optional arguments
     -p [ --pool ] arg    pool name
+    --namespace arg      namespace name
     --format arg         output format (plain, json, or xml) [default: plain]
     --pretty-format      pretty formatting (json and xml)
     --verbose            be verbose
