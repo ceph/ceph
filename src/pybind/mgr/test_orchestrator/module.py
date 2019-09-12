@@ -15,16 +15,14 @@ from mgr_module import MgrModule
 
 import orchestrator
 
-T = TypeVar('T')
 
-
-class TestCompletion(orchestrator.Completion[T]):
+class TestCompletion(orchestrator.Completion):
     def evaluate(self):
         self._first_promise.finalize(None)
 
 
 def deferred_read(f):
-    # type: (Callable[..., T]) -> Callable[..., TestCompletion[T]]
+    # type: (Callable) -> Callable[..., TestCompletion]
     """
     Decorator to make methods return
     a completion object that executes themselves.
@@ -39,7 +37,7 @@ def deferred_read(f):
 
 def deferred_write(message):
     def inner(f):
-        # type: (Callable[..., T]) -> Callable[..., TestCompletion[T]]
+        # type: (Callable) -> Callable[..., TestCompletion]
 
         @functools.wraps(f)
         def wrapper(self, *args, **kwargs):

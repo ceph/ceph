@@ -10,9 +10,6 @@ try:
 except ImportError:
     pass  # just for type checking
 
-T = TypeVar('T')
-
-
 try:
     from kubernetes import client, config
     from kubernetes.client.rest import ApiException
@@ -36,13 +33,13 @@ import orchestrator
 from .rook_cluster import RookCluster
 
 
-class RookCompletion(orchestrator.Completion[T]):
+class RookCompletion(orchestrator.Completion):
     def evaluate(self):
         self._first_promise.finalize(None)
 
 
 def deferred_read(f):
-    # type: (Callable[..., T]) -> Callable[..., RookCompletion[T]]
+    # type: (Callable) -> Callable[..., RookCompletion]
     """
     Decorator to make RookOrchestrator methods return
     a completion object that executes themselves.
@@ -55,12 +52,12 @@ def deferred_read(f):
     return wrapper
 
 
-def write_completion(on_complete,  # type: Callable[[], T]
+def write_completion(on_complete,  # type: Callable
                      message,  # type: str
                      mgr,
-                     calc_percent=None  # type: Optional[Callable[[], RookCompletion[float]]]
+                     calc_percent=None  # type: Optional[Callable[[], RookCompletion]]
                      ):
-    # type: (...) -> RookCompletion[T]
+    # type: (...) -> RookCompletion
     return RookCompletion.with_progress(
         message=message,
         mgr=mgr,

@@ -9,7 +9,6 @@ try:
 except ImportError:
     pass  # just for type checking
 
-T = TypeVar('T')
 
 import six
 import os
@@ -71,10 +70,10 @@ except ImportError:
 #    multiple bootstrapping / initialization
 
 
-class AsyncCompletion(orchestrator.Completion[T]):
-    def __init__(self, *args, many=False, **kwargs):
-        self.__on_complete = None  # type: Callable[[T], Any]
-        self.many = many
+class AsyncCompletion(orchestrator.Completion):
+    def __init__(self, *args, **kwargs):
+        self.__on_complete = None  # type: Callable
+        self.many = kwargs.pop('many')
         super(AsyncCompletion, self).__init__(*args, **kwargs)
 
     def propagate_to_next(self):
@@ -89,7 +88,7 @@ class AsyncCompletion(orchestrator.Completion[T]):
 
     @property
     def _on_complete(self):
-        # type: () -> Optional[Callable[[T], Any]]
+        # type: () -> Optional[Callable]
         if self.__on_complete is None:
             return None
 
@@ -112,7 +111,7 @@ class AsyncCompletion(orchestrator.Completion[T]):
 
     @_on_complete.setter
     def _on_complete(self, inner):
-        # type: (Callable[[T], Any]) -> None
+        # type: (Callable) -> None
         self.__on_complete = inner
 
 
@@ -131,17 +130,17 @@ def ssh_completion(cls=AsyncCompletion, **c_kwargs):
 
 
 def async_completion(f):
-    # type: (Callable[..., T]) -> Callable[..., AsyncCompletion[T]]
+    # type: (Callable) -> Callable[..., AsyncCompletion]
     return ssh_completion()(f)
 
 
 def async_map_completion(f):
-    # type: (Callable[..., T]) -> Callable[..., AsyncCompletion[T]]
+    # type: (Callable) -> Callable[..., AsyncCompletion]
     return ssh_completion(many=True)(f)
 
 
 def trivial_completion(f):
-    # type: (Callable[..., T]) -> Callable[..., orchestrator.Completion[T]]
+    # type: (Callable) -> Callable[..., orchestrator.Completion]
     return ssh_completion(cls=orchestrator.Completion)(f)
 
 
