@@ -1626,7 +1626,7 @@
     -p [ --pool ] arg    pool name
   
   rbd help mirror pool enable
-  usage: rbd mirror pool enable [--pool <pool>] 
+  usage: rbd mirror pool enable [--pool <pool>] [--site-name <site-name>] 
                                 <pool-name> <mode> 
   
   Enable RBD mirroring by default within a pool.
@@ -1637,6 +1637,7 @@
   
   Optional arguments
     -p [ --pool ] arg    pool name
+    --site-name arg      local site name
   
   rbd help mirror pool info
   usage: rbd mirror pool info [--pool <pool>] [--format <format>] 
