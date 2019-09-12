@@ -28,7 +28,6 @@
 #include "rgw_auth.h"
 #include "rgw_auth_filters.h"
 #include "rgw_sts.h"
-#include "rgw_sal.h"
 
 struct rgw_http_error {
   int http_ret;
@@ -113,7 +112,7 @@ public:
     return 0;
   }
   void send_response_begin(bool has_buckets) override;
-  void send_response_data(RGWUserBuckets& buckets) override;
+  void send_response_data(rgw::sal::RGWBucketList& buckets) override;
   void send_response_end() override;
 };
 

@@ -149,7 +149,7 @@ int RGWPSCreateNotifOp::verify_permission() {
 
   const auto& id = s->owner.get_id();
 
-  ret = store->getRados()->get_bucket_info(*s->sysobj_ctx, id.tenant, bucket_name,
+  ret = store->getRados()->get_bucket_info(store->svc(), id.tenant, bucket_name,
                                bucket_info, nullptr, null_yield, nullptr);
   if (ret < 0) {
     ldout(s->cct, 1) << "failed to get bucket info, cannot verify ownership" << dendl;
@@ -169,7 +169,7 @@ int RGWPSDeleteNotifOp::verify_permission() {
     return ret;
   }
 
-  ret = store->getRados()->get_bucket_info(*s->sysobj_ctx, s->owner.get_id().tenant, bucket_name,
+  ret = store->getRados()->get_bucket_info(store->svc(), s->owner.get_id().tenant, bucket_name,
                                bucket_info, nullptr, null_yield, nullptr);
   if (ret < 0) {
     return ret;
@@ -188,7 +188,7 @@ int RGWPSListNotifsOp::verify_permission() {
     return ret;
   }
 
-  ret = store->getRados()->get_bucket_info(*s->sysobj_ctx, s->owner.get_id().tenant, bucket_name,
+  ret = store->getRados()->get_bucket_info(store->svc(), s->owner.get_id().tenant, bucket_name,
                                bucket_info, nullptr, null_yield, nullptr);
   if (ret < 0) {
     return ret;
