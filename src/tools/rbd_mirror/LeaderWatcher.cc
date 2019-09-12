@@ -42,7 +42,6 @@ LeaderWatcher<I>::LeaderWatcher(Threads<I> *threads, librados::IoCtx &io_ctx,
 
 template <typename I>
 LeaderWatcher<I>::~LeaderWatcher() {
-  ceph_assert(m_status_watcher == nullptr);
   ceph_assert(m_instances == nullptr);
   ceph_assert(m_timer_task == nullptr);
 
@@ -128,16 +127,19 @@ void LeaderWatcher<I>::handle_register_watch(int r) {
   dout(10) << "r=" << r << dendl;
 
   Context *on_finish = nullptr;
-  if (r < 0) {
+  {
+    std::lock_guard timer_locker(m_threads->timer_lock);
     std::lock_guard locker{m_lock};
-    derr << "error registering leader watcher for " << m_oid << " object: "
-         << cpp_strerror(r) << dendl;
+
+    if (r < 0) {
+      derr << "error registering leader watcher for " << m_oid << " object: "
+           << cpp_strerror(r) << dendl;
+    } else {
+      schedule_acquire_leader_lock(0);
+    }
+
     ceph_assert(m_on_finish != nullptr);
     std::swap(on_finish, m_on_finish);
-  } else {
-    std::lock_guard locker{m_lock};
-    init_status_watcher();
-    return;
   }
 
   on_finish->complete(r);
@@ -186,7 +188,7 @@ void LeaderWatcher<I>::handle_shut_down_leader_lock(int r) {
     derr << "error shutting down leader lock: " << cpp_strerror(r) << dendl;
   }
 
-  shut_down_status_watcher();
+  unregister_watch();
 }
 
 template <typename I>
@@ -682,73 +684,6 @@ void LeaderWatcher<I>::handle_release_leader_lock(int r) {
   }
 
   schedule_acquire_leader_lock(1);
-}
-
-template <typename I>
-void LeaderWatcher<I>::init_status_watcher() {
-  dout(10) << dendl;
-
-  ceph_assert(ceph_mutex_is_locked(m_lock));
-  ceph_assert(m_status_watcher == nullptr);
-
-  m_status_watcher = MirrorStatusWatcher<I>::create(m_ioctx, m_work_queue);
-
-  Context *ctx = create_context_callback<
-    LeaderWatcher<I>, &LeaderWatcher<I>::handle_init_status_watcher>(this);
-
-  m_status_watcher->init(ctx);
-}
-
-template <typename I>
-void LeaderWatcher<I>::handle_init_status_watcher(int r) {
-  dout(10) << "r=" << r << dendl;
-
-  Context *on_finish = nullptr;
-  {
-    std::scoped_lock locker{m_threads->timer_lock, m_lock};
-
-    if (r < 0) {
-      derr << "error initializing mirror status watcher: " << cpp_strerror(r)
-           << cpp_strerror(r) << dendl;
-    } else {
-      schedule_acquire_leader_lock(0);
-    }
-
-    ceph_assert(m_on_finish != nullptr);
-    std::swap(on_finish, m_on_finish);
-  }
-
-  on_finish->complete(r);
-}
-
-template <typename I>
-void LeaderWatcher<I>::shut_down_status_watcher() {
-  dout(10) << dendl;
-
-  ceph_assert(ceph_mutex_is_locked(m_lock));
-  ceph_assert(m_status_watcher != nullptr);
-
-  Context *ctx = create_async_context_callback(
-    m_work_queue, create_context_callback<LeaderWatcher<I>,
-      &LeaderWatcher<I>::handle_shut_down_status_watcher>(this));
-
-  m_status_watcher->shut_down(ctx);
-}
-
-template <typename I>
-void LeaderWatcher<I>::handle_shut_down_status_watcher(int r) {
-  dout(10) << "r=" << r << dendl;
-
-  std::lock_guard locker{m_lock};
-  m_status_watcher->destroy();
-  m_status_watcher = nullptr;
-
-  if (r < 0) {
-    derr << "error shutting mirror status watcher down: " << cpp_strerror(r)
-         << dendl;
-  }
-
-  unregister_watch();
 }
 
 template <typename I>

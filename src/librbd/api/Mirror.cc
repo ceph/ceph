@@ -169,12 +169,6 @@ int Mirror<I>::image_enable(I *ictx, bool relax_same_pool_parent_check) {
   CephContext *cct = ictx->cct;
   ldout(cct, 20) << "ictx=" << ictx << dendl;
 
-  // TODO
-  if (!ictx->md_ctx.get_namespace().empty()) {
-    lderr(cct) << "namespaces are not supported" << dendl;
-    return -EINVAL;
-  }
-
   int r = ictx->state->refresh_if_required();
   if (r < 0) {
     return r;
@@ -581,12 +575,6 @@ int Mirror<I>::mode_set(librados::IoCtx& io_ctx,
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 20) << dendl;
 
-  // TODO
-  if (!io_ctx.get_namespace().empty()) {
-    lderr(cct) << "namespaces are not supported" << dendl;
-    return -EINVAL;
-  }
-
   cls::rbd::MirrorMode next_mirror_mode;
   switch (mirror_mode) {
   case RBD_MIRROR_MODE_DISABLED:
@@ -782,12 +770,6 @@ int Mirror<I>::peer_add(librados::IoCtx& io_ctx, std::string *uuid,
   CephContext *cct = reinterpret_cast<CephContext *>(io_ctx.cct());
   ldout(cct, 20) << "name=" << cluster_name << ", "
                  << "client=" << client_name << dendl;
-
-  // TODO
-  if (!io_ctx.get_namespace().empty()) {
-    lderr(cct) << "namespaces are not supported" << dendl;
-    return -EINVAL;
-  }
 
   if (cct->_conf->cluster == cluster_name) {
     lderr(cct) << "cannot add self as remote peer" << dendl;

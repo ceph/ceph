@@ -38,6 +38,7 @@ namespace mirror {
 
 template <typename> class ServiceDaemon;
 template <typename> class Threads;
+template <typename> class Throttler;
 
 namespace image_deleter { template <typename> struct TrashWatcher; }
 
@@ -47,14 +48,17 @@ namespace image_deleter { template <typename> struct TrashWatcher; }
 template <typename ImageCtxT = librbd::ImageCtx>
 class ImageDeleter {
 public:
-  static ImageDeleter* create(librados::IoCtx& local_io_ctx,
-                              Threads<librbd::ImageCtx>* threads,
-                              ServiceDaemon<librbd::ImageCtx>* service_daemon) {
-    return new ImageDeleter(local_io_ctx, threads, service_daemon);
+  static ImageDeleter* create(
+      librados::IoCtx& local_io_ctx, Threads<librbd::ImageCtx>* threads,
+      Throttler<librbd::ImageCtx>* image_deletion_throttler,
+      ServiceDaemon<librbd::ImageCtx>* service_daemon) {
+    return new ImageDeleter(local_io_ctx, threads, image_deletion_throttler,
+                            service_daemon);
   }
 
   ImageDeleter(librados::IoCtx& local_io_ctx,
                Threads<librbd::ImageCtx>* threads,
+               Throttler<librbd::ImageCtx>* image_deletion_throttler,
                ServiceDaemon<librbd::ImageCtx>* service_daemon);
 
   ImageDeleter(const ImageDeleter&) = delete;
@@ -124,6 +128,7 @@ private:
 
   librados::IoCtx& m_local_io_ctx;
   Threads<librbd::ImageCtx>* m_threads;
+  Throttler<librbd::ImageCtx>* m_image_deletion_throttler;
   ServiceDaemon<librbd::ImageCtx>* m_service_daemon;
 
   image_deleter::TrashWatcher<ImageCtxT>* m_trash_watcher = nullptr;
