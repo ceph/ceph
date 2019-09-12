@@ -68,20 +68,49 @@ inline void decode(GroupImageLinkState &state, bufferlist::const_iterator& it)
   state = static_cast<GroupImageLinkState>(int_state);
 }
 
+enum MirrorPeerDirection {
+  MIRROR_PEER_DIRECTION_RX    = 0,
+  MIRROR_PEER_DIRECTION_TX    = 1,
+  MIRROR_PEER_DIRECTION_RX_TX = 2
+};
+
+std::ostream& operator<<(std::ostream& os,
+                         MirrorPeerDirection mirror_peer_direction);
+
 struct MirrorPeer {
   MirrorPeer() {
   }
-  MirrorPeer(const std::string &uuid, const std::string &cluster_name,
-             const std::string &client_name)
-    : uuid(uuid), cluster_name(cluster_name), client_name(client_name) {
+  MirrorPeer(const std::string &uuid,
+             MirrorPeerDirection mirror_peer_direction,
+             const std::string& site_name,
+             const std::string& client_name,
+             const std::string& fsid)
+    : uuid(uuid), mirror_peer_direction(mirror_peer_direction),
+      site_name(site_name), client_name(client_name), fsid(fsid) {
   }
 
   std::string uuid;
-  std::string cluster_name;
-  std::string client_name;
+
+  MirrorPeerDirection mirror_peer_direction = MIRROR_PEER_DIRECTION_RX_TX;
+  std::string site_name;
+  std::string client_name;  // RX property
+  std::string fsid;
+  utime_t last_seen;
 
   inline bool is_valid() const {
-    return (!uuid.empty() && !cluster_name.empty() && !client_name.empty());
+    switch (mirror_peer_direction) {
+    case MIRROR_PEER_DIRECTION_TX:
+      break;
+    case MIRROR_PEER_DIRECTION_RX:
+    case MIRROR_PEER_DIRECTION_RX_TX:
+      if (client_name.empty()) {
+        return false;
+      }
+      break;
+    default:
+      return false;
+    }
+    return (!uuid.empty() && !site_name.empty());
   }
 
   void encode(bufferlist &bl) const;
@@ -91,6 +120,9 @@ struct MirrorPeer {
   static void generate_test_instances(std::list<MirrorPeer*> &o);
 
   bool operator==(const MirrorPeer &rhs) const;
+  bool operator!=(const MirrorPeer &rhs) const {
+    return (!(*this == rhs));
+  }
 };
 
 std::ostream& operator<<(std::ostream& os, const MirrorMode& mirror_mode);
