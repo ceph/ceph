@@ -81,31 +81,26 @@ export class RgwBucketFormComponent implements OnInit {
     }
 
     // Process route parameters.
-    this.route.params.subscribe(
-      (params: { bid: string }) => {
-        if (!params.hasOwnProperty('bid')) {
-          return;
-        }
-        const bid = decodeURIComponent(params.bid);
-        this.loading = true;
-
-        this.rgwBucketService.get(bid).subscribe((resp: object) => {
-          this.loading = false;
-          // Get the default values.
-          const defaults = _.clone(this.bucketForm.value);
-          // Extract the values displayed in the form.
-          let value = _.pick(resp, _.keys(this.bucketForm.value));
-          value['placement-target'] = resp['placement_rule'];
-          // Append default values.
-          value = _.merge(defaults, value);
-          // Update the form.
-          this.bucketForm.setValue(value);
-        });
-      },
-      (error) => {
-        this.error = error;
+    this.route.params.subscribe((params: { bid: string }) => {
+      if (!params.hasOwnProperty('bid')) {
+        return;
       }
-    );
+      const bid = decodeURIComponent(params.bid);
+      this.loading = true;
+
+      this.rgwBucketService.get(bid).subscribe((resp: object) => {
+        this.loading = false;
+        // Get the default values.
+        const defaults = _.clone(this.bucketForm.value);
+        // Extract the values displayed in the form.
+        let value = _.pick(resp, _.keys(this.bucketForm.value));
+        value['placement-target'] = resp['placement_rule'];
+        // Append default values.
+        value = _.merge(defaults, value);
+        // Update the form.
+        this.bucketForm.setValue(value);
+      });
+    });
   }
 
   goToListView() {
