@@ -4732,15 +4732,187 @@ int read_peer(cls_method_context_t hctx, const std::string &id,
   return 0;
 }
 
-int write_peer(cls_method_context_t hctx, const std::string &id,
-               const cls::rbd::MirrorPeer &peer) {
+int write_peer(cls_method_context_t hctx, const cls::rbd::MirrorPeer &peer) {
   bufferlist bl;
   encode(peer, bl);
 
-  int r = cls_cxx_map_set_val(hctx, peer_key(id), &bl);
+  int r = cls_cxx_map_set_val(hctx, peer_key(peer.uuid), &bl);
   if (r < 0) {
-    CLS_ERR("error writing peer '%s': %s", id.c_str(),
+    CLS_ERR("error writing peer '%s': %s", peer.uuid.c_str(),
             cpp_strerror(r).c_str());
+    return r;
+  }
+  return 0;
+}
+
+int check_mirroring_enabled(cls_method_context_t hctx) {
+  uint32_t mirror_mode_decode;
+  int r = read_key(hctx, mirror::MODE, &mirror_mode_decode);
+  if (r < 0 && r != -ENOENT) {
+    return r;
+  } else if (r == -ENOENT ||
+             mirror_mode_decode == cls::rbd::MIRROR_MODE_DISABLED) {
+    CLS_ERR("mirroring must be enabled on the pool");
+    return -EINVAL;
+  }
+
+  return 0;
+}
+
+int peer_ping(cls_method_context_t hctx, const std::string& site_name,
+              const std::string& fsid) {
+  int r = check_mirroring_enabled(hctx);
+  if (r < 0) {
+    return r;
+  }
+
+  if (site_name.empty() || fsid.empty()) {
+    return -EINVAL;
+  }
+
+  std::vector<cls::rbd::MirrorPeer> peers;
+  r = read_peers(hctx, &peers);
+  if (r < 0 && r != -ENOENT) {
+    return r;
+  }
+
+
+  cls::rbd::MirrorPeer mirror_peer;
+  auto site_it = std::find_if(peers.begin(), peers.end(),
+                              [&site_name](auto& peer) {
+      return (peer.site_name == site_name);
+    });
+
+  auto fsid_it = peers.end();
+  if (site_it == peers.end() ||
+      (!site_it->fsid.empty() && site_it->fsid != fsid)) {
+    // search for existing peer w/ same fsid
+    fsid_it = std::find_if(peers.begin(), peers.end(),
+                           [&fsid](auto& peer) {
+        return (peer.fsid == fsid);
+      });
+  }
+
+  auto it = peers.end();
+  if (site_it != peers.end() && fsid_it != peers.end()) {
+    // implies two peers -- match by fsid but don't update site name
+    it = fsid_it;
+  } else if (fsid_it != peers.end()) {
+    // implies site name has been updated in remote
+    fsid_it->site_name = site_name;
+    it = fsid_it;
+  } else if (site_it != peers.end()) {
+    // implies empty fsid in peer
+    site_it->fsid = fsid;
+    it = site_it;
+  } else {
+    CLS_LOG(10, "auto-generating new TX-only peer: %s", site_name.c_str());
+
+    uuid_d uuid_gen;
+    while (true) {
+      uuid_gen.generate_random();
+      mirror_peer.uuid = uuid_gen.to_string();
+
+      bufferlist bl;
+      r = cls_cxx_map_get_val(hctx, peer_key(mirror_peer.uuid), &bl);
+      if (r == -ENOENT) {
+        break;
+      } else if (r < 0) {
+        CLS_ERR("failed to retrieve mirror peer: %s", cpp_strerror(r).c_str());
+        return r;
+      }
+    }
+
+    mirror_peer.mirror_peer_direction = cls::rbd::MIRROR_PEER_DIRECTION_TX;
+    mirror_peer.site_name = site_name;
+    mirror_peer.fsid = fsid;
+  }
+
+  if (it != peers.end()) {
+    mirror_peer = *it;
+
+    if (mirror_peer.mirror_peer_direction ==
+          cls::rbd::MIRROR_PEER_DIRECTION_RX) {
+      CLS_LOG(10, "switching to RX/TX peer: %s", site_name.c_str());
+      mirror_peer.mirror_peer_direction = cls::rbd::MIRROR_PEER_DIRECTION_RX_TX;
+    }
+  }
+
+  mirror_peer.last_seen = ceph_clock_now();
+
+  if (!mirror_peer.is_valid()) {
+    CLS_ERR("attempting to update invalid peer: %s", site_name.c_str());
+    return -EINVAL;
+  }
+
+  r = write_peer(hctx, mirror_peer);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+int peer_add(cls_method_context_t hctx, cls::rbd::MirrorPeer mirror_peer) {
+  int r = check_mirroring_enabled(hctx);
+  if (r < 0) {
+    return r;
+  }
+
+  if (!mirror_peer.is_valid()) {
+    CLS_ERR("mirror peer is not valid");
+    return -EINVAL;
+  }
+
+  std::string mirror_uuid;
+  r = uuid_get(hctx, &mirror_uuid);
+  if (r < 0) {
+    CLS_ERR("error retrieving mirroring uuid: %s", cpp_strerror(r).c_str());
+    return r;
+  } else if (mirror_peer.uuid == mirror_uuid) {
+    CLS_ERR("peer uuid '%s' matches pool mirroring uuid",
+            mirror_uuid.c_str());
+    return -EINVAL;
+  } else if (mirror_peer.mirror_peer_direction ==
+               cls::rbd::MIRROR_PEER_DIRECTION_TX) {
+    CLS_ERR("peer uuid '%s' cannot use TX-only direction",
+            mirror_peer.uuid.c_str());
+    return -EINVAL;
+  }
+
+  std::vector<cls::rbd::MirrorPeer> peers;
+  r = read_peers(hctx, &peers);
+  if (r < 0 && r != -ENOENT) {
+    return r;
+  }
+
+  for (auto const &peer : peers) {
+    if (peer.uuid == mirror_peer.uuid) {
+      CLS_ERR("peer uuid '%s' already exists",
+              peer.uuid.c_str());
+      return -ESTALE;
+    } else if (peer.site_name == mirror_peer.site_name) {
+      CLS_ERR("peer site name '%s' already exists",
+              peer.site_name.c_str());
+      return -EEXIST;
+    } else if (!mirror_peer.fsid.empty() && peer.fsid == mirror_peer.fsid) {
+      CLS_ERR("peer fsid '%s' already exists",
+              peer.fsid.c_str());
+      return -EEXIST;
+    }
+  }
+
+  r = write_peer(hctx, mirror_peer);
+  if (r < 0) {
+    return r;
+  }
+  return 0;
+}
+
+int peer_remove(cls_method_context_t hctx, const std::string& uuid) {
+  int r = cls_cxx_map_remove_key(hctx, peer_key(uuid));
+  if (r < 0 && r != -ENOENT) {
+    CLS_ERR("error removing peer: %s", cpp_strerror(r).c_str());
     return r;
   }
   return 0;
@@ -5483,6 +5655,45 @@ int mirror_mode_set(cls_method_context_t hctx, bufferlist *in,
 
 /**
  * Input:
+ * @param unique peer site name (std::string)
+ * @param fsid (std::string)
+ * @param direction (MirrorPeerDirection) -- future use
+ *
+ * Output:
+ * @returns 0 on success, negative error code on failure
+ */
+int mirror_peer_ping(cls_method_context_t hctx, bufferlist *in,
+                     bufferlist *out) {
+  std::string site_name;
+  std::string fsid;
+  cls::rbd::MirrorPeerDirection mirror_peer_direction;
+  try {
+    auto it = in->cbegin();
+    decode(site_name, it);
+    decode(fsid, it);
+
+    uint8_t direction;
+    decode(direction, it);
+    mirror_peer_direction = static_cast<cls::rbd::MirrorPeerDirection>(
+      direction);
+  } catch (const buffer::error &err) {
+    return -EINVAL;
+  }
+
+  if (mirror_peer_direction != cls::rbd::MIRROR_PEER_DIRECTION_TX) {
+    return -EINVAL;
+  }
+
+  int r = mirror::peer_ping(hctx, site_name, fsid);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+/**
+ * Input:
  * none
  *
  * Output:
@@ -5518,56 +5729,11 @@ int mirror_peer_add(cls_method_context_t hctx, bufferlist *in,
     return -EINVAL;
   }
 
-  uint32_t mirror_mode_decode;
-  int r = read_key(hctx, mirror::MODE, &mirror_mode_decode);
-  if (r < 0 && r != -ENOENT) {
-    return r;
-  } else if (r == -ENOENT ||
-             mirror_mode_decode == cls::rbd::MIRROR_MODE_DISABLED) {
-    CLS_ERR("mirroring must be enabled on the pool");
-    return -EINVAL;
-  } else if (!mirror_peer.is_valid()) {
-    CLS_ERR("mirror peer is not valid");
-    return -EINVAL;
-  }
-
-  std::string mirror_uuid;
-  r = mirror::uuid_get(hctx, &mirror_uuid);
+  int r = mirror::peer_add(hctx, mirror_peer);
   if (r < 0) {
-    CLS_ERR("error retrieving mirroring uuid: %s", cpp_strerror(r).c_str());
-    return r;
-  } else if (mirror_peer.uuid == mirror_uuid) {
-    CLS_ERR("peer uuid '%s' matches pool mirroring uuid",
-            mirror_uuid.c_str());
-    return -EINVAL;
-  }
-
-  std::vector<cls::rbd::MirrorPeer> peers;
-  r = mirror::read_peers(hctx, &peers);
-  if (r < 0 && r != -ENOENT) {
     return r;
   }
 
-  for (auto const &peer : peers) {
-    if (peer.uuid == mirror_peer.uuid) {
-      CLS_ERR("peer uuid '%s' already exists",
-              peer.uuid.c_str());
-      return -ESTALE;
-    } else if (peer.cluster_name == mirror_peer.cluster_name) {
-      CLS_ERR("peer cluster name '%s' already exists",
-              peer.cluster_name.c_str());
-      return -EEXIST;
-    }
-  }
-
-  bufferlist bl;
-  encode(mirror_peer, bl);
-  r = cls_cxx_map_set_val(hctx, mirror::peer_key(mirror_peer.uuid),
-                          &bl);
-  if (r < 0) {
-    CLS_ERR("error adding peer: %s", cpp_strerror(r).c_str());
-    return r;
-  }
   return 0;
 }
 
@@ -5588,9 +5754,8 @@ int mirror_peer_remove(cls_method_context_t hctx, bufferlist *in,
     return -EINVAL;
   }
 
-  int r = cls_cxx_map_remove_key(hctx, mirror::peer_key(uuid));
-  if (r < 0 && r != -ENOENT) {
-    CLS_ERR("error removing peer: %s", cpp_strerror(r).c_str());
+  int r = mirror::peer_remove(hctx, uuid);
+  if (r < 0) {
     return r;
   }
   return 0;
@@ -5623,7 +5788,7 @@ int mirror_peer_set_client(cls_method_context_t hctx, bufferlist *in,
   }
 
   peer.client_name = client_name;
-  r = mirror::write_peer(hctx, uuid, peer);
+  r = mirror::write_peer(hctx, peer);
   if (r < 0) {
     return r;
   }
@@ -5633,7 +5798,7 @@ int mirror_peer_set_client(cls_method_context_t hctx, bufferlist *in,
 /**
  * Input:
  * @param uuid (std::string)
- * @param cluster_name (std::string)
+ * @param site_name (std::string)
  *
  * Output:
  * @returns 0 on success, negative error code on failure
@@ -5641,23 +5806,36 @@ int mirror_peer_set_client(cls_method_context_t hctx, bufferlist *in,
 int mirror_peer_set_cluster(cls_method_context_t hctx, bufferlist *in,
                             bufferlist *out) {
   std::string uuid;
-  std::string cluster_name;
+  std::string site_name;
   try {
     auto it = in->cbegin();
     decode(uuid, it);
-    decode(cluster_name, it);
+    decode(site_name, it);
   } catch (const buffer::error &err) {
     return -EINVAL;
   }
 
-  cls::rbd::MirrorPeer peer;
-  int r = mirror::read_peer(hctx, uuid, &peer);
-  if (r < 0) {
+  cls::rbd::MirrorPeer* peer = nullptr;
+  std::vector<cls::rbd::MirrorPeer> peers;
+  int r = mirror::read_peers(hctx, &peers);
+  if (r < 0 && r != -ENOENT) {
     return r;
   }
 
-  peer.cluster_name = cluster_name;
-  r = mirror::write_peer(hctx, uuid, peer);
+  for (auto& p : peers) {
+    if (p.uuid == uuid) {
+      peer = &p;
+    } else if (p.site_name == site_name) {
+      return -EEXIST;
+    }
+  }
+
+  if (peer == nullptr) {
+    return -ENOENT;
+  }
+
+  peer->site_name = site_name;
+  r = mirror::write_peer(hctx, *peer);
   if (r < 0) {
     return r;
   }
@@ -7574,6 +7752,7 @@ CLS_INIT(rbd)
   cls_method_handle_t h_mirror_uuid_set;
   cls_method_handle_t h_mirror_mode_get;
   cls_method_handle_t h_mirror_mode_set;
+  cls_method_handle_t h_mirror_peer_ping;
   cls_method_handle_t h_mirror_peer_list;
   cls_method_handle_t h_mirror_peer_add;
   cls_method_handle_t h_mirror_peer_remove;
@@ -7866,6 +8045,9 @@ CLS_INIT(rbd)
   cls_register_cxx_method(h_class, "mirror_mode_set",
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           mirror_mode_set, &h_mirror_mode_set);
+  cls_register_cxx_method(h_class, "mirror_peer_ping",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          mirror_peer_ping, &h_mirror_peer_ping);
   cls_register_cxx_method(h_class, "mirror_peer_list", CLS_METHOD_RD,
                           mirror_peer_list, &h_mirror_peer_list);
   cls_register_cxx_method(h_class, "mirror_peer_add",

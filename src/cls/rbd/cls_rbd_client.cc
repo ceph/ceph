@@ -1830,20 +1830,50 @@ int mirror_peer_list(librados::IoCtx *ioctx,
   return 0;
 }
 
-int mirror_peer_add(librados::IoCtx *ioctx, const std::string &uuid,
-                    const std::string &cluster_name,
-                    const std::string &client_name) {
-  cls::rbd::MirrorPeer peer(uuid, cluster_name, client_name);
-  bufferlist in_bl;
-  encode(peer, in_bl);
+int mirror_peer_ping(librados::IoCtx *ioctx,
+                     const std::string& site_name,
+                     const std::string& fsid) {
+  librados::ObjectWriteOperation op;
+  mirror_peer_ping(&op, site_name, fsid);
 
-  bufferlist out_bl;
-  int r = ioctx->exec(RBD_MIRRORING, "rbd", "mirror_peer_add", in_bl,
-                      out_bl);
+  int r = ioctx->operate(RBD_MIRRORING, &op);
   if (r < 0) {
     return r;
   }
+
   return 0;
+}
+
+void mirror_peer_ping(librados::ObjectWriteOperation *op,
+                      const std::string& site_name,
+                      const std::string& fsid) {
+  bufferlist in_bl;
+  encode(site_name, in_bl);
+  encode(fsid, in_bl);
+  encode(static_cast<uint8_t>(cls::rbd::MIRROR_PEER_DIRECTION_TX), in_bl);
+
+  op->exec("rbd", "mirror_peer_ping", in_bl);
+}
+
+int mirror_peer_add(librados::IoCtx *ioctx,
+                    const cls::rbd::MirrorPeer& mirror_peer) {
+  librados::ObjectWriteOperation op;
+  mirror_peer_add(&op, mirror_peer);
+
+  int r = ioctx->operate(RBD_MIRRORING, &op);
+  if (r < 0) {
+    return r;
+  }
+
+  return 0;
+}
+
+void mirror_peer_add(librados::ObjectWriteOperation *op,
+                     const cls::rbd::MirrorPeer& mirror_peer) {
+  bufferlist in_bl;
+  encode(mirror_peer, in_bl);
+
+  op->exec("rbd", "mirror_peer_add", in_bl);
 }
 
 int mirror_peer_remove(librados::IoCtx *ioctx,

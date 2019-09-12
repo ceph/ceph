@@ -8,41 +8,85 @@
 namespace cls {
 namespace rbd {
 
+std::ostream& operator<<(std::ostream& os,
+                         MirrorPeerDirection mirror_peer_direction) {
+  switch (mirror_peer_direction) {
+  case MIRROR_PEER_DIRECTION_RX:
+    os << "RX";
+    break;
+  case MIRROR_PEER_DIRECTION_TX:
+    os << "TX";
+    break;
+  case MIRROR_PEER_DIRECTION_RX_TX:
+    os << "RX/TX";
+    break;
+  default:
+    os << "unknown";
+    break;
+  }
+  return os;
+}
+
 void MirrorPeer::encode(bufferlist &bl) const {
-  ENCODE_START(1, 1, bl);
+  ENCODE_START(2, 1, bl);
   encode(uuid, bl);
-  encode(cluster_name, bl);
+  encode(site_name, bl);
   encode(client_name, bl);
   int64_t pool_id = -1;
   encode(pool_id, bl);
+
+  // v2
+  encode(static_cast<uint8_t>(mirror_peer_direction), bl);
+  encode(fsid, bl);
+  encode(last_seen, bl);
   ENCODE_FINISH(bl);
 }
 
 void MirrorPeer::decode(bufferlist::const_iterator &it) {
-  DECODE_START(1, it);
+  DECODE_START(2, it);
   decode(uuid, it);
-  decode(cluster_name, it);
+  decode(site_name, it);
   decode(client_name, it);
   int64_t pool_id;
   decode(pool_id, it);
+
+  if (struct_v >= 2) {
+    uint8_t mpd;
+    decode(mpd, it);
+    mirror_peer_direction = static_cast<MirrorPeerDirection>(mpd);
+    decode(fsid, it);
+    decode(last_seen, it);
+  }
+
   DECODE_FINISH(it);
 }
 
 void MirrorPeer::dump(Formatter *f) const {
   f->dump_string("uuid", uuid);
-  f->dump_string("cluster_name", cluster_name);
+  f->dump_stream("direction") << mirror_peer_direction;
+  f->dump_string("site_name", site_name);
+  f->dump_string("fsid", fsid);
   f->dump_string("client_name", client_name);
+  f->dump_stream("last_seen") << last_seen;
 }
 
 void MirrorPeer::generate_test_instances(std::list<MirrorPeer*> &o) {
   o.push_back(new MirrorPeer());
-  o.push_back(new MirrorPeer("uuid-123", "cluster name", "client name"));
+  o.push_back(new MirrorPeer("uuid-123", MIRROR_PEER_DIRECTION_RX, "site A",
+                             "client name", ""));
+  o.push_back(new MirrorPeer("uuid-234", MIRROR_PEER_DIRECTION_TX, "site B",
+                             "", "fsid"));
+  o.push_back(new MirrorPeer("uuid-345", MIRROR_PEER_DIRECTION_RX_TX, "site C",
+                             "client name", "fsid"));
 }
 
 bool MirrorPeer::operator==(const MirrorPeer &rhs) const {
   return (uuid == rhs.uuid &&
-          cluster_name == rhs.cluster_name &&
-          client_name == rhs.client_name);
+          mirror_peer_direction == rhs.mirror_peer_direction &&
+          site_name == rhs.site_name &&
+          client_name == rhs.client_name &&
+          fsid == rhs.fsid &&
+          last_seen == rhs.last_seen);
 }
 
 std::ostream& operator<<(std::ostream& os, const MirrorMode& mirror_mode) {
@@ -66,8 +110,11 @@ std::ostream& operator<<(std::ostream& os, const MirrorMode& mirror_mode) {
 std::ostream& operator<<(std::ostream& os, const MirrorPeer& peer) {
   os << "["
      << "uuid=" << peer.uuid << ", "
-     << "cluster_name=" << peer.cluster_name << ", "
-     << "client_name=" << peer.client_name
+     << "direction=" << peer.mirror_peer_direction << ", "
+     << "site_name=" << peer.site_name << ", "
+     << "client_name=" << peer.client_name << ", "
+     << "fsid=" << peer.fsid << ", "
+     << "last_seen=" << peer.last_seen
      << "]";
   return os;
 }

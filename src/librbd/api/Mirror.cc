@@ -1231,8 +1231,10 @@ int Mirror<I>::peer_add(librados::IoCtx& io_ctx, std::string *uuid,
     uuid_gen.generate_random();
 
     *uuid = uuid_gen.to_string();
-    r = cls_client::mirror_peer_add(&io_ctx, *uuid, cluster_name,
-                                    client_name);
+    r = cls_client::mirror_peer_add(
+      &io_ctx,
+      {*uuid, cls::rbd::MIRROR_PEER_DIRECTION_RX, cluster_name, client_name,
+       ""});
     if (r == -ESTALE) {
       ldout(cct, 5) << "duplicate UUID detected, retrying" << dendl;
     } else if (r < 0) {
@@ -1283,7 +1285,7 @@ int Mirror<I>::peer_list(librados::IoCtx& io_ctx,
   for (auto &mirror_peer : mirror_peers) {
     mirror_peer_t peer;
     peer.uuid = mirror_peer.uuid;
-    peer.cluster_name = mirror_peer.cluster_name;
+    peer.cluster_name = mirror_peer.site_name;
     peer.client_name = mirror_peer.client_name;
     peers->push_back(peer);
   }
