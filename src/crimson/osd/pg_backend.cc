@@ -255,7 +255,7 @@ PGBackend::read(const object_info_t& oi,
       if (const bool is_fine = _read_verify_data(oi, bl); is_fine) {
         return seastar::make_ready_future<bufferlist>(std::move(bl));
       } else {
-        return crimson::make_error<ceph::ct_error::object_corrupted>();
+        return crimson::ct_error::object_corrupted::make();
       }
     }, ll_read_errorator::pass_further{});
 }

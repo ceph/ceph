@@ -27,16 +27,15 @@ struct unthrowable_wrapper {
 
   unthrowable_wrapper(const unthrowable_wrapper&) = delete;
   static constexpr unthrowable_wrapper instance{};
-  template <class T> friend const T& make_error();
+  [[nodiscard]] static const auto& make() {
+    return instance;
+  }
 
 private:
   // can be used only to initialize the `instance` member
   explicit unthrowable_wrapper() = default;
 };
 
-template <class T> [[nodiscard]] const T& make_error() {
-  return T::instance;
-}
 
 // TODO: let `exception` use other type than `ct_error`.
 template <class ErrorT>

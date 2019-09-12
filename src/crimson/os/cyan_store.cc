@@ -182,11 +182,11 @@ CyanStore::read_errorator::future<ceph::bufferlist> CyanStore::read(
   logger().debug("{} {} {} {}~{}",
                 __func__, c->get_cid(), oid, offset, len);
   if (!c->exists) {
-    return crimson::make_error<ceph::ct_error::enoent>();
+    return crimson::ct_error::enoent::make();
   }
   ObjectRef o = c->get_object(oid);
   if (!o) {
-    return crimson::make_error<ceph::ct_error::enoent>();
+    return crimson::ct_error::enoent::make();
   }
   if (offset >= o->get_size())
     return seastar::make_ready_future<ceph::bufferlist>();
@@ -208,12 +208,12 @@ CyanStore::get_attr_errorator::future<ceph::bufferptr> CyanStore::get_attr(
                 __func__, c->get_cid(), oid);
   auto o = c->get_object(oid);
   if (!o) {
-    return crimson::make_error<crimson::ct_error::enoent>();
+    return crimson::ct_error::enoent::make();
   }
   if (auto found = o->xattr.find(name); found != o->xattr.end()) {
     return seastar::make_ready_future<ceph::bufferptr>(found->second);
   } else {
-    return crimson::make_error<crimson::ct_error::enodata>();
+    return crimson::ct_error::enodata::make();
   }
 }
 
