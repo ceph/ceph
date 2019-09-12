@@ -29,12 +29,6 @@ struct unthrowable_wrapper {
   static constexpr unthrowable_wrapper instance{};
   template <class T> friend const T& make_error();
 
-  // comparison operator for the static_assert in future's ctor.
-  template <_impl::ct_error OtherErrorV>
-  constexpr bool operator==(const unthrowable_wrapper<OtherErrorV>&) const {
-    return OtherErrorV == ErrorV;
-  }
-
 private:
   // can be used only to initialize the `instance` member
   explicit unthrowable_wrapper() = default;
@@ -45,7 +39,7 @@ template <class T> [[nodiscard]] const T& make_error() {
 }
 
 // TODO: let `exception` use other type than `ct_error`.
-template <_impl::ct_error V>
+template <class ErrorT>
 class exception {
   exception() = default;
 public:
@@ -65,9 +59,9 @@ public:
       errfunc(std::forward<ErrorVisitorT>(errfunc)) {
   }
 
-  template <_impl::ct_error ErrorV>
-  void operator()(const unthrowable_wrapper<ErrorV>& e) {
-    static_assert(std::is_invocable<ErrorVisitorT, decltype(e)>::value,
+  template <class ErrorT>
+  void handle() {
+    static_assert(std::is_invocable<ErrorVisitorT, ErrorT>::value,
                   "provided Error Visitor is not exhaustive");
     // In C++ throwing an exception isn't the sole way to signal
     // error with it. This approach nicely fits cold, infrequent cases
@@ -88,15 +82,15 @@ public:
     // It should be available both in GCC and Clang but a fallback
     // (based on `std::rethrow_exception()` and `catch`) can be made
     // to handle other platforms if necessary.
-    if (type_info == typeid(exception<ErrorV>)) {
+    if (type_info == typeid(exception<ErrorT>)) {
       // set `state::invalid` in internals of `seastar::future` to not
       // call `report_failed_future()` during `operator=()`.
       std::move(result).get_exception();
 
       constexpr bool explicitly_discarded = std::is_invocable_r<
-        struct ignore_marker_t&&, ErrorVisitorT, decltype(e)>::value;
+        struct ignore_marker_t&&, ErrorVisitorT, ErrorT>::value;
       if constexpr (!explicitly_discarded) {
-        result = std::forward<ErrorVisitorT>(errfunc)(e);
+        result = std::forward<ErrorVisitorT>(errfunc)(ErrorT::instance);
       }
     }
   }
@@ -223,17 +217,17 @@ struct errorator {
     // per type created on start-up.
     template <_impl::ct_error ErrorV>
     future(const unthrowable_wrapper<ErrorV>& e)
-      : base_t(seastar::make_exception_future<ValuesT...>(exception<ErrorV>{})) {
+      : base_t(seastar::make_exception_future<ValuesT...>(exception<std::decay_t<decltype(e)>>{})) {
       // this is `fold expression` of C++17
-      static_assert((... || (e == WrappedAllowedErrorsT::instance)),
+      static_assert((... || (std::is_same_v<std::decay_t<decltype(e)>,
+                                            WrappedAllowedErrorsT>)),
                     "disallowed ct_error");
     }
 
     template <class ValueFuncT, class ErrorVisitorT>
     auto safe_then(ValueFuncT&& valfunc, ErrorVisitorT&& errfunc) {
-      static_assert((... && std::is_invocable_v<
-                      ErrorVisitorT,
-                      decltype(WrappedAllowedErrorsT::instance)>),
+      static_assert((... && std::is_invocable_v<ErrorVisitorT,
+                                                WrappedAllowedErrorsT>),
                     "provided Error Visitor is not exhaustive");
 
       using value_func_result_t = std::invoke_result_t<ValueFuncT, ValuesT&&...>;
@@ -247,7 +241,7 @@ struct errorator {
       using return_errorator_t = make_errorator_t<
         value_func_errorator_t,
         std::decay_t<std::invoke_result_t<
-          ErrorVisitorT, decltype(WrappedAllowedErrorsT::instance)>>...>;
+          ErrorVisitorT, WrappedAllowedErrorsT>>...>;
       // OK, now we know about all errors next continuation must take
       // care about. If Visitor handled everything and the Value Func
       // doesn't return any, we'll finish with errorator<>::future
@@ -271,7 +265,7 @@ struct errorator {
               std::forward<ErrorVisitorT>(errfunc),
               std::move(future).get_exception()
             );
-            (maybe_handle_error(WrappedAllowedErrorsT::instance) , ...);
+            (maybe_handle_error.template handle<WrappedAllowedErrorsT>() , ...);
             return plainify(std::move(maybe_handle_error).get_result());
           } else {
             return plainify(futurator_t::apply(std::forward<ValueFuncT>(valfunc),
@@ -297,19 +291,21 @@ struct errorator {
 
   // the visitor that forwards handling of all errors to next continuation
   struct pass_further {
-    template <_impl::ct_error ErrorV>
-    const auto& operator()(const unthrowable_wrapper<ErrorV>& e) {
-      static_assert((... || (e == WrappedAllowedErrorsT::instance)),
-                    "passing further disallowed ct_error");
-      return ::crimson::make_error<std::decay_t<decltype(e)>>();
+    template <class ErrorT>
+    decltype(auto) operator()(ErrorT&& e) {
+      using decayed_t = std::decay_t<ErrorT>;
+      static_assert((... || std::is_same_v<WrappedAllowedErrorsT, decayed_t>),
+                    "passing further disallowed ErrorT");
+      return std::forward<ErrorT>(e);
     }
   };
 
   struct discard_all {
-    template <_impl::ct_error ErrorV>
-    auto operator()(const unthrowable_wrapper<ErrorV>& e) {
-      static_assert((... || (e == WrappedAllowedErrorsT::instance)),
-                    "discarding disallowed ct_error");
+    template <class ErrorT>
+    decltype(auto) operator()(ErrorT&&) {
+      static_assert((... || std::is_same_v<WrappedAllowedErrorsT,
+                                           std::decay_t<ErrorT>>),
+                    "discarding disallowed ErrorT");
       return ignore_marker_t{};
     }
   };
@@ -323,7 +319,7 @@ struct errorator {
   template <class ErrorT>
   struct is_carried {
     static constexpr bool value = \
-      ((WrappedAllowedErrorsT::instance == ErrorT::instance) || ...);
+      ((std::is_same_v<WrappedAllowedErrorsT, ErrorT>) || ...);
   };
   template <class ErrorT>
   static constexpr bool is_carried_v = is_carried<ErrorT>::value;
