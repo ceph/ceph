@@ -270,8 +270,9 @@ class Zap(object):
                 "Zapping successful for: %s" % ", ".join([str(d) for d in self.args.devices])
             )
         else:
+            identifier = self.args.osd_id or self.args.osd_fsid
             terminal.success(
-                "Zapping successful for OSD: %s" % self.args.osd_id or self.args.osd_fsid
+                "Zapping successful for OSD: %s" % identifier
             )
 
     @decorators.needs_root
