@@ -649,15 +649,13 @@ void StrayManager::_eval_stray_remote(CDentry *stray_dn, CDentry *remote_dn)
 
 void StrayManager::reintegrate_stray(CDentry *straydn, CDentry *rdn)
 {
-  dout(10) << __func__ << " " << *straydn << " into " << *rdn << dendl;
+  dout(10) << __func__ << " " << *straydn << " to " << *rdn << dendl;
 
   logger->inc(l_mdc_strays_reintegrated);
   
-  // rename it to another mds.
-  filepath src;
-  straydn->make_path(src);
-  filepath dst;
-  rdn->make_path(dst);
+  // rename it to remote linkage .
+  filepath src(straydn->get_name(), straydn->get_dir()->ino());
+  filepath dst(rdn->get_name(), rdn->get_dir()->ino());
 
   auto req = make_message<MClientRequest>(CEPH_MDS_OP_RENAME);
   req->set_filepath(dst);
@@ -669,24 +667,16 @@ void StrayManager::reintegrate_stray(CDentry *straydn, CDentry *rdn)
  
 void StrayManager::migrate_stray(CDentry *dn, mds_rank_t to)
 {
-  CInode *in = dn->get_projected_linkage()->get_inode();
-  ceph_assert(in);
-  CInode *diri = dn->dir->get_inode();
-  ceph_assert(diri->is_stray());
-  dout(10) << "migrate_stray from mds." << MDS_INO_STRAY_OWNER(diri->inode.ino)
-	   << " to mds." << to
-	   << " " << *dn << " " << *in << dendl;
+  dout(10) << __func__ << " " << *dn << " to mds." << to << dendl;
 
   logger->inc(l_mdc_strays_migrated);
 
   // rename it to another mds.
-  filepath src;
-  dn->make_path(src);
-  ceph_assert(src.depth() == 2);
+  inodeno_t dirino = dn->get_dir()->ino();
+  ceph_assert(MDS_INO_IS_STRAY(dirino));
 
-  filepath dst(MDS_INO_MDSDIR(to));
-  dst.push_dentry(src[0]);
-  dst.push_dentry(src[1]);
+  filepath src(dn->get_name(), dirino);
+  filepath dst(dn->get_name(), MDS_INO_STRAY(to, MDS_INO_STRAY_INDEX(dirino)));
 
   auto req = make_message<MClientRequest>(CEPH_MDS_OP_RENAME);
   req->set_filepath(dst);

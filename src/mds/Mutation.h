@@ -285,7 +285,11 @@ struct MDRequestImpl : public MutationImpl {
   // -- i am a client (master) request
   cref_t<MClientRequest> client_request; // client request (if any)
 
+  // tree and depth info of path1 and path2
+  inodeno_t dir_root[2] = {0, 0};
+  int dir_depth[2] = {-1, -1};
   file_layout_t dir_layout;
+
   // store up to two sets of dn vectors, inode pointers, for request path1 and path2.
   vector<CDentry*> dn[2];
   CInode *in[2];
@@ -441,6 +445,7 @@ struct MDRequestImpl : public MutationImpl {
   void set_filepath2(const filepath& fp);
   bool is_queued_for_replay() const;
   bool is_batch_op();
+  int compare_paths();
 
   void print(ostream &out) const override;
   void dump(Formatter *f) const override;
