@@ -321,13 +321,16 @@ class ProgressReference(object):
                  completion=None  # type: Optional[Callable[[], Completion[float]]]
                 ):
         """
-        ProgressReference can be used within Completions:
+        ProgressReference can be used within Completions::
 
-        +---------------+      +---------------------------------+
-        |               | then |                                 |
-        | My Completion | +--> | on_complete=ProgressReference() |
-        |               |      |                                 |
-        +---------------+      +---------------------------------+
+            +---------------+      +---------------------------------+
+            |               | then |                                 |
+            | My Completion | +--> | on_complete=ProgressReference() |
+            |               |      |                                 |
+            +---------------+      +---------------------------------+
+
+        See :func:`Completion.with_progress` for an easy way to create
+        a progress reference
 
         """
         super(ProgressReference, self).__init__()
@@ -396,11 +399,34 @@ class ProgressReference(object):
         self._completion_has_result = True
         self.progress = 1
 
+
 class Completion(_Promise[T]):
     """
     Combines multiple promises into one overall operation.
 
-    :ivar exception: Holds an exception object, if the completion errored.
+    Completions are composable by being able to
+    call one completion from another completion. I.e. making them re-usable
+    using Promises E.g.::
+
+        >>> return Orchestrator().get_hosts().then(self._create_osd)
+
+    where ``get_hosts`` returns a Completion of list of hosts and
+    ``_create_osd`` takes a list of hosts.
+
+    The concept behind this is to store the computation steps
+    explicit and then explicitly evaluate the chain:
+
+        >>> p = Completion(on_complete=lambda x: x*2).then(on_complete=lambda x: str(x))
+        ... p.finalize(2)
+        ... assert p.result = "4"
+
+    or graphically::
+
+        +---------------+      +-----------------+
+        |               | then |                 |
+        | lambda x: x*x | +--> | lambda x: str(x)|
+        |               |      |                 |
+        +---------------+      +-----------------+
 
     """
     def __init__(self,
