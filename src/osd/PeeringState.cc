@@ -11,20 +11,85 @@
 #include "messages/MRecoveryReserve.h"
 #include "messages/MOSDScrubReserve.h"
 #include "messages/MOSDPGInfo.h"
+#include "messages/MOSDPGInfo2.h"
 #include "messages/MOSDPGTrim.h"
 #include "messages/MOSDPGLog.h"
+#include "messages/MOSDPGNotify.h"
+#include "messages/MOSDPGNotify2.h"
+#include "messages/MOSDPGQuery.h"
+#include "messages/MOSDPGQuery2.h"
 
 #define dout_context cct
 #define dout_subsys ceph_subsys_osd
 
-BufferedRecoveryMessages::BufferedRecoveryMessages(PeeringCtx &ctx)
-  : query_map(std::move(ctx.query_map)),
-    info_map(std::move(ctx.info_map)),
-    notify_list(std::move(ctx.notify_list))
+BufferedRecoveryMessages::BufferedRecoveryMessages(
+  ceph_release_t r,
+  PeeringCtx &ctx)
+  : require_osd_release(r) {
+  // steal messages from ctx
+  message_map.swap(ctx.message_map);
+}
+
+void BufferedRecoveryMessages::send_notify(int to, const pg_notify_t &n)
 {
-  ctx.query_map.clear();
-  ctx.info_map.clear();
-  ctx.notify_list.clear();
+  if (require_osd_release >= ceph_release_t::octopus) {
+    spg_t pgid(n.info.pgid.pgid, n.to);
+    message_map[to].push_back(
+      make_message<MOSDPGNotify2>(
+	pgid,
+	n));
+  } else {
+    vector<pg_notify_t> notifies;
+    notifies.push_back(n);
+    message_map[to].push_back(
+      make_message<MOSDPGNotify>(n.epoch_sent, std::move(notifies))
+      );
+  }
+}
+
+void BufferedRecoveryMessages::send_query(
+  int to,
+  spg_t to_spgid,
+  const pg_query_t &q)
+{
+  if (require_osd_release >= ceph_release_t::octopus) {
+    message_map[to].push_back(
+      make_message<MOSDPGQuery2>(to_spgid, q)
+      );
+  } else {
+    map<spg_t,pg_query_t> queries;
+    queries[to_spgid] = q;
+    message_map[to].push_back(
+      make_message<MOSDPGQuery>(q.epoch_sent, std::move(queries))
+      );
+  }
+}
+
+void BufferedRecoveryMessages::send_info(
+  int to,
+  spg_t to_spgid,
+  epoch_t min_epoch,
+  epoch_t cur_epoch,
+  const pg_info_t &info)
+{
+  if (require_osd_release >= ceph_release_t::octopus) {
+    message_map[to].push_back(
+      make_message<MOSDPGInfo2>(
+	to_spgid,
+	info,
+	cur_epoch,
+	min_epoch)
+      );
+  } else {
+    auto m = make_message<MOSDPGInfo>(cur_epoch);
+    m->pg_list.push_back(
+      pg_notify_t(
+	to_spgid.shard,
+	info.pgid.shard,
+	min_epoch, cur_epoch,
+	info, PastIntervals()));
+    message_map[to].push_back(m);
+  }
 }
 
 void PGPool::update(CephContext *cct, OSDMapRef map)
@@ -47,13 +112,6 @@ void PGPool::update(CephContext *cct, OSDMapRef map)
     snapc = pi->get_snap_context();
   }
   cached_epoch = map->get_epoch();
-}
-
-void PeeringState::PeeringMachine::send_query(
-  pg_shard_t to, const pg_query_t &query) {
-  ceph_assert(state->rctx);
-  state->rctx->query_map[to.osd][
-    spg_t(context< PeeringMachine >().spgid.pgid, to.shard)] = query;
 }
 
 /*-------------Peering State Helpers----------------*/
@@ -105,7 +163,8 @@ void PeeringState::begin_block_outgoing() {
   ceph_assert(!messages_pending_flush);
   ceph_assert(orig_ctx);
   ceph_assert(rctx);
-  messages_pending_flush = BufferedRecoveryMessages();
+  messages_pending_flush = BufferedRecoveryMessages(
+    orig_ctx->require_osd_release);
   rctx.emplace(*messages_pending_flush, *orig_ctx);
 }
 
@@ -1960,21 +2019,22 @@ bool PeeringState::search_for_missing(
       oinfo.last_update != eversion_t()) {
     pg_info_t tinfo(oinfo);
     tinfo.pgid.shard = pg_whoami.shard;
-    ctx.info_map[from.osd].emplace_back(
-      pg_notify_t(
-	from.shard, pg_whoami.shard,
-	get_osdmap_epoch(),
-	get_osdmap_epoch(),
-	tinfo, past_intervals));
+    ctx.send_info(
+      from.osd,
+      spg_t(info.pgid.pgid, from.shard),
+      get_osdmap_epoch(),  // fixme: use lower epoch?
+      get_osdmap_epoch(),
+      tinfo);
   }
   return found_missing;
 }
 
-void PeeringState::discover_all_missing(
-  map<int, map<spg_t,pg_query_t> > &query_map)
+bool PeeringState::discover_all_missing(
+  BufferedRecoveryMessages &rctx)
 {
   auto &missing = pg_log.get_missing();
   uint64_t unfound = get_num_unfound();
+  bool any = false;  // did we start any queries
 
   psdout(10) << __func__ << " "
 	     << missing.num_missing() << " missing, "
@@ -2021,12 +2081,16 @@ void PeeringState::discover_all_missing(
     psdout(10) << __func__ << ": osd." << peer << ": requesting pg_missing_t"
 	       << dendl;
     peer_missing_requested.insert(peer);
-    query_map[peer.osd][spg_t(info.pgid.pgid, peer.shard)] =
+    rctx.send_query(
+      peer.osd,
+      spg_t(info.pgid.pgid, peer.shard),
       pg_query_t(
 	pg_query_t::FULLLOG,
 	peer.shard, pg_whoami.shard,
-	info.history, get_osdmap_epoch());
+	info.history, get_osdmap_epoch()));
+    any = true;
   }
+  return any;
 }
 
 /* Build the might_have_unfound set.
@@ -2062,8 +2126,6 @@ void PeeringState::build_might_have_unfound()
 void PeeringState::activate(
   ObjectStore::Transaction& t,
   epoch_t activation_epoch,
-  map<int, map<spg_t,pg_query_t> >& query_map,
-  map<int,vector<pg_notify_t>> *activator_map,
   PeeringCtxWrapper &ctx)
 {
   ceph_assert(!is_peered());
@@ -2180,16 +2242,15 @@ void PeeringState::activate(
 				<< " from (" << pi.log_tail << "," << pi.last_update
 				<< "] " << pi.last_backfill
 				<< " to " << info.last_update;
-	if (!pi.is_empty() && activator_map) {
+	if (!pi.is_empty()) {
 	  psdout(10) << "activate peer osd." << peer
 		     << " is up to date, queueing in pending_activators" << dendl;
-	  (*activator_map)[peer.osd].emplace_back(
-	    pg_notify_t(
-	      peer.shard, pg_whoami.shard,
-	      get_osdmap_epoch(),
-	      get_osdmap_epoch(),
-	      info,
-	      past_intervals));
+	  ctx.send_info(
+	    peer.osd,
+	    spg_t(info.pgid.pgid, peer.shard),
+	    get_osdmap_epoch(), // fixme: use lower epoch?
+	    get_osdmap_epoch(),
+	    info);
 	} else {
 	  psdout(10) << "activate peer osd." << peer
 		     << " is up to date, but sending pg_log anyway" << dendl;
@@ -2359,7 +2420,7 @@ void PeeringState::activate(
       build_might_have_unfound();
 
       // Always call now so update_calc_stats() will be accurate
-      discover_all_missing(query_map);
+      discover_all_missing(ctx.msgs);
 
     }
 
@@ -2564,7 +2625,7 @@ void PeeringState::fulfill_query(const MQuery& query, PeeringCtxWrapper &rctx)
     update_history(query.query.history);
     fulfill_info(query.from, query.query, notify_info);
     rctx.send_notify(
-      notify_info.first,
+      notify_info.first.osd,
       pg_notify_t(
 	notify_info.first.shard, pg_whoami.shard,
 	query.query_epoch,
@@ -4060,6 +4121,7 @@ PeeringState::Reset::Reset(my_context ctx)
 
   ps->flushes_in_progress = 0;
   ps->set_last_peering_reset();
+  ps->log_weirdness();
 }
 
 boost::statechart::result
@@ -4102,7 +4164,7 @@ boost::statechart::result PeeringState::Reset::react(const ActMap&)
   DECLARE_LOCALS;
   if (ps->should_send_notify() && ps->get_primary().osd >= 0) {
     context< PeeringMachine >().send_notify(
-      ps->get_primary(),
+      ps->get_primary().osd,
       pg_notify_t(
 	ps->get_primary().shard, ps->pg_whoami.shard,
 	ps->get_osdmap_epoch(),
@@ -5246,8 +5308,6 @@ PeeringState::Active::Active(my_context ctx)
   ps->start_flush(context< PeeringMachine >().get_cur_transaction());
   ps->activate(context< PeeringMachine >().get_cur_transaction(),
 	       ps->get_osdmap_epoch(),
-	       context< PeeringMachine >().get_query_map(),
-	       &context< PeeringMachine >().get_info_map(),
 	       context< PeeringMachine >().get_recovery_ctx());
 
   // everyone has to commit/ack before we are truly active
@@ -5334,7 +5394,7 @@ boost::statechart::result PeeringState::Active::react(const ActMap&)
 
   if (ps->have_unfound()) {
     // object may have become unfound
-    ps->discover_all_missing(context< PeeringMachine >().get_query_map());
+    ps->discover_all_missing(context<PeeringMachine>().get_recovery_ctx().msgs);
   }
 
   uint64_t unfound = ps->missing_loc.num_unfound();
@@ -5373,7 +5433,8 @@ boost::statechart::result PeeringState::Active::react(const MNotifyRec& notevt)
     ps->proc_replica_info(
       notevt.from, notevt.notify.info, notevt.notify.epoch_sent);
     if (ps->have_unfound() || (ps->is_degraded() && ps->might_have_unfound.count(notevt.from))) {
-      ps->discover_all_missing(context< PeeringMachine >().get_query_map());
+      ps->discover_all_missing(
+	context<PeeringMachine>().get_recovery_ctx().msgs);
     }
   }
   return discard_event();
@@ -5612,12 +5673,9 @@ boost::statechart::result PeeringState::ReplicaActive::react(
   const Activate& actevt) {
   DECLARE_LOCALS;
   psdout(10) << "In ReplicaActive, about to call activate" << dendl;
-  map<int, map<spg_t, pg_query_t> > query_map;
   ps->activate(
     context< PeeringMachine >().get_cur_transaction(),
     actevt.activation_epoch,
-    query_map,
-    NULL,
     context< PeeringMachine >().get_recovery_ctx());
   psdout(10) << "Activate Finished" << dendl;
   return discard_event();
@@ -5627,31 +5685,27 @@ boost::statechart::result PeeringState::ReplicaActive::react(
   const ActivateCommitted &evt)
 {
   DECLARE_LOCALS;
-  psdout(10) << "_activate_committed " << evt.epoch
-	   << " telling primary" << dendl;
-  MOSDPGInfo *m = new MOSDPGInfo(evt.epoch);
-  pg_notify_t i = pg_notify_t(
-    ps->get_primary().shard, ps->pg_whoami.shard,
-    ps->get_osdmap_epoch(),
-    ps->get_osdmap_epoch(),
-    ps->info,
-    PastIntervals());
+  psdout(10) << __func__ << " " << evt.epoch << " telling primary" << dendl;
 
-  i.info.history.last_epoch_started = evt.activation_epoch;
-  i.info.history.last_interval_started = i.info.history.same_interval_since;
+  auto &rctx = context<PeeringMachine>().get_recovery_ctx();
+  auto epoch = ps->get_osdmap_epoch();
+  pg_info_t i = ps->info;
+  i.history.last_epoch_started = evt.activation_epoch;
+  i.history.last_interval_started = i.history.same_interval_since;
+  rctx.send_info(
+    ps->get_primary().osd,
+    spg_t(ps->info.pgid.pgid, ps->get_primary().shard),
+    epoch,
+    epoch,
+    i);
+
   if (ps->acting.size() >= ps->pool.info.min_size) {
     ps->state_set(PG_STATE_ACTIVE);
   } else {
     ps->state_set(PG_STATE_PEERED);
   }
-
-  m->pg_list.emplace_back(i);
-  pl->send_cluster_message(
-    ps->get_primary().osd,
-    m,
-    ps->get_osdmap_epoch());
-
   pl->on_activate_committed();
+
   return discard_event();
 }
 
@@ -5688,7 +5742,7 @@ boost::statechart::result PeeringState::ReplicaActive::react(const ActMap&)
   DECLARE_LOCALS;
   if (ps->should_send_notify() && ps->get_primary().osd >= 0) {
     context< PeeringMachine >().send_notify(
-      ps->get_primary(),
+      ps->get_primary().osd,
       pg_notify_t(
 	ps->get_primary().shard, ps->pg_whoami.shard,
 	ps->get_osdmap_epoch(),
@@ -5808,7 +5862,7 @@ boost::statechart::result PeeringState::Stray::react(const ActMap&)
   DECLARE_LOCALS;
   if (ps->should_send_notify() && ps->get_primary().osd >= 0) {
     context< PeeringMachine >().send_notify(
-      ps->get_primary(),
+      ps->get_primary().osd,
       pg_notify_t(
 	ps->get_primary().shard, ps->pg_whoami.shard,
 	ps->get_osdmap_epoch(),
@@ -5937,6 +5991,7 @@ PeeringState::GetInfo::GetInfo(my_context ctx)
 
   DECLARE_LOCALS;
   ps->check_past_interval_bounds();
+  ps->log_weirdness();
   PastIntervals::PriorSet &prior_set = context< Peering >().prior_set;
 
   ceph_assert(ps->blocked_by.empty());
@@ -5977,10 +6032,11 @@ void PeeringState::GetInfo::get_infos()
     } else {
       psdout(10) << " querying info from osd." << peer << dendl;
       context< PeeringMachine >().send_query(
-	peer, pg_query_t(pg_query_t::INFO,
-			 it->shard, ps->pg_whoami.shard,
-			 ps->info.history,
-			 ps->get_osdmap_epoch()));
+	peer.osd,
+	pg_query_t(pg_query_t::INFO,
+		   it->shard, ps->pg_whoami.shard,
+		   ps->info.history,
+		   ps->get_osdmap_epoch()));
       peer_info_requested.insert(peer);
       ps->blocked_by.insert(peer.osd);
     }
@@ -6086,6 +6142,8 @@ PeeringState::GetLog::GetLog(my_context ctx)
 
   DECLARE_LOCALS;
 
+  ps->log_weirdness();
+
   // adjust acting?
   if (!ps->choose_acting(auth_log_shard, false,
 			 &context< Peering >().history_les_bound)) {
@@ -6128,7 +6186,7 @@ PeeringState::GetLog::GetLog(my_context ctx)
   // how much?
   psdout(10) << " requesting log from osd." << auth_log_shard << dendl;
   context<PeeringMachine>().send_query(
-    auth_log_shard,
+    auth_log_shard.osd,
     pg_query_t(
       pg_query_t::LOG,
       auth_log_shard.shard, ps->pg_whoami.shard,
@@ -6405,6 +6463,7 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
   context< PeeringMachine >().log_enter(state_name);
 
   DECLARE_LOCALS;
+  ps->log_weirdness();
   ceph_assert(!ps->acting_recovery_backfill.empty());
   eversion_t since;
   for (set<pg_shard_t>::iterator i = ps->acting_recovery_backfill.begin();
@@ -6450,7 +6509,7 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
     if (pi.log_tail <= since) {
       psdout(10) << " requesting log+missing since " << since << " from osd." << *i << dendl;
       context< PeeringMachine >().send_query(
-	*i,
+	i->osd,
 	pg_query_t(
 	  pg_query_t::LOG,
 	  i->shard, ps->pg_whoami.shard,
@@ -6461,7 +6520,7 @@ PeeringState::GetMissing::GetMissing(my_context ctx)
 			 << " (want since " << since << " < log.tail "
 			 << pi.log_tail << ")" << dendl;
       context< PeeringMachine >().send_query(
-	*i, pg_query_t(
+	i->osd, pg_query_t(
 	  pg_query_t::FULLLOG,
 	  i->shard, ps->pg_whoami.shard,
 	  ps->info.history, ps->get_osdmap_epoch()));

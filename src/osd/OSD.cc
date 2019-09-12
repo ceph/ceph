@@ -88,10 +88,13 @@
 #include "messages/MOSDMap.h"
 #include "messages/MMonGetOSDMap.h"
 #include "messages/MOSDPGNotify.h"
+#include "messages/MOSDPGNotify2.h"
 #include "messages/MOSDPGQuery.h"
+#include "messages/MOSDPGQuery2.h"
 #include "messages/MOSDPGLog.h"
 #include "messages/MOSDPGRemove.h"
 #include "messages/MOSDPGInfo.h"
+#include "messages/MOSDPGInfo2.h"
 #include "messages/MOSDPGCreate.h"
 #include "messages/MOSDPGCreate2.h"
 #include "messages/MOSDPGTrim.h"
@@ -7261,6 +7264,9 @@ void OSD::ms_fast_dispatch(Message *m)
     // these are single-pg messages that handle themselves
   case MSG_OSD_PG_LOG:
   case MSG_OSD_PG_TRIM:
+  case MSG_OSD_PG_NOTIFY2:
+  case MSG_OSD_PG_QUERY2:
+  case MSG_OSD_PG_INFO2:
   case MSG_OSD_BACKFILL_RESERVE:
   case MSG_OSD_RECOVERY_RESERVE:
     {
@@ -8615,25 +8621,23 @@ void OSD::_finish_splits(set<PGRef>& pgs)
   dout(10) << __func__ << " " << pgs << dendl;
   if (is_stopping())
     return;
-  PeeringCtx rctx = create_context();
   for (set<PGRef>::iterator i = pgs.begin();
        i != pgs.end();
        ++i) {
     PG *pg = i->get();
 
+    PeeringCtx rctx = create_context();
     pg->lock();
     dout(10) << __func__ << " " << *pg << dendl;
     epoch_t e = pg->get_osdmap_epoch();
     pg->handle_initialize(rctx);
     pg->queue_null(e, e);
-    dispatch_context_transaction(rctx, pg);
+    dispatch_context(rctx, pg, service.get_osdmap());
     pg->unlock();
 
     unsigned shard_index = pg->pg_id.hash_to_shard(num_shards);
     shards[shard_index]->register_and_wake_split_child(pg);
   }
-
-  dispatch_context(rctx, 0, service.get_osdmap());
 };
 
 bool OSD::add_merge_waiter(OSDMapRef nextmap, spg_t target, PGRef src,
@@ -8691,7 +8695,7 @@ bool OSD::advance_pg(
 		  << " is merge source, target is " << parent
 		   << dendl;
 	  pg->write_if_dirty(rctx);
-	  dispatch_context_transaction(rctx, pg, &handle);
+	  dispatch_context(rctx, pg, pg->get_osdmap(), &handle);
 	  pg->ch->flush();
 	  pg->on_shutdown();
 	  OSDShard *sdata = pg->osd_shard;
@@ -9265,19 +9269,7 @@ void OSD::handle_pg_create(OpRequestRef op)
 
 PeeringCtx OSD::create_context()
 {
-  return PeeringCtx();
-}
-
-void OSD::dispatch_context_transaction(PeeringCtx &ctx, PG *pg,
-                                       ThreadPool::TPHandle *handle)
-{
-  if (!ctx.transaction.empty() || ctx.transaction.has_contexts()) {
-    int tr = store->queue_transaction(
-      pg->ch,
-      std::move(ctx.transaction), TrackedOpRef(), handle);
-    ceph_assert(tr == 0);
-    ctx.reset_transaction();
-  }
+  return PeeringCtx(get_osdmap()->require_osd_release);
 }
 
 void OSD::dispatch_context(PeeringCtx &ctx, PG *pg, OSDMapRef curmap,
@@ -9288,9 +9280,24 @@ void OSD::dispatch_context(PeeringCtx &ctx, PG *pg, OSDMapRef curmap,
   } else if (!is_active()) {
     dout(20) << __func__ << " not active" << dendl;
   } else {
-    do_notifies(ctx.notify_list, curmap);
-    do_queries(ctx.query_map, curmap);
-    do_infos(ctx.info_map, curmap);
+    for (auto& [osd, ls] : ctx.message_map) {
+      if (!curmap->is_up(osd)) {
+	dout(20) << __func__ << " skipping down osd." << osd << dendl;
+	continue;
+      }
+      ConnectionRef con = service.get_con_osd_cluster(
+	osd, curmap->get_epoch());
+      if (!con) {
+	dout(20) << __func__ << " skipping osd." << osd << " (NULL con)"
+		 << dendl;
+	continue;
+      }
+      service.maybe_share_map(con.get(), curmap);
+      for (auto m : ls) {
+	con->send_message2(m);
+      }
+      ls.clear();
+    }
   }
   if ((!ctx.transaction.empty() || ctx.transaction.has_contexts()) && pg) {
     int tr = store->queue_transaction(
@@ -9299,92 +9306,6 @@ void OSD::dispatch_context(PeeringCtx &ctx, PG *pg, OSDMapRef curmap,
       handle);
     ceph_assert(tr == 0);
   }
-}
-
-/** do_notifies
- * Send an MOSDPGNotify to a primary, with a list of PGs that I have
- * content for, and they are primary for.
- */
-
-void OSD::do_notifies(
-  map<int,vector<pg_notify_t>>& notify_list,
-  OSDMapRef curmap)
-{
-  for (auto& [osd, notifies] : notify_list) {
-    if (!curmap->is_up(osd)) {
-      dout(20) << __func__ << " skipping down osd." << osd << dendl;
-      continue;
-    }
-    ConnectionRef con = service.get_con_osd_cluster(
-      osd, curmap->get_epoch());
-    if (!con) {
-      dout(20) << __func__ << " skipping osd." << osd << " (NULL con)" << dendl;
-      continue;
-    }
-    service.maybe_share_map(con.get(), curmap);
-    dout(7) << __func__ << " osd." << osd
-	    << " on " << notifies.size() << " PGs" << dendl;
-    MOSDPGNotify *m = new MOSDPGNotify(curmap->get_epoch(),
-				       std::move(notifies));
-    con->send_message(m);
-  }
-}
-
-
-/** do_queries
- * send out pending queries for info | summaries
- */
-void OSD::do_queries(map<int, map<spg_t,pg_query_t> >& query_map,
-		     OSDMapRef curmap)
-{
-  for (map<int, map<spg_t,pg_query_t> >::iterator pit = query_map.begin();
-       pit != query_map.end();
-       ++pit) {
-    if (!curmap->is_up(pit->first)) {
-      dout(20) << __func__ << " skipping down osd." << pit->first << dendl;
-      continue;
-    }
-    int who = pit->first;
-    ConnectionRef con = service.get_con_osd_cluster(who, curmap->get_epoch());
-    if (!con) {
-      dout(20) << __func__ << " skipping osd." << who
-	       << " (NULL con)" << dendl;
-      continue;
-    }
-    service.maybe_share_map(con.get(), curmap);
-    dout(7) << __func__ << " querying osd." << who
-	    << " on " << pit->second.size() << " PGs" << dendl;
-    MOSDPGQuery *m = new MOSDPGQuery(curmap->get_epoch(),
-				     std::move(pit->second));
-    con->send_message(m);
-  }
-}
-
-
-void OSD::do_infos(map<int,vector<pg_notify_t>>& info_map,
-		   OSDMapRef curmap)
-{
-  for (auto& [osd, notifies] : info_map) {
-    if (!curmap->is_up(osd)) {
-      dout(20) << __func__ << " skipping down osd." << osd << dendl;
-      continue;
-    }
-    for (auto& i : notifies) {
-      dout(20) << __func__ << " sending info " << i.info
-	       << " to osd " << osd << dendl;
-    }
-    ConnectionRef con = service.get_con_osd_cluster(
-      osd, curmap->get_epoch());
-    if (!con) {
-      dout(20) << __func__ << " skipping osd." << osd << " (NULL con)" << dendl;
-      continue;
-    }
-    service.maybe_share_map(con.get(), curmap);
-    MOSDPGInfo *m = new MOSDPGInfo(curmap->get_epoch());
-    m->pg_list = std::move(notifies);
-    con->send_message(m);
-  }
-  info_map.clear();
 }
 
 void OSD::handle_fast_pg_create(MOSDPGCreate2 *m)
@@ -9950,7 +9871,7 @@ void OSD::dequeue_peering_evt(
       pg->unlock();
       return;
     }
-    dispatch_context_transaction(rctx, pg, &handle);
+    dispatch_context(rctx, pg, curmap, &handle);
     need_up_thru = pg->get_need_up_thru();
     same_interval_since = pg->get_same_interval_since();
     pg->unlock();
@@ -9959,7 +9880,6 @@ void OSD::dequeue_peering_evt(
   if (need_up_thru) {
     queue_want_up_thru(same_interval_since);
   }
-  dispatch_context(rctx, pg, curmap, &handle);
 
   service.send_pg_temp();
 }
