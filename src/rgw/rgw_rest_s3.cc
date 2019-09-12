@@ -75,11 +75,11 @@ void list_all_buckets_end(struct req_state *s)
   s->formatter->close_section();
 }
 
-void dump_bucket(struct req_state *s, RGWBucketEnt& obj)
+void dump_bucket(struct req_state *s, rgw::sal::RGWSalBucket& obj)
 {
   s->formatter->open_object_section("Bucket");
-  s->formatter->dump_string("Name", obj.bucket.name);
-  dump_time(s, "CreationDate", &obj.creation_time);
+  s->formatter->dump_string("Name", obj.get_name());
+  dump_time(s, "CreationDate", &obj.get_creation_time());
   s->formatter->close_section();
 }
 
@@ -619,17 +619,17 @@ void RGWListBuckets_ObjStore_S3::send_response_begin(bool has_buckets)
   }
 }
 
-void RGWListBuckets_ObjStore_S3::send_response_data(RGWUserBuckets& buckets)
+void RGWListBuckets_ObjStore_S3::send_response_data(rgw::sal::RGWBucketList& buckets)
 {
   if (!sent_data)
     return;
 
-  map<string, RGWBucketEnt>& m = buckets.get_buckets();
-  map<string, RGWBucketEnt>::iterator iter;
+  map<string, rgw::sal::RGWSalBucket*>& m = buckets.get_buckets();
+  map<string, rgw::sal::RGWSalBucket*>::iterator iter;
 
   for (iter = m.begin(); iter != m.end(); ++iter) {
-    RGWBucketEnt obj = iter->second;
-    dump_bucket(s, obj);
+    rgw::sal::RGWSalBucket* obj = iter->second;
+    dump_bucket(s, *obj);
   }
   rgw_flush_formatter(s, s->formatter);
 }
@@ -1473,10 +1473,10 @@ void RGWGetBucketWebsite_ObjStore_S3::send_response()
   rgw_flush_formatter_and_reset(s, s->formatter);
 }
 
-static void dump_bucket_metadata(struct req_state *s, RGWBucketEnt& bucket)
+static void dump_bucket_metadata(struct req_state *s, rgw::sal::RGWSalBucket* bucket)
 {
-  dump_header(s, "X-RGW-Object-Count", static_cast<long long>(bucket.count));
-  dump_header(s, "X-RGW-Bytes-Used", static_cast<long long>(bucket.size));
+  dump_header(s, "X-RGW-Object-Count", static_cast<long long>(bucket->get_count()));
+  dump_header(s, "X-RGW-Bytes-Used", static_cast<long long>(bucket->get_size()));
 }
 
 void RGWStatBucket_ObjStore_S3::send_response()
@@ -1746,7 +1746,7 @@ int RGWPutObj_ObjStore_S3::get_params()
          return ret;
        }
     }
-    ret = store->getRados()->get_bucket_info(*s->sysobj_ctx,
+    ret = store->getRados()->get_bucket_info(store->svc(),
                                  copy_source_tenant_name,
                                  copy_source_bucket_name,
                                  copy_source_bucket_info,
@@ -4196,7 +4196,7 @@ int RGWHandler_REST_S3Website::retarget(RGWOp* op, RGWOp** new_op) {
   if (!(s->prot_flags & RGW_REST_WEBSITE))
     return 0;
 
-  int ret = store->getRados()->get_bucket_info(*s->sysobj_ctx, s->bucket_tenant,
+  int ret = store->getRados()->get_bucket_info(store->svc(), s->bucket_tenant,
 				  s->bucket_name, s->bucket_info, NULL,
 				  s->yield, &s->bucket_attrs);
   if (ret < 0) {

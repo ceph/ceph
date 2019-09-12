@@ -1032,8 +1032,7 @@ public:
                             rgw_obj& obj,                       /* in */
                             const DoutPrefixProvider *dpp,      /* in/out */ 
                             optional_yield y);                  /* in */                
-  int swift_versioning_restore(RGWSysObjectCtx& sysobj_ctx,
-                               RGWObjectCtx& obj_ctx,           /* in/out */
+  int swift_versioning_restore(RGWObjectCtx& obj_ctx,           /* in/out */
                                const rgw_user& user,            /* in */
                                RGWBucketInfo& bucket_info,      /* in */
                                rgw_obj& obj,                    /* in */
@@ -1310,12 +1309,13 @@ public:
   int get_bucket_stats_async(RGWBucketInfo& bucket_info, int shard_id, RGWGetBucketStats_CB *cb);
 
   int put_bucket_instance_info(RGWBucketInfo& info, bool exclusive, ceph::real_time mtime, map<string, bufferlist> *pattrs);
+  /* xxx dang obj_ctx -> svc */
   int get_bucket_instance_info(RGWSysObjectCtx& obj_ctx, const string& meta_key, RGWBucketInfo& info, ceph::real_time *pmtime, map<string, bufferlist> *pattrs, optional_yield y);
   int get_bucket_instance_info(RGWSysObjectCtx& obj_ctx, const rgw_bucket& bucket, RGWBucketInfo& info, ceph::real_time *pmtime, map<string, bufferlist> *pattrs, optional_yield y);
 
   static void make_bucket_entry_name(const string& tenant_name, const string& bucket_name, string& bucket_entry);
 
-  int get_bucket_info(RGWSysObjectCtx& obj_ctx,
+  int get_bucket_info(RGWServices *svc,
 		      const string& tenant_name, const string& bucket_name,
 		      RGWBucketInfo& info,
 		      ceph::real_time *pmtime, optional_yield y, map<string, bufferlist> *pattrs = NULL);

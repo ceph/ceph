@@ -979,12 +979,11 @@ int RGWReshard::process_single_logshard(int logshard_num)
 	ldout(store->ctx(), 20) << __func__ << " resharding " <<
 	  entry.bucket_name  << dendl;
 
-        auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
 	rgw_bucket bucket;
 	RGWBucketInfo bucket_info;
 	map<string, bufferlist> attrs;
 
-	ret = store->getRados()->get_bucket_info(obj_ctx, entry.tenant, entry.bucket_name,
+	ret = store->getRados()->get_bucket_info(store->svc(), entry.tenant, entry.bucket_name,
 				     bucket_info, nullptr, null_yield, &attrs);
 	if (ret < 0) {
 	  ldout(cct, 0) <<  __func__ << ": Error in get_bucket_info: " <<
