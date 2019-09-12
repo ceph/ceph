@@ -26,7 +26,10 @@ class RGWSI_Meta;
 class RGWBucketMetadataHandler;
 class RGWBucketInstanceMetadataHandler;
 class RGWUserCtl;
-namespace rgw { namespace sal { class RGWRadosStore; } }
+namespace rgw { namespace sal {
+  class RGWRadosStore;
+  class RGWBucketList;
+} }
 
 extern int rgw_bucket_parse_bucket_instance(const string& bucket_instance, string *bucket_name, string *bucket_id, int *shard_id);
 extern int rgw_bucket_parse_bucket_key(CephContext *cct, const string& key,
@@ -211,16 +214,13 @@ public:
  */
 extern int rgw_read_user_buckets(rgw::sal::RGWRadosStore *store,
                                  const rgw_user& user_id,
-                                 RGWUserBuckets& buckets,
+                                 rgw::sal::RGWBucketList& buckets,
                                  const string& marker,
                                  const string& end_marker,
                                  uint64_t max,
-                                 bool need_stats,
-				 bool* is_truncated,
-                                 uint64_t default_amount = 1000);
+                                 bool need_stats);
 
 extern int rgw_remove_object(rgw::sal::RGWRadosStore *store, const RGWBucketInfo& bucket_info, const rgw_bucket& bucket, rgw_obj_key& key);
-extern int rgw_remove_bucket(rgw::sal::RGWRadosStore *store, rgw_bucket& bucket, bool delete_children, optional_yield y);
 extern int rgw_remove_bucket_bypass_gc(rgw::sal::RGWRadosStore *store, rgw_bucket& bucket, int concurrent_max, optional_yield y);
 
 extern int rgw_object_get_attr(rgw::sal::RGWRadosStore* store, const RGWBucketInfo& bucket_info,

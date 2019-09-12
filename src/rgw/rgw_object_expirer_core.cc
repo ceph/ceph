@@ -174,8 +174,6 @@ int RGWObjectExpirer::init_bucket_info(const string& tenant_name,
                                        const string& bucket_id,
                                        RGWBucketInfo& bucket_info)
 {
-  auto obj_ctx = store->svc()->sysobj->init_obj_ctx();
-
   /*
    * XXX Here's where it gets tricky. We went to all the trouble of
    * punching the tenant through the objexp_hint_entry, but now we
@@ -186,7 +184,7 @@ int RGWObjectExpirer::init_bucket_info(const string& tenant_name,
    * are ephemeral, good call encoding tenant info!
    */
 
-  return store->getRados()->get_bucket_info(obj_ctx, tenant_name, bucket_name,
+  return store->getRados()->get_bucket_info(store->svc(), tenant_name, bucket_name,
 				bucket_info, nullptr, null_yield, nullptr);
 
 }

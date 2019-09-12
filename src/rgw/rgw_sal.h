@@ -25,8 +25,8 @@ namespace rgw { namespace sal {
 class RGWUser;
 class RGWSalBucket;
 class RGWObject;
+class RGWBucketList;
 
-typedef std::vector<RGWSalBucket> RGWBucketList;
 typedef std::map<string, string> RGWAttrs;
 
 class RGWStore {
@@ -35,8 +35,8 @@ class RGWStore {
     virtual ~RGWStore() = default;
 
     virtual RGWUser* get_user(const rgw_user &u) = 0;
-    virtual RGWSalBucket* get_bucket(RGWUser &u, const cls_user_bucket &b) = 0;
-    virtual RGWSalBucket* create_bucket(RGWUser &u, const cls_user_bucket &b) = 0;
+    virtual RGWSalBucket* get_bucket(RGWUser &u, const rgw_bucket &b) = 0;
+    //virtual RGWSalBucket* create_bucket(RGWUser &u, const rgw_bucket &b) = 0;
     virtual RGWBucketList* list_buckets(void) = 0;
 
     virtual void finalize(void)=0;
@@ -53,16 +53,24 @@ class RGWUser {
     RGWUser(const rgw_user &_u) : user(_u) {}
     virtual ~RGWUser() = default;
 
-    virtual RGWBucketList* list_buckets(void) = 0;
+    virtual int list_buckets(const string& marker, const string& end_marker,
+			     uint64_t max, bool need_stats, RGWBucketList &buckets) = 0;
+    virtual RGWSalBucket* add_bucket(rgw_bucket& bucket, ceph::real_time creation_time) = 0;
+    friend class RGWSalBucket;
+
+    std::string& get_tenant() { return user.tenant; }
+    /* xxx dang temporary; will be removed when User is complete */
+    rgw_user& get_user() { return user; }
 };
 
 class RGWSalBucket {
   protected:
-    cls_user_bucket ub;
+    RGWBucketEnt ent;
 
   public:
-    RGWSalBucket() : ub() {}
-    RGWSalBucket(const cls_user_bucket &_b) : ub(_b) {}
+    RGWSalBucket() : ent() {}
+    RGWSalBucket(const rgw_bucket &_b) { ent.bucket = _b; }
+    RGWSalBucket(const RGWBucketEnt &_e) : ent(_e) {}
     virtual ~RGWSalBucket() = default;
 
     virtual RGWObject* get_object(const rgw_obj_key &key) = 0;
@@ -70,9 +78,60 @@ class RGWSalBucket {
     virtual RGWObject* create_object(const rgw_obj_key &key /* Attributes */) = 0;
     virtual RGWAttrs& get_attrs(void) = 0;
     virtual int set_attrs(RGWAttrs &attrs) = 0;
-    virtual int delete_bucket(void) = 0;
+    virtual int remove_bucket(bool delete_children, optional_yield y) = 0;
     virtual RGWAccessControlPolicy& get_acl(void) = 0;
-    virtual int set_acl(const RGWAccessControlPolicy &acl) = 0;
+    virtual int set_acl(RGWAccessControlPolicy &acl, RGWBucketInfo& bucket_info, optional_yield y) = 0;
+    virtual int get_bucket_info(RGWBucketInfo &info, optional_yield y) = 0;
+    virtual int get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id,
+				 std::string *bucket_ver, std::string *master_ver,
+				 std::map<RGWObjCategory, RGWStorageStats>& stats,
+				 std::string *max_marker = nullptr,
+				 bool *syncstopped = nullptr) = 0;
+    virtual int sync_user_stats(RGWBucketInfo &info) = 0;
+    virtual int update_container_stats(void) = 0;
+
+    std::string get_name() const { return ent.bucket.name; }
+    std::string get_tenant() const { return ent.bucket.tenant; }
+    std::string get_marker() const { return ent.bucket.marker; }
+    std::string get_bucket_id() const { return ent.bucket.bucket_id; }
+    size_t get_size() const { return ent.size; }
+    size_t get_size_rounded() const { return ent.size_rounded; }
+    uint64_t get_count() const { return ent.count; }
+    rgw_placement_rule get_placement_rule() const { return ent.placement_rule; }
+    ceph::real_time& get_creation_time() { return ent.creation_time; };
+
+    /* dang - This is temporary, until the API is completed */
+    rgw_bucket& get_bi() { return ent.bucket; }
+
+    friend inline ostream& operator<<(ostream& out, const RGWSalBucket &b) {
+      out << b.ent.bucket;
+      return out;
+    }
+
+
+    friend class RGWBucketList;
+  protected:
+    virtual void set_ent(RGWBucketEnt &_ent) { ent = _ent; }
+};
+
+class RGWBucketList {
+  std::map<std::string, RGWSalBucket*> buckets;
+  bool truncated;
+
+public:
+  RGWBucketList() : buckets(), truncated(false) {}
+  RGWBucketList(RGWBucketList&&) = default;
+  RGWBucketList& operator=(const RGWBucketList&) = default;
+  ~RGWBucketList();
+
+  map<string, RGWSalBucket*>& get_buckets() { return buckets; }
+  bool is_truncated(void) { return truncated; }
+  void set_truncated(bool trunc) { truncated = trunc; }
+  void add(RGWSalBucket* bucket) {
+    buckets[bucket->ent.bucket.name] = bucket;
+  }
+  size_t count() { return buckets.size(); }
+
 };
 
 class RGWObject {
@@ -104,7 +163,11 @@ class RGWRadosUser : public RGWUser {
     RGWRadosUser(RGWRadosStore *_st, const rgw_user &_u) : RGWUser(_u), store(_st) { }
     RGWRadosUser() {}
 
-    RGWBucketList* list_buckets(void) { return new RGWBucketList(); }
+    int list_buckets(const string& marker, const string& end_marker,
+				uint64_t max, bool need_stats, RGWBucketList &buckets);
+    RGWSalBucket* add_bucket(rgw_bucket& bucket, ceph::real_time creation_time);
+
+    friend class RGWRadosBucket;
 };
 
 class RGWRadosObject : public RGWObject {
@@ -145,13 +208,14 @@ class RGWRadosBucket : public RGWSalBucket {
 
   public:
     RGWRadosBucket()
-      : object(nullptr),
+      : store(nullptr),
+        object(nullptr),
         attrs(),
         acls(),
 	user() {
     }
 
-    RGWRadosBucket(RGWRadosStore *_st, RGWUser &_u, const cls_user_bucket &_b)
+    RGWRadosBucket(RGWRadosStore *_st, RGWUser &_u, const rgw_bucket &_b)
       : RGWSalBucket(_b),
 	store(_st),
 	object(nullptr),
@@ -160,40 +224,54 @@ class RGWRadosBucket : public RGWSalBucket {
 	user(dynamic_cast<RGWRadosUser&>(_u)) {
     }
 
+    RGWRadosBucket(RGWRadosStore *_st, RGWUser &_u, const RGWBucketEnt &_e)
+      : RGWSalBucket(_e),
+	store(_st),
+	object(nullptr),
+        attrs(),
+        acls(),
+	user(dynamic_cast<RGWRadosUser&>(_u)) {
+    }
+
+    ~RGWRadosBucket() { }
+
     RGWObject* get_object(const rgw_obj_key &key) { return object; }
     RGWBucketList* list(void) { return new RGWBucketList(); }
     RGWObject* create_object(const rgw_obj_key &key /* Attributes */) override;
     RGWAttrs& get_attrs(void) { return attrs; }
     int set_attrs(RGWAttrs &a) { attrs = a; return 0; }
-    int delete_bucket(void) { return 0; }
+    virtual int remove_bucket(bool delete_children, optional_yield y) override;
     RGWAccessControlPolicy& get_acl(void) { return acls; }
-    int set_acl(const RGWAccessControlPolicy &acl) { acls = acl; return 0; }
+    virtual int set_acl(RGWAccessControlPolicy &acl, RGWBucketInfo& bucket_info, optional_yield y) override;
+    virtual int get_bucket_info(RGWBucketInfo &info, optional_yield y) override;
+    virtual int get_bucket_stats(RGWBucketInfo& bucket_info, int shard_id,
+				 std::string *bucket_ver, std::string *master_ver,
+				 std::map<RGWObjCategory, RGWStorageStats>& stats,
+				 std::string *max_marker = nullptr,
+				 bool *syncstopped = nullptr) override;
+    virtual int sync_user_stats(RGWBucketInfo &info) override;
+    virtual int update_container_stats(void) override;
 };
 
 class RGWRadosStore : public RGWStore {
   private:
     RGWRados *rados;
-    RGWRadosUser *user;
     RGWRadosBucket *bucket;
+    RGWUserCtl *user_ctl;
 
   public:
     RGWRadosStore()
       : rados(nullptr),
-        user(nullptr),
         bucket(nullptr) {
       }
     ~RGWRadosStore() {
-	if (bucket)
-	    delete bucket;
-	if (user)
-	    delete user;
-	if (rados)
-	    delete rados;
+      delete bucket;
+      delete rados;
     }
 
     virtual RGWUser* get_user(const rgw_user &u);
-    virtual RGWSalBucket* get_bucket(RGWUser &u, const cls_user_bucket &b) { return bucket; }
-    virtual RGWSalBucket* create_bucket(RGWUser &u, const cls_user_bucket &b);
+    virtual RGWSalBucket* get_bucket(RGWUser &u, const rgw_bucket &b) { return bucket; }
+    //virtual RGWSalBucket* create_bucket(RGWUser &u, const rgw_bucket &b);
     virtual RGWBucketList* list_buckets(void) { return new RGWBucketList(); }
 
     void setRados(RGWRados * st) { rados = st; }
@@ -201,6 +279,8 @@ class RGWRadosStore : public RGWStore {
 
     RGWServices *svc() { return &rados->svc; }
     RGWCtl *ctl() { return &rados->ctl; }
+
+    void setUserCtl(RGWUserCtl *_ctl) { user_ctl = _ctl; }
 
     void finalize(void) override;
 
