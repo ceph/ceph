@@ -3614,33 +3614,34 @@ CDir* Server::try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr)
 {
   CDir *dir = diri->get_dirfrag(fg);
 
-  // not open and inode not mine?
-  if (!dir && !diri->is_auth()) {
-    mds_rank_t inauth = diri->authority().first;
-    dout(7) << "try_open_auth_dirfrag: not open, not inode auth, fw to mds." << inauth << dendl;
-    mdcache->request_forward(mdr, inauth);
-    return 0;
-  }
+  if (dir) {
+    // am i auth for the dirfrag?
+    if (!dir->is_auth()) {
+      mds_rank_t auth = dir->authority().first;
+      dout(7) << "try_open_auth_dirfrag: not auth for " << *dir
+	<< ", fw to mds." << auth << dendl;
+      mdcache->request_forward(mdr, auth);
+      return nullptr;
+    }
+  } else {
+    // not open and inode not mine?
+    if (!diri->is_auth()) {
+      mds_rank_t inauth = diri->authority().first;
+      dout(7) << "try_open_auth_dirfrag: not open, not inode auth, fw to mds." << inauth << dendl;
+      mdcache->request_forward(mdr, inauth);
+      return nullptr;
+    }
 
-  // not open and inode frozen?
-  if (!dir && diri->is_frozen()) {
-    dout(10) << "try_open_auth_dirfrag: dir inode is frozen, waiting " << *diri << dendl;
-    ceph_assert(diri->get_parent_dir());
-    diri->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
-    return 0;
-  }
+    // not open and inode frozen?
+    if (diri->is_frozen()) {
+      dout(10) << "try_open_auth_dirfrag: dir inode is frozen, waiting " << *diri << dendl;
+      ceph_assert(diri->get_parent_dir());
+      diri->add_waiter(CInode::WAIT_UNFREEZE, new C_MDS_RetryRequest(mdcache, mdr));
+      return nullptr;
+    }
 
-  // invent?
-  if (!dir) 
+    // invent?
     dir = diri->get_or_open_dirfrag(mdcache, fg);
- 
-  // am i auth for the dirfrag?
-  if (!dir->is_auth()) {
-    mds_rank_t auth = dir->authority().first;
-    dout(7) << "try_open_auth_dirfrag: not auth for " << *dir
-	    << ", fw to mds." << auth << dendl;
-    mdcache->request_forward(mdr, auth);
-    return 0;
   }
 
   return dir;
