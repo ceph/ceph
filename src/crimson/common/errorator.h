@@ -21,9 +21,9 @@ namespace _impl {
 // would like to `throw make_error<...>)()` instead of returning.
 // returning allows for the compile-time verification of future's
 // AllowedErrorsV and also avoid the burden of throwing.
-template <_impl::ct_error ErrorV>
+template <class ErrorT, ErrorT ErrorV>
 struct unthrowable_wrapper {
-  using wrapped_type = decltype(ErrorV);
+  using is_error = std::true_type;
 
   unthrowable_wrapper(const unthrowable_wrapper&) = delete;
   static constexpr unthrowable_wrapper instance{};
@@ -102,6 +102,16 @@ public:
 
 template <class... AllowedErrors>
 struct errorator {
+  template <class T, class = std::void_t<>>
+  struct is_error  : std::false_type {};
+  template <class T>
+  struct is_error<T, std::void_t<typename T::is_error>> : T::is_error {};
+  template <class T>
+  static inline constexpr bool is_error_v = is_error<T>::value;
+
+  static_assert((... && is_error_v<AllowedErrors>),
+                "errorator expects presence of ::is_error in all error types");
+
   template <class... ValuesT>
   class future : private seastar::future<ValuesT...> {
     using base_t = seastar::future<ValuesT...>;
@@ -111,20 +121,6 @@ struct errorator {
     // has this member private.
     template <class ErrorVisitor, class Futurator>
     friend class maybe_handle_error_t;
-
-    template <class, class = std::void_t<>>
-    struct is_error {
-      static constexpr bool value = false;
-    };
-    template <class T>
-    struct is_error<T, std::void_t<typename T::wrapped_type>> {
-      // specialization for _impl::ct_error. it could be written in much
-      // simpler form – without void_t and is_same_v.
-      static constexpr bool value = \
-        std::is_same_v<typename T::wrapped_type, _impl::ct_error>;
-    };
-    template <class T>
-    static inline constexpr bool is_error_v = is_error<T>::value;
 
     template <class, class = std::void_t<>>
     struct get_errorator {
@@ -414,11 +410,11 @@ public:
 }; // class errorator, <> specialization
 
 namespace ct_error {
-  using enoent = unthrowable_wrapper<_impl::ct_error::enoent>;
-  using enodata = unthrowable_wrapper<_impl::ct_error::enodata>;
-  using invarg = unthrowable_wrapper<_impl::ct_error::invarg>;
-  using input_output_error = unthrowable_wrapper<_impl::ct_error::input_output_error>;
-  using object_corrupted = unthrowable_wrapper<_impl::ct_error::object_corrupted>;
+  using enoent = unthrowable_wrapper<_impl::ct_error, _impl::ct_error::enoent>;
+  using enodata = unthrowable_wrapper<_impl::ct_error, _impl::ct_error::enodata>;
+  using invarg = unthrowable_wrapper<_impl::ct_error, _impl::ct_error::invarg>;
+  using input_output_error = unthrowable_wrapper<_impl::ct_error, _impl::ct_error::input_output_error>;
+  using object_corrupted = unthrowable_wrapper<_impl::ct_error, _impl::ct_error::object_corrupted>;
 }
 
 } // namespace crimson
