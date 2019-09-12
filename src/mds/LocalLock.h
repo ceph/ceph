@@ -20,8 +20,6 @@
 
 class LocalLock : public SimpleLock {
 public:
-  client_t last_wrlock_client;
-  
   LocalLock(MDSCacheObject *o, LockType *t) : 
     SimpleLock(o, t) {
     set_state(LOCK_LOCK); // always.
@@ -59,7 +57,8 @@ public:
       out << " last_client=" << last_wrlock_client;
     out << ")";
   }
+
+private:
+  client_t last_wrlock_client;
 };
-
-
 #endif
