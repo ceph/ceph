@@ -114,6 +114,8 @@ enum {
 static const int MDS_TRAVERSE_DISCOVER		= (1 << 0);
 static const int MDS_TRAVERSE_LAST_XLOCKED	= (1 << 1);
 static const int MDS_TRAVERSE_WANT_DENTRY	= (1 << 2);
+static const int MDS_TRAVERSE_WANT_AUTH		= (1 << 3);
+
 
 // flags for predirty_journal_parents()
 static const int PREDIRTY_PRIMARY = 1; // primary dn, adjust nested accounting
@@ -774,6 +776,8 @@ class MDCache {
    * dentry is encountered.
    * MDS_TRAVERSE_WANT_DENTRY: Caller wants tail dentry. Add a null dentry if
    * tail dentry does not exist. return 0 even tail dentry is null.
+   * MDS_TRAVERSE_WANT_AUTH: Always forward request to auth MDS of target inode
+   * or auth MDS of tail dentry (MDS_TRAVERSE_WANT_DENTRY is set).
    *
    * @param pdnvec Data return parameter -- on success, contains a
    * vector of dentries. On failure, is either empty or contains the

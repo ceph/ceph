@@ -8056,6 +8056,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
   bool forward = !discover;
   bool last_xlocked = (flags & MDS_TRAVERSE_LAST_XLOCKED);
   bool want_dentry = (flags & MDS_TRAVERSE_WANT_DENTRY);
+  bool want_auth = (flags & MDS_TRAVERSE_WANT_AUTH);
 
   if (forward)
     ceph_assert(mdr);  // forward requires a request
@@ -8181,6 +8182,19 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
     }
     */
 
+    if (want_auth && want_dentry && depth == path.depth() - 1) {
+      if (curdir->is_ambiguous_auth()) {
+	dout(10) << "waiting for single auth on " << *curdir << dendl;
+	curdir->add_waiter(CInode::WAIT_SINGLEAUTH, cf.build());
+	return 1;
+      }
+      if (!curdir->is_auth()) {
+	dout(10) << "fw to auth for " << *curdir << dendl;
+	request_forward(mdr, curdir->authority().first);
+	return 2;
+      }
+    }
+
     // Before doing dirfrag->dn lookup, compare with DamageTable's
     // record of which dentries were unreadable
     if (mds->damage_table.is_dentry_damaged(curdir, path[depth], snapid)) {
@@ -8242,7 +8256,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
 			     (last_xlocked && depth == path.depth() - 1));
 	  if (mds->logger) mds->logger->inc(l_mds_traverse_remote_ino);
           return 1;
-        }        
+        }
       }
 
       cur = in;
@@ -8354,6 +8368,19 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
     }
 
     ceph_abort();  // i shouldn't get here
+  }
+
+  if (want_auth && !want_dentry) {
+    if (cur->is_ambiguous_auth()) {
+      dout(10) << "waiting for single auth on " << *cur << dendl;
+      cur->add_waiter(CInode::WAIT_SINGLEAUTH, cf.build());
+      return 1;
+    }
+    if (!cur->is_auth()) {
+      dout(10) << "fw to auth for " << *cur << dendl;
+      request_forward(mdr, cur->authority().first);
+      return 2;
+    }
   }
   
   // success.
