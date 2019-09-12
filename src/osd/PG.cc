@@ -1159,7 +1159,7 @@ void PG::read_state(ObjectStore *store)
   // init pool options
   store->set_collection_opts(ch, pool.info.opts);
 
-  PeeringCtx rctx;
+  PeeringCtx rctx(ceph_release_t::unknown);
   handle_initialize(rctx);
   // note: we don't activate here because we know the OSD will advance maps
   // during boot.
@@ -3619,8 +3619,7 @@ void PG::find_unfound(epoch_t queued, PeeringCtx &rctx)
     * It may be that our initial locations were bad and we errored
     * out while trying to pull.
     */
-  recovery_state.discover_all_missing(rctx.query_map);
-  if (rctx.query_map.empty()) {
+  if (!recovery_state.discover_all_missing(rctx)) {
     string action;
     if (state_test(PG_STATE_BACKFILLING)) {
       auto evt = PGPeeringEventRef(
