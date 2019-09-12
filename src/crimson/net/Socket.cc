@@ -144,8 +144,10 @@ seastar::future<> Socket::try_trap_pre(bp_action_t& trap) {
    case bp_action_t::CONTINUE:
     break;
    case bp_action_t::FAULT:
+    logger().info("[Test] got FAULT");
     throw std::system_error(make_error_code(ceph::net::error::negotiation_failure));
    case bp_action_t::BLOCK:
+    logger().info("[Test] got BLOCK");
     return blocker->block();
    case bp_action_t::STALL:
     trap = action;
@@ -163,6 +165,7 @@ seastar::future<> Socket::try_trap_post(bp_action_t& trap) {
    case bp_action_t::CONTINUE:
     break;
    case bp_action_t::STALL:
+    logger().info("[Test] got STALL and block");
     shutdown();
     return blocker->block();
    default:
