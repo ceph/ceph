@@ -8107,8 +8107,7 @@ void RGWPutBucketPublicAccessBlock::execute()
     return;
 
   if (!parser.parse(data.c_str(), data.length(), 1)) {
-    ldpp_dout(this,0) << "ERROR: malformed XML" << dendl;
-    ldpp_dout(this,20) << "xml: " << data.c_str() << dendl;
+    ldpp_dout(this, 0) << "ERROR: malformed XML" << dendl;
     op_ret = -ERR_MALFORMED_XML;
     return;
   }
@@ -8116,7 +8115,7 @@ void RGWPutBucketPublicAccessBlock::execute()
   try {
     RGWXMLDecoder::decode_xml("PublicAccessBlockConfiguration", access_conf, &parser, true);
   } catch (RGWXMLDecoder::err &err) {
-    ldout(s->cct, 5) << "unexpected xml:" << err << dendl;
+    ldpp_dout(this, 5) << "unexpected xml:" << err << dendl;
     op_ret = -ERR_MALFORMED_XML;
     return;
   }
@@ -8124,7 +8123,7 @@ void RGWPutBucketPublicAccessBlock::execute()
   if (!store->svc()->zone->is_meta_master()) {
     op_ret = forward_request_to_master(s, NULL, store, data, nullptr);
     if (op_ret < 0) {
-      ldpp_dout(this, 20) << "forward_request_to_master returned ret=" << op_ret << dendl;
+      ldpp_dout(this, 0) << "forward_request_to_master returned ret=" << op_ret << dendl;
       return;
     }
   }
@@ -8162,7 +8161,7 @@ void RGWGetBucketPublicAccessBlock::execute()
     try {
       access_conf.decode(iter);
     } catch (const buffer::error& e) {
-      ldout(s->cct, 0) << __func__ <<  "decode object legal hold config failed" << dendl;
+      ldpp_dout(this, 0) << __func__ <<  "decode access_conf failed" << dendl;
       op_ret = -EIO;
       return;
     }
