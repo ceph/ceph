@@ -134,8 +134,7 @@ def ls(path, opts=''):
                     continue
                 yield dent
     except libcephfs.ObjectNotFound:
-        perror('{}: no such directory exists'.format(path), end='\n',
-               apply_style=True)
+        perror('{}: no such directory exists'.format(path))
 
 
 def glob(path, pattern):
@@ -264,14 +263,14 @@ def copy_from_local(local_path, remote_path):
             file_ = open(local_path, 'rb')
         except PermissionError:
             perror('error: no permission to read local file {}'.format(
-                   local_path.decode('utf-8')), end='\n', apply_style=True)
+                   local_path.decode('utf-8')))
             return
         stdin = 1
     try:
         fd = cephfs.open(remote_path, 'w', 0o666)
     except libcephfs.Error:
         perror('error: no permission to write remote file {}'.format(
-               remote_path.decode('utf-8')), end='\n', apply_style=True)
+               remote_path.decode('utf-8')))
         return
     progress = 0
     while True:
@@ -342,7 +341,7 @@ class CephFSShell(Cmd):
         self.umask = '2'
 
     def default(self, line):
-        self.perror('Unrecognized command', end='\n', apply_style=True)
+        self.perror('Unrecognized command')
 
     def set_prompt(self):
         self.prompt = ('\033[01;33mCephFS:~' + colorama.Fore.LIGHTCYAN_EX
@@ -408,11 +407,11 @@ class CephFSShell(Cmd):
                 self.set_prompt()
             return res
         except ConnectionError as e:
-            self.perror('***\n{}'.format(e), end='\n', apply_style=True)
+            self.perror('***\n{}'.format(e))
         except KeyboardInterrupt:
-            self.perror('Command aborted', end='\n', apply_style=True)
+            self.perror('Command aborted')
         except Exception as e:
-            self.perror(e, end='\n', apply_style=True)
+            self.perror(e)
             traceback.print_exc(file=sys.stdout)
 
     class path_to_bytes(argparse.Action):
@@ -539,8 +538,7 @@ exists.')
                     cephfs.mkdir(path, permission)
                 except libcephfs.Error:
                     self.perror('directory missing in the path; '
-                                'you may want to pass the -p argument',
-                                end='\n', apply_style=True)
+                                'you may want to pass the -p argument')
                     return
 
     def complete_put(self, text, line, begidx, endidx):
@@ -590,8 +588,7 @@ exists.')
                     else:
                         root_dst_dir = a[0]
             else:
-                self.perror('error: no filename specified for destination',
-                            end='\n', apply_style=True)
+                self.perror('error: no filename specified for destination')
                 return
 
         if root_dst_dir[-1] != b'/':
@@ -603,8 +600,7 @@ exists.')
                     dst_file = root_dst_dir
                     if is_file_exists(dst_file):
                         self.perror('{}: file exists! use --force to overwrite'.format(
-                                    dst_file.decode('utf-8')), end='\n',
-                                    apply_style=True)
+                                    dst_file.decode('utf-8')))
                         return
             if args.local_path == b'-':
                 root_src_dir = b'-'
@@ -675,8 +671,7 @@ exists.')
             root_src_dir = cephfs.getcwd()
         if args.local_path == b'-':
             if args.remote_path == b'.' or args.remote_path == b'./':
-                self.perror('error: no remote file name specified', end='\n',
-                            apply_style=True)
+                self.perror('error: no remote file name specified')
                 return
             copy_to_local(root_src_dir, b'-')
         elif is_file_exists(args.remote_path):
@@ -694,8 +689,7 @@ exists.')
                         pass
                     else:
                         self.perror('{}: already exists! use --force to overwrite'.format(
-                                    root_src_dir.decode('utf-8')), end='\n',
-                                    apply_style=True)
+                                    root_src_dir.decode('utf-8')))
                         return
 
             for file_ in files:
@@ -714,8 +708,7 @@ exists.')
                         try:
                             os.stat(dst_path)
                             self.perror('{}: file already exists! use --force to override'.format(
-                                        file_.decode('utf-8')), end='\n',
-                                        apply_style=True)
+                                        file_.decode('utf-8')))
                             return
                         except OSError:
                             copy_to_local(file_, dst_path)
@@ -869,9 +862,9 @@ sub-directories, files')
             if not is_pattern and path != os.path.normpath(b''):
                 try:
                     cephfs.rmdir(path)
-                except libcephfs.Error as e:
-                    self.perror('Error in rmdir {}: {}'.format(
-                                path.decode('utf-8'), os.strerror(e.errno)))
+                except libcephfs.Error:
+                    self.perror('error: no such directory {} exists'.format(
+                                path.decode('utf-8')))
 
     def complete_rm(self, text, line, begidx, endidx):
         """
@@ -897,8 +890,7 @@ sub-directories, files')
                 try:
                     cephfs.unlink(path)
                 except libcephfs.Error:
-                    self.perror('{}: no such file'.format(path.decode('utf-8')),
-                                end='\n', apply_style=True)
+                    self.perror('{}: no such file'.format(path.decode('utf-8')))
 
     def complete_mv(self, text, line, begidx, endidx):
         """
@@ -920,7 +912,7 @@ sub-directories, files')
         try:
             cephfs.rename(args.src_path, args.dest_path)
         except libcephfs.Error:
-            self.perror('error: invalid file name', end='\n', apply_style=True)
+            self.perror('error: invalid file name')
 
     def complete_cd(self, text, line, begidx, endidx):
         """
@@ -942,8 +934,7 @@ sub-directories, files')
             self.working_dir = cephfs.getcwd().decode('utf-8')
             self.set_prompt()
         except libcephfs.Error:
-            self.perror('{}: no such directory'.format(args.path.decode('utf-8')),
-                        end='\n', apply_style=True)
+            self.perror('{}: no such directory'.format(args.path.decode('utf-8')))
 
     def do_cwd(self, arglist):
         """
@@ -973,7 +964,7 @@ sub-directories, files')
                 cephfs.chmod(path, mode)
             except libcephfs.Error:
                 self.perror('{}: no such file or directory'.format(
-                            path.decode('utf-8')), end='\n', apply_style=True)
+                            path.decode('utf-8')))
 
     def complete_cat(self, text, line, begidx, endidx):
         """
@@ -994,8 +985,7 @@ sub-directories, files')
             if is_file_exists(path):
                 copy_to_local(path, b'-')
             else:
-                self.perror('{}: no such file'.format(path.decode('utf-8')),
-                            end='\n', apply_style=True)
+                self.perror('{}: no such file'.format(path.decode('utf-8')))
 
     umask_parser = argparse.ArgumentParser(description='Set umask value.')
     umask_parser.add_argument('mode', help='Mode', type=str, action=ModeAction,
@@ -1049,7 +1039,7 @@ sub-directories, files')
             os.chdir(os.path.expanduser(args.path))
         except OSError as e:
             self.perror("Cannot change to {}: {}".format(e.filename,
-                        e.strerror), end='\n', apply_style=True)
+                        e.strerror))
 
     def complete_lls(self, text, line, begidx, endidx):
         """
@@ -1077,8 +1067,7 @@ sub-directories, files')
                     self.poutput("{}:".format(path.decode('utf-8')))
                     print_list(items)
                 except OSError as e:
-                    self.perror("'{}': {}".format(e.filename, e.strerror),
-                                end='\n', apply_style=True)
+                    self.perror("'{}': {}".format(e.filename, e.strerror))
         # Arguments to the with_argpaser decorator function are sticky.
         # The items in args.path do not get overwritten in subsequent calls.
         # The arguments remain in args.paths after the function exits and we
@@ -1181,7 +1170,7 @@ sub-directories, files')
                         f.decode('utf-8')))
                 except (libcephfs.Error, OSError):
                     self.perror('{} : no such directory exists'.format(f.\
-                        decode('utf-8')), apply_style=True)
+                        decode('utf-8')))
                     continue
 
         for path in args.paths:
@@ -1209,14 +1198,13 @@ sub-directories, files')
         Quota management.
         """
         if not is_dir_exists(args.path):
-            self.perror('error: no such directory {}'.format(args.path.decode('utf-8')),
-                        end='\n', apply_style=True)
+            self.perror('error: no such directory {}'.format(args.path.decode('utf-8')))
             return
 
         if args.op == 'set':
             if (args.max_bytes == -1) and (args.max_files == -1):
                 self.perror('please specify either --max_bytes or '
-                            '--max_files or both', end='\n', apply_style=True)
+                            '--max_files or both')
                 return
 
             if args.max_bytes >= 0:
@@ -1230,8 +1218,7 @@ sub-directories, files')
                     cephfs.setxattr(args.path, 'ceph.quota.max_bytes',
                                     max_bytes, len(max_bytes),
                                     os.XATTR_REPLACE)
-                    self.perror('max_bytes reset to %d' % args.max_bytes,
-                                end='\n', apply_style=True)
+                    self.perror('max_bytes reset to %d' % args.max_bytes)
 
             if args.max_files >= 0:
                 max_files = to_bytes(str(args.max_files))
@@ -1244,8 +1231,7 @@ sub-directories, files')
                     cephfs.setxattr(args.path, 'ceph.quota.max_files',
                                     max_files, len(max_files),
                                     os.XATTR_REPLACE)
-                    self.perror('max_files reset to %d' % args.max_files,
-                                end='\n', apply_style=True)
+                    self.perror('max_files reset to %d' % args.max_files)
         elif args.op == 'get':
             max_bytes = '0'
             max_files = '0'
@@ -1254,7 +1240,7 @@ sub-directories, files')
                                             'ceph.quota.max_bytes')
                 self.poutput('max_bytes: %s' % max_bytes)
             except libcephfs.Error:
-                self.perror('max_bytes is not set', end='\n', apply_style=True)
+                self.perror('max_bytes is not set')
                 pass
 
             try:
@@ -1262,7 +1248,7 @@ sub-directories, files')
                                             'ceph.quota.max_files')
                 self.poutput('max_files: %s' % max_files)
             except libcephfs.Error:
-                self.perror('max_files is not set', end='\n', apply_style=True)
+                self.perror('max_files is not set')
                 pass
 
     def do_help(self, line):
@@ -1314,8 +1300,7 @@ Access: {}\nModify: {}\nChange: {}".format(path.decode('utf-8'), stat.st_size,
                              mode_notation(stat.st_mode), stat.st_uid,
                              stat.st_gid, atime, mtime, ctime))
             except libcephfs.Error:
-                self.perror('{}: no such file or directory'.format(path.decode('utf-8')),
-                            end='\n', apply_style=True)
+                self.perror('{}: no such file or directory'.format(path.decode('utf-8')))
 
 
 if __name__ == '__main__':
