@@ -62,8 +62,8 @@ def poutput(s, end='\n'):
     shell.poutput(s, end=end)
 
 
-def perror(msg):
-    shell.perror(msg, end='\n', apply_style=True)
+def perror(msg, **kwargs):
+    shell.perror(msg, **kwargs)
 
 
 def setup_cephfs(config_file):
