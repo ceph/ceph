@@ -5,6 +5,7 @@
 
 #include <variant>
 #include <seastar/core/sharded.hh>
+#include <seastar/core/sleep.hh>
 
 #include "Fwd.h"
 #include "msg/async/frames_v2.h"
@@ -50,8 +51,8 @@ inline std::ostream& operator<<(std::ostream& out, const bp_action_t& action) {
 }
 
 class socket_blocker {
-  std::optional<seastar::promise<>> p_blocked;
-  std::optional<seastar::promise<>> p_unblocked;
+  std::optional<seastar::abort_source> p_blocked;
+  std::optional<seastar::abort_source> p_unblocked;
 
  public:
   seastar::future<> wait_blocked() {
@@ -59,25 +60,34 @@ class socket_blocker {
     if (p_unblocked) {
       return seastar::now();
     } else {
-      p_blocked = seastar::promise<>();
-      return p_blocked->get_future();
+      p_blocked = seastar::abort_source();
+      return seastar::sleep_abortable(10s, *p_blocked).then([this] {
+        throw std::runtime_error(
+            "Timeout (10s) in socket_blocker::wait_blocked()");
+      }).handle_exception_type([] (const seastar::sleep_aborted& e) {
+        // wait done!
+      });
     }
   }
 
   seastar::future<> block() {
     if (p_blocked) {
-      p_blocked->set_value();
+      p_blocked->request_abort();
       p_blocked = std::nullopt;
     }
     ceph_assert(!p_unblocked);
-    p_unblocked = seastar::promise<>();
-    return p_unblocked->get_future();
+    p_unblocked = seastar::abort_source();
+    return seastar::sleep_abortable(10s, *p_unblocked).then([this] {
+      ceph_abort("Timeout (10s) in socket_blocker::block()");
+    }).handle_exception_type([] (const seastar::sleep_aborted& e) {
+      // wait done!
+    });
   }
 
   void unblock() {
     ceph_assert(!p_blocked);
     ceph_assert(p_unblocked);
-    p_unblocked->set_value();
+    p_unblocked->request_abort();
     p_unblocked = std::nullopt;
   }
 };

@@ -730,7 +730,7 @@ struct TestInterceptor : public Interceptor {
   std::map<Breakpoint, counter_t> breakpoints_counter;
   std::map<ConnectionRef, unsigned> conns;
   ConnResults results;
-  std::optional<seastar::promise<>> signal;
+  std::optional<seastar::abort_source> signal;
 
   TestInterceptor() = default;
   // only used for copy breakpoint configurations
@@ -768,13 +768,17 @@ struct TestInterceptor : public Interceptor {
 
   seastar::future<> wait() {
     assert(!signal);
-    signal = seastar::promise<>();
-    return signal->get_future();
+    signal = seastar::abort_source();
+    return seastar::sleep_abortable(10s, *signal).then([this] {
+      throw std::runtime_error("Timeout (10s) in TestInterceptor::wait()");
+    }).handle_exception_type([] (const seastar::sleep_aborted& e) {
+      // wait done!
+    });
   }
 
   void notify() {
     if (signal) {
-      signal->set_value();
+      signal->request_abort();
       signal = std::nullopt;
     }
   }
