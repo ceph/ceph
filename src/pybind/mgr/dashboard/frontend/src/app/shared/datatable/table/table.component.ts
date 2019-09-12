@@ -323,7 +323,14 @@ export class TableComponent implements AfterContentChecked, OnInit, OnChanges, O
     // https://github.com/swimlane/ngx-datatable/issues/193#issuecomment-329144543
     if (this.table && this.table.element.clientWidth !== this.currentWidth) {
       this.currentWidth = this.table.element.clientWidth;
+      // Recalculate the sizes of the grid.
       this.table.recalculate();
+      // Mark the datatable as changed, Angular's change-detection will
+      // do the rest for us => the grid will be redrawn.
+      // Note, the ChangeDetectorRef variable is private, so we need to
+      // use this workaround to access it and make TypeScript happy.
+      const cdRef = _.get(this.table, 'cd');
+      cdRef.markForCheck();
     }
   }
 
