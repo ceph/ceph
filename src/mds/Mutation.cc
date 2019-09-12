@@ -413,6 +413,19 @@ bool MDRequestImpl::is_batch_op()
      client_request->get_filepath().depth() == 0);
 }
 
+int MDRequestImpl::compare_paths()
+{
+  if (dir_root[0] < dir_root[1])
+    return -1;
+  if (dir_root[0] > dir_root[1])
+    return 1;
+  if (dir_depth[0] < dir_depth[1])
+    return -1;
+  if (dir_depth[0] > dir_depth[1])
+    return 1;
+  return 0;
+}
+
 cref_t<MClientRequest> MDRequestImpl::release_client_request()
 {
   msg_lock.lock();

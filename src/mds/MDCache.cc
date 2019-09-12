@@ -8087,14 +8087,20 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
 
   dout(7) << "traverse: opening base ino " << path.get_ino() << " snap " << snapid << dendl;
   CInode *cur = get_inode(path.get_ino());
-  if (cur == NULL) {
-    if (MDS_INO_IS_MDSDIR(path.get_ino())) 
+  if (!cur) {
+    if (MDS_INO_IS_MDSDIR(path.get_ino())) {
       open_foreign_mdsdir(path.get_ino(), cf.build());
-    else {
-      //ceph_abort();  // hrm.. broken
-      return -ESTALE;
+      return 1;
     }
-    return 1;
+    if (MDS_INO_IS_STRAY(path.get_ino())) {
+      mds_rank_t rank = MDS_INO_STRAY_OWNER(path.get_ino());
+      unsigned idx = MDS_INO_STRAY_INDEX(path.get_ino());
+      filepath path(strays[idx]->get_parent_dn()->get_name(),
+		    MDS_INO_MDSDIR(rank));
+      MDRequestRef null_ref;
+      return path_traverse(null_ref, cf, path, MDS_TRAVERSE_DISCOVER, nullptr);
+    }
+    return -ESTALE;
   }
   if (cur->state_test(CInode::STATE_PURGING))
     return -ESTALE;

@@ -218,6 +218,8 @@ public:
 			      bool no_want_auth=false, bool want_layout=false);
   CDentry* rdlock_path_xlock_dentry(MDRequestRef& mdr, bool create,
 				    bool okexist=false, bool want_layout=false);
+  std::pair<CDentry*, CDentry*>
+	    rdlock_two_paths_xlock_destdn(MDRequestRef& mdr, bool xlock_srcdn);
 
   CDir* try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr);
 

@@ -141,6 +141,8 @@ bool Locker::try_rdlock_snap_layout(CInode *in, MDRequestRef& mdr,
 {
   dout(10) << __func__ << " " << *mdr << " " << *in << dendl;
   // rdlock ancestor snaps
+  inodeno_t root;
+  int depth = -1;
   bool found_locked = false;
   bool found_layout = false;
 
@@ -151,6 +153,7 @@ bool Locker::try_rdlock_snap_layout(CInode *in, MDRequestRef& mdr,
 
   CInode *t = in;
   while (true) {
+    ++depth;
     if (!found_locked && mdr->is_rdlocked(&t->snaplock))
       found_locked = true;
 
@@ -179,11 +182,15 @@ bool Locker::try_rdlock_snap_layout(CInode *in, MDRequestRef& mdr,
       }
     }
     CDentry* pdn = t->get_projected_parent_dn();
-    if (!pdn)
+    if (!pdn) {
+      root = t->ino();
       break;
+    }
     t = pdn->get_dir()->get_inode();
   }
 
+  mdr->dir_root[n] = root;
+  mdr->dir_depth[n] = depth;
   return true;
 
 failed:
