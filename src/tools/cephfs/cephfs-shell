@@ -133,8 +133,8 @@ def ls(path, opts=''):
                 elif almost_all and dent.d_name in (b'.', b'..'):
                     continue
                 yield dent
-    except libcephfs.ObjectNotFound:
-        perror('{}: no such directory exists'.format(path))
+    except libcephfs.ObjectNotFound as e:
+        perror(e)
 
 
 def glob(path, pattern):
@@ -268,9 +268,8 @@ def copy_from_local(local_path, remote_path):
         stdin = 1
     try:
         fd = cephfs.open(remote_path, 'w', 0o666)
-    except libcephfs.Error:
-        perror('error: no permission to write remote file {}'.format(
-               remote_path.decode('utf-8')))
+    except libcephfs.Error as e:
+        perror(e)
         return
     progress = 0
     while True:
@@ -536,9 +535,8 @@ exists.')
             else:
                 try:
                     cephfs.mkdir(path, permission)
-                except libcephfs.Error:
-                    perror('directory missing in the path; you may want to '
-                           'pass the -p argument')
+                except libcephfs.Error as e:
+                    perror(e)
                     return
 
     def complete_put(self, text, line, begidx, endidx):
@@ -862,9 +860,8 @@ sub-directories, files')
             if not is_pattern and path != os.path.normpath(b''):
                 try:
                     cephfs.rmdir(path)
-                except libcephfs.Error:
-                    perror('error: no such directory {} exists'.format(
-                            path.decode('utf-8')))
+                except libcephfs.Error as e:
+                    perror(e)
 
     def complete_rm(self, text, line, begidx, endidx):
         """
@@ -889,8 +886,9 @@ sub-directories, files')
             else:
                 try:
                     cephfs.unlink(path)
-                except libcephfs.Error:
-                    perror('{}: no such file'.format(path.decode('utf-8')))
+                except libcephfs.Error as e:
+                    # perhaps we need a better msg here
+                    perror(e)
 
     def complete_mv(self, text, line, begidx, endidx):
         """
@@ -911,8 +909,8 @@ sub-directories, files')
         """
         try:
             cephfs.rename(args.src_path, args.dest_path)
-        except libcephfs.Error:
-            perror('error: invalid file name')
+        except libcephfs.Error as e:
+            perror(e)
 
     def complete_cd(self, text, line, begidx, endidx):
         """
@@ -933,8 +931,8 @@ sub-directories, files')
             cephfs.chdir(args.path)
             self.working_dir = cephfs.getcwd().decode('utf-8')
             self.set_prompt()
-        except libcephfs.Error:
-            perror('{}: no such directory'.format(args.path.decode('utf-8')))
+        except libcephfs.Error as e:
+            perror(e)
 
     def do_cwd(self, arglist):
         """
@@ -962,9 +960,8 @@ sub-directories, files')
             mode = int(args.mode, base=8)
             try:
                 cephfs.chmod(path, mode)
-            except libcephfs.Error:
-                perror('{}: no such file or directory'.format(
-                            path.decode('utf-8')))
+            except libcephfs.Error as e:
+                perror(e)
 
     def complete_cat(self, text, line, begidx, endidx):
         """
@@ -1167,9 +1164,8 @@ sub-directories, files')
                         f = b'.' + f
                     poutput('{:10s} {}'.format(humansize(dusage),
                         f.decode('utf-8')))
-                except (libcephfs.Error, OSError):
-                    perror('{} : no such directory exists'.format(f.\
-                        decode('utf-8')))
+                except (libcephfs.Error, OSError) as e:
+                    perror(e)
                     continue
 
         for path in args.paths:
@@ -1298,8 +1294,8 @@ Access: {}\nModify: {}\nChange: {}".format(path.decode('utf-8'), stat.st_size,
                              stat.st_ino, stat.st_nlink, stat.st_mode,
                              mode_notation(stat.st_mode), stat.st_uid,
                              stat.st_gid, atime, mtime, ctime))
-            except libcephfs.Error:
-                perror('{}: no such file or directory'.format(path.decode('utf-8')))
+            except libcephfs.Error as e:
+                perror(e)
 
 
 if __name__ == '__main__':
