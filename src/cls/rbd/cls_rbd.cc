@@ -5553,9 +5553,7 @@ int mirror_peer_add(cls_method_context_t hctx, bufferlist *in,
       CLS_ERR("peer uuid '%s' already exists",
               peer.uuid.c_str());
       return -ESTALE;
-    } else if (peer.cluster_name == mirror_peer.cluster_name &&
-               (peer.pool_id == -1 || mirror_peer.pool_id == -1 ||
-                peer.pool_id == mirror_peer.pool_id)) {
+    } else if (peer.cluster_name == mirror_peer.cluster_name) {
       CLS_ERR("peer cluster name '%s' already exists",
               peer.cluster_name.c_str());
       return -EEXIST;

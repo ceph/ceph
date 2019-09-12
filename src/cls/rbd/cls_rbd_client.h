@@ -385,8 +385,7 @@ int mirror_peer_list(librados::IoCtx *ioctx,
                      std::vector<cls::rbd::MirrorPeer> *peers);
 int mirror_peer_add(librados::IoCtx *ioctx, const std::string &uuid,
                     const std::string &cluster_name,
-                    const std::string &client_name,
-                    int64_t pool_id = -1);
+                    const std::string &client_name);
 int mirror_peer_remove(librados::IoCtx *ioctx,
                        const std::string &uuid);
 int mirror_peer_set_client(librados::IoCtx *ioctx,

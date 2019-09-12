@@ -72,15 +72,13 @@ struct MirrorPeer {
   MirrorPeer() {
   }
   MirrorPeer(const std::string &uuid, const std::string &cluster_name,
-             const std::string &client_name, int64_t pool_id)
-    : uuid(uuid), cluster_name(cluster_name), client_name(client_name),
-      pool_id(pool_id) {
+             const std::string &client_name)
+    : uuid(uuid), cluster_name(cluster_name), client_name(client_name) {
   }
 
   std::string uuid;
   std::string cluster_name;
   std::string client_name;
-  int64_t pool_id = -1;
 
   inline bool is_valid() const {
     return (!uuid.empty() && !cluster_name.empty() && !client_name.empty());
