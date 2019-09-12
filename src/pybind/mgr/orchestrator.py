@@ -679,6 +679,14 @@ class Orchestrator(object):
                     }
         return features
 
+    @_hide_in_features
+    def cancel_completions(self):
+        # type: () -> None
+        """
+        Cancels ongoing completions. Unstuck the mgr.
+        """
+        raise NotImplementedError()
+
     def add_host(self, host):
         # type: (str) -> Completion
         """

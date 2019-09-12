@@ -205,6 +205,11 @@ class RookOrchestrator(MgrModule, orchestrator.Orchestrator):
 
             self._shutdown.wait(5)
 
+    def cancel_completions(self):
+        for p in self.all_progress_references:
+            p.fail()
+        self.all_progress_references.clear()
+
     @deferred_read
     def get_inventory(self, node_filter=None, refresh=False):
         node_list = None
