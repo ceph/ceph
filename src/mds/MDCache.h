@@ -119,6 +119,8 @@ static const int MDS_TRAVERSE_RDLOCK_SNAP	= (1 << 4);
 static const int MDS_TRAVERSE_RDLOCK_SNAP2	= (1 << 5);
 static const int MDS_TRAVERSE_WANT_DIRLAYOUT	= (1 << 6);
 static const int MDS_TRAVERSE_RDLOCK_PATH	= (1 << 7);
+static const int MDS_TRAVERSE_XLOCK_DENTRY	= (1 << 8);
+static const int MDS_TRAVERSE_RDLOCK_AUTHLOCK	= (1 << 9);
 
 
 // flags for predirty_journal_parents()

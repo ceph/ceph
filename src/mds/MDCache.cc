@@ -8071,6 +8071,8 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
   bool want_auth = (flags & MDS_TRAVERSE_WANT_AUTH);
   bool rdlock_snap = (flags & (MDS_TRAVERSE_RDLOCK_SNAP | MDS_TRAVERSE_RDLOCK_SNAP2));
   bool rdlock_path = (flags & MDS_TRAVERSE_RDLOCK_PATH);
+  bool xlock_dentry = (flags & MDS_TRAVERSE_XLOCK_DENTRY);
+  bool rdlock_authlock = (flags & MDS_TRAVERSE_RDLOCK_AUTHLOCK);
 
   if (forward)
     ceph_assert(mdr);  // forward requires a request
@@ -8227,7 +8229,16 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
 
       if (rdlock_path) {
 	lov.clear();
-	lov.add_rdlock(&dn->lock);
+	if (xlock_dentry && depth == path.depth() - 1) {
+	  lov.add_wrlock(&cur->filelock);
+	  lov.add_wrlock(&cur->nestlock);
+	  if (rdlock_authlock)
+	    lov.add_rdlock(&cur->authlock);
+
+	  lov.add_xlock(&dn->lock);
+	} else {
+	  lov.add_rdlock(&dn->lock);
+	}
 	if (!mds->locker->acquire_locks(mdr, lov)) {
 	  dout(10) << "traverse: failed to rdlock " << dn->lock << " " << *dn << dendl;
 	  return 1;
@@ -8338,7 +8349,15 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
 
 	    if (rdlock_path) {
 	      lov.clear();
-	      lov.add_rdlock(&dn->lock);
+	      if (xlock_dentry) {
+		lov.add_wrlock(&cur->filelock);
+		lov.add_wrlock(&cur->nestlock);
+		if (rdlock_authlock)
+		  lov.add_rdlock(&cur->authlock);
+		lov.add_xlock(&dn->lock);
+	      } else {
+		lov.add_rdlock(&dn->lock);
+	      }
 	      if (!mds->locker->acquire_locks(mdr, lov)) {
 		dout(10) << "traverse: failed to rdlock " << dn->lock << " " << *dn << dendl;
 		return 1;

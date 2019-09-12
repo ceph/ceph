@@ -3107,10 +3107,8 @@ CDentry* Server::prepare_stray_dentry(MDRequestRef& mdr, CInode *in)
   if (straydn) {
     string straydname;
     in->name_stray_dentry(straydname);
-    if (straydn->get_name() == straydname)
-      return straydn;
-
-    mdr->unpin(straydn);
+    ceph_assert(straydn->get_name() == straydname);
+    return straydn;
   }
 
   CDir *straydir = mdcache->get_stray_dir(in);
@@ -3380,26 +3378,46 @@ CInode* Server::rdlock_path_pin_ref(MDRequestRef& mdr,
  * create null dentry in place (or use existing if okexist).
  * get rdlocks on traversed dentries, xlock on new dentry.
  */
-CDentry* Server::rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
-					  MutationImpl::LockOpVec& lov,
-					  bool okexist, bool alwaysxlock,
-					  bool want_layout)
+CDentry* Server::rdlock_path_xlock_dentry(MDRequestRef& mdr,
+					  bool create, bool okexist, bool want_layout)
 {
-  const filepath& refpath = n ? mdr->get_filepath2() : mdr->get_filepath();
-
+  const filepath& refpath = mdr->get_filepath();
   dout(10) << "rdlock_path_xlock_dentry " << *mdr << " " << refpath << dendl;
-  if (mdr->locking_state & MutationImpl::PATH_LOCKED)
-    return mdr->dn[n].back();
 
-  CF_MDS_MDRContextFactory cf(mdcache, mdr);
-  int flags = MDS_TRAVERSE_WANT_DENTRY | MDS_TRAVERSE_WANT_AUTH;
-  if (n == 0)
-   flags |= MDS_TRAVERSE_RDLOCK_SNAP;
-  else
-   flags |=  MDS_TRAVERSE_RDLOCK_SNAP2;
+  if (mdr->locking_state & MutationImpl::PATH_LOCKED)
+    return mdr->dn[0].back();
+
+  // figure parent dir vs dname
+  if (refpath.depth() == 0) {
+    dout(7) << "invalid path (zero length)" << dendl;
+    respond_to_request(mdr, -EINVAL);
+    return nullptr;
+  }
+
+  if (refpath.is_last_snap()) {
+    respond_to_request(mdr, -EROFS);
+    return nullptr;
+  }
+
+  if (refpath.is_last_dot_or_dotdot()) {
+    dout(7) << "invalid path (last dot or dot_dot)" << dendl;
+    if (create)
+      respond_to_request(mdr, -EEXIST);
+    else
+      respond_to_request(mdr, -ENOTEMPTY);
+    return nullptr;
+  }
+
+  // traverse to parent dir
+  CF_MDS_MDRContextFactory cf(mdcache, mdr, true);
+  int flags = MDS_TRAVERSE_RDLOCK_SNAP | MDS_TRAVERSE_RDLOCK_PATH |
+	      MDS_TRAVERSE_WANT_DENTRY | MDS_TRAVERSE_XLOCK_DENTRY |
+	      MDS_TRAVERSE_WANT_AUTH;
+  if (create)
+    flags |= MDS_TRAVERSE_RDLOCK_AUTHLOCK;
   if (want_layout)
     flags |= MDS_TRAVERSE_WANT_DIRLAYOUT;
-  int r = mdcache->path_traverse(mdr, cf, refpath, flags, &mdr->dn[n]);
+  int r = mdcache->path_traverse(mdr, cf, refpath, flags, &mdr->dn[0]);
   if (r > 0)
     return nullptr; // delayed
   if (r < 0) {
@@ -3419,53 +3437,34 @@ CDentry* Server::rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
   if (!mdr->reqid.name.is_mds()) {
     if (diri->is_system() && !diri->is_root()) {
       respond_to_request(mdr, -EROFS);
-      return 0;
+      return nullptr;
     }
   }
 
   if (!diri->is_base() && diri->get_projected_parent_dir()->inode->is_stray()) {
     respond_to_request(mdr, -ENOENT);
-    return 0;
+    return nullptr;
   }
 
-  client_t client = mdr->get_client();
-  if (dn && !dn->lock.can_read(client) && dn->lock.get_xlock_by() != mdr) {
-    dout(10) << "waiting on xlocked dentry " << *dn << dendl;
-    dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryRequest(mdcache, mdr));
-    return 0;
-  }
-
-  CDentry::linkage_t *dnl = dn->get_linkage(client, mdr);
-  if (!dnl->is_null()) {
-    // name already exists
-    dout(10) << "dentry " << dn->get_name() << " exists in " << *dir << dendl;
-    if (!okexist) {
-      respond_to_request(mdr, -EEXIST);
-      return 0;
+  CDentry::linkage_t *dnl = dn->get_projected_linkage();
+  if (dnl->is_null()) {
+    if (!create) {
+      respond_to_request(mdr, -ENOENT);
+      return nullptr;
     }
-  } else {
+
     snapid_t next_snap = mdcache->get_global_snaprealm()->get_newest_seq() + 1;
     dn->first = std::max(dn->first, next_snap);
+  } else {
+    if (!okexist) {
+      respond_to_request(mdr, -EEXIST);
+      return nullptr;
+    }
+    mdr->in[0] = dnl->get_inode();
   }
-  mdr->in[n] = dnl->get_inode();
-
-  // -- lock --
-  // NOTE: rename takes the same set of locks for srcdn
-  for (int i=0; i<(int)mdr->dn[n].size(); i++) 
-    lov.add_rdlock(&mdr->dn[n][i]->lock);
-  if (alwaysxlock || dnl->is_null())
-    lov.add_xlock(&dn->lock);                 // new dn, xlock
-  else
-    lov.add_rdlock(&dn->lock);  // existing dn, rdlock
-  lov.add_wrlock(&dn->get_dir()->inode->filelock); // also, wrlock on dir mtime
-  lov.add_wrlock(&dn->get_dir()->inode->nestlock); // also, wrlock on dir mtime
 
   return dn;
 }
-
-
-
-
 
 /**
  * try_open_auth_dirfrag -- open dirfrag, or forward to dirfrag auth
@@ -4065,36 +4064,26 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   }
 
   bool excl = req->head.args.open.flags & CEPH_O_EXCL;
+  CDentry *dn = rdlock_path_xlock_dentry(mdr, true, !excl, true);
+  if (!dn)
+    return;
 
-  if (!excl) {
-    CF_MDS_MDRContextFactory cf(mdcache, mdr);
-    int r = mdcache->path_traverse(mdr, cf, req->get_filepath(), 0, &mdr->dn[0]);
-    if (r > 0) return;
-    if (r == 0) {
-      // it existed.
-      handle_client_open(mdr);
-      return;
-    }
-    if (r < 0 && r != -ENOENT) {
-      if (r == -ESTALE) {
-	dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
-	MDSContext *c = new C_MDS_TryFindInode(this, mdr);
-	mdcache->find_ino_peers(req->get_filepath().get_ino(), c);
-      } else {
-	dout(10) << "FAIL on error " << r << dendl;
-	respond_to_request(mdr, r);
-      }
-      return;
-    }
-  }
+  CDentry::linkage_t *dnl = dn->get_projected_linkage();
+  if (!excl && !dnl->is_null()) {
+    // it existed.
+    mds->locker->xlock_downgrade(&dn->lock, mdr.get());
 
-  MutationImpl::LockOpVec lov;
-  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, lov, !excl, false, true);
-  if (!dn) return;
-  if (mdr->snapid != CEPH_NOSNAP) {
-    respond_to_request(mdr, -EROFS);
+    MutationImpl::LockOpVec lov;
+    lov.add_rdlock(&dnl->get_inode()->snaplock);
+    if (!mds->locker->acquire_locks(mdr, lov))
+      return;
+
+    handle_client_open(mdr);
     return;
   }
+
+  ceph_assert(dnl->is_null());
+
   // set layout
   file_layout_t layout;
   if (mdr->dir_layout != file_layout_t())
@@ -4146,27 +4135,10 @@ void Server::handle_client_openc(MDRequestRef& mdr)
   // created null dn.
   CDir *dir = dn->get_dir();
   CInode *diri = dir->get_inode();
-  lov.add_rdlock(&diri->authlock);
-  if (!mds->locker->acquire_locks(mdr, lov))
-    return;
-
   if (!check_access(mdr, diri, access))
     return;
-
   if (!check_fragment_space(mdr, dir))
     return;
-
-  CDentry::linkage_t *dnl = dn->get_projected_linkage();
-
-  if (!dnl->is_null()) {
-    // it existed.  
-    ceph_assert(req->head.args.open.flags & CEPH_O_EXCL);
-    dout(10) << "O_EXCL, target exists, failing with -EEXIST" << dendl;
-    mdr->tracei = dnl->get_inode();
-    mdr->tracedn = dn;
-    respond_to_request(mdr, -EEXIST);
-    return;
-  }
 
   // create inode.
   CInode *in = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino),
@@ -5702,31 +5674,25 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
   client_t client = mdr->get_client();
-  MutationImpl::LockOpVec lov;
-  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, lov, false, false, true);
-  if (!dn) return;
-  if (mdr->snapid != CEPH_NOSNAP) {
-    respond_to_request(mdr, -EROFS);
-    return;
-  }
-  CInode *diri = dn->get_dir()->get_inode();
-  lov.add_rdlock(&diri->authlock);
-  if (!mds->locker->acquire_locks(mdr, lov))
-    return;
-
-  if (!check_access(mdr, diri, MAY_WRITE))
-    return;
-
-  if (!check_fragment_space(mdr, dn->get_dir()))
-    return;
 
   unsigned mode = req->head.args.mknod.mode;
   if ((mode & S_IFMT) == 0)
     mode |= S_IFREG;
 
+  CDentry *dn = rdlock_path_xlock_dentry(mdr, true, false, S_ISREG(mode));
+  if (!dn)
+    return;
+
+  CDir *dir = dn->get_dir();
+  CInode *diri = dir->get_inode();
+  if (!check_access(mdr, diri, MAY_WRITE))
+    return;
+  if (!check_fragment_space(mdr, dn->get_dir()))
+    return;
+
   // set layout
   file_layout_t layout;
-  if (S_ISREG(mode) && mdr->dir_layout != file_layout_t())
+  if (mdr->dir_layout != file_layout_t())
     layout = mdr->dir_layout;
   else
     layout = mdcache->default_file_layout;
@@ -5796,23 +5762,13 @@ void Server::handle_client_mknod(MDRequestRef& mdr)
 void Server::handle_client_mkdir(MDRequestRef& mdr)
 {
   const cref_t<MClientRequest> &req = mdr->client_request;
-  if (req->get_filepath().is_last_dot_or_dotdot()) {
-    respond_to_request(mdr, -EEXIST);
-    return;
-  }
 
-  MutationImpl::LockOpVec lov;
-  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, lov, false, false);
-  if (!dn) return;
-  if (mdr->snapid != CEPH_NOSNAP) {
-    respond_to_request(mdr, -EROFS);
+  CDentry *dn = rdlock_path_xlock_dentry(mdr, true);
+  if (!dn)
     return;
-  }
+
   CDir *dir = dn->get_dir();
   CInode *diri = dir->get_inode();
-  lov.add_rdlock(&diri->authlock);
-  if (!mds->locker->acquire_locks(mdr, lov))
-    return;
 
   // mkdir check access
   if (!check_access(mdr, diri, MAY_WRITE))
@@ -5825,7 +5781,7 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
   unsigned mode = req->head.args.mkdir.mode;
   mode &= ~S_IFMT;
   mode |= S_IFDIR;
-  CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino), mode);  
+  CInode *newi = prepare_new_inode(mdr, dir, inodeno_t(req->head.ino), mode);
   ceph_assert(newi);
 
   // it's a directory.
@@ -5887,28 +5843,22 @@ void Server::handle_client_mkdir(MDRequestRef& mdr)
 
 void Server::handle_client_symlink(MDRequestRef& mdr)
 {
-  const cref_t<MClientRequest> &req = mdr->client_request;
-  MutationImpl::LockOpVec lov;
-  CDentry *dn = rdlock_path_xlock_dentry(mdr, 0, lov, false, false);
-  if (!dn) return;
-  if (mdr->snapid != CEPH_NOSNAP) {
-    respond_to_request(mdr, -EROFS);
+  CDentry *dn = rdlock_path_xlock_dentry(mdr, true);
+  if (!dn)
     return;
-  }
+
   CDir *dir = dn->get_dir();
   CInode *diri = dir->get_inode();
-  lov.add_rdlock(&diri->authlock);
-  if (!mds->locker->acquire_locks(mdr, lov))
-    return;
 
   if (!check_access(mdr, diri, MAY_WRITE))
-   return;
-
+    return;
   if (!check_fragment_space(mdr, dir))
     return;
 
+  const cref_t<MClientRequest> &req = mdr->client_request;
+
   unsigned mode = S_IFLNK | 0777;
-  CInode *newi = prepare_new_inode(mdr, dn->get_dir(), inodeno_t(req->head.ino), mode);
+  CInode *newi = prepare_new_inode(mdr, dir, inodeno_t(req->head.ino), mode);
   ceph_assert(newi);
 
   // it's a symlink
@@ -6593,50 +6543,15 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   client_t client = mdr->get_client();
 
   // rmdir or unlink?
-  bool rmdir = false;
-  if (req->get_op() == CEPH_MDS_OP_RMDIR) rmdir = true;
+  bool rmdir = (req->get_op() == CEPH_MDS_OP_RMDIR);
 
-  const filepath& refpath = req->get_filepath();
-  if (refpath.depth() == 0) {
-    respond_to_request(mdr, -EINVAL);
+  CDentry *dn = rdlock_path_xlock_dentry(mdr, false, true);
+  if (!dn)
     return;
-  }
-  if (refpath.is_last_dot_or_dotdot()) {
-    respond_to_request(mdr, -ENOTEMPTY);
-    return;
-  }
-
-  // traverse to path
-  vector<CDentry*> trace;
-  CInode *in;
-  CF_MDS_MDRContextFactory cf(mdcache, mdr);
-  int r = mdcache->path_traverse(mdr, cf, refpath, 0, &trace, &in);
-  if (r > 0) return;
-  if (r < 0) {
-    if (r == -ESTALE) {
-      dout(10) << "FAIL on ESTALE but attempting recovery" << dendl;
-      mdcache->find_ino_peers(refpath.get_ino(), new C_MDS_TryFindInode(this, mdr));
-      return;
-    }
-    respond_to_request(mdr, r);
-    return;
-  }
-  if (mdr->snapid != CEPH_NOSNAP) {
-    respond_to_request(mdr, -EROFS);
-    return;
-  }
-
-  CDentry *dn = trace.back();
-  ceph_assert(dn);
-  if (!dn->is_auth()) {
-    mdcache->request_forward(mdr, dn->authority().first);
-    return;
-  }
-
-  CInode *diri = dn->get_dir()->get_inode();
 
   CDentry::linkage_t *dnl = dn->get_linkage(client, mdr);
   ceph_assert(!dnl->is_null());
+  CInode *in = dnl->get_inode();
 
   if (rmdir) {
     dout(7) << "handle_client_rmdir on " << *dn << dendl;
@@ -6667,6 +6582,12 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
     }
   }
 
+  CInode *diri = dn->get_dir()->get_inode();
+  if ((!mdr->has_more() || mdr->more()->witnessed.empty())) {
+    if (!check_access(mdr, diri, MAY_WRITE))
+      return;
+  }
+
   // -- create stray dentry? --
   CDentry *straydn = NULL;
   if (dnl->is_primary()) {
@@ -6680,25 +6601,19 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
   }
 
   // lock
+
   MutationImpl::LockOpVec lov;
 
-  for (int i=0; i<(int)trace.size()-1; i++)
-    lov.add_rdlock(&trace[i]->lock);
-  lov.add_xlock(&dn->lock);
-  lov.add_wrlock(&diri->filelock);
-  lov.add_wrlock(&diri->nestlock);
   lov.add_xlock(&in->linklock);
+  lov.add_xlock(&in->snaplock);
+  if (in->is_dir())
+    lov.add_rdlock(&in->filelock);   // to verify it's empty
+
   if (straydn) {
     lov.add_wrlock(&straydn->get_dir()->inode->filelock);
     lov.add_wrlock(&straydn->get_dir()->inode->nestlock);
     lov.add_xlock(&straydn->lock);
   }
-
-  // FIXME
-  // mds->locker->include_snap_rdlocks(diri, lov);
-  lov.add_xlock(&in->snaplock);
-  if (in->is_dir())
-    lov.add_rdlock(&in->filelock);   // to verify it's empty
 
   if (!mds->locker->acquire_locks(mdr, lov))
     return;
@@ -6707,11 +6622,6 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
       _dir_is_nonempty(mdr, in)) {
     respond_to_request(mdr, -ENOTEMPTY);
     return;
-  }
-
-  if ((!mdr->has_more() || mdr->more()->witnessed.empty())) {
-    if (!check_access(mdr, diri, MAY_WRITE))
-      return;
   }
 
   if (straydn)
@@ -6756,7 +6666,7 @@ void Server::handle_client_unlink(MDRequestRef& mdr)
       } else if (mdr->more()->waiting_on_slave.count(*p)) {
 	dout(10) << " already waiting on witness mds." << *p << dendl;      
       } else {
-	if (!_rmdir_prepare_witness(mdr, *p, trace, straydn))
+	if (!_rmdir_prepare_witness(mdr, *p, mdr->dn[0], straydn))
 	  return;
       }
     }
