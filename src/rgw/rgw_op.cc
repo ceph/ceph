@@ -7661,8 +7661,26 @@ void RGWPutBucketPolicy::execute()
 
   try {
     const Policy p(s->cct, s->bucket_tenant, data);
-    op_ret = retry_raced_bucket_write(store->getRados(), s, [&p, this] {
-	auto attrs = s->bucket_attrs;
+    auto attrs = s->bucket_attrs;
+    if (auto aiter = attrs.find(RGW_ATTR_PUBLIC_ACCESS);
+        aiter != attrs.end())
+      {
+        bufferlist::const_iterator iter{&aiter->second};
+        try {
+          rgw::IAM::PublicAccessConfiguration access_conf;
+          access_conf.decode(iter);
+          if (access_conf.block_public_policy() && rgw::IAM::IsPublic(p)) {
+            op_ret = -EACCES;
+            return;
+          }
+        } catch (const buffer::error& e) {
+          ldpp_dout(this, 0) << __func__ <<  "decode access conf failed" << dendl;
+          op_ret = -EIO;
+          return;
+        }
+      }
+
+    op_ret = retry_raced_bucket_write(store->getRados(), s, [&p, this, &attrs] {
 	attrs[RGW_ATTR_IAM_POLICY].clear();
 	attrs[RGW_ATTR_IAM_POLICY].append(p.text);
 	op_ret = store->ctl()->bucket->set_bucket_instance_attrs(s->bucket_info, attrs,
