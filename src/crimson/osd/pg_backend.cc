@@ -125,17 +125,16 @@ PGBackend::_load_os(const hobject_t& oid)
         os_cache.insert(oid,
           std::make_unique<ObjectState>(object_info_t{bl}, true /* exists */)));
     },
-    [oid, this] (const auto& e) {
-      using T = std::decay_t<decltype(e)>;
-      if constexpr (std::is_same_v<T, crimson::ct_error::enoent> ||
-                    std::is_same_v<T, crimson::ct_error::enodata>) {
-        return seastar::make_ready_future<cached_os_t>(
-          os_cache.insert(oid,
-            std::make_unique<ObjectState>(object_info_t{oid}, false)));
-      } else {
-        static_assert(always_false<T>::value, "non-exhaustive visitor!");
-      }
-    });
+    crimson::ct_error::enoent::handle([oid, this] {
+      return seastar::make_ready_future<cached_os_t>(
+        os_cache.insert(oid,
+          std::make_unique<ObjectState>(object_info_t{oid}, false)));
+    }),
+    crimson::ct_error::enodata::handle([oid, this] {
+      return seastar::make_ready_future<cached_os_t>(
+        os_cache.insert(oid,
+          std::make_unique<ObjectState>(object_info_t{oid}, false)));
+    }));
 }
 
 seastar::future<PGBackend::cached_ss_t>
@@ -493,16 +492,11 @@ seastar::future<> PGBackend::getxattr(
     osd_op.op.xattr.value_len = osd_op.outdata.length();
     return seastar::now();
     //ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
-  }, [] (const auto& e) {
-    using T = std::decay_t<decltype(e)>;
-    if constexpr (std::is_same_v<T, crimson::ct_error::enoent>) {
-      return seastar::make_exception_future<>(crimson::osd::object_not_found{});
-    } else if constexpr (std::is_same_v<T, crimson::ct_error::enodata>) {
-      return seastar::make_exception_future<>(crimson::osd::no_message_available{});
-    } else {
-      static_assert(always_false<T>::value, "non-exhaustive visitor!");
-    }
-  });
+  }, crimson::ct_error::enoent::handle([] {
+    return seastar::make_exception_future<>(crimson::osd::object_not_found{});
+  }), crimson::ct_error::enodata::handle([] {
+    return seastar::make_exception_future<>(crimson::osd::no_message_available{});
+  }));
   //ctx->delta_stats.num_rd++;
 }
 
