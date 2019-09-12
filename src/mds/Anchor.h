@@ -28,13 +28,6 @@
  */
 class Anchor {
 public:
-  inodeno_t ino;	// anchored ino
-  inodeno_t dirino;
-  std::string d_name;
-  __u8 d_type = 0;
-
-  int omap_idx = -1;	// stored in which omap object
-
   Anchor() {}
   Anchor(inodeno_t i, inodeno_t di, std::string_view str, __u8 tp) :
     ino(i), dirino(di), d_name(str), d_type(tp) {}
@@ -43,15 +36,19 @@ public:
   void decode(bufferlist::const_iterator &bl);
   void dump(Formatter *f) const;
   static void generate_test_instances(std::list<Anchor*>& ls);
+  bool operator==(const Anchor &r) {
+    return ino == r.ino && dirino == r.dirino &&
+    d_name == r.d_name && d_type == r.d_type;
+  }
+
+  inodeno_t ino;	// anchored ino
+  inodeno_t dirino;
+  std::string d_name;
+  __u8 d_type = 0;
+
+  int omap_idx = -1;	// stored in which omap object
 };
 WRITE_CLASS_ENCODER(Anchor)
-
-inline bool operator==(const Anchor &l, const Anchor &r) {
-  return l.ino == r.ino && l.dirino == r.dirino &&
-	 l.d_name == r.d_name && l.d_type == r.d_type;
-}
-
-ostream& operator<<(ostream& out, const Anchor &a);
 
 class RecoveredAnchor : public Anchor {
 public:
@@ -70,4 +67,5 @@ public:
   mutable int nref = 0; // how many children
 };
 
+ostream& operator<<(ostream& out, const Anchor &a);
 #endif
