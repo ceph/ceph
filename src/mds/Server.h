@@ -216,12 +216,11 @@ public:
 
   CInode* rdlock_path_pin_ref(MDRequestRef& mdr, int n, MutationImpl::LockOpVec& lov,
 			      bool want_auth, bool no_want_auth=false,
-			      file_layout_t **layout=nullptr,
-			      bool no_lookup=false);
+			      bool want_layout=false, bool no_lookup=false);
   CDentry* rdlock_path_xlock_dentry(MDRequestRef& mdr, int n,
 				    MutationImpl::LockOpVec& lov,
 				    bool okexist, bool alwaysxlock,
-				    file_layout_t **layout=nullptr);
+				    bool want_layout=false);
 
   CDir* try_open_auth_dirfrag(CInode *diri, frag_t fg, MDRequestRef& mdr);
 
@@ -249,10 +248,8 @@ public:
                           string value,
                           file_layout_t *layout);
   void handle_set_vxattr(MDRequestRef& mdr, CInode *cur,
-			 file_layout_t *dir_layout,
 			 MutationImpl::LockOpVec& lov);
   void handle_remove_vxattr(MDRequestRef& mdr, CInode *cur,
-			    file_layout_t *dir_layout,
 			    MutationImpl::LockOpVec& lov);
   void handle_client_setxattr(MDRequestRef& mdr);
   void handle_client_removexattr(MDRequestRef& mdr);

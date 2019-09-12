@@ -318,19 +318,21 @@ extern const char *ceph_mds_state_name(int s);
  *  - they also define the lock ordering by the MDS
  *  - a few of these are internal to the mds
  */
-#define CEPH_LOCK_DVERSION    1
-#define CEPH_LOCK_DN          2
-#define CEPH_LOCK_IVERSION    16    /* mds internal */
-#define CEPH_LOCK_ISNAP       32
-#define CEPH_LOCK_IFILE       64
-#define CEPH_LOCK_IAUTH       128
-#define CEPH_LOCK_ILINK       256
-#define CEPH_LOCK_IDFT        512   /* dir frag tree */
-#define CEPH_LOCK_INEST       1024  /* mds internal */
-#define CEPH_LOCK_IXATTR      2048
-#define CEPH_LOCK_IFLOCK      4096  /* advisory file locks */
-#define CEPH_LOCK_INO         8192  /* immutable inode bits; not a lock */
-#define CEPH_LOCK_IPOLICY     16384 /* policy lock on dirs. MDS internal */
+#define CEPH_LOCK_DN          (1 << 0)
+#define CEPH_LOCK_DVERSION    (1 << 1)
+#define CEPH_LOCK_ISNAP       (1 << 4)  /* snapshot lock. MDS internal */
+#define CEPH_LOCK_IPOLICY     (1 << 5)  /* policy lock on dirs. MDS internal */
+#define CEPH_LOCK_IFILE       (1 << 6)
+#define CEPH_LOCK_INEST       (1 << 7)  /* mds internal */
+#define CEPH_LOCK_IDFT        (1 << 8)  /* dir frag tree */
+#define CEPH_LOCK_IAUTH       (1 << 9)
+#define CEPH_LOCK_ILINK       (1 << 10)
+#define CEPH_LOCK_IXATTR      (1 << 11)
+#define CEPH_LOCK_IFLOCK      (1 << 12)  /* advisory file locks */
+#define CEPH_LOCK_IVERSION    (1 << 13)  /* mds internal */
+
+#define CEPH_LOCK_IFIRST      CEPH_LOCK_ISNAP
+
 
 /* client_session ops */
 enum {

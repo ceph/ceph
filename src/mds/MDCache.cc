@@ -8069,6 +8069,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
   bool last_xlocked = (flags & MDS_TRAVERSE_LAST_XLOCKED);
   bool want_dentry = (flags & MDS_TRAVERSE_WANT_DENTRY);
   bool want_auth = (flags & MDS_TRAVERSE_WANT_AUTH);
+  bool rdlock_snap = (flags & (MDS_TRAVERSE_RDLOCK_SNAP | MDS_TRAVERSE_RDLOCK_SNAP2));
 
   if (forward)
     ceph_assert(mdr);  // forward requires a request
@@ -8101,11 +8102,23 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
     return 1;
   }
 
+  if (rdlock_snap) {
+    int n = (flags & MDS_TRAVERSE_RDLOCK_SNAP2) ? 1 : 0;
+    if ((n == 0 && !(mdr->locking_state & MutationImpl::SNAP_LOCKED)) ||
+	(n == 1 && !(mdr->locking_state & MutationImpl::SNAP2_LOCKED))) {
+      bool want_layout = (flags & MDS_TRAVERSE_WANT_DIRLAYOUT);
+      if (!mds->locker->try_rdlock_snap_layout(cur, mdr, n, want_layout))
+	return 1;
+    }
+  }
+
   // start trace
   if (pdnvec)
     pdnvec->clear();
   if (pin)
     *pin = cur;
+
+  MutationImpl::LockOpVec lov;
 
   unsigned depth = 0;
   while (depth < path.depth()) {
@@ -8135,18 +8148,8 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
       snapid = realm->resolve_snapname(path[depth], cur->ino());
       dout(10) << "traverse: snap " << path[depth] << " -> " << snapid << dendl;
       if (!snapid) {
-	CInode *t = cur;
-	while (t) {
-	  // if snaplock isn't readable, it's possible that other mds is creating
-	  // snapshot, but snap update message hasn't been received.
-	  if (!t->snaplock.can_read(client)) {
-	    dout(10) << " non-readable snaplock on " << *t << dendl;
-	    t->snaplock.add_waiter(SimpleLock::WAIT_RD, cf.build());
-	    return 1;
-	  }
-	  CDentry *pdn = t->get_projected_parent_dn();
-	  t = pdn ? pdn->get_dir()->get_inode() : NULL;
-	}
+	if (pdnvec)
+	  pdnvec->clear();   // do not confuse likes of rdlock_path_pin_ref();
 	return -ENOENT;
       }
       mdr->snapid = snapid;
@@ -8278,6 +8281,15 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
 	return 1;
       }
 
+      if (rdlock_snap && !(want_dentry && depth == path.depth() - 1)) {
+	lov.clear();
+	lov.add_rdlock(&cur->snaplock);
+	if (!mds->locker->acquire_locks(mdr, lov)) {
+	  dout(10) << "traverse: failed to rdlock " << cur->snaplock << " " << *cur << dendl;
+	  return 1;
+	}
+      }
+
       // add to trace, continue.
       touch_inode(cur);
       if (pin)
@@ -8400,6 +8412,12 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
   dout(10) << "path_traverse finish on snapid " << snapid << dendl;
   if (mdr) 
     ceph_assert(mdr->snapid == snapid);
+
+  if (flags & MDS_TRAVERSE_RDLOCK_SNAP)
+    mdr->locking_state |= MutationImpl::SNAP_LOCKED;
+  else if (flags & MDS_TRAVERSE_RDLOCK_SNAP2)
+    mdr->locking_state |= MutationImpl::SNAP2_LOCKED;
+
   return 0;
 }
 
@@ -9563,7 +9581,7 @@ void MDCache::request_kill(MDRequestRef& mdr)
   // rollback slave requests is tricky. just let the request proceed.
   if (mdr->has_more() &&
       (!mdr->more()->witnessed.empty() || !mdr->more()->waiting_on_slave.empty())) {
-    if (!mdr->done_locking) {
+    if (!(mdr->locking_state & MutationImpl::ALL_LOCKED)) {
       ceph_assert(mdr->more()->witnessed.empty());
       mdr->aborted = true;
       dout(10) << "request_kill " << *mdr << " -- waiting for slave reply, delaying" << dendl;
@@ -12906,10 +12924,7 @@ void MDCache::upgrade_inode_snaprealm_work(MDRequestRef& mdr)
   }
 
   MutationImpl::LockOpVec lov;
-  mds->locker->include_snap_rdlocks(in, lov);
-  lov.erase_rdlock(&in->snaplock);
   lov.add_xlock(&in->snaplock);
-
   if (!mds->locker->acquire_locks(mdr, lov))
     return;
 
