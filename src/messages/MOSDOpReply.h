@@ -148,8 +148,12 @@ public:
     // zero out ops payload_len and possibly out data
     for (unsigned i = 0; i < ops.size(); i++) {
       ops[i].op.payload_len = 0;
-      if (ignore_out_data)
-	ops[i].outdata.clear();
+      if (ignore_out_data &&
+	  (ceph_osd_op_mode_modify(ops[i].op.op) ||
+	   ceph_osd_op_mode_cache(ops[i].op.op))) {
+	// WIP: we will soon support some limited payload here
+	ceph_assert(ops[i].outdata.length() == 0);
+      }
     }
   }
 private:

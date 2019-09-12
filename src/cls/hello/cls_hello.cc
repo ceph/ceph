@@ -158,10 +158,12 @@ static int writes_dont_return_data(cls_method_context_t hctx, bufferlist *in, bu
 
   // try to return some data.  note that this *won't* reach the
   // client!  see the matching test case in test_cls_hello.cc.
-  out->append("you will never see this");
+#warning "disable this return data temporarily"
+  //out->append("you will never see this");
 
   // if we try to return anything > 0 here the client will see 0.
-  return 42;
+  //return 42;
+  return 0;
 }
 
 
