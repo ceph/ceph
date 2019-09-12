@@ -1132,6 +1132,16 @@ class MgrModule(ceph_module.BaseMgrModule):
         else:
             return 0, 0
 
+    def get_rate(self, daemon_type, daemon_name, stat):
+        """returns most recent rate"""
+        data = self.get_counter(daemon_type, daemon_name, stat)[stat]
+
+        if data and len(data) > 1 and data[-1][0] != data[-2][0]:
+            return (data[-1][1] - data[-2][1]) / float(data[-1][0] - data[-2][0])
+        else:
+            return 0.0
+
+
     def get_all_perf_counters(self, prio_limit=PRIO_USEFUL,
                               services=("mds", "mon", "osd",
                                         "rbd-mirror", "rgw", "tcmu-runner")):

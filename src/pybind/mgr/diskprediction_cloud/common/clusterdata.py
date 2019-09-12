@@ -443,11 +443,7 @@ class ClusterAPI(object):
 
     def get_rate(self, svc_type, svc_name, path):
         """returns most recent rate"""
-        data = self.module.get_counter(svc_type, svc_name, path)[path]
-
-        if data and len(data) > 1:
-            return differentiate(*data[-2:])
-        return 0.0
+        return self.module.get_rate(svc_type, svc_name, path)
 
     def get_latest(self, daemon_type, daemon_name, counter):
         return self.module.get_latest(daemon_type, daemon_name, counter)
