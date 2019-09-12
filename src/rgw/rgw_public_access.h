@@ -31,16 +31,16 @@ class PublicAccessConfiguration {
   BlockPublicPolicy(true), RestrictPublicBuckets(false)
     {}
 
-  auto get_block_public_acls() const {
+  auto block_public_acls() const {
     return BlockPublicAcls;
   }
-  auto get_ignore_public_acls() const {
+  auto ignore_public_acls() const {
     return IgnorePublicAcls;
   }
-  auto get_block_public_policy() const {
+  auto block_public_policy() const {
     return BlockPublicPolicy;
   }
-  auto get_restrict_public_buckets() const {
+  auto restrict_public_buckets() const {
     return RestrictPublicBuckets;
   }
 

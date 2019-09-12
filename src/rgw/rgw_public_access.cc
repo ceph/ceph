@@ -28,10 +28,10 @@ void PublicAccessConfiguration::dump_xml(Formatter *f) const {
 ostream& operator<< (ostream& os, const PublicAccessConfiguration& access_conf)
 {
     os << std::boolalpha
-       << "BlockPublicAcls: " << access_conf.get_block_public_acls() << std::endl
-       << "IgnorePublicAcls: " << access_conf.get_ignore_public_acls() << std::endl
-       << "BlockPublicPolicy" << access_conf.get_block_public_policy() << std::endl
-       << "RestrictPublicBuckets" << access_conf.get_restrict_public_buckets() << std::endl;
+       << "BlockPublicAcls: " << access_conf.block_public_acls() << std::endl
+       << "IgnorePublicAcls: " << access_conf.ignore_public_acls() << std::endl
+       << "BlockPublicPolicy" << access_conf.block_public_policy() << std::endl
+       << "RestrictPublicBuckets" << access_conf.restrict_public_buckets() << std::endl;
 
     return os;
 }
