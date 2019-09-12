@@ -13,6 +13,7 @@ void MirrorPeer::encode(bufferlist &bl) const {
   encode(uuid, bl);
   encode(cluster_name, bl);
   encode(client_name, bl);
+  int64_t pool_id = -1;
   encode(pool_id, bl);
   ENCODE_FINISH(bl);
 }
@@ -22,6 +23,7 @@ void MirrorPeer::decode(bufferlist::const_iterator &it) {
   decode(uuid, it);
   decode(cluster_name, it);
   decode(client_name, it);
+  int64_t pool_id;
   decode(pool_id, it);
   DECODE_FINISH(it);
 }
@@ -30,19 +32,17 @@ void MirrorPeer::dump(Formatter *f) const {
   f->dump_string("uuid", uuid);
   f->dump_string("cluster_name", cluster_name);
   f->dump_string("client_name", client_name);
-  f->dump_int("pool_id", pool_id);
 }
 
 void MirrorPeer::generate_test_instances(std::list<MirrorPeer*> &o) {
   o.push_back(new MirrorPeer());
-  o.push_back(new MirrorPeer("uuid-123", "cluster name", "client name", 123));
+  o.push_back(new MirrorPeer("uuid-123", "cluster name", "client name"));
 }
 
 bool MirrorPeer::operator==(const MirrorPeer &rhs) const {
   return (uuid == rhs.uuid &&
           cluster_name == rhs.cluster_name &&
-          client_name == rhs.client_name &&
-          pool_id == rhs.pool_id);
+          client_name == rhs.client_name);
 }
 
 std::ostream& operator<<(std::ostream& os, const MirrorMode& mirror_mode) {
@@ -67,11 +67,8 @@ std::ostream& operator<<(std::ostream& os, const MirrorPeer& peer) {
   os << "["
      << "uuid=" << peer.uuid << ", "
      << "cluster_name=" << peer.cluster_name << ", "
-     << "client_name=" << peer.client_name;
-  if (peer.pool_id != -1) {
-    os << ", pool_id=" << peer.pool_id;
-  }
-  os << "]";
+     << "client_name=" << peer.client_name
+     << "]";
   return os;
 }
 
