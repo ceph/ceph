@@ -1631,6 +1631,7 @@
   
   rbd help mirror pool enable
   usage: rbd mirror pool enable [--pool <pool>] [--namespace <namespace>] 
+                                [--site-name <site-name>] 
                                 <pool-spec> <mode> 
   
   Enable RBD mirroring by default within a pool.
@@ -1643,6 +1644,7 @@
   Optional arguments
     -p [ --pool ] arg    pool name
     --namespace arg      namespace name
+    --site-name arg      local site name
   
   rbd help mirror pool info
   usage: rbd mirror pool info [--pool <pool>] [--namespace <namespace>] 
