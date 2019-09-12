@@ -180,10 +180,10 @@ class OSError(Error):
     def __init__(self, errno, strerror):
         super(OSError, self).__init__(errno, strerror)
         self.errno = errno
-        self.strerror = strerror
+        self.strerror = "%s: %s" % (strerror, os.strerror(errno))
 
     def __str__(self):
-        return '{0}: {1} [Errno {2}]'.format(self.strerror, os.strerror(self.errno), self.errno)
+        return '{} [Errno {}]'.format(self.strerror, self.errno)
 
 
 class PermissionError(OSError):
