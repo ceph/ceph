@@ -117,7 +117,18 @@ export class PoolFormComponent implements OnInit {
     this.form = new CdFormGroup(
       {
         name: new FormControl('', {
-          validators: [Validators.pattern(/^[.A-Za-z0-9_/-]+$/), Validators.required]
+          validators: [
+            Validators.pattern(/^[.A-Za-z0-9_/-]+$/),
+            Validators.required,
+            CdValidators.custom('rbdPool', () => {
+              return (
+                this.form &&
+                this.form.getValue('name').includes('/') &&
+                this.data &&
+                this.data.applications.selected.indexOf('rbd') !== -1
+              );
+            })
+          ]
         }),
         poolType: new FormControl('', {
           validators: [Validators.required]
@@ -144,17 +155,7 @@ export class PoolFormComponent implements OnInit {
           validators: [Validators.min(0)]
         })
       },
-      [
-        CdValidators.custom('form', () => null),
-        CdValidators.custom('rbdPool', () => {
-          return (
-            this.form &&
-            this.form.getValue('name').includes('/') &&
-            this.data &&
-            this.data.applications.selected.indexOf('rbd') !== -1
-          );
-        })
-      ]
+      [CdValidators.custom('form', () => null)]
     );
   }
 
@@ -690,6 +691,6 @@ export class PoolFormComponent implements OnInit {
   }
 
   appSelection() {
-    this.form.updateValueAndValidity({ emitEvent: false, onlySelf: true });
+    this.form.get('name').updateValueAndValidity({ emitEvent: false, onlySelf: true });
   }
 }
