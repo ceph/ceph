@@ -28,6 +28,12 @@ Options
 
    Interact with the given pool. Required by most commands.
 
+.. option:: --pgid
+
+   As an alternative to ``--pool``, ``--pgid`` also allow users to specify the
+   PG id to which the command will be directed. With this option, certain
+   commands like ``ls`` allow users to limit the scope of the command to the given PG.
+
 .. option:: -s snap, --snap snap
 
    Read from the given pool snapshot. Valid for all pool-specific read operations.
@@ -107,7 +113,7 @@ Pool specific commands
   List the watchers of object name.
 
 :command:`ls` *outfile*
-  List objects in given pool and write to outfile.
+  List objects in the given pool and write to outfile. Instead of ``--pool`` if ``--pgid`` will be specified, ``ls`` will only list the objects in the given PG.
 
 :command:`lssnap`
   List snapshots for given pool.
@@ -188,6 +194,10 @@ To view cluster utilization::
 To get a list object in pool foo sent to stdout::
 
        rados -p foo ls -
+
+To get a list of objects in PG 0.6::
+
+       rados --pgid 0.6 ls
 
 To write an object::
 
