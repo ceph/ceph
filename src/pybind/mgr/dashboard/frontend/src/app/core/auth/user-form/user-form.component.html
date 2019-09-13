@@ -1,7 +1,11 @@
+<cd-loading-panel *ngIf="!pwdExpirationSettings"
+                  i18n>Loading...</cd-loading-panel>
+
 <div class="col-sm-12 col-lg-6">
   <form name="userForm"
         #formDir="ngForm"
         [formGroup]="userForm"
+        *ngIf="pwdExpirationSettings"
         novalidate>
     <div class="card">
       <div i18n="form title|Example: Create Pool@@formTitle"
@@ -96,6 +100,41 @@
             <span class="invalid-feedback"
                   *ngIf="userForm.showError('confirmpassword', formDir, 'match')"
                   i18n>Password confirmation doesn't match the password.</span>
+          </div>
+        </div>
+
+        <!-- Password expiration date -->
+        <div class="form-group row"
+             *ngIf="showExpirationDateField()">
+          <label class="col-form-label col-sm-3"
+                 for="pwdExpirationDate">
+            <ng-container i18n>Password expiration date</ng-container>
+            <span class="required"
+                  *ngIf="pwdExpirationSettings.pwdExpirationSpan > 0"></span>
+          </label>
+          <div class="col-sm-9">
+            <div class="input-group">
+              <input type="text"
+                     class="form-control"
+                     i18n-placeholder
+                     placeholder="Password expiration date..."
+                     [bsConfig]="bsConfig"
+                     [minDate]="minDate"
+                     bsDatepicker
+                     id="pwdExpirationDate"
+                     name="pwdExpirationDate"
+                     formControlName="pwdExpirationDate">
+              <span class="input-group-append">
+                <button type="button"
+                        class="btn btn-light"
+                        (click)="clearExpirationDate()">
+                  <i class="icon-prepend {{ icons.destroy }}"></i>
+                </button>
+              </span>
+              <span class="invalid-feedback"
+                    *ngIf="userForm.showError('pwdExpirationDate', formDir, 'required')"
+                    i18n>This field is required.</span>
+            </div>
           </div>
         </div>
 

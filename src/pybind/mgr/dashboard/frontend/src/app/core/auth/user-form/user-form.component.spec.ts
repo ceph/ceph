@@ -6,12 +6,14 @@ import { Router, Routes } from '@angular/router';
 import { RouterTestingModule } from '@angular/router/testing';
 
 import { ButtonsModule } from 'ngx-bootstrap/buttons';
+import { BsDatepickerModule } from 'ngx-bootstrap/datepicker';
 import { BsModalService } from 'ngx-bootstrap/modal';
 import { ToastrModule } from 'ngx-toastr';
 import { of } from 'rxjs';
 
 import { configureTestBed, FormHelper, i18nProviders } from '../../../../testing/unit-test-helper';
 import { RoleService } from '../../../shared/api/role.service';
+import { SettingsService } from '../../../shared/api/settings.service';
 import { UserService } from '../../../shared/api/user.service';
 import { ComponentsModule } from '../../../shared/components/components.module';
 import { CdFormGroup } from '../../../shared/forms/cd-form-group';
@@ -50,7 +52,8 @@ describe('UserFormComponent', () => {
         ComponentsModule,
         ToastrModule.forRoot(),
         SharedModule,
-        ButtonsModule.forRoot()
+        ButtonsModule.forRoot(),
+        BsDatepickerModule.forRoot()
       ],
       declarations: [UserFormComponent, FakeComponent],
       providers: i18nProviders
@@ -85,9 +88,15 @@ describe('UserFormComponent', () => {
     });
 
     it('should not disable fields', () => {
-      ['username', 'name', 'password', 'confirmpassword', 'email', 'roles'].forEach((key) =>
-        expect(form.get(key).disabled).toBeFalsy()
-      );
+      [
+        'username',
+        'name',
+        'password',
+        'confirmpassword',
+        'email',
+        'roles',
+        'pwdExpirationDate'
+      ].forEach((key) => expect(form.get(key).disabled).toBeFalsy());
     });
 
     it('should validate username required', () => {
@@ -151,7 +160,8 @@ describe('UserFormComponent', () => {
         name: 'User 0',
         email: 'user0@email.com',
         roles: ['administrator'],
-        enabled: true
+        enabled: true,
+        pwdExpirationDate: undefined
       };
       formHelper.setMultipleValues(user);
       formHelper.setValue('confirmpassword', user.password);
@@ -171,7 +181,8 @@ describe('UserFormComponent', () => {
       name: 'User 1',
       email: 'user1@email.com',
       roles: ['administrator'],
-      enabled: true
+      enabled: true,
+      pwdExpirationDate: undefined
     };
     const roles = [
       {
@@ -196,15 +207,24 @@ describe('UserFormComponent', () => {
         }
       }
     ];
+    const pwdExpirationSettings = {
+      user_pwd_expiration_warning_1: 10,
+      user_pwd_expiration_warning_2: 5,
+      user_pwd_expiration_span: 90
+    };
 
     beforeEach(() => {
       spyOn(userService, 'get').and.callFake(() => of(user));
       spyOn(TestBed.get(RoleService), 'list').and.callFake(() => of(roles));
       setUrl('/user-management/users/edit/user1');
+      spyOn(TestBed.get(SettingsService), 'pwdExpirationSettings').and.callFake(() =>
+        of(pwdExpirationSettings)
+      );
       component.ngOnInit();
       const req = httpTesting.expectOne('api/role');
       expect(req.request.method).toBe('GET');
       req.flush(roles);
+      httpTesting.expectOne('ui-api/standard_settings');
     });
 
     afterEach(() => {
