@@ -78,6 +78,12 @@ namespace rados {
         }
         void dump(Formatter *f) const;
         void decode_json(JSONObj *obj);
+
+        bool operator==(const fifo_data_params_t& rhs) const {
+          return (max_obj_size == rhs.max_obj_size &&
+                  max_entry_size == rhs.max_entry_size &&
+                  full_size_threshold == rhs.full_size_threshold);
+        }
       };
       WRITE_CLASS_ENCODER(rados::cls::fifo::fifo_data_params_t)
 

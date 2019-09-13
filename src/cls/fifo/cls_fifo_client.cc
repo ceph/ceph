@@ -95,6 +95,27 @@ namespace rados {
 
         return 0;
       }
+
+      int FIFO::init_part(librados::ObjectWriteOperation *rados_op,
+                       const InitPartParams& params) {
+        cls_fifo_init_part_op op;
+
+        auto& state = params.state;
+
+        if (state.tag.empty()) {
+          return -EINVAL;
+        }
+
+        op.tag = state.tag;
+        op.data_params = state.data_params;
+
+        bufferlist in;
+        encode(op, in);
+        rados_op->exec("fifo", "fifo_init_part", in);
+
+        return 0;
+      }
+
     } // namespace fifo
   } // namespace cls
 } // namespace rados

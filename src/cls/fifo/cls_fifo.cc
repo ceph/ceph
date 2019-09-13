@@ -123,6 +123,42 @@ static int write_header(cls_method_context_t hctx,
   return cls_cxx_write_full(hctx, &bl);
 }
 
+const char *part_header_xattr_name = "fifo.part.header";
+
+static int read_part_header(cls_method_context_t hctx,
+                            cls_fifo_data_obj_header *part_header)
+{
+  bufferlist bl;
+  int r = cls_cxx_getxattr(hctx, part_header_xattr_name, &bl);
+  if (r < 0) {
+    if (r != -ENOENT &&
+        r != -ENODATA) {
+      CLS_ERR("ERROR: %s(): cls_cxx_getxattr(%s) returned r=%d", __func__, part_header_xattr_name, r);
+    }
+    return r;
+  }
+
+  auto iter = bl.cbegin();
+  try {
+    decode(*part_header, iter);
+  } catch (buffer::error& err) {
+    CLS_ERR("ERROR: %s(): failed decoding part header", __func__);
+    return -EIO;
+  }
+
+  return 0;
+
+}
+
+static int write_part_header(cls_method_context_t hctx,
+                             cls_fifo_data_obj_header& part_header)
+{
+  bufferlist bl;
+  encode(part_header, bl);
+
+  return cls_cxx_setxattr(hctx, part_header_xattr_name, &bl);
+}
+
 static int read_header(cls_method_context_t hctx,
                        std::optional<fifo_objv_t> objv,
                        fifo_info_t *info)
@@ -265,6 +301,58 @@ static int fifo_get_info_op(cls_method_context_t hctx,
   return 0;
 }
 
+static int fifo_init_part_op(cls_method_context_t hctx,
+                             bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "%s", __func__);
+
+  cls_fifo_init_part_op op;
+  try {
+    auto iter = in->cbegin();
+    decode(op, iter);
+  } catch (const buffer::error &err) {
+    CLS_ERR("ERROR: %s(): failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  uint64_t size;
+
+  int r = cls_cxx_stat2(hctx, &size, nullptr);
+  if (r < 0 && r != -ENOENT) {
+    CLS_ERR("ERROR: %s(): cls_cxx_stat2() on obj returned %d", __func__, r);
+    return r;
+  }
+  if (r == 0 && size > 0) {
+    cls_fifo_data_obj_header part_header;
+    r = read_part_header(hctx, &part_header);
+    if (r < 0) {
+      CLS_LOG(10, "%s(): failed to read part header", __func__);
+      return r;
+    }
+
+    if (!(part_header.tag == op.tag &&
+          part_header.params == op.data_params)) {
+      CLS_LOG(10, "%s(): failed to re-create existing part with different params", __func__);
+      return -EEXIST;
+    }
+
+    return 0; /* already exists */
+  }
+
+  cls_fifo_data_obj_header part_header;
+  
+  part_header.tag = op.tag;
+  part_header.params = op.data_params;
+
+  r = write_part_header(hctx, part_header);
+  if (r < 0) {
+    CLS_LOG(10, "%s(): failed to write header: r=%d", __func__, r);
+    return r;
+  }
+
+  return 0;
+}
+
 CLS_INIT(fifo)
 {
   CLS_LOG(20, "Loaded fifo class!");
@@ -272,6 +360,7 @@ CLS_INIT(fifo)
   cls_handle_t h_class;
   cls_method_handle_t h_fifo_create_op;
   cls_method_handle_t h_fifo_get_info_op;
+  cls_method_handle_t h_fifo_init_part_op;
 
   cls_register("fifo", &h_class);
   cls_register_cxx_method(h_class, "fifo_create",
@@ -279,8 +368,12 @@ CLS_INIT(fifo)
                           fifo_create_op, &h_fifo_create_op);
 
   cls_register_cxx_method(h_class, "fifo_get_info",
-                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          CLS_METHOD_RD,
                           fifo_get_info_op, &h_fifo_get_info_op);
+
+  cls_register_cxx_method(h_class, "fifo_init_part",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          fifo_init_part_op, &h_fifo_init_part_op);
 
   return;
 }

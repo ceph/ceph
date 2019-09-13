@@ -27,6 +27,9 @@ namespace rados {
 
       class FIFO {
       public:
+
+        /* create */
+
         struct CreateParams {
           struct State {
             static constexpr uint64_t default_max_obj_size = 4 * 1024 * 1024;
@@ -78,6 +81,9 @@ namespace rados {
 
         static int create(librados::ObjectWriteOperation *op,
                           const CreateParams& params);
+
+        /* get info */
+
         struct GetInfoParams {
           struct State {
             std::optional<fifo_objv_t> objv;
@@ -97,6 +103,26 @@ namespace rados {
                             const GetInfoParams& params,
                             rados::cls::fifo::fifo_info_t *result);
 
+        /* init part */
+
+        struct InitPartParams {
+          struct State {
+            string tag;
+            rados::cls::fifo::fifo_data_params_t data_params;
+          } state;
+
+          InitPartParams& tag(const std::string& tag) {
+            state.tag = tag;
+            return *this;
+          }
+          InitPartParams& data_params(const rados::cls::fifo::fifo_data_params_t& data_params) {
+            state.data_params = data_params;
+            return *this;
+          }
+        };
+
+        static int init_part(librados::ObjectWriteOperation *op,
+                             const InitPartParams& params);
       };
     } // namespace fifo
   }  // namespace cls

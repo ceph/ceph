@@ -96,3 +96,23 @@ struct cls_fifo_get_info_op_reply
 };
 WRITE_CLASS_ENCODER(cls_fifo_get_info_op_reply)
 
+struct cls_fifo_init_part_op
+{
+  string tag;
+  rados::cls::fifo::fifo_data_params_t data_params;
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(tag, bl);
+    encode(data_params, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator &bl) {
+    DECODE_START(1, bl);
+    decode(tag, bl);
+    decode(data_params, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_fifo_init_part_op)
+
