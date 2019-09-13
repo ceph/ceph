@@ -161,8 +161,8 @@ public:
   /**
    * process an admin socket command
    */
-  void do_command(std::string_view command, const cmdmap_t& cmdmap,
-		  std::string_view format, ceph::bufferlist *out);
+  int do_command(std::string_view command, const cmdmap_t& cmdmap,
+		 std::string_view format, ceph::bufferlist *out);
 
   static constexpr std::size_t largest_singleton = 8 * 72;
 

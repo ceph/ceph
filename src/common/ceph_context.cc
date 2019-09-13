@@ -441,19 +441,19 @@ public:
   int call(std::string_view command, const cmdmap_t& cmdmap,
 	   std::string_view format, bufferlist& out) override {
     try {
-      m_cct->do_command(command, cmdmap, format, &out);
+      return m_cct->do_command(command, cmdmap, format, &out);
     } catch (const bad_cmd_get& e) {
       return -EINVAL;
     }
-    return 0;
   }
 };
 
-void CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
+int CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
 			     std::string_view format, bufferlist *out)
 {
   Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
   stringstream ss;
+  int r = 0;
   for (auto it = cmdmap.begin(); it != cmdmap.end(); ++it) {
     if (it->first != "prefix") {
       ss << it->first  << ":" << cmd_vartype_stringify(it->second) << " ";
@@ -514,7 +514,7 @@ void CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
       if (!(cmd_getval(this, cmdmap, "var", var))) {
         f->dump_string("error", "syntax error: 'config unset <var>'");
       } else {
-        int r = _conf.rm_val(var.c_str());
+        r = _conf.rm_val(var.c_str());
         if (r < 0 && r != -ENOENT) {
           f->dump_stream("error") << "error unsetting '" << var << "': "
 				  << cpp_strerror(r);
@@ -536,7 +536,7 @@ void CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
       } else {
 	// val may be multiple words
 	string valstr = str_join(val, " ");
-        int r = _conf.set_val(var.c_str(), valstr.c_str());
+        r = _conf.set_val(var.c_str(), valstr.c_str());
         if (r < 0) {
           f->dump_stream("error") << "error setting '" << var << "' to '" << valstr << "': " << cpp_strerror(r);
         } else {
@@ -553,7 +553,7 @@ void CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
 	char buf[4096];
 	memset(buf, 0, sizeof(buf));
 	char *tmp = buf;
-	int r = _conf.get_val(var.c_str(), &tmp, sizeof(buf));
+	r = _conf.get_val(var.c_str(), &tmp, sizeof(buf));
 	if (r < 0) {
 	    f->dump_stream("error") << "error getting '" << var << "': " << cpp_strerror(r);
 	} else {
@@ -619,6 +619,7 @@ void CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
   delete f;
   lgeneric_dout(this, 1) << "do_command '" << command << "' '" << ss.str()
 		         << "result is " << out->length() << " bytes" << dendl;
+  return r;
 }
 
 CephContext::CephContext(uint32_t module_type_,
