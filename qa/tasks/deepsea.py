@@ -1676,6 +1676,7 @@ class Toolbox(DeepSea):
         """
         remote = get_remote_for_role(self.ctx, teuth_role)
         osds = enumerate_osds(remote, self.log)
+        assert osds, "No OSDs were captured, so please check if they are active"
         self.log.info("Checking if OSDs ->{}<- are ->{}<-".format(osds, file_or_blue))
         all_green = True
         for osd in osds:
