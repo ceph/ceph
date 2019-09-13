@@ -14,6 +14,7 @@ import fnmatch
 import math
 import re
 import shlex
+import stat
 
 if sys.version_info.major < 3:
     raise RuntimeError("cephfs-shell is only compatible with python3")
@@ -101,9 +102,21 @@ def get_chunks(file_size):
     yield(chunk_start, final_chunk_size)
 
 
-def to_bytes(string):
-    return bytes(string, encoding='utf-8')
-
+def to_bytes(param):
+    # don't convert as follows as it can lead unusable results like coverting
+    # [1, 2, 3, 4] to '[1, 2, 3, 4]' -
+    # str(param).encode('utf-8')
+    if isinstance(param, bytes):
+        return param
+    elif isinstance(param, str):
+        return bytes(param, encoding='utf-8')
+    elif isinstance(param, list):
+        return [i.encode('utf-8') if isinstance(i, str) else to_bytes(i) for \
+                i in param]
+    elif isinstance(param, int) or isinstance(param, float):
+        return str(param).encode('utf-8')
+    elif param is None:
+        return None
 
 def ls(path, opts=''):
     # opts tries to be like /bin/ls opts
@@ -401,10 +414,21 @@ class CephFSShell(Cmd):
 
     class path_to_bytes(argparse.Action):
         def __call__(self, parser, namespace, values, option_string=None):
-            if isinstance(values, str):
-                values = to_bytes(values)
-            if isinstance(values, list):
-                values = list(map(to_bytes, values))
+            values = to_bytes(values)
+            setattr(namespace, self.dest, values)
+
+    # TODO: move the necessary contents from here to `class path_to_bytes`.
+    class get_list_of_bytes_path(argparse.Action):
+        def __call__(self, parser, namespace, values, option_string=None):
+            values = to_bytes(values)
+
+            if values == b'.':
+                values = cephfs.getcwd()
+            else:
+                for i in values:
+                    if i == b'.':
+                        values[values.index(i)] = cephfs.getcwd()
+
             setattr(namespace, self.dest, values)
 
     def complete_mkdir(self, text, line, begidx, endidx):
@@ -1122,35 +1146,47 @@ sub-directories, files')
 
     du_parser = argparse.ArgumentParser(
         description='Disk Usage of a Directory')
-    du_parser.add_argument('dirs', type=str, action=path_to_bytes,
-                           help='Name of the directory.', nargs='?',
-                           default='.')
+    du_parser.add_argument('paths', type=str, action=get_list_of_bytes_path,
+                           help='Name of the directory.', nargs='*',
+                           default=[b'.'])
     du_parser.add_argument('-r', action='store_true',
                            help='Recursive Disk usage of all directories.')
 
     @with_argparser(du_parser)
     def do_du(self, args):
         """
-        Disk Usage of a Directory
+        Print disk usage of a given path(s).
         """
-        if args.dirs == b'':
-            args.dirs = cephfs.getcwd()
-        for dir_ in args.dirs:
+        def print_disk_usage(files):
+            if isinstance(files, bytes):
+                files = (files, )
+
+            for f in files:
+                try:
+                    st = cephfs.lstat(f)
+
+                    if stat.S_ISDIR(st.st_mode):
+                        dusage = int(cephfs.getxattr(f,
+                                     'ceph.dir.rbytes').decode('utf-8'))
+                    else:
+                        dusage = st.st_size
+
+                    # print path in local context
+                    f = os.path.normpath(f)
+                    if f[0] is ord('/'):
+                        f = b'.' + f
+                    self.poutput('{:10s} {}'.format(humansize(dusage),
+                        f.decode('utf-8')))
+                except (libcephfs.Error, OSError):
+                    self.perror('{} : no such directory exists'.format(f.\
+                        decode('utf-8')), apply_style=True)
+                    continue
+
+        for path in args.paths:
             if args.r:
-                for i in reversed(sorted(set(dirwalk(dir_)))):
-                    i = os.path.normpath(i)
-                    try:
-                        xattr = cephfs.getxattr(i, 'ceph.dir.rbytes')
-                        self.poutput('{:10s} {}'.format(
-                            humansize(int(xattr.decode('utf-8'))), '.'
-                            + i.decode('utf-8')))
-                    except libcephfs.Error:
-                        continue
+                print_disk_usage(sorted(set(dirwalk(path)).union({path})))
             else:
-                dir_ = os.path.normpath(dir_)
-                self.poutput('{:10s} {}'.format(humansize(int(cephfs.getxattr(
-                    dir_, 'ceph.dir.rbytes').decode('utf-8'))), '.'
-                    + dir_.decode('utf-8')))
+                print_disk_usage(path)
 
     quota_parser = argparse.ArgumentParser(
         description='Quota management for a Directory')
