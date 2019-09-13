@@ -54,6 +54,10 @@ public:
   exception(const exception&) = default;
 };
 
+namespace _impl {
+  template <class T> struct always_false : std::false_type {};
+};
+
 template <class ErrorVisitorT, class FuturatorT>
 class maybe_handle_error_t {
   const std::type_info& type_info;
@@ -95,10 +99,17 @@ public:
       // call `report_failed_future()` during `operator=()`.
       std::move(result).get_exception();
 
-      constexpr bool explicitly_discarded = std::is_invocable_r<
-        struct ignore_marker_t&&, ErrorVisitorT, ErrorT>::value;
-      if constexpr (!explicitly_discarded) {
+      using return_t = std::invoke_result_t<ErrorVisitorT, ErrorT>;
+      if constexpr (std::is_assignable_v<decltype(result), return_t>) {
         result = std::forward<ErrorVisitorT>(errfunc)(ErrorT::instance);
+      } else if constexpr (std::is_same_v<return_t, void>) {
+        // void denotes explicit discarding
+        // execute for the sake a side effects. Typically this boils down
+        // to throwing an exception by the handler.
+        std::forward<ErrorVisitorT>(errfunc)(ErrorT::instance);
+      } else {
+        static_assert(_impl::always_false<return_t>::value,
+                      "return of Error Visitor is not assignable to future");
       }
     }
   }
@@ -106,10 +117,6 @@ public:
   auto get_result() && {
     return std::move(result);
   }
-};
-
-namespace _impl {
-  template <class T> struct always_false : std::false_type {};
 };
 
 template <class FuncHead, class... FuncTail>
@@ -356,7 +363,6 @@ struct errorator {
       static_assert((... || std::is_same_v<AllowedErrors,
                                            std::decay_t<ErrorT>>),
                     "discarding disallowed ErrorT");
-      return ignore_marker_t{};
     }
   };
 
