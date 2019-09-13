@@ -77,34 +77,15 @@ seastar::future<> ShardServices::dispatch_context_transaction(
 seastar::future<> ShardServices::dispatch_context_messages(
   BufferedRecoveryMessages &&ctx)
 {
-  auto ret = seastar::when_all_succeed(
-    seastar::parallel_for_each(std::move(ctx.notify_list),
-      [this](auto& osd_notifies) {
-	auto& [peer, notifies] = osd_notifies;
-	auto m = make_message<MOSDPGNotify>(osdmap->get_epoch(),
-					    std::move(notifies));
-	logger().debug("dispatch_context_messages sending notify to {}", peer);
-	return send_to_osd(peer, m, osdmap->get_epoch());
-      }),
-    seastar::parallel_for_each(std::move(ctx.query_map),
-      [this](auto& osd_queries) {
-	auto& [peer, queries] = osd_queries;
-	auto m = make_message<MOSDPGQuery>(osdmap->get_epoch(),
-					   std::move(queries));
-	logger().debug("dispatch_context_messages sending query to {}", peer);
-	return send_to_osd(peer, m, osdmap->get_epoch());
-      }),
-    seastar::parallel_for_each(std::move(ctx.info_map),
-      [this](auto& osd_infos) {
-	auto& [peer, infos] = osd_infos;
-	auto m = make_message<MOSDPGInfo>(osdmap->get_epoch(),
-					  std::move(infos));
-	logger().debug("dispatch_context_messages sending info to {}", peer);
-	return send_to_osd(peer, m, osdmap->get_epoch());
-      }));
-  ctx.notify_list.clear();
-  ctx.query_map.clear();
-  ctx.info_map.clear();
+  auto ret = seastar::parallel_for_each(std::move(ctx.message_map),
+    [this](auto& osd_messages) {
+      auto& [peer, messages] = osd_messages;
+      logger().debug("dispatch_context_messages sending messages to {}", peer);
+      return seastar::parallel_for_each(std::move(messages), [=](auto& m) {
+        return send_to_osd(peer, m, osdmap->get_epoch());
+      });
+    });
+  ctx.message_map.clear();
   return ret;
 }
 

@@ -34,8 +34,6 @@ protected:
 
 public:
   PGAdvanceMap(
-    OSD &osd, Ref<PG> pg, epoch_t from, epoch_t to);
-  PGAdvanceMap(
     OSD &osd, Ref<PG> pg, epoch_t from, epoch_t to,
     PeeringCtx &&rctx, bool do_init);
   ~PGAdvanceMap();
