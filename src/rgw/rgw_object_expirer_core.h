@@ -56,7 +56,7 @@ public:
                        const ceph::real_time& end_time,
                        const int max_entries,
                        const string& marker,
-                       list<cls_timeindex_entry>& entries, /* out */
+                       std::vector<cls_timeindex_entry>& entries, /* out */
                        string *out_marker,                 /* out */
                        bool *truncated);                   /* out */
 
@@ -118,12 +118,12 @@ public:
 
   int garbage_single_object(objexp_hint_entry& hint);
 
-  void garbage_chunk(std::list<cls_timeindex_entry>& entries, /* in  */
+  void garbage_chunk(std::vector<cls_timeindex_entry>& entries, /* in  */
                      bool& need_trim);                        /* out */
 
   void trim_chunk(const std::string& shard,
-                  const utime_t& from,
-                  const utime_t& to,
+                  ceph::real_time from,
+                  ceph::real_time to,
                   const string& from_marker,
                   const string& to_marker);
 

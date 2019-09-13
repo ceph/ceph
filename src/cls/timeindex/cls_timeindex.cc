@@ -1,4 +1,4 @@
-// -*- mode:C; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
+// -*- mode:C++; tab-width:8; c-basic-offset:2; indent-tabs-mode:t -*-
 // vim: ts=8 sw=2 smarttab
 
 #include <errno.h>
@@ -12,25 +12,29 @@
 CLS_VER(1,0)
 CLS_NAME(timeindex)
 
+
+using namespace std::literals;
+
 static const size_t MAX_LIST_ENTRIES = 1000;
 static const size_t MAX_TRIM_ENTRIES = 1000;
 
 static const string TIMEINDEX_PREFIX = "1_";
 
-static void get_index_time_prefix(const utime_t& ts,
+static void get_index_time_prefix(ceph::real_time ts,
                                   string& index)
 {
   char buf[32];
+  auto tv = ceph::real_clock::to_timeval(ts);
 
   snprintf(buf, sizeof(buf), "%s%010ld.%06ld_", TIMEINDEX_PREFIX.c_str(),
-          (long)ts.sec(), (long)ts.usec());
+          (long)tv.tv_sec, (long)tv.tv_usec);
   buf[sizeof(buf) - 1] = '\0';
 
   index = buf;
 }
 
 static void get_index(cls_method_context_t hctx,
-                      const utime_t& key_ts,
+                      ceph::real_time key_ts,
                       const string& key_ext,
                       string& index)
 {
@@ -39,7 +43,7 @@ static void get_index(cls_method_context_t hctx,
 }
 
 static int parse_index(const string& index,
-                       utime_t& key_ts,
+                       ceph::real_time& key_ts,
                        string& key_ext)
 {
   int sec, usec;
@@ -47,7 +51,7 @@ static int parse_index(const string& index,
 
   int ret = sscanf(index.c_str(), "1_%d.%d_%255s", &sec, &usec, keyext);
 
-  key_ts  = utime_t(sec, usec);
+  key_ts  = ceph::real_time(std::chrono::seconds(sec) + std::chrono::microseconds(usec));
   key_ext = string(keyext);
   return ret;
 }
@@ -66,9 +70,7 @@ static int cls_timeindex_add(cls_method_context_t hctx,
     return -EINVAL;
   }
 
-  for (list<cls_timeindex_entry>::iterator iter = op.entries.begin();
-       iter != op.entries.end();
-       ++iter) {
+  for (auto iter = op.entries.begin(); iter != op.entries.end(); ++iter) {
     cls_timeindex_entry& entry = *iter;
 
     string index;
@@ -128,7 +130,7 @@ static int cls_timeindex_list(cls_method_context_t hctx,
     return rc;
   }
 
-  list<cls_timeindex_entry>& entries = ret.entries;
+  auto& entries = ret.entries;
   map<string, bufferlist>::iterator iter = keys.begin();
 
   string marker;

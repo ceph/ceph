@@ -1,6 +1,8 @@
 #include "cls_timeindex_types.h"
 #include "common/Formatter.h"
 
+using namespace std::literals;
+
 void cls_timeindex_entry::dump(Formatter *f) const
 {
   f->dump_stream("key_ts") << key_ts;
@@ -11,7 +13,7 @@ void cls_timeindex_entry::dump(Formatter *f) const
 void cls_timeindex_entry::generate_test_instances(list<cls_timeindex_entry*>& o)
 {
   cls_timeindex_entry *i = new cls_timeindex_entry;
-  i->key_ts = utime_t(0,0);
+  i->key_ts = ceph::real_time(0ns);
   i->key_ext = "foo";
   bufferlist bl;
   bl.append("bar");

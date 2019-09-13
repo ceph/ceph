@@ -9,7 +9,7 @@
 
 void cls_timeindex_add(
   librados::ObjectWriteOperation& op,
-  std::list<cls_timeindex_entry>& entries)
+  std::vector<cls_timeindex_entry>& entries)
 {
   librados::bufferlist in;
   cls_timeindex_add_op call;
@@ -33,7 +33,7 @@ void cls_timeindex_add(
 
 void cls_timeindex_add_prepare_entry(
   cls_timeindex_entry& entry,
-  const utime_t& key_timestamp,
+  ceph::real_time key_timestamp,
   const std::string& key_ext,
   const librados::bufferlist& bl)
 {
@@ -44,7 +44,7 @@ void cls_timeindex_add_prepare_entry(
 
 void cls_timeindex_add(
   librados::ObjectWriteOperation& op,
-  const utime_t& key_timestamp,
+  ceph::real_time key_timestamp,
   const std::string& key_ext,
   const librados::bufferlist& bl)
 {
@@ -55,8 +55,8 @@ void cls_timeindex_add(
 
 void cls_timeindex_trim(
   librados::ObjectWriteOperation& op,
-  const utime_t& from_time,
-  const utime_t& to_time,
+  ceph::real_time from_time,
+  ceph::real_time to_time,
   const std::string& from_marker,
   const std::string& to_marker)
 {
@@ -75,8 +75,8 @@ void cls_timeindex_trim(
 int cls_timeindex_trim(
   librados::IoCtx& io_ctx,
   const std::string& oid,
-  const utime_t& from_time,
-  const utime_t& to_time,
+  ceph::real_time from_time,
+  ceph::real_time to_time,
   const std::string& from_marker,
   const std::string& to_marker)
 {
@@ -98,11 +98,11 @@ int cls_timeindex_trim(
 
 void cls_timeindex_list(
   librados::ObjectReadOperation& op,
-  const utime_t& from,
-  const utime_t& to,
+  ceph::real_time from,
+  ceph::real_time to,
   const std::string& in_marker,
   const int max_entries,
-  std::list<cls_timeindex_entry>& entries,
+  std::vector<cls_timeindex_entry>& entries,
   std::string *out_marker,
   bool *truncated)
 {

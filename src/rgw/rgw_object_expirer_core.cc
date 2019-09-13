@@ -102,7 +102,7 @@ int RGWObjExpStore::objexp_hint_add(const ceph::real_time& delete_at,
   bufferlist hebl;
   encode(he, hebl);
   librados::ObjectWriteOperation op;
-  cls_timeindex_add(op, utime_t(delete_at), keyext, hebl);
+  cls_timeindex_add(op, delete_at, keyext, hebl);
 
   string shard_name = objexp_hint_get_shardname(objexp_key_shard(obj_key, cct->_conf->rgw_objexp_hints_num_shards));
   auto obj = rados_svc->obj(rgw_raw_obj(zone_svc->get_zone_params().log_pool, shard_name));
@@ -115,16 +115,16 @@ int RGWObjExpStore::objexp_hint_add(const ceph::real_time& delete_at,
 }
 
 int RGWObjExpStore::objexp_hint_list(const string& oid,
-                               const ceph::real_time& start_time,
-                               const ceph::real_time& end_time,
-                               const int max_entries,
-                               const string& marker,
-                               list<cls_timeindex_entry>& entries, /* out */
-                               string *out_marker,                 /* out */
-                               bool *truncated)                    /* out */
+				     const ceph::real_time& start_time,
+				     const ceph::real_time& end_time,
+				     const int max_entries,
+				     const string& marker,
+				     std::vector<cls_timeindex_entry>& entries, /* out */
+				     string *out_marker,                 /* out */
+				     bool *truncated)                    /* out */
 {
   librados::ObjectReadOperation op;
-  cls_timeindex_list(op, utime_t(start_time), utime_t(end_time), marker, max_entries, entries,
+  cls_timeindex_list(op, start_time, end_time, marker, max_entries, entries,
         out_marker, truncated);
 
   auto obj = rados_svc->obj(rgw_raw_obj(zone_svc->get_zone_params().log_pool, oid));
@@ -148,11 +148,11 @@ int RGWObjExpStore::objexp_hint_list(const string& oid,
 }
 
 static int cls_timeindex_trim_repeat(rgw_rados_ref ref,
-                                const string& oid,
-                                const utime_t& from_time,
-                                const utime_t& to_time,
-                                const string& from_marker,
-                                const string& to_marker)
+				     const std::string& oid,
+				     ceph::real_time from_time,
+				     ceph::real_time to_time,
+				     const std::string& from_marker,
+				     const std::string& to_marker)
 {
   bool done = false;
   do {
@@ -181,8 +181,9 @@ int RGWObjExpStore::objexp_hint_trim(const string& oid,
     return r;
   }
   auto& ref = obj.get_ref();
-  int ret = cls_timeindex_trim_repeat(ref, oid, utime_t(start_time), utime_t(end_time),
-          from_marker, to_marker);
+  int ret = cls_timeindex_trim_repeat(ref, oid, start_time, end_time,
+				      from_marker, to_marker);
+
   if ((ret < 0 ) && (ret != -ENOENT)) {
     return ret;
   }
@@ -241,18 +242,16 @@ int RGWObjectExpirer::garbage_single_object(objexp_hint_entry& hint)
   return ret;
 }
 
-void RGWObjectExpirer::garbage_chunk(list<cls_timeindex_entry>& entries,      /* in  */
-                                  bool& need_trim)                         /* out */
+void RGWObjectExpirer::garbage_chunk(std::vector<cls_timeindex_entry>& entries,      /* in  */
+				     bool& need_trim)                         /* out */
 {
   need_trim = false;
 
-  for (list<cls_timeindex_entry>::iterator iter = entries.begin();
-       iter != entries.end();
-       ++iter)
+  for (auto iter = entries.begin(); iter != entries.end(); ++iter)
   {
     objexp_hint_entry hint;
-    ldout(store->ctx(), 15) << "got removal hint for: " << iter->key_ts.sec() \
-        << " - " << iter->key_ext << dendl;
+    ldout(store->ctx(), 15) << "got removal hint for: " << iter->key_ts \
+			    << " - " << iter->key_ext << dendl;
 
     int ret = objexp_hint_parse(store->getRados()->ctx(), *iter, &hint);
     if (ret < 0) {
@@ -276,16 +275,13 @@ void RGWObjectExpirer::garbage_chunk(list<cls_timeindex_entry>& entries,      /*
 }
 
 void RGWObjectExpirer::trim_chunk(const string& shard,
-                                  const utime_t& from,
-                                  const utime_t& to,
+                                  ceph::real_time rt_from,
+                                  ceph::real_time rt_to,
                                   const string& from_marker,
                                   const string& to_marker)
 {
-  ldout(store->ctx(), 20) << "trying to trim removal hints to=" << to
+  ldout(store->ctx(), 20) << "trying to trim removal hints to=" << rt_to
                           << ", to_marker=" << to_marker << dendl;
-
-  real_time rt_from = from.to_real_time();
-  real_time rt_to = to.to_real_time();
 
   int ret = exp_store.objexp_hint_trim(shard, rt_from, rt_to,
                                        from_marker, to_marker);
@@ -327,7 +323,7 @@ bool RGWObjectExpirer::process_single_shard(const string& shard,
     real_time rt_last = last_run.to_real_time();
     real_time rt_start = round_start.to_real_time();
 
-    list<cls_timeindex_entry> entries;
+    std::vector<cls_timeindex_entry> entries;
     ret = exp_store.objexp_hint_list(shard, rt_last, rt_start,
                                      num_entries, marker, entries,
                                      &out_marker, &truncated);
@@ -341,7 +337,7 @@ bool RGWObjectExpirer::process_single_shard(const string& shard,
     garbage_chunk(entries, need_trim);
 
     if (need_trim) {
-      trim_chunk(shard, last_run, round_start, marker, out_marker);
+      trim_chunk(shard, last_run.to_real_time(), round_start.to_real_time(), marker, out_marker);
     }
 
     utime_t now = ceph_clock_now();
