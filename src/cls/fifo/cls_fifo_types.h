@@ -49,6 +49,10 @@ namespace rados {
                   ver == rhs.ver);
         }
 
+        bool empty() const {
+          return instance.empty();
+        }
+
         string to_str() {
           char buf[instance.size() + 32];
           snprintf(buf, sizeof(buf), "%s{%lld}", instance.c_str(), (long long)ver);
@@ -93,7 +97,7 @@ namespace rados {
           STATUS_PREPARE = 1,
           STATUS_COMPLETE = 2,
         } status{STATUS_INIT};
-        uint64_t head_num;
+        uint64_t head_num{0};
         string head_tag;
 
         void encode(bufferlist &bl) const {
@@ -113,16 +117,16 @@ namespace rados {
           DECODE_FINISH(bl);
         }
         void dump(Formatter *f) const;
+
+        bool operator==(const Status& s) const {
+          return (status == s);
+        }
       };
       WRITE_CLASS_ENCODER(rados::cls::fifo::fifo_prepare_status_t)
 
       struct fifo_info_t {
         string id;
         fifo_objv_t objv;
-        struct {
-          string name;
-          string ns;
-        } pool;
         string oid_prefix;
         fifo_data_params_t data_params;
 
@@ -132,12 +136,22 @@ namespace rados {
 
         fifo_prepare_status_t head_prepare_status;
 
+        uint64_t next_part() {
+          if (head_prepare_status == fifo_prepare_status_t::STATUS_INIT) {
+            return head_obj_num;
+          }
+          if (head_prepare_status == fifo_prepare_status_t::STATUS_PREPARE) {
+            return head_prepare_status.head_num;
+          }
+          return head_obj_num + 1;
+        }
+
+        string next_part_oid();
+
         void encode(bufferlist &bl) const {
           ENCODE_START(1, 1, bl);
           encode(id, bl);
           encode(objv, bl);
-          encode(pool.name, bl);
-          encode(pool.ns, bl);
           encode(oid_prefix, bl);
           encode(data_params, bl);
           encode(tail_obj_num, bl);
@@ -150,8 +164,6 @@ namespace rados {
           DECODE_START(1, bl);
           decode(id, bl);
           decode(objv, bl);
-          decode(pool.name, bl);
-          decode(pool.ns, bl);
           decode(oid_prefix, bl);
           decode(data_params, bl);
           decode(tail_obj_num, bl);

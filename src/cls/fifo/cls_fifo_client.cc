@@ -29,15 +29,12 @@ namespace rados {
 
         auto& state = params.state;
 
-        if (state.id.empty() ||
-            state.pool.name.empty()) {
+        if (state.id.empty()) {
           return -EINVAL;
         }
 
         op.id = state.id;
         op.objv = state.objv;
-        op.pool.name = state.pool.name;
-        op.pool.ns = state.pool.ns;
         op.oid_prefix = state.oid_prefix;
         op.max_obj_size = state.max_obj_size;
         op.max_entry_size = state.max_entry_size;
@@ -96,8 +93,31 @@ namespace rados {
         return 0;
       }
 
+      int FIFO::update_state(librados::ObjectWriteOperation *rados_op,
+                             const UpdateStateParams& params) {
+        cls_fifo_update_state_op op;
+
+        auto& state = params.state;
+
+        if (state.objv.empty()) {
+          return -EINVAL;
+        }
+
+        op.objv = state.objv;
+        op.tail_obj_num = state.tail_obj_num;
+        op.head_obj_num = state.head_obj_num;
+        op.head_tag = state.head_tag;
+        op.head_prepare_status = state.head_prepare_status;
+
+        bufferlist in;
+        encode(op, in);
+        rados_op->exec("fifo", "fifo_update_state", in);
+
+        return 0;
+      }
+
       int FIFO::init_part(librados::ObjectWriteOperation *rados_op,
-                       const InitPartParams& params) {
+                          const InitPartParams& params) {
         cls_fifo_init_part_op op;
 
         auto& state = params.state;

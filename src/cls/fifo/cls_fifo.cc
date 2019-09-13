@@ -241,8 +241,6 @@ static int fifo_create_op(cls_method_context_t hctx,
     }
 
     if (!(header.id == op.id &&
-          header.pool.name == op.pool.name &&
-          header.pool.ns == op.pool.ns &&
           (!op.oid_prefix ||
            header.oid_prefix == *op.oid_prefix) &&
           (!op.objv ||
@@ -260,8 +258,6 @@ static int fifo_create_op(cls_method_context_t hctx,
     header.objv = *op.objv;
   }
   header.oid_prefix = new_oid_prefix(op.id, op.oid_prefix);
-  header.pool.name = op.pool.name;
-  header.pool.ns = op.pool.ns;
 
   header.data_params.max_obj_size = op.max_obj_size;
   header.data_params.max_entry_size = op.max_entry_size;
@@ -270,6 +266,52 @@ static int fifo_create_op(cls_method_context_t hctx,
   r = write_header(hctx, header);
   if (r < 0) {
     CLS_LOG(10, "%s(): failed to write header: r=%d", __func__, r);
+    return r;
+  }
+
+  return 0;
+}
+
+static int fifo_update_state_op(cls_method_context_t hctx,
+                                bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "%s", __func__);
+
+  cls_fifo_update_state_op op;
+  try {
+    auto iter = in->cbegin();
+    decode(op, iter);
+  } catch (const buffer::error &err) {
+    CLS_ERR("ERROR: %s(): failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  fifo_info_t header;
+
+  int r = read_header(hctx, op.objv, &header);
+  if (r < 0) {
+    return r;
+  }
+
+  if (op.tail_obj_num) {
+    header.tail_obj_num = *op.tail_obj_num;
+  }
+
+  if (op.head_obj_num) {
+    header.head_obj_num = *op.head_obj_num;
+  }
+
+  if (op.head_tag) {
+    header.head_tag = *op.head_tag;
+  }
+
+  if (op.head_prepare_status) {
+    header.head_prepare_status = *op.head_prepare_status;
+  }
+
+  r = write_header(hctx, header);
+  if (r < 0) {
+    CLS_LOG(10, "%s(): failed to write heaader: r=%d", __func__, r);
     return r;
   }
 
@@ -361,6 +403,7 @@ CLS_INIT(fifo)
   cls_method_handle_t h_fifo_create_op;
   cls_method_handle_t h_fifo_get_info_op;
   cls_method_handle_t h_fifo_init_part_op;
+  cls_method_handle_t h_fifo_update_state_op;
 
   cls_register("fifo", &h_class);
   cls_register_cxx_method(h_class, "fifo_create",
@@ -374,6 +417,10 @@ CLS_INIT(fifo)
   cls_register_cxx_method(h_class, "fifo_init_part",
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           fifo_init_part_op, &h_fifo_init_part_op);
+
+  cls_register_cxx_method(h_class, "fifo_update_state",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          fifo_update_state_op, &h_fifo_update_state_op);
 
   return;
 }

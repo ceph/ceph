@@ -116,3 +116,32 @@ struct cls_fifo_init_part_op
 };
 WRITE_CLASS_ENCODER(cls_fifo_init_part_op)
 
+struct cls_fifo_update_state_op
+{
+  rados::cls::fifo::fifo_objv_t objv;
+
+  std::optional<uint64_t> tail_obj_num;
+  std::optional<uint64_t> head_obj_num;
+  std::optional<string> head_tag;
+  std::optional<rados::cls::fifo::fifo_prepare_status_t> head_prepare_status;
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(objv, bl);
+    encode(tail_obj_num, bl);
+    encode(head_obj_num, bl);
+    encode(head_tag, bl);
+    encode(head_prepare_status, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator &bl) {
+    DECODE_START(1, bl);
+    decode(objv, bl);
+    decode(tail_obj_num, bl);
+    decode(head_obj_num, bl);
+    decode(head_tag, bl);
+    decode(head_prepare_status, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_fifo_update_state_op)

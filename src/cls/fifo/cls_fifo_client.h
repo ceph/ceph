@@ -36,10 +36,6 @@ namespace rados {
             static constexpr uint64_t default_max_entry_size = 32 * 1024;
             std::string id;
             std::optional<fifo_objv_t> objv;
-            struct {
-              std::string name;
-              std::string ns;
-            } pool;
             std::optional<std::string> oid_prefix;
             bool exclusive{false};
             uint64_t max_obj_size{default_max_obj_size};
@@ -48,13 +44,6 @@ namespace rados {
 
           CreateParams& id(const std::string& id) {
             state.id = id;
-            return *this;
-          }
-          CreateParams& pool(const std::string& name, std::optional<std::string> ns = nullopt) {
-            state.pool.name = name;
-            if (ns) {
-              state.pool.ns = *ns;
-            }
             return *this;
           }
           CreateParams& oid_prefix(const std::string& oid_prefix) {
@@ -103,6 +92,42 @@ namespace rados {
                             const GetInfoParams& params,
                             rados::cls::fifo::fifo_info_t *result);
 
+        /* update */
+
+        struct UpdateStateParams {
+          struct State {
+            rados::cls::fifo::fifo_objv_t objv;
+
+            std::optional<uint64_t> tail_obj_num;
+            std::optional<uint64_t> head_obj_num;
+            std::optional<string> head_tag;
+            std::optional<rados::cls::fifo::fifo_prepare_status_t> head_prepare_status;
+          } state;
+
+          UpdateStateParams& objv(const fifo_objv_t& objv) {
+            state.objv = objv;
+            return *this;
+          }
+          UpdateStateParams& tail_obj_num(uint64_t tail_obj_num) {
+            state.tail_obj_num = tail_obj_num;
+            return *this;
+          }
+          UpdateStateParams& head_obj_num(uint64_t head_obj_num) {
+            state.head_obj_num = head_obj_num;
+            return *this;
+          }
+          UpdateStateParams& head_tag(const std::string& head_tag) {
+            state.head_tag = head_tag;
+            return *this;
+          }
+          UpdateStateParams& head_prepare_status(const rados::cls::fifo::fifo_prepare_status_t& head_prepare_status) {
+            state.head_prepare_status = head_prepare_status;
+            return *this;
+          }
+        };
+
+        static int update_state(librados::ObjectWriteOperation *rados_op,
+                                const UpdateStateParams& params);
         /* init part */
 
         struct InitPartParams {
