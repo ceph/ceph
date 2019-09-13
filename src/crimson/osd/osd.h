@@ -169,8 +169,8 @@ private:
 				  Ref<MOSDRepOp> m);
   seastar::future<> handle_rep_op_reply(ceph::net::Connection* conn,
 					Ref<MOSDRepOpReply> m);
-  seastar::future<> handle_pg_log(ceph::net::Connection* conn,
-				  Ref<MOSDPGLog> m);
+  seastar::future<> handle_peering_op(ceph::net::Connection* conn,
+				      Ref<MOSDPeeringOp> m);
 
   seastar::future<> committed_osd_maps(version_t first,
                                        version_t last,

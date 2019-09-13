@@ -488,16 +488,19 @@ seastar::future<> OSD::ms_dispatch(ceph::net::Connection* conn, MessageRef m)
   case CEPH_MSG_OSD_OP:
     return handle_osd_op(conn, boost::static_pointer_cast<MOSDOp>(m));
   case MSG_OSD_PG_CREATE2:
-  case MSG_OSD_PG_NOTIFY:
-  case MSG_OSD_PG_INFO:
-  case MSG_OSD_PG_QUERY:
     shard_services.start_operation<CompoundPeeringRequest>(
       *this,
       conn->get_shared(),
       m);
     return seastar::now();
+  case MSG_OSD_PG_NOTIFY2:
+    [[fallthrough]];
+  case MSG_OSD_PG_INFO2:
+    [[fallthrough]];
+  case MSG_OSD_PG_QUERY2:
+    [[fallthrough]];
   case MSG_OSD_PG_LOG:
-    return handle_pg_log(conn, boost::static_pointer_cast<MOSDPGLog>(m));
+    return handle_peering_op(conn, boost::static_pointer_cast<MOSDPeeringOp>(m));
   case MSG_OSD_REPOP:
     return handle_rep_op(conn, boost::static_pointer_cast<MOSDRepOp>(m));
   case MSG_OSD_REPOPREPLY:
@@ -974,18 +977,18 @@ void OSD::update_heartbeat_peers()
   heartbeat->update_peers(whoami);
 }
 
-seastar::future<> OSD::handle_pg_log(
+seastar::future<> OSD::handle_peering_op(
   ceph::net::Connection* conn,
-  Ref<MOSDPGLog> m)
+  Ref<MOSDPeeringOp> m)
 {
   const int from = m->get_source().num();
-  logger().debug("handle_pg_log on {} from {}", m->get_spg(), from);
+  logger().debug("handle_peering_op on {} from {}", m->get_spg(), from);
   shard_services.start_operation<RemotePeeringEvent>(
     *this,
     conn->get_shared(),
     shard_services,
-    pg_shard_t(from, m->from),
-    spg_t(m->info.pgid.pgid, m->to),
+    pg_shard_t{from, m->get_spg().shard},
+    m->get_spg(),
     std::move(*m->get_event()));
   return seastar::now();
 }
