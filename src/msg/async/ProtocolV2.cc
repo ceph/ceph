@@ -1487,12 +1487,7 @@ CtPtr ProtocolV2::handle_message() {
 
   ceph::mono_time fast_dispatch_time;
 
-  auto& conf = cct->_conf;
-  if ((conf->ms_blackhole_mon && connection->peer_type == CEPH_ENTITY_TYPE_MON)||
-      (conf->ms_blackhole_osd && connection->peer_type == CEPH_ENTITY_TYPE_OSD)||
-      (conf->ms_blackhole_mds && connection->peer_type == CEPH_ENTITY_TYPE_MDS)||
-      (conf->ms_blackhole_client &&
-       connection->peer_type == CEPH_ENTITY_TYPE_CLIENT)) {
+  if (connection->is_blackhole()) {
     ldout(cct, 10) << __func__ << " blackhole " << *message << dendl;
     message->put();
     goto out;
