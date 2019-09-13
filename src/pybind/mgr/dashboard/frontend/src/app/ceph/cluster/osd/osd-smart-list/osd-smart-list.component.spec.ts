@@ -1,7 +1,8 @@
 import { HttpClientTestingModule } from '@angular/common/http/testing';
 import { SimpleChange, SimpleChanges } from '@angular/core';
 import { ComponentFixture, TestBed } from '@angular/core/testing';
-import { TabsModule } from 'ngx-bootstrap/tabs';
+import { By } from '@angular/platform-browser';
+import { TabsetComponent, TabsetConfig, TabsModule } from 'ngx-bootstrap/tabs';
 
 import _ = require('lodash');
 import { of } from 'rxjs';
@@ -62,7 +63,7 @@ describe('OsdSmartListComponent', () => {
   configureTestBed({
     declarations: [OsdSmartListComponent],
     imports: [TabsModule, SharedModule, HttpClientTestingModule],
-    providers: [i18nProviders]
+    providers: [i18nProviders, TabsetComponent, TabsetConfig]
   });
 
   beforeEach(() => {
@@ -102,5 +103,27 @@ describe('OsdSmartListComponent', () => {
     initializeComponentWithData(patchData('json_format_version', [2, 0]));
     expect(component.data).toEqual({});
     expect(component.incompatible).toBeTruthy();
+  });
+
+  it('should display info panel for passed self test', () => {
+    initializeComponentWithData();
+    fixture.detectChanges();
+    const alertPanel = fixture.debugElement.query(By.css('cd-alert-panel'));
+    expect(component.incompatible).toBe(false);
+    expect(component.loading).toBe(false);
+    expect(alertPanel.attributes.size).toBe('slim');
+    expect(alertPanel.attributes.title).toBe('SMART overall-health self-assessment test result');
+    expect(alertPanel.attributes.type).toBe('info');
+  });
+
+  it('should display warning panel for failed self test', () => {
+    initializeComponentWithData(patchData('ata_smart_data.self_test.status.passed', false));
+    fixture.detectChanges();
+    const alertPanel = fixture.debugElement.query(By.css('cd-alert-panel'));
+    expect(component.incompatible).toBe(false);
+    expect(component.loading).toBe(false);
+    expect(alertPanel.attributes.size).toBe('slim');
+    expect(alertPanel.attributes.title).toBe('SMART overall-health self-assessment test result');
+    expect(alertPanel.attributes.type).toBe('warning');
   });
 });
