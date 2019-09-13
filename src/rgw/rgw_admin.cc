@@ -2616,6 +2616,11 @@ int check_reshard_bucket_params(rgw::sal::RGWRadosStore *store,
     return -EINVAL;
   }
 
+  if (num_shards < 0) {
+    cerr << "ERROR: num_shards must be non-negative integer" << std::endl;
+    return -EINVAL;
+  }
+
   int ret = init_bucket(tenant, bucket_name, bucket_id, bucket_info, bucket, &attrs);
   if (ret < 0) {
     cerr << "ERROR: could not init bucket: " << cpp_strerror(-ret) << std::endl;
