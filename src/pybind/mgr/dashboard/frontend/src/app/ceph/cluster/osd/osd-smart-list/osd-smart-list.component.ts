@@ -79,7 +79,10 @@ export class OsdSmartListComponent implements OnInit, OnChanges {
           // Build result
           result[deviceId] = {
             info: info,
-            smart: smartData.ata_smart_attributes,
+            smart: {
+              attributes: smartData.ata_smart_attributes,
+              data: smartData.ata_smart_data
+            },
             device: info.device.name,
             identifier: info.serial_number
           };

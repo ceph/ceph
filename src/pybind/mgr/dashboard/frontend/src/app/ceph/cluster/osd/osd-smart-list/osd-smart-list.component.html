@@ -9,6 +9,20 @@
           <cd-alert-panel type="warning">{{ device.value.userMessage }}</cd-alert-panel>
         </ng-container>
         <ng-template #noError>
+          <ng-container *ngIf="device.value.smart.data.self_test.status.passed; else selfTestFailed">
+            <cd-alert-panel
+              [showIcon]="false"
+              size="slim"
+              type="info"
+              title="SMART overall-health self-assessment test result">{{ device.value.smart.data.self_test.status.string }}</cd-alert-panel>
+          </ng-container>
+          <ng-template #selfTestFailed>
+            <cd-alert-panel
+              [showIcon]="false"
+              size="slim"
+              type="warning"
+              title="SMART overall-health self-assessment test result">{{ device.value.smart.data.self_test.status.string }}</cd-alert-panel>
+          </ng-template>
           <tabset>
             <tab i18n-heading
                  heading="Device Information">
@@ -18,7 +32,7 @@
 
             <tab i18n-heading
                  heading="S.M.A.R.T">
-              <cd-table [data]="device.value.smart.table"
+              <cd-table [data]="device.value.smart.attributes.table"
                         updateSelectionOnRefresh="never"
                         [columns]="columns"></cd-table>
             </tab>
