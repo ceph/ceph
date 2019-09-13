@@ -110,6 +110,8 @@ public:
   virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
 
 protected:
+  // low-level read errorator
+  using ll_read_errorator = ceph::os::FuturizedStore::read_errorator;
   const shard_id_t shard;
   CollectionRef coll;
   crimson::os::FuturizedStore* store;
@@ -120,10 +122,11 @@ private:
   seastar::future<cached_ss_t> _load_ss(const hobject_t& oid);
   SharedLRU<hobject_t, ObjectState> os_cache;
   seastar::future<cached_os_t> _load_os(const hobject_t& oid);
-  virtual seastar::future<bufferlist> _read(const hobject_t& hoid,
-					    size_t offset,
-					    size_t length,
-					    uint32_t flags) = 0;
+  virtual ll_read_errorator::future<ceph::bufferlist> _read(
+    const hobject_t& hoid,
+    size_t offset,
+    size_t length,
+    uint32_t flags) = 0;
   bool maybe_create_new_object(ObjectState& os, ceph::os::Transaction& txn);
   virtual seastar::future<crimson::osd::acked_peers_t>
   _submit_transaction(std::set<pg_shard_t>&& pg_shards,

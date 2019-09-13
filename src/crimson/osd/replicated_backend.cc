@@ -23,15 +23,13 @@ ReplicatedBackend::ReplicatedBackend(pg_t pgid,
     shard_services{shard_services}
 {}
 
-seastar::future<bufferlist> ReplicatedBackend::_read(const hobject_t& hoid,
-                                                     uint64_t off,
-                                                     uint64_t len,
-                                                     uint32_t flags)
+ReplicatedBackend::ll_read_errorator::future<ceph::bufferlist>
+ReplicatedBackend::_read(const hobject_t& hoid,
+                         const uint64_t off,
+                         const uint64_t len,
+                         const uint32_t flags)
 {
-  using read_errorator = ceph::os::FuturizedStore::read_errorator;
-  return store->read(coll, ghobject_t{hoid}, off, len, flags).safe_then(
-    [] (auto&& bl) { return bl; },
-    read_errorator::throw_as_runtime_error{});
+  return store->read(coll, ghobject_t{hoid}, off, len, flags);
 }
 
 seastar::future<crimson::osd::acked_peers_t>
