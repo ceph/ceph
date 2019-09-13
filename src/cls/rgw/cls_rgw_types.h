@@ -339,12 +339,16 @@ struct cls_rgw_obj_key {
 WRITE_CLASS_ENCODER(cls_rgw_obj_key)
 
 
-#define RGW_BUCKET_DIRENT_FLAG_VER           0x1    /* a versioned object instance */
-#define RGW_BUCKET_DIRENT_FLAG_CURRENT       0x2    /* the last object instance of a versioned object */
-#define RGW_BUCKET_DIRENT_FLAG_DELETE_MARKER 0x4    /* delete marker */
-#define RGW_BUCKET_DIRENT_FLAG_VER_MARKER    0x8    /* object is versioned, a placeholder for the plain entry */
-
 struct rgw_bucket_dir_entry {
+  /* a versioned object instance */
+  static constexpr uint16_t FLAG_VER =                0x1;
+  /* the last object instance of a versioned object */
+  static constexpr uint16_t FLAG_CURRENT =            0x2;
+  /* delete marker */
+  static constexpr uint16_t FLAG_DELETE_MARKER =      0x4;
+  /* object is versioned, a placeholder for the plain entry */
+  static constexpr uint16_t FLAG_VER_MARKER =         0x8;
+
   cls_rgw_obj_key key;
   rgw_bucket_entry_ver ver;
   std::string locator;
@@ -406,16 +410,21 @@ struct rgw_bucket_dir_entry {
     DECODE_FINISH(bl);
   }
 
-  bool is_current() {
-    int test_flags = RGW_BUCKET_DIRENT_FLAG_VER | RGW_BUCKET_DIRENT_FLAG_CURRENT;
-    return (flags & RGW_BUCKET_DIRENT_FLAG_VER) == 0 ||
+  bool is_current() const {
+    int test_flags =
+      rgw_bucket_dir_entry::FLAG_VER | rgw_bucket_dir_entry::FLAG_CURRENT;
+    return (flags & rgw_bucket_dir_entry::FLAG_VER) == 0 ||
            (flags & test_flags) == test_flags;
   }
-  bool is_delete_marker() { return (flags & RGW_BUCKET_DIRENT_FLAG_DELETE_MARKER) != 0; }
-  bool is_visible() {
+  bool is_delete_marker() const {
+    return (flags & rgw_bucket_dir_entry::FLAG_DELETE_MARKER) != 0;
+  }
+  bool is_visible() const {
     return is_current() && !is_delete_marker();
   }
-  bool is_valid() { return (flags & RGW_BUCKET_DIRENT_FLAG_VER_MARKER) == 0; }
+  bool is_valid() const {
+    return (flags & rgw_bucket_dir_entry::FLAG_VER_MARKER) == 0;
+  }
 
   void dump(Formatter *f) const;
   void decode_json(JSONObj *obj);
