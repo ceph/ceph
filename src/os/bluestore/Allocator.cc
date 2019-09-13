@@ -53,7 +53,7 @@ public:
   int call(std::string_view command, const cmdmap_t& cmdmap,
 	   std::string_view format, bufferlist& out) override {
     stringstream ss;
-    bool r = 0;
+    int r = 0;
     if (command == "bluestore allocator dump " + name) {
       Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
       f->open_array_section("free_regions");
