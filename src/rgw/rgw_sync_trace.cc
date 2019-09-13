@@ -196,7 +196,9 @@ string RGWSyncTraceManager::get_active_names()
 }
 
 int RGWSyncTraceManager::call(std::string_view command, const cmdmap_t& cmdmap,
-			      std::string_view format, bufferlist& out) {
+			      std::string_view format,
+			      std::ostream& ss,
+			      bufferlist& out) {
 
   bool show_history = (command == "sync trace history");
   bool show_short = (command == "sync trace active_short");
@@ -211,7 +213,6 @@ int RGWSyncTraceManager::call(std::string_view command, const cmdmap_t& cmdmap,
 
   shunique_lock rl(lock, ceph::acquire_shared);
 
-  stringstream ss;
   JSONFormatter f(true);
 
   f.open_object_section("result");
@@ -233,7 +234,7 @@ int RGWSyncTraceManager::call(std::string_view command, const cmdmap_t& cmdmap,
     } else {
       dump_node(entry.get(), show_history, f);
     }
-    f.flush(ss);
+    f.flush(out);
   }
   f.close_section();
 
@@ -246,13 +247,12 @@ int RGWSyncTraceManager::call(std::string_view command, const cmdmap_t& cmdmap,
       continue;
     }
     dump_node(entry.get(), show_history, f);
-    f.flush(ss);
+    f.flush(out);
   }
   f.close_section();
 
   f.close_section();
-  f.flush(ss);
-  out.append(ss);
+  f.flush(out);
 
   return 0;
 }

@@ -37,8 +37,12 @@ class AdminSocketHook {
 public:
   // NOTE: the sync handler doesn't take an input buffer currently because
   // no users need it yet.
-  virtual int call(std::string_view command, const cmdmap_t& cmdmap,
-		   std::string_view format, ceph::buffer::list& out) = 0;
+  virtual int call(
+    std::string_view command,
+    const cmdmap_t& cmdmap,
+    std::string_view format,
+    std::ostream& errss,
+    ceph::buffer::list& out) = 0;
   virtual void call_async(
     std::string_view command,
     const cmdmap_t& cmdmap,
@@ -47,8 +51,9 @@ public:
     std::function<void(int,const std::string&,bufferlist&)> on_finish) {
     // by default, call the synchronous handler and then finish
     bufferlist out;
-    int r = call(command, cmdmap, format, out);
-    on_finish(r, "", out);
+    std::ostringstream errss;
+    int r = call(command, cmdmap, format, errss, out);
+    on_finish(r, errss.str(), out);
   }
   virtual ~AdminSocketHook() {}
 };

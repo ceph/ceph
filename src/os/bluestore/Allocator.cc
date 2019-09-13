@@ -51,8 +51,9 @@ public:
   }
 
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format, bufferlist& out) override {
-    stringstream ss;
+	   std::string_view format,
+	   std::ostream& ss,
+	   bufferlist& out) override {
     int r = 0;
     if (command == "bluestore allocator dump " + name) {
       Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
@@ -72,26 +73,25 @@ public:
 
 
       f->close_section();
-      f->flush(ss);
+      f->flush(out);
     } else if (command == "bluestore allocator score " + name) {
       Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
       f->open_object_section("fragmentation_score");
       f->dump_float("fragmentation_rating", alloc->get_fragmentation_score());
       f->close_section();
-      f->flush(ss);
+      f->flush(out);
       delete f;
     } else if (command == "bluestore allocator fragmentation " + name) {
       Formatter* f = Formatter::create(format, "json-pretty", "json-pretty");
       f->open_object_section("fragmentation");
       f->dump_float("fragmentation_rating", alloc->get_fragmentation());
       f->close_section();
-      f->flush(ss);
+      f->flush(out);
       delete f;
     } else {
       ss << "Invalid command" << std::endl;
       r = -ENOSYS;
     }
-    out.append(ss);
     return r;
   }
 

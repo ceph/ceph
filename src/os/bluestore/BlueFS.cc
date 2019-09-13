@@ -74,43 +74,43 @@ private:
   SocketHook(BlueFS* bluefs) :
     bluefs(bluefs) {}
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format, bufferlist& out) override {
-      stringstream ss;
-      bool r = 0;
-      if (command == "bluestore bluefs available") {
-        int64_t alloc_size = 0;
-        cmd_getval(bluefs->cct, cmdmap, "alloc_size", alloc_size);
-        if ((alloc_size & (alloc_size - 1)) != 0) {
-          ss << "Invalid allocation size:'" << alloc_size << std::endl;
-        }
-        if (alloc_size == 0)
-          alloc_size = bluefs->cct->_conf->bluefs_alloc_size;
-        Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
-        f->open_object_section("bluefs_available_space");
-        for (unsigned dev = BDEV_WAL; dev <= BDEV_SLOW; dev++) {
-          if (bluefs->bdev[dev]) {
-            f->open_object_section("dev");
-            f->dump_string("device", bluefs->get_device_name(dev));
-            ceph_assert(bluefs->alloc[dev]);
-            f->dump_int("free", bluefs->alloc[dev]->get_free());
-            f->close_section();
-          }
-        }
-        size_t extra_space = 0;
-        if (bluefs->slow_dev_expander) {
-          extra_space = bluefs->slow_dev_expander->available_freespace(alloc_size);
-        }
-        f->dump_int("available_from_bluestore", extra_space);
-        f->close_section();
-        f->flush(ss);
-        delete f;
-      } else {
-        ss << "Invalid command" << std::endl;
-        r = -ENOSYS;
+	   std::string_view format,
+	   std::ostream& ss,
+	   bufferlist& out) override {
+    if (command == "bluestore bluefs available") {
+      int64_t alloc_size = 0;
+      cmd_getval(bluefs->cct, cmdmap, "alloc_size", alloc_size);
+      if ((alloc_size & (alloc_size - 1)) != 0) {
+	ss << "Invalid allocation size:'" << alloc_size << std::endl;
+	return -EINVAL;
       }
-      out.append(ss);
-      return r;
+      if (alloc_size == 0)
+	alloc_size = bluefs->cct->_conf->bluefs_alloc_size;
+      Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
+      f->open_object_section("bluefs_available_space");
+      for (unsigned dev = BDEV_WAL; dev <= BDEV_SLOW; dev++) {
+	if (bluefs->bdev[dev]) {
+	  f->open_object_section("dev");
+	  f->dump_string("device", bluefs->get_device_name(dev));
+	  ceph_assert(bluefs->alloc[dev]);
+	  f->dump_int("free", bluefs->alloc[dev]->get_free());
+	  f->close_section();
+	}
+      }
+      size_t extra_space = 0;
+      if (bluefs->slow_dev_expander) {
+	extra_space = bluefs->slow_dev_expander->available_freespace(alloc_size);
+      }
+      f->dump_int("available_from_bluestore", extra_space);
+      f->close_section();
+      f->flush(out);
+      delete f;
+    } else {
+      ss << "Invalid command" << std::endl;
+      return -ENOSYS;
     }
+    return 0;
+  }
 };
 
 BlueFS::BlueFS(CephContext* cct)

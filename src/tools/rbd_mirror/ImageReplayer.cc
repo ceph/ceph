@@ -196,14 +196,16 @@ public:
   }
 
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format, bufferlist& out) override {
+	   std::string_view format,
+	   std::ostream& errss,
+	   bufferlist& out) override {
     auto i = commands.find(command);
     ceph_assert(i != commands.end());
     Formatter *f = Formatter::create(format);
-    stringstream ss;
-    int r = i->second->call(f, &ss);
+    stringstream dss;
+    int r = i->second->call(f, &dss);
     delete f;
-    out.append(ss);
+    out.append(dss);
     return r;
   }
 

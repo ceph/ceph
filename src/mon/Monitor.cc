@@ -267,10 +267,12 @@ class AdminHook : public AdminSocketHook {
 public:
   explicit AdminHook(Monitor *m) : mon(m) {}
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	    std::string_view format, bufferlist& out) override {
-    stringstream ss;
-    mon->do_admin_command(command, cmdmap, format, ss);
-    out.append(ss);
+	   std::string_view format,
+	   std::ostream& errss,
+	   bufferlist& out) override {
+    stringstream outss;
+    mon->do_admin_command(command, cmdmap, format, outss);
+    out.append(outss);
     return 0;
   }
 };
