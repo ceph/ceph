@@ -586,7 +586,7 @@ int RGWSI_SysObj_Cache_ASocketHook::call(
     }
   } else if (command == "cache zap"sv) {
     svc->asocket.call_zap();
-    return true;
+    return 0;
   }
   return -ENOSYS;
 }
