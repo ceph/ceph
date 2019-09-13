@@ -31,7 +31,6 @@
 #include "common/item_history.h"
 #include "msg/MessageRef.h"
 
-
 // ======================================================
 
 // abstract Connection, for keeping per-connection state
@@ -254,7 +253,7 @@ public:
     std::lock_guard l{lock};
     last_keepalive_ack = t;
   }
-
+  bool is_blackhole() const;
 };
 
 typedef boost::intrusive_ptr<Connection> ConnectionRef;
