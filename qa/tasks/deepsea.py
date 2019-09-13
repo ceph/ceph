@@ -1878,12 +1878,14 @@ class Validation(DeepSea):
             raise ConfigError(self.err_prefix +
                               "ganesha_smoke_test needs an rgw or mds role, but neither was given")
         if client_host:
+            self.master_remote.sh("sudo salt-run ganesha.report 2>/dev/null")
             remote = self.remotes[client_host]
             self.scripts.run(
                 remote,
                 'ganesha_smoke_test.sh',
                 args=args,
                 )
+            self.master_remote.sh("sudo salt-run ganesha.report 2>/dev/null")
         else:
             raise ConfigError(self.err_prefix +
                               "ganesha_smoke_test needs a client role, but none was given")
