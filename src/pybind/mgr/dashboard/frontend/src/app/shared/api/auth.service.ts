@@ -27,7 +27,13 @@ export class AuthService {
   login(credentials: Credentials): Observable<LoginResponse> {
     return this.http.post('api/auth', credentials).pipe(
       tap((resp: LoginResponse) => {
-        this.authStorageService.set(resp.username, resp.token, resp.permissions, resp.sso);
+        this.authStorageService.set(
+          resp.username,
+          resp.token,
+          resp.permissions,
+          resp.sso,
+          resp.pwdExpirationDate
+        );
       })
     );
   }

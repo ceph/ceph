@@ -1,7 +1,9 @@
 import { HttpClient } from '@angular/common/http';
 import { Injectable } from '@angular/core';
 
-import * as _ from 'lodash';
+import { Observable } from 'rxjs';
+
+import { CdPwdExpirationSettings } from '../models/cd-pwd-expiration-settings';
 import { ApiModule } from './api.module';
 
 @Injectable({
@@ -46,5 +48,9 @@ export class SettingsService {
 
   validateGrafanaDashboardUrl(uid) {
     return this.http.get(`api/grafana/validation/${uid}`);
+  }
+
+  pwdExpirationSettings(): Observable<CdPwdExpirationSettings> {
+    return this.http.get<CdPwdExpirationSettings>('ui-api/standard_settings');
   }
 }

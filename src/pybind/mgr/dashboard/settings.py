@@ -52,6 +52,16 @@ class Options(object):
     # iSCSI management settings
     ISCSI_API_SSL_VERIFICATION = (True, bool)
 
+    # user management settings
+    # Time span of user passwords to expire in days.
+    # The default value is '0' which means that user passwords are
+    # never going to expire.
+    USER_PWD_EXPIRATION_SPAN = (0, int)
+    # warning levels to notify the user that the password is going
+    # to expire soon
+    USER_PWD_EXPIRATION_WARNING_1 = (10, int)
+    USER_PWD_EXPIRATION_WARNING_2 = (5, int)
+
     @staticmethod
     def has_default_value(name):
         return getattr(Settings, name, None) is None or \
