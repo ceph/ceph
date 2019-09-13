@@ -121,7 +121,15 @@ function main() {
     fi
 
     if [ ! -f ${venv_path}/bin/activate ]; then
-        $source_dir/src/tools/setup-virtualenv.sh ${venv_path}
+        if $with_python3; then
+            python=python3
+        elif $with_python2; then
+            python=python2
+        else
+            # cmake should have rejected this
+            exit 1
+        fi
+        $source_dir/src/tools/setup-virtualenv.sh --python=${python} ${venv_path}
     fi
     source ${venv_path}/bin/activate
     pip install tox
