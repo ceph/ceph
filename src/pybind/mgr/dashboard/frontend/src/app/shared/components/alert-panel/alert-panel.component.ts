@@ -41,6 +41,11 @@ export class AlertPanelComponent implements OnInit {
         this.typeIcon = this.typeIcon || Icons.infoCircle;
         this.bootstrapClass = this.bootstrapClass || 'info';
         break;
+      case 'success':
+        this.title = this.title || this.i18n('Success');
+        this.typeIcon = this.typeIcon || Icons.check;
+        this.bootstrapClass = this.bootstrapClass || 'success';
+        break;
     }
   }
 }
