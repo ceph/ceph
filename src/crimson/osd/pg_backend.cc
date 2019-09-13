@@ -249,14 +249,14 @@ seastar::future<bufferlist> PGBackend::read(const object_info_t& oi,
     // read size was trimmed to zero and it is expected to do nothing,
     return seastar::make_ready_future<bufferlist>();
   }
-  return _read(oi.soid, offset, length, flags).then(
+  return _read(oi.soid, offset, length, flags).safe_then(
     [&oi](auto&& bl) {
       if (const bool is_fine = _read_verify_data(oi, bl); is_fine) {
         return seastar::make_ready_future<bufferlist>(std::move(bl));
       } else {
         throw crimson::osd::object_corrupted{};
       }
-    });
+    }, ll_read_errorator::throw_as_runtime_error{});
 }
 
 seastar::future<> PGBackend::stat(
