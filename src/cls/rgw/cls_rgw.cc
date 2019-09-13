@@ -810,9 +810,10 @@ static int read_key_entry(cls_method_context_t hctx, cls_rgw_obj_key& key,
   }
 
   if (key.instance.empty() &&
-      entry->flags & RGW_BUCKET_DIRENT_FLAG_VER_MARKER) {
-    /* we only do it where key.instance is empty. In this case the delete marker will have a
-     * separate entry in the index to avoid collisions with the actual object, as it's mutable
+      entry->flags & rgw_bucket_dir_entry::FLAG_VER_MARKER) {
+    /* we only do it where key.instance is empty. In this case the
+     * delete marker will have a separate entry in the index to avoid
+     * collisions with the actual object, as it's mutable
      */
     if (special_delete_marker_name) {
       encode_obj_versioned_data_key(key, idx, true);
@@ -871,7 +872,11 @@ int rgw_bucket_complete_op(cls_method_context_t hctx, bufferlist *in, bufferlist
   }
 
   entry.index_ver = header.ver;
-  entry.flags = (entry.key.instance.empty() ? 0 : RGW_BUCKET_DIRENT_FLAG_VER); /* resetting entry flags, entry might have been previously a delete marker */
+  /* resetting entry flags, entry might have been previously a delete
+   * marker */
+  entry.flags = (entry.key.instance.empty() ?
+		 0 :
+		 rgw_bucket_dir_entry::FLAG_VER);
 
   if (op.tag.size()) {
     map<string, rgw_bucket_pending_info>::iterator pinter = entry.pending_map.find(op.tag);
@@ -1105,7 +1110,7 @@ public:
   void init_as_delete_marker(rgw_bucket_dir_entry_meta& meta) {
     /* a deletion marker, need to initialize it, there's no instance entry for it yet */
     instance_entry.key = key;
-    instance_entry.flags = RGW_BUCKET_DIRENT_FLAG_DELETE_MARKER;
+    instance_entry.flags = rgw_bucket_dir_entry::FLAG_DELETE_MARKER;
     instance_entry.meta = meta;
     instance_entry.tag = "delete-marker";
 
@@ -1172,9 +1177,9 @@ public:
       }
     }
 
-    uint64_t flags = RGW_BUCKET_DIRENT_FLAG_VER;
+    uint64_t flags = rgw_bucket_dir_entry::FLAG_VER;
     if (current) {
-      flags |= RGW_BUCKET_DIRENT_FLAG_CURRENT;
+      flags |= rgw_bucket_dir_entry::FLAG_CURRENT;
     }
 
     instance_entry.versioned_epoch = epoch;
@@ -1182,7 +1187,7 @@ public:
   }
 
   int demote_current() {
-    return write_entries(0, RGW_BUCKET_DIRENT_FLAG_CURRENT);
+    return write_entries(0, rgw_bucket_dir_entry::FLAG_CURRENT);
   }
 
   bool is_delete_marker() {
@@ -1324,7 +1329,7 @@ static int write_version_marker(cls_method_context_t hctx, cls_rgw_obj_key& key)
 {
   rgw_bucket_dir_entry entry;
   entry.key = key;
-  entry.flags = RGW_BUCKET_DIRENT_FLAG_VER_MARKER;
+  entry.flags = rgw_bucket_dir_entry::FLAG_VER_MARKER;
   int ret = write_entry(hctx, entry, key.name);
   if (ret < 0) {
     CLS_LOG(0, "ERROR: write_entry returned ret=%d", ret);
@@ -1355,10 +1360,10 @@ static int convert_plain_entry_to_versioned(cls_method_context_t hctx, cls_rgw_o
     }
 
     entry.versioned_epoch = 1; /* converted entries are always 1 */
-    entry.flags |= RGW_BUCKET_DIRENT_FLAG_VER;
+    entry.flags |= rgw_bucket_dir_entry::FLAG_VER;
 
     if (demote_current) {
-      entry.flags &= ~RGW_BUCKET_DIRENT_FLAG_CURRENT;
+      entry.flags &= ~rgw_bucket_dir_entry::FLAG_CURRENT;
     }
 
     string new_idx;
@@ -1901,7 +1906,7 @@ static int rgw_bucket_clear_olh(cls_method_context_t hctx, bufferlist *in, buffe
     return ret;
   }
 
-  if ((plain_entry.flags & RGW_BUCKET_DIRENT_FLAG_VER_MARKER) == 0) {
+  if ((plain_entry.flags & rgw_bucket_dir_entry::FLAG_VER_MARKER) == 0) {
     /* it's not a version marker, don't remove it */
     return 0;
   }
