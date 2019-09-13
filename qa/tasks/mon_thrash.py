@@ -169,7 +169,9 @@ class MonitorThrasher(Thrasher):
         """
         addr = self.ctx.ceph['ceph'].mons['mon.%s' % mon]
         self.log('thrashing mon.{id}@{addr} store'.format(id=mon, addr=addr))
-        out = self.manager.raw_cluster_cmd('-m', addr, 'sync', 'force')
+        out = self.manager.raw_cluster_cmd('-m', addr, 'sync', 'force',
+                                           '--yes-i-really-mean-it',
+                                           '--i-know-what-i-am-doing')
         j = json.loads(out)
         assert j['ret'] == 0, \
             'error forcing store sync on mon.{id}:\n{ret}'.format(
