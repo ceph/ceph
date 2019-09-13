@@ -7,6 +7,7 @@
 #include <boost/range/adaptor/filtered.hpp>
 #include <boost/range/adaptor/transformed.hpp>
 #include <boost/range/algorithm/copy.hpp>
+#include <fmt/format.h>
 #include <fmt/ostream.h>
 #include <seastar/core/print.hh>
 

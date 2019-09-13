@@ -42,17 +42,7 @@ public:
   virtual store_statfs_t stat() const = 0;
 
   using CollectionRef = boost::intrusive_ptr<FuturizedCollection>;
-
-  // TODO: using read_errorator = ceph::errorator<...>
-  struct read_errorator : crimson::errorator<crimson::ct_error::enoent> {
-    // just for the makeshift period of switching to errorator
-    struct throw_as_runtime_error : discard_all {
-      auto operator()(const auto& e) {
-        throw std::runtime_error("legacy throwing");
-        return discard_all::operator()(e);
-      }
-    };
-  };
+  using read_errorator = crimson::errorator<crimson::ct_error::enoent>;
   virtual read_errorator::future<ceph::bufferlist> read(
     CollectionRef c,
     const ghobject_t& oid,

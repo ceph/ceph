@@ -370,7 +370,20 @@ OpsExecuter::execute_osd_op(OSDOp& osd_op)
           osd_op.rval = bl.length();
           osd_op.outdata = std::move(bl);
           return seastar::now();
-        }, PGBackend::read_errorator::discard_all{});
+        },
+        // TODO: move this error handling do PG::do_osd_ops().
+        crimson::ct_error::input_output_error::handle([] {
+          throw ceph::osd::input_output_error{};
+        }),
+        crimson::ct_error::object_corrupted::handle([] {
+          throw ceph::osd::object_corrupted{};
+        }),
+        crimson::ct_error::enoent::handle([] {
+          throw ceph::osd::object_not_found{};
+        }),
+        crimson::ct_error::enodata::handle([] {
+          throw ceph::osd::no_message_available{};
+        }));
     });
   case CEPH_OSD_OP_GETXATTR:
     return do_read_op([&osd_op] (auto& backend, const auto& os) {

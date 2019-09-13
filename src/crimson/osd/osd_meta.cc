@@ -1,6 +1,7 @@
 #include "osd_meta.h"
 
 #include <fmt/format.h>
+#include <fmt/ostream.h>
 
 #include "crimson/os/futurized_collection.h"
 #include "crimson/os/futurized_store.h"
@@ -24,8 +25,14 @@ seastar::future<bufferlist> OSDMeta::load_map(epoch_t e)
   return store->read(coll,
                      osdmap_oid(e), 0, 0,
                      CEPH_OSD_OP_FLAG_FADVISE_WILLNEED).safe_then(
-    [] (auto&& bl) { return bl; },
-    read_errorator::throw_as_runtime_error{});
+    [] (auto&& bl) {
+      // TODO: introduce `::handle_error()` to errorated futures
+      // to avoid lambas like this one.
+      return bl;
+    }, crimson::ct_error::enoent::handle([e] {
+      throw std::runtime_error(fmt::format("read gave enoent on {}",
+                                           osdmap_oid(e)));
+    }));
 }
 
 void OSDMeta::store_superblock(ceph::os::Transaction& t,
@@ -38,13 +45,16 @@ void OSDMeta::store_superblock(ceph::os::Transaction& t,
 
 seastar::future<OSDSuperblock> OSDMeta::load_superblock()
 {
-  return store->read(coll, superblock_oid(), 0, 0)
-    .safe_then([this] (bufferlist&& bl) {
+  return store->read(coll, superblock_oid(), 0, 0).safe_then(
+    [this] (bufferlist&& bl) {
       auto p = bl.cbegin();
       OSDSuperblock superblock;
       decode(superblock, p);
       return seastar::make_ready_future<OSDSuperblock>(std::move(superblock));
-  }, read_errorator::throw_as_runtime_error{});
+    }, crimson::ct_error::enoent::handle([] {
+      throw std::runtime_error(fmt::format("read gave enoent on {}",
+                                           superblock_oid()));
+    }));
 }
 
 seastar::future<pg_pool_t,
@@ -65,7 +75,10 @@ OSDMeta::load_final_pool_info(int64_t pool) {
                                       ec_profile_t>(std::move(pi),
                                                     std::move(name),
                                                     std::move(ec_profile));
-  }, read_errorator::throw_as_runtime_error{});
+  }, crimson::ct_error::enoent::handle([pool] {
+    throw std::runtime_error(fmt::format("read gave enoent on {}",
+                                         final_pool_info_oid(pool)));
+  }));
 }
 
 ghobject_t OSDMeta::osdmap_oid(epoch_t epoch)
