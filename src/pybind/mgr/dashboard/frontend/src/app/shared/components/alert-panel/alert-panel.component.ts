@@ -14,11 +14,14 @@ export class AlertPanelComponent implements OnInit {
   bootstrapClass = '';
   @Output()
   backAction = new EventEmitter();
-
   @Input()
-  type: 'warning' | 'error' | 'info';
+  type: 'warning' | 'error' | 'info' | 'success';
   @Input()
   typeIcon: Icons | string;
+  @Input()
+  size: 'slim' | 'normal' = 'normal';
+  @Input()
+  showIcon = true;
 
   icons = Icons;
 
