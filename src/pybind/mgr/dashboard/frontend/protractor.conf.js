@@ -28,7 +28,7 @@ const config = {
   framework: 'jasmine',
   jasmineNodeOpts: {
     showColors: true,
-    defaultTimeoutInterval: 30000,
+    defaultTimeoutInterval: 300000,
     print: function() {}
   },
   params: {
@@ -62,7 +62,7 @@ config.onPrepare = async () => {
   require('ts-node').register({
     project: 'e2e/tsconfig.e2e.json'
   });
-  jasmine.getEnv().addReporter(new SpecReporter({ spec: { displayStacktrace: true } }));
+  jasmine.getEnv().addReporter(new SpecReporter({ spec: { displayStacktrace: true, displayDuration: true } }));
 
   await browser.get('/#/login');
 

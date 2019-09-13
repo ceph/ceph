@@ -94,60 +94,47 @@ describe('Dashboard Main Page', () => {
     });
   });
 
-  describe('Correct information', () => {
-    let originalTimeout;
+  it('Should check that dashboard cards have correct information', async () => {
+    interface TestSpec {
+      cardName: string;
+      regexMatcher?: RegExp;
+      pageObject: PageHelper;
+    }
 
-    beforeEach(async () => {
-      originalTimeout = jasmine.DEFAULT_TIMEOUT_INTERVAL;
-      jasmine.DEFAULT_TIMEOUT_INTERVAL = 200000;
-    });
+    const testSpecs: TestSpec[] = [
+      { cardName: 'Object Gateways', regexMatcher: /(\d+)\s+total/, pageObject: daemons },
+      { cardName: 'Monitors', regexMatcher: /(\d+)\s+\(quorum/, pageObject: monitors },
+      { cardName: 'Hosts', regexMatcher: /(\d+)\s+total/, pageObject: hosts },
+      { cardName: 'OSDs', regexMatcher: /(\d+)\s+total/, pageObject: osds },
+      { cardName: 'Pools', pageObject: pools },
+      { cardName: 'iSCSI Gateways', regexMatcher: /(\d+)\s+total/, pageObject: iscsi }
+    ];
 
-    it('Should check that dashboard cards have correct information', async () => {
-      interface TestSpec {
-        cardName: string;
-        regexMatcher?: RegExp;
-        pageObject: PageHelper;
-      }
-
-      const testSpecs: TestSpec[] = [
-        { cardName: 'Object Gateways', regexMatcher: /(\d+)\s+total/, pageObject: daemons },
-        { cardName: 'Monitors', regexMatcher: /(\d+)\s+\(quorum/, pageObject: monitors },
-        { cardName: 'Hosts', regexMatcher: /(\d+)\s+total/, pageObject: hosts },
-        { cardName: 'OSDs', regexMatcher: /(\d+)\s+total/, pageObject: osds },
-        { cardName: 'Pools', pageObject: pools },
-        { cardName: 'iSCSI Gateways', regexMatcher: /(\d+)\s+total/, pageObject: iscsi }
-      ];
-
-      for (let i = 0; i < testSpecs.length; i++) {
-        const spec = testSpecs[i];
-        await dashboard.navigateTo();
-        const infoCardBodyText = await dashboard.infoCardBodyText(spec.cardName);
-        let dashCount = 0;
-        if (spec.regexMatcher) {
-          const match = infoCardBodyText.match(new RegExp(spec.regexMatcher));
-          if (match && match.length > 1) {
-            dashCount = Number(match[1]);
-          } else {
-            return Promise.reject(
-              `Regex ${spec.regexMatcher} did not find a match for card with name ` +
-                `${spec.cardName}`
-            );
-          }
+    for (let i = 0; i < testSpecs.length; i++) {
+      const spec = testSpecs[i];
+      await dashboard.navigateTo();
+      const infoCardBodyText = await dashboard.infoCardBodyText(spec.cardName);
+      let dashCount = 0;
+      if (spec.regexMatcher) {
+        const match = infoCardBodyText.match(new RegExp(spec.regexMatcher));
+        if (match && match.length > 1) {
+          dashCount = Number(match[1]);
         } else {
-          dashCount = Number(infoCardBodyText);
+          return Promise.reject(
+            `Regex ${spec.regexMatcher} did not find a match for card with name ` +
+              `${spec.cardName}`
+          );
         }
-        await spec.pageObject.navigateTo();
-        const tableCount = await spec.pageObject.getTableTotalCount();
-        await expect(dashCount).toBe(
-          tableCount,
-          `Text of card "${spec.cardName}" and regex "${spec.regexMatcher}" resulted in ${dashCount} ` +
-            `but did not match table count ${tableCount}`
-        );
+      } else {
+        dashCount = Number(infoCardBodyText);
       }
-    });
-
-    afterEach(function() {
-      jasmine.DEFAULT_TIMEOUT_INTERVAL = originalTimeout;
-    });
+      await spec.pageObject.navigateTo();
+      const tableCount = await spec.pageObject.getTableTotalCount();
+      await expect(dashCount).toBe(
+        tableCount,
+        `Text of card "${spec.cardName}" and regex "${spec.regexMatcher}" resulted in ${dashCount} ` +
+          `but did not match table count ${tableCount}`
+      );
+    }
   });
 });
