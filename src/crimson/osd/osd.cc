@@ -297,8 +297,8 @@ seastar::future<> OSD::_preboot(version_t oldest, version_t newest)
     logger().warn("osdmap NOUP flag is set, waiting for it to clear");
   } else if (!osdmap->test_flag(CEPH_OSDMAP_SORTBITWISE)) {
     logger().error("osdmap SORTBITWISE OSDMap flag is NOT set; please set it");
-  } else if (osdmap->require_osd_release < ceph_release_t::luminous) {
-    logger().error("osdmap require_osd_release < luminous; please upgrade to luminous");
+  } else if (osdmap->require_osd_release < ceph_release_t::octopus) {
+    logger().error("osdmap require_osd_release < octopus; please upgrade to octopus");
   } else if (false) {
     // TODO: update mon if current fullness state is different from osdmap
   } else if (version_t n = local_conf()->osd_map_message_max;
@@ -669,7 +669,7 @@ seastar::future<Ref<PG>> OSD::handle_pg_create_info(
 		Ref<PG>(),
 		startmap);
 	    }
-	    ceph_assert(osdmap->require_osd_release >= ceph_release_t::nautilus);
+	    ceph_assert(osdmap->require_osd_release >= ceph_release_t::octopus);
 	    if (!pool->has_flag(pg_pool_t::FLAG_CREATING)) {
 	      // this ensures we do not process old creating messages after the
 	      // pool's initial pgs have been created (and pg are subsequently
@@ -995,11 +995,7 @@ seastar::future<> OSD::handle_peering_op(
 
 void OSD::check_osdmap_features()
 {
-  if (osdmap->require_osd_release < ceph_release_t::nautilus) {
-    heartbeat->set_require_authorizer(false);
-  } else {
-    heartbeat->set_require_authorizer(true);
-  }
+  heartbeat->set_require_authorizer(true);
 }
 
 seastar::future<> OSD::consume_map(epoch_t epoch)
