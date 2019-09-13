@@ -139,6 +139,12 @@ typedef enum {
   RBD_MIRROR_MODE_POOL      /* mirroring enabled on all journaled images */
 } rbd_mirror_mode_t;
 
+typedef enum {
+  RBD_MIRROR_PEER_DIRECTION_RX    = 0,
+  RBD_MIRROR_PEER_DIRECTION_TX    = 1,
+  RBD_MIRROR_PEER_DIRECTION_RX_TX = 2
+} rbd_mirror_peer_direction_t;
+
 typedef struct {
   char *uuid;
   char *cluster_name;
@@ -439,6 +445,12 @@ CEPH_RBD_API int rbd_mirror_mode_get(rados_ioctx_t io_ctx,
                                      rbd_mirror_mode_t *mirror_mode);
 CEPH_RBD_API int rbd_mirror_mode_set(rados_ioctx_t io_ctx,
                                      rbd_mirror_mode_t mirror_mode);
+
+CEPH_RBD_API int rbd_mirror_peer_bootstrap_create(rados_ioctx_t io_ctx,
+                                                  char *token, size_t *max_len);
+CEPH_RBD_API int rbd_mirror_peer_bootstrap_import(
+    rados_ioctx_t io_ctx, rbd_mirror_peer_direction_t direction,
+    const char *token);
 
 CEPH_RBD_API int rbd_mirror_peer_add(rados_ioctx_t io_ctx,
                                      char *uuid, size_t uuid_max_length,
