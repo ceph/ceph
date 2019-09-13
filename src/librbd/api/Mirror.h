@@ -29,6 +29,11 @@ struct Mirror {
   static int mode_get(librados::IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode);
   static int mode_set(librados::IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode);
 
+  static int peer_bootstrap_create(librados::IoCtx& io_ctx, std::string* token);
+  static int peer_bootstrap_import(librados::IoCtx& io_ctx,
+                                   rbd_mirror_peer_direction_t direction,
+                                   const std::string& token);
+
   static int peer_add(librados::IoCtx& io_ctx, std::string *uuid,
                       const std::string &cluster_name,
                       const std::string &client_name);
