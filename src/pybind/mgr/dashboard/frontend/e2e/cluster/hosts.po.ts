@@ -16,23 +16,27 @@ export class HostsPageHelper extends PageHelper {
     await this.navigateTo();
     let links_tested = 0;
 
-    // grab services column for first host
-    const services = element.all(by.css('.datatable-body-cell')).get(1);
-    // check is any services links are present
-    const txt = await services.getText();
+    const services = element.all(by.css('cd-hosts a.service-link'));
     // check that text (links) is present in services box
-    await expect(txt.length).toBeGreaterThan(0, 'No services links exist on first host');
-    if (txt.length === 0) {
-      return;
-    }
-    const links = services.all(by.css('a.service-link'));
-    const num_links = await links.count();
+    await expect(services.count()).toBeGreaterThan(0, 'No services links exist on first host');
+
+    /**
+     * Currently there is an issue [1] in ceph that it's causing
+     * a random appearance of a mds service in the hosts service listing.
+     * Decreasing the number of service by 1 temporarily fixes the e2e failure.
+     *
+     * TODO: Revert this change when the issue has been fixed.
+     *
+     * [1] https://tracker.ceph.com/issues/41538
+     */
+    const num_links = (await services.count()) - 1;
+
     for (let i = 0; i < num_links; i++) {
       // click link, check it worked by looking for changed breadcrumb,
       // navigate back to hosts page, repeat until all links checked
-      await links.get(i).click();
+      await services.get(i).click();
       await this.waitTextToBePresent(this.getBreadcrumb(), 'Performance Counters');
-      await this.navigateTo();
+      await this.navigateBack();
       await this.waitTextToBePresent(this.getBreadcrumb(), 'Hosts');
       links_tested++;
     }
