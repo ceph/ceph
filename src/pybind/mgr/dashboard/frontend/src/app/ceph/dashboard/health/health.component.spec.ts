@@ -272,7 +272,7 @@ describe('HealthComponent', () => {
     it('gets no data', () => {
       const chart = { dataset: [{}], options: {} };
       component.preparePgStatus(chart, {
-        pg_info: { pgs_per_osd: 0 }
+        pg_info: {}
       });
       expect(chart).toEqual(expectedChart([undefined, undefined, undefined, undefined]));
     });
@@ -281,7 +281,6 @@ describe('HealthComponent', () => {
       const chart = { dataset: [{}], options: {} };
       component.preparePgStatus(chart, {
         pg_info: {
-          pgs_per_osd: 10,
           statuses: {
             'clean+active+scrubbing+nonMappedState': 4,
             'clean+active+scrubbing': 2,
