@@ -182,16 +182,18 @@ class ClusterSocketHook : public AdminSocketHook {
 public:
   explicit ClusterSocketHook(ClusterState *o) : cluster_state(o) {}
   int call(std::string_view admin_command, const cmdmap_t& cmdmap,
-	   std::string_view format, bufferlist& out) override {
-    stringstream ss;
+	   std::string_view format,
+	   std::ostream& errss,
+	   bufferlist& out) override {
+    stringstream outss;
     int r = 0;
     try {
-      r = cluster_state->asok_command(admin_command, cmdmap, format, ss);
+      r = cluster_state->asok_command(admin_command, cmdmap, format, outss);
+      out.append(outss);
     } catch (const bad_cmd_get& e) {
-      ss << e.what();
+      errss << e.what();
       r = -EINVAL;
     }
-    out.append(ss);
     return r;
   }
 };

@@ -168,7 +168,9 @@ public:
 
   // AdminSocketHook
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format, bufferlist& out) override {
+	   std::string_view format,
+	   std::ostream& errss,
+	   bufferlist& out) override {
     if (command == "dump_mempools") {
       std::unique_ptr<Formatter> f(Formatter::create(format));
       f->open_object_section("mempools");
@@ -439,9 +441,11 @@ public:
   explicit CephContextHook(CephContext *cct) : m_cct(cct) {}
 
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format, bufferlist& out) override {
+	   std::string_view format,
+	   std::ostream& errss,
+	   bufferlist& out) override {
     try {
-      return m_cct->do_command(command, cmdmap, format, &out);
+      return m_cct->do_command(command, cmdmap, format, errss, &out);
     } catch (const bad_cmd_get& e) {
       return -EINVAL;
     }
@@ -449,21 +453,35 @@ public:
 };
 
 int CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
-			     std::string_view format, bufferlist *out)
+			    std::string_view format,
+			    std::ostream& ss,
+			    bufferlist *out)
+{
+  try {
+    return _do_command(command, cmdmap, format, ss, out);
+  } catch (const bad_cmd_get& e) {
+    ss << e.what();
+    return -EINVAL;
+  }
+}
+
+int CephContext::_do_command(
+  std::string_view command, const cmdmap_t& cmdmap,
+  std::string_view format,
+  std::ostream& ss,
+  bufferlist *out)
 {
   Formatter *f = Formatter::create(format, "json-pretty", "json-pretty");
-  stringstream ss;
   int r = 0;
-  for (auto it = cmdmap.begin(); it != cmdmap.end(); ++it) {
-    if (it->first != "prefix") {
-      ss << it->first  << ":" << cmd_vartype_stringify(it->second) << " ";
-    }
-  }
-  lgeneric_dout(this, 1) << "do_command '" << command << "' '"
-			 << ss.str() << dendl;
+  lgeneric_dout(this, 1) << "do_command '" << command << "' '" << cmdmap << "'"
+			 << dendl;
   ceph_assert_always(!(command == "assert" && _conf->debug_asok_assert_abort));
-  if (command == "abort" && _conf->debug_asok_assert_abort) {
-   ceph_abort();
+  if (command == "abort") {
+    if (_conf->debug_asok_assert_abort) {
+      ceph_abort();
+    } else {
+      return -EPERM;
+    }
   }
   if (command == "perfcounters_dump" || command == "1" ||
       command == "perf dump") {
@@ -512,16 +530,14 @@ int CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
     else if (command == "config unset") {
       std::string var;
       if (!(cmd_getval(this, cmdmap, "var", var))) {
-        f->dump_string("error", "syntax error: 'config unset <var>'");
+	r = -EINVAL;
       } else {
         r = _conf.rm_val(var.c_str());
         if (r < 0 && r != -ENOENT) {
-          f->dump_stream("error") << "error unsetting '" << var << "': "
-				  << cpp_strerror(r);
+          ss << "error unsetting '" << var << "': "
+	     << cpp_strerror(r);
         } else {
-          ostringstream ss;
           _conf.apply_changes(&ss);
-          f->dump_string("success", ss.str());
         }
       }
 
@@ -532,32 +548,33 @@ int CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
 
       if (!(cmd_getval(this, cmdmap, "var", var)) ||
           !(cmd_getval(this, cmdmap, "val", val))) {
-        f->dump_string("error", "syntax error: 'config set <var> <value>'");
+	r = -EINVAL;
       } else {
 	// val may be multiple words
 	string valstr = str_join(val, " ");
         r = _conf.set_val(var.c_str(), valstr.c_str());
         if (r < 0) {
-          f->dump_stream("error") << "error setting '" << var << "' to '" << valstr << "': " << cpp_strerror(r);
+          ss << "error setting '" << var << "' to '" << valstr << "': "
+	     << cpp_strerror(r);
         } else {
-          ostringstream ss;
+	  stringstream ss;
           _conf.apply_changes(&ss);
-          f->dump_string("success", ss.str());
+	  f->dump_string("success", ss.str());
         }
       }
     } else if (command == "config get") {
       std::string var;
       if (!cmd_getval(this, cmdmap, "var", var)) {
-	f->dump_string("error", "syntax error: 'config get <var>'");
+	r = -EINVAL;
       } else {
 	char buf[4096];
 	memset(buf, 0, sizeof(buf));
 	char *tmp = buf;
 	r = _conf.get_val(var.c_str(), &tmp, sizeof(buf));
 	if (r < 0) {
-	    f->dump_stream("error") << "error getting '" << var << "': " << cpp_strerror(r);
+	  ss << "error getting '" << var << "': " << cpp_strerror(r);
 	} else {
-	    f->dump_string(var.c_str(), buf);
+	  f->dump_string(var.c_str(), buf);
 	}
       }
     } else if (command == "config help") {
@@ -567,9 +584,8 @@ int CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
         std::string key = ConfFile::normalize_key_name(var);
 	auto schema = _conf.get_schema(key);
         if (!schema) {
-          std::ostringstream msg;
-          msg << "Setting not found: '" << key << "'";
-          f->dump_string("error", msg.str());
+          ss << "Setting not found: '" << key << "'";
+	  r = -ENOENT;
         } else {
           f->dump_object("option", *schema);
         }
@@ -615,10 +631,12 @@ int CephContext::do_command(std::string_view command, const cmdmap_t& cmdmap,
     }
     f->close_section();
   }
-  f->flush(*out);
+  if (r >= 0) {
+    f->flush(*out);
+  }
   delete f;
-  lgeneric_dout(this, 1) << "do_command '" << command << "' '" << ss.str()
-		         << "result is " << out->length() << " bytes" << dendl;
+  lgeneric_dout(this, 1) << "do_command '" << command << "' '" << cmdmap
+		         << "' result is " << out->length() << " bytes" << dendl;
   return r;
 }
 

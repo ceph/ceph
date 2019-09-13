@@ -116,7 +116,9 @@ TEST(AdminSocket, SendTooLongRequest) {
 
 class MyTest : public AdminSocketHook {
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format, bufferlist& result) override {
+	   std::string_view format,
+	   std::ostream& ss,
+	   bufferlist& result) override {
     std::vector<std::string> args;
     cmd_getval(g_ceph_context, cmdmap, "args", args);
     result.append(command);
@@ -149,7 +151,9 @@ TEST(AdminSocket, RegisterCommand) {
 
 class MyTest2 : public AdminSocketHook {
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format, bufferlist& result) override {
+	   std::string_view format,
+	   std::ostream& ss,
+	   bufferlist& result) override {
     std::vector<std::string> args;
     cmd_getval(g_ceph_context, cmdmap, "args", args);
     result.append(command);
@@ -162,6 +166,7 @@ class MyTest2 : public AdminSocketHook {
       resultstr += *it;
     }
     result.append(resultstr);
+    ss << "error stream";
     return 0;
   }
 };
@@ -203,7 +208,9 @@ public:
   BlockingHook() = default;
 
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format, bufferlist& result) override {
+	   std::string_view format,
+	   std::ostream& ss,
+	   bufferlist& result) override {
     std::unique_lock l{_lock};
     _cond.wait(l);
     return 0;

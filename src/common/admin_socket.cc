@@ -539,7 +539,9 @@ void AdminSocket::unregister_commands(const AdminSocketHook *hook)
 class VersionHook : public AdminSocketHook {
 public:
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format, bufferlist& out) override {
+	   std::string_view format,
+	   std::ostream& errss,
+	   bufferlist& out) override {
     if (command == "0"sv) {
       out.append(CEPH_ADMIN_SOCK_VERSION);
     } else {
@@ -568,6 +570,7 @@ public:
   explicit HelpHook(AdminSocket *as) : m_as(as) {}
   int call(std::string_view command, const cmdmap_t& cmdmap,
 	   std::string_view format,
+	   std::ostream& errss,
 	   bufferlist& out) override {
     std::unique_ptr<Formatter> f(Formatter::create(format, "json-pretty"sv,
 						   "json-pretty"sv));
@@ -589,7 +592,9 @@ class GetdescsHook : public AdminSocketHook {
 public:
   explicit GetdescsHook(AdminSocket *as) : m_as(as) {}
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format, bufferlist& out) override {
+	   std::string_view format,
+	   std::ostream& errss,
+	   bufferlist& out) override {
     int cmdnum = 0;
     JSONFormatter jf;
     jf.open_object_section("command_descriptions");

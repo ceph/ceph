@@ -853,15 +853,14 @@ int RGWCoroutinesManagerRegistry::hook_to_admin_command(const string& command)
 }
 
 int RGWCoroutinesManagerRegistry::call(std::string_view command,
-                                        const cmdmap_t& cmdmap,
-                                        std::string_view format,
-                                        bufferlist& out) {
+				       const cmdmap_t& cmdmap,
+				       std::string_view format,
+				       std::ostream& ss,
+				       bufferlist& out) {
   std::shared_lock rl{lock};
-  stringstream ss;
   JSONFormatter f;
   ::encode_json("cr_managers", *this, &f);
-  f.flush(ss);
-  out.append(ss);
+  f.flush(out);
   return 0;
 }
 

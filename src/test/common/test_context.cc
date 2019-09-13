@@ -39,22 +39,47 @@ TEST(CephContext, do_command)
   cmdmap["var"] = key;
 
   {
+    stringstream ss;
     bufferlist out;
-    cct->do_command("config get", cmdmap, "xml", &out);
+    cct->do_command("config get", cmdmap, "xml", ss, &out);
     string s(out.c_str(), out.length());
     EXPECT_EQ("<config_get><key>" + value + "</key></config_get>", s);
   }
 
   {
+    stringstream ss;
     bufferlist out;
-    cct->do_command("config get", cmdmap, "UNSUPPORTED", &out);
+    cmdmap_t bad_cmdmap; // no 'var' field
+    int r = cct->do_command("config get", bad_cmdmap, "xml", ss, &out);
+    string s(out.c_str(), out.length());
+    EXPECT_EQ(-EINVAL, r);
+    EXPECT_EQ("", s);
+    EXPECT_EQ("", ss.str()); // no error string :/
+  }
+  {
+    stringstream ss;
+    bufferlist out;
+    cmdmap_t bad_cmdmap;
+    bad_cmdmap["var"] = string("doesnotexist123");
+    int r = cct->do_command("config help", bad_cmdmap, "xml", ss, &out);
+    string s(out.c_str(), out.length());
+    EXPECT_EQ(-ENOENT, r);
+    EXPECT_EQ("", s);
+    EXPECT_EQ("Setting not found: 'doesnotexist123'", ss.str());
+  }
+
+  {
+    stringstream ss;
+    bufferlist out;
+    cct->do_command("config get", cmdmap, "UNSUPPORTED", ss, &out);
     string s(out.c_str(), out.length());
     EXPECT_EQ("{\n    \"key\": \"value\"\n}\n", s);
   }
 
   {
+    stringstream ss;
     bufferlist out;
-    cct->do_command("config diff get", cmdmap, "xml", &out);
+    cct->do_command("config diff get", cmdmap, "xml", ss, &out);
     string s(out.c_str(), out.length());
     EXPECT_EQ("<config_diff_get><diff><key><default></default><override>" + value + "</override><final>value</final></key><rbd_default_features><default>61</default><final>61</final></rbd_default_features></diff></config_diff_get>", s);
   }
