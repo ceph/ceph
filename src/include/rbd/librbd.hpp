@@ -74,6 +74,8 @@ namespace librbd {
     std::string address;
   } locker_t;
 
+  typedef rbd_mirror_peer_direction_t mirror_peer_direction_t;
+
   typedef struct {
     std::string uuid;
     std::string cluster_name;
@@ -269,6 +271,11 @@ public:
 
   int mirror_mode_get(IoCtx& io_ctx, rbd_mirror_mode_t *mirror_mode);
   int mirror_mode_set(IoCtx& io_ctx, rbd_mirror_mode_t mirror_mode);
+
+  int mirror_peer_bootstrap_create(IoCtx& io_ctx, std::string* token);
+  int mirror_peer_bootstrap_import(IoCtx& io_ctx,
+                                   mirror_peer_direction_t direction,
+                                   const std::string &token);
 
   int mirror_peer_add(IoCtx& io_ctx, std::string *uuid,
                       const std::string &cluster_name,
