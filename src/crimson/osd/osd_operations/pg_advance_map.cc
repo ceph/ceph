@@ -19,10 +19,6 @@ namespace {
 namespace ceph::osd {
 
 PGAdvanceMap::PGAdvanceMap(
-  OSD &osd, Ref<PG> pg, epoch_t from, epoch_t to)
-  : osd(osd), pg(pg), from(from), to(to), do_init(false) {}
-
-PGAdvanceMap::PGAdvanceMap(
   OSD &osd, Ref<PG> pg, epoch_t from, epoch_t to,
   PeeringCtx &&rctx, bool do_init)
   : osd(osd), pg(pg), from(from), to(to),
