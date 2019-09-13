@@ -175,7 +175,8 @@ MDCache::MDCache(MDSRank *m, PurgeQueue &purge_queue_) :
           trim_client_leases();
           trim();
           check_memory_usage();
-          mds->server->recall_client_state(nullptr, Server::RecallFlags::ENFORCE_MAX);
+          auto flags = Server::RecallFlags::ENFORCE_MAX|Server::RecallFlags::ENFORCE_LIVENESS;
+          mds->server->recall_client_state(nullptr, flags);
           upkeep_last_trim = clock::now();
         } else {
           dout(10) << "cache not ready for trimming" << dendl;
@@ -7593,7 +7594,7 @@ void MDCache::check_memory_usage()
   mds->mlogger->set(l_mdm_heap, last.get_heap());
 
   if (cache_toofull()) {
-    mds->server->recall_client_state(nullptr);
+    mds->server->recall_client_state(nullptr, Server::RecallFlags::TRIM);
   }
 
   // If the cache size had exceeded its limit, but we're back in bounds
