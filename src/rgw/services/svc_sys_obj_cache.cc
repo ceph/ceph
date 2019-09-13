@@ -518,7 +518,9 @@ public:
     void shutdown();
 
     int call(std::string_view command, const cmdmap_t& cmdmap,
-	     std::string_view format, bufferlist& out) override;
+	     std::string_view format,
+	     std::ostream& ss,
+	     bufferlist& out) override;
 };
 
 int RGWSI_SysObj_Cache_ASocketHook::start()
@@ -543,7 +545,9 @@ void RGWSI_SysObj_Cache_ASocketHook::shutdown()
 
 int RGWSI_SysObj_Cache_ASocketHook::call(
   std::string_view command, const cmdmap_t& cmdmap,
-  std::string_view format, bufferlist& out)
+  std::string_view format,
+  std::ostream& ss,
+  bufferlist& out)
 {
   if (command == "cache list"sv) {
     std::optional<std::string> filter;
@@ -558,7 +562,7 @@ int RGWSI_SysObj_Cache_ASocketHook::call(
       f->flush(out);
       return 0;
     } else {
-      out.append("Unable to create Formatter.\n");
+      ss << "Unable to create Formatter.\n";
       return -EINVAL;
     }
   } else if (command == "cache inspect"sv) {
@@ -569,11 +573,11 @@ int RGWSI_SysObj_Cache_ASocketHook::call(
         f->flush(out);
         return 0;
       } else {
-        out.append("Unable to find entry "s + target + ".\n");
+        ss << "Unable to find entry "s + target + ".\n";
         return -ENOENT;
       }
     } else {
-      out.append("Unable to create Formatter.\n");
+      ss << "Unable to create Formatter.\n";
       return -EINVAL;
     }
   } else if (command == "cache erase"sv) {
@@ -581,7 +585,7 @@ int RGWSI_SysObj_Cache_ASocketHook::call(
     if (svc->asocket.call_erase(target)) {
       return 0;
     } else {
-      out.append("Unable to find entry "s + target + ".\n");
+      ss << "Unable to find entry "s + target + ".\n";
       return -ENOENT;
     }
   } else if (command == "cache zap"sv) {

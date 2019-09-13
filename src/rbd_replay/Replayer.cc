@@ -302,7 +302,8 @@ void Replayer::erase_image(imagectx_id_t imagectx_id) {
     cmdmap_t cmdmap;
     string format = "json-pretty";
     bufferlist out;
-    g_ceph_context->do_command(command, cmdmap, format, &out);
+    stringstream ss;
+    g_ceph_context->do_command(command, cmdmap, format, ss, &out);
     out.write_stream(cout);
     cout << std::endl;
     cout.flush();
@@ -371,7 +372,8 @@ void Replayer::clear_images() {
     cmdmap_t cmdmap;
     string format = "json-pretty";
     bufferlist out;
-    g_ceph_context->do_command(command, cmdmap, format, &out);
+    stringstream ss;
+    g_ceph_context->do_command(command, cmdmap, format, ss, &out);
     out.write_stream(cout);
     cout << std::endl;
   }

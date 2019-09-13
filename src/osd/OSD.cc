@@ -2327,7 +2327,9 @@ class OSDSocketHook : public AdminSocketHook {
 public:
   explicit OSDSocketHook(OSD *o) : osd(o) {}
   int call(std::string_view prefix, const cmdmap_t& cmdmap,
-	   std::string_view format, bufferlist& out) override {
+	   std::string_view format,
+	   std::ostream& ss,
+	   bufferlist& out) override {
     ceph_abort("should use async hook");
   }
   void call_async(
@@ -2336,7 +2338,6 @@ public:
     std::string_view format,
     const bufferlist& inbl,
     std::function<void(int,const std::string&,bufferlist&)> on_finish) override {
-    stringstream ss;
     try {
       osd->asok_command(prefix, cmdmap, format, inbl, on_finish);
     } catch (const bad_cmd_get& e) {
@@ -3094,16 +3095,18 @@ class TestOpsSocketHook : public AdminSocketHook {
 public:
   TestOpsSocketHook(OSDService *s, ObjectStore *st) : service(s), store(st) {}
   int call(std::string_view command, const cmdmap_t& cmdmap,
-	   std::string_view format, bufferlist& out) override {
-    stringstream ss;
+	   std::string_view format,
+	   std::ostream& errss,
+	   bufferlist& out) override {
     int r = 0;
+    stringstream outss;
     try {
-      test_ops(service, store, command, cmdmap, ss);
+      test_ops(service, store, command, cmdmap, outss);
+      out.append(outss);
     } catch (const bad_cmd_get& e) {
-      ss << e.what();
+      errss << e.what();
       r = -EINVAL;
     }
-    out.append(ss);
     return r;
   }
   void test_ops(OSDService *service, ObjectStore *store,
