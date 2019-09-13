@@ -1785,7 +1785,7 @@ void Migrator::encode_export_dir(bufferlist& exportbl,
     exportbl.append("I", 1);    // inode dentry
     
     encode_export_inode(in, exportbl, exported_client_map, exported_client_metadata_map);  // encode, and (update state for) export
-    
+
     // directory?
     auto&& dfs = in->get_dirfrags();
     for (const auto& t : dfs) {

@@ -31,6 +31,7 @@
 #include "MDSContext.h"
 #include "flock.h"
 
+#include "BatchOp.h"
 #include "CDentry.h"
 #include "SimpleLock.h"
 #include "ScatterLock.h"
@@ -347,6 +348,8 @@ class CInode : public MDSCacheObject, public InodeStoreBase, public Counter<CIno
     ceph_assert(num_subtree_roots == 0);
     ceph_assert(num_exporting_dirs == 0);
   }
+
+  std::map<int, std::unique_ptr<BatchOp>> batch_ops;
 
   std::string_view pin_name(int p) const override;
 

@@ -110,6 +110,7 @@ private:
   friend class MDSContinuation;
   friend class ServerContext;
   friend class ServerLogContext;
+  friend class Batch_Getattr_Lookup;
 
 public:
   bool terminating_sessions;
@@ -350,6 +351,7 @@ public:
 private:
   void reply_client_request(MDRequestRef& mdr, const ref_t<MClientReply> &reply);
   void flush_session(Session *session, MDSGatherBuilder *gather);
+  void clear_batch_ops(const MDRequestRef& mdr);
 
   DecayCounter recall_throttle;
   time last_recall_state;
