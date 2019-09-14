@@ -498,9 +498,7 @@ seastar::future<> PGBackend::getxattr(
   //ctx->delta_stats.num_rd++;
 }
 
-crimson::errorator<crimson::ct_error::enoent,
-                   crimson::ct_error::enodata>::future<ceph::bufferptr>
-PGBackend::getxattr(
+PGBackend::get_attr_errorator::future<ceph::bufferptr> PGBackend::getxattr(
   const hobject_t& soid,
   std::string_view key) const
 {
