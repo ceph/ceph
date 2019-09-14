@@ -1317,6 +1317,7 @@ static int bucket_stats(RGWRadosStore *store, const std::string& tenant_name, st
   }
 
   utime_t ut(mtime);
+  utime_t ctime_ut(bucket_info.creation_time);
 
   formatter->open_object_section("stats");
   formatter->dump_string("bucket", bucket.name);
@@ -1331,6 +1332,7 @@ static int bucket_stats(RGWRadosStore *store, const std::string& tenant_name, st
   formatter->dump_string("ver", bucket_ver);
   formatter->dump_string("master_ver", master_ver);
   ut.gmtime(formatter->dump_stream("mtime"));
+  ctime_ut.gmtime(formatter->dump_stream("creation_time"));
   formatter->dump_string("max_marker", max_marker);
   dump_bucket_usage(stats, formatter);
   encode_json("bucket_quota", bucket_info.quota, formatter);
