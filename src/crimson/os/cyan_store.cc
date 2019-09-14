@@ -195,11 +195,7 @@ seastar::future<ceph::bufferlist> CyanStore::read(CollectionRef ch,
     l = o->get_size();
   else if (offset + l > o->get_size())
     l = o->get_size() - offset;
-  ceph::bufferlist bl;
-  if (int r = o->read(offset, l, bl); r < 0) {
-    throw std::runtime_error("read");
-  }
-  return seastar::make_ready_future<ceph::bufferlist>(std::move(bl));
+  return seastar::make_ready_future<ceph::bufferlist>(o->read(offset, l));
 }
 
 seastar::future<ceph::bufferptr> CyanStore::get_attr(CollectionRef ch,
