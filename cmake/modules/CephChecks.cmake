@@ -104,23 +104,18 @@ uint32_t load(char* p, size_t offset)
   return *reinterpret_cast<uint32_t*>(p + offset);
 }
 
-bool good(uint32_t lhs, uint32_t small_endian)
+bool good(uint32_t lhs, uint32_t big_endian)
 {
-  uint32_t rhs;
-  if (ntohl(0xdeadbeaf) == 0xdeadbeaf) {
-    return lhs == ntohl(small_endian);
-  } else {
-    return lhs == small_endian;
-  }
+  return lhs == ntohl(big_endian);
 }
 
 int main(int argc, char **argv)
 {
   char a1[] = \"ABCDEFG\";
-  uint32_t a2[] = {0x44434241,
-                   0x45444342,
-                   0x46454443,
-                   0x47464544};
+  uint32_t a2[] = {0x41424344,
+                   0x42434445,
+                   0x43444546,
+                   0x44454647};
   for (size_t i = 0; i < std::size(a2); i++) {
     if (!good(load(a1, i), a2[i])) {
       return 1;
