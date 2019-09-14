@@ -87,8 +87,8 @@ public:
   seastar::future<> getxattr(
     const ObjectState& os,
     OSDOp& osd_op) const;
-  crimson::errorator<crimson::ct_error::enoent,
-                     crimson::ct_error::enodata>::future<ceph::bufferptr> getxattr(
+  using get_attr_errorator = crimson::os::FuturizedStore::get_attr_errorator;
+  get_attr_errorator::future<ceph::bufferptr> getxattr(
     const hobject_t& soid,
     std::string_view key) const;
 
