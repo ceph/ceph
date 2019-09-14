@@ -474,7 +474,8 @@ int RGWAccessControlPolicy_S3::create_from_headers(RGWUserCtl *user_ctl, const R
 /*
   can only be called on object that was parsed
  */
-int RGWAccessControlPolicy_S3::rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RGWAccessControlPolicy& dest)
+int RGWAccessControlPolicy_S3::rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RGWAccessControlPolicy& dest,
+                                       std::string &err_msg)
 {
   if (!owner)
     return -EINVAL;
@@ -489,6 +490,7 @@ int RGWAccessControlPolicy_S3::rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RG
   RGWUserInfo owner_info;
   if (user_ctl->get_info_by_uid(owner->get_id(), &owner_info, null_yield) < 0) {
     ldout(cct, 10) << "owner info does not exist" << dendl;
+    err_msg = "Invalid id";
     return -EINVAL;
   }
   ACLOwner& dest_owner = dest.get_owner();
@@ -522,6 +524,7 @@ int RGWAccessControlPolicy_S3::rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RG
         ldout(cct, 10) << "grant user email=" << email << dendl;
         if (user_ctl->get_info_by_email(email, &grant_user, null_yield) < 0) {
           ldout(cct, 10) << "grant user email not found or other error" << dendl;
+          err_msg = "The e-mail address you provided does not match any account on record.";
           return -ERR_UNRESOLVABLE_EMAIL;
         }
         uid = grant_user.user_id;
@@ -531,12 +534,14 @@ int RGWAccessControlPolicy_S3::rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RG
         if (type.get_type() == ACL_TYPE_CANON_USER) {
           if (!src_grant.get_id(uid)) {
             ldout(cct, 0) << "ERROR: src_grant.get_id() failed" << dendl;
+            err_msg = "Invalid id";
             return -EINVAL;
           }
         }
     
         if (grant_user.user_id.empty() && user_ctl->get_info_by_uid(uid, &grant_user, null_yield) < 0) {
           ldout(cct, 10) << "grant user does not exist:" << uid << dendl;
+          err_msg = "Invalid id";
           return -EINVAL;
         } else {
           ACLPermission& perm = src_grant.get_permission();
@@ -557,6 +562,7 @@ int RGWAccessControlPolicy_S3::rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RG
           ldout(cct, 10) << "new grant: " << uri << dendl;
         } else {
           ldout(cct, 10) << "bad grant group:" << (int)src_grant.get_group() << dendl;
+          err_msg = "Invalid group uri";
           return -EINVAL;
         }
       }

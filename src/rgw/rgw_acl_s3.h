@@ -83,7 +83,8 @@ public:
   bool xml_end(const char *el) override;
 
   void to_xml(ostream& out);
-  int rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RGWAccessControlPolicy& dest);
+  int rebuild(RGWUserCtl *user_ctl, ACLOwner *owner, RGWAccessControlPolicy& dest,
+              std::string &err_msg);
   bool compare_group_name(string& id, ACLGroupTypeEnum group) override;
 
   virtual int create_canned(ACLOwner& _owner, ACLOwner& bucket_owner, const string& canned_acl) {
