@@ -50,6 +50,11 @@ public:
   seastar::future<> stat(
     const ObjectState& os,
     OSDOp& osd_op);
+
+  seastar::future<> create(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& trans);
   seastar::future<> remove(
     ObjectState& os,
     ceph::os::Transaction& txn);
@@ -82,6 +87,21 @@ public:
   seastar::future<ceph::bufferptr> getxattr(
     const hobject_t& soid,
     std::string_view key) const;
+
+  // OMAP
+  seastar::future<> omap_get_keys(
+    const ObjectState& os,
+    OSDOp& osd_op) const;
+  seastar::future<> omap_get_vals(
+    const ObjectState& os,
+    OSDOp& osd_op) const;
+  seastar::future<> omap_get_vals_by_keys(
+    const ObjectState& os,
+    OSDOp& osd_op) const;
+  seastar::future<> omap_set_vals(
+    ObjectState& os,
+    const OSDOp& osd_op,
+    ceph::os::Transaction& trans);
 
   virtual void got_rep_op_reply(const MOSDRepOpReply&) {}
 

@@ -5666,10 +5666,15 @@ struct OSDOp {
   sobject_t soid;
 
   ceph::buffer::list indata, outdata;
-  errorcode32_t rval;
+  errorcode32_t rval = 0;
 
-  OSDOp() : rval(0) {
+  OSDOp() {
     memset(&op, 0, sizeof(ceph_osd_op));
+  }
+
+  OSDOp(const int op_code) {
+    memset(&op, 0, sizeof(ceph_osd_op));
+    op.op = op_code;
   }
 
   /**
