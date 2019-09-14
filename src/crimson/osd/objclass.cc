@@ -53,23 +53,46 @@ int cls_read(cls_method_context_t hctx,
 
 int cls_get_request_origin(cls_method_context_t hctx, entity_inst_t *origin)
 {
-  return 0;
+  assert(origin);
+
+  try {
+    const auto& message = \
+      reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->get_message();
+    *origin = message.get_orig_source_inst();
+    return 0;
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
 }
 
-int cls_cxx_create(cls_method_context_t hctx, bool exclusive)
+int cls_cxx_create(cls_method_context_t hctx, const bool exclusive)
 {
-  return 0;
+  OSDOp op{CEPH_OSD_OP_CREATE};
+  op.op.flags = (exclusive ? CEPH_OSD_OP_FLAG_EXCL : 0);
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    return 0;
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
 }
 
 int cls_cxx_remove(cls_method_context_t hctx)
 {
-  return 0;
+  OSDOp op{CEPH_OSD_OP_DELETE};
+
+  // we're blocking here which presumes execution in Seastar's thread.
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    return 0;
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
 }
 
 int cls_cxx_stat(cls_method_context_t hctx, uint64_t *size, time_t *mtime)
 {
-  OSDOp op;//{CEPH_OSD_OP_STAT};
-  op.op.op = CEPH_OSD_OP_STAT;
+  OSDOp op{CEPH_OSD_OP_STAT};
 
   // we're blocking here which presumes execution in Seastar's thread.
   try {
@@ -109,8 +132,7 @@ int cls_cxx_read2(cls_method_context_t hctx,
                   bufferlist *outbl,
                   uint32_t op_flags)
 {
-  OSDOp op;
-  op.op.op = CEPH_OSD_OP_SYNC_READ;
+  OSDOp op{CEPH_OSD_OP_SYNC_READ};
   op.op.extent.offset = ofs;
   op.op.extent.length = len;
   op.op.flags = op_flags;
@@ -129,13 +151,22 @@ int cls_cxx_write2(cls_method_context_t hctx,
                    bufferlist *inbl,
                    uint32_t op_flags)
 {
-  return 0;
+  OSDOp op{ CEPH_OSD_OP_WRITE };
+  op.op.extent.offset = ofs;
+  op.op.extent.length = len;
+  op.op.flags = op_flags;
+  op.indata = *inbl;
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    return 0;
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
 }
 
 int cls_cxx_write_full(cls_method_context_t hctx, bufferlist * const inbl)
 {
-  OSDOp op;
-  op.op.op = CEPH_OSD_OP_WRITEFULL;
+  OSDOp op{CEPH_OSD_OP_WRITEFULL};
   op.op.extent.offset = 0;
   op.op.extent.length = inbl->length();
   op.indata = *inbl;
@@ -152,20 +183,51 @@ int cls_cxx_replace(cls_method_context_t hctx,
                     int len,
                     bufferlist *inbl)
 {
-  return 0;
+  {
+    OSDOp top{CEPH_OSD_OP_TRUNCATE};
+    top.op.extent.offset = 0;
+    top.op.extent.length = 0;
+    try {
+      reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(top).get();
+      return 0;
+    } catch (ceph::osd::error& e) {
+      return -e.code().value();
+    }
+  }
+
+  {
+    OSDOp wop{CEPH_OSD_OP_WRITE};
+    wop.op.extent.offset = ofs;
+    wop.op.extent.length = len;
+    wop.indata = *inbl;
+
+    try {
+      reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(wop).get();
+      return 0;
+    } catch (ceph::osd::error& e) {
+      return -e.code().value();
+    }
+  }
 }
 
 int cls_cxx_truncate(cls_method_context_t hctx, int ofs)
 {
-  return 0;
+  OSDOp op{CEPH_OSD_OP_TRUNCATE};
+  op.op.extent.offset = ofs;
+  op.op.extent.length = 0;
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    return 0;
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
 }
 
 int cls_cxx_getxattr(cls_method_context_t hctx,
                      const char *name,
                      bufferlist *outbl)
 {
-  OSDOp op;
-  op.op.op = CEPH_OSD_OP_GETXATTR;
+  OSDOp op{CEPH_OSD_OP_GETXATTR};
   op.op.xattr.name_len = strlen(name);
   op.indata.append(name, op.op.xattr.name_len);
   try {
@@ -187,8 +249,7 @@ int cls_cxx_setxattr(cls_method_context_t hctx,
                      const char *name,
                      bufferlist *inbl)
 {
-  OSDOp op;
-  op.op.op = CEPH_OSD_OP_SETXATTR;
+  OSDOp op{CEPH_OSD_OP_SETXATTR};
   op.op.xattr.name_len = std::strlen(name);
   op.op.xattr.value_len = inbl->length();
   op.indata.append(name, op.op.xattr.name_len);
@@ -203,7 +264,14 @@ int cls_cxx_setxattr(cls_method_context_t hctx,
 
 int cls_cxx_snap_revert(cls_method_context_t hctx, snapid_t snapid)
 {
-  return 0;
+  OSDOp op{op = CEPH_OSD_OP_ROLLBACK};
+  op.op.snap.snapid = snapid;
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    return 0;
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
 }
 
 int cls_cxx_map_get_all_vals(cls_method_context_t hctx,
@@ -214,22 +282,53 @@ int cls_cxx_map_get_all_vals(cls_method_context_t hctx,
 }
 
 int cls_cxx_map_get_keys(cls_method_context_t hctx,
-                         const string &start_obj,
-			 uint64_t max_to_get,
-                         set<string> *keys,
-                         bool *more)
+                         const std::string& start_obj,
+                         const uint64_t max_to_get,
+                         std::set<std::string>* const keys,
+                         bool* const more)
 {
-  return 0;
+  OSDOp op{ CEPH_OSD_OP_OMAPGETKEYS };
+  encode(start_obj, op.indata);
+  encode(max_to_get, op.indata);
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
+  try {
+    auto iter = op.outdata.cbegin();
+    decode(*keys, iter);
+    decode(*more, iter);
+  } catch (buffer::error&) {
+    return -EIO;
+  }
+  return keys->size();
 }
 
 int cls_cxx_map_get_vals(cls_method_context_t hctx,
-                         const string &start_obj,
-                         const string &filter_prefix,
-                         uint64_t max_to_get,
-                         map<string, bufferlist> *vals,
-                         bool *more)
+                         const std::string& start_obj,
+                         const std::string& filter_prefix,
+                         const uint64_t max_to_get,
+                         std::map<std::string, ceph::bufferlist> *vals,
+                         bool* const more)
 {
-  return 0;
+  OSDOp op{ CEPH_OSD_OP_OMAPGETVALS };
+  encode(start_obj, op.indata);
+  encode(max_to_get, op.indata);
+  encode(filter_prefix, op.indata);
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
+  try {
+    auto iter = op.outdata.cbegin();
+    decode(*vals, iter);
+    decode(*more, iter);
+  } catch (buffer::error&) {
+    return -EIO;
+  }
+  return vals->size();
 }
 
 int cls_cxx_map_read_header(cls_method_context_t hctx, bufferlist *outbl)
@@ -241,21 +340,62 @@ int cls_cxx_map_get_val(cls_method_context_t hctx,
                         const string &key,
                         bufferlist *outbl)
 {
-  return 0;
+  OSDOp op{ CEPH_OSD_OP_OMAPGETVALSBYKEYS };
+  {
+    std::set<std::string> k{key};
+    encode(k, op.indata);
+  }
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
+  std::map<std::string, ceph::bufferlist> m;
+  try {
+    auto iter = op.outdata.cbegin();
+    decode(m, iter);
+  } catch (buffer::error&) {
+    return -EIO;
+  }
+  if (auto iter = std::begin(m); iter != std::end(m)) {
+    *outbl = std::move(iter->second);
+    return 0;
+  } else {
+    return -ENOENT;
+  }
 }
 
 int cls_cxx_map_set_val(cls_method_context_t hctx,
                         const string &key,
                         bufferlist *inbl)
 {
-  return 0;
+  OSDOp op{ CEPH_OSD_OP_OMAPSETVALS };
+  {
+    std::map<std::string, ceph::bufferlist> m;
+    m[key] = *inbl;
+    encode(m, op.indata);
+  }
+
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    return 0;
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
 }
 
 int cls_cxx_map_set_vals(cls_method_context_t hctx,
-                         const std::map<string,
-                         bufferlist> *map)
+                         const std::map<string, ceph::bufferlist> *map)
 {
-  return 0;
+  OSDOp op{ CEPH_OSD_OP_OMAPSETVALS };
+  encode(*map, op.indata);
+
+  try {
+    reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->do_osd_op(op).get();
+    return 0;
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
 }
 
 int cls_cxx_map_clear(cls_method_context_t hctx)
@@ -304,7 +444,13 @@ uint64_t cls_get_features(cls_method_context_t hctx)
 
 uint64_t cls_get_client_features(cls_method_context_t hctx)
 {
-  return 0;
+  try {
+    const auto& message = \
+      reinterpret_cast<ceph::osd::OpsExecuter*>(hctx)->get_message();
+    return message.get_features();
+  } catch (ceph::osd::error& e) {
+    return -e.code().value();
+  }
 }
 
 ceph_release_t cls_get_required_osd_release(cls_method_context_t hctx)

@@ -309,7 +309,11 @@ seastar::future<> PGBackend::write(
     // write arrives before trimtrunc
     if (os.exists && !os.oi.is_whiteout()) {
       txn.truncate(coll->get_cid(),
-		   ghobject_t{os.oi.soid}, op.extent.truncate_size);
+                   ghobject_t{os.oi.soid}, op.extent.truncate_size);
+      if (op.extent.truncate_size != os.oi.size) {
+        os.oi.size = length;
+        // TODO: truncate_update_size_and_usage()
+      }
     }
     os.oi.truncate_seq = op.extent.truncate_seq;
     os.oi.truncate_size = op.extent.truncate_size;
@@ -324,6 +328,7 @@ seastar::future<> PGBackend::write(
   } else {
     txn.write(coll->get_cid(), ghobject_t{os.oi.soid},
 	      offset, length, std::move(buf), op.flags);
+    os.oi.size = std::max(offset + length, os.oi.size);
   }
   return seastar::now();
 }
@@ -347,6 +352,32 @@ seastar::future<> PGBackend::writefull(
               osd_op.indata, op.flags);
     os.oi.size = op.extent.length;
   }
+  return seastar::now();
+}
+
+seastar::future<> PGBackend::create(
+  ObjectState& os,
+  const OSDOp& osd_op,
+  ceph::os::Transaction& txn)
+{
+  const int flags = le32_to_cpu(osd_op.op.flags);
+  if (os.exists && !os.oi.is_whiteout() && (flags & CEPH_OSD_OP_FLAG_EXCL)) {
+    // this is an exclusive create
+    throw ceph::osd::make_error(-EEXIST);
+  }
+
+  if (osd_op.indata.length()) {
+    // handle the legacy. `category` is no longer implemented.
+    try {
+      auto p = osd_op.indata.cbegin();
+      std::string category;
+      decode(category, p);
+    } catch (buffer::error&) {
+      throw ceph::osd::invalid_argument();
+    }
+  }
+  maybe_create_new_object(os, txn);
+  txn.nop();
   return seastar::now();
 }
 
@@ -422,6 +453,7 @@ seastar::future<> PGBackend::setxattr(
     name = "_" + aname;
     bp.copy(osd_op.op.xattr.value_len, val);
   }
+  logger().debug("setxattr on obj={} for attr={}", os.oi.soid, name);
 
   txn.setattr(coll->get_cid(), ghobject_t{os.oi.soid}, name, val);
   return seastar::now();
@@ -440,14 +472,18 @@ seastar::future<> PGBackend::getxattr(
     bp.copy(osd_op.op.xattr.name_len, aname);
     name = "_" + aname;
   }
+  logger().debug("getxattr on obj={} for attr={}", os.oi.soid, name);
   return getxattr(os.oi.soid, name).then([&osd_op] (ceph::bufferptr val) {
     osd_op.outdata.clear();
     osd_op.outdata.push_back(std::move(val));
     osd_op.op.xattr.value_len = osd_op.outdata.length();
     //ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
   }).handle_exception_type(
-    [] (ceph::os::FuturizedStore::EnoentException& e) {
+    [] (ceph::os::FuturizedStore::EnoentException&) {
       return seastar::make_exception_future<>(ceph::osd::object_not_found{});
+  }).handle_exception_type(
+    [] (ceph::os::FuturizedStore::EnodataException&) {
+      return seastar::make_exception_future<>(ceph::osd::no_message_available{});
   });
   //ctx->delta_stats.num_rd++;
 }
@@ -457,4 +493,177 @@ seastar::future<ceph::bufferptr> PGBackend::getxattr(
   std::string_view key) const
 {
   return store->get_attr(coll, ghobject_t{soid}, key);
+}
+
+static seastar::future<ceph::os::FuturizedStore::omap_values_t>
+maybe_get_omap_vals_by_keys(
+  auto& store,
+  const auto& coll,
+  const auto& oi,
+  const auto& keys_to_get)
+{
+  if (oi.is_omap()) {
+    return store->omap_get_values(coll, ghobject_t{oi.soid}, keys_to_get);
+  } else {
+    return seastar::make_ready_future<ceph::os::FuturizedStore::omap_values_t>(
+      ceph::os::FuturizedStore::omap_values_t{});
+  }
+}
+
+static seastar::future<bool, ceph::os::FuturizedStore::omap_values_t>
+maybe_get_omap_vals(
+  auto& store,
+  const auto& coll,
+  const auto& oi,
+  const auto& start_after)
+{
+  if (oi.is_omap()) {
+    return store->omap_get_values(coll, ghobject_t{oi.soid}, start_after);
+  } else {
+    return seastar::make_ready_future<bool, ceph::os::FuturizedStore::omap_values_t>(
+      true, ceph::os::FuturizedStore::omap_values_t{});
+  }
+}
+
+seastar::future<> PGBackend::omap_get_keys(
+  const ObjectState& os,
+  OSDOp& osd_op) const
+{
+  std::string start_after;
+  uint64_t max_return;
+  try {
+    auto p = osd_op.indata.cbegin();
+    decode(start_after, p);
+    decode(max_return, p);
+  } catch (buffer::error&) {
+    throw ceph::osd::invalid_argument{};
+  }
+  max_return =
+    std::min(max_return, local_conf()->osd_max_omap_entries_per_request);
+
+  // TODO: truly chunk the reading
+  return maybe_get_omap_vals(store, coll, os.oi, start_after).then(
+    [=, &osd_op] (bool, ceph::os::FuturizedStore::omap_values_t vals) {
+      ceph::bufferlist result;
+      bool truncated = false;
+      uint32_t num = 0;
+      for (auto& [key, val] : vals) {
+        if (num++ >= max_return ||
+            result.length() >= local_conf()->osd_max_omap_bytes_per_request) {
+          truncated = true;
+          break;
+        }
+        encode(key, result);
+      }
+      encode(num, osd_op.outdata);
+      osd_op.outdata.claim_append(result);
+      encode(truncated, osd_op.outdata);
+      return seastar::now();
+    });
+
+  // TODO:
+  //ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
+  //ctx->delta_stats.num_rd++;
+}
+
+seastar::future<> PGBackend::omap_get_vals(
+  const ObjectState& os,
+  OSDOp& osd_op) const
+{
+  std::string start_after;
+  uint64_t max_return;
+  std::string filter_prefix;
+  try {
+    auto p = osd_op.indata.cbegin();
+    decode(start_after, p);
+    decode(max_return, p);
+    decode(filter_prefix, p);
+  } catch (buffer::error&) {
+    throw ceph::osd::invalid_argument{};
+  }
+
+  max_return = \
+    std::min(max_return, local_conf()->osd_max_omap_entries_per_request);
+
+  // TODO: truly chunk the reading
+  return maybe_get_omap_vals(store, coll, os.oi, start_after).then(
+    [=, &osd_op] (const bool done,
+                  ceph::os::FuturizedStore::omap_values_t vals) {
+      assert(done);
+      ceph::bufferlist result;
+      bool truncated = false;
+      uint32_t num = 0;
+      auto iter = filter_prefix > start_after ? vals.lower_bound(filter_prefix)
+                                              : std::begin(vals);
+      for (; iter != std::end(vals); ++iter) {
+        const auto& [key, value] = *iter;
+        if (key.substr(0, filter_prefix.size()) != filter_prefix) {
+          break;
+        } else if (num++ >= max_return ||
+            result.length() >= local_conf()->osd_max_omap_bytes_per_request) {
+          truncated = true;
+          break;
+        }
+        encode(key, result);
+        encode(value, result);
+      }
+      encode(num, osd_op.outdata);
+      osd_op.outdata.claim_append(result);
+      encode(truncated, osd_op.outdata);
+      return seastar::now();
+    });
+
+  // TODO:
+  //ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
+  //ctx->delta_stats.num_rd++;
+}
+seastar::future<> PGBackend::omap_get_vals_by_keys(
+  const ObjectState& os,
+  OSDOp& osd_op) const
+{
+  std::set<std::string> keys_to_get;
+  try {
+    auto p = osd_op.indata.cbegin();
+    decode(keys_to_get, p);
+  } catch (buffer::error&) {
+    throw ceph::osd::invalid_argument();
+  }
+
+  return maybe_get_omap_vals_by_keys(store, coll, os.oi, keys_to_get).then(
+    [&osd_op] (ceph::os::FuturizedStore::omap_values_t vals) {
+      encode(vals, osd_op.outdata);
+      return seastar::now();
+    });
+
+  // TODO:
+  //ctx->delta_stats.num_rd_kb += shift_round_up(osd_op.outdata.length(), 10);
+  //ctx->delta_stats.num_rd++;
+}
+
+seastar::future<> PGBackend::omap_set_vals(
+  ObjectState& os,
+  const OSDOp& osd_op,
+  ceph::os::Transaction& txn)
+{
+  maybe_create_new_object(os, txn);
+
+  ceph::bufferlist to_set_bl;
+  try {
+    auto p = osd_op.indata.cbegin();
+    decode_str_str_map_to_bl(p, &to_set_bl);
+  } catch (buffer::error&) {
+    throw ceph::osd::invalid_argument{};
+  }
+
+  txn.omap_setkeys(coll->get_cid(), ghobject_t{os.oi.soid}, to_set_bl);
+
+  // TODO:
+  //ctx->clean_regions.mark_omap_dirty();
+
+  // TODO:
+  //ctx->delta_stats.num_wr++;
+  //ctx->delta_stats.num_wr_kb += shift_round_up(to_set_bl.length(), 10);
+  os.oi.set_flag(object_info_t::FLAG_OMAP);
+  os.oi.clear_omap_digest();
+  return seastar::now();
 }

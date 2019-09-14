@@ -368,6 +368,10 @@ OpsExecuter::do_osd_op(OSDOp& osd_op)
     return do_read_op([&osd_op] (auto& backend, const auto& os) {
       return backend.getxattr(os, osd_op);
     });
+  case CEPH_OSD_OP_CREATE:
+    return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
+      return backend.create(os, osd_op, txn);
+    });
   case CEPH_OSD_OP_WRITE:
     return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
       return backend.write(os, osd_op, txn);
@@ -401,6 +405,40 @@ OpsExecuter::do_osd_op(OSDOp& osd_op)
     return do_const_op([&osd_op] (/* const */auto& backend, const auto& os) {
       return backend.stat(os, osd_op);
     });
+  case CEPH_OSD_OP_TMAPUP:
+    // TODO: there was an effort to kill TMAP in ceph-osd. According to
+    // @dzafman this isn't possible yet. Maybe it could be accomplished
+    // before crimson's readiness and we'd luckily don't need to carry.
+    return dont_do_legacy_op();
+
+  // OMAP
+  case CEPH_OSD_OP_OMAPGETKEYS:
+    return do_read_op([&osd_op] (auto& backend, const auto& os) {
+      return backend.omap_get_keys(os, osd_op);
+    });
+  case CEPH_OSD_OP_OMAPGETVALS:
+    return do_read_op([&osd_op] (auto& backend, const auto& os) {
+      return backend.omap_get_vals(os, osd_op);
+    });
+  case CEPH_OSD_OP_OMAPGETVALSBYKEYS:
+    return do_read_op([&osd_op] (auto& backend, const auto& os) {
+      return backend.omap_get_vals_by_keys(os, osd_op);
+    });
+  case CEPH_OSD_OP_OMAPSETVALS:
+    if (!pg.get_pool().info.supports_omap()) {
+      throw ceph::osd::operation_not_supported{};
+    }
+    return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
+      return backend.omap_set_vals(os, osd_op, txn);
+    });
+
+  // watch/notify
+  case CEPH_OSD_OP_WATCH:
+    return do_write_op([&osd_op] (auto& backend, auto& os, auto& txn) {
+      logger().warn("CEPH_OSD_OP_WATCH is not implemented yet; ignoring");
+      return seastar::now();
+    });
+
   default:
     logger().warn("unknown op {}", ceph_osd_op_name(op.op));
     throw std::runtime_error(
