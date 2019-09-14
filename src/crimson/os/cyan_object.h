@@ -28,7 +28,7 @@ struct Object : public boost::intrusive_ref_counter<
 
   // interface for object data
   size_t get_size() const;
-  int read(uint64_t offset, uint64_t len, bufferlist &bl);
+  ceph::bufferlist read(uint64_t offset, uint64_t len);
   int write(uint64_t offset, const bufferlist &bl);
   int clone(Object *src, uint64_t srcoff, uint64_t len,
 	     uint64_t dstoff);
