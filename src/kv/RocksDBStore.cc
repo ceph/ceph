@@ -93,8 +93,11 @@ public:
       n += p.second;
     }
     // it is wrong if content of merge operator changes after initialization
-    ceph_assert(name.size() == 0 || n == name);
-    name = n;
+    if (name.size() == 0) {
+      name = n;
+    } else {
+      ceph_assert(n == name);
+    }
     return name.c_str();
   }
 
@@ -174,8 +177,11 @@ public:
       n += p.second->name();
     }
     // it is wrong if content of merge operator changes after initialization
-    ceph_assert(name.size() == 0 || n == name);
-    name = n;
+    if (name.size() == 0) {
+      name = n;
+    } else {
+      ceph_assert(n == name);
+    }
     return name.c_str();
   }
 
