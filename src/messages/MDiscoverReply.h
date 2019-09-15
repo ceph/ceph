@@ -72,7 +72,7 @@ private:
   inodeno_t base_ino;
   frag_t base_dir_frag;  
   bool wanted_base_dir = false;
-  bool wanted_xlocked = false;
+  bool path_locked = false;
   snapid_t wanted_snapid;
 
   // and the response
@@ -93,7 +93,7 @@ private:
   inodeno_t get_base_ino() const { return base_ino; }
   frag_t get_base_dir_frag() const { return base_dir_frag; }
   bool get_wanted_base_dir() const { return wanted_base_dir; }
-  bool get_wanted_xlocked() const { return wanted_xlocked; }
+  bool is_path_locked() const { return path_locked; }
   snapid_t get_wanted_snapid() const { return wanted_snapid; }
 
   bool is_flag_error_dn() const { return flag_error_dn; }
@@ -116,7 +116,7 @@ protected:
     base_ino(dis.get_base_ino()),
     base_dir_frag(dis.get_base_dir_frag()),
     wanted_base_dir(dis.wants_base_dir()),
-    wanted_xlocked(dis.wants_xlocked()),
+    path_locked(dis.is_path_locked()),
     wanted_snapid(dis.get_snapid()),
     flag_error_dn(false),
     flag_error_dir(false),
@@ -131,7 +131,7 @@ protected:
     base_ino(df.ino),
     base_dir_frag(df.frag),
     wanted_base_dir(false),
-    wanted_xlocked(false),
+    path_locked(false),
     wanted_snapid(CEPH_NOSNAP),
     flag_error_dn(false),
     flag_error_dir(false),
@@ -179,7 +179,7 @@ public:
     decode(base_ino, p);
     decode(base_dir_frag, p);
     decode(wanted_base_dir, p);
-    decode(wanted_xlocked, p);
+    decode(path_locked, p);
     decode(wanted_snapid, p);
     decode(flag_error_dn, p);
     decode(flag_error_dir, p);
@@ -195,7 +195,7 @@ public:
     encode(base_ino, payload);
     encode(base_dir_frag, payload);
     encode(wanted_base_dir, payload);
-    encode(wanted_xlocked, payload);
+    encode(path_locked, payload);
     encode(wanted_snapid, payload);
     encode(flag_error_dn, payload);
     encode(flag_error_dir, payload);
