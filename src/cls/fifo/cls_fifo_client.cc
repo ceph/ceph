@@ -136,6 +136,26 @@ namespace rados {
         return 0;
       }
 
+      int FIFO::push_part(librados::ObjectWriteOperation *rados_op,
+                          const PushPartParams& params) {
+        cls_fifo_part_push_op op;
+
+        auto& state = params.state;
+
+        if (state.tag.empty()) {
+          return -EINVAL;
+        }
+
+        op.tag = state.tag;
+        op.data = state.data;
+
+        bufferlist in;
+        encode(op, in);
+        rados_op->exec("fifo", "fifo_push_part", in);
+
+        return 0;
+      }
+
     } // namespace fifo
   } // namespace cls
 } // namespace rados

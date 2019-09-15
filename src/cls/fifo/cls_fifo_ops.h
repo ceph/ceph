@@ -116,6 +116,26 @@ struct cls_fifo_init_part_op
 };
 WRITE_CLASS_ENCODER(cls_fifo_init_part_op)
 
+struct cls_fifo_part_push_op
+{
+  string tag;
+  bufferlist data;
+
+  void encode(bufferlist &bl) const {
+    ENCODE_START(1, 1, bl);
+    encode(tag, bl);
+    encode(data, bl);
+    ENCODE_FINISH(bl);
+  }
+  void decode(bufferlist::const_iterator &bl) {
+    DECODE_START(1, bl);
+    decode(tag, bl);
+    decode(data, bl);
+    DECODE_FINISH(bl);
+  }
+};
+WRITE_CLASS_ENCODER(cls_fifo_part_push_op)
+
 struct cls_fifo_update_state_op
 {
   rados::cls::fifo::fifo_objv_t objv;

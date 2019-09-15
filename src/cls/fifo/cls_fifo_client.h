@@ -148,6 +148,27 @@ namespace rados {
 
         static int init_part(librados::ObjectWriteOperation *op,
                              const InitPartParams& params);
+
+	/* push part */
+
+        struct PushPartParams {
+          struct State {
+            string tag;
+            bufferlist data;
+          } state;
+
+          PushPartParams& tag(const std::string& tag) {
+            state.tag = tag;
+            return *this;
+          }
+          PushPartParams& data(bufferlist& bl) {
+            state.data = bl;
+            return *this;
+          }
+        };
+
+        static int push_part(librados::ObjectWriteOperation *op,
+                             const PushPartParams& params);
       };
     } // namespace fifo
   }  // namespace cls

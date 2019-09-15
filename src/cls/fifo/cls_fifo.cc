@@ -61,9 +61,9 @@ WRITE_CLASS_ENCODER(cls_fifo_data_obj_header)
 
 struct cls_fifo_entry_header_pre {
 /* FIXME: le64_t */
-  uint64_t magic{0};
-  uint64_t header_size{0};
-};
+  __le64 magic;
+  __le64 header_size;
+} __attribute__ ((packed));
 
 struct cls_fifo_entry_header {
   uint64_t index{0};
@@ -397,6 +397,80 @@ static int fifo_init_part_op(cls_method_context_t hctx,
   return 0;
 }
 
+static int fifo_part_push_op(cls_method_context_t hctx,
+                             bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "%s", __func__);
+
+  cls_fifo_part_push_op op;
+  try {
+    auto iter = in->cbegin();
+    decode(op, iter);
+  } catch (const buffer::error &err) {
+    CLS_ERR("ERROR: %s(): failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  cls_fifo_data_obj_header part_header;
+  int r = read_part_header(hctx, &part_header);
+  if (r < 0) {
+    CLS_LOG(10, "%s(): failed to read part header", __func__);
+    return r;
+  }
+
+  if (!(part_header.tag == op.tag)) {
+    CLS_LOG(10, "%s(): bad tag", __func__);
+    return -EINVAL;
+  }
+
+  if (op.data.length() > part_header.params.max_entry_size) {
+    return -EINVAL;
+  }
+
+  if (part_header.max_ofs > part_header.params.full_size_threshold) {
+    return -ERANGE;
+  }
+
+  struct cls_fifo_entry_header entry_header;
+  entry_header.index = part_header.max_index;
+  entry_header.size = op.data.length();
+  entry_header.mtime = real_clock::now();
+
+  bufferlist entry_header_bl;
+  encode(entry_header, entry_header_bl);
+
+  cls_fifo_entry_header_pre pre_header;
+  pre_header.magic = part_header.magic;
+  pre_header.header_size = entry_header_bl.length();
+
+  bufferptr pre((char *)&pre_header, sizeof(pre_header));
+  bufferlist all_data;
+  all_data.append(pre);
+  all_data.claim_append(entry_header_bl);
+  all_data.claim_append(op.data);
+
+  auto write_len = all_data.length();
+
+  r = cls_cxx_write2(hctx, part_header.max_ofs, write_len,
+                     &all_data, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+  if (r < 0) {
+    CLS_LOG(10, "%s(): failed to write entry (ofs=%lld len=%lld): r=%d",
+            __func__, (long long)part_header.max_ofs, (long long)write_len, r);
+    return r;
+  }
+
+  ++part_header.max_index;
+  part_header.max_ofs += write_len;
+
+  r = write_part_header(hctx, part_header);
+  if (r < 0) {
+    CLS_LOG(10, "%s(): failed to write header: r=%d", __func__, r);
+    return r;
+  }
+
+  return 0;
+}
+
 CLS_INIT(fifo)
 {
   CLS_LOG(20, "Loaded fifo class!");
@@ -406,6 +480,7 @@ CLS_INIT(fifo)
   cls_method_handle_t h_fifo_get_info_op;
   cls_method_handle_t h_fifo_init_part_op;
   cls_method_handle_t h_fifo_update_state_op;
+  cls_method_handle_t h_fifo_part_push_op;;
 
   cls_register("fifo", &h_class);
   cls_register_cxx_method(h_class, "fifo_create",
@@ -423,6 +498,10 @@ CLS_INIT(fifo)
   cls_register_cxx_method(h_class, "fifo_update_state",
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           fifo_update_state_op, &h_fifo_update_state_op);
+
+  cls_register_cxx_method(h_class, "fifo_part_push",
+                          CLS_METHOD_RD | CLS_METHOD_WR,
+                          fifo_part_push_op, &h_fifo_part_push_op);
 
   return;
 }
