@@ -386,6 +386,8 @@ static int fifo_init_part_op(cls_method_context_t hctx,
   part_header.tag = op.tag;
   part_header.params = op.data_params;
 
+  cls_gen_random_bytes((char *)&part_header.magic, sizeof(part_header.magic));
+
   r = write_part_header(hctx, part_header);
   if (r < 0) {
     CLS_LOG(10, "%s(): failed to write header: r=%d", __func__, r);
