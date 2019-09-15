@@ -17,14 +17,41 @@ namespace _impl {
   };
 }
 
+// define the interface between error types and errorator
+template <class ConcreteErrorT>
+class error_t {
+  static constexpr const std::type_info& get_exception_ptr_type_info() {
+    return ConcreteErrorT::exception_ptr_type_info();
+  }
+
+  std::exception_ptr to_exception_ptr() const {
+    const auto* concrete_error = static_cast<const ConcreteErrorT*>(this);
+    return concrete_error->to_exception_ptr();
+  }
+
+  decltype(auto) static from_exception_ptr(std::exception_ptr ep) {
+    return ConcreteErrorT::from_exception_ptr(std::move(ep));
+  }
+
+  template <class... AllowedErrorsT>
+  friend struct errorator;
+
+  template <class ErrorVisitorT, class FuturatorT>
+  friend class maybe_handle_error_t;
+
+public:
+  template <class Func>
+  static decltype(auto) handle(Func&& func) {
+    return ConcreteErrorT::handle(std::forward<Func>(func));
+  }
+};
+
 // unthrowable_wrapper ensures compilation failure when somebody
 // would like to `throw make_error<...>)()` instead of returning.
 // returning allows for the compile-time verification of future's
 // AllowedErrorsV and also avoid the burden of throwing.
 template <class ErrorT, ErrorT ErrorV>
-struct unthrowable_wrapper {
-  using is_error = std::true_type;
-
+struct unthrowable_wrapper : error_t<unthrowable_wrapper<ErrorT, ErrorV>> {
   unthrowable_wrapper(const unthrowable_wrapper&) = delete;
   static constexpr unthrowable_wrapper instance{};
   [[nodiscard]] static const auto& make() {
@@ -43,15 +70,21 @@ struct unthrowable_wrapper {
 private:
   // can be used only to initialize the `instance` member
   explicit unthrowable_wrapper() = default;
-};
 
+  // implement the errorable interface
+  struct throwable_carrier{};
 
-// TODO: let `exception` use other type than `ct_error`.
-template <class ErrorT>
-class exception {
-  exception() = default;
-public:
-  exception(const exception&) = default;
+  static constexpr const std::type_info& exception_ptr_type_info() {
+    return typeid(throwable_carrier);
+  }
+  auto to_exception_ptr() const {
+    return std::make_exception_ptr<throwable_carrier>({});
+  }
+  static const auto& from_exception_ptr(std::exception_ptr) {
+    return instance;
+  }
+
+  friend class error_t<unthrowable_wrapper<ErrorT, ErrorV>>;
 };
 
 namespace _impl {
@@ -94,22 +127,25 @@ public:
     // It should be available both in GCC and Clang but a fallback
     // (based on `std::rethrow_exception()` and `catch`) can be made
     // to handle other platforms if necessary.
-    if (type_info == typeid(exception<ErrorT>)) {
+    if (type_info == ErrorT::error_t::get_exception_ptr_type_info()) {
       // set `state::invalid` in internals of `seastar::future` to not
       // call `report_failed_future()` during `operator=()`.
-      std::move(result).get_exception();
+      [[maybe_unused]] auto&& ep = std::move(result).get_exception();
 
       using return_t = std::invoke_result_t<ErrorVisitorT, ErrorT>;
       if constexpr (std::is_assignable_v<decltype(result), return_t>) {
-        result = std::forward<ErrorVisitorT>(errfunc)(ErrorT::instance);
+        result = std::invoke(std::forward<ErrorVisitorT>(errfunc),
+                             ErrorT::error_t::from_exception_ptr(std::move(ep)));
       } else if constexpr (std::is_same_v<return_t, void>) {
         // void denotes explicit discarding
         // execute for the sake a side effects. Typically this boils down
         // to throwing an exception by the handler.
-        std::forward<ErrorVisitorT>(errfunc)(ErrorT::instance);
+        std::invoke(std::forward<ErrorVisitorT>(errfunc),
+                    ErrorT::error_t::from_exception_ptr(std::move(ep)));
       } else {
         static_assert(_impl::always_false<return_t>::value,
                       "return of Error Visitor is not assignable to future");
+        // do nothing with `ep`.
       }
     }
   }
@@ -145,12 +181,8 @@ static constexpr auto composer(FuncHead&& head, FuncTail&&... tail) {
 
 template <class... AllowedErrors>
 struct errorator {
-  template <class T, class = std::void_t<>>
-  struct is_error  : std::false_type {};
   template <class T>
-  struct is_error<T, std::void_t<typename T::is_error>> : T::is_error {};
-  template <class T>
-  static inline constexpr bool is_error_v = is_error<T>::value;
+  static inline constexpr bool is_error_v = std::is_base_of_v<error_t<T>, T>;
 
   static_assert((... && is_error_v<AllowedErrors>),
                 "errorator expects presence of ::is_error in all error types");
@@ -258,8 +290,10 @@ struct errorator {
               class DecayedT = std::decay_t<ErrorT>,
               bool IsError = is_error_v<DecayedT>,
               class = std::enable_if_t<IsError>>
-    future(ErrorT&&)
-      : base_t(seastar::make_exception_future<ValuesT...>(exception<DecayedT>{})) {
+    future(ErrorT&& e)
+      : base_t(
+          seastar::make_exception_future<ValuesT...>(
+            errorator_type::make_exception_ptr(e))) {
       // this is `fold expression` of C++17.
       static_assert((... || (std::is_same_v<DecayedT, AllowedErrors>)),
                     "ErrorT is not enlisted in errorator");
@@ -452,7 +486,15 @@ private:
     }
   };
 
-  // needed because of return_errorator_t::template futurize<...>
+  template <class ErrorT>
+  static std::exception_ptr make_exception_ptr(ErrorT&& e) {
+    // calling via interface class due to encapsulation and friend relations.
+    return e.error_t<std::decay_t<ErrorT>>::to_exception_ptr();
+  }
+
+  // needed because of:
+  //  * return_errorator_t::template futurize<...> in `safe_then()`,
+  //  * conversion to `std::exception_ptr` in `future::future(ErrorT&&)`.
   template <class... ValueT>
   friend class future;
 }; // class errorator, generic template
