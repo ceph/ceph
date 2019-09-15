@@ -73,12 +73,19 @@ private:
 
   // implement the errorable interface
   struct throwable_carrier{};
+  static std::exception_ptr carrier_instance;
 
   static constexpr const std::type_info& exception_ptr_type_info() {
     return typeid(throwable_carrier);
   }
   auto to_exception_ptr() const {
-    return std::make_exception_ptr<throwable_carrier>({});
+    // error codes don't need to instantiate `std::exception_ptr` each
+    // time as the code is actually a part of the type itself.
+    // `std::make_exception_ptr()` on modern enough GCCs is quite cheap
+    // (see the Gleb Natapov's patch eradicating throw/catch there),
+    // but using one instance per type boils down the overhead to just
+    // ref-counting.
+    return carrier_instance;
   }
   static const auto& from_exception_ptr(std::exception_ptr) {
     return instance;
@@ -86,6 +93,11 @@ private:
 
   friend class error_t<unthrowable_wrapper<ErrorT, ErrorV>>;
 };
+
+template <class ErrorT, ErrorT ErrorV>
+std::exception_ptr unthrowable_wrapper<ErrorT, ErrorV>::carrier_instance = \
+  std::make_exception_ptr<
+    unthrowable_wrapper<ErrorT, ErrorV>::throwable_carrier>({});
 
 namespace _impl {
   template <class T> struct always_false : std::false_type {};
