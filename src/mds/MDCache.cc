@@ -8066,7 +8066,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
 {
   bool discover = (flags & MDS_TRAVERSE_DISCOVER);
   bool forward = !discover;
-  bool last_xlocked = (flags & MDS_TRAVERSE_LAST_XLOCKED);
+  bool path_locked = (flags & MDS_TRAVERSE_PATH_LOCKED);
   bool want_dentry = (flags & MDS_TRAVERSE_WANT_DENTRY);
   bool want_auth = (flags & MDS_TRAVERSE_WANT_AUTH);
   bool rdlock_snap = (flags & (MDS_TRAVERSE_RDLOCK_SNAP | MDS_TRAVERSE_RDLOCK_SNAP2));
@@ -8182,7 +8182,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
         // discover?
 	dout(10) << "traverse: need dirfrag " << fg << ", doing discover from " << *cur << dendl;
 	discover_path(cur, snapid, path.postfixpath(depth), cf.build(),
-		      last_xlocked);
+		      path_locked);
 	if (mds->logger) mds->logger->inc(l_mds_traverse_discover);
         return 1;
       }
@@ -8249,8 +8249,8 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
 	  dout(10) << "traverse: failed to rdlock " << dn->lock << " " << *dn << dendl;
 	  return 1;
 	}
-      } else if (!dn->lock.can_read(client) &&
-		 !(last_xlocked && depth == path.depth() - 1) &&
+      } else if (!path_locked &&
+		 !dn->lock.can_read(client) &&
 		 !(dn->lock.is_xlocked() && dn->lock.get_xlock_by() == mdr)) {
 	dout(10) << "traverse: non-readable dentry at " << *dn << dendl;
 	dn->lock.add_waiter(SimpleLock::WAIT_RD, cf.build());
@@ -8296,7 +8296,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
             return -EIO;
           }
           open_remote_dentry(dn, true, cf.build(),
-			     (last_xlocked && depth == path.depth() - 1));
+			     (path_locked && depth == path.depth() - 1));
 	  if (mds->logger) mds->logger->inc(l_mds_traverse_remote_ino);
           return 1;
         }
@@ -8412,7 +8412,7 @@ int MDCache::path_traverse(MDRequestRef& mdr, MDSContextFactory& cf,
       if ((discover)) {
 	dout(7) << "traverse: discover from " << path[depth] << " from " << *curdir << dendl;
 	discover_path(curdir, snapid, path.postfixpath(depth), cf.build(),
-		      last_xlocked);
+		      path_locked);
 	if (mds->logger) mds->logger->inc(l_mds_traverse_discover);
         return 1;
       } 
@@ -9926,7 +9926,7 @@ void MDCache::fetch_backtrace(inodeno_t ino, int64_t pool, bufferlist& bl, Conte
 void MDCache::_send_discover(discover_info_t& d)
 {
   auto dis = make_message<MDiscover>(d.ino, d.frag, d.snap, d.want_path,
-				     d.want_base_dir, d.want_xlocked);
+				     d.want_base_dir, d.path_locked);
   dis->set_tid(d.tid);
   mds->send_message_mds(dis, d.mds);
 }
@@ -9986,14 +9986,14 @@ void MDCache::discover_path(CInode *base,
 			    snapid_t snap,
 			    filepath want_path,
 			    MDSContext *onfinish,
-			    bool want_xlocked,
+			    bool path_locked,
 			    mds_rank_t from)
 {
   if (from < 0)
     from = base->authority().first;
 
   dout(7) << "discover_path " << base->ino() << " " << want_path << " snap " << snap << " from mds." << from
-	  << (want_xlocked ? " want_xlocked":"")
+	  << (path_locked ? " path_locked":"")
 	  << dendl;
 
   if (base->is_ambiguous_auth()) {
@@ -10010,7 +10010,7 @@ void MDCache::discover_path(CInode *base,
   }
 
   frag_t fg = base->pick_dirfrag(want_path[0]);
-  if ((want_xlocked && want_path.depth() == 1) ||
+  if ((path_locked && want_path.depth() == 1) ||
       !base->is_waiting_for_dir(fg) || !onfinish) {
     discover_info_t& d = _create_discover(from);
     d.ino = base->ino();
@@ -10019,7 +10019,7 @@ void MDCache::discover_path(CInode *base,
     d.snap = snap;
     d.want_path = want_path;
     d.want_base_dir = true;
-    d.want_xlocked = want_xlocked;
+    d.path_locked = path_locked;
     _send_discover(d);
   }
 
@@ -10043,12 +10043,12 @@ void MDCache::discover_path(CDir *base,
 			    snapid_t snap,
 			    filepath want_path,
 			    MDSContext *onfinish,
-			    bool want_xlocked)
+			    bool path_locked)
 {
   mds_rank_t from = base->authority().first;
 
   dout(7) << "discover_path " << base->dirfrag() << " " << want_path << " snap " << snap << " from mds." << from
-	  << (want_xlocked ? " want_xlocked":"")
+	  << (path_locked ? " path_locked":"")
 	  << dendl;
 
   if (base->is_ambiguous_auth()) {
@@ -10064,7 +10064,7 @@ void MDCache::discover_path(CDir *base,
     return;
   }
 
-  if ((want_xlocked && want_path.depth() == 1) ||
+  if ((path_locked && want_path.depth() == 1) ||
       !base->is_waiting_for_dentry(want_path[0].c_str(), snap) || !onfinish) {
     discover_info_t& d = _create_discover(from);
     d.ino = base->ino();
@@ -10073,7 +10073,7 @@ void MDCache::discover_path(CDir *base,
     d.snap = snap;
     d.want_path = want_path;
     d.want_base_dir = false;
-    d.want_xlocked = want_xlocked;
+    d.path_locked = path_locked;
     _send_discover(d);
   }
 
@@ -10335,11 +10335,10 @@ void MDCache::handle_discover(const cref_t<MDiscover> &dis)
     // xlocked dentry?
     //  ...always block on non-tail items (they are unrelated)
     //  ...allow xlocked tail disocvery _only_ if explicitly requested
-    bool tailitem = (dis->get_want().depth() == 0) || (i == dis->get_want().depth() - 1);
     if (dn->lock.is_xlocked()) {
       // is this the last (tail) item in the discover traversal?
-      if (tailitem && dis->wants_xlocked()) {
-	dout(7) << "handle_discover allowing discovery of xlocked tail " << *dn << dendl;
+      if (dis->is_path_locked()) {
+	dout(7) << "handle_discover allowing discovery of xlocked " << *dn << dendl;
       } else if (reply->is_empty()) {
 	dout(7) << "handle_discover blocking on xlocked " << *dn << dendl;
 	dn->lock.add_waiter(SimpleLock::WAIT_RD, new C_MDS_RetryMessage(mds, dis));
@@ -10351,8 +10350,9 @@ void MDCache::handle_discover(const cref_t<MDiscover> &dis)
     }
 
     // frozen inode?
+    bool tailitem = (dis->get_want().depth() == 0) || (i == dis->get_want().depth() - 1);
     if (dnl->is_primary() && dnl->get_inode()->is_frozen_inode()) {
-      if (tailitem && dis->wants_xlocked()) {
+      if (tailitem && dis->is_path_locked()) {
 	dout(7) << "handle_discover allowing discovery of frozen tail " << *dnl->get_inode() << dendl;
       } else if (reply->is_empty()) {
 	dout(7) << *dnl->get_inode() << " is frozen, empty reply, waiting" << dendl;
@@ -10517,7 +10517,7 @@ void MDCache::handle_discover_reply(const cref_t<MDiscoverReply> &m)
 				   m->get_wanted_snapid(), finished);
 	} else {
 	  filepath relpath(m->get_error_dentry(), 0);
-	  discover_path(dir, m->get_wanted_snapid(), relpath, 0, m->get_wanted_xlocked());
+	  discover_path(dir, m->get_wanted_snapid(), relpath, 0, m->is_path_locked());
 	}
       } else
 	dout(7) << " doing nothing, have dir but nobody is waiting on dentry "

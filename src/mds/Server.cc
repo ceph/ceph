@@ -7067,7 +7067,7 @@ void Server::handle_slave_rmdir_prep(MDRequestRef& mdr)
   CInode *in;
   CF_MDS_MDRContextFactory cf(mdcache, mdr, false);
   int r = mdcache->path_traverse(mdr, cf, srcpath,
-				 MDS_TRAVERSE_DISCOVER | MDS_TRAVERSE_LAST_XLOCKED,
+				 MDS_TRAVERSE_DISCOVER | MDS_TRAVERSE_PATH_LOCKED,
 				 &trace, &in);
   if (r > 0) return;
   if (r == -ESTALE) {
@@ -8588,7 +8588,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
   vector<CDentry*> trace;
   CF_MDS_MDRContextFactory cf(mdcache, mdr, false);
   int r = mdcache->path_traverse(mdr, cf, destpath,
-				 MDS_TRAVERSE_DISCOVER | MDS_TRAVERSE_LAST_XLOCKED | MDS_TRAVERSE_WANT_DENTRY,
+				 MDS_TRAVERSE_DISCOVER | MDS_TRAVERSE_PATH_LOCKED | MDS_TRAVERSE_WANT_DENTRY,
 				 &trace);
   if (r > 0) return;
   if (r == -ESTALE) {
@@ -8608,7 +8608,7 @@ void Server::handle_slave_rename_prep(MDRequestRef& mdr)
   dout(10) << " src " << srcpath << dendl;
   CInode *srci = nullptr;
   r = mdcache->path_traverse(mdr, cf, srcpath,
-			     MDS_TRAVERSE_DISCOVER | MDS_TRAVERSE_LAST_XLOCKED,
+			     MDS_TRAVERSE_DISCOVER | MDS_TRAVERSE_PATH_LOCKED,
 			     &trace, &srci);
   if (r > 0) return;
   ceph_assert(r == 0);
