@@ -412,6 +412,18 @@ struct errorator {
     }
   };
 
+  template <class ErrorFunc>
+  static decltype(auto) all_same_way(ErrorFunc&& error_func) {
+    return [
+      error_func = std::forward<ErrorFunc>(error_func)
+    ] (auto&& e) mutable -> decltype(auto) {
+      using decayed_t = std::decay_t<decltype(e)>;
+      auto&& handler =
+        decayed_t::error_t::handle(std::forward<ErrorFunc>(error_func));
+      return std::invoke(std::move(handler), std::forward<decltype(e)>(e));
+    };
+  };
+
   // get a new errorator by extending current one with new error
   template <class... NewAllowedErrorsT>
   using extend = errorator<AllowedErrors..., NewAllowedErrorsT...>;
