@@ -175,13 +175,8 @@ static seastar::future<hobject_t> pgls_filter(
         val.push_back(std::move(bp));
         const bool filtered = filter.filter(sobj, val);
         return seastar::make_ready_future<hobject_t>(filtered ? sobj : hobject_t{});
-      }, [&filter, sobj] (const auto& e) {
-        // TODO: sugar-coat error handling. Compile-time visitors require
-        // too much of fragile boilerplate.
-        using T = std::decay_t<decltype(e)>;
-        static_assert(std::is_same_v<T, crimson::ct_error::enoent> ||
-                      std::is_same_v<T, crimson::ct_error::enodata>);
-        logger().debug("pgls_filter: got enoent for obj={}", sobj);
+      }, PGBackend::get_attr_errorator::all_same_way([&filter, sobj] {
+        logger().debug("pgls_filter: got error for obj={}", sobj);
 
         if (filter.reject_empty_xattr()) {
           return seastar::make_ready_future<hobject_t>(hobject_t{});
@@ -189,7 +184,7 @@ static seastar::future<hobject_t> pgls_filter(
         ceph::bufferlist val;
         const bool filtered = filter.filter(sobj, val);
         return seastar::make_ready_future<hobject_t>(filtered ? sobj : hobject_t{});
-      });
+      }));
   } else {
     ceph::bufferlist empty_lvalue_bl;
     const bool filtered = filter.filter(sobj, empty_lvalue_bl);
