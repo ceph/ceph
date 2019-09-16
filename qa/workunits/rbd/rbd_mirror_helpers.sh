@@ -257,26 +257,28 @@ setup_pools()
     rbd --cluster ${cluster} mirror pool enable ${POOL} pool
     rbd --cluster ${cluster} mirror pool enable ${PARENT_POOL} image
 
-    if [ -z ${RBD_MIRROR_CONFIG_KEY} ]; then
-      rbd --cluster ${cluster} mirror pool peer add ${POOL} ${remote_cluster}
-      rbd --cluster ${cluster} mirror pool peer add ${PARENT_POOL} ${remote_cluster}
-    else
-      mon_map_file=${TEMPDIR}/${remote_cluster}.monmap
-      ceph --cluster ${remote_cluster} mon getmap > ${mon_map_file}
-      mon_addr=$(monmaptool --print ${mon_map_file} | grep -E 'mon\.' |
-        head -n 1 | sed -E 's/^[0-9]+: ([^ ]+).+$/\1/' | sed -E 's/\/[0-9]+//g')
+    if [ -z ${RBD_MIRROR_MANUAL_PEERS} ]; then
+      if [ -z ${RBD_MIRROR_CONFIG_KEY} ]; then
+        rbd --cluster ${cluster} mirror pool peer add ${POOL} ${remote_cluster}
+        rbd --cluster ${cluster} mirror pool peer add ${PARENT_POOL} ${remote_cluster}
+      else
+        mon_map_file=${TEMPDIR}/${remote_cluster}.monmap
+        ceph --cluster ${remote_cluster} mon getmap > ${mon_map_file}
+        mon_addr=$(monmaptool --print ${mon_map_file} | grep -E 'mon\.' |
+          head -n 1 | sed -E 's/^[0-9]+: ([^ ]+).+$/\1/' | sed -E 's/\/[0-9]+//g')
 
-      admin_key_file=${TEMPDIR}/${remote_cluster}.client.${CEPH_ID}.key
-      CEPH_ARGS='' ceph --cluster ${remote_cluster} auth get-key client.${CEPH_ID} > ${admin_key_file}
+        admin_key_file=${TEMPDIR}/${remote_cluster}.client.${CEPH_ID}.key
+        CEPH_ARGS='' ceph --cluster ${remote_cluster} auth get-key client.${CEPH_ID} > ${admin_key_file}
 
-      rbd --cluster ${cluster} mirror pool peer add ${POOL} client.${CEPH_ID}@${remote_cluster}-DNE \
-          --remote-mon-host "${mon_addr}" --remote-key-file ${admin_key_file}
+        rbd --cluster ${cluster} mirror pool peer add ${POOL} client.${CEPH_ID}@${remote_cluster}-DNE \
+            --remote-mon-host "${mon_addr}" --remote-key-file ${admin_key_file}
 
-      uuid=$(rbd --cluster ${cluster} mirror pool peer add ${PARENT_POOL} client.${CEPH_ID}@${remote_cluster}-DNE)
-      rbd --cluster ${cluster} mirror pool peer set ${PARENT_POOL} ${uuid} mon-host ${mon_addr}
-      rbd --cluster ${cluster} mirror pool peer set ${PARENT_POOL} ${uuid} key-file ${admin_key_file}
+        uuid=$(rbd --cluster ${cluster} mirror pool peer add ${PARENT_POOL} client.${CEPH_ID}@${remote_cluster}-DNE)
+        rbd --cluster ${cluster} mirror pool peer set ${PARENT_POOL} ${uuid} mon-host ${mon_addr}
+        rbd --cluster ${cluster} mirror pool peer set ${PARENT_POOL} ${uuid} key-file ${admin_key_file}
 
-      PEER_CLUSTER_SUFFIX=-DNE
+        PEER_CLUSTER_SUFFIX=-DNE
+      fi
     fi
 }
 
