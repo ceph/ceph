@@ -70,8 +70,8 @@ struct BufferedRecoveryMessages {
     }
   }
 
-  void send_osd_message(int target, Message *m) {
-    message_map[target].push_back(m);
+  void send_osd_message(int target, MessageRef m) {
+    message_map[target].push_back(std::move(m));
   }
   void send_notify(int to, const pg_notify_t &n);
   void send_query(int to, spg_t spgid, const pg_query_t &q);
@@ -214,8 +214,8 @@ struct PeeringCtxWrapper {
 
   PeeringCtxWrapper(PeeringCtxWrapper &&ctx) = default;
 
-  void send_osd_message(int target, Message *m) {
-    msgs.send_osd_message(target, m);
+  void send_osd_message(int target, MessageRef m) {
+    msgs.send_osd_message(target, std::move(m));
   }
   void send_notify(int to, const pg_notify_t &n) {
     msgs.send_notify(to, n);
