@@ -23,9 +23,9 @@ using namespace librados;
 namespace rados {
   namespace cls {
     namespace fifo {
-      int FIFO::create(librados::ObjectWriteOperation *rados_op,
-                       const CreateParams& params) {
-        cls_fifo_create_op op;
+      int FIFO::meta_create(librados::ObjectWriteOperation *rados_op,
+                            const MetaCreateParams& params) {
+        cls_fifo_meta_create_op op;
 
         auto& state = params.state;
 
@@ -48,16 +48,16 @@ namespace rados {
 
         bufferlist in;
         encode(op, in);
-        rados_op->exec("fifo", "fifo_create", in);
+        rados_op->exec("fifo", "fifo_meta_create", in);
 
         return 0;
       }
 
-      int FIFO::get_info(librados::IoCtx& ioctx,
+      int FIFO::meta_get(librados::IoCtx& ioctx,
                          const string& oid,
-                         const GetInfoParams& params,
+                         const MetaGetParams& params,
                          fifo_info_t *result) {
-        cls_fifo_get_info_op op;
+        cls_fifo_meta_get_op op;
 
         auto& state = params.state;
 
@@ -69,7 +69,7 @@ namespace rados {
         bufferlist out;
         int op_ret;
         encode(op, in);
-        rop.exec("fifo", "fifo_get_info", in, &out, &op_ret);
+        rop.exec("fifo", "fifo_meta_get", in, &out, &op_ret);
 
         int r = ioctx.operate(oid, &rop, nullptr);
         if (r < 0) {
@@ -80,7 +80,7 @@ namespace rados {
           return op_ret;
         }
 
-        cls_fifo_get_info_op_reply reply;
+        cls_fifo_meta_get_op_reply reply;
         auto iter = out.cbegin();
         try {
           decode(reply, iter);
@@ -93,9 +93,9 @@ namespace rados {
         return 0;
       }
 
-      int FIFO::update_state(librados::ObjectWriteOperation *rados_op,
-                             const UpdateStateParams& params) {
-        cls_fifo_update_state_op op;
+      int FIFO::meta_update(librados::ObjectWriteOperation *rados_op,
+                             const MetaUpdateParams& params) {
+        cls_fifo_meta_update_op op;
 
         auto& state = params.state;
 
@@ -111,14 +111,14 @@ namespace rados {
 
         bufferlist in;
         encode(op, in);
-        rados_op->exec("fifo", "fifo_update_state", in);
+        rados_op->exec("fifo", "fifo_meta_update", in);
 
         return 0;
       }
 
-      int FIFO::init_part(librados::ObjectWriteOperation *rados_op,
-                          const InitPartParams& params) {
-        cls_fifo_init_part_op op;
+      int FIFO::part_init(librados::ObjectWriteOperation *rados_op,
+                          const PartInitParams& params) {
+        cls_fifo_part_init_op op;
 
         auto& state = params.state;
 
@@ -131,7 +131,7 @@ namespace rados {
 
         bufferlist in;
         encode(op, in);
-        rados_op->exec("fifo", "fifo_init_part", in);
+        rados_op->exec("fifo", "fifo_part_init", in);
 
         return 0;
       }

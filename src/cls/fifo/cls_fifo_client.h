@@ -30,7 +30,7 @@ namespace rados {
 
         /* create */
 
-        struct CreateParams {
+        struct MetaCreateParams {
           struct State {
             static constexpr uint64_t default_max_obj_size = 4 * 1024 * 1024;
             static constexpr uint64_t default_max_entry_size = 32 * 1024;
@@ -42,59 +42,59 @@ namespace rados {
             uint64_t max_entry_size{default_max_entry_size};
           } state;
 
-          CreateParams& id(const std::string& id) {
+          MetaCreateParams& id(const std::string& id) {
             state.id = id;
             return *this;
           }
-          CreateParams& oid_prefix(const std::string& oid_prefix) {
+          MetaCreateParams& oid_prefix(const std::string& oid_prefix) {
             state.oid_prefix = oid_prefix;
             return *this;
           }
-          CreateParams& exclusive(bool exclusive) {
+          MetaCreateParams& exclusive(bool exclusive) {
             state.exclusive = exclusive;
             return *this;
           }
-          CreateParams& max_obj_size(uint64_t max_obj_size) {
+          MetaCreateParams& max_obj_size(uint64_t max_obj_size) {
             state.max_obj_size = max_obj_size;
             return *this;
           }
-          CreateParams& max_entry_size(uint64_t max_entry_size) {
+          MetaCreateParams& max_entry_size(uint64_t max_entry_size) {
             state.max_entry_size = max_entry_size;
             return *this;
           }
-          CreateParams& objv(const std::string& instance, uint64_t ver) {
+          MetaCreateParams& objv(const std::string& instance, uint64_t ver) {
             state.objv = fifo_objv_t{instance, ver};
             return *this;
           }
         };
 
-        static int create(librados::ObjectWriteOperation *op,
-                          const CreateParams& params);
+        static int meta_create(librados::ObjectWriteOperation *op,
+                               const MetaCreateParams& params);
 
         /* get info */
 
-        struct GetInfoParams {
+        struct MetaGetParams {
           struct State {
             std::optional<fifo_objv_t> objv;
           } state;
 
-          GetInfoParams& objv(const fifo_objv_t& v) {
+          MetaGetParams& objv(const fifo_objv_t& v) {
             state.objv = v;
             return *this;
           }
-          GetInfoParams& objv(const std::string& instance, uint64_t ver) {
+          MetaGetParams& objv(const std::string& instance, uint64_t ver) {
             state.objv = fifo_objv_t{instance, ver};
             return *this;
           }
         };
-        static int get_info(librados::IoCtx& ioctx,
+        static int meta_get(librados::IoCtx& ioctx,
                             const string& oid,
-                            const GetInfoParams& params,
+                            const MetaGetParams& params,
                             rados::cls::fifo::fifo_info_t *result);
 
         /* update */
 
-        struct UpdateStateParams {
+        struct MetaUpdateParams {
           struct State {
             rados::cls::fifo::fifo_objv_t objv;
 
@@ -104,50 +104,50 @@ namespace rados {
             std::optional<rados::cls::fifo::fifo_prepare_status_t> head_prepare_status;
           } state;
 
-          UpdateStateParams& objv(const fifo_objv_t& objv) {
+          MetaUpdateParams& objv(const fifo_objv_t& objv) {
             state.objv = objv;
             return *this;
           }
-          UpdateStateParams& tail_obj_num(uint64_t tail_obj_num) {
+          MetaUpdateParams& tail_obj_num(uint64_t tail_obj_num) {
             state.tail_obj_num = tail_obj_num;
             return *this;
           }
-          UpdateStateParams& head_obj_num(uint64_t head_obj_num) {
+          MetaUpdateParams& head_obj_num(uint64_t head_obj_num) {
             state.head_obj_num = head_obj_num;
             return *this;
           }
-          UpdateStateParams& head_tag(const std::string& head_tag) {
+          MetaUpdateParams& head_tag(const std::string& head_tag) {
             state.head_tag = head_tag;
             return *this;
           }
-          UpdateStateParams& head_prepare_status(const rados::cls::fifo::fifo_prepare_status_t& head_prepare_status) {
+          MetaUpdateParams& head_prepare_status(const rados::cls::fifo::fifo_prepare_status_t& head_prepare_status) {
             state.head_prepare_status = head_prepare_status;
             return *this;
           }
         };
 
-        static int update_state(librados::ObjectWriteOperation *rados_op,
-                                const UpdateStateParams& params);
+        static int meta_update(librados::ObjectWriteOperation *rados_op,
+                                const MetaUpdateParams& params);
         /* init part */
 
-        struct InitPartParams {
+        struct PartInitParams {
           struct State {
             string tag;
             rados::cls::fifo::fifo_data_params_t data_params;
           } state;
 
-          InitPartParams& tag(const std::string& tag) {
+          PartInitParams& tag(const std::string& tag) {
             state.tag = tag;
             return *this;
           }
-          InitPartParams& data_params(const rados::cls::fifo::fifo_data_params_t& data_params) {
+          PartInitParams& data_params(const rados::cls::fifo::fifo_data_params_t& data_params) {
             state.data_params = data_params;
             return *this;
           }
         };
 
-        static int init_part(librados::ObjectWriteOperation *op,
-                             const InitPartParams& params);
+        static int part_init(librados::ObjectWriteOperation *op,
+                             const PartInitParams& params);
 
 	/* push part */
 

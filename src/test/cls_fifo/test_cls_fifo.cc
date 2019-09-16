@@ -27,48 +27,13 @@ using namespace librados;
 
 using namespace rados::cls::fifo;
 
-#if 0
-void lock_info(IoCtx *ioctx, string& oid, string& name, map<locker_id_t, locker_info_t>& lockers,
-	       ClsLockType *assert_type, string *assert_tag)
-{
-  ClsLockType lock_type = LOCK_NONE;
-  string tag;
-  lockers.clear();
-  ASSERT_EQ(0, get_lock_info(ioctx, oid, name, &lockers, &lock_type, &tag));
-  cout << "lock: " << name << std::endl;
-  cout << "  lock_type: " << cls_lock_type_str(lock_type) << std::endl;
-  cout << "  tag: " << tag << std::endl;
-  cout << "  lockers:" << std::endl;
-
-  if (assert_type) {
-    ASSERT_EQ(*assert_type, lock_type);
-  }
-
-  if (assert_tag) {
-    ASSERT_EQ(*assert_tag, tag);
-  }
-
-  map<locker_id_t, locker_info_t>::iterator liter;
-  for (liter = lockers.begin(); liter != lockers.end(); ++liter) {
-    const locker_id_t& locker = liter->first;
-    cout << "    " << locker.locker << " expiration=" << liter->second.expiration
-         << " addr=" << liter->second.addr << " cookie=" << locker.cookie << std::endl;
-  }
-}
-
-void lock_info(IoCtx *ioctx, string& oid, string& name, map<locker_id_t, locker_info_t>& lockers)
-{
-  lock_info(ioctx, oid, name, lockers, NULL, NULL);
-}
-#endif
-
 static int fifo_create(IoCtx& ioctx,
                        const string& oid,
-                       const FIFO::CreateParams& params)
+                       const FIFO::MetaCreateParams& params)
 {
   ObjectWriteOperation op;
 
-  int r = FIFO::create(&op, params);
+  int r = FIFO::meta_create(&op, params);
   if (r < 0) {
     return r;
   }
@@ -87,29 +52,26 @@ TEST(ClsFIFO, TestCreate) {
   string oid = fifo_id;
 
   ASSERT_EQ(-EINVAL, fifo_create(ioctx, oid,
-                                  FIFO::CreateParams()));
+                                  FIFO::MetaCreateParams()));
 
   ASSERT_EQ(-EINVAL, fifo_create(ioctx, oid,
-                                  FIFO::CreateParams()
+                                  FIFO::MetaCreateParams()
                                   .id(fifo_id)));
 
   ASSERT_EQ(-EINVAL, fifo_create(ioctx, oid,
-                     FIFO::CreateParams()
+                     FIFO::MetaCreateParams()
                      .id(fifo_id)
-                     .pool(pool_name)
                      .max_obj_size(0)));
 
   ASSERT_EQ(-EINVAL, fifo_create(ioctx, oid,
-                     FIFO::CreateParams()
+                     FIFO::MetaCreateParams()
                      .id(fifo_id)
-                     .pool(pool_name)
                      .max_entry_size(0)));
-
+  
   /* first successful create */
   ASSERT_EQ(0, fifo_create(ioctx, oid,
-               FIFO::CreateParams()
-               .id(fifo_id)
-               .pool(pool_name)));
+               FIFO::MetaCreateParams()
+               .id(fifo_id)));
 
   uint64_t size;
   struct timespec ts;
@@ -118,9 +80,8 @@ TEST(ClsFIFO, TestCreate) {
 
   /* test idempotency */
   ASSERT_EQ(0, fifo_create(ioctx, oid,
-               FIFO::CreateParams()
-               .id(fifo_id)
-               .pool(pool_name)));
+               FIFO::MetaCreateParams()
+               .id(fifo_id)));
 
   uint64_t size2;
   struct timespec ts2;
@@ -128,21 +89,18 @@ TEST(ClsFIFO, TestCreate) {
   ASSERT_EQ(size2, size);
 
   ASSERT_EQ(-EEXIST, fifo_create(ioctx, oid,
-               FIFO::CreateParams()
+               FIFO::MetaCreateParams()
                .id(fifo_id)
-               .pool(pool_name)
                .exclusive(true)));
 
   ASSERT_EQ(-EEXIST, fifo_create(ioctx, oid,
-               FIFO::CreateParams()
+               FIFO::MetaCreateParams()
                .id(fifo_id)
-               .pool("foopool")
                .exclusive(false)));
 
   ASSERT_EQ(-EEXIST, fifo_create(ioctx, oid,
-               FIFO::CreateParams()
+               FIFO::MetaCreateParams()
                .id("foo")
-               .pool(pool_name)
                .exclusive(false)));
 
   ASSERT_EQ(0, destroy_one_pool_pp(pool_name, cluster));
@@ -162,25 +120,24 @@ TEST(ClsFIFO, TestGetInfo) {
 
   /* first successful create */
   ASSERT_EQ(0, fifo_create(ioctx, oid,
-               FIFO::CreateParams()
-               .id(fifo_id)
-               .pool(pool_name)));
+               FIFO::MetaCreateParams()
+               .id(fifo_id)));
 
-  ASSERT_EQ(0, FIFO::get_info(ioctx, oid,
-               FIFO::GetInfoParams(), &info));
+  ASSERT_EQ(0, FIFO::meta_get(ioctx, oid,
+               FIFO::MetaGetParams(), &info));
 
   ASSERT_TRUE(!info.objv.instance.empty());
 
-  ASSERT_EQ(0, FIFO::get_info(ioctx, oid,
-               FIFO::GetInfoParams()
+  ASSERT_EQ(0, FIFO::meta_get(ioctx, oid,
+               FIFO::MetaGetParams()
                .objv(info.objv),
                &info));
 
   fifo_objv_t objv;
   objv.instance="foo";
   objv.ver = 12;
-  ASSERT_EQ(-ECANCELED, FIFO::get_info(ioctx, oid,
-               FIFO::GetInfoParams()
+  ASSERT_EQ(-ECANCELED, FIFO::meta_get(ioctx, oid,
+               FIFO::MetaGetParams()
                .objv(objv),
                &info));
 

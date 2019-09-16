@@ -20,7 +20,7 @@
 #include "include/utime.h"
 #include "cls/fifo/cls_fifo_types.h"
 
-struct cls_fifo_create_op
+struct cls_fifo_meta_create_op
 {
   string id;
   std::optional<rados::cls::fifo::fifo_objv_t> objv;
@@ -60,9 +60,9 @@ struct cls_fifo_create_op
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_fifo_create_op)
+WRITE_CLASS_ENCODER(cls_fifo_meta_create_op)
 
-struct cls_fifo_get_info_op
+struct cls_fifo_meta_get_op
 {
   std::optional<rados::cls::fifo::fifo_objv_t> objv;
 
@@ -77,9 +77,9 @@ struct cls_fifo_get_info_op
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_fifo_get_info_op)
+WRITE_CLASS_ENCODER(cls_fifo_meta_get_op)
 
-struct cls_fifo_get_info_op_reply
+struct cls_fifo_meta_get_op_reply
 {
   rados::cls::fifo::fifo_info_t info;
 
@@ -94,9 +94,9 @@ struct cls_fifo_get_info_op_reply
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_fifo_get_info_op_reply)
+WRITE_CLASS_ENCODER(cls_fifo_meta_get_op_reply)
 
-struct cls_fifo_init_part_op
+struct cls_fifo_part_init_op
 {
   string tag;
   rados::cls::fifo::fifo_data_params_t data_params;
@@ -114,7 +114,7 @@ struct cls_fifo_init_part_op
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_fifo_init_part_op)
+WRITE_CLASS_ENCODER(cls_fifo_part_init_op)
 
 struct cls_fifo_part_push_op
 {
@@ -136,7 +136,7 @@ struct cls_fifo_part_push_op
 };
 WRITE_CLASS_ENCODER(cls_fifo_part_push_op)
 
-struct cls_fifo_update_state_op
+struct cls_fifo_meta_update_op
 {
   rados::cls::fifo::fifo_objv_t objv;
 
@@ -164,4 +164,4 @@ struct cls_fifo_update_state_op
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_fifo_update_state_op)
+WRITE_CLASS_ENCODER(cls_fifo_meta_update_op)

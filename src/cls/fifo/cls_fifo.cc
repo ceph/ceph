@@ -197,12 +197,12 @@ static int read_header(cls_method_context_t hctx,
   return 0;
 }
 
-static int fifo_create_op(cls_method_context_t hctx,
+static int fifo_meta_create_op(cls_method_context_t hctx,
                           bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "%s", __func__);
 
-  cls_fifo_create_op op;
+  cls_fifo_meta_create_op op;
   try {
     auto iter = in->cbegin();
     decode(op, iter);
@@ -272,12 +272,12 @@ static int fifo_create_op(cls_method_context_t hctx,
   return 0;
 }
 
-static int fifo_update_state_op(cls_method_context_t hctx,
+static int fifo_meta_update_op(cls_method_context_t hctx,
                                 bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "%s", __func__);
 
-  cls_fifo_update_state_op op;
+  cls_fifo_meta_update_op op;
   try {
     auto iter = in->cbegin();
     decode(op, iter);
@@ -318,12 +318,12 @@ static int fifo_update_state_op(cls_method_context_t hctx,
   return 0;
 }
 
-static int fifo_get_info_op(cls_method_context_t hctx,
+static int fifo_meta_get_op(cls_method_context_t hctx,
                           bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "%s", __func__);
 
-  cls_fifo_get_info_op op;
+  cls_fifo_meta_get_op op;
   try {
     auto iter = in->cbegin();
     decode(op, iter);
@@ -332,7 +332,7 @@ static int fifo_get_info_op(cls_method_context_t hctx,
     return -EINVAL;
   }
 
-  cls_fifo_get_info_op_reply reply;
+  cls_fifo_meta_get_op_reply reply;
   int r = read_header(hctx, op.objv, &reply.info);
   if (r < 0) {
     return r;
@@ -343,12 +343,12 @@ static int fifo_get_info_op(cls_method_context_t hctx,
   return 0;
 }
 
-static int fifo_init_part_op(cls_method_context_t hctx,
+static int fifo_part_init_op(cls_method_context_t hctx,
                              bufferlist *in, bufferlist *out)
 {
   CLS_LOG(20, "%s", __func__);
 
-  cls_fifo_init_part_op op;
+  cls_fifo_part_init_op op;
   try {
     auto iter = in->cbegin();
     decode(op, iter);
@@ -476,28 +476,28 @@ CLS_INIT(fifo)
   CLS_LOG(20, "Loaded fifo class!");
 
   cls_handle_t h_class;
-  cls_method_handle_t h_fifo_create_op;
-  cls_method_handle_t h_fifo_get_info_op;
-  cls_method_handle_t h_fifo_init_part_op;
-  cls_method_handle_t h_fifo_update_state_op;
+  cls_method_handle_t h_fifo_meta_create_op;
+  cls_method_handle_t h_fifo_meta_get_op;
+  cls_method_handle_t h_fifo_meta_update_op;
+  cls_method_handle_t h_fifo_part_init_op;
   cls_method_handle_t h_fifo_part_push_op;;
 
   cls_register("fifo", &h_class);
-  cls_register_cxx_method(h_class, "fifo_create",
+  cls_register_cxx_method(h_class, "fifo_meta_create",
                           CLS_METHOD_RD | CLS_METHOD_WR,
-                          fifo_create_op, &h_fifo_create_op);
+                          fifo_meta_create_op, &h_fifo_meta_create_op);
 
-  cls_register_cxx_method(h_class, "fifo_get_info",
+  cls_register_cxx_method(h_class, "fifo_meta_get",
                           CLS_METHOD_RD,
-                          fifo_get_info_op, &h_fifo_get_info_op);
+                          fifo_meta_get_op, &h_fifo_meta_get_op);
 
-  cls_register_cxx_method(h_class, "fifo_init_part",
+  cls_register_cxx_method(h_class, "fifo_meta_update",
                           CLS_METHOD_RD | CLS_METHOD_WR,
-                          fifo_init_part_op, &h_fifo_init_part_op);
+                          fifo_meta_update_op, &h_fifo_meta_update_op);
 
-  cls_register_cxx_method(h_class, "fifo_update_state",
+  cls_register_cxx_method(h_class, "fifo_part_init",
                           CLS_METHOD_RD | CLS_METHOD_WR,
-                          fifo_update_state_op, &h_fifo_update_state_op);
+                          fifo_part_init_op, &h_fifo_part_init_op);
 
   cls_register_cxx_method(h_class, "fifo_part_push",
                           CLS_METHOD_RD | CLS_METHOD_WR,
