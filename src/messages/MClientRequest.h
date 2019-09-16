@@ -193,7 +193,7 @@ public:
 
 	localmask &= ~CEPH_SETATTR_BTIME;
 
-	head.args.setattr.btime = { 0 };
+	head.args.setattr.btime = { init_le32(0), init_le32(0) };
 	head.args.setattr.mask = localmask;
       }
     }
