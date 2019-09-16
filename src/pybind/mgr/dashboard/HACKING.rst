@@ -1054,6 +1054,37 @@ Example:
     def list(self):
       return {"msg": "Hello"}
 
+How to create a dedicated UI endpoint which uses the 'public' API?
+~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+Sometimes we want to combine multiple calls into one single call
+to save bandwidth or for other performance reasons.
+In order to achieve that, we first have to create an ``@UiApiController`` which
+is used for endpoints consumed by the UI but that are not part of the
+'public' API. Let the ui class inherit from the REST controller class.
+Now you can use all methods from the api controller.
+
+Example:
+
+.. code-block:: python
+
+  import cherrypy
+  from . import UiApiController, ApiController, RESTController
+
+
+  @ApiController('ping', secure=False)  # /api/ping
+  class Ping(RESTController):
+    def list(self):
+      return self._list()
+
+    def _list(self):  # To not get in conflict with the JSON wrapper
+      return [1,2,3]
+
+
+  @UiApiController('ping', secure=False)  # /ui-api/ping
+  class PingUi(Ping):
+    def list(self):
+      return self._list() + [4, 5, 6]
 
 How to access the manager module instance from a controller?
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
