@@ -329,7 +329,8 @@ private:
     auto duration = std::chrono::duration<double>(now-recall_start).count();
 
     MDSGatherBuilder *gather = new MDSGatherBuilder(g_ceph_context);
-    auto [throttled, count] = server->recall_client_state(gather, Server::RecallFlags::STEADY);
+    auto flags = Server::RecallFlags::STEADY|Server::RecallFlags::TRIM;
+    auto [throttled, count] = server->recall_client_state(gather, flags);
     dout(10) << __func__
              << (throttled ? " (throttled)" : "")
              << " recalled " << count << " caps" << dendl;
