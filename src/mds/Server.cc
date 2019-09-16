@@ -2605,7 +2605,7 @@ void Server::handle_slave_request(const cref_t<MMDSSlaveRequest> &m)
       return;
     }
 
-    // may get these requests while mdr->slave_request is non-null
+    // may get these while mdr->slave_request is non-null
     if (m->get_op() == MMDSSlaveRequest::OP_DROPLOCKS) {
       mds->locker->drop_locks(mdr.get());
       return;

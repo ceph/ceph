@@ -318,7 +318,7 @@ public:
 			  vector<pair<CDir*, size_t> >& results);
   void child_export_finish(std::shared_ptr<export_base_t>& parent, bool success);
 
-  void get_export_lock_set(CDir *dir, MutationImpl::LockOpVec& lov);
+  bool export_try_grab_locks(CDir *dir, MutationRef& mut);
   void get_export_client_set(CDir *dir, std::set<client_t> &client_set);
   void get_export_client_set(CInode *in, std::set<client_t> &client_set);
 

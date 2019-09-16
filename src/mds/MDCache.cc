@@ -6912,7 +6912,7 @@ bool MDCache::trim_inode(CDentry *dn, CInode *in, CDir *con, expiremap& expirema
     // This is because that unconnected replicas are problematic for
     // subtree migration.
     //
-    if (!in->is_auth() && !mds->locker->rdlock_try(&in->dirfragtreelock, -1, nullptr)) {
+    if (!in->is_auth() && !mds->locker->rdlock_try(&in->dirfragtreelock, -1)) {
       return true;
     }
 

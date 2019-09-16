@@ -85,11 +85,11 @@ public:
   void try_eval(SimpleLock *lock, bool *pneed_issue);
 
   bool _rdlock_kick(SimpleLock *lock, bool as_anon);
-  bool rdlock_try(SimpleLock *lock, client_t client, MDSContext *c);
+  bool rdlock_try(SimpleLock *lock, client_t client);
   bool rdlock_start(SimpleLock *lock, MDRequestRef& mut, bool as_anon=false);
   void rdlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *mut, bool *pneed_issue);
-  bool can_rdlock_set(MutationImpl::LockOpVec& lov);
-  void rdlock_take_set(MutationImpl::LockOpVec& lov, MutationRef& mut);
+  bool rdlock_try_set(MutationImpl::LockOpVec& lov, MDRequestRef& mdr);
+  bool rdlock_try_set(MutationImpl::LockOpVec& lov, MutationRef& mut);
 
   void wrlock_force(SimpleLock *lock, MutationRef& mut);
   bool wrlock_try(SimpleLock *lock, MutationRef& mut);
