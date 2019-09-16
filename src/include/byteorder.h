@@ -99,11 +99,3 @@ inline ceph_le16 init_le16(__u16 x) {
   return v;
 }
 
-  /*
-#define cpu_to_le64(x) (x)
-#define cpu_to_le32(x) (x)
-#define cpu_to_le16(x) (x)
-  */
-#define le64_to_cpu(x) ((uint64_t)x)
-#define le32_to_cpu(x) ((__u32)x)
-#define le16_to_cpu(x) ((__u16)x)
