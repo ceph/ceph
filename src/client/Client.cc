@@ -4047,7 +4047,7 @@ void Client::add_update_cap(Inode *in, MetaSession *mds_session, uint64_t cap_id
 
   if (flags & CEPH_CAP_FLAG_AUTH) {
     if (in->auth_cap != &cap &&
-        (!in->auth_cap || ceph_seq_cmp(in->auth_cap->mseq, mseq) < 0)) {
+        (!in->auth_cap || ceph_seq_cmp(in->auth_cap->mseq, mseq) <= 0)) {
       if (in->auth_cap && in->flushing_cap_item.is_on_list()) {
 	ldout(cct, 10) << __func__ << " changing auth cap: "
 		       << "add myself to new auth MDS' flushing caps list" << dendl;
