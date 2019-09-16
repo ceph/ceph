@@ -15,6 +15,7 @@
   <!-- Page content -->
   <div ng-sidebar-content>
     <block-ui>
+      <cd-pwd-expiration-notification *ngIf="!isLoginActive()"></cd-pwd-expiration-notification>
       <cd-navigation *ngIf="!isLoginActive()"></cd-navigation>
       <div class="container-fluid"
            [ngClass]="{'full-height':isLoginActive(), 'dashboard':isDashboardPage()} ">
