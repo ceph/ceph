@@ -374,8 +374,10 @@ seastar::future<> OSD::_send_alive()
     want,
     up_thru_wanted);
   if (!osdmap->exists(whoami)) {
+    logger().warn("{} DNE", __func__);
     return seastar::now();
-  } else if (want <= up_thru_wanted){
+  } else if (want <= up_thru_wanted) {
+    logger().debug("{} {} <= {}", __func__, want, up_thru_wanted);
     return seastar::now();
   } else {
     up_thru_wanted = want;

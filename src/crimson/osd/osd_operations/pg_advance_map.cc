@@ -75,7 +75,7 @@ seastar::future<> PGAdvanceMap::start()
 	  handle.exit();
 	  if (do_init) {
 	    osd.pg_map.pg_created(pg->get_pgid(), pg);
-	    logger().info("{} new pg {}", __func__, *pg);
+	    logger().info("PGAdvanceMap::start new pg {}", *pg);
 	  }
 	  return seastar::when_all_succeed(
 	    pg->get_need_up_thru() ? osd._send_alive() : seastar::now(),

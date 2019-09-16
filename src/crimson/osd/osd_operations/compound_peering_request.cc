@@ -110,54 +110,6 @@ std::vector<OperationRef> handle_pg_create(
   return ret;
 }
 
-class QuerySubEvent : public PeeringSubEvent {
-public:
-  template <typename... Args>
-  QuerySubEvent(Args &&... args) :
-    PeeringSubEvent(std::forward<Args>(args)...) {}
-
-  void on_pg_absent() final {
-    logger().debug("handle_pg_query on absent pg {} from {}", pgid, from);
-    pg_info_t empty(pgid);
-    ctx.send_notify(from.osd,
-      pg_notify_t(
-	from.shard, pgid.shard,
-	evt.get_epoch_sent(),
-	osd.get_shard_services().get_osdmap()->get_epoch(),
-	empty,
-	PastIntervals()));
-  }
-};
-
-std::vector<OperationRef> handle_pg_query(
-  OSD &osd,
-  ceph::net::ConnectionRef conn,
-  compound_state_ref state,
-  Ref<MOSDPGQuery> m)
-{
-  std::vector<OperationRef> ret;
-  ret.reserve(m->pg_list.size());
-  const int from = m->get_source().num();
-  for (auto &p : m->pg_list) {
-    auto& [pgid, pg_query] = p;
-    MQuery query{pgid, pg_shard_t{from, pg_query.from},
-		 pg_query, pg_query.epoch_sent};
-    logger().debug("handle_pg_query on {} from {}", pgid, from);
-    auto op = osd.get_shard_services().start_operation<QuerySubEvent>(
-	state,
-	osd,
-	conn,
-	osd.get_shard_services(),
-	pg_shard_t(from, pg_query.from),
-	pgid,
-	pg_query.epoch_sent,
-	pg_query.epoch_sent,
-	std::move(query)).first;
-    ret.push_back(op);
-  }
-  return ret;
-}
-
 struct SubOpBlocker : BlockerT<SubOpBlocker> {
   static constexpr const char * type_name = "CompoundOpBlocker";
 
@@ -202,23 +154,12 @@ seastar::future<> CompoundPeeringRequest::start()
   auto state = seastar::make_lw_shared<compound_state>();
   auto blocker = std::make_unique<SubOpBlocker>(
     [&] {
-      switch (m->get_type()) {
-      case MSG_OSD_PG_CREATE2:
-	return handle_pg_create(
-	  osd,
-	  conn,
-	  state,
-	  boost::static_pointer_cast<MOSDPGCreate2>(m));
-      case MSG_OSD_PG_QUERY:
-	return handle_pg_query(
-	  osd,
-	  conn,
-	  state,
-	  boost::static_pointer_cast<MOSDPGQuery>(m));
-      default:
-	ceph_assert("Invalid message type" == 0);
-	return std::vector<OperationRef>();
-      }
+      assert((m->get_type() == MSG_OSD_PG_CREATE2));
+      return handle_pg_create(
+        osd,
+	conn,
+	state,
+	boost::static_pointer_cast<MOSDPGCreate2>(m));
     }());
 
   add_blocker(blocker.get());
