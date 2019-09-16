@@ -1235,7 +1235,7 @@ bool Locker::_rdlock_kick(SimpleLock *lock, bool as_anon)
   return false;
 }
 
-bool Locker::rdlock_try(SimpleLock *lock, client_t client, MDSContext *con)
+bool Locker::rdlock_try(SimpleLock *lock, client_t client)
 {
   dout(7) << "rdlock_try on " << *lock << " on " << *lock->get_parent() << dendl;  
 
@@ -1248,11 +1248,6 @@ bool Locker::rdlock_try(SimpleLock *lock, client_t client, MDSContext *con)
   if (lock->can_rdlock(client)) 
     return true;
 
-  // wait!
-  if (con) {
-    dout(7) << "rdlock_try waiting on " << *lock << " on " << *lock->get_parent() << dendl;
-    lock->add_waiter(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_RD, con);
-  }
   return false;
 }
 
@@ -1347,30 +1342,42 @@ void Locker::rdlock_finish(const MutationImpl::lock_iterator& it, MutationImpl *
   }
 }
 
-
-bool Locker::can_rdlock_set(MutationImpl::LockOpVec& lov)
+bool Locker::rdlock_try_set(MutationImpl::LockOpVec& lov, MDRequestRef& mdr)
 {
-  dout(10) << "can_rdlock_set " << dendl;
+  dout(10) << __func__  << dendl;
   for (const auto& p : lov) {
     auto lock = p.lock;
     ceph_assert(p.is_rdlock());
-    if (!lock->can_rdlock(-1)) {
-      dout(10) << "can_rdlock_set can't rdlock " << *lock << " on " << *lock->get_parent() << dendl;
-      return false;
+    if (!mdr->is_rdlocked(lock) && !rdlock_try(lock, mdr->get_client())) {
+      lock->add_waiter(SimpleLock::WAIT_STABLE|SimpleLock::WAIT_RD,
+                       new C_MDS_RetryRequest(mdcache, mdr));
+      goto failed;
     }
+    lock->get_rdlock();
+    mdr->emplace_lock(lock, MutationImpl::LockOp::RDLOCK);
+    dout(20) << " got rdlock on " << *lock << " " << *lock->get_parent() << dendl;
   }
+
   return true;
+failed:
+  dout(10) << __func__ << " failed" << dendl;
+  drop_locks(mdr.get(), nullptr);
+  mdr->drop_local_auth_pins();
+  return false;
 }
 
-
-void Locker::rdlock_take_set(MutationImpl::LockOpVec& lov, MutationRef& mut)
+bool Locker::rdlock_try_set(MutationImpl::LockOpVec& lov, MutationRef& mut)
 {
-  dout(10) << "rdlock_take_set "  << dendl;
+  dout(10) << __func__  << dendl;
   for (const auto& p : lov) {
+    auto lock = p.lock;
     ceph_assert(p.is_rdlock());
+    if (!lock->can_rdlock(mut->get_client()))
+      return false;
     p.lock->get_rdlock();
     mut->emplace_lock(p.lock, MutationImpl::LockOp::RDLOCK);
   }
+  return true;
 }
 
 // ------------------
