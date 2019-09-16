@@ -37,7 +37,7 @@ class OsdTest(DashboardTestCase):
                                                     'op_r', 'op_w'])
         self.assert_in_and_not_none(data['stats_history'], ['op_out_bytes', 'op_in_bytes'])
         self.assertSchema(data['stats_history']['op_out_bytes'],
-                          JList(JTuple([JLeaf(int), JLeaf(float)])))
+                          JList(JTuple([JLeaf(float), JLeaf(float)])))
 
     def test_details(self):
         data = self._get('/api/osd/0')
