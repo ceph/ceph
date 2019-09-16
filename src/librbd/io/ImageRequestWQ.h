@@ -9,9 +9,10 @@
 #include "common/Throttle.h"
 #include "common/WorkQueue.h"
 #include "librbd/io/Types.h"
-
+#include "include/interval_set.h"
 #include <list>
 #include <atomic>
+#include <vector>
 
 namespace librbd {
 
@@ -77,6 +78,7 @@ public:
   void apply_qos_schedule_tick_min(uint64_t tick);
 
   void apply_qos_limit(const uint64_t flag, uint64_t limit, uint64_t burst);
+
 protected:
   void *_void_dequeue() override;
   void process(ImageDispatchSpec<ImageCtxT> *req) override;
@@ -107,6 +109,14 @@ private:
   std::atomic<unsigned> m_io_blockers { 0 };
   std::atomic<unsigned> m_io_throttled { 0 };
 
+  typedef interval_set<uint64_t> ImageExtentIntervals;
+  ImageExtentIntervals m_in_flight_extents;
+
+  std::vector<ImageDispatchSpec<ImageCtxT>*> m_blocked_ios;
+  std::atomic<unsigned> m_last_tid { 0 };
+  std::set<uint64_t> m_queued_or_blocked_io_tids;
+  std::map<uint64_t, ImageDispatchSpec<ImageCtxT>*> m_queued_flushes;
+
   std::list<std::pair<uint64_t, TokenBucketThrottle*> > m_throttles;
   uint64_t m_qos_enabled_flag = 0;
 
@@ -126,14 +136,23 @@ private:
 
   bool needs_throttle(ImageDispatchSpec<ImageCtxT> *item);
 
-  void finish_queued_io(ImageDispatchSpec<ImageCtxT> *req);
+  void finish_queued_io(bool write_op);
+  void remove_in_flight_write_ios(uint64_t offset, uint64_t length,
+                                  bool write_op, uint64_t tid);
   void finish_in_flight_write();
 
+  void unblock_flushes(uint64_t tid);
+  bool block_overlapping_io(ImageExtentIntervals* in_flight_image_extents,
+                            uint64_t object_off, uint64_t object_len);
+  void unblock_overlapping_io(uint64_t offset, uint64_t length, uint64_t tid);
   int start_in_flight_io(AioCompletion *c);
   void finish_in_flight_io();
   void fail_in_flight_io(int r, ImageDispatchSpec<ImageCtxT> *req);
+  void process_io(ImageDispatchSpec<ImageCtxT> *req, bool non_blocking_io);
 
   void queue(ImageDispatchSpec<ImageCtxT> *req);
+  void queue_unblocked_io(AioCompletion *comp,
+                          ImageDispatchSpec<ImageCtxT> *req);
 
   void handle_acquire_lock(int r, ImageDispatchSpec<ImageCtxT> *req);
   void handle_refreshed(int r, ImageDispatchSpec<ImageCtxT> *req);
