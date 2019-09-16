@@ -322,7 +322,7 @@ private:
 
   // inodes i've truncated
   vector<inodeno_t> truncate_start;        // start truncate
-  map<inodeno_t, log_segment_seq_t> truncate_finish;  // finished truncate (started in segment blah)
+  map<inodeno_t, LogSegment::seq_t> truncate_finish;  // finished truncate (started in segment blah)
 
 public:
   vector<inodeno_t> destroyed_inodes;
