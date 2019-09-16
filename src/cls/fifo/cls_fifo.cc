@@ -22,7 +22,7 @@ using namespace rados::cls::fifo;
 CLS_VER(1,0)
 CLS_NAME(fifo)
 
-struct cls_fifo_data_obj_header {
+struct cls_fifo_part_header {
   string tag;
 
   fifo_data_params_t params;
@@ -57,7 +57,7 @@ struct cls_fifo_data_obj_header {
     DECODE_FINISH(bl);
   }
 };
-WRITE_CLASS_ENCODER(cls_fifo_data_obj_header)
+WRITE_CLASS_ENCODER(cls_fifo_part_header)
 
 struct cls_fifo_entry_header_pre {
 /* FIXME: le64_t */
@@ -126,7 +126,7 @@ static int write_header(cls_method_context_t hctx,
 const char *part_header_xattr_name = "fifo.part.header";
 
 static int read_part_header(cls_method_context_t hctx,
-                            cls_fifo_data_obj_header *part_header)
+                            cls_fifo_part_header *part_header)
 {
   bufferlist bl;
   int r = cls_cxx_getxattr(hctx, part_header_xattr_name, &bl);
@@ -151,7 +151,7 @@ static int read_part_header(cls_method_context_t hctx,
 }
 
 static int write_part_header(cls_method_context_t hctx,
-                             cls_fifo_data_obj_header& part_header)
+                             cls_fifo_part_header& part_header)
 {
   bufferlist bl;
   encode(part_header, bl);
@@ -259,9 +259,9 @@ static int fifo_meta_create_op(cls_method_context_t hctx,
   }
   header.oid_prefix = new_oid_prefix(op.id, op.oid_prefix);
 
-  header.data_params.max_obj_size = op.max_obj_size;
+  header.data_params.max_part_size = op.max_part_size;
   header.data_params.max_entry_size = op.max_entry_size;
-  header.data_params.full_size_threshold = op.max_obj_size - op.max_entry_size;
+  header.data_params.full_size_threshold = op.max_part_size - op.max_entry_size;
 
   r = write_header(hctx, header);
   if (r < 0) {
@@ -293,12 +293,12 @@ static int fifo_meta_update_op(cls_method_context_t hctx,
     return r;
   }
 
-  if (op.tail_obj_num) {
-    header.tail_obj_num = *op.tail_obj_num;
+  if (op.tail_part_num) {
+    header.tail_part_num = *op.tail_part_num;
   }
 
-  if (op.head_obj_num) {
-    header.head_obj_num = *op.head_obj_num;
+  if (op.head_part_num) {
+    header.head_part_num = *op.head_part_num;
   }
 
   if (op.head_tag) {
@@ -365,7 +365,7 @@ static int fifo_part_init_op(cls_method_context_t hctx,
     return r;
   }
   if (r == 0 && size > 0) {
-    cls_fifo_data_obj_header part_header;
+    cls_fifo_part_header part_header;
     r = read_part_header(hctx, &part_header);
     if (r < 0) {
       CLS_LOG(10, "%s(): failed to read part header", __func__);
@@ -381,7 +381,7 @@ static int fifo_part_init_op(cls_method_context_t hctx,
     return 0; /* already exists */
   }
 
-  cls_fifo_data_obj_header part_header;
+  cls_fifo_part_header part_header;
   
   part_header.tag = op.tag;
   part_header.params = op.data_params;
@@ -411,7 +411,7 @@ static int fifo_part_push_op(cls_method_context_t hctx,
     return -EINVAL;
   }
 
-  cls_fifo_data_obj_header part_header;
+  cls_fifo_part_header part_header;
   int r = read_part_header(hctx, &part_header);
   if (r < 0) {
     CLS_LOG(10, "%s(): failed to read part header", __func__);

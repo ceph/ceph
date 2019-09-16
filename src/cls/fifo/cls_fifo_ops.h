@@ -30,7 +30,7 @@ struct cls_fifo_meta_create_op
   } pool;
   std::optional<string> oid_prefix;
 
-  uint64_t max_obj_size{0};
+  uint64_t max_part_size{0};
   uint64_t max_entry_size{0};
 
   bool exclusive{false};
@@ -42,7 +42,7 @@ struct cls_fifo_meta_create_op
     encode(pool.name, bl);
     encode(pool.ns, bl);
     encode(oid_prefix, bl);
-    encode(max_obj_size, bl);
+    encode(max_part_size, bl);
     encode(max_entry_size, bl);
     encode(exclusive, bl);
     ENCODE_FINISH(bl);
@@ -54,7 +54,7 @@ struct cls_fifo_meta_create_op
     decode(pool.name, bl);
     decode(pool.ns, bl);
     decode(oid_prefix, bl);
-    decode(max_obj_size, bl);
+    decode(max_part_size, bl);
     decode(max_entry_size, bl);
     decode(exclusive, bl);
     DECODE_FINISH(bl);
@@ -140,16 +140,16 @@ struct cls_fifo_meta_update_op
 {
   rados::cls::fifo::fifo_objv_t objv;
 
-  std::optional<uint64_t> tail_obj_num;
-  std::optional<uint64_t> head_obj_num;
+  std::optional<uint64_t> tail_part_num;
+  std::optional<uint64_t> head_part_num;
   std::optional<string> head_tag;
   std::optional<rados::cls::fifo::fifo_prepare_status_t> head_prepare_status;
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
     encode(objv, bl);
-    encode(tail_obj_num, bl);
-    encode(head_obj_num, bl);
+    encode(tail_part_num, bl);
+    encode(head_part_num, bl);
     encode(head_tag, bl);
     encode(head_prepare_status, bl);
     ENCODE_FINISH(bl);
@@ -157,8 +157,8 @@ struct cls_fifo_meta_update_op
   void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
     decode(objv, bl);
-    decode(tail_obj_num, bl);
-    decode(head_obj_num, bl);
+    decode(tail_part_num, bl);
+    decode(head_part_num, bl);
     decode(head_tag, bl);
     decode(head_prepare_status, bl);
     DECODE_FINISH(bl);

@@ -62,20 +62,20 @@ namespace rados {
       WRITE_CLASS_ENCODER(rados::cls::fifo::fifo_objv_t)
 
       struct fifo_data_params_t {
-        uint64_t max_obj_size{0};
+        uint64_t max_part_size{0};
         uint64_t max_entry_size{0};
         uint64_t full_size_threshold{0};
 
         void encode(bufferlist &bl) const {
           ENCODE_START(1, 1, bl);
-          encode(max_obj_size, bl);
+          encode(max_part_size, bl);
           encode(max_entry_size, bl);
           encode(full_size_threshold, bl);
           ENCODE_FINISH(bl);
         }
         void decode(bufferlist::const_iterator &bl) {
           DECODE_START(1, bl);
-          decode(max_obj_size, bl);
+          decode(max_part_size, bl);
           decode(max_entry_size, bl);
           decode(full_size_threshold, bl);
           DECODE_FINISH(bl);
@@ -84,7 +84,7 @@ namespace rados {
         void decode_json(JSONObj *obj);
 
         bool operator==(const fifo_data_params_t& rhs) const {
-          return (max_obj_size == rhs.max_obj_size &&
+          return (max_part_size == rhs.max_part_size &&
                   max_entry_size == rhs.max_entry_size &&
                   full_size_threshold == rhs.full_size_threshold);
         }
@@ -130,20 +130,20 @@ namespace rados {
         string oid_prefix;
         fifo_data_params_t data_params;
 
-        uint64_t tail_obj_num{0};
-        uint64_t head_obj_num{0};
+        uint64_t tail_part_num{0};
+        uint64_t head_part_num{0};
         string head_tag;
 
         fifo_prepare_status_t head_prepare_status;
 
         uint64_t next_part() {
           if (head_prepare_status == fifo_prepare_status_t::STATUS_INIT) {
-            return head_obj_num;
+            return head_part_num;
           }
           if (head_prepare_status == fifo_prepare_status_t::STATUS_PREPARE) {
             return head_prepare_status.head_num;
           }
-          return head_obj_num + 1;
+          return head_part_num + 1;
         }
 
         string next_part_oid();
@@ -154,8 +154,8 @@ namespace rados {
           encode(objv, bl);
           encode(oid_prefix, bl);
           encode(data_params, bl);
-          encode(tail_obj_num, bl);
-          encode(head_obj_num, bl);
+          encode(tail_part_num, bl);
+          encode(head_part_num, bl);
           encode(head_tag, bl);
           encode(head_prepare_status, bl);
           ENCODE_FINISH(bl);
@@ -166,8 +166,8 @@ namespace rados {
           decode(objv, bl);
           decode(oid_prefix, bl);
           decode(data_params, bl);
-          decode(tail_obj_num, bl);
-          decode(head_obj_num, bl);
+          decode(tail_part_num, bl);
+          decode(head_part_num, bl);
           decode(head_tag, bl);
           decode(head_prepare_status, bl);
           DECODE_FINISH(bl);

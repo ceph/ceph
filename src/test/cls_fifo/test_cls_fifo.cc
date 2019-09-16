@@ -61,7 +61,7 @@ TEST(ClsFIFO, TestCreate) {
   ASSERT_EQ(-EINVAL, fifo_create(ioctx, oid,
                      FIFO::MetaCreateParams()
                      .id(fifo_id)
-                     .max_obj_size(0)));
+                     .max_part_size(0)));
 
   ASSERT_EQ(-EINVAL, fifo_create(ioctx, oid,
                      FIFO::MetaCreateParams()

@@ -36,13 +36,13 @@ namespace rados {
         op.id = state.id;
         op.objv = state.objv;
         op.oid_prefix = state.oid_prefix;
-        op.max_obj_size = state.max_obj_size;
+        op.max_part_size = state.max_part_size;
         op.max_entry_size = state.max_entry_size;
         op.exclusive = state.exclusive;
 
-        if (op.max_obj_size == 0 ||
+        if (op.max_part_size == 0 ||
             op.max_entry_size == 0 ||
-            op.max_entry_size > op.max_obj_size) {
+            op.max_entry_size > op.max_part_size) {
           return -EINVAL;
         }
 
@@ -104,8 +104,8 @@ namespace rados {
         }
 
         op.objv = state.objv;
-        op.tail_obj_num = state.tail_obj_num;
-        op.head_obj_num = state.head_obj_num;
+        op.tail_part_num = state.tail_part_num;
+        op.head_part_num = state.head_part_num;
         op.head_tag = state.head_tag;
         op.head_prepare_status = state.head_prepare_status;
 

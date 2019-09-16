@@ -32,13 +32,13 @@ namespace rados {
 
         struct MetaCreateParams {
           struct State {
-            static constexpr uint64_t default_max_obj_size = 4 * 1024 * 1024;
+            static constexpr uint64_t default_max_part_size = 4 * 1024 * 1024;
             static constexpr uint64_t default_max_entry_size = 32 * 1024;
             std::string id;
             std::optional<fifo_objv_t> objv;
             std::optional<std::string> oid_prefix;
             bool exclusive{false};
-            uint64_t max_obj_size{default_max_obj_size};
+            uint64_t max_part_size{default_max_part_size};
             uint64_t max_entry_size{default_max_entry_size};
           } state;
 
@@ -54,8 +54,8 @@ namespace rados {
             state.exclusive = exclusive;
             return *this;
           }
-          MetaCreateParams& max_obj_size(uint64_t max_obj_size) {
-            state.max_obj_size = max_obj_size;
+          MetaCreateParams& max_part_size(uint64_t max_part_size) {
+            state.max_part_size = max_part_size;
             return *this;
           }
           MetaCreateParams& max_entry_size(uint64_t max_entry_size) {
@@ -98,8 +98,8 @@ namespace rados {
           struct State {
             rados::cls::fifo::fifo_objv_t objv;
 
-            std::optional<uint64_t> tail_obj_num;
-            std::optional<uint64_t> head_obj_num;
+            std::optional<uint64_t> tail_part_num;
+            std::optional<uint64_t> head_part_num;
             std::optional<string> head_tag;
             std::optional<rados::cls::fifo::fifo_prepare_status_t> head_prepare_status;
           } state;
@@ -108,12 +108,12 @@ namespace rados {
             state.objv = objv;
             return *this;
           }
-          MetaUpdateParams& tail_obj_num(uint64_t tail_obj_num) {
-            state.tail_obj_num = tail_obj_num;
+          MetaUpdateParams& tail_part_num(uint64_t tail_part_num) {
+            state.tail_part_num = tail_part_num;
             return *this;
           }
-          MetaUpdateParams& head_obj_num(uint64_t head_obj_num) {
-            state.head_obj_num = head_obj_num;
+          MetaUpdateParams& head_part_num(uint64_t head_part_num) {
+            state.head_part_num = head_part_num;
             return *this;
           }
           MetaUpdateParams& head_tag(const std::string& head_tag) {
