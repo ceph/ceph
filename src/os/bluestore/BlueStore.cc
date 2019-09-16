@@ -7267,8 +7267,7 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
       l.blob_offset,
       l.length);
     ++num_extents;
-    if (depth != FSCK_SHALLOW &&
-      blob.has_unused()) {
+    if (depth != FSCK_SHALLOW && blob.has_unused()) {
       ceph_assert(referenced);
       auto p = referenced->find(l.blob);
       bluestore_blob_t::unused_t* pu;
@@ -7278,16 +7277,8 @@ BlueStore::OnodeRef BlueStore::fsck_check_objects_shallow(
       else {
         pu = &p->second;
       }
-      uint64_t blob_len = blob.get_logical_length();
-      ceph_assert((blob_len % (sizeof(*pu) * 8)) == 0);
-      ceph_assert(l.blob_offset + l.length <= blob_len);
-      uint64_t chunk_size = blob_len / (sizeof(*pu) * 8);
-      uint64_t start = l.blob_offset / chunk_size;
-      uint64_t end =
-        round_up_to(l.blob_offset + l.length, chunk_size) / chunk_size;
-      for (auto i = start; i < end; ++i) {
-        (*pu) |= (1u << i);
-      }
+      auto used = blob.calc_bits(l.blob_offset, l.length, min_alloc_size);
+      (*pu) |= used;
     }
   } //for (auto& l : o->extent_map.extent_map)
 
@@ -7792,6 +7783,8 @@ void BlueStore::_fsck_check_objects(FSCKDepth depth,
           dout(20) << __func__ << "  referenced 0x" << std::hex << i.second
             << std::dec << " for " << *i.first << dendl;
           const bluestore_blob_t& blob = i.first->get_blob();
+          if (!blob.has_unused())
+            continue;
           if (i.second & blob.unused) {
             derr << "fsck error: " << oid << " blob claims unused 0x"
               << std::hex << blob.unused
@@ -7799,7 +7792,9 @@ void BlueStore::_fsck_check_objects(FSCKDepth depth,
               << " on blob " << *i.first << dendl;
             ++errors;
           }
-          if (blob.has_csum()) {
+          if (!blob.has_csum())
+            continue;
+          if (blob.has_legacy_unused()) {
             uint64_t blob_len = blob.get_logical_length();
             uint64_t unused_chunk_size = blob_len / (sizeof(blob.unused) * 8);
             unsigned csum_count = blob.get_csum_count();
@@ -7822,6 +7817,37 @@ void BlueStore::_fsck_check_objects(FSCKDepth depth,
                     << blob.unused << ") but csum is non-zero 0x"
                     << blob.get_csum_item(p) << std::dec << " on blob "
                     << *i.first << dendl;
+                  ++errors;
+                }
+              }
+            }
+          }
+          if (blob.has_new_unused()) {
+            uint64_t unused_len = min_alloc_size;
+            uint64_t unused_chunk_size = unused_len / (sizeof(blob.unused)*8);
+            unsigned csum_count = blob.get_csum_count();
+            unsigned csum_chunk_size = blob.get_csum_chunk_size();
+            // skip leading placeholder extent, if any
+            ceph_assert(blob.get_unused_off() % csum_chunk_size == 0);
+            unsigned p = blob.get_unused_off() / csum_chunk_size;
+            for (; p < csum_count; ++p) {
+              unsigned pos = p * csum_chunk_size;
+              unsigned firstbit = pos / unused_chunk_size;    // [firstbit,lastbit]
+              unsigned lastbit = (pos + csum_chunk_size - 1) / unused_chunk_size;
+              unsigned mask = 1u << firstbit;
+              for (unsigned b = firstbit + 1; b <= lastbit; ++b) {
+                mask |= 1u << b;
+              }
+              if ((blob.unused & mask) == mask) {
+                // this csum chunk region is marked unused
+                if (blob.get_csum_item(p) != 0) {
+                  derr << "fsck error: " << oid
+                       << " blob claims csum chunk 0x" << std::hex << pos
+                       << "~" << csum_chunk_size
+                       << " is unused (mask 0x" << mask << " of unused 0x"
+                       << blob.unused << ") but csum is non-zero 0x"
+                       << blob.get_csum_item(p) << std::dec << " on blob "
+                       << *i.first << dendl;
                   ++errors;
                 }
               }
@@ -12793,7 +12819,7 @@ void BlueStore::_do_write_small(
 	// direct write into unused blocks of an existing mutable blob?
 	if ((b_off % chunk_size == 0 && b_len % chunk_size == 0) &&
 	    b->get_blob().get_ondisk_length() >= b_off + b_len &&
-	    b->get_blob().is_unused(b_off, b_len) &&
+	    b->get_blob().is_unused(b_off, b_len, min_alloc_size) &&
 	    b->get_blob().is_allocated(b_off, b_len)) {
 	  _apply_padding(head_pad, tail_pad, bl);
 
@@ -12831,7 +12857,7 @@ void BlueStore::_do_write_small(
 	  Extent *le = o->extent_map.set_lextent(c, offset, b_off + head_pad, length,
 						 b,
 						 &wctx->old_extents);
-	  b->dirty_blob().mark_used(le->blob_offset, le->length);
+	  b->dirty_blob().mark_used(le->blob_offset, le->length, min_alloc_size);
 	  txc->statfs_delta.stored() += le->length;
 	  dout(20) << __func__ << "  lex " << *le << dendl;
 	  logger->inc(l_bluestore_write_small_unused);
@@ -12914,7 +12940,6 @@ void BlueStore::_do_write_small(
 
 	  Extent *le = o->extent_map.set_lextent(c, offset, offset - bstart, length,
 						 b, &wctx->old_extents);
-	  b->dirty_blob().mark_used(le->blob_offset, le->length);
 	  txc->statfs_delta.stored() += le->length;
 	  dout(20) << __func__ << "  lex " << *le << dendl;
 	  logger->inc(l_bluestore_write_small_deferred);
@@ -12943,6 +12968,10 @@ void BlueStore::_do_write_small(
 	    uint64_t b_off = offset - bstart;
 	    uint64_t b_off0 = b_off;
 	    _pad_zeros(&bl, &b_off0, chunk_size);
+            // we have a fixed size of unused and
+            // we must allocate new space to re-use a blob.
+            // Hence blew here the unused field can not be accurate any more..
+            b->dirty_blob().clear_unused();
 
 	    dout(20) << __func__ << " reuse blob " << *b << std::hex
 		     << " (0x" << b_off0 << "~" << bl.length() << ")"
@@ -12994,6 +13023,7 @@ void BlueStore::_do_write_small(
 	  uint64_t b_off = offset - bstart;
 	  uint64_t b_off0 = b_off;
 	  _pad_zeros(&bl, &b_off0, chunk_size);
+          b->dirty_blob().clear_unused();
 
 	  dout(20) << __func__ << " reuse blob " << *b << std::hex
 		    << " (0x" << b_off0 << "~" << bl.length() << ")"
@@ -13379,13 +13409,9 @@ int BlueStore::_do_alloc_write(
     }
 
     if (wi.mark_unused) {
-      auto b_end = b_off + wi.bl.length();
-      if (b_off) {
-        dblob.add_unused(0, b_off);
-      }
-      if (b_end < wi.blob_length) {
-        dblob.add_unused(b_end, wi.blob_length - b_end);
-      }
+      // mark the whole extent as unused
+      // mark_used will figure out the real used bits for us later
+      dblob.mark_all_unused();
     }
 
     Extent *le = o->extent_map.set_lextent(coll, wi.logical_offset,
@@ -13393,7 +13419,8 @@ int BlueStore::_do_alloc_write(
                                            wi.length0,
                                            wi.b,
                                            nullptr);
-    wi.b->dirty_blob().mark_used(le->blob_offset, le->length);
+    if (wi.mark_unused)
+      dblob.mark_used(le->blob_offset, le->length, min_alloc_size);
     txc->statfs_delta.stored() += le->length;
     dout(20) << __func__ << "  lex " << *le << dendl;
     _buffer_cache_write(txc, wi.b, b_off, wi.bl,

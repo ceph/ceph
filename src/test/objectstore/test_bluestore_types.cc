@@ -904,6 +904,78 @@ TEST(bluestore_blob_t, prune_tail)
   ASSERT_FALSE(a.can_prune_tail());
 }
 
+TEST(bluestore_blob_t, unused)
+{
+  {
+    bluestore_blob_t b;
+    uint64_t min_alloc_size = 64 << 10; // 64 kB
+
+    // _do_write_small 0x0~1000
+    uint64_t offset = 0x0;
+    uint64_t length = 0x1000; // 4kB
+    uint64_t suggested_boff = 0;
+    PExtentVector extents;
+    extents.emplace_back(0x1a560000, min_alloc_size);
+    b.allocated(p2align(suggested_boff, min_alloc_size), min_alloc_size, extents);
+    b.mark_all_unused();
+    b.mark_used(offset, length, min_alloc_size);
+    ASSERT_FALSE(b.is_unused(offset, length, min_alloc_size));
+
+    // _do_write_small 0x2000~1000
+    offset = 0x2000;
+    length = 0x1000;
+    ASSERT_TRUE(b.is_unused(offset, length, min_alloc_size));
+    b.mark_used(offset, length, min_alloc_size);
+    ASSERT_FALSE(b.is_unused(offset, length, min_alloc_size));
+
+    // _do_write_small 0xc000~2000
+    offset = 0xc000;
+    length = 0x2000;
+    ASSERT_TRUE(b.is_unused(offset, length, min_alloc_size));
+    b.mark_used(offset, length, min_alloc_size);
+    ASSERT_FALSE(b.is_unused(offset, length, min_alloc_size));
+  }
+
+  {
+    bluestore_blob_t b;
+    uint64_t min_alloc_size = 64 << 10; // 64 kB
+
+    // _do_write_small 0x11000~1000
+    uint64_t offset = 0x11000;
+    uint64_t length = 0x1000; // 4kB
+    uint64_t suggested_boff = 0x11000;
+    PExtentVector extents;
+    extents.emplace_back(0x1a560000, min_alloc_size);
+    b.allocated(p2align(suggested_boff, min_alloc_size), min_alloc_size, extents);
+    b.mark_all_unused();
+    b.mark_used(offset, length, min_alloc_size);
+    ASSERT_FALSE(b.is_unused(offset, length, min_alloc_size));
+
+    // _do_write_small 0x15000~3000
+    offset = 0x15000;
+    length = 0x3000;
+    ASSERT_TRUE(b.is_unused(offset, length, min_alloc_size));
+    b.mark_used(offset, length, min_alloc_size);
+    ASSERT_FALSE(b.is_unused(offset, length, min_alloc_size));
+  }
+
+  {
+    // reuse blob
+    bluestore_blob_t b;
+    uint64_t min_alloc_size = 64 << 10; // 64 kB
+
+    // _do_write_small 0x9b000~1000
+    uint64_t offset = 0x9b000;
+    uint64_t length = 0x1000; // 4kB
+    uint64_t suggested_boff = 0x20000;
+    PExtentVector extents;
+    extents.emplace_back(0x410000, min_alloc_size);
+    b.allocated(p2align(suggested_boff, min_alloc_size), min_alloc_size, extents);
+    b.mark_all_unused();
+    ASSERT_FALSE(b.is_unused(offset, length, min_alloc_size));
+  }
+}
+
 TEST(Blob, split)
 {
   BlueStore store(g_ceph_context, "", 4096);

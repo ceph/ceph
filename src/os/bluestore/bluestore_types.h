@@ -433,11 +433,12 @@ private:
 
 public:
   enum {
-    LEGACY_FLAG_MUTABLE = 1,  ///< [legacy] blob can be overwritten or split
-    FLAG_COMPRESSED = 2,      ///< blob is compressed
-    FLAG_CSUM = 4,            ///< blob has checksums
-    FLAG_HAS_UNUSED = 8,      ///< blob has unused map
-    FLAG_SHARED = 16,         ///< blob is shared; see external SharedBlob
+    LEGACY_FLAG_MUTABLE = 1,          ///< [legacy] blob can be overwritten or split
+    FLAG_COMPRESSED = 2,              ///< blob is compressed
+    FLAG_CSUM = 4,                    ///< blob has checksums
+    LEGACY_FLAG_HAS_UNUSED = 8,       ///< [legacy] blob has unused map
+    FLAG_SHARED = 16,                 ///< blob is shared; see external SharedBlob
+    FLAG_HAS_UNUSED = 32,             ///< blob has unused map
   };
   static string get_flags_string(unsigned flags);
 
@@ -557,8 +558,18 @@ public:
   bool has_csum() const {
     return has_flag(FLAG_CSUM);
   }
-  bool has_unused() const {
+  bool has_legacy_unused() const {
+    return has_flag(LEGACY_FLAG_HAS_UNUSED);
+  }
+  bool has_new_unused() const {
     return has_flag(FLAG_HAS_UNUSED);
+  }
+  bool has_unused() const {
+    return has_legacy_unused() || has_new_unused();
+  }
+  void clear_unused() {
+    clear_flag(LEGACY_FLAG_HAS_UNUSED | FLAG_HAS_UNUSED);
+    unused = 0;
   }
   bool is_shared() const {
     return has_flag(FLAG_SHARED);
@@ -628,43 +639,70 @@ public:
     return _validate_range(b_off, b_len, false);
   }
 
+  uint64_t get_unused_off() const {
+    uint64_t unused_off = 0;
+    if (!extents.empty() &&
+        extents.begin()->offset == bluestore_pextent_t::INVALID_OFFSET) {
+      unused_off = extents.begin()->length;
+    }
+    return unused_off;
+  }
+
   /// return true if the logical range has never been used
-  bool is_unused(uint64_t offset, uint64_t length) const {
-    if (!has_unused()) {
-      return false;
+  bool is_unused(uint64_t offset,
+                 uint64_t length,
+                 uint32_t min_alloc_size) const {
+    if (has_legacy_unused()) {
+      uint64_t blob_len = get_logical_length();
+      ceph_assert((blob_len % (sizeof(unused)*8)) == 0);
+      ceph_assert(offset + length <= blob_len);
+      uint64_t chunk_size = blob_len / (sizeof(unused)*8);
+      uint64_t start = offset / chunk_size;
+      uint64_t end = round_up_to(offset + length, chunk_size) / chunk_size;
+      auto i = start;
+      while (i < end && (unused & (1u << i))) {
+        i++;
+      }
+      return i >= end;
     }
-    uint64_t blob_len = get_logical_length();
-    ceph_assert((blob_len % (sizeof(unused)*8)) == 0);
-    ceph_assert(offset + length <= blob_len);
-    uint64_t chunk_size = blob_len / (sizeof(unused)*8);
-    uint64_t start = offset / chunk_size;
-    uint64_t end = round_up_to(offset + length, chunk_size) / chunk_size;
-    auto i = start;
-    while (i < end && (unused & (1u << i))) {
-      i++;
+    if (has_new_unused()) {
+      uint64_t blob_unused_len = min_alloc_size;
+      ceph_assert((blob_unused_len % (sizeof(unused)*8)) == 0);
+      ceph_assert(length <= blob_unused_len);
+      uint64_t chunk_size = blob_unused_len / (sizeof(unused)*8);
+      uint64_t blob_unused_off = get_unused_off();
+      if (offset < blob_unused_off) {
+        // can happen if we are seeking a blob for re-use
+        return false;
+      }
+      uint64_t start_unused_off = offset - blob_unused_off;
+      if (start_unused_off + length > blob_unused_len) {
+        // can happen if we are seeking a blob for re-use
+        return false;
+      }
+      uint64_t start = start_unused_off / chunk_size;
+      uint64_t end = round_up_to(start_unused_off + length, chunk_size) /
+                     chunk_size;
+      auto i = start;
+      while (i < end && (unused & (1u << i))) {
+        i++;
+      }
+      return i >= end;
     }
-    return i >= end;
+    return false;
   }
 
-  /// mark a range that has never been used
-  void add_unused(uint64_t offset, uint64_t length) {
-    uint64_t blob_len = get_logical_length();
-    ceph_assert((blob_len % (sizeof(unused)*8)) == 0);
-    ceph_assert(offset + length <= blob_len);
-    uint64_t chunk_size = blob_len / (sizeof(unused)*8);
-    uint64_t start = round_up_to(offset, chunk_size) / chunk_size;
-    uint64_t end = (offset + length) / chunk_size;
-    for (auto i = start; i < end; ++i) {
-      unused |= (1u << i);
-    }
-    if (start != end) {
-      set_flag(FLAG_HAS_UNUSED);
-    }
+  void mark_all_unused() {
+    set_flag(FLAG_HAS_UNUSED);
+    unused = -1;
   }
 
-  /// indicate that a range has (now) been used.
-  void mark_used(uint64_t offset, uint64_t length) {
-    if (has_unused()) {
+  /// calculate which unused bits are affected by the input range
+  unused_t calc_bits(uint64_t offset,
+                     uint64_t length,
+                     uint32_t min_alloc_size) const {
+    unused_t u = 0;
+    if (has_legacy_unused()) {
       uint64_t blob_len = get_logical_length();
       ceph_assert((blob_len % (sizeof(unused)*8)) == 0);
       ceph_assert(offset + length <= blob_len);
@@ -672,11 +710,37 @@ public:
       uint64_t start = offset / chunk_size;
       uint64_t end = round_up_to(offset + length, chunk_size) / chunk_size;
       for (auto i = start; i < end; ++i) {
-        unused &= ~(1u << i);
+        u |= 1u << i;
       }
-      if (unused == 0) {
-        clear_flag(FLAG_HAS_UNUSED);
+    }
+    if (has_new_unused()) {
+      uint64_t blob_unused_len = min_alloc_size;
+      ceph_assert((blob_unused_len % (sizeof(unused)*8)) == 0);
+      ceph_assert(length <= blob_unused_len);
+      uint64_t chunk_size = blob_unused_len / (sizeof(unused)*8);
+      uint64_t blob_unused_off = get_unused_off();
+      ceph_assert(offset >= blob_unused_off);
+      uint64_t start_unused_off = offset - blob_unused_off;
+      ceph_assert(start_unused_off + length <= blob_unused_len);
+      uint64_t start = start_unused_off / chunk_size;
+      uint64_t end = round_up_to(start_unused_off + length, chunk_size) /
+                     chunk_size;
+      for (auto i = start; i < end; ++i) {
+        u |= 1u << i;
       }
+    }
+    return u;
+  }
+
+  /// indicate that a range has (now) been used.
+  void mark_used(uint64_t offset, uint64_t length, uint32_t min_alloc_size) {
+    if (!has_unused()) {
+      return;
+    }
+    auto used = calc_bits(offset, length, min_alloc_size);
+    unused &= ~used;
+    if (unused == 0) {
+      clear_flag(LEGACY_FLAG_HAS_UNUSED | FLAG_HAS_UNUSED);
     }
   }
 
