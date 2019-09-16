@@ -1494,7 +1494,7 @@ public:
         spawned_keys.clear();
         yield call(new RGWReadRemoteDataLogShardCR(sync_env, shard_id, sync_marker.marker,
                                                    &next_marker, &log_entries, &truncated));
-        if (retcode < 0) {
+        if (retcode < 0 && retcode != -ENOENT) {
           tn->log(0, SSTR("ERROR: failed to read remote data log info: ret=" << retcode));
           stop_spawned_services();
           drain_all();
