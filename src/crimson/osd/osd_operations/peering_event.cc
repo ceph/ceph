@@ -55,7 +55,7 @@ seastar::future<> PeeringEvent::start()
   IRef ref = this;
   return get_pg().then([this](Ref<PG> pg) {
     if (!pg) {
-      logger().debug("{}: pg absent, did not create", *this);
+      logger().warn("{}: pg absent, did not create", *this);
       on_pg_absent();
       handle.exit();
       return complete_rctx(pg);
