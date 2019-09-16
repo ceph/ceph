@@ -314,6 +314,9 @@ else
                 ensure_decent_gcc_on_ubuntu 9 bionic
                 [ ! $NO_BOOST_PKGS ] && install_boost_on_ubuntu bionic
                 ;;
+            *Disco*)
+                [ ! $NO_BOOST_PKGS ] && apt-get install -y libboost1.67-all-dev
+                ;;
             *)
                 $SUDO apt-get install -y gcc
                 ;;
