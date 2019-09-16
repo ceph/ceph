@@ -10525,8 +10525,11 @@ int Client::lazyio_synchronize(int fd, loff_t offset, size_t count)
   Inode *in = f->inode.get();
   
   _fsync(f, true);
-  if (_release(in))
-    check_caps(in, 0);
+  if (_release(in)) {
+    int r =_getattr(in, CEPH_STAT_CAP_SIZE, f->actor_perms);
+    if (r < 0) 
+      return r;
+  }
   return 0;
 }
 
