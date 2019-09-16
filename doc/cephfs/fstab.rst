@@ -15,10 +15,11 @@ following to ``/etc/fstab``::
 
 For example:: 
 
-	10.10.10.10:6789:/     /mnt/ceph    ceph    name=admin,secretfile=/etc/ceph/secret.key,noatime,_netdev    0       2
+	10.10.10.10:6789:/     /mnt/ceph    ceph    name=admin,noatime,_netdev    0       2
 	
-.. important:: The ``name`` and ``secret`` or ``secretfile`` options are 
-   mandatory when you have Ceph authentication running. 
+The default for the ``name=`` parameter is ``guest``. If the ``secret`` or
+``secretfile`` options are not specified then the mount helper will attempt to
+find a secret for the given ``name`` in one of the configured keyrings.
  
 See `User Management`_ for details.
    
