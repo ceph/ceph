@@ -1939,14 +1939,6 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
     }
   }
 
-  i = opts.find("pgid");
-  boost::optional<pg_t> pgid(i != opts.end(), std::move(pg_t()));
-  if (pgid && (!pgid->parse(i->second.c_str()) || (pool_name && rados.pool_lookup(pool_name) != pgid->pool()))) {
-    cerr << "invalid pgid" << std::endl;
-    ret = -1;
-    goto out;
-  }
-
   // open rados
   ret = rados.init_with_context(g_ceph_context);
   if (ret < 0) {
@@ -1973,6 +1965,14 @@ static int rados_tool_common(const std::map < std::string, std::string > &opts,
 	   << cpp_strerror(ret) << std::endl;
       goto out;
     }
+  }
+
+  i = opts.find("pgid");
+  boost::optional<pg_t> pgid(i != opts.end(), pg_t());
+  if (pgid && (!pgid->parse(i->second.c_str()) || (pool_name && rados.pool_lookup(pool_name) != pgid->pool()))) {
+    cerr << "invalid pgid" << std::endl;
+    ret = -1;
+    goto out;
   }
 
   // open io context.
