@@ -8731,7 +8731,8 @@ loff_t Client::_lseek(Fh *f, loff_t offset, int whence)
     break;
 
   default:
-    ceph_abort();
+    ldout(cct, 1) << __func__ << ": invalid whence value " << whence << dendl;
+    return -EINVAL;
   }
 
   if (pos < 0) {
