@@ -7,7 +7,10 @@ import re
 from functools import wraps
 import collections
 import logging
-from typing import Optional
+try:
+    from typing import Optional
+except ImportError:
+    pass # just for type checking
 
 import requests
 from orchestrator import OrchestratorError

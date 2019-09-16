@@ -1,6 +1,11 @@
 from __future__ import absolute_import
 import json
-from unittest.mock import MagicMock
+
+try:
+    from unittest.mock import MagicMock
+except ImportError:
+    # py2
+    from mock import MagicMock
 
 import pytest
 
