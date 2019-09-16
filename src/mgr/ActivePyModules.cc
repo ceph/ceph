@@ -34,7 +34,7 @@
 #define dout_context g_ceph_context
 #define dout_subsys ceph_subsys_mgr
 #undef dout_prefix
-#define dout_prefix *_dout << "mgr " << __func__ << " "    
+#define dout_prefix *_dout << "mgr " << __func__ << " "
 
 ActivePyModules::ActivePyModules(PyModuleConfig &module_config_,
           std::map<std::string, std::string> store_data,
@@ -535,7 +535,7 @@ bool ActivePyModules::get_config(const std::string &module_name,
   dout(20) << " key: " << global_key << dendl;
 
   std::lock_guard lock(module_config.lock);
-  
+
   auto i = module_config.config.find(global_key);
   if (i != module_config.config.end()) {
     *val = i->second;
@@ -596,7 +596,7 @@ PyObject *ActivePyModules::get_store_prefix(const std::string &module_name,
   dout(4) << __func__ << " prefix: " << global_prefix << dendl;
 
   PyFormatter f;
-  
+
   for (auto p = store_cache.lower_bound(global_prefix);
        p != store_cache.end() && p->first.find(global_prefix) == 0;
        ++p) {
@@ -610,7 +610,7 @@ void ActivePyModules::set_store(const std::string &module_name,
 {
   const std::string global_key = PyModule::config_prefix
                                    + module_name + "/" + key;
-  
+
   Command set_cmd;
   {
     std::lock_guard l(lock);
@@ -718,7 +718,7 @@ PyObject* ActivePyModules::get_counter_python(
       const auto &avg_data = counter_instance.get_data_avg();
       for (const auto &datapoint : avg_data) {
         f.open_array_section("datapoint");
-        f.dump_unsigned("t", datapoint.t.to_nsec());
+        f.dump_float("t", datapoint.t);
         f.dump_unsigned("s", datapoint.s);
         f.dump_unsigned("c", datapoint.c);
         f.close_section();
@@ -727,7 +727,7 @@ PyObject* ActivePyModules::get_counter_python(
       const auto &data = counter_instance.get_data();
       for (const auto &datapoint : data) {
         f.open_array_section("datapoint");
-        f.dump_unsigned("t", datapoint.t.to_nsec());
+        f.dump_float("t", datapoint.t);
         f.dump_unsigned("v", datapoint.v);
         f.close_section();
       }
@@ -748,12 +748,12 @@ PyObject* ActivePyModules::get_latest_counter_python(
   {
     if (counter_type.type & PERFCOUNTER_LONGRUNAVG) {
       const auto &datapoint = counter_instance.get_latest_data_avg();
-      f.dump_unsigned("t", datapoint.t.to_nsec());
+      f.dump_float("t", datapoint.t);
       f.dump_unsigned("s", datapoint.s);
       f.dump_unsigned("c", datapoint.c);
     } else {
       const auto &datapoint = counter_instance.get_latest_data();
-      f.dump_unsigned("t", datapoint.t.to_nsec());
+      f.dump_float("t", datapoint.t);
       f.dump_unsigned("v", datapoint.v);
     }
   };
