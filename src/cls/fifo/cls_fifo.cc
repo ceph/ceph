@@ -470,6 +470,191 @@ static int fifo_part_push_op(cls_method_context_t hctx,
   return 0;
 }
 
+class EntryReader {
+  static constexpr uint64_t prefetch_len = (128 * 1024);
+
+  cls_method_context_t hctx;
+
+  cls_fifo_part_header& part_header;
+
+  uint64_t ofs;
+  bufferlist data;
+
+  int fetch(uint64_t num_bytes);
+  int read(uint64_t num_bytes, bufferlist *pbl);
+  int peek(uint64_t num_bytes, char *dest);
+  int seek(uint64_t num_bytes);
+
+public:
+  EntryReader(cls_method_context_t _hctx,
+              cls_fifo_part_header& _part_header,
+              uint64_t _ofs) : hctx(_hctx),
+                               part_header(_part_header),
+                               ofs(_ofs) {
+    if (ofs < part_header.min_ofs) {
+      ofs = part_header.min_ofs;
+    }
+  }
+
+  bool end() const {
+    return (ofs >= part_header.max_ofs);
+  }
+
+  int get_next_entry(bufferlist *pbl,
+                     uint64_t *pofs,
+                     ceph::real_time *pmtime);
+};
+
+
+int EntryReader::fetch(uint64_t num_bytes)
+{
+  if (data.length() < num_bytes) {
+    bufferlist bl;
+    int r = cls_cxx_read2(hctx, ofs + data.length(), prefetch_len, &bl, CEPH_OSD_OP_FLAG_FADVISE_WILLNEED);
+    if (r < 0) {
+      CLS_ERR("ERROR: %s(): cls_cxx_read2() on obj returned %d", __func__, r);
+      return r;
+    }
+    data.claim_append(bl);
+  }
+
+  if ((unsigned)num_bytes > data.length()) {
+    CLS_LOG(20, "%s(): requested %lld bytes, but only %lld were available", __func__, (long long)num_bytes, (long long)data.length());
+    return -ERANGE;
+  }
+
+  return 0;
+}
+
+int EntryReader::read(uint64_t num_bytes, bufferlist *pbl)
+{
+  int r = fetch(num_bytes);
+  if (r < 0) {
+    return r;
+  }
+  data.splice(0, num_bytes, pbl);
+
+  ofs += num_bytes;
+
+  return 0;
+}
+
+int EntryReader::peek(uint64_t num_bytes, char *dest)
+{
+  int r = fetch(num_bytes);
+  if (r < 0) {
+    return r;
+  }
+
+  data.copy(0, num_bytes, dest);
+
+  return 0;
+}
+
+int EntryReader::seek(uint64_t num_bytes)
+{
+  bufferlist bl;
+
+  return read(num_bytes, &bl);
+}
+
+int EntryReader::get_next_entry(bufferlist *pbl,
+                                uint64_t *pofs,
+                                ceph::real_time *pmtime)
+{
+  if (end()) {
+    return -ENOENT;
+  }
+
+  *pofs = ofs;
+
+  cls_fifo_entry_header_pre pre_header;
+  int r = peek(sizeof(pre_header), (char *)&pre_header);
+  if (r < 0) {
+    return r;
+  }
+
+  if (pre_header.magic != part_header.magic) {
+    return -ERANGE;
+  }
+
+  r = seek(pre_header.pre_size);
+  if (r < 0) {
+    CLS_ERR("ERROR: %s(): failed to seek: r=%d", __func__, r);
+    return r;
+  }
+
+  bufferlist header;
+  r = read(pre_header.header_size, &header);
+  if (r < 0) {
+    CLS_ERR("ERROR: %s(): failed to read entry header: r=%d", __func__, r);
+    return r;
+  }
+
+  cls_fifo_entry_header entry_header;
+  auto iter = header.cbegin();
+  try {
+    decode(entry_header, iter);
+  } catch (buffer::error& err) {
+    CLS_ERR("%s(): failed decoding entry header", __func__);
+    return -EIO;
+  }
+
+  *pmtime = entry_header.mtime;
+
+  r = read(pre_header.data_size, pbl);
+  if (r < 0) {
+    CLS_ERR("%s(): failed reading data: r=%d", __func__, r);
+    return r;
+  }
+
+  return 0;
+}
+
+static int fifo_part_list_op(cls_method_context_t hctx,
+                             bufferlist *in, bufferlist *out)
+{
+  CLS_LOG(20, "%s", __func__);
+
+  cls_fifo_part_list_op op;
+  try {
+    auto iter = in->cbegin();
+    decode(op, iter);
+  } catch (const buffer::error &err) {
+    CLS_ERR("ERROR: %s(): failed to decode request", __func__);
+    return -EINVAL;
+  }
+
+  cls_fifo_part_header part_header;
+  int r = read_part_header(hctx, &part_header);
+  if (r < 0) {
+    CLS_LOG(10, "%s(): failed to read part header", __func__);
+    return r;
+  }
+
+  EntryReader reader(hctx, part_header, op.ofs);
+
+  cls_fifo_part_list_op_reply reply;
+
+  for (int i = 0; i < op.max_entries && !reader.end(); ++i) {
+    bufferlist data;
+    ceph::real_time mtime;
+    uint64_t ofs;
+
+    r = reader.get_next_entry(&data, &ofs, &mtime);
+    if (r < 0) {
+      CLS_ERR("ERROR: %s(): unexpected failure at get_next_entry(): r=%d", __func__, r);
+      return r;
+    }
+
+    reply.entries.emplace_back(std::move(data), ofs, mtime);
+  }
+
+  encode(reply, *out);
+
+  return 0;
+}
+
 CLS_INIT(fifo)
 {
   CLS_LOG(20, "Loaded fifo class!");
@@ -480,6 +665,7 @@ CLS_INIT(fifo)
   cls_method_handle_t h_fifo_meta_update_op;
   cls_method_handle_t h_fifo_part_init_op;
   cls_method_handle_t h_fifo_part_push_op;;
+  cls_method_handle_t h_fifo_part_list_op;;
 
   cls_register("fifo", &h_class);
   cls_register_cxx_method(h_class, "fifo_meta_create",
@@ -501,6 +687,10 @@ CLS_INIT(fifo)
   cls_register_cxx_method(h_class, "fifo_part_push",
                           CLS_METHOD_RD | CLS_METHOD_WR,
                           fifo_part_push_op, &h_fifo_part_push_op);
+
+  cls_register_cxx_method(h_class, "fifo_part_list",
+                          CLS_METHOD_RD,
+                          fifo_part_list_op, &h_fifo_part_list_op);
 
   return;
 }
