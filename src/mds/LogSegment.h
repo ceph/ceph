@@ -26,8 +26,6 @@
 
 #include "include/unordered_set.h"
 
-typedef uint64_t log_segment_seq_t;
-
 using ceph::unordered_set;
 
 class CDir;
@@ -38,6 +36,8 @@ struct MDSlaveUpdate;
 
 class LogSegment {
  public:
+  using seq_t = uint64_t;
+
   LogSegment(uint64_t _seq, loff_t off=-1) :
     seq(_seq), offset(off), end(off),
     dirty_dirfrags(member_offset(CDir, item_dirty)),
@@ -60,7 +60,7 @@ class LogSegment {
     expiry_waiters.push_back(c);
   }
 
-  const log_segment_seq_t seq;
+  const seq_t seq;
   uint64_t offset, end;
   int num_events = 0;
 

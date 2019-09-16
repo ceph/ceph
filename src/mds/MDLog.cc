@@ -1150,7 +1150,7 @@ void MDLog::_reformat_journal(JournalPointer const &jp_in, Journaler *old_journa
   // a log segment.  Because we change serialization, this will end up changing
   // for us, so we have to explicitly update the fields that point back to that
   // log segment.
-  std::map<log_segment_seq_t, log_segment_seq_t> segment_pos_rewrite;
+  std::map<LogSegment::seq_t, LogSegment::seq_t> segment_pos_rewrite;
 
   // The logic in here borrowed from replay_thread expects mds_lock to be held,
   // e.g. between checking readable and doing wait_for_readable so that journaler

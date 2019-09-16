@@ -3116,10 +3116,10 @@ void ENoOp::replay(MDSRank *mds)
  * True if the event was modified.
  */
 bool EMetaBlob::rewrite_truncate_finish(MDSRank const *mds,
-    std::map<log_segment_seq_t, log_segment_seq_t> const &old_to_new)
+    std::map<LogSegment::seq_t, LogSegment::seq_t> const &old_to_new)
 {
   bool modified = false;
-  map<inodeno_t, log_segment_seq_t> new_trunc_finish;
+  map<inodeno_t, LogSegment::seq_t> new_trunc_finish;
   for (const auto& p : truncate_finish) {
     auto q = old_to_new.find(p.second);
     if (q != old_to_new.end()) {
