@@ -81,6 +81,8 @@ protected:
   OSD &osd;
   ceph::net::ConnectionRef conn;
 
+  void on_pg_absent() final;
+  seastar::future<> complete_rctx(Ref<PG> pg) override;
   seastar::future<Ref<PG>> get_pg() final;
 
 public:
