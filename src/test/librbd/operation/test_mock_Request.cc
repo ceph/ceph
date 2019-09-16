@@ -109,7 +109,7 @@ struct TestMockOperationRequest : public TestMockFixture {
     EXPECT_CALL(mock_request, send_op())
       .WillOnce(Invoke([&mock_image_ctx, &mock_request, r]() {
                   mock_image_ctx.image_ctx->op_work_queue->queue(
-                    new FunctionContext([&mock_request, r](int _) {
+                    new LambdaContext([&mock_request, r](int _) {
                       mock_request.send_op_impl(r);
                     }), 0);
                 }));

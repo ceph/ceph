@@ -281,10 +281,10 @@ void ReplicatedBackend::objects_read_async(
 
 class C_OSD_OnOpCommit : public Context {
   ReplicatedBackend *pg;
-  ReplicatedBackend::InProgressOpRef op;
+  ceph::ref_t<ReplicatedBackend::InProgressOp> op;
 public:
-  C_OSD_OnOpCommit(ReplicatedBackend *pg, ReplicatedBackend::InProgressOp *op) 
-    : pg(pg), op(op) {}
+  C_OSD_OnOpCommit(ReplicatedBackend *pg, ceph::ref_t<ReplicatedBackend::InProgressOp> op)
+    : pg(pg), op(std::move(op)) {}
   void finish(int) override {
     pg->op_commit(op);
   }
@@ -479,7 +479,7 @@ void ReplicatedBackend::submit_transaction(
   auto insert_res = in_progress_ops.insert(
     make_pair(
       tid,
-      new InProgressOp(
+      ceph::make_ref<InProgressOp>(
 	tid, on_all_commit,
 	orig_op, at_version)
       )
@@ -529,8 +529,7 @@ void ReplicatedBackend::submit_transaction(
   }
 }
 
-void ReplicatedBackend::op_commit(
-  InProgressOpRef& op)
+void ReplicatedBackend::op_commit(const ceph::ref_t<InProgressOp>& op)
 {
   if (op->on_commit == nullptr) {
     // aborted

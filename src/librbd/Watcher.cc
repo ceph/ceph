@@ -162,7 +162,7 @@ void Watcher::unregister_watch(Context *on_finish) {
                        << dendl;
 
       ceph_assert(m_unregister_watch_ctx == nullptr);
-      m_unregister_watch_ctx = new FunctionContext([this, on_finish](int r) {
+      m_unregister_watch_ctx = new LambdaContext([this, on_finish](int r) {
           unregister_watch(on_finish);
         });
       return;
@@ -234,7 +234,7 @@ void Watcher::handle_error(uint64_t handle, int err) {
       m_watch_blacklisted = true;
     }
 
-    FunctionContext *ctx = new FunctionContext(
+    auto ctx = new LambdaContext(
         boost::bind(&Watcher::rewatch, this));
     m_work_queue->queue(ctx);
   }

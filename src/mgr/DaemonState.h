@@ -211,10 +211,6 @@ struct DeviceState : public RefCountedObject
   pair<utime_t,utime_t> life_expectancy;  ///< when device failure is expected
   utime_t life_expectancy_stamp;          ///< when life expectency was recorded
 
-  DeviceState(const std::string& n)
-    : RefCountedObject(nullptr, 0),
-      devid(n) {}
-
   void set_metadata(map<string,string>&& m);
 
   void set_life_expectancy(utime_t from, utime_t to, utime_t now);
@@ -229,9 +225,11 @@ struct DeviceState : public RefCountedObject
 
   void dump(Formatter *f) const;
   void print(ostream& out) const;
-};
 
-typedef boost::intrusive_ptr<DeviceState> DeviceStateRef;
+private:
+  FRIEND_MAKE_REF(DeviceState);
+  DeviceState(const std::string& n) : devid(n) {}
+};
 
 /**
  * Fuse the collection of per-daemon metadata from Ceph into
@@ -248,19 +246,19 @@ private:
   DaemonStateCollection all;
   std::set<DaemonKey> updating;
 
-  std::map<std::string,DeviceStateRef> devices;
+  std::map<std::string,ceph::ref_t<DeviceState>> devices;
 
   void _erase(const DaemonKey& dmk);
 
-  DeviceStateRef _get_or_create_device(const std::string& dev) {
-    auto p = devices.find(dev);
-    if (p != devices.end()) {
-      return p->second;
+  ceph::ref_t<DeviceState> _get_or_create_device(const std::string& dev) {
+    auto em = devices.try_emplace(dev, nullptr);
+    auto& d = em.first->second;
+    if (em.second) {
+      d = ceph::make_ref<DeviceState>(dev);
     }
-    devices[dev] = new DeviceState(dev);
-    return devices[dev];
+    return d;
   }
-  void _erase_device(DeviceStateRef d) {
+  void _erase_device(const ceph::ref_t<DeviceState>& d) {
     devices.erase(d->devid);
   }
 

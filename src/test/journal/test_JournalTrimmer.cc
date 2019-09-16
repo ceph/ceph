@@ -28,7 +28,7 @@ public:
     RadosTestFixture::TearDown();
   }
 
-  int append_payload(journal::JournalMetadataPtr metadata,
+  int append_payload(const ceph::ref_t<journal::JournalMetadata>& metadata,
                      const std::string &oid, uint64_t object_num,
                      const std::string &payload, uint64_t *commit_tid) {
     int r = append(oid + "." + stringify(object_num), create_payload(payload));
@@ -39,16 +39,15 @@ public:
     return r;
   }
 
-  journal::JournalMetadataPtr create_metadata(const std::string &oid) {
-    journal::JournalMetadataPtr metadata = RadosTestFixture::create_metadata(
-      oid);
+  auto create_metadata(const std::string &oid) {
+    auto metadata = RadosTestFixture::create_metadata(oid);
     m_metadata_list.push_back(metadata);
     metadata->add_listener(&m_listener);
     return metadata;
   }
 
   journal::JournalTrimmer *create_trimmer(const std::string &oid,
-                                            const journal::JournalMetadataPtr &metadata) {
+                                          const ceph::ref_t<journal::JournalMetadata>& metadata) {
     journal::JournalTrimmer *trimmer(new journal::JournalTrimmer(
       m_ioctx, oid + ".", metadata));
     m_trimmers.push_back(trimmer);
@@ -61,7 +60,7 @@ public:
     return m_ioctx.operate(oid, &op);
   }
 
-  typedef std::list<journal::JournalMetadataPtr> MetadataList;
+  typedef std::list<ceph::ref_t<journal::JournalMetadata>> MetadataList;
   MetadataList m_metadata_list;
   std::list<journal::JournalTrimmer*> m_trimmers;
 };
@@ -71,7 +70,7 @@ TEST_F(TestJournalTrimmer, Committed) {
   ASSERT_EQ(0, create(oid, 12, 2));
   ASSERT_EQ(0, client_register(oid));
 
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  auto metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
   ASSERT_TRUE(wait_for_update(metadata));
 
@@ -114,7 +113,7 @@ TEST_F(TestJournalTrimmer, CommittedWithOtherClient) {
   ASSERT_EQ(0, client_register(oid));
   ASSERT_EQ(0, client_register(oid, "client2", "slow client"));
 
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  auto metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
   ASSERT_TRUE(wait_for_update(metadata));
 
@@ -149,7 +148,7 @@ TEST_F(TestJournalTrimmer, RemoveObjects) {
   ASSERT_EQ(0, create(oid, 12, 2));
   ASSERT_EQ(0, client_register(oid));
 
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  auto metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
   ASSERT_TRUE(wait_for_update(metadata));
 
@@ -181,7 +180,7 @@ TEST_F(TestJournalTrimmer, RemoveObjectsWithOtherClient) {
   ASSERT_EQ(0, client_register(oid));
   ASSERT_EQ(0, client_register(oid, "client2", "other client"));
 
-  journal::JournalMetadataPtr metadata = create_metadata(oid);
+  auto metadata = create_metadata(oid);
   ASSERT_EQ(0, init_metadata(metadata));
   ASSERT_TRUE(wait_for_update(metadata));
 

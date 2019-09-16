@@ -418,7 +418,7 @@ template<typename I>
 void RemoveRequest<I>::remove_v1_image() {
   ldout(m_cct, 20) << dendl;
 
-  Context *ctx = new FunctionContext([this] (int r) {
+  Context *ctx = new LambdaContext([this] (int r) {
       r = tmap_rm(m_ioctx, m_image_name);
       handle_remove_v1_image(r);
     });

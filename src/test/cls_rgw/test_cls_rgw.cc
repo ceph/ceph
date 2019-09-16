@@ -8,6 +8,7 @@
 #include "gtest/gtest.h"
 #include "test/librados/test_cxx.h"
 #include "global/global_context.h"
+#include "common/ceph_context.h"
 
 #include <errno.h>
 #include <string>

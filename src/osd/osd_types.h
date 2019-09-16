@@ -36,6 +36,7 @@
 #include "include/types.h"
 #include "include/utime.h"
 #include "include/CompatSet.h"
+#include "common/ceph_context.h"
 #include "common/histogram.h"
 #include "include/interval_set.h"
 #include "include/inline_memory.h"

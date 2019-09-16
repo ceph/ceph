@@ -273,7 +273,7 @@ void ObjectMap<I>::detained_aio_update(UpdateOperation &&op) {
 
   ldout(cct, 20) << "in-flight update cell: " << cell << dendl;
   Context *on_finish = op.on_finish;
-  Context *ctx = new FunctionContext([this, cell, on_finish](int r) {
+  Context *ctx = new LambdaContext([this, cell, on_finish](int r) {
       handle_detained_aio_update(cell, r, on_finish);
     });
   aio_update(CEPH_NOSNAP, op.start_object_no, op.end_object_no, op.new_state,

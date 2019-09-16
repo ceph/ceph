@@ -324,7 +324,7 @@ void Replay<I>::replay_op_ready(uint64_t op_tid, Context *on_resume) {
 
   // resume the op state machine once the associated OpFinishEvent
   // is processed
-  op_event.on_op_finish_event = new FunctionContext(
+  op_event.on_op_finish_event = new LambdaContext(
     [on_resume](int r) {
       on_resume->complete(r);
     });

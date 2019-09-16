@@ -500,7 +500,7 @@ TEST_F(TestMockInstanceWatcher, ImageAcquireReleaseCancel) {
                     const std::string& o, librados::AioCompletionImpl *c,
                     bufferlist& bl, uint64_t timeout_ms, bufferlist *pbl) {
                     c->get();
-                    auto ctx = new FunctionContext(
+                    auto ctx = new LambdaContext(
                       [instance_watcher, &mock_io_ctx, c, pbl](int r) {
                         instance_watcher->cancel_notify_requests("other");
                         encode(librbd::watcher::NotifyResponse(), *pbl);
@@ -521,7 +521,7 @@ TEST_F(TestMockInstanceWatcher, ImageAcquireReleaseCancel) {
                     const std::string& o, librados::AioCompletionImpl *c,
                     bufferlist& bl, uint64_t timeout_ms, bufferlist *pbl) {
                     c->get();
-                    auto ctx = new FunctionContext(
+                    auto ctx = new LambdaContext(
                       [instance_watcher, &mock_io_ctx, c, pbl](int r) {
                         instance_watcher->cancel_notify_requests("other");
                         encode(librbd::watcher::NotifyResponse(), *pbl);
@@ -631,7 +631,7 @@ TEST_F(TestMockInstanceWatcher, PeerImageRemovedCancel) {
                     const std::string& o, librados::AioCompletionImpl *c,
                     bufferlist& bl, uint64_t timeout_ms, bufferlist *pbl) {
                     c->get();
-                    auto ctx = new FunctionContext(
+                    auto ctx = new LambdaContext(
                       [instance_watcher, &mock_io_ctx, c, pbl](int r) {
                         instance_watcher->cancel_notify_requests("other");
                         encode(librbd::watcher::NotifyResponse(), *pbl);

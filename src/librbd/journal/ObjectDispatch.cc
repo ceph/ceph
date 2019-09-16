@@ -194,7 +194,7 @@ bool ObjectDispatch<I>::flush(
   ldout(cct, 20) << dendl;
 
   auto ctx = *on_finish;
-  *on_finish = new FunctionContext(
+  *on_finish = new LambdaContext(
     [image_ctx=m_image_ctx, ctx, journal_tid=*journal_tid](int r) {
       image_ctx->journal->commit_io_event(journal_tid, r);
       ctx->complete(r);

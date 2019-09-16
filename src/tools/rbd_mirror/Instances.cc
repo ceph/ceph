@@ -55,7 +55,7 @@ void Instances<I>::shut_down(Context *on_finish) {
   ceph_assert(m_on_finish == nullptr);
   m_on_finish = on_finish;
 
-  Context *ctx = new FunctionContext(
+  Context *ctx = new LambdaContext(
     [this](int r) {
       std::scoped_lock locker{m_threads->timer_lock, m_lock};
       cancel_remove_task();
@@ -255,7 +255,7 @@ void Instances<I>::remove_instances(const Instances<I>::clock_t::time_point& tim
   ceph_assert(!instance_ids.empty());
 
   dout(10) << "instance_ids=" << instance_ids << dendl;
-  Context* ctx = new FunctionContext([this, instance_ids](int r) {
+  Context* ctx = new LambdaContext([this, instance_ids](int r) {
       handle_remove_instances(r, instance_ids);
     });
   ctx = create_async_context_callback(m_threads->work_queue, ctx);
@@ -337,7 +337,7 @@ void Instances<I>::schedule_remove_task(const Instances<I>::clock_t::time_point&
   dout(10) << dendl;
 
   // schedule a time to fire when the oldest instance should be removed
-  m_timer_task = new FunctionContext(
+  m_timer_task = new LambdaContext(
     [this, oldest_time](int r) {
       ceph_assert(ceph_mutex_is_locked(m_threads->timer_lock));
       std::lock_guard locker{m_lock};

@@ -235,7 +235,7 @@ void LeaderWatcher<I>::handle_wait_for_tasks() {
   ceph_assert(!m_timer_op_tracker.empty());
   m_timer_op_tracker.finish_op();
 
-  auto ctx = new FunctionContext([this](int r) {
+  auto ctx = new LambdaContext([this](int r) {
       Context *on_finish;
       {
         // ensure lock isn't held when completing shut down
@@ -350,7 +350,7 @@ void LeaderWatcher<I>::schedule_timer_task(const std::string &name,
 
   cancel_timer_task();
 
-  m_timer_task = new FunctionContext(
+  m_timer_task = new LambdaContext(
     [this, leader, timer_callback](int r) {
       ceph_assert(ceph_mutex_is_locked(m_threads->timer_lock));
       m_timer_task = nullptr;
@@ -582,7 +582,7 @@ void LeaderWatcher<I>::handle_get_locker(int r,
     return;
   }
 
-  auto ctx = new FunctionContext(
+  auto ctx = new LambdaContext(
     [this](int r) {
       std::string instance_id;
       if (get_leader_instance_id(&instance_id)) {
@@ -767,12 +767,12 @@ void LeaderWatcher<I>::notify_listener() {
       LeaderWatcher<I>, &LeaderWatcher<I>::handle_notify_listener>(this));
 
   if (is_leader(m_lock)) {
-    ctx = new FunctionContext(
+    ctx = new LambdaContext(
       [this, ctx](int r) {
         m_listener->post_acquire_handler(ctx);
       });
   } else {
-    ctx = new FunctionContext(
+    ctx = new LambdaContext(
       [this, ctx](int r) {
         m_listener->pre_release_handler(ctx);
       });

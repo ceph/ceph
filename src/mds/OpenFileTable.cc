@@ -1074,7 +1074,7 @@ void OpenFileTable::_prefetch_dirfrags()
   if (gather.has_subs()) {
     gather.set_finisher(
 	new MDSInternalContextWrapper(mds,
-	  new FunctionContext(finish_func)));
+	  new LambdaContext(std::move(finish_func))));
     gather.activate();
   } else {
     finish_func(0);
@@ -1144,7 +1144,7 @@ bool OpenFileTable::prefetch_inodes()
   if (!load_done) {
     wait_for_load(
 	new MDSInternalContextWrapper(mds,
-	  new FunctionContext([this](int r) {
+	  new LambdaContext([this](int r) {
 	    _prefetch_inodes();
 	    })
 	  )

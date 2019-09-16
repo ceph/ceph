@@ -118,7 +118,7 @@ void ImageMap<I>::update_image_mapping(Updates&& map_updates,
   dout(5) << "updates=[" << map_updates << "], "
           << "removes=[" << map_removals << "]" << dendl;
 
-  Context *on_finish = new FunctionContext(
+  Context *on_finish = new LambdaContext(
     [this, map_updates, map_removals](int r) {
       handle_update_request(map_updates, map_removals, r);
       finish_async_op();
@@ -221,7 +221,7 @@ void ImageMap<I>::schedule_update_task(const ceph::mutex &timer_lock) {
     }
   }
 
-  m_timer_task = new FunctionContext([this](int r) {
+  m_timer_task = new LambdaContext([this](int r) {
       ceph_assert(ceph_mutex_is_locked(m_threads->timer_lock));
       m_timer_task = nullptr;
 
@@ -275,7 +275,7 @@ void ImageMap<I>::schedule_rebalance_task() {
     m_threads->timer->cancel_event(m_rebalance_task);
   }
 
-  m_rebalance_task = new FunctionContext([this](int _) {
+  m_rebalance_task = new LambdaContext([this](int _) {
       ceph_assert(ceph_mutex_is_locked(m_threads->timer_lock));
       m_rebalance_task = nullptr;
 

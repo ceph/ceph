@@ -19,16 +19,16 @@ using std::shared_ptr;
 
 namespace journal {
 
-ObjectRecorder::ObjectRecorder(librados::IoCtx &ioctx, const std::string &oid,
+ObjectRecorder::ObjectRecorder(librados::IoCtx &ioctx, std::string_view oid,
                                uint64_t object_number, ceph::mutex* lock,
                                ContextWQ *work_queue, Handler *handler,
                                uint8_t order, int32_t max_in_flight_appends)
-  : RefCountedObject(NULL, 0), m_oid(oid), m_object_number(object_number),
-    m_cct(NULL), m_op_work_queue(work_queue), m_handler(handler),
+  : m_oid(oid), m_object_number(object_number),
+    m_op_work_queue(work_queue), m_handler(handler),
     m_order(order), m_soft_max_size(1 << m_order),
-    m_max_in_flight_appends(max_in_flight_appends), m_flush_handler(this),
-    m_lock(lock), m_last_flush_time(ceph_clock_now()), m_append_tid(0),
-    m_overflowed(false), m_object_closed(false), m_in_flight_flushes(false) {
+    m_max_in_flight_appends(max_in_flight_appends),
+    m_lock(lock), m_last_flush_time(ceph_clock_now())
+{
   m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext*>(m_ioctx.cct());
   ceph_assert(m_handler != NULL);
@@ -70,11 +70,12 @@ bool ObjectRecorder::append(AppendBuffers &&append_buffers) {
 
   ceph_assert(ceph_mutex_is_locked(*m_lock));
 
-  FutureImplPtr last_flushed_future;
+  ceph::ref_t<FutureImpl> last_flushed_future;
+  auto flush_handler = get_flush_handler();
   for (auto& append_buffer : append_buffers) {
     ldout(m_cct, 20) << *append_buffer.first << ", "
                      << "size=" << append_buffer.second.length() << dendl;
-    bool flush_requested = append_buffer.first->attach(&m_flush_handler);
+    bool flush_requested = append_buffer.first->attach(flush_handler);
     if (flush_requested) {
       last_flushed_future = append_buffer.first;
     }
@@ -112,7 +113,7 @@ void ObjectRecorder::flush(Context *on_safe) {
 
   if (future.is_valid()) {
     // cannot be invoked while the same lock context
-    m_op_work_queue->queue(new FunctionContext(
+    m_op_work_queue->queue(new LambdaContext(
       [future, on_safe] (int r) mutable {
         future.flush(on_safe);
       }));
@@ -121,19 +122,23 @@ void ObjectRecorder::flush(Context *on_safe) {
   }
 }
 
-void ObjectRecorder::flush(const FutureImplPtr &future) {
+void ObjectRecorder::flush(const ceph::ref_t<FutureImpl>& future) {
   ldout(m_cct, 20) << "flushing " << *future << dendl;
 
   m_lock->lock();
-  if (future->get_flush_handler().get() != &m_flush_handler) {
-    // if we don't own this future, re-issue the flush so that it hits the
-    // correct journal object owner
-    future->flush();
-    m_lock->unlock();
-    return;
-  } else if (future->is_flush_in_progress()) {
-    m_lock->unlock();
-    return;
+  {
+    auto flush_handler = future->get_flush_handler();
+    auto my_handler = get_flush_handler();
+    if (flush_handler != my_handler) {
+      // if we don't own this future, re-issue the flush so that it hits the
+      // correct journal object owner
+      future->flush();
+      m_lock->unlock();
+      return;
+    } else if (future->is_flush_in_progress()) {
+      m_lock->unlock();
+      return;
+    }
   }
 
   bool overflowed = send_appends(true, future);
@@ -258,7 +263,7 @@ void ObjectRecorder::append_overflowed() {
   restart_append_buffers.swap(m_pending_buffers);
 }
 
-bool ObjectRecorder::send_appends(bool force, FutureImplPtr flush_future) {
+bool ObjectRecorder::send_appends(bool force, ceph::ref_t<FutureImpl> flush_future) {
   ldout(m_cct, 20) << dendl;
 
   ceph_assert(ceph_mutex_is_locked(*m_lock));

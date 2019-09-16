@@ -122,7 +122,7 @@ ACTION_P2(NotifyInvoke, lock, cond) {
 }
 
 ACTION_P2(CompleteAioCompletion, r, image_ctx) {
-  image_ctx->op_work_queue->queue(new FunctionContext([this, arg0](int r) {
+  image_ctx->op_work_queue->queue(new LambdaContext([this, arg0](int r) {
       arg0->get();
       arg0->init_time(image_ctx, librbd::io::AIO_TYPE_NONE);
       arg0->set_request_count(1);

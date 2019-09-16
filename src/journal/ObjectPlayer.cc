@@ -43,17 +43,16 @@ bool advance_to_last_pad_byte(uint32_t off, bufferlist::const_iterator *iter,
 } // anonymous namespace
 
 ObjectPlayer::ObjectPlayer(librados::IoCtx &ioctx,
-                           const std::string &object_oid_prefix,
+                           const std::string& object_oid_prefix,
                            uint64_t object_num, SafeTimer &timer,
                            ceph::mutex &timer_lock, uint8_t order,
                            uint64_t max_fetch_bytes)
-  : RefCountedObject(NULL, 0), m_object_num(object_num),
+  : m_object_num(object_num),
     m_oid(utils::get_object_name(object_oid_prefix, m_object_num)),
-    m_cct(NULL), m_timer(timer), m_timer_lock(timer_lock), m_order(order),
+    m_timer(timer), m_timer_lock(timer_lock), m_order(order),
     m_max_fetch_bytes(max_fetch_bytes > 0 ? max_fetch_bytes : 2 << order),
-    m_watch_interval(0), m_watch_task(NULL),
-    m_lock(ceph::make_mutex(utils::unique_lock_name("ObjectPlayer::m_lock", this))),
-    m_fetch_in_progress(false) {
+    m_lock(ceph::make_mutex(utils::unique_lock_name("ObjectPlayer::m_lock", this)))
+{
   m_ioctx.dup(ioctx);
   m_cct = reinterpret_cast<CephContext*>(m_ioctx.cct());
 }
@@ -283,7 +282,7 @@ void ObjectPlayer::schedule_watch() {
   ceph_assert(m_watch_task == nullptr);
   m_watch_task = m_timer.add_event_after(
     m_watch_interval,
-    new FunctionContext([this](int) {
+    new LambdaContext([this](int) {
 	handle_watch_task();
       }));
 }

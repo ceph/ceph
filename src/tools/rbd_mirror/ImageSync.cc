@@ -364,7 +364,7 @@ void ImageSync<I>::handle_update_sync_point(int r) {
     m_updating_sync_point = false;
 
     if (m_image_copy_request != nullptr) {
-      m_update_sync_ctx = new FunctionContext(
+      m_update_sync_ctx = new LambdaContext(
         [this](int r) {
 	  std::lock_guard locker{m_lock};
           this->send_update_sync_point();

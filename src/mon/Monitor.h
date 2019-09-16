@@ -104,14 +104,6 @@ class AdminSocketHook;
 
 #define COMPAT_SET_LOC "feature_set"
 
-class C_MonContext final : public FunctionContext {
-  const Monitor *mon;
-public:
-  explicit C_MonContext(Monitor *m, boost::function<void(int)>&& callback)
-    : FunctionContext(std::move(callback)), mon(m) {}
-  void finish(int r) override;
-};
-
 class Monitor : public Dispatcher,
 		public AuthClient,
 		public AuthServer,
@@ -1042,5 +1034,32 @@ public:
 // make sure you add your feature to Monitor::get_supported_features
 
 
+/* Callers use:
+ *
+ *      new C_MonContext{...}
+ *
+ * instead of
+ *
+ *      new C_MonContext(...)
+ *
+ * because of gcc bug [1].
+ *
+ * [1] https://gcc.gnu.org/bugzilla/show_bug.cgi?id=85883
+ */
+template<typename T>
+class C_MonContext : public LambdaContext<T> {
+public:
+  C_MonContext(const Monitor* m, T&& f) :
+      LambdaContext<T>(std::forward<T>(f)),
+      mon(m)
+  {}
+  void finish(int r) override {
+    if (mon->is_shutdown())
+      return;
+    LambdaContext<T>::finish(r);
+  }
+private:
+  const Monitor* mon;
+};
 
 #endif

@@ -193,7 +193,7 @@ TEST_F(TestObjectMap, DISABLED_StressTest) {
 
     throttle.start_op();
     uint64_t object_no = (rand() % object_count);
-    auto ctx = new FunctionContext([&throttle, object_no](int r) {
+    auto ctx = new LambdaContext([&throttle, object_no](int r) {
         ASSERT_EQ(0, r) << "object_no=" << object_no;
         throttle.end_op(r);
       });

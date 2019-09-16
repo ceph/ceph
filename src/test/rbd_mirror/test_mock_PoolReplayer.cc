@@ -724,7 +724,7 @@ TEST_F(TestMockPoolReplayer, NamespacesError) {
   // test namespace replayer init fails for non leader
 
   C_SaferCond on_ns1_init;
-  auto ctx = new FunctionContext(
+  Context* ctx = new LambdaContext(
       [&mock_namespace, &on_ns1_init](int r) {
         mock_namespace.remove("ns1");
         on_ns1_init.complete(r);
@@ -760,7 +760,7 @@ TEST_F(TestMockPoolReplayer, NamespacesError) {
 
   expect_namespace_replayer_handle_acquire_leader(*mock_ns2_namespace_replayer,
                                                   -EINVAL);
-  ctx = new FunctionContext(
+  ctx = new LambdaContext(
       [&mock_namespace](int) {
         mock_namespace.remove("ns2");
       });
@@ -774,7 +774,7 @@ TEST_F(TestMockPoolReplayer, NamespacesError) {
   // test namespace replayer init fails on acquire leader
 
   C_SaferCond on_ns3_shut_down;
-  ctx = new FunctionContext(
+  ctx = new LambdaContext(
       [&mock_namespace, &on_ns3_shut_down](int) {
         mock_namespace.remove("ns3");
         on_ns3_shut_down.complete(0);

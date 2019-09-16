@@ -292,7 +292,7 @@ AsyncMessenger::AsyncMessenger(CephContext *cct, entity_name_t name,
   stack = single->stack.get();
   stack->start();
   local_worker = stack->get_worker();
-  local_connection = new AsyncConnection(cct, this, &dispatch_queue,
+  local_connection = ceph::make_ref<AsyncConnection>(cct, this, &dispatch_queue,
 					 local_worker, true, true);
   init_local_connection();
   reap_handler = new C_handle_reap(this);
@@ -556,7 +556,7 @@ void AsyncMessenger::add_accept(Worker *w, ConnectedSocket cli_socket,
 				const entity_addr_t &peer_addr)
 {
   std::lock_guard l{lock};
-  AsyncConnectionRef conn = new AsyncConnection(cct, this, &dispatch_queue, w,
+  auto conn = ceph::make_ref<AsyncConnection>(cct, this, &dispatch_queue, w,
 						listen_addr.is_msgr2(), false);
   conn->accept(std::move(cli_socket), listen_addr, peer_addr);
   accepting_conns.insert(conn);
@@ -585,7 +585,7 @@ AsyncConnectionRef AsyncMessenger::create_connect(
 
   // create connection
   Worker *w = stack->get_worker();
-  AsyncConnectionRef conn = new AsyncConnection(cct, this, &dispatch_queue, w,
+  auto conn = ceph::make_ref<AsyncConnection>(cct, this, &dispatch_queue, w,
 						target.is_msgr2(), false);
   conn->connect(addrs, type, target);
   ceph_assert(!conns.count(addrs));

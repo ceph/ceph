@@ -2514,7 +2514,7 @@ void ObjectCacher::discard_writeback(ObjectSet *oset,
 
   if (gather.has_subs()) {
     bool flushed = was_dirty && oset->dirty_or_tx == 0;
-    gather.set_finisher(new FunctionContext(
+    gather.set_finisher(new LambdaContext(
       [this, oset, flushed, on_finish](int) {
 	ceph_assert(ceph_mutex_is_locked(lock));
 	if (flushed && flush_set_callback)

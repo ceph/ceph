@@ -159,7 +159,7 @@ void SnapshotPurgeRequest<I>::snap_unprotect() {
     return;
   }
 
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
       handle_snap_unprotect(r);
       finish_op_ctx->complete(0);
     });
@@ -214,7 +214,7 @@ void SnapshotPurgeRequest<I>::snap_remove() {
     return;
   }
 
-  auto ctx = new FunctionContext([this, finish_op_ctx](int r) {
+  auto ctx = new LambdaContext([this, finish_op_ctx](int r) {
       handle_snap_remove(r);
       finish_op_ctx->complete(0);
     });

@@ -120,7 +120,7 @@ int ObjectCacheStore::do_promote(std::string pool_nspace,
 
   librados::bufferlist* read_buf = new librados::bufferlist();
 
-  auto ctx = new FunctionContext([this, read_buf, cache_file_name](int ret) {
+  auto ctx = new LambdaContext([this, read_buf, cache_file_name](int ret) {
     handle_promote_callback(ret, read_buf, cache_file_name);
   });
 

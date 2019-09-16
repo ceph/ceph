@@ -31,7 +31,7 @@ struct JournalTrimmer::C_RemoveSet : public Context {
 
 JournalTrimmer::JournalTrimmer(librados::IoCtx &ioctx,
                                const std::string &object_oid_prefix,
-                               const JournalMetadataPtr &journal_metadata)
+                               const ceph::ref_t<JournalMetadata>& journal_metadata)
     : m_cct(NULL), m_object_oid_prefix(object_oid_prefix),
       m_journal_metadata(journal_metadata), m_metadata_listener(this),
       m_remove_set_pending(false),
@@ -57,7 +57,7 @@ void JournalTrimmer::shut_down(Context *on_finish) {
   m_journal_metadata->remove_listener(&m_metadata_listener);
 
   // chain the shut down sequence (reverse order)
-  on_finish = new FunctionContext([this, on_finish](int r) {
+  on_finish = new LambdaContext([this, on_finish](int r) {
       m_async_op_tracker.wait_for_ops(on_finish);
     });
   m_journal_metadata->flush_commit_position(on_finish);
@@ -66,7 +66,7 @@ void JournalTrimmer::shut_down(Context *on_finish) {
 void JournalTrimmer::remove_objects(bool force, Context *on_finish) {
   ldout(m_cct, 20) << __func__ << dendl;
 
-  on_finish = new FunctionContext([this, force, on_finish](int r) {
+  on_finish = new LambdaContext([this, force, on_finish](int r) {
 				    std::lock_guard locker{m_lock};
 
       if (m_remove_set_pending) {

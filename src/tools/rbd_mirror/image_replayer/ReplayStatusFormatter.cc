@@ -170,7 +170,7 @@ void ReplayStatusFormatter<I>::send_update_tag_cache(uint64_t master_tag_tid,
   dout(20) << "master_tag_tid=" << master_tag_tid << ", mirror_tag_tid="
 	   << mirror_tag_tid << dendl;
 
-  FunctionContext *ctx = new FunctionContext(
+  auto ctx = new LambdaContext(
     [this, master_tag_tid, mirror_tag_tid](int r) {
       handle_update_tag_cache(master_tag_tid, mirror_tag_tid, r);
     });

@@ -7,11 +7,13 @@
 #include <mutex>
 
 #include "bluefs_types.h"
-#include "common/RefCountedObj.h"
 #include "BlockDevice.h"
 
+#include "common/RefCountedObj.h"
+#include "common/ceph_context.h"
+#include "global/global_context.h"
+
 #include "boost/intrusive/list.hpp"
-#include <boost/intrusive_ptr.hpp>
 
 class PerfCounters;
 
@@ -101,8 +103,10 @@ public:
     std::atomic_int num_readers, num_writers;
     std::atomic_int num_reading;
 
+  private:
+    FRIEND_MAKE_REF(File);
     File()
-      : RefCountedObject(NULL, 0),
+      :
 	refs(0),
 	dirty_seq(0),
 	locked(false),
@@ -117,15 +121,8 @@ public:
       ceph_assert(num_reading.load() == 0);
       ceph_assert(!locked);
     }
-
-    friend void intrusive_ptr_add_ref(File *f) {
-      f->get();
-    }
-    friend void intrusive_ptr_release(File *f) {
-      f->put();
-    }
   };
-  typedef boost::intrusive_ptr<File> FileRef;
+  using FileRef = ceph::ref_t<File>;
 
   typedef boost::intrusive::list<
       File,
@@ -139,22 +136,17 @@ public:
 
     mempool::bluefs::map<string,FileRef> file_map;
 
-    Dir() : RefCountedObject(NULL, 0) {}
-
-    friend void intrusive_ptr_add_ref(Dir *d) {
-      d->get();
-    }
-    friend void intrusive_ptr_release(Dir *d) {
-      d->put();
-    }
+  private:
+    FRIEND_MAKE_REF(Dir);
+    Dir() = default;
   };
-  typedef boost::intrusive_ptr<Dir> DirRef;
+  using DirRef = ceph::ref_t<Dir>;
 
   struct FileWriter {
     MEMPOOL_CLASS_HELPERS();
 
     FileRef file;
-    uint64_t pos;           ///< start offset for buffer
+    uint64_t pos = 0;       ///< start offset for buffer
     bufferlist buffer;      ///< new data to write (at end of file)
     bufferlist tail_block;  ///< existing partial block at end of file, if any
     bufferlist::page_aligned_appender buffer_appender;  //< for const char* only
@@ -167,7 +159,6 @@ public:
 
     FileWriter(FileRef f)
       : file(f),
-	pos(0),
 	buffer_appender(buffer.get_page_aligned_appender(
 			  g_conf()->bluefs_alloc_size / CEPH_PAGE_SIZE)) {
       ++file->num_writers;

@@ -692,7 +692,7 @@ void ImageFlushRequest<I>::send_request() {
   auto object_dispatch_spec = ObjectDispatchSpec::create_flush(
     &image_ctx, OBJECT_DISPATCH_LAYER_NONE, m_flush_source, journal_tid,
     this->m_trace, ctx);
-  ctx = new FunctionContext([object_dispatch_spec](int r) {
+  ctx = new LambdaContext([object_dispatch_spec](int r) {
       object_dispatch_spec->send();
     });
 

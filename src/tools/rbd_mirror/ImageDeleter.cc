@@ -189,7 +189,7 @@ template <typename I>
 void ImageDeleter<I>::shut_down_trash_watcher(Context* on_finish) {
   dout(10) << dendl;
   ceph_assert(m_trash_watcher);
-  auto ctx = new FunctionContext([this, on_finish](int r) {
+  auto ctx = new LambdaContext([this, on_finish](int r) {
       delete m_trash_watcher;
       m_trash_watcher = nullptr;
 
@@ -206,7 +206,7 @@ void ImageDeleter<I>::wait_for_ops(Context* on_finish) {
     cancel_retry_timer();
   }
 
-  auto ctx = new FunctionContext([this, on_finish](int) {
+  auto ctx = new LambdaContext([this, on_finish](int) {
       cancel_all_deletions(on_finish);
     });
   m_async_op_tracker.wait_for_ops(ctx);
@@ -236,7 +236,7 @@ void ImageDeleter<I>::wait_for_deletion(const std::string& image_id,
                                         Context* on_finish) {
   dout(5) << "image_id=" << image_id << dendl;
 
-  on_finish = new FunctionContext([this, on_finish](int r) {
+  on_finish = new LambdaContext([this, on_finish](int r) {
       m_threads->work_queue->queue(on_finish, r);
     });
 
@@ -374,7 +374,7 @@ void ImageDeleter<I>::remove_images() {
     ceph_assert(delete_info);
 
     auto on_start = create_async_context_callback(
-        m_threads->work_queue, new FunctionContext(
+        m_threads->work_queue, new LambdaContext(
             [this, delete_info](int r) {
               if (r < 0) {
                 notify_on_delete(delete_info->image_id, r);
@@ -397,7 +397,7 @@ void ImageDeleter<I>::remove_image(DeleteInfoRef delete_info) {
   m_in_flight_delete_queue.push_back(delete_info);
   m_async_op_tracker.start_op();
 
-  auto ctx = new FunctionContext([this, delete_info](int r) {
+  auto ctx = new LambdaContext([this, delete_info](int r) {
       handle_remove_image(delete_info, r);
       m_async_op_tracker.finish_op();
     });
@@ -454,7 +454,7 @@ void ImageDeleter<I>::schedule_retry_timer() {
 
   dout(10) << dendl;
   auto &delete_info = m_retry_delete_queue.front();
-  m_timer_ctx = new FunctionContext([this](int r) {
+  m_timer_ctx = new LambdaContext([this](int r) {
       handle_retry_timer();
     });
   m_threads->timer->add_event_at(delete_info->retry_time, m_timer_ctx);
@@ -500,7 +500,7 @@ void ImageDeleter<I>::handle_retry_timer() {
 
   // start (concurrent) removal of images
   m_async_op_tracker.start_op();
-  auto ctx = new FunctionContext([this](int r) {
+  auto ctx = new LambdaContext([this](int r) {
       remove_images();
       m_async_op_tracker.finish_op();
     });
