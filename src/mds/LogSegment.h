@@ -48,8 +48,7 @@ class LogSegment {
     dirty_parent_inodes(member_offset(CInode, item_dirty_parent)),
     dirty_dirfrag_dir(member_offset(CInode, item_dirty_dirfrag_dir)),
     dirty_dirfrag_nest(member_offset(CInode, item_dirty_dirfrag_nest)),
-    dirty_dirfrag_dirfragtree(member_offset(CInode, item_dirty_dirfrag_dirfragtree)),
-    slave_updates(0) // passed to begin() manually
+    dirty_dirfrag_dirfragtree(member_offset(CInode, item_dirty_dirfrag_dirfragtree))
   {}
 
   void try_to_expire(MDSRank *mds, MDSGatherBuilder &gather_bld, int op_prio);
@@ -75,7 +74,7 @@ class LogSegment {
   elist<CInode*>  dirty_dirfrag_nest;
   elist<CInode*>  dirty_dirfrag_dirfragtree;
 
-  elist<MDSlaveUpdate*> slave_updates;
+  elist<MDSlaveUpdate*> slave_updates{0}; // passed to begin() manually
 
   set<CInode*> truncating_inodes;
 
