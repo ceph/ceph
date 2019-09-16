@@ -983,10 +983,12 @@ void ProtocolV2::execute_connecting()
               logger().error("{} ms_handle_connect caught exception: {}", conn, eptr);
               ceph_abort("unexpected exception from ms_handle_connect()");
             });
-            logger().info("{} connected: gs={}, pgs={}, cs={},"
-                          " client_cookie={}, server_cookie={}, in_seq={}, out_seq={}",
+            logger().info("{} connected:"
+                          " gs={}, pgs={}, cs={}, client_cookie={},"
+                          " server_cookie={}, in_seq={}, out_seq={}, out_q={}",
                           conn, global_seq, peer_global_seq, connect_seq,
-                          client_cookie, server_cookie, conn.in_seq, conn.out_seq);
+                          client_cookie, server_cookie, conn.in_seq,
+                          conn.out_seq, conn.out_q.size());
             execute_ready();
             break;
            }
@@ -1179,7 +1181,7 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
                  existing_proto->server_cookie);
 
   if (existing_proto->state == state_t::REPLACING) {
-    logger().warn("{} server_connect: racing replace happened while "
+    logger().warn("{} server_connect: racing replace happened while"
                   " replacing existing connection {}, send wait.",
                   conn, *existing_conn);
     return send_wait();
@@ -1188,7 +1190,7 @@ ProtocolV2::handle_existing_connection(SocketConnectionRef existing_conn)
   if (existing_proto->peer_global_seq > peer_global_seq) {
     logger().warn("{} server_connect:"
                   " this is a stale connection, because peer_global_seq({})"
-                  "< existing->peer_global_seq({}), close this connection"
+                  " < existing->peer_global_seq({}), close this connection"
                   " in favor of existing connection {}",
                   conn, peer_global_seq,
                   existing_proto->peer_global_seq, *existing_conn);
@@ -1658,10 +1660,6 @@ void ProtocolV2::execute_establishing() {
   messenger.unaccept_conn(
     seastar::static_pointer_cast<SocketConnection>(
       conn.shared_from_this()));
-  logger().info("{} accepted: gs={}, pgs={}, cs={},"
-                " client_cookie={}, server_cookie={}, in_seq={}, out_seq={}",
-                conn, global_seq, peer_global_seq, connect_seq,
-                client_cookie, server_cookie, conn.in_seq, conn.out_seq);
   execution_done = seastar::with_gate(pending_dispatch, [this] {
     return seastar::futurize_apply([this] {
       return send_server_ident();
@@ -1671,6 +1669,11 @@ void ProtocolV2::execute_establishing() {
                        conn, get_state_name(state));
         abort_protocol();
       }
+      logger().info("{} established: gs={}, pgs={}, cs={}, client_cookie={},"
+                    " server_cookie={}, in_seq={}, out_seq={}, out_q={}",
+                    conn, global_seq, peer_global_seq, connect_seq,
+                    client_cookie, server_cookie, conn.in_seq,
+                    conn.out_seq, conn.out_q.size());
       execute_ready();
     }).handle_exception([this] (std::exception_ptr eptr) {
       if (state != state_t::ESTABLISHING) {
@@ -1811,16 +1814,18 @@ void ProtocolV2::trigger_replacing(bool reconnect,
         connection_features = new_conn_features;
         return send_server_ident();
       }
-    }).then([this] {
+    }).then([this, reconnect] {
       if (unlikely(state != state_t::REPLACING)) {
         logger().debug("{} triggered {} at the end of trigger_replacing()",
                        conn, get_state_name(state));
         abort_protocol();
       }
-      logger().info("{} reconnected(replaced): gs={}, pgs={}, cs={},"
-                    " client_cookie={}, server_cookie={}, in_seq={}, out_seq={}",
-                    conn, global_seq, peer_global_seq, connect_seq,
-                    client_cookie, server_cookie, conn.in_seq, conn.out_seq);
+      logger().info("{} replaced ({}):"
+                    " gs={}, pgs={}, cs={}, client_cookie={}, server_cookie={},"
+                    " in_seq={}, out_seq={}, out_q={}",
+                    conn, reconnect ? "reconnected" : "connected",
+                    global_seq, peer_global_seq, connect_seq, client_cookie,
+                    server_cookie, conn.in_seq, conn.out_seq, conn.out_q.size());
       execute_ready();
     }).handle_exception([this] (std::exception_ptr eptr) {
       if (state != state_t::REPLACING) {
