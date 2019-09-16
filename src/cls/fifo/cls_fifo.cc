@@ -60,27 +60,24 @@ struct cls_fifo_part_header {
 WRITE_CLASS_ENCODER(cls_fifo_part_header)
 
 struct cls_fifo_entry_header_pre {
-/* FIXME: le64_t */
   __le64 magic;
+  __le64 pre_size;
   __le64 header_size;
+  __le64 data_size;
+  __le64 index;
+  __le32 reserved;
 } __attribute__ ((packed));
 
 struct cls_fifo_entry_header {
-  uint64_t index{0};
-  uint64_t size{0};
   ceph::real_time mtime;
 
   void encode(bufferlist &bl) const {
     ENCODE_START(1, 1, bl);
-    encode(index, bl);
-    encode(size, bl);
     encode(mtime, bl);
     ENCODE_FINISH(bl);
   }
   void decode(bufferlist::const_iterator &bl) {
     DECODE_START(1, bl);
-    decode(index, bl);
-    decode(size, bl);
     decode(mtime, bl);
     DECODE_FINISH(bl);
   }
@@ -432,8 +429,6 @@ static int fifo_part_push_op(cls_method_context_t hctx,
   }
 
   struct cls_fifo_entry_header entry_header;
-  entry_header.index = part_header.max_index;
-  entry_header.size = op.data.length();
   entry_header.mtime = real_clock::now();
 
   bufferlist entry_header_bl;
@@ -441,7 +436,11 @@ static int fifo_part_push_op(cls_method_context_t hctx,
 
   cls_fifo_entry_header_pre pre_header;
   pre_header.magic = part_header.magic;
+  pre_header.pre_size = sizeof(pre_header);
   pre_header.header_size = entry_header_bl.length();
+  pre_header.data_size = op.data.length();
+  pre_header.index = part_header.max_index;
+  pre_header.reserved = 0;
 
   bufferptr pre((char *)&pre_header, sizeof(pre_header));
   bufferlist all_data;
