@@ -10,8 +10,12 @@ import json
 import os
 import errno
 import tempfile
-from typing import List, Any, Optional, Callable, Tuple, TypeVar
-T = TypeVar('T')
+
+try:
+    from typing import List, Optional, Callable
+except ImportError:
+    pass # just for type checking
+
 
 import requests
 
@@ -66,7 +70,7 @@ URL_GET_HOSTS = "api/v1/hosts"
 
 
 def deferred(f):
-    # type: (Callable[..., T]) -> Callable[..., orchestrator.Completion[T]]
+    # type: (Callable) -> Callable[..., orchestrator.Completion]
     """
     Decorator to make RookOrchestrator methods return
     a completion object that executes themselves.
