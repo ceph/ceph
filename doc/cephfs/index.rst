@@ -119,6 +119,7 @@ authentication keyring.
     Application best practices <app-best-practices>
     Scrub <scrub>
     LazyIO <lazyio>
+    Distributed Metadata Cache <mdcache>
 
 .. toctree:: 
    :hidden:
