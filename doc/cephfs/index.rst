@@ -104,6 +104,7 @@ authentication keyring.
     Experimental Features <experimental-features>
     CephFS Quotas <quota>
     Using Ceph with Hadoop <hadoop>
+    MDS Journaling <mds-journaling>
     cephfs-journal-tool <cephfs-journal-tool>
     File layouts <file-layouts>
     Client eviction <eviction>
