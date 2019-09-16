@@ -86,13 +86,62 @@ For example::
         $ rbd --cluster site-a mirror pool disable image-pool
         $ rbd --cluster site-b mirror pool disable image-pool
 
-Add Cluster Peer
-----------------
+Bootstrap Peers
+---------------
 
 In order for the ``rbd-mirror`` daemon to discover its peer cluster, the peer
-needs to be registered to the pool. To add a mirroring peer Ceph cluster with
-``rbd``, specify the ``mirror pool peer add`` command, the pool name, and a
-cluster specification::
+needs to be registered to the pool and a user account needs to be created.
+This process can be automated with ``rbd`` and the
+``mirror pool peer bootstrap create`` and ``mirror pool peer bootstrap import``
+commands.
+
+To manually create a new bootstrap token with ``rbd``, specify the
+``mirror pool peer bootstrap create`` command, a pool name, along with an
+optional friendly site name to describe the local cluster::
+
+        rbd mirror pool peer bootstrap create [--site-name {local-site-name}] {pool-name}
+
+The output of ``mirror pool peer bootstrap create`` will be a token that should
+be provided to the ``mirror pool peer bootstrap import`` command. For example,
+on site-a::
+
+        $ rbd --cluster site-a mirror pool peer bootstrap create --site-name site-a image-pool
+        eyJmc2lkIjoiOWY1MjgyZGItYjg5OS00NTk2LTgwOTgtMzIwYzFmYzM5NmYzIiwiY2xpZW50X2lkIjoicmJkLW1pcnJvci1wZWVyIiwia2V5IjoiQVFBUnczOWQwdkhvQmhBQVlMM1I4RmR5dHNJQU50bkFTZ0lOTVE9PSIsIm1vbl9ob3N0IjoiW3YyOjE5Mi4xNjguMS4zOjY4MjAsdjE6MTkyLjE2OC4xLjM6NjgyMV0ifQ==
+
+To manually import the bootstrap token created by another cluster with ``rbd``,
+specify the ``mirror pool peer bootstrap import`` command, the pool name, a file
+path to the created token (or '-' to read from standard input), along with an
+optional friendly site name to describe the local cluster and a mirroring
+direction (defaults to rx-tx for bidirectional mirroring, but can also be set
+to rx-only for unidirectional mirroring)::
+
+        rbd mirror pool peer bootstrap import [--site-name {local-site-name}] [--direction {rx-only or rx-tx}] {pool-name} {token-path}
+
+For example, on site-b::
+
+        $ cat <<EOF > token
+        eyJmc2lkIjoiOWY1MjgyZGItYjg5OS00NTk2LTgwOTgtMzIwYzFmYzM5NmYzIiwiY2xpZW50X2lkIjoicmJkLW1pcnJvci1wZWVyIiwia2V5IjoiQVFBUnczOWQwdkhvQmhBQVlMM1I4RmR5dHNJQU50bkFTZ0lOTVE9PSIsIm1vbl9ob3N0IjoiW3YyOjE5Mi4xNjguMS4zOjY4MjAsdjE6MTkyLjE2OC4xLjM6NjgyMV0ifQ==
+        EOF
+        $ rbd --cluster site-b mirror pool peer bootstrap import --site-name site-b image-pool token
+
+Add Cluster Peer Manually
+-------------------------
+
+Cluster peers can be specified manually if desired or if the above bootstrap
+commands are not available with the currently installed Ceph release.
+
+The remote ``rbd-mirror`` daemon will need access to the local cluster to
+perform mirroring. A new local Ceph user should be created for the remote
+daemon to use. To `create a Ceph user`_, with ``ceph`` specify the
+``auth get-or-create`` command, user name, monitor caps, and OSD caps::
+
+        ceph auth get-or-create client.rbd-mirror-peer mon 'profile rbd' osd 'profile rbd'
+
+The resulting keyring should be copied to the other cluster's ``rbd-mirror``
+daemon hosts if not using the Ceph monitor ``config-key`` store described below.
+
+To manually add a mirroring peer Ceph cluster with ``rbd``, specify the
+``mirror pool peer add`` command, the pool name, and a cluster specification::
 
         rbd mirror pool peer add {pool-name} {client-name}@{cluster-name}
 
@@ -112,7 +161,10 @@ stored within the local Ceph monitor ``config-key`` store. To specify the
 peer cluster connection attributes when adding a mirroring peer, use the
 ``--remote-mon-host`` and ``--remote-key-file`` optionals. For example::
 
-        $ rbd --cluster site-a mirror pool peer add image-pool client.rbd-mirror-peer@site-b --remote-mon-host 192.168.1.1,192.168.1.2 --remote-key-file <(echo 'AQAeuZdbMMoBChAAcj++/XUxNOLFaWdtTREEsw==')
+        $ cat <<EOF > remote-key-file
+        AQAeuZdbMMoBChAAcj++/XUxNOLFaWdtTREEsw==
+        EOF
+        $ rbd --cluster site-a mirror pool peer add image-pool client.rbd-mirror-peer@site-b --remote-mon-host 192.168.1.1,192.168.1.2 --remote-key-file remote-key-file
         $ rbd --cluster site-a mirror pool info image-pool --all
         Mode: pool
         Peers: 
