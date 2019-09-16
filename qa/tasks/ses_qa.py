@@ -149,17 +149,13 @@ class Validation(SESQA):
         total_osds = self.master_remote.sh(number_of_osds_in_cluster)
         osd_id = 0
         disks = self._get_drive_group_limit()
-        assert int(total_osds) == disks, "Unexpected number of osds {} (expected {})".format(total_osds, disks)
-        self.master_remote.sh("sudo ceph osd tree --format json | tee before.json")
-        osd_path = self.master_remote.sh("sudo salt '*' cephdisks.find_by_osd_id {} --out json | jq -j '.[][].path'".format(osd_id))
-        self.master_remote.sh("sudo salt-run osd.replace {}".format(osd_id))
-        self.master_remote.sh("""
-          sudo sgdisk -Z {path} &&
-          sudo mkfs.ext4 -F {path} &&
-          sudo mount {path} /mnt && sync && lsblk &&
-          sudo ceph-volume inventory""".format(path=osd_path))
-        self.master_remote.sh("sudo salt-run disks.c_v_commands 2>/dev/null")
-        # Output is like: ceph-volume lvm batch --no-auto /dev/vdb --yes --osd-ids 2
+        assert int(total_osds) == disks, "Unexpected number of osds {} (expected {})"\
+            .format(total_osds, disks)
+        self.scripts.run(
+                self.master_remote,
+                'drive_replace.sh',
+                args=[osd_id]
+                )
 
     def drive_replace_check(self, **kwargs):
         """
@@ -169,7 +165,8 @@ class Validation(SESQA):
         """
         total_osds = self.master_remote.sh(number_of_osds_in_cluster)
         disks = self._get_drive_group_limit()
-        assert int(total_osds) == disks, "Unexpected number of osds {} (expected {})".format(total_osds, disks)
+        assert int(total_osds) == disks, "Unexpected number of osds {} (expected {})"\
+            .format(total_osds, disks)
         self.master_remote.sh("sudo ceph osd tree --format json | tee after.json")
         self.master_remote.sh("diff before.json after.json && echo 'Drive Replaced OK'")
 
@@ -177,9 +174,10 @@ class Validation(SESQA):
         """
         Helper to get drive_groups limit field value
         """
-        drive_group = next(x for x in self.ctx['config']['tasks'] \
-                   if 'deepsea' in x and 'drive_group' in x['deepsea'])
+        drive_group = next(x for x in self.ctx['config']['tasks']
+                           if 'deepsea' in x and 'drive_group' in x['deepsea'])
         return int(drive_group['deepsea']['drive_group']['custom']['data_devices']['limit'])
+
 
 task = SESQA
 validation = Validation

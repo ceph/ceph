@@ -36,5 +36,5 @@ class Scripts:
         if as_root:
             cmd = "sudo " + cmd
         if args:
-            cmd += ' ' + ' '.join(args)
+            cmd += ' ' + ' '.join(map(str, args))
         remote.run(label=script_name, args=cmd)
