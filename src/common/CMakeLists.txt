@@ -24,6 +24,7 @@ set(common_srcs
   OutputDataSocket.cc
   PluginRegistry.cc
   Readahead.cc
+  RefCountedObj.cc
   SloppyCRCMap.cc
   SubProcess.cc
   Thread.cc

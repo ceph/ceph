@@ -2016,7 +2016,7 @@ void FileStore::init_temp_collections()
   for (vector<coll_t>::iterator p = ls.begin(); p != ls.end(); ++p) {
     if (p->is_temp())
       continue;
-    coll_map[*p] = new OpSequencer(cct, ++next_osr_id, *p);
+    coll_map[*p] = ceph::make_ref<OpSequencer>(cct, ++next_osr_id, *p);
     if (p->is_meta())
       continue;
     coll_t temp = p->get_temp();
@@ -2130,7 +2130,7 @@ ObjectStore::CollectionHandle FileStore::create_new_collection(const coll_t& c)
   std::lock_guard l{coll_lock};
   auto p = coll_map.find(c);
   if (p == coll_map.end()) {
-    auto *r = new OpSequencer(cct, ++next_osr_id, c);
+    auto r = ceph::make_ref<OpSequencer>(cct, ++next_osr_id, c);
     coll_map[c] = r;
     return r;
   } else {

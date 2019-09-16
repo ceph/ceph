@@ -2992,7 +2992,7 @@ bool OSDMonitor::prepare_mark_me_dead(MonOpRequestRef op)
   pending_inc.new_xinfo[target_osd].dead_epoch = m->get_epoch();
   wait_for_finished_proposal(
     op,
-    new FunctionContext(
+    new LambdaContext(
       [op, this] (int r) {
 	if (r >= 0) {
 	  mon->no_reply(op);	  // ignore on success

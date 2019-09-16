@@ -272,7 +272,7 @@ public:
     dout(20) << this << " " << __func__ << ": image_name=" << m_image_name
              << dendl;
 
-    auto ctx = new FunctionContext([this](int r) {
+    auto ctx = new LambdaContext([this](int r) {
         handle_finalize(r);
       });
 

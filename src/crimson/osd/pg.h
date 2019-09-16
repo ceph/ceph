@@ -170,7 +170,7 @@ public:
   void start_flush_on_transaction(
     ObjectStore::Transaction &t) final {
     t.register_on_commit(
-      new LambdaContext([this](){
+      new LambdaContext([this](int r){
 	peering_state.complete_flush();
     }));
   }
@@ -217,7 +217,7 @@ public:
     PGPeeringEventRef on_commit) final {
     t.register_on_commit(
       new LambdaContext(
-	[this, on_commit=std::move(on_commit)] {
+	[this, on_commit=std::move(on_commit)](int r){
 	  shard_services.start_operation<LocalPeeringEvent>(
 	    this,
 	    shard_services,

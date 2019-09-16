@@ -150,7 +150,7 @@ public:
             mock_threads.timer_cond.notify_one();
           } else {
             m_threads->work_queue->queue(
-              new FunctionContext([&mock_threads, ctx](int) {
+              new LambdaContext([&mock_threads, ctx](int) {
                 std::lock_guard timer_lock{mock_threads.timer_lock};
                 ctx->complete(0);
               }), 0);

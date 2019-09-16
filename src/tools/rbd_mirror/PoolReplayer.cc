@@ -582,7 +582,7 @@ void PoolReplayer<I>::update_namespace_replayers() {
     auto iter = mirroring_namespaces.find(it->first);
     if (iter == mirroring_namespaces.end()) {
       auto namespace_replayer = it->second;
-      auto on_shut_down = new FunctionContext(
+      auto on_shut_down = new LambdaContext(
         [this, namespace_replayer, ctx=gather_ctx->new_sub()](int r) {
           delete namespace_replayer;
           ctx->complete(r);
@@ -601,7 +601,7 @@ void PoolReplayer<I>::update_namespace_replayers() {
         m_threads, m_image_sync_throttler.get(),
         m_image_deletion_throttler.get(), m_service_daemon,
         m_cache_manager_handler);
-    auto on_init = new FunctionContext(
+    auto on_init = new LambdaContext(
         [this, namespace_replayer, name, &mirroring_namespaces,
          ctx=gather_ctx->new_sub()](int r) {
           if (r < 0) {
@@ -699,7 +699,7 @@ void PoolReplayer<I>::namespace_replayer_acquire_leader(const std::string &name,
   auto it = m_namespace_replayers.find(name);
   ceph_assert(it != m_namespace_replayers.end());
 
-  on_finish = new FunctionContext(
+  on_finish = new LambdaContext(
       [this, name, on_finish](int r) {
         if (r < 0) {
           derr << "failed to handle acquire leader for namespace: "
@@ -712,7 +712,7 @@ void PoolReplayer<I>::namespace_replayer_acquire_leader(const std::string &name,
 
           auto namespace_replayer = m_namespace_replayers[name];
           m_namespace_replayers.erase(name);
-          auto on_shut_down = new FunctionContext(
+          auto on_shut_down = new LambdaContext(
               [this, namespace_replayer, on_finish](int r) {
                 delete namespace_replayer;
                 on_finish->complete(r);
@@ -896,7 +896,7 @@ void PoolReplayer<I>::handle_post_acquire_leader(Context *on_finish) {
         m_service_daemon->add_or_update_attribute(m_local_pool_id,
                                                   SERVICE_DAEMON_LEADER_KEY,
                                                   true);
-        auto ctx = new FunctionContext(
+        auto ctx = new LambdaContext(
             [this, on_finish](int r) {
               if (r == 0) {
                 std::lock_guard locker{m_lock};

@@ -513,7 +513,7 @@ void InstanceWatcher<I>::notify_sync_start(const std::string &instance_id,
   bufferlist bl;
   encode(NotifyMessage{SyncStartPayload{request_id, sync_id}}, bl);
 
-  auto ctx = new FunctionContext(
+  auto ctx = new LambdaContext(
     [this, sync_id] (int r) {
       dout(10) << "finish: sync_id=" << sync_id << ", r=" << r << dendl;
       std::lock_guard locker{m_lock};
@@ -1040,7 +1040,7 @@ Context *InstanceWatcher<I>::prepare_request(const std::string &instance_id,
     m_requests.erase(it);
   } else {
     ctx = create_async_context_callback(
-        m_work_queue, new FunctionContext(
+        m_work_queue, new LambdaContext(
             [this, instance_id, request_id] (int r) {
               complete_request(instance_id, request_id, r);
             }));
@@ -1098,7 +1098,7 @@ void InstanceWatcher<I>::handle_image_acquire(
     const std::string &global_image_id, Context *on_finish) {
   dout(10) << "global_image_id=" << global_image_id << dendl;
 
-  auto ctx = new FunctionContext(
+  auto ctx = new LambdaContext(
       [this, global_image_id, on_finish] (int r) {
         m_instance_replayer->acquire_image(this, global_image_id, on_finish);
         m_notify_op_tracker.finish_op();
@@ -1113,7 +1113,7 @@ void InstanceWatcher<I>::handle_image_release(
     const std::string &global_image_id, Context *on_finish) {
   dout(10) << "global_image_id=" << global_image_id << dendl;
 
-  auto ctx = new FunctionContext(
+  auto ctx = new LambdaContext(
       [this, global_image_id, on_finish] (int r) {
         m_instance_replayer->release_image(global_image_id, on_finish);
         m_notify_op_tracker.finish_op();
@@ -1130,7 +1130,7 @@ void InstanceWatcher<I>::handle_peer_image_removed(
   dout(10) << "global_image_id=" << global_image_id << ", "
            << "peer_mirror_uuid=" << peer_mirror_uuid << dendl;
 
-  auto ctx = new FunctionContext(
+  auto ctx = new LambdaContext(
       [this, peer_mirror_uuid, global_image_id, on_finish] (int r) {
         m_instance_replayer->remove_peer_image(global_image_id,
                                                peer_mirror_uuid, on_finish);
@@ -1156,7 +1156,7 @@ void InstanceWatcher<I>::handle_sync_request(const std::string &instance_id,
   }
 
   Context *on_start = create_async_context_callback(
-    m_work_queue, new FunctionContext(
+    m_work_queue, new LambdaContext(
       [this, instance_id, sync_id, on_finish] (int r) {
         dout(10) << "handle_sync_request: finish: instance_id=" << instance_id
                  << ", sync_id=" << sync_id << ", r=" << r << dendl;

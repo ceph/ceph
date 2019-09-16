@@ -411,7 +411,7 @@ void ActivePyModules::start_one(PyModuleRef py_module)
 
   // Send all python calls down a Finisher to avoid blocking
   // C++ code, and avoid any potential lock cycles.
-  finisher.queue(new FunctionContext([this, active_module, name](int) {
+  finisher.queue(new LambdaContext([this, active_module, name](int) {
     int r = active_module->load(this);
     if (r != 0) {
       derr << "Failed to run module in active mode ('" << name << "')"
@@ -467,7 +467,7 @@ void ActivePyModules::notify_all(const std::string &notify_type,
     auto module = i.second.get();
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
-    finisher.queue(new FunctionContext([module, notify_type, notify_id](int r){
+    finisher.queue(new LambdaContext([module, notify_type, notify_id](int r){
       module->notify(notify_type, notify_id);
     }));
   }
@@ -486,7 +486,7 @@ void ActivePyModules::notify_all(const LogEntry &log_entry)
     // Note intentional use of non-reference lambda binding on
     // log_entry: we take a copy because caller's instance is
     // probably ephemeral.
-    finisher.queue(new FunctionContext([module, log_entry](int r){
+    finisher.queue(new LambdaContext([module, log_entry](int r){
       module->notify_clog(log_entry);
     }));
   }
@@ -981,7 +981,7 @@ void ActivePyModules::config_notify()
     auto module = i.second.get();
     // Send all python calls down a Finisher to avoid blocking
     // C++ code, and avoid any potential lock cycles.
-    finisher.queue(new FunctionContext([module](int r){
+    finisher.queue(new LambdaContext([module](int r){
 					 module->config_notify();
 				       }));
   }

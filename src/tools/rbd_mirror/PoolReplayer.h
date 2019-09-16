@@ -146,7 +146,7 @@ private:
     std::lock_guard locker{m_lock};
 
     on_finish = librbd::util::create_async_context_callback(
-      m_threads->work_queue, new FunctionContext(
+      m_threads->work_queue, new LambdaContext(
           [this, on_finish](int r) {
             {
               std::lock_guard locker{m_lock};
@@ -163,7 +163,7 @@ private:
             on_finish->complete(r);
           }));
 
-    auto on_lock = new FunctionContext(
+    auto on_lock = new LambdaContext(
         [this, callback, on_finish](int) {
           std::lock_guard locker{m_lock};
           ceph_assert(m_namespace_replayers_locked);

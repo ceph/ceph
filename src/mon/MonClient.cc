@@ -415,7 +415,7 @@ void MonClient::handle_monmap(MMonMap *m)
 void MonClient::handle_config(MConfig *m)
 {
   ldout(cct,10) << __func__ << " " << *m << dendl;
-  finisher.queue(new FunctionContext([this, m](int r) {
+  finisher.queue(new LambdaContext([this, m](int r) {
 	cct->_conf.set_mon_vals(cct, m->config, config_cb);
 	if (config_notify_cb) {
 	  config_notify_cb();
@@ -895,7 +895,7 @@ void MonClient::_un_backoff()
 
 void MonClient::schedule_tick()
 {
-  auto do_tick = make_lambda_context([this]() { tick(); });
+  auto do_tick = make_lambda_context([this](int) { tick(); });
   if (_hunting()) {
     const auto hunt_interval = (cct->_conf->mon_client_hunt_interval *
 				reopen_interval_multiplier);

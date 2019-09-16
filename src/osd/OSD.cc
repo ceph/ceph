@@ -450,7 +450,7 @@ HeartbeatStampsRef OSDService::get_hb_stamps(unsigned peer)
     hb_stamps.resize(peer + 1);
   }
   if (!hb_stamps[peer]) {
-    hb_stamps[peer].reset(new HeartbeatStamps(peer));
+    hb_stamps[peer] = ceph::make_ref<HeartbeatStamps>(peer);
   }
   return hb_stamps[peer];
 }
@@ -4539,20 +4539,18 @@ void OSD::_add_heartbeat_peer(int p)
 
     auto stamps = service.get_hb_stamps(p);
 
-    Session *sb = new Session(cct, cons.first.get());
+    auto sb = ceph::make_ref<Session>(cct, cons.first.get());
     sb->peer = p;
     sb->stamps = stamps;
-    RefCountedPtr sbref{sb, false};
     hi->hb_interval_start = ceph_clock_now();
     hi->con_back = cons.first.get();
-    hi->con_back->set_priv(sbref);
+    hi->con_back->set_priv(sb);
 
-    Session *sf = new Session(cct, cons.second.get());
+    auto sf = ceph::make_ref<Session>(cct, cons.second.get());
     sf->peer = p;
     sf->stamps = stamps;
-    RefCountedPtr sfref{sf, false};
     hi->con_front = cons.second.get();
-    hi->con_front->set_priv(sfref);
+    hi->con_front->set_priv(sf);
 
     dout(10) << "_add_heartbeat_peer: new peer osd." << p
 	     << " " << hi->con_back->get_peer_addr()
@@ -5691,11 +5689,9 @@ void OSD::ms_handle_fast_connect(Connection *con)
 {
   if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON &&
       con->get_peer_type() != CEPH_ENTITY_TYPE_MGR) {
-    auto priv = con->get_priv();
-    auto s = static_cast<Session*>(priv.get());
-    if (!s) {
-      s = new Session{cct, con};
-      con->set_priv(RefCountedPtr{s, false});
+    if (auto s = ceph::ref_cast<Session>(con->get_priv()); !s) {
+      s = ceph::make_ref<Session>(cct, con);
+      con->set_priv(s);
       dout(10) << " new session (outgoing) " << s << " con=" << s->con
           << " addr=" << s->con->get_peer_addr() << dendl;
       // we don't connect to clients
@@ -5709,11 +5705,9 @@ void OSD::ms_handle_fast_accept(Connection *con)
 {
   if (con->get_peer_type() != CEPH_ENTITY_TYPE_MON &&
       con->get_peer_type() != CEPH_ENTITY_TYPE_MGR) {
-    auto priv = con->get_priv();
-    auto s = static_cast<Session*>(priv.get());
-    if (!s) {
-      s = new Session{cct, con};
-      con->set_priv(RefCountedPtr{s, false});
+    if (auto s = ceph::ref_cast<Session>(con->get_priv()); !s) {
+      s = ceph::make_ref<Session>(cct, con);
+      con->set_priv(s);
       dout(10) << "new session (incoming)" << s << " con=" << con
           << " addr=" << con->get_peer_addr()
           << " must have raced with connect" << dendl;
@@ -5725,9 +5719,8 @@ void OSD::ms_handle_fast_accept(Connection *con)
 
 bool OSD::ms_handle_reset(Connection *con)
 {
-  auto s = con->get_priv();
-  auto session = static_cast<Session*>(s.get());
-  dout(2) << "ms_handle_reset con " << con << " session " << session << dendl;
+  auto session = ceph::ref_cast<Session>(con->get_priv());
+  dout(2) << "ms_handle_reset con " << con << " session " << session.get() << dendl;
   if (!session)
     return false;
   session->wstate.reset(con);
@@ -5736,7 +5729,7 @@ bool OSD::ms_handle_reset(Connection *con)
   // note that we break session->con *before* the session_handle_reset
   // cleanup below.  this avoids a race between us and
   // PG::add_backoff, Session::check_backoff, etc.
-  session_handle_reset(SessionRef{session});
+  session_handle_reset(session);
   return true;
 }
 
@@ -5745,9 +5738,8 @@ bool OSD::ms_handle_refused(Connection *con)
   if (!cct->_conf->osd_fast_fail_on_connection_refused)
     return false;
 
-  auto priv = con->get_priv();
-  auto session = static_cast<Session*>(priv.get());
-  dout(2) << "ms_handle_refused con " << con << " session " << session << dendl;
+  auto session = ceph::ref_cast<Session>(con->get_priv());
+  dout(2) << "ms_handle_refused con " << con << " session " << session.get() << dendl;
   if (!session)
     return false;
   int type = con->get_peer_type();
@@ -5858,7 +5850,7 @@ void OSD::_preboot(epoch_t oldest, epoch_t newest)
     // this thread might be required for splitting and merging PGs to
     // make progress.
     boot_finisher.queue(
-      new FunctionContext(
+      new LambdaContext(
 	[this](int r) {
 	  std::unique_lock l(osd_lock);
 	  if (is_preboot()) {
@@ -6320,8 +6312,7 @@ void OSD::handle_command(MMonCommand *m)
 void OSD::handle_command(MCommand *m)
 {
   ConnectionRef con = m->get_connection();
-  auto priv = con->get_priv();
-  auto session = static_cast<Session *>(priv.get());
+  auto session = ceph::ref_cast<Session>(con->get_priv());
   if (!session) {
     con->send_message(new MCommandReply(m, -EPERM));
     m->put();
@@ -6329,7 +6320,6 @@ void OSD::handle_command(MCommand *m)
   }
 
   OSDCap& caps = session->caps;
-  priv.reset();
 
   if (!caps.allow_all() || m->get_source().is_mon()) {
     con->send_message(new MCommandReply(m, -EPERM));
@@ -7154,8 +7144,7 @@ void OSDService::maybe_share_map(
 {
   // NOTE: we assume caller hold something that keeps the Connection itself
   // pinned (e.g., an OpRequest's MessageRef).
-  auto priv = con->get_priv();
-  auto session = static_cast<Session*>(priv.get());
+  auto session = ceph::ref_cast<Session>(con->get_priv());
   if (!session) {
     return;
   }
@@ -7191,7 +7180,7 @@ void OSDService::maybe_share_map(
   session->sent_epoch_lock.unlock();
 }
 
-void OSD::dispatch_session_waiting(SessionRef session, OSDMapRef osdmap)
+void OSD::dispatch_session_waiting(const ceph::ref_t<Session>& session, OSDMapRef osdmap)
 {
   ceph_assert(ceph_mutex_is_locked(session->session_dispatch_lock));
 
@@ -7327,11 +7316,10 @@ void OSD::ms_fast_dispatch(Message *m)
 int OSD::ms_handle_authentication(Connection *con)
 {
   int ret = 0;
-  auto priv = con->get_priv();
-  Session *s = static_cast<Session*>(priv.get());
+  auto s = ceph::ref_cast<Session>(con->get_priv());
   if (!s) {
-    s = new Session(cct, con);
-    con->set_priv(RefCountedPtr{s, false});
+    s = ceph::make_ref<Session>(cct, con);
+    con->set_priv(s);
     s->entity_name = con->get_peer_entity_name();
     dout(10) << __func__ << " new session " << s << " con " << s->con
 	     << " entity " << s->entity_name
@@ -8017,9 +8005,8 @@ void OSD::handle_osd_map(MOSDMap *m)
     return;
   }
 
-  auto priv = m->get_connection()->get_priv();
-  if (auto session = static_cast<Session *>(priv.get());
-      session && !(session->entity_name.is_mon() ||
+  auto session = ceph::ref_cast<Session>(m->get_connection()->get_priv());
+  if (session && !(session->entity_name.is_mon() ||
 		   session->entity_name.is_osd())) {
     //not enough perms!
     dout(10) << "got osd map from Session " << session
@@ -9055,8 +9042,7 @@ bool OSD::require_same_peer_instance(const Message *m, OSDMapRef& map,
 	    << dendl;
     ConnectionRef con = m->get_connection();
     con->mark_down();
-    auto priv = con->get_priv();
-    if (auto s = static_cast<Session*>(priv.get()); s) {
+    if (auto s = ceph::ref_cast<Session>(con->get_priv()); s) {
       if (!is_fast_dispatch)
 	s->session_dispatch_lock.lock();
       clear_session_waiting_on_map(s);
@@ -9628,7 +9614,7 @@ void OSD::do_recovery(
     std::lock_guard l(service.sleep_lock);
     if (recovery_sleep > 0 && service.recovery_needs_sleep) {
       PGRef pgref(pg);
-      auto recovery_requeue_callback = new FunctionContext([this, pgref, queued, reserved_pushes](int r) {
+      auto recovery_requeue_callback = new LambdaContext([this, pgref, queued, reserved_pushes](int r) {
         dout(20) << "do_recovery wake up at "
                  << ceph_clock_now()
 	         << ", re-queuing recovery" << dendl;

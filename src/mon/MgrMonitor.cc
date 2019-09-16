@@ -291,9 +291,9 @@ void MgrMonitor::post_paxos_update()
         send_digests();
       } else {
         cancel_timer();
-        wait_for_active_ctx(new C_MonContext(mon, [this](int) {
+        wait_for_active_ctx(new C_MonContext{mon, [this](int) {
           send_digests();
-        }));
+        }});
       }
     }
   }
@@ -651,9 +651,9 @@ void MgrMonitor::send_digests()
 timer:
   digest_event = mon->timer.add_event_after(
     g_conf().get_val<int64_t>("mon_mgr_digest_period"),
-    new C_MonContext(mon, [this](int) {
+    new C_MonContext{mon, [this](int) {
       send_digests();
-  }));
+  }});
 }
 
 void MgrMonitor::cancel_timer()

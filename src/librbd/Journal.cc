@@ -92,7 +92,7 @@ struct C_IsTagOwner : public Context {
 
     Journaler *journaler = this->journaler;
     Context *on_finish = this->on_finish;
-    FunctionContext *ctx = new FunctionContext(
+    auto ctx = new LambdaContext(
       [journaler, on_finish](int r) {
 	on_finish->complete(r);
 	delete journaler;
@@ -168,7 +168,7 @@ struct GetTagsRequest {
   void send_get_client() {
     ldout(cct, 20) << __func__ << dendl;
 
-    FunctionContext *ctx = new FunctionContext(
+    auto ctx = new LambdaContext(
       [this](int r) {
         handle_get_client(r);
       });
@@ -210,7 +210,7 @@ struct GetTagsRequest {
   void send_get_tags() {
     ldout(cct, 20) << __func__ << dendl;
 
-    FunctionContext *ctx = new FunctionContext(
+    auto ctx = new LambdaContext(
       [this](int r) {
         handle_get_tags(r);
       });
@@ -583,9 +583,9 @@ void Journal<I>::close(Context *on_finish) {
   CephContext *cct = m_image_ctx.cct;
   ldout(cct, 20) << this << " " << __func__ << dendl;
 
-  on_finish = new FunctionContext([this, on_finish](int r) {
+  on_finish = new LambdaContext([this, on_finish](int r) {
       // remove our handler from object dispatcher chain - preserve error
-      auto ctx = new FunctionContext([on_finish, r](int _) {
+      auto ctx = new LambdaContext([on_finish, r](int _) {
           on_finish->complete(r);
         });
       m_image_ctx.io_object_dispatcher->shut_down_object_dispatch(
@@ -896,7 +896,7 @@ void Journal<I>::append_op_event(uint64_t op_tid,
   }
 
   on_safe = create_async_context_callback(m_image_ctx, on_safe);
-  on_safe = new FunctionContext([this, on_safe](int r) {
+  on_safe = new LambdaContext([this, on_safe](int r) {
       // ensure all committed IO before this op is committed
       m_journaler->flush_commit_position(on_safe);
     });
@@ -1013,7 +1013,7 @@ void Journal<I>::start_external_replay(journal::Replay<I> **journal_replay,
   ceph_assert(m_journal_replay == nullptr);
 
   on_start = util::create_async_context_callback(m_image_ctx, on_start);
-  on_start = new FunctionContext(
+  on_start = new LambdaContext(
     [this, journal_replay, on_start](int r) {
       handle_start_external_replay(r, journal_replay, on_start);
     });
@@ -1123,7 +1123,7 @@ void Journal<I>::destroy_journaler(int r) {
   Context *ctx = create_async_context_callback(
     m_image_ctx, create_context_callback<
       Journal<I>, &Journal<I>::handle_journal_destroyed>(this));
-  ctx = new FunctionContext(
+  ctx = new LambdaContext(
     [this, ctx](int r) {
       std::lock_guard locker{m_lock};
       m_journaler->shut_down(ctx);
@@ -1288,7 +1288,7 @@ void Journal<I>::handle_replay_complete(int r) {
     }
   }
 
-  Context *ctx = new FunctionContext([this, cct](int r) {
+  Context *ctx = new LambdaContext([this, cct](int r) {
       ldout(cct, 20) << this << " handle_replay_complete: "
                      << "handle shut down replay" << dendl;
 
@@ -1306,11 +1306,11 @@ void Journal<I>::handle_replay_complete(int r) {
         handle_flushing_replay();
       }
     });
-  ctx = new FunctionContext([this, ctx](int r) {
+  ctx = new LambdaContext([this, ctx](int r) {
       // ensure the commit position is flushed to disk
       m_journaler->flush_commit_position(ctx);
     });
-  ctx = new FunctionContext([this, cct, cancel_ops, ctx](int r) {
+  ctx = new LambdaContext([this, cct, cancel_ops, ctx](int r) {
       ldout(cct, 20) << this << " handle_replay_complete: "
                      << "shut down replay" << dendl;
       m_journal_replay->shut_down(cancel_ops, ctx);
@@ -1358,11 +1358,11 @@ void Journal<I>::handle_replay_process_safe(ReplayEntry replay_entry, int r) {
       // stop replay, shut down, and restart
       Context* ctx = create_context_callback<
         Journal<I>, &Journal<I>::handle_flushing_restart>(this);
-      ctx = new FunctionContext([this, ctx](int r) {
+      ctx = new LambdaContext([this, ctx](int r) {
           // ensure the commit position is flushed to disk
           m_journaler->flush_commit_position(ctx);
         });
-      ctx = new FunctionContext([this, cct, ctx](int r) {
+      ctx = new LambdaContext([this, cct, ctx](int r) {
           ldout(cct, 20) << this << " handle_replay_process_safe: "
                          << "shut down replay" << dendl;
           {
@@ -1685,7 +1685,7 @@ void Journal<I>::handle_metadata_updated() {
   // pull the most recent tags from the journal, decode, and
   // update the internal tag state
   C_RefreshTags *refresh_ctx = new C_RefreshTags(m_async_journal_op_tracker);
-  refresh_ctx->on_finish = new FunctionContext(
+  refresh_ctx->on_finish = new LambdaContext(
     [this, refresh_sequence, refresh_ctx](int r) {
       handle_refresh_metadata(refresh_sequence, refresh_ctx->tag_tid,
                               refresh_ctx->tag_data, r);

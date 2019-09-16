@@ -363,7 +363,7 @@ class TokenBucketThrottle {
   uint64_t m_burst = 0;
   SafeTimer *m_timer;
   ceph::mutex *m_timer_lock;
-  FunctionContext *m_token_ctx = nullptr;
+  Context *m_token_ctx = nullptr;
   std::list<Blocker> m_blockers;
   ceph::mutex m_lock;
 
@@ -419,7 +419,7 @@ public:
 
   template <typename T, typename I, void(T::*MF)(int, I*, uint64_t)>
   void add_blocker(uint64_t c, T *handler, I *item, uint64_t flag) {
-    Context *ctx = new FunctionContext([handler, item, flag](int r) {
+    Context *ctx = new LambdaContext([handler, item, flag](int r) {
       (handler->*MF)(r, item, flag);
       });
     m_blockers.emplace_back(c, ctx);

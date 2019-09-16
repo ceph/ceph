@@ -147,7 +147,7 @@ Context *ExclusiveLock<I>::start_op(int* ret_val) {
   }
 
   m_async_op_tracker.start_op();
-  return new FunctionContext([this](int r) {
+  return new LambdaContext([this](int r) {
       m_async_op_tracker.finish_op();
     });
 }
@@ -202,7 +202,7 @@ void ExclusiveLock<I>::pre_acquire_lock_handler(Context *on_finish) {
 
   PreAcquireRequest<I> *req = PreAcquireRequest<I>::create(m_image_ctx,
                                                            on_finish);
-  m_image_ctx.op_work_queue->queue(new FunctionContext([req](int r) {
+  m_image_ctx.op_work_queue->queue(new LambdaContext([req](int r) {
     req->send();
   }));
 }
@@ -252,7 +252,7 @@ void ExclusiveLock<I>::post_acquire_lock_handler(int r, Context *on_finish) {
       util::create_context_callback<EL, &EL::handle_post_acquiring_lock>(this),
       util::create_context_callback<EL, &EL::handle_post_acquired_lock>(this));
 
-  m_image_ctx.op_work_queue->queue(new FunctionContext([req](int r) {
+  m_image_ctx.op_work_queue->queue(new LambdaContext([req](int r) {
     req->send();
   }));
 }
@@ -301,7 +301,7 @@ void ExclusiveLock<I>::pre_release_lock_handler(bool shutting_down,
 
   PreReleaseRequest<I> *req = PreReleaseRequest<I>::create(
     m_image_ctx, shutting_down, m_async_op_tracker, on_finish);
-  m_image_ctx.op_work_queue->queue(new FunctionContext([req](int r) {
+  m_image_ctx.op_work_queue->queue(new LambdaContext([req](int r) {
     req->send();
   }));
 }
