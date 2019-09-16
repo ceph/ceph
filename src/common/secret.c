@@ -31,13 +31,13 @@ int read_secret_from_file(const char *filename, char *secret, size_t max_len)
   fd = open(filename, O_RDONLY);
   if (fd < 0) {
     perror("unable to read secretfile");
-    return -1;
+    return -errno;
   }
   len = safe_read(fd, secret, max_len);
   if (len <= 0) {
     perror("unable to read secret from file");
     close(fd);
-    return -1;
+    return len ? len : -ENODATA;
   }
   end = secret;
   while (end < secret + len && *end && *end != '\n' && *end != '\r')
